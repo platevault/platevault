@@ -1,0 +1,33 @@
+[workspace]
+resolver = "2"
+members = [
+  "apps/desktop/src-tauri",
+  "crates/app/core",
+  "crates/audit",
+  "crates/calibration/core",
+  "crates/contracts/core",
+  "crates/domain/core",
+  "crates/fs/inventory",
+  "crates/fs/planner",
+  "crates/metadata/core",
+  "crates/metadata/fits",
+  "crates/metadata/video",
+  "crates/metadata/xisf",
+  "crates/persistence/db",
+  "crates/project/structure",
+  "crates/sessions",
+  "crates/targeting",
+  "crates/workflow/profiles",
+]
+
+[workspace.package]
+edition = "2021"
+license = "Apache-2.0"
+repository = ""
+
+[workspace.lints.rust]
+unsafe_code = "forbid"
+
+[workspace.lints.clippy]
+all = "warn"
+pedantic = "warn"

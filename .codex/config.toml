@@ -1,0 +1,10 @@
+# Project or subfolder-scoped Codex overrides.
+# Keep global defaults in ~/.codex/config.toml and place repo-specific
+# overrides here when the repository needs different behavior.
+
+# Example MCP server entry:
+# [mcp_servers.context7]
+# command = "npx"
+# args = ["-y", "@upstash/context7-mcp"]
+
+# Add project-local Codex settings below as needed.

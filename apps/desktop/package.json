@@ -1,0 +1,11 @@
+{
+  "name": "@astro-plan/desktop",
+  "private": true,
+  "version": "0.1.0",
+  "type": "module",
+  "scripts": {
+    "dev": "echo \"Tauri + React scaffold dependencies pending SpecKit plan\"",
+    "build": "echo \"Desktop build pending SpecKit plan\"",
+    "test": "echo \"Desktop tests pending SpecKit plan\""
+  }
+}
