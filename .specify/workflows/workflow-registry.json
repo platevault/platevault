@@ -2,12 +2,28 @@
   "schema_version": "1.0",
   "workflows": {
     "speckit": {
-      "name": "Full SDD Cycle",
+      "name": "Speckit Steering Cycle",
       "version": "1.0.0",
-      "description": "Runs specify \u2192 plan \u2192 tasks \u2192 implement with review gates",
-      "source": "bundled",
-      "installed_at": "2026-05-02T16:32:31.059164+00:00",
-      "updated_at": "2026-05-02T16:32:31.059210+00:00"
+      "description": "Runs the steering flow through specification, dependency wiring, critique, issue sync, checkpoint, and implementation.",
+      "source": "/home/sjors/.local/share/chezmoi/dotfiles/external-managed/config/agentic-tools/skills/project-setup/scripts/speckit/workflows/speckit",
+      "installed_at": "2026-05-08T11:31:56.077198+00:00",
+      "updated_at": "2026-05-08T11:31:56.077239+00:00"
+    },
+    "speckit-quality": {
+      "name": "Speckit Quality Gates",
+      "version": "1.0.0",
+      "description": "Runs post-implementation quality gates: verify-tasks \u2192 verify \u2192 review \u2192 cleanup \u2192 sync \u2192 sync-conflicts \u2192 retro \u2192 checkpoint.",
+      "source": "/home/sjors/.local/share/chezmoi/dotfiles/external-managed/config/agentic-tools/skills/project-setup/scripts/speckit/workflows/speckit-quality",
+      "installed_at": "2026-05-08T11:31:56.311889+00:00",
+      "updated_at": "2026-05-08T11:31:56.311899+00:00"
+    },
+    "speckit-full": {
+      "name": "Speckit Full Steering Cycle",
+      "version": "1.0.0",
+      "description": "Runs the full steering flow from specification through dependency sync, implementation, verification, review, cleanup, conflict checks, retrospective, and checkpoint.",
+      "source": "/home/sjors/.local/share/chezmoi/dotfiles/external-managed/config/agentic-tools/skills/project-setup/scripts/speckit/workflows/speckit-full",
+      "installed_at": "2026-05-08T11:31:56.535959+00:00",
+      "updated_at": "2026-05-08T11:31:56.535969+00:00"
     }
   }
 }

@@ -11,12 +11,12 @@
 
 **Purpose**: Finish the implementation scaffold without building product behavior yet.
 
-- [ ] T001 Document dependency selection criteria for Tauri, React, SQLite, schema generation, and FITS/XISF parsing in docs/research/implementation-dependencies.md
-- [ ] T002 [P] Create frontend source directory skeleton in apps/desktop/src/README.md
-- [ ] T003 [P] Create contract schema directory skeleton in packages/contracts/schemas/README.md
-- [ ] T004 [P] Create fixture directory guide for library, metadata, project, and filesystem safety fixtures in tests/fixtures/README.md
-- [ ] T005 [P] Create integration test directory guide for cross-crate flows in tests/integration/README.md
-- [ ] T006 Update workspace scripts for Rust, TypeScript, contracts, and fixture checks in package.json and justfile
+- [X] T001 Document and decide dependency selections for Tauri, React, SQLite, SQLite migration tooling, schema generation, Zod/type generation, FITS parsing, XISF parsing, and video metadata probing in docs/research/implementation-dependencies.md
+- [X] T002 [P] Create frontend source directory skeleton in apps/desktop/src/README.md
+- [X] T003 [P] Create contract schema directory skeleton in packages/contracts/schemas/README.md
+- [X] T004 [P] Create fixture directory guide for library, metadata, project, and filesystem safety fixtures in tests/fixtures/README.md
+- [X] T005 [P] Create integration test directory guide for cross-crate flows in tests/integration/README.md
+- [X] T006 Update workspace scripts and install/configure the selected Rust, TypeScript, contract, SQLite, migration, metadata parser, and fixture-check dependencies in package.json, Cargo.toml, and justfile
 
 ---
 
@@ -26,18 +26,18 @@
 
 **CRITICAL**: No user story work should begin until this phase is complete.
 
-- [ ] T007 Define common domain identifiers, timestamps, confidence, review state, and lifecycle enums in crates/domain/core/src/lib.rs
-- [ ] T008 [P] Define contract envelope, operation handle, operation event, and error DTOs in crates/contracts/core/src/lib.rs
-- [ ] T009 [P] Define JSON Schema envelope, operation event, and error schemas in packages/contracts/schemas/envelope.schema.json
-- [ ] T010 Add contract validation test harness for Rust and TypeScript schema parity in tests/contract/contract_schema_parity.rs
-- [ ] T011 Define AlmClient TypeScript interface and transport adapter boundary in packages/contracts/src/client.ts
-- [ ] T012 Define Tauri command adapter boundary for operation envelopes in apps/desktop/src-tauri/src/commands/mod.rs
-- [ ] T013 Define application operation dispatcher traits in crates/app/core/src/lib.rs
-- [ ] T014 Define SQLite migration and repository abstraction boundary in crates/persistence/db/src/lib.rs
-- [ ] T015 Define operation state persistence model and repository contract in crates/persistence/db/src/operation_state.rs
-- [ ] T016 Define audit event model and append-only audit writer trait in crates/audit/src/lib.rs
-- [ ] T017 Define reviewable filesystem plan, plan item, approval, and precondition models in crates/fs/planner/src/lib.rs
-- [ ] T018 Create shared React app shell, route registry, and feature service provider placeholders in apps/desktop/src/app/App.tsx
+- [X] T007 Define common domain identifiers, timestamps, confidence, review state, and lifecycle enums in crates/domain/core/src/lib.rs
+- [X] T008 [P] Define contract envelope, operation handle, operation event, and error DTOs in crates/contracts/core/src/lib.rs
+- [X] T009 [P] Define JSON Schema envelope, operation event, and error schemas in packages/contracts/schemas/envelope.schema.json
+- [X] T010 Add contract validation test harness for Rust and TypeScript schema parity in tests/contract/contract_schema_parity.rs
+- [X] T011 Define AlmClient TypeScript interface and transport adapter boundary in packages/contracts/src/client.ts
+- [X] T012 Define Tauri command adapter boundary for operation envelopes in apps/desktop/src-tauri/src/commands/mod.rs
+- [X] T013 Define application operation dispatcher traits in crates/app/core/src/lib.rs
+- [X] T014 Define SQLite migration and repository abstraction boundary in crates/persistence/db/src/lib.rs
+- [X] T015 Define operation state persistence model and repository contract in crates/persistence/db/src/operation_state.rs
+- [X] T016 Define audit event model and append-only audit writer trait in crates/audit/src/lib.rs
+- [X] T017 Define reviewable filesystem plan, plan item, approval, and precondition models in crates/fs/planner/src/lib.rs
+- [X] T018 Run $impeccable product-UI preflight and shape gate for the application shell, then create shared React app shell, route registry, and feature service provider placeholders in apps/desktop/src/app/App.tsx
 
 **Checkpoint**: Foundation ready. User-story tasks can now be implemented in priority order or by parallel teams.
 
@@ -51,8 +51,8 @@
 
 ### Tests for User Story 1
 
-- [ ] T019 [P] [US1] Add filesystem fixture for messy astrophotography root with Raw, Masters, Process, Published, SharpCap, Manual, and PixInsight-like folders in tests/fixtures/library_messy/README.md
-- [ ] T020 [P] [US1] Add contract tests for library.root.register, library.scan.start, and library.inventory.query in tests/contract/library_inventory_contract.rs
+- [X] T019 [P] [US1] Add filesystem fixture for messy astrophotography root with Raw, Masters, Process, Published, SharpCap, Manual, and PixInsight-like folders in tests/fixtures/library_messy/README.md
+- [X] T020 [P] [US1] Add contract tests for library.root.register, library.scan.start, and library.inventory.query in tests/contract/library_inventory_contract.rs
 - [ ] T021 [P] [US1] Add filesystem scan safety tests for root-relative paths, symlink/junction non-traversal, missing roots, and lazy hashing in tests/filesystem/library_scan_safety.rs
 - [ ] T022 [P] [US1] Add integration test for non-mutating inventory scan in tests/integration/us1_index_existing_library.rs
 
@@ -66,7 +66,7 @@
 - [ ] T028 [US1] Implement library root and inventory repositories in crates/persistence/db/src/library_inventory.rs
 - [ ] T029 [US1] Implement library.root.register, library.scan.start, and library.inventory.query operation handlers in crates/app/core/src/library_inventory.rs
 - [ ] T030 [US1] Wire library inventory Tauri commands through the operation dispatcher in apps/desktop/src-tauri/src/commands/library_inventory.rs
-- [ ] T031 [US1] Build root selection, scan progress, inventory summary, confidence labels, and unknown item UI in apps/desktop/src/features/library/LibraryInventoryPage.tsx
+- [ ] T031 [US1] Use $impeccable product-UI guidance to build root selection, scan progress, inventory summary, confidence labels, and unknown item UI in apps/desktop/src/features/library/LibraryInventoryPage.tsx
 - [ ] T032 [US1] Document US1 demo and safety verification steps in specs/001-astro-library-manager/quickstart.md
 
 **Checkpoint**: User Story 1 is fully functional and testable independently.
@@ -100,7 +100,7 @@
 - [ ] T046 [US2] Implement weighted calibration match scoring with hard incompatibility gates and explanation output in crates/calibration/core/src/lib.rs
 - [ ] T047 [US2] Implement metadata, session, target, equipment, and calibration repositories in crates/persistence/db/src/ingest.rs
 - [ ] T048 [US2] Implement metadata.extract.start, session candidate, calibration match, and review operation handlers in crates/app/core/src/ingest.rs
-- [ ] T049 [US2] Build ingest review UI for metadata, acquisition sessions, calibration sessions, masters, equipment, setup fingerprints, and plan references in apps/desktop/src/features/ingest/IngestReviewPage.tsx
+- [ ] T049 [US2] Use $impeccable product-UI guidance to build ingest review UI for metadata, acquisition sessions, calibration sessions, masters, equipment, setup fingerprints, and plan references in apps/desktop/src/features/ingest/IngestReviewPage.tsx
 
 **Checkpoint**: User Story 2 is fully functional and testable independently.
 
@@ -127,7 +127,7 @@
 - [ ] T057 [US3] Implement project, panel, source, workflow profile, and manifest repositories in crates/persistence/db/src/projects.rs
 - [ ] T058 [US3] Implement project.structure.plan_create, project.create_from_applied_plan, project.import.check_structure, project.source.map.update, and project.lifecycle.update handlers in crates/app/core/src/projects.rs
 - [ ] T059 [US3] Implement manifest preview generator from canonical database records in crates/project/structure/src/manifest.rs
-- [ ] T060 [US3] Build project creation, workflow profile selection, source mapping, calibration review, mosaic panel mapping, and manifest preview UI in apps/desktop/src/features/projects/ProjectEditorPage.tsx
+- [ ] T060 [US3] Use $impeccable product-UI guidance to build project creation, workflow profile selection, source mapping, calibration review, mosaic panel mapping, and manifest preview UI in apps/desktop/src/features/projects/ProjectEditorPage.tsx
 
 **Checkpoint**: User Story 3 is fully functional and testable independently.
 
@@ -152,7 +152,7 @@
 - [ ] T066 [US4] Implement source view plan generation for manifest-only, link, junction, hard-link, copy, and hybrid outputs in crates/fs/planner/src/source_view_plan.rs
 - [ ] T067 [US4] Implement source view tracking repositories in crates/persistence/db/src/source_views.rs
 - [ ] T068 [US4] Implement source_view.plan_generate and source_view.remove.plan operation handlers in crates/app/core/src/source_views.rs
-- [ ] T069 [US4] Build source view strategy comparison, plan preview, and generated view cleanup UI in apps/desktop/src/features/source-views/SourceViewPage.tsx
+- [ ] T069 [US4] Use $impeccable product-UI guidance to build source view strategy comparison, plan preview, and generated view cleanup UI in apps/desktop/src/features/source-views/SourceViewPage.tsx
 
 **Checkpoint**: User Story 4 is fully functional and testable independently.
 
@@ -166,7 +166,7 @@
 
 ### Tests for User Story 5
 
-- [ ] T070 [P] [US5] Add PixInsight-like and planetary/lunar processing workspace fixtures in tests/fixtures/processing_artifacts/README.md
+- [ ] T070 [P] [US5] Validate and document current PixInsight/WBPP artifact taxonomy plus planetary/lunar processing workspace fixture expectations in tests/fixtures/processing_artifacts/README.md
 - [ ] T071 [P] [US5] Add artifact observation and lifecycle contract tests in tests/contract/lifecycle_cleanup_contract.rs
 - [ ] T072 [P] [US5] Add cleanup tree inheritance, override, and protected-category tests in tests/integration/us5_cleanup_policy.rs
 - [ ] T073 [P] [US5] Add filesystem plan apply and audit tests for archive, trash, generated-link removal, partial failure, and no silent overwrite in tests/filesystem/plan_application_audit.rs
@@ -181,7 +181,7 @@
 - [ ] T079 [US5] Implement reviewed filesystem plan application with archive/trash/delete-disabled defaults and per-item precondition checks in crates/fs/planner/src/apply.rs
 - [ ] T080 [US5] Implement lifecycle, artifact, output, cleanup policy, cleanup tree, plan approval, and audit repositories in crates/persistence/db/src/lifecycle_cleanup.rs
 - [ ] T081 [US5] Implement artifact.observe.start, cleanup.policy.update, cleanup.tree.preview, cleanup.plan_generate, archive.plan_generate, plan.preview, plan.approve, plan.apply.start, manifest.generate.plan, and audit.query handlers in crates/app/core/src/lifecycle_cleanup.rs
-- [ ] T082 [US5] Build lifecycle, outputs, artifact observation, cleanup tree, archive plan, plan review, plan apply progress, and audit history UI in apps/desktop/src/features/lifecycle/LifecycleCleanupPage.tsx
+- [ ] T082 [US5] Use $impeccable product-UI guidance to build lifecycle, outputs, artifact observation, cleanup tree, archive plan, plan review, plan apply progress, and audit history UI in apps/desktop/src/features/lifecycle/LifecycleCleanupPage.tsx
 - [ ] T083 [US5] Implement JSON, JSONL events, and Markdown manifest file writers as plan items in crates/project/structure/src/manifest_writers.rs
 
 **Checkpoint**: User Story 5 is fully functional and testable independently.
@@ -204,7 +204,7 @@
 - [ ] T086 [US7] Implement target catalog repositories and coverage summary queries in crates/persistence/db/src/targets.rs
 - [ ] T087 [US7] Implement target.create, target.query, alias confirmation, and observing-plan link operation handlers in crates/app/core/src/targets.rs
 - [ ] T088 [US7] Implement target history aggregation across sessions, calibration context, projects, outputs, notes, and plan references in crates/targeting/src/history.rs
-- [ ] T089 [US7] Build target catalog, target detail, alias review, session/project history, output history, and plan reference UI in apps/desktop/src/features/targets/TargetHistoryPage.tsx
+- [ ] T089 [US7] Use $impeccable product-UI guidance to build target catalog, target detail, alias review, session/project history, output history, and plan reference UI in apps/desktop/src/features/targets/TargetHistoryPage.tsx
 
 **Checkpoint**: User Story 7 is fully functional and testable independently.
 
@@ -227,7 +227,7 @@
 - [ ] T093 [US6] Implement rule evaluation hooks for classification, naming, protected folders, aliases, metadata keyword maps, and retention in crates/app/core/src/rules.rs
 - [ ] T094 [US6] Implement root remap verification plan generation and relationship recovery in crates/fs/inventory/src/root_remap.rs
 - [ ] T095 [US6] Implement settings.get, settings.update, rules.update, and library.root.remap.plan handlers in crates/app/core/src/settings_rules.rs
-- [ ] T096 [US6] Build settings, rules, cleanup defaults, protected folders, aliases, taxonomy, and root recovery UI in apps/desktop/src/features/settings/SettingsRulesPage.tsx
+- [ ] T096 [US6] Use $impeccable product-UI guidance to build settings, rules, cleanup defaults, protected folders, aliases, taxonomy, and root recovery UI in apps/desktop/src/features/settings/SettingsRulesPage.tsx
 
 **Checkpoint**: User Story 6 is fully functional and testable independently.
 
@@ -242,7 +242,7 @@
 - [ ] T099 Add performance benchmark harness for 100,000 item scan and lazy hashing behavior in tests/integration/performance_inventory_scan.rs
 - [ ] T100 Add cross-platform path compatibility matrix and manual verification checklist in docs/architecture/filesystem-safety.md
 - [ ] T101 Run cargo fmt, cargo clippy, cargo test, contract validation, frontend typecheck, and fixture smoke test commands defined in justfile
-- [ ] T102 Run SpecKit analysis and resolve cross-artifact inconsistencies in specs/001-astro-library-manager/tasks.md
+- [ ] T102 Review SpecKit analysis report and update affected SpecKit artifacts in specs/001-astro-library-manager/tasks.md, specs/001-astro-library-manager/spec.md, specs/001-astro-library-manager/plan.md, or specs/001-astro-library-manager/research.md
 
 ---
 
@@ -286,7 +286,7 @@ blocked_by = ["T007"]
 [graph.T017]
 blocked_by = ["T007", "T016"]
 [graph.T018]
-blocked_by = ["T011"]
+blocked_by = ["T002", "T011"]
 [graph.T019]
 blocked_by = ["T004"]
 [graph.T020]
@@ -312,17 +312,17 @@ blocked_by = ["T013", "T025", "T027", "T028"]
 [graph.T030]
 blocked_by = ["T012", "T029"]
 [graph.T031]
-blocked_by = ["T011", "T029"]
+blocked_by = ["T011", "T018", "T029"]
 [graph.T032]
 blocked_by = ["T022", "T031"]
 [graph.T033]
 blocked_by = ["T004"]
 [graph.T034]
-blocked_by = ["T033", "T037"]
+blocked_by = ["T033"]
 [graph.T035]
-blocked_by = ["T033", "T041", "T042"]
+blocked_by = ["T033"]
 [graph.T036]
-blocked_by = ["T033", "T046"]
+blocked_by = ["T033"]
 [graph.T037]
 blocked_by = ["T007"]
 [graph.T038]
@@ -348,7 +348,7 @@ blocked_by = ["T014", "T037", "T041", "T042", "T046"]
 [graph.T048]
 blocked_by = ["T013", "T038", "T039", "T040", "T043", "T044", "T046", "T047"]
 [graph.T049]
-blocked_by = ["T011", "T048"]
+blocked_by = ["T011", "T018", "T048"]
 [graph.T050]
 blocked_by = ["T004"]
 [graph.T051]
@@ -370,7 +370,7 @@ blocked_by = ["T013", "T056", "T057"]
 [graph.T059]
 blocked_by = ["T054", "T057"]
 [graph.T060]
-blocked_by = ["T011", "T058", "T059"]
+blocked_by = ["T011", "T018", "T058", "T059"]
 [graph.T061]
 blocked_by = ["T008", "T054"]
 [graph.T062]
@@ -388,7 +388,7 @@ blocked_by = ["T014", "T064"]
 [graph.T068]
 blocked_by = ["T013", "T066", "T067"]
 [graph.T069]
-blocked_by = ["T011", "T068"]
+blocked_by = ["T011", "T018", "T068"]
 [graph.T070]
 blocked_by = ["T004"]
 [graph.T071]
@@ -400,7 +400,7 @@ blocked_by = ["T017", "T070"]
 [graph.T074]
 blocked_by = ["T054"]
 [graph.T075]
-blocked_by = ["T023", "T053", "T074"]
+blocked_by = ["T023", "T053", "T070", "T074"]
 [graph.T076]
 blocked_by = ["T054", "T074"]
 [graph.T077]
@@ -414,7 +414,7 @@ blocked_by = ["T014", "T074", "T079"]
 [graph.T081]
 blocked_by = ["T013", "T075", "T076", "T077", "T078", "T079", "T080"]
 [graph.T082]
-blocked_by = ["T011", "T081"]
+blocked_by = ["T011", "T018", "T081"]
 [graph.T083]
 blocked_by = ["T059", "T079", "T080"]
 [graph.T084]
@@ -428,7 +428,7 @@ blocked_by = ["T013", "T086"]
 [graph.T088]
 blocked_by = ["T041", "T042", "T054", "T086"]
 [graph.T089]
-blocked_by = ["T011", "T087", "T088"]
+blocked_by = ["T011", "T018", "T087", "T088"]
 [graph.T090]
 blocked_by = ["T008", "T023"]
 [graph.T091]
@@ -442,7 +442,7 @@ blocked_by = ["T017", "T023", "T092"]
 [graph.T095]
 blocked_by = ["T013", "T093", "T094"]
 [graph.T096]
-blocked_by = ["T011", "T095"]
+blocked_by = ["T011", "T018", "T095"]
 [graph.T097]
 blocked_by = ["T032", "T049", "T060", "T069", "T082", "T089", "T096"]
 [graph.T098]

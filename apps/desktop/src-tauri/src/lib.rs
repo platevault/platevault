@@ -1,6 +1,9 @@
-//! Placeholder desktop shell crate.
+//! Desktop shell crate boundaries.
 //!
-//! This is intentionally not a Tauri application yet. The `SpecKit` plan will
-//! decide exact Tauri/React setup and dependency versions before implementation.
+//! The Rust `tauri` crate is intentionally deferred until the app shell needs
+//! platform GUI system dependencies. Command modules still model the eventual
+//! Tauri adapter boundary around the language-neutral contract envelopes.
+
+pub mod commands;
 
 pub const CRATE_NAME: &str = "desktop_shell";

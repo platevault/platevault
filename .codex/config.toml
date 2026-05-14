@@ -1,10 +1,65 @@
-# Project or subfolder-scoped Codex overrides.
-# Keep global defaults in ~/.codex/config.toml and place repo-specific
-# overrides here when the repository needs different behavior.
+[mcp_servers.codebase-memory-mcp]
+command = "codebase-memory-mcp"
+args = []
+id = ""
 
-# Example MCP server entry:
-# [mcp_servers.context7]
-# command = "npx"
-# args = ["-y", "@upstash/context7-mcp"]
+[mcp_servers.context7]
+command = "npx"
+args = [ "-y", "@upstash/context7-mcp",]
+id = ""
 
-# Add project-local Codex settings below as needed.
+[mcp_servers.mcp-package-version]
+command = "npx"
+args = [ "-y", "mcp-package-version",]
+id = ""
+
+[mcp_servers.playwright]
+command = "npx"
+args = [ "-y", "@playwright/mcp@latest",]
+id = ""
+
+[mcp_servers.repomix]
+command = "npx"
+args = [ "-y", "repomix", "--mcp",]
+id = ""
+
+[mcp_servers.serena]
+command = "bash"
+args = [ "-lc", "ctx=\"${SERENA_MCP_CONTEXT:-}\"; if [ -z \"$ctx\" ]; then parent=\"$(ps -o args= -p \"$PPID\" 2>/dev/null | tr \"[:upper:]\" \"[:lower:]\")\"; case \"$parent\" in *claude*) ctx=\"claude-code\" ;; *codex*) ctx=\"codex\" ;; *) ctx=\"agent\" ;; esac; fi; exec serena start-mcp-server --context \"$ctx\" --project-from-cwd",]
+id = ""
+
+[mcp_servers.codebase-memory-mcp.env]
+
+[mcp_servers.codebase-memory-mcp.tools.index_status]
+approval_mode = "approve"
+
+[mcp_servers.context7.env]
+
+[mcp_servers.mcp-package-version.env]
+
+[mcp_servers.playwright.env]
+
+[mcp_servers.playwright.tools.browser_resize]
+approval_mode = "approve"
+
+[mcp_servers.playwright.tools.browser_navigate]
+approval_mode = "approve"
+
+[mcp_servers.playwright.tools.browser_evaluate]
+approval_mode = "approve"
+
+[mcp_servers.playwright.tools.browser_click]
+approval_mode = "approve"
+
+[mcp_servers.playwright.tools.browser_tabs]
+approval_mode = "approve"
+
+[mcp_servers.playwright.tools.browser_hover]
+approval_mode = "approve"
+
+[mcp_servers.playwright.tools.browser_run_code_unsafe]
+approval_mode = "approve"
+
+[mcp_servers.repomix.env]
+
+[mcp_servers.serena.env]

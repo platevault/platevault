@@ -1,0 +1,336 @@
+<!DOCTYPE html>
+
+<html class="light" lang="en"><head>
+<meta charset="utf-8"/>
+<meta content="width=device-width, initial-scale=1.0" name="viewport"/>
+<title>Astro Library Manager - Library Workbench</title>
+<script src="https://cdn.tailwindcss.com?plugins=forms,container-queries"></script>
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&amp;display=swap" rel="stylesheet"/>
+<link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:wght,FILL@100..700,0..1&amp;display=swap" rel="stylesheet"/>
+<link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:wght,FILL@100..700,0..1&amp;display=swap" rel="stylesheet"/>
+<script id="tailwind-config">
+        tailwind.config = {
+          darkMode: "class",
+          theme: {
+            extend: {
+              "colors": {
+                      "error-container": "#ffdad6",
+                      "surface-tint": "#545f73",
+                      "surface-dim": "#dcd9db",
+                      "on-primary": "#ffffff",
+                      "inverse-on-surface": "#f3f0f2",
+                      "surface-container-high": "#eae7e9",
+                      "primary-fixed": "#d8e3fb",
+                      "tertiary": "#1e1200",
+                      "tertiary-container": "#35260c",
+                      "on-secondary-container": "#5c6570",
+                      "on-tertiary-container": "#a38c6a",
+                      "surface-container-lowest": "#ffffff",
+                      "secondary": "#565f6a",
+                      "surface-container-highest": "#e4e2e3",
+                      "on-tertiary-fixed": "#271902",
+                      "on-surface-variant": "#45474c",
+                      "inverse-surface": "#303032",
+                      "outline": "#75777d",
+                      "background": "#fbf8fa",
+                      "error": "#ba1a1a",
+                      "surface": "#fbf8fa",
+                      "outline-variant": "#c5c6cd",
+                      "secondary-fixed-dim": "#bdc8d3",
+                      "on-error": "#ffffff",
+                      "primary-container": "#1e293b",
+                      "on-secondary-fixed-variant": "#3e4852",
+                      "secondary-container": "#dae3f0",
+                      "surface-variant": "#e4e2e3",
+                      "primary": "#091426",
+                      "surface-container": "#f0edef",
+                      "tertiary-fixed": "#fadfb8",
+                      "on-primary-container": "#8590a6",
+                      "surface-container-low": "#f5f3f4",
+                      "on-surface": "#1b1b1d",
+                      "on-tertiary": "#ffffff",
+                      "tertiary-fixed-dim": "#ddc39d",
+                      "on-error-container": "#93000a",
+                      "on-primary-fixed-variant": "#3c475a",
+                      "on-tertiary-fixed-variant": "#564427",
+                      "on-background": "#1b1b1d",
+                      "on-secondary-fixed": "#131d25",
+                      "on-secondary": "#ffffff",
+                      "surface-bright": "#fbf8fa",
+                      "primary-fixed-dim": "#bcc7de",
+                      "inverse-primary": "#bcc7de",
+                      "on-primary-fixed": "#111c2d",
+                      "secondary-fixed": "#dae3f0"
+              },
+              "borderRadius": {
+                      "DEFAULT": "0.125rem",
+                      "lg": "0.25rem",
+                      "xl": "0.5rem",
+                      "full": "0.75rem"
+              },
+              "spacing": {
+                      "toolbar_height": "40px",
+                      "unit_md": "16px",
+                      "sidebar_width": "248px",
+                      "gutter": "12px",
+                      "unit_sm": "8px",
+                      "unit_xs": "4px"
+              },
+              "fontFamily": {
+                      "h1": [
+                              "Inter"
+                      ],
+                      "label-caps": [
+                              "Inter"
+                      ],
+                      "body-medium": [
+                              "Inter"
+                      ],
+                      "body-base": [
+                              "Inter"
+                      ],
+                      "tabular-metadata": [
+                              "Inter"
+                      ]
+              },
+              "fontSize": {
+                      "h1": [
+                              "16px",
+                              {
+                                      "lineHeight": "24px",
+                                      "fontWeight": "600"
+                              }
+                      ],
+                      "label-caps": [
+                              "11px",
+                              {
+                                      "lineHeight": "14px",
+                                      "letterSpacing": "0.02em",
+                                      "fontWeight": "600"
+                              }
+                      ],
+                      "body-medium": [
+                              "13px",
+                              {
+                                      "lineHeight": "20px",
+                                      "fontWeight": "500"
+                              }
+                      ],
+                      "body-base": [
+                              "13px",
+                              {
+                                      "lineHeight": "20px",
+                                      "fontWeight": "400"
+                              }
+                      ],
+                      "tabular-metadata": [
+                              "12px",
+                              {
+                                      "lineHeight": "16px",
+                                      "fontWeight": "400"
+                              }
+                      ]
+              }
+            },
+          }
+        }
+    </script>
+<style>
+        body { font-family: 'Inter', sans-serif; background-color: #F8FAFC; }
+        .material-symbols-outlined {
+            font-variation-settings: 'FILL' 0, 'wght' 400, 'GRAD' 0, 'opsz' 24;
+        }
+    </style>
+</head>
+<body class="text-on-surface antialiased flex h-screen overflow-hidden">
+<!-- SideNavBar -->
+<nav class="w-[248px] h-screen border-r border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900 text-slate-900 dark:text-slate-100 font-['Inter'] text-[13px] tracking-tight border-r border-slate-200 dark:border-slate-800 fixed left-0 top-0 z-40 flex flex-col shrink-0">
+<div class="h-10 flex items-center px-4 border-b border-slate-200 dark:border-slate-800 shrink-0">
+<span class="text-sm font-bold text-slate-900 dark:text-slate-50">Astro Library</span>
+<span class="ml-2 text-[10px] text-slate-500">V1.0.4</span>
+</div>
+<div class="flex-1 py-2 overflow-y-auto">
+<a class="flex items-center h-8 px-4 bg-slate-100 dark:bg-slate-800 text-slate-900 dark:text-slate-50 border-l-2 border-slate-900 dark:border-slate-50 font-medium transition-all duration-150 ease-in-out" href="#">
+<span class="material-symbols-outlined text-[16px] mr-2" data-icon="library_books">library_books</span>
+                Library
+            </a>
+<a class="flex items-center h-8 px-4 text-slate-600 dark:text-slate-400 hover:bg-slate-50 dark:hover:bg-slate-800 transition-all duration-150 ease-in-out" href="#">
+<span class="material-symbols-outlined text-[16px] mr-2" data-icon="assignment">assignment</span>
+                Projects
+            </a>
+<a class="flex items-center h-8 px-4 text-slate-600 dark:text-slate-400 hover:bg-slate-50 dark:hover:bg-slate-800 transition-all duration-150 ease-in-out justify-between" href="#">
+<div class="flex items-center">
+<span class="material-symbols-outlined text-[16px] mr-2" data-icon="inbox">inbox</span>
+                    Inbox
+                </div>
+<span class="bg-primary-container text-on-primary text-[10px] font-bold px-1.5 py-0.5 rounded-[2px]">12</span>
+</a>
+<a class="flex items-center h-8 px-4 text-slate-600 dark:text-slate-400 hover:bg-slate-50 dark:hover:bg-slate-800 transition-all duration-150 ease-in-out" href="#">
+<span class="material-symbols-outlined text-[16px] mr-2" data-icon="settings">settings</span>
+                Settings
+            </a>
+</div>
+<div class="h-12 border-t border-slate-200 dark:border-slate-800 flex items-center px-4 shrink-0">
+<div class="w-6 h-6 bg-slate-200 rounded-full flex items-center justify-center overflow-hidden mr-2">
+<span class="material-symbols-outlined text-sm text-slate-500">person</span>
+</div>
+<span class="truncate">User Profile</span>
+</div>
+</nav>
+<!-- Main Content Canvas -->
+<div class="flex-1 flex flex-col ml-[248px] h-screen overflow-hidden">
+<!-- TopAppBar -->
+<header class="h-10 w-full border-b border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900 text-slate-900 dark:text-slate-100 font-['Inter'] text-[12px] font-medium border-b border-slate-200 dark:border-slate-800 sticky top-0 right-0 z-30 flex items-center justify-between px-4 shrink-0">
+<div class="flex items-center gap-2">
+<span class="font-h1 text-h1 text-slate-800">Astro Library Manager</span>
+</div>
+<div class="flex items-center gap-4">
+<div class="relative w-64">
+<span class="material-symbols-outlined absolute left-2 top-1.5 text-[14px] text-slate-400" data-icon="search">search</span>
+<input class="w-full h-7 pl-7 pr-2 text-[12px] bg-slate-50 border border-slate-200 rounded-[2px] focus:outline-none focus:border-slate-400 focus:bg-white text-slate-800 placeholder-slate-400" placeholder="Search library..." type="text"/>
+</div>
+<div class="flex items-center gap-1 border-l border-slate-200 pl-4">
+<button class="h-7 px-2 flex items-center justify-center text-slate-500 hover:text-slate-900 hover:bg-slate-50 rounded-[2px] transition-colors" title="refresh">
+<span class="material-symbols-outlined text-[16px]" data-icon="refresh">refresh</span>
+</button>
+<button class="h-7 px-2 flex items-center justify-center text-slate-500 hover:text-slate-900 hover:bg-slate-50 rounded-[2px] transition-colors" title="create_new_folder">
+<span class="material-symbols-outlined text-[16px]" data-icon="create_new_folder">create_new_folder</span>
+</button>
+<button class="h-7 px-2 flex items-center justify-center text-slate-500 hover:text-slate-900 hover:bg-slate-50 rounded-[2px] transition-colors" title="add_box">
+<span class="material-symbols-outlined text-[16px]" data-icon="add_box">add_box</span>
+</button>
+</div>
+<div class="flex items-center gap-2 border-l border-slate-200 pl-4">
+<button class="h-7 px-3 bg-white border border-slate-300 text-slate-700 rounded-[2px] hover:bg-slate-50 transition-colors">
+                        Scan
+                    </button>
+<button class="h-7 px-3 bg-slate-800 text-white border border-slate-800 rounded-[2px] hover:bg-slate-900 transition-colors">
+                        Add Data Source
+                    </button>
+</div>
+</div>
+</header>
+<!-- Workbench Layout -->
+<div class="flex-1 flex overflow-hidden bg-[#F8FAFC]">
+<!-- Main Content Area -->
+<main class="flex-1 flex flex-col min-w-0 p-gutter overflow-hidden">
+<div class="flex items-center justify-between mb-4 shrink-0">
+<h2 class="font-h1 text-h1 text-slate-900">Data Sources</h2>
+<div class="flex items-center gap-2">
+<button class="h-6 px-2 bg-white border border-slate-300 text-slate-600 rounded-[2px] text-[11px] font-medium hover:bg-slate-50 flex items-center gap-1">
+<span class="material-symbols-outlined text-[14px]">filter_list</span> Filter
+                        </button>
+<button class="h-6 px-2 bg-white border border-slate-300 text-slate-600 rounded-[2px] text-[11px] font-medium hover:bg-slate-50 flex items-center gap-1">
+<span class="material-symbols-outlined text-[14px]">view_column</span> Columns
+                        </button>
+</div>
+</div>
+<!-- Info Panel -->
+<div class="bg-blue-50 border border-blue-100 rounded-[2px] p-2 mb-4 shrink-0 flex items-start gap-2">
+<span class="material-symbols-outlined text-blue-500 text-[16px] mt-0.5">info</span>
+<div>
+<p class="font-label-caps text-label-caps text-blue-800 mb-0.5">RAW SOURCE RULE</p>
+<p class="font-body-base text-body-base text-blue-700">Immediate child folders are session candidates. Classification uses FITS/XISF metadata, not path names.</p>
+</div>
+</div>
+<!-- Tree Table -->
+<div class="flex-1 bg-white border border-slate-300 rounded-[2px] flex flex-col min-h-0 overflow-hidden shadow-sm">
+<!-- Table Header -->
+<div class="flex items-center h-8 border-b border-slate-300 bg-slate-50 px-2 font-label-caps text-label-caps text-slate-500 shrink-0">
+<div class="flex-1 min-w-[200px] pl-6">Name</div>
+<div class="w-[120px]">Type</div>
+<div class="w-[80px] text-right pr-4">Files</div>
+<div class="w-[100px]">Last Seen</div>
+<div class="w-[100px]">State</div>
+<div class="w-[80px]">Actions</div>
+</div>
+<!-- Table Body (Scrollable) -->
+<div class="flex-1 overflow-y-auto">
+<!-- Parent Row 1 -->
+<div class="flex items-center h-8 border-b border-slate-200 px-2 hover:bg-slate-50 font-body-base text-body-base text-slate-800">
+<div class="flex-1 min-w-[200px] flex items-center gap-1">
+<span class="material-symbols-outlined text-[16px] text-slate-400 cursor-pointer">expand_more</span>
+<span class="material-symbols-outlined text-[16px] text-slate-400">folder</span>
+<span class="font-medium">Poseidon-C PRO</span>
+</div>
+<div class="w-[120px] text-slate-500 text-[12px]">Raw</div>
+<div class="w-[80px] text-right pr-4 font-tabular-metadata text-tabular-metadata text-slate-600">-</div>
+<div class="w-[100px] font-tabular-metadata text-tabular-metadata text-slate-500">Today, 09:41</div>
+<div class="w-[100px]"></div>
+<div class="w-[80px]">
+<button class="text-slate-400 hover:text-slate-700"><span class="material-symbols-outlined text-[16px]">more_horiz</span></button>
+</div>
+</div>
+<!-- Child Row 1 (Selected) -->
+<div class="flex items-center h-8 border-b border-slate-200 px-2 bg-slate-100 font-body-base text-body-base text-slate-900">
+<div class="flex-1 min-w-[200px] flex items-center gap-1 pl-6">
+<span class="material-symbols-outlined text-[16px] text-slate-300 cursor-pointer">chevron_right</span>
+<span class="material-symbols-outlined text-[16px] text-blue-500" data-weight="fill">folder_open</span>
+<span>2023-10-24_M42_Orion</span>
+</div>
+<div class="w-[120px] text-slate-500 text-[12px]">Session</div>
+<div class="w-[80px] text-right pr-4 font-tabular-metadata text-tabular-metadata">1,204</div>
+<div class="w-[100px] font-tabular-metadata text-tabular-metadata text-slate-500">Yesterday</div>
+<div class="w-[100px]">
+<span class="inline-flex items-center px-1.5 h-5 rounded-[2px] bg-yellow-100 text-yellow-800 text-[10px] font-semibold tracking-wide">Candidate</span>
+</div>
+<div class="w-[80px]">
+<button class="text-slate-500 hover:text-slate-800"><span class="material-symbols-outlined text-[16px]">open_in_new</span></button>
+</div>
+</div>
+</div>
+</div>
+</main>
+<!-- Right Inspector Sidebar -->
+<aside class="w-[300px] border-l border-slate-300 bg-white flex flex-col shrink-0">
+<div class="h-10 border-b border-slate-200 px-4 flex items-center shrink-0">
+<span class="font-h1 text-h1 text-slate-800 truncate">2023-10-24_M42_Orion</span>
+</div>
+<div class="flex-1 overflow-y-auto p-4 space-y-6">
+<!-- FITS Metadata Summary -->
+<section>
+<h3 class="font-label-caps text-label-caps text-slate-500 mb-2">FITS METADATA SUMMARY</h3>
+<div class="bg-slate-50 border border-slate-200 rounded-[2px] p-2 space-y-2">
+<div class="flex justify-between items-center border-b border-slate-200 pb-1">
+<span class="font-body-base text-[12px] text-slate-600">Linked Target</span>
+<span class="font-body-medium text-[12px] text-slate-900">M42</span>
+</div>
+<div class="flex justify-between items-center border-b border-slate-200 pb-1">
+<span class="font-body-base text-[12px] text-slate-600">Session Date</span>
+<span class="font-tabular-metadata text-tabular-metadata text-slate-900">2023-10-24</span>
+</div>
+<div class="flex justify-between items-center border-b border-slate-200 pb-1">
+<span class="font-body-base text-[12px] text-slate-600">Sensor Temp</span>
+<span class="font-tabular-metadata text-tabular-metadata text-slate-900">-10.0°C</span>
+</div>
+<div class="flex justify-between items-center">
+<span class="font-body-base text-[12px] text-slate-600">Avg Gain</span>
+<span class="font-tabular-metadata text-tabular-metadata text-slate-900">100</span>
+</div>
+</div>
+</section>
+<!-- Rig Consistency -->
+<section>
+<h3 class="font-label-caps text-label-caps text-slate-500 mb-2">RIG CONSISTENCY</h3>
+<div class="flex items-center gap-2 p-2 bg-emerald-50 border border-emerald-200 rounded-[2px]">
+<span class="material-symbols-outlined text-emerald-600 text-[18px]">check_circle</span>
+<span class="font-body-medium text-[12px] text-emerald-800">Verified</span>
+</div>
+</section>
+</div>
+<!-- Actions Footer -->
+<div class="p-4 border-t border-slate-200 space-y-2 shrink-0 bg-slate-50">
+<button class="w-full h-8 bg-slate-800 text-white font-body-medium text-[12px] rounded-[2px] hover:bg-slate-900 transition-colors flex items-center justify-center gap-2">
+                        Confirm Session
+                    </button>
+<button class="w-full h-8 bg-white border border-slate-300 text-slate-700 font-body-medium text-[12px] rounded-[2px] hover:bg-slate-50 transition-colors flex items-center justify-center gap-2">
+                        Create Project from Session
+                    </button>
+<button class="w-full h-8 bg-transparent text-slate-500 font-body-medium text-[12px] rounded-[2px] hover:text-slate-800 transition-colors flex items-center justify-center gap-2">
+                        Resolve Metadata
+                    </button>
+</div>
+</aside>
+</div>
+</div>
+</body></html>

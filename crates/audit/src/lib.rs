@@ -1,13 +1,170 @@
 //! Audit event and operation history boundaries.
 
+use domain_core::{Actor, EntityId, Timestamp};
+use serde::{Deserialize, Serialize};
+use serde_json::Value;
+
 pub const CRATE_NAME: &str = "audit";
+
+pub type AuditWriteResult<T> = Result<T, AuditError>;
+
+#[derive(Debug, thiserror::Error)]
+pub enum AuditError {
+    #[error("audit writer failed: {0}")]
+    Writer(String),
+}
+
+#[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
+pub struct AuditLogEntry {
+    pub id: EntityId,
+    pub event_type: AuditEventType,
+    pub entity_type: String,
+    pub entity_id: Option<EntityId>,
+    pub plan_id: Option<EntityId>,
+    pub plan_item_id: Option<EntityId>,
+    pub timestamp: Timestamp,
+    pub actor: Actor,
+    pub details_json: Value,
+    pub result: AuditEventResult,
+}
+
+impl AuditLogEntry {
+    #[must_use]
+    pub fn new(
+        event_type: AuditEventType,
+        entity_type: impl Into<String>,
+        actor: Actor,
+        result: AuditEventResult,
+    ) -> Self {
+        Self {
+            id: EntityId::new(),
+            event_type,
+            entity_type: entity_type.into(),
+            entity_id: None,
+            plan_id: None,
+            plan_item_id: None,
+            timestamp: Timestamp::now_utc(),
+            actor,
+            details_json: Value::Object(serde_json::Map::new()),
+            result,
+        }
+    }
+
+    #[must_use]
+    pub fn for_entity(mut self, entity_id: EntityId) -> Self {
+        self.entity_id = Some(entity_id);
+        self
+    }
+
+    #[must_use]
+    pub fn for_plan(mut self, plan_id: EntityId) -> Self {
+        self.plan_id = Some(plan_id);
+        self
+    }
+
+    #[must_use]
+    pub fn for_plan_item(mut self, plan_item_id: EntityId) -> Self {
+        self.plan_item_id = Some(plan_item_id);
+        self
+    }
+
+    #[must_use]
+    pub fn with_details(mut self, details_json: Value) -> Self {
+        self.details_json = details_json;
+        self
+    }
+}
+
+#[derive(Clone, Copy, Debug, Eq, Hash, Ord, PartialEq, PartialOrd, Serialize, Deserialize)]
+#[serde(rename_all = "snake_case")]
+pub enum AuditEventType {
+    PlanCreated,
+    PlanApproved,
+    PlanApplied,
+    ItemApplied,
+    ItemFailed,
+    RootRemapped,
+    ManifestGenerated,
+    SourceViewGenerated,
+    CleanupDecisionRecorded,
+}
+
+#[derive(Clone, Copy, Debug, Eq, Hash, Ord, PartialEq, PartialOrd, Serialize, Deserialize)]
+#[serde(rename_all = "snake_case")]
+pub enum AuditEventResult {
+    Success,
+    Failure,
+    Partial,
+    Skipped,
+}
+
+pub trait AppendOnlyAuditWriter {
+    fn append(&mut self, entry: AuditLogEntry) -> AuditWriteResult<()>;
+}
 
 #[cfg(test)]
 mod tests {
-    use super::CRATE_NAME;
+    use domain_core::Actor;
+    use serde_json::json;
+
+    use super::{
+        AppendOnlyAuditWriter, AuditEventResult, AuditEventType, AuditLogEntry, AuditWriteResult,
+        CRATE_NAME,
+    };
+
+    #[derive(Default)]
+    struct InMemoryAuditWriter {
+        entries: Vec<AuditLogEntry>,
+    }
+
+    impl AppendOnlyAuditWriter for InMemoryAuditWriter {
+        fn append(&mut self, entry: AuditLogEntry) -> AuditWriteResult<()> {
+            self.entries.push(entry);
+            Ok(())
+        }
+    }
 
     #[test]
     fn exposes_crate_name() {
         assert_eq!(CRATE_NAME, "audit");
+    }
+
+    #[test]
+    fn creates_audit_entry_with_default_details() {
+        let entry = AuditLogEntry::new(
+            AuditEventType::PlanCreated,
+            "filesystem_plan",
+            Actor::system(),
+            AuditEventResult::Success,
+        );
+
+        assert_eq!(entry.entity_type, "filesystem_plan");
+        assert_eq!(entry.actor.as_str(), "system");
+        assert_eq!(entry.details_json, json!({}));
+    }
+
+    #[test]
+    fn append_only_writer_records_entries_in_order() {
+        let mut writer = InMemoryAuditWriter::default();
+        let first = AuditLogEntry::new(
+            AuditEventType::PlanApproved,
+            "filesystem_plan",
+            Actor::local("tester"),
+            AuditEventResult::Success,
+        );
+        let second = AuditLogEntry::new(
+            AuditEventType::ItemFailed,
+            "plan_item",
+            Actor::local("tester"),
+            AuditEventResult::Failure,
+        )
+        .with_details(json!({ "reason": "destination exists" }));
+
+        writer.append(first).unwrap();
+        writer.append(second).unwrap();
+
+        assert_eq!(writer.entries.len(), 2);
+        assert_eq!(writer.entries[0].event_type, AuditEventType::PlanApproved);
+        assert_eq!(writer.entries[1].event_type, AuditEventType::ItemFailed);
     }
 }

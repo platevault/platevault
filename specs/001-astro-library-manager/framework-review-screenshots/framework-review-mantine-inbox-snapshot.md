@@ -1,0 +1,28 @@
+- generic [ref=e3] [box=0,0,1440,980]:
+  - complementary "Primary navigation" [ref=e4] [box=0,0,272,980]:
+    - generic [ref=e5] [box=16,20,239,48]:
+      - generic [ref=e6] [box=16,24,40,40]: ALM
+      - generic [ref=e7] [box=68,28,85,32]
+    - navigation [ref=e10] [box=16,92,239,336]:
+      - generic [ref=e11] [box=16,92,239,186]
+      - generic [ref=e19] [box=16,298,239,130]
+  - generic [ref=e25] [box=272,0,1168,980]:
+    - banner [ref=e26] [box=272,0,1168,92]:
+      - generic [ref=e27] [box=296,22,238,47]
+      - generic "View controls" [ref=e30] [box=986,27,430,38]
+    - main "Framework Review workspace" [ref=e36] [box=272,92,1168,699]:
+      - generic [ref=e37] [box=292,112,1128,598]
+  - dialog "Overview" [ref=e170] [box=160,267,1120,446]:
+    - generic "Setup progress" [ref=e171] [box=161,268,1118,59]:
+      - generic [ref=e172] [box=181,284,173,26]: "1"
+      - generic [ref=e173] [box=362,284,173,26]: "2"
+      - generic [ref=e174] [box=543,284,173,26]: "3"
+      - generic [ref=e175] [box=724,284,173,26]: "4"
+      - generic [ref=e176] [box=905,284,173,26]: "5"
+      - generic [ref=e177] [box=1086,284,173,26]: "6"
+    - generic [ref=e178] [box=161,327,1118,310]:
+      - generic [ref=e179] [box=181,347,1078,114]
+      - list [ref=e184] [box=198,494,1044,106]
+    - generic [ref=e189] [box=161,637,1118,75]:
+      - button "Skip setup" [ref=e190] [cursor=pointer] [box=181,654,121,42]
+      - generic [ref=e191] [box=1116,654,143,42]

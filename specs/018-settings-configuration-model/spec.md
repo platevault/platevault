@@ -1,0 +1,96 @@
+# Feature Specification: Settings Configuration Model
+
+**Feature Branch**: `018-settings-configuration-model`  
+**Created**: 2026-05-09  
+**Status**: Draft  
+**Input**: User description: "Specify the settings model after the UI review: plain labels, one setting per line, hover information, auto-save, no internal technical controls, and grouped submenus that match user workflows."
+
+## User Scenarios & Testing *(mandatory)*
+
+### User Story 1 - Understand Every Setting (Priority: P1)
+
+As a user, I want each setting to have a plain label, a single-line control, and an information affordance so that configuration does not feel like internal implementation leakage.
+
+**Why this priority**: The user identified multiple settings whose names and controls were unclear.
+
+**Independent Test**: Open Settings and inspect each setting row; confirm each row has one control line, an information icon, clear label text, and no save button.
+
+**Acceptance Scenarios**:
+
+1. **Given** Settings is open, **When** a setting row is displayed, **Then** it has one primary line with label, info affordance, and control.
+2. **Given** a user hovers the information affordance, **When** help opens, **Then** it explains the setting in user language.
+3. **Given** a setting changes, **When** the control value changes, **Then** the app saves automatically and shows lightweight status.
+
+---
+
+### User Story 2 - Configure Workflow-Relevant Rules (Priority: P2)
+
+As a user, I want settings grouped by workflow domain so that source behavior, calibration matching, project naming, tools, catalogs, logs, and safety are easy to find.
+
+**Why this priority**: Settings should match product workflows, not code modules.
+
+**Independent Test**: Navigate each settings section and confirm controls are grouped under Sources, Calibration, Projects, Tools, Catalogs, Safety, Logs, and Appearance or equivalent final names.
+
+**Acceptance Scenarios**:
+
+1. **Given** a user needs calibration matching, **When** they open Settings, **Then** matching rules are grouped under Calibration.
+2. **Given** a user needs project folder naming, **When** they open Settings, **Then** pattern builder controls are grouped under Projects.
+3. **Given** a user needs log display preferences, **When** they open Settings, **Then** only workflow-relevant log display controls are shown.
+
+### Edge Cases
+
+- User changes a setting while an operation is running.
+- Auto-save fails.
+- Setting requires native path selection.
+- A setting is only relevant when another feature is enabled.
+- A setting has invalid values after version upgrade.
+
+### Domain Questions To Resolve
+
+- Final menu names for Settings sections.
+- Which settings are project-level overrides versus global defaults.
+
+## Requirements *(mandatory)*
+
+### Functional Requirements
+
+- **FR-001**: Settings MUST use plain user-facing labels and avoid internal terms such as marker write queue, project envelope, prepared sources layout, structure normalization, material kinds, reuse scope, or metadata repair unless reworked into clear user concepts.
+- **FR-002**: Settings MUST show one setting per line.
+- **FR-003**: Each setting row MUST include an information affordance that explains what the setting changes, how the app uses it, what the options mean, and any workflow or safety consequence; it MUST NOT merely restate the label.
+- **FR-004**: Settings MUST auto-save changes and MUST NOT require a global Save button.
+- **FR-005**: Destructive or high-risk setting changes MUST show confirmation before applying.
+- **FR-006**: Density MUST be fixed by the desktop design system; Settings MUST NOT expose compact/comfortable density controls.
+- **FR-007**: Light/dark mode MUST be available as an icon control in the app shell and as a persisted appearance setting if exposed.
+- **FR-008**: Project folder and archive location patterns MUST use the token pattern builder, not freeform text.
+- **FR-009**: Calibration matching settings MUST be per calibration frame type.
+- **FR-010**: Catalog settings MUST allow selecting available catalog families and target lookup behavior.
+- **FR-011**: Tool settings MUST configure executable paths for each supported processing tool.
+- **FR-012**: API contract settings MUST NOT appear as a normal user settings section.
+- **FR-013**: Log settings MUST not expose export format or request/entity metadata toggles; request/entity metadata is always present and export is JSON when offered.
+
+### Key Entities
+
+- **Setting Section**: Workflow-oriented group of settings.
+- **Setting Row**: Label, information affordance, control, validation, and auto-save state.
+- **Setting Help**: Short explanation shown on hover/focus.
+- **Setting Change Event**: Auditable configuration change.
+- **Project Override**: Project-specific configuration that overrides global defaults.
+
+## Success Criteria *(mandatory)*
+
+### Measurable Outcomes
+
+- **SC-001**: Every visible setting can be explained without referring to internal implementation names.
+- **SC-002**: Users can configure common setup, calibration, project naming, tool path, catalog, safety, log, and appearance preferences from Settings.
+- **SC-003**: Settings changes persist without a global save action.
+- **SC-004**: No visible settings section is named API Contracts.
+
+## Assumptions
+
+- Project-specific configuration lives in the Edit project pane when it only applies to one project.
+- Developer diagnostics can expose contract references outside normal user settings.
+
+## Out of Scope
+
+- Implementing persistence migrations.
+- Designing every final tooltip copy string.

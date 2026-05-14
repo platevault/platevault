@@ -1,0 +1,32 @@
+{
+  "name": "projects/1255501662478508239",
+  "projectId": "1255501662478508239",
+  "title": "Astro Library Manager Mockups",
+  "visibility": "PRIVATE",
+  "projectType": "PROJECT_DESIGN",
+  "origin": "STITCH",
+  "deviceType": "DESKTOP",
+  "screens": {
+    "inventory-workbench": {
+      "id": "78bd8411f72c4cdc87c304a69bbd5a79",
+      "sourceScreen": "projects/1255501662478508239/screens/78bd8411f72c4cdc87c304a69bbd5a79",
+      "width": 1280,
+      "height": 1024
+    },
+    "project-library-shell": {
+      "id": "a88287f170e24aab8c9b1293cfb612e4",
+      "sourceScreen": "projects/1255501662478508239/screens/a88287f170e24aab8c9b1293cfb612e4",
+      "width": 2560,
+      "height": 2048
+    },
+    "project-library-shell-v2": {
+      "id": "251a617879fe44c0b65882abfc124a0b",
+      "sourceScreen": "projects/1255501662478508239/screens/251a617879fe44c0b65882abfc124a0b",
+      "width": 2560,
+      "height": 2048
+    }
+  },
+  "metadata": {
+    "userRole": "OWNER"
+  }
+}

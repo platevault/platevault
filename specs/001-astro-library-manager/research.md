@@ -1,5 +1,12 @@
 # Research: Astro Library Manager
 
+## Related Decision Records
+
+- [UI and Domain Decision Record](./research-ui-domain-decisions.md): navigation,
+  data source boundaries, session confirmation, metadata repair, project
+  creation, prepared sources, manifests, notes, settings, cleanup, and deferred
+  scope decisions from the design grilling pass.
+
 ## Research Sources Consulted
 
 - Tauri architecture and command communication:
@@ -185,6 +192,11 @@ history/comment cards.
 varies in exact keyword usage. XISF is compatible with FITS metadata but can
 also include richer properties. The app should normalize known keys without
 discarding unknown keys.
+
+`OBJECT` is treated as a target search hint for lights and other target-bearing
+frames. It should search local/online target names, aliases, and catalog IDs, but
+must not silently assign the target when the value is missing, ambiguous, or
+contradicted by user review.
 
 **Alternatives considered**:
 

@@ -5,8 +5,15 @@
   "description": "Local-first desktop application for astrophotography library and project lifecycle management.",
   "packageManager": "pnpm@10.33.0",
   "scripts": {
-    "build": "cargo build --workspace",
-    "test": "cargo test --workspace",
-    "lint": "cargo fmt --all --check && cargo clippy --workspace --all-targets -- -D warnings"
+    "build": "cargo build --workspace && pnpm -r --if-present build",
+    "test": "cargo test --workspace && pnpm -r --if-present test",
+    "lint": "cargo fmt --all --check && cargo clippy --workspace --all-targets -- -D warnings && pnpm -r --if-present lint",
+    "typecheck": "pnpm -r --if-present typecheck",
+    "contracts:build": "pnpm --filter @astro-plan/contracts build",
+    "desktop:dev": "pnpm --filter @astro-plan/desktop dev",
+    "fixtures:check": "echo \"Fixture checks pending fixture implementation\""
+  },
+  "devDependencies": {
+    "typescript": "^5.9.3"
   }
 }

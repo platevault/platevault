@@ -1,0 +1,29 @@
+- generic [ref=e3] [box=0,0,1440,980]:
+  - complementary "Primary navigation" [ref=e4] [box=0,0,272,980]:
+    - generic [ref=e5] [box=16,20,239,48]:
+      - generic [ref=e6] [box=16,24,40,40]: ALM
+      - generic [ref=e7] [box=68,28,85,32]:
+        - paragraph [ref=e8] [box=68,28,85,14]: Astro Library
+        - strong [ref=e9] [box=68,42,85,18]: Manager
+    - navigation [ref=e10] [box=16,92,239,336]:
+      - generic [ref=e11] [box=16,92,239,186]:
+        - paragraph [ref=e12] [box=16,92,239,18]: Main
+        - button "Inbox" [ref=e13] [cursor=pointer] [box=16,118,239,48]
+        - button "Library" [ref=e15] [cursor=pointer] [box=16,174,239,48]
+        - button "Projects" [ref=e17] [cursor=pointer] [box=16,230,239,48]
+      - generic [ref=e19] [box=16,298,239,130]:
+        - paragraph [ref=e20] [box=16,298,239,18]: System
+        - button "Settings" [ref=e21] [cursor=pointer] [box=16,324,239,48]
+        - button "Framework Review" [ref=e23] [cursor=pointer] [box=16,380,239,48]
+  - generic [ref=e25] [box=272,0,1168,980]:
+    - banner [ref=e26] [box=272,0,1168,92]:
+      - generic [ref=e27] [box=296,22,238,47]:
+        - paragraph [ref=e28] [box=296,22,238,18]: Astro Library Manager
+        - heading "Framework Review" [level=1] [ref=e29] [box=296,41,238,28]
+      - generic "View controls" [ref=e30] [box=986,27,430,38]:
+        - generic [ref=e31] [box=986,27,384,38]
+        - button "Switch to dark theme" [ref=e34] [cursor=pointer] [box=1378,27,38,38]
+    - main "Framework Review workspace" [ref=e36] [box=272,92,1168,699]:
+      - generic [ref=e37] [box=292,112,1128,598]:
+        - generic [ref=e38] [box=292,112,1128,115]
+        - generic [ref=e55] [box=292,243,1128,467]

@@ -357,6 +357,9 @@ coverage, outputs, and project status.
 - **FR-013**: System MUST allow users to create acquisition sessions and
   processing projects from a selected target so target metadata and prior context
   are stored in project/session metadata for review.
+- **FR-013a**: System MUST use FITS/XISF `OBJECT` metadata as a target search
+  hint when present, while requiring user review or confirmation before assigning
+  ambiguous or unresolved targets.
 - **FR-014**: System MUST support referenced observing-plan artifacts, including
   NINA plans where available, as metadata-linked files without executing,
   scheduling, or fully editing those plans in v1.
@@ -549,9 +552,10 @@ coverage, outputs, and project status.
 - **SC-001**: A user can register an existing library root and complete an
   initial non-mutating inventory scan for at least 100,000 filesystem items while
   retaining a visible list of unclassified or low-confidence items.
-- **SC-002**: At least 95% of filesystem mutation attempts are represented in a
-  reviewable plan with clear source, destination, action type, conflict policy,
-  and protection status before application is possible.
+- **SC-002**: 100% of filesystem mutation-capable operations MUST block
+  application unless represented in a reviewable plan with clear source,
+  destination, action type, conflict policy, and protection status before
+  application is possible.
 - **SC-003**: A user can create a multi-session project, select source sessions,
   review calibration candidates, and generate a project manifest in under 10
   minutes after the relevant source data has already been indexed.

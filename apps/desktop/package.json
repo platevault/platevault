@@ -4,8 +4,28 @@
   "version": "0.1.0",
   "type": "module",
   "scripts": {
-    "dev": "echo \"Tauri + React scaffold dependencies pending SpecKit plan\"",
-    "build": "echo \"Desktop build pending SpecKit plan\"",
-    "test": "echo \"Desktop tests pending SpecKit plan\""
+    "dev": "vite --host 127.0.0.1",
+    "build": "vite build",
+    "preview": "vite preview --host 127.0.0.1",
+    "test": "echo \"Desktop tests pending UI implementation\"",
+    "typecheck": "tsc --noEmit"
+  },
+  "dependencies": {
+    "@astro-plan/contracts": "workspace:*",
+    "@mantine/core": "9.1.1",
+    "@mantine/hooks": "9.1.1",
+    "@tanstack/react-router": "1.169.2",
+    "@tanstack/react-table": "8.21.3",
+    "@tauri-apps/api": "^2.9.0",
+    "lucide-react": "1.14.0",
+    "react": "^19.2.0",
+    "react-dom": "^19.2.0"
+  },
+  "devDependencies": {
+    "@tauri-apps/cli": "^2.9.0",
+    "@types/react": "^19.2.0",
+    "@types/react-dom": "^19.2.0",
+    "@vitejs/plugin-react": "^5.1.0",
+    "vite": "^7.2.0"
   }
 }

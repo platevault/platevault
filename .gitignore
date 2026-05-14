@@ -303,3 +303,19 @@ apps/desktop/src-tauri/gen/
 
 # Local app state and generated data
 .astro-plan/
+
+# Browser automation scratch output
+.playwright-mcp/
+
+
+# APM dependencies
+apm_modules/
+
+# Serena project configuration
+!.serena/
+!.serena/project.yml
+.serena/.gitignore
+.serena/project.local.yml
+.serena/memories/
+.serena/cache/
+.serena/logs/

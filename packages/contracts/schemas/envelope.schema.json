@@ -1,0 +1,195 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://astro-library-manager.local/schemas/envelope.schema.json",
+  "title": "Astro Library Manager Contract Envelopes",
+  "description": "Transport-neutral operation envelopes, operation events, handles, and error DTOs.",
+  "oneOf": [
+    { "$ref": "#/$defs/RequestEnvelope" },
+    { "$ref": "#/$defs/OkResponseEnvelope" },
+    { "$ref": "#/$defs/ErrorResponseEnvelope" },
+    { "$ref": "#/$defs/OperationHandle" },
+    { "$ref": "#/$defs/OperationEvent" },
+    { "$ref": "#/$defs/ContractError" }
+  ],
+  "$defs": {
+    "ContractVersion": {
+      "type": "string",
+      "const": "1.0.0"
+    },
+    "RequestId": {
+      "type": "string",
+      "minLength": 1
+    },
+    "OperationId": {
+      "type": "string",
+      "minLength": 1
+    },
+    "OperationName": {
+      "type": "string",
+      "pattern": "^[a-z][a-z0-9_]*(\\.[a-z][a-z0-9_]*)+$",
+      "examples": ["library.scan.start", "plan.apply.start"]
+    },
+    "JsonObject": {
+      "type": "object",
+      "additionalProperties": true
+    },
+    "RequestEnvelope": {
+      "title": "RequestEnvelope",
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["contractVersion", "operation", "requestId", "payload"],
+      "properties": {
+        "contractVersion": { "$ref": "#/$defs/ContractVersion" },
+        "operation": { "$ref": "#/$defs/OperationName" },
+        "requestId": { "$ref": "#/$defs/RequestId" },
+        "payload": true
+      }
+    },
+    "OkResponseEnvelope": {
+      "title": "OkResponseEnvelope",
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["contractVersion", "requestId", "status", "payload"],
+      "properties": {
+        "contractVersion": { "$ref": "#/$defs/ContractVersion" },
+        "requestId": { "$ref": "#/$defs/RequestId" },
+        "status": { "const": "ok" },
+        "payload": true
+      }
+    },
+    "ErrorResponseEnvelope": {
+      "title": "ErrorResponseEnvelope",
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["contractVersion", "requestId", "status", "error"],
+      "properties": {
+        "contractVersion": { "$ref": "#/$defs/ContractVersion" },
+        "requestId": { "$ref": "#/$defs/RequestId" },
+        "status": { "const": "error" },
+        "error": { "$ref": "#/$defs/ContractError" }
+      }
+    },
+    "OperationHandle": {
+      "title": "OperationHandle",
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["operationId", "operation", "status"],
+      "properties": {
+        "operationId": { "$ref": "#/$defs/OperationId" },
+        "operation": { "$ref": "#/$defs/OperationName" },
+        "status": { "$ref": "#/$defs/OperationStatus" }
+      }
+    },
+    "OperationStatus": {
+      "type": "string",
+      "enum": ["queued", "running", "cancelling", "cancelled", "completed", "failed"]
+    },
+    "OperationEvent": {
+      "title": "OperationEvent",
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["contractVersion", "operationId", "eventType", "sequence", "payload"],
+      "properties": {
+        "contractVersion": { "$ref": "#/$defs/ContractVersion" },
+        "operationId": { "$ref": "#/$defs/OperationId" },
+        "eventType": { "$ref": "#/$defs/OperationEventType" },
+        "sequence": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "payload": true
+      }
+    },
+    "OperationEventType": {
+      "type": "string",
+      "enum": [
+        "progress",
+        "discovered_item_batch",
+        "extracted_metadata_batch",
+        "failed_file_batch",
+        "candidate_batch",
+        "observed_artifact_batch",
+        "item_started",
+        "item_applied",
+        "item_failed",
+        "warning",
+        "completed",
+        "failed",
+        "custom"
+      ]
+    },
+    "ContractError": {
+      "title": "ContractError",
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["code", "message", "severity", "retryable", "details"],
+      "properties": {
+        "code": {
+          "type": "string",
+          "pattern": "^[a-z][a-z0-9_]*(\\.[a-z][a-z0-9_]*)+$",
+          "examples": ["filesystem.destination_exists", "validation.required"]
+        },
+        "message": {
+          "type": "string",
+          "minLength": 1
+        },
+        "severity": { "$ref": "#/$defs/ErrorSeverity" },
+        "retryable": { "type": "boolean" },
+        "details": { "$ref": "#/$defs/JsonObject" },
+        "fieldErrors": {
+          "type": "array",
+          "items": { "$ref": "#/$defs/FieldError" },
+          "default": []
+        },
+        "recoveryActions": {
+          "type": "array",
+          "items": { "$ref": "#/$defs/RecoveryAction" },
+          "default": []
+        }
+      }
+    },
+    "ErrorSeverity": {
+      "type": "string",
+      "enum": ["info", "warning", "blocking", "fatal"]
+    },
+    "FieldError": {
+      "title": "FieldError",
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["field", "code", "message"],
+      "properties": {
+        "field": {
+          "type": "string",
+          "minLength": 1
+        },
+        "code": {
+          "type": "string",
+          "minLength": 1
+        },
+        "message": {
+          "type": "string",
+          "minLength": 1
+        }
+      }
+    },
+    "RecoveryAction": {
+      "title": "RecoveryAction",
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["code", "label"],
+      "properties": {
+        "code": {
+          "type": "string",
+          "minLength": 1
+        },
+        "label": {
+          "type": "string",
+          "minLength": 1
+        },
+        "description": {
+          "type": "string"
+        }
+      }
+    }
+  }
+}

@@ -1,13 +1,243 @@
 //! Application use-case orchestration boundary.
 
+use std::collections::BTreeMap;
+
+use contracts_core::{
+    ContractError, ErrorSeverity, OperationName, RequestEnvelope, RequestId, ResponseEnvelope,
+};
+use serde_json::Value;
+
 pub const CRATE_NAME: &str = "app_core";
+
+pub type OperationResult = Result<Value, ContractError>;
+
+#[derive(Clone, Copy, Debug, Eq, Hash, Ord, PartialEq, PartialOrd)]
+pub enum OperationSafetyClass {
+    ReadOnly,
+    DatabaseMutation,
+    PlanGenerating,
+    MutationApplying,
+}
+
+#[derive(Clone, Debug, Eq, PartialEq)]
+pub struct OperationBehavior {
+    pub safety_class: OperationSafetyClass,
+    pub long_running: bool,
+}
+
+impl OperationBehavior {
+    #[must_use]
+    pub const fn new(safety_class: OperationSafetyClass, long_running: bool) -> Self {
+        Self { safety_class, long_running }
+    }
+}
+
+#[derive(Clone, Debug, Eq, PartialEq)]
+pub struct OperationContext {
+    pub request_id: RequestId,
+    pub operation: OperationName,
+    pub actor: String,
+}
+
+impl OperationContext {
+    #[must_use]
+    pub fn system(request_id: RequestId, operation: OperationName) -> Self {
+        Self { request_id, operation, actor: "system".to_owned() }
+    }
+}
+
+pub trait OperationHandler: Send + Sync {
+    fn operation(&self) -> OperationName;
+
+    fn behavior(&self) -> OperationBehavior;
+
+    fn handle(&self, context: &OperationContext, payload: Value) -> OperationResult;
+}
+
+pub trait OperationDispatcher {
+    fn dispatch(&self, request: RequestEnvelope<Value>) -> ResponseEnvelope<Value>;
+}
+
+#[derive(Default)]
+pub struct OperationRegistry {
+    handlers: BTreeMap<String, Box<dyn OperationHandler>>,
+}
+
+impl OperationRegistry {
+    #[must_use]
+    pub const fn new() -> Self {
+        Self { handlers: BTreeMap::new() }
+    }
+
+    pub fn register<H>(&mut self, handler: H) -> Result<(), ContractError>
+    where
+        H: OperationHandler + 'static,
+    {
+        let operation = handler.operation().0;
+
+        if self.handlers.contains_key(&operation) {
+            return Err(ContractError::new(
+                "operation.handler_duplicate",
+                format!("Operation handler already registered for {operation}."),
+                ErrorSeverity::Fatal,
+                false,
+            ));
+        }
+
+        self.handlers.insert(operation, Box::new(handler));
+        Ok(())
+    }
+
+    #[must_use]
+    pub fn behavior_for(&self, operation: &OperationName) -> Option<OperationBehavior> {
+        self.handlers.get(&operation.0).map(|handler| handler.behavior())
+    }
+}
+
+impl OperationDispatcher for OperationRegistry {
+    fn dispatch(&self, request: RequestEnvelope<Value>) -> ResponseEnvelope<Value> {
+        let request_id = request.request_id;
+        let operation = request.operation;
+        let Some(handler) = self.handlers.get(&operation.0) else {
+            return ResponseEnvelope::error(request_id, unknown_operation_error(&operation));
+        };
+        let context = OperationContext::system(request_id.clone(), operation);
+
+        match handler.handle(&context, request.payload) {
+            Ok(payload) => ResponseEnvelope::ok(request_id, payload),
+            Err(error) => ResponseEnvelope::error(request_id, error),
+        }
+    }
+}
+
+fn unknown_operation_error(operation: &OperationName) -> ContractError {
+    ContractError::new(
+        "operation.not_found",
+        format!("No handler is registered for operation {}.", operation.0),
+        ErrorSeverity::Blocking,
+        false,
+    )
+}
 
 #[cfg(test)]
 mod tests {
-    use super::CRATE_NAME;
+    use contracts_core::{OperationName, RequestEnvelope, RequestId, ResponseStatus};
+    use serde_json::{json, Value};
+
+    use super::{
+        ContractError, ErrorSeverity, OperationBehavior, OperationContext, OperationHandler,
+        OperationRegistry, OperationSafetyClass, CRATE_NAME,
+    };
+    use crate::OperationDispatcher;
+
+    struct EchoHandler;
+
+    impl OperationHandler for EchoHandler {
+        fn operation(&self) -> OperationName {
+            OperationName("library.inventory.query".to_owned())
+        }
+
+        fn behavior(&self) -> OperationBehavior {
+            OperationBehavior::new(OperationSafetyClass::ReadOnly, false)
+        }
+
+        fn handle(
+            &self,
+            context: &OperationContext,
+            payload: Value,
+        ) -> Result<Value, ContractError> {
+            Ok(json!({
+                "operation": context.operation,
+                "payload": payload
+            }))
+        }
+    }
+
+    struct FailingHandler;
+
+    impl OperationHandler for FailingHandler {
+        fn operation(&self) -> OperationName {
+            OperationName("plan.apply.start".to_owned())
+        }
+
+        fn behavior(&self) -> OperationBehavior {
+            OperationBehavior::new(OperationSafetyClass::MutationApplying, true)
+        }
+
+        fn handle(
+            &self,
+            _context: &OperationContext,
+            _payload: Value,
+        ) -> Result<Value, ContractError> {
+            Err(ContractError::new(
+                "plan.approval_required",
+                "Plan approval is required.",
+                ErrorSeverity::Blocking,
+                false,
+            ))
+        }
+    }
 
     #[test]
     fn exposes_crate_name() {
         assert_eq!(CRATE_NAME, "app_core");
+    }
+
+    #[test]
+    fn dispatches_registered_operation() {
+        let mut registry = OperationRegistry::new();
+        registry.register(EchoHandler).unwrap();
+        let response = registry.dispatch(RequestEnvelope::new(
+            OperationName("library.inventory.query".to_owned()),
+            RequestId("req-1".to_owned()),
+            json!({ "limit": 25 }),
+        ));
+
+        assert_eq!(response.status, ResponseStatus::Ok);
+        assert_eq!(
+            response.payload.unwrap(),
+            json!({
+                "operation": "library.inventory.query",
+                "payload": { "limit": 25 }
+            })
+        );
+    }
+
+    #[test]
+    fn returns_contract_error_for_unknown_operation() {
+        let registry = OperationRegistry::new();
+        let response = registry.dispatch(RequestEnvelope::new(
+            OperationName("unknown.operation".to_owned()),
+            RequestId("req-1".to_owned()),
+            json!({}),
+        ));
+
+        assert_eq!(response.status, ResponseStatus::Error);
+        assert_eq!(response.error.unwrap().code, "operation.not_found");
+    }
+
+    #[test]
+    fn returns_handler_contract_error() {
+        let mut registry = OperationRegistry::new();
+        registry.register(FailingHandler).unwrap();
+        let response = registry.dispatch(RequestEnvelope::new(
+            OperationName("plan.apply.start".to_owned()),
+            RequestId("req-1".to_owned()),
+            json!({}),
+        ));
+
+        assert_eq!(response.status, ResponseStatus::Error);
+        assert_eq!(response.error.unwrap().code, "plan.approval_required");
+    }
+
+    #[test]
+    fn exposes_registered_operation_behavior() {
+        let mut registry = OperationRegistry::new();
+        registry.register(FailingHandler).unwrap();
+
+        assert_eq!(
+            registry.behavior_for(&OperationName("plan.apply.start".to_owned())).unwrap(),
+            OperationBehavior::new(OperationSafetyClass::MutationApplying, true)
+        );
     }
 }

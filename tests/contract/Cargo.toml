@@ -1,0 +1,22 @@
+[package]
+name = "contract_tests"
+version = "0.1.0"
+edition.workspace = true
+license.workspace = true
+publish = false
+
+[[test]]
+name = "contract_schema_parity"
+path = "contract_schema_parity.rs"
+
+[[test]]
+name = "library_inventory_contract"
+path = "library_inventory_contract.rs"
+
+[dev-dependencies]
+contracts_core = { path = "../../crates/contracts/core" }
+serde.workspace = true
+serde_json.workspace = true
+
+[lints]
+workspace = true
