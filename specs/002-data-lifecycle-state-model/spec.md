@@ -43,6 +43,7 @@ As a user, I want lifecycle transitions to be auditable so that I can understand
 
 ### Edge Cases
 
+- Mixed folders can contain files with divergent session keys, producing multiple session candidates that share some folder/path provenance and have independent action-critical review state.
 - Metadata parser returns incomplete or contradictory values.
 - The same physical file is discovered through two configured sources.
 - A generated project view becomes stale after the source item changes.
@@ -52,12 +53,15 @@ As a user, I want lifecycle transitions to be auditable so that I can understand
 ### Domain Questions To Resolve
 
 - **Resolved:** User-facing timeline views show workflow-significant lifecycle events by default; diagnostic events are separate.
-- **Unresolved:** Which metadata fields require explicit review before project creation?
+- **Resolved:** Which metadata fields require explicit review before project creation?
+  - Review is action-bound, not a universal per-field gate. The app must capture reviewed values only for the specific action being executed (for example, session confirmation, project creation, or move to Inventory), and unresolved/contradictory action-critical values block only that action.
 
 ### Decisions
 
 - **Accepted:** Lifecycle is asset-first / asset-centric-first. Assets are the primary lifecycle subject, and important values inside each asset carry field-level provenance for source and review status.
 - **Accepted:** User-facing timelines default to workflow-significant lifecycle events only (for example: state transitions, confirmations, project linkage changes, plan status milestones). Diagnostic/adapter/parser/retry/cache/request-level events are intentionally excluded from default timeline visibility and are available in logs or expanded lifecycle detail.
+- **Accepted:** Review is action-bound. There is no universal explicit per-field review gate before project creation; actions define which fields are review-critical in that moment and require confirmation for those fields only.
+- **Accepted:** Session candidates MUST be grouped/split by a metadata-derived session key generated from FITS/XISF/video metadata. Folder boundaries are scan boundaries and human hints, not authoritative session identity. Multiple folders may contribute to one session candidate when session keys match.
 
 ## Requirements *(mandatory)*
 
@@ -71,6 +75,10 @@ As a user, I want lifecycle transitions to be auditable so that I can understand
 - **FR-006**: Ledger rows MUST stay lean and omit confidence/evidence/provenance columns, while detail views and logs expose structured provenance with request/entity metadata automatically.
 - **FR-007**: All lifecycle transitions MUST be anchored on a `Data Asset`; value-centric events are represented as field-level provenance on that asset (including source and review status), so lifecycle meaning is testable at both asset and value granularity.
 - **FR-008**: Default lifecycle timeline rendering MUST display only workflow-significant events; diagnostics (adapter/parser/retry/cache/request-level events) MUST be excluded by default but remain retrievable through logs and expanded event-detail views to preserve full audit completeness.
+- **FR-009**: Action confirmation flows (for example, confirm session, create/move project, or mark items for processing) MUST record reviewed decisions scoped to the action, including which values were accepted, corrected, or explicitly left unresolved.
+- **FR-010**: If action-critical metadata or decision values are missing, contradictory, or unresolved, the current action MUST be blocked with a clear list of required corrections; unresolved values that are not critical to that action MAY remain unresolved.
+- **FR-011**: Session candidate formation MUST be based on grouping by a metadata-derived session key from FITS/XISF/video metadata; the exact session key field set is defined in follow-up Grill-Me resolution.
+- **FR-012**: Mixed-folder discovery inputs MUST split into separate session candidates whenever session keys differ; each candidate MUST retain the originating folder/path as provenance information, without treating path as authoritative session identity.
 
 ### Key Entities
 
