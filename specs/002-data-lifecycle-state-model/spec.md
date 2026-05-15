@@ -5,6 +5,10 @@
 **Status**: Draft  
 **Input**: User description: "Specify the data states and lifecycle model discussed for observed files, inferred metadata, reviewed decisions, generated views, plans, and applied mutations."
 
+### SpecKit Refinement Note (2026-05-15)
+
+This is the detailed follow-on specification for the lifecycle/state behavior introduced in Spec 001.
+
 ## User Scenarios & Testing *(mandatory)*
 
 ### User Story 1 - Understand Data State (Priority: P1)
@@ -47,6 +51,8 @@ As a user, I want lifecycle transitions to be auditable so that I can understand
 
 ### Domain Questions To Resolve
 
+- **Unresolved (recommended):** Is the lifecycle model asset-centric first or value-centric first?
+  **Recommended direction:** asset-centric first with field-level value provenance (not accepted).
 - Which lifecycle events are visible to normal users versus developer diagnostics?
 - Which metadata fields require explicit review before project creation?
 
@@ -54,14 +60,12 @@ As a user, I want lifecycle transitions to be auditable so that I can understand
 
 ### Functional Requirements
 
-- **FR-001**: The domain model MUST distinguish observed filesystem facts, parsed/inferred metadata, user-reviewed decisions, generated projections, planned mutations, and applied mutations.
-- **FR-002**: The UI MUST NOT surface confidence or evidence as routine ledger columns.
-- **FR-003**: Detail views MUST expose provenance for important values in structured rows or expandable sections.
-- **FR-004**: User-reviewed decisions MUST preserve the original observed or inferred value for audit.
-- **FR-005**: Generated project views MUST reference source Inventory records instead of becoming independent source truth.
-- **FR-006**: Planned cleanup/archive operations MUST remain reviewable until explicitly applied.
-- **FR-007**: Failed mutations MUST record an error event and final data state.
-- **FR-008**: Lifecycle state labels MUST be plain, functional, and consistent across Inbox, Inventory, Projects, Settings, logs, and documentation.
+- **FR-001**: The model MUST keep observed facts, inferred metadata, reviewed decisions, generated projections, planned mutations, and applied mutations in distinct lifecycle families.
+- **FR-002**: Any lifecycle transition MUST produce an auditable event containing actor, timestamp, from-state, to-state, and transition trigger.
+- **FR-003**: Generated projections MUST transition to `Stale` when their source input changes and MUST be clearly visible as stale in detail or list views.
+- **FR-004**: Filesystem plan execution MUST represent terminal outcomes as `Succeeded`, `Partially Failed`, `Failed`, or `Cancelled`, preserving which mutations completed versus those not applied.
+- **FR-005**: Session and calibration candidate reviews MUST preserve immutable snapshots of their observed/inferred/reviewed context for audit, while allowing new snapshots for later rescans.
+- **FR-006**: Ledger rows MUST stay lean and omit confidence/evidence/provenance columns, while detail views and logs expose structured provenance with request/entity metadata automatically.
 
 ### Key Entities
 
@@ -72,6 +76,15 @@ As a user, I want lifecycle transitions to be auditable so that I can understand
 - **Generated Projection**: A project source, prepared source, marker, manifest, or derived app-owned representation.
 - **Mutation Plan**: A proposed filesystem change pending review.
 - **Lifecycle Event**: Auditable transition or failure record.
+
+### State Families
+
+- **Data Source**: `Draft`, `Previewed`, `Active`, `Disconnected`, `Disabled`, `ReconnectRequired`, `Retired`
+- **Inventory Record**: `Observed`, `Missing`, `Changed`, `Classified`, `Rejected`, `Protected`
+- **Session Candidate / Calibration Candidate**: `Discovered`, `Candidate`, `Needs Review`, `Confirmed`, `Ignored`
+- **Project**: `Candidate`, `Source Mapping`, `Prepared`, `Processing`, `Finalized`, `Cleanup Reviewed`, `Archived`
+- **Prepared Source**: `Not Created`, `Planned`, `Ready`, `Stale`, `Retired`
+- **Filesystem Plan**: `Draft`, `Ready for Review`, `Approved`, `Executing`, `Succeeded`, `Partially Failed`, `Failed`, `Cancelled`
 
 ## Success Criteria *(mandatory)*
 
@@ -84,7 +97,6 @@ As a user, I want lifecycle transitions to be auditable so that I can understand
 
 ## Assumptions
 
-- SQLite remains the canonical local store for lifecycle state.
 - Logs include request and entity metadata automatically.
 
 ## Out of Scope
