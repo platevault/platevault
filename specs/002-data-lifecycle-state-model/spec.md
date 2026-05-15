@@ -51,12 +51,13 @@ As a user, I want lifecycle transitions to be auditable so that I can understand
 
 ### Domain Questions To Resolve
 
-- **Unresolved:** Which lifecycle events are visible to normal users versus developer diagnostics?
+- **Resolved:** User-facing timeline views show workflow-significant lifecycle events by default; diagnostic events are separate.
 - **Unresolved:** Which metadata fields require explicit review before project creation?
 
 ### Decisions
 
 - **Accepted:** Lifecycle is asset-first / asset-centric-first. Assets are the primary lifecycle subject, and important values inside each asset carry field-level provenance for source and review status.
+- **Accepted:** User-facing timelines default to workflow-significant lifecycle events only (for example: state transitions, confirmations, project linkage changes, plan status milestones). Diagnostic/adapter/parser/retry/cache/request-level events are intentionally excluded from default timeline visibility and are available in logs or expanded lifecycle detail.
 
 ## Requirements *(mandatory)*
 
@@ -69,6 +70,7 @@ As a user, I want lifecycle transitions to be auditable so that I can understand
 - **FR-005**: Session and calibration candidate reviews MUST preserve immutable snapshots of their observed/inferred/reviewed context for audit, while allowing new snapshots for later rescans.
 - **FR-006**: Ledger rows MUST stay lean and omit confidence/evidence/provenance columns, while detail views and logs expose structured provenance with request/entity metadata automatically.
 - **FR-007**: All lifecycle transitions MUST be anchored on a `Data Asset`; value-centric events are represented as field-level provenance on that asset (including source and review status), so lifecycle meaning is testable at both asset and value granularity.
+- **FR-008**: Default lifecycle timeline rendering MUST display only workflow-significant events; diagnostics (adapter/parser/retry/cache/request-level events) MUST be excluded by default but remain retrievable through logs and expanded event-detail views to preserve full audit completeness.
 
 ### Key Entities
 
