@@ -51,10 +51,12 @@ As a user, I want lifecycle transitions to be auditable so that I can understand
 
 ### Domain Questions To Resolve
 
-- **Unresolved (recommended):** Is the lifecycle model asset-centric first or value-centric first?
-  **Recommended direction:** asset-centric first with field-level value provenance (not accepted).
-- Which lifecycle events are visible to normal users versus developer diagnostics?
-- Which metadata fields require explicit review before project creation?
+- **Unresolved:** Which lifecycle events are visible to normal users versus developer diagnostics?
+- **Unresolved:** Which metadata fields require explicit review before project creation?
+
+### Decisions
+
+- **Accepted:** Lifecycle is asset-first / asset-centric-first. Assets are the primary lifecycle subject, and important values inside each asset carry field-level provenance for source and review status.
 
 ## Requirements *(mandatory)*
 
@@ -66,6 +68,7 @@ As a user, I want lifecycle transitions to be auditable so that I can understand
 - **FR-004**: Filesystem plan execution MUST represent terminal outcomes as `Succeeded`, `Partially Failed`, `Failed`, or `Cancelled`, preserving which mutations completed versus those not applied.
 - **FR-005**: Session and calibration candidate reviews MUST preserve immutable snapshots of their observed/inferred/reviewed context for audit, while allowing new snapshots for later rescans.
 - **FR-006**: Ledger rows MUST stay lean and omit confidence/evidence/provenance columns, while detail views and logs expose structured provenance with request/entity metadata automatically.
+- **FR-007**: All lifecycle transitions MUST be anchored on a `Data Asset`; value-centric events are represented as field-level provenance on that asset (including source and review status), so lifecycle meaning is testable at both asset and value granularity.
 
 ### Key Entities
 
