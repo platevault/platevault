@@ -7,6 +7,8 @@
 
 **Organization**: Tasks are grouped by user story so each story can be implemented and tested as an independently demonstrable increment.
 
+**Closure note**: This task list is archived as a decomposition scaffold for SpecKit. Spec 001 is closed as an umbrella/planning/prototype baseline; implementation is intentionally split across follow-on specs. Lifecycle/state and cleanup behavior continues in `specs/002-data-lifecycle-state-model/spec.md` and does not imply uncompleted tasks are complete in this document.
+
 ## Phase 1: Setup (Shared Infrastructure)
 
 **Purpose**: Finish the implementation scaffold without building product behavior yet.

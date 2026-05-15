@@ -826,10 +826,10 @@ export function SettingsPage() {
                 info={
                   <Stack gap="xs">
                     <Text size="xs">
-                      Restart setup opens the first-run setup wizard so you can review and update source choices.
+                      Restart setup opens the first-run source setup pages so you can update source roots.
                     </Text>
                     <Text size="xs">
-                      It returns you to the same setup pages and scan preview, ready to fine-tune sources in one pass.
+                      Use this to complete setup again and continue into guided first-project flow.
                     </Text>
                     <Text size="xs">Use this when your source paths or folders have changed.</Text>
                   </Stack>

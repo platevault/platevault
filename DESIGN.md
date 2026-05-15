@@ -266,15 +266,16 @@ when exported and always include request/entity metadata.
 
 ## Onboarding
 
-First-run setup is a page-by-page wizard for source configuration and scan
-preview. It can be skipped. It starts with a compact welcome page, then
+First-run setup is a page-by-page wizard for source configuration. It can be
+skipped. It starts with a compact welcome page, then
 clarifies source categories and the post-setup workflow before asking for
 directories. These clarification pages explain what each source category means,
 what the user should select for each category, and that project creation happens
 after setup. Source pages must explain the immediate selection task for that
 category instead of using defensive copy about unrelated actions. It validates
-required directories, duplicate source names, duplicate roots, and scan preview
-completion before finish.
+required directories, duplicate source names, duplicate roots, and directory-only
+source paths before finish. It does not include a mock scan preview; scanning and
+onboarding happen through the guided first-project workflow after setup.
 
 The guided first-project flow is not a mock overlay. It guides real actions:
 create sample Inbox placeholders, move darks, bias, flats, and lights into

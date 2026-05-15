@@ -91,8 +91,12 @@ This marker is an identity/reconnect aid only. The DB remains canonical.
 
 ### Decision
 
-Data source creation includes a type-specific preview before saving and before
-writing the source marker.
+For first-run setup, source configuration is validation-focused and does not show a
+preview. The initial setup flow validates required roots and continues into guided
+scan/workflow onboarding after sources are saved.
+
+For non-first-run source creation or source edits, include a type-specific preview
+before saving and before writing the source marker.
 
 Examples:
 
@@ -105,8 +109,12 @@ Examples:
 
 ### Rationale
 
-The preview prevents choosing a root at the wrong level and makes the source
-boundary visible before the app writes markers or indexes state.
+For first-run setup, this validation layer prevents creating a source with a
+missing or invalid root before setup can continue.
+
+For non-first-run operations, the preview prevents choosing a root at the wrong
+level and makes the source boundary visible before the app writes markers or
+indexes state.
 
 ## Raw Session Discovery
 

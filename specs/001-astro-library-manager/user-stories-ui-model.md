@@ -58,7 +58,6 @@ Each story includes:
 - Empty-state source prompt.
 - Data source picker.
 - Type selector.
-- Source preview before saving.
 - Settings form.
 - Confirm button.
 - Bottom log panel.
@@ -73,8 +72,9 @@ Each story includes:
 **Primary view**: `Settings > Data Sources`, with a lightweight entry point from
 `Library`.
 
-**Result**: The source is registered, previewed, and ready to scan. No library
-files are moved.
+**Result**: Source roots are selected and validated, then setup proceeds into the
+guided first-project onboarding flow. No scan/preview details are shown in this
+first-run pass; they appear in Inbox, Inventory, and Projects workflows.
 
 ### US-002: Add a Data Source Later
 

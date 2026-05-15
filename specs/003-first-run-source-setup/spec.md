@@ -3,7 +3,7 @@
 **Feature Branch**: `003-first-run-source-setup`  
 **Created**: 2026-05-09  
 **Status**: Draft  
-**Input**: User description: "Specify the one-time setup wizard for selecting initial data sources, validating selections, previewing scan results, and restarting setup later."
+**Input**: User description: "Specify the one-time setup wizard for selecting initial data sources, validating selections, starting guided first steps, and restarting setup later."
 
 ## User Scenarios & Testing *(mandatory)*
 
@@ -22,19 +22,19 @@ As a new user, I want setup to require at least one selected source for each req
 
 ---
 
-### User Story 2 - Preview Scan Results (Priority: P2)
+### User Story 2 - Continue To Guided First Steps (Priority: P2)
 
-As a user completing setup, I want the scan preview to show what each source will include before finishing setup.
+As a user completing setup, I want setup to finish after valid source roots are selected so that the guided flow can scan Inbox material and onboard the first project through real app actions.
 
-**Why this priority**: Users need confidence that the app will ingest the intended folders.
+**Why this priority**: Users need a short setup path; detailed scan review belongs in the Inbox and project workflows where the user can act on real items.
 
-**Independent Test**: Select sample source directories, click Preview scan, and confirm the expanded preview lists per-source directories/files and warnings.
+**Independent Test**: Select sample source directories, finish setup, and confirm the guided first-step flow starts at the Inbox scan action.
 
 **Acceptance Scenarios**:
 
-1. **Given** valid source paths, **When** the user starts preview scan, **Then** the wizard shows a spinner while scanning.
-2. **Given** scan preview completes, **When** results render, **Then** each source shows the full list of included directories/files and row-level warnings.
-3. **Given** scan preview has not completed, **When** the user tries to finish setup, **Then** Finish remains disabled.
+1. **Given** valid source paths, **When** the user reaches the final source step, **Then** Finish setup is available.
+2. **Given** setup is finished, **When** the wizard closes, **Then** the guided first-step flow starts and highlights the real Inbox scan action.
+3. **Given** the guided flow reaches project setup, **When** the user configures the sample project, **Then** they must select light sessions, darks, and bias through the project setup pane.
 
 ---
 
@@ -73,9 +73,9 @@ As a user, I want to restart the setup wizard from Settings so that I can correc
 - **FR-002**: Setup MUST allow skipping the entire wizard.
 - **FR-003**: Setup MUST NOT allow proceeding from a required source step until each required row has a directory.
 - **FR-004**: Setup MUST validate duplicate source names and duplicate source roots.
-- **FR-005**: Setup MUST provide a Preview scan action that shows expanded per-source results.
-- **FR-006**: Setup MUST show a loading state while preview scan is running.
-- **FR-007**: Setup MUST allow finishing only after preview scan completes or the whole wizard is skipped.
+- **FR-005**: Setup MUST NOT include a mock scan preview action, preview-available column, inferred kind column, or runtime warning column.
+- **FR-006**: Setup MUST start the guided first-step flow after successful completion.
+- **FR-007**: Setup MUST allow finishing after all required source steps pass validation or the whole wizard is skipped.
 - **FR-008**: Setup MUST be restartable from Settings.
 - **FR-009**: First-run setup MUST include source steps for Raw Sources, Calibration Sources, Project Sources, and Inbox Sources.
 - **FR-010**: First-run setup MUST explain that project creation happens later in the guided Projects workflow.
@@ -87,7 +87,7 @@ As a user, I want to restart the setup wizard from Settings so that I can correc
 
 - **Setup Source**: Source name, category, selected root, scan rule, validation state.
 - **Source Category**: Raw Sources, Calibration Sources, Project Sources, or Inbox Sources.
-- **Scan Preview Result**: Included directories/files and warnings per source.
+- **Guided First-Step Flow**: Post-setup coach that scans Inbox material, moves sample material into Inventory, verifies it, and creates the first project through real controls.
 - **Setup Session**: Current wizard run and completion/skip state.
 
 ## Success Criteria *(mandatory)*
@@ -95,8 +95,8 @@ As a user, I want to restart the setup wizard from Settings so that I can correc
 ### Measurable Outcomes
 
 - **SC-001**: Users can complete setup with valid sources in under 5 minutes.
-- **SC-002**: Invalid source rows are identified before scan preview runs.
-- **SC-003**: Preview scan results render without browser crashes for representative fixture trees.
+- **SC-002**: Invalid source rows are identified before the user leaves the relevant source step.
+- **SC-003**: Finishing setup starts the guided Inbox flow without browser crashes for representative source selections.
 - **SC-004**: Restarting setup preserves or updates source settings predictably.
 
 ## Assumptions

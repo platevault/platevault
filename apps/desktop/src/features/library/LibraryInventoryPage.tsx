@@ -30,8 +30,10 @@ import { ChevronDown, FolderOpen, MoveRight } from "lucide-react";
 
 import {
   emitGuideAction,
+  cleanupFirstStepGuideStateEvent,
   guidedConfirmedItemsStorageKey,
   guidedLibraryItemsStorageKey,
+  resetFirstStepGuideStateEvent,
   libraryCandidateEvent,
   type GuidedFrameKind,
 } from "../shared/guideEvents";
@@ -289,6 +291,35 @@ export function LibraryInventoryPage() {
     return () => window.removeEventListener(libraryCandidateEvent, syncGuidedCandidates);
   }, []);
 
+  useEffect(() => {
+    const resetGuideState = () => {
+      const nextRows = getInitialInventoryItems();
+      setRows(nextRows);
+      setSelectedRowId(nextRows[0]?.id ?? null);
+      setFilter("all");
+      setColumnFilters([]);
+      frameSearchRef.current = "all";
+      selectedSearchRef.current = null;
+
+      if (search.frame !== "all" || search.selected != null) {
+        void navigate({
+          search: (previous) => ({
+            ...previous,
+            frame: undefined,
+            selected: undefined,
+          }),
+        });
+      }
+    };
+
+    window.addEventListener(resetFirstStepGuideStateEvent, resetGuideState);
+    window.addEventListener(cleanupFirstStepGuideStateEvent, resetGuideState);
+    return () => {
+      window.removeEventListener(resetFirstStepGuideStateEvent, resetGuideState);
+      window.removeEventListener(cleanupFirstStepGuideStateEvent, resetGuideState);
+    };
+  }, []);
+
   return (
     <Stack gap="sm">
       <Group justify="space-between" align="flex-start" wrap="wrap" gap="sm">
@@ -479,6 +510,7 @@ function SelectedInventoryItem({
   onOpenLocation: (item: InventoryItem) => void;
 }) {
   const guideKind = getGuidedFrameKind(item);
+  const shouldTrackConfirmGuide = Boolean(guideKind && item.state !== "Confirmed");
   const topLevelLabels = new Set(["Frame type", "State", "Source", "Path"]);
   const details = [
     { label: "Frame type", value: item.type },
@@ -538,8 +570,10 @@ function SelectedInventoryItem({
           primaryLabel={item.state === "Confirmed" ? "Open" : "Confirm"}
           primaryLeftSection={item.state === "Confirmed" ? <FolderOpen size={14} /> : <MoveRight size={14} />}
           compact
-          guideTarget={guideKind && item.state !== "Confirmed" ? `library-confirm-${guideKind}` : undefined}
-          onPrimary={() => onAction(item.state === "Confirmed" ? "Open" : "Confirm", item)}
+          guideTarget={shouldTrackConfirmGuide ? `library-confirm-${guideKind}` : undefined}
+          onPrimary={() => {
+            onAction(item.state === "Confirmed" ? "Open" : "Confirm", item);
+          }}
           onOpenLocation={() => onOpenLocation(item)}
           actions={item.moreActions}
           onAction={(action) => onAction(action, item)}
