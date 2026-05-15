@@ -32,7 +32,15 @@ import {
 import { useNavigate } from "@tanstack/react-router";
 import { ChevronDown, FolderOpen, Pencil, Play, Plus, X } from "lucide-react";
 
-import { emitGuideAction, guidedConfirmedItemsStorageKey } from "../shared/guideEvents";
+import {
+  cleanupFirstStepGuideStateEvent,
+  emitGuideAction,
+  guidedCreatedProjectStorageKey,
+  guidedSampleProjectId,
+  isFirstStepGuideActive,
+  guidedConfirmedItemsStorageKey,
+  resetFirstStepGuideStateEvent,
+} from "../shared/guideEvents";
 
 type ProjectState = "Candidate" | "Source Mapping" | "Prepared" | "Processing" | "Finalized" | "Cleanup Reviewed" | "Archived";
 type ProjectSetupMode = "create" | "onboard" | "edit";
@@ -267,21 +275,49 @@ function createDraftSourceDefaults(sourceItems: ConfirmedInventoryItem[]) {
   };
 }
 
-function createLightMappingDraft(sourceItems: ConfirmedInventoryItem[]): LightMappingDraft {
+function createLightMappingDraft(
+  sourceItems: ConfirmedInventoryItem[],
+  options?: {
+    selected?: boolean;
+    lightId?: string;
+  },
+): LightMappingDraft {
+  const selected = options?.selected ?? true;
   const defaults = createDraftSourceDefaults(sourceItems);
+  const lightId = options?.lightId ?? defaults.light.id;
 
   return {
     id: `light-mapping-${Math.random().toString(36).slice(2, 10)}-${Date.now().toString(36)}`,
-    lightId: defaults.light.id,
-    selected: true,
+    lightId,
+    selected,
     flatsId: defaults.flat.id === "" ? "" : defaults.flat.id,
   };
 }
 
-function createDraftFromProject(project: ProjectRow | undefined, sourceItems: ConfirmedInventoryItem[]): ProjectDraft {
+function getExplicitLightSelectionCount(draft: ProjectDraft): number {
+  return draft.lights.filter((light) => light.selected && light.lightId.trim() !== "").length;
+}
+
+function createDraftFromProject(
+  project: ProjectRow | undefined,
+  sourceItems: ConfirmedInventoryItem[],
+  mode: ProjectSetupMode = "create",
+): ProjectDraft {
   const defaults = createDraftSourceDefaults(sourceItems);
 
   if (!project) {
+    if (mode === "create") {
+      return {
+        name: "New project",
+        root: "D:\\Astrophotography\\Projects\\",
+        target: "IC 1805 / IC 1848",
+        workflow: "PixInsight",
+        lights: [],
+        darksId: "",
+        biasId: "",
+      };
+    }
+
     return {
       name: "New project",
       root: "D:\\Astrophotography\\Projects\\",
@@ -305,7 +341,7 @@ function createDraftFromProject(project: ProjectRow | undefined, sourceItems: Co
 }
 
 function getProjectSetupSummary(draft: ProjectDraft): string[] {
-  const selectedLightCount = draft.lights.filter((light) => light.selected).length;
+  const selectedLightCount = getExplicitLightSelectionCount(draft);
   return [
     `${selectedLightCount} light mapping${selectedLightCount === 1 ? "" : "s"} selected`,
     draft.darksId ? "Dark master selected" : "Dark master not selected",
@@ -316,8 +352,8 @@ function getProjectSetupSummary(draft: ProjectDraft): string[] {
 function getSetupStepLabel(step: ProjectSetupStep) {
   const labels: Record<ProjectSetupStep, string> = {
     project: "Project",
-    lights: "Lights",
-    calibration: "Calibration",
+    lights: "Lights + Flats",
+    calibration: "Darks + Bias",
     review: "Review",
   };
   return labels[step];
@@ -358,7 +394,7 @@ function buildProjectSourcesFromDraft(draft: ProjectDraft, sourceItems: Confirme
   const sources: ProjectSource[] = [];
   const seenSourceIds = new Set<string>();
 
-  for (const lightMapping of draft.lights.filter((light) => light.selected)) {
+  for (const lightMapping of draft.lights.filter((light) => light.selected && light.lightId.trim() !== "")) {
     const item = sourceItemsById.get(lightMapping.lightId);
     const sourceId = lightMapping.lightId;
     if (!seenSourceIds.has(sourceId)) {
@@ -520,7 +556,9 @@ export function ProjectWorkspacePage() {
   const [projectSetupProjectId, setProjectSetupProjectId] = useState<string | undefined>(undefined);
   const [projectSetupError, setProjectSetupError] = useState<string | undefined>(undefined);
   const [projectSetupSourceItems, setProjectSetupSourceItems] = useState<ConfirmedInventoryItem[]>(() => getProjectSetupSourceItems());
-  const [projectDraft, setProjectDraft] = useState<ProjectDraft>(() => createDraftFromProject(undefined, projectSetupSourceItems));
+  const [projectDraft, setProjectDraft] = useState<ProjectDraft>(() =>
+    createDraftFromProject(undefined, projectSetupSourceItems, "create"),
+  );
   const [selectedProjectId, setSelectedProjectId] = useState<string>(initialProjects[0]?.id ?? "");
   const [columnFilters, setColumnFilters] = useState<ColumnFiltersState>([]);
   const [actionNote, setActionNote] = useState("");
@@ -635,6 +673,42 @@ export function ProjectWorkspacePage() {
     }
   }, [selectedProjectId, visibleProjectRows]);
 
+  useEffect(() => {
+    const cleanupGuideSampleProject = (event: Event) => {
+      const detail = (event as CustomEvent<{ projectId?: string }>).detail ?? {};
+      const targetProjectId = detail.projectId ?? guidedSampleProjectId;
+      const nextSourceItems = getProjectSetupSourceItems();
+
+      if (!targetProjectId) {
+        return;
+      }
+
+      setIsProjectSetupOpen(false);
+      setProjectSetupProjectId(undefined);
+      setProjectSetupError(undefined);
+      setProjectSetupMode("create");
+      setProjectSetupStep("project");
+      setProjectSetupSourceItems(nextSourceItems);
+      setProjectDraft(createDraftFromProject(undefined, nextSourceItems, "create"));
+
+      setProjects((prevProjects) => {
+        const hasGuideProject = prevProjects.some((project) => project.id === targetProjectId);
+        if (!hasGuideProject) {
+          return prevProjects;
+        }
+
+        return prevProjects.filter((project) => project.id !== targetProjectId);
+      });
+    };
+
+    window.addEventListener(resetFirstStepGuideStateEvent, cleanupGuideSampleProject);
+    window.addEventListener(cleanupFirstStepGuideStateEvent, cleanupGuideSampleProject);
+    return () => {
+      window.removeEventListener(resetFirstStepGuideStateEvent, cleanupGuideSampleProject);
+      window.removeEventListener(cleanupFirstStepGuideStateEvent, cleanupGuideSampleProject);
+    };
+  }, []);
+
   function onProjectStateFilterChange(selectedStates: string[]) {
     setColumnFilters((prevFilters) => {
       const nextFilters = prevFilters.filter((filter) => filter.id !== "state");
@@ -657,7 +731,7 @@ export function ProjectWorkspacePage() {
     } else {
       setProjectSetupProjectId(undefined);
     }
-    setProjectDraft(createDraftFromProject(project, resolvedSourceItems));
+    setProjectDraft(createDraftFromProject(project, resolvedSourceItems, mode));
     setProjectSetupStep("project");
     setProjectSetupError(undefined);
     setIsProjectSetupOpen(true);
@@ -675,8 +749,9 @@ export function ProjectWorkspacePage() {
   }
 
   function onCommitProjectSetup() {
-    const selectedLightCount = projectDraft.lights.filter((light) => light.selected).length;
+    const selectedLightCount = getExplicitLightSelectionCount(projectDraft);
     const nextSources = buildProjectSourcesFromDraft(projectDraft, projectSetupSourceItems);
+    const isGuidedProjectCreate = projectSetupMode === "create" && isFirstStepGuideActive();
     const canCreate =
       projectDraft.name.trim().length > 0 &&
       projectDraft.root.trim().length > 0 &&
@@ -690,7 +765,9 @@ export function ProjectWorkspacePage() {
     }
 
     const next: ProjectRow = {
-      id: projectSetupProjectId ?? `${Date.now()}-${projectDraft.name.toLowerCase().replace(/\\s+/g, "-")}`,
+      id:
+        projectSetupProjectId ??
+        (isGuidedProjectCreate ? guidedSampleProjectId : `${Date.now()}-${projectDraft.name.toLowerCase().replace(/\\s+/g, "-")}`),
       name: projectDraft.name,
       target: projectDraft.target,
       workflow: projectDraft.workflow,
@@ -708,7 +785,7 @@ export function ProjectWorkspacePage() {
 
     setProjects((prev) => {
       if (projectSetupMode === "create") {
-        return [next, ...prev];
+        return [next, ...prev.filter((project) => project.id !== next.id)];
       }
 
       return prev.map((project) => (project.id === next.id ? next : project));
@@ -722,10 +799,9 @@ export function ProjectWorkspacePage() {
     }
 
     if (projectSetupMode === "create") {
-      emitGuideAction("projects.create-project");
-      if (typeof window !== "undefined") {
+      if (isGuidedProjectCreate && typeof window !== "undefined") {
         window.localStorage.setItem(
-          "astro-plan:guided-created-project",
+          guidedCreatedProjectStorageKey,
           JSON.stringify({
             createdAt: new Date().toISOString(),
             projectId: next.id,
@@ -733,6 +809,7 @@ export function ProjectWorkspacePage() {
           }),
         );
       }
+      emitGuideAction("projects.create-project");
     }
 
     setIsProjectSetupOpen(false);
@@ -1258,11 +1335,13 @@ function ProjectSetupDialog({
   onConfirm: () => void;
 }) {
   const sourceOptions = getSourceOptions(confirmedItems);
-  const selectedLightCount = draft.lights.filter((light) => light.selected).length;
+  const selectedLightCount = getExplicitLightSelectionCount(draft);
   const canLeaveProject = draft.name.trim().length > 0 && draft.root.trim().length > 0;
   const canLeaveLights = selectedLightCount > 0;
   const canLeaveCalibration = draft.darksId.length > 0 && draft.biasId.length > 0;
   const canCreate = canLeaveProject && canLeaveLights && canLeaveCalibration;
+  const guideSectionTarget =
+    step === "lights" ? "project-setup-lights" : step === "calibration" ? "project-setup-calibration" : undefined;
   const actionLabel = {
     create: "Create project",
     onboard: "Onboard project",
@@ -1376,222 +1455,236 @@ function ProjectSetupDialog({
         </Group>
       </MantinePaper>
 
+      <Stack gap="xs" data-guide-target={guideSectionTarget}>
         <MantinePaper withBorder p={6} radius="sm">
           <Stack gap="xs">
             {step === "project" ? (
-            <Group gap="md" grow>
-              <Stack gap="xs" style={{ flex: 1 }}>
-                <TextInput
-                  size="xs"
-                  label="Project name"
-                  value={draft.name}
-                  onChange={(event) => onDraftChange({ name: event.target.value })}
-                />
-                <TextInput
-                  size="xs"
-                  label="Project folder"
-                  value={draft.root}
-                  onChange={(event) => onDraftChange({ root: event.target.value })}
-                />
-              </Stack>
-              <Stack gap="xs" style={{ flex: 1 }}>
-                <TextInput
-                  size="xs"
-                  label="Target"
-                  value={draft.target}
-                  onChange={(event) => onDraftChange({ target: event.target.value })}
-                />
-                <MantineSelect
-                  size="xs"
-                  label="Workflow"
-                  value={draft.workflow}
-                  data={["PixInsight", "Siril", "Planetary"]}
-                  onChange={(value) => onDraftChange({ workflow: value ?? "PixInsight" })}
-                />
-              </Stack>
-            </Group>
-          ) : null}
-
-          {step === "lights" ? (
-            <Stack gap={3}>
-              <Group gap="xs" justify="space-between" align="center">
-                <Text size="xs" fw={600}>
-                  Light sessions
-                </Text>
-                <MantineButton
-                  size="xs"
-                  variant="light"
-                  leftSection={<Plus size={12} />}
-                  onClick={() => {
-                    onDraftChange({
-                      lights: [...draft.lights, createLightMappingDraft(confirmedItems)],
-                    });
-                  }}
-                >
-                  Add light session
-                </MantineButton>
+              <Group gap="md" grow>
+                <Stack gap="xs" style={{ flex: 1 }}>
+                  <TextInput
+                    size="xs"
+                    label="Project name"
+                    value={draft.name}
+                    onChange={(event) => onDraftChange({ name: event.target.value })}
+                  />
+                  <TextInput
+                    size="xs"
+                    label="Project folder"
+                    value={draft.root}
+                    onChange={(event) => onDraftChange({ root: event.target.value })}
+                  />
+                </Stack>
+                <Stack gap="xs" style={{ flex: 1 }}>
+                  <TextInput
+                    size="xs"
+                    label="Target"
+                    value={draft.target}
+                    onChange={(event) => onDraftChange({ target: event.target.value })}
+                  />
+                  <MantineSelect
+                    size="xs"
+                    label="Workflow"
+                    value={draft.workflow}
+                    data={["PixInsight", "Siril", "Planetary"]}
+                    onChange={(value) => onDraftChange({ workflow: value ?? "PixInsight" })}
+                  />
+                </Stack>
               </Group>
-              {draft.lights.map((light) => {
-                const lightOption = sourceOptions.lights.find((option) => option.value === light.lightId);
-                return (
-                  <MantinePaper withBorder p={4} key={light.id} radius="sm">
-                    <Group gap="xs" wrap="nowrap" align="center">
-                      <Checkbox
-                        size="xs"
-                        checked={light.selected}
-                        onChange={(event) =>
-                          onDraftChange({
-                            lights: draft.lights.map((entry) =>
-                              entry.id === light.id ? { ...entry, selected: event.currentTarget.checked } : entry,
-                            ),
-                          })
-                        }
-                      />
-                      <Text size="xs" w={220} truncate>
-                        {lightOption?.label ?? light.lightId}
+            ) : null}
+
+            {step === "lights" ? (
+              <Stack gap={3}>
+                <Text size="xs" c="dimmed">
+                  Add one or more light sessions first. Flats can be linked per selected light session.
+                </Text>
+                <Group gap="xs" justify="space-between" align="center">
+                  <Text size="xs" fw={600}>
+                    Light sessions
+                  </Text>
+                  <MantineButton
+                    size="xs"
+                    variant="light"
+                    leftSection={<Plus size={12} />}
+                    onClick={() => {
+                      onDraftChange({
+                        lights: [
+                          ...draft.lights,
+                          createLightMappingDraft(confirmedItems, {
+                            selected: false,
+                            ...(mode === "create" ? { lightId: "" } : {}),
+                          }),
+                        ],
+                      });
+                    }}
+                  >
+                    Add light session
+                  </MantineButton>
+                </Group>
+                {draft.lights.map((light) => {
+                  const lightOption = sourceOptions.lights.find((option) => option.value === light.lightId);
+                  return (
+                    <MantinePaper withBorder p={4} key={light.id} radius="sm">
+                      <Group gap="xs" wrap="nowrap" align="center">
+                        <Checkbox
+                          size="xs"
+                          checked={light.selected}
+                          onChange={(event) =>
+                            onDraftChange({
+                              lights: draft.lights.map((entry) =>
+                                entry.id === light.id ? { ...entry, selected: event.currentTarget.checked } : entry,
+                              ),
+                            })
+                          }
+                        />
+                        <MantineSelect
+                          size="xs"
+                          w={250}
+                          label="Light session"
+                          value={light.lightId}
+                          data={sourceOptions.lights}
+                          placeholder="Select light session"
+                          onChange={(value) =>
+                            updateLightMapping(draft, onDraftChange, light.id, {
+                              lightId: value ?? light.lightId,
+                            })
+                          }
+                        />
+                        <MantineSelect
+                          size="xs"
+                          w={180}
+                          label="Flats"
+                          value={light.flatsId}
+                          data={[{ value: "", label: "No flats selected" }, ...sourceOptions.flats]}
+                          placeholder="Optional"
+                          onChange={(value) => updateLightMapping(draft, onDraftChange, light.id, { flatsId: value ?? "" })}
+                        />
+                        <ActionIcon
+                          size="xs"
+                          variant="subtle"
+                          color="red"
+                          disabled={draft.lights.length === 1}
+                          onClick={() => {
+                            onDraftChange({
+                              lights: draft.lights.filter((entry) => entry.id !== light.id),
+                            });
+                          }}
+                          aria-label={`Remove light mapping ${lightOption?.label ?? light.lightId}`}
+                        >
+                          <X size={14} />
+                        </ActionIcon>
+                      </Group>
+                    </MantinePaper>
+                  );
+                })}
+              </Stack>
+            ) : null}
+
+            {step === "calibration" ? (
+              <Stack gap="3">
+                <Text size="xs" c="dimmed">
+                  Select dark and bias masters separately. Both are required to continue.
+                </Text>
+                <Group gap="xs" align="flex-end">
+                  <MantineSelect
+                    size="xs"
+                    style={{ minWidth: 220 }}
+                    label="Dark master"
+                    value={draft.darksId}
+                    data={[{ value: "", label: "Select dark master" }, ...sourceOptions.darks]}
+                    onChange={(value) => onDraftChange({ darksId: value ?? "" })}
+                  />
+                  <MantineSelect
+                    size="xs"
+                    style={{ minWidth: 220 }}
+                    label="Bias master"
+                    value={draft.biasId}
+                    data={[{ value: "", label: "Select bias master" }, ...sourceOptions.bias]}
+                    onChange={(value) => onDraftChange({ biasId: value ?? "" })}
+                  />
+                </Group>
+              </Stack>
+            ) : null}
+
+            {step === "review" ? (
+              <Table withTableBorder withColumnBorders verticalSpacing={2} horizontalSpacing="sm">
+                <Table.Tbody>
+                  <Table.Tr>
+                    <Table.Td>
+                      <Text size="xs" fw={500}>
+                        Project
                       </Text>
-                      <MantineSelect
-                        size="xs"
-                        w={150}
-                        value={light.lightId}
-                        data={sourceOptions.lights}
-                        onChange={(value) =>
-                          updateLightMapping(draft, onDraftChange, light.id, {
-                            lightId: value ?? light.lightId,
-                          })
-                        }
-                      />
-                      <MantineSelect
-                        size="xs"
-                        w={180}
-                        value={light.flatsId}
-                        data={[{ value: "", label: "No flats selected" }, ...sourceOptions.flats]}
-                        onChange={(value) =>
-                          updateLightMapping(draft, onDraftChange, light.id, { flatsId: value ?? "" })
-                        }
-                      />
-                      <ActionIcon
-                        size="xs"
-                        variant="subtle"
-                        color="red"
-                        disabled={draft.lights.length === 1}
-                        onClick={() => {
-                          onDraftChange({
-                            lights: draft.lights.filter((entry) => entry.id !== light.id),
-                          });
-                        }}
-                        aria-label={`Remove light mapping ${lightOption?.label ?? light.lightId}`}
-                      >
-                        <X size={14} />
-                      </ActionIcon>
-                    </Group>
-                  </MantinePaper>
-                );
-              })}
-            </Stack>
-          ) : null}
-
-          {step === "calibration" ? (
-            <Group gap="xs" align="flex-end">
-              <MantineSelect
-                size="xs"
-                style={{ minWidth: 220 }}
-                label="Darks"
-                value={draft.darksId}
-                data={[{ value: "", label: "Select dark master" }, ...sourceOptions.darks]}
-                onChange={(value) => onDraftChange({ darksId: value ?? "" })}
-              />
-              <MantineSelect
-                size="xs"
-                style={{ minWidth: 220 }}
-                label="Bias"
-                value={draft.biasId}
-                data={[{ value: "", label: "Select bias master" }, ...sourceOptions.bias]}
-                onChange={(value) => onDraftChange({ biasId: value ?? "" })}
-              />
-            </Group>
-          ) : null}
-
-          {step === "review" ? (
-            <Table withTableBorder withColumnBorders verticalSpacing={2} horizontalSpacing="sm">
-              <Table.Tbody>
-                <Table.Tr>
-                  <Table.Td>
-                    <Text size="xs" fw={500}>
-                      Project
-                    </Text>
-                  </Table.Td>
-                  <Table.Td>
-                    <Text size="xs">{draft.name}</Text>
-                  </Table.Td>
-                </Table.Tr>
-                <Table.Tr>
-                  <Table.Td>
-                    <Text size="xs" fw={500}>
-                      Folder
-                    </Text>
-                  </Table.Td>
-                  <Table.Td>
-                    <Text size="xs">{draft.root}</Text>
-                  </Table.Td>
-                </Table.Tr>
-                <Table.Tr>
-                  <Table.Td>
-                    <Text size="xs" fw={500}>
-                      Project type
-                    </Text>
-                  </Table.Td>
-                  <Table.Td>
-                    <Text size="xs">{draft.workflow}</Text>
-                  </Table.Td>
-                </Table.Tr>
-                <Table.Tr>
-                  <Table.Td>
-                    <Text size="xs" fw={500}>
-                      Lights
-                    </Text>
-                  </Table.Td>
-                  <Table.Td>
-                    <Text size="xs">{selectedLightCount}</Text>
-                  </Table.Td>
-                </Table.Tr>
-                <Table.Tr>
-                  <Table.Td>
-                    <Text size="xs" fw={500}>
-                      Darks
-                    </Text>
-                  </Table.Td>
-                  <Table.Td>
-                    <Text size="xs">
-                      {sourceOptions.darks.find((option) => option.value === draft.darksId)?.label ?? "Not selected"}
-                    </Text>
-                  </Table.Td>
-                </Table.Tr>
-                <Table.Tr>
-                  <Table.Td>
-                    <Text size="xs" fw={500}>
-                      Bias
-                    </Text>
-                  </Table.Td>
-                  <Table.Td>
-                    <Text size="xs">
-                      {sourceOptions.bias.find((option) => option.value === draft.biasId)?.label ?? "Not selected"}
-                    </Text>
-                  </Table.Td>
-                </Table.Tr>
-                <Table.Tr>
-                  <Table.Td>
-                    <Text size="xs" fw={500}>
-                      Session mapping
-                    </Text>
-                  </Table.Td>
-                  <Table.Td>
-                    <Text size="xs">Flats optional per selected light</Text>
-                  </Table.Td>
-                </Table.Tr>
-              </Table.Tbody>
-          </Table>
-          ) : null}
+                    </Table.Td>
+                    <Table.Td>
+                      <Text size="xs">{draft.name}</Text>
+                    </Table.Td>
+                  </Table.Tr>
+                  <Table.Tr>
+                    <Table.Td>
+                      <Text size="xs" fw={500}>
+                        Folder
+                      </Text>
+                    </Table.Td>
+                    <Table.Td>
+                      <Text size="xs">{draft.root}</Text>
+                    </Table.Td>
+                  </Table.Tr>
+                  <Table.Tr>
+                    <Table.Td>
+                      <Text size="xs" fw={500}>
+                        Project type
+                      </Text>
+                    </Table.Td>
+                    <Table.Td>
+                      <Text size="xs">{draft.workflow}</Text>
+                    </Table.Td>
+                  </Table.Tr>
+                  <Table.Tr>
+                    <Table.Td>
+                      <Text size="xs" fw={500}>
+                        Lights
+                      </Text>
+                    </Table.Td>
+                    <Table.Td>
+                      <Text size="xs">{selectedLightCount}</Text>
+                    </Table.Td>
+                  </Table.Tr>
+                  <Table.Tr>
+                    <Table.Td>
+                      <Text size="xs" fw={500}>
+                        Darks
+                      </Text>
+                    </Table.Td>
+                    <Table.Td>
+                      <Text size="xs">
+                        {sourceOptions.darks.find((option) => option.value === draft.darksId)?.label ?? "Not selected"}
+                      </Text>
+                    </Table.Td>
+                  </Table.Tr>
+                  <Table.Tr>
+                    <Table.Td>
+                      <Text size="xs" fw={500}>
+                        Bias
+                      </Text>
+                    </Table.Td>
+                    <Table.Td>
+                      <Text size="xs">
+                        {sourceOptions.bias.find((option) => option.value === draft.biasId)?.label ?? "Not selected"}
+                      </Text>
+                    </Table.Td>
+                  </Table.Tr>
+                  <Table.Tr>
+                    <Table.Td>
+                      <Text size="xs" fw={500}>
+                        Session mapping
+                      </Text>
+                    </Table.Td>
+                    <Table.Td>
+                      <Text size="xs">Flats optional per selected light</Text>
+                    </Table.Td>
+                  </Table.Tr>
+                </Table.Tbody>
+              </Table>
+            ) : null}
           </Stack>
         </MantinePaper>
 
@@ -1624,7 +1717,6 @@ function ProjectSetupDialog({
                 size="xs"
                 type="button"
                 disabled={!canLeaveLights}
-                data-guide-target="project-setup-next-lights"
                 onClick={() => {
                   emitGuideAction("projects.setup.lights");
                   onStepChange("calibration");
@@ -1638,7 +1730,6 @@ function ProjectSetupDialog({
                 size="xs"
                 type="button"
                 disabled={!canLeaveCalibration}
-                data-guide-target="project-setup-next-calibration"
                 onClick={() => {
                   emitGuideAction("projects.setup.calibration");
                   onStepChange("review");
@@ -1660,6 +1751,7 @@ function ProjectSetupDialog({
             ) : null}
           </Group>
         </Group>
+        </Stack>
       </Stack>
     </Modal>
   );

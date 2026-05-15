@@ -31,7 +31,9 @@ import { ChevronDown, FolderOpen, MoveRight } from "lucide-react";
 import {
   emitGuideAction,
   guidedLibraryItemsStorageKey,
+  cleanupFirstStepGuideStateEvent,
   libraryCandidateEvent,
+  resetFirstStepGuideStateEvent,
   type GuidedFrameKind,
 } from "../shared/guideEvents";
 
@@ -308,6 +310,39 @@ export function InboxPage() {
         window.clearTimeout(scanTimeoutRef.current);
         scanTimeoutRef.current = null;
       }
+    };
+  }, []);
+
+  useEffect(() => {
+    const cleanupGuideState = () => {
+      if (scanTimeoutRef.current !== null) {
+        window.clearTimeout(scanTimeoutRef.current);
+        scanTimeoutRef.current = null;
+      }
+      setInboxItems(initialInboxItems);
+      setSelectedItemId(null);
+      setScanStatus("idle");
+      setFrameFilter("all");
+      setColumnFilters([]);
+      frameSearchRef.current = "all";
+      selectedSearchRef.current = null;
+
+      if (search.frame !== "all" || search.selected != null) {
+        void navigate({
+          search: (previous) => ({
+            ...previous,
+            frame: undefined,
+            selected: undefined,
+          }),
+        });
+      }
+    };
+
+    window.addEventListener(resetFirstStepGuideStateEvent, cleanupGuideState);
+    window.addEventListener(cleanupFirstStepGuideStateEvent, cleanupGuideState);
+    return () => {
+      window.removeEventListener(resetFirstStepGuideStateEvent, cleanupGuideState);
+      window.removeEventListener(cleanupFirstStepGuideStateEvent, cleanupGuideState);
     };
   }, []);
 

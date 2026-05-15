@@ -47,8 +47,8 @@ The first-run experience is a one-time, app-level walkthrough. It is not a
 dedicated primary navigation screen and it is not embedded on the Inbox,
 Inventory, Projects, or Settings pages.
 
-The wizard helps the user configure all relevant starting data sources and
-preview what scans would ingest before normal work starts. Initial project
+The wizard helps the user configure all relevant starting data sources before
+normal work starts. Initial project
 creation happens after setup through the guided Projects workflow. First-step
 guidance runs after the wizard as an in-product coach over real actions, not as
 a selectable wizard page or separate hints panel.
@@ -76,7 +76,7 @@ Wizard pages:
 - `Sources`: clarifies Raw, Calibration, Project, and Inbox source categories
   before the user selects directories, including what the user should choose for
   each category.
-- `Flow`: clarifies that setup saves source configuration and preview results;
+- `Flow`: clarifies that setup saves source configuration;
   first project creation happens later through guided real actions.
 - `Raw Sources`: configures one or more Raw roots using filesystem inputs.
 - `Calibration Sources`: configures one or more Calibration roots using
@@ -84,8 +84,6 @@ Wizard pages:
 - `Project Sources`: configures one or more Projects roots using filesystem
   inputs.
 - `Inbox Sources`: configures one or more Inbox roots using filesystem inputs.
-- `Scan Preview`: previews what the selected sources would ingest before Finish
-  saves or ingests anything.
 
 Post-setup guided first steps:
 
@@ -112,13 +110,12 @@ Rules:
   directory picker. Prototype replacements must be marked in source code.
 - Next is blocked when any source row has no selected directory, a duplicate
   source name, a duplicate source root, or a file-like path.
-- Each source row has a Preview action that shows an expanded per-source result
-  panel with included directories/files and per-entry warnings.
-- Scan Preview must show expected candidates, project folders, calibration
-  groups, or Inbox items before ingestion and must block Finish until the scan
-  has completed.
-- Finishing creates reviewable source drafts in the UI prototype; the real
-  implementation must preview the selected root before writing a marker.
+- The wizard must not show a mock source preview, inferred runtime kind, or
+  warning list. Those details are reviewed later in Inbox, Inventory, and
+  Projects where the user can act on real items.
+- Finishing creates source configuration drafts in the UI prototype and starts
+  the guided first-step flow. The real implementation validates source roots
+  before any marker or persisted source configuration is written.
 - Setup can be restarted from Settings, not only by clearing local state.
 - Source identity fields are immutable after creation; path changes use
   reconnect.

@@ -18,7 +18,6 @@ Wizard pages are sequential:
 - Calibration Sources.
 - Project Sources.
 - Inbox Sources.
-- Scan Preview.
 
 Users can skip the whole setup, but individual wizard pages are not skipped.
 Optional work is handled inside each page:
@@ -31,15 +30,12 @@ Optional work is handled inside each page:
   clearly marked in source code as a Tauri replacement point.
 - Source validation blocks Next when a row has no directory, a duplicate source
   name, a duplicate source root, or a file-like path.
-- Preview is a row action. It shows an expanded results panel with the
-  directories/files that would be included and per-entry warnings.
 - The initial project is not part of the wizard. It is created from the guided
   Projects workflow after setup.
 
-The summary/preview page must run a scan preview, show loading while it runs,
-and block Finish until it completes. It must show, for each source, the full
-included directory/file list and warnings before the user finishes setup. It
-must not imply marker writes or ingestion have already occurred.
+The wizard does not include a scan preview page or per-row preview action. It
+collects valid source roots, then hands off to the guided flow where Inbox,
+Inventory, and Projects show real scan/onboarding details at the point of action.
 
 Guided first steps are not selectable in the wizard. After setup completes, the
 first guide point can be skipped. Otherwise the guide points to real app

@@ -2,8 +2,14 @@
 
 **Feature Branch**: `001-astro-library-manager`  
 **Created**: 2026-05-02  
-**Status**: Draft  
+**Status**: Closed (Umbrella / Planning / Prototype Baseline)
 **Input**: User description: "Cross-platform local-first desktop application for managing astrophotography project structure, data ingestion, source mapping, calibration matching, PixInsight project preparation, and project lifecycle management."
+**Closure**: Umbrella/specification baseline only; this feature spec is closed as a planning/prototype artifact and does not represent an authorized app-implementation workstream.
+
+## Spec Scope Status
+
+- Remaining implementation scope is split into follow-on specs (first in sequence: `specs/002-data-lifecycle-state-model/spec.md`).
+- This file remains the high-level baseline for product intent, behavior, requirements, and future decomposition.
 
 ## User Scenarios & Testing *(mandatory)*
 

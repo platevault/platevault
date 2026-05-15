@@ -2,10 +2,15 @@
 
 **Branch**: `001-astro-library-manager` | **Date**: 2026-05-03 | **Spec**: [spec.md](./spec.md)
 **Input**: Feature specification from `/specs/001-astro-library-manager/spec.md`
+**Status**: Closed (Umbrella / Planning / Prototype Baseline)
 
 **Note**: This plan stops at SpecKit planning artifacts. It does not authorize
 application implementation beyond scaffold maintenance required by the SpecKit
 workflow.
+
+**Closure note**: Spec 001 is closed as the umbrella/planning/prototype baseline.
+Granular implementation has been moved into follow-on specs, starting with
+`specs/002-data-lifecycle-state-model/spec.md` for lifecycle state model work.
 
 ## Summary
 

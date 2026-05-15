@@ -4,7 +4,10 @@ import { Box, Button, Group, Paper, Text, Title } from "@mantine/core";
 
 import type { AppRouteId } from "../../app/routes";
 import {
+  completeFirstStepGuideSampleState,
   guideActionEvent,
+  cleanupFirstStepGuideSampleState,
+  resetFirstStepGuideSampleState,
   startFirstStepGuideEvent,
   stopFirstStepGuideEvent,
   type GuideActionId,
@@ -42,11 +45,14 @@ const guideStorageKey = "astro-plan:first-step-guide";
 const guideStepStorageKey = `${guideStorageKey}:step`;
 const openFirstRunWizardEvent = "astro-plan:open-first-run-wizard";
 const guideOverlayZIndex = 2600;
+const guideHighlightZIndex = 2615;
 const guideCardZIndex = 2620;
 const guideTargetPadding = 8;
 const guideTargetRetryDelayMs = 100;
 const guideTargetRetryBudgetMs = 3000;
 const guideTargetSettleWindowMs = 700;
+const guideBackdrop = "color-mix(in oklch, var(--canvas) 44%, transparent)";
+const guideTargetGlow = "0 0 0 0.22rem color-mix(in oklch, var(--accent-soft) 66%, transparent)";
 
 const guideSteps: GuideStep[] = [
   {
@@ -228,7 +234,7 @@ const guideSteps: GuideStep[] = [
   {
     id: "project-lights",
     route: "projects",
-    target: "project-setup-next-lights",
+    target: "project-setup-lights",
     title: "Lights And Flats",
     body: "Select one or more light sessions. Each selected light session can also point to flats.",
     completion: { type: "action", id: "projects.setup.lights" },
@@ -236,7 +242,7 @@ const guideSteps: GuideStep[] = [
   {
     id: "project-calibration",
     route: "projects",
-    target: "project-setup-next-calibration",
+    target: "project-setup-calibration",
     title: "Darks And Bias",
     body: "Select the dark and bias masters separately from the light sessions.",
     completion: { type: "action", id: "projects.setup.calibration" },
@@ -323,6 +329,7 @@ export function FirstStepGuide({ activeRouteId }: { activeRouteId: AppRouteId })
 
   useEffect(() => {
     const startGuide = () => {
+      resetFirstStepGuideSampleState();
       window.localStorage.setItem(guideStorageKey, "active");
       window.localStorage.setItem(guideStepStorageKey, "0");
       setStepIndex(0);
@@ -335,8 +342,7 @@ export function FirstStepGuide({ activeRouteId }: { activeRouteId: AppRouteId })
 
   useEffect(() => {
     const stopGuide = () => {
-      window.localStorage.removeItem(guideStorageKey);
-      window.localStorage.removeItem(guideStepStorageKey);
+      cleanupFirstStepGuideSampleState();
       setIsVisible(false);
     };
 
@@ -575,7 +581,6 @@ export function FirstStepGuide({ activeRouteId }: { activeRouteId: AppRouteId })
           position: "fixed",
           inset: 0,
           zIndex: guideOverlayZIndex,
-          background: "color-mix(in oklch, var(--canvas) 72%, transparent)",
           pointerEvents: "none",
         }}
       >
@@ -588,12 +593,29 @@ export function FirstStepGuide({ activeRouteId }: { activeRouteId: AppRouteId })
               left: panel.left,
               width: panel.width,
               height: panel.height,
-              background: "color-mix(in oklch, var(--canvas) 72%, transparent)",
-              pointerEvents: highlightRect ? "auto" : "none",
+              background: guideBackdrop,
+              pointerEvents: "auto",
             }}
           />
         ))}
       </Box>
+      {highlightRect ? (
+        <Box
+          aria-hidden="true"
+          style={{
+            position: "fixed",
+            top: highlightRect.top,
+            left: highlightRect.left,
+            width: highlightRect.width,
+            height: highlightRect.height,
+            borderRadius: "var(--radius-sm)",
+            border: "2px solid var(--focus-ring)",
+            boxShadow: guideTargetGlow,
+            pointerEvents: "none",
+            zIndex: guideHighlightZIndex,
+          }}
+        />
+      ) : null}
       <Paper
         shadow="xl"
         radius="md"
@@ -656,6 +678,7 @@ export function FirstStepGuide({ activeRouteId }: { activeRouteId: AppRouteId })
   }
 
   function finishGuide() {
+    completeFirstStepGuideSampleState();
     window.localStorage.setItem(guideStorageKey, "completed");
     window.localStorage.removeItem(guideStepStorageKey);
     setIsVisible(false);
