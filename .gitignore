@@ -319,3 +319,22 @@ apm_modules/
 .serena/memories/
 .serena/cache/
 .serena/logs/
+
+###--------------------------------###
+###  Local dev artifacts (ignore)  ###
+###--------------------------------###
+
+# Playwright screenshots captured during dev verification
+/*.png
+/.playwright-mcp/
+
+# Stray dotfiles that may appear in repo root (managed by chezmoi)
+/.bashrc
+/.bash_profile
+/.zshrc
+/.zprofile
+/.profile
+/.gitconfig
+/.gitmodules
+/.ripgreprc
+/.idea/

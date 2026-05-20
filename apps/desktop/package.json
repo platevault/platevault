@@ -12,14 +12,16 @@
   },
   "dependencies": {
     "@astro-plan/contracts": "workspace:*",
-    "@mantine/core": "9.1.1",
-    "@mantine/hooks": "9.1.1",
+    "@base-ui-components/react": "1.0.0-rc.0",
     "@tanstack/react-router": "1.169.2",
     "@tanstack/react-table": "8.21.3",
     "@tauri-apps/api": "^2.9.0",
+    "clsx": "2.1.1",
+    "cmdk": "1.1.1",
     "lucide-react": "1.14.0",
     "react": "^19.2.0",
-    "react-dom": "^19.2.0"
+    "react-dom": "^19.2.0",
+    "react-resizable-panels": "4.11.1"
   },
   "devDependencies": {
     "@tauri-apps/cli": "^2.9.0",

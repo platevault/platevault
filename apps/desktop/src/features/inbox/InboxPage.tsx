@@ -1,800 +1,371 @@
-import { useEffect, useMemo, useRef, useState } from "react";
-
-import "@mantine/core/styles.css";
+import { useMemo } from "react";
+import { useSearch, useNavigate } from "@tanstack/react-router";
+import { MoreVertical, AlertTriangle, ArrowRight } from "lucide-react";
 
 import {
-  ActionIcon,
-  Accordion,
-  Box,
-  Button as MantineButton,
-  Group,
+  Button,
+  DataTable,
+  DockedDrawer,
+  DrawerShell,
+  FactGroup,
+  Filters,
+  FilterLabel,
+  IconButton,
   Menu,
-  Paper,
+  PageHeader,
   Select,
-  Stack,
-  Table,
-  Tooltip,
-  Text,
-  Title,
-} from "@mantine/core";
-import {
-  flexRender,
-  getCoreRowModel,
-  getFilteredRowModel,
-  type ColumnDef,
-  type ColumnFiltersState,
-  useReactTable,
-} from "@tanstack/react-table";
-import { useNavigate, useSearch } from "@tanstack/react-router";
-import { ChevronDown, FolderOpen, MoveRight } from "lucide-react";
+  StateLabel,
+} from "../../ui";
+import { inboxItems, type InboxItem } from "../../data/mock";
+import { createPlanFromInbox, usePlans } from "../../data/store";
+import { useSettings } from "../../data/settings";
 
-import {
-  emitGuideAction,
-  guidedLibraryItemsStorageKey,
-  cleanupFirstStepGuideStateEvent,
-  libraryCandidateEvent,
-  resetFirstStepGuideStateEvent,
-  type GuidedFrameKind,
-} from "../shared/guideEvents";
-
-type InboxFrameKind = GuidedFrameKind | "mixed" | "unknown";
-
-type InboxItem = {
-  id: string;
-  name: string;
-  path: string;
-  source: string;
-  frameKind: InboxFrameKind;
-  details: Array<{ label: string; value: string }>;
-  warnings: string[];
-  moreActions: string[];
-};
-
-type InboxFrameFilter = "all" | InboxFrameKind;
-
-type LibraryCandidate = {
-  id: string;
-  name: string;
-  path: string;
-  source: "Inbox";
-  frameKind: GuidedFrameKind;
-  kind: string;
-  details: Array<{ label: string; value: string }>;
-  warnings: string[];
-  moreActions: string[];
-};
-
-const guidedFrameOrder: GuidedFrameKind[] = ["darks", "bias", "flats", "lights"];
-
-const guidedInboxItems: InboxItem[] = [
-  {
-    id: "guided-master-darks",
-    name: "Master darks 120s gain 100",
-    path: "Sample Inbox\\Calibration\\Darks\\MasterDark_120s_gain100.xisf",
-    source: "Sample Inbox",
-    frameKind: "darks",
-    details: [
-      { label: "Frame type", value: "Dark master" },
-      { label: "Exposure", value: "120s" },
-      { label: "Gain / offset", value: "100 / 50" },
-      { label: "Temperature", value: "-10C" },
-      { label: "Format", value: "XISF" },
-    ],
-    warnings: [],
-    moreActions: ["Defer", "Ignore"],
-  },
-  {
-    id: "guided-master-bias",
-    name: "Master bias gain 100",
-    path: "Sample Inbox\\Calibration\\Bias\\MasterBias_gain100.xisf",
-    source: "Sample Inbox",
-    frameKind: "bias",
-    details: [
-      { label: "Frame type", value: "Bias master" },
-      { label: "Gain / offset", value: "100 / 50" },
-      { label: "Camera", value: "Poseidon-C PRO" },
-      { label: "Format", value: "XISF" },
-    ],
-    warnings: [],
-    moreActions: ["Defer", "Ignore"],
-  },
-  {
-    id: "guided-flats-lpro",
-    name: "L-Pro flats 2025-03-12",
-    path: "Sample Inbox\\Calibration\\Flats\\L-Pro\\2025-03-12",
-    source: "Sample Inbox",
-    frameKind: "flats",
-    details: [
-      { label: "Frame type", value: "Flat frames" },
-      { label: "Filter", value: "L-Pro" },
-      { label: "Frames", value: "48" },
-      { label: "Gain / offset", value: "100 / 50" },
-      { label: "Camera", value: "Poseidon-C PRO" },
-    ],
-    warnings: ["Rotation metadata missing on two sample files."],
-    moreActions: ["Defer", "Ignore"],
-  },
-  {
-    id: "guided-lights-heart-soul",
-    name: "Heart & Soul lights 2025-03-10",
-    path: "Sample Inbox\\Lights\\Heart Soul\\2025-03-10",
-    source: "Sample Inbox",
-    frameKind: "lights",
-    details: [
-      { label: "Frame type", value: "Light frames" },
-      { label: "Target hint", value: "IC 1805 / IC 1848" },
-      { label: "Frames", value: "126" },
-      { label: "Filters", value: "L, R, G, B" },
-      { label: "Capture software", value: "N.I.N.A. 3.0" },
-    ],
-    warnings: [],
-    moreActions: ["Defer", "Ignore"],
-  },
-];
-
-const initialInboxItems: InboxItem[] = [
-  {
-    id: "session-split",
-    name: "20250318 Orion and Rosette",
-    path: "Raw Poseidon-C\\20250318 Orion and Rosette",
-    source: "Raw Poseidon-C",
-    frameKind: "mixed",
-    details: [
-      { label: "Finding", value: "Multiple target hints in one immediate child folder" },
-      { label: "Required action", value: "Split inside Inbox before moving to Inventory" },
-      { label: "Mutation", value: "No automatic split will be applied" },
-    ],
-    warnings: ["Mixed folders cannot move to Inventory until split."],
-    moreActions: ["Split folder", "Ignore"],
-  },
-  {
-    id: "unknown-folder",
-    name: "Manual exports March",
-    path: "Drop Zone\\Manual exports March",
-    source: "Drop Zone",
-    frameKind: "unknown",
-    details: [
-      { label: "Finding", value: "No supported image metadata found yet" },
-      { label: "Next step", value: "Classify or keep in Inbox" },
-      { label: "Mutation", value: "Moving files requires a separate plan" },
-    ],
-    warnings: [],
-    moreActions: ["Choose type", "Ignore"],
-  },
-];
+const ALL = "__all";
 
 export function InboxPage() {
-  const search = useSearch({ from: "/inbox" });
-  const navigate = useNavigate({ from: "/inbox" });
+  const search = useSearch({ strict: false }) as {
+    id?: string;
+    type?: string;
+    source?: string;
+  };
+  const navigate = useNavigate();
+  const selectedId = search.id ?? null;
 
-  const [inboxItems, setInboxItems] = useState(initialInboxItems);
-  const [selectedItemId, setSelectedItemId] = useState<string | null>(() => search.selected ?? null);
-  const [scanStatus, setScanStatus] = useState<"idle" | "running" | "complete">("idle");
-  const [actionNote, setActionNote] = useState("");
-  const [frameFilter, setFrameFilter] = useState<InboxFrameFilter>(() => search.frame ?? "all");
-  const [columnFilters, setColumnFilters] = useState<ColumnFiltersState>([]);
-  const scanTimeoutRef = useRef<number | null>(null);
-  const frameSearchRef = useRef<InboxFrameFilter>(search.frame ?? "all");
-  const selectedSearchRef = useRef<string | null>(search.selected ?? null);
+  const settings = useSettings();
+  const typeFilter = search.type ?? ALL;
+  const sourceFilter = search.source ?? ALL;
+  const setTypeFilter = (v: string) =>
+    navigate({
+      to: "/inbox",
+      search: { ...search, type: v === ALL ? undefined : v },
+    } as never);
+  const setSourceFilter = (v: string) =>
+    navigate({
+      to: "/inbox",
+      search: { ...search, source: v === ALL ? undefined : v },
+    } as never);
 
-  const columns = useMemo<ColumnDef<InboxItem>[]>(() => {
-    return [
-      {
-        accessorKey: "name",
-        header: "Name",
-        cell: ({ row }) => {
-          const item = row.original;
-          const guideKind = getGuidedFrameKind(item);
-
-          return (
-            <Stack gap={3}>
-              <MantineButton
-                variant="subtle"
-                size="xs"
-                p={0}
-                justify="flex-start"
-                onClick={() => selectInboxItem(item)}
-                data-guide-target={guideKind ? `inbox-select-${guideKind}` : undefined}
-              >
-                {item.name}
-              </MantineButton>
-            </Stack>
-          );
-        },
-      },
-      {
-        accessorKey: "path",
-        header: "Path",
-        cell: ({ getValue }) => <TruncatedCell value={getValue<string>()} />,
-      },
-      {
-        accessorKey: "frameKind",
-        header: "Type",
-        cell: ({ getValue }) => <Text size="xs">{getFrameKindLabel(getValue<InboxFrameKind>())}</Text>,
-        filterFn: (row, columnId, value) => {
-          if (!value || value === "all") {
-            return true;
-          }
-
-          return row.getValue<InboxFrameKind>(columnId) === value;
-        },
-      },
-      {
-        accessorKey: "source",
-        header: "Source",
-        cell: ({ getValue }) => <Text size="xs">{getValue<string>()}</Text>,
-      },
-      {
-        id: "actions",
-        header: "Actions",
-        cell: ({ row }) => {
-          const item = row.original;
-          const guideKind = getGuidedFrameKind(item);
-
-            return (
-              <RowActionMenu
-                label={item.name}
-                primaryLabel="Move"
-                primaryLeftSection={<MoveRight size={14} />}
-                primaryDisabled={!guideKind}
-                onPrimary={() => moveToLibrary(item)}
-                onOpenLocation={() => openInboxItemLocation(item)}
-                compact
-                actions={item.moreActions}
-                onAction={(action) => applySecondaryAction(action, item)}
-              />
-            );
-        },
-      },
-    ];
-  }, []);
-
-  const table = useReactTable({
-    data: inboxItems,
-    columns,
-    state: {
-      columnFilters,
-    },
-    getCoreRowModel: getCoreRowModel(),
-    getFilteredRowModel: getFilteredRowModel(),
-    onColumnFiltersChange: setColumnFilters,
-    getRowId: (row) => row.id,
-  });
-
-  const visibleRows = table.getRowModel().rows;
-
-  const selectedItem = useMemo(
-    () => visibleRows.find((row) => row.original.id === selectedItemId)?.original ?? visibleRows[0]?.original ?? null,
-    [selectedItemId, visibleRows],
+  const rows = useMemo(
+    () =>
+      inboxItems.filter(
+        (item) =>
+          (typeFilter === ALL || item.type === typeFilter) &&
+          (sourceFilter === ALL || item.sourceId === sourceFilter),
+      ),
+    [typeFilter, sourceFilter],
   );
 
-  useEffect(() => {
-    if (frameFilter === "all") {
-      setColumnFilters([]);
-      return;
+  const selected = inboxItems.find((i) => i.id === selectedId) ?? null;
+
+  const onRowSelect = (row: InboxItem) => {
+    if (selectedId === row.id) {
+      navigate({ to: "/inbox", search: { ...search, id: undefined } } as never);
+    } else {
+      navigate({ to: "/inbox", search: { ...search, id: row.id } } as never);
     }
+  };
 
-    setColumnFilters([{ id: "frameKind", value: frameFilter }]);
-  }, [frameFilter]);
+  const onClose = () =>
+    navigate({ to: "/inbox", search: { ...search, id: undefined } } as never);
 
-  useEffect(() => {
-    const routeFrame = search.frame ?? "all";
-    if (frameSearchRef.current === routeFrame) {
-      return;
-    }
-
-    frameSearchRef.current = routeFrame;
-    setFrameFilter(routeFrame);
-  }, [search.frame]);
-
-  useEffect(() => {
-    const routeSelected = search.selected ?? null;
-    if (selectedSearchRef.current === routeSelected) {
-      return;
-    }
-
-    selectedSearchRef.current = routeSelected;
-    if (!routeSelected) {
-      setSelectedItemId(null);
-      return;
-    }
-
-    if (visibleRows.some((row) => row.original.id === routeSelected)) {
-      setSelectedItemId(routeSelected);
-    }
-  }, [search.selected, visibleRows]);
-
-  useEffect(() => {
-    return () => {
-      if (scanTimeoutRef.current !== null) {
-        window.clearTimeout(scanTimeoutRef.current);
-        scanTimeoutRef.current = null;
-      }
-    };
-  }, []);
-
-  useEffect(() => {
-    const cleanupGuideState = () => {
-      if (scanTimeoutRef.current !== null) {
-        window.clearTimeout(scanTimeoutRef.current);
-        scanTimeoutRef.current = null;
-      }
-      setInboxItems(initialInboxItems);
-      setSelectedItemId(null);
-      setScanStatus("idle");
-      setFrameFilter("all");
-      setColumnFilters([]);
-      frameSearchRef.current = "all";
-      selectedSearchRef.current = null;
-
-      if (search.frame !== "all" || search.selected != null) {
-        void navigate({
-          search: (previous) => ({
-            ...previous,
-            frame: undefined,
-            selected: undefined,
-          }),
-        });
-      }
-    };
-
-    window.addEventListener(resetFirstStepGuideStateEvent, cleanupGuideState);
-    window.addEventListener(cleanupFirstStepGuideStateEvent, cleanupGuideState);
-    return () => {
-      window.removeEventListener(resetFirstStepGuideStateEvent, cleanupGuideState);
-      window.removeEventListener(cleanupFirstStepGuideStateEvent, cleanupGuideState);
-    };
-  }, []);
-
-  return (
-    <Stack gap="sm">
-      <Group justify="space-between" align="flex-start" wrap="wrap" gap="sm">
-        <Stack gap={2}>
-          <Text size="xs" fw={700} tt="uppercase" c="dimmed">
-            Inbox
-          </Text>
-          <Text fw={600} size="sm" id="inbox-title">
-            Queue
-          </Text>
-        </Stack>
-        <MantineButton
-          size="xs"
-          loading={scanStatus === "running"}
-          data-guide-target="inbox-scan"
-          onClick={scanInbox}
-        >
-          {scanStatus === "running" ? "Scanning" : "Scan inbox"}
-        </MantineButton>
-      </Group>
-
-      {actionNote ? (
-        <Text size="xs" c="dimmed" role="status">
-          {actionNote}
-        </Text>
-      ) : null}
-
-      <Group align="flex-start" gap="sm" wrap="wrap">
-        <Box style={{ flex: "1 1 0", minWidth: 0 }}>
-          <Paper withBorder p={0} radius="sm">
-            <Stack gap={0}>
-              <Group p="sm" justify="space-between" align="flex-end" wrap="wrap" gap="sm">
-                <Stack gap={2}>
-                  <Text size="xs" fw={700} tt="uppercase" c="dimmed">
-                    Queue
-                  </Text>
-                  <Title order={3} id="inbox-list-title">
-                    Items
-                  </Title>
-                </Stack>
-                <Box maw={220} w={220}>
-                  <Select
-                    label="Frame type"
-                    size="xs"
-                    value={frameFilter}
-                    data={[
-                      { value: "all", label: "All frame types" },
-                      { value: "lights", label: "Lights" },
-                      { value: "darks", label: "Darks" },
-                      { value: "bias", label: "Bias" },
-                      { value: "flats", label: "Flats" },
-                      { value: "mixed", label: "Mixed" },
-                      { value: "unknown", label: "Unknown" },
-                    ]}
-                    onChange={(value) => {
-                      const nextFrameFilter = (value as InboxFrameFilter) ?? "all";
-                      setFrameFilter(nextFrameFilter);
-                      if ((search.frame ?? "all") !== nextFrameFilter) {
-                        void navigate({
-                          search: (previous) => ({
-                            ...previous,
-                            frame: nextFrameFilter === "all" ? undefined : nextFrameFilter,
-                          }),
-                        });
-                      }
-                    }}
-                    allowDeselect={false}
-                  />
-                </Box>
-              </Group>
-              <Table.ScrollContainer minWidth={760}>
-                <Table highlightOnHover withColumnBorders verticalSpacing={2} horizontalSpacing="xs">
-                  <Table.Thead>
-                    <Table.Tr>
-                      {table
-                        .getHeaderGroups()
-                        .flatMap((headerGroup) => headerGroup.headers)
-                        .map((header) => (
-                          <Table.Th key={header.id} style={getInboxHeaderStyle(header.id)}>
-                            {flexRender(header.column.columnDef.header, header.getContext())}
-                          </Table.Th>
-                        ))}
-                    </Table.Tr>
-                  </Table.Thead>
-                  <Table.Tbody>
-                    {visibleRows.length === 0 ? (
-                      <Table.Tr>
-                        <Table.Td colSpan={4}>
-                          <Stack gap="xs" p="sm">
-                            <Text fw={700}>No Inbox items</Text>
-                            <Text size="xs" c="dimmed">
-                              Run an Inbox scan to create the sample lights and calibration placeholders.
-                            </Text>
-                          </Stack>
-                        </Table.Td>
-                      </Table.Tr>
-                    ) : null}
-                      {visibleRows.map((row) => {
-                        const item = row.original;
-                        const isSelected = selectedItem ? row.original.id === selectedItem.id : false;
-
-                      return (
-                        <Table.Tr
-                          key={row.id}
-                          data-selected={isSelected}
-                          style={isSelected ? { backgroundColor: "var(--surface-selected)" } : undefined}
-                        >
-                          {row.getVisibleCells().map((cell) => (
-                            <Table.Td key={cell.id}>{flexRender(cell.column.columnDef.cell, cell.getContext())}</Table.Td>
-                          ))}
-                        </Table.Tr>
-                      );
-                    })}
-                  </Table.Tbody>
-                </Table>
-              </Table.ScrollContainer>
-            </Stack>
-          </Paper>
-        </Box>
-        <Box style={{ flex: "0 1 22rem", minWidth: "20rem" }}>
-          <Paper withBorder p="sm" radius="sm" aria-label="Selected Inbox item details">
-            {selectedItem ? (
-              <SelectedInboxItem
-                item={selectedItem}
-                onAction={applySecondaryAction}
-                onMove={moveToLibrary}
-                onOpenLocation={openInboxItemLocation}
-              />
-            ) : (
-              <Stack gap="xs">
-                <Text fw={700} size="sm">
-                  No item selected
-                </Text>
-              </Stack>
-            )}
-          </Paper>
-        </Box>
-      </Group>
-    </Stack>
-  );
-
-  function scanInbox() {
-    if (scanTimeoutRef.current !== null) {
-      window.clearTimeout(scanTimeoutRef.current);
-      scanTimeoutRef.current = null;
-    }
-
-    setScanStatus("running");
-    setActionNote("Scanning Inbox source roots");
-
-    const timeoutId = window.setTimeout(() => {
-      setInboxItems((current) => mergeGuidedItems(current));
-      setSelectedItemId(null);
-      setScanStatus("complete");
-      setActionNote("Inbox scan complete. Review the sample darks, bias, flats, and lights.");
-      emitGuideAction("inbox.scan-complete");
-      scanTimeoutRef.current = null;
-    }, 700);
-
-    scanTimeoutRef.current = timeoutId;
-  }
-
-  function selectInboxItem(item: InboxItem) {
-    setSelectedItemId(item.id);
-    if (search.selected !== item.id) {
-      void navigate({
-        search: (previous) => ({
-          ...previous,
-          selected: item.id,
-        }),
-      });
-    }
-    setActionNote(`Selected ${item.name}`);
-    const guideKind = getGuidedFrameKind(item);
-    if (guideKind) {
-      emitGuideAction(`inbox.select-item.${guideKind}`);
-    }
-  }
-
-  function moveToLibrary(item: InboxItem) {
-    const guideKind = getGuidedFrameKind(item);
-    if (!guideKind) {
-      setActionNote("Split or classify this Inbox item before moving it to Inventory.");
-      return;
-    }
-
-    const promotedItem: LibraryCandidate = {
-      id: `inbox-${item.id}`,
-      name: item.name,
-      path: item.path,
-      source: "Inbox",
-      frameKind: guideKind,
-      kind: getLibraryKind(guideKind),
-      details: [
-        ...item.details,
-        { label: "Inbox source", value: item.source },
-        { label: "Move result", value: "Promoted to Inventory for confirmation" },
-      ],
-      warnings: item.warnings,
-      moreActions: ["Edit metadata", "Defer"],
-    };
-
-    writeGuidedLibraryCandidate(promotedItem);
-    window.dispatchEvent(new CustomEvent(libraryCandidateEvent));
-    setInboxItems((current) => current.filter((candidate) => candidate.id !== item.id));
-    setSelectedItemId(null);
-    setActionNote(`Moved to Inventory: ${item.name}`);
-    emitGuideAction(`inbox.move-to-library.${guideKind}`);
-  }
-
-  function applySecondaryAction(action: string, item: InboxItem) {
-    if (action === "Open location") {
-      openInboxItemLocation(item);
-      return;
-    }
-
-    setActionNote(`${action}: ${item.name}`);
-  }
-
-  function openInboxItemLocation(item: InboxItem) {
-    // Tauri TODO: replace this prototype note with a native file-browser reveal command.
-    setActionNote(`Open location: ${item.path}`);
-  }
-}
-
-function SelectedInboxItem({
-  item,
-  onAction,
-  onMove,
-  onOpenLocation,
-}: {
-  item: InboxItem;
-  onAction: (action: string, item: InboxItem) => void;
-  onMove: (item: InboxItem) => void;
-  onOpenLocation: (item: InboxItem) => void;
-}) {
-  const guideKind = getGuidedFrameKind(item);
-  const topLevelLabels = new Set(["Frame type", "Source", "Path"]);
-  const details = [
-    { label: "Frame type", value: getFrameKindLabel(item.frameKind) },
-    { label: "Source", value: item.source },
-    { label: "Path", value: item.path },
-    ...item.details.filter((detail) => !topLevelLabels.has(detail.label)),
-  ];
-
-  return (
-    <Stack gap="md">
-      <Stack gap={2}>
-        <Text size="xs" fw={700} tt="uppercase" c="dimmed">
-          {getFrameKindLabel(item.frameKind)}
-        </Text>
-        <Title order={4}>{item.name}</Title>
-      </Stack>
-      <Table withColumnBorders>
-        <Table.Tbody>
-          {details.map((detail, index) => (
-            <Table.Tr key={`${item.id}-${detail.label}-${index}`}>
-              <Table.Td>
-                <Text fw={600} size="xs">
-                  {detail.label}
-                </Text>
-              </Table.Td>
-              <Table.Td>
-                <Text size="xs" c="dimmed">
-                  {detail.value}
-                </Text>
-              </Table.Td>
-            </Table.Tr>
-          ))}
-        </Table.Tbody>
-      </Table>
-      {item.warnings.length > 0 ? (
-        <Accordion defaultValue="warnings">
-          <Accordion.Item value="warnings">
-            <Accordion.Control>Warnings</Accordion.Control>
-            <Accordion.Panel>
-              <Stack gap="xs">
-                {item.warnings.map((warning) => (
-                  <Text size="xs" key={warning}>
-                    {warning}
-                  </Text>
-                ))}
-              </Stack>
-            </Accordion.Panel>
-          </Accordion.Item>
-        </Accordion>
-      ) : null}
-      <Group gap="xs">
-        <RowActionMenu
-          label={item.name}
-          primaryLabel="Move to Inventory"
-          primaryLeftSection={<MoveRight size={14} />}
-          primaryDisabled={!guideKind}
-          guideTarget={guideKind ? `inbox-move-library-${guideKind}` : undefined}
-          onPrimary={() => onMove(item)}
-          onOpenLocation={() => onOpenLocation(item)}
-          compact
-          actions={item.moreActions}
-          onAction={(action) => onAction(action, item)}
+  const main = (
+    <div className="alm-page">
+      <PageHeader
+        title="Review Queue"
+        subtitle={`${rows.length} items waiting · routed by Inbox`}
+      />
+      <Filters>
+        <FilterLabel>Type</FilterLabel>
+        <Select
+          ariaLabel="Type filter"
+          value={typeFilter}
+          onValueChange={setTypeFilter}
+          options={[
+            { value: ALL, label: "All types" },
+            { value: "light", label: "Light" },
+            { value: "dark", label: "Dark" },
+            { value: "flat", label: "Flat" },
+            { value: "bias", label: "Bias" },
+            { value: "mixed", label: "Mixed" },
+          ]}
+          minWidth={130}
         />
-      </Group>
-    </Stack>
+        <FilterLabel>Source</FilterLabel>
+        <Select
+          ariaLabel="Source filter"
+          value={sourceFilter}
+          onValueChange={setSourceFilter}
+          options={[
+            { value: ALL, label: "All sources" },
+            { value: "src-astrodrive", label: "AstroDrive" },
+            { value: "src-local-raw", label: "local raw" },
+          ]}
+          minWidth={150}
+        />
+      </Filters>
+      <div className="alm-page__body">
+        <DataTable<InboxItem>
+          density={settings.rowDensity}
+          rows={rows}
+          selectedId={selectedId}
+          onSelect={onRowSelect}
+          rowOverflow={() => (
+            <Menu
+              trigger={
+                <button type="button" className="alm-iconbtn" aria-label="Row actions">
+                  <MoreVertical size={14} />
+                </button>
+              }
+              groups={[
+                {
+                  id: "row",
+                  items: [
+                    { id: "reveal", label: "Reveal in OS" },
+                    { id: "ignore", label: "Ignore" },
+                  ],
+                },
+              ]}
+            />
+          )}
+          columns={[
+            {
+              id: "path",
+              header: "Path",
+              size: 320,
+              className: "alm-table__cell--mono",
+              render: (row) => row.path,
+            },
+            {
+              id: "files",
+              header: "Files",
+              size: 70,
+              className: "alm-table__cell--num",
+              render: (row) => row.files,
+            },
+            {
+              id: "type",
+              header: "Type",
+              size: 100,
+              render: (row) =>
+                row.type === "mixed" ? (
+                  <StateLabel tone="warn">mixed</StateLabel>
+                ) : (
+                  <span className="alm-dim">{row.type}</span>
+                ),
+            },
+            {
+              id: "source",
+              header: "Source",
+              size: 130,
+              className: "alm-table__cell--dim",
+              render: (row) => row.sourceLabel,
+            },
+            {
+              id: "detected",
+              header: "Detected",
+              size: 140,
+              className: "alm-table__cell--dim",
+              render: (row) => row.detectedAt,
+            },
+          ]}
+        />
+      </div>
+    </div>
   );
-}
 
-function RowActionMenu({
-  label,
-  primaryLabel,
-  primaryDisabled,
-  guideTarget,
-  actions,
-  onPrimary,
-  onAction,
-  onOpenLocation,
-  primaryLeftSection,
-  compact = false,
-}: {
-  label: string;
-  primaryLabel: string;
-  primaryDisabled?: boolean;
-  guideTarget?: string;
-  actions: string[];
-  onPrimary: () => void;
-  onAction: (action: string) => void;
-  onOpenLocation: () => void;
-  primaryLeftSection?: React.ReactNode;
-  compact?: boolean;
-}) {
-  const filteredActions = actions.filter(Boolean).filter((action) => action !== "Open location");
-  const showMenu = filteredActions.length > 0;
+  const isMixed = selected?.type === "mixed";
+
+  // `usePlans()` subscribes us to plan changes so `existingPlan` recomputes
+  // when plans are created, applied, or discarded.
+  const allPlans = usePlans();
+  const existingPlan = useMemo(
+    () =>
+      selected
+        ? allPlans.find(
+            (p) =>
+              p.originPath === selected.path &&
+              (p.state === "draft" ||
+                p.state === "ready_for_review" ||
+                p.state === "approved" ||
+                p.state === "applying"),
+          )
+        : undefined,
+    [allPlans, selected],
+  );
+
+  const handleGeneratePlan = () => {
+    if (!selected) return;
+    if (existingPlan) {
+      navigate({ to: "/plans/$planId", params: { planId: existingPlan.id } } as never);
+      return;
+    }
+    const plan = createPlanFromInbox(selected);
+    navigate({ to: "/plans/$planId", params: { planId: plan.id } } as never);
+  };
+  const drawer = selected
+    ? (
+      <DrawerShell
+        title={selected.path}
+        subtitle={`${selected.files} files · ${
+          isMixed ? "mixed types detected" : `${selected.type} frames`
+        }`}
+        onClose={onClose}
+        body={
+          <>
+            {selected.mixedBreakdown ? (
+              <FactGroup label="Inferred breakdown">
+                <div style={{ display: "flex", flexDirection: "column", gap: 6 }}>
+                  {selected.mixedBreakdown.map((b) => (
+                    <div
+                      key={b.kind}
+                      style={{
+                        display: "grid",
+                        gridTemplateColumns: "70px 60px 1fr",
+                        gap: 12,
+                        alignItems: "center",
+                        fontSize: "var(--fs-small)",
+                      }}
+                    >
+                      <span style={{ color: "var(--text-dim)", textTransform: "capitalize" }}>
+                        {b.kind}
+                      </span>
+                      <span className="alm-table__cell--num">{b.count}</span>
+                      <span
+                        className="alm-mono"
+                        style={{
+                          color:
+                            b.destination.includes("unclassified")
+                              ? "var(--warn)"
+                              : "var(--text)",
+                        }}
+                      >
+                        {b.destination.includes("unclassified") ? (
+                          <AlertTriangle size={11} style={{ display: "inline", marginRight: 4 }} />
+                        ) : null}
+                        → {b.destination}
+                      </span>
+                    </div>
+                  ))}
+                </div>
+              </FactGroup>
+            ) : null}
+
+            {selected.sampleFiles ? (
+              <FactGroup label="Sample files">
+                <div
+                  style={{
+                    display: "flex",
+                    flexDirection: "column",
+                    gap: 2,
+                    border: "1px solid var(--border-subtle)",
+                    borderRadius: "var(--r-sm)",
+                    padding: 6,
+                    background: "var(--surface-2)",
+                  }}
+                >
+                  {selected.sampleFiles.map((f, idx) => (
+                    <div
+                      key={idx}
+                      style={{
+                        display: "grid",
+                        gridTemplateColumns: "1fr 60px 60px 60px",
+                        gap: 8,
+                        fontFamily: "var(--font-mono)",
+                        fontSize: "var(--fs-micro)",
+                        padding: "2px 6px",
+                      }}
+                    >
+                      <span>{f.name}</span>
+                      <span className="alm-dim">{f.type}</span>
+                      <span className="alm-dim">{f.exposure ?? "—"}</span>
+                      <span className="alm-dim">{f.filter ?? "—"}</span>
+                    </div>
+                  ))}
+                  <div
+                    style={{
+                      padding: "4px 6px",
+                      fontSize: "var(--fs-dense)",
+                      color: "var(--accent)",
+                      cursor: "pointer",
+                    }}
+                  >
+                    Show all {selected.files} →
+                  </div>
+                </div>
+              </FactGroup>
+            ) : null}
+
+            {selected.destinationPattern ? (
+              <FactGroup label={isMixed ? "Pattern driving destinations" : "Will route to"}>
+                <div
+                  style={{
+                    padding: 8,
+                    background: "var(--surface-2)",
+                    borderRadius: "var(--r-sm)",
+                    fontFamily: "var(--font-mono)",
+                    fontSize: "var(--fs-dense)",
+                    color: "var(--text)",
+                  }}
+                >
+                  {selected.destinationPattern}
+                </div>
+                <div
+                  style={{
+                    fontSize: "var(--fs-dense)",
+                    color: "var(--text-dim)",
+                    marginTop: 4,
+                  }}
+                >
+                  From Settings → Naming & Structure
+                </div>
+              </FactGroup>
+            ) : null}
+          </>
+        }
+        footer={
+          <>
+            <Button
+              variant="primary"
+              trailingIcon={<ArrowRight size={14} />}
+              onClick={handleGeneratePlan}
+            >
+              {existingPlan
+                ? `Open existing plan #${existingPlan.number}`
+                : isMixed
+                ? "Generate split plan"
+                : "Confirm to Inventory"}
+            </Button>
+            <Button>Reclassify…</Button>
+            <span style={{ flex: 1 }} />
+            <Menu
+              trigger={
+                <button type="button" className="alm-iconbtn" aria-label="More actions">
+                  <MoreVertical size={14} />
+                </button>
+              }
+              groups={[
+                {
+                  id: "more",
+                  items: [
+                    { id: "reveal", label: "Reveal in OS" },
+                    { id: "rescan", label: "Re-scan folder" },
+                  ],
+                },
+                {
+                  id: "more-2",
+                  items: [{ id: "ignore", label: "Ignore this folder", tone: "danger" }],
+                },
+              ]}
+            />
+          </>
+        }
+      />
+    )
+    : null;
 
   return (
-    <Group gap="xs" align="center" wrap="nowrap" justify="flex-end">
-      <MantineButton
-        size="xs"
-        variant="filled"
-        disabled={primaryDisabled}
-        leftSection={primaryLeftSection}
-        px={compact ? "var(--mantine-spacing-xs)" : undefined}
-        data-guide-target={guideTarget}
-        onClick={onPrimary}
-      >
-        {primaryLabel}
-      </MantineButton>
-      <MantineButton
-        size="xs"
-        variant="subtle"
-        px={compact ? "var(--mantine-spacing-xs)" : undefined}
-        leftSection={<FolderOpen size={14} />}
-        onClick={onOpenLocation}
-      >
-        Open location
-      </MantineButton>
-      {showMenu ? (
-        <Menu shadow="md" width={180} position="bottom-end" withArrow>
-          <Menu.Target>
-            <ActionIcon size="xs" variant="default" aria-label={`More actions for ${label}`}>
-              <ChevronDown size={14} />
-            </ActionIcon>
-          </Menu.Target>
-          <Menu.Dropdown>
-            {filteredActions.map((action) => (
-              <Menu.Item key={action} onClick={() => onAction(action)}>
-                {action}
-              </Menu.Item>
-            ))}
-          </Menu.Dropdown>
-        </Menu>
-      ) : null}
-    </Group>
+    <div style={{ flex: 1, minHeight: 0, display: "flex" }}>
+      <DockedDrawer main={main} drawer={drawer} />
+    </div>
   );
-}
-
-function getInboxHeaderStyle(columnId: string) {
-  if (columnId === "name") {
-    return { minWidth: "14rem", width: "22%" };
-  }
-  if (columnId === "path") {
-    return { minWidth: "16rem", width: "36%" };
-  }
-  if (columnId === "frameKind" || columnId === "source") {
-    return { width: "9rem", whiteSpace: "nowrap" };
-  }
-  if (columnId === "actions") {
-    return { width: "11rem" };
-  }
-  return undefined;
-}
-
-function TruncatedCell({ value }: { value: string }) {
-  return (
-    <Tooltip label={value} withinPortal={false}>
-      <Text size="xs" lineClamp={1} style={{ overflow: "hidden", textOverflow: "ellipsis" }}>
-        {value}
-      </Text>
-    </Tooltip>
-  );
-}
-
-function mergeGuidedItems(current: InboxItem[]) {
-  const existingIds = new Set(current.map((item) => item.id));
-  const missingGuidedItems = guidedInboxItems.filter((item) => !existingIds.has(item.id));
-  return [...missingGuidedItems, ...current];
-}
-
-function getGuidedFrameKind(item: InboxItem): GuidedFrameKind | null {
-  return guidedFrameOrder.includes(item.frameKind as GuidedFrameKind) ? (item.frameKind as GuidedFrameKind) : null;
-}
-
-function getFrameKindLabel(kind: InboxFrameKind) {
-  const labels: Record<InboxFrameKind, string> = {
-    lights: "Lights",
-    darks: "Darks",
-    bias: "Bias",
-    flats: "Flats",
-    mixed: "Mixed",
-    unknown: "Unknown",
-  };
-
-  return labels[kind];
-}
-
-function getLibraryKind(kind: GuidedFrameKind) {
-  const labels: Record<GuidedFrameKind, string> = {
-    lights: "Light session",
-    darks: "Dark master",
-    bias: "Bias master",
-    flats: "Flat set",
-  };
-
-  return labels[kind];
-}
-
-function writeGuidedLibraryCandidate(candidate: LibraryCandidate) {
-  const currentItems = readGuidedLibraryCandidates();
-  const nextItems = [candidate, ...currentItems.filter((item) => item.id !== candidate.id)];
-  window.localStorage.setItem(guidedLibraryItemsStorageKey, JSON.stringify(nextItems));
-}
-
-function readGuidedLibraryCandidates(): LibraryCandidate[] {
-  const rawCandidates = window.localStorage.getItem(guidedLibraryItemsStorageKey);
-  if (!rawCandidates) {
-    return [];
-  }
-
-  try {
-    return JSON.parse(rawCandidates) as LibraryCandidate[];
-  } catch {
-    window.localStorage.removeItem(guidedLibraryItemsStorageKey);
-    return [];
-  }
 }
