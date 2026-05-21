@@ -149,7 +149,7 @@ These apply to multiple specs and should be threaded through:
 
 | Open point | Decision |
 |---|---|
-| Approval-token mechanism | HMAC over `(plan_id, content_hash, approved_at, server_secret)`; single-use; 15-min expiry |
+| Approval-token mechanism | HMAC over `(plan_id, content_hash, approved_at, server_secret)`; single-use. **No TTL** — superseded by per-apply FS revalidation (2026-05-21): apply revalidates each item's source content-hash and destination emptiness against current FS state; any drift surfaces a "Plan is stale" dialog and the user re-approves with a fresh plan baked against current state. HMAC still guards plan-body integrity end-to-end. |
 | Discard with active retry chain | Soft-delete (`discarded_at` flag); chain stays intact |
 | Plan counter shape | Add `itemsSkipped`; invariant `total == applied + failed + skipped + cancelled + pending` |
 | Terminal plan retention | Keep all indefinitely; UI filter hides older than N days by default |
@@ -246,6 +246,7 @@ These apply to multiple specs and should be threaded through:
 5. **Spec 014 first-run flow** — OpenNGC download at first run requires the wizard (spec 003) to surface a 'Download catalogs' step or run it asynchronously after Finish. Update spec 003 + spec 014 to align.
 6. **Spec 003 wizard step for tool discovery** — spec 011's auto-discovery should run during first-run, not just on demand. Add a 'Detect tools' wizard step.
 7. **Plan apply pre-flight space check** — spec 017's plan generator gains a `total_bytes_required` field; spec 025's apply pre-flight refuses if available < required. Plan review surface shows the budget.
+8. **Plan revalidation at apply (2026-05-21)** — spec 025 gains a per-item FS revalidation step that runs before any mutation. Checks source content-hash unchanged and destination still empty. Any drift surfaces a "Plan is stale" dialog and forces re-approval against fresh state. Replaces the 15-min TTL on approval tokens (token now has no expiry; HMAC still guards plan-body integrity). Affects spec 017 (token issuance), spec 025 (apply contract), and the UI plan-review surfaces (Inbox / Projects / Activity drawers).
 
 ### Spec-internal mechanical fixes (no policy decisions needed)
 

@@ -1,182 +1,351 @@
-import { useMemo } from "react";
-import { useSearch, useNavigate } from "@tanstack/react-router";
-import { MoreVertical, AlertTriangle, ArrowRight } from "lucide-react";
+import { useMemo, useState } from "react";
+import { useSearch, useNavigate, Link } from "@tanstack/react-router";
+import { MoreVertical, AlertTriangle, Inbox } from "lucide-react";
 
 import {
   Button,
+  IconButton,
   DataTable,
   DockedDrawer,
   DrawerShell,
+  EmptyState,
   FactGroup,
   Filters,
   FilterLabel,
-  IconButton,
   Menu,
+  MultiSelect,
   PageHeader,
-  Select,
-  StateLabel,
+  sortRows,
+  type DataTableColumn,
+  type MultiSelectOption,
+  ConfidenceChip,
+  BulkActionBar,
+  PlanFooter,
+  StalePlanDialog,
 } from "../../ui";
+import { PlanInlineSummary } from "../../ui/PlanInlineSummary";
 import { inboxItems, type InboxItem } from "../../data/mock";
-import { createPlanFromInbox, usePlans } from "../../data/store";
+import { createPlanFromInbox, discardPlan, revalidateAndApply, regeneratePlan, usePlans } from "../../data/store";
 import { useSettings } from "../../data/settings";
 
-const ALL = "__all";
+const DEFAULT_SORT = "detected:desc";
+
+const ALL_INBOX_TYPES = ["light", "dark", "flat", "bias", "mixed"] as const;
+type InboxTypeFilter = (typeof ALL_INBOX_TYPES)[number];
+
+const INBOX_SOURCE_OPTIONS: MultiSelectOption[] = [
+  { value: "src-astrodrive", label: "AstroDrive" },
+  { value: "src-local-raw", label: "local raw" },
+];
+
+const INBOX_TYPE_OPTIONS: MultiSelectOption[] = [
+  { value: "light", label: "Light" },
+  { value: "dark", label: "Dark" },
+  { value: "flat", label: "Flat" },
+  { value: "bias", label: "Bias" },
+  { value: "mixed", label: "Mixed" },
+];
+
+const ALL_INBOX_SOURCE_IDS = INBOX_SOURCE_OPTIONS.map((o) => o.value);
+
+function parseCSV<T extends string>(
+  raw: string | undefined,
+  allowed: ReadonlyArray<T>,
+  defaultVal: T[],
+): T[] {
+  if (!raw) return defaultVal;
+  const set = new Set<string>(allowed);
+  const picked = raw.split(",").filter((s) => set.has(s)) as T[];
+  return picked.length > 0 ? picked : defaultVal;
+}
+
+function serializeCSV<T extends string>(values: T[], allValues: ReadonlyArray<T>): string | undefined {
+  if (values.length === allValues.length) return undefined;
+  return values.join(",");
+}
+
+const MOCK_DRIFT_ENTRIES = [
+  "light_073.fit modified at 2026-05-21 13:42",
+  "NGC7000/applied/light_088.fit now exists",
+  "light_091.fit no longer present",
+];
+
+function parseSort(sort: string | undefined): { id: string; dir: "asc" | "desc" } {
+  if (!sort) return { id: "detected", dir: "desc" };
+  const [id = "detected", rawDir] = sort.split(":");
+  const dir = rawDir === "asc" ? "asc" : "desc";
+  return { id, dir };
+}
 
 export function InboxPage() {
   const search = useSearch({ strict: false }) as {
     id?: string;
     type?: string;
     source?: string;
+    sort?: string;
   };
   const navigate = useNavigate();
   const selectedId = search.id ?? null;
 
   const settings = useSettings();
-  const typeFilter = search.type ?? ALL;
-  const sourceFilter = search.source ?? ALL;
-  const setTypeFilter = (v: string) =>
-    navigate({
-      to: "/inbox",
-      search: { ...search, type: v === ALL ? undefined : v },
-    } as never);
-  const setSourceFilter = (v: string) =>
-    navigate({
-      to: "/inbox",
-      search: { ...search, source: v === ALL ? undefined : v },
-    } as never);
 
-  const rows = useMemo(
+  const activeTypes = parseCSV<InboxTypeFilter>(search.type, ALL_INBOX_TYPES, [...ALL_INBOX_TYPES]);
+  const activeSources = parseCSV<string>(search.source, ALL_INBOX_SOURCE_IDS, [...ALL_INBOX_SOURCE_IDS]);
+
+  const sortState = parseSort(search.sort);
+
+  const navigate_ = (patch: Partial<typeof search>) => {
+    const next = { ...search, ...patch };
+    navigate({ to: "/inbox", search: next } as never);
+  };
+
+  const setActiveTypes = (types: string[]) =>
+    navigate_({ type: serializeCSV(types as InboxTypeFilter[], ALL_INBOX_TYPES) });
+  const setActiveSources = (sources: string[]) =>
+    navigate_({ source: serializeCSV(sources, ALL_INBOX_SOURCE_IDS) });
+
+  const handleSortChange = (next: { id: string; dir: "asc" | "desc" } | null) => {
+    const sortStr = next ? `${next.id}:${next.dir}` : undefined;
+    const isDefault = !sortStr || sortStr === DEFAULT_SORT;
+    navigate_({ sort: isDefault ? undefined : sortStr });
+  };
+
+  const columns: DataTableColumn<InboxItem>[] = useMemo(
+    () => [
+      {
+        id: "path",
+        header: "Path",
+        size: 300,
+        className: "alm-table__cell--mono",
+        sortable: true,
+        accessor: (row) => row.path,
+        render: (row) => row.path,
+      },
+      {
+        id: "files",
+        header: "Files",
+        size: 60,
+        className: "alm-table__cell--num",
+        sortable: true,
+        accessor: (row) => row.files,
+        render: (row) => row.files,
+      },
+      {
+        id: "target",
+        header: "Target",
+        size: 90,
+        sortable: true,
+        accessor: (row) => row.proposedTarget ?? null,
+        render: (row) =>
+          row.proposedTarget ? (
+            row.proposedTarget
+          ) : (
+            <span className="alm-text-faint">unknown</span>
+          ),
+      },
+      {
+        id: "type",
+        header: "Type",
+        size: 80,
+        className: "alm-table__cell--dim",
+        sortable: true,
+        accessor: (row) => row.type,
+        render: (row) => row.type,
+      },
+      {
+        id: "confidence",
+        header: "Confidence",
+        size: 110,
+        sortable: true,
+        accessor: (row) => row.confidence,
+        render: (row) => <ConfidenceChip value={row.confidence} mixed={row.type === "mixed"} />,
+      },
+      {
+        id: "detected",
+        header: "Detected",
+        size: 140,
+        className: "alm-table__cell--dim",
+        sortable: true,
+        accessor: (row) => row.detectedAt,
+        render: (row) => row.detectedAt,
+      },
+    ],
+    [],
+  );
+
+  const activeTypeSet = new Set(activeTypes);
+  const activeSourceSet = new Set(activeSources);
+
+  const baseRows = useMemo(
     () =>
       inboxItems.filter(
         (item) =>
-          (typeFilter === ALL || item.type === typeFilter) &&
-          (sourceFilter === ALL || item.sourceId === sourceFilter),
+          activeTypeSet.has(item.type) &&
+          activeSourceSet.has(item.sourceId),
       ),
-    [typeFilter, sourceFilter],
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+    [search.type, search.source],
   );
 
+  const rows = useMemo(() => {
+    const activeCol = columns.find((c) => c.id === sortState.id);
+    if (!activeCol) return baseRows;
+    return sortRows(baseRows, activeCol, sortState.dir);
+  }, [baseRows, columns, sortState.id, sortState.dir]);
+
   const selected = inboxItems.find((i) => i.id === selectedId) ?? null;
+  const [bulkSelection, setBulkSelection] = useState<Set<string>>(new Set());
+  const [lastChecked, setLastChecked] = useState<string | null>(null);
 
   const onRowSelect = (row: InboxItem) => {
     if (selectedId === row.id) {
-      navigate({ to: "/inbox", search: { ...search, id: undefined } } as never);
+      navigate_({ id: undefined });
     } else {
-      navigate({ to: "/inbox", search: { ...search, id: row.id } } as never);
+      navigate_({ id: row.id });
     }
   };
 
-  const onClose = () =>
-    navigate({ to: "/inbox", search: { ...search, id: undefined } } as never);
+  const onClose = () => navigate_({ id: undefined });
 
   const main = (
     <div className="alm-page">
       <PageHeader
-        title="Review Queue"
-        subtitle={`${rows.length} items waiting · routed by Inbox`}
+        title="Review queue"
+        subtitle={`${rows.length} folders detected · routed by Inbox`}
       />
       <Filters>
         <FilterLabel>Type</FilterLabel>
-        <Select
+        <MultiSelect
           ariaLabel="Type filter"
-          value={typeFilter}
-          onValueChange={setTypeFilter}
-          options={[
-            { value: ALL, label: "All types" },
-            { value: "light", label: "Light" },
-            { value: "dark", label: "Dark" },
-            { value: "flat", label: "Flat" },
-            { value: "bias", label: "Bias" },
-            { value: "mixed", label: "Mixed" },
-          ]}
+          value={activeTypes}
+          options={INBOX_TYPE_OPTIONS}
+          onValueChange={setActiveTypes}
+          allLabel="All types"
+          emptyLabel="No types"
           minWidth={130}
         />
         <FilterLabel>Source</FilterLabel>
-        <Select
+        <MultiSelect
           ariaLabel="Source filter"
-          value={sourceFilter}
-          onValueChange={setSourceFilter}
-          options={[
-            { value: ALL, label: "All sources" },
-            { value: "src-astrodrive", label: "AstroDrive" },
-            { value: "src-local-raw", label: "local raw" },
-          ]}
+          value={activeSources}
+          options={INBOX_SOURCE_OPTIONS}
+          onValueChange={setActiveSources}
+          allLabel="All sources"
+          emptyLabel="No sources"
           minWidth={150}
         />
       </Filters>
       <div className="alm-page__body">
-        <DataTable<InboxItem>
-          density={settings.rowDensity}
-          rows={rows}
-          selectedId={selectedId}
-          onSelect={onRowSelect}
-          rowOverflow={() => (
-            <Menu
-              trigger={
-                <button type="button" className="alm-iconbtn" aria-label="Row actions">
-                  <MoreVertical size={14} />
-                </button>
-              }
-              groups={[
-                {
-                  id: "row",
-                  items: [
-                    { id: "reveal", label: "Reveal in OS" },
-                    { id: "ignore", label: "Ignore" },
-                  ],
-                },
-              ]}
+        {inboxItems.length === 0 ? (
+          <EmptyState
+            icon={<Inbox size={36} />}
+            heading="Inbox is empty"
+            description="Drop folders into a watch path or wait for the next scan. Detected items appear here for review before they enter your library."
+            action={
+              <Link to={"/settings/$section" as never} params={{ section: "data-sources" } as never}>
+                <Button variant="primary">Go to scan settings</Button>
+              </Link>
+            }
+          />
+        ) : rows.length === 0 ? (
+          <EmptyState
+            heading="No folders match these filters"
+            description="Try widening the type or source filters above."
+            action={
+              <Button
+                onClick={() =>
+                  navigate({ to: "/inbox", search: { id: search.id } } as never)
+                }
+              >
+                Clear filters
+              </Button>
+            }
+          />
+        ) : null}
+        {rows.length > 0 ? (
+          <>
+            <DataTable<InboxItem>
+              density={settings.rowDensity}
+              rows={rows}
+              selectedId={selectedId}
+              onSelect={onRowSelect}
+              selectedIds={bulkSelection}
+              sort={search.sort ? sortState : null}
+              onSortChange={handleSortChange}
+              onToggleRow={(row, mods) => {
+                setBulkSelection((prev) => {
+                  const next = new Set(prev);
+                  if (mods.shift && lastChecked) {
+                    const a = rows.findIndex((r) => r.id === lastChecked);
+                    const b = rows.findIndex((r) => r.id === row.id);
+                    if (a >= 0 && b >= 0) {
+                      const [from, to] = a < b ? [a, b] : [b, a];
+                      for (let i = from; i <= to; i++) next.add(rows[i].id);
+                      return next;
+                    }
+                  }
+                  if (next.has(row.id)) next.delete(row.id);
+                  else next.add(row.id);
+                  return next;
+                });
+                setLastChecked(row.id);
+              }}
+              onToggleAll={() => {
+                setBulkSelection((prev) => {
+                  const allChecked = rows.every((r) => prev.has(r.id));
+                  return allChecked ? new Set() : new Set(rows.map((r) => r.id));
+                });
+              }}
+              rowOverflow={() => (
+                <Menu
+                  trigger={
+                    <IconButton size="sm" aria-label="Row actions">
+                      <MoreVertical size={14} />
+                    </IconButton>
+                  }
+                  groups={[
+                    {
+                      id: "row",
+                      items: [
+                        { id: "reveal", label: "Reveal in OS" },
+                        { id: "ignore", label: "Ignore", tone: "danger" as const },
+                      ],
+                    },
+                  ]}
+                />
+              )}
+              columns={columns}
             />
-          )}
-          columns={[
-            {
-              id: "path",
-              header: "Path",
-              size: 320,
-              className: "alm-table__cell--mono",
-              render: (row) => row.path,
-            },
-            {
-              id: "files",
-              header: "Files",
-              size: 70,
-              className: "alm-table__cell--num",
-              render: (row) => row.files,
-            },
-            {
-              id: "type",
-              header: "Type",
-              size: 100,
-              render: (row) =>
-                row.type === "mixed" ? (
-                  <StateLabel tone="warn">mixed</StateLabel>
-                ) : (
-                  <span className="alm-dim">{row.type}</span>
-                ),
-            },
-            {
-              id: "source",
-              header: "Source",
-              size: 130,
-              className: "alm-table__cell--dim",
-              render: (row) => row.sourceLabel,
-            },
-            {
-              id: "detected",
-              header: "Detected",
-              size: 140,
-              className: "alm-table__cell--dim",
-              render: (row) => row.detectedAt,
-            },
-          ]}
-        />
+            {bulkSelection.size > 0 ? (
+              <BulkActionBar
+                count={bulkSelection.size}
+                countLabel={(n) => `${n} folders`}
+                onClear={() => setBulkSelection(new Set())}
+                aria-label="Inbox bulk actions"
+                actions={
+                  <>
+                    <Button
+                      variant="primary"
+                      onClick={() => {
+                        rows.filter((r) => bulkSelection.has(r.id)).forEach((r) => createPlanFromInbox(r));
+                        setBulkSelection(new Set());
+                      }}
+                    >
+                      Generate plans for selected
+                    </Button>
+                    <Button>Ignore all</Button>
+                  </>
+                }
+              />
+            ) : null}
+          </>
+        ) : null}
       </div>
     </div>
   );
 
   const isMixed = selected?.type === "mixed";
 
-  // `usePlans()` subscribes us to plan changes so `existingPlan` recomputes
-  // when plans are created, applied, or discarded.
   const allPlans = usePlans();
   const existingPlan = useMemo(
     () =>
@@ -193,173 +362,224 @@ export function InboxPage() {
     [allPlans, selected],
   );
 
+  const [validating, setValidating] = useState(false);
+  const [staleOpen, setStaleOpen] = useState(false);
+
   const handleGeneratePlan = () => {
     if (!selected) return;
-    if (existingPlan) {
-      navigate({ to: "/plans/$planId", params: { planId: existingPlan.id } } as never);
-      return;
-    }
-    const plan = createPlanFromInbox(selected);
-    navigate({ to: "/plans/$planId", params: { planId: plan.id } } as never);
+    if (existingPlan) return;
+    createPlanFromInbox(selected);
   };
+
+  const handleApply = async () => {
+    if (!existingPlan) return;
+    setValidating(true);
+    try {
+      const outcome = await revalidateAndApply(existingPlan.id);
+      if (outcome === "stale") {
+        setStaleOpen(true);
+      }
+    } finally {
+      setValidating(false);
+    }
+  };
+
+  const handleDiscard = () => {
+    if (!existingPlan) return;
+    discardPlan(existingPlan.id);
+  };
+
+  const handleRegenerate = () => {
+    if (!existingPlan) return;
+    regeneratePlan(existingPlan.id);
+    setStaleOpen(false);
+  };
+
+  const planState = existingPlan?.state;
+  const isApplied = planState === "applied" || planState === "partially_applied";
+
   const drawer = selected
     ? (
-      <DrawerShell
-        title={selected.path}
-        subtitle={`${selected.files} files · ${
-          isMixed ? "mixed types detected" : `${selected.type} frames`
-        }`}
-        onClose={onClose}
-        body={
-          <>
-            {selected.mixedBreakdown ? (
-              <FactGroup label="Inferred breakdown">
-                <div style={{ display: "flex", flexDirection: "column", gap: 6 }}>
-                  {selected.mixedBreakdown.map((b) => (
-                    <div
-                      key={b.kind}
-                      style={{
-                        display: "grid",
-                        gridTemplateColumns: "70px 60px 1fr",
-                        gap: 12,
-                        alignItems: "center",
-                        fontSize: "var(--fs-small)",
-                      }}
-                    >
-                      <span style={{ color: "var(--text-dim)", textTransform: "capitalize" }}>
-                        {b.kind}
-                      </span>
-                      <span className="alm-table__cell--num">{b.count}</span>
-                      <span
-                        className="alm-mono"
+      <>
+        <DrawerShell
+          title={selected.path}
+          subtitle={`${selected.files} files · ${
+            isMixed ? "mixed types detected" : `${selected.type} frames`
+          }`}
+          onClose={onClose}
+          body={
+            <>
+              {existingPlan ? (
+                <FactGroup
+                  label={
+                    isApplied
+                      ? existingPlan.state === "partially_applied"
+                        ? `Plan #${existingPlan.number} · partially applied`
+                        : `Plan #${existingPlan.number} · applied`
+                      : planState === "applying"
+                      ? `Plan #${existingPlan.number} · applying…`
+                      : `Plan #${existingPlan.number} · ready for review`
+                  }
+                >
+                  <PlanInlineSummary plan={existingPlan} />
+                </FactGroup>
+              ) : null}
+              {selected.mixedBreakdown ? (
+                <FactGroup label="Inferred breakdown">
+                  <div style={{ display: "flex", flexDirection: "column", gap: 6 }}>
+                    {selected.mixedBreakdown.map((b) => (
+                      <div
+                        key={b.kind}
                         style={{
-                          color:
-                            b.destination.includes("unclassified")
-                              ? "var(--warn)"
-                              : "var(--text)",
+                          display: "grid",
+                          gridTemplateColumns: "70px 60px 1fr",
+                          gap: 12,
+                          alignItems: "center",
+                          fontSize: "var(--fs-small)",
                         }}
                       >
-                        {b.destination.includes("unclassified") ? (
-                          <AlertTriangle size={11} style={{ display: "inline", marginRight: 4 }} />
-                        ) : null}
-                        → {b.destination}
-                      </span>
-                    </div>
-                  ))}
-                </div>
-              </FactGroup>
-            ) : null}
+                        <span style={{ color: "var(--text-dim)", textTransform: "capitalize" }}>
+                          {b.kind}
+                        </span>
+                        <span className="alm-table__cell--num">{b.count}</span>
+                        <span
+                          className="alm-mono"
+                          style={{
+                            color:
+                              b.destination.includes("unclassified")
+                                ? "var(--warn)"
+                                : "var(--text)",
+                          }}
+                        >
+                          {b.destination.includes("unclassified") ? (
+                            <AlertTriangle size={11} style={{ display: "inline", marginRight: 4 }} />
+                          ) : null}
+                          → {b.destination}
+                        </span>
+                      </div>
+                    ))}
+                  </div>
+                </FactGroup>
+              ) : null}
 
-            {selected.sampleFiles ? (
-              <FactGroup label="Sample files">
-                <div
-                  style={{
-                    display: "flex",
-                    flexDirection: "column",
-                    gap: 2,
-                    border: "1px solid var(--border-subtle)",
-                    borderRadius: "var(--r-sm)",
-                    padding: 6,
-                    background: "var(--surface-2)",
-                  }}
-                >
-                  {selected.sampleFiles.map((f, idx) => (
-                    <div
-                      key={idx}
-                      style={{
-                        display: "grid",
-                        gridTemplateColumns: "1fr 60px 60px 60px",
-                        gap: 8,
-                        fontFamily: "var(--font-mono)",
-                        fontSize: "var(--fs-micro)",
-                        padding: "2px 6px",
-                      }}
-                    >
-                      <span>{f.name}</span>
-                      <span className="alm-dim">{f.type}</span>
-                      <span className="alm-dim">{f.exposure ?? "—"}</span>
-                      <span className="alm-dim">{f.filter ?? "—"}</span>
-                    </div>
-                  ))}
+              {selected.sampleFiles ? (
+                <FactGroup label="Sample files">
                   <div
                     style={{
-                      padding: "4px 6px",
-                      fontSize: "var(--fs-dense)",
-                      color: "var(--accent)",
-                      cursor: "pointer",
+                      display: "flex",
+                      flexDirection: "column",
+                      gap: 2,
+                      border: "1px solid var(--border-subtle)",
+                      borderRadius: "var(--r-sm)",
+                      padding: 6,
+                      background: "var(--surface-2)",
                     }}
                   >
-                    Show all {selected.files} →
+                    {selected.sampleFiles.map((f, idx) => (
+                      <div
+                        key={idx}
+                        style={{
+                          display: "grid",
+                          gridTemplateColumns: "1fr 60px 60px 60px",
+                          gap: 8,
+                          fontFamily: "var(--font-mono)",
+                          fontSize: "var(--fs-micro)",
+                          padding: "2px 6px",
+                        }}
+                      >
+                        <span>{f.name}</span>
+                        <span className="alm-dim">{f.type}</span>
+                        <span className="alm-dim">{f.exposure ?? "—"}</span>
+                        <span className="alm-dim">{f.filter ?? "—"}</span>
+                      </div>
+                    ))}
+                    <div
+                      style={{
+                        padding: "4px 6px",
+                        fontSize: "var(--fs-dense)",
+                        color: "var(--accent)",
+                        cursor: "pointer",
+                      }}
+                    >
+                      Show all {selected.files} →
+                    </div>
                   </div>
-                </div>
-              </FactGroup>
-            ) : null}
+                </FactGroup>
+              ) : null}
 
-            {selected.destinationPattern ? (
-              <FactGroup label={isMixed ? "Pattern driving destinations" : "Will route to"}>
-                <div
-                  style={{
-                    padding: 8,
-                    background: "var(--surface-2)",
-                    borderRadius: "var(--r-sm)",
-                    fontFamily: "var(--font-mono)",
-                    fontSize: "var(--fs-dense)",
-                    color: "var(--text)",
-                  }}
-                >
-                  {selected.destinationPattern}
-                </div>
-                <div
-                  style={{
-                    fontSize: "var(--fs-dense)",
-                    color: "var(--text-dim)",
-                    marginTop: 4,
-                  }}
-                >
-                  From Settings → Naming & Structure
-                </div>
-              </FactGroup>
-            ) : null}
-          </>
-        }
-        footer={
-          <>
-            <Button
-              variant="primary"
-              trailingIcon={<ArrowRight size={14} />}
-              onClick={handleGeneratePlan}
-            >
-              {existingPlan
-                ? `Open existing plan #${existingPlan.number}`
-                : isMixed
-                ? "Generate split plan"
-                : "Confirm to Inventory"}
-            </Button>
-            <Button>Reclassify…</Button>
-            <span style={{ flex: 1 }} />
-            <Menu
-              trigger={
-                <button type="button" className="alm-iconbtn" aria-label="More actions">
-                  <MoreVertical size={14} />
-                </button>
+              {selected.destinationPattern ? (
+                <FactGroup label={isMixed ? "Pattern driving destinations" : "Will route to"}>
+                  <div
+                    style={{
+                      padding: 8,
+                      background: "var(--surface-2)",
+                      borderRadius: "var(--r-sm)",
+                      fontFamily: "var(--font-mono)",
+                      fontSize: "var(--fs-dense)",
+                      color: "var(--text)",
+                    }}
+                  >
+                    {selected.destinationPattern}
+                  </div>
+                  <div
+                    style={{
+                      fontSize: "var(--fs-dense)",
+                      color: "var(--text-dim)",
+                      marginTop: 4,
+                    }}
+                  >
+                    From Settings → Naming & Structure
+                  </div>
+                </FactGroup>
+              ) : null}
+            </>
+          }
+          footer={
+            <PlanFooter
+              plan={existingPlan}
+              validating={validating}
+              generateLabel={isMixed ? "Generate split plan" : "Generate plan"}
+              onGenerate={handleGeneratePlan}
+              onApprove={handleApply}
+              onDiscard={handleDiscard}
+              onDone={onClose}
+              onRetry={handleApply}
+              onEditDestinations={() => { /* placeholder */ }}
+              extra={
+                <Menu
+                  trigger={
+                    <IconButton size="sm" aria-label="More actions">
+                      <MoreVertical size={14} />
+                    </IconButton>
+                  }
+                  groups={[
+                    {
+                      id: "more",
+                      items: [
+                        { id: "reveal", label: "Reveal in OS" },
+                        { id: "rescan", label: "Re-scan folder" },
+                      ],
+                    },
+                    {
+                      id: "more-2",
+                      items: [{ id: "ignore", label: "Ignore this folder", tone: "danger" }],
+                    },
+                  ]}
+                />
               }
-              groups={[
-                {
-                  id: "more",
-                  items: [
-                    { id: "reveal", label: "Reveal in OS" },
-                    { id: "rescan", label: "Re-scan folder" },
-                  ],
-                },
-                {
-                  id: "more-2",
-                  items: [{ id: "ignore", label: "Ignore this folder", tone: "danger" }],
-                },
-              ]}
             />
-          </>
-        }
-      />
+          }
+        />
+        {existingPlan ? (
+          <StalePlanDialog
+            open={staleOpen}
+            onOpenChange={(o) => { if (!o) setStaleOpen(false); }}
+            planNumber={existingPlan.number}
+            driftEntries={MOCK_DRIFT_ENTRIES}
+            onRegenerate={handleRegenerate}
+          />
+        ) : null}
+      </>
     )
     : null;
 

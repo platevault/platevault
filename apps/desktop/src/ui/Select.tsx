@@ -47,7 +47,7 @@ export function Select({
         </BaseSelect.Icon>
       </BaseSelect.Trigger>
       <BaseSelect.Portal>
-        <BaseSelect.Positioner sideOffset={4}>
+        <BaseSelect.Positioner sideOffset={4} className="alm-select-positioner">
           <BaseSelect.Popup className="alm-select-popup">
             {options.map((option) => (
               <BaseSelect.Item

@@ -10,7 +10,7 @@ import {
 import { InventoryPage } from "../features/inventory/InventoryPage";
 import { InboxPage } from "../features/inbox/InboxPage";
 import { ProjectsPage } from "../features/projects/ProjectsPage";
-import { PlansListPage } from "../features/plans/PlansListPage";
+import { ActivityPage } from "../features/activity/ActivityPage";
 import { PlanDetailPage } from "../features/plans/PlanDetailPage";
 import { SettingsPage } from "../features/settings/SettingsPage";
 import { WelcomePage } from "../features/welcome/WelcomePage";
@@ -50,11 +50,21 @@ const inventoryRoute = createRoute({
   path: "/inventory",
   validateSearch: (
     search: Record<string, unknown>,
-  ): { id?: string; source?: string; frame?: string; review?: string } => ({
+  ): {
+    id?: string;
+    source?: string;
+    frame?: string;
+    states?: string;
+    group?: "source" | "target" | "date";
+    sort?: string;
+  } => ({
     id: parseId(search.id),
     source: parseId(search.source),
     frame: parseId(search.frame),
-    review: parseId(search.review),
+    states: parseId(search.states),
+    group:
+      search.group === "target" || search.group === "date" ? (search.group as "target" | "date") : undefined,
+    sort: parseId(search.sort),
   }),
   component: InventoryPage,
 });
@@ -64,10 +74,11 @@ const inboxRoute = createRoute({
   path: "/inbox",
   validateSearch: (
     search: Record<string, unknown>,
-  ): { id?: string; type?: string; source?: string } => ({
+  ): { id?: string; type?: string; source?: string; sort?: string } => ({
     id: parseId(search.id),
     type: parseId(search.type),
     source: parseId(search.source),
+    sort: parseId(search.sort),
   }),
   component: InboxPage,
 });
@@ -77,24 +88,53 @@ const projectsRoute = createRoute({
   path: "/projects",
   validateSearch: (
     search: Record<string, unknown>,
-  ): { id?: string; lifecycle?: string; tool?: string } => ({
-    id: parseId(search.id),
-    lifecycle: parseId(search.lifecycle),
-    tool: parseId(search.tool),
-  }),
+  ): {
+    id?: string;
+    lifecycle?: string;
+    tool?: string;
+    tab?: "overview" | "sources" | "plans" | "activity";
+    sort?: string;
+  } => {
+    const tab =
+      search.tab === "sources" ||
+      search.tab === "plans" ||
+      search.tab === "activity"
+        ? (search.tab as "sources" | "plans" | "activity")
+        : undefined;
+    return {
+      id: parseId(search.id),
+      lifecycle: parseId(search.lifecycle),
+      tool: parseId(search.tool),
+      tab,
+      sort: parseId(search.sort),
+    };
+  },
   component: ProjectsPage,
 });
 
 const plansIndexRoute = createRoute({
   getParentRoute: () => rootRoute,
   path: "/plans",
+  component: () => <Navigate to="/activity" replace />,
+});
+
+const activityRoute = createRoute({
+  getParentRoute: () => rootRoute,
+  path: "/activity",
   validateSearch: (
     search: Record<string, unknown>,
-  ): { state?: string; origin?: string } => ({
-    state: parseId(search.state),
-    origin: parseId(search.origin),
+  ): {
+    id?: string;
+    states?: string;
+    origins?: string;
+    sort?: string;
+  } => ({
+    id: parseId(search.id),
+    states: parseId(search.states),
+    origins: parseId(search.origins),
+    sort: parseId(search.sort),
   }),
-  component: PlansListPage,
+  component: ActivityPage,
 });
 
 const planDetailRoute = createRoute({
@@ -107,6 +147,13 @@ const settingsRedirectRoute = createRoute({
   getParentRoute: () => rootRoute,
   path: "/settings",
   component: () => <Navigate to="/settings/$section" params={{ section: "data-sources" }} replace />,
+});
+
+// Backward-compat: old "application-log" param → new "audit" section id.
+const settingsApplicationLogRedirectRoute = createRoute({
+  getParentRoute: () => rootRoute,
+  path: "/settings/application-log",
+  component: () => <Navigate to="/settings/$section" params={{ section: "audit" }} replace />,
 });
 
 const settingsSectionRoute = createRoute({
@@ -122,8 +169,10 @@ const routeTree = rootRoute.addChildren([
   inboxRoute,
   projectsRoute,
   plansIndexRoute,
+  activityRoute,
   planDetailRoute,
   settingsRedirectRoute,
+  settingsApplicationLogRedirectRoute,
   settingsSectionRoute,
 ]);
 

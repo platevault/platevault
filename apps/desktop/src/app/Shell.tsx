@@ -1,39 +1,74 @@
 import { Link, useLocation, useRouter } from "@tanstack/react-router";
-import { useMemo, useState, type ReactNode } from "react";
-import { ClipboardList, Moon, Settings, Sun, Monitor } from "lucide-react";
+import { Fragment, useEffect, useMemo, useState, type ReactNode } from "react";
+import {
+  Activity as ActivityIcon,
+  ChevronRight,
+  HardDrive,
+  Inbox as InboxIcon,
+  Monitor,
+  Moon,
+  PanelLeftClose,
+  PanelLeftOpen,
+  Search,
+  Settings as SettingsIcon,
+  Sun,
+  Telescope,
+} from "lucide-react";
 
 import { CommandPalette, IconButton, LogPanel, Tooltip } from "../ui";
 import { useTheme } from "./theme";
-import { useInboxCount, useLog, usePendingPlansCount } from "../data/store";
+import {
+  getPlanById,
+  useInboxCount,
+  useLog,
+  usePendingPlansCount,
+  useProjects,
+  useScanStatus,
+} from "../data/store";
 import { buildPaletteGroups } from "./palette";
 
 interface NavItem {
   id: string;
   label: string;
   path: string;
-  count?: number;
+  icon: typeof HardDrive;
 }
 
 const NAV: NavItem[] = [
-  { id: "inventory", label: "Inventory", path: "/inventory" },
-  { id: "inbox", label: "Inbox", path: "/inbox" },
-  { id: "projects", label: "Projects", path: "/projects" },
-  { id: "settings", label: "Settings", path: "/settings" },
+  { id: "inventory", label: "Inventory", path: "/inventory", icon: HardDrive },
+  { id: "inbox", label: "Inbox", path: "/inbox", icon: InboxIcon },
+  { id: "projects", label: "Projects", path: "/projects", icon: Telescope },
+  { id: "activity", label: "Activity", path: "/activity", icon: ActivityIcon },
 ];
+
+const SIDEBAR_KEY = "alm.sidebar.collapsed";
 
 export function Shell({ children }: { children: ReactNode }) {
   const location = useLocation();
   const router = useRouter();
   const [paletteOpen, setPaletteOpen] = useState(false);
+  const [collapsed, setCollapsed] = useState<boolean>(() => {
+    if (typeof window === "undefined") return false;
+    return window.localStorage.getItem(SIDEBAR_KEY) === "1";
+  });
+
+  useEffect(() => {
+    if (typeof window === "undefined") return;
+    window.localStorage.setItem(SIDEBAR_KEY, collapsed ? "1" : "0");
+  }, [collapsed]);
+
+  const wizardMode = location.pathname.startsWith("/welcome");
 
   const activeId = useMemo(() => {
-    if (location.pathname.startsWith("/plans")) return null;
-    return NAV.find((n) => location.pathname.startsWith(n.path))?.id ?? null;
+    const match = NAV.find((n) => location.pathname.startsWith(n.path));
+    return match?.id ?? null;
   }, [location.pathname]);
+  const settingsActive = location.pathname.startsWith("/settings");
 
   const inboxCount = useInboxCount();
-  const { needsAction, needsAttention } = usePendingPlansCount();
+  const { needsAttention } = usePendingPlansCount();
   const log = useLog();
+  const scan = useScanStatus();
 
   const paletteGroups = useMemo(
     () => buildPaletteGroups((to) => router.navigate({ to })),
@@ -41,84 +76,119 @@ export function Shell({ children }: { children: ReactNode }) {
   );
 
   return (
-    <div className="alm-shell">
+    <div className="alm-shell" data-sidebar-collapsed={collapsed ? "true" : "false"}>
       <header className="alm-shell__header">
         <div className="alm-shell__brand">
           <span className="alm-shell__brand-mark">ALM</span>
-          <span>Astro Library Manager</span>
         </div>
+        <Breadcrumbs pathname={location.pathname} />
         <div className="alm-shell__header-utils">
-          <Tooltip content="Open command palette (⌘K)">
-            <button
-              type="button"
-              className="alm-btn"
-              data-variant="subtle"
-              data-size="sm"
-              onClick={() => setPaletteOpen(true)}
-            >
-              <span className="alm-kbd">⌘K</span>
-              <span style={{ color: "var(--text-dim)" }}>Search</span>
-            </button>
-          </Tooltip>
-          <Tooltip
-            content={
-              needsAttention > 0
-                ? `${needsAttention} plans need attention · ${needsAction} pending review`
-                : needsAction > 0
-                ? `${needsAction} plans pending review`
-                : "No plans waiting"
-            }
-          >
-            <Link
-              to="/plans"
-              className="alm-btn"
-              data-variant="subtle"
-              data-size="sm"
-              style={{ textDecoration: "none" }}
-              aria-label={`Plans, ${needsAction} pending review, ${needsAttention} need attention`}
-            >
-              <ClipboardList size={14} />
-              <span>Plans</span>
-              {needsAttention > 0 ? (
-                <span className="alm-badge" data-tone="danger" style={{ marginLeft: 2 }}>
-                  {needsAttention}
-                </span>
-              ) : null}
-              {needsAction > 0 ? (
-                <span className="alm-badge" data-tone="accent" style={{ marginLeft: 2 }}>
-                  {needsAction}
-                </span>
-              ) : null}
-            </Link>
+          <Tooltip content="Search (⌘K)">
+            <IconButton aria-label="Search" onClick={() => setPaletteOpen(true)}>
+              <Search size={15} />
+            </IconButton>
           </Tooltip>
           <ThemeToggle />
-          <Link to="/settings" style={{ display: "inline-flex" }}>
-            <IconButton aria-label="Settings">
-              <Settings size={15} />
-            </IconButton>
-          </Link>
         </div>
       </header>
 
-      <nav className="alm-shell__nav" aria-label="Primary">
-        {NAV.map((item) => (
-          <Link
-            key={item.id}
-            to={item.path}
-            className="alm-shell__nav-item"
-            data-active={activeId === item.id ? "true" : undefined}
-          >
-            <span>{item.label}</span>
-            {item.id === "inbox" && inboxCount > 0 ? (
-              <span className="alm-shell__nav-count">{inboxCount}</span>
-            ) : null}
-          </Link>
-        ))}
-      </nav>
+      <aside className="alm-shell__sidebar" aria-label="Primary">
+        <nav className="alm-shell__nav">
+          {NAV.map((item) => {
+            const Icon = item.icon;
+            const isActive = activeId === item.id;
+            const showInboxBadge = item.id === "inbox" && inboxCount > 0;
+            const showActivityBadge = item.id === "activity" && needsAttention > 0;
+            const isDisabled = wizardMode;
+
+            if (isDisabled) {
+              const disabledItem = (
+                <span
+                  key={item.id}
+                  className="alm-shell__nav-item"
+                  data-disabled="true"
+                  aria-disabled="true"
+                  aria-label={item.label}
+                >
+                  <Icon size={16} className="alm-shell__nav-icon" />
+                  {collapsed ? null : <span className="alm-shell__nav-label">{item.label}</span>}
+                </span>
+              );
+              return collapsed ? (
+                <Tooltip key={item.id} content={item.label} side="right">
+                  {disabledItem}
+                </Tooltip>
+              ) : (
+                disabledItem
+              );
+            }
+
+            const link = (
+              <Link
+                key={item.id}
+                to={item.path}
+                className="alm-shell__nav-item"
+                data-active={isActive ? "true" : undefined}
+                aria-label={item.label}
+              >
+                <Icon size={16} className="alm-shell__nav-icon" />
+                {collapsed ? null : <span className="alm-shell__nav-label">{item.label}</span>}
+                {!collapsed && showInboxBadge ? (
+                  <span className="alm-shell__nav-count">{inboxCount}</span>
+                ) : null}
+                {!collapsed && showActivityBadge ? (
+                  <span className="alm-shell__nav-badges">
+                    <span className="alm-badge" data-tone="danger">{needsAttention}</span>
+                  </span>
+                ) : null}
+                {collapsed && (showInboxBadge || showActivityBadge) ? (
+                  <span className="alm-shell__nav-dot" data-tone={showActivityBadge ? "danger" : "accent"} />
+                ) : null}
+              </Link>
+            );
+            return collapsed ? (
+              <Tooltip key={item.id} content={item.label} side="right">
+                {link}
+              </Tooltip>
+            ) : (
+              link
+            );
+          })}
+        </nav>
+
+        <div className="alm-shell__sidebar-footer">
+          {(() => {
+            const settingsLink = (
+              <Link
+                to="/settings"
+                className="alm-shell__nav-item"
+                data-active={settingsActive ? "true" : undefined}
+                aria-label="Settings"
+              >
+                <SettingsIcon size={16} className="alm-shell__nav-icon" />
+                {collapsed ? null : <span className="alm-shell__nav-label">Settings</span>}
+              </Link>
+            );
+            return collapsed ? (
+              <Tooltip content="Settings" side="right">{settingsLink}</Tooltip>
+            ) : (
+              settingsLink
+            );
+          })()}
+          <Tooltip content={collapsed ? "Expand sidebar" : "Collapse sidebar"} side="right">
+            <IconButton
+              aria-label={collapsed ? "Expand sidebar" : "Collapse sidebar"}
+              onClick={() => setCollapsed((c) => !c)}
+            >
+              {collapsed ? <PanelLeftOpen size={15} /> : <PanelLeftClose size={15} />}
+            </IconButton>
+          </Tooltip>
+        </div>
+      </aside>
 
       <main className="alm-shell__main">{children}</main>
 
-      <LogPanel entries={log} />
+      <LogPanel entries={log} scan={scan} />
 
       <CommandPalette
         open={paletteOpen}
@@ -126,6 +196,79 @@ export function Shell({ children }: { children: ReactNode }) {
         groups={paletteGroups}
       />
     </div>
+  );
+}
+
+const SECTION_LABELS: Record<string, string> = {
+  inventory: "Inventory",
+  inbox: "Inbox",
+  projects: "Projects",
+  activity: "Activity",
+  plans: "Activity",
+  settings: "Settings",
+  welcome: "Setup",
+};
+
+const SETTINGS_SECTION_LABELS: Record<string, string> = {
+  general: "General",
+  sources: "Sources",
+  classification: "Classification",
+  calibration: "Calibration",
+  projects: "Projects",
+  tools: "Processing tools",
+  observer: "Observer location",
+  catalogs: "Catalogs",
+  about: "About",
+};
+
+function Breadcrumbs({ pathname }: { pathname: string }) {
+  const projects = useProjects();
+  const crumbs = useMemo(() => {
+    const parts = pathname.split("/").filter(Boolean);
+    if (parts.length === 0) return [];
+
+    const [topRaw, second] = parts;
+    const top = topRaw === "plans" ? "activity" : topRaw;
+    const out: Array<{ label: string; to?: string }> = [];
+
+    const topLabel = SECTION_LABELS[top] ?? top;
+    out.push({ label: topLabel, to: `/${top}` });
+
+    if (!second) return out;
+
+    if (top === "plans") {
+      const plan = getPlanById(`plan-${second}`) ?? getPlanById(second);
+      if (plan) {
+        out.push({ label: `#${plan.number} · ${plan.title}` });
+      } else {
+        out.push({ label: `#${second}` });
+      }
+    } else if (top === "projects") {
+      const project = projects.find((p) => p.id === second);
+      out.push({ label: project?.name ?? second });
+    } else if (top === "settings") {
+      out.push({ label: SETTINGS_SECTION_LABELS[second] ?? second });
+    } else {
+      out.push({ label: second });
+    }
+    return out;
+  }, [pathname, projects]);
+
+  if (crumbs.length === 0) return <div className="alm-shell__breadcrumbs" />;
+
+  return (
+    <nav className="alm-shell__breadcrumbs" aria-label="Breadcrumb">
+      {crumbs.map((c, i) => (
+        <Fragment key={`${c.label}-${i}`}>
+          {i > 0 ? <ChevronRight size={13} className="alm-shell__crumb-sep" aria-hidden /> : null}
+          {c.to && i < crumbs.length - 1 ? (
+            <Link to={c.to} className="alm-shell__crumb">{c.label}</Link>
+          ) : (
+            <span className="alm-shell__crumb" data-current={i === crumbs.length - 1 ? "true" : undefined}>{c.label}</span>
+          )}
+        </Fragment>
+      ))}
+    </nav>
   );
 }
 

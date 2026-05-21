@@ -14,6 +14,9 @@ import {
   plans as seedPlans,
   logEntries as seedLogs,
   projects as seedProjects,
+  seedAuditEvents,
+  type AuditEvent,
+  type AuditEventKind,
   type InboxItem,
   type InventorySession,
   type InventorySource,
@@ -208,6 +211,89 @@ export function createPlanFromInbox(item: InboxItem): Plan {
   return plan;
 }
 
+const PENDING_PROJECT_PLAN_STATES: PlanState[] = [
+  "draft",
+  "ready_for_review",
+  "approved",
+  "applying",
+];
+
+/**
+ * Subscribe to plansPub and return the first plan whose origin is "project",
+ * originPath matches projectId, and state is one of the pending states.
+ */
+export function usePendingPlanForProject(projectId: string): Plan | undefined {
+  const all = usePlans();
+  return all.find(
+    (p) =>
+      p.origin === "project" &&
+      p.originPath === projectId &&
+      PENDING_PROJECT_PLAN_STATES.includes(p.state),
+  );
+}
+
+/**
+ * Create a source-map plan for a project. Sets origin to "project", originPath
+ * to the projectId, type to "restructure". Generates one item per ProjectSource
+ * if available, otherwise synthesises 5 placeholder items.
+ */
+export function createSourceMapPlanForProject(projectId: string): Plan {
+  const project = projectsPub.snapshot.find((p) => p.id === projectId);
+  const number = nextPlanNumber();
+  const name = project?.name ?? projectId;
+
+  let items: PlanItem[];
+  if (project && project.sources.length > 0) {
+    items = project.sources.map((src, idx) => ({
+      id: `pi-${number}-${idx + 1}`,
+      index: idx + 1,
+      name: src.name,
+      action: "link" as const,
+      from: `(inventory) ${src.inventoryId}`,
+      to: `(project) ${projectId}/sources/${src.name}/`,
+      reason: "source-map: link acquisition session into project source view",
+      protection: "protected" as const,
+      state: "pending" as const,
+    }));
+  } else {
+    items = Array.from({ length: 5 }).map((_, idx) => ({
+      id: `pi-${number}-${idx + 1}`,
+      index: idx + 1,
+      name: `source-${String(idx + 1).padStart(2, "0")}`,
+      action: "link" as const,
+      from: `(inventory) unknown-${idx + 1}`,
+      to: `(project) ${projectId}/sources/source-${String(idx + 1).padStart(2, "0")}/`,
+      reason: "source-map: synthesised placeholder — confirm before applying",
+      protection: "normal" as const,
+      state: "pending" as const,
+    }));
+  }
+
+  const plan: Plan = {
+    id: `plan-${number}`,
+    number,
+    title: `Project source-map ${name}`,
+    origin: "project",
+    originPath: projectId,
+    state: "ready_for_review",
+    createdAt: nowHHMM(),
+    items,
+    itemsTotal: items.length,
+    itemsApplied: 0,
+    itemsFailed: 0,
+    itemsPending: items.length,
+    type: "restructure",
+  };
+
+  plansPub.set([plan, ...plansPub.snapshot]);
+  appendLog({
+    level: "info",
+    source: `plan #${number}`,
+    message: `source-map plan created for project ${name} (${items.length} items)`,
+  });
+  return plan;
+}
+
 export function updatePlanState(id: string, state: PlanState) {
   plansPub.set(
     plansPub.snapshot.map((p) => (p.id === id ? { ...p, state } : p)),
@@ -350,6 +436,52 @@ export function useLog(): LogEntry[] {
   return useSyncExternalStore(logPub.subscribe, logPub.getSnapshot);
 }
 
+// ---------- scan status (mocked) ----------
+
+export interface ScanStatus {
+  state: "idle" | "running" | "error";
+  source: string;
+  processed?: number;
+  total?: number;
+  message?: string;
+}
+
+const scanPub = new Publisher<ScanStatus>({
+  state: "idle",
+  source: "/Volumes/AstroDrive",
+  message: "Scans up to date · 1247 files indexed",
+});
+
+export function useScanStatus(): ScanStatus {
+  return useSyncExternalStore(scanPub.subscribe, scanPub.getSnapshot);
+}
+
+export function setScanStatus(s: ScanStatus) {
+  scanPub.set(s);
+}
+
+/**
+ * Mock-only: simulate a running scan that ticks for a few seconds, useful
+ * to demo the inline progress affordance.
+ */
+export function simulateScan(source = "/Volumes/AstroDrive", total = 2380) {
+  let processed = 0;
+  scanPub.set({ state: "running", source, processed, total });
+  const id = window.setInterval(() => {
+    processed += Math.floor(40 + Math.random() * 80);
+    if (processed >= total) {
+      scanPub.set({
+        state: "idle",
+        source,
+        message: `Scans up to date · ${total} files indexed`,
+      });
+      window.clearInterval(id);
+      return;
+    }
+    scanPub.set({ state: "running", source, processed, total });
+  }, 250);
+}
+
 let logSeq = seedLogs.length;
 export function appendLog(entry: Omit<LogEntry, "id" | "time">) {
   const d = new Date();
@@ -443,6 +575,55 @@ export function getInventorySources() {
   return sourcesPub.snapshot;
 }
 
+/**
+ * Mock-only: append a new inventory source from the empty-state CTA.
+ * Generates a stable id from the path. Starts with zero sessions.
+ */
+export function addInventorySource(source: { path: string; kind: string }): void {
+  const id = `src-${source.path.replace(/[^a-zA-Z0-9]/g, "-").toLowerCase().slice(0, 32)}-${Date.now()}`;
+  const newSource: InventorySource = {
+    id,
+    path: source.path,
+    kind: source.kind as InventorySource["kind"],
+    state: "active",
+    sessions: [],
+  };
+  sourcesPub.set([...sourcesPub.snapshot, newSource]);
+  appendAuditEvent({
+    kind: "source_added",
+    actor: "user",
+    summary: `Source ${source.path} registered (${source.kind.replace("_", " ")})`,
+    details: { sourceId: id },
+  });
+  appendLog({
+    level: "info",
+    source: "inventory",
+    message: `source ${source.path} registered`,
+  });
+}
+
+export function remapInventorySource(sourceId: string, newPath: string): void {
+  let oldPath: string | undefined;
+  sourcesPub.set(
+    sourcesPub.snapshot.map((src) => {
+      if (src.id !== sourceId) return src;
+      oldPath = src.path;
+      return { ...src, path: newPath, state: "active" as const };
+    }),
+  );
+  appendAuditEvent({
+    kind: "source_remapped",
+    actor: "user",
+    summary: `Source remapped: ${oldPath ?? sourceId} → ${newPath}`,
+    details: { sourceId, before: oldPath, after: newPath },
+  });
+  appendLog({
+    level: "info",
+    source: "inventory",
+    message: `source ${sourceId} remapped to ${newPath}`,
+  });
+}
+
 export function setSessionReviewState(
   sessionId: string,
   state: InventorySession["state"],
@@ -471,4 +652,211 @@ export function setSessionReviewState(
       message: `${updatedName} review → ${state.replace(/_/g, " ")}`,
     });
   }
+}
+
+// ---------- audit log ----------
+
+const auditPub = new Publisher<AuditEvent[]>(
+  [...seedAuditEvents].sort(
+    (a, b) => new Date(b.at).getTime() - new Date(a.at).getTime(),
+  ),
+);
+
+export function useAuditLog(): AuditEvent[] {
+  return useSyncExternalStore(auditPub.subscribe, auditPub.getSnapshot);
+}
+
+let auditSeq = seedAuditEvents.length;
+
+export function appendAuditEvent(
+  event: Omit<AuditEvent, "id" | "at"> & { at?: string },
+): void {
+  const id = `audit-gen-${++auditSeq}`;
+  const at = event.at ?? new Date().toISOString();
+  const full: AuditEvent = { id, at, kind: event.kind, actor: event.actor, summary: event.summary, details: event.details };
+  // Prepend so newest-first order is maintained
+  auditPub.set([full, ...auditPub.snapshot]);
+}
+
+// ---------- plan revalidation ----------
+
+/**
+ * Revalidate a plan against the current FS state then apply it.
+ * For plan-42 (the 200-move inbox plan) injects a ~30% "stale" outcome so the
+ * drift dialog surfaces during demos.  All other plans always resolve "applied".
+ *
+ * While the mock revalidation runs (1.2 s) the returned Promise stays pending —
+ * callers should set a `validating` flag and clear it on resolution.
+ */
+export async function revalidateAndApply(
+  planId: string,
+  opts?: { force?: boolean },
+): Promise<"applied" | "stale"> {
+  await new Promise<void>((res) => setTimeout(res, 1200));
+
+  const isStaleCandidate = planId === "plan-42" && !opts?.force;
+  const outcome: "applied" | "stale" =
+    isStaleCandidate && Math.random() < 0.3 ? "stale" : "applied";
+
+  const plan = getPlanById(planId);
+  const planLabel = plan ? `#${plan.number}` : planId;
+
+  if (outcome === "stale") {
+    appendAuditEvent({
+      kind: "plan_failed",
+      actor: "system",
+      summary: `Plan ${planLabel} stale: 3 sources modified, 1 destination occupied`,
+      details: { planId },
+    });
+  } else {
+    simulateApply(planId);
+    appendAuditEvent({
+      kind: "plan_applied",
+      actor: "user",
+      summary: `Plan ${planLabel} applied`,
+      details: { planId },
+    });
+  }
+
+  return outcome;
+}
+
+// ---------- plan regeneration ----------
+
+/**
+ * Discard the given plan and create a new, slightly smaller plan with the same
+ * origin/originPath/type — simulating a re-generate after drift resolution.
+ */
+export function regeneratePlan(planId: string): Plan {
+  const old = getPlanById(planId);
+  const number = nextPlanNumber();
+
+  // Drop the last 2 items to simulate drift resolution
+  const baseItems: PlanItem[] = old
+    ? old.items.slice(0, Math.max(old.items.length - 2, 0)).map((it, idx) => ({
+        ...it,
+        id: `pi-${number}-${idx + 1}`,
+        index: idx + 1,
+        state: "pending" as const,
+        failureReason: undefined,
+      }))
+    : [];
+
+  const total = old ? Math.max(old.itemsTotal - 2, 0) : 0;
+
+  const plan: Plan = {
+    id: `plan-${number}`,
+    number,
+    title: old ? `${old.title} (regenerated)` : `Plan #${number}`,
+    origin: old?.origin ?? "inbox",
+    originPath: old?.originPath,
+    state: "ready_for_review",
+    createdAt: nowHHMM(),
+    items: baseItems,
+    itemsTotal: total,
+    itemsApplied: 0,
+    itemsFailed: 0,
+    itemsPending: total,
+    type: old?.type ?? "restructure",
+  };
+
+  // Discard old plan silently (without separate log — the audit event covers it)
+  plansPub.set(plansPub.snapshot.filter((p) => p.id !== planId));
+  // Insert new plan
+  plansPub.set([plan, ...plansPub.snapshot]);
+
+  appendAuditEvent({
+    kind: "plan_discarded",
+    actor: "user",
+    summary: `Plan ${old ? `#${old.number}` : planId} discarded and regenerated as #${number}`,
+    details: { planId },
+  });
+  appendLog({
+    level: "info",
+    source: `plan #${number}`,
+    message: `regenerated from ${planId} (${total} items)`,
+  });
+
+  return plan;
+}
+
+// ---------- per-item failure resolution ----------
+
+export function resolveFailedItem(
+  planId: string,
+  itemId: string,
+  action: "skip" | "rename" | "overwrite",
+  payload?: { to?: string },
+): void {
+  let plan = getPlanById(planId);
+  if (!plan) return;
+
+  const updatedItems = plan.items.map((it) => {
+    if (it.id !== itemId) return it;
+    if (action === "rename" && payload?.to) {
+      return { ...it, to: payload.to, state: "succeeded" as const, failureReason: undefined };
+    }
+    // skip or overwrite: transition to succeeded
+    return { ...it, state: "succeeded" as const, failureReason: undefined };
+  });
+
+  const newFailed = updatedItems.filter((i) => i.state === "failed").length;
+  const newApplied = updatedItems.filter((i) => i.state === "succeeded").length;
+  const newPending = updatedItems.filter((i) => i.state === "pending").length;
+
+  // If no failures remain, transition plan state to applied
+  const newPlanState: PlanState =
+    newFailed === 0
+      ? newPending === 0
+        ? "applied"
+        : plan.state
+      : plan.state;
+
+  plansPub.set(
+    plansPub.snapshot.map((p) =>
+      p.id === planId
+        ? {
+            ...p,
+            items: updatedItems,
+            itemsApplied: newApplied,
+            itemsFailed: newFailed,
+            itemsPending: newPending,
+            state: newPlanState,
+          }
+        : p,
+    ),
+  );
+
+  plan = getPlanById(planId);
+  appendAuditEvent({
+    kind: "plan_applied",
+    actor: "user",
+    summary: `Item ${itemId} in plan ${planId} resolved via ${action}`,
+    details: { planId },
+  });
+  appendLog({
+    level: "info",
+    source: `plan ${planId}`,
+    message: `item ${itemId} resolved: ${action}${payload?.to ? ` → ${payload.to}` : ""}`,
+  });
+}
+
+// Re-export AuditEventKind so consumers can reference it without importing mock
+export type { AuditEventKind };
+
+// ---------- symlink support check (mock) ----------
+
+/**
+ * Mock-only: detect symlink support for the current platform.
+ *
+ * On non-Windows platforms (detected via navigator.userAgent), symlinks are
+ * always supported.  On Windows the check randomly returns "disabled" (~50%)
+ * or "not_supported" (~50%) to make both warning states exercisable during
+ * the wizard walkthrough.
+ */
+export function checkSymlinkSupport(): "supported" | "not_supported" | "disabled" {
+  const isWindows = typeof navigator !== "undefined" &&
+    navigator.userAgent.toLowerCase().includes("windows");
+  if (!isWindows) return "supported";
+  return Math.random() < 0.5 ? "disabled" : "not_supported";
 }

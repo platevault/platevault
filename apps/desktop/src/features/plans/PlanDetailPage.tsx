@@ -2,7 +2,7 @@ import { useNavigate, useParams } from "@tanstack/react-router";
 import { useEffect, useMemo, useState } from "react";
 import { ArrowLeft, MoreVertical, Pause, FolderOpen, RefreshCw } from "lucide-react";
 
-import { Button, Facts, Menu, StateLabel } from "../../ui";
+import { Button, IconButton, Facts, Menu, StateLabel } from "../../ui";
 import { planStateLabel, planStateTone, type Plan, type PlanItem } from "../../data/mock";
 import { discardPlan, simulateApply, updatePlanState, usePlans } from "../../data/store";
 
@@ -32,15 +32,13 @@ export function PlanDetailPage() {
     return (
       <div className="alm-page">
         <div className="alm-page__head">
-          <button
-            type="button"
-            className="alm-btn"
-            data-variant="ghost"
-            data-size="sm"
+          <Button
+            variant="ghost"
+            size="sm"
             onClick={() => navigate({ to: "/plans" })}
           >
             <ArrowLeft size={14} /> Plans
-          </button>
+          </Button>
           <h1>Plan not found</h1>
         </div>
       </div>
@@ -62,16 +60,14 @@ export function PlanDetailPage() {
     <div className="alm-page" style={{ display: "flex", flexDirection: "column" }}>
       <div className="alm-page__head">
         <div className="alm-page__title" style={{ alignItems: "center" }}>
-          <button
-            type="button"
-            className="alm-btn"
-            data-variant="ghost"
-            data-size="sm"
+          <Button
+            variant="ghost"
+            size="sm"
             onClick={() => navigate({ to: "/plans" })}
             style={{ marginRight: 8 }}
           >
             <ArrowLeft size={14} /> Plans
-          </button>
+          </Button>
           <h1>
             <span className="alm-mono alm-dim">#{plan.number}</span> {plan.title}
           </h1>
@@ -80,9 +76,9 @@ export function PlanDetailPage() {
         <div className="alm-page__actions">
           <Menu
             trigger={
-              <button type="button" className="alm-iconbtn" aria-label="More actions">
+              <IconButton aria-label="More actions">
                 <MoreVertical size={15} />
-              </button>
+              </IconButton>
             }
             groups={[
               { id: "g1", items: [{ id: "diff", label: "View diff" }, { id: "dup", label: "Duplicate" }] },
@@ -389,15 +385,15 @@ function ApplyingPane({ plan }: { plan: Plan }) {
                 ) : null}
               </span>
               <div style={{ display: "flex", gap: 4 }}>
-                <button className="alm-btn" data-size="sm" data-variant="ghost">
+                <Button variant="ghost" size="sm">
                   Retry
-                </button>
-                <button className="alm-btn" data-size="sm" data-variant="ghost">
+                </Button>
+                <Button variant="ghost" size="sm">
                   Skip
-                </button>
-                <button className="alm-btn" data-size="sm" data-variant="ghost">
+                </Button>
+                <Button variant="ghost" size="sm">
                   Reveal
-                </button>
+                </Button>
               </div>
             </div>
           ))}
