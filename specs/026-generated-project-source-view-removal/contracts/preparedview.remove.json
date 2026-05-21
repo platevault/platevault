@@ -1,0 +1,48 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "preparedview.remove",
+  "title": "preparedview.remove",
+  "description": "Create a reviewable filesystem plan that removes a generated project source view. Only paths recorded as part of the view are included; inventory data is never targeted. Status: NOT IMPLEMENTED.",
+  "type": "object",
+  "properties": {
+    "request": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["view_id"],
+      "properties": {
+        "view_id": {
+          "type": "string",
+          "format": "uuid",
+          "description": "Identifier of the PreparedSourceView to remove."
+        }
+      }
+    },
+    "response": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["plan_id"],
+      "properties": {
+        "plan_id": {
+          "type": "string",
+          "format": "uuid",
+          "description": "Identifier of the produced ViewRemovalPlan (a FilesystemPlan with origin prepared_view_removal)."
+        }
+      }
+    },
+    "errors": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "view.not_found": {
+          "type": "object",
+          "description": "No PreparedSourceView exists for the supplied view_id."
+        },
+        "view.in_use": {
+          "type": "object",
+          "description": "The view is currently referenced by an active workflow, an in-progress plan, or another concurrent operation and cannot be removed."
+        }
+      }
+    }
+  },
+  "required": ["request", "response", "errors"]
+}

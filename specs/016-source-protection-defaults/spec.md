@@ -83,3 +83,24 @@ As a user, I want global protection defaults for newly added sources so that com
 
 - OS-level filesystem permissions.
 - Remote storage retention policies.
+
+## Implementation Status
+
+**Mockup-done (apps/desktop):**
+
+- Source Protection settings section (`SettingsPage.tsx::SourceProtectionSection`)
+  exposes three-level default protection (`protected` / `normal` / `unprotected`),
+  a `Block permanent delete` switch, and a `Protected categories` text input
+  (`lights, masters, finals` by default).
+- Settings store (`src/data/settings.ts`) persists `defaultProtection`,
+  `blockPermanentDelete`, and `protectedCategories` keys.
+- Per-source override surfaces (Sources detail / row) are scoped to future
+  implementation; mockup demonstrates inheritance language only.
+
+**Pending implementation:**
+
+- Per-source protection override storage and resolver (override → global default).
+- Protection evaluation hook inside plan generation (spec 017 cleanup, spec 025
+  archive) producing blocked / requires-acknowledgement plan items.
+- Protected categories enforcement (frame-type / role membership check).
+- Audit events for protection changes and protected-plan acknowledgements.

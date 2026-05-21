@@ -91,3 +91,48 @@ As a user, I want to review and confirm Inventory metadata before using it in pr
 - Cleanup/archive execution.
 - Target catalog lookup.
 - Processing-tool execution.
+
+## Implementation Status
+
+The desktop mockup at `apps/desktop/src/features/inventory/InventoryPage.tsx`
+already realises the visual and interaction shape of Inventory against the
+mock store in `apps/desktop/src/data/store.ts` and `apps/desktop/src/data/mock.ts`.
+Implementation for this spec moves the underlying data and state machine into
+Rust crates and a portable contract; the UI shell does not need to change.
+
+The following surfaces are already shipped in the mockup and serve as the
+visual contract this spec ratifies:
+
+- **Grouped ledger by source root**: `InventoryPage` groups sessions by
+  `InventorySource.path`, with a per-group header showing `kind` and
+  source `state` as meta text. This satisfies FR-005's "details only in
+  the detail pane" constraint while exposing source identity at the group
+  level instead of as a row column.
+- **Frame-type filter**: A `Frame type` Select offers `light | dark | flat |
+  bias | mixed` (FR-002). `mixed` is rendered in the filter to surface
+  unclassifiable inputs without forcing premature split; the move-to-Inventory
+  flow still blocks mixed folders per FR-009.
+- **Review-state filter**: A `Review` Select offers `confirmed | needs_review
+  | rejected`, sourced from `InventorySession.state`. State surfaces as a
+  `StateLabel` row cell and a `State` fact in the drawer; no badge bubble
+  shows alongside row content (FR-004).
+- **Action-bound primary CTA**: The drawer's primary `Confirm` button only
+  renders when the selected session is in `needs_review`. This is the
+  action-bound review pattern defined in spec 002 — the CTA exists because
+  the action is available, not as decoration.
+- **Action-bound overflow**: `Re-open review` appears in the row/drawer
+  overflow Menu only when the session is NOT in `needs_review`. `Reject
+  session` is grouped in a separate Menu section with `tone: "danger"`. Both
+  call `setSessionReviewState`, which is idempotent (re-applying the same
+  state is a no-op in the store).
+- **Source-state surfacing**: `InventorySource.state` (`active | missing |
+  disabled | reconnect_required`) is rendered in the group meta line. The
+  spec keeps "stale source" semantics aligned with `LibraryRoot.state` from
+  spec 002's data model; surfacing them at the group header avoids polluting
+  every row.
+
+Phase 0 research, Phase 1 plan / data model / contracts, and Phase 2 tasks
+treat the mockup as the visual and interaction contract. The Rust port keeps
+hook signatures (`useInventorySources`, `setSessionReviewState`,
+`getInventorySources`) intact so the component tree under
+`apps/desktop/src/features/inventory/` is not touched by the migration.

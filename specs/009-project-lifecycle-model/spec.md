@@ -91,3 +91,74 @@ As a user, I want the project side panel and opened project view to show structu
 - Running processing tools.
 - Full cleanup/archive execution.
 - Cloud synchronization.
+
+## Implementation Status
+
+**Mockup-implemented (apps/desktop):**
+
+- Seven Project lifecycle states (`setup_incomplete`, `ready`, `prepared`,
+  `processing`, `completed`, `archived`, `blocked`) are modeled in
+  `apps/desktop/src/data/mock.ts` (`ProjectLifecycle`, `projectLifecycleSteps`,
+  `lifecycleLabel`, `lifecycleTone`).
+- Canonical transition graph lives in `apps/desktop/src/data/store.ts` as
+  `PROJECT_TRANSITIONS`, with `isProjectTransitionAllowed` guarding the edge
+  table and `setProjectLifecycle(id, next, actionLabel?)` writing the new
+  state, deriving a default action label, and emitting an audit log line.
+- Project drawer renders the stepper at the top of `ProjectsPage.tsx`, with
+  contextual footer actions per lifecycle (`projectFooter`):
+  - `setup_incomplete`: Continue setup, Edit, overflow.
+  - `ready`/`prepared`: Open in {tool}, Mark as Processing, overflow.
+  - `processing`: Open in {tool}, Mark as Completed, overflow.
+  - `completed`: Open in {tool}, Generate cleanup plan (if sources remain),
+    overflow.
+  - `archived`: Unarchive (primary, re-enters via `processing`), read-only
+    notice.
+  - `blocked`: Resolve blocker, Edit, overflow.
+- Row overflow surfaces phase-appropriate actions through
+  `rowMenuGroupsForLifecycle`. Archived rows expose only View (read-only),
+  Reveal manifest folder, and Unarchive.
+- `lastAction { label, when }` is recorded on every successful transition and
+  surfaced in row, drawer header, and detail table.
+
+**Transition graph (canonical edges):**
+
+| From               | Allowed `to`                                            |
+| ------------------ | ------------------------------------------------------- |
+| `setup_incomplete` | `ready`, `blocked`                                       |
+| `ready`            | `prepared`, `processing`, `blocked`                      |
+| `prepared`         | `ready`, `processing`, `blocked`                         |
+| `processing`       | `completed`, `blocked`                                   |
+| `completed`        | `archived`, `processing` (re-open)                       |
+| `archived`         | `processing` (Unarchive)                                 |
+| `blocked`          | `ready`, `prepared`, `processing`, `setup_incomplete`    |
+
+Forbidden: `processing → ready` (would lie about progress); `archived →
+completed` (no implicit re-completion); any direct skip past `setup_incomplete`
+into `prepared` or later without passing `ready`.
+
+**Surface behavior (FR alignment):**
+
+- FR-001/FR-002: Lifecycle is a domain field rendered as a labeled stepper;
+  rows display state via `StateLabel`/`lifecycleTone` rather than a
+  decorative-only badge. No ambiguous "Plan" column appears in the project
+  table; plan counts/links are scoped to detail expandable rows.
+- FR-003: Footer uses the shared primary + secondary + overflow pattern.
+- FR-004: Phase-only top-action strips are removed; the stepper plus footer
+  carries all phase context.
+- FR-005/FR-006: Project detail enumerates sources with inventory deep-links.
+- FR-007: Channels, plans, manifests, lifecycle events render as expandable
+  sections.
+- FR-008: Every transition appends an audit log entry; full auditing routes
+  through spec 002's `lifecycle.transition` contract.
+- FR-009: `Project.blockedReason?` and a resolve-action label identify the
+  unblock path.
+
+**Deferred to implementation (post-mockup):**
+
+- Auto-`blocked` detection (missing inventory link, stale prepared source,
+  unconfigured tool path). The mockup permits only user-triggered transitions.
+- Filesystem mutation on `ready → prepared` and on cleanup generation flows
+  through spec 017 (filesystem plan) / spec 025; `setProjectLifecycle` is a
+  pure state write in the mockup.
+- Cross-spec audit fan-out via the persistence boundary
+  (`crates/persistence/db/`).

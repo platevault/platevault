@@ -1,0 +1,77 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://astro-plan/contracts/settings.update.json",
+  "title": "settings.update",
+  "description": "Write a single settings key. Implements the no-op guard and emits a non-noisy audit event when value changes.",
+  "operation": {
+    "name": "settings.update",
+    "direction": "ui-to-core",
+    "version": "1"
+  },
+  "request": {
+    "type": "object",
+    "required": ["key", "value"],
+    "additionalProperties": false,
+    "properties": {
+      "key": {
+        "type": "string",
+        "description": "Name of a v1 settings key.",
+        "enum": [
+          "pattern",
+          "autoApplyPattern",
+          "alwaysPreviewBeforePlan",
+          "followSymlinks",
+          "hashOnScan",
+          "darkMatchTolerance",
+          "flatMatching",
+          "suggestCalibration",
+          "rowDensity",
+          "logLevel",
+          "rememberFollowLogs",
+          "defaultProtection",
+          "blockPermanentDelete",
+          "protectedCategories"
+        ]
+      },
+      "value": {
+        "description": "Value to write. Must validate against the per-key sub-schema in settings.state.v1.json."
+      }
+    }
+  },
+  "response": {
+    "type": "object",
+    "required": ["key", "prior_value", "new_value"],
+    "additionalProperties": false,
+    "properties": {
+      "key": { "type": "string" },
+      "prior_value": {
+        "description": "Value before the update. Equal to new_value when no-op."
+      },
+      "new_value": {
+        "description": "Value after the update."
+      },
+      "audit_id": {
+        "type": "string",
+        "description": "Audit event id for non-noisy changes. Absent for noisy keys and for no-op writes."
+      }
+    }
+  },
+  "errors": [
+    {
+      "code": "key.unknown",
+      "message": "The supplied settings key is not part of the v1 schema.",
+      "http_status_equivalent": 400
+    },
+    {
+      "code": "value.invalid",
+      "message": "The supplied value does not validate against the key's schema.",
+      "http_status_equivalent": 400
+    },
+    {
+      "code": "value.unchanged",
+      "message": "The supplied value equals the stored value. Returned as informational only; the operation still succeeds and no audit event is emitted.",
+      "informational": true,
+      "http_status_equivalent": 200
+    }
+  ]
+}

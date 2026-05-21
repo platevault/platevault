@@ -1,0 +1,48 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "preparedview.regenerate",
+  "title": "preparedview.regenerate",
+  "description": "Create a reviewable filesystem plan that regenerates a previously prepared (and possibly removed) project source view from the canonical database. Status: NOT IMPLEMENTED.",
+  "type": "object",
+  "properties": {
+    "request": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["view_id"],
+      "properties": {
+        "view_id": {
+          "type": "string",
+          "format": "uuid",
+          "description": "Identifier of the PreparedSourceView to regenerate."
+        }
+      }
+    },
+    "response": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["plan_id"],
+      "properties": {
+        "plan_id": {
+          "type": "string",
+          "format": "uuid",
+          "description": "Identifier of the produced ViewRegenerationPlan (a FilesystemPlan with origin prepared_view_regeneration). Regeneration always creates a new plan and never reuses a removal plan."
+        }
+      }
+    },
+    "errors": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "view.not_found": {
+          "type": "object",
+          "description": "No PreparedSourceView record exists for the supplied view_id."
+        },
+        "view.in_use": {
+          "type": "object",
+          "description": "The view already has an in-progress plan (removal or regeneration); finish or cancel it before regenerating."
+        }
+      }
+    }
+  },
+  "required": ["request", "response", "errors"]
+}

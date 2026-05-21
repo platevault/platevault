@@ -1,0 +1,220 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://astro-plan.local/contracts/inventory.list.json",
+  "title": "inventory.list",
+  "description": "Operation contract for fetching the grouped Inventory ledger. Returns sources with their pre-filtered sessions. Source-of-truth for Rust DTOs in crates/contracts/core/src/inventory.rs and the generated TypeScript surface in packages/contracts/generated/.",
+  "type": "object",
+  "oneOf": [
+    { "$ref": "#/$defs/Request" },
+    { "$ref": "#/$defs/Response" }
+  ],
+  "$defs": {
+    "ContractVersion": {
+      "type": "string",
+      "const": "1.0"
+    },
+    "Uuid": {
+      "type": "string",
+      "format": "uuid"
+    },
+    "Timestamp": {
+      "type": "string",
+      "format": "date-time"
+    },
+    "Date": {
+      "type": "string",
+      "format": "date"
+    },
+    "FrameType": {
+      "type": "string",
+      "enum": ["light", "dark", "flat", "bias", "dark_flat", "mixed"]
+    },
+    "PresentationalReviewState": {
+      "type": "string",
+      "enum": ["needs_review", "confirmed", "rejected"]
+    },
+    "CanonicalSessionState": {
+      "type": "string",
+      "enum": [
+        "discovered",
+        "candidate",
+        "needs_review",
+        "confirmed",
+        "rejected",
+        "ignored"
+      ]
+    },
+    "SourceKind": {
+      "type": "string",
+      "enum": ["local_disk", "external_disk", "removable", "network_share"]
+    },
+    "SourceState": {
+      "type": "string",
+      "enum": ["active", "missing", "disabled", "reconnect_required"]
+    },
+    "ErrorCode": {
+      "type": "string",
+      "enum": [
+        "source.unknown",
+        "filter.invalid",
+        "contract.version_unsupported"
+      ]
+    },
+    "ErrorEnvelope": {
+      "type": "object",
+      "required": ["code", "message"],
+      "additionalProperties": false,
+      "properties": {
+        "code": { "$ref": "#/$defs/ErrorCode" },
+        "message": {
+          "type": "string",
+          "description": "Human-readable explanation. MUST NOT include absolute filesystem paths or secrets."
+        },
+        "details": {
+          "type": "object",
+          "additionalProperties": true
+        }
+      }
+    },
+    "InventoryFilters": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "source_filter": {
+          "$ref": "#/$defs/Uuid",
+          "description": "When set, limits the response to a single InventorySource."
+        },
+        "frame_filter": {
+          "$ref": "#/$defs/FrameType",
+          "description": "When set, limits sessions to the given frame type. The 'mixed' value matches sessions whose member frames disagree on kind."
+        },
+        "review_filter": {
+          "$ref": "#/$defs/PresentationalReviewState",
+          "description": "When set, limits sessions to the given presentational review state. 'ignored' canonical sessions are always excluded; surface them with a separate filter contract in a follow-up."
+        }
+      }
+    },
+    "ProvenanceSummary": {
+      "type": "object",
+      "description": "Drawer-only provenance summary. MUST NOT include confidence/evidence detail (spec 002 FR-006).",
+      "additionalProperties": false,
+      "properties": {
+        "target": { "type": "string" },
+        "filter": { "type": "string" },
+        "inferred": { "type": "string" },
+        "confirmed_by": { "type": "string" }
+      }
+    },
+    "LinkedRefs": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "projects": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "required": ["id", "name"],
+            "additionalProperties": false,
+            "properties": {
+              "id": { "$ref": "#/$defs/Uuid" },
+              "name": { "type": "string" }
+            }
+          }
+        },
+        "session": { "type": "string" },
+        "calibration": { "type": "string" }
+      }
+    },
+    "InventorySession": {
+      "type": "object",
+      "required": [
+        "id",
+        "name",
+        "source_id",
+        "frames",
+        "type",
+        "target",
+        "filter",
+        "exposure",
+        "state",
+        "canonical_state"
+      ],
+      "additionalProperties": false,
+      "properties": {
+        "id": { "$ref": "#/$defs/Uuid" },
+        "name": { "type": "string", "minLength": 1 },
+        "source_id": { "$ref": "#/$defs/Uuid" },
+        "frames": { "type": "integer", "minimum": 0 },
+        "type": { "$ref": "#/$defs/FrameType" },
+        "target": { "type": ["string", "null"] },
+        "filter": { "type": ["string", "null"] },
+        "exposure": { "type": ["string", "null"] },
+        "state": { "$ref": "#/$defs/PresentationalReviewState" },
+        "canonical_state": { "$ref": "#/$defs/CanonicalSessionState" },
+        "camera": { "type": "string" },
+        "gain": { "type": "string" },
+        "binning": { "type": "string" },
+        "set_temp": { "type": "string" },
+        "captured_on": { "$ref": "#/$defs/Date" },
+        "provenance": { "$ref": "#/$defs/ProvenanceSummary" },
+        "linked": { "$ref": "#/$defs/LinkedRefs" }
+      }
+    },
+    "InventorySource": {
+      "type": "object",
+      "required": ["id", "path", "kind", "state", "sessions"],
+      "additionalProperties": false,
+      "properties": {
+        "id": { "$ref": "#/$defs/Uuid" },
+        "path": { "type": "string", "minLength": 1 },
+        "kind": { "$ref": "#/$defs/SourceKind" },
+        "state": { "$ref": "#/$defs/SourceState" },
+        "sessions": {
+          "type": "array",
+          "items": { "$ref": "#/$defs/InventorySession" }
+        }
+      }
+    },
+    "Request": {
+      "type": "object",
+      "description": "Request envelope for inventory.list. Filters are optional; omit them for the unfiltered ledger.",
+      "required": ["contractVersion", "requestId"],
+      "additionalProperties": false,
+      "properties": {
+        "contractVersion": { "$ref": "#/$defs/ContractVersion" },
+        "requestId": { "$ref": "#/$defs/Uuid" },
+        "filters": { "$ref": "#/$defs/InventoryFilters" }
+      }
+    },
+    "Response": {
+      "type": "object",
+      "description": "Response envelope for inventory.list.",
+      "required": ["status", "contractVersion", "requestId"],
+      "additionalProperties": false,
+      "properties": {
+        "status": { "type": "string", "enum": ["success", "error"] },
+        "contractVersion": { "$ref": "#/$defs/ContractVersion" },
+        "requestId": { "$ref": "#/$defs/Uuid" },
+        "generated_at": { "$ref": "#/$defs/Timestamp" },
+        "sources": {
+          "type": "array",
+          "items": { "$ref": "#/$defs/InventorySource" }
+        },
+        "error": { "$ref": "#/$defs/ErrorEnvelope" }
+      },
+      "allOf": [
+        {
+          "if": { "properties": { "status": { "const": "success" } } },
+          "then": {
+            "required": ["generated_at", "sources"],
+            "not": { "required": ["error"] }
+          }
+        },
+        {
+          "if": { "properties": { "status": { "const": "error" } } },
+          "then": { "required": ["error"] }
+        }
+      ]
+    }
+  }
+}

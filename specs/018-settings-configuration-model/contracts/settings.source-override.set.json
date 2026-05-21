@@ -1,0 +1,56 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://astro-plan/contracts/settings.source-override.set.json",
+  "title": "settings.source-override.set",
+  "description": "Set a per-source override for an overridable settings key. To clear an override, omit 'value' or call the dedicated clear operation (out of scope here).",
+  "operation": {
+    "name": "settings.source-override.set",
+    "direction": "ui-to-core",
+    "version": "1"
+  },
+  "request": {
+    "type": "object",
+    "required": ["source_id", "key", "value"],
+    "additionalProperties": false,
+    "properties": {
+      "source_id": {
+        "type": "string",
+        "description": "Identifier of the data source root receiving the override."
+      },
+      "key": {
+        "type": "string",
+        "description": "One of the overridable settings keys.",
+        "enum": [
+          "followSymlinks",
+          "hashOnScan",
+          "autoApplyPattern",
+          "defaultProtection"
+        ]
+      },
+      "value": {
+        "description": "Override value; must validate against the same per-key sub-schema as the global key."
+      }
+    }
+  },
+  "response": {
+    "type": "object",
+    "required": ["source_id", "key"],
+    "additionalProperties": false,
+    "properties": {
+      "source_id": { "type": "string" },
+      "key": { "type": "string" }
+    }
+  },
+  "errors": [
+    {
+      "code": "source.not_found",
+      "message": "The supplied source_id does not match a known data source root.",
+      "http_status_equivalent": 404
+    },
+    {
+      "code": "key.unoverridable",
+      "message": "The supplied key cannot be overridden per source in v1.",
+      "http_status_equivalent": 400
+    }
+  ]
+}

@@ -1,0 +1,208 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://astro-plan.local/contracts/lifecycle.transition.json",
+  "title": "lifecycle.transition",
+  "description": "Operation contract for proposing and applying a lifecycle state transition on a Data Asset. Source-of-truth schema for the Rust contract DTOs in crates/contracts/core/ and the generated TypeScript surface in packages/contracts/generated/.",
+  "type": "object",
+  "oneOf": [
+    { "$ref": "#/$defs/Request" },
+    { "$ref": "#/$defs/Response" }
+  ],
+  "$defs": {
+    "ContractVersion": {
+      "type": "string",
+      "const": "1.0"
+    },
+    "Uuid": {
+      "type": "string",
+      "format": "uuid"
+    },
+    "Timestamp": {
+      "type": "string",
+      "format": "date-time"
+    },
+    "Actor": {
+      "type": "string",
+      "enum": ["user", "system"]
+    },
+    "EntityType": {
+      "type": "string",
+      "enum": [
+        "library_root",
+        "file_record",
+        "acquisition_session",
+        "calibration_session",
+        "project",
+        "prepared_source",
+        "processing_artifact",
+        "filesystem_plan"
+      ]
+    },
+    "ProjectState": {
+      "type": "string",
+      "enum": [
+        "setup_incomplete",
+        "ready",
+        "prepared",
+        "processing",
+        "completed",
+        "archived",
+        "blocked"
+      ]
+    },
+    "PlanState": {
+      "type": "string",
+      "enum": [
+        "draft",
+        "ready_for_review",
+        "approved",
+        "applying",
+        "applied",
+        "partially_applied",
+        "failed",
+        "cancelled"
+      ]
+    },
+    "SessionState": {
+      "type": "string",
+      "enum": [
+        "discovered",
+        "candidate",
+        "needs_review",
+        "confirmed",
+        "rejected",
+        "ignored"
+      ]
+    },
+    "DataSourceState": {
+      "type": "string",
+      "enum": ["active", "missing", "disabled", "reconnect_required"]
+    },
+    "InventoryState": {
+      "type": "string",
+      "enum": [
+        "observed",
+        "missing",
+        "changed",
+        "classified",
+        "rejected",
+        "protected"
+      ]
+    },
+    "PreparedSourceState": {
+      "type": "string",
+      "enum": ["not_created", "planned", "ready", "stale", "retired"]
+    },
+    "ProjectionState": {
+      "type": "string",
+      "enum": ["current", "stale", "regenerating"]
+    },
+    "LifecycleState": {
+      "description": "Discriminated union of per-family lifecycle states. A request's next_state must be valid for the entity_type given.",
+      "oneOf": [
+        { "$ref": "#/$defs/ProjectState" },
+        { "$ref": "#/$defs/PlanState" },
+        { "$ref": "#/$defs/SessionState" },
+        { "$ref": "#/$defs/DataSourceState" },
+        { "$ref": "#/$defs/InventoryState" },
+        { "$ref": "#/$defs/PreparedSourceState" },
+        { "$ref": "#/$defs/ProjectionState" }
+      ]
+    },
+    "ErrorCode": {
+      "type": "string",
+      "enum": [
+        "transition.refused",
+        "entity.not_found",
+        "state.unchanged",
+        "actor.not_authorised",
+        "plan.required",
+        "plan.not_approved"
+      ]
+    },
+    "ErrorEnvelope": {
+      "type": "object",
+      "required": ["code", "message"],
+      "additionalProperties": false,
+      "properties": {
+        "code": { "$ref": "#/$defs/ErrorCode" },
+        "message": {
+          "type": "string",
+          "description": "Human-readable explanation. MUST NOT include secrets or absolute filesystem paths."
+        },
+        "details": {
+          "type": "object",
+          "description": "Optional structured detail. Examples: { allowed_next_states: [...] } for transition.refused; { plan_id: uuid } for plan.required.",
+          "additionalProperties": true
+        }
+      }
+    },
+    "Request": {
+      "type": "object",
+      "description": "Request envelope for lifecycle.transition.",
+      "required": [
+        "contractVersion",
+        "requestId",
+        "entity_type",
+        "entity_id",
+        "next_state",
+        "actor"
+      ],
+      "additionalProperties": false,
+      "properties": {
+        "contractVersion": { "$ref": "#/$defs/ContractVersion" },
+        "requestId": { "$ref": "#/$defs/Uuid" },
+        "entity_type": { "$ref": "#/$defs/EntityType" },
+        "entity_id": { "$ref": "#/$defs/Uuid" },
+        "next_state": { "$ref": "#/$defs/LifecycleState" },
+        "action_label": {
+          "type": "string",
+          "description": "Human-readable label recorded on the audit entry (e.g. 'Unarchived').",
+          "minLength": 1,
+          "maxLength": 120
+        },
+        "actor": { "$ref": "#/$defs/Actor" },
+        "requires_plan": {
+          "type": "boolean",
+          "description": "Set by the caller when the transition implies filesystem mutation. Server may still demand a plan even when false; server MUST NOT apply a transition flagged true without a corresponding approved FilesystemPlan."
+        }
+      }
+    },
+    "Response": {
+      "type": "object",
+      "description": "Response envelope for lifecycle.transition.",
+      "required": ["status", "contractVersion", "requestId"],
+      "additionalProperties": false,
+      "properties": {
+        "status": {
+          "type": "string",
+          "enum": ["success", "error"]
+        },
+        "contractVersion": { "$ref": "#/$defs/ContractVersion" },
+        "requestId": { "$ref": "#/$defs/Uuid" },
+        "applied_at": { "$ref": "#/$defs/Timestamp" },
+        "prior_state": { "$ref": "#/$defs/LifecycleState" },
+        "new_state": { "$ref": "#/$defs/LifecycleState" },
+        "audit_id": { "$ref": "#/$defs/Uuid" },
+        "plan_id": {
+          "$ref": "#/$defs/Uuid",
+          "description": "Set when the server created or referenced a FilesystemPlan whose approval gates the transition."
+        },
+        "error": { "$ref": "#/$defs/ErrorEnvelope" }
+      },
+      "allOf": [
+        {
+          "if": { "properties": { "status": { "const": "success" } } },
+          "then": {
+            "required": ["applied_at", "new_state", "audit_id"],
+            "not": { "required": ["error"] }
+          }
+        },
+        {
+          "if": { "properties": { "status": { "const": "error" } } },
+          "then": { "required": ["error"] }
+        }
+      ]
+    }
+  }
+}

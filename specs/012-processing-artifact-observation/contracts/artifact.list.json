@@ -1,0 +1,109 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://astro-plan.local/contracts/artifact.list.json",
+  "title": "artifact.list",
+  "description": "List processing artifacts observed under a project, grouped for the Tool Launches drawer accordion.",
+  "type": "object",
+  "properties": {
+    "operation": { "const": "artifact.list" },
+    "request": {
+      "type": "object",
+      "required": ["project_id"],
+      "additionalProperties": false,
+      "properties": {
+        "project_id": {
+          "type": "string",
+          "description": "Identifier of the project whose artifacts to list."
+        },
+        "include_states": {
+          "type": "array",
+          "description": "Optional state filter. Defaults to ['present','missing'].",
+          "items": {
+            "type": "string",
+            "enum": ["present", "missing", "user_resolved_missing"]
+          },
+          "uniqueItems": true
+        }
+      }
+    },
+    "response": {
+      "type": "object",
+      "required": ["artifacts"],
+      "additionalProperties": false,
+      "properties": {
+        "artifacts": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "required": [
+              "id",
+              "project_id",
+              "path",
+              "kind",
+              "tool",
+              "detected_at",
+              "state",
+              "classification_confidence",
+              "classification_source"
+            ],
+            "additionalProperties": false,
+            "properties": {
+              "id": { "type": "string" },
+              "project_id": { "type": "string" },
+              "tool_launch_id": {
+                "type": ["string", "null"],
+                "description": "Attribution to a tool launch from feature 011; null when no launch matched the detection window."
+              },
+              "path": {
+                "type": "string",
+                "description": "Project-relative path; resolved through the library root."
+              },
+              "kind": {
+                "type": "string",
+                "enum": ["intermediate", "master", "final"]
+              },
+              "tool": {
+                "type": "string",
+                "description": "Workflow-profile tool id, e.g. pixinsight or siril."
+              },
+              "detected_at": { "type": "string", "format": "date-time" },
+              "last_seen_at": { "type": "string", "format": "date-time" },
+              "state": {
+                "type": "string",
+                "enum": ["present", "missing", "user_resolved_missing"]
+              },
+              "classification_confidence": {
+                "type": "number",
+                "minimum": 0,
+                "maximum": 1
+              },
+              "classification_source": {
+                "type": "string",
+                "enum": ["rule", "manual_override", "fallback"]
+              },
+              "size_bytes": { "type": "integer", "minimum": 0 }
+            }
+          }
+        }
+      }
+    },
+    "errors": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "required": ["code", "message"],
+        "properties": {
+          "code": {
+            "type": "string",
+            "enum": [
+              "project.not_found",
+              "project.output_folder_unavailable"
+            ]
+          },
+          "message": { "type": "string" }
+        }
+      }
+    }
+  },
+  "required": ["operation", "request", "response"]
+}

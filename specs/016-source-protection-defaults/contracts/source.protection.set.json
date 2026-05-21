@@ -1,0 +1,68 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "source.protection.set",
+  "title": "Set source protection",
+  "description": "Sets or replaces the protection override for a source.",
+  "type": "object",
+  "properties": {
+    "request": {
+      "type": "object",
+      "required": ["source_id", "level"],
+      "properties": {
+        "source_id": {
+          "type": "string",
+          "format": "uuid"
+        },
+        "level": {
+          "type": "string",
+          "enum": ["protected", "normal", "unprotected"]
+        },
+        "categories": {
+          "type": "array",
+          "items": { "type": "string" },
+          "description": "Optional per-source category override. Absent means inherit global protected categories."
+        }
+      },
+      "additionalProperties": false
+    },
+    "response": {
+      "type": "object",
+      "required": ["source_id", "prior_level", "new_level"],
+      "properties": {
+        "source_id": { "type": "string", "format": "uuid" },
+        "prior_level": {
+          "type": "string",
+          "enum": ["protected", "normal", "unprotected"]
+        },
+        "new_level": {
+          "type": "string",
+          "enum": ["protected", "normal", "unprotected"]
+        },
+        "prior_categories": {
+          "type": "array",
+          "items": { "type": "string" }
+        },
+        "new_categories": {
+          "type": "array",
+          "items": { "type": "string" }
+        }
+      },
+      "additionalProperties": false
+    },
+    "errors": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "required": ["code", "message"],
+        "properties": {
+          "code": {
+            "type": "string",
+            "enum": ["source.not_found", "level.unknown"]
+          },
+          "message": { "type": "string" }
+        }
+      }
+    }
+  },
+  "required": ["request", "response"]
+}

@@ -1,0 +1,105 @@
+# Tasks: Token Pattern Builder
+
+**Feature**: `015-token-pattern-builder`
+
+Tasks are grouped by user story so each group is independently testable. Tasks
+marked **[mockup-done]** are already realized in `apps/desktop/` and require
+only verification when the resolver lands.
+
+## US1 — Build Project Folder Pattern (P1)
+
+- **T1.1 [mockup-done]** `TokenPatternBuilder` component renders token and
+  separator chips with add/remove menus. Source: `apps/desktop/src/ui/TokenPattern.tsx`.
+- **T1.2 [mockup-done]** Library default pattern persists as `PatternPart[]`
+  via `apps/desktop/src/data/settings.ts`.
+- **T1.3** Wire add/remove operations through `pattern.validate` so structural
+  warnings (consecutive separators, leading/trailing separator,
+  no_path_separator) surface inline on the Naming & Structure pane.
+- **T1.4** Block saving when `pattern.validate` returns `valid: false`
+  (`pattern.empty` or `token.unknown`).
+- **T1.5** Unit tests for the token registry's `value`-set assertion and the
+  separator allow-list (UI guard).
+
+**Acceptance**: A user can build a pattern using each v1 token and each v1
+separator, see warnings update live, and cannot save an invalid pattern.
+
+## US2 — Live Preview Against Recent Metadata (P2)
+
+- **T2.1 [mockup-done]** `PatternPreview` component shape (`{ path, count? }`).
+  Source: `apps/desktop/src/ui/TokenPattern.tsx`.
+- **T2.2** Replace mock preview rows in `NamingStructureSection` with a live
+  preview that resolves the current pattern against the most recent N
+  inventory sessions per source.
+- **T2.3** Group preview rows by resolved destination and aggregate frame
+  counts.
+- **T2.4** Show fallback substitution affordance in preview rows
+  (e.g. dim `unclassified` segments) sourced from `ResolveResult.missing_tokens`.
+- **T2.5** Empty-state row when the pattern is empty.
+
+**Acceptance**: Editing the pattern updates preview rows within one frame; rows
+with fallback substitutions are visibly distinguished.
+
+## US3 — Resolve Pattern at Inbox Confirm (P3)
+
+- **T3.1** Define `crates/project/structure/` crate with `Pattern`,
+  `PatternPart`, `TokenDefinition`, `TokenRegistry`, `ResolverConfig` types.
+- **T3.2** Implement the v1 token registry (R1, data-model.md).
+- **T3.3** Implement value sanitization (R4) applied to metadata values before
+  insertion.
+- **T3.4** Implement `resolve(pattern, metadata, config) -> ResolveResult`
+  with fallback substitution and `missing_tokens` accumulation.
+- **T3.5** Implement `validate(pattern) -> ValidateResult` plus
+  `pattern.empty` and `token.unknown` errors.
+- **T3.6** OS-path post-resolution check producing `pattern.invalid` with
+  offending characters and resolved length.
+- **T3.7** Implement the `pattern.resolve` and `pattern.validate` operations
+  in `crates/contracts/core/` matching the JSON Schemas under `contracts/`.
+- **T3.8** Tauri adapter wiring so the desktop shell can call both operations.
+- **T3.9** Unit tests covering: each fallback default, sanitization table,
+  consecutive separators producing the expected collapse, unknown token error,
+  date_iso transform, and an end-to-end `{target}/{filter}/{date}/{frame_type}/`
+  fixture.
+- **T3.10** Contract conformance test: request/response payloads validate
+  against the JSON Schemas.
+
+**Acceptance**: Given a metadata bundle, the resolver produces the expected
+relative path and missing-token list; given a malformed pattern, the resolver
+returns the documented error code.
+
+## US4 — Per-Source Override Propagation (P4)
+
+- **T4.1 [mockup-done]** Override row stubs visible in the Naming & Structure
+  section. Source: `apps/desktop/src/features/settings/SettingsPage.tsx`
+  (`NamingStructureSection`).
+- **T4.2** Persist per-source overrides as `{ source_id, pattern }` rows in
+  the settings store (handoff to `crates/persistence/db/` schema is owned by
+  spec 018; this task captures the contract surface only).
+- **T4.3** Inbox confirm pipeline (spec 018) reads the override for the item's
+  source if present, otherwise uses the library default. This spec contributes
+  the pattern lookup contract; the pipeline integration lives in spec 018.
+- **T4.4** Preview rows in the Naming & Structure pane render one group per
+  source so override impact is visible.
+
+**Acceptance**: An override on source A changes resolved destinations for
+source A only; sources without overrides continue using the library default.
+
+## Cross-cutting
+
+- **TX.1** Document the token registry in user-facing docs (token name,
+  source field, default fallback).
+- **TX.2** Add a migration note to `docs/research/` describing the
+  `token.unknown` error path so future vocabulary changes can plan the
+  rollout.
+
+## Dependency Graph
+
+- US1 → US2 (preview reads validation results).
+- US3 → US2 (live preview calls the resolver).
+- US3 → US4 (override propagation calls the resolver).
+- US1, US2 can ship UI-only against a stub resolver; US3 unblocks real
+  destinations and Inbox confirm.
+
+## Stop Condition
+
+Implementation pauses here. The next phase (spec 018: Naming & Structure)
+consumes the resolver and override storage.

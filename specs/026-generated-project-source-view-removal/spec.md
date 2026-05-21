@@ -5,6 +5,52 @@
 **Status**: Draft  
 **Input**: User description: "Specify removing generated project source views and app-created links/folders without touching original Inventory data."
 
+## Implementation Status: NOT IMPLEMENTED
+
+This feature is specified only. No application code, persistence schema,
+contract handlers, or UI surfaces have been written. The canonical project
+database remains the source of truth; prepared source views are reproducible
+projections and removing them MUST be reversible by regeneration.
+
+### User Story 3 - Regenerate a Removed Source View (Priority: P2)
+
+As a user, after removing a generated source view to free disk space, I want to
+regenerate it from the canonical database so that the workflow remains
+reproducible without re-importing inventory.
+
+**Why this priority**: Removal is only safe if regeneration is cheap, reviewed,
+and produces the same logical view.
+
+**Independent Test**: Remove a view, then issue a regenerate request and confirm
+a new plan is produced that re-creates the same item set from canonical sources.
+
+**Acceptance Scenarios**:
+
+1. **Given** a previously removed source view, **When** the user requests
+   regeneration, **Then** a new filesystem plan is produced from the canonical
+   database with the same logical item set.
+2. **Given** the canonical inventory references have changed since removal,
+   **When** the user regenerates, **Then** the plan reflects the current
+   canonical state and flags any unresolved references.
+
+### User Story 4 - Detect Stale Source Views (Priority: P3)
+
+As a user, I want the app to detect when a generated source view has gone stale
+(inventory moved, removed, or remapped) so that I can decide to remove or
+regenerate it before it misleads downstream tools.
+
+**Acceptance Scenarios**:
+
+1. **Given** a source view references an inventory item that no longer resolves,
+   **When** the project is opened, **Then** the view is marked stale with the
+   broken reference visible.
+
+### User Story 5 - Audit Source View Removal (Priority: P3)
+
+Every view removal MUST emit per-item audit events covering attempted action,
+outcome, and any failures, consistent with the constitution's reviewable
+filesystem mutation principle.
+
 ## User Scenarios & Testing *(mandatory)*
 
 ### User Story 1 - Remove Generated Source Views (Priority: P1)

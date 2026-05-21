@@ -1,0 +1,104 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://astro-plan.local/contracts/project.manifest.get.json",
+  "title": "project.manifest.get",
+  "description": "Fetch one manifest snapshot with its full structured body.",
+  "type": "object",
+  "properties": {
+    "operation": { "const": "project.manifest.get" },
+    "request": {
+      "type": "object",
+      "required": ["manifest_id"],
+      "additionalProperties": false,
+      "properties": {
+        "manifest_id": { "type": "string" }
+      }
+    },
+    "response": {
+      "type": "object",
+      "required": ["manifest"],
+      "additionalProperties": false,
+      "properties": {
+        "manifest": {
+          "type": "object",
+          "required": [
+            "id",
+            "project_id",
+            "reason",
+            "timestamp",
+            "path",
+            "version",
+            "body"
+          ],
+          "additionalProperties": false,
+          "properties": {
+            "id": { "type": "string" },
+            "project_id": { "type": "string" },
+            "reason": {
+              "type": "string",
+              "enum": [
+                "created",
+                "source_change",
+                "lifecycle_transition",
+                "cleanup_applied"
+              ]
+            },
+            "timestamp": { "type": "string", "format": "date-time" },
+            "path": { "type": "string" },
+            "version": { "type": "integer", "minimum": 1 },
+            "body": {
+              "type": "object",
+              "required": ["lifecycle_state", "source_map"],
+              "properties": {
+                "source_map": {
+                  "type": "object",
+                  "description": "Snapshot of selected Inventory items by role.",
+                  "additionalProperties": true
+                },
+                "calibration": {
+                  "type": "object",
+                  "description": "Calibration choices and reused masters.",
+                  "additionalProperties": true
+                },
+                "workflow_profile": {
+                  "type": ["string", "null"]
+                },
+                "generated_views": {
+                  "type": "array",
+                  "items": {
+                    "type": "object",
+                    "required": ["id", "path"],
+                    "properties": {
+                      "id": { "type": "string" },
+                      "path": { "type": "string" }
+                    }
+                  }
+                },
+                "lifecycle_state": { "type": "string" },
+                "notes": {
+                  "type": ["string", "null"],
+                  "description": "Snapshot of the project's notes body at generation time."
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "errors": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "required": ["code", "message"],
+        "properties": {
+          "code": {
+            "type": "string",
+            "enum": ["manifest.not_found"]
+          },
+          "message": { "type": "string" }
+        }
+      }
+    }
+  },
+  "required": ["operation", "request", "response"]
+}

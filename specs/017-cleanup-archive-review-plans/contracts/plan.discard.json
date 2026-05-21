@@ -1,0 +1,40 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://astro-plan.dev/contracts/017/plan.discard.json",
+  "title": "plan.discard",
+  "description": "Discard a plan. Refused while the plan is applying. Owned by spec 017.",
+  "type": "object",
+  "properties": {
+    "request": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["plan_id"],
+      "properties": {
+        "plan_id": { "type": "string" }
+      }
+    },
+    "response": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["plan_id", "discarded_at"],
+      "properties": {
+        "plan_id": { "type": "string" },
+        "discarded_at": { "type": "string", "format": "date-time" }
+      }
+    },
+    "errors": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "required": ["code"],
+        "properties": {
+          "code": {
+            "type": "string",
+            "enum": ["plan.not_found", "plan.in_progress"]
+          },
+          "message": { "type": "string" }
+        }
+      }
+    }
+  }
+}

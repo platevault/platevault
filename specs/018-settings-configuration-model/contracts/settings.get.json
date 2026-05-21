@@ -1,0 +1,32 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://astro-plan/contracts/settings.get.json",
+  "title": "settings.get",
+  "description": "Read the full settings snapshot for the open library.",
+  "operation": {
+    "name": "settings.get",
+    "direction": "ui-to-core",
+    "version": "1"
+  },
+  "request": {
+    "type": "object",
+    "additionalProperties": false,
+    "properties": {}
+  },
+  "response": {
+    "type": "object",
+    "required": ["version", "settings"],
+    "additionalProperties": false,
+    "properties": {
+      "version": {
+        "type": "string",
+        "description": "Schema version of the returned payload, e.g. 'v1'.",
+        "const": "v1"
+      },
+      "settings": {
+        "$ref": "https://astro-plan/contracts/settings.state.v1.json"
+      }
+    }
+  },
+  "errors": []
+}

@@ -1,0 +1,108 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://astro-plan.local/contracts/catalog.list.json",
+  "title": "catalog.list",
+  "description": "Read contract returning every catalog registered with the app (built-in plus user-added). Used by Settings → Catalogs.",
+  "type": "object",
+  "oneOf": [
+    { "$ref": "#/$defs/Request" },
+    { "$ref": "#/$defs/Response" }
+  ],
+  "$defs": {
+    "ContractVersion": { "type": "string", "const": "1.0" },
+    "Uuid": { "type": "string", "format": "uuid" },
+    "Timestamp": { "type": "string", "format": "date-time" },
+    "CatalogId": {
+      "type": "string",
+      "minLength": 1,
+      "maxLength": 64,
+      "pattern": "^[a-z0-9][a-z0-9_-]*$",
+      "description": "Stable slug identifier, e.g. 'messier', 'ngc', 'ic'."
+    },
+    "CatalogOrigin": {
+      "type": "string",
+      "enum": ["built_in", "user"]
+    },
+    "LicenseShortCode": {
+      "type": "string",
+      "minLength": 1,
+      "maxLength": 64,
+      "description": "Short license code, e.g. 'public-domain', 'cc-by-4.0', 'apache-2.0'."
+    },
+    "Catalog": {
+      "type": "object",
+      "required": [
+        "id",
+        "name",
+        "version",
+        "license",
+        "origin",
+        "source_url",
+        "last_updated"
+      ],
+      "additionalProperties": false,
+      "properties": {
+        "id": { "$ref": "#/$defs/CatalogId" },
+        "name": { "type": "string", "minLength": 1 },
+        "version": { "type": "string", "minLength": 1 },
+        "license": { "$ref": "#/$defs/LicenseShortCode" },
+        "origin": { "$ref": "#/$defs/CatalogOrigin" },
+        "source_url": { "type": "string", "format": "uri" },
+        "last_updated": { "$ref": "#/$defs/Timestamp" },
+        "entry_count": { "type": "integer", "minimum": 0 }
+      }
+    },
+    "ErrorCode": {
+      "type": "string",
+      "enum": ["registry.unavailable", "actor.not_authorised"]
+    },
+    "ErrorEnvelope": {
+      "type": "object",
+      "required": ["code", "message"],
+      "additionalProperties": false,
+      "properties": {
+        "code": { "$ref": "#/$defs/ErrorCode" },
+        "message": { "type": "string" },
+        "details": { "type": "object", "additionalProperties": true }
+      }
+    },
+    "Request": {
+      "type": "object",
+      "required": ["contractVersion", "requestId"],
+      "additionalProperties": false,
+      "properties": {
+        "contractVersion": { "$ref": "#/$defs/ContractVersion" },
+        "requestId": { "$ref": "#/$defs/Uuid" }
+      }
+    },
+    "Response": {
+      "type": "object",
+      "required": ["status", "contractVersion", "requestId"],
+      "additionalProperties": false,
+      "properties": {
+        "status": { "type": "string", "enum": ["success", "error"] },
+        "contractVersion": { "$ref": "#/$defs/ContractVersion" },
+        "requestId": { "$ref": "#/$defs/Uuid" },
+        "catalogs": {
+          "type": "array",
+          "description": "All registered catalogs. Ordered by origin (built_in first), then by name.",
+          "items": { "$ref": "#/$defs/Catalog" }
+        },
+        "error": { "$ref": "#/$defs/ErrorEnvelope" }
+      },
+      "allOf": [
+        {
+          "if": { "properties": { "status": { "const": "success" } } },
+          "then": {
+            "required": ["catalogs"],
+            "not": { "required": ["error"] }
+          }
+        },
+        {
+          "if": { "properties": { "status": { "const": "error" } } },
+          "then": { "required": ["error"] }
+        }
+      ]
+    }
+  }
+}

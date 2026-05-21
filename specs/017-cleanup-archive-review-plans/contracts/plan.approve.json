@@ -1,0 +1,44 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://astro-plan.dev/contracts/017/plan.approve.json",
+  "title": "plan.approve",
+  "description": "Move a plan from ready_for_review (or draft) to approved. Owned by spec 017. Apply itself is owned by spec 025.",
+  "type": "object",
+  "properties": {
+    "request": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["plan_id"],
+      "properties": {
+        "plan_id": { "type": "string" }
+      }
+    },
+    "response": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["plan_id", "new_state"],
+      "properties": {
+        "plan_id": { "type": "string" },
+        "new_state": { "const": "approved" }
+      }
+    },
+    "errors": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "required": ["code"],
+        "properties": {
+          "code": {
+            "type": "string",
+            "enum": ["plan.not_found", "plan.invalid_state", "plan.items.empty"]
+          },
+          "message": { "type": "string" },
+          "current_state": {
+            "type": "string",
+            "description": "Returned on plan.invalid_state to help the UI explain the rejection."
+          }
+        }
+      }
+    }
+  }
+}

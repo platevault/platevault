@@ -1,0 +1,138 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://astro-plan.dev/contracts/017/plan.get.json",
+  "title": "plan.get",
+  "description": "Fetch a single plan with its items for the detail surface. Owned by spec 017.",
+  "type": "object",
+  "properties": {
+    "request": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["plan_id"],
+      "properties": {
+        "plan_id": { "type": "string" }
+      }
+    },
+    "response": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["plan"],
+      "properties": {
+        "plan": { "$ref": "#/$defs/Plan" }
+      }
+    },
+    "errors": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "required": ["code"],
+        "properties": {
+          "code": { "type": "string", "enum": ["plan.not_found"] },
+          "message": { "type": "string" }
+        }
+      }
+    }
+  },
+  "$defs": {
+    "PlanItem": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "id",
+        "index",
+        "name",
+        "action",
+        "from",
+        "to",
+        "reason",
+        "protection",
+        "state"
+      ],
+      "properties": {
+        "id": { "type": "string" },
+        "index": { "type": "integer", "minimum": 1 },
+        "name": { "type": "string" },
+        "action": {
+          "type": "string",
+          "enum": ["move", "archive", "delete", "link", "write"]
+        },
+        "from": { "type": "string" },
+        "to": { "type": "string" },
+        "reason": { "type": "string" },
+        "protection": { "type": "string", "enum": ["normal", "protected"] },
+        "linked": { "type": "string" },
+        "state": {
+          "type": "string",
+          "enum": ["pending", "applying", "succeeded", "failed", "skipped"]
+        },
+        "failure_reason": { "type": "string" },
+        "provenance": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "required": ["label", "value"],
+            "properties": {
+              "label": { "type": "string" },
+              "value": { "type": "string" }
+            }
+          }
+        }
+      }
+    },
+    "Plan": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "id",
+        "number",
+        "title",
+        "origin",
+        "state",
+        "created_at",
+        "items",
+        "items_total",
+        "items_applied",
+        "items_failed",
+        "items_pending",
+        "type"
+      ],
+      "properties": {
+        "id": { "type": "string" },
+        "number": { "type": "integer" },
+        "title": { "type": "string" },
+        "origin": {
+          "type": "string",
+          "enum": ["inbox", "restructure", "cleanup", "archive", "project"]
+        },
+        "origin_path": { "type": "string" },
+        "state": {
+          "type": "string",
+          "enum": [
+            "draft",
+            "ready_for_review",
+            "approved",
+            "applying",
+            "applied",
+            "partially_applied",
+            "failed",
+            "cancelled"
+          ]
+        },
+        "created_at": { "type": "string", "format": "date-time" },
+        "items": {
+          "type": "array",
+          "items": { "$ref": "#/$defs/PlanItem" }
+        },
+        "items_total": { "type": "integer", "minimum": 0 },
+        "items_applied": { "type": "integer", "minimum": 0 },
+        "items_failed": { "type": "integer", "minimum": 0 },
+        "items_pending": { "type": "integer", "minimum": 0 },
+        "type": {
+          "type": "string",
+          "enum": ["split", "restructure", "cleanup", "archive", "source_map"]
+        },
+        "parent_plan_id": { "type": "string" }
+      }
+    }
+  }
+}

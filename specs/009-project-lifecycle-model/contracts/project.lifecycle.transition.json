@@ -1,0 +1,170 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://astro-plan.local/contracts/project.lifecycle.transition.json",
+  "title": "project.lifecycle.transition",
+  "description": "Project-scoped wrapper around lifecycle.transition (spec 002). Server fills entity_type='project' and derives action_label from the edge when omitted. Returns project-scoped errors layered onto the shared envelope.",
+  "type": "object",
+  "oneOf": [
+    { "$ref": "#/$defs/Request" },
+    { "$ref": "#/$defs/Response" }
+  ],
+  "$defs": {
+    "ContractVersion": { "type": "string", "const": "1.0" },
+    "Uuid": { "type": "string", "format": "uuid" },
+    "Timestamp": { "type": "string", "format": "date-time" },
+    "Actor": { "type": "string", "enum": ["user", "system"] },
+    "ProjectLifecycle": {
+      "type": "string",
+      "enum": [
+        "setup_incomplete",
+        "ready",
+        "prepared",
+        "processing",
+        "completed",
+        "archived",
+        "blocked"
+      ]
+    },
+    "BlockedReason": {
+      "type": "object",
+      "description": "Required when next_state == 'blocked'; refused otherwise.",
+      "required": ["kind"],
+      "additionalProperties": true,
+      "properties": {
+        "kind": {
+          "type": "string",
+          "enum": [
+            "source_missing",
+            "prepared_source_stale",
+            "tool_unconfigured",
+            "calibration_unmatched",
+            "user"
+          ]
+        },
+        "note": { "type": "string", "maxLength": 500 },
+        "inventoryId": { "$ref": "#/$defs/Uuid" },
+        "preparedId": { "$ref": "#/$defs/Uuid" },
+        "calibrationSetId": { "$ref": "#/$defs/Uuid" },
+        "tool": { "type": "string" }
+      }
+    },
+    "LastAction": {
+      "type": "object",
+      "required": ["label", "when"],
+      "additionalProperties": false,
+      "properties": {
+        "label": { "type": "string", "minLength": 1, "maxLength": 120 },
+        "when": { "$ref": "#/$defs/Timestamp" }
+      }
+    },
+    "ErrorCode": {
+      "type": "string",
+      "description": "Project-scoped error codes layered on the spec 002 ErrorEnvelope. project.* codes are specific to this contract; the others are re-exported from lifecycle.transition for caller convenience.",
+      "enum": [
+        "project.not_found",
+        "transition.refused",
+        "prepared_source.required",
+        "plan.required",
+        "plan.not_approved",
+        "state.unchanged",
+        "actor.not_authorised"
+      ]
+    },
+    "ErrorEnvelope": {
+      "type": "object",
+      "required": ["code", "message"],
+      "additionalProperties": false,
+      "properties": {
+        "code": { "$ref": "#/$defs/ErrorCode" },
+        "message": {
+          "type": "string",
+          "description": "Human-readable explanation. MUST NOT include secrets or absolute filesystem paths."
+        },
+        "details": {
+          "type": "object",
+          "description": "Structured context. transition.refused MUST include allowed_next_states. prepared_source.required MUST include source_count. plan.required MUST include plan_id when one is recommended.",
+          "additionalProperties": true,
+          "properties": {
+            "allowed_next_states": {
+              "type": "array",
+              "items": { "$ref": "#/$defs/ProjectLifecycle" }
+            },
+            "source_count": { "type": "integer", "minimum": 0 },
+            "plan_id": { "$ref": "#/$defs/Uuid" }
+          }
+        }
+      }
+    },
+    "Request": {
+      "type": "object",
+      "description": "Project lifecycle transition request.",
+      "required": [
+        "contractVersion",
+        "requestId",
+        "project_id",
+        "next_state",
+        "actor"
+      ],
+      "additionalProperties": false,
+      "properties": {
+        "contractVersion": { "$ref": "#/$defs/ContractVersion" },
+        "requestId": { "$ref": "#/$defs/Uuid" },
+        "project_id": { "$ref": "#/$defs/Uuid" },
+        "next_state": { "$ref": "#/$defs/ProjectLifecycle" },
+        "actor": { "$ref": "#/$defs/Actor" },
+        "action_label": {
+          "type": "string",
+          "description": "Optional override. When omitted the server derives the label from the (from, to) edge per spec 009 research R2.",
+          "minLength": 1,
+          "maxLength": 120
+        },
+        "blocked_reason": {
+          "$ref": "#/$defs/BlockedReason",
+          "description": "Required iff next_state == 'blocked'."
+        },
+        "plan_id": {
+          "$ref": "#/$defs/Uuid",
+          "description": "Approved FilesystemPlan reference. Required on edges whose side_effect is non-null (see data-model.md transition table)."
+        }
+      },
+      "allOf": [
+        {
+          "if": { "properties": { "next_state": { "const": "blocked" } } },
+          "then": { "required": ["blocked_reason"] },
+          "else": { "not": { "required": ["blocked_reason"] } }
+        }
+      ]
+    },
+    "Response": {
+      "type": "object",
+      "description": "Project lifecycle transition response.",
+      "required": ["status", "contractVersion", "requestId"],
+      "additionalProperties": false,
+      "properties": {
+        "status": { "type": "string", "enum": ["success", "error"] },
+        "contractVersion": { "$ref": "#/$defs/ContractVersion" },
+        "requestId": { "$ref": "#/$defs/Uuid" },
+        "applied_at": { "$ref": "#/$defs/Timestamp" },
+        "prior_state": { "$ref": "#/$defs/ProjectLifecycle" },
+        "new_state": { "$ref": "#/$defs/ProjectLifecycle" },
+        "last_action": { "$ref": "#/$defs/LastAction" },
+        "audit_id": { "$ref": "#/$defs/Uuid" },
+        "plan_id": { "$ref": "#/$defs/Uuid" },
+        "error": { "$ref": "#/$defs/ErrorEnvelope" }
+      },
+      "allOf": [
+        {
+          "if": { "properties": { "status": { "const": "success" } } },
+          "then": {
+            "required": ["applied_at", "new_state", "last_action", "audit_id"],
+            "not": { "required": ["error"] }
+          }
+        },
+        {
+          "if": { "properties": { "status": { "const": "error" } } },
+          "then": { "required": ["error"] }
+        }
+      ]
+    }
+  }
+}

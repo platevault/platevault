@@ -1,0 +1,134 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://astro-plan.local/contracts/project.source.add.json",
+  "title": "project.source.add",
+  "description": "Link an Inventory session to an existing project as a ProjectSource. Snapshot fields (name, frames, filter, exposure) are copied from the Inventory row at link time. Channel inference re-runs and the recomputed channel list is returned. Refused with source.already.linked when the (project_id, inventory_session_id) pair already exists.",
+  "type": "object",
+  "oneOf": [
+    { "$ref": "#/$defs/Request" },
+    { "$ref": "#/$defs/Response" }
+  ],
+  "$defs": {
+    "ContractVersion": { "type": "string", "const": "1.0" },
+    "Uuid": { "type": "string", "format": "uuid" },
+    "Timestamp": { "type": "string", "format": "date-time" },
+    "ProjectSource": {
+      "type": "object",
+      "required": ["inventoryId", "name", "frames", "filter", "exposure", "linkedAt"],
+      "additionalProperties": false,
+      "properties": {
+        "inventoryId": { "$ref": "#/$defs/Uuid" },
+        "name": { "type": "string", "minLength": 1, "maxLength": 200 },
+        "frames": { "type": "integer", "minimum": 0 },
+        "filter": { "type": "string", "minLength": 0, "maxLength": 32 },
+        "exposure": { "type": "string", "minLength": 0, "maxLength": 32 },
+        "linkedAt": { "$ref": "#/$defs/Timestamp" }
+      }
+    },
+    "ProjectChannel": {
+      "type": "object",
+      "required": ["label", "source"],
+      "additionalProperties": false,
+      "properties": {
+        "label": { "type": "string", "minLength": 1, "maxLength": 32 },
+        "source": { "type": "string", "enum": ["inferred", "manual"] },
+        "addedAt": { "$ref": "#/$defs/Timestamp" }
+      }
+    },
+    "ErrorCode": {
+      "type": "string",
+      "description": "Source-add-scoped error codes layered on the spec 002 ErrorEnvelope.",
+      "enum": [
+        "project.not_found",
+        "session.not_found",
+        "source.already.linked",
+        "lifecycle.read_only",
+        "inventory.unscanned"
+      ]
+    },
+    "ErrorEnvelope": {
+      "type": "object",
+      "required": ["code", "message"],
+      "additionalProperties": false,
+      "properties": {
+        "code": { "$ref": "#/$defs/ErrorCode" },
+        "message": {
+          "type": "string",
+          "description": "Human-readable explanation. MUST NOT include secrets or absolute filesystem paths."
+        },
+        "details": {
+          "type": "object",
+          "description": "Structured context. source.already.linked MUST include existing_link_at. lifecycle.read_only MUST include current_lifecycle. inventory.unscanned MUST include inventory_session_id (the session exists but has no extracted metadata yet).",
+          "additionalProperties": true,
+          "properties": {
+            "existing_link_at": { "$ref": "#/$defs/Timestamp" },
+            "current_lifecycle": {
+              "type": "string",
+              "enum": [
+                "setup_incomplete",
+                "ready",
+                "prepared",
+                "processing",
+                "completed",
+                "archived",
+                "blocked"
+              ]
+            },
+            "inventory_session_id": { "$ref": "#/$defs/Uuid" }
+          }
+        }
+      }
+    },
+    "Request": {
+      "type": "object",
+      "description": "Link request. The inventory_session_id must point to a confirmed Inventory row (research R2); arbitrary disk paths are refused upstream by the UI picker.",
+      "required": [
+        "contractVersion",
+        "requestId",
+        "project_id",
+        "inventory_session_id"
+      ],
+      "additionalProperties": false,
+      "properties": {
+        "contractVersion": { "$ref": "#/$defs/ContractVersion" },
+        "requestId": { "$ref": "#/$defs/Uuid" },
+        "project_id": { "$ref": "#/$defs/Uuid" },
+        "inventory_session_id": { "$ref": "#/$defs/Uuid" }
+      }
+    },
+    "Response": {
+      "type": "object",
+      "description": "Source-add response.",
+      "required": ["status", "contractVersion", "requestId"],
+      "additionalProperties": false,
+      "properties": {
+        "status": { "type": "string", "enum": ["success", "error"] },
+        "contractVersion": { "$ref": "#/$defs/ContractVersion" },
+        "requestId": { "$ref": "#/$defs/Uuid" },
+        "project_id": { "$ref": "#/$defs/Uuid" },
+        "source_added": { "$ref": "#/$defs/ProjectSource" },
+        "channels": {
+          "type": "array",
+          "items": { "$ref": "#/$defs/ProjectChannel" },
+          "description": "Recomputed channel list after the link. Callers MAY diff against the prior list to surface 'new channel detected' feedback."
+        },
+        "audit_id": { "$ref": "#/$defs/Uuid" },
+        "linked_at": { "$ref": "#/$defs/Timestamp" },
+        "error": { "$ref": "#/$defs/ErrorEnvelope" }
+      },
+      "allOf": [
+        {
+          "if": { "properties": { "status": { "const": "success" } } },
+          "then": {
+            "required": ["project_id", "source_added", "channels", "audit_id", "linked_at"],
+            "not": { "required": ["error"] }
+          }
+        },
+        {
+          "if": { "properties": { "status": { "const": "error" } } },
+          "then": { "required": ["error"] }
+        }
+      ]
+    }
+  }
+}

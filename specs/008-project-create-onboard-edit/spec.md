@@ -108,3 +108,57 @@ As a user, I want all project setup fields to be editable from one project setti
 - Actual image processing.
 - Remote project sync.
 - Full processing-tool automation.
+
+## Implementation Status
+
+The mockup at `apps/desktop/src/features/projects/ProjectsPage.tsx` together
+with the in-memory model in `apps/desktop/src/data/mock.ts` and the read/write
+hooks in `apps/desktop/src/data/store.ts` cover the **read** and the
+**lifecycle-edit** halves of this feature, but none of the create, onboard, or
+metadata-edit flows are wired yet.
+
+### Wired (mockup)
+
+- Project listing with lifecycle and tool columns, filterable via header
+  controls (`useProjects`, lifecycle/tool filter chips).
+- Project drawer accordion sections for Lifecycle stepper, Sources,
+  Calibration sets, Channels, Plans, Manifests, Notes, and Tool launches.
+- Per-source rows surface `name`, `frames`, `filter`, `exposure` (from
+  `ProjectSource` in `mock.ts`).
+- `lastAction` denormalized marker rendered in row + drawer.
+- `setProjectLifecycle` writes lifecycle transitions to the in-memory store
+  (covered separately by spec 009).
+- `rowMenuGroupsForLifecycle` exposes contextual overflow actions per state.
+
+### Stubbed (no behavior)
+
+- **New project CTA** in the page header (`ProjectsPage.tsx:87`) is a
+  static button with no handler. There is no create wizard, no form, and no
+  store-side `addProject` mutation.
+- **Add source affordance** inside the drawer Sources section
+  (`ProjectsPage.tsx:277`, `<Plus size={12}/> Add source`) is rendered but
+  not wired. There is no inventory picker dialog and no `addProjectSource`
+  mutation.
+- **Edit project metadata** has no entry point. Name, tool, notes, and
+  channel inferences are read-only in the drawer. There is no Edit pane,
+  no inline edit, and no `updateProject` mutation.
+- **Onboard existing folder** (US 2) has no mockup surface at all; the
+  folder picker, marker-detection step, and source mapping reconciliation
+  are entirely absent.
+- Channels are stored as a flat string list on `Project`; there is no
+  inference step from source filters yet.
+- Project marker write, folder structure creation, and rollback semantics
+  (FR-007, FR-008) have no implementation; the mockup does not touch the
+  filesystem.
+
+### Cross-spec dependencies before implementation
+
+- Spec 003 (first-run source setup) provides the inventory items that the
+  source picker consumes; create cannot proceed without that surface.
+- Spec 009 (project lifecycle model) owns the `setup_incomplete → ready`
+  transition that successful creation emits.
+- Spec 010 (guided first project flow) is the orchestrator that calls into
+  this feature for the very first project; the wizard surface defined here
+  MUST be reusable from spec 010.
+- Spec 025 (filesystem plan application) owns the reviewable write that
+  produces the project folder structure and marker file.

@@ -94,3 +94,41 @@ As a user, I want settings grouped by workflow domain so that source behavior, c
 
 - Implementing persistence migrations.
 - Designing every final tooltip copy string.
+
+## Implementation Status
+
+The Settings surface is implemented as a mockup in the desktop shell. Behavior
+captured in code already and reflected in this spec:
+
+- **One-setting-per-line**: `SettingsPage.tsx` renders each setting as a single
+  row with label, info affordance, and a single control. No save button is
+  present anywhere on the page.
+- **Auto-save on every change**: `updateSettings(key, value)` in
+  `apps/desktop/src/data/settings.ts` writes immediately to a localStorage-backed
+  store under the versioned key `alm.settings.v1` and broadcasts to subscribers.
+- **No-op guard**: `updateSettings` short-circuits when the new value equals the
+  prior value. This prevents redundant persistence, redundant notifications, and
+  redundant audit entries for "phantom" changes.
+- **Noisy-key log policy**: `pattern` and `protectedCategories` are marked
+  noisy. Updates to these keys still persist, but do not append an entry to the
+  application log on every keystroke. All other keys log an `info`-level entry
+  to the `settings` source on change. This bounds the audit log against
+  token-editor and free-text drag activity while keeping discrete toggles
+  individually auditable.
+- **Per-source override scaffolding**: The Naming & Structure section exposes
+  per-source override stubs alongside the global token pattern builder. The
+  resolution model is global default → per-source override, with no further
+  inheritance levels in v1.
+- **Theme persistence separation**: The light/dark/system selector persists
+  under a separate localStorage key (`alm.theme`) managed by
+  `apps/desktop/src/app/theme.tsx`. Theme is intentionally not part of
+  `SettingsState v1`, so theme changes never participate in the settings
+  audit stream and never invalidate the settings schema.
+- **Wired sections**: Data Sources, Ingestion & Review, Naming & Structure,
+  Calibration, Tool Workflows, Catalogs, Cleanup & Archive, Source Protection,
+  Application Log, Appearance, and Advanced. API Contracts is not a user
+  section per FR-012.
+
+Persistence to the library SQLite database, schema migration, and an audit
+event stream remain unimplemented and are tracked in `plan.md`,
+`data-model.md`, `contracts/`, and `tasks.md`.

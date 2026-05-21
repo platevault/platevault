@@ -1,0 +1,114 @@
+# Research: Guided First Project Flow
+
+**Feature**: 010-guided-first-project-flow
+**Status**: Draft
+
+This document captures the research decisions needed before the coach can be
+designed in detail. Each decision lists the options considered, the chosen
+default, and the open variables for project-level configuration.
+
+## R1. Coach UX Surface: Overlay, Sidebar, Or Tooltip
+
+**Options**:
+
+- **Overlay popover** anchored to a DOM element via portal, with a callout
+  pointer and dismiss control.
+- **Persistent sidebar** that lists all steps and current focus.
+- **Native tooltip** attached to the target element.
+
+**Decision**: Overlay popover.
+
+**Why**: The overlay can be repositioned per route, does not consume layout
+real estate, and can defer gracefully when the anchor is absent. A sidebar
+duplicates information visible in Settings and breaks responsive layout for
+narrow desktop windows. Tooltips depend on hover and are not discoverable from
+keyboard for accessibility.
+
+**Open variables**: Visual treatment (callout vs. spotlight), keyboard focus
+behavior on appearance, and whether to dim non-anchor regions.
+
+## R2. Trigger Taxonomy
+
+**Options**:
+
+- **Event-bus triggers only**: completion bound to lifecycle/inventory/project
+  events.
+- **Click/path triggers**: completion bound to UI events such as
+  "user clicked confirm".
+- **Hybrid with timeouts**: events plus elapsed-time fallback.
+
+**Decision**: Event-bus triggers only.
+
+**Why**: The lifecycle event bus is already canonical for inventory and project
+state. Binding the coach to those events guarantees the coach can never declare
+a step done when the underlying domain state did not change. UI-click triggers
+would diverge from reality on failure. Timeouts violate FR-008 by guessing.
+
+**Open variables**: Which exact event names map to which step ids (see
+`data-model.md`).
+
+## R3. Completion Criteria Per Step
+
+| Step id                  | Source event           | Required payload          |
+| ------------------------ | ---------------------- | ------------------------- |
+| `inbox.confirm_first`    | `InventoryConfirmed`   | any item id               |
+| `project.create_first`   | `ProjectCreated`       | any project id            |
+| `tool.open_first`        | `ToolOpened`           | any project id + profile  |
+
+**Decision**: First occurrence of each event completes the step. The coach is
+about the *first* time, not a count.
+
+**Open variables**: Whether the event must originate from a user-initiated
+command or may also be satisfied by a recovery/restore action replaying past
+state. Default: ignore replay events flagged `source=restore` from the audit
+crate.
+
+## R4. Progress Persistence
+
+**Options**:
+
+- **SQLite single-row** in `guided_flow_state`.
+- **JSON file** under the app config dir.
+- **In-memory only**.
+
+**Decision**: SQLite single-row.
+
+**Why**: The persistence crate already owns SQLite. A single row keeps schema
+migrations trivial. JSON would split state across two stores. In-memory loses
+progress on restart and violates FR-006.
+
+**Open variables**: Whether to also write an audit event on each transition.
+Default: write a low-severity audit event so the coach is recoverable via the
+audit log if the row is corrupted.
+
+## R5. Optionality And Activation
+
+**Options**:
+
+- **Auto-activate** once after setup completes, then stay dormant unless
+  restarted.
+- **Opt-in** via Settings.
+- **Always-on** until completed or dismissed.
+
+**Decision**: Auto-activate once, then dormant unless restarted.
+
+**Why**: The product brief calls for low friction onboarding. Opt-in defeats
+the purpose; always-on annoys returning users. Auto-once-then-dormant matches
+the "in-app coach, not a tutorial" intent and aligns with FR-001 and FR-004.
+
+**Open variables**: Whether to expose a "show again" toggle in Settings for
+users who installed before this feature shipped. Default: yes, with a one-line
+explanation.
+
+## R6. Anchor Resolution On Missing Routes
+
+**Decision**: If the current route does not host the anchor for the current
+step, render a small route-pointer hint near the navigation entry to the
+required route instead of suppressing the coach entirely. This keeps the user
+oriented without forcing navigation.
+
+## R7. Accessibility
+
+**Decision**: Overlay hints must be reachable by keyboard, must announce
+themselves via `aria-live=polite`, and must not trap focus. Dismiss must be
+operable via Escape when the hint has focus.

@@ -1,0 +1,106 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://astro-plan/contracts/log.stream.json",
+  "title": "log.stream",
+  "description": "Subscribe to recent log entries with cursor-based resume. The backend returns an initial window from the cursor forward and pushes subsequent added events as new entries are emitted.",
+  "operation": {
+    "name": "log.stream",
+    "direction": "ui-to-core",
+    "version": "1",
+    "kind": "subscription"
+  },
+  "request": {
+    "type": "object",
+    "additionalProperties": false,
+    "properties": {
+      "cursor": {
+        "type": "string",
+        "description": "Opaque id of the last delivered LogEntry. Omit to receive the most recent window up to LOG_BUFFER_SIZE."
+      },
+      "level_min": {
+        "type": "string",
+        "enum": ["debug", "info", "warn", "error"],
+        "description": "Optional minimum severity. Server-side filter; the client may also filter further. Defaults to debug."
+      },
+      "include_diagnostics": {
+        "type": "boolean",
+        "description": "Include source = 'diagnostic' entries. Defaults to true for the panel; export defaults this to false.",
+        "default": true
+      },
+      "window_size": {
+        "type": "integer",
+        "minimum": 1,
+        "maximum": 500,
+        "description": "Initial window size on a no-cursor subscription. Capped at the UI ring buffer size.",
+        "default": 500
+      }
+    }
+  },
+  "events": {
+    "added": {
+      "description": "One or more entries appended to the stream. Ordered oldest-first within the event payload.",
+      "schema": {
+        "type": "object",
+        "required": ["added"],
+        "additionalProperties": false,
+        "properties": {
+          "added": {
+            "type": "array",
+            "items": { "$ref": "#/definitions/LogEntry" }
+          }
+        }
+      }
+    }
+  },
+  "errors": [
+    {
+      "code": "cursor.invalid",
+      "message": "The supplied cursor was not found in the current session. The client should restart subscription with no cursor.",
+      "http_status_equivalent": 410
+    },
+    {
+      "code": "stream.closed",
+      "message": "The backend closed the stream. The client may retry; a reconnect emits one diagnostic event.",
+      "http_status_equivalent": 503
+    }
+  ],
+  "definitions": {
+    "LogEntry": {
+      "type": "object",
+      "required": ["id", "time", "level", "source", "message"],
+      "additionalProperties": false,
+      "properties": {
+        "id": { "type": "string" },
+        "time": {
+          "type": "string",
+          "format": "date-time",
+          "description": "ISO-8601 UTC timestamp at server-side emission."
+        },
+        "level": {
+          "type": "string",
+          "enum": ["error", "warn", "info", "debug"]
+        },
+        "source": {
+          "type": "string",
+          "description": "Emitter tag. Workflow values include plans, lifecycle, inventory, settings, project. Diagnostic events use the literal 'diagnostic'."
+        },
+        "message": {
+          "type": "string",
+          "description": "Single-line human-readable summary. No newlines."
+        },
+        "request_id": {
+          "type": "string",
+          "description": "Operation id correlating one user intent across multiple events. Required for workflow events; optional for diagnostics."
+        },
+        "entity_type": {
+          "type": "string",
+          "description": "Referenced entity kind, when known. Examples: plan, project, target, source. Omitted for diagnostics."
+        },
+        "entity_id": {
+          "type": "string",
+          "description": "Stable id of the referenced entity. Required when entity_type is present."
+        }
+      }
+    }
+  }
+}

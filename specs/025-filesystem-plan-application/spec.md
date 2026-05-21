@@ -5,6 +5,101 @@
 **Status**: Draft  
 **Input**: User description: "Specify applying reviewed filesystem plans, including per-item outcomes, rollback where possible, progress, failures, and audit records."
 
+## Implementation Status
+
+A working **mockup** of plan apply exists in the desktop shell and informs this
+spec. Real (non-simulated) implementation has not started.
+
+### Mockup files
+
+- `apps/desktop/src/data/store.ts` — `simulateApply(planId)` walks
+  `pending → applying → succeeded/failed` item-by-item with a setTimeout tick
+  cadence; injects a deterministic failure every 30 items for demo realism;
+  computes the plan's terminal state (`applied`, `partially_applied`, or
+  `failed`) only after every item finishes; cancellation halts forward
+  progress because `tick` returns early when `plan.state !== "applying"`;
+  re-apply resets every non-failed item back to `pending` before progression.
+- `apps/desktop/src/features/plans/PlanDetailPage.tsx` — applying pane with
+  Needs Attention / Recently Applied / Pending sections, primary "Apply" /
+  "Cancel" actions, and disabled-while-applying guards.
+- `apps/desktop/src/data/store.ts` `updatePlanState` — generic transition used
+  for cancellation (`updatePlanState(plan.id, "cancelled")`).
+
+### Boundary with spec 017
+
+Spec **017 (Cleanup And Archive Review Plans)** owns plan generation, item
+preview, review, **approve**, and **discard**. It also owns `plan.retry`,
+which materialises a **new plan** from failed (or all) items of a terminal
+parent plan; that new plan returns to draft and follows the 017 review flow
+before reaching 025 again.
+
+Spec **025 (this feature)** owns:
+
+- The **apply executor** (the long-running operation that mutates the
+  filesystem).
+- **Item-level progression** semantics (`pending → applying → succeeded |
+  failed | skipped | cancelled`).
+- **Terminal state computation** for the plan (`applied`,
+  `partially_applied`, `failed`, `cancelled`).
+- **Cancellation** of an in-flight apply.
+- **Per-item skip** (only while still pending) and **per-item retry within a
+  running apply** (re-attempt a failed item without creating a new plan).
+- The **audit records** written per item attempt.
+
+`plan_id` and `item_id` shapes, the plan state machine pre-apply, and the
+retry-via-new-plan flow are shared with 017; this spec MUST NOT redefine them.
+
+### Item-progression semantics (from mockup)
+
+- A plan must be in `approved` before apply begins. The executor transitions
+  the plan to `applying` and processes items in plan order. Parallelism is a
+  research question; the mockup is strictly sequential.
+- Each item enters `applying`, then resolves to `succeeded`, `failed`, or
+  `skipped`. Items the user did not reach when cancelling resolve to
+  `cancelled`.
+- Counters (`itemsApplied`, `itemsFailed`, `itemsPending`) update after each
+  item resolves so the UI can render progress without polling per item.
+- Re-applying an `approved` plan re-runs items still in `pending`. Items in
+  `failed` are preserved across re-apply unless the user explicitly retries
+  them (item-level retry) or routes them through 017's `plan.retry` to a new
+  plan.
+
+### Cancellation behaviour
+
+- Cancellation is a user-initiated transition while the plan is `applying`.
+- The executor MUST finish the item that is currently `applying` (no torn
+  writes mid-rename or mid-copy) and MUST NOT start any further items.
+- Items already `succeeded`/`failed` keep their state. Untouched items move
+  from `pending` to `cancelled`.
+- The plan terminal state after cancellation is `cancelled` even if some
+  items succeeded; the audit log preserves which items applied so the user
+  can reason about partial progress.
+
+### Terminal-state computation
+
+After the last item resolves (or after cancellation halts progress) the
+executor computes the plan terminal state:
+
+- `applied`: every item is `succeeded` (and at least one item ran).
+- `partially_applied`: at least one `succeeded` and at least one `failed`,
+  with no `cancelled` items.
+- `failed`: at least one `failed` and zero `succeeded`.
+- `cancelled`: the run halted via cancellation; failures and successes
+  before cancellation are preserved on individual items.
+
+### Retry handoff to spec 017
+
+There are **two** retry pathways and they are distinct:
+
+1. **Per-item retry within a running apply (025)**: a failed item is
+   re-attempted in the same `applying` run. No new plan is created.
+2. **Plan-level retry after terminal (017)**: a terminal plan (`failed`,
+   `partially_applied`, `cancelled`) is the input to `plan.retry` in 017,
+   which materialises a fresh `draft` plan with the chosen items.
+
+Spec 025 MUST refuse to "retry" a terminal plan in place — that flow
+belongs to 017.
+
 ## User Scenarios & Testing *(mandatory)*
 
 ### User Story 1 - Apply A Reviewed Plan (Priority: P1)
@@ -19,7 +114,7 @@ As a user, I want to apply a reviewed filesystem plan only after approval so tha
 
 1. **Given** a plan is not approved, **When** the user tries to apply it, **Then** the app blocks the operation.
 2. **Given** a plan is approved, **When** the user applies it, **Then** each item shows progress and final outcome.
-3. **Given** an item fails, **When** apply completes, **Then** the plan state is partially failed and successful items remain recorded.
+3. **Given** an item fails, **When** apply completes, **Then** the plan state is `partially_applied` (if any item succeeded) or `failed` (if none did) and successful items remain recorded.
 
 ---
 
@@ -33,41 +128,76 @@ As a user, I want failures during plan application to be logged and recoverable 
 
 **Acceptance Scenarios**:
 
-1. **Given** a destination conflict appears during apply, **When** that item runs, **Then** the item fails with a reason and later items follow the plan policy.
+1. **Given** a destination conflict appears during apply, **When** that item runs, **Then** the item fails with a structured reason and later items follow the plan policy.
 2. **Given** rollback is possible for a failed operation, **When** rollback runs, **Then** rollback outcome is logged separately.
 3. **Given** rollback is not possible, **When** apply ends, **Then** the app clearly marks manual recovery steps.
 
+---
+
+### User Story 3 - Cancel An In-Flight Apply (Priority: P2)
+
+As a user, I want to stop an apply that is running so that I can intervene before more changes happen.
+
+**Independent Test**: Start applying a plan with many items, cancel while it is running, and confirm the plan terminal state is `cancelled`, finished items keep their outcomes, and remaining items move to `cancelled`.
+
+**Acceptance Scenarios**:
+
+1. **Given** a plan is `applying`, **When** the user cancels, **Then** the current item finishes and no further items start.
+2. **Given** the run was cancelled, **When** apply ends, **Then** the plan state is `cancelled` and per-item audit records preserve which items applied.
+
+---
+
+### User Story 4 - Per-Item Skip And Retry Within Apply (Priority: P3)
+
+As a user, I want to skip a pending item or retry a failed item without restarting the whole plan, so I can resolve issues incrementally.
+
+**Independent Test**: While a plan is `applying`, mark a pending item skipped (it transitions to `skipped` and is not executed) and retry a failed item (it transitions back to `applying`).
+
+**Acceptance Scenarios**:
+
+1. **Given** an item is `pending` during an active apply, **When** the user skips it, **Then** the item becomes `skipped` and is not executed.
+2. **Given** an item is `failed` during an active apply, **When** the user retries it, **Then** the item becomes `applying` again and the executor re-attempts it once.
+3. **Given** an item is not in the eligible state, **When** skip/retry is requested, **Then** the operation returns a structured error.
+
 ### Edge Cases
 
-- Source path disappears after review.
-- Destination path appears between review and apply.
-- User cancels while apply is running.
-- Permanent delete is included and requires confirmation.
+- Source path disappears between approval and apply.
+- Destination path appears between approval and apply.
+- User cancels while apply is running mid-item (current item must finish or fail cleanly; no torn write).
+- Permanent delete is included and requires destructive confirmation.
 - Some items are protected by source policy.
+- Re-apply of a plan that already has terminal failed items: only `pending` items run; `failed` items are preserved.
+- Approval token issued by 017 has been invalidated by a later plan edit.
 
 ### Domain Questions To Resolve
 
-- Default failure policy: stop on first failure or continue safe independent items.
-- Which operations support automatic rollback.
+- Default failure policy: stop on first failure or continue safe independent items. *(Default selected: continue; see research.md.)*
+- Which operations support automatic rollback. *(See research.md failure-mode taxonomy.)*
+- Whether per-volume parallelism is acceptable or whether v1 stays sequential.
 
 ## Requirements *(mandatory)*
 
 ### Functional Requirements
 
-- **FR-001**: Filesystem plans MUST require approval before apply.
-- **FR-002**: Apply MUST show progress and per-item outcomes.
-- **FR-003**: Apply MUST log request id, entity metadata, operation, and item outcome.
+- **FR-001**: Filesystem plans MUST require approval (an approval token issued by spec 017) before apply.
+- **FR-002**: Apply MUST show progress and per-item outcomes incrementally, not only at completion.
+- **FR-003**: Apply MUST log request id, entity metadata, operation, prior state, new state, and item outcome for every item state transition.
 - **FR-004**: Permanent delete items MUST require destructive confirmation immediately before apply.
-- **FR-005**: Failed items MUST retain retry context and failure reason.
-- **FR-006**: Partial success MUST result in a clear partially applied/partially failed state.
-- **FR-007**: Rollback attempts MUST be logged and may not be assumed to succeed.
+- **FR-005**: Failed items MUST retain a structured failure record (`code`, `message`, `recoverable`) and remain available for per-item retry within the current apply or for plan-level retry via 017.
+- **FR-006**: Partial success MUST result in `partially_applied`; total failure with zero successes MUST result in `failed`; cancellation MUST result in `cancelled` regardless of partial successes.
+- **FR-007**: Rollback attempts MUST be logged as separate audit events and MUST NOT be assumed to succeed.
 - **FR-008**: Source protection MUST be enforced during apply, not only during plan generation.
+- **FR-009**: Cancellation MUST halt forward progress; the currently `applying` item MUST be allowed to complete or fail; remaining `pending` items MUST become `cancelled`.
+- **FR-010**: Re-applying an `approved` plan MUST resume from items still in `pending` and MUST NOT silently re-run `succeeded` items.
+- **FR-011**: Apply MUST refuse if the approval token issued by 017 has been invalidated (`plan.approval.stale`).
 
 ### Key Entities
 
-- **Approved Filesystem Plan**: Review object authorized for apply.
+- **Approved Filesystem Plan**: Review object authorized for apply (owned by 017; consumed here).
 - **Plan Apply Run**: One execution attempt against a plan.
-- **Plan Item Outcome**: Success, skipped, blocked, failed, rolled back, or manual recovery needed.
+- **Plan Item Outcome**: `succeeded`, `failed`, `skipped`, `cancelled`, or `pending`.
+- **Plan Item Failure**: `{ code, message, recoverable }`.
+- **Plan Apply Event**: `{ plan_id, item_id, prior_state, new_state, at }` audit record.
 - **Rollback Outcome**: Result of any attempted reversal.
 
 ## Success Criteria *(mandatory)*
@@ -75,15 +205,19 @@ As a user, I want failures during plan application to be logged and recoverable 
 ### Measurable Outcomes
 
 - **SC-001**: A user can reconstruct every applied filesystem operation from the plan apply record.
-- **SC-002**: Partial failures never leave the plan with an ambiguous final state.
+- **SC-002**: Partial failures never leave the plan with an ambiguous final state (terminal state is always one of `applied`, `partially_applied`, `failed`, `cancelled`).
 - **SC-003**: Protected-source delete attempts are blocked or confirmed according to source policy.
+- **SC-004**: Cancelling an in-flight apply halts forward progress within one item, never starts a new item after cancel is observed.
 
 ## Assumptions
 
-- Plan generation and review are covered by cleanup/archive review plans.
+- Plan generation, review, approval, discard, and plan-level retry are owned by spec 017.
 - The app can record audit events even if filesystem mutation fails.
+- v1 apply is sequential within a single plan; parallelism is a research question.
 
 ## Out of Scope
 
 - Background scheduling.
 - Remote filesystem operations.
+- Plan-level retry (covered in spec 017 via `plan.retry`).
+- Plan generation, review, approve, and discard (spec 017).

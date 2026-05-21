@@ -1,0 +1,75 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://astro-plan.local/contracts/artifact.classify.json",
+  "title": "artifact.classify",
+  "description": "Manually override the classification of a processing artifact. Override is sticky: subsequent automatic re-classifications respect it until cleared.",
+  "type": "object",
+  "properties": {
+    "operation": { "const": "artifact.classify" },
+    "request": {
+      "type": "object",
+      "required": ["artifact_id", "kind"],
+      "additionalProperties": false,
+      "properties": {
+        "artifact_id": {
+          "type": "string",
+          "description": "Identifier of the artifact to override."
+        },
+        "kind": {
+          "type": "string",
+          "enum": ["intermediate", "master", "final"],
+          "description": "User-asserted classification."
+        },
+        "reason": {
+          "type": "string",
+          "maxLength": 500,
+          "description": "Optional free-form note for the audit trail."
+        }
+      }
+    },
+    "response": {
+      "type": "object",
+      "required": ["classified", "artifact_id", "kind", "classification_source", "classification_confidence"],
+      "additionalProperties": false,
+      "properties": {
+        "classified": {
+          "type": "boolean",
+          "description": "True when the override was applied."
+        },
+        "artifact_id": { "type": "string" },
+        "kind": {
+          "type": "string",
+          "enum": ["intermediate", "master", "final"]
+        },
+        "classification_source": {
+          "type": "string",
+          "enum": ["manual_override"]
+        },
+        "classification_confidence": {
+          "type": "number",
+          "const": 1.0
+        },
+        "updated_at": { "type": "string", "format": "date-time" }
+      }
+    },
+    "errors": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "required": ["code", "message"],
+        "properties": {
+          "code": {
+            "type": "string",
+            "enum": [
+              "artifact.not_found",
+              "artifact.kind_invalid",
+              "project.read_only"
+            ]
+          },
+          "message": { "type": "string" }
+        }
+      }
+    }
+  },
+  "required": ["operation", "request", "response"]
+}

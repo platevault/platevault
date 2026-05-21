@@ -1,0 +1,143 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://astro-plan.local/contracts/target.get.json",
+  "title": "target.get",
+  "description": "Read contract for the Target detail aggregate. Returns the Target record plus joined session and project history.",
+  "type": "object",
+  "oneOf": [
+    { "$ref": "#/$defs/Request" },
+    { "$ref": "#/$defs/Response" }
+  ],
+  "$defs": {
+    "ContractVersion": { "type": "string", "const": "1.0" },
+    "Uuid": { "type": "string", "format": "uuid" },
+    "Timestamp": { "type": "string", "format": "date-time" },
+    "Date": { "type": "string", "format": "date" },
+    "ProjectLifecycle": {
+      "type": "string",
+      "enum": [
+        "setup_incomplete",
+        "ready",
+        "prepared",
+        "processing",
+        "completed",
+        "archived",
+        "blocked"
+      ]
+    },
+    "ProcessingTool": {
+      "type": "string",
+      "enum": ["PixInsight", "Siril", "Planetary Suite"]
+    },
+    "CatalogRef": {
+      "type": "object",
+      "required": ["catalog", "designation"],
+      "additionalProperties": false,
+      "properties": {
+        "catalog": { "type": "string", "minLength": 1 },
+        "designation": { "type": "string", "minLength": 1 }
+      }
+    },
+    "Target": {
+      "type": "object",
+      "required": ["id", "primary", "aliases", "catalog_refs", "created_at", "updated_at"],
+      "additionalProperties": false,
+      "properties": {
+        "id": { "$ref": "#/$defs/Uuid" },
+        "primary": { "type": "string", "minLength": 1 },
+        "aliases": {
+          "type": "array",
+          "items": { "type": "string", "minLength": 1 }
+        },
+        "catalog_refs": {
+          "type": "array",
+          "items": { "$ref": "#/$defs/CatalogRef" }
+        },
+        "notes": { "type": "string" },
+        "created_at": { "$ref": "#/$defs/Timestamp" },
+        "updated_at": { "$ref": "#/$defs/Timestamp" }
+      }
+    },
+    "TargetSession": {
+      "type": "object",
+      "required": ["session_id", "captured_on", "inventory_id"],
+      "additionalProperties": false,
+      "properties": {
+        "session_id": { "$ref": "#/$defs/Uuid" },
+        "captured_on": { "$ref": "#/$defs/Date" },
+        "filter": { "type": "string" },
+        "exposure": { "type": "string" },
+        "frames": { "type": "integer", "minimum": 0 },
+        "inventory_id": { "$ref": "#/$defs/Uuid" }
+      }
+    },
+    "TargetProject": {
+      "type": "object",
+      "required": ["project_id", "name", "lifecycle", "tool"],
+      "additionalProperties": false,
+      "properties": {
+        "project_id": { "$ref": "#/$defs/Uuid" },
+        "name": { "type": "string", "minLength": 1 },
+        "lifecycle": { "$ref": "#/$defs/ProjectLifecycle" },
+        "tool": { "$ref": "#/$defs/ProcessingTool" }
+      }
+    },
+    "ErrorCode": {
+      "type": "string",
+      "enum": ["target.not_found", "actor.not_authorised"]
+    },
+    "ErrorEnvelope": {
+      "type": "object",
+      "required": ["code", "message"],
+      "additionalProperties": false,
+      "properties": {
+        "code": { "$ref": "#/$defs/ErrorCode" },
+        "message": { "type": "string" },
+        "details": { "type": "object", "additionalProperties": true }
+      }
+    },
+    "Request": {
+      "type": "object",
+      "required": ["contractVersion", "requestId", "target_id"],
+      "additionalProperties": false,
+      "properties": {
+        "contractVersion": { "$ref": "#/$defs/ContractVersion" },
+        "requestId": { "$ref": "#/$defs/Uuid" },
+        "target_id": { "$ref": "#/$defs/Uuid" }
+      }
+    },
+    "Response": {
+      "type": "object",
+      "required": ["status", "contractVersion", "requestId"],
+      "additionalProperties": false,
+      "properties": {
+        "status": { "type": "string", "enum": ["success", "error"] },
+        "contractVersion": { "$ref": "#/$defs/ContractVersion" },
+        "requestId": { "$ref": "#/$defs/Uuid" },
+        "target": { "$ref": "#/$defs/Target" },
+        "sessions": {
+          "type": "array",
+          "items": { "$ref": "#/$defs/TargetSession" }
+        },
+        "projects": {
+          "type": "array",
+          "items": { "$ref": "#/$defs/TargetProject" }
+        },
+        "error": { "$ref": "#/$defs/ErrorEnvelope" }
+      },
+      "allOf": [
+        {
+          "if": { "properties": { "status": { "const": "success" } } },
+          "then": {
+            "required": ["target", "sessions", "projects"],
+            "not": { "required": ["error"] }
+          }
+        },
+        {
+          "if": { "properties": { "status": { "const": "error" } } },
+          "then": { "required": ["error"] }
+        }
+      ]
+    }
+  }
+}

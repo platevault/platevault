@@ -1,0 +1,47 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://astro-plan/contracts/theme.set.json",
+  "title": "theme.set",
+  "description": "Set the user's chosen theme mode. The implementation persists the choice (localStorage in the desktop prototype; settings store in a future backend), applies it to the document root via the 'data-theme' attribute, and echoes the new mode plus the freshly resolved effective theme.",
+  "operation": {
+    "name": "theme.set",
+    "direction": "ui-to-core",
+    "version": "1"
+  },
+  "request": {
+    "type": "object",
+    "required": ["mode"],
+    "additionalProperties": false,
+    "properties": {
+      "mode": {
+        "type": "string",
+        "enum": ["system", "light", "dark"],
+        "description": "Desired theme mode."
+      }
+    }
+  },
+  "response": {
+    "type": "object",
+    "required": ["mode", "resolved"],
+    "additionalProperties": false,
+    "properties": {
+      "mode": {
+        "type": "string",
+        "enum": ["system", "light", "dark"],
+        "description": "The mode now in effect; equals the request 'mode' on success."
+      },
+      "resolved": {
+        "type": "string",
+        "enum": ["light", "dark"],
+        "description": "Effective theme after applying the new mode and (if 'system') resolving against the OS preference."
+      }
+    }
+  },
+  "errors": [
+    {
+      "code": "mode.unknown",
+      "message": "The supplied 'mode' value is not one of 'system', 'light', or 'dark'.",
+      "http_status_equivalent": 400
+    }
+  ]
+}

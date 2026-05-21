@@ -1,0 +1,104 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://astro-plan.local/contracts/target.lookup.json",
+  "title": "target.lookup",
+  "description": "Operation contract for looking up candidate Targets from a free-form query string. Returns a ranked list of TargetMatch records for the UI catalog picker. Source-of-truth schema for the Rust contract DTOs in crates/contracts/core/ and the generated TypeScript surface in packages/contracts/generated/.",
+  "type": "object",
+  "oneOf": [
+    { "$ref": "#/$defs/Request" },
+    { "$ref": "#/$defs/Response" },
+    { "$ref": "#/$defs/Error" }
+  ],
+  "$defs": {
+    "ContractVersion": {
+      "type": "string",
+      "const": "1.0"
+    },
+    "Uuid": {
+      "type": "string",
+      "format": "uuid"
+    },
+    "Confidence": {
+      "type": "string",
+      "enum": ["high", "medium", "low"]
+    },
+    "Strategy": {
+      "type": "string",
+      "enum": ["exact", "token_set", "edit_distance"]
+    },
+    "MatchEvidence": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["matched_alias", "normalized_query", "strategy", "score"],
+      "properties": {
+        "matched_alias": { "type": "string", "minLength": 1 },
+        "normalized_query": { "type": "string" },
+        "strategy": { "$ref": "#/$defs/Strategy" },
+        "score": { "type": "number", "minimum": 0, "maximum": 100 }
+      }
+    },
+    "TargetMatch": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["target_id", "confidence", "evidence"],
+      "properties": {
+        "target_id": { "$ref": "#/$defs/Uuid" },
+        "confidence": { "$ref": "#/$defs/Confidence" },
+        "evidence": { "$ref": "#/$defs/MatchEvidence" }
+      }
+    },
+    "Request": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["contract_version", "query"],
+      "properties": {
+        "contract_version": { "$ref": "#/$defs/ContractVersion" },
+        "query": {
+          "type": "string",
+          "description": "Free-form lookup query. Typically the raw FITS OBJECT value or a user-entered string."
+        },
+        "limit": {
+          "type": "integer",
+          "minimum": 1,
+          "maximum": 50,
+          "default": 10,
+          "description": "Maximum number of matches to return, ranked by confidence then score."
+        }
+      }
+    },
+    "Response": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["contract_version", "matches"],
+      "properties": {
+        "contract_version": { "$ref": "#/$defs/ContractVersion" },
+        "matches": {
+          "type": "array",
+          "items": { "$ref": "#/$defs/TargetMatch" },
+          "description": "Ranked candidate matches. Empty array indicates no candidates above the discard threshold."
+        }
+      }
+    },
+    "Error": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["contract_version", "error"],
+      "properties": {
+        "contract_version": { "$ref": "#/$defs/ContractVersion" },
+        "error": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["code", "message"],
+          "properties": {
+            "code": {
+              "type": "string",
+              "enum": ["query.empty", "catalog.unavailable"],
+              "description": "query.empty: the request omitted or whitespace-only query. catalog.unavailable: bundled catalog failed to load and lookup cannot proceed."
+            },
+            "message": { "type": "string", "minLength": 1 }
+          }
+        }
+      }
+    }
+  }
+}

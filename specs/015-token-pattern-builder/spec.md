@@ -2,8 +2,62 @@
 
 **Feature Branch**: `015-token-pattern-builder`  
 **Created**: 2026-05-09  
-**Status**: Draft  
+**Status**: Draft — mockup implemented for builder UI and preview
 **Input**: User description: "Specify the token-based pattern builder for project folders and archive locations, without freeform path text."
+
+## Implementation Status
+
+The visual and interactive surface of the builder is already realized in the
+desktop mockup. Logic for resolving a pattern against metadata, validating it
+against OS path rules, and persisting per-source overrides is **not yet
+implemented** and is in scope for this spec.
+
+### Mockup Evidence
+
+- `apps/desktop/src/ui/TokenPattern.tsx` — exports `TokenPatternBuilder`
+  (token + separator chips with add/remove menus), `PatternPreview` (list of
+  sample destination paths with optional frame counts), and `RenderPattern`
+  (inline read-only render of a pattern).
+- `apps/desktop/src/features/settings/SettingsPage.tsx` — `NamingStructureSection`
+  uses `TokenPatternBuilder` for the library default pattern, shows a
+  `PatternPreview` of representative destinations, exposes auto-apply and
+  always-preview toggles, and lists per-source override stubs.
+- `apps/desktop/src/data/mock.ts` — `availableTokens` enumerates the v1 token
+  vocabulary used by the builder.
+- `apps/desktop/src/data/settings.ts` — `SettingsState.pattern: PatternPart[]`
+  is the persisted shape; `DEFAULT_PATTERN` defines the seeded library default
+  (`{target}/{filter}/{date}/{frame_type}/`).
+
+### Token Vocabulary (v1)
+
+Sourced from `availableTokens` in `apps/desktop/src/data/mock.ts`:
+
+- `target` — primary acquisition target (catalog name or alias).
+- `filter` — optical filter used for the frame.
+- `date` — capture date (default `YYYY-MM-DD`).
+- `frame_type` — `light`, `dark`, `flat`, `bias`, or `mixed`.
+- `camera` — camera model.
+- `exposure` — exposure duration (formatted, e.g. `120s`).
+- `gain` — gain/ISO value.
+- `binning` — binning notation (e.g. `1x1`).
+- `set_temp` — set/sensor temperature (e.g. `-10C`).
+
+Telescope, project, and workflow tokens listed in FR-003 are **deferred** to a
+later spec; the v1 builder uses the vocabulary above.
+
+### Separator Vocabulary
+
+Sourced from `TokenPatternBuilder` defaults: `/`, `-`, `_`, and space. `/` is
+the only separator that introduces a new path segment; the others are
+treated as in-segment literals.
+
+### Preview Behavior
+
+`PatternPreview` accepts an array of `{ path, count }` rows. The mockup uses
+hand-curated sample destinations representative of the user's recent FITS;
+the live implementation MUST derive preview rows by resolving the current
+pattern against the most recent N inventory sessions per source, grouped by
+unique destination path, with a frame count per row.
 
 ## User Scenarios & Testing *(mandatory)*
 
@@ -13,71 +67,118 @@ As a user configuring naming, I want to build project folder patterns by selecti
 
 **Why this priority**: Freeform pattern text is unclear and error-prone.
 
-**Independent Test**: Build a pattern using target, project, date, camera, telescope, filter, and separators and confirm the preview updates.
+**Independent Test**: Build a pattern using target, filter, date, frame_type, camera, and separators and confirm the preview updates.
 
 **Acceptance Scenarios**:
 
 1. **Given** the pattern builder is open, **When** the user adds a metadata token, **Then** the token appears in the pattern preview.
-2. **Given** the user types a separator, **When** it is `/`, `-`, `_`, or space, **Then** it can be inserted between tokens.
+2. **Given** the user adds a separator, **When** it is `/`, `-`, `_`, or space, **Then** it appears between tokens in the rendered pattern.
+3. **Given** a pattern with `{target}/{filter}/`, **When** the user removes the `{filter}` chip, **Then** the preview reflects the shorter pattern immediately.
 
 ---
 
-### User Story 2 - Build Archive Location Pattern (Priority: P2)
+### User Story 2 - Live Preview Against Recent Metadata (Priority: P2)
 
-As a user configuring archive behavior, I want archive location patterns to use the same token builder so that cleanup/archive plans are consistent with project naming.
+As a user editing the pattern, I want to see how it resolves against my recent FITS so I can spot regressions before saving.
 
-**Why this priority**: Archive paths must be predictable before plan approval.
-
-**Independent Test**: Build an archive pattern and confirm a sample archive destination is shown.
+**Independent Test**: Edit the pattern and confirm the preview rows recompute with current sample frame counts.
 
 **Acceptance Scenarios**:
 
-1. **Given** an archive pattern, **When** sample metadata changes, **Then** the preview path updates.
-2. **Given** a path separator would create an invalid path, **When** the user attempts to insert it, **Then** the app prevents or warns.
+1. **Given** a pattern resolving to a path with a missing token, **When** the source metadata lacks a value, **Then** the preview row shows the configured fallback (e.g. `—` or `unclassified`).
+2. **Given** the pattern is empty, **When** the preview is requested, **Then** the preview displays a clear empty-state message and saving is blocked.
+
+---
+
+### User Story 3 - Resolve Pattern at Inbox Confirm (Priority: P3)
+
+As the application, when Inbox items are confirmed, I want to resolve the active pattern against each item's metadata to produce a destination relative path.
+
+**Independent Test**: Resolve a known pattern against a fixture metadata bundle and assert the produced relative path matches expectations.
+
+**Acceptance Scenarios**:
+
+1. **Given** a pattern `{target}/{filter}/{date}/{frame_type}/`, **When** resolved against `{target: M101, filter: Ha, date: 2026-04-12, frame_type: light}`, **Then** the relative path is `M101/Ha/2026-04-12/light/`.
+2. **Given** a token has no value, **When** resolved, **Then** the result includes the fallback and the missing-token list reports the absent token.
+3. **Given** a pattern produces a path containing OS-invalid characters, **When** validated, **Then** validation fails with `pattern.invalid` and the offending characters are reported.
+
+---
+
+### User Story 4 - Per-Source Override (Priority: P4)
+
+As a user with a legacy source whose existing layout differs, I want to override the library default pattern for that source only.
+
+**Independent Test**: Set an override pattern for one source and confirm Inbox items from other sources still resolve via the library default.
+
+**Acceptance Scenarios**:
+
+1. **Given** source A has an override pattern, **When** an Inbox item from source A is confirmed, **Then** its destination is resolved against the override.
+2. **Given** source B has no override, **When** an Inbox item from source B is confirmed, **Then** its destination is resolved against the library default.
+
+---
 
 ### Edge Cases
 
-- Missing metadata values.
-- Duplicate separators.
-- Invalid filesystem characters on Windows/macOS/Linux.
-- Extremely long generated paths.
+- Missing metadata values for one or more tokens.
+- Consecutive separators (e.g. `//`) produced by the user.
+- OS-invalid characters in resolved metadata values (`:`, `\`, `?`, `*`, etc.).
+- Extremely long generated paths (Windows MAX_PATH, POSIX 4096).
+- Empty pattern.
+- Trailing separator vs no trailing separator.
+- Unknown token name in a persisted pattern (vocabulary drift).
 
 ### Domain Questions To Resolve
 
-- Which metadata tokens are allowed in v1?
-- Should telescope represent optical tube, lens, or telescope configuration?
+See `research.md` for resolved decisions.
 
 ## Requirements *(mandatory)*
 
 ### Functional Requirements
 
 - **FR-001**: Project folder patterns MUST NOT be edited as unrestricted freeform text.
-- **FR-002**: Archive location patterns MUST NOT be edited as unrestricted freeform text.
-- **FR-003**: Builder MUST offer metadata tokens including target, project, date, camera, telescope, filter, and workflow.
-- **FR-004**: Builder MUST allow separators including `/`, `-`, `_`, and space.
-- **FR-005**: Builder MUST show a preview for representative metadata.
-- **FR-006**: Builder MUST validate generated paths against OS path rules before saving.
+- **FR-002**: Archive location patterns MUST NOT be edited as unrestricted freeform text and MUST reuse the same builder component (deferred to a later spec; vocabulary remains shared).
+- **FR-003**: Builder MUST offer metadata tokens from the v1 vocabulary: `target`, `filter`, `date`, `frame_type`, `camera`, `exposure`, `gain`, `binning`, `set_temp`.
+- **FR-004**: Builder MUST allow separators from the v1 set: `/`, `-`, `_`, space.
+- **FR-005**: Builder MUST show a preview of representative destination paths derived from recent metadata.
+- **FR-006**: Resolver MUST validate generated paths against OS path rules before any plan generation that consumes them.
+- **FR-007**: Resolver MUST substitute a documented fallback when a token has no value, and MUST report the missing tokens to the caller.
+- **FR-008**: Pattern MUST persist as an ordered list of `PatternPart` records, each tagged as `token` or `separator`.
+- **FR-009**: Builder MUST allow removing individual chips and reordering is **deferred** — v1 supports only append + remove.
+- **FR-010**: Library default pattern and per-source overrides MUST be persisted and editable in the Naming & Structure settings surface.
+- **FR-011**: When a persisted pattern references an unknown token name, the resolver MUST surface a `token.unknown` error rather than silently producing an empty segment.
 
 ### Key Entities
 
-- **Pattern Token**: A named metadata placeholder.
-- **Separator Token**: Literal separator inserted between metadata tokens.
-- **Pattern Preview**: Example generated path.
+- **PatternPart**: `{ id, kind: token|separator, value }` — the atomic unit of a pattern.
+- **Pattern**: ordered `PatternPart[]`.
+- **Token Definition**: name, source metadata field, optional fallback, optional value transform (e.g. date formatting).
+- **Pattern Preview Row**: `{ path, count? }` — a sampled resolution against representative metadata.
 
 ## Success Criteria *(mandatory)*
 
 ### Measurable Outcomes
 
-- **SC-001**: Users can create valid project and archive patterns without typing raw template syntax.
-- **SC-002**: Invalid pattern outputs are caught before they affect project creation or archive plans.
+- **SC-001**: Users can create valid project patterns without typing raw template syntax.
+- **SC-002**: Invalid pattern outputs (OS character violations, empty pattern, unknown tokens) are caught before they affect Inbox confirmation, plan generation, or archive plans.
 - **SC-003**: Users can identify all tokens available for folder naming from the UI.
+- **SC-004**: Preview reflects the current pattern within one frame of any edit (no save round-trip).
 
 ## Assumptions
 
-- Metadata tokens map to extracted or user-entered fields.
-- Missing metadata can be represented by fallback labels or validation warnings.
+- Metadata tokens map to extracted FITS/XISF fields or user-entered confirmations.
+- Missing metadata is represented by configurable fallback labels (see `research.md`).
+- The builder is not responsible for renaming existing files — only for resolving destination paths for new operations.
 
 ## Out of Scope
 
 - Arbitrary scripting or expression evaluation in patterns.
 - Automatic renaming of existing project folders.
+- Drag-to-reorder chips (deferred; v1 is append + remove).
+- Telescope / project / workflow tokens (deferred to a follow-up vocabulary spec).
+- Conditional pattern branches (e.g. "if frame_type is calibration, use a different sub-pattern") — deferred.
+
+## Dependencies
+
+- Spec 018 (Naming & Structure) consumes the persisted pattern and per-source overrides.
+- Spec 001 metadata extraction provides the field values resolved tokens read from.
+- `crates/project/structure/` will host the resolver and validator.

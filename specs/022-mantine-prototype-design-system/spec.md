@@ -1,108 +1,305 @@
-# Feature Specification: Mantine Prototype Design System
+# Feature Specification: Desktop Prototype Design System
 
-**Feature Branch**: `022-mantine-prototype-design-system`  
-**Created**: 2026-05-09  
-**Status**: Draft  
-**Input**: User description: "Specify that the prototype is Mantine-first, uses standard Mantine components and TanStack Table/Router, writes DESIGN.md, and avoids custom CSS or raw primitives unless necessary."
+**Feature Branch**: `022-mantine-prototype-design-system`
+**Created**: 2026-05-09
+**Last Revised**: 2026-05-20
+**Status**: Active (re-scoped from Mantine to Base UI)
+**Input**: Original user description: "Specify that the prototype is Mantine-first,
+uses standard Mantine components and TanStack Table/Router, writes DESIGN.md, and
+avoids custom CSS or raw primitives unless necessary." Revised after the
+design-system evaluation pass replaced Mantine with Base UI + a CSS-variable
+token system.
+
+## Supersession Notice
+
+The original Mantine-first direction is **superseded**. The prototype's
+design pass evaluated Mantine against alternatives and chose
+`@base-ui-components/react` (Base UI) plus a small, explicit set of
+companion libraries (`cmdk`, `react-resizable-panels`). The branch name
+and feature directory are kept for git history continuity, but the title
+and content reflect the actual implementation.
+
+**Why the direction changed**:
+
+1. **Token system fit**. The desktop already had a calibrated
+   CSS-variable token system (`apps/desktop/src/styles/tokens.css`)
+   covering color, typography, spacing, density, shadow, radius, and
+   timing across light/dark/system modes. Mantine wants to own its own
+   theme object and would have created two parallel sources of truth.
+2. **No Tailwind buy-in**. Several Mantine-adjacent design system kits
+   (shadcn/ui, Park UI) require Tailwind. The team explicitly does not
+   want a utility-class layer; component CSS files keyed to design
+   tokens are easier to audit against the constitution's "reviewable"
+   posture.
+3. **Headless behavior over styled components**. Base UI provides the
+   accessibility plumbing (focus traps, ARIA wiring, keyboard handling,
+   collision-aware popovers) without imposing visuals. The prototype
+   pages own visual decisions through `alm-*`-prefixed CSS classes that
+   read tokens.
+4. **MUI accessibility chops**. Base UI is maintained by the MUI team;
+   its primitives carry the same level of WCAG attention that Mantine
+   offers, without the styling assumptions.
+5. **Density and desktop affordances**. The product is a dense,
+   keyboard-driven desktop app. A custom command palette (`cmdk`), a
+   custom docked drawer (`react-resizable-panels`), and a custom data
+   table (`@tanstack/react-table` rendered through `alm-table-*` CSS)
+   give the prototype the desktop feel Mantine's defaults soften.
+
+The original FRs are not deleted; they are restated below in their
+revised form so future contributors do not re-litigate the choice.
 
 ## User Scenarios & Testing *(mandatory)*
 
-### User Story 1 - Use A Consistent Component System (Priority: P1)
+### User Story 1 - Single Design Token Source (Priority: P1)
 
-As a contributor, I want the prototype to be built from Mantine standard components so that the UI is consistent and not a collection of custom layouts.
+As a contributor styling a prototype page, I want every color,
+spacing, type, density, shadow, radius, and timing value to resolve to
+a CSS custom property defined in one tokens file so the look stays
+coherent and a future theme switch only touches that file.
 
-**Why this priority**: The user explicitly chose Mantine and asked to stop rolling custom primitive layouts.
+**Why this priority**: Without a single token source the design drifts
+the moment two contributors style adjacent components. The token
+system is the foundation every other story depends on.
 
-**Independent Test**: Inspect prototype source and confirm primary pages use Mantine layout, typography, form, menu, modal, table presentation, and feedback components rather than raw layout tags and custom CSS.
+**Independent Test**: Open `apps/desktop/src/styles/tokens.css` and a
+random component CSS file. Confirm component rules reference `var(--…)`
+tokens for color, spacing, radius, shadow, and motion, not hardcoded
+hex/px/ms values.
 
 **Acceptance Scenarios**:
 
-1. **Given** a page uses headings or body text, **When** source is inspected, **Then** it uses Mantine `Title` and `Text` unless there is a clear semantic reason not to.
-2. **Given** a page uses layout wrappers, **When** source is inspected, **Then** it uses Mantine `Stack`, `Group`, `Box`, `Paper`, `AppShell`, `Modal`, `Tabs`, `Accordion`, or equivalent.
-3. **Given** a custom CSS selector exists, **When** it is reviewed, **Then** it is justified as global theming, integration glue, or a layout case Mantine cannot express cleanly.
+1. **Given** a component CSS rule, **When** it sets a color or surface,
+   **Then** it uses a `--bg`/`--surface-*`/`--text-*`/`--border-*`
+   variable rather than a literal value.
+2. **Given** the dark theme is active, **When** `data-theme="dark"` is
+   set on `:root`, **Then** all tokens swap and no component needs
+   theme-aware overrides beyond what tokens express.
+3. **Given** a new color, spacing, or shadow is needed, **When** a
+   contributor adds it, **Then** they add a token first and reference
+   it from components, not the other way around.
 
 ---
 
-### User Story 2 - Preserve Table And Routing Architecture (Priority: P1)
+### User Story 2 - Headless Primitive Library (Priority: P2)
 
-As a contributor, I want tables and routes to use the selected specialist libraries so that table logic and navigation remain maintainable.
+As a contributor composing a page, I want a small set of accessible
+primitives (`Button`, `IconButton`, `TextInput`, `Select`, `Switch`,
+`Menu`, `Dialog`, `Tooltip`, `Accordion`, `Badge`, `Stepper`,
+`StateLabel`, `EmptyState`, `PageHeader`, `Filters`, `DataTable`,
+`DockedDrawer`, `DrawerShell`, `CommandPalette`, `LogPanel`,
+`TokenPattern`) under `apps/desktop/src/ui/` so I can build pages
+without re-deriving accessibility behavior.
 
-**Why this priority**: The settled stack is Mantine for UI, TanStack Table for table logic, and TanStack Router for routing.
+**Why this priority**: The primitives are what contributors reach for
+every day. They must exist, be uniform, and read tokens.
 
-**Independent Test**: Inspect Inventory, Inbox, and Projects tables for TanStack Table usage; inspect app navigation for TanStack Router usage.
+**Independent Test**: List `apps/desktop/src/ui/`. Confirm each
+primitive imports Base UI or another headless library where applicable,
+exposes a `className`-friendly surface, and has a matching block in
+`apps/desktop/src/styles/components.css` keyed by `alm-*` selectors.
 
 **Acceptance Scenarios**:
 
-1. **Given** a data ledger is implemented, **When** table source is inspected, **Then** TanStack Table owns row/filter/selection logic.
-2. **Given** navigation is implemented, **When** source is inspected, **Then** TanStack Router owns routes and links.
-3. **Given** a Mantine table is used, **When** table behavior changes, **Then** behavior is controlled through TanStack Table state rather than ad hoc DOM state.
+1. **Given** an interactive primitive (menu, dialog, tooltip,
+   accordion, select), **When** the source is inspected, **Then** it
+   wraps a Base UI headless primitive and applies `alm-*` CSS classes.
+2. **Given** the command palette, **When** the source is inspected,
+   **Then** it uses `cmdk` for fuzzy match plus a Base UI dialog for
+   modal/focus behavior.
+3. **Given** the docked drawer, **When** the source is inspected,
+   **Then** it composes `react-resizable-panels` with `alm-drawer-*`
+   visuals and respects the `--drawer-min-w`/`--drawer-max-w` tokens.
+4. **Given** a primitive is added or changed, **When** review runs,
+   **Then** the primitive does not bring in a styled-component runtime
+   or a CSS-in-JS dependency.
 
 ---
 
-### User Story 3 - Maintain DESIGN.md (Priority: P2)
+### User Story 3 - Composable Component Vocabulary (Priority: P3)
 
-As a future contributor, I want a DESIGN.md that documents the prototype design system so that future UI work follows the settled decisions.
+As a contributor building a ledger page, I want feature pages to compose
+the existing primitives (page header + filters + data table + drawer +
+empty state) without inventing one-off layouts.
 
-**Why this priority**: The user requested DESIGN.md as part of the prototype.
+**Why this priority**: Pages share strong layout conventions; ad hoc
+page shells were a major source of drift in earlier prototypes.
 
-**Independent Test**: Open DESIGN.md and confirm it documents register, component policy, layout, typography, color/theming, actions, table behavior, details panels, settings, onboarding, logs, and accessibility.
+**Independent Test**: Inspect Inventory, Inbox, Projects, and Plans
+pages. Confirm each uses `PageHeader`, `Filters`, `DataTable` (with
+`@tanstack/react-table` state), and `DockedDrawer`/`DrawerShell` for
+selection detail.
 
 **Acceptance Scenarios**:
 
-1. **Given** a contributor starts UI work, **When** they read DESIGN.md, **Then** they can identify Mantine/TanStack usage rules.
-2. **Given** a page needs a new component, **When** DESIGN.md is followed, **Then** the contributor first checks Mantine standard components before custom building.
-3. **Given** custom CSS is proposed, **When** DESIGN.md is followed, **Then** the contributor documents why it is necessary.
+1. **Given** a ledger page, **When** it renders, **Then** it composes
+   the primitives above instead of bespoke layout markup.
+2. **Given** a ledger page selects a row, **When** the drawer opens,
+   **Then** the drawer uses `DockedDrawer` and the page does not
+   re-implement resize, persist, or close behavior.
+3. **Given** a new ledger page is proposed, **When** review runs,
+   **Then** it is rejected if it does not reuse the page shell
+   primitives.
+
+---
+
+### User Story 4 - Theme Mode Switching (Priority: P4)
+
+As a user, I want to choose system / light / dark mode and have the
+app apply my choice immediately and across reloads.
+
+**Why this priority**: Theme switching is a small surface but a
+visible product affordance, and the contract for it is what locks the
+token system in place.
+
+**Independent Test**: Open Settings, switch between system, light, and
+dark. Confirm the entire app re-themes without reload and that the
+choice persists after a refresh.
+
+**Acceptance Scenarios**:
+
+1. **Given** the user picks "dark", **When** they reload, **Then** the
+   app starts in dark mode using the stored preference.
+2. **Given** the user picks "system", **When** the OS appearance
+   changes, **Then** the app follows without user action.
+3. **Given** a programmatic caller asks for the current theme, **When**
+   it calls `theme.get`, **Then** it receives `{mode, resolved}` per
+   the contract.
+4. **Given** a programmatic caller wants to change the theme, **When**
+   it calls `theme.set` with `system|light|dark`, **Then** the app
+   applies it and echoes the new `{mode, resolved}`.
 
 ### Edge Cases
 
-- Mantine lacks a required native desktop affordance.
-- Tauri native controls require small integration wrappers.
-- A semantic HTML element is required for accessibility.
-- A layout is not practical with Mantine props alone.
-- A component would become less accessible if forced through a generic primitive.
+- A primitive needs an affordance Base UI does not provide
+  (e.g. resizable docked panel) → compose a small headless companion
+  library (`react-resizable-panels`) instead of forking Base UI.
+- The host platform exposes a native control (Tauri title bar) →
+  integrate at the shell boundary, not inside a primitive.
+- The OS theme changes while the app is open and mode is "system" →
+  resolved theme updates without code in feature pages.
+- A future contributor wants to add Tailwind or CSS-in-JS → rejected;
+  components consume tokens through plain CSS files keyed to
+  `alm-*` classes.
+- A component needs a value not in tokens → add the token first.
 
 ### Domain Questions To Resolve
 
-- Which local wrapper components should be extracted after the prototype stabilizes.
-- Whether Mantine theme tokens should live in code, DESIGN.md, or both.
+- Whether the token vocabulary should be exported as a generated
+  TypeScript module for compile-time autocomplete in addition to CSS.
+- Whether the `alm-` prefix should be hardened with a CSS scope check
+  or remain a convention.
+- Whether DESIGN.md belongs at the repo root, in `docs/design/`, or in
+  `apps/desktop/`.
 
 ## Requirements *(mandatory)*
 
 ### Functional Requirements
 
-- **FR-001**: The prototype MUST use Mantine as the primary UI component system.
-- **FR-002**: The prototype MUST use TanStack Table for ledger/table behavior.
-- **FR-003**: The prototype MUST use TanStack Router for routing.
-- **FR-004**: The prototype MUST avoid custom CSS for layout and widgets unless necessary.
-- **FR-005**: The prototype MUST avoid raw `<p>`, `<h1>`, `<h2>`, `<h3>`, and generic layout primitives where Mantine equivalents are practical.
-- **FR-006**: Any remaining raw semantic element or custom CSS MUST be justified as accessibility, Tauri integration, global theming, or a Mantine limitation.
-- **FR-007**: DESIGN.md MUST exist and document the design system decisions.
-- **FR-008**: Prototype pages MUST use standard component affordances for buttons, menus, settings rows, modals, tabs, details, tables, filters, and onboarding.
-- **FR-009**: UI copy MUST use functional product language and avoid AI-flavored labels.
+- **FR-001**: The prototype MUST use `@base-ui-components/react` as the
+  headless primitive layer for menu, dialog, tooltip, accordion,
+  select, switch, and popover behavior.
+- **FR-002**: The prototype MUST use `cmdk` for command palette fuzzy
+  matching and keyboard navigation, composed with a Base UI dialog for
+  focus and overlay behavior.
+- **FR-003**: The prototype MUST use `react-resizable-panels` for the
+  docked drawer/detail pane in ledger pages.
+- **FR-004**: The prototype MUST use `@tanstack/react-table` for table
+  state (rows, columns, sort, filter, selection) and render it through
+  `DataTable` plus `alm-table-*` CSS classes.
+- **FR-005**: The prototype MUST use `@tanstack/react-router` for
+  routing, per spec 020.
+- **FR-006**: All visual decisions MUST resolve to CSS custom
+  properties declared in `apps/desktop/src/styles/tokens.css`. Hardcoded
+  colors, spacing, radii, shadows, and motion durations are not
+  permitted in component CSS.
+- **FR-007**: Component styles MUST live in `apps/desktop/src/styles/components.css`
+  and use the `alm-` class prefix.
+- **FR-008**: Reusable primitives MUST live under `apps/desktop/src/ui/`
+  with one file per primitive and a barrel export in `index.ts`.
+- **FR-009**: The prototype MUST NOT introduce Tailwind, CSS-in-JS
+  runtimes, or styled-components.
+- **FR-010**: The prototype MUST NOT introduce Mantine or shadcn/ui as
+  runtime dependencies. Existing references in older docs MUST be
+  treated as historical.
+- **FR-011**: Theme mode handling MUST support `system`, `light`, and
+  `dark`. The active mode MUST be reflected by `data-theme` on the
+  document root (or its absence for `system`).
+- **FR-012**: Theme switching MUST persist across reloads via
+  `localStorage` under the key `alm.theme`.
+- **FR-013**: The `theme.get` and `theme.set` contracts MUST describe
+  the UI-to-core boundary for theme reads and writes so a future
+  backend-driven settings layer can implement them without UI changes.
+- **FR-014**: Primitive component APIs MUST accept `className` and
+  spread remaining props onto the underlying root element to allow
+  feature pages to extend behavior without forking primitives.
+- **FR-015**: A `DESIGN.md` (or equivalent durable design doc) MUST
+  document token taxonomy, primitive vocabulary, page composition
+  rules, and the headless-library policy. Location is a domain
+  question (see above).
+- **FR-016**: UI copy MUST use functional product language and avoid
+  AI-flavored labels (carried from the original spec).
 
 ### Key Entities
 
-- **Design System Rule**: Documented decision that constrains UI implementation.
-- **Mantine Component Usage**: Standard component selected for layout, text, forms, menus, modals, and feedback.
-- **Custom CSS Exception**: Documented reason for a non-Mantine style.
-- **Prototype Route**: User-facing route implemented under the selected stack.
+- **Design Token**: A CSS custom property declared in `tokens.css` with
+  a name, value, theme variants (light/dark/system), and a category
+  (color, typography, spacing, density, shadow, radius, timing,
+  z-index, shell-metric).
+- **Primitive Component**: A `.tsx` file in `apps/desktop/src/ui/` that
+  wraps a headless library and exposes a token-driven visual surface.
+- **Component Style Block**: A rule set in `components.css` keyed by an
+  `alm-*` class that resolves only to tokens.
+- **Theme Mode**: One of `system`, `light`, `dark`.
+- **Resolved Theme**: One of `light`, `dark` — the concrete mode in
+  effect after resolving `system` against the OS preference.
 
 ## Success Criteria *(mandatory)*
 
 ### Measurable Outcomes
 
-- **SC-001**: Source grep finds no avoidable raw heading/body text primitives in primary prototype pages.
-- **SC-002**: Source grep finds no non-Mantine UI framework imports in the prototype.
-- **SC-003**: Typecheck passes after Mantine/TanStack migration.
-- **SC-004**: DESIGN.md explains enough for another agent to continue UI work without re-litigating the stack.
+- **SC-001**: A repository grep finds no Mantine, shadcn/ui, Tailwind,
+  or styled-components imports in `apps/desktop/`.
+- **SC-002**: A repository grep finds no hardcoded hex colors or `px`
+  spacing values in `apps/desktop/src/styles/components.css` outside
+  of token-emit lines and explicitly justified exceptions.
+- **SC-003**: Every primitive under `apps/desktop/src/ui/` either wraps
+  a Base UI / `cmdk` / `react-resizable-panels` element or is built on
+  semantic HTML with documented rationale.
+- **SC-004**: The desktop prototype's Inventory, Inbox, Projects, and
+  Plans pages each compose `PageHeader`, `Filters`, `DataTable`, and
+  `DockedDrawer`/`DrawerShell` rather than bespoke layout markup.
+- **SC-005**: Theme switching is observable in Playwright MCP: toggling
+  `system → light → dark` updates `:root[data-theme]` and persists on
+  reload.
 
 ## Assumptions
 
-- Mantine components can be styled through props/theme for most prototype needs.
-- Minimal global CSS remains acceptable for app-level theme variables and Tauri/browser integration glue.
+- The CSS custom property approach is sufficient for the prototype and
+  any planned production theme (no need for runtime theme objects).
+- A small set of headless libraries is preferable to one large styled
+  framework for a dense, keyboard-driven desktop app.
+- TanStack Router and TanStack Table remain the navigation/table
+  decisions (no change from the original spec).
+- DESIGN.md, when it lands, will reference this spec, spec 015 (token
+  pattern builder), and spec 020 (router/URL state) as anchors.
 
 ## Out of Scope
 
-- Building a full reusable component library.
-- Replacing Mantine internals.
+- A full themeable component library beyond what the desktop prototype
+  needs today.
+- Replacing Base UI internals or contributing back upstream.
 - Pixel-perfect final production visual design.
+- Mantine migration tooling (Mantine was never adopted at runtime).
+- Tailwind, CSS-in-JS, or styled-components adoption.
+- Multi-brand theming. Tokens describe one product brand; alternate
+  brands are a future research topic.
+
+## References
+
+- Original Mantine direction: see git history of this file (this is a
+  revision of the same `spec.md` rather than a separate retired file).
+- Spec 015 (token pattern builder) for naming-pattern tokens.
+- Spec 020 (router and URL state) for the routing decision.
+- Implementation evidence: `apps/desktop/src/ui/`,
+  `apps/desktop/src/styles/{tokens,reset,components}.css`,
+  `apps/desktop/src/app/theme.tsx`.

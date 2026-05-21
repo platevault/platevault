@@ -1,0 +1,72 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://astro-plan.local/contracts/project.manifest.list.json",
+  "title": "project.manifest.list",
+  "description": "List manifest snapshots for a project, ordered newest first.",
+  "type": "object",
+  "properties": {
+    "operation": { "const": "project.manifest.list" },
+    "request": {
+      "type": "object",
+      "required": ["project_id"],
+      "additionalProperties": false,
+      "properties": {
+        "project_id": {
+          "type": "string",
+          "description": "Identifier of the project whose manifests to list."
+        }
+      }
+    },
+    "response": {
+      "type": "object",
+      "required": ["manifests"],
+      "additionalProperties": false,
+      "properties": {
+        "manifests": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "required": ["id", "reason", "timestamp", "path", "has_body"],
+            "additionalProperties": false,
+            "properties": {
+              "id": { "type": "string" },
+              "reason": {
+                "type": "string",
+                "enum": [
+                  "created",
+                  "source_change",
+                  "lifecycle_transition",
+                  "cleanup_applied"
+                ]
+              },
+              "timestamp": { "type": "string", "format": "date-time" },
+              "path": {
+                "type": "string",
+                "description": "Project-relative path, typically under notes/."
+              },
+              "has_body": {
+                "type": "boolean",
+                "description": "True when the manifest carries an expandable body."
+              }
+            }
+          }
+        }
+      }
+    },
+    "errors": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "required": ["code", "message"],
+        "properties": {
+          "code": {
+            "type": "string",
+            "enum": ["project.not_found"]
+          },
+          "message": { "type": "string" }
+        }
+      }
+    }
+  },
+  "required": ["operation", "request", "response"]
+}

@@ -1,0 +1,49 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://astro-plan.local/contracts/project.note.update.json",
+  "title": "project.note.update",
+  "description": "Replace the project's notes body with the provided content.",
+  "type": "object",
+  "properties": {
+    "operation": { "const": "project.note.update" },
+    "request": {
+      "type": "object",
+      "required": ["project_id", "content"],
+      "additionalProperties": false,
+      "properties": {
+        "project_id": { "type": "string" },
+        "content": {
+          "type": "string",
+          "description": "Full replacement markdown body. Empty string clears the notes."
+        }
+      }
+    },
+    "response": {
+      "type": "object",
+      "required": ["updated_at"],
+      "additionalProperties": false,
+      "properties": {
+        "updated_at": {
+          "type": "string",
+          "format": "date-time",
+          "description": "Server-recorded save timestamp."
+        }
+      }
+    },
+    "errors": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "required": ["code", "message"],
+        "properties": {
+          "code": {
+            "type": "string",
+            "enum": ["project.not_found", "project.read_only"]
+          },
+          "message": { "type": "string" }
+        }
+      }
+    }
+  },
+  "required": ["operation", "request", "response"]
+}

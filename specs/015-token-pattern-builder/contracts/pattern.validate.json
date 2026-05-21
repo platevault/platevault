@@ -1,0 +1,83 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "astro-plan/contracts/pattern.validate",
+  "title": "pattern.validate",
+  "description": "Structural validation of a token pattern, without resolving against metadata.",
+  "type": "object",
+  "definitions": {
+    "PatternPart": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["id", "kind", "value"],
+      "properties": {
+        "id": { "type": "string", "minLength": 1 },
+        "kind": { "type": "string", "enum": ["token", "separator"] },
+        "value": { "type": "string", "minLength": 1 }
+      }
+    }
+  },
+  "properties": {
+    "request": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["pattern"],
+      "properties": {
+        "pattern": {
+          "type": "array",
+          "items": { "$ref": "#/definitions/PatternPart" }
+        }
+      }
+    },
+    "response": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["valid", "warnings"],
+      "properties": {
+        "valid": { "type": "boolean" },
+        "warnings": {
+          "type": "array",
+          "items": {
+            "type": "string",
+            "enum": [
+              "consecutive_separators",
+              "leading_separator",
+              "trailing_separator",
+              "no_path_separator"
+            ]
+          }
+        }
+      }
+    },
+    "errors": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "pattern.empty": {
+          "description": "Pattern contains zero parts.",
+          "type": "object",
+          "required": ["code", "message"],
+          "properties": {
+            "code": { "const": "pattern.empty" },
+            "message": { "type": "string" }
+          }
+        },
+        "token.unknown": {
+          "description": "Pattern references a token name not present in the registry.",
+          "type": "object",
+          "required": ["code", "message"],
+          "properties": {
+            "code": { "const": "token.unknown" },
+            "message": { "type": "string" },
+            "details": {
+              "type": "object",
+              "properties": {
+                "token": { "type": "string" }
+              }
+            }
+          }
+        }
+      }
+    }
+  },
+  "required": ["request", "response", "errors"]
+}

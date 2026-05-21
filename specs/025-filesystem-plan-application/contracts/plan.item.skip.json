@@ -1,0 +1,50 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://astro-plan.dev/contracts/025/plan.item.skip.json",
+  "title": "plan.item.skip",
+  "description": "Skip a still-pending plan item during an active apply. The item transitions from pending to skipped and is not executed. Owned by spec 025.",
+  "type": "object",
+  "properties": {
+    "request": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["plan_id", "item_id"],
+      "properties": {
+        "plan_id": { "type": "string" },
+        "item_id": { "type": "string" }
+      }
+    },
+    "response": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["item_id", "new_state"],
+      "properties": {
+        "item_id": { "type": "string" },
+        "new_state": { "const": "skipped" }
+      }
+    },
+    "errors": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "required": ["code"],
+        "properties": {
+          "code": {
+            "type": "string",
+            "enum": [
+              "plan.not_found",
+              "plan.not_in_apply",
+              "item.not_found",
+              "item.not_pending"
+            ]
+          },
+          "message": { "type": "string" },
+          "current_item_state": {
+            "type": "string",
+            "description": "Returned on item.not_pending."
+          }
+        }
+      }
+    }
+  }
+}

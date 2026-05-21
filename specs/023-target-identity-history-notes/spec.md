@@ -5,52 +5,120 @@
 **Status**: Draft  
 **Input**: User description: "Specify target identity, aliases, target history, observing-plan references, and notes as bounded follow-on features beyond FITS OBJECT lookup."
 
+## Implementation Status: NOT IMPLEMENTED
+
+Targets exist as a data model concept (cross-referenced from spec 013 FITS
+`OBJECT` lookup), but no dedicated UI route, alias workflow, history view, or
+note editor exists yet. Targets are intentionally **not** a top-level
+navigation surface. Target detail is reachable only via:
+
+- Global Cmd+K search (alias-aware lookup).
+- Deep links from Inventory rows (acquired-on records).
+- Deep links from Project detail (sources/targets references).
+
+This spec defines the durable target identity model and the detail route that
+those entry points open into.
+
 ## User Scenarios & Testing *(mandatory)*
 
-### User Story 1 - Resolve Target Identity (Priority: P1)
+### User Story 1 - View Target Identity (Priority: P1)
 
-As a user, I want target records to keep a stable identity with aliases and catalog references so that sessions and projects using different names can still be connected.
+As a user, I want to open a target detail page from Cmd+K, an Inventory row,
+or a Project source so I can see canonical identity (primary name, catalog
+refs, aliases) without targets becoming a primary nav destination.
 
-**Why this priority**: FITS `OBJECT` lookup is only a hint. The durable product model needs target identity and history.
+**Why this priority**: Identity resolution is the foundation; everything else
+(history, projects-per-target, notes) hangs off a stable target id.
 
-**Independent Test**: Import sessions with `OBJECT=M31`, `OBJECT=Andromeda Galaxy`, and a manually selected Messier entry; confirm they can link to one target record with preserved aliases.
+**Independent Test**: Search "M31" in Cmd+K, open the resulting target detail
+at `/targets/$targetId`; confirm primary name, aliases, and catalog references
+render. Repeat the entry from an Inventory item and a Project source link.
 
 **Acceptance Scenarios**:
 
-1. **Given** multiple names refer to the same target, **When** the user reviews target suggestions, **Then** the app can link them to one target identity.
-2. **Given** a user manually corrects a target, **When** the correction is saved, **Then** the original hint remains visible in provenance.
-3. **Given** a target has catalog aliases, **When** the target is opened, **Then** aliases and catalog identifiers are listed separately from notes.
+1. **Given** multiple names refer to the same target, **When** the user opens
+   target detail, **Then** all aliases and catalog identifiers are listed.
+2. **Given** a user manually corrects a target alias, **When** the correction
+   is saved, **Then** the original FITS `OBJECT` hint remains visible in
+   provenance.
+3. **Given** a target has catalog aliases, **When** the target is opened,
+   **Then** aliases and catalog identifiers are listed separately from notes.
+4. **Given** Targets is not in primary nav, **When** the user inspects the app
+   shell, **Then** no top-level Targets entry exists; access is only via
+   Cmd+K, Inventory, or Project links.
 
 ---
 
-### User Story 2 - See Target History (Priority: P2)
+### User Story 2 - See Sessions Over Time (Priority: P2)
 
-As a user, I want to see target history across sessions and projects so that I understand what data I already have and what remains to process.
+As a user, I want to see every acquisition session linked to a target ordered
+by capture date so I understand what data I have already collected across
+years and which gaps remain.
 
-**Why this priority**: Target history connects Inventory, sessions, and projects without making Targets a primary navigation destination.
+**Why this priority**: Multi-year acquisition history is the primary reason
+target detail exists; users plan continuation by reviewing prior captures.
 
-**Independent Test**: Open target detail from an Inventory item or project and confirm linked sessions, projects, notes, and observing-plan references are visible.
+**Independent Test**: For a target with sessions captured in three different
+years, open target detail and confirm the sessions section lists each session
+grouped/ordered by `captured_on` with filter, exposure, and frame counts.
 
 **Acceptance Scenarios**:
 
-1. **Given** a target has linked sessions, **When** target detail opens, **Then** acquisition history is shown by session/date/source.
-2. **Given** a target has linked projects, **When** target detail opens, **Then** project references and lifecycle state are shown.
-3. **Given** a target has notes, **When** notes are edited, **Then** changes are saved with audit metadata.
+1. **Given** a target has linked sessions across multiple years, **When**
+   target detail opens, **Then** sessions render in reverse-chronological
+   order with date, filter, and frame summary.
+2. **Given** a session row is selected, **When** the user activates it,
+   **Then** the app deep-links to the corresponding Inventory item.
+3. **Given** a target has no sessions yet, **When** detail opens, **Then** an
+   explicit empty state explains that imports will appear here.
 
 ---
 
-### User Story 3 - Link Observing Plan References (Priority: P3)
+### User Story 3 - See Projects Per Target (Priority: P3)
 
-As a user, I want to attach observing-plan references to a target or session so that capture planning context can be preserved without making the app a planning tool.
+As a user, I want to see every project that uses a target so I can pivot from
+acquisition history to processing state for the same object.
 
-**Why this priority**: Observing-plan references were identified in the story inventory but should remain contextual.
+**Why this priority**: Connecting acquisition to processing per target makes
+"have I already worked on this" answerable from one screen.
 
-**Independent Test**: Attach a NINA plan reference to a target/session and confirm it appears in target history and project context.
+**Independent Test**: Create two projects that reference the same target; open
+target detail and confirm both projects appear with their lifecycle state and
+link out to project detail.
 
 **Acceptance Scenarios**:
 
-1. **Given** an observing-plan file or reference exists, **When** the user links it, **Then** it is recorded as a contextual reference.
-2. **Given** a linked reference is missing, **When** target detail opens, **Then** the app shows a missing-reference warning without deleting history.
+1. **Given** a target has one or more projects, **When** target detail opens,
+   **Then** a Projects section lists each project with its lifecycle state.
+2. **Given** a project is archived, **When** the projects list renders,
+   **Then** the archived lifecycle tone is visible.
+3. **Given** a project is opened from the list, **When** the user activates a
+   row, **Then** the app navigates to that project's detail route.
+
+---
+
+### User Story 4 - Observing Notes Per Target (Priority: P4)
+
+As a user, I want to keep free-text observing notes per target so I can
+record seeing, framing intent, plate-scale plans, or capture problems that
+should persist across sessions.
+
+**Why this priority**: Notes are useful but lower priority than identity,
+history, and projects.
+
+**Independent Test**: Edit the notes field on a target, refresh, and confirm
+content persists with an updated-at timestamp; verify a per-session note
+(spec 005) remains distinct from the per-target note.
+
+**Acceptance Scenarios**:
+
+1. **Given** a target detail is open, **When** the user edits the notes
+   field and saves, **Then** the note is stored and `updated_at` is refreshed.
+2. **Given** per-target and per-session notes both exist, **When** target
+   detail renders, **Then** the per-target note is shown and per-session
+   notes remain attached to their session rows.
+3. **Given** a target name is later corrected, **When** the alias edit
+   completes, **Then** the per-target note survives unchanged.
 
 ### Edge Cases
 

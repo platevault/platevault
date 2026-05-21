@@ -1,0 +1,54 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://astro-plan.dev/contracts/025/plan.cancel.json",
+  "title": "plan.cancel",
+  "description": "Cancel an in-flight plan apply. The currently-applying item is allowed to finish; remaining pending items transition to cancelled. Owned by spec 025.",
+  "type": "object",
+  "properties": {
+    "request": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["plan_id"],
+      "properties": {
+        "plan_id": { "type": "string" }
+      }
+    },
+    "response": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["plan_id", "cancelled_at", "items_applied", "items_pending_skipped"],
+      "properties": {
+        "plan_id": { "type": "string" },
+        "cancelled_at": { "type": "string", "format": "date-time" },
+        "items_applied": {
+          "type": "integer",
+          "minimum": 0,
+          "description": "Number of items that completed (succeeded or failed) before cancellation took effect."
+        },
+        "items_pending_skipped": {
+          "type": "integer",
+          "minimum": 0,
+          "description": "Number of items that were still pending and were transitioned to cancelled."
+        }
+      }
+    },
+    "errors": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "required": ["code"],
+        "properties": {
+          "code": {
+            "type": "string",
+            "enum": ["plan.not_found", "plan.not_in_apply", "plan.terminal"]
+          },
+          "message": { "type": "string" },
+          "current_state": {
+            "type": "string",
+            "description": "Returned on plan.not_in_apply and plan.terminal."
+          }
+        }
+      }
+    }
+  }
+}

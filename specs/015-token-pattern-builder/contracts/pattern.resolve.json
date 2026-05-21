@@ -1,0 +1,103 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "astro-plan/contracts/pattern.resolve",
+  "title": "pattern.resolve",
+  "description": "Resolve a token pattern against a metadata bundle to produce a relative destination path.",
+  "type": "object",
+  "definitions": {
+    "PatternPart": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["id", "kind", "value"],
+      "properties": {
+        "id": { "type": "string", "minLength": 1 },
+        "kind": { "type": "string", "enum": ["token", "separator"] },
+        "value": { "type": "string", "minLength": 1 }
+      }
+    },
+    "MetadataBundle": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "target":     { "type": "string" },
+        "filter":     { "type": "string" },
+        "date":       { "type": "string", "description": "ISO YYYY-MM-DD (UTC)" },
+        "frame_type": { "type": "string", "enum": ["light", "dark", "flat", "bias", "mixed"] },
+        "camera":     { "type": "string" },
+        "exposure":   { "type": "string" },
+        "gain":       { "type": "string" },
+        "binning":    { "type": "string" },
+        "set_temp":   { "type": "string" }
+      }
+    }
+  },
+  "properties": {
+    "request": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["pattern", "metadata"],
+      "properties": {
+        "pattern": {
+          "type": "array",
+          "minItems": 1,
+          "items": { "$ref": "#/definitions/PatternPart" }
+        },
+        "metadata": { "$ref": "#/definitions/MetadataBundle" }
+      }
+    },
+    "response": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["relative_path", "missing_tokens"],
+      "properties": {
+        "relative_path": {
+          "type": "string",
+          "description": "Forward-slash relative path; never starts with a drive letter or root anchor."
+        },
+        "missing_tokens": {
+          "type": "array",
+          "items": { "type": "string" },
+          "description": "Token names that were substituted via fallback."
+        }
+      }
+    },
+    "errors": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "pattern.invalid": {
+          "description": "Resolved path violates OS path rules (invalid characters survived sanitization or path exceeded length limits).",
+          "type": "object",
+          "required": ["code", "message"],
+          "properties": {
+            "code": { "const": "pattern.invalid" },
+            "message": { "type": "string" },
+            "details": {
+              "type": "object",
+              "properties": {
+                "violating_chars": { "type": "array", "items": { "type": "string" } },
+                "resolved_length": { "type": "integer" }
+              }
+            }
+          }
+        },
+        "token.unknown": {
+          "description": "Pattern references a token name not present in the registry.",
+          "type": "object",
+          "required": ["code", "message"],
+          "properties": {
+            "code": { "const": "token.unknown" },
+            "message": { "type": "string" },
+            "details": {
+              "type": "object",
+              "properties": {
+                "token": { "type": "string" }
+              }
+            }
+          }
+        }
+      }
+    }
+  },
+  "required": ["request", "response", "errors"]
+}

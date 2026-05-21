@@ -2,110 +2,263 @@
 
 **Feature Branch**: `003-first-run-source-setup`  
 **Created**: 2026-05-09  
-**Status**: Draft  
+**Last Updated**: 2026-05-20  
+**Status**: Draft (mockup wired)  
 **Input**: User description: "Specify the one-time setup wizard for selecting initial data sources, validating selections, starting guided first steps, and restarting setup later."
+
+## Implementation Status
+
+The mockup wiring already exists in the desktop shell. The spec must match the
+behavior described in these files. Anything beyond the mockup is still
+unimplemented and must be marked accordingly in `plan.md` and `tasks.md`.
+
+Wired files (mockup-only — no Tauri picker, no SQLite persistence):
+
+- `apps/desktop/src/features/welcome/WelcomePage.tsx` — sequential 6-step
+  wizard: Welcome → Raw Sources → Calibration Sources → Project Sources →
+  Inbox Sources → Finish. Uses an in-memory list, a stubbed
+  `pickFolderStub(kind)` returning canned paths, and persists the working
+  list to `localStorage` under `alm.first-run.sources`. Only the Raw step
+  enforces "at least one entry"; Calibration, Project, and Inbox are
+  advance-without-entry. Finish writes the flag `alm.first-run.completed=1`
+  and navigates to `/inventory`.
+- `apps/desktop/src/app/router.tsx` — the index route (`/`) inspects
+  `alm.first-run.completed` and redirects to `/welcome` when unset, or
+  `/inventory` when set. The wizard route is `/welcome` and is not part of
+  the main navigation chrome.
+- `apps/desktop/src/features/settings/SettingsPage.tsx` — a "Restart
+  first-run wizard" button removes both `alm.first-run.completed` and
+  `alm.first-run.sources` from `localStorage`, then navigates to
+  `/welcome`. This is a destructive reset, not a prefill.
+
+The mockup is intentionally thin: it does not validate that a path exists, is a
+directory, is readable, or is unique across kinds, and it does not write to the
+library database. Full behavior described below MUST be delivered against a
+Tauri-backed picker and the persistence boundary, replacing the stubs.
 
 ## User Scenarios & Testing *(mandatory)*
 
-### User Story 1 - Select Required Sources (Priority: P1)
+### User Story 1 - Land On The Wizard On First Launch (Priority: P1)
 
-As a new user, I want setup to require at least one selected source for each required source category so that the app starts with usable scan inputs.
+As a new user opening Astro Library Manager for the first time, I want the app
+to take me straight to setup so that I don't accidentally land on an empty
+Inventory view that has nothing to show.
 
-**Why this priority**: Setup must prevent empty configuration that makes guided first steps impossible.
+**Why this priority**: Without a first-run gate, the app's primary surfaces
+(Inventory, Inbox, Projects) have no source roots to scan and look broken.
 
-**Independent Test**: Attempt to proceed through setup without selecting a directory for each required source category and confirm the wizard blocks progress with row-level errors.
+**Independent Test**: Clear the library state, open the app, and confirm the
+index route redirects to `/welcome` and the wizard opens on the Welcome step.
 
 **Acceptance Scenarios**:
 
-1. **Given** a source step with no selected directory, **When** the user clicks Next, **Then** the wizard highlights the missing row and stays on the step.
-2. **Given** all required source rows have directories, **When** the user clicks Next, **Then** the wizard advances.
+1. **Given** a fresh install (no completion flag), **When** the user opens
+   the app, **Then** the index route navigates to `/welcome` and the Welcome
+   step renders first.
+2. **Given** a completed first-run (flag set), **When** the user opens the
+   app, **Then** the index route navigates to `/inventory` and the wizard is
+   not shown.
+3. **Given** the wizard is open, **When** the user moves through steps,
+   **Then** progress is visible via a stepper and step counter (`Step N of M`).
 
 ---
 
-### User Story 2 - Continue To Guided First Steps (Priority: P2)
+### User Story 2 - Register Source Roots By Category (Priority: P2)
 
-As a user completing setup, I want setup to finish after valid source roots are selected so that the guided flow can scan Inbox material and onboard the first project through real app actions.
+As a new user, I want to register source directories grouped by category (Raw,
+Calibration, Project, Inbox) so that downstream scanning, calibration matching,
+and project envelopes know where to look.
 
-**Why this priority**: Users need a short setup path; detailed scan review belongs in the Inbox and project workflows where the user can act on real items.
+**Why this priority**: Source roots are the entry point for every other
+workflow. Without them the rest of the app is inert.
 
-**Independent Test**: Select sample source directories, finish setup, and confirm the guided first-step flow starts at the Inbox scan action.
+**Independent Test**: Walk through the four source steps, add at least one Raw
+source and zero or more of each other kind, finish the wizard, and confirm the
+registered sources are visible (in localStorage during the mockup; in the
+library DB once the persistence task lands).
 
 **Acceptance Scenarios**:
 
-1. **Given** valid source paths, **When** the user reaches the final source step, **Then** Finish setup is available.
-2. **Given** setup is finished, **When** the wizard closes, **Then** the guided first-step flow starts and highlights the real Inbox scan action.
-3. **Given** the guided flow reaches project setup, **When** the user configures the sample project, **Then** they must select light sessions, darks, and bias through the project setup pane.
+1. **Given** the Raw Sources step with zero entries, **When** the user
+   clicks Next, **Then** the wizard blocks advancement and surfaces "No raw
+   sources yet. Add at least one to continue."
+2. **Given** the Raw Sources step with at least one entry, **When** the user
+   clicks Next, **Then** the wizard advances to Calibration Sources.
+3. **Given** the Calibration, Project, or Inbox steps with zero entries,
+   **When** the user clicks Next, **Then** the wizard advances without
+   blocking. [NEEDS DECISION: confirm Project remains optional given that
+   downstream project workflows expect a project source root.]
+4. **Given** a source step with a directory chosen via the native picker,
+   **When** the user adds it, **Then** the directory appears in the list for
+   that kind and can be removed inline.
+5. **Given** the Finish step, **When** the user clicks Finish, **Then** the
+   completion flag is set, registered sources are persisted to the library
+   store, and the app navigates to `/inventory`.
 
 ---
 
-### User Story 3 - Restart Setup Later (Priority: P3)
+### User Story 3 - Restart Setup From Settings (Priority: P3)
 
-As a user, I want to restart the setup wizard from Settings so that I can correct first-run source choices.
+As a user who has already completed setup, I want a clear entry point to
+restart the wizard so that I can correct a wrong source or onboard a new drive
+without hunting for hidden affordances.
 
-**Why this priority**: Users asked how to reinitiate setup and expect a clear entry point.
+**Why this priority**: Users explicitly asked how to reach setup again after
+finishing it; without an obvious entry point they reach for app uninstall.
 
-**Independent Test**: Use Settings to restart setup and confirm the wizard opens without creating a permanent main navigation screen.
+**Independent Test**: Complete setup, open Settings, click "Restart first-run
+wizard", and confirm the wizard opens at the Welcome step.
 
 **Acceptance Scenarios**:
 
-1. **Given** setup has completed, **When** the user chooses Restart setup in Settings, **Then** the setup wizard opens.
-2. **Given** setup is restarted, **When** the user completes it, **Then** source settings update and the wizard closes.
+1. **Given** a completed first-run, **When** the user clicks "Restart
+   first-run wizard" in Settings, **Then** the completion flag is cleared
+   and the app navigates to `/welcome`.
+2. **Given** the restarted wizard, **When** the user completes it again,
+   **Then** the new source set is persisted and the completion flag is set.
+3. **Given** the restart action, **When** it runs in the mockup, **Then**
+   both the flag and the working source list are cleared. [NEEDS DECISION:
+   confirm restart should be destructive (clear all previously registered
+   sources) versus prefill (load existing sources into the wizard for
+   editing). Mockup currently does a destructive reset.]
+
+---
+
+### User Story 4 - Understand Each Source Category (Priority: P4)
+
+As a new user unfamiliar with the app, I want each source step to explain what
+that category is for and what I should select so that I don't conflate Raw with
+Calibration or pick the wrong root.
+
+**Why this priority**: Wrong source assignment at first-run propagates into
+calibration matching errors and project envelope confusion later, which is
+expensive to undo.
+
+**Independent Test**: Open each source step and confirm the step copy explains
+the category, gives an example of what to select, and clarifies whether the
+step is required.
+
+**Acceptance Scenarios**:
+
+1. **Given** the Raw step, **When** it renders, **Then** the copy explains
+   raw lights/darks/flats/bias storage and states that the step is required.
+2. **Given** the Calibration step, **When** it renders, **Then** the copy
+   explains calibration libraries (masters) and states that it is optional.
+3. **Given** the Project step, **When** it renders, **Then** the copy
+   explains per-project envelopes and notes that project creation happens
+   later in the guided Projects workflow.
+4. **Given** the Inbox step, **When** it renders, **Then** the copy explains
+   that inbox folders are watched for newly-captured data.
 
 ### Edge Cases
 
-- Duplicate source names.
-- Duplicate source roots.
-- Missing directories.
-- Inaccessible directories.
-- Very large source roots.
-- Mixed folders that include lights and calibration frames.
+- Duplicate source paths across kinds (same root listed as both Raw and
+  Calibration). [NEEDS DECISION: reject duplicate-across-kinds, allow with
+  warning, or allow silently.]
+- Duplicate source paths within a kind (mockup currently allows; the picker
+  stub avoids re-suggesting, but manual entry would not).
+- Path no longer exists at Finish time (drive disconnected).
+- Path is a symlink or junction.
+- Path requires elevated permissions to read.
+- Path is on a network share that mounts lazily.
+- User clicks the cancel button on the native picker dialog.
+- Very large source root with millions of files (validation must not block on
+  recursive enumeration).
+- Mixed folders that contain both lights and calibration frames.
 
 ### Domain Questions To Resolve
 
-- Which source categories are required for first setup versus optional later additions?
-- Should existing source settings prefill the restarted setup wizard?
+- Should the wizard expose a per-row scan rule (recursive vs single-level), or
+  defer that choice to the Inventory page after setup? [NEEDS DECISION]
+- Should registered sources at Finish be applied atomically (all-or-nothing
+  into the DB) or row-at-a-time as the user adds them? [NEEDS DECISION]
+- Is "skip the entire wizard" still in scope given that the Raw step is now
+  required? [NEEDS DECISION — see FR-002 vs FR-003 below.]
 
 ## Requirements *(mandatory)*
 
 ### Functional Requirements
 
-- **FR-001**: Setup MUST be a page-by-page wizard, not a permanent main-screen panel.
-- **FR-002**: Setup MUST allow skipping the entire wizard.
-- **FR-003**: Setup MUST NOT allow proceeding from a required source step until each required row has a directory.
-- **FR-004**: Setup MUST validate duplicate source names and duplicate source roots.
-- **FR-005**: Setup MUST NOT include a mock scan preview action, preview-available column, inferred kind column, or runtime warning column.
-- **FR-006**: Setup MUST start the guided first-step flow after successful completion.
-- **FR-007**: Setup MUST allow finishing after all required source steps pass validation or the whole wizard is skipped.
-- **FR-008**: Setup MUST be restartable from Settings.
-- **FR-009**: First-run setup MUST include source steps for Raw Sources, Calibration Sources, Project Sources, and Inbox Sources.
-- **FR-010**: First-run setup MUST explain that project creation happens later in the guided Projects workflow.
-- **FR-011**: First-run setup MUST start with a welcome page that explains setup scope, the skip option, and what the user will configure.
-- **FR-012**: First-run setup MUST include clarification pages before directory selection so users understand each source category, what they should select for it, and the post-setup guided workflow.
-- **FR-013**: Each source selection page MUST explain the category-specific action the user is expected to take.
+- **FR-001**: The wizard MUST be a sequential page-by-page flow accessed at
+  `/welcome`, not a permanent navigation entry in the main shell.
+- **FR-002**: The wizard MUST treat the Raw Sources step as required (at
+  least one Raw source). [NEEDS DECISION: spec previously also said the
+  wizard MUST allow skipping the entire wizard (old FR-002). The mockup
+  enforces Raw and has no global Skip button. Resolve by either removing
+  global skip or adding a confirm-skip path that still demands a Raw source
+  later.]
+- **FR-003**: The wizard MUST NOT allow advancing from the Raw step until at
+  least one Raw source is registered.
+- **FR-004**: The wizard MUST allow advancing from Calibration, Project, and
+  Inbox steps without entries (they are optional in the mockup).
+- **FR-005**: The wizard MUST validate that each chosen path exists, is a
+  directory, and is readable before accepting it. [Not yet implemented; stub
+  picker bypasses validation.]
+- **FR-006**: The wizard MUST detect and surface duplicate source paths
+  within the same kind.
+- **FR-007**: The wizard MUST NOT copy, move, modify, hash, or scan files
+  during the wizard run. Indexing is deferred to the Inventory workflow.
+- **FR-008**: The wizard MUST use the operating system's native directory
+  picker (via Tauri's `plugin-dialog`) once wired; the current `pickFolderStub`
+  MUST be replaced before this spec is considered done.
+- **FR-009**: First-run setup MUST include source steps for Raw Sources,
+  Calibration Sources, Project Sources, and Inbox Sources in that order.
+- **FR-010**: First-run setup MUST explain on the Project step that project
+  creation itself happens later in the guided Projects workflow.
+- **FR-011**: First-run setup MUST start with a Welcome step that explains
+  setup scope, that nothing is moved or modified, and that all choices are
+  changeable later.
+- **FR-012**: Each source selection step MUST include explanatory copy that
+  defines the category and tells the user what kind of directory to select.
+- **FR-013**: The wizard MUST be restartable from Settings via a clearly
+  labeled control.
+- **FR-014**: On Finish, the wizard MUST set a persistent completion flag and
+  navigate the user to the Inventory surface.
+- **FR-015**: While the wizard is in progress, the working source list MAY
+  be held in volatile UI state and `localStorage` for resilience against
+  refresh, but MUST be promoted to the library database on Finish.
+- **FR-016**: The index route (`/`) MUST redirect to `/welcome` when the
+  completion flag is absent and to `/inventory` (or the user's default
+  landing surface) when present.
 
 ### Key Entities
 
-- **Setup Source**: Source name, category, selected root, scan rule, validation state.
-- **Source Category**: Raw Sources, Calibration Sources, Project Sources, or Inbox Sources.
-- **Guided First-Step Flow**: Post-setup coach that scans Inbox material, moves sample material into Inventory, verifies it, and creates the first project through real controls.
-- **Setup Session**: Current wizard run and completion/skip state.
+- **Registered Source**: Persistent record of a directory the app should
+  treat as an input root, with a kind (Raw / Calibration / Project / Inbox),
+  an absolute path, and creation metadata. Multiple per kind allowed.
+- **First-Run State**: Persistent flag indicating whether the wizard has
+  been completed, plus the working source list buffer used during wizard
+  progression.
+- **Source Category**: One of Raw, Calibration, Project, Inbox. Determines
+  step copy, required/optional gating, and downstream consumers.
+- **Setup Session**: The current run through the wizard, including which
+  step is active and which sources have been added in this run.
 
 ## Success Criteria *(mandatory)*
 
 ### Measurable Outcomes
 
-- **SC-001**: Users can complete setup with valid sources in under 5 minutes.
-- **SC-002**: Invalid source rows are identified before the user leaves the relevant source step.
-- **SC-003**: Finishing setup starts the guided Inbox flow without browser crashes for representative source selections.
-- **SC-004**: Restarting setup preserves or updates source settings predictably.
+- **SC-001**: A new user can complete first-run setup end-to-end with valid
+  source directories in under 5 minutes.
+- **SC-002**: A blocked Raw step surfaces the gating reason inline within the
+  step body (not in a separate toast or modal).
+- **SC-003**: Finishing setup makes the index route resolve to `/inventory`
+  without further prompts on the next launch.
+- **SC-004**: Restarting setup from Settings opens the wizard in under 1
+  second and clears the completion flag deterministically.
 
 ## Assumptions
 
-- Project creation happens after setup in the guided first-project flow.
-- Source roots are directories only.
+- Project creation happens after setup in the guided first-project workflow,
+  not inside the wizard.
+- Source roots are directories only, not individual files or archives.
+- The user will be running a desktop OS with a native directory picker.
 
 ## Out of Scope
 
 - Creating the first project.
+- Scanning, hashing, or indexing files.
 - Moving data into Inventory.
-- Applying filesystem mutations.
+- Applying any filesystem mutations.
+- A guided post-setup coach (deferred; spec previously hinted at one but the
+  mockup ends at Inventory).

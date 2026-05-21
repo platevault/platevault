@@ -1,0 +1,58 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "source.protection.get",
+  "title": "Get source protection",
+  "description": "Resolves effective protection for a source, or returns global defaults when source_id is omitted.",
+  "type": "object",
+  "properties": {
+    "request": {
+      "type": "object",
+      "properties": {
+        "source_id": {
+          "type": "string",
+          "format": "uuid",
+          "description": "Source to inspect. Omit for global defaults."
+        }
+      },
+      "additionalProperties": false
+    },
+    "response": {
+      "type": "object",
+      "required": ["level", "categories"],
+      "properties": {
+        "source_id": {
+          "type": "string",
+          "format": "uuid",
+          "description": "Echo of the requested source_id. Absent when global defaults are returned."
+        },
+        "level": {
+          "type": "string",
+          "enum": ["protected", "normal", "unprotected"],
+          "description": "Effective protection level."
+        },
+        "categories": {
+          "type": "array",
+          "items": { "type": "string" },
+          "description": "Protected categories applicable to this source."
+        },
+        "inherits_default": {
+          "type": "boolean",
+          "description": "True when no per-source override exists and global defaults were returned."
+        }
+      },
+      "additionalProperties": false
+    },
+    "errors": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "required": ["code", "message"],
+        "properties": {
+          "code": { "type": "string", "enum": ["source.not_found"] },
+          "message": { "type": "string" }
+        }
+      }
+    }
+  },
+  "required": ["request", "response"]
+}

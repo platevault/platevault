@@ -1,0 +1,51 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://astro-library-manager.local/contracts/firstrun.complete.json",
+  "title": "firstrun.complete",
+  "description": "Mark the first-run wizard as completed. MUST only succeed when the wizard is in_progress and the Raw step has at least one RegisteredSource. Sets FirstRunState.completed_at, clears the sources_buffer, and is mirrored to the localStorage completion flag by the desktop adapter.",
+  "type": "object",
+  "properties": {
+    "operation": {
+      "const": "firstrun.complete"
+    },
+    "version": {
+      "type": "string",
+      "const": "1"
+    },
+    "request": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {}
+    },
+    "response": {
+      "type": "object",
+      "required": ["completed_at"],
+      "additionalProperties": false,
+      "properties": {
+        "completed_at": {
+          "type": "string",
+          "format": "date-time",
+          "description": "Server-local time the wizard was marked complete."
+        },
+        "registered_source_count": {
+          "type": "integer",
+          "minimum": 0,
+          "description": "Total RegisteredSource rows at completion time, included for caller convenience."
+        }
+      }
+    },
+    "errors": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "wizard.not.in.progress": {
+          "description": "FirstRunState is already completed_at != null. The caller should refresh state rather than re-completing."
+        },
+        "required.step.incomplete": {
+          "description": "No RegisteredSource of kind 'raw' exists. The wizard MUST register at least one Raw source before completion."
+        }
+      }
+    }
+  },
+  "required": ["operation", "version", "request", "response", "errors"]
+}

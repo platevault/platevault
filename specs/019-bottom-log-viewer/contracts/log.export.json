@@ -1,0 +1,90 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://astro-plan/contracts/log.export.json",
+  "title": "log.export",
+  "description": "Export a window of log entries to a JSON file at a user-chosen path. The format is fixed to JSON; the format field is retained for forward compatibility but is not surfaced as a user setting.",
+  "operation": {
+    "name": "log.export",
+    "direction": "ui-to-core",
+    "version": "1"
+  },
+  "request": {
+    "type": "object",
+    "required": ["format", "file_path"],
+    "additionalProperties": false,
+    "properties": {
+      "file_path": {
+        "type": "string",
+        "description": "Absolute filesystem path of the export target. Parent directory must exist and be writable."
+      },
+      "format": {
+        "type": "string",
+        "enum": ["json"],
+        "description": "Fixed to 'json' in v1. Reserved for forward compatibility; not surfaced as a user setting."
+      },
+      "level_min": {
+        "type": "string",
+        "enum": ["debug", "info", "warn", "error"],
+        "description": "Optional minimum severity bound. Defaults to debug."
+      },
+      "since": {
+        "type": "string",
+        "format": "date-time",
+        "description": "Optional ISO-8601 lower bound on entry time (inclusive)."
+      },
+      "until": {
+        "type": "string",
+        "format": "date-time",
+        "description": "Optional ISO-8601 upper bound on entry time (exclusive)."
+      },
+      "include_diagnostics": {
+        "type": "boolean",
+        "description": "Include source = 'diagnostic' entries. Defaults to false for exports.",
+        "default": false
+      }
+    }
+  },
+  "response": {
+    "type": "object",
+    "required": ["file_path", "count"],
+    "additionalProperties": false,
+    "properties": {
+      "file_path": {
+        "type": "string",
+        "description": "Absolute path of the written file. Equal to the requested file_path on success."
+      },
+      "count": {
+        "type": "integer",
+        "minimum": 0,
+        "description": "Number of LogEntry rows written."
+      },
+      "bytes": {
+        "type": "integer",
+        "minimum": 0,
+        "description": "Optional byte size of the written file."
+      }
+    }
+  },
+  "errors": [
+    {
+      "code": "path.write.denied",
+      "message": "The chosen path is not writable. No file was created.",
+      "http_status_equivalent": 403
+    },
+    {
+      "code": "path.parent.missing",
+      "message": "The parent directory of the chosen path does not exist.",
+      "http_status_equivalent": 404
+    },
+    {
+      "code": "range.invalid",
+      "message": "since is not strictly before until, or one bound is malformed.",
+      "http_status_equivalent": 400
+    },
+    {
+      "code": "format.unsupported",
+      "message": "Requested format is not supported in v1. Only 'json' is accepted.",
+      "http_status_equivalent": 400
+    }
+  ]
+}

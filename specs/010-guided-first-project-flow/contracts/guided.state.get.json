@@ -1,0 +1,60 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://astro-plan/contracts/guided.state.get.json",
+  "title": "guided.state.get",
+  "description": "Return the current GuidedFlowState for UI hydration.",
+  "type": "object",
+  "properties": {
+    "request": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {},
+      "required": []
+    },
+    "response": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["state"],
+      "properties": {
+        "state": {
+          "$ref": "#/$defs/GuidedFlowState"
+        }
+      }
+    },
+    "errors": {
+      "type": "array",
+      "items": {
+        "type": "string",
+        "enum": ["PERSISTENCE_UNAVAILABLE", "STATE_CORRUPTED"]
+      }
+    }
+  },
+  "required": ["request", "response"],
+  "$defs": {
+    "GuidedFlowState": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["current_step", "completed_steps", "dismissed"],
+      "properties": {
+        "current_step": {
+          "type": ["string", "null"],
+          "description": "Id of the active step or null."
+        },
+        "completed_steps": {
+          "type": "array",
+          "items": { "type": "string" },
+          "uniqueItems": true
+        },
+        "dismissed": { "type": "boolean" },
+        "dismissed_at": {
+          "type": ["string", "null"],
+          "format": "date-time"
+        },
+        "updated_at": {
+          "type": "string",
+          "format": "date-time"
+        }
+      }
+    }
+  }
+}

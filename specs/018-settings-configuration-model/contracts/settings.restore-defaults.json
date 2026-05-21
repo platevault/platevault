@@ -1,0 +1,60 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://astro-plan/contracts/settings.restore-defaults.json",
+  "title": "settings.restore-defaults",
+  "description": "Restore one, several, or all v1 settings keys to their in-code defaults. Empty 'keys' restores all keys.",
+  "operation": {
+    "name": "settings.restore-defaults",
+    "direction": "ui-to-core",
+    "version": "1"
+  },
+  "request": {
+    "type": "object",
+    "additionalProperties": false,
+    "properties": {
+      "keys": {
+        "type": "array",
+        "description": "List of v1 settings keys to restore. Empty or omitted means restore every key.",
+        "uniqueItems": true,
+        "items": {
+          "type": "string",
+          "enum": [
+            "pattern",
+            "autoApplyPattern",
+            "alwaysPreviewBeforePlan",
+            "followSymlinks",
+            "hashOnScan",
+            "darkMatchTolerance",
+            "flatMatching",
+            "suggestCalibration",
+            "rowDensity",
+            "logLevel",
+            "rememberFollowLogs",
+            "defaultProtection",
+            "blockPermanentDelete",
+            "protectedCategories"
+          ]
+        }
+      }
+    }
+  },
+  "response": {
+    "type": "object",
+    "required": ["restored"],
+    "additionalProperties": false,
+    "properties": {
+      "restored": {
+        "type": "array",
+        "description": "Keys whose stored value was deleted so the default would apply on next read. Keys already at default are omitted.",
+        "items": { "type": "string" }
+      }
+    }
+  },
+  "errors": [
+    {
+      "code": "key.unknown",
+      "message": "One or more supplied keys are not part of the v1 schema. No keys are restored when the request contains any unknown key.",
+      "http_status_equivalent": 400
+    }
+  ]
+}

@@ -1,0 +1,111 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://astro-library-manager.local/contracts/native.file.pick.json",
+  "title": "native.file.pick",
+  "description": "Open the OS-native file picker with type filters and return the user-selected absolute path. Cancellation is a non-error null response. Implemented over @tauri-apps/plugin-dialog with directory=false, multiple=false. Used by master-calibration selection for FITS, XISF, and TIFF files.",
+  "type": "object",
+  "properties": {
+    "operation": {
+      "const": "native.file.pick"
+    },
+    "version": {
+      "type": "string",
+      "const": "1"
+    },
+    "request": {
+      "type": "object",
+      "required": ["filters", "request_id"],
+      "additionalProperties": false,
+      "properties": {
+        "filters": {
+          "description": "Ordered list of file-type filters. The first filter is the default. Extensions MUST NOT include the leading dot.",
+          "type": "array",
+          "minItems": 1,
+          "items": {
+            "type": "object",
+            "required": ["name", "extensions"],
+            "additionalProperties": false,
+            "properties": {
+              "name": {
+                "type": "string",
+                "minLength": 1
+              },
+              "extensions": {
+                "type": "array",
+                "minItems": 1,
+                "items": {
+                  "type": "string",
+                  "pattern": "^[A-Za-z0-9*]+$"
+                }
+              }
+            }
+          },
+          "examples": [
+            [
+              { "name": "All supported", "extensions": ["fit", "fits", "xisf", "tif", "tiff"] },
+              { "name": "FITS", "extensions": ["fit", "fits"] },
+              { "name": "XISF", "extensions": ["xisf"] },
+              { "name": "TIFF", "extensions": ["tif", "tiff"] },
+              { "name": "All files", "extensions": ["*"] }
+            ]
+          ]
+        },
+        "default_path": {
+          "description": "Optional absolute path to anchor the dialog (typically the calibration source root). Honored where supported.",
+          "type": ["string", "null"],
+          "minLength": 1
+        },
+        "request_id": {
+          "type": "string",
+          "format": "uuid"
+        }
+      }
+    },
+    "response": {
+      "type": "object",
+      "required": ["path", "cancelled"],
+      "additionalProperties": false,
+      "properties": {
+        "path": {
+          "description": "Absolute OS-canonical path the user selected, or null when the user cancelled.",
+          "type": ["string", "null"]
+        },
+        "selected_filter": {
+          "description": "The name of the filter active when the user clicked Open. Useful for recording the user's declared frame type.",
+          "type": ["string", "null"]
+        },
+        "cancelled": {
+          "type": "boolean"
+        }
+      }
+    },
+    "errors": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "picker.unavailable": {
+          "description": "The host environment does not provide a native file picker."
+        },
+        "filters.invalid": {
+          "description": "The supplied filter list violated the schema (empty, malformed extension, or duplicate name)."
+        },
+        "os.command_failed": {
+          "description": "The OS-native dialog returned an unexpected failure. Cancellation is NOT an error."
+        }
+      }
+    },
+    "notes": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "audit_event_on_failure": {
+          "const": "native.picker.failed"
+        },
+        "audit_on_cancellation": {
+          "const": false
+        }
+      }
+    }
+  },
+  "required": ["operation", "version", "request", "response", "errors"]
+}

@@ -1,0 +1,127 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://astro-plan/contracts/url.resolve.json",
+  "title": "url.resolve",
+  "description": "Resolve an incoming app link (route + search params) against the open library and report per-entity existence. Used by the future 'open shared link' affordance and by importers that need to know whether to clear selection or render an empty state.",
+  "operation": {
+    "name": "url.resolve",
+    "direction": "ui-to-core",
+    "version": "1"
+  },
+  "request": {
+    "type": "object",
+    "required": ["link"],
+    "additionalProperties": false,
+    "properties": {
+      "link": {
+        "type": "string",
+        "description": "The full in-app URL to resolve. May be the hash form (e.g. 'index.html#/inventory?id=item-123&frame=light') or just the route+search fragment ('/inventory?id=item-123&frame=light')."
+      },
+      "library_id": {
+        "type": "string",
+        "description": "Optional library identifier the caller expects to match. Reserved for future cross-library link refusal; ignored in v1."
+      }
+    }
+  },
+  "response": {
+    "type": "object",
+    "required": ["route", "path", "params", "search", "entities", "overall_status"],
+    "additionalProperties": false,
+    "properties": {
+      "route": {
+        "type": "string",
+        "description": "Canonical route id matched (e.g. '/inventory', '/plans/$planId'). Equal to the path with `$param` placeholders preserved."
+      },
+      "path": {
+        "type": "string",
+        "description": "Concrete path component after parsing (e.g. '/inventory', '/plans/plan-123')."
+      },
+      "params": {
+        "type": "object",
+        "description": "Parsed path params, narrowed against the matched route contract.",
+        "additionalProperties": true
+      },
+      "search": {
+        "type": "object",
+        "description": "Parsed search params after validateSearch, with unknown and invalid keys dropped.",
+        "additionalProperties": true
+      },
+      "entities": {
+        "type": "array",
+        "description": "Per-entity resolution result for every ResolvableEntityRef declared by the matched route.",
+        "items": {
+          "type": "object",
+          "required": ["source", "key", "kind", "id", "status"],
+          "additionalProperties": false,
+          "properties": {
+            "source": { "type": "string", "enum": ["path", "search"] },
+            "key": { "type": "string" },
+            "kind": {
+              "type": "string",
+              "enum": ["plan", "project", "inventory_item", "inbox_item", "settings_section"]
+            },
+            "id": { "type": "string" },
+            "status": {
+              "type": "string",
+              "enum": ["exists", "missing", "redirected"],
+              "description": "'exists' if the entity is present; 'missing' if not found in the current library; 'redirected' if a canonical replacement is available."
+            },
+            "redirect_to": {
+              "type": "string",
+              "description": "For 'redirected' status, the canonical id to use instead."
+            },
+            "on_missing": {
+              "type": "string",
+              "enum": ["clear", "render_empty"],
+              "description": "Echoed from the route contract so the caller can apply the right UX."
+            }
+          }
+        }
+      },
+      "overall_status": {
+        "type": "string",
+        "enum": ["ok", "partial", "stale"],
+        "description": "'ok' when every entity exists; 'partial' when at least one path entity exists but at least one search id is missing; 'stale' when no referenced entity exists."
+      },
+      "suggested_navigation": {
+        "type": "object",
+        "description": "Optional navigation hint the caller may apply directly.",
+        "additionalProperties": false,
+        "properties": {
+          "to": { "type": "string", "description": "Target path." },
+          "search": {
+            "type": "object",
+            "description": "Search params to apply, with stale ids omitted."
+          },
+          "replace": {
+            "type": "boolean",
+            "description": "Whether to replace the current history entry rather than push."
+          }
+        }
+      }
+    }
+  },
+  "errors": [
+    {
+      "code": "route.unknown",
+      "message": "The supplied link does not match any registered route.",
+      "http_status_equivalent": 404
+    },
+    {
+      "code": "entity.not_found",
+      "message": "A required path entity referenced by the link does not exist in the current library. Returned only when the missing entity is on a path segment whose route cannot render without it.",
+      "http_status_equivalent": 404
+    },
+    {
+      "code": "link.malformed",
+      "message": "The supplied link could not be parsed into a route and search shape.",
+      "http_status_equivalent": 400
+    },
+    {
+      "code": "library.mismatch",
+      "message": "The supplied library_id does not match the currently open library. Reserved for future cross-library link policy; not emitted in v1.",
+      "informational": true,
+      "http_status_equivalent": 409
+    }
+  ]
+}

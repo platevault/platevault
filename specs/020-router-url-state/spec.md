@@ -37,6 +37,38 @@ As a user, I want important filters and selected entities to be reflected in rou
 2. **Given** Projects are filtered by multiple lifecycle states, **When** the route reloads, **Then** the multiselect state remains active.
 3. **Given** a selected entity no longer exists, **When** the route loads, **Then** the app clears selection and shows a useful empty state.
 
+---
+
+### User Story 3 - Graceful Stale-Id Fallback (Priority: P3)
+
+As a user, I want a route that references a deleted, archived, or unknown entity id to recover gracefully so that stale bookmarks and shared links never strand me.
+
+**Why this priority**: Shared/exported links and old bookmarks will inevitably point at entities that have moved, been archived, or were never present in this library.
+
+**Independent Test**: Visit `/inventory?id=does-not-exist`, `/plans/missing`, and `/projects?id=archived` and confirm each clears the selection, surfaces a useful empty/redirect state, and never throws.
+
+**Acceptance Scenarios**:
+
+1. **Given** a deep link to `/plans/$planId` for an unknown plan, **When** the route loads, **Then** the app shows a "plan not found" empty state with a link back to the plans list, and the URL is replaced with `/plans`.
+2. **Given** a deep link with `?id=` referencing a deleted entity, **When** the route loads, **Then** the selection clears, the filter portion of the search is preserved, and the URL is cleaned up.
+3. **Given** a route segment is unknown (e.g. `/unknown-route`), **When** the user lands on it, **Then** the app redirects to the index resolver and does not flash a blank page.
+
+---
+
+### User Story 4 - Export Shareable Links (Priority: P4)
+
+As a user, I want to copy a link that captures my current ledger view (route + filters + selection) so that I can paste it into notes, tickets, or another machine running the same library.
+
+**Why this priority**: Cross-machine link portability and note-pinning is a future affordance; the URL state pattern must already support it.
+
+**Independent Test**: From any ledger page with filters and a selection applied, invoke "copy link", paste into a fresh app instance, and confirm the same view restores (subject to entity existence and library identity).
+
+**Acceptance Scenarios**:
+
+1. **Given** Inventory is filtered and an item is selected, **When** the user copies the link and pastes it into a new window, **Then** the same filters and selection are restored.
+2. **Given** a link encodes a filter with a special character, **When** the link is decoded, **Then** the filter is restored without corruption.
+3. **Given** a link is pasted into a library that does not contain the referenced entity, **When** the route loads, **Then** the filter portion still applies and the selection clears with a clear notice.
+
 ### Edge Cases
 
 - Route references deleted or archived entity.
@@ -44,11 +76,14 @@ As a user, I want important filters and selected entities to be reflected in rou
 - Guided flow needs to advance across routes.
 - Search query contains special characters.
 - Desktop hash history differs from future browser/web adapter.
+- Search params with unknown keys arrive from older app versions.
+- Library identity mismatch between exporter and importer of a link.
 
 ### Domain Questions To Resolve
 
 - Which route search parameters are stable public app contract versus internal prototype state.
 - Whether selected detail panes get nested routes or search parameters.
+- Whether shared links should include a library identifier prefix.
 
 ## Requirements *(mandatory)*
 
@@ -61,13 +96,16 @@ As a user, I want important filters and selected entities to be reflected in rou
 - **FR-005**: Route loaders or future data loading boundaries MUST preserve local-first behavior.
 - **FR-006**: Invalid selected entity route state MUST fail gracefully.
 - **FR-007**: Routing decisions MUST be documented in prototype and implementation specs.
+- **FR-008**: Each ledger route MUST declare its accepted search params through `validateSearch` and ignore unknown keys without throwing.
+- **FR-009**: Stale entity ids MUST clear from the URL when the entity is confirmed missing, preserving filters in the URL.
 
 ### Key Entities
 
-- **App Route**: Inbox, Inventory, Projects, Settings, Framework Review, or future feature route.
+- **App Route**: Inbox, Inventory, Projects, Plans, Settings, Welcome, or future feature route.
 - **Route Search State**: Filter, selected id, query, wizard/guide state, and view options.
 - **Route Loader**: Future data boundary for local store reads.
 - **Navigation Event**: Route transition relevant to guided flow or audit.
+- **Route Contract**: The declared shape (path, params, search-param keys) every page must obey.
 
 ## Success Criteria *(mandatory)*
 
@@ -76,13 +114,63 @@ As a user, I want important filters and selected entities to be reflected in rou
 - **SC-001**: Primary navigation works without manual hash mutation.
 - **SC-002**: Filters can be reloaded from route state.
 - **SC-003**: Guided first-project flow can move between Inbox, Inventory, and Projects using router navigation.
+- **SC-004**: 100% of declared ledger search-param keys round-trip through copy-paste of the current URL.
+- **SC-005**: Zero uncaught errors on stale-id deep links in a smoke pass across all ledger routes.
+
+## Implementation Status
+
+The desktop mockup at `apps/desktop/src/app/router.tsx` already encodes the route surface this spec ratifies. It uses TanStack Router with a hash history (`createHashHistory`) and a single `Shell` root layout. The following routes are implemented and wired into the running app:
+
+### Routes
+
+| Path                    | Component         | Notes                                                                                  |
+|-------------------------|-------------------|----------------------------------------------------------------------------------------|
+| `/`                     | index resolver    | Redirects to `/welcome` or `/inventory` based on `alm.first-run.completed`.            |
+| `/welcome`              | `WelcomePage`     | First-run guided entry.                                                                |
+| `/inventory`            | `InventoryPage`   | Ledger; selection + filter via search params.                                          |
+| `/inbox`                | `InboxPage`       | Ledger; selection + filter via search params.                                          |
+| `/projects`             | `ProjectsPage`    | Ledger; selection + filter via search params.                                          |
+| `/plans`                | `PlansListPage`   | Ledger; filter via search params.                                                      |
+| `/plans/$planId`        | `PlanDetailPage`  | Path param for the plan id; no filters.                                                |
+| `/settings`             | redirect          | Redirects to `/settings/$section` with `section = "data-sources"`.                     |
+| `/settings/$section`    | `SettingsPage`    | Path param selects the active settings section.                                        |
+
+### Search Param Keys (per page)
+
+| Route        | Key         | Type     | Purpose                                            |
+|--------------|-------------|----------|----------------------------------------------------|
+| `/inventory` | `id`        | string?  | Selected inventory item id.                        |
+| `/inventory` | `source`    | string?  | Filter by data source id.                          |
+| `/inventory` | `frame`     | string?  | Filter by frame type.                              |
+| `/inventory` | `review`    | string?  | Filter by review state.                            |
+| `/inbox`     | `id`        | string?  | Selected inbox item id.                            |
+| `/inbox`     | `type`      | string?  | Filter by inbox item type.                         |
+| `/inbox`     | `source`    | string?  | Filter by source id.                               |
+| `/projects`  | `id`        | string?  | Selected project id.                               |
+| `/projects`  | `lifecycle` | string?  | Lifecycle filter (single or comma-list).           |
+| `/projects`  | `tool`      | string?  | Tool filter.                                       |
+| `/plans`     | `state`     | string?  | Plan state filter.                                 |
+| `/plans`     | `origin`    | string?  | Plan origin filter.                                |
+
+Each ledger page reads its search state through TanStack Router's `useSearch` and writes via `useNavigate({ from })` with merged `search` updates. Unknown keys are dropped by the per-route `validateSearch` helper. Stale selection ids today fall through to an empty detail pane rather than crashing.
+
+### Deep-Linkable Scenarios
+
+- `/inventory?frame=light&review=needs-review` opens Inventory with frame and review filters applied.
+- `/projects?lifecycle=processing&id=proj-123` opens Projects with the lifecycle filter and selection focused.
+- `/plans/plan-2026-05-20-cleanup-001` opens a specific plan detail.
+- `/settings/calibration` opens Settings on the calibration section.
+- `/inbox?type=mixed&source=src-drive-a` opens Inbox filtered to mixed-folder items from a specific source.
 
 ## Assumptions
 
 - TanStack Router remains the selected routing framework.
 - TanStack Table handles table state and may sync selected state to the router.
+- Library identity is implicit (single library open at a time); links are scoped to whichever library is open.
 
 ## Out of Scope
 
 - Server-side routing.
 - Public web deployment routing.
+- Authentication-gated routes.
+- Library identity prefix encoding (deferred research question).

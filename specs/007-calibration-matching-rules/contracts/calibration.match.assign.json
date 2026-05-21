@@ -1,0 +1,79 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://astro-plan.local/contracts/calibration.match.assign.json",
+  "title": "calibration.match.assign",
+  "description": "Persist a calibration master assignment for a light session. Hard-rule mismatches require override=true.",
+  "version": "1.0.0",
+  "type": "object",
+  "properties": {
+    "operation": { "const": "calibration.match.assign" },
+    "request": {
+      "type": "object",
+      "required": ["session_id", "master_id", "override"],
+      "properties": {
+        "session_id": {
+          "type": "string",
+          "format": "uuid",
+          "description": "Light session being assigned."
+        },
+        "master_id": {
+          "type": "string",
+          "format": "uuid",
+          "description": "Calibration master to assign. Its calibration_type implicitly determines the target slot."
+        },
+        "override": {
+          "type": "boolean",
+          "description": "When true, accepts hard-rule mismatches and records them in audit history."
+        }
+      },
+      "additionalProperties": false
+    },
+    "response": {
+      "type": "object",
+      "required": ["assigned", "confidence"],
+      "properties": {
+        "assigned": {
+          "type": "object",
+          "required": ["assignment_id", "session_id", "master_id", "calibration_type", "was_override"],
+          "properties": {
+            "assignment_id": { "type": "string", "format": "uuid" },
+            "session_id": { "type": "string", "format": "uuid" },
+            "master_id": { "type": "string", "format": "uuid" },
+            "calibration_type": { "enum": ["dark", "flat", "bias"] },
+            "was_override": { "type": "boolean" },
+            "mismatched_dimensions": {
+              "type": "array",
+              "items": { "type": "string" }
+            },
+            "assigned_at": { "type": "string", "format": "date-time" }
+          },
+          "additionalProperties": false
+        },
+        "confidence": {
+          "type": "number",
+          "minimum": 0,
+          "maximum": 1,
+          "description": "Confidence captured at assignment time using the active MatchingRuleConfig."
+        }
+      },
+      "additionalProperties": false
+    },
+    "errors": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "required": ["code", "message"],
+        "properties": {
+          "code": { "enum": ["master.not_found", "incompatible.dimensions", "session.not_found"] },
+          "message": { "type": "string" },
+          "dimensions": {
+            "type": "array",
+            "description": "On incompatible.dimensions, lists hard-rule dimensions that mismatched.",
+            "items": { "type": "string" }
+          }
+        }
+      }
+    }
+  },
+  "required": ["operation", "request", "response"]
+}

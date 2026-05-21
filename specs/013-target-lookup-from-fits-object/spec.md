@@ -5,6 +5,14 @@
 **Status**: Draft  
 **Input**: User description: "Specify target lookup using FITS OBJECT as a search hint, with catalog selection and manual correction."
 
+## Implementation Status: NOT IMPLEMENTED
+
+This feature has no implementation. Only the specification, plan, research,
+data model, contracts, and tasks artifacts exist. The targeting crate
+(`crates/targeting/`) referenced in the plan is a future boundary; no Rust or
+TypeScript code has been written. All acceptance scenarios, user stories, and
+tasks are pending review and have not been executed.
+
 ## User Scenarios & Testing *(mandatory)*
 
 ### User Story 1 - Use FITS OBJECT As Target Hint (Priority: P1)
@@ -22,6 +30,30 @@ As a user importing lights, I want the app to use the FITS `OBJECT` keyword as a
 
 ---
 
+### User Story 1a - Resolve OBJECT Against Catalog (Priority: P1)
+
+As a user importing lights, I want the FITS `OBJECT` value matched against a
+local target catalog (Messier, NGC, IC, popular names) so that an exact match
+becomes a confirmed target identity without manual lookup.
+
+**Why this priority**: An exact catalog match is the most common case and
+delivers the headline value of automatic target identification.
+
+**Independent Test**: Import frames with `OBJECT=M31`, `OBJECT=NGC224`, and
+`OBJECT=Andromeda Galaxy` and confirm each resolves to the same target identity
+with high confidence.
+
+**Acceptance Scenarios**:
+
+1. **Given** `OBJECT=M101`, **When** lookup runs, **Then** the system returns a
+   single match with the canonical designation `M 101` and high confidence.
+2. **Given** `OBJECT=NGC5457`, **When** lookup runs, **Then** the same target
+   identity as the M101 case is returned via the catalog alias.
+3. **Given** `OBJECT=Pinwheel Galaxy`, **When** lookup runs, **Then** the popular
+   name resolves to the same target identity.
+
+---
+
 ### User Story 2 - Select Catalog Suggestions (Priority: P2)
 
 As a user, I want target suggestions constrained by selected catalogs so that lookup results match my preferred naming sources.
@@ -34,6 +66,57 @@ As a user, I want target suggestions constrained by selected catalogs so that lo
 
 1. **Given** catalog lookup is enabled, **When** the app can connect to Sesame/SIMBAD, **Then** it searches with selected catalog preferences.
 2. **Given** lookup is unavailable, **When** the user reviews the target, **Then** manual target entry remains available.
+
+---
+
+### User Story 2a - Fuzzy Match For Variant Spellings (Priority: P2)
+
+As a user with capture software that writes inconsistent `OBJECT` values, I
+want the lookup to tolerate spacing, casing, and punctuation variants so that
+near-matches still resolve to the right target.
+
+**Why this priority**: Variant spellings are common but not universal; fuzzy
+match is required for usable coverage without being core to MVP.
+
+**Independent Test**: Import frames with `OBJECT=m 101`, `OBJECT=ngc-5457`,
+`OBJECT=pinwheel`, and `OBJECT=M101 LRGB` and confirm all return the M101
+target identity with a confidence below the exact-match tier.
+
+**Acceptance Scenarios**:
+
+1. **Given** an `OBJECT` value with extra whitespace or punctuation, **When**
+   lookup runs, **Then** the system returns the best match with `medium` or
+   `high` confidence and surfaces the evidence used.
+2. **Given** a value containing the catalog designation plus extra tokens (for
+   example `M101 LRGB`), **When** lookup runs, **Then** the catalog token still
+   resolves to the target identity and the extra tokens are recorded as
+   evidence.
+
+---
+
+### User Story 3 - Unresolved And Ambiguous Fallback (Priority: P3)
+
+As a user, I want unresolved or ambiguous `OBJECT` values to fail gracefully so
+that the ingestion flow is never blocked by lookup gaps.
+
+**Why this priority**: Edge cases are real but rare; they must not block the
+P1 happy path.
+
+**Independent Test**: Import frames with `OBJECT=Light`, `OBJECT=Target`, and a
+deliberately ambiguous alias and confirm the lookup returns an unresolved or
+ambiguous result with options for manual entry.
+
+**Acceptance Scenarios**:
+
+1. **Given** a generic value such as `Light`, **When** lookup runs, **Then** the
+   system returns `unresolved` and offers manual target entry.
+2. **Given** an ambiguous alias matching multiple catalog entries, **When**
+   lookup runs, **Then** the system returns `ambiguous` with the candidate
+   matches ranked by confidence.
+3. **Given** the local catalog is unavailable, **When** lookup runs, **Then**
+   the system returns `catalog.unavailable` and ingestion is not blocked.
+
+---
 
 ### Edge Cases
 

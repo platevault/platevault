@@ -1,0 +1,64 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "plan.protection.check",
+  "title": "Check plan protection",
+  "description": "Returns protection-affected items for a plan so the review UI can gate execution.",
+  "type": "object",
+  "properties": {
+    "request": {
+      "type": "object",
+      "required": ["plan_id"],
+      "properties": {
+        "plan_id": { "type": "string", "format": "uuid" }
+      },
+      "additionalProperties": false
+    },
+    "response": {
+      "type": "object",
+      "required": ["has_protected_items", "protected_items"],
+      "properties": {
+        "has_protected_items": { "type": "boolean" },
+        "protected_items": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "required": ["item_id", "level", "reason"],
+            "properties": {
+              "item_id": { "type": "string", "format": "uuid" },
+              "source_id": { "type": "string", "format": "uuid" },
+              "level": {
+                "type": "string",
+                "enum": ["protected", "normal", "unprotected"]
+              },
+              "matched_categories": {
+                "type": "array",
+                "items": { "type": "string" }
+              },
+              "original_action": { "type": "string" },
+              "rewritten_action": {
+                "type": ["string", "null"],
+                "description": "Set when block_permanent_delete rewrote the action (e.g., delete -> archive)."
+              },
+              "requires_acknowledgement": { "type": "boolean" },
+              "reason": { "type": "string" }
+            },
+            "additionalProperties": false
+          }
+        }
+      },
+      "additionalProperties": false
+    },
+    "errors": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "required": ["code", "message"],
+        "properties": {
+          "code": { "type": "string", "enum": ["plan.not_found"] },
+          "message": { "type": "string" }
+        }
+      }
+    }
+  },
+  "required": ["request", "response"]
+}

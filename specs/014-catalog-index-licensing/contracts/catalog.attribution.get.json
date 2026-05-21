@@ -1,0 +1,95 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://astro-plan.local/contracts/catalog.attribution.get.json",
+  "title": "catalog.attribution.get",
+  "description": "Read contract returning the per-catalog license attribution surface used by Settings → Catalogs. Separated from catalog.list so the (potentially large) notice text is not paid for on the metadata listing.",
+  "type": "object",
+  "oneOf": [
+    { "$ref": "#/$defs/Request" },
+    { "$ref": "#/$defs/Response" }
+  ],
+  "$defs": {
+    "ContractVersion": { "type": "string", "const": "1.0" },
+    "Uuid": { "type": "string", "format": "uuid" },
+    "Timestamp": { "type": "string", "format": "date-time" },
+    "CatalogId": {
+      "type": "string",
+      "minLength": 1,
+      "maxLength": 64,
+      "pattern": "^[a-z0-9][a-z0-9_-]*$"
+    },
+    "LicenseShortCode": {
+      "type": "string",
+      "minLength": 1,
+      "maxLength": 64
+    },
+    "LicenseAttribution": {
+      "type": "object",
+      "required": ["catalog_id", "text", "link", "license"],
+      "additionalProperties": false,
+      "properties": {
+        "catalog_id": { "$ref": "#/$defs/CatalogId" },
+        "text": {
+          "type": "string",
+          "minLength": 1,
+          "description": "Full required notice text, verbatim. Public-domain catalogs still carry a 'verified: <source>, accessed <date>' string."
+        },
+        "link": { "type": "string", "format": "uri" },
+        "license": { "$ref": "#/$defs/LicenseShortCode" },
+        "accessed_on": { "$ref": "#/$defs/Timestamp" }
+      }
+    },
+    "ErrorCode": {
+      "type": "string",
+      "enum": ["registry.unavailable", "actor.not_authorised"]
+    },
+    "ErrorEnvelope": {
+      "type": "object",
+      "required": ["code", "message"],
+      "additionalProperties": false,
+      "properties": {
+        "code": { "$ref": "#/$defs/ErrorCode" },
+        "message": { "type": "string" },
+        "details": { "type": "object", "additionalProperties": true }
+      }
+    },
+    "Request": {
+      "type": "object",
+      "required": ["contractVersion", "requestId"],
+      "additionalProperties": false,
+      "properties": {
+        "contractVersion": { "$ref": "#/$defs/ContractVersion" },
+        "requestId": { "$ref": "#/$defs/Uuid" }
+      }
+    },
+    "Response": {
+      "type": "object",
+      "required": ["status", "contractVersion", "requestId"],
+      "additionalProperties": false,
+      "properties": {
+        "status": { "type": "string", "enum": ["success", "error"] },
+        "contractVersion": { "$ref": "#/$defs/ContractVersion" },
+        "requestId": { "$ref": "#/$defs/Uuid" },
+        "attributions": {
+          "type": "array",
+          "description": "Per-catalog attribution rows. One catalog may produce multiple rows when its bundle aggregates more than one upstream source.",
+          "items": { "$ref": "#/$defs/LicenseAttribution" }
+        },
+        "error": { "$ref": "#/$defs/ErrorEnvelope" }
+      },
+      "allOf": [
+        {
+          "if": { "properties": { "status": { "const": "success" } } },
+          "then": {
+            "required": ["attributions"],
+            "not": { "required": ["error"] }
+          }
+        },
+        {
+          "if": { "properties": { "status": { "const": "error" } } },
+          "then": { "required": ["error"] }
+        }
+      ]
+    }
+  }
+}

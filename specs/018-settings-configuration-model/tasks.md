@@ -1,0 +1,318 @@
+# Tasks: Settings Configuration Model
+
+**Input**: Design documents from `/specs/018-settings-configuration-model/`
+**Prerequisites**: `spec.md`, `plan.md`, `research.md`, `data-model.md`, `contracts/`
+
+**Tests**: Tests are required at the contract and use-case boundary for this
+feature because writes mutate persisted state.
+
+**Organization**: Grouped by user story so each story can be delivered
+incrementally without breaking prior stories. Tasks marked `MOCKUP-DONE` are
+already implemented in the desktop mockup; reuse the existing code.
+
+## Path Conventions
+
+- Desktop: `apps/desktop/src/`
+- Rust core (future): `crates/app/core/`, `crates/persistence/db/`,
+  `crates/audit/`, `crates/contracts/core/`
+- Contracts: `specs/018-settings-configuration-model/contracts/` mirrored to
+  `packages/contracts/settings/`
+
+---
+
+## Phase 1: Setup
+
+- [ ] T001 Mirror the four JSON Schemas from
+      `specs/018-settings-configuration-model/contracts/` into
+      `packages/contracts/settings/` and regenerate TypeScript types.
+- [ ] T002 [P] Add a `settings.state.v1.json` schema in
+      `packages/contracts/settings/` that captures per-key value sub-schemas
+      referenced by `settings.update.json`.
+
+---
+
+## Phase 2: Foundational
+
+- [ ] T003 Add a `settings` table and a `source_overrides` table to
+      `crates/persistence/db/` migrations: `(key TEXT PRIMARY KEY, value JSON,
+      updated_at TEXT)` and `(source_id TEXT, key TEXT, value JSON, updated_at
+      TEXT, PRIMARY KEY(source_id, key))`.
+- [ ] T004 [P] Add a Rust mirror of `SettingsState v1` and `SourceOverride` in
+      `crates/contracts/core/src/settings.rs` matching the JSON Schemas.
+- [ ] T005 [P] Add a `settings` audit event variant to `crates/audit/` with
+      fields `key`, `prior_value`, `new_value`, optional `snapshot`.
+- [ ] T006 Create the `crates/app/core/usecases/settings.rs` module skeleton
+      with `get_settings`, `update_setting`, `restore_defaults`,
+      `set_source_override` entry points returning typed errors.
+
+**Checkpoint**: persistence, audit, and use-case skeleton ready.
+
+---
+
+## Phase 3: User Story 1 - View and Edit Settings (P1) - MVP
+
+**Goal**: Every visible setting can be read and updated with auto-save through
+a typed hook. No global save button. Density-fixed, one-per-line.
+
+**Independent Test**: Open Settings; for each row, change the control; reload;
+confirm the new value persists and the audit log shows one entry per
+non-noisy change.
+
+### Tests for User Story 1
+
+- [ ] T007 [P] [US1] Contract test for `settings.get` in
+      `crates/app/core/tests/settings_get.rs` against
+      `contracts/settings.get.json`.
+- [ ] T008 [P] [US1] Contract test for `settings.update` happy path,
+      `key.unknown`, `value.invalid`, and the no-op informational path in
+      `crates/app/core/tests/settings_update.rs`.
+- [ ] T009 [P] [US1] Desktop unit test for `updateSettings` no-op guard and
+      `NOISY_KEYS` skip-log behavior in
+      `apps/desktop/src/data/settings.test.ts`.
+
+### Implementation for User Story 1
+
+- [ ] T010 [US1] MOCKUP-DONE: `SettingsState`, `useSettings()`,
+      `updateSettings(key, value)`, `NOISY_KEYS`, default table in
+      `apps/desktop/src/data/settings.ts`. Keep the localStorage path as the
+      offline fallback after T013 lands.
+- [ ] T011 [US1] MOCKUP-DONE: `SettingsPage.tsx` rows for every v1 key with
+      one-per-line layout, info affordance, and auto-save status text in
+      `apps/desktop/src/features/settings/SettingsPage.tsx`.
+- [ ] T012 [US1] MOCKUP-DONE: Theme persistence under `alm.theme` in
+      `apps/desktop/src/app/theme.tsx`. Keep Appearance section wired to this
+      module rather than to `useSettings()`.
+- [ ] T013 [US1] Implement `get_settings` and `update_setting` use cases in
+      `crates/app/core/usecases/settings.rs` with no-op guard, JSON Schema
+      validation against the per-key sub-schema, and audit emission for
+      non-noisy keys.
+- [ ] T014 [US1] Add Tauri commands `settings_get` and `settings_update` in
+      `apps/desktop/src-tauri/` wired to the use-case crate.
+- [ ] T015 [US1] Replace the localStorage write path in
+      `apps/desktop/src/data/settings.ts` with a Tauri dispatch that falls
+      back to localStorage only when the backend channel is unavailable.
+
+**Checkpoint**: US1 fully functional with auto-save against SQLite.
+
+---
+
+## Phase 4: User Story 2 - Persistence and Audit (P2)
+
+**Goal**: Settings persist in SQLite, schema is versioned, the audit stream
+is readable, noisy keys do not flood the log, and missing or invalid stored
+values self-heal.
+
+**Independent Test**: Open the library, edit `pattern` twice and `logLevel`
+once; close and reopen; confirm exactly one audit entry exists for
+`logLevel` and one `settings.snapshot` entry exists for the noisy keys.
+
+### Tests for User Story 2
+
+- [ ] T016 [P] [US2] Integration test that an invalid stored value resets to
+      default with one `warn` audit entry in
+      `crates/app/core/tests/settings_repair.rs`.
+- [ ] T017 [P] [US2] Integration test that updates to `pattern` and
+      `protectedCategories` do not emit per-change audit entries but do
+      appear in a `settings.snapshot` event in
+      `crates/app/core/tests/settings_noisy.rs`.
+
+### Implementation for User Story 2
+
+- [ ] T018 [US2] Hydrate defaults at `settings.get` time for missing rows in
+      the use-case crate.
+- [ ] T019 [US2] Validate stored values against the v1 schema on read; on
+      failure, delete the bad row and emit a `warn` audit entry.
+- [ ] T020 [US2] Emit a `settings.snapshot` audit event at session start and
+      on Settings page close capturing noisy-key state.
+
+**Checkpoint**: US1 + US2 work. Audit stream remains readable under
+rapid edits.
+
+---
+
+## Phase 5: User Story 3 - Per-Source Override (P3)
+
+**Goal**: Overridable keys can be overridden per data source root; resolution
+order is per-source → global → default.
+
+**Independent Test**: Set `hashOnScan = eager` globally and `hashOnScan = off`
+for a specific source; trigger a scan of that source; confirm the override
+wins. Attempt to override `logLevel`; confirm `key.unoverridable`.
+
+### Tests for User Story 3
+
+- [ ] T021 [P] [US3] Contract test for `settings.source-override.set` in
+      `crates/app/core/tests/settings_override_set.rs` covering happy path,
+      `source.not_found`, and `key.unoverridable`.
+- [ ] T022 [P] [US3] Unit test of resolution order in
+      `crates/app/core/tests/settings_resolution.rs`.
+
+### Implementation for User Story 3
+
+- [ ] T023 [US3] Implement `set_source_override` in
+      `crates/app/core/usecases/settings.rs` with overridable-key whitelist
+      and source existence check.
+- [ ] T024 [US3] Add a resolver helper `resolve_setting(key, source_id?)` used
+      by scan and protection code paths.
+- [ ] T025 [US3] Add the per-source override stub wiring in
+      `apps/desktop/src/features/settings/SettingsPage.tsx` (Naming &
+      Structure section already exposes the stub; extend it to call the new
+      Tauri command).
+
+**Checkpoint**: US1 + US2 + US3 work. Overridable keys honor source overrides.
+
+---
+
+## Phase 6: User Story 4 - Restore Defaults (P4)
+
+**Goal**: A user can restore one key, several keys, or every key to defaults.
+
+**Independent Test**: Change five keys; restore two by name; reload; confirm
+two are back to default and the other three are still customized.
+
+### Tests for User Story 4
+
+- [ ] T026 [P] [US4] Contract test for `settings.restore-defaults` covering
+      empty `keys`, partial `keys`, and `key.unknown` rejection in
+      `crates/app/core/tests/settings_restore.rs`.
+
+### Implementation for User Story 4
+
+- [ ] T027 [US4] Implement `restore_defaults` by deleting the named rows
+      (or all rows when `keys` is empty) and emitting one audit entry per
+      restored key.
+- [ ] T028 [US4] Add a "Restore defaults" action to each section header in
+      `apps/desktop/src/features/settings/SettingsPage.tsx`, wired to the
+      new command.
+
+**Checkpoint**: US1-US4 work.
+
+---
+
+## Phase 7: User Story 5 - Schema Migration (P5)
+
+**Goal**: A future bump from `v1` to `v2` migrates stored settings cleanly
+with an audit summary.
+
+**Independent Test**: Run the migration harness with a fixture v1 database;
+confirm v2 reads succeed, audit entries summarize counts, and dropped keys
+are not silently lost.
+
+### Tests for User Story 5
+
+- [ ] T029 [P] [US5] Migration test in
+      `crates/persistence/db/tests/settings_v1_to_v2.rs` using a fixture
+      database.
+
+### Implementation for User Story 5
+
+- [ ] T030 [US5] Add a migration module that maps v1 keys to v2 keys with
+      explicit drop and reset behavior.
+- [ ] T031 [US5] Emit one `info` audit event summarizing migrated, dropped,
+      and reset counts.
+
+**Checkpoint**: All user stories complete; the schema can evolve.
+
+---
+
+## Phase 8: Polish
+
+- [ ] T032 [P] Remove the `rowDensity` key from `SettingsState` once FR-006 is
+      enforced everywhere in the desktop shell; update the v1 schema and
+      migration table accordingly.
+- [ ] T033 Update `docs/research/` index to point at this feature's
+      `research.md`.
+- [ ] T034 Quickstart pass: open Settings, change one of every kind of
+      control, verify auto-save and audit behavior end-to-end.
+
+---
+
+## Dependencies & Execution Order
+
+### Task Dependencies
+
+```toml
+[graph]
+T001 = { blocked_by = [] }
+T002 = { blocked_by = [] }
+T003 = { blocked_by = [] }
+T004 = { blocked_by = ["T001", "T002"] }
+T005 = { blocked_by = [] }
+T006 = { blocked_by = ["T003", "T004", "T005"] }
+T007 = { blocked_by = ["T006"] }
+T008 = { blocked_by = ["T006"] }
+T009 = { blocked_by = [] }
+T010 = { blocked_by = [] }
+T011 = { blocked_by = [] }
+T012 = { blocked_by = [] }
+T013 = { blocked_by = ["T006", "T007", "T008"] }
+T014 = { blocked_by = ["T013"] }
+T015 = { blocked_by = ["T014", "T010"] }
+T016 = { blocked_by = ["T013"] }
+T017 = { blocked_by = ["T013"] }
+T018 = { blocked_by = ["T013"] }
+T019 = { blocked_by = ["T013", "T016"] }
+T020 = { blocked_by = ["T013", "T017"] }
+T021 = { blocked_by = ["T006"] }
+T022 = { blocked_by = ["T006"] }
+T023 = { blocked_by = ["T021", "T022"] }
+T024 = { blocked_by = ["T023"] }
+T025 = { blocked_by = ["T023", "T024"] }
+T026 = { blocked_by = ["T006"] }
+T027 = { blocked_by = ["T026", "T013"] }
+T028 = { blocked_by = ["T027"] }
+T029 = { blocked_by = ["T003"] }
+T030 = { blocked_by = ["T029"] }
+T031 = { blocked_by = ["T030"] }
+T032 = { blocked_by = ["T015"] }
+T033 = { blocked_by = [] }
+T034 = { blocked_by = ["T015", "T020", "T025", "T028"] }
+```
+
+### Phase Dependencies
+
+- **Setup (Phase 1)**: starts immediately.
+- **Foundational (Phase 2)**: depends on Setup. Blocks all user stories.
+- **US1 (Phase 3)**: MVP. Largely MOCKUP-DONE on the desktop side; backend
+  wiring completes it.
+- **US2-US5 (Phases 4-7)**: depend on Foundational; can run in priority order
+  or in parallel after US1 lands.
+- **Polish (Phase 8)**: depends on the stories whose surfaces it touches.
+
+### Parallel Opportunities
+
+- T001 / T002 / T003 / T005 in Setup + Foundational.
+- T007 / T008 / T009 in US1 tests.
+- T016 / T017 in US2 tests.
+- T021 / T022 in US3 tests.
+
+---
+
+## Implementation Strategy
+
+### MVP First
+
+1. Phases 1-2.
+2. Phase 3 (US1) end-to-end: replace localStorage write path with Tauri while
+   keeping the mockup wiring on the desktop.
+
+### Incremental Delivery
+
+1. MVP (US1).
+2. US2 (audit + repair).
+3. US3 (per-source override).
+4. US4 (restore defaults).
+5. US5 (schema migration).
+6. Polish.
+
+---
+
+## Notes
+
+- [P] = different files, no dependencies.
+- [Story] = traceability to spec.md user story.
+- MOCKUP-DONE = code already exists in the desktop mockup; reuse, do not
+  rewrite.
+- Avoid: rewriting `apps/desktop/src/data/settings.ts` from scratch; adding
+  keys to `NOISY_KEYS` without a research decision; adding theme to
+  `SettingsState`.

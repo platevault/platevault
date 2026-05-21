@@ -1,0 +1,47 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://astro-plan/contracts/guided.step.complete.json",
+  "title": "guided.step.complete",
+  "description": "Mark a guided flow step as complete and return the next step.",
+  "type": "object",
+  "properties": {
+    "request": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["step_id"],
+      "properties": {
+        "step_id": {
+          "type": "string",
+          "description": "Stable id of the step to mark complete (e.g. `inbox.confirm_first`)."
+        }
+      }
+    },
+    "response": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["completed"],
+      "properties": {
+        "completed": {
+          "type": "boolean",
+          "description": "True when this call transitioned the step into completed_steps."
+        },
+        "next_step": {
+          "type": ["string", "null"],
+          "description": "Id of the next uncompleted step, or null when the flow is complete."
+        }
+      }
+    },
+    "errors": {
+      "type": "array",
+      "items": {
+        "type": "string",
+        "enum": [
+          "UNKNOWN_STEP_ID",
+          "FLOW_DISMISSED",
+          "PERSISTENCE_UNAVAILABLE"
+        ]
+      }
+    }
+  },
+  "required": ["request", "response"]
+}

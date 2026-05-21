@@ -1,0 +1,50 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://astro-plan.dev/contracts/017/plan.retry.json",
+  "title": "plan.retry",
+  "description": "Create a new plan covering the failed items (or all items) of a terminal parent plan. Owned by spec 017. The new plan starts in draft.",
+  "type": "object",
+  "properties": {
+    "request": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["parent_plan_id", "items_filter"],
+      "properties": {
+        "parent_plan_id": { "type": "string" },
+        "items_filter": {
+          "type": "string",
+          "enum": ["failed", "all"],
+          "description": "Which parent items to materialise into the retry plan."
+        }
+      }
+    },
+    "response": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["new_plan_id"],
+      "properties": {
+        "new_plan_id": { "type": "string" },
+        "parent_plan_id": { "type": "string" },
+        "items_total": { "type": "integer", "minimum": 1 }
+      }
+    },
+    "errors": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "required": ["code"],
+        "properties": {
+          "code": {
+            "type": "string",
+            "enum": ["parent.not_found", "parent.not_terminal", "no.items.to.retry"]
+          },
+          "message": { "type": "string" },
+          "parent_state": {
+            "type": "string",
+            "description": "Returned on parent.not_terminal so the UI can explain."
+          }
+        }
+      }
+    }
+  }
+}

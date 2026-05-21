@@ -1,0 +1,91 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://astro-library-manager.local/contracts/native.reveal.json",
+  "title": "native.reveal",
+  "description": "Open the OS file browser at the given path with the target selected when the host platform supports per-item selection. Implemented over tauri-plugin-opener revealItemInDir with documented per-platform fallbacks (macOS open -R, Windows explorer.exe /select,, Linux freedesktop ShowItems with xdg-open directory fallback).",
+  "type": "object",
+  "properties": {
+    "operation": {
+      "const": "native.reveal"
+    },
+    "version": {
+      "type": "string",
+      "const": "1"
+    },
+    "request": {
+      "type": "object",
+      "required": ["path", "request_id"],
+      "additionalProperties": false,
+      "properties": {
+        "path": {
+          "description": "Absolute path to reveal. May point to a file or directory. Existence is checked at dispatch time, not at input-validation time.",
+          "type": "string",
+          "minLength": 1
+        },
+        "entity_kind": {
+          "description": "Optional context tag for audit-log correlation.",
+          "type": "string",
+          "enum": [
+            "inbox_item",
+            "inventory_row",
+            "project_manifest",
+            "master_calibration",
+            "registered_source",
+            "other"
+          ]
+        },
+        "entity_id": {
+          "type": "string"
+        },
+        "request_id": {
+          "type": "string",
+          "format": "uuid"
+        }
+      }
+    },
+    "response": {
+      "type": "object",
+      "required": ["revealed", "selection"],
+      "additionalProperties": false,
+      "properties": {
+        "revealed": {
+          "description": "True when the OS file browser launched successfully.",
+          "type": "boolean"
+        },
+        "selection": {
+          "description": "How the target was highlighted. `target` means the item was selected (macOS, Windows, Linux with freedesktop ShowItems). `directory_only` means only the parent directory opened (Linux fallback). `none` means no UI hint was applied.",
+          "type": "string",
+          "enum": ["target", "directory_only", "none"]
+        }
+      }
+    },
+    "errors": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "path.not_exists": {
+          "description": "The provided path does not resolve to any filesystem entry at dispatch time. User is shown a non-destructive toast and the failure is audit-logged."
+        },
+        "os.command_failed": {
+          "description": "The underlying OS reveal command (open -R, explorer.exe /select,, or freedesktop ShowItems) returned a non-zero exit or D-Bus error. Audit-logged."
+        }
+      }
+    },
+    "notes": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "audit_event_on_failure": {
+          "const": "native.reveal.failed"
+        },
+        "audit_on_cancellation": {
+          "const": false
+        },
+        "symlink_policy": {
+          "const": "preserve-user-visible-path"
+        }
+      }
+    }
+  },
+  "required": ["operation", "version", "request", "response", "errors"]
+}

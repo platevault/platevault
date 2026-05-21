@@ -1,0 +1,96 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://astro-plan.local/contracts/inbox.confirm.json",
+  "title": "inbox.confirm",
+  "description": "Confirm the next action for a classified Inbox item. For single_type items, action must be 'confirm' (direct Inventory promotion). For mixed items, action must be 'split' (generate a reviewable plan). Always creates or references a Plan in state ready_for_review.",
+  "type": "object",
+  "version": "1.0.0",
+  "operation": "inbox.confirm",
+  "request": {
+    "type": "object",
+    "required": ["inbox_item_id", "action"],
+    "additionalProperties": false,
+    "properties": {
+      "inbox_item_id": { "type": "string" },
+      "action": {
+        "type": "string",
+        "enum": ["split", "confirm"],
+        "description": "'split' for mixed Inbox items; 'confirm' for single_type Inbox items."
+      }
+    }
+  },
+  "response": {
+    "type": "object",
+    "required": ["plan_id", "plan_state"],
+    "additionalProperties": false,
+    "properties": {
+      "plan_id": { "type": "string" },
+      "plan_state": {
+        "type": "string",
+        "enum": ["ready_for_review"],
+        "description": "Plans created by this operation always land in ready_for_review."
+      },
+      "items_total": {
+        "type": "integer",
+        "minimum": 0,
+        "description": "Number of plan items created. Equals the number of scanned files in the Inbox item."
+      }
+    }
+  },
+  "errors": [
+    {
+      "code": "inbox.item.not_found",
+      "description": "No InboxItem exists for the provided inbox_item_id.",
+      "http_status_hint": 404
+    },
+    {
+      "code": "inbox.has.open.plan",
+      "description": "The Inbox item already has a Plan in an open state (draft, ready_for_review, approved, or applying). The caller should route to the existing plan.",
+      "http_status_hint": 409,
+      "data": {
+        "type": "object",
+        "required": ["existing_plan_id"],
+        "properties": {
+          "existing_plan_id": { "type": "string" },
+          "existing_plan_state": {
+            "type": "string",
+            "enum": ["draft", "ready_for_review", "approved", "applying"]
+          }
+        }
+      }
+    },
+    {
+      "code": "classification.ambiguous",
+      "description": "Action does not match the current classification. For example: action='confirm' on a mixed item, or action='split' on a single_type item, or any action on an unclassified item.",
+      "http_status_hint": 422,
+      "data": {
+        "type": "object",
+        "properties": {
+          "current_type": {
+            "type": "string",
+            "enum": ["single_type", "mixed", "unclassified"]
+          },
+          "requested_action": {
+            "type": "string",
+            "enum": ["split", "confirm"]
+          }
+        }
+      }
+    },
+    {
+      "code": "pattern.unset",
+      "description": "The active Naming & Structure pattern (spec 015) is unset, invalid, or fails to resolve required tokens for one or more files. No plan was created.",
+      "http_status_hint": 422,
+      "data": {
+        "type": "object",
+        "properties": {
+          "missing_tokens": {
+            "type": "array",
+            "items": { "type": "string" }
+          },
+          "first_failing_file": { "type": "string" }
+        }
+      }
+    }
+  ]
+}

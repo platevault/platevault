@@ -2,88 +2,198 @@
 
 **Feature Branch**: `012-processing-artifact-observation`  
 **Created**: 2026-05-09  
+**Last Updated**: 2026-05-20  
 **Status**: Draft  
 **Input**: User description: "Specify how the app observes outputs from PixInsight, Siril, planetary/lunar tools, and future workflow profiles without becoming the processing tool."
 
+## Implementation Status: NOT IMPLEMENTED
+
+No code lands for this feature. Mockup state for the Tool Launches drawer
+accordion is the only visible surface today (see feature 011 desktop mock).
+Architecture, contracts, and tasks below define the future-build target.
+
 ## User Scenarios & Testing *(mandatory)*
 
-### User Story 1 - Observe Processing Outputs (Priority: P1)
+### User Story 1 - Detect New Files In A Project's Output Folder (Priority: P1)
 
-As a user, I want the app to notice processing outputs and associate them with projects so that project lifecycle and archive decisions include generated artifacts.
+As a user, I want the app to notice files that appear in a project's
+expected output folder so that processing results show up alongside the
+project without manual import.
 
-**Why this priority**: The app prepares and observes processing work but does not process images itself.
+**Why this priority**: detection is the foundation. Until the app sees
+the file, classification and surfacing are moot. P1 also satisfies the
+constitution's PixInsight Boundary — the app *observes* what PixInsight
+or Siril wrote, it does not write the file itself.
 
-**Independent Test**: Add representative output files to a project folder and confirm the app records them as processing artifacts linked to the project.
+**Independent Test**: launch the desktop app with a project pointing at
+an output folder. Drop a representative `.xisf` or `.fits` file into the
+folder from outside the app. Within the configured debounce window the
+file appears in the project drawer's Tool Launches accordion as an
+unclassified artifact with a detection timestamp.
 
 **Acceptance Scenarios**:
 
-1. **Given** a project folder contains supported workflow outputs, **When** the project is scanned, **Then** artifacts are recorded with type, path, workflow, and observation source.
-2. **Given** an artifact is inferred from naming or folder placement, **When** it is shown in detail, **Then** the inference is separate from reviewed project state.
-3. **Given** an artifact is deleted outside the app, **When** the project is rescanned, **Then** the artifact state becomes missing or stale rather than silently disappearing.
+1. **Given** a project has an output folder configured, **When** a new
+   file with a recognized processing extension is written to that
+   folder, **Then** a `ProcessingArtifact` row is recorded with the
+   project id, absolute path (resolved through library root), and a
+   detection timestamp.
+2. **Given** a file is renamed or replaced in the output folder,
+   **When** the watcher fires, **Then** the existing artifact's
+   `detected_at` is updated and an audit event records the change
+   rather than creating a duplicate row.
+3. **Given** a file is deleted outside the app, **When** the project is
+   rescanned, **Then** the artifact transitions to `missing` rather
+   than disappearing silently.
 
 ---
 
-### User Story 2 - Use Workflow Profiles (Priority: P2)
+### User Story 2 - Classify Artifacts As Intermediate / Master / Final (Priority: P2)
 
-As a user, I want artifact observation to be driven by workflow profiles so that PixInsight, Siril, and future tools can use different expected folders and outputs.
+As a user, I want detected files to be classified so that I can tell at
+a glance which files are throwaway intermediates and which are the
+final result of a processing session.
 
-**Why this priority**: Hardcoding PixInsight would contradict the product boundary.
+**Why this priority**: detection alone produces a noisy list. Coarse
+classification (intermediate / master / final) gives the user enough
+signal to prioritise review. Manual override is part of the user
+story — heuristics are never silently authoritative.
 
-**Independent Test**: Configure a PixInsight project and a Siril project with different artifact rules and confirm each observes the expected output taxonomy.
+**Independent Test**: drop a set of representative files into the
+output folder (`integration_*.xisf`, `MasterDark_*.xisf`,
+`<target>_final.tif`). Each artifact appears classified per the
+workflow profile's rules with a confidence value. The user changes one
+artifact's kind via the contract and the override is recorded.
 
 **Acceptance Scenarios**:
 
-1. **Given** a PixInsight project, **When** outputs are scanned, **Then** PixInsight-specific artifact categories are recognized.
-2. **Given** a Siril project, **When** outputs are scanned, **Then** Siril-specific artifact categories are recognized without PixInsight labels.
-3. **Given** an unknown workflow artifact appears, **When** it is shown, **Then** the user can review or ignore it without breaking the project.
+1. **Given** a detected file matches a workflow-profile naming
+   heuristic, **When** the classifier runs, **Then** the artifact's
+   `kind` is set to one of `intermediate`, `master`, or `final` with a
+   `classification_confidence` between 0 and 1.
+2. **Given** a user manually overrides an artifact's kind, **When** the
+   override is applied, **Then** the new kind, the source
+   (`manual_override`), and an audit event are recorded; subsequent
+   re-classifications do not silently revert the user choice.
+3. **Given** a file is unknown to all loaded workflow profiles,
+   **When** the classifier runs, **Then** the artifact is recorded
+   with `kind = intermediate` and `classification_confidence < 0.2`,
+   surfaced as "needs review" rather than dropped.
+
+---
+
+### User Story 3 - Surface Artifacts In The Project Drawer (Priority: P3)
+
+As a user, I want observed artifacts to appear in the project drawer's
+Tool Launches accordion so that processing results are visible next to
+the launch that produced them.
+
+**Why this priority**: surfacing depends on detection (P1) and is
+clearer with classification (P2). Grouping under Tool Launches ties
+each artifact to a launch when one exists (feature 011 cross-spec).
+
+**Independent Test**: open a project drawer; the Tool Launches
+accordion section lists each tool launch followed by the artifacts
+that appeared in the output folder after the launch's start time,
+grouped by `kind` with a count badge.
+
+**Acceptance Scenarios**:
+
+1. **Given** the project has artifacts and tool launches, **When** the
+   drawer renders, **Then** artifacts are grouped under their nearest
+   preceding launch by detection timestamp.
+2. **Given** an artifact has no preceding launch (manual processing),
+   **When** the drawer renders, **Then** it appears under an
+   "Unattributed" group.
+3. **Given** an artifact is `missing`, **When** the drawer renders,
+   **Then** the row visibly distinguishes the missing state and offers
+   a "Mark resolved" affordance via the classify contract.
+
+---
 
 ### Edge Cases
 
-- Tool output folders contain temporary files.
-- Same artifact appears under multiple names or symbolic links.
-- Artifact naming conflicts with source data.
-- Workflow profile rules are updated after artifacts were observed.
-- Large output folders need incremental scanning.
+- Output folder is on a removed external drive: watcher unavailable;
+  detection pauses without losing existing rows.
+- Same artifact appears under multiple names (symlinks, hardlinks): the
+  app records the first observed canonical path and treats links as
+  references (constitution forbids following symlinks unless enabled).
+- A user runs PixInsight and writes the file before the watcher has
+  attached: the on-attach reconciliation scan must catch the file.
+- Workflow profile rules change after artifacts were observed: existing
+  classifications stay; the user can request a reclassify per project.
+- Very large output folders: bounded debounce window (default 2s) and
+  paged listing keep UI responsive.
 
 ### Domain Questions To Resolve
 
-- Exact first-release artifact categories for PixInsight.
-- Minimum Siril artifact taxonomy for first release.
+- Exact extension allow-list per workflow profile (see research.md).
+- Default debounce window and watch-vs-poll selection per platform.
+- Whether `final` requires a manifest cross-reference (feature 024).
 
 ## Requirements *(mandatory)*
 
 ### Functional Requirements
 
-- **FR-001**: The app MUST observe processing artifacts as project-linked data.
-- **FR-002**: Artifact observation MUST preserve the distinction between observed files and reviewed project state.
-- **FR-003**: Artifact rules MUST be defined by workflow profile.
-- **FR-004**: PixInsight-specific artifact naming MUST NOT leak into non-PixInsight projects.
-- **FR-005**: Artifact state MUST support present, missing, stale, ignored, and reviewed states or equivalent final vocabulary.
-- **FR-006**: Observed artifacts MUST be included in project lifecycle and cleanup/archive planning.
-- **FR-007**: The app MUST NOT process images or replace external processing tools.
+- **FR-001**: The app MUST observe a project's configured output folder
+  and detect newly written files matching the active workflow profile.
+- **FR-002**: Each observed file MUST become a `ProcessingArtifact` row
+  with `project_id`, `path`, `tool`, and `detected_at` recorded.
+- **FR-003**: Each artifact MUST carry a `kind` of `intermediate`,
+  `master`, or `final`, plus a `classification_confidence` value.
+- **FR-004**: Classification MUST be driven by workflow-profile rules,
+  not hardcoded per UI surface.
+- **FR-005**: Users MUST be able to manually override classification;
+  overrides MUST persist across re-detection and re-classification.
+- **FR-006**: Missing files MUST transition to a `missing` state rather
+  than being deleted from the index silently.
+- **FR-007**: The app MUST NOT write to, modify, or process the
+  observed files. Observation is read-only.
+- **FR-008**: Artifact detection and classification MUST emit audit
+  events (`artifact.detected`, `artifact.classified`,
+  `artifact.classify.override`, `artifact.missing`).
+- **FR-009**: Artifacts MUST be surfaceable in the project drawer's
+  Tool Launches accordion, grouped by nearest preceding launch.
 
 ### Key Entities
 
-- **Processing Artifact**: Output file or folder observed under a project.
-- **Artifact Rule**: Workflow-profile rule for recognizing artifact paths and types.
-- **Artifact State**: Current review and availability state of an artifact.
-- **Workflow Profile**: Tool or process-specific rules for prepared sources and artifacts.
+- **Processing Artifact**: Output file observed under a project,
+  classified as intermediate / master / final, optionally associated
+  with a tool launch.
+- **Artifact Classifier Rule**: Workflow-profile-scoped naming or
+  extension pattern that maps an observed file to a kind and tool.
+- **Artifact State**: Present, missing, or user-resolved.
+- **Workflow Profile**: Tool-specific configuration (feature 011 cross-spec).
 
 ## Success Criteria *(mandatory)*
 
 ### Measurable Outcomes
 
-- **SC-001**: PixInsight and Siril artifact rules can coexist without UI hardcoding.
-- **SC-002**: A project detail view can list observed artifacts by type and state.
+- **SC-001**: Dropping a known PixInsight master file into a project's
+  output folder results in a classified artifact in the drawer within
+  the debounce window.
+- **SC-002**: PixInsight and Siril rules coexist without UI hardcoding.
 - **SC-003**: Missing artifacts remain auditable after rescan.
+- **SC-004**: Manual classification overrides survive a re-scan.
+
+## Cross-References
+
+- Feature 011 (Processing Tool Launch): supplies the `tool_launch_id`
+  used to attribute artifacts to a launch.
+- Feature 024 (Project Manifests And Notes): manifests snapshot the
+  set of `final` artifacts at lifecycle checkpoints.
+- Feature 001 (Library Manager): library-root abstraction resolves
+  artifact paths across removed/remapped drives.
 
 ## Assumptions
 
 - Processing tools own actual processing.
-- Project artifact observation is local filesystem based.
+- Project artifact observation is local-filesystem based.
+- Each project has at most one active output folder per workflow.
 
 ## Out of Scope
 
-- Running workflow scripts.
-- Editing processing outputs.
+- Running workflow scripts or invoking PixInsight/Siril.
+- Editing, transcoding, or compressing artifact files.
 - Uploading artifacts to remote services.
+- Diffing or comparing artifact contents.

@@ -1,0 +1,151 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://astro-plan.dev/contracts/025/plan.apply.json",
+  "title": "plan.apply",
+  "description": "Apply an approved filesystem plan. Long-running operation: clients subscribe to item_progress and plan_terminal events with a cursor. Owned by spec 025. Plan generation/review/approve/discard live in spec 017.",
+  "type": "object",
+  "properties": {
+    "request": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["plan_id", "approval_token"],
+      "properties": {
+        "plan_id": {
+          "type": "string",
+          "description": "Identifier of the plan in state `approved`."
+        },
+        "approval_token": {
+          "type": "string",
+          "description": "Token issued by spec 017's plan.approve, bound to the plan content hash at approval time."
+        },
+        "cursor": {
+          "type": "string",
+          "description": "Optional resume cursor for re-subscribing to the same in-flight run.",
+          "nullable": true
+        }
+      }
+    },
+    "response": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["plan_id", "run_id", "new_state"],
+      "properties": {
+        "plan_id": { "type": "string" },
+        "run_id": {
+          "type": "string",
+          "description": "Identifier of this PlanApplyRun, used by audit events and resume cursors."
+        },
+        "new_state": {
+          "const": "applying",
+          "description": "Plan state immediately after apply begins."
+        }
+      }
+    },
+    "events": {
+      "type": "object",
+      "description": "Stream events emitted to subscribers of this long-running operation.",
+      "properties": {
+        "item_progress": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["run_id", "plan_id", "item_id", "prior_state", "new_state", "at", "cursor"],
+          "properties": {
+            "run_id": { "type": "string" },
+            "plan_id": { "type": "string" },
+            "item_id": { "type": "string" },
+            "prior_state": {
+              "type": "string",
+              "enum": ["pending", "applying", "succeeded", "failed", "skipped", "cancelled"]
+            },
+            "new_state": {
+              "type": "string",
+              "enum": ["pending", "applying", "succeeded", "failed", "skipped", "cancelled"]
+            },
+            "at": { "type": "string", "format": "date-time" },
+            "cursor": {
+              "type": "string",
+              "description": "Opaque cursor; resume subscription by passing it as request.cursor."
+            },
+            "failure": {
+              "type": "object",
+              "additionalProperties": false,
+              "required": ["code", "message", "recoverable"],
+              "properties": {
+                "code": {
+                  "type": "string",
+                  "enum": [
+                    "permission.denied",
+                    "conflict.destination_exists",
+                    "source.missing",
+                    "source.locked",
+                    "volume.unavailable",
+                    "disk.full",
+                    "path.invalid",
+                    "protected.source",
+                    "trash.unavailable",
+                    "unknown"
+                  ]
+                },
+                "message": { "type": "string" },
+                "recoverable": { "type": "boolean" }
+              }
+            }
+          }
+        },
+        "plan_terminal": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["run_id", "plan_id", "terminal_state", "at", "counts"],
+          "properties": {
+            "run_id": { "type": "string" },
+            "plan_id": { "type": "string" },
+            "terminal_state": {
+              "type": "string",
+              "enum": ["applied", "partially_applied", "failed", "cancelled"]
+            },
+            "at": { "type": "string", "format": "date-time" },
+            "counts": {
+              "type": "object",
+              "additionalProperties": false,
+              "required": ["succeeded", "failed", "skipped", "cancelled"],
+              "properties": {
+                "succeeded": { "type": "integer", "minimum": 0 },
+                "failed": { "type": "integer", "minimum": 0 },
+                "skipped": { "type": "integer", "minimum": 0 },
+                "cancelled": { "type": "integer", "minimum": 0 }
+              }
+            }
+          }
+        }
+      }
+    },
+    "errors": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "required": ["code"],
+        "properties": {
+          "code": {
+            "type": "string",
+            "enum": [
+              "plan.not_found",
+              "plan.not_approved",
+              "plan.approval.stale",
+              "plan.invalid_state",
+              "plan.conflict.overlap"
+            ]
+          },
+          "message": { "type": "string" },
+          "current_state": {
+            "type": "string",
+            "description": "Returned on plan.invalid_state and plan.not_approved."
+          },
+          "conflicting_plan_id": {
+            "type": "string",
+            "description": "Returned on plan.conflict.overlap."
+          }
+        }
+      }
+    }
+  }
+}

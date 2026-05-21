@@ -1,0 +1,117 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://astro-plan.dev/contracts/017/plan.list.json",
+  "title": "plan.list",
+  "description": "List reviewable plans, defaulting to failed-first ordering. Owned by spec 017.",
+  "type": "object",
+  "properties": {
+    "request": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "state_filter": {
+          "type": "array",
+          "description": "Optional state allowlist; omit or empty for all states.",
+          "items": {
+            "type": "string",
+            "enum": [
+              "draft",
+              "ready_for_review",
+              "approved",
+              "applying",
+              "applied",
+              "partially_applied",
+              "failed",
+              "cancelled"
+            ]
+          },
+          "uniqueItems": true
+        },
+        "origin_filter": {
+          "type": "array",
+          "description": "Optional origin allowlist; omit or empty for all origins.",
+          "items": {
+            "type": "string",
+            "enum": ["inbox", "restructure", "cleanup", "archive", "project"]
+          },
+          "uniqueItems": true
+        },
+        "limit": {
+          "type": "integer",
+          "minimum": 1,
+          "maximum": 500,
+          "default": 100
+        }
+      }
+    },
+    "response": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["plans"],
+      "properties": {
+        "plans": {
+          "type": "array",
+          "items": { "$ref": "#/$defs/PlanSummary" }
+        }
+      }
+    },
+    "errors": {
+      "type": "array",
+      "description": "No domain errors. Transport/decoding errors are surfaced by the IPC layer.",
+      "items": false,
+      "maxItems": 0
+    }
+  },
+  "$defs": {
+    "PlanSummary": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "id",
+        "number",
+        "title",
+        "origin",
+        "state",
+        "created_at",
+        "items_total",
+        "items_applied",
+        "items_failed",
+        "items_pending",
+        "type"
+      ],
+      "properties": {
+        "id": { "type": "string" },
+        "number": { "type": "integer" },
+        "title": { "type": "string" },
+        "origin": {
+          "type": "string",
+          "enum": ["inbox", "restructure", "cleanup", "archive", "project"]
+        },
+        "origin_path": { "type": "string" },
+        "state": {
+          "type": "string",
+          "enum": [
+            "draft",
+            "ready_for_review",
+            "approved",
+            "applying",
+            "applied",
+            "partially_applied",
+            "failed",
+            "cancelled"
+          ]
+        },
+        "created_at": { "type": "string", "format": "date-time" },
+        "items_total": { "type": "integer", "minimum": 0 },
+        "items_applied": { "type": "integer", "minimum": 0 },
+        "items_failed": { "type": "integer", "minimum": 0 },
+        "items_pending": { "type": "integer", "minimum": 0 },
+        "type": {
+          "type": "string",
+          "enum": ["split", "restructure", "cleanup", "archive", "source_map"]
+        },
+        "parent_plan_id": { "type": "string" }
+      }
+    }
+  }
+}

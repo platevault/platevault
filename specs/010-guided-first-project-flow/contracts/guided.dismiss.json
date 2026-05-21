@@ -1,0 +1,35 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://astro-plan/contracts/guided.dismiss.json",
+  "title": "guided.dismiss",
+  "description": "Dismiss the guided flow. Hints stop rendering until restart from Settings.",
+  "type": "object",
+  "properties": {
+    "request": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {},
+      "required": []
+    },
+    "response": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["dismissed_at"],
+      "properties": {
+        "dismissed_at": {
+          "type": "string",
+          "format": "date-time",
+          "description": "Timestamp the dismiss was recorded."
+        }
+      }
+    },
+    "errors": {
+      "type": "array",
+      "items": {
+        "type": "string",
+        "enum": ["ALREADY_DISMISSED", "PERSISTENCE_UNAVAILABLE"]
+      }
+    }
+  },
+  "required": ["request", "response"]
+}

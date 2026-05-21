@@ -1,0 +1,93 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://astro-plan/contracts/dev.calls.list.json",
+  "title": "dev.calls.list",
+  "description": "Read the in-memory recent-calls ring buffer captured by the developer-mode recording proxy. Session-only, never persisted.",
+  "operation": {
+    "name": "dev.calls.list",
+    "direction": "ui-to-core",
+    "version": "1"
+  },
+  "request": {
+    "type": "object",
+    "additionalProperties": false,
+    "properties": {
+      "limit": {
+        "type": "integer",
+        "minimum": 1,
+        "maximum": 100,
+        "description": "Optional max rows to return. Defaults to the full buffer (100). Larger values are clamped."
+      }
+    }
+  },
+  "response": {
+    "type": "object",
+    "required": ["calls"],
+    "additionalProperties": false,
+    "properties": {
+      "calls": {
+        "type": "array",
+        "description": "Newest-first list of recorded calls.",
+        "items": {
+          "type": "object",
+          "required": ["id", "contract", "contract_version", "request", "started_at", "duration_ms", "payload_truncated"],
+          "additionalProperties": false,
+          "properties": {
+            "id": {
+              "type": "string",
+              "description": "Monotonic session-scoped id. Used as the row key."
+            },
+            "contract": {
+              "type": "string",
+              "description": "Operation name at call time, e.g. plan.create."
+            },
+            "contract_version": {
+              "type": "string",
+              "description": "Operation version at call time. Pinned per call."
+            },
+            "request": {
+              "type": "object",
+              "description": "Redacted request payload. Sensitive fields are replaced with the string '<redacted>'."
+            },
+            "response": {
+              "type": "object",
+              "description": "Response payload on success. Absent when the call errored."
+            },
+            "error": {
+              "type": "object",
+              "required": ["code", "message"],
+              "additionalProperties": false,
+              "properties": {
+                "code": { "type": "string" },
+                "message": { "type": "string" },
+                "details": { "type": "object" }
+              },
+              "description": "Error envelope on failure. Absent on success."
+            },
+            "started_at": {
+              "type": "string",
+              "format": "date-time",
+              "description": "Wall-clock UTC start time."
+            },
+            "duration_ms": {
+              "type": "number",
+              "minimum": 0,
+              "description": "Monotonic elapsed time from dispatch to response or error."
+            },
+            "payload_truncated": {
+              "type": "boolean",
+              "description": "True when the recorder truncated the stored request or response above the 64 KB threshold."
+            }
+          }
+        }
+      }
+    }
+  },
+  "errors": [
+    {
+      "code": "dev_mode.disabled",
+      "message": "Developer mode is disabled. The recording proxy is not installed; no calls are available.",
+      "http_status_equivalent": 403
+    }
+  ]
+}

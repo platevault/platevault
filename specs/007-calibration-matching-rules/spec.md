@@ -1,94 +1,229 @@
 # Feature Specification: Calibration Matching Rules
 
-**Feature Branch**: `007-calibration-matching-rules`  
-**Created**: 2026-05-09  
-**Status**: Draft  
+**Feature Branch**: `007-calibration-matching-rules`
+**Created**: 2026-05-09
+**Last Updated**: 2026-05-20
+**Status**: Draft
 **Input**: User description: "Specify configurable calibration matching rules per calibration type, with recommendations and manual override."
+
+## Implementation Status: UI scaffolding only
+
+The desktop settings page at
+`apps/desktop/src/features/settings/SettingsPage.tsx` currently exposes three
+calibration controls — dark match tolerance, flat matching strategy, and a
+"suggest calibration" toggle — backed by the local settings keys
+`darkMatchTolerance`, `flatMatching`, and `suggestCalibration` in
+`apps/desktop/src/data/settings.ts`. There is no matcher crate, no
+recommendation engine, no contract, and no persistence wiring. The current UI
+edits values that are never read by any matching logic. Everything in this
+specification, plan, research, data model, contracts, and tasks describes
+behavior that does not yet exist.
 
 ## User Scenarios & Testing *(mandatory)*
 
-### User Story 1 - Configure Matching Per Calibration Type (Priority: P1)
+### User Story 1 - Dark Frame Matching (Priority: P1)
 
-As an astrophotographer, I want dark, bias, and flat matching rules configured separately so that the app recommends calibrations using criteria that make sense for each type.
+As an astrophotographer with light frames captured at specific gain, offset,
+exposure, and sensor temperature, I want the app to recommend dark masters that
+match these acquisition parameters so that calibration is correct without me
+hand-walking every dark library.
 
-**Why this priority**: Matching requirements differ by calibration type and user workflow.
+**Why this priority**: Darks are the most parameter-sensitive calibration type
+and the most common reason a project blocks during preparation. Without dark
+matching the rest of the feature is not useful.
 
-**Independent Test**: Configure dark, bias, and flat matching fields independently and verify recommendations change per type.
+**Independent Test**: Load a light session with known gain, offset, exposure,
+and temperature, configure dark rules with default tolerances, and verify the
+returned ranked list contains exact-parameter dark masters first and
+within-tolerance dark masters second, with confidence values reflecting
+dimension match counts.
 
 **Acceptance Scenarios**:
 
-1. **Given** dark matching excludes temperature, **When** recommendations are generated, **Then** dark candidates are not rejected solely because temperature differs.
-2. **Given** flat matching includes filter and optical train, **When** recommendations are generated, **Then** flats are grouped by those fields.
-3. **Given** flats exist from the same light session or observing night, **When** recommendations are generated, **Then** those flats are preferred over compatible flats from other nights.
-4. **Given** no same-session or same-night flats are available, **When** recommendations are generated, **Then** compatible flats from other nights remain eligible instead of blocking the project.
+1. **Given** a light session at gain 100, offset 50, exposure 300s, temperature
+   -10C, **When** matching is requested, **Then** a dark master at identical
+   gain/offset and exposure 300s within ±2C is returned with high confidence.
+2. **Given** the same light session, **When** only out-of-tolerance darks
+   exist, **Then** the response lists them with reduced confidence and a
+   `dimensions_mismatched` array naming the failing dimensions.
+3. **Given** dark match tolerance for temperature is widened in settings,
+   **When** matching is re-requested, **Then** previously rejected darks now
+   appear with confidence values reflecting the wider tolerance.
 
 ---
 
-### User Story 2 - Manual Override (Priority: P2)
+### User Story 2 - Flat Frame Matching (Priority: P2)
 
-As a user preparing a project, I want to manually select calibration frames even when automatic recommendations disagree.
+As an astrophotographer, I want flat masters recommended based on filter,
+optical-train rotation, binning, and date proximity so that vignetting and
+dust-mote correction matches the actual light frame capture state.
 
-**Why this priority**: Users explicitly need final control over calibration assignment.
+**Why this priority**: Flats are required for any project that integrates
+multi-frame data, but their matching policy is workflow-dependent and benefits
+from explicit configuration.
 
-**Independent Test**: Select a calibration manually that is not the top recommendation and confirm the project uses the manual choice.
+**Independent Test**: Load a multi-filter light session captured on a known
+observing night, request flat matching, and verify each filter's recommended
+flat master comes from the closest same-rotation, same-binning flat capture
+night, with `dimensions_matched` showing filter, rotation, binning, and a
+date-proximity score.
 
 **Acceptance Scenarios**:
 
-1. **Given** recommended calibrations exist, **When** the user selects a different calibration, **Then** the manual selection is preserved.
-2. **Given** manual selection conflicts with a recommendation, **When** the project is reviewed, **Then** the app shows the conflict without blocking the user.
+1. **Given** a light session with filter Ha and rotation 90°, **When** flat
+   matching is requested, **Then** flat masters with matching filter and
+   rotation from the same observing night are ranked above any other.
+2. **Given** no same-night flats exist, **When** matching is requested,
+   **Then** compatible flats from the nearest date are returned with confidence
+   reduced for date proximity.
+3. **Given** a flat master with a different binning, **When** matching is
+   requested, **Then** it is excluded from the recommendation list because
+   binning is a hard constraint.
+
+---
+
+### User Story 3 - Bias Frame Matching (Priority: P3)
+
+As a user calibrating short-exposure or scaled-dark workflows, I want bias
+masters recommended based on gain and offset alone so that bias is not blocked
+by exposure or temperature requirements that do not apply.
+
+**Why this priority**: Bias matching is the simplest case and only relevant for
+some workflows, but it must not be conflated with dark matching rules.
+
+**Independent Test**: Load a light session with bias-eligible workflow,
+request bias matching, and confirm the recommendation set is filtered by gain
+and offset only, with no exposure or temperature dimension entries in the
+response.
+
+**Acceptance Scenarios**:
+
+1. **Given** bias masters at matching gain/offset, **When** matching is
+   requested, **Then** they are returned with confidence based on gain/offset
+   match only.
+2. **Given** bias masters whose gain differs, **When** matching is requested,
+   **Then** they are excluded because gain is a hard constraint for bias.
+
+---
+
+### User Story 4 - Manual Override (Priority: P4)
+
+As a user preparing a project, I want to assign a specific calibration master
+even when it conflicts with the auto-recommendation so that I retain final
+control over calibration decisions.
+
+**Why this priority**: Override is essential trust behavior but only meaningful
+once auto-matching produces something to override.
+
+**Independent Test**: Auto-match a session, then call assign with a non-top
+master and `override=true`, and verify the assignment is recorded with
+confidence and a flag indicating it was an override.
+
+**Acceptance Scenarios**:
+
+1. **Given** a recommendation set, **When** the user assigns a master that is
+   not the top recommendation with `override=true`, **Then** the assignment is
+   persisted and the response reports the assigned master's confidence.
+2. **Given** the user attempts to assign a master with incompatible hard-rule
+   dimensions, **When** the request is sent without override, **Then** the call
+   returns `incompatible.dimensions` and the assignment is not made.
+3. **Given** the user retries the same incompatible assignment with
+   `override=true`, **Then** the assignment is recorded with a lowered
+   confidence and a mismatched-dimensions audit note.
 
 ### Edge Cases
 
-- Darks without reliable temperature metadata.
-- Flats captured at different gain/offset from lights.
-- Flats captured after midnight but still belonging to the same observing night.
-- Multiple light sessions on adjacent calendar dates that should not share flats unless same-night/session matching or compatibility fallback allows it.
-- Missing camera or telescope metadata.
-- Existing master file instead of a calibration directory.
+- Darks without reliable temperature metadata fall back to gain+offset+exposure
+  matching with reduced confidence.
+- Flats captured after local midnight but belonging to the same observing
+  night are grouped by observing-night semantics, not calendar date.
+- Multiple light sessions on adjacent calendar dates do not share flats unless
+  same-night/session grouping or compatibility fallback explicitly allows it.
+- Missing camera or telescope metadata excludes the candidate from hard-rule
+  matching and surfaces a "metadata gap" reason instead of a silent rejection.
+- A user-provided master file (not directory) is treated as a single calibration
+  master with metadata derived from headers, not from sibling files.
 
 ### Domain Questions To Resolve
 
-- Which fields are default match criteria per type?
-- Should bias matching include exposure or treat exposure as implicit?
+- Default tolerance values per dimension (temperature, date proximity) at
+  first launch.
+- Whether bias matching should ever consider exposure for scaled-dark
+  workflows, or treat exposure as implicit.
+- Whether confidence is a single 0–1 scalar or a structured breakdown the UI
+  must render.
 
 ## Requirements *(mandatory)*
 
 ### Functional Requirements
 
-- **FR-001**: System MUST support frame types `light`, `dark`, `flat`, `bias`, and `dark flat` in the domain model.
-- **FR-002**: Project setup MUST expose dark, bias, and flat selection separately.
-- **FR-003**: Dark flats MUST NOT appear in the initial project setup workflow unless a later spec enables them.
-- **FR-004**: Matching rules MUST be configurable per calibration type.
-- **FR-005**: Recommendations MUST remain recommendations and MUST allow manual override.
-- **FR-006**: Master calibration mode MUST allow selecting a file instead of a directory.
-- **FR-007**: Matching explanations MUST be inspectable outside routine ledger rows.
-- **FR-008**: Flat recommendations MUST prioritize flats from the same light session and observing night before considering compatible flats from other nights.
-- **FR-009**: Same-night flat matching MUST use observing-night/session semantics, not plain calendar-date equality.
-- **FR-010**: If same-session or same-night flats are unavailable, flat recommendations MUST fall back to flats that match the configured calibration compatibility fields.
+- **FR-001**: System MUST support frame types `light`, `dark`, `flat`, `bias`,
+  and `dark flat` in the domain model.
+- **FR-002**: Matching rules MUST be configurable independently per
+  calibration type (dark, bias, flat).
+- **FR-003**: Dark matching MUST default to gain (exact), offset (exact),
+  exposure (±configurable tolerance), and temperature (±configurable tolerance).
+- **FR-004**: Flat matching MUST default to filter (exact), rotation (±0.5°
+  default), binning (exact), and date proximity scored against the light
+  session's observing night.
+- **FR-005**: Bias matching MUST default to gain (exact) and offset (exact),
+  with exposure and temperature explicitly excluded unless configured.
+- **FR-006**: System MUST return ranked recommendations with per-candidate
+  confidence and explicit `dimensions_matched` / `dimensions_mismatched` lists.
+- **FR-007**: Recommendations MUST remain advisory; manual override MUST be
+  accepted via an explicit override flag.
+- **FR-008**: Flat recommendations MUST prioritize same-session and
+  same-observing-night flats before compatibility fallback.
+- **FR-009**: Same-night flat matching MUST use observing-night/session
+  semantics, not plain calendar-date equality.
+- **FR-010**: Master calibration mode MUST allow selecting a file instead of a
+  directory.
+- **FR-011**: Matching explanations MUST be inspectable via the contract
+  response, not only via UI tooltips.
+- **FR-012**: Hard-rule mismatches (e.g., gain for darks, binning for flats)
+  MUST exclude candidates from the auto list but MAY be assigned via override.
 
 ### Key Entities
 
 - **Calibration Type**: Dark, bias, flat, or dark flat.
-- **Matching Rule**: Selected metadata fields used for recommendations.
-- **Observing Night**: The acquisition night/session grouping used to associate after-midnight captures with the same practical imaging session.
-- **Calibration Recommendation**: Candidate relationship between light data and calibration data.
-- **Manual Override**: User-selected calibration assignment.
+- **Matching Rule**: Selected metadata fields, tolerances, and hard/soft
+  classification per calibration type.
+- **Calibration Master**: A calibration artifact (file or directory) with
+  extracted metadata used as the right-hand side of matching.
+- **Calibration Match**: Candidate relationship between a light session and a
+  calibration master with confidence and dimension breakdown.
+- **Observing Night**: The acquisition night/session grouping used to associate
+  after-midnight captures with the same practical imaging session.
+- **Manual Override**: User-selected assignment that supersedes the auto-pick
+  and is recorded with override provenance.
 
 ## Success Criteria *(mandatory)*
 
 ### Measurable Outcomes
 
-- **SC-001**: Users can configure matching rules for darks, bias, and flats independently.
-- **SC-002**: Users can complete project calibration assignment even with incomplete metadata.
-- **SC-003**: Manual calibration choices are preserved across project edits.
-- **SC-004**: Flat recommendation explanations show whether a candidate was selected by same-session, same-night, or compatibility fallback behavior.
+- **SC-001**: Users can configure dark, bias, and flat matching independently
+  from a single settings surface.
+- **SC-002**: For a session with complete metadata, the matcher produces at
+  least one ranked candidate per applicable calibration type when masters
+  exist.
+- **SC-003**: Manual override is preserved across project edits and reported in
+  the response payload.
+- **SC-004**: Flat recommendation responses indicate whether each candidate
+  was selected by same-session, same-night, or compatibility fallback.
+- **SC-005**: Recommendation responses surface every excluded dimension so the
+  UI can render a "why not" view without a second call.
 
 ## Assumptions
 
 - Light frames are the anchor for project calibration recommendations.
-- Metadata extraction can provide camera, telescope, filter, exposure, gain, offset, binning, and temperature when available.
+- Metadata extraction (specs 003/004) can provide camera, telescope, filter,
+  exposure, gain, offset, binning, and temperature where headers contain them.
+- The session and observing-night concepts come from the sessions crate and
+  are already populated for any candidate light session.
 
 ## Out of Scope
 
 - Pixel-level calibration validation.
-- Automatic calibration application.
+- Automatic application of calibration to images.
+- Cross-library master sharing.
+- Authoring new calibration masters (the matcher consumes existing masters).

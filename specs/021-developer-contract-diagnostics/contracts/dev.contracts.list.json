@@ -1,0 +1,79 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://astro-plan/contracts/dev.contracts.list.json",
+  "title": "dev.contracts.list",
+  "description": "List the contract metadata registered in the current build. Read-only, replay-safe.",
+  "operation": {
+    "name": "dev.contracts.list",
+    "direction": "ui-to-core",
+    "version": "1"
+  },
+  "request": {
+    "type": "object",
+    "additionalProperties": false,
+    "properties": {}
+  },
+  "response": {
+    "type": "object",
+    "required": ["contracts"],
+    "additionalProperties": false,
+    "properties": {
+      "contracts": {
+        "type": "array",
+        "description": "All contracts registered at startup. Order is by `name` ascending.",
+        "items": {
+          "type": "object",
+          "required": ["name", "version", "schema_path", "direction", "replay_safe"],
+          "additionalProperties": false,
+          "properties": {
+            "name": {
+              "type": "string",
+              "description": "Operation name, e.g. plan.create."
+            },
+            "version": {
+              "type": "string",
+              "description": "Semantic version of the contract shape."
+            },
+            "schema_path": {
+              "type": "string",
+              "description": "Absolute path to the JSON Schema file backing this contract."
+            },
+            "direction": {
+              "type": "string",
+              "enum": ["ui-to-core", "core-to-ui"],
+              "description": "Matches the direction field in the schema's operation block."
+            },
+            "replay_safe": {
+              "type": "boolean",
+              "description": "True for read-only contracts that may be replayed from the developer surface."
+            },
+            "sensitive_fields": {
+              "type": "array",
+              "items": { "type": "string" },
+              "description": "Optional JSON Pointer paths whose values are redacted before storage."
+            },
+            "ts_hash": {
+              "type": "string",
+              "description": "Optional TypeScript-side declaration hash. Present when known at startup."
+            },
+            "rust_hash": {
+              "type": "string",
+              "description": "Optional Rust-side declaration hash. Present when known at startup."
+            },
+            "mismatch": {
+              "type": "boolean",
+              "description": "True when ts_hash and rust_hash are both present and differ."
+            }
+          }
+        }
+      }
+    }
+  },
+  "errors": [
+    {
+      "code": "dev_mode.disabled",
+      "message": "Developer mode is disabled. Enable devMode in settings to read the contract registry.",
+      "http_status_equivalent": 403
+    }
+  ]
+}

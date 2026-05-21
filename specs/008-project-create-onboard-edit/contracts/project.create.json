@@ -1,0 +1,149 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://astro-plan.local/contracts/project.create.json",
+  "title": "project.create",
+  "description": "Create a new project from confirmed Inventory items. The use case validates identity, resolves initial sources, builds a FilesystemPlan for folder + marker + tool scaffold, persists the project in 'setup_incomplete', and emits an audit event. The first lifecycle transition (setup_incomplete → ready) is owned by spec 009 and is NOT performed here.",
+  "type": "object",
+  "oneOf": [
+    { "$ref": "#/$defs/Request" },
+    { "$ref": "#/$defs/Response" }
+  ],
+  "$defs": {
+    "ContractVersion": { "type": "string", "const": "1.0" },
+    "Uuid": { "type": "string", "format": "uuid" },
+    "Timestamp": { "type": "string", "format": "date-time" },
+    "ProcessingTool": {
+      "type": "string",
+      "enum": ["PixInsight", "Siril", "Planetary Suite"]
+    },
+    "ProjectChannel": {
+      "type": "object",
+      "required": ["label", "source"],
+      "additionalProperties": false,
+      "properties": {
+        "label": { "type": "string", "minLength": 1, "maxLength": 32 },
+        "source": { "type": "string", "enum": ["inferred", "manual"] },
+        "addedAt": { "$ref": "#/$defs/Timestamp" }
+      }
+    },
+    "ErrorCode": {
+      "type": "string",
+      "description": "Project-create-scoped error codes layered on the spec 002 ErrorEnvelope.",
+      "enum": [
+        "name.empty",
+        "name.too_long",
+        "name.duplicate",
+        "tool.unknown",
+        "source.not_found",
+        "path.invalid",
+        "path.collision",
+        "plan.required"
+      ]
+    },
+    "ErrorEnvelope": {
+      "type": "object",
+      "required": ["code", "message"],
+      "additionalProperties": false,
+      "properties": {
+        "code": { "$ref": "#/$defs/ErrorCode" },
+        "message": {
+          "type": "string",
+          "description": "Human-readable explanation. MUST NOT include secrets or absolute filesystem paths."
+        },
+        "details": {
+          "type": "object",
+          "description": "Structured context. name.duplicate MUST include conflicting_project_id. source.not_found MUST include the missing inventory ids. path.collision MUST include the colliding project id.",
+          "additionalProperties": true,
+          "properties": {
+            "conflicting_project_id": { "$ref": "#/$defs/Uuid" },
+            "missing_inventory_ids": {
+              "type": "array",
+              "items": { "$ref": "#/$defs/Uuid" }
+            },
+            "colliding_project_id": { "$ref": "#/$defs/Uuid" }
+          }
+        }
+      }
+    },
+    "Request": {
+      "type": "object",
+      "description": "Project creation request. initial_sources is optional; an empty array creates the project skeleton without sources, which is valid (the project lands in setup_incomplete and the spec 009 ready transition is gated on a non-empty source list).",
+      "required": [
+        "contractVersion",
+        "requestId",
+        "name",
+        "tool",
+        "path"
+      ],
+      "additionalProperties": false,
+      "properties": {
+        "contractVersion": { "$ref": "#/$defs/ContractVersion" },
+        "requestId": { "$ref": "#/$defs/Uuid" },
+        "name": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 120,
+          "description": "User-facing project label. Validated for non-emptiness, length, and uniqueness within the library."
+        },
+        "tool": { "$ref": "#/$defs/ProcessingTool" },
+        "path": {
+          "type": "string",
+          "minLength": 1,
+          "description": "Library-root-relative folder path for the new project. The use case verifies it is unused before planning the folder write."
+        },
+        "initial_sources": {
+          "type": "array",
+          "items": { "$ref": "#/$defs/Uuid" },
+          "uniqueItems": true,
+          "description": "Inventory session ids to link at create time. Sources are picked from Inventory only (research R2); arbitrary disk paths are refused upstream by the UI picker."
+        },
+        "notes": {
+          "type": "string",
+          "maxLength": 4096
+        }
+      }
+    },
+    "Response": {
+      "type": "object",
+      "description": "Project creation response.",
+      "required": ["status", "contractVersion", "requestId"],
+      "additionalProperties": false,
+      "properties": {
+        "status": { "type": "string", "enum": ["success", "error"] },
+        "contractVersion": { "$ref": "#/$defs/ContractVersion" },
+        "requestId": { "$ref": "#/$defs/Uuid" },
+        "project_id": { "$ref": "#/$defs/Uuid" },
+        "lifecycle": {
+          "type": "string",
+          "const": "setup_incomplete",
+          "description": "New projects deterministically start in setup_incomplete. The first transition to 'ready' is owned by spec 009 and runs after the FilesystemPlan is applied."
+        },
+        "plan_id": {
+          "$ref": "#/$defs/Uuid",
+          "description": "FilesystemPlan id for the folder + marker + tool scaffold. Present when the project required a filesystem write; absent for metadata-only creates (e.g. onboarding a folder whose marker already exists)."
+        },
+        "channels": {
+          "type": "array",
+          "items": { "$ref": "#/$defs/ProjectChannel" },
+          "description": "Channels inferred from initial_sources at create time. Empty when no sources were linked."
+        },
+        "audit_id": { "$ref": "#/$defs/Uuid" },
+        "created_at": { "$ref": "#/$defs/Timestamp" },
+        "error": { "$ref": "#/$defs/ErrorEnvelope" }
+      },
+      "allOf": [
+        {
+          "if": { "properties": { "status": { "const": "success" } } },
+          "then": {
+            "required": ["project_id", "lifecycle", "channels", "audit_id", "created_at"],
+            "not": { "required": ["error"] }
+          }
+        },
+        {
+          "if": { "properties": { "status": { "const": "error" } } },
+          "then": { "required": ["error"] }
+        }
+      ]
+    }
+  }
+}

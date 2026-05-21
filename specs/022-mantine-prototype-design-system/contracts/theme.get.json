@@ -1,0 +1,34 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://astro-plan/contracts/theme.get.json",
+  "title": "theme.get",
+  "description": "Read the current desktop theme mode and the resolved (effective) theme. 'mode' is the user's chosen setting and may be 'system', 'light', or 'dark'. 'resolved' is the concrete theme in effect after resolving 'system' against the OS preference, and is always 'light' or 'dark'.",
+  "operation": {
+    "name": "theme.get",
+    "direction": "ui-to-core",
+    "version": "1"
+  },
+  "request": {
+    "type": "object",
+    "additionalProperties": false,
+    "properties": {}
+  },
+  "response": {
+    "type": "object",
+    "required": ["mode", "resolved"],
+    "additionalProperties": false,
+    "properties": {
+      "mode": {
+        "type": "string",
+        "enum": ["system", "light", "dark"],
+        "description": "User-chosen theme mode. 'system' means follow the OS appearance setting."
+      },
+      "resolved": {
+        "type": "string",
+        "enum": ["light", "dark"],
+        "description": "Effective theme after resolving 'system' against the OS preference."
+      }
+    }
+  },
+  "errors": []
+}

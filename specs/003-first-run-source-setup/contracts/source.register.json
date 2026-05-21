@@ -1,0 +1,87 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://astro-library-manager.local/contracts/source.register.json",
+  "title": "source.register",
+  "description": "Register a single directory as a RegisteredSource of the given kind. Idempotent failure on duplicate (kind, path). Performs path existence, directory, and readability validation before inserting.",
+  "type": "object",
+  "properties": {
+    "operation": {
+      "const": "source.register"
+    },
+    "version": {
+      "type": "string",
+      "const": "1"
+    },
+    "request": {
+      "type": "object",
+      "required": ["kind", "path"],
+      "additionalProperties": false,
+      "properties": {
+        "kind": {
+          "description": "Which source category this directory belongs to.",
+          "type": "string",
+          "enum": ["raw", "calibration", "project", "inbox"]
+        },
+        "path": {
+          "description": "Absolute filesystem path to a readable directory on the local machine. OS-canonical form preferred; server will normalize.",
+          "type": "string",
+          "minLength": 1
+        },
+        "kind_subtype": {
+          "description": "Optional category refinement (reserved; unused at first-run).",
+          "type": "string"
+        },
+        "created_via": {
+          "type": "string",
+          "enum": ["first_run", "settings_add", "settings_restart"],
+          "default": "first_run"
+        }
+      }
+    },
+    "response": {
+      "type": "object",
+      "required": ["source_id", "kind", "path", "created_at"],
+      "additionalProperties": false,
+      "properties": {
+        "source_id": {
+          "type": "string",
+          "format": "uuid"
+        },
+        "kind": {
+          "type": "string",
+          "enum": ["raw", "calibration", "project", "inbox"]
+        },
+        "path": {
+          "type": "string",
+          "description": "Normalized canonical path as persisted."
+        },
+        "created_at": {
+          "type": "string",
+          "format": "date-time"
+        }
+      }
+    },
+    "errors": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "path.not.exists": {
+          "description": "The provided path does not resolve to any filesystem entry."
+        },
+        "path.not.directory": {
+          "description": "The provided path exists but is not a directory (e.g. it is a file or a special node)."
+        },
+        "path.permission.denied": {
+          "description": "The current process cannot read the directory metadata or list its contents."
+        },
+        "kind.unsupported": {
+          "description": "The provided kind is not one of raw, calibration, project, or inbox. Reserved for forward compatibility."
+        },
+        "path.already.registered": {
+          "description": "A RegisteredSource with the same (kind, path) already exists. Returns the existing source_id in the error payload."
+        }
+      }
+    }
+  },
+  "required": ["operation", "version", "request", "response", "errors"]
+}

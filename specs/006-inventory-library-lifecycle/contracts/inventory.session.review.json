@@ -1,0 +1,145 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://astro-plan.local/contracts/inventory.session.review.json",
+  "title": "inventory.session.review",
+  "description": "Session-scoped wrapper around lifecycle.transition (spec 002) for the Inventory surface. Pre-fills entity_type based on the session kind resolved server-side from session_id. Returns the same response shape as lifecycle.transition with an additional projected_state field reflecting the post-transition presentational state for the ledger.",
+  "type": "object",
+  "oneOf": [
+    { "$ref": "#/$defs/Request" },
+    { "$ref": "#/$defs/Response" }
+  ],
+  "$defs": {
+    "ContractVersion": {
+      "type": "string",
+      "const": "1.0"
+    },
+    "Uuid": {
+      "type": "string",
+      "format": "uuid"
+    },
+    "Timestamp": {
+      "type": "string",
+      "format": "date-time"
+    },
+    "Actor": {
+      "type": "string",
+      "enum": ["user", "system"]
+    },
+    "ResolvedEntityType": {
+      "type": "string",
+      "description": "Resolved server-side from session_id; included in the response so audit correlation is unambiguous.",
+      "enum": ["acquisition_session", "calibration_session"]
+    },
+    "CanonicalSessionState": {
+      "type": "string",
+      "enum": [
+        "discovered",
+        "candidate",
+        "needs_review",
+        "confirmed",
+        "rejected",
+        "ignored"
+      ]
+    },
+    "PresentationalReviewState": {
+      "type": "string",
+      "enum": ["needs_review", "confirmed", "rejected"]
+    },
+    "ErrorCode": {
+      "type": "string",
+      "enum": [
+        "session.not_found",
+        "state.unchanged",
+        "transition.refused",
+        "actor.not_authorised",
+        "source.unavailable",
+        "contract.version_unsupported"
+      ]
+    },
+    "ErrorEnvelope": {
+      "type": "object",
+      "required": ["code", "message"],
+      "additionalProperties": false,
+      "properties": {
+        "code": { "$ref": "#/$defs/ErrorCode" },
+        "message": {
+          "type": "string",
+          "description": "Human-readable explanation. MUST NOT include absolute filesystem paths or secrets."
+        },
+        "details": {
+          "type": "object",
+          "description": "Optional structured detail. Examples: { allowed_next_states: [...] } for transition.refused; { source_state: 'missing' } for source.unavailable.",
+          "additionalProperties": true
+        }
+      }
+    },
+    "Request": {
+      "type": "object",
+      "description": "Request envelope for inventory.session.review. Caller supplies the session id and target canonical state; the server resolves the entity_type and delegates to lifecycle.transition.",
+      "required": [
+        "contractVersion",
+        "requestId",
+        "session_id",
+        "next_state",
+        "actor"
+      ],
+      "additionalProperties": false,
+      "properties": {
+        "contractVersion": { "$ref": "#/$defs/ContractVersion" },
+        "requestId": { "$ref": "#/$defs/Uuid" },
+        "session_id": { "$ref": "#/$defs/Uuid" },
+        "next_state": {
+          "$ref": "#/$defs/CanonicalSessionState",
+          "description": "Canonical spec 002 session state. The UI sends canonical names (e.g. 'confirmed', 'needs_review', 'rejected'); presentational projection is applied only to responses."
+        },
+        "action_label": {
+          "type": "string",
+          "description": "Human-readable label recorded on the audit entry (e.g. 'Confirmed', 'Re-opened review', 'Rejected session').",
+          "minLength": 1,
+          "maxLength": 120
+        },
+        "actor": { "$ref": "#/$defs/Actor" }
+      }
+    },
+    "Response": {
+      "type": "object",
+      "description": "Response envelope for inventory.session.review. Mirrors lifecycle.transition response with projected_state added.",
+      "required": ["status", "contractVersion", "requestId"],
+      "additionalProperties": false,
+      "properties": {
+        "status": { "type": "string", "enum": ["success", "error"] },
+        "contractVersion": { "$ref": "#/$defs/ContractVersion" },
+        "requestId": { "$ref": "#/$defs/Uuid" },
+        "applied_at": { "$ref": "#/$defs/Timestamp" },
+        "entity_type": { "$ref": "#/$defs/ResolvedEntityType" },
+        "prior_state": { "$ref": "#/$defs/CanonicalSessionState" },
+        "new_state": { "$ref": "#/$defs/CanonicalSessionState" },
+        "projected_state": {
+          "$ref": "#/$defs/PresentationalReviewState",
+          "description": "Presentational projection of new_state for the Inventory ledger (research.md §3)."
+        },
+        "audit_id": { "$ref": "#/$defs/Uuid" },
+        "error": { "$ref": "#/$defs/ErrorEnvelope" }
+      },
+      "allOf": [
+        {
+          "if": { "properties": { "status": { "const": "success" } } },
+          "then": {
+            "required": [
+              "applied_at",
+              "entity_type",
+              "new_state",
+              "projected_state",
+              "audit_id"
+            ],
+            "not": { "required": ["error"] }
+          }
+        },
+        {
+          "if": { "properties": { "status": { "const": "error" } } },
+          "then": { "required": ["error"] }
+        }
+      ]
+    }
+  }
+}
