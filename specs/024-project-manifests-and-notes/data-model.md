@@ -46,6 +46,7 @@ Enum of generation triggers.
 | `source_change` | Source map mutated (lights/flats/darks/bias). |
 | `lifecycle_transition` | Project state changed. |
 | `cleanup_applied` | A cleanup plan touched project sources. |
+| `workflow_run` | A processing-tool workflow run completed (spec 012 `workflow.run_completed` event). |
 
 The mockup `reason` strings ("Created", "Source added", "Lifecycle: imaging
 done") map onto these values for display.
@@ -88,6 +89,7 @@ The writer in `crates/project/structure/manifest.rs` is invoked by:
 | Project source-map mutation (`project.sources.update`) | `source_change` | One manifest per applied mutation, not per UI keystroke. |
 | Lifecycle transition (`project.lifecycle.transition`, feature 002) | `lifecycle_transition` | Includes the new state in the body. |
 | Cleanup plan apply (`cleanup.plan.apply`, feature 008) | `cleanup_applied` | Only when the cleanup affected files referenced by this project. |
+| Workflow run completed (`workflow.run_completed` event from spec 012) | `workflow_run` | Subscriber receives `{ projectId, toolId, completedAt, outputArtifacts: [...] }`. Writes a manifest for the named project. **FLAGGED**: spec 012 must emit `workflow.run_completed` with this payload shape — see GRILL amendment 2026-05-22. |
 
 Triggers are idempotent: if a write fails, the next retry produces a new
 filename (timestamp differs) and a new database row. The previous
@@ -99,8 +101,12 @@ attempt is recorded as a Manifest Export Event with status `failed`
 - A manifest file is never overwritten or mutated after creation.
 - `path` is project-relative; absolute resolution uses the library-root
   abstraction from feature 001.
-- `body.notes` is a copy, not a reference. Editing the live notes file
-  does not change historical manifests.
+- `body.notes` is a **full text snapshot** at write time, not a reference or
+  hash/excerpt. Editing the live notes file does not change historical manifests.
+  (A8, ratified 2026-05-22.)
+- `ProjectNote.content` MUST NOT exceed 16 384 bytes (UTF-8). Writes that
+  would exceed this limit MUST be rejected with `note.content_too_large`.
+  (A5, ratified 2026-05-22.)
 - Exactly one `ProjectNote` per project; deletion is not supported in v1.
 
 ## Audit Events

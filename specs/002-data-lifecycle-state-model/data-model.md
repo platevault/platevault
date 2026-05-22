@@ -103,6 +103,7 @@ A grouping of light frames sharing a metadata-derived session key
 | `target_id` | uuid | no | FK → `Target.id` after confirmation. |
 | `frame_ids` | uuid[] | yes | FK list → `FileRecord.id`. |
 | `state` | enum(`discovered`,`candidate`,`needs_review`,`confirmed`,`rejected`,`ignored`) | yes | See research.md §2.3. |
+| `observer_location` | `ProvenancedValue<ObserverLocation>` \| null | no | Observer location at capture time. See §ObserverLocation below (R-Obs). |
 | `review_snapshot_id` | uuid | no | FK to the immutable snapshot captured at last review (FR-005). |
 | `last_action` | object | no | `{label, at, actor}` for UI projection. |
 | `created_at` | datetime | yes | First derivation timestamp. |
@@ -113,6 +114,7 @@ A grouping of light frames sharing a metadata-derived session key
 - Members with divergent session keys MUST be split into separate sessions (FR-012).
 - `confirmed` and `rejected` are soft-terminal; both are re-openable to `needs_review`.
 - Each transition into a review state MUST snapshot the contributing observed/inferred/reviewed context (FR-005).
+- When `observer_location` extraction fails or yields null for a session where location is action-critical, `AcquisitionSession.state` transitions to `needs_review` with `observer_location` as a blocking field. The `provenance.unreviewed` error code is used (R2.2). User review resolves the block.
 
 ### Lifecycle
 
@@ -199,15 +201,15 @@ projects.
 
 | Field | Type | Required | Description |
 |---|---|---|---|
-| `id` | uuid | yes | Stable identifier. |
-| `canonical_name` | string | yes | Catalog primary name. |
+| `id` | uuid | yes | Stable identifier. UUIDv5 from canonical designation per spec 013 R6. |
+| `primary_designation` | string | yes | Catalog primary display name (e.g. `M 31`). Chosen by catalog precedence per spec 013. |
 | `aliases` | string[] | yes | Other names users may have used in folders/filenames. |
-| `catalog_refs` | object[] | no | Structured catalog identifiers (`{catalog, designation}`). |
+| `catalog_refs` | object[] | no | Structured catalog identifiers (`{catalog_id, catalog_display, designation}`). |
 | `created_at` | datetime | yes | Initial registration timestamp. |
 
 ### Invariants
 
-- `canonical_name` MUST be unique per library.
+- `primary_designation` MUST be unique per library.
 - Aliases MUST be matched case-insensitively but stored as-entered.
 - Targets MUST NOT be deleted while a `Project` or `AcquisitionSession` references them.
 
@@ -259,10 +261,12 @@ Verbatim from research.md §2.1 `PROJECT_TRANSITIONS`.
 | `completed` | `archived` | User archives | Excluded from default surfaces. |
 | `completed` | `processing` | Re-open completed project | Audit logs "Re-opened". |
 | `archived` | `processing` | Unarchive | Audit logs "Unarchived → resumed processing". |
+| `archived` | `ready` | Unarchive to ready | Audit logs "Unarchived". R-Unarchive (GRILL 2026-05-22): primary unarchive path for revisiting a project without immediately resuming processing. |
 | `blocked` | `setup_incomplete` | Recovery to setup | Resume context preserved. |
 | `blocked` | `ready` | Recovery to ready | Resume context preserved. |
 | `blocked` | `prepared` | Recovery to prepared | Resume context preserved. |
 | `blocked` | `processing` | Recovery to processing | Resume context preserved. |
+| `blocked` | `archived` | Escape hatch: archive a permanently-blocked project | Audit logs "Archived from blocked"; `blocked → completed` remains forbidden (GRILL spec 009). |
 
 ---
 
@@ -308,7 +312,7 @@ execution. Canonical home is `crates/fs/planner/`.
 | `id` | uuid | yes | Stable identifier. |
 | `kind` | enum(`organize`,`prepare_source`,`cleanup`,`archive`,`regenerate_artifact`) | yes | Plan category. |
 | `items` | object[] | yes | Per-item mutation records `{source, target, op, item_state}`. |
-| `state` | enum(`draft`,`ready_for_review`,`approved`,`applying`,`applied`,`partially_applied`,`failed`,`cancelled`) | yes | See research.md §2.2. |
+| `state` | enum(`draft`,`ready_for_review`,`approved`,`applying`,`paused`,`applied`,`partially_applied`,`failed`,`cancelled`,`discarded`) | yes | See research.md §2.2. `discarded` is the soft-delete terminal (pairs with spec 017's retry-chain semantics). `paused` is a mid-apply suspension state entered on `volume.unavailable`, `disk.full`, or `item.stale` (R-Pause-1). |
 | `parent_plan_id` | uuid | no | Set when this plan is a retry of a failed plan. |
 | `created_by` | enum(`user`,`system`) | yes | Plan origin. |
 | `created_at` | datetime | yes | Initial draft timestamp. |
@@ -338,6 +342,9 @@ Verbatim from research.md §2.2.
 | `applying` | `partially_applied` | Mixed item outcomes | Terminal; item state preserved. |
 | `applying` | `failed` | All items fail or fatal abort | Terminal; item state preserved. |
 | `applying` | `cancelled` | User cancels mid-apply | Terminal; in-flight item state preserved. |
+| `applying` | `paused` | Mid-apply fault: `volume.unavailable`, `disk.full`, or `item.stale` | Non-terminal; user must resume or cancel (R-Pause-1). |
+| `paused` | `applying` | User resumes after resolving condition | Run continues from next pending item. |
+| `paused` | `cancelled` | User cancels from paused state | Terminal. |
 
 ---
 
@@ -356,7 +363,7 @@ no-ops-that-the-caller-should-have-known-about. Canonical home is
 | `to_state` | string | no | Null for refused-no-transition events. |
 | `trigger` | string | yes | Action label (e.g. "Unarchived"). |
 | `actor` | enum(`user`,`system`) | yes | Who initiated. |
-| `outcome` | enum(`applied`,`refused`,`unchanged`,`failed`) | yes | Result class. |
+| `outcome` | enum(`applied`,`refused`,`failed`) | yes | Result class. No-op transitions (`status: "noop"` on the contract) write no row, so `unchanged` is intentionally absent. |
 | `severity` | enum(`workflow`,`diagnostic`) | yes | Default-visible vs. log-only (FR-008). |
 | `request_id` | uuid | yes | Operation correlation. |
 | `at` | datetime | yes | Event timestamp. |
@@ -365,9 +372,11 @@ no-ops-that-the-caller-should-have-known-about. Canonical home is
 ### Invariants
 
 - Append-only. Never updated or deleted.
-- Written transactionally with the entity mutation (or with no entity mutation, for refused/unchanged outcomes).
+- Written transactionally with the entity mutation (or with no entity mutation, for refused outcomes).
 - `outcome == refused` MUST have `to_state == null` and MUST NOT have mutated the entity.
-- `outcome == unchanged` MUST be emitted only when the caller explicitly requested a state that equals the current state AND the entry SHOULD be suppressed at write time unless diagnostics is enabled.
+- No-op transitions (caller-requested next_state equals current_state) MUST NOT write a row; the contract response is `status: "noop"` (see `contracts/lifecycle.transition.json`).
+- `actor == system` is permitted ONLY on edges entering or leaving `blocked` (per GRILL spec 009 ratification). The use case MUST reject any other edge with `actor == system` with `transition.refused`; the rejection itself is audit-logged as `actor == system, outcome == refused`. See `tasks.md` T038/T044 for the enforcement rule.
+- Default UI timelines (and spec 019's log panel) filter `severity = workflow`; diagnostic events stay queryable but hidden by default (FR-008).
 - Ledger rows MUST omit `confidence | evidence | provenance` columns (FR-006); those live in `payload` only.
 
 ### Lifecycle
@@ -376,11 +385,67 @@ None — entries are immutable.
 
 ---
 
+## Plan-Requirement Edge Table
+
+Canonical server-side table mapping `(entity_type, from, to) → requires_plan`.
+The use case derives the plan gate from this table on every transition
+attempt; callers MUST NOT pass `requires_plan` on the contract request
+(`contracts/lifecycle.transition.json` does not accept it). See research.md
+§2 and tasks.md T044.
+
+| entity_type | from | to | requires_plan | Notes |
+|---|---|---|---|---|
+| `project` | `ready` | `prepared` | `true` | Generating prepared source view writes to disk. |
+| `project` | `prepared` | `ready` | `true` | Retiring prepared source rows may delete views (constitution §archive-over-delete). |
+| `project` | `completed` | `archived` | `true` **(always — R-Archived-Plan, GRILL 2026-05-22)** | Plan always required even when no files move; plan has at least the manifest-write structural item. **NOTE: this row previously said "when archiving moves files"; that condition is REMOVED — plan is unconditionally required per spec 009 R-Archived-Plan.** |
+| `project` | `blocked` | `archived` | `true` **(always — A3, GRILL 2026-05-22)** | Escape-hatch edge added in spec 009 A3. Plan always required (same as `completed → archived`). |
+| `project` | `archived` | `processing` | `true` (when unarchive restores files, C7) | Plan required when (a) sources mapped to different paths OR (b) any source content needs to move to active project root. Plan NOT required when only metadata changes. |
+| `project` | `archived` | `ready` | `true` (when unarchive restores files, C7) | **R-Unarchive (GRILL 2026-05-22)**: New edge. Same C7 criterion as `archived → processing`. Plan required when (a) sources mapped to different paths OR (b) any source content needs to move. Plan NOT required when only metadata (notes, lifecycle) transitions. Actor: user only. Audit event `project.unarchived` emitted. |
+| `prepared_source` | `*` | `retired` | `true` | Removes/cleans up generated files (spec 026). |
+| `processing_artifact` | `*` | `regenerating` | `true` (when materialization implies a write) | Generating regeneration outputs to disk requires a plan. |
+| `file_record` | `*` | `protected` | `false` | Pin-only mutation; no filesystem effect. |
+| `inventory_session` | `*` | `*` | `false` | Pure metadata transitions. |
+| `calibration_session` | `*` | `*` | `false` | Pure metadata transitions. |
+| `data_source` | `*` | `*` | `false` | Connection/config transitions only. |
+| `plan` | `*` | `*` | `false` | Plan lifecycle itself is the plan; no nested plan needed. |
+| `projection` | `*` | `*` | `false` | Read-side staleness flag; regeneration is owned by the source entity edge. |
+
+Edges not listed default to `requires_plan = false`. The full table is
+authored in `crates/domain/core/src/lifecycle/plan_requirement.rs` (canonical
+home; tasks.md T044 wires it).
+
+## ProvenanceHistoryArchive
+
+Append-only archive for `ProvenancedValue.history` entries that age out of
+the inline retention window. Decision: keep most recent N entries per
+`(asset_id, field_path, origin)` inline on `ProvenancedValue`; spill older
+entries here (GRILL 2026-05-21).
+
+| Field | Type | Required | Description |
+|---|---|---|---|
+| `id` | uuid | yes | Stable identifier. |
+| `asset_type` | string | yes | Entity family (matches `provenance.read` `asset_type`). |
+| `asset_id` | uuid | yes | Owning entity. |
+| `field_path` | string | yes | Dotted field path on the asset. |
+| `origin` | enum(`observed`,`inferred`,`reviewed`,`generated`,`planned`,`applied`) | yes | Tag of the archived entry. |
+| `value` | json | yes | Prior value at the time of capture. |
+| `captured_at` | datetime | yes | Original capture timestamp. |
+| `source_id` | string | no | Opaque reference (file id, plan id, reviewer id). |
+| `replaced_by` | string | no | Pointer to the entry that superseded this one. |
+| `archived_at` | datetime | yes | When this entry left the inline window. |
+
+### Invariants
+
+- Append-only. Never updated or deleted.
+- The `provenance.read` contract returns inline entries plus a `history_truncated: true` flag when archive rows exist for a `(asset_id, field_path)` pair. The archive table is the destination for follow-on `provenance.history.list` reads (deferred to v1.x; not part of this spec's contract surface).
+- Retention budget per `(asset_id, field_path, origin)` inline window is implementation-tunable; tasks.md T010 names the SQLite migration that creates this table.
+
 ## ProvenancedValue
 
 Wrapper that carries observed/inferred/reviewed (and downstream
 generated/planned/applied) history for any field on a Data Asset. Defined in
-research.md §4.
+research.md §4. Read access for UI/agents goes through the
+`provenance.read` contract (`contracts/provenance.read.json`).
 
 | Field | Type | Required | Description |
 |---|---|---|---|
@@ -400,3 +465,37 @@ research.md §4.
 
 None — the wrapper itself has no state; its `history` records the lifecycle
 of the underlying value.
+
+---
+
+## ObserverLocation
+
+The observer's geographic location and timezone at acquisition time.
+Carried on `AcquisitionSession.observer_location` as a
+`ProvenancedValue<ObserverLocation>` (R-Obs).
+
+| Field | Type | Required | Description |
+|---|---|---|---|
+| `tz` | string (IANA timezone) | yes | e.g. `"Europe/Amsterdam"`. |
+| `lat` | float (degrees, −90..90) | no | Latitude. Extracted from FITS `OBSGEO-B` or `SITELAT`. |
+| `lon` | float (degrees, −180..180) | no | Longitude. Extracted from FITS `OBSGEO-L` or `SITELONG`. |
+
+### Provenance
+
+Auto-extracted from FITS keywords during metadata parsing. If both
+`OBSGEO-B`/`OBSGEO-L` and `SITELAT`/`SITELONG` are present, prefer
+`OBSGEO-B`/`OBSGEO-L` (IAU standard). If timezone cannot be derived from
+coordinates, the value is partial (lat/lon present, tz absent).
+
+`ProvenancedValue.origin` is:
+- `observed` when extracted directly from FITS keywords.
+- `inferred` when derived from coordinates using a timezone lookup.
+- `reviewed` when the user has confirmed or corrected the value.
+
+### Notes
+
+`observer_location` is NOT collected at first-run setup (spec 003). It is
+resolved at session-formation time, per-import. It is NOT a global settings
+key in spec 018 (R-Obs; GRILL_DECISIONS amendment 2026-05-22). It is used
+by downstream features including spec 007 (calibration night matching) and
+spec 023 (`captured_on` date derivation).

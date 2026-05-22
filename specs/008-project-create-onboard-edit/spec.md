@@ -9,17 +9,22 @@
 
 ### User Story 1 - Create A Project (Priority: P1)
 
-As a user, I want project creation to ask for required project information once and create the necessary app-owned resources so that I do not need separate technical actions like creating an envelope or retrying marker writes.
+As a user, I want to create a project from a single dialog that collects the required fields — name, tool, optional initial sources, and optional notes — so that I do not need separate technical actions like creating an envelope or retrying marker writes.
 
 **Why this priority**: Project setup is a core workflow and must use simple functional naming.
 
-**Independent Test**: Start Add project, provide path, project name, project type/workflow, light sessions, optional flats, darks, and bias, then confirm the app creates the project record, folder structure, project marker, and source mappings.
+**Independent Test**: Open "New project" dialog, provide name, select tool (required), optionally pick initial sources from Inventory, optionally add notes, then confirm the app creates the project record, folder structure, project marker, and source mappings in one operation.
 
 **Acceptance Scenarios**:
 
-1. **Given** required project fields are valid, **When** the user creates the project, **Then** folder structure, source mappings, workflow resources, and project marker are created as one operation.
+1. **Given** name and tool are supplied (tool is mandatory), **When** the user confirms the dialog, **Then** folder structure, source mappings, workflow resources, and project marker are created as one operation.
 2. **Given** any creation step fails, **When** the operation stops, **Then** the app rolls back created resources where possible, logs an error, and notifies the user.
 3. **Given** project creation succeeds, **When** the project opens, **Then** sources are listed directly and can be opened or inspected.
+4. **Given** no initial sources are supplied, **When** the project is created, **Then** the project lands in `setup_incomplete`. The `setup_incomplete` state is ONLY for missing/unconfirmed sources, never for missing tool (tool is required at create). The system auto-transitions to `ready` once the first confirmed source is added and mapped.
+
+**Note on `project.duplicate`**: The recovery path for tool-locked projects (lifecycle in `{prepared, processing, completed, blocked}`) is manual re-creation via `project.create`. There is no `project.duplicate` contract in v1. See plan.md for the deferred follow-up note.
+
+**Note on source removal**: `project.source.remove` is available in v1. Removal from lifecycle states `{prepared, processing, completed, archived}` is refused with `lifecycle.read_only`.
 
 ---
 
@@ -70,16 +75,17 @@ As a user, I want all project setup fields to be editable from one project setti
 ### Functional Requirements
 
 - **FR-001**: Project creation MUST use functional labels such as Add project, Edit project, Open, and Open in PixInsight/Siril.
-- **FR-002**: Project creation MUST collect project path, project name, project type/workflow, and required source mappings.
-- **FR-003**: Project creation MUST support one or more light sessions.
-- **FR-004**: Each light session MUST allow an optional flats source.
-- **FR-005**: Project creation MUST collect darks and bias separately.
-- **FR-006**: Initial project setup MUST NOT expose dark flats unless a later workflow explicitly enables them.
-- **FR-007**: Project creation MUST create required folder structure, project marker, and workflow resources as part of the operation.
-- **FR-008**: Project creation MUST roll back, log, and notify on failure.
-- **FR-009**: Onboarding MUST support existing project folders.
-- **FR-010**: Project edit MUST be a single pane for project fields and source mappings.
-- **FR-011**: Technical actions named Create project envelope, Generate/update prepared sources, Project label, or Retry marker write MUST NOT appear as normal user actions.
+- **FR-002**: Project creation MUST use a single-form dialog collecting: name (required), tool (required), optional initial sources, optional notes. There is no multi-step wizard for create (GRILL A1).
+- **FR-003**: Tool MUST be selected at project creation time; it is a required field. `setup_incomplete` state is ONLY for projects missing confirmed sources, never for missing tool (R-Tool-Req).
+- **FR-004**: Initial sources are optional at create; omitting them is valid and results in `setup_incomplete`. The system auto-transitions to `ready` once the tool is set (always true post-create) and at least one confirmed source is mapped.
+- **FR-005**: Project creation MUST create required folder structure, project marker, and workflow resources as part of the operation.
+- **FR-006**: Project creation MUST roll back, log, and notify on failure.
+- **FR-007**: Onboarding MUST support existing project folders.
+- **FR-008**: Project edit MUST be a single pane for project fields and source mappings.
+- **FR-009**: Technical actions named Create project envelope, Generate/update prepared sources, Project label, or Retry marker write MUST NOT appear as normal user actions.
+- **FR-010**: After source additions, projects with manually-overridden channels MUST surface `channelDrift.hasNewSources = true` on `project.get` until the user re-infers (calls `project.channels.reinfer`) or dismisses (calls `project.channels.dismiss_drift`).
+- **FR-011**: `project.source.remove` MUST be permitted when `lifecycle in {setup_incomplete, ready, blocked}` and refused with `lifecycle.read_only` when `lifecycle in {prepared, processing, completed, archived}`.
+- **FR-012**: `project.source.add` use case MUST verify the referenced Inventory session has `state == "confirmed"`. Unconfirmed sessions are rejected with `source.not_confirmed`.
 
 ### Key Entities
 

@@ -138,16 +138,19 @@ supported by the desktop environment.
 - Long Windows paths (>260 chars) and UNC paths.
 - Network-mounted paths that resolve slowly.
 
-### Domain Questions To Resolve
+### Domain Questions Resolved
 
-- Should reveal failures create user-facing notifications only, audit-log
-  entries only, or both? Default leans both: a toast plus a structured
-  log entry.
-- Should the `All supported` filter combine FITS+XISF+TIFF extensions
-  into one filter row, or be exposed as a separate "Supported astro
-  formats" preset?
-- Should the directory picker remember the last-chosen parent per source
-  kind to anchor the next open?
+- **Reveal failures** emit BOTH a toast (with error code + "Copy path" action)
+  AND an audit event `native.reveal.failed` (C-toast, ratified 2026-05-22).
+- **`All supported` filter** is the first row of the filter list and is a
+  combined preset covering XISF, FITS (fit/fits/fts), TIFF, PNG, JPG.
+  Per-format filter rows follow (R-AllSupported, ratified 2026-05-22).
+- **`.fts` extension** is included in the FITS filter and the All-supported
+  filter (B-.fts, ratified 2026-05-22).
+- **Directory picker last-path** is per-kind, stored in `localStorage` under
+  `alm.lastPath.<kind>` (R-LastPath, ratified 2026-05-22).
+- **Level filter persistence** — session-only; resets to `all` on each panel
+  open (C-level-persistence, ratified 2026-05-22).
 
 ## Requirements *(mandatory)*
 
@@ -178,6 +181,21 @@ supported by the desktop environment.
 - **FR-009**: All three operations MUST be invoked through the
   language-neutral JSON Schema contracts in `contracts/native.*.json`
   so a future remote backend can implement the same surface.
+- **FR-010**: Reveal failures MUST emit BOTH a user-facing toast (with the
+  error code's human-readable copy and a "Copy path" action) AND an audit
+  event `native.reveal.failed` (C-toast, ratified 2026-05-22).
+- **FR-011**: The file filter list for master calibration MUST include `.fts`
+  in both the FITS filter and the "All supported" combined preset
+  (B-.fts, ratified 2026-05-22).
+- **FR-012**: The wildcard `*` extension is ONLY valid in a filter named
+  exactly `"All files"`. The server MUST reject `*` in any other filter
+  row with `filters.invalid` (D-004-1, ratified 2026-05-22).
+- **FR-013**: The `entity_kind` field on `RevealRequest` is a closed enum:
+  `inbox_item | inventory_row | project_manifest | master_calibration |
+  registered_source | other` (R-EntityKind, ratified 2026-05-22).
+- **FR-014**: The directory and file pickers MUST remember the last-chosen
+  directory per affordance kind in `localStorage` under `alm.lastPath.<kind>`
+  and pass it as `default_path` on the next open (R-LastPath, ratified 2026-05-22).
 
 ### Key Entities
 

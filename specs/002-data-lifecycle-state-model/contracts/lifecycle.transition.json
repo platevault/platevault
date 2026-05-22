@@ -23,6 +23,7 @@
     },
     "Actor": {
       "type": "string",
+      "description": "Initiator of the transition. `actor=system` is only permitted on edges entering or leaving `blocked` (per spec 009 ratification). Use-case layer enforces the rule and rejects violations with `transition.refused`.",
       "enum": ["user", "system"]
     },
     "EntityType": {
@@ -32,9 +33,13 @@
         "file_record",
         "acquisition_session",
         "calibration_session",
+        "data_source",
         "project",
         "prepared_source",
         "processing_artifact",
+        "projection",
+        "plan",
+        "inventory_session",
         "filesystem_plan"
       ]
     },
@@ -60,7 +65,8 @@
         "applied",
         "partially_applied",
         "failed",
-        "cancelled"
+        "cancelled",
+        "discarded"
       ]
     },
     "SessionState": {
@@ -78,7 +84,7 @@
       "type": "string",
       "enum": ["active", "missing", "disabled", "reconnect_required"]
     },
-    "InventoryState": {
+    "FileRecordState": {
       "type": "string",
       "enum": [
         "observed",
@@ -97,14 +103,204 @@
       "type": "string",
       "enum": ["current", "stale", "regenerating"]
     },
+    "ProjectRequest": {
+      "type": "object",
+      "required": [
+        "contractVersion",
+        "requestId",
+        "entity_type",
+        "entity_id",
+        "current_state",
+        "next_state",
+        "actor"
+      ],
+      "additionalProperties": false,
+      "properties": {
+        "contractVersion": { "$ref": "#/$defs/ContractVersion" },
+        "requestId": { "$ref": "#/$defs/Uuid" },
+        "entity_type": { "type": "string", "const": "project" },
+        "entity_id": { "$ref": "#/$defs/Uuid" },
+        "current_state": { "$ref": "#/$defs/ProjectState" },
+        "next_state": { "$ref": "#/$defs/ProjectState" },
+        "action_label": { "$ref": "#/$defs/ActionLabel" },
+        "actor": { "$ref": "#/$defs/Actor" }
+      }
+    },
+    "PlanRequest": {
+      "type": "object",
+      "required": [
+        "contractVersion",
+        "requestId",
+        "entity_type",
+        "entity_id",
+        "current_state",
+        "next_state",
+        "actor"
+      ],
+      "additionalProperties": false,
+      "properties": {
+        "contractVersion": { "$ref": "#/$defs/ContractVersion" },
+        "requestId": { "$ref": "#/$defs/Uuid" },
+        "entity_type": { "type": "string", "const": "plan" },
+        "entity_id": { "$ref": "#/$defs/Uuid" },
+        "current_state": { "$ref": "#/$defs/PlanState" },
+        "next_state": { "$ref": "#/$defs/PlanState" },
+        "action_label": { "$ref": "#/$defs/ActionLabel" },
+        "actor": { "$ref": "#/$defs/Actor" }
+      }
+    },
+    "InventorySessionRequest": {
+      "type": "object",
+      "required": [
+        "contractVersion",
+        "requestId",
+        "entity_type",
+        "entity_id",
+        "current_state",
+        "next_state",
+        "actor"
+      ],
+      "additionalProperties": false,
+      "properties": {
+        "contractVersion": { "$ref": "#/$defs/ContractVersion" },
+        "requestId": { "$ref": "#/$defs/Uuid" },
+        "entity_type": { "type": "string", "const": "inventory_session" },
+        "entity_id": { "$ref": "#/$defs/Uuid" },
+        "current_state": { "$ref": "#/$defs/SessionState" },
+        "next_state": { "$ref": "#/$defs/SessionState" },
+        "action_label": { "$ref": "#/$defs/ActionLabel" },
+        "actor": { "$ref": "#/$defs/Actor" }
+      }
+    },
+    "CalibrationSessionRequest": {
+      "type": "object",
+      "required": [
+        "contractVersion",
+        "requestId",
+        "entity_type",
+        "entity_id",
+        "current_state",
+        "next_state",
+        "actor"
+      ],
+      "additionalProperties": false,
+      "properties": {
+        "contractVersion": { "$ref": "#/$defs/ContractVersion" },
+        "requestId": { "$ref": "#/$defs/Uuid" },
+        "entity_type": { "type": "string", "const": "calibration_session" },
+        "entity_id": { "$ref": "#/$defs/Uuid" },
+        "current_state": { "$ref": "#/$defs/SessionState" },
+        "next_state": { "$ref": "#/$defs/SessionState" },
+        "action_label": { "$ref": "#/$defs/ActionLabel" },
+        "actor": { "$ref": "#/$defs/Actor" }
+      }
+    },
+    "DataSourceRequest": {
+      "type": "object",
+      "required": [
+        "contractVersion",
+        "requestId",
+        "entity_type",
+        "entity_id",
+        "current_state",
+        "next_state",
+        "actor"
+      ],
+      "additionalProperties": false,
+      "properties": {
+        "contractVersion": { "$ref": "#/$defs/ContractVersion" },
+        "requestId": { "$ref": "#/$defs/Uuid" },
+        "entity_type": { "type": "string", "const": "data_source" },
+        "entity_id": { "$ref": "#/$defs/Uuid" },
+        "current_state": { "$ref": "#/$defs/DataSourceState" },
+        "next_state": { "$ref": "#/$defs/DataSourceState" },
+        "action_label": { "$ref": "#/$defs/ActionLabel" },
+        "actor": { "$ref": "#/$defs/Actor" }
+      }
+    },
+    "PreparedSourceRequest": {
+      "type": "object",
+      "required": [
+        "contractVersion",
+        "requestId",
+        "entity_type",
+        "entity_id",
+        "current_state",
+        "next_state",
+        "actor"
+      ],
+      "additionalProperties": false,
+      "properties": {
+        "contractVersion": { "$ref": "#/$defs/ContractVersion" },
+        "requestId": { "$ref": "#/$defs/Uuid" },
+        "entity_type": { "type": "string", "const": "prepared_source" },
+        "entity_id": { "$ref": "#/$defs/Uuid" },
+        "current_state": { "$ref": "#/$defs/PreparedSourceState" },
+        "next_state": { "$ref": "#/$defs/PreparedSourceState" },
+        "action_label": { "$ref": "#/$defs/ActionLabel" },
+        "actor": { "$ref": "#/$defs/Actor" }
+      }
+    },
+    "ProjectionRequest": {
+      "type": "object",
+      "required": [
+        "contractVersion",
+        "requestId",
+        "entity_type",
+        "entity_id",
+        "current_state",
+        "next_state",
+        "actor"
+      ],
+      "additionalProperties": false,
+      "properties": {
+        "contractVersion": { "$ref": "#/$defs/ContractVersion" },
+        "requestId": { "$ref": "#/$defs/Uuid" },
+        "entity_type": { "type": "string", "const": "projection" },
+        "entity_id": { "$ref": "#/$defs/Uuid" },
+        "current_state": { "$ref": "#/$defs/ProjectionState" },
+        "next_state": { "$ref": "#/$defs/ProjectionState" },
+        "action_label": { "$ref": "#/$defs/ActionLabel" },
+        "actor": { "$ref": "#/$defs/Actor" }
+      }
+    },
+    "FileRecordRequest": {
+      "type": "object",
+      "required": [
+        "contractVersion",
+        "requestId",
+        "entity_type",
+        "entity_id",
+        "current_state",
+        "next_state",
+        "actor"
+      ],
+      "additionalProperties": false,
+      "properties": {
+        "contractVersion": { "$ref": "#/$defs/ContractVersion" },
+        "requestId": { "$ref": "#/$defs/Uuid" },
+        "entity_type": { "type": "string", "const": "file_record" },
+        "entity_id": { "$ref": "#/$defs/Uuid" },
+        "current_state": { "$ref": "#/$defs/FileRecordState" },
+        "next_state": { "$ref": "#/$defs/FileRecordState" },
+        "action_label": { "$ref": "#/$defs/ActionLabel" },
+        "actor": { "$ref": "#/$defs/Actor" }
+      }
+    },
+    "ActionLabel": {
+      "type": "string",
+      "description": "Human-readable label recorded on the audit entry (e.g. 'Unarchived').",
+      "minLength": 1,
+      "maxLength": 120
+    },
     "LifecycleState": {
-      "description": "Discriminated union of per-family lifecycle states. A request's next_state must be valid for the entity_type given.",
+      "description": "Any per-family lifecycle state value. Use the family-specific enums in the discriminated Request sub-schemas; this alias exists only for the Response shape where the family is fixed by the corresponding request.",
       "oneOf": [
         { "$ref": "#/$defs/ProjectState" },
         { "$ref": "#/$defs/PlanState" },
         { "$ref": "#/$defs/SessionState" },
         { "$ref": "#/$defs/DataSourceState" },
-        { "$ref": "#/$defs/InventoryState" },
+        { "$ref": "#/$defs/FileRecordState" },
         { "$ref": "#/$defs/PreparedSourceState" },
         { "$ref": "#/$defs/ProjectionState" }
       ]
@@ -114,10 +310,10 @@
       "enum": [
         "transition.refused",
         "entity.not_found",
-        "state.unchanged",
         "actor.not_authorised",
         "plan.required",
-        "plan.not_approved"
+        "plan.not_approved",
+        "provenance.unreviewed"
       ]
     },
     "ErrorEnvelope": {
@@ -132,41 +328,45 @@
         },
         "details": {
           "type": "object",
-          "description": "Optional structured detail. Examples: { allowed_next_states: [...] } for transition.refused; { plan_id: uuid } for plan.required.",
-          "additionalProperties": true
+          "description": "Optional structured detail. Examples: { allowed_next_states: [...] } for transition.refused; { plan_id: uuid } for plan.required; { blocking_fields: [{ field_path, required_origin: 'reviewed' }] } for provenance.unreviewed.",
+          "additionalProperties": true,
+          "properties": {
+            "allowed_next_states": {
+              "type": "array",
+              "items": { "type": "string" }
+            },
+            "plan_id": { "$ref": "#/$defs/Uuid" },
+            "blocking_fields": {
+              "type": "array",
+              "items": {
+                "type": "object",
+                "required": ["field_path", "required_origin"],
+                "additionalProperties": false,
+                "properties": {
+                  "field_path": { "type": "string" },
+                  "required_origin": {
+                    "type": "string",
+                    "enum": ["reviewed"]
+                  }
+                }
+              }
+            }
+          }
         }
       }
     },
     "Request": {
-      "type": "object",
-      "description": "Request envelope for lifecycle.transition.",
-      "required": [
-        "contractVersion",
-        "requestId",
-        "entity_type",
-        "entity_id",
-        "next_state",
-        "actor"
-      ],
-      "additionalProperties": false,
-      "properties": {
-        "contractVersion": { "$ref": "#/$defs/ContractVersion" },
-        "requestId": { "$ref": "#/$defs/Uuid" },
-        "entity_type": { "$ref": "#/$defs/EntityType" },
-        "entity_id": { "$ref": "#/$defs/Uuid" },
-        "next_state": { "$ref": "#/$defs/LifecycleState" },
-        "action_label": {
-          "type": "string",
-          "description": "Human-readable label recorded on the audit entry (e.g. 'Unarchived').",
-          "minLength": 1,
-          "maxLength": 120
-        },
-        "actor": { "$ref": "#/$defs/Actor" },
-        "requires_plan": {
-          "type": "boolean",
-          "description": "Set by the caller when the transition implies filesystem mutation. Server may still demand a plan even when false; server MUST NOT apply a transition flagged true without a corresponding approved FilesystemPlan."
-        }
-      }
+      "description": "Discriminated request envelope. Each branch pins `entity_type` to a single family and constrains `current_state`/`next_state` to that family's enum. The server derives `requires_plan` from a canonical (entity_type, from, to) edge table; callers MUST NOT assert it.",
+      "oneOf": [
+        { "$ref": "#/$defs/ProjectRequest" },
+        { "$ref": "#/$defs/PlanRequest" },
+        { "$ref": "#/$defs/InventorySessionRequest" },
+        { "$ref": "#/$defs/CalibrationSessionRequest" },
+        { "$ref": "#/$defs/DataSourceRequest" },
+        { "$ref": "#/$defs/PreparedSourceRequest" },
+        { "$ref": "#/$defs/ProjectionRequest" },
+        { "$ref": "#/$defs/FileRecordRequest" }
+      ]
     },
     "Response": {
       "type": "object",
@@ -176,7 +376,8 @@
       "properties": {
         "status": {
           "type": "string",
-          "enum": ["success", "error"]
+          "enum": ["success", "noop", "error"],
+          "description": "`success` = state mutated and audit row written. `noop` = caller-requested next_state equals current_state; no mutation, no audit row, no error. `error` = transition refused or otherwise rejected; structured `error` field populated."
         },
         "contractVersion": { "$ref": "#/$defs/ContractVersion" },
         "requestId": { "$ref": "#/$defs/Uuid" },
@@ -196,6 +397,17 @@
           "then": {
             "required": ["applied_at", "new_state", "audit_id"],
             "not": { "required": ["error"] }
+          }
+        },
+        {
+          "if": { "properties": { "status": { "const": "noop" } } },
+          "then": {
+            "not": {
+              "anyOf": [
+                { "required": ["audit_id"] },
+                { "required": ["error"] }
+              ]
+            }
           }
         },
         {

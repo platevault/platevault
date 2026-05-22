@@ -36,14 +36,15 @@
                 "items": {
                   "type": "string",
                   "pattern": "^[A-Za-z0-9*]+$"
-                }
+                },
+                "description": "Extensions without leading dot. The wildcard '*' is ONLY valid in a filter named exactly 'All files'; the server returns filters.invalid if '*' appears in any other filter row (D-004-1)."
               }
             }
           },
           "examples": [
             [
-              { "name": "All supported", "extensions": ["fit", "fits", "xisf", "tif", "tiff"] },
-              { "name": "FITS", "extensions": ["fit", "fits"] },
+              { "name": "All supported astro images", "extensions": ["xisf", "fits", "fit", "fts", "tif", "tiff", "png", "jpg"] },
+              { "name": "FITS", "extensions": ["fit", "fits", "fts"] },
               { "name": "XISF", "extensions": ["xisf"] },
               { "name": "TIFF", "extensions": ["tif", "tiff"] },
               { "name": "All files", "extensions": ["*"] }
@@ -87,7 +88,7 @@
           "description": "The host environment does not provide a native file picker."
         },
         "filters.invalid": {
-          "description": "The supplied filter list violated the schema (empty, malformed extension, or duplicate name)."
+          "description": "The supplied filter list violated the schema: empty list, malformed extension, duplicate name, or '*' used in a filter not named exactly 'All files' (D-004-1)."
         },
         "os.command_failed": {
           "description": "The OS-native dialog returned an unexpected failure. Cancellation is NOT an error."

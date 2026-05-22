@@ -68,17 +68,56 @@ preserve forward progress while keeping the audit trail honest.
 
 ---
 
-## R4 — Token Value Escape Rules
+## R4 — Token Value Sanitization and Path Safety
 
-**Question**: How are OS-invalid characters in metadata values handled?
+**Question**: How are OS-invalid and dangerous characters in metadata values handled?
 
-**Decision**: The resolver applies a conservative substitution table on
-token *values only* (never on separators, which are whitelisted):
+**Decision** (updated 2026-05-22 to incorporate Unicode hardening, path traversal
+protection, reserved name rejection, and path length caps — Ref: A1, A2, A3, A4):
+
+The resolver applies the following sanitization steps to all resolved token
+*values* (never to separators, which are whitelisted):
+
+### Step 1 — Unicode Normalization (Ref: A1)
+
+- Apply NFC normalization to all resolved token values.
+- Strip the following Unicode character ranges:
+  - C0 controls: U+0000–U+001F
+  - C1 controls: U+0080–U+009F
+  - Format characters: U+00AD (soft hyphen), U+200B–U+200F (zero-width spaces),
+    U+2028–U+202F (line/paragraph separators, narrow no-break space),
+    U+FEFF (BOM / zero-width no-break space)
+  - Bidi overrides: U+202A–U+202E (LRE, RLE, PDF, LRO, RLO),
+    U+2066–U+2069 (LRI, RLI, FSI, PDI)
+- Apply Unicode confusables detection per Unicode Technical Standard #39
+  (`confusables.txt` / Rust `unicode-security` crate). Confusable characters
+  in resolved token values are flagged with error code `pattern.invalid.unicode`.
+
+### Step 2 — OS Character Substitution
 
 - Windows-reserved: `<`, `>`, `:`, `"`, `/`, `\`, `|`, `?`, `*` → replaced with `_`.
-- Control characters (U+0000–U+001F) → replaced with `_`.
 - Leading/trailing whitespace and dots → trimmed.
-- Empty result after sanitization → treated as missing (fallback applies).
+- Empty result after all sanitization → treated as missing (fallback applies).
+
+### Step 3 — Path Traversal Rejection (Ref: A2)
+
+After all sanitization, if any resolved token value equals `.` or `..`, or if
+the assembled relative path contains a `..` segment, the resolver returns
+error code `path.traversal`. This is checked after fallback substitution.
+
+### Step 4 — Windows Reserved Device Name Rejection (Ref: A3)
+
+If any path segment (case-insensitive, all platforms) matches a Windows
+reserved device name — `CON`, `PRN`, `AUX`, `NUL`, `COM1`–`COM9`,
+`LPT1`–`LPT9` — with or without a file extension, the resolver returns error
+code `path.reserved_name`.
+
+### Step 5 — Path Length Caps (Ref: A4)
+
+- Maximum segment length: ≤ 200 UTF-8 bytes per path segment.
+- Maximum total relative path: ≤ 200 characters.
+- If either limit is exceeded, the resolver returns `pattern.invalid` with
+  `segmentLengthBytes` and `resolvedLength` in the details payload.
 
 Sanitization is applied **before** the value enters the path. The validator's
 post-resolution OS-path check is a defense-in-depth assert that should never
@@ -109,13 +148,22 @@ layouts. Warnings preserve user agency.
 
 **Question**: How is the `date` token rendered?
 
-**Decision**: ISO-like `YYYY-MM-DD`, derived from the FITS `DATE-OBS` header
-in UTC. Locale-sensitive formats are explicitly forbidden — audit consistency
-depends on a single representation.
+**Decision** (updated 2026-05-22 — Ref: R-Date-1):
 
-**Future**: A configurable date format may be added once we have an explicit
-research decision for time-zone handling around midnight observation
-sessions; out of scope here.
+The `{date}` token resolves to the **local date** in
+`AcquisitionSession.observer_location.tz` at the frame's `exposure_start`
+time, using the observing-night boundary rule from spec 023 (solar-noon to
+solar-noon, i.e. `captured_on = date_of(exposure_start_utc − 12h)` in the
+observer's local timezone).
+
+When `observer_location` is unset (or the session is in `needs_review` with
+no observer location), the resolver falls back to the UTC date of
+`exposure_start`. This is a degraded result; the `missing_tokens` array will
+include `date` and the token renders with the UTC fallback value.
+
+Format is ISO-like `YYYY-MM-DD`. Locale-sensitive formats are explicitly
+forbidden — audit consistency depends on a single representation. A
+configurable date format is deferred to a future spec.
 
 ---
 

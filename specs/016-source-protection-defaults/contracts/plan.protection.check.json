@@ -15,14 +15,16 @@
     },
     "response": {
       "type": "object",
-      "required": ["has_protected_items", "protected_items"],
+      "required": ["has_protected_items", "protected_items", "non_blocking_summary"],
+      "description": "Response includes ONLY items requiring user acknowledgement (level = protected or items rewritten by block_permanent_delete). Normal and unprotected items are summarised in non_blocking_summary (R-CheckScope).",
       "properties": {
         "has_protected_items": { "type": "boolean" },
         "protected_items": {
           "type": "array",
+          "description": "Items that require explicit user acknowledgement before the plan may execute. Excludes normal and unprotected items.",
           "items": {
             "type": "object",
-            "required": ["item_id", "level", "reason"],
+            "required": ["item_id", "level", "reason", "requires_acknowledgement"],
             "properties": {
               "item_id": { "type": "string", "format": "uuid" },
               "source_id": { "type": "string", "format": "uuid" },
@@ -44,6 +46,24 @@
             },
             "additionalProperties": false
           }
+        },
+        "non_blocking_summary": {
+          "type": "object",
+          "description": "Counts of items that do NOT require acknowledgement (R-CheckScope).",
+          "required": ["normal_count", "unprotected_count"],
+          "properties": {
+            "normal_count": {
+              "type": "integer",
+              "minimum": 0,
+              "description": "Number of plan items whose resolved level is 'normal'."
+            },
+            "unprotected_count": {
+              "type": "integer",
+              "minimum": 0,
+              "description": "Number of plan items whose resolved level is 'unprotected'."
+            }
+          },
+          "additionalProperties": false
         }
       },
       "additionalProperties": false

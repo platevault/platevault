@@ -41,19 +41,38 @@ user wants to protect master frames or final stacks wherever they live.
 - Per-target protection: a target spans many sources; better expressed via
   lifecycle state (spec 002) rather than this protection model.
 
-## R3. Archive vs Trash Semantics
+## R3. Archive vs Trash vs Permanent Delete Semantics
 
-**Decision**: When `block_permanent_delete` is enabled and a plan would
-permanently delete from a `protected` source, the planner rewrites the action
-to **archive** (move to project archive root, see spec 025). Trash (OS-level
-recycle bin) is only used when no archive root is configured.
+**Decision (updated 2026-05-22, R-OSTrash-Allowed)**: OS trash is treated as
+a **reversible** action and is NOT considered permanent delete. The
+`block_permanent_delete` flag therefore applies ONLY to the `permanent_delete`
+action. The `os_trash` destructive destination (spec 017 `destructiveDestination`)
+is always allowed regardless of `block_permanent_delete`, because the user can
+recover items from the OS recycle bin/trash.
 
-**Rationale**: archive is recoverable from inside the app; trash is
-recoverable but external to the audit trail. Constitution principle II prefers
-archive over trash over delete.
+Interaction table:
+
+| Action                                   | `block_permanent_delete = true` | `block_permanent_delete = false` |
+| ---------------------------------------- | ------------------------------- | -------------------------------- |
+| `archive` (move to archive root)         | Allowed                         | Allowed                          |
+| `os_trash` (OS recycle bin/trash)        | **Allowed** — reversible        | Allowed                          |
+| `permanent_delete`                       | **Blocked** — rewritten to archive | Allowed (with plan review)   |
+
+When the planner would emit a `permanent_delete` against a `protected` source
+with `block_permanent_delete = true`, it rewrites the action to `archive`
+(move to `<library_root>/.astro-plan-archive/<planId>/`, spec 025 pattern).
+The rewrite is recorded on the plan item as `rewritten_action`.
+
+**Rationale**: archive is recoverable from inside the app; OS trash is
+recoverable from outside the app; permanent delete is not recoverable.
+Constitution principle II prefers archive over trash over delete. Blocking
+`os_trash` would be overly restrictive and would surprise users who have
+selected that destructive destination in the plan review.
 
 **Rejected alternatives**:
 
+- Block `os_trash` with `block_permanent_delete`: too restrictive; OS trash
+  is clearly reversible.
 - Always use OS trash: loses audit linkage and breaks on network drives where
   trash is not supported.
 - Refuse the plan entirely: poor UX; user has to rebuild the plan manually.
@@ -91,5 +110,6 @@ because they are typically reproducible.
 ## Open Questions (deferred)
 
 - Whether to allow regex / glob patterns in the protected categories input.
-- Whether to expose a "freeze project" toggle that promotes all sources
-  involved in a project to `protected` for the duration of a milestone.
+- **"Freeze project" toggle** — explicitly deferred to v1.x (confirmed
+  2026-05-22). A toggle that promotes all sources in a project to `protected`
+  is useful but out of scope for v1. Document in spec.md Out of Scope.

@@ -2,21 +2,23 @@
   "$schema": "https://json-schema.org/draft/2020-12/schema",
   "$id": "https://astro-plan.dev/contracts/025/plan.apply.json",
   "title": "plan.apply",
-  "description": "Apply an approved filesystem plan. Long-running operation: clients subscribe to item_progress and plan_terminal events with a cursor. Owned by spec 025. Plan generation/review/approve/discard live in spec 017.",
+  "description": "Apply an approved filesystem plan. Long-running operation: clients subscribe to itemProgress and planTerminal events with a cursor. Owned by spec 025. Plan generation/review/approve/discard live in spec 017. (R-Env-1, R-Run-1, R-CAS-1, R-FS-1)",
   "type": "object",
   "properties": {
     "request": {
       "type": "object",
       "additionalProperties": false,
-      "required": ["plan_id", "approval_token"],
+      "required": ["contractVersion", "requestId", "planId", "approvalToken"],
       "properties": {
-        "plan_id": {
+        "contractVersion": { "type": "string" },
+        "requestId": { "type": "string" },
+        "planId": {
           "type": "string",
           "description": "Identifier of the plan in state `approved`."
         },
-        "approval_token": {
+        "approvalToken": {
           "type": "string",
-          "description": "Token issued by spec 017's plan.approve, bound to the plan content hash at approval time."
+          "description": "Token issued by spec 017's plan.approve, HMAC over (planId, contentHash, approvedAt, serverSecret). Single-use; no TTL — freshness via per-item FS revalidation (A1, R-FS-1)."
         },
         "cursor": {
           "type": "string",
@@ -26,40 +28,61 @@
       }
     },
     "response": {
-      "type": "object",
-      "additionalProperties": false,
-      "required": ["plan_id", "run_id", "new_state"],
-      "properties": {
-        "plan_id": { "type": "string" },
-        "run_id": {
-          "type": "string",
-          "description": "Identifier of this PlanApplyRun, used by audit events and resume cursors."
+      "oneOf": [
+        {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["status", "contractVersion", "requestId", "planId", "runId", "newState"],
+          "properties": {
+            "status": { "const": "success" },
+            "contractVersion": { "type": "string" },
+            "requestId": { "type": "string" },
+            "planId": { "type": "string" },
+            "runId": {
+              "type": "string",
+              "description": "Identifier of this PlanApplyRun row (mandatory in v1, R-Run-1)."
+            },
+            "newState": {
+              "const": "applying",
+              "description": "Plan state immediately after apply begins."
+            }
+          }
         },
-        "new_state": {
-          "const": "applying",
-          "description": "Plan state immediately after apply begins."
+        {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["status", "contractVersion", "requestId", "errors"],
+          "properties": {
+            "status": { "const": "failure" },
+            "contractVersion": { "type": "string" },
+            "requestId": { "type": "string" },
+            "errors": {
+              "type": "array",
+              "items": { "$ref": "#/$defs/Error" }
+            }
+          }
         }
-      }
+      ]
     },
     "events": {
       "type": "object",
       "description": "Stream events emitted to subscribers of this long-running operation.",
       "properties": {
-        "item_progress": {
+        "itemProgress": {
           "type": "object",
           "additionalProperties": false,
-          "required": ["run_id", "plan_id", "item_id", "prior_state", "new_state", "at", "cursor"],
+          "required": ["runId", "planId", "itemId", "priorState", "newState", "at", "cursor"],
           "properties": {
-            "run_id": { "type": "string" },
-            "plan_id": { "type": "string" },
-            "item_id": { "type": "string" },
-            "prior_state": {
+            "runId": { "type": "string" },
+            "planId": { "type": "string" },
+            "itemId": { "type": "string" },
+            "priorState": {
               "type": "string",
-              "enum": ["pending", "applying", "succeeded", "failed", "skipped", "cancelled"]
+              "enum": ["pending", "applying", "succeeded", "failed", "stale", "skipped", "cancelled"]
             },
-            "new_state": {
+            "newState": {
               "type": "string",
-              "enum": ["pending", "applying", "succeeded", "failed", "skipped", "cancelled"]
+              "enum": ["pending", "applying", "succeeded", "failed", "stale", "skipped", "cancelled"]
             },
             "at": { "type": "string", "format": "date-time" },
             "cursor": {
@@ -83,6 +106,12 @@
                     "path.invalid",
                     "protected.source",
                     "trash.unavailable",
+                    "copy.succeeded.delete.failed",
+                    "copy.succeeded.delete.failed.rollback.failed",
+                    "item.stale",
+                    "os_trash.unavailable",
+                    "os_trash.full",
+                    "os_trash.permission.denied",
                     "unknown"
                   ]
                 },
@@ -92,14 +121,14 @@
             }
           }
         },
-        "plan_terminal": {
+        "planTerminal": {
           "type": "object",
           "additionalProperties": false,
-          "required": ["run_id", "plan_id", "terminal_state", "at", "counts"],
+          "required": ["runId", "planId", "terminalState", "at", "counts"],
           "properties": {
-            "run_id": { "type": "string" },
-            "plan_id": { "type": "string" },
-            "terminal_state": {
+            "runId": { "type": "string" },
+            "planId": { "type": "string" },
+            "terminalState": {
               "type": "string",
               "enum": ["applied", "partially_applied", "failed", "cancelled"]
             },
@@ -118,33 +147,35 @@
           }
         }
       }
-    },
-    "errors": {
-      "type": "array",
-      "items": {
-        "type": "object",
-        "required": ["code"],
-        "properties": {
-          "code": {
-            "type": "string",
-            "enum": [
-              "plan.not_found",
-              "plan.not_approved",
-              "plan.approval.stale",
-              "plan.invalid_state",
-              "plan.conflict.overlap"
-            ]
-          },
-          "message": { "type": "string" },
-          "current_state": {
-            "type": "string",
-            "description": "Returned on plan.invalid_state and plan.not_approved."
-          },
-          "conflicting_plan_id": {
-            "type": "string",
-            "description": "Returned on plan.conflict.overlap."
-          }
-        }
+    }
+  },
+  "$defs": {
+    "Error": {
+      "type": "object",
+      "required": ["code", "message"],
+      "additionalProperties": false,
+      "properties": {
+        "code": {
+          "type": "string",
+          "enum": [
+            "plan.not_found",
+            "plan.not_approved",
+            "plan.approval.stale",
+            "plan.invalid_state",
+            "plan.conflict.overlap"
+          ],
+          "description": "plan.invalid_state covers CAS race (R-CAS-1): state changed between read and write."
+        },
+        "message": { "type": "string" },
+        "currentState": {
+          "type": "string",
+          "description": "Returned on plan.invalid_state and plan.not_approved."
+        },
+        "conflictingPlanId": {
+          "type": "string",
+          "description": "Returned on plan.conflict.overlap."
+        },
+        "details": { "type": "object" }
       }
     }
   }

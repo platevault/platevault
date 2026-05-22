@@ -68,6 +68,7 @@ As a user, I want to copy a link that captures my current ledger view (route + f
 1. **Given** Inventory is filtered and an item is selected, **When** the user copies the link and pastes it into a new window, **Then** the same filters and selection are restored.
 2. **Given** a link encodes a filter with a special character, **When** the link is decoded, **Then** the filter is restored without corruption.
 3. **Given** a link is pasted into a library that does not contain the referenced entity, **When** the route loads, **Then** the filter portion still applies and the selection clears with a clear notice.
+4. **Given** a link carries a `lib` param that differs from the currently-open library, **When** the route loads, **Then** the app refuses the link with the banner "This link is from a different library." and does not navigate.
 
 ### Edge Cases
 
@@ -96,8 +97,10 @@ As a user, I want to copy a link that captures my current ledger view (route + f
 - **FR-005**: Route loaders or future data loading boundaries MUST preserve local-first behavior.
 - **FR-006**: Invalid selected entity route state MUST fail gracefully.
 - **FR-007**: Routing decisions MUST be documented in prototype and implementation specs.
-- **FR-008**: Each ledger route MUST declare its accepted search params through `validateSearch` and ignore unknown keys without throwing.
+- **FR-008**: Each ledger route MUST declare its accepted search params through `validateSearch`. Unknown keys MUST be dropped silently (forward-compat for older shared links). Invalid values of known keys MUST trigger an error banner and the param MUST be dropped from the URL.
 - **FR-009**: Stale entity ids MUST clear from the URL when the entity is confirmed missing, preserving filters in the URL.
+- **FR-010**: All internally generated links (from `<Link>` components and `useNavigate` call sites) MUST include a `?lib=<current_library_id>` search param.
+- **FR-011**: When a link is resolved and its `lib` param does not match the currently-open library, the app MUST refuse the link and display an inline banner: "This link is from a different library." The resolution MUST NOT silently clear the selection.
 
 ### Key Entities
 
@@ -142,7 +145,7 @@ The desktop mockup at `apps/desktop/src/app/router.tsx` already encodes the rout
 | `/inventory` | `id`        | string?  | Selected inventory item id.                        |
 | `/inventory` | `source`    | string?  | Filter by data source id.                          |
 | `/inventory` | `frame`     | string?  | Filter by frame type.                              |
-| `/inventory` | `review`    | string?  | Filter by review state.                            |
+| `/inventory` | `reviewFilter` | string?  | Filter by review state (canonical key; was `review` — see DeprecatedParamMap). |
 | `/inbox`     | `id`        | string?  | Selected inbox item id.                            |
 | `/inbox`     | `type`      | string?  | Filter by inbox item type.                         |
 | `/inbox`     | `source`    | string?  | Filter by source id.                               |
@@ -156,7 +159,7 @@ Each ledger page reads its search state through TanStack Router's `useSearch` an
 
 ### Deep-Linkable Scenarios
 
-- `/inventory?frame=light&review=needs-review` opens Inventory with frame and review filters applied.
+- `/inventory?frame=light&reviewFilter=needs-review` opens Inventory with frame and review filters applied.
 - `/projects?lifecycle=processing&id=proj-123` opens Projects with the lifecycle filter and selection focused.
 - `/plans/plan-2026-05-20-cleanup-001` opens a specific plan detail.
 - `/settings/calibration` opens Settings on the calibration section.
@@ -166,11 +169,10 @@ Each ledger page reads its search state through TanStack Router's `useSearch` an
 
 - TanStack Router remains the selected routing framework.
 - TanStack Table handles table state and may sync selected state to the router.
-- Library identity is implicit (single library open at a time); links are scoped to whichever library is open.
+- Every internal link carries `?lib=<library_id>` in v1; cross-library links are refused with a banner (see FR-010, FR-011).
 
 ## Out of Scope
 
 - Server-side routing.
 - Public web deployment routing.
 - Authentication-gated routes.
-- Library identity prefix encoding (deferred research question).

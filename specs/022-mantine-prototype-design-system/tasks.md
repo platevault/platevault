@@ -46,7 +46,7 @@ description: "Task list for the desktop prototype design system (Base UI + token
 - [x] T010 [mockup-done] [US1] Author the token vocabulary in `apps/desktop/src/styles/tokens.css`.
 - [ ] T011 [US1] Audit `apps/desktop/src/styles/components.css` to ensure every color, spacing, radius, shadow, and motion duration references a token. Document any justified exception inline with a comment.
 - [ ] T012 [P] [US1] (Optional) Add a CI grep guard that fails the build if `components.css` introduces a hex color, raw px (outside token blocks), or raw ms value.
-- [ ] T013 [P] [US1] (Optional) Generate `apps/desktop/src/styles/tokens.d.ts` (or `tokens.ts`) so TypeScript can autocomplete token names. Deferred until the domain question in `spec.md` is resolved.
+- [ ] T013 [P] [US1] **DEFERRED to v1.x (R-022-TSDefer, GRILL 2026-05-22)**: Generate `apps/desktop/src/styles/tokens.d.ts` (or `tokens.ts`) so TypeScript can autocomplete token names. Tokens enforced via review only in v1. Do not implement in v1.
 
 **Checkpoint**: Token system is the single source of truth.
 
@@ -80,7 +80,7 @@ description: "Task list for the desktop prototype design system (Base UI + token
 
 - [x] T030 [mockup-done] [US3] Ledger pages adopt the page-shell composition.
 - [ ] T031 [US3] Audit feature pages for ad-hoc layout markup that should be replaced by a primitive. Either extract the markup into a new primitive in `ui/` or refactor the page to use existing primitives.
-- [ ] T032 [P] [US3] Write `DESIGN.md` per FR-015. Cover token taxonomy (link to `data-model.md`), primitive vocabulary, page composition rules, and the headless-library policy. Location to be resolved per the domain question in `spec.md` (default: `apps/desktop/DESIGN.md`).
+- [ ] T032 [P] [US3] Update `/DESIGN.md` (repo root) per FR-015 and FR-019. The file already exists at the root (created in commit `314292a`, A1 GRILL 2026-05-22). Ensure it covers: token taxonomy (link to `data-model.md`), primitive vocabulary (including helper exports `FilterLabel`, `FactGroup`, `Facts`, `TokenPatternBuilder`), page composition rules, headless-library policy, density levels (dense/comfortable), `alm-` prefix convention, and token additions process. Do NOT create a new file; update the existing `/DESIGN.md`.
 
 **Checkpoint**: Pages follow one composition rulebook.
 
@@ -94,7 +94,7 @@ description: "Task list for the desktop prototype design system (Base UI + token
 
 - [x] T040 [mockup-done] [US4] `ThemeProvider` implements the resolution and persistence behavior described in `plan.md` and `data-model.md`.
 - [ ] T041 [US4] Mirror `contracts/theme.get.json` and `contracts/theme.set.json` into `packages/contracts/theme/`.
-- [ ] T042 [P] [US4] Wire the Settings page's theme toggle to call a thin adapter that satisfies the `theme.get`/`theme.set` contract shape, even though the implementation is local (so the desktop boundary already speaks the contract).
+- [ ] T042 [P] [US4] **OPTIONAL/DEFERRED (D-022-3, GRILL 2026-05-22)**: Wire the Settings page's theme toggle to call a thin adapter that satisfies the `theme.get`/`theme.set` contract shape. The v1 `ThemeProvider` is the canonical implementation; the contract is forward-compat only and does not block v1. Implement only if the Settings-to-contract adapter is explicitly needed by another spec.
 - [ ] T043 [P] [US4] (Optional) Implement `crates/app/core/usecases/theme.rs` as a stub that returns the persisted mode when a backend exists. Not required for v1.
 - [ ] T044 [P] [US4] (Optional) Playwright MCP smoke: toggle each mode, reload, confirm `data-theme` and the visual change. May be added as part of the broader desktop test suite.
 
@@ -207,6 +207,6 @@ US3 work.
   formalizes the rules behind it.
 - Avoid introducing new dependencies during these tasks; if a need
   arises, file a research addendum in `research.md` first.
-- DESIGN.md location is deferred (see `spec.md` domain questions);
-  pick `apps/desktop/DESIGN.md` as the default until the broader
-  documentation pass decides.
+- DESIGN.md location is resolved: `/DESIGN.md` at repo root
+  (A1, GRILL 2026-05-22). The file already exists (commit `314292a`).
+  T032 must update the existing file, not create a new one.

@@ -58,12 +58,16 @@ apps/desktop (Tauri + React)
 
 A new crate that owns:
 
-- `Target { id, primary, aliases, catalog_refs, notes?, created_at, updated_at }`.
+- `Target { id, primary_designation, aliases, catalog_refs, notes?, created_at, updated_at }`.
 - Alias normalization (case-folding, whitespace, hyphen/space variants).
 - Alias conflict detection (returns `alias.duplicate` error code when an alias
   is already attached to another target).
-- Identity merge/split helpers (deferred behind a feature flag for v1; only
-  alias add/remove and primary rename are wired through contracts in v1).
+- Alias removal (returns `alias.is_primary` when the alias is also the current
+  primary; returns `alias.not_found` when not present on this target).
+- Primary rename (promotes an existing alias to primary_designation; demotes
+  prior primary to alias; returns `designation.not_in_aliases` when target
+  designation is not among existing aliases).
+- Identity merge/split helpers (deferred behind a feature flag for v1).
 
 The crate has no Tauri, no DB, and no UI dependency. Persistence is owned by
 `crates/persistence/db`.
@@ -72,21 +76,33 @@ The crate has no Tauri, no DB, and no UI dependency. Persistence is owned by
 
 - `target_get(TargetGetRequest) -> Response`: loads the Target record, joins
   `TargetSession[]` from `crates/sessions`, joins `TargetProject[]` from
-  `crates/project/structure`, returns aggregate.
+  `crates/project/structure`, returns aggregate. Sessions with null
+  `observer_location` are excluded from the sessions list (R-3.1).
 - `target_note_update(TargetNoteUpdateRequest) -> Response`: replaces note
-  body, refreshes `updated_at`, writes one audit event.
+  body (max 16 KB UTF-8; A6), refreshes `updated_at`, writes one audit event.
 - `target_alias_add(TargetAliasAddRequest) -> Response`: validates the alias
   via the targeting crate, rejects on duplicate (`alias.duplicate`), writes
   the alias and one audit event.
+- `target_alias_remove(TargetAliasRemoveRequest) -> Response`: removes an
+  alias; rejects with `alias.is_primary` if it is the current primary; writes
+  audit event `target.alias_removed` + provenance entry.
+- `target_primary_rename(TargetPrimaryRenameRequest) -> Response`: promotes an
+  existing alias to primary_designation; rejects with
+  `designation.not_in_aliases` when designation is not among existing aliases;
+  writes audit event `target.primary_renamed` + provenance entry.
 
 ### Contracts
 
 - `target.get`: detail aggregate read.
 - `target.note.update`: write per-target note.
 - `target.alias.add`: append alias.
+- `target.alias.remove`: remove an alias (v1; R-3.4).
+- `target.primary.rename`: promote an existing alias to primary (v1; R-3.4).
 
-Alias removal, primary rename, and identity merge/split are deferred and will
-get their own contracts in later specs.
+Identity merge/split (moving sessions across target records) remains deferred.
+Cross-catalog equivalence unification is handled automatically by spec 013's
+`CatalogEquivalence` table. The v1 remediation path for user-visible naming
+errors is `target.alias.remove` + `target.primary.rename`.
 
 ### UI Layer
 
@@ -98,7 +114,7 @@ get their own contracts in later specs.
   frames; rows deep-link to Inventory.
 - Projects section: list of `TargetProject` rows with lifecycle tone; rows
   deep-link to Project detail.
-- Notes section: editable text area, debounced save through
+- Notes section: editable text area, 5-second debounced save through
   `target.note.update`.
 
 The Cmd+K palette gains alias-aware target results that route to this view.
@@ -139,8 +155,11 @@ excludes Targets from the sidebar manifest.
 ## Cross-Spec Links
 
 - **Spec 013 (Target Lookup From FITS `OBJECT`)**: owns the
-  hint-to-suggestion pipeline. This spec owns the durable target record that
-  resolved suggestions write into.
+  hint-to-suggestion pipeline and the `CatalogEquivalence` table that
+  automatically unifies cross-catalog identities (e.g. M31 ≡ NGC 224). This
+  spec owns the durable target record that resolved suggestions write into.
+  The deferred merge-domain question is resolved by spec 013's equivalence
+  table (A8; R-3.4).
 - **Spec 014 (Catalog Index & Licensing)**: catalog refs displayed on target
   detail are sourced from the catalog index when available.
 - **Spec 020 (Router URL State)**: `/targets/$targetId` is registered as a

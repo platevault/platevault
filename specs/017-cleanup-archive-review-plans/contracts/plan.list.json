@@ -2,16 +2,18 @@
   "$schema": "https://json-schema.org/draft/2020-12/schema",
   "$id": "https://astro-plan.dev/contracts/017/plan.list.json",
   "title": "plan.list",
-  "description": "List reviewable plans, defaulting to failed-first ordering. Owned by spec 017.",
+  "description": "List reviewable plans, defaulting to failed-first ordering. Owned by spec 017. (R-Env-1: camelCase envelope, contractVersion, requestId, status-discriminated.)",
   "type": "object",
   "properties": {
     "request": {
       "type": "object",
       "additionalProperties": false,
       "properties": {
-        "state_filter": {
+        "contractVersion": { "type": "string", "description": "Contract version, e.g. \"1\"." },
+        "requestId": { "type": "string", "description": "Caller-supplied correlation id." },
+        "stateFilter": {
           "type": "array",
-          "description": "Optional state allowlist; omit or empty for all states.",
+          "description": "Optional state allowlist; omit or empty for all non-discarded states.",
           "items": {
             "type": "string",
             "enum": [
@@ -19,15 +21,17 @@
               "ready_for_review",
               "approved",
               "applying",
+              "paused",
               "applied",
               "partially_applied",
               "failed",
-              "cancelled"
+              "cancelled",
+              "discarded"
             ]
           },
           "uniqueItems": true
         },
-        "origin_filter": {
+        "originFilter": {
           "type": "array",
           "description": "Optional origin allowlist; omit or empty for all origins.",
           "items": {
@@ -35,6 +39,11 @@
             "enum": ["inbox", "restructure", "cleanup", "archive", "project"]
           },
           "uniqueItems": true
+        },
+        "createdAfter": {
+          "type": "string",
+          "format": "date-time",
+          "description": "Optional RFC 3339 cutoff. Server derives default from settings.plans.list.default_age_cutoff_days (default 90 days) when caller omits. (R-Ret-1)"
         },
         "limit": {
           "type": "integer",
@@ -45,24 +54,49 @@
       }
     },
     "response": {
-      "type": "object",
-      "additionalProperties": false,
-      "required": ["plans"],
-      "properties": {
-        "plans": {
-          "type": "array",
-          "items": { "$ref": "#/$defs/PlanSummary" }
+      "oneOf": [
+        {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["status", "contractVersion", "requestId", "plans"],
+          "properties": {
+            "status": { "const": "success" },
+            "contractVersion": { "type": "string" },
+            "requestId": { "type": "string" },
+            "plans": {
+              "type": "array",
+              "items": { "$ref": "#/$defs/PlanSummary" }
+            }
+          }
+        },
+        {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["status", "contractVersion", "requestId", "errors"],
+          "properties": {
+            "status": { "const": "failure" },
+            "contractVersion": { "type": "string" },
+            "requestId": { "type": "string" },
+            "errors": {
+              "type": "array",
+              "items": { "$ref": "#/$defs/Error" }
+            }
+          }
         }
-      }
-    },
-    "errors": {
-      "type": "array",
-      "description": "No domain errors. Transport/decoding errors are surfaced by the IPC layer.",
-      "items": false,
-      "maxItems": 0
+      ]
     }
   },
   "$defs": {
+    "Error": {
+      "type": "object",
+      "required": ["code", "message"],
+      "additionalProperties": false,
+      "properties": {
+        "code": { "type": "string" },
+        "message": { "type": "string" },
+        "details": { "type": "object" }
+      }
+    },
     "PlanSummary": {
       "type": "object",
       "additionalProperties": false,
@@ -72,11 +106,15 @@
         "title",
         "origin",
         "state",
-        "created_at",
-        "items_total",
-        "items_applied",
-        "items_failed",
-        "items_pending",
+        "createdAt",
+        "itemsTotal",
+        "itemsApplied",
+        "itemsFailed",
+        "itemsSkipped",
+        "itemsCancelled",
+        "itemsPending",
+        "totalBytesRequired",
+        "destructiveDestination",
         "type"
       ],
       "properties": {
@@ -87,7 +125,7 @@
           "type": "string",
           "enum": ["inbox", "restructure", "cleanup", "archive", "project"]
         },
-        "origin_path": { "type": "string" },
+        "originPath": { "type": "string" },
         "state": {
           "type": "string",
           "enum": [
@@ -95,22 +133,37 @@
             "ready_for_review",
             "approved",
             "applying",
+            "paused",
             "applied",
             "partially_applied",
             "failed",
-            "cancelled"
+            "cancelled",
+            "discarded"
           ]
         },
-        "created_at": { "type": "string", "format": "date-time" },
-        "items_total": { "type": "integer", "minimum": 0 },
-        "items_applied": { "type": "integer", "minimum": 0 },
-        "items_failed": { "type": "integer", "minimum": 0 },
-        "items_pending": { "type": "integer", "minimum": 0 },
+        "createdAt": { "type": "string", "format": "date-time" },
+        "discardedAt": { "type": "string", "format": "date-time", "description": "Set when state == discarded (A5)." },
+        "itemsTotal": { "type": "integer", "minimum": 0 },
+        "itemsApplied": { "type": "integer", "minimum": 0 },
+        "itemsFailed": { "type": "integer", "minimum": 0 },
+        "itemsSkipped": { "type": "integer", "minimum": 0, "description": "Items marked skipped during apply (A3)." },
+        "itemsCancelled": { "type": "integer", "minimum": 0, "description": "Items cancelled when run was cancelled (A3)." },
+        "itemsPending": { "type": "integer", "minimum": 0 },
+        "totalBytesRequired": {
+          "type": "integer",
+          "minimum": 0,
+          "description": "Pre-flight space estimate in bytes (A4)."
+        },
+        "destructiveDestination": {
+          "type": "string",
+          "enum": ["archive", "os_trash"],
+          "description": "Per-plan destination for destructive items (R-Trash-1). Default: archive."
+        },
         "type": {
           "type": "string",
           "enum": ["split", "restructure", "cleanup", "archive", "source_map"]
         },
-        "parent_plan_id": { "type": "string" }
+        "parentPlanId": { "type": "string" }
       }
     }
   }

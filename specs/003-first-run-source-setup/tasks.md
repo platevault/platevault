@@ -6,7 +6,9 @@ description: "Task list for First-Run Source Setup (spec 003)"
 
 **Input**: Design documents from `/specs/003-first-run-source-setup/`
 **Prerequisites**: `plan.md`, `spec.md`, `research.md`, `data-model.md`,
-`contracts/source.register.json`, `contracts/firstrun.complete.json`
+`contracts/source.register.json`, `contracts/source.register.batch.json`,
+`contracts/firstrun.complete.json`, `contracts/firstrun.restart.json`,
+`contracts/audit.first_run.completed.json`
 
 **Tests**: Tests are included because spec acceptance scenarios are
 testable end-to-end and the contract surface needs schema conformance
@@ -31,27 +33,43 @@ in `apps/desktop/src/features/welcome/WelcomePage.tsx` are marked
       equivalent) and a contract-test harness under `tests/contract/`.
 - [ ] T003 [P] Wire the JSON Schemas in `specs/003-first-run-source-setup/contracts/`
       into the contracts index in `packages/contracts/` so generated TS
-      types are produced.
+      types are produced. Includes the three new contracts:
+      `source.register.batch.json`, `firstrun.restart.json`, and
+      `audit.first_run.completed.json` (R-Batch, R-E5, R-E2).
 
 ---
 
 ## Phase 2: Foundational (Blocking Prerequisites)
 
 - [ ] T004 Define `RegisteredSource` and `FirstRunState` schema and
-      migration in `crates/persistence/db/migrations/` per
-      `data-model.md`.
+      migration in `crates/persistence/db/migrations/` per `data-model.md`.
+      `RegisteredSource` includes `scan_depth` column (default `recursive`,
+      R-Wiz-1) and server-derived `created_via` column (R-Auth-1).
+      `FirstRunState` does NOT include `sources_buffer` — scratch state is
+      `localStorage`-only (R-Buf).
 - [ ] T005 [P] Add Rust DTOs mirroring the JSON contracts in
       `crates/contracts/core/src/first_run.rs`.
 - [ ] T006 [P] Implement repository methods
-      `register_source`, `list_sources`, `remove_source`,
-      `get_first_run_state`, `set_first_run_state`, and
-      `complete_first_run` in `crates/persistence/db/src/first_run.rs`.
-- [ ] T007 Implement the `register_source` and `complete_first_run` use
-      cases in `crates/app/core/src/first_run.rs`, including path
-      validation (exists, is_dir, readable) and error mapping to the
-      contract's error enum.
-- [ ] T008 Expose Tauri commands `source_register` and `firstrun_complete`
-      in `apps/desktop/src-tauri/src/commands/firstrun.rs`, delegating to
+      `register_source`, `register_source_batch`, `list_sources`,
+      `remove_source`, `get_first_run_state`, `set_first_run_state`,
+      `complete_first_run`, and `restart_first_run` in
+      `crates/persistence/db/src/first_run.rs`. `register_source`
+      derives `created_via` from `FirstRunState.completed_at` context
+      (R-Auth-1). `register_source_batch` is transactional: all-or-nothing
+      on full failure; partial commit on partial success (R-Batch).
+- [ ] T007 Implement the `register_source`, `register_source_batch`,
+      `complete_first_run`, and `restart_first_run` use cases in
+      `crates/app/core/src/first_run.rs`. Path validation (exists, is_dir,
+      readable) and error mapping to the contract's error enum.
+      `register_source` and batch variant detect `path.already.registered`
+      (idempotent — D1) and `path.already.registered.different_kind` (reject —
+      R-1.4). `complete_first_run` checks both raw and project kinds are
+      present (R-Wiz-2). `restart_first_run` clears `completed_at` and
+      returns existing sources as prefilled_sources (R-E5). `complete_first_run`
+      emits `first_run.completed` audit event via `crates/audit/` (R-E2).
+- [ ] T008 Expose Tauri commands `source_register`, `source_register_batch`,
+      `firstrun_complete`, and `firstrun_restart` in
+      `apps/desktop/src-tauri/src/commands/firstrun.rs`, delegating to
       `crates/app/core/`.
 
 **Checkpoint**: Domain + persistence + contract surface are live; user
@@ -105,9 +123,16 @@ and Finish writes `RegisteredSource` rows plus `FirstRunState.completed_at`.
 - [ ] T013 [P] [US2] Contract conformance test for
       `contracts/source.register.json` in
       `tests/contract/source_register_test.rs`.
+- [ ] T013b [P] [US2] Contract conformance test for
+      `contracts/source.register.batch.json` in
+      `tests/contract/source_register_batch_test.rs`. Cover: all-success,
+      partial (one error), all-failure atomic rollback, idempotent
+      `path.already.registered`, `path.already.registered.different_kind`
+      (R-Batch, R-1.4).
 - [ ] T014 [P] [US2] Contract conformance test for
       `contracts/firstrun.complete.json` in
-      `tests/contract/firstrun_complete_test.rs`.
+      `tests/contract/firstrun_complete_test.rs`. Cover: missing raw source,
+      missing project source (R-Wiz-2).
 - [ ] T015 [P] [US2] Component test for the wizard's Raw-required gating
       and category copy in
       `apps/desktop/src/features/welcome/WelcomePage.test.tsx`.
@@ -130,11 +155,15 @@ and Finish writes `RegisteredSource` rows plus `FirstRunState.completed_at`.
       (`path.not.exists`, `path.not.directory`,
       `path.permission.denied`, `path.already.registered`) inline next
       to the offending row.
-- [ ] T020 [US2] [mockup ✓, needs Tauri impl] On Finish, iterate the
-      working buffer and invoke `firstrun_complete`. On
-      `required.step.incomplete`, return the user to the Raw step with a
-      banner. On `wizard.not.in.progress`, treat the wizard as already
-      complete and redirect.
+- [ ] T020 [US2] [mockup ✓, needs Tauri impl] On Finish, invoke
+      `source_register_batch` with the full working buffer, then
+      invoke `firstrun_complete`. On batch partial-failure, stay on
+      the Finish step with per-row error indicators (A9, R-Batch).
+      Treat `path.already.registered` rows as success (D1). On
+      `required.step.incomplete`, return the user to the relevant
+      step (Raw or Project) with a banner (R-Wiz-2). On
+      `wizard.not.in.progress`, treat the wizard as already complete
+      and redirect.
 - [ ] T021 [US2] Replace the direct `navigate({ to: "/inventory" })`
       call with a successful-completion handler that also clears the
       `localStorage` buffer.
@@ -162,15 +191,16 @@ into the working buffer.
 ### Implementation for User Story 3
 
 - [ ] T023 [US3] [mockup ✓, needs Tauri impl] Update
-      `apps/desktop/src/features/settings/SettingsPage.tsx`: instead of
-      removing `alm.first-run.sources`, only clear the completion flag
-      (both DB and `localStorage`) and hydrate the wizard's working
-      buffer from `RegisteredSource` rows via a new
-      `firstrun_restart` Tauri command (research §5, prefill default).
-- [ ] T024 [US3] Add `firstrun_restart` use case in
-      `crates/app/core/src/first_run.rs` that clears
-      `FirstRunState.completed_at`, snapshots `RegisteredSource` rows
-      into `FirstRunState.sources_buffer`, and updates `updated_at`.
+      `apps/desktop/src/features/settings/SettingsPage.tsx`: invoke
+      `firstrun_restart` Tauri command (R-E5), receive `prefilled_sources`,
+      write them to `localStorage["alm.first-run.sources"]`, clear the
+      completion flag from `localStorage`, and navigate to `/welcome`.
+      The existing destructive reset (removing both keys) is replaced by
+      this prefill flow (A7).
+- [ ] T024 [US3] `firstrun_restart` use case is implemented as part of T007
+      (above). The restart reads localStorage on wizard mount to restore the
+      prefilled buffer (R-Buf). NOTE: `FirstRunState.sources_buffer` does NOT
+      exist in the DB; the buffer is localStorage-only (R-Buf).
 - [ ] T025 [US3] Add a confirm-before-restart dialog so users do not
       lose the completion flag accidentally.
 
@@ -207,12 +237,27 @@ discoverable.
 
 - [ ] T029 [P] Update `docs/research/` with a short note linking back to
       `specs/003-first-run-source-setup/research.md` for future reference.
-- [ ] T030 [P] Add an audit event `first_run.completed` emitted by
-      `firstrun_complete` and routed through `crates/audit/`.
+- [ ] T030 [P] Audit event `first_run.completed` is emitted by the
+      `complete_first_run` use case (wired in T007) via `crates/audit/`.
+      Schema is defined in `contracts/audit.first_run.completed.json` (R-E2).
+      Add conformance test in `tests/contract/audit_first_run_completed_test.rs`.
+- [ ] T030b [P] Add conformance test for `contracts/firstrun.restart.json`
+      in `tests/contract/firstrun_restart_test.rs`. Cover: happy path with
+      prefilled sources, `wizard.not.completed` error (R-E5).
+- [ ] T033 [US2] Add a Detect Tools step to the wizard (A5). The step calls
+      a tool-discovery Tauri command (cross-ref spec 011) to list detected
+      tool paths (PixInsight, Siril, planetary tools). User confirms or edits
+      before advancing to Download Catalogs. The step pre-fills Settings
+      tool paths without activating any tool.
+- [ ] T034 [US2] Add a Download Catalogs step to the wizard (A6). The step
+      offers OpenNGC download by default (cross-ref spec 014). User can skip;
+      download runs asynchronously after Finish or is deferred to Settings →
+      Catalogs. The step does not block Finish if skipped.
 - [ ] T031 Run `just lint`, `just typecheck`, `just test`, and verify
-      Playwright MCP coverage of the gate, happy path, and restart.
-- [ ] T032 Resolve all `[NEEDS DECISION]` markers in `spec.md` before
-      this feature exits Draft status.
+      Playwright MCP coverage of the gate, happy path, restart, and
+      batch partial-failure.
+- [ ] T032 Verify all `[NEEDS DECISION]` markers are resolved in `spec.md`
+      before this feature exits Draft status.
 
 ---
 
@@ -258,9 +303,13 @@ T027 = { blocked_by = ["T026"] }
 T028 = { blocked_by = ["T026"] }
 
 T029 = { blocked_by = [] }
-T030 = { blocked_by = ["T008"] }
-T031 = { blocked_by = ["T021", "T023", "T028"] }
+T030 = { blocked_by = ["T007"] }
+T030b = { blocked_by = ["T003"] }
+T031 = { blocked_by = ["T021", "T023", "T028", "T033", "T034"] }
 T032 = { blocked_by = ["T031"] }
+T013b = { blocked_by = ["T003"] }
+T033 = { blocked_by = ["T008"] }
+T034 = { blocked_by = ["T008"] }
 ```
 
 ### Phase Dependencies

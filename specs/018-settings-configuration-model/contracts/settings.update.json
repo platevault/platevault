@@ -40,19 +40,24 @@
   },
   "response": {
     "type": "object",
-    "required": ["key", "prior_value", "new_value"],
+    "required": ["status", "key", "prior_value", "new_value"],
     "additionalProperties": false,
     "properties": {
+      "status": {
+        "type": "string",
+        "enum": ["success", "noop"],
+        "description": "'success' when the value changed and was persisted. 'noop' when the incoming value is deep-equal to the stored value (A4, R4.1): no row write, no audit event. Matches spec 002 noop pattern."
+      },
       "key": { "type": "string" },
       "prior_value": {
-        "description": "Value before the update. Equal to new_value when no-op."
+        "description": "Value before the update. Equal to new_value when status='noop'."
       },
       "new_value": {
-        "description": "Value after the update."
+        "description": "Value after the update. Equal to prior_value when status='noop'."
       },
       "audit_id": {
         "type": "string",
-        "description": "Audit event id for non-noisy changes. Absent for noisy keys and for no-op writes."
+        "description": "Audit event id for non-noisy changes. Absent for noisy keys and when status='noop'."
       }
     }
   },
@@ -66,12 +71,6 @@
       "code": "value.invalid",
       "message": "The supplied value does not validate against the key's schema.",
       "http_status_equivalent": 400
-    },
-    {
-      "code": "value.unchanged",
-      "message": "The supplied value equals the stored value. Returned as informational only; the operation still succeeds and no audit event is emitted.",
-      "informational": true,
-      "http_status_equivalent": 200
     }
   ]
 }

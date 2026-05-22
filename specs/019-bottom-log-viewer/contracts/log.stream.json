@@ -15,7 +15,7 @@
     "properties": {
       "cursor": {
         "type": "string",
-        "description": "Opaque id of the last delivered LogEntry. Omit to receive the most recent window up to LOG_BUFFER_SIZE."
+        "description": "Opaque id of the last delivered LogEntry. Format: aud:<n> or dia:<n> (A1). Omit to receive the most recent window up to LOG_BUFFER_SIZE."
       },
       "level_min": {
         "type": "string",
@@ -26,6 +26,14 @@
         "type": "boolean",
         "description": "Include source = 'diagnostic' entries. Defaults to true for the panel; export defaults this to false.",
         "default": true
+      },
+      "source_filter": {
+        "type": "array",
+        "description": "Optional filter to one or more source values. When present, only entries whose source matches one of the listed values are returned (R-SourceFilter). Omit to receive all sources.",
+        "items": {
+          "type": "string",
+          "enum": ["audit", "diagnostic", "catalog", "plan", "workflow", "lifecycle", "inventory", "settings", "project", "target", "tool"]
+        }
       },
       "window_size": {
         "type": "integer",
@@ -38,7 +46,7 @@
   },
   "events": {
     "added": {
-      "description": "One or more entries appended to the stream. Ordered oldest-first within the event payload.",
+      "description": "One or more entries appended to the stream. Ordered oldest-first within the event payload. May include truncation signal when the cursor predates retained history.",
       "schema": {
         "type": "object",
         "required": ["added"],
@@ -47,6 +55,15 @@
           "added": {
             "type": "array",
             "items": { "$ref": "#/definitions/LogEntry" }
+          },
+          "truncated": {
+            "type": "boolean",
+            "description": "True when the requested cursor predates the oldest retained entry (vacuum gap). The UI should render an inline 'History gap' marker (A4)."
+          },
+          "truncated_count": {
+            "type": ["integer", "null"],
+            "minimum": 0,
+            "description": "Estimated count of entries that existed before the oldest retained entry. Null when the audit vacuum does not record counts."
           }
         }
       }
@@ -67,10 +84,19 @@
   "definitions": {
     "LogEntry": {
       "type": "object",
-      "required": ["id", "time", "level", "source", "message"],
+      "required": ["id", "time", "level", "source", "message", "contract_version"],
       "additionalProperties": false,
       "properties": {
-        "id": { "type": "string" },
+        "id": {
+          "type": "string",
+          "pattern": "^(aud|dia):[0-9]+$",
+          "description": "Stable prefixed id. aud:<n> for audit-sourced entries; dia:<n> for diagnostic entries (A1). Monotonic within each namespace within a session."
+        },
+        "contract_version": {
+          "type": "string",
+          "const": "1",
+          "description": "Schema version of this LogEntry shape (H1). Will be camelCase'd in the future envelope sweep."
+        },
         "time": {
           "type": "string",
           "format": "date-time",
@@ -82,7 +108,8 @@
         },
         "source": {
           "type": "string",
-          "description": "Emitter tag. Workflow values include plans, lifecycle, inventory, settings, project. Diagnostic events use the literal 'diagnostic'."
+          "enum": ["audit", "diagnostic", "catalog", "plan", "workflow", "lifecycle", "inventory", "settings", "project", "target", "tool"],
+          "description": "Emitter tag. Closed enum aligned to spec 002 event-bus topic prefixes (R-SourceEnum). Diagnostic events use the literal 'diagnostic'."
         },
         "message": {
           "type": "string",
@@ -94,7 +121,7 @@
         },
         "entity_type": {
           "type": "string",
-          "description": "Referenced entity kind, when known. Examples: plan, project, target, source. Omitted for diagnostics."
+          "description": "Referenced entity kind, when known. Enum is the spec 002 AssetType enum (includes 'target' per spec 013 amendment, 'data_source' per spec 014 amendment — E-019-2). Omitted for diagnostics."
         },
         "entity_id": {
           "type": "string",

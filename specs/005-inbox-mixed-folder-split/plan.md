@@ -1,17 +1,19 @@
 # Implementation Plan: Inbox Mixed-Folder Split
 
-**Branch**: `005-inbox-mixed-folder-split` | **Date**: 2026-05-20 | **Spec**: [spec.md](./spec.md)
+**Branch**: `005-inbox-mixed-folder-split` | **Date**: 2026-05-22 (updated) | **Spec**: [spec.md](./spec.md)
 **Input**: Feature specification from `/specs/005-inbox-mixed-folder-split/spec.md`
 
 ## Summary
 
-Detect whether each Inbox folder is single-type or mixed by reading
-metadata (FITS/XISF `IMAGETYP`, falling back to filename heuristics with
-reduced confidence). Surface a file-level breakdown in the desktop UI.
-For mixed folders, generate a reviewable filesystem plan — one plan item
-per file — through the existing plan-apply pipeline. For single-type
-folders, confirm directly to Inventory. Maintain the invariant that any
-Inbox item has at most one open plan at a time.
+Detect whether each Inbox folder is single-type or mixed by reading the FITS
+`IMAGETYP` keyword for every file and normalizing via the
+`ImageTypNormalizationTable`. Classification is **deterministic** — no
+confidence scores, no filename heuristics. Surface a file-level breakdown in
+the desktop UI. For mixed folders, generate a reviewable filesystem plan —
+one plan item per file, destinations targeting Inventory directly (not sibling
+staging) — through the existing plan-apply pipeline. For single-type folders,
+confirm directly to Inventory. Maintain the invariant that any Inbox item has
+at most one open plan at a time. (Ref: R-IMAGETYP, A5, R-Split-1)
 
 This feature is a **producer** for the reviewable plan pipeline (spec 017
 + spec 025) and a **consumer** of the Naming & Structure token pattern
@@ -23,7 +25,8 @@ This feature is a **producer** for the reviewable plan pipeline (spec 017
 TypeScript 5.x + React 18 (desktop UI shell).  
 **Primary Dependencies**: Future Rust crates — `crates/metadata/fits`,
 `crates/metadata/xisf`, `crates/metadata/core`, `crates/domain/core`,
-`crates/app/core`, `crates/fs/planner`, `crates/persistence/db`. Frontend:
+`crates/app/core`, `crates/fs/planner`, `crates/patterns/` (spec 015
+resolver, per R-CratePatterns), `crates/persistence/db`. Frontend:
 existing `apps/desktop/` shell.  
 **Storage**: SQLite via `crates/persistence/db` for classification cache,
 Inbox item state, and the Inbox→Plan back-reference. Image files remain on
@@ -54,10 +57,11 @@ candidate folders per scan root.
 - **PixInsight boundary**: PASS. No calibration, debayer, registration,
   integration, drizzle, stacking, or pixel manipulation. Classification
   reads headers only.
-- **Research-led domain modeling**: PASS-WITH-RESEARCH. See
-  [research.md](./research.md) for FITS header consensus rules, confidence
-  thresholds, fallback heuristics, and prior art comparison (PI WBPP file
-  classifier, NINA auto-sort).
+- **Research-led domain modeling**: PASS. See
+  [research.md](./research.md) for the deterministic IMAGETYP-only
+  classification model, normalization table, prior art comparison (PI WBPP
+  file classifier), video lane separation, and content-signature TOCTOU
+  safety. (Ref: R-IMAGETYP, A5)
 - **Portable contracts and durable records**: PASS. Two language-neutral
   JSON Schema contracts under `contracts/`. The SQLite database is the
   durable record for Inbox items, classifications, and plan
@@ -88,12 +92,14 @@ specs/005-inbox-mixed-folder-split/
 
 ```text
 crates/
-├── domain/core/                 # InboxClassificationRule, FrameType enum, confidence model
-├── metadata/core/               # shared FrameType signal extraction trait
+├── domain/core/                 # FrameType enum, InboxClassificationRule
+├── metadata/core/               # shared FrameType extraction + ImageTypNormalizationTable
 ├── metadata/fits/               # FITS IMAGETYP, FILTER, OBJECT readers
 ├── metadata/xisf/               # XISF equivalents
+├── metadata/video/              # video file detection for inbox.video.* lane
+├── patterns/                    # spec 015 pattern resolver (R-CratePatterns)
 ├── fs/planner/                  # Plan + PlanItem (already planned; consumer)
-├── app/core/                    # InboxClassifyUseCase, InboxConfirmUseCase
+├── app/core/                    # InboxClassifyUseCase, InboxConfirmUseCase, InboxReclassifyUseCase
 ├── persistence/db/              # Inbox/Classification/PlanLink repositories
 └── contracts/core/              # Rust DTOs matching contracts/*.json
 
@@ -118,41 +124,53 @@ No new top-level packages.
 ### Classifier
 
 - Input: `inbox_item_id` and an optional `force_rescan` flag.
-- Reads cached metadata when present; falls back to
+- Reads cached evidence when `content_signature` matches; falls back to
   `crates/metadata/{fits,xisf}` adapters on miss.
-- Frame-type consensus rule (default proposal, validated by research.md):
-  - For each file, derive a `FrameType` signal from `IMAGETYP` (strong) or
-    filename pattern (weak).
-  - Aggregate per-folder: if more than one strong frame-type signal appears
-    with count ≥ N, classify `mixed`. Else if a single dominant frame type
-    has confidence ≥ threshold, classify `single-type`. Else
-    `unclassified`.
-- Output: `InboxClassification` with confidence, breakdown, sample files,
-  and per-file evidence records.
+- Frame-type classification rule (deterministic — no confidence scores):
+  - For each file, read `IMAGETYP` (or XISF equivalent) and normalize via
+    `ImageTypNormalizationTable` in `crates/metadata/core`.
+  - Files with no readable or recognized `IMAGETYP` receive per-file
+    `unclassified = true` markers.
+  - Video files (`.ser`, `.avi`, `.mp4`, `.mov`) are skipped; routed to
+    the `inbox.video.*` lane.
+  - Folder aggregation: `single_type T` if all classified files map to T;
+    `mixed` if two or more types appear; `unclassified` if every file is
+    unclassified.
+- Computes `contentSignature` (R-Sig-1 formula) and returns it in the response.
+- Output: `InboxClassification` with breakdown, per-file evidence records,
+  unclassified file count, and `contentSignature`. (Ref: R-IMAGETYP, A5, A8)
 
 ### Plan Generator
 
 - Driven by the active Naming & Structure token pattern (spec 015),
-  resolved once at generation time and recorded on the plan.
-- One `PlanItem` per scanned file. Items are grouped by frame type via a
-  group key, not by sub-plans — the planner crate stays unaware of frame
-  semantics.
+  resolved via `crates/patterns/` (R-CratePatterns), recorded on the plan.
+- Destination paths target Inventory directly — no sibling staging step.
+  One plan per `inbox.confirm` action. (Ref: R-Split-1)
+- File list comes from `InboxClassificationEvidence.relativeFilePath` rows,
+  NOT from `InboxItem.fileCount`. (Ref: A9)
+- One `PlanItem` per scanned file, carrying the actual source and destination
+  paths. Items grouped by frame type via a group key.
 - Validates that every token required by the pattern resolves for every
-  file. If any file fails, the whole operation fails
-  `pattern.unset` / `pattern.unresolved` with no partial plan.
+  file. If any file fails, the whole operation fails `pattern.unset` /
+  `pattern.unresolved` with no partial plan.
+- When the resulting plan includes destructive items, the caller MUST supply
+  `destructiveDestination: "archive" | "os_trash"`. (Ref: R-DestChoice)
+- Verifies `contentSignature` matches before creating the plan; returns
+  `classification.stale` if drift is detected. (Ref: A8)
 
 ### Store Integration
 
 - `crates/persistence/db` owns:
-  - `inbox_items` (one row per scanned folder)
-  - `inbox_classifications` (current result, with `force_rescan`
-    invalidation)
+  - `inbox_items` (one row per leaf folder; `lane` field distinguishes FITS vs video)
+  - `inbox_classifications` (current result, with `force_rescan` invalidation)
+  - `inbox_classification_evidence` (per-file records; `unclassified` + `manual_override` fields)
   - `inbox_plan_links` (Inbox item → open plan id, enforced unique
     where plan state is open)
-- The plans publisher (existing in `crates/app/core`, planned alongside
-  spec 017) emits state transitions. This feature subscribes to mark Inbox
-  items resolved on `applied`, and to release the open-plan lock on
-  `discarded`/`failed`.
+- The plans publisher (spec 017 event bus) emits state transitions. This
+  feature subscribes to `plan.applying.completed`, `plan.applying.paused`,
+  and `plan.discarded` to mark Inbox items resolved or release the open-plan
+  lock. A background repair query runs every 5 minutes as a safety net.
+  (Ref: E4, R-PlanOpen)
 
 ### Future Rust Crate Mapping
 
@@ -160,8 +178,10 @@ No new top-level packages.
 |---|---|
 | FITS header reads (IMAGETYP, FILTER, OBJECT) | `crates/metadata/fits` |
 | XISF header reads | `crates/metadata/xisf` |
-| Shared FrameType + confidence model | `crates/metadata/core` |
+| Video file detection (inbox.video.* lane) | `crates/metadata/video` |
+| Shared FrameType + ImageTypNormalizationTable | `crates/metadata/core` |
 | Classification rule + invariants | `crates/domain/core` |
+| Pattern resolver (spec 015) | `crates/patterns/` (R-CratePatterns) |
 | Orchestration use cases | `crates/app/core` |
 | Plan items + grouping | `crates/fs/planner` |
 | DTOs for contracts | `crates/contracts/core` |
@@ -169,9 +189,16 @@ No new top-level packages.
 
 ### Contract Surface
 
-- `inbox.classify` — idempotent unless `force_rescan: true`.
-- `inbox.confirm` — only valid action depends on classification:
-  `action: "split"` for `mixed`, `action: "confirm"` for `single-type`.
+- `inbox.classify` — idempotent unless `force_rescan: true`. Response
+  includes `contentSignature`. (Ref: A8)
+- `inbox.confirm` — action depends on classification: `action: "split"` for
+  `mixed`, `action: "confirm"` for `single_type`. Requires
+  `contentSignature`. Returns `classification.stale` on drift. Accepts
+  `destructiveDestination` when plan has destructive items. (Ref: A8,
+  R-DestChoice)
+- `inbox.reclassify` — NEW. Accepts a list of `{ filePath, frameType }`
+  entries. Writes `manualOverride` to evidence rows and triggers
+  re-aggregation. (Ref: R-Unclass-1, R-Unclass-2)
 
 ## Complexity Tracking
 

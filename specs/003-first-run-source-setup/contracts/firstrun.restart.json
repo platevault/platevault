@@ -1,0 +1,91 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://astro-library-manager.local/contracts/firstrun.restart.json",
+  "title": "firstrun.restart",
+  "description": "Restart the first-run wizard from Settings. Clears FirstRunState.completed_at and returns existing RegisteredSource rows as prefilled_sources so the wizard working buffer can be hydrated (A7, R-E5). Does NOT delete existing RegisteredSource rows. The working source list is held in localStorage only after this call (R-Buf). Emits an audit.first_run.restarted event.",
+  "type": "object",
+  "properties": {
+    "operation": {
+      "const": "firstrun.restart"
+    },
+    "version": {
+      "type": "string",
+      "const": "1"
+    },
+    "request": {
+      "type": "object",
+      "required": ["confirm"],
+      "additionalProperties": false,
+      "properties": {
+        "confirm": {
+          "type": "boolean",
+          "const": true,
+          "description": "Must be true. Requires explicit caller intent to prevent accidental restarts."
+        }
+      }
+    },
+    "response": {
+      "type": "object",
+      "required": ["restarted_at", "prefilled_sources"],
+      "additionalProperties": false,
+      "properties": {
+        "restarted_at": {
+          "type": "string",
+          "format": "date-time",
+          "description": "Server-local time the restart was processed."
+        },
+        "prefilled_sources": {
+          "type": "array",
+          "description": "Summary of existing RegisteredSource rows to prefill into the wizard working buffer.",
+          "items": {
+            "type": "object",
+            "required": ["source_id", "kind", "path"],
+            "additionalProperties": false,
+            "properties": {
+              "source_id": {
+                "type": "string",
+                "format": "uuid"
+              },
+              "kind": {
+                "type": "string",
+                "enum": ["raw", "calibration", "project", "inbox"]
+              },
+              "path": {
+                "type": "string"
+              },
+              "scan_depth": {
+                "type": "string",
+                "enum": ["recursive", "single"]
+              }
+            }
+          }
+        }
+      }
+    },
+    "events": {
+      "type": "object",
+      "description": "Audit events emitted by this operation.",
+      "additionalProperties": false,
+      "properties": {
+        "audit.first_run.restarted": {
+          "description": "Emitted when the wizard is restarted. Payload includes restarted_at and prefilled_source_count.",
+          "type": "object",
+          "properties": {
+            "restarted_at": { "type": "string", "format": "date-time" },
+            "prefilled_source_count": { "type": "integer", "minimum": 0 }
+          }
+        }
+      }
+    },
+    "errors": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "wizard.not.completed": {
+          "description": "FirstRunState.completed_at is already null. The wizard is not in a completed state and cannot be restarted."
+        }
+      }
+    }
+  },
+  "required": ["operation", "version", "request", "response", "errors"]
+}

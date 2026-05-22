@@ -101,12 +101,33 @@ description: "Task list for 007-calibration-matching-rules"
 
 ---
 
+## Phase 6b: Batch Suggest (US5)
+
+**Goal**: Project-wide calibration suggestions for multiple sessions in a single call.
+
+**Independent Test**: Call `calibration.match.suggest.batch` with 3 session IDs
+including one with `observer_location: null`. Assert partial success: the null-location
+session returns `status: "observer_location_missing"` while others return matches.
+
+- [ ] T035 [US5] Implement `batch_suggest` dispatcher in `crates/calibration/core/src/lib.rs` that fans out per (session, calibration_type) pair and aggregates results.
+- [ ] T036 [US5] Handle `observer_location_missing` and `session.mixed_state` per-item statuses in the batch dispatcher.
+- [ ] T037 [P] [US5] Contract test against `packages/contracts/schemas/calibration.match.suggest.batch.json` covering: all-success, partial (one observer_location_missing), all-error in `tests/contracts/calibration_match_suggest_batch.rs`.
+- [ ] T038 [US5] Tauri command adapter for `calibration.match.suggest.batch` in `apps/desktop/src-tauri/src/commands/calibration.rs`.
+- [ ] T039 [P] [US5] Unit test: batch with mixed session returns `session.mixed_state` for that session; other sessions unaffected.
+
+**Checkpoint**: Batch suggest live — spec 008 project-level calibration can use this contract.
+
+---
+
 ## Phase 7: Polish & Cross-Cutting
 
-- [ ] T031 [P] Wire settings page `apps/desktop/src/features/settings/SettingsPage.tsx` so the existing `darkMatchTolerance`, `flatMatching`, and `suggestCalibration` controls write through to `MatchingRuleConfig` persistence; remove dead-end behavior.
+- [ ] T031 [P] Wire settings page `apps/desktop/src/features/settings/SettingsPage.tsx` so the existing `darkMatchTolerance`, `flatMatching`, and `suggestCalibration` (now `prefill_suggestion`) controls write through to `MatchingRuleConfig` persistence; remove dead-end behavior. Rename the `suggestCalibration` settings key to `prefill_suggestion` in persistence and UI (R-Prefill).
 - [ ] T032 Add quickstart `specs/007-calibration-matching-rules/quickstart.md` walking through suggest → review → assign.
 - [ ] T033 [P] Performance check: simulate 1k masters and assert single-session suggest returns under 200ms; record results in `docs/research/`.
-- [ ] T034 Update `apps/desktop/src/features/calibration/matchPanel.tsx` consumer hook to drive the project-detail accordion (spec 008 surface).
+- [ ] T034 Update `apps/desktop/src/features/calibration/matchPanel.tsx` consumer hook to drive the project-detail accordion (spec 008 surface). Ensure the hook respects `prefill_suggestion` when opening the assign dialog.
+- [ ] T040 [P] CI snapshot test: assert that the `calibration_types` enum in all three suggest/assign contracts matches the canonical definition in spec 002 when spec 002 adds it — fails build on drift (D6). Wire as a JSON-diff step in the contracts validation harness.
+- [ ] T041 [P] Contract test: `session.mixed_state` error returned when calling `calibration.match.suggest` or `calibration.match.assign` with a session whose type is `mixed`.
+- [ ] T042 [P] Contract test: `match.observer_location_missing` returned when calling `calibration.match.suggest` with a session lacking `observer_location` or `exposure_start_utc`.
 
 ---
 
@@ -150,6 +171,14 @@ T031 = { blocked_by = ["T010"] }
 T032 = { blocked_by = ["T015", "T020", "T024", "T029"] }
 T033 = { blocked_by = ["T013", "T019", "T023"] }
 T034 = { blocked_by = ["T014", "T019", "T023", "T028"] }
+T035 = { blocked_by = ["T013", "T019", "T023"] }
+T036 = { blocked_by = ["T035"] }
+T037 = { blocked_by = ["T035", "T002"] }
+T038 = { blocked_by = ["T035", "T007"] }
+T039 = { blocked_by = ["T035"] }
+T040 = { blocked_by = ["T002"] }
+T041 = { blocked_by = ["T014", "T028", "T002"] }
+T042 = { blocked_by = ["T014", "T002"] }
 ```
 
 ### Phase Dependencies

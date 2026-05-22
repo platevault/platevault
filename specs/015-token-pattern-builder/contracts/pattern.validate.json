@@ -2,7 +2,7 @@
   "$schema": "https://json-schema.org/draft/2020-12/schema",
   "$id": "astro-plan/contracts/pattern.validate",
   "title": "pattern.validate",
-  "description": "Structural validation of a token pattern, without resolving against metadata.",
+  "description": "Structural validation of a token pattern, without resolving against metadata. Returns warnings for non-fatal structural issues.",
   "type": "object",
   "definitions": {
     "PatternPart": {
@@ -59,6 +59,37 @@
           "properties": {
             "code": { "const": "pattern.empty" },
             "message": { "type": "string" }
+          }
+        },
+        "pattern.invalid.unicode": {
+          "description": "A token value in the pattern contains Unicode confusables or disallowed characters (C0/C1 controls, format chars, bidi overrides). Note: this can only be detected statically for separator values, not for token values (which are resolved at runtime). (Ref: A1)",
+          "type": "object",
+          "required": ["code", "message"],
+          "properties": {
+            "code": { "const": "pattern.invalid.unicode" },
+            "message": { "type": "string" },
+            "details": {
+              "type": "object",
+              "properties": {
+                "token": { "type": "string" },
+                "offending_value": { "type": "string" }
+              }
+            }
+          }
+        },
+        "path.reserved_name": {
+          "description": "A separator or literal segment value matches a Windows reserved device name (CON, PRN, AUX, NUL, COM1-9, LPT1-9), case-insensitively. Note: token values are only checked at resolve time. (Ref: A3)",
+          "type": "object",
+          "required": ["code", "message"],
+          "properties": {
+            "code": { "const": "path.reserved_name" },
+            "message": { "type": "string" },
+            "details": {
+              "type": "object",
+              "properties": {
+                "offending_segment": { "type": "string" }
+              }
+            }
           }
         },
         "token.unknown": {

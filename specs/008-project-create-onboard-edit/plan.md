@@ -9,15 +9,22 @@ This feature owns three flows that share one project model: **create** a new
 project from confirmed Inventory items, **onboard** an existing project folder
 that already lives on disk, and **edit** project metadata after the fact. All
 three converge on the same `Project` aggregate (see `data-model.md`) and emit
-the same audit envelope. The create wizard is structurally analogous to the
-first-run source-setup wizard from spec 003 but scoped to a single project:
-identity → tool → sources → calibration → channels → confirm. Source picking
-is scoped to **Inventory**, never an arbitrary disk path, because picking
-arbitrary paths bypasses the scan/extract pipeline that downstream features
-depend on. Channels are inferred from the filters present on the picked
-sources, with manual override on the confirm step. Tool selection drives which
-generated artifacts (PixInsight project file, Siril sequence, etc.) the
-filesystem plan must create.
+the same audit envelope.
+
+The create flow uses a **single-form dialog** (name, tool, optional initial
+sources, optional notes) — not a multi-step wizard. This decision was ratified
+in GRILL 2026-05-22 (A1), reversing the earlier five-step wizard design. The
+dialog is reusable from spec 010's guided first-project flow. Source picking is
+scoped to **Inventory**, never an arbitrary disk path, because picking arbitrary
+paths bypasses the scan/extract pipeline that downstream features depend on.
+Channels are inferred from the filters present on the picked sources. Tool
+selection is mandatory at create and drives which generated artifacts (PixInsight
+project file, Siril sequence, etc.) the filesystem plan must create.
+
+**`project.duplicate` deferred**: There is no `project.duplicate` contract in
+v1. The recovery path for tool-locked projects is manual re-creation via
+`project.create`. The UI surfaces this in tool-lock messaging. Follow-up tracked
+in GRILL amendment 2026-05-22 (R-NoDup).
 
 ## Constitution Check
 
@@ -109,36 +116,44 @@ apps/desktop (Tauri + React)
 
 ### Contracts
 
-Three new JSON Schemas under `contracts/`:
+Seven JSON Schemas under `contracts/`:
 
-- `project.create.json` — full creation, with optional `initial_sources[]`.
+- `project.create.json` — full creation, with optional `initial_sources[]` and required `tool`.
 - `project.update.json` — metadata-only patch on existing project.
-- `project.source.add.json` — incremental source addition.
+- `project.source.add.json` — incremental source addition. Use case verifies Inventory session `state == "confirmed"` (R-Inventory-Confirmed); rejects with `source.not_confirmed` otherwise.
+- `project.source.remove.json` — source removal. Uses camelCase convention (A7 exception). Permitted in `{setup_incomplete, ready, blocked}`; refused in `{prepared, processing, completed, archived}`.
+- `project.channels.reinfer.json` — triggers fresh channel inference; resets `hasNewSources` to false.
+- `project.channels.dismiss_drift.json` — keeps manual overrides; resets `hasNewSources` to false; persists user's choice.
+- `project.get.json` — project detail read. Response includes `channelDrift: { hasNewSources: boolean, suggestedAction: "re_infer" | "dismiss" }`.
+- `project.list.json` — project list (in `009/contracts/`). Extended with cursor-based pagination: optional `cursor`, `limit` (default 50, max 200); response adds `nextCursor` (R-Pagination).
 
-All three reuse the spec 002 `ErrorEnvelope` shape and contribute their
-own project-scoped error codes (see each schema's `ErrorCode` enum).
+New contracts (`project.source.remove`, `project.channels.reinfer`, `project.channels.dismiss_drift`) use camelCase convention per A7 exception. Existing contracts stay snake_case pending the deferred envelope sweep.
+
+All contracts reuse the spec 002 `ErrorEnvelope` shape and contribute their own project-scoped error codes (see each schema's `ErrorCode` enum).
 
 ### UI Layer
 
 `apps/desktop/src/features/projects/`:
 
-- `create/CreateProjectWizard.tsx`: multi-step modal opened from the
+- `create/CreateProjectDialog.tsx`: single-form modal opened from the
   page-header "New project" button (currently a stub at line 87 of
-  `ProjectsPage.tsx`). Steps: Identity → Tool → Sources → Channels →
-  Confirm. The Sources step renders an Inventory picker driven by
-  `useInventory()` (spec 003); rows are checkboxes grouped by session.
+  `ProjectsPage.tsx`). Fields: name (required), tool (required, radio group,
+  default PixInsight), optional Inventory source picker, optional notes.
+  The dialog is reusable from spec 010's guided first-project flow without
+  behavior change.
 - `onboard/OnboardProjectWizard.tsx`: opened from a secondary CTA on the
   same page header. Steps: Pick folder → Detect marker / metadata →
   Reconcile sources against Inventory → Confirm.
 - `edit/EditProjectPane.tsx`: opened from the drawer overflow on any
   non-archived project. Single pane with name, tool, notes, sources list
-  (with remove + Add source row), and channel inference preview.
-- `AddSourcePicker.tsx`: shared by create wizard and drawer; renders the
+  (with remove + Add source row), and channel inference preview. Channel
+  drift banner surfaces when `channelDrift.hasNewSources == true`.
+- `AddSourcePicker.tsx`: shared by create dialog and drawer; renders the
   inventory rows scoped to the project's tool/target compatibility.
 
-The page-header "New project" button gets a click handler dispatching the
-`open create wizard` route action; URL state tracks the wizard step so
-deep-links and back-button work (consistent with spec 020).
+The page-header "New project" button gets a click handler opening the
+`CreateProjectDialog`; URL state records the open state so deep-links and
+back-button work (consistent with spec 020).
 
 ## Phasing
 
@@ -164,11 +179,17 @@ deep-links and back-button work (consistent with spec 020).
    and unit tests for layout per tool.
 2. Add `crates/domain/core/src/project/` aggregate + invariants + tests.
 3. Add `crates/app/core/src/usecases/project_setup.rs` with fake
-   persistence + audit doubles.
-4. Generate Rust DTOs and TS types from the three schemas.
+   persistence + audit doubles. Use case enforces:
+   - `source.add` checks `inventory_session.state == "confirmed"` (R-Inventory-Confirmed).
+   - `source.remove` forbidden in `{prepared, processing, completed, archived}`.
+   - Automatic `setup_incomplete → ready` invariant-check fires after every
+     `project.update` or `project.source.add`; if `tool != null AND ≥1 confirmed
+     source mapped`, the lifecycle service auto-transitions via `actor=system`
+     (R-Ready-Trigger).
+4. Generate Rust DTOs and TS types from all seven schemas.
 5. Add Tauri command adapters.
-6. Replace the stub `New project` button with the create wizard; wire
-   `Add source` inline. Add an edit overflow entry.
+6. Replace the stub `New project` button with `CreateProjectDialog`; wire
+   `Add source` inline and source-remove; add an edit overflow entry.
 7. Build the onboard wizard last (no current mockup surface).
 8. Playwright smoke per US.
 

@@ -103,6 +103,30 @@ audit event to a `LogEntry` projection plus a small set of diagnostic events
 that emit through the same channel but are not persisted (see research R2).
 The mapping is one-way; the viewer never writes back into audit.
 
+### Event-Bus Subscriptions (R-Subscriptions)
+
+The log viewer subscribes to the following spec 002 event-bus topic wildcards:
+
+| Subscription       | Source tag    |
+|--------------------|---------------|
+| `audit.*`          | `audit`       |
+| `lifecycle.*`      | `lifecycle`   |
+| `plan.*`           | `plan`        |
+| `catalog.*`        | `catalog`     |
+| `inventory.*`      | `inventory`   |
+| `workflow.*`       | `workflow`    |
+| `target.*`         | `target`      |
+| `tool.*`           | `tool`        |
+| `settings.*`       | `settings`    |
+| `project.*`        | `project`     |
+| (ephemeral)        | `diagnostic`  |
+
+Diagnostic events bypass the event bus and emit directly on the stream
+channel with `source = "diagnostic"`. They are never written to audit.
+
+The `source` tag on each `LogEntry` is derived from the topic prefix as
+shown in the table above.
+
 ### Stream Channel
 
 `log.stream` is a cursor-based subscription. The client opens with an

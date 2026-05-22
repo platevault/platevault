@@ -120,6 +120,35 @@ content persists with an updated-at timestamp; verify a per-session note
 3. **Given** a target name is later corrected, **When** the alias edit
    completes, **Then** the per-target note survives unchanged.
 
+### User Story 5 - Correct A Duplicate Or Wrong Identity (Priority: P2)
+
+As a user who finds that two separate targets have been created for the same
+celestial object (or that a target was mis-named), I want to remove an alias
+and rename the primary designation so that the identity record reflects the
+correct catalog designation.
+
+**Why this priority**: Spec 013 auto-creates targets from catalog equivalences;
+users may encounter names that do not match their preferred designation and
+need a lightweight remediation path without a full merge/split workflow.
+
+**Independent Test**: A target with primary `NGC 224` has alias `M 31` added.
+Remove alias `NGC 224` (failing with `alias.is_primary`). Rename primary from
+`NGC 224` to `M 31` (success); confirm prior primary `NGC 224` becomes an
+alias. Then remove alias `NGC 224` (success).
+
+**Acceptance Scenarios**:
+
+1. **Given** a target with a wrong primary designation, **When** the user
+   renames the primary to an existing alias, **Then** the old primary becomes
+   an alias and the alias becomes the new primary.
+2. **Given** a target with an unwanted alias, **When** the user removes the
+   alias, **Then** the alias is deleted and an audit event is written.
+3. **Given** the user tries to remove an alias that is currently the primary,
+   **When** the request is processed, **Then** the system returns
+   `alias.is_primary` and no mutation occurs.
+
+---
+
 ### Edge Cases
 
 - Same target has conflicting catalog coordinates.
@@ -130,8 +159,13 @@ content persists with an updated-at timestamp; verify a per-session note
 
 ### Domain Questions To Resolve
 
-- Final target identity merge/split workflow.
-- Which observing-plan systems are recognized first.
+- **Final target identity merge/split workflow**: RESOLVED — spec 013 ships a
+  cross-catalog equivalence table that handles automatic catalog unification.
+  Manual full-merge/split (moving sessions across target records) is deferred;
+  the v1 remediation path is `target.alias.remove` + `target.primary.rename`
+  (US5 + R-3.4). See spec 013 data-model.md `CatalogEquivalence`.
+- **Which observing-plan systems are recognized first**: DEFERRED (R5) — out of
+  scope for v1.
 
 ## Requirements *(mandatory)*
 
@@ -140,10 +174,12 @@ content persists with an updated-at timestamp; verify a per-session note
 - **FR-001**: Target identity MUST be a durable record separate from raw FITS `OBJECT` hints.
 - **FR-002**: Target aliases and catalog identifiers MUST be stored as structured references.
 - **FR-003**: Target detail MUST show linked sessions and projects contextually.
-- **FR-004**: Target notes MUST be editable and auditable.
+- **FR-004**: Target notes MUST be editable (max 16 KB UTF-8; A6) and auditable.
 - **FR-005**: Observing-plan references MUST be contextual links, not primary navigation.
 - **FR-006**: Manual target corrections MUST preserve the original hint and provenance.
 - **FR-007**: Missing observing-plan references MUST warn without deleting historical records.
+- **FR-008**: Users MUST be able to remove an alias from a target (`target.alias.remove`), with `alias.is_primary` error when the alias is also the primary designation.
+- **FR-009**: Users MUST be able to rename the primary designation by promoting an existing alias (`target.primary.rename`), which demotes the prior primary to alias status.
 
 ### Key Entities
 

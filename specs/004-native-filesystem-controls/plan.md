@@ -169,10 +169,11 @@ contract-defined error copy.
 ### Audit Logging
 
 `os.command_failed` and `path.not_exists` reveal errors emit an audit
-event `native.reveal.failed` carrying `{ path_hash, entity_kind?,
-entity_id?, request_id }`. Cancellation is NOT logged. Picker
-permission denials emit `native.picker.failed` with the same shape but
-without `path_hash`.
+event `native.reveal.failed` carrying `{ entity_kind?, entity_id?,
+request_id }`. Raw path and path hash are NOT included in the audit
+payload (A2: correlate via `entity_id` only; no PII in audit exports).
+Cancellation is NOT logged. Picker permission denials emit
+`native.picker.failed` with `{ picker_kind, error_code, request_id }`.
 
 ### Build-Flag Fallback
 

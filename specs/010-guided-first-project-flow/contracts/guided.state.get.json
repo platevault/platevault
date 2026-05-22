@@ -23,6 +23,7 @@
     },
     "errors": {
       "type": "array",
+      "description": "STATE_CORRUPTED is informational: it signals that corruption was detected, the row has already been reset to Idle server-side, and the caller should retry. The next call returns the fresh Idle state. PERSISTENCE_UNAVAILABLE signals a storage layer failure.",
       "items": {
         "type": "string",
         "enum": ["PERSISTENCE_UNAVAILABLE", "STATE_CORRUPTED"]

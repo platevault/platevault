@@ -8,24 +8,39 @@
 ## Implementation Status: Settings nav entry stub only
 
 The mockup ships a "Catalogs" entry under Settings that currently renders no
-content. The bundled catalog index, license-attribution surface, and
-maintainer update tooling described here are unimplemented; this spec
-defines the shape they will take before any catalog data is bundled.
+content. The downloaded catalog index, license-attribution surface, and
+update tooling described here are unimplemented; this spec defines the shape
+they will take before any catalog data is installed.
+
+All thirteen v1 catalogs are **downloaded** at first run from a
+project-hosted manifest (`astro-plan-catalogs` repo, name TBD). There are
+no bundled/built-in catalog files in v1. (R-1.1, R-1.2)
 
 ## User Scenarios & Testing *(mandatory)*
 
-### User Story 1 - Generate Minimal Catalog Index (Priority: P1)
+### User Story 1 - Download and Install Catalog Index at First Run (Priority: P1)
 
-As a maintainer, I want CI to generate a minimal target index from permitted catalog sources so that the app can ship lightweight offline search hints without maintaining a hand-curated catalog.
+As a user completing first-run setup, I want the app to download and install
+all thirteen catalog indexes from the project-hosted manifest so that target
+lookup is available immediately after setup without requiring an app update.
 
-**Why this priority**: The user rejected first-run downloads for all catalogs but wanted the bundled-minimal-index idea preserved.
+**Why this priority**: All v1 catalogs are distributed via download (Pattern X,
+R-1.1). First-run is the natural installation point. Without this step,
+Settings → Catalogs is empty and target lookup is non-functional.
 
-**Independent Test**: Run the catalog index generation workflow against approved sources and confirm it outputs names, identifiers, RA, and DEC only.
+**Independent Test**: Complete the first-run wizard through the Download
+Catalogs step and confirm all thirteen catalogs appear in Settings → Catalogs
+with version, license, and entry count.
 
 **Acceptance Scenarios**:
 
-1. **Given** an approved catalog source, **When** CI runs the generator, **Then** the output includes only minimal fields needed for lookup.
-2. **Given** a source license is not compatible, **When** CI evaluates it, **Then** the source is excluded and the report explains why.
+1. **Given** the first-run wizard reaches the Download Catalogs step, **When**
+   the user proceeds, **Then** the app fetches the manifest via
+   `catalog.manifest.fetch`, downloads each catalog via `catalog.download`,
+   verifies the minisign signature, and installs into SQLite.
+2. **Given** a catalog source has a license incompatible with redistribution,
+   **When** the manifest is evaluated, **Then** that catalog is excluded and
+   the CI report explains why (R-2.1 closed enum; hard-fail on unknown codes).
 
 ---
 
@@ -46,25 +61,26 @@ As an open-source maintainer, I want catalog source licenses checked against Apa
 
 ### User Story 3 - List Available Catalogs in Settings (Priority: P1)
 
-As a user, I want the Settings → Catalogs page to list every catalog index
-available to the app (built-in Messier/NGC/IC, plus any user-added optional
-catalogs) with version and last-updated metadata so that I understand what
+As a user, I want the Settings → Catalogs page to list every downloaded
+catalog with version and last-updated metadata so that I understand what
 the app can resolve offline.
 
 **Why this priority**: The mockup already places the nav entry; without a
 populated list the user cannot tell whether catalog lookup is working.
 
-**Independent Test**: Open Settings → Catalogs and confirm Messier, NGC, and
-IC appear with version, source URL, and last-updated timestamp.
+**Independent Test**: Open Settings → Catalogs and confirm all thirteen v1
+catalogs (including OpenNGC) appear with version, source URL, and
+last-updated timestamp.
 
 **Acceptance Scenarios**:
 
-1. **Given** the app is installed with bundled catalogs, **When** the user
-   opens Settings → Catalogs, **Then** every bundled catalog is listed with
-   id, name, version, license short code, and last-updated date.
-2. **Given** a user-added optional catalog is registered, **When** the page
-   re-renders, **Then** the added catalog appears alongside the built-ins
-   with the same fields and a distinct `origin = "user"` marker.
+1. **Given** the app has completed first-run catalog download, **When** the
+   user opens Settings → Catalogs, **Then** every installed catalog is listed
+   with id, name, version, license short code (`origin = "downloaded"`), and
+   last-updated date. (R-1.1, R-1.3)
+2. **Given** `origin = "user"` catalogs are deferred to v1.x, **When** the
+   Settings page renders, **Then** no user-added catalog rows appear and the
+   "Add catalog" affordance is absent in v1. (A2 — user-added deferred)
 
 ---
 
@@ -87,36 +103,43 @@ redistribution.
 
 **Acceptance Scenarios**:
 
-1. **Given** any bundled catalog with a non-public-domain license, **When**
-   the attribution panel renders, **Then** the required notice text and
-   source link are visible and selectable.
-2. **Given** a catalog declared as public domain, **When** the panel
-   renders, **Then** the entry is still listed with the public-domain
-   declaration so the user can verify nothing is missing.
+1. **Given** any installed catalog with a non-public-domain license (e.g.
+   OpenNGC CC BY-SA 4.0), **When** the attribution panel renders, **Then**
+   the required notice text, `author`, `title`, `license_uri`, and source
+   link are visible and selectable. (R-2.2)
+2. **Given** a catalog declared as public domain, **When** the panel renders,
+   **Then** the entry is still listed with the public-domain declaration so
+   the user can verify nothing is missing.
+3. **Given** a release is assembled by CI, **When** the release artifacts are
+   published, **Then** both `NOTICE.json` (machine-readable array) and
+   `NOTICE.txt` (human-readable, one section per catalog) are included
+   alongside the catalog bundle. (R-2.3)
 
 ---
 
-### User Story 5 - Update Catalog Indexes (Priority: P3)
+### User Story 5 - Update Catalog Indexes (Deferred to v1.x)
 
-As a maintainer, I want an explicit "update catalogs" action that fetches
-the latest CI-generated index bundle (without surprising the user) so that
+> **Status**: Deferred to v1.x. The `catalog.download` contract (R-1.4)
+> doubles as "install if missing, update if present" and is used for the
+> first-run path in v1. A user-facing "Update Catalogs" UI that surfaces
+> individual catalog refresh, per-row progress, and rollback ships in v1.x.
+> The `catalog.update` task stub is retained but marked v1.x intent. (A3)
+
+As a user, I want an explicit "update catalogs" action that fetches
+the latest catalog bundle (without surprising the user) so that
 catalog data stays current without requiring an app reinstall.
 
 **Why this priority**: Catalog refreshes are rare and the v1 product is
-local-first; an update path is needed but does not gate first use.
+local-first; an update UI does not gate first use.
 
-**Independent Test**: Trigger the update action; confirm the new index is
-written atomically, the previous version is retained until success, and
-the Settings list reflects the new version.
+**Acceptance Scenarios** *(v1.x target)*:
 
-**Acceptance Scenarios**:
-
-1. **Given** a newer CI-generated bundle is available, **When** the user
-   invokes Update Catalogs, **Then** the app downloads, verifies, and
-   swaps in the new bundle without losing user-added catalogs.
+1. **Given** a newer bundle is available, **When** the user invokes Update
+   Catalogs, **Then** the app downloads, verifies, and swaps in the new
+   bundle atomically.
 2. **Given** the update fails partway, **When** the operation aborts,
-   **Then** the previous bundle remains active and the failure is
-   surfaced with the offending catalog id.
+   **Then** the previous catalog remains active and the failure is surfaced
+   with the offending catalog id.
 
 ### Edge Cases
 
@@ -134,39 +157,77 @@ the Settings list reflects the new version.
 
 ### Functional Requirements
 
-- **FR-001**: The project MUST NOT bundle catalog data without recorded license compatibility.
-- **FR-002**: CI-generated index MUST include only minimal fields: name, aliases/identifiers, RA, DEC, and source catalog.
-- **FR-003**: CI MUST generate a license report for every included and excluded catalog source.
-- **FR-004**: The app MUST use the bundled index only as a lookup hint and still allow online lookup/manual selection.
-- **FR-005**: The bundled index MUST be reproducible from source definitions.
+- **FR-001**: The project MUST NOT distribute catalog data without recorded
+  license compatibility. Every catalog in the manifest MUST carry a
+  `LicenseShortCode` from the closed enum (R-2.1). CI hard-fails on unknown
+  codes.
+- **FR-002**: Installed catalog indexes MUST include only minimal fields:
+  name, aliases/identifiers, RA, DEC, and source catalog.
+- **FR-003**: CI MUST generate `NOTICE.json` and `NOTICE.txt` artifacts for
+  every catalog release, covering all included catalogs. (R-2.3)
+- **FR-004**: The app MUST use the installed index only as a lookup hint and
+  still allow online lookup/manual selection.
+- **FR-005**: The installed index MUST be reproducible from the manifest and
+  source definitions.
 - **FR-006**: Settings → Catalogs MUST list every catalog known to the app
-  with id, display name, version, license short code, origin (built-in or
-  user), source URL, and last-updated date.
+  with id, display name, version, license short code, origin
+  (`downloaded` for v1 catalogs; `user` reserved for v1.x), source URL, and
+  last-updated date. (R-1.3)
 - **FR-007**: A license attribution surface MUST display the full required
-  notice text and source link for every bundled catalog, regardless of
-  whether the license requires explicit attribution.
-- **FR-008**: Catalog update operations MUST be atomic: the previous
-  bundle remains available until the new bundle is verified, and user-added
-  catalogs MUST survive built-in updates.
+  notice text and source link for every installed catalog. For CC-BY/CC-BY-SA
+  catalogs (e.g. OpenNGC), `author`, `title`, and `license_uri` MUST also be
+  displayed. (R-2.2)
+- **FR-008**: Catalog download operations MUST be atomic: the previous
+  catalog remains available until the new one is verified. *(Full
+  user-facing update UI deferred to v1.x — A3.)*
+- **FR-009**: The backend MUST reject any operation with `origin = "user"`
+  with error code `origin.not_implemented` in v1. (A2, R-1.3)
 
 ### Key Entities
 
-- **Catalog Source Definition**: URL/source metadata, fields, license, transform.
+- **Manifest**: Signed TOML document from `astro-plan-catalogs` repo listing
+  all v1 catalogs with per-catalog URL, checksum, license, and version.
+  Fetched via ETag-conditional HTTP; verified with embedded minisign pubkey.
+- **Catalog Source Definition**: URL/source metadata, fields, license.
 - **Minimal Catalog Entry**: Name, identifiers, coordinates, source.
-- **License Report**: Compatibility result and notice text.
 - **Catalog**: Registered catalog index visible to the app — id, name,
-  version, license short code, origin (built-in/user), source URL, last
-  updated.
-- **License Attribution**: Per-catalog notice text and source link rendered
-  in Settings and used to compose redistribution NOTICE files.
+  version, license short code, origin (`built_in` reserved/unused in v1;
+  `downloaded` for all thirteen v1 catalogs; `user` reserved for v1.x),
+  source URL, last updated. (R-1.3, R-3.3)
+- **LicenseAttribution**: Per-catalog notice surface with structured CC-BY
+  fields (`author`, `title`, `license_uri`, `modifications_notice`). Used in
+  Settings and to generate `NOTICE.json` / `NOTICE.txt`. (R-2.2, R-2.3)
+
+**v1 catalog set** (all `origin = "downloaded"`, R-1.1):
+
+| Catalog | License | Entries (approx) |
+|---|---|---|
+| Messier (M1–M110) | public-domain | 110 |
+| Caldwell (C1–C109) | public-domain | 109 |
+| Sharpless 2 (Sh2-1…Sh2-313) | public-domain | 313 |
+| Abell PN (planetary nebulae) | public-domain | 86 |
+| Abell galaxy clusters | public-domain | 4,073 |
+| Arp (peculiar galaxies) | public-domain | 338 |
+| vdB (van den Bergh reflection nebulae) | public-domain | 158 |
+| Barnard (dark nebulae) | public-domain | 372 |
+| LBN (Lynds Bright Nebulae) | public-domain | 1,125 |
+| LDN (Lynds Dark Nebulae) | public-domain | 1,802 |
+| Melotte (clusters) | public-domain | 245 |
+| common-names (app-authored) | apache-2.0 | ~300 |
+| OpenNGC (NGC + IC + modern positions) | cc-by-sa-4.0 | ~13,000 |
 
 ## Success Criteria *(mandatory)*
 
 ### Measurable Outcomes
 
-- **SC-001**: CI can regenerate the index from approved sources without manual editing.
-- **SC-002**: Every bundled catalog entry traces back to a compatible source license.
-- **SC-003**: The bundled index stays under an agreed size threshold.
+- **SC-001**: CI can regenerate the manifest and catalog artifacts from
+  approved sources without manual editing.
+- **SC-002**: Every installed catalog entry traces back to a compatible
+  source license recorded in the manifest.
+- **SC-003**: No upstream catalog larger than 10 MB compressed is added
+  without an explicit decision; project review required before adding any
+  catalog above this threshold. This is a process-level constraint, not a
+  hard binary limit. (R-2.4)
 
 ## Assumptions
 
@@ -175,5 +236,10 @@ the Settings list reflects the new version.
 
 ## Out of Scope
 
-- Bundling full catalog metadata.
-- Downloading all catalogs during first run.
+- Bundling full catalog metadata (beyond minimal fields per FR-002).
+- `built_in` catalog content in v1 (enum value reserved for forward-compat;
+  zero catalogs ship as `built_in` in v1). (R-3.3)
+- User-added catalogs (`origin = "user"`) — deferred to v1.x. (A2)
+- User-facing "Update Catalogs" UI — deferred to v1.x. (A3)
+- Cross-catalog identifier reconciliation — owned by spec 013 (OpenNGC is
+  the canonical NGC+IC source; spec 013 must align). (E3)

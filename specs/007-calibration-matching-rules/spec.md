@@ -131,6 +131,37 @@ confidence and a flag indicating it was an override.
    `override=true`, **Then** the assignment is recorded with a lowered
    confidence and a mismatched-dimensions audit note.
 
+---
+
+### User Story 5 - Batch Calibration Suggestions (Priority: P2)
+
+As a user preparing a project, I want to request calibration suggestions for
+multiple light sessions at once so that project-wide calibration preparation
+does not require a separate call per session.
+
+**Why this priority**: A project may have dozens of light sessions across
+multiple targets, filters, and nights. Batch suggestions make the project
+preparation workflow practical.
+
+**Independent Test**: Seed 3 light sessions with differing parameters, call
+`calibration.match.suggest.batch` with all three session IDs, and verify
+each session returns per-type candidates with correct `status` values
+(`match`, `ambiguous`, `no_match`, or `observer_location_missing`). Verify
+partial success: if one session lacks observer_location, that session returns
+`observer_location_missing` while others return matches.
+
+**Acceptance Scenarios**:
+
+1. **Given** multiple light sessions, **When** batch suggest is requested,
+   **Then** each session receives independent ranked candidates per type.
+2. **Given** one session has `observer_location: null`, **When** batch suggest
+   is requested, **Then** that session's result returns
+   `status: "observer_location_missing"` and others are unaffected.
+3. **Given** a `calibration_types` filter is provided, **When** batch suggest
+   is requested, **Then** only the requested types are evaluated per session.
+
+---
+
 ### Edge Cases
 
 - Darks without reliable temperature metadata fall back to gain+offset+exposure
@@ -157,15 +188,19 @@ confidence and a flag indicating it was an override.
 
 ### Functional Requirements
 
-- **FR-001**: System MUST support frame types `light`, `dark`, `flat`, `bias`,
-  and `dark flat` in the domain model.
+- **FR-001**: The matching engine MUST support calibration types `dark`, `flat`,
+  and `bias` in v1. `dark_flat` is reserved in the `CalibrationType` enum for
+  forward-compatibility but MUST NOT be matched, suggested, or assigned in v1.
+  Files with dark_flat IMAGETYP values land as `unclassified` at the inbox level
+  (spec 005 ripple). The `dark_flat` slot MUST NOT appear in any Settings UI
+  filter chip, assignment dropdown, or calibration type selector in v1.
 - **FR-002**: Matching rules MUST be configurable independently per
   calibration type (dark, bias, flat).
 - **FR-003**: Dark matching MUST default to gain (exact), offset (exact),
   exposure (±configurable tolerance), and temperature (±configurable tolerance).
 - **FR-004**: Flat matching MUST default to filter (exact), rotation (±0.5°
-  default), binning (exact), and date proximity scored against the light
-  session's observing night.
+  default), binning (exact), optic_train (exact), and date proximity scored
+  against the light session's observing night.
 - **FR-005**: Bias matching MUST default to gain (exact) and offset (exact),
   with exposure and temperature explicitly excluded unless configured.
 - **FR-006**: System MUST return ranked recommendations with per-candidate

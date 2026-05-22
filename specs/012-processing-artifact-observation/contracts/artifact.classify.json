@@ -16,9 +16,9 @@
           "description": "Identifier of the artifact to override."
         },
         "kind": {
-          "type": "string",
-          "enum": ["intermediate", "master", "final"],
-          "description": "User-asserted classification."
+          "type": ["string", "null"],
+          "enum": ["intermediate", "master", "final", null],
+          "description": "User-asserted classification. Pass null to clear the manual override and re-apply workflow-profile rules (A6)."
         },
         "reason": {
           "type": "string",

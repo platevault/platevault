@@ -55,7 +55,7 @@ As a user, I want to review and confirm Inventory metadata before using it in pr
 ### Functional Requirements
 
 - **FR-001**: The product name for the stable library surface MUST be "Inventory".
-- **FR-002**: Inventory rows MUST include frame type filtering for light, dark, flat, bias, and dark flat where supported.
+- **FR-002**: Inventory rows MUST include frame type filtering for light, dark, flat, and bias (dark flat is reserved and not exposed in v1).
 - **FR-003**: Inventory MUST NOT use ambiguous "tags" or "handling" fields as primary workflow controls.
 - **FR-004**: Inventory MUST show review state as plain text or structured data, not as decorative state bubbles.
 - **FR-005**: Inventory detail panes MUST show selected item details only.
@@ -63,11 +63,12 @@ As a user, I want to review and confirm Inventory metadata before using it in pr
 - **FR-007**: Open location MUST use the native OS file browser when the Tauri integration is available.
 - **FR-008**: Inventory MUST preserve lifecycle references back to Inbox/source observations.
 - **FR-009**: Mixed folders MUST be split before they can become Inventory items.
+- **FR-010**: A Cmd+K palette entry "Show ignored items" MUST navigate to `/inventory?reviewFilter=ignored`, surfacing sessions in the `ignored` canonical state that are otherwise excluded from the default ledger.
 
 ### Key Entities
 
 - **Inventory Item**: Reviewed or reviewable source data available for calibration and project workflows.
-- **Inventory Review State**: Needs review, confirmed, warning, blocked, or stale.
+- **Inventory Review State**: One of the six canonical session states: `discovered`, `candidate`, `needs_review`, `confirmed`, `rejected`, or `ignored`.
 - **Frame Type**: Light, dark, flat, bias, or dark flat.
 - **Source Reference**: Original configured source root and discovered path.
 - **Inventory Lifecycle Event**: Move, review, correction, stale source, archive, or removal event.
@@ -112,10 +113,13 @@ visual contract this spec ratifies:
   bias | mixed` (FR-002). `mixed` is rendered in the filter to surface
   unclassifiable inputs without forcing premature split; the move-to-Inventory
   flow still blocks mixed folders per FR-009.
-- **Review-state filter**: A `Review` Select offers `confirmed | needs_review
-  | rejected`, sourced from `InventorySession.state`. State surfaces as a
-  `StateLabel` row cell and a `State` fact in the drawer; no badge bubble
-  shows alongside row content (FR-004).
+- **Review-state filter**: A `Review` Select offers the six canonical states
+  `discovered | candidate | needs_review | confirmed | rejected | ignored`,
+  sourced from `InventorySession.state`. The UI maps display labels locally:
+  `discovered` and `candidate` display as "Needs review"; `ignored` is
+  accessible via the Cmd+K "Show ignored items" action (FR-010). State
+  surfaces as a `StateLabel` row cell and a `State` fact in the drawer; no
+  badge bubble shows alongside row content (FR-004).
 - **Action-bound primary CTA**: The drawer's primary `Confirm` button only
   renders when the selected session is in `needs_review`. This is the
   action-bound review pattern defined in spec 002 — the CTA exists because

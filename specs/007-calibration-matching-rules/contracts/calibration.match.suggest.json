@@ -18,7 +18,7 @@
         },
         "calibration_types": {
           "type": "array",
-          "description": "Subset of calibration types to suggest. When omitted, all configured types are returned.",
+          "description": "Subset of calibration types to suggest. When omitted, all configured types (dark, flat, bias) are returned. dark_flat is not a valid value in v1.",
           "items": { "enum": ["dark", "flat", "bias"] },
           "uniqueItems": true
         }
@@ -27,11 +27,15 @@
     },
     "response": {
       "type": "object",
-      "required": ["matches"],
+      "required": ["status"],
       "properties": {
+        "status": {
+          "description": "Result kind for this session. 'observer_location_missing' means the session lacks observer_location or exposure_start_utc; no matches are returned and the session must be reviewed before matching can proceed (A6).",
+          "enum": ["match", "ambiguous", "no_match", "observer_location_missing"]
+        },
         "matches": {
           "type": "array",
-          "description": "Ranked candidate list. Ordering is descending by confidence; ties broken by selection_reason precedence (same_session > same_night > compatible_fallback).",
+          "description": "Ranked candidate list. Ordering is descending by confidence; ties broken by selection_reason precedence (same_session > same_night > compatible_fallback). Present only when status is 'match' or 'ambiguous'.",
           "items": { "$ref": "#/$defs/CalibrationMatch" }
         }
       },
@@ -43,7 +47,7 @@
         "type": "object",
         "required": ["code", "message"],
         "properties": {
-          "code": { "enum": ["session.not_found", "no.masters.available"] },
+          "code": { "enum": ["session.not_found", "session.mixed_state", "match.observer_location_missing", "no.masters.available"] },
           "message": { "type": "string" }
         }
       }

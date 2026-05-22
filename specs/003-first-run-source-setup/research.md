@@ -77,14 +77,13 @@ with the older FR-002 ("MUST allow skipping the entire wizard")?
 - **Raw required + per-step skip + global "I'll do this later" escape
   hatch** — flexible but adds three control surfaces to maintain.
 
-**Decision (default)**: Raw required, others optional, no global skip
-(option 1). This matches the mockup and matches the "without a Raw source
-the app has nothing to do" reality. Old FR-002 should be retired; the
-spec marks the conflict as a `[NEEDS DECISION]`.
-
-**Open**: Whether to add a single "I'll add sources later from Settings"
-escape on the Welcome step that bypasses Raw enforcement at the cost of
-landing in an empty Inventory. Recommend rejecting until users ask.
+**Decision**: Raw required, Project required, others optional, no global
+skip (R-Wiz-3). Raw and Project are mandatory: without a Raw source the
+app has nothing to scan; without a Project source downstream project
+workflows have no root to write into. Old FR-002 ("allow skipping the
+entire wizard") is REJECTED and removed from spec.md. Rationale: a
+global skip leaves the app completely inert. There is no "I'll add
+sources later" escape hatch (R-Wiz-3).
 
 ## 4. Persistence Boundary (Mid-Wizard vs Finish)
 
@@ -109,9 +108,14 @@ abandoned half-runs, matches the "durable records vs reproducible
 projections" constitution principle, and lets the Finish step surface
 row-level errors as a unit.
 
-**Open**: Decide whether the Finish flush is atomic (all-or-nothing
-transaction) or row-by-row with partial-failure reporting. Default is
-atomic; revisit if validation needs to surface multiple errors per run.
+**Decision (A9, R-Batch)**: Per-source calls via the `source.register.batch`
+contract with row-level partial-success reporting. The Finish step invokes
+`source.register.batch` with all buffered sources in a single request.
+The response reports per-item status (`success`, `partial`, or `failure`
+at the envelope level). A `path.already.registered` error on a given row
+is treated as success (idempotent — D1). The Finish step stays open and
+surfaces row-level errors when any item fails; rows with errors can be
+retried individually without re-submitting successful ones.
 
 ## 5. Restart Semantics (Destructive Reset vs Prefill)
 
@@ -142,6 +146,28 @@ real implementation.
 source (e.g. drive disconnected) before showing the wizard, or only on
 demand. Default: lazy revalidation on Finish.
 
+The `firstrun.restart` contract (R-E5) clears `FirstRunState.completed_at`
+and returns the set of existing `RegisteredSource` rows as
+`prefilled_sources` so the wizard working buffer can be hydrated. Crash
+recovery from a restarted-but-unfinished session reads from
+`localStorage` (`alm.first-run.sources`) — same-install only (R-Buf).
+
+## 6a. Duplicate Path Across Kinds (R-1.4)
+
+**Question**: If the user attempts to register the same absolute path under
+two different kinds (e.g. the same directory as both `raw` and `calibration`),
+what should happen?
+
+**Decision (R-1.4)**: REJECT. A path that is already registered under a
+different kind returns `path.already.registered.different_kind` error code.
+This is distinct from `path.already.registered` (same kind, same path —
+idempotent success on batch). The error is surfaced inline next to the
+offending row, showing the conflicting kind.
+
+Rationale: allowing one directory to serve two roles silently corrupts
+downstream scan routing (inventory scanner, calibration matcher, project
+envelope all filter by kind).
+
 ## 6. Index Route Gating Source of Truth
 
 **Question**: Does the `/` route gate read from `localStorage` or from
@@ -156,11 +182,75 @@ the library database?
 - **DB-first with `localStorage` cache** — read the cached flag for an
   optimistic render, then reconcile with the DB on mount.
 
-**Decision (default)**: DB-first with `localStorage` cache (option 3).
-Honors the durable-record principle while keeping the gate snappy.
-`firstrun.complete` writes both. Cache mismatch triggers a one-time
-re-resolve.
+**Decision (A8)**: DB-first with `localStorage` cache (option 3). RESOLVED.
+The `localStorage` flag is RETAINED as a synchronous-render cache layer; it
+is not eliminated. `firstrun.complete` writes both. Cache mismatch triggers
+a one-time re-resolve. The index route MUST show a loading/pending state
+while the DB-first reconcile resolves (see spec.md FR-016; D2 test case in
+018/T009).
 
 **Open**: Confirm we don't need a separate "library not found" branch in
 the gate. If the user's SQLite file is missing, the gate should fall
 back to the wizard rather than rendering an empty Inventory.
+
+## 7. `created_via` Server-Derived (R-Auth-1)
+
+**Question**: Should the request payload for `source.register` include a
+`created_via` field supplied by the caller?
+
+**Decision (R-Auth-1)**: REMOVED from the request. `created_via` is now
+server-derived. The server inspects `FirstRunState.completed_at`:
+
+- If `completed_at == null` → `created_via = "first_run"`
+- If `completed_at != null` and no restart in progress → `created_via = "settings_add"`
+- If a restart is in progress → `created_via = "settings_restart"`
+
+Rationale: the caller cannot be trusted to supply accurate provenance.
+The server has the authoritative context to determine origin.
+
+## 8. `sources_buffer` in localStorage Only (R-Buf)
+
+**Question**: Should `FirstRunState.sources_buffer` be persisted in the DB
+as a durable mirror of the wizard's in-progress source list?
+
+**Decision (R-Buf)**: `sources_buffer` is REMOVED from the DB entity
+`FirstRunState`. The wizard scratch state lives exclusively in
+`localStorage` under `alm.first-run.sources`. This is intentional:
+
+- Crash recovery is same-install only (the localStorage key survives
+  browser/Tauri process crash but not a machine wipe or reinstall).
+- The DB remains clean of transient wizard state.
+- Restart recovery (T024) reads from localStorage, not the DB.
+
+The `sources_buffer` field is removed from `data-model.md`.
+
+## 9. Wizard Steps: Detect Tools and Download Catalogs (A5, A6)
+
+**Question**: Should first-run include tool discovery and catalog download?
+
+**Decision (A5)**: Yes. A 'Detect Tools' step is added after the four source
+steps and before Finish. The step reads discovered tool paths from the
+tool-discovery service (spec 011). The user reviews and confirms (or edits)
+before advancing. This pre-fills Settings → Tool Workflows without
+silently activating any tool.
+
+**Decision (A6)**: Yes. A 'Download Catalogs' step is added after Detect
+Tools. It downloads all thirteen v1 catalogs (spec 014, R-1.1) using the
+`catalog.manifest.fetch` and `catalog.download` contracts from spec 014
+(R-1.4). The step calls `catalog.manifest.fetch` first (no ETag on first
+run), then calls `catalog.download` per catalog with parallel-N concurrency
+(N TBD). Progress is driven by event-bus topics from spec 014 R-3.1. The
+user can skip; catalog download can be retried from Settings → Catalogs. The
+step does not block Finish if skipped. See spec 003 `plan.md` §Download
+Catalogs Wizard Step for the full protocol.
+
+Wizard step sequence (FR-009): Welcome → Raw → Calibration → Project →
+Inbox → Detect Tools → Download Catalogs → Finish.
+
+## 10. First-Run Completion as Standalone Audit Event (R-E2)
+
+**Decision (R-E2)**: `firstrun.complete` emits a dedicated audit event
+`first_run.completed` routed directly through `crates/audit/`. The payload
+includes `completed_at` and `source_count_by_kind`. This is NOT a spec 002
+lifecycle entity; first-run state is not part of the data lifecycle model.
+The contract is defined in `contracts/audit.first_run.completed.json`.

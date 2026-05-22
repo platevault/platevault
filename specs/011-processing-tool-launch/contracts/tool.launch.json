@@ -26,7 +26,9 @@
         "tool.not_configured",
         "tool.executable.not_found",
         "project.not_found",
-        "launch.failed"
+        "launch.failed",
+        "cwd.outside_library_root",
+        "macos.quarantine.detected"
       ]
     },
     "ErrorEnvelope": {
@@ -86,7 +88,7 @@
         "pid": {
           "type": ["integer", "null"],
           "minimum": 0,
-          "description": "OS-reported process id. Null on platforms (e.g. macOS open -a) where the immediate PID is not surfaced before detach."
+          "description": "OS-reported process id. Null on platforms where the immediate PID is not surfaced before detach — most notably macOS when using 'open -b <bundle_id>'."
         },
         "launched_at": { "$ref": "#/$defs/Timestamp" },
         "working_dir": {

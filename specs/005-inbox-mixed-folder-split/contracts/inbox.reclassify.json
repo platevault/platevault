@@ -1,0 +1,105 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://astro-plan.local/contracts/inbox.reclassify.json",
+  "title": "inbox.reclassify",
+  "description": "Write manual frame_type overrides for one or more files in an Inbox item. Bulk multiselect is supported — supply multiple entries in a single request. After writing overrides, the classifier re-runs aggregation on the folder with overrides included as authoritative evidence. Once all files are either classified or overridden, the item transitions to single_type or mixed and the normal inbox.confirm action becomes available. (Ref: R-Unclass-1, R-Unclass-2)",
+  "contractVersion": "1.0.0",
+  "operation": "inbox.reclassify",
+  "request": {
+    "type": "object",
+    "required": ["inboxItemId", "overrides"],
+    "additionalProperties": false,
+    "properties": {
+      "inboxItemId": {
+        "type": "string",
+        "description": "Stable identifier of the Inbox item whose files are being reclassified."
+      },
+      "overrides": {
+        "type": "array",
+        "minItems": 1,
+        "description": "One entry per file being reclassified. Supports bulk assignment by providing multiple entries.",
+        "items": {
+          "type": "object",
+          "required": ["filePath", "frameType"],
+          "additionalProperties": false,
+          "properties": {
+            "filePath": {
+              "type": "string",
+              "description": "Relative file path as stored in InboxClassificationEvidence.relativeFilePath."
+            },
+            "frameType": {
+              "type": "string",
+              "enum": ["light", "dark", "bias", "flat", "dark_flat"],
+              "description": "The frame type to assign to this file via manualOverride."
+            }
+          }
+        }
+      }
+    }
+  },
+  "response": {
+    "type": "object",
+    "required": ["requestId", "inboxItemId", "updatedType", "remainingUnclassified"],
+    "additionalProperties": false,
+    "properties": {
+      "requestId": {
+        "type": "string",
+        "description": "Echoed from request for correlation."
+      },
+      "inboxItemId": { "type": "string" },
+      "updatedType": {
+        "type": "string",
+        "enum": ["single_type", "mixed", "unclassified"],
+        "description": "The folder classification result after re-aggregation with the new overrides applied."
+      },
+      "frameType": {
+        "type": "string",
+        "enum": ["light", "dark", "bias", "flat", "dark_flat"],
+        "description": "Present only when updatedType == single_type."
+      },
+      "remainingUnclassified": {
+        "type": "integer",
+        "minimum": 0,
+        "description": "Count of files still needing review (unclassified = true AND manualOverride IS NULL). Zero means the item is ready for inbox.confirm."
+      },
+      "appliedCount": {
+        "type": "integer",
+        "minimum": 0,
+        "description": "Number of file overrides successfully written in this request."
+      }
+    }
+  },
+  "errors": [
+    {
+      "code": "inbox.item.not_found",
+      "description": "No InboxItem exists for the provided inboxItemId.",
+      "httpStatusHint": 404
+    },
+    {
+      "code": "inbox.has.open.plan",
+      "description": "The Inbox item already has an open Plan. Reclassification is not permitted while a plan is open.",
+      "httpStatusHint": 409,
+      "data": {
+        "type": "object",
+        "required": ["existingPlanId"],
+        "properties": {
+          "existingPlanId": { "type": "string" }
+        }
+      }
+    },
+    {
+      "code": "file.not_found",
+      "description": "One or more filePath values in overrides do not match any InboxClassificationEvidence row for this item.",
+      "httpStatusHint": 422,
+      "data": {
+        "type": "object",
+        "properties": {
+          "missingPaths": {
+            "type": "array",
+            "items": { "type": "string" }
+          }
+        }
+      }
+    }
+  ]
+}

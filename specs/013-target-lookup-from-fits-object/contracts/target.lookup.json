@@ -2,12 +2,11 @@
   "$schema": "https://json-schema.org/draft/2020-12/schema",
   "$id": "https://astro-plan.local/contracts/target.lookup.json",
   "title": "target.lookup",
-  "description": "Operation contract for looking up candidate Targets from a free-form query string. Returns a ranked list of TargetMatch records for the UI catalog picker. Source-of-truth schema for the Rust contract DTOs in crates/contracts/core/ and the generated TypeScript surface in packages/contracts/generated/.",
+  "description": "Operation contract for looking up candidate Targets from a free-form query string. Returns a ranked list of TargetMatch records for the UI catalog picker. The active catalog set is server-derived from spec 018 settings (target_lookup.active_catalogs); callers cannot override it per-request (R8). Source-of-truth schema for the Rust contract DTOs in crates/contracts/core/ and the generated TypeScript surface in packages/contracts/generated/.",
   "type": "object",
   "oneOf": [
     { "$ref": "#/$defs/Request" },
-    { "$ref": "#/$defs/Response" },
-    { "$ref": "#/$defs/Error" }
+    { "$ref": "#/$defs/Response" }
   ],
   "$defs": {
     "ContractVersion": {
@@ -26,6 +25,25 @@
       "type": "string",
       "enum": ["exact", "token_set", "edit_distance"]
     },
+    "CatalogId": {
+      "type": "string",
+      "enum": [
+        "messier",
+        "caldwell",
+        "sharpless",
+        "abell_pn",
+        "abell_galaxies",
+        "arp",
+        "vdb",
+        "barnard",
+        "lbn",
+        "ldn",
+        "melotte",
+        "common",
+        "openngc"
+      ],
+      "description": "Closed enum of v1 catalog slugs. Ref: spec 014 catalog set."
+    },
     "MatchEvidence": {
       "type": "object",
       "additionalProperties": false,
@@ -40,19 +58,36 @@
     "TargetMatch": {
       "type": "object",
       "additionalProperties": false,
-      "required": ["target_id", "confidence", "evidence"],
+      "required": ["target_id", "primary_designation", "catalog_display", "confidence", "score", "evidence"],
       "properties": {
         "target_id": { "$ref": "#/$defs/Uuid" },
+        "primary_designation": {
+          "type": "string",
+          "minLength": 1,
+          "description": "Canonical display designation chosen by precedence table (R6)."
+        },
+        "catalog_display": {
+          "type": "string",
+          "minLength": 1,
+          "description": "Human-readable name of the precedence-winning catalog (e.g. 'Messier')."
+        },
         "confidence": { "$ref": "#/$defs/Confidence" },
+        "score": {
+          "type": "number",
+          "minimum": 0,
+          "maximum": 100,
+          "description": "Raw similarity score. 100 for exact matches."
+        },
         "evidence": { "$ref": "#/$defs/MatchEvidence" }
       }
     },
     "Request": {
       "type": "object",
       "additionalProperties": false,
-      "required": ["contract_version", "query"],
+      "required": ["contractVersion", "requestId", "query"],
       "properties": {
-        "contract_version": { "$ref": "#/$defs/ContractVersion" },
+        "contractVersion": { "$ref": "#/$defs/ContractVersion" },
+        "requestId": { "$ref": "#/$defs/Uuid" },
         "query": {
           "type": "string",
           "description": "Free-form lookup query. Typically the raw FITS OBJECT value or a user-entered string."
@@ -69,36 +104,51 @@
     "Response": {
       "type": "object",
       "additionalProperties": false,
-      "required": ["contract_version", "matches"],
+      "required": ["status", "contractVersion", "requestId"],
       "properties": {
-        "contract_version": { "$ref": "#/$defs/ContractVersion" },
+        "status": {
+          "type": "string",
+          "enum": ["success", "error"]
+        },
+        "contractVersion": { "$ref": "#/$defs/ContractVersion" },
+        "requestId": { "$ref": "#/$defs/Uuid" },
         "matches": {
           "type": "array",
           "items": { "$ref": "#/$defs/TargetMatch" },
-          "description": "Ranked candidate matches. Empty array indicates no candidates above the discard threshold."
-        }
-      }
-    },
-    "Error": {
-      "type": "object",
-      "additionalProperties": false,
-      "required": ["contract_version", "error"],
-      "properties": {
-        "contract_version": { "$ref": "#/$defs/ContractVersion" },
-        "error": {
-          "type": "object",
-          "additionalProperties": false,
-          "required": ["code", "message"],
-          "properties": {
-            "code": {
-              "type": "string",
-              "enum": ["query.empty", "catalog.unavailable"],
-              "description": "query.empty: the request omitted or whitespace-only query. catalog.unavailable: bundled catalog failed to load and lookup cannot proceed."
-            },
-            "message": { "type": "string", "minLength": 1 }
+          "description": "Ranked candidate matches. Present when status=success. Empty array indicates no candidates above the discard threshold."
+        },
+        "errors": {
+          "type": "array",
+          "description": "Present when status=error.",
+          "items": {
+            "type": "object",
+            "additionalProperties": false,
+            "required": ["code", "message"],
+            "properties": {
+              "code": {
+                "type": "string",
+                "enum": [
+                  "query.empty",
+                  "catalog.unavailable",
+                  "catalog.not_installed"
+                ],
+                "description": "query.empty: missing or whitespace-only query. catalog.unavailable: index failed to load from SQLite. catalog.not_installed: first-run download not yet completed (FR-005)."
+              },
+              "message": { "type": "string", "minLength": 1 }
+            }
           }
         }
-      }
+      },
+      "allOf": [
+        {
+          "if": { "properties": { "status": { "const": "success" } } },
+          "then": { "required": ["matches"] }
+        },
+        {
+          "if": { "properties": { "status": { "const": "error" } } },
+          "then": { "required": ["errors"] }
+        }
+      ]
     }
   }
 }

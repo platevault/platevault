@@ -10,39 +10,39 @@ Should "New project" be a multi-step wizard or a single long-form modal?
 
 ### Decision
 
-**Multi-step wizard with five steps**: Identity → Tool → Sources → Channels
-→ Confirm. The wizard is structurally analogous to the first-run source
-setup (spec 003) but scoped to one project. URL state tracks the step so
-deep-links and back-button work (spec 020).
+**REVISED (GRILL 2026-05-22, A1)**: ~~Multi-step wizard~~ → **Single-form
+dialog** with four fields: name (required), tool (required), optional initial
+sources, optional notes. The prior five-step wizard decision (Identity → Tool →
+Sources → Channels → Confirm) is explicitly reversed.
 
-### Rationale
+### Rationale for single-form
 
-- The required information spans heterogeneous shapes (text, single-select,
-  multi-select picker, inferred preview). A single form would either force
-  the picker to render in a constrained sub-area (causing scroll-in-scroll
-  pain) or push the user through long vertical scrolling with no clear
-  progress signal.
-- The wizard form composes cleanly with spec 010's guided first-project
-  flow: spec 010 wraps the same wizard with extra surrounding context, no
-  fork in implementation.
-- Validation can run per step (e.g. duplicate-name check before tool
-  selection), which gives faster error feedback than a single
-  submit-then-explain cycle.
-- The Sources step routinely needs more vertical space than the other
-  steps; a wizard lets it claim that space without affecting Identity or
-  Tool layout.
+- The required information at create time is minimal: name, tool, optional
+  sources, optional notes. Channels are inferred automatically from sources
+  and do not need their own step at create time.
+- A single dialog eliminates wizard-fatigue and URL-step complexity for a
+  form that rarely exceeds a screen height.
+- The form composes cleanly with spec 010's guided first-project flow without
+  a structural fork: spec 010 wraps the same dialog with extra surrounding
+  context.
+- Channel inference still runs (R4), but surfacing it as a separate step adds
+  indirection for a value the user rarely overrides at create time. Overrides
+  are available post-create through the edit pane.
 
-### Alternatives considered
+### Prior wizard rationale (now superseded)
 
-- **Single long-form modal**: rejected for the scroll/space reasons above.
-  Reconsider only if user testing shows wizard fatigue.
+The original rationale cited scroll-in-scroll pain from a multi-select picker
+in a single form, and per-step validation benefits. These remain valid concerns
+but the GRILL session concluded the create surface is simple enough that they
+do not outweigh wizard overhead.
+
+### Alternatives considered (post-reversal)
+
+- **Multi-step wizard**: now the rejected option. Reconsider if user testing
+  shows meaningful friction from a single-form layout (e.g. large Inventory
+  sets causing scroll issues in the source picker).
 - **Inline-in-page form** (not modal): rejected because the Projects page
-  already hosts a drawer; opening a second editing surface in the same
-  page caused layout collisions in early mockup attempts.
-- **Two-step wizard** (Identity+Tool, Sources+Channels+Confirm): rejected
-  because Channels is conceptually about the sources, not about identity;
-  collapsing Sources and Channels together loses the "review inferred
-  channels" beat.
+  already hosts a drawer; a second editing surface causes layout collisions.
 
 ## R2. Source Picking: Inventory Versus Arbitrary Disk
 
@@ -239,7 +239,7 @@ tool, or a partial earlier onboard)?
   legitimate reinstall recovery case impossible without manual marker
   deletion.
 
-## R7. Update Scope And `lifecycle == archived` Read-Only Rule
+## R7. Update Scope And `lifecycle == archived` Read-Only Rule (Plus Blocked + Tool-Lock)
 
 ### Question
 
@@ -250,11 +250,17 @@ the project is `archived`?
 
 - Editable through `project.update`: `name`, `tool`, `notes`.
 - Editable through their own contracts: `sources` (via
-  `project.source.add` and a future `project.source.remove`), `lifecycle`
+  `project.source.add` and `project.source.remove`), `lifecycle`
   (via `project.lifecycle.transition`, spec 009), and `calibrationSets`
   (via spec 007 contracts).
 - `lifecycle == "archived"` → all edit operations refuse with
   `lifecycle.read_only`. Unarchive via spec 009 first.
+- **Tool lock (R-Tool-Lock)**: `tool` is immutable when `lifecycle in
+  {prepared, processing, completed, blocked}`. The `blocked` state is
+  explicitly included in the lock set (GRILL 2026-05-22, R-Tool-Lock). The
+  `project.update` contract returns `tool.locked` with `details.current_lifecycle`
+  when a tool change is refused. Recovery path for tool-locked projects is
+  manual re-creation via `project.create` (no `project.duplicate` in v1).
 
 ### Rationale
 
@@ -263,9 +269,98 @@ the project is `archived`?
   is distinct from a `project_source_added` event).
 - Read-only-when-archived preserves the archive-as-museum invariant from
   spec 009 R1: an archived project's record is a historical snapshot.
+- Including `blocked` in the tool-lock set prevents tool changes during an
+  inconsistent state, which could invalidate the blocking reason (e.g. a
+  `tool_unconfigured` block with a different tool would be resolved by the
+  lock rather than the user configuring the original tool).
 
 ### Alternatives considered
 
 - **All fields editable on one PATCH contract**: rejected for audit
   granularity.
 - **Allow edits on archived**: rejected for the museum invariant.
+- **Exclude `blocked` from tool-lock**: rejected; `blocked` may be entered from
+  `prepared`/`processing`/`completed` and the tool lock must persist.
+
+## R8. Pagination on `project.list`
+
+### Question
+
+How should `project.list` handle large project libraries?
+
+### Decision
+
+**Cursor-based pagination** (GRILL 2026-05-22, R-Pagination). Request accepts
+optional `cursor?: string` and `limit?: int` (default 50, max 200). Response
+includes `nextCursor?: string` (omitted on last page) wrapping the projects
+array.
+
+Cursor format: opaque base64-encoded `(createdAt, id)` tuple, server-controlled.
+Clients MUST treat cursors as opaque; the encoding may change between server
+versions. Omitting `cursor` returns the first page.
+
+### Rationale
+
+- Offset pagination is O(n) at high offsets in SQLite. Cursor pagination is
+  O(log n) with a covering index on `(created_at, id)`.
+- Opaque cursor hides the sort key from callers, allowing the server to change
+  sort order without a contract break.
+
+### Alternatives considered
+
+- **Offset pagination**: rejected for performance reasons.
+- **No pagination**: rejected; large libraries could have hundreds of projects.
+
+## R9. Channel Drift Detection
+
+### Question
+
+How does the UI know when automatically-inferred channels may be stale after
+a source addition, if the user has manually overridden channels?
+
+### Decision
+
+**`channelDrift` field on `project.get` response** (GRILL 2026-05-22,
+R-ChannelDrift). The server sets `channelDrift.hasNewSources = true` when a
+source has been added after the last explicit channel review (re-infer or
+dismiss). The `suggestedAction` is `"re_infer"` when the new sources
+introduce filters not yet represented in the channel list, or `"dismiss"`
+when channels are already comprehensive.
+
+Two contracts reset the drift flag:
+- `project.channels.reinfer`: triggers fresh channel inference from all sources;
+  resets `hasNewSources` to false; overwrites manual additions with inference.
+- `project.channels.dismiss_drift`: keeps existing manual overrides; resets
+  `hasNewSources` to false; records user's explicit dismiss choice in audit.
+
+### Rationale
+
+- Silent channel list changes after manual overrides would violate the
+  user's expectation that manual changes are sticky (research R4).
+- Surfacing a drift banner rather than auto-updating respects the sticky-manual
+  invariant while still informing the user.
+
+## R10. Inventory-Confirmed Enforcement on `source.add`
+
+### Question
+
+Should `project.source.add` accept any Inventory session id, or only
+confirmed sessions?
+
+### Decision
+
+**Confirmed only** (GRILL 2026-05-22, R-Inventory-Confirmed). The use case
+resolves `inventory_session_id` via the `AcquisitionSession` FK and checks
+`state == "confirmed"` per the spec 002 six-state lifecycle. Unconfirmed sessions
+(discovered, candidate, needs_review, rejected, ignored) are rejected with new
+error code `source.not_confirmed` (with `details: { actual_state }`). Contract
+schema is NOT changed to enforce this (it remains a `Uuid`); enforcement is
+use-case-side only.
+
+### Rationale
+
+- Linking an unconfirmed session bypasses the review pipeline that ensures
+  frame count, filter, and exposure metadata are reliable.
+- Downstream features (calibration matching, channel inference, manifests) all
+  assume source metadata is reviewed; an unreviewed session would produce
+  silent inference errors.

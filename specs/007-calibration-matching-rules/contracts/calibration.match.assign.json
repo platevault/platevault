@@ -64,7 +64,7 @@
         "type": "object",
         "required": ["code", "message"],
         "properties": {
-          "code": { "enum": ["master.not_found", "incompatible.dimensions", "session.not_found"] },
+          "code": { "enum": ["master.not_found", "incompatible.dimensions", "session.not_found", "session.mixed_state", "match.observer_location_missing"] },
           "message": { "type": "string" },
           "dimensions": {
             "type": "array",

@@ -2,12 +2,11 @@
   "$schema": "https://json-schema.org/draft/2020-12/schema",
   "$id": "https://astro-plan.local/contracts/target.resolve.json",
   "title": "target.resolve",
-  "description": "Operation contract for resolving a single FITS OBJECT header value to a stable Target identity. Wraps target.lookup with single-result semantics suitable for ingestion. Source-of-truth schema for the Rust contract DTOs in crates/contracts/core/ and the generated TypeScript surface in packages/contracts/generated/.",
+  "description": "Operation contract for resolving a single FITS OBJECT header value to a stable Target identity. Wraps target.lookup with single-result semantics suitable for ingestion. Returns status-discriminated response per spec 002/014 envelope convention. Source-of-truth schema for the Rust contract DTOs in crates/contracts/core/ and the generated TypeScript surface in packages/contracts/generated/.",
   "type": "object",
   "oneOf": [
     { "$ref": "#/$defs/Request" },
-    { "$ref": "#/$defs/Response" },
-    { "$ref": "#/$defs/Error" }
+    { "$ref": "#/$defs/Response" }
   ],
   "$defs": {
     "ContractVersion": {
@@ -22,12 +21,41 @@
       "type": "string",
       "enum": ["high", "medium", "low"]
     },
+    "ResolveStatus": {
+      "type": "string",
+      "enum": ["resolved", "ambiguous", "unresolved", "error"],
+      "description": "resolved: single confident match. ambiguous: multiple candidates within gap rule. unresolved: no candidate above discard threshold. error: catalog unavailable or request invalid."
+    },
+    "CandidateSummary": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["target_id", "primary_designation", "catalog_display", "score"],
+      "properties": {
+        "target_id": { "$ref": "#/$defs/Uuid" },
+        "primary_designation": {
+          "type": "string",
+          "minLength": 1,
+          "description": "Canonical display designation chosen by precedence table (R6)."
+        },
+        "catalog_display": {
+          "type": "string",
+          "minLength": 1,
+          "description": "Human-readable name of the precedence-winning catalog."
+        },
+        "score": {
+          "type": "number",
+          "minimum": 0,
+          "maximum": 100
+        }
+      }
+    },
     "Request": {
       "type": "object",
       "additionalProperties": false,
-      "required": ["contract_version", "fits_object_value"],
+      "required": ["contractVersion", "requestId", "fits_object_value"],
       "properties": {
-        "contract_version": { "$ref": "#/$defs/ContractVersion" },
+        "contractVersion": { "$ref": "#/$defs/ContractVersion" },
+        "requestId": { "$ref": "#/$defs/Uuid" },
         "fits_object_value": {
           "type": "string",
           "description": "Raw FITS OBJECT header value as extracted from the light frame."
@@ -37,46 +65,72 @@
     "Response": {
       "type": "object",
       "additionalProperties": false,
-      "required": ["contract_version", "target_id", "confidence"],
+      "required": ["status", "contractVersion", "requestId"],
       "properties": {
-        "contract_version": { "$ref": "#/$defs/ContractVersion" },
-        "target_id": { "$ref": "#/$defs/Uuid" },
-        "confidence": { "$ref": "#/$defs/Confidence" }
-      }
-    },
-    "Error": {
-      "type": "object",
-      "additionalProperties": false,
-      "required": ["contract_version", "error"],
-      "properties": {
-        "contract_version": { "$ref": "#/$defs/ContractVersion" },
-        "error": {
-          "type": "object",
-          "additionalProperties": false,
-          "required": ["code", "message"],
-          "properties": {
-            "code": {
-              "type": "string",
-              "enum": ["unresolved", "ambiguous"],
-              "description": "unresolved: no candidate above the discard threshold. ambiguous: multiple candidates with overlapping confidence; caller should fall back to target.lookup to present a chooser."
-            },
-            "message": { "type": "string", "minLength": 1 },
-            "candidates": {
-              "type": "array",
-              "description": "Optional: present when code is 'ambiguous'. Ranked candidate target_ids with confidence so the UI can route to a chooser without a second lookup.",
-              "items": {
-                "type": "object",
-                "additionalProperties": false,
-                "required": ["target_id", "confidence"],
-                "properties": {
-                  "target_id": { "$ref": "#/$defs/Uuid" },
-                  "confidence": { "$ref": "#/$defs/Confidence" }
-                }
-              }
+        "status": { "$ref": "#/$defs/ResolveStatus" },
+        "contractVersion": { "$ref": "#/$defs/ContractVersion" },
+        "requestId": { "$ref": "#/$defs/Uuid" },
+        "target_id": {
+          "$ref": "#/$defs/Uuid",
+          "description": "Present when status=resolved."
+        },
+        "primary_designation": {
+          "type": "string",
+          "minLength": 1,
+          "description": "Present when status=resolved. Canonical display designation."
+        },
+        "catalog_display": {
+          "type": "string",
+          "minLength": 1,
+          "description": "Present when status=resolved. Human-readable name of the winning catalog."
+        },
+        "confidence": {
+          "$ref": "#/$defs/Confidence",
+          "description": "Present when status=resolved."
+        },
+        "candidates": {
+          "type": "array",
+          "description": "Present when status=ambiguous. Candidates within the gap rule, ranked by score descending.",
+          "items": { "$ref": "#/$defs/CandidateSummary" }
+        },
+        "errors": {
+          "type": "array",
+          "description": "Present when status=error.",
+          "items": {
+            "type": "object",
+            "additionalProperties": false,
+            "required": ["code", "message"],
+            "properties": {
+              "code": {
+                "type": "string",
+                "enum": [
+                  "query.empty",
+                  "catalog.unavailable",
+                  "catalog.not_installed"
+                ],
+                "description": "query.empty: missing or whitespace-only input. catalog.unavailable: index failed to build from SQLite. catalog.not_installed: first-run download not yet completed."
+              },
+              "message": { "type": "string", "minLength": 1 }
             }
           }
         }
-      }
+      },
+      "allOf": [
+        {
+          "if": { "properties": { "status": { "const": "resolved" } } },
+          "then": {
+            "required": ["target_id", "primary_designation", "catalog_display", "confidence"]
+          }
+        },
+        {
+          "if": { "properties": { "status": { "const": "ambiguous" } } },
+          "then": { "required": ["candidates"] }
+        },
+        {
+          "if": { "properties": { "status": { "const": "error" } } },
+          "then": { "required": ["errors"] }
+        }
+      ]
     }
   }
 }

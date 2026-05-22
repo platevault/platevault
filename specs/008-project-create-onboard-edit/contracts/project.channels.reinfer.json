@@ -1,0 +1,88 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://astro-plan.local/contracts/project.channels.reinfer.json",
+  "title": "project.channels.reinfer",
+  "description": "Trigger fresh channel inference from all currently linked sources. Overwrites manual channel additions and removals with the inference output. Resets channelDrift.hasNewSources to false on project.get. Emits a project_channels_recomputed audit event. Ratified: GRILL 2026-05-22 R-ChannelDrift. Convention: camelCase (A7 exception for new contracts).",
+  "type": "object",
+  "oneOf": [
+    { "$ref": "#/$defs/Request" },
+    { "$ref": "#/$defs/Response" }
+  ],
+  "$defs": {
+    "ContractVersion": { "type": "string", "const": "1.0" },
+    "Uuid": { "type": "string", "format": "uuid" },
+    "Timestamp": { "type": "string", "format": "date-time" },
+    "ProjectChannel": {
+      "type": "object",
+      "required": ["label", "source"],
+      "additionalProperties": false,
+      "properties": {
+        "label": { "type": "string", "minLength": 1, "maxLength": 32 },
+        "source": { "type": "string", "enum": ["inferred", "manual"] },
+        "addedAt": { "$ref": "#/$defs/Timestamp" }
+      }
+    },
+    "ErrorCode": {
+      "type": "string",
+      "enum": [
+        "project.not_found",
+        "lifecycle.read_only",
+        "actor.not_authorised"
+      ]
+    },
+    "ErrorEnvelope": {
+      "type": "object",
+      "required": ["code", "message"],
+      "additionalProperties": false,
+      "properties": {
+        "code": { "$ref": "#/$defs/ErrorCode" },
+        "message": { "type": "string" },
+        "details": { "type": "object", "additionalProperties": true }
+      }
+    },
+    "Request": {
+      "type": "object",
+      "description": "Channel re-inference request. All manually-added and manually-removed channels are discarded; the channel list is recomputed from source filters.",
+      "required": ["contractVersion", "requestId", "projectId"],
+      "additionalProperties": false,
+      "properties": {
+        "contractVersion": { "$ref": "#/$defs/ContractVersion" },
+        "requestId": { "$ref": "#/$defs/Uuid" },
+        "projectId": { "$ref": "#/$defs/Uuid" }
+      }
+    },
+    "Response": {
+      "type": "object",
+      "description": "Channel re-inference response.",
+      "required": ["status", "contractVersion", "requestId"],
+      "additionalProperties": false,
+      "properties": {
+        "status": { "type": "string", "enum": ["success", "error"] },
+        "contractVersion": { "$ref": "#/$defs/ContractVersion" },
+        "requestId": { "$ref": "#/$defs/Uuid" },
+        "projectId": { "$ref": "#/$defs/Uuid" },
+        "channels": {
+          "type": "array",
+          "items": { "$ref": "#/$defs/ProjectChannel" },
+          "description": "Recomputed channel list. All entries have source='inferred'."
+        },
+        "auditId": { "$ref": "#/$defs/Uuid" },
+        "updatedAt": { "$ref": "#/$defs/Timestamp" },
+        "error": { "$ref": "#/$defs/ErrorEnvelope" }
+      },
+      "allOf": [
+        {
+          "if": { "properties": { "status": { "const": "success" } } },
+          "then": {
+            "required": ["projectId", "channels", "auditId", "updatedAt"],
+            "not": { "required": ["error"] }
+          }
+        },
+        {
+          "if": { "properties": { "status": { "const": "error" } } },
+          "then": { "required": ["error"] }
+        }
+      ]
+    }
+  }
+}

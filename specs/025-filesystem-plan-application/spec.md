@@ -189,7 +189,40 @@ As a user, I want to skip a pending item or retry a failed item without restarti
 - **FR-008**: Source protection MUST be enforced during apply, not only during plan generation.
 - **FR-009**: Cancellation MUST halt forward progress; the currently `applying` item MUST be allowed to complete or fail; remaining `pending` items MUST become `cancelled`.
 - **FR-010**: Re-applying an `approved` plan MUST resume from items still in `pending` and MUST NOT silently re-run `succeeded` items.
-- **FR-011**: Apply MUST refuse if the approval token issued by 017 has been invalidated (`plan.approval.stale`).
+- **FR-011**: Apply MUST refuse if the approval token issued by 017 has been
+  invalidated (`plan.approval.stale`). No time-based TTL; freshness is
+  enforced by per-item FS revalidation (A2).
+- **FR-012**: Plan generation MUST compute `totalBytesRequired` and verify
+  each destination volume has sufficient free space (with a safety margin).
+  Plan generation MUST fail (plan does not enter `draftable` state) if the
+  pre-flight space check fails. Mid-apply `disk.full` is a recoverable
+  per-item failure that pauses the run (A4, R-Pause-1).
+- **FR-013**: Before each item mutation the executor MUST check (a) source
+  path's current `(mtime, sizeBytes)` matches the `approvedMtime` /
+  `approvedSizeBytes` snapshot stored by `plan.approve`, AND (b) the
+  destination path is empty (no name conflict). On mismatch: item state →
+  `stale`; run pauses (R-Pause-1); UI shows "Plan is stale" dialog with
+  regenerate option. Error code: `item.stale` (`recoverable: true`;
+  non-skippable; requires re-approval via regenerated plan) (R-FS-1).
+- **FR-014**: Before any filesystem mutation the executor MUST canonicalize
+  source and destination paths and verify each resolves inside a registered
+  library root. Paths resolving outside a root MUST fail with
+  `path.invalid`. Symlinks in resolved paths MUST be treated as scope
+  violations unless the root has explicit symlink-follow enabled
+  (constitution §V, A6).
+- **FR-015**: When the executor encounters `volume.unavailable`, `disk.full`,
+  or `item.stale` mid-apply, the run MUST transition to `paused`. The UI
+  surfaces a dialog with actions: "Remount drive" / "Free space" / "Resume"
+  / "Cancel run". "Cancel run" calls `plan.cancel`; "Resume" calls
+  `plan.resume` (R-Pause-1).
+- **FR-016**: The apply executor MUST perform an atomic compare-and-swap on
+  `plans.state = 'approved' → 'applying'` before starting. If the CAS fails
+  (state changed between read and write), apply MUST return
+  `plan.invalid_state` and not start the run (R-CAS-1).
+- **FR-017**: Multiple plans MAY apply concurrently only if their
+  (source ∪ destination) path sets are disjoint at subtree-prefix
+  granularity. Overlapping plans are rejected with `plan.conflict.overlap`
+  (R-Concur-1).
 
 ### Key Entities
 

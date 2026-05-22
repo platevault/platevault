@@ -141,9 +141,37 @@ inside `@media (prefers-color-scheme: dark)` provides the
 "system" mode behavior without JavaScript.
 
 Component CSS files must reference tokens via `var(--…)` and must
-not hardcode color, spacing, radius, shadow, or motion. New tokens
-are added before new components use them; this is enforced by
-review, not tooling, in v1.
+not hardcode color, spacing, radius, shadow, or motion. The one
+carve-out is `font-family`: font-stack literals (e.g.
+`system-ui, -apple-system, sans-serif`) may appear as literal values
+because they reference platform names, not design choices
+(D-022-1, GRILL 2026-05-22). Token coverage for `font-size`,
+`font-weight`, and `line-height` still applies.
+
+**Density levels (A2, GRILL 2026-05-22)**: Two levels are supported
+in v1 — `dense` (compact desktop-optimised row heights) and
+`comfortable` (relaxed spacing for lower-density screens). The
+`--row-h` alias points to the active density. A third `compact`
+level is deferred to v1.x. Density switching is a CSS variable swap
+only; no JS re-render is required.
+
+**Token additions process (A4, GRILL 2026-05-22)**: Adding a new
+token to `tokens.css` requires (1) updating `/DESIGN.md` with the
+token's name, category, and rationale, and (2) passing adversarial
+review confirming no existing token already covers the use case.
+New tokens must be added before new components use them; this is
+enforced by review, not tooling, in v1.
+
+**`alm-` prefix convention (R-022-PrefixConvention, GRILL
+2026-05-22)**: The `alm-` class prefix is a greppable convention.
+Reviewers enforce it; no build-time lint exists in v1. A CI
+check is deferred to v1.x.
+
+**DESIGN.md location (A1, GRILL 2026-05-22)**: The canonical design
+document lives at `/DESIGN.md` (repo root). The file already exists
+(created in commit `314292a`). T032 must reference that path; the
+task is not to create the file but to ensure it is kept current and
+references this spec.
 
 ### Headless Primitive Layer
 
@@ -202,6 +230,14 @@ implement them server-side without changing the UI. The contracts
 intentionally split `mode` (user-chosen) from `resolved`
 (observed effective theme) so callers can decide which one to act
 on.
+
+**Forward-compat posture (D-022-3, GRILL 2026-05-22)**: The v1
+`ThemeProvider` is the canonical implementation. The `theme.get` /
+`theme.set` contracts MAY be replaced by a backend-driven settings
+layer in a future revision. The contract shape is forward-compat
+only and does not block v1 implementation. An envelope sweep for
+these two contracts is deferred per the cross-spec deferred-sweep
+note (E-026-1 / GRILL 2026-05-22 note).
 
 ### Out-of-Scope Choices (Why Each Was Rejected)
 

@@ -1,7 +1,7 @@
 # Tasks: Processing Artifact Observation
 
 **Feature**: `012-processing-artifact-observation`
-**Date**: 2026-05-20
+**Date**: 2026-05-22
 **Spec**: [spec.md](./spec.md) | **Plan**: [plan.md](./plan.md)
 
 Tasks are grouped by user story. No code is shipped today; all
@@ -24,15 +24,21 @@ and `size_bytes`.
       `rules.rs`.
 - [ ] **T003** Implement `notify-rs`-based watcher in `watcher.rs` with
       a polling-fallback driver behind a common trait. Probe + self-test
-      per research item R-3.
+      per research item R-3. Apply `watch_extensions` coarse pre-filter
+      per `WorkflowProfile.watch_extensions` (R-ExtAllow, R-7).
 - [ ] **T004** Implement debounce + stable-size check per research item
       R-4 (default 2000ms, configurable).
 - [ ] **T005** Implement `reconciler.rs` rescan-on-attach to catch files
       written while the watcher was detached.
 - [ ] **T006** Implement `artifacts_repo.rs` in `crates/persistence/db/`
       with insert, lookup-by-path, and state-transition operations.
-- [ ] **T007** Audit events `artifact.detected`, `artifact.missing`,
-      `artifact.recovered` via `crates/audit/`.
+- [ ] **T007** Audit events `artifact.detected`, `artifact.updated`,
+      `artifact.missing`, `artifact.recovered` via `crates/audit/`.
+      `artifact.updated` fires on in-place rerun overwrite (A8).
+- [ ] **T007b** Add `watch_extensions` field to `WorkflowProfile`
+      schema in `crates/workflow/profiles/`. Seed default extension
+      list per R-ExtAllow. Expose per-profile override via settings
+      (spec 018 ripple: `workflow_profile.<id>.watch_extensions`).
 - [ ] **T008** Wire watcher attach/detach to project drawer lifecycle
       events in the desktop app.
 - [ ] **T009** Integration test: drop a known-good file into a fixture
@@ -60,7 +66,9 @@ re-run the classifier and confirm the override survives.
       matching rule wins; unknown → fallback with confidence < 0.2.
 - [ ] **T014** Implement `artifact.classify` contract handler writing
       a `classification_overrides` row and an `artifact.classify.override`
-      audit event.
+      audit event. When `kind: null` is passed, DELETE the override row,
+      re-run rule classification, emit `artifact.classify.override.cleared`
+      audit event (A6).
 - [ ] **T015** Make classifier re-runs skip rows with
       `classification_source = manual_override`.
 - [ ] **T016** Generate TypeScript types from
@@ -89,7 +97,23 @@ group. Missing artifacts visibly distinguish their state and offer a
       `contracts/artifact.list.json` into `packages/contracts/`.
 - [ ] **T022** Implement tool-launch attribution in the detection path
       per data-model "Tool Launch Attribution" (nearest preceding
-      launch within configurable window, same tool).
+      launch within configurable window, same tool). Use app-clock for
+      timestamps, NOT `metadata.modified()` (R-AppClock, R-8).
+- [ ] **T022b** Implement re-attribution subscriber on `tool.launch`
+      event (A7): back-fill `tool_launch_id` for `processing_artifacts`
+      rows where `detected_at` is within `launch_attribution_window` of
+      the new launch's `launched_at` AND `tool_launch_id` is null OR
+      points to an earlier launch. Integration test: artifact detected
+      before launch row written → assert re-attribution fires after
+      `tool.launch` event.
+- [ ] **T022c** Implement `workflow.run_completed` event emission
+      (R-Event-Light, FR-010): when attribution pass sets
+      `ToolLaunch.completed_at`, emit `workflow.run_completed` to the
+      spec 002 event bus with payload from `contracts/
+      workflow.run_completed.json`. Integration test: launch completes
+      → `workflow.run_completed` fires with correct `artifactIds`.
+      Note: spec 024 subscribes to this event for `workflow_run`
+      manifests (R-Workflow-1 from spec 024 amendment).
 - [ ] **T023** Extend `apps/desktop/src/features/projects/` drawer:
       Tool Launches accordion rendering attributed groups + an
       "Unattributed" group.
@@ -126,17 +150,19 @@ group. Missing artifacts visibly distinguish their state and offer a
 
 ```
 T001 ──► T002 ──► T003 ──► T004 ──► T005
-T001 ──► T006 ──► T007 ──► T008 ──► T009 ──► T010
+T001 ──► T006 ──► T007 ──► T007b ──► T008 ──► T009 ──► T010
 
 T002 ──► T011 ──► T012 ──► T013 ──► T014 ──► T015
 T014 ──► T016 ──► T017
 T015 ──► T018
 T013 ──► T019
 
-T006 ──► T020 ──► T021 ──► T022 ──► T023
+T006 ──► T020 ──► T021 ──► T022 ──► T022b ──► T022c ──► T023
 T023 ──► T024 ──► T025
 T023 ──► T026
 T022 ──► T027 ──► T028
+T022b ──► T027
+T022c ──► TX04
 
 T020, T014 ──► TX01
 TX01 ──► TX03

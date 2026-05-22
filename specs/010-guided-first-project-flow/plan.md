@@ -56,18 +56,26 @@ Transitions:
   `Active(step) → Active(next uncompleted step)`; on no more steps,
   `→ Completed`.
 - `dismiss`: `Active(_) → Dismissed`.
-- `restart` (from Settings): `Dismissed → Active(lowest uncompleted)` and also
-  re-arms `Completed → Idle` only if the user explicitly resets progress (out
-  of scope for v1; restart resumes, does not reset).
+- `restart` (from Settings):
+  - `Dismissed → Active(lowest uncompleted)`: resumes at the lowest uncompleted
+    step; previously completed steps remain completed.
+  - `Completed → Idle`: resets all progress and replays from step 1.
+    This is in-scope for v1 (A1 ratified 2026-05-22).
 
 ### Event Bus
 
 The coach subscribes to the existing lifecycle event bus published by
-`crates/domain/core`:
+`crates/domain/core`. Topic names use dot-notation lowercase (project
+convention per trigger-taxonomy decision C, 2026-05-22):
 
-- `InventoryConfirmed { item_id }` → completes step `inbox.confirm_first`.
-- `ProjectCreated { project_id }` → completes step `project.create_first`.
-- `ToolOpened { project_id, profile_id }` → completes step `tool.open_first`.
+- `inventory.confirmed` → completes step `inbox.confirm_first`.
+- `project.created` → completes step `project.create_first`.
+- `tool.opened` → completes step `tool.open_first`.
+
+Each event envelope carries a `source: enum("user", "restore", "system")`
+field (spec 002 §6 R-Source-1). The guided-flow subscriber MUST filter
+`source != "restore"`: replay events from audit-log recovery MUST NOT
+advance coach steps.
 
 The coach does not synthesize events. It listens. If an event arrives before
 the coach is active (because the user moved fast or because the coach is

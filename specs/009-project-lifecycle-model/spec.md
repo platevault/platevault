@@ -122,19 +122,35 @@ As a user, I want the project side panel and opened project view to show structu
 
 **Transition graph (canonical edges):**
 
-| From               | Allowed `to`                                            |
-| ------------------ | ------------------------------------------------------- |
-| `setup_incomplete` | `ready`, `blocked`                                       |
-| `ready`            | `prepared`, `processing`, `blocked`                      |
-| `prepared`         | `ready`, `processing`, `blocked`                         |
-| `processing`       | `completed`, `blocked`                                   |
-| `completed`        | `archived`, `processing` (re-open)                       |
-| `archived`         | `processing` (Unarchive)                                 |
-| `blocked`          | `ready`, `prepared`, `processing`, `setup_incomplete`    |
+| From               | Allowed `to`                                                        |
+| ------------------ | ------------------------------------------------------------------- |
+| `setup_incomplete` | `ready`, `blocked`                                                  |
+| `ready`            | `prepared`, `processing`, `blocked`                                 |
+| `prepared`         | `ready`, `processing`, `blocked`                                    |
+| `processing`       | `completed`, `blocked`                                              |
+| `completed`        | `archived`, `processing` (re-open)                                  |
+| `archived`         | `processing` (Unarchive — resume work), `ready` (Unarchive to ready — R-Unarchive, GRILL 2026-05-22) |
+| `blocked`          | `ready`, `prepared`, `processing`, `setup_incomplete`, `archived`   |
+
+Seventeen allowed edges total. `blocked → archived` is an escape hatch for
+permanently-blocked projects; it requires explicit user confirmation and always
+requires a plan (same requirements as `completed → archived`). `blocked →
+completed` remains forbidden (A3, GRILL 2026-05-22).
 
 Forbidden: `processing → ready` (would lie about progress); `archived →
 completed` (no implicit re-completion); any direct skip past `setup_incomplete`
 into `prepared` or later without passing `ready`.
+
+**Unarchive edge added (R-Unarchive, GRILL 2026-05-22)**: `archived → ready`
+is now a valid transition. It is the primary unarchive path for users who want
+to revisit a finished project without immediately resuming processing. Conditions
+and plan requirements mirror `archived → processing`: plan required when (a)
+sources are mapped to different paths OR (b) any source content needs to move;
+plan NOT required when only metadata transitions. Actor: user only. Audit event
+`project.unarchived` is emitted. The previous `archived → processing` edge
+remains as an alternate unarchive path (resume work directly).
+
+Eighteen allowed edges total (seventeen + `archived → ready`).
 
 **Surface behavior (FR alignment):**
 

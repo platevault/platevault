@@ -95,6 +95,12 @@ As a user, I want the log to keep a bounded buffer in the UI and be exportable t
 - **FR-009**: The UI buffer MUST be bounded; the v1 bound is 500 entries with oldest-first eviction.
 - **FR-010**: A log entry MUST be cross-linkable when it carries `entity_type` and `entity_id`, falling back to `request_id` when only the request id is known.
 - **FR-011**: The log subscription MUST be cursor-based so a reopened panel resumes after the last seen entry without replaying the full buffer.
+- **FR-012**: Log entry `id` MUST use the prefixed format `aud:<n>` for audit-sourced entries and `dia:<n>` for diagnostic entries (A1).
+- **FR-013**: The `source` field MUST be a closed enum aligned to spec 002 event-bus topic prefixes: `audit | diagnostic | catalog | plan | workflow | lifecycle | inventory | settings | project | target | tool` (R-SourceEnum).
+- **FR-014**: When `logLevel != "debug"` (spec 018 setting), diagnostic entries MUST be hidden in the viewer and the diagnostics filter chip MUST be locked off (A3).
+- **FR-015**: When the viewer's cursor predates retained history (vacuum gap), the stream response MUST include `truncated: true` and the UI MUST render an inline "History gap" marker at the top of the log list (A4).
+- **FR-016**: `log.stream` requests MUST support an optional `source_filter: string[]` parameter to restrict entries to one or more source values (R-SourceFilter).
+- **FR-017**: Each `LogEntry` MUST carry a `contract_version` field set to `"1"` (H1).
 
 ### Key Entities
 
@@ -154,9 +160,20 @@ Promotion to a backend-canonical log stream is plan work, not spec work.
 - Settings exposes a log level control and a `rememberFollowLogs` preference;
   it does NOT expose a "follow logs by default" toggle (FR-005).
 
-### Open At Spec Level
+### Domain Questions Resolved (2026-05-22)
 
-- Persistence of the level filter across sessions. Today the filter resets to
-  `all` per open. The spec accepts either behavior; the plan picks one.
-- Whether `debug` is gated behind a developer setting. Today it is always
-  visible in the filter row.
+- **Level filter persistence (B-level-persistence)**: Session-only. The filter
+  resets to `all` on each panel mount. Confirmed.
+- **`debug` gating (A3)**: Diagnostic entries (and the debug filter chip) are
+  hidden when `logLevel != "debug"` in spec 018 settings. When `logLevel == "debug"`,
+  diagnostics are visible by default with a toggle in the log header.
+- **`include_diagnostics` asymmetry (B-include_diagnostics-defaults)**: Stream
+  default `true` (when debug mode), export default `false`. The asymmetry is
+  intentional: exported files should contain only durable audit entries by default.
+
+### US4 Acceptance Scenario (B2)
+
+Updated acceptance scenario 2: "confirm the exported file contains only
+audit-source entries (matching the `include_diagnostics=false` default);
+diagnostic entries visible in the viewer are explicitly excluded unless the
+'Include diagnostics' toggle is on."

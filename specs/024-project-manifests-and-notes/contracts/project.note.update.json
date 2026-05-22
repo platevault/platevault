@@ -14,7 +14,8 @@
         "project_id": { "type": "string" },
         "content": {
           "type": "string",
-          "description": "Full replacement markdown body. Empty string clears the notes."
+          "maxLength": 16384,
+          "description": "Full replacement markdown body (UTF-8). Empty string clears the notes. Maximum 16 384 bytes UTF-8 (A5)."
         }
       }
     },
@@ -38,8 +39,9 @@
         "properties": {
           "code": {
             "type": "string",
-            "enum": ["project.not_found", "project.read_only"]
+            "enum": ["project.not_found", "project.read_only", "note.content_too_large"]
           },
+          "description_note": "project.read_only fires only when lifecycle == 'archived' (R-NotesEdit). note.content_too_large fires when content exceeds 16 384 bytes UTF-8 (A5).",
           "message": { "type": "string" }
         }
       }

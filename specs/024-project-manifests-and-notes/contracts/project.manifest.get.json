@@ -40,7 +40,8 @@
                 "created",
                 "source_change",
                 "lifecycle_transition",
-                "cleanup_applied"
+                "cleanup_applied",
+                "workflow_run"
               ]
             },
             "timestamp": { "type": "string", "format": "date-time" },

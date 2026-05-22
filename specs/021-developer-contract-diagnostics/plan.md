@@ -104,14 +104,34 @@ view and any audit-side concerns. No new persistence is introduced.
 
 ## Architecture
 
+### Build Configuration (R-DevFeature)
+
+The `dev-tools` Cargo feature gates the entire developer surface at compile
+time.
+
+- **Release builds** (compiled without `dev-tools`): the `/dev/contracts`
+  route, the recording proxy module, and the `dev.contracts.list` /
+  `dev.calls.list` / `dev.export` Tauri commands are NOT compiled in. The
+  binary has zero surface area for developer diagnostics.
+- **Developer/CI builds** (compiled with `dev-tools`): all of the above are
+  compiled in and governed by the `devMode` runtime toggle.
+
+Implementation note: `crates/app/core` and the root workspace `Cargo.toml`
+must add a `dev-tools` feature entry. `tauri.conf.json` must reference a
+`dev-tools` build profile. These edits are deferred to the Rust
+implementation phase — do NOT apply them in the spec session.
+
 ### Route Gating
 
-`/dev/contracts` is registered unconditionally so deep links do not 404, but
-the page component checks `devMode` from the settings store on mount. With
-`devMode` off, the page renders a "developer mode disabled" stub and does
-not subscribe to the call stream (FR-008 acceptance 2). With `devMode` on,
-the page mounts the contract list, the recent-calls list, and the schema
-viewer.
+In `dev-tools` builds, `/dev/contracts` is registered unconditionally so
+deep links do not 404, but the page component checks `devMode` from the
+settings store on mount. With `devMode` off, the page renders a "developer
+mode disabled" stub and does not subscribe to the call stream (FR-008
+acceptance 2). With `devMode` on, the page mounts the contract list, the
+recent-calls list, and the schema viewer.
+
+In release builds (without `dev-tools`), the route is absent; the router
+treats it as an unknown route and falls through to the index resolver.
 
 ### Command Palette Entry
 

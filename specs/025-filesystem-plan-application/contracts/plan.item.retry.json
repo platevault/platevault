@@ -2,48 +2,72 @@
   "$schema": "https://json-schema.org/draft/2020-12/schema",
   "$id": "https://astro-plan.dev/contracts/025/plan.item.retry.json",
   "title": "plan.item.retry",
-  "description": "Retry a failed plan item within a still-running apply. The item transitions from failed back to applying and is re-executed once. Plan-level retry (terminal plan -> new plan) is owned by spec 017 (plan.retry).",
+  "description": "Retry a failed plan item within a still-running apply. The item transitions from failed back to applying and is re-executed once. Plan-level retry (terminal plan -> new plan) is owned by spec 017 (plan.retry). (R-Env-1)",
   "type": "object",
   "properties": {
     "request": {
       "type": "object",
       "additionalProperties": false,
-      "required": ["plan_id", "item_id"],
+      "required": ["contractVersion", "requestId", "planId", "itemId"],
       "properties": {
-        "plan_id": { "type": "string" },
-        "item_id": { "type": "string" }
+        "contractVersion": { "type": "string" },
+        "requestId": { "type": "string" },
+        "planId": { "type": "string" },
+        "itemId": { "type": "string" }
       }
     },
     "response": {
-      "type": "object",
-      "additionalProperties": false,
-      "required": ["item_id", "new_state"],
-      "properties": {
-        "item_id": { "type": "string" },
-        "new_state": { "const": "applying" }
-      }
-    },
-    "errors": {
-      "type": "array",
-      "items": {
-        "type": "object",
-        "required": ["code"],
-        "properties": {
-          "code": {
-            "type": "string",
-            "enum": [
-              "plan.not_found",
-              "plan.not_in_apply",
-              "item.not_found",
-              "item.not_failed"
-            ]
-          },
-          "message": { "type": "string" },
-          "current_item_state": {
-            "type": "string",
-            "description": "Returned on item.not_failed so the UI can route to plan-level retry (spec 017) if the plan is terminal."
+      "oneOf": [
+        {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["status", "contractVersion", "requestId", "itemId", "newState"],
+          "properties": {
+            "status": { "const": "success" },
+            "contractVersion": { "type": "string" },
+            "requestId": { "type": "string" },
+            "itemId": { "type": "string" },
+            "newState": { "const": "applying" }
+          }
+        },
+        {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["status", "contractVersion", "requestId", "errors"],
+          "properties": {
+            "status": { "const": "failure" },
+            "contractVersion": { "type": "string" },
+            "requestId": { "type": "string" },
+            "errors": {
+              "type": "array",
+              "items": { "$ref": "#/$defs/Error" }
+            }
           }
         }
+      ]
+    }
+  },
+  "$defs": {
+    "Error": {
+      "type": "object",
+      "required": ["code", "message"],
+      "additionalProperties": false,
+      "properties": {
+        "code": {
+          "type": "string",
+          "enum": [
+            "plan.not_found",
+            "plan.not_in_apply",
+            "item.not_found",
+            "item.not_failed"
+          ]
+        },
+        "message": { "type": "string" },
+        "currentItemState": {
+          "type": "string",
+          "description": "Returned on item.not_failed so the UI can route to plan-level retry (spec 017) if the plan is terminal."
+        },
+        "details": { "type": "object" }
       }
     }
   }

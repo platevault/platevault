@@ -7,17 +7,26 @@
 
 This feature owns two surfaces that share a single registry:
 
-1. A CI-generated minimal catalog index (Messier, NGC, IC; user-added
-   catalogs registered locally) bundled with the app for offline target
-   lookup.
-2. A Settings → Catalogs page that lists registered catalogs and the
-   license attribution required to ship them.
+1. A downloaded minimal catalog index (all thirteen v1 catalogs downloaded
+   at first run from a project-hosted manifest in the `astro-plan-catalogs`
+   repo — name TBD). There are **no bundled/built-in catalog files** in v1.
+   All catalogs have `origin = "downloaded"`. (R-1.1, R-1.3)
+2. A Settings → Catalogs page that lists installed catalogs and the license
+   attribution required to ship them.
 
 The catalog registry lives in `crates/targeting/catalogs/`. License
-metadata is bundled alongside each catalog file, never inferred at
-runtime. The Settings page reads the registry through two contracts
-(`catalog.list`, `catalog.attribution.get`) and renders nothing else —
-acquisition/transforms remain CI-side.
+metadata is stored in SQLite alongside each catalog record, never inferred
+at runtime. The Settings page reads the registry through two contracts
+(`catalog.list`, `catalog.attribution.get`) and renders nothing else.
+Manifest fetch and catalog download use two new contracts
+(`catalog.manifest.fetch`, `catalog.download`). (R-1.4)
+
+> **Forward-note (E3)**: Spec 013 must align cross-catalog equivalence work
+> with OpenNGC as the canonical NGC+IC source.
+
+> **Note (R-3.3)**: `origin = "built_in"` exists in the enum for
+> forward-compatibility (future emergency-fallback if download fails);
+> zero catalogs ship as `built_in` in v1.
 
 ## Constitution Check
 
@@ -46,25 +55,64 @@ acquisition/transforms remain CI-side.
 apps/desktop (Tauri + React)
   └─ features/settings/catalogs/* hooks
        └─ tauri commands: catalog.list / catalog.attribution.get
+            |             catalog.manifest.fetch / catalog.download
             └─ crates/app/core/usecases/catalogs.rs
-                 ├─ crates/targeting/catalogs/registry.rs (registry)
-                 ├─ crates/targeting/catalogs/license.rs  (attribution model)
+                 ├─ crates/targeting/catalogs/registry.rs   (registry)
+                 ├─ crates/targeting/catalogs/license.rs    (attribution model)
+                 ├─ crates/targeting/catalogs/download.rs   (manifest fetch + download)
                  ├─ crates/persistence/db (catalog table + audit hooks)
                  └─ crates/audit (catalog.* events)
 ```
 
+### Catalog Distribution
+
+All v1 catalogs are distributed via a **project-hosted manifest repository**
+(proposed name: `astro-plan-catalogs`). The pattern mirrors
+[astro-up](https://github.com/sjors/astro-up)'s `crates/astro-up-core/src/catalog/`
+module (manifest reader, ETag-conditional fetch, minisign verification).
+(R-1.2)
+
+**Manifest repository** (`astro-plan-catalogs`, name TBD):
+- Holds one TOML manifest file per catalog describing `catalog_id`,
+  `version`, `url`, `checksum`, `license` (`LicenseShortCode`), and
+  `size_bytes`.
+- Each GitHub Release publishes a signed catalog bundle plus a `.minisig`
+  signature file.
+
+**Fetch flow** (mirrors astro-up `catalog/fetch.rs`):
+1. App calls `catalog.manifest.fetch` with optional `etag` from prior fetch.
+2. Backend sends HTTP GET with `If-None-Match` header; retries once on
+   transient failure (timeout, 5xx) with 2-second backoff.
+3. On 200: downloads catalog bytes + `.minisig` file.
+4. On 304: returns `status: "not_modified"`.
+
+**Signature verification** (mirrors astro-up `catalog/verify.rs`):
+- App embeds the minisign public key at build time via
+  `include_str!("minisign.pub.key")`.
+- Verification runs **in memory** before writing to disk, preserving the
+  previous catalog on failure.
+- Any verification failure returns `catalog.signature.invalid` and leaves
+  the previously installed version active.
+
+**Installation**:
+- Verified catalog bytes are written atomically (temp-file + rename).
+- Catalog metadata and `LicenseAttribution` are upserted into SQLite.
+- Event-bus topics are emitted during progress (R-3.1).
+
 ### Catalog Registry (`crates/targeting/catalogs/`)
 
-- `registry.rs`: read-only listing of known catalogs. Built-in catalogs
-  are compiled into the binary via a generated manifest produced from
-  the CI bundle; user-added catalogs are read from the SQLite `catalog`
-  table joined with the on-disk index file.
-- `license.rs`: `LicenseAttribution` model and a loader that pairs each
-  registered catalog id with a sidecar attribution record produced by
-  CI. Attribution text is stored verbatim — never templated at runtime.
-- `loader.rs` (out-of-scope here): file-format readers (CSV/JSON
-  variants) live behind a `CatalogReader` trait; only the registry
-  metadata and license attribution are in v1 contract scope.
+- `registry.rs`: read-only listing of known catalogs. All v1 catalogs are
+  stored in SQLite (`catalog_downloaded` table); the `built_in` origin is
+  reserved but unused in v1. `user` origin is deferred to v1.x.
+- `license.rs`: `LicenseAttribution` model with structured CC-BY fields
+  (`author`, `title`, `license_uri`, `modifications_notice`). Attribution
+  text is stored verbatim — never templated at runtime. (R-2.2)
+- `download.rs`: manifest fetch, ETag caching, per-catalog download,
+  in-memory minisign verification, atomic install into SQLite. Emits
+  event-bus topics from R-3.1 during progress.
+- `loader.rs` (out-of-scope here): file-format readers (CSV/JSON variants)
+  live behind a `CatalogReader` trait; only registry metadata and license
+  attribution are in v1 contract scope.
 
 ### Settings Page
 
@@ -82,49 +130,66 @@ apps/desktop (Tauri + React)
 
 ### Contracts
 
-- `catalog.list`: request is `{}` (no filters); response returns
-  `catalogs: Catalog[]` ordered by origin (built-in first) then name.
-- `catalog.attribution.get`: request is `{}`; response returns
-  `attributions: LicenseAttribution[]`. Separation from `catalog.list`
-  keeps the attribution payload (which may be large) out of the
-  metadata listing.
+- `catalog.list`: request `{}`; response `catalogs: Catalog[]` ordered by
+  origin (`downloaded` first) then name. (R-1.3)
+- `catalog.attribution.get`: request `{}`; response
+  `attributions: LicenseAttribution[]`. Separated from `catalog.list` so
+  the large attribution payload is not paid for on the metadata listing.
+- `catalog.manifest.fetch`: request `{ etag? }`; response
+  `{ status: fetched|not_modified|failed, manifest?, etag?, error? }`.
+  (R-1.4, new contract)
+- `catalog.download`: request `{ catalog_id }`; response
+  `{ status: success|failure, audit_id?, error? }`. Backend resolves the
+  URL from the cached manifest, fetches, verifies checksum + minisign,
+  installs into SQLite. Reusable for first-run install AND future updates.
+  (R-1.4, A3, new contract)
 
-### CI / Bundling
+### CI / NOTICE Artifacts
 
-CI is owned by the wider repo workflow (out of this spec's
-implementation scope). The plan only records that:
+CI (in `astro-plan-catalogs` repo) generates two NOTICE artifacts per
+release:
 
-- CI consumes catalog source definitions and emits a manifest plus
-  per-catalog index file and per-catalog attribution sidecar.
-- Manifest + sidecars are committed into the app bundle's resources
-  directory and the registry loader reads them at startup.
+1. `NOTICE.json` — machine-readable array: `[{ catalog_id, name, license,
+   license_uri, author?, title?, source_url, accessed_on,
+   modifications_notice? }, ...]`.
+2. `NOTICE.txt` — human-readable rendering, one section per catalog. (R-2.3)
+
+Both are published alongside catalog bundles on GitHub Releases.
 
 ## Phasing
 
 ### Phase 0 — Research (this spec)
 
-- Decide bundle formats (CSV vs JSON vs FITS extension).
-- Confirm license obligations per catalog (Messier, NGC, IC, common
-  name lists).
-- Define update strategy: atomic swap, version pinning, rollback.
+- Decide catalog format (CSV vs JSON vs FITS extension). (R1)
+- Confirm license obligations per catalog. (R2 — updated for 13-catalog set)
+- Define distribution mechanism: project-hosted manifest + minisign +
+  GitHub Releases. (R3 — updated)
+- Define field set for minimal index. (R4)
+- Define `LicenseShortCode` closed enum. (R5)
+- Define structured `LicenseAttribution` with CC-BY fields. (R-2.2)
+- Define NOTICE artifact format. (R-2.3)
+- Define size threshold constraint. (R-2.4)
+- Define catalog event-bus topics. (R-3.1)
+- Document `ProvenancedValue` carve-out. (R-3.2)
 
 ### Phase 1 — Design
 
 - Finalize `data-model.md` for `Catalog` and `LicenseAttribution`.
-- Finalize the two contracts in this directory.
-- Document the CI manifest shape (separate task; out of v1 scope).
+- Finalize all four contracts in this directory.
 
 ### Phase 2 — Implementation (deferred, gated by review)
 
-1. Add `crates/targeting/catalogs/` skeleton with the registry and
-   license model and an in-memory test fixture.
-2. Add `crates/app/core/usecases/catalogs.rs` with `list` and
-   `attribution.get` use cases.
-3. Generate Rust DTOs and TypeScript types from the two contracts.
-4. Replace the empty Settings → Catalogs stub with the two-section
-   page driven by Tauri commands.
-5. Add a Playwright smoke verifying that Messier, NGC, and IC appear
-   with non-empty attribution text.
+1. Add `crates/targeting/catalogs/` skeleton with registry, license,
+   download modules and an in-memory test fixture.
+2. Add `crates/app/core/usecases/catalogs.rs` with `list`,
+   `attribution_get`, `manifest_fetch`, and `download` use cases.
+3. Generate Rust DTOs and TypeScript types from all four contracts.
+4. Replace the empty Settings → Catalogs stub with the two-section page
+   driven by Tauri commands.
+5. Wire the Download Catalogs wizard step in spec 003 to
+   `catalog.manifest.fetch` + `catalog.download`.
+6. Add a Playwright smoke verifying that all thirteen v1 catalogs appear
+   with non-empty attribution text after first-run wizard.
 
 ## Cross-Spec Links
 
@@ -139,14 +204,18 @@ implementation scope). The plan only records that:
 
 ## Risks
 
-- **Attribution drift**: If a CI-bundled catalog updates its required
-  notice text mid-version, the in-app panel will silently lag until
-  the next bundle. Mitigation: every catalog update bumps the version
-  and is audit-logged.
-- **User-added catalogs without license metadata**: Users may try to
-  register catalogs that lack attribution. The registry MUST refuse
-  registration unless the user supplies attribution text and an
-  acknowledgement that they may not be allowed to redistribute the
-  app with that catalog included.
-- **Bundle size**: Even minimal indexes can grow. The plan defers the
-  size cap to research and does not assume a number.
+- **Attribution drift**: If an upstream catalog updates its required notice
+  text mid-version, the in-app panel will silently lag until the next
+  manifest release. Mitigation: every catalog update bumps the version and
+  is audit-logged.
+- **Manifest fetch failure at first run**: If the network is unavailable
+  during the Download Catalogs wizard step, catalog lookup is non-functional.
+  Current behavior: error screen (no graceful degradation in v1). Future
+  mitigation: fall back to `built_in` content if available (R-3.3, R3 note).
+- **OpenNGC CC BY-SA redistribution**: OpenNGC's CC BY-SA 4.0 license
+  requires attribution and share-alike on derivatives. The app stays
+  Apache-2.0; the `astro-plan-catalogs` repo acts as redistributor and
+  attaches the LICENSE file alongside each OpenNGC artifact. `NOTICE.json` /
+  `NOTICE.txt` carry the required attribution. (A1, R-2.3)
+- **Catalog size growth**: SC-003 sets a 10 MB compressed threshold per
+  catalog. Any catalog exceeding this requires an explicit decision. (R-2.4)

@@ -1,0 +1,112 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://astro-library-manager.local/contracts/source.register.batch.json",
+  "title": "source.register.batch",
+  "description": "Register one or more directories as RegisteredSources in a single call. Used by the first-run Finish step to flush the working source buffer to SQLite (R-Batch, A9). Atomically: if ALL items fail, nothing is committed. On partial success the items that succeeded are committed; failed rows are reported with per-item error codes. 'path.already.registered' on a row is treated as success and returns the existing source_id (idempotent — D1).",
+  "type": "object",
+  "properties": {
+    "operation": {
+      "const": "source.register.batch"
+    },
+    "version": {
+      "type": "string",
+      "const": "1"
+    },
+    "request": {
+      "type": "object",
+      "required": ["sources"],
+      "additionalProperties": false,
+      "properties": {
+        "sources": {
+          "type": "array",
+          "description": "Ordered list of sources to register. Index is preserved in the response item array.",
+          "minItems": 1,
+          "items": {
+            "type": "object",
+            "required": ["kind", "path"],
+            "additionalProperties": false,
+            "properties": {
+              "kind": {
+                "description": "Which source category this directory belongs to.",
+                "type": "string",
+                "enum": ["raw", "calibration", "project", "inbox"]
+              },
+              "path": {
+                "description": "Absolute filesystem path to a readable directory. Server normalizes to OS-canonical form.",
+                "type": "string",
+                "minLength": 1
+              },
+              "kind_subtype": {
+                "description": "Optional category refinement (reserved; unused at first-run).",
+                "type": "string"
+              },
+              "scan_depth": {
+                "description": "How deep to scan this root. Default 'recursive'. Exposed as advanced/collapsed disclosure in the wizard (R-Wiz-1).",
+                "type": "string",
+                "enum": ["recursive", "single"],
+                "default": "recursive"
+              }
+            }
+          }
+        }
+      }
+    },
+    "response": {
+      "type": "object",
+      "required": ["status", "items"],
+      "additionalProperties": false,
+      "properties": {
+        "status": {
+          "type": "string",
+          "enum": ["success", "partial", "failure"],
+          "description": "'success' when every item succeeded. 'partial' when at least one item succeeded and at least one failed. 'failure' when every item failed — in this case no rows are committed (atomic rollback)."
+        },
+        "items": {
+          "type": "array",
+          "description": "Per-item outcome, in the same order as the request sources array.",
+          "items": {
+            "type": "object",
+            "required": ["index", "status"],
+            "additionalProperties": false,
+            "properties": {
+              "index": {
+                "type": "integer",
+                "minimum": 0,
+                "description": "Zero-based index into the request sources array."
+              },
+              "status": {
+                "type": "string",
+                "enum": ["success", "failure"],
+                "description": "'success' includes the idempotent path.already.registered case."
+              },
+              "source_id": {
+                "type": "string",
+                "format": "uuid",
+                "description": "Assigned or existing source_id on success."
+              },
+              "error": {
+                "type": "string",
+                "description": "Error code from the source.register error set, or 'path.already.registered.different_kind' (R-1.4), when status='failure'."
+              },
+              "error_detail": {
+                "type": "object",
+                "description": "Optional structured detail (e.g. conflicting_kind for path.already.registered.different_kind).",
+                "additionalProperties": true
+              }
+            }
+          }
+        }
+      }
+    },
+    "errors": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "sources.empty": {
+          "description": "The sources array is empty. At least one source is required."
+        }
+      }
+    }
+  },
+  "required": ["operation", "version", "request", "response", "errors"]
+}

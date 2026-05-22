@@ -58,6 +58,12 @@ As a user, I want global protection defaults for newly added sources so that com
 - **FR-004**: Cleanup/archive plans MUST evaluate protection at source level.
 - **FR-005**: Destructive actions against protected sources MUST require explicit warning and confirmation.
 - **FR-006**: Protection settings MUST be auditable.
+- **FR-007**: The `os_trash` destructive destination MUST NOT be blocked by
+  `block_permanent_delete`. Only the `permanent_delete` action (distinct from
+  `archive` and `os_trash`) is blocked and rewritten (R-OSTrash-Allowed, 2026-05-22).
+- **FR-008**: The `plan.protection.check` response MUST include ONLY items
+  requiring user acknowledgement. Normal and unprotected items MUST appear
+  only as summary counts in `non_blocking_summary` (R-CheckScope, 2026-05-22).
 
 ### Key Entities
 
@@ -83,6 +89,9 @@ As a user, I want global protection defaults for newly added sources so that com
 
 - OS-level filesystem permissions.
 - Remote storage retention policies.
+- "Freeze project" toggle (deferred to v1.x): a feature that would promote
+  all sources involved in a project to `protected` for the duration of a
+  milestone. Explicitly out of scope for v1.
 
 ## Implementation Status
 

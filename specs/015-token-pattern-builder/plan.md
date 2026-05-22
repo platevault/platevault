@@ -26,7 +26,8 @@ render chips without re-parsing.
 
 ### Resolver Boundary
 
-The canonical resolver lives in `crates/project/structure/`. It accepts:
+The canonical resolver lives in **`crates/patterns/`** (previously proposed
+as `crates/project/structure/`; split per R-CratePatterns, 2026-05-22). It accepts:
 
 - a `Pattern` (Rust mirror of the JSON shape),
 - a `MetadataBundle` keyed by token name,
@@ -41,8 +42,8 @@ remote backend.
 
 ### Validator Boundary
 
-`crates/project/structure/` also hosts a structural validator that operates on
-a `Pattern` without metadata. It surfaces:
+`crates/patterns/` also hosts a structural validator that operates on a
+`Pattern` without metadata. It surfaces:
 
 - empty pattern → `pattern.empty`,
 - unknown token names → `token.unknown` (compared against the resolver's
@@ -76,13 +77,13 @@ the Inbox confirm pipeline (spec 018).
 ## Boundaries
 
 - This feature owns: pattern model, resolver, validator, token registry,
-  fallback policy.
+  fallback policy, sanitization pipeline (Unicode + OS + path safety).
 - This feature does **not** own: Inbox confirm pipeline (spec 018), plan
   generation (spec on filesystem plans), per-source override storage schema
   (lives in `crates/persistence/db/` and the Naming & Structure spec).
 - No new heavy dependencies. The resolver is plain Rust; the validator uses
-  the existing path-rule utilities in `crates/fs/inventory/` if available,
-  otherwise a small inline helper.
+  a small inline helper. The `unicode-security` crate is the only new
+  dependency (Unicode confusables detection, Ref: A1).
 
 ## Phases
 
@@ -106,18 +107,39 @@ are portable, no implicit filesystem mutation.
 See `tasks.md`. Tasks are grouped by user story (P1–P4) and mark the mockup
 work already complete.
 
-## Future Crate
+## Crate Boundary
 
-`crates/project/structure/` is the planned home for:
+**Updated 2026-05-22 (Ref: R-CratePatterns)**: The pattern parser and
+resolver are split into a dedicated crate **`crates/patterns/`**, separate
+from `crates/project/structure/`.
+
+`crates/patterns/` is the home for:
 
 - `Pattern`, `PatternPart` Rust mirrors of the contract DTOs,
 - `TokenRegistry` and `TokenDefinition`,
 - `resolve()` and `validate()` functions,
 - fallback configuration loader,
-- error types matching the contract error codes.
+- sanitization pipeline (Unicode NFC, strip controls/bidi/format, OS char
+  substitution, `.`/`..` traversal check, reserved name check, length caps),
+- error types matching the contract error codes (`pattern.invalid`,
+  `pattern.invalid.unicode`, `path.traversal`, `path.reserved_name`,
+  `token.unknown`, `pattern.empty`).
 
-The crate has zero runtime dependencies on Tauri, the database, or the metadata
-extraction crates. Metadata is passed in as a plain bundle.
+The crate has zero runtime dependencies on Tauri, the database, or the
+metadata extraction crates. Metadata is passed in as a plain bundle.
+
+**Consumers of `crates/patterns/`**:
+
+- `crates/app/core` (spec 005 Inbox confirm + preview)
+- `crates/fs/planner` (spec 017 plan generation)
+- `crates/project/structure/` (spec 008/024 project manifests)
+
+`crates/project/structure/` retains project-envelope rules but delegates
+pattern resolution to `crates/patterns/`.
+
+**CLAUDE.md note**: The `crates/patterns/` crate path must be added to the
+Monorepo Structure section of `CLAUDE.md`. This edit is **deferred** — do not
+edit CLAUDE.md in this session. Flag for next CLAUDE.md revision. (Ref: R-CratePatterns)
 
 ## Risks & Mitigations
 

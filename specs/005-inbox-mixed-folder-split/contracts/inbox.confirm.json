@@ -2,13 +2,13 @@
   "$schema": "https://json-schema.org/draft/2020-12/schema",
   "$id": "https://astro-plan.local/contracts/inbox.confirm.json",
   "title": "inbox.confirm",
-  "description": "Confirm the next action for a classified Inbox item. For single_type items, action must be 'confirm' (direct Inventory promotion). For mixed items, action must be 'split' (generate a reviewable plan). Always creates or references a Plan in state ready_for_review.",
+  "description": "Confirm the next action for a classified Inbox item. For single_type items, action must be 'confirm' (direct Inventory promotion). For mixed items, action must be 'split' (generate a reviewable plan). Always creates a Plan in state ready_for_review with destination paths targeting Inventory directly. Requires the contentSignature from the most recent inbox.classify response to guard against TOCTOU drift.",
   "type": "object",
-  "version": "1.0.0",
+  "version": "1.1.0",
   "operation": "inbox.confirm",
   "request": {
     "type": "object",
-    "required": ["inbox_item_id", "action"],
+    "required": ["inbox_item_id", "action", "content_signature"],
     "additionalProperties": false,
     "properties": {
       "inbox_item_id": { "type": "string" },
@@ -16,6 +16,15 @@
         "type": "string",
         "enum": ["split", "confirm"],
         "description": "'split' for mixed Inbox items; 'confirm' for single_type Inbox items."
+      },
+      "content_signature": {
+        "type": "string",
+        "description": "The contentSignature returned by the most recent inbox.classify call. If this does not match the current folder state, the operation returns classification.stale. (Ref: A8, R-Sig-1)"
+      },
+      "destructive_destination": {
+        "type": "string",
+        "enum": ["archive", "os_trash"],
+        "description": "Required when the resulting plan includes destructive items (e.g. archiving the original mixed folder after split). 'archive' uses the app-managed archive location; 'os_trash' uses the OS-native recycle bin. (Ref: R-DestChoice)"
       }
     }
   },
@@ -33,7 +42,7 @@
       "items_total": {
         "type": "integer",
         "minimum": 0,
-        "description": "Number of plan items created. Equals the number of scanned files in the Inbox item."
+        "description": "Number of plan items created. Equals the number of files enumerated from InboxClassificationEvidence rows (not derived from fileCount). (Ref: A9)"
       }
     }
   },
@@ -45,7 +54,7 @@
     },
     {
       "code": "inbox.has.open.plan",
-      "description": "The Inbox item already has a Plan in an open state (draft, ready_for_review, approved, or applying). The caller should route to the existing plan.",
+      "description": "The Inbox item already has a Plan in an open state (draft, ready_for_review, approved, applying, or paused). The caller should route to the existing plan. (Ref: E1)",
       "http_status_hint": 409,
       "data": {
         "type": "object",
@@ -54,7 +63,7 @@
           "existing_plan_id": { "type": "string" },
           "existing_plan_state": {
             "type": "string",
-            "enum": ["draft", "ready_for_review", "approved", "applying"]
+            "enum": ["draft", "ready_for_review", "approved", "applying", "paused"]
           }
         }
       }
@@ -73,6 +82,21 @@
           "requested_action": {
             "type": "string",
             "enum": ["split", "confirm"]
+          }
+        }
+      }
+    },
+    {
+      "code": "classification.stale",
+      "description": "The supplied contentSignature does not match the current folder state. The folder has changed since classification. The caller must re-classify and review the updated result before confirming. (Ref: A8, R-Sig-1)",
+      "http_status_hint": 409,
+      "data": {
+        "type": "object",
+        "properties": {
+          "stale_since": {
+            "type": "string",
+            "format": "date-time",
+            "description": "Approximate timestamp at which the signature mismatch was detected."
           }
         }
       }

@@ -1,35 +1,45 @@
 # Research: Inbox Mixed-Folder Split
 
 **Spec**: [spec.md](./spec.md) | **Plan**: [plan.md](./plan.md)
-**Date**: 2026-05-20
+**Date**: 2026-05-22 (rewritten; prior draft 2026-05-20 superseded)
 
 ## Scope
 
-Decide how to classify folder contents as `single-type`, `mixed`, or
-`unclassified`; what evidence is authoritative; how confidence is computed;
-and how prior art handles the same problem. Output recommendations feed the
-classifier crate boundary defined in plan.md.
+Decide how to classify folder contents as `single_type`, `mixed`, or
+`unclassified`; what evidence is authoritative; and how unclassified files
+are surfaced and resolved. Output recommendations feed the classifier crate
+boundary defined in plan.md.
 
-## Frame-Type Signals
+**OVERRIDE NOTICE (2026-05-22)**: The prior draft of this file used
+confidence scores, filename heuristics, and count-based thresholds to
+classify folders. All of that model is **superseded**. Classification is now
+**deterministic**: the sole authoritative signal is the FITS `IMAGETYP`
+keyword, normalized via the `ImageTypNormalizationTable` below. There are no
+confidence scores, no filename fallbacks, and no percentage thresholds.
+(Ref: R-IMAGETYP, A5)
 
-### Primary: FITS `IMAGETYP` Header
+---
 
-The FITS standard (NASA HEASARC TPV/IMAGETYP convention; also used by
-SBIG, ASCOM, NINA, KStars/EKOS, ZWO ASIAIR, and most modern capture
-software) sets `IMAGETYP` to one of:
+## Frame-Type Classification Model
 
-- `Light Frame` / `LIGHT` / `OBJECT` — science frames
-- `Dark Frame` / `DARK`
-- `Bias Frame` / `BIAS` / `Zero`
-- `Flat Frame` / `FLAT`
-- `Dark Flat` / `FLATDARK` / `DARK FLAT`
+### Primary and Sole Signal: FITS `IMAGETYP` Header
 
-**Normalization**: The classifier MUST normalize case, whitespace, and the
-common variants (`LIGHT` ↔ `Light Frame`) before consensus. A canonical
-mapping table lives in `crates/metadata/core`.
+The classifier reads the `IMAGETYP` FITS keyword for every file in the
+folder. Values are normalized via the `ImageTypNormalizationTable` (see
+§IMAGETYP Normalization below). The classification is fully deterministic:
 
-**Trust level**: High. When `IMAGETYP` is present and recognized, it is
-the authoritative signal.
+- **`single_type T`**: every file that has a readable `IMAGETYP` maps to the
+  same `FrameType T`. Files with no readable `IMAGETYP` receive per-file
+  unclassified markers but do not change the folder classification unless
+  ALL files are unclassified.
+- **`mixed`**: two or more distinct `FrameType` values appear among the
+  classified files.
+- **`unclassified`**: every file in the folder has no readable or recognized
+  `IMAGETYP`.
+
+There is no threshold. A folder with 1000 Light files and 1 Dark file is
+`mixed`. A folder with 1000 Light files and 2 files with no `IMAGETYP` is
+`single_type Light` with 2 per-file unclassified markers.
 
 ### Secondary: XISF Property Equivalents
 
@@ -38,111 +48,220 @@ XISF carries the same intent under `Observation:Type` or in
 crate `crates/metadata/xisf` SHALL surface the same `FrameType` enum from
 either source.
 
-### Tertiary: Filename Heuristics
+### No Filename Heuristics
 
-Capture software frequently writes filenames like:
+Filename heuristics are **not used** for classification. They are not
+fallback evidence, do not reduce or raise any score, and have no effect on
+the classification result. The sole classification signal is `IMAGETYP` (or
+its XISF equivalent). (Ref: A5)
 
-- NINA: `LIGHT_M31_300s_Ha_001.fits`, `DARK_300s_001.fits`
-- ASIAIR: `Light_M31_..._Ha_001.fit`, `Bias_..._001.fit`
-- Sequence Generator Pro: `M31_Light_Ha_001.fit`
-- PixInsight WBPP outputs: `*_l_cc.xisf`, `*_d.xisf`, `*_f.xisf`
+---
 
-**Trust level**: Low. Used only when `IMAGETYP` is missing or unreadable.
-Filename evidence reduces confidence (see thresholds below) and never
-overrides a header signal.
+## IMAGETYP Normalization
 
-### Anti-Signal: `FILTER`
+**Section added 2026-05-22. (Ref: R-IMAGETYP-Norm)**
+
+The normalization table is case-insensitive after trim. Unknown values cause
+the file to be marked unclassified (per-file marker, not folder-level).
+
+| FrameType  | Recognized IMAGETYP values |
+|---|---|
+| `Light`    | `LIGHT`, `Light Frame`, `Light`, `Object`, `LIGHT_FRAME`, `OBJECT`, `science` |
+| `Dark`     | `DARK`, `Dark Frame`, `Dark`, `DARKFRAME` |
+| `Bias`     | `BIAS`, `Bias Frame`, `Bias`, `BIASFRAME`, `Zero`, `OFFSET` |
+| `Flat`     | `FLAT`, `Flat Frame`, `Flat`, `FLATFRAME`, `Skyflat`, `Domeflat` |
+| `DarkFlat` | `DARKFLAT`, `Dark Flat`, `Flat Dark`, `FLATDARK` |
+
+**Known capture-software values** (reference, research task pending — see
+tasks.md §Phase 0):
+
+- **NINA**: writes `Light Frame`, `Dark Frame`, `Flat Frame`, `Bias Frame`
+- **Sequence Generator Pro (SGP)**: writes `Light Frame`, `Dark Frame`,
+  `Flat Frame`, `Bias Frame`
+- **Astro Photography Tool (APT)**: writes `LIGHT`, `DARK`, `FLAT`, `BIAS`
+- **Voyager**: writes `Light Frame`, `Dark Frame`, `Flat Frame`, `Bias Frame`
+- **Ekos/KStars**: writes `LIGHT`, `DARK`, `FLAT`, `BIAS`
+- **MaximDL**: writes `Light Frame`, `Dark Frame`, `Flat Frame`, `Bias Frame`
+- **ASIAIR**: writes `Light`, `Dark`, `Flat`, `Bias`
+- **SharpCap**: writes `Light`, `Dark`, `Flat`, `Bias`
+- **ZWO ASI software**: writes `LIGHT`, `DARK`, `FLAT`, `BIAS`
+- **FireCapture** (planetary): primarily writes video — see §Video Lane
+
+A research task (tasks.md T0-IMAGETYP-Research) is added to validate these
+values against real FITS files from each capture software before v1 ships.
+
+A settings UI for user-extended normalization mappings (for niche software)
+is **deferred to v1.x**. This is documented as a spec 018 follow-up.
+(Ref: R-IMAGETYP-Norm)
+
+**Canonical data artifact**: the normalization table ships as data in
+`crates/metadata/core` (not hardcoded in the classifier). (Ref:
+R-IMAGETYP-Norm, tasks.md T-NormTable)
+
+---
+
+## Anti-Signal: `FILTER` — Not a Frame-Type Discriminator
 
 `FILTER` is **not** a frame-type discriminator. Filter diversity within a
-single frame type is a separate concern. The "is mixed filter mixed?"
-question is left as a `[NEEDS DECISION]` in spec.md.
+single frame type is a separate concern. Multi-filter folders with uniform
+`IMAGETYP=Light` (e.g., LRGB or narrowband) are classified `single_type
+Light`. The `{filter}` token in the spec 015 resolver routes files to
+per-filter subdirectories at plan-generation time. (Ref: A6)
 
-## Confidence Thresholds (Default Proposal)
+---
 
-Per-file confidence:
+## Per-File Unclassified Markers
 
-| Evidence | Confidence |
-|---|---|
-| `IMAGETYP` recognized and normalized | 1.0 |
-| `IMAGETYP` present but non-standard | 0.7 |
-| Filename matches strict capture-software pattern | 0.6 |
-| Filename matches loose substring | 0.3 |
-| Nothing | 0.0 (unclassified) |
+**Section added 2026-05-22. (Ref: R-FileMarker)**
 
-Per-folder consensus:
+When a file has no readable `IMAGETYP` (absent, malformed, or unknown
+value), the file receives a per-file unclassified marker
+(`InboxClassificationEvidence.unclassified = true`). This does not affect
+the folder-level classification of the remaining files.
 
-- A folder is `single-type T` if the share of files with `frame_type == T`
-  AND confidence ≥ 0.6 is ≥ 95%, **and** every other recognized frame
-  type appears in < 2 files (absorbs occasional rogue files into
-  "Needs review" rather than triggering a split).
-- A folder is `mixed` if two or more recognized frame types each appear
-  in ≥ 2 files with confidence ≥ 0.6.
-- Otherwise the folder is `unclassified` and confirmation is blocked.
+- A folder with 1000 Light files + 2 unclassified files → `single_type
+  Light` with 2 per-file markers.
+- A folder with 500 Light files + 500 Dark files → `mixed`.
+- A folder where every file is unclassified → folder `unclassified`.
 
-These thresholds are **defaults** and MUST be validated against the
-fixture corpus before being frozen. Per spec FR-001 they are configurable
-at the library level.
+Per-file markers are surfaced in the UI as a "Needs review" sub-list. The
+user resolves them via the inline reclassification affordance.
 
-## Ambiguity Surfacing
+---
 
-Files with confidence < 0.6 are surfaced in a "Needs review" group in
-the UI breakdown. They are not counted toward consensus and are not
-auto-assigned to any frame type. They block direct Inventory confirmation
-the same way a `mixed` classification does, but they do **not** force a
-split plan — a separate "Resolve unclassified" affordance is required.
-[NEEDS DECISION: design of the resolve-unclassified affordance — defer
-to spec follow-up.]
+## Ambiguity Surfacing and Manual Reclassification
+
+**Section rewritten 2026-05-22. (Ref: R-Unclass-1, R-Unclass-2)**
+
+Files with `unclassified = true` (and no `manualOverride`) are surfaced in
+the UI detail drawer as a "Needs review" sub-list. They are excluded from
+folder-level consensus until resolved. A folder with only unclassified files
+is blocked from confirmation.
+
+### Resolution workflow
+
+1. User opens the detail drawer for an `unclassified` or partially
+   unclassified Inbox item.
+2. The "Needs review" sub-list shows each unclassified file with an inline
+   "Reclassify…" picker.
+3. The file list supports multiselect (Shift+Click, Ctrl+Click, Select All)
+   and a "Set type for selected" bulk action.
+4. The `inbox.reclassify` contract (see `contracts/inbox.reclassify.json`)
+   accepts a list of `{ filePath, frameType }` entries (single file or bulk).
+5. The contract writes `manualOverride` to the corresponding
+   `InboxClassificationEvidence` rows.
+6. The classifier re-runs folder-level aggregation using overrides as
+   authoritative (deterministic) evidence.
+7. Once all files are either classified by `IMAGETYP` or overridden, the
+   item transitions to `single_type` or `mixed` and the normal
+   `inbox.confirm` CTA becomes available.
+
+---
+
+## Video Lane
+
+**Section added 2026-05-22. (Ref: R-Video-1)**
+
+Video files (`.ser`, `.avi`, `.mp4`, `.mov`) are detected at scan time and
+routed to a **separate `inbox.video.*` lane** handled by
+`crates/metadata/video/`. They:
+
+- Do NOT enter the FITS classifier.
+- Do NOT affect folder classification (a folder with FITS lights + 1 SER
+  video file is classified on the FITS files alone; the video is handled
+  separately).
+- Are NOT assigned a `FrameType` from the FITS enum.
+- Will be specified in detail in a future spec for planetary/lunar workflows.
+
+The `lane` field on Inbox items: `enum("fits", "video")`.
+
+---
+
+## Recursive Scan and Inbox Item Granularity
+
+**Section added 2026-05-22. (Ref: R-Granularity-1)**
+
+The scanner walks the source root recursively. Each **leaf folder** that
+directly contains FITS files becomes its own Inbox item. Folders that
+contain only subfolders (no direct FITS files) are not Inbox items; their
+FITS-bearing descendant folders are.
+
+`InboxItem.relativePath` is the path of the leaf folder containing the FITS
+files.
+
+---
+
+## Split Destination Model
+
+**Section added 2026-05-22. (Ref: R-Split-1)**
+
+Split plans produce destination paths via the spec 015 resolver, targeting
+**Inventory paths directly**. There is no Inbox sibling staging step. Each
+`inbox.confirm` action produces one plan. Plan items carry final Inventory
+destinations resolved at confirm time.
+
+---
+
+## Content Signature and TOCTOU Safety
+
+**Section added 2026-05-22. (Ref: A8, R-Sig-1)**
+
+### Signature Formula
+
+- **Per-file signature**: `sha256(filename || size_bytes || mtime_unix_ns || sha256(first 65536 bytes))`
+  - The 64 KB partial-content hash detects FITS header rewrites that
+    preserve size and mtime.
+- **Folder content signature**: `sha256(sorted(per_file_signatures))`
+
+### Usage
+
+- `inbox.classify` computes and returns the folder `contentSignature`.
+- `inbox.confirm` requires the caller to supply the `contentSignature` from
+  the most recent classify call.
+- If the signature does not match the current folder state, the operation
+  returns `classification.stale` with a `staleSince` timestamp and the
+  caller must re-classify.
+- **Cost**: one `stat` call + 64 KB read per file. Acceptable for typical
+  inbox folder sizes (< 10 k files).
+
+---
+
+## `plan_open` State and Repair Query
+
+**Section added 2026-05-22. (Ref: R-PlanOpen)**
+
+`plan_open` is a stored `InboxItem.state` value. The primary update path is
+via the spec 002 event bus (`plan.applying.completed`, `plan.applying.paused`,
+`plan.discarded`). A background self-healing repair query runs every 5
+minutes to close any `plan_open` items whose linked plan has reached a
+terminal state (`applied | partially_applied | failed | cancelled |
+discarded`) without the event having been processed. See tasks.md for the
+repair task.
+
+---
 
 ## Prior Art
 
 ### PixInsight WBPP File Classifier
 
-PixInsight's WeightedBatchPreprocessing script (Juan Conejero et al.)
-classifies inputs by reading FITS headers with a deterministic priority
-list (`IMAGETYP` → `FRAME` → user override → filename). WBPP groups by
-`(IMAGETYP, FILTER, EXPTIME, BINNING, CCD-TEMP)` for calibration matching.
-Astro Plan's classifier mirrors WBPP's header-first priority but stops at
-frame type — calibration grouping is the responsibility of spec 001.
+PixInsight's WeightedBatchPreprocessing script classifies inputs by reading
+FITS headers with a deterministic priority list (`IMAGETYP` → `FRAME` →
+user override → filename). Astro Plan's classifier mirrors WBPP's
+header-first model and stops at frame type. (Ref: A5)
 
-**Takeaway**: header-first, filename-fallback, user-override is the
-established expert pattern. We adopt it.
+**Takeaway**: header-first is the established expert pattern. We adopt it
+and remove the filename fallback entirely.
 
-### NINA Auto-Sort / SGP Image File Pattern
-
-NINA's "image file pattern" and SGP's equivalent write frame type into
-both the filename and the FITS header, so filename heuristics for these
-two ecosystems are reliable enough to be a useful fallback when headers
-are stripped or unreadable.
-
-**Takeaway**: the filename heuristic table is small and worth maintaining
-because it covers ~80% of practical "header missing" cases for these
-ecosystems.
-
-### KStars / EKOS, ASIAIR
-
-Both write standard `IMAGETYP` values. ASIAIR additionally writes
-proprietary headers (e.g., `ASIAIR_*`) that we may surface as evidence
-metadata but do not use for classification.
-
-## Handling Unclassified Files
-
-Three policies were considered:
-
-1. **Block the whole folder** until every file resolves. Rejected:
-   one bad file shouldn't strand 499 good files.
-2. **Silently drop** unclassified files from the plan. Rejected:
-   violates constitution principle II (reviewable mutation requires
-   awareness of every affected file).
-3. **Surface as "Needs review" group**, exclude from consensus, exclude
-   from the auto-generated split plan, allow manual reclassification or
-   exclusion before plan generation. **Adopted.**
+---
 
 ## Container Differences (FITS vs XISF)
 
-XISF supports nested properties, multiple frame types per file (rare),
-and explicit calibration history. The classifier MUST flatten to one
-`FrameType` per file. Files with multiple frame-type properties are
-treated as `unclassified` with high-priority surfacing in the UI.
+XISF supports nested properties and multiple frame types per file (rare).
+The classifier MUST flatten to one `FrameType` per file. Files with multiple
+frame-type properties are treated as unclassified with high-priority
+surfacing in the UI.
+
+---
 
 ## Performance
 
@@ -150,20 +269,19 @@ treated as `unclassified` with high-priority surfacing in the UI.
   Reading 500 headers is I/O-bound; sequential reads of ~1 MB total are
   comfortably under the 2 s target on SSD.
 - Caching: classification results are cached in `inbox_classifications`
-  keyed by (inbox_item_id, content_signature). `content_signature` is a
-  lightweight per-folder signature derived from filenames, sizes, and
-  mtimes — not file hashes. Per constitution, large-file hashing is
-  optional or lazy.
+  keyed by (inbox_item_id, content_signature). Invalidated on
+  `force_rescan` or content_signature drift.
+- Content signature: one stat + 64 KB read per file. Per constitution,
+  full-file hashing is not used for classification.
 
-## Open Questions Carried Forward
+---
 
-These map to `[NEEDS DECISION]` markers in spec.md:
+## Resolved Open Questions
 
-1. Confidence thresholds: validate defaults against the fixture corpus.
-2. Filter mismatch: does multi-filter in single-frame-type count as
-   "mixed"?
-3. Split destination model: sibling Inbox folders, or direct Inventory
-   destinations?
-4. Manual reclassification: allowed pre-plan? Does it bypass thresholds?
-5. Video files (planetary/lunar): in-scope for this classifier or routed
-   elsewhere?
+All open questions from the prior draft are resolved (2026-05-22):
+
+1. ~~Confidence thresholds~~ — replaced by deterministic IMAGETYP model. (Ref: R-IMAGETYP, A5)
+2. ~~Filter mismatch~~ — not a mixed condition; `{filter}` routes at plan time. (Ref: A6)
+3. ~~Split destination model~~ — direct to Inventory. (Ref: R-Split-1)
+4. ~~Manual reclassification~~ — inline picker + multiselect bulk-assign. (Ref: R-Unclass-1, R-Unclass-2)
+5. ~~Video files~~ — separate lane. (Ref: R-Video-1)

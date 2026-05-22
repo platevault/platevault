@@ -184,12 +184,22 @@ choice persists after a refresh.
 
 ### Domain Questions To Resolve
 
-- Whether the token vocabulary should be exported as a generated
-  TypeScript module for compile-time autocomplete in addition to CSS.
-- Whether the `alm-` prefix should be hardened with a CSS scope check
-  or remain a convention.
-- Whether DESIGN.md belongs at the repo root, in `docs/design/`, or in
-  `apps/desktop/`.
+- ~~Whether the token vocabulary should be exported as a generated
+  TypeScript module for compile-time autocomplete in addition to CSS.~~
+  **RESOLVED (R-022-TSDefer, GRILL 2026-05-22)**: TypeScript token
+  autocomplete module deferred to v1.x. Tokens are enforced via review
+  only in v1. See Out of Scope.
+- ~~Whether the `alm-` prefix should be hardened with a CSS scope check
+  or remain a convention.~~
+  **RESOLVED (R-022-PrefixConvention, GRILL 2026-05-22)**: `alm-` prefix
+  is a greppable convention only in v1. Reviewer enforces; no build-time
+  check in v1. Build-time lint deferred to v1.x. See Out of Scope.
+- ~~Whether DESIGN.md belongs at the repo root, in `docs/design/`, or in
+  `apps/desktop/`.~~
+  **RESOLVED (A1, GRILL 2026-05-22)**: DESIGN.md lives at the repo root
+  (`/DESIGN.md`). The file already exists (created in the ui-revision-pass
+  commit `314292a`). All spec references treat `/DESIGN.md` as the
+  canonical design document.
 
 ## Requirements *(mandatory)*
 
@@ -211,7 +221,11 @@ choice persists after a refresh.
 - **FR-006**: All visual decisions MUST resolve to CSS custom
   properties declared in `apps/desktop/src/styles/tokens.css`. Hardcoded
   colors, spacing, radii, shadows, and motion durations are not
-  permitted in component CSS.
+  permitted in component CSS. **Exception (D-022-1, GRILL 2026-05-22)**:
+  `font-family` declarations MAY reference platform-native font-stack
+  literals (e.g. `system-ui, -apple-system, sans-serif`) because font
+  stacks are inherently platform strings, not design tokens. Token
+  coverage for `font-size`, `font-weight`, and `line-height` still applies.
 - **FR-007**: Component styles MUST live in `apps/desktop/src/styles/components.css`
   and use the `alm-` class prefix.
 - **FR-008**: Reusable primitives MUST live under `apps/desktop/src/ui/`
@@ -226,9 +240,12 @@ choice persists after a refresh.
   document root (or its absence for `system`).
 - **FR-012**: Theme switching MUST persist across reloads via
   `localStorage` under the key `alm.theme`.
-- **FR-013**: The `theme.get` and `theme.set` contracts MUST describe
-  the UI-to-core boundary for theme reads and writes so a future
-  backend-driven settings layer can implement them without UI changes.
+- **FR-013**: The `theme.get` and `theme.set` contracts describe the
+  UI-to-core boundary for theme reads and writes. **Softened
+  (D-022-3, GRILL 2026-05-22)**: Theme contracts MAY be replaced by a
+  backend-driven settings layer in a future revision; the v1
+  `ThemeProvider` remains the canonical implementation. The contract
+  shape is forward-compat only and does not block v1 implementation.
 - **FR-014**: Primitive component APIs MUST accept `className` and
   spread remaining props onto the underlying root element to allow
   feature pages to extend behavior without forking primitives.
@@ -238,6 +255,19 @@ choice persists after a refresh.
   question (see above).
 - **FR-016**: UI copy MUST use functional product language and avoid
   AI-flavored labels (carried from the original spec).
+- **FR-017** *(A2, GRILL 2026-05-22)*: The token system MUST support
+  two density levels: `dense` and `comfortable`. The `--row-h` alias
+  switches between `--row-h-dense` and `--row-h-comfortable`. A third
+  `compact` level is deferred to v1.x.
+- **FR-018** *(A3, GRILL 2026-05-22)*: A new reusable primitive MUST be
+  added to `apps/desktop/src/ui/` when it is used in **3 or more**
+  distinct feature contexts, OR when it encapsulates unique accessibility
+  semantics (e.g. focus trapping, ARIA role composition) that would
+  otherwise be duplicated. Single-use affordances MAY stay inline.
+- **FR-019** *(A4, GRILL 2026-05-22)*: Adding a new design token to
+  `tokens.css` MUST be accompanied by an update to `/DESIGN.md` and
+  MUST pass adversarial review before merge. Reviewers verify that no
+  existing token already covers the use case.
 
 ### Key Entities
 
@@ -293,6 +323,17 @@ choice persists after a refresh.
 - Tailwind, CSS-in-JS, or styled-components adoption.
 - Multi-brand theming. Tokens describe one product brand; alternate
   brands are a future research topic.
+- **TypeScript token autocomplete module** *(R-022-TSDefer, GRILL
+  2026-05-22)*: Generating a `tokens.d.ts` / `tokens.ts` module for
+  compile-time token name autocomplete is deferred to v1.x. Token
+  correctness is enforced via code review only in v1.
+- **Build-time `alm-` prefix lint** *(R-022-PrefixConvention, GRILL
+  2026-05-22)*: A CI check enforcing the `alm-` class prefix is deferred
+  to v1.x. The prefix is a greppable convention; reviewers enforce it
+  manually in v1.
+- **Compact density level** *(A2, GRILL 2026-05-22)*: A third density
+  mode `compact` is deferred to v1.x. v1 ships `dense` and `comfortable`
+  only.
 
 ## References
 

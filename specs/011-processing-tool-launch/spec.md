@@ -2,7 +2,7 @@
 
 **Feature Branch**: `011-processing-tool-launch`
 **Created**: 2026-05-09
-**Last Amended**: 2026-05-20
+**Last Amended**: 2026-05-22
 **Status**: Draft
 **Input**: User description: "Specify direct tool launch for project workflows,
 including configured paths for PixInsight, Siril, and future tools, with
@@ -19,6 +19,11 @@ project working directory is passed, and no audit record is written. The
 button label, gating, and disabled-state copy on the mockup MUST remain the
 authoritative UX target for this spec; the implementation work covered here is
 behavioural wiring (settings → use case → OS process → audit), not new UI.
+
+**IMPORTANT (E5)**: The mockup's `setProjectLifecycle('processing')` call
+MUST be removed during implementation. Tool launch does NOT mutate project
+lifecycle state. The `ready → processing` transition is a separate explicit
+user action governed by spec 009.
 
 ## User Scenarios & Testing *(mandatory)*
 
@@ -51,9 +56,9 @@ non-null PID.
    with the project root as working directory (no file argument), and the
    audit record notes `source_view: absent`.
 3. **Given** a tool launch succeeded once, **When** the user clicks the CTA
-   again while the prior process is still alive, **Then** the app warns
-   ("Tool already running for this project") and lets the user proceed,
-   cancel, or focus the existing window where the OS supports it.
+   again while the prior process is still alive, **Then** the app presents a
+   modal warning with two buttons: **"Open another instance"** (sends
+   `force=true` to the contract) and **"Cancel"** (aborts the launch).
 
 ---
 
@@ -143,16 +148,18 @@ launch profile defined in `crates/workflow/profiles/`.
 
 ### Domain Questions Open
 
-- **O1 (Multi-version handling)**: Should `ToolProfile` allow a list of
-  candidate executables (PixInsight 1.8 vs 1.9), and if so should we expose
-  a per-project "preferred version" override?
 - **O2 (Tool-emitted "back-to-app" signal)**: Whether to ship a small drop
   folder convention (or a process-watch heuristic) so spec 012 can detect
   artifacts without polling. Deferred from this spec but a launch-time
   decision (we record `launched_at` and project id whether or not the tool
   cooperates).
-- **O3 (Sandboxed launches on macOS)**: When PixInsight is installed under
-  `/Applications`, do we need a translocation/quarantine workaround?
+
+### Domain Questions Deferred to v2
+
+- **O1 (Multi-version handling)**: Should `ToolProfile` allow a list of
+  candidate executables (PixInsight 1.8 vs 1.9), and if so should we expose
+  a per-project "preferred version" override? Deferred: v1 has one executable
+  per tool profile.
 
 ## Requirements *(mandatory)*
 
@@ -184,6 +191,13 @@ launch profile defined in `crates/workflow/profiles/`.
   AND the project has a generated source-view folder, the app MUST pass that
   folder per the profile's argument template; otherwise it MUST fall back to
   the project root as working directory only.
+- **FR-010**: Tool launch MUST canonicalize the working directory and verify
+  it resolves inside a registered library root. If it does not, the launch
+  MUST be refused with error code `cwd.outside_library_root`.
+- **FR-011**: Executable existence is NOT validated before launch. If the
+  executable path is absent or inaccessible, the OS spawn error is propagated
+  as `launch.failed` with a descriptive `os_error_kind`; the use case does
+  not perform a pre-spawn file-existence check.
 
 ### Key Entities
 

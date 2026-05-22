@@ -108,6 +108,17 @@
           "description": "Multiselect tool filter. Empty array or omitted means 'all'.",
           "items": { "$ref": "#/$defs/ProcessingTool" },
           "uniqueItems": true
+        },
+        "cursor": {
+          "type": "string",
+          "description": "Opaque pagination cursor returned by a prior response in nextCursor. Omit to start from the first page. Format: base64-encoded (createdAt, id) tuple — treat as opaque; format may change between server versions (R-Pagination, GRILL 2026-05-22)."
+        },
+        "limit": {
+          "type": "integer",
+          "minimum": 1,
+          "maximum": 200,
+          "default": 50,
+          "description": "Maximum number of projects to return. Default 50, max 200."
         }
       }
     },
@@ -122,6 +133,10 @@
         "projects": {
           "type": "array",
           "items": { "$ref": "#/$defs/ProjectSummary" }
+        },
+        "nextCursor": {
+          "type": "string",
+          "description": "Opaque cursor for the next page. Absent when this is the last page. Pass this value as 'cursor' in the next request to continue pagination (R-Pagination, GRILL 2026-05-22)."
         },
         "error": { "$ref": "#/$defs/ErrorEnvelope" }
       },

@@ -25,26 +25,38 @@ intentionally out of scope.
 **Question**: Is the surface visible by default, behind a build flag, behind
 a runtime toggle, or both?
 
-**Options**:
+**Options considered**:
 
 1. **Visible by default in all builds**. Cons: violates FR-001 and SC-001;
    normal users discover developer plumbing.
 2. **Build-flag only** (e.g., compiled into dev builds, stripped from
    production). Pros: zero overhead in production. Cons: developers running
    the production build cannot debug a user's report without a custom build.
-3. **Runtime toggle, hidden by default** (chosen). The setting key
-   `devMode` defaults to `false` and is toggled from a hidden settings
-   page reachable only by typing the full URL. With `devMode` off the
-   recording proxy is bypassed at module load.
-4. **Combined: build flag gates the toggle**. Pros: belt-and-suspenders.
-   Cons: more states than the value justifies; the runtime toggle is enough
-   if the recording proxy is genuinely bypassed when off.
+3. **Runtime toggle, hidden by default**. The setting key `devMode` defaults
+   to `false`; runtime toggle only. Recording proxy is bypassed at module load
+   when `devMode` is off.
+4. **Combined: compile-time `dev-tools` feature + runtime toggle** (chosen,
+   A-021-2, R-DevFeature).
 
-**Decision**: Runtime toggle (Option 3). Persisted per device. Production
-builds ship with the surface present but disabled, so a developer reproducing
-a user issue can opt in without a rebuild. The recording proxy is
-short-circuited at module load when `devMode` is off; this is verified by
-SC-004 (no proxy frame in flame charts with `devMode = false`).
+**Decision**: Option 4 — compile-time + runtime hybrid.
+
+- **Compile-time gate** (`dev-tools` Cargo feature): Release builds are
+  compiled WITHOUT `dev-tools`. This strips the `/dev/contracts` route, the
+  recording proxy, and the `dev.contracts.list` / `dev.calls.list` Tauri
+  commands from the binary entirely. Zero overhead, zero surface area in
+  production.
+- **Runtime toggle** (`devMode`, Settings store, boolean, default `false`):
+  In `dev-tools` builds, the toggle controls whether the proxy is installed
+  at app boot. Toggling off requires an app restart for full proxy uninstall.
+  Route gating and the command-palette entry react immediately (no restart
+  needed for the UI gate).
+- **Restart requirement** (A-021-1): FR-008 acceptance scenario 4 documents
+  the restart requirement for full proxy uninstall. Scenario 5 notes that
+  recording continues until restart when toggled off mid-session (informational,
+  not a fail condition).
+- The `dev-tools` Cargo feature addition to `crates/app/core` and the root
+  workspace `Cargo.toml` is deferred to the Rust implementation phase; do NOT
+  edit `Cargo.toml` or `tauri.conf.json` in the spec session.
 
 ## R3. Performance impact of call recording
 
@@ -72,20 +84,26 @@ acceptable to pay that cost?
 
 **Question**: How are sensitive fields handled in the recorded payload?
 
-**Decision**: Redaction is contract-declared. Each `ContractMeta` carries
-an optional `sensitive_fields: string[]` of JSON Pointer paths into the
-request and response shapes. The recorder replaces matched values with the
-string `"<redacted>"` before storing. Defaults:
+**Decision** (updated by A-021-3): Redaction is contract-declared AND paths
+are REDACTED BY DEFAULT.
 
-- Any field named `password`, `token`, `secret`, or `api_key` at any depth.
-- Any path that contains a user-owned filesystem path under a
-  privacy-flagged settings key (currently `librariesRootPath` is not
-  flagged, so paths are stored verbatim; this is a deliberate choice
-  because path debugging is a primary developer use case).
-
-A future research decision can widen the default set if user feedback
-shows recorded payloads leaking unexpected data. Contracts may extend the
-default set per operation.
+- Any field named `password`, `token`, `secret`, or `api_key` at any depth
+  is replaced with `"<redacted>"`.
+- **All filesystem paths are redacted by default.** Path values (any field
+  whose value looks like an absolute filesystem path) are replaced with a
+  sanitized placeholder of the form `${LIBRARY_ROOT}/Andromeda/Light/...`
+  where the library root prefix is replaced by the `${LIBRARY_ROOT}` token
+  and the remainder of the path is retained for readability.
+- Per-export opt-in: the diagnostic export action accepts
+  `includeVerbatimPaths: boolean` (default `false`). When `true`, paths are
+  included verbatim in the export JSON. This toggle is per-export and NOT
+  stored in the ring buffer (which always uses redacted paths).
+- Contracts may extend the default sensitive-field set per operation via
+  `ContractMeta.sensitive_fields`.
+- **Settled decision (C-021-3 — `ts_hash` / `rust_hash` algorithm)**: Use
+  SHA-256. Hash content is the canonical JSON serialization of the schema
+  with deterministic key ordering. This is consistent with spec 014 catalog
+  checksums.
 
 ## R5. Cursor and reset semantics
 
@@ -100,15 +118,43 @@ to a future audit-backed feature, not to this surface.
 
 **Question**: Which contracts may be replayed from the developer surface?
 
-**Decision**:
+**Decision** (updated by A-021-4):
 
-- Read-only contracts are `replay_safe = true` by default.
-- Write contracts are `replay_safe = false` in v1. The replay action is
-  rendered but disabled with a tooltip explaining why. This avoids
-  re-running a plan apply or a settings write by accident from a
-  diagnostic surface.
+- `replay_safe` DEFAULTS TO `false`. All contracts are opt-out of replay
+  unless they explicitly declare `replay_safe: true`.
+- Read-only contracts MAY declare `replay_safe: true` if reviewed and
+  appropriate.
+- Write contracts MUST NOT set `replay_safe: true` unless present in an
+  explicit allow-list entry (enforced by CI lint snapshot test, T037).
+- The replay action is rendered but disabled with a tooltip ("Write contracts
+  cannot be replayed from the developer surface") when `replay_safe = false`.
 - A future research decision can introduce a confirmation flow that allows
   replaying write contracts with explicit consent.
+
+**Rationale for default-false**: Opt-in is safer — it prevents accidental
+re-execution of state-mutating contracts from a diagnostic surface. The
+opt-in is explicit and reviewable at the contract level.
+
+## R8. Ring buffer worst-case memory (settled, C-021-1)
+
+**Question**: Is 13 MB ring buffer memory acceptable?
+
+**Decision**: Accepted. 100 entries × 64 KB (request + response) = 13 MB
+worst-case. This is acceptable for a developer-only surface. The threshold
+is a compile-time constant in v1; a research decision is required to raise it.
+
+## R9. `ts_hash` / `rust_hash` algorithm (settled, C-021-3)
+
+**Decision**: SHA-256. Hash content = canonical JSON serialization of the
+schema with deterministic (sorted) key ordering. Consistent with spec 014
+catalog checksums. See also R4 above.
+
+## R10. Export contract (C-021-4)
+
+**Decision**: A new `dev.export.json` contract is defined for the diagnostic
+export action. It accepts `includeVerbatimPaths: boolean` (default `false`)
+in its request. The contract uses camelCase envelope. See
+`contracts/dev.export.json` (new file, created in this pass).
 
 ## R7. Schema source of truth
 

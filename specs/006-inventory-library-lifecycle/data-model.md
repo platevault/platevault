@@ -66,12 +66,11 @@ One row in the inventory ledger. Projects one `AcquisitionSession` OR one
 | `name` | string | yes | Display name derived from target + capture date, or a calibration-set descriptor. Not user-editable from this surface in v1. |
 | `source_id` | uuid | yes | FK → `InventorySource.id` (= `LibraryRoot.id`). |
 | `frames` | u32 | yes | Count of `FileRecord` rows linked to the underlying session. |
-| `type` | enum(`light`,`dark`,`flat`,`bias`,`dark_flat`,`mixed`) | yes | See research.md §2. `mixed` is presentational only. |
-| `target` | string \| null | yes | `Target.canonical_name` when linked; `null` for calibration sessions or unlinked acquisition sessions. |
+| `type` | enum(`light`,`dark`,`flat`,`bias`,`mixed`) | yes | See research.md §2. `dark_flat` is reserved but not stored or returned in v1. `mixed` is a server-derived sentinel (Rust + SQL) for post-promotion regressions. |
+| `target` | string \| null | yes | `Target.primary_designation` when linked; `null` for calibration sessions or unlinked acquisition sessions. |
 | `filter` | string \| null | yes | Effective filter (`reviewed > inferred > observed`). |
 | `exposure` | string \| null | yes | Effective exposure in human form (e.g. "300s"). |
-| `state` | enum(`needs_review`,`confirmed`,`rejected`) | yes | Presentational projection (research.md §3). |
-| `canonical_state` | enum(`discovered`,`candidate`,`needs_review`,`confirmed`,`rejected`,`ignored`) | yes | Underlying spec 002 state. Carried so `inventory.session.review` knows the real source. |
+| `state` | enum(`discovered`,`candidate`,`needs_review`,`confirmed`,`rejected`,`ignored`) | yes | Canonical spec 002 session state (research.md §3 R-Projection-Wide). No presentational projection. UI maps display labels locally. |
 | `camera` | string | no | Equipment fact. |
 | `gain` | string | no | Equipment fact. |
 | `binning` | string | no | Equipment fact. |
@@ -83,27 +82,30 @@ One row in the inventory ledger. Projects one `AcquisitionSession` OR one
 ### Invariants
 
 - `(id, source_id)` is unique; `id` alone is unique across the projection.
-- `state` MUST be derived deterministically from `canonical_state`:
-  - `discovered` → `needs_review`
-  - `candidate` → `needs_review`
-  - `needs_review` → `needs_review`
-  - `confirmed` → `confirmed`
-  - `rejected` → `rejected`
-  - `ignored` → excluded from default ledger (filter only).
-- `type == "mixed"` is only ever produced when member frames disagree on
-  kind. The underlying session never stores `mixed`.
+- `state` is the canonical spec 002 value; it is NOT projected or collapsed
+  server-side. Sessions with `state == "ignored"` are excluded from the
+  default ledger and surfaced only via `reviewFilter=ignored` (FR-010).
+  Sessions with `state ∈ {discovered, candidate}` display as "Needs review"
+  in the UI via local label mapping; the API returns the canonical value.
+- `type == "mixed"` is detected server-side (Rust + SQL) when member frames
+  disagree on kind after promotion. The underlying session never stores
+  `mixed`; it is a derived field in the contract response only (D2 — covered
+  by integration test, not JSON Schema fixture).
+- `type` NEVER returns `dark_flat` in v1. Files with dark_flat IMAGETYP
+  values land as `unclassified` at the inbox level (spec 005 ripple).
 - `provenance` MUST NOT carry confidence/evidence detail; those live in
   spec 002 `ProvenancedValue.history` and are reachable from the audit
   log, not from this DTO (spec 002 FR-006).
-- A row with `state == "needs_review"` MUST be eligible for `Confirm`;
-  the projection guarantees this by refusing to emit `needs_review` for
-  sessions that lack the required reviewed fields (see below).
+- A row with `state ∈ {discovered, candidate, needs_review}` MUST be
+  eligible for `Confirm`; the projection guarantees this by refusing to
+  emit these states for sessions that lack the required reviewed fields
+  (see below).
 
 ### Required Reviewed Fields
 
-Per research.md §7, for a session to project as `state == "needs_review"`
-(i.e. eligible for one-click `Confirm` from the drawer) it must have at
-least:
+Per research.md §7, for a session with `state ∈ {discovered, candidate,
+needs_review}` to be eligible for one-click `Confirm` from the drawer, it
+must have at least:
 
 - `target` resolved to a `Target` row (acquisition sessions only).
 - `filter` set (any provenance tag).
@@ -113,6 +115,14 @@ When any of these is missing, the row still appears in the ledger but
 its primary CTA changes from `Confirm` to `Resolve fields` (footer
 button), and `Confirm` is hidden. This is the action-bound review rule
 from spec 002 FR-009/FR-010 applied to the Inventory surface.
+
+**Note on `captured_on`** (E2): The `InventorySession.captured_on` field
+is the **earliest frame date** among the session's member frames. It is
+intentionally different from `TargetSession.captured_on` in spec 023,
+which uses the local-solar-noon boundary (spec 023 + spec 023 A5). Spec 006
+uses the earliest frame date as a UX ordering label; spec 023 owns the
+canonical observing-night identity. The divergence is intentional and
+documented.
 
 For calibration sessions, the required reviewed fields are `kind`,
 `exposure`, and the equipment match key (camera + binning + set_temp at
@@ -133,9 +143,8 @@ calibration_session, library_root, file_record}`.
 | This spec field | Spec 002 source | Notes |
 |---|---|---|
 | `InventorySource.*` | `LibraryRoot.*` | Direct mirror, `kind` refined. |
-| `InventorySession.canonical_state` | `AcquisitionSession.state` / `CalibrationSession.state` | Spec 002 §AcquisitionSession §CalibrationSession. |
-| `InventorySession.state` | derived | Projection rule above. |
-| `InventorySession.target` | `AcquisitionSession.target_id` → `Target.canonical_name` | Spec 002 §Target. |
+| `InventorySession.state` | `AcquisitionSession.state` / `CalibrationSession.state` | Canonical spec 002 value; no server-side projection. |
+| `InventorySession.target` | `AcquisitionSession.target_id` → `Target.primary_designation` | Spec 002 §Target (A1: `canonical_name` → `primary_designation`). |
 | `InventorySession.frames` | `len(session.frame_ids)` | Spec 002 §AcquisitionSession.frame_ids. |
 | `InventorySession.provenance.*` | `ProvenancedValue.history` summary | Summary only; detail lives in audit. |
 | `InventorySession.linked.projects` | reverse FK from `Project.session_ids` | Spec 002 §Project. |
@@ -147,7 +156,14 @@ Mutations are submitted via `inventory.session.review`, which is a
 session-scoped wrapper around `lifecycle.transition` with pre-filled
 `entity_type ∈ {acquisition_session, calibration_session}` chosen by the
 backend based on the session id. Idempotency is inherited from spec 002:
-re-applying the current state returns `state.unchanged`.
+re-applying the current state returns `status: "noop"` (no audit entry,
+no error). The `state.unchanged` error code is NOT used; the noop pattern
+is the canonical response for idempotent re-application (A2).
+
+**Mixed-session assign guard** (E5): If `session.state == "mixed"`, the
+`inventory.session.review` use case rejects with error code
+`session.mixed_state`. The user must split the session first using
+spec 005's reclassify workflow before a review state transition is accepted.
 
 ## Notes for Implementers
 

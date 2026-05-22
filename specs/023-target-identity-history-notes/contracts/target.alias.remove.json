@@ -1,0 +1,90 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://astro-plan.local/contracts/target.alias.remove.json",
+  "title": "target.alias.remove",
+  "description": "Write contract that removes an alias from a target. Fails with alias.is_primary if the alias is the current primary_designation (use target.primary.rename first). Emits a target.alias_removed audit event and provenance entry on success. (R-3.4)",
+  "type": "object",
+  "oneOf": [
+    { "$ref": "#/$defs/Request" },
+    { "$ref": "#/$defs/Response" }
+  ],
+  "$defs": {
+    "ContractVersion": { "type": "string", "const": "1.0" },
+    "Uuid": { "type": "string", "format": "uuid" },
+    "ErrorCode": {
+      "type": "string",
+      "enum": [
+        "target.not_found",
+        "alias.not_found",
+        "alias.is_primary",
+        "actor.not_authorised"
+      ],
+      "description": "alias.not_found: the alias is not present on this target. alias.is_primary: the alias is currently the primary_designation; use target.primary.rename to demote it first."
+    },
+    "ErrorEnvelope": {
+      "type": "object",
+      "required": ["code", "message"],
+      "additionalProperties": false,
+      "properties": {
+        "code": { "$ref": "#/$defs/ErrorCode" },
+        "message": { "type": "string" },
+        "details": { "type": "object", "additionalProperties": true }
+      }
+    },
+    "Request": {
+      "type": "object",
+      "required": ["contractVersion", "requestId", "targetId", "alias"],
+      "additionalProperties": false,
+      "properties": {
+        "contractVersion": { "$ref": "#/$defs/ContractVersion" },
+        "requestId": { "$ref": "#/$defs/Uuid" },
+        "targetId": {
+          "$ref": "#/$defs/Uuid",
+          "description": "Target to remove the alias from."
+        },
+        "alias": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 200,
+          "description": "Display form of the alias to remove. Server normalizes for lookup."
+        }
+      }
+    },
+    "Response": {
+      "type": "object",
+      "required": ["status", "contractVersion", "requestId"],
+      "additionalProperties": false,
+      "properties": {
+        "status": { "type": "string", "enum": ["success", "error"] },
+        "contractVersion": { "$ref": "#/$defs/ContractVersion" },
+        "requestId": { "$ref": "#/$defs/Uuid" },
+        "targetId": {
+          "$ref": "#/$defs/Uuid",
+          "description": "Present when status=success."
+        },
+        "removed_alias": {
+          "type": "string",
+          "description": "The normalized form of the removed alias. Present when status=success."
+        },
+        "audit_id": {
+          "$ref": "#/$defs/Uuid",
+          "description": "ID of the written audit event. Present when status=success."
+        },
+        "error": { "$ref": "#/$defs/ErrorEnvelope" }
+      },
+      "allOf": [
+        {
+          "if": { "properties": { "status": { "const": "success" } } },
+          "then": {
+            "required": ["targetId", "removed_alias", "audit_id"],
+            "not": { "required": ["error"] }
+          }
+        },
+        {
+          "if": { "properties": { "status": { "const": "error" } } },
+          "then": { "required": ["error"] }
+        }
+      ]
+    }
+  }
+}

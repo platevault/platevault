@@ -57,9 +57,16 @@ specs/007-calibration-matching-rules/
 ├── data-model.md
 ├── contracts/
 │   ├── calibration.match.suggest.json
+│   ├── calibration.match.suggest.batch.json  # R-Batch: v1 batch suggest
 │   └── calibration.match.assign.json
 └── tasks.md
 ```
+
+**Spec 008 dependency**: The project-detail accordion in spec 008 must respect
+`MatchingRuleConfig.prefill_suggestion` when opening the assign dialog. The
+batch suggest contract (`calibration.match.suggest.batch`) is the recommended
+call for project-level calibration preparation (spec 008 uses it for
+project-wide calibration). See research.md R5 for the loop-closing rule.
 
 ### Source Code (repository root)
 

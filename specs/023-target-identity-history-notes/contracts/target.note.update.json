@@ -36,8 +36,8 @@
         "target_id": { "$ref": "#/$defs/Uuid" },
         "content": {
           "type": "string",
-          "description": "Replacement note body. Empty string clears the note.",
-          "maxLength": 8000
+          "description": "Replacement note body. Empty string clears the note. Max 16384 UTF-8 bytes (A6).",
+          "maxLength": 16384
         }
       }
     },

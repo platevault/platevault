@@ -46,7 +46,7 @@
         },
         "details": {
           "type": "object",
-          "description": "Structured context. name.duplicate MUST include conflicting_project_id. lifecycle.read_only MUST include current_lifecycle. tool.locked MUST include current_lifecycle (the lifecycle states that lock tool changes are prepared, processing, completed).",
+          "description": "Structured context. name.duplicate MUST include conflicting_project_id. lifecycle.read_only MUST include current_lifecycle. tool.locked MUST include current_lifecycle (the lifecycle states that lock tool changes are prepared, processing, completed, blocked — R-Tool-Lock).",
           "additionalProperties": true,
           "properties": {
             "conflicting_project_id": { "$ref": "#/$defs/Uuid" },

@@ -9,10 +9,13 @@ audit event for each state transition.
 
 ## Shared entities (owned by 017)
 
-- `Plan { id, number, state, items, items_total, items_applied, items_failed, items_pending, approval_token?, ... }`
-- `PlanItem { id, plan_id, operation, source, destination?, reason, protected, confirm_required, state }`
+- `Plan { id, number, state, items, itemsTotal, itemsApplied, itemsFailed, itemsSkipped, itemsCancelled, itemsPending, totalBytesRequired, destructiveDestination, approvalToken?, ... }`
+- `PlanItem { id, planId, operation, source, destination?, reason, protected, confirmRequired, state, approvedMtime?, approvedSizeBytes?, archivePath? }`
 
-Spec 025 consumes these shapes unchanged. It does not redefine them.
+Spec 025 consumes these shapes. Counter names are camelCase per R-Env-1.
+`approvedMtime` and `approvedSizeBytes` are populated by spec 017's
+`plan.approve` at approval time and consumed here for per-item FS
+revalidation (R-FS-1).
 
 ## Entities owned by spec 025
 
@@ -26,6 +29,7 @@ PlanItemState =
   | applying     # executor is acting on this item right now
   | succeeded    # filesystem operation completed
   | failed       # filesystem operation failed; see PlanItemFailure
+  | stale        # per-item FS revalidation mismatch; non-skippable (R-FS-1)
   | skipped      # user marked the item skipped before it ran
   | cancelled    # user cancelled the run before this item was reached
 ```
@@ -39,6 +43,8 @@ Transitions allowed by the executor:
   pending; via `plan.item.skip`)
 - `failed → applying` (only via `plan.item.retry` while plan is `applying`)
 - `pending → cancelled` (set in batch when the run cancels)
+- `applying → stale` (per-item FS revalidation mismatch; R-FS-1; transitions
+  run to `paused`; non-skippable; requires re-approval)
 
 Disallowed transitions MUST be rejected at the use-case layer.
 
@@ -82,52 +88,67 @@ the type; the persistence crate owns the schema. The table is append-only
 (no UPDATE/DELETE) so the audit chain is reconstructable per FR-003 and
 SC-001.
 
-### `PlanApplyRun` (optional v1, recommended)
+### `PlanApplyRun` (REQUIRED in v1, R-Run-1)
 
-If multiple apply attempts on the same plan need to be distinguished:
+`PlanApplyRun` is a **mandatory** SQLite table (not optional). Persisted on
+apply start. Tracks each execution attempt independently.
 
 ```text
 PlanApplyRun {
-  id:            string  # ULID
-  plan_id:       string
-  started_at:    datetime
-  ended_at?:     datetime
-  terminal_state: "applied" | "partially_applied" | "failed" | "cancelled"
-  items_succeeded: int
-  items_failed:    int
-  items_skipped:   int
-  items_cancelled: int
-  approval_token: string  # the token used; allows audit of which approval gated this run
+  id:             string   # ULID
+  planId:         string   # FK → plans.id
+  approvalToken:  string   # the token used; allows audit of which approval gated this run
+  startedAt:      datetime
+  endedAt?:       datetime
+  terminalState?: "applied" | "partially_applied" | "failed" | "cancelled" | "paused"
+  itemsTotal:     int
+  itemsApplied:   int
+  itemsFailed:    int
+  itemsSkipped:   int
+  itemsCancelled: int
+  itemsPending:   int
 }
 ```
 
-`PlanApplyEvent.run_id` SHOULD reference this row when present.
+`PlanApplyEvent.runId` MUST reference this row.
+
+`terminalState` `paused` indicates the run is suspended awaiting user action
+(R-Pause-1). The run transitions `paused → applying` on `plan.resume` or
+`paused → cancelled` on `plan.cancel`.
 
 ## Counters
 
-The plan-level counters (`items_applied`, `items_failed`, `items_pending`)
-already exist on the `Plan` shape (owned by 017). Spec 025's executor
-updates them transactionally with each item state transition:
+The plan-level counters (`itemsApplied`, `itemsFailed`, `itemsSkipped`,
+`itemsCancelled`, `itemsPending`) are owned by 017 and updated by spec 025's
+executor transactionally with each item state transition:
 
-- on `pending → applying`: `items_pending--`
-- on `applying → succeeded`: `items_applied++`
-- on `applying → failed`: `items_failed++`
-- on `failed → applying` (retry): `items_failed--`
-- on `pending → skipped`: `items_pending--`
-- on `pending → cancelled` (batch at cancel): `items_pending` set to 0
+- on `pending → applying`: `itemsPending--`
+- on `applying → succeeded`: `itemsApplied++`
+- on `applying → failed`: `itemsFailed++`
+- on `applying → stale`: run pauses; no counter change until resolved
+- on `failed → applying` (retry): `itemsFailed--`
+- on `pending → skipped`: `itemsPending--`; `itemsSkipped++`
+- on `pending → cancelled` (batch at cancel): `itemsPending` → 0;
+  `itemsCancelled += (count of pending items)`
 
 ## Invariants
 
-- `items_succeeded + items_failed + items_skipped + items_cancelled + items_pending = items_total`
-  at all times.
-- For any item, the sequence of `PlanApplyEvent.new_state` values forms a
+- `itemsApplied + itemsFailed + itemsSkipped + itemsCancelled + itemsPending
+  == itemsTotal` at all times (A3).
+- For any item, the sequence of `PlanApplyEvent.newState` values forms a
   legal path in the transition graph.
 - A plan in a terminal state has no item in `applying`.
 - `Plan.state == "cancelled"` ⇒ there exists a `PlanApplyEvent` recording
   the plan-level `applying → cancelled` transition; per-item events for the
   batched `pending → cancelled` transitions are written for every untouched
   item.
+- `Plan.state == "paused"` ⇒ there exists a `PlanApplyRun` with
+  `terminalState == "paused"` and a `PlanApplyEvent` recording the
+  `applying → paused` transition (R-Pause-1).
 - `PlanApplyEvent` rows are append-only (no UPDATE, no DELETE).
+- A `PlanApplyRun` row MUST be created at apply start before any item
+  mutation (R-Run-1). The CAS `plans.state: 'approved' → 'applying'` is
+  atomic; if it fails, no run is created (R-CAS-1).
 
 ## Relation to spec 017 shapes
 

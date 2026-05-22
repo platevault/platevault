@@ -1,6 +1,6 @@
 # Implementation Plan: Processing Tool Launch
 
-**Branch**: `011-processing-tool-launch` | **Date**: 2026-05-20 | **Spec**:
+**Branch**: `011-processing-tool-launch` | **Date**: 2026-05-22 | **Spec**:
 [spec.md](./spec.md)
 
 ## Summary
@@ -57,13 +57,22 @@ Settings owns:
 - `toolProfiles[]` rows keyed by `tool_id` (`pixinsight`, `siril`,
   `planetary_suite`, plus user-added entries in a future spec).
 - Per-tool `executable_path` (string, validated on save).
+- Per-tool `bundle_id` (macOS only; null for Windows/Linux; user-editable
+  per tool profile — R-BundleId; spec 018 ripple: settings table supports
+  per-tool bundle_id override).
 - Per-tool `enabled` flag (lets the user hide a tool from project CTAs
   without deleting the path).
 
 The settings store is the canonical read source for the launch use case.
 `crates/workflow/profiles/` owns the *static* parts (display name, args
-template, capability flags) and is seeded for the three first-class tools.
-Settings owns the *user-mutable* parts (executable path, enabled flag).
+template, capability flags, seeded bundle_ids) and is seeded for the three
+first-class tools. Settings owns the *user-mutable* parts (executable path,
+enabled flag, bundle_id override).
+
+**Tool-path auto-discovery is invoked from two entry points** (A2): the
+Settings → Tool Workflows page on first open, and the first-run wizard's
+"Detect tools" step (spec 003). Both pre-fill empty path fields; the user
+must explicitly save before paths are active.
 
 ### Use Case Layer
 
@@ -74,17 +83,22 @@ Settings owns the *user-mutable* parts (executable path, enabled flag).
   2. Load `ToolProfile` by `tool_id`; reject with `tool.not_configured`
      when no profile exists or `enabled = false` or `executable_path` is
      empty.
-  3. Validate `executable_path` resolves to an extant, executable file;
-     reject with `tool.executable.not_found` otherwise.
-  4. Resolve project working folder: prefer the project's generated
+  3. Resolve project working folder: prefer the project's generated
      source-view folder (read via `crates/project/structure`); fall back
      to the project root.
+  4. Canonicalize the working directory and verify it resolves inside a
+     registered library root. Reject with `cwd.outside_library_root` if
+     the check fails (R-CwdContain, FR-010). Pre-spawn executable
+     existence is NOT checked; OS errors surface as `launch.failed`
+     (R-DropExecCheck, FR-011).
   5. Render the profile's `args_template` against the substitution
      vocabulary (`{folder}`, `{file}` — see research R3). Profiles
      declaring `supports_open_folder = false` skip the folder token and
      rely on `cwd`.
-  6. Spawn a detached child process. On failure, return `launch.failed`
-     with the OS error string normalised.
+  6. Spawn a detached child process. On macOS, prefer
+     `open -b <bundle_id>` when `bundle_id` is set; on quarantine error,
+     surface the R-MacQuarantine notification. On other failure, return
+     `launch.failed` with the OS error string normalised.
   7. Persist a `ToolLaunch` row with `launched_at`, `pid`, `project_id`,
      `tool_id`.
   8. Emit a `tool_launch` audit event referencing both the project and
@@ -102,10 +116,13 @@ where the OS does not surface it before detach completes.
 
 - **Windows**: `Command::new(exe).args(rendered).current_dir(cwd)
   .creation_flags(DETACHED_PROCESS | CREATE_NEW_PROCESS_GROUP)`.
-- **macOS**: For `.app` bundles, prefer `open -a "PixInsight" --args …
-  --background` semantics via a small helper; for plain executables, use
-  `Command::new(exe)` + `setsid`-style detach (`pre_exec` setsid on
-  unix).
+- **macOS**: When `bundle_id` is set on the `ToolProfile`, use
+  `open -b <bundle_id> --args …` (R-BundleId). When `bundle_id` is null,
+  fall back to `Command::new(exe)` + `setsid`-style detach (`pre_exec`
+  setsid on unix). If `open -b` returns a translocation/quarantine error
+  (specific exit code or recognisable stderr pattern), surface a
+  notification: "macOS quarantined this app. Run
+  `xattr -dr com.apple.quarantine <path>` and retry." (R-MacQuarantine).
 - **Linux**: `Command::new(exe).args(rendered).current_dir(cwd)`,
   detach with `setsid` via `pre_exec`. Optionally support `flatpak run`
   prefix when the profile declares it.
@@ -117,7 +134,8 @@ behind a platform `cfg` boundary; the use case is platform-agnostic.
 
 - `crates/workflow/profiles/`: `ToolProfile`, `LaunchInvocation`,
   per-platform spawn helpers, args-template parser. Owns the seed list
-  for PixInsight, Siril, Planetary Suite.
+  for PixInsight, Siril, Planetary Suite (including `bundle_id` values
+  per R-BundleId).
 - `crates/persistence/db/`: `ToolLaunch` table, settings table extension
   for tool paths.
 - `crates/app/core/`: orchestration use case + Tauri command adapter.

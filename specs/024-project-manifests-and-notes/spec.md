@@ -56,7 +56,9 @@ As a user, I want project notes to live with the project record so that processi
 
 - **FR-001**: Project manifest checkpoints MUST document project source mappings, calibration choices, workflow profile, generated source views, and project lifecycle state.
 - **FR-002**: Manifests MUST be generated documentation, not canonical source truth.
-- **FR-003**: Project notes MUST be editable from project detail or Edit project.
+- **FR-003**: Project notes MUST be editable from project detail or Edit project
+  on projects in any lifecycle state. Notes are read-only only when
+  `lifecycle == "archived"`. (R-NotesEdit, ratified 2026-05-22.)
 - **FR-004**: Note changes MUST be auditable.
 - **FR-005**: Manifest exports MUST record success or failure.
 - **FR-006**: Onboarding an existing project MUST detect existing manifest-like files and ask how to handle them.

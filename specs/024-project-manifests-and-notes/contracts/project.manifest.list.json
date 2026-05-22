@@ -14,6 +14,17 @@
         "project_id": {
           "type": "string",
           "description": "Identifier of the project whose manifests to list."
+        },
+        "cursor": {
+          "type": "string",
+          "description": "Opaque pagination cursor from a previous response. Omit for first page."
+        },
+        "limit": {
+          "type": "integer",
+          "minimum": 1,
+          "maximum": 200,
+          "default": 50,
+          "description": "Maximum number of manifests to return. Default 50, max 200."
         }
       }
     },
@@ -36,7 +47,8 @@
                   "created",
                   "source_change",
                   "lifecycle_transition",
-                  "cleanup_applied"
+                  "cleanup_applied",
+                  "workflow_run"
                 ]
               },
               "timestamp": { "type": "string", "format": "date-time" },
@@ -50,6 +62,10 @@
               }
             }
           }
+        },
+        "next_cursor": {
+          "type": "string",
+          "description": "Opaque cursor to retrieve the next page. Absent when no further results."
         }
       }
     },

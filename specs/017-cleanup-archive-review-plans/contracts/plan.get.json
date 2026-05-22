@@ -2,38 +2,63 @@
   "$schema": "https://json-schema.org/draft/2020-12/schema",
   "$id": "https://astro-plan.dev/contracts/017/plan.get.json",
   "title": "plan.get",
-  "description": "Fetch a single plan with its items for the detail surface. Owned by spec 017.",
+  "description": "Fetch a single plan with its items for the detail surface. Owned by spec 017. (R-Env-1: camelCase envelope, contractVersion, requestId, status-discriminated.)",
   "type": "object",
   "properties": {
     "request": {
       "type": "object",
       "additionalProperties": false,
-      "required": ["plan_id"],
+      "required": ["contractVersion", "requestId", "planId"],
       "properties": {
-        "plan_id": { "type": "string" }
+        "contractVersion": { "type": "string" },
+        "requestId": { "type": "string" },
+        "planId": { "type": "string" }
       }
     },
     "response": {
-      "type": "object",
-      "additionalProperties": false,
-      "required": ["plan"],
-      "properties": {
-        "plan": { "$ref": "#/$defs/Plan" }
-      }
-    },
-    "errors": {
-      "type": "array",
-      "items": {
-        "type": "object",
-        "required": ["code"],
-        "properties": {
-          "code": { "type": "string", "enum": ["plan.not_found"] },
-          "message": { "type": "string" }
+      "oneOf": [
+        {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["status", "contractVersion", "requestId", "plan"],
+          "properties": {
+            "status": { "const": "success" },
+            "contractVersion": { "type": "string" },
+            "requestId": { "type": "string" },
+            "plan": { "$ref": "#/$defs/Plan" }
+          }
+        },
+        {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["status", "contractVersion", "requestId", "errors"],
+          "properties": {
+            "status": { "const": "failure" },
+            "contractVersion": { "type": "string" },
+            "requestId": { "type": "string" },
+            "errors": {
+              "type": "array",
+              "items": { "$ref": "#/$defs/Error" }
+            }
+          }
         }
-      }
+      ]
     }
   },
   "$defs": {
+    "Error": {
+      "type": "object",
+      "required": ["code", "message"],
+      "additionalProperties": false,
+      "properties": {
+        "code": {
+          "type": "string",
+          "enum": ["plan.not_found"]
+        },
+        "message": { "type": "string" },
+        "details": { "type": "object" }
+      }
+    },
     "PlanItem": {
       "type": "object",
       "additionalProperties": false,
@@ -63,9 +88,24 @@
         "linked": { "type": "string" },
         "state": {
           "type": "string",
-          "enum": ["pending", "applying", "succeeded", "failed", "skipped"]
+          "enum": ["pending", "applying", "succeeded", "failed", "skipped", "cancelled"],
+          "description": "cancelled added per E5."
         },
-        "failure_reason": { "type": "string" },
+        "failureReason": { "type": "string" },
+        "approvedMtime": {
+          "type": "string",
+          "format": "date-time",
+          "description": "Source mtime snapshot taken at approve time (R-FS-1). Null before approval."
+        },
+        "approvedSizeBytes": {
+          "type": "integer",
+          "minimum": 0,
+          "description": "Source size snapshot taken at approve time (R-FS-1). Null before approval."
+        },
+        "archivePath": {
+          "type": "string",
+          "description": "Computed destination under .astro-plan-archive/<planId>/ for destructive items (R-Archive-1)."
+        },
         "provenance": {
           "type": "array",
           "items": {
@@ -88,12 +128,16 @@
         "title",
         "origin",
         "state",
-        "created_at",
+        "createdAt",
         "items",
-        "items_total",
-        "items_applied",
-        "items_failed",
-        "items_pending",
+        "itemsTotal",
+        "itemsApplied",
+        "itemsFailed",
+        "itemsSkipped",
+        "itemsCancelled",
+        "itemsPending",
+        "totalBytesRequired",
+        "destructiveDestination",
         "type"
       ],
       "properties": {
@@ -104,7 +148,7 @@
           "type": "string",
           "enum": ["inbox", "restructure", "cleanup", "archive", "project"]
         },
-        "origin_path": { "type": "string" },
+        "originPath": { "type": "string" },
         "state": {
           "type": "string",
           "enum": [
@@ -112,26 +156,41 @@
             "ready_for_review",
             "approved",
             "applying",
+            "paused",
             "applied",
             "partially_applied",
             "failed",
-            "cancelled"
+            "cancelled",
+            "discarded"
           ]
         },
-        "created_at": { "type": "string", "format": "date-time" },
+        "createdAt": { "type": "string", "format": "date-time" },
+        "discardedAt": { "type": "string", "format": "date-time", "description": "Set when state == discarded (A5)." },
         "items": {
           "type": "array",
           "items": { "$ref": "#/$defs/PlanItem" }
         },
-        "items_total": { "type": "integer", "minimum": 0 },
-        "items_applied": { "type": "integer", "minimum": 0 },
-        "items_failed": { "type": "integer", "minimum": 0 },
-        "items_pending": { "type": "integer", "minimum": 0 },
+        "itemsTotal": { "type": "integer", "minimum": 0 },
+        "itemsApplied": { "type": "integer", "minimum": 0 },
+        "itemsFailed": { "type": "integer", "minimum": 0 },
+        "itemsSkipped": { "type": "integer", "minimum": 0, "description": "A3." },
+        "itemsCancelled": { "type": "integer", "minimum": 0, "description": "A3." },
+        "itemsPending": { "type": "integer", "minimum": 0 },
+        "totalBytesRequired": {
+          "type": "integer",
+          "minimum": 0,
+          "description": "Pre-flight space estimate in bytes (A4)."
+        },
+        "destructiveDestination": {
+          "type": "string",
+          "enum": ["archive", "os_trash"],
+          "description": "Per-plan destination for destructive items (R-Trash-1)."
+        },
         "type": {
           "type": "string",
           "enum": ["split", "restructure", "cleanup", "archive", "source_map"]
         },
-        "parent_plan_id": { "type": "string" }
+        "parentPlanId": { "type": "string" }
       }
     }
   }

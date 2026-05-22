@@ -41,26 +41,40 @@ with fallback substitutions are visibly distinguished.
 
 ## US3 — Resolve Pattern at Inbox Confirm (P3)
 
-- **T3.1** Define `crates/project/structure/` crate with `Pattern`,
-  `PatternPart`, `TokenDefinition`, `TokenRegistry`, `ResolverConfig` types.
-- **T3.2** Implement the v1 token registry (R1, data-model.md).
-- **T3.3** Implement value sanitization (R4) applied to metadata values before
-  insertion.
+- **T3.1** Define **`crates/patterns/`** crate (previously `crates/project/structure/`
+  — split per R-CratePatterns, 2026-05-22) with `Pattern`, `PatternPart`,
+  `TokenDefinition`, `TokenRegistry`, `ResolverConfig` types. Add as workspace member.
+- **T3.2** Implement the v1 token registry (R1, data-model.md). Include the
+  `date_obs_local` source field mapping with UTC fallback. (Ref: R-Date-1)
+- **T3.3** Implement value sanitization pipeline (R4 updated 2026-05-22):
+  - Step 1: NFC normalization + strip C0/C1 controls, format chars, bidi overrides. (Ref: A1)
+  - Step 2: OS character substitution (Windows reserved chars → `_`, trim whitespace/dots).
+  - Step 3: Path traversal rejection — if token value is `.` or `..` or assembled path
+    contains `..`, return `path.traversal`. (Ref: A2)
+  - Step 4: Windows reserved device name rejection (CON, PRN, AUX, NUL, COM1-9, LPT1-9),
+    case-insensitive, all platforms → `path.reserved_name`. (Ref: A3)
+  - Step 5: Unicode confusables detection via `unicode-security` crate → `pattern.invalid.unicode`. (Ref: A1)
 - **T3.4** Implement `resolve(pattern, metadata, config) -> ResolveResult`
   with fallback substitution and `missing_tokens` accumulation.
-- **T3.5** Implement `validate(pattern) -> ValidateResult` plus
-  `pattern.empty` and `token.unknown` errors.
+- **T3.5** Implement `validate(pattern) -> ValidateResult` plus `pattern.empty`,
+  `token.unknown`, `path.reserved_name`, and `pattern.invalid.unicode` errors
+  (for static checks on separator/literal values).
 - **T3.6** OS-path post-resolution check producing `pattern.invalid` with
-  offending characters and resolved length.
-- **T3.7** Implement the `pattern.resolve` and `pattern.validate` operations
-  in `crates/contracts/core/` matching the JSON Schemas under `contracts/`.
-- **T3.8** Tauri adapter wiring so the desktop shell can call both operations.
-- **T3.9** Unit tests covering: each fallback default, sanitization table,
-  consecutive separators producing the expected collapse, unknown token error,
-  date_iso transform, and an end-to-end `{target}/{filter}/{date}/{frame_type}/`
-  fixture.
-- **T3.10** Contract conformance test: request/response payloads validate
-  against the JSON Schemas.
+  `violating_chars`, `resolved_length`, and `segment_length_bytes` (≤200 bytes
+  per segment, ≤200 chars total). (Ref: A4)
+- **T3.7** Implement the `pattern.resolve`, `pattern.validate`, and
+  `pattern.preview` operations in `crates/contracts/core/` matching the JSON
+  Schemas under `contracts/`. (Ref: R-Preview)
+- **T3.8** Tauri adapter wiring so the desktop shell can call all three operations.
+- **T3.9** Unit tests covering: each fallback default, full sanitization pipeline
+  (Unicode strip, traversal, reserved name, confusables), consecutive separators,
+  unknown token error, date_iso transform (with and without observer_location),
+  path length caps, and an end-to-end `{target}/{filter}/{date}/{frame_type}/` fixture.
+- **T3.10** Contract conformance test: request/response payloads validate against
+  the JSON Schemas for pattern.resolve, pattern.validate, and pattern.preview.
+- **T3.11** Wire `pattern.preview` in the Settings UI live preview: each edit to
+  the pattern triggers a `pattern.preview` call and updates the displayed example
+  path within one frame. (Ref: R-Preview)
 
 **Acceptance**: Given a metadata bundle, the resolver produces the expected
 relative path and missing-token list; given a malformed pattern, the resolver

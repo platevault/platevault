@@ -2,7 +2,7 @@
   "$schema": "https://json-schema.org/draft/2020-12/schema",
   "$id": "preparedview.remove",
   "title": "preparedview.remove",
-  "description": "Create a reviewable filesystem plan that removes a generated project source view. Only paths recorded as part of the view are included; inventory data is never targeted. Status: NOT IMPLEMENTED.",
+  "description": "Create a reviewable filesystem plan that removes a generated project source view. Only paths recorded as part of the view are included; inventory data is never targeted. Destructive destination is always 'archive' (R-026-Dest-Archive). The response plan_id enters the standard spec 017/025 pipeline (approve → apply). All spec 017/025 error codes can surface during apply. Allowed only when the owning project lifecycle is setup_incomplete|ready|prepared|processing|blocked|completed; refused on archived with lifecycle.read_only (R-026-Lifecycle). Envelope sweep deferred (E-026-1). Status: NOT IMPLEMENTED.",
   "type": "object",
   "properties": {
     "request": {
@@ -25,7 +25,7 @@
         "plan_id": {
           "type": "string",
           "format": "uuid",
-          "description": "Identifier of the produced ViewRemovalPlan (a FilesystemPlan with origin prepared_view_removal)."
+          "description": "Identifier of the produced ViewRemovalPlan (a FilesystemPlan with origin prepared_view_removal). The plan enters the standard spec 017/025 pipeline: approve then apply. Destructive destination is hard-coded to archive."
         }
       }
     },
@@ -40,6 +40,26 @@
         "view.in_use": {
           "type": "object",
           "description": "The view is currently referenced by an active workflow, an in-progress plan, or another concurrent operation and cannot be removed."
+        },
+        "view.mixed_kind": {
+          "type": "object",
+          "description": "The view's kind does not match all item materializations. Resolve the kind_diverged state via the UI before removing (D-026-H2, A2, GRILL 2026-05-22)."
+        },
+        "view.unsupported_kind": {
+          "type": "object",
+          "description": "The view uses a kind not supported in v1 (e.g. hardlink, which is deferred to v1.x — R-026-Strategies, GRILL 2026-05-22)."
+        },
+        "lifecycle.read_only": {
+          "type": "object",
+          "description": "The owning project is archived. View operations are not permitted on archived projects. Use the spec 009 unarchive transition (archived → ready) first (R-026-Lifecycle, GRILL 2026-05-22). The details object includes allowed_lifecycle_states listing the states that permit this operation.",
+          "properties": {
+            "allowed_lifecycle_states": {
+              "type": "array",
+              "items": { "type": "string" },
+              "description": "Lifecycle states in which this operation is permitted.",
+              "example": ["setup_incomplete", "ready", "prepared", "processing", "blocked", "completed"]
+            }
+          }
         }
       }
     }

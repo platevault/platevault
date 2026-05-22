@@ -32,8 +32,10 @@ by an overlay hint.
 - **T011** Implement state machine transitions for
   `setup_completed → Active(inbox.confirm_first)` and
   `inventory.confirmed → completed/Completed`.
-- **T012** [P] Subscribe `guided_flow` to the `InventoryConfirmed` lifecycle
-  event and translate to the completion transition.
+  Subscribe to `inventory.confirmed` (dot-notation); filter `source == "restore"`.
+- **T012** [P] Subscribe `guided_flow` to the `inventory.confirmed` lifecycle
+  event topic (dot-notation) and translate to the completion transition.
+  Ignore events where envelope `source == "restore"` (spec 002 R-Source-1).
 - **T013** [P] Add overlay renderer in `apps/desktop/src/features/guided/` that
   resolves anchors by attribute and renders a single hint at a time.
 - **T014** Anchor the Inbox confirm control with the `inbox.confirm-row`
@@ -50,8 +52,10 @@ Goal: with at least one confirmed inventory item, the coach guides the user to
 the Create project control and advances on `ProjectCreated`.
 
 - **T020** Extend registry with `project.create_first`.
-- **T021** Implement transition for `project.created` completion event.
-- **T022** [P] Subscribe `guided_flow` to the `ProjectCreated` lifecycle event.
+- **T021** Implement transition for `project.created` completion event
+  (dot-notation topic; filter `source == "restore"`).
+- **T022** [P] Subscribe `guided_flow` to the `project.created` lifecycle event
+  topic (dot-notation); ignore replay events (`source == "restore"`).
 - **T023** Anchor the Create project control with the
   `projects.create-cta` attribute.
 - **T024** [P] Add integration test asserting P2 advances only after a real
@@ -65,9 +69,10 @@ Goal: after the first project exists, the coach guides the user to open it in
 the configured processing tool and advances on `ToolOpened`.
 
 - **T030** Extend registry with `tool.open_first`.
-- **T031** Implement transition for `tool.opened` completion event and the
-  terminal transition to `Completed`.
-- **T032** [P] Subscribe `guided_flow` to the `ToolOpened` lifecycle event.
+- **T031** Implement transition for `tool.opened` completion event (dot-notation;
+  filter `source == "restore"`) and the terminal transition to `Completed`.
+- **T032** [P] Subscribe `guided_flow` to the `tool.opened` lifecycle event
+  topic (dot-notation); ignore replay events.
 - **T033** Anchor the open-in-tool control with the
   `project.open-in-tool` attribute.
 - **T034** [P] Add integration test for the full P1 → P2 → P3 sequence ending
@@ -81,14 +86,33 @@ Goal: the coach can be dismissed and restarted without losing progress.
 
 - **T040** Implement `dismiss` transition writing `dismissed_at` and clearing
   `current_step`.
-- **T041** Implement `restart` action in Settings that resumes at the lowest
-  uncompleted step and clears `dismissed_at`.
+- **T041** Implement `restart` action in Settings:
+  - If flow is `Dismissed`: resume at the lowest uncompleted step, clear
+    `dismissed_at` (previously completed steps retained).
+  - If flow is `Completed`: reset all progress to Idle, replay from step 1
+    (A1 — Completed→Idle restart, ratified 2026-05-22).
 - **T042** [P] Add Settings UI entry "Restart guided flow" that invokes
   restart and is gated to disabled when the flow is `Completed`.
 - **T043** [P] Add integration test: dismiss mid-P2, fire `project.created`,
   restart, confirm the coach resumes at P3.
 - **T044** Add a11y test asserting Escape on a focused hint dismisses the
   coach and that overlay hints announce via `aria-live=polite`.
+
+## Phase 2 (addendum) — Anchor-Orphan CI Gate (A2)
+
+Goal: the build fails when a registered `data-guide-anchor` constant has no
+corresponding element in the built desktop bundle.
+
+- **T026** [P] Add a build-time CI check that enumerates every anchor value in
+  `apps/desktop/src/features/guided/anchors.ts` and asserts each one is present
+  in the built HTML/JSX bundle (e.g. via `rg --count` on the compiled output or
+  a Vitest static-scan test). Build fails on any missing anchor. Document the
+  check in `plan.md` and `research.md` §R2 (anchor drift mitigation).
+- **T027** Add integration test: inject a corrupt `guided_flow_state` row,
+  call `guided.state.get`, assert `STATE_CORRUPTED` is returned, assert a
+  `guided_flow.state.corrupted` diagnostic audit event was written, then call
+  `guided.state.get` again and assert fresh Idle state is returned (R-Corrupt,
+  FR-010).
 
 ## Phase 5 - Closeout
 

@@ -9,12 +9,12 @@
 
 Enum.
 
-| Value      | Notes                                        |
-|------------|----------------------------------------------|
-| `dark`     | Long-exposure thermal-pattern calibration    |
-| `flat`     | Flat-field illumination calibration          |
-| `bias`     | Read-noise calibration (gain/offset only)    |
-| `dark_flat`| Reserved; not part of v1 user stories        |
+| Value      | Notes                                                                                    |
+|------------|------------------------------------------------------------------------------------------|
+| `dark`     | Long-exposure thermal-pattern calibration                                                |
+| `flat`     | Flat-field illumination calibration                                                      |
+| `bias`     | Read-noise calibration (gain/offset only)                                                |
+| `dark_flat`| Reserved for forward-compat; NOT matched, suggested, or assigned in v1 (R-DarkFlat-Reserved). Files with dark_flat IMAGETYP values land as `unclassified` at inbox level (spec 005 ripple). Not exposed in any v1 UI. |
 
 ### CalibrationMaster
 
@@ -37,7 +37,7 @@ Persisted user configuration per calibration type.
 | `calibration_type` | CalibrationType    | Primary key                            |
 | `hard_dimensions` | Vec<Dimension>      | Excluded on mismatch                   |
 | `soft_dimensions` | Vec<SoftDimension>  | Dimension + tolerance + max penalty    |
-| `suggest_auto_assign` | bool            | UI may auto-call assign if confidence high |
+| `prefill_suggestion` | bool           | When true (default), the assign dialog opens pre-filled with the top candidate; user must click Confirm to call `calibration.match.assign`. When false, dialog opens empty. UI NEVER bypasses confirmation (R-Prefill, A7). Settings key: `calibration.prefill_suggestion: boolean` (default true) — spec 018 ripple flagged. |
 
 ### Dimension
 
@@ -99,10 +99,12 @@ Persisted result of `calibration.match.assign`.
 |-----------------------------|-------|-------------------|---------------------|
 | `filter`                    | Hard  | —                 | —                   |
 | `binning`                   | Hard  | —                 | —                   |
-| `optic_train`               | Hard  | —                 | —                   |
+| `optic_train`               | Hard  | —                 | — (R-OpticTrain: telescope+camera+filter wheel+focuser+rotator owns the vignetting pattern; cross-train flats are unsafe) |
 | `rotation`                  | Soft  | ±0.5°             | 0.5                 |
 | `observing_night_proximity` | Soft  | 0 nights preferred, ±7 nights tolerated | 0.4 |
-| `gain`                      | Soft  | exact preferred   | 0.2                 |
+| `gain`                      | Soft  | exact preferred   | 0.2 (configurable hard via `calibration.flat.gain.tolerance_hard: boolean`, default false — spec 018 ripple) |
+
+Note: Flat soft cap sum = 0.5 + 0.4 + 0.2 = 1.1. The confidence formula clamps to [0.0, 1.0] preventing negative values (R-OverridePenalty, D3 fix). See research.md R4.
 
 ### Bias
 
@@ -117,7 +119,29 @@ Persisted result of `calibration.match.assign`.
    of the active `MatchingRuleConfig` for its type, OR be excluded.
 2. A `CalibrationAssignment` MAY violate hard dimensions only when
    `was_override = true`.
-3. `confidence` ∈ [0.0, 1.0] inclusive.
+3. `confidence` ∈ [0.0, 1.0] inclusive. The confidence formula applies
+   `clamp(…, 0.0, 1.0)` to prevent negative values from summed soft penalties.
 4. `(session_id, calibration_type)` is unique in `CalibrationAssignment`.
 5. `dimensions_matched ∪ dimensions_mismatched` covers every dimension declared
    active for the calibration type.
+6. `calibration_types` enum in all contracts MUST NOT include `dark_flat` in v1.
+   The `CalibrationType` Rust enum reserves the slot; contracts do not expose it.
+7. **Mixed-session guard** (E5): If the input `AcquisitionSession.type == "mixed"`,
+   `calibration.match.suggest` and `calibration.match.assign` MUST reject with
+   error code `session.mixed_state`. The user must split the session first (spec
+   005 reclassify). A mixed session has no coherent calibration requirements.
+8. **Observer-location guard** (A6): If `AcquisitionSession.observer_location`
+   is null OR `exposure_start_utc` is null, the matcher returns
+   `status: "observer_location_missing"` (for suggest) or rejects with
+   `match.observer_location_missing` (for assign). No fallback matching.
+
+## Settings Keys (A5 — spec 018 ripples, flagged, not yet applied to spec 018)
+
+| Key | Type | Default | Description |
+|---|---|---|---|
+| `calibration.dark_temp_tolerance` | number | 2.0 | Dark temperature soft dimension tolerance in °C |
+| `calibration.flat.gain.tolerance_hard` | boolean | false | When true, gain becomes a hard dimension for flat matching |
+| `calibration.dark.override_penalty` | number | 0.3 | Confidence penalty applied when a dark is assigned as override |
+| `calibration.flat.override_penalty` | number | 0.3 | Confidence penalty applied when a flat is assigned as override |
+| `calibration.bias.override_penalty` | number | 0.3 | Confidence penalty applied when a bias is assigned as override |
+| `calibration.prefill_suggestion` | boolean | true | When true, the assign dialog pre-fills with the top candidate (pre-fill only; user must confirm) |

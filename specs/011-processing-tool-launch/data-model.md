@@ -1,6 +1,6 @@
 # Data Model: Processing Tool Launch
 
-**Spec**: 011-processing-tool-launch | **Date**: 2026-05-20
+**Spec**: 011-processing-tool-launch | **Date**: 2026-05-22
 
 ## ToolProfile
 
@@ -10,27 +10,44 @@ Seeded by `crates/workflow/profiles/`; mutable fields (`executable_path`,
 ```
 ToolProfile {
   id:                   String          // stable tool_id, e.g. "pixinsight"
+                                        // MUST match [a-z0-9_]+ (C2)
   name:                 String          // display name
   executable_path:      String?         // user-configured; null when unset
+  bundle_id:            String?         // macOS only; null on Windows/Linux (R-BundleId)
+                                        // seed values: pixinsight="com.pixinsight.PixInsight"
+                                        //              siril="org.free-astro.siril"
+                                        //              startools="com.startools.startools"
+                                        //              astropixelprocessor="com.astropixelprocessor.app"
   args_template:        String[]        // closed-vocabulary tokens; see R3
   supports_open_folder: bool            // whether {folder} is meaningful as an arg
   enabled:              bool            // settings flag; false hides the CTA
   auto_detected:        bool            // true when path came from R2 discovery
                                         // and the user has not yet saved an override
   platform_hints?: {
-    detach_strategy:    DetachStrategy  // "spawn_detached" | "open_minus_a" | "setsid"
+    detach_strategy:    DetachStrategy  // "spawn_detached" | "open_bundle_id" | "setsid"
   }
 }
 ```
 
 ```
-DetachStrategy = "spawn_detached"  // Windows default
-               | "open_minus_a"    // macOS .app bundles
-               | "setsid"          // Linux + macOS plain binaries
+DetachStrategy = "spawn_detached"   // Windows default
+               | "open_bundle_id"   // macOS .app bundles — uses "open -b <bundle_id>" (A1)
+               | "setsid"           // Linux + macOS plain binaries
 ```
+
+### macOS launch rule (R-BundleId)
+
+- If `bundle_id` is set: `open -b <bundle_id> --args <rendered_argv>` with
+  `cwd` anchored via the Tauri shell API.
+- If `bundle_id` is null: fall back to direct executable + `setsid`-style
+  detach via `pre_exec`.
+- On quarantine/translocation error from `open -b`: surface R-MacQuarantine
+  notification (see `research.md` R5).
 
 ### Invariants
 
+- `id` MUST match `[a-z0-9_]+`. Derivation rule: lowercase source name,
+  remove spaces. Reject identifiers with other characters (C2).
 - `args_template` may only contain literal strings and tokens from the
   closed set `{folder}`, `{file}`.
 - `supports_open_folder == false` ⇒ `args_template` MUST NOT include
@@ -39,6 +56,8 @@ DetachStrategy = "spawn_detached"  // Windows default
   current Settings join in memory before the use case reads them.
 - `executable_path` is normalised to an absolute path on save; relative
   paths are rejected.
+- `bundle_id` is nullable; null on non-macOS platforms and when not
+  configured for a macOS tool.
 
 ## ToolLaunch
 
@@ -56,7 +75,9 @@ ToolLaunch {
   outcome:       LaunchOutcome
   audit_id:      Uuid              // back-reference to crates/audit entry
   working_dir:   String            // resolved cwd that was passed to the child
-  args_hash:     String            // BLAKE3 over the rendered argv (for audit)
+  args_hash:     String            // BLAKE3(canonicalized_executable_path || rendered_argv)
+                                   // executable_path canonicalized before hashing;
+                                   // argv rendered with consistent separator (R-Hash-Exec)
 }
 ```
 

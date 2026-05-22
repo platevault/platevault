@@ -84,10 +84,12 @@ library DB once the persistence task lands).
    sources yet. Add at least one to continue."
 2. **Given** the Raw Sources step with at least one entry, **When** the user
    clicks Next, **Then** the wizard advances to Calibration Sources.
-3. **Given** the Calibration, Project, or Inbox steps with zero entries,
-   **When** the user clicks Next, **Then** the wizard advances without
-   blocking. [NEEDS DECISION: confirm Project remains optional given that
-   downstream project workflows expect a project source root.]
+3. **Given** the Calibration or Inbox steps with zero entries, **When** the
+   user clicks Next, **Then** the wizard advances without blocking. The
+   Project step REQUIRES at least one Project source before advancing:
+   a project source root is mandatory because downstream project workflows
+   expect one (R-Wiz-2). The wizard blocks advancement from the Project
+   step with inline copy: "At least one Project source is required."
 4. **Given** a source step with a directory chosen via the native picker,
    **When** the user adds it, **Then** the directory appears in the list for
    that kind and can be removed inline.
@@ -116,11 +118,11 @@ wizard", and confirm the wizard opens at the Welcome step.
    and the app navigates to `/welcome`.
 2. **Given** the restarted wizard, **When** the user completes it again,
    **Then** the new source set is persisted and the completion flag is set.
-3. **Given** the restart action, **When** it runs in the mockup, **Then**
-   both the flag and the working source list are cleared. [NEEDS DECISION:
-   confirm restart should be destructive (clear all previously registered
-   sources) versus prefill (load existing sources into the wizard for
-   editing). Mockup currently does a destructive reset.]
+3. **Given** the restart action, **When** it executes, **Then** the completion
+   flag is cleared and the wizard opens with the previously registered sources
+   prefilled into the working buffer for editing (A7). The mockup's destructive
+   reset is a known regression to fix during real implementation. The new
+   contract is `firstrun.restart` (A7, R-E5).
 
 ---
 
@@ -153,8 +155,9 @@ step is required.
 ### Edge Cases
 
 - Duplicate source paths across kinds (same root listed as both Raw and
-  Calibration). [NEEDS DECISION: reject duplicate-across-kinds, allow with
-  warning, or allow silently.]
+  Calibration). RESOLVED: reject with `path.already.registered.different_kind`
+  error code (R-1.4). The error is surfaced inline next to the offending row
+  with the conflicting kind shown.
 - Duplicate source paths within a kind (mockup currently allows; the picker
   stub avoids re-suggesting, but manual entry would not).
 - Path no longer exists at Finish time (drive disconnected).
@@ -166,14 +169,14 @@ step is required.
   recursive enumeration).
 - Mixed folders that contain both lights and calibration frames.
 
-### Domain Questions To Resolve
+### Domain Questions — Resolved
 
-- Should the wizard expose a per-row scan rule (recursive vs single-level), or
-  defer that choice to the Inventory page after setup? [NEEDS DECISION]
-- Should registered sources at Finish be applied atomically (all-or-nothing
-  into the DB) or row-at-a-time as the user adds them? [NEEDS DECISION]
-- Is "skip the entire wizard" still in scope given that the Raw step is now
-  required? [NEEDS DECISION — see FR-002 vs FR-003 below.]
+- Per-row scan rule: RESOLVED — wizard shows scan-depth as advanced/collapsed
+  disclosure only; default is `recursive` (R-Wiz-1).
+- Finish atomicity: RESOLVED — per-source calls with row-level partial success
+  via `source.register.batch` contract (R-Batch, A9).
+- Skip entire wizard: RESOLVED — rejected. Raw is required; there is no global
+  skip path (R-Wiz-3).
 
 ## Requirements *(mandatory)*
 
@@ -182,15 +185,17 @@ step is required.
 - **FR-001**: The wizard MUST be a sequential page-by-page flow accessed at
   `/welcome`, not a permanent navigation entry in the main shell.
 - **FR-002**: The wizard MUST treat the Raw Sources step as required (at
-  least one Raw source). [NEEDS DECISION: spec previously also said the
-  wizard MUST allow skipping the entire wizard (old FR-002). The mockup
-  enforces Raw and has no global Skip button. Resolve by either removing
-  global skip or adding a confirm-skip path that still demands a Raw source
-  later.]
+  least one Raw source) and the Project Sources step as required (at least
+  one Project source — R-Wiz-2). Global skip of the entire wizard is
+  rejected: the app is inert without a Raw source and downstream project
+  workflows require a project source root (R-Wiz-3). There is no "I'll add
+  sources later" escape hatch.
 - **FR-003**: The wizard MUST NOT allow advancing from the Raw step until at
   least one Raw source is registered.
-- **FR-004**: The wizard MUST allow advancing from Calibration, Project, and
-  Inbox steps without entries (they are optional in the mockup).
+- **FR-004**: The wizard MUST allow advancing from Calibration and Inbox steps
+  without entries (they are optional). The Project step is required (at least
+  one entry) — see FR-002 and R-Wiz-2. Spec 010 cross-reference: the
+  first-project flow can now assume a project source exists.
 - **FR-005**: The wizard MUST validate that each chosen path exists, is a
   directory, and is readable before accepting it. [Not yet implemented; stub
   picker bypasses validation.]
@@ -202,7 +207,10 @@ step is required.
   picker (via Tauri's `plugin-dialog`) once wired; the current `pickFolderStub`
   MUST be replaced before this spec is considered done.
 - **FR-009**: First-run setup MUST include source steps for Raw Sources,
-  Calibration Sources, Project Sources, and Inbox Sources in that order.
+  Calibration Sources, Project Sources, and Inbox Sources in that order,
+  followed by a Detect Tools step and a Download Catalogs step before Finish.
+  Wizard step sequence: Welcome → Raw → Calibration → Project → Inbox →
+  Detect Tools → Download Catalogs → Finish (A5, A6).
 - **FR-010**: First-run setup MUST explain on the Project step that project
   creation itself happens later in the guided Projects workflow.
 - **FR-011**: First-run setup MUST start with a Welcome step that explains
@@ -211,7 +219,18 @@ step is required.
 - **FR-012**: Each source selection step MUST include explanatory copy that
   defines the category and tells the user what kind of directory to select.
 - **FR-013**: The wizard MUST be restartable from Settings via a clearly
-  labeled control.
+  labeled control. Restart uses the `firstrun.restart` contract and prefills
+  existing registered sources into the wizard working buffer (A7, R-E5).
+- **FR-017**: Each source-entry row in the wizard MAY expose a scan-depth
+  selector (Recursive / Single-level) as advanced/collapsed disclosure.
+  Default is `recursive`. The disclosure is hidden by default; users access
+  it via an "Advanced" expander on the row (R-Wiz-1).
+- **FR-018**: The Detect Tools step MUST list discovered processing tools
+  (PixInsight, Siril, planetary tools) read from the tool-discovery service
+  (spec 011). The user confirms or edits the tool list before Finish (A5).
+- **FR-019**: The Download Catalogs step MUST offer OpenNGC download by
+  default (spec 014). The user can skip and download later from Settings.
+  The download may run asynchronously after Finish if the user skips (A6).
 - **FR-014**: On Finish, the wizard MUST set a persistent completion flag and
   navigate the user to the Inventory surface.
 - **FR-015**: While the wizard is in progress, the working source list MAY
@@ -219,13 +238,18 @@ step is required.
   refresh, but MUST be promoted to the library database on Finish.
 - **FR-016**: The index route (`/`) MUST redirect to `/welcome` when the
   completion flag is absent and to `/inventory` (or the user's default
-  landing surface) when present.
+  landing surface) when present. The gate uses DB-first with localStorage
+  cache for synchronous render; the localStorage flag is retained as a
+  cache layer, not eliminated (A8). The route MUST show a loading/pending
+  state while the DB-first reconcile resolves to avoid a flash of the wrong
+  route.
 
 ### Key Entities
 
 - **Registered Source**: Persistent record of a directory the app should
   treat as an input root, with a kind (Raw / Calibration / Project / Inbox),
-  an absolute path, and creation metadata. Multiple per kind allowed.
+  an absolute path, a `scan_depth` (`recursive` | `single`, default
+  `recursive` — R-Wiz-1), and creation metadata. Multiple per kind allowed.
 - **First-Run State**: Persistent flag indicating whether the wizard has
   been completed, plus the working source list buffer used during wizard
   progression.

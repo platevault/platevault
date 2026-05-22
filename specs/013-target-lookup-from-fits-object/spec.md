@@ -33,8 +33,10 @@ As a user importing lights, I want the app to use the FITS `OBJECT` keyword as a
 ### User Story 1a - Resolve OBJECT Against Catalog (Priority: P1)
 
 As a user importing lights, I want the FITS `OBJECT` value matched against a
-local target catalog (Messier, NGC, IC, popular names) so that an exact match
-becomes a confirmed target identity without manual lookup.
+local target catalog (Messier, Caldwell, Sharpless 2, Abell PN, Abell galaxy
+clusters, Arp, van den Bergh, Barnard, LBN, LDN, Melotte, common names, and
+OpenNGC) so that an exact match becomes a confirmed target identity without
+manual lookup.
 
 **Why this priority**: An exact catalog match is the most common case and
 delivers the headline value of automatic target identification.
@@ -138,15 +140,16 @@ ambiguous result with options for manual entry.
 - **FR-001**: Light frame metadata extraction MUST preserve the raw FITS `OBJECT` value.
 - **FR-002**: Target lookup MUST use FITS `OBJECT` as a hint, not as an automatic final target.
 - **FR-003**: Users MUST be able to manually select or correct the target.
-- **FR-004**: Settings MUST allow selecting available catalogs such as Messier, NGC, IC, LBN, LDN, and Sharpless.
-- **FR-005**: Lookup MUST work without requiring first-run catalog downloads.
+- **FR-004**: The active catalog set is the thirteen v1 catalogs downloaded via spec 014 (`catalog.download` flow): Messier, Caldwell, Sharpless 2, Abell PN, Abell galaxy clusters, Arp, van den Bergh, Barnard, LBN, LDN, Melotte, common names, and OpenNGC. The active set is server-derived from spec 018 settings at request time; callers cannot override per-request (R8).
+- **FR-005**: After the first-run catalog download completes (spec 003 + spec 014), lookup MUST work offline. If the catalog data is not yet installed (first-run not yet completed), lookup returns `catalog.not_installed`.
 - **FR-006**: Lookup failures MUST be non-blocking and logged.
 
 ### Key Entities
 
 - **Object Hint**: Raw metadata value used for lookup.
 - **Target Suggestion**: Candidate target name, identifiers, and coordinates.
-- **Catalog Preference**: Enabled catalog list used for suggestion ranking/filtering.
+- **Catalog Preference**: Active catalog set read from spec 018 settings; server-derived, not caller-supplied.
+- **CatalogEquivalence**: Cross-catalog row asserting that two catalog entries refer to the same physical object (e.g. M31 ≡ NGC 224). See `data-model.md`.
 
 ## Success Criteria *(mandatory)*
 

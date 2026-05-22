@@ -33,7 +33,8 @@ is new.
       `mcp-package-version` before pinning.
 - [ ] T002 [P] Extend `apps/desktop/src-tauri/capabilities/default.json`
       to allow `dialog:default`, `dialog:allow-open`, and
-      `opener:default` per the Tauri 2.x capability spec.
+      `opener:allow-reveal-item-in-dir` per the Tauri 2.x capability spec.
+      Note: `launch-app` and `launch-url` capabilities are owned by spec 011.
 - [ ] T003 [P] Wire the three JSON Schemas in
       `specs/004-native-filesystem-controls/contracts/` into the
       contracts index in `packages/contracts/` so generated TypeScript
@@ -49,8 +50,8 @@ is new.
       `FileFilter`, and the error enum).
 - [ ] T005 [P] Define audit-event types `native.picker.failed` and
       `native.reveal.failed` in `crates/audit/src/events.rs` per
-      `data-model.md`. Use SHA-256 hashing for `path_hash` to avoid
-      logging raw PII.
+      `data-model.md`. Correlate reveal failures via `entity_id` only;
+      do NOT include a `path_hash` field (A2: path hash dropped from audit).
 - [ ] T006 [P] Implement the three use cases in
       `crates/app/core/src/native.rs`: `pick_directory`,
       `pick_file`, and `reveal_path`. Path validation for

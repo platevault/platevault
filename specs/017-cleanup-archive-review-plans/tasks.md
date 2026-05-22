@@ -206,19 +206,54 @@ items materialised.
 
 ---
 
-## Phase 8: Polish & Cross-Cutting
+## Phase 8: Archive Management (User Story 6, R-Archive-2)
 
-- [ ] T038 [P] Update `docs/research/` index to point at this spec's
+**Goal**: After a plan is applied with `destructiveDestination: archive`,
+the user can send the archive subtree to OS trash or permanently delete it.
+
+### Tests for User Story 6
+
+- [ ] T043 [P] [US6] Contract test for `archive.send_to_trash` covering
+  `plan.not_found`, `archive.empty`, `os_trash.unavailable`.
+- [ ] T044 [P] [US6] Contract test for `archive.permanently_delete` covering
+  `confirm.text.mismatch`, `plan.not_found`, `archive.empty`.
+
+### Implementation for User Story 6
+
+- [ ] T045 [US6] Implement `send_archive_to_trash` use case in
+  `crates/app/core/src/plans/archive_manage.rs`; emits audit event.
+- [ ] T046 [US6] Implement `permanently_delete_archive` use case; requires
+  `confirmText == "DELETE"` guard; emits audit event.
+- [ ] T047 [US6] Wire Tauri command bindings for the two new contracts.
+- [ ] T048 [US6] Add "Send to Trash" / "Permanently Delete" CTAs in
+  `PlanDetailPage.tsx` for plans with `state: applied` and
+  `destructiveDestination: archive`.
+
+**Checkpoint**: Archive management fully usable from the UI.
+
+---
+
+## Phase 9: Polish & Cross-Cutting
+
+- [ ] T049 [P] Update `docs/research/` index to point at this spec's
   research.md.
-- [ ] T039 [P] Performance check: list render under 100 ms for 200 plans;
+- [ ] T050 [P] Performance check: list render under 100 ms for 200 plans;
   detail under 150 ms for 2000 items.
-- [ ] T040 Accessibility audit on PlansListPage and PlanDetailPage for the
-  state-aware action bar (focus order, button labels).
-- [ ] T041 Coordinate handoff edge with spec 025: confirm `applying`,
-  `applied`, `partially_applied`, `failed`, `cancelled` are written only by
-  the apply executor.
-- [ ] T042 Quickstart walkthrough in `specs/017-cleanup-archive-review-plans/`
+- [ ] T051 Accessibility audit on PlansListPage and PlanDetailPage for the
+  state-aware action bar (focus order, button labels; includes `paused` state).
+- [ ] T052 Coordinate handoff edge with spec 025: confirm `applying`,
+  `paused`, `applied`, `partially_applied`, `failed`, `cancelled` are
+  written only by the apply executor.
+- [ ] T053 Quickstart walkthrough in `specs/017-cleanup-archive-review-plans/`
   if the team chooses to add one.
+- [ ] T054 [P] Add `destructiveDestination` picker to plan-review UI: radio
+  group "Archive (default) / OS Trash" shown only when plan contains
+  destructive items.
+- [ ] T055 [P] Verify `plan.state_machine` in `crates/fs/planner/` includes
+  all 10 states including `paused` and `discarded` with correct allowed
+  transitions.
+- [ ] T056 [P] Register plan lifecycle event-bus topics on spec 002 §6.3:
+  `plan.approved`, `plan.discarded`, `plan.cancelled` (A7).
 
 ---
 
@@ -340,20 +375,47 @@ blocked_by = ["T035"]
 [graph.T037]
 blocked_by = ["T035"]
 
-[graph.T038]
+[graph.T043]
+blocked_by = ["T004", "T006", "T008"]
+
+[graph.T044]
+blocked_by = ["T004", "T006", "T008"]
+
+[graph.T045]
+blocked_by = ["T004", "T007", "T005"]
+
+[graph.T046]
+blocked_by = ["T045"]
+
+[graph.T047]
+blocked_by = ["T045", "T046"]
+
+[graph.T048]
+blocked_by = ["T047"]
+
+[graph.T049]
 blocked_by = []
 
-[graph.T039]
+[graph.T050]
 blocked_by = ["T015", "T016"]
 
-[graph.T040]
+[graph.T051]
 blocked_by = ["T015", "T016"]
 
-[graph.T041]
+[graph.T052]
 blocked_by = ["T025"]
 
-[graph.T042]
+[graph.T053]
 blocked_by = ["T037"]
+
+[graph.T054]
+blocked_by = ["T016"]
+
+[graph.T055]
+blocked_by = ["T007"]
+
+[graph.T056]
+blocked_by = ["T025", "T030", "T035"]
 ```
 
 ### Phase Dependencies

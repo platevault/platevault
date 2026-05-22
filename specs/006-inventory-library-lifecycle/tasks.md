@@ -105,12 +105,16 @@ visible/hidden. Trigger each action and assert the session's
 
 - [ ] T300 [US3] Implement `crates/app/core/src/usecases/inventory.rs::review_session` wrapping `lifecycle.transition` with resolved `entity_type`.
 - [ ] T301 [US3] Expose Tauri command `inventory_session_review` mapping `contracts/inventory.session.review.json` to the wrapped use case.
-- [ ] T302 [US3] Replace `setSessionReviewState` body in `apps/desktop/src/data/store.ts` with a Tauri call. Preserve the function signature and the idempotency guarantee (re-applying current state is a no-op at the UI layer too — return without re-rendering).
-- [ ] T303 [P] [US3] Contract test: `state.unchanged` is returned and `audit_id` is `null` when the requested state equals the current state, per spec 002 idempotency rules.
+- [ ] T302 [US3] Replace `setSessionReviewState` body in `apps/desktop/src/data/store.ts` with a Tauri call. The hook accepts canonical 6-value states (`discovered | candidate | needs_review | confirmed | rejected | ignored`). UI layer maps display labels locally: `discovered` and `candidate` display as "Needs review". Preserve the function signature and the idempotency guarantee (re-applying current state returns `status: "noop"` — UI layer does not re-render on noop).
+- [ ] T303 [P] [US3] Contract test: `status: "noop"` is returned and `audit_id` is absent when the requested `next_state` equals the current state, per spec 002 idempotency rules (A2 — `state.unchanged` error code is NOT used).
 - [ ] T304 [P] [US3] Contract test: `session.not_found` is returned for unknown ids.
 - [ ] T305 [P] [US3] Contract test: `transition.refused` is returned with `details.allowed_next_states` populated for a state that the spec-002 graph forbids.
 - [ ] T306 [P] [US3] Playwright MCP: confirm a `needs_review` session, verify the `Confirm` button disappears and `Re-open review` appears in the overflow.
 - [ ] T307 [P] [US3] Playwright MCP: reject a `confirmed` session, verify the danger-toned menu item is reachable and the row state updates to `rejected`.
+- [ ] T308 [P] [US3] Contract test: `session.mixed_state` error is returned when attempting to review a session whose `type == "mixed"`. User must split via spec 005 reclassify first.
+- [ ] T309 [US3] Implement Cmd+K "Show ignored items" palette action. The action navigates to `/inventory?reviewFilter=ignored` per spec 020 router conventions. Only visible when `ignored` sessions exist in the library (FR-010).
+- [ ] T310 [P] [US3] Playwright MCP: trigger Cmd+K palette, invoke "Show ignored items", assert the URL updates to `/inventory?reviewFilter=ignored` and any ignored sessions appear in the ledger.
+- [ ] T311 [P] [US3] Integration test (not JSON Schema fixture): verify the server-side `mixed` type detection (D2) — seed a session with heterogeneous member frames post-promotion, call `inventory.list`, assert `type == "mixed"` is returned and no `mixed` value is stored in the underlying session row.
 
 **Checkpoint**: P3 deliverable complete — all three review actions flow through the contract and emit audit entries.
 
@@ -142,6 +146,7 @@ review actions on its sessions are refused with
 ## Phase 7: Polish & Documentation
 
 - [ ] T500 [P] [Shared] Add a one-page diagram in `docs/research/` showing the projection join and the contract delegation to `lifecycle.transition`.
+- [ ] T506 [P] [Shared] CI snapshot test: assert that the `SessionState` enum in `inventory.list.json` and `inventory.session.review.json` matches the canonical definition in spec 002 when spec 002 adds it — fails build on drift (D6). Wire as a JSON-diff step in the contracts validation harness.
 - [ ] T501 [P] [Shared] Update `apps/desktop/src/data/mock.ts` header comment to clarify that `InventorySession` and `InventorySource` are now generated-type aliases backed by `packages/contracts/generated/`.
 - [ ] T502 [Shared] Run `just lint` and `just typecheck`; address contract-driven type drift.
 - [ ] T503 [Shared] Run `just test` to confirm the projection, use cases, contract round-trips, and adapter shape are green.
@@ -178,7 +183,8 @@ T103 ──> T400 ─> T401 ─> T403,T404,T405
             │
             └─> T402
 
-T500..T503 run after the per-story checkpoints.
+T308,T309,T310,T311 follow T301.
+T500..T503,T506 run after the per-story checkpoints.
 ```
 
 ## MVP Definition

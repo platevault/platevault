@@ -47,8 +47,19 @@ prepared         → { ready, processing, blocked }
 processing       → { completed, blocked }
 completed        → { archived, processing }     # re-open by resuming
 archived         → { processing }               # unarchive resumes work
-blocked          → { ready, prepared, processing, setup_incomplete }
+blocked          → { ready, prepared, processing, setup_incomplete, archived }
 ```
+
+The `blocked → archived` edge is the escape hatch ratified in GRILL spec 009:
+a user may archive a permanently blocked project without first recovering it
+to an active stage. `blocked → completed` remains forbidden — completion
+requires passing through an active stage so the audit trail records the
+actual completion event rather than a synthetic resolution.
+
+The plan-requirement gate per edge is encoded in the canonical `(entity_type,
+from, to) → requires_plan` table — see data-model.md §Plan-Requirement Edge
+Table. Callers MUST NOT pass `requires_plan` on the request; the server
+derives it from this table.
 
 Rationale for the more contested edges:
 
@@ -103,6 +114,55 @@ ignored    → { candidate }                 # un-ignore re-evaluates
 `Re-open review` from `confirmed` is supported in the mockup at
 `InventoryPage.tsx:388–394` (only renders when state ≠ needs_review).
 
+### 2.4 FileRecord transitions
+
+`FileRecord` is a first-class lifecycle entity (constitution §Local-First File
+Custody). The graph below is the canonical edge list; the data-model.md
+FileRecord lifecycle table is the per-entity rendering of the same edges. The
+discriminated `Request` union in `contracts/lifecycle.transition.json` includes
+a `file_record` family sub-schema bound to `FileRecordState`.
+
+```
+observed   → { classified, changed, missing, protected }
+classified → { rejected, changed, missing, protected }
+changed    → { observed, missing, protected }
+missing    → { observed, protected }     # rescan recovers; protected pin
+rejected   → { classified, protected }   # reinstate or protect
+protected  → ∅ (sticky pin until user removes)
+```
+
+Edges from data-model.md §FileRecord §Lifecycle. The `* → protected` rule
+applies to any non-terminal state and prevents subsequent cleanup-plan
+inclusion (constitution §Reviewable Filesystem Mutation, spec 016).
+
+### 2.5 Session-key derivation
+
+`session_key = canonical_tuple(target_id, filter, binning, gain, observing_night)`.
+
+`observing_night` is computed from a frame's UTC capture timestamp using the
+configured `observer_location` (spec 018) — the local-solar-noon boundary rule
+(consistent with GRILL spec 013/023 ratification):
+
+```
+local_time   = utc_capture_at  →  shift by observer_location.tz
+observing_night
+    = local_calendar_date(local_time)
+        if local_time.hour < 12 (i.e. local morning, still last night)
+            → previous_local_calendar_date
+        else
+            → today_local_calendar_date
+```
+
+Stored as `YYYY-MM-DD` (start-of-night local calendar date). Missing
+`observer_location` triggers `provenance.unreviewed` against the
+`observer_location` settings field (spec 018) and refuses session formation
+rather than guessing. Frames spanning the boundary keep their per-frame
+observing_night value; if two frames in a candidate group resolve to different
+nights, the candidate MUST split (FR-012).
+
+The implementation task for the derivation function sits before T034 in
+`tasks.md`.
+
 ## 3. Action-bound review vs blanket review
 
 **Decision: action-bound (already accepted in spec 002 commit 7a681f6).**
@@ -119,14 +179,23 @@ gating. The Rust port MUST:
 1. Mark each critical-action input field with a `required_provenance: reviewed`
    tag.
 2. Refuse the action with `provenance.unreviewed` if any required input is
-   still `inferred` or `observed`.
+   still `inferred` or `observed`. The error envelope's `details.blocking_fields`
+   MUST list every offending field as
+   `{ field_path: string, required_origin: "reviewed" }`. The
+   `lifecycle.transition.json` contract defines this shape.
 3. Surface the specific blocking field to the UI, not just a generic "needs
    review" message.
 
-`[NEEDS DECISION: Should the action-bound block emit a temporary "Review →
-Continue" inline flow, or always route the user to the detail drawer to
-confirm individual fields?]` Default: route to detail drawer; constitution
-favors visibility over speed.
+**Resolved (GRILL 2026-05-21):** action-bound review blocks route the user to
+the detail drawer with the offending field highlighted. The inline "Review →
+Continue" alternative was rejected because it tucks audit-relevant decisions
+behind a transient dialog. See §8 resolved-questions table.
+
+**Resolved (GRILL 2026-05-21) — rejected-session visibility:** ledger views
+default-filter `state != rejected` for `InventorySession` and
+`CalibrationSession`; detail surfaces always show rejected entries; a
+'show rejected' toggle re-includes them in ledger views. This is captured in
+spec.md FR-006 and removes the open question from §7.
 
 ## 4. Provenance separation
 
@@ -158,24 +227,41 @@ pub struct ProvenancedValue<T> {
 without erasing the prior `inferred` value (constitution: "Destructive
 operations MUST prefer archive or trash over permanent deletion").
 
+> **Carve-out — catalog entries (spec 014, R-3.2)**: Catalog entries
+> (`Catalog`, `LicenseAttribution`) are **app-owned reference data**, not
+> user assets. Fields on these types do NOT use `ProvenancedValue<T>`. Source
+> provenance for a catalog as a whole is carried by the manifest record and
+> the `LicenseAttribution`. The canonical example of this carve-out is
+> spec 014; any future app-owned reference data that is not a user asset
+> should follow the same pattern. User-visible Target identity that diverges
+> from catalog data lives in spec 013 with full `ProvenancedValue` tracking.
+
 ## 5. No-op guards
 
 The mockup demonstrates two invariants that the Rust port MUST preserve:
 
 1. **Same-state writes are no-ops** (`store.ts:457`). Calling
    `setSessionReviewState(id, "confirmed")` when the session is already
-   `confirmed` returns `state.unchanged` as the contract response and writes
-   neither a state mutation nor an audit event.
+   `confirmed` returns `status: "noop"` as the contract response and writes
+   neither a state mutation nor an audit event. The `noop` response shape
+   omits `audit_id` and `error`; the contract `allOf` block enforces this.
 2. **Refused transitions log but do not mutate** (`store.ts:406-413`). A
-   disallowed edge writes a `warn` log entry and returns `transition.refused`
-   without touching the entity. The audit log thus contains both successful
-   transitions AND attempted-but-refused transitions, which is the signal
-   needed to spot UI bugs (caller offered a button that mapped to a
-   disallowed edge).
+   disallowed edge writes a `warn` audit entry and returns
+   `transition.refused` without touching the entity. The audit log thus
+   contains both successful transitions AND attempted-but-refused
+   transitions, which is the signal needed to spot UI bugs (caller offered a
+   button that mapped to a disallowed edge).
 
 These two rules MUST be transactional with the audit write: the only valid
-outcomes are (a) state mutated + audit emitted, or (b) no mutation + warn log,
-or (c) no mutation + nothing logged.
+outcomes are (a) state mutated + audit emitted (`status: "success"`),
+(b) no mutation + refused-edge audit entry (`status: "error"` with
+`error.code = "transition.refused"`), or (c) no mutation + nothing logged
+(`status: "noop"`).
+
+**Decision (GRILL 2026-05-21):** no-op transitions emit `status: "noop"` and
+write nothing to the audit log. The earlier `state.unchanged` error code is
+removed from the contract; the `unchanged` outcome value is also removed from
+`AuditLogEntry.outcome` because no row is ever written for a no-op.
 
 ## 6. Projection-staleness propagation
 
@@ -194,27 +280,120 @@ On any state change to a source node, all dependents flip to
 `stale`. The UI surfaces "stale" inline; regeneration is a user-triggered
 action that goes through `FilesystemPlan` if it implies any filesystem write.
 
-`[NEEDS DECISION: Should stale propagation be eager (write on every
-transition) or lazy (computed on read with a `dependents_dirty_at`
-timestamp)?]` Default: lazy with timestamp, for write throughput. Citation:
-matches the constitution's "Large-file hashing MUST be optional or lazy".
+### 6.1 Event bus (canonical state-propagation design)
+
+**Decision (GRILL 2026-05-21):** propagation is driven by an event bus, not
+eager database writes or lazy reads. Spec 002 owns the canonical event-bus
+design note for the whole project.
+
+On every successful transition (`status: "success"` per §5), the use-case
+layer publishes a `lifecycle.transition.applied` event onto the in-process
+event bus. Subscribers (projection-staleness recomputer, log panel /
+spec 019, guided-flow trigger / spec 010, manifest regenerator / spec 024,
+detail-drawer cache invalidator) consume the event and react.
+
+**Event shape:**
+
+```jsonc
+// topic: lifecycle.transition.applied
+{
+  "entity_type": "project" | "plan" | "inventory_session"
+                | "calibration_session" | "data_source"
+                | "prepared_source" | "projection" | "file_record",
+  "entity_id": "<uuid>",
+  "from": "<state-or-null>",
+  "to": "<state>",
+  "applied_at": "<rfc3339>",
+  "audit_id": "<uuid>",
+  "actor": "user" | "system",
+  "request_id": "<uuid>",
+  "source": "user" | "restore" | "system"  // R-Source-1 (2026-05-22)
+}
+```
+
+**R-Source-1 — `source` field semantics (ratified 2026-05-22)**:
+
+Every event on the bus carries a top-level `source` field with one of three
+values:
+
+| Value | Meaning |
+|-------|---------|
+| `user` | Event triggered by direct user action (a command issued from the UI or a user-initiated Tauri call). |
+| `restore` | Event triggered by recovery or replay of the audit log (e.g. app startup reconciliation, crash-recovery replay). |
+| `system` | Event triggered by an automatic invariant check, a scheduled background job, or an internal system process without direct user initiation. |
+
+Subscribers SHOULD branch on `source` where the distinction matters:
+- The guided-flow coach (spec 010) ignores events where `source == "restore"` so
+  that audit-log replay does not prematurely advance coach steps.
+- The audit log records `source` on every event row.
+- Subscribers that are idempotent on `(audit_id, subscriber_id)` may safely
+  ignore `source`, but must still accept and discard `restore` events without
+  side-effects if idempotency is already guaranteed by another means.
+
+The `source` field applies to ALL event topics on the in-process bus, not
+only `lifecycle.transition.applied`.
+
+**Delivery semantics:**
+
+- At-least-once delivery to subscribers within the same process. Subscribers
+  MUST be idempotent on `(audit_id, subscriber_id)`.
+- Refused transitions and no-ops do NOT publish events (refused emits only an
+  audit row; no-ops emit nothing).
+- Publication is transactional with the entity mutation + audit write:
+  publication runs inside the same SQLite transaction commit hook so a
+  rolled-back transaction never emits.
+- Cross-process or cross-machine delivery is out of scope for v1 (single
+  desktop process). The topic and payload shape are designed to be
+  serializable for a future remote service per constitution §V.
+
+The earlier "lazy with `dependents_dirty_at` timestamp" default is replaced
+by event-bus driven invalidation. Subscribers that need projection staleness
+(`ProcessingArtifact.staleness`, `PreparedSource.state`, manifest staleness)
+recompute on each event using the dependency graph above.
+
+#### 6.2 Catalog event-bus topics (spec 014)
+
+Catalog download and manifest-fetch operations publish the following
+additional topics on the same in-process event bus. These are owned by
+**spec 014** (`crates/targeting/catalogs/download.rs`); they are registered
+here because spec 002 is the canonical event-bus design owner. (R-3.1,
+spec 014 research R8)
+
+| Topic | Payload |
+|---|---|
+| `catalog.manifest.fetched` | `{ manifest_version, etag?, catalogs_count, fetched_at }` |
+| `catalog.download.started` | `{ catalog_id, expected_bytes, started_at }` |
+| `catalog.download.progress` | `{ catalog_id, bytes_downloaded, expected_bytes, fraction }` |
+| `catalog.download.completed` | `{ catalog_id, bytes_downloaded, duration_ms, audit_id }` |
+| `catalog.download.failed` | `{ catalog_id, error_code, error_message, duration_ms }` |
+
+Delivery semantics are identical to `lifecycle.transition.applied` (§6.1):
+at-least-once, idempotent on `(audit_id, subscriber_id)`, transactional
+with the SQLite write. The first-run Download Catalogs wizard step
+subscribes to `progress` / `completed` / `failed` for per-row progress UI.
 
 ## 7. Open option points
 
-1. `[NEEDS DECISION: action-bound block UX]` — inline confirm vs detail drawer
-   routing. Default: detail drawer.
-2. `[NEEDS DECISION: stale propagation strategy]` — eager vs lazy. Default:
-   lazy with timestamp.
-3. `[NEEDS DECISION: rejected sessions surfacing]` — by default the Inventory
-   `Review` filter has a "Rejected" option (`InventoryPage.tsx:128`). Do
-   rejected sessions appear in other views (Projects, Plans) or are they
-   filtered out everywhere? Default: visible in detail surfaces, hidden in
-   default ledger views.
-4. `[NEEDS DECISION: audit-event partitioning]` — diagnostic vs
-   workflow-significant. Default: a `severity: diagnostic | workflow` tag on
-   every event; UI defaults to filtering diagnostics out.
-5. `[NEEDS DECISION: provenance history retention]` — bounded vs unbounded.
-   Default: unbounded (constitutional "archive over delete").
+All previously open option points have been resolved by the GRILL 2026-05-21
+pass and are now folded into the §8 resolved-questions table:
+
+1. ~~`[NEEDS DECISION: action-bound block UX]`~~ — **Resolved:** detail drawer
+   with offending field highlighted. (§3, §8 #11.)
+2. ~~`[NEEDS DECISION: stale propagation strategy]`~~ — **Resolved:** event
+   bus is the canonical state-propagation mechanism (§6.1, §8 #12).
+3. ~~`[NEEDS DECISION: rejected sessions surfacing]`~~ — **Resolved:** ledger
+   views default-filter `state != rejected`; detail surfaces always show
+   rejected; 'show rejected' toggle re-includes them in ledgers. (§3, §8 #13,
+   spec.md FR-006.)
+4. ~~`[NEEDS DECISION: audit-event partitioning]`~~ — **Resolved:** keep
+   `severity: workflow | diagnostic` as the partitioning mechanism on
+   `AuditLogEntry`; default UI timelines and the spec 019 log panel
+   default-filter `severity = workflow`. (§8 #14.)
+5. ~~`[NEEDS DECISION: provenance history retention]`~~ — **Resolved:** keep
+   the most recent N entries per origin tag inline on `ProvenancedValue`;
+   archive older entries to a separate `provenance_history_archive` table
+   (data-model.md). The `provenance.read` contract carries a
+   `history_truncated` flag and an archive query path. (§8 #15.)
 
 ## 8. Resolved questions
 
@@ -230,3 +409,16 @@ matches the constitution's "Large-file hashing MUST be optional or lazy".
 | 8 | Is retry-of-failed-plan a new plan? | Yes — referencing parent id | spec 017 §retry semantics |
 | 9 | Does projection staleness propagate? | Yes — via a dependency graph | constitution §V (projections) |
 | 10 | Provenance: state machine or overlapping tags? | Overlapping tags, append-only history | constitution §archive-over-delete |
+| 11 | Action-bound review block UX | Route to detail drawer with offending field highlighted | GRILL 2026-05-21 |
+| 12 | Projection-staleness propagation strategy | Event bus (`lifecycle.transition.applied`); §6.1 owns the canonical design | GRILL 2026-05-21 |
+| 13 | Rejected sessions in default ledger views | Hidden by default; detail surfaces always show; 'show rejected' toggle re-includes | GRILL 2026-05-21 |
+| 14 | Audit diagnostic vs workflow partitioning | `severity: workflow \| diagnostic` on `AuditLogEntry`; default UI filters `severity = workflow` | GRILL 2026-05-21 |
+| 15 | Provenance history retention | Most recent N per origin tag inline; older archived to `provenance_history_archive`; `provenance.read` returns `history_truncated` | GRILL 2026-05-21 |
+| 16 | `requires_plan` provenance | Server-derived from canonical `(entity_type, from, to)` edge table; callers MUST NOT assert | GRILL 2026-05-21 |
+| 17 | `LifecycleState` shape in contract | Discriminated `oneOf` Request sub-schemas per entity family (8 families incl. `file_record`) | GRILL 2026-05-21 |
+| 18 | No-op response shape | `status: "noop"` with no `audit_id`, no `error`; `state.unchanged` error removed | GRILL 2026-05-21 |
+| 19 | `actor=system` edge policy | Permitted only on `* → blocked` and `blocked → *` edges; enforced in use case, rejected with `transition.refused` | GRILL spec 009 2026-05-21 |
+| 20 | `blocked → archived` legality | Allowed (escape hatch); `blocked → completed` remains forbidden | GRILL spec 009 2026-05-21 |
+| 21 | `discarded` in PlanState | Added to `PlanState` enum (terminal soft-delete; pairs with spec 017) | GRILL 2026-05-21 |
+| 22 | `FileRecord` lifecycle first-class | Yes — own transition graph (§2.4) and discriminated Request sub-schema; edge-list test owned by tasks.md | GRILL 2026-05-21 |
+| 23 | Session-key formula | `(target_id, filter, binning, gain, observing_night)` with local-solar-noon `observing_night` derivation (§2.5) | GRILL 2026-05-21 |

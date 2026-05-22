@@ -83,21 +83,35 @@ apps/desktop/src/features/projects/
 
 ## Architecture Decisions
 
-1. **Manifest writer triggered on project lifecycle transitions.** A
-   small writer function inside `crates/project/structure/manifest.rs`
-   is the single producer. Triggers are: project created, source map
-   changed (lights/flats/darks/bias added or removed), lifecycle state
-   transition (e.g. acquisition → imaging → done), cleanup plan applied.
-   The writer takes a `ManifestReason` enum, snapshots the project's
-   current source map / workflow / state, renders markdown, writes the
-   file, then records a database row and an audit event.
+1. **Manifest writer triggered on project lifecycle transitions and workflow
+   run completions.** A small writer function inside
+   `crates/project/structure/manifest.rs` is the single producer. Triggers
+   are: project created, source map changed (lights/flats/darks/bias added
+   or removed), lifecycle state transition (e.g. acquisition → imaging →
+   done), cleanup plan applied, and workflow run completed. The writer
+   takes a `ManifestReason` enum, snapshots the project's current source
+   map / workflow / state, renders markdown, writes the file, then records
+   a database row and an audit event.
 
-2. **Manifest content stable across renders.** A manifest snapshot
+   The `workflow_run` reason is triggered by subscribing to the
+   `workflow.run_completed` event-bus topic (spec 012). On receipt, the
+   manifest writer is called with `reason = workflow_run` for the project
+   identified in the payload `{ projectId, toolId, completedAt,
+   outputArtifacts }`. **FLAGGED — spec 012 ripple**: spec 012 must emit
+   `workflow.run_completed` with the above payload shape. Do NOT edit spec
+   012 here; see GRILL amendment 2026-05-22.
+
+   Note on `crates/patterns/` dependency (D, spec 015 R-CratePatterns):
+   the manifest writer does not use pattern resolution. No dependency on
+   `crates/patterns/` is required here.
+
+2. **Manifest file is canonical and immutable.** A manifest snapshot
    captures the project state at one moment and is never rewritten.
    Filenames embed timestamp + reason so retries are deterministic and
-   the index in the database stays in lockstep with files on disk. A
-   `version` field on the row lets future schema bumps regenerate the
-   markdown body from the database without losing identity.
+   the index in the database stays in lockstep with files on disk. The
+   `version` field on the row governs the format used for NEW writes only;
+   existing files are never re-rendered from the database. (A7, ratified
+   2026-05-22.)
 
 3. **Manifest path inside the project's `notes/` folder.** The writer
    resolves `<project_root>/notes/manifest-<YYYY-MM-DD-HHMMSS>-<reason>.md`.
@@ -109,7 +123,11 @@ apps/desktop/src/features/projects/
    `<project_root>/notes/project-notes.md`. There is one notes file per
    project. Saves go through a contract (`project.note.update`) that
    writes the file atomically and records an audit event with the new
-   `updated_at` timestamp.
+   `updated_at` timestamp. The UI applies a **5-second debounce** before
+   issuing the update call to avoid noisy per-keystroke writes. (A5.)
+   Notes are editable on projects in any lifecycle state except `archived`;
+   the `project.read_only` error fires only when `lifecycle == "archived"`.
+   (R-NotesEdit, ratified 2026-05-22.)
 
 5. **Read-only manifest surface in the contracts.** No
    `project.manifest.update` or `project.manifest.delete` contract is

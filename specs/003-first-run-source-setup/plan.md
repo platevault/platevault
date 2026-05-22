@@ -8,13 +8,23 @@
 Replace the mockup-only first-run wizard with a Tauri-backed flow that
 registers source roots into the library database. A route gate at `/`
 dispatches between `/welcome` and `/inventory` based on a persisted
-completion flag. The wizard itself is a sequential six-step React component
-(Welcome → Raw → Calibration → Project → Inbox → Finish) where only the Raw
-step is required to advance. Directory selection uses
-`@tauri-apps/plugin-dialog`; interim state lives in `localStorage` for
-resilience, and on Finish the working source list is promoted to SQLite via
-the `source.register` contract and the completion flag is set via
-`firstrun.complete`.
+completion flag. The wizard is a sequential eight-step React component
+(Welcome → Raw → Calibration → Project → Inbox → Detect Tools → Download
+Catalogs → Finish) where Raw and Project steps are required to advance (A5,
+A6, R-Wiz-2). Directory selection uses `@tauri-apps/plugin-dialog`; interim
+state lives in `localStorage` for resilience. On Finish the working source
+list is promoted to SQLite via the `source.register.batch` contract (R-Batch,
+A9) and the completion flag is set via `firstrun.complete`.
+
+The Download Catalogs step is backed by the `catalog.manifest.fetch` and
+`catalog.download` contracts from spec 014 (R-1.4). The step does not block
+Finish if the user skips it (A6); catalog download can be retried from
+Settings → Catalogs.
+
+**Observer location**: `observer_location` is NOT collected at first-run. It
+is resolved at session-formation time (per-import, auto-extracted from FITS
+keywords) and lives on `AcquisitionSession` in spec 002, not in settings
+(R-Obs).
 
 ## Technical Context
 
@@ -144,16 +154,56 @@ The refactor MUST:
 
 - **During wizard**: `localStorage["alm.first-run.sources"]` holds the
   working `SourceEntry[]`. This survives accidental refresh but is treated
-  as throwaway state, not durable.
-- **On Finish**: the wizard iterates the buffer and calls
-  `source.register` for each entry. If any call fails, the wizard stays on
-  the Finish step with row-level errors. On full success it calls
-  `firstrun.complete`, sets the completion flag, clears the buffer, and
-  navigates to `/inventory`.
-- **On Restart from Settings**: the wizard clears the completion flag.
-  Whether previously registered sources are also wiped is the open
-  question recorded in `research.md`. Mockup is destructive; spec leans
-  toward prefill in a follow-up iteration.
+  as throwaway state, not durable. The DB `FirstRunState` row does NOT
+  carry a `sources_buffer` column (R-Buf; research §8).
+- **On Finish**: the wizard calls `source.register.batch` with all buffered
+  sources in a single request (R-Batch, A9). Rows with `path.already.registered`
+  are treated as success (idempotent — D1). On partial failure, the wizard
+  stays on the Finish step with per-row error indicators; the user can retry
+  failed rows. On full success (or after retries clear all errors), the
+  wizard calls `firstrun.complete`, sets the completion flag, clears the
+  buffer, and navigates to `/inventory`. `firstrun.complete` emits
+  `first_run.completed` audit event (R-E2).
+- **`created_via` is server-derived** (R-Auth-1): the caller does NOT pass
+  `created_via` in the request. The server sets it based on
+  `FirstRunState.completed_at` context (`first_run` while null, `settings_add`
+  or `settings_restart` otherwise).
+
+### Restart Flow
+
+- The Settings "Restart first-run wizard" button calls the `firstrun.restart`
+  Tauri command (R-E5).
+- The server clears `FirstRunState.completed_at`, sets `last_step = welcome`,
+  emits `audit.first_run.restarted`, and returns `prefilled_sources` (the
+  current `RegisteredSource` rows).
+- The desktop writes `prefilled_sources` to `localStorage["alm.first-run.sources"]`,
+  clears the `alm.first-run.completed` flag, and navigates to `/welcome` (A7).
+- Existing `RegisteredSource` rows are NOT deleted by restart; the user
+  amends them during the re-run.
+
+### Download Catalogs Wizard Step
+
+The Download Catalogs step (step 7, A6, R-1.4) is backed by contracts from
+spec 014:
+
+1. **Manifest fetch**: calls `catalog.manifest.fetch` (with no `etag` on
+   first run). On `status: "fetched"`, the manifest catalogs list drives
+   step 2.
+2. **Per-catalog download**: iterates the manifest catalog list and calls
+   `catalog.download` for each entry. Concurrency is parallel-N (N TBD;
+   recommend 3 by default). Each call is independent; partial failure does
+   not abort the remaining downloads.
+3. **Progress UI**: subscribes to event-bus topics
+   `catalog.download.started`, `catalog.download.progress`,
+   `catalog.download.completed`, and `catalog.download.failed` for per-row
+   progress indicators (mirrors the `source.register.batch` partial-success
+   pattern).
+4. **Failure handling**: any catalog that fails shows a per-row error with a
+   Retry button. The user may retry individual rows without re-downloading
+   already-successful catalogs.
+5. **Skip**: the step does not block Finish. A "Skip for now" action advances
+   the wizard; catalog installation can be completed later from Settings →
+   Catalogs. If skipped, catalog lookup is unavailable until completed.
 
 ### Tauri Picker Replacement
 

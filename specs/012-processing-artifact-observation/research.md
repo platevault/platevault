@@ -3,6 +3,7 @@
 **Feature**: `012-processing-artifact-observation`
 **Date**: 2026-05-20
 **Status**: Resolved items recorded; open items deferred to design or v1+.
+**Last Amended**: 2026-05-22
 
 This research backs the constitution's Research-Led Domain Modeling
 principle for output-folder conventions, classification heuristics,
@@ -175,11 +176,63 @@ does it return to `present`?
 
 ---
 
+## R-7 — Extension Allow-List Per Workflow Profile (R-ExtAllow)
+
+### Decision
+
+Each `WorkflowProfile` carries a `watch_extensions: string[]` field that
+acts as a coarse pre-filter before the classifier runs. Default set:
+`[".xisf", ".fits", ".fit", ".tif", ".tiff", ".png", ".jpg", ".ser", ".avi"]`.
+Files with extensions not in this list are silently ignored by the watcher;
+they never become `ProcessingArtifact` rows. This avoids index noise from
+tool-internal temp files (e.g. `.lock`, `.tmp`, `.xisf.bak`).
+
+The Settings UI exposes the `watch_extensions` list per profile (spec 018
+ripple: `workflow_profile.<id>.watch_extensions`).
+
+### Implications
+
+- Extension filtering is case-insensitive on Windows; case-sensitive on
+  macOS/Linux.
+- The default list is conservative; users on custom workflows can add
+  extensions via settings.
+
+---
+
+## R-8 — Clock Source for Attribution Timestamps (R-AppClock)
+
+### Decision
+
+Attribution timestamps (`detected_at` for new artifacts, `launched_at` in
+the attribution window calculation) use the application clock
+(`Instant::now()` at event arrival), NOT filesystem `metadata.modified()`.
+
+### Rationale
+
+NAS shares and network filesystems frequently report stale or wrong mtimes
+due to clock skew between the NAS and the client. Using app-clock prevents
+spurious attribution failures caused by NAS time drift. `file_mtime` is
+still recorded on the `ProcessingArtifact` row as metadata but is NOT used
+for attribution window calculations.
+
+---
+
+## R-9 — Watcher Lifetime (C5 — drawer-bound, current design kept)
+
+### Decision
+
+The current per-project watcher lifetime (attached when the project drawer
+opens or the project becomes active; detached when the drawer closes) is
+retained. Trade-off: files added while the drawer is closed are caught at
+the next reconciliation scan on re-attach. This is acceptable because the
+reconciliation scan runs immediately on attach.
+
+---
+
 ## Open Questions Deferred
 
-- **M-1**: Whether `final` artifacts should automatically be linked
-  into the project manifest body (feature 024) or only on user
-  confirmation.
+- **M-1**: `final` artifact auto-link to manifest (resolved: never auto-link
+  — user manually attaches; decision ratified 2026-05-21).
 - **M-2**: Polling-fallback heuristic refinement after first real-world
   usage on SMB/NFS.
 - **M-3**: XISF/FITS header peeking for classification disambiguation.

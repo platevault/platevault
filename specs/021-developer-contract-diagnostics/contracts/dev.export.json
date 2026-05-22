@@ -1,0 +1,110 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://astro-plan/contracts/dev.export.json",
+  "title": "dev.export",
+  "description": "Export a JSON snapshot of the contract registry and recent-calls buffer to a user-chosen file path. Only available in dev-tools builds. Paths are redacted by default; opt in to verbatim paths per export.",
+  "operation": {
+    "name": "dev.export",
+    "direction": "ui-to-core",
+    "version": "1",
+    "contractVersion": "1.0.0"
+  },
+  "request": {
+    "type": "object",
+    "required": ["outputPath"],
+    "additionalProperties": false,
+    "properties": {
+      "requestId": {
+        "type": "string",
+        "description": "Caller-supplied correlation id."
+      },
+      "outputPath": {
+        "type": "string",
+        "description": "Absolute filesystem path where the JSON export should be written. Must be inside a user-accessible location; validated against path.write.denied envelope."
+      },
+      "includeVerbatimPaths": {
+        "type": "boolean",
+        "default": false,
+        "description": "When false (default), filesystem paths in the export are replaced with ${LIBRARY_ROOT}/... placeholders. When true, verbatim paths are included. This is a per-export opt-in only; the in-memory ring buffer always stores redacted paths."
+      },
+      "includeContracts": {
+        "type": "boolean",
+        "default": true,
+        "description": "Include the full contract registry list in the export."
+      },
+      "includeCalls": {
+        "type": "boolean",
+        "default": true,
+        "description": "Include the recent-calls buffer in the export."
+      }
+    }
+  },
+  "response": {
+    "oneOf": [
+      {
+        "type": "object",
+        "required": ["status", "requestId", "contractVersion", "writtenPath", "callCount", "contractCount"],
+        "additionalProperties": false,
+        "properties": {
+          "status": { "type": "string", "const": "ok" },
+          "requestId": { "type": "string" },
+          "contractVersion": { "type": "string", "const": "1.0.0" },
+          "writtenPath": {
+            "type": "string",
+            "description": "Absolute path of the written export file."
+          },
+          "callCount": {
+            "type": "integer",
+            "minimum": 0,
+            "description": "Number of call records included in the export."
+          },
+          "contractCount": {
+            "type": "integer",
+            "minimum": 0,
+            "description": "Number of contract records included in the export."
+          }
+        }
+      },
+      {
+        "type": "object",
+        "required": ["status", "requestId", "contractVersion", "errors"],
+        "additionalProperties": false,
+        "properties": {
+          "status": { "type": "string", "const": "error" },
+          "requestId": { "type": "string" },
+          "contractVersion": { "type": "string", "const": "1.0.0" },
+          "errors": {
+            "type": "array",
+            "items": {
+              "type": "object",
+              "required": ["code", "message"],
+              "additionalProperties": false,
+              "properties": {
+                "code": { "type": "string" },
+                "message": { "type": "string" },
+                "details": { "type": "object" }
+              }
+            }
+          }
+        }
+      }
+    ]
+  },
+  "errorCodes": [
+    {
+      "code": "dev_mode.disabled",
+      "message": "Developer mode is disabled. Export is not available.",
+      "httpStatusEquivalent": 403
+    },
+    {
+      "code": "path.write.denied",
+      "message": "The output path is outside the allowed write envelope.",
+      "httpStatusEquivalent": 403
+    },
+    {
+      "code": "path.write.failed",
+      "message": "The export file could not be written. Check disk space and permissions.",
+      "httpStatusEquivalent": 500
+    }
+  ]
+}

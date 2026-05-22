@@ -120,28 +120,113 @@ partially terminal plan, what happens?
   from those `pending` items. `failed` items are preserved (not retried),
   `succeeded` items are skipped.
 
-## R7. Concurrency model
+## R7. Concurrency model (R-Concur-1)
 
 **Decision**: v1 is **strictly sequential** within a single plan, matching
-the mockup. Per-volume parallelism is deferred. Multiple plans CAN apply
-concurrently only if they touch disjoint source/destination subtrees; the
-executor MUST refuse overlapping plans with `plan.conflict.overlap`. This
-overlap check uses the planner's path-set comparison.
+the mockup. Per-volume parallelism is deferred. Multiple plans MAY apply
+concurrently only if their (source ∪ destination) path sets are disjoint at
+subtree-prefix granularity. The executor MUST check pending applies against
+active applies' path sets at start; overlapping plans are rejected with
+`plan.conflict.overlap`.
 
-## R8. Approval-token freshness
+**Path-set comparison algorithm**: Compute `Set<canonical_path_prefix>` per
+plan (source paths + destination paths + archive paths). Compare via
+prefix-overlap test: two sets overlap if any prefix in one is a prefix-of or
+has-as-prefix any prefix in the other. The comparison uses canonicalized
+absolute paths.
 
-**Decision**: The approval token issued by 017 includes the plan-content
-hash at approval time. Apply re-computes the hash before running and
-rejects with `plan.approval.stale` if the plan content changed. This
-prevents an edit between approve and apply from sneaking new items into a
-run.
+## R8. Approval-token freshness (A2)
+
+**Decision**: The approval token issued by 017 is an HMAC over
+`(planId, contentHash, approvedAt, serverSecret)`. Single-use; consumed by
+`plan.apply`. **No time-based TTL on the approval token.** Freshness is
+enforced by per-item FS revalidation before each mutation (see R-FS-1 below).
+
+The apply executor re-computes the plan content hash before starting and
+rejects with `plan.approval.stale` if the plan body changed. This prevents
+an edit between approve and apply from sneaking new items into a run.
+
+## R1 (addendum). Cross-volume move error codes (R-Fail-1)
+
+In addition to the R3 taxonomy, cross-volume copy-then-delete failure adds:
+
+| code | recoverable | meaning |
+|---|---|---|
+| `copy.succeeded.delete.failed` | true | Cross-volume move: copy succeeded but source delete failed. Executor attempts rollback (remove destination copy). |
+| `copy.succeeded.delete.failed.rollback.failed` | true | Rollback of destination copy also failed; both source AND destination remain on disk. UI surfaces this hybrid state explicitly. Audit event records the full sequence. |
+| `item.stale` | true | Per-item FS revalidation mismatch (R-FS-1). Non-skippable; requires re-approval. |
+| `os_trash.unavailable` | true | Platform trash API not supported (R-Trash-1). |
+| `os_trash.full` | true | OS trash quota exceeded. |
+| `os_trash.permission.denied` | false | OS refused trash operation. |
+
+**Rollback policy for `copy.succeeded.delete.failed`**: executor attempts to
+remove the destination copy. If rollback succeeds, item lands in `failed`
+with the original delete error. If rollback fails, item lands in `failed`
+with code `copy.succeeded.delete.failed.rollback.failed` and both source and
+destination remain on disk. The UI surfaces this hybrid state explicitly.
+Audit event records the full sequence.
+
+## R3 (addendum). Disk-full pre-flight (A4)
+
+Pre-flight space check at plan generation time blocks plan creation when
+destination volume has insufficient space (computed from `totalBytesRequired`
+with a configurable safety margin). This is a hard fail before the plan
+enters `draftable` state.
+
+Mid-apply `disk.full` (volume fills up after plan creation) becomes a
+recoverable per-item failure that pauses the run (matches R-Pause-1 below).
+The user frees space and resumes.
+
+## R-FS-1. Per-item FS revalidation snapshot
+
+Before each item mutation the executor MUST check:
+- (a) Source path's current `(mtime, sizeBytes)` matches `PlanItem.approvedMtime`
+  / `PlanItem.approvedSizeBytes` (populated by `plan.approve`).
+- (b) Destination path is empty (no name conflict).
+
+On mismatch: item state → `stale`; run pauses (R-Pause-1). User sees "Plan
+is stale" dialog with option to regenerate the plan (full re-approval flow).
+Error code `item.stale` is `recoverable: true` and non-skippable.
+
+## R-Pause-1. Pause/resume on mid-apply faults
+
+Run state machine: `applying → paused` on `volume.unavailable`, `disk.full`,
+or `item.stale`. `paused → applying` via `plan.resume`. `paused → cancelled`
+via `plan.cancel`.
+
+The `plan.resume` contract re-validates the pause condition before resuming.
+If the condition is unchanged (e.g. volume still unavailable), the server
+returns the appropriate failure code rather than resuming.
+
+Event bus topics: `plan.applying.paused` (on pause), `plan.applying.resumed`
+(on resume).
+
+## R-CAS-1. Atomic CAS on apply start
+
+The apply executor MUST perform an atomic compare-and-swap:
+`UPDATE plans SET state='applying' WHERE id=? AND state='approved'`.
+If the CAS fails (state changed between read and write, e.g. concurrent
+apply from another window), apply returns `plan.invalid_state` and does NOT
+start the run. This prevents double-apply races.
 
 ## Open Points
 
-- Whether `volume.unavailable` should pause the run rather than fail items.
-  Default: fail each affected item; user can per-item-retry after
-  remounting.
-- Whether to expose a "dry-run" mode separate from 017's plan review.
-  Default: no; review is the dry run.
-- Whether `disk.full` should short-circuit the whole run.
-  Default: no; continue to allow non-overlapping items to succeed.
+All previously open points are now resolved:
+
+- `volume.unavailable` pauses the run (R-Pause-1). Resolved.
+- `disk.full` pauses the run mid-apply; pre-flight blocks plan creation (A4, R-Pause-1). Resolved.
+- Per-volume parallelism deferred; sequential is v1 (R-Concur-1). Resolved.
+- Dry-run: no separate mode; review IS the dry run. Resolved.
+
+## R2 (addendum). OS trash platform semantics (R-Trash-1)
+
+When `destructiveDestination == os_trash` on a plan, the executor uses:
+- **Windows**: `IFileOperation::DeleteItem` with `FOFX_RECYCLEONDELETE`.
+- **macOS**: `NSFileManager.trashItem(at:resultingItemURL:error:)`.
+- **Linux**: freedesktop trash spec / `gio trash` (XDG `$XDG_DATA_HOME/Trash`
+  with `.trashinfo` file).
+
+Recommended Rust crate: `trash` (cross-platform abstraction).
+
+Error codes: `os_trash.unavailable`, `os_trash.full`,
+`os_trash.permission.denied` (added to R3 taxonomy above).

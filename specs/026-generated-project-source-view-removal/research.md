@@ -12,6 +12,10 @@ A `PreparedSourceView` is considered stale when any of the following holds:
 - The recorded link target on disk no longer exists, has changed kind (e.g.
   symlink replaced by a regular file), or points outside the original
   inventory item.
+- **Copy-kind only (A3, GRILL 2026-05-22)**: The content hash of the copied
+  file no longer matches the hash recorded at creation (`hash_diverged`). This
+  signals that the copy has drifted from its canonical source. Link-kind views
+  (symlink, junction) skip content hash because they carry no unique bytes.
 - The project's workflow profile has changed such that the view's strategy
   (symlink vs copy vs junction) is no longer the project's preferred strategy.
 - A canonical inventory item the view references has been archived or marked
@@ -22,12 +26,15 @@ are surfaced in the UI; no mutation happens without a reviewed plan.
 
 ## R2: Cross-Platform Link and Junction Cleanup
 
+**v1 strategies: symlink, junction, copy only. `hardlink` is deferred to v1.x
+(R-026-Strategies, GRILL 2026-05-22).**
+
 | Strategy   | Windows                              | macOS / Linux         |
 | ---------- | ------------------------------------ | --------------------- |
 | symlink    | `RemoveDirectoryW` / `DeleteFileW`   | `unlink(2)`           |
 | junction   | reparse point removal via `DeviceIoControl` then `RemoveDirectoryW` | not applicable |
-| hardlink   | `DeleteFileW` (only the link entry)  | `unlink(2)`           |
-| copy       | archive then delete via trash crate  | archive then trash    |
+| copy       | archive (hard-coded default, R-026-Dest-Archive) | archive then trash    |
+| hardlink   | *(deferred to v1.x)*                 | *(deferred to v1.x)*  |
 
 Removal MUST never recurse into the link target. Junction handling on Windows
 must explicitly detect reparse points so the OS does not follow the junction
@@ -37,13 +44,22 @@ membership, never by walking the filesystem.
 
 ## R3: Archive vs Delete for View Files
 
-- Link-kind views (symlink, junction, hardlink) carry no unique bytes; direct
-  unlink is safe and reversible by regeneration. Default: direct unlink.
-- Copy-kind views carry duplicated bytes that may be the user's only convenient
-  workflow copy; default to archive/trash so the user can restore without a
-  full regeneration. The user may opt into permanent delete per plan.
-- Mixed-strategy views produce a plan with mixed actions, each item explicitly
-  labeled in the review surface.
+**Updated (A1 + R-026-Dest-Archive, GRILL 2026-05-22)**: The destructive
+destination for ALL view removal is hard-coded to `archive`. There is no
+user-selectable `destructiveDestination` on the remove request. Rationale:
+preserving reversibility is a constitutional requirement; the user can always
+permanently delete from the archive surface after review.
+
+- Link-kind views (symlink, junction) carry no unique bytes; an archive
+  step is still taken to preserve the audit trail, but the archive action is
+  effectively a no-op for bytes (the link entry is removed and nothing is
+  moved to the archive folder).
+- Copy-kind views carry duplicated bytes; the archive step moves the copy to
+  `<library_root>/.astro-plan-archive/<planId>/` before deletion, consistent
+  with spec 017 R-Archive-1.
+- Mixed-kind views are refused at create time (A2); no mixed-action plan is
+  produced in v1.
+- `hardlink` removal semantics are deferred to v1.x (R-026-Strategies).
 
 ## R4: Regeneration Cost Analysis
 
@@ -60,9 +76,25 @@ membership, never by walking the filesystem.
 ## Decisions
 
 - D1: Treat removal and regeneration as `FilesystemPlan` variants, not as
-  bespoke operations.
-- D2: Default link-kind removal to direct unlink; default copy-kind removal to
-  archive.
-- D3: Stale detection is read-only and never auto-mutates.
+  bespoke operations. Both plans flow through the full spec 017/025 pipeline:
+  `plan.approve` (with approvalToken) → `plan.apply` (with per-item FS
+  revalidation, paused state, `plan.resume`). See R-026-Pipeline.
+- D2: Archive is the hard-coded destructive destination for all view removal;
+  there is no user-selectable alternative in v1 (R-026-Dest-Archive, GRILL
+  2026-05-22).
+- D3: Stale detection is read-only and never auto-mutates. Spec 017 cleanup
+  plans MAY include stale views as passive candidates; the user explicitly
+  approves any action (R-026-StaleAutoInclude, GRILL 2026-05-22).
 - D4: Preserve `PreparedSourceView` membership history after removal so
-  regeneration is reproducible.
+  regeneration is reproducible. Removed views have an indefinite regenerable
+  lifetime (A4, GRILL 2026-05-22).
+- D5 *(R-026-Lifecycle, GRILL 2026-05-22)*: View removal and regeneration are
+  allowed only when the owning project is in `setup_incomplete | ready |
+  prepared | processing | blocked | completed`. Requests on `archived` projects
+  are refused with `lifecycle.read_only`. The unarchive path flows through spec
+  009 R-Unarchive (`archived → ready`).
+- D6 *(R-026-Pipeline, GRILL 2026-05-22)*: All spec 017/025 error codes can
+  surface during plan apply (e.g. `item.stale`, `disk.full`,
+  `volume.unavailable`, `path.invalid`). The response for both remove and
+  regenerate includes a `plan_id` that tracks the plan through the standard
+  pipeline.

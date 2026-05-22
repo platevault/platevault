@@ -48,9 +48,15 @@ and the mockup mirrors this with the "Generate retry plan for failures" CTA.
 This keeps each apply attempt audit-immutable and lets the list show retry
 chains by following parent links.
 
-**Open option**: Whether the retry plan defaults to "failed items only" or
-"all items". The contract supports both via `items_filter`; the UX default in
-the mockup is failed-items-only.
+**Retry default** (R-Retry-1): Default retry filter is `failed`. For
+`cancelled` plans, the UI provides two separate explicit CTAs: "Retry failed"
+and "Retry cancelled" (each filters server-side). No auto-bundling of failed
++ cancelled items.
+
+**Retry chain UI** (R-Chain-1): Retry chain displays as a flat
+`parentPlanId` link in the plan detail header (e.g. "Retry of Plan #42 —
+partially_applied"). The parent plan shows "→ Retried as Plan #43 —
+applying". Bidirectional via shared `parentPlanId`. No tree widget in v1.
 
 ## 3. Cancellation semantics with partial progress
 
@@ -87,22 +93,34 @@ is `applying`.
 **Question**: For destructive plan items in v1, do we use platform trash, an
 app-managed archive folder, or permanent delete?
 
-**Options considered**:
+**Decision** (R-Trash-1 — OVERRIDE of prior "OS trash deferred"):
+**Both `archive` and `os_trash` are available in v1.** The user picks the
+destructive destination per cleanup plan at plan-review time. The choice is
+per-plan, recorded as `destructiveDestination` on the Plan entity. Default
+is `archive`.
 
-- **A. Permanent delete.** Smallest disk footprint, biggest blast radius.
-  Rejected by the constitution unless explicitly approved.
-- **B. Platform trash (Recycle Bin / Trash / FreeDesktop trash).** Cross-
-  platform support varies; external drives often skip system trash.
-- **C. App-managed archive folder under each library root.** Predictable
-  behavior across platforms and external drives; user owns the archive.
+- **`archive`** (default): app-managed folder under
+  `<library_root>/.astro-plan-archive/<planId>/<relative_source_path>`.
+  Conflict naming: append `.<n>` before extension. The archive folder is
+  filesystem-visible and appears in spec 016 protected categories by default.
+  Per-plan subfolders enable bulk operations (R-Archive-2).
+- **`os_trash`**: uses OS-native recycle bin per platform:
+  - Windows: `IFileOperation::DeleteItem` with `FOFX_RECYCLEONDELETE`.
+  - macOS: `NSFileManager.trashItem(at:resultingItemURL:error:)`.
+  - Linux: freedesktop trash spec / `gio trash` (XDG `$XDG_DATA_HOME/Trash`).
+  - Recommended Rust crate: `trash` (cross-platform abstraction).
+- **Permanent delete** of original paths remains deferred past v1. The
+  `archive.permanently_delete` contract covers only the app's own archive
+  subfolder after archiving (R-Archive-2).
 
-**Decision**: **C for v1, with B as a future option.** Permanent delete is
-deferred past v1.
+**Error codes added** (for `os_trash` path): `os_trash.unavailable`
+(platform API not supported), `os_trash.full`, `os_trash.permission.denied`.
 
-**Rationale**: Constitution principle II prefers archive workflows. Platform
-trash inconsistency on external drives (a common astro storage location)
-makes B unreliable. An app-managed archive is reviewable, predictable, and
-reversible without piping through OS trash semantics.
+**Rationale**: Constitution principle II prefers archive workflows. An
+app-managed archive is reviewable, predictable, and reversible. OS trash is
+now also available as a convenience for users who prefer it, since the `trash`
+Rust crate provides reliable cross-platform semantics including external
+drive support on all three target platforms.
 
 ## 5. Dry-run preview
 
@@ -160,16 +178,44 @@ Resolved:
 
 - Two-pane review surface (Q1).
 - Retry = new plan with `parentPlanId` (Q2).
+- Retry default = `failed`; cancelled plans get separate CTAs (R-Retry-1).
+- Retry chain UI = flat `parentPlanId` link, no tree widget in v1 (R-Chain-1).
 - Cancel = halt without rollback; distinct from partial-applied (Q3).
-- Archive folder, no permanent delete in v1 (Q4).
+- Archive folder + OS trash both available in v1; per-plan choice
+  `destructiveDestination` (R-Trash-1 — OVERRIDE of "OS trash deferred").
+- Archive location: `<library_root>/.astro-plan-archive/<planId>/` (R-Archive-1).
+- Archive management: `archive.send_to_trash` + `archive.permanently_delete`
+  per plan; `permanently_delete` requires `confirmText: "DELETE"` (R-Archive-2).
 - No separate dry-run state (Q5).
 - Default ordering: failed-first, then creation-time descending (Q6).
 - Concurrency: state-precondition rejects the loser (Q7).
+- `discarded` state: soft-delete terminal; row retained; `parentPlanId`
+  resolvable (A5).
+- `itemsSkipped` + `itemsCancelled` counters; invariant updated (A3).
+- `totalBytesRequired` pre-flight field; plan generation fails if insufficient
+  space (A4).
+- Per-item FS revalidation (`approvedMtime`/`approvedSizeBytes`) replaces TTL;
+  stale mismatch → `item.stale` → run pauses (R-FS-1, A2).
+- Approval token: HMAC over `(planId, contentHash, approvedAt, serverSecret)`;
+  single-use; no time-based TTL (A1).
+- Event bus topics: `plan.approved`, `plan.discarded`, `plan.cancelled` (A7).
+- Universal camelCase + `contractVersion` + `requestId` envelope (R-Env-1).
+- Plan list age cutoff: 90 days default from settings, configurable (R-Ret-1).
 
 Open:
 
-- Default retry filter: failed-only versus all (deferred to UX testing).
-- Whether the retry chain UI displays a tree, breadcrumbs, or a flat parent
-  link (deferred to spec 019/020 work on cross-surface linking).
-- Whether approving a plan also writes a checkpoint of the affected
-  filesystem state for spec 025 to validate before applying.
+- None remaining for spec 017 after this revision pass.
+
+## 9. Plan list age cutoff (R-Ret-1)
+
+**Decision**: The UI default list view hides terminal plans older than
+`settings.plans.list.default_age_cutoff_days` (default 90 days). User can
+override via Settings or a filter chip. Value `0` means show all.
+
+**Settings follow-up (NOT edited here)**: Spec 018 must add key
+`plans.list.default_age_cutoff_days: number (default 90, 0 = show all)`.
+This is flagged as a spec 018 follow-up.
+
+**Contract impact**: `plan.list.json` `request` adds optional `createdAfter:
+rfc3339`; server derives the default cutoff from the settings value when the
+caller omits it.

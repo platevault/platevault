@@ -2,78 +2,115 @@
   "$schema": "https://json-schema.org/draft/2020-12/schema",
   "$id": "https://astro-plan/contracts/dev.contracts.list.json",
   "title": "dev.contracts.list",
-  "description": "List the contract metadata registered in the current build. Read-only, replay-safe.",
+  "description": "List the contract metadata registered in the current build. Only available in dev-tools builds. Read-only.",
   "operation": {
     "name": "dev.contracts.list",
     "direction": "ui-to-core",
-    "version": "1"
+    "version": "1",
+    "contractVersion": "1.0.0"
   },
   "request": {
     "type": "object",
     "additionalProperties": false,
-    "properties": {}
+    "properties": {
+      "requestId": {
+        "type": "string",
+        "description": "Caller-supplied correlation id."
+      }
+    }
   },
   "response": {
-    "type": "object",
-    "required": ["contracts"],
-    "additionalProperties": false,
-    "properties": {
-      "contracts": {
-        "type": "array",
-        "description": "All contracts registered at startup. Order is by `name` ascending.",
-        "items": {
-          "type": "object",
-          "required": ["name", "version", "schema_path", "direction", "replay_safe"],
-          "additionalProperties": false,
-          "properties": {
-            "name": {
-              "type": "string",
-              "description": "Operation name, e.g. plan.create."
-            },
-            "version": {
-              "type": "string",
-              "description": "Semantic version of the contract shape."
-            },
-            "schema_path": {
-              "type": "string",
-              "description": "Absolute path to the JSON Schema file backing this contract."
-            },
-            "direction": {
-              "type": "string",
-              "enum": ["ui-to-core", "core-to-ui"],
-              "description": "Matches the direction field in the schema's operation block."
-            },
-            "replay_safe": {
-              "type": "boolean",
-              "description": "True for read-only contracts that may be replayed from the developer surface."
-            },
-            "sensitive_fields": {
-              "type": "array",
-              "items": { "type": "string" },
-              "description": "Optional JSON Pointer paths whose values are redacted before storage."
-            },
-            "ts_hash": {
-              "type": "string",
-              "description": "Optional TypeScript-side declaration hash. Present when known at startup."
-            },
-            "rust_hash": {
-              "type": "string",
-              "description": "Optional Rust-side declaration hash. Present when known at startup."
-            },
-            "mismatch": {
-              "type": "boolean",
-              "description": "True when ts_hash and rust_hash are both present and differ."
+    "oneOf": [
+      {
+        "type": "object",
+        "required": ["status", "requestId", "contractVersion", "contracts"],
+        "additionalProperties": false,
+        "properties": {
+          "status": { "type": "string", "const": "ok" },
+          "requestId": { "type": "string" },
+          "contractVersion": { "type": "string", "const": "1.0.0" },
+          "contracts": {
+            "type": "array",
+            "description": "All contracts registered at startup. Order is by `name` ascending.",
+            "items": {
+              "type": "object",
+              "required": ["name", "version", "schemaPath", "direction", "replaySafe"],
+              "additionalProperties": false,
+              "properties": {
+                "name": {
+                  "type": "string",
+                  "description": "Operation name, e.g. plan.create."
+                },
+                "version": {
+                  "type": "string",
+                  "description": "Semantic version of the contract shape."
+                },
+                "schemaPath": {
+                  "type": "string",
+                  "description": "Absolute path to the JSON Schema file backing this contract."
+                },
+                "direction": {
+                  "type": "string",
+                  "enum": ["ui-to-core", "core-to-ui"],
+                  "description": "Matches the direction field in the schema's operation block."
+                },
+                "replaySafe": {
+                  "type": "boolean",
+                  "default": false,
+                  "description": "Default false. True only when the contract explicitly opts in. Write contracts must not set true without an allow-list entry (CI lint enforced)."
+                },
+                "sensitiveFields": {
+                  "type": "array",
+                  "items": { "type": "string" },
+                  "description": "Optional JSON Pointer paths whose values are redacted before storage."
+                },
+                "tsHash": {
+                  "type": "string",
+                  "description": "SHA-256 of canonical JSON serialization of the TypeScript-side schema declaration. Present when known at startup."
+                },
+                "rustHash": {
+                  "type": "string",
+                  "description": "SHA-256 of canonical JSON serialization of the Rust-side schema declaration. Present when known at startup."
+                },
+                "mismatch": {
+                  "type": "boolean",
+                  "description": "True when tsHash and rustHash are both present and differ."
+                }
+              }
+            }
+          }
+        }
+      },
+      {
+        "type": "object",
+        "required": ["status", "requestId", "contractVersion", "errors"],
+        "additionalProperties": false,
+        "properties": {
+          "status": { "type": "string", "const": "error" },
+          "requestId": { "type": "string" },
+          "contractVersion": { "type": "string", "const": "1.0.0" },
+          "errors": {
+            "type": "array",
+            "items": {
+              "type": "object",
+              "required": ["code", "message"],
+              "additionalProperties": false,
+              "properties": {
+                "code": { "type": "string" },
+                "message": { "type": "string" },
+                "details": { "type": "object" }
+              }
             }
           }
         }
       }
-    }
+    ]
   },
-  "errors": [
+  "errorCodes": [
     {
       "code": "dev_mode.disabled",
       "message": "Developer mode is disabled. Enable devMode in settings to read the contract registry.",
-      "http_status_equivalent": 403
+      "httpStatusEquivalent": 403
     }
   ]
 }

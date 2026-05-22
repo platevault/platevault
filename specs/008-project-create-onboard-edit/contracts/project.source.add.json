@@ -42,6 +42,7 @@
         "project.not_found",
         "session.not_found",
         "source.already.linked",
+        "source.not_confirmed",
         "lifecycle.read_only",
         "inventory.unscanned"
       ]
@@ -58,7 +59,7 @@
         },
         "details": {
           "type": "object",
-          "description": "Structured context. source.already.linked MUST include existing_link_at. lifecycle.read_only MUST include current_lifecycle. inventory.unscanned MUST include inventory_session_id (the session exists but has no extracted metadata yet).",
+          "description": "Structured context. source.already.linked MUST include existing_link_at. lifecycle.read_only MUST include current_lifecycle. inventory.unscanned MUST include inventory_session_id. source.not_confirmed MUST include actual_state (the AcquisitionSession state that is not 'confirmed').",
           "additionalProperties": true,
           "properties": {
             "existing_link_at": { "$ref": "#/$defs/Timestamp" },
@@ -74,7 +75,12 @@
                 "blocked"
               ]
             },
-            "inventory_session_id": { "$ref": "#/$defs/Uuid" }
+            "inventory_session_id": { "$ref": "#/$defs/Uuid" },
+            "actual_state": {
+              "type": "string",
+              "enum": ["discovered", "candidate", "needs_review", "rejected", "ignored"],
+              "description": "The actual AcquisitionSession state when source.not_confirmed is returned."
+            }
           }
         }
       }

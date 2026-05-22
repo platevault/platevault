@@ -106,6 +106,42 @@ tests/
 - The plan terminal state row update is also transactional with the final
   audit event.
 
+## Ratified Decisions Folded
+
+The following decisions from GRILL_DECISIONS_2026-05-22 are now reflected in
+this spec's artifacts:
+
+| Ref | Summary |
+|-----|---------|
+| A2 | No TTL on approval token; per-item FS revalidation is freshness mechanism |
+| A4 | `totalBytesRequired` pre-flight; plan creation fails if space insufficient |
+| A6 | Canonical path check at apply start; Phase 3 blocker task added |
+| A7 | Event bus topics: `plan.applying.started`, `plan.item.progress`, `plan.applying.paused`, `plan.applying.resumed`, `plan.applying.completed` |
+| R-Env-1 | All contracts: camelCase, `contractVersion`, `requestId`, status-discriminated envelope |
+| R-Run-1 | `PlanApplyRun` mandatory SQLite table; created on apply start |
+| R-Fail-1 | `copy.succeeded.delete.failed` + rollback policy; `copy.succeeded.delete.failed.rollback.failed` |
+| R-FS-1 | Per-item FS revalidation before each mutation; `item.stale` → `paused` |
+| R-Concur-1 | Concurrency: strictly sequential within a plan; cross-plan overlap check |
+| R-Pause-1 | Pause/resume state machine; `plan.resume` contract |
+| R-CAS-1 | Atomic CAS on apply start; `plan.invalid_state` on race |
+| R-Trash-1 | OS trash semantics per platform; `os_trash.*` error codes |
+
+## Pause State Machine (R-Pause-1)
+
+```
+applying → paused       on: volume.unavailable | disk.full | item.stale
+paused   → applying     via: plan.resume (after condition resolves)
+paused   → cancelled    via: plan.cancel
+```
+
+The `plan.resume` contract re-validates the pause condition before resuming.
+If the condition is unchanged the server returns the appropriate fault code.
+The UI shows a dialog with context-appropriate action prompts:
+- `volume.unavailable` → "Remount drive" / "Cancel run"
+- `disk.full` → "Free space" / "Cancel run"
+- `item.stale` → "Regenerate plan" / "Cancel run"
+Once the user resolves the condition, "Resume" becomes enabled.
+
 ## Complexity Tracking
 
 No constitutional violations. No entries.

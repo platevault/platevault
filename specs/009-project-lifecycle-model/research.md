@@ -11,8 +11,8 @@ forbidden-by-design?
 
 ### Decision
 
-Sixteen allowed edges, organized as one forward path with three recovery
-families:
+Seventeen allowed edges (sixteen original + `blocked → archived` escape hatch
+per A3), organized as one forward path with recovery families:
 
 - **Forward path**: `setup_incomplete → ready → prepared → processing →
   completed → archived`.
@@ -21,11 +21,72 @@ families:
   spec 017).
 - **Re-open**: `completed → processing` (user discovered more work to do
   after marking complete).
-- **Unarchive**: `archived → processing` (resume work directly — see R3).
+- **Unarchive (two paths, R-Unarchive, GRILL 2026-05-22)**:
+  - `archived → ready`: the user wants to revisit a finished project but
+    is not necessarily resuming active processing. This is the primary
+    unarchive path. The project returns to the `ready` state where the
+    user can inspect, edit sources, or start a prepared-source generation.
+    Reverse archival is supported via this single primary edge.
+  - `archived → processing`: direct resume (the pre-existing path).
+    Retained for users who know they want to immediately continue processing.
 - **Block**: any active state (`setup_incomplete`, `ready`, `prepared`,
   `processing`) can transition to `blocked`.
 - **Unblock**: `blocked → {ready, prepared, processing, setup_incomplete}`
   back to whatever state the resolution implies.
+- **Escape-hatch archive**: `blocked → archived` (A3, GRILL 2026-05-22).
+  For permanently-blocked projects the user cannot unblock. Requires explicit
+  user confirmation and always requires a plan (identical requirements to
+  `completed → archived`). Allowed actors: user (with explicit confirmation)
+  OR system (if the system determines the project is permanently unrecoverable).
+
+**`actor=system` authorization (A4, GRILL 2026-05-22)**: The use case enforces
+that `actor=system` is allowed ONLY on:
+1. `* → blocked` (any state to blocked).
+2. `blocked → *` (any blocked recovery edge, including `blocked → archived`).
+3. The deterministic invariant-driven `setup_incomplete → ready` auto-transition
+   (R-Ready-Trigger) — classified as "automatic invariant transition".
+
+Any other `actor=system` edge is rejected with `transition.refused`; the
+rejection is audit-logged.
+
+**`requires_plan` server derivation (A6)**: Callers MUST NOT pass `requires_plan`
+on the contract request. The server consults the spec 002 canonical
+`(entity_type, from, to) → requires_plan` plan-requirement edge table. For
+project transitions:
+- `ready → prepared`: required.
+- `prepared → ready`: required.
+- `completed → archived`: **always required** (R-Archived-Plan).
+- `blocked → archived`: **always required** (same as `completed → archived`).
+- `archived → processing`: required only when files moved (C7 criterion).
+- `archived → ready`: required only when files moved (C7 criterion — mirrors
+  `archived → processing`). Plan NOT required when only metadata transitions
+  (R-Unarchive, GRILL 2026-05-22).
+- All other project edges: not required.
+
+**`setup_incomplete → ready` auto-transition (R-Ready-Trigger)**: Server-side
+invariant check fires after every `project.update` or `project.source.add`.
+Invariants: `tool != null AND ≥1 confirmed source mapped`. When satisfied,
+lifecycle service auto-transitions via `actor=system`. Emits
+`project.lifecycle.ready` event on event bus. This is an "automatic invariant
+transition" — a sub-classification of system-actor use alongside
+`* → blocked` / `blocked → *`.
+
+**`completed → archived` always requires plan (R-Archived-Plan)**: Even when
+no files move, plan generation produces a Plan with at least the manifest-write
+structural item. The empty-move plan preserves the audit trail and satisfies the
+spec 024 manifest snapshot requirement.
+
+**Blocked-flag debounce (D5)**: The detector layer MUST debounce on the same
+`(entity_id, blocking_condition)` for at least 60 seconds. The lifecycle layer
+itself does NOT debounce.
+
+### `status: "noop"` response (A2)
+
+When `next_state` equals the project's current state, the use case returns
+`status: "noop"` — no error, no `audit_id`. This aligns with the spec 002
+noop pattern (GRILL 2026-05-21, aligned A2). The removed `state.unchanged`
+error code is explicitly retired; callers should handle `"noop"` status as a
+success with no state change.
 
 ### Forbidden edges and rationale
 
@@ -36,15 +97,23 @@ families:
 - **`archived → completed`**: refused because re-completion is never silent;
   the user must re-enter `processing` and re-mark complete. This keeps
   `lastAction` truthful.
-- **`archived → ready` / `archived → prepared`**: refused for the same
-  reason. The archive is a terminal museum state and exits only through the
-  explicit Unarchive action.
-- **`completed → archived` via auto-transition**: not forbidden, but not
-  automatic. User must approve the archive action; the audit chain MUST
-  include the FilesystemPlan id.
-- **Skipping `ready`**: `setup_incomplete` may only progress to `ready`. No
-  short-circuit to `prepared`/`processing` — the readiness gate is the
-  invariant that source mapping exists.
+- **`archived → prepared`**: still refused. `archived → ready` is now the
+  primary unarchive path; going directly to `prepared` skips the readiness
+  gate (R-Unarchive, GRILL 2026-05-22 — `archived → ready` is now allowed).
+- **`archived → ready` (UPDATED — R-Unarchive, GRILL 2026-05-22)**: This
+  edge is NOW ALLOWED. It was previously forbidden; the rationale for
+  forbidding it (archive is a terminal museum state) has been revised.
+  User rationale: users legitimately need to revisit finished projects
+  (e.g., planning an imaging re-run, reviewing sources, fixing metadata).
+  The unarchive is explicit and auditable; the archive-over-delete principle
+  still applies to any files that were moved during archival. Reverse archival
+  is supported via this edge.
+- **`blocked → completed`**: explicitly forbidden even after adding
+  `blocked → archived`. The user must unblock and re-mark complete, or use
+  the escape-hatch archive (A3).
+- **Skipping `ready`**: `setup_incomplete` may only progress to `ready` (or
+  `blocked`). No short-circuit to `prepared`/`processing` — the readiness gate
+  is the invariant that source mapping exists.
 
 ### Alternatives considered
 
@@ -55,6 +124,8 @@ families:
 - **Auto-archive on `completed` after N days**: rejected for v1. Auto state
   transitions risk silent destruction of user expectations. Reconsider once
   the audit and revert surfaces are mature.
+- **`blocked → completed`**: rejected (A3); use `blocked → archived` escape
+  hatch instead.
 
 ## R2. Action-Label Policy
 
@@ -79,6 +150,7 @@ Action labels are **edge-derived**, not state-derived. The mockup precedent
 | `completed → archived`              | `Marked archived`    |
 | `completed → processing`            | `Re-opened`          |
 | `archived → processing`             | `Unarchived`         |
+| `archived → ready`                  | `Unarchived`         |
 | `* → blocked`                       | `Marked blocked`     |
 | `blocked → *`                       | `Resolved blocker`   |
 
@@ -170,6 +242,34 @@ when the flag is set and no approved plan_id is referenced, and
 `prepared_source.required` (project-scoped) when the prepared source
 artifact is missing or invalid for a `ready → prepared` transition that
 otherwise has an approved plan.
+
+## R5a. JSON Schema Plan-Gated Enforcement (R-PlanGated-Schema)
+
+### Question
+
+Should the `project.lifecycle.transition.json` schema enforce `plan_id`
+requirement for plan-gated edges at the schema layer?
+
+### Decision
+
+**Yes — belt-and-suspenders `if/then` allOf in Request** (GRILL 2026-05-22,
+R-PlanGated-Schema):
+
+```json
+{
+  "if": { "properties": { "next_state": { "enum": ["prepared", "archived"] } } },
+  "then": { "required": ["plan_id"] }
+}
+```
+
+This is schema-layer enforcement only. The server STILL enforces the requirement
+authoritatively via the spec 002 plan-requirement edge table (A6). The schema
+catches missing `plan_id` at client validation time before the request is sent.
+
+### Rationale
+
+- Schema-level enforcement catches integration bugs earlier.
+- The server remains authoritative; schema is a defense-in-depth layer only.
 
 ## R5. Stepper UX and Visited-State Indication
 

@@ -1,7 +1,7 @@
 # Data Model: Processing Artifact Observation
 
 **Feature**: `012-processing-artifact-observation`
-**Date**: 2026-05-20
+**Date**: 2026-05-22
 
 ## Entities
 
@@ -12,7 +12,7 @@ by the app but never owned by it.
 
 | Field | Type | Required | Notes |
 |-------|------|----------|-------|
-| `id` | string (ulid) | yes | Stable identifier. |
+| `id` | string (uuid) | yes | Stable identifier (C4: UUID for consistency with other spec entities). |
 | `project_id` | string | yes | FK to `Project.id`. |
 | `tool_launch_id` | string | optional | FK to `ToolLaunch.id` (feature 011); null when no launch matches the detection window. |
 | `path` | string (project-relative) | yes | Project-relative path; absolute resolution via library root (feature 001). |
@@ -24,7 +24,8 @@ by the app but never owned by it.
 | `classification_confidence` | float in [0,1] | yes | 1.0 for manual overrides; otherwise per rule (research R-2). |
 | `classification_source` | ClassificationSource | yes | `rule`, `manual_override`, or `fallback`. |
 | `size_bytes` | integer | yes | Snapshot at detection; used for partial-write stable-size check. |
-| `file_mtime` | datetime | yes | Filesystem mtime at detection. |
+| `file_mtime` | datetime | yes | Filesystem mtime at detection. NOT used for attribution (R-AppClock). |
+| `content_hash` | string? | no | Hex-encoded SHA-256 or BLAKE3 of file content. Updated in-place on rerun overwrite (A8). Null until first hash computed. |
 
 ### ArtifactKind
 
@@ -94,6 +95,12 @@ Presence of a row forces `classification_source = manual_override`,
 `classification_confidence = 1.0`, and disables automatic
 re-classification.
 
+**Clear path (A6):** Calling `artifact.classify` with `kind: null`
+deletes the `ClassificationOverride` row for the artifact and triggers
+rule re-classification. The artifact's `classification_source` returns
+to `rule` or `fallback`. An `artifact.classify.override.cleared` audit
+event is emitted.
+
 ---
 
 ## Derived View: ProcessingArtifactSummary
@@ -125,14 +132,47 @@ Grouping for the drawer:
 
 When a new artifact is detected:
 
-1. Look up all `ToolLaunch` rows for the project whose `started_at`
+1. Look up all `ToolLaunch` rows for the project whose `launched_at`
    is within `launch_attribution_window` (default 6h, configurable
-   per workflow profile) before `detected_at`.
+   per workflow profile — C3) before `detected_at`.
 2. Of those, pick the nearest preceding launch with the same `tool`.
 3. If none match, leave `tool_launch_id` null.
 
-Attribution is computed once at detection and is not recomputed when
-launches are added later. Future re-attribution is out of scope.
+**Attribution uses the application clock** (`Instant::now()` at event
+arrival), NOT filesystem `metadata.modified()` — NAS clock skew
+protection (R-AppClock).
+
+**Re-attribution on new `tool.launch` event (A7):** On every
+`tool.launch` event, the attribution pass back-fills `tool_launch_id`
+for `processing_artifacts` rows where `detected_at` is within 6 hours
+of the new launch's `launched_at` AND `tool_launch_id` is currently null
+OR points to an earlier launch. This allows late-arriving launch records
+to claim artifacts that were detected before the launch row was
+persisted.
+
+**PI rerun overwrite rule (A8):** When a tool writes to a path that
+already has a `ProcessingArtifact` row, the row is UPDATED in place:
+`content_hash`, `size_bytes`, `last_seen_at` are refreshed. No new
+`artifact.detected` event is emitted; an `artifact.updated` event is
+emitted instead. The audit history of prior `content_hash` values is
+NOT preserved — this is a deliberate simplification (single row, latest
+hash only).
+
+## WorkflowProfile extension (R-ExtAllow)
+
+```
+WorkflowProfile {
+  ...
+  watch_extensions:  String[]   // coarse pre-filter before classifier
+                                 // default: [".xisf",".fits",".fit",
+                                 //           ".tif",".tiff",".png",
+                                 //           ".jpg",".ser",".avi"]
+                                 // spec 018 ripple: workflow_profile.<id>.watch_extensions
+}
+```
+
+Files whose extension is NOT in `watch_extensions` are silently skipped
+by the watcher. The extension check is case-insensitive on Windows.
 
 ## Invariants
 
@@ -143,6 +183,11 @@ launches are added later. Future re-attribution is out of scope.
   `missing → present`, an existing override is preserved.
 - A row's `kind` and `classification_confidence` are recomputed only
   when `classification_source != manual_override`.
+- Sending `kind: null` to `artifact.classify` CLEARS the
+  `ClassificationOverride` row and triggers rule re-classification (A6).
+- `content_hash` is the latest known hash; prior values are not retained
+  (A8 in-place update rule).
+- `id` is a UUID (not ULID) for consistency with other spec entities (C4).
 
 ## Audit Events
 
@@ -151,15 +196,22 @@ Audit events flow through `crates/audit/`:
 - `artifact.detected` — new row created.
 - `artifact.classified` — automatic classification recorded.
 - `artifact.classify.override` — manual override applied.
+- `artifact.classify.override.cleared` — `kind: null` call; override row
+  deleted; rules re-applied (A6).
+- `artifact.updated` — existing row updated in place on rerun overwrite;
+  `content_hash` changed (A8). NOT emitted for attribution-only updates.
 - `artifact.missing` — state transitioned to `missing`.
 - `artifact.recovered` — state transitioned `missing → present`.
 - `artifact.user_resolved` — user marked a missing row resolved.
+- `workflow.run_completed` — emitted when `ToolLaunch.completed_at` is
+  set by this spec's attribution pass; carries `projectId`, `toolId`,
+  `toolLaunchId`, `completedAt`, `artifactIds` (R-Event-Light, FR-010).
 
 ## Storage Sketch
 
 ```sql
 CREATE TABLE processing_artifacts (
-  id                         TEXT PRIMARY KEY,
+  id                         TEXT PRIMARY KEY,      -- UUID (C4)
   project_id                 TEXT NOT NULL,
   tool_launch_id             TEXT NULL,
   path                       TEXT NOT NULL,
@@ -171,7 +223,8 @@ CREATE TABLE processing_artifacts (
   classification_confidence  REAL NOT NULL,
   classification_source      TEXT NOT NULL CHECK (classification_source IN ('rule','manual_override','fallback')),
   size_bytes                 INTEGER NOT NULL,
-  file_mtime                 TEXT NOT NULL,
+  file_mtime                 TEXT NOT NULL,         -- stored; NOT used for attribution (R-AppClock)
+  content_hash               TEXT NULL,             -- hex SHA-256 or BLAKE3; updated in-place on rerun (A8)
   UNIQUE (project_id, path)
 );
 

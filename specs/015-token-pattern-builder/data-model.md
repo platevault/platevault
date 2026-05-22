@@ -46,7 +46,7 @@ Describes one token in the registry.
 |--------------|-------------------|--------------------|-------------|
 | `target`     | `target`          | `unclassified`     | sanitize_only |
 | `filter`     | `filter`          | `nofilter`         | sanitize_only |
-| `date`       | `date_obs_utc`    | `undated`          | date_iso    |
+| `date`       | `date_obs_local`  | `undated`          | date_iso    |
 | `frame_type` | `frame_type`      | `unknown`          | lower       |
 | `camera`     | `camera`          | `unknown-camera`   | sanitize_only |
 | `exposure`   | `exposure`        | `unknown-exposure` | sanitize_only |
@@ -54,10 +54,21 @@ Describes one token in the registry.
 | `binning`    | `binning`         | `1x1`              | sanitize_only |
 | `set_temp`   | `set_temp`        | `untempered`       | sanitize_only |
 
+**Note on `date` source field**: `date_obs_local` is the local date computed
+from `exposure_start` in `AcquisitionSession.observer_location.tz` using the
+solar-noon boundary rule (spec 023). When observer_location is unset the
+caller substitutes the UTC date and includes `"date"` in the `missing_tokens`
+array. (Ref: R-Date-1)
+
 ### MetadataBundle
 
 A flat map keyed by `source_field`. Values are strings; absent keys imply
 fallback substitution.
+
+`frame_type` values in the bundle MUST be from the closed enum:
+`["light", "dark", "flat", "bias", "dark_flat"]` (lowercase). `mixed` is
+NOT a valid `frame_type` in a MetadataBundle; it is a folder-level
+classification result, not a per-file property. (Ref: R-FrameEnum)
 
 ### ResolveResult
 
@@ -89,8 +100,11 @@ by token name; the registry above mirrors the same values.
 
 ## Errors
 
-| Code              | When                                                                |
-|-------------------|---------------------------------------------------------------------|
-| `pattern.empty`   | Resolve or validate called with an empty `PatternPart[]`.           |
-| `pattern.invalid` | Resolved path violates OS path rules (e.g. >MAX_PATH).              |
-| `token.unknown`   | Pattern references a token name not present in the registry.        |
+| Code                      | When                                                                                    |
+|---------------------------|-----------------------------------------------------------------------------------------|
+| `pattern.empty`           | Resolve or validate called with an empty `PatternPart[]`.                               |
+| `pattern.invalid`         | Resolved path violates OS path rules (segment > 200 bytes or total > 200 chars). Details include `segmentLengthBytes` and `resolvedLength`. (Ref: A4) |
+| `pattern.invalid.unicode` | A resolved token value contains Unicode confusables or stripped bidi/format characters. (Ref: A1) |
+| `path.traversal`          | A resolved token value equals `.` or `..`, or the assembled path contains a `..` segment. (Ref: A2) |
+| `path.reserved_name`      | A path segment matches a Windows reserved device name (CON, PRN, AUX, NUL, COM1–9, LPT1–9), case-insensitively, on any platform. (Ref: A3) |
+| `token.unknown`           | Pattern references a token name not present in the registry.                            |

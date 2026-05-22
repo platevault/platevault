@@ -84,8 +84,26 @@ allowed to proceed.
   override UI in `apps/desktop/`.
 - **Phase 3**: audit wiring and acknowledgement flow.
 
+## Cross-Spec Notes (ratified 2026-05-22)
+
+- **R-OSTrash-Allowed (E-016-1)**: `os_trash` is treated as reversible.
+  The `block_permanent_delete` flag applies ONLY to `permanent_delete` actions.
+  Spec 017's `destructiveDestination = os_trash` is always allowed even when
+  `block_permanent_delete = true`. Only spec 017's `permanent_delete` action
+  (separate from `archive`/`os_trash`) is blocked and rewritten to `archive`.
+- **E-016-2 (spec 025 pre-flight)**: Protection re-resolution happens during
+  spec 025's per-item FS revalidation. The plan item's `resolved_level` and
+  `block_permanent_delete` are re-evaluated against the current source state
+  at apply time, not just at plan-generation time. Stale-protection drift
+  surfaces as `item.stale` and forces re-approval.
+- **E-016-3 (spec 018 audit-event override)**: The `protectedCategories`
+  settings key MUST emit `protection.default.changed` whenever it is updated,
+  overriding spec 018's general no-op / no-emit policy for non-noisy keys.
+  This is a named exception documented in spec 018's noisy-key exclusion list.
+
 ## Out of Scope
 
 - OS-level ACL enforcement.
 - Network-share retention coordination.
 - Encryption-at-rest controls.
+- "Freeze project" toggle (deferred to v1.x; see research Open Questions).

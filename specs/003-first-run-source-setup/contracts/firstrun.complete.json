@@ -2,7 +2,7 @@
   "$schema": "https://json-schema.org/draft/2020-12/schema",
   "$id": "https://astro-library-manager.local/contracts/firstrun.complete.json",
   "title": "firstrun.complete",
-  "description": "Mark the first-run wizard as completed. MUST only succeed when the wizard is in_progress and the Raw step has at least one RegisteredSource. Sets FirstRunState.completed_at, clears the sources_buffer, and is mirrored to the localStorage completion flag by the desktop adapter.",
+  "description": "Mark the first-run wizard as completed. MUST only succeed when the wizard is in_progress, at least one RegisteredSource of kind 'raw' exists, and at least one RegisteredSource of kind 'project' exists (R-Wiz-2). Source registration MUST be performed via source.register.batch before calling this operation (R-Batch, A9). Sets FirstRunState.completed_at and mirrors the completion flag to localStorage. Emits audit event first_run.completed (R-E2). Partial-success from the batch call is handled at the Finish step; this operation is only invoked after all required sources are committed.",
   "type": "object",
   "properties": {
     "operation": {
@@ -42,7 +42,7 @@
           "description": "FirstRunState is already completed_at != null. The caller should refresh state rather than re-completing."
         },
         "required.step.incomplete": {
-          "description": "No RegisteredSource of kind 'raw' exists. The wizard MUST register at least one Raw source before completion."
+          "description": "No RegisteredSource of kind 'raw' exists, or no RegisteredSource of kind 'project' exists. Both are required before completion (R-Wiz-2). The error payload includes which kinds are missing."
         }
       }
     }

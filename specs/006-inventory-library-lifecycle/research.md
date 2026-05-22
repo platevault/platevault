@@ -66,51 +66,58 @@ split before becoming Inventory items?
 - Option 3 contradicts FR-009 and the spec-002 invariant that calibration
   sessions reject frame-kind heterogeneity.
 
-**Decision**: Option 2. Stored values are `light | dark | flat | bias |
-dark_flat` (mirrors spec 002 `CalibrationSession.kind` plus `light` from
-`AcquisitionSession`). `mixed` is a presentational sentinel produced by
-the projection when a session's member frames disagree on kind; it is the
-trigger for a "split or reclassify" recovery prompt rather than a stable
-state. The filter accepts `mixed` so users can find these sessions.
+**Decision**: Option 2. Stored values are `light | dark | flat | bias`
+(mirrors spec 002 `CalibrationSession.kind` plus `light` from
+`AcquisitionSession`). `dark_flat` is reserved in the spec 005 `FrameType`
+enum for forward-compatibility but is NOT stored or matched in v1; files with
+IMAGETYP values mapping to dark_flat land as `unclassified` (spec 005 ripple
+— dark_flat keywords are excluded from the IMAGETYP normalization table in
+v1). `mixed` is a sentinel detected server-side (Rust + SQL) when a
+session's member frames disagree on kind after promotion; it is the trigger
+for a "split or reclassify" recovery prompt rather than a stable stored
+value. The filter accepts `mixed` so users can find these sessions.
+
+**Per-frame kind storage constraint**: Per-frame kind storage lives in
+spec 005 (Inbox) only. Inventory sessions collapse to a single kind on
+confirm. There is no per-frame kind array on `InventorySession`. The `mixed`
+sentinel is a post-promotion regression marker, not stored frame-level data.
+The `mixed` type is detected server-side and returned as a derived `type`
+field in the contract; integration tests (not JSON Schema fixtures) validate
+this detection path.
 
 ## 3. Review-State Semantics and Spec 002 Cross-Reference
 
-**Question**: The mockup shows three review states (`confirmed |
-needs_review | rejected`) but spec 002 defines a six-state family
-(`discovered | candidate | needs_review | confirmed | rejected | ignored`).
-How do the two reconcile?
+**Question**: The initial mockup used a three-bucket presentational
+projection (`confirmed | needs_review | rejected`). GRILL ratified the
+wide projection drop (R-Projection-Wide, 2026-05-22). How are the two
+layers aligned?
 
-**Options**:
+**Ratified decision** (R-Projection-Wide): The dual-field approach is
+rejected. `InventorySession` exposes a single `state` field using the
+spec 002 six-value canonical family:
 
-1. **Adopt the spec-002 family verbatim in the UI**: Six states everywhere.
-2. **Project spec-002 states into a three-bucket UI vocabulary**:
-   `discovered` and `candidate` collapse into `needs_review` for ledger
-   display; `ignored` is filter-only.
-3. **Diverge — keep three-state in the data model**: The inventory record
-   stores only three states, losing the candidate/ignored distinction.
+```
+discovered | candidate | needs_review | confirmed | rejected | ignored
+```
 
-**Tradeoffs**:
+There is no server-side presentational projection; the Tauri adapter
+returns canonical state names directly. The UI layer maps display labels
+locally:
 
-- Option 1 surfaces internal pipeline states (`discovered`, `candidate`)
-  that have no user-facing action. Users would see a row in `discovered`
-  with no available transition, which violates FR-006 (actions must be
-  consistent across Inbox/Inventory/Projects).
-- Option 2 keeps the user vocabulary aligned with what users actually need
-  to act on — "this needs my attention" vs "I confirmed it" vs "I rejected
-  it" — while preserving the underlying state for analytics, audit, and
-  re-derivation. `ignored` becomes a separate filter ("Hidden") rather
-  than a row decoration.
-- Option 3 throws away information the system already has and complicates
-  re-ingestion when a previously ignored session reappears.
+- `discovered` and `candidate` → display label "Needs review"
+- `confirmed` → display label "Confirmed"
+- `rejected` → display label "Rejected"
+- `ignored` → excluded from default ledger; surfaced via Cmd+K
+  "Show ignored items" (FR-010) which navigates to
+  `/inventory?reviewFilter=ignored`
 
-**Decision**: Option 2. The projection in `crates/fs/inventory/projection.rs`
-maps `discovered` and `candidate` to a presentational `needs_review`
-bucket. `ignored` rows are excluded from the default ledger and surfaced
-only when the review filter explicitly selects `ignored` (filter value
-added in a follow-up; v1 omits `ignored` from the filter selector to keep
-the visible vocabulary tight). The Tauri `inventory.session.review`
-contract operates on the spec-002 state family directly; the UI sends
-canonical state names, not the projected bucket.
+`inventory.session.review` `next_state` accepts the six canonical values.
+`setSessionReviewState` in the Tauri adapter sends canonical state names.
+
+**Noop pattern** (A2): Re-applying the current state returns
+`status: "noop"` per spec 002's idempotency contract. The `state.unchanged`
+error code is removed from `inventory.session.review`. The noop response
+carries no `audit_id` (no audit entry is created for no-op transitions).
 
 ## 4. Source-State Surfacing: Missing vs. Reconnect-Required
 
@@ -144,8 +151,9 @@ Review actions on sessions whose root is `missing` or `reconnect_required`
 are still callable from the drawer; the contract layer is responsible for
 refusing them with `transition.refused` and the error detail
 `{ reason: "source_unavailable" }` so the UI can surface a quiet message.
-Confirm actions on sessions under `disabled` roots return `state.unchanged`
-when already confirmed, and `transition.refused` otherwise.
+Confirm actions on sessions under `disabled` roots return `status: "noop"`
+when the requested state already matches current state, and
+`transition.refused` otherwise.
 
 ## 5. Drawer Field Ordering
 

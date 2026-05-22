@@ -27,15 +27,26 @@
     },
     "FrameType": {
       "type": "string",
-      "enum": ["light", "dark", "flat", "bias", "dark_flat", "mixed"]
+      "enum": ["light", "dark", "flat", "bias", "mixed"],
+      "description": "dark_flat is reserved in the FrameType domain enum but is never returned in v1. mixed is a server-derived sentinel for post-promotion regressions."
     },
-    "PresentationalReviewState": {
+    "SessionState": {
       "type": "string",
-      "enum": ["needs_review", "confirmed", "rejected"]
-    },
-    "CanonicalSessionState": {
-      "type": "string",
+      "description": "Canonical spec 002 session state. No server-side presentational projection. UI maps display labels locally: discovered+candidate display as 'Needs review'.",
       "enum": [
+        "discovered",
+        "candidate",
+        "needs_review",
+        "confirmed",
+        "rejected",
+        "ignored"
+      ]
+    },
+    "ReviewFilter": {
+      "type": "string",
+      "description": "Filter token for the review_filter parameter. 'all' disables state filtering. 'ignored' surfaces ignored sessions that are otherwise excluded from the default ledger.",
+      "enum": [
+        "all",
         "discovered",
         "candidate",
         "needs_review",
@@ -89,8 +100,8 @@
           "description": "When set, limits sessions to the given frame type. The 'mixed' value matches sessions whose member frames disagree on kind."
         },
         "review_filter": {
-          "$ref": "#/$defs/PresentationalReviewState",
-          "description": "When set, limits sessions to the given presentational review state. 'ignored' canonical sessions are always excluded; surface them with a separate filter contract in a follow-up."
+          "$ref": "#/$defs/ReviewFilter",
+          "description": "When set, limits sessions to the given canonical state. 'ignored' sessions are excluded from the default ledger (no filter or filter='all'); use review_filter='ignored' to surface them (FR-010 Cmd+K action navigates to /inventory?reviewFilter=ignored)."
         }
       }
     },
@@ -136,8 +147,7 @@
         "target",
         "filter",
         "exposure",
-        "state",
-        "canonical_state"
+        "state"
       ],
       "additionalProperties": false,
       "properties": {
@@ -149,13 +159,18 @@
         "target": { "type": ["string", "null"] },
         "filter": { "type": ["string", "null"] },
         "exposure": { "type": ["string", "null"] },
-        "state": { "$ref": "#/$defs/PresentationalReviewState" },
-        "canonical_state": { "$ref": "#/$defs/CanonicalSessionState" },
+        "state": {
+          "$ref": "#/$defs/SessionState",
+          "description": "Canonical spec 002 state. UI maps display labels locally: discovered+candidate → 'Needs review'. ignored sessions only appear when review_filter='ignored'."
+        },
         "camera": { "type": "string" },
         "gain": { "type": "string" },
         "binning": { "type": "string" },
         "set_temp": { "type": "string" },
-        "captured_on": { "$ref": "#/$defs/Date" },
+        "captured_on": {
+          "$ref": "#/$defs/Date",
+          "description": "Earliest frame date among member frames (UX ordering label). Intentionally different from spec 023 TargetSession.captured_on which uses the solar-noon boundary."
+        },
         "provenance": { "$ref": "#/$defs/ProvenanceSummary" },
         "linked": { "$ref": "#/$defs/LinkedRefs" }
       }

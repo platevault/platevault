@@ -12,7 +12,11 @@
     "ContractVersion": { "type": "string", "const": "1.0" },
     "Uuid": { "type": "string", "format": "uuid" },
     "Timestamp": { "type": "string", "format": "date-time" },
-    "Actor": { "type": "string", "enum": ["user", "system"] },
+    "Actor": {
+      "type": "string",
+      "enum": ["user", "system"],
+      "description": "Who initiated the transition. actor='system' is permitted by the contract schema but the server enforces that system actors may only use edges entering or leaving 'blocked' (GRILL spec 009 A4), PLUS the deterministic invariant-driven setup_incomplete → ready auto-transition (R-Ready-Trigger). Any other system-actor edge is rejected server-side with transition.refused."
+    },
     "ProjectLifecycle": {
       "type": "string",
       "enum": [
@@ -59,14 +63,13 @@
     },
     "ErrorCode": {
       "type": "string",
-      "description": "Project-scoped error codes layered on the spec 002 ErrorEnvelope. project.* codes are specific to this contract; the others are re-exported from lifecycle.transition for caller convenience.",
+      "description": "Project-scoped error codes layered on the spec 002 ErrorEnvelope. project.* codes are specific to this contract; the others are re-exported from lifecycle.transition for caller convenience. Note: state.unchanged is NOT an error code; a no-op transition returns status='noop' with no audit_id and no error (GRILL A2, spec 002 noop pattern).",
       "enum": [
         "project.not_found",
         "transition.refused",
         "prepared_source.required",
         "plan.required",
         "plan.not_approved",
-        "state.unchanged",
         "actor.not_authorised"
       ]
     },
@@ -132,16 +135,25 @@
           "if": { "properties": { "next_state": { "const": "blocked" } } },
           "then": { "required": ["blocked_reason"] },
           "else": { "not": { "required": ["blocked_reason"] } }
+        },
+        {
+          "description": "R-PlanGated-Schema: Schema-layer enforcement that plan_id is present for plan-gated edges. Belt-and-suspenders alongside spec 002 plan-requirement edge table. Server still enforces the requirement authoritatively. Note: archived→ready (R-Unarchive) and archived→processing require plan_id only when files move (C7 criterion); the schema cannot model that condition-dependent requirement, so the if/then here only covers unconditionally-required edges (prepared, archived terminal). The server enforces the C7 conditional requirement for the unarchive edges.",
+          "if": {
+            "properties": {
+              "next_state": { "enum": ["prepared", "archived"] }
+            }
+          },
+          "then": { "required": ["plan_id"] }
         }
       ]
     },
     "Response": {
       "type": "object",
-      "description": "Project lifecycle transition response.",
+      "description": "Project lifecycle transition response. status='noop' is returned when next_state equals the project's current state; no audit_id and no error are present in this case (GRILL A2, spec 002 noop pattern).",
       "required": ["status", "contractVersion", "requestId"],
       "additionalProperties": false,
       "properties": {
-        "status": { "type": "string", "enum": ["success", "error"] },
+        "status": { "type": "string", "enum": ["success", "error", "noop"] },
         "contractVersion": { "$ref": "#/$defs/ContractVersion" },
         "requestId": { "$ref": "#/$defs/Uuid" },
         "applied_at": { "$ref": "#/$defs/Timestamp" },
@@ -158,6 +170,13 @@
           "then": {
             "required": ["applied_at", "new_state", "last_action", "audit_id"],
             "not": { "required": ["error"] }
+          }
+        },
+        {
+          "if": { "properties": { "status": { "const": "noop" } } },
+          "then": {
+            "not": { "required": ["error"] },
+            "description": "No-op response: next_state equals current state. No audit_id and no error. Caller should treat this as a success with no observable state change."
           }
         },
         {

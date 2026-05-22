@@ -11,10 +11,10 @@ existing contract registry; not persisted.
 | `version`           | `string`                          | Semantic version of the contract shape, e.g. `"1"` or `"1.2"`.                       |
 | `schema_path`       | `string`                          | Absolute path to the JSON Schema file under `packages/contracts/`.                   |
 | `direction`         | `"ui-to-core" \| "core-to-ui"`    | Matches the `direction` field in the schema's `operation` block.                     |
-| `replay_safe`       | `boolean`                         | `true` for read-only contracts; `false` for write contracts in v1.                   |
+| `replay_safe`       | `boolean`                         | Default `false`. Contracts must opt in to `true` explicitly. Write contracts must NOT set `true` without an explicit allow-list entry (CI lint enforced). |
 | `sensitive_fields`  | `string[]`                        | JSON Pointer paths whose values are redacted before storage. Optional; defaults to the well-known set in research R4. |
-| `ts_hash`           | `string?`                         | Hash of the TypeScript-side declaration. Used for mismatch detection at startup.     |
-| `rust_hash`         | `string?`                         | Hash of the Rust-side declaration. Used for mismatch detection at startup.           |
+| `ts_hash`           | `string?`                         | SHA-256 hash of the canonical JSON serialization (deterministic key ordering) of the TypeScript-side schema declaration. Used for mismatch detection at startup. |
+| `rust_hash`         | `string?`                         | SHA-256 hash of the canonical JSON serialization (deterministic key ordering) of the Rust-side schema declaration. Used for mismatch detection at startup. |
 | `mismatch`          | `boolean`                         | Derived: `ts_hash != rust_hash` when both are present.                               |
 
 `ContractMeta` is computed at startup from the registry and cached for the
@@ -30,7 +30,7 @@ the in-memory ring buffer; not persisted.
 | `id`                 | `string`                          | Monotonic id within session. Used as the row key.                                      |
 | `contract`           | `string`                          | Equal to `ContractMeta.name` at call time.                                             |
 | `contract_version`   | `string`                          | Equal to `ContractMeta.version` at call time. Pinned per call so schema viewing matches the recorded shape. |
-| `request`            | `object`                          | Redacted request payload. Sensitive fields replaced with `"<redacted>"`.               |
+| `request`            | `object`                          | Sanitized request payload. Sensitive fields (password/token/secret/api_key) replaced with `"<redacted>"`. All filesystem paths replaced with `${LIBRARY_ROOT}/...` placeholder (per A-021-3). |
 | `response`           | `object?`                         | Response payload on success. Absent when the call errored.                             |
 | `error`              | `ContractError?`                  | Error envelope on failure. Absent on success.                                          |
 | `started_at`         | `string` (ISO-8601, UTC)          | Wall-clock start time.                                                                 |
@@ -66,12 +66,17 @@ does not dedupe; every dispatched call produces a new record.
 
 | Field      | Type      | Storage                          | Notes                                          |
 |------------|-----------|----------------------------------|------------------------------------------------|
-| `devMode`  | `boolean` | Settings store, key `devMode`    | Defaults to `false`. Persisted per device.     |
+| `devMode`  | `boolean` | Settings store, key `devMode`    | Defaults to `false`. Persisted per device. Spec 018 ripple: key must be registered in spec 018 settings store (see cross-spec ripple flags). |
 
 The flag is read once at app boot to decide whether to install the
 recording proxy. Toggling the flag at runtime requires an app restart to
-install or uninstall the proxy; the route gating and the command-palette
-entry react immediately.
+install or uninstall the proxy (full uninstall = zero overhead). The route
+gating and the command-palette entry react immediately without a restart.
+
+**Compile-time constraint (R-DevFeature)**: This flag is only readable in
+builds compiled with the `dev-tools` Cargo feature. In release builds the
+key is present in the Settings store schema (for portability) but has no
+effect since the proxy and route are not compiled in.
 
 ## Schema File
 

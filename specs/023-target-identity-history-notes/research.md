@@ -55,16 +55,43 @@ How are aliases added, normalized, and conflict-checked?
 - **Silent merge on duplicate**: rejected; merging targets is destructive
   enough that it requires explicit user review.
 
-## R3. History By Date
+## R3. History By Date And `captured_on` Derivation
 
 ### Question
 
-How are sessions ordered and grouped on target detail?
+How are sessions ordered and grouped on target detail, and how is `captured_on`
+derived?
 
-### Decision
+### Decision (A5, R-3.1 — 2026-05-22)
 
-- Sessions are ordered reverse-chronologically by `captured_on` (the night
-  of acquisition, not the file mtime).
+**`captured_on` derivation formula:**
+
+```
+captured_on = local_date_of(frame.exposure_start_utc - 12h)
+```
+
+where `local_date` is the UTC date shifted by −12 h, then interpreted in the
+timezone of `AcquisitionSession.observer_location.tz`.
+
+This is the "solar-noon boundary" rule: an observation that begins just after
+midnight local time belongs to the previous calendar date (the start of the
+observing night), not the new calendar date.
+
+Reference: `AcquisitionSession.observer_location: ProvenancedValue<ObserverLocation>`
+(spec 002 data-model.md §ObserverLocation).
+
+**Null rule (R-3.1):** When `AcquisitionSession.observer_location` is null
+or in `unreviewed` state (i.e. not yet confirmed), `captured_on = null` and
+the session is **excluded** from the target history list until
+`observer_location` is reviewed. The session remains in the spec 002
+`needs_review` queue with `observer_location` as the blocking field
+(`provenance.unreviewed` error code per spec 002). Once the user reviews
+`observer_location`, `captured_on` is derived and the session appears in
+history on next `target.get` call.
+
+**Ordering and display:**
+
+- Sessions with a valid `captured_on` are ordered reverse-chronologically.
 - v1 renders a flat list; year grouping is a cosmetic enhancement deferred
   to a follow-up. `captured_on` is exposed as a full date so the UI can
   group later without a contract change.
@@ -74,8 +101,9 @@ How are sessions ordered and grouped on target detail?
 ### Rationale
 
 Astrophotographers think in terms of "the night of" capture, not file
-timestamps. Reverse-chronological matches the "what did I do most recently?"
-question that drives this view.
+timestamps. The −12 h rule captures the conventional solar-noon-to-solar-noon
+observing night boundary. Excluding sessions with unreviewed observer_location
+ensures `captured_on` values are trustworthy when displayed.
 
 ## R4. Observing Notes: Per-Target vs Per-Session
 

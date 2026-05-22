@@ -86,9 +86,10 @@ format?
 - **Linux**: GTK uses MIME-style filters but the plugin translates
   extension lists into glob filters that work across portal backends.
 
-**Open**: Decide whether to include `.fts` as a FITS alias (some
-legacy DSLR-FITS converters used it). Recommend yes — add it to both
-`FITS` and `All supported` lists in a v1.1 follow-up.
+**Resolved (2026-05-22, B-.fts)**: `.fts` IS included in both the `FITS`
+filter and the `All supported astro images` combined preset. Legacy
+DSLR-FITS converters used this extension; omitting it caused missed files
+for some users. This is a v1 requirement, not a v1.1 follow-up.
 
 ## 3. Reveal-In-OS Cross-Platform Commands
 
@@ -177,15 +178,18 @@ parent directory per source kind to make subsequent picks faster?
   `last_project`, `last_inbox` separately. Most useful for users who
   organize each kind on a different drive.
 
-**Decision (default)**: Per-kind last-path, stored in
-`localStorage` under `alm.native.last-path.<kind>`. The Tauri command
-does not see the cached value; the React hook passes it as
-`default_path` on each open. On macOS and Linux the OS dialog may
-override this with its own session memory; that's acceptable.
+**Decision (ratified 2026-05-22, R-LastPath)**: Per-kind last-path, stored in
+`localStorage` using the `alm.lastPath.<kind>` namespace. Keys:
+`alm.lastPath.library_root`, `alm.lastPath.catalog_import`,
+`alm.lastPath.export`, `alm.lastPath.master_calibration`. Additional
+keys may be added following the same pattern. The Tauri backend command
+does not see the cached value; the React hook passes it as `default_path`
+on each open. On macOS and Linux the OS dialog may override this with its
+own session memory; that's acceptable.
 
-**Open**: Decide whether to also seed the master-file picker from the
-calibration source root. Default yes — when adding a master and a
-calibration source root is registered, pass it as `default_path`.
+**Resolved**: The master-file picker is seeded from the calibration source
+root (when registered) as `default_path`. This is a reasonable default for
+users who store masters alongside their calibration data.
 
 ## 6. Reveal Failures: User Notification Plus Audit
 
@@ -199,13 +203,14 @@ an audit-log entry, or both?
   and may think the click did nothing.
 - **Toast plus audit log** — quick feedback and a durable record.
 
-**Decision (default)**: Both. The toast carries the error code's
-human-readable copy plus a "Copy path" action. The audit log entry
-carries `{ kind: "native.reveal.failed", error_code, path_hash,
-entity_kind?, entity_id?, request_id, timestamp }`. Path hash, not
-the raw path, is used in the audit log to avoid surfacing PII when
-the audit log is exported.
+**Decision (ratified 2026-05-22, C-toast)**: Both. The toast carries the
+error code's human-readable copy plus a "Copy path" secondary action
+(if the toast component supports it; otherwise the error message alone
+is shown and the user can copy the path from the audit log). The audit
+log entry carries `{ kind: "native.reveal.failed", error_code,
+entity_kind?, entity_id?, request_id, timestamp }`.
 
-**Open**: Confirm the toast component supports a secondary action
-("Copy path"). If not, the toast offers only the error message and
-the audit entry carries the rest.
+**A2 — path_hash dropped**: Raw path and path hash are NOT persisted in
+the audit payload. Correlation is via `entity_id` only, which avoids PII
+leakage when the audit log is exported. This decision supersedes the
+earlier "path hash instead of raw path" approach.

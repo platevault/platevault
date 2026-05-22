@@ -82,7 +82,7 @@ the user explicitly re-runs "Re-infer channels" from the edit pane.
 
 ```
 CalibrationSetRef { id: Uuid, label: String }      // owned by spec 007
-ProjectPlanRef    { id: Uuid, title: String, state: PlanState }   // owned by spec 025
+ProjectPlanRef    { id: Uuid, title: String, state: PlanState }   // owned by spec 025; PlanState defined by spec 002 (includes paused, discarded per spec 017+025 amendment — E6)
 ProjectManifest   { id, reason, timestamp, path, body? }          // owned by spec 024
 LastAction        { label, when }                  // owned by spec 009
 BlockedReason     { kind, ...payload }             // owned by spec 009
@@ -105,12 +105,18 @@ spec-009 operation that runs after the create plan is applied.
 - `name` is non-empty, ≤ 120 chars, unique within library scope.
 - `path` is unique within library scope; two projects MUST NOT share a
   folder.
-- `tool` is immutable when `lifecycle in {"prepared", "processing",
-  "completed"}`. Changing tool before prepared/after archived requires a
-  fresh setup pass (out of scope for v1; recorded as a future research
-  item).
+- `tool` is non-null on all projects after create (R-Tool-Req). `tool` is
+  immutable when `lifecycle in {"prepared", "processing", "completed",
+  "blocked"}` (R-Tool-Lock, GRILL 2026-05-22). The `blocked` state is
+  included because it may be entered from any of the locked states.
+  Changing tool requires lifecycle to be `setup_incomplete` or `ready`.
+  Recovery from a locked-tool project uses manual re-creation via
+  `project.create` (no `project.duplicate` in v1 — R-NoDup).
+- `setup_incomplete` is ONLY for projects with missing/unconfirmed sources.
+  A project without a tool MUST NOT be created (tool is required at create).
 - `sources[]` MUST contain unique `inventoryId` values; duplicate add
-  attempts return `source.already.linked`.
+  attempts return `source.already.linked`. Each linked source MUST reference
+  a confirmed Inventory session (`state == "confirmed"` — R-Inventory-Confirmed).
 - `channels[]` MUST contain unique `label` values.
 - `lifecycle == "archived"` ⇒ all edit operations refuse with
   `lifecycle.read_only` (research R7).
@@ -156,5 +162,32 @@ ProjectSourceAddResult {
   source_added:  ProjectSource
   channels:      ProjectChannel[]     // recomputed after link; the caller may diff against prior list
   audit_id:      Uuid
+  new_lifecycle? ProjectLifecycle     // present if source.add triggered a setup_incomplete → ready auto-transition (R-Ready-Trigger)
 }
 ```
+
+### ProjectSourceRemoveResult (returned by `project.source.remove`)
+
+```
+ProjectSourceRemoveResult {
+  projectId:       Uuid
+  removedSourceId: Uuid
+  auditId:         Uuid
+  newLifecycle?:   ProjectLifecycle   // present if removal triggered a ready → setup_incomplete transition
+}
+```
+
+Uses camelCase convention (A7 exception for new contracts).
+
+### ChannelDrift (embedded in `project.get` response)
+
+```
+ChannelDrift {
+  hasNewSources:   Boolean   // true when sources were added after last channel review
+  suggestedAction: "re_infer" | "dismiss"
+}
+```
+
+Present on the `project.get` response. Reset to `hasNewSources = false` by
+calling `project.channels.reinfer` or `project.channels.dismiss_drift`
+(R-ChannelDrift, GRILL 2026-05-22).

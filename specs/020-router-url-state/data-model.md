@@ -65,16 +65,17 @@ The v1 route table. Each row is one `RouteContract` instance.
 |---------------------|----------------------------------------------------------------------|
 | Path                | `/inventory`                                                         |
 | Params              | `{}`                                                                 |
-| Search              | `{ id?: string; source?: string; frame?: string; review?: string }`  |
+| Search              | `{ lib?: string; id?: string; source?: string; frame?: string; reviewFilter?: string }` |
 | Carries Selection   | yes (`id`)                                                           |
 | Resolvable Entities | `{source:"search", key:"id", kind:"inventory_item", on_missing:"clear"}` |
 
-| Search Key | Type    | Purpose                       | On Invalid |
-|------------|---------|-------------------------------|------------|
-| `id`       | string? | Selected item id              | drop       |
-| `source`   | string? | Filter by data source id      | drop       |
-| `frame`    | string? | Filter by frame type          | drop       |
-| `review`   | string? | Filter by review state        | drop       |
+| Search Key      | Type    | Purpose                               | On Invalid       | Enum Allow-List |
+|-----------------|---------|---------------------------------------|------------------|-----------------|
+| `lib`           | string? | Library id for cross-library refusal  | drop             | runtime-known   |
+| `id`            | string? | Selected item id                      | drop             | –               |
+| `source`        | string? | Filter by data source id              | drop             | –               |
+| `frame`         | string? | Filter by frame type                  | error banner+drop | `FrameType` from spec 005: `Light \| Dark \| Flat \| Bias \| DarkFlat` |
+| `reviewFilter`  | string? | Filter by review state (canonical key; old key `review` auto-migrated via DeprecatedParamMap) | error banner+drop | `SessionState` from spec 006: 6 canonical values + `all` |
 
 ### `/inbox`
 
@@ -82,15 +83,16 @@ The v1 route table. Each row is one `RouteContract` instance.
 |---------------------|--------------------------------------------------------|
 | Path                | `/inbox`                                               |
 | Params              | `{}`                                                   |
-| Search              | `{ id?: string; type?: string; source?: string }`      |
+| Search              | `{ lib?: string; id?: string; type?: string; source?: string }` |
 | Carries Selection   | yes (`id`)                                             |
 | Resolvable Entities | `{source:"search", key:"id", kind:"inbox_item", on_missing:"clear"}` |
 
-| Search Key | Type    | Purpose                  | On Invalid |
-|------------|---------|--------------------------|------------|
-| `id`       | string? | Selected inbox item id   | drop       |
-| `type`     | string? | Filter by item type      | drop       |
-| `source`   | string? | Filter by source id      | drop       |
+| Search Key | Type    | Purpose                  | On Invalid        | Enum Allow-List |
+|------------|---------|--------------------------|-------------------|-----------------|
+| `lib`      | string? | Library id               | drop              | runtime-known   |
+| `id`       | string? | Selected inbox item id   | drop              | –               |
+| `type`     | string? | Filter by item type      | error banner+drop | `calibration_type` from spec 007: `dark \| flat \| bias` |
+| `source`   | string? | Filter by source id      | drop              | –               |
 
 ### `/projects`
 
@@ -98,15 +100,16 @@ The v1 route table. Each row is one `RouteContract` instance.
 |---------------------|----------------------------------------------------------------|
 | Path                | `/projects`                                                    |
 | Params              | `{}`                                                           |
-| Search              | `{ id?: string; lifecycle?: string; tool?: string }`           |
+| Search              | `{ lib?: string; id?: string; lifecycle?: string; tool?: string }` |
 | Carries Selection   | yes (`id`)                                                     |
 | Resolvable Entities | `{source:"search", key:"id", kind:"project", on_missing:"clear"}` |
 
-| Search Key  | Type    | Purpose                                          | On Invalid |
-|-------------|---------|--------------------------------------------------|------------|
-| `id`        | string? | Selected project id                              | drop       |
-| `lifecycle` | string? | Lifecycle filter (CSV multiselect, enum-allowed) | drop       |
-| `tool`      | string? | Tool filter                                      | drop       |
+| Search Key  | Type    | Purpose                                          | On Invalid        | Enum Allow-List |
+|-------------|---------|--------------------------------------------------|-------------------|-----------------|
+| `lib`       | string? | Library id                                       | drop              | runtime-known   |
+| `id`        | string? | Selected project id                              | drop              | –               |
+| `lifecycle` | string? | Lifecycle filter (CSV multiselect, enum-allowed) | error banner+drop | `ProjectLifecycle` from spec 002: `setup_incomplete \| active \| blocked \| processing \| ready \| completed \| archived \| discarded` |
+| `tool`      | string? | Tool filter (`tool_id` slug)                     | drop              | runtime-known set from spec 011 |
 
 ### `/plans`
 
@@ -114,14 +117,15 @@ The v1 route table. Each row is one `RouteContract` instance.
 |---------------------|----------------------------------------|
 | Path                | `/plans`                               |
 | Params              | `{}`                                   |
-| Search              | `{ state?: string; origin?: string }`  |
+| Search              | `{ lib?: string; state?: string; origin?: string }` |
 | Carries Selection   | no (selection is path-based via `/plans/$planId`) |
 | Resolvable Entities | none                                   |
 
-| Search Key | Type    | Purpose             | On Invalid |
-|------------|---------|---------------------|------------|
-| `state`    | string? | Plan state filter   | drop       |
-| `origin`   | string? | Plan origin filter  | drop       |
+| Search Key | Type    | Purpose             | On Invalid        | Enum Allow-List |
+|------------|---------|---------------------|-------------------|-----------------|
+| `lib`      | string? | Library id          | drop              | runtime-known   |
+| `state`    | string? | Plan state filter   | error banner+drop | `PlanState` from spec 017+025: `draft \| ready \| approved \| applying \| applied \| partially_applied \| failed \| cancelled \| discarded \| paused` |
+| `origin`   | string? | Plan origin filter  | error banner+drop | `PlanOrigin` from spec 017: `cleanup \| split \| retry \| archive \| user` |
 
 ### `/plans/$planId`
 
@@ -129,7 +133,7 @@ The v1 route table. Each row is one `RouteContract` instance.
 |---------------------|-----------------------------------------------------------------------|
 | Path                | `/plans/$planId`                                                      |
 | Params              | `{ planId: string }`                                                  |
-| Search              | `{}`                                                                  |
+| Search              | `{ lib?: string }`                                                    |
 | Carries Selection   | yes (via path param)                                                  |
 | Resolvable Entities | `{source:"path", key:"planId", kind:"plan", on_missing:"render_empty"}` |
 
@@ -150,7 +154,7 @@ The v1 route table. Each row is one `RouteContract` instance.
 |---------------------|--------------------------------------------------------------------------------|
 | Path                | `/settings/$section`                                                           |
 | Params              | `{ section: string }`                                                          |
-| Search              | `{}`                                                                           |
+| Search              | `{ lib?: string }`                                                             |
 | Carries Selection   | no                                                                             |
 | Resolvable Entities | `{source:"path", key:"section", kind:"settings_section", on_missing:"render_empty"}` |
 
@@ -162,8 +166,43 @@ The v1 route table. Each row is one `RouteContract` instance.
 | `to_path`        | string   | New canonical path.                                                |
 | `params_diff`    | object   | Keys whose values changed in path params.                          |
 | `search_diff`    | object   | Keys whose values changed in search params (added, removed, modified). |
-| `kind`           | enum     | `"link"`, `"programmatic"`, `"redirect"`, `"replace-cleanup"`.     |
+| `kind`           | enum     | `"link"`, `"programmatic"`, `"redirect"`, `"replace-cleanup"`. Settled vocabulary (C-020-3). |
+| `source`         | enum     | `"user"`, `"restore"`, `"system"`. Matches spec 002 R-Source-1. Emitted on the event bus so subscribers can distinguish user-initiated navigations from restore/system-driven transitions. |
 | `at`             | string   | ISO-8601 timestamp.                                                |
+
+## DeprecatedParamMap
+
+The `DeprecatedParamMap` registry maps old URL param keys to their canonical
+replacements. The router's URL read phase applies the map before calling
+`validateSearch`; the UI always emits the canonical key. Deprecated entries
+are removed after 2 app releases.
+
+| Deprecated key | Canonical key   | Route        | Rationale                                    |
+|----------------|-----------------|--------------|----------------------------------------------|
+| `review`       | `reviewFilter`  | `/inventory` | Aligns with spec 006 FR-010 canonical naming. |
+
+**Implementation rule**: The migration rewrite is applied during search-param
+parsing. A `debug`-level migration log entry is emitted per rewrite so the
+team can track adoption before removal.
+
+## Stale-Id Re-Fire Guard
+
+Pages that issue a stale-id `navigate({ replace: true })` to clear a missing
+`id` from the URL MUST guard against re-firing on every render. Use a `useRef`
+flag or effect-cleanup pattern:
+
+```ts
+const staleClearedRef = useRef(false);
+useEffect(() => {
+  if (!staleClearedRef.current && entityMissing) {
+    staleClearedRef.current = true;
+    navigate({ search: prev => ({ ...prev, id: undefined }), replace: true });
+  }
+}, [entityMissing]);
+```
+
+Tests MUST assert that `navigate` fires at most once per stale-id encounter
+(Phase 7 task, D-020-H1).
 
 ## RouteLoader (reserved)
 

@@ -136,6 +136,30 @@ required; this spec sharpens behavior on already-bounded crates and adds
 contracts to `packages/contracts/`. UI lives in the existing
 `apps/desktop/src/features/plans/` folder.
 
+## Ratified Decisions Folded
+
+The following decisions from GRILL_DECISIONS_2026-05-22 are now reflected in
+this spec's artifacts:
+
+| Ref | Summary |
+|-----|---------|
+| A1 | `approvalToken` HMAC in `plan.approve` response; no TTL |
+| A2 | Per-item FS revalidation replaces 15-min TTL |
+| A3 | `itemsSkipped` + `itemsCancelled` counters; invariant updated |
+| A4 | `totalBytesRequired` pre-flight field on Plan |
+| A5 | `discarded` state: soft-delete terminal, `discardedAt` timestamp |
+| A6 | Canonical path verification at apply; Phase 3 blocker task in spec 025 |
+| A7 | Event bus topics: plan lifecycle + per-spec topics registered on spec 002 §6.3 |
+| R-Env-1 | All contracts: camelCase, `contractVersion`, `requestId`, status-discriminated envelope |
+| R-FS-1 | `approvedMtime`/`approvedSizeBytes` on PlanItem; populated at approve time |
+| R-Ret-1 | Plan list age cutoff 90 days (configurable via spec 018 follow-up) |
+| R-Archive-1 | Archive location: `<library_root>/.astro-plan-archive/<planId>/` |
+| R-Trash-1 | OS trash available in v1 (OVERRIDE); per-plan `destructiveDestination` |
+| R-Archive-2 | `archive.send_to_trash` + `archive.permanently_delete` contracts (new) |
+| R-Retry-1 | Default retry filter `failed`; cancelled plans get separate "Retry cancelled" CTA |
+| R-Chain-1 | Retry chain UI: flat `parentPlanId` link in detail header, no tree widget |
+| E5 | `cancelled` added to PlanItem.state enum |
+
 ## Complexity Tracking
 
 No constitutional violations.

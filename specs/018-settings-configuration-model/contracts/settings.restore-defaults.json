@@ -2,7 +2,7 @@
   "$schema": "https://json-schema.org/draft/2020-12/schema",
   "$id": "https://astro-plan/contracts/settings.restore-defaults.json",
   "title": "settings.restore-defaults",
-  "description": "Restore one, several, or all v1 settings keys to their in-code defaults. Empty 'keys' restores all keys.",
+  "description": "Restore one, several, or all v1 settings keys to their in-code defaults by writing the literal default value as an explicit row (A3). Empty 'keys' restores all keys. Keys already at default return status='noop' with no row write and no audit event (R-3.1, cross-ref spec 002 noop pattern).",
   "operation": {
     "name": "settings.restore-defaults",
     "direction": "ui-to-core",
@@ -40,12 +40,22 @@
   },
   "response": {
     "type": "object",
-    "required": ["restored"],
+    "required": ["status", "restored"],
     "additionalProperties": false,
     "properties": {
+      "status": {
+        "type": "string",
+        "enum": ["success", "noop"],
+        "description": "'success' when at least one key was restored (literal default value written). 'noop' when every requested key was already at its default value — no row writes, no audit events (R-3.1)."
+      },
       "restored": {
         "type": "array",
-        "description": "Keys whose stored value was deleted so the default would apply on next read. Keys already at default are omitted.",
+        "description": "Keys for which the literal default value was written. Empty when status='noop'.",
+        "items": { "type": "string" }
+      },
+      "already_at_default": {
+        "type": "array",
+        "description": "Keys that were already at their default value and were not written (R-3.1).",
         "items": { "type": "string" }
       }
     }

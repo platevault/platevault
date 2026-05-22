@@ -76,12 +76,39 @@ update on every keystroke?
 **Decision**: A `NOISY_KEYS` set, mirrored in the desktop snapshot and in the
 Rust use-case, gates per-change audit emission. Noisy keys still persist on
 every change; they do not emit per-change audit events. A `settings.snapshot`
-event captures noisy-key state at session start and at user-initiated
-explicit save points (e.g. closing the Settings page). Non-noisy keys emit
-one audit event per change.
+event captures noisy-key state at two points:
+
+1. **Session start** — on library open.
+2. **Debounced inactivity** — after any noisy-key write, a 5-minute
+   inactivity debounce fires once when no further noisy-key writes arrive.
+   The timer is per-session; it resets on each noisy write and fires exactly
+   once on quiet. The Settings page-close trigger is dropped. (R-Aud-1)
+
+The debounce timer state lives in the use-case layer and MUST be cancelled on
+library close to avoid a phantom snapshot after shutdown. T017/T020
+implementation must provision the debounce timer and test the
+reset-on-write + fire-once-on-quiet invariant.
+
+Non-noisy keys emit one audit event per change.
 
 The current noisy set is `{pattern, protectedCategories}`. Adding a key
 requires a research decision because it lowers auditability.
+
+### R4.1 Deep-equal no-op guard (A4)
+
+Before any persistence write or audit emission, the use-case MUST compare the
+incoming value to the stored value using **deep structural equality** for
+`object` and `array` keys (e.g. `PatternPart[]`, `string[]`), and **strict
+equality** for primitive keys. An incoming `PatternPart[]` that is
+structurally equal to the stored array — same length, same `id`/`kind`/`value`
+at every index — MUST be treated as a no-op even though the reference
+differs. The `status: "noop"` response is returned; no row write and no audit
+event are emitted. This is especially relevant for `protectedCategories`
+(`string[]`, R-Set-1) and `pattern` (`PatternPart[]`).
+
+T013 implementation note: implement `settings_value_eq(a, b)` using
+recursive equality; cover a `PatternPart[]` structurally-equal test case
+in T009's desktop unit tests alongside the existing scalar no-op test.
 
 ## R5. Cross-tab / cross-window settings divergence (deferred)
 
@@ -108,18 +135,38 @@ Per-project overrides (mentioned in spec Key Entities) are out of scope here;
 they live in the Edit project pane per the spec's Assumptions. The settings
 model exposes only global and per-source layers in v1.
 
-**Overridable keys**: a subset declared explicitly. Today the planned
-overridable keys are `hashOnScan`, `followSymlinks`, `autoApplyPattern`, and
-`defaultProtection`. Attempting to override a key outside this set returns
-`key.unoverridable`.
+**Overridable keys**: a subset declared explicitly. The overridable keys are
+`hashOnScan`, `followSymlinks`, and `defaultProtection`. `autoApplyPattern`
+was removed from the overridable set for symmetry with `pattern`, which is
+also not overridable (A2). Attempting to override a key outside this set
+returns `key.unoverridable`.
 
-## R7. Defaults are not stored
+## R7. Defaults are explicitly written on restore (A3)
 
-A key with no stored row resolves to its in-code default. This keeps
-defaults free of drift across libraries and lets a defaults change in code
-ship cleanly without a data migration. Restoring a default deletes the
-stored row rather than writing the default value, so a future defaults
-change is picked up automatically by any user who restored that key.
+**Revised (A3)**: `settings.restore-defaults` now writes the **literal
+in-code default value** as an explicit row rather than deleting the row.
+This makes the restored state unambiguous regardless of future in-code
+default changes: a library whose user restored a key continues to have that
+value until they change it again. Future default changes only affect
+libraries where the key has no row (never explicitly set or restored).
+
+A key with no stored row still resolves to its in-code default at read time
+(unchanged from prior design). The distinction is that after a restore the
+row exists explicitly with the current default value, whereas before the row
+was absent.
+
+This is consistent with spec 002's noop pattern (R-3.1): if the stored value
+already equals the default, restore-defaults returns `status: "noop"` with no
+row write and no audit event (see R3.1 below).
+
+### R7.1 Restore-defaults already-at-default (R-3.1)
+
+If the key's stored value already equals the in-code default (deep-equal per
+R4.1), `settings.restore-defaults` returns `status: "noop"` — no row write,
+no audit event. This mirrors the spec 002 noop pattern. The contract response
+includes a top-level `status: "success" | "noop"` field; keys that were
+already at default are reported in a separate `already_at_default` array
+rather than in `restored`.
 
 ## R8. Theme separation
 

@@ -13,7 +13,7 @@
 - C. Creation + source change + lifecycle transition + cleanup apply.
 - D. On every save of any project field (chatty).
 
-**Decision (default)**: **C**. Triggers are bounded and meaningful:
+**Decision (default)**: **C (extended)**. Triggers are bounded and meaningful:
 1. **Created** — first manifest documents initial sources, calibration
    choices, workflow profile, and generated views.
 2. **Source change** — lights/flats/darks/bias added, removed, or
@@ -22,10 +22,16 @@
    acquisition/imaging/processing/done/archived (see feature 002).
 4. **Cleanup applied** — a cleanup plan from feature 008 was committed
    and may have moved/archived files relevant to the project.
+5. **Workflow run** — a processing-tool workflow run completed. Spec 024
+   subscribes to the `workflow.run_completed` event-bus topic (spec 012).
+   On receipt, writes a `workflow_run` manifest for the project named in
+   the event payload `{ projectId, toolId, completedAt, outputArtifacts }`.
+   **FLAGGED**: spec 012 must emit `workflow.run_completed` with this exact
+   payload shape (R-Workflow-1, 2026-05-22). Do NOT edit spec 012 here —
+   see GRILL amendment 2026-05-22 for the spec 012 ripple note.
 
-**Rationale**: matches the mockup `reason` strings ("Created",
-"Source added", "Lifecycle: imaging done") and produces a manifest only
-when something user-visible changed.
+**Rationale**: matches the mockup `reason` strings plus the ratified A4
+decision to add `workflow_run` to the enum (GRILL 2026-05-21 spec 024 row).
 
 **Open follow-ups**: whether manual user-triggered "snapshot now"
 deserves its own reason; deferred until a clear use case appears.
@@ -61,10 +67,11 @@ front-matter; format-migration tooling is deferred.
 **Decision**:
 - **Notes** are a single, user-editable markdown file per project at
   `notes/project-notes.md`. They reflect current intent and are mutable.
-- **Manifests** are immutable, app-generated checkpoints. When a
-  manifest is generated, it MAY embed a copy (or hash + excerpt) of the
-  notes body at that moment under a `notes:` field in front-matter, so
-  the historical context is preserved alongside the source-map snapshot.
+- **Manifests** are immutable, app-generated checkpoints. When a manifest
+  is generated, it MUST embed the **full text snapshot** of the notes body
+  at that moment under a `notes:` field in front-matter (not a hash or
+  excerpt). This preserves historical context alongside the source-map
+  snapshot. (A8, ratified 2026-05-22.)
 - The mockup already shows manifests carrying a `body.notes` string
   (`mock.ts` line 393), confirming the snapshot-in-manifest pattern.
 
@@ -91,6 +98,12 @@ discarding earlier entries.
 **Rationale**: deletion is destructive and the constitution favors
 reversibility. The "Export copy" action in the mockup confirms users
 expect manifests to remain available.
+
+**Pagination**: The `project.manifest.list` contract is paginated with
+optional `cursor` and `limit` (default 50, max 200) in the request, and
+`nextCursor` in the response. This keeps the list contract efficient for
+projects with many manifests without requiring auto-pruning. Auto-prune
+is deferred to v1.x. (A6, ratified 2026-05-22.)
 
 **Open follow-ups**: add a manifest-pruning feature later if libraries
 accumulate thousands of entries.
@@ -137,9 +150,10 @@ inspect manually. The writer must not overwrite preexisting files.
 
 | Item | Default |
 |------|---------|
-| Triggers | created / source change / lifecycle transition / cleanup apply |
+| Triggers | created / source change / lifecycle transition / cleanup apply / workflow run |
 | Format | markdown + YAML front-matter |
-| Notes/manifest | separate file; manifest may embed notes snapshot |
-| Retention | keep all in v1 |
+| Notes/manifest | separate file; manifest MUST embed full text snapshot at write time |
+| Notes length cap | 16 384 bytes UTF-8 (A5); 5s debounce on UI saves |
+| Retention | keep all in v1; paginated list (cursor, limit 50/max 200) |
 | Reveal | platform shell adapter, parent-folder fallback on Linux |
 | Onboarding | detect existing, prompt user, never overwrite |

@@ -23,7 +23,6 @@
         "enum": [
           "followSymlinks",
           "hashOnScan",
-          "autoApplyPattern",
           "defaultProtection"
         ]
       },

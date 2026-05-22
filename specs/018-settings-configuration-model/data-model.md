@@ -23,7 +23,7 @@ in which each field below maps to one row keyed by field name.
 | `rememberFollowLogs`      | `boolean`                                  | Application Log    | Remember follow       | Whether the log auto-scrolls on new entries.                          |
 | `defaultProtection`       | `"protected" \| "normal" \| "unprotected"` | Source Protection  | Default protection    | Overridable per source.                                               |
 | `blockPermanentDelete`    | `boolean`                                  | Source Protection  | Block permanent delete| Routes destructive operations to archive/trash workflows.             |
-| `protectedCategories`     | `string`                                   | Source Protection  | Protected categories  | Comma-separated; parsed at use site. Noisy.                           |
+| `protectedCategories`     | `string[]`                                 | Source Protection  | Protected categories  | Array of category strings. Noisy. (R-Set-1)                          |
 
 ### Defaults
 
@@ -42,7 +42,7 @@ in which each field below maps to one row keyed by field name.
 | `rememberFollowLogs`      | `true`                                                                                                   |
 | `defaultProtection`       | `"protected"`                                                                                            |
 | `blockPermanentDelete`    | `true`                                                                                                   |
-| `protectedCategories`     | `"lights, masters, finals"`                                                                              |
+| `protectedCategories`     | `["lights", "masters", "finals"]`                                                                        |
 
 ### Noisy Keys
 
@@ -51,9 +51,9 @@ snapshot rather than per-change. See `research.md` R4.
 
 ### Overridable Keys
 
-`followSymlinks`, `hashOnScan`, `autoApplyPattern`, `defaultProtection`. All
-other keys are global-only in v1; attempts to override return
-`key.unoverridable`.
+`followSymlinks`, `hashOnScan`, `defaultProtection`. All other keys are
+global-only in v1; attempts to override return `key.unoverridable`.
+(`autoApplyPattern` was removed from the overridable set — A2.)
 
 ## SourceOverride
 

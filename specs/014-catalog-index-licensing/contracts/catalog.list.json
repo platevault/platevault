@@ -21,13 +21,13 @@
     },
     "CatalogOrigin": {
       "type": "string",
-      "enum": ["built_in", "user"]
+      "enum": ["built_in", "downloaded", "user"],
+      "description": "'built_in' is reserved (unused in v1). 'downloaded' covers all v1 catalogs. 'user' is reserved for v1.x; backend rejects with origin.not_implemented in v1. (R-1.3)"
     },
     "LicenseShortCode": {
       "type": "string",
-      "minLength": 1,
-      "maxLength": 64,
-      "description": "Short license code, e.g. 'public-domain', 'cc-by-4.0', 'apache-2.0'."
+      "enum": ["public-domain", "apache-2.0", "mit", "cc0-1.0", "cc-by-4.0", "cc-by-sa-4.0", "hyperleda", "esa-free"],
+      "description": "Closed enum (R-2.1). CI hard-fails on unknown values. New entries require an explicit research decision per the constitution."
     },
     "Catalog": {
       "type": "object",
@@ -85,7 +85,7 @@
         "requestId": { "$ref": "#/$defs/Uuid" },
         "catalogs": {
           "type": "array",
-          "description": "All registered catalogs. Ordered by origin (built_in first), then by name.",
+          "description": "All registered catalogs. Ordered by origin (downloaded first), then by name.",
           "items": { "$ref": "#/$defs/Catalog" }
         },
         "error": { "$ref": "#/$defs/ErrorEnvelope" }

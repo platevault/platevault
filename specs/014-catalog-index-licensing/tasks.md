@@ -9,45 +9,61 @@ mockup but renders no content; every task below is post-mockup work.
 ## Foundations
 
 - T001. Add `crates/targeting/catalogs/` skeleton with modules
-  `registry`, `license`, `loader`. Public surface exposes only the
-  registry list and the attribution loader; the entry-reader trait
-  remains unimplemented (owned by spec 013).
-- T002. Define the compiled-in manifest format consumed by the
-  built-in registry. Add a build script that consumes the CI bundle
-  output (catalog files + sidecar attributions) and emits a Rust
-  module mapping each `Catalog` to its `LicenseAttribution[]`.
-- T003. Add SQLite tables `catalog_user` and
-  `catalog_user_attribution` per `data-model.md`, with migrations and
-  repository code in `crates/persistence/db`.
-- T004. Add `crates/app/core/usecases/catalogs.rs` exposing `list` and
-  `attribution_get` use cases. Use case tests run against a fake
-  registry + fake repository.
+  `registry`, `license`, `download`, `loader`. Public surface exposes
+  registry list, attribution loader, and download use cases; the
+  entry-reader trait remains unimplemented (owned by spec 013).
+- T002. Add SQLite migrations for `catalog_downloaded(id, name,
+  version, license, source_url, last_updated, entry_count)` and
+  `catalog_downloaded_attribution(catalog_id, license, text, link,
+  accessed_on, author, title, license_uri, modifications_notice)`
+  in `crates/persistence/db`. (A2 — `catalog_user*` tables removed;
+  user-added deferred to v1.x)
+- T003. ~~Add `catalog_user` and `catalog_user_attribution` tables~~
+  **REMOVED** (A2 — user-added catalogs deferred to v1.x). Enum value
+  `origin = "user"` is defined in contracts but backend rejects with
+  `origin.not_implemented` in v1. Add a unit test confirming the
+  rejection.
+- T004. Add `crates/app/core/usecases/catalogs.rs` exposing `list`,
+  `attribution_get`, `manifest_fetch`, and `download` use cases. Use
+  case tests run against a fake registry + fake repository.
 - T005. Generate Rust DTOs in `crates/contracts/core/` and TypeScript
-  types in `packages/contracts/generated/` from
-  `catalog.list.json` and `catalog.attribution.get.json`.
-- T006. Add Tauri command adapters mapping `catalog.list` and
-  `catalog.attribution.get` to the two use cases.
+  types in `packages/contracts/generated/` from all four contracts:
+  `catalog.list.json`, `catalog.attribution.get.json`,
+  `catalog.manifest.fetch.json`, and `catalog.download.json`.
+- T006. Add Tauri command adapters mapping all four contracts to the
+  four use cases.
+- T007-event. Add event-bus publishers in `crates/targeting/catalogs/download.rs`
+  emitting the five topics from R-3.1:
+  `catalog.manifest.fetched`, `catalog.download.started`,
+  `catalog.download.progress`, `catalog.download.completed`,
+  `catalog.download.failed`. Subscribers in the first-run wizard
+  consume `started`/`progress`/`completed`/`failed` for per-row
+  progress UI. (R-3.1)
 
-## US 1 — List Available Catalogs in Settings (P1)
+## US 1 — Download Catalogs at First Run + List in Settings (P1)
 
-- T007. Replace the empty Settings → Catalogs stub with a
+- T008. Replace the empty Settings → Catalogs stub with a
   `CatalogsPage` shell that mounts a single "Available catalogs"
   section and a placeholder for the attribution panel (wired in US 2).
-- T008. Implement the available-catalogs table with columns: name,
-  version, license short code, origin badge, source URL link,
-  last-updated date. Sourced from a `useCatalogList()` hook backed by
-  the `catalog.list` Tauri command.
-- T009. Seed the built-in registry with Messier (public domain), NGC
-  (HEASARC public), IC (HEASARC public), and the in-repo common-name
-  list. Each row's `source_url`, `version`, and `last_updated` come
-  from the CI manifest.
-- T010. Render `origin = "user"` rows with a distinct badge and an
-  inline action to open the user-catalog registration drawer
-  (drawer itself deferred to a follow-up spec; the action surfaces a
-  "not yet available" tooltip in v1).
-- T011. Tests: vitest unit covering empty state, mixed origin
-  ordering, and date formatting; Playwright smoke confirming
-  Messier/NGC/IC render with non-empty version + last-updated values.
+- T009. Implement the available-catalogs table with columns: name,
+  version, license short code, origin badge (`downloaded` for all v1
+  catalogs), source URL link, last-updated date. Sourced from a
+  `useCatalogList()` hook backed by the `catalog.list` Tauri command.
+  No "Add catalog" affordance in v1 (A2).
+- T010. ~~Render `origin = "user"` rows~~ **REMOVED** (A2 — deferred
+  to v1.x). Add a unit test confirming the backend rejects
+  `origin = "user"` with `origin.not_implemented`.
+- T010-dl. Implement the Download Catalogs wizard step for spec 003:
+  (1) calls `catalog.manifest.fetch`; (2) iterates the manifest
+  catalog list and calls `catalog.download` for each (parallel-N
+  concurrency, N TBD); (3) subscribes to event-bus topics for
+  per-row progress; (4) on any failure, shows per-row error and a
+  Retry button (mirrors `source.register.batch` partial-success
+  pattern). Step does not block Finish if skipped. (D, spec 003)
+- T011. Tests: vitest unit covering empty state, single-origin
+  ordering, and date formatting; Playwright smoke confirming all
+  thirteen v1 catalogs render with non-empty version + last-updated
+  values after wizard completion.
 
 ## US 2 — Show License Attribution (P2)
 
@@ -67,21 +83,24 @@ mockup but renders no content; every task below is post-mockup work.
   NOTICE serialisation format; Playwright smoke confirming the Copy
   NOTICE action returns a buffer containing every catalog id.
 
-## US 3 — Update Catalog Indexes (P3)
+## US 3 — Update Catalog Indexes (Deferred to v1.x)
 
-- T017. Add a `catalog.update` Tauri command stub that, in v1, returns
-  a friendly `update.unavailable` error pointing the user at the app
-  release notes. Spec 014 v1 ships bundle-only updates (research R3).
-- T018. Implement the "Update Catalogs" action on the Settings page,
-  wired to the stub. Render the returned message inline; the action
-  remains visible so the affordance is discoverable.
-- T019. Define the audit event shape `catalog.updated` and emit it
-  from a future-tense path (no-op in v1, but the event type is
-  reserved). Add a test that the event type is registered with the
-  audit catalogue.
-- T020. Document the deferred work — signed manifest fetch, atomic
-  swap, rollback — as a follow-up spec stub and link it from
-  `research.md` R3. No implementation in this spec.
+> These tasks ship in v1.x only. The `catalog.download` contract already
+> serves as "install if missing, update if present" and covers first-run
+> installation in v1. (A3)
+
+- T017. *(v1.x)* Add a user-facing "Update Catalogs" action on the
+  Settings page. Wire to `catalog.download` per-catalog with per-row
+  progress and Retry on failure. In v1 this stub returns
+  `update.unavailable` pointing the user to first-run setup if no
+  manifest is cached.
+- T018. *(v1.x)* Implement per-catalog update UI.
+- T019. Define the audit event shape `catalog.updated` and reserve
+  the type in `crates/audit/`. No-op in v1. Add a test that the
+  event type is registered with the audit catalogue.
+- T020. *(done in research R3)* Graceful-degradation behavior (error
+  screen in v1; future `built_in` fallback) is documented in
+  `research.md` R3. No additional implementation in this spec.
 
 ## Cross-Cutting
 
@@ -98,20 +117,20 @@ mockup but renders no content; every task below is post-mockup work.
 
 ```
 T001 ─┬─► T002 ─► T009
-      └─► T004 ─► T006 ─► T008 / T013 / T017
-T003 ─► T004
+      └─► T004 ─► T006 ─► T009 / T013 / T017
 T005 ─► T006
-T007 ─► T008 ─► T010
+T008 ─► T009 ─► T010-dl
 T008 ─► T012 ─► T014 / T015
-T017 ─► T018
-T019 is independent (audit registration only).
-T021 / T022 gate merge once T005 / T009 are in.
+T007-event ─► T010-dl
+T017 ─► T018   (both v1.x)
+T019 is independent (audit type reservation only).
+T021 / T022 gate merge once T005 / T002 are in.
 ```
 
 ## Out of Scope
 
 - Catalog entry rows themselves (spec 013).
-- User-catalog registration drawer (deferred follow-up spec).
-- Signed-manifest update fetch, atomic swap, rollback (deferred
-  follow-up spec; see research R3).
-- Per-catalog opt-in refresh independent of app version.
+- `origin = "user"` / user-catalog registration — deferred to v1.x. (A2)
+- Full user-facing "Update Catalogs" UI — deferred to v1.x. (A3)
+- `built_in` catalog content in v1 (enum reserved for forward-compat). (R-3.3)
+- Per-catalog opt-in refresh independent of first-run (v1.x path).

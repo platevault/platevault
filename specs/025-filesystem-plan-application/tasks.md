@@ -26,7 +26,7 @@ description: "Task list for spec 025 — filesystem plan application"
 ## Phase 2: Foundational (Blocking Prerequisites)
 
 - [ ] T004 Add `plan_apply_events` table migration in `crates/persistence/db/migrations/` per `data-model.md` (append-only, indexed by `plan_id` and `at`).
-- [ ] T005 Add `plan_apply_runs` table migration in `crates/persistence/db/migrations/` per `data-model.md` (one row per apply attempt, indexed by `plan_id`).
+- [ ] T005 Add `plan_apply_runs` table migration in `crates/persistence/db/migrations/` per `data-model.md` (one row per apply attempt, indexed by `plan_id`). **PlanApplyRun is mandatory in v1 (R-Run-1)** — row is created atomically with the `approved → applying` CAS transition (R-CAS-1).
 - [ ] T006 [P] Define `PlanItemState`, `PlanItemFailure`, `PlanApplyEvent`, `PlanApplyRun` types in `crates/audit/src/plan_apply.rs`.
 - [ ] T007 [P] Extend `crates/fs/planner/` to expose path-set comparison for the overlap check (`plan.conflict.overlap`).
 - [ ] T008 Define the executor trait `FsExecutor` in `crates/fs/executor/src/lib.rs` with `execute_item`, cancellation token, and dependency injection for filesystem ops (so tests can substitute an in-memory FS).
@@ -135,13 +135,66 @@ description: "Task list for spec 025 — filesystem plan application"
 
 ---
 
-## Phase 7: Polish & Cross-Cutting Concerns
+## Phase 7: Pause/Resume (R-Pause-1)
 
-- [ ] T043 [P] Documentation updates in `docs/research/` linking research.md decisions R1–R8 to runtime behaviour.
-- [ ] T044 [P] Quickstart in `specs/025-filesystem-plan-application/quickstart.md` walking through an in-memory apply with all four contracts.
+**Goal**: `applying → paused` on `volume.unavailable`, `disk.full`, or
+`item.stale`; resume via `plan.resume`; cancel via `plan.cancel`.
+
+### Tests for Pause/Resume
+
+- [ ] T048 [P] Contract test for `plan.resume` in
+  `tests/contract/plan_resume.spec.ts` (success, `run.not_paused`,
+  `volume.still.unavailable`, `disk.still.full`, `item.still.stale`).
+- [ ] T049 [P] Integration test: pause on `volume.unavailable` in
+  `tests/integration/apply_pause_volume.rs`.
+- [ ] T050 [P] Integration test: pause on `item.stale` in
+  `tests/integration/apply_pause_stale.rs`.
+
+### Implementation for Pause/Resume
+
+- [ ] T051 Implement pause-condition detection in the executor loop
+  `crates/fs/executor/src/run.rs` (check R-FS-1 snapshot before each item;
+  check volume/disk mid-apply).
+- [ ] T052 Implement `plan_resume` use case in
+  `crates/app/core/src/usecases/plan_resume.rs`; re-validates pause
+  condition; returns fault if still unresolved.
+- [ ] T053 Implement Tauri command binding for `plan.resume`.
+- [ ] T054 [US-Pause] Emit `plan.applying.paused` and `plan.applying.resumed`
+  event-bus topics on state transitions (A7).
+
+**Checkpoint**: Pause/resume functional; stale plan surfaced to user.
+
+---
+
+## Phase 8: CAS + Concurrency Safety (R-CAS-1, R-Concur-1)
+
+**Goal**: Atomic apply-start CAS prevents double-apply; overlap check rejects
+path-conflicting concurrent plans.
+
+- [ ] T055 [P] Implement atomic CAS `approved → applying` in
+  `crates/app/core/src/usecases/plan_apply.rs`; return `plan.invalid_state`
+  on race (R-CAS-1).
+- [ ] T056 [P] Implement path-set overlap check using T007 path-set comparison;
+  reject overlapping plans with `plan.conflict.overlap` (R-Concur-1).
+- [ ] T057 [P] Integration test for CAS race:
+  `tests/integration/apply_cas_race.rs`.
+- [ ] T058 [P] Integration test for overlap rejection:
+  `tests/integration/apply_overlap.rs`.
+
+**Checkpoint**: No double-apply; no overlapping-plan corruption.
+
+---
+
+## Phase 9: Polish & Cross-Cutting Concerns
+
+- [ ] T043 [P] Documentation updates in `docs/research/` linking research.md decisions R1–R8+ to runtime behaviour.
+- [ ] T044 [P] Quickstart in `specs/025-filesystem-plan-application/quickstart.md` walking through an in-memory apply with all five contracts (apply, cancel, resume, item.skip, item.retry).
 - [ ] T045 Performance check: 10k-item plan emits item progress within 50 ms of state transition (per plan.md Performance Goals).
-- [ ] T046 Security hardening review: ensure no path escapes the configured library/archive roots; ensure no apply runs without an approval token.
+- [ ] T046 **Phase 3 blocker** (A6): Canonical path verification — ensure no path escapes the configured library/archive roots at apply start; fail with `path.invalid` for out-of-root paths; symlink-follow only when root has explicit opt-in. Promoted from polish to Phase 3.
 - [ ] T047 Run quickstart.md validation.
+- [ ] T059 [P] Register plan apply event-bus topics on spec 002 §6.3:
+  `plan.applying.started`, `plan.item.progress`, `plan.applying.paused`,
+  `plan.applying.resumed`, `plan.applying.completed` (A7).
 
 ---
 
@@ -200,10 +253,25 @@ T041 = { blocked_by = ["T039", "T040"] }
 T042 = { blocked_by = ["T013"] }
 
 T043 = { blocked_by = ["T013"] }
-T044 = { blocked_by = ["T019", "T033", "T041"] }
+T044 = { blocked_by = ["T019", "T033", "T041", "T053"] }
 T045 = { blocked_by = ["T013"] }
-T046 = { blocked_by = ["T020", "T018"] }
+T046 = { blocked_by = ["T013"] }
 T047 = { blocked_by = ["T044"] }
+
+T048 = { blocked_by = ["T002"] }
+T049 = { blocked_by = ["T051"] }
+T050 = { blocked_by = ["T051"] }
+T051 = { blocked_by = ["T013"] }
+T052 = { blocked_by = ["T051"] }
+T053 = { blocked_by = ["T052"] }
+T054 = { blocked_by = ["T051", "T052"] }
+
+T055 = { blocked_by = ["T018"] }
+T056 = { blocked_by = ["T007", "T018"] }
+T057 = { blocked_by = ["T055"] }
+T058 = { blocked_by = ["T056"] }
+
+T059 = { blocked_by = ["T018", "T052"] }
 ```
 
 ### Phase Dependencies

@@ -2,7 +2,7 @@
 
 **Feature Branch**: `012-processing-artifact-observation`  
 **Created**: 2026-05-09  
-**Last Updated**: 2026-05-20  
+**Last Updated**: 2026-05-22  
 **Status**: Draft  
 **Input**: User description: "Specify how the app observes outputs from PixInsight, Siril, planetary/lunar tools, and future workflow profiles without becoming the processing tool."
 
@@ -154,6 +154,13 @@ grouped by `kind` with a count badge.
   `artifact.classify.override`, `artifact.missing`).
 - **FR-009**: Artifacts MUST be surfaceable in the project drawer's
   Tool Launches accordion, grouped by nearest preceding launch.
+- **FR-010**: Spec 012 MUST emit a `workflow.run_completed` event on the
+  spec 002 event bus when a tool launch reaches a terminal state
+  (specifically: when `ToolLaunch.completed_at` is set by this spec's
+  attribution pass). The event payload MUST include `projectId`,
+  `toolId`, `toolLaunchId`, `completedAt`, and the list of `artifactIds`
+  detected under that launch. Spec 024 subscribes to this event to write
+  `workflow_run` manifests (R-Event-Light).
 
 ### Key Entities
 

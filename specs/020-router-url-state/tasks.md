@@ -113,6 +113,17 @@ description: "Task list for Router And URL State"
 - [ ] T052 Promote `parseId` callers to typed `parseString`/`parseEnum` via `knip`-driven cleanup pass on `router.tsx`.
 - [ ] T053 Add a Playwright MCP smoke that navigates each route in `data-model.md` and asserts no console errors.
 
+## Phase 8: Ratified Decisions (A-020-1 through D-020-H2)
+
+- [ ] T060 [US2] [P] Implement `DeprecatedParamMap` registry in `apps/desktop/src/lib/route-contract.ts`. Apply the map during URL read (before `validateSearch`). Emit a `debug`-level migration log entry per rewrite. Rename `review` → `reviewFilter` at all `useNavigate` call sites and `validateSearch` declarations. (A-020-1, A-020-2, R9)
+- [ ] T061 [US2] [P] Add Vitest: a URL with `?review=foo` is rewritten to `?reviewFilter=foo` by the DeprecatedParamMap before validateSearch runs; `?reviewFilter=foo` passes through unchanged. (A-020-2)
+- [ ] T062 [US2] [P] Implement two-tier validator error banner: when a known param has an invalid value (not in its enum allow-list), display an error banner and drop the param from the URL on the next write. Add Vitest asserting the banner is triggered and the bad param is removed. (A-020-4, R-Validator-Tiered)
+- [ ] T063 [US4] Inject `?lib=<current_library_id>` into all `<Link>` components and `useNavigate` call sites throughout the desktop tree. Requires `current_library_id` from the settings or library context. (R-Lib-V1, FR-010)
+- [ ] T064 [US4] Implement the cross-library refusal banner in the `url.resolve` consumer: when the response is `library.mismatch`, display inline banner "This link is from a different library." and do not navigate. Add Vitest for this path. (A-020-3, FR-011)
+- [ ] T065 [US4] Update `url.resolve` Tauri command and TypeScript DTOs to require `libraryId` in the request; validate against the currently-open library in the use-case. (A-020-3, R-Lib-V1)
+- [ ] T066 [US3] [P] Add Vitest asserting the stale-id `navigate` fires at most once per stale-id encounter (useRef guard pattern from data-model.md). (D-020-H1)
+- [ ] T067 [P] Add enum allow-list constants to `route-contract.ts` for all typed URL params (`FrameType`, `SessionState`, `ProjectLifecycle`, `PlanState`, `PlanOrigin`, `calibration_type`); use them in all `validateSearch` implementations. (D-020-H2)
+
 ---
 
 ## Dependencies & Execution Order
@@ -203,6 +214,23 @@ blocked_by = ["T008"]
 blocked_by = ["T007"]
 [graph.T053]
 blocked_by = ["T010", "T011", "T012", "T013", "T014", "T015"]
+
+[graph.T060]
+blocked_by = ["T003", "T007"]
+[graph.T061]
+blocked_by = ["T060"]
+[graph.T062]
+blocked_by = ["T007"]
+[graph.T063]
+blocked_by = ["T025"]
+[graph.T064]
+blocked_by = ["T041", "T065"]
+[graph.T065]
+blocked_by = ["T041"]
+[graph.T066]
+blocked_by = ["T031"]
+[graph.T067]
+blocked_by = ["T003"]
 ```
 
 ### Phase Dependencies

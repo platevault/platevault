@@ -21,7 +21,7 @@ each showing reason + timestamp + path.
 - [x] **T1.3** Per-snapshot row rendering reason, timestamp, path. *(mockup-done)*
 - [ ] **T1.4** Define `crates/project/structure/manifest.rs` writer skeleton with `ManifestReason` enum.
 - [ ] **T1.5** Define DB schema for `manifests` table (id, project_id, reason, timestamp, path, version) in `crates/persistence/db/`.
-- [ ] **T1.6** Implement `project.manifest.list` contract handler returning newest-first summaries.
+- [ ] **T1.6** Implement `project.manifest.list` contract handler returning newest-first summaries with cursor-based pagination (cursor, limit default 50 / max 200, nextCursor in response). (A6.)
 - [ ] **T1.7** Wire desktop drawer to live `project.manifest.list` call behind a feature flag (parallel to mock data).
 
 ---
@@ -35,8 +35,8 @@ snapshot).
 - [x] **T2.1** Expandable body container in drawer with source list and notes-of-record block. *(mockup-done — `ProjectsPage.tsx:391-395`)*
 - [ ] **T2.2** Define `ManifestBody` rendering shape in TypeScript matching the schema in `project.manifest.get`.
 - [ ] **T2.3** Implement `project.manifest.get` contract handler reading from DB and (optionally) the on-disk markdown body.
-- [ ] **T2.4** Manifest writer renders markdown body with YAML front-matter at lifecycle triggers (created, source_change, lifecycle_transition, cleanup_applied).
-- [ ] **T2.5** Embed `notes` snapshot into manifest body when notes exist at write time.
+- [ ] **T2.4** Manifest writer renders markdown body with YAML front-matter at lifecycle triggers (created, source_change, lifecycle_transition, cleanup_applied, workflow_run). Subscribe to `workflow.run_completed` event bus topic (spec 012). (**FLAGGED**: spec 012 ripple — spec 012 must emit `workflow.run_completed` with `{ projectId, toolId, completedAt, outputArtifacts }`. See GRILL amendment 2026-05-22.)
+- [ ] **T2.5** Embed **full text snapshot** of notes into manifest body when notes exist at write time (not hash or excerpt). (A8.)
 - [ ] **T2.6** Audit events: `manifest.write.attempt` / `success` / `failure` via `crates/audit/`.
 - [ ] **T2.7** Onboarding hook: detect preexisting `notes/manifest-*.md` and surface the choose-policy prompt (FR-006).
 
@@ -65,12 +65,12 @@ notes body and save. Reload the project; the new body persists. The
 audit log shows a `note.update` event.
 
 - [x] **T4.1** Drawer "Notes" section renders existing notes body or "No notes." placeholder. *(mockup-done — `ProjectsPage.tsx:414-427`)*
-- [ ] **T4.2** Add inline edit affordance (textarea + save/cancel) to the Notes section.
+- [ ] **T4.2** Add inline edit affordance (textarea + save/cancel) to the Notes section. Apply a **5-second debounce** before issuing `project.note.update` to avoid per-keystroke writes. Enforce the 16 384-byte content cap client-side with a counter and server-side with `note.content_too_large` error. (A5.)
 - [ ] **T4.3** Define DB schema for `project_notes` (id, project_id unique, updated_at, content).
 - [ ] **T4.4** Implement `crates/project/structure/notes.rs` adapter reading/writing `notes/project-notes.md` atomically.
 - [ ] **T4.5** Implement `project.note.update` contract handler returning `updated_at`.
 - [ ] **T4.6** Audit event `note.update` recorded on save.
-- [ ] **T4.7** Error mapping for `project.not_found` and `project.read_only` (archived projects).
+- [ ] **T4.7** Error mapping: `project.not_found`; `project.read_only` fires only when `lifecycle == "archived"` (not on other lifecycle states — R-NotesEdit); `note.content_too_large` when content exceeds 16 384 bytes UTF-8 (A5).
 
 ---
 
@@ -82,6 +82,10 @@ audit log shows a `note.update` event.
 - [ ] **TX.4** Integration test: mutate source map → assert `source_change` manifest exists; previous manifest unchanged.
 - [ ] **TX.5** Integration test: edit notes → reload project → notes persist; manifest generated after a source change includes the new notes snapshot.
 - [ ] **TX.6** Constitution recheck after design (pre-implementation).
+- [ ] **TX.7** Integration test: generate >50 manifests for one project, call `project.manifest.list` with default limit, assert exactly 50 returned + `next_cursor` present; call with returned cursor, assert next page returned. (A6 pagination.)
+- [ ] **TX.8** Integration test: simulate `workflow.run_completed` event → assert `workflow_run` manifest row written and file present on disk. (A4, R-Workflow-1. Requires spec 012 stub emitting the event.)
+- [ ] **TX.9** Integration test: attempt `project.note.update` with content > 16 384 bytes → assert `note.content_too_large` error returned; assert no note file mutated. (A5.)
+- [ ] **TX.10** Integration test: attempt `project.note.update` on an `archived` project → assert `project.read_only`; attempt on a `completed` project → assert success. (R-NotesEdit.)
 
 ---
 

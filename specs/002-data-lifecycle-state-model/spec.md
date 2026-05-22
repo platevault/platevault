@@ -25,7 +25,11 @@ Wired files (mockup-only, in `apps/desktop/`):
   `ProjectLifecycle` (`setup_incomplete | ready | prepared | processing |
   completed | archived | blocked`), `PlanState` (`draft | ready_for_review |
   approved | applying | applied | partially_applied | failed | cancelled`),
-  `InventorySession.state` (`confirmed | needs_review | rejected`),
+  `InventorySession.state` — canonical 6-state vocabulary
+  (`discovered | candidate | needs_review | confirmed | rejected | ignored`);
+  the current mockup only exercises a partial subset
+  (`confirmed | needs_review | rejected`) and MUST be brought up to the full
+  6-state set in the Rust port,
   `InventorySource.state` (`active | missing | disabled | reconnect_required`),
   plus `lifecycleLabel`, `lifecycleTone`, `planStateLabel`, `planStateTone`,
   `inventoryStateLabel`, `inventoryStateTone`.
@@ -142,12 +146,12 @@ As a user, I want lifecycle transitions to be auditable so that I can understand
 - **FR-003**: Generated projections MUST transition to `Stale` when their source input changes and MUST be clearly visible as stale in detail or list views.
 - **FR-004**: Filesystem plan execution MUST represent terminal outcomes as `Succeeded`, `Partially Failed`, `Failed`, or `Cancelled`, preserving which mutations completed versus those not applied.
 - **FR-005**: Session and calibration candidate reviews MUST preserve immutable snapshots of their observed/inferred/reviewed context for audit, while allowing new snapshots for later rescans.
-- **FR-006**: Ledger rows MUST stay lean and omit confidence/evidence/provenance columns, while detail views and logs expose structured provenance with request/entity metadata automatically.
+- **FR-006**: Ledger rows MUST stay lean and omit confidence/evidence/provenance columns, while detail views and logs expose structured provenance with request/entity metadata automatically. Default ledger views for `InventorySession` and `CalibrationSession` MUST filter `state != rejected`; detail surfaces MUST always show rejected entries; a 'show rejected' toggle MUST be available to re-include them in ledger views.
 - **FR-007**: All lifecycle transitions MUST be anchored on a `Data Asset`; value-centric events are represented as field-level provenance on that asset (including source and review status), so lifecycle meaning is testable at both asset and value granularity.
 - **FR-008**: Default lifecycle timeline rendering MUST display only workflow-significant events; diagnostics (adapter/parser/retry/cache/request-level events) MUST be excluded by default but remain retrievable through logs and expanded event-detail views to preserve full audit completeness.
 - **FR-009**: Action confirmation flows (for example, confirm session, create/move project, or mark items for processing) MUST record reviewed decisions scoped to the action, including which values were accepted, corrected, or explicitly left unresolved.
 - **FR-010**: If action-critical metadata or decision values are missing, contradictory, or unresolved, the current action MUST be blocked with a clear list of required corrections; unresolved values that are not critical to that action MAY remain unresolved.
-- **FR-011**: Session candidate formation MUST be based on grouping by a metadata-derived session key from FITS/XISF/video metadata; the exact session key field set is defined in follow-up Grill-Me resolution.
+- **FR-011**: Session candidate formation MUST be based on grouping by a metadata-derived session key from FITS/XISF/video metadata. The session key is the tuple `(target_id, filter, binning, gain, observing_night)`, where `observing_night` is derived from each frame's UTC capture timestamp using the configured `observer_location` (spec 018) at local-solar-noon boundaries (consistent with spec 013/023). See research.md §2.5 for the derivation algorithm.
 - **FR-012**: Mixed-folder discovery inputs MUST split into separate session candidates whenever session keys differ; each candidate MUST retain the originating folder/path as provenance information, without treating path as authoritative session identity.
 
 ### Key Entities

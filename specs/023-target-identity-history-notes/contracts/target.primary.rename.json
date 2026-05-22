@@ -1,0 +1,94 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://astro-plan.local/contracts/target.primary.rename.json",
+  "title": "target.primary.rename",
+  "description": "Write contract that promotes an existing alias to primary_designation. The prior primary_designation is demoted to alias status. The new primary MUST already be present in the target's aliases. Emits a target.primary_renamed audit event and provenance entry on success. (R-3.4)",
+  "type": "object",
+  "oneOf": [
+    { "$ref": "#/$defs/Request" },
+    { "$ref": "#/$defs/Response" }
+  ],
+  "$defs": {
+    "ContractVersion": { "type": "string", "const": "1.0" },
+    "Uuid": { "type": "string", "format": "uuid" },
+    "ErrorCode": {
+      "type": "string",
+      "enum": [
+        "target.not_found",
+        "designation.not_in_aliases",
+        "designation.already_primary",
+        "actor.not_authorised"
+      ],
+      "description": "designation.not_in_aliases: newPrimaryDesignation is not among the target's existing aliases; add it first with target.alias.add. designation.already_primary: the designation is already the current primary_designation."
+    },
+    "ErrorEnvelope": {
+      "type": "object",
+      "required": ["code", "message"],
+      "additionalProperties": false,
+      "properties": {
+        "code": { "$ref": "#/$defs/ErrorCode" },
+        "message": { "type": "string" },
+        "details": { "type": "object", "additionalProperties": true }
+      }
+    },
+    "Request": {
+      "type": "object",
+      "required": ["contractVersion", "requestId", "targetId", "newPrimaryDesignation"],
+      "additionalProperties": false,
+      "properties": {
+        "contractVersion": { "$ref": "#/$defs/ContractVersion" },
+        "requestId": { "$ref": "#/$defs/Uuid" },
+        "targetId": {
+          "$ref": "#/$defs/Uuid",
+          "description": "Target whose primary_designation is to be changed."
+        },
+        "newPrimaryDesignation": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 200,
+          "description": "Designation to promote. MUST be an existing alias on this target."
+        }
+      }
+    },
+    "Response": {
+      "type": "object",
+      "required": ["status", "contractVersion", "requestId"],
+      "additionalProperties": false,
+      "properties": {
+        "status": { "type": "string", "enum": ["success", "error"] },
+        "contractVersion": { "$ref": "#/$defs/ContractVersion" },
+        "requestId": { "$ref": "#/$defs/Uuid" },
+        "targetId": {
+          "$ref": "#/$defs/Uuid",
+          "description": "Present when status=success."
+        },
+        "prior_primary": {
+          "type": "string",
+          "description": "The previous primary_designation, now an alias. Present when status=success."
+        },
+        "new_primary": {
+          "type": "string",
+          "description": "The new primary_designation. Present when status=success."
+        },
+        "audit_id": {
+          "$ref": "#/$defs/Uuid",
+          "description": "ID of the written audit event. Present when status=success."
+        },
+        "error": { "$ref": "#/$defs/ErrorEnvelope" }
+      },
+      "allOf": [
+        {
+          "if": { "properties": { "status": { "const": "success" } } },
+          "then": {
+            "required": ["targetId", "prior_primary", "new_primary", "audit_id"],
+            "not": { "required": ["error"] }
+          }
+        },
+        {
+          "if": { "properties": { "status": { "const": "error" } } },
+          "then": { "required": ["error"] }
+        }
+      ]
+    }
+  }
+}

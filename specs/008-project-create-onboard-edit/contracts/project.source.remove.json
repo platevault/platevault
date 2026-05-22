@@ -1,0 +1,122 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://astro-plan.local/contracts/project.source.remove.json",
+  "title": "project.source.remove",
+  "description": "Remove a source link from an existing project. Permitted when lifecycle in {setup_incomplete, ready, blocked}. Refused with lifecycle.read_only when lifecycle in {prepared, processing, completed, archived}. When removal leaves zero confirmed sources the project transitions back to setup_incomplete (newLifecycle present in response). Removing the last confirmed source is gated by a second confirmation: the caller must retry with confirmLastSource=true or the server returns lifecycle.last_confirmed_source. Ratified: GRILL 2026-05-22 R-Remove. Convention: camelCase (A7 exception for new contracts).",
+  "type": "object",
+  "oneOf": [
+    { "$ref": "#/$defs/Request" },
+    { "$ref": "#/$defs/Response" }
+  ],
+  "$defs": {
+    "ContractVersion": { "type": "string", "const": "1.0" },
+    "Uuid": { "type": "string", "format": "uuid" },
+    "Timestamp": { "type": "string", "format": "date-time" },
+    "ProjectLifecycle": {
+      "type": "string",
+      "enum": [
+        "setup_incomplete",
+        "ready",
+        "prepared",
+        "processing",
+        "completed",
+        "archived",
+        "blocked"
+      ]
+    },
+    "ErrorCode": {
+      "type": "string",
+      "description": "Source-remove-scoped error codes.",
+      "enum": [
+        "project.not_found",
+        "source.not_found",
+        "lifecycle.read_only",
+        "lifecycle.last_confirmed_source"
+      ]
+    },
+    "ErrorEnvelope": {
+      "type": "object",
+      "required": ["code", "message"],
+      "additionalProperties": false,
+      "properties": {
+        "code": { "$ref": "#/$defs/ErrorCode" },
+        "message": {
+          "type": "string",
+          "description": "Human-readable explanation. MUST NOT include secrets or absolute filesystem paths."
+        },
+        "details": {
+          "type": "object",
+          "description": "Structured context. lifecycle.read_only MUST include currentLifecycle. lifecycle.last_confirmed_source MUST include remainingConfirmedCount (always 0 in this case).",
+          "additionalProperties": true,
+          "properties": {
+            "currentLifecycle": { "$ref": "#/$defs/ProjectLifecycle" },
+            "remainingConfirmedCount": {
+              "type": "integer",
+              "minimum": 0,
+              "description": "Number of confirmed sources that would remain after removal. 0 triggers lifecycle.last_confirmed_source unless confirmLastSource=true."
+            }
+          }
+        }
+      }
+    },
+    "Request": {
+      "type": "object",
+      "description": "Source removal request. projectSourceId identifies the ProjectSource row (keyed by inventoryId on the project). confirmLastSource must be true when removing the last confirmed source; omitting it returns lifecycle.last_confirmed_source so the caller can surface a confirmation dialog.",
+      "required": [
+        "contractVersion",
+        "requestId",
+        "projectId",
+        "projectSourceId"
+      ],
+      "additionalProperties": false,
+      "properties": {
+        "contractVersion": { "$ref": "#/$defs/ContractVersion" },
+        "requestId": { "$ref": "#/$defs/Uuid" },
+        "projectId": { "$ref": "#/$defs/Uuid" },
+        "projectSourceId": {
+          "$ref": "#/$defs/Uuid",
+          "description": "The inventoryId of the ProjectSource to remove."
+        },
+        "confirmLastSource": {
+          "type": "boolean",
+          "description": "Must be true when removing the last confirmed source. Omitting or setting false causes lifecycle.last_confirmed_source to be returned, giving the caller a chance to surface a confirmation dialog."
+        }
+      }
+    },
+    "Response": {
+      "type": "object",
+      "description": "Source removal response.",
+      "required": ["status", "contractVersion", "requestId"],
+      "additionalProperties": false,
+      "properties": {
+        "status": { "type": "string", "enum": ["success", "error"] },
+        "contractVersion": { "$ref": "#/$defs/ContractVersion" },
+        "requestId": { "$ref": "#/$defs/Uuid" },
+        "projectId": { "$ref": "#/$defs/Uuid" },
+        "removedSourceId": {
+          "$ref": "#/$defs/Uuid",
+          "description": "The inventoryId of the removed ProjectSource."
+        },
+        "auditId": { "$ref": "#/$defs/Uuid" },
+        "newLifecycle": {
+          "$ref": "#/$defs/ProjectLifecycle",
+          "description": "Present when removal triggered a lifecycle transition (e.g. ready → setup_incomplete when last confirmed source was removed)."
+        },
+        "error": { "$ref": "#/$defs/ErrorEnvelope" }
+      },
+      "allOf": [
+        {
+          "if": { "properties": { "status": { "const": "success" } } },
+          "then": {
+            "required": ["projectId", "removedSourceId", "auditId"],
+            "not": { "required": ["error"] }
+          }
+        },
+        {
+          "if": { "properties": { "status": { "const": "error" } } },
+          "then": { "required": ["error"] }
+        }
+      ]
+    }
+  }
+}

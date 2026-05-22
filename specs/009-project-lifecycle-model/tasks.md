@@ -15,8 +15,9 @@ counterparts (contract-backed, audited) are tracked separately.
 - F-2. Add `crates/domain/core/src/lifecycle/project.rs` with the
   `ProjectLifecycle` enum, the `ProjectTransition` table from
   `data-model.md`, and pure `transition(from, to) -> Result<…>` plus
-  `default_label(from, to)` functions. Unit-test all 16 allowed edges and a
-  representative set of forbidden combinations.
+  `default_label(from, to)` functions. Unit-test all 17 allowed edges
+  (including `blocked → archived`) and a representative set of forbidden
+  combinations (including `blocked → completed`).
 - F-3. Add `crates/app/core/src/usecases/project_lifecycle.rs` exposing
   `transition` and `list` use cases. Wire to `crates/persistence/db` (writes
   Project + appends audit) and `crates/audit` (event emission). Use case
@@ -97,6 +98,36 @@ counterparts (contract-backed, audited) are tracked separately.
 - US4-5. Tests: each reason kind has an integration test covering both auto
   detection and manual resolution.
 
+## Phase 7 — Blocked-Flag Debounce (D5)
+
+- P7-1. Implement debounce logic in the detector layer
+  (`crates/app/core/usecases/project_health.rs` or a dedicated
+  `crates/app/core/debounce/` module): suppress re-emission of a block
+  signal for the same `(entity_id, blocking_condition)` pair within a 60-
+  second window (D5, GRILL 2026-05-22). The lifecycle use case itself has
+  no debounce; all suppression lives in the detector layer.
+- P7-2. Debounce window is configurable via an in-process constant
+  (not a user-facing setting); default 60 s. Unit-test the debounce: rapid
+  duplicate signals produce exactly one transition call within the window.
+- P7-3. Tests: integration test verifying that two rapid
+  `source_missing` events for the same project produce only one
+  `* → blocked` transition audit entry.
+
+## Phase 8 — Setup-Incomplete → Ready Auto-Transition (R-Ready-Trigger)
+
+- P8-1. Add `check_project_ready_invariant(project_id)` use case in
+  `crates/app/core/usecases/project_lifecycle.rs`. Invariant:
+  `tool != null AND ≥1 confirmed source mapped`. When met, auto-transition
+  `setup_incomplete → ready` via `actor=system`.
+- P8-2. Call `check_project_ready_invariant` after every `project.update`
+  and `project.source.add` use-case completion. The check is a no-op unless
+  the project is currently in `setup_incomplete`.
+- P8-3. Emit `project.lifecycle.ready` event on the event bus after
+  successful auto-transition.
+- P8-4. Tests: unit test invariant check for all combinations of
+  tool/sources; integration test verifying that adding a confirmed source
+  to a tool-set setup_incomplete project triggers the auto-transition.
+
 ## Cross-Cutting
 
 - X-1. Update the steering index entry for `specs/009-` once tasks land.
@@ -117,6 +148,30 @@ US1-3 / US1-4 / US1-6 depend on F-5.
 US2-4 / US2-5 depend on mockup parity (US2-1 .. US2-3).
 US4-2 / US4-3 depend on US3-3 and the blocked_reason field on the contract.
 ```
+
+## US 5 — Unarchive to Ready (R-Unarchive, GRILL 2026-05-22)
+
+- US5-1. Add `archived → ready` to the `ProjectTransition` table in
+  `crates/domain/core/src/lifecycle/project.rs`. Unit-test the new edge and
+  confirm `archived → prepared` remains forbidden.
+- US5-2. Extend the plan-requirement logic in `plan_requirement.rs` (T044):
+  `archived → ready` follows C7 criterion (required when files move, not
+  required when only metadata transitions) — same as `archived → processing`.
+- US5-3. Add `Unarchived` as the default action label for `archived → ready`
+  in the edge-label table (R2, `data-model.md`). Emit audit event
+  `project.unarchived`.
+- US5-4. Update the `projectFooter` in `apps/desktop/src/pages/ProjectsPage.tsx`
+  (mockup): the `archived` state's "Unarchive" footer action should surface
+  both `archived → ready` (primary: "Unarchive") and `archived → processing`
+  (secondary: "Unarchive and Resume"). Final UX copy to be confirmed in the
+  design pass.
+- US5-5. Contract: ensure `project.lifecycle.transition.json` correctly
+  handles `next_state: "ready"` from `archived` state (server-side validation
+  accepts the edge; schema layer does not require `plan_id` unconditionally
+  for this edge per the R-PlanGated-Schema note).
+- US5-6. Tests: unit test `archived → ready` allowed; `archived → prepared`
+  still refused; integration test for metadata-only unarchive (no plan) and
+  file-move unarchive (plan required).
 
 ## Out of Scope
 

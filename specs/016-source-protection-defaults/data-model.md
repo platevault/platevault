@@ -23,13 +23,14 @@ ProtectionLevel ::= "protected" | "normal" | "unprotected"
 Per-source override of protection policy. Absence means the source inherits
 the global default.
 
-| Field        | Type                  | Notes                                                       |
-| ------------ | --------------------- | ----------------------------------------------------------- |
-| `source_id`  | `string` (uuid)       | FK to Source. Primary key.                                  |
-| `level`      | `ProtectionLevel`     | Effective protection for this source.                       |
-| `categories` | `array<string>`       | Optional override of protected categories for this source.  |
-| `updated_at` | `timestamp`           | Audit timestamp.                                            |
-| `updated_by` | `string`              | User / agent identifier.                                    |
+| Field                   | Type                  | Notes                                                                           |
+| ----------------------- | --------------------- | ------------------------------------------------------------------------------- |
+| `source_id`             | `string` (uuid)       | FK to Source. Primary key.                                                      |
+| `level`                 | `ProtectionLevel`     | Effective protection for this source.                                           |
+| `block_permanent_delete`| `bool?`               | null = inherit global `block_permanent_delete`; true/false = explicit per-source override (A2). |
+| `categories`            | `array<string>`       | Optional override of protected categories for this source.                      |
+| `updated_at`            | `timestamp`           | Audit timestamp.                                                                |
+| `updated_by`            | `string`              | User / agent identifier.                                                        |
 
 ### GlobalProtectionDefaults
 
@@ -41,6 +42,21 @@ exists. Mirrors the settings keys already present in the desktop mockup.
 | `default_level`          | `ProtectionLevel` | `protected`                   |
 | `block_permanent_delete` | `boolean`         | `true`                        |
 | `protected_categories`   | `array<string>`   | `["lights", "masters", "finals"]` |
+
+**Hard-coded fallback values (A3)**: If the `GlobalProtectionDefaults` row is
+absent from the database (e.g. first run before migration completes), the
+resolver uses hard-coded in-code defaults:
+- `level: "protected"`
+- `block_permanent_delete: true`
+- `protected_categories: ["lights", "masters", "finals"]`
+
+These values are also the seed values for the migration that creates the
+`GlobalProtectionDefaults` row.
+
+**`protected_categories` storage (A4)**: Stored as a JSON-encoded
+`array<string>` in SQLite. The UI presents and parses this as a
+comma-separated string (e.g. `"lights, masters, finals"`). Whitespace is
+trimmed; empty tokens are ignored.
 
 ### ProtectedPlanItem (projection)
 
@@ -60,16 +76,29 @@ plan item from `crates/fs/planner/`.
 
 ## Resolver
 
+**Precedence rule (A1)**: When a per-source override row exists, it wins
+unconditionally. Categories elevate the level ONLY when NO override row exists.
+
 ```
 resolve(source_id, category?) -> ProtectionLevel
   override = SourceProtectionState[source_id]
   if override exists:
-    if category and override.categories includes category: return "protected"
-    return override.level
-  defaults = GlobalProtectionDefaults
+    return override.level          // override wins; categories are NOT checked
+  defaults = GlobalProtectionDefaults (or hard-coded fallback if row absent)
   if category and defaults.protected_categories includes category:
     return "protected"
   return defaults.default_level
+```
+
+**`block_permanent_delete` resolution (A2)**:
+
+```
+resolve_block_permanent_delete(source_id) -> bool
+  override = SourceProtectionState[source_id]
+  if override exists and override.block_permanent_delete is not null:
+    return override.block_permanent_delete
+  defaults = GlobalProtectionDefaults (or hard-coded fallback)
+  return defaults.block_permanent_delete
 ```
 
 ## Defaults Table

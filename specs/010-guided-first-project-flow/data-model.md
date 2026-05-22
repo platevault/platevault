@@ -14,18 +14,18 @@ not user-mutable.
 | ------------------ | ---------------------------- | -------------------------------------------------------------------- |
 | `id`               | string                       | Stable id, e.g. `inbox.confirm_first`.                               |
 | `route`            | string                       | Route pattern where the anchor is expected to exist.                 |
-| `trigger`          | enum `InventoryConfirmed` \| `ProjectCreated` \| `ToolOpened` | Event that completes the step. |
-| `completion_event` | string                       | Canonical event name from the lifecycle event bus.                   |
+| `trigger`          | string                       | Dot-notation event topic from the lifecycle event bus (e.g. `inventory.confirmed`). |
+| `completion_event` | string                       | Canonical event topic name (dot-notation lowercase).                 |
 | `hint_text`        | string                       | Localized hint copy keyed by user locale.                            |
 | `anchor`           | string                       | `data-guide-anchor` selector value for overlay positioning.          |
 
 Registry (v1):
 
-| id                       | route            | trigger              | completion_event      | anchor                |
-| ------------------------ | ---------------- | -------------------- | --------------------- | --------------------- |
-| `inbox.confirm_first`    | `/inbox`         | `InventoryConfirmed` | `inventory.confirmed` | `inbox.confirm-row`   |
-| `project.create_first`   | `/projects`      | `ProjectCreated`     | `project.created`     | `projects.create-cta` |
-| `tool.open_first`        | `/projects/:id`  | `ToolOpened`         | `tool.opened`         | `project.open-in-tool`|
+| id                       | route            | trigger (dot-notation)   | completion_event      | anchor                |
+| ------------------------ | ---------------- | ------------------------ | --------------------- | --------------------- |
+| `inbox.confirm_first`    | `/inbox`         | `inventory.confirmed`    | `inventory.confirmed` | `inbox.confirm-row`   |
+| `project.create_first`   | `/projects`      | `project.created`        | `project.created`     | `projects.create-cta` |
+| `tool.open_first`        | `/projects/:id`  | `tool.opened`            | `tool.opened`         | `project.open-in-tool`|
 
 ### GuidedFlowState
 
@@ -56,7 +56,33 @@ Per-install runtime state, stored in a single SQLite row.
 | Active(s)                 | `completion_event` for any step `t`      | Active(next uncompleted step) or Completed     |
 | Active(s)                 | `dismiss`                                | Dismissed                                      |
 | Dismissed                 | `restart`                                | Active(lowest uncompleted registry step)       |
-| Completed                 | `restart`                                | Completed (no-op; restart does not reset)      |
+| Completed                 | `restart`                                | Idle (progress reset; replay from step 1)      |
+
+## Event Subscription Rules
+
+The guided-flow module subscribes to the lifecycle event bus (spec 002 §6.1).
+All event subscribers MUST check the `source` field on the event envelope
+(see spec 002 §6 R-Source-1):
+
+- **GuidedSubscription rule**: Ignore any event where `source == "restore"`.
+  Replay events from audit-log recovery MUST NOT advance coach steps, because
+  the user did not perform the action during this session.
+- `source == "user"` or `source == "system"` events advance steps normally.
+
+## Recovery Rules
+
+When the `guided_flow_state` row fails deserialization on app start or state
+read (corrupt JSON, unknown state value, schema mismatch):
+
+1. Reset the in-memory state to Idle.
+2. Persist the fresh Idle row, overwriting the corrupt row.
+3. Emit a `diagnostic` audit event (`guided_flow.state.corrupted`) containing
+   the raw corrupt value and the parse error detail.
+4. The first `guided.state.get` call after the reset returns error code
+   `STATE_CORRUPTED` (informational — the reset has already happened
+   server-side; callers should present a non-blocking notice and retry, which
+   will return the fresh Idle state).
+5. All subsequent reads return the fresh Idle state normally.
 
 ## Storage
 

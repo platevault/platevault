@@ -16,48 +16,76 @@ counterparts (contract-backed, audited) are tracked separately.
   `infer_channels(sources)`, and `merge_channels(inferred, manual)`
   functions. Unit-test inference and merge semantics from research R4.
 - F-3. Add `crates/app/core/src/usecases/project_setup.rs` exposing
-  `create`, `update`, and `add_source` use cases. Wire to
+  `create`, `update`, `add_source`, and `remove_source` use cases. Wire to
   `crates/persistence/db` and `crates/audit`. Use-case tests pass through
   a fake repository and a fake inventory reader.
+  - `add_source` MUST check `inventory_session.state == "confirmed"`; reject
+    with `source.not_confirmed` otherwise (R-Inventory-Confirmed).
+  - `remove_source` MUST refuse with `lifecycle.read_only` when `lifecycle in
+    {prepared, processing, completed, archived}`.
+  - After every `create`, `update`, or `add_source`, fire the invariant check:
+    if `tool != null AND ≥1 confirmed source mapped`, auto-transition
+    `setup_incomplete → ready` via `actor=system` (R-Ready-Trigger).
 - F-4. Generate Rust DTOs in `crates/contracts/core/` and TS types in
-  `packages/contracts/generated/` from the three JSON Schemas
-  (`project.create`, `project.update`, `project.source.add`).
+  `packages/contracts/generated/` from all seven JSON Schemas
+  (`project.create`, `project.update`, `project.source.add`,
+  `project.source.remove`, `project.get`, `project.channels.reinfer`,
+  `project.channels.dismiss_drift`).
 - F-5. Add Tauri command adapters that map each contract to its use case.
 - F-6. Extend `apps/desktop/src/data/store.ts` with `useCreateProject`,
-  `useUpdateProject`, and `useAddProjectSource` mutation hooks backed by
+  `useUpdateProject`, `useAddProjectSource`, `useRemoveProjectSource`,
+  `useReinferChannels`, and `useDismissChannelDrift` mutation hooks backed by
   the Tauri adapters. Preserve current `useProjects` shape.
 
 ## US 1 — Create A Project (P1)
 
 - US1-1. `[mockup]` Page-header "New project" button is rendered
   (`ProjectsPage.tsx:87`). Currently no handler.
-- US1-2. Build `CreateProjectWizard.tsx` with five steps: Identity → Tool →
-  Sources → Channels → Confirm. URL state tracks the active step (spec
-  020 router contract).
-- US1-3. Identity step: name input with live duplicate-check (debounced
-  call to `project.list` or a dedicated `project.name.check` helper);
-  length and non-empty validation; library-root-relative path input.
-- US1-4. Tool step: radio group seeded with `PixInsight` default
-  (research R3). All three `ProcessingTool` values rendered.
-- US1-5. Sources step: `AddSourcePicker.tsx` shared component renders
-  Inventory sessions grouped by capture session; checkbox selection
-  drives `initial_sources[]`. Empty Inventory shows an empty-state with
-  a link to spec 003 source-setup.
-- US1-6. Channels step: shows inferred channels from selected sources as
-  removable chips; manual "Add channel" input. Persists `source` flag
-  per channel.
-- US1-7. Confirm step: review pane summarising all collected values; a
-  Create primary action dispatches `project.create`.
-- US1-8. Wire the page-header "New project" click handler to open the
-  wizard. Replace the static button with a button that records the
-  wizard open in URL state.
-- US1-9. On success, navigate to the new project drawer and surface a
-  toast linking to the generated `plan_id` (spec 025 plan review).
-- US1-10. On error, render inline messages for each `ErrorCode`
+- US1-2. Build `CreateProjectDialog.tsx` as a single-form modal (A1 — wizard
+  reversed). Fields: name (required, with live duplicate-check), tool (required,
+  radio group, PixInsight default), optional Inventory source picker, optional
+  notes. No step-based navigation; URL state records dialog open/close only.
+- US1-3. Name field: debounced duplicate-check against `project.list`;
+  non-empty and ≤120-char validation; library-root-relative path input.
+- US1-4. Tool field: radio group seeded with `PixInsight` default (research R3).
+  All three `ProcessingTool` values rendered. Tool is required; submit disabled
+  until a tool is selected.
+- US1-5. Optional sources field: `AddSourcePicker.tsx` shared component renders
+  confirmed Inventory sessions grouped by capture session; checkbox selection
+  drives `initial_sources[]`. Empty Inventory shows an empty-state with a link
+  to spec 003 source-setup.
+- US1-6. Wire the page-header "New project" click handler to open the dialog.
+  Replace the static button with a button that records dialog-open in URL state.
+- US1-7. On success, navigate to the new project drawer and surface a toast
+  linking to the generated `plan_id` (spec 025 plan review).
+- US1-8. On error, render inline messages for each `ErrorCode`
   (`name.empty`, `name.duplicate`, `tool.unknown`, `source.not_found`,
-  `path.collision`).
-- US1-11. Tests: vitest for each step's validation; Playwright smoke
-  covering create-from-empty and create-with-three-sources happy paths.
+  `source.not_confirmed`, `path.collision`).
+- US1-9. Tests: vitest for dialog field validation; Playwright smoke covering
+  create-from-empty and create-with-three-sources happy paths.
+
+## US 1b — Source Remove (P2)
+
+- US1b-1. Wire source-remove rows in `EditProjectPane.tsx` to `useRemoveProjectSource`.
+  Currently disabled with tooltip (US3-5).
+- US1b-2. Remove icon is enabled when `lifecycle in {setup_incomplete, ready, blocked}`;
+  disabled with tooltip "Cannot remove source in current lifecycle state" otherwise.
+- US1b-3. When removal triggers a `ready → setup_incomplete` transition (server returns
+  `newLifecycle = "setup_incomplete"`), surface a warning toast explaining the project
+  returned to setup_incomplete.
+- US1b-4. When removal would leave zero confirmed sources, surface a confirmation
+  dialog before calling the contract (maps to `lifecycle.last_confirmed_source` error).
+- US1b-5. Tests: vitest for enabled/disabled states; Playwright smoke for remove-last-source
+  confirmation flow.
+
+## US 1c — Channel Drift Detection (P3)
+
+- US1c-1. `project.get` response includes `channelDrift`; render a drift banner in
+  `EditProjectPane.tsx` and project drawer when `channelDrift.hasNewSources == true`.
+- US1c-2. Banner shows `suggestedAction`: "Re-infer channels" (primary) or "Dismiss"
+  (secondary). Wire primary to `useReinferChannels`; wire secondary to `useDismissChannelDrift`.
+- US1c-3. Tests: vitest for banner render condition; Playwright smoke for re-infer and
+  dismiss flows.
 
 ## US 2 — Onboard An Existing Project (P2)
 
@@ -93,10 +121,8 @@ counterparts (contract-backed, audited) are tracked separately.
   `<Plus size={12}/> Add source` at `ProjectsPage.tsx:277`) to the
   shared `AddSourcePicker.tsx` from US 1, dispatching
   `project.source.add` on selection.
-- US3-5. Wire source-remove to a future `project.source.remove`
-  contract (out of scope for this spec; tracked under cross-cutting).
-  For v1, the row's remove icon is disabled with a tooltip linking to
-  the follow-up.
+- US3-5. Wire source-remove to `project.source.remove` (now available in v1 —
+  US1b). Remove icon is lifecycle-gated per US1b-2.
 - US3-6. Channel inference preview re-runs whenever the source list
   changes; manually added channels are visually distinguishable from
   inferred channels.
@@ -121,14 +147,15 @@ counterparts (contract-backed, audited) are tracked separately.
 
 - X-1. Update the steering index entry for `specs/008-` once tasks land.
 - X-2. Generate a contract snapshot test that fails on enum drift
-  between the three JSON Schemas and the Rust domain types.
+  between the seven JSON Schemas and the Rust domain types.
 - X-3. Coordinate with spec 010 (guided first project flow) to confirm
-  the create wizard is invocable from an external orchestrator.
+  the create dialog is invocable from an external orchestrator without
+  behavior change.
 - X-4. Coordinate with spec 011 (tool launch) to ensure tool changes
-  emit a `project_renamed` / `project_tool_changed` audit event that
-  invalidates launcher path caches.
-- X-5. File a follow-up spec for `project.source.remove` so US3-5 can
-  be enabled.
+  emit a `project_tool_changed` audit event that invalidates launcher path
+  caches.
+- X-5. `project.source.remove` is now in-scope (US1b). Remove cross-cutting
+  follow-up note; tracker X-5 closed.
 
 ## Dependency Graph
 
@@ -147,11 +174,13 @@ US1-9 depends on spec 025 (filesystem plan application).
 
 ## Out of Scope
 
-- `project.source.remove` contract and UI (tracked as follow-up X-5).
 - Multi-source bulk add (current contract is single-session per call;
   callers loop for batch add).
-- Tool change after `prepared` lifecycle (blocked by `tool.locked`; a
-  future spec defines the migration path).
+- Tool change after `prepared` lifecycle (blocked by `tool.locked`;
+  recovery is manual re-creation via `project.create` — R-NoDup; no
+  `project.duplicate` in v1).
 - Templated name suggestions (research R5 alternative, deferred).
 - Project rename → folder rename (current rename is metadata-only;
   filesystem rename is a follow-up plan).
+- `project.get` contract schema (detail read for channel drift and other
+  fields; deferred to Phase 1 design alongside channel inference contracts).

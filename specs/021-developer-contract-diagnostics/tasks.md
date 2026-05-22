@@ -205,7 +205,9 @@ frame appears in the flame chart.
       flag) so the proxy code is not loaded.
 - [ ] T032 [US4] Add the hidden settings page that toggles `devMode`
       (reachable by typing the full URL only) and document the URL in
-      `docs/research/`.
+      `docs/research/`. This page is rendered ONLY when the `dev-tools`
+      Cargo feature is compiled in (gated at the component level via a
+      compile-time constant injected by the build). (A-021-2, R-DevFeature)
 - [ ] T033 [US4] Quickstart pass: enable `devMode`, open Cmd+K, navigate
       to `/dev/contracts`, trigger five calls of mixed outcomes, view a
       schema, replay a read-only call, then disable `devMode` and
@@ -217,12 +219,29 @@ frame appears in the flame chart.
 
 ## Phase 7: Polish
 
-- [ ] T034 [P] Confirm the diagnostic export action emits a JSON snapshot
-      containing the contract list and the recent-calls buffer (FR-007);
-      file the export contract as a follow-up if it grows beyond this
-      surface.
+- [ ] T034 [P] Implement the diagnostic export action using the new
+      `dev.export` contract (`specs/021-developer-contract-diagnostics/contracts/dev.export.json`).
+      The Tauri command accepts `includeVerbatimPaths: boolean` (default false);
+      when false, filesystem paths in the export are replaced with
+      `${LIBRARY_ROOT}/...` placeholders. Mirror the contract to
+      `packages/contracts/dev/dev.export.json`. (A-021-3, C-021-4, FR-007)
 - [ ] T035 Update `docs/research/` index to point at this feature's
       `research.md`.
+
+## Phase 8: Compile-Time Feature Flag Tasks (R-DevFeature)
+
+- [ ] T036 [P] Document the `dev-tools` Cargo feature in
+      `specs/021-developer-contract-diagnostics/plan.md` Build Configuration
+      section. Add a TODO comment in `apps/desktop/src/routes.ts` marking
+      the `/dev/contracts` registration as requiring the `dev-tools` feature
+      at the Rust implementation phase. Do NOT edit `Cargo.toml` or
+      `tauri.conf.json` in this task. (A-021-2, R-DevFeature)
+- [ ] T037 [P] Add a CI lint snapshot test:
+      "Every new contract declares `replaySafe` explicitly (build fails if
+      missing). Write-contracts (direction=ui-to-core with state-mutating
+      operations) must NOT have `replaySafe: true` unless present in an
+      explicit allow-list file at `specs/021-developer-contract-diagnostics/replay-safe-allowlist.txt`."
+      (A-021-4, D-021-H3)
 
 ---
 
@@ -267,6 +286,8 @@ T032 = { blocked_by = ["T007"] }
 T033 = { blocked_by = ["T027", "T028", "T031", "T032"] }
 T034 = { blocked_by = ["T022", "T011"] }
 T035 = { blocked_by = [] }
+T036 = { blocked_by = [] }
+T037 = { blocked_by = ["T001"] }
 ```
 
 ### Phase Dependencies

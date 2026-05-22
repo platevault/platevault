@@ -42,9 +42,10 @@ because launching capture software from an archive-stage project is rare.
 
 ### Decision
 
-Settings is authoritative. On first open of Settings → Tool Workflows,
-the app performs a best-effort auto-detect that pre-fills empty path
-fields and tags them "auto-detected". The user must explicitly save to
+Settings is authoritative. Auto-discovery is invoked from **two entry
+points** (A2): (a) the first open of Settings → Tool Workflows, and (b)
+the first-run wizard's "Detect tools" step (spec 003). Both pre-fill empty
+path fields and tag them "auto-detected". The user must explicitly save to
 adopt them. No path is auto-applied without user confirmation.
 
 Discovery heuristics per OS:
@@ -150,6 +151,37 @@ launch as a separate row.
 
 ### Implications
 
-- `ToolLaunch.completed_at` is a future-spec column; v1 only writes
-  `launched_at` and reads `pid` for the re-launch warning.
+- `ToolLaunch.completed_at` is not written by this spec; spec 012 owns its
+  update.
 - The `launch_id` is the stable handle spec 012 will consume.
+
+## R5 — macOS Quarantine and Translocation (R-MacQuarantine)
+
+### Decision
+
+macOS quarantine/translocation is treated as a user responsibility to
+resolve, not a setup-time check. If `open -b <bundle_id>` returns a
+translocation or quarantine error (detected via a non-zero exit code combined
+with a recognisable stderr pattern such as "is damaged" or translocation path
+prefix), the app surfaces a notification:
+
+> "macOS quarantined this app. Run
+> `xattr -dr com.apple.quarantine <path>` and retry."
+
+The notification is advisory; the error code `macos.quarantine.detected` is
+returned in the launch response (not always fatal — the user may retry after
+resolving quarantine). The app does NOT attempt to remove quarantine
+attributes itself.
+
+### Alternatives Considered
+
+- **Pre-flight quarantine check**: too invasive; would require scanning all
+  `.app` bundles at settings-open time. Deferred.
+- **Silent ignore**: violates constitution II (non-silent mutation boundary).
+
+### Implications
+
+- `macos.quarantine.detected` is an advisory error code added to the
+  `tool.launch` contract errors enum.
+- O3 (macOS quarantine) from the original open questions is resolved by this
+  research decision.

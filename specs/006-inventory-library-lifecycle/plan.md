@@ -20,13 +20,15 @@ records and `crates/sessions/` session aggregation. A future filesystem
 watcher in `crates/fs/inventory/` will push delta updates on the same
 contract; live updates are out of scope for v1.
 
-State family alignment: the mockup uses three review states (`confirmed |
-needs_review | rejected`) for `InventorySession`. The canonical state family
-in spec 002 has six states (`discovered | candidate | needs_review |
-confirmed | rejected | ignored`). The Tauri adapter projects `discovered`
-and `candidate` into a presentational `needs_review` bucket for the ledger
-and surfaces `ignored` only via filter; the underlying record keeps its full
-state.
+State family alignment: `InventorySession.state` uses the six canonical
+states from spec 002 (`discovered | candidate | needs_review | confirmed |
+rejected | ignored`) directly. There is no server-side presentational
+projection. The UI layer maps display labels locally: `discovered` and
+`candidate` display as "Needs review" in row cells and drawer headings;
+`ignored` sessions are excluded from the default ledger and surfaced via the
+Cmd+K "Show ignored items" action (FR-010) which navigates to
+`/inventory?reviewFilter=ignored`. Reference spec 020 router conventions for
+URL parameter handling.
 
 ## Technical Context
 
@@ -88,8 +90,8 @@ Re-check after Phase 1: gates remain green provided
 `inventory.session.review` wraps `lifecycle.transition` with a pre-filled
 `entity_type: "acquisition_session"` (or `calibration_session`) and refuses
 review actions on a session whose owning `LibraryRoot` is `missing` —
-mirrored as `state.unchanged` only when the request actually matches
-current state.
+returns `status: "noop"` (spec 002 idempotency pattern) when the requested
+state equals the current state.
 
 ## Project Structure
 

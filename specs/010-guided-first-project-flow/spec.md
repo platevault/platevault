@@ -149,8 +149,17 @@ uncompleted step.
   event is observed (inventory confirmation, project created, tool opened).
 - **FR-004**: The coach MUST be dismissable from any hint with a single
   action and MUST hide all hints when dismissed.
-- **FR-005**: The coach MUST be restartable from Settings and MUST resume at
-  the lowest uncompleted step.
+- **FR-005**: The coach MUST be restartable from Settings. When dismissed
+  without completing all steps, restart resumes at the lowest uncompleted step
+  (previously completed steps remain completed). When restarted after the flow
+  has reached `Completed`, restart MUST reset all progress and replay from step
+  1 (Idle).
+- **FR-010**: When the guided-flow state row is corrupt (deserialization fails,
+  invalid state value, or any unrecoverable parse error), the system MUST reset
+  the state to Idle, emit a diagnostic audit event containing the corruption
+  detail, and continue normally. The `STATE_CORRUPTED` error code is returned on
+  the first `guided.state.get` call after the reset (informational — signals the
+  reset happened); subsequent reads return the fresh Idle state.
 - **FR-006**: The coach MUST persist completed steps and dismissed state across
   app restarts.
 - **FR-007**: The coach MUST tolerate the anchor element being absent on the

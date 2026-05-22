@@ -20,23 +20,49 @@
     },
     "LicenseShortCode": {
       "type": "string",
-      "minLength": 1,
-      "maxLength": 64
+      "enum": ["public-domain", "apache-2.0", "mit", "cc0-1.0", "cc-by-4.0", "cc-by-sa-4.0", "hyperleda", "esa-free"],
+      "description": "Closed enum (R-2.1). CI hard-fails on unknown values."
     },
     "LicenseAttribution": {
       "type": "object",
-      "required": ["catalog_id", "text", "link", "license"],
+      "required": ["catalog_id", "license", "text", "link"],
       "additionalProperties": false,
       "properties": {
         "catalog_id": { "$ref": "#/$defs/CatalogId" },
+        "license": { "$ref": "#/$defs/LicenseShortCode" },
         "text": {
           "type": "string",
           "minLength": 1,
           "description": "Full required notice text, verbatim. Public-domain catalogs still carry a 'verified: <source>, accessed <date>' string."
         },
         "link": { "type": "string", "format": "uri" },
-        "license": { "$ref": "#/$defs/LicenseShortCode" },
-        "accessed_on": { "$ref": "#/$defs/Timestamp" }
+        "accessed_on": { "$ref": "#/$defs/Timestamp" },
+        "author": {
+          "type": "string",
+          "description": "REQUIRED for cc-by-4.0 and cc-by-sa-4.0 licenses. Author or rights-holder name. (R-2.2)"
+        },
+        "title": {
+          "type": "string",
+          "description": "REQUIRED for cc-by-4.0 and cc-by-sa-4.0 licenses. Work title. (R-2.2)"
+        },
+        "license_uri": {
+          "type": "string",
+          "format": "uri",
+          "description": "REQUIRED for cc-by-4.0 and cc-by-sa-4.0 licenses. Canonical license URL. (R-2.2)"
+        },
+        "modifications_notice": {
+          "type": "string",
+          "description": "Required if the project has modified the upstream data. Describes the nature of modifications. (R-2.2)"
+        }
+      },
+      "if": {
+        "properties": {
+          "license": { "enum": ["cc-by-4.0", "cc-by-sa-4.0"] }
+        },
+        "required": ["license"]
+      },
+      "then": {
+        "required": ["author", "title", "license_uri"]
       }
     },
     "ErrorCode": {

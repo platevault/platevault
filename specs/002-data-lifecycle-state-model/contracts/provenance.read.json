@@ -1,0 +1,133 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://astro-plan.local/contracts/provenance.read.json",
+  "title": "provenance.read",
+  "description": "Read-side contract returning the field-level provenance trail for a Data Asset. Mirrors ProvenancedValue<T> from data-model.md (§ProvenancedValue) and research.md §4. Inline history is bounded per origin tag; older entries are archived to the `provenance_history_archive` table and retrievable via the archive query path referenced by `history_truncated`.",
+  "type": "object",
+  "oneOf": [
+    { "$ref": "#/$defs/Request" },
+    { "$ref": "#/$defs/Response" }
+  ],
+  "$defs": {
+    "ContractVersion": {
+      "type": "string",
+      "const": "1.0"
+    },
+    "Uuid": {
+      "type": "string",
+      "format": "uuid"
+    },
+    "Timestamp": {
+      "type": "string",
+      "format": "date-time"
+    },
+    "AssetType": {
+      "type": "string",
+      "enum": [
+        "file_record",
+        "acquisition_session",
+        "calibration_session",
+        "project",
+        "prepared_source",
+        "processing_artifact",
+        "filesystem_plan",
+        "data_source",
+        "target"
+      ],
+      "description": "target added for alias and primary_designation provenance tracking (R-3.2)."
+    },
+    "ProvenanceOrigin": {
+      "type": "string",
+      "enum": [
+        "observed",
+        "inferred",
+        "reviewed",
+        "generated",
+        "planned",
+        "applied"
+      ]
+    },
+    "ProvenanceHistoryEntry": {
+      "type": "object",
+      "required": ["origin", "value", "captured_at"],
+      "additionalProperties": false,
+      "properties": {
+        "origin": { "$ref": "#/$defs/ProvenanceOrigin" },
+        "value": {
+          "description": "Prior value at the time the entry was recorded. JSON-typed."
+        },
+        "captured_at": { "$ref": "#/$defs/Timestamp" },
+        "source_id": {
+          "type": "string",
+          "description": "Opaque reference to the originating source (e.g. file_record id, plan id, reviewer id)."
+        },
+        "replaced_by": {
+          "type": "string",
+          "description": "Optional pointer to the entry that superseded this one (e.g. an audit_id or a sibling entry id)."
+        }
+      }
+    },
+    "ProvenanceField": {
+      "type": "object",
+      "required": ["field_path", "current", "origin", "captured_at", "history"],
+      "additionalProperties": false,
+      "properties": {
+        "field_path": {
+          "type": "string",
+          "description": "Dotted path to the field on the asset (e.g. `frame_kind`, `metadata.exposure`)."
+        },
+        "current": {
+          "description": "The effective current value (priority `reviewed > inferred > observed`)."
+        },
+        "origin": { "$ref": "#/$defs/ProvenanceOrigin" },
+        "captured_at": { "$ref": "#/$defs/Timestamp" },
+        "source_id": {
+          "type": "string",
+          "description": "Opaque reference to the source that produced the current value."
+        },
+        "history": {
+          "type": "array",
+          "description": "Most recent N entries per origin tag, newest first. Older entries are archived to `provenance_history_archive` and signaled by `history_truncated`.",
+          "items": { "$ref": "#/$defs/ProvenanceHistoryEntry" }
+        },
+        "history_truncated": {
+          "type": "boolean",
+          "description": "True if older entries for this field exist in the archive table. Archive entries are retrievable via the archive query path documented in data-model.md §ProvenanceHistoryArchive."
+        }
+      }
+    },
+    "Request": {
+      "type": "object",
+      "description": "Read request for one asset's provenance.",
+      "required": ["contractVersion", "requestId", "asset_id", "asset_type"],
+      "additionalProperties": false,
+      "properties": {
+        "contractVersion": { "$ref": "#/$defs/ContractVersion" },
+        "requestId": { "$ref": "#/$defs/Uuid" },
+        "asset_id": { "$ref": "#/$defs/Uuid" },
+        "asset_type": { "$ref": "#/$defs/AssetType" },
+        "field_paths": {
+          "type": "array",
+          "description": "Optional filter to a subset of field paths. Omit to return all provenanced fields.",
+          "items": { "type": "string" },
+          "uniqueItems": true
+        }
+      }
+    },
+    "Response": {
+      "type": "object",
+      "required": ["contractVersion", "requestId", "asset_id", "asset_type", "provenance"],
+      "additionalProperties": false,
+      "properties": {
+        "contractVersion": { "$ref": "#/$defs/ContractVersion" },
+        "requestId": { "$ref": "#/$defs/Uuid" },
+        "asset_id": { "$ref": "#/$defs/Uuid" },
+        "asset_type": { "$ref": "#/$defs/AssetType" },
+        "provenance": {
+          "type": "array",
+          "items": { "$ref": "#/$defs/ProvenanceField" }
+        }
+      }
+    }
+  }
+}

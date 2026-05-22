@@ -91,8 +91,15 @@ As a user, I want the UI to clearly distinguish generated project views from ori
 
 ### Domain Questions To Resolve
 
-- Which generated view strategies are supported at first release.
-- Whether stale generated views are automatically included in cleanup plans.
+- ~~Which generated view strategies are supported at first release.~~
+  **RESOLVED (R-026-Strategies, GRILL 2026-05-22)**: v1 ships
+  `symlink`, `junction`, and `copy`. `hardlink` is reserved/deferred
+  to v1.x. See Out of Scope.
+- ~~Whether stale generated views are automatically included in cleanup plans.~~
+  **RESOLVED (R-026-StaleAutoInclude, GRILL 2026-05-22)**: Stale views
+  NEVER auto-mutate. Cleanup plans (spec 017) MAY include stale views
+  as passive candidates in their preview; the user explicitly approves
+  any action.
 
 ## Requirements *(mandatory)*
 
@@ -100,10 +107,37 @@ As a user, I want the UI to clearly distinguish generated project views from ori
 
 - **FR-001**: Generated source views MUST be tracked separately from Inventory data.
 - **FR-002**: Removal plans MUST include only app-created links/folders unless the user explicitly adds other reviewed items.
-- **FR-003**: Removal MUST happen through filesystem plan review and apply.
+- **FR-003**: Removal MUST happen through filesystem plan review and apply, following the full spec 017/025 pipeline: `plan.approve` (with approvalToken) → `plan.apply` (with per-item FS revalidation, paused state, `plan.resume`). See R-026-Pipeline.
 - **FR-004**: Project detail MUST show generated source view state and source Inventory references.
 - **FR-005**: Missing generated views MUST be marked missing or stale, not silently removed from history.
 - **FR-006**: Removal outcomes MUST be logged per item.
+- **FR-007** *(R-026-Strategies, GRILL 2026-05-22)*: v1 view strategies
+  are `symlink`, `junction`, and `copy` only. `hardlink` is reserved
+  and deferred to v1.x.
+- **FR-008** *(A2, GRILL 2026-05-22)*: A `PreparedSourceView.kind` MUST
+  equal every item's `PreparedSourceViewItem.materialization` at create
+  time. Requests that would produce a mixed-kind view MUST be refused
+  with `view.mixed_kind`.
+- **FR-009** *(A3, GRILL 2026-05-22)*: Copy-kind stale detection
+  includes content hash mismatch. Link-kind (symlink/junction) views
+  skip content hash on stale detection.
+- **FR-010** *(A4, GRILL 2026-05-22)*: A view in state `removed` has an
+  indefinite regenerable lifetime. The `PreparedSourceView` record is
+  never hard-deleted; regeneration always remains available.
+- **FR-011** *(R-026-Dest-Archive, GRILL 2026-05-22)*: The destructive
+  destination for view removal is always `archive`. There is no
+  user-selectable `destructiveDestination` field on the remove request;
+  the server hard-codes `archive` for the underlying `FilesystemPlan`.
+- **FR-012** *(R-026-Lifecycle, GRILL 2026-05-22)*: View removal and
+  regeneration are allowed when the owning project is in
+  `setup_incomplete | ready | prepared | processing | blocked |
+  completed`. Requests on an `archived` project MUST be refused with
+  `lifecycle.read_only`. Use the R-Unarchive path (spec 009) to
+  unarchive before operating on views.
+- **FR-013** *(R-026-StaleAutoInclude, GRILL 2026-05-22)*: Stale views
+  MUST NOT be automatically mutated. Spec 017 cleanup plans MAY include
+  stale views as passive candidates; the user explicitly approves any
+  action taken against them.
 
 ### Key Entities
 
@@ -129,3 +163,14 @@ As a user, I want the UI to clearly distinguish generated project views from ori
 
 - Processing-tool execution.
 - Deleting original source data without cleanup/archive review.
+- **`hardlink` view strategy** *(D-026-H1 / R-026-Strategies, GRILL
+  2026-05-22)*: Hardlink creation, removal, and regeneration are
+  deferred to v1.x. The `kind` enum reserves the value; no
+  implementation is provided in v1.
+- **User-selectable destructive destination**: The remove contract does
+  not expose a `destructiveDestination` field. Archive is hard-coded
+  (R-026-Dest-Archive, GRILL 2026-05-22).
+- **Envelope sweep for existing contracts** *(E-026-1, GRILL 2026-05-22)*:
+  The camelCase + `contractVersion` + `requestId` envelope sweep for
+  `preparedview.remove.json` and `preparedview.regenerate.json` is
+  deferred to the cross-spec final envelope sweep pass.

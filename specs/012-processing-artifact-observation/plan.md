@@ -1,6 +1,6 @@
 # Implementation Plan: Processing Artifact Observation
 
-**Branch**: `012-processing-artifact-observation` | **Date**: 2026-05-20
+**Branch**: `012-processing-artifact-observation` | **Date**: 2026-05-22
 **Spec**: [spec.md](./spec.md)
 **Input**: Feature specification at `specs/012-processing-artifact-observation/spec.md`
 
@@ -115,25 +115,51 @@ apps/desktop/src/features/projects/
    `classification_confidence < 0.2` so they surface as "needs review"
    rather than being dropped.
 
-3. **Manual override is sticky.** When a user changes an artifact's
-   kind through `artifact.classify`, the override is recorded with
-   `classification_source = manual_override`. Subsequent automatic
-   re-classifications ignore manual rows. Reclassification can only
-   be re-enabled by clearing the override (future operation, out of
-   v1 scope).
+3. **Manual override is sticky; `kind: null` clears the override.**
+   When a user changes an artifact's kind through `artifact.classify`,
+   the override is recorded with `classification_source = manual_override`.
+   Subsequent automatic re-classifications ignore manual rows. Sending
+   `kind: null` in `artifact.classify` clears the override row and causes
+   the classifier to re-run rule-based classification (A6).
 
-4. **Attribution to tool launches via timestamp window.** Each
-   artifact's `detected_at` is matched against feature-011 launch
-   records: the nearest preceding launch with the same `tool` whose
-   start time is within a configurable window (default 6 hours) wins.
-   Artifacts with no matching launch are surfaced under
-   "Unattributed". This is a soft association — the artifact does not
-   become invalid if the launch row is deleted.
+4. **Attribution to tool launches via timestamp window; re-attribution
+   on new launch events.** Each artifact's `detected_at` is matched
+   against feature-011 launch records: the nearest preceding launch with
+   the same `tool` whose start time is within a configurable window
+   (default 6 hours, per-profile configurable — C3) wins. Artifacts with
+   no matching launch are surfaced under "Unattributed". This is a soft
+   association — the artifact does not become invalid if the launch row
+   is deleted.
+
+   Additionally, on every `tool.launch` event, a re-attribution pass
+   back-fills `tool_launch_id` for `processing_artifacts` rows where
+   `detected_at` is within 6 hours of the new launch's `launched_at`
+   AND `tool_launch_id` is currently null OR points to an earlier launch
+   (A7). Attribution timestamps use `Instant::now()` at event arrival,
+   NOT filesystem mtime (R-AppClock).
 
 5. **Read-only observation, audited.** The watcher never opens an
    observed file for write. Every detection, classification, override,
    and missing-state transition emits an audit event so the user's
    project history is reconstructible without the file index.
+
+7. **`workflow.run_completed` event emission (R-Event-Light).** The
+   attribution pass writes `ToolLaunch.completed_at` when it determines
+   a workflow run is terminal (heuristic: `ToolLaunch.completed_at` set
+   by this spec's attribution pass — specifically, when the attribution
+   window closes after the last artifact for a launch is seen). On that
+   write, spec 012 emits `workflow.run_completed` to the spec 002 event
+   bus with payload `{ projectId, toolId, toolLaunchId, completedAt,
+   artifactIds }`. Spec 024 subscribes to write `workflow_run` manifests.
+   See `contracts/workflow.run_completed.json` for the schema.
+
+8. **PI rerun: in-place update, single row.** When a processing tool
+   overwrites a path that already has a `ProcessingArtifact` row, the
+   row is UPDATED in place: `content_hash` is refreshed, `last_seen_at`
+   updated, NO new `artifact.detected` event; instead an `artifact.updated`
+   audit event is emitted (A8). Audit history of prior `content_hash`
+   values is intentionally lost (single row, latest hash only — trade-off
+   ratified).
 
 6. **Watcher with polling fallback.** notify-rs is the default. On
    network shares, FUSE mounts, and known-bad filesystems detected via

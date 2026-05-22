@@ -57,8 +57,10 @@ shipped in `apps/desktop/` and pending only wiring to real persistence.
 
 ## US4 — Protected Category Enforcement (P4)
 
-- [ ] **T-030** Parse `protected_categories` settings string into an array
-  (comma- and whitespace-tolerant) and persist as canonical list.
+- [ ] **T-030** Persist `protected_categories` as a JSON-encoded `array<string>`
+  in SQLite (A4). The UI parses/renders it as a comma-separated string (e.g.
+  `"lights, masters, finals"`); whitespace is trimmed and empty tokens are
+  ignored on parse. The canonical storage form is always the JSON array.
 - [ ] **T-031** Resolve effective categories per source: per-source override
   if present, else global list.
 - [ ] **T-032** Map plan-item targets to categories (frame type / role from

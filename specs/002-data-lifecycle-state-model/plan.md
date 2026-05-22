@@ -42,9 +42,22 @@ p95 on a local SQLite store with 100k assets and 1M audit events.
 MUST be transactional with their audit-event write; same-state writes MUST be
 no-ops; refused transitions MUST log without mutating; ledger rows MUST omit
 confidence/evidence/provenance columns (FR-006).
-**Scale/Scope**: 6 lifecycle state families, ~10 entities, 1 JSON-Schema
-contract surface, 1 Tauri command pair (`lifecycle.transition.preview`,
-`lifecycle.transition.apply`).
+**Scale/Scope**: 8 lifecycle state families (project, plan, inventory_session,
+calibration_session, data_source, prepared_source, projection, file_record),
+~10 entities, 2 JSON-Schema contract surfaces (`lifecycle.transition.json`,
+`provenance.read.json`), 1 Tauri command pair
+(`lifecycle.transition.preview`, `lifecycle.transition.apply`), 1 read
+command (`lifecycle.read_asset_detail` / `provenance.read`), and 1 in-process
+event-bus topic (`lifecycle.transition.applied`).
+
+**Event bus**: A single in-process event bus carries
+`lifecycle.transition.applied` events (research.md §6.1). This spec owns the
+canonical event-bus design note for the whole project (per GRILL 2026-05-21
+cross-cutting decision). Publication is transactional with the entity
+mutation + audit write; refused transitions and no-ops do not publish.
+Subscribers include the projection-staleness recomputer (FR-003), spec 010's
+guided-flow triggers, spec 019's log panel, and spec 024's manifest
+regenerator.
 
 ## Constitution Check
 
@@ -89,7 +102,11 @@ specs/002-data-lifecycle-state-model/
 ├── research.md                       # Phase 0 decisions (this round)
 ├── data-model.md                     # Phase 1 entity + transition tables
 ├── contracts/
-│   └── lifecycle.transition.json     # JSON-Schema contract
+│   ├── lifecycle.transition.json     # JSON-Schema contract (discriminated
+│   │                                 #   per-family Request sub-schemas)
+│   └── provenance.read.json          # JSON-Schema contract for the
+│                                     #   provenance read path (history,
+│                                     #   archive truncation flag)
 └── tasks.md                          # Phase 2 task graph
 ```
 

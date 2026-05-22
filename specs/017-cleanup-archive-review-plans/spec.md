@@ -122,6 +122,35 @@ containing only the failed items (or all items, per the chosen filter).
 3. **Given** any non-terminal plan, **When** retry is attempted, **Then** the
    call is refused with `parent.not_terminal`.
 
+### User Story 6 - Manage Archive Contents After Apply (Priority: P5)
+
+As a user, after a cleanup plan has applied and files are in the app-managed
+archive folder, I want to be able to send the archive to OS trash or
+permanently delete it so I can reclaim disk space when I am confident the
+archived files are no longer needed.
+
+**Why this priority**: Archiving preserves safety; cleanup is only complete
+once the user confirms the files are truly unwanted.
+
+**Independent Test**: Apply a cleanup plan with `destructiveDestination:
+archive`, then use `archive.send_to_trash` to send the archive subfolder to
+the OS trash. Confirm audit records the action.
+
+**Acceptance Scenarios**:
+
+1. **Given** a plan whose destructive items have been archived, **When** the
+   user chooses "Send archive to trash", **Then** the entire
+   `<library_root>/.astro-plan-archive/<planId>/` subtree is moved to the OS
+   trash and an audit event is written.
+2. **Given** a plan whose archive is in trash, **When** the user chooses
+   "Permanently delete archive", **Then** they must type "DELETE" to confirm
+   and the subtree is irreversibly removed.
+3. **Given** `archive.permanently_delete` is called without `confirmText:
+   "DELETE"`, **When** the request arrives, **Then** the operation is refused
+   with `confirm.text.mismatch`.
+
+---
+
 ### Edge Cases
 
 - Destination path already exists.
@@ -153,8 +182,11 @@ containing only the failed items (or all items, per the chosen filter).
 - **FR-004**: Permanent delete MUST require a destructive warning popup and
   explicit confirmation. (Deferred in v1 — archive/trash only.)
 - **FR-005**: Plans MUST expose the state vocabulary: `draft`,
-  `ready_for_review`, `approved`, `applying`, `applied`, `partially_applied`,
-  `failed`, `cancelled`.
+  `ready_for_review`, `approved`, `applying`, `paused`, `applied`,
+  `partially_applied`, `failed`, `cancelled`, `discarded`. `discarded` is a
+  soft-delete terminal: `discarded_at` is set; the plan row is retained;
+  `parentPlanId` references remain resolvable; discarded plans are excluded
+  from the default `stateFilter` list (A5).
 - **FR-006**: Plan apply MUST log every item outcome. (Apply itself is owned by
   spec 025; this spec only requires that the contract surfaces the per-item
   log.)
@@ -168,27 +200,52 @@ containing only the failed items (or all items, per the chosen filter).
   (inbox, restructure, cleanup, archive, project source-map).
 - **FR-011**: The plan detail surface MUST present a state-aware action bar:
   draft → Approve & Apply; approved → Apply now; applying → Pause/Cancel;
-  applied → Back; partially_applied/failed → Generate retry plan; cancelled →
-  Back.
+  paused → Resume / Cancel run (R-Pause-1); applied → Back;
+  partially_applied/failed → Generate retry plan; cancelled → Back.
+  Per-item FS revalidation is the freshness mechanism — no time-based TTL on
+  the approval token (A2).
 - **FR-012**: A retry plan MUST be a new plan referencing the parent via
   `parentPlanId`. The parent plan MUST NOT be mutated by retry.
-- **FR-013**: Discarding a plan MUST be refused while the plan is `applying`.
+- **FR-013**: Discarding a plan MUST be refused while the plan is `applying` or
+  `paused`.
 - **FR-014**: Approve MUST be refused for plans with zero items.
 - **FR-015**: The plans surface MUST render a three-branch empty state: no
   plans, no matches under current filter, or table with results.
+- **FR-016**: Cleanup plans with destructive items MUST allow the user to
+  choose between two destinations at plan-review time: `archive` (default,
+  app-managed, under `<library_root>/.astro-plan-archive/<planId>/`) or
+  `os_trash` (OS-native recycle bin: Windows Recycle Bin, macOS Trash, Linux
+  XDG trash). The choice is per-plan, not per-item, recorded as
+  `destructiveDestination` on the Plan entity (R-Trash-1). OVERRIDE: OS
+  trash is available in v1; the prior "OS trash deferred" position is
+  rescinded.
+- **FR-017**: When all items in a plan have been archived to the
+  app-managed archive folder, the user MUST be able to permanently delete
+  or send to OS trash the entire plan's archive subfolder via the archive
+  management operations `archive.send_to_trash` and
+  `archive.permanently_delete` (R-Archive-2). `archive.permanently_delete`
+  MUST require an explicit `confirmText: "DELETE"` in the request to gate
+  this irreversible action.
 
 ### Key Entities
 
 - **Plan**: Reviewable set of proposed filesystem operations, with state,
-  origin, item counters, and optional parent reference.
+  origin, item counters, `destructiveDestination`, and optional parent
+  reference.
 - **Plan Item**: One proposed filesystem operation, with source, destination,
   action, reason, protection, and per-item state.
-- **Plan State**: Review and apply lifecycle state, drawn from the eight-state
-  vocabulary in FR-005.
+- **Plan State**: Review and apply lifecycle state, drawn from the
+  ten-state vocabulary in FR-005 (including `paused` and `discarded`).
 - **Plan Origin**: Where the plan came from (inbox, restructure, cleanup,
   archive, project source-map).
+- **Destructive Destination**: Per-plan choice of `archive` or `os_trash`
+  for destructive items (FR-016, R-Trash-1).
+- **Archive Management**: Post-apply operations on the app-managed archive
+  folder: `archive.send_to_trash` and `archive.permanently_delete`
+  (FR-017, R-Archive-2).
 - **Destructive Confirmation**: Explicit user confirmation for permanent
-  delete. (Deferred in v1.)
+  delete. In v1, `archive.permanently_delete` requires `confirmText:
+  "DELETE"`.
 
 ## Success Criteria *(mandatory)*
 
@@ -251,6 +308,9 @@ that:
 
 - Cloud archive services.
 - Background scheduled deletion.
-- Permanent delete (deferred past v1).
+- Permanent delete of arbitrary filesystem paths outside the archive folder
+  (deferred past v1; `archive.permanently_delete` covers only the
+  plan-owned archive subtree).
 - The apply executor itself (spec 025).
 - Audit log presentation surface (spec 019).
+- Per-item destructive destination override (v1 choice is per-plan only).

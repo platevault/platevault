@@ -68,7 +68,13 @@ non-noisy change.
       `crates/app/core/tests/settings_update.rs`.
 - [ ] T009 [P] [US1] Desktop unit test for `updateSettings` no-op guard and
       `NOISY_KEYS` skip-log behavior in
-      `apps/desktop/src/data/settings.test.ts`.
+      `apps/desktop/src/data/settings.test.ts`. Must include:
+      (a) primitive no-op (unchanged scalar), (b) a `PatternPart[]` that is
+      structurally equal to the stored value — same length, same `id`/`kind`/`value`
+      — must be treated as noop (A4, R4.1), (c) a `string[]` for
+      `protectedCategories` structurally-equal test case (R-Set-1).
+      Also add a pending-DB-reconcile race test: the index route must render a
+      loading/pending state while the DB-first gate is resolving (D2).
 
 ### Implementation for User Story 1
 
@@ -85,7 +91,13 @@ non-noisy change.
 - [ ] T013 [US1] Implement `get_settings` and `update_setting` use cases in
       `crates/app/core/usecases/settings.rs` with no-op guard, JSON Schema
       validation against the per-key sub-schema, and audit emission for
-      non-noisy keys.
+      non-noisy keys. Implementation notes:
+      - No-op guard uses `settings_value_eq(a, b)` — deep structural equality
+        for object/array types, strict for primitives (A4, R4.1).
+      - `protectedCategories` is `string[]`; structural equality applies
+        (element-wise, order-sensitive) (R-Set-1). Cover in T009.
+      - Response shape is `{ status: "success"|"noop", key, prior_value,
+        new_value, audit_id? }` (E1+E4; no `value.unchanged` error code).
 - [ ] T014 [US1] Add Tauri commands `settings_get` and `settings_update` in
       `apps/desktop/src-tauri/` wired to the use-case crate.
 - [ ] T015 [US1] Replace the localStorage write path in
@@ -123,7 +135,14 @@ once; close and reopen; confirm exactly one audit entry exists for
 - [ ] T019 [US2] Validate stored values against the v1 schema on read; on
       failure, delete the bad row and emit a `warn` audit entry.
 - [ ] T020 [US2] Emit a `settings.snapshot` audit event at session start and
-      on Settings page close capturing noisy-key state.
+      via a 5-minute inactivity debounce after noisy-key writes (R-Aud-1).
+      The "page close" trigger is dropped. Implementation notes:
+      - Debounce timer is per-session; resets on each noisy-key write.
+      - Fires exactly once when 5 minutes elapse without a noisy write.
+      - Timer is cancelled on library close.
+      - Test: write a noisy key, write again within 5 min, confirm only one
+        snapshot fires; write a noisy key, wait (mock timer), confirm snapshot
+        fires exactly once.
 
 **Checkpoint**: US1 + US2 work. Audit stream remains readable under
 rapid edits.
@@ -178,9 +197,13 @@ two are back to default and the other three are still customized.
 
 ### Implementation for User Story 4
 
-- [ ] T027 [US4] Implement `restore_defaults` by deleting the named rows
-      (or all rows when `keys` is empty) and emitting one audit entry per
-      restored key.
+- [ ] T027 [US4] Implement `restore_defaults` by writing the literal in-code
+      default value as an explicit row for each requested key (A3). Keys
+      already at default are collected in `already_at_default` and skipped
+      (no write, no audit event — R-3.1). When all keys are already at
+      default, return `status: "noop"`. Otherwise return `status: "success"`
+      with `restored` listing keys that were actually written. Emit one
+      audit entry per key in `restored`.
 - [ ] T028 [US4] Add a "Restore defaults" action to each section header in
       `apps/desktop/src/features/settings/SettingsPage.tsx`, wired to the
       new command.

@@ -65,7 +65,7 @@ at the given path with the target selected when supported.
 | Field | Type | Required | Notes |
 |------|------|---------|------|
 | `path` | string (absolute path) | yes | Path to reveal. May point to a file or a directory. |
-| `entity_kind` | string | no | Optional entity context (`inbox_item`, `inventory_row`, `project_manifest`, `master_calibration`) for audit-log correlation. |
+| `entity_kind` | string | no | Optional entity context. Closed enum: `inbox_item \| inventory_row \| project_manifest \| master_calibration \| registered_source \| other` (R-EntityKind). Used for audit-log correlation. |
 | `entity_id` | string | no | Optional entity id for audit-log correlation. |
 | `request_id` | UUID v4 (text) | yes | Generated client-side for log correlation. |
 
@@ -114,13 +114,39 @@ two new event kinds.
 |------|------|---------|------|
 | `kind` | constant `"native.reveal.failed"` | yes | Discriminator. |
 | `error_code` | enum `path.not_exists \| os.command_failed` | yes | Contract error code. |
-| `path_hash` | string (SHA-256 hex) | yes | Hash of the attempted path. Raw path is not persisted in the audit log to avoid PII leakage on export. |
 | `entity_kind` | string \| null | no | Mirrors the request's `entity_kind`. |
-| `entity_id` | string \| null | no | Mirrors the request's `entity_id`. |
+| `entity_id` | string \| null | no | Mirrors the request's `entity_id`. Used as the sole correlation key; raw path and path hash are NOT persisted (A2: drop path_hash to avoid PII in audit exports). |
 | `request_id` | UUID v4 (text) | yes | Correlates to the originating request. |
 | `timestamp` | ISO 8601 (text) | yes | Server-local time. |
 
 Cancellation is NOT logged.
+
+## LastPathMemory (R-LastPath)
+
+Per-kind last-chosen directory stored in browser `localStorage`. The React
+hook reads the value and passes it as `default_path` on the next picker open.
+The Tauri backend command does not see or store these values.
+
+| Key | Pick affordance |
+|-----|-----------------|
+| `alm.lastPath.library_root` | Source root (raw, calibration, project, inbox) |
+| `alm.lastPath.catalog_import` | Catalog file import |
+| `alm.lastPath.export` | Any export destination |
+| `alm.lastPath.master_calibration` | Master calibration file |
+
+Additional keys may be added for future affordances following the
+`alm.lastPath.<kind>` namespace convention.
+
+## File Filter Ordering (R-AllSupported)
+
+The canonical filter list for master calibration file selection, in order.
+The first row is the default. Extensions are without the leading dot.
+
+1. `{ name: "All supported astro images", extensions: ["xisf","fits","fit","fts","tif","tiff","png","jpg"] }` — combined preset (default).
+2. `{ name: "FITS", extensions: ["fit","fits","fts"] }` — includes `.fts` alias (B-.fts).
+3. `{ name: "XISF", extensions: ["xisf"] }`.
+4. `{ name: "TIFF", extensions: ["tif","tiff"] }`.
+5. `{ name: "All files", extensions: ["*"] }` — escape hatch; `*` is only valid in a filter named `"All files"` (D-004-1). The server rejects `*` in any other filter row with `filters.invalid`.
 
 ## Relationships
 

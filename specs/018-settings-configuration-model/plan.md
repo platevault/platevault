@@ -147,8 +147,20 @@ Every successful update of a non-noisy key creates one `audit` event with
 `source = "settings"`, `level = "info"`, the key, the prior value, and the new
 value. `pattern` and `protectedCategories` are noisy and do not generate
 per-change audit entries; instead, a `settings.snapshot` audit event captures
-their state at session boundaries (start, explicit save points). Restoring
-defaults emits one `audit` event per restored key for clarity.
+their state at:
+
+1. **Session start** — on library open.
+2. **Debounced inactivity (R-Aud-1)** — after any noisy-key write, a 5-minute
+   inactivity debounce emits one `settings.snapshot` once quiet. The timer
+   resets on each noisy write and fires exactly once. The "page close" trigger
+   is dropped in favour of this debounce. Timer state is per-session and is
+   cancelled on library close.
+
+Restoring defaults emits one `audit` event per restored key (for keys where
+the value actually changed; already-at-default keys emit no event — R-3.1).
+
+T017 and T020 implementation notes: provision a debounce timer in the
+use-case; test reset-on-write and fire-once-on-quiet behaviour.
 
 ### Default Restore
 

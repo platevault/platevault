@@ -150,6 +150,10 @@ semantic HTML and is styled by an `alm-*` class block in
 | `TextInput`        | Semantic `<input>` + `alm-text-input-*`      | Text input                                 |
 | `TokenPattern`     | Plain layout primitive                       | Token-pattern builder surface (spec 015)   |
 | `Tooltip`          | Base UI Tooltip                              | Hover/focus tooltip                        |
+| `FilterLabel`      | Plain element + `alm-filter-label-*`         | Label chip inside a `Filters` row (D-022-2, GRILL 2026-05-22) |
+| `FactGroup`        | Plain layout primitive                       | Labelled group of fact rows in detail panes (D-022-2) |
+| `Facts`            | Plain layout primitive                       | Ordered list of `FactGroup` / key–value rows (D-022-2) |
+| `TokenPatternBuilder` | Composition of `TokenPattern` + form controls | Full token-pattern authoring surface; re-exports `TokenPattern` internals (D-022-2) |
 
 ## Theme Mode
 

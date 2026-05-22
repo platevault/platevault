@@ -192,9 +192,30 @@ and a time range; confirm the response `count` matches the file rows.
       include `request_id` so the projection always populates it.
 - [ ] T028 Quickstart pass: open the panel, trigger one event of each
       source, change the level filter, toggle follow, cross-link a row,
-      and export a window.
+      and export a window (confirm export contains only audit-source entries
+      with `include_diagnostics=false` default — B2).
 - [ ] T029 Update `docs/research/` index to point at this feature's
       `research.md`.
+- [ ] T030 [P] Implement wildcard event-bus subscriptions in
+      `crates/app/core/usecases/log_stream.rs` for all spec 002 topic
+      prefixes (`audit.*`, `lifecycle.*`, `plan.*`, `catalog.*`,
+      `inventory.*`, `workflow.*`, `target.*`, `tool.*`, `settings.*`,
+      `project.*`). Map each topic prefix to its `source` tag per the
+      table in `plan.md` (R-Subscriptions).
+- [ ] T031 [P] Wire `source_filter` optional parameter in `open_stream`
+      use-case: when present, filter returned entries to the listed source
+      values before emission (R-SourceFilter).
+- [ ] T032 [P] Subscribe `LogPanel` to spec 018 `logLevel` setting changes.
+      When `logLevel != "debug"`, hide diagnostic entries and lock the
+      diagnostics filter chip. When `logLevel == "debug"`, show the
+      diagnostics toggle in the log header (A3).
+- [ ] T033 [P] Implement truncation marker: when `open_stream` returns
+      `truncated: true`, render an inline "History gap — N entries older
+      than this point are no longer retained" marker at the top of the log
+      list in `LogPanel.tsx` (A4).
+- [ ] T034 Add `contract_version: "1"` to the Rust `LogEntry` DTO in
+      `crates/contracts/core/src/log.rs` and to the TypeScript generated
+      type (H1).
 
 ---
 
@@ -233,6 +254,11 @@ T026 = { blocked_by = ["T022"] }
 T027 = { blocked_by = ["T018"] }
 T028 = { blocked_by = ["T012", "T021", "T025", "T026"] }
 T029 = { blocked_by = [] }
+T030 = { blocked_by = ["T018"] }
+T031 = { blocked_by = ["T018"] }
+T032 = { blocked_by = ["T007"] }
+T033 = { blocked_by = ["T020"] }
+T034 = { blocked_by = ["T003"] }
 ```
 
 ### Phase Dependencies

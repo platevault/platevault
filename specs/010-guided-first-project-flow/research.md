@@ -58,10 +58,12 @@ would diverge from reality on failure. Timeouts violate FR-008 by guessing.
 **Decision**: First occurrence of each event completes the step. The coach is
 about the *first* time, not a count.
 
-**Open variables**: Whether the event must originate from a user-initiated
-command or may also be satisfied by a recovery/restore action replaying past
-state. Default: ignore replay events flagged `source=restore` from the audit
-crate.
+**Resolved (R-Source-1, 2026-05-22)**: The event envelope carries a top-level
+`source: enum("user", "restore", "system")` field (see spec 002 §6 R-Source-1).
+The guided-flow subscriber ignores events where `source == "restore"`. This
+ensures that audit-log replay during recovery does not prematurely advance
+coach steps. `source == "user"` and `source == "system"` events are accepted.
+No further open variables on this decision.
 
 ## R4. Progress Persistence
 
@@ -77,9 +79,12 @@ crate.
 migrations trivial. JSON would split state across two stores. In-memory loses
 progress on restart and violates FR-006.
 
-**Open variables**: Whether to also write an audit event on each transition.
-Default: write a low-severity audit event so the coach is recoverable via the
-audit log if the row is corrupted.
+**Resolved (R-Corrupt, 2026-05-22)**: Write a `diagnostic` audit event on each
+transition. If the state row is corrupt on read, the system resets to Idle,
+emits a `guided_flow.state.corrupted` diagnostic audit event with the raw
+corrupt value and parse error, and returns `STATE_CORRUPTED` on the first
+`guided.state.get` call (informational; subsequent reads return fresh Idle).
+See data-model.md §Recovery Rules for the full protocol.
 
 ## R5. Optionality And Activation
 

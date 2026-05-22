@@ -1,0 +1,91 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://astro-plan.local/contracts/catalog.download.json",
+  "title": "catalog.download",
+  "description": "Download, verify, and install a single catalog from the URL resolved via the cached manifest. Verifies the minisign signature in memory before writing to disk (mirrors astro-up catalog/verify.rs). Emits catalog.download.* event-bus topics during progress (R-3.1). Reusable for first-run installation AND future per-catalog updates. (R-1.4, A3)",
+  "type": "object",
+  "oneOf": [
+    { "$ref": "#/$defs/Request" },
+    { "$ref": "#/$defs/Response" }
+  ],
+  "$defs": {
+    "ContractVersion": { "type": "string", "const": "1.0" },
+    "Uuid": { "type": "string", "format": "uuid" },
+    "CatalogId": {
+      "type": "string",
+      "minLength": 1,
+      "maxLength": 64,
+      "pattern": "^[a-z0-9][a-z0-9_-]*$",
+      "description": "Stable slug identifier matching a catalog_id in the current cached manifest."
+    },
+    "DownloadStatus": {
+      "type": "string",
+      "enum": ["success", "failure"],
+      "description": "'success': catalog fetched, signature verified, installed into SQLite. 'failure': see error for details; previously installed catalog (if any) remains active."
+    },
+    "ErrorCode": {
+      "type": "string",
+      "enum": [
+        "catalog.not_in_manifest",
+        "catalog.fetch_failed",
+        "catalog.signature_invalid",
+        "catalog.checksum_mismatch",
+        "catalog.install_failed",
+        "manifest.not_fetched",
+        "network.unavailable",
+        "origin.not_implemented",
+        "actor.not_authorised"
+      ],
+      "description": "'catalog.not_in_manifest': catalog_id not present in the current cached manifest. 'manifest.not_fetched': no manifest cached; call catalog.manifest.fetch first. 'origin.not_implemented': origin=user rejected in v1 (A2)."
+    },
+    "ErrorEnvelope": {
+      "type": "object",
+      "required": ["code", "message"],
+      "additionalProperties": false,
+      "properties": {
+        "code": { "$ref": "#/$defs/ErrorCode" },
+        "message": { "type": "string" },
+        "details": { "type": "object", "additionalProperties": true }
+      }
+    },
+    "Request": {
+      "type": "object",
+      "required": ["contractVersion", "requestId", "catalog_id"],
+      "additionalProperties": false,
+      "properties": {
+        "contractVersion": { "$ref": "#/$defs/ContractVersion" },
+        "requestId": { "$ref": "#/$defs/Uuid" },
+        "catalog_id": { "$ref": "#/$defs/CatalogId" }
+      }
+    },
+    "Response": {
+      "type": "object",
+      "required": ["status", "contractVersion", "requestId"],
+      "additionalProperties": false,
+      "properties": {
+        "status": { "$ref": "#/$defs/DownloadStatus" },
+        "contractVersion": { "$ref": "#/$defs/ContractVersion" },
+        "requestId": { "$ref": "#/$defs/Uuid" },
+        "audit_id": {
+          "type": "string",
+          "format": "uuid",
+          "description": "Audit event id emitted on successful install. Correlates with catalog.download.completed event-bus topic. (R-3.1)"
+        },
+        "error": { "$ref": "#/$defs/ErrorEnvelope" }
+      },
+      "allOf": [
+        {
+          "if": { "properties": { "status": { "const": "success" } } },
+          "then": {
+            "required": ["audit_id"],
+            "not": { "required": ["error"] }
+          }
+        },
+        {
+          "if": { "properties": { "status": { "const": "failure" } } },
+          "then": { "required": ["error"] }
+        }
+      ]
+    }
+  }
+}

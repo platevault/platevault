@@ -1,0 +1,55 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://astro-library-manager.local/contracts/audit.first_run.completed.json",
+  "title": "audit.first_run.completed",
+  "description": "Audit event emitted when the first-run wizard is successfully completed. Routed directly through crates/audit/ — this is NOT a spec 002 lifecycle transition event (R-E2). The event is append-only and must not be updated or deleted.",
+  "type": "object",
+  "properties": {
+    "event": {
+      "const": "first_run.completed"
+    },
+    "version": {
+      "type": "string",
+      "const": "1"
+    },
+    "payload": {
+      "type": "object",
+      "required": ["completed_at", "source_count_by_kind"],
+      "additionalProperties": false,
+      "properties": {
+        "completed_at": {
+          "type": "string",
+          "format": "date-time",
+          "description": "RFC 3339 timestamp when the wizard was marked complete."
+        },
+        "source_count_by_kind": {
+          "type": "object",
+          "required": ["raw", "project"],
+          "additionalProperties": false,
+          "description": "Count of RegisteredSource rows per kind at completion time.",
+          "properties": {
+            "raw": {
+              "type": "integer",
+              "minimum": 1,
+              "description": "Count of raw sources. Always >= 1 (required by firstrun.complete)."
+            },
+            "calibration": {
+              "type": "integer",
+              "minimum": 0
+            },
+            "project": {
+              "type": "integer",
+              "minimum": 1,
+              "description": "Count of project sources. Always >= 1 (required by firstrun.complete, R-Wiz-2)."
+            },
+            "inbox": {
+              "type": "integer",
+              "minimum": 0
+            }
+          }
+        }
+      }
+    }
+  },
+  "required": ["event", "version", "payload"]
+}
