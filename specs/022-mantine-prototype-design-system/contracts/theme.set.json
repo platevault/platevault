@@ -3,45 +3,75 @@
   "$id": "https://astro-plan/contracts/theme.set.json",
   "title": "theme.set",
   "description": "Set the user's chosen theme mode. The implementation persists the choice (localStorage in the desktop prototype; settings store in a future backend), applies it to the document root via the 'data-theme' attribute, and echoes the new mode plus the freshly resolved effective theme.",
-  "operation": {
-    "name": "theme.set",
-    "direction": "ui-to-core",
-    "version": "1"
+  "type": "object",
+  "properties": {
+    "request": {
+      "type": "object",
+      "required": ["contractVersion", "requestId", "mode"],
+      "additionalProperties": false,
+      "properties": {
+        "contractVersion": { "type": "string" },
+        "requestId": { "type": "string", "format": "uuid" },
+        "mode": {
+          "type": "string",
+          "enum": ["system", "light", "dark"],
+          "description": "Desired theme mode."
+        }
+      }
+    },
+    "response": {
+      "oneOf": [
+        {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["status", "contractVersion", "requestId", "mode", "resolved"],
+          "properties": {
+            "status": { "const": "success" },
+            "contractVersion": { "type": "string" },
+            "requestId": { "type": "string", "format": "uuid" },
+            "mode": {
+              "type": "string",
+              "enum": ["system", "light", "dark"],
+              "description": "The mode now in effect; equals the request 'mode' on success."
+            },
+            "resolved": {
+              "type": "string",
+              "enum": ["light", "dark"],
+              "description": "Effective theme after applying the new mode and (if 'system') resolving against the OS preference."
+            }
+          }
+        },
+        {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["status", "contractVersion", "requestId", "errors"],
+          "properties": {
+            "status": { "const": "failure" },
+            "contractVersion": { "type": "string" },
+            "requestId": { "type": "string", "format": "uuid" },
+            "errors": {
+              "type": "array",
+              "items": { "$ref": "#/$defs/Error" }
+            }
+          }
+        }
+      ]
+    }
   },
-  "request": {
-    "type": "object",
-    "required": ["mode"],
-    "additionalProperties": false,
-    "properties": {
-      "mode": {
-        "type": "string",
-        "enum": ["system", "light", "dark"],
-        "description": "Desired theme mode."
+  "required": ["request", "response"],
+  "$defs": {
+    "Error": {
+      "type": "object",
+      "required": ["code", "message"],
+      "additionalProperties": false,
+      "properties": {
+        "code": {
+          "type": "string",
+          "enum": ["mode.unknown"]
+        },
+        "message": { "type": "string" },
+        "details": { "type": "object", "additionalProperties": true }
       }
     }
-  },
-  "response": {
-    "type": "object",
-    "required": ["mode", "resolved"],
-    "additionalProperties": false,
-    "properties": {
-      "mode": {
-        "type": "string",
-        "enum": ["system", "light", "dark"],
-        "description": "The mode now in effect; equals the request 'mode' on success."
-      },
-      "resolved": {
-        "type": "string",
-        "enum": ["light", "dark"],
-        "description": "Effective theme after applying the new mode and (if 'system') resolving against the OS preference."
-      }
-    }
-  },
-  "errors": [
-    {
-      "code": "mode.unknown",
-      "message": "The supplied 'mode' value is not one of 'system', 'light', or 'dark'.",
-      "http_status_equivalent": 400
-    }
-  ]
+  }
 }

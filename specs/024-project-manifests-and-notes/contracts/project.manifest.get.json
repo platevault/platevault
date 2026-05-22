@@ -4,102 +4,130 @@
   "title": "project.manifest.get",
   "description": "Fetch one manifest snapshot with its full structured body.",
   "type": "object",
-  "properties": {
-    "operation": { "const": "project.manifest.get" },
-    "request": {
-      "type": "object",
-      "required": ["manifest_id"],
-      "additionalProperties": false,
-      "properties": {
-        "manifest_id": { "type": "string" }
-      }
+  "oneOf": [
+    { "$ref": "#/$defs/Request" },
+    { "$ref": "#/$defs/Response" }
+  ],
+  "$defs": {
+    "ContractVersion": { "type": "string", "const": "2.0.0" },
+    "Uuid": { "type": "string", "format": "uuid" },
+    "Timestamp": { "type": "string", "format": "date-time" },
+    "ManifestReason": {
+      "type": "string",
+      "enum": [
+        "created",
+        "source_change",
+        "lifecycle_transition",
+        "cleanup_applied",
+        "workflow_run"
+      ]
     },
-    "response": {
+    "ManifestBody": {
       "type": "object",
-      "required": ["manifest"],
-      "additionalProperties": false,
+      "required": ["lifecycleState", "sourceMap"],
       "properties": {
-        "manifest": {
+        "sourceMap": {
           "type": "object",
-          "required": [
-            "id",
-            "project_id",
-            "reason",
-            "timestamp",
-            "path",
-            "version",
-            "body"
-          ],
-          "additionalProperties": false,
-          "properties": {
-            "id": { "type": "string" },
-            "project_id": { "type": "string" },
-            "reason": {
-              "type": "string",
-              "enum": [
-                "created",
-                "source_change",
-                "lifecycle_transition",
-                "cleanup_applied",
-                "workflow_run"
-              ]
-            },
-            "timestamp": { "type": "string", "format": "date-time" },
-            "path": { "type": "string" },
-            "version": { "type": "integer", "minimum": 1 },
-            "body": {
-              "type": "object",
-              "required": ["lifecycle_state", "source_map"],
-              "properties": {
-                "source_map": {
-                  "type": "object",
-                  "description": "Snapshot of selected Inventory items by role.",
-                  "additionalProperties": true
-                },
-                "calibration": {
-                  "type": "object",
-                  "description": "Calibration choices and reused masters.",
-                  "additionalProperties": true
-                },
-                "workflow_profile": {
-                  "type": ["string", "null"]
-                },
-                "generated_views": {
-                  "type": "array",
-                  "items": {
-                    "type": "object",
-                    "required": ["id", "path"],
-                    "properties": {
-                      "id": { "type": "string" },
-                      "path": { "type": "string" }
-                    }
-                  }
-                },
-                "lifecycle_state": { "type": "string" },
-                "notes": {
-                  "type": ["string", "null"],
-                  "description": "Snapshot of the project's notes body at generation time."
-                }
-              }
+          "description": "Snapshot of selected Inventory items by role.",
+          "additionalProperties": true
+        },
+        "calibration": {
+          "type": "object",
+          "description": "Calibration choices and reused masters.",
+          "additionalProperties": true
+        },
+        "workflowProfile": {
+          "type": ["string", "null"]
+        },
+        "generatedViews": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "required": ["id", "path"],
+            "additionalProperties": false,
+            "properties": {
+              "id": { "type": "string" },
+              "path": { "type": "string" }
             }
           }
+        },
+        "lifecycleState": { "type": "string" },
+        "notes": {
+          "type": ["string", "null"],
+          "description": "Snapshot of the project's notes body at generation time."
         }
       }
     },
-    "errors": {
-      "type": "array",
-      "items": {
-        "type": "object",
-        "required": ["code", "message"],
-        "properties": {
-          "code": {
-            "type": "string",
-            "enum": ["manifest.not_found"]
-          },
-          "message": { "type": "string" }
-        }
+    "Manifest": {
+      "type": "object",
+      "required": [
+        "id",
+        "projectId",
+        "reason",
+        "timestamp",
+        "path",
+        "version",
+        "body"
+      ],
+      "additionalProperties": false,
+      "properties": {
+        "id": { "type": "string" },
+        "projectId": { "type": "string" },
+        "reason": { "$ref": "#/$defs/ManifestReason" },
+        "timestamp": { "$ref": "#/$defs/Timestamp" },
+        "path": { "type": "string" },
+        "version": { "type": "integer", "minimum": 1 },
+        "body": { "$ref": "#/$defs/ManifestBody" }
       }
+    },
+    "ErrorCode": {
+      "type": "string",
+      "enum": ["manifest.not_found"]
+    },
+    "ErrorEnvelope": {
+      "type": "object",
+      "required": ["code", "message"],
+      "additionalProperties": false,
+      "properties": {
+        "code": { "$ref": "#/$defs/ErrorCode" },
+        "message": { "type": "string" },
+        "details": { "type": "object", "additionalProperties": true }
+      }
+    },
+    "Request": {
+      "type": "object",
+      "required": ["contractVersion", "requestId", "manifestId"],
+      "additionalProperties": false,
+      "properties": {
+        "contractVersion": { "$ref": "#/$defs/ContractVersion" },
+        "requestId": { "$ref": "#/$defs/Uuid" },
+        "manifestId": { "type": "string" }
+      }
+    },
+    "Response": {
+      "type": "object",
+      "required": ["status", "contractVersion", "requestId"],
+      "additionalProperties": false,
+      "properties": {
+        "status": { "type": "string", "enum": ["success", "error"] },
+        "contractVersion": { "$ref": "#/$defs/ContractVersion" },
+        "requestId": { "$ref": "#/$defs/Uuid" },
+        "manifest": { "$ref": "#/$defs/Manifest" },
+        "error": { "$ref": "#/$defs/ErrorEnvelope" }
+      },
+      "allOf": [
+        {
+          "if": { "properties": { "status": { "const": "success" } } },
+          "then": {
+            "required": ["manifest"],
+            "not": { "required": ["error"] }
+          }
+        },
+        {
+          "if": { "properties": { "status": { "const": "error" } } },
+          "then": { "required": ["error"] }
+        }
+      ]
     }
-  },
-  "required": ["operation", "request", "response"]
+  }
 }

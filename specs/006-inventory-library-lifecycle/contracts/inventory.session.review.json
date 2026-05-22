@@ -2,7 +2,7 @@
   "$schema": "https://json-schema.org/draft/2020-12/schema",
   "$id": "https://astro-plan.local/contracts/inventory.session.review.json",
   "title": "inventory.session.review",
-  "description": "Session-scoped wrapper around lifecycle.transition (spec 002) for the Inventory surface. Pre-fills entity_type based on the session kind resolved server-side from session_id. Returns a status-discriminated response: success (transition applied), noop (state unchanged, no audit entry), or error.",
+  "description": "Session-scoped wrapper around lifecycle.transition (spec 002) for the Inventory surface. Pre-fills entityType based on the session kind resolved server-side from sessionId. Returns a status-discriminated response: success (transition applied), noop (state unchanged, no audit entry), or error.",
   "type": "object",
   "oneOf": [
     { "$ref": "#/$defs/Request" },
@@ -11,7 +11,7 @@
   "$defs": {
     "ContractVersion": {
       "type": "string",
-      "const": "1.0"
+      "const": "2.0.0"
     },
     "Uuid": {
       "type": "string",
@@ -27,12 +27,12 @@
     },
     "ResolvedEntityType": {
       "type": "string",
-      "description": "Resolved server-side from session_id; included in the response so audit correlation is unambiguous.",
+      "description": "Resolved server-side from sessionId; included in the response so audit correlation is unambiguous.",
       "enum": ["acquisition_session", "calibration_session"]
     },
     "SessionState": {
       "type": "string",
-      "description": "Canonical spec 002 six-value session state. Used for both next_state (request) and new_state/prior_state (response). No presentational projection.",
+      "description": "Canonical spec 002 six-value session state. Used for both nextState (request) and newState/priorState (response). No presentational projection.",
       "enum": [
         "discovered",
         "candidate",
@@ -65,31 +65,31 @@
         },
         "details": {
           "type": "object",
-          "description": "Optional structured detail. Examples: { allowed_next_states: [...] } for transition.refused; { source_state: 'missing' } for source.unavailable; {} for session.mixed_state (user must split via spec 005 reclassify).",
+          "description": "Optional structured detail. Examples: { allowedNextStates: [...] } for transition.refused; { sourceState: 'missing' } for source.unavailable; {} for session.mixed_state (user must split via spec 005 reclassify).",
           "additionalProperties": true
         }
       }
     },
     "Request": {
       "type": "object",
-      "description": "Request envelope for inventory.session.review. Caller supplies the session id and target canonical state; the server resolves the entity_type and delegates to lifecycle.transition.",
+      "description": "Request envelope for inventory.session.review. Caller supplies the session id and target canonical state; the server resolves the entityType and delegates to lifecycle.transition.",
       "required": [
         "contractVersion",
         "requestId",
-        "session_id",
-        "next_state",
+        "sessionId",
+        "nextState",
         "actor"
       ],
       "additionalProperties": false,
       "properties": {
         "contractVersion": { "$ref": "#/$defs/ContractVersion" },
         "requestId": { "$ref": "#/$defs/Uuid" },
-        "session_id": { "$ref": "#/$defs/Uuid" },
-        "next_state": {
+        "sessionId": { "$ref": "#/$defs/Uuid" },
+        "nextState": {
           "$ref": "#/$defs/SessionState",
-          "description": "Canonical spec 002 session state to transition to. When next_state equals current state, the response is status='noop' (no audit entry, no error). The state.unchanged error code is not used."
+          "description": "Canonical spec 002 session state to transition to. When nextState equals current state, the response is status='noop' (no audit entry, no error). The state.unchanged error code is not used."
         },
-        "action_label": {
+        "actionLabel": {
           "type": "string",
           "description": "Human-readable label recorded on the audit entry (e.g. 'Confirmed', 'Re-opened review', 'Rejected session').",
           "minLength": 1,
@@ -107,11 +107,11 @@
         "status": { "type": "string", "enum": ["success", "noop", "error"] },
         "contractVersion": { "$ref": "#/$defs/ContractVersion" },
         "requestId": { "$ref": "#/$defs/Uuid" },
-        "applied_at": { "$ref": "#/$defs/Timestamp" },
-        "entity_type": { "$ref": "#/$defs/ResolvedEntityType" },
-        "prior_state": { "$ref": "#/$defs/SessionState" },
-        "new_state": { "$ref": "#/$defs/SessionState" },
-        "audit_id": { "$ref": "#/$defs/Uuid" },
+        "appliedAt": { "$ref": "#/$defs/Timestamp" },
+        "entityType": { "$ref": "#/$defs/ResolvedEntityType" },
+        "priorState": { "$ref": "#/$defs/SessionState" },
+        "newState": { "$ref": "#/$defs/SessionState" },
+        "auditId": { "$ref": "#/$defs/Uuid" },
         "error": { "$ref": "#/$defs/ErrorEnvelope" }
       },
       "allOf": [
@@ -119,11 +119,11 @@
           "if": { "properties": { "status": { "const": "success" } } },
           "then": {
             "required": [
-              "applied_at",
-              "entity_type",
-              "prior_state",
-              "new_state",
-              "audit_id"
+              "appliedAt",
+              "entityType",
+              "priorState",
+              "newState",
+              "auditId"
             ],
             "not": { "required": ["error"] }
           }
@@ -131,7 +131,7 @@
         {
           "if": { "properties": { "status": { "const": "noop" } } },
           "then": {
-            "not": { "required": ["error", "audit_id"] }
+            "not": { "required": ["error", "auditId"] }
           }
         },
         {

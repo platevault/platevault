@@ -9,7 +9,7 @@
     { "$ref": "#/$defs/Response" }
   ],
   "$defs": {
-    "ContractVersion": { "type": "string", "const": "1.0" },
+    "ContractVersion": { "type": "string", "const": "2.0.0" },
     "Uuid": { "type": "string", "format": "uuid" },
     "Timestamp": { "type": "string", "format": "date-time" },
     "CatalogId": {
@@ -25,10 +25,10 @@
     },
     "LicenseAttribution": {
       "type": "object",
-      "required": ["catalog_id", "license", "text", "link"],
+      "required": ["catalogId", "license", "text", "link"],
       "additionalProperties": false,
       "properties": {
-        "catalog_id": { "$ref": "#/$defs/CatalogId" },
+        "catalogId": { "$ref": "#/$defs/CatalogId" },
         "license": { "$ref": "#/$defs/LicenseShortCode" },
         "text": {
           "type": "string",
@@ -36,7 +36,7 @@
           "description": "Full required notice text, verbatim. Public-domain catalogs still carry a 'verified: <source>, accessed <date>' string."
         },
         "link": { "type": "string", "format": "uri" },
-        "accessed_on": { "$ref": "#/$defs/Timestamp" },
+        "accessedOn": { "$ref": "#/$defs/Timestamp" },
         "author": {
           "type": "string",
           "description": "REQUIRED for cc-by-4.0 and cc-by-sa-4.0 licenses. Author or rights-holder name. (R-2.2)"
@@ -45,12 +45,12 @@
           "type": "string",
           "description": "REQUIRED for cc-by-4.0 and cc-by-sa-4.0 licenses. Work title. (R-2.2)"
         },
-        "license_uri": {
+        "licenseUri": {
           "type": "string",
           "format": "uri",
           "description": "REQUIRED for cc-by-4.0 and cc-by-sa-4.0 licenses. Canonical license URL. (R-2.2)"
         },
-        "modifications_notice": {
+        "modificationsNotice": {
           "type": "string",
           "description": "Required if the project has modified the upstream data. Describes the nature of modifications. (R-2.2)"
         }
@@ -62,7 +62,7 @@
         "required": ["license"]
       },
       "then": {
-        "required": ["author", "title", "license_uri"]
+        "required": ["author", "title", "licenseUri"]
       }
     },
     "ErrorCode": {

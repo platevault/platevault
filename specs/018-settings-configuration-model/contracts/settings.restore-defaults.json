@@ -3,68 +3,125 @@
   "$id": "https://astro-plan/contracts/settings.restore-defaults.json",
   "title": "settings.restore-defaults",
   "description": "Restore one, several, or all v1 settings keys to their in-code defaults by writing the literal default value as an explicit row (A3). Empty 'keys' restores all keys. Keys already at default return status='noop' with no row write and no audit event (R-3.1, cross-ref spec 002 noop pattern).",
-  "operation": {
-    "name": "settings.restore-defaults",
-    "direction": "ui-to-core",
-    "version": "1"
-  },
-  "request": {
-    "type": "object",
-    "additionalProperties": false,
-    "properties": {
-      "keys": {
-        "type": "array",
-        "description": "List of v1 settings keys to restore. Empty or omitted means restore every key.",
-        "uniqueItems": true,
-        "items": {
-          "type": "string",
-          "enum": [
-            "pattern",
-            "autoApplyPattern",
-            "alwaysPreviewBeforePlan",
-            "followSymlinks",
-            "hashOnScan",
-            "darkMatchTolerance",
-            "flatMatching",
-            "suggestCalibration",
-            "rowDensity",
-            "logLevel",
-            "rememberFollowLogs",
-            "defaultProtection",
-            "blockPermanentDelete",
-            "protectedCategories"
-          ]
+  "type": "object",
+  "properties": {
+    "request": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["contractVersion", "requestId"],
+      "properties": {
+        "contractVersion": { "type": "string" },
+        "requestId": { "type": "string", "format": "uuid" },
+        "keys": {
+          "type": "array",
+          "description": "List of v1 settings keys to restore. Empty or omitted means restore every key.",
+          "uniqueItems": true,
+          "items": {
+            "oneOf": [
+              {
+                "type": "string",
+                "enum": [
+                  "pattern",
+                  "autoApplyPattern",
+                  "alwaysPreviewBeforePlan",
+                  "followSymlinks",
+                  "hashOnScan",
+                  "darkMatchTolerance",
+                  "flatMatching",
+                  "suggestCalibration",
+                  "rowDensity",
+                  "logLevel",
+                  "rememberFollowLogs",
+                  "defaultProtection",
+                  "blockPermanentDelete",
+                  "protectedCategories",
+                  "current_library_id",
+                  "devMode",
+                  "plans.list.default_age_cutoff_days",
+                  "target_lookup.active_catalogs",
+                  "calibration.dark_temp_tolerance",
+                  "calibration.prefill_suggestion",
+                  "imagetyp_normalization.user_mappings"
+                ]
+              },
+              {
+                "type": "string",
+                "pattern": "^calibration\\.(dark|flat|bias)\\.override_penalty$"
+              },
+              {
+                "type": "string",
+                "pattern": "^tools\\.[a-z0-9_]+\\.bundle_id$"
+              },
+              {
+                "type": "string",
+                "pattern": "^workflow_profile\\.[a-z0-9_]+\\.watch_extensions$"
+              },
+              {
+                "type": "string",
+                "pattern": "^workflow_profile\\.[a-z0-9_]+\\.launch_attribution_window_hours$"
+              }
+            ]
+          }
         }
       }
+    },
+    "response": {
+      "oneOf": [
+        {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["status", "contractVersion", "requestId", "restored"],
+          "properties": {
+            "status": {
+              "type": "string",
+              "enum": ["success", "noop"],
+              "description": "'success' when at least one key was restored (literal default value written). 'noop' when every requested key was already at its default value — no row writes, no audit events (R-3.1)."
+            },
+            "contractVersion": { "type": "string" },
+            "requestId": { "type": "string", "format": "uuid" },
+            "restored": {
+              "type": "array",
+              "description": "Keys for which the literal default value was written. Empty when status='noop'.",
+              "items": { "type": "string" }
+            },
+            "alreadyAtDefault": {
+              "type": "array",
+              "description": "Keys that were already at their default value and were not written (R-3.1).",
+              "items": { "type": "string" }
+            }
+          }
+        },
+        {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["status", "contractVersion", "requestId", "errors"],
+          "properties": {
+            "status": { "const": "failure" },
+            "contractVersion": { "type": "string" },
+            "requestId": { "type": "string", "format": "uuid" },
+            "errors": {
+              "type": "array",
+              "items": { "$ref": "#/$defs/Error" }
+            }
+          }
+        }
+      ]
     }
   },
-  "response": {
-    "type": "object",
-    "required": ["status", "restored"],
-    "additionalProperties": false,
-    "properties": {
-      "status": {
-        "type": "string",
-        "enum": ["success", "noop"],
-        "description": "'success' when at least one key was restored (literal default value written). 'noop' when every requested key was already at its default value — no row writes, no audit events (R-3.1)."
-      },
-      "restored": {
-        "type": "array",
-        "description": "Keys for which the literal default value was written. Empty when status='noop'.",
-        "items": { "type": "string" }
-      },
-      "already_at_default": {
-        "type": "array",
-        "description": "Keys that were already at their default value and were not written (R-3.1).",
-        "items": { "type": "string" }
+  "required": ["request", "response"],
+  "$defs": {
+    "Error": {
+      "type": "object",
+      "required": ["code", "message"],
+      "additionalProperties": false,
+      "properties": {
+        "code": {
+          "type": "string",
+          "enum": ["key.unknown"]
+        },
+        "message": { "type": "string" },
+        "details": { "type": "object", "additionalProperties": true }
       }
     }
-  },
-  "errors": [
-    {
-      "code": "key.unknown",
-      "message": "One or more supplied keys are not part of the v1 schema. No keys are restored when the request contains any unknown key.",
-      "http_status_equivalent": 400
-    }
-  ]
+  }
 }

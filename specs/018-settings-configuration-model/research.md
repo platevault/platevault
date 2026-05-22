@@ -168,6 +168,98 @@ includes a top-level `status: "success" | "noop"` field; keys that were
 already at default are reported in a separate `already_at_default` array
 rather than in `restored`.
 
+## R9. Structured-path keys (tools.* and workflow_profile.*)
+
+**Question**: How should settings whose natural scope is "per tool" or
+"per workflow profile" be represented in the flat key-value settings store?
+
+**Options**:
+
+1. **Top-level object keys** (e.g., `tools: { pixinsight: { bundle_id: "…" } }`).
+   Cons: changes to one tool's bundle_id would require writing the entire
+   `tools` object; no-op detection requires deep diffing the whole object.
+2. **Structured-path strings** (e.g., `tools.pixinsight.bundle_id`). Pros:
+   each key-value pair is independent; the no-op guard operates at the
+   individual key grain; the `settings.update` contract accepts one key at a
+   time which is already the model. Cons: the `key` field in contracts cannot
+   enumerate every possible `<tool_id>`; a regex pattern is used instead.
+
+**Decision**: Structured-path dot notation. The `key` field in
+`settings.update`, `settings.restore-defaults`, and
+`settings.source-override.set` contracts validates structured-path keys using
+regex patterns rather than enum values:
+
+- `^tools\.[a-z0-9_]+\.bundle_id$`
+- `^workflow_profile\.[a-z0-9_]+\.watch_extensions$`
+- `^workflow_profile\.[a-z0-9_]+\.launch_attribution_window_hours$`
+
+The use-case layer validates that the `<tool_id>` / `<profile_id>` slug
+exists before writing; an unknown slug returns `key.unknown`.
+
+## R10. `devMode` compile-time gate
+
+**Question**: How should the settings store handle a key that only has
+behavioral effect in specific build configurations?
+
+**Decision**: `devMode` is present in the settings schema for all builds so
+that migrations and contract validation remain uniform. In a release build
+(without the `dev-tools` Cargo feature), the use-case layer:
+
+1. Returns `devMode: false` in every `settings.get` response, ignoring the
+   stored value.
+2. Rejects `settings.update` for `devMode` with `value.invalid` (read-only
+   key in this build).
+
+The desktop Settings UI hides the `devMode` row entirely in release builds.
+This keeps the schema portable across build configurations while preventing
+accidental exposure in production.
+
+## R11. Per-frame-type override_penalty expansion
+
+**Question**: `calibration.<frame_type>.override_penalty` implies three
+separate keys (`calibration.dark.override_penalty`,
+`calibration.flat.override_penalty`, `calibration.bias.override_penalty`).
+Should these be a single structured object or three independent keys?
+
+**Decision**: Three independent flat keys using the structured-path pattern
+`calibration.<frame_type>.override_penalty`. Rationale: each frame type is
+independently tunable; the per-key update contract already supports atomic
+writes; flattening avoids nested JSON in the settings store. The enum of
+valid `<frame_type>` slots is `dark | flat | bias` (v1). `dark_flat` is
+reserved but not exposed until it exits the DarkFlat-Reserved decision
+(spec 007 R-DarkFlat-Reserved). A regex pattern `^calibration\.(dark|flat|bias)\.override_penalty$`
+validates the key in contracts.
+
+## R12. `imagetyp_normalization.user_mappings` storage
+
+**Question**: The `user_mappings` value is a JSON array of objects. How is it
+stored in the single-column `value JSON` row, and how does deep-equal no-op
+detection apply?
+
+**Decision**: The entire array is stored as a JSON-encoded value in the
+`settings.value` column, identical to how `protectedCategories` (`string[]`)
+is stored. Deep structural equality (R4.1) applies element-wise across the
+array: same length, same `{imagetyp_string, frame_type}` at each index in the
+same order. Order is significant because the normalization engine applies
+entries in order; a reorder is a meaningful change and is not a no-op.
+`imagetyp_normalization.user_mappings` is **not** classified as noisy because
+the array is edited via a structured table control (add/remove row), not via
+free-text drag; individual row mutations are discrete auditable events.
+
+## R13. `target_lookup.active_catalogs` default and validation
+
+**Question**: The default is "all 13 v1 catalogs". Should the default be
+stored as a literal array or derived at read time?
+
+**Decision**: The default is **not stored**; it is derived at read time from
+the spec 014 catalog manifest. When no `target_lookup.active_catalogs` row
+exists, the use-case returns the full installed catalog id list. This keeps
+the default in sync with the installed catalog set without requiring a
+migration every time a new catalog ships. When a row does exist, only the
+listed catalog ids that are currently installed and active are honored;
+unknown ids are silently filtered and a `warn` audit entry is emitted (same
+pattern as R2 schema validation).
+
 ## R8. Theme separation
 
 Theme persistence is intentionally split from settings persistence. The

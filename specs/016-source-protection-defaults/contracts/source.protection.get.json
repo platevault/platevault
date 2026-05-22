@@ -1,62 +1,91 @@
 {
   "$schema": "https://json-schema.org/draft/2020-12/schema",
-  "$id": "source.protection.get",
-  "title": "Get source protection",
-  "description": "Resolves effective protection for a source, or returns global defaults when source_id is omitted.",
+  "$id": "https://astro-plan.local/contracts/source.protection.get.json",
+  "title": "source.protection.get",
+  "description": "Resolves effective protection for a source, or returns global defaults when sourceId is omitted.",
   "type": "object",
-  "properties": {
-    "request": {
+  "oneOf": [
+    { "$ref": "#/$defs/Request" },
+    { "$ref": "#/$defs/Response" }
+  ],
+  "$defs": {
+    "ContractVersion": { "type": "string", "const": "2.0.0" },
+    "Uuid": { "type": "string", "format": "uuid" },
+    "ProtectionLevel": {
+      "type": "string",
+      "enum": ["protected", "normal", "unprotected"]
+    },
+    "ErrorCode": {
+      "type": "string",
+      "enum": ["source.not_found"]
+    },
+    "ErrorEnvelope": {
       "type": "object",
+      "required": ["code", "message"],
+      "additionalProperties": false,
       "properties": {
-        "source_id": {
-          "type": "string",
-          "format": "uuid",
+        "code": { "$ref": "#/$defs/ErrorCode" },
+        "message": { "type": "string" },
+        "details": { "type": "object", "additionalProperties": true }
+      }
+    },
+    "Request": {
+      "type": "object",
+      "required": ["contractVersion", "requestId"],
+      "additionalProperties": false,
+      "properties": {
+        "contractVersion": { "$ref": "#/$defs/ContractVersion" },
+        "requestId": { "$ref": "#/$defs/Uuid" },
+        "sourceId": {
+          "$ref": "#/$defs/Uuid",
           "description": "Source to inspect. Omit for global defaults."
         }
-      },
-      "additionalProperties": false
+      }
     },
-    "response": {
+    "Response": {
       "type": "object",
-      "required": ["level", "block_permanent_delete", "categories"],
+      "required": ["status", "contractVersion", "requestId"],
+      "additionalProperties": false,
       "properties": {
-        "source_id": {
-          "type": "string",
-          "format": "uuid",
-          "description": "Echo of the requested source_id. Absent when global defaults are returned."
+        "status": { "type": "string", "enum": ["success", "error"] },
+        "contractVersion": { "$ref": "#/$defs/ContractVersion" },
+        "requestId": { "$ref": "#/$defs/Uuid" },
+        "sourceId": {
+          "$ref": "#/$defs/Uuid",
+          "description": "Echo of the requested sourceId. Absent when global defaults are returned."
         },
         "level": {
-          "type": "string",
-          "enum": ["protected", "normal", "unprotected"],
+          "$ref": "#/$defs/ProtectionLevel",
           "description": "Effective protection level (resolved: per-source override wins unconditionally; categories elevate only when no override row exists)."
         },
-        "block_permanent_delete": {
+        "blockPermanentDelete": {
           "type": "boolean",
-          "description": "Effective block_permanent_delete. Resolved from per-source override when present and non-null; otherwise from global default (A2)."
+          "description": "Effective blockPermanentDelete. Resolved from per-source override when present and non-null; otherwise from global default (A2)."
         },
         "categories": {
           "type": "array",
           "items": { "type": "string" },
           "description": "Protected categories applicable to this source."
         },
-        "inherits_default": {
+        "inheritsDefault": {
           "type": "boolean",
           "description": "True when no per-source override exists and global defaults were returned."
-        }
+        },
+        "error": { "$ref": "#/$defs/ErrorEnvelope" }
       },
-      "additionalProperties": false
-    },
-    "errors": {
-      "type": "array",
-      "items": {
-        "type": "object",
-        "required": ["code", "message"],
-        "properties": {
-          "code": { "type": "string", "enum": ["source.not_found"] },
-          "message": { "type": "string" }
+      "allOf": [
+        {
+          "if": { "properties": { "status": { "const": "success" } } },
+          "then": {
+            "required": ["level", "blockPermanentDelete", "categories"],
+            "not": { "required": ["error"] }
+          }
+        },
+        {
+          "if": { "properties": { "status": { "const": "error" } } },
+          "then": { "required": ["error"] }
         }
-      }
+      ]
     }
-  },
-  "required": ["request", "response"]
+  }
 }

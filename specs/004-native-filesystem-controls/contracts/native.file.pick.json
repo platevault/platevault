@@ -5,18 +5,13 @@
   "description": "Open the OS-native file picker with type filters and return the user-selected absolute path. Cancellation is a non-error null response. Implemented over @tauri-apps/plugin-dialog with directory=false, multiple=false. Used by master-calibration selection for FITS, XISF, and TIFF files.",
   "type": "object",
   "properties": {
-    "operation": {
-      "const": "native.file.pick"
-    },
-    "version": {
-      "type": "string",
-      "const": "1"
-    },
     "request": {
       "type": "object",
-      "required": ["filters", "request_id"],
+      "required": ["contractVersion", "requestId", "filters"],
       "additionalProperties": false,
       "properties": {
+        "contractVersion": { "type": "string" },
+        "requestId": { "type": "string", "format": "uuid" },
         "filters": {
           "description": "Ordered list of file-type filters. The first filter is the default. Extensions MUST NOT include the leading dot.",
           "type": "array",
@@ -40,73 +35,69 @@
                 "description": "Extensions without leading dot. The wildcard '*' is ONLY valid in a filter named exactly 'All files'; the server returns filters.invalid if '*' appears in any other filter row (D-004-1)."
               }
             }
-          },
-          "examples": [
-            [
-              { "name": "All supported astro images", "extensions": ["xisf", "fits", "fit", "fts", "tif", "tiff", "png", "jpg"] },
-              { "name": "FITS", "extensions": ["fit", "fits", "fts"] },
-              { "name": "XISF", "extensions": ["xisf"] },
-              { "name": "TIFF", "extensions": ["tif", "tiff"] },
-              { "name": "All files", "extensions": ["*"] }
-            ]
-          ]
+          }
         },
-        "default_path": {
+        "defaultPath": {
           "description": "Optional absolute path to anchor the dialog (typically the calibration source root). Honored where supported.",
           "type": ["string", "null"],
           "minLength": 1
-        },
-        "request_id": {
-          "type": "string",
-          "format": "uuid"
         }
       }
     },
     "response": {
-      "type": "object",
-      "required": ["path", "cancelled"],
-      "additionalProperties": false,
-      "properties": {
-        "path": {
-          "description": "Absolute OS-canonical path the user selected, or null when the user cancelled.",
-          "type": ["string", "null"]
+      "oneOf": [
+        {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["status", "contractVersion", "requestId", "path", "cancelled"],
+          "properties": {
+            "status": { "const": "success" },
+            "contractVersion": { "type": "string" },
+            "requestId": { "type": "string", "format": "uuid" },
+            "path": {
+              "description": "Absolute OS-canonical path the user selected, or null when the user cancelled.",
+              "type": ["string", "null"]
+            },
+            "selectedFilter": {
+              "description": "The name of the filter active when the user clicked Open. Useful for recording the user's declared frame type.",
+              "type": ["string", "null"]
+            },
+            "cancelled": {
+              "type": "boolean"
+            }
+          }
         },
-        "selected_filter": {
-          "description": "The name of the filter active when the user clicked Open. Useful for recording the user's declared frame type.",
-          "type": ["string", "null"]
-        },
-        "cancelled": {
-          "type": "boolean"
+        {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["status", "contractVersion", "requestId", "errors"],
+          "properties": {
+            "status": { "const": "failure" },
+            "contractVersion": { "type": "string" },
+            "requestId": { "type": "string", "format": "uuid" },
+            "errors": {
+              "type": "array",
+              "items": { "$ref": "#/$defs/Error" }
+            }
+          }
         }
-      }
-    },
-    "errors": {
-      "type": "object",
-      "additionalProperties": false,
-      "properties": {
-        "picker.unavailable": {
-          "description": "The host environment does not provide a native file picker."
-        },
-        "filters.invalid": {
-          "description": "The supplied filter list violated the schema: empty list, malformed extension, duplicate name, or '*' used in a filter not named exactly 'All files' (D-004-1)."
-        },
-        "os.command_failed": {
-          "description": "The OS-native dialog returned an unexpected failure. Cancellation is NOT an error."
-        }
-      }
-    },
-    "notes": {
-      "type": "object",
-      "additionalProperties": false,
-      "properties": {
-        "audit_event_on_failure": {
-          "const": "native.picker.failed"
-        },
-        "audit_on_cancellation": {
-          "const": false
-        }
-      }
+      ]
     }
   },
-  "required": ["operation", "version", "request", "response", "errors"]
+  "required": ["request", "response"],
+  "$defs": {
+    "Error": {
+      "type": "object",
+      "required": ["code", "message"],
+      "additionalProperties": false,
+      "properties": {
+        "code": {
+          "type": "string",
+          "enum": ["picker.unavailable", "filters.invalid", "os.command_failed"]
+        },
+        "message": { "type": "string" },
+        "details": { "type": "object", "additionalProperties": true }
+      }
+    }
+  }
 }

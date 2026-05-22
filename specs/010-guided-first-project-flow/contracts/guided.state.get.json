@@ -8,26 +8,40 @@
     "request": {
       "type": "object",
       "additionalProperties": false,
-      "properties": {},
-      "required": []
+      "required": ["contractVersion", "requestId"],
+      "properties": {
+        "contractVersion": { "type": "string" },
+        "requestId": { "type": "string", "format": "uuid" }
+      }
     },
     "response": {
-      "type": "object",
-      "additionalProperties": false,
-      "required": ["state"],
-      "properties": {
-        "state": {
-          "$ref": "#/$defs/GuidedFlowState"
+      "oneOf": [
+        {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["status", "contractVersion", "requestId", "state"],
+          "properties": {
+            "status": { "const": "success" },
+            "contractVersion": { "type": "string" },
+            "requestId": { "type": "string", "format": "uuid" },
+            "state": { "$ref": "#/$defs/GuidedFlowState" }
+          }
+        },
+        {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["status", "contractVersion", "requestId", "errors"],
+          "properties": {
+            "status": { "const": "failure" },
+            "contractVersion": { "type": "string" },
+            "requestId": { "type": "string", "format": "uuid" },
+            "errors": {
+              "type": "array",
+              "items": { "$ref": "#/$defs/Error" }
+            }
+          }
         }
-      }
-    },
-    "errors": {
-      "type": "array",
-      "description": "STATE_CORRUPTED is informational: it signals that corruption was detected, the row has already been reset to Idle server-side, and the caller should retry. The next call returns the fresh Idle state. PERSISTENCE_UNAVAILABLE signals a storage layer failure.",
-      "items": {
-        "type": "string",
-        "enum": ["PERSISTENCE_UNAVAILABLE", "STATE_CORRUPTED"]
-      }
+      ]
     }
   },
   "required": ["request", "response"],
@@ -35,26 +49,40 @@
     "GuidedFlowState": {
       "type": "object",
       "additionalProperties": false,
-      "required": ["current_step", "completed_steps", "dismissed"],
+      "required": ["currentStep", "completedSteps", "dismissed"],
       "properties": {
-        "current_step": {
+        "currentStep": {
           "type": ["string", "null"],
           "description": "Id of the active step or null."
         },
-        "completed_steps": {
+        "completedSteps": {
           "type": "array",
           "items": { "type": "string" },
           "uniqueItems": true
         },
         "dismissed": { "type": "boolean" },
-        "dismissed_at": {
+        "dismissedAt": {
           "type": ["string", "null"],
           "format": "date-time"
         },
-        "updated_at": {
+        "updatedAt": {
           "type": "string",
           "format": "date-time"
         }
+      }
+    },
+    "Error": {
+      "type": "object",
+      "required": ["code", "message"],
+      "additionalProperties": false,
+      "properties": {
+        "code": {
+          "type": "string",
+          "enum": ["persistence_unavailable", "state_corrupted"],
+          "description": "state_corrupted is informational: it signals that corruption was detected, the row has already been reset to Idle server-side, and the caller should retry. The next call returns the fresh Idle state. persistence_unavailable signals a storage layer failure."
+        },
+        "message": { "type": "string" },
+        "details": { "type": "object", "additionalProperties": true }
       }
     }
   }

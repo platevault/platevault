@@ -2,14 +2,14 @@
   "$schema": "https://json-schema.org/draft/2020-12/schema",
   "$id": "https://astro-plan.local/contracts/project.source.add.json",
   "title": "project.source.add",
-  "description": "Link an Inventory session to an existing project as a ProjectSource. Snapshot fields (name, frames, filter, exposure) are copied from the Inventory row at link time. Channel inference re-runs and the recomputed channel list is returned. Refused with source.already.linked when the (project_id, inventory_session_id) pair already exists.",
+  "description": "Link an Inventory session to an existing project as a ProjectSource. Snapshot fields (name, frames, filter, exposure) are copied from the Inventory row at link time. Channel inference re-runs and the recomputed channel list is returned. Refused with source.already.linked when the (projectId, inventorySessionId) pair already exists.",
   "type": "object",
   "oneOf": [
     { "$ref": "#/$defs/Request" },
     { "$ref": "#/$defs/Response" }
   ],
   "$defs": {
-    "ContractVersion": { "type": "string", "const": "1.0" },
+    "ContractVersion": { "type": "string", "const": "2.0.0" },
     "Uuid": { "type": "string", "format": "uuid" },
     "Timestamp": { "type": "string", "format": "date-time" },
     "ProjectSource": {
@@ -59,11 +59,11 @@
         },
         "details": {
           "type": "object",
-          "description": "Structured context. source.already.linked MUST include existing_link_at. lifecycle.read_only MUST include current_lifecycle. inventory.unscanned MUST include inventory_session_id. source.not_confirmed MUST include actual_state (the AcquisitionSession state that is not 'confirmed').",
+          "description": "Structured context. source.already.linked MUST include existingLinkAt. lifecycle.read_only MUST include currentLifecycle. inventory.unscanned MUST include inventorySessionId. source.not_confirmed MUST include actualState (the AcquisitionSession state that is not 'confirmed').",
           "additionalProperties": true,
           "properties": {
-            "existing_link_at": { "$ref": "#/$defs/Timestamp" },
-            "current_lifecycle": {
+            "existingLinkAt": { "$ref": "#/$defs/Timestamp" },
+            "currentLifecycle": {
               "type": "string",
               "enum": [
                 "setup_incomplete",
@@ -75,8 +75,8 @@
                 "blocked"
               ]
             },
-            "inventory_session_id": { "$ref": "#/$defs/Uuid" },
-            "actual_state": {
+            "inventorySessionId": { "$ref": "#/$defs/Uuid" },
+            "actualState": {
               "type": "string",
               "enum": ["discovered", "candidate", "needs_review", "rejected", "ignored"],
               "description": "The actual AcquisitionSession state when source.not_confirmed is returned."
@@ -87,19 +87,19 @@
     },
     "Request": {
       "type": "object",
-      "description": "Link request. The inventory_session_id must point to a confirmed Inventory row (research R2); arbitrary disk paths are refused upstream by the UI picker.",
+      "description": "Link request. The inventorySessionId must point to a confirmed Inventory row (research R2); arbitrary disk paths are refused upstream by the UI picker.",
       "required": [
         "contractVersion",
         "requestId",
-        "project_id",
-        "inventory_session_id"
+        "projectId",
+        "inventorySessionId"
       ],
       "additionalProperties": false,
       "properties": {
         "contractVersion": { "$ref": "#/$defs/ContractVersion" },
         "requestId": { "$ref": "#/$defs/Uuid" },
-        "project_id": { "$ref": "#/$defs/Uuid" },
-        "inventory_session_id": { "$ref": "#/$defs/Uuid" }
+        "projectId": { "$ref": "#/$defs/Uuid" },
+        "inventorySessionId": { "$ref": "#/$defs/Uuid" }
       }
     },
     "Response": {
@@ -111,22 +111,22 @@
         "status": { "type": "string", "enum": ["success", "error"] },
         "contractVersion": { "$ref": "#/$defs/ContractVersion" },
         "requestId": { "$ref": "#/$defs/Uuid" },
-        "project_id": { "$ref": "#/$defs/Uuid" },
-        "source_added": { "$ref": "#/$defs/ProjectSource" },
+        "projectId": { "$ref": "#/$defs/Uuid" },
+        "sourceAdded": { "$ref": "#/$defs/ProjectSource" },
         "channels": {
           "type": "array",
           "items": { "$ref": "#/$defs/ProjectChannel" },
           "description": "Recomputed channel list after the link. Callers MAY diff against the prior list to surface 'new channel detected' feedback."
         },
-        "audit_id": { "$ref": "#/$defs/Uuid" },
-        "linked_at": { "$ref": "#/$defs/Timestamp" },
+        "auditId": { "$ref": "#/$defs/Uuid" },
+        "linkedAt": { "$ref": "#/$defs/Timestamp" },
         "error": { "$ref": "#/$defs/ErrorEnvelope" }
       },
       "allOf": [
         {
           "if": { "properties": { "status": { "const": "success" } } },
           "then": {
-            "required": ["project_id", "source_added", "channels", "audit_id", "linked_at"],
+            "required": ["projectId", "sourceAdded", "channels", "auditId", "linkedAt"],
             "not": { "required": ["error"] }
           }
         },

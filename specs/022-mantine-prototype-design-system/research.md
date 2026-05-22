@@ -44,6 +44,17 @@ are stable (menu, dialog, tooltip, accordion, select, switch). The
 swap to Radix is straightforward (the wrapper boundary is one file per
 primitive) if a specific Base UI primitive proves unstable.
 
+**Positioning engine**: Base UI uses
+[Floating UI](https://github.com/floating-ui/floating-ui) internally for all
+anchor-positioned primitives (Popover, Tooltip, Select, Menu, AutocompletePopup).
+Floating UI is the de facto positioning library for React — it handles
+collision detection, flip/shift middleware, arrow placement, virtual elements,
+and scroll-aware repositioning. We do NOT depend on Floating UI directly; we
+inherit it transitively through Base UI's Positioner components. Spec 010
+(Guided First Project Flow) uses Shepherd for the product tour, which also
+uses Floating UI internally — so the entire app shares one positioning runtime
+without two competing implementations.
+
 ## R2: Tokens via CSS Variables vs Runtime Theme Object
 
 **Decision**: CSS custom properties declared in `tokens.css` and

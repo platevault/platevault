@@ -3,88 +3,94 @@
   "$id": "https://astro-plan/contracts/log.stream.json",
   "title": "log.stream",
   "description": "Subscribe to recent log entries with cursor-based resume. The backend returns an initial window from the cursor forward and pushes subsequent added events as new entries are emitted.",
-  "operation": {
-    "name": "log.stream",
-    "direction": "ui-to-core",
-    "version": "1",
-    "kind": "subscription"
-  },
-  "request": {
-    "type": "object",
-    "additionalProperties": false,
-    "properties": {
-      "cursor": {
-        "type": "string",
-        "description": "Opaque id of the last delivered LogEntry. Format: aud:<n> or dia:<n> (A1). Omit to receive the most recent window up to LOG_BUFFER_SIZE."
-      },
-      "level_min": {
-        "type": "string",
-        "enum": ["debug", "info", "warn", "error"],
-        "description": "Optional minimum severity. Server-side filter; the client may also filter further. Defaults to debug."
-      },
-      "include_diagnostics": {
-        "type": "boolean",
-        "description": "Include source = 'diagnostic' entries. Defaults to true for the panel; export defaults this to false.",
-        "default": true
-      },
-      "source_filter": {
-        "type": "array",
-        "description": "Optional filter to one or more source values. When present, only entries whose source matches one of the listed values are returned (R-SourceFilter). Omit to receive all sources.",
-        "items": {
+  "type": "object",
+  "properties": {
+    "request": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["contractVersion", "requestId"],
+      "properties": {
+        "contractVersion": { "type": "string" },
+        "requestId": { "type": "string", "format": "uuid" },
+        "cursor": {
           "type": "string",
-          "enum": ["audit", "diagnostic", "catalog", "plan", "workflow", "lifecycle", "inventory", "settings", "project", "target", "tool"]
+          "description": "Opaque id of the last delivered LogEntry. Format: aud:<n> or dia:<n> (A1). Omit to receive the most recent window up to LOG_BUFFER_SIZE."
+        },
+        "levelMin": {
+          "type": "string",
+          "enum": ["debug", "info", "warn", "error"],
+          "description": "Optional minimum severity. Server-side filter; the client may also filter further. Defaults to debug."
+        },
+        "includeDiagnostics": {
+          "type": "boolean",
+          "description": "Include source = 'diagnostic' entries. Defaults to true for the panel; export defaults this to false.",
+          "default": true
+        },
+        "sourceFilter": {
+          "type": "array",
+          "description": "Optional filter to one or more source values. When present, only entries whose source matches one of the listed values are returned (R-SourceFilter). Omit to receive all sources.",
+          "items": {
+            "type": "string",
+            "enum": ["audit", "diagnostic", "catalog", "plan", "workflow", "lifecycle", "inventory", "settings", "project", "target", "tool"]
+          }
+        },
+        "windowSize": {
+          "type": "integer",
+          "minimum": 1,
+          "maximum": 500,
+          "description": "Initial window size on a no-cursor subscription. Capped at the UI ring buffer size.",
+          "default": 500
         }
-      },
-      "window_size": {
-        "type": "integer",
-        "minimum": 1,
-        "maximum": 500,
-        "description": "Initial window size on a no-cursor subscription. Capped at the UI ring buffer size.",
-        "default": 500
       }
-    }
-  },
-  "events": {
-    "added": {
-      "description": "One or more entries appended to the stream. Ordered oldest-first within the event payload. May include truncation signal when the cursor predates retained history.",
-      "schema": {
-        "type": "object",
-        "required": ["added"],
-        "additionalProperties": false,
-        "properties": {
-          "added": {
-            "type": "array",
-            "items": { "$ref": "#/definitions/LogEntry" }
-          },
-          "truncated": {
-            "type": "boolean",
-            "description": "True when the requested cursor predates the oldest retained entry (vacuum gap). The UI should render an inline 'History gap' marker (A4)."
-          },
-          "truncated_count": {
-            "type": ["integer", "null"],
-            "minimum": 0,
-            "description": "Estimated count of entries that existed before the oldest retained entry. Null when the audit vacuum does not record counts."
+    },
+    "events": {
+      "added": {
+        "description": "One or more entries appended to the stream. Ordered oldest-first within the event payload. May include truncation signal when the cursor predates retained history.",
+        "schema": {
+          "type": "object",
+          "required": ["contractVersion", "added"],
+          "additionalProperties": false,
+          "properties": {
+            "contractVersion": { "type": "string" },
+            "added": {
+              "type": "array",
+              "items": { "$ref": "#/$defs/LogEntry" }
+            },
+            "truncated": {
+              "type": "boolean",
+              "description": "True when the requested cursor predates the oldest retained entry (vacuum gap). The UI should render an inline 'History gap' marker (A4)."
+            },
+            "truncatedCount": {
+              "type": ["integer", "null"],
+              "minimum": 0,
+              "description": "Estimated count of entries that existed before the oldest retained entry. Null when the audit vacuum does not record counts."
+            }
           }
         }
       }
+    },
+    "errors": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "required": ["code", "message"],
+        "additionalProperties": false,
+        "properties": {
+          "code": {
+            "type": "string",
+            "enum": ["cursor.invalid", "stream.closed"]
+          },
+          "message": { "type": "string" },
+          "details": { "type": "object", "additionalProperties": true }
+        }
+      }
     }
   },
-  "errors": [
-    {
-      "code": "cursor.invalid",
-      "message": "The supplied cursor was not found in the current session. The client should restart subscription with no cursor.",
-      "http_status_equivalent": 410
-    },
-    {
-      "code": "stream.closed",
-      "message": "The backend closed the stream. The client may retry; a reconnect emits one diagnostic event.",
-      "http_status_equivalent": 503
-    }
-  ],
-  "definitions": {
+  "required": ["request"],
+  "$defs": {
     "LogEntry": {
       "type": "object",
-      "required": ["id", "time", "level", "source", "message", "contract_version"],
+      "required": ["id", "time", "level", "source", "message", "contractVersion"],
       "additionalProperties": false,
       "properties": {
         "id": {
@@ -92,10 +98,10 @@
           "pattern": "^(aud|dia):[0-9]+$",
           "description": "Stable prefixed id. aud:<n> for audit-sourced entries; dia:<n> for diagnostic entries (A1). Monotonic within each namespace within a session."
         },
-        "contract_version": {
+        "contractVersion": {
           "type": "string",
-          "const": "1",
-          "description": "Schema version of this LogEntry shape (H1). Will be camelCase'd in the future envelope sweep."
+          "const": "2.0.0",
+          "description": "Schema version of this LogEntry shape (H1)."
         },
         "time": {
           "type": "string",
@@ -115,17 +121,17 @@
           "type": "string",
           "description": "Single-line human-readable summary. No newlines."
         },
-        "request_id": {
+        "requestId": {
           "type": "string",
           "description": "Operation id correlating one user intent across multiple events. Required for workflow events; optional for diagnostics."
         },
-        "entity_type": {
+        "entityType": {
           "type": "string",
           "description": "Referenced entity kind, when known. Enum is the spec 002 AssetType enum (includes 'target' per spec 013 amendment, 'data_source' per spec 014 amendment — E-019-2). Omitted for diagnostics."
         },
-        "entity_id": {
+        "entityId": {
           "type": "string",
-          "description": "Stable id of the referenced entity. Required when entity_type is present."
+          "description": "Stable id of the referenced entity. Required when entityType is present."
         }
       }
     }

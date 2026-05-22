@@ -32,8 +32,9 @@ using `packages/contracts` JSON Schemas.
 desktop store); single-key writes complete in <50ms p95 against a cold SQLite.
 **Constraints**: Single-window application; no cross-tab coordination required
 in v1. Audit log must not amplify noisy keys.
-**Scale/Scope**: A bounded set of v1 keys (14 today) plus per-source overrides
-keyed by source ID.
+**Scale/Scope**: A bounded set of v1 keys (14 flat keys + 12 absorbed keys
+including structured-path patterns) plus per-source overrides keyed by source
+ID.
 
 ## Constitution Check
 
@@ -177,6 +178,59 @@ backend channel is ready; it is per-device rather than per-library; it must
 not block on Tauri startup; and it should not pollute the settings audit
 stream. The Appearance section in Settings reads/writes through the theme
 module, not through `useSettings()`.
+
+## Absorbed Key Special Handling
+
+### `devMode` — compile-time gating
+
+`devMode` is present in the settings schema unconditionally, but the
+use-case layer enforces compile-time behavior:
+
+- **`dev-tools` build**: `devMode` is read/write; the developer surface is
+  shown when `true`.
+- **Release build**: `settings.get` returns `devMode: false` regardless of
+  stored value; `settings.update` on `devMode` returns `value.invalid`
+  (read-only in this build). The Settings UI row is hidden entirely.
+
+This is enforced via a `#[cfg(feature = "dev-tools")]` branch in the
+use-case module. No schema migration is needed: the row may be present or
+absent; both are handled uniformly.
+
+### Structured-path keys — regex validation
+
+Keys in the form `tools.<tool_id>.bundle_id`,
+`workflow_profile.<profile_id>.watch_extensions`, and
+`workflow_profile.<profile_id>.launch_attribution_window_hours` are validated
+by regex in the use-case before the value schema is checked. An unrecognised
+`<tool_id>` or `<profile_id>` slug (one that has no registered ToolProfile or
+WorkflowProfile row) returns `key.unknown`. A recognised slug with an invalid
+value returns `value.invalid`.
+
+The `key` field in `settings.update` and `settings.restore-defaults` contracts
+accepts these patterns via a `oneOf` combining the existing flat-key enum with
+three `pattern` alternatives (see `contracts/settings.update.json`).
+
+### Per-frame-type override_penalty
+
+`calibration.dark.override_penalty`, `calibration.flat.override_penalty`, and
+`calibration.bias.override_penalty` are three independent keys. The contracts
+validate the frame-type slot via a regex `^calibration\.(dark|flat|bias)\.override_penalty$`.
+All three share the same value schema: `number` in `[0, 1]`.
+
+### `target_lookup.active_catalogs` — runtime default
+
+No stored row means "all installed catalogs are active". The use-case
+resolves the default dynamically from the spec 014 catalog manifest rather
+than from an in-code literal list. Unknown catalog ids in a stored array are
+filtered with a `warn` audit entry (consistent with R2 unknown-key policy).
+
+### JSON-array keys
+
+`target_lookup.active_catalogs` (`string[]`),
+`workflow_profile.<profile_id>.watch_extensions` (`string[]`), and
+`imagetyp_normalization.user_mappings` (`object[]`) are stored as
+JSON-encoded arrays in the `settings.value` column. Deep structural equality
+(R4.1) applies; element order is significant.
 
 ## Complexity Tracking
 

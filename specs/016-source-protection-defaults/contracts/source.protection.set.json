@@ -1,80 +1,96 @@
 {
   "$schema": "https://json-schema.org/draft/2020-12/schema",
-  "$id": "source.protection.set",
-  "title": "Set source protection",
+  "$id": "https://astro-plan.local/contracts/source.protection.set.json",
+  "title": "source.protection.set",
   "description": "Sets or replaces the protection override for a source.",
   "type": "object",
-  "properties": {
-    "request": {
+  "oneOf": [
+    { "$ref": "#/$defs/Request" },
+    { "$ref": "#/$defs/Response" }
+  ],
+  "$defs": {
+    "ContractVersion": { "type": "string", "const": "2.0.0" },
+    "Uuid": { "type": "string", "format": "uuid" },
+    "ProtectionLevel": {
+      "type": "string",
+      "enum": ["protected", "normal", "unprotected"]
+    },
+    "ErrorCode": {
+      "type": "string",
+      "enum": ["source.not_found", "level.unknown"]
+    },
+    "ErrorEnvelope": {
       "type": "object",
-      "required": ["source_id", "level"],
+      "required": ["code", "message"],
+      "additionalProperties": false,
       "properties": {
-        "source_id": {
-          "type": "string",
-          "format": "uuid"
-        },
-        "level": {
-          "type": "string",
-          "enum": ["protected", "normal", "unprotected"]
-        },
-        "block_permanent_delete": {
+        "code": { "$ref": "#/$defs/ErrorCode" },
+        "message": { "type": "string" },
+        "details": { "type": "object", "additionalProperties": true }
+      }
+    },
+    "Request": {
+      "type": "object",
+      "required": ["contractVersion", "requestId", "sourceId", "level"],
+      "additionalProperties": false,
+      "properties": {
+        "contractVersion": { "$ref": "#/$defs/ContractVersion" },
+        "requestId": { "$ref": "#/$defs/Uuid" },
+        "sourceId": { "$ref": "#/$defs/Uuid" },
+        "level": { "$ref": "#/$defs/ProtectionLevel" },
+        "blockPermanentDelete": {
           "type": ["boolean", "null"],
-          "description": "Per-source override for block_permanent_delete. null = inherit global value; true/false = explicit override (A2). Absent is treated as null (inherit)."
+          "description": "Per-source override for blockPermanentDelete. null = inherit global value; true/false = explicit override (A2). Absent is treated as null (inherit)."
         },
         "categories": {
           "type": "array",
           "items": { "type": "string" },
           "description": "Optional per-source category override. Absent means inherit global protected categories."
         }
-      },
-      "additionalProperties": false
+      }
     },
-    "response": {
+    "Response": {
       "type": "object",
-      "required": ["source_id", "prior_level", "new_level"],
+      "required": ["status", "contractVersion", "requestId"],
+      "additionalProperties": false,
       "properties": {
-        "source_id": { "type": "string", "format": "uuid" },
-        "prior_level": {
-          "type": "string",
-          "enum": ["protected", "normal", "unprotected"]
-        },
-        "new_level": {
-          "type": "string",
-          "enum": ["protected", "normal", "unprotected"]
-        },
-        "prior_block_permanent_delete": {
+        "status": { "type": "string", "enum": ["success", "error"] },
+        "contractVersion": { "$ref": "#/$defs/ContractVersion" },
+        "requestId": { "$ref": "#/$defs/Uuid" },
+        "sourceId": { "$ref": "#/$defs/Uuid" },
+        "priorLevel": { "$ref": "#/$defs/ProtectionLevel" },
+        "newLevel": { "$ref": "#/$defs/ProtectionLevel" },
+        "priorBlockPermanentDelete": {
           "type": ["boolean", "null"],
           "description": "Prior per-source override value. null means was inheriting global."
         },
-        "new_block_permanent_delete": {
+        "newBlockPermanentDelete": {
           "type": ["boolean", "null"],
           "description": "New per-source override value. null means now inheriting global."
         },
-        "prior_categories": {
+        "priorCategories": {
           "type": "array",
           "items": { "type": "string" }
         },
-        "new_categories": {
+        "newCategories": {
           "type": "array",
           "items": { "type": "string" }
-        }
+        },
+        "error": { "$ref": "#/$defs/ErrorEnvelope" }
       },
-      "additionalProperties": false
-    },
-    "errors": {
-      "type": "array",
-      "items": {
-        "type": "object",
-        "required": ["code", "message"],
-        "properties": {
-          "code": {
-            "type": "string",
-            "enum": ["source.not_found", "level.unknown"]
-          },
-          "message": { "type": "string" }
+      "allOf": [
+        {
+          "if": { "properties": { "status": { "const": "success" } } },
+          "then": {
+            "required": ["sourceId", "priorLevel", "newLevel"],
+            "not": { "required": ["error"] }
+          }
+        },
+        {
+          "if": { "properties": { "status": { "const": "error" } } },
+          "then": { "required": ["error"] }
         }
-      }
+      ]
     }
-  },
-  "required": ["request", "response"]
+  }
 }

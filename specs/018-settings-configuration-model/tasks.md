@@ -238,6 +238,86 @@ are not silently lost.
 
 ---
 
+## Phase 9: Absorbed Key Implementation
+
+Tasks for keys absorbed from cross-spec ratification passes (2026-05-22).
+
+### Group A — Library context + dev mode + UI persistence
+
+- [ ] T035 [US1] Add `current_library_id` (string?, uuid) to `SettingsState`
+      and the v1 schema in `packages/contracts/settings/`. Wire to the library
+      open/close lifecycle in `crates/app/core/`. Desktop reads this key to
+      inject `?lib=` into `<Link>` components (spec 020 R-Lib-V1).
+- [ ] T036 [US1] Add `devMode` (boolean, default false) to `SettingsState`.
+      Implement compile-time gate in `crates/app/core/usecases/settings.rs`:
+      `#[cfg(feature = "dev-tools")]` allows read/write; release build returns
+      `devMode: false` on get and rejects update with `value.invalid`. Desktop
+      Settings UI hides the row in release builds.
+- [ ] T037 [US1] Add `plans.list.default_age_cutoff_days` (number, default 90)
+      to `SettingsState`. Mark noisy in `NOISY_KEYS`. Desktop uses this key in
+      the plans list to clip the visible terminal-plan window.
+- [ ] T038 [US1] Add `rememberFollowLogs` (boolean, default false) to
+      `SettingsState` and mark noisy in `NOISY_KEYS`. Desktop log viewer reads
+      this key on mount to initialize the follow-tail toggle (spec 019 E-019-3).
+      Note: `rememberFollowLogs` was already listed in the original SettingsState
+      table; this task wires the noisy classification and default flip from
+      `true` to `false` per the spec 019 amendment.
+
+### Group B — Target lookup
+
+- [ ] T039 [US1] Add `target_lookup.active_catalogs` (string[], dynamic default)
+      to `SettingsState`. Implement dynamic-default resolution in the use-case:
+      no stored row → return full installed catalog id list from spec 014
+      manifest. Unknown catalog ids in stored array → filter + warn audit entry.
+      Desktop Settings Catalogs section exposes a multi-select for this key.
+
+### Group C — Calibration matching
+
+- [ ] T040 [US1] Add `calibration.dark_temp_tolerance` (number, default 2.0),
+      `calibration.prefill_suggestion` (boolean, default true) to `SettingsState`
+      and the v1 schema.
+- [ ] T041 [US1] Add `calibration.dark.override_penalty`,
+      `calibration.flat.override_penalty`, `calibration.bias.override_penalty`
+      (number [0,1], default 0.3 each) as three independent structured-path keys.
+      Validate the `^calibration\\.(dark|flat|bias)\\.override_penalty$` pattern
+      in the use-case; reject unrecognised frame-type slots with `key.unknown`.
+
+### Group D — Tool launching
+
+- [ ] T042 [US1] Add `tools.<tool_id>.bundle_id` structured-path key support.
+      Validate `^tools\\.[a-z0-9_]+\\.bundle_id$` in use-case; verify that
+      `<tool_id>` references an existing ToolProfile row before writing. Seed
+      known-tool defaults at tool registration time in spec 011's ToolProfile
+      migration (`tools.pixinsight.bundle_id`, `tools.siril.bundle_id`).
+
+### Group E — Workflow profile watcher
+
+- [ ] T043 [US1] Add `workflow_profile.<profile_id>.watch_extensions` and
+      `workflow_profile.<profile_id>.launch_attribution_window_hours` structured-
+      path keys. Validate regex patterns in use-case; verify `<profile_id>`
+      references an existing WorkflowProfile row. Default for `watch_extensions`
+      is `[".xisf",".fits",".fit",".tif",".tiff",".png",".jpg",".ser",".avi"]`.
+
+### Group F — IMAGETYP normalization
+
+- [ ] T044 [US1] Add `imagetyp_normalization.user_mappings`
+      (`Array<{imagetyp_string: string, frame_type: FrameType}>`, default `[]`)
+      to `SettingsState`. Store as JSON array in `settings.value` column.
+      Deep structural equality applies element-wise (R4.1); order is significant.
+      Desktop Settings surface exposes a table control for add/remove row.
+
+### Cross-group
+
+- [ ] T045 [P] Update `packages/contracts/settings/settings.state.v1.json` to
+      add all newly absorbed keys' value sub-schemas (flat keys and structured-
+      path key value shapes). This unblocks T002 and the contract round-trip
+      tests in T007/T008.
+- [ ] T046 [P] Extend `crates/app/core/tests/settings_update.rs` (T008) to
+      cover: (a) structured-path key happy paths for all three pattern groups,
+      (b) `devMode` update rejected in release build, (c)
+      `calibration.dark_temp_tolerance` out-of-range rejection, (d)
+      `imagetyp_normalization.user_mappings` deep-equal noop.
+
 ## Phase 8: Polish
 
 - [ ] T032 [P] Remove the `rowDensity` key from `SettingsState` once FR-006 is
@@ -290,6 +370,18 @@ T031 = { blocked_by = ["T030"] }
 T032 = { blocked_by = ["T015"] }
 T033 = { blocked_by = [] }
 T034 = { blocked_by = ["T015", "T020", "T025", "T028"] }
+T035 = { blocked_by = ["T045"] }
+T036 = { blocked_by = ["T045"] }
+T037 = { blocked_by = ["T045"] }
+T038 = { blocked_by = ["T045"] }
+T039 = { blocked_by = ["T045"] }
+T040 = { blocked_by = ["T045"] }
+T041 = { blocked_by = ["T045"] }
+T042 = { blocked_by = ["T045"] }
+T043 = { blocked_by = ["T045"] }
+T044 = { blocked_by = ["T045"] }
+T045 = { blocked_by = [] }
+T046 = { blocked_by = ["T008", "T035", "T036", "T037", "T038", "T039", "T040", "T041", "T042", "T043", "T044"] }
 ```
 
 ### Phase Dependencies
@@ -308,6 +400,7 @@ T034 = { blocked_by = ["T015", "T020", "T025", "T028"] }
 - T007 / T008 / T009 in US1 tests.
 - T016 / T017 in US2 tests.
 - T021 / T022 in US3 tests.
+- T035–T044 in Phase 9 (all depend on T045; each group is independent).
 
 ---
 

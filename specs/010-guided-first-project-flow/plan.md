@@ -38,8 +38,16 @@ renders overlay hints anchored to existing controls.
   completed step ids, current step pointer, and dismissed-at timestamp.
 - `crates/contracts/core/guided/`: Rust DTOs for `guided.state.get`,
   `guided.step.complete`, and `guided.dismiss` contracts.
-- `apps/desktop/src/features/guided/`: React overlay layer, route-aware anchor
-  resolution, hint renderer, Settings restart entry.
+- `apps/desktop/src/features/guided/`: React overlay layer. Wraps a
+  [Shepherd](https://github.com/shipshapecode/shepherd) tour instance whose
+  steps mirror the state machine below. Step content (text, anchor selector,
+  primary action) is declared per step; Shepherd handles focus management,
+  scroll-into-view, spotlight cutouts, and dismissal hooks. Anchor positioning
+  uses [Floating UI](https://github.com/floating-ui/floating-ui) (transitively
+  via Shepherd v12+), which is also the positioning engine used by Base UI
+  primitives (spec 022) — single positioning runtime across the app. Route-
+  aware anchor resolution, hint renderer wiring, and the Settings restart
+  entry live in this folder.
 
 ### State Machine
 

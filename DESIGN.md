@@ -25,7 +25,11 @@ Primary user: an astrophotographer working at a desktop with Finder/Explorer, ca
 | Table primitive | App-local `DataTable` in `src/ui/DataTable.tsx` | Sortable columns, groups (static or collapsible), checkbox multi-select, density. Caller supplies sorted rows via the exported `sortRows<T>` helper. |
 | State | `useSyncExternalStore` pub/sub in `src/data/store.ts` | Mock-only for now; backend-ready seam. |
 
-If you need a primitive that doesn't exist, check Base UI first, then write a thin app-local component. Do not pull in a second component library.
+If you need a primitive that doesn't exist, check Base UI first, then look for a focused, well-maintained library that solves the specific problem (e.g. [Shepherd](https://github.com/shipshapecode/shepherd) for the guided tour, [Floating UI](https://github.com/floating-ui/floating-ui) for anchor positioning — which Base UI already uses internally). Only write a thin app-local component when no suitable library exists or the surface is genuinely project-specific. Do not pull in a second general-purpose component library.
+
+## UI engineering principle: prefer standard libraries
+
+Before writing a custom UI primitive, search for an established library that solves the problem. The bar is: actively maintained, accessibility-aware, widely adopted, license-compatible. Examples we use: Base UI (primitives), Floating UI (positioning, transitively), `cmdk` (command palette), `react-resizable-panels` (docked drawer), `lucide-react` (icons), `@tanstack/react-table` (tables), `@tanstack/react-router` (routing), and Shepherd (guided tour, spec 010). Reuse beats reinvention — custom code carries an accessibility and maintenance tax we should not pay twice. UI plans (per-feature `plan.md`) should explicitly call out the library choice or document why a custom implementation was necessary.
 
 ## Tokens
 

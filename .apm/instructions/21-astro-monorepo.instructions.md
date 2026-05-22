@@ -18,6 +18,8 @@ Primary paths:
 - `crates/calibration/core/`: calibration matching and reuse policy model.
 - `crates/workflow/profiles/`: processing tool/workflow profile model.
 - `crates/project/structure/`: app-owned project envelope rules.
+- `crates/patterns/`: shared token-pattern parser and resolver (consumed by
+  Inbox confirm pipeline, archive plans, and project source views).
 - `crates/fs/inventory/`: filesystem scan records and root/path model.
 - `crates/fs/planner/`: reviewable filesystem plan model.
 - `crates/metadata/core/`: shared extracted metadata model.
@@ -41,3 +43,9 @@ remote backend transport. Concrete schemas are produced during planning.
 SQLite is the canonical local store for metadata, relationships, rules,
 lifecycle, plans, and audit history. JSON Schema based operation contracts form
 the transport boundary, with Tauri as the first adapter.
+
+The workspace Cargo manifest defines a `dev-tools` feature (default off) that
+compile-time-gates the developer-mode surface from spec 021 (recording proxy,
+`/dev/contracts` route, `dev.contracts.list` / `dev.calls.list` / `dev.export`
+Tauri commands). Release binaries MUST omit the `dev-tools` feature so the
+developer surface is absent at runtime, not merely hidden behind a flag.

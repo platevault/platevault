@@ -11,7 +11,7 @@
   "$defs": {
     "ContractVersion": {
       "type": "string",
-      "const": "1.0"
+      "const": "2.0.0"
     },
     "Uuid": {
       "type": "string",
@@ -108,21 +108,21 @@
       "required": [
         "contractVersion",
         "requestId",
-        "entity_type",
-        "entity_id",
-        "current_state",
-        "next_state",
+        "entityType",
+        "entityId",
+        "currentState",
+        "nextState",
         "actor"
       ],
       "additionalProperties": false,
       "properties": {
         "contractVersion": { "$ref": "#/$defs/ContractVersion" },
         "requestId": { "$ref": "#/$defs/Uuid" },
-        "entity_type": { "type": "string", "const": "project" },
-        "entity_id": { "$ref": "#/$defs/Uuid" },
-        "current_state": { "$ref": "#/$defs/ProjectState" },
-        "next_state": { "$ref": "#/$defs/ProjectState" },
-        "action_label": { "$ref": "#/$defs/ActionLabel" },
+        "entityType": { "type": "string", "const": "project" },
+        "entityId": { "$ref": "#/$defs/Uuid" },
+        "currentState": { "$ref": "#/$defs/ProjectState" },
+        "nextState": { "$ref": "#/$defs/ProjectState" },
+        "actionLabel": { "$ref": "#/$defs/ActionLabel" },
         "actor": { "$ref": "#/$defs/Actor" }
       }
     },
@@ -131,21 +131,21 @@
       "required": [
         "contractVersion",
         "requestId",
-        "entity_type",
-        "entity_id",
-        "current_state",
-        "next_state",
+        "entityType",
+        "entityId",
+        "currentState",
+        "nextState",
         "actor"
       ],
       "additionalProperties": false,
       "properties": {
         "contractVersion": { "$ref": "#/$defs/ContractVersion" },
         "requestId": { "$ref": "#/$defs/Uuid" },
-        "entity_type": { "type": "string", "const": "plan" },
-        "entity_id": { "$ref": "#/$defs/Uuid" },
-        "current_state": { "$ref": "#/$defs/PlanState" },
-        "next_state": { "$ref": "#/$defs/PlanState" },
-        "action_label": { "$ref": "#/$defs/ActionLabel" },
+        "entityType": { "type": "string", "const": "plan" },
+        "entityId": { "$ref": "#/$defs/Uuid" },
+        "currentState": { "$ref": "#/$defs/PlanState" },
+        "nextState": { "$ref": "#/$defs/PlanState" },
+        "actionLabel": { "$ref": "#/$defs/ActionLabel" },
         "actor": { "$ref": "#/$defs/Actor" }
       }
     },
@@ -154,21 +154,21 @@
       "required": [
         "contractVersion",
         "requestId",
-        "entity_type",
-        "entity_id",
-        "current_state",
-        "next_state",
+        "entityType",
+        "entityId",
+        "currentState",
+        "nextState",
         "actor"
       ],
       "additionalProperties": false,
       "properties": {
         "contractVersion": { "$ref": "#/$defs/ContractVersion" },
         "requestId": { "$ref": "#/$defs/Uuid" },
-        "entity_type": { "type": "string", "const": "inventory_session" },
-        "entity_id": { "$ref": "#/$defs/Uuid" },
-        "current_state": { "$ref": "#/$defs/SessionState" },
-        "next_state": { "$ref": "#/$defs/SessionState" },
-        "action_label": { "$ref": "#/$defs/ActionLabel" },
+        "entityType": { "type": "string", "const": "inventory_session" },
+        "entityId": { "$ref": "#/$defs/Uuid" },
+        "currentState": { "$ref": "#/$defs/SessionState" },
+        "nextState": { "$ref": "#/$defs/SessionState" },
+        "actionLabel": { "$ref": "#/$defs/ActionLabel" },
         "actor": { "$ref": "#/$defs/Actor" }
       }
     },
@@ -177,21 +177,21 @@
       "required": [
         "contractVersion",
         "requestId",
-        "entity_type",
-        "entity_id",
-        "current_state",
-        "next_state",
+        "entityType",
+        "entityId",
+        "currentState",
+        "nextState",
         "actor"
       ],
       "additionalProperties": false,
       "properties": {
         "contractVersion": { "$ref": "#/$defs/ContractVersion" },
         "requestId": { "$ref": "#/$defs/Uuid" },
-        "entity_type": { "type": "string", "const": "calibration_session" },
-        "entity_id": { "$ref": "#/$defs/Uuid" },
-        "current_state": { "$ref": "#/$defs/SessionState" },
-        "next_state": { "$ref": "#/$defs/SessionState" },
-        "action_label": { "$ref": "#/$defs/ActionLabel" },
+        "entityType": { "type": "string", "const": "calibration_session" },
+        "entityId": { "$ref": "#/$defs/Uuid" },
+        "currentState": { "$ref": "#/$defs/SessionState" },
+        "nextState": { "$ref": "#/$defs/SessionState" },
+        "actionLabel": { "$ref": "#/$defs/ActionLabel" },
         "actor": { "$ref": "#/$defs/Actor" }
       }
     },
@@ -200,21 +200,21 @@
       "required": [
         "contractVersion",
         "requestId",
-        "entity_type",
-        "entity_id",
-        "current_state",
-        "next_state",
+        "entityType",
+        "entityId",
+        "currentState",
+        "nextState",
         "actor"
       ],
       "additionalProperties": false,
       "properties": {
         "contractVersion": { "$ref": "#/$defs/ContractVersion" },
         "requestId": { "$ref": "#/$defs/Uuid" },
-        "entity_type": { "type": "string", "const": "data_source" },
-        "entity_id": { "$ref": "#/$defs/Uuid" },
-        "current_state": { "$ref": "#/$defs/DataSourceState" },
-        "next_state": { "$ref": "#/$defs/DataSourceState" },
-        "action_label": { "$ref": "#/$defs/ActionLabel" },
+        "entityType": { "type": "string", "const": "data_source" },
+        "entityId": { "$ref": "#/$defs/Uuid" },
+        "currentState": { "$ref": "#/$defs/DataSourceState" },
+        "nextState": { "$ref": "#/$defs/DataSourceState" },
+        "actionLabel": { "$ref": "#/$defs/ActionLabel" },
         "actor": { "$ref": "#/$defs/Actor" }
       }
     },
@@ -223,21 +223,21 @@
       "required": [
         "contractVersion",
         "requestId",
-        "entity_type",
-        "entity_id",
-        "current_state",
-        "next_state",
+        "entityType",
+        "entityId",
+        "currentState",
+        "nextState",
         "actor"
       ],
       "additionalProperties": false,
       "properties": {
         "contractVersion": { "$ref": "#/$defs/ContractVersion" },
         "requestId": { "$ref": "#/$defs/Uuid" },
-        "entity_type": { "type": "string", "const": "prepared_source" },
-        "entity_id": { "$ref": "#/$defs/Uuid" },
-        "current_state": { "$ref": "#/$defs/PreparedSourceState" },
-        "next_state": { "$ref": "#/$defs/PreparedSourceState" },
-        "action_label": { "$ref": "#/$defs/ActionLabel" },
+        "entityType": { "type": "string", "const": "prepared_source" },
+        "entityId": { "$ref": "#/$defs/Uuid" },
+        "currentState": { "$ref": "#/$defs/PreparedSourceState" },
+        "nextState": { "$ref": "#/$defs/PreparedSourceState" },
+        "actionLabel": { "$ref": "#/$defs/ActionLabel" },
         "actor": { "$ref": "#/$defs/Actor" }
       }
     },
@@ -246,21 +246,21 @@
       "required": [
         "contractVersion",
         "requestId",
-        "entity_type",
-        "entity_id",
-        "current_state",
-        "next_state",
+        "entityType",
+        "entityId",
+        "currentState",
+        "nextState",
         "actor"
       ],
       "additionalProperties": false,
       "properties": {
         "contractVersion": { "$ref": "#/$defs/ContractVersion" },
         "requestId": { "$ref": "#/$defs/Uuid" },
-        "entity_type": { "type": "string", "const": "projection" },
-        "entity_id": { "$ref": "#/$defs/Uuid" },
-        "current_state": { "$ref": "#/$defs/ProjectionState" },
-        "next_state": { "$ref": "#/$defs/ProjectionState" },
-        "action_label": { "$ref": "#/$defs/ActionLabel" },
+        "entityType": { "type": "string", "const": "projection" },
+        "entityId": { "$ref": "#/$defs/Uuid" },
+        "currentState": { "$ref": "#/$defs/ProjectionState" },
+        "nextState": { "$ref": "#/$defs/ProjectionState" },
+        "actionLabel": { "$ref": "#/$defs/ActionLabel" },
         "actor": { "$ref": "#/$defs/Actor" }
       }
     },
@@ -269,21 +269,21 @@
       "required": [
         "contractVersion",
         "requestId",
-        "entity_type",
-        "entity_id",
-        "current_state",
-        "next_state",
+        "entityType",
+        "entityId",
+        "currentState",
+        "nextState",
         "actor"
       ],
       "additionalProperties": false,
       "properties": {
         "contractVersion": { "$ref": "#/$defs/ContractVersion" },
         "requestId": { "$ref": "#/$defs/Uuid" },
-        "entity_type": { "type": "string", "const": "file_record" },
-        "entity_id": { "$ref": "#/$defs/Uuid" },
-        "current_state": { "$ref": "#/$defs/FileRecordState" },
-        "next_state": { "$ref": "#/$defs/FileRecordState" },
-        "action_label": { "$ref": "#/$defs/ActionLabel" },
+        "entityType": { "type": "string", "const": "file_record" },
+        "entityId": { "$ref": "#/$defs/Uuid" },
+        "currentState": { "$ref": "#/$defs/FileRecordState" },
+        "nextState": { "$ref": "#/$defs/FileRecordState" },
+        "actionLabel": { "$ref": "#/$defs/ActionLabel" },
         "actor": { "$ref": "#/$defs/Actor" }
       }
     },
@@ -328,23 +328,23 @@
         },
         "details": {
           "type": "object",
-          "description": "Optional structured detail. Examples: { allowed_next_states: [...] } for transition.refused; { plan_id: uuid } for plan.required; { blocking_fields: [{ field_path, required_origin: 'reviewed' }] } for provenance.unreviewed.",
+          "description": "Optional structured detail. Examples: { allowedNextStates: [...] } for transition.refused; { planId: uuid } for plan.required; { blockingFields: [{ fieldPath, requiredOrigin: 'reviewed' }] } for provenance.unreviewed.",
           "additionalProperties": true,
           "properties": {
-            "allowed_next_states": {
+            "allowedNextStates": {
               "type": "array",
               "items": { "type": "string" }
             },
-            "plan_id": { "$ref": "#/$defs/Uuid" },
-            "blocking_fields": {
+            "planId": { "$ref": "#/$defs/Uuid" },
+            "blockingFields": {
               "type": "array",
               "items": {
                 "type": "object",
-                "required": ["field_path", "required_origin"],
+                "required": ["fieldPath", "requiredOrigin"],
                 "additionalProperties": false,
                 "properties": {
-                  "field_path": { "type": "string" },
-                  "required_origin": {
+                  "fieldPath": { "type": "string" },
+                  "requiredOrigin": {
                     "type": "string",
                     "enum": ["reviewed"]
                   }
@@ -356,7 +356,7 @@
       }
     },
     "Request": {
-      "description": "Discriminated request envelope. Each branch pins `entity_type` to a single family and constrains `current_state`/`next_state` to that family's enum. The server derives `requires_plan` from a canonical (entity_type, from, to) edge table; callers MUST NOT assert it.",
+      "description": "Discriminated request envelope. Each branch pins `entityType` to a single family and constrains `currentState`/`nextState` to that family's enum. The server derives `requiresPlan` from a canonical (entityType, from, to) edge table; callers MUST NOT assert it.",
       "oneOf": [
         { "$ref": "#/$defs/ProjectRequest" },
         { "$ref": "#/$defs/PlanRequest" },
@@ -377,15 +377,15 @@
         "status": {
           "type": "string",
           "enum": ["success", "noop", "error"],
-          "description": "`success` = state mutated and audit row written. `noop` = caller-requested next_state equals current_state; no mutation, no audit row, no error. `error` = transition refused or otherwise rejected; structured `error` field populated."
+          "description": "`success` = state mutated and audit row written. `noop` = caller-requested nextState equals currentState; no mutation, no audit row, no error. `error` = transition refused or otherwise rejected; structured `error` field populated."
         },
         "contractVersion": { "$ref": "#/$defs/ContractVersion" },
         "requestId": { "$ref": "#/$defs/Uuid" },
-        "applied_at": { "$ref": "#/$defs/Timestamp" },
-        "prior_state": { "$ref": "#/$defs/LifecycleState" },
-        "new_state": { "$ref": "#/$defs/LifecycleState" },
-        "audit_id": { "$ref": "#/$defs/Uuid" },
-        "plan_id": {
+        "appliedAt": { "$ref": "#/$defs/Timestamp" },
+        "priorState": { "$ref": "#/$defs/LifecycleState" },
+        "newState": { "$ref": "#/$defs/LifecycleState" },
+        "auditId": { "$ref": "#/$defs/Uuid" },
+        "planId": {
           "$ref": "#/$defs/Uuid",
           "description": "Set when the server created or referenced a FilesystemPlan whose approval gates the transition."
         },
@@ -395,7 +395,7 @@
         {
           "if": { "properties": { "status": { "const": "success" } } },
           "then": {
-            "required": ["applied_at", "new_state", "audit_id"],
+            "required": ["appliedAt", "newState", "auditId"],
             "not": { "required": ["error"] }
           }
         },
@@ -404,7 +404,7 @@
           "then": {
             "not": {
               "anyOf": [
-                { "required": ["audit_id"] },
+                { "required": ["auditId"] },
                 { "required": ["error"] }
               ]
             }

@@ -76,6 +76,70 @@ As a user, I want settings grouped by workflow domain so that source behavior, c
 - **Setting Change Event**: Auditable configuration change.
 - **Project Override**: Project-specific configuration that overrides global defaults.
 
+### Absorbed Settings Keys (2026-05-22 ripple absorption)
+
+The following keys were flagged across multiple prior ratification passes and
+are now absorbed into the v1 settings model.
+
+**Library context**
+
+- `current_library_id` (`string?`, uuid): tracks which library is currently
+  open; drives `?lib=<library_id>` URL injection across all `<Link>` components
+  (spec 020 R-Lib-V1). Single-library v1 always has one value; slot is reserved.
+- `devMode` (`boolean`, default `false`): runtime toggle for the developer-mode
+  surface (recording proxy, `/dev/contracts` route). Only meaningful when the
+  binary is compiled with the Cargo feature `dev-tools`; in release builds this
+  key is read-only and hidden from Settings UI (spec 021 R-DevFeature).
+
+**Plans**
+
+- `plans.list.default_age_cutoff_days` (`number`, default `90`, `0` = show all):
+  UI hides terminal plans older than this threshold by default (spec 017 R-Ret-1).
+
+**Log viewer**
+
+- `rememberFollowLogs` (`boolean`, default `false`): persists the "follow tail"
+  toggle state in the log viewer across app restarts (spec 019 E-019-3).
+
+**Target lookup**
+
+- `target_lookup.active_catalogs` (`string[]`, catalog_id enum): backend-derived
+  active catalog set for `target.lookup`; default is all 13 v1 catalogs per
+  spec 014. User can disable specific catalogs in Settings (spec 013 R-2.2).
+
+**Calibration matching**
+
+- `calibration.dark_temp_tolerance` (`number`, default `2.0` °C): dark frame
+  temperature matching tolerance (spec 007 A5).
+- `calibration.dark.override_penalty` / `calibration.flat.override_penalty` /
+  `calibration.bias.override_penalty` (`number`, default `0.3`, range `[0, 1]`):
+  per-frame-type confidence penalty applied when a user overrides the
+  auto-suggested calibration match (spec 007 R-OverridePenalty).
+- `calibration.prefill_suggestion` (`boolean`, default `true`): when true, the
+  assign dialog opens pre-filled with the top candidate; user must confirm
+  (spec 007 R-Prefill).
+
+**Tool launching**
+
+- `tools.<tool_id>.bundle_id` (`string?`, macOS only): per-tool macOS bundle
+  identifier used for `open -b` launching; seed values for known tools
+  (PixInsight, Siril); user-editable for custom installs (spec 011 R-BundleId).
+
+**Workflow profile (artifact watcher)**
+
+- `workflow_profile.<profile_id>.watch_extensions` (`string[]`): per-workflow-
+  profile allow-list of file extensions the watcher monitors (spec 012 R-ExtAllow).
+- `workflow_profile.<profile_id>.launch_attribution_window_hours` (`number`,
+  default `6`): per-workflow-profile attribution window for matching artifacts
+  to tool launches (spec 012 C3).
+
+**FITS classifier**
+
+- `imagetyp_normalization.user_mappings` (`Array<{ imagetyp_string: string,
+  frame_type: enum }>`): user-extensible table for IMAGETYP strings not covered
+  by the built-in normalization table; empty array default (spec 005
+  R-IMAGETYP-Norm).
+
 ## Success Criteria *(mandatory)*
 
 ### Measurable Outcomes

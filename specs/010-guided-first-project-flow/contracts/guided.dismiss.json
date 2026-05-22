@@ -8,28 +8,60 @@
     "request": {
       "type": "object",
       "additionalProperties": false,
-      "properties": {},
-      "required": []
+      "required": ["contractVersion", "requestId"],
+      "properties": {
+        "contractVersion": { "type": "string" },
+        "requestId": { "type": "string", "format": "uuid" }
+      }
     },
     "response": {
-      "type": "object",
-      "additionalProperties": false,
-      "required": ["dismissed_at"],
-      "properties": {
-        "dismissed_at": {
-          "type": "string",
-          "format": "date-time",
-          "description": "Timestamp the dismiss was recorded."
+      "oneOf": [
+        {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["status", "contractVersion", "requestId", "dismissedAt"],
+          "properties": {
+            "status": { "const": "success" },
+            "contractVersion": { "type": "string" },
+            "requestId": { "type": "string", "format": "uuid" },
+            "dismissedAt": {
+              "type": "string",
+              "format": "date-time",
+              "description": "Timestamp the dismiss was recorded."
+            }
+          }
+        },
+        {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["status", "contractVersion", "requestId", "errors"],
+          "properties": {
+            "status": { "const": "failure" },
+            "contractVersion": { "type": "string" },
+            "requestId": { "type": "string", "format": "uuid" },
+            "errors": {
+              "type": "array",
+              "items": { "$ref": "#/$defs/Error" }
+            }
+          }
         }
-      }
-    },
-    "errors": {
-      "type": "array",
-      "items": {
-        "type": "string",
-        "enum": ["ALREADY_DISMISSED", "PERSISTENCE_UNAVAILABLE"]
-      }
+      ]
     }
   },
-  "required": ["request", "response"]
+  "required": ["request", "response"],
+  "$defs": {
+    "Error": {
+      "type": "object",
+      "required": ["code", "message"],
+      "additionalProperties": false,
+      "properties": {
+        "code": {
+          "type": "string",
+          "enum": ["already_dismissed", "persistence_unavailable"]
+        },
+        "message": { "type": "string" },
+        "details": { "type": "object", "additionalProperties": true }
+      }
+    }
+  }
 }

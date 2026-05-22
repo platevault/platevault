@@ -9,7 +9,7 @@
     { "$ref": "#/$defs/Response" }
   ],
   "$defs": {
-    "ContractVersion": { "type": "string", "const": "1.0" },
+    "ContractVersion": { "type": "string", "const": "2.0.0" },
     "Uuid": { "type": "string", "format": "uuid" },
     "Timestamp": { "type": "string", "format": "date-time" },
     "ProcessingTool": {
@@ -46,11 +46,11 @@
         },
         "details": {
           "type": "object",
-          "description": "Structured context. name.duplicate MUST include conflicting_project_id. lifecycle.read_only MUST include current_lifecycle. tool.locked MUST include current_lifecycle (the lifecycle states that lock tool changes are prepared, processing, completed, blocked — R-Tool-Lock).",
+          "description": "Structured context. name.duplicate MUST include conflictingProjectId. lifecycle.read_only MUST include currentLifecycle. tool.locked MUST include currentLifecycle (the lifecycle states that lock tool changes are prepared, processing, completed, blocked — R-Tool-Lock).",
           "additionalProperties": true,
           "properties": {
-            "conflicting_project_id": { "$ref": "#/$defs/Uuid" },
-            "current_lifecycle": {
+            "conflictingProjectId": { "$ref": "#/$defs/Uuid" },
+            "currentLifecycle": {
               "type": "string",
               "enum": [
                 "setup_incomplete",
@@ -69,12 +69,12 @@
     "Request": {
       "type": "object",
       "description": "Project metadata patch request. At least one of name/tool/notes MUST be supplied; an empty patch returns 'no_op'.",
-      "required": ["contractVersion", "requestId", "project_id"],
+      "required": ["contractVersion", "requestId", "projectId"],
       "additionalProperties": false,
       "properties": {
         "contractVersion": { "$ref": "#/$defs/ContractVersion" },
         "requestId": { "$ref": "#/$defs/Uuid" },
-        "project_id": { "$ref": "#/$defs/Uuid" },
+        "projectId": { "$ref": "#/$defs/Uuid" },
         "name": {
           "type": "string",
           "minLength": 1,
@@ -102,22 +102,22 @@
         "status": { "type": "string", "enum": ["success", "error"] },
         "contractVersion": { "$ref": "#/$defs/ContractVersion" },
         "requestId": { "$ref": "#/$defs/Uuid" },
-        "project_id": { "$ref": "#/$defs/Uuid" },
-        "fields_updated": {
+        "projectId": { "$ref": "#/$defs/Uuid" },
+        "fieldsUpdated": {
           "type": "array",
           "items": { "$ref": "#/$defs/FieldName" },
           "uniqueItems": true,
           "description": "Subset of the requested fields that were actually changed. A field present in the request but identical to the stored value is omitted from this list."
         },
-        "audit_id": { "$ref": "#/$defs/Uuid" },
-        "updated_at": { "$ref": "#/$defs/Timestamp" },
+        "auditId": { "$ref": "#/$defs/Uuid" },
+        "updatedAt": { "$ref": "#/$defs/Timestamp" },
         "error": { "$ref": "#/$defs/ErrorEnvelope" }
       },
       "allOf": [
         {
           "if": { "properties": { "status": { "const": "success" } } },
           "then": {
-            "required": ["project_id", "fields_updated", "audit_id", "updated_at"],
+            "required": ["projectId", "fieldsUpdated", "auditId", "updatedAt"],
             "not": { "required": ["error"] }
           }
         },

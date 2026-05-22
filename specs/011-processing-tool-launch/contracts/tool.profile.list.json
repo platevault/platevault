@@ -9,7 +9,7 @@
     { "$ref": "#/$defs/Response" }
   ],
   "$defs": {
-    "ContractVersion": { "type": "string", "const": "1.0" },
+    "ContractVersion": { "type": "string", "const": "2.0.0" },
     "Uuid": { "type": "string", "format": "uuid" },
     "ToolId": {
       "type": "string",
@@ -25,9 +25,9 @@
         "name",
         "configured",
         "available",
-        "supports_open_folder",
+        "supportsOpenFolder",
         "enabled",
-        "auto_detected"
+        "autoDetected"
       ],
       "additionalProperties": false,
       "properties": {
@@ -40,23 +40,23 @@
         },
         "configured": {
           "type": "boolean",
-          "description": "True when executable_path is set and non-blank in Settings."
+          "description": "True when executablePath is set and non-blank in Settings."
         },
         "available": {
           "type": "boolean",
           "description": "True when configured AND the executable currently exists with execute permission. Filesystem read; debounce at the UI layer."
         },
-        "supports_open_folder": {
+        "supportsOpenFolder": {
           "type": "boolean",
-          "description": "Whether the tool's args_template renders {folder}. The CTA still passes cwd when this is false."
+          "description": "Whether the tool's argsTemplate renders {folder}. The CTA still passes cwd when this is false."
         },
         "enabled": {
           "type": "boolean",
           "description": "User-controlled switch for hiding the tool from project CTAs without deleting the path."
         },
-        "auto_detected": {
+        "autoDetected": {
           "type": "boolean",
-          "description": "True when the current executable_path came from R2 discovery and has not been explicitly saved by the user yet."
+          "description": "True when the current executablePath came from R2 discovery and has not been explicitly saved by the user yet."
         }
       }
     },

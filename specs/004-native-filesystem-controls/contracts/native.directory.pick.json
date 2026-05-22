@@ -5,70 +5,75 @@
   "description": "Open the OS-native directory picker and return the user-selected absolute path. Cancellation is a non-error null response. Implemented over @tauri-apps/plugin-dialog with directory=true, multiple=false.",
   "type": "object",
   "properties": {
-    "operation": {
-      "const": "native.directory.pick"
-    },
-    "version": {
-      "type": "string",
-      "const": "1"
-    },
     "request": {
       "type": "object",
-      "required": ["request_id"],
+      "required": ["contractVersion", "requestId"],
       "additionalProperties": false,
       "properties": {
-        "default_path": {
-          "description": "Optional absolute path to anchor the dialog. Honored where the host OS supports it. Silently ignored when the path does not exist.",
-          "type": ["string", "null"],
-          "minLength": 1
-        },
-        "request_id": {
+        "contractVersion": { "type": "string" },
+        "requestId": {
           "description": "Client-generated UUID for log correlation.",
           "type": "string",
           "format": "uuid"
+        },
+        "defaultPath": {
+          "description": "Optional absolute path to anchor the dialog. Honored where the host OS supports it. Silently ignored when the path does not exist.",
+          "type": ["string", "null"],
+          "minLength": 1
         }
       }
     },
     "response": {
-      "type": "object",
-      "required": ["path", "cancelled"],
-      "additionalProperties": false,
-      "properties": {
-        "path": {
-          "description": "Absolute OS-canonical path the user selected, or null when the user cancelled the dialog.",
-          "type": ["string", "null"]
+      "oneOf": [
+        {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["status", "contractVersion", "requestId", "path", "cancelled"],
+          "properties": {
+            "status": { "const": "success" },
+            "contractVersion": { "type": "string" },
+            "requestId": { "type": "string", "format": "uuid" },
+            "path": {
+              "description": "Absolute OS-canonical path the user selected, or null when the user cancelled the dialog.",
+              "type": ["string", "null"]
+            },
+            "cancelled": {
+              "description": "True when the user dismissed the dialog without selecting. Mirrors path === null.",
+              "type": "boolean"
+            }
+          }
         },
-        "cancelled": {
-          "description": "True when the user dismissed the dialog without selecting. Mirrors path === null.",
-          "type": "boolean"
+        {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["status", "contractVersion", "requestId", "errors"],
+          "properties": {
+            "status": { "const": "failure" },
+            "contractVersion": { "type": "string" },
+            "requestId": { "type": "string", "format": "uuid" },
+            "errors": {
+              "type": "array",
+              "items": { "$ref": "#/$defs/Error" }
+            }
+          }
         }
-      }
-    },
-    "errors": {
-      "type": "object",
-      "additionalProperties": false,
-      "properties": {
-        "picker.unavailable": {
-          "description": "The host environment does not provide a native directory picker (e.g. browser-only build without the build-flag stub enabled)."
-        },
-        "os.command_failed": {
-          "description": "The OS-native dialog returned an unexpected failure (e.g. permission denied by the OS, capability allowlist missing). Cancellation is NOT an error."
-        }
-      }
-    },
-    "notes": {
-      "type": "object",
-      "description": "Implementation notes consumed by the audit and UI layers.",
-      "additionalProperties": false,
-      "properties": {
-        "audit_event_on_failure": {
-          "const": "native.picker.failed"
-        },
-        "audit_on_cancellation": {
-          "const": false
-        }
-      }
+      ]
     }
   },
-  "required": ["operation", "version", "request", "response", "errors"]
+  "required": ["request", "response"],
+  "$defs": {
+    "Error": {
+      "type": "object",
+      "required": ["code", "message"],
+      "additionalProperties": false,
+      "properties": {
+        "code": {
+          "type": "string",
+          "enum": ["picker.unavailable", "os.command_failed"]
+        },
+        "message": { "type": "string" },
+        "details": { "type": "object", "additionalProperties": true }
+      }
+    }
+  }
 }

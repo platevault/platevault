@@ -5,18 +5,13 @@
   "description": "Register a single directory as a RegisteredSource of the given kind. Idempotent failure on duplicate (kind, path). Performs path existence, directory, and readability validation before inserting.",
   "type": "object",
   "properties": {
-    "operation": {
-      "const": "source.register"
-    },
-    "version": {
-      "type": "string",
-      "const": "1"
-    },
     "request": {
       "type": "object",
-      "required": ["kind", "path"],
+      "required": ["contractVersion", "requestId", "kind", "path"],
       "additionalProperties": false,
       "properties": {
+        "contractVersion": { "type": "string" },
+        "requestId": { "type": "string", "format": "uuid" },
         "kind": {
           "description": "Which source category this directory belongs to.",
           "type": "string",
@@ -27,11 +22,11 @@
           "type": "string",
           "minLength": 1
         },
-        "kind_subtype": {
+        "kindSubtype": {
           "description": "Optional category refinement (reserved; unused at first-run).",
           "type": "string"
         },
-        "scan_depth": {
+        "scanDepth": {
           "description": "How deep to scan this source root. Default 'recursive'. Exposed as advanced/collapsed disclosure in the wizard (R-Wiz-1).",
           "type": "string",
           "enum": ["recursive", "single"],
@@ -40,52 +35,71 @@
       }
     },
     "response": {
-      "type": "object",
-      "required": ["source_id", "kind", "path", "created_at"],
-      "additionalProperties": false,
-      "properties": {
-        "source_id": {
-          "type": "string",
-          "format": "uuid"
+      "oneOf": [
+        {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["status", "contractVersion", "requestId", "sourceId", "kind", "path", "createdAt"],
+          "properties": {
+            "status": { "const": "success" },
+            "contractVersion": { "type": "string" },
+            "requestId": { "type": "string", "format": "uuid" },
+            "sourceId": {
+              "type": "string",
+              "format": "uuid"
+            },
+            "kind": {
+              "type": "string",
+              "enum": ["raw", "calibration", "project", "inbox"]
+            },
+            "path": {
+              "type": "string",
+              "description": "Normalized canonical path as persisted."
+            },
+            "createdAt": {
+              "type": "string",
+              "format": "date-time"
+            }
+          }
         },
-        "kind": {
-          "type": "string",
-          "enum": ["raw", "calibration", "project", "inbox"]
-        },
-        "path": {
-          "type": "string",
-          "description": "Normalized canonical path as persisted."
-        },
-        "created_at": {
-          "type": "string",
-          "format": "date-time"
+        {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["status", "contractVersion", "requestId", "errors"],
+          "properties": {
+            "status": { "const": "failure" },
+            "contractVersion": { "type": "string" },
+            "requestId": { "type": "string", "format": "uuid" },
+            "errors": {
+              "type": "array",
+              "items": { "$ref": "#/$defs/Error" }
+            }
+          }
         }
-      }
-    },
-    "errors": {
-      "type": "object",
-      "additionalProperties": false,
-      "properties": {
-        "path.not.exists": {
-          "description": "The provided path does not resolve to any filesystem entry."
-        },
-        "path.not.directory": {
-          "description": "The provided path exists but is not a directory (e.g. it is a file or a special node)."
-        },
-        "path.permission.denied": {
-          "description": "The current process cannot read the directory metadata or list its contents."
-        },
-        "kind.unsupported": {
-          "description": "The provided kind is not one of raw, calibration, project, or inbox. Reserved for forward compatibility."
-        },
-        "path.already.registered": {
-          "description": "A RegisteredSource with the same (kind, path) already exists. Returns the existing source_id in the error payload. Treated as success (idempotent) during batch Finish flush (D1)."
-        },
-        "path.already.registered.different_kind": {
-          "description": "The path is already registered under a different kind. Rejected to prevent scan-routing ambiguity (R-1.4). Error payload includes the conflicting kind."
-        }
-      }
+      ]
     }
   },
-  "required": ["operation", "version", "request", "response", "errors"]
+  "required": ["request", "response"],
+  "$defs": {
+    "Error": {
+      "type": "object",
+      "required": ["code", "message"],
+      "additionalProperties": false,
+      "properties": {
+        "code": {
+          "type": "string",
+          "enum": [
+            "path.not_exists",
+            "path.not_directory",
+            "path.permission_denied",
+            "kind.unsupported",
+            "path.already_registered",
+            "path.already_registered.different_kind"
+          ]
+        },
+        "message": { "type": "string" },
+        "details": { "type": "object", "additionalProperties": true }
+      }
+    }
+  }
 }

@@ -48,6 +48,32 @@ and content reflect the actual implementation.
 The original FRs are not deleted; they are restated below in their
 revised form so future contributors do not re-litigate the choice.
 
+## Foundational Principle: Prefer Standard Libraries
+
+Before writing a custom UI primitive or interaction pattern, search for an
+established, actively-maintained library that solves the problem. The bar is:
+accessibility-aware, widely adopted, license-compatible, narrow scope (does
+one thing well). Custom code carries an accessibility and maintenance tax that
+should not be paid twice. This principle applies to all UI plans in this
+project — per-feature `plan.md` documents MUST either reference the library
+chosen or justify why a custom implementation was necessary.
+
+Reference libraries currently in use (or chosen for a near-term feature):
+
+| Concern | Library | Used by |
+|---|---|---|
+| Headless primitives | Base UI (`@base-ui-components/react`) | this spec |
+| Anchor positioning | Floating UI (transitively via Base UI + Shepherd) | this spec, spec 010 |
+| Command palette | `cmdk` | this spec |
+| Layout / docked drawer | `react-resizable-panels` | this spec |
+| Icons | `lucide-react` | this spec |
+| Table primitive | `@tanstack/react-table` | this spec |
+| Routing + URL state | `@tanstack/react-router` | this spec, spec 020 |
+| Guided product tour | [Shepherd](https://github.com/shipshapecode/shepherd) | spec 010 |
+
+New UI features SHOULD start with a library scan; if a primitive does not
+exist, prefer composing two narrow libraries over building a general one.
+
 ## User Scenarios & Testing *(mandatory)*
 
 ### User Story 1 - Single Design Token Source (Priority: P1)

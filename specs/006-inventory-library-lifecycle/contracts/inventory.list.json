@@ -11,7 +11,7 @@
   "$defs": {
     "ContractVersion": {
       "type": "string",
-      "const": "1.0"
+      "const": "2.0.0"
     },
     "Uuid": {
       "type": "string",
@@ -44,7 +44,7 @@
     },
     "ReviewFilter": {
       "type": "string",
-      "description": "Filter token for the review_filter parameter. 'all' disables state filtering. 'ignored' surfaces ignored sessions that are otherwise excluded from the default ledger.",
+      "description": "Filter token for the reviewFilter parameter. 'all' disables state filtering. 'ignored' surfaces ignored sessions that are otherwise excluded from the default ledger.",
       "enum": [
         "all",
         "discovered",
@@ -91,17 +91,17 @@
       "type": "object",
       "additionalProperties": false,
       "properties": {
-        "source_filter": {
+        "sourceFilter": {
           "$ref": "#/$defs/Uuid",
           "description": "When set, limits the response to a single InventorySource."
         },
-        "frame_filter": {
+        "frameFilter": {
           "$ref": "#/$defs/FrameType",
           "description": "When set, limits sessions to the given frame type. The 'mixed' value matches sessions whose member frames disagree on kind."
         },
-        "review_filter": {
+        "reviewFilter": {
           "$ref": "#/$defs/ReviewFilter",
-          "description": "When set, limits sessions to the given canonical state. 'ignored' sessions are excluded from the default ledger (no filter or filter='all'); use review_filter='ignored' to surface them (FR-010 Cmd+K action navigates to /inventory?reviewFilter=ignored)."
+          "description": "When set, limits sessions to the given canonical state. 'ignored' sessions are excluded from the default ledger (no filter or filter='all'); use reviewFilter='ignored' to surface them (FR-010 Cmd+K action navigates to /inventory?reviewFilter=ignored)."
         }
       }
     },
@@ -113,7 +113,7 @@
         "target": { "type": "string" },
         "filter": { "type": "string" },
         "inferred": { "type": "string" },
-        "confirmed_by": { "type": "string" }
+        "confirmedBy": { "type": "string" }
       }
     },
     "LinkedRefs": {
@@ -141,7 +141,7 @@
       "required": [
         "id",
         "name",
-        "source_id",
+        "sourceId",
         "frames",
         "type",
         "target",
@@ -153,7 +153,7 @@
       "properties": {
         "id": { "$ref": "#/$defs/Uuid" },
         "name": { "type": "string", "minLength": 1 },
-        "source_id": { "$ref": "#/$defs/Uuid" },
+        "sourceId": { "$ref": "#/$defs/Uuid" },
         "frames": { "type": "integer", "minimum": 0 },
         "type": { "$ref": "#/$defs/FrameType" },
         "target": { "type": ["string", "null"] },
@@ -161,15 +161,15 @@
         "exposure": { "type": ["string", "null"] },
         "state": {
           "$ref": "#/$defs/SessionState",
-          "description": "Canonical spec 002 state. UI maps display labels locally: discovered+candidate → 'Needs review'. ignored sessions only appear when review_filter='ignored'."
+          "description": "Canonical spec 002 state. UI maps display labels locally: discovered+candidate → 'Needs review'. ignored sessions only appear when reviewFilter='ignored'."
         },
         "camera": { "type": "string" },
         "gain": { "type": "string" },
         "binning": { "type": "string" },
-        "set_temp": { "type": "string" },
-        "captured_on": {
+        "setTemp": { "type": "string" },
+        "capturedOn": {
           "$ref": "#/$defs/Date",
-          "description": "Earliest frame date among member frames (UX ordering label). Intentionally different from spec 023 TargetSession.captured_on which uses the solar-noon boundary."
+          "description": "Earliest frame date among member frames (UX ordering label). Intentionally different from spec 023 TargetSession.capturedOn which uses the solar-noon boundary."
         },
         "provenance": { "$ref": "#/$defs/ProvenanceSummary" },
         "linked": { "$ref": "#/$defs/LinkedRefs" }
@@ -210,7 +210,7 @@
         "status": { "type": "string", "enum": ["success", "error"] },
         "contractVersion": { "$ref": "#/$defs/ContractVersion" },
         "requestId": { "$ref": "#/$defs/Uuid" },
-        "generated_at": { "$ref": "#/$defs/Timestamp" },
+        "generatedAt": { "$ref": "#/$defs/Timestamp" },
         "sources": {
           "type": "array",
           "items": { "$ref": "#/$defs/InventorySource" }
@@ -221,7 +221,7 @@
         {
           "if": { "properties": { "status": { "const": "success" } } },
           "then": {
-            "required": ["generated_at", "sources"],
+            "required": ["generatedAt", "sources"],
             "not": { "required": ["error"] }
           }
         },

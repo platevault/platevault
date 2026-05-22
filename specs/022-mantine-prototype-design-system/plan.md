@@ -25,6 +25,14 @@ backend contract implementation)
 **Primary Dependencies**: `@base-ui-components/react`, `cmdk`,
 `react-resizable-panels`, `@tanstack/react-table`,
 `@tanstack/react-router`, React 18, Tauri 2.x.
+[Floating UI](https://github.com/floating-ui/floating-ui) is inherited
+transitively through Base UI's Positioner components for all anchor-positioned
+primitives (Popover, Tooltip, Select, Menu, Autocomplete) — collision
+detection, flip/shift middleware, arrow placement, and scroll-aware
+repositioning. We do NOT depend on Floating UI directly. Spec 010's guided-
+tour overlay (built on [Shepherd](https://github.com/shipshapecode/shepherd))
+uses the same positioning engine, so the entire app shares one positioning
+runtime.
 **Storage**: `localStorage` key `alm.theme` for theme persistence in
 the desktop prototype. A future backend may persist theme in the
 settings store; the contracts already model that boundary.

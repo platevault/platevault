@@ -4,14 +4,40 @@
   "title": "artifact.classify",
   "description": "Manually override the classification of a processing artifact. Override is sticky: subsequent automatic re-classifications respect it until cleared.",
   "type": "object",
-  "properties": {
-    "operation": { "const": "artifact.classify" },
-    "request": {
+  "oneOf": [
+    { "$ref": "#/$defs/Request" },
+    { "$ref": "#/$defs/Response" }
+  ],
+  "$defs": {
+    "ContractVersion": { "type": "string", "const": "2.0.0" },
+    "Uuid": { "type": "string", "format": "uuid" },
+    "Timestamp": { "type": "string", "format": "date-time" },
+    "ArtifactKind": {
+      "type": "string",
+      "enum": ["intermediate", "master", "final"]
+    },
+    "ErrorCode": {
+      "type": "string",
+      "enum": ["artifact.not_found", "artifact.kind_invalid", "project.read_only"]
+    },
+    "ErrorEnvelope": {
       "type": "object",
-      "required": ["artifact_id", "kind"],
+      "required": ["code", "message"],
       "additionalProperties": false,
       "properties": {
-        "artifact_id": {
+        "code": { "$ref": "#/$defs/ErrorCode" },
+        "message": { "type": "string" },
+        "details": { "type": "object", "additionalProperties": true }
+      }
+    },
+    "Request": {
+      "type": "object",
+      "required": ["contractVersion", "requestId", "artifactId", "kind"],
+      "additionalProperties": false,
+      "properties": {
+        "contractVersion": { "$ref": "#/$defs/ContractVersion" },
+        "requestId": { "$ref": "#/$defs/Uuid" },
+        "artifactId": {
           "type": "string",
           "description": "Identifier of the artifact to override."
         },
@@ -27,49 +53,44 @@
         }
       }
     },
-    "response": {
+    "Response": {
       "type": "object",
-      "required": ["classified", "artifact_id", "kind", "classification_source", "classification_confidence"],
+      "required": ["status", "contractVersion", "requestId"],
       "additionalProperties": false,
       "properties": {
+        "status": { "type": "string", "enum": ["success", "error"] },
+        "contractVersion": { "$ref": "#/$defs/ContractVersion" },
+        "requestId": { "$ref": "#/$defs/Uuid" },
         "classified": {
           "type": "boolean",
           "description": "True when the override was applied."
         },
-        "artifact_id": { "type": "string" },
-        "kind": {
-          "type": "string",
-          "enum": ["intermediate", "master", "final"]
-        },
-        "classification_source": {
+        "artifactId": { "type": "string" },
+        "kind": { "$ref": "#/$defs/ArtifactKind" },
+        "classificationSource": {
           "type": "string",
           "enum": ["manual_override"]
         },
-        "classification_confidence": {
+        "classificationConfidence": {
           "type": "number",
           "const": 1.0
         },
-        "updated_at": { "type": "string", "format": "date-time" }
-      }
-    },
-    "errors": {
-      "type": "array",
-      "items": {
-        "type": "object",
-        "required": ["code", "message"],
-        "properties": {
-          "code": {
-            "type": "string",
-            "enum": [
-              "artifact.not_found",
-              "artifact.kind_invalid",
-              "project.read_only"
-            ]
-          },
-          "message": { "type": "string" }
+        "updatedAt": { "$ref": "#/$defs/Timestamp" },
+        "error": { "$ref": "#/$defs/ErrorEnvelope" }
+      },
+      "allOf": [
+        {
+          "if": { "properties": { "status": { "const": "success" } } },
+          "then": {
+            "required": ["classified", "artifactId", "kind", "classificationSource", "classificationConfidence"],
+            "not": { "required": ["error"] }
+          }
+        },
+        {
+          "if": { "properties": { "status": { "const": "error" } } },
+          "then": { "required": ["error"] }
         }
-      }
+      ]
     }
-  },
-  "required": ["operation", "request", "response"]
+  }
 }

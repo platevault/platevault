@@ -2,50 +2,71 @@
   "$schema": "https://json-schema.org/draft/2020-12/schema",
   "$id": "https://astro-library-manager.local/contracts/firstrun.complete.json",
   "title": "firstrun.complete",
-  "description": "Mark the first-run wizard as completed. MUST only succeed when the wizard is in_progress, at least one RegisteredSource of kind 'raw' exists, and at least one RegisteredSource of kind 'project' exists (R-Wiz-2). Source registration MUST be performed via source.register.batch before calling this operation (R-Batch, A9). Sets FirstRunState.completed_at and mirrors the completion flag to localStorage. Emits audit event first_run.completed (R-E2). Partial-success from the batch call is handled at the Finish step; this operation is only invoked after all required sources are committed.",
+  "description": "Mark the first-run wizard as completed. MUST only succeed when the wizard is in_progress, at least one RegisteredSource of kind 'raw' exists, and at least one RegisteredSource of kind 'project' exists (R-Wiz-2). Source registration MUST be performed via source.register.batch before calling this operation (R-Batch, A9). Sets FirstRunState.completedAt and mirrors the completion flag to localStorage. Emits audit event first_run.completed (R-E2). Partial-success from the batch call is handled at the Finish step; this operation is only invoked after all required sources are committed.",
   "type": "object",
   "properties": {
-    "operation": {
-      "const": "firstrun.complete"
-    },
-    "version": {
-      "type": "string",
-      "const": "1"
-    },
     "request": {
       "type": "object",
       "additionalProperties": false,
-      "properties": {}
+      "required": ["contractVersion", "requestId"],
+      "properties": {
+        "contractVersion": { "type": "string" },
+        "requestId": { "type": "string", "format": "uuid" }
+      }
     },
     "response": {
-      "type": "object",
-      "required": ["completed_at"],
-      "additionalProperties": false,
-      "properties": {
-        "completed_at": {
-          "type": "string",
-          "format": "date-time",
-          "description": "Server-local time the wizard was marked complete."
+      "oneOf": [
+        {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["status", "contractVersion", "requestId", "completedAt"],
+          "properties": {
+            "status": { "const": "success" },
+            "contractVersion": { "type": "string" },
+            "requestId": { "type": "string", "format": "uuid" },
+            "completedAt": {
+              "type": "string",
+              "format": "date-time",
+              "description": "Server-local time the wizard was marked complete."
+            },
+            "registeredSourceCount": {
+              "type": "integer",
+              "minimum": 0,
+              "description": "Total RegisteredSource rows at completion time, included for caller convenience."
+            }
+          }
         },
-        "registered_source_count": {
-          "type": "integer",
-          "minimum": 0,
-          "description": "Total RegisteredSource rows at completion time, included for caller convenience."
+        {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["status", "contractVersion", "requestId", "errors"],
+          "properties": {
+            "status": { "const": "failure" },
+            "contractVersion": { "type": "string" },
+            "requestId": { "type": "string", "format": "uuid" },
+            "errors": {
+              "type": "array",
+              "items": { "$ref": "#/$defs/Error" }
+            }
+          }
         }
-      }
-    },
-    "errors": {
-      "type": "object",
-      "additionalProperties": false,
-      "properties": {
-        "wizard.not.in.progress": {
-          "description": "FirstRunState is already completed_at != null. The caller should refresh state rather than re-completing."
-        },
-        "required.step.incomplete": {
-          "description": "No RegisteredSource of kind 'raw' exists, or no RegisteredSource of kind 'project' exists. Both are required before completion (R-Wiz-2). The error payload includes which kinds are missing."
-        }
-      }
+      ]
     }
   },
-  "required": ["operation", "version", "request", "response", "errors"]
+  "required": ["request", "response"],
+  "$defs": {
+    "Error": {
+      "type": "object",
+      "required": ["code", "message"],
+      "additionalProperties": false,
+      "properties": {
+        "code": {
+          "type": "string",
+          "enum": ["wizard.not_in_progress", "required_step.incomplete"]
+        },
+        "message": { "type": "string" },
+        "details": { "type": "object", "additionalProperties": true }
+      }
+    }
+  }
 }

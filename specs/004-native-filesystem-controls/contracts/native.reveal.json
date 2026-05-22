@@ -5,24 +5,22 @@
   "description": "Open the OS file browser at the given path with the target selected when the host platform supports per-item selection. Implemented over tauri-plugin-opener revealItemInDir with documented per-platform fallbacks (macOS open -R, Windows explorer.exe /select,, Linux freedesktop ShowItems with xdg-open directory fallback).",
   "type": "object",
   "properties": {
-    "operation": {
-      "const": "native.reveal"
-    },
-    "version": {
-      "type": "string",
-      "const": "1"
-    },
     "request": {
       "type": "object",
-      "required": ["path", "request_id"],
+      "required": ["contractVersion", "requestId", "path"],
       "additionalProperties": false,
       "properties": {
+        "contractVersion": { "type": "string" },
+        "requestId": {
+          "type": "string",
+          "format": "uuid"
+        },
         "path": {
           "description": "Absolute path to reveal. May point to a file or directory. Existence is checked at dispatch time, not at input-validation time.",
           "type": "string",
           "minLength": 1
         },
-        "entity_kind": {
+        "entityKind": {
           "description": "Optional context tag for audit-log correlation.",
           "type": "string",
           "enum": [
@@ -34,58 +32,63 @@
             "other"
           ]
         },
-        "entity_id": {
+        "entityId": {
           "type": "string"
-        },
-        "request_id": {
-          "type": "string",
-          "format": "uuid"
         }
       }
     },
     "response": {
-      "type": "object",
-      "required": ["revealed", "selection"],
-      "additionalProperties": false,
-      "properties": {
-        "revealed": {
-          "description": "True when the OS file browser launched successfully.",
-          "type": "boolean"
+      "oneOf": [
+        {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["status", "contractVersion", "requestId", "revealed", "selection"],
+          "properties": {
+            "status": { "const": "success" },
+            "contractVersion": { "type": "string" },
+            "requestId": { "type": "string", "format": "uuid" },
+            "revealed": {
+              "description": "True when the OS file browser launched successfully.",
+              "type": "boolean"
+            },
+            "selection": {
+              "description": "How the target was highlighted. `target` means the item was selected (macOS, Windows, Linux with freedesktop ShowItems). `directory_only` means only the parent directory opened (Linux fallback). `none` means no UI hint was applied.",
+              "type": "string",
+              "enum": ["target", "directory_only", "none"]
+            }
+          }
         },
-        "selection": {
-          "description": "How the target was highlighted. `target` means the item was selected (macOS, Windows, Linux with freedesktop ShowItems). `directory_only` means only the parent directory opened (Linux fallback). `none` means no UI hint was applied.",
-          "type": "string",
-          "enum": ["target", "directory_only", "none"]
+        {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["status", "contractVersion", "requestId", "errors"],
+          "properties": {
+            "status": { "const": "failure" },
+            "contractVersion": { "type": "string" },
+            "requestId": { "type": "string", "format": "uuid" },
+            "errors": {
+              "type": "array",
+              "items": { "$ref": "#/$defs/Error" }
+            }
+          }
         }
-      }
-    },
-    "errors": {
-      "type": "object",
-      "additionalProperties": false,
-      "properties": {
-        "path.not_exists": {
-          "description": "The provided path does not resolve to any filesystem entry at dispatch time. User is shown a non-destructive toast and the failure is audit-logged."
-        },
-        "os.command_failed": {
-          "description": "The underlying OS reveal command (open -R, explorer.exe /select,, or freedesktop ShowItems) returned a non-zero exit or D-Bus error. Audit-logged."
-        }
-      }
-    },
-    "notes": {
-      "type": "object",
-      "additionalProperties": false,
-      "properties": {
-        "audit_event_on_failure": {
-          "const": "native.reveal.failed"
-        },
-        "audit_on_cancellation": {
-          "const": false
-        },
-        "symlink_policy": {
-          "const": "preserve-user-visible-path"
-        }
-      }
+      ]
     }
   },
-  "required": ["operation", "version", "request", "response", "errors"]
+  "required": ["request", "response"],
+  "$defs": {
+    "Error": {
+      "type": "object",
+      "required": ["code", "message"],
+      "additionalProperties": false,
+      "properties": {
+        "code": {
+          "type": "string",
+          "enum": ["path.not_exists", "os.command_failed"]
+        },
+        "message": { "type": "string" },
+        "details": { "type": "object", "additionalProperties": true }
+      }
+    }
+  }
 }

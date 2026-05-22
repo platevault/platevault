@@ -1,84 +1,113 @@
 {
   "$schema": "https://json-schema.org/draft/2020-12/schema",
-  "$id": "plan.protection.check",
-  "title": "Check plan protection",
+  "$id": "https://astro-plan.local/contracts/plan.protection.check.json",
+  "title": "plan.protection.check",
   "description": "Returns protection-affected items for a plan so the review UI can gate execution.",
   "type": "object",
-  "properties": {
-    "request": {
-      "type": "object",
-      "required": ["plan_id"],
-      "properties": {
-        "plan_id": { "type": "string", "format": "uuid" }
-      },
-      "additionalProperties": false
+  "oneOf": [
+    { "$ref": "#/$defs/Request" },
+    { "$ref": "#/$defs/Response" }
+  ],
+  "$defs": {
+    "ContractVersion": { "type": "string", "const": "2.0.0" },
+    "Uuid": { "type": "string", "format": "uuid" },
+    "ProtectionLevel": {
+      "type": "string",
+      "enum": ["protected", "normal", "unprotected"]
     },
-    "response": {
+    "ProtectedItem": {
       "type": "object",
-      "required": ["has_protected_items", "protected_items", "non_blocking_summary"],
-      "description": "Response includes ONLY items requiring user acknowledgement (level = protected or items rewritten by block_permanent_delete). Normal and unprotected items are summarised in non_blocking_summary (R-CheckScope).",
+      "required": ["itemId", "level", "reason", "requiresAcknowledgement"],
+      "additionalProperties": false,
       "properties": {
-        "has_protected_items": { "type": "boolean" },
-        "protected_items": {
+        "itemId": { "$ref": "#/$defs/Uuid" },
+        "sourceId": { "$ref": "#/$defs/Uuid" },
+        "level": { "$ref": "#/$defs/ProtectionLevel" },
+        "matchedCategories": {
           "type": "array",
-          "description": "Items that require explicit user acknowledgement before the plan may execute. Excludes normal and unprotected items.",
-          "items": {
-            "type": "object",
-            "required": ["item_id", "level", "reason", "requires_acknowledgement"],
-            "properties": {
-              "item_id": { "type": "string", "format": "uuid" },
-              "source_id": { "type": "string", "format": "uuid" },
-              "level": {
-                "type": "string",
-                "enum": ["protected", "normal", "unprotected"]
-              },
-              "matched_categories": {
-                "type": "array",
-                "items": { "type": "string" }
-              },
-              "original_action": { "type": "string" },
-              "rewritten_action": {
-                "type": ["string", "null"],
-                "description": "Set when block_permanent_delete rewrote the action (e.g., delete -> archive)."
-              },
-              "requires_acknowledgement": { "type": "boolean" },
-              "reason": { "type": "string" }
-            },
-            "additionalProperties": false
-          }
+          "items": { "type": "string" }
         },
-        "non_blocking_summary": {
-          "type": "object",
-          "description": "Counts of items that do NOT require acknowledgement (R-CheckScope).",
-          "required": ["normal_count", "unprotected_count"],
-          "properties": {
-            "normal_count": {
-              "type": "integer",
-              "minimum": 0,
-              "description": "Number of plan items whose resolved level is 'normal'."
-            },
-            "unprotected_count": {
-              "type": "integer",
-              "minimum": 0,
-              "description": "Number of plan items whose resolved level is 'unprotected'."
-            }
-          },
-          "additionalProperties": false
-        }
-      },
-      "additionalProperties": false
+        "originalAction": { "type": "string" },
+        "rewrittenAction": {
+          "type": ["string", "null"],
+          "description": "Set when block_permanent_delete rewrote the action (e.g., delete -> archive)."
+        },
+        "requiresAcknowledgement": { "type": "boolean" },
+        "reason": { "type": "string" }
+      }
     },
-    "errors": {
-      "type": "array",
-      "items": {
-        "type": "object",
-        "required": ["code", "message"],
-        "properties": {
-          "code": { "type": "string", "enum": ["plan.not_found"] },
-          "message": { "type": "string" }
+    "NonBlockingSummary": {
+      "type": "object",
+      "description": "Counts of items that do NOT require acknowledgement (R-CheckScope).",
+      "required": ["normalCount", "unprotectedCount"],
+      "additionalProperties": false,
+      "properties": {
+        "normalCount": {
+          "type": "integer",
+          "minimum": 0,
+          "description": "Number of plan items whose resolved level is 'normal'."
+        },
+        "unprotectedCount": {
+          "type": "integer",
+          "minimum": 0,
+          "description": "Number of plan items whose resolved level is 'unprotected'."
         }
       }
+    },
+    "ErrorCode": {
+      "type": "string",
+      "enum": ["plan.not_found"]
+    },
+    "ErrorEnvelope": {
+      "type": "object",
+      "required": ["code", "message"],
+      "additionalProperties": false,
+      "properties": {
+        "code": { "$ref": "#/$defs/ErrorCode" },
+        "message": { "type": "string" },
+        "details": { "type": "object", "additionalProperties": true }
+      }
+    },
+    "Request": {
+      "type": "object",
+      "required": ["contractVersion", "requestId", "planId"],
+      "additionalProperties": false,
+      "properties": {
+        "contractVersion": { "$ref": "#/$defs/ContractVersion" },
+        "requestId": { "$ref": "#/$defs/Uuid" },
+        "planId": { "$ref": "#/$defs/Uuid" }
+      }
+    },
+    "Response": {
+      "type": "object",
+      "required": ["status", "contractVersion", "requestId"],
+      "additionalProperties": false,
+      "properties": {
+        "status": { "type": "string", "enum": ["success", "error"] },
+        "contractVersion": { "$ref": "#/$defs/ContractVersion" },
+        "requestId": { "$ref": "#/$defs/Uuid" },
+        "hasProtectedItems": { "type": "boolean" },
+        "protectedItems": {
+          "type": "array",
+          "description": "Items that require explicit user acknowledgement before the plan may execute. Excludes normal and unprotected items.",
+          "items": { "$ref": "#/$defs/ProtectedItem" }
+        },
+        "nonBlockingSummary": { "$ref": "#/$defs/NonBlockingSummary" },
+        "error": { "$ref": "#/$defs/ErrorEnvelope" }
+      },
+      "allOf": [
+        {
+          "if": { "properties": { "status": { "const": "success" } } },
+          "then": {
+            "required": ["hasProtectedItems", "protectedItems", "nonBlockingSummary"],
+            "not": { "required": ["error"] }
+          }
+        },
+        {
+          "if": { "properties": { "status": { "const": "error" } } },
+          "then": { "required": ["error"] }
+        }
+      ]
     }
-  },
-  "required": ["request", "response"]
+  }
 }

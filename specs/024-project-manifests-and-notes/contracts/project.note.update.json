@@ -4,14 +4,36 @@
   "title": "project.note.update",
   "description": "Replace the project's notes body with the provided content.",
   "type": "object",
-  "properties": {
-    "operation": { "const": "project.note.update" },
-    "request": {
+  "oneOf": [
+    { "$ref": "#/$defs/Request" },
+    { "$ref": "#/$defs/Response" }
+  ],
+  "$defs": {
+    "ContractVersion": { "type": "string", "const": "2.0.0" },
+    "Uuid": { "type": "string", "format": "uuid" },
+    "Timestamp": { "type": "string", "format": "date-time" },
+    "ErrorCode": {
+      "type": "string",
+      "enum": ["project.not_found", "project.read_only", "note.content_too_large"]
+    },
+    "ErrorEnvelope": {
       "type": "object",
-      "required": ["project_id", "content"],
+      "required": ["code", "message"],
       "additionalProperties": false,
       "properties": {
-        "project_id": { "type": "string" },
+        "code": { "$ref": "#/$defs/ErrorCode" },
+        "message": { "type": "string" },
+        "details": { "type": "object", "additionalProperties": true }
+      }
+    },
+    "Request": {
+      "type": "object",
+      "required": ["contractVersion", "requestId", "projectId", "content"],
+      "additionalProperties": false,
+      "properties": {
+        "contractVersion": { "$ref": "#/$defs/ContractVersion" },
+        "requestId": { "$ref": "#/$defs/Uuid" },
+        "projectId": { "type": "string" },
         "content": {
           "type": "string",
           "maxLength": 16384,
@@ -19,33 +41,33 @@
         }
       }
     },
-    "response": {
+    "Response": {
       "type": "object",
-      "required": ["updated_at"],
+      "required": ["status", "contractVersion", "requestId"],
       "additionalProperties": false,
       "properties": {
-        "updated_at": {
-          "type": "string",
-          "format": "date-time",
+        "status": { "type": "string", "enum": ["success", "error"] },
+        "contractVersion": { "$ref": "#/$defs/ContractVersion" },
+        "requestId": { "$ref": "#/$defs/Uuid" },
+        "updatedAt": {
+          "$ref": "#/$defs/Timestamp",
           "description": "Server-recorded save timestamp."
+        },
+        "error": { "$ref": "#/$defs/ErrorEnvelope" }
+      },
+      "allOf": [
+        {
+          "if": { "properties": { "status": { "const": "success" } } },
+          "then": {
+            "required": ["updatedAt"],
+            "not": { "required": ["error"] }
+          }
+        },
+        {
+          "if": { "properties": { "status": { "const": "error" } } },
+          "then": { "required": ["error"] }
         }
-      }
-    },
-    "errors": {
-      "type": "array",
-      "items": {
-        "type": "object",
-        "required": ["code", "message"],
-        "properties": {
-          "code": {
-            "type": "string",
-            "enum": ["project.not_found", "project.read_only", "note.content_too_large"]
-          },
-          "description_note": "project.read_only fires only when lifecycle == 'archived' (R-NotesEdit). note.content_too_large fires when content exceeds 16 384 bytes UTF-8 (A5).",
-          "message": { "type": "string" }
-        }
-      }
+      ]
     }
-  },
-  "required": ["operation", "request", "response"]
+  }
 }

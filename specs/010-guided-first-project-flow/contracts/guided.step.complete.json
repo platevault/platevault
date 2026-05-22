@@ -8,40 +8,67 @@
     "request": {
       "type": "object",
       "additionalProperties": false,
-      "required": ["step_id"],
+      "required": ["contractVersion", "requestId", "stepId"],
       "properties": {
-        "step_id": {
+        "contractVersion": { "type": "string" },
+        "requestId": { "type": "string", "format": "uuid" },
+        "stepId": {
           "type": "string",
           "description": "Stable id of the step to mark complete (e.g. `inbox.confirm_first`)."
         }
       }
     },
     "response": {
-      "type": "object",
-      "additionalProperties": false,
-      "required": ["completed"],
-      "properties": {
-        "completed": {
-          "type": "boolean",
-          "description": "True when this call transitioned the step into completed_steps."
+      "oneOf": [
+        {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["status", "contractVersion", "requestId", "completed"],
+          "properties": {
+            "status": { "const": "success" },
+            "contractVersion": { "type": "string" },
+            "requestId": { "type": "string", "format": "uuid" },
+            "completed": {
+              "type": "boolean",
+              "description": "True when this call transitioned the step into completedSteps."
+            },
+            "nextStep": {
+              "type": ["string", "null"],
+              "description": "Id of the next uncompleted step, or null when the flow is complete."
+            }
+          }
         },
-        "next_step": {
-          "type": ["string", "null"],
-          "description": "Id of the next uncompleted step, or null when the flow is complete."
+        {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["status", "contractVersion", "requestId", "errors"],
+          "properties": {
+            "status": { "const": "failure" },
+            "contractVersion": { "type": "string" },
+            "requestId": { "type": "string", "format": "uuid" },
+            "errors": {
+              "type": "array",
+              "items": { "$ref": "#/$defs/Error" }
+            }
+          }
         }
-      }
-    },
-    "errors": {
-      "type": "array",
-      "items": {
-        "type": "string",
-        "enum": [
-          "UNKNOWN_STEP_ID",
-          "FLOW_DISMISSED",
-          "PERSISTENCE_UNAVAILABLE"
-        ]
-      }
+      ]
     }
   },
-  "required": ["request", "response"]
+  "required": ["request", "response"],
+  "$defs": {
+    "Error": {
+      "type": "object",
+      "required": ["code", "message"],
+      "additionalProperties": false,
+      "properties": {
+        "code": {
+          "type": "string",
+          "enum": ["unknown_step_id", "flow_dismissed", "persistence_unavailable"]
+        },
+        "message": { "type": "string" },
+        "details": { "type": "object", "additionalProperties": true }
+      }
+    }
+  }
 }

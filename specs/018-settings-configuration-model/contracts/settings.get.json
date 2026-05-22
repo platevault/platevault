@@ -3,30 +3,60 @@
   "$id": "https://astro-plan/contracts/settings.get.json",
   "title": "settings.get",
   "description": "Read the full settings snapshot for the open library.",
-  "operation": {
-    "name": "settings.get",
-    "direction": "ui-to-core",
-    "version": "1"
-  },
-  "request": {
-    "type": "object",
-    "additionalProperties": false,
-    "properties": {}
-  },
-  "response": {
-    "type": "object",
-    "required": ["version", "settings"],
-    "additionalProperties": false,
-    "properties": {
-      "version": {
-        "type": "string",
-        "description": "Schema version of the returned payload, e.g. 'v1'.",
-        "const": "v1"
-      },
-      "settings": {
-        "$ref": "https://astro-plan/contracts/settings.state.v1.json"
+  "type": "object",
+  "properties": {
+    "request": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["contractVersion", "requestId"],
+      "properties": {
+        "contractVersion": { "type": "string" },
+        "requestId": { "type": "string", "format": "uuid" }
       }
+    },
+    "response": {
+      "oneOf": [
+        {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["status", "contractVersion", "requestId", "settings"],
+          "properties": {
+            "status": { "const": "success" },
+            "contractVersion": { "type": "string" },
+            "requestId": { "type": "string", "format": "uuid" },
+            "settings": {
+              "$ref": "https://astro-plan/contracts/settings.state.v1.json"
+            }
+          }
+        },
+        {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["status", "contractVersion", "requestId", "errors"],
+          "properties": {
+            "status": { "const": "failure" },
+            "contractVersion": { "type": "string" },
+            "requestId": { "type": "string", "format": "uuid" },
+            "errors": {
+              "type": "array",
+              "items": { "$ref": "#/$defs/Error" }
+            }
+          }
+        }
+      ]
     }
   },
-  "errors": []
+  "required": ["request", "response"],
+  "$defs": {
+    "Error": {
+      "type": "object",
+      "required": ["code", "message"],
+      "additionalProperties": false,
+      "properties": {
+        "code": { "type": "string" },
+        "message": { "type": "string" },
+        "details": { "type": "object", "additionalProperties": true }
+      }
+    }
+  }
 }

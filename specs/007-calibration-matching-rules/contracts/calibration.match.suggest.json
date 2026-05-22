@@ -3,79 +3,46 @@
   "$id": "https://astro-plan.local/contracts/calibration.match.suggest.json",
   "title": "calibration.match.suggest",
   "description": "Request ranked calibration master suggestions for a light session. Read-only; never persists state.",
-  "version": "1.0.0",
   "type": "object",
-  "properties": {
-    "operation": { "const": "calibration.match.suggest" },
-    "request": {
-      "type": "object",
-      "required": ["session_id"],
-      "properties": {
-        "session_id": {
-          "type": "string",
-          "format": "uuid",
-          "description": "Light session whose calibration recommendations are being requested."
-        },
-        "calibration_types": {
-          "type": "array",
-          "description": "Subset of calibration types to suggest. When omitted, all configured types (dark, flat, bias) are returned. dark_flat is not a valid value in v1.",
-          "items": { "enum": ["dark", "flat", "bias"] },
-          "uniqueItems": true
-        }
-      },
-      "additionalProperties": false
-    },
-    "response": {
-      "type": "object",
-      "required": ["status"],
-      "properties": {
-        "status": {
-          "description": "Result kind for this session. 'observer_location_missing' means the session lacks observer_location or exposure_start_utc; no matches are returned and the session must be reviewed before matching can proceed (A6).",
-          "enum": ["match", "ambiguous", "no_match", "observer_location_missing"]
-        },
-        "matches": {
-          "type": "array",
-          "description": "Ranked candidate list. Ordering is descending by confidence; ties broken by selection_reason precedence (same_session > same_night > compatible_fallback). Present only when status is 'match' or 'ambiguous'.",
-          "items": { "$ref": "#/$defs/CalibrationMatch" }
-        }
-      },
-      "additionalProperties": false
-    },
-    "errors": {
-      "type": "array",
-      "items": {
-        "type": "object",
-        "required": ["code", "message"],
-        "properties": {
-          "code": { "enum": ["session.not_found", "session.mixed_state", "match.observer_location_missing", "no.masters.available"] },
-          "message": { "type": "string" }
-        }
-      }
-    }
-  },
-  "required": ["operation", "request", "response"],
+  "oneOf": [
+    { "$ref": "#/$defs/Request" },
+    { "$ref": "#/$defs/Response" }
+  ],
   "$defs": {
+    "ContractVersion": { "type": "string", "const": "2.0.0" },
+    "Uuid": { "type": "string", "format": "uuid" },
+    "CalibrationType": {
+      "type": "string",
+      "enum": ["dark", "flat", "bias"]
+    },
+    "SuggestStatus": {
+      "type": "string",
+      "description": "Result kind for this session. 'observer_location_missing' means the session lacks observerLocation or exposureStartUtc; no matches are returned and the session must be reviewed before matching can proceed (A6).",
+      "enum": ["match", "ambiguous", "no_match", "observer_location_missing"]
+    },
     "CalibrationMatch": {
       "type": "object",
       "required": [
-        "session_id",
-        "master_id",
-        "calibration_type",
+        "sessionId",
+        "masterId",
+        "calibrationType",
         "confidence",
-        "dimensions_matched",
-        "dimensions_mismatched",
-        "selection_reason"
+        "dimensionsMatched",
+        "dimensionsMismatched",
+        "selectionReason"
       ],
+      "additionalProperties": false,
       "properties": {
-        "session_id": { "type": "string", "format": "uuid" },
-        "master_id": { "type": "string", "format": "uuid" },
-        "calibration_type": { "enum": ["dark", "flat", "bias"] },
+        "sessionId": { "$ref": "#/$defs/Uuid" },
+        "masterId": { "$ref": "#/$defs/Uuid" },
+        "calibrationType": { "$ref": "#/$defs/CalibrationType" },
         "confidence": { "type": "number", "minimum": 0, "maximum": 1 },
-        "dimensions_matched": {
+        "dimensionsMatched": {
           "type": "array",
           "items": {
             "type": "object",
             "required": ["dimension"],
+            "additionalProperties": false,
             "properties": {
               "dimension": { "type": "string" },
               "observed": {},
@@ -84,23 +51,92 @@
             }
           }
         },
-        "dimensions_mismatched": {
+        "dimensionsMismatched": {
           "type": "array",
           "items": {
             "type": "object",
             "required": ["dimension", "reason"],
+            "additionalProperties": false,
             "properties": {
               "dimension": { "type": "string" },
-              "reason": { "enum": ["out_of_tolerance", "metadata_missing", "hard_rule_violation"] },
+              "reason": { "type": "string", "enum": ["out_of_tolerance", "metadata_missing", "hard_rule_violation"] },
               "delta": { "type": "number" }
             }
           }
         },
-        "selection_reason": {
+        "selectionReason": {
+          "type": "string",
           "enum": ["same_session", "same_night", "compatible_fallback"]
         }
+      }
+    },
+    "ErrorCode": {
+      "type": "string",
+      "enum": [
+        "session.not_found",
+        "session.mixed_state",
+        "match.observer_location_missing",
+        "no.masters.available"
+      ]
+    },
+    "ErrorEnvelope": {
+      "type": "object",
+      "required": ["code", "message"],
+      "additionalProperties": false,
+      "properties": {
+        "code": { "$ref": "#/$defs/ErrorCode" },
+        "message": { "type": "string" },
+        "details": { "type": "object", "additionalProperties": true }
+      }
+    },
+    "Request": {
+      "type": "object",
+      "required": ["contractVersion", "requestId", "sessionId"],
+      "additionalProperties": false,
+      "properties": {
+        "contractVersion": { "$ref": "#/$defs/ContractVersion" },
+        "requestId": { "$ref": "#/$defs/Uuid" },
+        "sessionId": {
+          "$ref": "#/$defs/Uuid",
+          "description": "Light session whose calibration recommendations are being requested."
+        },
+        "calibrationTypes": {
+          "type": "array",
+          "description": "Subset of calibration types to suggest. When omitted, all configured types (dark, flat, bias) are returned. dark_flat is not a valid value in v1.",
+          "items": { "$ref": "#/$defs/CalibrationType" },
+          "uniqueItems": true
+        }
+      }
+    },
+    "Response": {
+      "type": "object",
+      "required": ["status", "contractVersion", "requestId"],
+      "additionalProperties": false,
+      "properties": {
+        "status": { "type": "string", "enum": ["success", "error"] },
+        "contractVersion": { "$ref": "#/$defs/ContractVersion" },
+        "requestId": { "$ref": "#/$defs/Uuid" },
+        "suggestStatus": { "$ref": "#/$defs/SuggestStatus" },
+        "matches": {
+          "type": "array",
+          "description": "Ranked candidate list. Ordering is descending by confidence; ties broken by selectionReason precedence (same_session > same_night > compatible_fallback). Present only when suggestStatus is 'match' or 'ambiguous'.",
+          "items": { "$ref": "#/$defs/CalibrationMatch" }
+        },
+        "error": { "$ref": "#/$defs/ErrorEnvelope" }
       },
-      "additionalProperties": false
+      "allOf": [
+        {
+          "if": { "properties": { "status": { "const": "success" } } },
+          "then": {
+            "required": ["suggestStatus"],
+            "not": { "required": ["error"] }
+          }
+        },
+        {
+          "if": { "properties": { "status": { "const": "error" } } },
+          "then": { "required": ["error"] }
+        }
+      ]
     }
   }
 }

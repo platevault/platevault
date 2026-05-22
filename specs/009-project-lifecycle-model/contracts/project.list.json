@@ -9,7 +9,7 @@
     { "$ref": "#/$defs/Response" }
   ],
   "$defs": {
-    "ContractVersion": { "type": "string", "const": "1.0" },
+    "ContractVersion": { "type": "string", "const": "2.0.0" },
     "Uuid": { "type": "string", "format": "uuid" },
     "Timestamp": { "type": "string", "format": "date-time" },
     "ProjectLifecycle": {
@@ -97,13 +97,13 @@
       "properties": {
         "contractVersion": { "$ref": "#/$defs/ContractVersion" },
         "requestId": { "$ref": "#/$defs/Uuid" },
-        "lifecycle_filter": {
+        "lifecycleFilter": {
           "type": "array",
           "description": "Multiselect lifecycle filter. Empty array or omitted means 'all'.",
           "items": { "$ref": "#/$defs/ProjectLifecycle" },
           "uniqueItems": true
         },
-        "tool_filter": {
+        "toolFilter": {
           "type": "array",
           "description": "Multiselect tool filter. Empty array or omitted means 'all'.",
           "items": { "$ref": "#/$defs/ProcessingTool" },

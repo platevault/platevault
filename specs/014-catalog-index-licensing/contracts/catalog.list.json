@@ -9,7 +9,7 @@
     { "$ref": "#/$defs/Response" }
   ],
   "$defs": {
-    "ContractVersion": { "type": "string", "const": "1.0" },
+    "ContractVersion": { "type": "string", "const": "2.0.0" },
     "Uuid": { "type": "string", "format": "uuid" },
     "Timestamp": { "type": "string", "format": "date-time" },
     "CatalogId": {
@@ -37,8 +37,8 @@
         "version",
         "license",
         "origin",
-        "source_url",
-        "last_updated"
+        "sourceUrl",
+        "lastUpdated"
       ],
       "additionalProperties": false,
       "properties": {
@@ -47,9 +47,9 @@
         "version": { "type": "string", "minLength": 1 },
         "license": { "$ref": "#/$defs/LicenseShortCode" },
         "origin": { "$ref": "#/$defs/CatalogOrigin" },
-        "source_url": { "type": "string", "format": "uri" },
-        "last_updated": { "$ref": "#/$defs/Timestamp" },
-        "entry_count": { "type": "integer", "minimum": 0 }
+        "sourceUrl": { "type": "string", "format": "uri" },
+        "lastUpdated": { "$ref": "#/$defs/Timestamp" },
+        "entryCount": { "type": "integer", "minimum": 0 }
       }
     },
     "ErrorCode": {

@@ -16,7 +16,9 @@ default, and the open variables for project-level configuration.
 - **Persistent sidebar** that lists all steps and current focus.
 - **Native tooltip** attached to the target element.
 
-**Decision**: Overlay popover.
+**Decision**: Overlay popover, implemented with [Shepherd](https://github.com/shipshapecode/shepherd)
+backed by [Floating UI](https://github.com/floating-ui/floating-ui) for anchor
+positioning.
 
 **Why**: The overlay can be repositioned per route, does not consume layout
 real estate, and can defer gracefully when the anchor is absent. A sidebar
@@ -24,8 +26,28 @@ duplicates information visible in Settings and breaks responsive layout for
 narrow desktop windows. Tooltips depend on hover and are not discoverable from
 keyboard for accessibility.
 
-**Open variables**: Visual treatment (callout vs. spotlight), keyboard focus
-behavior on appearance, and whether to dim non-anchor regions.
+**Library choice rationale**: Shepherd is the canonical product-tour library
+for web apps — it provides step navigation, focus management, scroll-into-view,
+spotlight cutouts, and dismissal hooks out of the box. Building these from
+scratch would duplicate well-understood UX primitives. Shepherd v12+ uses
+Floating UI internally for anchor positioning, which is the same engine Base
+UI (spec 022) uses for popover/tooltip positioning — so the entire app shares
+one positioning runtime. This avoids two competing implementations of collision
+detection, flip behavior, and arrow placement.
+
+**Integration boundary**: `crates/app/core/guided_flow/` emits step transitions;
+the React layer (`apps/desktop/src/features/guided/`) wires those transitions
+to a `Shepherd.Tour` instance. Step content (text, anchor selector, primary
+action) is rendered via Shepherd's step API. Anchor selectors come from a stable
+`data-guided-anchor` attribute convention on the underlying UI elements
+(documented at the touch points in `apps/desktop/`; see R6 for missing-anchor
+behavior).
+Dismissal and step completion are reported back through the guided state
+contracts.
+
+**Open variables**: Visual treatment (callout vs. spotlight — Shepherd
+supports both via its `modalOverlay` option), keyboard focus behavior on
+appearance, and whether to dim non-anchor regions.
 
 ## R2. Trigger Taxonomy
 
