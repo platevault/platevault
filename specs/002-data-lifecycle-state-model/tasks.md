@@ -32,13 +32,13 @@ description: "Task list for Data Lifecycle State Model (Spec 002)"
 
 **Purpose**: Wire the workspace skeleton for the lifecycle domain.
 
-- [ ] T001 Confirm workspace members for `crates/domain/core`, `crates/audit`, `crates/persistence/db`, `crates/contracts/core`, `crates/app/core` exist in `Cargo.toml`; add empty crates where missing.
-- [ ] T002 [P] Add `serde`, `thiserror`, `uuid`, `time` to `crates/domain/core/Cargo.toml` per plan.md Technical Context.
-- [ ] T003 [P] Add `sqlx` (sqlite, runtime-tokio-rustls, macros) to `crates/persistence/db/Cargo.toml`.
-- [ ] T004 [P] Add `schemars` to `crates/contracts/core/Cargo.toml` for JSON Schema GENERATION from Rust DTOs (Rust is canonical source of truth; JSON files are reproducible projections per research.md §9).
-- [ ] T005 [P] Wire `packages/contracts/` build script to copy `specs/002-data-lifecycle-state-model/contracts/lifecycle.transition.json` and `specs/002-data-lifecycle-state-model/contracts/provenance.read.json` into `packages/contracts/` at build time (plan.md §Project Structure).
-- [ ] T005b [P] Create `crates/contracts/core/src/bin/generate-contracts.rs` binary that walks all Rust DTOs in `crates/contracts/core/src/` and emits JSON Schemas to `specs/<NNN>/contracts/*.json` via `schemars::schema_for!()`. Output uses stable serialization (sorted keys). The binary reads existing contract files to copy the `$id` field. CI runs this + `git diff --exit-code specs/*/contracts/*.json` to gate Rust DTO changes (research.md §9.2–9.3).
-- [ ] T005c [P] Wire `specta` + `tauri-specta` Rust→TypeScript codegen: add `specta` and `tauri-specta` to workspace deps; create `cargo run --bin generate-bindings` (or equivalent `tauri-specta` hook) that regenerates `apps/desktop/src/bindings/*.ts` from Rust Tauri command signatures. CI asserts `git diff --exit-code apps/desktop/src/bindings/` after regeneration (research.md §9.5).
+- [x] T001 Confirm workspace members for `crates/domain/core`, `crates/audit`, `crates/persistence/db`, `crates/contracts/core`, `crates/app/core` exist in `Cargo.toml`; add empty crates where missing.
+- [x] T002 [P] Add `serde`, `thiserror`, `uuid`, `time` to `crates/domain/core/Cargo.toml` per plan.md Technical Context.
+- [x] T003 [P] Add `sqlx` (sqlite, runtime-tokio-rustls, macros) to `crates/persistence/db/Cargo.toml`.
+- [x] T004 [P] Add `schemars` to `crates/contracts/core/Cargo.toml` for JSON Schema GENERATION from Rust DTOs (Rust is canonical source of truth; JSON files are reproducible projections per research.md §9).
+- [x] T005 [P] Wire `packages/contracts/` build script to copy `specs/002-data-lifecycle-state-model/contracts/lifecycle.transition.json` and `specs/002-data-lifecycle-state-model/contracts/provenance.read.json` into `packages/contracts/` at build time (plan.md §Project Structure).
+- [x] T005b [P] Create `crates/contracts/core/src/bin/generate-contracts.rs` binary that walks all Rust DTOs in `crates/contracts/core/src/` and emits JSON Schemas to `specs/<NNN>/contracts/*.json` via `schemars::schema_for!()`. Output uses stable serialization (sorted keys). The binary reads existing contract files to copy the `$id` field. CI runs this + `git diff --exit-code specs/*/contracts/*.json` to gate Rust DTO changes (research.md §9.2–9.3).
+- [x] T005c [P] Wire `specta` + `tauri-specta` Rust→TypeScript codegen: add `specta` and `tauri-specta` to workspace deps; create `cargo run --bin generate-bindings` (or equivalent `tauri-specta` hook) that regenerates `apps/desktop/src/bindings/*.ts` from Rust Tauri command signatures. CI asserts `git diff --exit-code apps/desktop/src/bindings/` after regeneration (research.md §9.5).
 
 ---
 
@@ -48,14 +48,14 @@ description: "Task list for Data Lifecycle State Model (Spec 002)"
 
 **⚠️ CRITICAL**: No US work begins until this phase is complete.
 
-- [ ] T006 [P] Define `LifecycleState` family enums in `crates/domain/core/src/lifecycle/{project,plan,session,inventory,data_source,prepared_source,projection}.rs` matching data-model.md state families.
-- [ ] T007 [P] Define `ProvenanceTag` enum and `ProvenancedValue<T>` in `crates/domain/core/src/lifecycle/provenance.rs` per research.md §4 and data-model.md §ProvenancedValue.
-- [ ] T008 Define the canonical `DataAsset` trait + lifecycle-bearing entity structs in `crates/domain/core/src/lifecycle/mod.rs` (depends on T006, T007). Anchors FR-007.
-- [ ] T009 [P] Define `AuditLogEntry`, `Outcome`, `Severity` in `crates/audit/src/event.rs` per data-model.md §AuditLogEntry.
-- [ ] T010 SQLite schema migration `crates/persistence/db/migrations/0002_lifecycle.sql` covering `library_root`, `file_record`, `acquisition_session`, `calibration_session`, `calibration_master`, `target`, `project`, `processing_artifact`, `filesystem_plan`, `audit_log_entry`, and `provenance_history_archive` (depends on T008, T009). Ledger columns MUST omit `confidence/evidence/provenance` (FR-006). `provenance_history_archive` schema per data-model.md §ProvenanceHistoryArchive.
-- [ ] T010b [P] Add durable event-bus SQLite `events` table to the migration in T010 (or a separate `0002_events.sql`). Schema: `(event_id INTEGER PRIMARY KEY AUTOINCREMENT, topic TEXT NOT NULL, source TEXT NOT NULL CHECK(source IN ('user','restore','system')), emitted_at TEXT NOT NULL, payload JSON NOT NULL)`. Subscribers read with a `since: event_id` cursor for replay. Part of the hybrid event-bus design (research.md §6.1, plan.md Technical Context). Depends on T003.
-- [ ] T011 [P] Repository trait `LifecycleRepository` in `crates/persistence/db/src/repositories/lifecycle.rs` with read + transactional-mutate signatures (depends on T010).
-- [ ] T012 Rust DTO mirror of `lifecycle.transition.json` in `crates/contracts/core/src/lifecycle.rs`, deriving serde + Display for codes (depends on T006).
+- [x] T006 [P] Define `LifecycleState` family enums in `crates/domain/core/src/lifecycle/{project,plan,session,inventory,data_source,prepared_source,projection}.rs` matching data-model.md state families.
+- [x] T007 [P] Define `ProvenanceTag` enum and `ProvenancedValue<T>` in `crates/domain/core/src/lifecycle/provenance.rs` per research.md §4 and data-model.md §ProvenancedValue.
+- [x] T008 Define the canonical `DataAsset` trait + lifecycle-bearing entity structs in `crates/domain/core/src/lifecycle/mod.rs` (depends on T006, T007). Anchors FR-007.
+- [x] T009 [P] Define `AuditLogEntry`, `Outcome`, `Severity` in `crates/audit/src/event.rs` per data-model.md §AuditLogEntry.
+- [x] T010 SQLite schema migration `crates/persistence/db/migrations/0002_lifecycle.sql` covering `library_root`, `file_record`, `acquisition_session`, `calibration_session`, `calibration_master`, `target`, `project`, `processing_artifact`, `filesystem_plan`, `audit_log_entry`, and `provenance_history_archive` (depends on T008, T009). Ledger columns MUST omit `confidence/evidence/provenance` (FR-006). `provenance_history_archive` schema per data-model.md §ProvenanceHistoryArchive.
+- [x] T010b [P] Add durable event-bus SQLite `events` table to the migration in T010 (or a separate `0002_events.sql`). Schema: `(event_id INTEGER PRIMARY KEY AUTOINCREMENT, topic TEXT NOT NULL, source TEXT NOT NULL CHECK(source IN ('user','restore','system')), emitted_at TEXT NOT NULL, payload JSON NOT NULL)`. Subscribers read with a `since: event_id` cursor for replay. Part of the hybrid event-bus design (research.md §6.1, plan.md Technical Context). Depends on T003.
+- [x] T011 [P] Repository trait `LifecycleRepository` in `crates/persistence/db/src/repositories/lifecycle.rs` with read + transactional-mutate signatures (depends on T010).
+- [x] T012 Rust DTO mirror of `lifecycle.transition.json` in `crates/contracts/core/src/lifecycle.rs`, deriving serde + Display for codes (depends on T006).
 
 **Checkpoint**: Foundation ready — user-story tasks can begin in parallel.
 
@@ -71,19 +71,19 @@ description: "Task list for Data Lifecycle State Model (Spec 002)"
 
 > Write tests FIRST; ensure they FAIL before implementation.
 
-- [ ] T013 [P] [US1] Unit test in `crates/domain/core/tests/provenance.rs` verifying priority `reviewed > inferred > observed` and append-only history.
-- [ ] T014 [P] [US1] Unit test in `crates/domain/core/tests/asset_state.rs` verifying that ledger projections exclude provenance columns (FR-006).
-- [ ] T015 [P] [US1] Integration test in `crates/persistence/db/tests/lifecycle_read.rs` confirming ledger queries omit `confidence/evidence/provenance` and detail queries surface `ProvenancedValue.history`.
-- [ ] T016 [P] [US1] JSON-Schema fixture test in `packages/contracts/tests/lifecycle.transition.fixtures.test.ts` (Vitest) validating sample request/response shapes against `lifecycle.transition.json` Draft 2020-12.
+- [x] T013 [P] [US1] Unit test in `crates/domain/core/tests/provenance.rs` verifying priority `reviewed > inferred > observed` and append-only history.
+- [x] T014 [P] [US1] Unit test in `crates/domain/core/tests/asset_state.rs` verifying that ledger projections exclude provenance columns (FR-006).
+- [x] T015 [P] [US1] Integration test in `crates/persistence/db/tests/lifecycle_read.rs` confirming ledger queries omit `confidence/evidence/provenance` and detail queries surface `ProvenancedValue.history`.
+- [x] T016 [P] [US1] JSON-Schema fixture test in `packages/contracts/tests/lifecycle.transition.fixtures.test.ts` (Vitest) validating sample request/response shapes against `lifecycle.transition.json` Draft 2020-12.
 
 ### Implementation for User Story 1
 
-- [ ] T017 [US1] Implement `ProvenancedValue<T>` serde + priority resolution in `crates/domain/core/src/lifecycle/provenance.rs` (depends on T007, T013).
-- [ ] T018 [P] [US1] Implement `DataAsset` enum dispatch (`FileRecord`, `AcquisitionSession`, `CalibrationSession`, `Project`, `PreparedSource`, `ProcessingArtifact`, `FilesystemPlan`) in `crates/domain/core/src/lifecycle/mod.rs` (depends on T008, T014). `[mockup ✓, needs Rust port]` from `apps/desktop/src/data/mock.ts`.
-- [ ] T019 [US1] Read-side repository methods (`load_asset_detail`, `list_assets_ledger`) in `crates/persistence/db/src/repositories/lifecycle.rs` (depends on T011, T015).
-- [ ] T020 [US1] Use case `read_asset_detail` in `crates/app/core/src/usecases/lifecycle.rs` returning provenance-rich detail (depends on T019).
-- [ ] T021 [US1] Tauri command `lifecycle.read_asset_detail` in `apps/desktop/src-tauri/src/commands/lifecycle.rs` (depends on T020).
-- [ ] T021a [US1] Use case `provenance.read` in `crates/app/core/src/usecases/lifecycle.rs` returning the contract shape defined in `contracts/provenance.read.json` (inline history per origin tag + `history_truncated` flag; archive lookup via `provenance_history_archive` table from T010) (depends on T019). Tauri command `provenance.read` in `apps/desktop/src-tauri/src/commands/lifecycle.rs`.
+- [x] T017 [US1] Implement `ProvenancedValue<T>` serde + priority resolution in `crates/domain/core/src/lifecycle/provenance.rs` (depends on T007, T013).
+- [x] T018 [P] [US1] Implement `DataAsset` enum dispatch (`FileRecord`, `AcquisitionSession`, `CalibrationSession`, `Project`, `PreparedSource`, `ProcessingArtifact`, `FilesystemPlan`) in `crates/domain/core/src/lifecycle/mod.rs` (depends on T008, T014). `[mockup ✓, needs Rust port]` from `apps/desktop/src/data/mock.ts`.
+- [x] T019 [US1] Read-side repository methods (`load_asset_detail`, `list_assets_ledger`) in `crates/persistence/db/src/repositories/lifecycle.rs` (depends on T011, T015).
+- [x] T020 [US1] Use case `read_asset_detail` in `crates/app/core/src/usecases/lifecycle.rs` returning provenance-rich detail (depends on T019).
+- [x] T021 [US1] Tauri command `lifecycle.read_asset_detail` in `apps/desktop/src-tauri/src/commands/lifecycle.rs` (depends on T020).
+- [x] T021a [US1] Use case `provenance.read` in `crates/app/core/src/usecases/lifecycle.rs` returning the contract shape defined in `contracts/provenance.read.json` (inline history per origin tag + `history_truncated` flag; archive lookup via `provenance_history_archive` table from T010) (depends on T019). Tauri command `provenance.read` in `apps/desktop/src-tauri/src/commands/lifecycle.rs`.
 - [ ] T022 [US1] Contract codegen: generate TypeScript surface from `packages/contracts/lifecycle.transition.json` and `packages/contracts/provenance.read.json` into `packages/contracts/generated/` (depends on T005, T016).
 - [ ] T023 [US1] Replace `apps/desktop/src/data/store.ts` provenance-shape code with a thin adapter calling the Tauri command; preserve existing hook signatures so `ProjectsPage.tsx`, `PlanDetailPage.tsx`, `InventoryPage.tsx` stay untouched (depends on T021, T022). `[mockup ✓, needs Rust port]`.
 - [ ] T024 [P] [US1] Vitest test in `apps/desktop/src/data/store.test.ts` verifying the adapter exposes the same hook signatures the components consume.
@@ -103,30 +103,30 @@ description: "Task list for Data Lifecycle State Model (Spec 002)"
 
 > Write tests FIRST; ensure they FAIL before implementation.
 
-- [ ] T026 [P] [US2] Unit test in `crates/domain/core/tests/project_transitions.rs` asserting the full edge list from research.md §2.1 / data-model.md §Project §Lifecycle.
-- [ ] T027 [P] [US2] Unit test in `crates/domain/core/tests/plan_transitions.rs` asserting the edge list from research.md §2.2.
-- [ ] T028 [P] [US2] Unit test in `crates/domain/core/tests/session_transitions.rs` asserting the edge list from research.md §2.3.
+- [x] T026 [P] [US2] Unit test in `crates/domain/core/tests/project_transitions.rs` asserting the full edge list from research.md §2.1 / data-model.md §Project §Lifecycle.
+- [x] T027 [P] [US2] Unit test in `crates/domain/core/tests/plan_transitions.rs` asserting the edge list from research.md §2.2.
+- [x] T028 [P] [US2] Unit test in `crates/domain/core/tests/session_transitions.rs` asserting the edge list from research.md §2.3.
 - [ ] T029 [P] [US2] Integration test in `crates/app/core/tests/transition_apply.rs` covering: success path, refused-no-mutation path, same-state no-op path, plan-required path (depends on T012, T010).
 - [ ] T030 [P] [US2] JSON-Schema fixture test in `packages/contracts/tests/lifecycle.transition.errors.test.ts` covering each error code: `transition.refused`, `entity.not_found`, `actor.not_authorised`, `plan.required`, `plan.not_approved`, `provenance.unreviewed` (with the `blocking_fields` detail shape). Plus a fixture for the `status: "noop"` success-of-sorts response (no `audit_id`, no `error`).
 - [ ] T031 [P] [US2] Audit-event integration test in `crates/audit/tests/transactional.rs` verifying audit row + state mutation share a transaction (no half-writes).
 
 ### Implementation for User Story 2
 
-- [ ] T032 [US2] Encode project transition table in `crates/domain/core/src/lifecycle/project.rs` (depends on T026). `[mockup ✓, needs Rust port]` from `apps/desktop/src/data/store.ts:376` `PROJECT_TRANSITIONS`.
-- [ ] T033 [P] [US2] Encode plan transition table in `crates/domain/core/src/lifecycle/plan.rs` (depends on T027). `[mockup ✓, needs Rust port]` from `apps/desktop/src/data/store.ts` `simulateApply`.
+- [x] T032 [US2] Encode project transition table in `crates/domain/core/src/lifecycle/project.rs` (depends on T026). `[mockup ✓, needs Rust port]` from `apps/desktop/src/data/store.ts:376` `PROJECT_TRANSITIONS`.
+- [x] T033 [P] [US2] Encode plan transition table in `crates/domain/core/src/lifecycle/plan.rs` (depends on T027). `[mockup ✓, needs Rust port]` from `apps/desktop/src/data/store.ts` `simulateApply`.
 - [ ] T033a [P] [US2] Implement session-key derivation `session_key(target_id, filter, binning, gain, observing_night)` and the `observing_night` local-solar-noon algorithm in `crates/sessions/src/key.rs` per research.md §2.5 and spec.md FR-011 (depends on T006). Sits before T034 in dependency order. Refuses to derive when `observer_location` (spec 018) is unset and surfaces `provenance.unreviewed` against that field.
-- [ ] T034 [P] [US2] Encode session transition table in `crates/domain/core/src/lifecycle/session.rs` (depends on T028, T033a). `[mockup ✓, needs Rust port]` from `apps/desktop/src/data/store.ts` `setSessionReviewState`.
-- [ ] T035 [P] [US2] Encode data-source, prepared-source, projection transition tables in their respective `crates/domain/core/src/lifecycle/*.rs` files.
-- [ ] T035a [P] [US2] Encode FileRecord transition table in `crates/domain/core/src/lifecycle/file_record.rs` per research.md §2.4 and data-model.md §FileRecord. Includes an exhaustive edge-list unit test in `crates/domain/core/tests/file_record_transitions.rs` mirroring the format of T026/T027/T028 (split out from T035 because FileRecord is first-class — GRILL 2026-05-21).
-- [ ] T036 [US2] No-op guard + refused-edge logger in `crates/domain/core/src/lifecycle/mod.rs` returning `Outcome::Noop` (no audit row; contract `status: "noop"`) / `Outcome::Refused` (audit row, contract `status: "error"` with `error.code = "transition.refused"`) per research.md §5 (depends on T032, T033, T034, T035, T035a). `[mockup ✓, needs Rust port]` from `store.ts:457` and `store.ts:406-413`.
-- [ ] T037 [US2] Transactional `apply_transition` in `crates/persistence/db/src/repositories/lifecycle.rs` writing entity update + audit row in one tx, or audit-only for refused, or nothing for suppressed-unchanged (depends on T010, T036).
-- [ ] T038 [US2] Use case `transition_apply` in `crates/app/core/src/usecases/lifecycle.rs` validating actor, dispatching by family, returning the contract response shape (depends on T037, T012, T029). MUST enforce the `actor=system` edge policy (GRILL spec 009 ratification): `actor == system` is permitted ONLY on edges entering or leaving `blocked`; any other edge with `actor == system` MUST be rejected with `transition.refused` and audit-logged. MUST also enforce action-bound review (FR-009/FR-010): when action-critical fields are not `reviewed`, refuse with `provenance.unreviewed` and populate `error.details.blocking_fields` per `contracts/lifecycle.transition.json`. On success, publish `lifecycle.transition.applied` on the in-process event bus (research.md §6.1).
+- [x] T034 [P] [US2] Encode session transition table in `crates/domain/core/src/lifecycle/session.rs` (depends on T028, T033a). `[mockup ✓, needs Rust port]` from `apps/desktop/src/data/store.ts` `setSessionReviewState`.
+- [x] T035 [P] [US2] Encode data-source, prepared-source, projection transition tables in their respective `crates/domain/core/src/lifecycle/*.rs` files.
+- [x] T035a [P] [US2] Encode FileRecord transition table in `crates/domain/core/src/lifecycle/file_record.rs` per research.md §2.4 and data-model.md §FileRecord. Includes an exhaustive edge-list unit test in `crates/domain/core/tests/file_record_transitions.rs` mirroring the format of T026/T027/T028 (split out from T035 because FileRecord is first-class — GRILL 2026-05-21).
+- [x] T036 [US2] No-op guard + refused-edge logger in `crates/domain/core/src/lifecycle/mod.rs` returning `Outcome::Noop` (no audit row; contract `status: "noop"`) / `Outcome::Refused` (audit row, contract `status: "error"` with `error.code = "transition.refused"`) per research.md §5 (depends on T032, T033, T034, T035, T035a). `[mockup ✓, needs Rust port]` from `store.ts:457` and `store.ts:406-413`.
+- [x] T037 [US2] Transactional `apply_transition` in `crates/persistence/db/src/repositories/lifecycle.rs` writing entity update + audit row in one tx, or audit-only for refused, or nothing for suppressed-unchanged (depends on T010, T036).
+- [x] T038 [US2] Use case `transition_apply` in `crates/app/core/src/usecases/lifecycle.rs` validating actor, dispatching by family, returning the contract response shape (depends on T037, T012, T029). MUST enforce the `actor=system` edge policy (GRILL spec 009 ratification): `actor == system` is permitted ONLY on edges entering or leaving `blocked`; any other edge with `actor == system` MUST be rejected with `transition.refused` and audit-logged. MUST also enforce action-bound review (FR-009/FR-010): when action-critical fields are not `reviewed`, refuse with `provenance.unreviewed` and populate `error.details.blocking_fields` per `contracts/lifecycle.transition.json`. On success, publish `lifecycle.transition.applied` on the in-process event bus (research.md §6.1).
 - [ ] T039 [US2] Use case `transition_preview` in `crates/app/core/src/usecases/lifecycle.rs` (read-only "would this be allowed?") for UI dry-run.
-- [ ] T040 [US2] Tauri commands `lifecycle.transition.apply` and `lifecycle.transition.preview` in `apps/desktop/src-tauri/src/commands/lifecycle.rs` (depends on T038, T039).
+- [x] T040 [US2] Tauri commands `lifecycle.transition.apply` and `lifecycle.transition.preview` in `apps/desktop/src-tauri/src/commands/lifecycle.rs` (depends on T038, T039).
 - [ ] T041 [US2] Swap `apps/desktop/src/data/store.ts` `setProjectLifecycle`, `setSessionReviewState`, `simulateApply` to call the Tauri commands; preserve hook signatures so `ProjectsPage.tsx`, `PlanDetailPage.tsx`, `InventoryPage.tsx` need no edits (depends on T040). `[mockup ✓, needs Rust port]`.
 - [ ] T042 [P] [US2] Vitest in `apps/desktop/src/data/store.transitions.test.ts` covering refused-edge UI projection and `usePendingPlansCount` partition into `needsAction` / `needsAttention`. `[mockup ✓, needs Rust port]`.
 - [ ] T043 [US2] Playwright MCP smoke in `tests/e2e/lifecycle_transitions.spec.ts` driving a project through the full transition path and asserting the timeline renders only workflow-significant events (FR-008) (depends on T041).
-- [ ] T044 [US2] FilesystemPlan gate in `crates/app/core/src/usecases/lifecycle.rs`: the canonical `(entity_type, from, to) → requires_plan` edge table lives in `crates/domain/core/src/lifecycle/plan_requirement.rs` (authored from data-model.md §Plan-Requirement Edge Table). Callers MUST NOT pass `requires_plan` on the request; the server derives it. Any transition whose edge yields `requires_plan = true` MUST refuse with `plan.required` (creating a draft `FilesystemPlan` and returning its `plan_id`) or `plan.not_approved` until the plan reaches `approved` (depends on T038). Includes the actor=system edge-policy enforcement note shared with T038.
+- [x] T044 [US2] FilesystemPlan gate in `crates/app/core/src/usecases/lifecycle.rs`: the canonical `(entity_type, from, to) → requires_plan` edge table lives in `crates/domain/core/src/lifecycle/plan_requirement.rs` (authored from data-model.md §Plan-Requirement Edge Table). Callers MUST NOT pass `requires_plan` on the request; the server derives it. Any transition whose edge yields `requires_plan = true` MUST refuse with `plan.required` (creating a draft `FilesystemPlan` and returning its `plan_id`) or `plan.not_approved` until the plan reaches `approved` (depends on T038). Includes the actor=system edge-policy enforcement note shared with T038.
 
 **Checkpoint**: US1 + US2 both functional independently.
 
@@ -136,11 +136,11 @@ description: "Task list for Data Lifecycle State Model (Spec 002)"
 
 **Purpose**: Tighten cross-story behavior before declaring the spec implementation-ready.
 
-- [ ] T045 [P] Audit severity filter (`workflow` vs `diagnostic`) in `crates/audit/src/event.rs` and timeline read API (FR-008). Default UI timelines and the spec 019 log panel filter `severity = workflow` (GRILL 2026-05-21 resolved); diagnostic events stay queryable behind the toggle.
-- [ ] T046 [P] Event-bus driven stale-propagation pass: subscribe to `lifecycle.transition.applied` (research.md §6.1) and recompute dependent `ProcessingArtifact.staleness` and `PreparedSource.state` rows on source transition (FR-003). Replaces the earlier "lazy with `dependents_dirty_at` timestamp" approach. Subscribers MUST be idempotent on `(audit_id, subscriber_id)`.
+- [x] T045 [P] Audit severity filter (`workflow` vs `diagnostic`) in `crates/audit/src/event.rs` and timeline read API (FR-008). Default UI timelines and the spec 019 log panel filter `severity = workflow` (GRILL 2026-05-21 resolved); diagnostic events stay queryable behind the toggle.
+- [x] T046 [P] Event-bus driven stale-propagation pass: subscribe to `lifecycle.transition.applied` (research.md §6.1) and recompute dependent `ProcessingArtifact.staleness` and `PreparedSource.state` rows on source transition (FR-003). Replaces the earlier "lazy with `dependents_dirty_at` timestamp" approach. Subscribers MUST be idempotent on `(audit_id, subscriber_id)`.
 - [ ] T047 [P] Immutable session snapshot writer (FR-005) in `crates/persistence/db/src/repositories/lifecycle.rs` on each transition into/out of `confirmed`/`rejected`/`needs_review`.
 - [ ] T048 [P] Documentation pass in `docs/research/lifecycle-state-model.md` cross-linking the resolved questions from research.md §8.
-- [ ] T049 Run `just lint` + `just test` + `just typecheck` from repo root and resolve any drift before declaring ready-for-impl.
+- [x] T049 Run `just lint` + `just test` + `just typecheck` from repo root and resolve any drift before declaring ready-for-impl.
 
 ---
 
