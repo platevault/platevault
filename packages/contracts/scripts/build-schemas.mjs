@@ -3,6 +3,7 @@ import { basename, join } from "node:path";
 import { spawnSync } from "node:child_process";
 
 const schemasDir = new URL("../schemas", import.meta.url).pathname;
+const specsDir = new URL("../../../specs", import.meta.url).pathname;
 const generatedDir = new URL("../src/generated", import.meta.url).pathname;
 
 function findSchemas(dir) {
@@ -15,10 +16,30 @@ function findSchemas(dir) {
   });
 }
 
+// SpecKit-managed contracts live under `specs/<NNN>-<slug>/contracts/*.json`.
+// Only the contracts listed below are wired into the TS generation pipeline —
+// other specs reference remote `$ref`s that json2ts cannot resolve offline.
+// Add to this allowlist as each spec's contracts settle.
+const SPEC_CONTRACT_ALLOWLIST = [
+  "002-data-lifecycle-state-model/contracts/lifecycle.transition.json",
+  "002-data-lifecycle-state-model/contracts/provenance.read.json",
+];
+
+function findSpecContracts() {
+  return SPEC_CONTRACT_ALLOWLIST.map((rel) => join(specsDir, rel)).filter((path) => {
+    try {
+      readdirSync(join(path, "..")); // ensure parent exists
+      return true;
+    } catch {
+      return false;
+    }
+  });
+}
+
 rmSync(generatedDir, { recursive: true, force: true });
 mkdirSync(generatedDir, { recursive: true });
 
-const schemas = findSchemas(schemasDir);
+const schemas = [...findSchemas(schemasDir), ...findSpecContracts()];
 
 if (schemas.length === 0) {
   writeFileSync(
@@ -30,9 +51,10 @@ if (schemas.length === 0) {
   process.exit(0);
 }
 
+let exitCode = 0;
 for (const schema of schemas) {
-  const outputName = basename(schema, ".schema.json") + ".d.ts";
-  const output = join(generatedDir, outputName);
+  const stem = basename(schema, ".schema.json").replace(/\.json$/, "");
+  const output = join(generatedDir, `${stem}.d.ts`);
   const result = spawnSync(
     "json2ts",
     ["-i", schema, "-o", output, "--unreachableDefinitions"],
@@ -40,6 +62,9 @@ for (const schema of schemas) {
   );
 
   if (result.status !== 0) {
-    process.exit(result.status ?? 1);
+    console.error(`json2ts failed on ${schema}`);
+    exitCode = result.status ?? 1;
   }
 }
+
+process.exit(exitCode);

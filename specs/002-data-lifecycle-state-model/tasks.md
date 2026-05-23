@@ -84,7 +84,7 @@ description: "Task list for Data Lifecycle State Model (Spec 002)"
 - [x] T020 [US1] Use case `read_asset_detail` in `crates/app/core/src/usecases/lifecycle.rs` returning provenance-rich detail (depends on T019).
 - [x] T021 [US1] Tauri command `lifecycle.read_asset_detail` in `apps/desktop/src-tauri/src/commands/lifecycle.rs` (depends on T020).
 - [x] T021a [US1] Use case `provenance.read` in `crates/app/core/src/usecases/lifecycle.rs` returning the contract shape defined in `contracts/provenance.read.json` (inline history per origin tag + `history_truncated` flag; archive lookup via `provenance_history_archive` table from T010) (depends on T019). Tauri command `provenance.read` in `apps/desktop/src-tauri/src/commands/lifecycle.rs`.
-- [ ] T022 [US1] Contract codegen: generate TypeScript surface from `packages/contracts/lifecycle.transition.json` and `packages/contracts/provenance.read.json` into `packages/contracts/generated/` (depends on T005, T016).
+- [x] T022 [US1] Contract codegen: generate TypeScript surface from `packages/contracts/lifecycle.transition.json` and `packages/contracts/provenance.read.json` into `packages/contracts/generated/` (depends on T005, T016).
 - [ ] T023 [US1] Replace `apps/desktop/src/data/store.ts` provenance-shape code with a thin adapter calling the Tauri command; preserve existing hook signatures so `ProjectsPage.tsx`, `PlanDetailPage.tsx`, `InventoryPage.tsx` stay untouched (depends on T021, T022). `[mockup ✓, needs Rust port]`.
 - [ ] T024 [P] [US1] Vitest test in `apps/desktop/src/data/store.test.ts` verifying the adapter exposes the same hook signatures the components consume.
 - [ ] T025 [US1] Playwright MCP smoke in `tests/e2e/lifecycle_detail.spec.ts` verifying detail view shows observed/inferred/reviewed columns and ledger row hides them (depends on T023).
@@ -107,7 +107,7 @@ description: "Task list for Data Lifecycle State Model (Spec 002)"
 - [x] T027 [P] [US2] Unit test in `crates/domain/core/tests/plan_transitions.rs` asserting the edge list from research.md §2.2.
 - [x] T028 [P] [US2] Unit test in `crates/domain/core/tests/session_transitions.rs` asserting the edge list from research.md §2.3.
 - [ ] T029 [P] [US2] Integration test in `crates/app/core/tests/transition_apply.rs` covering: success path, refused-no-mutation path, same-state no-op path, plan-required path (depends on T012, T010).
-- [ ] T030 [P] [US2] JSON-Schema fixture test in `packages/contracts/tests/lifecycle.transition.errors.test.ts` covering each error code: `transition.refused`, `entity.not_found`, `actor.not_authorised`, `plan.required`, `plan.not_approved`, `provenance.unreviewed` (with the `blocking_fields` detail shape). Plus a fixture for the `status: "noop"` success-of-sorts response (no `audit_id`, no `error`).
+- [x] T030 [P] [US2] JSON-Schema fixture test in `packages/contracts/tests/lifecycle.transition.errors.test.ts` covering each error code: `transition.refused`, `entity.not_found`, `actor.not_authorised`, `plan.required`, `plan.not_approved`, `provenance.unreviewed` (with the `blocking_fields` detail shape). Plus a fixture for the `status: "noop"` success-of-sorts response (no `audit_id`, no `error`).
 - [ ] T031 [P] [US2] Audit-event integration test in `crates/audit/tests/transactional.rs` verifying audit row + state mutation share a transaction (no half-writes).
 
 ### Implementation for User Story 2
