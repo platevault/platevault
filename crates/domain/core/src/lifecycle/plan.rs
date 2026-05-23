@@ -100,6 +100,31 @@ pub enum PlanKind {
     RegenerateArtifact,
 }
 
+/// Canonical allowed `(from, to)` edge list per research.md §2.2 and spec 017.
+/// Retry plans are NEW plans with `parent_plan_id` set — no terminal → non-terminal
+/// edges exist except via fresh plan creation.
+pub const TRANSITIONS: &[(PlanState, PlanState)] = &[
+    (PlanState::Draft, PlanState::ReadyForReview),
+    (PlanState::Draft, PlanState::Discarded),
+    (PlanState::ReadyForReview, PlanState::Approved),
+    (PlanState::ReadyForReview, PlanState::Draft),
+    (PlanState::ReadyForReview, PlanState::Discarded),
+    (PlanState::Approved, PlanState::Applying),
+    (PlanState::Approved, PlanState::Draft),
+    (PlanState::Applying, PlanState::Applied),
+    (PlanState::Applying, PlanState::PartiallyApplied),
+    (PlanState::Applying, PlanState::Failed),
+    (PlanState::Applying, PlanState::Cancelled),
+    (PlanState::Applying, PlanState::Paused),
+    (PlanState::Paused, PlanState::Applying),
+    (PlanState::Paused, PlanState::Cancelled),
+];
+
+#[must_use]
+pub fn is_allowed(from: PlanState, to: PlanState) -> bool {
+    TRANSITIONS.iter().any(|&(f, t)| f == from && t == to)
+}
+
 /// Stub entity struct — full item-level records wired in persistence layer.
 #[derive(Clone, Debug, Serialize, Deserialize)]
 pub struct FilesystemPlan {

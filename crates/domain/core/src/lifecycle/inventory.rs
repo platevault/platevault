@@ -33,6 +33,32 @@ pub enum InventoryState {
     Protected,
 }
 
+/// Canonical allowed `(from, to)` edge list per research.md §2.4 (FileRecord transitions)
+/// and data-model.md §FileRecord §Lifecycle. `* → protected` is a wildcard rule applied
+/// from any non-terminal state; encoded explicitly here. `protected` is a sticky pin.
+pub const TRANSITIONS: &[(InventoryState, InventoryState)] = &[
+    (InventoryState::Observed, InventoryState::Classified),
+    (InventoryState::Observed, InventoryState::Changed),
+    (InventoryState::Observed, InventoryState::Missing),
+    (InventoryState::Observed, InventoryState::Protected),
+    (InventoryState::Classified, InventoryState::Rejected),
+    (InventoryState::Classified, InventoryState::Changed),
+    (InventoryState::Classified, InventoryState::Missing),
+    (InventoryState::Classified, InventoryState::Protected),
+    (InventoryState::Changed, InventoryState::Observed),
+    (InventoryState::Changed, InventoryState::Missing),
+    (InventoryState::Changed, InventoryState::Protected),
+    (InventoryState::Missing, InventoryState::Observed),
+    (InventoryState::Missing, InventoryState::Protected),
+    (InventoryState::Rejected, InventoryState::Classified),
+    (InventoryState::Rejected, InventoryState::Protected),
+];
+
+#[must_use]
+pub fn is_allowed(from: InventoryState, to: InventoryState) -> bool {
+    TRANSITIONS.iter().any(|&(f, t)| f == from && t == to)
+}
+
 /// A scanned filesystem entry under a `LibraryRoot`.
 #[derive(Clone, Debug, Serialize, Deserialize)]
 pub struct FileRecord {

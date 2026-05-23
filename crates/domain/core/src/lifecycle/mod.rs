@@ -4,6 +4,7 @@ pub mod data_asset;
 pub mod data_source;
 pub mod inventory;
 pub mod plan;
+pub mod plan_requirement;
 pub mod prepared_source;
 pub mod project;
 pub mod projection;

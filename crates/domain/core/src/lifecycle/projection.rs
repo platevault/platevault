@@ -27,6 +27,19 @@ pub enum ProjectionState {
     Regenerating,
 }
 
+/// Canonical allowed `(from, to)` edges per data-model.md §ProcessingArtifact §Lifecycle.
+pub const TRANSITIONS: &[(ProjectionState, ProjectionState)] = &[
+    (ProjectionState::Current, ProjectionState::Stale),
+    (ProjectionState::Stale, ProjectionState::Regenerating),
+    (ProjectionState::Regenerating, ProjectionState::Current),
+    (ProjectionState::Regenerating, ProjectionState::Stale),
+];
+
+#[must_use]
+pub fn is_allowed(from: ProjectionState, to: ProjectionState) -> bool {
+    TRANSITIONS.iter().any(|&(f, t)| f == from && t == to)
+}
+
 #[derive(
     Clone,
     Copy,

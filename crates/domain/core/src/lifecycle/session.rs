@@ -43,6 +43,28 @@ impl SessionState {
     }
 }
 
+/// Canonical allowed `(from, to)` edge list per research.md §2.3. Applies to
+/// both `AcquisitionSession` and `CalibrationSession` — the state family is
+/// shared per data-model.md §CalibrationSession §Lifecycle.
+pub const TRANSITIONS: &[(SessionState, SessionState)] = &[
+    (SessionState::Discovered, SessionState::Candidate),
+    (SessionState::Discovered, SessionState::Ignored),
+    (SessionState::Candidate, SessionState::NeedsReview),
+    (SessionState::Candidate, SessionState::Confirmed),
+    (SessionState::Candidate, SessionState::Rejected),
+    (SessionState::NeedsReview, SessionState::Confirmed),
+    (SessionState::NeedsReview, SessionState::Rejected),
+    (SessionState::Confirmed, SessionState::NeedsReview),
+    (SessionState::Confirmed, SessionState::Rejected),
+    (SessionState::Rejected, SessionState::NeedsReview),
+    (SessionState::Ignored, SessionState::Candidate),
+];
+
+#[must_use]
+pub fn is_allowed(from: SessionState, to: SessionState) -> bool {
+    TRANSITIONS.iter().any(|&(f, t)| f == from && t == to)
+}
+
 /// Calibration frame kind.
 #[derive(
     Clone,
