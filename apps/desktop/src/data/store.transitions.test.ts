@@ -69,12 +69,12 @@ afterEach(() => {
 
 describe("refusalBucket", () => {
   it.each([
-    ["plan_required", "needsAction"],
-    ["plan_not_approved", "needsAction"],
-    ["provenance_unreviewed", "needsAction"],
-    ["entity_not_found", "needsAction"],
-    ["transition_refused", "needsAttention"],
-    ["actor_not_authorised", "needsAttention"],
+    ["plan.required", "needsAction"],
+    ["plan.not_approved", "needsAction"],
+    ["provenance.unreviewed", "needsAction"],
+    ["entity.not_found", "needsAction"],
+    ["transition.refused", "needsAttention"],
+    ["actor.not_authorised", "needsAttention"],
     ["dev_fallback", "needsAttention"],
   ] as ReadonlyArray<[TransitionErrorCode | "dev_fallback", "needsAction" | "needsAttention"]>)(
     "%s → %s",
@@ -90,7 +90,7 @@ describe("refusalBucket", () => {
 // ----------------------------------------------------------------------------
 
 describe("setProjectLifecycle — refused edges surface refusals", () => {
-  it("rejects an illegal transition with code `transition_refused` (needsAttention)", async () => {
+  it("rejects an illegal transition with code `transition.refused` (needsAttention)", async () => {
     const store = await freshStore();
     // Seed project `prj-m101` ships in lifecycle "processing". The transition
     // map (see store.ts) does NOT permit processing → ready, so this edge
@@ -102,7 +102,7 @@ describe("setProjectLifecycle — refused edges surface refusals", () => {
     const refusals = hook.result.current;
     expect(refusals.length).toBeGreaterThan(0);
     const latest = refusals[0];
-    expect(latest.code).toBe("transition_refused");
+    expect(latest.code).toBe("transition.refused");
     expect(latest.entityType).toBe("project");
     expect(latest.entityId).toBe("prj-m101");
     expect(store.refusalBucket(latest.code)).toBe("needsAttention");
@@ -210,7 +210,7 @@ describe("usePendingPlansCount partition", () => {
     expect(after.needsAction).toBe(before.needsAction);
   });
 
-  it("adds a `transition_refused` refusal to `needsAttention` only", async () => {
+  it("adds a `transition.refused` refusal to `needsAttention` only", async () => {
     const store = await freshStore();
     const before = renderHook(() => store.usePendingPlansCount()).result.current;
 

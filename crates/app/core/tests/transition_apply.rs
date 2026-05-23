@@ -142,6 +142,29 @@ async fn refused_no_mutation_disallowed_edge() {
         .await
         .unwrap();
     assert_eq!(state, "processing");
+
+    // Refused-outcome audit row is DURABLE per data-model.md §242 / §378:
+    // refusals MUST be audit-logged, not merely observable in the response.
+    let (refused_rows, to_state, outcome, actor, payload): (
+        i64,
+        Option<String>,
+        String,
+        String,
+        Option<String>,
+    ) = sqlx::query_as(
+        "SELECT COUNT(*), MAX(to_state), MAX(outcome), MAX(actor), MAX(payload) \
+         FROM audit_log_entry WHERE entity_id = ? AND outcome = 'refused'",
+    )
+    .bind(&project)
+    .fetch_one(db.pool())
+    .await
+    .unwrap();
+    assert_eq!(refused_rows, 1, "exactly one refused row must exist");
+    assert!(to_state.is_none(), "refused rows MUST have to_state == null (data-model.md:376)");
+    assert_eq!(outcome, "refused");
+    assert_eq!(actor, "user");
+    let payload = payload.expect("payload populated");
+    assert!(payload.contains("\"code\":\"transition.refused\""));
 }
 
 #[tokio::test]
@@ -299,6 +322,17 @@ async fn provenance_unreviewed_refusal_when_observer_location_only_observed() {
     assert_eq!(blocking.len(), 1);
     assert_eq!(blocking[0].get("fieldPath").and_then(|v| v.as_str()), Some("observer_location"));
     assert_eq!(blocking[0].get("requiredOrigin").and_then(|v| v.as_str()), Some("reviewed"));
+
+    // Durable refused row exists for the provenance.unreviewed refusal too.
+    let (count,): (i64,) = sqlx::query_as(
+        "SELECT COUNT(*) FROM audit_log_entry WHERE entity_id = ? \
+         AND outcome = 'refused' AND payload LIKE '%provenance.unreviewed%'",
+    )
+    .bind(&session)
+    .fetch_one(db.pool())
+    .await
+    .unwrap();
+    assert_eq!(count, 1, "provenance.unreviewed refusal must be audit-logged");
 
     // Entity row unchanged.
     let (state,): (String,) = sqlx::query_as("SELECT state FROM acquisition_session WHERE id = ?")

@@ -30,7 +30,9 @@ use domain_core::lifecycle::{
     plan as plan_lifecycle, plan_requirement::requires_plan, prepared_source, project, projection,
     session,
 };
-use persistence_db::repositories::lifecycle::LifecycleRepository;
+use persistence_db::repositories::lifecycle::{
+    LifecycleRepository, TransitionRequest as RepoTransitionRequest,
+};
 use serde::Serialize;
 use time::format_description::well_known::Rfc3339;
 use uuid::Uuid;
@@ -83,32 +85,36 @@ where
 
     // 3. Edge validity per domain transition table.
     if !validate_edge(command.entity_type, &command.from_state, &command.to_state) {
-        return TransitionResponse::error(
-            request_id,
-            TransitionError {
-                code: TransitionErrorCode::TransitionRefused,
-                message: format!(
-                    "edge ({}, {} -> {}) not in canonical transition table",
-                    command.entity_type, command.from_state, command.to_state
-                ),
-                details: None,
-            },
+        let message = format!(
+            "edge ({}, {} -> {}) not in canonical transition table",
+            command.entity_type, command.from_state, command.to_state
         );
+        return record_refused(
+            repo,
+            &command,
+            request_id,
+            TransitionErrorCode::TransitionRefused,
+            "transition.refused",
+            message,
+            None,
+        )
+        .await;
     }
 
     // 4. actor=system policy (GRILL spec 009 ratification, data-model.md
     //    §AuditLogEntry §Invariants): only allowed on edges entering or
     //    leaving `blocked`.
     if command.actor == "system" && !touches_blocked(&command.from_state, &command.to_state) {
-        return TransitionResponse::error(
+        return record_refused(
+            repo,
+            &command,
             request_id,
-            TransitionError {
-                code: TransitionErrorCode::ActorNotAuthorised,
-                message: "actor=system is only permitted on edges entering or leaving `blocked`"
-                    .to_owned(),
-                details: None,
-            },
-        );
+            TransitionErrorCode::ActorNotAuthorised,
+            "actor.not_authorised",
+            "actor=system is only permitted on edges entering or leaving `blocked`".to_owned(),
+            None,
+        )
+        .await;
     }
 
     // 5. Action-bound review gate (T050, FR-009/FR-010). Field-level review
@@ -123,20 +129,46 @@ where
     //    to a separate task; this branch surfaces `plan.required` so the
     //    caller knows to drive a `FilesystemPlan` flow before retrying.
     if requires_plan(command.entity_type, &command.from_state, &command.to_state) {
-        return TransitionResponse::error(
-            request_id,
-            TransitionError {
-                code: TransitionErrorCode::PlanRequired,
-                message: format!(
-                    "edge ({}, {} -> {}) requires an approved FilesystemPlan",
-                    command.entity_type, command.from_state, command.to_state
-                ),
-                details: None,
-            },
+        let message = format!(
+            "edge ({}, {} -> {}) requires an approved FilesystemPlan",
+            command.entity_type, command.from_state, command.to_state
         );
+        return record_refused(
+            repo,
+            &command,
+            request_id,
+            TransitionErrorCode::PlanRequired,
+            "plan.required",
+            message,
+            None,
+        )
+        .await;
     }
 
     // 6. Hand off — record + publish.
+    dispatch_to_repository(repo, bus, command, edge_table, request_id, prior_state).await
+}
+
+/// Final dispatch step of [`apply_transition`]. Extracted to keep
+/// `apply_transition` itself under clippy's `too_many_lines` limit and to
+/// keep the refusal-audit recovery (for CAS-loss and not-found errors) in
+/// a single locus.
+async fn dispatch_to_repository<R, S>(
+    repo: &R,
+    bus: &EventBus,
+    command: TransitionCommand,
+    edge_table: &HashMap<EntityType, Vec<([&'static str; 2], EdgeMeta)>, S>,
+    request_id: Uuid,
+    prior_state: String,
+) -> TransitionResponse
+where
+    R: LifecycleRepository + Sync,
+    S: std::hash::BuildHasher,
+{
+    // Clone for refusal-audit recovery in case `transition_lifecycle` itself
+    // fails after our pre-checks (e.g. CAS lost a race, missing entity).
+    // The clone is cheap (UUIDs + short strings).
+    let command_for_refusal = command.clone();
     match transition_lifecycle(repo, bus, command, edge_table).await {
         Ok(None) => TransitionResponse::noop(request_id),
         Ok(Some(record)) => {
@@ -153,22 +185,37 @@ where
                 record.audit_id.as_uuid(),
             )
         }
-        Err(LifecycleError::NotFound { entity_id }) => TransitionResponse::error(
-            request_id,
-            TransitionError {
-                code: TransitionErrorCode::EntityNotFound,
-                message: format!("entity {entity_id} not found"),
-                details: None,
-            },
-        ),
-        Err(LifecycleError::Refused(reason)) => TransitionResponse::error(
-            request_id,
-            TransitionError {
-                code: TransitionErrorCode::TransitionRefused,
-                message: reason,
-                details: None,
-            },
-        ),
+        // EntityNotFound: the entity didn't exist when CAS ran. We still
+        // record the attempted refusal — it's evidence of an attempted
+        // operation. The entity_id in the audit row points at a missing
+        // entity, which is fine (audit_log_entry has no FK).
+        Err(LifecycleError::NotFound { entity_id }) => {
+            record_refused(
+                repo,
+                &command_for_refusal,
+                request_id,
+                TransitionErrorCode::EntityNotFound,
+                "entity.not_found",
+                format!("entity {entity_id} not found"),
+                None,
+            )
+            .await
+        }
+        Err(LifecycleError::Refused(reason)) => {
+            record_refused(
+                repo,
+                &command_for_refusal,
+                request_id,
+                TransitionErrorCode::TransitionRefused,
+                "transition.refused",
+                reason,
+                None,
+            )
+            .await
+        }
+        // Persistence-layer error: do NOT also write a refused audit row,
+        // because the audit write itself would likely fail. Surface the
+        // refusal envelope only.
         Err(LifecycleError::Persistence(err)) => TransitionResponse::error(
             request_id,
             TransitionError {
@@ -200,43 +247,87 @@ where
     let origins = match repo.field_origins(command.entity_id, command.entity_type).await {
         Ok(map) => map,
         Err(err) => {
-            return Some(TransitionResponse::error(
-                request_id,
-                TransitionError {
-                    code: TransitionErrorCode::TransitionRefused,
-                    message: err.to_string(),
-                    details: None,
-                },
-            ));
+            return Some(
+                record_refused(
+                    repo,
+                    command,
+                    request_id,
+                    TransitionErrorCode::TransitionRefused,
+                    "transition.refused",
+                    err.to_string(),
+                    None,
+                )
+                .await,
+            );
         }
     };
 
     let blocking: Vec<serde_json::Value> = critical
         .iter()
         .filter(|field| origins.get(**field).is_none_or(|t| *t != ProvenanceTag::Reviewed))
-        .map(|field| {
-            serde_json::json!({ "fieldPath": *field, "requiredOrigin": "reviewed" })
-        })
+        .map(|field| serde_json::json!({ "fieldPath": *field, "requiredOrigin": "reviewed" }))
         .collect();
     if blocking.is_empty() {
         return None;
     }
-    Some(TransitionResponse::error(
+    let message = format!(
+        "edge ({}, {} -> {}) requires reviewed provenance on {} field(s)",
+        command.entity_type,
+        command.from_state,
+        command.to_state,
+        blocking.len()
+    );
+    Some(
+        record_refused(
+            repo,
+            command,
+            request_id,
+            TransitionErrorCode::ProvenanceUnreviewed,
+            "provenance.unreviewed",
+            message,
+            Some(serde_json::json!({ "blockingFields": blocking })),
+        )
+        .await,
+    )
+}
+
+/// Helper for all refusal paths in [`apply_transition`]. Writes a `refused`
+/// audit row (data-model.md §242 / §378 — refusals MUST be durable, not
+/// just observable in the response envelope), then returns the refusal
+/// response. Best-effort: a persistence failure on the audit row MUST NOT
+/// mask the user-facing refusal (the response is what the caller sees).
+async fn record_refused<R>(
+    repo: &R,
+    command: &TransitionCommand,
+    request_id: Uuid,
+    code: TransitionErrorCode,
+    code_str: &'static str,
+    message: String,
+    details: Option<serde_json::Value>,
+) -> TransitionResponse
+where
+    R: LifecycleRepository + Sync,
+{
+    let _ = repo
+        .record_refused_transition(
+            RepoTransitionRequest {
+                entity_id: command.entity_id,
+                entity_type: command.entity_type,
+                from_state: command.from_state.clone(),
+                to_state: command.to_state.clone(),
+                trigger: command.trigger.clone(),
+                actor: command.actor.clone(),
+                request_id: command.request_id,
+            },
+            code_str,
+            &message,
+        )
+        .await;
+
+    TransitionResponse::error(
         request_id,
-        TransitionError {
-            code: TransitionErrorCode::ProvenanceUnreviewed,
-            message: format!(
-                "edge ({}, {} -> {}) requires reviewed provenance on {} field(s)",
-                command.entity_type,
-                command.from_state,
-                command.to_state,
-                blocking.len()
-            ),
-            details: Some(contracts_core::JsonAny::new(serde_json::json!({
-                "blockingFields": blocking,
-            }))),
-        },
-    ))
+        TransitionError { code, message, details: details.map(contracts_core::JsonAny::new) },
+    )
 }
 
 /// `transition_preview` — read-only dry-run of [`apply_transition`] (T039).

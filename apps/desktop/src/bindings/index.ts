@@ -381,7 +381,7 @@ export type TransitionActor = "user" | "system";
 
 export type TransitionError = TransitionError_Serialize | TransitionError_Deserialize;
 
-export type TransitionErrorCode = "transition_refused" | "entity_not_found" | "actor_not_authorised" | "plan_required" | "plan_not_approved" | "provenance_unreviewed";
+export type TransitionErrorCode = "transition.refused" | "entity.not_found" | "actor.not_authorised" | "plan.required" | "plan.not_approved" | "provenance.unreviewed";
 
 export type TransitionError_Deserialize = {
 	code: TransitionErrorCode,

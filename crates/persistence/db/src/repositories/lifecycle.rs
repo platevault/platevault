@@ -117,6 +117,19 @@ pub trait LifecycleRepository {
         transition: TransitionRequest,
     ) -> impl std::future::Future<Output = DbResult<TransitionRecord>> + Send;
 
+    /// Persist a `refused` audit row for a transition the use case refused
+    /// before mutation. The row records `actor`, `from_state`,
+    /// `to_state = NULL` (invariant data-model.md:376), and the refusal
+    /// code + message in `payload`. Required by data-model.md §242 and §378
+    /// — refused transitions MUST be durable, not just observable via the
+    /// response envelope.
+    fn record_refused_transition(
+        &self,
+        transition: TransitionRequest,
+        refusal_code: &'static str,
+        refusal_message: &str,
+    ) -> impl std::future::Future<Output = DbResult<AuditId>> + Send;
+
     /// Read the winning `ProvenanceTag` per `field_path` for an entity.
     ///
     /// Returns a map keyed by `field_path`. Fields with no provenance rows
@@ -417,6 +430,61 @@ impl LifecycleRepository for SqliteLifecycleRepository {
         })
     }
 
+    async fn record_refused_transition(
+        &self,
+        transition: TransitionRequest,
+        refusal_code: &'static str,
+        refusal_message: &str,
+    ) -> DbResult<AuditId> {
+        // Per data-model.md §AuditLogEntry invariants:
+        //   - `outcome == refused` MUST have `to_state == null`
+        //   - the row is NOT joined to a state mutation (no CAS, no UPDATE)
+        // The original actor is preserved (the use case has already done the
+        // actor=system policy check; for that specific refusal the actor IS
+        // system, which matches §378 of the spec).
+        let audit_id = AuditId::new();
+        let audit_id_str = audit_id.as_uuid().to_string();
+        let entity_id_str = transition.entity_id.as_uuid().to_string();
+        let request_id_str = transition.request_id.as_uuid().to_string();
+        let at_str = Timestamp::now_utc()
+            .as_offset_date_time()
+            .format(&time::format_description::well_known::Rfc3339)
+            .unwrap_or_else(|_| "1970-01-01T00:00:00Z".to_owned());
+
+        // Payload carries the refusal code + message so consumers reading the
+        // audit table can reconstruct the refusal envelope without joining
+        // against the response log. JSON form matches the contract's
+        // dotted-form error codes.
+        let payload = serde_json::json!({
+            "refusal": {
+                "code": refusal_code,
+                "message": refusal_message,
+            },
+            "attempted_to_state": transition.to_state,
+        })
+        .to_string();
+
+        sqlx::query(
+            "INSERT INTO audit_log_entry \
+             (audit_id, entity_type, entity_id, from_state, to_state, trigger, actor, \
+              outcome, severity, request_id, at, payload) \
+             VALUES (?, ?, ?, ?, NULL, ?, ?, 'refused', 'workflow', ?, ?, ?)",
+        )
+        .bind(&audit_id_str)
+        .bind(transition.entity_type.as_str())
+        .bind(&entity_id_str)
+        .bind(&transition.from_state)
+        .bind(&transition.trigger)
+        .bind(&transition.actor)
+        .bind(&request_id_str)
+        .bind(&at_str)
+        .bind(&payload)
+        .execute(&self.pool)
+        .await?;
+
+        Ok(audit_id)
+    }
+
     async fn field_origins(
         &self,
         entity_id: EntityId,
@@ -428,8 +496,7 @@ impl LifecycleRepository for SqliteLifecycleRepository {
         // `acquisition_session`). Reuse `load_provenance` so origin
         // resolution stays in one place (priority + superseded_by rules).
         let asset_type = provenance_asset_type(entity_type);
-        let (per_field, _truncated) =
-            load_provenance(&self.pool, entity_id, asset_type).await?;
+        let (per_field, _truncated) = load_provenance(&self.pool, entity_id, asset_type).await?;
         Ok(per_field.into_iter().map(|(path, pv)| (path, pv.origin)).collect())
     }
 }
@@ -500,6 +567,17 @@ impl LifecycleRepository for InMemoryLifecycleRepository {
             to_state: transition.to_state,
             applied_at: Timestamp::now_utc(),
         })
+    }
+
+    async fn record_refused_transition(
+        &self,
+        _transition: TransitionRequest,
+        _refusal_code: &'static str,
+        _refusal_message: &str,
+    ) -> DbResult<AuditId> {
+        // In-memory stub: no durable storage. Tests that need to assert the
+        // refused audit row exists should use `SqliteLifecycleRepository`.
+        Ok(AuditId::new())
     }
 
     async fn field_origins(

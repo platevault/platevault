@@ -66,6 +66,7 @@ pub enum LifecycleError {
 }
 
 /// Inputs for the `transition_lifecycle` use case.
+#[derive(Clone, Debug)]
 pub struct TransitionCommand {
     pub entity_id: EntityId,
     pub entity_type: EntityType,

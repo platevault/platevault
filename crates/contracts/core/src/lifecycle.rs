@@ -282,13 +282,21 @@ pub enum TransitionRequest {
     JsonSchema,
     Type,
 )]
-#[serde(rename_all = "snake_case")]
 pub enum TransitionErrorCode {
+    // Use dotted-form codes to match
+    // `specs/002-data-lifecycle-state-model/contracts/lifecycle.transition.json`
+    // §$defs.ErrorCode — the contract is the source of truth (Constitution §V).
+    #[serde(rename = "transition.refused")]
     TransitionRefused,
+    #[serde(rename = "entity.not_found")]
     EntityNotFound,
+    #[serde(rename = "actor.not_authorised")]
     ActorNotAuthorised,
+    #[serde(rename = "plan.required")]
     PlanRequired,
+    #[serde(rename = "plan.not_approved")]
     PlanNotApproved,
+    #[serde(rename = "provenance.unreviewed")]
     ProvenanceUnreviewed,
 }
 

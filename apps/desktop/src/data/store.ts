@@ -95,13 +95,13 @@ export function refusalBucket(
   code: TransitionErrorCode | "dev_fallback",
 ): "needsAction" | "needsAttention" {
   switch (code) {
-    case "plan_required":
-    case "plan_not_approved":
-    case "provenance_unreviewed":
-    case "entity_not_found":
+    case "plan.required":
+    case "plan.not_approved":
+    case "provenance.unreviewed":
+    case "entity.not_found":
       return "needsAction";
-    case "transition_refused":
-    case "actor_not_authorised":
+    case "transition.refused":
+    case "actor.not_authorised":
     case "dev_fallback":
       return "needsAttention";
   }
@@ -503,7 +503,7 @@ export function simulateApply(id: string): void {
       pushRefusal({
         entityType: "plan",
         entityId: id,
-        code: "transition_refused",
+        code: "transition.refused",
         message: err instanceof Error ? err.message : String(err),
       });
     });
@@ -811,7 +811,7 @@ export function setProjectLifecycle(
     pushRefusal({
       entityType: "project",
       entityId: id,
-      code: "transition_refused",
+      code: "transition.refused",
       message: `Illegal transition ${project.lifecycle} → ${next}`,
     });
     return;
@@ -856,7 +856,7 @@ export function setProjectLifecycle(
       pushRefusal({
         entityType: "project",
         entityId: id,
-        code: "transition_refused",
+        code: "transition.refused",
         message: err instanceof Error ? err.message : String(err),
       });
     });
@@ -1013,7 +1013,7 @@ export function setSessionReviewState(
       pushRefusal({
         entityType: "inventory_session",
         entityId: sessionId,
-        code: "transition_refused",
+        code: "transition.refused",
         message: err instanceof Error ? err.message : String(err),
       });
     });
