@@ -244,3 +244,63 @@ async fn load_asset_detail_includes_hydrated_provenance() {
     assert_eq!(pv.current, serde_json::json!("Reviewed Name"));
     assert!(!detail.history_truncated);
 }
+
+#[tokio::test]
+async fn field_origins_returns_winning_tag_per_field() {
+    let (db, repo) = setup().await;
+    let pool = db.pool();
+
+    let target = Uuid::new_v4().to_string();
+    let proj = Uuid::new_v4().to_string();
+    insert_target(pool, &target).await;
+    insert_project(pool, &proj, &target).await;
+
+    // `name` has only an observed entry; `target.coords` has observed +
+    // reviewed (reviewed must win per priority).
+    insert_prov_row(
+        pool,
+        "project",
+        &proj,
+        "name",
+        "observed",
+        "\"raw\"",
+        "2026-05-10T00:00:00Z",
+        None,
+    )
+    .await;
+    insert_prov_row(
+        pool,
+        "project",
+        &proj,
+        "target.coords",
+        "observed",
+        "\"obs\"",
+        "2026-05-10T00:00:00Z",
+        None,
+    )
+    .await;
+    insert_prov_row(
+        pool,
+        "project",
+        &proj,
+        "target.coords",
+        "reviewed",
+        "\"rev\"",
+        "2026-05-11T00:00:00Z",
+        None,
+    )
+    .await;
+
+    let entity_id = EntityId::from_uuid(Uuid::parse_str(&proj).unwrap());
+    let origins = repo.field_origins(entity_id, EntityType::Project).await.unwrap();
+    assert_eq!(origins.get("name"), Some(&ProvenanceTag::Observed));
+    assert_eq!(origins.get("target.coords"), Some(&ProvenanceTag::Reviewed));
+}
+
+#[tokio::test]
+async fn field_origins_empty_for_unknown_asset() {
+    let (_db, repo) = setup().await;
+    let entity_id = EntityId::from_uuid(Uuid::new_v4());
+    let origins = repo.field_origins(entity_id, EntityType::Project).await.unwrap();
+    assert!(origins.is_empty());
+}

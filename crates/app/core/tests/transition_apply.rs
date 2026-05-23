@@ -1,18 +1,23 @@
-//! T029 — integration tests for `transition_use_case::apply_transition`
+//! T029 + T050 — integration tests for `transition_use_case::apply_transition`
 //! against a real `SqliteLifecycleRepository` + migrations.
 //!
-//! Covers the four scenarios called out in tasks.md T029:
+//! Covers the scenarios called out in tasks.md T029:
 //! 1. Success path — entity row + audit row both committed.
 //! 2. Refused (disallowed edge) — no mutation, no audit row.
 //! 3. Same-state no-op — sentinel response, no rows.
 //! 4. Plan-required — refusal with `plan.required` code, no mutation.
+//!
+//! And T050 (action-bound review, FR-009/FR-010):
+//! 5. Refused (`provenance.unreviewed`) when `observer_location` is not
+//!    `reviewed` on `acquisition_session.candidate → needs_review`.
+//! 6. Success path when the same field carries a `reviewed` origin.
 
 use app_core::lifecycle_use_case::build_edge_table;
 use app_core::transition_use_case::apply_transition;
 use audit::bus::EventBus;
 use contracts_core::lifecycle::{
-    ProjectState, ProjectTransitionRequest, TransitionActor, TransitionErrorCode,
-    TransitionRequest, TransitionStatus,
+    InventorySessionTransitionRequest, ProjectState, ProjectTransitionRequest, SessionState,
+    TransitionActor, TransitionErrorCode, TransitionRequest, TransitionStatus,
 };
 use persistence_db::repositories::lifecycle::SqliteLifecycleRepository;
 use persistence_db::Database;
@@ -204,4 +209,178 @@ async fn plan_required_refusal() {
         .await
         .unwrap();
     assert_eq!(state, "ready");
+}
+
+// ── T050 — action-bound review (FR-009/FR-010) ───────────────────────────────
+
+async fn insert_acquisition_session(pool: &sqlx::SqlitePool, id: &str, state: &str) {
+    sqlx::query(
+        "INSERT INTO acquisition_session (id, session_key, frame_ids, state, created_at) \
+         VALUES (?, 'KEY', '[]', ?, '2026-05-01T00:00:00Z')",
+    )
+    .bind(id)
+    .bind(state)
+    .execute(pool)
+    .await
+    .unwrap();
+}
+
+async fn insert_prov_row(
+    pool: &sqlx::SqlitePool,
+    asset_id: &str,
+    field_path: &str,
+    origin: &str,
+    value_json: &str,
+) {
+    sqlx::query(
+        "INSERT INTO provenance_history_archive \
+         (id, asset_type, asset_id, field_path, origin, value, captured_at, source_id, replaced_by, archived_at) \
+         VALUES (?, 'acquisition_session', ?, ?, ?, ?, '2026-05-01T00:00:00Z', NULL, NULL, '2026-05-01T00:00:00Z')",
+    )
+    .bind(Uuid::new_v4().to_string())
+    .bind(asset_id)
+    .bind(field_path)
+    .bind(origin)
+    .bind(value_json)
+    .execute(pool)
+    .await
+    .unwrap();
+}
+
+fn session_request(
+    id: Uuid,
+    from: SessionState,
+    to: SessionState,
+    actor: TransitionActor,
+) -> TransitionRequest {
+    TransitionRequest::InventorySession(InventorySessionTransitionRequest {
+        contract_version: "2.0.0".to_owned(),
+        request_id: Uuid::new_v4(),
+        entity_type: "inventory_session".to_owned(),
+        entity_id: id,
+        current_state: from,
+        next_state: to,
+        action_label: None,
+        actor,
+    })
+}
+
+#[tokio::test]
+async fn provenance_unreviewed_refusal_when_observer_location_only_observed() {
+    let (db, repo, bus) = setup().await;
+    let session = Uuid::new_v4().to_string();
+    insert_acquisition_session(db.pool(), &session, "candidate").await;
+    // observer_location carries an `observed` origin — NOT reviewed.
+    insert_prov_row(
+        db.pool(),
+        &session,
+        "observer_location",
+        "observed",
+        r#"{"tz":"UTC"}"#,
+    )
+    .await;
+
+    let session_uuid = Uuid::parse_str(&session).unwrap();
+    let table = build_edge_table();
+
+    let resp = apply_transition(
+        &repo,
+        &bus,
+        session_request(
+            session_uuid,
+            SessionState::Candidate,
+            SessionState::NeedsReview,
+            TransitionActor::User,
+        ),
+        &table,
+    )
+    .await;
+
+    let err = resp.error.expect("must refuse");
+    assert_eq!(err.code, TransitionErrorCode::ProvenanceUnreviewed);
+    let details = err.details.expect("details populated").0;
+    let blocking = details
+        .get("blockingFields")
+        .and_then(|v| v.as_array())
+        .expect("blockingFields array");
+    assert_eq!(blocking.len(), 1);
+    assert_eq!(blocking[0].get("fieldPath").and_then(|v| v.as_str()), Some("observer_location"));
+    assert_eq!(blocking[0].get("requiredOrigin").and_then(|v| v.as_str()), Some("reviewed"));
+
+    // Entity row unchanged.
+    let (state,): (String,) = sqlx::query_as("SELECT state FROM acquisition_session WHERE id = ?")
+        .bind(&session)
+        .fetch_one(db.pool())
+        .await
+        .unwrap();
+    assert_eq!(state, "candidate");
+}
+
+#[tokio::test]
+async fn provenance_unreviewed_refusal_when_field_missing_entirely() {
+    let (db, repo, bus) = setup().await;
+    let session = Uuid::new_v4().to_string();
+    insert_acquisition_session(db.pool(), &session, "candidate").await;
+    // No provenance rows at all — must still refuse.
+
+    let session_uuid = Uuid::parse_str(&session).unwrap();
+    let table = build_edge_table();
+
+    let resp = apply_transition(
+        &repo,
+        &bus,
+        session_request(
+            session_uuid,
+            SessionState::Candidate,
+            SessionState::NeedsReview,
+            TransitionActor::User,
+        ),
+        &table,
+    )
+    .await;
+
+    assert_eq!(
+        resp.error.as_ref().map(|e| e.code),
+        Some(TransitionErrorCode::ProvenanceUnreviewed)
+    );
+}
+
+#[tokio::test]
+async fn provenance_reviewed_allows_candidate_to_needs_review() {
+    let (db, repo, bus) = setup().await;
+    let session = Uuid::new_v4().to_string();
+    insert_acquisition_session(db.pool(), &session, "candidate").await;
+    insert_prov_row(
+        db.pool(),
+        &session,
+        "observer_location",
+        "reviewed",
+        r#"{"tz":"Europe/Amsterdam"}"#,
+    )
+    .await;
+
+    let session_uuid = Uuid::parse_str(&session).unwrap();
+    let table = build_edge_table();
+
+    let resp = apply_transition(
+        &repo,
+        &bus,
+        session_request(
+            session_uuid,
+            SessionState::Candidate,
+            SessionState::NeedsReview,
+            TransitionActor::User,
+        ),
+        &table,
+    )
+    .await;
+
+    // Inventory/AcquisitionSession is not plan-required so this must succeed.
+    assert_eq!(resp.status, TransitionStatus::Success, "resp = {resp:?}");
+    let (state,): (String,) = sqlx::query_as("SELECT state FROM acquisition_session WHERE id = ?")
+        .bind(&session)
+        .fetch_one(db.pool())
+        .await
+        .unwrap();
+    assert_eq!(state, "needs_review");
 }

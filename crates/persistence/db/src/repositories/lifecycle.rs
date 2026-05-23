@@ -7,7 +7,7 @@ use audit::bus::EventBus;
 use audit::event_bus::{LifecycleTransitionApplied, Source, TOPIC_LIFECYCLE_TRANSITION_APPLIED};
 use domain_core::ids::{AuditId, EntityId, Timestamp};
 use domain_core::lifecycle::data_asset::EntityType;
-use domain_core::lifecycle::provenance::ProvenancedValue;
+use domain_core::lifecycle::provenance::{ProvenanceTag, ProvenancedValue};
 use serde_json::Value;
 use uuid::Uuid;
 
@@ -100,7 +100,6 @@ impl DbError {
     }
 }
 
-/// Async repository trait for lifecycle state operations.
 pub trait LifecycleRepository {
     fn load_asset_detail(
         &self,
@@ -117,6 +116,19 @@ pub trait LifecycleRepository {
         &self,
         transition: TransitionRequest,
     ) -> impl std::future::Future<Output = DbResult<TransitionRecord>> + Send;
+
+    /// Read the winning `ProvenanceTag` per `field_path` for an entity.
+    ///
+    /// Returns a map keyed by `field_path`. Fields with no provenance rows
+    /// are simply absent from the map (callers MUST treat absence as
+    /// "no reviewed origin"). Used by the action-bound review gate
+    /// (FR-009/FR-010) — see
+    /// `domain_core::lifecycle::action_review_requirement`.
+    fn field_origins(
+        &self,
+        entity_id: EntityId,
+        entity_type: EntityType,
+    ) -> impl std::future::Future<Output = DbResult<HashMap<String, ProvenanceTag>>> + Send;
 }
 
 // ── Table name helpers ────────────────────────────────────────────────────────
@@ -404,6 +416,33 @@ impl LifecycleRepository for SqliteLifecycleRepository {
             applied_at,
         })
     }
+
+    async fn field_origins(
+        &self,
+        entity_id: EntityId,
+        entity_type: EntityType,
+    ) -> DbResult<HashMap<String, ProvenanceTag>> {
+        // Provenance rows are stored under the SQL table's canonical asset
+        // tag (see `table_for`), which can differ from `EntityType::as_str()`
+        // for families that share a table (e.g. `inventory_session` shares
+        // `acquisition_session`). Reuse `load_provenance` so origin
+        // resolution stays in one place (priority + superseded_by rules).
+        let asset_type = provenance_asset_type(entity_type);
+        let (per_field, _truncated) =
+            load_provenance(&self.pool, entity_id, asset_type).await?;
+        Ok(per_field.into_iter().map(|(path, pv)| (path, pv.origin)).collect())
+    }
+}
+
+/// Map an `EntityType` to the canonical `asset_type` tag used for provenance
+/// archive rows. Mirrors `table_for` for families that share a storage table.
+fn provenance_asset_type(entity_type: EntityType) -> &'static str {
+    match entity_type {
+        EntityType::InventorySession => "acquisition_session",
+        EntityType::Plan => "filesystem_plan",
+        EntityType::LibraryRoot => "data_source",
+        other => other.as_str(),
+    }
 }
 
 fn parse_entity_type(s: &str) -> EntityType {
@@ -461,6 +500,17 @@ impl LifecycleRepository for InMemoryLifecycleRepository {
             to_state: transition.to_state,
             applied_at: Timestamp::now_utc(),
         })
+    }
+
+    async fn field_origins(
+        &self,
+        _entity_id: EntityId,
+        _entity_type: EntityType,
+    ) -> DbResult<HashMap<String, ProvenanceTag>> {
+        // The in-memory stub does not store provenance; tests that need a
+        // populated map should use `SqliteLifecycleRepository` or wrap this
+        // stub with a custom override.
+        Ok(HashMap::new())
     }
 }
 

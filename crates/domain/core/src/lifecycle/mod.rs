@@ -1,5 +1,6 @@
 //! Lifecycle state types for all Data Asset families (spec 002).
 
+pub mod action_review_requirement;
 pub mod data_asset;
 pub mod data_source;
 pub mod inventory;

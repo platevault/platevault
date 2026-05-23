@@ -414,6 +414,33 @@ Edges not listed default to `requires_plan = false`. The full table is
 authored in `crates/domain/core/src/lifecycle/plan_requirement.rs` (canonical
 home; tasks.md T044 wires it).
 
+## Action-Bound Review
+
+Canonical server-side table mapping `(entity_type, from, to) →
+action_critical_fields[]`. The transition use case enforces FR-009/FR-010
+by reading `ProvenancedValue.origin` for each listed field via
+`LifecycleRepository::field_origins` and refusing the edge with
+`provenance.unreviewed` (populating `error.details.blockingFields`) when
+any required field is not yet `reviewed`. Review state is derived
+field-level from provenance — it is NOT a per-entity column.
+
+| entity_type | from | to | action_critical_fields | Notes |
+|---|---|---|---|---|
+| `acquisition_session` | `candidate` | `needs_review` | `observer_location` | Confirming a session as ready-for-review requires the observer location to have been reviewed (FR-009/FR-010). |
+
+TODO: populate via SpecKit clarification. Additional cells require an
+explicit research/clarification cycle before they may be added
+(constitution §IV — Research-Led Domain Modeling); the table is
+intentionally minimal until each new cell carries a documented decision.
+
+The canonical table lives in
+`crates/domain/core/src/lifecycle/action_review_requirement.rs`. The
+contract dispatcher tags acquisition-session requests as the
+`inventory_session` variant; the Rust table mirrors the cell under that
+alias so the gate fires on either path. The refusal envelope shape is
+defined by `contracts/lifecycle.transition.json` (`provenance.unreviewed`,
+`details.blockingFields`) and exercised by `tests/transition_apply.rs`.
+
 ## ProvenanceHistoryArchive
 
 Append-only archive for `ProvenancedValue.history` entries that age out of

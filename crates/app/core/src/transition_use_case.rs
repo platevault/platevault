@@ -1,15 +1,20 @@
-//! Contract-shaped lifecycle transition use case (spec 002 T036/T038/T044).
+//! Contract-shaped lifecycle transition use case
+//! (spec 002 T036/T038/T044/T050).
 //!
 //! Translates a discriminated `contracts_core::lifecycle::TransitionRequest`
 //! into a [`TransitionCommand`], enforces the spec 002 invariants
-//! (noop, allowed-edge, actor=system, plan-required), then either dispatches
-//! to [`transition_lifecycle`] for the persisted mutation or returns a
-//! refusal envelope.
+//! (noop, allowed-edge, actor=system, action-bound review, plan-required),
+//! then either dispatches to [`transition_lifecycle`] for the persisted
+//! mutation or returns a refusal envelope.
 //!
-//! Action-bound provenance review (FR-009/FR-010) is intentionally out of
-//! scope for this module — that data lives on the entity row and is
-//! enforced by a follow-up consumer (T038 second clause). The plumbing
-//! here ensures the use case is the single place that gate adds onto.
+//! Action-bound review (FR-009/FR-010, T050) is enforced here field-level:
+//! for each `(entity_type, from, to)` cell present in
+//! `domain_core::lifecycle::action_review_requirement::TABLE`, the gate
+//! reads `ProvenancedValue.origin` per listed field via
+//! `LifecycleRepository::field_origins` and refuses the edge with
+//! `provenance.unreviewed` (populating `details.blockingFields`) when any
+//! required field is not yet `reviewed`. Review state is derived from
+//! field-level provenance — it is NOT a per-entity column.
 
 use std::collections::HashMap;
 
@@ -19,9 +24,11 @@ use contracts_core::lifecycle::{
 };
 use domain_core::ids::EntityId;
 use domain_core::lifecycle::data_asset::EntityType;
+use domain_core::lifecycle::provenance::ProvenanceTag;
 use domain_core::lifecycle::{
-    data_source, inventory, plan as plan_lifecycle, plan_requirement::requires_plan,
-    prepared_source, project, projection, session,
+    action_review_requirement::action_critical_fields, data_source, inventory,
+    plan as plan_lifecycle, plan_requirement::requires_plan, prepared_source, project, projection,
+    session,
 };
 use persistence_db::repositories::lifecycle::LifecycleRepository;
 use serde::Serialize;
@@ -39,8 +46,10 @@ use crate::lifecycle_use_case::{
 /// 2. Same-state no-op → `TransitionResponse::noop`.
 /// 3. Edge not in the domain table → `transition.refused`.
 /// 4. `actor=system` on non-`blocked`-touching edge → `transition.refused`.
-/// 5. `requires_plan(...)` true → `plan.required` (plan creation deferred).
-/// 6. Hand off to [`transition_lifecycle`].
+/// 5. Action-bound review (FR-009/FR-010): any action-critical field whose
+///    provenance origin is not `reviewed` → `provenance.unreviewed`.
+/// 6. `requires_plan(...)` true → `plan.required` (plan creation deferred).
+/// 7. Hand off to [`transition_lifecycle`].
 pub async fn apply_transition<R, S>(
     repo: &R,
     bus: &EventBus,
@@ -102,7 +111,14 @@ where
         );
     }
 
-    // 5. Plan-required gate (T044): callers MUST NOT pass requires_plan;
+    // 5. Action-bound review gate (T050, FR-009/FR-010). Field-level review
+    //    state is derived from `ProvenancedValue.origin` — it is NOT a
+    //    per-entity column. See data-model.md §Action-Bound Review.
+    if let Some(refusal) = check_action_review(repo, &command, request_id).await {
+        return refusal;
+    }
+
+    // 6. Plan-required gate (T044): callers MUST NOT pass requires_plan;
     //    we derive it from the canonical table. Plan creation is deferred
     //    to a separate task; this branch surfaces `plan.required` so the
     //    caller knows to drive a `FilesystemPlan` flow before retrying.
@@ -162,6 +178,65 @@ where
             },
         ),
     }
+}
+
+/// Inspect action-critical fields and return a `provenance.unreviewed`
+/// refusal envelope when any required field is not yet `Reviewed`.
+/// Returns `None` when the edge has no review requirement or all fields
+/// satisfy it. Surfaces persistence errors as `transition.refused`.
+async fn check_action_review<R>(
+    repo: &R,
+    command: &TransitionCommand,
+    request_id: Uuid,
+) -> Option<TransitionResponse>
+where
+    R: LifecycleRepository + Sync,
+{
+    let critical =
+        action_critical_fields(command.entity_type, &command.from_state, &command.to_state);
+    if critical.is_empty() {
+        return None;
+    }
+    let origins = match repo.field_origins(command.entity_id, command.entity_type).await {
+        Ok(map) => map,
+        Err(err) => {
+            return Some(TransitionResponse::error(
+                request_id,
+                TransitionError {
+                    code: TransitionErrorCode::TransitionRefused,
+                    message: err.to_string(),
+                    details: None,
+                },
+            ));
+        }
+    };
+
+    let blocking: Vec<serde_json::Value> = critical
+        .iter()
+        .filter(|field| origins.get(**field).is_none_or(|t| *t != ProvenanceTag::Reviewed))
+        .map(|field| {
+            serde_json::json!({ "fieldPath": *field, "requiredOrigin": "reviewed" })
+        })
+        .collect();
+    if blocking.is_empty() {
+        return None;
+    }
+    Some(TransitionResponse::error(
+        request_id,
+        TransitionError {
+            code: TransitionErrorCode::ProvenanceUnreviewed,
+            message: format!(
+                "edge ({}, {} -> {}) requires reviewed provenance on {} field(s)",
+                command.entity_type,
+                command.from_state,
+                command.to_state,
+                blocking.len()
+            ),
+            details: Some(contracts_core::JsonAny::new(serde_json::json!({
+                "blockingFields": blocking,
+            }))),
+        },
+    ))
 }
 
 /// `transition_preview` — read-only dry-run of [`apply_transition`] (T039).
