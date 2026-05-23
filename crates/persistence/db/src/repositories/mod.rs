@@ -2,3 +2,4 @@
 
 pub mod lifecycle;
 pub mod provenance;
+pub mod session_snapshot;
