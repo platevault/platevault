@@ -16,9 +16,8 @@ default, and the open variables for project-level configuration.
 - **Persistent sidebar** that lists all steps and current focus.
 - **Native tooltip** attached to the target element.
 
-**Decision**: Overlay popover, implemented with [Shepherd](https://github.com/shipshapecode/shepherd)
-backed by [Floating UI](https://github.com/floating-ui/floating-ui) for anchor
-positioning.
+**Decision**: Overlay popover, implemented with [react-joyride v3](https://github.com/gilbarbara/react-joyride)
+using its `useJoyride()` hook in controlled mode.
 
 **Why**: The overlay can be repositioned per route, does not consume layout
 real estate, and can defer gracefully when the anchor is absent. A sidebar
@@ -26,28 +25,56 @@ duplicates information visible in Settings and breaks responsive layout for
 narrow desktop windows. Tooltips depend on hover and are not discoverable from
 keyboard for accessibility.
 
-**Library choice rationale**: Shepherd is the canonical product-tour library
-for web apps — it provides step navigation, focus management, scroll-into-view,
-spotlight cutouts, and dismissal hooks out of the box. Building these from
-scratch would duplicate well-understood UX primitives. Shepherd v12+ uses
-Floating UI internally for anchor positioning, which is the same engine Base
-UI (spec 022) uses for popover/tooltip positioning — so the entire app shares
-one positioning runtime. This avoids two competing implementations of collision
-detection, flip behavior, and arrow placement.
+**Library choice rationale**: react-joyride v3 is MIT-licensed, declares
+explicit React 16.8–19 peer-dependency support (was rewritten in 2026 for
+concurrent rendering), and its `useJoyride()` controlled-mode hook exposes
+`run`/`stepIndex`/`action` knobs that map cleanly onto the spec-010
+orchestrator's event-driven advancement model (step completes when the user
+performs the real domain action, not when they click a "Next" button in the
+hint). `spotlightClicks: true` keeps the underlying UI fully interactive,
+satisfying the non-modal requirement. Anchor-missing is reported via the
+`callback({ status, type })` channel so the orchestrator can pause / resume /
+skip without crashes.
+
+**Alternatives considered**:
+
+- **Shepherd.js** (originally chosen in the 2026-05-09 revision of this
+  document): **disqualified** because Shepherd relicensed to
+  `AGPL-3.0 OR commercial` after that revision was written. AGPL-3.0 is
+  incompatible with this project's distributed desktop binary posture (per
+  Constitution Principle V — "Portable Contracts and Durable Records" — and
+  the implicit permissive-licensing intent for shipped code). A commercial
+  Shepherd seat is also unnecessary friction.
+- **Onborda**: MIT, but last release Dec 2024 and only declares React `>=18`
+  in peer-deps. Stale maintenance signal.
+- **driver.js**: tiny and MIT, but core has been stagnant since 2023 and lacks
+  built-in event-driven advancement semantics.
+- **@reactour/tour v3.8**: MIT, but does **not** declare React 19 in peer-deps.
+  Risky on a React 19 codebase.
+- **nextstepjs v2.2**: MIT, active (Jan 2026), route-aware adapters. Strong
+  runner-up. Set aside because react-joyride's controlled-mode hook is the
+  more direct fit for spec 010's "advance on real domain event" pattern; if
+  joyride proves unsuitable in implementation, nextstepjs is the fallback.
 
 **Integration boundary**: `crates/app/core/guided_flow/` emits step transitions;
 the React layer (`apps/desktop/src/features/guided/`) wires those transitions
-to a `Shepherd.Tour` instance. Step content (text, anchor selector, primary
-action) is rendered via Shepherd's step API. Anchor selectors come from a stable
-`data-guided-anchor` attribute convention on the underlying UI elements
+to react-joyride's controlled `stepIndex` via the `useJoyride()` hook. Step
+content (text, anchor selector, primary action) is declared in a
+`GuidedFlowStep` registry on the React side. Anchor selectors come from a
+stable `data-guide-anchor` attribute convention on the underlying UI elements
 (documented at the touch points in `apps/desktop/`; see R6 for missing-anchor
-behavior).
-Dismissal and step completion are reported back through the guided state
-contracts.
+behavior). Dismissal and step completion are reported back through the guided
+state contracts.
 
-**Open variables**: Visual treatment (callout vs. spotlight — Shepherd
-supports both via its `modalOverlay` option), keyboard focus behavior on
-appearance, and whether to dim non-anchor regions.
+**Positioning note**: react-joyride does its own positioning (does not use
+Floating UI) and renders into a portal, so it composes cleanly with Base UI's
+Floating-UI-backed popovers without z-index or stack conflicts. The original
+"shared positioning runtime" rationale that favored Shepherd no longer applies.
+
+**Open variables**: Visual treatment (callout vs. spotlight — joyride supports
+both via `spotlightClicks` and `disableOverlay` options), keyboard focus
+behavior on appearance, and whether to dim non-anchor regions
+(`disableOverlay` + `spotlightPadding`).
 
 ## R2. Trigger Taxonomy
 

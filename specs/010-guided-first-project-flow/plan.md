@@ -39,15 +39,18 @@ renders overlay hints anchored to existing controls.
 - `crates/contracts/core/guided/`: Rust DTOs for `guided.state.get`,
   `guided.step.complete`, and `guided.dismiss` contracts.
 - `apps/desktop/src/features/guided/`: React overlay layer. Wraps a
-  [Shepherd](https://github.com/shipshapecode/shepherd) tour instance whose
-  steps mirror the state machine below. Step content (text, anchor selector,
-  primary action) is declared per step; Shepherd handles focus management,
-  scroll-into-view, spotlight cutouts, and dismissal hooks. Anchor positioning
-  uses [Floating UI](https://github.com/floating-ui/floating-ui) (transitively
-  via Shepherd v12+), which is also the positioning engine used by Base UI
-  primitives (spec 022) — single positioning runtime across the app. Route-
-  aware anchor resolution, hint renderer wiring, and the Settings restart
-  entry live in this folder.
+  [react-joyride v3](https://github.com/gilbarbara/react-joyride) instance in
+  controlled mode via the `useJoyride()` hook. Steps mirror the state machine
+  below. Step content (text, anchor selector, primary action) is declared in
+  a `GuidedFlowStep` registry. Joyride handles focus management, scroll-into-
+  view, spotlight cutouts (`spotlightClicks: true` keeps the underlying UI
+  interactive), and dismissal callbacks. Joyride does its own positioning and
+  renders into a portal, so it composes cleanly with Base UI's Floating-UI-
+  backed popovers without z-index or stack conflicts. Route-aware anchor
+  resolution, hint renderer wiring, and the Settings restart entry live in
+  this folder. (Library decision and license rationale: see
+  `research.md` §R1; Shepherd was set aside because of its AGPL-or-commercial
+  relicense.)
 
 ### State Machine
 
