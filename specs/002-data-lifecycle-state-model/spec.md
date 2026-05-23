@@ -130,6 +130,12 @@ As a user, I want lifecycle transitions to be auditable so that I can understand
 - **Resolved:** Which metadata fields require explicit review before project creation?
   - Review is action-bound, not a universal per-field gate. The app must capture reviewed values only for the specific action being executed (for example, session confirmation, project creation, or move to Inventory), and unresolved/contradictory action-critical values block only that action.
 
+### Clarifications
+
+#### Session 2026-05-23
+
+- Q: For the `acquisition_session` action-bound review gate, should the cell guard the entry-to-review edge (`candidate → needs_review`) or the confirmation edges (`candidate → confirmed` and `needs_review → confirmed`)? → A: Move the gate to the confirmation edges and drop the entry-to-review cell — the entry edge is a pipeline-driven auto-transition triggered by extraction failure, not a user action the gate refuses. (Recorded in `data-model.md` §Action-Bound Review.)
+
 ### Decisions
 
 - **Accepted:** Lifecycle is asset-first / asset-centric-first. Assets are the primary lifecycle subject, and important values inside each asset carry field-level provenance for source and review status.

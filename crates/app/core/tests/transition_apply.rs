@@ -9,7 +9,9 @@
 //!
 //! And T050 (action-bound review, FR-009/FR-010):
 //! 5. Refused (`provenance.unreviewed`) when `observer_location` is not
-//!    `reviewed` on `acquisition_session.candidate → needs_review`.
+//!    `reviewed` on `acquisition_session.candidate → confirmed`.
+//!    (Clarified 2026-05-23 — gate sits on the confirmation edges, not
+//!    on the pipeline-driven entry-to-review edge.)
 //! 6. Success path when the same field carries a `reviewed` origin.
 
 use app_core::lifecycle_use_case::build_edge_table;
@@ -289,7 +291,7 @@ async fn provenance_unreviewed_refusal_when_observer_location_only_observed() {
         session_request(
             session_uuid,
             SessionState::Candidate,
-            SessionState::NeedsReview,
+            SessionState::Confirmed,
             TransitionActor::User,
         ),
         &table,
@@ -332,7 +334,7 @@ async fn provenance_unreviewed_refusal_when_field_missing_entirely() {
         session_request(
             session_uuid,
             SessionState::Candidate,
-            SessionState::NeedsReview,
+            SessionState::Confirmed,
             TransitionActor::User,
         ),
         &table,
@@ -346,7 +348,7 @@ async fn provenance_unreviewed_refusal_when_field_missing_entirely() {
 }
 
 #[tokio::test]
-async fn provenance_reviewed_allows_candidate_to_needs_review() {
+async fn provenance_reviewed_allows_candidate_to_confirmed() {
     let (db, repo, bus) = setup().await;
     let session = Uuid::new_v4().to_string();
     insert_acquisition_session(db.pool(), &session, "candidate").await;
@@ -368,7 +370,7 @@ async fn provenance_reviewed_allows_candidate_to_needs_review() {
         session_request(
             session_uuid,
             SessionState::Candidate,
-            SessionState::NeedsReview,
+            SessionState::Confirmed,
             TransitionActor::User,
         ),
         &table,
@@ -382,5 +384,5 @@ async fn provenance_reviewed_allows_candidate_to_needs_review() {
         .fetch_one(db.pool())
         .await
         .unwrap();
-    assert_eq!(state, "needs_review");
+    assert_eq!(state, "confirmed");
 }

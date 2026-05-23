@@ -426,12 +426,20 @@ field-level from provenance — it is NOT a per-entity column.
 
 | entity_type | from | to | action_critical_fields | Notes |
 |---|---|---|---|---|
-| `acquisition_session` | `candidate` | `needs_review` | `observer_location` | Confirming a session as ready-for-review requires the observer location to have been reviewed (FR-009/FR-010). |
+| `acquisition_session` | `candidate` | `confirmed` | `observer_location` | Confirming a session requires the observer location to have been reviewed (FR-009/FR-010). |
+| `acquisition_session` | `needs_review` | `confirmed` | `observer_location` | Same gate applies when promoting from `needs_review` to `confirmed`. |
 
-TODO: populate via SpecKit clarification. Additional cells require an
-explicit research/clarification cycle before they may be added
-(constitution §IV — Research-Led Domain Modeling); the table is
-intentionally minimal until each new cell carries a documented decision.
+The auto-transition `candidate → needs_review` described in §AcquisitionSession
+invariants (when extraction fails or yields null) is a **pipeline-driven
+auto-transition**, NOT a user action this gate refuses. It is therefore not a
+cell in this table; the gate fires on the user-initiated confirmation edges.
+(Clarified 2026-05-23 — narrow clarify pass over §Action-Bound Review.)
+
+Further cells require additional fields to be promoted to `ProvenancedValue<T>`
+first. Today only `AcquisitionSession.observer_location` is wrapped; promoting
+other extracted fields (e.g. `FileRecord` exposure metadata, `AcquisitionSession.target_id`,
+`Project.target_id`) is out of scope for spec 002 and would be a separate spec
+amendment or a new "Provenance Wrapper Coverage" spec.
 
 The canonical table lives in
 `crates/domain/core/src/lifecycle/action_review_requirement.rs`. The
