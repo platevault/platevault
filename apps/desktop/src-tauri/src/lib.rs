@@ -6,20 +6,22 @@
 
 pub mod commands;
 
+use std::sync::Arc;
+
+use audit::bus::EventBus;
+use persistence_db::repositories::lifecycle::SqliteLifecycleRepository;
+use sqlx::SqlitePool;
 use tauri_specta::{collect_commands, Builder};
 
 use crate::commands::lifecycle::{
-    lifecycle_ledger_list, lifecycle_transition_apply, provenance_read,
+    lifecycle_ledger_list, lifecycle_transition_apply, provenance_read, AppState,
 };
 
 pub const CRATE_NAME: &str = "desktop_shell";
 
 /// Build the tauri-specta [`Builder`] populated with every typed command.
 ///
-/// Reused by the production binary (once it lands) and by `tests/bindings.rs`
-/// for TS emission. The binary entry point is intentionally deferred until
-/// the desktop icon set and `tauri.conf.json` bundle config land — keeping
-/// `cargo build --workspace` green without requiring image assets.
+/// Reused by `run` (production) and `tests/bindings.rs` (TS emission).
 #[must_use]
 pub fn specta_builder() -> Builder<tauri::Wry> {
     Builder::<tauri::Wry>::new()
@@ -37,4 +39,31 @@ pub fn specta_builder() -> Builder<tauri::Wry> {
             lifecycle_transition_apply,
             lifecycle_ledger_list,
         ])
+}
+
+/// Launch the desktop shell.
+///
+/// Caller is responsible for providing an already-migrated [`SqlitePool`];
+/// the persistence layer expects migrations to have run before commands hit
+/// the database.
+///
+/// # Panics
+/// Panics if the Tauri runtime fails to launch — there is no recovery path
+/// once the GUI process is requested but cannot be started.
+pub fn run(pool: SqlitePool) {
+    let bus = EventBus::with_pool(pool.clone());
+    let repo = Arc::new(SqliteLifecycleRepository::new(pool, bus.clone()));
+    let state = AppState::new(repo, bus);
+
+    let builder = specta_builder();
+
+    tauri::Builder::default()
+        .invoke_handler(builder.invoke_handler())
+        .setup(move |app| {
+            builder.mount_events(app);
+            Ok(())
+        })
+        .manage(state)
+        .run(tauri::generate_context!())
+        .expect("error while running tauri application");
 }
