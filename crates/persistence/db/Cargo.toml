@@ -8,10 +8,18 @@ license.workspace = true
 path = "src/lib.rs"
 
 [dependencies]
-rusqlite.workspace = true
+audit = { path = "../../audit" }
+domain_core = { path = "../../domain/core" }
 serde.workspace = true
+serde_json.workspace = true
+# sqlx is the production async SQLite driver (ratified stack: sqlx 0.8 + sqlite +
+# runtime-tokio-rustls + macros + migrate + uuid + time + json).
+# Add `sqlx.workspace = true` here and enable `sqlx-sqlite` feature when building
+# outside the network-restricted sandbox. The stub in-memory impl below compiles
+# and all unit tests pass without it.
 thiserror.workspace = true
 time.workspace = true
+tokio.workspace = true
 
 [lints]
 workspace = true

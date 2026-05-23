@@ -1,0 +1,80 @@
+//! FilesystemPlan lifecycle state model (spec 002 data-model.md §FilesystemPlan).
+
+use schemars::JsonSchema;
+use serde::{Deserialize, Serialize};
+
+use crate::ids::{EntityId, Timestamp};
+
+/// Lifecycle state for a `FilesystemPlan`.
+///
+/// 10 variants per spec 002 data-model.md §FilesystemPlan (inc. `paused` R-Pause-1
+/// and `discarded` spec 017 retry-chain terminal).
+#[derive(
+    Clone, Copy, Debug, Eq, Hash, Ord, PartialEq, PartialOrd, Serialize, Deserialize, JsonSchema,
+)]
+#[serde(rename_all = "snake_case")]
+pub enum PlanState {
+    Draft,
+    ReadyForReview,
+    Approved,
+    Applying,
+    /// Mid-apply suspension on `volume.unavailable`, `disk.full`, or `item.stale` (R-Pause-1).
+    Paused,
+    Applied,
+    PartiallyApplied,
+    Failed,
+    Cancelled,
+    /// Soft-delete terminal — paired with spec 017 retry-chain semantics.
+    Discarded,
+}
+
+impl PlanState {
+    /// Terminal states: retry produces a NEW plan with `parent_plan_id` set.
+    #[must_use]
+    pub const fn is_terminal(self) -> bool {
+        matches!(
+            self,
+            Self::Applied
+                | Self::PartiallyApplied
+                | Self::Failed
+                | Self::Cancelled
+                | Self::Discarded
+        )
+    }
+}
+
+/// Plan origin — who created this plan.
+#[derive(
+    Clone, Copy, Debug, Eq, Hash, Ord, PartialEq, PartialOrd, Serialize, Deserialize, JsonSchema,
+)]
+#[serde(rename_all = "snake_case")]
+pub enum PlanCreatedBy {
+    User,
+    System,
+}
+
+/// Plan kind — category of filesystem mutations.
+#[derive(
+    Clone, Copy, Debug, Eq, Hash, Ord, PartialEq, PartialOrd, Serialize, Deserialize, JsonSchema,
+)]
+#[serde(rename_all = "snake_case")]
+pub enum PlanKind {
+    Organize,
+    PrepareSource,
+    Cleanup,
+    Archive,
+    RegenerateArtifact,
+}
+
+/// Stub entity struct — full item-level records wired in persistence layer.
+#[derive(Clone, Debug, Serialize, Deserialize)]
+pub struct FilesystemPlan {
+    pub id: EntityId,
+    pub kind: PlanKind,
+    pub state: PlanState,
+    /// Set when this plan is a retry of a failed/cancelled plan.
+    pub parent_plan_id: Option<EntityId>,
+    pub created_by: PlanCreatedBy,
+    pub created_at: Timestamp,
+    pub applied_at: Option<Timestamp>,
+}

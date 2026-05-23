@@ -56,6 +56,7 @@ impl FilesystemPlan {
         self.status = PlanStatus::ReadyForReview;
     }
 
+    #[allow(clippy::missing_errors_doc)] // error variants documented on PlanError type
     pub fn approve(&mut self, approval: PlanApproval) -> PlanResult<()> {
         if self.status != PlanStatus::ReadyForReview {
             return Err(PlanError::NotReadyForApproval(self.status));

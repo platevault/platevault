@@ -1,130 +1,27 @@
 //! Shared domain primitives for Astro Library Manager.
+#![allow(clippy::doc_markdown)] // spec/domain terminology not appropriate for backticks
 
-use serde::{Deserialize, Serialize};
-use time::OffsetDateTime;
-use uuid::Uuid;
+pub mod actor;
+pub mod ids;
+pub mod lifecycle;
+
+pub use actor::Actor;
+pub use ids::{AuditId, ContentHash, EntityId, Timestamp};
+
+// ── Legacy type aliases kept for crates that import the old flat names ────────
+/// Legacy alias: use `lifecycle::plan::PlanState` in new code.
+pub use lifecycle::plan::PlanState as PlanStatus;
 
 pub const CRATE_NAME: &str = "domain_core";
+
+// ── Re-export legacy types that other crates still import ────────────────────
+
+use serde::{Deserialize, Serialize};
 
 #[derive(Clone, Debug, Eq, PartialEq, thiserror::Error)]
 pub enum DomainError {
     #[error("confidence score must be between 0.0 and 1.0 inclusive, got {0}")]
     InvalidConfidenceScore(String),
-}
-
-#[derive(Clone, Copy, Debug, Eq, Hash, Ord, PartialEq, PartialOrd, Serialize, Deserialize)]
-#[serde(transparent)]
-pub struct EntityId(Uuid);
-
-impl EntityId {
-    #[must_use]
-    pub fn new() -> Self {
-        Self(Uuid::new_v4())
-    }
-
-    #[must_use]
-    pub const fn from_uuid(value: Uuid) -> Self {
-        Self(value)
-    }
-
-    #[must_use]
-    pub const fn as_uuid(self) -> Uuid {
-        self.0
-    }
-}
-
-impl Default for EntityId {
-    fn default() -> Self {
-        Self::new()
-    }
-}
-
-impl From<Uuid> for EntityId {
-    fn from(value: Uuid) -> Self {
-        Self::from_uuid(value)
-    }
-}
-
-#[derive(Clone, Copy, Debug, Eq, PartialEq, Serialize, Deserialize)]
-#[serde(transparent)]
-pub struct Timestamp(OffsetDateTime);
-
-impl Timestamp {
-    #[must_use]
-    pub fn now_utc() -> Self {
-        Self(OffsetDateTime::now_utc())
-    }
-
-    #[must_use]
-    pub const fn from_offset_date_time(value: OffsetDateTime) -> Self {
-        Self(value)
-    }
-
-    #[must_use]
-    pub const fn as_offset_date_time(self) -> OffsetDateTime {
-        self.0
-    }
-}
-
-impl From<OffsetDateTime> for Timestamp {
-    fn from(value: OffsetDateTime) -> Self {
-        Self::from_offset_date_time(value)
-    }
-}
-
-#[derive(Clone, Debug, Eq, PartialEq, Serialize, Deserialize)]
-#[serde(transparent)]
-pub struct Actor(String);
-
-impl Actor {
-    pub const SYSTEM_VALUE: &'static str = "system";
-
-    #[must_use]
-    pub fn system() -> Self {
-        Self(Self::SYSTEM_VALUE.to_owned())
-    }
-
-    #[must_use]
-    pub fn local(value: impl Into<String>) -> Self {
-        Self(value.into())
-    }
-
-    #[must_use]
-    pub fn as_str(&self) -> &str {
-        &self.0
-    }
-}
-
-impl Default for Actor {
-    fn default() -> Self {
-        Self::system()
-    }
-}
-
-#[derive(Clone, Debug, Eq, PartialEq, Serialize, Deserialize)]
-pub struct EntityMetadata {
-    pub id: EntityId,
-    pub created_at: Timestamp,
-    pub updated_at: Timestamp,
-    pub created_by: Actor,
-}
-
-impl EntityMetadata {
-    #[must_use]
-    pub fn new(created_by: Actor) -> Self {
-        let now = Timestamp::now_utc();
-
-        Self { id: EntityId::new(), created_at: now, updated_at: now, created_by }
-    }
-
-    #[must_use]
-    pub fn system() -> Self {
-        Self::new(Actor::system())
-    }
-
-    pub fn touch(&mut self, updated_at: Timestamp) {
-        self.updated_at = updated_at;
-    }
 }
 
 #[derive(Clone, Copy, Debug, PartialEq, PartialOrd, Serialize, Deserialize)]
@@ -135,6 +32,8 @@ impl ConfidenceScore {
     pub const MIN: f64 = 0.0;
     pub const MAX: f64 = 1.0;
 
+    /// # Errors
+    /// Returns `DomainError::InvalidConfidenceScore` if `value` is outside `[0.0, 1.0]`.
     pub fn new(value: f64) -> Result<Self, DomainError> {
         if (Self::MIN..=Self::MAX).contains(&value) {
             Ok(Self(value))
@@ -195,6 +94,7 @@ impl Confidence {
         Self { score, level, evidence_refs: Vec::new(), explanation: explanation.into() }
     }
 
+    #[must_use]
     pub fn with_evidence(mut self, evidence: EvidenceRef) -> Self {
         self.evidence_refs.push(evidence);
         self
@@ -211,90 +111,6 @@ pub enum ReviewState {
     Ignored,
 }
 
-#[derive(Clone, Copy, Debug, Eq, Hash, Ord, PartialEq, PartialOrd, Serialize, Deserialize)]
-#[serde(rename_all = "snake_case")]
-pub enum ProjectLifecycleState {
-    Candidate,
-    Active,
-    SourceMapped,
-    Prepared,
-    Processing,
-    Finalized,
-    Verified,
-    CleanupReviewed,
-    Archived,
-    Retired,
-}
-
-impl ProjectLifecycleState {
-    #[must_use]
-    pub const fn is_before_archive(self) -> bool {
-        matches!(
-            self,
-            Self::Candidate
-                | Self::Active
-                | Self::SourceMapped
-                | Self::Prepared
-                | Self::Processing
-                | Self::Finalized
-                | Self::Verified
-                | Self::CleanupReviewed
-        )
-    }
-}
-
-#[derive(Clone, Copy, Debug, Eq, Hash, Ord, PartialEq, PartialOrd, Serialize, Deserialize)]
-#[serde(rename_all = "snake_case")]
-pub enum VerificationState {
-    NotReady,
-    OutputsRecorded,
-    Verified,
-    Rejected,
-    Unknown,
-}
-
-#[derive(Clone, Copy, Debug, Eq, Hash, Ord, PartialEq, PartialOrd, Serialize, Deserialize)]
-#[serde(rename_all = "snake_case")]
-pub enum CleanupState {
-    NotReviewed,
-    Eligible,
-    Reviewed,
-    Applied,
-    Blocked,
-}
-
-#[derive(Clone, Copy, Debug, Eq, Hash, Ord, PartialEq, PartialOrd, Serialize, Deserialize)]
-#[serde(rename_all = "snake_case")]
-pub enum ArchiveState {
-    NotArchived,
-    Planned,
-    Archived,
-    Restored,
-}
-
-#[derive(Clone, Copy, Debug, Eq, Hash, Ord, PartialEq, PartialOrd, Serialize, Deserialize)]
-#[serde(rename_all = "snake_case")]
-pub enum PlanStatus {
-    Draft,
-    ReadyForReview,
-    Approved,
-    Applying,
-    Applied,
-    PartiallyApplied,
-    Failed,
-    Cancelled,
-    Superseded,
-}
-
-#[derive(Clone, Copy, Debug, Eq, Hash, Ord, PartialEq, PartialOrd, Serialize, Deserialize)]
-#[serde(rename_all = "snake_case")]
-pub enum AcquisitionSessionState {
-    Candidate,
-    Confirmed,
-    Rejected,
-    Superseded,
-}
-
 #[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
 pub struct Reviewed<T> {
     pub value: T,
@@ -309,11 +125,37 @@ impl<T> Reviewed<T> {
     }
 }
 
+/// Legacy flat struct used by other crates — kept for compilation compatibility.
+#[derive(Clone, Debug, Eq, PartialEq, Serialize, Deserialize)]
+pub struct EntityMetadata {
+    pub id: EntityId,
+    pub created_at: Timestamp,
+    pub updated_at: Timestamp,
+    pub created_by: Actor,
+}
+
+impl EntityMetadata {
+    #[must_use]
+    pub fn new(created_by: Actor) -> Self {
+        let now = Timestamp::now_utc();
+        Self { id: EntityId::new(), created_at: now, updated_at: now, created_by }
+    }
+
+    #[must_use]
+    pub fn system() -> Self {
+        Self::new(Actor::System)
+    }
+
+    pub fn touch(&mut self, updated_at: Timestamp) {
+        self.updated_at = updated_at;
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::{
-        Actor, ConfidenceLevel, ConfidenceScore, EntityId, EntityMetadata, ProjectLifecycleState,
-        ReviewState, Reviewed, CRATE_NAME,
+        Actor, ConfidenceLevel, ConfidenceScore, EntityId, EntityMetadata, ReviewState, Reviewed,
+        CRATE_NAME,
     };
 
     #[test]
@@ -323,14 +165,15 @@ mod tests {
 
     #[test]
     fn creates_stable_entity_metadata() {
-        let metadata = EntityMetadata::new(Actor::local("tester"));
+        let metadata = EntityMetadata::new(Actor::user(EntityId::new()));
 
         assert_ne!(metadata.id, EntityId::default());
-        assert_eq!(metadata.created_by.as_str(), "tester");
+        assert!(matches!(metadata.created_by, Actor::User { .. }));
         assert_eq!(metadata.created_at, metadata.updated_at);
     }
 
     #[test]
+    #[allow(clippy::float_cmp)] // exact boundary values are representable without error
     fn validates_confidence_score_bounds() {
         assert_eq!(ConfidenceScore::new(0.0).unwrap().get(), 0.0);
         assert_eq!(ConfidenceScore::new(1.0).unwrap().get(), 1.0);
@@ -349,12 +192,5 @@ mod tests {
 
         assert_eq!(reviewed.value, "M31");
         assert_eq!(reviewed.review_state, ReviewState::Confirmed);
-    }
-
-    #[test]
-    fn identifies_lifecycle_states_before_archive() {
-        assert!(ProjectLifecycleState::Verified.is_before_archive());
-        assert!(!ProjectLifecycleState::Archived.is_before_archive());
-        assert!(!ProjectLifecycleState::Retired.is_before_archive());
     }
 }

@@ -1,5 +1,8 @@
 //! Rust-side contract DTO boundary.
 
+pub mod lifecycle;
+pub mod provenance;
+
 use serde::{Deserialize, Serialize};
 use serde_json::Value;
 

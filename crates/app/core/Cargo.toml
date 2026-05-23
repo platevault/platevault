@@ -8,8 +8,13 @@ license.workspace = true
 path = "src/lib.rs"
 
 [dependencies]
+audit = { path = "../../audit" }
 contracts_core = { path = "../../contracts/core" }
+domain_core = { path = "../../domain/core" }
+persistence_db = { path = "../../persistence/db" }
 serde_json.workspace = true
+thiserror.workspace = true
+tokio.workspace = true
 
 [lints]
 workspace = true

@@ -1,10 +1,21 @@
-//! Audit event and operation history boundaries.
+//! Audit event, operation history, and in-process event bus.
+#![allow(clippy::doc_markdown)] // spec/domain terminology not appropriate for backticks
 
-use domain_core::{Actor, EntityId, Timestamp};
-use serde::{Deserialize, Serialize};
-use serde_json::Value;
+pub mod bus;
+pub mod event;
+pub mod event_bus;
+
+pub use bus::EventBus;
+pub use event::{AuditLogEntry, Outcome, Severity};
+pub use event_bus::{EventEnvelope, LifecycleTransitionApplied, Source, TOPIC_LIFECYCLE_TRANSITION_APPLIED};
 
 pub const CRATE_NAME: &str = "audit";
+
+// ── Backward-compat re-exports for other crates that import the old API ──────
+
+use domain_core::{Actor, EntityId, ids::Timestamp};
+use serde::{Deserialize, Serialize};
+use serde_json::Value;
 
 pub type AuditWriteResult<T> = Result<T, AuditError>;
 
@@ -14,8 +25,10 @@ pub enum AuditError {
     Writer(String),
 }
 
+/// Legacy flat entry used by the old `AppendOnlyAuditWriter` trait.
+/// New code should use `event::AuditLogEntry` instead.
 #[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
-pub struct AuditLogEntry {
+pub struct LegacyAuditLogEntry {
     pub id: EntityId,
     pub event_type: AuditEventType,
     pub entity_type: String,
@@ -28,7 +41,7 @@ pub struct AuditLogEntry {
     pub result: AuditEventResult,
 }
 
-impl AuditLogEntry {
+impl LegacyAuditLogEntry {
     #[must_use]
     pub fn new(
         event_type: AuditEventType,
@@ -99,7 +112,8 @@ pub enum AuditEventResult {
 }
 
 pub trait AppendOnlyAuditWriter {
-    fn append(&mut self, entry: AuditLogEntry) -> AuditWriteResult<()>;
+    #[allow(clippy::missing_errors_doc)] // trait-level; callers decide on docs
+    fn append(&mut self, entry: LegacyAuditLogEntry) -> AuditWriteResult<()>;
 }
 
 #[cfg(test)]
@@ -108,17 +122,17 @@ mod tests {
     use serde_json::json;
 
     use super::{
-        AppendOnlyAuditWriter, AuditEventResult, AuditEventType, AuditLogEntry, AuditWriteResult,
-        CRATE_NAME,
+        AppendOnlyAuditWriter, AuditEventResult, AuditEventType, AuditWriteResult,
+        LegacyAuditLogEntry, CRATE_NAME,
     };
 
     #[derive(Default)]
     struct InMemoryAuditWriter {
-        entries: Vec<AuditLogEntry>,
+        entries: Vec<LegacyAuditLogEntry>,
     }
 
     impl AppendOnlyAuditWriter for InMemoryAuditWriter {
-        fn append(&mut self, entry: AuditLogEntry) -> AuditWriteResult<()> {
+        fn append(&mut self, entry: LegacyAuditLogEntry) -> AuditWriteResult<()> {
             self.entries.push(entry);
             Ok(())
         }
@@ -131,7 +145,7 @@ mod tests {
 
     #[test]
     fn creates_audit_entry_with_default_details() {
-        let entry = AuditLogEntry::new(
+        let entry = LegacyAuditLogEntry::new(
             AuditEventType::PlanCreated,
             "filesystem_plan",
             Actor::system(),
@@ -146,13 +160,13 @@ mod tests {
     #[test]
     fn append_only_writer_records_entries_in_order() {
         let mut writer = InMemoryAuditWriter::default();
-        let first = AuditLogEntry::new(
+        let first = LegacyAuditLogEntry::new(
             AuditEventType::PlanApproved,
             "filesystem_plan",
             Actor::local("tester"),
             AuditEventResult::Success,
         );
-        let second = AuditLogEntry::new(
+        let second = LegacyAuditLogEntry::new(
             AuditEventType::ItemFailed,
             "plan_item",
             Actor::local("tester"),

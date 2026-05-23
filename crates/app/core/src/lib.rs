@@ -1,4 +1,7 @@
 //! Application use-case orchestration boundary.
+#![allow(clippy::doc_markdown)] // spec/domain terminology not appropriate for backticks
+
+pub mod lifecycle_use_case;
 
 use std::collections::BTreeMap;
 
@@ -51,6 +54,9 @@ pub trait OperationHandler: Send + Sync {
 
     fn behavior(&self) -> OperationBehavior;
 
+    /// # Errors
+    /// Returns a `ContractError` if the operation fails to produce a valid result.
+    #[allow(clippy::result_large_err)] // ContractError size is acceptable at this boundary
     fn handle(&self, context: &OperationContext, payload: Value) -> OperationResult;
 }
 
@@ -69,6 +75,9 @@ impl OperationRegistry {
         Self { handlers: BTreeMap::new() }
     }
 
+    /// # Errors
+    /// Returns `ContractError` if a handler is already registered for the same operation name.
+    #[allow(clippy::result_large_err)] // ContractError size is acceptable at this boundary
     pub fn register<H>(&mut self, handler: H) -> Result<(), ContractError>
     where
         H: OperationHandler + 'static,

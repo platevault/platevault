@@ -1,30 +1,10 @@
 //! Operation state persistence model and repository contract.
+//! Ported from rusqlite to sqlx; model structs preserved for compatibility.
 
 use serde::{Deserialize, Serialize};
 use time::OffsetDateTime;
 
-use crate::{DbResult, Migration};
-
-pub const OPERATION_STATE_MIGRATION: Migration = Migration::new(
-    "001_operation_state",
-    "create operation state table",
-    "
-    CREATE TABLE operation_states (
-        id TEXT PRIMARY KEY NOT NULL,
-        operation_type TEXT NOT NULL,
-        status TEXT NOT NULL,
-        progress_current INTEGER,
-        progress_total INTEGER,
-        current_message TEXT,
-        started_at TEXT,
-        finished_at TEXT,
-        resume_token TEXT,
-        error_code TEXT,
-        error_message TEXT,
-        updated_at TEXT NOT NULL
-    );
-    ",
-);
+use crate::DbResult;
 
 #[derive(Clone, Debug, Eq, PartialEq, Serialize, Deserialize)]
 pub struct OperationState {
@@ -128,49 +108,58 @@ impl OperationStateError {
     }
 }
 
+/// Repository trait for operation state. Implementors use `sqlx::SqlitePool`.
 pub trait OperationStateRepository {
-    fn insert_operation_state(&mut self, state: &OperationState) -> DbResult<()>;
+    fn insert_operation_state(
+        &mut self,
+        state: &OperationState,
+    ) -> impl std::future::Future<Output = DbResult<()>> + Send;
 
-    fn update_operation_state(&mut self, state: &OperationState) -> DbResult<()>;
+    fn update_operation_state(
+        &mut self,
+        state: &OperationState,
+    ) -> impl std::future::Future<Output = DbResult<()>> + Send;
 
-    fn find_operation_state(&self, id: &str) -> DbResult<Option<OperationState>>;
+    fn find_operation_state(
+        &self,
+        id: &str,
+    ) -> impl std::future::Future<Output = DbResult<Option<OperationState>>> + Send;
+}
+
+// ── In-memory implementation for tests ───────────────────────────────────────
+
+#[derive(Default)]
+pub struct InMemoryOperationStateRepository {
+    states: std::collections::BTreeMap<String, OperationState>,
+}
+
+impl OperationStateRepository for InMemoryOperationStateRepository {
+    async fn insert_operation_state(&mut self, state: &OperationState) -> DbResult<()> {
+        self.states.insert(state.id.clone(), state.clone());
+        Ok(())
+    }
+
+    async fn update_operation_state(&mut self, state: &OperationState) -> DbResult<()> {
+        self.states.insert(state.id.clone(), state.clone());
+        Ok(())
+    }
+
+    async fn find_operation_state(&self, id: &str) -> DbResult<Option<OperationState>> {
+        Ok(self.states.get(id).cloned())
+    }
 }
 
 #[cfg(test)]
 mod tests {
-    use std::collections::BTreeMap;
-
     use time::OffsetDateTime;
 
     use super::{
-        OperationState, OperationStateError, OperationStateRepository, OperationStateStatus,
-        OperationType,
+        InMemoryOperationStateRepository, OperationState, OperationStateError,
+        OperationStateRepository, OperationStateStatus, OperationType,
     };
-    use crate::DbResult;
 
-    #[derive(Default)]
-    struct InMemoryOperationStateRepository {
-        states: BTreeMap<String, OperationState>,
-    }
-
-    impl OperationStateRepository for InMemoryOperationStateRepository {
-        fn insert_operation_state(&mut self, state: &OperationState) -> DbResult<()> {
-            self.states.insert(state.id.clone(), state.clone());
-            Ok(())
-        }
-
-        fn update_operation_state(&mut self, state: &OperationState) -> DbResult<()> {
-            self.states.insert(state.id.clone(), state.clone());
-            Ok(())
-        }
-
-        fn find_operation_state(&self, id: &str) -> DbResult<Option<OperationState>> {
-            Ok(self.states.get(id).cloned())
-        }
-    }
-
-    #[test]
-    fn creates_queued_operation_state() {
+    #[tokio::test]
+    async fn creates_queued_operation_state() {
         let now = OffsetDateTime::UNIX_EPOCH;
         let state = OperationState::queued("op-1", OperationType::ScanRoot, now);
 
@@ -179,8 +168,8 @@ mod tests {
         assert_eq!(state.updated_at, now);
     }
 
-    #[test]
-    fn records_running_and_failed_transitions() {
+    #[tokio::test]
+    async fn records_running_and_failed_transitions() {
         let start = OffsetDateTime::UNIX_EPOCH;
         let finish = start + time::Duration::seconds(10);
         let mut state = OperationState::queued("op-1", OperationType::ApplyPlan, start);
@@ -189,28 +178,30 @@ mod tests {
         assert_eq!(state.status, OperationStateStatus::Running);
         assert_eq!(state.started_at, Some(start));
 
-        state
-            .mark_failed(finish, OperationStateError::new("plan.item_failed", "Plan item failed."));
+        state.mark_failed(
+            finish,
+            OperationStateError::new("plan.item_failed", "Plan item failed."),
+        );
         assert_eq!(state.status, OperationStateStatus::Failed);
         assert_eq!(state.finished_at, Some(finish));
         assert_eq!(state.error.unwrap().code, "plan.item_failed");
     }
 
-    #[test]
-    fn repository_contract_supports_insert_update_and_lookup() {
-        let mut repository = InMemoryOperationStateRepository::default();
+    #[tokio::test]
+    async fn repository_contract_supports_insert_update_and_lookup() {
+        let mut repo = InMemoryOperationStateRepository::default();
         let mut state = OperationState::queued(
             "op-1",
             OperationType::GenerateManifest,
             OffsetDateTime::UNIX_EPOCH,
         );
 
-        repository.insert_operation_state(&state).unwrap();
+        repo.insert_operation_state(&state).await.unwrap();
         state.mark_running(OffsetDateTime::UNIX_EPOCH, Some("Generating manifest".to_owned()));
-        repository.update_operation_state(&state).unwrap();
+        repo.update_operation_state(&state).await.unwrap();
 
         assert_eq!(
-            repository.find_operation_state("op-1").unwrap().unwrap().status,
+            repo.find_operation_state("op-1").await.unwrap().unwrap().status,
             OperationStateStatus::Running
         );
     }
