@@ -2,6 +2,7 @@
 
 use schemars::JsonSchema;
 use serde::{Deserialize, Serialize};
+use specta::Type;
 
 use crate::ids::{EntityId, Timestamp};
 
@@ -11,6 +12,7 @@ use crate::ids::{EntityId, Timestamp};
 /// and `discarded` spec 017 retry-chain terminal).
 #[derive(
     Clone, Copy, Debug, Eq, Hash, Ord, PartialEq, PartialOrd, Serialize, Deserialize, JsonSchema,
+    Type,
 )]
 #[serde(rename_all = "snake_case")]
 pub enum PlanState {
@@ -46,6 +48,7 @@ impl PlanState {
 /// Plan origin — who created this plan.
 #[derive(
     Clone, Copy, Debug, Eq, Hash, Ord, PartialEq, PartialOrd, Serialize, Deserialize, JsonSchema,
+    Type,
 )]
 #[serde(rename_all = "snake_case")]
 pub enum PlanCreatedBy {
@@ -56,6 +59,7 @@ pub enum PlanCreatedBy {
 /// Plan kind — category of filesystem mutations.
 #[derive(
     Clone, Copy, Debug, Eq, Hash, Ord, PartialEq, PartialOrd, Serialize, Deserialize, JsonSchema,
+    Type,
 )]
 #[serde(rename_all = "snake_case")]
 pub enum PlanKind {

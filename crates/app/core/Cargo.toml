@@ -13,6 +13,7 @@ contracts_core = { path = "../../contracts/core" }
 domain_core = { path = "../../domain/core" }
 persistence_db = { path = "../../persistence/db" }
 serde_json.workspace = true
+sqlx.workspace = true
 thiserror.workspace = true
 tokio.workspace = true
 

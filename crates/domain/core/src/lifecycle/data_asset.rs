@@ -3,6 +3,7 @@
 
 use schemars::JsonSchema;
 use serde::{Deserialize, Serialize};
+use specta::Type;
 
 use crate::ids::EntityId;
 use crate::lifecycle::data_source::{DataSourceState, RegisteredSource};
@@ -14,7 +15,7 @@ use crate::lifecycle::project::{Project, ProjectState};
 use crate::lifecycle::session::{AcquisitionSession, CalibrationSession, SessionState};
 
 /// The string tag used in contracts and audit rows for each entity family.
-#[derive(Clone, Copy, Debug, Eq, Hash, Ord, PartialEq, PartialOrd, Serialize, Deserialize, JsonSchema)]
+#[derive(Clone, Copy, Debug, Eq, Hash, Ord, PartialEq, PartialOrd, Serialize, Deserialize, JsonSchema, Type)]
 #[serde(rename_all = "snake_case")]
 pub enum EntityType {
     LibraryRoot,

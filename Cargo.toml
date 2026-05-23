@@ -33,7 +33,7 @@ quick-xml = "0.39"
 #   specta is on the 2.x rc track; specta-typescript and tauri-specta follow the same rc series.
 #   schemars stays on 0.8 (uuid1 feature maps to uuid crate v1; upgrading to 1.x is a separate task).
 sqlx = { version = "0.9", default-features = false, features = ["sqlite", "runtime-tokio", "tls-rustls", "macros", "migrate", "uuid", "time", "json"] }
-specta = { version = "2.0.0-rc.25", features = ["derive", "uuid", "time"] }
+specta = { version = "2.0.0-rc.25", features = ["derive", "uuid", "time", "serde_json"] }
 specta-typescript = "0.0.12"
 tauri-specta = { version = "2.0.0-rc.25", features = ["typescript"] }
 schemars = { version = "0.8", features = ["uuid1"] }

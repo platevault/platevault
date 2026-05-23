@@ -2,6 +2,7 @@
 
 use schemars::JsonSchema;
 use serde::{Deserialize, Serialize};
+use specta::Type;
 
 use crate::ids::{EntityId, Timestamp};
 
@@ -10,6 +11,7 @@ use crate::ids::{EntityId, Timestamp};
 /// 7 variants from spec 002 §Project and research.md §2.1.
 #[derive(
     Clone, Copy, Debug, Eq, Hash, Ord, PartialEq, PartialOrd, Serialize, Deserialize, JsonSchema,
+    Type,
 )]
 #[serde(rename_all = "snake_case")]
 pub enum ProjectState {
@@ -38,7 +40,7 @@ impl ProjectState {
 }
 
 /// Snapshot of `{label, at, actor}` recorded in the UI projection column.
-#[derive(Clone, Debug, Eq, PartialEq, Serialize, Deserialize, JsonSchema)]
+#[derive(Clone, Debug, Eq, PartialEq, Serialize, Deserialize, JsonSchema, Type)]
 #[serde(rename_all = "camelCase")]
 pub struct LastAction {
     pub label: String,

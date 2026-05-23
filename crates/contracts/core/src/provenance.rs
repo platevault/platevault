@@ -4,11 +4,12 @@
 
 use schemars::JsonSchema;
 use serde::{Deserialize, Serialize};
+use specta::Type;
 use uuid::Uuid;
 
 pub const CONTRACT_VERSION: &str = "2.0.0";
 
-#[derive(Clone, Copy, Debug, Eq, Hash, Ord, PartialEq, PartialOrd, Serialize, Deserialize, JsonSchema)]
+#[derive(Clone, Copy, Debug, Eq, Hash, Ord, PartialEq, PartialOrd, Serialize, Deserialize, JsonSchema, Type)]
 #[serde(rename_all = "snake_case")]
 pub enum AssetType {
     FileRecord,
@@ -23,7 +24,7 @@ pub enum AssetType {
     Target,
 }
 
-#[derive(Clone, Copy, Debug, Eq, Hash, Ord, PartialEq, PartialOrd, Serialize, Deserialize, JsonSchema)]
+#[derive(Clone, Copy, Debug, Eq, Hash, Ord, PartialEq, PartialOrd, Serialize, Deserialize, JsonSchema, Type)]
 #[serde(rename_all = "snake_case")]
 pub enum ProvenanceOrigin {
     Observed,
@@ -34,7 +35,7 @@ pub enum ProvenanceOrigin {
     Applied,
 }
 
-#[derive(Clone, Debug, PartialEq, Serialize, Deserialize, JsonSchema)]
+#[derive(Clone, Debug, PartialEq, Serialize, Deserialize, JsonSchema, Type)]
 #[serde(rename_all = "camelCase")]
 pub struct ProvenanceHistoryEntry {
     pub origin: ProvenanceOrigin,
@@ -46,7 +47,7 @@ pub struct ProvenanceHistoryEntry {
     pub replaced_by: Option<String>,
 }
 
-#[derive(Clone, Debug, PartialEq, Serialize, Deserialize, JsonSchema)]
+#[derive(Clone, Debug, PartialEq, Serialize, Deserialize, JsonSchema, Type)]
 #[serde(rename_all = "camelCase")]
 pub struct ProvenanceField {
     pub field_path: String,
@@ -60,14 +61,14 @@ pub struct ProvenanceField {
     pub history_truncated: bool,
 }
 
-#[derive(Clone, Copy, Debug, Eq, Hash, Ord, PartialEq, PartialOrd, Serialize, Deserialize, JsonSchema)]
+#[derive(Clone, Copy, Debug, Eq, Hash, Ord, PartialEq, PartialOrd, Serialize, Deserialize, JsonSchema, Type)]
 #[serde(rename_all = "snake_case")]
 pub enum ProvenanceErrorCode {
     AssetNotFound,
     ActorNotAuthorised,
 }
 
-#[derive(Clone, Debug, PartialEq, Serialize, Deserialize, JsonSchema)]
+#[derive(Clone, Debug, PartialEq, Serialize, Deserialize, JsonSchema, Type)]
 #[serde(rename_all = "camelCase")]
 pub struct ProvenanceError {
     pub code: ProvenanceErrorCode,
@@ -76,7 +77,7 @@ pub struct ProvenanceError {
     pub details: Option<serde_json::Value>,
 }
 
-#[derive(Clone, Debug, PartialEq, Serialize, Deserialize, JsonSchema)]
+#[derive(Clone, Debug, PartialEq, Serialize, Deserialize, JsonSchema, Type)]
 #[serde(rename_all = "camelCase")]
 pub struct ProvenanceReadRequest {
     pub contract_version: String,
@@ -100,14 +101,14 @@ impl ProvenanceReadRequest {
     }
 }
 
-#[derive(Clone, Copy, Debug, Eq, Hash, Ord, PartialEq, PartialOrd, Serialize, Deserialize, JsonSchema)]
+#[derive(Clone, Copy, Debug, Eq, Hash, Ord, PartialEq, PartialOrd, Serialize, Deserialize, JsonSchema, Type)]
 #[serde(rename_all = "snake_case")]
 pub enum ProvenanceResponseStatus {
     Success,
     Error,
 }
 
-#[derive(Clone, Debug, PartialEq, Serialize, Deserialize, JsonSchema)]
+#[derive(Clone, Debug, PartialEq, Serialize, Deserialize, JsonSchema, Type)]
 #[serde(rename_all = "camelCase")]
 pub struct ProvenanceReadResponse {
     pub status: ProvenanceResponseStatus,

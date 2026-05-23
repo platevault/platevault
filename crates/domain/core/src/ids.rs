@@ -2,12 +2,14 @@
 
 use schemars::JsonSchema;
 use serde::{Deserialize, Serialize};
+use specta::Type;
 use time::OffsetDateTime;
 use uuid::Uuid;
 
 /// Stable UUIDv4 identifier for any entity.
 #[derive(
     Clone, Copy, Debug, Eq, Hash, Ord, PartialEq, PartialOrd, Serialize, Deserialize, JsonSchema,
+    Type,
 )]
 #[serde(transparent)]
 pub struct EntityId(Uuid);
@@ -50,6 +52,7 @@ impl std::fmt::Display for EntityId {
 /// Opaque UUID identifier for an `AuditLogEntry`.
 #[derive(
     Clone, Copy, Debug, Eq, Hash, Ord, PartialEq, PartialOrd, Serialize, Deserialize, JsonSchema,
+    Type,
 )]
 #[serde(transparent)]
 pub struct AuditId(Uuid);
@@ -78,7 +81,7 @@ impl Default for AuditId {
 }
 
 /// 32-byte SHA-256 content hash. Lazy — populated only when a workflow demands it.
-#[derive(Clone, Debug, Eq, Hash, PartialEq, Serialize, Deserialize, JsonSchema)]
+#[derive(Clone, Debug, Eq, Hash, PartialEq, Serialize, Deserialize, JsonSchema, Type)]
 #[serde(transparent)]
 pub struct ContentHash(String);
 
@@ -98,8 +101,9 @@ impl ContentHash {
 }
 
 /// RFC 3339 UTC timestamp wrapper.
-#[derive(Clone, Copy, Debug, Eq, PartialEq, Serialize, Deserialize)]
+#[derive(Clone, Copy, Debug, Eq, PartialEq, Serialize, Deserialize, Type)]
 #[serde(transparent)]
+#[specta(transparent)]
 pub struct Timestamp(OffsetDateTime);
 
 impl Timestamp {

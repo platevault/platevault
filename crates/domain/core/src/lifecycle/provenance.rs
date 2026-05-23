@@ -5,12 +5,14 @@
 
 use schemars::JsonSchema;
 use serde::{Deserialize, Serialize};
+use specta::Type;
 
 use crate::ids::{EntityId, Timestamp};
 
 /// Origin tag that classifies how a value was derived or confirmed.
 #[derive(
     Clone, Copy, Debug, Eq, Hash, Ord, PartialEq, PartialOrd, Serialize, Deserialize, JsonSchema,
+    Type,
 )]
 #[serde(rename_all = "snake_case")]
 pub enum ProvenanceTag {
@@ -28,22 +30,6 @@ pub enum ProvenanceTag {
     Applied,
 }
 
-/// One entry in the append-only provenance history.
-#[derive(Clone, Debug, PartialEq, Serialize, Deserialize, JsonSchema)]
-#[serde(rename_all = "camelCase")]
-pub struct ProvenanceEntry<T: JsonSchema> {
-    /// The value that was in effect when this entry was captured.
-    pub value: T,
-    pub origin: ProvenanceTag,
-    pub captured_at: Timestamp,
-    /// Opaque reference to the originating source (file_record id, plan id, reviewer id, etc.).
-    #[serde(skip_serializing_if = "Option::is_none")]
-    pub source_id: Option<EntityId>,
-    /// Optional pointer to the entry that superseded this one.
-    #[serde(skip_serializing_if = "Option::is_none")]
-    pub replaced_by: Option<String>,
-}
-
 /// Priority score — lower number = higher priority.
 fn priority(tag: ProvenanceTag) -> u8 {
     match tag {
@@ -56,13 +42,38 @@ fn priority(tag: ProvenanceTag) -> u8 {
     }
 }
 
+/// One entry in the append-only provenance history.
+///
+/// `T` must satisfy both `JsonSchema` (for schemars) and `Type` (for specta).
+/// The bounds are expressed via attribute overrides rather than inline generic
+/// constraints to avoid conflicts when derive macros add independent `where`
+/// clauses for each trait.
+#[derive(Clone, Debug, PartialEq, Serialize, Deserialize, JsonSchema, Type)]
+#[serde(rename_all = "camelCase")]
+#[schemars(bound = "T: JsonSchema")]
+#[specta(bound = "T: Type")]
+pub struct ProvenanceEntry<T> {
+    /// The value that was in effect when this entry was captured.
+    pub value: T,
+    pub origin: ProvenanceTag,
+    pub captured_at: Timestamp,
+    /// Opaque reference to the originating source (file_record id, plan id, reviewer id, etc.).
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub source_id: Option<EntityId>,
+    /// Optional pointer to the entry that superseded this one.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub replaced_by: Option<String>,
+}
+
 /// Wrapper that carries a value with its full provenance trail.
 ///
 /// `history` is append-only; mutation produces a new entry without erasing prior ones.
 /// Inline history is bounded per origin tag; older entries spill to `provenance_history_archive`.
-#[derive(Clone, Debug, PartialEq, Serialize, Deserialize, JsonSchema)]
+#[derive(Clone, Debug, PartialEq, Serialize, Deserialize, JsonSchema, Type)]
 #[serde(rename_all = "camelCase")]
-pub struct ProvenancedValue<T: JsonSchema> {
+#[schemars(bound = "T: Clone + JsonSchema")]
+#[specta(bound = "T: Clone + Type")]
+pub struct ProvenancedValue<T> {
     /// Effective current value (priority: reviewed > inferred > observed > generated > planned > applied).
     pub current: T,
     /// The origin tag of the winning entry.
@@ -74,7 +85,7 @@ pub struct ProvenancedValue<T: JsonSchema> {
     pub history_truncated: bool,
 }
 
-impl<T: Clone + JsonSchema> ProvenancedValue<T> {
+impl<T: Clone + JsonSchema + Type> ProvenancedValue<T> {
     /// Construct with a single initial entry.
     #[must_use]
     pub fn new(value: T, origin: ProvenanceTag, captured_at: Timestamp) -> Self {

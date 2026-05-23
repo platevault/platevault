@@ -3,6 +3,7 @@
 
 use schemars::JsonSchema;
 use serde::{Deserialize, Serialize};
+use specta::Type;
 
 use crate::ids::{EntityId, Timestamp};
 use crate::lifecycle::provenance::ProvenancedValue;
@@ -12,6 +13,7 @@ use crate::lifecycle::provenance::ProvenancedValue;
 /// 6 variants per spec 002 §SessionState and research.md §2.3.
 #[derive(
     Clone, Copy, Debug, Eq, Hash, Ord, PartialEq, PartialOrd, Serialize, Deserialize, JsonSchema,
+    Type,
 )]
 #[serde(rename_all = "snake_case")]
 pub enum SessionState {
@@ -34,6 +36,7 @@ impl SessionState {
 /// Calibration frame kind.
 #[derive(
     Clone, Copy, Debug, Eq, Hash, Ord, PartialEq, PartialOrd, Serialize, Deserialize, JsonSchema,
+    Type,
 )]
 #[serde(rename_all = "snake_case")]
 pub enum CalibrationKind {
@@ -45,7 +48,7 @@ pub enum CalibrationKind {
 
 /// Geographic observer location at acquisition time. Carried as
 /// `ProvenancedValue<ObserverLocation>` on `AcquisitionSession` (R-Obs).
-#[derive(Clone, Debug, PartialEq, Serialize, Deserialize, JsonSchema)]
+#[derive(Clone, Debug, PartialEq, Serialize, Deserialize, JsonSchema, Type)]
 pub struct ObserverLocation {
     /// IANA timezone identifier (e.g. `"Europe/Amsterdam"`).
     pub tz: String,

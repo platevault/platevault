@@ -115,19 +115,21 @@ where
         })
         .await?;
 
-    // Publish live event (durable-side write to `events` table deferred to T010b).
-    let _ = bus.publish(
-        TOPIC_LIFECYCLE_TRANSITION_APPLIED,
-        Source::User,
-        LifecycleTransitionApplied {
-            entity_type: cmd.entity_type,
-            entity_id: cmd.entity_id.to_string(),
-            from_state: cmd.from_state,
-            to_state: cmd.to_state,
-            actor: cmd.actor,
-            at: record.applied_at,
-        },
-    );
+    // Publish event (durable write to `events` table + live broadcast).
+    let _ = bus
+        .publish(
+            TOPIC_LIFECYCLE_TRANSITION_APPLIED,
+            Source::User,
+            LifecycleTransitionApplied {
+                entity_type: cmd.entity_type,
+                entity_id: cmd.entity_id.to_string(),
+                from_state: cmd.from_state,
+                to_state: cmd.to_state,
+                actor: cmd.actor,
+                at: record.applied_at,
+            },
+        )
+        .await;
 
     Ok(Some(record))
 }
@@ -137,10 +139,29 @@ mod tests {
     use super::*;
     use persistence_db::repositories::lifecycle::InMemoryLifecycleRepository;
 
+    async fn test_bus() -> EventBus {
+        let pool = sqlx::SqlitePool::connect("sqlite::memory:")
+            .await
+            .expect("in-memory pool for test");
+        sqlx::query(
+            "CREATE TABLE IF NOT EXISTS events (\
+             event_id INTEGER PRIMARY KEY AUTOINCREMENT,\
+             topic TEXT NOT NULL,\
+             source TEXT NOT NULL,\
+             emitted_at TEXT NOT NULL,\
+             payload TEXT NOT NULL\
+             )",
+        )
+        .execute(&pool)
+        .await
+        .expect("create events table");
+        EventBus::with_pool(pool)
+    }
+
     #[tokio::test]
     async fn noop_returns_none_without_persisting() {
         let repo = InMemoryLifecycleRepository;
-        let bus = EventBus::new();
+        let bus = test_bus().await;
         let table = build_edge_table();
 
         let result = transition_lifecycle(
@@ -166,7 +187,7 @@ mod tests {
     #[tokio::test]
     async fn successful_transition_returns_record_and_publishes_event() {
         let repo = InMemoryLifecycleRepository;
-        let bus = EventBus::new();
+        let bus = test_bus().await;
         let mut rx = bus.subscribe();
         let table = build_edge_table();
 

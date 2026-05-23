@@ -29,6 +29,7 @@ dependencies = [
  "domain_core",
  "persistence_db",
  "serde_json",
+ "sqlx",
  "thiserror",
  "tokio",
 ]
@@ -51,7 +52,9 @@ dependencies = [
  "serde",
  "serde_json",
  "specta",
+ "sqlx",
  "thiserror",
+ "time",
  "tokio",
 ]
 
@@ -895,6 +898,7 @@ dependencies = [
  "thiserror",
  "time",
  "tokio",
+ "uuid",
 ]
 
 [[package]]
@@ -1226,6 +1230,7 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "38f9a30cbcbb7011f1da7d73483983bf838af123883e45f2b36ed76328df9c50"
 dependencies = [
  "rustc_version",
+ "serde_json",
  "specta-macros",
  "time",
  "uuid",

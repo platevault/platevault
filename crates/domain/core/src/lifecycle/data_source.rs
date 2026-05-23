@@ -2,11 +2,13 @@
 
 use schemars::JsonSchema;
 use serde::{Deserialize, Serialize};
+use specta::Type;
 
 use crate::ids::{EntityId, Timestamp};
 
 #[derive(
     Clone, Copy, Debug, Eq, Hash, Ord, PartialEq, PartialOrd, Serialize, Deserialize, JsonSchema,
+    Type,
 )]
 #[serde(rename_all = "snake_case")]
 pub enum DataSourceState {
@@ -18,6 +20,7 @@ pub enum DataSourceState {
 
 #[derive(
     Clone, Copy, Debug, Eq, Hash, Ord, PartialEq, PartialOrd, Serialize, Deserialize, JsonSchema,
+    Type,
 )]
 #[serde(rename_all = "snake_case")]
 pub enum LibraryRootKind {

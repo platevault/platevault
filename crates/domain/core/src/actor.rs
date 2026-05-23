@@ -2,6 +2,7 @@
 
 use schemars::JsonSchema;
 use serde::{Deserialize, Serialize};
+use specta::Type;
 
 use crate::ids::EntityId;
 
@@ -10,7 +11,7 @@ use crate::ids::EntityId;
 /// `system` is only permitted on edges entering or leaving `blocked`
 /// (per spec 009 ratification). The use-case layer enforces this and rejects
 /// violations with `transition.refused`.
-#[derive(Clone, Debug, Default, Eq, PartialEq, Serialize, Deserialize, JsonSchema)]
+#[derive(Clone, Debug, Default, Eq, PartialEq, Serialize, Deserialize, JsonSchema, Type)]
 #[serde(rename_all = "snake_case", tag = "kind")]
 pub enum Actor {
     User { user_id: EntityId },

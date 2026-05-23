@@ -4,6 +4,7 @@
 use schemars::JsonSchema;
 use serde::{Deserialize, Serialize};
 use serde_json::Value;
+use specta::Type;
 
 use domain_core::ids::{AuditId, EntityId, Timestamp};
 use domain_core::lifecycle::data_asset::EntityType;
@@ -11,6 +12,7 @@ use domain_core::lifecycle::data_asset::EntityType;
 /// Result class for an audit event.
 #[derive(
     Clone, Copy, Debug, Eq, Hash, Ord, PartialEq, PartialOrd, Serialize, Deserialize, JsonSchema,
+    Type,
 )]
 #[serde(rename_all = "snake_case")]
 pub enum Outcome {
@@ -22,6 +24,7 @@ pub enum Outcome {
 /// Visibility tier for the audit event (FR-008).
 #[derive(
     Clone, Copy, Debug, Eq, Hash, Ord, PartialEq, PartialOrd, Serialize, Deserialize, JsonSchema,
+    Type,
 )]
 #[serde(rename_all = "snake_case")]
 pub enum Severity {
@@ -30,7 +33,7 @@ pub enum Severity {
 }
 
 /// Durable, append-only record of a lifecycle transition attempt.
-#[derive(Clone, Debug, PartialEq, Serialize, Deserialize, JsonSchema)]
+#[derive(Clone, Debug, PartialEq, Serialize, Deserialize, JsonSchema, Type)]
 #[serde(rename_all = "camelCase")]
 pub struct AuditLogEntry {
     pub audit_id: AuditId,
