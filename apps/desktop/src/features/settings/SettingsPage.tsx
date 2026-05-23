@@ -172,6 +172,11 @@ function DataSourcesSection() {
         <Button
           variant="ghost"
           onClick={() => {
+            // Clear the first-run flag so the wizard actually re-enters
+            // cleanly: without this, the index route still redirects to
+            // /inventory on the next reload and the wizard appears
+            // "stuck completed" in any non-incognito browser session.
+            localStorage.removeItem("alm.first-run.completed");
             navigate({ to: "/welcome" });
           }}
         >
