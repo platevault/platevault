@@ -12,7 +12,7 @@
  *   - each entry exposes `data-refusal-bucket` and `data-refusal-code`
  *
  * Groups: `needsAction` first, then `needsAttention`. Cap rendered entries
- * at 10 (newest-first per the store).
+ * (scrolls when the list grows; newest-first per the store).
  */
 import { useMemo, useState } from "react";
 import { AlertCircle } from "lucide-react";
@@ -20,7 +20,6 @@ import { AlertCircle } from "lucide-react";
 import { Tooltip } from "../ui";
 import { useRefusals, refusalBucket, type RefusalRecord } from "../data/store";
 
-const MAX_ENTRIES = 10;
 
 interface Bucketed {
   needsAction: RefusalRecord[];
@@ -109,23 +108,22 @@ export function RefusalSurface() {
             display: "flex",
             flexDirection: "column",
             gap: 8,
+            maxHeight: "60vh",
+            overflowY: "auto",
           }}
         >
           {needsAction.length > 0 ? (
             <RefusalGroup
               label="Needs action"
               bucket="needsAction"
-              entries={needsAction.slice(0, MAX_ENTRIES)}
+              entries={needsAction}
             />
           ) : null}
           {needsAttention.length > 0 ? (
             <RefusalGroup
               label="Needs attention"
               bucket="needsAttention"
-              entries={needsAttention.slice(
-                0,
-                Math.max(0, MAX_ENTRIES - needsAction.length),
-              )}
+              entries={needsAttention}
             />
           ) : null}
         </div>

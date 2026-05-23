@@ -63,10 +63,9 @@ export interface RefusalRecord {
   blockingFields?: string[];
 }
 
-// Publisher is declared below; we delay instantiation by deferring with a
-// lazy getter. To avoid temporal dead zone with const ordering, we move the
-// `Publisher` class definition above (already done at line 33) — this section
-// is positioned after it logically.
+// `refusalsPub` instantiation lives further down (after the `Publisher`
+// class). These helpers reference it via closure, not at module-init time,
+// so there's no TDZ concern.
 
 export function useRefusals(): RefusalRecord[] {
   return useSyncExternalStore(refusalsPub.subscribe, refusalsPub.getSnapshot);
@@ -117,23 +116,36 @@ export type TransitionOutcome =
   | { ok: false; refusal: RefusalRecord };
 
 /**
- * Extract `blockingFields` from a refusal's `details` payload (set for
- * `provenance_unreviewed`).
+ * Extract field paths from a refusal's `details.blockingFields` payload
+ * (set for `provenance.unreviewed`). The contract emits objects per
+ * `contracts/lifecycle.transition.json` §$defs.BlockingField:
+ *   { fieldPath: string, requiredOrigin: string }
+ *
+ * We accept either the contract object shape OR a flat `string[]` for
+ * forward-compatibility with any consumer that pre-projects the list.
+ * The legacy `blocking_fields` (snake_case) key is also accepted because
+ * some intermediaries (e.g. dev-fallback shims) may emit it.
  */
-function extractBlockingFields(details: unknown): string[] | undefined {
-  if (details && typeof details === "object" && "blocking_fields" in details) {
-    const raw = (details as { blocking_fields: unknown }).blocking_fields;
-    if (Array.isArray(raw) && raw.every((x) => typeof x === "string")) {
-      return raw as string[];
-    }
-  }
-  if (details && typeof details === "object" && "blockingFields" in details) {
-    const raw = (details as { blockingFields: unknown }).blockingFields;
-    if (Array.isArray(raw) && raw.every((x) => typeof x === "string")) {
-      return raw as string[];
-    }
-  }
-  return undefined;
+export function extractBlockingFields(details: unknown): string[] | undefined {
+  if (!details || typeof details !== "object") return undefined;
+  const raw =
+    "blockingFields" in details
+      ? (details as { blockingFields: unknown }).blockingFields
+      : "blocking_fields" in details
+        ? (details as { blocking_fields: unknown }).blocking_fields
+        : undefined;
+  if (!Array.isArray(raw)) return undefined;
+  const paths = raw
+    .map((entry) => {
+      if (typeof entry === "string") return entry;
+      if (entry && typeof entry === "object" && "fieldPath" in entry) {
+        const fp = (entry as { fieldPath: unknown }).fieldPath;
+        return typeof fp === "string" ? fp : undefined;
+      }
+      return undefined;
+    })
+    .filter((x): x is string => typeof x === "string");
+  return paths.length > 0 ? paths : undefined;
 }
 
 function projectResponse(

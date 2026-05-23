@@ -276,3 +276,51 @@ describe("dev harness — Tauri bridge absent", () => {
     expect(updated?.lifecycle).toBe("completed");
   });
 });
+
+// ----------------------------------------------------------------------------
+// 6. extractBlockingFields — contract-shape regression guard (P0 from
+//    2026-05-23 code review). Backend emits
+//    `details.blockingFields: [{ fieldPath, requiredOrigin }]` per
+//    contracts/lifecycle.transition.json §$defs.BlockingField. The old
+//    extractor only accepted `string[]`, so production refusals lost
+//    their per-field detail.
+// ----------------------------------------------------------------------------
+
+describe("extractBlockingFields", () => {
+  it("projects fieldPath strings from the contract's object array (camelCase)", async () => {
+    const store = await freshStore();
+    const result = store.extractBlockingFields({
+      blockingFields: [
+        { fieldPath: "observer_location", requiredOrigin: "reviewed" },
+        { fieldPath: "target_id", requiredOrigin: "reviewed" },
+      ],
+    });
+    expect(result).toEqual(["observer_location", "target_id"]);
+  });
+
+  it("projects fieldPath strings from the snake_case legacy key", async () => {
+    const store = await freshStore();
+    const result = store.extractBlockingFields({
+      blocking_fields: [{ fieldPath: "observer_location", requiredOrigin: "reviewed" }],
+    });
+    expect(result).toEqual(["observer_location"]);
+  });
+
+  it("accepts a pre-projected flat string[] for forward compatibility", async () => {
+    const store = await freshStore();
+    const result = store.extractBlockingFields({
+      blockingFields: ["observer_location", "target_id"],
+    });
+    expect(result).toEqual(["observer_location", "target_id"]);
+  });
+
+  it("returns undefined for missing or malformed details", async () => {
+    const store = await freshStore();
+    expect(store.extractBlockingFields(undefined)).toBeUndefined();
+    expect(store.extractBlockingFields(null)).toBeUndefined();
+    expect(store.extractBlockingFields({})).toBeUndefined();
+    expect(store.extractBlockingFields({ blockingFields: "not an array" })).toBeUndefined();
+    expect(store.extractBlockingFields({ blockingFields: [] })).toBeUndefined();
+    expect(store.extractBlockingFields({ blockingFields: [{ notFieldPath: "x" }] })).toBeUndefined();
+  });
+});

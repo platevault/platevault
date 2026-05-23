@@ -66,6 +66,14 @@ function synthesiseDevProvenance(
   assetType: AssetType,
   fieldPaths?: string[],
 ): ProvenanceField[] {
+  // Defence-in-depth: the runtime check `!isTauriRuntime()` is the primary
+  // gate, but if a future build ever loads this module in a non-Tauri
+  // context that lacks `__TAURI_INTERNALS__` (e.g. a remote-backend mode
+  // or compromised harness), an attacker could force the synthetic path
+  // and hide real backend responses. Vite tree-shakes `import.meta.env.DEV`
+  // branches at build time, so production bundles will short-circuit
+  // here and never ship the synthesis logic.
+  if (!import.meta.env.DEV) return [];
   const capturedAt = new Date().toISOString();
   let entries: Array<{ fieldPath: string; current: unknown }> = [];
 

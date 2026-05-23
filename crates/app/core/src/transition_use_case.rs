@@ -145,7 +145,7 @@ where
         .await;
     }
 
-    // 6. Hand off — record + publish.
+    // 7. Hand off — record + publish.
     dispatch_to_repository(repo, bus, command, edge_table, request_id, prior_state).await
 }
 
@@ -296,6 +296,12 @@ where
 /// just observable in the response envelope), then returns the refusal
 /// response. Best-effort: a persistence failure on the audit row MUST NOT
 /// mask the user-facing refusal (the response is what the caller sees).
+///
+/// Audit-write failures are surfaced on stderr so an external watchdog can
+/// alert on gap rates — silently dropping them would defeat the
+/// "reviewable mutation" principle (Constitution §II). The repo has no
+/// structured logging facility yet; eprintln is the lowest-friction signal
+/// that doesn't add a dependency.
 async fn record_refused<R>(
     repo: &R,
     command: &TransitionCommand,
@@ -308,7 +314,7 @@ async fn record_refused<R>(
 where
     R: LifecycleRepository + Sync,
 {
-    let _ = repo
+    if let Err(err) = repo
         .record_refused_transition(
             RepoTransitionRequest {
                 entity_id: command.entity_id,
@@ -322,7 +328,13 @@ where
             code_str,
             &message,
         )
-        .await;
+        .await
+    {
+        eprintln!(
+            "audit: failed to persist refused row entity_id={} entity_type={} code={} err={}",
+            command.entity_id, command.entity_type, code_str, err
+        );
+    }
 
     TransitionResponse::error(
         request_id,
