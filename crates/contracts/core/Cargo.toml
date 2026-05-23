@@ -16,6 +16,7 @@ domain_core = { path = "../../domain/core" }
 schemars.workspace = true
 serde.workspace = true
 serde_json.workspace = true
+specta.workspace = true
 thiserror.workspace = true
 uuid.workspace = true
 

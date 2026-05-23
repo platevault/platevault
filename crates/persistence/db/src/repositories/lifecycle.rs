@@ -78,6 +78,55 @@ pub trait LifecycleRepository {
     ) -> impl std::future::Future<Output = DbResult<TransitionRecord>> + Send;
 }
 
+/// SQLite-backed implementation of [`LifecycleRepository`].
+///
+/// Initial implementation stubs each method to return `DbError::NotImplemented`
+/// so the wiring compiles and the trait surface is exercised. Full SQL bodies
+/// will be added in subsequent tasks once the schema is validated via migration
+/// smoke tests.
+pub struct SqliteLifecycleRepository {
+    pool: sqlx::SqlitePool,
+}
+
+impl SqliteLifecycleRepository {
+    #[must_use]
+    pub fn new(pool: sqlx::SqlitePool) -> Self {
+        Self { pool }
+    }
+}
+
+impl LifecycleRepository for SqliteLifecycleRepository {
+    async fn load_asset_detail(
+        &self,
+        _entity_id: EntityId,
+        _entity_type: EntityType,
+    ) -> DbResult<AssetDetail> {
+        // TODO: implement with sqlx query against lifecycle_ledger table.
+        Err(DbError::NotImplemented)
+    }
+
+    async fn list_assets_ledger(&self, _filter: LedgerFilter) -> DbResult<Vec<LedgerRow>> {
+        // TODO: implement with sqlx query_as against lifecycle_ledger table.
+        Err(DbError::NotImplemented)
+    }
+
+    async fn record_transition(
+        &self,
+        _transition: TransitionRequest,
+    ) -> DbResult<TransitionRecord> {
+        // TODO: implement with sqlx transaction: insert into lifecycle_ledger + lifecycle_events.
+        Err(DbError::NotImplemented)
+    }
+}
+
+// Keep the pool accessible for tests that verify the pool is alive.
+impl SqliteLifecycleRepository {
+    #[must_use]
+    pub fn pool(&self) -> &sqlx::SqlitePool {
+        &self.pool
+    }
+}
+
 /// In-memory stub — compiles without sqlx; used by unit tests.
 #[derive(Default)]
 pub struct InMemoryLifecycleRepository;

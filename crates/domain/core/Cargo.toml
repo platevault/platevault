@@ -10,6 +10,7 @@ path = "src/lib.rs"
 [dependencies]
 schemars.workspace = true
 serde.workspace = true
+specta.workspace = true
 thiserror.workspace = true
 time.workspace = true
 uuid.workspace = true
