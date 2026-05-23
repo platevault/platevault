@@ -25,7 +25,56 @@ import {
   useProjects,
   useScanStatus,
 } from "../data/store";
+import { useTauriBridgeStatus } from "../data/lifecycle-bridge";
 import { buildPaletteGroups } from "./palette";
+
+function BridgeStatusPill() {
+  const status = useTauriBridgeStatus();
+  let label: string;
+  let tone: string;
+  let tooltip: string;
+  switch (status.runtime) {
+    case "tauri":
+      label = "Tauri";
+      tone = "ok";
+      tooltip = `Connected to spec 002 backend — ledger probe returned ${status.ledgerCount} row(s).`;
+      break;
+    case "probing":
+      label = "…";
+      tone = "probing";
+      tooltip = "Probing Tauri bridge…";
+      break;
+    case "error":
+      label = "Err";
+      tone = "err";
+      tooltip = `Tauri bridge probe failed: ${status.message}`;
+      break;
+    case "browser":
+    default:
+      label = "Mock";
+      tone = "mock";
+      tooltip = "Browser-mode mockup. Launch via `cargo tauri dev` for the real backend.";
+      break;
+  }
+  return (
+    <Tooltip content={tooltip}>
+      <span
+        className="alm-shell__bridge-pill"
+        data-tone={tone}
+        aria-label={tooltip}
+        style={{
+          fontSize: 11,
+          padding: "2px 6px",
+          borderRadius: 4,
+          border: "1px solid var(--color-border)",
+          opacity: 0.7,
+        }}
+      >
+        {label}
+      </span>
+    </Tooltip>
+  );
+}
 
 interface NavItem {
   id: string;
@@ -83,6 +132,7 @@ export function Shell({ children }: { children: ReactNode }) {
         </div>
         <Breadcrumbs pathname={location.pathname} />
         <div className="alm-shell__header-utils">
+          <BridgeStatusPill />
           <Tooltip content="Search (⌘K)">
             <IconButton aria-label="Search" onClick={() => setPaletteOpen(true)}>
               <Search size={15} />

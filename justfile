@@ -26,6 +26,17 @@ typecheck:
 contracts-build:
     pnpm --filter @astro-plan/contracts build
 
+# Regenerate Rust-derived JSON contract schemas and the tauri-specta
+# TypeScript bindings, then fail when either is out of sync with the
+# committed tree. Wire this into CI for spec 002 + onward.
+check-generated:
+    cargo run -q -p contracts_core --bin generate-contracts
+    cargo test -q -p desktop_shell --test bindings
+    git diff --exit-code specs/*/contracts/*.generated.json apps/desktop/src/bindings/
+
+# Full pre-merge gate: lint + tests + typecheck + generated-artifact drift.
+check: lint test typecheck check-generated
+
 # Placeholder fixture check hook.
 fixtures-check:
     pnpm fixtures:check
