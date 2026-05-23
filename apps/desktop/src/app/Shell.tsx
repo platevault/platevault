@@ -27,6 +27,7 @@ import {
 } from "../data/store";
 import { useTauriBridgeStatus } from "../data/lifecycle-bridge";
 import { buildPaletteGroups } from "./palette";
+import { RefusalSurface } from "./RefusalSurface";
 
 function BridgeStatusPill() {
   const status = useTauriBridgeStatus();
@@ -133,6 +134,7 @@ export function Shell({ children }: { children: ReactNode }) {
         <Breadcrumbs pathname={location.pathname} />
         <div className="alm-shell__header-utils">
           <BridgeStatusPill />
+          <RefusalSurface />
           <Tooltip content="Search (⌘K)">
             <IconButton aria-label="Search" onClick={() => setPaletteOpen(true)}>
               <Search size={15} />

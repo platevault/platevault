@@ -1,6 +1,13 @@
 import type { ReactNode } from "react";
 
-export type ChipTone = "neutral" | "success" | "warn" | "danger" | "accent" | "info";
+export type ChipTone =
+  | "neutral"
+  | "success"
+  | "warn"
+  | "danger"
+  | "accent"
+  | "info"
+  | "archival";
 
 export interface ChipProps {
   tone?: ChipTone;

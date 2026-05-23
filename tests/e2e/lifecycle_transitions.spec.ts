@@ -11,11 +11,10 @@
  * which runs the Vite browser shell — `window.__TAURI_INTERNALS__` is absent.
  * Every write into the store therefore takes the dev-fallback branch in
  * `setProjectLifecycle`: it pushes a synthetic `dev_fallback` refusal AND
- * applies the legacy mock mutation. At time of writing no UI surface
- * subscribes to `useRefusals()`, so the refusal-bucket assertion is
- * deferred until either (a) a refusal-toast / refusal-badge component
- * lands or (b) a Tauri-runtime e2e harness exists. Both are tracked as
- * follow-ups.
+ * applies the legacy mock mutation. The shell-level `RefusalSurface` (in
+ * `apps/desktop/src/app/RefusalSurface.tsx`) subscribes to `useRefusals()`
+ * and renders a pill with grouped entries, which lets this test assert the
+ * refusal-bucket projection (FR-008, refusal-surface portion).
  *
  * FR-008 (timeline shows only workflow-significant events) is asserted
  * structurally: the project drawer's Activity tab renders a small set of
@@ -65,6 +64,19 @@ test.describe("lifecycle transitions · write-side seam (dev-harness)", () => {
     // Tauri call succeeded.
     await expect(row).toContainText(/Completed/i, { timeout: 5_000 });
     await expect(row).not.toContainText(/^Processing$/i);
+
+    // FR-008 (refusal bucket projection): the dev-fallback path pushed a
+    // `dev_fallback` refusal into the store. The shell-level RefusalSurface
+    // must render an entry in the `needsAttention` bucket with that code.
+    const surface = page.locator("[data-refusal-surface]");
+    await expect(surface).toBeVisible();
+    const devFallbackEntry = surface.locator(
+      '[data-refusal-bucket="needsAttention"][data-refusal-code="dev_fallback"]',
+    );
+    // The surface is collapsed into a count-pill — click to expand the
+    // popover so the per-entry markers are mounted.
+    await surface.getByRole("button").first().click();
+    await expect(devFallbackEntry.first()).toBeVisible();
   });
 
   // FR-008: timeline shows only workflow-significant events.

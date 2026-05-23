@@ -129,6 +129,11 @@
   --danger-soft: rgba(193, 59, 67, 0.12);
   --info: #2c6fb0;
   --info-soft: rgba(44, 111, 176, 0.12);
+  /* "archival" — system-committed / finalised. Teal, distinct from `success`
+     (user-verified green) and `info` (raw-fact blue). Light value contrasts
+     ≥ 4.5:1 on --bg and on --surface-2. */
+  --archival: #0d7d8c;
+  --archival-soft: rgba(13, 125, 140, 0.12);
 
   --focus-ring: rgba(61, 92, 219, 0.45);
 
@@ -179,6 +184,10 @@
   --danger-soft: rgba(226, 96, 104, 0.14);
   --info: #6b9dcc;
   --info-soft: rgba(107, 157, 204, 0.14);
+  /* "archival" — system-committed / finalised. Light teal for dark theme,
+     contrast ≥ 4.5:1 on --bg. */
+  --archival: #5dc4d4;
+  --archival-soft: rgba(93, 196, 212, 0.16);
 
   --focus-ring: rgba(107, 138, 255, 0.55);
 
@@ -226,6 +235,8 @@
     --danger-soft: rgba(226, 96, 104, 0.14);
     --info: #6b9dcc;
     --info-soft: rgba(107, 157, 204, 0.14);
+    --archival: #5dc4d4;
+    --archival-soft: rgba(93, 196, 212, 0.16);
 
     --focus-ring: rgba(107, 138, 255, 0.55);
 

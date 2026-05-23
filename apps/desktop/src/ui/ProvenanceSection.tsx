@@ -38,17 +38,13 @@ export const PROVENANCE_ORIGINS: ReadonlyArray<ProvenanceOrigin> = [
 /**
  * Origin → ChipTone mapping. Distinct, accessible color per origin.
  *
- * The Chip primitive ships 6 tones (neutral, info, warn, success, accent,
- * danger). We map each origin to a distinct tone:
  *   - observed   → info     (raw, factual reading)
  *   - inferred   → warn     (uncertain, computed)
  *   - reviewed   → success  (user-verified)
  *   - generated  → accent   (system-derived projection)
  *   - planned    → neutral  (intent, not yet applied)
- *   - applied    → danger   (irreversible finalization — use danger tone
- *                            ONLY for visual distinction; semantically it
- *                            is not an error. See `data-provenance-origin`
- *                            for the canonical origin signal in tests/a11y.)
+ *   - applied    → archival (system-committed / finalised — teal, distinct
+ *                            from `success` which signals user verification)
  */
 const ORIGIN_TONE: Record<ProvenanceOrigin, ChipTone> = {
   observed: "info",
@@ -56,7 +52,7 @@ const ORIGIN_TONE: Record<ProvenanceOrigin, ChipTone> = {
   reviewed: "success",
   generated: "accent",
   planned: "neutral",
-  applied: "danger",
+  applied: "archival",
 };
 
 export interface OriginChipProps {

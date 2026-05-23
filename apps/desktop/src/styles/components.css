@@ -2165,12 +2165,14 @@ button.alm-statechip:hover {
 .alm-statechip[data-tone="accent"]::before  { background: var(--accent); }
 .alm-statechip[data-tone="info"]::before    { background: var(--info); }
 .alm-statechip[data-tone="neutral"]::before { background: var(--text-faint); }
+.alm-statechip[data-tone="archival"]::before { background: var(--archival); }
 
-.alm-statechip[data-active="true"][data-tone="success"] { color: var(--success); border-color: var(--success); background: var(--success-soft); }
-.alm-statechip[data-active="true"][data-tone="warn"]    { color: var(--warn);    border-color: var(--warn);    background: var(--warn-soft); }
-.alm-statechip[data-active="true"][data-tone="danger"]  { color: var(--danger);  border-color: var(--danger);  background: var(--danger-soft); }
-.alm-statechip[data-active="true"][data-tone="accent"]  { color: var(--accent);  border-color: var(--accent);  background: var(--accent-soft); }
-.alm-statechip[data-active="true"][data-tone="info"]    { color: var(--info);    border-color: var(--info);    background: var(--info-soft); }
+.alm-statechip[data-active="true"][data-tone="success"]  { color: var(--success);  border-color: var(--success);  background: var(--success-soft); }
+.alm-statechip[data-active="true"][data-tone="warn"]     { color: var(--warn);     border-color: var(--warn);     background: var(--warn-soft); }
+.alm-statechip[data-active="true"][data-tone="danger"]   { color: var(--danger);   border-color: var(--danger);   background: var(--danger-soft); }
+.alm-statechip[data-active="true"][data-tone="accent"]   { color: var(--accent);   border-color: var(--accent);   background: var(--accent-soft); }
+.alm-statechip[data-active="true"][data-tone="info"]     { color: var(--info);     border-color: var(--info);     background: var(--info-soft); }
+.alm-statechip[data-active="true"][data-tone="archival"] { color: var(--archival); border-color: var(--archival); background: var(--archival-soft); }
 
 /* State button — clickable inline pill for row-level quick-state actions */
 .alm-statebtn {
