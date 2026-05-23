@@ -1,42 +1,69 @@
 //! LifecycleRepository — async trait for spec 002 lifecycle operations.
 
+use std::collections::HashMap;
+use std::fmt::Write as _;
+
 use audit::bus::EventBus;
 use audit::event_bus::{LifecycleTransitionApplied, Source, TOPIC_LIFECYCLE_TRANSITION_APPLIED};
 use domain_core::ids::{AuditId, EntityId, Timestamp};
 use domain_core::lifecycle::data_asset::EntityType;
+use domain_core::lifecycle::provenance::ProvenancedValue;
 use serde_json::Value;
 use uuid::Uuid;
 
+use crate::repositories::provenance::load_provenance;
 use crate::{DbError, DbResult};
 
 /// Ledger row — omits provenance fields per FR-006.
+///
+/// Columns map 1-to-1 to `ledger_view` (migration 0004).
 #[derive(Clone, Debug, serde::Serialize, serde::Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct LedgerRow {
     pub entity_id: EntityId,
     pub entity_type: EntityType,
     pub current_state: String,
-    pub last_action_label: Option<String>,
-    pub last_action_at: Option<String>,
+    pub title: Option<String>,
+    pub path: Option<String>,
+    pub project_id: Option<EntityId>,
+    pub updated_at: Option<String>,
 }
 
 /// Filter for ledger list queries.
+///
+/// All fields are AND-combined. `entity_types` and `states` are IN clauses
+/// (empty vec = no filter, matching the absence semantics of `None`).
 #[derive(Clone, Debug, Default)]
 pub struct LedgerFilter {
-    pub entity_type: Option<EntityType>,
-    pub state: Option<String>,
+    /// One or more entity_type tags to include.
+    pub entity_types: Vec<EntityType>,
+    /// One or more lifecycle states to include.
+    pub states: Vec<String>,
+    /// Restrict to assets owned by this project (`project_id = ?`).
+    pub project_id: Option<EntityId>,
+    /// RFC 3339 lower bound on `updated_at` (inclusive).
+    pub updated_after: Option<String>,
+    /// RFC 3339 upper bound on `updated_at` (inclusive).
+    pub updated_before: Option<String>,
     pub limit: Option<u32>,
     pub offset: Option<u32>,
 }
 
-/// Full asset detail including provenance fields (for detail views).
+/// Full asset detail including hydrated provenance per field path.
 #[derive(Clone, Debug, serde::Serialize, serde::Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct AssetDetail {
     pub entity_id: EntityId,
     pub entity_type: EntityType,
     pub current_state: String,
-    pub provenance_fields: Vec<Value>,
+    /// Map keyed by field_path → typed `ProvenancedValue<Value>`. Inline
+    /// `history` is bounded at 10 entries per field (spec 002 amendment
+    /// B-provenance-retention); `history_truncated` is set per field when
+    /// older entries exist in the archive.
+    pub provenance: HashMap<String, ProvenancedValue<Value>>,
+    /// True when at least one field's archive holds more than the inline
+    /// retention window.
+    pub history_truncated: bool,
 }
 
 /// Request to apply a lifecycle transition.
@@ -162,120 +189,119 @@ impl LifecycleRepository for SqliteLifecycleRepository {
             .map(|(s,)| s)
             .ok_or_else(|| DbError::NotFound(format!("{entity_type:?} {entity_id}")))?;
 
-        // Provenance fields: read from provenance_history_archive for this asset.
-        // Returns JSON objects; full hydration is TODO(spec 002 Phase 4).
-        let prov_rows: Vec<(String,)> = sqlx::query_as(
-            "SELECT json_object(\
-               'fieldPath', field_path, \
-               'origin', origin, \
-               'capturedAt', captured_at, \
-               'value', json(value)\
-             ) FROM provenance_history_archive \
-             WHERE asset_type = ? AND asset_id = ? \
-             ORDER BY captured_at DESC LIMIT 50",
-        )
-        .bind(entity_type.as_str())
-        .bind(&id_str)
-        .fetch_all(&self.pool)
-        .await?;
+        // Hydrate provenance from provenance_history_archive (spec 002 Phase 4).
+        let (provenance, history_truncated) =
+            load_provenance(&self.pool, entity_id, entity_type.as_str()).await?;
 
-        let provenance_fields = prov_rows
-            .into_iter()
-            .filter_map(|(s,)| serde_json::from_str(&s).ok())
-            .collect();
-
-        Ok(AssetDetail { entity_id, entity_type, current_state, provenance_fields })
+        Ok(AssetDetail {
+            entity_id,
+            entity_type,
+            current_state,
+            provenance,
+            history_truncated,
+        })
     }
 
     async fn list_assets_ledger(&self, filter: LedgerFilter) -> DbResult<Vec<LedgerRow>> {
-        // Build a UNION ALL query over the tables that carry lifecycle state.
-        // For the ledger we only need (id, entity_type_str, state, last_action).
-        // We use runtime queries because the entity_type filter is dynamic.
-        // TODO(spec 002 Phase 4): replace with a materialised ledger view.
+        // Single-query implementation backed by the `ledger_view` materialised
+        // view (migration 0004). All filter clauses use `?` placeholders;
+        // user-supplied strings are never interpolated into the SQL text.
 
-        // Candidate tables + entity type strings for the union.
-        let all_tables: &[(&str, &str, &str)] = &[
-            ("file_record", "file_record", "state"),
-            ("acquisition_session", "acquisition_session", "state"),
-            ("calibration_session", "calibration_session", "state"),
-            ("project", "project", "state"),
-            ("filesystem_plan", "filesystem_plan", "state"),
-            ("prepared_source_view", "prepared_source", "state"),
-            ("processing_artifact", "processing_artifact", "staleness"),
-            ("library_root", "data_source", "state"),
-        ];
+        let mut sql = String::from(
+            "SELECT entity_type, entity_id, state, title, path, project_id, updated_at \
+             FROM ledger_view",
+        );
+        let mut where_clauses: Vec<String> = Vec::new();
+        // Track bind values in a typed enum-ish way: each tuple is (binder fn).
+        // We bind in two passes (build then execute) since sqlx's QueryAs is
+        // not Send across `await` between binds in a loop without it.
+        let mut string_binds: Vec<String> = Vec::new();
 
-        // Filter to requested entity_type if provided.
-        let tables: Vec<(&str, &str, &str)> = if let Some(et) = filter.entity_type {
-            let target = et.as_str();
-            all_tables
-                .iter()
-                .filter(|(_, et_str, _)| *et_str == target)
-                .copied()
-                .collect()
-        } else {
-            all_tables.to_vec()
-        };
-
-        if tables.is_empty() {
-            return Ok(Vec::new());
-        }
-
-        let mut rows = Vec::new();
-
-        for (table, et_str, state_col) in &tables {
-            // last_action column is nullable JSON {label, at} — only project and sessions have it.
-            let has_last_action =
-                matches!(*table, "project" | "acquisition_session" | "calibration_session" | "filesystem_plan");
-
-            let query_str = if has_last_action {
-                format!(
-                    "SELECT id, '{et_str}', {state_col}, \
-                     json_extract(last_action, '$.label'), \
-                     json_extract(last_action, '$.at') \
-                     FROM {table}"
-                )
-            } else {
-                format!("SELECT id, '{et_str}', {state_col}, NULL, NULL FROM {table}")
-            };
-
-            // Apply state filter.
-            let query_str = if let Some(ref state) = filter.state {
-                format!("{query_str} WHERE {state_col} = '{state}'")
-            } else {
-                query_str
-            };
-
-            // AssertSqlSafe: query_str is built from static table/column names only.
-            let raw: Vec<(String, String, String, Option<String>, Option<String>)> =
-                sqlx::query_as(sqlx::AssertSqlSafe(query_str))
-                    .fetch_all(&self.pool)
-                    .await?;
-
-            for (id_str, et_str, state, label, at) in raw {
-                let uuid = Uuid::parse_str(&id_str)
-                    .map_err(|e| DbError::NotFound(format!("bad uuid {id_str}: {e}")))?;
-                let entity_id = EntityId::from_uuid(uuid);
-                // Map the string back to EntityType.
-                let entity_type = parse_entity_type(&et_str);
-                rows.push(LedgerRow {
-                    entity_id,
-                    entity_type,
-                    current_state: state,
-                    last_action_label: label,
-                    last_action_at: at,
-                });
+        if !filter.entity_types.is_empty() {
+            let placeholders: Vec<&str> = filter.entity_types.iter().map(|_| "?").collect();
+            where_clauses.push(format!("entity_type IN ({})", placeholders.join(",")));
+            for et in &filter.entity_types {
+                string_binds.push(et.as_str().to_owned());
             }
         }
 
-        // Apply limit/offset.
-        let offset = filter.offset.unwrap_or(0) as usize;
-        let rows: Vec<LedgerRow> = rows.into_iter().skip(offset).collect();
-        let rows = if let Some(limit) = filter.limit {
-            rows.into_iter().take(limit as usize).collect()
-        } else {
-            rows
-        };
+        if !filter.states.is_empty() {
+            let placeholders: Vec<&str> = filter.states.iter().map(|_| "?").collect();
+            where_clauses.push(format!("state IN ({})", placeholders.join(",")));
+            for s in &filter.states {
+                string_binds.push(s.clone());
+            }
+        }
+
+        if let Some(pid) = filter.project_id {
+            where_clauses.push("project_id = ?".to_owned());
+            string_binds.push(pid.as_uuid().to_string());
+        }
+
+        if let Some(ref ts) = filter.updated_after {
+            where_clauses.push("updated_at >= ?".to_owned());
+            string_binds.push(ts.clone());
+        }
+
+        if let Some(ref ts) = filter.updated_before {
+            where_clauses.push("updated_at <= ?".to_owned());
+            string_binds.push(ts.clone());
+        }
+
+        if !where_clauses.is_empty() {
+            sql.push_str(" WHERE ");
+            sql.push_str(&where_clauses.join(" AND "));
+        }
+
+        // Stable order so limit/offset is meaningful.
+        sql.push_str(" ORDER BY updated_at DESC, entity_id ASC");
+
+        if let Some(limit) = filter.limit {
+            let _ = write!(sql, " LIMIT {limit}");
+            if let Some(offset) = filter.offset {
+                let _ = write!(sql, " OFFSET {offset}");
+            }
+        } else if let Some(offset) = filter.offset {
+            // SQLite requires LIMIT when OFFSET is present.
+            let _ = write!(sql, " LIMIT -1 OFFSET {offset}");
+        }
+
+        // AssertSqlSafe: every dynamic portion above is either a static
+        // identifier, a fixed `?` placeholder, or an integer literal derived
+        // from typed `u32` filter fields. User-supplied strings flow through
+        // `bind` calls below.
+        let mut q = sqlx::query_as::<_, (String, String, String, Option<String>, Option<String>, Option<String>, Option<String>)>(
+            sqlx::AssertSqlSafe(sql),
+        );
+        for v in &string_binds {
+            q = q.bind(v);
+        }
+
+        let raw = q.fetch_all(&self.pool).await?;
+
+        let mut rows = Vec::with_capacity(raw.len());
+        for (et_str, id_str, state, title, path, project_id, updated_at) in raw {
+            let uuid = Uuid::parse_str(&id_str)
+                .map_err(|e| DbError::NotFound(format!("bad uuid {id_str}: {e}")))?;
+            let entity_id = EntityId::from_uuid(uuid);
+            let entity_type = parse_entity_type(&et_str);
+            let project_id = match project_id {
+                Some(s) => Some(EntityId::from_uuid(
+                    Uuid::parse_str(&s)
+                        .map_err(|e| DbError::NotFound(format!("bad project uuid {s}: {e}")))?,
+                )),
+                None => None,
+            };
+            rows.push(LedgerRow {
+                entity_id,
+                entity_type,
+                current_state: state,
+                title,
+                path,
+                project_id,
+                updated_at,
+            });
+        }
 
         Ok(rows)
     }
@@ -408,7 +434,8 @@ impl LifecycleRepository for InMemoryLifecycleRepository {
             entity_id,
             entity_type,
             current_state: "unknown".to_owned(),
-            provenance_fields: Vec::new(),
+            provenance: HashMap::new(),
+            history_truncated: false,
         })
     }
 
