@@ -4,12 +4,14 @@
 pub mod bus;
 pub mod event;
 pub mod event_bus;
+pub mod stale_propagator;
 
 pub use bus::EventBus;
-pub use event::{AuditLogEntry, Outcome, Severity};
+pub use event::{AuditLogEntry, Outcome, Severity, SeverityFilter};
 pub use event_bus::{
     EventEnvelope, LifecycleTransitionApplied, Source, TOPIC_LIFECYCLE_TRANSITION_APPLIED,
 };
+pub use stale_propagator::{PropagatorFn, StalePropagator};
 
 pub const CRATE_NAME: &str = "audit";
 

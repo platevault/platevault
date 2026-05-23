@@ -52,6 +52,56 @@ pub enum Severity {
     Diagnostic,
 }
 
+impl Severity {
+    /// Default UI severity for newly minted audit entries (FR-008).
+    ///
+    /// Workflow is the visible tier; diagnostic stays log-only behind the
+    /// spec 019 panel toggle.
+    #[must_use]
+    pub const fn default_for_entry() -> Self {
+        Self::Workflow
+    }
+}
+
+/// Severity filter for timeline reads (T045).
+///
+/// Default UI timelines render `WorkflowOnly`; the spec 019 log panel can
+/// flip to `All` to surface diagnostic entries.
+#[derive(
+    Clone,
+    Copy,
+    Debug,
+    Default,
+    Eq,
+    Hash,
+    Ord,
+    PartialEq,
+    PartialOrd,
+    Serialize,
+    Deserialize,
+    JsonSchema,
+    Type,
+)]
+#[serde(rename_all = "snake_case")]
+pub enum SeverityFilter {
+    /// Default for primary surfaces.
+    #[default]
+    WorkflowOnly,
+    /// Include diagnostic-tier entries (log panel toggle).
+    All,
+}
+
+impl SeverityFilter {
+    /// `true` when the supplied severity should be included.
+    #[must_use]
+    pub const fn includes(self, severity: Severity) -> bool {
+        match self {
+            Self::All => true,
+            Self::WorkflowOnly => matches!(severity, Severity::Workflow),
+        }
+    }
+}
+
 /// Durable, append-only record of a lifecycle transition attempt.
 #[derive(Clone, Debug, PartialEq, Serialize, Deserialize, JsonSchema, Type)]
 #[serde(rename_all = "camelCase")]
