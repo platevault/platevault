@@ -172,11 +172,18 @@ function DataSourcesSection() {
         <Button
           variant="ghost"
           onClick={() => {
-            // Clear the first-run flag so the wizard actually re-enters
-            // cleanly: without this, the index route still redirects to
-            // /inventory on the next reload and the wizard appears
-            // "stuck completed" in any non-incognito browser session.
+            // Fully reset wizard state so the tutorial actually re-runs:
+            //   - `alm.first-run.completed` gates the index route → must
+            //     be cleared or `/` bounces straight to `/inventory`.
+            //   - `alm.first-run.sources` is the wizard's persisted source
+            //     selection; if left in place, Step 0 boots pre-populated
+            //     with the previous run, making the tutorial feel skipped.
+            //   - `symlinkSupport` lives in the global settings blob and
+            //     also caches the previous wizard outcome — wipe it so the
+            //     symlink check actually re-runs.
             localStorage.removeItem("alm.first-run.completed");
+            localStorage.removeItem("alm.first-run.sources");
+            updateSettings("symlinkSupport", null);
             navigate({ to: "/welcome" });
           }}
         >
