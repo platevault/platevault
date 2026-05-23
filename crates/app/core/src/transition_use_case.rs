@@ -164,6 +164,81 @@ where
     }
 }
 
+/// `transition_preview` — read-only dry-run of [`apply_transition`] (T039).
+///
+/// Walks the same decision tree (noop → edge → actor=system → plan-required)
+/// but never touches the repository and never publishes events. The returned
+/// envelope carries `status: "success"` when the transition would be allowed,
+/// `status: "noop"` for identity edges, and `status: "error"` with the same
+/// refusal codes as the apply path. Useful for UI button enabling.
+#[must_use]
+pub fn preview_transition(request: TransitionRequest) -> TransitionResponse {
+    let parsed = match parse_request(request) {
+        Ok(parsed) => parsed,
+        Err(err) => {
+            return TransitionResponse::error(
+                Uuid::nil(),
+                TransitionError {
+                    code: TransitionErrorCode::TransitionRefused,
+                    message: err,
+                    details: None,
+                },
+            );
+        }
+    };
+    let ParsedRequest { request_id, command, prior_state } = parsed;
+
+    if command.from_state == command.to_state {
+        return TransitionResponse::noop(request_id);
+    }
+    if !validate_edge(command.entity_type, &command.from_state, &command.to_state) {
+        return TransitionResponse::error(
+            request_id,
+            TransitionError {
+                code: TransitionErrorCode::TransitionRefused,
+                message: format!(
+                    "edge ({}, {} -> {}) not in canonical transition table",
+                    command.entity_type, command.from_state, command.to_state
+                ),
+                details: None,
+            },
+        );
+    }
+    if command.actor == "system" && !touches_blocked(&command.from_state, &command.to_state) {
+        return TransitionResponse::error(
+            request_id,
+            TransitionError {
+                code: TransitionErrorCode::ActorNotAuthorised,
+                message: "actor=system is only permitted on edges entering or leaving `blocked`"
+                    .to_owned(),
+                details: None,
+            },
+        );
+    }
+    if requires_plan(command.entity_type, &command.from_state, &command.to_state) {
+        return TransitionResponse::error(
+            request_id,
+            TransitionError {
+                code: TransitionErrorCode::PlanRequired,
+                message: format!(
+                    "edge ({}, {} -> {}) requires an approved FilesystemPlan",
+                    command.entity_type, command.from_state, command.to_state
+                ),
+                details: None,
+            },
+        );
+    }
+
+    // Success — applied_at is omitted (dry-run produces no audit row).
+    TransitionResponse::success(
+        request_id,
+        String::new(),
+        prior_state,
+        command.to_state,
+        Uuid::nil(),
+    )
+}
+
 /// Look up `(from, to)` in the appropriate domain transition table.
 fn validate_edge(entity_type: EntityType, from: &str, to: &str) -> bool {
     match entity_type {

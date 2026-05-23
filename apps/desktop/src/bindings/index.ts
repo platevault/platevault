@@ -22,6 +22,13 @@ export const commands = {
 	 */
 	lifecycleTransitionApply: (request: TransitionRequest_Deserialize) => typedError<TransitionResponse_Serialize, string>(__TAURI_INVOKE("lifecycle_transition_apply", { request })),
 	/**
+	 *  `lifecycle.transition.preview` — read-only dry-run for UI button enabling.
+	 * 
+	 *  # Errors
+	 *  Never returns `Err`; refusal codes fold into `TransitionResponse::error(...)`.
+	 */
+	lifecycleTransitionPreview: (request: TransitionRequest_Deserialize) => typedError<TransitionResponse_Serialize, string>(__TAURI_INVOKE("lifecycle_transition_preview", { request })),
+	/**
 	 *  `lifecycle.ledger.list` Tauri command.
 	 * 
 	 *  # Errors

@@ -14,7 +14,8 @@ use sqlx::SqlitePool;
 use tauri_specta::{collect_commands, Builder};
 
 use crate::commands::lifecycle::{
-    lifecycle_ledger_list, lifecycle_transition_apply, provenance_read, AppState,
+    lifecycle_ledger_list, lifecycle_transition_apply, lifecycle_transition_preview,
+    provenance_read, AppState,
 };
 
 pub const CRATE_NAME: &str = "desktop_shell";
@@ -37,6 +38,7 @@ pub fn specta_builder() -> Builder<tauri::Wry> {
         .commands(collect_commands![
             provenance_read,
             lifecycle_transition_apply,
+            lifecycle_transition_preview,
             lifecycle_ledger_list,
         ])
 }

@@ -12,7 +12,7 @@ use std::sync::Arc;
 use app_core::ledger_use_case::list_assets_ledger;
 use app_core::lifecycle_use_case::{build_edge_table, EdgeMeta};
 use app_core::provenance_use_case::read_provenance;
-use app_core::transition_use_case::apply_transition;
+use app_core::transition_use_case::{apply_transition, preview_transition};
 use audit::bus::EventBus;
 use contracts_core::lifecycle::{TransitionRequest, TransitionResponse};
 use contracts_core::provenance::{ProvenanceReadRequest, ProvenanceReadResponse};
@@ -117,6 +117,18 @@ pub async fn lifecycle_transition_apply(
     request: TransitionRequest,
 ) -> Result<TransitionResponse, String> {
     Ok(apply_transition(state.repo.as_ref(), &state.bus, request, &state.edge_table).await)
+}
+
+/// `lifecycle.transition.preview` — read-only dry-run for UI button enabling.
+///
+/// # Errors
+/// Never returns `Err`; refusal codes fold into `TransitionResponse::error(...)`.
+#[tauri::command]
+#[specta::specta]
+pub async fn lifecycle_transition_preview(
+    request: TransitionRequest,
+) -> Result<TransitionResponse, String> {
+    Ok(preview_transition(request))
 }
 
 /// camelCase wire shape mirroring [`LedgerRow`] for the typed Tauri surface.

@@ -40,4 +40,8 @@ fn exports_typescript_bindings() {
         written.contains("lifecycleLedgerList"),
         "binding contains lifecycle_ledger_list command"
     );
+    assert!(
+        written.contains("lifecycleTransitionPreview"),
+        "binding contains lifecycle_transition_preview command"
+    );
 }

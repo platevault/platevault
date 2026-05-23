@@ -3065,6 +3065,11 @@ dependencies = [
 [[package]]
 name = "sessions"
 version = "0.1.0"
+dependencies = [
+ "domain_core",
+ "thiserror 2.0.18",
+ "time",
+]
 
 [[package]]
 name = "sha1"
