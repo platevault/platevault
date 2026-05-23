@@ -178,10 +178,8 @@ mod tests {
         assert_eq!(state.status, OperationStateStatus::Running);
         assert_eq!(state.started_at, Some(start));
 
-        state.mark_failed(
-            finish,
-            OperationStateError::new("plan.item_failed", "Plan item failed."),
-        );
+        state
+            .mark_failed(finish, OperationStateError::new("plan.item_failed", "Plan item failed."));
         assert_eq!(state.status, OperationStateStatus::Failed);
         assert_eq!(state.finished_at, Some(finish));
         assert_eq!(state.error.unwrap().code, "plan.item_failed");

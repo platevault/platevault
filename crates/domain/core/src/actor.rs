@@ -14,7 +14,9 @@ use crate::ids::EntityId;
 #[derive(Clone, Debug, Default, Eq, PartialEq, Serialize, Deserialize, JsonSchema, Type)]
 #[serde(rename_all = "snake_case", tag = "kind")]
 pub enum Actor {
-    User { user_id: EntityId },
+    User {
+        user_id: EntityId,
+    },
     #[default]
     System,
 }

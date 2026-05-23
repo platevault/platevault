@@ -50,10 +50,7 @@ impl Database {
     ///
     /// Returns [`DbError::Database`] if the pool cannot connect to the given URL.
     pub async fn connect(connection_string: &str) -> DbResult<Self> {
-        let pool = SqlitePoolOptions::new()
-            .max_connections(8)
-            .connect(connection_string)
-            .await?;
+        let pool = SqlitePoolOptions::new().max_connections(8).connect(connection_string).await?;
         Ok(Self { pool })
     }
 

@@ -15,10 +15,10 @@ use std::collections::HashMap;
 
 use audit::bus::EventBus;
 use audit::event_bus::{LifecycleTransitionApplied, Source, TOPIC_LIFECYCLE_TRANSITION_APPLIED};
-use domain_core::lifecycle::data_asset::EntityType;
 use domain_core::ids::EntityId;
+use domain_core::lifecycle::data_asset::EntityType;
 use persistence_db::repositories::lifecycle::{
-    LifecycleRepository, TransitionRequest, TransitionRecord,
+    LifecycleRepository, TransitionRecord, TransitionRequest,
 };
 
 /// Metadata carried on an allowed transition edge.
@@ -47,9 +47,9 @@ pub fn build_edge_table() -> HashMap<EntityType, Vec<([&'static str; 2], EdgeMet
     ]);
 
     // prepared_source: all → retired requires plan
-    m.entry(EntityType::PreparedSource).or_default().push(
-        (["*", "retired"], EdgeMeta { requires_plan: true })
-    );
+    m.entry(EntityType::PreparedSource)
+        .or_default()
+        .push((["*", "retired"], EdgeMeta { requires_plan: true }));
 
     m
 }
@@ -140,9 +140,8 @@ mod tests {
     use persistence_db::repositories::lifecycle::InMemoryLifecycleRepository;
 
     async fn test_bus() -> EventBus {
-        let pool = sqlx::SqlitePool::connect("sqlite::memory:")
-            .await
-            .expect("in-memory pool for test");
+        let pool =
+            sqlx::SqlitePool::connect("sqlite::memory:").await.expect("in-memory pool for test");
         sqlx::query(
             "CREATE TABLE IF NOT EXISTS events (\
              event_id INTEGER PRIMARY KEY AUTOINCREMENT,\

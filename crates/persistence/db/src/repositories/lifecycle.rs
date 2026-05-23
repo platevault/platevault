@@ -193,13 +193,7 @@ impl LifecycleRepository for SqliteLifecycleRepository {
         let (provenance, history_truncated) =
             load_provenance(&self.pool, entity_id, entity_type.as_str()).await?;
 
-        Ok(AssetDetail {
-            entity_id,
-            entity_type,
-            current_state,
-            provenance,
-            history_truncated,
-        })
+        Ok(AssetDetail { entity_id, entity_type, current_state, provenance, history_truncated })
     }
 
     async fn list_assets_ledger(&self, filter: LedgerFilter) -> DbResult<Vec<LedgerRow>> {
@@ -270,9 +264,18 @@ impl LifecycleRepository for SqliteLifecycleRepository {
         // identifier, a fixed `?` placeholder, or an integer literal derived
         // from typed `u32` filter fields. User-supplied strings flow through
         // `bind` calls below.
-        let mut q = sqlx::query_as::<_, (String, String, String, Option<String>, Option<String>, Option<String>, Option<String>)>(
-            sqlx::AssertSqlSafe(sql),
-        );
+        let mut q = sqlx::query_as::<
+            _,
+            (
+                String,
+                String,
+                String,
+                Option<String>,
+                Option<String>,
+                Option<String>,
+                Option<String>,
+            ),
+        >(sqlx::AssertSqlSafe(sql));
         for v in &string_binds {
             q = q.bind(v);
         }

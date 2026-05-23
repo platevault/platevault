@@ -9,7 +9,17 @@ use domain_core::lifecycle::data_asset::EntityType;
 
 /// Who caused the event to be emitted.
 #[derive(
-    Clone, Copy, Debug, Eq, Hash, Ord, PartialEq, PartialOrd, Serialize, Deserialize, JsonSchema,
+    Clone,
+    Copy,
+    Debug,
+    Eq,
+    Hash,
+    Ord,
+    PartialEq,
+    PartialOrd,
+    Serialize,
+    Deserialize,
+    JsonSchema,
     Type,
 )]
 #[serde(rename_all = "snake_case")]

@@ -1,7 +1,10 @@
 //! Application use-case orchestration boundary.
 #![allow(clippy::doc_markdown)] // spec/domain terminology not appropriate for backticks
 
+pub mod ledger_use_case;
 pub mod lifecycle_use_case;
+pub mod provenance_use_case;
+pub mod transition_use_case;
 
 use std::collections::BTreeMap;
 

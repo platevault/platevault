@@ -10,7 +10,17 @@ use crate::ids::{EntityId, Timestamp};
 ///
 /// 7 variants from spec 002 §Project and research.md §2.1.
 #[derive(
-    Clone, Copy, Debug, Eq, Hash, Ord, PartialEq, PartialOrd, Serialize, Deserialize, JsonSchema,
+    Clone,
+    Copy,
+    Debug,
+    Eq,
+    Hash,
+    Ord,
+    PartialEq,
+    PartialOrd,
+    Serialize,
+    Deserialize,
+    JsonSchema,
     Type,
 )]
 #[serde(rename_all = "snake_case")]

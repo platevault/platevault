@@ -1,0 +1,59 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "title": "ProvenanceReadRequest",
+  "type": "object",
+  "required": [
+    "assetId",
+    "assetType",
+    "contractVersion",
+    "requestId"
+  ],
+  "properties": {
+    "assetId": {
+      "type": "string",
+      "format": "uuid"
+    },
+    "assetType": {
+      "$ref": "#/definitions/AssetType"
+    },
+    "contractVersion": {
+      "type": "string"
+    },
+    "fieldPaths": {
+      "type": "array",
+      "items": {
+        "type": "string"
+      }
+    },
+    "requestId": {
+      "type": "string",
+      "format": "uuid"
+    }
+  },
+  "definitions": {
+    "AssetType": {
+      "oneOf": [
+        {
+          "type": "string",
+          "enum": [
+            "file_record",
+            "acquisition_session",
+            "calibration_session",
+            "project",
+            "prepared_source",
+            "processing_artifact",
+            "filesystem_plan",
+            "data_source"
+          ]
+        },
+        {
+          "description": "target: alias and primaryDesignation provenance tracking (R-3.2).",
+          "type": "string",
+          "enum": [
+            "target"
+          ]
+        }
+      ]
+    }
+  }
+}

@@ -11,7 +11,17 @@ use crate::ids::{EntityId, Timestamp};
 /// 10 variants per spec 002 data-model.md §FilesystemPlan (inc. `paused` R-Pause-1
 /// and `discarded` spec 017 retry-chain terminal).
 #[derive(
-    Clone, Copy, Debug, Eq, Hash, Ord, PartialEq, PartialOrd, Serialize, Deserialize, JsonSchema,
+    Clone,
+    Copy,
+    Debug,
+    Eq,
+    Hash,
+    Ord,
+    PartialEq,
+    PartialOrd,
+    Serialize,
+    Deserialize,
+    JsonSchema,
     Type,
 )]
 #[serde(rename_all = "snake_case")]
@@ -47,7 +57,17 @@ impl PlanState {
 
 /// Plan origin — who created this plan.
 #[derive(
-    Clone, Copy, Debug, Eq, Hash, Ord, PartialEq, PartialOrd, Serialize, Deserialize, JsonSchema,
+    Clone,
+    Copy,
+    Debug,
+    Eq,
+    Hash,
+    Ord,
+    PartialEq,
+    PartialOrd,
+    Serialize,
+    Deserialize,
+    JsonSchema,
     Type,
 )]
 #[serde(rename_all = "snake_case")]
@@ -58,7 +78,17 @@ pub enum PlanCreatedBy {
 
 /// Plan kind — category of filesystem mutations.
 #[derive(
-    Clone, Copy, Debug, Eq, Hash, Ord, PartialEq, PartialOrd, Serialize, Deserialize, JsonSchema,
+    Clone,
+    Copy,
+    Debug,
+    Eq,
+    Hash,
+    Ord,
+    PartialEq,
+    PartialOrd,
+    Serialize,
+    Deserialize,
+    JsonSchema,
     Type,
 )]
 #[serde(rename_all = "snake_case")]

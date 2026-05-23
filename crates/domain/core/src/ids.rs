@@ -8,7 +8,17 @@ use uuid::Uuid;
 
 /// Stable UUIDv4 identifier for any entity.
 #[derive(
-    Clone, Copy, Debug, Eq, Hash, Ord, PartialEq, PartialOrd, Serialize, Deserialize, JsonSchema,
+    Clone,
+    Copy,
+    Debug,
+    Eq,
+    Hash,
+    Ord,
+    PartialEq,
+    PartialOrd,
+    Serialize,
+    Deserialize,
+    JsonSchema,
     Type,
 )]
 #[serde(transparent)]
@@ -51,7 +61,17 @@ impl std::fmt::Display for EntityId {
 
 /// Opaque UUID identifier for an `AuditLogEntry`.
 #[derive(
-    Clone, Copy, Debug, Eq, Hash, Ord, PartialEq, PartialOrd, Serialize, Deserialize, JsonSchema,
+    Clone,
+    Copy,
+    Debug,
+    Eq,
+    Hash,
+    Ord,
+    PartialEq,
+    PartialOrd,
+    Serialize,
+    Deserialize,
+    JsonSchema,
     Type,
 )]
 #[serde(transparent)]

@@ -1,0 +1,436 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "title": "TransitionRequest",
+  "description": "Discriminated request — one variant per entity family.",
+  "oneOf": [
+    {
+      "type": "object",
+      "required": [
+        "actor",
+        "contractVersion",
+        "currentState",
+        "entityId",
+        "entityType",
+        "nextState",
+        "requestId"
+      ],
+      "properties": {
+        "actionLabel": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "actor": {
+          "$ref": "#/definitions/TransitionActor"
+        },
+        "contractVersion": {
+          "type": "string"
+        },
+        "currentState": {
+          "$ref": "#/definitions/ProjectState"
+        },
+        "entityId": {
+          "type": "string",
+          "format": "uuid"
+        },
+        "entityType": {
+          "type": "string"
+        },
+        "nextState": {
+          "$ref": "#/definitions/ProjectState"
+        },
+        "requestId": {
+          "type": "string",
+          "format": "uuid"
+        }
+      }
+    },
+    {
+      "type": "object",
+      "required": [
+        "actor",
+        "contractVersion",
+        "currentState",
+        "entityId",
+        "entityType",
+        "nextState",
+        "requestId"
+      ],
+      "properties": {
+        "actionLabel": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "actor": {
+          "$ref": "#/definitions/TransitionActor"
+        },
+        "contractVersion": {
+          "type": "string"
+        },
+        "currentState": {
+          "$ref": "#/definitions/PlanState"
+        },
+        "entityId": {
+          "type": "string",
+          "format": "uuid"
+        },
+        "entityType": {
+          "type": "string"
+        },
+        "nextState": {
+          "$ref": "#/definitions/PlanState"
+        },
+        "requestId": {
+          "type": "string",
+          "format": "uuid"
+        }
+      }
+    },
+    {
+      "type": "object",
+      "required": [
+        "actor",
+        "contractVersion",
+        "currentState",
+        "entityId",
+        "entityType",
+        "nextState",
+        "requestId"
+      ],
+      "properties": {
+        "actionLabel": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "actor": {
+          "$ref": "#/definitions/TransitionActor"
+        },
+        "contractVersion": {
+          "type": "string"
+        },
+        "currentState": {
+          "$ref": "#/definitions/SessionState"
+        },
+        "entityId": {
+          "type": "string",
+          "format": "uuid"
+        },
+        "entityType": {
+          "type": "string"
+        },
+        "nextState": {
+          "$ref": "#/definitions/SessionState"
+        },
+        "requestId": {
+          "type": "string",
+          "format": "uuid"
+        }
+      }
+    },
+    {
+      "type": "object",
+      "required": [
+        "actor",
+        "contractVersion",
+        "currentState",
+        "entityId",
+        "entityType",
+        "nextState",
+        "requestId"
+      ],
+      "properties": {
+        "actionLabel": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "actor": {
+          "$ref": "#/definitions/TransitionActor"
+        },
+        "contractVersion": {
+          "type": "string"
+        },
+        "currentState": {
+          "$ref": "#/definitions/SessionState"
+        },
+        "entityId": {
+          "type": "string",
+          "format": "uuid"
+        },
+        "entityType": {
+          "type": "string"
+        },
+        "nextState": {
+          "$ref": "#/definitions/SessionState"
+        },
+        "requestId": {
+          "type": "string",
+          "format": "uuid"
+        }
+      }
+    },
+    {
+      "type": "object",
+      "required": [
+        "actor",
+        "contractVersion",
+        "currentState",
+        "entityId",
+        "entityType",
+        "nextState",
+        "requestId"
+      ],
+      "properties": {
+        "actionLabel": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "actor": {
+          "$ref": "#/definitions/TransitionActor"
+        },
+        "contractVersion": {
+          "type": "string"
+        },
+        "currentState": {
+          "$ref": "#/definitions/DataSourceState"
+        },
+        "entityId": {
+          "type": "string",
+          "format": "uuid"
+        },
+        "entityType": {
+          "type": "string"
+        },
+        "nextState": {
+          "$ref": "#/definitions/DataSourceState"
+        },
+        "requestId": {
+          "type": "string",
+          "format": "uuid"
+        }
+      }
+    },
+    {
+      "type": "object",
+      "required": [
+        "actor",
+        "contractVersion",
+        "currentState",
+        "entityId",
+        "entityType",
+        "nextState",
+        "requestId"
+      ],
+      "properties": {
+        "actionLabel": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "actor": {
+          "$ref": "#/definitions/TransitionActor"
+        },
+        "contractVersion": {
+          "type": "string"
+        },
+        "currentState": {
+          "$ref": "#/definitions/PreparedSourceState"
+        },
+        "entityId": {
+          "type": "string",
+          "format": "uuid"
+        },
+        "entityType": {
+          "type": "string"
+        },
+        "nextState": {
+          "$ref": "#/definitions/PreparedSourceState"
+        },
+        "requestId": {
+          "type": "string",
+          "format": "uuid"
+        }
+      }
+    },
+    {
+      "type": "object",
+      "required": [
+        "actor",
+        "contractVersion",
+        "currentState",
+        "entityId",
+        "entityType",
+        "nextState",
+        "requestId"
+      ],
+      "properties": {
+        "actionLabel": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "actor": {
+          "$ref": "#/definitions/TransitionActor"
+        },
+        "contractVersion": {
+          "type": "string"
+        },
+        "currentState": {
+          "$ref": "#/definitions/ProjectionState"
+        },
+        "entityId": {
+          "type": "string",
+          "format": "uuid"
+        },
+        "entityType": {
+          "type": "string"
+        },
+        "nextState": {
+          "$ref": "#/definitions/ProjectionState"
+        },
+        "requestId": {
+          "type": "string",
+          "format": "uuid"
+        }
+      }
+    },
+    {
+      "type": "object",
+      "required": [
+        "actor",
+        "contractVersion",
+        "currentState",
+        "entityId",
+        "entityType",
+        "nextState",
+        "requestId"
+      ],
+      "properties": {
+        "actionLabel": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "actor": {
+          "$ref": "#/definitions/TransitionActor"
+        },
+        "contractVersion": {
+          "type": "string"
+        },
+        "currentState": {
+          "$ref": "#/definitions/FileRecordState"
+        },
+        "entityId": {
+          "type": "string",
+          "format": "uuid"
+        },
+        "entityType": {
+          "type": "string"
+        },
+        "nextState": {
+          "$ref": "#/definitions/FileRecordState"
+        },
+        "requestId": {
+          "type": "string",
+          "format": "uuid"
+        }
+      }
+    }
+  ],
+  "definitions": {
+    "DataSourceState": {
+      "type": "string",
+      "enum": [
+        "active",
+        "missing",
+        "disabled",
+        "reconnect_required"
+      ]
+    },
+    "FileRecordState": {
+      "type": "string",
+      "enum": [
+        "observed",
+        "missing",
+        "changed",
+        "classified",
+        "rejected",
+        "protected"
+      ]
+    },
+    "PlanState": {
+      "description": "Note: `paused` is a domain-internal state (R-Pause-1); not surfaced in the transition contract.",
+      "type": "string",
+      "enum": [
+        "draft",
+        "ready_for_review",
+        "approved",
+        "applying",
+        "applied",
+        "partially_applied",
+        "failed",
+        "cancelled",
+        "discarded"
+      ]
+    },
+    "PreparedSourceState": {
+      "type": "string",
+      "enum": [
+        "not_created",
+        "planned",
+        "ready",
+        "stale",
+        "retired"
+      ]
+    },
+    "ProjectState": {
+      "type": "string",
+      "enum": [
+        "setup_incomplete",
+        "ready",
+        "prepared",
+        "processing",
+        "completed",
+        "archived",
+        "blocked"
+      ]
+    },
+    "ProjectionState": {
+      "type": "string",
+      "enum": [
+        "current",
+        "stale",
+        "regenerating"
+      ]
+    },
+    "SessionState": {
+      "type": "string",
+      "enum": [
+        "discovered",
+        "candidate",
+        "needs_review",
+        "confirmed",
+        "rejected",
+        "ignored"
+      ]
+    },
+    "TransitionActor": {
+      "type": "string",
+      "enum": [
+        "user",
+        "system"
+      ]
+    }
+  }
+}

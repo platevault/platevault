@@ -7,16 +7,17 @@
 use audit::bus::EventBus;
 use domain_core::ids::EntityId;
 use domain_core::lifecycle::data_asset::EntityType;
-use persistence_db::Database;
 use persistence_db::repositories::lifecycle::{
     LedgerFilter, LifecycleRepository, SqliteLifecycleRepository,
 };
+use persistence_db::Database;
 use uuid::Uuid;
 
 async fn setup() -> (Database, SqliteLifecycleRepository) {
     let db = Database::in_memory().await.expect("in-memory connect");
     db.migrate().await.expect("migrations");
-    let repo = SqliteLifecycleRepository::new(db.pool().clone(), EventBus::new(db.pool().clone(), 16));
+    let repo =
+        SqliteLifecycleRepository::new(db.pool().clone(), EventBus::new(db.pool().clone(), 16));
     (db, repo)
 }
 
@@ -125,7 +126,15 @@ async fn ledger_view_unions_all_seeded_entities() {
     insert_library_root(pool, &root, "lr-1").await;
     insert_target(pool, &target).await;
     insert_project(pool, &project, "Test Project", &target, "ready", "2026-05-10T00:00:00Z").await;
-    insert_file_record(pool, &file, &root, "raw/2026-05-10/light.fits", "observed", "2026-05-11T00:00:00Z").await;
+    insert_file_record(
+        pool,
+        &file,
+        &root,
+        "raw/2026-05-10/light.fits",
+        "observed",
+        "2026-05-11T00:00:00Z",
+    )
+    .await;
     insert_acquisition_session(pool, &session, "discovered", "2026-05-12T00:00:00Z").await;
 
     let rows = repo.list_assets_ledger(LedgerFilter::default()).await.unwrap();
@@ -148,10 +157,7 @@ async fn entity_type_filter_restricts_results() {
     insert_project(pool, &project, "P", &target, "ready", "2026-05-10T00:00:00Z").await;
     insert_acquisition_session(pool, &session, "discovered", "2026-05-11T00:00:00Z").await;
 
-    let filter = LedgerFilter {
-        entity_types: vec![EntityType::Project],
-        ..Default::default()
-    };
+    let filter = LedgerFilter { entity_types: vec![EntityType::Project], ..Default::default() };
     let rows = repo.list_assets_ledger(filter).await.unwrap();
     assert_eq!(rows.len(), 1);
     assert_eq!(rows[0].entity_type, EntityType::Project);
@@ -172,8 +178,17 @@ async fn state_filter_in_clause() {
     let p_prepared = new_uuid();
     let p_processing = new_uuid();
     insert_project(pool, &p_ready, "ready", &target, "ready", "2026-05-10T00:00:00Z").await;
-    insert_project(pool, &p_prepared, "prepared", &target, "prepared", "2026-05-11T00:00:00Z").await;
-    insert_project(pool, &p_processing, "processing", &target, "processing", "2026-05-12T00:00:00Z").await;
+    insert_project(pool, &p_prepared, "prepared", &target, "prepared", "2026-05-11T00:00:00Z")
+        .await;
+    insert_project(
+        pool,
+        &p_processing,
+        "processing",
+        &target,
+        "processing",
+        "2026-05-12T00:00:00Z",
+    )
+    .await;
 
     let filter = LedgerFilter {
         states: vec!["ready".to_owned(), "prepared".to_owned()],

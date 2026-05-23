@@ -6,10 +6,30 @@ license.workspace = true
 
 [lib]
 path = "src/lib.rs"
+# Cdylib makes `cargo tauri build` happy; rlib keeps the lib loadable from
+# integration tests in this crate (e.g. the tauri-specta binding-export test).
+crate-type = ["staticlib", "cdylib", "rlib"]
+
+[build-dependencies]
+tauri-build = { workspace = true }
 
 [dependencies]
+app_core = { path = "../../../crates/app/core" }
+audit = { path = "../../../crates/audit" }
 contracts_core = { path = "../../../crates/contracts/core" }
+domain_core = { path = "../../../crates/domain/core" }
+persistence_db = { path = "../../../crates/persistence/db" }
+serde = { workspace = true }
 serde_json.workspace = true
+specta = { workspace = true }
+specta-typescript = { workspace = true }
+sqlx = { workspace = true }
+tauri = { workspace = true }
+tauri-specta = { workspace = true }
+thiserror = { workspace = true }
+time = { workspace = true }
+tokio = { workspace = true }
+uuid = { workspace = true }
 
 [lints]
 workspace = true

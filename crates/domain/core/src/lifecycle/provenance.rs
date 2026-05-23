@@ -11,7 +11,17 @@ use crate::ids::{EntityId, Timestamp};
 
 /// Origin tag that classifies how a value was derived or confirmed.
 #[derive(
-    Clone, Copy, Debug, Eq, Hash, Ord, PartialEq, PartialOrd, Serialize, Deserialize, JsonSchema,
+    Clone,
+    Copy,
+    Debug,
+    Eq,
+    Hash,
+    Ord,
+    PartialEq,
+    PartialOrd,
+    Serialize,
+    Deserialize,
+    JsonSchema,
     Type,
 )]
 #[serde(rename_all = "snake_case")]

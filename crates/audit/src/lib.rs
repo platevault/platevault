@@ -7,13 +7,15 @@ pub mod event_bus;
 
 pub use bus::EventBus;
 pub use event::{AuditLogEntry, Outcome, Severity};
-pub use event_bus::{EventEnvelope, LifecycleTransitionApplied, Source, TOPIC_LIFECYCLE_TRANSITION_APPLIED};
+pub use event_bus::{
+    EventEnvelope, LifecycleTransitionApplied, Source, TOPIC_LIFECYCLE_TRANSITION_APPLIED,
+};
 
 pub const CRATE_NAME: &str = "audit";
 
 // ── Backward-compat re-exports for other crates that import the old API ──────
 
-use domain_core::{Actor, EntityId, ids::Timestamp};
+use domain_core::{ids::Timestamp, Actor, EntityId};
 use serde::{Deserialize, Serialize};
 use serde_json::Value;
 

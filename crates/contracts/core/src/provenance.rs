@@ -9,7 +9,20 @@ use uuid::Uuid;
 
 pub const CONTRACT_VERSION: &str = "2.0.0";
 
-#[derive(Clone, Copy, Debug, Eq, Hash, Ord, PartialEq, PartialOrd, Serialize, Deserialize, JsonSchema, Type)]
+#[derive(
+    Clone,
+    Copy,
+    Debug,
+    Eq,
+    Hash,
+    Ord,
+    PartialEq,
+    PartialOrd,
+    Serialize,
+    Deserialize,
+    JsonSchema,
+    Type,
+)]
 #[serde(rename_all = "snake_case")]
 pub enum AssetType {
     FileRecord,
@@ -24,7 +37,20 @@ pub enum AssetType {
     Target,
 }
 
-#[derive(Clone, Copy, Debug, Eq, Hash, Ord, PartialEq, PartialOrd, Serialize, Deserialize, JsonSchema, Type)]
+#[derive(
+    Clone,
+    Copy,
+    Debug,
+    Eq,
+    Hash,
+    Ord,
+    PartialEq,
+    PartialOrd,
+    Serialize,
+    Deserialize,
+    JsonSchema,
+    Type,
+)]
 #[serde(rename_all = "snake_case")]
 pub enum ProvenanceOrigin {
     Observed,
@@ -39,7 +65,7 @@ pub enum ProvenanceOrigin {
 #[serde(rename_all = "camelCase")]
 pub struct ProvenanceHistoryEntry {
     pub origin: ProvenanceOrigin,
-    pub value: serde_json::Value,
+    pub value: crate::JsonAny,
     pub captured_at: String,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub source_id: Option<String>,
@@ -51,7 +77,7 @@ pub struct ProvenanceHistoryEntry {
 #[serde(rename_all = "camelCase")]
 pub struct ProvenanceField {
     pub field_path: String,
-    pub current: serde_json::Value,
+    pub current: crate::JsonAny,
     pub origin: ProvenanceOrigin,
     pub captured_at: String,
     #[serde(skip_serializing_if = "Option::is_none")]
@@ -61,7 +87,20 @@ pub struct ProvenanceField {
     pub history_truncated: bool,
 }
 
-#[derive(Clone, Copy, Debug, Eq, Hash, Ord, PartialEq, PartialOrd, Serialize, Deserialize, JsonSchema, Type)]
+#[derive(
+    Clone,
+    Copy,
+    Debug,
+    Eq,
+    Hash,
+    Ord,
+    PartialEq,
+    PartialOrd,
+    Serialize,
+    Deserialize,
+    JsonSchema,
+    Type,
+)]
 #[serde(rename_all = "snake_case")]
 pub enum ProvenanceErrorCode {
     AssetNotFound,
@@ -74,7 +113,7 @@ pub struct ProvenanceError {
     pub code: ProvenanceErrorCode,
     pub message: String,
     #[serde(skip_serializing_if = "Option::is_none")]
-    pub details: Option<serde_json::Value>,
+    pub details: Option<crate::JsonAny>,
 }
 
 #[derive(Clone, Debug, PartialEq, Serialize, Deserialize, JsonSchema, Type)]
@@ -101,7 +140,20 @@ impl ProvenanceReadRequest {
     }
 }
 
-#[derive(Clone, Copy, Debug, Eq, Hash, Ord, PartialEq, PartialOrd, Serialize, Deserialize, JsonSchema, Type)]
+#[derive(
+    Clone,
+    Copy,
+    Debug,
+    Eq,
+    Hash,
+    Ord,
+    PartialEq,
+    PartialOrd,
+    Serialize,
+    Deserialize,
+    JsonSchema,
+    Type,
+)]
 #[serde(rename_all = "snake_case")]
 pub enum ProvenanceResponseStatus {
     Success,

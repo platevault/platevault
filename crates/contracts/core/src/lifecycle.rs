@@ -12,7 +12,20 @@ pub const CONTRACT_VERSION: &str = "2.0.0";
 
 // ── State enums — mirror the JSON $defs exactly ───────────────────────────────
 
-#[derive(Clone, Copy, Debug, Eq, Hash, Ord, PartialEq, PartialOrd, Serialize, Deserialize, JsonSchema, Type)]
+#[derive(
+    Clone,
+    Copy,
+    Debug,
+    Eq,
+    Hash,
+    Ord,
+    PartialEq,
+    PartialOrd,
+    Serialize,
+    Deserialize,
+    JsonSchema,
+    Type,
+)]
 #[serde(rename_all = "snake_case")]
 pub enum ProjectState {
     SetupIncomplete,
@@ -25,7 +38,20 @@ pub enum ProjectState {
 }
 
 /// Note: `paused` is a domain-internal state (R-Pause-1); not surfaced in the transition contract.
-#[derive(Clone, Copy, Debug, Eq, Hash, Ord, PartialEq, PartialOrd, Serialize, Deserialize, JsonSchema, Type)]
+#[derive(
+    Clone,
+    Copy,
+    Debug,
+    Eq,
+    Hash,
+    Ord,
+    PartialEq,
+    PartialOrd,
+    Serialize,
+    Deserialize,
+    JsonSchema,
+    Type,
+)]
 #[serde(rename_all = "snake_case")]
 pub enum PlanState {
     Draft,
@@ -39,7 +65,20 @@ pub enum PlanState {
     Discarded,
 }
 
-#[derive(Clone, Copy, Debug, Eq, Hash, Ord, PartialEq, PartialOrd, Serialize, Deserialize, JsonSchema, Type)]
+#[derive(
+    Clone,
+    Copy,
+    Debug,
+    Eq,
+    Hash,
+    Ord,
+    PartialEq,
+    PartialOrd,
+    Serialize,
+    Deserialize,
+    JsonSchema,
+    Type,
+)]
 #[serde(rename_all = "snake_case")]
 pub enum SessionState {
     Discovered,
@@ -50,7 +89,20 @@ pub enum SessionState {
     Ignored,
 }
 
-#[derive(Clone, Copy, Debug, Eq, Hash, Ord, PartialEq, PartialOrd, Serialize, Deserialize, JsonSchema, Type)]
+#[derive(
+    Clone,
+    Copy,
+    Debug,
+    Eq,
+    Hash,
+    Ord,
+    PartialEq,
+    PartialOrd,
+    Serialize,
+    Deserialize,
+    JsonSchema,
+    Type,
+)]
 #[serde(rename_all = "snake_case")]
 pub enum DataSourceState {
     Active,
@@ -59,7 +111,20 @@ pub enum DataSourceState {
     ReconnectRequired,
 }
 
-#[derive(Clone, Copy, Debug, Eq, Hash, Ord, PartialEq, PartialOrd, Serialize, Deserialize, JsonSchema, Type)]
+#[derive(
+    Clone,
+    Copy,
+    Debug,
+    Eq,
+    Hash,
+    Ord,
+    PartialEq,
+    PartialOrd,
+    Serialize,
+    Deserialize,
+    JsonSchema,
+    Type,
+)]
 #[serde(rename_all = "snake_case")]
 pub enum FileRecordState {
     Observed,
@@ -70,7 +135,20 @@ pub enum FileRecordState {
     Protected,
 }
 
-#[derive(Clone, Copy, Debug, Eq, Hash, Ord, PartialEq, PartialOrd, Serialize, Deserialize, JsonSchema, Type)]
+#[derive(
+    Clone,
+    Copy,
+    Debug,
+    Eq,
+    Hash,
+    Ord,
+    PartialEq,
+    PartialOrd,
+    Serialize,
+    Deserialize,
+    JsonSchema,
+    Type,
+)]
 #[serde(rename_all = "snake_case")]
 pub enum PreparedSourceState {
     NotCreated,
@@ -80,7 +158,20 @@ pub enum PreparedSourceState {
     Retired,
 }
 
-#[derive(Clone, Copy, Debug, Eq, Hash, Ord, PartialEq, PartialOrd, Serialize, Deserialize, JsonSchema, Type)]
+#[derive(
+    Clone,
+    Copy,
+    Debug,
+    Eq,
+    Hash,
+    Ord,
+    PartialEq,
+    PartialOrd,
+    Serialize,
+    Deserialize,
+    JsonSchema,
+    Type,
+)]
 #[serde(rename_all = "snake_case")]
 pub enum ProjectionState {
     Current,
@@ -88,7 +179,20 @@ pub enum ProjectionState {
     Regenerating,
 }
 
-#[derive(Clone, Copy, Debug, Eq, Hash, Ord, PartialEq, PartialOrd, Serialize, Deserialize, JsonSchema, Type)]
+#[derive(
+    Clone,
+    Copy,
+    Debug,
+    Eq,
+    Hash,
+    Ord,
+    PartialEq,
+    PartialOrd,
+    Serialize,
+    Deserialize,
+    JsonSchema,
+    Type,
+)]
 #[serde(rename_all = "snake_case")]
 pub enum TransitionActor {
     User,
@@ -164,7 +268,20 @@ pub enum TransitionRequest {
 
 // ── Error envelope ────────────────────────────────────────────────────────────
 
-#[derive(Clone, Copy, Debug, Eq, Hash, Ord, PartialEq, PartialOrd, Serialize, Deserialize, JsonSchema, Type)]
+#[derive(
+    Clone,
+    Copy,
+    Debug,
+    Eq,
+    Hash,
+    Ord,
+    PartialEq,
+    PartialOrd,
+    Serialize,
+    Deserialize,
+    JsonSchema,
+    Type,
+)]
 #[serde(rename_all = "snake_case")]
 pub enum TransitionErrorCode {
     TransitionRefused,
@@ -181,12 +298,25 @@ pub struct TransitionError {
     pub code: TransitionErrorCode,
     pub message: String,
     #[serde(skip_serializing_if = "Option::is_none")]
-    pub details: Option<serde_json::Value>,
+    pub details: Option<crate::JsonAny>,
 }
 
 // ── Response ──────────────────────────────────────────────────────────────────
 
-#[derive(Clone, Copy, Debug, Eq, Hash, Ord, PartialEq, PartialOrd, Serialize, Deserialize, JsonSchema, Type)]
+#[derive(
+    Clone,
+    Copy,
+    Debug,
+    Eq,
+    Hash,
+    Ord,
+    PartialEq,
+    PartialOrd,
+    Serialize,
+    Deserialize,
+    JsonSchema,
+    Type,
+)]
 #[serde(rename_all = "snake_case")]
 pub enum TransitionStatus {
     Success,
@@ -216,7 +346,13 @@ pub struct TransitionResponse {
 
 impl TransitionResponse {
     #[must_use]
-    pub fn success(request_id: Uuid, applied_at: String, prior: String, new: String, audit_id: Uuid) -> Self {
+    pub fn success(
+        request_id: Uuid,
+        applied_at: String,
+        prior: String,
+        new: String,
+        audit_id: Uuid,
+    ) -> Self {
         Self {
             status: TransitionStatus::Success,
             contract_version: CONTRACT_VERSION.to_owned(),

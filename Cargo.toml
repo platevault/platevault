@@ -35,6 +35,8 @@ quick-xml = "0.39"
 sqlx = { version = "0.9", default-features = false, features = ["sqlite", "runtime-tokio", "tls-rustls", "macros", "migrate", "uuid", "time", "json"] }
 specta = { version = "2.0.0-rc.25", features = ["derive", "uuid", "time", "serde_json"] }
 specta-typescript = "0.0.12"
+tauri = { version = "2.11", default-features = false, features = ["wry"] }
+tauri-build = { version = "2.6", features = [] }
 tauri-specta = { version = "2.0.0-rc.25", features = ["typescript"] }
 schemars = { version = "0.8", features = ["uuid1"] }
 serde = { version = "1", features = ["derive"] }

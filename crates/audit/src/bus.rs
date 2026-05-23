@@ -74,20 +74,20 @@ impl EventBus {
             Source::Restore => "restore",
             Source::System => "system",
         };
-        let emitted_at = envelope.emitted_at.as_offset_date_time()
+        let emitted_at = envelope
+            .emitted_at
+            .as_offset_date_time()
             .format(&time::format_description::well_known::Rfc3339)
             .unwrap_or_else(|_| "1970-01-01T00:00:00Z".to_owned());
         let payload_str = serde_json::to_string(&value)?;
 
-        sqlx::query(
-            "INSERT INTO events (topic, source, emitted_at, payload) VALUES (?, ?, ?, ?)",
-        )
-        .bind(topic)
-        .bind(source_str)
-        .bind(&emitted_at)
-        .bind(&payload_str)
-        .execute(&self.pool)
-        .await?;
+        sqlx::query("INSERT INTO events (topic, source, emitted_at, payload) VALUES (?, ?, ?, ?)")
+            .bind(topic)
+            .bind(source_str)
+            .bind(&emitted_at)
+            .bind(&payload_str)
+            .execute(&self.pool)
+            .await?;
 
         // 2. Broadcast to live subscribers.
         // `send` errors only when there are NO receivers at all (which is fine).
@@ -159,9 +159,7 @@ mod tests {
     use crate::event_bus::Source;
 
     async fn make_test_bus() -> EventBus {
-        let pool = sqlx::SqlitePool::connect("sqlite::memory:")
-            .await
-            .expect("in-memory pool");
+        let pool = sqlx::SqlitePool::connect("sqlite::memory:").await.expect("in-memory pool");
         // Apply the events table migration manually.
         sqlx::query(
             "CREATE TABLE IF NOT EXISTS events (\

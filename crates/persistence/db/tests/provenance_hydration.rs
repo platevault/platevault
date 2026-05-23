@@ -9,15 +9,16 @@ use audit::bus::EventBus;
 use domain_core::ids::EntityId;
 use domain_core::lifecycle::data_asset::EntityType;
 use domain_core::lifecycle::provenance::ProvenanceTag;
-use persistence_db::Database;
 use persistence_db::repositories::lifecycle::{LifecycleRepository, SqliteLifecycleRepository};
-use persistence_db::repositories::provenance::{INLINE_HISTORY_LIMIT, load_provenance};
+use persistence_db::repositories::provenance::{load_provenance, INLINE_HISTORY_LIMIT};
+use persistence_db::Database;
 use uuid::Uuid;
 
 async fn setup() -> (Database, SqliteLifecycleRepository) {
     let db = Database::in_memory().await.expect("in-memory connect");
     db.migrate().await.expect("migrations");
-    let repo = SqliteLifecycleRepository::new(db.pool().clone(), EventBus::new(db.pool().clone(), 16));
+    let repo =
+        SqliteLifecycleRepository::new(db.pool().clone(), EventBus::new(db.pool().clone(), 16));
     (db, repo)
 }
 
@@ -85,9 +86,39 @@ async fn priority_resolution_reviewed_wins_over_inferred_and_observed() {
 
     // Three entries for the same field, written in observed/inferred/reviewed
     // order. None of them are explicitly superseded.
-    insert_prov_row(pool, "project", &asset_id, "target.coords", "observed", "\"obs\"", "2026-05-01T00:00:00Z", None).await;
-    insert_prov_row(pool, "project", &asset_id, "target.coords", "inferred", "\"inf\"", "2026-05-02T00:00:00Z", None).await;
-    insert_prov_row(pool, "project", &asset_id, "target.coords", "reviewed", "\"rev\"", "2026-05-03T00:00:00Z", None).await;
+    insert_prov_row(
+        pool,
+        "project",
+        &asset_id,
+        "target.coords",
+        "observed",
+        "\"obs\"",
+        "2026-05-01T00:00:00Z",
+        None,
+    )
+    .await;
+    insert_prov_row(
+        pool,
+        "project",
+        &asset_id,
+        "target.coords",
+        "inferred",
+        "\"inf\"",
+        "2026-05-02T00:00:00Z",
+        None,
+    )
+    .await;
+    insert_prov_row(
+        pool,
+        "project",
+        &asset_id,
+        "target.coords",
+        "reviewed",
+        "\"rev\"",
+        "2026-05-03T00:00:00Z",
+        None,
+    )
+    .await;
 
     let (map, truncated) = load_provenance(pool, entity_id, "project").await.unwrap();
     assert!(!truncated);

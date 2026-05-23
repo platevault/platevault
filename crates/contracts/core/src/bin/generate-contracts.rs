@@ -20,8 +20,8 @@ use schemars::{schema_for, JsonSchema};
 fn project_root() -> PathBuf {
     // Walk up from the binary's manifest dir to the workspace root.
     // CARGO_MANIFEST_DIR = crates/contracts/core; go up 3 levels.
-    let manifest = std::env::var("CARGO_MANIFEST_DIR")
-        .expect("CARGO_MANIFEST_DIR must be set by cargo");
+    let manifest =
+        std::env::var("CARGO_MANIFEST_DIR").expect("CARGO_MANIFEST_DIR must be set by cargo");
     PathBuf::from(manifest)
         .ancestors()
         .nth(3)

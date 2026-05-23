@@ -10,12 +10,25 @@ use crate::lifecycle::data_source::{DataSourceState, RegisteredSource};
 use crate::lifecycle::inventory::{FileRecord, InventoryState};
 use crate::lifecycle::plan::{FilesystemPlan, PlanState};
 use crate::lifecycle::prepared_source::{PreparedSourceState, PreparedSourceView};
-use crate::lifecycle::projection::{ProcessingArtifact, ProjectionState};
 use crate::lifecycle::project::{Project, ProjectState};
+use crate::lifecycle::projection::{ProcessingArtifact, ProjectionState};
 use crate::lifecycle::session::{AcquisitionSession, CalibrationSession, SessionState};
 
 /// The string tag used in contracts and audit rows for each entity family.
-#[derive(Clone, Copy, Debug, Eq, Hash, Ord, PartialEq, PartialOrd, Serialize, Deserialize, JsonSchema, Type)]
+#[derive(
+    Clone,
+    Copy,
+    Debug,
+    Eq,
+    Hash,
+    Ord,
+    PartialEq,
+    PartialOrd,
+    Serialize,
+    Deserialize,
+    JsonSchema,
+    Type,
+)]
 #[serde(rename_all = "snake_case")]
 pub enum EntityType {
     LibraryRoot,

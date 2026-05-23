@@ -20,23 +20,12 @@ use domain_core::ids::{EntityId, Timestamp};
 ///
 /// Ordered to match the column projection in `load_provenance`:
 /// `id, asset_id, asset_type, field_path, origin, value, captured_at, source_id, replaced_by`.
-type RawProvenanceTuple = (
-    String,
-    String,
-    String,
-    String,
-    String,
-    String,
-    String,
-    Option<String>,
-    Option<String>,
-);
-use domain_core::lifecycle::provenance::{
-    ProvenanceEntry, ProvenanceTag, ProvenancedValue,
-};
+type RawProvenanceTuple =
+    (String, String, String, String, String, String, String, Option<String>, Option<String>);
+use domain_core::lifecycle::provenance::{ProvenanceEntry, ProvenanceTag, ProvenancedValue};
 use serde_json::Value;
-use time::OffsetDateTime;
 use time::format_description::well_known::Rfc3339;
+use time::OffsetDateTime;
 use uuid::Uuid;
 
 use crate::{DbError, DbResult};
@@ -93,8 +82,7 @@ fn parse_timestamp(s: &str) -> Result<Timestamp, DbError> {
 }
 
 fn parse_entity_id(s: &str) -> Result<EntityId, DbError> {
-    let uuid = Uuid::parse_str(s)
-        .map_err(|e| DbError::NotFound(format!("bad uuid '{s}': {e}")))?;
+    let uuid = Uuid::parse_str(s).map_err(|e| DbError::NotFound(format!("bad uuid '{s}': {e}")))?;
     Ok(EntityId::from_uuid(uuid))
 }
 
@@ -103,11 +91,7 @@ fn row_to_entry(row: &ProvenanceRow) -> DbResult<ProvenanceEntry<Value>> {
     let value: Value = serde_json::from_str(&row.value_json)?;
     let origin = parse_tag(&row.origin)?;
     let captured_at = parse_timestamp(&row.captured_at)?;
-    let source_id = row
-        .source_id
-        .as_deref()
-        .map(parse_entity_id)
-        .transpose()?;
+    let source_id = row.source_id.as_deref().map(parse_entity_id).transpose()?;
     Ok(ProvenanceEntry {
         value,
         origin,
@@ -153,8 +137,8 @@ pub async fn load_provenance(
 
     let rows: Vec<ProvenanceRow> = raw
         .into_iter()
-        .map(|(id, entity_id, entity_type, field_path, origin, value_json, captured_at, source_id, superseded_by)| {
-            ProvenanceRow {
+        .map(
+            |(
                 id,
                 entity_id,
                 entity_type,
@@ -164,8 +148,20 @@ pub async fn load_provenance(
                 captured_at,
                 source_id,
                 superseded_by,
-            }
-        })
+            )| {
+                ProvenanceRow {
+                    id,
+                    entity_id,
+                    entity_type,
+                    field_path,
+                    origin,
+                    value_json,
+                    captured_at,
+                    source_id,
+                    superseded_by,
+                }
+            },
+        )
         .collect();
 
     // Group by field_path. Preserves the SQL ordering (oldest first).
@@ -185,10 +181,8 @@ pub async fn load_provenance(
         }
 
         // Decode every row into a ProvenanceEntry once.
-        let mut entries: Vec<ProvenanceEntry<Value>> = rows
-            .iter()
-            .map(row_to_entry)
-            .collect::<DbResult<Vec<_>>>()?;
+        let mut entries: Vec<ProvenanceEntry<Value>> =
+            rows.iter().map(row_to_entry).collect::<DbResult<Vec<_>>>()?;
 
         // Resolution rule:
         //   1. Prefer entries whose `replaced_by` is NULL (i.e. not superseded
@@ -205,11 +199,8 @@ pub async fn load_provenance(
             .filter(|(_, r)| r.superseded_by.is_none())
             .map(|(i, _)| i)
             .collect();
-        let candidate_indices: Vec<usize> = if unsuperseded.is_empty() {
-            (0..entries.len()).collect()
-        } else {
-            unsuperseded
-        };
+        let candidate_indices: Vec<usize> =
+            if unsuperseded.is_empty() { (0..entries.len()).collect() } else { unsuperseded };
 
         let pick_index = candidate_indices
             .into_iter()
@@ -218,9 +209,7 @@ pub async fn load_provenance(
                 let eb = &entries[b];
                 priority(ea.origin).cmp(&priority(eb.origin)).then_with(|| {
                     // newest wins on priority tie
-                    eb.captured_at
-                        .as_offset_date_time()
-                        .cmp(&ea.captured_at.as_offset_date_time())
+                    eb.captured_at.as_offset_date_time().cmp(&ea.captured_at.as_offset_date_time())
                 })
             })
             .ok_or_else(|| {
