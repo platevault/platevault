@@ -5,6 +5,7 @@ import {
   createRouter,
   Navigate,
   Outlet,
+  useRouterState,
 } from "@tanstack/react-router";
 
 import { InventoryPage } from "../features/inventory/InventoryPage";
@@ -17,11 +18,21 @@ import { WelcomePage } from "../features/welcome/WelcomePage";
 import { Shell } from "./Shell";
 
 const rootRoute = createRootRoute({
-  component: () => (
-    <Shell>
-      <Outlet />
-    </Shell>
-  ),
+  component: () => {
+    // The first-run wizard is a fullscreen onboarding experience and must
+    // not render inside the Shell chrome (sidebar, breadcrumb, status bar).
+    // Otherwise "Restart setup wizard" lands the user on a page that looks
+    // like a settings sub-page rather than a fresh wizard.
+    const pathname = useRouterState({ select: (s) => s.location.pathname });
+    if (pathname === "/welcome") {
+      return <Outlet />;
+    }
+    return (
+      <Shell>
+        <Outlet />
+      </Shell>
+    );
+  },
 });
 
 function parseId(value: unknown): string | undefined {
