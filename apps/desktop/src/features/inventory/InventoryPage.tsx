@@ -47,6 +47,8 @@ import {
 } from "../../data/mock";
 import { setSessionReviewState, useInventorySources, useProjects, addInventorySource } from "../../data/store";
 import { useSettings } from "../../data/settings";
+import { useProvenance } from "../../data/provenance";
+import { ProvenanceSection } from "../../ui";
 
 const DEFAULT_SORT = "date:desc";
 
@@ -57,6 +59,33 @@ const CALIBRATION_TYPES = new Set(["dark", "flat", "bias", "dark_flat"]);
 
 function isCalibrationSession(type: InventorySession["type"]): boolean {
   return CALIBRATION_TYPES.has(type);
+}
+
+/**
+ * Provenance pane for an inventory session. Reads the spec 002
+ * `ProvenanceField[]` payload via `useProvenance` — `calibration_session`
+ * for bias/dark/flat, `acquisition_session` otherwise. In `pnpm dev` this
+ * resolves through the dev shim that synthesises fields from the legacy
+ * `InventorySession.provenance` dict; under Tauri it hits the contract.
+ */
+function SessionProvenance({
+  sessionId,
+  sessionType,
+}: {
+  sessionId: string;
+  sessionType: InventorySession["type"];
+}) {
+  const assetType = isCalibrationSession(sessionType)
+    ? ("calibration_session" as const)
+    : ("acquisition_session" as const);
+  const { data, loading, error } = useProvenance(sessionId, assetType);
+  const hasContent = loading || error || (data && data.length > 0);
+  if (!hasContent) return null;
+  return (
+    <FactGroup label="Provenance">
+      <ProvenanceSection fields={data} loading={loading} error={error} />
+    </FactGroup>
+  );
 }
 
 const DEFAULT_STATES: InventorySessionState[] = [
@@ -620,26 +649,11 @@ export function InventoryPage() {
               />
             </FactGroup>
 
-            {selected.provenance ? (
-              <FactGroup label="Provenance">
-                <Facts
-                  entries={[
-                    selected.provenance.target
-                      ? { label: "Target", value: selected.provenance.target }
-                      : null,
-                    selected.provenance.filter
-                      ? { label: "Filter", value: selected.provenance.filter }
-                      : null,
-                    selected.provenance.inferred
-                      ? { label: "Inferred", value: selected.provenance.inferred }
-                      : null,
-                    selected.provenance.confirmedBy
-                      ? { label: "Confirmed", value: selected.provenance.confirmedBy }
-                      : null,
-                  ].filter(Boolean) as Array<{ label: React.ReactNode; value: React.ReactNode }>}
-                />
-              </FactGroup>
-            ) : null}
+            <SessionProvenance
+              sessionId={selected.id}
+              sessionType={selected.type}
+            />
+
 
             {/* Project assignment: only for light/mixed sessions */}
             {selected.type === "light" || selected.type === "mixed" ? (

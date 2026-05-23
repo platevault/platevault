@@ -2,9 +2,10 @@ import { useNavigate, useParams } from "@tanstack/react-router";
 import { useEffect, useMemo, useState } from "react";
 import { ArrowLeft, MoreVertical, Pause, FolderOpen, RefreshCw } from "lucide-react";
 
-import { Button, IconButton, Facts, Menu, StateLabel } from "../../ui";
+import { Button, IconButton, Facts, Menu, StateLabel, ProvenanceSection } from "../../ui";
 import { planStateLabel, planStateTone, type Plan, type PlanItem } from "../../data/mock";
 import { discardPlan, simulateApply, updatePlanState, usePlans } from "../../data/store";
+import { useProvenance } from "../../data/provenance";
 
 export function PlanDetailPage() {
   const { planId } = useParams({ strict: false }) as { planId?: string };
@@ -317,6 +318,25 @@ function PlanItemRow({
   );
 }
 
+/**
+ * Provenance pane for a plan item. Reads the spec 002 `ProvenanceField[]`
+ * payload via `useProvenance` (asset type `filesystem_plan`). In `pnpm dev`
+ * this resolves through the dev-mode shim that synthesises fields from the
+ * legacy `PlanItem.provenance` mock data; under Tauri it hits the real
+ * contract.
+ */
+function PlanItemProvenance({ itemId }: { itemId: string }) {
+  const { data, loading, error } = useProvenance(itemId, "filesystem_plan");
+  const hasContent = loading || error || (data && data.length > 0);
+  if (!hasContent) return null;
+  return (
+    <div style={{ marginTop: 16 }} data-provenance-pane="plan-item">
+      <div className="alm-fact-group__label">Provenance</div>
+      <ProvenanceSection fields={data} loading={loading} error={error} />
+    </div>
+  );
+}
+
 function PlanItemDetail({ item }: { item: PlanItem }) {
   return (
     <div>
@@ -335,12 +355,8 @@ function PlanItemDetail({ item }: { item: PlanItem }) {
         ].filter(Boolean) as Array<{ label: React.ReactNode; value: React.ReactNode; mono?: boolean }>}
       />
 
-      {item.provenance ? (
-        <div style={{ marginTop: 16 }}>
-          <div className="alm-fact-group__label">Provenance</div>
-          <Facts entries={item.provenance} />
-        </div>
-      ) : null}
+      <PlanItemProvenance itemId={item.id} />
+
 
       <div style={{ marginTop: 16, display: "flex", gap: 8 }}>
         <Button leadingIcon={<FolderOpen size={14} />}>Reveal source in OS</Button>

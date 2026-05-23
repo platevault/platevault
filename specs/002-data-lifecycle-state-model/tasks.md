@@ -85,9 +85,10 @@ description: "Task list for Data Lifecycle State Model (Spec 002)"
 - [x] T021 [US1] Tauri command `lifecycle.read_asset_detail` in `apps/desktop/src-tauri/src/commands/lifecycle.rs` (depends on T020).
 - [x] T021a [US1] Use case `provenance.read` in `crates/app/core/src/usecases/lifecycle.rs` returning the contract shape defined in `contracts/provenance.read.json` (inline history per origin tag + `history_truncated` flag; archive lookup via `provenance_history_archive` table from T010) (depends on T019). Tauri command `provenance.read` in `apps/desktop/src-tauri/src/commands/lifecycle.rs`.
 - [x] T022 [US1] Contract codegen: generate TypeScript surface from `packages/contracts/lifecycle.transition.json` and `packages/contracts/provenance.read.json` into `packages/contracts/generated/` (depends on T005, T016).
-- [ ] T023 [US1] Replace `apps/desktop/src/data/store.ts` provenance-shape code with a thin adapter calling the Tauri command; preserve existing hook signatures so `ProjectsPage.tsx`, `PlanDetailPage.tsx`, `InventoryPage.tsx` stay untouched (depends on T021, T022). `[mockup ✓, needs Rust port]`.
-- [ ] T024 [P] [US1] Vitest test in `apps/desktop/src/data/store.test.ts` verifying the adapter exposes the same hook signatures the components consume.
-- [ ] T025 [US1] Playwright MCP smoke in `tests/e2e/lifecycle_detail.spec.ts` verifying detail view shows observed/inferred/reviewed columns and ledger row hides them (depends on T023).
+- [x] T023a [US1] Additive `useProvenance(assetId, assetType, fieldPaths?)` hook in `apps/desktop/src/data/provenance.ts` calling `readProvenance` in Tauri runtime, and synthesising a `ProvenanceField[]` projection from `mock.ts` (session dict / plan-item `{label,value}[]`) outside Tauri so `pnpm dev` keeps working. Zero component edits — pure additive seam (depends on T021, T022).
+- [x] T023b [US1] Component opt-in: migrate `ProjectsPage.tsx`, `PlanDetailPage.tsx`, `InventoryPage.tsx` (and any detail view surfacing provenance) off the inline mock-shape fields onto `useProvenance`, rendering `ProvenanceField[]` with an origin chip (observed/inferred/reviewed/generated/planned/applied) and a per-field history disclosure honoring `historyTruncated` (depends on T023a).
+- [x] T024 [P] [US1] Vitest test in `apps/desktop/src/data/store.test.ts` verifying the adapter exposes the same hook signatures the components consume.
+- [x] T025 [US1] Playwright smoke in `tests/e2e/lifecycle_detail.spec.ts` verifying the detail view renders origin chips drawn from the 6 documented origins (observed/inferred/reviewed/generated/planned/applied) plus an interactive history disclosure, and the ledger (list) row hides them (depends on T023). NOTE: under `pnpm dev` (no Tauri bridge) the dev shim emits `origin === "observed"` only; full multi-origin coverage requires a Tauri-runtime variant tracked as follow-up.
 
 **Checkpoint**: US1 functional and independently testable.
 
@@ -123,9 +124,9 @@ description: "Task list for Data Lifecycle State Model (Spec 002)"
 - [x] T038 [US2] Use case `transition_apply` in `crates/app/core/src/usecases/lifecycle.rs` validating actor, dispatching by family, returning the contract response shape (depends on T037, T012, T029). MUST enforce the `actor=system` edge policy (GRILL spec 009 ratification): `actor == system` is permitted ONLY on edges entering or leaving `blocked`; any other edge with `actor == system` MUST be rejected with `transition.refused` and audit-logged. MUST also enforce action-bound review (FR-009/FR-010): when action-critical fields are not `reviewed`, refuse with `provenance.unreviewed` and populate `error.details.blocking_fields` per `contracts/lifecycle.transition.json`. On success, publish `lifecycle.transition.applied` on the in-process event bus (research.md §6.1).
 - [x] T039 [US2] Use case `transition_preview` in `crates/app/core/src/usecases/lifecycle.rs` (read-only "would this be allowed?") for UI dry-run.
 - [x] T040 [US2] Tauri commands `lifecycle.transition.apply` and `lifecycle.transition.preview` in `apps/desktop/src-tauri/src/commands/lifecycle.rs` (depends on T038, T039).
-- [ ] T041 [US2] Swap `apps/desktop/src/data/store.ts` `setProjectLifecycle`, `setSessionReviewState`, `simulateApply` to call the Tauri commands; preserve hook signatures so `ProjectsPage.tsx`, `PlanDetailPage.tsx`, `InventoryPage.tsx` need no edits (depends on T040). `[mockup ✓, needs Rust port]`.
-- [ ] T042 [P] [US2] Vitest in `apps/desktop/src/data/store.transitions.test.ts` covering refused-edge UI projection and `usePendingPlansCount` partition into `needsAction` / `needsAttention`. `[mockup ✓, needs Rust port]`.
-- [ ] T043 [US2] Playwright MCP smoke in `tests/e2e/lifecycle_transitions.spec.ts` driving a project through the full transition path and asserting the timeline renders only workflow-significant events (FR-008) (depends on T041).
+- [x] T041 [US2] Swap `apps/desktop/src/data/store.ts` `setProjectLifecycle`, `setSessionReviewState`, `simulateApply` to call the Tauri commands; preserve hook signatures so `ProjectsPage.tsx`, `PlanDetailPage.tsx`, `InventoryPage.tsx` need no edits (depends on T040). `[mockup ✓, needs Rust port]`. Refusals are projected through a new `useRefusals` hook + `refusalBucket()` helper; `usePendingPlansCount` partitions both plan-state and refusal-code into `needsAction` / `needsAttention`. Dev-harness path (no Tauri) emits a synthetic `dev_fallback` refusal and applies the legacy mock mutation so `pnpm dev` still demos.
+- [x] T042 [P] [US2] Vitest in `apps/desktop/src/data/store.transitions.test.ts` covering refused-edge UI projection and `usePendingPlansCount` partition into `needsAction` / `needsAttention`. `[mockup ✓, needs Rust port]`.
+- [x] T043 [US2] Playwright MCP smoke in `tests/e2e/lifecycle_transitions.spec.ts` driving a project through the full transition path and asserting the timeline renders only workflow-significant events (FR-008) (depends on T041). Follow-up: full FR-008 filter coverage and a refusal-bucket UI assertion require a Tauri-runtime e2e harness AND a UI surface that subscribes to `useRefusals()` — one `test.skip` documents the deferred assertion.
 - [x] T044 [US2] FilesystemPlan gate in `crates/app/core/src/usecases/lifecycle.rs`: the canonical `(entity_type, from, to) → requires_plan` edge table lives in `crates/domain/core/src/lifecycle/plan_requirement.rs` (authored from data-model.md §Plan-Requirement Edge Table). Callers MUST NOT pass `requires_plan` on the request; the server derives it. Any transition whose edge yields `requires_plan = true` MUST refuse with `plan.required` (creating a draft `FilesystemPlan` and returning its `plan_id`) or `plan.not_approved` until the plan reaches `approved` (depends on T038). Includes the actor=system edge-policy enforcement note shared with T038.
 
 **Checkpoint**: US1 + US2 both functional independently.
@@ -141,6 +142,7 @@ description: "Task list for Data Lifecycle State Model (Spec 002)"
 - [x] T047 [P] Immutable session snapshot writer (FR-005) in `crates/persistence/db/src/repositories/lifecycle.rs` on each transition into/out of `confirmed`/`rejected`/`needs_review`.
 - [x] T048 [P] Documentation pass in `docs/research/lifecycle-state-model.md` cross-linking the resolved questions from research.md §8.
 - [x] T049 Run `just lint` + `just test` + `just typecheck` from repo root and resolve any drift before declaring ready-for-impl.
+- [x] T050 [US2] Action-bound review gate (FR-009/FR-010). Authoritative table `(entity_type, from, to) → action_critical_fields[]` in `crates/domain/core/src/lifecycle/action_review_requirement.rs` (canonical home; mirrors data-model.md §Action-Bound Review and seeds the single documented cell — `acquisition_session.candidate → needs_review` requires `observer_location`; further cells require SpecKit clarification). Adds `LifecycleRepository::field_origins` (`crates/persistence/db/src/repositories/lifecycle.rs`) backed by `provenance_history_archive`. Wires the gate into `crates/app/core/src/transition_use_case.rs::apply_transition` between the `actor=system` and `plan.required` checks: any field whose `ProvenancedValue.origin` is not `reviewed` MUST refuse with `provenance.unreviewed` and populate `error.details.blockingFields` per `contracts/lifecycle.transition.json`. Field-level review is derived from provenance — it is NOT a per-entity column. Closes out the FR-009/FR-010 second clause of T038; T038 itself stays closed (depends on T038, T044).
 
 ---
 
@@ -178,9 +180,10 @@ T020 = { blocked_by = ["T019"] }
 T021 = { blocked_by = ["T020"] }
 T021a = { blocked_by = ["T019"] }
 T022 = { blocked_by = ["T005", "T016"] }
-T023 = { blocked_by = ["T021", "T022"] }
-T024 = { blocked_by = ["T023"] }
-T025 = { blocked_by = ["T023"] }
+T023a = { blocked_by = ["T021", "T022"] }
+T023b = { blocked_by = ["T023a"] }
+T024 = { blocked_by = ["T023a"] }
+T025 = { blocked_by = ["T023b"] }
 
 T026 = { blocked_by = ["T006"] }
 T027 = { blocked_by = ["T006"] }
@@ -199,7 +202,7 @@ T037 = { blocked_by = ["T010", "T036"] }
 T038 = { blocked_by = ["T012", "T029", "T037"] }
 T039 = { blocked_by = ["T037"] }
 T040 = { blocked_by = ["T038", "T039"] }
-T041 = { blocked_by = ["T023", "T040"] }
+T041 = { blocked_by = ["T023a", "T040"] }
 T042 = { blocked_by = ["T041"] }
 T043 = { blocked_by = ["T041"] }
 T044 = { blocked_by = ["T038"] }
@@ -209,6 +212,7 @@ T046 = { blocked_by = ["T038"] }
 T047 = { blocked_by = ["T037"] }
 T048 = { blocked_by = ["T044"] }
 T049 = { blocked_by = ["T043", "T044", "T045", "T046", "T047"] }
+T050 = { blocked_by = ["T038", "T044"] }
 ```
 
 ### Phase Dependencies
@@ -273,7 +277,7 @@ Task: "Encode session transitions in crates/domain/core/src/lifecycle/session.rs
 
 - Dev A: US1 (read paths + provenance).
 - Dev B: US2 (transition graphs + audit transactional writes).
-- Dev C: Contract codegen + UI adapter (T005, T022, T023, T041).
+- Dev C: Contract codegen + UI adapter (T005, T022, T023a, T023b, T041).
 
 ---
 

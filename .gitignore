@@ -328,6 +328,10 @@ apm_modules/
 /*.png
 /.playwright-mcp/
 
+# Playwright + vitest run artifacts
+apps/desktop/test-results/
+apps/desktop/playwright-report/
+
 # Stray dotfiles that may appear in repo root (managed by chezmoi)
 /.bashrc
 /.bash_profile

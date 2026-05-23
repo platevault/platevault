@@ -54,6 +54,15 @@ export type { LogPanelProps, LogEntry } from "./LogPanel";
 // ---- New primitives ----
 export { Chip, ChipGroup } from "./Chip";
 export type { ChipProps, ChipGroupProps, ChipTone } from "./Chip";
+export {
+  ProvenanceSection,
+  OriginChip,
+  PROVENANCE_ORIGINS,
+} from "./ProvenanceSection";
+export type {
+  ProvenanceSectionProps,
+  OriginChipProps,
+} from "./ProvenanceSection";
 export { Tabs } from "./Tabs";
 export type { TabsProps, TabItem } from "./Tabs";
 export { SectionHeader } from "./SectionHeader";

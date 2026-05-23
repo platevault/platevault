@@ -27,6 +27,150 @@ import {
   type ProjectLifecycle,
 } from "./mock";
 import type { LogEntry } from "../ui/LogPanel";
+import {
+  applyTransition,
+  CONTRACT_VERSION,
+  isTauriRuntime,
+  newRequestId,
+  NotInTauriRuntimeError,
+  previewTransition,
+  type TransitionRequest,
+} from "../api/lifecycle";
+import type {
+  TransitionErrorCode,
+  TransitionResponse_Serialize,
+} from "../bindings";
+
+// ---------- spec 002 refusal projection ----------
+
+/**
+ * Surface a recent `TransitionRefusal` to the UI so subscribers can render an
+ * inline reason without throwing. Refusals are *expected* control flow per
+ * spec 002 — they should never short-circuit React rendering.
+ *
+ * `dev_fallback` is emitted when the call could not reach Tauri at all (we're
+ * running in the `pnpm dev` browser harness). It is kept distinct from a real
+ * backend refusal so the UI can show "running against mock" vs "backend said
+ * no".
+ */
+export interface RefusalRecord {
+  id: string;
+  at: string;
+  entityType: string;
+  entityId: string;
+  code: TransitionErrorCode | "dev_fallback";
+  message: string;
+  blockingFields?: string[];
+}
+
+// Publisher is declared below; we delay instantiation by deferring with a
+// lazy getter. To avoid temporal dead zone with const ordering, we move the
+// `Publisher` class definition above (already done at line 33) — this section
+// is positioned after it logically.
+
+export function useRefusals(): RefusalRecord[] {
+  return useSyncExternalStore(refusalsPub.subscribe, refusalsPub.getSnapshot);
+}
+
+function pushRefusal(entry: Omit<RefusalRecord, "id" | "at">): RefusalRecord {
+  const record: RefusalRecord = {
+    id: `refusal-${++refusalSeq}`,
+    at: new Date().toISOString(),
+    ...entry,
+  };
+  // newest-first, cap at 100
+  refusalsPub.set([record, ...refusalsPub.snapshot].slice(0, 100));
+  return record;
+}
+
+/**
+ * Bucket a refusal code into actionable vs informational. The split mirrors
+ * what the UI surfaces to the user: codes that require an explicit follow-up
+ * (generate a plan, fill in fields, look up a missing entity) go into
+ * `needsAction`; codes that describe *why* the system declined but require no
+ * user remediation (illegal transition, system actor rejected) go into
+ * `needsAttention`.
+ */
+export function refusalBucket(
+  code: TransitionErrorCode | "dev_fallback",
+): "needsAction" | "needsAttention" {
+  switch (code) {
+    case "plan_required":
+    case "plan_not_approved":
+    case "provenance_unreviewed":
+    case "entity_not_found":
+      return "needsAction";
+    case "transition_refused":
+    case "actor_not_authorised":
+    case "dev_fallback":
+      return "needsAttention";
+  }
+}
+
+/**
+ * Refusal-aware result envelope for write helpers that previously returned
+ * `void`. The legacy callers still see `void`; new subscribers can read
+ * the projection via `useRefusals()`.
+ */
+export type TransitionOutcome =
+  | { ok: true; appliedAt: string | null; newState: string | null }
+  | { ok: false; refusal: RefusalRecord };
+
+/**
+ * Extract `blockingFields` from a refusal's `details` payload (set for
+ * `provenance_unreviewed`).
+ */
+function extractBlockingFields(details: unknown): string[] | undefined {
+  if (details && typeof details === "object" && "blocking_fields" in details) {
+    const raw = (details as { blocking_fields: unknown }).blocking_fields;
+    if (Array.isArray(raw) && raw.every((x) => typeof x === "string")) {
+      return raw as string[];
+    }
+  }
+  if (details && typeof details === "object" && "blockingFields" in details) {
+    const raw = (details as { blockingFields: unknown }).blockingFields;
+    if (Array.isArray(raw) && raw.every((x) => typeof x === "string")) {
+      return raw as string[];
+    }
+  }
+  return undefined;
+}
+
+function projectResponse(
+  resp: TransitionResponse_Serialize,
+  entityType: string,
+  entityId: string,
+): TransitionOutcome {
+  if (resp.status === "error" && resp.error) {
+    const refusal = pushRefusal({
+      entityType,
+      entityId,
+      code: resp.error.code,
+      message: resp.error.message,
+      blockingFields: extractBlockingFields(resp.error.details),
+    });
+    return { ok: false, refusal };
+  }
+  return {
+    ok: true,
+    appliedAt: resp.appliedAt ?? null,
+    newState: resp.newState ?? null,
+  };
+}
+
+function projectDevFallback(
+  entityType: string,
+  entityId: string,
+  message: string,
+): TransitionOutcome {
+  const refusal = pushRefusal({
+    entityType,
+    entityId,
+    code: "dev_fallback",
+    message,
+  });
+  return { ok: false, refusal };
+}
 
 // ---------- generic publisher ----------
 
@@ -45,6 +189,11 @@ class Publisher<T> {
     this.listeners.forEach((l) => l());
   }
 }
+
+// ---------- spec 002 refusal publisher ----------
+// Declared here (after Publisher) but used by the projection helpers above.
+const refusalsPub = new Publisher<RefusalRecord[]>([]);
+let refusalSeq = 0;
 
 // ---------- plans ----------
 
@@ -306,13 +455,68 @@ export function discardPlan(id: string) {
 }
 
 /**
+ * Spec 002 write-side seam: dry-run the plan transition first to surface any
+ * refusals, then continue with the existing UI ticker. The ticker animates
+ * what the backend would do; the preview call is the contract gate.
+ *
+ * Hook signature unchanged so callers (`PlanDetailPage`, command bar action)
+ * continue to fire-and-forget.
+ */
+export function simulateApply(id: string): void {
+  if (!isTauriRuntime()) {
+    runSimulateApply(id);
+    return;
+  }
+
+  const plan = getPlanById(id);
+  if (!plan) return;
+
+  // Treat "apply plan" as a plan-state transition driven by the user. The
+  // actual semantic states for plans live in the bindings as plan-specific
+  // variants; for the preview we infer from the current PlanState.
+  const previewRequest: TransitionRequest = {
+    plan: {
+      entityType: "plan",
+      contractVersion: CONTRACT_VERSION,
+      requestId: newRequestId(),
+      entityId: id,
+      currentState: plan.state === "applying" ? "approved" : plan.state,
+      nextState: "applying",
+      actionLabel: "Apply plan",
+      actor: "user",
+    },
+  };
+
+  void previewTransition(previewRequest)
+    .then((resp) => {
+      const outcome = projectResponse(resp, "plan", id);
+      if (outcome.ok) {
+        runSimulateApply(id);
+      }
+    })
+    .catch((err: unknown) => {
+      if (err instanceof NotInTauriRuntimeError) {
+        projectDevFallback("plan", id, err.message);
+        runSimulateApply(id);
+        return;
+      }
+      pushRefusal({
+        entityType: "plan",
+        entityId: id,
+        code: "transition_refused",
+        message: err instanceof Error ? err.message : String(err),
+      });
+    });
+}
+
+/**
  * Simulate apply progression: pending → applying → succeeded/failed item by
  * item, with the failed plan-41 staying failed.
  *
  * Safe to call on a plan that has previously been applied/cancelled — we
  * reset all non-failed items back to pending so the counters don't drift.
  */
-export function simulateApply(id: string) {
+function runSimulateApply(id: string): void {
   const plan = getPlanById(id);
   if (!plan) return;
   if (plan.items.length === 0) {
@@ -414,18 +618,45 @@ export function useInboxCount(): number {
   return inboxItems.length;
 }
 
+/**
+ * Surfaces what the user owes the system, partitioned for the Shell pill.
+ *
+ * Spec 002 (T041) folds in transition refusals on top of plan state:
+ *
+ * - `needsAction` (user must do something): plans in `draft` /
+ *   `ready_for_review` / `approved`, plus refusals whose codes require
+ *   explicit follow-up — `plan_required`, `plan_not_approved`,
+ *   `provenance_unreviewed`, `entity_not_found`.
+ * - `needsAttention` (informational / structural): plans that ended in
+ *   `failed` or `partially_applied`, plus refusals whose codes describe a
+ *   structural decline that needs no user remediation —
+ *   `transition_refused`, `actor_not_authorised`, and the synthetic
+ *   `dev_fallback` emitted by the browser dev harness.
+ *
+ * See `refusalBucket()` for the canonical refusal-code → bucket map.
+ */
 export function usePendingPlansCount(): {
   needsAction: number;
   needsAttention: number;
 } {
   const all = usePlans();
-  const needsAction = all.filter(
+  const refusals = useRefusals();
+  const planAction = all.filter(
     (p) => p.state === "ready_for_review" || p.state === "draft" || p.state === "approved",
   ).length;
-  const needsAttention = all.filter(
+  const planAttention = all.filter(
     (p) => p.state === "failed" || p.state === "partially_applied",
   ).length;
-  return { needsAction, needsAttention };
+  const refusalAction = refusals.filter(
+    (r) => refusalBucket(r.code) === "needsAction",
+  ).length;
+  const refusalAttention = refusals.filter(
+    (r) => refusalBucket(r.code) === "needsAttention",
+  ).length;
+  return {
+    needsAction: planAction + refusalAction,
+    needsAttention: planAttention + refusalAttention,
+  };
 }
 
 // ---------- log ----------
@@ -527,22 +758,12 @@ export function isProjectTransitionAllowed(
   return PROJECT_TRANSITIONS[from]?.includes(to) ?? false;
 }
 
-export function setProjectLifecycle(
+function applyLocalProjectMutation(
   id: string,
   next: ProjectLifecycle,
-  actionLabel?: string,
-) {
-  const project = projectsPub.snapshot.find((p) => p.id === id);
-  if (!project) return;
-  if (project.lifecycle === next) return;
-  if (!isProjectTransitionAllowed(project.lifecycle, next)) {
-    appendLog({
-      level: "warn",
-      source: `project ${project.name}`,
-      message: `transition refused: ${project.lifecycle} → ${next}`,
-    });
-    return;
-  }
+  actionLabel: string | undefined,
+  project: Project,
+): void {
   const when = new Date().toISOString().slice(0, 16).replace("T", " ");
   const label =
     actionLabel ??
@@ -561,6 +782,84 @@ export function setProjectLifecycle(
     source: `project ${project.name}`,
     message: `lifecycle ${project.lifecycle} → ${next}`,
   });
+}
+
+/**
+ * Spec 002 write-side seam: drive a project lifecycle transition through the
+ * Tauri `lifecycle.transition.apply` command when the runtime is available.
+ *
+ * The hook signature is preserved (return type stays `void`) so existing
+ * component callers keep compiling. Refusals are projected into the refusal
+ * store (`useRefusals`) and counted by `usePendingPlansCount`. Errors that
+ * indicate we're not in Tauri (browser dev harness) silently fall back to the
+ * legacy mock mutation so `pnpm dev` still demos.
+ */
+export function setProjectLifecycle(
+  id: string,
+  next: ProjectLifecycle,
+  actionLabel?: string,
+): void {
+  const project = projectsPub.snapshot.find((p) => p.id === id);
+  if (!project) return;
+  if (project.lifecycle === next) return;
+  if (!isProjectTransitionAllowed(project.lifecycle, next)) {
+    appendLog({
+      level: "warn",
+      source: `project ${project.name}`,
+      message: `transition refused: ${project.lifecycle} → ${next}`,
+    });
+    pushRefusal({
+      entityType: "project",
+      entityId: id,
+      code: "transition_refused",
+      message: `Illegal transition ${project.lifecycle} → ${next}`,
+    });
+    return;
+  }
+
+  if (!isTauriRuntime()) {
+    projectDevFallback(
+      "project",
+      id,
+      `Dev harness: ${project.lifecycle} → ${next} applied locally`,
+    );
+    applyLocalProjectMutation(id, next, actionLabel, project);
+    return;
+  }
+
+  const request: TransitionRequest = {
+    project: {
+      entityType: "project",
+      contractVersion: CONTRACT_VERSION,
+      requestId: newRequestId(),
+      entityId: id,
+      currentState: project.lifecycle,
+      nextState: next,
+      actionLabel: actionLabel ?? null,
+      actor: "user",
+    },
+  };
+
+  void applyTransition(request)
+    .then((resp) => {
+      const outcome = projectResponse(resp, "project", id);
+      if (outcome.ok) {
+        applyLocalProjectMutation(id, next, actionLabel, project);
+      }
+    })
+    .catch((err: unknown) => {
+      if (err instanceof NotInTauriRuntimeError) {
+        projectDevFallback("project", id, err.message);
+        applyLocalProjectMutation(id, next, actionLabel, project);
+        return;
+      }
+      pushRefusal({
+        entityType: "project",
+        entityId: id,
+        code: "transition_refused",
+        message: err instanceof Error ? err.message : String(err),
+      });
+    });
 }
 
 // ---------- inventory ----------
@@ -624,10 +923,10 @@ export function remapInventorySource(sourceId: string, newPath: string): void {
   });
 }
 
-export function setSessionReviewState(
+function applyLocalSessionMutation(
   sessionId: string,
   state: InventorySession["state"],
-) {
+): void {
   let updatedName: string | null = null;
   let changed = false;
   sourcesPub.set(
@@ -652,6 +951,72 @@ export function setSessionReviewState(
       message: `${updatedName} review → ${state.replace(/_/g, " ")}`,
     });
   }
+}
+
+function findSession(sessionId: string): InventorySession | undefined {
+  for (const src of sourcesPub.snapshot) {
+    const hit = src.sessions.find((s) => s.id === sessionId);
+    if (hit) return hit;
+  }
+  return undefined;
+}
+
+/**
+ * Spec 002 write-side seam: drive an inventory session review-state change
+ * through `lifecycle.transition.apply`. Preserves the `void` return; refusals
+ * land in `useRefusals()`.
+ */
+export function setSessionReviewState(
+  sessionId: string,
+  state: InventorySession["state"],
+): void {
+  const session = findSession(sessionId);
+  if (!session) return;
+  if (session.state === state) return;
+
+  if (!isTauriRuntime()) {
+    projectDevFallback(
+      "inventory_session",
+      sessionId,
+      `Dev harness: review → ${state} applied locally`,
+    );
+    applyLocalSessionMutation(sessionId, state);
+    return;
+  }
+
+  const request: TransitionRequest = {
+    inventory_session: {
+      entityType: "inventory_session",
+      contractVersion: CONTRACT_VERSION,
+      requestId: newRequestId(),
+      entityId: sessionId,
+      currentState: session.state,
+      nextState: state,
+      actionLabel: null,
+      actor: "user",
+    },
+  };
+
+  void applyTransition(request)
+    .then((resp) => {
+      const outcome = projectResponse(resp, "inventory_session", sessionId);
+      if (outcome.ok) {
+        applyLocalSessionMutation(sessionId, state);
+      }
+    })
+    .catch((err: unknown) => {
+      if (err instanceof NotInTauriRuntimeError) {
+        projectDevFallback("inventory_session", sessionId, err.message);
+        applyLocalSessionMutation(sessionId, state);
+        return;
+      }
+      pushRefusal({
+        entityType: "inventory_session",
+        entityId: sessionId,
+        code: "transition_refused",
+        message: err instanceof Error ? err.message : String(err),
+      });
+    });
 }
 
 // ---------- audit log ----------

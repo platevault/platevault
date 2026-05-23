@@ -111,6 +111,22 @@ export async function applyTransition(
 }
 
 /**
+ * Dry-run a lifecycle transition without mutating durable state. Used by the
+ * write-side UI to enable/disable action buttons and surface anticipated
+ * refusals before the user commits to apply.
+ */
+export async function previewTransition(
+  request: TransitionRequest_Deserialize,
+): Promise<TransitionResponse_Serialize> {
+  requireRuntime("lifecycleTransitionPreview");
+  const result = await commands.lifecycleTransitionPreview(request);
+  if (result.status === "ok") {
+    return result.data;
+  }
+  throw new Error(`lifecycle_transition_preview invoke failed: ${result.error}`);
+}
+
+/**
  * List ledger rows. Filter fields default to empty (no constraint).
  */
 export async function listLedger(filter: Partial<LedgerFilterDto> = {}): Promise<LedgerRowDto[]> {

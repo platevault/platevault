@@ -18,6 +18,7 @@ import {
   PageHeader,
   PlanFooter,
   PlanInlineSummary,
+  ProvenanceSection,
   SectionHeader,
   StateLabel,
   Tabs,
@@ -46,6 +47,7 @@ import {
   useProjects,
 } from "../../data/store";
 import { useSettings } from "../../data/settings";
+import { useProvenance } from "../../data/provenance";
 
 const DEFAULT_SORT = "updated:desc";
 
@@ -146,8 +148,27 @@ function PendingPlanChip({
    Drawer body panels
    ================================================================ */
 
+/**
+ * Provenance pane for a project. Reads the spec 002 `ProvenanceField[]`
+ * payload via `useProvenance` (asset type `project`). In `pnpm dev` the
+ * dev shim returns an empty list (no per-project mock projection), so this
+ * section self-hides until the contract is wired under Tauri.
+ */
+function ProjectProvenance({ projectId }: { projectId: string }): ReactElement | null {
+  const { data, loading, error } = useProvenance(projectId, "project");
+  const hasContent = loading || error || (data && data.length > 0);
+  if (!hasContent) return null;
+  return (
+    <div style={{ marginTop: 16 }} data-provenance-pane="project">
+      <div className="alm-fact-group__label">Provenance</div>
+      <ProvenanceSection fields={data} loading={loading} error={error} />
+    </div>
+  );
+}
+
 function OverviewPanel({ project }: { project: Project }): ReactElement {
   return (
+    <>
     <Facts
       entries={[
         { label: "Lifecycle", value: <StateLabel tone={lifecycleTone(project.lifecycle)}>{lifecycleLabel(project.lifecycle)}</StateLabel> },
@@ -171,6 +192,8 @@ function OverviewPanel({ project }: { project: Project }): ReactElement {
           : null,
       ].filter(Boolean) as Array<{ label: React.ReactNode; value: React.ReactNode }>}
     />
+    <ProjectProvenance projectId={project.id} />
+    </>
   );
 }
 
