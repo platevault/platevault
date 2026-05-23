@@ -267,3 +267,14 @@ rationale (also captured in `plan.md`) is that theme must paint before the
 backend is reachable, must be per-device, and must not pollute the settings
 audit stream. Theme has its own key (`alm.theme`) and its own writer in
 `apps/desktop/src/app/theme.tsx`.
+
+## R9. calibration.flat.gain.tolerance_hard — dropped 2026-05-23
+
+`calibration.flat.gain.tolerance_hard` was considered as a user-configurable
+boolean setting (from the original spec 007 GRILL table, A5). It was dropped
+on 2026-05-23 when flat gain was ratified as code-fixed Hard (exact match).
+Because gain is now unconditionally Hard for flat matching, there is nothing
+for the user to configure: no tolerance exists, no toggle applies. The key
+does NOT appear in `data-model.md §Absorbed Keys`, `settings.update.json`,
+or `settings.restore-defaults.json`. See spec 007 `data-model.md` Flat
+dimensions and `research.md R1` for the rationale.

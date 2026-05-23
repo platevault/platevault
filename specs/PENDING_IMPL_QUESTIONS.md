@@ -155,3 +155,25 @@ Once Q1 + Q3 + Q5 are answered, I can scaffold the foundational lifecycle types 
 ## What lands when you're back
 
 Read this file, the `specs/PENDING_REVIEW_QUESTIONS.md`, and pick a path. I'll resume with whatever you ratify.
+
+---
+
+## Resolution (2026-05-23)
+
+All Q1–Q8 and the flat-gain dimension question are ratified. Final answers:
+
+| Question | Decision |
+|---|---|
+| Q1: SQLite driver | **sqlx** (async; `sqlite + runtime-tokio-rustls + macros + migrate` features). Replace rusqlite-based scaffolding during spec 002 Phase 2. |
+| Q2: Migration tooling | **Defer** (greenfield). Use `sqlx::migrate!()` with inline `*.sql` files when the migration is written; no separate runner. |
+| Q3: Async runtime + event bus | **tokio** runtime. **Hybrid event bus**: `tokio::sync::broadcast` (live) + SQLite `events` table (durable replay). |
+| Q4: JSON Schema generation | **Rust-canonical via schemars**. Rust DTOs in `crates/contracts/core/` (with `#[derive(JsonSchema)]`) are the source of truth. JSON files at `specs/*/contracts/*.json` are reproducible projections. `cargo run --bin generate-contracts` regenerates them; CI gates with `git diff --exit-code`. |
+| Q5: Rust→TS codegen | **specta + tauri-specta**. Output to `apps/desktop/src/bindings/`. |
+| Q6: Workspace deps | sqlx, tokio (sync+rt-multi-thread+macros), schemars, specta, tauri-specta. |
+| Q7: T003 amendment | T003 updated to sqlx (already reflected in tasks.md; matches ratification). |
+| Q8: Re-review mechanical items | Applied this session (spec 005 DarkFlat row removed; spec 002 §6.3 plan topics added). |
+| Flat gain Hard vs Soft | **Hard (exact match)**. Code-fixed. No user setting. `calibration.flat.gain.tolerance_hard` dropped from spec 007 data-model.md and spec 018. |
+
+**Existing rusqlite scaffolding** in `crates/persistence/db/` and `crates/domain/core/` will be replaced during spec 002 Phase 2 Rust scaffolding (task #16).
+
+**Next**: Task #16 — Scaffold spec 002 Phase 2 foundation in Rust (T001–T012 + T010b).

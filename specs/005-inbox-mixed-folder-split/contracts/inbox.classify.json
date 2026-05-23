@@ -39,7 +39,7 @@
       "frame_type": {
         "type": "string",
         "enum": ["light", "dark", "bias", "flat", "dark_flat"],
-        "description": "Present only when type == single_type."
+        "description": "Present only when type == single_type. NOTE: 'dark_flat' is reserved; v1 normalization table does not map IMAGETYP values to dark_flat. Files with dark-flat IMAGETYP land as unclassified until manually reclassified via inbox.reclassify (spec 007 R-DarkFlat-Reserved)."
       },
       "breakdown": {
         "type": "array",
@@ -51,7 +51,8 @@
           "properties": {
             "kind": {
               "type": "string",
-              "enum": ["light", "dark", "bias", "flat", "dark_flat"]
+              "enum": ["light", "dark", "bias", "flat", "dark_flat"],
+              "description": "Reserved; v1 normalization table does not map IMAGETYP values to dark_flat. Files with dark-flat IMAGETYP land as unclassified until manually reclassified."
             },
             "count": { "type": "integer", "minimum": 0 },
             "destination_preview": {

@@ -70,7 +70,8 @@ the file to be marked unclassified (per-file marker, not folder-level).
 | `Dark`     | `DARK`, `Dark Frame`, `Dark`, `DARKFRAME` |
 | `Bias`     | `BIAS`, `Bias Frame`, `Bias`, `BIASFRAME`, `Zero`, `OFFSET` |
 | `Flat`     | `FLAT`, `Flat Frame`, `Flat`, `FLATFRAME`, `Skyflat`, `Domeflat` |
-| `DarkFlat` | `DARKFLAT`, `Dark Flat`, `Flat Dark`, `FLATDARK` |
+
+> **Note**: `dark_flat` IMAGETYP values (DARKFLAT, Dark Flat, FLATDARK, etc.) are intentionally NOT in the normalization table for v1. Per spec 007 R-DarkFlat-Reserved, dark-flat calibration matching is deferred. Files with these IMAGETYP values land in the `unclassified` state and require manual user assignment via `inbox.reclassify`. The `dark_flat` FrameType enum value remains reserved for forward-compat.
 
 **Known capture-software values** (reference, research task pending — see
 tasks.md §Phase 0):

@@ -102,9 +102,9 @@ Persisted result of `calibration.match.assign`.
 | `optic_train`               | Hard  | —                 | — (R-OpticTrain: telescope+camera+filter wheel+focuser+rotator owns the vignetting pattern; cross-train flats are unsafe) |
 | `rotation`                  | Soft  | ±0.5°             | 0.5                 |
 | `observing_night_proximity` | Soft  | 0 nights preferred, ±7 nights tolerated | 0.4 |
-| `gain`                      | Soft  | exact preferred   | 0.2 (configurable hard via `calibration.flat.gain.tolerance_hard: boolean`, default false — spec 018 ripple) |
+| `gain`                      | Hard  | —                 | — (Hard: exact gain match required. No tolerance. Ratified 2026-05-23 — flat gain accepts only exact-equal matches. Users with mixed-gain flats must use the manual override mechanism.) |
 
-Note: Flat soft cap sum = 0.5 + 0.4 + 0.2 = 1.1. The confidence formula clamps to [0.0, 1.0] preventing negative values (R-OverridePenalty, D3 fix). See research.md R4.
+Note: Flat soft cap sum = 0.5 + 0.4 = 0.9 (gain moved to Hard). The confidence formula clamps to [0.0, 1.0] preventing negative values (R-OverridePenalty, D3 fix). See research.md R4.
 
 ### Bias
 
@@ -140,8 +140,9 @@ Note: Flat soft cap sum = 0.5 + 0.4 + 0.2 = 1.1. The confidence formula clamps t
 | Key | Type | Default | Description |
 |---|---|---|---|
 | `calibration.dark_temp_tolerance` | number | 2.0 | Dark temperature soft dimension tolerance in °C |
-| `calibration.flat.gain.tolerance_hard` | boolean | false | When true, gain becomes a hard dimension for flat matching |
 | `calibration.dark.override_penalty` | number | 0.3 | Confidence penalty applied when a dark is assigned as override |
 | `calibration.flat.override_penalty` | number | 0.3 | Confidence penalty applied when a flat is assigned as override |
 | `calibration.bias.override_penalty` | number | 0.3 | Confidence penalty applied when a bias is assigned as override |
 | `calibration.prefill_suggestion` | boolean | true | When true, the assign dialog pre-fills with the top candidate (pre-fill only; user must confirm) |
+
+> **Note**: `calibration.flat.gain.tolerance_hard` was considered but dropped 2026-05-23. Flat gain is code-fixed Hard (exact match). See the Flat matching dimensions table above.

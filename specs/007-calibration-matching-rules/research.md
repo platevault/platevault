@@ -13,8 +13,10 @@ on mismatch) and **soft** (tolerated within range, reduces confidence).
 | Type   | Hard dimensions                        | Soft dimensions (default tolerance)       |
 |--------|----------------------------------------|-------------------------------------------|
 | Dark   | gain, offset                           | exposure (±5%), temperature (±2C)         |
-| Flat   | filter, binning, optic_train           | rotation (±0.5°), observing-night proximity (±N nights, default 7), gain (exact preferred, soft warning otherwise) |
+| Flat   | filter, binning, optic_train, **gain** | rotation (±0.5°), observing-night proximity (±N nights, default 7) |
 | Bias   | gain, offset                           | (none by default; exposure NOT considered) |
+
+**Flat gain rationale (ratified 2026-05-23)**: Flat gain matching is binary Hard/exact. Mixed-gain flats are rare; users who have them should normalize captures upstream or accept manual override per session. Soft tolerance for gain proved confusing without a clear numeric meaning (gain is a unitless ADU multiplier, so no natural tolerance unit exists). Users with mixed-gain flats must use the manual override mechanism (`was_override = true` in `CalibrationAssignment`).
 
 `optic_train` is a **hard** dimension for flats (R-OpticTrain). Rationale:
 the optic train (telescope + camera + filter wheel + focuser + rotator

@@ -35,8 +35,10 @@ description: "Task list for Data Lifecycle State Model (Spec 002)"
 - [ ] T001 Confirm workspace members for `crates/domain/core`, `crates/audit`, `crates/persistence/db`, `crates/contracts/core`, `crates/app/core` exist in `Cargo.toml`; add empty crates where missing.
 - [ ] T002 [P] Add `serde`, `thiserror`, `uuid`, `time` to `crates/domain/core/Cargo.toml` per plan.md Technical Context.
 - [ ] T003 [P] Add `sqlx` (sqlite, runtime-tokio-rustls, macros) to `crates/persistence/db/Cargo.toml`.
-- [ ] T004 [P] Add `schemars` (or equivalent) to `crates/contracts/core/Cargo.toml` for JSON-Schema fixture validation.
+- [ ] T004 [P] Add `schemars` to `crates/contracts/core/Cargo.toml` for JSON Schema GENERATION from Rust DTOs (Rust is canonical source of truth; JSON files are reproducible projections per research.md §9).
 - [ ] T005 [P] Wire `packages/contracts/` build script to copy `specs/002-data-lifecycle-state-model/contracts/lifecycle.transition.json` and `specs/002-data-lifecycle-state-model/contracts/provenance.read.json` into `packages/contracts/` at build time (plan.md §Project Structure).
+- [ ] T005b [P] Create `crates/contracts/core/src/bin/generate-contracts.rs` binary that walks all Rust DTOs in `crates/contracts/core/src/` and emits JSON Schemas to `specs/<NNN>/contracts/*.json` via `schemars::schema_for!()`. Output uses stable serialization (sorted keys). The binary reads existing contract files to copy the `$id` field. CI runs this + `git diff --exit-code specs/*/contracts/*.json` to gate Rust DTO changes (research.md §9.2–9.3).
+- [ ] T005c [P] Wire `specta` + `tauri-specta` Rust→TypeScript codegen: add `specta` and `tauri-specta` to workspace deps; create `cargo run --bin generate-bindings` (or equivalent `tauri-specta` hook) that regenerates `apps/desktop/src/bindings/*.ts` from Rust Tauri command signatures. CI asserts `git diff --exit-code apps/desktop/src/bindings/` after regeneration (research.md §9.5).
 
 ---
 
@@ -51,6 +53,7 @@ description: "Task list for Data Lifecycle State Model (Spec 002)"
 - [ ] T008 Define the canonical `DataAsset` trait + lifecycle-bearing entity structs in `crates/domain/core/src/lifecycle/mod.rs` (depends on T006, T007). Anchors FR-007.
 - [ ] T009 [P] Define `AuditLogEntry`, `Outcome`, `Severity` in `crates/audit/src/event.rs` per data-model.md §AuditLogEntry.
 - [ ] T010 SQLite schema migration `crates/persistence/db/migrations/0002_lifecycle.sql` covering `library_root`, `file_record`, `acquisition_session`, `calibration_session`, `calibration_master`, `target`, `project`, `processing_artifact`, `filesystem_plan`, `audit_log_entry`, and `provenance_history_archive` (depends on T008, T009). Ledger columns MUST omit `confidence/evidence/provenance` (FR-006). `provenance_history_archive` schema per data-model.md §ProvenanceHistoryArchive.
+- [ ] T010b [P] Add durable event-bus SQLite `events` table to the migration in T010 (or a separate `0002_events.sql`). Schema: `(event_id INTEGER PRIMARY KEY AUTOINCREMENT, topic TEXT NOT NULL, source TEXT NOT NULL CHECK(source IN ('user','restore','system')), emitted_at TEXT NOT NULL, payload JSON NOT NULL)`. Subscribers read with a `since: event_id` cursor for replay. Part of the hybrid event-bus design (research.md §6.1, plan.md Technical Context). Depends on T003.
 - [ ] T011 [P] Repository trait `LifecycleRepository` in `crates/persistence/db/src/repositories/lifecycle.rs` with read + transactional-mutate signatures (depends on T010).
 - [ ] T012 Rust DTO mirror of `lifecycle.transition.json` in `crates/contracts/core/src/lifecycle.rs`, deriving serde + Display for codes (depends on T006).
 
@@ -152,13 +155,16 @@ T002 = { blocked_by = ["T001"] }
 T003 = { blocked_by = ["T001"] }
 T004 = { blocked_by = ["T001"] }
 T005 = { blocked_by = ["T001"] }
+T005b = { blocked_by = ["T004"] }
+T005c = { blocked_by = ["T001"] }
 
 T006 = { blocked_by = ["T002"] }
 T007 = { blocked_by = ["T002"] }
 T008 = { blocked_by = ["T006", "T007"] }
 T009 = { blocked_by = ["T002"] }
 T010 = { blocked_by = ["T003", "T008", "T009"] }
-T011 = { blocked_by = ["T010"] }
+T010b = { blocked_by = ["T003"] }
+T011 = { blocked_by = ["T010", "T010b"] }
 T012 = { blocked_by = ["T004", "T006"] }
 
 T013 = { blocked_by = ["T007"] }

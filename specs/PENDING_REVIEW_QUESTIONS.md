@@ -432,3 +432,23 @@ The original adversarial BLOCKED item H3 for spec 012 flagged that a watcher sel
 6. **Add plan lifecycle event-bus topics to spec 002 research.md §6.3** (before spec 002 implementation): register `plan.approved`, `plan.discarded`, `plan.cancelled`, `plan.applying.*` topics.
 
 7. **Begin spec 002 implementation** once the above deferred sweep and §6.3 addition are complete; all other blockers are cleared.
+
+---
+
+## Resolution (2026-05-23)
+
+Applied in this session:
+
+- **Cross-cutting finding #1 — spec 005 DarkFlat row**: REMOVED. `DarkFlat` row deleted from `specs/005-inbox-mixed-folder-split/research.md` normalization table. Reserved-slot note added per spec 007 R-DarkFlat-Reserved. Description annotation added to `dark_flat` enum values in `inbox.classify.json`.
+
+- **Cross-cutting finding #6 — spec 002 §6.3 plan lifecycle topics**: ADDED. `specs/002-data-lifecycle-state-model/research.md §6.3` now registers all `plan.approved`, `plan.discarded`, `plan.cancelled`, `plan.applying.*`, and `plan.item.stale` topics with full payload signatures.
+
+- **Cross-cutting finding #5 — `calibration.flat.gain.tolerance_hard`**: RESOLVED by dropping the key. Flat gain is ratified as code-fixed Hard (exact match). Key removed from spec 007 `data-model.md §Settings Keys` and noted as explicitly dropped. Spec 018 `data-model.md` absorbed keys never included this key (confirmed); spec 018 `research.md R9` documents the drop decision. Spec 018 contracts (`settings.update.json`, `settings.restore-defaults.json`) confirmed clean — no removal needed.
+
+- **Cross-cutting finding #2 — deferred envelope sweep**: Confirmed done in commits `48cfa35` and `c94384c` (the adversarial review predated those commits). Not a blocker for spec 002 Phase 2.
+
+- **Cross-cutting finding #3 — `crates/patterns/` in CLAUDE.md**: Confirmed addressed in commit `c94384c` (task #11). No spec-artifact change needed.
+
+- **Cross-cutting finding #4 — `settings.state.v1.json` per-key sub-schema**: Tracked as a follow-up task for spec 018 implementation phase. Not blocking spec 002 Phase 2 foundation work.
+
+- **Cross-cutting finding #7 — spec 012 self-test probe**: The R-ExtAllow amendment replaces the probe with an extension allow-list filter. Verify at spec 012 implementation time that no write-to-disk probe remains. No spec-artifact change needed now.

@@ -372,6 +372,34 @@ at-least-once, idempotent on `(audit_id, subscriber_id)`, transactional
 with the SQLite write. The first-run Download Catalogs wizard step
 subscribes to `progress` / `completed` / `failed` for per-row progress UI.
 
+#### 6.3 Plan lifecycle topics (spec 017 + 025 amendment A7)
+
+Plan application is a long-running multi-item operation. These topics are
+registered here because spec 002 is the canonical event-bus design owner (per
+GRILL 2026-05-21 cross-cutting decision). They are owned by specs 017 and 025
+at the implementation layer (`crates/fs/planner/`).
+
+All events carry the spec 002 envelope: `contractVersion`, `topic`,
+`source: enum(user|restore|system)` (R-Source-1), `emittedAt`, `payload`.
+
+| Topic | Payload |
+|---|---|
+| `plan.approved` | `{ planId, approvalToken, approvedAt, approvedBy, contentHash }` |
+| `plan.discarded` | `{ planId, discardedAt, reason? }` |
+| `plan.cancelled` | `{ planId, runId, cancelledAt, itemsApplied, itemsFailed, itemsSkipped, itemsCancelled }` |
+| `plan.applying.started` | `{ planId, runId, startedAt, itemsTotal, totalBytesRequired }` |
+| `plan.applying.item.progress` | `{ planId, runId, itemIndex, itemsApplied, itemsFailed, currentBytesProcessed }` |
+| `plan.applying.paused` | `{ planId, runId, pausedAt, reason: enum(volume_unavailable\|disk_full\|item_stale) }` |
+| `plan.applying.resumed` | `{ planId, runId, resumedAt }` |
+| `plan.applying.completed` | `{ planId, runId, completedAt, terminalState: enum(applied\|partially_applied\|failed\|cancelled), itemsApplied, itemsFailed, itemsSkipped, itemsCancelled }` |
+| `plan.item.stale` | `{ planId, runId, itemIndex, expectedMtime, actualMtime, expectedSizeBytes, actualSizeBytes }` |
+
+Delivery semantics are identical to `lifecycle.transition.applied` (§6.1):
+at-least-once, idempotent on `(audit_id, subscriber_id)`, transactional with
+the SQLite write. The spec 019 log panel subscribes to `plan.applying.*`
+topics for live progress rows. The spec 010 guided-flow coach ignores these
+events where `source == "restore"` to prevent replay from advancing coach steps.
+
 ## 7. Open option points
 
 All previously open option points have been resolved by the GRILL 2026-05-21
@@ -422,3 +450,66 @@ pass and are now folded into the §8 resolved-questions table:
 | 21 | `discarded` in PlanState | Added to `PlanState` enum (terminal soft-delete; pairs with spec 017) | GRILL 2026-05-21 |
 | 22 | `FileRecord` lifecycle first-class | Yes — own transition graph (§2.4) and discriminated Request sub-schema; edge-list test owned by tasks.md | GRILL 2026-05-21 |
 | 23 | Session-key formula | `(target_id, filter, binning, gain, observing_night)` with local-solar-noon `observing_night` derivation (§2.5) | GRILL 2026-05-21 |
+
+## 9. Contract source of truth: Rust-canonical via schemars
+
+**Ratified 2026-05-23.**
+
+### 9.1 Canonical source
+
+Rust DTOs in `crates/contracts/core/src/` (deriving
+`#[derive(JsonSchema, Serialize, Deserialize)]` via `schemars`) are the
+**canonical source of truth** for all contract schemas. The JSON Schema files
+at `specs/<NNN>/contracts/*.json` are **reproducible projections** generated
+from those Rust types.
+
+Constitutional alignment: per Constitution Principle V, "Generated manifests
+and source views are reproducible projections unless a research decision
+explicitly marks an artifact as canonical." This research note formally
+applies that principle — the JSON Schema files are projections of the Rust
+DTOs, not independent canonical artifacts.
+
+### 9.2 Generation pipeline
+
+- `cargo run --bin generate-contracts` walks all Rust DTOs in
+  `crates/contracts/core/src/` and emits JSON Schemas to
+  `specs/<NNN>/contracts/*.json`.
+- The binary uses `schemars::schema_for!()` per DTO type and writes the
+  output with a stable JSON serializer (sorted keys, consistent indentation)
+  so diffs are meaningful.
+- The `$id` field on each emitted schema MUST match the existing `$id` in the
+  spec contract file (the binary reads the existing file to copy the `$id`).
+
+### 9.3 CI gate
+
+CI runs `cargo run --bin generate-contracts` after every Rust change that
+touches `crates/contracts/core/` and then asserts:
+
+```
+git diff --exit-code specs/*/contracts/*.json
+```
+
+A non-zero exit fails the build. This ensures that Rust DTO changes are
+always propagated to the spec JSON files before merge.
+
+### 9.4 Checked-in JSON files
+
+The JSON Schema files remain **checked into git** for two reasons:
+
+1. **Diff readability**: reviewers see the exact schema surface that changes
+   with each Rust DTO PR.
+2. **Non-Rust consumer reference**: the TypeScript desktop adapter and any
+   future remote client can consume the JSON files directly without running
+   the Rust toolchain.
+
+They are **not** authoritative for correctness — the Rust DTOs are. A
+discrepancy between a checked-in JSON file and the Rust DTO is a bug,
+detected and rejected by the CI gate.
+
+### 9.5 Rust → TypeScript codegen
+
+`specta` + `tauri-specta` generate TypeScript type bindings from Rust command
+signatures. Output goes to `apps/desktop/src/bindings/`. A
+`cargo run --bin generate-bindings` (or equivalent `tauri-specta` hook) step
+regenerates those files; CI asserts `git diff --exit-code apps/desktop/src/bindings/`
+after regeneration.
