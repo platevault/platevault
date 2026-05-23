@@ -273,14 +273,7 @@ async fn provenance_unreviewed_refusal_when_observer_location_only_observed() {
     let session = Uuid::new_v4().to_string();
     insert_acquisition_session(db.pool(), &session, "candidate").await;
     // observer_location carries an `observed` origin — NOT reviewed.
-    insert_prov_row(
-        db.pool(),
-        &session,
-        "observer_location",
-        "observed",
-        r#"{"tz":"UTC"}"#,
-    )
-    .await;
+    insert_prov_row(db.pool(), &session, "observer_location", "observed", r#"{"tz":"UTC"}"#).await;
 
     let session_uuid = Uuid::parse_str(&session).unwrap();
     let table = build_edge_table();
@@ -301,10 +294,8 @@ async fn provenance_unreviewed_refusal_when_observer_location_only_observed() {
     let err = resp.error.expect("must refuse");
     assert_eq!(err.code, TransitionErrorCode::ProvenanceUnreviewed);
     let details = err.details.expect("details populated").0;
-    let blocking = details
-        .get("blockingFields")
-        .and_then(|v| v.as_array())
-        .expect("blockingFields array");
+    let blocking =
+        details.get("blockingFields").and_then(|v| v.as_array()).expect("blockingFields array");
     assert_eq!(blocking.len(), 1);
     assert_eq!(blocking[0].get("fieldPath").and_then(|v| v.as_str()), Some("observer_location"));
     assert_eq!(blocking[0].get("requiredOrigin").and_then(|v| v.as_str()), Some("reviewed"));

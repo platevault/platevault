@@ -142,14 +142,14 @@ mod tests {
         // auto-transition (extraction failure), not a user action this
         // gate refuses. It must NOT carry an action-critical cell.
         // Clarified 2026-05-23.
-        assert!(
-            action_critical_fields(EntityType::AcquisitionSession, "candidate", "needs_review")
-                .is_empty()
-        );
-        assert!(
-            action_critical_fields(EntityType::InventorySession, "candidate", "needs_review")
-                .is_empty()
-        );
+        assert!(action_critical_fields(
+            EntityType::AcquisitionSession,
+            "candidate",
+            "needs_review"
+        )
+        .is_empty());
+        assert!(action_critical_fields(EntityType::InventorySession, "candidate", "needs_review")
+            .is_empty());
     }
 
     #[test]
@@ -159,14 +159,14 @@ mod tests {
         // cells exist for that entity type. Future cells for other entity
         // types require additional fields to be promoted to
         // `ProvenancedValue<T>` first — out of scope for spec 002.
-        assert!(
-            action_critical_fields(EntityType::CalibrationSession, "candidate", "confirmed")
-                .is_empty()
-        );
-        assert!(
-            action_critical_fields(EntityType::CalibrationSession, "needs_review", "confirmed")
-                .is_empty()
-        );
+        assert!(action_critical_fields(EntityType::CalibrationSession, "candidate", "confirmed")
+            .is_empty());
+        assert!(action_critical_fields(
+            EntityType::CalibrationSession,
+            "needs_review",
+            "confirmed"
+        )
+        .is_empty());
     }
 
     #[test]
