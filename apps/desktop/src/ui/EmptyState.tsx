@@ -1,42 +1,23 @@
-import type { ReactNode } from "react";
+import type { ReactNode } from 'react';
 
 export interface EmptyStateProps {
-  /** Lucide icon element rendered at 36px in --text-faint. Pass e.g. <HardDrive size={36} /> */
   icon?: ReactNode;
-  /** Main heading. Rendered at --fs-md / --fw-semibold. */
-  heading?: ReactNode;
-  /** One-line description below the heading. Rendered at --fs-small / --text-dim. */
-  description?: ReactNode;
-  /** Primary CTA — a Button or Link. */
+  title: string;
+  description?: string;
   action?: ReactNode;
-  /** Secondary affordance — rendered below the primary CTA. */
-  secondaryAction?: ReactNode;
 }
 
-export function EmptyState({
-  icon,
-  heading,
-  description,
-  action,
-  secondaryAction,
-}: EmptyStateProps) {
+/**
+ * Reusable empty state placeholder shown when a page or list has no data.
+ * Renders a centered icon, title, optional description, and optional action CTA.
+ */
+export function EmptyState({ icon, title, description, action }: EmptyStateProps) {
   return (
-    <div className="alm-empty">
-      {icon ? (
-        <div className="alm-empty__icon" aria-hidden="true">
-          {icon}
-        </div>
-      ) : null}
-      {heading ? (
-        <div className="alm-empty__heading">{heading}</div>
-      ) : null}
-      {description ? (
-        <div className="alm-empty__desc">{description}</div>
-      ) : null}
-      {action ? <div className="alm-empty__action">{action}</div> : null}
-      {secondaryAction ? (
-        <div className="alm-empty__secondary">{secondaryAction}</div>
-      ) : null}
+    <div className="alm-empty-state" role="status" aria-label={title}>
+      {icon && <div className="alm-empty-state__icon" aria-hidden="true">{icon}</div>}
+      <h3 className="alm-empty-state__title">{title}</h3>
+      {description && <p className="alm-empty-state__description">{description}</p>}
+      {action && <div className="alm-empty-state__action">{action}</div>}
     </div>
   );
 }

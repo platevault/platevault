@@ -1,198 +1,234 @@
 import {
   createHashHistory,
+  createRouter,
   createRootRoute,
   createRoute,
-  createRouter,
-  Navigate,
-  Outlet,
-  useRouterState,
-} from "@tanstack/react-router";
+  lazyRouteComponent,
+} from '@tanstack/react-router';
+import { Shell } from './Shell';
 
-import { InventoryPage } from "../features/inventory/InventoryPage";
-import { InboxPage } from "../features/inbox/InboxPage";
-import { ProjectsPage } from "../features/projects/ProjectsPage";
-import { ActivityPage } from "../features/activity/ActivityPage";
-import { PlanDetailPage } from "../features/plans/PlanDetailPage";
-import { SettingsPage } from "../features/settings/SettingsPage";
-import { WelcomePage } from "../features/welcome/WelcomePage";
-import { Shell } from "./Shell";
-
+// Root route — Shell wraps all pages via Outlet
 const rootRoute = createRootRoute({
-  component: () => {
-    // The first-run wizard is a fullscreen onboarding experience and must
-    // not render inside the Shell chrome (sidebar, breadcrumb, status bar).
-    // Otherwise "Restart setup wizard" lands the user on a page that looks
-    // like a settings sub-page rather than a fresh wizard.
-    const pathname = useRouterState({ select: (s) => s.location.pathname });
-    if (pathname === "/welcome") {
-      return <Outlet />;
-    }
-    return (
-      <Shell>
-        <Outlet />
-      </Shell>
-    );
-  },
+  component: Shell,
 });
 
-function parseId(value: unknown): string | undefined {
-  return typeof value === "string" && value.length > 0 ? value : undefined;
-}
+// --- Sessions (default landing) ---
 
-const indexRoute = createRoute({
+const sessionsRoute = createRoute({
   getParentRoute: () => rootRoute,
-  path: "/",
-  component: () => {
-    const completed =
-      typeof window !== "undefined" &&
-      localStorage.getItem("alm.first-run.completed") === "1";
-    return completed ? <Navigate to="/inventory" replace /> : <Navigate to="/welcome" replace />;
-  },
+  path: '/sessions',
+  component: lazyRouteComponent(
+    () => import('@/features/sessions/SessionsPage'),
+    'SessionsPage',
+  ),
 });
 
-const welcomeRoute = createRoute({
+const sessionDetailRoute = createRoute({
   getParentRoute: () => rootRoute,
-  path: "/welcome",
-  component: WelcomePage,
+  path: '/sessions/$id',
+  component: lazyRouteComponent(
+    () => import('@/features/sessions/SessionDetail'),
+    'SessionDetail',
+  ),
 });
 
-const inventoryRoute = createRoute({
+// --- Review ---
+
+const reviewRoute = createRoute({
   getParentRoute: () => rootRoute,
-  path: "/inventory",
-  validateSearch: (
-    search: Record<string, unknown>,
-  ): {
-    id?: string;
-    source?: string;
-    frame?: string;
-    states?: string;
-    group?: "source" | "target" | "date";
-    sort?: string;
-  } => ({
-    id: parseId(search.id),
-    source: parseId(search.source),
-    frame: parseId(search.frame),
-    states: parseId(search.states),
-    group:
-      search.group === "target" || search.group === "date" ? (search.group as "target" | "date") : undefined,
-    sort: parseId(search.sort),
-  }),
-  component: InventoryPage,
+  path: '/review',
+  component: lazyRouteComponent(
+    () => import('@/features/review/ReviewPage'),
+    'ReviewPage',
+  ),
 });
 
-const inboxRoute = createRoute({
+// --- Calibration ---
+
+const calibrationRoute = createRoute({
   getParentRoute: () => rootRoute,
-  path: "/inbox",
-  validateSearch: (
-    search: Record<string, unknown>,
-  ): { id?: string; type?: string; source?: string; sort?: string } => ({
-    id: parseId(search.id),
-    type: parseId(search.type),
-    source: parseId(search.source),
-    sort: parseId(search.sort),
-  }),
-  component: InboxPage,
+  path: '/calibration',
+  component: lazyRouteComponent(
+    () => import('@/features/calibration/CalibrationPage'),
+    'CalibrationPage',
+  ),
 });
+
+const calibrationDetailRoute = createRoute({
+  getParentRoute: () => rootRoute,
+  path: '/calibration/$id',
+  component: lazyRouteComponent(
+    () => import('@/features/calibration/CalibrationDetail'),
+    'CalibrationDetail',
+  ),
+});
+
+// --- Targets ---
+
+const targetsRoute = createRoute({
+  getParentRoute: () => rootRoute,
+  path: '/targets',
+  component: lazyRouteComponent(
+    () => import('@/features/targets/TargetsPage'),
+    'TargetsPage',
+  ),
+});
+
+const targetDetailRoute = createRoute({
+  getParentRoute: () => rootRoute,
+  path: '/targets/$id',
+  component: lazyRouteComponent(
+    () => import('@/features/targets/TargetDetail'),
+    'TargetDetail',
+  ),
+});
+
+// --- Projects ---
 
 const projectsRoute = createRoute({
   getParentRoute: () => rootRoute,
-  path: "/projects",
-  validateSearch: (
-    search: Record<string, unknown>,
-  ): {
-    id?: string;
-    lifecycle?: string;
-    tool?: string;
-    tab?: "overview" | "sources" | "plans" | "activity";
-    sort?: string;
-  } => {
-    const tab =
-      search.tab === "sources" ||
-      search.tab === "plans" ||
-      search.tab === "activity"
-        ? (search.tab as "sources" | "plans" | "activity")
-        : undefined;
-    return {
-      id: parseId(search.id),
-      lifecycle: parseId(search.lifecycle),
-      tool: parseId(search.tool),
-      tab,
-      sort: parseId(search.sort),
-    };
-  },
-  component: ProjectsPage,
+  path: '/projects',
+  component: lazyRouteComponent(
+    () => import('@/features/projects/ProjectsPage'),
+    'ProjectsPage',
+  ),
 });
 
-const plansIndexRoute = createRoute({
+const projectDetailRoute = createRoute({
   getParentRoute: () => rootRoute,
-  path: "/plans",
-  component: () => <Navigate to="/activity" replace />,
+  path: '/projects/$id',
+  component: lazyRouteComponent(
+    () => import('@/features/projects/ProjectDetail'),
+    'ProjectDetail',
+  ),
 });
 
-const activityRoute = createRoute({
+const projectArtifactsRoute = createRoute({
   getParentRoute: () => rootRoute,
-  path: "/activity",
-  validateSearch: (
-    search: Record<string, unknown>,
-  ): {
-    id?: string;
-    states?: string;
-    origins?: string;
-    sort?: string;
-  } => ({
-    id: parseId(search.id),
-    states: parseId(search.states),
-    origins: parseId(search.origins),
-    sort: parseId(search.sort),
-  }),
-  component: ActivityPage,
+  path: '/projects/$id/artifacts',
+  component: lazyRouteComponent(
+    () => import('@/features/projects/ArtifactsPage'),
+    'ArtifactsPage',
+  ),
+});
+
+const projectNewRoute = createRoute({
+  getParentRoute: () => rootRoute,
+  path: '/projects/new',
+  component: lazyRouteComponent(
+    () => import('@/features/projects/wizard/WizardPage'),
+    'WizardPage',
+  ),
+});
+
+// --- Plans ---
+
+const plansRoute = createRoute({
+  getParentRoute: () => rootRoute,
+  path: '/plans',
+  component: lazyRouteComponent(
+    () => import('@/features/plans/PlansPage'),
+    'PlansPage',
+  ),
 });
 
 const planDetailRoute = createRoute({
   getParentRoute: () => rootRoute,
-  path: "/plans/$planId",
-  component: PlanDetailPage,
+  path: '/plans/$id',
+  component: lazyRouteComponent(
+    () => import('@/features/plans/PlanReview'),
+    'PlanReview',
+  ),
 });
 
-const settingsRedirectRoute = createRoute({
+// --- Audit ---
+
+const auditRoute = createRoute({
   getParentRoute: () => rootRoute,
-  path: "/settings",
-  component: () => <Navigate to="/settings/$section" params={{ section: "data-sources" }} replace />,
+  path: '/audit',
+  component: lazyRouteComponent(
+    () => import('@/features/audit/AuditPage'),
+    'AuditPage',
+  ),
 });
 
-// Backward-compat: old "application-log" param → new "audit" section id.
-const settingsApplicationLogRedirectRoute = createRoute({
+// --- Settings ---
+
+const settingsRoute = createRoute({
   getParentRoute: () => rootRoute,
-  path: "/settings/application-log",
-  component: () => <Navigate to="/settings/$section" params={{ section: "audit" }} replace />,
+  path: '/settings',
+  component: lazyRouteComponent(
+    () => import('@/features/settings/SettingsPage'),
+    'SettingsPage',
+  ),
 });
 
-const settingsSectionRoute = createRoute({
+const settingsPaneRoute = createRoute({
   getParentRoute: () => rootRoute,
-  path: "/settings/$section",
-  component: SettingsPage,
+  path: '/settings/$pane',
+  component: lazyRouteComponent(
+    () => import('@/features/settings/SettingsPage'),
+    'SettingsPage',
+  ),
 });
+
+// --- Setup ---
+
+const setupRoute = createRoute({
+  getParentRoute: () => rootRoute,
+  path: '/setup',
+  component: lazyRouteComponent(
+    () => import('@/features/setup/SetupPage'),
+    'SetupPage',
+  ),
+});
+
+// --- Index redirect ---
+
+const indexRoute = createRoute({
+  getParentRoute: () => rootRoute,
+  path: '/',
+  component: lazyRouteComponent(
+    () => import('@/features/sessions/SessionsPage'),
+    'SessionsPage',
+  ),
+});
+
+// --- Route tree ---
 
 const routeTree = rootRoute.addChildren([
   indexRoute,
-  welcomeRoute,
-  inventoryRoute,
-  inboxRoute,
+  sessionsRoute,
+  sessionDetailRoute,
+  reviewRoute,
+  calibrationRoute,
+  calibrationDetailRoute,
+  targetsRoute,
+  targetDetailRoute,
+  projectNewRoute, // Must come before $id to avoid param collision
   projectsRoute,
-  plansIndexRoute,
-  activityRoute,
+  projectDetailRoute,
+  projectArtifactsRoute,
+  plansRoute,
   planDetailRoute,
-  settingsRedirectRoute,
-  settingsApplicationLogRedirectRoute,
-  settingsSectionRoute,
+  auditRoute,
+  settingsRoute,
+  settingsPaneRoute,
+  setupRoute,
 ]);
 
+// --- Router instance ---
+
+const hashHistory = createHashHistory();
+
 export const router = createRouter({
-  history: createHashHistory(),
   routeTree,
+  history: hashHistory,
+  defaultPreload: 'intent',
 });
 
-declare module "@tanstack/react-router" {
+// Type registration for TanStack Router
+declare module '@tanstack/react-router' {
   interface Register {
     router: typeof router;
   }
