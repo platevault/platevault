@@ -25,3 +25,5 @@ strat = "strat"
 PN = "PN"
 # debayer abbreviation in fixtures
 DBE = "DBE"
+# optical train ID prefix
+ot = "ot"
