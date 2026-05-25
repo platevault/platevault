@@ -1,5 +1,5 @@
 // Static mock fixture data for AcquisitionSession and SessionDetail
-// Types mirror @/api/types — inline definitions used until that module is created
+// Types mirror @/bindings/types — inline definitions used until that module is created
 
 type SessionState = 'discovered' | 'candidate' | 'needs_review' | 'confirmed' | 'rejected' | 'ignored';
 type ConfidenceLevel = 'unknown' | 'low' | 'medium' | 'high' | 'confirmed' | 'rejected';
