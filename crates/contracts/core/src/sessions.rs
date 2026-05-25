@@ -13,6 +13,8 @@ use specta::Type;
 pub use crate::lifecycle::SessionState;
 pub use crate::provenance::ProvenanceOrigin;
 
+use crate::calibration::CalibrationKind;
+
 /// Confidence level for inferred or reviewed metadata.
 #[derive(Clone, Copy, Debug, Eq, Hash, Ord, PartialEq, PartialOrd, Serialize, Deserialize, Type)]
 #[serde(rename_all = "snake_case")]
@@ -72,4 +74,92 @@ pub struct AcquisitionSession {
     pub target_ids: Vec<String>,
     pub project_ids: Vec<String>,
     pub warnings: Vec<String>,
+}
+
+// ── Detail types ────────────────────────────────────────────────────────────
+
+/// A group of frames within a session (per-filter breakdown).
+#[derive(Clone, Debug, Serialize, Deserialize, Type)]
+#[serde(rename_all = "camelCase")]
+pub struct Frameset {
+    pub filter: String,
+    pub count: u32,
+    pub integration_s: f64,
+}
+
+/// A calibration match entry for a session detail view.
+#[derive(Clone, Debug, Serialize, Deserialize, Type)]
+#[serde(rename_all = "camelCase")]
+pub struct SessionCalibrationMatch {
+    pub master_id: String,
+    pub kind: CalibrationKind,
+    pub score: f64,
+    pub soft_mismatches: Vec<String>,
+}
+
+/// A history entry for a session detail view.
+#[derive(Clone, Debug, Serialize, Deserialize, Type)]
+#[serde(rename_all = "camelCase")]
+pub struct SessionHistoryEntry {
+    pub timestamp: String,
+    pub event: String,
+    pub actor: String,
+}
+
+/// Extended detail view of an acquisition session.
+#[derive(Clone, Debug, Serialize, Deserialize, Type)]
+#[serde(rename_all = "camelCase")]
+pub struct SessionDetail {
+    // Flattened base fields from AcquisitionSession.
+    pub id: String,
+    pub session_key: SessionKey,
+    pub state: SessionState,
+    pub confidence: ConfidenceLevel,
+    pub optical_train_id: String,
+    pub frame_count: u32,
+    pub total_integration_seconds: f64,
+    pub total_size_bytes: u64,
+    pub metadata: std::collections::HashMap<String, MetaValue>,
+    pub target_ids: Vec<String>,
+    pub project_ids: Vec<String>,
+    pub warnings: Vec<String>,
+    // Detail-only fields.
+    pub framesets: Vec<Frameset>,
+    pub calibration_matches: Vec<SessionCalibrationMatch>,
+    pub history: Vec<SessionHistoryEntry>,
+}
+
+// ── Calendar types ──────────────────────────────────────────────────────────
+
+/// A session stub within a calendar day.
+#[derive(Clone, Debug, Serialize, Deserialize, Type)]
+#[serde(rename_all = "camelCase")]
+pub struct CalendarSessionStub {
+    pub id: String,
+    pub target: String,
+    pub filter: String,
+}
+
+/// A single day in the session calendar.
+#[derive(Clone, Debug, Serialize, Deserialize, Type)]
+#[serde(rename_all = "camelCase")]
+pub struct CalendarDay {
+    pub day: u32,
+    pub sessions: Vec<CalendarSessionStub>,
+}
+
+/// A single month in the session calendar.
+#[derive(Clone, Debug, Serialize, Deserialize, Type)]
+#[serde(rename_all = "camelCase")]
+pub struct CalendarMonth {
+    pub year: u32,
+    pub month: u32,
+    pub days: Vec<CalendarDay>,
+}
+
+/// Calendar data for the sessions calendar view.
+#[derive(Clone, Debug, Serialize, Deserialize, Type)]
+#[serde(rename_all = "camelCase")]
+pub struct CalendarData {
+    pub months: Vec<CalendarMonth>,
 }
