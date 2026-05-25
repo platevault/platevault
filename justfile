@@ -47,7 +47,7 @@ dev:
 
 # Start the Tauri desktop app in development mode (Rust + frontend).
 tauri-dev:
-    cd apps/desktop && cargo tauri dev
+    cd apps/desktop && pnpm tauri dev
 
 # Clean build artifacts
 clean:
