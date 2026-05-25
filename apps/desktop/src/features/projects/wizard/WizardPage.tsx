@@ -73,19 +73,22 @@ export function WizardPage() {
   const [currentStep, setCurrentStep] = useState(0);
   const [wizardData, setWizardData] = useState<WizardData>(loadDraft);
 
+  // In mock mode, allow skipping all validation to walk through the wizard quickly
+  const devSkip = import.meta.env.VITE_USE_MOCKS === 'true';
+
   // Save draft on step change
   useEffect(() => {
     saveDraft(wizardData);
   }, [currentStep, wizardData]);
 
-  // Step validation
+  // Step validation — devSkip bypasses all gates so you can walk through without data
   function canAdvance(): boolean {
+    if (devSkip) return true;
     switch (currentStep) {
       case 0:
         return wizardData.name.name.trim().length > 0;
       case 1:
-        // Allow skipping source selection in dev mode for faster wizard testing
-        return import.meta.env.DEV || wizardData.sources.selectedSessionIds.length > 0;
+        return wizardData.sources.selectedSessionIds.length > 0;
       case 2:
         return true; // Calibration is optional
       case 3:
@@ -227,6 +230,11 @@ export function WizardPage() {
         </span>
         <span style={{ flex: 1 }} />
         <Btn size="sm" onClick={() => saveDraft(wizardData)}>Save draft</Btn>
+        {devSkip && (
+          <Btn size="sm" onClick={() => { clearDraft(); setWizardData(INITIAL_DATA); setCurrentStep(0); }}>
+            Reset wizard
+          </Btn>
+        )}
         <Btn size="sm" onClick={handleCancel}>Cancel</Btn>
       </Toolbar>
 
