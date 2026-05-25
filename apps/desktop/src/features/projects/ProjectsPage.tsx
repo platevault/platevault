@@ -243,6 +243,7 @@ export function ProjectsPage() {
         </Btn>
         <span className="alm-toolbar__separator" />
         <Btn size="sm">Filter: state &#x25BE;</Btn>
+        <Btn size="sm" data-tour="open-tool">Source views&hellip;</Btn>
         <Btn variant="primary" size="sm" onClick={() => navigate({ to: '/projects/new' })} data-tour="new-project">
           + New project
         </Btn>

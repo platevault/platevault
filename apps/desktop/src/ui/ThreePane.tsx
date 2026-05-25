@@ -1,5 +1,4 @@
 import type { ReactNode } from 'react';
-import { Group, Panel, Separator } from 'react-resizable-panels';
 
 export interface ThreePaneProps {
   list: ReactNode;
@@ -13,25 +12,20 @@ export function ThreePane({
   list,
   content,
   detail,
-  listWidth = 220,
-  detailWidth = 320,
+  listWidth = 260,
+  detailWidth = 380,
 }: ThreePaneProps) {
-  const listPercent = Math.round((listWidth / 1200) * 100);
-  const detailPercent = Math.round((detailWidth / 1200) * 100);
-
   return (
-    <Group orientation="horizontal" style={{ flex: 1, display: 'flex' }}>
-      <Panel defaultSize={listPercent} minSize={10} maxSize={30}>
+    <div style={{ display: 'flex', flex: 1, minHeight: 0, height: '100%' }}>
+      <div style={{ width: listWidth, flexShrink: 0, height: '100%', overflow: 'auto', borderRight: '1px solid var(--alm-border)' }}>
         {list}
-      </Panel>
-      <Separator style={{ width: 1, background: 'var(--alm-border)', cursor: 'col-resize' }} />
-      <Panel minSize={30}>
+      </div>
+      <div style={{ flex: 1, minWidth: 0, height: '100%', overflow: 'auto' }}>
         {content}
-      </Panel>
-      <Separator style={{ width: 1, background: 'var(--alm-border)', cursor: 'col-resize' }} />
-      <Panel defaultSize={detailPercent} minSize={15} maxSize={40}>
+      </div>
+      <div style={{ width: detailWidth, flexShrink: 0, height: '100%', overflow: 'auto', borderLeft: '1px solid var(--alm-border)' }}>
         {detail}
-      </Panel>
-    </Group>
+      </div>
+    </div>
   );
 }

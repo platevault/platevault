@@ -103,7 +103,7 @@ export function ProjectDetail() {
         </div>
 
         {/* Action buttons */}
-        <Btn size="sm">Source views&hellip;</Btn>
+        <Btn size="sm" data-tour="open-tool">Source views&hellip;</Btn>
         <Btn size="sm">Observe artifacts</Btn>
         <Btn size="sm">Record output&hellip;</Btn>
         <Btn size="sm">Generate plan &#x25BE;</Btn>
