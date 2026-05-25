@@ -123,6 +123,7 @@ pub fn build_app() -> tauri::App {
     let builder = specta_builder();
 
     tauri::Builder::default()
+        .plugin(tauri_plugin_dialog::init())
         .invoke_handler(builder.invoke_handler())
         .setup(move |app| {
             builder.mount_events(app);

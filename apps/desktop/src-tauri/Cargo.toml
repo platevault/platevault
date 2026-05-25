@@ -25,6 +25,7 @@ specta = { workspace = true }
 specta-typescript = { workspace = true }
 sqlx = { workspace = true }
 tauri = { workspace = true }
+tauri-plugin-dialog = { workspace = true }
 tauri-specta = { workspace = true }
 thiserror = { workspace = true }
 time = { workspace = true }

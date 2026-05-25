@@ -4,6 +4,8 @@
   "description": "Default capability set for the desktop app. Grants the main window the ability to invoke the spec 002 lifecycle commands plus tauri-specta's built-in event registration.",
   "windows": ["main"],
   "permissions": [
-    "core:default"
+    "core:default",
+    "dialog:default",
+    "dialog:allow-open"
   ]
 }
