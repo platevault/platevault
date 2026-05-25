@@ -1,4 +1,4 @@
-import type { ReviewItem } from '@/api/types';
+import type { ReviewItem } from '@/bindings/types';
 import { Btn } from '@/ui';
 import { queueProgress } from '@/data/fixtures/review';
 

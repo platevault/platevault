@@ -1,5 +1,5 @@
 import { memo } from 'react';
-import type { ProjectDetail } from '@/api/types';
+import type { ProjectDetail } from '@/bindings/types';
 import { Box, KV, Btn } from '@/ui';
 import { PipelineStrip } from './PipelineStrip';
 import { LifecycleStrip } from './LifecycleStrip';

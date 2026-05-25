@@ -1,5 +1,5 @@
 import { useMemo, useState } from 'react';
-import type { Project, ProjectState } from '@/api/types';
+import type { Project, ProjectState } from '@/bindings/types';
 import { Pill, Btn } from '@/ui';
 import { targetNames } from '@/data/fixtures/projects';
 

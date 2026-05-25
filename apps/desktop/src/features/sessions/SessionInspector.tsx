@@ -1,5 +1,5 @@
-import type { AcquisitionSession } from '@/api/types';
-import type { ConfidenceLevel } from '@/api/types';
+import type { AcquisitionSession } from '@/bindings/types';
+import type { ConfidenceLevel } from '@/bindings/types';
 import { Pill, Confidence, Btn } from '@/ui';
 
 /** Fixture calibration matches for the inspector sidebar */

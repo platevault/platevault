@@ -1,5 +1,5 @@
 import { useState, useEffect, useCallback, useMemo } from 'react';
-import type { ReviewItem, ConfidenceLevel } from '@/api/types';
+import type { ReviewItem, ConfidenceLevel } from '@/bindings/types';
 import { getReviewQueue, transitionSession } from '@/api/commands';
 import { createQueryStore, useQuery } from '@/data/store';
 import { ThreePane, EmptyState } from '@/ui';

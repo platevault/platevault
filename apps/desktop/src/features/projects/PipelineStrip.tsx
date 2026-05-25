@@ -1,5 +1,5 @@
 import { memo } from 'react';
-import type { ProjectDetail } from '@/api/types';
+import type { ProjectDetail } from '@/bindings/types';
 import { Pill, Lock } from '@/ui';
 
 export interface PipelineStripProps {

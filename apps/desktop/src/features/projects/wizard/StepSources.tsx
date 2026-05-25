@@ -2,7 +2,7 @@ import { useState, useMemo } from 'react';
 import { Checkbox } from '@base-ui-components/react/checkbox';
 import { useQuery, createQueryStore } from '@/data/store';
 import { listSessions } from '@/api/commands';
-import type { AcquisitionSession } from '@/api/types';
+import type { AcquisitionSession } from '@/bindings/types';
 
 const sessionsStore = createQueryStore(() => listSessions());
 

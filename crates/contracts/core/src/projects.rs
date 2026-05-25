@@ -1,0 +1,213 @@
+//! Project contract DTOs for the Tauri IPC surface.
+//!
+//! These types mirror the hand-written TypeScript `Project` and `ProjectDetail`
+//! in `apps/desktop/src/api/types.ts`.
+
+use serde::{Deserialize, Serialize};
+use specta::Type;
+
+use crate::lifecycle::ProjectState;
+use crate::sessions::ConfidenceLevel;
+
+// ── Structs ─────────────────────────────────────────────────────────────────
+
+/// Map of calibration frame roles to file paths within a project.
+#[derive(Clone, Debug, Default, Serialize, Deserialize, Type)]
+#[serde(rename_all = "camelCase")]
+pub struct SourceMap {
+    pub lights: Vec<String>,
+    pub darks: Vec<String>,
+    pub flats: Vec<String>,
+    pub bias: Vec<String>,
+    pub dark_flats: Vec<String>,
+}
+
+/// Cleanup state summary for a project.
+#[derive(Clone, Debug, Serialize, Deserialize, Type)]
+#[serde(rename_all = "camelCase")]
+pub struct CleanupState {
+    pub reclaimable_bytes: u64,
+}
+
+/// A project as seen in list views.
+#[derive(Clone, Debug, Serialize, Deserialize, Type)]
+#[serde(rename_all = "camelCase")]
+pub struct Project {
+    pub id: String,
+    pub name: String,
+    pub workflow_profile_id: String,
+    pub root_path: String,
+    pub state: ProjectState,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub blocked_reason: Option<String>,
+    pub verification_state: VerificationState,
+    pub cleanup_state: CleanupState,
+    pub integration_hours: f64,
+    pub target_ids: Vec<String>,
+    pub source_map: SourceMap,
+    pub source_view_ids: Vec<String>,
+    pub output_ids: Vec<String>,
+    pub processing_directory: String,
+    pub output_directory: String,
+    pub updated_at: String,
+}
+
+/// Verification state for a project's outputs.
+#[derive(
+    Clone, Copy, Debug, Eq, Hash, Ord, PartialEq, PartialOrd, Serialize, Deserialize, Type,
+)]
+#[serde(rename_all = "snake_case")]
+pub enum VerificationState {
+    Unreviewed,
+    HasAccepted,
+    AllRejected,
+}
+
+/// A source entry within a project detail view.
+#[derive(Clone, Debug, Serialize, Deserialize, Type)]
+#[serde(rename_all = "camelCase")]
+pub struct ProjectSource {
+    pub role: SourceRole,
+    pub name: String,
+    pub frames: u32,
+    pub hours: String,
+    pub selection: SourceSelection,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub warning: Option<String>,
+}
+
+/// Role of a source within a project.
+#[derive(
+    Clone, Copy, Debug, Eq, Hash, Ord, PartialEq, PartialOrd, Serialize, Deserialize, Type,
+)]
+#[serde(rename_all = "snake_case")]
+pub enum SourceRole {
+    Light,
+    Dark,
+    Flat,
+    Bias,
+}
+
+/// Selection state for a source within a project.
+#[derive(
+    Clone, Copy, Debug, Eq, Hash, Ord, PartialEq, PartialOrd, Serialize, Deserialize, Type,
+)]
+#[serde(rename_all = "snake_case")]
+pub enum SourceSelection {
+    Selected,
+    Candidate,
+}
+
+/// A source view within a project detail view.
+#[derive(Clone, Debug, Serialize, Deserialize, Type)]
+#[serde(rename_all = "camelCase")]
+pub struct ProjectSourceView {
+    pub name: String,
+    pub strategy: SourceViewStrategy,
+    pub link_count: u32,
+    pub plan_ref: String,
+}
+
+/// Link strategy for a source view.
+#[derive(
+    Clone, Copy, Debug, Eq, Hash, Ord, PartialEq, PartialOrd, Serialize, Deserialize, Type,
+)]
+#[serde(rename_all = "snake_case")]
+pub enum SourceViewStrategy {
+    Junction,
+    Symlink,
+    Hardlink,
+    Copy,
+}
+
+/// An output artifact within a project detail view.
+#[derive(Clone, Debug, Serialize, Deserialize, Type)]
+#[serde(rename_all = "camelCase")]
+pub struct ProjectOutput {
+    pub id: String,
+    pub filename: String,
+    pub kind: String,
+    pub size_bytes: u64,
+    pub date: String,
+    pub verification: OutputVerification,
+    pub protected: bool,
+}
+
+/// Verification state for a single output.
+#[derive(
+    Clone, Copy, Debug, Eq, Hash, Ord, PartialEq, PartialOrd, Serialize, Deserialize, Type,
+)]
+#[serde(rename_all = "snake_case")]
+pub enum OutputVerification {
+    Accepted,
+    Unreviewed,
+    Superseded,
+}
+
+/// A group of processing artifacts within a project detail view.
+#[derive(Clone, Debug, Serialize, Deserialize, Type)]
+#[serde(rename_all = "camelCase")]
+pub struct ProjectArtifactGroup {
+    /// Artifact type label (e.g. "registered", "`drizzle_data`").
+    #[serde(rename = "type")]
+    pub artifact_type: String,
+    pub count: u32,
+    pub total_size_bytes: u64,
+    pub cleanup_eligibility: CleanupEligibility,
+    pub confidence: ConfidenceLevel,
+    pub tool: String,
+    pub protected: bool,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub warning: Option<String>,
+}
+
+/// Cleanup eligibility for an artifact group.
+#[derive(
+    Clone, Copy, Debug, Eq, Hash, Ord, PartialEq, PartialOrd, Serialize, Deserialize, Type,
+)]
+#[serde(rename_all = "snake_case")]
+pub enum CleanupEligibility {
+    Eligible,
+    Archive,
+    Keep,
+    None,
+}
+
+/// Extended detail view of a project.
+#[derive(Clone, Debug, Serialize, Deserialize, Type)]
+#[serde(rename_all = "camelCase")]
+pub struct ProjectDetail {
+    // Flattened base fields from Project.
+    pub id: String,
+    pub name: String,
+    pub workflow_profile_id: String,
+    pub root_path: String,
+    pub state: ProjectState,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub blocked_reason: Option<String>,
+    pub verification_state: VerificationState,
+    pub cleanup_state: CleanupState,
+    pub integration_hours: f64,
+    pub target_ids: Vec<String>,
+    pub source_map: SourceMap,
+    pub source_view_ids: Vec<String>,
+    pub output_ids: Vec<String>,
+    pub processing_directory: String,
+    pub output_directory: String,
+    pub updated_at: String,
+    // Detail-only fields.
+    pub targets: Vec<String>,
+    pub sources: Vec<ProjectSource>,
+    pub source_views: Vec<ProjectSourceView>,
+    pub outputs: Vec<ProjectOutput>,
+    pub artifacts: Vec<ProjectArtifactGroup>,
+    pub lifecycle_stage_index: u32,
+    pub audit_count: u32,
+    pub plan_count: u32,
+    pub cleanup_bytes: u64,
+    pub cleanup_label: String,
+    pub total_integration_label: String,
+    pub on_disk_label: String,
+    pub notes_count: u32,
+    pub manifest_count: u32,
+}

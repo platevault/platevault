@@ -1,6 +1,6 @@
 import { clsx } from 'clsx';
 import { usePreference } from '@/data/preferences';
-import type { AppPreferences } from '@/api/types';
+import type { AppPreferences } from '@/bindings/types';
 
 type GroupByMode = AppPreferences['sessionsGroupBy'];
 

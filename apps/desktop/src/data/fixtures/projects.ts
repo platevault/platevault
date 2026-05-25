@@ -8,7 +8,7 @@ import type {
   ProjectSourceView,
   ProjectOutput,
   ProjectArtifactGroup,
-} from '@/api/types';
+} from '@/bindings/types';
 
 // ─── Helpers ────────────────────────────────────────────────────────────────
 

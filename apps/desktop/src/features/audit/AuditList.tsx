@@ -1,6 +1,6 @@
 import { useState, useMemo } from 'react';
 import { clsx } from 'clsx';
-import type { AuditEntry, AuditOutcome } from '@/api/types';
+import type { AuditEntry, AuditOutcome } from '@/bindings/types';
 import { Pill } from '@/ui';
 
 export interface AuditListProps {

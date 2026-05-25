@@ -1,7 +1,7 @@
 import { useParams } from '@tanstack/react-router';
 import { useParameterizedQuery, createParameterizedStore } from '@/data/store';
 import { getProject } from '@/api/commands';
-import type { ProjectDetail, ProjectOutput, ProjectArtifactGroup } from '@/api/types';
+import type { ProjectDetail, ProjectOutput, ProjectArtifactGroup } from '@/bindings/types';
 import { Toolbar, Pill, Btn, Lock, Confidence } from '@/ui';
 
 const projectStore = createParameterizedStore<string, ProjectDetail>((id) =>

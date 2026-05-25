@@ -5,7 +5,7 @@ import {
   createParameterizedStore,
 } from '@/data/store';
 import { getTarget } from '@/api/commands';
-import type { TargetDetail as TargetDetailType, AcquisitionSession, ProjectState } from '@/api/types';
+import type { TargetDetail as TargetDetailType, AcquisitionSession, ProjectState } from '@/bindings/types';
 import { KV, Pill, Btn, Box } from '@/ui';
 import { CoverageChart } from './CoverageChart';
 

@@ -1,4 +1,4 @@
-import type { ProjectDetail } from '@/api/types';
+import type { ProjectDetail } from '@/bindings/types';
 import { Box, KV, Btn } from '@/ui';
 import { KitGrid } from './KitGrid';
 import { PipelineStrip } from './PipelineStrip';

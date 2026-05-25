@@ -1,5 +1,5 @@
 // Static mock fixture data for Equipment and LibraryRoot
-// Types mirror @/api/types — inline definitions used until that module is created
+// Types mirror @/bindings/types — inline definitions used until that module is created
 
 type EquipmentKind = 'camera' | 'telescope' | 'mount' | 'filter_wheel' | 'focuser' | 'guide_camera';
 

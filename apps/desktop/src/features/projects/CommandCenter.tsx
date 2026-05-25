@@ -1,5 +1,5 @@
 import { memo } from 'react';
-import type { ProjectDetail, ProjectSource } from '@/api/types';
+import type { ProjectDetail, ProjectSource } from '@/bindings/types';
 import { Box, KV, Pill, Btn, Lock } from '@/ui';
 import { KitGrid } from './KitGrid';
 import { LifecycleStrip } from './LifecycleStrip';

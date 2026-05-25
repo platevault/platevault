@@ -8,7 +8,7 @@ import type {
   ProjectState,
   SessionState,
   ConfidenceLevel,
-} from '@/api/types';
+} from '@/bindings/types';
 
 // ---------------------------------------------------------------------------
 // List items — shown in the left pane

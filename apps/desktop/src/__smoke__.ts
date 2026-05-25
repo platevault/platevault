@@ -130,7 +130,7 @@ import type {
   AuditEntry,
   ReviewItem,
   SearchResult,
-} from '@/api/types';
+} from '@/bindings/types';
 
 // ─── Router Verification ─────────────────────────────────────────────────────
 

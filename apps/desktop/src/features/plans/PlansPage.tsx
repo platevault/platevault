@@ -7,7 +7,7 @@ import {
   invalidateStores,
 } from '@/data/store';
 import { listPlans, getPlan, approvePlan, discardPlan } from '@/api/commands';
-import type { PlanDetail } from '@/api/types';
+import type { PlanDetail } from '@/bindings/types';
 import { ThreePane, EmptyState } from '@/ui';
 import { PlansList } from './PlansList';
 import { PlanReviewInline } from './PlanReviewInline';

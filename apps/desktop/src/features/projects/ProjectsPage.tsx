@@ -2,7 +2,7 @@ import { useCallback, useRef, useState } from 'react';
 import { useNavigate } from '@tanstack/react-router';
 import { useQuery, createQueryStore } from '@/data/store';
 import { listProjects } from '@/api/commands';
-import type { ProjectDetail as ProjectDetailType } from '@/api/types';
+import type { ProjectDetail as ProjectDetailType } from '@/bindings/types';
 import { ThreePane, EmptyState, Btn } from '@/ui';
 import { ProjectsList } from './ProjectsList';
 import { ProjectDetailPane } from './ProjectDetailPane';
