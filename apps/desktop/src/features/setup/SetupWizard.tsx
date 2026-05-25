@@ -4,14 +4,23 @@ import { WizardShell } from '@/ui/WizardShell';
 import { Btn } from '@/ui/Btn';
 import { setPreference } from '@/data/preferences';
 import { registerRoot, startScan } from '@/api/commands';
-import { StepWelcome, StepSources, StepScan, StepConfirm } from './steps';
-import type { SourceCategory, ScanSettings } from './steps';
+import {
+  StepWelcome,
+  StepSources,
+  StepCatalogs,
+  StepScan,
+  StepConfirm,
+  DEFAULT_CATALOG_SETTINGS,
+  DEFAULT_SCAN_SETTINGS,
+} from './steps';
+import type { SourceCategory, CatalogSettings, ScanSettings } from './steps';
 
 const STORAGE_KEY = 'alm-setup-wizard-state';
 
 interface WizardState {
   currentStep: number;
   categories: SourceCategory[];
+  catalogSettings: CatalogSettings;
   scanSettings: ScanSettings;
 }
 
@@ -22,15 +31,6 @@ const DEFAULT_CATEGORIES: SourceCategory[] = [
   { key: 'inbox', label: 'Inbox sources', note: 'new / unprocessed', required: false, paths: [], estimates: [] },
 ];
 
-const DEFAULT_SCAN_SETTINGS: ScanSettings = {
-  scanFits: true,
-  scanXisf: true,
-  scanRaw: false,
-  scanVideo: false,
-  extractMetadata: true,
-  inferSessions: true,
-};
-
 const STEPS = [
   { label: 'Welcome', heading: 'Welcome to Astro Library Manager', description: '' },
   {
@@ -39,9 +39,14 @@ const STEPS = [
     description: 'Add the folders the app should index. Nothing is moved or modified. You can add more later.',
   },
   {
+    label: 'Catalogs',
+    heading: 'Target catalogs',
+    description: 'Choose which astronomical catalogs to use for resolving object names in your files.',
+  },
+  {
     label: 'Scan settings',
-    heading: 'What should the scan look for?',
-    description: 'Choose file types and options for the initial library scan. You can change these later.',
+    heading: 'Scan & discovery',
+    description: 'Configure how the initial library scan groups frames, resolves targets, and discovers calibration data.',
   },
   {
     label: 'Confirm',
@@ -56,7 +61,12 @@ function loadWizardState(): WizardState {
     if (raw) {
       const parsed = JSON.parse(raw);
       if (Array.isArray(parsed?.categories) && parsed.categories.length > 0) {
-        return parsed as WizardState;
+        return {
+          currentStep: parsed.currentStep ?? 0,
+          categories: parsed.categories,
+          catalogSettings: parsed.catalogSettings ?? DEFAULT_CATALOG_SETTINGS,
+          scanSettings: parsed.scanSettings ?? DEFAULT_SCAN_SETTINGS,
+        };
       }
     }
   } catch {
@@ -65,6 +75,7 @@ function loadWizardState(): WizardState {
   return {
     currentStep: 0,
     categories: DEFAULT_CATEGORIES,
+    catalogSettings: DEFAULT_CATALOG_SETTINGS,
     scanSettings: DEFAULT_SCAN_SETTINGS,
   };
 }
@@ -101,6 +112,10 @@ export function SetupWizard() {
 
   const handleCategoriesChange = useCallback((categories: SourceCategory[]) => {
     setState((prev) => ({ ...prev, categories }));
+  }, []);
+
+  const handleCatalogSettingsChange = useCallback((catalogSettings: CatalogSettings) => {
+    setState((prev) => ({ ...prev, catalogSettings }));
   }, []);
 
   const handleScanSettingsChange = useCallback((scanSettings: ScanSettings) => {
@@ -175,6 +190,7 @@ export function SetupWizard() {
     setState({
       currentStep: 0,
       categories: DEFAULT_CATEGORIES,
+      catalogSettings: DEFAULT_CATALOG_SETTINGS,
       scanSettings: DEFAULT_SCAN_SETTINGS,
     });
   }, []);
@@ -287,14 +303,21 @@ export function SetupWizard() {
             />
           )}
           {step === 2 && (
+            <StepCatalogs
+              settings={state.catalogSettings}
+              onSettingsChange={handleCatalogSettingsChange}
+            />
+          )}
+          {step === 3 && (
             <StepScan
               settings={state.scanSettings}
               onSettingsChange={handleScanSettingsChange}
             />
           )}
-          {step === 3 && (
+          {step === 4 && (
             <StepConfirm
               categories={state.categories}
+              catalogSettings={state.catalogSettings}
               scanSettings={state.scanSettings}
               isSubmitting={isSubmitting}
             />

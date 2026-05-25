@@ -1,94 +1,281 @@
 import { Switch } from '@base-ui-components/react/switch';
 
 export interface ScanSettings {
-  scanFits: boolean;
-  scanXisf: boolean;
-  scanRaw: boolean;
-  scanVideo: boolean;
-  extractMetadata: boolean;
-  inferSessions: boolean;
+  groupingStrategy: 'standard' | 'night_only' | 'target_only';
+  targetResolution: boolean;
+  ambiguityHandling: 'flag_review' | 'auto_pick';
+  calibrationDiscovery: boolean;
+  equipmentDetection: boolean;
+  followSymlinks: boolean;
 }
+
+export const DEFAULT_SCAN_SETTINGS: ScanSettings = {
+  groupingStrategy: 'standard',
+  targetResolution: true,
+  ambiguityHandling: 'flag_review',
+  calibrationDiscovery: true,
+  equipmentDetection: true,
+  followSymlinks: false,
+};
 
 export interface StepScanProps {
   settings: ScanSettings;
   onSettingsChange: (settings: ScanSettings) => void;
 }
 
-const SCAN_OPTIONS: Array<{ key: keyof ScanSettings; label: string; description: string }> = [
-  { key: 'scanFits', label: 'FITS files', description: 'Scan for .fit, .fits, .fts files' },
-  { key: 'scanXisf', label: 'XISF files', description: 'Scan for .xisf PixInsight format files' },
-  { key: 'scanRaw', label: 'Camera RAW', description: 'Scan for .cr2, .cr3, .nef, .arw, .dng files' },
-  { key: 'scanVideo', label: 'Video files', description: 'Scan for .ser, .avi planetary/lunar captures' },
-  { key: 'extractMetadata', label: 'Extract metadata', description: 'Read FITS/XISF headers during scan' },
-  { key: 'inferSessions', label: 'Infer sessions', description: 'Group files into acquisition sessions automatically' },
+const GROUPING_OPTIONS: Array<{ value: ScanSettings['groupingStrategy']; label: string; description: string }> = [
+  { value: 'standard', label: 'Standard (target + filter + night + train)', description: 'Group by OBJECT + FILTER + night + optical train' },
+  { value: 'night_only', label: 'By night only', description: 'Group all frames from the same night together' },
+  { value: 'target_only', label: 'By target only', description: 'Group all frames of the same target regardless of night or filter' },
 ];
 
 /**
- * Step 3 — Scan settings.
+ * Switch row — renders a labeled toggle with description in a card-style row.
+ */
+function SwitchRow({
+  label,
+  description,
+  checked,
+  onCheckedChange,
+  children,
+}: {
+  label: string;
+  description: string;
+  checked: boolean;
+  onCheckedChange: () => void;
+  children?: React.ReactNode;
+}) {
+  return (
+    <div
+      style={{
+        padding: 'var(--alm-space-3) var(--alm-space-4)',
+        background: 'var(--alm-surface)',
+        borderRadius: 'var(--alm-radius-sm)',
+        border: '1px solid var(--alm-border)',
+      }}
+    >
+      <div
+        style={{
+          display: 'flex',
+          alignItems: 'center',
+          justifyContent: 'space-between',
+          gap: 'var(--alm-space-3)',
+        }}
+      >
+        <div style={{ flex: 1 }}>
+          <div style={{ fontSize: 'var(--alm-text-sm)', fontWeight: 500 }}>
+            {label}
+          </div>
+          <div
+            style={{
+              fontSize: 'var(--alm-text-xs)',
+              color: 'var(--alm-text-muted)',
+              lineHeight: 1.5,
+              marginTop: 'var(--alm-space-1)',
+            }}
+          >
+            {description}
+          </div>
+        </div>
+        <Switch.Root
+          checked={checked}
+          onCheckedChange={onCheckedChange}
+          className="alm-switch"
+          aria-label={label}
+          style={{
+            width: 36,
+            height: 20,
+            borderRadius: 10,
+            background: checked ? 'var(--alm-gray-900)' : 'var(--alm-gray-200)',
+            position: 'relative',
+            cursor: 'pointer',
+            flexShrink: 0,
+            transition: 'background 150ms',
+          }}
+        >
+          <Switch.Thumb
+            className="alm-switch__thumb"
+            style={{
+              display: 'block',
+              width: 16,
+              height: 16,
+              borderRadius: '50%',
+              background: '#fff',
+              position: 'absolute',
+              top: 2,
+              left: checked ? 18 : 2,
+              transition: 'left 150ms',
+            }}
+          />
+        </Switch.Root>
+      </div>
+      {checked && children && (
+        <div
+          style={{
+            marginTop: 'var(--alm-space-3)',
+            paddingTop: 'var(--alm-space-3)',
+            borderTop: '1px solid var(--alm-border)',
+          }}
+        >
+          {children}
+        </div>
+      )}
+    </div>
+  );
+}
+
+/**
+ * Step 4 — Scan & discovery settings.
+ * Five controls: session grouping strategy, target resolution, calibration
+ * discovery, equipment detection, and symlink/junction following.
+ *
  * The parent SetupWizard renders the step heading and navigation footer.
  */
 export function StepScan({ settings, onSettingsChange }: StepScanProps) {
-  function toggle(key: keyof ScanSettings) {
-    onSettingsChange({ ...settings, [key]: !settings[key] });
+  function update<K extends keyof ScanSettings>(key: K, value: ScanSettings[K]) {
+    onSettingsChange({ ...settings, [key]: value });
   }
 
   return (
     <div style={{ display: 'flex', flexDirection: 'column', gap: 'var(--alm-space-4)' }}>
-      {SCAN_OPTIONS.map((option) => (
+      {/* 1. Session grouping strategy */}
+      <div
+        style={{
+          padding: 'var(--alm-space-3) var(--alm-space-4)',
+          background: 'var(--alm-surface)',
+          borderRadius: 'var(--alm-radius-sm)',
+          border: '1px solid var(--alm-border)',
+        }}
+      >
+        <div style={{ fontSize: 'var(--alm-text-sm)', fontWeight: 500 }}>
+          Session grouping strategy
+        </div>
         <div
-          key={option.key}
           style={{
-            display: 'flex',
-            alignItems: 'center',
-            justifyContent: 'space-between',
-            gap: 'var(--alm-space-3)',
-            padding: 'var(--alm-space-3) var(--alm-space-4)',
-            background: 'var(--alm-surface)',
-            borderRadius: 'var(--alm-radius-sm)',
-            border: '1px solid var(--alm-border)',
+            fontSize: 'var(--alm-text-xs)',
+            color: 'var(--alm-text-muted)',
+            lineHeight: 1.5,
+            marginTop: 'var(--alm-space-1)',
+            marginBottom: 'var(--alm-space-3)',
           }}
         >
-          <div>
-            <div style={{ fontSize: 'var(--alm-text-sm)', fontWeight: 500 }}>
-              {option.label}
-            </div>
-            <div style={{ fontSize: 'var(--alm-text-xs)', color: 'var(--alm-text-muted)' }}>
-              {option.description}
-            </div>
-          </div>
-          <Switch.Root
-            checked={settings[option.key]}
-            onCheckedChange={() => toggle(option.key)}
-            className="alm-switch"
-            aria-label={option.label}
+          How should frames be grouped into sessions?
+        </div>
+        <select
+          value={settings.groupingStrategy}
+          onChange={(e) =>
+            update('groupingStrategy', e.target.value as ScanSettings['groupingStrategy'])
+          }
+          aria-label="Session grouping strategy"
+          style={{
+            width: '100%',
+            padding: 'var(--alm-space-2) var(--alm-space-3)',
+            fontSize: 'var(--alm-text-sm)',
+            border: '1px solid var(--alm-border)',
+            borderRadius: 'var(--alm-radius-sm)',
+            background: 'var(--alm-bg)',
+            color: 'var(--alm-text)',
+            cursor: 'pointer',
+          }}
+        >
+          {GROUPING_OPTIONS.map((opt) => (
+            <option key={opt.value} value={opt.value}>
+              {opt.label}
+            </option>
+          ))}
+        </select>
+        <div
+          style={{
+            fontSize: 'var(--alm-text-xs)',
+            color: 'var(--alm-text-muted)',
+            marginTop: 'var(--alm-space-2)',
+          }}
+        >
+          {GROUPING_OPTIONS.find((o) => o.value === settings.groupingStrategy)?.description}
+        </div>
+      </div>
+
+      {/* 2. Target resolution */}
+      <SwitchRow
+        label="Target resolution"
+        description="Match OBJECT headers against catalog entries to resolve target identity."
+        checked={settings.targetResolution}
+        onCheckedChange={() => update('targetResolution', !settings.targetResolution)}
+      >
+        <div>
+          <div
             style={{
-              width: 36,
-              height: 20,
-              borderRadius: 10,
-              background: settings[option.key] ? 'var(--alm-gray-900)' : 'var(--alm-gray-200)',
-              position: 'relative',
-              cursor: 'pointer',
-              flexShrink: 0,
-              transition: 'background 150ms',
+              fontSize: 'var(--alm-text-xs)',
+              color: 'var(--alm-text-muted)',
+              marginBottom: 'var(--alm-space-2)',
             }}
           >
-            <Switch.Thumb
-              className="alm-switch__thumb"
+            When OBJECT header matches multiple catalog entries:
+          </div>
+          <div style={{ display: 'flex', flexDirection: 'column', gap: 'var(--alm-space-2)' }}>
+            <label
               style={{
-                display: 'block',
-                width: 16,
-                height: 16,
-                borderRadius: '50%',
-                background: '#fff',
-                position: 'absolute',
-                top: 2,
-                left: settings[option.key] ? 18 : 2,
-                transition: 'left 150ms',
+                display: 'flex',
+                alignItems: 'center',
+                gap: 'var(--alm-space-2)',
+                fontSize: 'var(--alm-text-xs)',
+                cursor: 'pointer',
               }}
-            />
-          </Switch.Root>
+            >
+              <input
+                type="radio"
+                name="ambiguityHandling"
+                checked={settings.ambiguityHandling === 'flag_review'}
+                onChange={() => update('ambiguityHandling', 'flag_review')}
+                style={{ accentColor: 'var(--alm-gray-900)' }}
+              />
+              Flag for manual review
+            </label>
+            <label
+              style={{
+                display: 'flex',
+                alignItems: 'center',
+                gap: 'var(--alm-space-2)',
+                fontSize: 'var(--alm-text-xs)',
+                cursor: 'pointer',
+              }}
+            >
+              <input
+                type="radio"
+                name="ambiguityHandling"
+                checked={settings.ambiguityHandling === 'auto_pick'}
+                onChange={() => update('ambiguityHandling', 'auto_pick')}
+                style={{ accentColor: 'var(--alm-gray-900)' }}
+              />
+              Auto-pick best match and flag
+            </label>
+          </div>
         </div>
-      ))}
+      </SwitchRow>
+
+      {/* 3. Calibration discovery */}
+      <SwitchRow
+        label="Calibration discovery"
+        description="Scan for darks, flats, bias, and dark flats alongside light frames. Fingerprint calibration masters for matching."
+        checked={settings.calibrationDiscovery}
+        onCheckedChange={() => update('calibrationDiscovery', !settings.calibrationDiscovery)}
+      />
+
+      {/* 4. Equipment detection */}
+      <SwitchRow
+        label="Equipment detection"
+        description="Infer optical trains from FITS headers (camera, telescope, filter wheel, gain, binning)."
+        checked={settings.equipmentDetection}
+        onCheckedChange={() => update('equipmentDetection', !settings.equipmentDetection)}
+      />
+
+      {/* 5. Symlink / junction following */}
+      <SwitchRow
+        label="Symlink / junction following"
+        description="Follow symbolic links and NTFS junctions during scan. Off by default for safety — enable if your library uses linked folder structures."
+        checked={settings.followSymlinks}
+        onCheckedChange={() => update('followSymlinks', !settings.followSymlinks)}
+      />
     </div>
   );
 }
