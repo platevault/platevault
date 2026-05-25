@@ -3,6 +3,7 @@
 //! Stub implementations returning hardcoded fixture data matching the mock
 //! layer until the real persistence layer is wired.
 
+use contracts_core::JsonAny;
 use contracts_core::roots::{
     Equipment, IpcOperationHandle, LibraryRoot, RemapSample, RemapVerification, RootCategory,
 };
@@ -27,9 +28,9 @@ pub async fn roots_list() -> Result<Vec<LibraryRoot>, String> {
 pub async fn roots_register(
     path: String,
     category: String,
-    scan_settings: serde_json::Value,
+    scan_settings: JsonAny,
 ) -> Result<LibraryRoot, String> {
-    tracing::debug!("stub: roots.register path={path} category={category} scan_settings={scan_settings}");
+    tracing::debug!("stub: roots.register path={path} category={category} scan_settings={scan_settings:?}");
     let cat = match category.as_str() {
         "calibration" => RootCategory::Calibration,
         "project" => RootCategory::Project,

@@ -6,6 +6,7 @@
 use std::collections::HashMap;
 
 use contracts_core::enums::{Density, ViewMode};
+use contracts_core::JsonAny;
 use contracts_core::preferences::{AppPreferences, SessionsGroupBy, SessionsView, TourCompleted};
 
 /// `preferences.get` — returns current application preferences.
@@ -36,8 +37,8 @@ pub async fn preferences_get() -> Result<AppPreferences, String> {
 #[specta::specta(rename = "preferences.set")]
 pub async fn preferences_set(
     key: String,
-    value: serde_json::Value,
+    value: JsonAny,
 ) -> Result<(), String> {
-    tracing::debug!("stub: preferences.set key={key} value={value}");
+    tracing::debug!("stub: preferences.set key={key} value={value:?}");
     Ok(())
 }

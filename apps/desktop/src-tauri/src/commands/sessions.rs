@@ -151,7 +151,7 @@ pub async fn sessions_calendar(
 pub async fn sessions_transition(
     id: String,
     action: String,
-    metadata: Option<serde_json::Value>,
+    metadata: Option<JsonAny>,
 ) -> Result<AcquisitionSession, String> {
     tracing::debug!("stub: sessions.transition id={id} action={action} metadata={metadata:?}");
     let mut session = stub_sessions().into_iter().next().unwrap();

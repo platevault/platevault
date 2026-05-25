@@ -4,6 +4,7 @@
 //! layer until the real persistence layer is wired.
 
 use contracts_core::lifecycle::PlanState;
+use contracts_core::JsonAny;
 use contracts_core::plans::{
     DryRunResult, FilesystemPlan, PlanDetail, PlanItem, PlanItemAction, PlanItemStatus, PlanKind,
     PlanSafetySummary,
@@ -18,7 +19,7 @@ use contracts_core::roots::IpcOperationHandle;
 #[tauri::command]
 #[specta::specta(rename = "plans.list")]
 pub async fn plans_list(
-    filters: Option<serde_json::Value>,
+    filters: Option<JsonAny>,
 ) -> Result<Vec<FilesystemPlan>, String> {
     tracing::debug!("stub: plans.list filters={filters:?}");
     Ok(stub_plans())

@@ -4,6 +4,7 @@
 //! layer until the real persistence layer is wired.
 
 use contracts_core::lifecycle::{PlanState, ProjectState};
+use contracts_core::JsonAny;
 use contracts_core::plans::{
     DryRunResult, FilesystemPlan, PlanItem, PlanItemAction, PlanItemStatus, PlanKind,
 };
@@ -22,7 +23,7 @@ use contracts_core::sessions::ConfidenceLevel;
 #[tauri::command]
 #[specta::specta(rename = "projects.list")]
 pub async fn projects_list(
-    filters: Option<serde_json::Value>,
+    filters: Option<JsonAny>,
 ) -> Result<Vec<Project>, String> {
     tracing::debug!("stub: projects.list filters={filters:?}");
     Ok(stub_projects())
@@ -148,9 +149,9 @@ pub async fn projects_get(id: String) -> Result<ProjectDetail, String> {
 #[tauri::command]
 #[specta::specta(rename = "projects.create_plan")]
 pub async fn projects_create_plan(
-    wizard_state: serde_json::Value,
+    wizard_state: JsonAny,
 ) -> Result<FilesystemPlan, String> {
-    tracing::debug!("stub: projects.create_plan wizard_state={wizard_state}");
+    tracing::debug!("stub: projects.create_plan wizard_state={wizard_state:?}");
     Ok(FilesystemPlan {
         id: "plan-new-001".to_owned(),
         kind: PlanKind::ProjectStructure,

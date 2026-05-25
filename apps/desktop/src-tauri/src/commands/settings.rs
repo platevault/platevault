@@ -32,8 +32,8 @@ pub async fn settings_get(scope: String) -> Result<SettingsData, String> {
 #[specta::specta(rename = "settings.update")]
 pub async fn settings_update(
     scope: String,
-    values: serde_json::Value,
+    values: JsonAny,
 ) -> Result<(), String> {
-    tracing::debug!("stub: settings.update scope={scope} values={values}");
+    tracing::debug!("stub: settings.update scope={scope} values={values:?}");
     Ok(())
 }

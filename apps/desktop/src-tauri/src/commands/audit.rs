@@ -4,6 +4,7 @@
 //! layer until the real persistence layer is wired.
 
 use contracts_core::audit::{AuditActor, AuditEntry, AuditListResponse, AuditOutcome};
+use contracts_core::JsonAny;
 
 /// `audit.list` — returns paginated audit entries.
 ///
@@ -12,8 +13,8 @@ use contracts_core::audit::{AuditActor, AuditEntry, AuditListResponse, AuditOutc
 #[tauri::command]
 #[specta::specta(rename = "audit.list")]
 pub async fn audit_list(
-    filters: Option<serde_json::Value>,
-    pagination: Option<serde_json::Value>,
+    filters: Option<JsonAny>,
+    pagination: Option<JsonAny>,
 ) -> Result<AuditListResponse, String> {
     tracing::debug!("stub: audit.list filters={filters:?} pagination={pagination:?}");
     let entries = stub_audit_entries();
@@ -28,7 +29,7 @@ pub async fn audit_list(
 #[tauri::command]
 #[specta::specta(rename = "audit.export")]
 pub async fn audit_export(
-    filters: Option<serde_json::Value>,
+    filters: Option<JsonAny>,
 ) -> Result<String, String> {
     tracing::debug!("stub: audit.export filters={filters:?}");
     let entries = stub_audit_entries();
