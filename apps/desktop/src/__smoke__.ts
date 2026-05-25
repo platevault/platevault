@@ -88,10 +88,16 @@ import { WizardPage } from '@/features/projects/wizard/WizardPage';
 
 import { PlansPage } from '@/features/plans/PlansPage';
 import { PlanReview } from '@/features/plans/PlanReview';
+import { PlanReviewInline } from '@/features/plans/PlanReviewInline';
+import { PlansList } from '@/features/plans/PlansList';
+import { PlanInspector } from '@/features/plans/PlanInspector';
 import { PlanTable } from '@/features/plans/PlanTable';
 import { PlanDiff } from '@/features/plans/PlanDiff';
 
 import { AuditPage } from '@/features/audit/AuditPage';
+import { AuditList } from '@/features/audit/AuditList';
+import { AuditDetail } from '@/features/audit/AuditDetail';
+import { AuditContext } from '@/features/audit/AuditContext';
 
 import { SettingsPage } from '@/features/settings/SettingsPage';
 import { DensitySelector } from '@/features/settings/DensitySelector';
@@ -187,9 +193,15 @@ export type SmokeCheck = {
   wizardPage: typeof WizardPage;
   plansPage: typeof PlansPage;
   planReview: typeof PlanReview;
+  planReviewInline: typeof PlanReviewInline;
+  plansList: typeof PlansList;
+  planInspector: typeof PlanInspector;
   planTable: typeof PlanTable;
   planDiff: typeof PlanDiff;
   auditPage: typeof AuditPage;
+  auditList: typeof AuditList;
+  auditDetail: typeof AuditDetail;
+  auditContext: typeof AuditContext;
   settingsPage: typeof SettingsPage;
   densitySelector: typeof DensitySelector;
   setupPage: typeof SetupPage;

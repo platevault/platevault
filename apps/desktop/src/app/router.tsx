@@ -4,6 +4,7 @@ import {
   createRootRoute,
   createRoute,
   lazyRouteComponent,
+  redirect,
 } from '@tanstack/react-router';
 import { Shell } from './Shell';
 
@@ -26,10 +27,13 @@ const sessionsRoute = createRoute({
 const sessionDetailRoute = createRoute({
   getParentRoute: () => rootRoute,
   path: '/sessions/$id',
-  component: lazyRouteComponent(
-    () => import('@/features/sessions/SessionDetail'),
-    'SessionDetail',
-  ),
+  beforeLoad: ({ params }) => {
+    // Redirect /sessions/:id to the 3-pane view with the session pre-selected
+    throw redirect({
+      to: '/sessions',
+      search: { selected: params.id },
+    });
+  },
 });
 
 // --- Review ---
@@ -132,13 +136,16 @@ const plansRoute = createRoute({
   ),
 });
 
+// Plan detail is now inline in PlansPage — redirect deep links
 const planDetailRoute = createRoute({
   getParentRoute: () => rootRoute,
   path: '/plans/$id',
-  component: lazyRouteComponent(
-    () => import('@/features/plans/PlanReview'),
-    'PlanReview',
-  ),
+  beforeLoad: ({ params }) => {
+    throw redirect({
+      to: '/plans',
+      search: { selected: params.id },
+    });
+  },
 });
 
 // --- Audit ---

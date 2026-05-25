@@ -61,9 +61,7 @@ export function TourProvider({ children }: { children: React.ReactNode }) {
    * guard the tour ends prematurely instead of resuming on the next page.
    */
   const transitioningRef = useRef(false);
-  const navigateRef = useRef(useNavigate());
   const navigate = useNavigate();
-  navigateRef.current = navigate;
   const location = useLocation();
 
   const allDone =
@@ -76,22 +74,14 @@ export function TourProvider({ children }: { children: React.ReactNode }) {
     return -1;
   }, [tourCompleted]);
 
-  const clearPoll = useCallback(() => {
+  // ---- Stable helpers using refs to avoid dependency churn ----
+
+  function clearPoll() {
     if (pollRef.current) {
       clearInterval(pollRef.current);
       pollRef.current = null;
     }
-  }, []);
-
-  const markAllDone = useCallback(() => {
-    setTourCompleted({ step1: true, step2: true, step3: true });
-    completeTourStep({ step: 'step1' });
-    completeTourStep({ step: 'step2' });
-    completeTourStep({ step: 'step3' });
-    setRun(false);
-    transitioningRef.current = false;
-    clearPoll();
-  }, [setTourCompleted, clearPoll]);
+  }
 
   /**
    * Transition to a given step index.
@@ -103,51 +93,65 @@ export function TourProvider({ children }: { children: React.ReactNode }) {
    * 4. Polls the DOM until the target element appears, then restarts the tour
    *    at the new stepIndex and clears the guard.
    */
-  const goToStep = useCallback(
-    (idx: number) => {
-      clearPoll();
+  function goToStep(idx: number) {
+    clearPoll();
 
-      const step = TOUR_STEPS[idx];
-      if (!step) {
-        markAllDone();
-        return;
+    const step = TOUR_STEPS[idx];
+    if (!step) {
+      markAllDone();
+      return;
+    }
+
+    // Set the guard BEFORE stopping so the resulting status event is ignored.
+    transitioningRef.current = true;
+
+    setRun(false);
+    setStepIndex(idx);
+
+    // Read the pathname fresh from the hash to avoid stale closure values.
+    const currentPath = window.location.hash.replace(/^#/, '') || '/';
+    if (!currentPath.startsWith(step.page)) {
+      navigate({ to: step.page as '/' });
+    }
+
+    // Poll for the target element to appear after navigation and render.
+    pollRef.current = setInterval(() => {
+      if (document.querySelector(step.target as string)) {
+        clearPoll();
+        transitioningRef.current = false;
+        setRun(true);
       }
+    }, 200);
+  }
 
-      // Set the guard BEFORE stopping so the resulting status event is ignored.
-      transitioningRef.current = true;
+  function markAllDone() {
+    setTourCompleted({ step1: true, step2: true, step3: true });
+    completeTourStep({ step: 'step1' });
+    completeTourStep({ step: 'step2' });
+    completeTourStep({ step: 'step3' });
+    setRun(false);
+    transitioningRef.current = false;
+    clearPoll();
+  }
 
-      setRun(false);
-      setStepIndex(idx);
-
-      // Read the pathname fresh from the hash to avoid stale closure values.
-      const currentPath =
-        window.location.hash.replace(/^#/, '') || '/';
-      if (!currentPath.startsWith(step.page)) {
-        navigateRef.current({ to: step.page as '/' });
-      }
-
-      // Poll for the target element to appear after navigation and render.
-      pollRef.current = setInterval(() => {
-        if (document.querySelector(step.target as string)) {
-          clearPoll();
-          transitioningRef.current = false;
-          setRun(true);
-        }
-      }, 200);
-    },
-    [markAllDone, clearPoll],
-  );
+  // Store the latest versions in refs so callbacks and effects always see
+  // the current functions without being in dependency arrays.
+  const goToStepRef = useRef(goToStep);
+  goToStepRef.current = goToStep;
+  const markAllDoneRef = useRef(markAllDone);
+  markAllDoneRef.current = markAllDone;
 
   // Auto-start when setup is complete and tour has incomplete steps.
+  // Uses refs to avoid dependency churn that races with the poll interval.
   useEffect(() => {
     if (!setupCompleted || allDone || activeStepIndex < 0) {
       setRun(false);
       clearPoll();
       return;
     }
-    goToStep(activeStepIndex);
-    return clearPoll;
-  }, [setupCompleted, allDone, activeStepIndex, goToStep, clearPoll]);
+    goToStepRef.current(activeStepIndex);
+    return () => clearPoll();
+  }, [setupCompleted, allDone, activeStepIndex]); // eslint-disable-line react-hooks/exhaustive-deps
 
   const handleEvent = useCallback(
     (data: EventData, _controls: Controls) => {
@@ -162,7 +166,7 @@ export function TourProvider({ children }: { children: React.ReactNode }) {
 
       // Tour finished (last step completed) or skipped.
       if (status === STATUS.FINISHED || status === STATUS.SKIPPED) {
-        markAllDone();
+        markAllDoneRef.current();
         return;
       }
 
@@ -177,27 +181,27 @@ export function TourProvider({ children }: { children: React.ReactNode }) {
         if (action === ACTIONS.NEXT || action === ACTIONS.CLOSE) {
           const nextIndex = index + 1;
           if (nextIndex < TOUR_STEPS.length) {
-            goToStep(nextIndex);
+            goToStepRef.current(nextIndex);
           } else {
             // Last step completed. Mark done explicitly because
             // STATUS.FINISHED may not fire reliably in controlled mode.
-            markAllDone();
+            markAllDoneRef.current();
           }
         } else if (action === ACTIONS.PREV) {
-          goToStep(Math.max(0, index - 1));
+          goToStepRef.current(Math.max(0, index - 1));
         }
       }
 
       // Target element not found: skip to the next step or finish.
       if (type === EVENTS.TARGET_NOT_FOUND) {
         if (index < TOUR_STEPS.length - 1) {
-          goToStep(index + 1);
+          goToStepRef.current(index + 1);
         } else {
-          markAllDone();
+          markAllDoneRef.current();
         }
       }
     },
-    [tourCompleted, setTourCompleted, markAllDone, goToStep],
+    [tourCompleted, setTourCompleted],
   );
 
   return (
