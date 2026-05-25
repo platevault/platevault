@@ -171,6 +171,13 @@ export function SessionsList({ sessions, selectedId, onSelect }: SessionsListPro
 
   const hasActiveFilters = stateFilter.size > 0 || filterFilter !== null || trainFilter !== null;
 
+  // Track the first reviewable session so we can tag it for the guided tour.
+  const firstTourId = useMemo(() => {
+    const reviewable = new Set(['discovered', 'candidate', 'needs_review']);
+    const match = sorted.find((s) => reviewable.has(s.state));
+    return match?.id ?? sorted[0]?.id ?? null;
+  }, [sorted]);
+
   return (
     <div className="alm-session-list">
       {/* Search */}
@@ -298,6 +305,7 @@ export function SessionsList({ sessions, selectedId, onSelect }: SessionsListPro
                   selectedId === session.id && 'alm-session-list__item--selected',
                 )}
                 onClick={() => onSelect(session.id)}
+                {...(session.id === firstTourId ? { 'data-tour': 'first-session' } : undefined)}
               >
                 <div className="alm-session-list__item-top">
                   <span className="alm-session-list__item-target">
