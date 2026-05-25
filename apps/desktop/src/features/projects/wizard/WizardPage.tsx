@@ -84,7 +84,8 @@ export function WizardPage() {
       case 0:
         return wizardData.name.name.trim().length > 0;
       case 1:
-        return wizardData.sources.selectedSessionIds.length > 0;
+        // Allow skipping source selection in dev mode for faster wizard testing
+        return import.meta.env.DEV || wizardData.sources.selectedSessionIds.length > 0;
       case 2:
         return true; // Calibration is optional
       case 3:
