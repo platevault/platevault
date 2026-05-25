@@ -3,6 +3,7 @@
 pub mod json_any;
 pub mod lifecycle;
 pub mod provenance;
+pub mod sessions;
 
 pub use json_any::JsonAny;
 

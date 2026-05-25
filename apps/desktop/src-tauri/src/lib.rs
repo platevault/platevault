@@ -17,6 +17,7 @@ use crate::commands::lifecycle::{
     lifecycle_ledger_list, lifecycle_transition_apply, lifecycle_transition_preview,
     provenance_read, AppState,
 };
+use crate::commands::sessions::sessions_list;
 
 pub const CRATE_NAME: &str = "desktop_shell";
 
@@ -40,6 +41,7 @@ pub fn specta_builder() -> Builder<tauri::Wry> {
             lifecycle_transition_apply,
             lifecycle_transition_preview,
             lifecycle_ledger_list,
+            sessions_list,
         ])
 }
 
