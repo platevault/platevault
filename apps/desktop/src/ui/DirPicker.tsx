@@ -9,18 +9,13 @@ export interface DirPickerProps {
 
 export function DirPicker({ value, onChange, label }: DirPickerProps) {
   const handleChoose = async () => {
-    console.log('[DirPicker] handleChoose fired');
     try {
-      console.log('[DirPicker] importing plugin-dialog...');
-      const mod = await import('@tauri-apps/plugin-dialog');
-      console.log('[DirPicker] import ok, calling open()...');
-      const selected = await mod.open({ directory: true, multiple: false });
-      console.log('[DirPicker] open() returned:', selected);
+      const { open } = await import('@tauri-apps/plugin-dialog');
+      const selected = await open({ directory: true, multiple: false });
       if (typeof selected === 'string') {
         onChange(selected);
       }
-    } catch (err) {
-      console.error('[DirPicker] error:', err);
+    } catch {
       const path = window.prompt('Enter folder path:');
       if (path) onChange(path);
     }
