@@ -79,6 +79,6 @@ After any tool call, always surface the `outputComponents` (Text Description and
 
 ## 💡 Best Practices
 
-- **Iterative Polish**: Prefere `edit_screens` for targeted adjustments over full re-generation.
+- **Iterative Polish**: Prefer `edit_screens` for targeted adjustments over full re-generation.
 - **Semantic First**: Name colors by their role (e.g., "Primary Action") as well as their appearance.
 - **Atmosphere Matters**: Explicitly set the "vibe" (Minimalist, Vibrant, Brutalist) to guide the generator.

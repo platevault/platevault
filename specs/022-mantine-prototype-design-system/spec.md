@@ -3,7 +3,7 @@
 **Feature Branch**: `022-mantine-prototype-design-system`
 **Created**: 2026-05-09
 **Last Revised**: 2026-05-20
-**Status**: Active (re-scoped from Mantine to Base UI)
+**Status**: Superseded by spec 027 (Desktop Frontend Implementation)
 **Input**: Original user description: "Specify that the prototype is Mantine-first,
 uses standard Mantine components and TanStack Table/Router, writes DESIGN.md, and
 avoids custom CSS or raw primitives unless necessary." Revised after the

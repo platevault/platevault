@@ -13,4 +13,3 @@ if [ -f pyproject.toml ] || [ -d tests ]; then
     pytest
   fi
 fi
-

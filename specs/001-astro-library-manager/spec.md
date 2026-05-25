@@ -3,6 +3,8 @@
 **Feature Branch**: `001-astro-library-manager`  
 **Created**: 2026-05-02  
 **Status**: Closed (Umbrella / Planning / Prototype Baseline)
+**Superseded By**: `specs/027-frontend-implementation/spec.md` (2026-05-24)
+**Note**: This spec remains as historical reference for product intent and domain modeling. The authoritative UI design is now in `/DESIGN.md` (canvas wireframe export from Claude Design, 2026-05-24).
 **Input**: User description: "Cross-platform local-first desktop application for managing astrophotography project structure, data ingestion, source mapping, calibration matching, PixInsight project preparation, and project lifecycle management."
 **Closure**: Umbrella/specification baseline only; this feature spec is closed as a planning/prototype artifact and does not represent an authorized app-implementation workstream.
 

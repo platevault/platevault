@@ -1,198 +1,248 @@
 import {
   createHashHistory,
+  createRouter,
   createRootRoute,
   createRoute,
-  createRouter,
-  Navigate,
+  lazyRouteComponent,
+  redirect,
   Outlet,
-  useRouterState,
-} from "@tanstack/react-router";
+} from '@tanstack/react-router';
+import { Shell } from './Shell';
 
-import { InventoryPage } from "../features/inventory/InventoryPage";
-import { InboxPage } from "../features/inbox/InboxPage";
-import { ProjectsPage } from "../features/projects/ProjectsPage";
-import { ActivityPage } from "../features/activity/ActivityPage";
-import { PlanDetailPage } from "../features/plans/PlanDetailPage";
-import { SettingsPage } from "../features/settings/SettingsPage";
-import { WelcomePage } from "../features/welcome/WelcomePage";
-import { Shell } from "./Shell";
-
+// Root route — bare Outlet so setup can render without the shell
 const rootRoute = createRootRoute({
-  component: () => {
-    // The first-run wizard is a fullscreen onboarding experience and must
-    // not render inside the Shell chrome (sidebar, breadcrumb, status bar).
-    // Otherwise "Restart setup wizard" lands the user on a page that looks
-    // like a settings sub-page rather than a fresh wizard.
-    const pathname = useRouterState({ select: (s) => s.location.pathname });
-    if (pathname === "/welcome") {
-      return <Outlet />;
-    }
-    return (
-      <Shell>
-        <Outlet />
-      </Shell>
-    );
+  component: () => <Outlet />,
+});
+
+// Shell layout — wraps all app pages (not setup)
+const shellRoute = createRoute({
+  getParentRoute: () => rootRoute,
+  id: 'shell',
+  component: Shell,
+});
+
+// --- Sessions (default landing) ---
+
+const sessionsRoute = createRoute({
+  getParentRoute: () => shellRoute,
+  path: '/sessions',
+  component: lazyRouteComponent(
+    () => import('@/features/sessions/SessionsPage'),
+    'SessionsPage',
+  ),
+});
+
+const sessionDetailRoute = createRoute({
+  getParentRoute: () => shellRoute,
+  path: '/sessions/$id',
+  beforeLoad: ({ params }) => {
+    throw redirect({
+      to: '/sessions',
+      search: { selected: params.id },
+    });
   },
 });
 
-function parseId(value: unknown): string | undefined {
-  return typeof value === "string" && value.length > 0 ? value : undefined;
-}
+// --- Review ---
 
-const indexRoute = createRoute({
-  getParentRoute: () => rootRoute,
-  path: "/",
-  component: () => {
-    const completed =
-      typeof window !== "undefined" &&
-      localStorage.getItem("alm.first-run.completed") === "1";
-    return completed ? <Navigate to="/inventory" replace /> : <Navigate to="/welcome" replace />;
-  },
+const reviewRoute = createRoute({
+  getParentRoute: () => shellRoute,
+  path: '/review',
+  component: lazyRouteComponent(
+    () => import('@/features/review/ReviewPage'),
+    'ReviewPage',
+  ),
 });
 
-const welcomeRoute = createRoute({
-  getParentRoute: () => rootRoute,
-  path: "/welcome",
-  component: WelcomePage,
+// --- Calibration ---
+
+const calibrationRoute = createRoute({
+  getParentRoute: () => shellRoute,
+  path: '/calibration',
+  component: lazyRouteComponent(
+    () => import('@/features/calibration/CalibrationPage'),
+    'CalibrationPage',
+  ),
 });
 
-const inventoryRoute = createRoute({
-  getParentRoute: () => rootRoute,
-  path: "/inventory",
-  validateSearch: (
-    search: Record<string, unknown>,
-  ): {
-    id?: string;
-    source?: string;
-    frame?: string;
-    states?: string;
-    group?: "source" | "target" | "date";
-    sort?: string;
-  } => ({
-    id: parseId(search.id),
-    source: parseId(search.source),
-    frame: parseId(search.frame),
-    states: parseId(search.states),
-    group:
-      search.group === "target" || search.group === "date" ? (search.group as "target" | "date") : undefined,
-    sort: parseId(search.sort),
-  }),
-  component: InventoryPage,
+const calibrationDetailRoute = createRoute({
+  getParentRoute: () => shellRoute,
+  path: '/calibration/$id',
+  component: lazyRouteComponent(
+    () => import('@/features/calibration/CalibrationDetail'),
+    'CalibrationDetail',
+  ),
 });
 
-const inboxRoute = createRoute({
-  getParentRoute: () => rootRoute,
-  path: "/inbox",
-  validateSearch: (
-    search: Record<string, unknown>,
-  ): { id?: string; type?: string; source?: string; sort?: string } => ({
-    id: parseId(search.id),
-    type: parseId(search.type),
-    source: parseId(search.source),
-    sort: parseId(search.sort),
-  }),
-  component: InboxPage,
+// --- Targets ---
+
+const targetsRoute = createRoute({
+  getParentRoute: () => shellRoute,
+  path: '/targets',
+  component: lazyRouteComponent(
+    () => import('@/features/targets/TargetsPage'),
+    'TargetsPage',
+  ),
 });
+
+const targetDetailRoute = createRoute({
+  getParentRoute: () => shellRoute,
+  path: '/targets/$id',
+  component: lazyRouteComponent(
+    () => import('@/features/targets/TargetDetail'),
+    'TargetDetail',
+  ),
+});
+
+// --- Projects ---
 
 const projectsRoute = createRoute({
-  getParentRoute: () => rootRoute,
-  path: "/projects",
-  validateSearch: (
-    search: Record<string, unknown>,
-  ): {
-    id?: string;
-    lifecycle?: string;
-    tool?: string;
-    tab?: "overview" | "sources" | "plans" | "activity";
-    sort?: string;
-  } => {
-    const tab =
-      search.tab === "sources" ||
-      search.tab === "plans" ||
-      search.tab === "activity"
-        ? (search.tab as "sources" | "plans" | "activity")
-        : undefined;
-    return {
-      id: parseId(search.id),
-      lifecycle: parseId(search.lifecycle),
-      tool: parseId(search.tool),
-      tab,
-      sort: parseId(search.sort),
-    };
-  },
-  component: ProjectsPage,
+  getParentRoute: () => shellRoute,
+  path: '/projects',
+  component: lazyRouteComponent(
+    () => import('@/features/projects/ProjectsPage'),
+    'ProjectsPage',
+  ),
 });
 
-const plansIndexRoute = createRoute({
-  getParentRoute: () => rootRoute,
-  path: "/plans",
-  component: () => <Navigate to="/activity" replace />,
+const projectDetailRoute = createRoute({
+  getParentRoute: () => shellRoute,
+  path: '/projects/$id',
+  component: lazyRouteComponent(
+    () => import('@/features/projects/ProjectDetail'),
+    'ProjectDetail',
+  ),
 });
 
-const activityRoute = createRoute({
-  getParentRoute: () => rootRoute,
-  path: "/activity",
-  validateSearch: (
-    search: Record<string, unknown>,
-  ): {
-    id?: string;
-    states?: string;
-    origins?: string;
-    sort?: string;
-  } => ({
-    id: parseId(search.id),
-    states: parseId(search.states),
-    origins: parseId(search.origins),
-    sort: parseId(search.sort),
-  }),
-  component: ActivityPage,
+const projectArtifactsRoute = createRoute({
+  getParentRoute: () => shellRoute,
+  path: '/projects/$id/artifacts',
+  component: lazyRouteComponent(
+    () => import('@/features/projects/ArtifactsPage'),
+    'ArtifactsPage',
+  ),
+});
+
+const projectNewRoute = createRoute({
+  getParentRoute: () => shellRoute,
+  path: '/projects/new',
+  component: lazyRouteComponent(
+    () => import('@/features/projects/wizard/WizardPage'),
+    'WizardPage',
+  ),
+});
+
+// --- Plans ---
+
+const plansRoute = createRoute({
+  getParentRoute: () => shellRoute,
+  path: '/plans',
+  component: lazyRouteComponent(
+    () => import('@/features/plans/PlansPage'),
+    'PlansPage',
+  ),
 });
 
 const planDetailRoute = createRoute({
-  getParentRoute: () => rootRoute,
-  path: "/plans/$planId",
-  component: PlanDetailPage,
+  getParentRoute: () => shellRoute,
+  path: '/plans/$id',
+  beforeLoad: ({ params }) => {
+    throw redirect({
+      to: '/plans',
+      search: { selected: params.id },
+    });
+  },
 });
 
-const settingsRedirectRoute = createRoute({
-  getParentRoute: () => rootRoute,
-  path: "/settings",
-  component: () => <Navigate to="/settings/$section" params={{ section: "data-sources" }} replace />,
+// --- Audit ---
+
+const auditRoute = createRoute({
+  getParentRoute: () => shellRoute,
+  path: '/audit',
+  component: lazyRouteComponent(
+    () => import('@/features/audit/AuditPage'),
+    'AuditPage',
+  ),
 });
 
-// Backward-compat: old "application-log" param → new "audit" section id.
-const settingsApplicationLogRedirectRoute = createRoute({
-  getParentRoute: () => rootRoute,
-  path: "/settings/application-log",
-  component: () => <Navigate to="/settings/$section" params={{ section: "audit" }} replace />,
+// --- Settings ---
+
+const settingsRoute = createRoute({
+  getParentRoute: () => shellRoute,
+  path: '/settings',
+  component: lazyRouteComponent(
+    () => import('@/features/settings/SettingsPage'),
+    'SettingsPage',
+  ),
 });
 
-const settingsSectionRoute = createRoute({
-  getParentRoute: () => rootRoute,
-  path: "/settings/$section",
-  component: SettingsPage,
+const settingsPaneRoute = createRoute({
+  getParentRoute: () => shellRoute,
+  path: '/settings/$pane',
+  component: lazyRouteComponent(
+    () => import('@/features/settings/SettingsPage'),
+    'SettingsPage',
+  ),
 });
+
+// --- Setup (standalone, no shell) ---
+
+const setupRoute = createRoute({
+  getParentRoute: () => rootRoute,
+  path: '/setup',
+  component: lazyRouteComponent(
+    () => import('@/features/setup/SetupPage'),
+    'SetupPage',
+  ),
+});
+
+// --- Index redirect ---
+
+const indexRoute = createRoute({
+  getParentRoute: () => shellRoute,
+  path: '/',
+  component: lazyRouteComponent(
+    () => import('@/features/sessions/SessionsPage'),
+    'SessionsPage',
+  ),
+});
+
+// --- Route tree ---
 
 const routeTree = rootRoute.addChildren([
-  indexRoute,
-  welcomeRoute,
-  inventoryRoute,
-  inboxRoute,
-  projectsRoute,
-  plansIndexRoute,
-  activityRoute,
-  planDetailRoute,
-  settingsRedirectRoute,
-  settingsApplicationLogRedirectRoute,
-  settingsSectionRoute,
+  setupRoute,
+  shellRoute.addChildren([
+    indexRoute,
+    sessionsRoute,
+    sessionDetailRoute,
+    reviewRoute,
+    calibrationRoute,
+    calibrationDetailRoute,
+    targetsRoute,
+    targetDetailRoute,
+    projectNewRoute,
+    projectsRoute,
+    projectDetailRoute,
+    projectArtifactsRoute,
+    plansRoute,
+    planDetailRoute,
+    auditRoute,
+    settingsRoute,
+    settingsPaneRoute,
+  ]),
 ]);
 
+// --- Router instance ---
+
+const hashHistory = createHashHistory();
+
 export const router = createRouter({
-  history: createHashHistory(),
   routeTree,
+  history: hashHistory,
+  defaultPreload: 'intent',
 });
 
-declare module "@tanstack/react-router" {
+declare module '@tanstack/react-router' {
   interface Register {
     router: typeof router;
   }

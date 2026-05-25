@@ -1,0 +1,49 @@
+{
+  "hooks": {
+    "UserPromptSubmit": [
+      {
+        "hooks": [
+          {
+            "type": "command",
+            "command": ".agents/skills/speckit-dag/scripts/dispatcher.sh",
+            "args": [
+              "pre"
+            ],
+            "timeout": 5
+          }
+        ],
+        "_apm_source": "speckit"
+      }
+    ],
+    "PreToolUse": [
+      {
+        "hooks": [
+          {
+            "type": "command",
+            "command": ".agents/skills/speckit-dag/scripts/dispatcher.sh",
+            "args": [
+              "pre"
+            ],
+            "timeout": 5
+          }
+        ],
+        "_apm_source": "speckit"
+      }
+    ],
+    "PostToolUse": [
+      {
+        "hooks": [
+          {
+            "type": "command",
+            "command": ".agents/skills/speckit-dag/scripts/dispatcher.sh",
+            "args": [
+              "post"
+            ],
+            "timeout": 5
+          }
+        ],
+        "_apm_source": "speckit"
+      }
+    ]
+  }
+}

@@ -1,9 +1,10 @@
 # Implementation Plan: [FEATURE]
 
 **Branch**: `[###-feature-name]` | **Date**: [DATE] | **Spec**: [link]
+
 **Input**: Feature specification from `/specs/[###-feature-name]/spec.md`
 
-**Note**: This template is filled in by the `/speckit.plan` command. See `.specify/templates/plan-template.md` for the execution workflow.
+**Note**: This template is filled in by the `/speckit-plan` command. See `.specify/templates/plan-template.md` for the execution workflow.
 
 ## Summary
 
@@ -17,36 +18,29 @@
   the iteration process.
 -->
 
-**Language/Version**: [e.g., Python 3.11, Swift 5.9, Rust 1.75 or NEEDS CLARIFICATION]  
-**Primary Dependencies**: [e.g., FastAPI, UIKit, LLVM or NEEDS CLARIFICATION]  
-**Storage**: [if applicable, e.g., PostgreSQL, CoreData, files or N/A]  
-**Testing**: [e.g., pytest, XCTest, cargo test or NEEDS CLARIFICATION]  
+**Language/Version**: [e.g., Python 3.11, Swift 5.9, Rust 1.75 or NEEDS CLARIFICATION]
+
+**Primary Dependencies**: [e.g., FastAPI, UIKit, LLVM or NEEDS CLARIFICATION]
+
+**Storage**: [if applicable, e.g., PostgreSQL, CoreData, files or N/A]
+
+**Testing**: [e.g., pytest, XCTest, cargo test or NEEDS CLARIFICATION]
+
 **Target Platform**: [e.g., Linux server, iOS 15+, WASM or NEEDS CLARIFICATION]
-**Project Type**: [e.g., library/cli/web-service/mobile-app/compiler/desktop-app or NEEDS CLARIFICATION]  
-**Performance Goals**: [domain-specific, e.g., 1000 req/s, 10k lines/sec, 60 fps or NEEDS CLARIFICATION]  
-**Constraints**: [domain-specific, e.g., <200ms p95, <100MB memory, offline-capable or NEEDS CLARIFICATION]  
+
+**Project Type**: [e.g., library/cli/web-service/mobile-app/compiler/desktop-app or NEEDS CLARIFICATION]
+
+**Performance Goals**: [domain-specific, e.g., 1000 req/s, 10k lines/sec, 60 fps or NEEDS CLARIFICATION]
+
+**Constraints**: [domain-specific, e.g., <200ms p95, <100MB memory, offline-capable or NEEDS CLARIFICATION]
+
 **Scale/Scope**: [domain-specific, e.g., 10k users, 1M LOC, 50 screens or NEEDS CLARIFICATION]
 
 ## Constitution Check
 
 *GATE: Must pass before Phase 0 research. Re-check after Phase 1 design.*
 
-- Local-first file custody: Does the plan keep image files user-owned on disk,
-  with library roots modeled separately from relative paths?
-- Reviewable filesystem mutation: Are all filesystem changes represented as
-  explicit plans with audit records, no silent overwrite, and archive/trash
-  defaults for destructive actions?
-- PixInsight boundary: Does the plan avoid calibration, debayering,
-  registration, integration, drizzle, stacking, and image editing?
-- Research-led domain modeling: Are structure, naming, calibration matching,
-  source views, lifecycle, metadata extraction, and cleanup rules decided by
-  documented research instead of assumed conventions?
-- Portable contracts and durable records: Is the UI-to-core contract
-  language-neutral and versioned, with durable records separated from generated
-  manifests/source views?
-- Cross-platform path safety: Does the plan address Windows/macOS/Linux path
-  behavior, symlinks, junctions, external drives, moved roots, and optional or
-  lazy hashing for large files?
+[Gates determined based on constitution file]
 
 ## Project Structure
 
@@ -54,12 +48,12 @@
 
 ```text
 specs/[###-feature]/
-├── plan.md              # This file (/speckit.plan command output)
-├── research.md          # Phase 0 output (/speckit.plan command)
-├── data-model.md        # Phase 1 output (/speckit.plan command)
-├── quickstart.md        # Phase 1 output (/speckit.plan command)
-├── contracts/           # Phase 1 output (/speckit.plan command)
-└── tasks.md             # Phase 2 output (/speckit.tasks command - NOT created by /speckit.plan)
+├── plan.md              # This file (/speckit-plan command output)
+├── research.md          # Phase 0 output (/speckit-plan command)
+├── data-model.md        # Phase 1 output (/speckit-plan command)
+├── quickstart.md        # Phase 1 output (/speckit-plan command)
+├── contracts/           # Phase 1 output (/speckit-plan command)
+└── tasks.md             # Phase 2 output (/speckit-tasks command - NOT created by /speckit-plan)
 ```
 
 ### Source Code (repository root)

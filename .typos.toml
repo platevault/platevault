@@ -1,0 +1,29 @@
+[files]
+extend-exclude = [
+    ".agents/",
+    ".claude/agents/",
+    ".claude/commands/",
+    ".claude/skills/",
+    ".codex/",
+    ".specify/",
+    "docs/design/canvas-wireframes-*",
+    "CLAUDE.md",
+    "AGENTS.md",
+    "GEMINI.md",
+    "*/CLAUDE.md",
+    "*/AGENTS.md",
+]
+
+[default.extend-words]
+# Rust specta builder method
+typ = "typ"
+# SER astrophotography video format
+ser = "ser"
+# abbreviation for strategy (variable names)
+strat = "strat"
+# RGBA PNG abbreviation context
+PN = "PN"
+# debayer abbreviation in fixtures
+DBE = "DBE"
+# optical train ID prefix
+ot = "ot"

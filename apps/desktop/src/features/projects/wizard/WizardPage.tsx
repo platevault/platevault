@@ -1,0 +1,298 @@
+import { useState, useEffect, useMemo } from 'react';
+import { useNavigate } from '@tanstack/react-router';
+import { WizardShell, Btn, Toolbar } from '@/ui';
+import type { WizardStep } from '@/ui';
+import { StepName, type StepNameData } from './StepName';
+import { StepSources, type StepSourcesData } from './StepSources';
+import { StepCalibration, type CalibrationMapping } from './StepCalibration';
+import { StepViews, type StepViewsData, type SourceViewStrategy } from './StepViews';
+import { StepLayout, type StepLayoutData } from './StepLayout';
+import { StepReview } from './StepReview';
+
+const STORAGE_KEY = 'alm-project-wizard-draft';
+
+interface WizardData {
+  name: StepNameData;
+  sources: StepSourcesData;
+  calibration: CalibrationMapping;
+  views: StepViewsData;
+  layout: StepLayoutData;
+}
+
+const INITIAL_DATA: WizardData = {
+  name: { name: '', workflowProfile: 'pixinsight' },
+  sources: { selectedSessionIds: [] },
+  calibration: { flatMappings: {}, sharedDarkId: '', sharedBiasId: '', sharedDarkFlatId: '' },
+  views: { strategy: 'junction' },
+  layout: { namingPattern: '' },
+};
+
+function loadDraft(): WizardData {
+  try {
+    const raw = localStorage.getItem(STORAGE_KEY);
+    if (raw) return { ...INITIAL_DATA, ...JSON.parse(raw) };
+  } catch {
+    // ignore
+  }
+  return INITIAL_DATA;
+}
+
+function saveDraft(data: WizardData): void {
+  try {
+    localStorage.setItem(STORAGE_KEY, JSON.stringify(data));
+  } catch {
+    // ignore
+  }
+}
+
+function clearDraft(): void {
+  try {
+    localStorage.removeItem(STORAGE_KEY);
+  } catch {
+    // ignore
+  }
+}
+
+const STEP_LABELS = [
+  'Name & profile',
+  'Sources (lights)',
+  'Calibration',
+  'Source views',
+  'Naming & layout',
+  'Review plan & create',
+];
+
+const PROFILE_LABELS: Record<string, string> = {
+  pixinsight: 'PixInsight/WBPP',
+  siril: 'Siril',
+  planetary: 'planetary/lunar',
+};
+
+export function WizardPage() {
+  const navigate = useNavigate();
+  const [currentStep, setCurrentStep] = useState(0);
+  const [wizardData, setWizardData] = useState<WizardData>(loadDraft);
+
+  // In mock mode, allow skipping all validation to walk through the wizard quickly
+  const devSkip = import.meta.env.VITE_USE_MOCKS === 'true';
+
+  // Save draft on step change
+  useEffect(() => {
+    saveDraft(wizardData);
+  }, [currentStep, wizardData]);
+
+  // Step validation — devSkip bypasses all gates so you can walk through without data
+  function canAdvance(): boolean {
+    if (devSkip) return true;
+    switch (currentStep) {
+      case 0:
+        return wizardData.name.name.trim().length > 0;
+      case 1:
+        return wizardData.sources.selectedSessionIds.length > 0;
+      case 2:
+        return true; // Calibration is optional
+      case 3:
+        return true; // View strategy has a default
+      case 4:
+        return true; // Layout has defaults
+      default:
+        return false;
+    }
+  }
+
+  function handleNext() {
+    if (currentStep < STEP_LABELS.length - 1 && canAdvance()) {
+      setCurrentStep(currentStep + 1);
+    }
+  }
+
+  function handleBack() {
+    if (currentStep > 0) {
+      setCurrentStep(currentStep - 1);
+    }
+  }
+
+  function handleCancel() {
+    clearDraft();
+    navigate({ to: '/projects' });
+  }
+
+  const steps: WizardStep[] = STEP_LABELS.map((label, i) => ({
+    label,
+    completed: i < currentStep,
+  }));
+
+  // Build wizard state for the review step
+  const fullWizardState: Record<string, unknown> = {
+    name: wizardData.name.name,
+    workflow_profile: wizardData.name.workflowProfile,
+    session_ids: wizardData.sources.selectedSessionIds,
+    calibration: wizardData.calibration,
+    source_view_strategy: wizardData.views.strategy,
+    naming_pattern: wizardData.layout.namingPattern,
+  };
+
+  const projectLabel = wizardData.name.name || 'New project';
+  const profileLabel = PROFILE_LABELS[wizardData.name.workflowProfile] || wizardData.name.workflowProfile;
+
+  // Computed summary counts
+  const flatsMapped = Object.values(wizardData.calibration.flatMappings).filter(Boolean).length;
+  const darkSelected = wizardData.calibration.sharedDarkId ? 1 : 0;
+  const biasSelected = wizardData.calibration.sharedBiasId ? 1 : 0;
+
+  // Back / Next button labels per wireframe
+  const backLabels = ['', '← Back', '← Back to sources', '← Calibration', '← Source views', '← Back'];
+  const nextLabels = ['Next: sources →', 'Next: calibration →', 'Next: source views →', 'Next: naming →', 'Next: review →', ''];
+
+  // Summary panel (right rail)
+  const summary = (
+    <div style={{ display: 'flex', flexDirection: 'column', gap: 'var(--alm-space-5)', fontSize: 'var(--alm-text-xs)' }}>
+      <div style={{ color: 'var(--alm-text-muted)', textTransform: 'uppercase', letterSpacing: '.04em', fontWeight: 600 }}>
+        Project summary
+      </div>
+      <div>
+        <div style={{ fontSize: 'var(--alm-text-sm)', fontWeight: 600 }}>{projectLabel}</div>
+        <div style={{ color: 'var(--alm-text-muted)' }}>{profileLabel}</div>
+      </div>
+
+      <div>
+        <div style={{ color: 'var(--alm-text-muted)', textTransform: 'uppercase', fontWeight: 600 }}>
+          What&rsquo;s selected so far
+        </div>
+        <div style={{ marginTop: 'var(--alm-space-2)' }}>
+          <SummaryRow label="Lights" value={`${wizardData.sources.selectedSessionIds.length} sess`} />
+          <SummaryRow label="Darks" value={`${darkSelected} master`} />
+          <SummaryRow label="Flats" value={`${flatsMapped} masters`} />
+          <SummaryRow label="Bias" value={`${biasSelected} master`} />
+        </div>
+      </div>
+
+      {currentStep < 5 && (
+        <div>
+          <div style={{ color: 'var(--alm-text-muted)', textTransform: 'uppercase', fontWeight: 600 }}>
+            Coming up
+          </div>
+          <div style={{ marginTop: 'var(--alm-space-2)' }}>
+            {STEP_LABELS.slice(currentStep + 1).map((label, i) => (
+              <div key={label} style={{ padding: '3px 0', borderBottom: i < STEP_LABELS.length - currentStep - 2 ? '1px dotted var(--alm-border)' : 'none' }}>
+                {currentStep + i + 2}. {label}
+              </div>
+            ))}
+          </div>
+        </div>
+      )}
+
+      <div style={{ padding: 'var(--alm-space-3)', background: 'var(--alm-bg)', border: '1px solid var(--alm-border)' }}>
+        <div style={{ color: 'var(--alm-text-muted)' }}>Estimated on-disk footprint</div>
+        <div className="alm-mono" style={{ fontSize: '16px', fontWeight: 600, marginTop: 2 }}>
+          ~12 KB
+        </div>
+        <div style={{ fontSize: '10.5px', color: 'var(--alm-text-muted)' }}>
+          plan will create directories + manifest only &middot; no light frames are copied
+        </div>
+      </div>
+
+      {/* Navigation buttons in the summary rail */}
+      <div style={{ display: 'flex', gap: 'var(--alm-space-2)', marginTop: 'var(--alm-space-3)' }}>
+        {currentStep > 0 && (
+          <Btn size="sm" onClick={handleBack}>
+            {backLabels[currentStep]}
+          </Btn>
+        )}
+        {currentStep < 5 && (
+          <Btn variant="primary" size="sm" onClick={handleNext} disabled={!canAdvance()} style={{ flex: 1 }}>
+            {nextLabels[currentStep]}
+          </Btn>
+        )}
+      </div>
+    </div>
+  );
+
+  return (
+    <div className="alm-page" style={{ display: 'flex', flexDirection: 'column', flex: 1 }}>
+      {/* Wizard toolbar */}
+      <Toolbar
+        subBar={
+          <div className="alm-project-sub">
+            <span>Workflow profile: {profileLabel}</span>
+            <span className="alm-project-sub__dot">&middot;</span>
+            {wizardData.name.name && (
+              <span>From target context: {wizardData.name.name.split(/[\s·—]/)[0]}</span>
+            )}
+            <span style={{ marginLeft: 'auto', color: 'var(--alm-text-faint)' }}>
+              Sources are selected here; the filesystem plan is shown at step 6 before anything is created.
+            </span>
+          </div>
+        }
+      >
+        <span style={{ fontSize: 'var(--alm-text-sm)', fontWeight: 600 }}>
+          New project &mdash; {projectLabel}
+        </span>
+        <span style={{ flex: 1 }} />
+        <Btn size="sm" onClick={() => saveDraft(wizardData)}>Save draft</Btn>
+        {devSkip && (
+          <Btn size="sm" onClick={() => { clearDraft(); setWizardData(INITIAL_DATA); setCurrentStep(0); }}>
+            Reset wizard
+          </Btn>
+        )}
+        <Btn size="sm" onClick={handleCancel}>Cancel</Btn>
+      </Toolbar>
+
+      <WizardShell steps={steps} currentStep={currentStep} summary={summary}>
+        {/* Step title + description */}
+        {currentStep < 5 && (
+          <div style={{ marginBottom: 'var(--alm-space-5)' }}>
+            <h2 style={{ fontSize: '18px', fontWeight: 600, margin: 0 }}>
+              Step {currentStep + 1} &middot; {STEP_LABELS[currentStep]}
+            </h2>
+          </div>
+        )}
+
+        {/* Step content */}
+        {currentStep === 0 && (
+          <StepName
+            data={wizardData.name}
+            onChange={(name) => setWizardData({ ...wizardData, name })}
+          />
+        )}
+        {currentStep === 1 && (
+          <StepSources
+            data={wizardData.sources}
+            onChange={(sources) => setWizardData({ ...wizardData, sources })}
+          />
+        )}
+        {currentStep === 2 && (
+          <StepCalibration
+            selectedSessionIds={wizardData.sources.selectedSessionIds}
+            data={wizardData.calibration}
+            onChange={(calibration) => setWizardData({ ...wizardData, calibration })}
+          />
+        )}
+        {currentStep === 3 && (
+          <StepViews
+            data={wizardData.views}
+            onChange={(views) => setWizardData({ ...wizardData, views })}
+          />
+        )}
+        {currentStep === 4 && (
+          <StepLayout
+            data={wizardData.layout}
+            nameData={wizardData.name}
+            strategy={wizardData.views.strategy}
+            onChange={(layout) => setWizardData({ ...wizardData, layout })}
+          />
+        )}
+        {currentStep === 5 && <StepReview wizardState={fullWizardState} />}
+      </WizardShell>
+    </div>
+  );
+}
+
+function SummaryRow({ label, value }: { label: string; value: string }) {
+  return (
+    <div style={{ padding: '3px 0', borderBottom: '1px dotted var(--alm-border)', display: 'flex' }}>
+      <span style={{ flex: 1 }}>{label}</span>
+      <span className="alm-mono">{value}</span>
+    </div>
+  );
+}

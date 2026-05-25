@@ -8,4 +8,3 @@ if command -v golangci-lint >/dev/null 2>&1; then
 fi
 
 go test ./...
-
