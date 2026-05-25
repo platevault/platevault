@@ -11,6 +11,7 @@ use std::sync::Arc;
 use audit::bus::EventBus;
 use persistence_db::repositories::lifecycle::SqliteLifecycleRepository;
 use sqlx::SqlitePool;
+use tauri::Manager;
 use tauri_specta::{collect_commands, Builder};
 
 use crate::commands::audit::{audit_export, audit_list};
@@ -107,20 +108,16 @@ pub fn specta_builder() -> Builder<tauri::Wry> {
         ])
 }
 
-/// Launch the desktop shell.
+/// Build the Tauri [`App`] **without** starting the event loop.
 ///
-/// Caller is responsible for providing an already-migrated [`SqlitePool`];
-/// the persistence layer expects migrations to have run before commands hit
-/// the database.
+/// The returned handle exposes the platform path resolver (needed to locate
+/// the default SQLite database path) while the caller retains full control
+/// over state management and app startup ordering.
 ///
 /// # Panics
-/// Panics if the Tauri runtime fails to launch — there is no recovery path
-/// once the GUI process is requested but cannot be started.
-pub fn run(pool: SqlitePool) {
-    let bus = EventBus::with_pool(pool.clone());
-    let repo = Arc::new(SqliteLifecycleRepository::new(pool, bus.clone()));
-    let state = AppState::new(repo, bus);
-
+/// Panics if the Tauri runtime cannot be initialised.
+#[must_use]
+pub fn build_app() -> tauri::App {
     let builder = specta_builder();
 
     tauri::Builder::default()
@@ -129,7 +126,25 @@ pub fn run(pool: SqlitePool) {
             builder.mount_events(app);
             Ok(())
         })
-        .manage(state)
-        .run(tauri::generate_context!())
-        .expect("error while running tauri application");
+        .build(tauri::generate_context!())
+        .expect("error while building tauri application")
+}
+
+/// Manage application state on a pre-built [`App`] and start the event loop.
+///
+/// Caller is responsible for providing an already-migrated [`SqlitePool`];
+/// the persistence layer expects migrations to have run before commands hit
+/// the database.
+///
+/// # Panics
+/// Panics if the Tauri event loop fails to start — there is no recovery path
+/// once the GUI process is requested but cannot be started.
+pub fn run_app(app: tauri::App, pool: SqlitePool) {
+    let bus = EventBus::with_pool(pool.clone());
+    let repo = Arc::new(SqliteLifecycleRepository::new(pool, bus.clone()));
+    let state = AppState::new(repo, bus);
+
+    app.manage(state);
+
+    app.run(|_handle, _event| {});
 }
