@@ -1,47 +1,17 @@
-// Static mock fixture data for SettingsData
-// Types mirror @/api/types — inline definitions used until that module is created
+// Static mock fixture data for Settings
+// Wireframe-aligned data matching canvas-wireframes-2026-05-24/project/wireframes/settings.jsx
 
 interface CleanupPolicyCell {
-  action: 'keep' | 'trash' | 'delete' | 'review';
+  action: 'keep' | 'trash' | 'delete' | 'archive' | 'rm_link';
 }
 
-interface CleanupPolicyMatrix {
-  // rows: data type; columns: processing tool
-  calibrated_lights: {
-    pixinsight: CleanupPolicyCell;
-    siril: CleanupPolicyCell;
-    planetary: CleanupPolicyCell;
-  };
-  registered_lights: {
-    pixinsight: CleanupPolicyCell;
-    siril: CleanupPolicyCell;
-    planetary: CleanupPolicyCell;
-  };
-  stacked_outputs: {
-    pixinsight: CleanupPolicyCell;
-    siril: CleanupPolicyCell;
-    planetary: CleanupPolicyCell;
-  };
-  drizzle_outputs: {
-    pixinsight: CleanupPolicyCell;
-    siril: CleanupPolicyCell;
-    planetary: CleanupPolicyCell;
-  };
-  weight_maps: {
-    pixinsight: CleanupPolicyCell;
-    siril: CleanupPolicyCell;
-    planetary: CleanupPolicyCell;
-  };
-  rejection_maps: {
-    pixinsight: CleanupPolicyCell;
-    siril: CleanupPolicyCell;
-    planetary: CleanupPolicyCell;
-  };
-  logs: {
-    pixinsight: CleanupPolicyCell;
-    siril: CleanupPolicyCell;
-    planetary: CleanupPolicyCell;
-  };
+interface CleanupPolicyRow {
+  label: string;
+  pixinsight: CleanupPolicyCell;
+  siril: CleanupPolicyCell;
+  planetary: CleanupPolicyCell;
+  trigger: string;
+  destructive?: boolean;
 }
 
 interface ProtectionRule {
@@ -75,17 +45,27 @@ interface WorkflowToolConfig {
 }
 
 interface SourceViewStrategy {
-  id: 'symlinks' | 'junctions' | 'hardlinks' | 'copy';
+  id: 'manifest' | 'symlinks' | 'junctions' | 'hardlinks' | 'copy' | 'hybrid';
   label: string;
   platform_availability: string[];
 }
 
+interface LibraryRoot {
+  path: string;
+  category: 'Raw' | 'Calibration' | 'Projects' | 'Inbox';
+  state: 'online' | 'offline';
+  files: number | string;
+  last_scan: string;
+  warn?: boolean;
+}
+
 interface SettingsData {
+  roots: LibraryRoot[];
   naming_structure: NamingStructureConfig;
   source_view_strategy: SourceViewStrategy['id'];
   processing_directory: string;
   output_directory: string;
-  cleanup_policy: CleanupPolicyMatrix;
+  cleanup_policy: CleanupPolicyRow[];
   protection_rules: ProtectionRule[];
   workflow_tools: WorkflowToolConfig[];
   log_level: 'trace' | 'debug' | 'info' | 'warn' | 'error';
@@ -95,71 +75,43 @@ interface SettingsData {
 }
 
 export const settingsData: SettingsData = {
+  roots: [
+    { path: 'D:\\Astrophotography\\Raw', category: 'Raw', state: 'online', files: 84231, last_scan: '2h ago' },
+    { path: 'D:\\Astrophotography\\Calibration', category: 'Calibration', state: 'online', files: 12044, last_scan: '2h ago' },
+    { path: 'D:\\Astrophotography\\Projects', category: 'Projects', state: 'online', files: 38112, last_scan: '2h ago' },
+    { path: 'D:\\Astrophotography\\Inbox', category: 'Inbox', state: 'online', files: 1842, last_scan: '2h ago' },
+    { path: '\\\\NAS-2025\\astro\\archive', category: 'Inbox', state: 'offline', files: '?', last_scan: 'never', warn: true },
+    { path: 'E:\\AstroOverflow', category: 'Raw', state: 'online', files: 7931, last_scan: '2h ago' },
+  ],
+
   naming_structure: {
     tokens: [
       { token: '{target}', label: 'Target', example: 'NGC7000' },
       { token: '{filter}', label: 'Filter', example: 'Ha' },
       { token: '{date}', label: 'Date', example: '2026-04-15' },
-      { token: '{exposure}s', label: 'Exposure', example: '600s' },
+      { token: '{frame_type}', label: 'Frame type', example: 'lights' },
     ],
-    separator: '_',
-    overrides: {
-      darks: [
-        { token: '{kind}', label: 'Kind', example: 'dark' },
-        { token: '{exposure}s', label: 'Exposure', example: '600s' },
-        { token: '{temp}C', label: 'Temperature', example: '-15C' },
-        { token: '{gain}g', label: 'Gain', example: '100g' },
-      ],
-      flats: [
-        { token: '{kind}', label: 'Kind', example: 'flat' },
-        { token: '{filter}', label: 'Filter', example: 'Ha' },
-        { token: '{date}', label: 'Date', example: '2026-04-15' },
-      ],
-    },
+    separator: '/',
+    overrides: {},
   },
 
-  source_view_strategy: 'symlinks',
+  source_view_strategy: 'junctions',
 
   processing_directory: 'processing/',
   output_directory: 'outputs/',
 
-  cleanup_policy: {
-    calibrated_lights: {
-      pixinsight: { action: 'trash' },
-      siril: { action: 'trash' },
-      planetary: { action: 'keep' },
-    },
-    registered_lights: {
-      pixinsight: { action: 'trash' },
-      siril: { action: 'trash' },
-      planetary: { action: 'keep' },
-    },
-    stacked_outputs: {
-      pixinsight: { action: 'keep' },
-      siril: { action: 'keep' },
-      planetary: { action: 'keep' },
-    },
-    drizzle_outputs: {
-      pixinsight: { action: 'keep' },
-      siril: { action: 'review' },
-      planetary: { action: 'keep' },
-    },
-    weight_maps: {
-      pixinsight: { action: 'trash' },
-      siril: { action: 'trash' },
-      planetary: { action: 'delete' },
-    },
-    rejection_maps: {
-      pixinsight: { action: 'trash' },
-      siril: { action: 'delete' },
-      planetary: { action: 'delete' },
-    },
-    logs: {
-      pixinsight: { action: 'keep' },
-      siril: { action: 'keep' },
-      planetary: { action: 'keep' },
-    },
-  },
+  cleanup_policy: [
+    { label: 'Registered frames', pixinsight: { action: 'trash' }, siril: { action: 'trash' }, planetary: { action: 'keep' }, trigger: 'after output verified' },
+    { label: 'Calibrated frames', pixinsight: { action: 'trash' }, siril: { action: 'trash' }, planetary: { action: 'keep' }, trigger: 'after output verified' },
+    { label: 'Debayered frames', pixinsight: { action: 'trash' }, siril: { action: 'trash' }, planetary: { action: 'keep' }, trigger: 'after output verified' },
+    { label: 'Local normalized', pixinsight: { action: 'trash' }, siril: { action: 'keep' }, planetary: { action: 'keep' }, trigger: 'after output verified' },
+    { label: 'Drizzle data', pixinsight: { action: 'trash' }, siril: { action: 'trash' }, planetary: { action: 'keep' }, trigger: 'after output verified' },
+    { label: 'Integration cache', pixinsight: { action: 'trash' }, siril: { action: 'trash' }, planetary: { action: 'trash' }, trigger: 'after output verified' },
+    { label: 'Stack output (intermediate)', pixinsight: { action: 'keep' }, siril: { action: 'keep' }, planetary: { action: 'keep' }, trigger: '—' },
+    { label: 'Temporary files', pixinsight: { action: 'delete' }, siril: { action: 'delete' }, planetary: { action: 'delete' }, trigger: 'always', destructive: true },
+    { label: 'Processing logs', pixinsight: { action: 'archive' }, siril: { action: 'archive' }, planetary: { action: 'archive' }, trigger: 'on completion' },
+    { label: 'Process icons / tool config', pixinsight: { action: 'keep' }, siril: { action: 'keep' }, planetary: { action: 'keep' }, trigger: '—' },
+  ],
 
   protection_rules: [
     {

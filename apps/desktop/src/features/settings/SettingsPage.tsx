@@ -1,11 +1,10 @@
+import { useState } from 'react';
 import { useParams } from '@tanstack/react-router';
-import { Tabs } from '@base-ui-components/react/tabs';
 import { useAutoSave } from './useAutoSave';
 import { DataSources } from './DataSources';
 import { NamingStructure } from './NamingStructure';
 import { SourceViewStrategy } from './SourceViewStrategy';
 import { CleanupPolicy } from './CleanupPolicy';
-import { RootRecovery } from './RootRecovery';
 import { Equipment } from './Equipment';
 import { Tools } from './Tools';
 import { LogSettings } from './LogSettings';
@@ -14,88 +13,128 @@ import { Protection } from './Protection';
 import { DisplayPane } from './DisplayPane';
 
 const PANES = [
-  { id: 'data-sources', label: 'Data Sources' },
-  { id: 'naming', label: 'Naming Structure' },
-  { id: 'source-view', label: 'Source View Strategy' },
-  { id: 'cleanup', label: 'Cleanup Policy' },
-  { id: 'root-recovery', label: 'Root Recovery' },
-  { id: 'equipment', label: 'Equipment' },
-  { id: 'tools', label: 'Tools' },
-  { id: 'logs', label: 'Log Settings' },
-  { id: 'catalogs', label: 'Catalogs' },
-  { id: 'protection', label: 'Protection' },
-  { id: 'display', label: 'Display' },
+  { id: 'sources', label: 'Data sources' },
+  { id: 'ingest', label: 'Ingestion & review' },
+  { id: 'naming', label: 'Naming & structure' },
+  { id: 'views', label: 'Source view strategy' },
+  { id: 'cal', label: 'Calibration matching' },
+  { id: 'tools', label: 'Tool workflows' },
+  { id: 'catalogs', label: 'Target catalogs' },
+  { id: 'protect', label: 'Source protection' },
+  { id: 'cleanup', label: 'Cleanup & archive' },
+  { id: 'log', label: 'Application log' },
+  { id: 'appearance', label: 'Appearance' },
+  { id: 'adv', label: 'Advanced / developer' },
 ] as const;
 
 type PaneId = (typeof PANES)[number]['id'];
 
-function getPaneComponent(paneId: PaneId, save: (scope: string, values: Record<string, unknown>) => void) {
+const PANE_TITLES: Record<PaneId, { title: string; sub?: string }> = {
+  sources: {
+    title: 'Data sources',
+    sub: 'Library roots the app indexes. Files are read in read-only mode; nothing is modified outside an approved plan.',
+  },
+  ingest: { title: 'Ingestion & review' },
+  naming: {
+    title: 'Naming & Structure',
+    sub: 'Pattern used when files are confirmed from Inbox to Inventory.',
+  },
+  views: {
+    title: 'Source view strategy',
+    sub: 'How the app generates tool-friendly projections of your source map. Picked per project at creation, with this as the default.',
+  },
+  cal: { title: 'Calibration matching' },
+  tools: { title: 'Tool workflows' },
+  catalogs: { title: 'Target catalogs' },
+  protect: { title: 'Source protection' },
+  cleanup: {
+    title: 'Cleanup & archive policy',
+    sub: 'What happens to each kind of data when cleanup runs. Policies vary by processing tool because different tools produce different intermediates.',
+  },
+  log: { title: 'Application log' },
+  appearance: { title: 'Appearance' },
+  adv: { title: 'Advanced / developer' },
+};
+
+function getPaneComponent(
+  paneId: PaneId,
+  save: (scope: string, values: Record<string, unknown>) => void,
+) {
   switch (paneId) {
-    case 'data-sources':
+    case 'sources':
       return <DataSources save={save} />;
     case 'naming':
       return <NamingStructure save={save} />;
-    case 'source-view':
+    case 'views':
       return <SourceViewStrategy save={save} />;
     case 'cleanup':
       return <CleanupPolicy save={save} />;
-    case 'root-recovery':
-      return <RootRecovery />;
-    case 'equipment':
+    case 'cal':
       return <Equipment save={save} />;
     case 'tools':
       return <Tools save={save} />;
-    case 'logs':
+    case 'log':
       return <LogSettings save={save} />;
     case 'catalogs':
       return <Catalogs save={save} />;
-    case 'protection':
+    case 'protect':
       return <Protection save={save} />;
-    case 'display':
+    case 'appearance':
       return <DisplayPane />;
+    default:
+      return (
+        <div className="alm-empty">
+          This pane is not yet implemented.
+        </div>
+      );
   }
 }
 
 export function SettingsPage() {
   const params = useParams({ strict: false }) as { pane?: string };
-  const initialPane = PANES.find((p) => p.id === params.pane)?.id ?? 'data-sources';
+  const initialPane =
+    PANES.find((p) => p.id === params.pane)?.id ?? 'sources';
+  const [activePane, setActivePane] = useState<PaneId>(initialPane);
   const { save, saved } = useAutoSave();
+  const paneInfo = PANE_TITLES[activePane];
 
   return (
-    <Tabs.Root
-      defaultValue={initialPane}
-      orientation="vertical"
-      className="alm-settings"
-      data-testid="SettingsPage"
-    >
-      {/* Left rail */}
-      <Tabs.List className="alm-settings__rail" aria-label="Settings categories">
+    <div className="alm-settings" data-testid="SettingsPage">
+      {/* Left rail nav */}
+      <nav
+        className="alm-settings__rail"
+        aria-label="Settings categories"
+      >
         {PANES.map((pane) => (
-          <Tabs.Tab
+          <button
             key={pane.id}
-            value={pane.id}
-            className="alm-settings__nav-item"
+            type="button"
+            className={`alm-settings__nav-item${activePane === pane.id ? ' alm-settings__nav-item--active' : ''}`}
+            onClick={() => setActivePane(pane.id)}
+            aria-current={activePane === pane.id ? 'page' : undefined}
           >
             {pane.label}
-          </Tabs.Tab>
+          </button>
         ))}
-      </Tabs.List>
+      </nav>
 
-      {/* Right content */}
+      {/* Right content pane */}
       <div className="alm-settings__content">
-        <div className="alm-settings__header">
+        <div className="alm-settings__pane-header">
+          <h2 className="alm-settings__pane-title">{paneInfo.title}</h2>
           {saved && (
             <span className="alm-settings__saved" aria-live="polite">
               Saved &#10003;
             </span>
           )}
         </div>
-        {PANES.map((pane) => (
-          <Tabs.Panel key={pane.id} value={pane.id} className="alm-settings__body">
-            {getPaneComponent(pane.id, save)}
-          </Tabs.Panel>
-        ))}
+        {paneInfo.sub && (
+          <p className="alm-settings__pane-sub">{paneInfo.sub}</p>
+        )}
+        <div className="alm-settings__pane-body">
+          {getPaneComponent(activePane, save)}
+        </div>
       </div>
-    </Tabs.Root>
+    </div>
   );
 }

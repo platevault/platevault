@@ -152,15 +152,13 @@
 /* Box */
 .alm-box {
   border: 1px solid var(--alm-border);
-  border-radius: var(--alm-radius-md);
   background: var(--alm-bg);
-  padding: var(--alm-space-7);
 }
 
 .alm-box__heading {
   font-size: var(--alm-text-md);
   font-weight: 600;
-  margin-bottom: var(--alm-space-5);
+  margin: 0;
 }
 
 /* Section */
@@ -951,9 +949,10 @@
   color: var(--alm-text);
 }
 
-.alm-tabs__tab--active {
+.alm-tabs__tab--active,
+.alm-tabs__tab[data-selected] {
   color: var(--alm-text);
-  border-bottom-color: var(--alm-accent);
+  border-bottom-color: var(--alm-ink);
 }
 
 /* Detail body */
@@ -1345,12 +1344,12 @@
 }
 
 .alm-settings__rail {
-  width: 200px;
+  width: 220px;
   flex-shrink: 0;
   border-right: 1px solid var(--alm-border);
   background: var(--alm-surface);
   overflow-y: auto;
-  padding: var(--alm-space-5) 0;
+  padding: var(--alm-space-2) 0;
 }
 
 .alm-settings__nav {
@@ -1363,14 +1362,16 @@
   display: block;
   width: 100%;
   text-align: left;
-  padding: var(--alm-space-3) var(--alm-space-7);
+  padding: 6px 14px;
   border: none;
+  border-left: 2px solid transparent;
   background: none;
   font-size: var(--alm-text-sm);
-  color: var(--alm-text);
+  color: var(--alm-text-secondary);
   cursor: pointer;
   border-radius: 0;
   transition: background 0.1s;
+  font-family: inherit;
 }
 
 .alm-settings__nav-item:hover {
@@ -1378,30 +1379,41 @@
 }
 
 .alm-settings__nav-item--active {
-  background: var(--alm-gray-200);
-  font-weight: 600;
-  border-left: 2px solid var(--alm-accent);
+  background: var(--alm-wf-bg3);
+  color: var(--alm-ink);
+  border-left-color: var(--alm-ink);
 }
 
 .alm-settings__content {
   flex: 1;
   overflow-y: auto;
+  padding: var(--alm-space-7);
   display: flex;
   flex-direction: column;
 }
 
-.alm-settings__header {
+.alm-settings__pane-header {
   display: flex;
   align-items: center;
   gap: var(--alm-space-5);
-  padding: var(--alm-space-7);
-  border-bottom: 1px solid var(--alm-border);
 }
 
-.alm-settings__title {
-  font-size: var(--alm-text-lg);
+.alm-settings__pane-title {
+  font-size: var(--alm-text-xl);
   font-weight: 600;
   margin: 0;
+}
+
+.alm-settings__pane-sub {
+  font-size: var(--alm-text-sm);
+  color: var(--alm-text-muted);
+  margin: 4px 0 0;
+  max-width: 640px;
+}
+
+.alm-settings__pane-body {
+  margin-top: var(--alm-space-6);
+  flex: 1;
 }
 
 .alm-settings__saved {
@@ -1414,12 +1426,6 @@
 @keyframes alm-fade-in {
   from { opacity: 0; transform: translateY(-2px); }
   to { opacity: 1; transform: translateY(0); }
-}
-
-.alm-settings__body {
-  flex: 1;
-  padding: var(--alm-space-7);
-  overflow-y: auto;
 }
 
 /* ─── Data Sources ─────────────────────────────────────────────────────────── */
@@ -3601,4 +3607,142 @@
   border-radius: 0;
   transition: width 0.3s ease;
   min-width: 0;
+}
+
+/* ─── Data Sources — section header (wireframe style) ────────────────────── */
+
+.alm-datasources__section-header {
+  display: flex;
+  align-items: baseline;
+  gap: var(--alm-space-5);
+  padding: var(--alm-space-4) 0 var(--alm-space-3);
+}
+
+.alm-datasources__section-title {
+  font-size: 12.5px;
+  font-weight: 600;
+  color: var(--alm-text);
+}
+
+.alm-datasources__section-sub {
+  font-size: var(--alm-text-xs);
+  color: var(--alm-text-muted);
+}
+
+.alm-datasources__section-header .alm-btn {
+  margin-left: auto;
+}
+
+/* Two-column box grid below tables */
+.alm-datasources__boxes {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: var(--alm-space-6);
+  margin-top: var(--alm-space-7);
+}
+
+/* ─── Box — updated for heading + right + body structure ─────────────────── */
+
+.alm-box__header {
+  display: flex;
+  align-items: center;
+  gap: var(--alm-space-3);
+  padding: 6px 10px;
+  border-bottom: 1px solid var(--alm-border-subtle);
+  background: var(--alm-surface);
+}
+
+.alm-box__header .alm-box__heading {
+  flex: 1;
+  font-size: var(--alm-text-xs);
+  font-weight: 600;
+  color: var(--alm-text-secondary);
+  margin: 0;
+}
+
+.alm-box__right {
+  flex-shrink: 0;
+}
+
+.alm-box__body {
+  padding: 10px 12px;
+}
+
+/* ─── Cleanup — group header rows ────────────────────────────────────────── */
+
+.alm-cleanup__group-header {
+  padding: 6px 10px;
+  background: var(--alm-surface);
+  font-size: 10.5px;
+  color: var(--alm-text-muted);
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  font-weight: 600;
+}
+
+/* ─── Naming — section labels ────────────────────────────────────────────── */
+
+.alm-naming__section-label {
+  font-size: var(--alm-text-xs);
+  color: var(--alm-text-muted);
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  margin-bottom: var(--alm-space-2);
+}
+
+/* ─── Session Detail — two-column grid layout ────────────────────────────── */
+
+.alm-session-detail-grid {
+  display: grid;
+  grid-template-columns: 1fr 320px;
+  gap: 0;
+  flex: 1;
+  min-height: 0;
+  overflow: hidden;
+}
+
+.alm-session-detail-main {
+  display: flex;
+  flex-direction: column;
+  border-right: 1px solid var(--alm-border);
+  overflow: hidden;
+}
+
+.alm-session-detail-content {
+  flex: 1;
+  padding: var(--alm-space-6);
+  overflow-y: auto;
+}
+
+.alm-session-detail-inspector {
+  padding: var(--alm-space-6);
+  background: var(--alm-surface);
+  overflow-y: auto;
+}
+
+.alm-session-detail-inspector__label {
+  font-size: var(--alm-text-xs);
+  color: var(--alm-text-muted);
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+}
+
+.alm-session-inspector-card {
+  margin-top: 4px;
+  padding: var(--alm-space-3);
+  background: var(--alm-bg);
+  border: 1px solid var(--alm-border);
+}
+
+/* ─── Audit — row highlights ─────────────────────────────────────────────── */
+
+.alm-audit-table th {
+  position: sticky;
+  top: 0;
+  background: var(--alm-surface);
+  z-index: 1;
+}
+
+.alm-audit-table td {
+  vertical-align: top;
 }
