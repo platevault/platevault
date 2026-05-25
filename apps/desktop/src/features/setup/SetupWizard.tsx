@@ -154,19 +154,30 @@ export function SetupWizard() {
     }
   }, [state.categories, state.scanSettings, navigate]);
 
+  const isMockMode = import.meta.env.VITE_USE_MOCKS === 'true';
+
   // Determine whether "Continue" should be enabled
   const canProceed = useMemo(() => {
+    if (isMockMode) return true;
     if (state.currentStep === 1) {
-      // At least one required category must have at least one folder
       return state.categories
         .filter((c) => c.required)
         .every((c) => c.paths.some(Boolean));
     }
     return true;
-  }, [state.currentStep, state.categories]);
+  }, [state.currentStep, state.categories, isMockMode]);
 
   const step = state.currentStep;
   const stepMeta = STEPS[step];
+
+  const resetWizard = useCallback(() => {
+    clearWizardState();
+    setState({
+      currentStep: 0,
+      categories: DEFAULT_CATEGORIES,
+      scanSettings: DEFAULT_SCAN_SETTINGS,
+    });
+  }, []);
 
   const wizardSteps = STEPS.map((s, i) => ({
     label: s.label,
@@ -188,6 +199,11 @@ export function SetupWizard() {
         </Btn>
       ) : (
         <span />
+      )}
+      {isMockMode && (
+        <Btn variant="ghost" onClick={resetWizard} style={{ fontSize: 11, color: 'var(--alm-text-muted)' }}>
+          Reset wizard
+        </Btn>
       )}
       <div style={{ flex: 1 }} />
       {step === 1 && totalFolders > 0 && (
