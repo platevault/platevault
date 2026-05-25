@@ -20,7 +20,9 @@ pub struct TourCompleted {
 }
 
 /// Sessions grouping mode.
-#[derive(Clone, Copy, Debug, Eq, Hash, Ord, PartialEq, PartialOrd, Serialize, Deserialize, Type)]
+#[derive(
+    Clone, Copy, Debug, Eq, Hash, Ord, PartialEq, PartialOrd, Serialize, Deserialize, Type,
+)]
 #[serde(rename_all = "snake_case")]
 pub enum SessionsGroupBy {
     None,
@@ -31,7 +33,9 @@ pub enum SessionsGroupBy {
 }
 
 /// Sessions view mode.
-#[derive(Clone, Copy, Debug, Eq, Hash, Ord, PartialEq, PartialOrd, Serialize, Deserialize, Type)]
+#[derive(
+    Clone, Copy, Debug, Eq, Hash, Ord, PartialEq, PartialOrd, Serialize, Deserialize, Type,
+)]
 #[serde(rename_all = "snake_case")]
 pub enum SessionsView {
     List,

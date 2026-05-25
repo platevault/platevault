@@ -11,7 +11,9 @@ use crate::sessions::{ConfidenceLevel, MetaValue};
 // ── Enums ───────────────────────────────────────────────────────────────────
 
 /// Kind of item in the review queue.
-#[derive(Clone, Copy, Debug, Eq, Hash, Ord, PartialEq, PartialOrd, Serialize, Deserialize, Type)]
+#[derive(
+    Clone, Copy, Debug, Eq, Hash, Ord, PartialEq, PartialOrd, Serialize, Deserialize, Type,
+)]
 #[serde(rename_all = "snake_case")]
 pub enum ReviewItemKind {
     Session,

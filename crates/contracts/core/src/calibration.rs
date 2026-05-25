@@ -9,7 +9,9 @@ use specta::Type;
 // ── Enums ───────────────────────────────────────────────────────────────────
 
 /// Kind of calibration master frame.
-#[derive(Clone, Copy, Debug, Eq, Hash, Ord, PartialEq, PartialOrd, Serialize, Deserialize, Type)]
+#[derive(
+    Clone, Copy, Debug, Eq, Hash, Ord, PartialEq, PartialOrd, Serialize, Deserialize, Type,
+)]
 #[serde(rename_all = "snake_case")]
 pub enum CalibrationKind {
     Dark,

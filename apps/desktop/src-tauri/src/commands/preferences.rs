@@ -6,8 +6,8 @@
 use std::collections::HashMap;
 
 use contracts_core::enums::{Density, ViewMode};
-use contracts_core::JsonAny;
 use contracts_core::preferences::{AppPreferences, SessionsGroupBy, SessionsView, TourCompleted};
+use contracts_core::JsonAny;
 
 /// `preferences.get` — returns current application preferences.
 ///
@@ -35,10 +35,7 @@ pub async fn preferences_get() -> Result<AppPreferences, String> {
 /// Returns `Err(String)` on failure; the stub never fails.
 #[tauri::command]
 #[specta::specta(rename = "preferences.set")]
-pub async fn preferences_set(
-    key: String,
-    value: JsonAny,
-) -> Result<(), String> {
+pub async fn preferences_set(key: String, value: JsonAny) -> Result<(), String> {
     tracing::debug!("stub: preferences.set key={key} value={value:?}");
     Ok(())
 }

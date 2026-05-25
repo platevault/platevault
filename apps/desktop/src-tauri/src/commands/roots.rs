@@ -3,10 +3,10 @@
 //! Stub implementations returning hardcoded fixture data matching the mock
 //! layer until the real persistence layer is wired.
 
-use contracts_core::JsonAny;
 use contracts_core::roots::{
     Equipment, IpcOperationHandle, LibraryRoot, RemapSample, RemapVerification, RootCategory,
 };
+use contracts_core::JsonAny;
 
 /// `roots.list` — returns all registered library roots.
 ///
@@ -30,7 +30,9 @@ pub async fn roots_register(
     category: String,
     scan_settings: JsonAny,
 ) -> Result<LibraryRoot, String> {
-    tracing::debug!("stub: roots.register path={path} category={category} scan_settings={scan_settings:?}");
+    tracing::debug!(
+        "stub: roots.register path={path} category={category} scan_settings={scan_settings:?}"
+    );
     let cat = match category.as_str() {
         "calibration" => RootCategory::Calibration,
         "project" => RootCategory::Project,
@@ -53,10 +55,7 @@ pub async fn roots_register(
 /// Returns `Err(String)` on failure; the stub never fails.
 #[tauri::command]
 #[specta::specta(rename = "roots.remap")]
-pub async fn roots_remap(
-    root_id: String,
-    new_path: String,
-) -> Result<RemapVerification, String> {
+pub async fn roots_remap(root_id: String, new_path: String) -> Result<RemapVerification, String> {
     tracing::debug!("stub: roots.remap root_id={root_id} new_path={new_path}");
     Ok(RemapVerification {
         root_id,
@@ -77,10 +76,7 @@ pub async fn roots_remap(
 /// Returns `Err(String)` on failure; the stub never fails.
 #[tauri::command]
 #[specta::specta(rename = "roots.remap.apply")]
-pub async fn roots_remap_apply(
-    root_id: String,
-    verified: bool,
-) -> Result<(), String> {
+pub async fn roots_remap_apply(root_id: String, verified: bool) -> Result<(), String> {
     tracing::debug!("stub: roots.remap.apply root_id={root_id} verified={verified}");
     Ok(())
 }
@@ -91,14 +87,9 @@ pub async fn roots_remap_apply(
 /// Returns `Err(String)` on failure; the stub never fails.
 #[tauri::command]
 #[specta::specta(rename = "scan.start")]
-pub async fn scan_start(
-    root_ids: Option<Vec<String>>,
-) -> Result<IpcOperationHandle, String> {
+pub async fn scan_start(root_ids: Option<Vec<String>>) -> Result<IpcOperationHandle, String> {
     tracing::debug!("stub: scan.start root_ids={root_ids:?}");
-    Ok(IpcOperationHandle {
-        operation_id: "op-scan-001".to_owned(),
-        kind: "scan".to_owned(),
-    })
+    Ok(IpcOperationHandle { operation_id: "op-scan-001".to_owned(), kind: "scan".to_owned() })
 }
 
 /// `equipment.list` — returns all registered equipment.

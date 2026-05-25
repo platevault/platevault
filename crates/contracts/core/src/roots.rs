@@ -9,7 +9,9 @@ use specta::Type;
 // ── Enums ───────────────────────────────────────────────────────────────────
 
 /// Category of a library root directory.
-#[derive(Clone, Copy, Debug, Eq, Hash, Ord, PartialEq, PartialOrd, Serialize, Deserialize, Type)]
+#[derive(
+    Clone, Copy, Debug, Eq, Hash, Ord, PartialEq, PartialOrd, Serialize, Deserialize, Type,
+)]
 #[serde(rename_all = "snake_case")]
 pub enum RootCategory {
     Raw,
@@ -85,7 +87,9 @@ pub struct ProgressEvent {
 }
 
 /// Terminal state of a long-running operation.
-#[derive(Clone, Copy, Debug, Eq, Hash, Ord, PartialEq, PartialOrd, Serialize, Deserialize, Type)]
+#[derive(
+    Clone, Copy, Debug, Eq, Hash, Ord, PartialEq, PartialOrd, Serialize, Deserialize, Type,
+)]
 #[serde(rename_all = "snake_case")]
 pub enum CompletionState {
     Completed,

@@ -12,7 +12,9 @@ use crate::provenance::ProvenanceOrigin;
 // ── Enums ───────────────────────────────────────────────────────────────────
 
 /// Kind of filesystem plan.
-#[derive(Clone, Copy, Debug, Eq, Hash, Ord, PartialEq, PartialOrd, Serialize, Deserialize, Type)]
+#[derive(
+    Clone, Copy, Debug, Eq, Hash, Ord, PartialEq, PartialOrd, Serialize, Deserialize, Type,
+)]
 #[serde(rename_all = "snake_case")]
 pub enum PlanKind {
     ProjectStructure,
@@ -25,7 +27,9 @@ pub enum PlanKind {
 }
 
 /// Action to perform on a single filesystem item.
-#[derive(Clone, Copy, Debug, Eq, Hash, Ord, PartialEq, PartialOrd, Serialize, Deserialize, Type)]
+#[derive(
+    Clone, Copy, Debug, Eq, Hash, Ord, PartialEq, PartialOrd, Serialize, Deserialize, Type,
+)]
 #[serde(rename_all = "snake_case")]
 pub enum PlanItemAction {
     Mkdir,
@@ -40,7 +44,9 @@ pub enum PlanItemAction {
 }
 
 /// Status of a single plan item.
-#[derive(Clone, Copy, Debug, Eq, Hash, Ord, PartialEq, PartialOrd, Serialize, Deserialize, Type)]
+#[derive(
+    Clone, Copy, Debug, Eq, Hash, Ord, PartialEq, PartialOrd, Serialize, Deserialize, Type,
+)]
 #[serde(rename_all = "snake_case")]
 pub enum PlanItemStatus {
     Pending,

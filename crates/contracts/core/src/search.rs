@@ -9,7 +9,9 @@ use specta::Type;
 // ── Enums ───────────────────────────────────────────────────────────────────
 
 /// Kind of entity returned by a global search.
-#[derive(Clone, Copy, Debug, Eq, Hash, Ord, PartialEq, PartialOrd, Serialize, Deserialize, Type)]
+#[derive(
+    Clone, Copy, Debug, Eq, Hash, Ord, PartialEq, PartialOrd, Serialize, Deserialize, Type,
+)]
 #[serde(rename_all = "snake_case")]
 pub enum SearchResultKind {
     Session,

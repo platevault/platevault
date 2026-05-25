@@ -16,7 +16,9 @@ pub use crate::provenance::ProvenanceOrigin;
 use crate::calibration::CalibrationKind;
 
 /// Confidence level for inferred or reviewed metadata.
-#[derive(Clone, Copy, Debug, Eq, Hash, Ord, PartialEq, PartialOrd, Serialize, Deserialize, Type)]
+#[derive(
+    Clone, Copy, Debug, Eq, Hash, Ord, PartialEq, PartialOrd, Serialize, Deserialize, Type,
+)]
 #[serde(rename_all = "snake_case")]
 pub enum ConfidenceLevel {
     Unknown,

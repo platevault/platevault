@@ -9,7 +9,9 @@ use specta::Type;
 // ── Enums ───────────────────────────────────────────────────────────────────
 
 /// Outcome of an audited action.
-#[derive(Clone, Copy, Debug, Eq, Hash, Ord, PartialEq, PartialOrd, Serialize, Deserialize, Type)]
+#[derive(
+    Clone, Copy, Debug, Eq, Hash, Ord, PartialEq, PartialOrd, Serialize, Deserialize, Type,
+)]
 #[serde(rename_all = "snake_case")]
 pub enum AuditOutcome {
     Applied,
@@ -20,7 +22,9 @@ pub enum AuditOutcome {
 }
 
 /// Actor that triggered the audited action.
-#[derive(Clone, Copy, Debug, Eq, Hash, Ord, PartialEq, PartialOrd, Serialize, Deserialize, Type)]
+#[derive(
+    Clone, Copy, Debug, Eq, Hash, Ord, PartialEq, PartialOrd, Serialize, Deserialize, Type,
+)]
 #[serde(rename_all = "snake_case")]
 pub enum AuditActor {
     User,

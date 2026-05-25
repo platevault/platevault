@@ -969,7 +969,7 @@ export type ProjectArtifactGroup = ProjectArtifactGroup_Serialize | ProjectArtif
 
 /**  A group of processing artifacts within a project detail view. */
 export type ProjectArtifactGroup_Deserialize = {
-	/**  Artifact type label (e.g. "registered", "drizzle_data"). */
+	/**  Artifact type label (e.g. "registered", "`drizzle_data`"). */
 	type: string,
 	count: number,
 	totalSizeBytes: number,
@@ -982,7 +982,7 @@ export type ProjectArtifactGroup_Deserialize = {
 
 /**  A group of processing artifacts within a project detail view. */
 export type ProjectArtifactGroup_Serialize = {
-	/**  Artifact type label (e.g. "registered", "drizzle_data"). */
+	/**  Artifact type label (e.g. "registered", "`drizzle_data`"). */
 	type: string,
 	count: number,
 	totalSizeBytes: number,

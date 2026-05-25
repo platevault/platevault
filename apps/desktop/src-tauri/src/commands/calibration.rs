@@ -71,7 +71,11 @@ pub async fn calibration_masters_list() -> Result<Vec<CalibrationMaster>, String
             created_at: "2026-05-01T19:00:00Z".to_owned(),
             age_days: 23,
             size_bytes: 13_107_200,
-            used_by_session_ids: vec!["ses-001".to_owned(), "ses-003".to_owned(), "ses-005".to_owned()],
+            used_by_session_ids: vec![
+                "ses-001".to_owned(),
+                "ses-003".to_owned(),
+                "ses-005".to_owned(),
+            ],
             used_by_project_ids: vec!["proj-001".to_owned()],
         },
     ])

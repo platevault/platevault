@@ -30,10 +30,7 @@ pub async fn settings_get(scope: String) -> Result<SettingsData, String> {
 /// Returns `Err(String)` on failure; the stub never fails.
 #[tauri::command]
 #[specta::specta(rename = "settings.update")]
-pub async fn settings_update(
-    scope: String,
-    values: JsonAny,
-) -> Result<(), String> {
+pub async fn settings_update(scope: String, values: JsonAny) -> Result<(), String> {
     tracing::debug!("stub: settings.update scope={scope} values={values:?}");
     Ok(())
 }

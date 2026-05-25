@@ -53,7 +53,9 @@ pub struct Project {
 }
 
 /// Verification state for a project's outputs.
-#[derive(Clone, Copy, Debug, Eq, Hash, Ord, PartialEq, PartialOrd, Serialize, Deserialize, Type)]
+#[derive(
+    Clone, Copy, Debug, Eq, Hash, Ord, PartialEq, PartialOrd, Serialize, Deserialize, Type,
+)]
 #[serde(rename_all = "snake_case")]
 pub enum VerificationState {
     Unreviewed,
@@ -75,7 +77,9 @@ pub struct ProjectSource {
 }
 
 /// Role of a source within a project.
-#[derive(Clone, Copy, Debug, Eq, Hash, Ord, PartialEq, PartialOrd, Serialize, Deserialize, Type)]
+#[derive(
+    Clone, Copy, Debug, Eq, Hash, Ord, PartialEq, PartialOrd, Serialize, Deserialize, Type,
+)]
 #[serde(rename_all = "snake_case")]
 pub enum SourceRole {
     Light,
@@ -85,7 +89,9 @@ pub enum SourceRole {
 }
 
 /// Selection state for a source within a project.
-#[derive(Clone, Copy, Debug, Eq, Hash, Ord, PartialEq, PartialOrd, Serialize, Deserialize, Type)]
+#[derive(
+    Clone, Copy, Debug, Eq, Hash, Ord, PartialEq, PartialOrd, Serialize, Deserialize, Type,
+)]
 #[serde(rename_all = "snake_case")]
 pub enum SourceSelection {
     Selected,
@@ -103,7 +109,9 @@ pub struct ProjectSourceView {
 }
 
 /// Link strategy for a source view.
-#[derive(Clone, Copy, Debug, Eq, Hash, Ord, PartialEq, PartialOrd, Serialize, Deserialize, Type)]
+#[derive(
+    Clone, Copy, Debug, Eq, Hash, Ord, PartialEq, PartialOrd, Serialize, Deserialize, Type,
+)]
 #[serde(rename_all = "snake_case")]
 pub enum SourceViewStrategy {
     Junction,
@@ -126,7 +134,9 @@ pub struct ProjectOutput {
 }
 
 /// Verification state for a single output.
-#[derive(Clone, Copy, Debug, Eq, Hash, Ord, PartialEq, PartialOrd, Serialize, Deserialize, Type)]
+#[derive(
+    Clone, Copy, Debug, Eq, Hash, Ord, PartialEq, PartialOrd, Serialize, Deserialize, Type,
+)]
 #[serde(rename_all = "snake_case")]
 pub enum OutputVerification {
     Accepted,
@@ -138,7 +148,7 @@ pub enum OutputVerification {
 #[derive(Clone, Debug, Serialize, Deserialize, Type)]
 #[serde(rename_all = "camelCase")]
 pub struct ProjectArtifactGroup {
-    /// Artifact type label (e.g. "registered", "drizzle_data").
+    /// Artifact type label (e.g. "registered", "`drizzle_data`").
     #[serde(rename = "type")]
     pub artifact_type: String,
     pub count: u32,
@@ -152,7 +162,9 @@ pub struct ProjectArtifactGroup {
 }
 
 /// Cleanup eligibility for an artifact group.
-#[derive(Clone, Copy, Debug, Eq, Hash, Ord, PartialEq, PartialOrd, Serialize, Deserialize, Type)]
+#[derive(
+    Clone, Copy, Debug, Eq, Hash, Ord, PartialEq, PartialOrd, Serialize, Deserialize, Type,
+)]
 #[serde(rename_all = "snake_case")]
 pub enum CleanupEligibility {
     Eligible,

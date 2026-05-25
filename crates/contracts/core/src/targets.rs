@@ -12,7 +12,9 @@ use crate::sessions::AcquisitionSession;
 // ── Enums ───────────────────────────────────────────────────────────────────
 
 /// Classification of an astronomical target.
-#[derive(Clone, Copy, Debug, Eq, Hash, Ord, PartialEq, PartialOrd, Serialize, Deserialize, Type)]
+#[derive(
+    Clone, Copy, Debug, Eq, Hash, Ord, PartialEq, PartialOrd, Serialize, Deserialize, Type,
+)]
 #[serde(rename_all = "snake_case")]
 pub enum TargetKind {
     DeepSky,
