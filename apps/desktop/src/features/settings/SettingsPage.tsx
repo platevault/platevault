@@ -11,7 +11,7 @@ import { Tools } from './Tools';
 import { LogSettings } from './LogSettings';
 import { Catalogs } from './Catalogs';
 import { Protection } from './Protection';
-import { DensitySelector } from './DensitySelector';
+import { DisplayPane } from './DisplayPane';
 
 const PANES = [
   { id: 'data-sources', label: 'Data Sources' },
@@ -52,7 +52,7 @@ function getPaneComponent(paneId: PaneId, save: (scope: string, values: Record<s
     case 'protection':
       return <Protection save={save} />;
     case 'display':
-      return <DensitySelector />;
+      return <DisplayPane />;
   }
 }
 

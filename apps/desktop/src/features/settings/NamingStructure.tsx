@@ -29,22 +29,53 @@ const AVAILABLE_SEPARATORS: TokenChip[] = [
 
 const FRAME_TYPES = ['lights', 'darks', 'flats', 'bias'] as const;
 
-const MOCK_METADATA = {
-  target: 'NGC7000',
-  filter: 'Ha',
-  date: '2026-05-18',
-  sequence: '001',
-  binning: '1x1',
-  gain: '100',
+type MockMetadata = {
+  label: string;
+  target: string;
+  filter: string;
+  date: string;
+  sequence: string;
+  binning: string;
+  gain: string;
 };
 
-function buildPreview(pattern: TokenChip[], seq: string): string {
+const PREVIEW_EXAMPLES: MockMetadata[] = [
+  {
+    label: 'NGC 7000 · Ha',
+    target: 'NGC7000',
+    filter: 'Ha',
+    date: '2026-05-18',
+    sequence: '001',
+    binning: '1x1',
+    gain: '100',
+  },
+  {
+    label: 'M42 · OIII',
+    target: 'M42',
+    filter: 'OIII',
+    date: '2026-03-04',
+    sequence: '007',
+    binning: '1x1',
+    gain: '120',
+  },
+  {
+    label: 'IC1805 · SII',
+    target: 'IC1805',
+    filter: 'SII',
+    date: '2025-11-29',
+    sequence: '023',
+    binning: '2x2',
+    gain: '80',
+  },
+];
+
+function buildPreview(pattern: TokenChip[], meta: MockMetadata): string {
   return pattern
     .map((chip) => {
       if (chip.type === 'separator') return chip.value;
-      const key = chip.value.replace(/[{}]/g, '');
-      if (key === 'sequence') return seq;
-      return MOCK_METADATA[key as keyof typeof MOCK_METADATA] ?? chip.value;
+      const key = chip.value.replace(/[{}]/g, '') as keyof MockMetadata;
+      if (key === 'label') return chip.value;
+      return meta[key] ?? chip.value;
     })
     .join('');
 }
@@ -267,12 +298,15 @@ export function NamingStructure({ save }: NamingStructureProps) {
         label="Default pattern"
       />
 
-      {/* Preview */}
+      {/* Preview — 3 examples using different session metadata */}
       <div className="alm-naming__preview">
-        <span className="alm-naming__preview-label">Preview</span>
-        <code className="alm-mono">{buildPreview(pattern, '001')}</code>
-        <code className="alm-mono">{buildPreview(pattern, '002')}</code>
-        <code className="alm-mono">{buildPreview(pattern, '003')}</code>
+        <span className="alm-naming__preview-label">Live preview</span>
+        {PREVIEW_EXAMPLES.map((meta) => (
+          <div key={meta.label} className="alm-naming__preview-row">
+            <span className="alm-naming__preview-meta">{meta.label}</span>
+            <code className="alm-mono">{buildPreview(pattern, meta)}</code>
+          </div>
+        ))}
       </div>
 
       {/* Per-frame-type overrides */}

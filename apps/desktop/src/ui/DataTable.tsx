@@ -43,6 +43,53 @@ export function DataTable<T>({
   const [rowSelection, setRowSelection] = useState<RowSelectionState>({});
   const [grouping] = useState<GroupingState>(groupBy ? [groupBy] : []);
 
+  // Tracks the index of the last row whose checkbox was clicked, for Shift-click range select.
+  const lastClickedRowIndex = useRef<number | null>(null);
+
+  // Stable ref so the column definition closure always calls the current version.
+  const handleCheckboxCellClickRef = useRef<(rowIndex: number, e: React.MouseEvent) => void>(
+    () => {},
+  );
+
+  // tableRef lets the click handler resolve the current row model at call time,
+  // avoiding a chicken-and-egg dependency (table depends on allColumns, which must
+  // not close over `rows` directly, or it would re-memo on every render).
+  const tableRef = useRef<ReturnType<typeof useReactTable<T>> | null>(null);
+
+  // Update the handler synchronously each render so it always has fresh closure
+  // values without adding it as a dependency to allColumns's useMemo.
+  handleCheckboxCellClickRef.current = (rowIndex: number, e: React.MouseEvent) => {
+    // On plain clicks, let Checkbox.Root's onCheckedChange handle toggling.
+    // We only intercept to record the anchor index and handle Shift-range select.
+    const currentRows = tableRef.current?.getRowModel().rows ?? [];
+    const row = currentRows[rowIndex];
+    if (!row) return;
+
+    if (e.shiftKey && lastClickedRowIndex.current !== null) {
+      // Prevent the checkbox's own onCheckedChange from double-toggling the
+      // clicked row when a range selection is performed.
+      e.preventDefault();
+      e.stopPropagation();
+
+      const from = Math.min(lastClickedRowIndex.current, rowIndex);
+      const to = Math.max(lastClickedRowIndex.current, rowIndex);
+      // Select all rows in the range; preserve existing selections outside it.
+      setRowSelection((prev) => {
+        const next = { ...prev };
+        for (let i = from; i <= to; i++) {
+          const r = currentRows[i];
+          if (r && !r.getIsGrouped()) {
+            next[r.id] = true;
+          }
+        }
+        return next;
+      });
+    }
+
+    // Always update the anchor so the next Shift-click has a valid reference.
+    lastClickedRowIndex.current = rowIndex;
+  };
+
   const allColumns = useMemo(() => {
     if (!selectable) return columns;
     const selectCol: ColumnDef<T, any> = {
@@ -65,6 +112,9 @@ export function DataTable<T>({
           checked={row.getIsSelected()}
           onCheckedChange={(checked) => row.toggleSelected(checked === true)}
           aria-label="Select row"
+          // Shift-click range select is handled by the <td> onClick wrapper in
+          // the render loop below; this onCheckedChange handles plain clicks and
+          // keyboard activation so assistive technology continues to work.
         >
           <Checkbox.Indicator className="alm-checkbox__indicator">
             &#x2713;
@@ -88,6 +138,9 @@ export function DataTable<T>({
     getExpandedRowModel: groupBy ? getExpandedRowModel() : undefined,
     enableRowSelection: selectable,
   });
+
+  // Keep tableRef current so handleCheckboxCellClickRef can resolve rows lazily.
+  tableRef.current = table;
 
   const { rows } = table.getRowModel();
 
@@ -205,6 +258,11 @@ export function DataTable<T>({
                   {row.getVisibleCells().map((cell) => (
                     <td
                       key={cell.id}
+                      onClick={
+                        cell.column.id === '_select'
+                          ? (e) => handleCheckboxCellClickRef.current(virtualRow.index, e)
+                          : undefined
+                      }
                       style={{
                         height: 'var(--alm-row-height)',
                         padding: 'var(--alm-cell-padding)',

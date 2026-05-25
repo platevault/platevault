@@ -6,7 +6,11 @@ const calendarStore = createQueryStore(() =>
   getSessionsCalendar({ start_month: '2026-04', end_month: '2026-06' }),
 );
 
-export function CalendarView() {
+interface CalendarViewProps {
+  onDaySelect?: (date: string) => void;
+}
+
+export function CalendarView({ onDaySelect }: CalendarViewProps) {
   const { data, loading } = useQuery(calendarStore);
 
   if (loading || !data) {
@@ -34,7 +38,7 @@ export function CalendarView() {
                   className={`alm-calendar__day ${hasSessions ? 'alm-calendar__day--has-data' : ''}`}
                   onClick={() => {
                     if (hasSessions) {
-                      console.log('Filter by day:', `${month.year}-${month.month}-${day}`);
+                      onDaySelect?.(`${month.year}-${String(month.month).padStart(2, '0')}-${String(day).padStart(2, '0')}`);
                     }
                   }}
                 >

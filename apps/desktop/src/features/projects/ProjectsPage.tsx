@@ -71,6 +71,14 @@ function verificationVariant(state: Project['verification_state']) {
   }
 }
 
+function formatIntegrationHours(hours: number): string {
+  if (hours === 0) return '0h';
+  if (hours < 1) return `${Math.round(hours * 60)}m`;
+  const h = Math.floor(hours);
+  const m = Math.round((hours - h) * 60);
+  return m > 0 ? `${h}h ${m}m` : `${h}h`;
+}
+
 export function ProjectsPage() {
   const { data, loading } = useQuery(projectsStore);
   const navigate = useNavigate();
@@ -117,6 +125,11 @@ export function ProjectsPage() {
           const state = getValue() as Project['verification_state'];
           return <Pill label={verificationLabel(state)} variant={verificationVariant(state)} size="sm" />;
         },
+      },
+      {
+        accessorKey: 'integration_hours',
+        header: 'Integration',
+        cell: ({ getValue }) => formatIntegrationHours(getValue() as number),
       },
       {
         id: 'on_disk_size',
@@ -172,6 +185,14 @@ export function ProjectsPage() {
     [navigate],
   );
 
+  const aggregates = useMemo(() => {
+    if (!data || data.length === 0) return null;
+    const totalIntegrationHours = data.reduce((sum, p) => sum + p.integration_hours, 0);
+    const totalOnDiskBytes = data.reduce((sum, p) => sum + p.cleanup_state.reclaimable_bytes, 0);
+    const cleanupEligibleCount = data.filter((p) => p.cleanup_state.reclaimable_bytes > 0).length;
+    return { totalIntegrationHours, totalOnDiskBytes, cleanupEligibleCount };
+  }, [data]);
+
   return (
     <div className="alm-page">
       <Toolbar>
@@ -202,6 +223,35 @@ export function ProjectsPage() {
           data={data}
           onRowClick={(row) => navigate({ to: '/projects/$id', params: { id: row.id } })}
         />
+      )}
+
+      {!loading && aggregates && (
+        <div
+          style={{
+            display: 'flex',
+            alignItems: 'center',
+            gap: 'var(--alm-space-7)',
+            padding: 'var(--alm-space-3) var(--alm-space-5)',
+            borderTop: '1px solid var(--alm-border)',
+            background: 'var(--alm-surface)',
+            fontSize: 'var(--alm-text-xs)',
+            color: 'var(--alm-text-muted)',
+            flexShrink: 0,
+          }}
+        >
+          <span>
+            <strong style={{ color: 'inherit' }}>Total integration:</strong>{' '}
+            {formatIntegrationHours(aggregates.totalIntegrationHours)}
+          </span>
+          <span>
+            <strong style={{ color: 'inherit' }}>Total on-disk:</strong>{' '}
+            {formatBytes(aggregates.totalOnDiskBytes)}
+          </span>
+          <span>
+            <strong style={{ color: 'inherit' }}>Cleanup eligible:</strong>{' '}
+            {aggregates.cleanupEligibleCount} project{aggregates.cleanupEligibleCount !== 1 ? 's' : ''}
+          </span>
+        </div>
       )}
     </div>
   );

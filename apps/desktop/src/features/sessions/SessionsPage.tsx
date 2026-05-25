@@ -33,6 +33,7 @@ export function SessionsPage() {
   const [view, setView] = usePreference('sessionsView');
   const [groupBy] = usePreference('sessionsGroupBy');
   const [selection, setSelection] = useState<Set<string>>(new Set());
+  const [selectedDay, setSelectedDay] = useState<string | null>(null);
   const navigate = useNavigate();
 
   const columns = useMemo<ColumnDef<AcquisitionSession, any>[]>(
@@ -111,6 +112,11 @@ export function SessionsPage() {
 
   const groupByColumn = groupBy === 'none' ? undefined : groupBy === 'train' ? 'optical_train_id' : groupBy;
 
+  const filteredData = useMemo(() => {
+    if (!data || !selectedDay) return data;
+    return data.filter((s) => s.session_key.night === selectedDay);
+  }, [data, selectedDay]);
+
   return (
     <div className="alm-page">
       <Toolbar
@@ -137,19 +143,32 @@ export function SessionsPage() {
         </Btn>
       </Toolbar>
 
+      {selectedDay && (
+        <div className="alm-page__filter-bar">
+          <span>Filtered by night: {selectedDay}</span>
+          <Btn size="sm" variant="ghost" onClick={() => setSelectedDay(null)}>
+            Clear
+          </Btn>
+        </div>
+      )}
+
       {loading && <div className="alm-page__loading">Loading sessions...</div>}
 
-      {!loading && view === 'list' && data && data.length === 0 && (
+      {!loading && view === 'list' && filteredData && filteredData.length === 0 && (
         <EmptyState
           title="No sessions found"
-          description="Sessions will appear here after scanning your library roots."
+          description={
+            selectedDay
+              ? `No sessions for night ${selectedDay}.`
+              : 'Sessions will appear here after scanning your library roots.'
+          }
         />
       )}
 
-      {!loading && view === 'list' && data && data.length > 0 && (
+      {!loading && view === 'list' && filteredData && filteredData.length > 0 && (
         <DataTable
           columns={columns}
-          data={data}
+          data={filteredData}
           groupBy={groupByColumn}
           selectable
           onRowClick={(row) => navigate({ to: '/sessions/$id', params: { id: row.id } })}
@@ -161,7 +180,9 @@ export function SessionsPage() {
         />
       )}
 
-      {!loading && view === 'calendar' && <CalendarView />}
+      {!loading && view === 'calendar' && (
+        <CalendarView onDaySelect={(day) => { setSelectedDay(day); setView('list'); }} />
+      )}
     </div>
   );
 }

@@ -6,6 +6,7 @@ import { StatusBar } from './StatusBar';
 import { LogPanel } from './LogPanel';
 import { CommandPalette } from './CommandPalette';
 import { LogPanelProvider, useLogPanel } from './LogPanelContext';
+import { OperationStatusProvider } from './OperationStatusContext';
 import { TourProvider } from '@/features/tour/TourProvider';
 
 function ShellInner() {
@@ -43,8 +44,10 @@ function ShellInner() {
 
 export function Shell() {
   return (
-    <LogPanelProvider>
-      <ShellInner />
-    </LogPanelProvider>
+    <OperationStatusProvider>
+      <LogPanelProvider>
+        <ShellInner />
+      </LogPanelProvider>
+    </OperationStatusProvider>
   );
 }

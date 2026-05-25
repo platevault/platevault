@@ -220,6 +220,7 @@ export interface Project {
   blocked_reason?: string;
   verification_state: 'unreviewed' | 'has_accepted' | 'all_rejected';
   cleanup_state: { reclaimable_bytes: number };
+  integration_hours: number;
   target_ids: string[];
   source_map: SourceMap;
   source_view_ids: string[];

@@ -7,7 +7,7 @@ import { Toolbar, FilterBar, DataTable, Pill, Btn, EmptyState } from '@/ui';
 
 // --- Filter definitions ---
 
-const FILTER_DEFS = [
+const OUTCOME_ACTOR_FILTER_DEFS = [
   { key: 'outcome:applied', label: 'Applied' },
   { key: 'outcome:ok', label: 'OK' },
   { key: 'outcome:refused', label: 'Refused' },
@@ -54,12 +54,37 @@ const auditStore = createQueryStore(() =>
 export function AuditPage() {
   const { data, loading } = useQuery(auditStore);
   const [activeFilters, setActiveFilters] = useState<string[]>([]);
+  const [dateStart, setDateStart] = useState<string>('');
+  const [dateEnd, setDateEnd] = useState<string>('');
   const [expandedId, setExpandedId] = useState<string | null>(null);
 
-  // Filter entries based on active filter chips
+  // Derive distinct event types from loaded data for dynamic event type chips
+  const eventTypeFilterDefs = useMemo(() => {
+    if (!data?.entries) return [];
+    const seen = new Set<string>();
+    const defs: { key: string; label: string }[] = [];
+    for (const entry of data.entries) {
+      if (!seen.has(entry.event_type)) {
+        seen.add(entry.event_type);
+        defs.push({ key: `eventtype:${entry.event_type}`, label: entry.event_type });
+      }
+    }
+    defs.sort((a, b) => a.label.localeCompare(b.label));
+    return defs;
+  }, [data]);
+
+  // Filter entries based on active filter chips and date range
   const filteredEntries = useMemo(() => {
     if (!data?.entries) return [];
-    if (activeFilters.length === 0) return data.entries;
+
+    const hasChipFilters = activeFilters.length > 0;
+    const hasDateFilter = dateStart !== '' || dateEnd !== '';
+
+    if (!hasChipFilters && !hasDateFilter) return data.entries;
+
+    // Parse date boundaries once (end-of-day inclusive for dateEnd)
+    const startMs = dateStart !== '' ? new Date(dateStart).getTime() : -Infinity;
+    const endMs = dateEnd !== '' ? new Date(`${dateEnd}T23:59:59.999Z`).getTime() : Infinity;
 
     return data.entries.filter((entry) => {
       const outcomeFilters = activeFilters
@@ -68,15 +93,23 @@ export function AuditPage() {
       const actorFilters = activeFilters
         .filter((f) => f.startsWith('actor:'))
         .map((f) => f.split(':')[1]);
+      const eventTypeFilters = activeFilters
+        .filter((f) => f.startsWith('eventtype:'))
+        .map((f) => f.slice('eventtype:'.length));
 
       const matchesOutcome =
         outcomeFilters.length === 0 || outcomeFilters.includes(entry.outcome);
       const matchesActor =
         actorFilters.length === 0 || actorFilters.includes(entry.actor);
+      const matchesEventType =
+        eventTypeFilters.length === 0 || eventTypeFilters.includes(entry.event_type);
 
-      return matchesOutcome && matchesActor;
+      const entryMs = new Date(entry.timestamp).getTime();
+      const matchesDate = entryMs >= startMs && entryMs <= endMs;
+
+      return matchesOutcome && matchesActor && matchesEventType && matchesDate;
     });
-  }, [data, activeFilters]);
+  }, [data, activeFilters, dateStart, dateEnd]);
 
   const handleToggleFilter = useCallback((key: string) => {
     setActiveFilters((prev) =>
@@ -86,6 +119,8 @@ export function AuditPage() {
 
   const handleClearFilters = useCallback(() => {
     setActiveFilters([]);
+    setDateStart('');
+    setDateEnd('');
   }, []);
 
   const handleExport = useCallback(async () => {
@@ -218,11 +253,56 @@ export function AuditPage() {
       </Toolbar>
 
       <FilterBar
-        filters={FILTER_DEFS}
+        filters={OUTCOME_ACTOR_FILTER_DEFS}
         active={activeFilters}
         onToggle={handleToggleFilter}
         onClear={handleClearFilters}
       />
+
+      {eventTypeFilterDefs.length > 0 && (
+        <FilterBar
+          filters={eventTypeFilterDefs}
+          active={activeFilters}
+          onToggle={handleToggleFilter}
+          onClear={() => {
+            setActiveFilters((prev) => prev.filter((f) => !f.startsWith('eventtype:')));
+          }}
+        />
+      )}
+
+      <div className="alm-toolbar__sub">
+        <label htmlFor="audit-date-start" className="alm-text-muted" style={{ fontSize: 'var(--alm-text-xs)' }}>
+          From
+        </label>
+        <input
+          id="audit-date-start"
+          type="date"
+          className="alm-input alm-input--sm"
+          value={dateStart}
+          onChange={(e) => setDateStart(e.target.value)}
+          aria-label="Filter from date"
+        />
+        <label htmlFor="audit-date-end" className="alm-text-muted" style={{ fontSize: 'var(--alm-text-xs)' }}>
+          To
+        </label>
+        <input
+          id="audit-date-end"
+          type="date"
+          className="alm-input alm-input--sm"
+          value={dateEnd}
+          onChange={(e) => setDateEnd(e.target.value)}
+          aria-label="Filter to date"
+        />
+        {(dateStart !== '' || dateEnd !== '') && (
+          <button
+            type="button"
+            className="alm-btn alm-btn--ghost alm-btn--sm"
+            onClick={() => { setDateStart(''); setDateEnd(''); }}
+          >
+            Clear dates
+          </button>
+        )}
+      </div>
 
       {loading && <div className="alm-page__loading">Loading audit log...</div>}
 

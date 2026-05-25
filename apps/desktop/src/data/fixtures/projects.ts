@@ -26,6 +26,7 @@ interface Project {
   blocked_reason?: string;
   verification_state: 'unreviewed' | 'has_accepted' | 'all_rejected';
   cleanup_state: { reclaimable_bytes: number };
+  integration_hours: number;
   target_ids: string[];
   source_map: SourceMap;
   source_view_ids: string[];
@@ -76,6 +77,7 @@ export const projects: Project[] = [
     state: 'ready',
     verification_state: 'unreviewed',
     cleanup_state: { reclaimable_bytes: 0 },
+    integration_hours: 12.5,
     target_ids: ['550e8400-e29b-41d4-a716-446655440201'],
     source_map: {
       light_session_ids: [
@@ -106,6 +108,7 @@ export const projects: Project[] = [
     state: 'processing',
     verification_state: 'unreviewed',
     cleanup_state: { reclaimable_bytes: 1_073_741_824 },
+    integration_hours: 8.0,
     target_ids: ['550e8400-e29b-41d4-a716-446655440202'],
     source_map: {
       light_session_ids: [
@@ -132,6 +135,7 @@ export const projects: Project[] = [
     state: 'completed',
     verification_state: 'has_accepted',
     cleanup_state: { reclaimable_bytes: 3_221_225_472 },
+    integration_hours: 6.25,
     target_ids: ['550e8400-e29b-41d4-a716-446655440205'],
     source_map: {
       light_session_ids: ['550e8400-e29b-41d4-a716-446655440008'],
@@ -162,6 +166,7 @@ export const blockedProject: Project = {
   blocked_reason: 'Ha and OIII sessions not yet confirmed — need at least 2 sessions per channel',
   verification_state: 'unreviewed',
   cleanup_state: { reclaimable_bytes: 0 },
+  integration_hours: 3.0,
   target_ids: ['550e8400-e29b-41d4-a716-446655440203'],
   source_map: {
     light_session_ids: ['550e8400-e29b-41d4-a716-446655440002'],

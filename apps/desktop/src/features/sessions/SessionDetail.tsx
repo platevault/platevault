@@ -1,7 +1,8 @@
+import { useState } from 'react';
 import { useParams } from '@tanstack/react-router';
 import { Tabs } from '@base-ui-components/react/tabs';
 import { useParameterizedQuery, createParameterizedStore } from '@/data/store';
-import { getSession } from '@/api/commands';
+import { getSession, transitionSession } from '@/api/commands';
 import type { SessionDetail as SessionDetailType, ProvenanceOrigin } from '@/api/types';
 import { KV, Pill, Confidence, Provenance, Btn, Section } from '@/ui';
 
@@ -22,12 +23,23 @@ const TAB_ITEMS: Array<{ value: TabValue; label: string }> = [
 export function SessionDetail() {
   const { id } = useParams({ strict: false }) as { id: string };
   const { data, loading, error } = useParameterizedQuery(sessionStore, id);
+  const [reopening, setReopening] = useState(false);
 
   if (loading) return <div className="alm-page__loading">Loading session...</div>;
   if (error) return <div className="alm-page__error">Error: {error.message}</div>;
   if (!data) return null;
 
   const isConfirmed = data.state === 'confirmed';
+
+  const handleReopen = async () => {
+    setReopening(true);
+    try {
+      await transitionSession({ id: data.id, action: 'reopen' });
+      sessionStore.invalidate(data.id);
+    } finally {
+      setReopening(false);
+    }
+  };
 
   return (
     <div className="alm-page">
@@ -37,8 +49,8 @@ export function SessionDetail() {
         </h1>
         <Pill label={data.state} variant={data.state === 'confirmed' ? 'ok' : 'warn'} />
         {isConfirmed && (
-          <Btn size="sm" variant="ghost">
-            Re-open to review
+          <Btn size="sm" variant="ghost" onClick={handleReopen} disabled={reopening}>
+            {reopening ? 'Reopening...' : 'Re-open to review'}
           </Btn>
         )}
       </header>
