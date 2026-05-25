@@ -3,7 +3,7 @@ import { Dialog } from '@base-ui-components/react/dialog';
 import { Command } from 'cmdk';
 import { useNavigate } from '@tanstack/react-router';
 import { searchGlobal } from '@/api/commands';
-import type { SearchResult } from '@/api/types';
+import type { SearchResult } from '@/bindings/types';
 
 const PAGES: Array<{ label: string; route: string }> = [
   { label: 'Sessions', route: '/sessions' },

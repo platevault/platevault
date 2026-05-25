@@ -1,5 +1,5 @@
 import { memo } from 'react';
-import type { PlanItem, PlanDetail } from '@/api/types';
+import type { PlanItem, PlanDetail } from '@/bindings/types';
 
 export interface PlanDiffProps {
   items: PlanItem[];

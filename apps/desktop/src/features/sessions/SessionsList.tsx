@@ -1,6 +1,6 @@
 import { useMemo, useState } from 'react';
 import { clsx } from 'clsx';
-import type { AcquisitionSession, AppPreferences } from '@/api/types';
+import type { AcquisitionSession, AppPreferences } from '@/bindings/types';
 import { Pill, Confidence, Btn } from '@/ui';
 import { usePreference } from '@/data/preferences';
 

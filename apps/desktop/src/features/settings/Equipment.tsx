@@ -1,6 +1,6 @@
 import { useState, useEffect } from 'react';
 import { listEquipment } from '@/api/commands';
-import type { Equipment as EquipmentType } from '@/api/types';
+import type { Equipment as EquipmentType } from '@/bindings/types';
 import { Btn } from '@/ui';
 
 interface EquipmentProps {

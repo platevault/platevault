@@ -10,7 +10,7 @@ import type {
   PlanState,
   PlanKind,
   ProvenanceOrigin,
-} from '@/api/types';
+} from '@/bindings/types';
 
 // ---------------------------------------------------------------------------
 // Plan items for the cleanup plan (matches wireframe table + diff views)

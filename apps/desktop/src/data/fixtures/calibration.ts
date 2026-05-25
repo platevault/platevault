@@ -5,7 +5,7 @@ import type {
   CalibrationKind,
   ConfidenceLevel,
   ProvenanceOrigin,
-} from '@/api/types';
+} from '@/bindings/types';
 
 // ─── Master list ────────────────────────────────────────────────────────────
 

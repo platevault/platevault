@@ -1,7 +1,7 @@
 import { useParameterizedQuery, createParameterizedStore } from '@/data/store';
 import { usePreference } from '@/data/preferences';
 import { getProject } from '@/api/commands';
-import type { ProjectDetail as ProjectDetailType, ViewMode, ProjectState } from '@/api/types';
+import type { ProjectDetail as ProjectDetailType, ViewMode, ProjectState } from '@/bindings/types';
 import { Toolbar, Pill, Btn } from '@/ui';
 import { CommandCenter } from './CommandCenter';
 import { PipelineView } from './PipelineView';

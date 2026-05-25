@@ -1,6 +1,6 @@
 import { useState, useMemo } from 'react';
 import { clsx } from 'clsx';
-import type { Target, TargetKind } from '@/api/types';
+import type { Target, TargetKind } from '@/bindings/types';
 import { Btn } from '@/ui';
 
 export interface TargetListProps {

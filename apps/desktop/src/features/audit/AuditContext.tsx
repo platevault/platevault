@@ -1,4 +1,4 @@
-import type { AuditEntry, AuditOutcome } from '@/api/types';
+import type { AuditEntry, AuditOutcome } from '@/bindings/types';
 import { Pill, Box } from '@/ui';
 
 export interface AuditContextProps {

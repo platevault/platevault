@@ -8,7 +8,7 @@ import type {
   CalendarData,
   MasterDetail,
   MatchCandidate,
-} from './types';
+} from '@/bindings/types';
 
 const delay = (ms: number) => new Promise<void>((r) => setTimeout(r, ms));
 

@@ -3,7 +3,7 @@ import { useSearch } from '@tanstack/react-router';
 import { useQuery, createQueryStore } from '@/data/store';
 import { usePreference } from '@/data/preferences';
 import { listSessions } from '@/api/commands';
-import type { AcquisitionSession } from '@/api/types';
+import type { AcquisitionSession } from '@/bindings/types';
 import { ThreePane, Toolbar, Btn, EmptyState } from '@/ui';
 import { SessionsList } from './SessionsList';
 import { SessionDetailInline } from './SessionDetail';

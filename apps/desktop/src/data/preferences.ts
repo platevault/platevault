@@ -1,5 +1,5 @@
 import { useSyncExternalStore, useCallback } from 'react';
-import type { AppPreferences } from '@/api/types';
+import type { AppPreferences } from '@/bindings/types';
 
 const STORAGE_KEY = 'alm-preferences';
 

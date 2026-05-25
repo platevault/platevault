@@ -20,7 +20,7 @@ import type {
   SettingsData,
   RemapVerification,
   MatchCandidate,
-} from './types';
+} from '@/bindings/types';
 
 // Conditionally import mocks or real Tauri invoke
 const useMocks = import.meta.env.VITE_USE_MOCKS === 'true';

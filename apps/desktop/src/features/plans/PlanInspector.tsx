@@ -1,4 +1,4 @@
-import type { PlanDetail, PlanState } from '@/api/types';
+import type { PlanDetail, PlanState } from '@/bindings/types';
 import { Pill, Btn, KV } from '@/ui';
 
 export interface PlanInspectorProps {

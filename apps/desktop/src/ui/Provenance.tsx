@@ -1,5 +1,5 @@
 import { Tooltip } from '@base-ui-components/react/tooltip';
-import type { ProvenanceOrigin } from '@/api/types';
+import type { ProvenanceOrigin } from '@/bindings/types';
 
 const GLYPH_MAP: Record<ProvenanceOrigin, { glyph: string; label: string }> = {
   reviewed: { glyph: '●', label: 'Reviewed' },

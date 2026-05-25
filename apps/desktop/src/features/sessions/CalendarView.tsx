@@ -1,6 +1,6 @@
 import { useQuery, createQueryStore } from '@/data/store';
 import { getSessionsCalendar } from '@/api/commands';
-import type { CalendarData } from '@/api/types';
+import type { CalendarData } from '@/bindings/types';
 
 const calendarStore = createQueryStore(() =>
   getSessionsCalendar({ start_month: '2026-04', end_month: '2026-06' }),
