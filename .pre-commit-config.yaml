@@ -1,4 +1,4 @@
-exclude: '^(\.specify/|specs/)'
+exclude: '^(\.specify/|specs/|\.claude/|\.agents/|\.codex/|\.mcp\.json)'
 
 repos:
   - repo: https://github.com/pre-commit/pre-commit-hooks
