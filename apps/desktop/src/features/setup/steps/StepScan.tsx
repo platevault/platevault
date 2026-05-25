@@ -1,4 +1,3 @@
-import { Button } from '@base-ui-components/react/button';
 import { Switch } from '@base-ui-components/react/switch';
 
 export interface ScanSettings {
@@ -13,8 +12,6 @@ export interface ScanSettings {
 export interface StepScanProps {
   settings: ScanSettings;
   onSettingsChange: (settings: ScanSettings) => void;
-  onNext: () => void;
-  onBack: () => void;
 }
 
 const SCAN_OPTIONS: Array<{ key: keyof ScanSettings; label: string; description: string }> = [
@@ -26,87 +23,72 @@ const SCAN_OPTIONS: Array<{ key: keyof ScanSettings; label: string; description:
   { key: 'inferSessions', label: 'Infer sessions', description: 'Group files into acquisition sessions automatically' },
 ];
 
-export function StepScan({ settings, onSettingsChange, onNext, onBack }: StepScanProps) {
+/**
+ * Step 3 — Scan settings.
+ * The parent SetupWizard renders the step heading and navigation footer.
+ */
+export function StepScan({ settings, onSettingsChange }: StepScanProps) {
   function toggle(key: keyof ScanSettings) {
     onSettingsChange({ ...settings, [key]: !settings[key] });
   }
 
   return (
-    <div style={{ maxWidth: 560 }}>
-      <h2 style={{ fontSize: 'var(--alm-text-lg)', fontWeight: 600, marginBottom: 'var(--alm-space-2)' }}>
-        Scan Settings
-      </h2>
-      <p style={{ fontSize: 'var(--alm-text-xs)', color: 'var(--alm-text-muted)', marginBottom: 'var(--alm-space-5)' }}>
-        Choose what to look for during the initial library scan. You can change these later.
-      </p>
-
-      <div style={{ display: 'flex', flexDirection: 'column', gap: 'var(--alm-space-4)', marginBottom: 'var(--alm-space-7)' }}>
-        {SCAN_OPTIONS.map((option) => (
-          <div
-            key={option.key}
+    <div style={{ display: 'flex', flexDirection: 'column', gap: 'var(--alm-space-4)' }}>
+      {SCAN_OPTIONS.map((option) => (
+        <div
+          key={option.key}
+          style={{
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: 'space-between',
+            gap: 'var(--alm-space-3)',
+            padding: 'var(--alm-space-3) var(--alm-space-4)',
+            background: 'var(--alm-surface)',
+            borderRadius: 'var(--alm-radius-sm)',
+            border: '1px solid var(--alm-border)',
+          }}
+        >
+          <div>
+            <div style={{ fontSize: 'var(--alm-text-sm)', fontWeight: 500 }}>
+              {option.label}
+            </div>
+            <div style={{ fontSize: 'var(--alm-text-xs)', color: 'var(--alm-text-muted)' }}>
+              {option.description}
+            </div>
+          </div>
+          <Switch.Root
+            checked={settings[option.key]}
+            onCheckedChange={() => toggle(option.key)}
+            className="alm-switch"
+            aria-label={option.label}
             style={{
-              display: 'flex',
-              alignItems: 'center',
-              justifyContent: 'space-between',
-              gap: 'var(--alm-space-3)',
-              padding: 'var(--alm-space-3) var(--alm-space-4)',
-              background: 'var(--alm-surface)',
-              borderRadius: 'var(--alm-radius-sm)',
-              border: '1px solid var(--alm-border)',
+              width: 36,
+              height: 20,
+              borderRadius: 10,
+              background: settings[option.key] ? 'var(--alm-gray-900)' : 'var(--alm-gray-200)',
+              position: 'relative',
+              cursor: 'pointer',
+              flexShrink: 0,
+              transition: 'background 150ms',
             }}
           >
-            <div>
-              <div style={{ fontSize: 'var(--alm-text-sm)', fontWeight: 500 }}>
-                {option.label}
-              </div>
-              <div style={{ fontSize: 'var(--alm-text-xs)', color: 'var(--alm-text-muted)' }}>
-                {option.description}
-              </div>
-            </div>
-            <Switch.Root
-              checked={settings[option.key]}
-              onCheckedChange={() => toggle(option.key)}
-              className="alm-switch"
-              aria-label={option.label}
+            <Switch.Thumb
+              className="alm-switch__thumb"
               style={{
-                width: 36,
-                height: 20,
-                borderRadius: 10,
-                background: settings[option.key] ? 'var(--alm-gray-900)' : 'var(--alm-gray-200)',
-                position: 'relative',
-                cursor: 'pointer',
-                flexShrink: 0,
-                transition: 'background 150ms',
+                display: 'block',
+                width: 16,
+                height: 16,
+                borderRadius: '50%',
+                background: '#fff',
+                position: 'absolute',
+                top: 2,
+                left: settings[option.key] ? 18 : 2,
+                transition: 'left 150ms',
               }}
-            >
-              <Switch.Thumb
-                className="alm-switch__thumb"
-                style={{
-                  display: 'block',
-                  width: 16,
-                  height: 16,
-                  borderRadius: '50%',
-                  background: '#fff',
-                  position: 'absolute',
-                  top: 2,
-                  left: settings[option.key] ? 18 : 2,
-                  transition: 'left 150ms',
-                }}
-              />
-            </Switch.Root>
-          </div>
-        ))}
-      </div>
-
-      {/* Navigation */}
-      <div style={{ display: 'flex', justifyContent: 'space-between' }}>
-        <Button className="alm-btn alm-btn--ghost" onClick={onBack}>
-          Back
-        </Button>
-        <Button className="alm-btn alm-btn--primary" onClick={onNext}>
-          Continue
-        </Button>
-      </div>
+            />
+          </Switch.Root>
+        </div>
+      ))}
     </div>
   );
 }

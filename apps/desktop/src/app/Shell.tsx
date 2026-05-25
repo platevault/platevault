@@ -24,9 +24,6 @@ function ShellInner() {
 
   return (
     <div className={`alm-shell density-${prefs.density}`}>
-      <div className="alm-titlebar" data-tauri-drag-region>
-        <span className="alm-titlebar__title">Astro Library Manager</span>
-      </div>
       <div className="alm-shell__body">
         <Sidebar />
         <main className="alm-shell__main">

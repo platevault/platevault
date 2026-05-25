@@ -1,28 +1,47 @@
 :root {
-  /* Grayscale palette */
-  --alm-gray-50: #fafafa;
-  --alm-gray-100: #f5f5f5;
-  --alm-gray-200: #e5e5e5;
-  --alm-gray-300: #d4d4d4;
-  --alm-gray-400: #a3a3a3;
-  --alm-gray-500: #737373;
+  /* Wireframe palette — warm grays from canvas wireframes */
+  --alm-ink: #1a1a1a;
+  --alm-ink2: #3a3a3a;
+  --alm-ink3: #6a6a6a;
+  --alm-ink4: #9a9a9a;
+  --alm-rule: #d4d4d2;
+  --alm-rule2: #e4e3e0;
+  --alm-wf-bg: #fafaf8;
+  --alm-wf-bg2: #f3f2ee;
+  --alm-wf-bg3: #ebeae5;
+  --alm-wf-chip: #ebeae5;
+  --alm-wf-warn: #7a5a1a;
+  --alm-wf-danger: #8a2a1a;
+  --alm-wf-ok: #1f5a3a;
+  --alm-titlebar-bg: #d8d6d1;
+
+  /* Grayscale palette (legacy mappings) */
+  --alm-gray-50: #fafaf8;
+  --alm-gray-100: #f3f2ee;
+  --alm-gray-200: #ebeae5;
+  --alm-gray-300: #d4d4d2;
+  --alm-gray-400: #9a9a9a;
+  --alm-gray-500: #6a6a6a;
   --alm-gray-600: #525252;
-  --alm-gray-700: #404040;
+  --alm-gray-700: #3a3a3a;
   --alm-gray-800: #262626;
-  --alm-gray-900: #171717;
+  --alm-gray-900: #1a1a1a;
   --alm-gray-950: #0a0a0a;
 
   /* Semantic colors */
-  --alm-bg: #ffffff;
-  --alm-surface: var(--alm-gray-50);
-  --alm-border: var(--alm-gray-200);
-  --alm-text: var(--alm-gray-900);
-  --alm-text-muted: var(--alm-gray-500);
+  --alm-bg: var(--alm-wf-bg);
+  --alm-surface: var(--alm-wf-bg2);
+  --alm-border: var(--alm-rule);
+  --alm-border-subtle: var(--alm-rule2);
+  --alm-text: var(--alm-ink);
+  --alm-text-secondary: var(--alm-ink2);
+  --alm-text-muted: var(--alm-ink3);
+  --alm-text-faint: var(--alm-ink4);
   --alm-accent: #2563eb;
-  --alm-ok: #16a34a;
-  --alm-warn: #d97706;
-  --alm-danger: #dc2626;
-  --alm-info: #2563eb;
+  --alm-ok: var(--alm-wf-ok);
+  --alm-warn: var(--alm-wf-warn);
+  --alm-danger: var(--alm-wf-danger);
+  --alm-info: #345268;
 
   /* Typography */
   --alm-font-sans: 'Inter', system-ui, sans-serif;

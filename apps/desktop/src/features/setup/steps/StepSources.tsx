@@ -1,203 +1,159 @@
-import { useState } from 'react';
-import { Button } from '@base-ui-components/react/button';
-import { Radio } from '@base-ui-components/react/radio';
-import { RadioGroup } from '@base-ui-components/react/radio-group';
-import { DirPicker } from '@/ui';
-import { Trash2 } from 'lucide-react';
+import { Box } from '@/ui/Box';
+import { Btn } from '@/ui/Btn';
+import { DirPicker } from '@/ui/DirPicker';
+import { Pill } from '@/ui/Pill';
 
-export interface SourceEntry {
-  path: string;
-  category: 'raw' | 'calibration' | 'project' | 'inbox';
-  estimatedFiles?: number;
+/** A source category with zero or more folder paths. */
+export interface SourceCategory {
+  key: string;
+  label: string;
+  note: string;
+  required: boolean;
+  paths: string[];
+  /** Estimated file count per path index. */
+  estimates: number[];
 }
 
 export interface StepSourcesProps {
-  sources: SourceEntry[];
-  onSourcesChange: (sources: SourceEntry[]) => void;
-  onNext: () => void;
-  onBack: () => void;
+  categories: SourceCategory[];
+  onCategoriesChange: (categories: SourceCategory[]) => void;
 }
 
-const CATEGORIES = [
-  { value: 'raw', label: 'Raw', description: 'Light frames, unprocessed captures' },
-  { value: 'calibration', label: 'Calibration', description: 'Darks, flats, bias frames' },
-  { value: 'project', label: 'Project', description: 'Processing project folders' },
-  { value: 'inbox', label: 'Inbox', description: 'New/unsorted captures' },
-] as const;
-
-export function StepSources({ sources, onSourcesChange, onNext, onBack }: StepSourcesProps) {
-  const [pendingPath, setPendingPath] = useState('');
-  const [pendingCategory, setPendingCategory] = useState<SourceEntry['category']>('raw');
-
-  function addSource() {
-    if (!pendingPath) return;
-    const entry: SourceEntry = {
-      path: pendingPath,
-      category: pendingCategory,
-      estimatedFiles: Math.floor(Math.random() * 2000) + 50, // Placeholder until real scan
-    };
-    onSourcesChange([...sources, entry]);
-    setPendingPath('');
-    setPendingCategory('raw');
+/**
+ * Step 2 — Library sources.
+ * Renders one Box card per source category (Raw, Calibration, Project, Inbox).
+ * Each card supports multiple folders with individual DirPicker, estimated
+ * file count, and remove button. An "+ Add folder..." button appends a new
+ * empty picker to the category.
+ *
+ * The parent SetupWizard renders the step heading and navigation footer.
+ */
+export function StepSources({ categories, onCategoriesChange }: StepSourcesProps) {
+  function updateCategory(index: number, update: Partial<SourceCategory>) {
+    const next = categories.map((cat, i) =>
+      i === index ? { ...cat, ...update } : cat,
+    );
+    onCategoriesChange(next);
   }
 
-  function removeSource(index: number) {
-    onSourcesChange(sources.filter((_, i) => i !== index));
+  function addFolder(catIndex: number) {
+    const cat = categories[catIndex];
+    updateCategory(catIndex, {
+      paths: [...cat.paths, ''],
+      estimates: [...cat.estimates, 0],
+    });
   }
 
-  const canProceed = sources.length > 0;
+  function removeFolder(catIndex: number, pathIndex: number) {
+    const cat = categories[catIndex];
+    updateCategory(catIndex, {
+      paths: cat.paths.filter((_, j) => j !== pathIndex),
+      estimates: cat.estimates.filter((_, j) => j !== pathIndex),
+    });
+  }
+
+  function setFolderPath(catIndex: number, pathIndex: number, path: string) {
+    const cat = categories[catIndex];
+    const nextPaths = cat.paths.map((p, j) => (j === pathIndex ? path : p));
+    // Generate a placeholder estimate when a new path is chosen
+    const nextEstimates = cat.estimates.map((e, j) =>
+      j === pathIndex && path && !e
+        ? Math.floor(Math.random() * 40_000) + 500
+        : e,
+    );
+    updateCategory(catIndex, { paths: nextPaths, estimates: nextEstimates });
+  }
 
   return (
-    <div style={{ maxWidth: 640 }}>
-      <h2 style={{ fontSize: 'var(--alm-text-lg)', fontWeight: 600, marginBottom: 'var(--alm-space-2)' }}>
-        Library Sources
-      </h2>
-      <p style={{ fontSize: 'var(--alm-text-xs)', color: 'var(--alm-text-muted)', marginBottom: 'var(--alm-space-5)' }}>
-        Add the folders where your astrophotography files live. You can add more later in Settings.
-      </p>
-
-      {/* Existing sources list */}
-      {sources.length > 0 && (
-        <div style={{ marginBottom: 'var(--alm-space-5)', display: 'flex', flexDirection: 'column', gap: 'var(--alm-space-2)' }}>
-          {sources.map((source, i) => (
-            <div
-              key={`${source.path}-${i}`}
+    <div style={{ display: 'flex', flexDirection: 'column', gap: 'var(--alm-space-5)' }}>
+      {categories.map((cat, catIdx) => (
+        <Box key={cat.key}>
+          {/* Category header row */}
+          <div
+            style={{
+              display: 'flex',
+              alignItems: 'baseline',
+              gap: 'var(--alm-space-4)',
+              marginBottom: 'var(--alm-space-3)',
+            }}
+          >
+            <span style={{ fontSize: 'var(--alm-text-base)', fontWeight: 600 }}>
+              {cat.label}
+            </span>
+            <Pill
+              label={cat.required ? 'REQUIRED' : 'OPTIONAL'}
+              variant={cat.required ? 'warn' : 'ghost'}
+              size="sm"
+            />
+            <span
               style={{
-                display: 'flex',
-                alignItems: 'center',
-                gap: 'var(--alm-space-3)',
-                padding: 'var(--alm-space-3)',
-                background: 'var(--alm-surface)',
-                borderRadius: 'var(--alm-radius-sm)',
-                border: '1px solid var(--alm-border)',
+                fontSize: 'var(--alm-text-xs)',
+                color: 'var(--alm-text-muted)',
               }}
             >
-              <span style={{
-                fontSize: 'var(--alm-text-xs)',
-                fontFamily: 'var(--alm-font-mono)',
-                flex: 1,
-                overflow: 'hidden',
-                textOverflow: 'ellipsis',
-                whiteSpace: 'nowrap',
-              }}>
-                {source.path}
-              </span>
-              <span style={{
-                fontSize: 'var(--alm-text-xs)',
-                padding: '2px 8px',
-                borderRadius: 'var(--alm-radius-sm)',
-                background: 'var(--alm-gray-100)',
-                color: 'var(--alm-text-muted)',
-                textTransform: 'capitalize',
-              }}>
-                {source.category}
-              </span>
-              {source.estimatedFiles != null && (
-                <span style={{ fontSize: 'var(--alm-text-xs)', color: 'var(--alm-text-muted)' }}>
-                  ~{source.estimatedFiles.toLocaleString()} files
-                </span>
-              )}
-              <Button
-                className="alm-btn alm-btn--sm alm-btn--ghost"
-                onClick={() => removeSource(i)}
-                aria-label={`Remove ${source.path}`}
+              {cat.note}
+            </span>
+          </div>
+
+          {/* Folder list or empty state */}
+          <div style={{ display: 'flex', flexDirection: 'column', gap: 'var(--alm-space-2)' }}>
+            {cat.paths.length === 0 && (
+              <div
+                style={{
+                  padding: 'var(--alm-space-5)',
+                  border: '1px dashed var(--alm-border)',
+                  borderRadius: 'var(--alm-radius-sm)',
+                  color: 'var(--alm-text-muted)',
+                  fontSize: 'var(--alm-text-sm)',
+                  textAlign: 'center',
+                }}
               >
-                <Trash2 size={14} />
-              </Button>
-            </div>
-          ))}
-        </div>
-      )}
+                No folders added
+              </div>
+            )}
 
-      {/* Add new source form */}
-      <div style={{
-        padding: 'var(--alm-space-4)',
-        border: '1px dashed var(--alm-border)',
-        borderRadius: 'var(--alm-radius-sm)',
-        marginBottom: 'var(--alm-space-5)',
-      }}>
-        <DirPicker
-          value={pendingPath}
-          onChange={setPendingPath}
-          label="Folder"
-        />
-
-        <div style={{ marginTop: 'var(--alm-space-3)' }}>
-          <span style={{ fontSize: 'var(--alm-text-xs)', color: 'var(--alm-text-muted)', display: 'block', marginBottom: 'var(--alm-space-2)' }}>
-            Category
-          </span>
-          <RadioGroup
-            value={pendingCategory}
-            onValueChange={(val) => setPendingCategory(val as SourceEntry['category'])}
-            aria-label="Source category"
-            style={{ display: 'flex', flexDirection: 'column', gap: 'var(--alm-space-2)' }}
-          >
-            {CATEGORIES.map((cat) => (
-              <label
-                key={cat.value}
+            {cat.paths.map((folderPath, pathIdx) => (
+              <div
+                key={pathIdx}
                 style={{
                   display: 'flex',
                   alignItems: 'center',
-                  gap: 'var(--alm-space-2)',
-                  cursor: 'pointer',
-                  fontSize: 'var(--alm-text-xs)',
+                  gap: 'var(--alm-space-3)',
                 }}
               >
-                <Radio.Root
-                  value={cat.value}
-                  className="alm-radio"
-                  style={{
-                    width: 16,
-                    height: 16,
-                    borderRadius: '50%',
-                    border: '2px solid var(--alm-gray-300)',
-                    display: 'inline-flex',
-                    alignItems: 'center',
-                    justifyContent: 'center',
-                    flexShrink: 0,
-                  }}
-                >
-                  <Radio.Indicator
-                    className="alm-radio__indicator"
-                    style={{
-                      width: 8,
-                      height: 8,
-                      borderRadius: '50%',
-                      background: 'var(--alm-gray-900)',
-                    }}
+                <div style={{ flex: 1 }}>
+                  <DirPicker
+                    value={folderPath}
+                    onChange={(p) => setFolderPath(catIdx, pathIdx, p)}
                   />
-                </Radio.Root>
-                <span>{cat.label}</span>
-                <span style={{ color: 'var(--alm-text-muted)' }}> — {cat.description}</span>
-              </label>
+                </div>
+                {cat.estimates[pathIdx] > 0 && (
+                  <span
+                    style={{
+                      color: 'var(--alm-text-muted)',
+                      fontSize: 'var(--alm-text-xs)',
+                      whiteSpace: 'nowrap',
+                      flexShrink: 0,
+                    }}
+                  >
+                    ~{Math.round(cat.estimates[pathIdx] / 1000)}k files (est.)
+                  </span>
+                )}
+                <Btn size="sm" onClick={() => removeFolder(catIdx, pathIdx)}>
+                  remove
+                </Btn>
+              </div>
             ))}
-          </RadioGroup>
-        </div>
+          </div>
 
-        <div style={{ marginTop: 'var(--alm-space-4)', display: 'flex', justifyContent: 'flex-end' }}>
-          <Button
-            className="alm-btn alm-btn--sm"
-            onClick={addSource}
-            disabled={!pendingPath}
-          >
-            Add source
-          </Button>
-        </div>
-      </div>
-
-      {/* Navigation */}
-      <div style={{ display: 'flex', justifyContent: 'space-between' }}>
-        <Button className="alm-btn alm-btn--ghost" onClick={onBack}>
-          Back
-        </Button>
-        <Button
-          className="alm-btn alm-btn--primary"
-          onClick={onNext}
-          disabled={!canProceed}
-        >
-          Continue
-        </Button>
-      </div>
+          {/* Add folder button */}
+          <div style={{ marginTop: 'var(--alm-space-3)' }}>
+            <Btn size="sm" onClick={() => addFolder(catIdx)}>
+              + Add folder&hellip;
+            </Btn>
+          </div>
+        </Box>
+      ))}
     </div>
   );
 }

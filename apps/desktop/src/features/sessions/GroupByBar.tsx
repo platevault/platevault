@@ -16,8 +16,8 @@ export function GroupByBar() {
   const [groupBy, setGroupBy] = usePreference('sessionsGroupBy');
 
   return (
-    <div className="alm-toolbar__sub">
-      <span className="alm-groupby__label">Group by:</span>
+    <div className="alm-sessions-group">
+      <span className="alm-groupby__label">Group:</span>
       {MODES.map((mode) => (
         <button
           key={mode.value}
