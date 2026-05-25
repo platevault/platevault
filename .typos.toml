@@ -1,0 +1,4 @@
+[files]
+extend-exclude = [
+    ".agents/skills/*/scripts/*.js",
+]

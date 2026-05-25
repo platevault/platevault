@@ -9,7 +9,7 @@ Transform a text description into a high-fidelity design screen.
 ## Steps
 
 ### 1. Enhance the User Prompt
-Before calling the Stitch MCP tool, apply the [Prompt Enhancement Pipeline](../SKILL.md#prompt-enhancement-pipeline). 
+Before calling the Stitch MCP tool, apply the [Prompt Enhancement Pipeline](../SKILL.md#prompt-enhancement-pipeline).
 - Identify the platform (Web/Mobile) and page type.
 - Incorporate any existing project design system from `.stitch/DESIGN.md`.
 - Use specific [Design Mappings](../references/design-mappings.md) and [Prompting Keywords](../references/prompt-keywords.md).

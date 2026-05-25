@@ -6,7 +6,7 @@ _Started 2026-05-24 07:49 UTC_
 
 ## User
 
-we are creating a wireframe for each orf the appliication pages of a desktop application called "astro library manager", built using tauri on rust and base-ui on react. 
+we are creating a wireframe for each orf the appliication pages of a desktop application called "astro library manager", built using tauri on rust and base-ui on react.
 
 The attachned design-prompt is a prompt from the agtent that wrote the initial specs
 
@@ -172,34 +172,34 @@ Fixed — the `AB` wrapper was masking `DCArtboard` from the canvas's child filt
 
 ## User
 
-the library inventory is showing files when we don't really care about individual files, we purely care about sessions/masters that we can link to a project in the structure that pixinsight/siril expects it. 
+the library inventory is showing files when we don't really care about individual files, we purely care about sessions/masters that we can link to a project in the structure that pixinsight/siril expects it.
 
-The review queue should also be based on imaging sessions, not individual files. 
+The review queue should also be based on imaging sessions, not individual files.
 
-I like the timeline but right now it doesn't feel that useful compared to just sorting by date. 
+I like the timeline but right now it doesn't feel that useful compared to just sorting by date.
 
-Board doesnt feel that useful. 
+Board doesnt feel that useful.
 
-Can we also add some mockups of the list view with options to group by month/year/filter/target/optical train? 
-The 3 pane nav is nice for the review queue. For the menu i want the sidebar but make it collapsible. 
+Can we also add some mockups of the list view with options to group by month/year/filter/target/optical train?
+The 3 pane nav is nice for the review queue. For the menu i want the sidebar but make it collapsible.
 
 Targets 3 pane nav is great
 
 Sessioons can be used in multiple projects
 
-For the calibration masters the matrix is a bit confusing i think. we just want to be able to see the masters and details on them as well as associate them to a project. 
+For the calibration masters the matrix is a bit confusing i think. we just want to be able to see the masters and details on them as well as associate them to a project.
 
 The "targets" coverage at a glance is great.
 
-Project list is great. 
+Project list is great.
 
-Project detail - i think i prefer the command senter, however we should be consisent and use the sidebar. especially if it's collapsible. maybe allow the user to switch between pipeline and command center? also give me a mockup of a command center that shows both the source maps and a project pipeline. 
+Project detail - i think i prefer the command senter, however we should be consisent and use the sidebar. especially if it's collapsible. maybe allow the user to switch between pipeline and command center? also give me a mockup of a command center that shows both the source maps and a project pipeline.
 
-The source view preparation strategy is i think a configuration/setting, not preparing a project? I think the source views should also be part of setting up a new project. show me the end to end wizard for preparing a new project including ingesting sources, masters, artifacts, etc. 
+The source view preparation strategy is i think a configuration/setting, not preparing a project? I think the source views should also be part of setting up a new project. show me the end to end wizard for preparing a new project including ingesting sources, masters, artifacts, etc.
 
-For plan review, i like both the table and diff. make it toggleable. 
+For plan review, i like both the table and diff. make it toggleable.
 
-CLeanup tree should be something in settings, not per project. 
+CLeanup tree should be something in settings, not per project.
 
 I want to see more examples of all settings pages, including naming & structure, how we build a view, how we handle renaming/moving/restructuring files from inbox to raw sources.
 
@@ -305,13 +305,13 @@ Caveats:
 
 ## User
 
-i like the project list and combined details. 
+i like the project list and combined details.
 
-For new project wizard, not sure why the lights are still in the calibration step, but we should have a mapping of flats per light source (separate filters for separate flats/filters. 
+For new project wizard, not sure why the lights are still in the calibration step, but we should have a mapping of flats per light source (separate filters for separate flats/filters.
 
 Project names don't have a template as projects are just user created, they don't have specific details available yet. We need an ingestion pattern for inbox → sessions/calibration though. Thisd should use draggable tokens and separators the user can add, see screenshot for an example.
 
-For cleanup & archive policy we need to be able to select what policy we take for each data when cleaning up. This also needs to depend on the type of process (PI, Siril, etc) has been selected. 
+For cleanup & archive policy we need to be able to select what policy we take for each data when cleaning up. This also needs to depend on the type of process (PI, Siril, etc) has been selected.
 
 We also need to have the user set a directeory where in the project they'll store their pixinishgt/siril data/processing directory as that'll determine what to clean up. This should be a default setting, not per project.
 
@@ -339,15 +339,15 @@ All three done:
 
 - **Wizard step 3**: lights row gone; flats now mapped per filter (each light source's filter gets its own master-flat picker), with darks/bias/dark-flats grouped as "shared calibration"
 - **Naming settings**: drag-token + separator builder, global pattern with live preview (`M101/Ha/2026-04-12/lights/`), per-frame-type override rows with enable toggles. Project-name template is gone — projects are user-named
-- **Cleanup settings**: 
+- **Cleanup settings**:
   - New **Processing directory** section at the top — set the relative path per tool (PI / Siril / planetary) and a default output directory. This is what the app treats as cleanup-eligible
   - **Policy matrix** below — rows are data types, columns are processing tools (PixInsight / Siril / Planetary). Each cell shows the default action (keep / archive / trash / DELETE) per tool, with `—` for types the tool doesn't produce (e.g. Siril has no "local normalized", planetary has no "calibrated"). Shared categories (sources, masters, outputs, notes) collapse to a single locked column
 
 ## User
 
-all directory fields should be directory selectors, not text fields across all mockups. the default should just be processing i think. 
+all directory fields should be directory selectors, not text fields across all mockups. the default should just be processing i think.
 
-Not sure what the inbox → raw migration is actually for? 
+Not sure what the inbox → raw migration is actually for?
 
 After you've changed this, please liberally annotate every decision on every screenshot so that we can send this to claude code to build. Write a DESIGN.MD that claude code should adhere to.
 
@@ -525,4 +525,3 @@ What's now in place for handoff:
 Still tactical work to do:
 - Inline sticky notes + PinNum chips only added to ~3 wireframes so far. The other 14 have the DesignNotes band but not yet pin chips inline. Tell me which 4-5 you most want fully pinned and I'll do those next.
 - Some sticky notes overlap content because they're absolute-positioned. If you'd rather they sit in a dedicated right-side gutter outside the AppFrame, that's a layout change I can make.
-

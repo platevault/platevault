@@ -12,7 +12,7 @@ Make targeted changes to an already generated design.
 Use `list_screens` or `get_screen` to find the correct `projectId` and `screenId`.
 
 ### 2. Formulate the Edit Prompt
-Be specific about the changes you want to make. Do not just say "fix it". 
+Be specific about the changes you want to make. Do not just say "fix it".
 - **Location**: "Change the color of the [primary button] in the [hero section]..."
 - **Visuals**: "...to a darker blue (#004080) and add a subtle shadow."
 - **Structure**: "Add a secondary button next to the primary one with the text 'Learn More'."
