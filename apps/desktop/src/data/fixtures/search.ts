@@ -1,5 +1,5 @@
 // Static mock fixture data for SearchResult (command palette)
-// Types mirror @/api/types — inline definitions used until that module is created
+// Types mirror @/bindings/types — inline definitions used until that module is created
 
 type SearchResultKind = 'session' | 'target' | 'project' | 'page' | 'action';
 

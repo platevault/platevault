@@ -1,7 +1,7 @@
 import { useState } from 'react';
 import { remapRoot, applyRootRemap } from '@/api/commands';
 import { Btn, Pill, Box, KV } from '@/ui';
-import type { RemapVerification } from '@/api/types';
+import type { RemapVerification } from '@/bindings/types';
 
 /** Wireframe fixture data for the verification samples */
 const FIXTURE_SAMPLES = [

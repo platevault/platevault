@@ -1,5 +1,5 @@
 import { memo, useMemo } from 'react';
-import type { ProjectSource } from '@/api/types';
+import type { ProjectSource } from '@/bindings/types';
 import { Btn } from '@/ui';
 
 export interface KitGridProps {

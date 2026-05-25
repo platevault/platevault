@@ -1,7 +1,7 @@
 import { useState } from 'react';
 import { AlertDialog } from '@base-ui-components/react/alert-dialog';
 import { Checkbox } from '@base-ui-components/react/checkbox';
-import type { FilesystemPlan } from '@/api/types';
+import type { FilesystemPlan } from '@/bindings/types';
 import { Btn } from '@/ui';
 
 export interface ApprovalGateProps {

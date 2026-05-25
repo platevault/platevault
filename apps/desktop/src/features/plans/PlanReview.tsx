@@ -7,7 +7,7 @@ import {
   createQueryStore,
 } from '@/data/store';
 import { getPlan, approvePlan, discardPlan, listPlans } from '@/api/commands';
-import type { PlanDetail, PlanState } from '@/api/types';
+import type { PlanDetail, PlanState } from '@/bindings/types';
 import { Toolbar, Pill, Btn } from '@/ui';
 import { PlanTable } from './PlanTable';
 import { PlanDiff } from './PlanDiff';

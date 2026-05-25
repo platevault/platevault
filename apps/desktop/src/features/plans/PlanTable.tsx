@@ -1,6 +1,6 @@
 import { useMemo, memo } from 'react';
 import { type ColumnDef } from '@tanstack/react-table';
-import type { PlanItem, PlanItemAction, PlanItemStatus, ProvenanceOrigin } from '@/api/types';
+import type { PlanItem, PlanItemAction, PlanItemStatus, ProvenanceOrigin } from '@/bindings/types';
 import { DataTable, Pill, Provenance } from '@/ui';
 
 export interface PlanTableProps {

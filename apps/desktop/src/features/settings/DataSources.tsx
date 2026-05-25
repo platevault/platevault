@@ -2,7 +2,7 @@ import { useState, useEffect } from 'react';
 import { Select } from '@base-ui-components/react/select';
 import { listRoots, registerRoot, startScan } from '@/api/commands';
 import { DirPicker, Btn, Pill, Box, KV } from '@/ui';
-import type { LibraryRoot } from '@/api/types';
+import type { LibraryRoot } from '@/bindings/types';
 
 interface DataSourcesProps {
   save: (scope: string, values: Record<string, unknown>) => void;

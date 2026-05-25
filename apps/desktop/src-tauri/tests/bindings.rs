@@ -44,4 +44,48 @@ fn exports_typescript_bindings() {
         written.contains("lifecycleTransitionPreview"),
         "binding contains lifecycle_transition_preview command"
     );
+
+    // Spec 029 stub commands — assert all command groups are present.
+    let stub_commands = [
+        "sessionsList",
+        "sessions.get",
+        "sessions.calendar",
+        "sessions.transition",
+        "sessions.split",
+        "sessions.merge",
+        "calibration.masters.list",
+        "calibration.masters.get",
+        "calibration.matches",
+        "targets.list",
+        "targets.get",
+        "projects.list",
+        "projects.get",
+        "projects.create_plan",
+        "plans.list",
+        "plans.get",
+        "plans.approve",
+        "plans.apply",
+        "plans.discard",
+        "audit.list",
+        "audit.export",
+        "review.queue",
+        "roots.list",
+        "roots.register",
+        "roots.remap\"",
+        "roots.remap.apply",
+        "scan.start",
+        "equipment.list",
+        "settings.get",
+        "settings.update",
+        "preferences.get",
+        "preferences.set",
+        "search.global",
+        "tour.complete_step",
+    ];
+    for cmd in &stub_commands {
+        assert!(
+            written.contains(cmd),
+            "binding missing stub command: {cmd}"
+        );
+    }
 }

@@ -1,6 +1,6 @@
 import { useRef, useEffect } from 'react';
 import { clsx } from 'clsx';
-import type { ReviewItem } from '@/api/types';
+import type { ReviewItem } from '@/bindings/types';
 import { Confidence, Pill } from '@/ui';
 
 export interface ReviewQueueProps {

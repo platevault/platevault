@@ -6,7 +6,7 @@ import { invoke as __TAURI_INVOKE } from "@tauri-apps/api/core";
 export const commands = {
 	/**
 	 *  `provenance.read` Tauri command — returns the contract response shape.
-	 *
+	 * 
 	 *  # Errors
 	 *  Never returns `Err`; persistence failures are folded into
 	 *  `ProvenanceReadResponse::error(...)`. The `Result` shape exists so the
@@ -15,7 +15,7 @@ export const commands = {
 	provenanceRead: (request: ProvenanceReadRequest_Deserialize) => typedError<ProvenanceReadResponse_Serialize, string>(__TAURI_INVOKE("provenance_read", { request })),
 	/**
 	 *  `lifecycle.transition.apply` Tauri command.
-	 *
+	 * 
 	 *  # Errors
 	 *  Never returns `Err`; refusal / persistence errors fold into
 	 *  `TransitionResponse::error(...)` per the contract.
@@ -23,25 +23,459 @@ export const commands = {
 	lifecycleTransitionApply: (request: TransitionRequest_Deserialize) => typedError<TransitionResponse_Serialize, string>(__TAURI_INVOKE("lifecycle_transition_apply", { request })),
 	/**
 	 *  `lifecycle.transition.preview` — read-only dry-run for UI button enabling.
-	 *
+	 * 
 	 *  # Errors
 	 *  Never returns `Err`; refusal codes fold into `TransitionResponse::error(...)`.
 	 */
 	lifecycleTransitionPreview: (request: TransitionRequest_Deserialize) => typedError<TransitionResponse_Serialize, string>(__TAURI_INVOKE("lifecycle_transition_preview", { request })),
 	/**
 	 *  `lifecycle.ledger.list` Tauri command.
-	 *
+	 * 
 	 *  # Errors
 	 *  Returns a stringified persistence error when the repository query fails
 	 *  (e.g. transient DB unavailability). Successful empty results are `Ok(vec![])`.
 	 */
 	lifecycleLedgerList: (filter: LedgerFilterDto) => typedError<LedgerRowDto[], string>(__TAURI_INVOKE("lifecycle_ledger_list", { filter })),
+	/**
+	 *  `sessions.list` — returns all acquisition sessions.
+	 * 
+	 *  # Errors
+	 *  Returns `Err(String)` on failure; the stub never fails.
+	 */
+	sessionsList: () => typedError<AcquisitionSession_Serialize[], string>(__TAURI_INVOKE("sessions.list")),
+	/**
+	 *  `sessions.get` — returns a single session detail.
+	 * 
+	 *  # Errors
+	 *  Returns `Err(String)` on failure; the stub never fails.
+	 */
+	sessionsGet: (id: string) => typedError<SessionDetail_Serialize, string>(__TAURI_INVOKE("sessions.get", { id })),
+	/**
+	 *  `sessions.calendar` — returns calendar data for a month range.
+	 * 
+	 *  # Errors
+	 *  Returns `Err(String)` on failure; the stub never fails.
+	 */
+	sessionsCalendar: (startMonth: string, endMonth: string) => typedError<CalendarData, string>(__TAURI_INVOKE("sessions.calendar", { startMonth, endMonth })),
+	/**
+	 *  `sessions.transition` — transition a session to a new state.
+	 * 
+	 *  # Errors
+	 *  Returns `Err(String)` on failure; the stub never fails.
+	 */
+	sessionsTransition: (id: string, action: string, metadata: unknown | null) => typedError<AcquisitionSession_Serialize, string>(__TAURI_INVOKE("sessions.transition", { id, action, metadata })),
+	/**
+	 *  `sessions.split` — split a session at a given frame index.
+	 * 
+	 *  # Errors
+	 *  Returns `Err(String)` on failure; the stub never fails.
+	 */
+	sessionsSplit: (id: string, splitAtIndex: number) => typedError<SessionSplitResult_Serialize, string>(__TAURI_INVOKE("sessions.split", { id, splitAtIndex })),
+	/**
+	 *  `sessions.merge` — merge multiple sessions into one.
+	 * 
+	 *  # Errors
+	 *  Returns `Err(String)` on failure; the stub never fails.
+	 */
+	sessionsMerge: (ids: string[]) => typedError<AcquisitionSession_Serialize, string>(__TAURI_INVOKE("sessions.merge", { ids })),
+	/**
+	 *  `calibration.masters.list` — returns all calibration masters.
+	 * 
+	 *  # Errors
+	 *  Returns `Err(String)` on failure; the stub never fails.
+	 */
+	calibrationMastersList: () => typedError<CalibrationMaster_Serialize[], string>(__TAURI_INVOKE("calibration.masters.list")),
+	/**
+	 *  `calibration.masters.get` — returns a single calibration master detail.
+	 * 
+	 *  # Errors
+	 *  Returns `Err(String)` on failure; the stub never fails.
+	 */
+	calibrationMastersGet: (id: string) => typedError<MasterDetail_Serialize, string>(__TAURI_INVOKE("calibration.masters.get", { id })),
+	/**
+	 *  `calibration.matches` — returns calibration match candidates for a session.
+	 * 
+	 *  # Errors
+	 *  Returns `Err(String)` on failure; the stub never fails.
+	 */
+	calibrationMatches: (sessionId: string) => typedError<MatchCandidate_Serialize[], string>(__TAURI_INVOKE("calibration.matches", { sessionId })),
+	/**
+	 *  `targets.list` — returns all targets, optionally filtered by search.
+	 * 
+	 *  # Errors
+	 *  Returns `Err(String)` on failure; the stub never fails.
+	 */
+	targetsList: (search: string | null) => typedError<Target_Serialize[], string>(__TAURI_INVOKE("targets.list", { search })),
+	/**
+	 *  `targets.get` — returns a single target detail.
+	 * 
+	 *  # Errors
+	 *  Returns `Err(String)` on failure; the stub never fails.
+	 */
+	targetsGet: (id: string) => typedError<TargetDetail_Serialize, string>(__TAURI_INVOKE("targets.get", { id })),
+	/**
+	 *  `projects.list` — returns all projects.
+	 * 
+	 *  # Errors
+	 *  Returns `Err(String)` on failure; the stub never fails.
+	 */
+	projectsList: (filters: unknown | null) => typedError<Project_Serialize[], string>(__TAURI_INVOKE("projects.list", { filters })),
+	/**
+	 *  `projects.get` — returns a single project detail.
+	 * 
+	 *  # Errors
+	 *  Returns `Err(String)` on failure; the stub never fails.
+	 */
+	projectsGet: (id: string) => typedError<ProjectDetail_Serialize, string>(__TAURI_INVOKE("projects.get", { id })),
+	/**
+	 *  `projects.create_plan` — create a filesystem plan from wizard state.
+	 * 
+	 *  # Errors
+	 *  Returns `Err(String)` on failure; the stub never fails.
+	 */
+	projectsCreatePlan: (wizardState: unknown) => typedError<FilesystemPlan_Serialize, string>(__TAURI_INVOKE("projects.create_plan", { wizardState })),
+	/**
+	 *  `plans.list` — returns all filesystem plans.
+	 * 
+	 *  # Errors
+	 *  Returns `Err(String)` on failure; the stub never fails.
+	 */
+	plansList: (filters: unknown | null) => typedError<FilesystemPlan_Serialize[], string>(__TAURI_INVOKE("plans.list", { filters })),
+	/**
+	 *  `plans.get` — returns a single plan detail.
+	 * 
+	 *  # Errors
+	 *  Returns `Err(String)` on failure; the stub never fails.
+	 */
+	plansGet: (id: string) => typedError<PlanDetail_Serialize, string>(__TAURI_INVOKE("plans.get", { id })),
+	/**
+	 *  `plans.approve` — approve a plan for application.
+	 * 
+	 *  # Errors
+	 *  Returns `Err(String)` on failure; the stub never fails.
+	 */
+	plansApprove: (id: string, deleteAcknowledged: boolean | null) => typedError<FilesystemPlan_Serialize, string>(__TAURI_INVOKE("plans.approve", { id, deleteAcknowledged })),
+	/**
+	 *  `plans.apply` — apply an approved plan, returning an operation handle.
+	 * 
+	 *  # Errors
+	 *  Returns `Err(String)` on failure; the stub never fails.
+	 */
+	plansApply: (id: string) => typedError<IpcOperationHandle, string>(__TAURI_INVOKE("plans.apply", { id })),
+	/**
+	 *  `plans.discard` — discard a plan.
+	 * 
+	 *  # Errors
+	 *  Returns `Err(String)` on failure; the stub never fails.
+	 */
+	plansDiscard: (id: string) => typedError<null, string>(__TAURI_INVOKE("plans.discard", { id })),
+	/**
+	 *  `audit.list` — returns paginated audit entries.
+	 * 
+	 *  # Errors
+	 *  Returns `Err(String)` on failure; the stub never fails.
+	 */
+	auditList: (filters: unknown | null, pagination: unknown | null) => typedError<AuditListResponse_Serialize, string>(__TAURI_INVOKE("audit.list", { filters, pagination })),
+	/**
+	 *  `audit.export` — export audit entries as newline-delimited JSON.
+	 * 
+	 *  # Errors
+	 *  Returns `Err(String)` on failure; the stub never fails.
+	 */
+	auditExport: (filters: unknown | null) => typedError<string, string>(__TAURI_INVOKE("audit.export", { filters })),
+	/**
+	 *  `review.queue` — returns items awaiting user review.
+	 * 
+	 *  # Errors
+	 *  Returns `Err(String)` on failure; the stub never fails.
+	 */
+	reviewQueue: (filter: string | null) => typedError<ReviewItem_Serialize[], string>(__TAURI_INVOKE("review.queue", { filter })),
+	/**
+	 *  `roots.list` — returns all registered library roots.
+	 * 
+	 *  # Errors
+	 *  Returns `Err(String)` on failure; the stub never fails.
+	 */
+	rootsList: () => typedError<LibraryRoot_Serialize[], string>(__TAURI_INVOKE("roots.list")),
+	/**
+	 *  `roots.register` — register a new library root.
+	 * 
+	 *  # Errors
+	 *  Returns `Err(String)` on failure; the stub never fails.
+	 */
+	rootsRegister: (path: string, category: string, scanSettings: unknown) => typedError<LibraryRoot_Serialize, string>(__TAURI_INVOKE("roots.register", { path, category, scanSettings })),
+	/**
+	 *  `roots.remap` — preview a root path remap.
+	 * 
+	 *  # Errors
+	 *  Returns `Err(String)` on failure; the stub never fails.
+	 */
+	rootsRemap: (rootId: string, newPath: string) => typedError<RemapVerification, string>(__TAURI_INVOKE("roots.remap", { rootId, newPath })),
+	/**
+	 *  `roots.remap.apply` — apply a verified root remap.
+	 * 
+	 *  # Errors
+	 *  Returns `Err(String)` on failure; the stub never fails.
+	 */
+	rootsRemapApply: (rootId: string, verified: boolean) => typedError<null, string>(__TAURI_INVOKE("roots.remap.apply", { rootId, verified })),
+	/**
+	 *  `scan.start` — start a filesystem scan, optionally for specific roots.
+	 * 
+	 *  # Errors
+	 *  Returns `Err(String)` on failure; the stub never fails.
+	 */
+	scanStart: (rootIds: string[] | null) => typedError<IpcOperationHandle, string>(__TAURI_INVOKE("scan.start", { rootIds })),
+	/**
+	 *  `equipment.list` — returns all registered equipment.
+	 * 
+	 *  # Errors
+	 *  Returns `Err(String)` on failure; the stub never fails.
+	 */
+	equipmentList: () => typedError<Equipment[], string>(__TAURI_INVOKE("equipment.list")),
+	/**
+	 *  `settings.get` — returns settings for a given scope.
+	 * 
+	 *  # Errors
+	 *  Returns `Err(String)` on failure; the stub never fails.
+	 */
+	settingsGet: (scope: string) => typedError<SettingsData, string>(__TAURI_INVOKE("settings.get", { scope })),
+	/**
+	 *  `settings.update` — update settings for a given scope.
+	 * 
+	 *  # Errors
+	 *  Returns `Err(String)` on failure; the stub never fails.
+	 */
+	settingsUpdate: (scope: string, values: unknown) => typedError<null, string>(__TAURI_INVOKE("settings.update", { scope, values })),
+	/**
+	 *  `preferences.get` — returns current application preferences.
+	 * 
+	 *  # Errors
+	 *  Returns `Err(String)` on failure; the stub never fails.
+	 */
+	preferencesGet: () => typedError<AppPreferences, string>(__TAURI_INVOKE("preferences.get")),
+	/**
+	 *  `preferences.set` — update a single preference key.
+	 * 
+	 *  # Errors
+	 *  Returns `Err(String)` on failure; the stub never fails.
+	 */
+	preferencesSet: (key: string, value: unknown) => typedError<null, string>(__TAURI_INVOKE("preferences.set", { key, value })),
+	/**
+	 *  `search.global` — performs a global search across all entity types.
+	 * 
+	 *  # Errors
+	 *  Returns `Err(String)` on failure; the stub never fails.
+	 */
+	searchGlobal: (query: string) => typedError<SearchResult_Serialize[], string>(__TAURI_INVOKE("search.global", { query })),
+	/**
+	 *  `tour.complete_step` — mark a tour step as completed.
+	 * 
+	 *  # Errors
+	 *  Returns `Err(String)` on failure; the stub never fails.
+	 */
+	tourCompleteStep: (step: string) => typedError<null, string>(__TAURI_INVOKE("tour.complete_step", { step })),
 };
 
 /* Types */
-export type AssetType = "file_record" | "acquisition_session" | "calibration_session" | "project" | "prepared_source" | "processing_artifact" | "filesystem_plan" | "data_source" |
+/**
+ *  An acquisition session as seen through the IPC boundary.
+ * 
+ *  This is the list-level representation returned by `sessions.list`. It
+ *  matches the frontend's `AcquisitionSession` interface in `types.ts`.
+ */
+export type AcquisitionSession = AcquisitionSession_Serialize | AcquisitionSession_Deserialize;
+
+/**
+ *  An acquisition session as seen through the IPC boundary.
+ * 
+ *  This is the list-level representation returned by `sessions.list`. It
+ *  matches the frontend's `AcquisitionSession` interface in `types.ts`.
+ */
+export type AcquisitionSession_Deserialize = {
+	id: string,
+	sessionKey: SessionKey,
+	state: SessionState,
+	confidence: ConfidenceLevel,
+	opticalTrainId: string,
+	frameCount: number,
+	totalIntegrationSeconds: number | null,
+	totalSizeBytes: number,
+	metadata: { [key in string]: MetaValue_Deserialize },
+	targetIds: string[],
+	projectIds: string[],
+	warnings: string[],
+};
+
+/**
+ *  An acquisition session as seen through the IPC boundary.
+ * 
+ *  This is the list-level representation returned by `sessions.list`. It
+ *  matches the frontend's `AcquisitionSession` interface in `types.ts`.
+ */
+export type AcquisitionSession_Serialize = {
+	id: string,
+	sessionKey: SessionKey,
+	state: SessionState,
+	confidence: ConfidenceLevel,
+	opticalTrainId: string,
+	frameCount: number,
+	totalIntegrationSeconds: number | null,
+	totalSizeBytes: number,
+	metadata: { [key in string]: MetaValue_Serialize },
+	targetIds: string[],
+	projectIds: string[],
+	warnings: string[],
+};
+
+/**  Application-level user preferences. */
+export type AppPreferences = {
+	sidebarCollapsed: boolean,
+	density: Density,
+	projectViewModes: { [key in string]: ViewMode },
+	defaultProjectView: ViewMode,
+	sessionsGroupBy: SessionsGroupBy,
+	sessionsView: SessionsView,
+	tourCompleted: TourCompleted,
+	setupCompleted: boolean,
+};
+
+export type AssetType = "file_record" | "acquisition_session" | "calibration_session" | "project" | "prepared_source" | "processing_artifact" | "filesystem_plan" | "data_source" | 
 /**  target: alias and primaryDesignation provenance tracking (R-3.2). */
 "target";
+
+/**  Actor that triggered the audited action. */
+export type AuditActor = "user" | "system";
+
+/**  A single audit log entry. */
+export type AuditEntry = AuditEntry_Serialize | AuditEntry_Deserialize;
+
+/**  A single audit log entry. */
+export type AuditEntry_Deserialize = {
+	id: string,
+	timestamp: string,
+	eventType: string,
+	entityType: string,
+	entityId: string,
+	fromState: string | null,
+	toState: string | null,
+	actor: AuditActor,
+	outcome: AuditOutcome,
+	detail: string,
+};
+
+/**  A single audit log entry. */
+export type AuditEntry_Serialize = {
+	id: string,
+	timestamp: string,
+	eventType: string,
+	entityType: string,
+	entityId: string,
+	fromState?: string | null,
+	toState?: string | null,
+	actor: AuditActor,
+	outcome: AuditOutcome,
+	detail: string,
+};
+
+/**  Paginated response for audit list queries. */
+export type AuditListResponse = AuditListResponse_Serialize | AuditListResponse_Deserialize;
+
+/**  Paginated response for audit list queries. */
+export type AuditListResponse_Deserialize = {
+	entries: AuditEntry_Deserialize[],
+	total: number,
+};
+
+/**  Paginated response for audit list queries. */
+export type AuditListResponse_Serialize = {
+	entries: AuditEntry_Serialize[],
+	total: number,
+};
+
+/**  Outcome of an audited action. */
+export type AuditOutcome = "applied" | "ok" | "refused" | "failed" | "paused";
+
+/**  Calendar data for the sessions calendar view. */
+export type CalendarData = {
+	months: CalendarMonth[],
+};
+
+/**  A single day in the session calendar. */
+export type CalendarDay = {
+	day: number,
+	sessions: CalendarSessionStub[],
+};
+
+/**  A single month in the session calendar. */
+export type CalendarMonth = {
+	year: number,
+	month: number,
+	days: CalendarDay[],
+};
+
+/**  A session stub within a calendar day. */
+export type CalendarSessionStub = {
+	id: string,
+	target: string,
+	filter: string,
+};
+
+/**  Sensor/optical fingerprint that determines calibration compatibility. */
+export type CalibrationFingerprint = CalibrationFingerprint_Serialize | CalibrationFingerprint_Deserialize;
+
+/**  Sensor/optical fingerprint that determines calibration compatibility. */
+export type CalibrationFingerprint_Deserialize = {
+	camera: string,
+	sensorMode: string | null,
+	exposureS: number | null,
+	tempC: number | null,
+	gain: number | null,
+	binning: string,
+	filter: string | null,
+};
+
+/**  Sensor/optical fingerprint that determines calibration compatibility. */
+export type CalibrationFingerprint_Serialize = {
+	camera: string,
+	sensorMode?: string | null,
+	exposureS: number | null,
+	tempC?: number | null,
+	gain: number | null,
+	binning: string,
+	filter?: string | null,
+};
+
+/**  Kind of calibration master frame. */
+export type CalibrationKind = "dark" | "flat" | "bias" | "dark_flat" | "bad_pixel_map";
+
+/**  A calibration master as seen in list views. */
+export type CalibrationMaster = CalibrationMaster_Serialize | CalibrationMaster_Deserialize;
+
+/**  A calibration master as seen in list views. */
+export type CalibrationMaster_Deserialize = {
+	id: string,
+	kind: CalibrationKind,
+	fingerprint: CalibrationFingerprint_Deserialize,
+	sourceSessionId: string,
+	createdAt: string,
+	ageDays: number,
+	sizeBytes: number,
+	usedBySessionIds: string[],
+	usedByProjectIds: string[],
+};
+
+/**  A calibration master as seen in list views. */
+export type CalibrationMaster_Serialize = {
+	id: string,
+	kind: CalibrationKind,
+	fingerprint: CalibrationFingerprint_Serialize,
+	sourceSessionId: string,
+	createdAt: string,
+	ageDays: number,
+	sizeBytes: number,
+	usedBySessionIds: string[],
+	usedByProjectIds: string[],
+};
 
 export type CalibrationSessionTransitionRequest = CalibrationSessionTransitionRequest_Serialize | CalibrationSessionTransitionRequest_Deserialize;
 
@@ -65,6 +499,56 @@ export type CalibrationSessionTransitionRequest_Serialize = {
 	nextState: SessionState,
 	actionLabel?: string | null,
 	actor: TransitionActor,
+};
+
+/**  Catalog identifiers for a target (NGC, IC, Messier, etc.). */
+export type CatalogIds = CatalogIds_Serialize | CatalogIds_Deserialize;
+
+/**  Catalog identifiers for a target (NGC, IC, Messier, etc.). */
+export type CatalogIds_Deserialize = {
+	ngc: string | null,
+	ic: string | null,
+	messier: string | null,
+};
+
+/**  Catalog identifiers for a target (NGC, IC, Messier, etc.). */
+export type CatalogIds_Serialize = {
+	ngc?: string | null,
+	ic?: string | null,
+	messier?: string | null,
+};
+
+/**  Cleanup eligibility for an artifact group. */
+export type CleanupEligibility = "eligible" | "archive" | "keep" | "none";
+
+/**  Cleanup state summary for a project. */
+export type CleanupState = {
+	reclaimableBytes: number,
+};
+
+/**  A compatible session entry within a master detail view. */
+export type CompatibleSessionEntry = {
+	sessionId: string,
+	score: number | null,
+	softMismatches: string[],
+};
+
+/**  Confidence level for inferred or reviewed metadata. */
+export type ConfidenceLevel = "unknown" | "low" | "medium" | "high" | "confirmed" | "rejected";
+
+/**  Equatorial coordinates (J2000). */
+export type Coordinates = Coordinates_Serialize | Coordinates_Deserialize;
+
+/**  Equatorial coordinates (J2000). */
+export type Coordinates_Deserialize = {
+	ra: number | null,
+	dec: number | null,
+};
+
+/**  Equatorial coordinates (J2000). */
+export type Coordinates_Serialize = {
+	ra?: number | null,
+	dec?: number | null,
 };
 
 export type DataSourceState = "active" | "missing" | "disabled" | "reconnect_required";
@@ -93,6 +577,24 @@ export type DataSourceTransitionRequest_Serialize = {
 	actor: TransitionActor,
 };
 
+/**  UI density preference. */
+export type Density = "compact" | "comfortable" | "spacious";
+
+/**  Dry-run result summary. */
+export type DryRunResult = {
+	passed: number,
+	warnings: number,
+	failures: number,
+};
+
+/**  A piece of astrophotography equipment. */
+export type Equipment = {
+	id: string,
+	name: string,
+	kind: string,
+	aliases: string[],
+};
+
 export type FileRecordState = "observed" | "missing" | "changed" | "classified" | "rejected" | "protected";
 
 export type FileRecordTransitionRequest = FileRecordTransitionRequest_Serialize | FileRecordTransitionRequest_Deserialize;
@@ -119,6 +621,44 @@ export type FileRecordTransitionRequest_Serialize = {
 	actor: TransitionActor,
 };
 
+/**  A filesystem plan as seen in list/detail views. */
+export type FilesystemPlan = FilesystemPlan_Serialize | FilesystemPlan_Deserialize;
+
+/**  A filesystem plan as seen in list/detail views. */
+export type FilesystemPlan_Deserialize = {
+	id: string,
+	kind: PlanKind,
+	state: PlanState,
+	items: PlanItem_Deserialize[],
+	dryRunResult: DryRunResult,
+	hasDestructive: boolean,
+	reclaimBytes: number,
+	createdAt: string,
+	approvedAt: string | null,
+	appliedAt: string | null,
+};
+
+/**  A filesystem plan as seen in list/detail views. */
+export type FilesystemPlan_Serialize = {
+	id: string,
+	kind: PlanKind,
+	state: PlanState,
+	items: PlanItem_Serialize[],
+	dryRunResult: DryRunResult,
+	hasDestructive: boolean,
+	reclaimBytes: number,
+	createdAt: string,
+	approvedAt?: string | null,
+	appliedAt?: string | null,
+};
+
+/**  A group of frames within a session (per-filter breakdown). */
+export type Frameset = {
+	filter: string,
+	count: number,
+	integrationS: number | null,
+};
+
 export type InventorySessionTransitionRequest = InventorySessionTransitionRequest_Serialize | InventorySessionTransitionRequest_Deserialize;
 
 export type InventorySessionTransitionRequest_Deserialize = {
@@ -143,6 +683,12 @@ export type InventorySessionTransitionRequest_Serialize = {
 	actor: TransitionActor,
 };
 
+/**  Handle for a long-running operation (scan, plan apply, etc.). */
+export type IpcOperationHandle = {
+	operationId: string,
+	kind: string,
+};
+
 /**  JSON-friendly ledger filter mirrored to TypeScript via specta. */
 export type LedgerFilterDto = {
 	entityTypes?: string[],
@@ -156,7 +702,7 @@ export type LedgerFilterDto = {
 
 /**
  *  camelCase wire shape mirroring [`LedgerRow`] for the typed Tauri surface.
- *
+ * 
  *  `LedgerRow` itself doesn't derive `specta::Type` (the persistence layer
  *  stays language-internal). This DTO is the IPC projection.
  */
@@ -168,6 +714,198 @@ export type LedgerRowDto = {
 	path: string | null,
 	projectId: string | null,
 	updatedAt: string | null,
+};
+
+/**  A registered library root directory. */
+export type LibraryRoot = LibraryRoot_Serialize | LibraryRoot_Deserialize;
+
+/**  A registered library root directory. */
+export type LibraryRoot_Deserialize = {
+	id: string,
+	path: string,
+	category: RootCategory,
+	online: boolean,
+	fileCount: number,
+	lastScanned: string | null,
+};
+
+/**  A registered library root directory. */
+export type LibraryRoot_Serialize = {
+	id: string,
+	path: string,
+	category: RootCategory,
+	online: boolean,
+	fileCount: number,
+	lastScanned?: string | null,
+};
+
+/**  Extended detail view of a calibration master. */
+export type MasterDetail = MasterDetail_Serialize | MasterDetail_Deserialize;
+
+/**  Extended detail view of a calibration master. */
+export type MasterDetail_Deserialize = {
+	id: string,
+	kind: CalibrationKind,
+	fingerprint: CalibrationFingerprint_Deserialize,
+	sourceSessionId: string,
+	createdAt: string,
+	ageDays: number,
+	sizeBytes: number,
+	usedBySessionIds: string[],
+	usedByProjectIds: string[],
+	compatibleSessions: CompatibleSessionEntry[],
+	usageStats: MasterUsageStats,
+};
+
+/**  Extended detail view of a calibration master. */
+export type MasterDetail_Serialize = {
+	id: string,
+	kind: CalibrationKind,
+	fingerprint: CalibrationFingerprint_Serialize,
+	sourceSessionId: string,
+	createdAt: string,
+	ageDays: number,
+	sizeBytes: number,
+	usedBySessionIds: string[],
+	usedByProjectIds: string[],
+	compatibleSessions: CompatibleSessionEntry[],
+	usageStats: MasterUsageStats,
+};
+
+/**  Usage statistics for a calibration master. */
+export type MasterUsageStats = {
+	sessionCount: number,
+	projectCount: number,
+};
+
+/**  A candidate match between a session and a calibration master. */
+export type MatchCandidate = MatchCandidate_Serialize | MatchCandidate_Deserialize;
+
+/**  A candidate match between a session and a calibration master. */
+export type MatchCandidate_Deserialize = {
+	masterId: string,
+	kind: CalibrationKind,
+	score: number | null,
+	filter: string | null,
+	softMismatches: string[],
+};
+
+/**  A candidate match between a session and a calibration master. */
+export type MatchCandidate_Serialize = {
+	masterId: string,
+	kind: CalibrationKind,
+	score: number | null,
+	filter?: string | null,
+	softMismatches: string[],
+};
+
+/**  A single metadata value with provenance and confidence tracking. */
+export type MetaValue = MetaValue_Serialize | MetaValue_Deserialize;
+
+/**  A single metadata value with provenance and confidence tracking. */
+export type MetaValue_Deserialize = {
+	/**
+	 *  Free-form JSON value. Uses [`crate::JsonAny`] to avoid specta's
+	 *  infinite-recursion issue with raw `serde_json::Value`.
+	 */
+	value: unknown,
+	raw: string | null,
+	origin: ProvenanceOrigin,
+	confidence: ConfidenceLevel,
+	evidenceRef: string | null,
+};
+
+/**  A single metadata value with provenance and confidence tracking. */
+export type MetaValue_Serialize = {
+	/**
+	 *  Free-form JSON value. Uses [`crate::JsonAny`] to avoid specta's
+	 *  infinite-recursion issue with raw `serde_json::Value`.
+	 */
+	value: unknown,
+	raw?: string | null,
+	origin: ProvenanceOrigin,
+	confidence: ConfidenceLevel,
+	evidenceRef?: string | null,
+};
+
+/**  Verification state for a single output. */
+export type OutputVerification = "accepted" | "unreviewed" | "superseded";
+
+/**  Extended detail view of a filesystem plan. */
+export type PlanDetail = PlanDetail_Serialize | PlanDetail_Deserialize;
+
+/**  Extended detail view of a filesystem plan. */
+export type PlanDetail_Deserialize = {
+	id: string,
+	kind: PlanKind,
+	state: PlanState,
+	items: PlanItem_Deserialize[],
+	dryRunResult: DryRunResult,
+	hasDestructive: boolean,
+	reclaimBytes: number,
+	createdAt: string,
+	approvedAt: string | null,
+	appliedAt: string | null,
+	summary: PlanSafetySummary,
+};
+
+/**  Extended detail view of a filesystem plan. */
+export type PlanDetail_Serialize = {
+	id: string,
+	kind: PlanKind,
+	state: PlanState,
+	items: PlanItem_Serialize[],
+	dryRunResult: DryRunResult,
+	hasDestructive: boolean,
+	reclaimBytes: number,
+	createdAt: string,
+	approvedAt?: string | null,
+	appliedAt?: string | null,
+	summary: PlanSafetySummary,
+};
+
+/**  A single item within a filesystem plan. */
+export type PlanItem = PlanItem_Serialize | PlanItem_Deserialize;
+
+/**  Action to perform on a single filesystem item. */
+export type PlanItemAction = "mkdir" | "move" | "copy" | "link" | "junction" | "write" | "archive" | "trash" | "delete";
+
+/**  Status of a single plan item. */
+export type PlanItemStatus = "pending" | "applied" | "failed" | "skipped" | "protected";
+
+/**  A single item within a filesystem plan. */
+export type PlanItem_Deserialize = {
+	action: PlanItemAction,
+	sourcePath: string,
+	destPath: string,
+	status: PlanItemStatus,
+	dryRunOk: boolean,
+	protectionReason: string | null,
+	provenance: ProvenanceOrigin,
+};
+
+/**  A single item within a filesystem plan. */
+export type PlanItem_Serialize = {
+	action: PlanItemAction,
+	sourcePath: string,
+	destPath: string,
+	status: PlanItemStatus,
+	dryRunOk: boolean,
+	protectionReason?: string | null,
+	provenance: ProvenanceOrigin,
+};
+
+/**  Kind of filesystem plan. */
+export type PlanKind = "project_structure" | "source_view" | "source_view_removal" | "archive" | "cleanup" | "root_remap" | "manifest";
+
+/**  Safety summary for a plan detail view. */
+export type PlanSafetySummary = {
+	itemCount: number,
+	reclaimBytes: number,
+	trashCount: number,
+	archiveCount: number,
+	deleteCount: number,
+	protectedCount: number,
 };
 
 /**  Note: `paused` is a domain-internal state (R-Pause-1); not surfaced in the transition contract. */
@@ -223,6 +961,151 @@ export type PreparedSourceTransitionRequest_Serialize = {
 	actor: TransitionActor,
 };
 
+/**  A project as seen in list views. */
+export type Project = Project_Serialize | Project_Deserialize;
+
+/**  A group of processing artifacts within a project detail view. */
+export type ProjectArtifactGroup = ProjectArtifactGroup_Serialize | ProjectArtifactGroup_Deserialize;
+
+/**  A group of processing artifacts within a project detail view. */
+export type ProjectArtifactGroup_Deserialize = {
+	/**  Artifact type label (e.g. "registered", "`drizzle_data`"). */
+	type: string,
+	count: number,
+	totalSizeBytes: number,
+	cleanupEligibility: CleanupEligibility,
+	confidence: ConfidenceLevel,
+	tool: string,
+	protected: boolean,
+	warning: string | null,
+};
+
+/**  A group of processing artifacts within a project detail view. */
+export type ProjectArtifactGroup_Serialize = {
+	/**  Artifact type label (e.g. "registered", "`drizzle_data`"). */
+	type: string,
+	count: number,
+	totalSizeBytes: number,
+	cleanupEligibility: CleanupEligibility,
+	confidence: ConfidenceLevel,
+	tool: string,
+	protected: boolean,
+	warning?: string | null,
+};
+
+/**  Extended detail view of a project. */
+export type ProjectDetail = ProjectDetail_Serialize | ProjectDetail_Deserialize;
+
+/**  Extended detail view of a project. */
+export type ProjectDetail_Deserialize = {
+	id: string,
+	name: string,
+	workflowProfileId: string,
+	rootPath: string,
+	state: ProjectState,
+	blockedReason: string | null,
+	verificationState: VerificationState,
+	cleanupState: CleanupState,
+	integrationHours: number | null,
+	targetIds: string[],
+	sourceMap: SourceMap,
+	sourceViewIds: string[],
+	outputIds: string[],
+	processingDirectory: string,
+	outputDirectory: string,
+	updatedAt: string,
+	targets: string[],
+	sources: ProjectSource_Deserialize[],
+	sourceViews: ProjectSourceView[],
+	outputs: ProjectOutput[],
+	artifacts: ProjectArtifactGroup_Deserialize[],
+	lifecycleStageIndex: number,
+	auditCount: number,
+	planCount: number,
+	cleanupBytes: number,
+	cleanupLabel: string,
+	totalIntegrationLabel: string,
+	onDiskLabel: string,
+	notesCount: number,
+	manifestCount: number,
+};
+
+/**  Extended detail view of a project. */
+export type ProjectDetail_Serialize = {
+	id: string,
+	name: string,
+	workflowProfileId: string,
+	rootPath: string,
+	state: ProjectState,
+	blockedReason?: string | null,
+	verificationState: VerificationState,
+	cleanupState: CleanupState,
+	integrationHours: number | null,
+	targetIds: string[],
+	sourceMap: SourceMap,
+	sourceViewIds: string[],
+	outputIds: string[],
+	processingDirectory: string,
+	outputDirectory: string,
+	updatedAt: string,
+	targets: string[],
+	sources: ProjectSource_Serialize[],
+	sourceViews: ProjectSourceView[],
+	outputs: ProjectOutput[],
+	artifacts: ProjectArtifactGroup_Serialize[],
+	lifecycleStageIndex: number,
+	auditCount: number,
+	planCount: number,
+	cleanupBytes: number,
+	cleanupLabel: string,
+	totalIntegrationLabel: string,
+	onDiskLabel: string,
+	notesCount: number,
+	manifestCount: number,
+};
+
+/**  An output artifact within a project detail view. */
+export type ProjectOutput = {
+	id: string,
+	filename: string,
+	kind: string,
+	sizeBytes: number,
+	date: string,
+	verification: OutputVerification,
+	protected: boolean,
+};
+
+/**  A source entry within a project detail view. */
+export type ProjectSource = ProjectSource_Serialize | ProjectSource_Deserialize;
+
+/**  A source view within a project detail view. */
+export type ProjectSourceView = {
+	name: string,
+	strategy: SourceViewStrategy,
+	linkCount: number,
+	planRef: string,
+};
+
+/**  A source entry within a project detail view. */
+export type ProjectSource_Deserialize = {
+	role: SourceRole,
+	name: string,
+	frames: number,
+	hours: string,
+	selection: SourceSelection,
+	warning: string | null,
+};
+
+/**  A source entry within a project detail view. */
+export type ProjectSource_Serialize = {
+	role: SourceRole,
+	name: string,
+	frames: number,
+	hours: string,
+	selection: SourceSelection,
+	warning?: string | null,
+};
+
 export type ProjectState = "setup_incomplete" | "ready" | "prepared" | "processing" | "completed" | "archived" | "blocked";
 
 export type ProjectTransitionRequest = ProjectTransitionRequest_Serialize | ProjectTransitionRequest_Deserialize;
@@ -247,6 +1130,46 @@ export type ProjectTransitionRequest_Serialize = {
 	nextState: ProjectState,
 	actionLabel?: string | null,
 	actor: TransitionActor,
+};
+
+/**  A project as seen in list views. */
+export type Project_Deserialize = {
+	id: string,
+	name: string,
+	workflowProfileId: string,
+	rootPath: string,
+	state: ProjectState,
+	blockedReason: string | null,
+	verificationState: VerificationState,
+	cleanupState: CleanupState,
+	integrationHours: number | null,
+	targetIds: string[],
+	sourceMap: SourceMap,
+	sourceViewIds: string[],
+	outputIds: string[],
+	processingDirectory: string,
+	outputDirectory: string,
+	updatedAt: string,
+};
+
+/**  A project as seen in list views. */
+export type Project_Serialize = {
+	id: string,
+	name: string,
+	workflowProfileId: string,
+	rootPath: string,
+	state: ProjectState,
+	blockedReason?: string | null,
+	verificationState: VerificationState,
+	cleanupState: CleanupState,
+	integrationHours: number | null,
+	targetIds: string[],
+	sourceMap: SourceMap,
+	sourceViewIds: string[],
+	outputIds: string[],
+	processingDirectory: string,
+	outputDirectory: string,
+	updatedAt: string,
 };
 
 export type ProjectionState = "current" | "stale" | "regenerating";
@@ -375,7 +1298,292 @@ export type ProvenanceReadResponse_Serialize = {
 
 export type ProvenanceResponseStatus = "success" | "error";
 
+/**  A sample path match result within a remap verification. */
+export type RemapSample = {
+	relativePath: string,
+	found: boolean,
+};
+
+/**  Verification result for a root path remap operation. */
+export type RemapVerification = {
+	rootId: string,
+	originalPath: string,
+	newPath: string,
+	samples: RemapSample[],
+	allVerified: boolean,
+};
+
+/**  An item in the review queue awaiting user decision. */
+export type ReviewItem = ReviewItem_Serialize | ReviewItem_Deserialize;
+
+/**  Kind of item in the review queue. */
+export type ReviewItemKind = "session" | "unclassified_file";
+
+/**  An item in the review queue awaiting user decision. */
+export type ReviewItem_Deserialize = {
+	id: string,
+	kind: ReviewItemKind,
+	sessionId: string | null,
+	filePath: string | null,
+	confidence: ConfidenceLevel,
+	blockingReasons: string[],
+	evidence: { [key in string]: MetaValue_Deserialize },
+	suggestedTarget: string | null,
+	suggestedFilter: string | null,
+};
+
+/**  An item in the review queue awaiting user decision. */
+export type ReviewItem_Serialize = {
+	id: string,
+	kind: ReviewItemKind,
+	sessionId?: string | null,
+	filePath?: string | null,
+	confidence: ConfidenceLevel,
+	blockingReasons: string[],
+	evidence: { [key in string]: MetaValue_Serialize },
+	suggestedTarget?: string | null,
+	suggestedFilter?: string | null,
+};
+
+/**  Category of a library root directory. */
+export type RootCategory = "raw" | "calibration" | "project" | "inbox";
+
+/**  A single search result from global search. */
+export type SearchResult = SearchResult_Serialize | SearchResult_Deserialize;
+
+/**  Kind of entity returned by a global search. */
+export type SearchResultKind = "session" | "target" | "project" | "page" | "action";
+
+/**  A single search result from global search. */
+export type SearchResult_Deserialize = {
+	id: string,
+	kind: SearchResultKind,
+	label: string,
+	sublabel: string | null,
+	route: string,
+	score: number | null,
+};
+
+/**  A single search result from global search. */
+export type SearchResult_Serialize = {
+	id: string,
+	kind: SearchResultKind,
+	label: string,
+	sublabel?: string | null,
+	route: string,
+	score: number | null,
+};
+
+/**  A calibration match entry for a session detail view. */
+export type SessionCalibrationMatch = {
+	masterId: string,
+	kind: CalibrationKind,
+	score: number | null,
+	softMismatches: string[],
+};
+
+/**  Extended detail view of an acquisition session. */
+export type SessionDetail = SessionDetail_Serialize | SessionDetail_Deserialize;
+
+/**  Extended detail view of an acquisition session. */
+export type SessionDetail_Deserialize = {
+	id: string,
+	sessionKey: SessionKey,
+	state: SessionState,
+	confidence: ConfidenceLevel,
+	opticalTrainId: string,
+	frameCount: number,
+	totalIntegrationSeconds: number | null,
+	totalSizeBytes: number,
+	metadata: { [key in string]: MetaValue_Deserialize },
+	targetIds: string[],
+	projectIds: string[],
+	warnings: string[],
+	framesets: Frameset[],
+	calibrationMatches: SessionCalibrationMatch[],
+	history: SessionHistoryEntry[],
+};
+
+/**  Extended detail view of an acquisition session. */
+export type SessionDetail_Serialize = {
+	id: string,
+	sessionKey: SessionKey,
+	state: SessionState,
+	confidence: ConfidenceLevel,
+	opticalTrainId: string,
+	frameCount: number,
+	totalIntegrationSeconds: number | null,
+	totalSizeBytes: number,
+	metadata: { [key in string]: MetaValue_Serialize },
+	targetIds: string[],
+	projectIds: string[],
+	warnings: string[],
+	framesets: Frameset[],
+	calibrationMatches: SessionCalibrationMatch[],
+	history: SessionHistoryEntry[],
+};
+
+/**  A history entry for a session detail view. */
+export type SessionHistoryEntry = {
+	timestamp: string,
+	event: string,
+	actor: string,
+};
+
+/**
+ *  Composite key that uniquely identifies an acquisition session by its
+ *  observing parameters.
+ */
+export type SessionKey = {
+	target: string,
+	filter: string,
+	binning: string,
+	gain: string,
+	/**  ISO date of the observing night (local sunset date). */
+	night: string,
+};
+
+/**  Wrapper for `sessions.split` return value. */
+export type SessionSplitResult = SessionSplitResult_Serialize | SessionSplitResult_Deserialize;
+
+/**  Wrapper for `sessions.split` return value. */
+export type SessionSplitResult_Deserialize = {
+	original: AcquisitionSession_Deserialize,
+	new: AcquisitionSession_Deserialize,
+};
+
+/**  Wrapper for `sessions.split` return value. */
+export type SessionSplitResult_Serialize = {
+	original: AcquisitionSession_Serialize,
+	new: AcquisitionSession_Serialize,
+};
+
 export type SessionState = "discovered" | "candidate" | "needs_review" | "confirmed" | "rejected" | "ignored";
+
+/**  Sessions grouping mode. */
+export type SessionsGroupBy = "none" | "target" | "month" | "filter" | "train";
+
+/**  Sessions view mode. */
+export type SessionsView = "list" | "calendar";
+
+/**
+ *  Scoped settings data (general, naming, calibration, etc.).
+ * 
+ *  `values` is a free-form JSON object keyed by setting name.
+ */
+export type SettingsData = {
+	scope: string,
+	values: unknown,
+};
+
+/**  Map of calibration frame roles to file paths within a project. */
+export type SourceMap = {
+	lights: string[],
+	darks: string[],
+	flats: string[],
+	bias: string[],
+	darkFlats: string[],
+};
+
+/**  Role of a source within a project. */
+export type SourceRole = "light" | "dark" | "flat" | "bias";
+
+/**  Selection state for a source within a project. */
+export type SourceSelection = "selected" | "candidate";
+
+/**  Link strategy for a source view. */
+export type SourceViewStrategy = "junction" | "symlink" | "hardlink" | "copy";
+
+/**  An astronomical target as seen in list views. */
+export type Target = Target_Serialize | Target_Deserialize;
+
+/**  Extended detail view of a target. */
+export type TargetDetail = TargetDetail_Serialize | TargetDetail_Deserialize;
+
+/**  Extended detail view of a target. */
+export type TargetDetail_Deserialize = {
+	id: string,
+	name: string,
+	aliases: string[],
+	catalogIds: CatalogIds_Deserialize,
+	kind: TargetKind,
+	coordinates: Coordinates_Deserialize | null,
+	sessionCount: number,
+	projectCount: number,
+	totalIntegrationHours: number | null,
+	coverage: { [key in string]: number | null },
+	recommendedHours: { [key in string]: number | null },
+	sessions: AcquisitionSession_Deserialize[],
+	projects: TargetProjectStub[],
+};
+
+/**  Extended detail view of a target. */
+export type TargetDetail_Serialize = {
+	id: string,
+	name: string,
+	aliases: string[],
+	catalogIds: CatalogIds_Serialize,
+	kind: TargetKind,
+	coordinates?: Coordinates_Serialize | null,
+	sessionCount: number,
+	projectCount: number,
+	totalIntegrationHours: number | null,
+	coverage: { [key in string]: number | null },
+	recommendedHours: { [key in string]: number | null },
+	sessions: AcquisitionSession_Serialize[],
+	projects: TargetProjectStub[],
+};
+
+/**  Classification of an astronomical target. */
+export type TargetKind = "deep_sky" | "planetary" | "lunar" | "solar" | "landscape";
+
+/**  A project stub within the target detail view. */
+export type TargetProjectStub = {
+	id: string,
+	name: string,
+	state: ProjectState,
+};
+
+/**  An astronomical target as seen in list views. */
+export type Target_Deserialize = {
+	id: string,
+	name: string,
+	aliases: string[],
+	catalogIds: CatalogIds_Deserialize,
+	kind: TargetKind,
+	coordinates: Coordinates_Deserialize | null,
+	sessionCount: number,
+	projectCount: number,
+	totalIntegrationHours: number | null,
+	/**  Filter name -> acquired hours. */
+	coverage: { [key in string]: number | null },
+	/**  Filter name -> recommended hours. */
+	recommendedHours: { [key in string]: number | null },
+};
+
+/**  An astronomical target as seen in list views. */
+export type Target_Serialize = {
+	id: string,
+	name: string,
+	aliases: string[],
+	catalogIds: CatalogIds_Serialize,
+	kind: TargetKind,
+	coordinates?: Coordinates_Serialize | null,
+	sessionCount: number,
+	projectCount: number,
+	totalIntegrationHours: number | null,
+	/**  Filter name -> acquired hours. */
+	coverage: { [key in string]: number | null },
+	/**  Filter name -> recommended hours. */
+	recommendedHours: { [key in string]: number | null },
+};
+
+/**  Tour completion state tracking. */
+export type TourCompleted = {
+	step1: boolean,
+	step2: boolean,
+	step3: boolean,
+};
 
 export type TransitionActor = "user" | "system";
 
@@ -464,6 +1672,12 @@ export type TransitionResponse_Serialize = {
 
 export type TransitionStatus = "success" | "noop" | "error";
 
+/**  Verification state for a project's outputs. */
+export type VerificationState = "unreviewed" | "has_accepted" | "all_rejected";
+
+/**  Project detail view mode. */
+export type ViewMode = "center" | "pipeline" | "combined";
+
 /* Tauri Specta runtime */
 async function typedError<T, E>(result: Promise<T>): Promise<{ status: "ok"; data: T } | { status: "error"; error: E }> {
     try {
@@ -473,3 +1687,4 @@ async function typedError<T, E>(result: Promise<T>): Promise<{ status: "ok"; dat
         return { status: "error", error: e as any };
     }
 }
+

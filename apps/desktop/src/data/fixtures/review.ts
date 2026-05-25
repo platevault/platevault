@@ -6,7 +6,7 @@ import type {
   ConfidenceLevel,
   ProvenanceOrigin,
   MetaValue,
-} from '@/api/types';
+} from '@/bindings/types';
 
 // ─── Queue items ────────────────────────────────────────────────────────────
 

@@ -2,7 +2,7 @@ import { useEffect } from 'react';
 import { Collapsible } from '@base-ui-components/react/collapsible';
 import { Progress } from '@base-ui-components/react/progress';
 import { useLogPanel } from './LogPanelContext';
-import type { ProgressEvent } from '@/api/types';
+import type { ProgressEvent } from '@/bindings/types';
 
 const MOCK_EVENTS: Array<{ time: string; message: string }> = [
   { time: '22:15:01', message: 'Scan completed: 1,247 files indexed' },

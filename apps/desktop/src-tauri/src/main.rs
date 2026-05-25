@@ -1,20 +1,37 @@
 // Hide the Windows console window on release builds; harmless elsewhere.
 #![cfg_attr(all(not(debug_assertions), target_os = "windows"), windows_subsystem = "windows")]
 
-use desktop_shell::run;
+use desktop_shell::{build_app, run_app};
 use persistence_db::Database;
+use tauri::Manager;
 
 #[tokio::main]
 async fn main() {
-    // Resolve the SQLite URL. `ALM_DB_URL` lets dev/test runs target an
-    // alternate store; otherwise we fall back to an in-process ephemeral
-    // store so the first launch never wedges on filesystem permissions.
-    // Persistent on-disk default + platform data dir resolution is tracked
-    // as Phase 6 (settings/first-run wiring).
-    let db_url = std::env::var("ALM_DB_URL").unwrap_or_else(|_| "sqlite::memory:".to_owned());
+    // Build the Tauri app first so we can access the platform path resolver.
+    // The event loop is NOT started yet — that happens in `run_app` after the
+    // database is ready.
+    let app = build_app();
+
+    // Resolve the SQLite URL.
+    //
+    // `ALM_DB_URL` lets dev/test runs target an alternate store.  When unset
+    // we derive a persistent on-disk path from Tauri's platform data directory
+    // so the database survives across launches.
+    let db_url = if let Ok(url) = std::env::var("ALM_DB_URL") {
+        url
+    } else {
+        let data_dir =
+            app.path().app_data_dir().expect("failed to resolve platform data directory");
+
+        std::fs::create_dir_all(&data_dir).expect("failed to create app data directory");
+
+        let db_path = data_dir.join("alm.db");
+
+        format!("sqlite://{}?mode=rwc", db_path.display())
+    };
 
     let db = Database::connect(&db_url).await.expect("connect SQLite");
     db.migrate().await.expect("run migrations");
 
-    run(db.pool().clone());
+    run_app(app, db.pool().clone());
 }

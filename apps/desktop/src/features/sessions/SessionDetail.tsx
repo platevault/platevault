@@ -2,7 +2,7 @@ import { useState } from 'react';
 import { useParams } from '@tanstack/react-router';
 import { useParameterizedQuery, createParameterizedStore } from '@/data/store';
 import { getSession, transitionSession } from '@/api/commands';
-import type { SessionDetail as SessionDetailType, ProvenanceOrigin, ConfidenceLevel, AcquisitionSession } from '@/api/types';
+import type { SessionDetail as SessionDetailType, ProvenanceOrigin, ConfidenceLevel, AcquisitionSession } from '@/bindings/types';
 import { KV, Pill, Confidence, Provenance, Btn, Box } from '@/ui';
 
 const sessionStore = createParameterizedStore((id: string) =>

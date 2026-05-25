@@ -1,7 +1,7 @@
 import { useState, useMemo, useCallback } from 'react';
 import { useQuery, createQueryStore } from '@/data/store';
 import { listAuditEntries, exportAudit } from '@/api/commands';
-import type { AuditEntry } from '@/api/types';
+import type { AuditEntry } from '@/bindings/types';
 import { ThreePane, EmptyState } from '@/ui';
 import { AuditList } from './AuditList';
 import { AuditDetail } from './AuditDetail';

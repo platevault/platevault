@@ -1,6 +1,6 @@
 import { useState, useMemo } from 'react';
 import { clsx } from 'clsx';
-import type { FilesystemPlan, PlanState, PlanKind } from '@/api/types';
+import type { FilesystemPlan, PlanState, PlanKind } from '@/bindings/types';
 import { Pill } from '@/ui';
 
 export interface PlansListProps {

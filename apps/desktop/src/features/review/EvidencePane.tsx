@@ -1,4 +1,4 @@
-import type { ReviewItem } from '@/api/types';
+import type { ReviewItem } from '@/bindings/types';
 import { Box, KV, Pill, Btn } from '@/ui';
 import { focusedSession } from '@/data/fixtures/review';
 

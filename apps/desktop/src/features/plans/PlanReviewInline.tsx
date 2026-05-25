@@ -1,5 +1,5 @@
 import { useState } from 'react';
-import type { PlanDetail, PlanState } from '@/api/types';
+import type { PlanDetail, PlanState } from '@/bindings/types';
 import { Toolbar, Pill } from '@/ui';
 import { PlanTable } from './PlanTable';
 import { PlanDiff } from './PlanDiff';

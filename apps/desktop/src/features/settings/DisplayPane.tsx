@@ -1,7 +1,7 @@
 import { RadioGroup } from '@base-ui-components/react/radio-group';
 import { Radio } from '@base-ui-components/react/radio';
 import { usePreference, setPreference } from '@/data/preferences';
-import type { Density } from '@/api/types';
+import type { Density } from '@/bindings/types';
 import { Btn } from '@/ui';
 
 const DENSITY_OPTIONS: { value: Density; label: string; description: string }[] = [

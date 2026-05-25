@@ -1,10 +1,25 @@
 //! Rust-side contract DTO boundary.
 
+pub mod audit;
+pub mod calibration;
+pub mod enums;
 pub mod json_any;
 pub mod lifecycle;
+pub mod plans;
+pub mod preferences;
+pub mod projects;
 pub mod provenance;
+pub mod review;
+pub mod roots;
+pub mod search;
+pub mod sessions;
+pub mod settings;
+pub mod targets;
 
 pub use json_any::JsonAny;
+
+// Re-export shared enums for convenience.
+pub use enums::{Density, ViewMode};
 
 use serde::{Deserialize, Serialize};
 use serde_json::Value;
