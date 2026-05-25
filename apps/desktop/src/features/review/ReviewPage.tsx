@@ -2,20 +2,11 @@ import { useState, useEffect, useCallback, useMemo } from 'react';
 import type { ReviewItem, ConfidenceLevel } from '@/api/types';
 import { getReviewQueue, transitionSession } from '@/api/commands';
 import { createQueryStore, useQuery } from '@/data/store';
-import { ThreePane, FilterBar, EmptyState } from '@/ui';
+import { ThreePane, EmptyState } from '@/ui';
 import { ReviewQueue } from './ReviewQueue';
 import { EvidencePane } from './EvidencePane';
 import { DecisionPanel } from './DecisionPanel';
-
-// --- Filter configuration ---
-
-type FilterKey = 'sessions' | 'all' | 'unclassified';
-
-const FILTER_TABS: { key: FilterKey; label: string }[] = [
-  { key: 'sessions', label: 'Sessions' },
-  { key: 'all', label: 'All items' },
-  { key: 'unclassified', label: 'Unclassified files' },
-];
+import { queueProgress } from '@/data/fixtures/review';
 
 // --- Confidence sort order (ascending: lowest first) ---
 
@@ -28,10 +19,30 @@ const CONFIDENCE_ORDER: Record<ConfidenceLevel, number> = {
   rejected: 5,
 };
 
-function sortByConfidence(items: ReviewItem[]): ReviewItem[] {
-  return [...items].sort(
-    (a, b) => CONFIDENCE_ORDER[a.confidence] - CONFIDENCE_ORDER[b.confidence],
-  );
+type SortKey = 'confidence' | 'date' | 'target';
+
+function sortItems(items: ReviewItem[], key: SortKey): ReviewItem[] {
+  const sorted = [...items];
+  switch (key) {
+    case 'confidence':
+      return sorted.sort(
+        (a, b) => CONFIDENCE_ORDER[a.confidence] - CONFIDENCE_ORDER[b.confidence],
+      );
+    case 'date':
+      return sorted.sort((a, b) => {
+        const dateA = String(a.evidence.night?.value ?? '');
+        const dateB = String(b.evidence.night?.value ?? '');
+        return dateB.localeCompare(dateA);
+      });
+    case 'target':
+      return sorted.sort((a, b) => {
+        const tA = a.suggested_target ?? '';
+        const tB = b.suggested_target ?? '';
+        return tA.localeCompare(tB);
+      });
+    default:
+      return sorted;
+  }
 }
 
 // --- Query store for the review queue ---
@@ -43,33 +54,22 @@ const reviewQueueStore = createQueryStore(() => getReviewQueue());
 export function ReviewPage() {
   const { data: rawItems, loading, error } = useQuery(reviewQueueStore);
   const [activeIndex, setActiveIndex] = useState(0);
-  const [activeFilter, setActiveFilter] = useState<FilterKey>('all');
+  const [sortKey, setSortKey] = useState<SortKey>('confidence');
 
-  // Filter items based on active tab
-  const filteredItems = useMemo(() => {
+  // Sort items
+  const sortedItems = useMemo(() => {
     if (!rawItems) return [];
-    let items: ReviewItem[];
-    switch (activeFilter) {
-      case 'sessions':
-        items = rawItems.filter((item) => item.kind === 'session');
-        break;
-      case 'unclassified':
-        items = rawItems.filter((item) => item.kind === 'unclassified_file');
-        break;
-      default:
-        items = rawItems;
-    }
-    return sortByConfidence(items);
-  }, [rawItems, activeFilter]);
+    return sortItems(rawItems, sortKey);
+  }, [rawItems, sortKey]);
 
-  // Clamp activeIndex when filtered list changes
+  // Clamp activeIndex when list changes
   useEffect(() => {
-    if (activeIndex >= filteredItems.length && filteredItems.length > 0) {
+    if (activeIndex >= sortedItems.length && sortedItems.length > 0) {
       setActiveIndex(0);
     }
-  }, [filteredItems.length, activeIndex]);
+  }, [sortedItems.length, activeIndex]);
 
-  const activeItem: ReviewItem | null = filteredItems[activeIndex] ?? null;
+  const activeItem: ReviewItem | null = sortedItems[activeIndex] ?? null;
 
   // Handle decision: transition session, then auto-advance
   const handleDecision = useCallback(
@@ -93,14 +93,14 @@ export function ReviewPage() {
 
       // Auto-advance to next item (wrap to 0 at end)
       setActiveIndex((prev) => {
-        if (filteredItems.length <= 1) return 0;
-        return prev >= filteredItems.length - 1 ? 0 : prev + 1;
+        if (sortedItems.length <= 1) return 0;
+        return prev >= sortedItems.length - 1 ? 0 : prev + 1;
       });
 
       // Refresh the queue
       reviewQueueStore.invalidate();
     },
-    [activeItem, filteredItems.length],
+    [activeItem, sortedItems.length],
   );
 
   // Navigate with J/K, decide with Cmd+1/2/3
@@ -114,14 +114,14 @@ export function ReviewPage() {
       if (e.key === 'j' && !e.metaKey && !e.ctrlKey) {
         e.preventDefault();
         setActiveIndex((prev) =>
-          prev >= filteredItems.length - 1 ? 0 : prev + 1,
+          prev >= sortedItems.length - 1 ? 0 : prev + 1,
         );
         return;
       }
       if (e.key === 'k' && !e.metaKey && !e.ctrlKey) {
         e.preventDefault();
         setActiveIndex((prev) =>
-          prev <= 0 ? filteredItems.length - 1 : prev - 1,
+          prev <= 0 ? sortedItems.length - 1 : prev - 1,
         );
         return;
       }
@@ -143,18 +143,7 @@ export function ReviewPage() {
 
     document.addEventListener('keydown', handleKeyDown);
     return () => document.removeEventListener('keydown', handleKeyDown);
-  }, [filteredItems.length, handleDecision]);
-
-  // Filter bar handler — single-select tab behavior
-  const handleFilterToggle = useCallback((key: string) => {
-    setActiveFilter(key as FilterKey);
-    setActiveIndex(0);
-  }, []);
-
-  const handleFilterClear = useCallback(() => {
-    setActiveFilter('all');
-    setActiveIndex(0);
-  }, []);
+  }, [sortedItems.length, handleDecision]);
 
   // --- Render ---
 
@@ -177,33 +166,30 @@ export function ReviewPage() {
         listWidth={220}
         detailWidth={320}
         list={
-          <div style={{ display: 'flex', flexDirection: 'column', height: '100%' }}>
-            <div style={{ padding: '8px 8px 0' }}>
-              <FilterBar
-                filters={FILTER_TABS}
-                active={[activeFilter]}
-                onToggle={handleFilterToggle}
-                onClear={handleFilterClear}
-              />
-            </div>
-            {loading && filteredItems.length === 0 ? (
-              <p style={{ padding: 16, color: 'var(--alm-text-muted)', fontSize: 'var(--alm-text-sm)' }}>
-                Loading...
-              </p>
-            ) : filteredItems.length === 0 ? (
-              <EmptyState
-                icon={<span>&#x2713;</span>}
-                title="All caught up"
-                description="No items in the review queue right now."
-              />
-            ) : (
-              <ReviewQueue
-                items={filteredItems}
-                activeIndex={activeIndex}
-                onSelect={setActiveIndex}
-              />
-            )}
-          </div>
+          loading && sortedItems.length === 0 ? (
+            <p style={{ padding: 16, color: 'var(--alm-text-muted)', fontSize: 'var(--alm-text-sm)' }}>
+              Loading...
+            </p>
+          ) : sortedItems.length === 0 ? (
+            <EmptyState
+              icon={<span>&#x2713;</span>}
+              title="All caught up"
+              description="No items in the review queue right now."
+            />
+          ) : (
+            <ReviewQueue
+              items={sortedItems}
+              activeIndex={activeIndex}
+              onSelect={setActiveIndex}
+              sortValue={sortKey}
+              onSortChange={(v) => {
+                setSortKey(v as SortKey);
+                setActiveIndex(0);
+              }}
+              acquisitionCount={queueProgress.acquisitionCount}
+              calibrationCount={queueProgress.calibrationCount}
+            />
+          )
         }
         content={<EvidencePane item={activeItem} />}
         detail={<DecisionPanel item={activeItem} onDecision={handleDecision} />}

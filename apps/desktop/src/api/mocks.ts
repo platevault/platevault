@@ -1,7 +1,6 @@
 import type {
   AuditEntry,
   SearchResult,
-  ReviewItem,
   LibraryRoot,
   Equipment,
   SettingsData,
@@ -55,11 +54,7 @@ const mockPreferences: AppPreferences = {
   setupCompleted: false,
 };
 
-const mockReviewItems: ReviewItem[] = [
-  { id: 'rev-001', kind: 'session', session_id: 'ses-003', confidence: 'low', blocking_reasons: ['target not reviewed'], evidence: {}, suggested_target: 'M31' },
-  { id: 'rev-002', kind: 'session', session_id: 'ses-005', confidence: 'medium', blocking_reasons: [], evidence: {}, suggested_target: 'NGC 7000' },
-  { id: 'rev-003', kind: 'unclassified_file', file_path: '/astro/raw/unknown/img_001.fits', confidence: 'unknown', blocking_reasons: ['no session match'], evidence: {} },
-];
+// Review items are loaded from the wireframe-aligned fixture file (review.queue case below).
 
 const mockSearchResults: SearchResult[] = [
   { id: 'ses-001', kind: 'session', label: 'M31 L 2026-05-18', sublabel: '120 frames', route: '/sessions/ses-001', score: 0.95 },
@@ -173,7 +168,8 @@ export async function mockInvoke<T>(
       return mockEquipment as T;
     }
     case 'review.queue': {
-      return mockReviewItems as T;
+      const { reviewItems } = await import('@/data/fixtures/review');
+      return reviewItems as T;
     }
     case 'preferences.get': {
       return mockPreferences as T;

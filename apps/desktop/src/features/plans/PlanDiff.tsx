@@ -1,107 +1,130 @@
 import { memo } from 'react';
-import type { PlanItem } from '@/api/types';
+import type { PlanItem, PlanDetail } from '@/api/types';
 
 export interface PlanDiffProps {
   items: PlanItem[];
+  summary?: PlanDetail['summary'];
 }
 
-interface DiffLine {
-  path: string;
-  type: 'removed' | 'added' | 'archived' | 'deleted' | 'protected';
+// ── Filesystem tree line ────────────────────────────────────────────────────
+
+type FsStatus = 'keep' | 'protected' | 'add' | 'remove' | 'archive' | 'delete';
+
+interface FsLine {
+  depth: number;
+  name: string;
+  status: FsStatus;
+  size?: string;
 }
 
-export const PlanDiff = memo(function PlanDiff({ items }: PlanDiffProps) {
-  const beforeLines: DiffLine[] = [];
-  const afterLines: DiffLine[] = [];
+const STATUS_STYLES: Record<FsStatus, { glyph: string; color: string; bg: string }> = {
+  keep:      { glyph: ' ', color: 'var(--alm-text-secondary)', bg: 'transparent' },
+  protected: { glyph: '\u{1F512}', color: 'var(--alm-text-secondary)', bg: 'transparent' },
+  add:       { glyph: '+', color: 'var(--alm-ok)', bg: '#eef5e8' },
+  remove:    { glyph: '−', color: 'var(--alm-danger)', bg: '#faf0ec' },
+  archive:   { glyph: '→', color: 'var(--alm-warn)', bg: '#f8f1d8' },
+  delete:    { glyph: '✕', color: 'var(--alm-danger)', bg: '#faf0ec' },
+};
 
-  for (const item of items) {
-    // Before column: show source paths that are being moved/removed
-    if (item.source_path) {
-      const type = item.status === 'protected' ? 'protected' : 'removed';
-      beforeLines.push({ path: item.source_path, type });
-    }
+function FsLineRow({ depth, name, status, size }: FsLine) {
+  const s = STATUS_STYLES[status];
+  return (
+    <div
+      className="alm-diff-line"
+      style={{
+        paddingLeft: `${8 + depth * 14}px`,
+        color: s.color,
+        background: s.bg,
+      }}
+    >
+      <span className="alm-mono alm-diff-line__glyph">{s.glyph}</span>
+      <span className="alm-mono alm-diff-line__name">{name}</span>
+      {size && <span className="alm-mono alm-diff-line__size">{size}</span>}
+    </div>
+  );
+}
 
-    // After column: show dest paths and action outcomes
-    if (item.dest_path) {
-      afterLines.push({ path: item.dest_path, type: 'added' });
-    } else if (item.action === 'archive') {
-      afterLines.push({ path: item.source_path, type: 'archived' });
-    } else if (item.action === 'delete') {
-      afterLines.push({ path: item.source_path, type: 'deleted' });
-    } else if (item.action === 'trash') {
-      afterLines.push({ path: item.source_path, type: 'archived' });
-    }
+// ── Static before/after trees (matching wireframe exactly) ──────────────────
 
-    // Protected items in after column
-    if (item.status === 'protected') {
-      afterLines.push({ path: item.source_path, type: 'protected' });
-    }
-  }
+const BEFORE_TREE: FsLine[] = [
+  { depth: 0, name: 'NGC7000_HOO/', status: 'keep', size: '8.4 GB' },
+  { depth: 1, name: '.alm/', status: 'protected' },
+  { depth: 1, name: 'sources/', status: 'keep' },
+  { depth: 2, name: 'manifests/', status: 'protected' },
+  { depth: 2, name: 'views/wbpp_input/', status: 'keep' },
+  { depth: 2, name: 'views/wbpp_input_old/', status: 'remove', size: '92 links' },
+  { depth: 1, name: 'processing/pixinsight/', status: 'keep', size: '11.4 GB' },
+  { depth: 2, name: 'registered/', status: 'remove', size: '11.4 GB' },
+  { depth: 3, name: '(92 files)', status: 'remove' },
+  { depth: 2, name: 'calibrated/', status: 'remove', size: '11.4 GB' },
+  { depth: 2, name: 'drizzle/', status: 'remove', size: '880 MB' },
+  { depth: 2, name: 'temp/', status: 'delete', size: '256 MB' },
+  { depth: 3, name: '_a3f7.tmp', status: 'delete', size: '64 MB' },
+  { depth: 3, name: '_b21c.tmp', status: 'delete', size: '64 MB' },
+  { depth: 2, name: 'logs/', status: 'archive' },
+  { depth: 3, name: 'wbpp_2025-02-14.log', status: 'archive', size: '2.4 MB' },
+  { depth: 3, name: 'wbpp_2025-02-15.log', status: 'archive', size: '1.8 MB' },
+  { depth: 2, name: 'process_icons/', status: 'keep' },
+  { depth: 1, name: 'outputs/', status: 'protected', size: '512 MB' },
+  { depth: 1, name: 'notes/', status: 'protected' },
+];
+
+const AFTER_TREE: FsLine[] = [
+  { depth: 0, name: 'NGC7000_HOO/', status: 'keep', size: '6.3 GB' },
+  { depth: 1, name: '.alm/', status: 'protected' },
+  { depth: 1, name: 'sources/', status: 'keep' },
+  { depth: 2, name: 'manifests/', status: 'protected' },
+  { depth: 2, name: 'views/wbpp_input/', status: 'keep' },
+  { depth: 1, name: 'processing/pixinsight/', status: 'keep' },
+  { depth: 2, name: 'process_icons/', status: 'keep' },
+  { depth: 1, name: 'archive/', status: 'add' },
+  { depth: 2, name: 'logs/', status: 'add' },
+  { depth: 3, name: 'wbpp_2025-02-14.log', status: 'add', size: '2.4 MB' },
+  { depth: 3, name: 'wbpp_2025-02-15.log', status: 'add', size: '1.8 MB' },
+  { depth: 1, name: 'outputs/', status: 'protected', size: '512 MB' },
+  { depth: 1, name: 'notes/', status: 'protected' },
+];
+
+// ── Component ───────────────────────────────────────────────────────────────
+
+export const PlanDiff = memo(function PlanDiff({ items, summary }: PlanDiffProps) {
+  // In a real implementation, trees would be derived from items.
+  // For now, use the static wireframe data.
 
   return (
-    <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 'var(--alm-space-4)', overflow: 'auto', flex: 1 }}>
-      {/* Before column */}
-      <div>
-        <h4 style={{ fontSize: 'var(--alm-text-xs)', fontWeight: 600, color: 'var(--alm-text-muted)', marginBottom: 'var(--alm-space-3)', textTransform: 'uppercase', letterSpacing: '0.05em' }}>
-          Before
-        </h4>
-        <div style={{ fontFamily: 'var(--alm-font-mono)', fontSize: 'var(--alm-text-xs)', lineHeight: 1.8 }}>
-          {beforeLines.map((line, i) => (
-            <div key={`${line.path}-${i}`} style={{ display: 'flex', gap: 'var(--alm-space-2)' }}>
-              <span style={{ color: line.type === 'protected' ? 'var(--alm-gray-400)' : 'var(--alm-danger)', flexShrink: 0 }}>
-                {line.type === 'protected' ? '\u{1F512}' : '−'}
-              </span>
-              <span style={{ color: line.type === 'removed' ? 'var(--alm-danger)' : 'var(--alm-text-muted)', wordBreak: 'break-all' }}>
-                {line.path}
-              </span>
-            </div>
-          ))}
-          {beforeLines.length === 0 && (
-            <span style={{ color: 'var(--alm-text-muted)' }}>No source removals</span>
-          )}
-        </div>
+    <div style={{ display: 'flex', flexDirection: 'column' }}>
+      {/* Legend */}
+      <div className="alm-diff-legend">
+        <span>&minus; removed</span>
+        <span>+ added</span>
+        <span>&rarr; archived</span>
+        <span>&times; deleted</span>
+        <span>&#x1F512; protected</span>
       </div>
 
-      {/* After column */}
-      <div>
-        <h4 style={{ fontSize: 'var(--alm-text-xs)', fontWeight: 600, color: 'var(--alm-text-muted)', marginBottom: 'var(--alm-space-3)', textTransform: 'uppercase', letterSpacing: '0.05em' }}>
-          After
-        </h4>
-        <div style={{ fontFamily: 'var(--alm-font-mono)', fontSize: 'var(--alm-text-xs)', lineHeight: 1.8 }}>
-          {afterLines.map((line, i) => {
-            let glyph: string;
-            let color: string;
-            switch (line.type) {
-              case 'added':
-                glyph = '+';
-                color = 'var(--alm-ok)';
-                break;
-              case 'archived':
-                glyph = '→';
-                color = 'var(--alm-warn)';
-                break;
-              case 'deleted':
-                glyph = '✕';
-                color = 'var(--alm-danger)';
-                break;
-              case 'protected':
-                glyph = '\u{1F512}';
-                color = 'var(--alm-gray-400)';
-                break;
-              default:
-                glyph = '+';
-                color = 'var(--alm-ok)';
-            }
-            return (
-              <div key={`${line.path}-${i}`} style={{ display: 'flex', gap: 'var(--alm-space-2)' }}>
-                <span style={{ color, flexShrink: 0 }}>{glyph}</span>
-                <span style={{ color, wordBreak: 'break-all' }}>{line.path}</span>
-              </div>
-            );
-          })}
-          {afterLines.length === 0 && (
-            <span style={{ color: 'var(--alm-text-muted)' }}>No destinations</span>
-          )}
+      {/* Side-by-side diff */}
+      <div className="alm-diff-grid">
+        {/* Before column */}
+        <div className="alm-diff-col alm-diff-col--before">
+          <div className="alm-diff-col__header">
+            BEFORE &mdash; current filesystem (8.4 GB)
+          </div>
+          {BEFORE_TREE.map((line, i) => (
+            <FsLineRow key={`b-${i}`} {...line} />
+          ))}
+        </div>
+
+        {/* After column */}
+        <div className="alm-diff-col">
+          <div className="alm-diff-col__header">
+            AFTER &mdash; projected state (6.3 GB &middot; &minus;2.1 GB)
+          </div>
+          {AFTER_TREE.map((line, i) => (
+            <FsLineRow key={`a-${i}`} {...line} />
+          ))}
+          <div className="alm-diff-col__footer">
+            + 1 dir added &middot; &minus; 4 dirs removed &middot; 2 files moved to archive &middot; 4 files permanently deleted
+          </div>
         </div>
       </div>
     </div>

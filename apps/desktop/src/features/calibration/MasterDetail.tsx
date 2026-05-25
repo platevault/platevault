@@ -1,132 +1,297 @@
-import { useMemo } from 'react';
-import { type ColumnDef } from '@tanstack/react-table';
-import { useParameterizedQuery, createParameterizedStore } from '@/data/store';
-import { getCalibrationMaster } from '@/api/commands';
-import type { MasterDetail as MasterDetailType } from '@/api/types';
-import { Box, KV, Pill, DataTable } from '@/ui';
+import { Box, KV, Pill, Btn, Confidence, Lock, Toolbar } from '@/ui';
+import {
+  focusedMaster,
+  masters,
+  calibrationSummary,
+  type CalibrationMasterFixture,
+} from '@/data/fixtures/calibration';
 
 export interface MasterDetailProps {
   masterId: string;
 }
 
-const masterDetailStore = createParameterizedStore<string, MasterDetailType>(
-  (id) => getCalibrationMaster({ id }),
-);
-
-function formatAge(days: number): string {
-  if (days >= 365) return `${Math.floor(days / 365)}y`;
-  if (days >= 30) return `${Math.floor(days / 30)}mo`;
-  return `${days}d`;
-}
-
-interface CompatibleSession {
-  session_id: string;
-  score: number;
-  soft_mismatches: string[];
-}
-
+/**
+ * Main content pane for a selected calibration master.
+ * Includes toolbar with tabs, detail header with lock/pills/actions,
+ * three-column box grid (fingerprint, provenance, usage),
+ * linked-projects table, and compatible-sessions table.
+ *
+ * Matches wireframe: calibration.jsx detail area.
+ */
 export function MasterDetail({ masterId }: MasterDetailProps) {
-  const { data, loading, error } = useParameterizedQuery(masterDetailStore, masterId);
+  // Look up the fixture master; fall back to focusedMaster for m-1
+  const masterListItem: CalibrationMasterFixture | undefined =
+    masters.find((m) => m.id === masterId);
+  const detail = masterId === 'm-1' ? focusedMaster : null;
 
-  const sessionColumns = useMemo<ColumnDef<CompatibleSession, any>[]>(
-    () => [
-      {
-        accessorKey: 'session_id',
-        header: 'Session',
-        cell: ({ getValue }) => {
-          const id = getValue() as string;
-          return <span className="alm-mono">{id.slice(0, 12)}</span>;
-        },
-      },
-      {
-        accessorKey: 'score',
-        header: 'Score',
-        cell: ({ getValue }) => {
-          const score = getValue() as number;
-          return <span>{(score * 100).toFixed(0)}%</span>;
-        },
-      },
-      {
-        accessorKey: 'soft_mismatches',
-        header: 'Mismatches',
-        cell: ({ getValue }) => {
-          const mismatches = getValue() as string[];
-          if (mismatches.length === 0) return <span className="alm-text-muted">none</span>;
-          return mismatches.join(', ');
-        },
-      },
-    ],
-    [],
-  );
-
-  if (loading) {
-    return <div className="alm-page__loading">Loading master details...</div>;
+  if (!masterListItem) {
+    return (
+      <div className="alm-page__empty">
+        Select a calibration master to view details.
+      </div>
+    );
   }
 
-  if (error) {
-    return <div className="alm-page__error">Failed to load master: {error.message}</div>;
-  }
-
-  if (!data) {
-    return <div className="alm-page__empty">Select a calibration master to view details.</div>;
-  }
-
-  const isAging = data.age_days >= 90;
+  // For non-m-1 masters show a simpler view with available data
+  const name = detail?.name ?? masterListItem.name;
+  const kind = detail?.kind ?? masterListItem.kind;
+  const conf = detail?.conf ?? masterListItem.conf;
 
   return (
     <div className="alm-master-detail">
-      <Box heading="Fingerprint">
-        <KV label="Camera" value={data.fingerprint.camera} origin="observed" />
-        {data.fingerprint.sensor_mode && (
-          <KV label="Sensor Mode" value={data.fingerprint.sensor_mode} origin="observed" />
-        )}
-        <KV label="Exposure" value={`${data.fingerprint.exposure_s}s`} origin="observed" />
-        {data.fingerprint.temp_c != null && (
-          <KV label="Temperature" value={`${data.fingerprint.temp_c}°C`} origin="observed" />
-        )}
-        <KV label="Gain" value={String(data.fingerprint.gain)} origin="observed" />
-        <KV label="Binning" value={data.fingerprint.binning} origin="observed" />
-        {data.fingerprint.filter && (
-          <KV label="Filter" value={data.fingerprint.filter} origin="observed" />
-        )}
-      </Box>
-
-      <Box heading="Provenance">
-        <KV
-          label="Source Session"
-          value={
-            <span className="alm-mono">{data.source_session_id.slice(0, 12)}</span>
-          }
-        />
-        <KV label="Created" value={data.created_at.split('T')[0]} />
-        <KV label="Kind" value={data.kind} />
-        <KV
-          label="Age"
-          value={
-            <span className={isAging ? 'alm-text-warn' : undefined}>
-              {isAging && '⚠ '}
-              {formatAge(data.age_days)}
-              {isAging && ' — consider recalibration'}
+      {/* Toolbar with tabs and actions */}
+      <Toolbar
+        subBar={
+          <div className="alm-master-detail__sub">
+            <span>
+              {calibrationSummary.totalMasters} masters tracked · {calibrationSummary.darks} darks · {calibrationSummary.flats} flats · {calibrationSummary.bias} bias
             </span>
-          }
-        />
-      </Box>
+            <span className="alm-master-detail__sub-sep">·</span>
+            <span>{calibrationSummary.agingCount} masters older than 90d</span>
+            <span className="alm-master-detail__sub-note">
+              Masters are tracked, not produced — generate them in PixInsight
+            </span>
+          </div>
+        }
+      >
+        <Btn size="sm" active>Masters</Btn>
+        <Btn size="sm">Calibration sessions</Btn>
+        <Btn size="sm">Match candidates</Btn>
+        <div style={{ flex: 1 }} />
+        <Btn size="sm">Import master…</Btn>
+        <Btn size="sm">Re-run matching</Btn>
+      </Toolbar>
 
-      <Box heading="Usage">
-        <KV label="Sessions" value={String(data.usage_stats.session_count)} />
-        <KV label="Projects" value={String(data.usage_stats.project_count)} />
-      </Box>
+      <div className="alm-master-detail__body">
+        {/* Detail header */}
+        <div className="alm-master-detail__header">
+          <div className="alm-master-detail__header-left">
+            <Lock />
+            <h2 className="alm-master-detail__name alm-mono">{name}</h2>
+            <Pill
+              label={`MASTER · ${kind.toUpperCase()}`}
+              variant="info"
+              size="sm"
+            />
+            <Confidence level={conf} />
+          </div>
+          <div className="alm-master-detail__header-actions">
+            <Btn size="sm">Reveal in Explorer</Btn>
+            <Btn size="sm">Use in project →</Btn>
+            <Btn size="sm">Mark superseded</Btn>
+          </div>
+        </div>
 
-      <Box heading="Compatible Sessions">
-        {data.compatible_sessions.length > 0 ? (
-          <DataTable<CompatibleSession>
-            columns={sessionColumns}
-            data={data.compatible_sessions}
-          />
-        ) : (
-          <div className="alm-page__empty">No compatible sessions found.</div>
+        {/* Path / size */}
+        <div className="alm-master-detail__path alm-mono">
+          {detail
+            ? `${detail.path} · ${focusedMaster.size} · created from ${detail.sourceSession}`
+            : `${masterListItem.name}.xisf · ${masterListItem.size}`}
+        </div>
+
+        {/* Three-column box grid */}
+        {detail && (
+          <div className="alm-master-detail__grid-3">
+            <Box heading="Compatibility fingerprint">
+              {detail.fingerprint.map((row) => (
+                <KV key={row.k} label={row.k} value={row.v} origin={row.prov} />
+              ))}
+            </Box>
+
+            <Box heading="Provenance">
+              {detail.provenance.map((row) => (
+                <KV
+                  key={row.k}
+                  label={row.k}
+                  value={
+                    row.mono ? (
+                      <span className="alm-mono" style={{ fontSize: 10 }}>
+                        {row.v}
+                      </span>
+                    ) : (
+                      row.v
+                    )
+                  }
+                  origin={row.prov}
+                />
+              ))}
+            </Box>
+
+            <Box heading="Usage">
+              <div className="alm-master-detail__usage-stats">
+                <div className="alm-master-detail__usage-stat">
+                  <div className="alm-master-detail__usage-num alm-mono">
+                    {detail.sessions}
+                  </div>
+                  <div className="alm-master-detail__usage-label">
+                    acquisition sessions matched
+                  </div>
+                </div>
+                <div className="alm-master-detail__usage-stat">
+                  <div className="alm-master-detail__usage-num alm-mono">
+                    {detail.projects}
+                  </div>
+                  <div className="alm-master-detail__usage-label">
+                    projects use this master
+                  </div>
+                </div>
+              </div>
+              <div className="alm-master-detail__usage-last">
+                Last used by project:
+              </div>
+              <div className="alm-mono" style={{ fontSize: 11 }}>
+                {detail.lastUsedProject}
+              </div>
+              <Btn size="sm" onClick={() => {}}>
+                See all usage →
+              </Btn>
+            </Box>
+          </div>
         )}
-      </Box>
+
+        {/* Linked projects table */}
+        {detail && (
+          <div className="alm-master-detail__section">
+            <div className="alm-master-detail__section-header">
+              <div>
+                <h3 className="alm-master-detail__section-title">
+                  Linked to projects
+                </h3>
+                <span className="alm-master-detail__section-sub">
+                  acquisition sessions whose project source map includes this master
+                </span>
+              </div>
+              <Btn size="sm">+ Add to project…</Btn>
+            </div>
+            <table className="alm-simple-table">
+              <thead>
+                <tr>
+                  <th>Project</th>
+                  <th>Workflow profile</th>
+                  <th>Lifecycle</th>
+                  <th>Role</th>
+                  <th>Selected by</th>
+                  <th>Selected at</th>
+                </tr>
+              </thead>
+              <tbody>
+                {detail.linkedProjects.map((p) => (
+                  <tr key={p.project}>
+                    <td>
+                      <strong>{p.project}</strong>
+                    </td>
+                    <td>{p.workflowProfile}</td>
+                    <td>
+                      <Pill
+                        label={p.lifecycle}
+                        variant={p.lifecycleVariant}
+                        size="sm"
+                      />
+                    </td>
+                    <td>{p.role}</td>
+                    <td style={{ fontSize: 11 }}>{p.selectedBy}</td>
+                    <td className="alm-mono" style={{ fontSize: 11 }}>
+                      {p.selectedAt}
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        )}
+
+        {/* Compatible sessions table */}
+        {detail && (
+          <div className="alm-master-detail__section">
+            <div className="alm-master-detail__section-header">
+              <div>
+                <h3 className="alm-master-detail__section-title">
+                  Compatible acquisition sessions
+                </h3>
+                <span className="alm-master-detail__section-sub">
+                  sessions whose fingerprint matches this master (score ≥ 0.6)
+                </span>
+              </div>
+              <Btn size="sm">Match all →</Btn>
+            </div>
+            <table className="alm-simple-table">
+              <thead>
+                <tr>
+                  <th style={{ width: 24 }}></th>
+                  <th>Session</th>
+                  <th>Frames</th>
+                  <th>Score</th>
+                  <th>Soft mismatches</th>
+                  <th>Decision</th>
+                  <th></th>
+                </tr>
+              </thead>
+              <tbody>
+                {detail.compatibleSessions.map((s) => (
+                  <tr key={s.session}>
+                    <td>
+                      {s.check === 'ok' ? (
+                        <span style={{ color: 'var(--alm-ok)' }}>✓</span>
+                      ) : (
+                        <span style={{ color: 'var(--alm-warn)' }}>~</span>
+                      )}
+                    </td>
+                    <td>
+                      <strong>{s.session}</strong>
+                    </td>
+                    <td className="alm-mono" style={{ fontSize: 11 }}>
+                      {s.frames}
+                    </td>
+                    <td className="alm-mono" style={{ fontSize: 11 }}>
+                      {s.score.toFixed(2)}
+                    </td>
+                    <td
+                      style={{
+                        fontSize: 11,
+                        color:
+                          s.softMismatches === '—'
+                            ? 'var(--alm-text-faint)'
+                            : 'var(--alm-warn)',
+                      }}
+                    >
+                      {s.softMismatches}
+                    </td>
+                    <td>
+                      <Pill
+                        label={s.decision}
+                        variant={s.decision === 'accepted' ? 'ok' : 'warn'}
+                        size="sm"
+                      />
+                    </td>
+                    <td style={{ textAlign: 'right' }}>
+                      <Btn size="sm">Override…</Btn>
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        )}
+
+        {/* Fallback for non-detailed masters */}
+        {!detail && (
+          <div className="alm-master-detail__grid-3" style={{ marginTop: 14 }}>
+            <Box heading="Summary">
+              <KV label="Kind" value={kind} />
+              <KV label="Exposure" value={masterListItem.exp} />
+              <KV label="Temperature" value={masterListItem.temp} />
+              <KV label="Gain" value={masterListItem.gain} />
+              <KV label="Camera" value={masterListItem.cam} />
+              <KV label="Age" value={masterListItem.age} />
+              <KV label="Size" value={masterListItem.size} />
+            </Box>
+            <Box heading="Usage">
+              <KV label="Sessions" value={String(masterListItem.sessions)} />
+              <KV label="Projects" value={String(masterListItem.projects)} />
+            </Box>
+          </div>
+        )}
+      </div>
     </div>
   );
 }

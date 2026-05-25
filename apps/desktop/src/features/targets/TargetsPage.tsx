@@ -49,7 +49,7 @@ export function TargetsPage() {
           )
         }
         detail={<div />}
-        listWidth={260}
+        listWidth={220}
         detailWidth={0}
       />
     </div>

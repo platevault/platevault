@@ -54,10 +54,13 @@ function loadWizardState(): WizardState {
   try {
     const raw = localStorage.getItem(STORAGE_KEY);
     if (raw) {
-      return JSON.parse(raw) as WizardState;
+      const parsed = JSON.parse(raw);
+      if (Array.isArray(parsed?.categories) && parsed.categories.length > 0) {
+        return parsed as WizardState;
+      }
     }
   } catch {
-    // corrupt state -- start fresh
+    // corrupt or stale state -- start fresh
   }
   return {
     currentStep: 0,

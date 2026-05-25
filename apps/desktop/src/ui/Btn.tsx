@@ -9,6 +9,10 @@ export interface BtnProps {
   disabled?: boolean;
   onClick?: () => void;
   children: ReactNode;
+  /** Optional inline style override. */
+  style?: React.CSSProperties;
+  /** Optional extra class name. */
+  className?: string;
   /** Pass-through HTML attributes (e.g. data-tour for guided tour anchors). */
   [key: `data-${string}`]: string | undefined;
 }
@@ -20,6 +24,8 @@ export function Btn({
   disabled,
   onClick,
   children,
+  style: inlineStyle,
+  className: extraClassName,
   ...rest
 }: BtnProps) {
   return (
@@ -29,9 +35,11 @@ export function Btn({
         variant && `alm-btn--${variant}`,
         size === 'sm' && 'alm-btn--sm',
         active && 'alm-btn--active',
+        extraClassName,
       )}
       disabled={disabled}
       onClick={onClick}
+      style={inlineStyle}
       {...rest}
     >
       {children}

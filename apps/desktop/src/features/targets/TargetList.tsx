@@ -1,7 +1,6 @@
 import { useState, useMemo } from 'react';
 import { clsx } from 'clsx';
 import type { Target } from '@/api/types';
-import { Pill } from '@/ui';
 
 export interface TargetListProps {
   targets: Target[];
@@ -9,27 +8,10 @@ export interface TargetListProps {
   onSelect: (id: string) => void;
 }
 
-function kindVariant(kind: string) {
-  switch (kind) {
-    case 'deep_sky':
-      return 'info' as const;
-    case 'planetary':
-      return 'warn' as const;
-    case 'lunar':
-      return 'neutral' as const;
-    case 'solar':
-      return 'warn' as const;
-    case 'landscape':
-      return 'ghost' as const;
-    default:
-      return 'neutral' as const;
-  }
-}
-
-function formatKind(kind: string): string {
-  return kind.replace(/_/g, ' ');
-}
-
+/**
+ * Target list pane (left side of three-pane layout).
+ * Matches wireframe: search bar, items showing name + alias + stats.
+ */
 export function TargetList({ targets, selectedId, onSelect }: TargetListProps) {
   const [search, setSearch] = useState('');
 
@@ -46,8 +28,11 @@ export function TargetList({ targets, selectedId, onSelect }: TargetListProps) {
     );
   }, [targets, search]);
 
+  const isUnresolved = (t: Target) => t.name === '(unresolved)';
+
   return (
     <div className="alm-target-list">
+      {/* Search bar */}
       <div className="alm-target-list__search">
         <input
           type="search"
@@ -58,6 +43,8 @@ export function TargetList({ targets, selectedId, onSelect }: TargetListProps) {
           aria-label="Search targets"
         />
       </div>
+
+      {/* Target items */}
       <ul className="alm-target-list__items" role="listbox" aria-label="Targets">
         {filtered.map((target) => (
           <li
@@ -77,14 +64,28 @@ export function TargetList({ targets, selectedId, onSelect }: TargetListProps) {
             }}
             tabIndex={0}
           >
+            {/* Row 1: name + warning */}
             <div className="alm-target-list__row">
-              <span className="alm-target-list__name">{target.name}</span>
-              <Pill label={formatKind(target.kind)} variant={kindVariant(target.kind)} size="sm" />
+              <span className="alm-target-list__name">
+                {target.name}
+              </span>
+              {isUnresolved(target) && (
+                <span className="alm-target-list__warn" aria-label="Unresolved target">&#x26A0;</span>
+              )}
             </div>
+
+            {/* Row 2: alias (if present) */}
+            {target.aliases.length > 0 && target.aliases[0] && (
+              <div className="alm-target-list__alias">{target.aliases[0]}</div>
+            )}
+
+            {/* Row 3: stats */}
             <div className="alm-target-list__meta">
-              <span>{target.session_count} session{target.session_count !== 1 ? 's' : ''}</span>
+              <span>{target.session_count} sess</span>
               <span className="alm-target-list__dot" aria-hidden="true" />
               <span>{target.total_integration_hours.toFixed(1)}h</span>
+              <span className="alm-target-list__dot" aria-hidden="true" />
+              <span>{target.project_count} proj</span>
             </div>
           </li>
         ))}
@@ -92,6 +93,9 @@ export function TargetList({ targets, selectedId, onSelect }: TargetListProps) {
           <li className="alm-target-list__empty">No targets match your search</li>
         )}
       </ul>
+
+      {/* New target footer */}
+      <div className="alm-target-list__footer">+ new target</div>
     </div>
   );
 }

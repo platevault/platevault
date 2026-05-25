@@ -22,7 +22,7 @@ const STRATEGIES: Array<{ id: SourceViewStrategy; label: string; description: st
 ];
 
 export function StepViews({ data, onChange }: StepViewsProps) {
-  const [showOptions, setShowOptions] = useState(data.strategy !== 'symlink');
+  const [showOptions, setShowOptions] = useState(data.strategy !== 'junction');
 
   return (
     <div style={{ display: 'flex', flexDirection: 'column', gap: 'var(--alm-space-5)' }}>

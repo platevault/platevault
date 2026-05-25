@@ -1,5 +1,4 @@
 import { memo } from 'react';
-import { clsx } from 'clsx';
 
 export interface CoverageChartProps {
   coverage: Record<string, number>;
@@ -7,8 +6,9 @@ export interface CoverageChartProps {
 }
 
 /**
- * Horizontal bar chart showing filter coverage vs. recommended hours.
- * Pure CSS bars — no charting library needed.
+ * Horizontal bar chart showing filter coverage hours.
+ * Matches wireframe: simple bars with filter label, track, hours value.
+ * Pure CSS -- no charting library needed.
  */
 export const CoverageChart = memo(function CoverageChart({ coverage, recommended }: CoverageChartProps) {
   // Collect all filters from both maps
@@ -27,43 +27,22 @@ export const CoverageChart = memo(function CoverageChart({ coverage, recommended
       {filters.map((filter) => {
         const actual = coverage[filter] ?? 0;
         const target = recommended[filter] ?? 0;
-        const belowRecommended = target > 0 && actual < target;
-        const barPercent = Math.min((actual / maxHours) * 100, 100);
+        const barPercent = maxHours > 0 ? Math.min((actual / maxHours) * 100, 100) : 0;
 
         return (
           <div key={filter} className="alm-coverage-chart__row">
             <span className="alm-coverage-chart__label">{filter}</span>
-            <div className="alm-coverage-chart__track">
-              <div
-                className={clsx(
-                  'alm-coverage-chart__bar',
-                  belowRecommended && 'alm-coverage-chart__bar--below',
-                )}
-                style={{ width: `${barPercent}%` }}
-                aria-valuenow={actual}
-                aria-valuemax={target}
-                role="meter"
-                aria-label={`${filter}: ${actual.toFixed(1)}h of ${target.toFixed(1)}h recommended`}
-              />
-              {target > 0 && (
-                <div
-                  className="alm-coverage-chart__target-mark"
-                  style={{ left: `${Math.min((target / maxHours) * 100, 100)}%` }}
-                  title={`Recommended: ${target.toFixed(1)}h`}
-                />
-              )}
-            </div>
-            <span className="alm-coverage-chart__hours">
-              {actual.toFixed(1)}h
-            </span>
-            {belowRecommended && (
+            <span className="alm-coverage-chart__track">
               <span
-                className="alm-coverage-chart__warning"
-                title={`Below recommended (${target.toFixed(1)}h)`}
-              >
-                &#x26A0; Below recommended
-              </span>
-            )}
+                className="alm-coverage-chart__bar"
+                style={{ width: `${barPercent}%` }}
+                role="meter"
+                aria-valuenow={actual}
+                aria-valuemax={target || actual}
+                aria-label={`${filter}: ${actual.toFixed(1)}h${target ? ` of ${target.toFixed(1)}h recommended` : ''}`}
+              />
+            </span>
+            <span className="alm-coverage-chart__hours">{actual.toFixed(1)}h</span>
           </div>
         );
       })}

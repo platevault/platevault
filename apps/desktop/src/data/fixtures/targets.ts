@@ -1,202 +1,166 @@
 // Static mock fixture data for Target and TargetDetail
-// Types mirror @/api/types — inline definitions used until that module is created
+// Matches wireframe: canvas-wireframes-2026-05-24/project/wireframes/targets.jsx
 
-type TargetKind = 'deep_sky' | 'planetary' | 'lunar' | 'solar' | 'landscape';
+import type {
+  Target,
+  TargetDetail as TargetDetailType,
+  AcquisitionSession,
+  ProjectState,
+  SessionState,
+  ConfidenceLevel,
+} from '@/api/types';
 
-interface Target {
-  id: string;
-  name: string;
-  aliases: string[];
-  catalog_ids: {
-    ngc?: number;
-    ic?: number;
-    messier?: number;
-  };
-  kind: TargetKind;
-  coordinates: {
-    ra?: number; // decimal hours
-    dec?: number; // decimal degrees
-  };
-  session_count: number;
-  project_count: number;
-  total_integration_hours: number;
-  coverage: Record<string, number>; // filter → hours
-  recommended_hours: Record<string, number>; // filter → target hours
-}
-
-interface LinkedSession {
-  session_id: string;
-  night: string;
-  filter: string;
-  integration_hours: number;
-  state: string;
-  confidence: string;
-}
-
-interface LinkedProject {
-  project_id: string;
-  name: string;
-  state: string;
-}
-
-interface TargetDetail extends Target {
-  linked_sessions: LinkedSession[];
-  linked_projects: LinkedProject[];
-  notes?: string;
-}
+// ---------------------------------------------------------------------------
+// List items — shown in the left pane
+// ---------------------------------------------------------------------------
 
 export const targets: Target[] = [
-  // NGC 7000 — North America Nebula — good narrowband coverage
   {
     id: '550e8400-e29b-41d4-a716-446655440201',
     name: 'NGC 7000',
-    aliases: ['North America Nebula', 'NGC7000', 'C20'],
-    catalog_ids: { ngc: 7000 },
+    aliases: ['North America Nebula', 'Caldwell 20'],
+    catalog_ids: { ngc: '7000' },
     kind: 'deep_sky',
-    coordinates: { ra: 20.97, dec: 44.53 },
-    session_count: 3,
-    project_count: 1,
-    total_integration_hours: 7.5,
-    coverage: {
-      Ha: 3.0,
-      OIII: 2.5,
-      SII: 2.0,
-    },
-    recommended_hours: {
-      Ha: 4.0,
-      OIII: 4.0,
-      SII: 4.0,
-    },
-    // Ha, OIII, SII all below recommended — will trigger warnings
+    coordinates: { ra: 20.983, dec: 44.517 },
+    session_count: 12,
+    project_count: 2,
+    total_integration_hours: 14.2,
+    coverage: { Ha: 6.3, OIII: 4.8, SII: 1.8, L: 0 },
+    recommended_hours: { Ha: 6.0, OIII: 5.0, SII: 3.0, L: 0 },
   },
-
-  // M31 — Andromeda Galaxy — missing G and B channels
   {
     id: '550e8400-e29b-41d4-a716-446655440202',
     name: 'M31',
-    aliases: ['Andromeda Galaxy', 'NGC 224', 'NGC224'],
-    catalog_ids: { messier: 31, ngc: 224 },
+    aliases: ['Andromeda Galaxy'],
+    catalog_ids: { messier: '31', ngc: '224' },
     kind: 'deep_sky',
     coordinates: { ra: 0.712, dec: 41.27 },
-    session_count: 3,
+    session_count: 8,
     project_count: 1,
-    total_integration_hours: 4.58,
-    coverage: {
-      L: 1.5,
-      R: 1.125,
-      G: 0,  // missing — will trigger warning
-      B: 0,  // missing — will trigger warning
-    },
-    recommended_hours: {
-      L: 3.0,
-      R: 2.0,
-      G: 2.0,
-      B: 2.0,
-    },
+    total_integration_hours: 11.8,
+    coverage: { L: 5.2, R: 3.1, G: 1.8, B: 1.7 },
+    recommended_hours: { L: 6.0, R: 3.0, G: 3.0, B: 3.0 },
   },
-
-  // IC 1396 — Elephant Trunk Nebula — low SII only
   {
     id: '550e8400-e29b-41d4-a716-446655440203',
     name: 'IC 1396',
-    aliases: ['Elephant Trunk Nebula', 'IC1396'],
-    catalog_ids: { ic: 1396 },
+    aliases: ["Elephant's Trunk"],
+    catalog_ids: { ic: '1396' },
     kind: 'deep_sky',
     coordinates: { ra: 21.62, dec: 57.5 },
-    session_count: 1,
-    project_count: 0,
-    total_integration_hours: 2.0,
-    coverage: {
-      SII: 2.0,
-      Ha: 0,   // missing — will trigger warning
-      OIII: 0, // missing — will trigger warning
-    },
-    recommended_hours: {
-      Ha: 4.0,
-      OIII: 4.0,
-      SII: 4.0,
-    },
+    session_count: 4,
+    project_count: 1,
+    total_integration_hours: 9.3,
+    coverage: { Ha: 5.1, OIII: 4.2 },
+    recommended_hours: { Ha: 6.0, OIII: 6.0 },
   },
-
-  // M42 — Orion Nebula — partial (Ha only, rejected OIII)
   {
     id: '550e8400-e29b-41d4-a716-446655440204',
-    name: 'M42',
-    aliases: ['Orion Nebula', 'Great Orion Nebula', 'NGC 1976', 'NGC1976'],
-    catalog_ids: { messier: 42, ngc: 1976 },
-    kind: 'deep_sky',
-    coordinates: { ra: 5.588, dec: -5.39 },
-    session_count: 2,
-    project_count: 0,
-    total_integration_hours: 5.0,
-    coverage: {
-      Ha: 5.0,
-      OIII: 0,  // session rejected — will trigger warning
-    },
-    recommended_hours: {
-      Ha: 3.0,
-      OIII: 3.0,
-    },
+    name: 'Jupiter',
+    aliases: [],
+    catalog_ids: {},
+    kind: 'planetary',
+    coordinates: {},
+    session_count: 6,
+    project_count: 1,
+    total_integration_hours: 2.5,
+    coverage: {},
+    recommended_hours: {},
   },
-
-  // NGC 2244 — Rosette Nebula core — only Ha, good coverage
   {
     id: '550e8400-e29b-41d4-a716-446655440205',
-    name: 'NGC 2244',
-    aliases: ['Rosette Nebula', 'Caldwell 50', 'NGC2244'],
-    catalog_ids: { ngc: 2244 },
+    name: 'M42',
+    aliases: ['Orion Nebula'],
+    catalog_ids: { messier: '42', ngc: '1976' },
     kind: 'deep_sky',
-    coordinates: { ra: 6.532, dec: 4.95 },
-    session_count: 1,
+    coordinates: { ra: 5.588, dec: -5.39 },
+    session_count: 5,
     project_count: 0,
-    total_integration_hours: 3.33,
-    coverage: {
-      Ha: 3.33,
-      OIII: 0,  // not yet started — will trigger warning
-      SII: 0,   // not yet started — will trigger warning
-    },
-    recommended_hours: {
-      Ha: 4.0,
-      OIII: 3.0,
-      SII: 3.0,
-    },
+    total_integration_hours: 3.4,
+    coverage: { Ha: 3.4 },
+    recommended_hours: { Ha: 4.0 },
+  },
+  {
+    id: '550e8400-e29b-41d4-a716-446655440206',
+    name: '(unresolved)',
+    aliases: [],
+    catalog_ids: {},
+    kind: 'deep_sky',
+    coordinates: {},
+    session_count: 3,
+    project_count: 0,
+    total_integration_hours: 4.2,
+    coverage: { Ha: 4.2 },
+    recommended_hours: { Ha: 4.0 },
   },
 ];
 
-export const targetDetail: TargetDetail = {
-  ...targets[0], // NGC 7000
-  linked_sessions: [
+// ---------------------------------------------------------------------------
+// Detail — the full NGC 7000 detail matching the wireframe
+// ---------------------------------------------------------------------------
+
+export const targetDetail: TargetDetailType = {
+  ...targets[0],
+  sessions: [
     {
-      session_id: '550e8400-e29b-41d4-a716-446655440001',
-      night: '2026-04-12',
-      filter: 'Ha',
-      integration_hours: 3.0,
-      state: 'discovered',
-      confidence: 'unknown',
+      id: 's-001',
+      session_key: { target: 'NGC 7000', filter: 'Ha', binning: '1x1', gain: '100', night: '2024-11-30' },
+      state: 'confirmed' as SessionState,
+      confidence: 'confirmed' as ConfidenceLevel,
+      optical_train_id: 'ot-2600mm',
+      frame_count: 54,
+      total_integration_seconds: 16200,
+      total_size_bytes: 0,
+      metadata: {},
+      target_ids: ['550e8400-e29b-41d4-a716-446655440201'],
+      project_ids: ['proj-hoo'],
+      warnings: [],
     },
     {
-      session_id: '550e8400-e29b-41d4-a716-446655440005',
-      night: '2026-04-15',
-      filter: 'OIII',
-      integration_hours: 2.5,
-      state: 'confirmed',
-      confidence: 'confirmed',
+      id: 's-002',
+      session_key: { target: 'NGC 7000', filter: 'OIII', binning: '1x1', gain: '100', night: '2024-11-30' },
+      state: 'confirmed' as SessionState,
+      confidence: 'confirmed' as ConfidenceLevel,
+      optical_train_id: 'ot-2600mm',
+      frame_count: 38,
+      total_integration_seconds: 11520,
+      total_size_bytes: 0,
+      metadata: {},
+      target_ids: ['550e8400-e29b-41d4-a716-446655440201'],
+      project_ids: ['proj-hoo'],
+      warnings: [],
     },
     {
-      session_id: '550e8400-e29b-41d4-a716-446655440006',
-      night: '2026-04-18',
-      filter: 'SII',
-      integration_hours: 2.33,
-      state: 'confirmed',
-      confidence: 'high',
+      id: 's-003',
+      session_key: { target: 'NGC 7000', filter: 'SII', binning: '1x1', gain: '100', night: '2024-12-01' },
+      state: 'needs_review' as SessionState,
+      confidence: 'high' as ConfidenceLevel,
+      optical_train_id: 'ot-2600mm',
+      frame_count: 22,
+      total_integration_seconds: 6480,
+      total_size_bytes: 0,
+      metadata: {},
+      target_ids: ['550e8400-e29b-41d4-a716-446655440201'],
+      project_ids: [],
+      warnings: [],
+    },
+    {
+      id: 's-004',
+      session_key: { target: 'NGC 7000', filter: 'Ha', binning: '1x1', gain: '100', night: '2024-12-15' },
+      state: 'confirmed' as SessionState,
+      confidence: 'confirmed' as ConfidenceLevel,
+      optical_train_id: 'ot-2600mm',
+      frame_count: 30,
+      total_integration_seconds: 9000,
+      total_size_bytes: 0,
+      metadata: {},
+      target_ids: ['550e8400-e29b-41d4-a716-446655440201'],
+      project_ids: ['proj-sho'],
+      warnings: [],
     },
   ],
-  linked_projects: [
-    {
-      project_id: '550e8400-e29b-41d4-a716-446655440301',
-      name: 'NGC 7000 — HOO Narrowband',
-      state: 'ready',
-    },
+  projects: [
+    { id: 'proj-hoo', name: 'NGC 7000 · HOO', state: 'processing' as ProjectState },
+    { id: 'proj-sho', name: 'NGC 7000 · SHO mosaic', state: 'ready' as ProjectState },
   ],
-  notes: 'Primary narrowband target for autumn. Target SHO palette with minimum 4h per channel.',
 };

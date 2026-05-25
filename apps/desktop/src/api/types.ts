@@ -338,21 +338,58 @@ export interface TargetDetail extends Target {
   projects: Array<{ id: string; name: string; state: ProjectState }>;
 }
 
+export interface ProjectSource {
+  role: 'light' | 'dark' | 'flat' | 'bias';
+  name: string;
+  frames: number;
+  hours: string;
+  selection: 'selected' | 'candidate';
+  warning?: string;
+}
+
+export interface ProjectSourceView {
+  name: string;
+  strategy: 'junction' | 'symlink' | 'hardlink' | 'copy';
+  link_count: number;
+  plan_ref: string;
+}
+
+export interface ProjectOutput {
+  id: string;
+  filename: string;
+  kind: string;
+  size_bytes: number;
+  date: string;
+  verification: 'accepted' | 'unreviewed' | 'superseded';
+  protected: boolean;
+}
+
+export interface ProjectArtifactGroup {
+  type: string;
+  count: number;
+  total_size_bytes: number;
+  cleanup_eligibility: 'eligible' | 'archive' | 'keep' | 'none';
+  confidence: ConfidenceLevel;
+  tool: string;
+  protected: boolean;
+  warning?: string;
+}
+
 export interface ProjectDetail extends Project {
-  outputs: Array<{
-    id: string;
-    filename: string;
-    kind: string;
-    size_bytes: number;
-    date: string;
-    verification: 'accepted' | 'unreviewed' | 'superseded';
-    protected: boolean;
-  }>;
-  artifacts: Array<{
-    type: string;
-    count: number;
-    total_size_bytes: number;
-  }>;
+  targets: string[];
+  sources: ProjectSource[];
+  source_views: ProjectSourceView[];
+  outputs: ProjectOutput[];
+  artifacts: ProjectArtifactGroup[];
+  lifecycle_stage_index: number;
+  audit_count: number;
+  plan_count: number;
+  cleanup_bytes: number;
+  cleanup_label: string;
+  total_integration_label: string;
+  on_disk_label: string;
+  notes_count: number;
+  manifest_count: number;
 }
 
 export interface PlanDetail extends FilesystemPlan {

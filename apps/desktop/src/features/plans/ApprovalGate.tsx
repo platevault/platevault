@@ -14,7 +14,7 @@ export interface ApprovalGateProps {
  *
  * Tier 1 (non-destructive): Simple "Approve" button
  * Tier 2 (has trash/archive but no permanent delete): Approve with AlertDialog confirmation
- * Tier 3 (has_destructive = true): Checkbox acknowledgement required before approve
+ * Tier 3 (has_destructive = true): Inline danger banner with checkbox acknowledgement
  *
  * Blocks approval entirely if any dry_run_ok === false in plan items.
  */
@@ -29,58 +29,43 @@ export function ApprovalGate({ plan, onApprove }: ApprovalGateProps) {
     (item) => item.action === 'trash' || item.action === 'archive',
   );
   const isDestructive = plan.has_destructive;
+  const deleteCount = plan.items.filter((item) => item.action === 'delete').length;
 
-  // Tier 3: permanent deletes
+  // Tier 3: permanent deletes — inline danger banner (matches wireframe)
   if (isDestructive) {
     return (
-      <div
-        className="alm-approval-gate"
-        style={{
-          padding: 'var(--alm-space-5)',
-          borderTop: '1px solid var(--alm-border)',
-          display: 'flex',
-          flexDirection: 'column',
-          gap: 'var(--alm-space-3)',
-        }}
-      >
+      <div className="alm-approval-gate alm-approval-gate--danger">
         {hasDryRunFailure && (
-          <p style={{ color: 'var(--alm-danger)', fontSize: 'var(--alm-text-sm)', margin: 0 }}>
+          <p className="alm-approval-gate__block-msg">
             Cannot approve: dry-run preconditions failed
           </p>
         )}
 
-        <label
-          style={{
-            display: 'flex',
-            alignItems: 'center',
-            gap: 'var(--alm-space-2)',
-            fontSize: 'var(--alm-text-sm)',
-            color: 'var(--alm-danger)',
-            cursor: hasDryRunFailure ? 'not-allowed' : 'pointer',
-            opacity: hasDryRunFailure ? 0.5 : 1,
-          }}
-        >
-          <Checkbox.Root
-            className="alm-checkbox"
-            checked={deleteAcknowledged}
-            disabled={hasDryRunFailure}
-            onCheckedChange={(checked) => setDeleteAcknowledged(checked === true)}
-          >
-            <Checkbox.Indicator className="alm-checkbox__indicator">
-              &#x2713;
-            </Checkbox.Indicator>
-          </Checkbox.Root>
-          I understand this will permanently delete files
-        </label>
-
-        <div>
-          <Btn
-            variant="danger"
-            disabled={hasDryRunFailure || !deleteAcknowledged}
-            onClick={onApprove}
-          >
-            Approve
-          </Btn>
+        <div className="alm-approval-gate__banner">
+          <span className="alm-approval-gate__icon" aria-hidden="true">&#x26A0;</span>
+          <div className="alm-approval-gate__body">
+            <div className="alm-approval-gate__title">
+              This plan includes {deleteCount} permanent delete{deleteCount !== 1 ? 's' : ''}
+            </div>
+            <div className="alm-approval-gate__desc">
+              Permanent delete is normally disabled. It was enabled for:{' '}
+              <span className="alm-mono">processing/pixinsight/temp/*.tmp</span>.
+              These files will be unrecoverable.
+            </div>
+          </div>
+          <label className="alm-approval-gate__ack">
+            <Checkbox.Root
+              className="alm-checkbox"
+              checked={deleteAcknowledged}
+              disabled={hasDryRunFailure}
+              onCheckedChange={(checked) => setDeleteAcknowledged(checked === true)}
+            >
+              <Checkbox.Indicator className="alm-checkbox__indicator">
+                &#x2713;
+              </Checkbox.Indicator>
+            </Checkbox.Root>
+            I understand and accept
+          </label>
         </div>
       </div>
     );
@@ -89,18 +74,9 @@ export function ApprovalGate({ plan, onApprove }: ApprovalGateProps) {
   // Tier 2: has trash/archive — AlertDialog confirmation
   if (hasTrashOrArchive) {
     return (
-      <div
-        className="alm-approval-gate"
-        style={{
-          padding: 'var(--alm-space-5)',
-          borderTop: '1px solid var(--alm-border)',
-          display: 'flex',
-          flexDirection: 'column',
-          gap: 'var(--alm-space-3)',
-        }}
-      >
+      <div className="alm-approval-gate">
         {hasDryRunFailure && (
-          <p style={{ color: 'var(--alm-danger)', fontSize: 'var(--alm-text-sm)', margin: 0 }}>
+          <p className="alm-approval-gate__block-msg">
             Cannot approve: dry-run preconditions failed
           </p>
         )}
@@ -141,15 +117,9 @@ export function ApprovalGate({ plan, onApprove }: ApprovalGateProps) {
 
   // Tier 1: non-destructive — simple button
   return (
-    <div
-      className="alm-approval-gate"
-      style={{
-        padding: 'var(--alm-space-5)',
-        borderTop: '1px solid var(--alm-border)',
-      }}
-    >
+    <div className="alm-approval-gate">
       {hasDryRunFailure && (
-        <p style={{ color: 'var(--alm-danger)', fontSize: 'var(--alm-text-sm)', margin: 0, marginBottom: 'var(--alm-space-3)' }}>
+        <p className="alm-approval-gate__block-msg">
           Cannot approve: dry-run preconditions failed
         </p>
       )}

@@ -1,4 +1,4 @@
-import { useMemo } from 'react';
+import { useMemo, useState } from 'react';
 import { useNavigate } from '@tanstack/react-router';
 import { type ColumnDef } from '@tanstack/react-table';
 import { useQuery, createQueryStore } from '@/data/store';
@@ -7,6 +7,8 @@ import type { Project, ProjectState } from '@/api/types';
 import { Toolbar, DataTable, Pill, Btn, EmptyState } from '@/ui';
 
 const projectsStore = createQueryStore(() => listProjects());
+
+// ─── Helpers ────────────────────────────────────────────────────────────────
 
 function formatBytes(bytes: number): string {
   if (bytes === 0) return '—';
@@ -26,186 +28,229 @@ function formatRelativeDate(iso: string): string {
   const diffH = Math.floor(diffMin / 60);
   if (diffH < 24) return `${diffH}h ago`;
   const diffD = Math.floor(diffH / 24);
-  if (diffD < 30) return `${diffD}d ago`;
+  if (diffD === 1) return 'yesterday';
+  if (diffD < 7) return `${diffD} days ago`;
+  if (diffD < 30) return `${Math.floor(diffD / 7)} weeks ago`;
   const diffMo = Math.floor(diffD / 30);
-  return `${diffMo}mo ago`;
-}
-
-function projectStateVariant(state: ProjectState) {
-  switch (state) {
-    case 'completed':
-      return 'ok' as const;
-    case 'ready':
-    case 'prepared':
-      return 'info' as const;
-    case 'processing':
-      return 'neutral' as const;
-    case 'setup_incomplete':
-      return 'ghost' as const;
-    case 'blocked':
-      return 'danger' as const;
-    case 'archived':
-      return 'warn' as const;
-  }
-}
-
-function verificationLabel(state: Project['verification_state']): string {
-  switch (state) {
-    case 'has_accepted':
-      return 'Verified';
-    case 'all_rejected':
-      return 'Rejected';
-    default:
-      return 'Unreviewed';
-  }
-}
-
-function verificationVariant(state: Project['verification_state']) {
-  switch (state) {
-    case 'has_accepted':
-      return 'ok' as const;
-    case 'all_rejected':
-      return 'danger' as const;
-    default:
-      return 'ghost' as const;
-  }
+  if (diffMo < 12) return `${diffMo} months ago`;
+  return `${Math.floor(diffMo / 12)}y ago`;
 }
 
 function formatIntegrationHours(hours: number): string {
-  if (hours === 0) return '0h';
-  if (hours < 1) return `${Math.round(hours * 60)}m`;
-  const h = Math.floor(hours);
-  const m = Math.round((hours - h) * 60);
-  return m > 0 ? `${h}h ${m}m` : `${h}h`;
+  if (hours === 0) return '—';
+  return `${hours.toFixed(1)}h`;
 }
+
+function lifecycleVariant(state: ProjectState) {
+  const map: Record<ProjectState, 'warn' | 'ghost' | 'info' | 'ok' | 'neutral' | 'danger'> = {
+    setup_incomplete: 'warn',
+    ready: 'ghost',
+    prepared: 'info',
+    processing: 'info',
+    completed: 'ok',
+    archived: 'neutral',
+    blocked: 'danger',
+  };
+  return map[state];
+}
+
+function lifecycleLabel(state: ProjectState): string {
+  return state.replace(/_/g, ' ');
+}
+
+// ─── Target lookup (from fixtures until live) ───────────────────────────────
+
+function targetLabel(ids: string[]): string {
+  // In the wireframe, target shows as the target name + panel info for mosaics
+  // For now, derive from project name or return a placeholder
+  if (ids.length === 0) return '?';
+  return ids.length === 1 ? ids[0].slice(-4) : `${ids.length} targets`;
+}
+
+// ─── Component ──────────────────────────────────────────────────────────────
 
 export function ProjectsPage() {
   const { data, loading } = useQuery(projectsStore);
   const navigate = useNavigate();
+  const [viewMode, setViewMode] = useState<'table' | 'cards'>('table');
+  const [search, setSearch] = useState('');
 
-  const columns = useMemo<ColumnDef<Project, any>[]>(
+  const filtered = useMemo(() => {
+    if (!data) return [];
+    if (!search.trim()) return data;
+    const q = search.toLowerCase();
+    return data.filter(
+      (p) =>
+        p.name.toLowerCase().includes(q) ||
+        p.workflow_profile_id.toLowerCase().includes(q),
+    );
+  }, [data, search]);
+
+  const counts = useMemo(() => {
+    if (!data) return { total: 0, active: 0, completed: 0, archived: 0, blocked: 0 };
+    return {
+      total: data.length,
+      active: data.filter((p) => !['completed', 'archived', 'blocked'].includes(p.state)).length,
+      completed: data.filter((p) => p.state === 'completed').length,
+      archived: data.filter((p) => p.state === 'archived').length,
+      blocked: data.filter((p) => p.state === 'blocked').length,
+    };
+  }, [data]);
+
+  const aggregates = useMemo(() => {
+    if (!data || data.length === 0) return null;
+    const totalInteg = data
+      .filter((p) => !['archived', 'blocked'].includes(p.state))
+      .reduce((s, p) => s + p.integration_hours, 0);
+    const totalDisk = data.reduce((s, p) => s + p.cleanup_state.reclaimable_bytes, 0);
+    const cleanupBytes = data
+      .filter((p) => p.cleanup_state.reclaimable_bytes > 0)
+      .reduce((s, p) => s + p.cleanup_state.reclaimable_bytes, 0);
+    return {
+      totalInteg: `${totalInteg.toFixed(1)}h`,
+      totalDisk: formatBytes(totalDisk || 1), // fallback
+      cleanupBytes: formatBytes(cleanupBytes),
+    };
+  }, [data]);
+
+  const columns = useMemo<ColumnDef<Project, unknown>[]>(
     () => [
       {
-        id: 'warning',
-        header: '',
-        size: 32,
-        cell: ({ row }) =>
-          row.original.state === 'blocked' ? (
-            <span title={row.original.blocked_reason || 'Blocked'} style={{ color: 'var(--alm-warn)' }}>
-              &#x26A0;
+        accessorKey: 'name',
+        header: 'Project',
+        cell: ({ row }) => (
+          <div>
+            <span className="alm-projects-table__name">
+              {row.original.name} <span className="alm-projects-table__arrow">&rarr;</span>
             </span>
-          ) : null,
+            {row.original.blocked_reason && (
+              <div className="alm-projects-table__warn">
+                &#x26A0; {row.original.blocked_reason}
+              </div>
+            )}
+          </div>
+        ),
       },
       {
-        accessorKey: 'name',
-        header: 'Name',
-        cell: ({ row }) => (
-          <span>
-            {row.original.name}
-            {row.original.state === 'setup_incomplete' && (
-              <span style={{ marginLeft: 'var(--alm-space-2)', fontSize: 'var(--alm-text-xs)', color: 'var(--alm-text-muted)' }}>
-                (draft)
-              </span>
-            )}
-          </span>
+        id: 'target',
+        header: 'Target',
+        cell: ({ row }) => targetLabel(row.original.target_ids),
+      },
+      {
+        accessorKey: 'workflow_profile_id',
+        header: 'Profile',
+        size: 120,
+        cell: ({ getValue }) => (
+          <span style={{ fontSize: 'var(--alm-text-xs)' }}>{getValue() as string}</span>
         ),
       },
       {
         accessorKey: 'state',
         header: 'Lifecycle',
+        size: 110,
         cell: ({ getValue }) => {
           const state = getValue() as ProjectState;
-          return <Pill label={state.replace(/_/g, ' ')} variant={projectStateVariant(state)} size="sm" />;
+          return <Pill label={lifecycleLabel(state)} variant={lifecycleVariant(state)} size="sm" />;
         },
       },
       {
-        accessorKey: 'verification_state',
-        header: 'Verification',
-        cell: ({ getValue }) => {
-          const state = getValue() as Project['verification_state'];
-          return <Pill label={verificationLabel(state)} variant={verificationVariant(state)} size="sm" />;
-        },
+        id: 'sessions',
+        header: 'Sess.',
+        size: 50,
+        cell: ({ row }) => (
+          <span className="alm-mono">{row.original.source_map.lights.length}</span>
+        ),
       },
       {
         accessorKey: 'integration_hours',
-        header: 'Integration',
-        cell: ({ getValue }) => formatIntegrationHours(getValue() as number),
+        header: 'Integ.',
+        size: 60,
+        cell: ({ getValue }) => (
+          <span className="alm-mono">{formatIntegrationHours(getValue() as number)}</span>
+        ),
       },
       {
-        id: 'on_disk_size',
-        header: 'On-disk',
-        accessorFn: (r) => r.cleanup_state.reclaimable_bytes,
-        cell: ({ getValue }) => formatBytes(getValue() as number),
+        accessorKey: 'verification_state',
+        header: 'Outputs',
+        cell: ({ getValue }) => {
+          const state = getValue() as Project['verification_state'];
+          if (state === 'has_accepted') {
+            return <Pill label="accepted" variant="ok" size="sm" />;
+          }
+          return <span style={{ color: 'var(--alm-text-faint)' }}>&mdash;</span>;
+        },
+      },
+      {
+        id: 'size',
+        header: 'Size on disk',
+        size: 110,
+        cell: ({ row }) => {
+          const bytes = row.original.cleanup_state.reclaimable_bytes;
+          return <span className="alm-mono">{formatBytes(bytes)}</span>;
+        },
       },
       {
         id: 'cleanup',
         header: 'Cleanup',
+        size: 130,
         cell: ({ row }) => {
           const bytes = row.original.cleanup_state.reclaimable_bytes;
-          return bytes > 0 ? (
-            <Pill label="Eligible" variant="warn" size="sm" />
-          ) : (
-            <span style={{ color: 'var(--alm-text-muted)' }}>—</span>
-          );
+          if (bytes <= 0) {
+            return <span style={{ color: 'var(--alm-text-faint)' }}>&mdash;</span>;
+          }
+          return <span>{formatBytes(bytes)} ready</span>;
         },
       },
       {
         accessorKey: 'updated_at',
         header: 'Updated',
-        cell: ({ getValue }) => formatRelativeDate(getValue() as string),
-      },
-      {
-        accessorKey: 'workflow_profile_id',
-        header: 'Workflow',
-        cell: ({ getValue }) => {
-          const profile = getValue() as string;
-          return <Pill label={profile} variant="ghost" size="sm" />;
-        },
-      },
-      {
-        id: 'actions',
-        header: '',
-        size: 80,
-        cell: ({ row }) => {
-          if (row.original.state === 'setup_incomplete') {
-            return (
-              <Btn
-                size="sm"
-                variant="ghost"
-                onClick={() => navigate({ to: '/projects/new' })}
-              >
-                Resume
-              </Btn>
-            );
-          }
-          return null;
-        },
+        size: 100,
+        cell: ({ getValue }) => (
+          <span style={{ color: 'var(--alm-text-muted)' }}>
+            {formatRelativeDate(getValue() as string)}
+          </span>
+        ),
       },
     ],
-    [navigate],
+    [],
   );
-
-  const aggregates = useMemo(() => {
-    if (!data || data.length === 0) return null;
-    const totalIntegrationHours = data.reduce((sum, p) => sum + p.integration_hours, 0);
-    const totalOnDiskBytes = data.reduce((sum, p) => sum + p.cleanup_state.reclaimable_bytes, 0);
-    const cleanupEligibleCount = data.filter((p) => p.cleanup_state.reclaimable_bytes > 0).length;
-    return { totalIntegrationHours, totalOnDiskBytes, cleanupEligibleCount };
-  }, [data]);
 
   return (
     <div className="alm-page">
-      <Toolbar>
-        <span style={{ fontWeight: 600, fontSize: 'var(--alm-text-sm)' }}>Projects</span>
-        <span style={{ flex: 1 }} />
-        <Btn variant="primary" onClick={() => navigate({ to: '/projects/new' })} data-tour="new-project">
+      <Toolbar
+        subBar={
+          <div className="alm-projects-sub">
+            <span>{counts.total} projects</span>
+            <span className="alm-projects-sub__dot">&middot;</span>
+            <span>{counts.active} active &middot; {counts.completed} completed &middot; {counts.archived} archived</span>
+            <span className="alm-projects-sub__dot">&middot;</span>
+            <span>{counts.blocked} blocked</span>
+          </div>
+        }
+      >
+        <input
+          type="text"
+          className="alm-sessions-search"
+          placeholder="Search projects, targets…"
+          value={search}
+          onChange={(e) => setSearch(e.target.value)}
+        />
+        <Btn size="sm" active={viewMode === 'table'} onClick={() => setViewMode('table')}>
+          Table
+        </Btn>
+        <Btn size="sm" active={viewMode === 'cards'} onClick={() => setViewMode('cards')}>
+          Cards
+        </Btn>
+        <span className="alm-toolbar__separator" />
+        <Btn size="sm">Filter: state &#x25BE;</Btn>
+        <Btn variant="primary" size="sm" onClick={() => navigate({ to: '/projects/new' })} data-tour="new-project">
           + New project
         </Btn>
       </Toolbar>
 
       {loading && <div className="alm-page__loading">Loading projects...</div>}
 
-      {!loading && data && data.length === 0 && (
+      {!loading && filtered.length === 0 && !search && (
         <EmptyState
           title="No projects yet"
           description="Create a project to organize sessions, calibration masters, and outputs."
@@ -217,39 +262,31 @@ export function ProjectsPage() {
         />
       )}
 
-      {!loading && data && data.length > 0 && (
+      {!loading && filtered.length === 0 && search && (
+        <div className="alm-page__empty">No projects match &ldquo;{search}&rdquo;</div>
+      )}
+
+      {!loading && filtered.length > 0 && (
         <DataTable
           columns={columns}
-          data={data}
+          data={filtered}
           onRowClick={(row) => navigate({ to: '/projects/$id', params: { id: row.id } })}
         />
       )}
 
       {!loading && aggregates && (
-        <div
-          style={{
-            display: 'flex',
-            alignItems: 'center',
-            gap: 'var(--alm-space-7)',
-            padding: 'var(--alm-space-3) var(--alm-space-5)',
-            borderTop: '1px solid var(--alm-border)',
-            background: 'var(--alm-surface)',
-            fontSize: 'var(--alm-text-xs)',
-            color: 'var(--alm-text-muted)',
-            flexShrink: 0,
-          }}
-        >
+        <div className="alm-projects-footer">
           <span>
-            <strong style={{ color: 'inherit' }}>Total integration:</strong>{' '}
-            {formatIntegrationHours(aggregates.totalIntegrationHours)}
+            Total integration across active:{' '}
+            <span className="alm-mono">{aggregates.totalInteg}</span>
           </span>
           <span>
-            <strong style={{ color: 'inherit' }}>Total on-disk:</strong>{' '}
-            {formatBytes(aggregates.totalOnDiskBytes)}
+            Total on disk:{' '}
+            <span className="alm-mono">{aggregates.totalDisk}</span>
           </span>
           <span>
-            <strong style={{ color: 'inherit' }}>Cleanup eligible:</strong>{' '}
-            {aggregates.cleanupEligibleCount} project{aggregates.cleanupEligibleCount !== 1 ? 's' : ''}
+            Cleanup-eligible:{' '}
+            <span className="alm-mono">{aggregates.cleanupBytes}</span>
           </span>
         </div>
       )}

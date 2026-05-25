@@ -1,5 +1,6 @@
 import type { ReviewItem } from '@/api/types';
 import { Btn } from '@/ui';
+import { queueProgress } from '@/data/fixtures/review';
 
 export interface DecisionPanelProps {
   item: ReviewItem | null;
@@ -7,85 +8,88 @@ export interface DecisionPanelProps {
 }
 
 /**
- * Right pane with decision action buttons.
- * Confirm is disabled when blocking_reasons exist.
- * Keyboard shortcut hints are displayed alongside each button.
+ * Right pane with lifecycle decision buttons, correction actions,
+ * notes textarea, and queue progress bar.
+ *
+ * Matches wireframe: review-queue.jsx decision panel.
  */
 export function DecisionPanel({ item, onDecision }: DecisionPanelProps) {
   if (!item) {
     return (
-      <div className="alm-decision-panel" style={{ padding: 24 }}>
-        <p style={{ color: 'var(--alm-text-muted)' }}>No item selected.</p>
+      <div className="alm-decision-panel">
+        <p className="alm-decision-panel__placeholder">No item selected.</p>
       </div>
     );
   }
 
   const hasBlockingReasons = item.blocking_reasons.length > 0;
+  const pct = Math.round(
+    (queueProgress.reviewed / queueProgress.total) * 100,
+  );
 
   return (
-    <div className="alm-decision-panel" style={{ padding: 16, display: 'flex', flexDirection: 'column', gap: 12 }}>
-      <h3 style={{ fontSize: 'var(--alm-text-sm)', fontWeight: 600, marginBottom: 4 }}>
-        Decision
-      </h3>
+    <div className="alm-decision-panel">
+      {/* Section label */}
+      <div className="alm-decision-panel__section-label">Decisions</div>
 
-      {/* Confirm */}
-      <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
-        <Btn
-          variant="primary"
-          disabled={hasBlockingReasons}
-          onClick={() => onDecision('confirm')}
-        >
-          Confirm
-        </Btn>
-        <kbd style={{ fontSize: 'var(--alm-text-xs)', color: 'var(--alm-text-muted)' }}>
-          &#x2318;1
-        </kbd>
+      {/* Lifecycle */}
+      <div className="alm-decision-panel__group">
+        <div className="alm-decision-panel__group-title">Lifecycle</div>
+        <div className="alm-decision-panel__actions">
+          <Btn
+            variant="primary"
+            disabled={hasBlockingReasons}
+            onClick={() => onDecision('confirm')}
+          >
+            Confirm ⌘1
+          </Btn>
+          <Btn onClick={() => onDecision('reject')}>Reject ⌘2</Btn>
+          <Btn onClick={() => onDecision('skip')}>Skip (review later) ⌘3</Btn>
+          <Btn size="sm" onClick={() => {}}>
+            Re-open existing confirmation
+          </Btn>
+        </div>
       </div>
 
-      {/* Reject */}
-      <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
-        <Btn
-          variant="danger"
-          onClick={() => onDecision('reject')}
-        >
-          Reject
+      {/* Corrections */}
+      <div className="alm-decision-panel__group">
+        <div className="alm-decision-panel__group-title">Corrections</div>
+        <Btn size="sm" onClick={() => {}}>
+          Reassign target…
         </Btn>
-        <kbd style={{ fontSize: 'var(--alm-text-xs)', color: 'var(--alm-text-muted)' }}>
-          &#x2318;2
-        </kbd>
+        <Btn size="sm" onClick={() => {}}>
+          Reassign optical train…
+        </Btn>
+        <Btn size="sm" onClick={() => {}}>
+          Split this session…
+        </Btn>
+        <Btn size="sm" onClick={() => {}}>
+          Merge with another…
+        </Btn>
       </div>
 
-      {/* Skip */}
-      <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
-        <Btn
-          variant="ghost"
-          onClick={() => onDecision('skip')}
-        >
-          Skip
-        </Btn>
-        <kbd style={{ fontSize: 'var(--alm-text-xs)', color: 'var(--alm-text-muted)' }}>
-          &#x2318;3
-        </kbd>
+      {/* Notes */}
+      <div className="alm-decision-panel__group">
+        <div className="alm-decision-panel__group-title">Notes</div>
+        <textarea
+          className="alm-decision-panel__notes"
+          placeholder="Optional notes for future reviewers…"
+        />
       </div>
 
-      {/* Blocking reasons note */}
-      {hasBlockingReasons && (
-        <p
-          style={{
-            marginTop: 8,
-            fontSize: 'var(--alm-text-xs)',
-            color: 'var(--alm-warn)',
-            lineHeight: 1.4,
-          }}
-        >
-          Confirm is disabled because blocking reasons must be resolved first:
-          {item.blocking_reasons.map((reason, i) => (
-            <span key={i} style={{ display: 'block', marginTop: 2 }}>
-              &bull; {reason}
-            </span>
-          ))}
-        </p>
-      )}
+      {/* Queue progress */}
+      <div className="alm-decision-panel__progress">
+        <div className="alm-decision-panel__progress-title">Queue progress</div>
+        <div className="alm-decision-panel__progress-track">
+          <div
+            className="alm-decision-panel__progress-fill"
+            style={{ width: `${pct}%` }}
+          />
+        </div>
+        <div className="alm-decision-panel__progress-label">
+          {queueProgress.reviewed} reviewed · {queueProgress.remaining} remaining
+        </div>
+      </div>
     </div>
   );
 }

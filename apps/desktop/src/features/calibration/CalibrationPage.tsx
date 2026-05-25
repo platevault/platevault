@@ -1,51 +1,35 @@
 import { useState } from 'react';
-import { useNavigate, useParams } from '@tanstack/react-router';
-import { useQuery, createQueryStore } from '@/data/store';
-import { listCalibrationMasters } from '@/api/commands';
-import { ThreePane, EmptyState } from '@/ui';
+import { ThreePane } from '@/ui';
+import { masters } from '@/data/fixtures/calibration';
 import { MastersList } from './MastersList';
 import { MasterDetail } from './MasterDetail';
 
-const mastersStore = createQueryStore(() => listCalibrationMasters());
-
+/**
+ * Calibration page — three-pane layout.
+ * Left: grouped masters list.
+ * Center: selected master detail with toolbar, fingerprint, provenance,
+ *         usage, linked projects, compatible sessions.
+ * Right: empty (no separate detail pane in the wireframe — the center
+ *        pane spans the full remaining width via gridTemplateColumns).
+ *
+ * Matches wireframe: calibration.jsx
+ */
 export function CalibrationPage() {
-  const { data, loading } = useQuery(mastersStore);
-  const navigate = useNavigate();
-
-  // Try to pick up $id from route params (for /calibration/$id)
-  const params = useParams({ strict: false }) as { id?: string };
-  const [localSelectedId, setLocalSelectedId] = useState<string | undefined>(undefined);
-
-  const selectedId = params.id ?? localSelectedId;
-
-  function handleSelect(id: string) {
-    setLocalSelectedId(id);
-    navigate({ to: '/calibration/$id', params: { id } });
-  }
-
-  if (loading) {
-    return <div className="alm-page alm-page__loading">Loading calibration masters...</div>;
-  }
-
-  if (!data || data.length === 0) {
-    return (
-      <div className="alm-page" data-testid="CalibrationPage">
-        <EmptyState
-          title="No calibration masters found"
-          description="Calibration masters will appear here once they are identified from your library scans."
-        />
-      </div>
-    );
-  }
+  const [selectedId, setSelectedId] = useState<string>('m-1');
+  const [groupValue, setGroupValue] = useState('kind');
 
   return (
     <div className="alm-page" data-testid="CalibrationPage">
       <ThreePane
+        listWidth={220}
+        detailWidth={0}
         list={
           <MastersList
-            masters={data ?? []}
+            masters={masters}
             selectedId={selectedId}
-            onSelect={handleSelect}
+            onSelect={setSelectedId}
+            groupValue={groupValue}
+            onGroupChange={setGroupValue}
           />
         }
         content={

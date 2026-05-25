@@ -36,7 +36,7 @@ function planStateVariant(state: PlanState) {
     case 'applied':
       return 'ok' as const;
     case 'ready_for_review':
-      return 'info' as const;
+      return 'warn' as const;
     case 'approved':
     case 'applying':
       return 'neutral' as const;
@@ -97,7 +97,7 @@ export function PlansPage() {
         header: 'Reclaim',
         cell: ({ getValue }) => {
           const bytes = getValue() as number;
-          return bytes > 0 ? formatBytes(bytes) : '—';
+          return bytes > 0 ? formatBytes(bytes) : '--';
         },
       },
       {

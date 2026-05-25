@@ -1,5 +1,6 @@
-import { useState, useEffect } from 'react';
-import { WizardShell, Btn } from '@/ui';
+import { useState, useEffect, useMemo } from 'react';
+import { useNavigate } from '@tanstack/react-router';
+import { WizardShell, Btn, Toolbar } from '@/ui';
 import type { WizardStep } from '@/ui';
 import { StepName, type StepNameData } from './StepName';
 import { StepSources, type StepSourcesData } from './StepSources';
@@ -22,7 +23,7 @@ const INITIAL_DATA: WizardData = {
   name: { name: '', workflowProfile: 'pixinsight' },
   sources: { selectedSessionIds: [] },
   calibration: { flatMappings: {}, sharedDarkId: '', sharedBiasId: '', sharedDarkFlatId: '' },
-  views: { strategy: 'symlink' },
+  views: { strategy: 'junction' },
   layout: { namingPattern: '' },
 };
 
@@ -54,14 +55,21 @@ function clearDraft(): void {
 
 const STEP_LABELS = [
   'Name & profile',
-  'Sources',
+  'Sources (lights)',
   'Calibration',
   'Source views',
   'Naming & layout',
-  'Review plan',
+  'Review plan & create',
 ];
 
+const PROFILE_LABELS: Record<string, string> = {
+  pixinsight: 'PixInsight/WBPP',
+  siril: 'Siril',
+  planetary: 'planetary/lunar',
+};
+
 export function WizardPage() {
+  const navigate = useNavigate();
   const [currentStep, setCurrentStep] = useState(0);
   const [wizardData, setWizardData] = useState<WizardData>(loadDraft);
 
@@ -100,6 +108,11 @@ export function WizardPage() {
     }
   }
 
+  function handleCancel() {
+    clearDraft();
+    navigate({ to: '/projects' });
+  }
+
   const steps: WizardStep[] = STEP_LABELS.map((label, i) => ({
     label,
     completed: i < currentStep,
@@ -115,40 +128,117 @@ export function WizardPage() {
     naming_pattern: wizardData.layout.namingPattern,
   };
 
-  // Summary for right rail
+  const projectLabel = wizardData.name.name || 'New project';
+  const profileLabel = PROFILE_LABELS[wizardData.name.workflowProfile] || wizardData.name.workflowProfile;
+
+  // Computed summary counts
+  const flatsMapped = Object.values(wizardData.calibration.flatMappings).filter(Boolean).length;
+  const darkSelected = wizardData.calibration.sharedDarkId ? 1 : 0;
+  const biasSelected = wizardData.calibration.sharedBiasId ? 1 : 0;
+
+  // Back / Next button labels per wireframe
+  const backLabels = ['', '← Back', '← Back to sources', '← Calibration', '← Source views', '← Back'];
+  const nextLabels = ['Next: sources →', 'Next: calibration →', 'Next: source views →', 'Next: naming →', 'Next: review →', ''];
+
+  // Summary panel (right rail)
   const summary = (
-    <div style={{ display: 'flex', flexDirection: 'column', gap: 'var(--alm-space-3)', fontSize: 'var(--alm-text-xs)' }}>
-      <h4 style={{ margin: 0, fontSize: 'var(--alm-text-xs)', fontWeight: 600, color: 'var(--alm-text-muted)', textTransform: 'uppercase' }}>
-        Summary
-      </h4>
-      {wizardData.name.name && (
+    <div style={{ display: 'flex', flexDirection: 'column', gap: 'var(--alm-space-5)', fontSize: 'var(--alm-text-xs)' }}>
+      <div style={{ color: 'var(--alm-text-muted)', textTransform: 'uppercase', letterSpacing: '.04em', fontWeight: 600 }}>
+        Project summary
+      </div>
+      <div>
+        <div style={{ fontSize: 'var(--alm-text-sm)', fontWeight: 600 }}>{projectLabel}</div>
+        <div style={{ color: 'var(--alm-text-muted)' }}>{profileLabel}</div>
+      </div>
+
+      <div>
+        <div style={{ color: 'var(--alm-text-muted)', textTransform: 'uppercase', fontWeight: 600 }}>
+          What&rsquo;s selected so far
+        </div>
+        <div style={{ marginTop: 'var(--alm-space-2)' }}>
+          <SummaryRow label="Lights" value={`${wizardData.sources.selectedSessionIds.length} sess`} />
+          <SummaryRow label="Darks" value={`${darkSelected} master`} />
+          <SummaryRow label="Flats" value={`${flatsMapped} masters`} />
+          <SummaryRow label="Bias" value={`${biasSelected} master`} />
+        </div>
+      </div>
+
+      {currentStep < 5 && (
         <div>
-          <span style={{ color: 'var(--alm-text-muted)' }}>Name: </span>
-          <strong>{wizardData.name.name}</strong>
+          <div style={{ color: 'var(--alm-text-muted)', textTransform: 'uppercase', fontWeight: 600 }}>
+            Coming up
+          </div>
+          <div style={{ marginTop: 'var(--alm-space-2)' }}>
+            {STEP_LABELS.slice(currentStep + 1).map((label, i) => (
+              <div key={label} style={{ padding: '3px 0', borderBottom: i < STEP_LABELS.length - currentStep - 2 ? '1px dotted var(--alm-border)' : 'none' }}>
+                {currentStep + i + 2}. {label}
+              </div>
+            ))}
+          </div>
         </div>
       )}
-      <div>
-        <span style={{ color: 'var(--alm-text-muted)' }}>Profile: </span>
-        <strong>{wizardData.name.workflowProfile}</strong>
+
+      <div style={{ padding: 'var(--alm-space-3)', background: 'var(--alm-bg)', border: '1px solid var(--alm-border)' }}>
+        <div style={{ color: 'var(--alm-text-muted)' }}>Estimated on-disk footprint</div>
+        <div className="alm-mono" style={{ fontSize: '16px', fontWeight: 600, marginTop: 2 }}>
+          ~12 KB
+        </div>
+        <div style={{ fontSize: '10.5px', color: 'var(--alm-text-muted)' }}>
+          plan will create directories + manifest only &middot; no light frames are copied
+        </div>
       </div>
-      <div>
-        <span style={{ color: 'var(--alm-text-muted)' }}>Sessions: </span>
-        <strong>{wizardData.sources.selectedSessionIds.length}</strong>
-      </div>
-      <div>
-        <span style={{ color: 'var(--alm-text-muted)' }}>Flats mapped: </span>
-        <strong>{Object.values(wizardData.calibration.flatMappings).filter(Boolean).length}</strong>
-      </div>
-      <div>
-        <span style={{ color: 'var(--alm-text-muted)' }}>View strategy: </span>
-        <strong>{wizardData.views.strategy}</strong>
+
+      {/* Navigation buttons in the summary rail */}
+      <div style={{ display: 'flex', gap: 'var(--alm-space-2)', marginTop: 'var(--alm-space-3)' }}>
+        {currentStep > 0 && (
+          <Btn size="sm" onClick={handleBack}>
+            {backLabels[currentStep]}
+          </Btn>
+        )}
+        {currentStep < 5 && (
+          <Btn variant="primary" size="sm" onClick={handleNext} disabled={!canAdvance()} style={{ flex: 1 }}>
+            {nextLabels[currentStep]}
+          </Btn>
+        )}
       </div>
     </div>
   );
 
   return (
     <div className="alm-page" style={{ display: 'flex', flexDirection: 'column', flex: 1 }}>
+      {/* Wizard toolbar */}
+      <Toolbar
+        subBar={
+          <div className="alm-project-sub">
+            <span>Workflow profile: {profileLabel}</span>
+            <span className="alm-project-sub__dot">&middot;</span>
+            {wizardData.name.name && (
+              <span>From target context: {wizardData.name.name.split(/[\s·—]/)[0]}</span>
+            )}
+            <span style={{ marginLeft: 'auto', color: 'var(--alm-text-faint)' }}>
+              Sources are selected here; the filesystem plan is shown at step 6 before anything is created.
+            </span>
+          </div>
+        }
+      >
+        <span style={{ fontSize: 'var(--alm-text-sm)', fontWeight: 600 }}>
+          New project &mdash; {projectLabel}
+        </span>
+        <span style={{ flex: 1 }} />
+        <Btn size="sm" onClick={() => saveDraft(wizardData)}>Save draft</Btn>
+        <Btn size="sm" onClick={handleCancel}>Cancel</Btn>
+      </Toolbar>
+
       <WizardShell steps={steps} currentStep={currentStep} summary={summary}>
+        {/* Step title + description */}
+        {currentStep < 5 && (
+          <div style={{ marginBottom: 'var(--alm-space-5)' }}>
+            <h2 style={{ fontSize: '18px', fontWeight: 600, margin: 0 }}>
+              Step {currentStep + 1} &middot; {STEP_LABELS[currentStep]}
+            </h2>
+          </div>
+        )}
+
         {/* Step content */}
         {currentStep === 0 && (
           <StepName
@@ -184,19 +274,16 @@ export function WizardPage() {
           />
         )}
         {currentStep === 5 && <StepReview wizardState={fullWizardState} />}
-
-        {/* Navigation */}
-        {currentStep < 5 && (
-          <div style={{ display: 'flex', justifyContent: 'space-between', marginTop: 'var(--alm-space-7)', paddingTop: 'var(--alm-space-5)', borderTop: '1px solid var(--alm-border)' }}>
-            <Btn variant="ghost" onClick={handleBack} disabled={currentStep === 0}>
-              Back
-            </Btn>
-            <Btn variant="primary" onClick={handleNext} disabled={!canAdvance()}>
-              Next
-            </Btn>
-          </div>
-        )}
       </WizardShell>
+    </div>
+  );
+}
+
+function SummaryRow({ label, value }: { label: string; value: string }) {
+  return (
+    <div style={{ padding: '3px 0', borderBottom: '1px dotted var(--alm-border)', display: 'flex' }}>
+      <span style={{ flex: 1 }}>{label}</span>
+      <span className="alm-mono">{value}</span>
     </div>
   );
 }
