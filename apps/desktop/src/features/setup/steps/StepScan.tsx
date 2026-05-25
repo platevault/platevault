@@ -2,6 +2,7 @@ import { Switch } from '@base-ui-components/react/switch';
 
 export interface ScanSettings {
   groupingStrategy: 'standard' | 'night_only' | 'target_only';
+  targetResolution: boolean;
   calibrationDiscovery: boolean;
   equipmentDetection: boolean;
   followSymlinks: boolean;
@@ -9,6 +10,7 @@ export interface ScanSettings {
 
 export const DEFAULT_SCAN_SETTINGS: ScanSettings = {
   groupingStrategy: 'standard',
+  targetResolution: true,
   calibrationDiscovery: true,
   equipmentDetection: true,
   followSymlinks: false,
@@ -191,36 +193,13 @@ export function StepScan({ settings, onSettingsChange }: StepScanProps) {
         </div>
       </div>
 
-      {/* 2. Target resolution — always on, always manual review */}
-      <div
-        style={{
-          padding: 'var(--alm-space-3) var(--alm-space-4)',
-          background: 'var(--alm-surface)',
-          borderRadius: 'var(--alm-radius-sm)',
-          border: '1px solid var(--alm-border)',
-        }}
-      >
-        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
-          <div style={{ flex: 1 }}>
-            <div style={{ fontSize: 'var(--alm-text-sm)', fontWeight: 500 }}>
-              Target resolution
-            </div>
-            <div
-              style={{
-                fontSize: 'var(--alm-text-xs)',
-                color: 'var(--alm-text-muted)',
-                lineHeight: 1.5,
-                marginTop: 'var(--alm-space-1)',
-              }}
-            >
-              OBJECT headers are matched against your enabled catalogs. All matches are flagged for manual review — no auto-confirmation.
-            </div>
-          </div>
-          <span style={{ fontSize: 'var(--alm-text-xs)', color: 'var(--alm-text-muted)', flexShrink: 0 }}>
-            Always on
-          </span>
-        </div>
-      </div>
+      {/* 2. Target resolution */}
+      <SwitchRow
+        label="Target resolution"
+        description="Match OBJECT headers against your enabled catalogs. All matches are flagged for manual review."
+        checked={settings.targetResolution}
+        onCheckedChange={() => update('targetResolution', !settings.targetResolution)}
+      />
 
       {/* 3. Calibration discovery */}
       <SwitchRow

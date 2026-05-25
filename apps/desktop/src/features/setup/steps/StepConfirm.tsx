@@ -109,7 +109,7 @@ export function StepConfirm({
       <Card title="Scan configuration">
         <div style={{ display: 'flex', flexDirection: 'column', gap: 0 }}>
           <Row label="Session grouping" value={GROUPING_LABELS[scanSettings.groupingStrategy]} />
-          <Row label="Target resolution" value="On — all matches flagged for manual review" />
+          <Row label="Target resolution" value={scanSettings.targetResolution ? 'On — matches flagged for manual review' : 'Off'} />
           <Row label="Calibration discovery" value={scanSettings.calibrationDiscovery ? 'On' : 'Off'} />
           <Row label="Equipment detection" value={scanSettings.equipmentDetection ? 'On' : 'Off'} />
           <Row label="Symlink following" value={scanSettings.followSymlinks ? 'On' : 'Off'} />
