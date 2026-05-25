@@ -15,17 +15,19 @@ use tauri::Manager;
 use tauri_specta::{collect_commands, Builder};
 
 use crate::commands::audit::{audit_export, audit_list};
-use crate::commands::calibration::{calibration_masters_get, calibration_masters_list, calibration_matches};
+use crate::commands::calibration::{
+    calibration_masters_get, calibration_masters_list, calibration_matches,
+};
 use crate::commands::lifecycle::{
     lifecycle_ledger_list, lifecycle_transition_apply, lifecycle_transition_preview,
     provenance_read, AppState,
 };
-use crate::commands::plans::{plans_approve, plans_apply, plans_discard, plans_get, plans_list};
+use crate::commands::plans::{plans_apply, plans_approve, plans_discard, plans_get, plans_list};
 use crate::commands::preferences::{preferences_get, preferences_set};
 use crate::commands::projects::{projects_create_plan, projects_get, projects_list};
 use crate::commands::review::review_queue;
 use crate::commands::roots::{
-    equipment_list, roots_list, roots_remap, roots_remap_apply, roots_register, scan_start,
+    equipment_list, roots_list, roots_register, roots_remap, roots_remap_apply, scan_start,
 };
 use crate::commands::search::search_global;
 use crate::commands::sessions::{
@@ -111,7 +113,7 @@ pub fn specta_builder() -> Builder<tauri::Wry> {
 /// Build the Tauri [`App`] **without** starting the event loop.
 ///
 /// The returned handle exposes the platform path resolver (needed to locate
-/// the default SQLite database path) while the caller retains full control
+/// the default `SQLite` database path) while the caller retains full control
 /// over state management and app startup ordering.
 ///
 /// # Panics

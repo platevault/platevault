@@ -4,13 +4,13 @@
 //! layer until the real persistence layer is wired.
 
 use contracts_core::lifecycle::PlanState;
-use contracts_core::JsonAny;
 use contracts_core::plans::{
     DryRunResult, FilesystemPlan, PlanDetail, PlanItem, PlanItemAction, PlanItemStatus, PlanKind,
     PlanSafetySummary,
 };
 use contracts_core::provenance::ProvenanceOrigin;
 use contracts_core::roots::IpcOperationHandle;
+use contracts_core::JsonAny;
 
 /// `plans.list` — returns all filesystem plans.
 ///
@@ -18,9 +18,7 @@ use contracts_core::roots::IpcOperationHandle;
 /// Returns `Err(String)` on failure; the stub never fails.
 #[tauri::command]
 #[specta::specta(rename = "plans.list")]
-pub async fn plans_list(
-    filters: Option<JsonAny>,
-) -> Result<Vec<FilesystemPlan>, String> {
+pub async fn plans_list(filters: Option<JsonAny>) -> Result<Vec<FilesystemPlan>, String> {
     tracing::debug!("stub: plans.list filters={filters:?}");
     Ok(stub_plans())
 }
@@ -33,7 +31,9 @@ pub async fn plans_list(
 #[specta::specta(rename = "plans.get")]
 pub async fn plans_get(id: String) -> Result<PlanDetail, String> {
     tracing::debug!("stub: plans.get id={id}");
-    let base = stub_plans().into_iter().next().unwrap();
+    let base =
+        stub_plans().into_iter().next().ok_or_else(|| "no stub plan available".to_owned())?;
+    let item_count = u32::try_from(base.items.len()).unwrap_or(0);
     Ok(PlanDetail {
         id: id.clone(),
         kind: base.kind,
@@ -46,7 +46,7 @@ pub async fn plans_get(id: String) -> Result<PlanDetail, String> {
         approved_at: base.approved_at,
         applied_at: base.applied_at,
         summary: PlanSafetySummary {
-            item_count: base.items.len() as u32,
+            item_count,
             reclaim_bytes: base.reclaim_bytes,
             trash_count: 0,
             archive_count: 1,
@@ -67,7 +67,8 @@ pub async fn plans_approve(
     delete_acknowledged: Option<bool>,
 ) -> Result<FilesystemPlan, String> {
     tracing::debug!("stub: plans.approve id={id} delete_acknowledged={delete_acknowledged:?}");
-    let mut plan = stub_plans().into_iter().next().unwrap();
+    let mut plan =
+        stub_plans().into_iter().next().ok_or_else(|| "no stub plan available".to_owned())?;
     plan.id = id;
     plan.state = PlanState::Approved;
     plan.approved_at = Some("2026-05-25T12:30:00Z".to_owned());

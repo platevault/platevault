@@ -18,7 +18,7 @@ pub async fn audit_list(
 ) -> Result<AuditListResponse, String> {
     tracing::debug!("stub: audit.list filters={filters:?} pagination={pagination:?}");
     let entries = stub_audit_entries();
-    let total = entries.len() as u32;
+    let total = u32::try_from(entries.len()).unwrap_or(0);
     Ok(AuditListResponse { entries, total })
 }
 
@@ -28,9 +28,7 @@ pub async fn audit_list(
 /// Returns `Err(String)` on failure; the stub never fails.
 #[tauri::command]
 #[specta::specta(rename = "audit.export")]
-pub async fn audit_export(
-    filters: Option<JsonAny>,
-) -> Result<String, String> {
+pub async fn audit_export(filters: Option<JsonAny>) -> Result<String, String> {
     tracing::debug!("stub: audit.export filters={filters:?}");
     let entries = stub_audit_entries();
     let lines: Vec<String> =

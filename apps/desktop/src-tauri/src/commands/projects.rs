@@ -4,7 +4,6 @@
 //! layer until the real persistence layer is wired.
 
 use contracts_core::lifecycle::{PlanState, ProjectState};
-use contracts_core::JsonAny;
 use contracts_core::plans::{
     DryRunResult, FilesystemPlan, PlanItem, PlanItemAction, PlanItemStatus, PlanKind,
 };
@@ -15,6 +14,7 @@ use contracts_core::projects::{
 };
 use contracts_core::provenance::ProvenanceOrigin;
 use contracts_core::sessions::ConfidenceLevel;
+use contracts_core::JsonAny;
 
 /// `projects.list` — returns all projects.
 ///
@@ -22,9 +22,7 @@ use contracts_core::sessions::ConfidenceLevel;
 /// Returns `Err(String)` on failure; the stub never fails.
 #[tauri::command]
 #[specta::specta(rename = "projects.list")]
-pub async fn projects_list(
-    filters: Option<JsonAny>,
-) -> Result<Vec<Project>, String> {
+pub async fn projects_list(filters: Option<JsonAny>) -> Result<Vec<Project>, String> {
     tracing::debug!("stub: projects.list filters={filters:?}");
     Ok(stub_projects())
 }
@@ -37,9 +35,15 @@ pub async fn projects_list(
 #[specta::specta(rename = "projects.get")]
 pub async fn projects_get(id: String) -> Result<ProjectDetail, String> {
     tracing::debug!("stub: projects.get id={id}");
-    let base = stub_projects().into_iter().next().unwrap();
-    Ok(ProjectDetail {
-        id: id.clone(),
+    let base =
+        stub_projects().into_iter().next().ok_or_else(|| "no stub project available".to_owned())?;
+    Ok(build_project_detail(&id, base))
+}
+
+/// Assemble a [`ProjectDetail`] from a base [`Project`] and detail fixtures.
+fn build_project_detail(id: &str, base: Project) -> ProjectDetail {
+    ProjectDetail {
+        id: id.to_owned(),
         name: base.name,
         workflow_profile_id: base.workflow_profile_id,
         root_path: base.root_path,
@@ -56,80 +60,15 @@ pub async fn projects_get(id: String) -> Result<ProjectDetail, String> {
         output_directory: base.output_directory,
         updated_at: base.updated_at,
         targets: vec!["NGC 7000".to_owned()],
-        sources: vec![
-            ProjectSource {
-                role: SourceRole::Light,
-                name: "NGC 7000 Ha".to_owned(),
-                frames: 18,
-                hours: "3.0h".to_owned(),
-                selection: SourceSelection::Selected,
-                warning: None,
-            },
-            ProjectSource {
-                role: SourceRole::Dark,
-                name: "Dark 300s -10C".to_owned(),
-                frames: 30,
-                hours: "2.5h".to_owned(),
-                selection: SourceSelection::Selected,
-                warning: None,
-            },
-            ProjectSource {
-                role: SourceRole::Flat,
-                name: "Flat L".to_owned(),
-                frames: 20,
-                hours: "0.0h".to_owned(),
-                selection: SourceSelection::Candidate,
-                warning: Some("age > 60 days".to_owned()),
-            },
-        ],
+        sources: stub_project_sources(),
         source_views: vec![ProjectSourceView {
             name: "WBPP Source View".to_owned(),
             strategy: SourceViewStrategy::Symlink,
             link_count: 68,
             plan_ref: "plan-sv-001".to_owned(),
         }],
-        outputs: vec![
-            ProjectOutput {
-                id: "out-001".to_owned(),
-                filename: "NGC7000_SHO_v1.tif".to_owned(),
-                kind: "final".to_owned(),
-                size_bytes: 268_435_456,
-                date: "2026-05-18".to_owned(),
-                verification: OutputVerification::Accepted,
-                protected: true,
-            },
-            ProjectOutput {
-                id: "out-002".to_owned(),
-                filename: "NGC7000_SHO_v0_draft.tif".to_owned(),
-                kind: "draft".to_owned(),
-                size_bytes: 268_435_456,
-                date: "2026-05-16".to_owned(),
-                verification: OutputVerification::Superseded,
-                protected: false,
-            },
-        ],
-        artifacts: vec![
-            ProjectArtifactGroup {
-                artifact_type: "registered".to_owned(),
-                count: 45,
-                total_size_bytes: 3_145_728_000,
-                cleanup_eligibility: CleanupEligibility::Eligible,
-                confidence: ConfidenceLevel::High,
-                tool: "PixInsight/StarAlignment".to_owned(),
-                protected: false,
-                warning: None,
-            },
-            ProjectArtifactGroup {
-                artifact_type: "drizzle_data".to_owned(),
-                count: 45,
-                total_size_bytes: 1_572_864_000,
-                cleanup_eligibility: CleanupEligibility::Archive,
-                confidence: ConfidenceLevel::Medium,
-                tool: "PixInsight/DrizzleIntegration".to_owned(),
-                protected: false,
-                warning: Some("may be needed for re-integration".to_owned()),
-            },
-        ],
+        outputs: stub_project_outputs(),
+        artifacts: stub_project_artifacts(),
         lifecycle_stage_index: 3,
         audit_count: 12,
         plan_count: 2,
@@ -139,7 +78,84 @@ pub async fn projects_get(id: String) -> Result<ProjectDetail, String> {
         on_disk_label: "8.2 GB".to_owned(),
         notes_count: 3,
         manifest_count: 1,
-    })
+    }
+}
+
+fn stub_project_sources() -> Vec<ProjectSource> {
+    vec![
+        ProjectSource {
+            role: SourceRole::Light,
+            name: "NGC 7000 Ha".to_owned(),
+            frames: 18,
+            hours: "3.0h".to_owned(),
+            selection: SourceSelection::Selected,
+            warning: None,
+        },
+        ProjectSource {
+            role: SourceRole::Dark,
+            name: "Dark 300s -10C".to_owned(),
+            frames: 30,
+            hours: "2.5h".to_owned(),
+            selection: SourceSelection::Selected,
+            warning: None,
+        },
+        ProjectSource {
+            role: SourceRole::Flat,
+            name: "Flat L".to_owned(),
+            frames: 20,
+            hours: "0.0h".to_owned(),
+            selection: SourceSelection::Candidate,
+            warning: Some("age > 60 days".to_owned()),
+        },
+    ]
+}
+
+fn stub_project_outputs() -> Vec<ProjectOutput> {
+    vec![
+        ProjectOutput {
+            id: "out-001".to_owned(),
+            filename: "NGC7000_SHO_v1.tif".to_owned(),
+            kind: "final".to_owned(),
+            size_bytes: 268_435_456,
+            date: "2026-05-18".to_owned(),
+            verification: OutputVerification::Accepted,
+            protected: true,
+        },
+        ProjectOutput {
+            id: "out-002".to_owned(),
+            filename: "NGC7000_SHO_v0_draft.tif".to_owned(),
+            kind: "draft".to_owned(),
+            size_bytes: 268_435_456,
+            date: "2026-05-16".to_owned(),
+            verification: OutputVerification::Superseded,
+            protected: false,
+        },
+    ]
+}
+
+fn stub_project_artifacts() -> Vec<ProjectArtifactGroup> {
+    vec![
+        ProjectArtifactGroup {
+            artifact_type: "registered".to_owned(),
+            count: 45,
+            total_size_bytes: 3_145_728_000,
+            cleanup_eligibility: CleanupEligibility::Eligible,
+            confidence: ConfidenceLevel::High,
+            tool: "PixInsight/StarAlignment".to_owned(),
+            protected: false,
+            warning: None,
+        },
+        ProjectArtifactGroup {
+            artifact_type: "drizzle_data".to_owned(),
+            count: 45,
+            total_size_bytes: 1_572_864_000,
+            cleanup_eligibility: CleanupEligibility::Archive,
+            confidence: ConfidenceLevel::Medium,
+            tool: "PixInsight/DrizzleIntegration".to_owned(),
+            protected: false,
+            warning: Some("may be needed for re-integration".to_owned()),
+        },
+    ]
 }
 
 /// `projects.create_plan` — create a filesystem plan from wizard state.
@@ -148,9 +164,7 @@ pub async fn projects_get(id: String) -> Result<ProjectDetail, String> {
 /// Returns `Err(String)` on failure; the stub never fails.
 #[tauri::command]
 #[specta::specta(rename = "projects.create_plan")]
-pub async fn projects_create_plan(
-    wizard_state: JsonAny,
-) -> Result<FilesystemPlan, String> {
+pub async fn projects_create_plan(wizard_state: JsonAny) -> Result<FilesystemPlan, String> {
     tracing::debug!("stub: projects.create_plan wizard_state={wizard_state:?}");
     Ok(FilesystemPlan {
         id: "plan-new-001".to_owned(),

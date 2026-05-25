@@ -39,7 +39,8 @@ pub async fn targets_list(search: Option<String>) -> Result<Vec<Target>, String>
 #[specta::specta(rename = "targets.get")]
 pub async fn targets_get(id: String) -> Result<TargetDetail, String> {
     tracing::debug!("stub: targets.get id={id}");
-    let base = stub_targets().into_iter().next().unwrap();
+    let base =
+        stub_targets().into_iter().next().ok_or_else(|| "no stub target available".to_owned())?;
     Ok(TargetDetail {
         id: id.clone(),
         name: base.name,
@@ -127,7 +128,11 @@ fn stub_targets() -> Vec<Target> {
             id: "550e8400-e29b-41d4-a716-446655440202".to_owned(),
             name: "M31".to_owned(),
             aliases: vec!["Andromeda Galaxy".to_owned()],
-            catalog_ids: CatalogIds { ngc: Some("224".to_owned()), ic: None, messier: Some("31".to_owned()) },
+            catalog_ids: CatalogIds {
+                ngc: Some("224".to_owned()),
+                ic: None,
+                messier: Some("31".to_owned()),
+            },
             kind: TargetKind::DeepSky,
             coordinates: Some(Coordinates { ra: Some(10.68), dec: Some(41.27) }),
             session_count: 3,

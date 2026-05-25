@@ -154,7 +154,8 @@ pub async fn sessions_transition(
     metadata: Option<JsonAny>,
 ) -> Result<AcquisitionSession, String> {
     tracing::debug!("stub: sessions.transition id={id} action={action} metadata={metadata:?}");
-    let mut session = stub_sessions().into_iter().next().unwrap();
+    let mut session =
+        stub_sessions().into_iter().next().ok_or_else(|| "no stub session available".to_owned())?;
     session.id = id;
     session.state = SessionState::Confirmed;
     session.confidence = ConfidenceLevel::Confirmed;
@@ -167,10 +168,7 @@ pub async fn sessions_transition(
 /// Returns `Err(String)` on failure; the stub never fails.
 #[tauri::command]
 #[specta::specta(rename = "sessions.split")]
-pub async fn sessions_split(
-    id: String,
-    split_at_index: u32,
-) -> Result<SessionSplitResult, String> {
+pub async fn sessions_split(id: String, split_at_index: u32) -> Result<SessionSplitResult, String> {
     tracing::debug!("stub: sessions.split id={id} split_at_index={split_at_index}");
     let sessions = stub_sessions();
     let mut original = sessions[0].clone();
@@ -178,7 +176,7 @@ pub async fn sessions_split(
     original.frame_count = split_at_index;
 
     let mut new_session = sessions[1].clone();
-    new_session.id = "550e8400-e29b-41d4-a716-446655440099".to_owned();
+    "550e8400-e29b-41d4-a716-446655440099".clone_into(&mut new_session.id);
     new_session.frame_count = 18_u32.saturating_sub(split_at_index);
 
     Ok(SessionSplitResult { original, new: new_session })
@@ -192,7 +190,8 @@ pub async fn sessions_split(
 #[specta::specta(rename = "sessions.merge")]
 pub async fn sessions_merge(ids: Vec<String>) -> Result<AcquisitionSession, String> {
     tracing::debug!("stub: sessions.merge ids={ids:?}");
-    let mut merged = stub_sessions().into_iter().next().unwrap();
+    let mut merged =
+        stub_sessions().into_iter().next().ok_or_else(|| "no stub session available".to_owned())?;
     merged.id = ids.into_iter().next().unwrap_or_default();
     merged.frame_count = 30;
     merged.total_integration_seconds = 18000.0;
@@ -242,101 +241,154 @@ fn key(target: &str, filter: &str, binning: &str, gain: &str, night: &str) -> Se
 
 fn stub_sessions() -> Vec<AcquisitionSession> {
     vec![
-        // discovered — NGC 7000 Ha
-        AcquisitionSession {
-            id: "550e8400-e29b-41d4-a716-446655440001".to_owned(),
-            session_key: key("NGC 7000", "Ha", "1", "100", "2026-04-12"),
-            state: SessionState::Discovered,
-            confidence: ConfidenceLevel::Unknown,
-            optical_train_id: ids::TRAIN_FSQ106.to_owned(),
-            frame_count: 18,
-            total_integration_seconds: 10800.0,
-            total_size_bytes: 1_258_291_200,
-            metadata: HashMap::from([
-                ("target".to_owned(), meta("NGC 7000", "NGC7000", ProvenanceOrigin::Observed, ConfidenceLevel::Medium, None)),
-                ("filter".to_owned(), meta("Ha", "H-alpha 7nm", ProvenanceOrigin::Observed, ConfidenceLevel::High, None)),
-            ]),
-            target_ids: vec![ids::TARGET_NGC7000.to_owned()],
-            project_ids: vec![],
-            warnings: vec!["target not yet confirmed".to_owned()],
-        },
-        // discovered — IC 1396 SII
-        AcquisitionSession {
-            id: "550e8400-e29b-41d4-a716-446655440002".to_owned(),
-            session_key: key("IC 1396", "SII", "1", "100", "2026-04-14"),
-            state: SessionState::Discovered,
-            confidence: ConfidenceLevel::Low,
-            optical_train_id: ids::TRAIN_FSQ106.to_owned(),
-            frame_count: 12,
-            total_integration_seconds: 7200.0,
-            total_size_bytes: 838_860_800,
-            metadata: HashMap::from([(
-                "target".to_owned(),
-                meta("IC 1396", "IC1396", ProvenanceOrigin::Inferred, ConfidenceLevel::Low, Some("fits.object")),
-            )]),
-            target_ids: vec![ids::TARGET_IC1396.to_owned()],
-            project_ids: vec![],
-            warnings: vec![
-                "target confidence low".to_owned(),
-                "no calibration match found".to_owned(),
-            ],
-        },
-        // needs_review — M31 L
-        AcquisitionSession {
-            id: "550e8400-e29b-41d4-a716-446655440003".to_owned(),
-            session_key: key("M31", "L", "1", "0", "2026-03-28"),
-            state: SessionState::NeedsReview,
-            confidence: ConfidenceLevel::Medium,
-            optical_train_id: ids::TRAIN_GT81.to_owned(),
-            frame_count: 60,
-            total_integration_seconds: 5400.0,
-            total_size_bytes: 2_147_483_648,
-            metadata: HashMap::from([(
-                "target".to_owned(),
-                meta("M31", "M31", ProvenanceOrigin::Observed, ConfidenceLevel::High, None),
-            )]),
-            target_ids: vec![ids::TARGET_M31.to_owned()],
-            project_ids: vec![],
-            warnings: vec!["filter origin is inferred \u{2014} please verify".to_owned()],
-        },
-        // confirmed — NGC 7000 OIII
-        AcquisitionSession {
-            id: "550e8400-e29b-41d4-a716-446655440005".to_owned(),
-            session_key: key("NGC 7000", "OIII", "1", "100", "2026-04-15"),
-            state: SessionState::Confirmed,
-            confidence: ConfidenceLevel::Confirmed,
-            optical_train_id: ids::TRAIN_FSQ106.to_owned(),
-            frame_count: 15,
-            total_integration_seconds: 9000.0,
-            total_size_bytes: 1_048_576_000,
-            metadata: HashMap::from([
-                ("target".to_owned(), meta("NGC 7000", "NGC7000", ProvenanceOrigin::Reviewed, ConfidenceLevel::Confirmed, None)),
-                ("filter".to_owned(), meta("OIII", "OIII 6.5nm", ProvenanceOrigin::Reviewed, ConfidenceLevel::Confirmed, None)),
-            ]),
-            target_ids: vec![ids::TARGET_NGC7000.to_owned()],
-            project_ids: vec![ids::PROJECT_NGC7000_NB.to_owned()],
-            warnings: vec![],
-        },
-        // rejected — M42 OIII
-        AcquisitionSession {
-            id: "550e8400-e29b-41d4-a716-446655440009".to_owned(),
-            session_key: key("M42", "OIII", "1", "100", "2026-02-11"),
-            state: SessionState::Rejected,
-            confidence: ConfidenceLevel::Rejected,
-            optical_train_id: ids::TRAIN_GT81.to_owned(),
-            frame_count: 8,
-            total_integration_seconds: 4800.0,
-            total_size_bytes: 560_000_000,
-            metadata: HashMap::from([(
-                "target".to_owned(),
-                meta("M42", "M42", ProvenanceOrigin::Observed, ConfidenceLevel::High, None),
-            )]),
-            target_ids: vec![ids::TARGET_M42.to_owned()],
-            project_ids: vec![],
-            warnings: vec![
-                "high cloud cover during capture".to_owned(),
-                "star FWHM > 6 arcsec".to_owned(),
-            ],
-        },
+        stub_session_ngc7000_ha(),
+        stub_session_ic1396_sii(),
+        stub_session_m31_l(),
+        stub_session_ngc7000_oiii(),
+        stub_session_m42_oiii(),
     ]
+}
+
+/// Discovered — NGC 7000 Ha.
+fn stub_session_ngc7000_ha() -> AcquisitionSession {
+    AcquisitionSession {
+        id: "550e8400-e29b-41d4-a716-446655440001".to_owned(),
+        session_key: key("NGC 7000", "Ha", "1", "100", "2026-04-12"),
+        state: SessionState::Discovered,
+        confidence: ConfidenceLevel::Unknown,
+        optical_train_id: ids::TRAIN_FSQ106.to_owned(),
+        frame_count: 18,
+        total_integration_seconds: 10800.0,
+        total_size_bytes: 1_258_291_200,
+        metadata: HashMap::from([
+            (
+                "target".to_owned(),
+                meta(
+                    "NGC 7000",
+                    "NGC7000",
+                    ProvenanceOrigin::Observed,
+                    ConfidenceLevel::Medium,
+                    None,
+                ),
+            ),
+            (
+                "filter".to_owned(),
+                meta("Ha", "H-alpha 7nm", ProvenanceOrigin::Observed, ConfidenceLevel::High, None),
+            ),
+        ]),
+        target_ids: vec![ids::TARGET_NGC7000.to_owned()],
+        project_ids: vec![],
+        warnings: vec!["target not yet confirmed".to_owned()],
+    }
+}
+
+/// Discovered — IC 1396 SII.
+fn stub_session_ic1396_sii() -> AcquisitionSession {
+    AcquisitionSession {
+        id: "550e8400-e29b-41d4-a716-446655440002".to_owned(),
+        session_key: key("IC 1396", "SII", "1", "100", "2026-04-14"),
+        state: SessionState::Discovered,
+        confidence: ConfidenceLevel::Low,
+        optical_train_id: ids::TRAIN_FSQ106.to_owned(),
+        frame_count: 12,
+        total_integration_seconds: 7200.0,
+        total_size_bytes: 838_860_800,
+        metadata: HashMap::from([(
+            "target".to_owned(),
+            meta(
+                "IC 1396",
+                "IC1396",
+                ProvenanceOrigin::Inferred,
+                ConfidenceLevel::Low,
+                Some("fits.object"),
+            ),
+        )]),
+        target_ids: vec![ids::TARGET_IC1396.to_owned()],
+        project_ids: vec![],
+        warnings: vec!["target confidence low".to_owned(), "no calibration match found".to_owned()],
+    }
+}
+
+/// Needs review — M31 L.
+fn stub_session_m31_l() -> AcquisitionSession {
+    AcquisitionSession {
+        id: "550e8400-e29b-41d4-a716-446655440003".to_owned(),
+        session_key: key("M31", "L", "1", "0", "2026-03-28"),
+        state: SessionState::NeedsReview,
+        confidence: ConfidenceLevel::Medium,
+        optical_train_id: ids::TRAIN_GT81.to_owned(),
+        frame_count: 60,
+        total_integration_seconds: 5400.0,
+        total_size_bytes: 2_147_483_648,
+        metadata: HashMap::from([(
+            "target".to_owned(),
+            meta("M31", "M31", ProvenanceOrigin::Observed, ConfidenceLevel::High, None),
+        )]),
+        target_ids: vec![ids::TARGET_M31.to_owned()],
+        project_ids: vec![],
+        warnings: vec!["filter origin is inferred \u{2014} please verify".to_owned()],
+    }
+}
+
+/// Confirmed — NGC 7000 OIII.
+fn stub_session_ngc7000_oiii() -> AcquisitionSession {
+    AcquisitionSession {
+        id: "550e8400-e29b-41d4-a716-446655440005".to_owned(),
+        session_key: key("NGC 7000", "OIII", "1", "100", "2026-04-15"),
+        state: SessionState::Confirmed,
+        confidence: ConfidenceLevel::Confirmed,
+        optical_train_id: ids::TRAIN_FSQ106.to_owned(),
+        frame_count: 15,
+        total_integration_seconds: 9000.0,
+        total_size_bytes: 1_048_576_000,
+        metadata: HashMap::from([
+            (
+                "target".to_owned(),
+                meta(
+                    "NGC 7000",
+                    "NGC7000",
+                    ProvenanceOrigin::Reviewed,
+                    ConfidenceLevel::Confirmed,
+                    None,
+                ),
+            ),
+            (
+                "filter".to_owned(),
+                meta(
+                    "OIII",
+                    "OIII 6.5nm",
+                    ProvenanceOrigin::Reviewed,
+                    ConfidenceLevel::Confirmed,
+                    None,
+                ),
+            ),
+        ]),
+        target_ids: vec![ids::TARGET_NGC7000.to_owned()],
+        project_ids: vec![ids::PROJECT_NGC7000_NB.to_owned()],
+        warnings: vec![],
+    }
+}
+
+/// Rejected — M42 OIII.
+fn stub_session_m42_oiii() -> AcquisitionSession {
+    AcquisitionSession {
+        id: "550e8400-e29b-41d4-a716-446655440009".to_owned(),
+        session_key: key("M42", "OIII", "1", "100", "2026-02-11"),
+        state: SessionState::Rejected,
+        confidence: ConfidenceLevel::Rejected,
+        optical_train_id: ids::TRAIN_GT81.to_owned(),
+        frame_count: 8,
+        total_integration_seconds: 4800.0,
+        total_size_bytes: 560_000_000,
+        metadata: HashMap::from([(
+            "target".to_owned(),
+            meta("M42", "M42", ProvenanceOrigin::Observed, ConfidenceLevel::High, None),
+        )]),
+        target_ids: vec![ids::TARGET_M42.to_owned()],
+        project_ids: vec![],
+        warnings: vec![
+            "high cloud cover during capture".to_owned(),
+            "star FWHM > 6 arcsec".to_owned(),
+        ],
+    }
 }

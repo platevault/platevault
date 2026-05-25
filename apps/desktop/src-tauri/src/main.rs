@@ -17,18 +17,17 @@ async fn main() {
     // `ALM_DB_URL` lets dev/test runs target an alternate store.  When unset
     // we derive a persistent on-disk path from Tauri's platform data directory
     // so the database survives across launches.
-    let db_url = match std::env::var("ALM_DB_URL") {
-        Ok(url) => url,
-        Err(_) => {
-            let data_dir =
-                app.path().app_data_dir().expect("failed to resolve platform data directory");
+    let db_url = if let Ok(url) = std::env::var("ALM_DB_URL") {
+        url
+    } else {
+        let data_dir =
+            app.path().app_data_dir().expect("failed to resolve platform data directory");
 
-            std::fs::create_dir_all(&data_dir).expect("failed to create app data directory");
+        std::fs::create_dir_all(&data_dir).expect("failed to create app data directory");
 
-            let db_path = data_dir.join("alm.db");
+        let db_path = data_dir.join("alm.db");
 
-            format!("sqlite://{}?mode=rwc", db_path.display())
-        }
+        format!("sqlite://{}?mode=rwc", db_path.display())
     };
 
     let db = Database::connect(&db_url).await.expect("connect SQLite");
