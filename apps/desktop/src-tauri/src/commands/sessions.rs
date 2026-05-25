@@ -1,21 +1,29 @@
-//! Spec 029 session query stubs exposed to the Tauri webview.
+//! Spec 029 session stubs exposed to the Tauri webview.
 //!
-//! This is the proof-of-concept command for validating the end-to-end
-//! tauri-specta pipeline: Rust stub -> typed TS binding -> frontend invoke.
-//! The stub returns hardcoded fixture data matching the mock layer until
-//! the real persistence layer is wired.
+//! Stub implementations returning hardcoded fixture data matching the mock
+//! layer until the real persistence layer is wired.
 
 use std::collections::HashMap;
 
+use contracts_core::calibration::CalibrationKind;
 use contracts_core::sessions::{
-    AcquisitionSession, ConfidenceLevel, MetaValue, ProvenanceOrigin, SessionKey, SessionState,
+    AcquisitionSession, CalendarData, CalendarDay, CalendarMonth, CalendarSessionStub,
+    ConfidenceLevel, Frameset, MetaValue, ProvenanceOrigin, SessionCalibrationMatch, SessionDetail,
+    SessionHistoryEntry, SessionKey, SessionState,
 };
 use contracts_core::JsonAny;
+use serde::{Deserialize, Serialize};
+use specta::Type;
+
+/// Wrapper for `sessions.split` return value.
+#[derive(Clone, Debug, Serialize, Deserialize, Type)]
+#[serde(rename_all = "camelCase")]
+pub struct SessionSplitResult {
+    pub original: AcquisitionSession,
+    pub new: AcquisitionSession,
+}
 
 /// `sessions.list` — returns all acquisition sessions.
-///
-/// Stub implementation returning hardcoded fixture data that mirrors
-/// `apps/desktop/src/data/fixtures/sessions.ts`.
 ///
 /// # Errors
 /// Returns `Err(String)` on failure; the stub never fails.
@@ -24,6 +32,171 @@ use contracts_core::JsonAny;
 pub async fn sessions_list() -> Result<Vec<AcquisitionSession>, String> {
     tracing::debug!("stub: sessions.list");
     Ok(stub_sessions())
+}
+
+/// `sessions.get` — returns a single session detail.
+///
+/// # Errors
+/// Returns `Err(String)` on failure; the stub never fails.
+#[tauri::command]
+#[specta::specta(rename = "sessions.get")]
+pub async fn sessions_get(id: String) -> Result<SessionDetail, String> {
+    tracing::debug!("stub: sessions.get id={id}");
+    let base = &stub_sessions()[0];
+    Ok(SessionDetail {
+        id: id.clone(),
+        session_key: base.session_key.clone(),
+        state: base.state,
+        confidence: base.confidence,
+        optical_train_id: base.optical_train_id.clone(),
+        frame_count: base.frame_count,
+        total_integration_seconds: base.total_integration_seconds,
+        total_size_bytes: base.total_size_bytes,
+        metadata: base.metadata.clone(),
+        target_ids: base.target_ids.clone(),
+        project_ids: base.project_ids.clone(),
+        warnings: base.warnings.clone(),
+        framesets: vec![
+            Frameset { filter: "Ha".to_owned(), count: 18, integration_s: 10800.0 },
+            Frameset { filter: "OIII".to_owned(), count: 15, integration_s: 9000.0 },
+            Frameset { filter: "SII".to_owned(), count: 12, integration_s: 7200.0 },
+        ],
+        calibration_matches: vec![
+            SessionCalibrationMatch {
+                master_id: "master-001".to_owned(),
+                kind: CalibrationKind::Dark,
+                score: 0.97,
+                soft_mismatches: vec![],
+            },
+            SessionCalibrationMatch {
+                master_id: "master-002".to_owned(),
+                kind: CalibrationKind::Flat,
+                score: 0.92,
+                soft_mismatches: vec!["age > 60 days".to_owned()],
+            },
+        ],
+        history: vec![
+            SessionHistoryEntry {
+                timestamp: "2026-04-12T22:00:00Z".to_owned(),
+                event: "discovered".to_owned(),
+                actor: "system".to_owned(),
+            },
+            SessionHistoryEntry {
+                timestamp: "2026-04-13T10:30:00Z".to_owned(),
+                event: "confirmed".to_owned(),
+                actor: "user".to_owned(),
+            },
+        ],
+    })
+}
+
+/// `sessions.calendar` — returns calendar data for a month range.
+///
+/// # Errors
+/// Returns `Err(String)` on failure; the stub never fails.
+#[tauri::command]
+#[specta::specta(rename = "sessions.calendar")]
+pub async fn sessions_calendar(
+    start_month: String,
+    end_month: String,
+) -> Result<CalendarData, String> {
+    tracing::debug!("stub: sessions.calendar start={start_month} end={end_month}");
+    Ok(CalendarData {
+        months: vec![CalendarMonth {
+            year: 2026,
+            month: 5,
+            days: vec![
+                CalendarDay {
+                    day: 18,
+                    sessions: vec![CalendarSessionStub {
+                        id: "ses-001".to_owned(),
+                        target: "M31".to_owned(),
+                        filter: "L".to_owned(),
+                    }],
+                },
+                CalendarDay {
+                    day: 19,
+                    sessions: vec![
+                        CalendarSessionStub {
+                            id: "ses-003".to_owned(),
+                            target: "M31".to_owned(),
+                            filter: "R".to_owned(),
+                        },
+                        CalendarSessionStub {
+                            id: "ses-004".to_owned(),
+                            target: "M31".to_owned(),
+                            filter: "G".to_owned(),
+                        },
+                    ],
+                },
+                CalendarDay {
+                    day: 20,
+                    sessions: vec![CalendarSessionStub {
+                        id: "ses-005".to_owned(),
+                        target: "NGC 7000".to_owned(),
+                        filter: "Ha".to_owned(),
+                    }],
+                },
+            ],
+        }],
+    })
+}
+
+/// `sessions.transition` — transition a session to a new state.
+///
+/// # Errors
+/// Returns `Err(String)` on failure; the stub never fails.
+#[tauri::command]
+#[specta::specta(rename = "sessions.transition")]
+pub async fn sessions_transition(
+    id: String,
+    action: String,
+    metadata: Option<serde_json::Value>,
+) -> Result<AcquisitionSession, String> {
+    tracing::debug!("stub: sessions.transition id={id} action={action} metadata={metadata:?}");
+    let mut session = stub_sessions().into_iter().next().unwrap();
+    session.id = id;
+    session.state = SessionState::Confirmed;
+    session.confidence = ConfidenceLevel::Confirmed;
+    Ok(session)
+}
+
+/// `sessions.split` — split a session at a given frame index.
+///
+/// # Errors
+/// Returns `Err(String)` on failure; the stub never fails.
+#[tauri::command]
+#[specta::specta(rename = "sessions.split")]
+pub async fn sessions_split(
+    id: String,
+    split_at_index: u32,
+) -> Result<SessionSplitResult, String> {
+    tracing::debug!("stub: sessions.split id={id} split_at_index={split_at_index}");
+    let sessions = stub_sessions();
+    let mut original = sessions[0].clone();
+    original.id = id;
+    original.frame_count = split_at_index;
+
+    let mut new_session = sessions[1].clone();
+    new_session.id = "550e8400-e29b-41d4-a716-446655440099".to_owned();
+    new_session.frame_count = 18_u32.saturating_sub(split_at_index);
+
+    Ok(SessionSplitResult { original, new: new_session })
+}
+
+/// `sessions.merge` — merge multiple sessions into one.
+///
+/// # Errors
+/// Returns `Err(String)` on failure; the stub never fails.
+#[tauri::command]
+#[specta::specta(rename = "sessions.merge")]
+pub async fn sessions_merge(ids: Vec<String>) -> Result<AcquisitionSession, String> {
+    tracing::debug!("stub: sessions.merge ids={ids:?}");
+    let mut merged = stub_sessions().into_iter().next().unwrap();
+    merged.id = ids.into_iter().next().unwrap_or_default();
+    merged.frame_count = 30;
+    merged.total_integration_seconds = 18000.0;
+    Ok(merged)
 }
 
 // ---------------------------------------------------------------------------

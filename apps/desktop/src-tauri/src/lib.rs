@@ -13,11 +13,27 @@ use persistence_db::repositories::lifecycle::SqliteLifecycleRepository;
 use sqlx::SqlitePool;
 use tauri_specta::{collect_commands, Builder};
 
+use crate::commands::audit::{audit_export, audit_list};
+use crate::commands::calibration::{calibration_masters_get, calibration_masters_list, calibration_matches};
 use crate::commands::lifecycle::{
     lifecycle_ledger_list, lifecycle_transition_apply, lifecycle_transition_preview,
     provenance_read, AppState,
 };
-use crate::commands::sessions::sessions_list;
+use crate::commands::plans::{plans_approve, plans_apply, plans_discard, plans_get, plans_list};
+use crate::commands::preferences::{preferences_get, preferences_set};
+use crate::commands::projects::{projects_create_plan, projects_get, projects_list};
+use crate::commands::review::review_queue;
+use crate::commands::roots::{
+    equipment_list, roots_list, roots_remap, roots_remap_apply, roots_register, scan_start,
+};
+use crate::commands::search::search_global;
+use crate::commands::sessions::{
+    sessions_calendar, sessions_get, sessions_list, sessions_merge, sessions_split,
+    sessions_transition,
+};
+use crate::commands::settings::{settings_get, settings_update};
+use crate::commands::targets::{targets_get, targets_list};
+use crate::commands::tour::tour_complete_step;
 
 pub const CRATE_NAME: &str = "desktop_shell";
 
@@ -37,11 +53,57 @@ pub fn specta_builder() -> Builder<tauri::Wry> {
         // would otherwise fail with "infinitely recursive inline reference".
         .typ::<serde_json::Value>()
         .commands(collect_commands![
+            // lifecycle (spec 002)
             provenance_read,
             lifecycle_transition_apply,
             lifecycle_transition_preview,
             lifecycle_ledger_list,
+            // sessions
             sessions_list,
+            sessions_get,
+            sessions_calendar,
+            sessions_transition,
+            sessions_split,
+            sessions_merge,
+            // calibration
+            calibration_masters_list,
+            calibration_masters_get,
+            calibration_matches,
+            // targets
+            targets_list,
+            targets_get,
+            // projects
+            projects_list,
+            projects_get,
+            projects_create_plan,
+            // plans
+            plans_list,
+            plans_get,
+            plans_approve,
+            plans_apply,
+            plans_discard,
+            // audit
+            audit_list,
+            audit_export,
+            // review
+            review_queue,
+            // roots & scan & equipment
+            roots_list,
+            roots_register,
+            roots_remap,
+            roots_remap_apply,
+            scan_start,
+            equipment_list,
+            // settings
+            settings_get,
+            settings_update,
+            // preferences
+            preferences_get,
+            preferences_set,
+            // search
+            search_global,
+            // tour
+            tour_complete_step,
         ])
 }
 
