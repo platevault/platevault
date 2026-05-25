@@ -5,18 +5,26 @@ import {
   createRoute,
   lazyRouteComponent,
   redirect,
+  Outlet,
 } from '@tanstack/react-router';
 import { Shell } from './Shell';
 
-// Root route — Shell wraps all pages via Outlet
+// Root route — bare Outlet so setup can render without the shell
 const rootRoute = createRootRoute({
+  component: () => <Outlet />,
+});
+
+// Shell layout — wraps all app pages (not setup)
+const shellRoute = createRoute({
+  getParentRoute: () => rootRoute,
+  id: 'shell',
   component: Shell,
 });
 
 // --- Sessions (default landing) ---
 
 const sessionsRoute = createRoute({
-  getParentRoute: () => rootRoute,
+  getParentRoute: () => shellRoute,
   path: '/sessions',
   component: lazyRouteComponent(
     () => import('@/features/sessions/SessionsPage'),
@@ -25,10 +33,9 @@ const sessionsRoute = createRoute({
 });
 
 const sessionDetailRoute = createRoute({
-  getParentRoute: () => rootRoute,
+  getParentRoute: () => shellRoute,
   path: '/sessions/$id',
   beforeLoad: ({ params }) => {
-    // Redirect /sessions/:id to the 3-pane view with the session pre-selected
     throw redirect({
       to: '/sessions',
       search: { selected: params.id },
@@ -39,7 +46,7 @@ const sessionDetailRoute = createRoute({
 // --- Review ---
 
 const reviewRoute = createRoute({
-  getParentRoute: () => rootRoute,
+  getParentRoute: () => shellRoute,
   path: '/review',
   component: lazyRouteComponent(
     () => import('@/features/review/ReviewPage'),
@@ -50,7 +57,7 @@ const reviewRoute = createRoute({
 // --- Calibration ---
 
 const calibrationRoute = createRoute({
-  getParentRoute: () => rootRoute,
+  getParentRoute: () => shellRoute,
   path: '/calibration',
   component: lazyRouteComponent(
     () => import('@/features/calibration/CalibrationPage'),
@@ -59,7 +66,7 @@ const calibrationRoute = createRoute({
 });
 
 const calibrationDetailRoute = createRoute({
-  getParentRoute: () => rootRoute,
+  getParentRoute: () => shellRoute,
   path: '/calibration/$id',
   component: lazyRouteComponent(
     () => import('@/features/calibration/CalibrationDetail'),
@@ -70,7 +77,7 @@ const calibrationDetailRoute = createRoute({
 // --- Targets ---
 
 const targetsRoute = createRoute({
-  getParentRoute: () => rootRoute,
+  getParentRoute: () => shellRoute,
   path: '/targets',
   component: lazyRouteComponent(
     () => import('@/features/targets/TargetsPage'),
@@ -79,7 +86,7 @@ const targetsRoute = createRoute({
 });
 
 const targetDetailRoute = createRoute({
-  getParentRoute: () => rootRoute,
+  getParentRoute: () => shellRoute,
   path: '/targets/$id',
   component: lazyRouteComponent(
     () => import('@/features/targets/TargetDetail'),
@@ -90,7 +97,7 @@ const targetDetailRoute = createRoute({
 // --- Projects ---
 
 const projectsRoute = createRoute({
-  getParentRoute: () => rootRoute,
+  getParentRoute: () => shellRoute,
   path: '/projects',
   component: lazyRouteComponent(
     () => import('@/features/projects/ProjectsPage'),
@@ -99,7 +106,7 @@ const projectsRoute = createRoute({
 });
 
 const projectDetailRoute = createRoute({
-  getParentRoute: () => rootRoute,
+  getParentRoute: () => shellRoute,
   path: '/projects/$id',
   component: lazyRouteComponent(
     () => import('@/features/projects/ProjectDetail'),
@@ -108,7 +115,7 @@ const projectDetailRoute = createRoute({
 });
 
 const projectArtifactsRoute = createRoute({
-  getParentRoute: () => rootRoute,
+  getParentRoute: () => shellRoute,
   path: '/projects/$id/artifacts',
   component: lazyRouteComponent(
     () => import('@/features/projects/ArtifactsPage'),
@@ -117,7 +124,7 @@ const projectArtifactsRoute = createRoute({
 });
 
 const projectNewRoute = createRoute({
-  getParentRoute: () => rootRoute,
+  getParentRoute: () => shellRoute,
   path: '/projects/new',
   component: lazyRouteComponent(
     () => import('@/features/projects/wizard/WizardPage'),
@@ -128,7 +135,7 @@ const projectNewRoute = createRoute({
 // --- Plans ---
 
 const plansRoute = createRoute({
-  getParentRoute: () => rootRoute,
+  getParentRoute: () => shellRoute,
   path: '/plans',
   component: lazyRouteComponent(
     () => import('@/features/plans/PlansPage'),
@@ -136,9 +143,8 @@ const plansRoute = createRoute({
   ),
 });
 
-// Plan detail is now inline in PlansPage — redirect deep links
 const planDetailRoute = createRoute({
-  getParentRoute: () => rootRoute,
+  getParentRoute: () => shellRoute,
   path: '/plans/$id',
   beforeLoad: ({ params }) => {
     throw redirect({
@@ -151,7 +157,7 @@ const planDetailRoute = createRoute({
 // --- Audit ---
 
 const auditRoute = createRoute({
-  getParentRoute: () => rootRoute,
+  getParentRoute: () => shellRoute,
   path: '/audit',
   component: lazyRouteComponent(
     () => import('@/features/audit/AuditPage'),
@@ -162,7 +168,7 @@ const auditRoute = createRoute({
 // --- Settings ---
 
 const settingsRoute = createRoute({
-  getParentRoute: () => rootRoute,
+  getParentRoute: () => shellRoute,
   path: '/settings',
   component: lazyRouteComponent(
     () => import('@/features/settings/SettingsPage'),
@@ -171,7 +177,7 @@ const settingsRoute = createRoute({
 });
 
 const settingsPaneRoute = createRoute({
-  getParentRoute: () => rootRoute,
+  getParentRoute: () => shellRoute,
   path: '/settings/$pane',
   component: lazyRouteComponent(
     () => import('@/features/settings/SettingsPage'),
@@ -179,7 +185,7 @@ const settingsPaneRoute = createRoute({
   ),
 });
 
-// --- Setup ---
+// --- Setup (standalone, no shell) ---
 
 const setupRoute = createRoute({
   getParentRoute: () => rootRoute,
@@ -193,7 +199,7 @@ const setupRoute = createRoute({
 // --- Index redirect ---
 
 const indexRoute = createRoute({
-  getParentRoute: () => rootRoute,
+  getParentRoute: () => shellRoute,
   path: '/',
   component: lazyRouteComponent(
     () => import('@/features/sessions/SessionsPage'),
@@ -204,24 +210,26 @@ const indexRoute = createRoute({
 // --- Route tree ---
 
 const routeTree = rootRoute.addChildren([
-  indexRoute,
-  sessionsRoute,
-  sessionDetailRoute,
-  reviewRoute,
-  calibrationRoute,
-  calibrationDetailRoute,
-  targetsRoute,
-  targetDetailRoute,
-  projectNewRoute, // Must come before $id to avoid param collision
-  projectsRoute,
-  projectDetailRoute,
-  projectArtifactsRoute,
-  plansRoute,
-  planDetailRoute,
-  auditRoute,
-  settingsRoute,
-  settingsPaneRoute,
   setupRoute,
+  shellRoute.addChildren([
+    indexRoute,
+    sessionsRoute,
+    sessionDetailRoute,
+    reviewRoute,
+    calibrationRoute,
+    calibrationDetailRoute,
+    targetsRoute,
+    targetDetailRoute,
+    projectNewRoute,
+    projectsRoute,
+    projectDetailRoute,
+    projectArtifactsRoute,
+    plansRoute,
+    planDetailRoute,
+    auditRoute,
+    settingsRoute,
+    settingsPaneRoute,
+  ]),
 ]);
 
 // --- Router instance ---
@@ -234,7 +242,6 @@ export const router = createRouter({
   defaultPreload: 'intent',
 });
 
-// Type registration for TanStack Router
 declare module '@tanstack/react-router' {
   interface Register {
     router: typeof router;

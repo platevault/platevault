@@ -1,5 +1,5 @@
 import { useEffect } from 'react';
-import { Outlet, useNavigate, useLocation } from '@tanstack/react-router';
+import { Outlet, useNavigate } from '@tanstack/react-router';
 import { usePreferences } from '@/data/preferences';
 import { Sidebar } from './Sidebar';
 import { StatusBar } from './StatusBar';
@@ -13,14 +13,13 @@ function ShellInner() {
   const prefs = usePreferences();
   const { expanded } = useLogPanel();
   const navigate = useNavigate();
-  const location = useLocation();
 
   // Redirect to /setup if first-run setup is not completed
   useEffect(() => {
-    if (!prefs.setupCompleted && location.pathname !== '/setup') {
+    if (!prefs.setupCompleted) {
       navigate({ to: '/setup' });
     }
-  }, [prefs.setupCompleted, location.pathname, navigate]);
+  }, [prefs.setupCompleted, navigate]);
 
   return (
     <div className={`alm-shell density-${prefs.density}`}>
