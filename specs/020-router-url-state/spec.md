@@ -2,7 +2,7 @@
 
 **Feature Branch**: `020-router-url-state`  
 **Created**: 2026-05-09  
-**Status**: Draft  
+**Status**: Superseded by spec 027 (Desktop Frontend Implementation)  
 **Input**: User description: "Specify routing and route state for the desktop prototype and future app using TanStack Router."
 
 ## User Scenarios & Testing *(mandatory)*
