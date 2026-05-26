@@ -103,8 +103,9 @@ no row is added.
       helper that calls `tauri.invoke("native_directory_pick",
       payload)`. Generate the `request_id` per call.
 - [ ] T012 [US1] Persist last-chosen parent per source kind in
-      `localStorage` under `alm.native.last-path.<kind>` and pass it
-      as `default_path` on the next open (research §5).
+      `localStorage` under `alm.lastPath.<kind>` and pass it as
+      `default_path` on the next open (research §5, data-model.md
+      §LastPathMemory).
 - [ ] T013 [US1] Replace the ad-hoc `@tauri-apps/plugin-dialog` dynamic
       import in `AddFolderButton`
       (`apps/desktop/src/features/setup/steps/StepRaw.tsx`) and the
