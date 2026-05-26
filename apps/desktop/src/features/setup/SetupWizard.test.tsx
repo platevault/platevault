@@ -1,10 +1,10 @@
 /// <reference types="@testing-library/jest-dom" />
 /**
- * SetupWizard gating tests (T015).
+ * SetupWizard gating tests (T044 — rewritten for 4-step flow).
  *
- * Validates that required steps (Raw, Project) block advancement when empty,
- * optional steps (Calibration, Inbox) advance freely, and duplicate paths
- * within the same kind are rejected by the deduplication guard.
+ * Validates that Step 1 (Source Folders) blocks advancement when required
+ * folder types (light_frames, project) are missing, and that Steps 2 and 3
+ * advance freely.
  */
 import { render, screen, fireEvent, waitFor, act } from '@testing-library/react';
 import { describe, it, expect, beforeEach, vi } from 'vitest';
@@ -51,6 +51,7 @@ vi.mock('@tanstack/react-router', () => ({
 vi.mock('@/api/commands', () => ({
   completeFirstRun: vi.fn().mockResolvedValue({ success: true }),
   registerRoot: vi.fn().mockResolvedValue({ id: 'mock-root', path: '' }),
+  registerRootBatch: vi.fn().mockResolvedValue({ results: [] }),
 }));
 
 // Mock @tauri-apps/api/core to prevent any accidental live invoke.
@@ -79,7 +80,7 @@ function renderWizard() {
 }
 
 /**
- * Click the primary "Continue" / "Get started" button.
+ * Click the primary "Continue" button.
  * Throws if the button is not found.
  */
 function clickContinue() {
@@ -87,14 +88,11 @@ function clickContinue() {
   fireEvent.click(btn);
 }
 
-/** Return the primary continue/get-started button. */
+/** Return the primary continue button. */
 function getContinueButton(): HTMLElement {
-  // Step 0 says "Get started", all others say "Continue to ...".
   const allButtons = screen.getAllByRole('button');
   const match = allButtons.find(
-    (b) =>
-      b.textContent?.includes('Get started') ||
-      b.textContent?.includes('Continue to'),
+    (b) => b.textContent?.includes('Continue to'),
   );
   if (!match) throw new Error('Continue button not found');
   return match;
@@ -117,6 +115,14 @@ async function addFolder(path: string) {
   });
 }
 
+/**
+ * Change the source kind dropdown for a given folder row (by index, 0-based).
+ */
+function changeKind(index: number, kind: string) {
+  const selects = screen.getAllByLabelText('Source type');
+  fireEvent.change(selects[index], { target: { value: kind } });
+}
+
 // ---------------------------------------------------------------------------
 // Setup
 // ---------------------------------------------------------------------------
@@ -131,173 +137,208 @@ beforeEach(() => {
 // Tests
 // ---------------------------------------------------------------------------
 
-describe('SetupWizard step gating', () => {
-  it('blocks Continue on the Raw step when no paths are added', async () => {
+describe('SetupWizard 4-step flow', () => {
+  it('starts on Step 1 (Source Folders) and shows the heading', () => {
     renderWizard();
+    expect(screen.getByText(/where does your data live/i)).toBeInTheDocument();
+    expect(screen.getByText(/step 1 of 4/i)).toBeInTheDocument();
+  });
 
-    // Step 0 (Welcome) — advance to step 1 (Raw).
-    clickContinue(); // "Get started"
-
-    // We should now be on the Raw step.
-    expect(screen.getByText(/where are your raw frames/i)).toBeInTheDocument();
-
-    // The Continue button should be disabled (no raw paths yet).
+  it('blocks Continue on Step 1 when no paths are added', () => {
+    renderWizard();
     const continueBtn = getContinueButton();
     expect(continueBtn).toBeDisabled();
   });
 
-  it('enables Continue on the Raw step after adding a path', async () => {
+  it('blocks Continue on Step 1 when only light_frames is added (project missing)', async () => {
     renderWizard();
 
-    // Advance to Raw step.
-    clickContinue();
-    expect(screen.getByText(/where are your raw frames/i)).toBeInTheDocument();
-
-    // Initially disabled.
-    expect(getContinueButton()).toBeDisabled();
-
-    // Add a folder path (use a path that does NOT collide with the example
-    // paths shown at the bottom of StepRaw to avoid duplicate-text queries).
-    await addFolder('/home/user/astrophoto/raw');
-
-    // The path should appear in the list and Continue should now be enabled.
+    await addFolder('/astro/lights');
     await waitFor(() => {
-      expect(screen.getByText('/home/user/astrophoto/raw')).toBeInTheDocument();
+      expect(screen.getByText('/astro/lights')).toBeInTheDocument();
     });
-    expect(getContinueButton()).not.toBeDisabled();
+
+    // Only light_frames added, project is still missing
+    const continueBtn = getContinueButton();
+    expect(continueBtn).toBeDisabled();
   });
 
-  it('blocks Continue on the Project step when no paths are added', async () => {
-    // Seed state so we start at step 3 directly, with a raw path already set
-    // (otherwise we could not have passed the raw step gating).
+  it('enables Continue on Step 1 after adding both light_frames and project folders', async () => {
+    renderWizard();
+
+    // Add light_frames folder (default kind for new folders)
+    await addFolder('/astro/lights');
+    await waitFor(() => {
+      expect(screen.getByText('/astro/lights')).toBeInTheDocument();
+    });
+
+    // Add project folder
+    await addFolder('/astro/projects');
+    await waitFor(() => {
+      expect(screen.getByText('/astro/projects')).toBeInTheDocument();
+    });
+
+    // Change second folder to project kind
+    changeKind(1, 'project');
+
+    // Should now be enabled
+    await waitFor(() => {
+      expect(getContinueButton()).not.toBeDisabled();
+    });
+  });
+
+  it('allows Step 2 (Processing Tools) to advance without changes', async () => {
+    // Seed state at step 1 with required folders already filled
     const seeded = {
-      currentStep: 3,
-      sources: {
-        raw: [{ path: '/astro/lights', scanDepth: 'recursive' }],
-        calibration: [],
-        project: [],
-        inbox: [],
-      },
+      currentStep: 1,
+      sources: [
+        { path: '/astro/lights', kind: 'light_frames', scanDepth: 'recursive' },
+        { path: '/astro/projects', kind: 'project', scanDepth: 'recursive' },
+      ],
       catalogSettings: {
-        openngc: true,
         messier: true,
+        ngcIc: true,
+        caldwell: true,
         sharpless: true,
-        barnard: true,
-        lbn: true,
-        ldn: true,
-        simbadOnline: true,
+        abell: true,
+      },
+      tools: {
+        pixinsight: { enabled: false, path: null },
+        siril: { enabled: false, path: null },
       },
     };
     window.localStorage.setItem(WIZARD_STORAGE_KEY, JSON.stringify(seeded));
 
     renderWizard();
 
-    // Verify we are on the Project step.
-    expect(screen.getByText(/project folders/i)).toBeInTheDocument();
+    // We should be on the Processing Tools step (heading)
+    expect(screen.getByRole('heading', { name: /processing tools/i })).toBeInTheDocument();
+    expect(screen.getByText(/step 2 of 4/i)).toBeInTheDocument();
 
-    // Continue should be disabled.
-    expect(getContinueButton()).toBeDisabled();
+    // Continue should be enabled (tools step has no requirements)
+    const continueBtn = getContinueButton();
+    expect(continueBtn).not.toBeDisabled();
+
+    // Click Continue — should advance to Catalogs step
+    fireEvent.click(continueBtn);
+    expect(screen.getByRole('heading', { name: /target catalogs/i })).toBeInTheDocument();
   });
 
-  it('allows Calibration step (step 2) to advance without paths', async () => {
-    // Seed at step 2 with a raw path so the wizard state is valid.
+  it('allows Step 3 (Catalogs) to advance without changes', async () => {
+    // Seed state at step 2
     const seeded = {
       currentStep: 2,
-      sources: {
-        raw: [{ path: '/astro/lights', scanDepth: 'recursive' }],
-        calibration: [],
-        project: [],
-        inbox: [],
-      },
+      sources: [
+        { path: '/astro/lights', kind: 'light_frames', scanDepth: 'recursive' },
+        { path: '/astro/projects', kind: 'project', scanDepth: 'recursive' },
+      ],
       catalogSettings: {
-        openngc: true,
         messier: true,
+        ngcIc: true,
+        caldwell: true,
         sharpless: true,
-        barnard: true,
-        lbn: true,
-        ldn: true,
-        simbadOnline: true,
+        abell: true,
+      },
+      tools: {
+        pixinsight: { enabled: false, path: null },
+        siril: { enabled: false, path: null },
       },
     };
     window.localStorage.setItem(WIZARD_STORAGE_KEY, JSON.stringify(seeded));
 
     renderWizard();
 
-    // Verify we are on the Calibration step.
-    expect(screen.getByText(/calibration masters/i)).toBeInTheDocument();
+    // We should be on the Catalogs step
+    expect(screen.getByRole('heading', { name: /target catalogs/i })).toBeInTheDocument();
 
-    // Continue should be enabled (calibration is optional).
+    // Continue should be enabled
     const continueBtn = getContinueButton();
     expect(continueBtn).not.toBeDisabled();
-
-    // Click Continue — should advance to Project step (step 3).
-    fireEvent.click(continueBtn);
-    expect(screen.getByText(/project folders/i)).toBeInTheDocument();
   });
 
-  it('allows Inbox step (step 4) to advance without paths', async () => {
-    // Seed at step 4, with raw + project paths filled.
+  it('shows Confirm step (Step 4) with Complete setup button', async () => {
+    // Seed state at step 3 (Confirm)
     const seeded = {
-      currentStep: 4,
-      sources: {
-        raw: [{ path: '/astro/lights', scanDepth: 'recursive' }],
-        calibration: [],
-        project: [{ path: '/astro/projects', scanDepth: 'recursive' }],
-        inbox: [],
-      },
+      currentStep: 3,
+      sources: [
+        { path: '/astro/lights', kind: 'light_frames', scanDepth: 'recursive' },
+        { path: '/astro/projects', kind: 'project', scanDepth: 'recursive' },
+      ],
       catalogSettings: {
-        openngc: true,
         messier: true,
+        ngcIc: true,
+        caldwell: true,
         sharpless: true,
-        barnard: true,
-        lbn: true,
-        ldn: true,
-        simbadOnline: true,
+        abell: true,
+      },
+      tools: {
+        pixinsight: { enabled: false, path: null },
+        siril: { enabled: false, path: null },
       },
     };
     window.localStorage.setItem(WIZARD_STORAGE_KEY, JSON.stringify(seeded));
 
     renderWizard();
 
-    // Verify we are on the Inbox step.
-    expect(screen.getByText(/inbox \/ watched folders/i)).toBeInTheDocument();
+    // Verify we are on the Confirm step
+    expect(screen.getByText(/ready to go/i)).toBeInTheDocument();
 
-    // Continue should be enabled (inbox is optional).
-    const continueBtn = getContinueButton();
-    expect(continueBtn).not.toBeDisabled();
+    // Complete setup button should be present and enabled
+    const completeBtn = screen.getByRole('button', { name: /complete setup/i });
+    expect(completeBtn).not.toBeDisabled();
+  });
 
-    // Click Continue — should advance to Tools step (step 5).
-    fireEvent.click(continueBtn);
-    expect(screen.getByText(/detect processing tools/i)).toBeInTheDocument();
+  it('blocks Complete setup on Confirm step when required folders are missing', async () => {
+    // Seed at step 3 but WITHOUT a project folder
+    const seeded = {
+      currentStep: 3,
+      sources: [
+        { path: '/astro/lights', kind: 'light_frames', scanDepth: 'recursive' },
+      ],
+      catalogSettings: {
+        messier: true,
+        ngcIc: true,
+        caldwell: true,
+        sharpless: true,
+        abell: true,
+      },
+      tools: {
+        pixinsight: { enabled: false, path: null },
+        siril: { enabled: false, path: null },
+      },
+    };
+    window.localStorage.setItem(WIZARD_STORAGE_KEY, JSON.stringify(seeded));
+
+    renderWizard();
+
+    expect(screen.getByText(/ready to go/i)).toBeInTheDocument();
+
+    // Complete setup should be disabled
+    const completeBtn = screen.getByRole('button', { name: /complete setup/i });
+    expect(completeBtn).toBeDisabled();
+
+    // Should show the blocked message
+    expect(screen.getByText(/cannot complete setup/i)).toBeInTheDocument();
   });
 
   it('rejects a duplicate path within the same kind', async () => {
     renderWizard();
 
-    // Advance to Raw step.
-    clickContinue();
-    expect(screen.getByText(/where are your raw frames/i)).toBeInTheDocument();
-
-    // Add a folder path (unique — avoids collision with example paths).
+    // Add a folder path
     await addFolder('/home/user/astrophoto/raw');
-
-    // Wait for the path to appear and React to settle with the new state,
-    // ensuring the next addFolder call receives the updated sources closure.
     await waitFor(() => {
       expect(screen.getByText('/home/user/astrophoto/raw')).toBeInTheDocument();
     });
 
-    // Confirm the footer shows 1 folder.
+    // Confirm the footer shows 1 folder
     expect(screen.getByText(/1 folder selected/i)).toBeInTheDocument();
 
-    // Add the same path again — the dedup check should reject it.
+    // Add the same path again — the dedup check should reject it
     await addFolder('/home/user/astrophoto/raw');
 
     // After attempting to add a duplicate, the path should still appear only
-    // once and the folder count should remain at 1 (the duplicate was rejected
-    // by the checkDeduplication guard in makeSourceHandlers).
+    // once and the folder count should remain at 1.
     await waitFor(() => {
-      // The path text appears exactly once (the entry row).
       const pathElements = screen.getAllByText('/home/user/astrophoto/raw');
       expect(pathElements).toHaveLength(1);
     });
