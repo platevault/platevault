@@ -17,7 +17,23 @@
 - [x] checkpoint.commit (pre-implementation) — 696ac0e
 - [x] agent-assign.assign — 6 agents, 109 tasks assigned
 - [x] agent-assign.validate — PASS, 109/109 tasks covered, 5 agents valid
-- [ ] agent-assign.execute — IN PROGRESS
+- [ ] agent-assign.execute — IN PROGRESS (Phase 1 done, Phase 2 partial)
+  - [x] Phase 1: T001-T009 (setup, migrations) — 108ab9c
+  - [x] Phase 2 partial: T010-T015, T019-T022, T027 (shared components, DTOs, enum expansion)
+  - [ ] Phase 2 remaining: T016-T018, T023-T026, T028-T035 (rust agent running)
+  - [ ] Phase 3: T036-T044 (wizard rewrite agent running)
+  - [x] Phase 4 partial: T050 (conflict-detection.ts), T055 (session-naming.ts)
+  - [x] Phase 4 partial: T050 (conflict-detection.ts), T055 (session-naming.ts)
+  - [x] Phase 6 partial: T068 (Sidebar 7 nav items), T069 (router update), T079-T080 (ArchivePage+List)
+  - [x] Phase 8 partial: T096/T099 (StatusBar rewrite)
+  - [ ] Phase 2 remaining: T016-T018, T023-T026, T028 (rust agent)
+  - [ ] Phase 3: T036-T044 (wizard agent)
+  - [ ] Phase 4 remaining: T045-T049, T051-T054, T056
+  - [ ] Phase 5: T057-T067
+  - [ ] Phase 6 remaining: T070-T078
+  - [ ] Phase 7: T081-T095
+  - [ ] Phase 8 remaining: T097-T098, T100
+  - [ ] Phase 9: T101-T109
 - [ ] verify-tasks (parallel)
 - [ ] verify (parallel)
 - [ ] code-review (parallel)
@@ -49,6 +65,15 @@ frontend-developer for all React/TS UI, coder for mechanical tasks, typescript-p
 pure TS logic, speckit-implement-task for cross-cutting verification.
 **Question for user**: Would you have preferred different agent assignments for any tasks?
 Especially: should database-architect handle migrations instead of rust-pro?
+
+### D005 — Session scope assessment
+**Time**: after Phase 1+2 partial commit
+**Context**: 109 tasks is an enormous scope. Phase 1 (9 tasks) + Phase 2 partial (11 tasks)
+took significant effort including cascading SourceKind enum changes. ~89 tasks remain.
+**Decision**: Continue with remaining Phase 2 backend (repos, commands, services) and as many
+Phase 3-8 frontend tasks as possible. Quality > speed — review every agent's output.
+**Question for user**: Given the scale, should future phases be implemented as separate PRs
+per user story rather than one massive branch?
 
 ### D004 — Pre-commit hook blocks commit due to mtime check
 **Time**: after Phase 1+2 work

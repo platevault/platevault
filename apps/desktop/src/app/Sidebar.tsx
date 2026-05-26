@@ -1,58 +1,37 @@
 import { Link, useRouterState } from '@tanstack/react-router';
 import { clsx } from 'clsx';
 import { usePreference } from '@/data/preferences';
-import { useQuery, createQueryStore } from '@/data/store';
-import { getReviewQueue, listPlans } from '@/api/commands';
 
 interface NavItem {
-  /** Single-letter glyph shown in collapsed mode. */
   glyph: string;
   label: string;
   path: string;
-  /** Whether this item can show a warn-colored count. */
   warn?: boolean;
 }
 
 const NAV_ITEMS: NavItem[] = [
-  { glyph: 'R', label: 'Review queue', path: '/review', warn: true },
+  { glyph: '⬇', label: 'Inbox', path: '/inbox', warn: true },
   { glyph: 'S', label: 'Sessions', path: '/sessions' },
   { glyph: 'C', label: 'Calibration', path: '/calibration' },
   { glyph: '⌖', label: 'Targets', path: '/targets' },
   { glyph: 'P', label: 'Projects', path: '/projects' },
-  { glyph: '◇', label: 'Plans', path: '/plans', warn: true },
-  { glyph: '◷', label: 'Audit log', path: '/audit' },
+  { glyph: '▣', label: 'Archive', path: '/archive' },
   { glyph: '⚙', label: 'Settings', path: '/settings' },
 ];
 
-/** Mock counts matching the wireframe. Real data overrides review + plans. */
 const MOCK_COUNTS: Record<string, number> = {
-  '/review': 48,
+  '/inbox': 12,
   '/sessions': 247,
   '/calibration': 84,
   '/targets': 53,
   '/projects': 19,
-  '/plans': 3,
 };
-
-const reviewStore = createQueryStore(() => getReviewQueue());
-const plansStore = createQueryStore(() => listPlans());
 
 export function Sidebar() {
   const [collapsed, setCollapsed] = usePreference('sidebarCollapsed');
   const location = useRouterState({ select: (s) => s.location });
-  const reviewState = useQuery(reviewStore);
-  const plansState = useQuery(plansStore);
-
-  const reviewCount = reviewState.data?.length ?? 0;
-  const pendingPlans =
-    plansState.data?.filter(
-      (p) => p.state === 'ready_for_review' || p.state === 'approved',
-    ).length ?? 0;
 
   function getCount(item: NavItem): number | undefined {
-    // Use real data when available, otherwise fall back to mock counts
-    if (item.path === '/review' && reviewCount > 0) return reviewCount;
-    if (item.path === '/plans' && pendingPlans > 0) return pendingPlans;
     return MOCK_COUNTS[item.path];
   }
 

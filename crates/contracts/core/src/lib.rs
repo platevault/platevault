@@ -22,6 +22,7 @@ pub mod sessions;
 pub mod settings;
 pub mod status;
 pub mod targets;
+pub mod tools;
 
 pub use json_any::JsonAny;
 
