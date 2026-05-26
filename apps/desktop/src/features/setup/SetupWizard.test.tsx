@@ -10,17 +10,18 @@ import { render, screen, fireEvent, waitFor, act } from '@testing-library/react'
 import { describe, it, expect, beforeEach, vi } from 'vitest';
 
 // ---------------------------------------------------------------------------
-// Controlled dialog mock — tests set `nextDialogPath` before clicking
-// "+ Add folder" so the async open() resolves to the desired path.
+// Hoisted mock state — vi.hoisted runs BEFORE vi.mock factories, so
+// the `mockOpen` fn is accessible from within the hoisted mock factory.
 // ---------------------------------------------------------------------------
-let nextDialogPath: string | null = null;
+const { mockOpen } = vi.hoisted(() => {
+  const mockOpen = vi.fn<() => Promise<string | null>>();
+  return { mockOpen };
+});
 
+// Mock @tauri-apps/plugin-dialog: dynamic import resolves, `open` delegates
+// to our controllable `mockOpen` spy.
 vi.mock('@tauri-apps/plugin-dialog', () => ({
-  open: vi.fn(async () => {
-    const p = nextDialogPath;
-    nextDialogPath = null;
-    return p;
-  }),
+  open: mockOpen,
 }));
 
 // Mock @tanstack/react-router so useNavigate returns a no-op.
@@ -82,20 +83,18 @@ function getContinueButton(): HTMLElement {
 }
 
 /**
- * Simulate adding a folder by setting the controlled dialog path and
- * clicking the "+ Add folder" button.
+ * Simulate adding a folder by configuring the mocked dialog.open() to
+ * resolve with the desired path, then clicking the "+ Add folder" button.
  */
 async function addFolder(path: string) {
-  // Set the path that the mocked dialog.open() will resolve with.
-  nextDialogPath = path;
+  mockOpen.mockResolvedValueOnce(path);
 
-  // Find and click the "+ Add folder..." button visible on the current step.
   const addBtn = screen.getByRole('button', { name: /add folder/i });
 
   await act(async () => {
     fireEvent.click(addBtn);
-    // The handleChoose function is async — give it a microtask tick to
-    // resolve the dynamic import and call onAdd.
+    // handleChoose is async: it awaits the dynamic import then awaits
+    // open(). Flush the microtask queue so React processes the state update.
     await new Promise((r) => setTimeout(r, 0));
   });
 }
@@ -107,7 +106,7 @@ async function addFolder(path: string) {
 beforeEach(() => {
   // Clear all wizard and preference state between tests.
   window.localStorage.clear();
-  nextDialogPath = null;
+  mockOpen.mockReset();
 });
 
 // ---------------------------------------------------------------------------
