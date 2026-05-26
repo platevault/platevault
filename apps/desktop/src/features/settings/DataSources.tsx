@@ -43,7 +43,7 @@ export function DataSources({ save }: DataSourcesProps) {
       const useMocks = import.meta.env.VITE_USE_MOCKS === 'true';
       if (!useMocks) {
         const { commands } = await import('@/bindings/index');
-        const restartResult = await commands.firstrunRestart();
+        const restartResult = await commands.firstrunRestart({ confirm: true });
         if (restartResult.status !== 'ok') throw new Error('restart failed');
         const sources: Record<string, Array<{ path: string; scanDepth: string }>> = {
           raw: [], calibration: [], project: [], inbox: [],

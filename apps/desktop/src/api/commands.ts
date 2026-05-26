@@ -276,7 +276,7 @@ export async function completeFirstRun(): Promise<FirstRunCompleteResult> {
 }
 
 export async function restartFirstRun(): Promise<FirstRunRestartResult> {
-  return invoke<FirstRunRestartResult>('firstrun.restart');
+  return invoke<FirstRunRestartResult>('firstrun.restart', { request: { confirm: true } });
 }
 
 export async function getFirstRunState(): Promise<FirstRunState> {
