@@ -248,8 +248,9 @@ describe('SetupWizard 4-step flow', () => {
 
     renderWizard();
 
-    // We should be on the Catalogs step
+    // We should be on the Catalogs step (heading)
     expect(screen.getByRole('heading', { name: /target catalogs/i })).toBeInTheDocument();
+    expect(screen.getByText(/step 3 of 4/i)).toBeInTheDocument();
 
     // Continue should be enabled
     const continueBtn = getContinueButton();

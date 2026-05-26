@@ -5,6 +5,7 @@
 //! are emitted at test time by `tests/bindings.rs` via tauri-specta.
 
 pub mod commands;
+pub mod watcher;
 
 use std::sync::Arc;
 
@@ -21,7 +22,7 @@ use crate::commands::calibration::{
 use crate::commands::calibration_tolerances::{
     calibration_tolerances_get, calibration_tolerances_update,
 };
-use crate::commands::cleanup::{cleanup_policy_get, cleanup_policy_update};
+use crate::commands::cleanup::{cleanup_policy_get, cleanup_policy_update, cleanup_scan};
 use crate::commands::equipment::{
     equipment_cameras_create, equipment_cameras_delete, equipment_cameras_list,
     equipment_cameras_update, equipment_filters_create, equipment_filters_delete,
@@ -33,6 +34,7 @@ use crate::commands::equipment::{
 use crate::commands::firstrun::{
     firstrun_complete, firstrun_restart, firstrun_state, roots_register_batch,
 };
+use crate::commands::inbox::inbox_scan;
 use crate::commands::ingestion::{ingestion_settings_get, ingestion_settings_update};
 use crate::commands::lifecycle::{
     lifecycle_ledger_list, lifecycle_transition_apply, lifecycle_transition_preview,
@@ -154,12 +156,15 @@ pub fn specta_builder() -> Builder<tauri::Wry> {
             equipment_filters_delete,
             // status (spec 030)
             status_summary,
-            // cleanup policy (spec 030)
+            // cleanup policy & scan (spec 030)
             cleanup_policy_get,
             cleanup_policy_update,
+            cleanup_scan,
             // calibration tolerances (spec 030)
             calibration_tolerances_get,
             calibration_tolerances_update,
+            // inbox (spec 030)
+            inbox_scan,
             // ingestion settings (spec 030)
             ingestion_settings_get,
             ingestion_settings_update,

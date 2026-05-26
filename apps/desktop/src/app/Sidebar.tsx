@@ -1,6 +1,7 @@
 import { Link, useRouterState } from '@tanstack/react-router';
 import { clsx } from 'clsx';
 import { usePreference } from '@/data/preferences';
+import { useStatusSummary } from './useStatusSummary';
 
 interface NavItem {
   glyph: string;
@@ -30,8 +31,13 @@ const MOCK_COUNTS: Record<string, number> = {
 export function Sidebar() {
   const [collapsed, setCollapsed] = usePreference('sidebarCollapsed');
   const location = useRouterState({ select: (s) => s.location });
+  const status = useStatusSummary();
+
+  const onlineRoots = status.roots.filter((r) => r.online);
+  const offlineRoots = status.roots.filter((r) => !r.online);
 
   function getCount(item: NavItem): number | undefined {
+    if (item.path === '/inbox' && status.inboxCount > 0) return status.inboxCount;
     return MOCK_COUNTS[item.path];
   }
 
@@ -145,12 +151,24 @@ export function Sidebar() {
         })}
       </ul>
 
-      {/* Footer: root stats + offline warning */}
+      {/* Footer: root health */}
       <div className="alm-sidebar__footer">
-        <div className="alm-sidebar__roots">4 roots &middot; 2 online</div>
-        <div className="alm-sidebar__offline-warn">
-          &#x26A0; NAS-Astro offline
-        </div>
+        <Link to="/settings/$pane" params={{ pane: 'data-sources' }} className="alm-sidebar__roots">
+          <span
+            className={clsx(
+              'alm-sidebar__root-dot',
+              offlineRoots.length > 0
+                ? 'alm-sidebar__root-dot--warn'
+                : 'alm-sidebar__root-dot--ok',
+            )}
+          />
+          {status.roots.length} roots &middot; {onlineRoots.length} online
+        </Link>
+        {offlineRoots.length > 0 && (
+          <div className="alm-sidebar__offline-warn">
+            {offlineRoots.map((r) => r.path.split(/[\\/]/).pop()).join(', ')} offline
+          </div>
+        )}
       </div>
     </nav>
   );

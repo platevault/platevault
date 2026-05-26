@@ -20,20 +20,21 @@
 - [ ] agent-assign.execute — IN PROGRESS (Phase 1 done, Phase 2 partial)
   - [x] Phase 1: T001-T009 (setup, migrations) — 108ab9c
   - [x] Phase 2 partial: T010-T015, T019-T022, T027 (shared components, DTOs, enum expansion)
-  - [ ] Phase 2 remaining: T016-T018, T023-T026, T028-T035 (rust agent running)
-  - [ ] Phase 3: T036-T044 (wizard rewrite agent running)
+  - [x] Phase 2: T016-T018, T023-T028 (backend commands complete)
+  - [x] Phase 2 services: T029-T035 (watcher, inbox scan, split/merge stubs, notes sync, cleanup scan, bindings regen)
+  - [x] Phase 3: T036-T044 (wizard rewrite complete, 9 tests pass)
   - [x] Phase 4 partial: T050 (conflict-detection.ts), T055 (session-naming.ts)
   - [x] Phase 4 partial: T050 (conflict-detection.ts), T055 (session-naming.ts)
   - [x] Phase 6 partial: T068 (Sidebar 7 nav items), T069 (router update), T079-T080 (ArchivePage+List)
   - [x] Phase 8 partial: T096/T099 (StatusBar rewrite)
   - [ ] Phase 2 remaining: T016-T018, T023-T026, T028 (rust agent)
   - [ ] Phase 3: T036-T044 (wizard agent)
-  - [ ] Phase 4 remaining: T045-T049, T051-T054, T056
-  - [ ] Phase 5: T057-T067
-  - [ ] Phase 6 remaining: T070-T078
-  - [ ] Phase 7: T081-T095
-  - [ ] Phase 8 remaining: T097-T098, T100
-  - [ ] Phase 9: T101-T109
+  - [x] Phase 4: T045-T056 (inbox page, session review, action sidebar, split/merge, confirm overlay, filter select, mock data)
+  - [ ] Phase 5+6: T057-T078 (frontend-projects agent running)
+  - [ ] Phase 7: T081-T095 (frontend-settings agent running)
+  - [x] Phase 8: T096-T100 (StatusBar, useStatusSummary, sidebar footer complete)
+  - [x] Phase 9 partial: T101 (.playwright-mcp deleted)
+  - [ ] Phase 9 remaining: T102-T109
 - [ ] verify-tasks (parallel)
 - [ ] verify (parallel)
 - [ ] code-review (parallel)

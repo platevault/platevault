@@ -38,8 +38,8 @@ fn str_to_category(s: &str) -> FilterCategory {
         "narrowband" => FilterCategory::Narrowband,
         "broadband" => FilterCategory::Broadband,
         "dual_band" => FilterCategory::DualBand,
-        "other" => FilterCategory::Other,
         "custom" => FilterCategory::Custom,
+        // "other" and any unknown value default to Other.
         _ => FilterCategory::Other,
     }
 }
@@ -119,11 +119,10 @@ pub async fn update_camera(pool: &SqlitePool, req: &UpdateCamera) -> DbResult<Ca
     }
 
     // Fetch the full row to return auto_detected.
-    let row: (i32,) =
-        sqlx::query_as("SELECT auto_detected FROM cameras WHERE id = ?")
-            .bind(&req.id)
-            .fetch_one(pool)
-            .await?;
+    let row: (i32,) = sqlx::query_as("SELECT auto_detected FROM cameras WHERE id = ?")
+        .bind(&req.id)
+        .fetch_one(pool)
+        .await?;
 
     Ok(Camera {
         id: req.id.clone(),
@@ -139,8 +138,7 @@ pub async fn update_camera(pool: &SqlitePool, req: &UpdateCamera) -> DbResult<Ca
 ///
 /// Returns [`DbError::NotFound`] if the ID does not exist.
 pub async fn delete_camera(pool: &SqlitePool, id: &str) -> DbResult<()> {
-    let result =
-        sqlx::query("DELETE FROM cameras WHERE id = ?").bind(id).execute(pool).await?;
+    let result = sqlx::query("DELETE FROM cameras WHERE id = ?").bind(id).execute(pool).await?;
 
     if result.rows_affected() == 0 {
         return Err(DbError::NotFound(format!("camera {id} not found")));
@@ -254,11 +252,10 @@ pub async fn update_telescope(pool: &SqlitePool, req: &UpdateTelescope) -> DbRes
         return Err(DbError::NotFound(format!("telescope {} not found", req.id)));
     }
 
-    let row: (i32,) =
-        sqlx::query_as("SELECT auto_detected FROM telescopes WHERE id = ?")
-            .bind(&req.id)
-            .fetch_one(pool)
-            .await?;
+    let row: (i32,) = sqlx::query_as("SELECT auto_detected FROM telescopes WHERE id = ?")
+        .bind(&req.id)
+        .fetch_one(pool)
+        .await?;
 
     Ok(Telescope {
         id: req.id.clone(),
@@ -275,8 +272,7 @@ pub async fn update_telescope(pool: &SqlitePool, req: &UpdateTelescope) -> DbRes
 ///
 /// Returns [`DbError::NotFound`] if the ID does not exist.
 pub async fn delete_telescope(pool: &SqlitePool, id: &str) -> DbResult<()> {
-    let result =
-        sqlx::query("DELETE FROM telescopes WHERE id = ?").bind(id).execute(pool).await?;
+    let result = sqlx::query("DELETE FROM telescopes WHERE id = ?").bind(id).execute(pool).await?;
 
     if result.rows_affected() == 0 {
         return Err(DbError::NotFound(format!("telescope {id} not found")));
@@ -468,12 +464,7 @@ pub async fn create_filter(pool: &SqlitePool, req: &CreateFilter) -> DbResult<Fi
     .execute(pool)
     .await?;
 
-    Ok(Filter {
-        id,
-        name: req.name.clone(),
-        category: req.category,
-        auto_detected: false,
-    })
+    Ok(Filter { id, name: req.name.clone(), category: req.category, auto_detected: false })
 }
 
 /// Update an existing filter.
@@ -495,11 +486,10 @@ pub async fn update_filter(pool: &SqlitePool, req: &UpdateFilter) -> DbResult<Fi
         return Err(DbError::NotFound(format!("filter {} not found", req.id)));
     }
 
-    let row: (i32,) =
-        sqlx::query_as("SELECT auto_detected FROM filters WHERE id = ?")
-            .bind(&req.id)
-            .fetch_one(pool)
-            .await?;
+    let row: (i32,) = sqlx::query_as("SELECT auto_detected FROM filters WHERE id = ?")
+        .bind(&req.id)
+        .fetch_one(pool)
+        .await?;
 
     Ok(Filter {
         id: req.id.clone(),
@@ -515,8 +505,7 @@ pub async fn update_filter(pool: &SqlitePool, req: &UpdateFilter) -> DbResult<Fi
 ///
 /// Returns [`DbError::NotFound`] if the ID does not exist.
 pub async fn delete_filter(pool: &SqlitePool, id: &str) -> DbResult<()> {
-    let result =
-        sqlx::query("DELETE FROM filters WHERE id = ?").bind(id).execute(pool).await?;
+    let result = sqlx::query("DELETE FROM filters WHERE id = ?").bind(id).execute(pool).await?;
 
     if result.rows_affected() == 0 {
         return Err(DbError::NotFound(format!("filter {id} not found")));

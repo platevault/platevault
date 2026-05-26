@@ -7,6 +7,7 @@ pub mod cleanup;
 pub mod enums;
 pub mod equipment;
 pub mod first_run;
+pub mod inbox;
 pub mod ingestion;
 pub mod json_any;
 pub mod lifecycle;

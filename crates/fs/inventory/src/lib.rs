@@ -1,5 +1,7 @@
 //! Library root, path, scan, and filesystem inventory boundaries.
 
+pub mod watcher;
+
 pub const CRATE_NAME: &str = "fs_inventory";
 
 #[cfg(test)]

@@ -1,7 +1,14 @@
-import { useState, useMemo } from 'react';
+/**
+ * TargetList -- uses ListSidebar with 4 grouping options:
+ * type, constellation, catalog, project.
+ * Refactored per spec 030 T077.
+ */
+
+import { useState, useMemo, useCallback } from 'react';
 import { clsx } from 'clsx';
 import type { Target, TargetKind } from '@/bindings/types';
-import { Btn } from '@/ui';
+import { Pill } from '@/ui';
+import { ListSidebar } from '@/components';
 
 export interface TargetListProps {
   targets: Target[];
@@ -11,27 +18,23 @@ export interface TargetListProps {
 
 // ─── Types ───────────────────────────────────────────────────────────────────
 
-type GroupBy = 'none' | 'kind';
+type GroupBy = 'none' | 'type' | 'constellation' | 'catalog' | 'project';
 type SortBy = 'name' | 'sessions' | 'integration';
 
 // ─── Constants ───────────────────────────────────────────────────────────────
 
-const GROUP_MODES: Array<{ value: GroupBy; label: string }> = [
+const GROUP_OPTIONS = [
   { value: 'none', label: 'None' },
-  { value: 'kind', label: 'Kind' },
+  { value: 'type', label: 'Type' },
+  { value: 'constellation', label: 'Constellation' },
+  { value: 'catalog', label: 'Catalog' },
+  { value: 'project', label: 'Project' },
 ];
 
-const SORT_MODES: Array<{ value: SortBy; label: string }> = [
+const SORT_OPTIONS = [
   { value: 'name', label: 'Name' },
   { value: 'sessions', label: 'Sessions' },
   { value: 'integration', label: 'Integration hours' },
-];
-
-const KIND_FILTERS: Array<{ key: TargetKind; label: string }> = [
-  { key: 'deep_sky', label: 'Deep sky' },
-  { key: 'planetary', label: 'Planetary' },
-  { key: 'lunar', label: 'Lunar' },
-  { key: 'solar', label: 'Solar' },
 ];
 
 const KIND_LABELS: Record<TargetKind, string> = {
@@ -42,7 +45,34 @@ const KIND_LABELS: Record<TargetKind, string> = {
   landscape: 'Landscape',
 };
 
+const KIND_FILTERS: { value: string; label: string }[] = [
+  { value: 'deep_sky', label: 'Deep sky' },
+  { value: 'planetary', label: 'Planetary' },
+  { value: 'lunar', label: 'Lunar' },
+  { value: 'solar', label: 'Solar' },
+];
+
 // ─── Helpers ──────────────────────────────────────────────────────────────────
+
+/** Approximate constellation from RA for demo purposes. */
+function constellationFromRa(ra?: number): string {
+  if (ra == null) return 'Unknown';
+  if (ra >= 20 && ra < 22) return 'Cygnus';
+  if (ra >= 0 && ra < 2) return 'Andromeda';
+  if (ra >= 21 && ra < 23) return 'Cepheus';
+  if (ra >= 5 && ra < 7) return 'Orion';
+  return 'Other';
+}
+
+function catalogLabel(t: Target): string {
+  const entries = Object.entries(t.catalog_ids).filter(([, v]) => v != null && v !== '');
+  if (entries.length === 0) return 'No catalog';
+  return entries.map(([cat]) => cat.toUpperCase()).join(', ');
+}
+
+function projectLabel(t: Target): string {
+  return t.project_count > 0 ? `${t.project_count} project${t.project_count !== 1 ? 's' : ''}` : 'No project';
+}
 
 function hasCoverageWarning(t: Target): boolean {
   return Object.entries(t.recommended_hours).some(
@@ -72,7 +102,23 @@ function groupTargets(
 
   const map = new Map<string, Target[]>();
   for (const t of targets) {
-    const key = KIND_LABELS[t.kind] ?? t.kind;
+    let key: string;
+    switch (groupBy) {
+      case 'type':
+        key = KIND_LABELS[t.kind] ?? t.kind;
+        break;
+      case 'constellation':
+        key = constellationFromRa(t.coordinates?.ra);
+        break;
+      case 'catalog':
+        key = catalogLabel(t);
+        break;
+      case 'project':
+        key = projectLabel(t);
+        break;
+      default:
+        key = '';
+    }
     const arr = map.get(key) ?? [];
     arr.push(t);
     map.set(key, arr);
@@ -82,21 +128,26 @@ function groupTargets(
 
 // ─── Component ───────────────────────────────────────────────────────────────
 
-/**
- * Target list pane (left side of three-pane layout).
- * Matches wireframe: search bar, group/sort controls, filter chips,
- * items showing name + alias + stats.
- */
 export function TargetList({ targets, selectedId, onSelect }: TargetListProps) {
   const [search, setSearch] = useState('');
   const [groupBy, setGroupBy] = useState<GroupBy>('none');
   const [sortBy, setSortBy] = useState<SortBy>('name');
-  const [kindFilter, setKindFilter] = useState<Set<TargetKind>>(new Set());
-  const [coverageOnly, setCoverageOnly] = useState(false);
+  const [activeFilters, setActiveFilters] = useState<Set<string>>(new Set());
+
+  const handleFilterToggle = useCallback((value: string) => {
+    setActiveFilters((prev) => {
+      const next = new Set(prev);
+      if (next.has(value)) {
+        next.delete(value);
+      } else {
+        next.add(value);
+      }
+      return next;
+    });
+  }, []);
 
   const isUnresolved = (t: Target) => t.name === '(unresolved)';
 
-  // Filter
   const filtered = useMemo(() => {
     let result = targets;
 
@@ -112,183 +163,90 @@ export function TargetList({ targets, selectedId, onSelect }: TargetListProps) {
       );
     }
 
-    if (kindFilter.size > 0) {
-      result = result.filter((t) => kindFilter.has(t.kind));
-    }
-
-    if (coverageOnly) {
-      result = result.filter(hasCoverageWarning);
+    if (activeFilters.size > 0) {
+      result = result.filter((t) => activeFilters.has(t.kind));
     }
 
     return result;
-  }, [targets, search, kindFilter, coverageOnly]);
+  }, [targets, search, activeFilters]);
 
-  // Sort then group
   const sorted = useMemo(() => sortTargets(filtered, sortBy), [filtered, sortBy]);
   const groups = useMemo(() => groupTargets(sorted, groupBy), [sorted, groupBy]);
 
-  const toggleKind = (kind: TargetKind) => {
-    setKindFilter((prev) => {
-      const next = new Set(prev);
-      if (next.has(kind)) next.delete(kind);
-      else next.add(kind);
-      return next;
-    });
-  };
-
-  const hasActiveFilters = kindFilter.size > 0 || coverageOnly;
+  const filterPills = KIND_FILTERS.map((f) => ({
+    value: f.value,
+    label: f.label,
+    active: activeFilters.has(f.value),
+  }));
 
   return (
-    <div className="alm-target-list">
-      {/* Search bar */}
-      <div className="alm-target-list__search">
-        <input
-          type="search"
-          placeholder="Search targets..."
-          value={search}
-          onChange={(e) => setSearch(e.target.value)}
-          className="alm-target-list__input"
-          aria-label="Search targets"
-        />
-      </div>
-
-      {/* Controls: group + sort */}
-      <div className="alm-proj-list__controls">
-        <label className="alm-proj-list__control-label">
-          <span className="alm-proj-list__control-text">Group</span>
-          <select
-            className="alm-proj-list__select"
-            value={groupBy}
-            onChange={(e) => setGroupBy(e.target.value as GroupBy)}
-            aria-label="Group targets by"
-          >
-            {GROUP_MODES.map((m) => (
-              <option key={m.value} value={m.value}>{m.label}</option>
-            ))}
-          </select>
-        </label>
-        <label className="alm-proj-list__control-label">
-          <span className="alm-proj-list__control-text">Sort</span>
-          <select
-            className="alm-proj-list__select"
-            value={sortBy}
-            onChange={(e) => setSortBy(e.target.value as SortBy)}
-            aria-label="Sort targets by"
-          >
-            {SORT_MODES.map((m) => (
-              <option key={m.value} value={m.value}>{m.label}</option>
-            ))}
-          </select>
-        </label>
-      </div>
-
-      {/* Filter chips */}
-      <div className="alm-proj-list__chips">
-        {KIND_FILTERS.map((f) => (
-          <button
-            key={f.key}
-            type="button"
-            className={clsx(
-              'alm-filter-chip alm-filter-chip--xs',
-              kindFilter.has(f.key) && 'alm-filter-chip--active',
-            )}
-            onClick={() => toggleKind(f.key)}
-            aria-pressed={kindFilter.has(f.key)}
-            aria-label={`Filter by ${f.label}`}
-          >
-            {f.label}
-          </button>
-        ))}
-        <button
-          type="button"
-          className={clsx(
-            'alm-filter-chip alm-filter-chip--xs',
-            coverageOnly && 'alm-filter-chip--active',
+    <ListSidebar
+      searchPlaceholder="Search targets..."
+      searchValue={search}
+      onSearchChange={setSearch}
+      groupOptions={GROUP_OPTIONS}
+      groupValue={groupBy}
+      onGroupChange={(v) => setGroupBy(v as GroupBy)}
+      sortOptions={SORT_OPTIONS}
+      sortValue={sortBy}
+      onSortChange={(v) => setSortBy(v as SortBy)}
+      filterPills={filterPills}
+      onFilterToggle={handleFilterToggle}
+      itemCount={filtered.length}
+    >
+      {groups.map((group) => (
+        <div key={group.label || '__all'} role="presentation">
+          {group.label && (
+            <div className="alm-list-sidebar__group-header" role="presentation">
+              {group.label}
+            </div>
           )}
-          onClick={() => setCoverageOnly((v) => !v)}
-          aria-pressed={coverageOnly}
-          aria-label="Show only targets with coverage warning"
-        >
-          coverage warning
-        </button>
-        {hasActiveFilters && (
-          <Btn
-            size="sm"
-            variant="ghost"
-            onClick={() => {
-              setKindFilter(new Set());
-              setCoverageOnly(false);
-            }}
-          >
-            Clear
-          </Btn>
-        )}
-      </div>
-
-      {/* Target items */}
-      <div className="alm-target-list__items" role="listbox" aria-label="Targets">
-        {groups.map((group) => (
-          <div key={group.label || '__all'}>
-            {group.label && (
-              <div className="alm-session-list__group-header" role="presentation">
-                {group.label}
-              </div>
-            )}
-            {group.items.map((target) => (
-              <div
-                key={target.id}
-                className={clsx(
-                  'alm-target-list__item',
-                  target.id === selectedId && 'alm-target-list__item--selected',
+          {group.items.map((target) => (
+            <div
+              key={target.id}
+              className={clsx(
+                'alm-list-sidebar__item',
+                target.id === selectedId && 'alm-list-sidebar__item--selected',
+              )}
+              role="option"
+              aria-selected={target.id === selectedId}
+              onClick={() => onSelect(target.id)}
+              onKeyDown={(e) => {
+                if (e.key === 'Enter' || e.key === ' ') {
+                  e.preventDefault();
+                  onSelect(target.id);
+                }
+              }}
+              tabIndex={0}
+            >
+              <div className="alm-list-sidebar__item-row">
+                <span className="alm-list-sidebar__item-name">
+                  {target.name}
+                </span>
+                {isUnresolved(target) && (
+                  <span className="alm-list-sidebar__item-warn" aria-label="Unresolved target">&#x26A0;</span>
                 )}
-                role="option"
-                aria-selected={target.id === selectedId}
-                onClick={() => onSelect(target.id)}
-                onKeyDown={(e) => {
-                  if (e.key === 'Enter' || e.key === ' ') {
-                    e.preventDefault();
-                    onSelect(target.id);
-                  }
-                }}
-                tabIndex={0}
-              >
-                {/* Row 1: name + warning */}
-                <div className="alm-target-list__row">
-                  <span className="alm-target-list__name">
-                    {target.name}
-                  </span>
-                  {isUnresolved(target) && (
-                    <span className="alm-target-list__warn" aria-label="Unresolved target">&#x26A0;</span>
-                  )}
-                  {hasCoverageWarning(target) && !isUnresolved(target) && (
-                    <span className="alm-target-list__warn" aria-label="Coverage warning">&#x26A0;</span>
-                  )}
-                </div>
-
-                {/* Row 2: alias (if present) */}
-                {target.aliases.length > 0 && target.aliases[0] && (
-                  <div className="alm-target-list__alias">{target.aliases[0]}</div>
+                {hasCoverageWarning(target) && !isUnresolved(target) && (
+                  <span className="alm-list-sidebar__item-warn" aria-label="Coverage warning">&#x26A0;</span>
                 )}
-
-                {/* Row 3: stats */}
-                <div className="alm-target-list__meta">
-                  <span>{target.session_count} sess</span>
-                  <span className="alm-target-list__dot" aria-hidden="true" />
-                  <span>{target.total_integration_hours.toFixed(1)}h</span>
-                  <span className="alm-target-list__dot" aria-hidden="true" />
-                  <span>{target.project_count} proj</span>
-                </div>
               </div>
-            ))}
-          </div>
-        ))}
-        {filtered.length === 0 && (
-          <div className="alm-target-list__empty">No targets match your search</div>
-        )}
-      </div>
-
-      {/* New target footer */}
-      <div className="alm-target-list__footer">+ new target</div>
-    </div>
+              {target.aliases.length > 0 && target.aliases[0] && (
+                <div className="alm-list-sidebar__item-alias">{target.aliases[0]}</div>
+              )}
+              <div className="alm-list-sidebar__item-meta">
+                <span>{target.session_count} sess</span>
+                <span className="alm-list-sidebar__item-dot" aria-hidden="true" />
+                <span>{target.total_integration_hours.toFixed(1)}h</span>
+                <span className="alm-list-sidebar__item-dot" aria-hidden="true" />
+                <span>{target.project_count} proj</span>
+              </div>
+            </div>
+          ))}
+        </div>
+      ))}
+      {filtered.length === 0 && (
+        <div className="alm-list-sidebar__empty">No targets match your search</div>
+      )}
+    </ListSidebar>
   );
 }

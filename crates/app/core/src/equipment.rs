@@ -43,10 +43,7 @@ pub async fn list_cameras(pool: &SqlitePool) -> Result<Vec<Camera>, ContractErro
 /// # Errors
 ///
 /// Returns `ContractError` on duplicate or database failure.
-pub async fn create_camera(
-    pool: &SqlitePool,
-    req: &CreateCamera,
-) -> Result<Camera, ContractError> {
+pub async fn create_camera(pool: &SqlitePool, req: &CreateCamera) -> Result<Camera, ContractError> {
     repo::create_camera(pool, req).await.map_err(db_to_contract)
 }
 
@@ -55,10 +52,7 @@ pub async fn create_camera(
 /// # Errors
 ///
 /// Returns `ContractError` if the camera is not found.
-pub async fn update_camera(
-    pool: &SqlitePool,
-    req: &UpdateCamera,
-) -> Result<Camera, ContractError> {
+pub async fn update_camera(pool: &SqlitePool, req: &UpdateCamera) -> Result<Camera, ContractError> {
     repo::update_camera(pool, req).await.map_err(db_to_contract)
 }
 
@@ -98,12 +92,7 @@ pub async fn find_or_create_camera_by_alias(
         .execute(pool)
         .await
         .map_err(|e| {
-            ContractError::new(
-                "internal.database",
-                e.to_string(),
-                ErrorSeverity::Fatal,
-                true,
-            )
+            ContractError::new("internal.database", e.to_string(), ErrorSeverity::Fatal, true)
         })?;
 
     Ok(camera)
@@ -162,9 +151,7 @@ pub async fn find_or_create_telescope_by_alias(
     pool: &SqlitePool,
     alias: &str,
 ) -> Result<Telescope, ContractError> {
-    if let Some(scope) =
-        repo::find_telescope_by_alias(pool, alias).await.map_err(db_to_contract)?
-    {
+    if let Some(scope) = repo::find_telescope_by_alias(pool, alias).await.map_err(db_to_contract)? {
         return Ok(scope);
     }
 
@@ -181,12 +168,7 @@ pub async fn find_or_create_telescope_by_alias(
         .execute(pool)
         .await
         .map_err(|e| {
-            ContractError::new(
-                "internal.database",
-                e.to_string(),
-                ErrorSeverity::Fatal,
-                true,
-            )
+            ContractError::new("internal.database", e.to_string(), ErrorSeverity::Fatal, true)
         })?;
 
     Ok(scope)
@@ -252,10 +234,7 @@ pub async fn list_filters(pool: &SqlitePool) -> Result<Vec<Filter>, ContractErro
 /// # Errors
 ///
 /// Returns `ContractError` on duplicate name or database failure.
-pub async fn create_filter(
-    pool: &SqlitePool,
-    req: &CreateFilter,
-) -> Result<Filter, ContractError> {
+pub async fn create_filter(pool: &SqlitePool, req: &CreateFilter) -> Result<Filter, ContractError> {
     repo::create_filter(pool, req).await.map_err(db_to_contract)
 }
 
@@ -264,10 +243,7 @@ pub async fn create_filter(
 /// # Errors
 ///
 /// Returns `ContractError` if the filter is not found.
-pub async fn update_filter(
-    pool: &SqlitePool,
-    req: &UpdateFilter,
-) -> Result<Filter, ContractError> {
+pub async fn update_filter(pool: &SqlitePool, req: &UpdateFilter) -> Result<Filter, ContractError> {
     repo::update_filter(pool, req).await.map_err(db_to_contract)
 }
 
@@ -305,12 +281,7 @@ pub async fn find_or_create_filter_by_name(
         .execute(pool)
         .await
         .map_err(|e| {
-            ContractError::new(
-                "internal.database",
-                e.to_string(),
-                ErrorSeverity::Fatal,
-                true,
-            )
+            ContractError::new("internal.database", e.to_string(), ErrorSeverity::Fatal, true)
         })?;
 
     Ok(filter)

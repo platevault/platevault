@@ -1,236 +1,168 @@
-import { useState, useEffect, useCallback } from 'react';
-import { useNavigate } from '@tanstack/react-router';
-import { Select } from '@base-ui-components/react/select';
-import { listRoots, registerRoot, startScan } from '@/api/commands';
-import { setPreference } from '@/data/preferences';
-import { Btn, Pill, Box, KV } from '@/ui';
-import { DirPicker } from '@/ui/DirPicker';
-import type { LibraryRoot } from '@/bindings/types';
+import { useState } from 'react';
+import clsx from 'clsx';
+import { Btn, Pill } from '@/ui';
 
 interface DataSourcesProps {
   save: (scope: string, values: Record<string, unknown>) => void;
 }
 
-const CATEGORY_VARIANT: Record<string, 'ghost' | 'ok' | 'warn' | 'info' | 'neutral'> = {
-  raw: 'ghost',
-  calibration: 'ghost',
-  project: 'ghost',
-  inbox: 'ghost',
+type SourceType = 'raw' | 'calibration' | 'project' | 'inbox' | 'archive' | 'overflow';
+
+const TYPE_VARIANT: Record<SourceType, 'ok' | 'info' | 'warn' | 'neutral' | 'ghost' | 'danger'> = {
+  raw: 'ok',
+  calibration: 'info',
+  project: 'neutral',
+  inbox: 'warn',
+  archive: 'ghost',
+  overflow: 'ghost',
 };
 
-const CATEGORIES = ['raw', 'calibration', 'project', 'inbox'] as const;
+interface SourceRoot {
+  id: string;
+  path: string;
+  type: SourceType;
+}
 
-/** Wireframe-accurate data-source roots for fixture mode */
-const FIXTURE_ROOTS: LibraryRoot[] = [
-  { id: 'root-1', path: 'D:\\Astrophotography\\Raw', category: 'raw', online: true, file_count: 84231, last_scanned: '2h ago' },
-  { id: 'root-2', path: 'D:\\Astrophotography\\Calibration', category: 'calibration', online: true, file_count: 12044, last_scanned: '2h ago' },
-  { id: 'root-3', path: 'D:\\Astrophotography\\Projects', category: 'project', online: true, file_count: 38112, last_scanned: '2h ago' },
-  { id: 'root-4', path: 'D:\\Astrophotography\\Inbox', category: 'inbox', online: true, file_count: 1842, last_scanned: '2h ago' },
-  { id: 'root-5', path: '\\\\NAS-2025\\astro\\archive', category: 'inbox', online: false, file_count: 0, last_scanned: undefined },
-  { id: 'root-6', path: 'E:\\AstroOverflow', category: 'raw', online: true, file_count: 7931, last_scanned: '2h ago' },
+const MOCK_ROOTS: SourceRoot[] = [
+  { id: 'r1', path: 'D:\\Astrophotography\\Raw', type: 'raw' },
+  { id: 'r2', path: 'D:\\Astrophotography\\Calibration', type: 'calibration' },
+  { id: 'r3', path: 'D:\\Astrophotography\\Projects', type: 'project' },
+  { id: 'r4', path: 'D:\\Astrophotography\\Inbox', type: 'inbox' },
+  { id: 'r5', path: '\\\\NAS-2025\\astro\\archive', type: 'archive' },
+  { id: 'r6', path: 'E:\\AstroOverflow', type: 'overflow' },
 ];
 
+function makeId() {
+  return `root-${Date.now()}-${Math.random().toString(36).slice(2, 6)}`;
+}
+
 export function DataSources({ save }: DataSourcesProps) {
-  const navigate = useNavigate();
-  const [roots, setRoots] = useState<LibraryRoot[]>([]);
-  const [newPath, setNewPath] = useState('');
-  const [newCategory, setNewCategory] = useState<string>('raw');
-  const [showRestartConfirm, setShowRestartConfirm] = useState(false);
-  const [restarting, setRestarting] = useState(false);
+  const [roots, setRoots] = useState<SourceRoot[]>(MOCK_ROOTS);
+  const [addingPath, setAddingPath] = useState('');
+  const [addingType, setAddingType] = useState<SourceType>('raw');
+  const [showAdd, setShowAdd] = useState(false);
 
-  const handleRestartWizard = useCallback(async () => {
-    setRestarting(true);
-    try {
-      const useMocks = import.meta.env.VITE_USE_MOCKS === 'true';
-      if (!useMocks) {
-        const { commands } = await import('@/bindings/index');
-        const restartResult = await commands.firstrunRestart({ confirm: true });
-        if (restartResult.status !== 'ok') throw new Error('restart failed');
-        const sources: Record<string, Array<{ path: string; scanDepth: string }>> = {
-          raw: [], calibration: [], project: [], inbox: [],
-        };
-        for (const src of restartResult.data.prefilledSources) {
-          if (sources[src.kind]) {
-            sources[src.kind].push({ path: src.path, scanDepth: 'recursive' });
-          }
-        }
-        const existing = localStorage.getItem('alm-setup-wizard-state');
-        const state = existing ? JSON.parse(existing) : {};
-        localStorage.setItem('alm-setup-wizard-state', JSON.stringify({
-          ...state,
-          sources,
-        }));
-      }
-      setPreference('setupCompleted', false);
-      setShowRestartConfirm(false);
-      navigate({ to: '/setup' });
-    } catch {
-      setRestarting(false);
-    }
-  }, [navigate]);
-
-  useEffect(() => {
-    listRoots().then((loaded) => {
-      setRoots(loaded.length > 0 ? loaded : FIXTURE_ROOTS);
-    }).catch(() => {
-      setRoots(FIXTURE_ROOTS);
-    });
-  }, []);
-
-  const totalFiles = roots.reduce(
-    (sum, r) => sum + (typeof r.file_count === 'number' ? r.file_count : 0),
-    0,
-  );
-
-  const handleAddRoot = async () => {
-    if (!newPath) return;
-    const root = await registerRoot({
-      path: newPath,
-      category: newCategory,
-      scanSettings: { followSymlinks: false, excludedPatterns: [] },
-    });
-    setRoots((prev) => [...prev, root]);
-    setNewPath('');
-    save('roots', { roots: [...roots, root].map((r) => r.id) });
+  const handleAdd = () => {
+    if (!addingPath.trim()) return;
+    const newRoot: SourceRoot = {
+      id: makeId(),
+      path: addingPath.trim(),
+      type: addingType,
+    };
+    const updated = [...roots, newRoot];
+    setRoots(updated);
+    setAddingPath('');
+    setShowAdd(false);
+    save('roots', { roots: updated.map((r) => ({ id: r.id, path: r.path, type: r.type })) });
   };
 
-  const handleScan = async (rootId: string) => {
-    await startScan({ root_ids: [rootId] });
+  const handleRemove = (id: string) => {
+    const updated = roots.filter((r) => r.id !== id);
+    setRoots(updated);
+    save('roots', { roots: updated.map((r) => ({ id: r.id, path: r.path, type: r.type })) });
+  };
+
+  const handleReveal = (path: string) => {
+    // Mock: in real app this would call Tauri shell.open
+    console.log('Reveal in explorer:', path);
   };
 
   return (
     <div className="alm-datasources">
-      {/* Section header */}
-      <div className="alm-datasources__section-header">
-        <span className="alm-datasources__section-title">Registered roots</span>
-        <span className="alm-datasources__section-sub">
-          {roots.length} roots &middot; {totalFiles.toLocaleString()} files indexed
-        </span>
-        <Btn size="sm" onClick={handleAddRoot} disabled={!newPath}>
-          + Add root&hellip;
+      <div className="alm-datasources__toolbar">
+        <Btn size="sm" onClick={() => setShowAdd(true)}>
+          Add source folder
         </Btn>
       </div>
+
+      {showAdd && (
+        <div className="alm-datasources__add-form">
+          <div className="alm-datasources__add-row">
+            <input
+              className="alm-input alm-datasources__add-input"
+              value={addingPath}
+              onChange={(e) => setAddingPath(e.target.value)}
+              placeholder="e.g. D:\Astrophotography\Raw"
+              onKeyDown={(e) => {
+                if (e.key === 'Enter') handleAdd();
+                if (e.key === 'Escape') setShowAdd(false);
+              }}
+              autoFocus
+              aria-label="Source folder path"
+            />
+            <select
+              className="alm-select alm-datasources__add-select"
+              value={addingType}
+              onChange={(e) => setAddingType(e.target.value as SourceType)}
+              aria-label="Source type"
+            >
+              <option value="raw">raw</option>
+              <option value="calibration">calibration</option>
+              <option value="project">project</option>
+              <option value="inbox">inbox</option>
+              <option value="archive">archive</option>
+              <option value="overflow">overflow</option>
+            </select>
+            <Btn size="sm" onClick={handleAdd} disabled={!addingPath.trim()}>
+              Add
+            </Btn>
+            <Btn size="sm" variant="ghost" onClick={() => setShowAdd(false)}>
+              Cancel
+            </Btn>
+          </div>
+        </div>
+      )}
 
       <table className="alm-datasources__table">
         <thead>
           <tr>
-            <th style={{ width: 24 }}></th>
             <th>Path</th>
-            <th style={{ width: 110 }}>Category</th>
-            <th style={{ width: 70 }}>State</th>
-            <th style={{ width: 80 }}>Files</th>
-            <th style={{ width: 110 }}>Last scan</th>
-            <th style={{ width: 130 }}></th>
+            <th className="alm-datasources__col-type">Type</th>
+            <th className="alm-datasources__col-actions"></th>
           </tr>
         </thead>
         <tbody>
           {roots.map((root) => (
-            <tr
-              key={root.id}
-              className={!root.online ? 'alm-datasources__row--offline' : undefined}
-            >
+            <tr key={root.id} className="alm-datasources__row">
               <td>
-                {!root.online ? (
-                  <span className="alm-text-warn">&#9888;</span>
-                ) : (
-                  <span style={{ color: 'var(--alm-ok)' }}>&#9679;</span>
-                )}
-              </td>
-              <td style={{ minWidth: 280 }}>
                 <code className="alm-mono">{root.path}</code>
               </td>
               <td>
                 <Pill
-                  label={root.category}
-                  variant={CATEGORY_VARIANT[root.category] ?? 'ghost'}
+                  label={root.type}
+                  variant={TYPE_VARIANT[root.type]}
                   size="sm"
                 />
               </td>
-              <td>
-                {root.online ? (
-                  <Pill label="online" variant="ok" size="sm" />
-                ) : (
-                  <Pill label="offline" variant="danger" size="sm" />
-                )}
-              </td>
-              <td className="alm-mono" style={{ fontSize: 'var(--alm-text-xs)' }}>
-                {root.file_count > 0 ? root.file_count.toLocaleString() : '?'}
-              </td>
-              <td style={{ fontSize: 'var(--alm-text-xs)', color: 'var(--alm-text-muted)' }}>
-                {root.last_scanned ?? 'never'}
-              </td>
-              <td>
-                {!root.online ? (
-                  <Btn size="sm">Reconnect&hellip;</Btn>
-                ) : (
-                  <Btn size="sm" onClick={() => handleScan(root.id)}>
-                    Re-scan
-                  </Btn>
-                )}
+              <td className="alm-datasources__row-actions">
+                <Btn
+                  size="sm"
+                  variant="ghost"
+                  onClick={() => handleReveal(root.path)}
+                  aria-label={`Reveal ${root.path}`}
+                >
+                  Reveal
+                </Btn>
+                <Btn
+                  size="sm"
+                  variant="ghost"
+                  onClick={() => handleRemove(root.id)}
+                  aria-label={`Remove ${root.path}`}
+                >
+                  Remove
+                </Btn>
               </td>
             </tr>
           ))}
+          {roots.length === 0 && (
+            <tr>
+              <td colSpan={3} className="alm-datasources__empty">
+                No source folders registered. Click "Add source folder" to get started.
+              </td>
+            </tr>
+          )}
         </tbody>
       </table>
-
-      {/* Two-column boxes below */}
-      <div className="alm-datasources__boxes">
-        <Box heading="Scan defaults">
-          <KV label="Follow symlinks" value={<><input type="checkbox" /> no</>} />
-          <KV label="Follow junctions" value={<><input type="checkbox" /> no</>} />
-          <KV
-            label="Hashing"
-            value={
-              <select className="alm-select alm-select--sm">
-                <option>lazy (recommended)</option>
-              </select>
-            }
-          />
-          <KV
-            label="Metadata extraction"
-            value={
-              <select className="alm-select alm-select--sm">
-                <option>FITS + XISF + sidecar</option>
-              </select>
-            }
-          />
-        </Box>
-        <Box heading="What happens to new files in the inbox?">
-          <p style={{ fontSize: 'var(--alm-text-xs)', color: 'var(--alm-text-secondary)', margin: 0 }}>
-            Inbox roots are <strong>scanned in place</strong> -- files are not moved or modified.
-            New material appears in the Review queue as session candidates, where you confirm them.
-            They stay where they are on disk; the app just indexes them.
-          </p>
-          <p style={{ fontSize: 'var(--alm-text-xs)', color: 'var(--alm-text-muted)', margin: 0, marginTop: 6 }}>
-            If you want to physically reorganize inbox files into your raw tree, do it through
-            your filesystem -- this app does not move source files.
-          </p>
-        </Box>
-      </div>
-
-      {/* Restart setup wizard */}
-      <div style={{ marginTop: 'var(--alm-space-7)', paddingTop: 'var(--alm-space-5)', borderTop: '1px solid var(--alm-border)' }}>
-        {!showRestartConfirm ? (
-          <Btn size="sm" onClick={() => setShowRestartConfirm(true)}>
-            Restart setup wizard&hellip;
-          </Btn>
-        ) : (
-          <Box>
-            <p style={{ fontSize: 'var(--alm-text-sm)', margin: 0, marginBottom: 'var(--alm-space-3)' }}>
-              This will re-open the first-run setup wizard. Your existing source
-              roots will be prefilled so you can review and edit them.
-            </p>
-            <div style={{ display: 'flex', gap: 'var(--alm-space-3)' }}>
-              <Btn variant="primary" size="sm" onClick={handleRestartWizard} disabled={restarting}>
-                {restarting ? 'Restarting…' : 'Confirm restart'}
-              </Btn>
-              <Btn size="sm" onClick={() => setShowRestartConfirm(false)} disabled={restarting}>
-                Cancel
-              </Btn>
-            </div>
-          </Box>
-        )}
-      </div>
     </div>
   );
 }

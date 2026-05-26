@@ -15,12 +15,7 @@ pub async fn status_summary() -> Result<StatusSummary, String> {
     tracing::debug!("stub: status.summary");
     Ok(StatusSummary {
         inbox_count: 0,
-        library: LibraryStats {
-            sessions: 0,
-            calibration_sets: 0,
-            targets: 0,
-            projects: 0,
-        },
+        library: LibraryStats { sessions: 0, calibration_sets: 0, targets: 0, projects: 0 },
         cleanup_reclaimable_bytes: 0,
         volumes: vec![],
         roots: vec![],

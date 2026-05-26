@@ -48,12 +48,12 @@ pub async fn roots_register(
     );
 
     let kind = match category.as_str() {
-        "light_frames" => SourceKind::LightFrames,
         "dark" => SourceKind::Dark,
         "flat" => SourceKind::Flat,
         "bias" => SourceKind::Bias,
         "project" => SourceKind::Project,
         "inbox" => SourceKind::Inbox,
+        // "light_frames" and any unknown category default to LightFrames.
         _ => SourceKind::LightFrames,
     };
 

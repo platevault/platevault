@@ -35,12 +35,12 @@ fn source_kind_to_str(kind: SourceKind) -> &'static str {
 
 fn str_to_source_kind(s: &str) -> SourceKind {
     match s {
-        "light_frames" => SourceKind::LightFrames,
         "dark" => SourceKind::Dark,
         "flat" => SourceKind::Flat,
         "bias" => SourceKind::Bias,
         "project" => SourceKind::Project,
         "inbox" => SourceKind::Inbox,
+        // "light_frames" and any unknown value default to LightFrames.
         _ => SourceKind::LightFrames,
     }
 }
@@ -260,7 +260,9 @@ pub async fn get_first_run_state(pool: &SqlitePool) -> DbResult<FirstRunStateRes
 
     match row {
         Some((completed_at, last_step)) => Ok(FirstRunStateResponse { completed_at, last_step }),
-        None => Ok(FirstRunStateResponse { completed_at: None, last_step: "source_folders".to_owned() }),
+        None => {
+            Ok(FirstRunStateResponse { completed_at: None, last_step: "source_folders".to_owned() })
+        }
     }
 }
 

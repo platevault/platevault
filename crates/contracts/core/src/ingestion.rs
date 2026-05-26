@@ -3,6 +3,7 @@
 use serde::{Deserialize, Serialize};
 use specta::Type;
 
+#[allow(clippy::struct_excessive_bools)] // IPC DTO mirrors frontend toggle flags
 #[derive(Clone, Debug, Serialize, Deserialize, Type)]
 #[serde(rename_all = "camelCase")]
 pub struct IngestionSettings {
@@ -17,6 +18,7 @@ pub struct IngestionSettings {
     pub default_filter: Option<String>,
 }
 
+#[allow(clippy::struct_excessive_bools)] // IPC DTO mirrors frontend toggle flags
 #[derive(Clone, Debug, Serialize, Deserialize, Type)]
 #[serde(rename_all = "camelCase")]
 pub struct UpdateIngestionSettings {

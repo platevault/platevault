@@ -10,7 +10,8 @@
 //! data until the real persistence layer is wired.
 //!
 //! Spec 030 modules add equipment CRUD, status, cleanup, calibration
-//! tolerances, ingestion settings, and tools commands.
+//! tolerances, ingestion settings, tools, inbox scan, and cleanup scan
+//! commands.
 
 pub mod audit;
 pub mod calibration;
@@ -19,6 +20,7 @@ pub mod cleanup;
 pub mod envelope;
 pub mod equipment;
 pub mod firstrun;
+pub mod inbox;
 pub mod ingestion;
 pub mod lifecycle;
 pub mod native;
