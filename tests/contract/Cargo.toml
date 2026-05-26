@@ -33,6 +33,10 @@ path = "firstrun_restart_test.rs"
 name = "audit_first_run_completed_test"
 path = "audit_first_run_completed_test.rs"
 
+[[test]]
+name = "native_contracts_test"
+path = "native_contracts_test.rs"
+
 [dev-dependencies]
 contracts_core = { path = "../../crates/contracts/core" }
 serde.workspace = true

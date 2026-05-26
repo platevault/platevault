@@ -25,6 +25,7 @@ use crate::commands::lifecycle::{
     lifecycle_ledger_list, lifecycle_transition_apply, lifecycle_transition_preview,
     provenance_read, AppState,
 };
+use crate::commands::native::{native_directory_pick, native_file_pick, native_reveal};
 use crate::commands::plans::{plans_apply, plans_approve, plans_discard, plans_get, plans_list};
 use crate::commands::preferences::{preferences_get, preferences_set};
 use crate::commands::projects::{projects_create_plan, projects_get, projects_list};
@@ -115,6 +116,10 @@ pub fn specta_builder() -> Builder<tauri::Wry> {
             search_global,
             // tour
             tour_complete_step,
+            // native filesystem controls (spec 004)
+            native_directory_pick,
+            native_file_pick,
+            native_reveal,
         ])
 }
 
@@ -132,6 +137,7 @@ pub fn build_app() -> tauri::App {
 
     tauri::Builder::default()
         .plugin(tauri_plugin_dialog::init())
+        .plugin(tauri_plugin_opener::init())
         .invoke_handler(builder.invoke_handler())
         .setup(move |app| {
             builder.mount_events(app);

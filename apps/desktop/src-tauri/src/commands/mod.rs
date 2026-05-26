@@ -14,6 +14,7 @@ pub mod calibration;
 pub mod envelope;
 pub mod firstrun;
 pub mod lifecycle;
+pub mod native;
 pub mod plans;
 pub mod preferences;
 pub mod projects;
