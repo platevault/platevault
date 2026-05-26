@@ -13,7 +13,7 @@
 - contracts/commands.md: ✅
 
 ## Flow remaining
-- [ ] taskstoissues
+- [x] taskstoissues — 109 issues created (#140–#248)
 - [ ] checkpoint.commit (pre-implementation)
 - [ ] agent-assign.assign
 - [ ] agent-assign.validate
