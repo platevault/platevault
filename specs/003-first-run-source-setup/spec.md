@@ -243,8 +243,9 @@ step is required.
 - **FR-014**: On Finish, the wizard MUST set a persistent completion flag and
   navigate the user to the Sessions surface (`/sessions`).
 - **FR-015**: While the wizard is in progress, the working source list MAY
-  be held in volatile UI state and `localStorage` for resilience against
-  refresh, but MUST be promoted to the library database on Finish.
+  be held in volatile UI state and `localStorage` (key
+  `alm-setup-wizard-state`) for resilience against refresh, but MUST be
+  promoted to the library database on Finish.
 - **FR-016**: The index route (`/`) MUST redirect to `/setup` when the
   completion flag is absent and to `/sessions` when present. The gate uses
   DB-first with localStorage cache for synchronous render; the localStorage

@@ -68,7 +68,10 @@ implemented and validated independently.
       `register_source`, `register_source_batch`, `complete_first_run`,
       `restart_first_run`, and `get_first_run_state`. Path validation
       (exists, is_dir, readable) and error mapping to the contract error
-      enum. Detect `path.already.registered` (idempotent — D1) and
+      enum (FR-005). Include unit tests for path validation edge cases:
+      non-existent path, file instead of directory, permission denied,
+      symlink target, Windows long path. Detect
+      `path.already.registered` (idempotent — D1) and
       `path.already.registered.different_kind` (reject — R-1.4).
       `complete_first_run` checks both raw and project kinds present
       (R-Wiz-2). `restart_first_run` clears `completed_at` and returns
@@ -107,7 +110,9 @@ gate sends to `/sessions` on next launch.
       `beforeLoad` guard on the index route that calls `firstrun.state`
       via Tauri and redirects to `/setup` when `completed_at` is null.
       Fall back to `setupCompleted` localStorage preference if the Tauri
-      call fails. Show a loading state during the async check.
+      call fails. Render a loading/pending state (spinner or skeleton)
+      while the async DB check resolves to prevent a flash of the wrong
+      route (FR-016).
 - [ ] T011 [US1] Update `apps/desktop/src/features/setup/SetupPage.tsx`:
       replace the `usePreference('setupCompleted')` guard with a
       DB-backed check via `firstrun.state`. Keep localStorage as cache.
@@ -160,7 +165,10 @@ other two advance freely, and Finish writes `RegisteredSource` rows plus
       `StepProject.tsx`, `StepInbox.tsx`. Each uses the existing
       `DirPicker` component for directory selection. Include category
       explanation copy, Required/Optional badge, and example paths per
-      the spec's US4 acceptance scenarios.
+      the spec's US4 acceptance scenarios. Each step includes an
+      optional scan-depth selector (Recursive / Single-level) as
+      advanced/collapsed disclosure, hidden by default behind an
+      "Advanced" expander on each row (FR-017).
 - [ ] T019 [US2] Add `apps/desktop/src/features/setup/sources-store.ts`
       to centralize the localStorage buffer and the DB-promotion flow.
       The store manages the working source list, deduplication checks,
