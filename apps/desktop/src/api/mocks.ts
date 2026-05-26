@@ -237,6 +237,32 @@ export async function mockInvoke<T>(
       return undefined as T;
     }
 
+    // ---------- First-Run / Batch Commands ----------
+
+    case 'roots.register.batch': {
+      const sources = (_args?.sources as Array<{ kind: string; path: string }>) ?? [];
+      return {
+        results: sources.map((s, i) => ({
+          kind: s.kind,
+          path: s.path,
+          success: true,
+          root: { ...mockRoots[i % mockRoots.length], path: s.path, category: s.kind },
+        })),
+      } as T;
+    }
+    case 'firstrun.complete': {
+      return { success: true } as T;
+    }
+    case 'firstrun.restart': {
+      return {
+        success: true,
+        prefilled_sources: mockRoots.map((r) => ({ kind: r.category, path: r.path })),
+      } as T;
+    }
+    case 'firstrun.state': {
+      return { completed: false } as T;
+    }
+
     default:
       throw new Error(`Unknown mock command: ${cmd}`);
   }
