@@ -241,4 +241,3 @@ export async function flushToDB(sources: SourcesState): Promise<FlushResult> {
     };
   }
 }
-
