@@ -1,16 +1,27 @@
+/// <reference types="@testing-library/jest-dom" />
 /**
  * SetupWizard gating tests (T015).
  *
  * Validates that required steps (Raw, Project) block advancement when empty,
  * optional steps (Calibration, Inbox) advance freely, and duplicate paths
- * within the same kind produce an inline warning.
+ * within the same kind are rejected by the deduplication guard.
  */
-import { render, screen, fireEvent, waitFor, within } from '@testing-library/react';
+import { render, screen, fireEvent, waitFor, act } from '@testing-library/react';
 import { describe, it, expect, beforeEach, vi } from 'vitest';
 
 // ---------------------------------------------------------------------------
-// Module mocks — must be declared before the component import.
+// Controlled dialog mock — tests set `nextDialogPath` before clicking
+// "+ Add folder" so the async open() resolves to the desired path.
 // ---------------------------------------------------------------------------
+let nextDialogPath: string | null = null;
+
+vi.mock('@tauri-apps/plugin-dialog', () => ({
+  open: vi.fn(async () => {
+    const p = nextDialogPath;
+    nextDialogPath = null;
+    return p;
+  }),
+}));
 
 // Mock @tanstack/react-router so useNavigate returns a no-op.
 vi.mock('@tanstack/react-router', () => ({
@@ -21,13 +32,6 @@ vi.mock('@tanstack/react-router', () => ({
 vi.mock('@/api/commands', () => ({
   completeFirstRun: vi.fn().mockResolvedValue({ success: true }),
   registerRoot: vi.fn().mockResolvedValue({ id: 'mock-root', path: '' }),
-}));
-
-// Mock @tauri-apps/plugin-dialog — the AddFolderButton dynamic import would
-// fail in jsdom. Returning a rejected promise forces the fallback to
-// window.prompt, which we stub per-test.
-vi.mock('@tauri-apps/plugin-dialog', () => ({
-  open: vi.fn().mockRejectedValue(new Error('no tauri')),
 }));
 
 // Mock @tauri-apps/api/core to prevent any accidental live invoke.
@@ -77,23 +81,23 @@ function getContinueButton(): HTMLElement {
   return match;
 }
 
-/** Simulate adding a folder via the window.prompt fallback path. */
+/**
+ * Simulate adding a folder by setting the controlled dialog path and
+ * clicking the "+ Add folder" button.
+ */
 async function addFolder(path: string) {
-  // Stub window.prompt to return the desired path (the AddFolderButton
-  // falls back to prompt when the Tauri dialog import fails).
-  const promptSpy = vi.spyOn(window, 'prompt').mockReturnValueOnce(path);
+  // Set the path that the mocked dialog.open() will resolve with.
+  nextDialogPath = path;
 
   // Find and click the "+ Add folder..." button visible on the current step.
   const addBtn = screen.getByRole('button', { name: /add folder/i });
-  fireEvent.click(addBtn);
 
-  // The prompt fallback is synchronous in the catch branch, but the handler
-  // is async (it awaits the dynamic import first). Give React a tick.
-  await waitFor(() => {
-    expect(promptSpy).toHaveBeenCalled();
+  await act(async () => {
+    fireEvent.click(addBtn);
+    // The handleChoose function is async — give it a microtask tick to
+    // resolve the dynamic import and call onAdd.
+    await new Promise((r) => setTimeout(r, 0));
   });
-
-  promptSpy.mockRestore();
 }
 
 // ---------------------------------------------------------------------------
@@ -102,10 +106,8 @@ async function addFolder(path: string) {
 
 beforeEach(() => {
   // Clear all wizard and preference state between tests.
-  // Use window.localStorage explicitly because Node 22+ exposes an undefined
-  // globalThis.localStorage unless --localstorage-file is provided, which
-  // shadows the jsdom-provided implementation.
   window.localStorage.clear();
+  nextDialogPath = null;
 });
 
 // ---------------------------------------------------------------------------
@@ -278,8 +280,7 @@ describe('SetupWizard step gating', () => {
     // once and the folder count should remain at 1 (the duplicate was rejected
     // by the checkDeduplication guard in makeSourceHandlers).
     await waitFor(() => {
-      // The path text appears once as the entry + once in examples (different
-      // path so only once here). Verify exactly one entry row exists.
+      // The path text appears exactly once (the entry row).
       const pathElements = screen.getAllByText('/home/user/astrophoto/raw');
       expect(pathElements).toHaveLength(1);
     });

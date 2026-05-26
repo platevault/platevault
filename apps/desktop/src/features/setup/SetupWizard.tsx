@@ -175,9 +175,9 @@ export function SetupWizard() {
         return;
       }
 
-      // Server-side validation (T020)
-      if (!isMockMode) {
-        const validationError = await validatePath(path, kind);
+      // Client-side validation (T020)
+      {
+        const validationError = validatePath(state.sources, path, kind);
         if (validationError) {
           // Show error inline but still add the path so user can see and remove it
           setState((prev) => ({

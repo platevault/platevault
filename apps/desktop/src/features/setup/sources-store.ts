@@ -219,14 +219,13 @@ export async function flushToDB(sources: SourcesState): Promise<FlushResult> {
       })),
     });
 
-    const results: FlushRowResult[] = allSources.map((source, i) => {
-      const item = batchResult.items?.[i];
-      if (!item || item.status === 'success') {
-        return { kind: source.kind, path: source.path, success: true };
+    const results: FlushRowResult[] = batchResult.results.map((item) => {
+      if (item.success) {
+        return { kind: item.kind as SourceKind, path: item.path, success: true };
       }
       const errorCode = item.error ?? 'unknown';
       const message = ERROR_MESSAGES[errorCode] ?? `Registration failed: ${errorCode}`;
-      return { kind: source.kind, path: source.path, success: false, error: message };
+      return { kind: item.kind as SourceKind, path: item.path, success: false, error: message };
     });
 
     return { results, allSucceeded: results.every((r) => r.success) };
