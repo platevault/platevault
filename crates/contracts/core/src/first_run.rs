@@ -6,6 +6,8 @@
 use serde::{Deserialize, Serialize};
 use specta::Type;
 
+use crate::JsonAny;
+
 // ── Enums ───────────────────────────────────────────────────────────────────
 
 /// Kind of a registered source directory.
@@ -100,7 +102,7 @@ pub struct BatchItem {
     #[serde(skip_serializing_if = "Option::is_none")]
     pub error: Option<String>,
     #[serde(skip_serializing_if = "Option::is_none")]
-    pub error_detail: Option<serde_json::Value>,
+    pub error_detail: Option<JsonAny>,
 }
 
 /// Response payload for `firstrun.complete`.

@@ -12,6 +12,7 @@
 pub mod audit;
 pub mod calibration;
 pub mod envelope;
+pub mod firstrun;
 pub mod lifecycle;
 pub mod plans;
 pub mod preferences;

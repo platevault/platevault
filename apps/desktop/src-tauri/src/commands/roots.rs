@@ -1,12 +1,17 @@
-//! Spec 029 root/scan/equipment stubs exposed to the Tauri webview.
+//! Root/scan/equipment commands exposed to the Tauri webview.
 //!
-//! Stub implementations returning hardcoded fixture data matching the mock
-//! layer until the real persistence layer is wired.
+//! `roots.register` delegates to the real `app_core::first_run` use case
+//! (spec 003). Remaining commands are stubs returning fixture data until
+//! the real persistence layer is wired.
 
+use contracts_core::first_run::{RegisterSourceRequest, RegisterSourceResponse, ScanDepth, SourceKind};
 use contracts_core::roots::{
     Equipment, IpcOperationHandle, LibraryRoot, RemapSample, RemapVerification, RootCategory,
 };
 use contracts_core::JsonAny;
+use tauri::State;
+
+use crate::commands::lifecycle::AppState;
 
 /// `roots.list` — returns all registered library roots.
 ///
@@ -21,32 +26,51 @@ pub async fn roots_list() -> Result<Vec<LibraryRoot>, String> {
 
 /// `roots.register` — register a new library root.
 ///
+/// Delegates to `app_core::first_run::register_source` for path validation,
+/// duplicate detection, and persistence. The `scan_settings` parameter is
+/// reserved for future scan configuration; currently only `scanDepth` is
+/// extracted.
+///
 /// # Errors
-/// Returns `Err(String)` on failure; the stub never fails.
+/// Returns `Err(String)` on path validation failure, duplicate, or DB error.
 #[tauri::command]
 #[specta::specta(rename = "roots.register")]
 pub async fn roots_register(
+    state: State<'_, AppState>,
     path: String,
     category: String,
     scan_settings: JsonAny,
-) -> Result<LibraryRoot, String> {
-    tracing::debug!(
-        "stub: roots.register path={path} category={category} scan_settings={scan_settings:?}"
-    );
-    let cat = match category.as_str() {
-        "calibration" => RootCategory::Calibration,
-        "project" => RootCategory::Project,
-        "inbox" => RootCategory::Inbox,
-        _ => RootCategory::Raw,
+) -> Result<RegisterSourceResponse, String> {
+    tracing::debug!("roots.register path={path} category={category} scan_settings={scan_settings:?}");
+
+    let kind = match category.as_str() {
+        "calibration" => SourceKind::Calibration,
+        "project" => SourceKind::Project,
+        "inbox" => SourceKind::Inbox,
+        _ => SourceKind::Raw,
     };
-    Ok(LibraryRoot {
-        id: "root-new-001".to_owned(),
+
+    // Extract scan_depth from scan_settings if provided.
+    let scan_depth = scan_settings
+        .0
+        .get("scanDepth")
+        .and_then(|v| v.as_str())
+        .map(|s| match s {
+            "single" => ScanDepth::Single,
+            _ => ScanDepth::Recursive,
+        })
+        .unwrap_or(ScanDepth::Recursive);
+
+    let req = RegisterSourceRequest {
+        kind,
         path,
-        category: cat,
-        online: true,
-        file_count: 0,
-        last_scanned: None,
-    })
+        kind_subtype: None,
+        scan_depth,
+    };
+
+    app_core::first_run::register_source(state.repo.pool(), &req)
+        .await
+        .map_err(|e| e.message)
 }
 
 /// `roots.remap` — preview a root path remap.

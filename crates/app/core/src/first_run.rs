@@ -11,7 +11,7 @@ use contracts_core::first_run::{
     RegisterSourceBatchRequest, RegisterSourceBatchResponse, RegisterSourceRequest,
     RegisterSourceResponse, SourceKind,
 };
-use contracts_core::{ContractError, ErrorSeverity};
+use contracts_core::{ContractError, ErrorSeverity, JsonAny};
 use persistence_db::repositories::first_run as repo;
 use sqlx::SqlitePool;
 
@@ -171,7 +171,7 @@ pub async fn register_source_batch(
                 status: ItemStatus::Failure,
                 source_id: None,
                 error: Some(e.code.clone()),
-                error_detail: Some(serde_json::json!({ "message": e.message })),
+                error_detail: Some(JsonAny::new(serde_json::json!({ "message": e.message }))),
             });
         } else if let Err(e) = check_duplicate(pool, &source.path, source.kind).await {
             items.push(BatchItem {
@@ -179,7 +179,7 @@ pub async fn register_source_batch(
                 status: ItemStatus::Failure,
                 source_id: None,
                 error: Some(e.code.clone()),
-                error_detail: Some(serde_json::json!({ "message": e.message })),
+                error_detail: Some(JsonAny::new(serde_json::json!({ "message": e.message }))),
             });
         } else {
             valid_sources.push((index, source));

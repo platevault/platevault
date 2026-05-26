@@ -200,10 +200,22 @@ export const commands = {
 	/**
 	 *  `roots.register` — register a new library root.
 	 * 
+	 *  Delegates to `app_core::first_run::register_source` for path validation,
+	 *  duplicate detection, and persistence. The `scan_settings` parameter is
+	 *  reserved for future scan configuration; currently only `scanDepth` is
+	 *  extracted.
+	 * 
 	 *  # Errors
-	 *  Returns `Err(String)` on failure; the stub never fails.
+	 *  Returns `Err(String)` on path validation failure, duplicate, or DB error.
 	 */
-	rootsRegister: (path: string, category: string, scanSettings: unknown) => typedError<LibraryRoot_Serialize, string>(__TAURI_INVOKE("roots.register", { path, category, scanSettings })),
+	rootsRegister: (path: string, category: string, scanSettings: unknown) => typedError<RegisterSourceResponse, string>(__TAURI_INVOKE("roots.register", { path, category, scanSettings })),
+	/**
+	 *  `roots.register.batch` — register multiple source directories at once.
+	 * 
+	 *  # Errors
+	 *  Returns `Err(String)` on catastrophic failure; per-item errors are in the response.
+	 */
+	rootsRegisterBatch: (request: RegisterSourceBatchRequest_Deserialize) => typedError<RegisterSourceBatchResponse_Serialize, string>(__TAURI_INVOKE("roots.register.batch", { request })),
 	/**
 	 *  `roots.remap` — preview a root path remap.
 	 * 
@@ -232,6 +244,29 @@ export const commands = {
 	 *  Returns `Err(String)` on failure; the stub never fails.
 	 */
 	equipmentList: () => typedError<Equipment[], string>(__TAURI_INVOKE("equipment.list")),
+	/**
+	 *  `firstrun.state` — get the current first-run wizard state.
+	 * 
+	 *  # Errors
+	 *  Returns `Err(String)` on database failure.
+	 */
+	firstrunState: () => typedError<FirstRunStateResponse_Serialize, string>(__TAURI_INVOKE("firstrun.state")),
+	/**
+	 *  `firstrun.complete` — mark the first-run wizard as complete.
+	 * 
+	 *  Requires at least one raw source and one project source to be registered.
+	 * 
+	 *  # Errors
+	 *  Returns `Err(String)` if preconditions are not met or on database failure.
+	 */
+	firstrunComplete: () => typedError<FirstRunCompleteResponse, string>(__TAURI_INVOKE("firstrun.complete")),
+	/**
+	 *  `firstrun.restart` — restart the first-run wizard, returning existing sources.
+	 * 
+	 *  # Errors
+	 *  Returns `Err(String)` on database failure.
+	 */
+	firstrunRestart: () => typedError<FirstRunRestartResponse, string>(__TAURI_INVOKE("firstrun.restart")),
 	/**
 	 *  `settings.get` — returns settings for a given scope.
 	 * 
@@ -394,6 +429,30 @@ export type AuditListResponse_Serialize = {
 
 /**  Outcome of an audited action. */
 export type AuditOutcome = "applied" | "ok" | "refused" | "failed" | "paused";
+
+/**  Individual item result within a batch registration. */
+export type BatchItem = BatchItem_Serialize | BatchItem_Deserialize;
+
+/**  Individual item result within a batch registration. */
+export type BatchItem_Deserialize = {
+	index: number,
+	status: ItemStatus,
+	sourceId: string | null,
+	error: string | null,
+	errorDetail: unknown | null,
+};
+
+/**  Individual item result within a batch registration. */
+export type BatchItem_Serialize = {
+	index: number,
+	status: ItemStatus,
+	sourceId?: string | null,
+	error?: string | null,
+	errorDetail?: unknown | null,
+};
+
+/**  Overall batch operation status. */
+export type BatchStatus = "success" | "partial" | "failure";
 
 /**  Calendar data for the sessions calendar view. */
 export type CalendarData = {
@@ -652,6 +711,31 @@ export type FilesystemPlan_Serialize = {
 	appliedAt?: string | null,
 };
 
+/**  Response payload for `firstrun.complete`. */
+export type FirstRunCompleteResponse = {
+	completedAt: string,
+};
+
+/**  Response payload for `firstrun.restart`. */
+export type FirstRunRestartResponse = {
+	prefilledSources: RegisterSourceResponse[],
+};
+
+/**  Response payload for `firstrun.state`. */
+export type FirstRunStateResponse = FirstRunStateResponse_Serialize | FirstRunStateResponse_Deserialize;
+
+/**  Response payload for `firstrun.state`. */
+export type FirstRunStateResponse_Deserialize = {
+	completedAt: string | null,
+	lastStep: string,
+};
+
+/**  Response payload for `firstrun.state`. */
+export type FirstRunStateResponse_Serialize = {
+	completedAt?: string | null,
+	lastStep: string,
+};
+
 /**  A group of frames within a session (per-filter breakdown). */
 export type Frameset = {
 	filter: string,
@@ -688,6 +772,9 @@ export type IpcOperationHandle = {
 	operationId: string,
 	kind: string,
 };
+
+/**  Per-item status within a batch operation. */
+export type ItemStatus = "success" | "failure";
 
 /**  JSON-friendly ledger filter mirrored to TypeScript via specta. */
 export type LedgerFilterDto = {
@@ -1298,6 +1385,61 @@ export type ProvenanceReadResponse_Serialize = {
 
 export type ProvenanceResponseStatus = "success" | "error";
 
+/**  Request payload for `roots.register.batch`. */
+export type RegisterSourceBatchRequest = RegisterSourceBatchRequest_Serialize | RegisterSourceBatchRequest_Deserialize;
+
+/**  Request payload for `roots.register.batch`. */
+export type RegisterSourceBatchRequest_Deserialize = {
+	sources: RegisterSourceRequest_Deserialize[],
+};
+
+/**  Request payload for `roots.register.batch`. */
+export type RegisterSourceBatchRequest_Serialize = {
+	sources: RegisterSourceRequest_Serialize[],
+};
+
+/**  Response payload for `roots.register.batch`. */
+export type RegisterSourceBatchResponse = RegisterSourceBatchResponse_Serialize | RegisterSourceBatchResponse_Deserialize;
+
+/**  Response payload for `roots.register.batch`. */
+export type RegisterSourceBatchResponse_Deserialize = {
+	status: BatchStatus,
+	items: BatchItem_Deserialize[],
+};
+
+/**  Response payload for `roots.register.batch`. */
+export type RegisterSourceBatchResponse_Serialize = {
+	status: BatchStatus,
+	items: BatchItem_Serialize[],
+};
+
+/**  Request payload for `roots.register`. */
+export type RegisterSourceRequest = RegisterSourceRequest_Serialize | RegisterSourceRequest_Deserialize;
+
+/**  Request payload for `roots.register`. */
+export type RegisterSourceRequest_Deserialize = {
+	kind: SourceKind,
+	path: string,
+	kindSubtype: string | null,
+	scanDepth: ScanDepth,
+};
+
+/**  Request payload for `roots.register`. */
+export type RegisterSourceRequest_Serialize = {
+	kind: SourceKind,
+	path: string,
+	kindSubtype?: string | null,
+	scanDepth: ScanDepth,
+};
+
+/**  Response payload for `roots.register`. */
+export type RegisterSourceResponse = {
+	sourceId: string,
+	kind: SourceKind,
+	path: string,
+	createdAt: string,
+};
+
 /**  A sample path match result within a remap verification. */
 export type RemapSample = {
 	relativePath: string,
@@ -1347,6 +1489,9 @@ export type ReviewItem_Serialize = {
 
 /**  Category of a library root directory. */
 export type RootCategory = "raw" | "calibration" | "project" | "inbox";
+
+/**  Scan depth strategy for a registered source. */
+export type ScanDepth = "recursive" | "single";
 
 /**  A single search result from global search. */
 export type SearchResult = SearchResult_Serialize | SearchResult_Deserialize;
@@ -1475,6 +1620,9 @@ export type SettingsData = {
 	scope: string,
 	values: unknown,
 };
+
+/**  Kind of a registered source directory. */
+export type SourceKind = "raw" | "calibration" | "project" | "inbox";
 
 /**  Map of calibration frame roles to file paths within a project. */
 export type SourceMap = {
