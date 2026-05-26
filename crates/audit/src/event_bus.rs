@@ -66,3 +66,13 @@ pub struct LifecycleTransitionApplied {
 }
 
 pub const TOPIC_LIFECYCLE_TRANSITION_APPLIED: &str = "lifecycle.transition.applied";
+
+/// Payload for the `first_run.completed` topic (spec 003).
+#[derive(Clone, Debug, Serialize, Deserialize, JsonSchema, Type)]
+#[serde(rename_all = "camelCase")]
+pub struct FirstRunCompleted {
+    pub completed_at: String,
+    pub source_count: usize,
+}
+
+pub const TOPIC_FIRST_RUN_COMPLETED: &str = "first_run.completed";
