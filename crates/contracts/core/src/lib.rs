@@ -3,6 +3,7 @@
 pub mod audit;
 pub mod calibration;
 pub mod enums;
+pub mod first_run;
 pub mod json_any;
 pub mod lifecycle;
 pub mod plans;
