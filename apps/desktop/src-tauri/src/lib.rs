@@ -18,6 +18,9 @@ use crate::commands::audit::{audit_export, audit_list};
 use crate::commands::calibration::{
     calibration_masters_get, calibration_masters_list, calibration_matches,
 };
+use crate::commands::firstrun::{
+    firstrun_complete, firstrun_restart, firstrun_state, roots_register_batch,
+};
 use crate::commands::lifecycle::{
     lifecycle_ledger_list, lifecycle_transition_apply, lifecycle_transition_preview,
     provenance_read, AppState,
@@ -93,10 +96,15 @@ pub fn specta_builder() -> Builder<tauri::Wry> {
             // roots & scan & equipment
             roots_list,
             roots_register,
+            roots_register_batch,
             roots_remap,
             roots_remap_apply,
             scan_start,
             equipment_list,
+            // first-run wizard (spec 003)
+            firstrun_state,
+            firstrun_complete,
+            firstrun_restart,
             // settings
             settings_get,
             settings_update,

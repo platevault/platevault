@@ -23,6 +23,11 @@ function findSchemas(dir) {
 const SPEC_CONTRACT_ALLOWLIST = [
   "002-data-lifecycle-state-model/contracts/lifecycle.transition.json",
   "002-data-lifecycle-state-model/contracts/provenance.read.json",
+  "003-first-run-source-setup/contracts/roots.register.json",
+  "003-first-run-source-setup/contracts/roots.register.batch.json",
+  "003-first-run-source-setup/contracts/firstrun.complete.json",
+  "003-first-run-source-setup/contracts/firstrun.restart.json",
+  "003-first-run-source-setup/contracts/audit.first_run.completed.json",
 ];
 
 function findSpecContracts() {

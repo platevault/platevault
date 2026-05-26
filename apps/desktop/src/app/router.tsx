@@ -8,6 +8,7 @@ import {
   Outlet,
 } from '@tanstack/react-router';
 import { Shell } from './Shell';
+import { getPreferences } from '@/data/preferences';
 
 // Root route — bare Outlet so setup can render without the shell
 const rootRoute = createRootRoute({
@@ -196,11 +197,34 @@ const setupRoute = createRoute({
   ),
 });
 
-// --- Index redirect ---
+// --- Index redirect (first-run gate) ---
+
+async function checkFirstRunComplete(): Promise<boolean> {
+  const prefs = getPreferences();
+  if (prefs.setupCompleted) return true;
+
+  const useMocks = import.meta.env.VITE_USE_MOCKS === 'true';
+  if (useMocks) return !!prefs.setupCompleted;
+
+  try {
+    const { commands } = await import('@/bindings/index');
+    const result = await commands.firstrunState();
+    if (result.status === 'ok') return result.data.completedAt !== null;
+    return !!prefs.setupCompleted;
+  } catch {
+    return !!prefs.setupCompleted;
+  }
+}
 
 const indexRoute = createRoute({
   getParentRoute: () => shellRoute,
   path: '/',
+  beforeLoad: async () => {
+    const complete = await checkFirstRunComplete();
+    if (!complete) {
+      throw redirect({ to: '/setup' });
+    }
+  },
   component: lazyRouteComponent(
     () => import('@/features/sessions/SessionsPage'),
     'SessionsPage',

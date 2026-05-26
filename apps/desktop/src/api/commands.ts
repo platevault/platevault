@@ -196,7 +196,7 @@ export async function updateSettings(args: {
 export async function registerRoot(args: {
   path: string;
   category: string;
-  scan_settings: Record<string, unknown>;
+  scanSettings: Record<string, unknown>;
 }): Promise<LibraryRoot> {
   return invoke<LibraryRoot>('roots.register', args);
 }
@@ -230,4 +230,55 @@ export async function setPreference(args: {
 
 export async function completeTourStep(args: { step: string }): Promise<void> {
   return invoke<void>('tour.complete_step', args);
+}
+
+// ---------- First-Run / Batch Commands ----------
+
+export interface BatchSourceEntry {
+  kind: string;
+  path: string;
+  scan_depth?: string;
+}
+
+export interface BatchRegisterResult {
+  results: Array<{
+    kind: string;
+    path: string;
+    success: boolean;
+    root?: LibraryRoot;
+    error?: string;
+  }>;
+}
+
+export interface FirstRunState {
+  completed: boolean;
+  completed_at?: string;
+}
+
+export interface FirstRunCompleteResult {
+  success: boolean;
+  missing?: string[];
+}
+
+export interface FirstRunRestartResult {
+  success: boolean;
+  prefilled_sources?: Array<{ kind: string; path: string }>;
+}
+
+export async function registerRootBatch(args: {
+  sources: BatchSourceEntry[];
+}): Promise<BatchRegisterResult> {
+  return invoke<BatchRegisterResult>('roots.register.batch', args);
+}
+
+export async function completeFirstRun(): Promise<FirstRunCompleteResult> {
+  return invoke<FirstRunCompleteResult>('firstrun.complete');
+}
+
+export async function restartFirstRun(): Promise<FirstRunRestartResult> {
+  return invoke<FirstRunRestartResult>('firstrun.restart', { request: { confirm: true } });
+}
+
+export async function getFirstRunState(): Promise<FirstRunState> {
+  return invoke<FirstRunState>('firstrun.state');
 }

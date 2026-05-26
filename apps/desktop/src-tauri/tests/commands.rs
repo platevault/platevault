@@ -32,7 +32,7 @@ use desktop_shell::commands::preferences::{preferences_get, preferences_set};
 use desktop_shell::commands::projects::{projects_create_plan, projects_get, projects_list};
 use desktop_shell::commands::review::review_queue;
 use desktop_shell::commands::roots::{
-    equipment_list, roots_list, roots_register, roots_remap, roots_remap_apply, scan_start,
+    equipment_list, roots_list, roots_remap, roots_remap_apply, scan_start,
 };
 use desktop_shell::commands::search::search_global;
 use desktop_shell::commands::sessions::{
@@ -242,11 +242,26 @@ async fn stub_roots_list() {
     assert!(!res.unwrap().is_empty());
 }
 
+// `roots_register` now requires `State<'_, AppState>` (spec 003 real impl).
+// Tested at the use-case layer below alongside other stateful commands.
+
 #[tokio::test]
-async fn stub_roots_register() {
-    let settings = contracts_core::JsonAny::from(serde_json::json!({}));
-    let res = roots_register("/test/path".to_owned(), "raw".to_owned(), settings).await;
-    assert!(res.is_ok(), "roots_register failed: {res:?}");
+async fn roots_register_via_use_case() {
+    let db = Database::in_memory().await.expect("in-memory database");
+    db.migrate().await.expect("run migrations");
+
+    let req = contracts_core::first_run::RegisterSourceRequest {
+        kind: contracts_core::first_run::SourceKind::Raw,
+        path: "/tmp".to_owned(),
+        kind_subtype: None,
+        scan_depth: contracts_core::first_run::ScanDepth::Recursive,
+    };
+
+    let resp = app_core::first_run::register_source(db.pool(), &req).await;
+    assert!(resp.is_ok(), "register_source failed: {resp:?}");
+    let resp = resp.unwrap();
+    assert_eq!(resp.kind, contracts_core::first_run::SourceKind::Raw);
+    assert_eq!(resp.path, "/tmp");
 }
 
 #[tokio::test]

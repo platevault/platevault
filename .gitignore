@@ -311,6 +311,11 @@ apps/desktop/src-tauri/gen/
 # APM dependencies
 apm_modules/
 
+# Spec Kit Memory optimizer cache
+.spec-kit-memory/
+.specify/extensions/memory-md/node_modules/
+.specify/extensions/memory-md/dist/
+
 # Serena project configuration
 !.serena/
 !.serena/project.yml
@@ -342,3 +347,4 @@ apps/desktop/playwright-report/
 /.gitmodules
 /.ripgreprc
 /.idea/
+.idea

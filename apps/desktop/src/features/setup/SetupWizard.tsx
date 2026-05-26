@@ -3,40 +3,68 @@ import { useNavigate } from '@tanstack/react-router';
 import { WizardShell } from '@/ui/WizardShell';
 import { Btn } from '@/ui/Btn';
 import { setPreference } from '@/data/preferences';
-import { registerRoot, startScan } from '@/api/commands';
+import { completeFirstRun } from '@/api/commands';
 import {
   StepWelcome,
-  StepSources,
+  StepRaw,
+  StepCalibration,
+  StepProject,
+  StepInbox,
+  StepDetectTools,
   StepCatalogs,
-  StepScan,
   StepConfirm,
   DEFAULT_CATALOG_SETTINGS,
-  DEFAULT_SCAN_SETTINGS,
 } from './steps';
-import type { SourceCategory, CatalogSettings, ScanSettings } from './steps';
+import type { CatalogSettings } from './steps';
+import type { SourcesState, SourceKind, ScanDepth } from './sources-store';
+import {
+  loadSources,
+  saveSources,
+  addSource,
+  removeSource,
+  checkDeduplication,
+  validatePath,
+  flushToDB,
+} from './sources-store';
 
 const STORAGE_KEY = 'alm-setup-wizard-state';
 
 interface WizardState {
   currentStep: number;
-  categories: SourceCategory[];
+  sources: SourcesState;
   catalogSettings: CatalogSettings;
-  scanSettings: ScanSettings;
 }
 
-const DEFAULT_CATEGORIES: SourceCategory[] = [
-  { key: 'raw', label: 'Raw sources', note: 'where light frames live', required: true, paths: [], estimates: [] },
-  { key: 'calibration', label: 'Calibration sources', note: 'darks, flats, biases', required: false, paths: [], estimates: [] },
-  { key: 'project', label: 'Project sources', note: 'processing projects', required: true, paths: [], estimates: [] },
-  { key: 'inbox', label: 'Inbox sources', note: 'new / unprocessed', required: false, paths: [], estimates: [] },
-];
-
 const STEPS = [
-  { label: 'Welcome', heading: 'Welcome to Astro Library Manager', description: '' },
   {
-    label: 'Sources',
-    heading: 'Where does your astrophotography data live?',
-    description: 'Add the folders the app should index. Nothing is moved or modified. You can add more later.',
+    label: 'Welcome',
+    heading: 'Welcome to Astro Library Manager',
+    description: '',
+  },
+  {
+    label: 'Raw',
+    heading: 'Where are your raw frames?',
+    description: 'Add the folders where your light frames, darks, flats, and biases are stored.',
+  },
+  {
+    label: 'Calibration',
+    heading: 'Calibration masters',
+    description: 'Add folders containing your master calibration frames. You can skip this step.',
+  },
+  {
+    label: 'Project',
+    heading: 'Project folders',
+    description: 'Add folders where processing projects and output files will live.',
+  },
+  {
+    label: 'Inbox',
+    heading: 'Inbox / watched folders',
+    description: 'Add folders for newly captured data. You can skip this step.',
+  },
+  {
+    label: 'Tools',
+    heading: 'Detect processing tools',
+    description: 'The app can detect installed astrophotography processing tools.',
   },
   {
     label: 'Catalogs',
@@ -44,12 +72,7 @@ const STEPS = [
     description: 'Choose which astronomical catalogs to use for resolving object names in your files.',
   },
   {
-    label: 'Scan settings',
-    heading: 'Scan & discovery',
-    description: 'Configure how the initial library scan groups frames, resolves targets, and discovers calibration data.',
-  },
-  {
-    label: 'Confirm',
+    label: 'Finish',
     heading: 'Ready to go',
     description: 'Review your configuration before starting the initial scan.',
   },
@@ -60,23 +83,26 @@ function loadWizardState(): WizardState {
     const raw = localStorage.getItem(STORAGE_KEY);
     if (raw) {
       const parsed = JSON.parse(raw);
-      if (Array.isArray(parsed?.categories) && parsed.categories.length > 0) {
-        return {
-          currentStep: parsed.currentStep ?? 0,
-          categories: parsed.categories,
-          catalogSettings: parsed.catalogSettings ?? DEFAULT_CATALOG_SETTINGS,
-          scanSettings: parsed.scanSettings ?? DEFAULT_SCAN_SETTINGS,
-        };
-      }
+      return {
+        currentStep: parsed.currentStep ?? 0,
+        sources: parsed.sources && typeof parsed.sources === 'object'
+          ? {
+              raw: Array.isArray(parsed.sources.raw) ? parsed.sources.raw : [],
+              calibration: Array.isArray(parsed.sources.calibration) ? parsed.sources.calibration : [],
+              project: Array.isArray(parsed.sources.project) ? parsed.sources.project : [],
+              inbox: Array.isArray(parsed.sources.inbox) ? parsed.sources.inbox : [],
+            }
+          : loadSources(),
+        catalogSettings: parsed.catalogSettings ?? DEFAULT_CATALOG_SETTINGS,
+      };
     }
   } catch {
     // corrupt or stale state -- start fresh
   }
   return {
     currentStep: 0,
-    categories: DEFAULT_CATEGORIES,
+    sources: loadSources(),
     catalogSettings: DEFAULT_CATALOG_SETTINGS,
-    scanSettings: DEFAULT_SCAN_SETTINGS,
   };
 }
 
@@ -100,62 +126,143 @@ export function SetupWizard() {
   const navigate = useNavigate();
   const [state, setState] = useState<WizardState>(loadWizardState);
   const [isSubmitting, setIsSubmitting] = useState(false);
+  const [errors, setErrors] = useState<Record<SourceKind, Record<number, string>>>({
+    raw: {},
+    calibration: {},
+    project: {},
+    inbox: {},
+  });
 
   // Persist wizard progress on every state change
   useEffect(() => {
     saveWizardState(state);
+    saveSources(state.sources);
   }, [state]);
 
   const goTo = useCallback((step: number) => {
     setState((prev) => ({ ...prev, currentStep: step }));
   }, []);
 
-  const handleCategoriesChange = useCallback((categories: SourceCategory[]) => {
-    setState((prev) => ({ ...prev, categories }));
-  }, []);
-
   const handleCatalogSettingsChange = useCallback((catalogSettings: CatalogSettings) => {
     setState((prev) => ({ ...prev, catalogSettings }));
   }, []);
 
-  const handleScanSettingsChange = useCallback((scanSettings: ScanSettings) => {
-    setState((prev) => ({ ...prev, scanSettings }));
-  }, []);
+  const isMockMode = import.meta.env.VITE_USE_MOCKS === 'true';
 
-  // Derived summary counts
-  const { totalFolders, totalEstimate } = useMemo(() => {
-    let folders = 0;
-    let estimate = 0;
-    for (const cat of state.categories) {
-      for (let i = 0; i < cat.paths.length; i++) {
-        if (cat.paths[i]) {
-          folders++;
-          estimate += cat.estimates[i] || 0;
+  // --- Source management per kind ---
+  const makeSourceHandlers = useCallback((kind: SourceKind) => ({
+    onAdd: async (path: string) => {
+      // Deduplication check
+      const dedup = checkDeduplication(state.sources, kind, path);
+      if (dedup.crossKindConflict) {
+        setErrors((prev) => ({
+          ...prev,
+          [kind]: {
+            ...prev[kind],
+            [state.sources[kind].length]: `This directory is registered under ${dedup.crossKindConflict}`,
+          },
+        }));
+        return;
+      }
+      if (dedup.sameKindDuplicate) {
+        setErrors((prev) => ({
+          ...prev,
+          [kind]: {
+            ...prev[kind],
+            [state.sources[kind].length]: 'This directory is already added',
+          },
+        }));
+        return;
+      }
+
+      // Client-side validation (T020)
+      {
+        const validationError = validatePath(state.sources, path, kind);
+        if (validationError) {
+          // Show error inline but still add the path so user can see and remove it
+          setState((prev) => ({
+            ...prev,
+            sources: addSource(prev.sources, kind, path),
+          }));
+          setErrors((prev) => ({
+            ...prev,
+            [kind]: {
+              ...prev[kind],
+              [state.sources[kind].length]: validationError.message,
+            },
+          }));
+          return;
         }
       }
+
+      setState((prev) => ({
+        ...prev,
+        sources: addSource(prev.sources, kind, path),
+      }));
+      // Clear any error for this index
+      setErrors((prev) => {
+        const kindErrors = { ...prev[kind] };
+        delete kindErrors[state.sources[kind].length];
+        return { ...prev, [kind]: kindErrors };
+      });
+    },
+    onRemove: (index: number) => {
+      setState((prev) => ({
+        ...prev,
+        sources: removeSource(prev.sources, kind, index),
+      }));
+      // Clear error for removed index and reindex remaining errors
+      setErrors((prev) => {
+        const oldErrors = prev[kind];
+        const newErrors: Record<number, string> = {};
+        for (const [key, value] of Object.entries(oldErrors)) {
+          const idx = Number(key);
+          if (idx < index) newErrors[idx] = value;
+          else if (idx > index) newErrors[idx - 1] = value;
+          // skip the removed index
+        }
+        return { ...prev, [kind]: newErrors };
+      });
+    },
+    onScanDepthChange: (index: number, depth: ScanDepth) => {
+      setState((prev) => {
+        const entries = [...prev.sources[kind]];
+        entries[index] = { ...entries[index], scanDepth: depth };
+        return {
+          ...prev,
+          sources: { ...prev.sources, [kind]: entries },
+        };
+      });
+    },
+  }), [state.sources, isMockMode]);
+
+  // Derived folder count for footer
+  const totalFolders = useMemo(() => {
+    let count = 0;
+    const kinds: SourceKind[] = ['raw', 'calibration', 'project', 'inbox'];
+    for (const k of kinds) {
+      count += state.sources[k].length;
     }
-    return { totalFolders: folders, totalEstimate: estimate };
-  }, [state.categories]);
+    return count;
+  }, [state.sources]);
 
   const handleComplete = useCallback(async () => {
     setIsSubmitting(true);
     try {
-      // Register each folder as a root
-      for (const cat of state.categories) {
-        for (const path of cat.paths) {
-          if (!path) continue;
-          await registerRoot({
-            path,
-            category: cat.key,
-            scan_settings: state.scanSettings as unknown as Record<string, unknown>,
-          });
-        }
+      // Flush all sources to the database
+      const flushResult = await flushToDB(state.sources);
+
+      if (!flushResult.allSucceeded) {
+        // Show errors on the confirm step but don't block — user can retry
+        console.warn('Some source registrations failed:', flushResult.results.filter((r) => !r.success));
       }
 
-      // Start the initial scan
-      await startScan();
+      // Mark first-run complete via backend
+      if (!isMockMode) {
+        await completeFirstRun();
+      }
 
-      // Mark setup complete
+      // Mark setup complete in local preferences
       setPreference('setupCompleted', true);
 
       // Clean up wizard progress
@@ -167,20 +274,24 @@ export function SetupWizard() {
       // On failure, allow retry -- stay on confirm step
       setIsSubmitting(false);
     }
-  }, [state.categories, state.scanSettings, navigate]);
-
-  const isMockMode = import.meta.env.VITE_USE_MOCKS === 'true';
+  }, [state.sources, isMockMode, navigate]);
 
   // Determine whether "Continue" should be enabled
+  // Raw (step 1) and Project (step 3) require at least one path.
+  // All others advance freely.
   const canProceed = useMemo(() => {
     if (isMockMode) return true;
-    if (state.currentStep === 1) {
-      return state.categories
-        .filter((c) => c.required)
-        .every((c) => c.paths.some(Boolean));
+    const step = state.currentStep;
+    if (step === 1) {
+      // Raw step: requires at least one path
+      return state.sources.raw.length > 0;
+    }
+    if (step === 3) {
+      // Project step: requires at least one path
+      return state.sources.project.length > 0;
     }
     return true;
-  }, [state.currentStep, state.categories, isMockMode]);
+  }, [state.currentStep, state.sources, isMockMode]);
 
   const step = state.currentStep;
   const stepMeta = STEPS[step];
@@ -189,22 +300,16 @@ export function SetupWizard() {
     clearWizardState();
     setState({
       currentStep: 0,
-      categories: DEFAULT_CATEGORIES,
+      sources: { raw: [], calibration: [], project: [], inbox: [] },
       catalogSettings: DEFAULT_CATALOG_SETTINGS,
-      scanSettings: DEFAULT_SCAN_SETTINGS,
     });
+    setErrors({ raw: {}, calibration: {}, project: {}, inbox: {} });
   }, []);
 
   const wizardSteps = STEPS.map((s, i) => ({
     label: s.label,
     completed: i < step,
   }));
-
-  // Format estimated file count for footer
-  function formatEstimate(n: number): string {
-    if (n >= 1000) return `~${Math.round(n / 1000)}k files`;
-    return `~${n} files`;
-  }
 
   // Build the navigation footer for the current step
   const footer = (
@@ -222,7 +327,8 @@ export function SetupWizard() {
         </Btn>
       )}
       <div style={{ flex: 1 }} />
-      {step === 1 && totalFolders > 0 && (
+      {/* Folder count summary on source steps */}
+      {step >= 1 && step <= 4 && totalFolders > 0 && (
         <span
           style={{
             fontSize: 'var(--alm-text-xs)',
@@ -230,7 +336,6 @@ export function SetupWizard() {
           }}
         >
           {totalFolders} folder{totalFolders !== 1 ? 's' : ''} selected
-          {totalEstimate > 0 ? ` · ${formatEstimate(totalEstimate)}` : ''}
         </span>
       )}
       {step < STEPS.length - 1 ? (
@@ -297,28 +402,45 @@ export function SetupWizard() {
           {/* Step body */}
           {step === 0 && <StepWelcome onNext={() => goTo(1)} />}
           {step === 1 && (
-            <StepSources
-              categories={state.categories}
-              onCategoriesChange={handleCategoriesChange}
+            <StepRaw
+              entries={state.sources.raw}
+              errors={errors.raw}
+              {...makeSourceHandlers('raw')}
             />
           )}
           {step === 2 && (
-            <StepCatalogs
-              settings={state.catalogSettings}
-              onSettingsChange={handleCatalogSettingsChange}
+            <StepCalibration
+              entries={state.sources.calibration}
+              errors={errors.calibration}
+              {...makeSourceHandlers('calibration')}
             />
           )}
           {step === 3 && (
-            <StepScan
-              settings={state.scanSettings}
-              onSettingsChange={handleScanSettingsChange}
+            <StepProject
+              entries={state.sources.project}
+              errors={errors.project}
+              {...makeSourceHandlers('project')}
             />
           )}
           {step === 4 && (
+            <StepInbox
+              entries={state.sources.inbox}
+              errors={errors.inbox}
+              {...makeSourceHandlers('inbox')}
+            />
+          )}
+          {step === 5 && <StepDetectTools />}
+          {step === 6 && (
+            <StepCatalogs
+              settings={state.catalogSettings}
+              onSettingsChange={handleCatalogSettingsChange}
+              onSkip={() => goTo(7)}
+            />
+          )}
+          {step === 7 && (
             <StepConfirm
-              categories={state.categories}
+              sources={state.sources}
               catalogSettings={state.catalogSettings}
-              scanSettings={state.scanSettings}
               isSubmitting={isSubmitting}
             />
           )}

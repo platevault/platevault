@@ -1,10 +1,10 @@
 export { StepWelcome } from './StepWelcome';
-export { StepSources } from './StepSources';
-export type { SourceCategory } from './StepSources';
+export { StepRaw } from './StepRaw';
+export { StepCalibration } from './StepCalibration';
+export { StepProject } from './StepProject';
+export { StepInbox } from './StepInbox';
+export { StepDetectTools } from './StepDetectTools';
 export { StepCatalogs } from './StepCatalogs';
 export type { CatalogSettings } from './StepCatalogs';
 export { DEFAULT_CATALOG_SETTINGS } from './StepCatalogs';
-export { StepScan } from './StepScan';
-export type { ScanSettings } from './StepScan';
-export { DEFAULT_SCAN_SETTINGS } from './StepScan';
 export { StepConfirm } from './StepConfirm';

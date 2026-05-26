@@ -2,39 +2,43 @@
 
 **Feature Branch**: `003-first-run-source-setup`  
 **Created**: 2026-05-09  
-**Last Updated**: 2026-05-20  
-**Status**: Draft (mockup wired)  
+**Last Updated**: 2026-05-26  
+**Status**: Draft (reconciled post-027/029)  
 **Input**: User description: "Specify the one-time setup wizard for selecting initial data sources, validating selections, starting guided first steps, and restarting setup later."
 
 ## Implementation Status
 
-The mockup wiring already exists in the desktop shell. The spec must match the
-behavior described in these files. Anything beyond the mockup is still
-unimplemented and must be marked accordingly in `plan.md` and `tasks.md`.
+Specs 027 (Frontend Implementation) and 029 (Tauri Backend Wiring) have been
+merged. The setup wizard exists as a working UI with stub Tauri commands.
 
-Wired files (mockup-only — no Tauri picker, no SQLite persistence):
+Wired files (stub commands — no real persistence):
 
-- `apps/desktop/src/features/welcome/WelcomePage.tsx` — sequential 6-step
-  wizard: Welcome → Raw Sources → Calibration Sources → Project Sources →
-  Inbox Sources → Finish. Uses an in-memory list, a stubbed
-  `pickFolderStub(kind)` returning canned paths, and persists the working
-  list to `localStorage` under `alm.first-run.sources`. Only the Raw step
-  enforces "at least one entry"; Calibration, Project, and Inbox are
-  advance-without-entry. Finish writes the flag `alm.first-run.completed=1`
-  and navigates to `/inventory`.
-- `apps/desktop/src/app/router.tsx` — the index route (`/`) inspects
-  `alm.first-run.completed` and redirects to `/welcome` when unset, or
-  `/inventory` when set. The wizard route is `/welcome` and is not part of
-  the main navigation chrome.
-- `apps/desktop/src/features/settings/SettingsPage.tsx` — a "Restart
-  first-run wizard" button removes both `alm.first-run.completed` and
-  `alm.first-run.sources` from `localStorage`, then navigates to
-  `/welcome`. This is a destructive reset, not a prefill.
+- `apps/desktop/src/features/setup/SetupWizard.tsx` — 5-step wizard:
+  Welcome → Sources (unified) → Catalogs → Scan Settings → Confirm. Uses
+  `DirPicker` (wired to `@tauri-apps/plugin-dialog`), persists wizard
+  progress to `localStorage` under `alm-setup-wizard-state`. Calls
+  `registerRoot()` per folder on Finish, then `startScan()`, sets
+  `setupCompleted` preference, and navigates to `/sessions`.
+- `apps/desktop/src/features/setup/SetupPage.tsx` — guards against
+  re-entry when `setupCompleted` is true, redirects to `/sessions`.
+- `apps/desktop/src/features/setup/steps/` — step components:
+  `StepWelcome`, `StepSources` (unified 4-category card layout),
+  `StepCatalogs`, `StepScan`, `StepConfirm`.
+- `apps/desktop/src/app/router.tsx` — setup route at `/setup` renders
+  outside the Shell chrome. Index route (`/`) goes to `/sessions`.
+- `apps/desktop/src/api/commands.ts` — `registerRoot()` calls
+  `roots.register`, `startScan()` calls `scan.start` (both stubs).
+- `apps/desktop/src-tauri/src/commands/roots.rs` — stub handlers for
+  `roots.register`, `roots.list`, `roots.remap`, `roots.remap.apply`,
+  `scan.start`, `equipment.list` returning fixture data.
+- `apps/desktop/src/data/preferences.ts` — `setupCompleted` flag stored
+  in localStorage-only preferences.
+- `apps/desktop/src/features/settings/SettingsPage.tsx` — "Restart setup
+  wizard" button clears preferences and navigates to `/setup`.
 
-The mockup is intentionally thin: it does not validate that a path exists, is a
-directory, is readable, or is unique across kinds, and it does not write to the
-library database. Full behavior described below MUST be delivered against a
-Tauri-backed picker and the persistence boundary, replacing the stubs.
+This spec replaces the stub commands with real persistence and refactors
+the 5-step wizard into the 8-step design described below. The `DirPicker`
+and `@tauri-apps/plugin-dialog` wiring are retained as-is.
 
 ## User Scenarios & Testing *(mandatory)*
 
@@ -42,21 +46,21 @@ Tauri-backed picker and the persistence boundary, replacing the stubs.
 
 As a new user opening Astro Library Manager for the first time, I want the app
 to take me straight to setup so that I don't accidentally land on an empty
-Inventory view that has nothing to show.
+Sessions view that has nothing to show.
 
 **Why this priority**: Without a first-run gate, the app's primary surfaces
-(Inventory, Inbox, Projects) have no source roots to scan and look broken.
+(Sessions, Calibration, Projects) have no source roots to scan and look broken.
 
 **Independent Test**: Clear the library state, open the app, and confirm the
-index route redirects to `/welcome` and the wizard opens on the Welcome step.
+index route redirects to `/setup` and the wizard opens on the Welcome step.
 
 **Acceptance Scenarios**:
 
 1. **Given** a fresh install (no completion flag), **When** the user opens
-   the app, **Then** the index route navigates to `/welcome` and the Welcome
+   the app, **Then** the index route navigates to `/setup` and the Welcome
    step renders first.
 2. **Given** a completed first-run (flag set), **When** the user opens the
-   app, **Then** the index route navigates to `/inventory` and the wizard is
+   app, **Then** the index route navigates to `/sessions` and the wizard is
    not shown.
 3. **Given** the wizard is open, **When** the user moves through steps,
    **Then** progress is visible via a stepper and step counter (`Step N of M`).
@@ -95,7 +99,7 @@ library DB once the persistence task lands).
    that kind and can be removed inline.
 5. **Given** the Finish step, **When** the user clicks Finish, **Then** the
    completion flag is set, registered sources are persisted to the library
-   store, and the app navigates to `/inventory`.
+   store, and the app navigates to `/sessions`.
 
 ---
 
@@ -115,14 +119,14 @@ wizard", and confirm the wizard opens at the Welcome step.
 
 1. **Given** a completed first-run, **When** the user clicks "Restart
    first-run wizard" in Settings, **Then** the completion flag is cleared
-   and the app navigates to `/welcome`.
+   and the app navigates to `/setup`.
 2. **Given** the restarted wizard, **When** the user completes it again,
    **Then** the new source set is persisted and the completion flag is set.
 3. **Given** the restart action, **When** it executes, **Then** the completion
    flag is cleared and the wizard opens with the previously registered sources
-   prefilled into the working buffer for editing (A7). The mockup's destructive
-   reset is a known regression to fix during real implementation. The new
-   contract is `firstrun.restart` (A7, R-E5).
+   prefilled into the working buffer for editing (A7). The existing destructive
+   reset in Settings is replaced by the prefill flow. The Tauri command is
+   `firstrun.restart` (dotted name, A7, R-E5).
 
 ---
 
@@ -155,7 +159,7 @@ step is required.
 ### Edge Cases
 
 - Duplicate source paths across kinds (same root listed as both Raw and
-  Calibration). RESOLVED: reject with `path.already.registered.different_kind`
+  Calibration). RESOLVED: reject with `path.already_registered.different_kind`
   error code (R-1.4). The error is surfaced inline next to the offending row
   with the conflicting kind shown.
 - Duplicate source paths within a kind (mockup currently allows; the picker
@@ -183,7 +187,7 @@ step is required.
 ### Functional Requirements
 
 - **FR-001**: The wizard MUST be a sequential page-by-page flow accessed at
-  `/welcome`, not a permanent navigation entry in the main shell.
+  `/setup`, not a permanent navigation entry in the main shell.
 - **FR-002**: The wizard MUST treat the Raw Sources step as required (at
   least one Raw source) and the Project Sources step as required (at least
   one Project source — R-Wiz-2). Global skip of the entire wizard is
@@ -204,8 +208,8 @@ step is required.
 - **FR-007**: The wizard MUST NOT copy, move, modify, hash, or scan files
   during the wizard run. Indexing is deferred to the Inventory workflow.
 - **FR-008**: The wizard MUST use the operating system's native directory
-  picker (via Tauri's `plugin-dialog`) once wired; the current `pickFolderStub`
-  MUST be replaced before this spec is considered done.
+  picker (via Tauri's `plugin-dialog`). The `DirPicker` component is already
+  wired to `@tauri-apps/plugin-dialog` and is retained as-is.
 - **FR-009**: First-run setup MUST include source steps for Raw Sources,
   Calibration Sources, Project Sources, and Inbox Sources in that order,
   followed by a Detect Tools step and a Download Catalogs step before Finish.
@@ -219,8 +223,9 @@ step is required.
 - **FR-012**: Each source selection step MUST include explanatory copy that
   defines the category and tells the user what kind of directory to select.
 - **FR-013**: The wizard MUST be restartable from Settings via a clearly
-  labeled control. Restart uses the `firstrun.restart` contract and prefills
-  existing registered sources into the wizard working buffer (A7, R-E5).
+  labeled control. Restart calls the `firstrun.restart` Tauri command
+  (dotted name) and prefills existing registered sources into the wizard
+  working buffer (A7, R-E5).
 - **FR-017**: Each source-entry row in the wizard MAY expose a scan-depth
   selector (Recursive / Single-level) as advanced/collapsed disclosure.
   Default is `recursive`. The disclosure is hidden by default; users access
@@ -228,21 +233,25 @@ step is required.
 - **FR-018**: The Detect Tools step MUST list discovered processing tools
   (PixInsight, Siril, planetary tools) read from the tool-discovery service
   (spec 011). The user confirms or edits the tool list before Finish (A5).
+  Until spec 011 is implemented, this step renders with stub/placeholder UI
+  and fixture data.
 - **FR-019**: The Download Catalogs step MUST offer OpenNGC download by
   default (spec 014). The user can skip and download later from Settings.
   The download may run asynchronously after Finish if the user skips (A6).
+  Until spec 014 is implemented, this step renders with stub/placeholder UI
+  and fixture data.
 - **FR-014**: On Finish, the wizard MUST set a persistent completion flag and
-  navigate the user to the Inventory surface.
+  navigate the user to the Sessions surface (`/sessions`).
 - **FR-015**: While the wizard is in progress, the working source list MAY
-  be held in volatile UI state and `localStorage` for resilience against
-  refresh, but MUST be promoted to the library database on Finish.
-- **FR-016**: The index route (`/`) MUST redirect to `/welcome` when the
-  completion flag is absent and to `/inventory` (or the user's default
-  landing surface) when present. The gate uses DB-first with localStorage
-  cache for synchronous render; the localStorage flag is retained as a
-  cache layer, not eliminated (A8). The route MUST show a loading/pending
-  state while the DB-first reconcile resolves to avoid a flash of the wrong
-  route.
+  be held in volatile UI state and `localStorage` (key
+  `alm-setup-wizard-state`) for resilience against refresh, but MUST be
+  promoted to the library database on Finish.
+- **FR-016**: The index route (`/`) MUST redirect to `/setup` when the
+  completion flag is absent and to `/sessions` when present. The gate uses
+  DB-first with localStorage cache for synchronous render; the localStorage
+  flag is retained as a cache layer, not eliminated (A8). The route MUST
+  show a loading/pending state while the DB-first reconcile resolves to
+  avoid a flash of the wrong route.
 
 ### Key Entities
 
@@ -266,7 +275,7 @@ step is required.
   source directories in under 5 minutes.
 - **SC-002**: A blocked Raw step surfaces the gating reason inline within the
   step body (not in a separate toast or modal).
-- **SC-003**: Finishing setup makes the index route resolve to `/inventory`
+- **SC-003**: Finishing setup makes the index route resolve to `/sessions`
   without further prompts on the next launch.
 - **SC-004**: Restarting setup from Settings opens the wizard in under 1
   second and clears the completion flag deterministically.
@@ -277,6 +286,16 @@ step is required.
   not inside the wizard.
 - Source roots are directories only, not individual files or archives.
 - The user will be running a desktop OS with a native directory picker.
+
+## Clarifications
+
+### Session 2026-05-26
+
+- Q: Should the wizard use 8 separate steps (one per source category + Detect Tools + Download Catalogs) or the current 5-step unified design? → A: 8-step design per spec (Welcome → Raw → Calibration → Project → Inbox → Detect Tools → Download Catalogs → Finish). The current unified Sources step will be refactored.
+- Q: Should routes use `/welcome` + `/inventory` (spec) or `/setup` + `/sessions` (codebase)? → A: Keep current paths — `/setup` for wizard, `/sessions` as post-setup landing.
+- Q: Should commands use the spec's `source_register` / `firstrun_*` names or the existing `roots.*` dotted namespace? → A: Use existing `roots.*` namespace, add `roots.register.batch`, `firstrun.complete`, `firstrun.restart` as dotted-name Tauri commands.
+- Q: Should the first-run gate be DB-backed or localStorage-only? → A: DB-backed `FirstRunState` table with localStorage as synchronous cache for the route gate.
+- Q: Should Detect Tools and Download Catalogs steps be deferred or stubbed? → A: Stub both steps with placeholder UI and fixture data; wire real backends when specs 011/014 land.
 
 ## Out of Scope
 

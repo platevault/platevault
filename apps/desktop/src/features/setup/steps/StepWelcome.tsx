@@ -30,7 +30,8 @@ export function StepWelcome(_props: StepWelcomeProps) {
         }}
       >
         This setup will help you register your library folders and configure initial scan
-        settings. It takes about a minute.
+        settings. Nothing is moved or modified — and all choices are changeable later
+        from Settings. It takes about a minute.
       </p>
     </div>
   );

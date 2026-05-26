@@ -13,6 +13,26 @@ path = "contract_schema_parity.rs"
 name = "library_inventory_contract"
 path = "library_inventory_contract.rs"
 
+[[test]]
+name = "roots_register_test"
+path = "roots_register_test.rs"
+
+[[test]]
+name = "roots_register_batch_test"
+path = "roots_register_batch_test.rs"
+
+[[test]]
+name = "firstrun_complete_test"
+path = "firstrun_complete_test.rs"
+
+[[test]]
+name = "firstrun_restart_test"
+path = "firstrun_restart_test.rs"
+
+[[test]]
+name = "audit_first_run_completed_test"
+path = "audit_first_run_completed_test.rs"
+
 [dev-dependencies]
 contracts_core = { path = "../../crates/contracts/core" }
 serde.workspace = true

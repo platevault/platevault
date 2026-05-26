@@ -1,0 +1,74 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://astro-library-manager.local/contracts/roots.register.json",
+  "title": "roots.register",
+  "description": "Register a single directory as a RegisteredSource of the given kind. Idempotent failure on duplicate (kind, path). Performs path existence, directory, and readability validation before inserting. Tauri command: roots.register. On success returns the registered source; on failure returns an error string via Tauri's Result<T, String> pattern.",
+  "type": "object",
+  "properties": {
+    "request": {
+      "type": "object",
+      "description": "Tauri command parameters (positional, camelCase).",
+      "required": ["path", "category", "scanSettings"],
+      "additionalProperties": false,
+      "properties": {
+        "path": {
+          "description": "Absolute filesystem path to a readable directory on the local machine.",
+          "type": "string",
+          "minLength": 1
+        },
+        "category": {
+          "description": "Which source category this directory belongs to.",
+          "type": "string",
+          "enum": ["raw", "calibration", "project", "inbox"]
+        },
+        "scanSettings": {
+          "description": "Scan configuration object. Currently only scanDepth is extracted.",
+          "type": "object",
+          "properties": {
+            "scanDepth": {
+              "type": "string",
+              "enum": ["recursive", "single"],
+              "default": "recursive"
+            }
+          }
+        }
+      }
+    },
+    "response": {
+      "type": "object",
+      "description": "RegisterSourceResponse — returned on success.",
+      "required": ["sourceId", "kind", "path", "createdAt"],
+      "additionalProperties": false,
+      "properties": {
+        "sourceId": {
+          "type": "string",
+          "format": "uuid"
+        },
+        "kind": {
+          "type": "string",
+          "enum": ["raw", "calibration", "project", "inbox"]
+        },
+        "path": {
+          "type": "string",
+          "description": "Normalized canonical path as persisted."
+        },
+        "createdAt": {
+          "type": "string",
+          "format": "date-time"
+        }
+      }
+    },
+    "errors": {
+      "description": "Error codes returned as Err(String) via Tauri's Result pattern. The error message contains the human-readable description.",
+      "type": "object",
+      "properties": {
+        "path.not_exists": { "description": "Path does not exist on the filesystem." },
+        "path.not_directory": { "description": "Path exists but is not a directory." },
+        "path.permission_denied": { "description": "Directory exists but is not readable." },
+        "path.already_registered": { "description": "Path is already registered under the same kind (idempotent)." },
+        "path.already_registered.different_kind": { "description": "Path is already registered under a different kind." }
+      }
+    }
+  },
+  "required": ["request", "response"]
+}

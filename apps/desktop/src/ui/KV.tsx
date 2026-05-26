@@ -1,5 +1,5 @@
 import type { ReactNode } from 'react';
-import type { ProvenanceOrigin, ConfidenceLevel } from '@/api/types';
+import type { ProvenanceOrigin, ConfidenceLevel } from '@/bindings/types';
 import { Provenance } from './Provenance';
 import { Confidence } from './Confidence';
 

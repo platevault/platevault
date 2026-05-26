@@ -9,6 +9,7 @@ path = "src/lib.rs"
 
 [dependencies]
 audit = { path = "../../audit" }
+contracts_core = { path = "../../contracts/core" }
 domain_core = { path = "../../domain/core" }
 serde.workspace = true
 serde_json.workspace = true
