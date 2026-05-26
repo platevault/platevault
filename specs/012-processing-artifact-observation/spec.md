@@ -1,5 +1,9 @@
 # Feature Specification: Processing Artifact Observation
 
+> **See Spec 030**: UI implementation of this feature must follow
+> [Spec 030 — UI Audit & Revision](../030-ui-audit-revision/spec.md)
+> for layout, navigation, and component patterns.
+
 **Feature Branch**: `012-processing-artifact-observation`  
 **Created**: 2026-05-09  
 **Last Updated**: 2026-05-22  

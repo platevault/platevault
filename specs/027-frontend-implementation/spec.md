@@ -1,5 +1,9 @@
 # Feature Specification: Desktop Frontend Implementation
 
+> **Superseded**: All UI layout, navigation, and component design in this spec
+> is superseded by [Spec 030 — UI Audit & Revision](../030-ui-audit-revision/spec.md).
+> Implement using spec 030 patterns. This spec is reference only.
+
 **Feature Branch**: `027-frontend-implementation`
 
 **Created**: 2026-05-24

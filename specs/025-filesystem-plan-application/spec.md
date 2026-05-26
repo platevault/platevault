@@ -1,5 +1,9 @@
 # Feature Specification: Filesystem Plan Application
 
+> **See Spec 030**: UI implementation of this feature must follow
+> [Spec 030 — UI Audit & Revision](../030-ui-audit-revision/spec.md)
+> for layout, navigation, and component patterns.
+
 **Feature Branch**: `025-filesystem-plan-application`  
 **Created**: 2026-05-09  
 **Status**: Draft  

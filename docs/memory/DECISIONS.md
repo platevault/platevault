@@ -104,3 +104,85 @@ Active → Needs Review → Superseded → (pruned)
 **Evidence**: Spec 029 implementation. Discovered during PoC, documented in handover.
 
 **Where to look next**: `crates/contracts/core/src/lib.rs` (JsonAny definition)
+
+---
+
+### 2026-05-26 - Spec 030 is the authoritative UI design spec
+
+**Status**: Active
+
+**Why this is durable**: All UI implementation work must follow spec 030's decisions. Earlier UI specs (027, 028) are superseded for layout, navigation, and component design.
+
+**Decision**: Spec 030 (UI Audit & Revision) is the leading specification for all UI/UX decisions. It supersedes spec 027 (frontend implementation) for layout and navigation patterns, and spec 028 (frontend quality hardening) for component consistency. Any conflict between spec 030 and earlier specs, spec 030 wins.
+
+**Tradeoffs**: Existing implemented UI from specs 027/029 will need rework. This is intentional — the audit found significant inconsistencies that justify a comprehensive redesign.
+
+**Future mistake prevented**: Implementing new features using spec 027's layout patterns (right sidebars everywhere, split-column property tables, confidence scores) when spec 030 has replaced them with the hybrid model.
+
+**Evidence**: Interactive screen-by-screen audit with user, covering all 9 screens + settings (12 panes).
+
+**Where to look next**: `specs/030-ui-audit-revision/spec.md`
+
+---
+
+### 2026-05-26 - Hybrid layout model: sidebars for workflow screens, top bars for data screens
+
+**Status**: Active
+
+**Why this is durable**: Every new screen or detail view must follow this pattern.
+
+**Decision**: Inbox and Projects use a right action sidebar (multi-step workflow). Sessions, Calibration, Targets, and Archive use a top action bar (read-heavy, few actions). Contextual info (notes, calibration matches, project membership) goes in the main content area on top-bar screens.
+
+**Tradeoffs**: Inconsistency between screens — but justified because Inbox/Projects have fundamentally different interaction patterns (workflow vs. data browsing).
+
+**Future mistake prevented**: Adding right sidebars to every screen "for consistency" when they'd be mostly empty, wasting horizontal space.
+
+**Evidence**: Spec 030 sections 2.3, 3.4, 4.3, 5.1, 6.5. Discussed Option A (sidebar everywhere), Option B (top bar only), Option C (hybrid). User chose hybrid after evaluating tradeoffs.
+
+---
+
+### 2026-05-26 - Project lifecycle simplified to 5 phases (Prepared removed)
+
+**Status**: Active
+
+**Why this is durable**: All project state machines, transitions, and UI must use the 5-phase model.
+
+**Decision**: Project lifecycle is Setup → Ready → Processing → Completed → Archived. The "Prepared" phase is removed — generating source views auto-advances from Ready to Processing. Existing projects in "prepared" state need migration to "processing".
+
+**Tradeoffs**: Less granular lifecycle tracking. But "prepared" was a meaningless pause — the user clicked "generate views" and then immediately started processing.
+
+**Future mistake prevented**: Adding UI for a "Prepared" phase that has no user-facing purpose.
+
+**Evidence**: Spec 030 section 6.3.
+
+---
+
+### 2026-05-26 - Source view junctions at folder level with DATE_ prefix keyword
+
+**Status**: Active
+
+**Why this is durable**: All source view generation code must follow this pattern.
+
+**Decision**: Source views use folder-level junctions/symlinks (one per session), not per-file symlinks. Lights and flats are grouped by filter, with `DATE_` prefix on session folder names for WBPP custom grouping (e.g., `Lights/Ha/DATE_2024-11-30/`). Darks and bias use descriptive names without DATE_ prefix. Calibration lives under a `Calibration/` parent directory.
+
+**Tradeoffs**: Requires source files to be organized in session folders before junction creation. The inbox-to-session confirmation flow handles this via the token pattern system.
+
+**Future mistake prevented**: Creating thousands of per-file symlinks (slow, fragile) or flat junction structures that WBPP can't group by date.
+
+**Evidence**: Spec 030 research.md R3, discussed in interactive session.
+
+---
+
+### 2026-05-26 - Expanded source folder types (6 types, not 4)
+
+**Status**: Active
+
+**Why this is durable**: All folder registration, wizard, and settings code must use the expanded enum.
+
+**Decision**: Source folder types expanded from `raw | calibration | project | inbox` to `light_frames | dark | flat | bias | project | inbox`. All six are required during setup. Migration: `raw` → `light_frames`, `calibration` → user-disambiguated.
+
+**Tradeoffs**: Breaking change to the roots.register contract. Requires migration for existing data.
+
+**Future mistake prevented**: Registering one "calibration" folder when the app actually needs separate dark/flat/bias folders for proper calibration matching.
+
+**Evidence**: Spec 030 section 1.1, wizard redesign.

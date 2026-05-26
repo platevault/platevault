@@ -12,8 +12,9 @@ UI-to-core boundary; Tauri commands are the first adapter.
 ## Major Components
 
 - **apps/desktop/src/** — React 18 + TanStack Router frontend, Mantine-free
-  (custom CSS vars design system). Pages: Sessions, Review, Calibration,
-  Targets, Projects, Plans, Audit, Settings, Setup wizard.
+  (custom CSS vars design system). Pages per spec 030: Inbox (was Review),
+  Sessions, Calibration, Targets, Projects, Archive (new), Settings (with
+  Audit Log). Plans removed from nav. Setup wizard is 4 steps.
 - **apps/desktop/src-tauri/** — Tauri shell with specta-generated TypeScript
   bindings. Commands use dotted names (`roots.register`, `sessions.list`).
 - **crates/domain/core/** — pure domain types and invariants.

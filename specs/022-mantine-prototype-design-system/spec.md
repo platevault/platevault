@@ -1,5 +1,9 @@
 # Feature Specification: Desktop Prototype Design System
 
+> **UI Revised**: The UI design in this spec has been revised by
+> [Spec 030 — UI Audit & Revision](../030-ui-audit-revision/spec.md).
+> When implementing, follow spec 030 for layout, navigation, and component patterns.
+
 **Feature Branch**: `022-mantine-prototype-design-system`
 **Created**: 2026-05-09
 **Last Revised**: 2026-05-20

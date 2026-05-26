@@ -1,5 +1,9 @@
 # Feature Specification: Guided First Project Flow
 
+> **UI Revised**: The UI design in this spec has been revised by
+> [Spec 030 — UI Audit & Revision](../030-ui-audit-revision/spec.md).
+> When implementing, follow spec 030 for layout, navigation, and component patterns.
+
 **Feature Branch**: `010-guided-first-project-flow`
 **Created**: 2026-05-09
 **Last Updated**: 2026-05-20

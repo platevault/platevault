@@ -1,5 +1,9 @@
 # Feature Specification: Frontend Quality Hardening
 
+> **Superseded**: All UI layout, navigation, and component design in this spec
+> is superseded by [Spec 030 — UI Audit & Revision](../030-ui-audit-revision/spec.md).
+> Implement using spec 030 patterns. This spec is reference only.
+
 **Feature Branch**: `028-frontend-quality-hardening`
 **Created**: 2026-05-25
 **Status**: Placeholder

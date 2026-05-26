@@ -1,5 +1,9 @@
 # Feature Specification: Developer Contract Diagnostics
 
+> **See Spec 030**: Implementation of this feature must follow
+> [Spec 030 — UI Audit & Revision](../030-ui-audit-revision/spec.md)
+> for UI patterns, lifecycle states, source folder types, and data model changes.
+
 **Feature Branch**: `021-developer-contract-diagnostics`  
 **Created**: 2026-05-09  
 **Status**: Draft  

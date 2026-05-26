@@ -1,5 +1,9 @@
 # Feature Specification: Tauri Backend Wiring
 
+> **See Spec 030**: Implementation of this feature must follow
+> [Spec 030 — UI Audit & Revision](../030-ui-audit-revision/spec.md)
+> for UI patterns, lifecycle states, source folder types, and data model changes.
+
 **Feature Branch**: `029-tauri-backend-wiring`
 
 **Created**: 2026-05-25

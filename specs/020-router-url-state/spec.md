@@ -1,5 +1,9 @@
 # Feature Specification: Router And URL State
 
+> **UI Revised**: The UI design in this spec has been revised by
+> [Spec 030 — UI Audit & Revision](../030-ui-audit-revision/spec.md).
+> When implementing, follow spec 030 for layout, navigation, and component patterns.
+
 **Feature Branch**: `020-router-url-state`  
 **Created**: 2026-05-09  
 **Status**: Superseded by spec 027 (Desktop Frontend Implementation)  

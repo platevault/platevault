@@ -1,5 +1,9 @@
 # Feature Specification: Astro Library Manager
 
+> **See Spec 030**: Implementation of this feature must follow
+> [Spec 030 — UI Audit & Revision](../030-ui-audit-revision/spec.md)
+> for UI patterns, lifecycle states, source folder types, and data model changes.
+
 **Feature Branch**: `001-astro-library-manager`  
 **Created**: 2026-05-02  
 **Status**: Closed (Umbrella / Planning / Prototype Baseline)

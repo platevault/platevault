@@ -25,6 +25,11 @@ This is a compact routing map for durable project memory (`docs/memory/`). Keep 
 - [DB-first route gate](DECISIONS.md#2026-05-26---db-first-with-localstorage-cache-for-first-run-gate) — DB authority, localStorage cache
 - [Contract schemas = Tauri pattern](DECISIONS.md#2026-05-26---contract-schemas-match-tauriispecta-pattern) — no envelope wrappers
 - [JsonAny for untyped params](DECISIONS.md#2026-05-25---jsonany-wrapper-for-specta-annotated-command-parameters) — prevents specta stack overflow
+- [Spec 030 is authoritative UI spec](DECISIONS.md#2026-05-26---spec-030-is-the-authoritative-ui-design-spec) — supersedes 027/028 for layout, nav, components
+- [Hybrid layout model](DECISIONS.md#2026-05-26---hybrid-layout-model-sidebars-for-workflow-screens-top-bars-for-data-screens) — sidebars for Inbox+Projects, top bars elsewhere
+- [5-phase project lifecycle](DECISIONS.md#2026-05-26---project-lifecycle-simplified-to-5-phases-prepared-removed) — Prepared removed, Ready auto-advances to Processing
+- [Folder-level junctions with DATE_](DECISIONS.md#2026-05-26---source-view-junctions-at-folder-level-with-date_-prefix-keyword) — one junction per session, WBPP grouping keyword
+- [6 source folder types](DECISIONS.md#2026-05-26---expanded-source-folder-types-6-types-not-4) — light_frames/dark/flat/bias/project/inbox
 
 ## Workflow
 

@@ -1,5 +1,9 @@
 # Feature Specification: Processing Tool Launch
 
+> **See Spec 030**: UI implementation of this feature must follow
+> [Spec 030 — UI Audit & Revision](../030-ui-audit-revision/spec.md)
+> for layout, navigation, and component patterns.
+
 **Feature Branch**: `011-processing-tool-launch`
 **Created**: 2026-05-09
 **Last Amended**: 2026-05-22
