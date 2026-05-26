@@ -269,8 +269,10 @@ pub async fn complete_first_run(
     // Count sources per kind for the audit event.
     let sources = repo::list_sources(pool).await.map_err(db_to_contract)?;
     let source_count_by_kind = SourceCountByKind {
-        raw: sources.iter().filter(|s| s.kind == SourceKind::Raw).count(),
-        calibration: sources.iter().filter(|s| s.kind == SourceKind::Calibration).count(),
+        light_frames: sources.iter().filter(|s| s.kind == SourceKind::LightFrames).count(),
+        dark: sources.iter().filter(|s| s.kind == SourceKind::Dark).count(),
+        flat: sources.iter().filter(|s| s.kind == SourceKind::Flat).count(),
+        bias: sources.iter().filter(|s| s.kind == SourceKind::Bias).count(),
         project: sources.iter().filter(|s| s.kind == SourceKind::Project).count(),
         inbox: sources.iter().filter(|s| s.kind == SourceKind::Inbox).count(),
     };
@@ -339,14 +341,14 @@ mod tests {
         let pool = db.pool().clone();
 
         let req = RegisterSourceRequest {
-            kind: SourceKind::Raw,
+            kind: SourceKind::LightFrames,
             path: "/tmp".to_owned(),
             kind_subtype: None,
             scan_depth: contracts_core::first_run::ScanDepth::Recursive,
         };
         repo::register_source(&pool, &req).await.unwrap();
 
-        let err = check_duplicate(&pool, "/tmp", SourceKind::Raw).await.unwrap_err();
+        let err = check_duplicate(&pool, "/tmp", SourceKind::LightFrames).await.unwrap_err();
         assert_eq!(err.code, "path.already_registered");
     }
 
@@ -357,7 +359,7 @@ mod tests {
         let pool = db.pool().clone();
 
         let req = RegisterSourceRequest {
-            kind: SourceKind::Raw,
+            kind: SourceKind::LightFrames,
             path: "/tmp".to_owned(),
             kind_subtype: None,
             scan_depth: contracts_core::first_run::ScanDepth::Recursive,

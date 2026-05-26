@@ -71,8 +71,10 @@ pub const TOPIC_LIFECYCLE_TRANSITION_APPLIED: &str = "lifecycle.transition.appli
 #[derive(Clone, Debug, Serialize, Deserialize, JsonSchema, Type)]
 #[serde(rename_all = "camelCase")]
 pub struct SourceCountByKind {
-    pub raw: usize,
-    pub calibration: usize,
+    pub light_frames: usize,
+    pub dark: usize,
+    pub flat: usize,
+    pub bias: usize,
     pub project: usize,
     pub inbox: usize,
 }

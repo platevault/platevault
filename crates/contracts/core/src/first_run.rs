@@ -14,10 +14,12 @@ use crate::JsonAny;
 #[derive(
     Clone, Copy, Debug, Eq, Hash, Ord, PartialEq, PartialOrd, Serialize, Deserialize, Type,
 )]
-#[serde(rename_all = "lowercase")]
+#[serde(rename_all = "snake_case")]
 pub enum SourceKind {
-    Raw,
-    Calibration,
+    LightFrames,
+    Dark,
+    Flat,
+    Bias,
     Project,
     Inbox,
 }
@@ -146,9 +148,11 @@ mod tests {
     use super::*;
 
     #[test]
-    fn source_kind_serializes_lowercase() {
-        assert_eq!(serde_json::to_value(SourceKind::Raw).unwrap(), json!("raw"));
-        assert_eq!(serde_json::to_value(SourceKind::Calibration).unwrap(), json!("calibration"));
+    fn source_kind_serializes_snake_case() {
+        assert_eq!(serde_json::to_value(SourceKind::LightFrames).unwrap(), json!("light_frames"));
+        assert_eq!(serde_json::to_value(SourceKind::Dark).unwrap(), json!("dark"));
+        assert_eq!(serde_json::to_value(SourceKind::Flat).unwrap(), json!("flat"));
+        assert_eq!(serde_json::to_value(SourceKind::Bias).unwrap(), json!("bias"));
         assert_eq!(serde_json::to_value(SourceKind::Project).unwrap(), json!("project"));
         assert_eq!(serde_json::to_value(SourceKind::Inbox).unwrap(), json!("inbox"));
     }
@@ -162,13 +166,14 @@ mod tests {
     #[test]
     fn register_source_request_camel_case() {
         let req = RegisterSourceRequest {
-            kind: SourceKind::Raw,
-            path: "/astro/raw".to_owned(),
+            kind: SourceKind::LightFrames,
+            path: "/astro/lights".to_owned(),
             kind_subtype: None,
             scan_depth: ScanDepth::Recursive,
         };
         let value = serde_json::to_value(req).unwrap();
         assert_eq!(value["scanDepth"], json!("recursive"));
+        assert_eq!(value["kind"], json!("light_frames"));
         assert!(value.get("kindSubtype").is_none()); // skip_serializing_if
     }
 

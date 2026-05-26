@@ -24,8 +24,10 @@ fn now_iso() -> String {
 
 fn source_kind_to_str(kind: SourceKind) -> &'static str {
     match kind {
-        SourceKind::Raw => "raw",
-        SourceKind::Calibration => "calibration",
+        SourceKind::LightFrames => "light_frames",
+        SourceKind::Dark => "dark",
+        SourceKind::Flat => "flat",
+        SourceKind::Bias => "bias",
         SourceKind::Project => "project",
         SourceKind::Inbox => "inbox",
     }
@@ -33,10 +35,13 @@ fn source_kind_to_str(kind: SourceKind) -> &'static str {
 
 fn str_to_source_kind(s: &str) -> SourceKind {
     match s {
-        "calibration" => SourceKind::Calibration,
+        "light_frames" => SourceKind::LightFrames,
+        "dark" => SourceKind::Dark,
+        "flat" => SourceKind::Flat,
+        "bias" => SourceKind::Bias,
         "project" => SourceKind::Project,
         "inbox" => SourceKind::Inbox,
-        _ => SourceKind::Raw,
+        _ => SourceKind::LightFrames,
     }
 }
 
@@ -240,7 +245,7 @@ pub async fn remove_source(pool: &SqlitePool, id: &str) -> DbResult<()> {
 
 /// Get the current first-run wizard state.
 ///
-/// Returns a default state (`last_step = "welcome"`, `completed_at = None`)
+/// Returns a default state (`last_step = "source_folders"`, `completed_at = None`)
 /// if no row exists yet.
 ///
 /// # Errors
@@ -255,7 +260,7 @@ pub async fn get_first_run_state(pool: &SqlitePool) -> DbResult<FirstRunStateRes
 
     match row {
         Some((completed_at, last_step)) => Ok(FirstRunStateResponse { completed_at, last_step }),
-        None => Ok(FirstRunStateResponse { completed_at: None, last_step: "welcome".to_owned() }),
+        None => Ok(FirstRunStateResponse { completed_at: None, last_step: "source_folders".to_owned() }),
     }
 }
 
@@ -266,9 +271,9 @@ pub async fn get_first_run_state(pool: &SqlitePool) -> DbResult<FirstRunStateRes
 /// Returns [`DbError::NotFound`] if preconditions are not met (at least one
 /// raw source and one project source must be registered).
 pub async fn complete_first_run(pool: &SqlitePool) -> DbResult<FirstRunCompleteResponse> {
-    // Check preconditions: at least one raw + one project source.
-    let raw_count: (i64,) =
-        sqlx::query_as("SELECT COUNT(*) FROM registered_sources WHERE kind = 'raw'")
+    // Check preconditions: at least one light_frames + one project source.
+    let light_count: (i64,) =
+        sqlx::query_as("SELECT COUNT(*) FROM registered_sources WHERE kind = 'light_frames'")
             .fetch_one(pool)
             .await?;
     let project_count: (i64,) =
@@ -276,9 +281,10 @@ pub async fn complete_first_run(pool: &SqlitePool) -> DbResult<FirstRunCompleteR
             .fetch_one(pool)
             .await?;
 
-    if raw_count.0 == 0 || project_count.0 == 0 {
+    if light_count.0 == 0 || project_count.0 == 0 {
         return Err(DbError::NotFound(
-            "first_run.incomplete: at least one raw and one project source required".to_owned(),
+            "first_run.incomplete: at least one light_frames and one project source required"
+                .to_owned(),
         ));
     }
 
@@ -287,9 +293,9 @@ pub async fn complete_first_run(pool: &SqlitePool) -> DbResult<FirstRunCompleteR
     // Upsert the singleton row.
     sqlx::query(
         "INSERT INTO first_run_state (singleton_id, completed_at, last_step, updated_at) \
-         VALUES ('first_run', ?, 'finish', ?) \
+         VALUES ('first_run', ?, 'complete', ?) \
          ON CONFLICT(singleton_id) DO UPDATE SET completed_at = excluded.completed_at, \
-         last_step = 'finish', updated_at = excluded.updated_at",
+         last_step = 'complete', updated_at = excluded.updated_at",
     )
     .bind(&completed_at)
     .bind(&completed_at)
@@ -315,9 +321,9 @@ pub async fn restart_first_run(pool: &SqlitePool) -> DbResult<FirstRunRestartRes
     // Clear completed_at and reset to welcome step.
     sqlx::query(
         "INSERT INTO first_run_state (singleton_id, completed_at, last_step, updated_at) \
-         VALUES ('first_run', NULL, 'welcome', ?) \
+         VALUES ('first_run', NULL, 'source_folders', ?) \
          ON CONFLICT(singleton_id) DO UPDATE SET completed_at = NULL, \
-         last_step = 'welcome', updated_at = excluded.updated_at",
+         last_step = 'source_folders', updated_at = excluded.updated_at",
     )
     .bind(&now)
     .execute(pool)
@@ -376,14 +382,14 @@ mod tests {
     async fn register_and_list_source() {
         let pool = setup_db().await;
         let req = RegisterSourceRequest {
-            kind: SourceKind::Raw,
+            kind: SourceKind::LightFrames,
             path: "/astro/raw".to_owned(),
             kind_subtype: None,
             scan_depth: ScanDepth::Recursive,
         };
 
         let resp = register_source(&pool, &req).await.unwrap();
-        assert_eq!(resp.kind, SourceKind::Raw);
+        assert_eq!(resp.kind, SourceKind::LightFrames);
         assert_eq!(resp.path, "/astro/raw");
         assert!(!resp.source_id.is_empty());
 
@@ -396,7 +402,7 @@ mod tests {
     async fn duplicate_kind_path_fails() {
         let pool = setup_db().await;
         let req = RegisterSourceRequest {
-            kind: SourceKind::Raw,
+            kind: SourceKind::LightFrames,
             path: "/astro/raw".to_owned(),
             kind_subtype: None,
             scan_depth: ScanDepth::Recursive,
@@ -435,7 +441,7 @@ mod tests {
     async fn first_run_state_default_when_no_row() {
         let pool = setup_db().await;
         let state = get_first_run_state(&pool).await.unwrap();
-        assert_eq!(state.last_step, "welcome");
+        assert_eq!(state.last_step, "source_folders");
         assert!(state.completed_at.is_none());
     }
 
@@ -449,7 +455,7 @@ mod tests {
 
         // Only raw: should fail.
         let req = RegisterSourceRequest {
-            kind: SourceKind::Raw,
+            kind: SourceKind::LightFrames,
             path: "/astro/raw".to_owned(),
             kind_subtype: None,
             scan_depth: ScanDepth::Recursive,
@@ -471,7 +477,7 @@ mod tests {
 
         // Verify state updated.
         let state = get_first_run_state(&pool).await.unwrap();
-        assert_eq!(state.last_step, "finish");
+        assert_eq!(state.last_step, "complete");
         assert!(state.completed_at.is_some());
     }
 
@@ -479,10 +485,9 @@ mod tests {
     async fn restart_first_run_clears_completed_at() {
         let pool = setup_db().await;
 
-        // Register sources and complete.
         let raw = RegisterSourceRequest {
-            kind: SourceKind::Raw,
-            path: "/astro/raw".to_owned(),
+            kind: SourceKind::LightFrames,
+            path: "/astro/lights".to_owned(),
             kind_subtype: None,
             scan_depth: ScanDepth::Recursive,
         };
@@ -496,13 +501,12 @@ mod tests {
         register_source(&pool, &proj).await.unwrap();
         complete_first_run(&pool).await.unwrap();
 
-        // Restart.
         let resp = restart_first_run(&pool).await.unwrap();
         assert_eq!(resp.prefilled_sources.len(), 2);
 
         let state = get_first_run_state(&pool).await.unwrap();
         assert!(state.completed_at.is_none());
-        assert_eq!(state.last_step, "welcome");
+        assert_eq!(state.last_step, "source_folders");
     }
 
     #[tokio::test]
@@ -512,13 +516,13 @@ mod tests {
         let req = RegisterSourceBatchRequest {
             sources: vec![
                 RegisterSourceRequest {
-                    kind: SourceKind::Raw,
+                    kind: SourceKind::LightFrames,
                     path: "/astro/raw".to_owned(),
                     kind_subtype: None,
                     scan_depth: ScanDepth::Recursive,
                 },
                 RegisterSourceRequest {
-                    kind: SourceKind::Raw,
+                    kind: SourceKind::LightFrames,
                     path: "/astro/raw".to_owned(), // duplicate — will fail
                     kind_subtype: None,
                     scan_depth: ScanDepth::Recursive,
@@ -537,8 +541,8 @@ mod tests {
     #[tokio::test]
     async fn update_step_persists() {
         let pool = setup_db().await;
-        update_first_run_step(&pool, "raw").await.unwrap();
+        update_first_run_step(&pool, "processing_tools").await.unwrap();
         let state = get_first_run_state(&pool).await.unwrap();
-        assert_eq!(state.last_step, "raw");
+        assert_eq!(state.last_step, "processing_tools");
     }
 }

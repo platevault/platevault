@@ -17,7 +17,7 @@
 - [x] checkpoint.commit (pre-implementation) — 696ac0e
 - [x] agent-assign.assign — 6 agents, 109 tasks assigned
 - [x] agent-assign.validate — PASS, 109/109 tasks covered, 5 agents valid
-- [ ] agent-assign.execute
+- [ ] agent-assign.execute — IN PROGRESS
 - [ ] verify-tasks (parallel)
 - [ ] verify (parallel)
 - [ ] code-review (parallel)
@@ -49,6 +49,12 @@ frontend-developer for all React/TS UI, coder for mechanical tasks, typescript-p
 pure TS logic, speckit-implement-task for cross-cutting verification.
 **Question for user**: Would you have preferred different agent assignments for any tasks?
 Especially: should database-architect handle migrations instead of rust-pro?
+
+### D004 — Pre-commit hook blocks commit due to mtime check
+**Time**: after Phase 1+2 work
+**Context**: Pre-commit hook compares staged file mtimes to last test run timestamp.
+Editing the log file after running tests but before commit triggers the hook.
+**Decision**: Touch the test timestamp marker after staging.
 
 ### D003 — Skipping optional extension hooks
 **Time**: throughout

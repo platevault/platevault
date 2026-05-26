@@ -48,10 +48,13 @@ pub async fn roots_register(
     );
 
     let kind = match category.as_str() {
-        "calibration" => SourceKind::Calibration,
+        "light_frames" => SourceKind::LightFrames,
+        "dark" => SourceKind::Dark,
+        "flat" => SourceKind::Flat,
+        "bias" => SourceKind::Bias,
         "project" => SourceKind::Project,
         "inbox" => SourceKind::Inbox,
-        _ => SourceKind::Raw,
+        _ => SourceKind::LightFrames,
     };
 
     // Extract scan_depth from scan_settings if provided.
