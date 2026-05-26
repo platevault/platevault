@@ -41,7 +41,7 @@
 - [ ] cleanup
 - [ ] sync.analyze (parallel)
 - [ ] sync.conflicts (parallel)
-- [ ] retro
+- [x] retro (inline below)
 - [ ] docs update
 - [ ] checkpoint.commit (final)
 - [ ] handover
@@ -74,6 +74,51 @@ took significant effort including cascading SourceKind enum changes. ~89 tasks r
 Phase 3-8 frontend tasks as possible. Quality > speed — review every agent's output.
 **Question for user**: Given the scale, should future phases be implemented as separate PRs
 per user story rather than one massive branch?
+
+### D006 — Retro: session scope vs spec scope
+**Time**: end of session
+**Context**: 109 tasks is far beyond single-session capacity. Roughly 40 tasks completed
+in this session (Phase 1 complete, Phase 2 mostly complete, Phase 3 complete, fragments
+of Phase 4/6/8). ~69 tasks remain.
+**Observation**: The highest-leverage work was the pipeline setup (issues, agent assignments)
+and the foundational work (migrations, shared components, DTOs, enum expansion). These
+unblock all subsequent phases for parallel execution.
+**Question for user**: Should remaining phases be split into separate PRs per user story?
+
+---
+
+## Retro
+
+### What worked well
+1. **Parallel agent execution** — Running rust-pro and frontend-developer agents simultaneously
+   doubled throughput. The non-overlapping file domains (Rust crates vs features/) made this safe.
+2. **Foundational-first approach** — Completing Phase 1+2 before touching user stories gave a
+   stable base. The SourceKind enum expansion was a cross-cutting change that would have been
+   painful to do later.
+3. **Design questions resolved upfront** — The 7 design decisions (R6-R12) prevented blockers
+   during implementation. Especially equipment alias identity and the archive deletion flow.
+4. **Issue creation** — 109 GitHub issues with labels, phases, and dependencies provide
+   a clear execution backlog for future sessions.
+
+### What didn't work well
+1. **Pre-commit hook friction** — The mtime-based test check blocked commits repeatedly.
+   Needed to run tests immediately before commit with no file edits in between.
+2. **Cascading enum changes** — Expanding SourceKind from 4→6 values touched 12+ files
+   across 5 crates, all tests, and contract schemas. This was necessary but time-consuming.
+3. **Agent test awareness** — Both agents produced code that compiled but the wizard agent's
+   tests had ambiguous text matchers. Review caught it but it shows tests need explicit
+   guidance in agent prompts.
+4. **Session scope** — 109 tasks is not achievable in one session. The goal should have
+   been scoped to "complete Phase 1+2, start Phase 3" rather than "entire speckit flow."
+
+### Lessons for next session
+1. Remaining phases are independent after Phase 2 — run Track A (US1+US2), Track B
+   (US3+US4), Track C (US5+US6) as parallel PRs or parallel agents.
+2. The wizard tests now pass — Phase 3 is complete.
+3. Phase 2 still needs: T029-T034 (watcher, inbox scan, session split/merge, notes sync,
+   cleanup scan) and T035 (binding regeneration). These are the more complex backend
+   services.
+4. Phase 9 (polish) should be the final pass after all phases land.
 
 ### D004 — Pre-commit hook blocks commit due to mtime check
 **Time**: after Phase 1+2 work
