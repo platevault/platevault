@@ -311,6 +311,31 @@ export const commands = {
 	 *  Returns `Err(String)` on failure; the stub never fails.
 	 */
 	tourCompleteStep: (step: string) => typedError<null, string>(__TAURI_INVOKE("tour.complete_step", { step })),
+	/**
+	 *  `native.directory.pick` — open the OS directory picker.
+	 * 
+	 *  # Errors
+	 *  Returns `Err(String)` on validation failure or if the dialog cannot be shown.
+	 */
+	nativeDirectoryPick: (request: DirectoryPickRequest_Deserialize) => typedError<DirectoryPickResponse, string>(__TAURI_INVOKE("native.directory.pick", { request })),
+	/**
+	 *  `native.file.pick` — open the OS file picker with type filters.
+	 * 
+	 *  # Errors
+	 *  Returns `Err(String)` on filter validation failure or if the dialog cannot be shown.
+	 */
+	nativeFilePick: (request: FilePickRequest_Deserialize) => typedError<FilePickResponse_Serialize, string>(__TAURI_INVOKE("native.file.pick", { request })),
+	/**
+	 *  `native.reveal` — reveal a path in the OS file browser.
+	 * 
+	 *  Uses `tauri_plugin_opener::reveal_item_in_dir`. On Linux, if the opener
+	 *  plugin fails, falls back to `xdg-open` on the parent directory and
+	 *  returns `selection: "directory_only"`.
+	 * 
+	 *  # Errors
+	 *  Returns `Err(String)` if the path does not exist or the OS command fails.
+	 */
+	nativeReveal: (request: RevealRequest_Deserialize) => typedError<RevealResponse, string>(__TAURI_INVOKE("native.reveal", { request })),
 };
 
 /* Types */
@@ -641,6 +666,29 @@ export type DataSourceTransitionRequest_Serialize = {
 /**  UI density preference. */
 export type Density = "compact" | "comfortable" | "spacious";
 
+/**  Request payload for `native.directory.pick`. */
+export type DirectoryPickRequest = DirectoryPickRequest_Serialize | DirectoryPickRequest_Deserialize;
+
+/**  Request payload for `native.directory.pick`. */
+export type DirectoryPickRequest_Deserialize = {
+	requestId: string,
+	defaultPath: string | null,
+};
+
+/**  Request payload for `native.directory.pick`. */
+export type DirectoryPickRequest_Serialize = {
+	requestId: string,
+	defaultPath?: string | null,
+};
+
+/**  Response payload for `native.directory.pick`. */
+export type DirectoryPickResponse = {
+	/**  Absolute OS-canonical path the user selected, or `None` when cancelled. */
+	path: string | null,
+	/**  True when the user dismissed the dialog without selecting. */
+	cancelled: boolean,
+};
+
 /**  Dry-run result summary. */
 export type DryRunResult = {
 	passed: number,
@@ -648,12 +696,65 @@ export type DryRunResult = {
 	failures: number,
 };
 
+/**  Entity kind for audit-log correlation on reveal operations. */
+export type EntityKind = "inbox_item" | "inventory_row" | "project_manifest" | "master_calibration" | "registered_source" | "other";
+
 /**  A piece of astrophotography equipment. */
 export type Equipment = {
 	id: string,
 	name: string,
 	kind: string,
 	aliases: string[],
+};
+
+/**  A file-type filter row for the OS file picker. */
+export type FileFilter = {
+	/**  Display name for the filter (e.g. "FITS files"). */
+	name: string,
+	/**  Extensions without leading dot (e.g. `["fits", "fit"]`). */
+	extensions: string[],
+};
+
+/**  Request payload for `native.file.pick`. */
+export type FilePickRequest = FilePickRequest_Serialize | FilePickRequest_Deserialize;
+
+/**  Request payload for `native.file.pick`. */
+export type FilePickRequest_Deserialize = {
+	requestId: string,
+	/**  Ordered list of file-type filters. The first filter is the default. */
+	filters: FileFilter[],
+	defaultPath: string | null,
+};
+
+/**  Request payload for `native.file.pick`. */
+export type FilePickRequest_Serialize = {
+	requestId: string,
+	/**  Ordered list of file-type filters. The first filter is the default. */
+	filters: FileFilter[],
+	defaultPath?: string | null,
+};
+
+/**  Response payload for `native.file.pick`. */
+export type FilePickResponse = FilePickResponse_Serialize | FilePickResponse_Deserialize;
+
+/**  Response payload for `native.file.pick`. */
+export type FilePickResponse_Deserialize = {
+	/**  Absolute OS-canonical path the user selected, or `None` when cancelled. */
+	path: string | null,
+	/**  The name of the filter active when the user clicked Open. */
+	selectedFilter: string | null,
+	/**  True when the user dismissed the dialog without selecting. */
+	cancelled: boolean,
+};
+
+/**  Response payload for `native.file.pick`. */
+export type FilePickResponse_Serialize = {
+	/**  Absolute OS-canonical path the user selected, or `None` when cancelled. */
+	path: string | null,
+	/**  The name of the filter active when the user clicked Open. */
+	selectedFilter?: string | null,
+	/**  True when the user dismissed the dialog without selecting. */
+	cancelled: boolean,
 };
 
 export type FileRecordState = "observed" | "missing" | "changed" | "classified" | "rejected" | "protected";
@@ -1463,6 +1564,48 @@ export type RemapVerification = {
 	samples: RemapSample[],
 	allVerified: boolean,
 };
+
+/**  Request payload for `native.reveal`. */
+export type RevealRequest = RevealRequest_Serialize | RevealRequest_Deserialize;
+
+/**  Request payload for `native.reveal`. */
+export type RevealRequest_Deserialize = {
+	requestId: string,
+	/**  Absolute path to reveal. May point to a file or directory. */
+	path: string,
+	/**  Optional context tag for audit-log correlation. */
+	entityKind: EntityKind | null,
+	/**  Optional entity identifier for audit-log correlation. */
+	entityId: string | null,
+};
+
+/**  Request payload for `native.reveal`. */
+export type RevealRequest_Serialize = {
+	requestId: string,
+	/**  Absolute path to reveal. May point to a file or directory. */
+	path: string,
+	/**  Optional context tag for audit-log correlation. */
+	entityKind?: EntityKind | null,
+	/**  Optional entity identifier for audit-log correlation. */
+	entityId?: string | null,
+};
+
+/**  Response payload for `native.reveal`. */
+export type RevealResponse = {
+	/**  True when the OS file browser launched successfully. */
+	revealed: boolean,
+	/**  How the target was highlighted. */
+	selection: RevealSelection,
+};
+
+/**  How the target was highlighted in the OS file browser after a reveal. */
+export type RevealSelection = 
+/**  The item was selected in the file browser (macOS, Windows, Linux freedesktop). */
+"target" | 
+/**  Only the parent directory opened (Linux xdg-open fallback). */
+"directory_only" | 
+/**  No UI hint was applied. */
+"none";
 
 /**  An item in the review queue awaiting user decision. */
 export type ReviewItem = ReviewItem_Serialize | ReviewItem_Deserialize;

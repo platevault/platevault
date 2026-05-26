@@ -1,3 +1,4 @@
+import { useEffect } from 'react';
 import { Box, KV, Pill, Btn, Confidence, Lock, Toolbar } from '@/ui';
 import {
   focusedMaster,
@@ -5,6 +6,8 @@ import {
   calibrationSummary,
   type CalibrationMasterFixture,
 } from '@/data/fixtures/calibration';
+import { useRevealInOs, copyToClipboard } from '@/shared/native/reveal';
+import { addToast } from '@/shared/toast';
 
 export interface MasterDetailProps {
   masterId: string;
@@ -23,6 +26,25 @@ export function MasterDetail({ masterId }: MasterDetailProps) {
   const masterListItem: CalibrationMasterFixture | undefined =
     masters.find((m) => m.id === masterId);
   const detail = masterId === 'm-1' ? focusedMaster : null;
+
+  const { reveal, error: revealError } = useRevealInOs();
+
+  // Surface reveal errors as toasts with "Copy path" action (T029)
+  useEffect(() => {
+    if (revealError) {
+      addToast({
+        message: revealError.message,
+        variant: 'error',
+        duration: 8000,
+        action: {
+          label: 'Copy path',
+          onClick: () => {
+            void copyToClipboard(revealError.path);
+          },
+        },
+      });
+    }
+  }, [revealError]);
 
   if (!masterListItem) {
     return (
@@ -76,7 +98,20 @@ export function MasterDetail({ masterId }: MasterDetailProps) {
             <Confidence level={conf} />
           </div>
           <div className="alm-master-detail__header-actions">
-            <Btn size="sm">Reveal in Explorer</Btn>
+            <Btn
+              size="sm"
+              onClick={() => {
+                const masterPath = detail
+                  ? detail.path
+                  : `${masterListItem.name}.xisf`;
+                void reveal(masterPath, {
+                  entityKind: 'calibration_master',
+                  entityId: masterId,
+                });
+              }}
+            >
+              Reveal in Explorer
+            </Btn>
             <Btn size="sm">Use in project →</Btn>
             <Btn size="sm">Mark superseded</Btn>
           </div>
