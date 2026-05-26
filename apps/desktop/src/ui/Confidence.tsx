@@ -1,5 +1,5 @@
 import { clsx } from 'clsx';
-import type { ConfidenceLevel } from '@/api/types';
+import type { ConfidenceLevel } from '@/bindings/types';
 
 const LEVEL_CONFIG: Record<ConfidenceLevel, { width: string; color: string; label: string }> = {
   unknown: { width: '0%', color: 'var(--alm-gray-300)', label: 'Unknown' },
