@@ -112,19 +112,9 @@ fn db_to_contract(e: persistence_db::DbError) -> ContractError {
     // Map UNIQUE constraint violations to duplicate error codes.
     let msg = e.to_string();
     if msg.contains("UNIQUE constraint failed") {
-        ContractError::new(
-            "path.already_registered",
-            msg,
-            ErrorSeverity::Warning,
-            false,
-        )
+        ContractError::new("path.already_registered", msg, ErrorSeverity::Warning, false)
     } else {
-        ContractError::new(
-            "internal.database",
-            msg,
-            ErrorSeverity::Fatal,
-            true,
-        )
+        ContractError::new("internal.database", msg, ErrorSeverity::Fatal, true)
     }
 }
 
@@ -191,9 +181,8 @@ pub async fn register_source_batch(
         let batch_req = RegisterSourceBatchRequest {
             sources: valid_sources.iter().map(|(_, s)| (*s).clone()).collect(),
         };
-        let batch_resp = repo::register_source_batch(pool, &batch_req)
-            .await
-            .map_err(db_to_contract)?;
+        let batch_resp =
+            repo::register_source_batch(pool, &batch_req).await.map_err(db_to_contract)?;
 
         // Map repository batch items back to original indices.
         for (batch_idx, repo_item) in batch_resp.items.into_iter().enumerate() {
@@ -230,9 +219,7 @@ pub async fn register_source_batch(
 /// # Errors
 ///
 /// Returns `ContractError` on database failure.
-pub async fn list_sources(
-    pool: &SqlitePool,
-) -> Result<Vec<RegisterSourceResponse>, ContractError> {
+pub async fn list_sources(pool: &SqlitePool) -> Result<Vec<RegisterSourceResponse>, ContractError> {
     repo::list_sources(pool).await.map_err(db_to_contract)
 }
 

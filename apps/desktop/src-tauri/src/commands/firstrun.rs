@@ -17,13 +17,9 @@ use crate::commands::lifecycle::AppState;
 /// Returns `Err(String)` on database failure.
 #[tauri::command]
 #[specta::specta(rename = "firstrun.state")]
-pub async fn firstrun_state(
-    state: State<'_, AppState>,
-) -> Result<FirstRunStateResponse, String> {
+pub async fn firstrun_state(state: State<'_, AppState>) -> Result<FirstRunStateResponse, String> {
     tracing::debug!("firstrun.state");
-    app_core::first_run::get_first_run_state(state.repo.pool())
-        .await
-        .map_err(|e| e.message)
+    app_core::first_run::get_first_run_state(state.repo.pool()).await.map_err(|e| e.message)
 }
 
 /// `firstrun.complete` — mark the first-run wizard as complete.
@@ -53,9 +49,7 @@ pub async fn firstrun_restart(
     state: State<'_, AppState>,
 ) -> Result<FirstRunRestartResponse, String> {
     tracing::debug!("firstrun.restart");
-    app_core::first_run::restart_first_run(state.repo.pool())
-        .await
-        .map_err(|e| e.message)
+    app_core::first_run::restart_first_run(state.repo.pool()).await.map_err(|e| e.message)
 }
 
 /// `roots.register.batch` — register multiple source directories at once.

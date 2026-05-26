@@ -83,9 +83,6 @@ fn exports_typescript_bindings() {
         "tour.complete_step",
     ];
     for cmd in &stub_commands {
-        assert!(
-            written.contains(cmd),
-            "binding missing stub command: {cmd}"
-        );
+        assert!(written.contains(cmd), "binding missing stub command: {cmd}");
     }
 }

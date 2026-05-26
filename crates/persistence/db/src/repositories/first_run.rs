@@ -91,12 +91,7 @@ pub async fn register_source(
     .execute(pool)
     .await?;
 
-    Ok(RegisterSourceResponse {
-        source_id: id,
-        kind: req.kind,
-        path: req.path.clone(),
-        created_at,
-    })
+    Ok(RegisterSourceResponse { source_id: id, kind: req.kind, path: req.path.clone(), created_at })
 }
 
 /// Register multiple sources in a single transaction with partial-success
@@ -207,10 +202,8 @@ pub async fn list_sources(pool: &SqlitePool) -> DbResult<Vec<RegisterSourceRespo
 ///
 /// Returns [`DbError::NotFound`] if the ID does not exist.
 pub async fn remove_source(pool: &SqlitePool, id: &str) -> DbResult<()> {
-    let result = sqlx::query("DELETE FROM registered_sources WHERE id = ?")
-        .bind(id)
-        .execute(pool)
-        .await?;
+    let result =
+        sqlx::query("DELETE FROM registered_sources WHERE id = ?").bind(id).execute(pool).await?;
 
     if result.rows_affected() == 0 {
         return Err(DbError::NotFound(format!("registered source {id} not found")));
@@ -228,19 +221,15 @@ pub async fn remove_source(pool: &SqlitePool, id: &str) -> DbResult<()> {
 ///
 /// Returns [`DbError::Database`] on query failure.
 pub async fn get_first_run_state(pool: &SqlitePool) -> DbResult<FirstRunStateResponse> {
-    let row: Option<(Option<String>, String)> =
-        sqlx::query_as("SELECT completed_at, last_step FROM first_run_state WHERE singleton_id = 'first_run'")
-            .fetch_optional(pool)
-            .await?;
+    let row: Option<(Option<String>, String)> = sqlx::query_as(
+        "SELECT completed_at, last_step FROM first_run_state WHERE singleton_id = 'first_run'",
+    )
+    .fetch_optional(pool)
+    .await?;
 
     match row {
-        Some((completed_at, last_step)) => {
-            Ok(FirstRunStateResponse { completed_at, last_step })
-        }
-        None => Ok(FirstRunStateResponse {
-            completed_at: None,
-            last_step: "welcome".to_owned(),
-        }),
+        Some((completed_at, last_step)) => Ok(FirstRunStateResponse { completed_at, last_step }),
+        None => Ok(FirstRunStateResponse { completed_at: None, last_step: "welcome".to_owned() }),
     }
 }
 

@@ -4,7 +4,9 @@
 //! (spec 003). Remaining commands are stubs returning fixture data until
 //! the real persistence layer is wired.
 
-use contracts_core::first_run::{RegisterSourceRequest, RegisterSourceResponse, ScanDepth, SourceKind};
+use contracts_core::first_run::{
+    RegisterSourceRequest, RegisterSourceResponse, ScanDepth, SourceKind,
+};
 use contracts_core::roots::{
     Equipment, IpcOperationHandle, LibraryRoot, RemapSample, RemapVerification, RootCategory,
 };
@@ -41,7 +43,9 @@ pub async fn roots_register(
     category: String,
     scan_settings: JsonAny,
 ) -> Result<RegisterSourceResponse, String> {
-    tracing::debug!("roots.register path={path} category={category} scan_settings={scan_settings:?}");
+    tracing::debug!(
+        "roots.register path={path} category={category} scan_settings={scan_settings:?}"
+    );
 
     let kind = match category.as_str() {
         "calibration" => SourceKind::Calibration,
@@ -61,16 +65,9 @@ pub async fn roots_register(
         })
         .unwrap_or(ScanDepth::Recursive);
 
-    let req = RegisterSourceRequest {
-        kind,
-        path,
-        kind_subtype: None,
-        scan_depth,
-    };
+    let req = RegisterSourceRequest { kind, path, kind_subtype: None, scan_depth };
 
-    app_core::first_run::register_source(state.repo.pool(), &req)
-        .await
-        .map_err(|e| e.message)
+    app_core::first_run::register_source(state.repo.pool(), &req).await.map_err(|e| e.message)
 }
 
 /// `roots.remap` — preview a root path remap.

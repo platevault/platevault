@@ -28,16 +28,16 @@ implemented and validated independently.
 
 ## Phase 1: Contracts & Schema Setup
 
-- [ ] T001 [P] Rename contract files: `source.register.json` →
+- [x] T001 [P] Rename contract files: `source.register.json` →
       `roots.register.json`, `source.register.batch.json` →
       `roots.register.batch.json`. Update command names inside each schema
       to use dotted names (`roots.register`, `roots.register.batch`).
-- [ ] T002 [P] Wire the JSON Schemas in `specs/003-first-run-source-setup/contracts/`
+- [x] T002 [P] Wire the JSON Schemas in `specs/003-first-run-source-setup/contracts/`
       into the contracts index in `packages/contracts/` so generated TS
       types are produced. Contracts: `roots.register.json`,
       `roots.register.batch.json`, `firstrun.complete.json`,
       `firstrun.restart.json`, `audit.first_run.completed.json`.
-- [ ] T003 [P] Add JSON Schema validator dev dependency (Ajv 2020 or
+- [x] T003 [P] Add JSON Schema validator dev dependency (Ajv 2020 or
       equivalent) and a contract-test harness under `tests/contract/` if
       not already present.
 
@@ -45,17 +45,17 @@ implemented and validated independently.
 
 ## Phase 2: Persistence & Domain (Blocking Prerequisites)
 
-- [ ] T004 Define `RegisteredSource` and `FirstRunState` schema and
+- [x] T004 Define `RegisteredSource` and `FirstRunState` schema and
       migration in `crates/persistence/db/migrations/`. `RegisteredSource`
       includes `scan_depth` column (default `recursive`, R-Wiz-1) and
       server-derived `created_via` column (R-Auth-1). `FirstRunState` does
       NOT include `sources_buffer` — scratch state is localStorage-only
       (R-Buf).
-- [ ] T005 [P] Add Rust DTOs mirroring the JSON contracts in
+- [x] T005 [P] Add Rust DTOs mirroring the JSON contracts in
       `crates/contracts/core/src/first_run.rs`. Types for
       `roots.register`, `roots.register.batch`, `firstrun.complete`,
       `firstrun.restart`, and `firstrun.state` requests/responses.
-- [ ] T006 [P] Implement repository methods in
+- [x] T006 [P] Implement repository methods in
       `crates/persistence/db/src/first_run.rs`:
       `register_source`, `register_source_batch`, `list_sources`,
       `remove_source`, `get_first_run_state`, `set_first_run_state`,
@@ -64,7 +64,7 @@ implemented and validated independently.
       `FirstRunState.completed_at` context (R-Auth-1).
       `register_source_batch` is transactional: all-or-nothing on full
       failure; partial commit on partial success (R-Batch).
-- [ ] T007 Implement use cases in `crates/app/core/src/first_run.rs`:
+- [x] T007 Implement use cases in `crates/app/core/src/first_run.rs`:
       `register_source`, `register_source_batch`, `complete_first_run`,
       `restart_first_run`, and `get_first_run_state`. Path validation
       (exists, is_dir, readable) and error mapping to the contract error
@@ -77,7 +77,7 @@ implemented and validated independently.
       (R-Wiz-2). `restart_first_run` clears `completed_at` and returns
       existing sources as prefilled (R-E5). `complete_first_run` emits
       `first_run.completed` audit event via `crates/audit/` (R-E2).
-- [ ] T008 Replace the `roots.register` stub in
+- [x] T008 Replace the `roots.register` stub in
       `apps/desktop/src-tauri/src/commands/roots.rs` with a real
       implementation delegating to `crates/app/core/`. Add new Tauri
       commands: `roots.register.batch`, `firstrun.complete`,
@@ -106,14 +106,14 @@ gate sends to `/sessions` on next launch.
 
 ### Implementation for User Story 1
 
-- [ ] T010 [US1] Update `apps/desktop/src/app/router.tsx`: add a
+- [x] T010 [US1] Update `apps/desktop/src/app/router.tsx`: add a
       `beforeLoad` guard on the index route that calls `firstrun.state`
       via Tauri and redirects to `/setup` when `completed_at` is null.
       Fall back to `setupCompleted` localStorage preference if the Tauri
       call fails. Render a loading/pending state (spinner or skeleton)
       while the async DB check resolves to prevent a flash of the wrong
       route (FR-016).
-- [ ] T011 [US1] Update `apps/desktop/src/features/setup/SetupPage.tsx`:
+- [x] T011 [US1] Update `apps/desktop/src/features/setup/SetupPage.tsx`:
       replace the `usePreference('setupCompleted')` guard with a
       DB-backed check via `firstrun.state`. Keep localStorage as cache.
 
@@ -155,12 +155,12 @@ other two advance freely, and Finish writes `RegisteredSource` rows plus
 
 ### Implementation for User Story 2
 
-- [ ] T017 [US2] Refactor `SetupWizard.tsx`: replace the 5-step `STEPS`
+- [x] T017 [US2] Refactor `SetupWizard.tsx`: replace the 5-step `STEPS`
       array with the 8-step sequence (Welcome → Raw → Calibration →
       Project → Inbox → Detect Tools → Download Catalogs → Finish).
       Update `canAdvance` to require entries for Raw (step 1) and
       Project (step 3).
-- [ ] T018 [US2] Split `StepSources.tsx` into four per-category step
+- [x] T018 [US2] Split `StepSources.tsx` into four per-category step
       components: `StepRaw.tsx`, `StepCalibration.tsx`,
       `StepProject.tsx`, `StepInbox.tsx`. Each uses the existing
       `DirPicker` component for directory selection. Include category
@@ -169,32 +169,32 @@ other two advance freely, and Finish writes `RegisteredSource` rows plus
       optional scan-depth selector (Recursive / Single-level) as
       advanced/collapsed disclosure, hidden by default behind an
       "Advanced" expander on each row (FR-017).
-- [ ] T019 [US2] Add `apps/desktop/src/features/setup/sources-store.ts`
+- [x] T019 [US2] Add `apps/desktop/src/features/setup/sources-store.ts`
       to centralize the localStorage buffer and the DB-promotion flow.
       The store manages the working source list, deduplication checks,
       and flush-to-DB via `roots.register.batch` on Finish.
-- [ ] T020 [US2] Wire the wizard's per-step "Add folder" action through
+- [x] T020 [US2] Wire the wizard's per-step "Add folder" action through
       `sources-store.ts`. After the user selects a directory via
       `DirPicker`, call `roots.register` to validate and render contract
       errors (`path.not.exists`, `path.not.directory`,
       `path.permission.denied`, `path.already.registered`,
       `path.already.registered.different_kind`) inline next to the row.
-- [ ] T021 [US2] Update the Finish step (`StepConfirm.tsx`): on submit,
+- [x] T021 [US2] Update the Finish step (`StepConfirm.tsx`): on submit,
       call `roots.register.batch` with the full working buffer, then
       call `firstrun.complete`. On batch partial-failure, stay on
       Finish with per-row error indicators. Treat
       `path.already.registered` as success (D1). On
       `required.step.incomplete`, return to the relevant step. On
       success, clear localStorage buffer and navigate to `/sessions`.
-- [ ] T022 [US2] Add `StepDetectTools.tsx` as a stub/placeholder step.
+- [x] T022 [US2] Add `StepDetectTools.tsx` as a stub/placeholder step.
       Show a fixture list of common tools (PixInsight, Siril, planetary
       tools) with a note that auto-detection will be available in a
       future update. User can skip freely.
-- [ ] T023 [US2] Update `StepCatalogs.tsx` for stub mode: show OpenNGC
+- [x] T023 [US2] Update `StepCatalogs.tsx` for stub mode: show OpenNGC
       and common catalogs with simulated download progress. Include
       "Skip for now" action that advances without blocking. Note that
       real catalog download will be available in a future update.
-- [ ] T024 [US2] Update `apps/desktop/src/api/commands.ts`: add
+- [x] T024 [US2] Update `apps/desktop/src/api/commands.ts`: add
       `registerRootBatch()`, `completeFirstRun()`, `restartFirstRun()`,
       and `getFirstRunState()` wrappers calling the new Tauri commands.
 
@@ -224,13 +224,13 @@ into the working buffer.
 
 ### Implementation for User Story 3
 
-- [ ] T027 [US3] Update
+- [x] T027 [US3] Update
       `apps/desktop/src/features/settings/SettingsPage.tsx`: replace
       the destructive reset with a call to `restartFirstRun()` that
       receives `prefilled_sources`, writes them to
       `localStorage["alm-setup-wizard-state"]`, clears `setupCompleted`
       preference, and navigates to `/setup`.
-- [ ] T028 [US3] Add a confirm-before-restart dialog so users do not
+- [x] T028 [US3] Add a confirm-before-restart dialog so users do not
       lose the completion flag accidentally.
 
 **Checkpoint**: Restart is durable, non-destructive, and discoverable.
@@ -241,12 +241,12 @@ into the working buffer.
 
 - [ ] T029 [P] Audit event `first_run.completed` schema conformance test
       in `tests/contract/audit_first_run_completed_test.rs` (R-E2).
-- [ ] T030 [P] Update `docs/research/` with a short note linking back to
+- [x] T030 [P] Update `docs/research/` with a short note linking back to
       `specs/003-first-run-source-setup/research.md` for reference.
 - [ ] T031 Run `just lint`, `just typecheck`, `just test`, and verify
       Playwright MCP coverage of the gate, happy path, restart, and
       batch partial-failure.
-- [ ] T032 Remove old `StepSources.tsx` and `StepScan.tsx` (superseded
+- [x] T032 Remove old `StepSources.tsx` and `StepScan.tsx` (superseded
       by per-category steps and merged into confirm flow). Update
       `steps/index.ts` exports.
 
