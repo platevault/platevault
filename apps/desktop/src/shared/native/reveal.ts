@@ -9,15 +9,18 @@
  */
 
 import { useState, useCallback } from 'react';
-import { invoke } from '@tauri-apps/api/core';
+import { commands } from '@/bindings';
 
 // ---------------------------------------------------------------------------
 // Types
 // ---------------------------------------------------------------------------
 
+/** Valid entity kinds for audit correlation (must match Rust EntityKind enum). */
+export type EntityKind = 'inbox_item' | 'inventory_row' | 'project_manifest' | 'master_calibration' | 'registered_source' | 'other';
+
 /** Context passed alongside the reveal request for audit correlation. */
 export interface RevealContext {
-  entityKind?: string;
+  entityKind?: EntityKind;
   entityId?: string;
 }
 
@@ -79,31 +82,27 @@ export async function revealInOs(
   if (!isTauri()) {
     // eslint-disable-next-line no-console
     console.info('[reveal-stub]', path, ctx);
-    return { revealed: true, selection: path };
+    return { revealed: true, selection: 'target' };
   }
 
   const requestId = crypto.randomUUID();
 
-  try {
-    const result = await invoke<RevealResult>('native_reveal', {
-      requestId,
-      path,
-      entityKind: ctx?.entityKind ?? null,
-      entityId: ctx?.entityId ?? null,
-      contractVersion: '1.0.0',
-    });
+  const response = await commands.nativeReveal({
+    requestId,
+    path,
+    entityKind: ctx?.entityKind ?? null,
+    entityId: ctx?.entityId ?? null,
+  });
 
-    return result;
-  } catch (err: unknown) {
-    const message = err instanceof Error ? err.message : String(err);
-
-    // Map known contract error codes
+  if (response.status === 'error') {
+    const message = response.error;
     if (message.includes('path.not_exists') || message.includes('not found') || message.includes('does not exist')) {
       throw new RevealError_impl('path.not_exists', `Path does not exist: ${path}`, path);
     }
-
     throw new RevealError_impl('os.command_failed', message, path);
   }
+
+  return response.data;
 }
 
 // ---------------------------------------------------------------------------

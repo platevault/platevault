@@ -214,7 +214,7 @@ function AddFolderButton({ onAdd }: { onAdd: (path: string) => void }) {
   const { pick, loading, error } = useDirectoryPicker();
 
   const handleChoose = async () => {
-    const result = await pick(undefined, 'library_root');
+    const result = await pick(undefined, 'inbox');
     if (result.path) {
       onAdd(result.path);
     }

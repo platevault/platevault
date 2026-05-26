@@ -105,7 +105,7 @@ export function MasterDetail({ masterId }: MasterDetailProps) {
                   ? detail.path
                   : `${masterListItem.name}.xisf`;
                 void reveal(masterPath, {
-                  entityKind: 'calibration_master',
+                  entityKind: 'master_calibration',
                   entityId: masterId,
                 });
               }}

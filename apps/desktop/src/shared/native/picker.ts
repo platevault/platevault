@@ -9,7 +9,7 @@
  */
 
 import { useState, useCallback } from 'react';
-import { invoke } from '@tauri-apps/api/core';
+import { commands } from '@/bindings';
 
 // ---------------------------------------------------------------------------
 // Types
@@ -34,8 +34,8 @@ export interface FilePickResult {
   cancelled: boolean;
 }
 
-/** Affordance kinds for last-path persistence. */
-export type LastPathKind = 'library_root' | 'master_calibration';
+/** Affordance kinds for last-path persistence (per FR-014). */
+export type LastPathKind = 'raw' | 'calibration' | 'project' | 'inbox' | 'master_calibration' | 'catalog_import' | 'export';
 
 /** Error shape returned when a picker invocation fails (non-cancellation). */
 export interface PickerError {
@@ -48,7 +48,7 @@ export interface PickerError {
 // ---------------------------------------------------------------------------
 
 export const CALIBRATION_FILE_FILTERS: FileFilter[] = [
-  { name: 'All supported astro images', extensions: ['xisf', 'fits', 'fit', 'fts', 'tif', 'tiff', 'png', 'jpg'] },
+  { name: 'All supported', extensions: ['xisf', 'fits', 'fit', 'fts', 'tif', 'tiff'] },
   { name: 'FITS', extensions: ['fit', 'fits', 'fts'] },
   { name: 'XISF', extensions: ['xisf'] },
   { name: 'TIFF', extensions: ['tif', 'tiff'] },
@@ -168,30 +168,26 @@ export async function pickDirectory(
 
   const requestId = crypto.randomUUID();
 
-  try {
-    const result = await invoke<DirectoryPickResult>('native_directory_pick', {
-      requestId,
-      defaultPath: resolvedDefault ?? null,
-      contractVersion: '1.0.0',
-    });
+  const response = await commands.nativeDirectoryPick({
+    requestId,
+    defaultPath: resolvedDefault ?? null,
+  });
 
-    // Tauri command returns the contract response shape directly
-    if (result.cancelled || result.path === null) {
-      return { path: null, cancelled: true };
-    }
-
-    if (kind) setLastPath(kind, result.path);
-    return { path: result.path, cancelled: false };
-  } catch (err: unknown) {
-    // Distinguish cancellation from real errors. The Tauri side should
-    // return a response with `cancelled: true`, but some backends throw
-    // on user-cancel instead.
-    const message = err instanceof Error ? err.message : String(err);
+  if (response.status === 'error') {
+    const message = response.error;
     if (message.includes('cancelled') || message.includes('canceled')) {
       return { path: null, cancelled: true };
     }
     throw new PickerError_impl('picker.directory_failed', message);
   }
+
+  const result = response.data;
+  if (result.cancelled || result.path === null) {
+    return { path: null, cancelled: true };
+  }
+
+  if (kind) setLastPath(kind, result.path);
+  return { path: result.path, cancelled: false };
 }
 
 /**
@@ -218,32 +214,32 @@ export async function pickFile(
 
   const requestId = crypto.randomUUID();
 
-  try {
-    const result = await invoke<FilePickResult>('native_file_pick', {
-      requestId,
-      filters,
-      defaultPath: resolvedDefault ?? null,
-      contractVersion: '1.0.0',
-    });
+  const response = await commands.nativeFilePick({
+    requestId,
+    filters,
+    defaultPath: resolvedDefault ?? null,
+  });
 
-    if (result.cancelled || result.path === null) {
-      return { path: null, selectedFilter: null, cancelled: true };
-    }
-
-    if (kind) setLastPath(kind, result.path);
-    if (result.selectedFilter) setSelectedFilter(result.selectedFilter);
-    return {
-      path: result.path,
-      selectedFilter: result.selectedFilter,
-      cancelled: false,
-    };
-  } catch (err: unknown) {
-    const message = err instanceof Error ? err.message : String(err);
+  if (response.status === 'error') {
+    const message = response.error;
     if (message.includes('cancelled') || message.includes('canceled')) {
       return { path: null, selectedFilter: null, cancelled: true };
     }
     throw new PickerError_impl('picker.file_failed', message);
   }
+
+  const result = response.data;
+  if (result.cancelled || result.path === null) {
+    return { path: null, selectedFilter: null, cancelled: true };
+  }
+
+  if (kind) setLastPath(kind, result.path);
+  if (result.selectedFilter) setSelectedFilter(result.selectedFilter);
+  return {
+    path: result.path,
+    selectedFilter: result.selectedFilter ?? null,
+    cancelled: false,
+  };
 }
 
 // ---------------------------------------------------------------------------
