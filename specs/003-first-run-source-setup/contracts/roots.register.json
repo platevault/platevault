@@ -1,7 +1,7 @@
 {
   "$schema": "https://json-schema.org/draft/2020-12/schema",
-  "$id": "https://astro-library-manager.local/contracts/source.register.json",
-  "title": "source.register",
+  "$id": "https://astro-library-manager.local/contracts/roots.register.json",
+  "title": "roots.register",
   "description": "Register a single directory as a RegisteredSource of the given kind. Idempotent failure on duplicate (kind, path). Performs path existence, directory, and readability validation before inserting.",
   "type": "object",
   "properties": {
