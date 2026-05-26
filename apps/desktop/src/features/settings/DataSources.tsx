@@ -3,7 +3,8 @@ import { useNavigate } from '@tanstack/react-router';
 import { Select } from '@base-ui-components/react/select';
 import { listRoots, registerRoot, startScan } from '@/api/commands';
 import { setPreference } from '@/data/preferences';
-import { DirPicker, Btn, Pill, Box, KV } from '@/ui';
+import { Btn, Pill, Box, KV } from '@/ui';
+import { DirPicker } from '@/ui/DirPicker';
 import type { LibraryRoot } from '@/bindings/types';
 
 interface DataSourcesProps {

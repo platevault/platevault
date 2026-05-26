@@ -38,6 +38,7 @@ specta-typescript = "0.0.12"
 tauri = { version = "2.11", default-features = false, features = ["wry"] }
 tauri-build = { version = "2.6", features = [] }
 tauri-plugin-dialog = "2"
+tauri-plugin-opener = "2"
 tauri-specta = { version = "2.0.0-rc.25", features = ["typescript"] }
 schemars = { version = "0.8", features = ["uuid1"] }
 serde = { version = "1", features = ["derive"] }

@@ -11,17 +11,35 @@ import { describe, it, expect, beforeEach, vi } from 'vitest';
 
 // ---------------------------------------------------------------------------
 // Hoisted mock state — vi.hoisted runs BEFORE vi.mock factories, so
-// the `mockOpen` fn is accessible from within the hoisted mock factory.
+// the `mockPickDirectory` fn is accessible from within the hoisted mock factory.
 // ---------------------------------------------------------------------------
-const { mockOpen } = vi.hoisted(() => {
-  const mockOpen = vi.fn<() => Promise<string | null>>();
-  return { mockOpen };
+const { mockPickDirectory } = vi.hoisted(() => {
+  const mockPickDirectory = vi.fn<() => Promise<{ path: string | null; cancelled: boolean }>>();
+  return { mockPickDirectory };
 });
 
-// Mock @tauri-apps/plugin-dialog: dynamic import resolves, `open` delegates
-// to our controllable `mockOpen` spy.
+// Mock @tauri-apps/plugin-dialog so any leftover dynamic imports resolve.
 vi.mock('@tauri-apps/plugin-dialog', () => ({
-  open: mockOpen,
+  open: vi.fn().mockResolvedValue(null),
+}));
+
+// Mock the new native picker module so AddFolderButton uses our controllable
+// mock instead of attempting a real Tauri invoke.
+vi.mock('@/shared/native/picker', () => ({
+  pickDirectory: mockPickDirectory,
+  useDirectoryPicker: () => ({
+    pick: mockPickDirectory,
+    loading: false,
+    error: null,
+    clearError: vi.fn(),
+  }),
+}));
+
+// Mock toast module to prevent side-effect issues in tests.
+vi.mock('@/shared/toast', () => ({
+  addToast: vi.fn(),
+  dismissToast: vi.fn(),
+  useToasts: () => ({ toasts: [], dismiss: vi.fn(), add: vi.fn() }),
 }));
 
 // Mock @tanstack/react-router so useNavigate returns a no-op.
@@ -83,18 +101,18 @@ function getContinueButton(): HTMLElement {
 }
 
 /**
- * Simulate adding a folder by configuring the mocked dialog.open() to
+ * Simulate adding a folder by configuring the mocked pickDirectory() to
  * resolve with the desired path, then clicking the "+ Add folder" button.
  */
 async function addFolder(path: string) {
-  mockOpen.mockResolvedValueOnce(path);
+  mockPickDirectory.mockResolvedValueOnce({ path, cancelled: false });
 
   const addBtn = screen.getByRole('button', { name: /add folder/i });
 
   await act(async () => {
     fireEvent.click(addBtn);
-    // handleChoose is async: it awaits the dynamic import then awaits
-    // open(). Flush the microtask queue so React processes the state update.
+    // handleChoose is async: it awaits pickDirectory(). Flush the microtask
+    // queue so React processes the state update.
     await new Promise((r) => setTimeout(r, 0));
   });
 }
@@ -106,7 +124,7 @@ async function addFolder(path: string) {
 beforeEach(() => {
   // Clear all wizard and preference state between tests.
   window.localStorage.clear();
-  mockOpen.mockReset();
+  mockPickDirectory.mockReset();
 });
 
 // ---------------------------------------------------------------------------

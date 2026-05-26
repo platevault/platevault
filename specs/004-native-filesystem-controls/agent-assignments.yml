@@ -1,0 +1,125 @@
+# Agent Assignments
+# Feature: 004-native-filesystem-controls
+# Generated: 2026-05-26T11:45:00Z
+# Command: /speckit.agent-assign.assign
+
+agents_scanned:
+  - name: "rust-pro"
+    source: "project"
+    description: "Master Rust 1.75+ with modern async patterns, advanced type system features, and production-ready systems programming"
+  - name: "frontend-developer"
+    source: "project"
+    description: "Build React components, implement responsive layouts, and handle client-side state management"
+  - name: "typescript-pro"
+    source: "project"
+    description: "Master TypeScript with advanced types, generics, and strict type safety"
+  - name: "test-automator"
+    source: "project"
+    description: "Master AI-powered test automation with modern frameworks, self-healing tests, and comprehensive quality engineering"
+  - name: "coder"
+    source: "project"
+    description: "Implementation subagent for bounded code changes, tests, refactors, and migrations"
+  - name: "docs-architect"
+    source: "project"
+    description: "Creates comprehensive technical documentation from existing codebases"
+
+assignments:
+  T001:
+    agent: "coder"
+    reason: "Cross-boundary dependency setup: npm package.json + Rust Cargo.toml"
+  T002:
+    agent: "coder"
+    reason: "Tauri capabilities config file edit"
+  T003:
+    agent: "typescript-pro"
+    reason: "Wire JSON Schemas into contracts index for TS type generation"
+  T004:
+    agent: "rust-pro"
+    reason: "Rust DTO struct/enum definitions in contracts/core"
+  T005:
+    agent: "rust-pro"
+    reason: "Rust audit event type definitions"
+  T006:
+    agent: "rust-pro"
+    reason: "Rust use-case implementation with path validation"
+  T007:
+    agent: "rust-pro"
+    reason: "Rust Tauri command handler wiring"
+  T008:
+    agent: "rust-pro"
+    reason: "Rust contract conformance test"
+  T009:
+    agent: "frontend-developer"
+    reason: "Vitest unit test for React hook"
+  T010:
+    agent: "test-automator"
+    reason: "Playwright E2E smoke test"
+  T011:
+    agent: "frontend-developer"
+    reason: "React hook + async helper implementation"
+  T012:
+    agent: "frontend-developer"
+    reason: "Frontend localStorage state management"
+  T013:
+    agent: "frontend-developer"
+    reason: "Component rewiring across setup wizard steps"
+  T014:
+    agent: "frontend-developer"
+    reason: "UI error handling with toast + audit"
+  T015:
+    agent: "rust-pro"
+    reason: "Rust contract conformance test"
+  T016:
+    agent: "frontend-developer"
+    reason: "Vitest unit test for React hook"
+  T017:
+    agent: "test-automator"
+    reason: "Playwright E2E test for master-add flow"
+  T018:
+    agent: "frontend-developer"
+    reason: "React hook implementation for file picker"
+  T019:
+    agent: "frontend-developer"
+    reason: "Frontend integration: wire calibration root as default_path"
+  T020:
+    agent: "rust-pro"
+    reason: "Rust filter validation logic"
+  T021:
+    agent: "frontend-developer"
+    reason: "Frontend state persistence for selected filter"
+  T022:
+    agent: "rust-pro"
+    reason: "Rust contract conformance test"
+  T023:
+    agent: "rust-pro"
+    reason: "Rust unit tests with mocked opener trait"
+  T024:
+    agent: "test-automator"
+    reason: "Playwright E2E integration test for reveal flow"
+  T025:
+    agent: "frontend-developer"
+    reason: "React hook + async helper for reveal"
+  T026:
+    agent: "rust-pro"
+    reason: "Rust domain logic for reveal_path"
+  T027:
+    agent: "rust-pro"
+    reason: "Rust platform-specific Linux fallback code"
+  T028:
+    agent: "frontend-developer"
+    reason: "Component rewiring across Inbox/Inventory/Projects/calibration surfaces"
+  T029:
+    agent: "frontend-developer"
+    reason: "UI error handling with toast + audit for reveal"
+  T030:
+    agent: "docs-architect"
+    reason: "Architecture documentation"
+  T031:
+    agent: "frontend-developer"
+    reason: "UI story/component demo"
+  T032:
+    agent: "coder"
+    reason: "Cross-boundary verification: lint + typecheck + test"
+  T033:
+    agent: "coder"
+    reason: "Spec cleanup: resolve remaining decision markers"

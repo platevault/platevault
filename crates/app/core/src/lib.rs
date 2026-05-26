@@ -4,6 +4,7 @@
 pub mod first_run;
 pub mod ledger_use_case;
 pub mod lifecycle_use_case;
+pub mod native;
 pub mod provenance_use_case;
 pub mod transition_use_case;
 

@@ -79,28 +79,26 @@ async fn check_duplicate(
     path: &str,
     kind: SourceKind,
 ) -> Result<(), ContractError> {
-    let existing = repo::list_sources(pool).await.map_err(db_to_contract)?;
+    let matches = repo::find_sources_by_path(pool, path).await.map_err(db_to_contract)?;
 
-    for source in &existing {
-        if source.path == path {
-            if source.kind == kind {
-                return Err(ContractError::new(
-                    "path.already_registered",
-                    format!("Path is already registered as {kind:?}: {path}"),
-                    ErrorSeverity::Warning,
-                    false,
-                ));
-            }
+    if let Some(source) = matches.first() {
+        if source.kind == kind {
             return Err(ContractError::new(
-                "path.already_registered.different_kind",
-                format!(
-                    "Path is already registered as {:?} (requested {:?}): {path}",
-                    source.kind, kind
-                ),
+                "path.already_registered",
+                format!("Path is already registered as {kind:?}: {path}"),
                 ErrorSeverity::Warning,
                 false,
             ));
         }
+        return Err(ContractError::new(
+            "path.already_registered.different_kind",
+            format!(
+                "Path is already registered as {:?} (requested {:?}): {path}",
+                source.kind, kind
+            ),
+            ErrorSeverity::Warning,
+            false,
+        ));
     }
 
     Ok(())

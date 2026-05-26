@@ -86,3 +86,57 @@ pub struct FirstRunCompleted {
 }
 
 pub const TOPIC_FIRST_RUN_COMPLETED: &str = "first_run.completed";
+
+// ── Native filesystem control audit events (spec 004) ─────────────────────
+
+/// Kind of picker that failed.
+#[derive(
+    Clone,
+    Copy,
+    Debug,
+    Eq,
+    Hash,
+    Ord,
+    PartialEq,
+    PartialOrd,
+    Serialize,
+    Deserialize,
+    JsonSchema,
+    Type,
+)]
+#[serde(rename_all = "snake_case")]
+pub enum PickerKind {
+    Directory,
+    File,
+}
+
+/// Payload for the `native.picker.failed` topic (spec 004).
+///
+/// Audit event emitted when an OS picker dialog fails.
+/// Does NOT include path or path_hash fields (A2 decision: correlate via entity_id).
+#[derive(Clone, Debug, Serialize, Deserialize, JsonSchema, Type)]
+#[serde(rename_all = "camelCase")]
+pub struct NativePickerFailed {
+    pub picker_kind: PickerKind,
+    pub error_code: String,
+    pub request_id: String,
+}
+
+pub const TOPIC_NATIVE_PICKER_FAILED: &str = "native.picker.failed";
+
+/// Payload for the `native.reveal.failed` topic (spec 004).
+///
+/// Audit event emitted when a reveal-in-OS operation fails.
+/// Does NOT include path or path_hash fields (A2 decision: correlate via entity_id).
+#[derive(Clone, Debug, Serialize, Deserialize, JsonSchema, Type)]
+#[serde(rename_all = "camelCase")]
+pub struct NativeRevealFailed {
+    pub error_code: String,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub entity_kind: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub entity_id: Option<String>,
+    pub request_id: String,
+}
+
+pub const TOPIC_NATIVE_REVEAL_FAILED: &str = "native.reveal.failed";

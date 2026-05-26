@@ -8,12 +8,15 @@
 
 ## Implementation Status: NOT YET IMPLEMENTED
 
-The only existing wiring is a stub picker in
-`apps/desktop/src/features/welcome/WelcomePage.tsx` that returns canned
-paths. No native picker, no Reveal-in-OS action, and no file-type filters
-have been wired into the Tauri shell. Specs 003 (first-run), 005 (inbox),
-006 (inventory), 008 (project create), and 017 (cleanup review) all assume
-these controls exist; this feature provides them.
+Spec 003 added an ad-hoc dynamic import of `@tauri-apps/plugin-dialog`
+in `AddFolderButton` (`apps/desktop/src/features/setup/steps/StepRaw.tsx`)
+with a `window.prompt` fallback. However: the npm dependency is not in
+`package.json`, there is no Tauri capability allowlist entry, no
+contract DTO, no audit logging, no `default_path`/last-path memory,
+and no structured error handling. No Reveal-in-OS action and no
+file-type filters have been wired. Specs 005 (inbox), 006 (inventory),
+008 (project create), and 017 (cleanup review) all assume these
+contract-driven controls exist; this feature provides them.
 
 ## User Scenarios & Testing *(mandatory)*
 
@@ -172,9 +175,10 @@ supported by the desktop environment.
 - **FR-006**: Failed picker or reveal operations MUST be logged with
   request id, entity kind, entity id (when available), and the
   contract error code.
-- **FR-007**: The UI MUST remove prototype upload-style controls and the
-  `pickFolderStub` once the Tauri picker is available, except behind an
-  explicit build flag for browser-only tests.
+- **FR-007**: The UI MUST remove the ad-hoc `@tauri-apps/plugin-dialog`
+  dynamic import in `AddFolderButton` and the `window.prompt` fallback
+  once the contract-driven `useDirectoryPicker` hook is available,
+  except behind an explicit build flag for browser-only tests.
 - **FR-008**: User cancellation of any picker MUST be returned as a
   non-error null/empty response. Cancellation is not an error and MUST
   NOT be logged at error level.

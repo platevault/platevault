@@ -61,6 +61,32 @@ async fn resolve_created_via(pool: &SqlitePool) -> DbResult<&'static str> {
 
 // ── Public API ──────────────────────────────────────────────────────────────
 
+/// Find all registered sources that share the given path (any kind).
+///
+/// # Errors
+///
+/// Returns [`DbError::Database`] on query failure.
+pub async fn find_sources_by_path(
+    pool: &SqlitePool,
+    path: &str,
+) -> DbResult<Vec<RegisterSourceResponse>> {
+    let rows: Vec<(String, String, String, String)> =
+        sqlx::query_as("SELECT id, kind, path, created_at FROM registered_sources WHERE path = ?")
+            .bind(path)
+            .fetch_all(pool)
+            .await?;
+
+    Ok(rows
+        .into_iter()
+        .map(|(id, kind, path, created_at)| RegisterSourceResponse {
+            source_id: id,
+            kind: str_to_source_kind(&kind),
+            path,
+            created_at,
+        })
+        .collect())
+}
+
 /// Register a single source directory.
 ///
 /// # Errors

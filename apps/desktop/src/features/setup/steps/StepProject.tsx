@@ -2,6 +2,7 @@ import { useState } from 'react';
 import { Box } from '@/ui/Box';
 import { Btn } from '@/ui/Btn';
 import { Pill } from '@/ui/Pill';
+import { useDirectoryPicker } from '@/shared/native/picker';
 import type { SourceEntry, ScanDepth } from '../sources-store';
 
 export interface StepProjectProps {
@@ -210,22 +211,32 @@ function SourceRow({
 }
 
 function AddFolderButton({ onAdd }: { onAdd: (path: string) => void }) {
+  const { pick, loading, error } = useDirectoryPicker();
+
   const handleChoose = async () => {
-    try {
-      const { open } = await import('@tauri-apps/plugin-dialog');
-      const selected = await open({ directory: true, multiple: false });
-      if (typeof selected === 'string') {
-        onAdd(selected);
-      }
-    } catch {
-      const path = window.prompt('Enter folder path:');
-      if (path) onAdd(path);
+    const result = await pick(undefined, 'project');
+    if (result.path) {
+      onAdd(result.path);
     }
   };
 
   return (
-    <Btn size="sm" onClick={handleChoose}>
-      + Add folder&hellip;
-    </Btn>
+    <div>
+      <Btn size="sm" onClick={handleChoose} disabled={loading}>
+        {loading ? 'Choosing...' : '+ Add folder…'}
+      </Btn>
+      {error && (
+        <div
+          style={{
+            marginTop: 'var(--alm-space-1)',
+            fontSize: 'var(--alm-text-xs)',
+            color: 'var(--alm-danger, #dc2626)',
+            lineHeight: 1.4,
+          }}
+        >
+          {error.message}
+        </div>
+      )}
+    </div>
   );
 }

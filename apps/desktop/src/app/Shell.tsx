@@ -8,6 +8,7 @@ import { CommandPalette } from './CommandPalette';
 import { LogPanelProvider, useLogPanel } from './LogPanelContext';
 import { OperationStatusProvider } from './OperationStatusContext';
 import { TourProvider } from '@/features/tour/TourProvider';
+import { ToastContainer } from '@/ui/ToastContainer';
 
 function ShellInner() {
   const prefs = usePreferences();
@@ -34,6 +35,7 @@ function ShellInner() {
       {expanded && <LogPanel />}
       <StatusBar />
       <CommandPalette />
+      <ToastContainer />
     </div>
   );
 }

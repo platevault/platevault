@@ -321,11 +321,9 @@ export function SetupWizard() {
       ) : (
         <span />
       )}
-      {isMockMode && (
-        <Btn variant="ghost" onClick={resetWizard} style={{ fontSize: 11, color: 'var(--alm-text-muted)' }}>
-          Reset wizard
-        </Btn>
-      )}
+      <Btn variant="ghost" onClick={resetWizard} style={{ fontSize: 11, color: 'var(--alm-text-muted)' }}>
+        Reset wizard
+      </Btn>
       <div style={{ flex: 1 }} />
       {/* Folder count summary on source steps */}
       {step >= 1 && step <= 4 && totalFolders > 0 && (

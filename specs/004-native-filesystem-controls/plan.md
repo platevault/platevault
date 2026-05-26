@@ -5,8 +5,9 @@
 
 ## Summary
 
-Replace the prototype `pickFolderStub` and the toast-only "Open
-location" action with three real, contract-driven Tauri operations:
+Replace the ad-hoc `@tauri-apps/plugin-dialog` dynamic import in
+`AddFolderButton` (spec 003) and the toast-only "Open location" action
+with three contract-driven Tauri operations:
 `native.directory.pick`, `native.file.pick`, and `native.reveal`. The
 directory and file pickers use `@tauri-apps/plugin-dialog`. Reveal-in-OS
 uses `tauri-plugin-opener` (preferred for cross-platform per-file
@@ -97,7 +98,11 @@ apps/desktop/
 ├── src/
 │   ├── shared/native/picker.ts             # NEW: directory + file picker hooks
 │   ├── shared/native/reveal.ts             # NEW: reveal-in-OS hook
-│   └── features/welcome/WelcomePage.tsx    # consumer: replaces pickFolderStub
+│   ├── features/setup/steps/StepRaw.tsx    # consumer: replaces ad-hoc dialog import
+│   ├── features/setup/steps/StepCalibration.tsx  # consumer
+│   ├── features/setup/steps/StepProject.tsx      # consumer
+│   ├── features/setup/steps/StepInbox.tsx        # consumer
+│   └── features/settings/DataSources.tsx   # consumer: settings add-source
 ├── src-tauri/
 │   ├── Cargo.toml                          # adds tauri-plugin-opener
 │   ├── capabilities/default.json           # adds dialog + opener allowlist
@@ -177,10 +182,10 @@ Cancellation is NOT logged. Picker permission denials emit
 
 ### Build-Flag Fallback
 
-The browser-only stub from `WelcomePage.tsx` survives behind a build
-flag (`VITE_TAURI=false`) so component tests and Storybook runs do
-not require a Tauri runtime. Production builds MUST set
-`VITE_TAURI=true` and the stub MUST throw if invoked.
+The browser-only fallback (`window.prompt` in `AddFolderButton`)
+survives behind a build flag (`VITE_TAURI=false`) so component tests
+and Storybook runs do not require a Tauri runtime. Production builds
+MUST set `VITE_TAURI=true` and the fallback MUST throw if invoked.
 
 ## Complexity Tracking
 
