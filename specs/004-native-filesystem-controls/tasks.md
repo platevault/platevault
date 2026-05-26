@@ -28,16 +28,16 @@ else is new.
 
 ## Phase 1: Setup (Shared Infrastructure)
 
-- [ ] T001 Add `@tauri-apps/plugin-dialog` and `@tauri-apps/api` to
+- [x] T001 Add `@tauri-apps/plugin-dialog` and `@tauri-apps/api` to
       `apps/desktop/package.json`. Add `tauri-plugin-dialog` and
       `tauri-plugin-opener` Rust crates to
       `apps/desktop/src-tauri/Cargo.toml`. Verify versions with
       `mcp-package-version` before pinning.
-- [ ] T002 [P] Extend `apps/desktop/src-tauri/capabilities/default.json`
+- [x] T002 [P] Extend `apps/desktop/src-tauri/capabilities/default.json`
       to allow `dialog:default`, `dialog:allow-open`, and
       `opener:allow-reveal-item-in-dir` per the Tauri 2.x capability spec.
       Note: `launch-app` and `launch-url` capabilities are owned by spec 011.
-- [ ] T003 [P] Wire the three JSON Schemas in
+- [x] T003 [P] Wire the three JSON Schemas in
       `specs/004-native-filesystem-controls/contracts/` into the
       contracts index in `packages/contracts/` so generated TypeScript
       types are produced for the request/response shapes.
@@ -46,21 +46,21 @@ else is new.
 
 ## Phase 2: Foundational (Blocking Prerequisites)
 
-- [ ] T004 Add Rust DTOs mirroring the three contracts in
+- [x] T004 Add Rust DTOs mirroring the three contracts in
       `crates/contracts/core/src/native.rs` (`PickerRequest`,
       `PickerResult`, `RevealRequest`, `RevealResult`,
       `FileFilter`, and the error enum).
-- [ ] T005 [P] Define audit-event types `native.picker.failed` and
+- [x] T005 [P] Define audit-event types `native.picker.failed` and
       `native.reveal.failed` in `crates/audit/src/events.rs` per
       `data-model.md`. Correlate reveal failures via `entity_id` only;
       do NOT include a `path_hash` field (A2: path hash dropped from audit).
-- [ ] T006 [P] Implement the three use cases in
+- [x] T006 [P] Implement the three use cases in
       `crates/app/core/src/native.rs`: `pick_directory`,
       `pick_file`, and `reveal_path`. Path validation for
       `reveal_path` happens here (exists check using
       `std::fs::metadata`; non-existence maps to
       `path.not_exists`).
-- [ ] T007 Expose Tauri commands `native_directory_pick`,
+- [x] T007 Expose Tauri commands `native_directory_pick`,
       `native_file_pick`, and `native_reveal` in
       `apps/desktop/src-tauri/src/commands/native.rs`, delegating to
       `crates/app/core/`.
@@ -83,30 +83,30 @@ no row is added.
 
 ### Tests for User Story 1
 
-- [ ] T008 [P] [US1] Contract conformance test for
+- [x] T008 [P] [US1] Contract conformance test for
       `native.directory.pick.json` in
       `tests/contract/native_directory_pick.rs`.
-- [ ] T009 [P] [US1] Vitest unit test for the `useDirectoryPicker`
+- [x] T009 [P] [US1] Vitest unit test for the `useDirectoryPicker`
       hook in
       `apps/desktop/src/shared/native/picker.test.ts`, covering
       success, cancellation (null path), and OS-error branches with
       `@tauri-apps/plugin-dialog` mocked.
-- [ ] T010 [P] [US1] Playwright MCP smoke test that the first-run
+- [x] T010 [P] [US1] Playwright MCP smoke test that the first-run
       wizard renders the picker (intercepted at the Tauri command
       boundary) in
       `tests/integration/first_run_picker.spec.ts`.
 
 ### Implementation for User Story 1
 
-- [ ] T011 [US1] Create `apps/desktop/src/shared/native/picker.ts`
+- [x] T011 [US1] Create `apps/desktop/src/shared/native/picker.ts`
       exporting `useDirectoryPicker()` and a `pickDirectory()` async
       helper that calls `tauri.invoke("native_directory_pick",
       payload)`. Generate the `request_id` per call.
-- [ ] T012 [US1] Persist last-chosen parent per source kind in
+- [x] T012 [US1] Persist last-chosen parent per source kind in
       `localStorage` under `alm.lastPath.<kind>` and pass it as
       `default_path` on the next open (research §5, data-model.md
       §LastPathMemory).
-- [ ] T013 [US1] Replace the ad-hoc `@tauri-apps/plugin-dialog` dynamic
+- [x] T013 [US1] Replace the ad-hoc `@tauri-apps/plugin-dialog` dynamic
       import in `AddFolderButton`
       (`apps/desktop/src/features/setup/steps/StepRaw.tsx`) and the
       equivalent affordances in `StepCalibration.tsx`,
@@ -114,7 +114,7 @@ no row is added.
       `features/settings/DataSources.tsx` with the new
       `pickDirectory()` helper. Keep the `window.prompt` fallback
       behind the `VITE_TAURI=false` build flag for component tests.
-- [ ] T014 [US1] Surface picker errors (`picker.unavailable`,
+- [x] T014 [US1] Surface picker errors (`picker.unavailable`,
       `os.command_failed`) inline next to the offending row and emit
       a toast plus an audit event via the existing audit sink.
 
@@ -136,32 +136,32 @@ selected when the filter is switched to `TIFF`.
 
 ### Tests for User Story 2
 
-- [ ] T015 [P] [US2] Contract conformance test for
+- [x] T015 [P] [US2] Contract conformance test for
       `native.file.pick.json` in
       `tests/contract/native_file_pick.rs`.
-- [ ] T016 [P] [US2] Vitest unit test for `useFilePicker` covering
+- [x] T016 [P] [US2] Vitest unit test for `useFilePicker` covering
       filter ordering, `default_path` propagation, cancellation, and
       `filters.invalid` rejection in
       `apps/desktop/src/shared/native/picker.test.ts`.
-- [ ] T017 [P] [US2] Playwright MCP test for the master-add flow in
+- [x] T017 [P] [US2] Playwright MCP test for the master-add flow in
       `tests/integration/master_file_picker.spec.ts`, intercepting
       the Tauri command and asserting the filter list passed in
       from the UI.
 
 ### Implementation for User Story 2
 
-- [ ] T018 [US2] Add `pickFile(filters, default_path?)` and
+- [x] T018 [US2] Add `pickFile(filters, default_path?)` and
       `useFilePicker()` to
       `apps/desktop/src/shared/native/picker.ts`. Build the default
       filter list once and reuse it across master-add surfaces.
-- [ ] T019 [US2] Wire the calibration source root (when registered)
+- [x] T019 [US2] Wire the calibration source root (when registered)
       as `default_path` for the master picker (research §5 open
       follow-up).
-- [ ] T020 [US2] Validate the filter list in
+- [x] T020 [US2] Validate the filter list in
       `crates/app/core/src/native.rs::pick_file`, returning
       `filters.invalid` if extensions are empty or contain illegal
       characters per the JSON Schema pattern.
-- [ ] T021 [US2] Persist the user's `selected_filter` choice along
+- [x] T021 [US2] Persist the user's `selected_filter` choice along
       with the chosen path so downstream calibration entry forms can
       pre-fill the frame type when unambiguous (e.g. XISF → declared
       master type taken from filename heuristic in a later spec).
@@ -186,40 +186,40 @@ response carries `selection: "directory_only"`.
 
 ### Tests for User Story 3
 
-- [ ] T022 [P] [US3] Contract conformance test for
+- [x] T022 [P] [US3] Contract conformance test for
       `native.reveal.json` in
       `tests/contract/native_reveal.rs`.
-- [ ] T023 [P] [US3] Rust unit tests for `reveal_path` in
+- [x] T023 [P] [US3] Rust unit tests for `reveal_path` in
       `crates/app/core/src/native.rs` covering `path.not_exists`,
       `os.command_failed`, and the `selection` enum branches with a
       mocked opener trait.
-- [ ] T024 [P] [US3] Playwright MCP integration test for the reveal
+- [x] T024 [P] [US3] Playwright MCP integration test for the reveal
       flow in `tests/integration/reveal_in_os.spec.ts`, intercepting
       the Tauri command and asserting the request payload (including
       `entity_kind` and `entity_id` correlation).
 
 ### Implementation for User Story 3
 
-- [ ] T025 [US3] Add `apps/desktop/src/shared/native/reveal.ts`
+- [x] T025 [US3] Add `apps/desktop/src/shared/native/reveal.ts`
       exporting `useRevealInOs()` and a `revealInOs(path, ctx?)`
       helper. The helper generates `request_id`, attaches the
       optional `entity_kind` / `entity_id`, and calls
       `tauri.invoke("native_reveal", payload)`.
-- [ ] T026 [US3] Implement `reveal_path` in
+- [x] T026 [US3] Implement `reveal_path` in
       `crates/app/core/src/native.rs` against a `RevealAdapter`
       trait. Default implementation delegates to
       `tauri-plugin-opener` `revealItemInDir`. Map plugin errors to
       the contract's error enum.
-- [ ] T027 [US3] Add a Linux fallback path in the Tauri command
+- [x] T027 [US3] Add a Linux fallback path in the Tauri command
       handler: if `tauri-plugin-opener` reports the freedesktop
       `ShowItems` interface is unavailable, call `xdg-open` on the
       parent directory and return `selection: "directory_only"`.
-- [ ] T028 [US3] Replace the existing toast-only "Open location"
+- [x] T028 [US3] Replace the existing toast-only "Open location"
       handlers in Inbox, Inventory, Projects, and master calibration
       surfaces with `revealInOs(path, { entity_kind, entity_id })`.
       Remove the prototype TODO comments referenced in
       `FR-007`.
-- [ ] T029 [US3] On `path.not_exists` and `os.command_failed`,
+- [x] T029 [US3] On `path.not_exists` and `os.command_failed`,
       surface a toast with a "Copy path" action and emit the
       `native.reveal.failed` audit event.
 
@@ -230,17 +230,17 @@ contract-defined error handling.
 
 ## Phase 6: Polish & Cross-Cutting Concerns
 
-- [ ] T030 [P] Document the three new operations in
+- [x] T030 [P] Document the three new operations in
       `docs/architecture/native-filesystem.md` (or extend the
       existing platform doc) with the per-OS notes from
       `research.md`.
-- [ ] T031 [P] Add a Storybook entry (browser-only build flag) that
+- [~] T031 SKIPPED (no Storybook in project): [P] Add a Storybook entry (browser-only build flag) that
       exercises the stub picker and a fake reveal handler so design
       reviews do not require a Tauri runtime.
-- [ ] T032 Run `just lint`, `just typecheck`, `just test`, and
+- [x] T032 Run `just lint`, `just typecheck`, `just test`, and
       verify Playwright MCP coverage of the three flows on at least
       one platform.
-- [ ] T033 Resolve all `[NEEDS DECISION]` markers in `spec.md`
+- [x] T033 Resolve all `[NEEDS DECISION]` markers in `spec.md`
       (filter ordering choice, last-path memory scope, toast
       copy-path support) before this feature exits Draft status.
 
