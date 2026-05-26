@@ -1,4 +1,4 @@
-import { registerRoot } from '@/api/commands';
+import { registerRoot, registerRootBatch } from '@/api/commands';
 
 const STORAGE_KEY = 'alm-setup-wizard-state';
 
@@ -168,86 +168,78 @@ export function getAllSources(
 }
 
 /**
- * Validate a single path by calling roots.register on the backend.
+ * Validate a single path client-side. Does NOT register the source —
+ * registration only happens at flush time via flushToDB().
  * Returns null on success, or a ValidationError on failure.
  */
-export async function validatePath(
+export function validatePath(
+  sources: SourcesState,
   path: string,
   kind: SourceKind,
-): Promise<ValidationError | null> {
-  const isMockMode = import.meta.env.VITE_USE_MOCKS === 'true';
-  if (isMockMode) {
-    // In mock mode, always succeed
-    return null;
+): ValidationError | null {
+  if (!path || !path.trim()) {
+    return { code: 'path.empty', message: 'Path cannot be empty' };
   }
 
-  try {
-    await registerRoot({ path, category: kind, scan_settings: {} });
-    return null;
-  } catch (err: unknown) {
-    const errorCode = extractErrorCode(err);
-    const message = ERROR_MESSAGES[errorCode] ?? `Registration failed: ${errorCode}`;
-    return { code: errorCode, message };
+  const dedup = checkDeduplication(sources, kind, path);
+  if (dedup.sameKindDuplicate) {
+    return { code: 'path.already_registered', message: ERROR_MESSAGES['path.already_registered'] };
   }
+  if (dedup.crossKindConflict) {
+    return {
+      code: 'path.already_registered.different_kind',
+      message: `${ERROR_MESSAGES['path.already_registered.different_kind']} (${dedup.crossKindConflict})`,
+    };
+  }
+
+  return null;
 }
 
 /**
- * Flush all sources to the database via roots.register.
+ * Flush all sources to the database via roots.register.batch.
  * Returns per-row success/failure results.
  */
 export async function flushToDB(sources: SourcesState): Promise<FlushResult> {
   const isMockMode = import.meta.env.VITE_USE_MOCKS === 'true';
-  const allSources = getAllSources(sources);
-  const results: FlushRowResult[] = [];
+  const allSources = getAllSources(sources).filter((s) => s.path);
 
-  for (const source of allSources) {
-    if (!source.path) continue;
+  if (isMockMode) {
+    return {
+      results: allSources.map((s) => ({ kind: s.kind, path: s.path, success: true })),
+      allSucceeded: true,
+    };
+  }
 
-    try {
-      if (isMockMode) {
-        // In mock mode, simulate success
-        results.push({ kind: source.kind, path: source.path, success: true });
-      } else {
-        await registerRoot({
-          path: source.path,
-          category: source.kind,
-          scan_settings: { scan_depth: source.scanDepth },
-        });
-        results.push({ kind: source.kind, path: source.path, success: true });
+  try {
+    const batchResult = await registerRootBatch({
+      sources: allSources.map((s) => ({
+        kind: s.kind,
+        path: s.path,
+        scan_depth: s.scanDepth,
+      })),
+    });
+
+    const results: FlushRowResult[] = allSources.map((source, i) => {
+      const item = batchResult.items?.[i];
+      if (!item || item.status === 'success') {
+        return { kind: source.kind, path: source.path, success: true };
       }
-    } catch (err: unknown) {
-      const errorCode = extractErrorCode(err);
+      const errorCode = item.error ?? 'unknown';
       const message = ERROR_MESSAGES[errorCode] ?? `Registration failed: ${errorCode}`;
-      results.push({
-        kind: source.kind,
-        path: source.path,
+      return { kind: source.kind, path: source.path, success: false, error: message };
+    });
+
+    return { results, allSucceeded: results.every((r) => r.success) };
+  } catch (err: unknown) {
+    return {
+      results: allSources.map((s) => ({
+        kind: s.kind,
+        path: s.path,
         success: false,
-        error: message,
-      });
-    }
+        error: `Batch registration failed: ${String(err)}`,
+      })),
+      allSucceeded: false,
+    };
   }
-
-  return {
-    results,
-    allSucceeded: results.every((r) => r.success),
-  };
 }
 
-/** Extract a dotted error code from a Tauri invoke error. */
-function extractErrorCode(err: unknown): string {
-  if (err && typeof err === 'object') {
-    // Tauri contract errors may have a code field
-    if ('code' in err && typeof (err as Record<string, unknown>).code === 'string') {
-      return (err as Record<string, unknown>).code as string;
-    }
-    // Or a message that contains the error code
-    if ('message' in err && typeof (err as Record<string, unknown>).message === 'string') {
-      const msg = (err as Record<string, unknown>).message as string;
-      // Try to extract dotted code from message (e.g., "path.not_exists: ...")
-      const match = msg.match(/^([\w.]+?)(?:\s*:|$)/);
-      if (match) return match[1];
-      return msg;
-    }
-  }
-  return String(err);
-}

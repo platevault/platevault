@@ -45,21 +45,19 @@ export function DataSources({ save }: DataSourcesProps) {
         const { commands } = await import('@/bindings/index');
         const restartResult = await commands.firstrunRestart();
         if (restartResult.status !== 'ok') throw new Error('restart failed');
-        const categories = [
-          { key: 'raw', label: 'Raw sources', note: 'where light frames live', required: true, paths: [] as string[], estimates: [] as number[] },
-          { key: 'calibration', label: 'Calibration sources', note: 'darks, flats, biases', required: false, paths: [] as string[], estimates: [] as number[] },
-          { key: 'project', label: 'Project sources', note: 'processing projects', required: true, paths: [] as string[], estimates: [] as number[] },
-          { key: 'inbox', label: 'Inbox sources', note: 'new / unprocessed', required: false, paths: [] as string[], estimates: [] as number[] },
-        ];
+        const sources: Record<string, Array<{ path: string; scanDepth: string }>> = {
+          raw: [], calibration: [], project: [], inbox: [],
+        };
         for (const src of restartResult.data.prefilledSources) {
-          const cat = categories.find((c) => c.key === src.kind);
-          if (cat) cat.paths.push(src.path);
+          if (sources[src.kind]) {
+            sources[src.kind].push({ path: src.path, scanDepth: 'recursive' });
+          }
         }
+        const existing = localStorage.getItem('alm-setup-wizard-state');
+        const state = existing ? JSON.parse(existing) : {};
         localStorage.setItem('alm-setup-wizard-state', JSON.stringify({
-          currentStep: 0,
-          categories,
-          catalogSettings: {},
-          scanSettings: {},
+          ...state,
+          sources,
         }));
       }
       setPreference('setupCompleted', false);
@@ -88,7 +86,7 @@ export function DataSources({ save }: DataSourcesProps) {
     const root = await registerRoot({
       path: newPath,
       category: newCategory,
-      scan_settings: { follow_symlinks: false, excluded_patterns: [] },
+      scanSettings: { followSymlinks: false, excludedPatterns: [] },
     });
     setRoots((prev) => [...prev, root]);
     setNewPath('');

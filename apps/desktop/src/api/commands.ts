@@ -196,7 +196,7 @@ export async function updateSettings(args: {
 export async function registerRoot(args: {
   path: string;
   category: string;
-  scan_settings: Record<string, unknown>;
+  scanSettings: Record<string, unknown>;
 }): Promise<LibraryRoot> {
   return invoke<LibraryRoot>('roots.register', args);
 }

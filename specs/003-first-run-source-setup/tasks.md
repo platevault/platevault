@@ -101,7 +101,7 @@ gate sends to `/sessions` on next launch.
 
 ### Tests for User Story 1
 
-- [ ] T009 [P] [US1] Integration test for the gate behavior in
+- [x] T009 [P] [US1] Integration test for the gate behavior in
       `tests/integration/first_run_gate.spec.ts` (Playwright MCP).
 
 ### Implementation for User Story 1
@@ -134,23 +134,23 @@ other two advance freely, and Finish writes `RegisteredSource` rows plus
 
 ### Tests for User Story 2
 
-- [ ] T012 [P] [US2] Contract conformance test for
+- [x] T012 [P] [US2] Contract conformance test for
       `contracts/roots.register.json` in
       `tests/contract/roots_register_test.rs`.
-- [ ] T013 [P] [US2] Contract conformance test for
+- [x] T013 [P] [US2] Contract conformance test for
       `contracts/roots.register.batch.json` in
       `tests/contract/roots_register_batch_test.rs`. Cover: all-success,
       partial (one error), all-failure atomic rollback, idempotent
       `path.already.registered`, `path.already.registered.different_kind`
       (R-Batch, R-1.4).
-- [ ] T014 [P] [US2] Contract conformance test for
+- [x] T014 [P] [US2] Contract conformance test for
       `contracts/firstrun.complete.json` in
       `tests/contract/firstrun_complete_test.rs`. Cover: missing raw
       source, missing project source (R-Wiz-2).
 - [ ] T015 [P] [US2] Component test for the wizard's Raw-required and
       Project-required gating in
       `apps/desktop/src/features/setup/SetupWizard.test.tsx`.
-- [ ] T016 [P] [US2] Playwright end-to-end test for the full wizard
+- [x] T016 [P] [US2] Playwright end-to-end test for the full wizard
       happy path in `tests/integration/first_run_happy_path.spec.ts`.
 
 ### Implementation for User Story 2
@@ -214,10 +214,10 @@ into the working buffer.
 
 ### Tests for User Story 3
 
-- [ ] T025 [P] [US3] Playwright test for the restart flow in
+- [x] T025 [P] [US3] Playwright test for the restart flow in
       `tests/integration/first_run_restart.spec.ts`, asserting prefilled
       sources and a cleared completion flag.
-- [ ] T026 [P] [US3] Contract conformance test for
+- [x] T026 [P] [US3] Contract conformance test for
       `contracts/firstrun.restart.json` in
       `tests/contract/firstrun_restart_test.rs`. Cover: happy path with
       prefilled sources, `wizard.not.completed` error (R-E5).
@@ -239,7 +239,7 @@ into the working buffer.
 
 ## Phase 6: Polish & Cross-Cutting Concerns
 
-- [ ] T029 [P] Audit event `first_run.completed` schema conformance test
+- [x] T029 [P] Audit event `first_run.completed` schema conformance test
       in `tests/contract/audit_first_run_completed_test.rs` (R-E2).
 - [x] T030 [P] Update `docs/research/` with a short note linking back to
       `specs/003-first-run-source-setup/research.md` for reference.
