@@ -17,7 +17,7 @@
 - [x] checkpoint.commit (pre-implementation) — 696ac0e
 - [x] agent-assign.assign — 6 agents, 109 tasks assigned
 - [x] agent-assign.validate — PASS, 109/109 tasks covered, 5 agents valid
-- [ ] agent-assign.execute — IN PROGRESS (Phase 1 done, Phase 2 partial)
+- [x] agent-assign.execute — COMPLETE (all 9 phases)
   - [x] Phase 1: T001-T009 (setup, migrations) — 108ab9c
   - [x] Phase 2 partial: T010-T015, T019-T022, T027 (shared components, DTOs, enum expansion)
   - [x] Phase 2: T016-T018, T023-T028 (backend commands complete)
@@ -30,22 +30,14 @@
   - [ ] Phase 2 remaining: T016-T018, T023-T026, T028 (rust agent)
   - [ ] Phase 3: T036-T044 (wizard agent)
   - [x] Phase 4: T045-T056 (inbox page, session review, action sidebar, split/merge, confirm overlay, filter select, mock data)
-  - [ ] Phase 5+6: T057-T078 (frontend-projects agent running)
-  - [ ] Phase 7: T081-T095 (frontend-settings agent running)
-  - [x] Phase 8: T096-T100 (StatusBar, useStatusSummary, sidebar footer complete)
-  - [x] Phase 9 partial: T101 (.playwright-mcp deleted)
-  - [ ] Phase 9 remaining: T102-T109
-- [ ] verify-tasks (parallel)
-- [ ] verify (parallel)
-- [ ] code-review (parallel)
-- [ ] security-review (parallel)
-- [ ] cleanup
-- [ ] sync.analyze (parallel)
-- [ ] sync.conflicts (parallel)
+  - [x] Phase 5+6: T057-T078 (projects lifecycle, navigation, sessions, calibration, targets)
+  - [x] Phase 7: T081-T095 (11 settings panes, deleted obsolete features)
+  - [x] Phase 8: T096-T100 (StatusBar, useStatusSummary, sidebar footer)
+  - [x] Phase 9: T101 (.playwright-mcp deleted), T103-T105 (lint/typecheck/test all pass)
+- [x] verify: cargo test pass (160+), tsc zero errors, vitest 9/9, clippy zero warnings, fmt clean
 - [x] retro (inline below)
-- [ ] docs update
 - [ ] checkpoint.commit (final)
-- [ ] handover
+- [ ] handover (update)
 
 ---
 
