@@ -28,6 +28,9 @@ const SPEC_CONTRACT_ALLOWLIST = [
   "003-first-run-source-setup/contracts/firstrun.complete.json",
   "003-first-run-source-setup/contracts/firstrun.restart.json",
   "003-first-run-source-setup/contracts/audit.first_run.completed.json",
+  "004-native-filesystem-controls/contracts/native.directory.pick.json",
+  "004-native-filesystem-controls/contracts/native.file.pick.json",
+  "004-native-filesystem-controls/contracts/native.reveal.json",
 ];
 
 function findSpecContracts() {

@@ -19,3 +19,8 @@ export type * from "./generated/envelope";
 // level after json2ts; the namespace keeps callers explicit.
 export type * as LifecycleTransition from "./generated/lifecycle.transition";
 export type * as ProvenanceRead from "./generated/provenance.read";
+
+// Spec 004 — Native Filesystem Controls.
+export type * as NativeDirectoryPick from "./generated/native.directory.pick";
+export type * as NativeFilePick from "./generated/native.file.pick";
+export type * as NativeReveal from "./generated/native.reveal";
