@@ -1,9 +1,3 @@
-/**
- * Shell -- main application shell with sidebar, main content, status bar.
- * Route hybrid layout: Inbox and Projects get their own right sidebar
- * handling (built into their pages). Other routes use full-width main.
- */
-
 import { useEffect } from 'react';
 import { Outlet, useNavigate } from '@tanstack/react-router';
 import { usePreferences } from '@/data/preferences';
@@ -13,6 +7,7 @@ import { LogPanel } from './LogPanel';
 import { CommandPalette } from './CommandPalette';
 import { LogPanelProvider, useLogPanel } from './LogPanelContext';
 import { OperationStatusProvider } from './OperationStatusContext';
+import { TourProvider } from '@/features/tour/TourProvider';
 import { ToastContainer } from '@/ui/ToastContainer';
 
 function ShellInner() {
@@ -32,7 +27,9 @@ function ShellInner() {
       <div className="alm-shell__body">
         <Sidebar />
         <main className="alm-shell__main">
-          <Outlet />
+          <TourProvider>
+            <Outlet />
+          </TourProvider>
         </main>
       </div>
       {expanded && <LogPanel />}

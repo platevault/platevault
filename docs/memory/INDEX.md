@@ -30,12 +30,6 @@ This is a compact routing map for durable project memory (`docs/memory/`). Keep 
 - [5-phase project lifecycle](DECISIONS.md#2026-05-26---project-lifecycle-simplified-to-5-phases-prepared-removed) — Prepared removed, Ready auto-advances to Processing
 - [Folder-level junctions with DATE_](DECISIONS.md#2026-05-26---source-view-junctions-at-folder-level-with-date_-prefix-keyword) — one junction per session, WBPP grouping keyword
 - [6 source folder types](DECISIONS.md#2026-05-26---expanded-source-folder-types-6-types-not-4) — light_frames/dark/flat/bias/project/inbox
-- [Session files join table](DECISIONS.md#2026-05-26---session-file-tracking-via-join-table) — explicit membership, not metadata matching
-- [Equipment alias-based identity](DECISIONS.md#2026-05-26---equipment-identity-via-alias-based-uuid-matching) — FITS strings match aliases, survive renames
-- [Archive = soft delete, no retention](DECISIONS.md#2026-05-26---archive-is-the-soft-delete-stage-no-retention-timer) — three manual steps, no timer
-- [Inbox-only filesystem watcher](DECISIONS.md#2026-05-26---filesystem-watcher-inbox-only-additions--deletions--moves) — additions, deletions, moves; source folders lazy
-- [Notes sync one-way for v1](DECISIONS.md#2026-05-26---notes-sync-is-db--disk-one-way-for-v1) — DB authority, disk is projection; [#139](https://github.com/nightwatch-astro/alm/issues/139) tracks future bidirectional
-- [Profile switch regenerates source view](DECISIONS.md#2026-05-26---tool-profile-switch-regenerates-source-view-via-reviewable-plan) — reviewable plan to swap junctions
 
 ## Workflow
 

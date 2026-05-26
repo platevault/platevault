@@ -251,7 +251,7 @@ async fn roots_register_via_use_case() {
     db.migrate().await.expect("run migrations");
 
     let req = contracts_core::first_run::RegisterSourceRequest {
-        kind: contracts_core::first_run::SourceKind::LightFrames,
+        kind: contracts_core::first_run::SourceKind::Raw,
         path: "/tmp".to_owned(),
         kind_subtype: None,
         scan_depth: contracts_core::first_run::ScanDepth::Recursive,
@@ -260,7 +260,7 @@ async fn roots_register_via_use_case() {
     let resp = app_core::first_run::register_source(db.pool(), &req).await;
     assert!(resp.is_ok(), "register_source failed: {resp:?}");
     let resp = resp.unwrap();
-    assert_eq!(resp.kind, contracts_core::first_run::SourceKind::LightFrames);
+    assert_eq!(resp.kind, contracts_core::first_run::SourceKind::Raw);
     assert_eq!(resp.path, "/tmp");
 }
 

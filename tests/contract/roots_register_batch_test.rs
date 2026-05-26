@@ -11,7 +11,7 @@ fn sample_batch_request() -> RegisterSourceBatchRequest {
     RegisterSourceBatchRequest {
         sources: vec![
             RegisterSourceRequest {
-                kind: SourceKind::LightFrames,
+                kind: SourceKind::Raw,
                 path: "/astro/raw".to_owned(),
                 kind_subtype: None,
                 scan_depth: ScanDepth::Recursive,
@@ -23,7 +23,7 @@ fn sample_batch_request() -> RegisterSourceBatchRequest {
                 scan_depth: ScanDepth::Recursive,
             },
             RegisterSourceRequest {
-                kind: SourceKind::Dark,
+                kind: SourceKind::Calibration,
                 path: "/astro/darks".to_owned(),
                 kind_subtype: Some("dark".to_owned()),
                 scan_depth: ScanDepth::Single,
@@ -112,9 +112,9 @@ fn batch_request_preserves_source_order() {
     let value = serde_json::to_value(sample_batch_request()).unwrap();
     let sources = value["sources"].as_array().unwrap();
 
-    assert_eq!(sources[0]["kind"], json!("light_frames"));
+    assert_eq!(sources[0]["kind"], json!("raw"));
     assert_eq!(sources[1]["kind"], json!("project"));
-    assert_eq!(sources[2]["kind"], json!("dark"));
+    assert_eq!(sources[2]["kind"], json!("calibration"));
 }
 
 // ── batch status enum ──────────────────────────────────────────────────────

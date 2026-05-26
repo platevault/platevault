@@ -1,218 +1,174 @@
-import { useState, useMemo } from 'react';
-import clsx from 'clsx';
+import { useState, useCallback, useRef } from 'react';
 import { Btn } from '@/ui';
 
 interface NamingStructureProps {
   save: (scope: string, values: Record<string, unknown>) => void;
 }
 
-const AVAILABLE_TOKENS = [
-  '{object}',
-  '{target}',
-  '{filter}',
-  '{date}',
-  '{date_time}',
-  '{frame_type}',
-  '{exposure}',
-  '{gain}',
-  '{binning}',
-  '{camera}',
-  '{telescope}',
-  '{sequence}',
-  '{session_id}',
-] as const;
-
-const SEPARATORS = ['/', '_', '-', '.'] as const;
-
-/* No "Dark flat" frame type per task spec */
-const FRAME_TYPES = ['Light', 'Dark', 'Flat', 'Bias'] as const;
-
-/* Default patterns: lights use {object}, darks/flats/bias do not (research R4) */
-const DEFAULT_PATTERNS: Record<string, string[]> = {
-  Light: ['{object}', '/', '{filter}', '/', '{date}', '/', '{frame_type}', '/'],
-  Dark: ['{camera}', '/', '{exposure}', '/', '{date}', '/', '{frame_type}', '/'],
-  Flat: ['{camera}', '/', '{filter}', '/', '{date}', '/', '{frame_type}', '/'],
-  Bias: ['{camera}', '/', '{date}', '/', '{frame_type}', '/'],
-};
-
-/* Mock metadata for preview */
-const PREVIEW_VALUES: Record<string, string> = {
-  '{object}': 'M101',
-  '{target}': 'M101',
-  '{filter}': 'Ha',
-  '{date}': '2026-04-12',
-  '{date_time}': '2026-04-12T22_30',
-  '{frame_type}': 'lights',
-  '{exposure}': '300s',
-  '{gain}': 'g100',
-  '{binning}': '1x1',
-  '{camera}': 'ASI2600MM',
-  '{telescope}': 'Esprit100',
-  '{sequence}': '0001',
-  '{session_id}': 'a3f7',
-};
-
-function resolvePreview(tokens: string[]): string {
-  return tokens
-    .map((t) => PREVIEW_VALUES[t] ?? t)
-    .join('');
+interface TokenChip {
+  id: string;
+  label: string;
+  value: string;
+  type: 'token' | 'separator';
 }
 
-function TokenChip({
-  token,
-  onRemove,
-}: {
-  token: string;
-  onRemove: () => void;
-}) {
-  const isSep = !token.startsWith('{');
+const FRAME_TYPES = ['Light', 'Dark', 'Flat', 'Bias', 'Dark flat'] as const;
+
+function Token({ kind, label, onRemove }: { kind: 'token' | 'separator'; label: string; onRemove?: () => void }) {
   return (
     <span
-      className={clsx(
-        'alm-naming__chip',
-        isSep ? 'alm-naming__chip--separator' : 'alm-naming__chip--token',
-      )}
+      className={`alm-naming__chip alm-naming__chip--${kind === 'separator' ? 'separator' : 'token'}`}
+      draggable
     >
-      <span>{token}</span>
-      <button
-        type="button"
-        className="alm-naming__chip-remove"
-        onClick={onRemove}
-        aria-label={`Remove ${token}`}
-      >
-        &times;
-      </button>
+      {kind !== 'separator' && (
+        <span style={{ color: '#7080a0' }}>&#8942;&#8942;</span>
+      )}
+      <span>{label}</span>
+      {onRemove && (
+        <button
+          type="button"
+          className="alm-naming__chip-remove"
+          onClick={onRemove}
+          aria-label={`Remove ${label}`}
+        >
+          &times;
+        </button>
+      )}
     </span>
   );
 }
 
-function PatternEditor({
+function PatternBuilder({
   tokens,
-  onChange,
-  label,
+  disabled,
 }: {
-  tokens: string[];
-  onChange: (tokens: string[]) => void;
-  label: string;
+  tokens: TokenChip[];
+  disabled?: boolean;
 }) {
-  const [showTokenMenu, setShowTokenMenu] = useState(false);
-  const [showSepMenu, setShowSepMenu] = useState(false);
-
-  const handleAddToken = (token: string) => {
-    onChange([...tokens, token]);
-    setShowTokenMenu(false);
-  };
-
-  const handleAddSeparator = (sep: string) => {
-    onChange([...tokens, sep]);
-    setShowSepMenu(false);
-  };
-
-  const handleRemove = (index: number) => {
-    onChange(tokens.filter((_, i) => i !== index));
-  };
-
-  const preview = resolvePreview(tokens);
-
   return (
-    <div className="alm-naming__editor" aria-label={label}>
-      <div className="alm-naming__dropzone">
-        {tokens.map((tk, i) => (
-          <TokenChip key={`${tk}-${i}`} token={tk} onRemove={() => handleRemove(i)} />
-        ))}
-        <span className="alm-naming__divider" />
-        <div className="alm-naming__add-group">
-          <Btn size="sm" onClick={() => setShowTokenMenu(!showTokenMenu)}>
-            + Token
-          </Btn>
-          {showTokenMenu && (
-            <div className="alm-naming__dropdown">
-              {AVAILABLE_TOKENS.map((t) => (
-                <button
-                  key={t}
-                  type="button"
-                  className="alm-naming__dropdown-item"
-                  onClick={() => handleAddToken(t)}
-                >
-                  {t}
-                </button>
-              ))}
-            </div>
-          )}
-        </div>
-        <div className="alm-naming__add-group">
-          <Btn size="sm" onClick={() => setShowSepMenu(!showSepMenu)}>
-            + Separator
-          </Btn>
-          {showSepMenu && (
-            <div className="alm-naming__dropdown">
-              {SEPARATORS.map((s) => (
-                <button
-                  key={s}
-                  type="button"
-                  className="alm-naming__dropdown-item"
-                  onClick={() => handleAddSeparator(s)}
-                >
-                  {s === '/' ? '/ (path)' : s}
-                </button>
-              ))}
-            </div>
-          )}
-        </div>
+    <div
+      className="alm-naming__dropzone"
+      style={disabled ? { opacity: 0.5, background: 'var(--alm-surface)' } : undefined}
+    >
+      {tokens.map((tk, i) => (
+        <Token key={i} kind={tk.type} label={tk.label} />
+      ))}
+      <span style={{ width: 1, height: 18, background: 'var(--alm-border)', margin: '0 4px' }} />
+      <Btn size="sm">+ Token</Btn>
+      <Btn size="sm">+ Separator</Btn>
+    </div>
+  );
+}
+
+function FrameOverride({
+  label,
+  enabled,
+  tokens,
+  onToggle,
+}: {
+  label: string;
+  enabled: boolean;
+  tokens: TokenChip[];
+  onToggle: () => void;
+}) {
+  return (
+    <div style={{ padding: '12px 0', borderTop: '1px solid var(--alm-border-subtle)' }}>
+      <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
+        <span
+          onClick={onToggle}
+          role="switch"
+          aria-checked={enabled}
+          tabIndex={0}
+          onKeyDown={(e) => { if (e.key === 'Enter' || e.key === ' ') onToggle(); }}
+          style={{
+            width: 32,
+            height: 18,
+            borderRadius: 9,
+            background: enabled ? 'var(--alm-text-secondary)' : 'var(--alm-gray-200)',
+            border: '1px solid var(--alm-border)',
+            position: 'relative',
+            cursor: 'pointer',
+            flexShrink: 0,
+          }}
+        >
+          <span
+            style={{
+              position: 'absolute',
+              top: 1,
+              left: enabled ? 15 : 1,
+              width: 14,
+              height: 14,
+              borderRadius: 7,
+              background: 'var(--alm-bg)',
+              border: '1px solid var(--alm-border)',
+              transition: 'left 0.15s',
+            }}
+          />
+        </span>
+        <span style={{ fontSize: 'var(--alm-text-base)', fontWeight: 500 }}>{label}</span>
       </div>
-      {tokens.length > 0 && (
-        <div className="alm-naming__preview-line">
-          <span className="alm-naming__preview-label">Preview:</span>
-          <code className="alm-mono">{preview}</code>
-        </div>
-      )}
+      <div style={{ marginTop: 6 }}>
+        <PatternBuilder tokens={tokens} disabled={!enabled} />
+      </div>
     </div>
   );
 }
 
 export function NamingStructure({ save }: NamingStructureProps) {
-  const [patterns, setPatterns] = useState<Record<string, string[]>>(DEFAULT_PATTERNS);
+  const defaultTokens: TokenChip[] = [
+    { id: '1', label: '{target}', value: '{target}', type: 'token' },
+    { id: '2', label: '/', value: '/', type: 'separator' },
+    { id: '3', label: '{filter}', value: '{filter}', type: 'token' },
+    { id: '4', label: '/', value: '/', type: 'separator' },
+    { id: '5', label: '{date}', value: '{date}', type: 'token' },
+    { id: '6', label: '/', value: '/', type: 'separator' },
+    { id: '7', label: '{frame_type}', value: '{frame_type}', type: 'token' },
+    { id: '8', label: '/', value: '/', type: 'separator' },
+  ];
 
-  const handlePatternChange = (frameType: string, tokens: string[]) => {
-    const updated = { ...patterns, [frameType]: tokens };
-    setPatterns(updated);
-    save('naming', { patterns: updated });
+  const [overrides, setOverrides] = useState<Record<string, boolean>>({
+    Light: false,
+    Dark: false,
+    Flat: false,
+    Bias: false,
+    'Dark flat': false,
+  });
+
+  const toggleOverride = (ft: string) => {
+    setOverrides((prev) => ({ ...prev, [ft]: !prev[ft] }));
   };
-
-  /* Combined preview for all frame types */
-  const previewLines = useMemo(() => {
-    return FRAME_TYPES.map((ft) => ({
-      type: ft,
-      path: resolvePreview(patterns[ft] ?? []),
-    }));
-  }, [patterns]);
 
   return (
     <div className="alm-naming">
-      {/* Per-frame-type patterns */}
-      {FRAME_TYPES.map((ft) => (
-        <section key={ft} className="alm-naming__section">
-          <h3 className="alm-naming__section-label">{ft} frames</h3>
-          <PatternEditor
-            tokens={patterns[ft] ?? []}
-            onChange={(tokens) => handlePatternChange(ft, tokens)}
-            label={`${ft} naming pattern`}
-          />
-        </section>
-      ))}
+      {/* Global pattern */}
+      <div className="alm-naming__section-label">Global pattern</div>
+      <PatternBuilder tokens={defaultTokens} />
 
-      {/* Combined preview */}
-      <section className="alm-naming__section">
-        <h3 className="alm-naming__section-label">Live Preview</h3>
-        <div className="alm-naming__preview">
-          {previewLines.map(({ type, path }) => (
-            <div key={type} className="alm-naming__preview-row">
-              <span className="alm-naming__preview-type">{type}:</span>
-              <code className="alm-mono">{path}</code>
-            </div>
-          ))}
-        </div>
-      </section>
+      {/* Preview */}
+      <div className="alm-naming__section-label" style={{ marginTop: 'var(--alm-space-7)' }}>
+        Preview using recent fits
+      </div>
+      <div className="alm-naming__preview">
+        <code className="alm-mono">M101/Ha/2026-04-12/lights/</code>
+        <code className="alm-mono">M101/OIII/2026-04-13/lights/</code>
+        <code className="alm-mono">M101/---/2026-04/darks/</code>
+      </div>
+
+      {/* Per-frame-type overrides */}
+      <div className="alm-naming__section-label" style={{ marginTop: 'var(--alm-space-9)' }}>
+        Per-frame-type overrides
+      </div>
+      <div>
+        {FRAME_TYPES.map((ft) => (
+          <FrameOverride
+            key={ft}
+            label={ft}
+            enabled={overrides[ft]}
+            tokens={defaultTokens}
+            onToggle={() => toggleOverride(ft)}
+          />
+        ))}
+      </div>
     </div>
   );
 }

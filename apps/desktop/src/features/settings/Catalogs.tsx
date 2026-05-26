@@ -6,54 +6,45 @@ interface CatalogsProps {
   save: (scope: string, values: Record<string, unknown>) => void;
 }
 
-interface CatalogEntry {
+interface CatalogSource {
   id: string;
   name: string;
   description: string;
-  objectCount: number;
   enabled: boolean;
+  lastSynced?: string;
 }
 
-const INITIAL_CATALOGS: CatalogEntry[] = [
+const INITIAL_CATALOGS: CatalogSource[] = [
   {
     id: 'messier',
-    name: 'Messier',
+    name: 'Messier Catalog',
     description: '110 deep-sky objects catalogued by Charles Messier',
-    objectCount: 110,
     enabled: true,
+    lastSynced: '2026-04-01',
   },
   {
-    id: 'ngc-ic',
-    name: 'NGC-IC',
-    description: 'New General Catalogue and Index Catalogue',
-    objectCount: 13226,
+    id: 'ngc',
+    name: 'NGC / IC',
+    description: 'New General Catalogue and Index Catalogue (~13,000 objects)',
     enabled: true,
-  },
-  {
-    id: 'caldwell',
-    name: 'Caldwell',
-    description: 'Caldwell catalogue of 109 deep-sky objects visible in amateur telescopes',
-    objectCount: 109,
-    enabled: false,
+    lastSynced: '2026-04-01',
   },
   {
     id: 'sharpless',
-    name: 'Sharpless',
-    description: 'Sharpless catalog of HII regions (Sh2)',
-    objectCount: 313,
+    name: 'Sharpless (Sh2)',
+    description: 'Sharpless catalog of HII regions (313 objects)',
     enabled: false,
   },
   {
     id: 'abell',
-    name: 'Abell',
-    description: 'Abell catalog of planetary nebulae and galaxy clusters',
-    objectCount: 86,
+    name: 'Abell Planetary Nebulae',
+    description: 'Abell catalog of planetary nebulae (86 objects)',
     enabled: false,
   },
 ];
 
 export function Catalogs({ save }: CatalogsProps) {
-  const [catalogs, setCatalogs] = useState<CatalogEntry[]>(INITIAL_CATALOGS);
+  const [catalogs, setCatalogs] = useState<CatalogSource[]>(INITIAL_CATALOGS);
 
   const handleToggle = (id: string) => {
     const updated = catalogs.map((c) =>
@@ -65,18 +56,15 @@ export function Catalogs({ save }: CatalogsProps) {
     });
   };
 
-  const handleDownloadAll = () => {
-    console.log('Download all catalogs triggered');
+  const handleSync = (id: string) => {
+    const updated = catalogs.map((c) =>
+      c.id === id ? { ...c, lastSynced: new Date().toISOString().split('T')[0] } : c,
+    );
+    setCatalogs(updated);
   };
 
   return (
     <div className="alm-catalogs">
-      <div className="alm-catalogs__toolbar">
-        <Btn size="sm" onClick={handleDownloadAll}>
-          Download All
-        </Btn>
-      </div>
-
       <ul className="alm-catalogs__list">
         {catalogs.map((catalog) => (
           <li key={catalog.id} className="alm-catalogs__item">
@@ -90,13 +78,22 @@ export function Catalogs({ save }: CatalogsProps) {
                 <Switch.Thumb className="alm-switch__thumb" />
               </Switch.Root>
               <div className="alm-catalogs__info">
-                <strong className="alm-catalogs__name">{catalog.name}</strong>
+                <strong>{catalog.name}</strong>
                 <span className="alm-catalogs__desc">{catalog.description}</span>
-                <span className="alm-catalogs__count">
-                  {catalog.objectCount.toLocaleString()} objects
-                </span>
+                {catalog.lastSynced && (
+                  <span className="alm-catalogs__synced">
+                    Last synced: {catalog.lastSynced}
+                  </span>
+                )}
               </div>
             </label>
+            <Btn
+              size="sm"
+              onClick={() => handleSync(catalog.id)}
+              disabled={!catalog.enabled}
+            >
+              Sync
+            </Btn>
           </li>
         ))}
       </ul>

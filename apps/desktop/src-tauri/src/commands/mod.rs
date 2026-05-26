@@ -8,20 +8,11 @@
 //!
 //! Spec 029 stub modules expose every command group with hardcoded fixture
 //! data until the real persistence layer is wired.
-//!
-//! Spec 030 modules add equipment CRUD, status, cleanup, calibration
-//! tolerances, ingestion settings, tools, inbox scan, and cleanup scan
-//! commands.
 
 pub mod audit;
 pub mod calibration;
-pub mod calibration_tolerances;
-pub mod cleanup;
 pub mod envelope;
-pub mod equipment;
 pub mod firstrun;
-pub mod inbox;
-pub mod ingestion;
 pub mod lifecycle;
 pub mod native;
 pub mod plans;
@@ -32,7 +23,5 @@ pub mod roots;
 pub mod search;
 pub mod sessions;
 pub mod settings;
-pub mod status;
 pub mod targets;
-pub mod tools;
 pub mod tour;

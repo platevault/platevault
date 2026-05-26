@@ -175,10 +175,10 @@ async fn state_filter_in_clause() {
     insert_target(pool, &target).await;
 
     let p_ready = new_uuid();
-    let p_completed = new_uuid();
+    let p_prepared = new_uuid();
     let p_processing = new_uuid();
     insert_project(pool, &p_ready, "ready", &target, "ready", "2026-05-10T00:00:00Z").await;
-    insert_project(pool, &p_completed, "completed", &target, "completed", "2026-05-11T00:00:00Z")
+    insert_project(pool, &p_prepared, "prepared", &target, "prepared", "2026-05-11T00:00:00Z")
         .await;
     insert_project(
         pool,
@@ -191,13 +191,13 @@ async fn state_filter_in_clause() {
     .await;
 
     let filter = LedgerFilter {
-        states: vec!["ready".to_owned(), "completed".to_owned()],
+        states: vec!["ready".to_owned(), "prepared".to_owned()],
         ..Default::default()
     };
     let rows = repo.list_assets_ledger(filter).await.unwrap();
     assert_eq!(rows.len(), 2);
     for r in &rows {
-        assert!(r.current_state == "ready" || r.current_state == "completed");
+        assert!(r.current_state == "ready" || r.current_state == "prepared");
     }
 }
 

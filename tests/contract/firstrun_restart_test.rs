@@ -9,7 +9,7 @@ fn response_with_prefilled() -> FirstRunRestartResponse {
         prefilled_sources: vec![
             RegisterSourceResponse {
                 source_id: "id-raw-1".to_owned(),
-                kind: SourceKind::LightFrames,
+                kind: SourceKind::Raw,
                 path: "/astro/raw".to_owned(),
                 created_at: "2026-05-20T10:00:00Z".to_owned(),
             },
@@ -76,7 +76,7 @@ fn prefilled_sources_preserve_order_and_values() {
     let sources = value["prefilledSources"].as_array().unwrap();
 
     assert_eq!(sources[0]["sourceId"], json!("id-raw-1"));
-    assert_eq!(sources[0]["kind"], json!("light_frames"));
+    assert_eq!(sources[0]["kind"], json!("raw"));
     assert_eq!(sources[0]["path"], json!("/astro/raw"));
 
     assert_eq!(sources[1]["sourceId"], json!("id-project-1"));

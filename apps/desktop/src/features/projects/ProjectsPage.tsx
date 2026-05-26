@@ -1,17 +1,12 @@
-/**
- * ProjectsPage -- list-detail-sidebar layout for projects.
- * Left: ProjectsList (ListSidebar), Center: ProjectDetail, Right: LifecycleSidebar.
- */
-
-import { useCallback, useState } from 'react';
+import { useCallback, useRef, useState } from 'react';
 import { useNavigate } from '@tanstack/react-router';
 import { useQuery, createQueryStore } from '@/data/store';
 import { listProjects } from '@/api/commands';
 import type { ProjectDetail as ProjectDetailType } from '@/bindings/types';
-import { EmptyState, Btn } from '@/ui';
+import { ThreePane, EmptyState, Btn } from '@/ui';
 import { ProjectsList } from './ProjectsList';
-import { ProjectDetailInline } from './ProjectDetail';
-import { LifecycleSidebar } from './LifecycleSidebar';
+import { ProjectDetailPane } from './ProjectDetailPane';
+import { ProjectInspector } from './ProjectInspector';
 
 const projectsStore = createQueryStore(() => listProjects());
 
@@ -21,8 +16,13 @@ export function ProjectsPage() {
   const [selectedId, setSelectedId] = useState<string | undefined>(undefined);
   const [loadedProject, setLoadedProject] = useState<ProjectDetailType | undefined>(undefined);
 
+  // Track the project ID the loaded detail belongs to so stale data is not
+  // shown in the inspector when selection changes.
+  const loadedProjectIdRef = useRef<string | undefined>(undefined);
+
   const handleProjectLoaded = useCallback(
     (project: ProjectDetailType) => {
+      loadedProjectIdRef.current = project.id;
       setLoadedProject(project);
     },
     [],
@@ -54,47 +54,48 @@ export function ProjectsPage() {
     );
   }
 
+  // Auto-select first project when none is selected
   const effectiveId = selectedId ?? projects[0]?.id;
 
-  // Only show sidebar data when it belongs to the currently selected project
-  const sidebarProject =
-    loadedProject && loadedProject.id === effectiveId
+  // Only show inspector data when it belongs to the currently selected project
+  const inspectorProject =
+    loadedProject && loadedProjectIdRef.current === effectiveId
       ? loadedProject
       : undefined;
 
   return (
-    <div className="alm-page alm-page--hybrid" data-testid="ProjectsPage">
-      <div className="alm-hybrid-layout">
-        <div className="alm-hybrid-layout__list">
+    <div className="alm-page" data-testid="ProjectsPage">
+      <ThreePane
+        list={
           <ProjectsList
             projects={projects}
             selectedId={effectiveId}
             onSelect={setSelectedId}
             onNewProject={handleNewProject}
           />
-        </div>
-        <div className="alm-hybrid-layout__content">
-          {effectiveId ? (
-            <ProjectDetailInline
+        }
+        content={
+          effectiveId ? (
+            <ProjectDetailPane
               projectId={effectiveId}
               onProjectLoaded={handleProjectLoaded}
             />
           ) : (
             <div className="alm-page__empty">Select a project to view details</div>
-          )}
-        </div>
-        <div className="alm-hybrid-layout__sidebar">
-          {sidebarProject ? (
-            <LifecycleSidebar project={sidebarProject} />
+          )
+        }
+        detail={
+          inspectorProject ? (
+            <ProjectInspector project={inspectorProject} />
           ) : (
-            <div className="alm-page__empty">
+            <div className="alm-page__empty" style={{ padding: 'var(--alm-space-7)' }}>
               {effectiveId
-                ? 'Loading sidebar...'
-                : 'Select a project to view lifecycle details'}
+                ? 'Loading inspector...'
+                : 'Select a project to view details'}
             </div>
-          )}
-        </div>
-      </div>
+          )
+        }
+      />
     </div>
   );
 }

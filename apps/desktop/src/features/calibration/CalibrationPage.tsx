@@ -1,31 +1,29 @@
-/**
- * CalibrationPage -- list-detail layout using TopActionBar.
- * Left: MastersList, Center: MasterDetail (full width, no right sidebar).
- * Refactored per spec 030 T075.
- */
-
 import { useState } from 'react';
-import { masters, calibrationSummary } from '@/data/fixtures/calibration';
-import { TopActionBar } from '@/components';
+import { ThreePane } from '@/ui';
+import { masters } from '@/data/fixtures/calibration';
 import { MastersList } from './MastersList';
 import { MasterDetail } from './MasterDetail';
 
+/**
+ * Calibration page — three-pane layout.
+ * Left: grouped masters list.
+ * Center: selected master detail with toolbar, fingerprint, provenance,
+ *         usage, linked projects, compatible sessions.
+ * Right: empty (no separate detail pane in the wireframe — the center
+ *        pane spans the full remaining width via gridTemplateColumns).
+ *
+ * Matches wireframe: calibration.jsx
+ */
 export function CalibrationPage() {
   const [selectedId, setSelectedId] = useState<string>('m-1');
   const [groupValue, setGroupValue] = useState('kind');
 
   return (
     <div className="alm-page" data-testid="CalibrationPage">
-      <TopActionBar
-        title="Calibration"
-        subtitle={`${calibrationSummary.totalMasters} masters · ${calibrationSummary.darks} darks · ${calibrationSummary.flats} flats · ${calibrationSummary.bias} bias · ${calibrationSummary.agingCount} aging`}
-        actions={[
-          { label: 'Import master...', onClick: () => {} },
-          { label: 'Re-run matching', onClick: () => {} },
-        ]}
-      />
-      <div className="alm-list-detail-layout">
-        <div className="alm-list-detail-layout__list">
+      <ThreePane
+        listWidth={220}
+        detailWidth={0}
+        list={
           <MastersList
             masters={masters}
             selectedId={selectedId}
@@ -33,17 +31,18 @@ export function CalibrationPage() {
             groupValue={groupValue}
             onGroupChange={setGroupValue}
           />
-        </div>
-        <div className="alm-list-detail-layout__detail">
-          {selectedId ? (
+        }
+        content={
+          selectedId ? (
             <MasterDetail masterId={selectedId} />
           ) : (
             <div className="alm-page__empty">
               Select a calibration master from the list to view its details.
             </div>
-          )}
-        </div>
-      </div>
+          )
+        }
+        detail={<div />}
+      />
     </div>
   );
 }

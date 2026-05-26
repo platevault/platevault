@@ -1,43 +1,58 @@
 import { Link, useRouterState } from '@tanstack/react-router';
 import { clsx } from 'clsx';
 import { usePreference } from '@/data/preferences';
-import { useStatusSummary } from './useStatusSummary';
+import { useQuery, createQueryStore } from '@/data/store';
+import { getReviewQueue, listPlans } from '@/api/commands';
 
 interface NavItem {
+  /** Single-letter glyph shown in collapsed mode. */
   glyph: string;
   label: string;
   path: string;
+  /** Whether this item can show a warn-colored count. */
   warn?: boolean;
 }
 
 const NAV_ITEMS: NavItem[] = [
-  { glyph: '⬇', label: 'Inbox', path: '/inbox', warn: true },
+  { glyph: 'R', label: 'Review queue', path: '/review', warn: true },
   { glyph: 'S', label: 'Sessions', path: '/sessions' },
   { glyph: 'C', label: 'Calibration', path: '/calibration' },
   { glyph: '⌖', label: 'Targets', path: '/targets' },
   { glyph: 'P', label: 'Projects', path: '/projects' },
-  { glyph: '▣', label: 'Archive', path: '/archive' },
+  { glyph: '◇', label: 'Plans', path: '/plans', warn: true },
+  { glyph: '◷', label: 'Audit log', path: '/audit' },
   { glyph: '⚙', label: 'Settings', path: '/settings' },
 ];
 
+/** Mock counts matching the wireframe. Real data overrides review + plans. */
 const MOCK_COUNTS: Record<string, number> = {
-  '/inbox': 12,
+  '/review': 48,
   '/sessions': 247,
   '/calibration': 84,
   '/targets': 53,
   '/projects': 19,
+  '/plans': 3,
 };
+
+const reviewStore = createQueryStore(() => getReviewQueue());
+const plansStore = createQueryStore(() => listPlans());
 
 export function Sidebar() {
   const [collapsed, setCollapsed] = usePreference('sidebarCollapsed');
   const location = useRouterState({ select: (s) => s.location });
-  const status = useStatusSummary();
+  const reviewState = useQuery(reviewStore);
+  const plansState = useQuery(plansStore);
 
-  const onlineRoots = status.roots.filter((r) => r.online);
-  const offlineRoots = status.roots.filter((r) => !r.online);
+  const reviewCount = reviewState.data?.length ?? 0;
+  const pendingPlans =
+    plansState.data?.filter(
+      (p) => p.state === 'ready_for_review' || p.state === 'approved',
+    ).length ?? 0;
 
   function getCount(item: NavItem): number | undefined {
-    if (item.path === '/inbox' && status.inboxCount > 0) return status.inboxCount;
+    // Use real data when available, otherwise fall back to mock counts
+    if (item.path === '/review' && reviewCount > 0) return reviewCount;
+    if (item.path === '/plans' && pendingPlans > 0) return pendingPlans;
     return MOCK_COUNTS[item.path];
   }
 
@@ -151,24 +166,12 @@ export function Sidebar() {
         })}
       </ul>
 
-      {/* Footer: root health */}
+      {/* Footer: root stats + offline warning */}
       <div className="alm-sidebar__footer">
-        <Link to="/settings/$pane" params={{ pane: 'data-sources' }} className="alm-sidebar__roots">
-          <span
-            className={clsx(
-              'alm-sidebar__root-dot',
-              offlineRoots.length > 0
-                ? 'alm-sidebar__root-dot--warn'
-                : 'alm-sidebar__root-dot--ok',
-            )}
-          />
-          {status.roots.length} roots &middot; {onlineRoots.length} online
-        </Link>
-        {offlineRoots.length > 0 && (
-          <div className="alm-sidebar__offline-warn">
-            {offlineRoots.map((r) => r.path.split(/[\\/]/).pop()).join(', ')} offline
-          </div>
-        )}
+        <div className="alm-sidebar__roots">4 roots &middot; 2 online</div>
+        <div className="alm-sidebar__offline-warn">
+          &#x26A0; NAS-Astro offline
+        </div>
       </div>
     </nav>
   );

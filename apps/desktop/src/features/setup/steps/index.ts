@@ -1,10 +1,10 @@
-export { StepSourceFolders } from './StepSourceFolders';
-export type { StepSourceFoldersProps } from './StepSourceFolders';
-export { StepTools } from './StepTools';
-export type { StepToolsProps, ToolsState, ToolConfig } from './StepTools';
-export { DEFAULT_TOOLS_STATE } from './StepTools';
+export { StepWelcome } from './StepWelcome';
+export { StepRaw } from './StepRaw';
+export { StepCalibration } from './StepCalibration';
+export { StepProject } from './StepProject';
+export { StepInbox } from './StepInbox';
+export { StepDetectTools } from './StepDetectTools';
 export { StepCatalogs } from './StepCatalogs';
-export type { CatalogSettings, StepCatalogsProps } from './StepCatalogs';
+export type { CatalogSettings } from './StepCatalogs';
 export { DEFAULT_CATALOG_SETTINGS } from './StepCatalogs';
 export { StepConfirm } from './StepConfirm';
-export type { StepConfirmProps } from './StepConfirm';

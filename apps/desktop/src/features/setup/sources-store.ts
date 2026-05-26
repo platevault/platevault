@@ -1,38 +1,21 @@
-import { registerRootBatch } from '@/api/commands';
+import { registerRoot, registerRootBatch } from '@/api/commands';
 
 const STORAGE_KEY = 'alm-setup-wizard-state';
 
-export type SourceKind = 'light_frames' | 'dark' | 'flat' | 'bias' | 'project' | 'inbox';
+export type SourceKind = 'raw' | 'calibration' | 'project' | 'inbox';
 export type ScanDepth = 'recursive' | 'single';
-
-export const ALL_SOURCE_KINDS: SourceKind[] = [
-  'light_frames',
-  'dark',
-  'flat',
-  'bias',
-  'project',
-  'inbox',
-];
-
-export const SOURCE_KIND_LABELS: Record<SourceKind, string> = {
-  light_frames: 'Light frames',
-  dark: 'Darks',
-  flat: 'Flats',
-  bias: 'Bias',
-  project: 'Projects',
-  inbox: 'Inbox',
-};
-
-export const REQUIRED_KINDS: SourceKind[] = ['light_frames', 'project'];
 
 export interface SourceEntry {
   path: string;
-  kind: SourceKind;
   scanDepth: ScanDepth;
 }
 
-/** Flat array of source entries — replaces the old per-kind object shape. */
-export type SourcesState = SourceEntry[];
+export interface SourcesState {
+  raw: SourceEntry[];
+  calibration: SourceEntry[];
+  project: SourceEntry[];
+  inbox: SourceEntry[];
+}
 
 export interface DeduplicationResult {
   ok: boolean;
@@ -68,27 +51,34 @@ const ERROR_MESSAGES: Record<string, string> = {
   'path.already_registered.different_kind': 'This directory is registered under a different category',
 };
 
+function getDefaultState(): SourcesState {
+  return {
+    raw: [],
+    calibration: [],
+    project: [],
+    inbox: [],
+  };
+}
+
 /** Load sources state from localStorage. */
 export function loadSources(): SourcesState {
   try {
     const raw = localStorage.getItem(STORAGE_KEY);
     if (raw) {
       const parsed = JSON.parse(raw);
-      if (Array.isArray(parsed?.sources)) {
-        return parsed.sources.filter(
-          (e: unknown): e is SourceEntry =>
-            typeof e === 'object' &&
-            e !== null &&
-            typeof (e as SourceEntry).path === 'string' &&
-            typeof (e as SourceEntry).kind === 'string' &&
-            ALL_SOURCE_KINDS.includes((e as SourceEntry).kind),
-        );
+      if (parsed?.sources && typeof parsed.sources === 'object') {
+        return {
+          raw: Array.isArray(parsed.sources.raw) ? parsed.sources.raw : [],
+          calibration: Array.isArray(parsed.sources.calibration) ? parsed.sources.calibration : [],
+          project: Array.isArray(parsed.sources.project) ? parsed.sources.project : [],
+          inbox: Array.isArray(parsed.sources.inbox) ? parsed.sources.inbox : [],
+        };
       }
     }
   } catch {
     // corrupt state -- start fresh
   }
-  return [];
+  return getDefaultState();
 }
 
 /** Persist sources state to localStorage under the wizard state key. */
@@ -110,14 +100,18 @@ export function checkDeduplication(
 ): DeduplicationResult {
   const normalizedPath = path.toLowerCase();
 
-  const sameKindDuplicate = sources.some(
-    (entry) => entry.kind === kind && entry.path.toLowerCase() === normalizedPath,
+  // Check same-kind duplicate
+  const sameKindDuplicate = sources[kind].some(
+    (entry) => entry.path.toLowerCase() === normalizedPath,
   );
 
+  // Check cross-kind conflict
   let crossKindConflict: SourceKind | undefined;
-  for (const entry of sources) {
-    if (entry.kind !== kind && entry.path.toLowerCase() === normalizedPath) {
-      crossKindConflict = entry.kind;
+  const allKinds: SourceKind[] = ['raw', 'calibration', 'project', 'inbox'];
+  for (const k of allKinds) {
+    if (k === kind) continue;
+    if (sources[k].some((entry) => entry.path.toLowerCase() === normalizedPath)) {
+      crossKindConflict = k;
       break;
     }
   }
@@ -136,28 +130,41 @@ export function addSource(
   path: string,
   scanDepth: ScanDepth = 'recursive',
 ): SourcesState {
-  return [...sources, { path, kind, scanDepth }];
+  return {
+    ...sources,
+    [kind]: [...sources[kind], { path, scanDepth }],
+  };
 }
 
 /** Remove a source entry by index, returning updated state. */
 export function removeSource(
   sources: SourcesState,
-  _kind: SourceKind,
+  kind: SourceKind,
   index: number,
 ): SourcesState {
-  return sources.filter((_, i) => i !== index);
+  return {
+    ...sources,
+    [kind]: sources[kind].filter((_, i) => i !== index),
+  };
 }
 
 /** Get sources for a specific kind. */
-export function getSourcesByKind(sources: SourcesState, kind: SourceKind): SourceEntry[] {
-  return sources.filter((e) => e.kind === kind);
+export function getSources(sources: SourcesState, kind: SourceKind): SourceEntry[] {
+  return sources[kind];
 }
 
-/** Check which required kinds are missing from the current sources. */
-export function getMissingRequiredKinds(sources: SourcesState): SourceKind[] {
-  return REQUIRED_KINDS.filter(
-    (kind) => !sources.some((e) => e.kind === kind),
-  );
+/** Get all sources as a flat array with kind labels. */
+export function getAllSources(
+  sources: SourcesState,
+): Array<SourceEntry & { kind: SourceKind }> {
+  const allKinds: SourceKind[] = ['raw', 'calibration', 'project', 'inbox'];
+  const result: Array<SourceEntry & { kind: SourceKind }> = [];
+  for (const kind of allKinds) {
+    for (const entry of sources[kind]) {
+      result.push({ ...entry, kind });
+    }
+  }
+  return result;
 }
 
 /**
@@ -194,18 +201,18 @@ export function validatePath(
  */
 export async function flushToDB(sources: SourcesState): Promise<FlushResult> {
   const isMockMode = import.meta.env.VITE_USE_MOCKS === 'true';
-  const validSources = sources.filter((s) => s.path);
+  const allSources = getAllSources(sources).filter((s) => s.path);
 
   if (isMockMode) {
     return {
-      results: validSources.map((s) => ({ kind: s.kind, path: s.path, success: true })),
+      results: allSources.map((s) => ({ kind: s.kind, path: s.path, success: true })),
       allSucceeded: true,
     };
   }
 
   try {
     const batchResult = await registerRootBatch({
-      sources: validSources.map((s) => ({
+      sources: allSources.map((s) => ({
         kind: s.kind,
         path: s.path,
         scan_depth: s.scanDepth,
@@ -224,7 +231,7 @@ export async function flushToDB(sources: SourcesState): Promise<FlushResult> {
     return { results, allSucceeded: results.every((r) => r.success) };
   } catch (err: unknown) {
     return {
-      results: validSources.map((s) => ({
+      results: allSources.map((s) => ({
         kind: s.kind,
         path: s.path,
         success: false,

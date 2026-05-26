@@ -1,124 +1,264 @@
-import { useCallback } from 'react';
+import { useState, useCallback } from 'react';
 import { Btn } from '@/ui/Btn';
-import { Box } from '@/ui/Box';
-import { Switch } from '@base-ui-components/react/switch';
-import { clsx } from 'clsx';
+import { Pill } from '@/ui/Pill';
 
 export interface CatalogSettings {
+  openngc: boolean;
   messier: boolean;
-  ngcIc: boolean;
-  caldwell: boolean;
   sharpless: boolean;
-  abell: boolean;
+  barnard: boolean;
+  lbn: boolean;
+  ldn: boolean;
+  simbadOnline: boolean;
 }
 
 export const DEFAULT_CATALOG_SETTINGS: CatalogSettings = {
+  openngc: true,
   messier: true,
-  ngcIc: true,
-  caldwell: true,
   sharpless: true,
-  abell: true,
+  barnard: true,
+  lbn: true,
+  ldn: true,
+  simbadOnline: true,
 };
 
 export interface StepCatalogsProps {
   settings: CatalogSettings;
   onSettingsChange: (settings: CatalogSettings) => void;
+  /** Called when user clicks "Skip for now" — advances to next step. */
+  onSkip?: () => void;
 }
 
-interface CatalogDef {
-  key: keyof CatalogSettings;
+type DownloadState = 'idle' | 'downloading' | 'ready';
+
+interface CatalogEntry {
+  key: keyof Omit<CatalogSettings, 'simbadOnline'>;
   name: string;
   description: string;
+  entries: string;
+  size: string;
+  license?: string;
+  bundled?: boolean;
 }
 
-const CATALOG_DEFS: CatalogDef[] = [
+const CATALOGS: CatalogEntry[] = [
+  {
+    key: 'openngc',
+    name: 'OpenNGC',
+    description: 'NGC/IC objects — comprehensive deep-sky catalog',
+    entries: '~14,000 entries',
+    size: '~2 MB download',
+    license: 'CC-BY-SA-4.0',
+  },
   {
     key: 'messier',
     name: 'Messier',
-    description: '110 classic deep-sky objects visible from the northern hemisphere',
-  },
-  {
-    key: 'ngcIc',
-    name: 'NGC / IC',
-    description: 'Comprehensive catalog of galaxies, clusters, and nebulae (~14,000 entries)',
-  },
-  {
-    key: 'caldwell',
-    name: 'Caldwell',
-    description: '109 deep-sky objects not in the Messier catalog',
+    description: '110 classic deep-sky objects',
+    entries: '110 entries',
+    size: 'Bundled',
+    bundled: true,
   },
   {
     key: 'sharpless',
-    name: 'Sharpless',
-    description: '313 HII emission nebulae across the Milky Way',
+    name: 'Sharpless (Sh2)',
+    description: '313 HII emission nebulae',
+    entries: '313 entries',
+    size: '~50 KB download',
   },
   {
-    key: 'abell',
-    name: 'Abell',
-    description: 'Galaxy clusters and planetary nebulae catalog',
+    key: 'barnard',
+    name: 'Barnard',
+    description: '349 dark nebulae',
+    entries: '349 entries',
+    size: '~30 KB download',
+  },
+  {
+    key: 'lbn',
+    name: 'LBN',
+    description: 'Lynds Bright Nebulae — 1,125 bright nebulae',
+    entries: '1,125 entries',
+    size: '~100 KB download',
+  },
+  {
+    key: 'ldn',
+    name: 'LDN',
+    description: 'Lynds Dark Nebulae — 1,802 dark nebulae',
+    entries: '1,802 entries',
+    size: '~120 KB download',
   },
 ];
 
 /**
- * Step 3 -- Target Catalogs.
- * List of astronomical catalogs with enable/disable toggles and
- * a "Download All" button (mock for now).
+ * Step — Download catalogs (stub mode).
+ * Shows catalog cards with simulated download buttons.
+ * Real catalog download will be available in a future update.
  */
-export function StepCatalogs({ settings, onSettingsChange }: StepCatalogsProps) {
-  const handleToggle = useCallback(
-    (key: keyof CatalogSettings, checked: boolean) => {
-      onSettingsChange({ ...settings, [key]: checked });
-    },
-    [settings, onSettingsChange],
-  );
+export function StepCatalogs({ settings, onSettingsChange, onSkip }: StepCatalogsProps) {
+  const [downloadStates, setDownloadStates] = useState<Record<string, DownloadState>>(() => {
+    const initial: Record<string, DownloadState> = {};
+    for (const c of CATALOGS) {
+      initial[c.key] = c.bundled ? 'ready' : 'idle';
+    }
+    return initial;
+  });
 
-  const handleDownloadAll = useCallback(() => {
-    console.log('[StepCatalogs] Download All clicked (mock)');
-  }, []);
+  const handleDownload = useCallback((key: string) => {
+    setDownloadStates((prev) => ({ ...prev, [key]: 'downloading' }));
+    // Simulate download — brief animation then "Ready"
+    setTimeout(() => {
+      setDownloadStates((prev) => ({ ...prev, [key]: 'ready' }));
+      // Enable the catalog in settings when "downloaded"
+      onSettingsChange({ ...settings, [key]: true });
+    }, 800 + Math.random() * 400);
+  }, [settings, onSettingsChange]);
 
-  const enabledCount = Object.values(settings).filter(Boolean).length;
+  const readyCount = Object.values(downloadStates).filter((s) => s === 'ready').length;
 
   return (
-    <div className="alm-step-catalogs">
-      <p className="alm-step-catalogs__intro">
+    <div style={{ display: 'flex', flexDirection: 'column', gap: 'var(--alm-space-5)' }}>
+      <p
+        style={{
+          fontSize: 'var(--alm-text-sm)',
+          color: 'var(--alm-text-muted)',
+          lineHeight: 1.6,
+          maxWidth: 540,
+        }}
+      >
         Target catalogs are used to resolve OBJECT headers in your FITS/XISF files
-        to known astronomical objects. Toggle the catalogs you want to use.
+        to known astronomical objects.
       </p>
 
-      <div className="alm-step-catalogs__list">
-        {CATALOG_DEFS.map((def) => (
-          <Box key={def.key}>
-            <div className="alm-step-catalogs__row">
-              <div className="alm-step-catalogs__row-info">
-                <span className="alm-step-catalogs__row-name">{def.name}</span>
-                <span className="alm-step-catalogs__row-desc">{def.description}</span>
+      {/* Catalog cards */}
+      <div style={{ display: 'flex', flexDirection: 'column', gap: 'var(--alm-space-3)' }}>
+        {CATALOGS.map((catalog) => {
+          const dlState = downloadStates[catalog.key] ?? 'idle';
+          return (
+            <div
+              key={catalog.key}
+              style={{
+                display: 'flex',
+                alignItems: 'center',
+                gap: 'var(--alm-space-4)',
+                padding: 'var(--alm-space-3) var(--alm-space-4)',
+                background: 'var(--alm-surface)',
+                borderRadius: 'var(--alm-radius-sm)',
+                border: '1px solid var(--alm-border)',
+              }}
+            >
+              {/* Content */}
+              <div style={{ flex: 1, minWidth: 0 }}>
+                <div
+                  style={{
+                    display: 'flex',
+                    alignItems: 'baseline',
+                    gap: 'var(--alm-space-2)',
+                    flexWrap: 'wrap',
+                  }}
+                >
+                  <span style={{ fontSize: 'var(--alm-text-sm)', fontWeight: 600 }}>
+                    {catalog.name}
+                  </span>
+                  <span
+                    style={{
+                      fontSize: 'var(--alm-text-xs)',
+                      color: 'var(--alm-text-muted)',
+                    }}
+                  >
+                    {catalog.description}
+                  </span>
+                </div>
+                <div
+                  style={{
+                    display: 'flex',
+                    alignItems: 'center',
+                    gap: 'var(--alm-space-3)',
+                    marginTop: 'var(--alm-space-1)',
+                    flexWrap: 'wrap',
+                  }}
+                >
+                  <span
+                    style={{
+                      fontSize: 'var(--alm-text-xs)',
+                      color: 'var(--alm-text-muted)',
+                    }}
+                  >
+                    {catalog.entries}
+                  </span>
+                  <span
+                    style={{
+                      fontSize: 'var(--alm-text-xs)',
+                      color: 'var(--alm-text-muted)',
+                    }}
+                  >
+                    {catalog.size}
+                  </span>
+                  {catalog.license && (
+                    <Pill label={catalog.license} variant="info" size="sm" />
+                  )}
+                </div>
               </div>
-              <Switch.Root
-                className={clsx('alm-switch', settings[def.key] && 'alm-switch--checked')}
-                checked={settings[def.key]}
-                onCheckedChange={(checked) => handleToggle(def.key, checked)}
-                aria-label={`Enable ${def.name} catalog`}
-              >
-                <Switch.Thumb className="alm-switch__thumb" />
-              </Switch.Root>
+
+              {/* Download button / status */}
+              <div style={{ flexShrink: 0 }}>
+                {dlState === 'ready' ? (
+                  <Pill label={catalog.bundled ? 'BUNDLED' : 'READY'} variant="ok" size="sm" />
+                ) : dlState === 'downloading' ? (
+                  <span
+                    style={{
+                      fontSize: 'var(--alm-text-xs)',
+                      color: 'var(--alm-text-muted)',
+                      fontStyle: 'italic',
+                    }}
+                  >
+                    Downloading...
+                  </span>
+                ) : (
+                  <Btn
+                    size="sm"
+                    onClick={() => handleDownload(catalog.key)}
+                  >
+                    Download
+                  </Btn>
+                )}
+              </div>
             </div>
-          </Box>
-        ))}
+          );
+        })}
       </div>
 
-      <div className="alm-step-catalogs__footer">
-        <Btn size="sm" onClick={handleDownloadAll}>
-          Download All
-        </Btn>
-        <span className="alm-step-catalogs__count">
-          {enabledCount} of {CATALOG_DEFS.length} catalogs enabled
-        </span>
+      {/* Summary */}
+      <div
+        style={{
+          fontSize: 'var(--alm-text-xs)',
+          color: 'var(--alm-text-muted)',
+        }}
+      >
+        {readyCount} of {CATALOGS.length} catalogs ready
       </div>
 
-      <div className="alm-step-catalogs__note">
+      {/* Note + skip */}
+      <div
+        style={{
+          padding: 'var(--alm-space-3) var(--alm-space-4)',
+          background: 'var(--alm-bg)',
+          borderRadius: 'var(--alm-radius-sm)',
+          border: '1px solid var(--alm-border)',
+          fontSize: 'var(--alm-text-xs)',
+          color: 'var(--alm-text-muted)',
+          lineHeight: 1.6,
+        }}
+      >
         Real catalog download will be available in a future update.
-        Catalogs can be installed later from Settings.
+        Catalogs can be installed later from Settings &rarr; Catalogs.
       </div>
+
+      {onSkip && (
+        <div>
+          <Btn variant="ghost" size="sm" onClick={onSkip}>
+            Skip for now &rarr;
+          </Btn>
+        </div>
+      )}
     </div>
   );
 }

@@ -6,7 +6,7 @@ import { invoke as __TAURI_INVOKE } from "@tauri-apps/api/core";
 export const commands = {
 	/**
 	 *  `provenance.read` Tauri command — returns the contract response shape.
-	 * 
+	 *
 	 *  # Errors
 	 *  Never returns `Err`; persistence failures are folded into
 	 *  `ProvenanceReadResponse::error(...)`. The `Result` shape exists so the
@@ -15,7 +15,7 @@ export const commands = {
 	provenanceRead: (request: ProvenanceReadRequest_Deserialize) => typedError<ProvenanceReadResponse_Serialize, string>(__TAURI_INVOKE("provenance_read", { request })),
 	/**
 	 *  `lifecycle.transition.apply` Tauri command.
-	 * 
+	 *
 	 *  # Errors
 	 *  Never returns `Err`; refusal / persistence errors fold into
 	 *  `TransitionResponse::error(...)` per the contract.
@@ -23,14 +23,14 @@ export const commands = {
 	lifecycleTransitionApply: (request: TransitionRequest_Deserialize) => typedError<TransitionResponse_Serialize, string>(__TAURI_INVOKE("lifecycle_transition_apply", { request })),
 	/**
 	 *  `lifecycle.transition.preview` — read-only dry-run for UI button enabling.
-	 * 
+	 *
 	 *  # Errors
 	 *  Never returns `Err`; refusal codes fold into `TransitionResponse::error(...)`.
 	 */
 	lifecycleTransitionPreview: (request: TransitionRequest_Deserialize) => typedError<TransitionResponse_Serialize, string>(__TAURI_INVOKE("lifecycle_transition_preview", { request })),
 	/**
 	 *  `lifecycle.ledger.list` Tauri command.
-	 * 
+	 *
 	 *  # Errors
 	 *  Returns a stringified persistence error when the repository query fails
 	 *  (e.g. transient DB unavailability). Successful empty results are `Ok(vec![])`.
@@ -38,513 +38,310 @@ export const commands = {
 	lifecycleLedgerList: (filter: LedgerFilterDto) => typedError<LedgerRowDto[], string>(__TAURI_INVOKE("lifecycle_ledger_list", { filter })),
 	/**
 	 *  `sessions.list` — returns all acquisition sessions.
-	 * 
+	 *
 	 *  # Errors
 	 *  Returns `Err(String)` on failure; the stub never fails.
 	 */
 	sessionsList: () => typedError<AcquisitionSession_Serialize[], string>(__TAURI_INVOKE("sessions.list")),
 	/**
 	 *  `sessions.get` — returns a single session detail.
-	 * 
+	 *
 	 *  # Errors
 	 *  Returns `Err(String)` on failure; the stub never fails.
 	 */
 	sessionsGet: (id: string) => typedError<SessionDetail_Serialize, string>(__TAURI_INVOKE("sessions.get", { id })),
 	/**
 	 *  `sessions.calendar` — returns calendar data for a month range.
-	 * 
+	 *
 	 *  # Errors
 	 *  Returns `Err(String)` on failure; the stub never fails.
 	 */
 	sessionsCalendar: (startMonth: string, endMonth: string) => typedError<CalendarData, string>(__TAURI_INVOKE("sessions.calendar", { startMonth, endMonth })),
 	/**
 	 *  `sessions.transition` — transition a session to a new state.
-	 * 
+	 *
 	 *  # Errors
 	 *  Returns `Err(String)` on failure; the stub never fails.
 	 */
 	sessionsTransition: (id: string, action: string, metadata: unknown | null) => typedError<AcquisitionSession_Serialize, string>(__TAURI_INVOKE("sessions.transition", { id, action, metadata })),
 	/**
 	 *  `sessions.split` — split a session at a given frame index.
-	 * 
+	 *
 	 *  # Errors
 	 *  Returns `Err(String)` on failure; the stub never fails.
 	 */
 	sessionsSplit: (id: string, splitAtIndex: number) => typedError<SessionSplitResult_Serialize, string>(__TAURI_INVOKE("sessions.split", { id, splitAtIndex })),
 	/**
 	 *  `sessions.merge` — merge multiple sessions into one.
-	 * 
+	 *
 	 *  # Errors
 	 *  Returns `Err(String)` on failure; the stub never fails.
 	 */
 	sessionsMerge: (ids: string[]) => typedError<AcquisitionSession_Serialize, string>(__TAURI_INVOKE("sessions.merge", { ids })),
 	/**
 	 *  `calibration.masters.list` — returns all calibration masters.
-	 * 
+	 *
 	 *  # Errors
 	 *  Returns `Err(String)` on failure; the stub never fails.
 	 */
 	calibrationMastersList: () => typedError<CalibrationMaster_Serialize[], string>(__TAURI_INVOKE("calibration.masters.list")),
 	/**
 	 *  `calibration.masters.get` — returns a single calibration master detail.
-	 * 
+	 *
 	 *  # Errors
 	 *  Returns `Err(String)` on failure; the stub never fails.
 	 */
 	calibrationMastersGet: (id: string) => typedError<MasterDetail_Serialize, string>(__TAURI_INVOKE("calibration.masters.get", { id })),
 	/**
 	 *  `calibration.matches` — returns calibration match candidates for a session.
-	 * 
+	 *
 	 *  # Errors
 	 *  Returns `Err(String)` on failure; the stub never fails.
 	 */
 	calibrationMatches: (sessionId: string) => typedError<MatchCandidate_Serialize[], string>(__TAURI_INVOKE("calibration.matches", { sessionId })),
 	/**
 	 *  `targets.list` — returns all targets, optionally filtered by search.
-	 * 
+	 *
 	 *  # Errors
 	 *  Returns `Err(String)` on failure; the stub never fails.
 	 */
 	targetsList: (search: string | null) => typedError<Target_Serialize[], string>(__TAURI_INVOKE("targets.list", { search })),
 	/**
 	 *  `targets.get` — returns a single target detail.
-	 * 
+	 *
 	 *  # Errors
 	 *  Returns `Err(String)` on failure; the stub never fails.
 	 */
 	targetsGet: (id: string) => typedError<TargetDetail_Serialize, string>(__TAURI_INVOKE("targets.get", { id })),
 	/**
 	 *  `projects.list` — returns all projects.
-	 * 
+	 *
 	 *  # Errors
 	 *  Returns `Err(String)` on failure; the stub never fails.
 	 */
 	projectsList: (filters: unknown | null) => typedError<Project_Serialize[], string>(__TAURI_INVOKE("projects.list", { filters })),
 	/**
 	 *  `projects.get` — returns a single project detail.
-	 * 
+	 *
 	 *  # Errors
 	 *  Returns `Err(String)` on failure; the stub never fails.
 	 */
 	projectsGet: (id: string) => typedError<ProjectDetail_Serialize, string>(__TAURI_INVOKE("projects.get", { id })),
 	/**
 	 *  `projects.create_plan` — create a filesystem plan from wizard state.
-	 * 
+	 *
 	 *  # Errors
 	 *  Returns `Err(String)` on failure; the stub never fails.
 	 */
 	projectsCreatePlan: (wizardState: unknown) => typedError<FilesystemPlan_Serialize, string>(__TAURI_INVOKE("projects.create_plan", { wizardState })),
 	/**
 	 *  `plans.list` — returns all filesystem plans.
-	 * 
+	 *
 	 *  # Errors
 	 *  Returns `Err(String)` on failure; the stub never fails.
 	 */
 	plansList: (filters: unknown | null) => typedError<FilesystemPlan_Serialize[], string>(__TAURI_INVOKE("plans.list", { filters })),
 	/**
 	 *  `plans.get` — returns a single plan detail.
-	 * 
+	 *
 	 *  # Errors
 	 *  Returns `Err(String)` on failure; the stub never fails.
 	 */
 	plansGet: (id: string) => typedError<PlanDetail_Serialize, string>(__TAURI_INVOKE("plans.get", { id })),
 	/**
 	 *  `plans.approve` — approve a plan for application.
-	 * 
+	 *
 	 *  # Errors
 	 *  Returns `Err(String)` on failure; the stub never fails.
 	 */
 	plansApprove: (id: string, deleteAcknowledged: boolean | null) => typedError<FilesystemPlan_Serialize, string>(__TAURI_INVOKE("plans.approve", { id, deleteAcknowledged })),
 	/**
 	 *  `plans.apply` — apply an approved plan, returning an operation handle.
-	 * 
+	 *
 	 *  # Errors
 	 *  Returns `Err(String)` on failure; the stub never fails.
 	 */
 	plansApply: (id: string) => typedError<IpcOperationHandle, string>(__TAURI_INVOKE("plans.apply", { id })),
 	/**
 	 *  `plans.discard` — discard a plan.
-	 * 
+	 *
 	 *  # Errors
 	 *  Returns `Err(String)` on failure; the stub never fails.
 	 */
 	plansDiscard: (id: string) => typedError<null, string>(__TAURI_INVOKE("plans.discard", { id })),
 	/**
 	 *  `audit.list` — returns paginated audit entries.
-	 * 
+	 *
 	 *  # Errors
 	 *  Returns `Err(String)` on failure; the stub never fails.
 	 */
 	auditList: (filters: unknown | null, pagination: unknown | null) => typedError<AuditListResponse_Serialize, string>(__TAURI_INVOKE("audit.list", { filters, pagination })),
 	/**
 	 *  `audit.export` — export audit entries as newline-delimited JSON.
-	 * 
+	 *
 	 *  # Errors
 	 *  Returns `Err(String)` on failure; the stub never fails.
 	 */
 	auditExport: (filters: unknown | null) => typedError<string, string>(__TAURI_INVOKE("audit.export", { filters })),
 	/**
 	 *  `review.queue` — returns items awaiting user review.
-	 * 
+	 *
 	 *  # Errors
 	 *  Returns `Err(String)` on failure; the stub never fails.
 	 */
 	reviewQueue: (filter: string | null) => typedError<ReviewItem_Serialize[], string>(__TAURI_INVOKE("review.queue", { filter })),
 	/**
 	 *  `roots.list` — returns all registered library roots.
-	 * 
+	 *
 	 *  # Errors
 	 *  Returns `Err(String)` on failure; the stub never fails.
 	 */
 	rootsList: () => typedError<LibraryRoot_Serialize[], string>(__TAURI_INVOKE("roots.list")),
 	/**
 	 *  `roots.register` — register a new library root.
-	 * 
+	 *
 	 *  Delegates to `app_core::first_run::register_source` for path validation,
 	 *  duplicate detection, and persistence. The `scan_settings` parameter is
 	 *  reserved for future scan configuration; currently only `scanDepth` is
 	 *  extracted.
-	 * 
+	 *
 	 *  # Errors
 	 *  Returns `Err(String)` on path validation failure, duplicate, or DB error.
 	 */
 	rootsRegister: (path: string, category: string, scanSettings: unknown) => typedError<RegisterSourceResponse, string>(__TAURI_INVOKE("roots.register", { path, category, scanSettings })),
 	/**
 	 *  `roots.register.batch` — register multiple source directories at once.
-	 * 
+	 *
 	 *  # Errors
 	 *  Returns `Err(String)` on catastrophic failure; per-item errors are in the response.
 	 */
 	rootsRegisterBatch: (request: RegisterSourceBatchRequest_Deserialize) => typedError<RegisterSourceBatchResponse_Serialize, string>(__TAURI_INVOKE("roots.register.batch", { request })),
 	/**
 	 *  `roots.remap` — preview a root path remap.
-	 * 
+	 *
 	 *  # Errors
 	 *  Returns `Err(String)` on failure; the stub never fails.
 	 */
 	rootsRemap: (rootId: string, newPath: string) => typedError<RemapVerification, string>(__TAURI_INVOKE("roots.remap", { rootId, newPath })),
 	/**
 	 *  `roots.remap.apply` — apply a verified root remap.
-	 * 
+	 *
 	 *  # Errors
 	 *  Returns `Err(String)` on failure; the stub never fails.
 	 */
 	rootsRemapApply: (rootId: string, verified: boolean) => typedError<null, string>(__TAURI_INVOKE("roots.remap.apply", { rootId, verified })),
 	/**
 	 *  `scan.start` — start a filesystem scan, optionally for specific roots.
-	 * 
+	 *
 	 *  # Errors
 	 *  Returns `Err(String)` on failure; the stub never fails.
 	 */
 	scanStart: (rootIds: string[] | null) => typedError<IpcOperationHandle, string>(__TAURI_INVOKE("scan.start", { rootIds })),
 	/**
 	 *  `equipment.list` — returns all registered equipment.
-	 * 
+	 *
 	 *  # Errors
 	 *  Returns `Err(String)` on failure; the stub never fails.
 	 */
 	equipmentList: () => typedError<Equipment[], string>(__TAURI_INVOKE("equipment.list")),
 	/**
 	 *  `firstrun.state` — get the current first-run wizard state.
-	 * 
+	 *
 	 *  # Errors
 	 *  Returns `Err(String)` on database failure.
 	 */
 	firstrunState: () => typedError<FirstRunStateResponse_Serialize, string>(__TAURI_INVOKE("firstrun.state")),
 	/**
 	 *  `firstrun.complete` — mark the first-run wizard as complete.
-	 * 
+	 *
 	 *  Requires at least one raw source and one project source to be registered.
-	 * 
+	 *
 	 *  # Errors
 	 *  Returns `Err(String)` if preconditions are not met or on database failure.
 	 */
 	firstrunComplete: () => typedError<FirstRunCompleteResponse, string>(__TAURI_INVOKE("firstrun.complete")),
 	/**
 	 *  `firstrun.restart` — restart the first-run wizard, returning existing sources.
-	 * 
+	 *
 	 *  Requires `confirm: true` in the request to prevent accidental restarts.
-	 * 
+	 *
 	 *  # Errors
 	 *  Returns `Err(String)` if `confirm` is not `true` or on database failure.
 	 */
 	firstrunRestart: (request: FirstRunRestartRequest) => typedError<FirstRunRestartResponse, string>(__TAURI_INVOKE("firstrun.restart", { request })),
 	/**
 	 *  `settings.get` — returns settings for a given scope.
-	 * 
+	 *
 	 *  # Errors
 	 *  Returns `Err(String)` on failure; the stub never fails.
 	 */
 	settingsGet: (scope: string) => typedError<SettingsData, string>(__TAURI_INVOKE("settings.get", { scope })),
 	/**
 	 *  `settings.update` — update settings for a given scope.
-	 * 
+	 *
 	 *  # Errors
 	 *  Returns `Err(String)` on failure; the stub never fails.
 	 */
 	settingsUpdate: (scope: string, values: unknown) => typedError<null, string>(__TAURI_INVOKE("settings.update", { scope, values })),
 	/**
 	 *  `preferences.get` — returns current application preferences.
-	 * 
+	 *
 	 *  # Errors
 	 *  Returns `Err(String)` on failure; the stub never fails.
 	 */
 	preferencesGet: () => typedError<AppPreferences, string>(__TAURI_INVOKE("preferences.get")),
 	/**
 	 *  `preferences.set` — update a single preference key.
-	 * 
+	 *
 	 *  # Errors
 	 *  Returns `Err(String)` on failure; the stub never fails.
 	 */
 	preferencesSet: (key: string, value: unknown) => typedError<null, string>(__TAURI_INVOKE("preferences.set", { key, value })),
 	/**
 	 *  `search.global` — performs a global search across all entity types.
-	 * 
+	 *
 	 *  # Errors
 	 *  Returns `Err(String)` on failure; the stub never fails.
 	 */
 	searchGlobal: (query: string) => typedError<SearchResult_Serialize[], string>(__TAURI_INVOKE("search.global", { query })),
 	/**
 	 *  `tour.complete_step` — mark a tour step as completed.
-	 * 
+	 *
 	 *  # Errors
 	 *  Returns `Err(String)` on failure; the stub never fails.
 	 */
 	tourCompleteStep: (step: string) => typedError<null, string>(__TAURI_INVOKE("tour.complete_step", { step })),
 	/**
 	 *  `native.directory.pick` — open the OS directory picker.
-	 * 
+	 *
 	 *  # Errors
 	 *  Returns `Err(String)` on validation failure or if the dialog cannot be shown.
 	 */
 	nativeDirectoryPick: (request: DirectoryPickRequest_Deserialize) => typedError<DirectoryPickResponse, string>(__TAURI_INVOKE("native.directory.pick", { request })),
 	/**
 	 *  `native.file.pick` — open the OS file picker with type filters.
-	 * 
+	 *
 	 *  # Errors
 	 *  Returns `Err(String)` on filter validation failure or if the dialog cannot be shown.
 	 */
 	nativeFilePick: (request: FilePickRequest_Deserialize) => typedError<FilePickResponse_Serialize, string>(__TAURI_INVOKE("native.file.pick", { request })),
 	/**
 	 *  `native.reveal` — reveal a path in the OS file browser.
-	 * 
+	 *
 	 *  Uses `tauri_plugin_opener::reveal_item_in_dir`. On Linux, if the opener
 	 *  plugin fails, falls back to `xdg-open` on the parent directory and
 	 *  returns `selection: "directory_only"`.
-	 * 
+	 *
 	 *  # Errors
 	 *  Returns `Err(String)` if the path does not exist or the OS command fails.
 	 */
 	nativeReveal: (request: RevealRequest_Deserialize) => typedError<RevealResponse, string>(__TAURI_INVOKE("native.reveal", { request })),
-	/**
-	 *  `equipment.cameras.list` — list all cameras.
-	 * 
-	 *  # Errors
-	 *  Returns `Err(String)` on database failure.
-	 */
-	equipmentCamerasList: () => typedError<Camera[], string>(__TAURI_INVOKE("equipment.cameras.list")),
-	/**
-	 *  `equipment.cameras.create` — create a new camera.
-	 * 
-	 *  # Errors
-	 *  Returns `Err(String)` on duplicate or database failure.
-	 */
-	equipmentCamerasCreate: (request: CreateCamera) => typedError<Camera, string>(__TAURI_INVOKE("equipment.cameras.create", { request })),
-	/**
-	 *  `equipment.cameras.update` — update an existing camera.
-	 * 
-	 *  # Errors
-	 *  Returns `Err(String)` if the camera is not found.
-	 */
-	equipmentCamerasUpdate: (request: UpdateCamera) => typedError<Camera, string>(__TAURI_INVOKE("equipment.cameras.update", { request })),
-	/**
-	 *  `equipment.cameras.delete` — delete a camera by ID.
-	 * 
-	 *  # Errors
-	 *  Returns `Err(String)` if the camera is not found.
-	 */
-	equipmentCamerasDelete: (id: string) => typedError<null, string>(__TAURI_INVOKE("equipment.cameras.delete", { id })),
-	/**
-	 *  `equipment.telescopes.list` — list all telescopes.
-	 * 
-	 *  # Errors
-	 *  Returns `Err(String)` on database failure.
-	 */
-	equipmentTelescopesList: () => typedError<Telescope[], string>(__TAURI_INVOKE("equipment.telescopes.list")),
-	/**
-	 *  `equipment.telescopes.create` — create a new telescope.
-	 * 
-	 *  # Errors
-	 *  Returns `Err(String)` on duplicate or database failure.
-	 */
-	equipmentTelescopesCreate: (request: CreateTelescope) => typedError<Telescope, string>(__TAURI_INVOKE("equipment.telescopes.create", { request })),
-	/**
-	 *  `equipment.telescopes.update` — update an existing telescope.
-	 * 
-	 *  # Errors
-	 *  Returns `Err(String)` if the telescope is not found.
-	 */
-	equipmentTelescopesUpdate: (request: UpdateTelescope) => typedError<Telescope, string>(__TAURI_INVOKE("equipment.telescopes.update", { request })),
-	/**
-	 *  `equipment.telescopes.delete` — delete a telescope by ID.
-	 * 
-	 *  # Errors
-	 *  Returns `Err(String)` if the telescope is not found.
-	 */
-	equipmentTelescopesDelete: (id: string) => typedError<null, string>(__TAURI_INVOKE("equipment.telescopes.delete", { id })),
-	/**
-	 *  `equipment.trains.list` — list all optical trains.
-	 * 
-	 *  # Errors
-	 *  Returns `Err(String)` on database failure.
-	 */
-	equipmentTrainsList: () => typedError<OpticalTrain[], string>(__TAURI_INVOKE("equipment.trains.list")),
-	/**
-	 *  `equipment.trains.create` — create a new optical train.
-	 * 
-	 *  # Errors
-	 *  Returns `Err(String)` on database failure.
-	 */
-	equipmentTrainsCreate: (request: CreateOpticalTrain) => typedError<OpticalTrain, string>(__TAURI_INVOKE("equipment.trains.create", { request })),
-	/**
-	 *  `equipment.trains.update` — update an existing optical train.
-	 * 
-	 *  # Errors
-	 *  Returns `Err(String)` if the optical train is not found.
-	 */
-	equipmentTrainsUpdate: (request: UpdateOpticalTrain) => typedError<OpticalTrain, string>(__TAURI_INVOKE("equipment.trains.update", { request })),
-	/**
-	 *  `equipment.trains.delete` — delete an optical train by ID.
-	 * 
-	 *  # Errors
-	 *  Returns `Err(String)` if the optical train is not found.
-	 */
-	equipmentTrainsDelete: (id: string) => typedError<null, string>(__TAURI_INVOKE("equipment.trains.delete", { id })),
-	/**
-	 *  `equipment.filters.list` — list all filters.
-	 * 
-	 *  # Errors
-	 *  Returns `Err(String)` on database failure.
-	 */
-	equipmentFiltersList: () => typedError<Filter[], string>(__TAURI_INVOKE("equipment.filters.list")),
-	/**
-	 *  `equipment.filters.create` — create a new filter.
-	 * 
-	 *  # Errors
-	 *  Returns `Err(String)` on duplicate name or database failure.
-	 */
-	equipmentFiltersCreate: (request: CreateFilter) => typedError<Filter, string>(__TAURI_INVOKE("equipment.filters.create", { request })),
-	/**
-	 *  `equipment.filters.update` — update an existing filter.
-	 * 
-	 *  # Errors
-	 *  Returns `Err(String)` if the filter is not found.
-	 */
-	equipmentFiltersUpdate: (request: UpdateFilter) => typedError<Filter, string>(__TAURI_INVOKE("equipment.filters.update", { request })),
-	/**
-	 *  `equipment.filters.delete` — delete a filter by ID.
-	 * 
-	 *  # Errors
-	 *  Returns `Err(String)` if the filter is not found.
-	 */
-	equipmentFiltersDelete: (id: string) => typedError<null, string>(__TAURI_INVOKE("equipment.filters.delete", { id })),
-	/**
-	 *  `status.summary` — returns current library status overview.
-	 * 
-	 *  # Errors
-	 *  Returns `Err(String)` on failure; the stub never fails.
-	 */
-	statusSummary: () => typedError<StatusSummary, string>(__TAURI_INVOKE("status.summary")),
-	/**
-	 *  `cleanup.policy.get` — returns the current cleanup policy.
-	 * 
-	 *  # Errors
-	 *  Returns `Err(String)` on failure; the stub never fails.
-	 */
-	cleanupPolicyGet: () => typedError<CleanupPolicy, string>(__TAURI_INVOKE("cleanup.policy.get")),
-	/**
-	 *  `cleanup.policy.update` — update the cleanup policy.
-	 * 
-	 *  # Errors
-	 *  Returns `Err(String)` on failure; the stub never fails.
-	 */
-	cleanupPolicyUpdate: (request: UpdateCleanupPolicy) => typedError<CleanupPolicy, string>(__TAURI_INVOKE("cleanup.policy.update", { request })),
-	/**
-	 *  `cleanup.scan` — scan a project for cleanup candidates.
-	 * 
-	 *  Returns an empty candidates list as a stub. The real implementation will
-	 *  walk the project file tree and apply the cleanup policy to identify
-	 *  reclaimable artifacts.
-	 * 
-	 *  # Errors
-	 *  Returns `Err(String)` on failure; the stub never fails.
-	 */
-	cleanupScan: (projectId: string) => typedError<CleanupScanResult, string>(__TAURI_INVOKE("cleanup.scan", { projectId })),
-	/**
-	 *  `calibration.tolerances.get` — returns current calibration matching tolerances.
-	 * 
-	 *  # Errors
-	 *  Returns `Err(String)` on failure; the stub never fails.
-	 */
-	calibrationTolerancesGet: () => typedError<CalibrationTolerances, string>(__TAURI_INVOKE("calibration.tolerances.get")),
-	/**
-	 *  `calibration.tolerances.update` — update calibration matching tolerances.
-	 * 
-	 *  # Errors
-	 *  Returns `Err(String)` on failure; the stub never fails.
-	 */
-	calibrationTolerancesUpdate: (request: UpdateCalibrationTolerances) => typedError<CalibrationTolerances, string>(__TAURI_INVOKE("calibration.tolerances.update", { request })),
-	/**
-	 *  `inbox.scan` — on-demand inbox folder scan.
-	 * 
-	 *  Returns a stub list of discovered file entries. The real implementation
-	 *  will delegate to the filesystem inventory scanner.
-	 * 
-	 *  # Errors
-	 *  Returns `Err(String)` on failure; the stub never fails.
-	 */
-	inboxScan: (rootId: string | null) => typedError<InboxScanResult, string>(__TAURI_INVOKE("inbox.scan", { rootId })),
-	/**
-	 *  `ingestion.settings.get` — returns current ingestion/scan settings.
-	 * 
-	 *  # Errors
-	 *  Returns `Err(String)` on failure; the stub never fails.
-	 */
-	ingestionSettingsGet: () => typedError<IngestionSettings, string>(__TAURI_INVOKE("ingestion.settings.get")),
-	/**
-	 *  `ingestion.settings.update` — update ingestion/scan settings.
-	 * 
-	 *  # Errors
-	 *  Returns `Err(String)` on failure; the stub never fails.
-	 */
-	ingestionSettingsUpdate: (request: UpdateIngestionSettings) => typedError<IngestionSettings, string>(__TAURI_INVOKE("ingestion.settings.update", { request })),
-	/**
-	 *  `tools.list` — list configured processing tools.
-	 * 
-	 *  # Errors
-	 *  Returns `Err(String)` on failure; the stub never fails.
-	 */
-	toolsList: () => typedError<ProcessingTool[], string>(__TAURI_INVOKE("tools.list")),
-	/**
-	 *  `tools.update` — update a processing tool configuration.
-	 * 
-	 *  # Errors
-	 *  Returns `Err(String)` on failure; the stub never fails.
-	 */
-	toolsUpdate: (request: UpdateProcessingTool) => typedError<ProcessingTool, string>(__TAURI_INVOKE("tools.update", { request })),
-	/**
-	 *  `tools.validate_path` — validate a processing tool executable path.
-	 * 
-	 *  # Errors
-	 *  Returns `Err(String)` on failure; the stub never fails.
-	 */
-	toolsValidatePath: (path: string) => typedError<ToolPathValidation, string>(__TAURI_INVOKE("tools.validate_path", { path })),
 };
 
 /* Types */
 /**
  *  An acquisition session as seen through the IPC boundary.
- * 
+ *
  *  This is the list-level representation returned by `sessions.list`. It
  *  matches the frontend's `AcquisitionSession` interface in `types.ts`.
  */
@@ -552,7 +349,7 @@ export type AcquisitionSession = AcquisitionSession_Serialize | AcquisitionSessi
 
 /**
  *  An acquisition session as seen through the IPC boundary.
- * 
+ *
  *  This is the list-level representation returned by `sessions.list`. It
  *  matches the frontend's `AcquisitionSession` interface in `types.ts`.
  */
@@ -573,7 +370,7 @@ export type AcquisitionSession_Deserialize = {
 
 /**
  *  An acquisition session as seen through the IPC boundary.
- * 
+ *
  *  This is the list-level representation returned by `sessions.list`. It
  *  matches the frontend's `AcquisitionSession` interface in `types.ts`.
  */
@@ -604,7 +401,7 @@ export type AppPreferences = {
 	setupCompleted: boolean,
 };
 
-export type AssetType = "file_record" | "acquisition_session" | "calibration_session" | "project" | "prepared_source" | "processing_artifact" | "filesystem_plan" | "data_source" | 
+export type AssetType = "file_record" | "acquisition_session" | "calibration_session" | "project" | "prepared_source" | "processing_artifact" | "filesystem_plan" | "data_source" |
 /**  target: alias and primaryDesignation provenance tracking (R-3.2). */
 "target";
 
@@ -790,22 +587,6 @@ export type CalibrationSessionTransitionRequest_Serialize = {
 	actor: TransitionActor,
 };
 
-export type CalibrationTolerances = {
-	temperatureToleranceC: number | null,
-	exposureToleranceS: number | null,
-	agingLimitDays: number,
-	requireSameCamera: boolean,
-	requireSameGain: boolean,
-	requireSameBinning: boolean,
-};
-
-export type Camera = {
-	id: string,
-	name: string,
-	aliases: string[],
-	autoDetected: boolean,
-};
-
 /**  Catalog identifiers for a target (NGC, IC, Messier, etc.). */
 export type CatalogIds = CatalogIds_Serialize | CatalogIds_Deserialize;
 
@@ -823,33 +604,8 @@ export type CatalogIds_Serialize = {
 	messier?: string | null,
 };
 
-export type CleanupAction = "keep" | "archive" | "delete";
-
-export type CleanupCandidate = {
-	filePath: string,
-	dataType: string,
-	sizeBytes: number,
-	reason: string,
-};
-
 /**  Cleanup eligibility for an artifact group. */
 export type CleanupEligibility = "eligible" | "archive" | "keep" | "none";
-
-export type CleanupPolicy = {
-	entries: CleanupPolicyEntry[],
-	autoOnCompletion: boolean,
-};
-
-export type CleanupPolicyEntry = {
-	dataType: string,
-	action: CleanupAction,
-};
-
-export type CleanupScanResult = {
-	projectId: string,
-	candidates: CleanupCandidate[],
-	totalReclaimableBytes: number,
-};
 
 /**  Cleanup state summary for a project. */
 export type CleanupState = {
@@ -879,29 +635,6 @@ export type Coordinates_Deserialize = {
 export type Coordinates_Serialize = {
 	ra?: number | null,
 	dec?: number | null,
-};
-
-export type CreateCamera = {
-	name: string,
-	aliases: string[],
-};
-
-export type CreateFilter = {
-	name: string,
-	category: FilterCategory,
-};
-
-export type CreateOpticalTrain = {
-	name: string,
-	telescopeId: string | null,
-	cameraId: string | null,
-	focalLengthMm: number,
-};
-
-export type CreateTelescope = {
-	name: string,
-	aliases: string[],
-	focalLengthMm: number | null,
 };
 
 export type DataSourceState = "active" | "missing" | "disabled" | "reconnect_required";
@@ -1081,15 +814,6 @@ export type FilesystemPlan_Serialize = {
 	appliedAt?: string | null,
 };
 
-export type Filter = {
-	id: string,
-	name: string,
-	category: FilterCategory,
-	autoDetected: boolean,
-};
-
-export type FilterCategory = "narrowband" | "broadband" | "dual_band" | "other" | "custom";
-
 /**  Response payload for `firstrun.complete`. */
 export type FirstRunCompleteResponse = {
 	completedAt: string,
@@ -1127,34 +851,6 @@ export type Frameset = {
 	filter: string,
 	count: number,
 	integrationS: number | null,
-};
-
-/**  A file entry discovered during an inbox scan. */
-export type InboxFileEntry = {
-	path: string,
-	fileName: string,
-	sizeBytes: number,
-	extension: string,
-};
-
-/**  Result of an inbox scan operation. */
-export type InboxScanResult = {
-	rootId: string,
-	entries: InboxFileEntry[],
-	totalCount: number,
-	totalSizeBytes: number,
-};
-
-export type IngestionSettings = {
-	watcherEnabled: boolean,
-	scanOnStartup: boolean,
-	followSymlinks: boolean,
-	followJunctions: boolean,
-	eagerHashing: boolean,
-	metadataExtraction: boolean,
-	exposureGroupingToleranceS: number | null,
-	temperatureGroupingToleranceC: number | null,
-	defaultFilter: string | null,
 };
 
 export type InventorySessionTransitionRequest = InventorySessionTransitionRequest_Serialize | InventorySessionTransitionRequest_Deserialize;
@@ -1203,7 +899,7 @@ export type LedgerFilterDto = {
 
 /**
  *  camelCase wire shape mirroring [`LedgerRow`] for the typed Tauri surface.
- * 
+ *
  *  `LedgerRow` itself doesn't derive `specta::Type` (the persistence layer
  *  stays language-internal). This DTO is the IPC projection.
  */
@@ -1238,13 +934,6 @@ export type LibraryRoot_Serialize = {
 	online: boolean,
 	fileCount: number,
 	lastScanned?: string | null,
-};
-
-export type LibraryStats = {
-	sessions: number,
-	calibrationSets: number,
-	targets: number,
-	projects: number,
 };
 
 /**  Extended detail view of a calibration master. */
@@ -1334,14 +1023,6 @@ export type MetaValue_Serialize = {
 	origin: ProvenanceOrigin,
 	confidence: ConfidenceLevel,
 	evidenceRef?: string | null,
-};
-
-export type OpticalTrain = {
-	id: string,
-	name: string,
-	telescopeId: string | null,
-	cameraId: string | null,
-	focalLengthMm: number,
 };
 
 /**  Verification state for a single output. */
@@ -1475,15 +1156,6 @@ export type PreparedSourceTransitionRequest_Serialize = {
 	nextState: PreparedSourceState,
 	actionLabel?: string | null,
 	actor: TransitionActor,
-};
-
-export type ProcessingTool = {
-	id: string,
-	name: string,
-	path: string | null,
-	version: string | null,
-	detected: boolean,
-	enabled: boolean,
 };
 
 /**  A project as seen in list views. */
@@ -1927,11 +1599,11 @@ export type RevealResponse = {
 };
 
 /**  How the target was highlighted in the OS file browser after a reveal. */
-export type RevealSelection = 
+export type RevealSelection =
 /**  The item was selected in the file browser (macOS, Windows, Linux freedesktop). */
-"target" | 
+"target" |
 /**  Only the parent directory opened (Linux xdg-open fallback). */
-"directory_only" | 
+"directory_only" |
 /**  No UI hint was applied. */
 "none";
 
@@ -1969,13 +1641,6 @@ export type ReviewItem_Serialize = {
 
 /**  Category of a library root directory. */
 export type RootCategory = "raw" | "calibration" | "project" | "inbox";
-
-export type RootHealth = {
-	id: string,
-	path: string,
-	kind: string,
-	online: boolean,
-};
 
 /**  Scan depth strategy for a registered source. */
 export type ScanDepth = "recursive" | "single";
@@ -2100,7 +1765,7 @@ export type SessionsView = "list" | "calendar";
 
 /**
  *  Scoped settings data (general, naming, calibration, etc.).
- * 
+ *
  *  `values` is a free-form JSON object keyed by setting name.
  */
 export type SettingsData = {
@@ -2109,7 +1774,7 @@ export type SettingsData = {
 };
 
 /**  Kind of a registered source directory. */
-export type SourceKind = "light_frames" | "dark" | "flat" | "bias" | "project" | "inbox";
+export type SourceKind = "raw" | "calibration" | "project" | "inbox";
 
 /**  Map of calibration frame roles to file paths within a project. */
 export type SourceMap = {
@@ -2128,14 +1793,6 @@ export type SourceSelection = "selected" | "candidate";
 
 /**  Link strategy for a source view. */
 export type SourceViewStrategy = "junction" | "symlink" | "hardlink" | "copy";
-
-export type StatusSummary = {
-	inboxCount: number,
-	library: LibraryStats,
-	cleanupReclaimableBytes: number,
-	volumes: VolumeHealth[],
-	roots: RootHealth[],
-};
 
 /**  An astronomical target as seen in list views. */
 export type Target = Target_Serialize | Target_Deserialize;
@@ -2219,20 +1876,6 @@ export type Target_Serialize = {
 	coverage: { [key in string]: number | null },
 	/**  Filter name -> recommended hours. */
 	recommendedHours: { [key in string]: number | null },
-};
-
-export type Telescope = {
-	id: string,
-	name: string,
-	aliases: string[],
-	focalLengthMm: number | null,
-	autoDetected: boolean,
-};
-
-export type ToolPathValidation = {
-	path: string,
-	valid: boolean,
-	reason: string | null,
 };
 
 /**  Tour completion state tracking. */
@@ -2329,78 +1972,11 @@ export type TransitionResponse_Serialize = {
 
 export type TransitionStatus = "success" | "noop" | "error";
 
-export type UpdateCalibrationTolerances = {
-	temperatureToleranceC: number | null,
-	exposureToleranceS: number | null,
-	agingLimitDays: number,
-	requireSameCamera: boolean,
-	requireSameGain: boolean,
-	requireSameBinning: boolean,
-};
-
-export type UpdateCamera = {
-	id: string,
-	name: string,
-	aliases: string[],
-};
-
-export type UpdateCleanupPolicy = {
-	entries: CleanupPolicyEntry[],
-	autoOnCompletion: boolean,
-};
-
-export type UpdateFilter = {
-	id: string,
-	name: string,
-	category: FilterCategory,
-};
-
-export type UpdateIngestionSettings = {
-	watcherEnabled: boolean,
-	scanOnStartup: boolean,
-	followSymlinks: boolean,
-	followJunctions: boolean,
-	eagerHashing: boolean,
-	metadataExtraction: boolean,
-	exposureGroupingToleranceS: number | null,
-	temperatureGroupingToleranceC: number | null,
-	defaultFilter: string | null,
-};
-
-export type UpdateOpticalTrain = {
-	id: string,
-	name: string,
-	telescopeId: string | null,
-	cameraId: string | null,
-	focalLengthMm: number,
-};
-
-export type UpdateProcessingTool = {
-	id: string,
-	path: string | null,
-	enabled: boolean,
-};
-
-export type UpdateTelescope = {
-	id: string,
-	name: string,
-	aliases: string[],
-	focalLengthMm: number | null,
-};
-
 /**  Verification state for a project's outputs. */
 export type VerificationState = "unreviewed" | "has_accepted" | "all_rejected";
 
 /**  Project detail view mode. */
 export type ViewMode = "center" | "pipeline" | "combined";
-
-export type VolumeHealth = {
-	path: string,
-	label: string | null,
-	freeBytes: number,
-	totalBytes: number,
-	warning: boolean,
-};
 
 /* Tauri Specta runtime */
 async function typedError<T, E>(result: Promise<T>): Promise<{ status: "ok"; data: T } | { status: "error"; error: E }> {
@@ -2411,4 +1987,3 @@ async function typedError<T, E>(result: Promise<T>): Promise<{ status: "ok"; dat
         return { status: "error", error: e as any };
     }
 }
-

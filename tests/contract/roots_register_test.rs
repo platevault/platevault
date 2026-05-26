@@ -7,8 +7,8 @@ use serde_json::json;
 
 fn sample_request() -> RegisterSourceRequest {
     RegisterSourceRequest {
-        kind: SourceKind::LightFrames,
-        path: "/astro/lights".to_owned(),
+        kind: SourceKind::Raw,
+        path: "/astro/raw".to_owned(),
         kind_subtype: None,
         scan_depth: ScanDepth::Recursive,
     }
@@ -16,7 +16,7 @@ fn sample_request() -> RegisterSourceRequest {
 
 fn sample_request_with_subtype() -> RegisterSourceRequest {
     RegisterSourceRequest {
-        kind: SourceKind::Dark,
+        kind: SourceKind::Calibration,
         path: "/astro/darks".to_owned(),
         kind_subtype: Some("dark".to_owned()),
         scan_depth: ScanDepth::Single,
@@ -26,8 +26,8 @@ fn sample_request_with_subtype() -> RegisterSourceRequest {
 fn sample_response() -> RegisterSourceResponse {
     RegisterSourceResponse {
         source_id: "a1b2c3d4-e5f6-7890-abcd-ef1234567890".to_owned(),
-        kind: SourceKind::LightFrames,
-        path: "/astro/lights".to_owned(),
+        kind: SourceKind::Raw,
+        path: "/astro/raw".to_owned(),
         created_at: "2026-05-26T12:00:00Z".to_owned(),
     }
 }
@@ -39,10 +39,12 @@ fn request_serializes_required_fields_as_camel_case() {
     let value = serde_json::to_value(sample_request()).expect("request should serialize");
     let obj = value.as_object().expect("request should be an object");
 
-    assert_eq!(obj["kind"], json!("light_frames"));
+    // Required fields from roots.register.json request schema.
+    assert_eq!(obj["kind"], json!("raw"));
     assert!(obj["path"].is_string());
     assert_eq!(obj["scanDepth"], json!("recursive"));
 
+    // Optional kindSubtype omitted when None (skip_serializing_if).
     assert!(!obj.contains_key("kindSubtype"), "kindSubtype should be absent when None");
 }
 
@@ -60,11 +62,10 @@ fn request_with_kind_subtype_includes_field() {
 
 #[test]
 fn source_kind_variants_match_contract_enum() {
+    // roots.register.json: enum ["raw", "calibration", "project", "inbox"]
     let expected = [
-        (SourceKind::LightFrames, "light_frames"),
-        (SourceKind::Dark, "dark"),
-        (SourceKind::Flat, "flat"),
-        (SourceKind::Bias, "bias"),
+        (SourceKind::Raw, "raw"),
+        (SourceKind::Calibration, "calibration"),
         (SourceKind::Project, "project"),
         (SourceKind::Inbox, "inbox"),
     ];
@@ -80,7 +81,7 @@ fn source_kind_variants_match_contract_enum() {
 
 #[test]
 fn source_kind_roundtrips_from_json() {
-    for variant_str in ["light_frames", "dark", "flat", "bias", "project", "inbox"] {
+    for variant_str in ["raw", "calibration", "project", "inbox"] {
         let deserialized: SourceKind =
             serde_json::from_value(json!(variant_str)).unwrap_or_else(|e| {
                 panic!("\"{variant_str}\" should deserialize to SourceKind: {e}");
@@ -94,6 +95,7 @@ fn source_kind_roundtrips_from_json() {
 
 #[test]
 fn scan_depth_variants_match_contract_enum() {
+    // roots.register.json: enum ["recursive", "single"]
     assert_eq!(serde_json::to_value(ScanDepth::Recursive).unwrap(), json!("recursive"));
     assert_eq!(serde_json::to_value(ScanDepth::Single).unwrap(), json!("single"));
 }
@@ -105,14 +107,16 @@ fn response_serializes_required_fields_as_camel_case() {
     let value = serde_json::to_value(sample_response()).expect("response should serialize");
     let obj = value.as_object().expect("response should be an object");
 
+    // Required keys from roots.register.json success response:
+    // sourceId, kind, path, createdAt
     assert!(obj.contains_key("sourceId"), "response must have sourceId");
     assert!(obj.contains_key("kind"), "response must have kind");
     assert!(obj.contains_key("path"), "response must have path");
     assert!(obj.contains_key("createdAt"), "response must have createdAt");
 
     assert_eq!(obj["sourceId"], json!("a1b2c3d4-e5f6-7890-abcd-ef1234567890"));
-    assert_eq!(obj["kind"], json!("light_frames"));
-    assert_eq!(obj["path"], json!("/astro/lights"));
+    assert_eq!(obj["kind"], json!("raw"));
+    assert_eq!(obj["path"], json!("/astro/raw"));
     assert_eq!(obj["createdAt"], json!("2026-05-26T12:00:00Z"));
 }
 
@@ -120,6 +124,8 @@ fn response_serializes_required_fields_as_camel_case() {
 fn response_created_at_is_string_for_iso8601() {
     let value = serde_json::to_value(sample_response()).unwrap();
 
+    // The contract requires format: "date-time" (ISO 8601 / RFC 3339).
+    // Verify the Rust DTO serializes createdAt as a JSON string.
     assert!(
         value["createdAt"].is_string(),
         "createdAt must serialize as a JSON string (date-time format)"
@@ -131,6 +137,9 @@ fn response_has_no_extra_keys_beyond_contract() {
     let value = serde_json::to_value(sample_response()).unwrap();
     let obj = value.as_object().unwrap();
 
+    // The success response in roots.register.json defines only these
+    // properties (excluding envelope keys status, contractVersion, requestId
+    // which are added by the ResponseEnvelope wrapper, not the DTO itself).
     let allowed: std::collections::BTreeSet<&str> =
         ["sourceId", "kind", "path", "createdAt"].into_iter().collect();
 

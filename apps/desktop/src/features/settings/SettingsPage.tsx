@@ -1,80 +1,59 @@
 import { useState } from 'react';
 import { useParams } from '@tanstack/react-router';
-import clsx from 'clsx';
 import { useAutoSave } from './useAutoSave';
 import { DataSources } from './DataSources';
-import { Equipment } from './Equipment';
-import { Ingestion } from './Ingestion';
 import { NamingStructure } from './NamingStructure';
-import { ProcessingTools } from './ProcessingTools';
-import { CalibrationMatching } from './CalibrationMatching';
+import { SourceViewStrategy } from './SourceViewStrategy';
+import { CleanupPolicy } from './CleanupPolicy';
+import { Equipment } from './Equipment';
+import { Tools } from './Tools';
+import { LogSettings } from './LogSettings';
 import { Catalogs } from './Catalogs';
-import { Cleanup } from './Cleanup';
-import { General } from './General';
-import { Advanced } from './Advanced';
-import { AuditLog } from './AuditLog';
+import { Protection } from './Protection';
+import { DisplayPane } from './DisplayPane';
 
 const PANES = [
-  { id: 'sources', label: 'Data Sources' },
-  { id: 'equipment', label: 'Equipment' },
-  { id: 'ingestion', label: 'Ingestion' },
-  { id: 'naming', label: 'Naming & Structure' },
-  { id: 'tools', label: 'Processing Tools' },
-  { id: 'cal', label: 'Calibration Matching' },
-  { id: 'catalogs', label: 'Target Catalogs' },
-  { id: 'cleanup', label: 'Cleanup' },
-  { id: 'general', label: 'General' },
-  { id: 'advanced', label: 'Advanced' },
-  { id: 'audit', label: 'Audit Log' },
+  { id: 'sources', label: 'Data sources' },
+  { id: 'ingest', label: 'Ingestion & review' },
+  { id: 'naming', label: 'Naming & structure' },
+  { id: 'views', label: 'Source view strategy' },
+  { id: 'cal', label: 'Calibration matching' },
+  { id: 'tools', label: 'Tool workflows' },
+  { id: 'catalogs', label: 'Target catalogs' },
+  { id: 'protect', label: 'Source protection' },
+  { id: 'cleanup', label: 'Cleanup & archive' },
+  { id: 'log', label: 'Application log' },
+  { id: 'appearance', label: 'Appearance' },
+  { id: 'adv', label: 'Advanced / developer' },
 ] as const;
 
 type PaneId = (typeof PANES)[number]['id'];
 
-const PANE_META: Record<PaneId, { title: string; sub?: string }> = {
+const PANE_TITLES: Record<PaneId, { title: string; sub?: string }> = {
   sources: {
-    title: 'Data Sources',
+    title: 'Data sources',
     sub: 'Library roots the app indexes. Files are read in read-only mode; nothing is modified outside an approved plan.',
   },
-  equipment: {
-    title: 'Equipment',
-    sub: 'Cameras, telescopes, optical trains, and filter libraries used across your sessions.',
-  },
-  ingestion: {
-    title: 'Ingestion',
-    sub: 'Controls how the app watches, scans, and groups newly discovered files.',
-  },
+  ingest: { title: 'Ingestion & review' },
   naming: {
     title: 'Naming & Structure',
     sub: 'Pattern used when files are confirmed from Inbox to Inventory.',
   },
-  tools: {
-    title: 'Processing Tools',
-    sub: 'Configure executable paths and directory structure templates for each processing tool.',
+  views: {
+    title: 'Source view strategy',
+    sub: 'How the app generates tool-friendly projections of your source map. Picked per project at creation, with this as the default.',
   },
-  cal: {
-    title: 'Calibration Matching',
-    sub: 'Tolerances and requirements for automatic calibration frame matching.',
-  },
-  catalogs: {
-    title: 'Target Catalogs',
-    sub: 'Deep-sky catalogs used for target identification and alias resolution.',
-  },
+  cal: { title: 'Calibration matching' },
+  tools: { title: 'Tool workflows' },
+  catalogs: { title: 'Target catalogs' },
+  protect: { title: 'Source protection' },
   cleanup: {
-    title: 'Cleanup',
-    sub: 'Default actions for each data type when cleanup runs after processing.',
+    title: 'Cleanup & archive policy',
+    sub: 'What happens to each kind of data when cleanup runs. Policies vary by processing tool because different tools produce different intermediates.',
   },
-  general: {
-    title: 'General',
-    sub: 'Theme, font size, and display density preferences.',
-  },
-  advanced: {
-    title: 'Advanced',
-    sub: 'Logging, diagnostics, and database information.',
-  },
-  audit: {
-    title: 'Audit Log',
-    sub: 'Searchable history of every state change, plan application, and system event.',
-  },
+  log: { title: 'Application log' },
+  appearance: { title: 'Appearance' },
+  adv: { title: 'Advanced / developer' },
 };
 
 function getPaneComponent(
@@ -84,26 +63,24 @@ function getPaneComponent(
   switch (paneId) {
     case 'sources':
       return <DataSources save={save} />;
-    case 'equipment':
-      return <Equipment save={save} />;
-    case 'ingestion':
-      return <Ingestion save={save} />;
     case 'naming':
       return <NamingStructure save={save} />;
-    case 'tools':
-      return <ProcessingTools save={save} />;
+    case 'views':
+      return <SourceViewStrategy save={save} />;
+    case 'cleanup':
+      return <CleanupPolicy save={save} />;
     case 'cal':
-      return <CalibrationMatching save={save} />;
+      return <Equipment save={save} />;
+    case 'tools':
+      return <Tools save={save} />;
+    case 'log':
+      return <LogSettings save={save} />;
     case 'catalogs':
       return <Catalogs save={save} />;
-    case 'cleanup':
-      return <Cleanup />;
-    case 'general':
-      return <General />;
-    case 'advanced':
-      return <Advanced save={save} />;
-    case 'audit':
-      return <AuditLog />;
+    case 'protect':
+      return <Protection save={save} />;
+    case 'appearance':
+      return <DisplayPane />;
     default:
       return (
         <div className="alm-empty">
@@ -119,10 +96,11 @@ export function SettingsPage() {
     PANES.find((p) => p.id === params.pane)?.id ?? 'sources';
   const [activePane, setActivePane] = useState<PaneId>(initialPane);
   const { save, saved } = useAutoSave();
-  const paneInfo = PANE_META[activePane];
+  const paneInfo = PANE_TITLES[activePane];
 
   return (
     <div className="alm-settings" data-testid="SettingsPage">
+      {/* Left rail nav */}
       <nav
         className="alm-settings__rail"
         aria-label="Settings categories"
@@ -131,10 +109,7 @@ export function SettingsPage() {
           <button
             key={pane.id}
             type="button"
-            className={clsx(
-              'alm-settings__nav-item',
-              activePane === pane.id && 'alm-settings__nav-item--active',
-            )}
+            className={`alm-settings__nav-item${activePane === pane.id ? ' alm-settings__nav-item--active' : ''}`}
             onClick={() => setActivePane(pane.id)}
             aria-current={activePane === pane.id ? 'page' : undefined}
           >
@@ -143,6 +118,7 @@ export function SettingsPage() {
         ))}
       </nav>
 
+      {/* Right content pane */}
       <div className="alm-settings__content">
         <div className="alm-settings__pane-header">
           <h2 className="alm-settings__pane-title">{paneInfo.title}</h2>
