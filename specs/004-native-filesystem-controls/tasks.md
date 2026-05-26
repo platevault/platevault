@@ -14,10 +14,12 @@ surface and the per-OS reveal behavior is the highest-risk area in the
 feature.
 
 **Organization**: Tasks are grouped by user story so each picker and
-the reveal action can be implemented independently. The only
-pre-existing wiring is the `pickFolderStub` in
-`apps/desktop/src/features/welcome/WelcomePage.tsx`; everything else
-is new.
+the reveal action can be implemented independently. The pre-existing wiring is an ad-hoc dynamic import of
+`@tauri-apps/plugin-dialog` in `AddFolderButton`
+(`apps/desktop/src/features/setup/steps/StepRaw.tsx`), added by spec
+003. The dependency is not in `package.json`, has no Tauri capability,
+no contract DTO, no audit logging, and no last-path memory. Everything
+else is new.
 
 ## Format: `[ID] [P?] [Story] Description`
 
@@ -103,10 +105,14 @@ no row is added.
 - [ ] T012 [US1] Persist last-chosen parent per source kind in
       `localStorage` under `alm.native.last-path.<kind>` and pass it
       as `default_path` on the next open (research §5).
-- [ ] T013 [US1] Replace `pickFolderStub` in
-      `apps/desktop/src/features/welcome/WelcomePage.tsx` with the
-      new `pickDirectory()` helper. Keep the stub behind the
-      `VITE_TAURI=false` build flag for component tests.
+- [ ] T013 [US1] Replace the ad-hoc `@tauri-apps/plugin-dialog` dynamic
+      import in `AddFolderButton`
+      (`apps/desktop/src/features/setup/steps/StepRaw.tsx`) and the
+      equivalent affordances in `StepCalibration.tsx`,
+      `StepProject.tsx`, `StepInbox.tsx`, and
+      `features/settings/DataSources.tsx` with the new
+      `pickDirectory()` helper. Keep the `window.prompt` fallback
+      behind the `VITE_TAURI=false` build flag for component tests.
 - [ ] T014 [US1] Surface picker errors (`picker.unavailable`,
       `os.command_failed`) inline next to the offending row and emit
       a toast plus an audit event via the existing audit sink.
