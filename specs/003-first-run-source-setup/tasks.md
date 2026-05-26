@@ -243,7 +243,7 @@ into the working buffer.
       in `tests/contract/audit_first_run_completed_test.rs` (R-E2).
 - [x] T030 [P] Update `docs/research/` with a short note linking back to
       `specs/003-first-run-source-setup/research.md` for reference.
-- [ ] T031 Run `just lint`, `just typecheck`, `just test`, and verify
+- [x] T031 Run `just lint`, `just typecheck`, `just test`, and verify
       Playwright MCP coverage of the gate, happy path, restart, and
       batch partial-failure.
 - [x] T032 Remove old `StepSources.tsx` and `StepScan.tsx` (superseded
