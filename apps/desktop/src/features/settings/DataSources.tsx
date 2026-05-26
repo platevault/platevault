@@ -1,6 +1,8 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useCallback } from 'react';
+import { useNavigate } from '@tanstack/react-router';
 import { Select } from '@base-ui-components/react/select';
 import { listRoots, registerRoot, startScan } from '@/api/commands';
+import { setPreference } from '@/data/preferences';
 import { DirPicker, Btn, Pill, Box, KV } from '@/ui';
 import type { LibraryRoot } from '@/bindings/types';
 
@@ -28,9 +30,44 @@ const FIXTURE_ROOTS: LibraryRoot[] = [
 ];
 
 export function DataSources({ save }: DataSourcesProps) {
+  const navigate = useNavigate();
   const [roots, setRoots] = useState<LibraryRoot[]>([]);
   const [newPath, setNewPath] = useState('');
   const [newCategory, setNewCategory] = useState<string>('raw');
+  const [showRestartConfirm, setShowRestartConfirm] = useState(false);
+  const [restarting, setRestarting] = useState(false);
+
+  const handleRestartWizard = useCallback(async () => {
+    setRestarting(true);
+    try {
+      const useMocks = import.meta.env.VITE_USE_MOCKS === 'true';
+      if (!useMocks) {
+        const { commands } = await import('@/bindings/index');
+        const result = await commands.firstrunRestart();
+        const categories = [
+          { key: 'raw', label: 'Raw sources', note: 'where light frames live', required: true, paths: [] as string[], estimates: [] as number[] },
+          { key: 'calibration', label: 'Calibration sources', note: 'darks, flats, biases', required: false, paths: [] as string[], estimates: [] as number[] },
+          { key: 'project', label: 'Project sources', note: 'processing projects', required: true, paths: [] as string[], estimates: [] as number[] },
+          { key: 'inbox', label: 'Inbox sources', note: 'new / unprocessed', required: false, paths: [] as string[], estimates: [] as number[] },
+        ];
+        for (const src of result.prefilled_sources) {
+          const cat = categories.find((c) => c.key === src.kind);
+          if (cat) cat.paths.push(src.path);
+        }
+        localStorage.setItem('alm-setup-wizard-state', JSON.stringify({
+          currentStep: 0,
+          categories,
+          catalogSettings: {},
+          scanSettings: {},
+        }));
+      }
+      setPreference('setupCompleted', false);
+      setShowRestartConfirm(false);
+      navigate({ to: '/setup' });
+    } catch {
+      setRestarting(false);
+    }
+  }, [navigate]);
 
   useEffect(() => {
     listRoots().then((loaded) => {
@@ -169,6 +206,30 @@ export function DataSources({ save }: DataSourcesProps) {
             your filesystem -- this app does not move source files.
           </p>
         </Box>
+      </div>
+
+      {/* Restart setup wizard */}
+      <div style={{ marginTop: 'var(--alm-space-7)', paddingTop: 'var(--alm-space-5)', borderTop: '1px solid var(--alm-border)' }}>
+        {!showRestartConfirm ? (
+          <Btn size="sm" onClick={() => setShowRestartConfirm(true)}>
+            Restart setup wizard&hellip;
+          </Btn>
+        ) : (
+          <Box>
+            <p style={{ fontSize: 'var(--alm-text-sm)', margin: 0, marginBottom: 'var(--alm-space-3)' }}>
+              This will re-open the first-run setup wizard. Your existing source
+              roots will be prefilled so you can review and edit them.
+            </p>
+            <div style={{ display: 'flex', gap: 'var(--alm-space-3)' }}>
+              <Btn variant="primary" size="sm" onClick={handleRestartWizard} disabled={restarting}>
+                {restarting ? 'Restarting…' : 'Confirm restart'}
+              </Btn>
+              <Btn size="sm" onClick={() => setShowRestartConfirm(false)} disabled={restarting}>
+                Cancel
+              </Btn>
+            </div>
+          </Box>
+        )}
       </div>
     </div>
   );
