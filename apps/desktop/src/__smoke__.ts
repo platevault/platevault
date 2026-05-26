@@ -62,10 +62,14 @@ import { SessionDetail } from '@/features/sessions/SessionDetail';
 import { CalendarView } from '@/features/sessions/CalendarView';
 import { GroupByBar } from '@/features/sessions/GroupByBar';
 
-import { ReviewPage } from '@/features/review/ReviewPage';
-import { ReviewQueue } from '@/features/review/ReviewQueue';
-import { EvidencePane } from '@/features/review/EvidencePane';
-import { DecisionPanel } from '@/features/review/DecisionPanel';
+import { InboxPage } from '@/features/inbox/InboxPage';
+import { InboxList } from '@/features/inbox/InboxList';
+import { SessionReview } from '@/features/inbox/SessionReview';
+import { ActionSidebar } from '@/features/inbox/ActionSidebar';
+import { SplitPreview } from '@/features/inbox/SplitPreview';
+import { MergeSearch } from '@/features/inbox/MergeSearch';
+import { InboxConfirmOverlay } from '@/features/inbox/InboxConfirmOverlay';
+import { FilterSelect } from '@/features/inbox/FilterSelect';
 
 import { CalibrationPage } from '@/features/calibration/CalibrationPage';
 import { CalibrationDetail } from '@/features/calibration/CalibrationDetail';
@@ -80,32 +84,13 @@ import { CoverageChart } from '@/features/targets/CoverageChart';
 
 import { ProjectsPage } from '@/features/projects/ProjectsPage';
 import { ProjectDetail } from '@/features/projects/ProjectDetail';
-import { ArtifactsPage } from '@/features/projects/ArtifactsPage';
-import { CommandCenter } from '@/features/projects/CommandCenter';
-import { PipelineView } from '@/features/projects/PipelineView';
-import { CombinedView } from '@/features/projects/CombinedView';
 import { WizardPage } from '@/features/projects/wizard/WizardPage';
-
-import { PlansPage } from '@/features/plans/PlansPage';
-import { PlanReview } from '@/features/plans/PlanReview';
-import { PlanReviewInline } from '@/features/plans/PlanReviewInline';
-import { PlansList } from '@/features/plans/PlansList';
-import { PlanInspector } from '@/features/plans/PlanInspector';
-import { PlanTable } from '@/features/plans/PlanTable';
-import { PlanDiff } from '@/features/plans/PlanDiff';
-
-import { AuditPage } from '@/features/audit/AuditPage';
-import { AuditList } from '@/features/audit/AuditList';
-import { AuditDetail } from '@/features/audit/AuditDetail';
-import { AuditContext } from '@/features/audit/AuditContext';
 
 import { SettingsPage } from '@/features/settings/SettingsPage';
 import { DensitySelector } from '@/features/settings/DensitySelector';
 
 import { SetupPage } from '@/features/setup/SetupPage';
 import { SetupWizard } from '@/features/setup/SetupWizard';
-
-import { TourProvider } from '@/features/tour/TourProvider';
 
 // ─── Data Layer ──────────────────────────────────────────────────────────────
 
@@ -171,10 +156,14 @@ export type SmokeCheck = {
   sessionDetail: typeof SessionDetail;
   calendarView: typeof CalendarView;
   groupByBar: typeof GroupByBar;
-  reviewPage: typeof ReviewPage;
-  reviewQueue: typeof ReviewQueue;
-  evidencePane: typeof EvidencePane;
-  decisionPanel: typeof DecisionPanel;
+  inboxPage: typeof InboxPage;
+  inboxList: typeof InboxList;
+  sessionReview: typeof SessionReview;
+  actionSidebar: typeof ActionSidebar;
+  splitPreview: typeof SplitPreview;
+  mergeSearch: typeof MergeSearch;
+  inboxConfirmOverlay: typeof InboxConfirmOverlay;
+  filterSelect: typeof FilterSelect;
   calibrationPage: typeof CalibrationPage;
   calibrationDetail: typeof CalibrationDetail;
   mastersList: typeof MastersList;
@@ -186,27 +175,11 @@ export type SmokeCheck = {
   coverageChart: typeof CoverageChart;
   projectsPage: typeof ProjectsPage;
   projectDetail: typeof ProjectDetail;
-  artifactsPage: typeof ArtifactsPage;
-  commandCenter: typeof CommandCenter;
-  pipelineView: typeof PipelineView;
-  combinedView: typeof CombinedView;
   wizardPage: typeof WizardPage;
-  plansPage: typeof PlansPage;
-  planReview: typeof PlanReview;
-  planReviewInline: typeof PlanReviewInline;
-  plansList: typeof PlansList;
-  planInspector: typeof PlanInspector;
-  planTable: typeof PlanTable;
-  planDiff: typeof PlanDiff;
-  auditPage: typeof AuditPage;
-  auditList: typeof AuditList;
-  auditDetail: typeof AuditDetail;
-  auditContext: typeof AuditContext;
   settingsPage: typeof SettingsPage;
   densitySelector: typeof DensitySelector;
   setupPage: typeof SetupPage;
   setupWizard: typeof SetupWizard;
-  tourProvider: typeof TourProvider;
   // Data
   usePreference: typeof usePreference;
   usePreferences: typeof usePreferences;

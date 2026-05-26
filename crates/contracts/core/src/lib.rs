@@ -2,8 +2,13 @@
 
 pub mod audit;
 pub mod calibration;
+pub mod calibration_tolerances;
+pub mod cleanup;
 pub mod enums;
+pub mod equipment;
 pub mod first_run;
+pub mod inbox;
+pub mod ingestion;
 pub mod json_any;
 pub mod lifecycle;
 pub mod native;
@@ -16,7 +21,9 @@ pub mod roots;
 pub mod search;
 pub mod sessions;
 pub mod settings;
+pub mod status;
 pub mod targets;
+pub mod tools;
 
 pub use json_any::JsonAny;
 

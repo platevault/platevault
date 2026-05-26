@@ -96,6 +96,12 @@ export function MasterDetail({ masterId }: MasterDetailProps) {
               size="sm"
             />
             <Confidence level={conf} />
+            {masterListItem.ageDays >= 365 && (
+              <Pill label="aging > 1 year" variant="danger" size="sm" />
+            )}
+            {masterListItem.ageDays >= 90 && masterListItem.ageDays < 365 && (
+              <Pill label={`aging ${masterListItem.age}`} variant="warn" size="sm" />
+            )}
           </div>
           <div className="alm-master-detail__header-actions">
             <Btn
@@ -127,10 +133,18 @@ export function MasterDetail({ masterId }: MasterDetailProps) {
         {/* Three-column box grid */}
         {detail && (
           <div className="alm-master-detail__grid-3">
-            <Box heading="Compatibility fingerprint">
-              {detail.fingerprint.map((row) => (
-                <KV key={row.k} label={row.k} value={row.v} origin={row.prov} />
-              ))}
+            <Box heading="Matching fingerprint">
+              <div className="alm-master-detail__fingerprint-highlight">
+                {detail.fingerprint.map((row) => (
+                  <KV key={row.k} label={row.k} value={row.v} origin={row.prov} />
+                ))}
+                <div className="alm-master-detail__fingerprint-binary">
+                  <span className="alm-master-detail__fingerprint-binary-label">Binary match:</span>
+                  <span className="alm-master-detail__fingerprint-binary-value alm-mono">
+                    exact ({detail.fingerprint.length}/{detail.fingerprint.length} fields)
+                  </span>
+                </div>
+              </div>
             </Box>
 
             <Box heading="Provenance">

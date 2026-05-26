@@ -44,14 +44,14 @@ const sessionDetailRoute = createRoute({
   },
 });
 
-// --- Review ---
+// --- Inbox (was Review) ---
 
-const reviewRoute = createRoute({
+const inboxRoute = createRoute({
   getParentRoute: () => shellRoute,
-  path: '/review',
+  path: '/inbox',
   component: lazyRouteComponent(
-    () => import('@/features/review/ReviewPage'),
-    'ReviewPage',
+    () => import('@/features/inbox/InboxPage'),
+    'InboxPage',
   ),
 });
 
@@ -115,15 +115,6 @@ const projectDetailRoute = createRoute({
   ),
 });
 
-const projectArtifactsRoute = createRoute({
-  getParentRoute: () => shellRoute,
-  path: '/projects/$id/artifacts',
-  component: lazyRouteComponent(
-    () => import('@/features/projects/ArtifactsPage'),
-    'ArtifactsPage',
-  ),
-});
-
 const projectNewRoute = createRoute({
   getParentRoute: () => shellRoute,
   path: '/projects/new',
@@ -133,36 +124,14 @@ const projectNewRoute = createRoute({
   ),
 });
 
-// --- Plans ---
+// --- Archive ---
 
-const plansRoute = createRoute({
+const archiveRoute = createRoute({
   getParentRoute: () => shellRoute,
-  path: '/plans',
+  path: '/archive',
   component: lazyRouteComponent(
-    () => import('@/features/plans/PlansPage'),
-    'PlansPage',
-  ),
-});
-
-const planDetailRoute = createRoute({
-  getParentRoute: () => shellRoute,
-  path: '/plans/$id',
-  beforeLoad: ({ params }) => {
-    throw redirect({
-      to: '/plans',
-      search: { selected: params.id },
-    });
-  },
-});
-
-// --- Audit ---
-
-const auditRoute = createRoute({
-  getParentRoute: () => shellRoute,
-  path: '/audit',
-  component: lazyRouteComponent(
-    () => import('@/features/audit/AuditPage'),
-    'AuditPage',
+    () => import('@/features/archive/ArchivePage'),
+    'ArchivePage',
   ),
 });
 
@@ -237,9 +206,9 @@ const routeTree = rootRoute.addChildren([
   setupRoute,
   shellRoute.addChildren([
     indexRoute,
+    inboxRoute,
     sessionsRoute,
     sessionDetailRoute,
-    reviewRoute,
     calibrationRoute,
     calibrationDetailRoute,
     targetsRoute,
@@ -247,10 +216,7 @@ const routeTree = rootRoute.addChildren([
     projectNewRoute,
     projectsRoute,
     projectDetailRoute,
-    projectArtifactsRoute,
-    plansRoute,
-    planDetailRoute,
-    auditRoute,
+    archiveRoute,
     settingsRoute,
     settingsPaneRoute,
   ]),
