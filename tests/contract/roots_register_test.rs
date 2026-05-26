@@ -45,10 +45,7 @@ fn request_serializes_required_fields_as_camel_case() {
     assert_eq!(obj["scanDepth"], json!("recursive"));
 
     // Optional kindSubtype omitted when None (skip_serializing_if).
-    assert!(
-        !obj.contains_key("kindSubtype"),
-        "kindSubtype should be absent when None"
-    );
+    assert!(!obj.contains_key("kindSubtype"), "kindSubtype should be absent when None");
 }
 
 #[test]

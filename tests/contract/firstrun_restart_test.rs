@@ -29,30 +29,22 @@ fn response_with_prefilled() -> FirstRunRestartResponse {
 }
 
 fn response_with_empty_prefilled() -> FirstRunRestartResponse {
-    FirstRunRestartResponse {
-        prefilled_sources: vec![],
-    }
+    FirstRunRestartResponse { prefilled_sources: vec![] }
 }
 
 // ── firstrun.restart response with prefilled sources ───────────────────────
 
 #[test]
 fn response_serializes_prefilled_sources_as_camel_case() {
-    let value =
-        serde_json::to_value(response_with_prefilled()).expect("response should serialize");
+    let value = serde_json::to_value(response_with_prefilled()).expect("response should serialize");
     let obj = value.as_object().expect("response should be an object");
 
     // Contract response has "prefilled_sources" in snake_case in the JSON
     // schema, but the Rust DTO uses #[serde(rename_all = "camelCase")], so
     // it becomes "prefilledSources".
-    assert!(
-        obj.contains_key("prefilledSources"),
-        "response must have prefilledSources key"
-    );
+    assert!(obj.contains_key("prefilledSources"), "response must have prefilledSources key");
 
-    let sources = obj["prefilledSources"]
-        .as_array()
-        .expect("prefilledSources should be an array");
+    let sources = obj["prefilledSources"].as_array().expect("prefilledSources should be an array");
     assert_eq!(sources.len(), 3);
 }
 
@@ -95,9 +87,8 @@ fn prefilled_sources_preserve_order_and_values() {
 fn empty_prefilled_sources_serializes_as_empty_array() {
     let value =
         serde_json::to_value(response_with_empty_prefilled()).expect("response should serialize");
-    let sources = value["prefilledSources"]
-        .as_array()
-        .expect("prefilledSources should be an array");
+    let sources =
+        value["prefilledSources"].as_array().expect("prefilledSources should be an array");
 
     assert!(sources.is_empty(), "prefilledSources should be empty");
 }
@@ -108,8 +99,7 @@ fn response_has_only_contract_defined_keys() {
     let obj = value.as_object().unwrap();
 
     // DTO-level keys (envelope adds status, contractVersion, requestId).
-    let allowed: std::collections::BTreeSet<&str> =
-        ["prefilledSources"].into_iter().collect();
+    let allowed: std::collections::BTreeSet<&str> = ["prefilledSources"].into_iter().collect();
 
     for key in obj.keys() {
         assert!(

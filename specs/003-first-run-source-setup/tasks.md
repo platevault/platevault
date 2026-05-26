@@ -147,7 +147,7 @@ other two advance freely, and Finish writes `RegisteredSource` rows plus
       `contracts/firstrun.complete.json` in
       `tests/contract/firstrun_complete_test.rs`. Cover: missing raw
       source, missing project source (R-Wiz-2).
-- [ ] T015 [P] [US2] Component test for the wizard's Raw-required and
+- [x] T015 [P] [US2] Component test for the wizard's Raw-required and
       Project-required gating in
       `apps/desktop/src/features/setup/SetupWizard.test.tsx`.
 - [x] T016 [P] [US2] Playwright end-to-end test for the full wizard

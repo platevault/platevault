@@ -77,9 +77,7 @@ fn partial_failure_response() -> RegisterSourceBatchResponse {
                 status: ItemStatus::Failure,
                 source_id: None,
                 error: Some("path.already_registered.different_kind".to_owned()),
-                error_detail: Some(JsonAny::new(
-                    json!({ "conflicting_kind": "inbox" }),
-                )),
+                error_detail: Some(JsonAny::new(json!({ "conflicting_kind": "inbox" }))),
             },
         ],
     }
@@ -89,7 +87,8 @@ fn partial_failure_response() -> RegisterSourceBatchResponse {
 
 #[test]
 fn batch_request_serializes_sources_array() {
-    let value = serde_json::to_value(sample_batch_request()).expect("batch request should serialize");
+    let value =
+        serde_json::to_value(sample_batch_request()).expect("batch request should serialize");
     let obj = value.as_object().expect("batch request should be an object");
 
     // Contract requires a top-level "sources" array.
@@ -141,7 +140,8 @@ fn item_status_variants_match_contract() {
 
 #[test]
 fn success_response_serializes_with_status_and_items() {
-    let value = serde_json::to_value(success_response()).expect("success response should serialize");
+    let value =
+        serde_json::to_value(success_response()).expect("success response should serialize");
     let obj = value.as_object().expect("response should be an object");
 
     assert_eq!(obj["status"], json!("success"));
@@ -162,22 +162,16 @@ fn success_item_omits_error_fields() {
     let first_item = &value["items"][0];
 
     // skip_serializing_if: error and errorDetail absent when None.
-    assert!(
-        first_item.get("error").is_none(),
-        "successful item should not have error"
-    );
-    assert!(
-        first_item.get("errorDetail").is_none(),
-        "successful item should not have errorDetail"
-    );
+    assert!(first_item.get("error").is_none(), "successful item should not have error");
+    assert!(first_item.get("errorDetail").is_none(), "successful item should not have errorDetail");
 }
 
 // ── partial failure response ───────────────────────────────────────────────
 
 #[test]
 fn partial_response_has_mixed_item_statuses() {
-    let value =
-        serde_json::to_value(partial_failure_response()).expect("partial response should serialize");
+    let value = serde_json::to_value(partial_failure_response())
+        .expect("partial response should serialize");
 
     assert_eq!(value["status"], json!("partial"));
 
@@ -191,10 +185,7 @@ fn partial_response_has_mixed_item_statuses() {
     // Item 1: failure with error code
     assert_eq!(items[1]["status"], json!("failure"));
     assert_eq!(items[1]["error"], json!("path.not_exists"));
-    assert!(
-        items[1].get("sourceId").is_none(),
-        "failed item should not have sourceId"
-    );
+    assert!(items[1].get("sourceId").is_none(), "failed item should not have sourceId");
 
     // Item 2: failure with error and detail
     assert_eq!(items[2]["status"], json!("failure"));

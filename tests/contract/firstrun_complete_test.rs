@@ -4,9 +4,7 @@ use serde_json::json;
 // ── helpers ────────────────────────────────────────────────────────────────
 
 fn sample_response() -> FirstRunCompleteResponse {
-    FirstRunCompleteResponse {
-        completed_at: "2026-05-26T14:30:00Z".to_owned(),
-    }
+    FirstRunCompleteResponse { completed_at: "2026-05-26T14:30:00Z".to_owned() }
 }
 
 // ── firstrun.complete response ─────────────────────────────────────────────
@@ -17,10 +15,7 @@ fn response_serializes_completed_at_as_camel_case() {
     let obj = value.as_object().expect("response should be an object");
 
     // Contract requires "completedAt" (camelCase) — format: date-time.
-    assert!(
-        obj.contains_key("completedAt"),
-        "response must have completedAt key"
-    );
+    assert!(obj.contains_key("completedAt"), "response must have completedAt key");
     assert_eq!(obj["completedAt"], json!("2026-05-26T14:30:00Z"));
 }
 
