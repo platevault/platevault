@@ -4,8 +4,8 @@
 //! in `specta_builder()` in `lib.rs` for TS binding generation.
 
 use contracts_core::first_run::{
-    FirstRunCompleteResponse, FirstRunRestartResponse, FirstRunStateResponse,
-    RegisterSourceBatchRequest, RegisterSourceBatchResponse,
+    FirstRunCompleteResponse, FirstRunRestartRequest, FirstRunRestartResponse,
+    FirstRunStateResponse, RegisterSourceBatchRequest, RegisterSourceBatchResponse,
 };
 use tauri::State;
 
@@ -41,14 +41,20 @@ pub async fn firstrun_complete(
 
 /// `firstrun.restart` — restart the first-run wizard, returning existing sources.
 ///
+/// Requires `confirm: true` in the request to prevent accidental restarts.
+///
 /// # Errors
-/// Returns `Err(String)` on database failure.
+/// Returns `Err(String)` if `confirm` is not `true` or on database failure.
 #[tauri::command]
 #[specta::specta(rename = "firstrun.restart")]
 pub async fn firstrun_restart(
     state: State<'_, AppState>,
+    request: FirstRunRestartRequest,
 ) -> Result<FirstRunRestartResponse, String> {
-    tracing::debug!("firstrun.restart");
+    tracing::debug!("firstrun.restart (confirm={})", request.confirm);
+    if !request.confirm {
+        return Err("firstrun.restart requires confirm=true".to_owned());
+    }
     app_core::first_run::restart_first_run(state.repo.pool()).await.map_err(|e| e.message)
 }
 

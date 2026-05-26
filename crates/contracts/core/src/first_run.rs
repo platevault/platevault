@@ -110,12 +110,21 @@ pub struct BatchItem {
 #[serde(rename_all = "camelCase")]
 pub struct FirstRunCompleteResponse {
     pub completed_at: String,
+    pub registered_source_count: usize,
+}
+
+/// Request payload for `firstrun.restart`.
+#[derive(Clone, Debug, Serialize, Deserialize, Type)]
+#[serde(rename_all = "camelCase")]
+pub struct FirstRunRestartRequest {
+    pub confirm: bool,
 }
 
 /// Response payload for `firstrun.restart`.
 #[derive(Clone, Debug, Serialize, Deserialize, Type)]
 #[serde(rename_all = "camelCase")]
 pub struct FirstRunRestartResponse {
+    pub restarted_at: String,
     pub prefilled_sources: Vec<RegisterSourceResponse>,
 }
 

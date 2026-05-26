@@ -5,7 +5,7 @@
 //! persistence repository.
 
 use audit::bus::EventBus;
-use audit::event_bus::{FirstRunCompleted, Source, TOPIC_FIRST_RUN_COMPLETED};
+use audit::event_bus::{FirstRunCompleted, Source, SourceCountByKind, TOPIC_FIRST_RUN_COMPLETED};
 use contracts_core::first_run::{
     FirstRunCompleteResponse, FirstRunRestartResponse, FirstRunStateResponse,
     RegisterSourceBatchRequest, RegisterSourceBatchResponse, RegisterSourceRequest,
@@ -268,18 +268,21 @@ pub async fn complete_first_run(
         }
     })?;
 
-    // Count sources for the audit event.
+    // Count sources per kind for the audit event.
     let sources = repo::list_sources(pool).await.map_err(db_to_contract)?;
+    let source_count_by_kind = SourceCountByKind {
+        raw: sources.iter().filter(|s| s.kind == SourceKind::Raw).count(),
+        calibration: sources.iter().filter(|s| s.kind == SourceKind::Calibration).count(),
+        project: sources.iter().filter(|s| s.kind == SourceKind::Project).count(),
+        inbox: sources.iter().filter(|s| s.kind == SourceKind::Inbox).count(),
+    };
 
     // Publish audit event (best-effort; do not fail the operation if the bus drops).
     let _ = bus
         .publish(
             TOPIC_FIRST_RUN_COMPLETED,
             Source::User,
-            FirstRunCompleted {
-                completed_at: resp.completed_at.clone(),
-                source_count: sources.len(),
-            },
+            FirstRunCompleted { completed_at: resp.completed_at.clone(), source_count_by_kind },
         )
         .await;
 

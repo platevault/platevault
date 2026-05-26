@@ -6,7 +6,7 @@ import { invoke as __TAURI_INVOKE } from "@tauri-apps/api/core";
 export const commands = {
 	/**
 	 *  `provenance.read` Tauri command — returns the contract response shape.
-	 *
+	 * 
 	 *  # Errors
 	 *  Never returns `Err`; persistence failures are folded into
 	 *  `ProvenanceReadResponse::error(...)`. The `Result` shape exists so the
@@ -15,7 +15,7 @@ export const commands = {
 	provenanceRead: (request: ProvenanceReadRequest_Deserialize) => typedError<ProvenanceReadResponse_Serialize, string>(__TAURI_INVOKE("provenance_read", { request })),
 	/**
 	 *  `lifecycle.transition.apply` Tauri command.
-	 *
+	 * 
 	 *  # Errors
 	 *  Never returns `Err`; refusal / persistence errors fold into
 	 *  `TransitionResponse::error(...)` per the contract.
@@ -23,14 +23,14 @@ export const commands = {
 	lifecycleTransitionApply: (request: TransitionRequest_Deserialize) => typedError<TransitionResponse_Serialize, string>(__TAURI_INVOKE("lifecycle_transition_apply", { request })),
 	/**
 	 *  `lifecycle.transition.preview` — read-only dry-run for UI button enabling.
-	 *
+	 * 
 	 *  # Errors
 	 *  Never returns `Err`; refusal codes fold into `TransitionResponse::error(...)`.
 	 */
 	lifecycleTransitionPreview: (request: TransitionRequest_Deserialize) => typedError<TransitionResponse_Serialize, string>(__TAURI_INVOKE("lifecycle_transition_preview", { request })),
 	/**
 	 *  `lifecycle.ledger.list` Tauri command.
-	 *
+	 * 
 	 *  # Errors
 	 *  Returns a stringified persistence error when the repository query fails
 	 *  (e.g. transient DB unavailability). Successful empty results are `Ok(vec![])`.
@@ -38,273 +38,275 @@ export const commands = {
 	lifecycleLedgerList: (filter: LedgerFilterDto) => typedError<LedgerRowDto[], string>(__TAURI_INVOKE("lifecycle_ledger_list", { filter })),
 	/**
 	 *  `sessions.list` — returns all acquisition sessions.
-	 *
+	 * 
 	 *  # Errors
 	 *  Returns `Err(String)` on failure; the stub never fails.
 	 */
 	sessionsList: () => typedError<AcquisitionSession_Serialize[], string>(__TAURI_INVOKE("sessions.list")),
 	/**
 	 *  `sessions.get` — returns a single session detail.
-	 *
+	 * 
 	 *  # Errors
 	 *  Returns `Err(String)` on failure; the stub never fails.
 	 */
 	sessionsGet: (id: string) => typedError<SessionDetail_Serialize, string>(__TAURI_INVOKE("sessions.get", { id })),
 	/**
 	 *  `sessions.calendar` — returns calendar data for a month range.
-	 *
+	 * 
 	 *  # Errors
 	 *  Returns `Err(String)` on failure; the stub never fails.
 	 */
 	sessionsCalendar: (startMonth: string, endMonth: string) => typedError<CalendarData, string>(__TAURI_INVOKE("sessions.calendar", { startMonth, endMonth })),
 	/**
 	 *  `sessions.transition` — transition a session to a new state.
-	 *
+	 * 
 	 *  # Errors
 	 *  Returns `Err(String)` on failure; the stub never fails.
 	 */
 	sessionsTransition: (id: string, action: string, metadata: unknown | null) => typedError<AcquisitionSession_Serialize, string>(__TAURI_INVOKE("sessions.transition", { id, action, metadata })),
 	/**
 	 *  `sessions.split` — split a session at a given frame index.
-	 *
+	 * 
 	 *  # Errors
 	 *  Returns `Err(String)` on failure; the stub never fails.
 	 */
 	sessionsSplit: (id: string, splitAtIndex: number) => typedError<SessionSplitResult_Serialize, string>(__TAURI_INVOKE("sessions.split", { id, splitAtIndex })),
 	/**
 	 *  `sessions.merge` — merge multiple sessions into one.
-	 *
+	 * 
 	 *  # Errors
 	 *  Returns `Err(String)` on failure; the stub never fails.
 	 */
 	sessionsMerge: (ids: string[]) => typedError<AcquisitionSession_Serialize, string>(__TAURI_INVOKE("sessions.merge", { ids })),
 	/**
 	 *  `calibration.masters.list` — returns all calibration masters.
-	 *
+	 * 
 	 *  # Errors
 	 *  Returns `Err(String)` on failure; the stub never fails.
 	 */
 	calibrationMastersList: () => typedError<CalibrationMaster_Serialize[], string>(__TAURI_INVOKE("calibration.masters.list")),
 	/**
 	 *  `calibration.masters.get` — returns a single calibration master detail.
-	 *
+	 * 
 	 *  # Errors
 	 *  Returns `Err(String)` on failure; the stub never fails.
 	 */
 	calibrationMastersGet: (id: string) => typedError<MasterDetail_Serialize, string>(__TAURI_INVOKE("calibration.masters.get", { id })),
 	/**
 	 *  `calibration.matches` — returns calibration match candidates for a session.
-	 *
+	 * 
 	 *  # Errors
 	 *  Returns `Err(String)` on failure; the stub never fails.
 	 */
 	calibrationMatches: (sessionId: string) => typedError<MatchCandidate_Serialize[], string>(__TAURI_INVOKE("calibration.matches", { sessionId })),
 	/**
 	 *  `targets.list` — returns all targets, optionally filtered by search.
-	 *
+	 * 
 	 *  # Errors
 	 *  Returns `Err(String)` on failure; the stub never fails.
 	 */
 	targetsList: (search: string | null) => typedError<Target_Serialize[], string>(__TAURI_INVOKE("targets.list", { search })),
 	/**
 	 *  `targets.get` — returns a single target detail.
-	 *
+	 * 
 	 *  # Errors
 	 *  Returns `Err(String)` on failure; the stub never fails.
 	 */
 	targetsGet: (id: string) => typedError<TargetDetail_Serialize, string>(__TAURI_INVOKE("targets.get", { id })),
 	/**
 	 *  `projects.list` — returns all projects.
-	 *
+	 * 
 	 *  # Errors
 	 *  Returns `Err(String)` on failure; the stub never fails.
 	 */
 	projectsList: (filters: unknown | null) => typedError<Project_Serialize[], string>(__TAURI_INVOKE("projects.list", { filters })),
 	/**
 	 *  `projects.get` — returns a single project detail.
-	 *
+	 * 
 	 *  # Errors
 	 *  Returns `Err(String)` on failure; the stub never fails.
 	 */
 	projectsGet: (id: string) => typedError<ProjectDetail_Serialize, string>(__TAURI_INVOKE("projects.get", { id })),
 	/**
 	 *  `projects.create_plan` — create a filesystem plan from wizard state.
-	 *
+	 * 
 	 *  # Errors
 	 *  Returns `Err(String)` on failure; the stub never fails.
 	 */
 	projectsCreatePlan: (wizardState: unknown) => typedError<FilesystemPlan_Serialize, string>(__TAURI_INVOKE("projects.create_plan", { wizardState })),
 	/**
 	 *  `plans.list` — returns all filesystem plans.
-	 *
+	 * 
 	 *  # Errors
 	 *  Returns `Err(String)` on failure; the stub never fails.
 	 */
 	plansList: (filters: unknown | null) => typedError<FilesystemPlan_Serialize[], string>(__TAURI_INVOKE("plans.list", { filters })),
 	/**
 	 *  `plans.get` — returns a single plan detail.
-	 *
+	 * 
 	 *  # Errors
 	 *  Returns `Err(String)` on failure; the stub never fails.
 	 */
 	plansGet: (id: string) => typedError<PlanDetail_Serialize, string>(__TAURI_INVOKE("plans.get", { id })),
 	/**
 	 *  `plans.approve` — approve a plan for application.
-	 *
+	 * 
 	 *  # Errors
 	 *  Returns `Err(String)` on failure; the stub never fails.
 	 */
 	plansApprove: (id: string, deleteAcknowledged: boolean | null) => typedError<FilesystemPlan_Serialize, string>(__TAURI_INVOKE("plans.approve", { id, deleteAcknowledged })),
 	/**
 	 *  `plans.apply` — apply an approved plan, returning an operation handle.
-	 *
+	 * 
 	 *  # Errors
 	 *  Returns `Err(String)` on failure; the stub never fails.
 	 */
 	plansApply: (id: string) => typedError<IpcOperationHandle, string>(__TAURI_INVOKE("plans.apply", { id })),
 	/**
 	 *  `plans.discard` — discard a plan.
-	 *
+	 * 
 	 *  # Errors
 	 *  Returns `Err(String)` on failure; the stub never fails.
 	 */
 	plansDiscard: (id: string) => typedError<null, string>(__TAURI_INVOKE("plans.discard", { id })),
 	/**
 	 *  `audit.list` — returns paginated audit entries.
-	 *
+	 * 
 	 *  # Errors
 	 *  Returns `Err(String)` on failure; the stub never fails.
 	 */
 	auditList: (filters: unknown | null, pagination: unknown | null) => typedError<AuditListResponse_Serialize, string>(__TAURI_INVOKE("audit.list", { filters, pagination })),
 	/**
 	 *  `audit.export` — export audit entries as newline-delimited JSON.
-	 *
+	 * 
 	 *  # Errors
 	 *  Returns `Err(String)` on failure; the stub never fails.
 	 */
 	auditExport: (filters: unknown | null) => typedError<string, string>(__TAURI_INVOKE("audit.export", { filters })),
 	/**
 	 *  `review.queue` — returns items awaiting user review.
-	 *
+	 * 
 	 *  # Errors
 	 *  Returns `Err(String)` on failure; the stub never fails.
 	 */
 	reviewQueue: (filter: string | null) => typedError<ReviewItem_Serialize[], string>(__TAURI_INVOKE("review.queue", { filter })),
 	/**
 	 *  `roots.list` — returns all registered library roots.
-	 *
+	 * 
 	 *  # Errors
 	 *  Returns `Err(String)` on failure; the stub never fails.
 	 */
 	rootsList: () => typedError<LibraryRoot_Serialize[], string>(__TAURI_INVOKE("roots.list")),
 	/**
 	 *  `roots.register` — register a new library root.
-	 *
+	 * 
 	 *  Delegates to `app_core::first_run::register_source` for path validation,
 	 *  duplicate detection, and persistence. The `scan_settings` parameter is
 	 *  reserved for future scan configuration; currently only `scanDepth` is
 	 *  extracted.
-	 *
+	 * 
 	 *  # Errors
 	 *  Returns `Err(String)` on path validation failure, duplicate, or DB error.
 	 */
 	rootsRegister: (path: string, category: string, scanSettings: unknown) => typedError<RegisterSourceResponse, string>(__TAURI_INVOKE("roots.register", { path, category, scanSettings })),
 	/**
 	 *  `roots.register.batch` — register multiple source directories at once.
-	 *
+	 * 
 	 *  # Errors
 	 *  Returns `Err(String)` on catastrophic failure; per-item errors are in the response.
 	 */
 	rootsRegisterBatch: (request: RegisterSourceBatchRequest_Deserialize) => typedError<RegisterSourceBatchResponse_Serialize, string>(__TAURI_INVOKE("roots.register.batch", { request })),
 	/**
 	 *  `roots.remap` — preview a root path remap.
-	 *
+	 * 
 	 *  # Errors
 	 *  Returns `Err(String)` on failure; the stub never fails.
 	 */
 	rootsRemap: (rootId: string, newPath: string) => typedError<RemapVerification, string>(__TAURI_INVOKE("roots.remap", { rootId, newPath })),
 	/**
 	 *  `roots.remap.apply` — apply a verified root remap.
-	 *
+	 * 
 	 *  # Errors
 	 *  Returns `Err(String)` on failure; the stub never fails.
 	 */
 	rootsRemapApply: (rootId: string, verified: boolean) => typedError<null, string>(__TAURI_INVOKE("roots.remap.apply", { rootId, verified })),
 	/**
 	 *  `scan.start` — start a filesystem scan, optionally for specific roots.
-	 *
+	 * 
 	 *  # Errors
 	 *  Returns `Err(String)` on failure; the stub never fails.
 	 */
 	scanStart: (rootIds: string[] | null) => typedError<IpcOperationHandle, string>(__TAURI_INVOKE("scan.start", { rootIds })),
 	/**
 	 *  `equipment.list` — returns all registered equipment.
-	 *
+	 * 
 	 *  # Errors
 	 *  Returns `Err(String)` on failure; the stub never fails.
 	 */
 	equipmentList: () => typedError<Equipment[], string>(__TAURI_INVOKE("equipment.list")),
 	/**
 	 *  `firstrun.state` — get the current first-run wizard state.
-	 *
+	 * 
 	 *  # Errors
 	 *  Returns `Err(String)` on database failure.
 	 */
 	firstrunState: () => typedError<FirstRunStateResponse_Serialize, string>(__TAURI_INVOKE("firstrun.state")),
 	/**
 	 *  `firstrun.complete` — mark the first-run wizard as complete.
-	 *
+	 * 
 	 *  Requires at least one raw source and one project source to be registered.
-	 *
+	 * 
 	 *  # Errors
 	 *  Returns `Err(String)` if preconditions are not met or on database failure.
 	 */
 	firstrunComplete: () => typedError<FirstRunCompleteResponse, string>(__TAURI_INVOKE("firstrun.complete")),
 	/**
 	 *  `firstrun.restart` — restart the first-run wizard, returning existing sources.
-	 *
+	 * 
+	 *  Requires `confirm: true` in the request to prevent accidental restarts.
+	 * 
 	 *  # Errors
-	 *  Returns `Err(String)` on database failure.
+	 *  Returns `Err(String)` if `confirm` is not `true` or on database failure.
 	 */
-	firstrunRestart: () => typedError<FirstRunRestartResponse, string>(__TAURI_INVOKE("firstrun.restart")),
+	firstrunRestart: (request: FirstRunRestartRequest) => typedError<FirstRunRestartResponse, string>(__TAURI_INVOKE("firstrun.restart", { request })),
 	/**
 	 *  `settings.get` — returns settings for a given scope.
-	 *
+	 * 
 	 *  # Errors
 	 *  Returns `Err(String)` on failure; the stub never fails.
 	 */
 	settingsGet: (scope: string) => typedError<SettingsData, string>(__TAURI_INVOKE("settings.get", { scope })),
 	/**
 	 *  `settings.update` — update settings for a given scope.
-	 *
+	 * 
 	 *  # Errors
 	 *  Returns `Err(String)` on failure; the stub never fails.
 	 */
 	settingsUpdate: (scope: string, values: unknown) => typedError<null, string>(__TAURI_INVOKE("settings.update", { scope, values })),
 	/**
 	 *  `preferences.get` — returns current application preferences.
-	 *
+	 * 
 	 *  # Errors
 	 *  Returns `Err(String)` on failure; the stub never fails.
 	 */
 	preferencesGet: () => typedError<AppPreferences, string>(__TAURI_INVOKE("preferences.get")),
 	/**
 	 *  `preferences.set` — update a single preference key.
-	 *
+	 * 
 	 *  # Errors
 	 *  Returns `Err(String)` on failure; the stub never fails.
 	 */
 	preferencesSet: (key: string, value: unknown) => typedError<null, string>(__TAURI_INVOKE("preferences.set", { key, value })),
 	/**
 	 *  `search.global` — performs a global search across all entity types.
-	 *
+	 * 
 	 *  # Errors
 	 *  Returns `Err(String)` on failure; the stub never fails.
 	 */
 	searchGlobal: (query: string) => typedError<SearchResult_Serialize[], string>(__TAURI_INVOKE("search.global", { query })),
 	/**
 	 *  `tour.complete_step` — mark a tour step as completed.
-	 *
+	 * 
 	 *  # Errors
 	 *  Returns `Err(String)` on failure; the stub never fails.
 	 */
@@ -314,7 +316,7 @@ export const commands = {
 /* Types */
 /**
  *  An acquisition session as seen through the IPC boundary.
- *
+ * 
  *  This is the list-level representation returned by `sessions.list`. It
  *  matches the frontend's `AcquisitionSession` interface in `types.ts`.
  */
@@ -322,7 +324,7 @@ export type AcquisitionSession = AcquisitionSession_Serialize | AcquisitionSessi
 
 /**
  *  An acquisition session as seen through the IPC boundary.
- *
+ * 
  *  This is the list-level representation returned by `sessions.list`. It
  *  matches the frontend's `AcquisitionSession` interface in `types.ts`.
  */
@@ -343,7 +345,7 @@ export type AcquisitionSession_Deserialize = {
 
 /**
  *  An acquisition session as seen through the IPC boundary.
- *
+ * 
  *  This is the list-level representation returned by `sessions.list`. It
  *  matches the frontend's `AcquisitionSession` interface in `types.ts`.
  */
@@ -374,7 +376,7 @@ export type AppPreferences = {
 	setupCompleted: boolean,
 };
 
-export type AssetType = "file_record" | "acquisition_session" | "calibration_session" | "project" | "prepared_source" | "processing_artifact" | "filesystem_plan" | "data_source" |
+export type AssetType = "file_record" | "acquisition_session" | "calibration_session" | "project" | "prepared_source" | "processing_artifact" | "filesystem_plan" | "data_source" | 
 /**  target: alias and primaryDesignation provenance tracking (R-3.2). */
 "target";
 
@@ -714,10 +716,17 @@ export type FilesystemPlan_Serialize = {
 /**  Response payload for `firstrun.complete`. */
 export type FirstRunCompleteResponse = {
 	completedAt: string,
+	registeredSourceCount: number,
+};
+
+/**  Request payload for `firstrun.restart`. */
+export type FirstRunRestartRequest = {
+	confirm: boolean,
 };
 
 /**  Response payload for `firstrun.restart`. */
 export type FirstRunRestartResponse = {
+	restartedAt: string,
 	prefilledSources: RegisterSourceResponse[],
 };
 
@@ -789,7 +798,7 @@ export type LedgerFilterDto = {
 
 /**
  *  camelCase wire shape mirroring [`LedgerRow`] for the typed Tauri surface.
- *
+ * 
  *  `LedgerRow` itself doesn't derive `specta::Type` (the persistence layer
  *  stays language-internal). This DTO is the IPC projection.
  */
@@ -1613,7 +1622,7 @@ export type SessionsView = "list" | "calendar";
 
 /**
  *  Scoped settings data (general, naming, calibration, etc.).
- *
+ * 
  *  `values` is a free-form JSON object keyed by setting name.
  */
 export type SettingsData = {
@@ -1835,3 +1844,4 @@ async function typedError<T, E>(result: Promise<T>): Promise<{ status: "ok"; dat
         return { status: "error", error: e as any };
     }
 }
+

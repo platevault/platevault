@@ -270,7 +270,12 @@ pub async fn complete_first_run(pool: &SqlitePool) -> DbResult<FirstRunCompleteR
     .execute(pool)
     .await?;
 
-    Ok(FirstRunCompleteResponse { completed_at })
+    // Count total registered sources for the response.
+    let total_count: (i64,) =
+        sqlx::query_as("SELECT COUNT(*) FROM registered_sources").fetch_one(pool).await?;
+    let registered_source_count = usize::try_from(total_count.0.max(0)).unwrap_or(0);
+
+    Ok(FirstRunCompleteResponse { completed_at, registered_source_count })
 }
 
 /// Restart the first-run wizard (clear completed_at, return existing sources).
@@ -299,7 +304,7 @@ pub async fn restart_first_run(pool: &SqlitePool) -> DbResult<FirstRunRestartRes
 
     let sources = list_sources(pool).await?;
 
-    Ok(FirstRunRestartResponse { prefilled_sources: sources })
+    Ok(FirstRunRestartResponse { restarted_at: now.clone(), prefilled_sources: sources })
 }
 
 /// Update the last_step in the first_run_state singleton.

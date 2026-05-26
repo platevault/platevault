@@ -4,7 +4,10 @@ use serde_json::json;
 // ── helpers ────────────────────────────────────────────────────────────────
 
 fn sample_response() -> FirstRunCompleteResponse {
-    FirstRunCompleteResponse { completed_at: "2026-05-26T14:30:00Z".to_owned() }
+    FirstRunCompleteResponse {
+        completed_at: "2026-05-26T14:30:00Z".to_owned(),
+        registered_source_count: 4,
+    }
 }
 
 // ── firstrun.complete response ─────────────────────────────────────────────
@@ -36,9 +39,10 @@ fn response_has_only_contract_defined_keys() {
     let obj = value.as_object().unwrap();
 
     // The DTO-level response (before envelope wrapping) should contain
-    // only completedAt. Envelope keys (status, contractVersion, requestId)
-    // are added by ResponseEnvelope, not the DTO itself.
-    let allowed: std::collections::BTreeSet<&str> = ["completedAt"].into_iter().collect();
+    // completedAt and registeredSourceCount. Envelope keys (status,
+    // contractVersion, requestId) are added by ResponseEnvelope, not the DTO.
+    let allowed: std::collections::BTreeSet<&str> =
+        ["completedAt", "registeredSourceCount"].into_iter().collect();
 
     for key in obj.keys() {
         assert!(
@@ -56,4 +60,18 @@ fn response_roundtrips_through_json() {
         serde_json::from_str(&json_str).expect("should deserialize from string");
 
     assert_eq!(original.completed_at, deserialized.completed_at);
+    assert_eq!(original.registered_source_count, deserialized.registered_source_count);
+}
+
+#[test]
+fn response_includes_registered_source_count() {
+    let value = serde_json::to_value(sample_response()).unwrap();
+    let obj = value.as_object().unwrap();
+
+    assert!(
+        obj.contains_key("registeredSourceCount"),
+        "response must have registeredSourceCount key"
+    );
+    assert!(value["registeredSourceCount"].is_u64(), "registeredSourceCount must be an integer");
+    assert_eq!(value["registeredSourceCount"], json!(4));
 }

@@ -9,7 +9,7 @@ pub mod stale_propagator;
 pub use bus::EventBus;
 pub use event::{AuditLogEntry, Outcome, Severity, SeverityFilter};
 pub use event_bus::{
-    EventEnvelope, FirstRunCompleted, LifecycleTransitionApplied, Source,
+    EventEnvelope, FirstRunCompleted, LifecycleTransitionApplied, Source, SourceCountByKind,
     TOPIC_FIRST_RUN_COMPLETED, TOPIC_LIFECYCLE_TRANSITION_APPLIED,
 };
 pub use stale_propagator::{PropagatorFn, StalePropagator};

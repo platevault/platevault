@@ -5,6 +5,7 @@ use serde_json::json;
 
 fn response_with_prefilled() -> FirstRunRestartResponse {
     FirstRunRestartResponse {
+        restarted_at: "2026-05-26T15:00:00Z".to_owned(),
         prefilled_sources: vec![
             RegisterSourceResponse {
                 source_id: "id-raw-1".to_owned(),
@@ -29,7 +30,10 @@ fn response_with_prefilled() -> FirstRunRestartResponse {
 }
 
 fn response_with_empty_prefilled() -> FirstRunRestartResponse {
-    FirstRunRestartResponse { prefilled_sources: vec![] }
+    FirstRunRestartResponse {
+        restarted_at: "2026-05-26T15:00:00Z".to_owned(),
+        prefilled_sources: vec![],
+    }
 }
 
 // ── firstrun.restart response with prefilled sources ───────────────────────
@@ -42,6 +46,7 @@ fn response_serializes_prefilled_sources_as_camel_case() {
     // Contract response has "prefilled_sources" in snake_case in the JSON
     // schema, but the Rust DTO uses #[serde(rename_all = "camelCase")], so
     // it becomes "prefilledSources".
+    assert!(obj.contains_key("restartedAt"), "response must have restartedAt key");
     assert!(obj.contains_key("prefilledSources"), "response must have prefilledSources key");
 
     let sources = obj["prefilledSources"].as_array().expect("prefilledSources should be an array");
@@ -99,7 +104,8 @@ fn response_has_only_contract_defined_keys() {
     let obj = value.as_object().unwrap();
 
     // DTO-level keys (envelope adds status, contractVersion, requestId).
-    let allowed: std::collections::BTreeSet<&str> = ["prefilledSources"].into_iter().collect();
+    let allowed: std::collections::BTreeSet<&str> =
+        ["restartedAt", "prefilledSources"].into_iter().collect();
 
     for key in obj.keys() {
         assert!(
@@ -116,9 +122,20 @@ fn response_roundtrips_through_json() {
     let deserialized: FirstRunRestartResponse =
         serde_json::from_str(&json_str).expect("should deserialize from string");
 
+    assert_eq!(original.restarted_at, deserialized.restarted_at);
     assert_eq!(original.prefilled_sources.len(), deserialized.prefilled_sources.len());
     assert_eq!(
         original.prefilled_sources[0].source_id,
         deserialized.prefilled_sources[0].source_id
     );
+}
+
+#[test]
+fn response_restarted_at_is_iso8601_string() {
+    let value = serde_json::to_value(response_with_prefilled()).unwrap();
+    assert!(
+        value["restartedAt"].is_string(),
+        "restartedAt must be a JSON string for date-time format"
+    );
+    assert_eq!(value["restartedAt"], json!("2026-05-26T15:00:00Z"));
 }
