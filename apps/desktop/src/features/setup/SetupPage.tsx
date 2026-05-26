@@ -23,9 +23,9 @@ export function SetupPage() {
     let cancelled = false;
     import('@/bindings/index')
       .then(({ commands }) => commands.firstrunState())
-      .then((state) => {
+      .then((result) => {
         if (cancelled) return;
-        if (state.completed_at !== null) {
+        if (result.status === 'ok' && result.data.completedAt !== null) {
           navigate({ to: '/sessions' });
         } else {
           setChecking(false);

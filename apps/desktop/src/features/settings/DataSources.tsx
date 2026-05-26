@@ -43,14 +43,15 @@ export function DataSources({ save }: DataSourcesProps) {
       const useMocks = import.meta.env.VITE_USE_MOCKS === 'true';
       if (!useMocks) {
         const { commands } = await import('@/bindings/index');
-        const result = await commands.firstrunRestart();
+        const restartResult = await commands.firstrunRestart();
+        if (restartResult.status !== 'ok') throw new Error('restart failed');
         const categories = [
           { key: 'raw', label: 'Raw sources', note: 'where light frames live', required: true, paths: [] as string[], estimates: [] as number[] },
           { key: 'calibration', label: 'Calibration sources', note: 'darks, flats, biases', required: false, paths: [] as string[], estimates: [] as number[] },
           { key: 'project', label: 'Project sources', note: 'processing projects', required: true, paths: [] as string[], estimates: [] as number[] },
           { key: 'inbox', label: 'Inbox sources', note: 'new / unprocessed', required: false, paths: [] as string[], estimates: [] as number[] },
         ];
-        for (const src of result.prefilled_sources) {
+        for (const src of restartResult.data.prefilledSources) {
           const cat = categories.find((c) => c.key === src.kind);
           if (cat) cat.paths.push(src.path);
         }

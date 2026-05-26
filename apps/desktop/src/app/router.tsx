@@ -204,14 +204,15 @@ async function checkFirstRunComplete(): Promise<boolean> {
   if (prefs.setupCompleted) return true;
 
   const useMocks = import.meta.env.VITE_USE_MOCKS === 'true';
-  if (useMocks) return prefs.setupCompleted === true;
+  if (useMocks) return !!prefs.setupCompleted;
 
   try {
     const { commands } = await import('@/bindings/index');
-    const state = await commands.firstrunState();
-    return state.completed_at !== null;
+    const result = await commands.firstrunState();
+    if (result.status === 'ok') return result.data.completedAt !== null;
+    return !!prefs.setupCompleted;
   } catch {
-    return prefs.setupCompleted === true;
+    return !!prefs.setupCompleted;
   }
 }
 
