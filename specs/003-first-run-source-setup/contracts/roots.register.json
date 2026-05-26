@@ -2,104 +2,73 @@
   "$schema": "https://json-schema.org/draft/2020-12/schema",
   "$id": "https://astro-library-manager.local/contracts/roots.register.json",
   "title": "roots.register",
-  "description": "Register a single directory as a RegisteredSource of the given kind. Idempotent failure on duplicate (kind, path). Performs path existence, directory, and readability validation before inserting.",
+  "description": "Register a single directory as a RegisteredSource of the given kind. Idempotent failure on duplicate (kind, path). Performs path existence, directory, and readability validation before inserting. Tauri command: roots.register. On success returns the registered source; on failure returns an error string via Tauri's Result<T, String> pattern.",
   "type": "object",
   "properties": {
     "request": {
       "type": "object",
-      "required": ["contractVersion", "requestId", "kind", "path"],
+      "description": "Tauri command parameters (positional, camelCase).",
+      "required": ["path", "category", "scanSettings"],
       "additionalProperties": false,
       "properties": {
-        "contractVersion": { "type": "string" },
-        "requestId": { "type": "string", "format": "uuid" },
-        "kind": {
+        "path": {
+          "description": "Absolute filesystem path to a readable directory on the local machine.",
+          "type": "string",
+          "minLength": 1
+        },
+        "category": {
           "description": "Which source category this directory belongs to.",
           "type": "string",
           "enum": ["raw", "calibration", "project", "inbox"]
         },
-        "path": {
-          "description": "Absolute filesystem path to a readable directory on the local machine. OS-canonical form preferred; server will normalize.",
-          "type": "string",
-          "minLength": 1
-        },
-        "kindSubtype": {
-          "description": "Optional category refinement (reserved; unused at first-run).",
-          "type": "string"
-        },
-        "scanDepth": {
-          "description": "How deep to scan this source root. Default 'recursive'. Exposed as advanced/collapsed disclosure in the wizard (R-Wiz-1).",
-          "type": "string",
-          "enum": ["recursive", "single"],
-          "default": "recursive"
+        "scanSettings": {
+          "description": "Scan configuration object. Currently only scanDepth is extracted.",
+          "type": "object",
+          "properties": {
+            "scanDepth": {
+              "type": "string",
+              "enum": ["recursive", "single"],
+              "default": "recursive"
+            }
+          }
         }
       }
     },
     "response": {
-      "oneOf": [
-        {
-          "type": "object",
-          "additionalProperties": false,
-          "required": ["status", "contractVersion", "requestId", "sourceId", "kind", "path", "createdAt"],
-          "properties": {
-            "status": { "const": "success" },
-            "contractVersion": { "type": "string" },
-            "requestId": { "type": "string", "format": "uuid" },
-            "sourceId": {
-              "type": "string",
-              "format": "uuid"
-            },
-            "kind": {
-              "type": "string",
-              "enum": ["raw", "calibration", "project", "inbox"]
-            },
-            "path": {
-              "type": "string",
-              "description": "Normalized canonical path as persisted."
-            },
-            "createdAt": {
-              "type": "string",
-              "format": "date-time"
-            }
-          }
-        },
-        {
-          "type": "object",
-          "additionalProperties": false,
-          "required": ["status", "contractVersion", "requestId", "errors"],
-          "properties": {
-            "status": { "const": "failure" },
-            "contractVersion": { "type": "string" },
-            "requestId": { "type": "string", "format": "uuid" },
-            "errors": {
-              "type": "array",
-              "items": { "$ref": "#/$defs/Error" }
-            }
-          }
-        }
-      ]
-    }
-  },
-  "required": ["request", "response"],
-  "$defs": {
-    "Error": {
       "type": "object",
-      "required": ["code", "message"],
+      "description": "RegisterSourceResponse — returned on success.",
+      "required": ["sourceId", "kind", "path", "createdAt"],
       "additionalProperties": false,
       "properties": {
-        "code": {
+        "sourceId": {
           "type": "string",
-          "enum": [
-            "path.not_exists",
-            "path.not_directory",
-            "path.permission_denied",
-            "kind.unsupported",
-            "path.already_registered",
-            "path.already_registered.different_kind"
-          ]
+          "format": "uuid"
         },
-        "message": { "type": "string" },
-        "details": { "type": "object", "additionalProperties": true }
+        "kind": {
+          "type": "string",
+          "enum": ["raw", "calibration", "project", "inbox"]
+        },
+        "path": {
+          "type": "string",
+          "description": "Normalized canonical path as persisted."
+        },
+        "createdAt": {
+          "type": "string",
+          "format": "date-time"
+        }
+      }
+    },
+    "errors": {
+      "description": "Error codes returned as Err(String) via Tauri's Result pattern. The error message contains the human-readable description.",
+      "type": "object",
+      "properties": {
+        "path.not_exists": { "description": "Path does not exist on the filesystem." },
+        "path.not_directory": { "description": "Path exists but is not a directory." },
+        "path.permission_denied": { "description": "Directory exists but is not readable." },
+        "path.already_registered": { "description": "Path is already registered under the same kind (idempotent)." },
+        "path.already_registered.different_kind": { "description": "Path is already registered under a different kind." }
       }
     }
-  }
+  },
+  "required": ["request", "response"]
 }

@@ -70,8 +70,8 @@ wizard; native picker must run on the platform main thread per Tauri's
   language-neutral JSON Schema Draft 2020-12. SQLite is the durable record;
   `localStorage` is treated as a regenerable buffer.
 - **Cross-platform path safety**: PARTIAL. The wizard delegates path
-  validation to the Tauri picker plus a `path.not.exists` /
-  `path.not.directory` / `path.permission.denied` error set in the
+  validation to the Tauri picker plus a `path.not_exists` /
+  `path.not_directory` / `path.permission_denied` error set in the
   contract. Symlink and junction policy is deferred to the inventory
   scanner per the Astro Library Manager constitution.
 
@@ -173,7 +173,7 @@ component. The refactor MUST:
    that buffers in `localStorage` mid-wizard but flushes to SQLite on
    Finish via the `roots.register.batch` Tauri command.
 7. Surface validation errors returned by `roots.register` inline next to
-   the offending row (e.g. `path.not.exists`, `path.already.registered`).
+   the offending row (e.g. `path.not_exists`, `path.already_registered`).
 
 ### Persistence Boundary
 

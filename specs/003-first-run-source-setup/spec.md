@@ -159,7 +159,7 @@ step is required.
 ### Edge Cases
 
 - Duplicate source paths across kinds (same root listed as both Raw and
-  Calibration). RESOLVED: reject with `path.already.registered.different_kind`
+  Calibration). RESOLVED: reject with `path.already_registered.different_kind`
   error code (R-1.4). The error is surfaced inline next to the offending row
   with the conflicting kind shown.
 - Duplicate source paths within a kind (mockup currently allows; the picker
