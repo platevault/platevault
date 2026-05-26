@@ -20,9 +20,9 @@ use sqlx::SqlitePool;
 /// Validate that the given path exists, is a directory, and is readable.
 ///
 /// Returns a `ContractError` with a dotted error code on failure.
-fn validate_path(path: &str) -> Result<(), ContractError> {
+fn validate_path(path: &str) -> Result<(), Box<ContractError>> {
     let metadata = std::fs::metadata(path).map_err(|e| {
-        if e.kind() == std::io::ErrorKind::NotFound {
+        Box::new(if e.kind() == std::io::ErrorKind::NotFound {
             ContractError::new(
                 "path.not_exists",
                 format!("Path does not exist: {path}"),
@@ -43,31 +43,29 @@ fn validate_path(path: &str) -> Result<(), ContractError> {
                 ErrorSeverity::Blocking,
                 false,
             )
-        }
+        })
     })?;
 
     if !metadata.is_dir() {
-        return Err(ContractError::new(
+        return Err(Box::new(ContractError::new(
             "path.not_directory",
             format!("Path is not a directory: {path}"),
             ErrorSeverity::Blocking,
             false,
-        ));
+        )));
     }
 
-    // Check read permission (best-effort; actual permission model is OS-dependent).
     #[cfg(unix)]
     {
         use std::os::unix::fs::PermissionsExt;
         let mode = metadata.permissions().mode();
-        // Check if any read bit is set (owner, group, or other).
         if mode & 0o444 == 0 {
-            return Err(ContractError::new(
+            return Err(Box::new(ContractError::new(
                 "path.permission_denied",
                 format!("No read permission on: {path}"),
                 ErrorSeverity::Blocking,
                 false,
-            ));
+            )));
         }
     }
 
@@ -109,8 +107,8 @@ async fn check_duplicate(
 }
 
 fn db_to_contract(e: persistence_db::DbError) -> ContractError {
-    // Map UNIQUE constraint violations to duplicate error codes.
     let msg = e.to_string();
+    drop(e);
     if msg.contains("UNIQUE constraint failed") {
         ContractError::new("path.already_registered", msg, ErrorSeverity::Warning, false)
     } else {
@@ -130,7 +128,7 @@ pub async fn register_source(
     pool: &SqlitePool,
     req: &RegisterSourceRequest,
 ) -> Result<RegisterSourceResponse, ContractError> {
-    validate_path(&req.path)?;
+    validate_path(&req.path).map_err(|e| *e)?;
     check_duplicate(pool, &req.path, req.kind).await?;
     repo::register_source(pool, req).await.map_err(db_to_contract)
 }

@@ -342,3 +342,4 @@ apps/desktop/playwright-report/
 /.gitmodules
 /.ripgreprc
 /.idea/
+.idea

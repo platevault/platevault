@@ -55,15 +55,13 @@ pub async fn roots_register(
     };
 
     // Extract scan_depth from scan_settings if provided.
-    let scan_depth = scan_settings
-        .0
-        .get("scanDepth")
-        .and_then(|v| v.as_str())
-        .map(|s| match s {
+    let scan_depth = scan_settings.0.get("scanDepth").and_then(|v| v.as_str()).map_or(
+        ScanDepth::Recursive,
+        |s| match s {
             "single" => ScanDepth::Single,
             _ => ScanDepth::Recursive,
-        })
-        .unwrap_or(ScanDepth::Recursive);
+        },
+    );
 
     let req = RegisterSourceRequest { kind, path, kind_subtype: None, scan_depth };
 
