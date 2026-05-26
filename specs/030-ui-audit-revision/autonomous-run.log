@@ -14,9 +14,9 @@
 
 ## Flow remaining
 - [x] taskstoissues — 109 issues created (#140–#248)
-- [ ] checkpoint.commit (pre-implementation)
-- [ ] agent-assign.assign
-- [ ] agent-assign.validate
+- [x] checkpoint.commit (pre-implementation) — 696ac0e
+- [x] agent-assign.assign — 6 agents, 109 tasks assigned
+- [x] agent-assign.validate — PASS, 109/109 tasks covered, 5 agents valid
 - [ ] agent-assign.execute
 - [ ] verify-tasks (parallel)
 - [ ] verify (parallel)
@@ -40,4 +40,19 @@
 Spec 030 planning was committed to main (e204f28).
 **Decision**: Create feature branch `030-ui-audit-revision` from main for implementation.
 **Deviation**: None — this is the normal flow, planning just happened to land on main.
+
+### D002 — Agent assignments in autonomous mode (no user review)
+**Time**: after taskstoissues
+**Context**: Skill outline says "ask the user" for approval. Running autonomously.
+**Decision**: Assigned based on file paths and task types. rust-pro for all Rust backend,
+frontend-developer for all React/TS UI, coder for mechanical tasks, typescript-pro for
+pure TS logic, speckit-implement-task for cross-cutting verification.
+**Question for user**: Would you have preferred different agent assignments for any tasks?
+Especially: should database-architect handle migrations instead of rust-pro?
+
+### D003 — Skipping optional extension hooks
+**Time**: throughout
+**Context**: Extensions define optional pre/post hooks (git commit, onboard, etc.).
+**Decision**: Skipping all optional hooks — commits are done inline when needed, and
+onboarding is not relevant for autonomous execution.
 
