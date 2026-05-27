@@ -1,5 +1,5 @@
 import { useState } from 'react';
-import { Btn, RadioGroup } from '@/ui';
+import { Btn } from '@/ui';
 
 interface AdvancedProps {
   save: (scope: string, values: Record<string, unknown>) => void;
@@ -49,18 +49,27 @@ export function Advanced({ save }: AdvancedProps) {
       <div className="alm-settings__group">
         <div className="alm-settings__group-title">Log Level</div>
         <div className="alm-settings__row">
+          <div className="alm-settings__row-label">Log Level</div>
           <div className="alm-settings__row-content">
-            <RadioGroup
-              options={[
-                { value: 'trace', label: 'Trace', desc: 'All internal events — very verbose' },
-                { value: 'debug', label: 'Debug', desc: 'Diagnostic detail useful during development' },
-                { value: 'info', label: 'Info', desc: 'Normal operational messages (default)' },
-                { value: 'warn', label: 'Warn', desc: 'Warnings only' },
-                { value: 'error', label: 'Error', desc: 'Errors only — quietest' },
-              ]}
+            <select
+              className="alm-select"
               value={logLevel}
-              onChange={(v) => { setLogLevel(v as LogLevel); save('advanced', { log_level: v }); }}
-            />
+              onChange={(e) => { setLogLevel(e.target.value as LogLevel); save('advanced', { log_level: e.target.value }); }}
+              style={{ height: 28 }}
+            >
+              <option value="trace">Trace</option>
+              <option value="debug">Debug</option>
+              <option value="info">Info</option>
+              <option value="warn">Warn</option>
+              <option value="error">Error</option>
+            </select>
+            <div className="alm-settings__row-desc">
+              {logLevel === 'trace' && 'All internal events — very verbose'}
+              {logLevel === 'debug' && 'Diagnostic detail useful during development'}
+              {logLevel === 'info' && 'Normal operational messages (default)'}
+              {logLevel === 'warn' && 'Warnings only'}
+              {logLevel === 'error' && 'Errors only — quietest'}
+            </div>
           </div>
         </div>
       </div>

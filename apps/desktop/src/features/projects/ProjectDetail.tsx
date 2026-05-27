@@ -132,6 +132,10 @@ export function ProjectDetailContent({ project }: ProjectDetailContentProps) {
           { label: 'Views', value: project.views },
           { label: 'On disk', value: project.size },
           { label: 'Outputs', value: project.outputs },
+          { label: 'Integration', value: `${project.hours}h` },
+          { label: 'Profile', value: project.profile },
+          { label: 'Target', value: project.target },
+          { label: 'Notes', value: 2 },
         ].map((stat) => (
           <div key={stat.label} className="alm-detail__stat">
             <span className="alm-detail__stat-value">{stat.value}</span>

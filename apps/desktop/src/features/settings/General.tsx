@@ -1,5 +1,4 @@
 import { useState } from 'react';
-import { RadioGroup } from '@/ui';
 import { usePreference } from '@/data/preferences';
 import type { Density } from '@/bindings/types';
 
@@ -16,16 +15,23 @@ export function General() {
       <div className="alm-settings__group">
         <div className="alm-settings__group-title">Theme</div>
         <div className="alm-settings__row">
+          <div className="alm-settings__row-label">Theme</div>
           <div className="alm-settings__row-content">
-            <RadioGroup
-              options={[
-                { value: 'light', label: 'Light', desc: 'Light background with dark text' },
-                { value: 'dark', label: 'Dark', desc: 'Dark background suited for low-light sessions' },
-                { value: 'system', label: 'System', desc: 'Follow your operating system preference' },
-              ]}
+            <select
+              className="alm-select"
               value={theme}
-              onChange={(v) => setTheme(v as ThemeChoice)}
-            />
+              onChange={(e) => setTheme(e.target.value as ThemeChoice)}
+              style={{ height: 28 }}
+            >
+              <option value="light">Light</option>
+              <option value="dark">Dark</option>
+              <option value="system">System</option>
+            </select>
+            <div className="alm-settings__row-desc">
+              {theme === 'light' && 'Light background with dark text'}
+              {theme === 'dark' && 'Dark background suited for low-light sessions'}
+              {theme === 'system' && 'Follow your operating system preference'}
+            </div>
           </div>
         </div>
       </div>
@@ -33,16 +39,23 @@ export function General() {
       <div className="alm-settings__group">
         <div className="alm-settings__group-title">Font Size</div>
         <div className="alm-settings__row">
+          <div className="alm-settings__row-label">Font Size</div>
           <div className="alm-settings__row-content">
-            <RadioGroup
-              options={[
-                { value: 'small', label: 'Small', desc: '13 px base' },
-                { value: 'default', label: 'Default', desc: '14 px base' },
-                { value: 'large', label: 'Large', desc: '16 px base' },
-              ]}
+            <select
+              className="alm-select"
               value={fontSize}
-              onChange={(v) => setFontSize(v as FontSize)}
-            />
+              onChange={(e) => setFontSize(e.target.value as FontSize)}
+              style={{ height: 28 }}
+            >
+              <option value="small">Small (13px)</option>
+              <option value="default">Default (14px)</option>
+              <option value="large">Large (16px)</option>
+            </select>
+            <div className="alm-settings__row-desc">
+              {fontSize === 'small' && '13 px base'}
+              {fontSize === 'default' && '14 px base'}
+              {fontSize === 'large' && '16 px base'}
+            </div>
           </div>
         </div>
       </div>
@@ -50,16 +63,23 @@ export function General() {
       <div className="alm-settings__group">
         <div className="alm-settings__group-title">Display Density</div>
         <div className="alm-settings__row">
+          <div className="alm-settings__row-label">Density</div>
           <div className="alm-settings__row-content">
-            <RadioGroup
-              options={[
-                { value: 'compact', label: 'Compact', desc: '24 px row height — fits more rows on screen' },
-                { value: 'comfortable', label: 'Comfortable', desc: '32 px row height — default' },
-                { value: 'spacious', label: 'Spacious', desc: '40 px row height — easier to click' },
-              ]}
+            <select
+              className="alm-select"
               value={density}
-              onChange={(v) => setDensity(v as Density)}
-            />
+              onChange={(e) => setDensity(e.target.value as Density)}
+              style={{ height: 28 }}
+            >
+              <option value="compact">Compact (24px row)</option>
+              <option value="comfortable">Comfortable (32px row)</option>
+              <option value="spacious">Spacious (40px row)</option>
+            </select>
+            <div className="alm-settings__row-desc">
+              {density === 'compact' && '24 px row height — fits more rows on screen'}
+              {density === 'comfortable' && '32 px row height — default'}
+              {density === 'spacious' && '40 px row height — easier to click'}
+            </div>
           </div>
         </div>
       </div>

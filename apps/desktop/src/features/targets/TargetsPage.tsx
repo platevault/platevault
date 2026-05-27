@@ -17,13 +17,7 @@ export function TargetsPage() {
           <TopActionBar
             title="Targets"
             subtitle={`${TARGETS_DATA.length} targets`}
-            right={
-              <>
-                <Btn>Edit aliases</Btn>
-                <Btn>Link plan</Btn>
-                <Btn variant="accent">New project</Btn>
-              </>
-            }
+            right={<Btn variant="accent">New project</Btn>}
           />
         }
         list={<TargetList targets={TARGETS_DATA} selected={selected} onSelect={setSelected} />}

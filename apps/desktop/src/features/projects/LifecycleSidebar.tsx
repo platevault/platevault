@@ -1,16 +1,17 @@
 /**
  * LifecycleSidebar -- right sidebar for Projects page.
- * Vertical pipeline visualization + phase actions + quick stats.
- * Design V3 rewrite (inline VerticalPipeline, no LifecycleStrip dependency).
+ * Horizontal pill-based lifecycle visualization + integration time per channel.
+ * Design V3 rewrite.
  */
 
-import { Section, KV, Btn, Pill } from '@/ui';
+import { Section, Pill, CoverageBar } from '@/ui';
 import type { ProjectFixture } from '@/data/fixtures/projects';
 import type { PillVariant } from '@/ui';
 
 // ─── Lifecycle pipeline ──────────────────────────────────────────────────────
 
 const LIFECYCLE_STEPS = ['setup', 'ready', 'prepared', 'processing', 'completed', 'archived'] as const;
+type LifecycleStep = typeof LIFECYCLE_STEPS[number];
 
 const stateToIdx: Record<string, number> = {
   setup_incomplete: 0,
@@ -22,71 +23,33 @@ const stateToIdx: Record<string, number> = {
   blocked: -1,
 };
 
-function VerticalPipeline({ currentState }: { currentState: string }) {
+function HorizontalPipeline({ currentState }: { currentState: string }) {
   const currentIdx = stateToIdx[currentState] ?? -1;
   const isBlocked = currentState === 'blocked';
 
   return (
-    <div className="alm-vpipeline" role="list" aria-label="Project lifecycle stages">
-      {LIFECYCLE_STEPS.map((step, i) => {
+    <div
+      className="alm-hpipeline"
+      role="list"
+      aria-label="Project lifecycle stages"
+    >
+      {isBlocked && (
+        <span role="listitem"><Pill variant="danger">Blocked</Pill></span>
+      )}
+      {LIFECYCLE_STEPS.map((step: LifecycleStep, i) => {
         const isDone = !isBlocked && i < currentIdx;
         const isCurrent = !isBlocked && i === currentIdx;
-        const isFuture = isBlocked || i > currentIdx;
+        const variant: PillVariant = isDone ? 'ok' : isCurrent ? 'accent' : 'ghost';
 
         return (
-          <div
+          <span
             key={step}
-            className="alm-vpipeline__row"
             role="listitem"
-            style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 0 }}
+            aria-current={isCurrent ? 'step' : undefined}
+            style={isCurrent ? { fontWeight: 600 } : undefined}
           >
-            <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', width: 16 }}>
-              <div
-                style={{
-                  width: 10,
-                  height: 10,
-                  borderRadius: '50%',
-                  background: isDone
-                    ? 'var(--alm-color-ok)'
-                    : isCurrent
-                    ? 'transparent'
-                    : 'var(--alm-color-border)',
-                  border: isCurrent
-                    ? '2px solid var(--alm-color-accent)'
-                    : isDone
-                    ? 'none'
-                    : '2px solid var(--alm-color-border)',
-                  flexShrink: 0,
-                }}
-                aria-current={isCurrent ? 'step' : undefined}
-              />
-              {i < LIFECYCLE_STEPS.length - 1 && (
-                <div
-                  style={{
-                    width: 2,
-                    height: 14,
-                    background: isDone ? 'var(--alm-color-ok)' : 'var(--alm-color-border)',
-                    marginTop: 2,
-                  }}
-                />
-              )}
-            </div>
-            <span
-              style={{
-                fontSize: 'var(--alm-text-xs)',
-                color: isCurrent
-                  ? 'var(--alm-color-fg)'
-                  : isDone
-                  ? 'var(--alm-color-fg-muted)'
-                  : 'var(--alm-color-fg-subtle)',
-                fontWeight: isCurrent ? 600 : undefined,
-                textTransform: 'capitalize',
-                paddingBottom: i < LIFECYCLE_STEPS.length - 1 ? 14 : 0,
-              }}
-            >
-              {step}
-            </span>
-          </div>
+            <Pill variant={variant}>{step}</Pill>
+          </span>
         );
       })}
     </div>
@@ -95,9 +58,9 @@ function VerticalPipeline({ currentState }: { currentState: string }) {
 
 // ─── Phase actions ───────────────────────────────────────────────────────────
 
-type ActionDef = { label: string; variant?: 'primary' | 'accent' | 'danger' | 'ghost' };
+export type ActionDef = { label: string; variant?: 'primary' | 'accent' | 'danger' | 'ghost' };
 
-function phaseActions(state: ProjectFixture['state']): ActionDef[] {
+export function phaseActions(state: ProjectFixture['state']): ActionDef[] {
   switch (state) {
     case 'setup_incomplete':
       return [{ label: 'Continue setup', variant: 'primary' }];
@@ -131,40 +94,13 @@ function phaseActions(state: ProjectFixture['state']): ActionDef[] {
   }
 }
 
-// ─── Helpers ────────────────────────────────────────────────────────────────
+// ─── Channel data ─────────────────────────────────────────────────────────────
 
-function projectVariant(state: ProjectFixture['state']): PillVariant {
-  switch (state) {
-    case 'completed':
-    case 'archived':
-      return 'ok';
-    case 'processing':
-      return 'info';
-    case 'prepared':
-      return 'accent';
-    case 'ready':
-      return 'neutral';
-    case 'blocked':
-      return 'danger';
-    case 'setup_incomplete':
-      return 'ghost';
-    default:
-      return 'neutral';
-  }
-}
-
-function stateLabel(state: ProjectFixture['state']): string {
-  switch (state) {
-    case 'setup_incomplete': return 'Setup';
-    case 'ready': return 'Ready';
-    case 'prepared': return 'Prepared';
-    case 'processing': return 'Processing';
-    case 'completed': return 'Completed';
-    case 'archived': return 'Archived';
-    case 'blocked': return 'Blocked';
-    default: return state;
-  }
-}
+const CHANNEL_DATA = [
+  { filter: 'Ha', hours: 4.5, max: 10 },
+  { filter: 'OIII', hours: 3.2, max: 10 },
+  { filter: 'SII', hours: 2.5, max: 10 },
+];
 
 // ─── Props ───────────────────────────────────────────────────────────────────
 
@@ -175,49 +111,25 @@ export interface LifecycleSidebarProps {
 // ─── Component ──────────────────────────────────────────────────────────────
 
 export function LifecycleSidebar({ project }: LifecycleSidebarProps) {
-  const actions = phaseActions(project.state);
-
   return (
     <aside
       className="alm-lifecycle-sidebar"
       aria-label="Project lifecycle sidebar"
-      style={{ width: 220, flexShrink: 0, overflowY: 'auto' }}
+      style={{ width: 220, flexShrink: 0 }}
     >
       {/* Lifecycle */}
       <Section title="Lifecycle">
-        <div style={{ padding: '8px 16px 4px' }}>
-          <Pill variant={projectVariant(project.state)}>{stateLabel(project.state)}</Pill>
-        </div>
-        <div style={{ padding: '8px 16px' }}>
-          <VerticalPipeline currentState={project.state} />
+        <div style={{ padding: '8px 16px 12px' }}>
+          <HorizontalPipeline currentState={project.state} />
         </div>
       </Section>
 
-      {/* Actions */}
-      <Section title="Actions">
-        <div style={{ display: 'flex', flexDirection: 'column', gap: 6, padding: '4px 16px 8px' }}>
-          {actions.map((action) => (
-            <Btn
-              key={action.label}
-              variant={action.variant}
-              size="sm"
-              style={{ width: '100%', justifyContent: 'flex-start' }}
-            >
-              {action.label}
-            </Btn>
+      {/* Integration time per channel */}
+      <Section title="Integration per channel">
+        <div style={{ padding: '8px 16px 12px', display: 'flex', flexDirection: 'column', gap: 6 }}>
+          {CHANNEL_DATA.map(({ filter, hours, max }) => (
+            <CoverageBar key={filter} label={filter} value={hours} max={max} />
           ))}
-        </div>
-      </Section>
-
-      {/* Quick stats */}
-      <Section title="Quick stats">
-        <div style={{ padding: '4px 0 8px' }}>
-          <KV label="Integration" value={<span className="alm-mono">{project.hours}h</span>} />
-          <KV label="On disk" value={<span className="alm-mono">{project.size}</span>} />
-          <KV label="Profile" value={project.profile} />
-          <KV label="Targets" value={project.target} />
-          <KV label="Outputs" value={project.outputs} />
-          <KV label="Notes" value="2" />
         </div>
       </Section>
     </aside>

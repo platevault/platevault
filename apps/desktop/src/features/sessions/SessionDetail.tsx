@@ -1,6 +1,7 @@
+import { useState } from 'react';
 import type { SessionFixture } from '@/data/fixtures/sessions';
 import { DetailPane, DetailHeader } from '@/components';
-import { Pill, Btn, Section, Box, Table, EmptyState } from '@/ui';
+import { Pill, Btn, Section, Box, Table, EmptyState, Lock } from '@/ui';
 
 // Calibration match fixture for detail view
 const CAL_MATCHES = [
@@ -13,7 +14,15 @@ const HISTORY_ROWS = [
   { ts: '2026-04-16T09:12:00Z', event: 'session.confirmed', actor: 'user', detail: 'Reviewed and confirmed' },
   { ts: '2026-04-15T21:06:00Z', event: 'session.candidate', actor: 'system', detail: 'Metadata extraction completed' },
   { ts: '2026-04-15T21:05:00Z', event: 'session.discovered', actor: 'system', detail: 'Inbox scan detected new FITS files' },
+  { ts: '2026-04-14T18:30:00Z', event: 'session.metadata_updated', actor: 'user', detail: 'Target name corrected to NGC 7000' },
+  { ts: '2026-04-14T17:55:00Z', event: 'session.filter_set', actor: 'user', detail: 'Filter manually set to Ha' },
+  { ts: '2026-04-13T10:22:00Z', event: 'session.project_linked', actor: 'user', detail: 'Linked to NGC 7000 · HOO' },
+  { ts: '2026-04-12T08:04:00Z', event: 'session.cal_matched', actor: 'system', detail: 'Calibration auto-matched: dark, flat' },
+  { ts: '2026-04-11T22:15:00Z', event: 'session.needs_review', actor: 'system', detail: 'Soft mismatch detected on flat age' },
+  { ts: '2026-04-10T19:40:00Z', event: 'session.rescan', actor: 'user', detail: 'Manual rescan triggered' },
 ];
+
+const PAGE_SIZE = 5;
 
 const stateVariant = (s: string) =>
   (({ confirmed: 'ok', needs_review: 'warn', rejected: 'danger', discovered: 'ghost', candidate: 'neutral', ignored: 'neutral' } as Record<string, 'ok' | 'warn' | 'danger' | 'ghost' | 'neutral'>)[s] ?? 'neutral');
@@ -23,6 +32,8 @@ interface Props {
 }
 
 export function SessionDetail({ session }: Props) {
+  const [historyPage, setHistoryPage] = useState(0);
+
   if (!session) {
     return (
       <DetailPane>
@@ -34,12 +45,17 @@ export function SessionDetail({ session }: Props) {
     );
   }
 
+  const isLinked = session.projects.length > 0;
+  const totalPages = Math.ceil(HISTORY_ROWS.length / PAGE_SIZE);
+  const historySlice = HISTORY_ROWS.slice(historyPage * PAGE_SIZE, (historyPage + 1) * PAGE_SIZE);
+
   return (
     <DetailPane>
       {/* Header */}
       <DetailHeader
         title={
           <>
+            {isLinked && <Lock />}
             <strong>{session.target}</strong>
             {' · '}
             {session.filter}
@@ -56,7 +72,7 @@ export function SessionDetail({ session }: Props) {
         actions={
           <>
             <Btn size="sm">Re-open to review</Btn>
-            <Btn size="sm" disabled={session.projects.length > 0}>Move to Inbox</Btn>
+            <Btn size="sm" disabled={isLinked}>Move to Inbox</Btn>
             <Btn size="sm">Use in project</Btn>
           </>
         }
@@ -151,8 +167,17 @@ export function SessionDetail({ session }: Props) {
         )}
       </Section>
 
-      {/* History */}
-      <Section title="History">
+      {/* History with pagination */}
+      <Section
+        title="History"
+        count={`page ${historyPage + 1} of ${totalPages}`}
+        right={
+          <span style={{ display: 'flex', gap: 4 }}>
+            <Btn size="sm" disabled={historyPage === 0} onClick={() => setHistoryPage(p => p - 1)}>Previous</Btn>
+            <Btn size="sm" disabled={historyPage >= totalPages - 1} onClick={() => setHistoryPage(p => p + 1)}>Next</Btn>
+          </span>
+        }
+      >
         <Table
           columns={[
             { key: 'ts', label: 'Timestamp', className: 'alm-mono' },
@@ -160,7 +185,7 @@ export function SessionDetail({ session }: Props) {
             { key: 'actor', label: 'Actor' },
             { key: 'detail', label: 'Detail' },
           ]}
-          rows={HISTORY_ROWS.map(h => ({
+          rows={historySlice.map(h => ({
             ts: <span className="alm-mono" style={{ fontSize: 11 }}>{h.ts}</span>,
             event: h.event,
             actor: h.actor,

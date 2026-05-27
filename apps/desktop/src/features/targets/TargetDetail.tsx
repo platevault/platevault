@@ -1,7 +1,7 @@
 import type { TargetFixture } from '@/data/fixtures/targets';
 import { TARGETS_DATA, targetDetail } from '@/data/fixtures/targets';
 import { DetailPane, DetailHeader } from '@/components';
-import { Pill, Box, KV, Section, Table, CoverageBar, Banner, EmptyState } from '@/ui';
+import { Pill, Btn, Box, KV, Section, Table, CoverageBar, Banner, EmptyState } from '@/ui';
 
 // Session state variant helper
 const sessVariant = (s: string) =>
@@ -62,7 +62,7 @@ export function TargetDetailPaneInline({ target }: TargetDetailPaneInlineProps) 
 
   return (
     <DetailPane>
-      {/* Header — no action buttons (they're in TopActionBar) */}
+      {/* Header — target-scoped actions */}
       <DetailHeader
         title={
           <>
@@ -74,6 +74,12 @@ export function TargetDetailPaneInline({ target }: TargetDetailPaneInlineProps) 
         }
         titleExtra={<Pill variant="ghost">{target.kind}</Pill>}
         subtitle={`${target.sessions} sessions · ${target.hours.toFixed(1)}h · ${target.projects} projects`}
+        actions={
+          <>
+            <Btn size="sm">Edit aliases</Btn>
+            <Btn size="sm">Link plan</Btn>
+          </>
+        }
       />
 
       {/* Two-column grid layout */}
