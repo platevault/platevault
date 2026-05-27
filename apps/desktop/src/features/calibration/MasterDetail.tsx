@@ -1,11 +1,24 @@
 import type { MasterFixture } from '@/data/fixtures/calibration';
 import { focusedMaster } from '@/data/fixtures/calibration';
 import { DetailPane, DetailHeader } from '@/components';
-import { Pill, Btn, Box, KV, Table, EmptyState, Lock } from '@/ui';
+import { Pill, Btn, Box, KV, Section, Table, EmptyState, Lock } from '@/ui';
 
 interface Props {
   master: MasterFixture | null;
 }
+
+// Matched sessions for Usage section
+const MATCHED_SESSIONS = [
+  { session: 'NGC 7000 · Ha · 2024-11-30', filter: 'Ha', frames: 54, status: 'accepted' as const },
+  { session: 'NGC 7000 · OIII · 2024-11-30', filter: 'OIII', frames: 38, status: 'accepted' as const },
+  { session: 'NGC 7000 · SII · 2024-12-01', filter: 'SII', frames: 22, status: 'undecided' as const },
+];
+
+// Linked projects for Usage section
+const LINKED_PROJECTS = [
+  { project: 'NGC 7000 · HOO', profile: 'PixInsight/WBPP', state: 'processing' as const },
+  { project: 'NGC 7000 · SHO mosaic', profile: 'PixInsight/WBPP', state: 'ready' as const },
+];
 
 // Compatible sessions fixture (shown for the focused master only)
 const COMPAT_SESSIONS = [
@@ -68,7 +81,7 @@ export function MasterDetail({ master }: Props) {
           </div>
         </Box>
 
-        <Box title="Provenance">
+        <Box title="Origin">
           <KV label="Kind" value={master.kind} />
           <KV label="Exposure" value={master.exposure} />
           <KV label="Temperature" value={master.temp} />
@@ -80,16 +93,40 @@ export function MasterDetail({ master }: Props) {
         </Box>
 
         <Box title="Usage">
-          <div style={{ display: 'flex', gap: 20, marginBottom: 12 }}>
-            <div style={{ textAlign: 'center' }}>
-              <div className="alm-mono" style={{ fontSize: 24, fontWeight: 700 }}>{master.sessions}</div>
-              <div style={{ fontSize: 11, color: 'var(--alm-text-muted)' }}>sessions matched</div>
-            </div>
-            <div style={{ textAlign: 'center' }}>
-              <div className="alm-mono" style={{ fontSize: 24, fontWeight: 700 }}>{master.projects}</div>
-              <div style={{ fontSize: 11, color: 'var(--alm-text-muted)' }}>projects</div>
-            </div>
-          </div>
+          <Section title="Matched sessions" count={MATCHED_SESSIONS.length}>
+            <Table
+              columns={[
+                { key: 'session', label: 'Session' },
+                { key: 'filter', label: 'Filter', style: { width: 60 } },
+                { key: 'frames', label: 'Frames', style: { width: 64 } },
+                { key: 'status', label: 'Match status', style: { width: 96 } },
+              ]}
+              rows={MATCHED_SESSIONS.map(s => ({
+                session: <strong>{s.session}</strong>,
+                filter: <Pill variant="ghost">{s.filter}</Pill>,
+                frames: <span className="alm-mono">{s.frames}</span>,
+                status: <Pill variant={s.status === 'accepted' ? 'ok' : 'warn'}>{s.status}</Pill>,
+              }))}
+            />
+          </Section>
+          <Section title="Linked projects" count={LINKED_PROJECTS.length}>
+            <Table
+              columns={[
+                { key: 'project', label: 'Project' },
+                { key: 'profile', label: 'Profile' },
+                { key: 'state', label: 'Lifecycle state' },
+              ]}
+              rows={LINKED_PROJECTS.map(p => ({
+                project: <strong>{p.project}</strong>,
+                profile: p.profile,
+                state: (
+                  <Pill variant={p.state === 'processing' ? 'info' : p.state === 'ready' ? 'neutral' : 'ghost'}>
+                    {p.state}
+                  </Pill>
+                ),
+              }))}
+            />
+          </Section>
         </Box>
       </div>
 

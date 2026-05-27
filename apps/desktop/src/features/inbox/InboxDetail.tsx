@@ -39,6 +39,12 @@ export function InboxDetail({ item }: InboxDetailProps) {
     { key: 'confirm', label: 'Confirm', style: { width: 72 } },
   ];
 
+  // Parse mixed gain values from the conflict string, e.g. "Mixed gains: 100, 120"
+  const gainConflict = item.conflict && /gain/i.test(item.conflict);
+  const gainConflictValues = gainConflict
+    ? item.conflict!.replace(/.*gains?:\s*/i, '').trim()
+    : null;
+
   const propertyRows = [
     {
       property: 'Object',
@@ -78,10 +84,23 @@ export function InboxDetail({ item }: InboxDetailProps) {
       confirm: <input type="checkbox" />,
     },
     {
-      property: 'Gain',
-      value: <span className="alm-mono">{item.gain}</span>,
+      property: gainConflict ? (
+        <span style={{ display: 'flex', alignItems: 'center', gap: 4 }}>
+          Gain
+          <span style={{ color: 'var(--alm-warn)', fontSize: 'var(--alm-text-xs)' }} aria-label="Conflict">&#x26A0;</span>
+        </span>
+      ) : 'Gain',
+      value: gainConflict ? (
+        <span className="alm-mono" style={{ color: 'var(--alm-warn)' }}>
+          {gainConflictValues?.replace(',', ' &')}
+        </span>
+      ) : (
+        <span className="alm-mono">{item.gain}</span>
+      ),
       source: 'fits',
       confirm: <input type="checkbox" defaultChecked />,
+      _rowStyle: gainConflict ? { background: 'var(--alm-warn-bg)' } : undefined,
+      _rowClassName: gainConflict ? 'alm-prop-table__row--conflict' : undefined,
     },
     {
       property: 'Binning',
