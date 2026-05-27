@@ -165,28 +165,19 @@ export function ProjectDetailContent({ project }: ProjectDetailContentProps) {
         </Banner>
       )}
 
-      {/* Lifecycle + Stats side by side */}
+      {/* Lifecycle + Integration per channel */}
       <div style={{ display: 'grid', gridTemplateColumns: '180px 1fr', gap: 'var(--alm-sp-3)', marginBottom: 'var(--alm-sp-4)' }}>
         <Box title="Lifecycle">
           <LifecycleFlowchart currentState={project.state} />
         </Box>
-        <Box title="Overview">
-          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4, 1fr)', gap: 'var(--alm-sp-3)' }}>
-            {[
-              { label: 'Sources', value: project.sources },
-              { label: 'Views', value: project.views },
-              { label: 'On disk', value: project.size },
-              { label: 'Outputs', value: project.outputs },
-              { label: 'Integration', value: `${project.hours}h` },
-              { label: 'Profile', value: project.profile },
-              { label: 'Target', value: project.target },
-              { label: 'Notes', value: NOTES.length },
-            ].map(s => (
-              <div key={s.label} className="alm-detail__stat">
-                <span className="alm-detail__stat-value">{s.value}</span>
-                <span className="alm-detail__stat-label">{s.label}</span>
-              </div>
+        <Box title="Integration per channel">
+          <div style={{ display: 'flex', flexDirection: 'column', gap: 'var(--alm-sp-2)' }}>
+            {CHANNEL_DATA.map(c => (
+              <CoverageBar key={c.filter} label={c.filter} value={c.hours} max={c.max} />
             ))}
+          </div>
+          <div style={{ marginTop: 'var(--alm-sp-3)', fontSize: 'var(--alm-text-xs)', color: 'var(--alm-text-muted)' }}>
+            Total: {project.hours}h · {project.size} on disk · Profile: {project.profile}
           </div>
         </Box>
       </div>
@@ -230,17 +221,6 @@ export function ProjectDetailContent({ project }: ProjectDetailContentProps) {
             actions: <Btn size="sm">Reveal</Btn>,
           }))}
         />
-      </Section>
-
-      {/* Integration per channel */}
-      <Section title="Integration per channel">
-        <Box>
-          <div style={{ display: 'flex', flexDirection: 'column', gap: 'var(--alm-sp-2)' }}>
-            {CHANNEL_DATA.map(c => (
-              <CoverageBar key={c.filter} label={c.filter} value={c.hours} max={c.max} />
-            ))}
-          </div>
-        </Box>
       </Section>
 
       {/* Notes */}
