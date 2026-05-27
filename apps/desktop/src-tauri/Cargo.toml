@@ -18,6 +18,7 @@ app_core = { path = "../../../crates/app/core" }
 audit = { path = "../../../crates/audit" }
 contracts_core = { path = "../../../crates/contracts/core" }
 domain_core = { path = "../../../crates/domain/core" }
+fs_inventory = { path = "../../../crates/fs/inventory" }
 persistence_db = { path = "../../../crates/persistence/db" }
 serde = { workspace = true }
 serde_json.workspace = true

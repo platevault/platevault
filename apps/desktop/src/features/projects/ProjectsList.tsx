@@ -1,6 +1,13 @@
-import { useMemo, useState } from 'react';
+/**
+ * ProjectsList -- uses the standard ListSidebar component for consistent
+ * search, group, sort, filter pill layout across all list-detail screens.
+ */
+
+import { useMemo, useState, useCallback } from 'react';
+import { clsx } from 'clsx';
 import type { Project, ProjectState } from '@/bindings/types';
 import { Pill, Btn } from '@/ui';
+import { ListSidebar } from '@/components';
 import { targetNames } from '@/data/fixtures/projects';
 
 // ─── Types ──────────────────────────────────────────────────────────────────
@@ -108,15 +115,28 @@ function groupProjects(
   return Array.from(groups.entries()).map(([label, items]) => ({ label, items }));
 }
 
-// ─── Filter chips ───────────────────────────────────────────────────────────
+// ─── Filter pills ───────────────────────────────────────────────────────────
 
 const STATE_FILTERS: { key: ProjectState; label: string }[] = [
   { key: 'processing', label: 'Processing' },
   { key: 'ready', label: 'Ready' },
-  { key: 'prepared', label: 'Prepared' },
   { key: 'completed', label: 'Completed' },
   { key: 'archived', label: 'Archived' },
   { key: 'blocked', label: 'Blocked' },
+];
+
+const GROUP_OPTIONS = [
+  { value: 'none', label: 'None' },
+  { value: 'target', label: 'Target' },
+  { value: 'profile', label: 'Profile' },
+  { value: 'state', label: 'Lifecycle' },
+];
+
+const SORT_OPTIONS = [
+  { value: 'updated', label: 'Updated' },
+  { value: 'name', label: 'Name' },
+  { value: 'integration', label: 'Integration' },
+  { value: 'size', label: 'Size' },
 ];
 
 // ─── Component ──────────────────────────────────────────────────────────────
@@ -132,10 +152,22 @@ export function ProjectsList({
   const [sortBy, setSortBy] = useState<SortBy>('updated');
   const [activeFilters, setActiveFilters] = useState<Set<ProjectState>>(new Set());
 
+  const handleFilterToggle = useCallback((value: string) => {
+    setActiveFilters((prev) => {
+      const next = new Set(prev);
+      const key = value as ProjectState;
+      if (next.has(key)) {
+        next.delete(key);
+      } else {
+        next.add(key);
+      }
+      return next;
+    });
+  }, []);
+
   const filtered = useMemo(() => {
     let result = projects;
 
-    // Text search
     if (search.trim()) {
       const q = search.toLowerCase();
       result = result.filter(
@@ -146,7 +178,6 @@ export function ProjectsList({
       );
     }
 
-    // State filters
     if (activeFilters.size > 0) {
       result = result.filter((p) => activeFilters.has(p.state));
     }
@@ -157,158 +188,95 @@ export function ProjectsList({
   const sorted = useMemo(() => sortProjects(filtered, sortBy), [filtered, sortBy]);
   const groups = useMemo(() => groupProjects(sorted, groupBy), [sorted, groupBy]);
 
-  function toggleFilter(state: ProjectState) {
-    setActiveFilters((prev) => {
-      const next = new Set(prev);
-      if (next.has(state)) {
-        next.delete(state);
-      } else {
-        next.add(state);
-      }
-      return next;
-    });
-  }
+  const filterPills = STATE_FILTERS.map((f) => ({
+    value: f.key,
+    label: f.label,
+    active: activeFilters.has(f.key),
+  }));
 
   return (
-    <div className="alm-proj-list">
-      {/* Search */}
-      <div className="alm-proj-list__search">
-        <input
-          type="text"
-          className="alm-proj-list__input"
-          placeholder="Search projects..."
-          value={search}
-          onChange={(e) => setSearch(e.target.value)}
-          aria-label="Search projects"
-        />
-      </div>
-
-      {/* Controls: group-by + sort */}
-      <div className="alm-proj-list__controls">
-        <label className="alm-proj-list__control-label">
-          <span className="alm-proj-list__control-text">Group</span>
-          <select
-            className="alm-proj-list__select"
-            value={groupBy}
-            onChange={(e) => setGroupBy(e.target.value as GroupBy)}
-            aria-label="Group by"
-          >
-            <option value="none">None</option>
-            <option value="target">Target</option>
-            <option value="profile">Profile</option>
-            <option value="state">Lifecycle</option>
-          </select>
-        </label>
-        <label className="alm-proj-list__control-label">
-          <span className="alm-proj-list__control-text">Sort</span>
-          <select
-            className="alm-proj-list__select"
-            value={sortBy}
-            onChange={(e) => setSortBy(e.target.value as SortBy)}
-            aria-label="Sort by"
-          >
-            <option value="updated">Updated</option>
-            <option value="name">Name</option>
-            <option value="integration">Integration</option>
-            <option value="size">Size</option>
-          </select>
-        </label>
-      </div>
-
-      {/* Filter chips */}
-      <div className="alm-proj-list__chips">
-        {STATE_FILTERS.map((f) => (
-          <button
-            key={f.key}
-            className={`alm-proj-list__chip${activeFilters.has(f.key) ? ' alm-proj-list__chip--active' : ''}`}
-            onClick={() => toggleFilter(f.key)}
-            aria-pressed={activeFilters.has(f.key)}
-            aria-label={`Filter by ${f.label}`}
-          >
-            {f.label}
-          </button>
-        ))}
-        {activeFilters.size > 0 && (
-          <button
-            className="alm-proj-list__chip alm-proj-list__chip--clear"
-            onClick={() => setActiveFilters(new Set())}
-          >
-            Clear
-          </button>
-        )}
-      </div>
-
-      {/* List items */}
-      <ul className="alm-proj-list__items" role="listbox" aria-label="Projects">
-        {groups.map((group) => (
-          <li key={group.label || '__all'} role="presentation">
-            {group.label && (
-              <div className="alm-proj-list__group-header" role="presentation">
-                {group.label}
-                <span className="alm-proj-list__group-count">{group.items.length}</span>
-              </div>
-            )}
-            {group.items.map((project) => (
-              <div
-                key={project.id}
-                className={`alm-proj-list__item${project.id === selectedId ? ' alm-proj-list__item--selected' : ''}`}
-                role="option"
-                aria-selected={project.id === selectedId}
-                tabIndex={0}
-                onClick={() => onSelect(project.id)}
-                onKeyDown={(e) => {
-                  if (e.key === 'Enter' || e.key === ' ') {
-                    e.preventDefault();
-                    onSelect(project.id);
-                  }
-                }}
-              >
-                <div className="alm-proj-list__item-row">
-                  <span className="alm-proj-list__item-name">
-                    {project.state === 'blocked' && (
-                      <span className="alm-proj-list__item-warn" aria-label="Blocked">&#x26A0; </span>
-                    )}
-                    {project.name}
-                  </span>
-                  <Pill
-                    label={lifecycleLabel(project.state)}
-                    variant={lifecycleVariant(project.state)}
-                    size="sm"
-                  />
-                </div>
-                <div className="alm-proj-list__item-meta">
-                  <span>{targetLabel(project.target_ids)}</span>
-                  {project.integration_hours > 0 && (
-                    <>
-                      <span className="alm-proj-list__item-dot" />
-                      <span className="alm-mono">{formatIntegrationHours(project.integration_hours)}</span>
-                    </>
+    <ListSidebar
+      searchPlaceholder="Search projects..."
+      searchValue={search}
+      onSearchChange={setSearch}
+      groupOptions={GROUP_OPTIONS}
+      groupValue={groupBy}
+      onGroupChange={(v) => setGroupBy(v as GroupBy)}
+      sortOptions={SORT_OPTIONS}
+      sortValue={sortBy}
+      onSortChange={(v) => setSortBy(v as SortBy)}
+      filterPills={filterPills}
+      onFilterToggle={handleFilterToggle}
+      itemCount={filtered.length}
+    >
+      {groups.map((group) => (
+        <div key={group.label || '__all'} role="presentation">
+          {group.label && (
+            <div className="alm-list-sidebar__group-header" role="presentation">
+              {group.label}
+              <span className="alm-list-sidebar__group-count">{group.items.length}</span>
+            </div>
+          )}
+          {group.items.map((project) => (
+            <div
+              key={project.id}
+              className={clsx(
+                'alm-list-sidebar__item',
+                project.id === selectedId && 'alm-list-sidebar__item--selected',
+              )}
+              role="option"
+              aria-selected={project.id === selectedId}
+              tabIndex={0}
+              onClick={() => onSelect(project.id)}
+              onKeyDown={(e) => {
+                if (e.key === 'Enter' || e.key === ' ') {
+                  e.preventDefault();
+                  onSelect(project.id);
+                }
+              }}
+            >
+              <div className="alm-list-sidebar__item-row">
+                <span className="alm-list-sidebar__item-name">
+                  {project.state === 'blocked' && (
+                    <span className="alm-list-sidebar__item-warn" aria-label="Blocked">&#x26A0; </span>
                   )}
-                  {project.cleanup_state.reclaimable_bytes > 0 && (
-                    <>
-                      <span className="alm-proj-list__item-dot" />
-                      <span className="alm-mono">{formatBytes(project.cleanup_state.reclaimable_bytes)}</span>
-                    </>
-                  )}
-                </div>
+                  {project.name}
+                </span>
+                <Pill
+                  label={lifecycleLabel(project.state)}
+                  variant={lifecycleVariant(project.state)}
+                  size="sm"
+                />
               </div>
-            ))}
-          </li>
-        ))}
-      </ul>
-
+              <div className="alm-list-sidebar__item-meta">
+                <span>{targetLabel(project.target_ids)}</span>
+                {project.integration_hours > 0 && (
+                  <>
+                    <span className="alm-list-sidebar__item-dot" />
+                    <span className="alm-mono">{formatIntegrationHours(project.integration_hours)}</span>
+                  </>
+                )}
+                {project.cleanup_state.reclaimable_bytes > 0 && (
+                  <>
+                    <span className="alm-list-sidebar__item-dot" />
+                    <span className="alm-mono">{formatBytes(project.cleanup_state.reclaimable_bytes)}</span>
+                  </>
+                )}
+              </div>
+            </div>
+          ))}
+        </div>
+      ))}
       {filtered.length === 0 && (
-        <div className="alm-proj-list__empty">
+        <div className="alm-list-sidebar__empty">
           {search ? `No projects match "${search}"` : 'No projects match filters'}
         </div>
       )}
-
-      {/* Footer: new project button */}
-      <div className="alm-proj-list__footer">
+      <div className="alm-list-sidebar__action-footer">
         <Btn variant="primary" size="sm" onClick={onNewProject} data-tour="new-project">
           + New project
         </Btn>
       </div>
-    </div>
+    </ListSidebar>
   );
 }
