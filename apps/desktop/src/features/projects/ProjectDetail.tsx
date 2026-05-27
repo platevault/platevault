@@ -1,11 +1,5 @@
-/**
- * ProjectDetail -- center pane for Projects page.
- * Uses fixture data + hardcoded mock sub-data.
- * Design V3 rewrite.
- */
-
 import { DetailHeader, DetailPane } from '@/components';
-import { Pill, Btn, Section, Banner, Table } from '@/ui';
+import { Pill, Btn, Section, Banner, Table, Box, KV, CoverageBar } from '@/ui';
 import { PROJECTS_DATA } from '@/data/fixtures/projects';
 import type { ProjectFixture } from '@/data/fixtures/projects';
 import type { PillVariant } from '@/ui';
@@ -13,59 +7,104 @@ import type { PillVariant } from '@/ui';
 // ─── Helpers ────────────────────────────────────────────────────────────────
 
 function projectVariant(state: ProjectFixture['state']): PillVariant {
-  switch (state) {
-    case 'completed':
-    case 'archived':
-      return 'ok';
-    case 'processing':
-      return 'info';
-    case 'prepared':
-      return 'accent';
-    case 'ready':
-      return 'neutral';
-    case 'blocked':
-      return 'danger';
-    case 'setup_incomplete':
-      return 'ghost';
-    default:
-      return 'neutral';
-  }
+  const map: Record<string, PillVariant> = {
+    completed: 'ok', archived: 'ok', processing: 'info', prepared: 'accent',
+    ready: 'neutral', blocked: 'danger', setup_incomplete: 'ghost',
+  };
+  return map[state] ?? 'neutral';
 }
 
 function stateLabel(state: ProjectFixture['state']): string {
-  switch (state) {
-    case 'setup_incomplete': return 'Setup';
-    case 'ready': return 'Ready';
-    case 'prepared': return 'Prepared';
-    case 'processing': return 'Processing';
-    case 'completed': return 'Completed';
-    case 'archived': return 'Archived';
-    case 'blocked': return 'Blocked';
-    default: return state;
-  }
+  const map: Record<string, string> = {
+    setup_incomplete: 'Setup', ready: 'Ready', prepared: 'Prepared',
+    processing: 'Processing', completed: 'Completed', archived: 'Archived',
+    blocked: 'Blocked',
+  };
+  return map[state] ?? state;
 }
 
 function sourceTypeVariant(type: string): PillVariant {
-  switch (type) {
-    case 'light': return 'info';
-    case 'dark': return 'neutral';
-    case 'flat': return 'accent';
-    case 'bias': return 'ghost';
-    default: return 'neutral';
-  }
+  const map: Record<string, PillVariant> = { light: 'info', dark: 'neutral', flat: 'accent', bias: 'ghost' };
+  return map[type] ?? 'neutral';
 }
 
 function sourceStatusVariant(status: string): PillVariant {
-  switch (status) {
-    case 'selected': return 'ok';
-    case 'candidate': return 'warn';
-    case 'aging': return 'warn';
-    case 'rejected': return 'danger';
-    default: return 'neutral';
+  const map: Record<string, PillVariant> = { selected: 'ok', candidate: 'warn', aging: 'warn', rejected: 'danger' };
+  return map[status] ?? 'neutral';
+}
+
+// ─── Phase actions ──────────────────────────────────────────────────────────
+
+type ActionDef = { label: string; variant?: 'primary' | 'accent' | 'danger' };
+
+function phaseActions(state: ProjectFixture['state']): ActionDef[] {
+  switch (state) {
+    case 'setup_incomplete': return [{ label: 'Continue setup', variant: 'primary' }];
+    case 'ready': return [{ label: 'Generate source view', variant: 'primary' }, { label: 'Add sessions' }];
+    case 'prepared': return [{ label: 'Reveal source views', variant: 'primary' }];
+    case 'processing': return [{ label: 'Mark complete', variant: 'primary' }];
+    case 'completed': return [{ label: 'Generate cleanup plan', variant: 'primary' }, { label: 'Archive project' }];
+    case 'archived': return [{ label: 'Unarchive' }];
+    case 'blocked': return [{ label: 'Resolve block', variant: 'danger' }];
+    default: return [];
   }
 }
 
-// ─── Mock sub-data ───────────────────────────────────────────────────────────
+// ─── Lifecycle flowchart ────────────────────────────────────────────────────
+
+const LIFECYCLE_STEPS = ['setup', 'ready', 'prepared', 'processing', 'completed', 'archived'] as const;
+const stateToIdx: Record<string, number> = {
+  setup_incomplete: 0, ready: 1, prepared: 2, processing: 3, completed: 4, archived: 5, blocked: -1,
+};
+
+function LifecycleFlowchart({ currentState }: { currentState: string }) {
+  const currentIdx = stateToIdx[currentState] ?? -1;
+  const isBlocked = currentState === 'blocked';
+
+  return (
+    <div className="alm-lifecycle">
+      {LIFECYCLE_STEPS.map((step, i) => {
+        const isDone = !isBlocked && i < currentIdx;
+        const isCurrent = !isBlocked && i === currentIdx;
+
+        const dotClass = [
+          'alm-lifecycle__dot',
+          isDone && 'alm-lifecycle__dot--done',
+          isCurrent && 'alm-lifecycle__dot--active',
+          isBlocked && isCurrent && 'alm-lifecycle__dot--blocked',
+        ].filter(Boolean).join(' ');
+
+        const labelClass = [
+          'alm-lifecycle__label',
+          isDone && 'alm-lifecycle__label--done',
+          isCurrent && 'alm-lifecycle__label--active',
+        ].filter(Boolean).join(' ');
+
+        return (
+          <div key={step} className="alm-lifecycle__step">
+            <div className="alm-lifecycle__connector">
+              {i > 0 && <div className={`alm-lifecycle__line${isDone || isCurrent ? ' alm-lifecycle__line--done' : ''}`} />}
+              <div className={dotClass} />
+              {i < LIFECYCLE_STEPS.length - 1 && <div className={`alm-lifecycle__line${isDone ? ' alm-lifecycle__line--done' : ''}`} />}
+            </div>
+            <span className={labelClass}>{step}</span>
+          </div>
+        );
+      })}
+      {isBlocked && (
+        <div className="alm-lifecycle__step">
+          <div className="alm-lifecycle__connector">
+            <div className="alm-lifecycle__line" />
+            <div className="alm-lifecycle__dot alm-lifecycle__dot--blocked" />
+          </div>
+          <span className="alm-lifecycle__label" style={{ color: 'var(--alm-danger)' }}>blocked</span>
+        </div>
+      )}
+    </div>
+  );
+}
+
+// ─── Mock sub-data ──────────────────────────────────────────────────────────
 
 const SOURCE_DATA = [
   { type: 'light', name: 'NGC 7000 · Ha · 2024-11', detail: '3054 frames · 4.5h', status: 'selected' },
@@ -82,82 +121,88 @@ const SOURCE_VIEWS = [
   { name: 'wbpp_input_p2', strategy: 'symlink', files: 92, plan: 'plan #21' },
 ];
 
+const CHANNEL_DATA = [
+  { filter: 'Ha', hours: 4.5, max: 10 },
+  { filter: 'OIII', hours: 3.2, max: 10 },
+  { filter: 'SII', hours: 2.5, max: 10 },
+];
+
 const NOTES = [
   'Reduced star FWHM from 2.8 to 2.4 with drizzle',
   'Color balance adjusted per PixInsight STF',
 ];
 
-// ─── Source map columns ──────────────────────────────────────────────────────
-
-const SOURCE_COLUMNS = [
-  { key: 'type', label: 'Type', style: { width: 72 } },
-  { key: 'name', label: 'Name' },
-  { key: 'detail', label: 'Detail' },
-  { key: 'status', label: 'Status', style: { width: 96 } },
-];
-
-// ─── Props ───────────────────────────────────────────────────────────────────
+// ─── Component ──────────────────────────────────────────────────────────────
 
 export interface ProjectDetailContentProps {
   project: ProjectFixture;
 }
 
-// ─── Inner content component (used by ProjectsPage) ──────────────────────────
-
 export function ProjectDetailContent({ project }: ProjectDetailContentProps) {
   const projectPath = `D:\\Astrophotography\\Projects\\${project.name.replace(/\s·\s/g, '_').replace(/\s/g, '')}`;
+  const actions = phaseActions(project.state);
 
   return (
     <DetailPane>
       <DetailHeader
         title={project.name}
         titleExtra={
-          <span style={{ marginLeft: 8 }}>
-            <Pill variant={projectVariant(project.state)}>
-              {stateLabel(project.state)}
-            </Pill>
-          </span>
+          <Pill variant={projectVariant(project.state)}>{stateLabel(project.state)}</Pill>
         }
         subtitle={projectPath}
-        actions={<Btn size="sm">Reveal in Explorer</Btn>}
+        actions={<>
+          {actions.map(a => (
+            <Btn key={a.label} size="sm" variant={a.variant}>{a.label}</Btn>
+          ))}
+          <Btn size="sm">Reveal in Explorer</Btn>
+        </>}
       />
-
-      {/* Pipeline stats bar */}
-      <div
-        className="alm-detail__stats-bar"
-        style={{ display: 'flex', gap: 0, borderBottom: '1px solid var(--alm-color-border)' }}
-      >
-        {[
-          { label: 'Sources', value: project.sources },
-          { label: 'Views', value: project.views },
-          { label: 'On disk', value: project.size },
-          { label: 'Outputs', value: project.outputs },
-          { label: 'Integration', value: `${project.hours}h` },
-          { label: 'Profile', value: project.profile },
-          { label: 'Target', value: project.target },
-          { label: 'Notes', value: 2 },
-        ].map((stat) => (
-          <div key={stat.label} className="alm-detail__stat">
-            <span className="alm-detail__stat-value">{stat.value}</span>
-            <span className="alm-detail__stat-label">{stat.label}</span>
-          </div>
-        ))}
-      </div>
 
       {/* Blocked banner */}
       {project.state === 'blocked' && project.blockedReason && (
-        <Banner variant="danger" style={{ margin: '12px 16px 0' }}>
+        <Banner variant="danger" style={{ marginBottom: 'var(--alm-sp-3)' }}>
           {project.blockedReason}
         </Banner>
       )}
 
+      {/* Lifecycle + Stats side by side */}
+      <div style={{ display: 'grid', gridTemplateColumns: '180px 1fr', gap: 'var(--alm-sp-3)', marginBottom: 'var(--alm-sp-4)' }}>
+        <Box title="Lifecycle">
+          <LifecycleFlowchart currentState={project.state} />
+        </Box>
+        <Box title="Overview">
+          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4, 1fr)', gap: 'var(--alm-sp-3)' }}>
+            {[
+              { label: 'Sources', value: project.sources },
+              { label: 'Views', value: project.views },
+              { label: 'On disk', value: project.size },
+              { label: 'Outputs', value: project.outputs },
+              { label: 'Integration', value: `${project.hours}h` },
+              { label: 'Profile', value: project.profile },
+              { label: 'Target', value: project.target },
+              { label: 'Notes', value: NOTES.length },
+            ].map(s => (
+              <div key={s.label} className="alm-detail__stat">
+                <span className="alm-detail__stat-value">{s.value}</span>
+                <span className="alm-detail__stat-label">{s.label}</span>
+              </div>
+            ))}
+          </div>
+        </Box>
+      </div>
+
       {/* Source map */}
       <Section title="Source map" count={SOURCE_DATA.length}>
         <Table
-          columns={SOURCE_COLUMNS}
-          rows={SOURCE_DATA.map((row) => ({
+          columns={[
+            { key: 'type', label: 'Type', style: { width: 72 } },
+            { key: 'name', label: 'Name' },
+            { key: 'detail', label: 'Detail' },
+            { key: 'status', label: 'Status', style: { width: 96 } },
+          ]}
+          rows={SOURCE_DATA.map(row => ({
             type: <Pill variant={sourceTypeVariant(row.type)}>{row.type}</Pill>,
-            name: <span className="alm-mono">{row.name}</span>,
+            name: <span style={{ fontFamily: 'var(--alm-font-mono)', fontSize: 'var(--alm-text-xs)' }}>{row.name}</span>,
             detail: row.detail,
             status: <Pill variant={sourceStatusVariant(row.status)}>{row.status}</Pill>,
           }))}
@@ -174,13 +219,11 @@ export function ProjectDetailContent({ project }: ProjectDetailContentProps) {
             { key: 'plan', label: 'Plan', style: { width: 80 } },
             { key: 'actions', label: '', style: { width: 80 } },
           ]}
-          rows={SOURCE_VIEWS.map((view) => ({
-            name: (
-              <span>
-                <span className="alm-mono">{view.name}</span>{' '}
-                <Pill variant="ghost">generated</Pill>
-              </span>
-            ),
+          rows={SOURCE_VIEWS.map(view => ({
+            name: <>
+              <span style={{ fontFamily: 'var(--alm-font-mono)', fontSize: 'var(--alm-text-xs)' }}>{view.name}</span>{' '}
+              <Pill variant="ghost">generated</Pill>
+            </>,
             strategy: view.strategy,
             files: view.files,
             plan: view.plan,
@@ -189,21 +232,26 @@ export function ProjectDetailContent({ project }: ProjectDetailContentProps) {
         />
       </Section>
 
+      {/* Integration per channel */}
+      <Section title="Integration per channel">
+        <Box>
+          <div style={{ display: 'flex', flexDirection: 'column', gap: 'var(--alm-sp-2)' }}>
+            {CHANNEL_DATA.map(c => (
+              <CoverageBar key={c.filter} label={c.filter} value={c.hours} max={c.max} />
+            ))}
+          </div>
+        </Box>
+      </Section>
+
       {/* Notes */}
-      <Section
-        title="Notes"
-        count={NOTES.length}
-        right={<Btn size="sm">+ Add note</Btn>}
-      >
+      <Section title="Notes" count={NOTES.length} right={<Btn size="sm">+ Add note</Btn>}>
         {NOTES.map((note, i) => (
           <div
             key={i}
             style={{
-              display: 'flex',
-              alignItems: 'center',
-              justifyContent: 'space-between',
-              padding: '6px 16px',
-              borderBottom: i < NOTES.length - 1 ? '1px solid var(--alm-color-border)' : undefined,
+              display: 'flex', alignItems: 'center', justifyContent: 'space-between',
+              padding: '6px 0',
+              borderBottom: i < NOTES.length - 1 ? '1px solid var(--alm-border-subtle)' : undefined,
             }}
           >
             <span style={{ fontSize: 'var(--alm-text-sm)' }}>{note}</span>
@@ -218,10 +266,6 @@ export function ProjectDetailContent({ project }: ProjectDetailContentProps) {
   );
 }
 
-/**
- * Route-level component for /projects/$id.
- * Uses the first fixture project as a fallback (fixture data, no real routing).
- */
 export function ProjectDetail() {
   const project = PROJECTS_DATA[0];
   return <ProjectDetailContent project={project} />;
