@@ -1,14 +1,16 @@
 /**
- * T046 — InboxPage: full inbox session review page.
- *
- * Layout: Left (ListSidebar with InboxList), Center (SessionReview detail),
- * Right (ActionSidebar). Uses ThreePane for the three-column layout.
- * Mock data from ./mock-data — no Tauri data fetching.
+ * InboxPage -- three-pane layout using PageShell + ListDetailLayout.
+ * Left: ListSidebar with InboxList, Center: SessionReview detail,
+ * Right: ActionSidebar.
+ * Replaces ThreePane with ListDetailLayout(list, detail, sidebar).
+ * Rewritten per spec 030 composition contracts.
  */
 
 import { useState, useMemo, useCallback } from 'react';
-import { ThreePane, EmptyState } from '@/ui';
-import { ListSidebar } from '@/components';
+import { EmptyState } from '@/ui';
+import { PageShell, ListDetailLayout, ListSidebar } from '@/components';
+import type { FilterPill } from '@/components';
+import { useSetToggle } from '@/hooks/useSetToggle';
 import { InboxList } from './InboxList';
 import { SessionReview } from './SessionReview';
 import { ActionSidebar } from './ActionSidebar';
@@ -37,11 +39,11 @@ const SORT_OPTIONS = [
   { value: 'name_asc', label: 'Name (A-Z)' },
 ];
 
-const TYPE_PILLS = [
-  { value: 'light', label: 'Lights', active: false },
-  { value: 'dark', label: 'Darks', active: false },
-  { value: 'flat', label: 'Flats', active: false },
-  { value: 'bias', label: 'Bias', active: false },
+const TYPE_PILL_DEFS = [
+  { value: 'light', label: 'Lights' },
+  { value: 'dark', label: 'Darks' },
+  { value: 'flat', label: 'Flats' },
+  { value: 'bias', label: 'Bias' },
 ];
 
 function sortSessions(sessions: InboxSession[], mode: SortMode): InboxSession[] {
@@ -67,7 +69,7 @@ export function InboxPage() {
   const [searchQuery, setSearchQuery] = useState('');
   const [groupBy, setGroupBy] = useState<GroupMode>('none');
   const [sortMode, setSortMode] = useState<SortMode>('date_desc');
-  const [typeFilters, setTypeFilters] = useState<Set<string>>(new Set());
+  const [typeFilters, toggleTypeFilter] = useSetToggle<string>();
   const [filterFilter, setFilterFilter] = useState('');
   const [selectedId, setSelectedId] = useState<string | null>(null);
 
@@ -116,23 +118,14 @@ export function InboxPage() {
   }, [sessions, selectedId]);
 
   // Filter pills with active state
-  const pillState = useMemo(
+  const pillState: FilterPill[] = useMemo(
     () =>
-      TYPE_PILLS.map((p) => ({
+      TYPE_PILL_DEFS.map((p) => ({
         ...p,
         active: typeFilters.has(p.value),
       })),
     [typeFilters],
   );
-
-  const handleFilterToggle = useCallback((value: string) => {
-    setTypeFilters((prev) => {
-      const next = new Set(prev);
-      if (next.has(value)) next.delete(value);
-      else next.add(value);
-      return next;
-    });
-  }, []);
 
   const handleAction = useCallback(
     (action: InboxAction) => {
@@ -179,15 +172,8 @@ export function InboxPage() {
   );
 
   return (
-    <div className="alm-page alm-inbox-page">
-      {/* Filter select above the three-pane layout */}
-      <div className="alm-inbox-page__toolbar">
-        <FilterSelect value={filterFilter} onChange={setFilterFilter} />
-      </div>
-
-      <ThreePane
-        listWidth={280}
-        detailWidth={220}
+    <PageShell testId="InboxPage">
+      <ListDetailLayout
         list={
           <ListSidebar
             searchPlaceholder="Search inbox..."
@@ -200,9 +186,10 @@ export function InboxPage() {
             sortValue={sortMode}
             onSortChange={(v) => setSortMode(v as SortMode)}
             filterPills={pillState}
-            onFilterToggle={handleFilterToggle}
+            onFilterToggle={toggleTypeFilter}
             itemCount={sorted.length}
           >
+            <FilterSelect value={filterFilter} onChange={setFilterFilter} />
             <InboxList
               sessions={sorted}
               selectedId={selectedId}
@@ -210,7 +197,7 @@ export function InboxPage() {
             />
           </ListSidebar>
         }
-        content={
+        detail={
           selectedSession ? (
             <SessionReview session={selectedSession} />
           ) : (
@@ -220,7 +207,7 @@ export function InboxPage() {
             />
           )
         }
-        detail={
+        sidebar={
           <ActionSidebar
             hasSelection={selectedId !== null}
             onAction={handleAction}
@@ -252,6 +239,6 @@ export function InboxPage() {
           />
         </>
       )}
-    </div>
+    </PageShell>
   );
 }

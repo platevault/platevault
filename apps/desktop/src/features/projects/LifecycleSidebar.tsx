@@ -1,35 +1,22 @@
 /**
  * LifecycleSidebar -- right sidebar for projects with phase badge,
  * phase-specific actions, and quick stats.
+ * Updated per spec 030 to use shared display utilities and fix actions:
+ * - Remove "Record output", "Observe artifacts", "Edit source map"
+ * - Add "Mark sources complete", "Mark complete", "Reveal source views"
  */
 
 import { memo } from 'react';
 import type { ProjectDetail as ProjectDetailType, ProjectState } from '@/bindings/types';
 import { Pill, Btn, Section, KV } from '@/ui';
+import { projectStateVariant, projectStateLabel } from '@/lib/display';
 import { LifecycleStrip } from './LifecycleStrip';
 
 export interface LifecycleSidebarProps {
   project: ProjectDetailType;
 }
 
-function stateVariant(state: ProjectState) {
-  const map: Record<ProjectState, 'warn' | 'ghost' | 'info' | 'ok' | 'neutral' | 'danger'> = {
-    setup_incomplete: 'warn',
-    ready: 'ghost',
-    prepared: 'info',
-    processing: 'info',
-    completed: 'ok',
-    archived: 'neutral',
-    blocked: 'danger',
-  };
-  return map[state];
-}
-
-function stateLabel(state: ProjectState): string {
-  return state.replace(/_/g, ' ');
-}
-
-/** Phase-specific actions based on the current project state. */
+/** Phase-specific actions based on the current project state (per spec). */
 function phaseActions(state: ProjectState): Array<{ label: string; variant?: 'primary' | 'ghost' }> {
   switch (state) {
     case 'setup_incomplete':
@@ -40,12 +27,16 @@ function phaseActions(state: ProjectState): Array<{ label: string; variant?: 'pr
       return [
         { label: 'Generate source view', variant: 'primary' },
         { label: 'Add sessions' },
-        { label: 'Edit source map' },
+        { label: 'Mark sources complete' },
+      ];
+    case 'prepared':
+      return [
+        { label: 'Reveal source views', variant: 'primary' },
+        { label: 'Re-generate view' },
       ];
     case 'processing':
       return [
-        { label: 'Record output', variant: 'primary' },
-        { label: 'Observe artifacts' },
+        { label: 'Mark complete', variant: 'primary' },
         { label: 'Re-generate view' },
       ];
     case 'completed':
@@ -79,8 +70,8 @@ export const LifecycleSidebar = memo(function LifecycleSidebar({
       <Section title="Lifecycle">
         <div className="alm-lifecycle-sidebar__phase">
           <Pill
-            label={stateLabel(project.state)}
-            variant={stateVariant(project.state)}
+            label={projectStateLabel(project.state)}
+            variant={projectStateVariant(project.state)}
           />
         </div>
         <LifecycleStrip currentIndex={project.lifecycle_stage_index} />

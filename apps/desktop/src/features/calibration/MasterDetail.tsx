@@ -1,5 +1,5 @@
 import { useEffect } from 'react';
-import { Box, KV, Pill, Btn, Confidence, Lock, Toolbar } from '@/ui';
+import { Box, KV, Pill, Btn, Lock, Toolbar } from '@/ui';
 import {
   focusedMaster,
   masters,
@@ -57,7 +57,6 @@ export function MasterDetail({ masterId }: MasterDetailProps) {
   // For non-m-1 masters show a simpler view with available data
   const name = detail?.name ?? masterListItem.name;
   const kind = detail?.kind ?? masterListItem.kind;
-  const conf = detail?.conf ?? masterListItem.conf;
 
   return (
     <div className="alm-master-detail">
@@ -95,7 +94,6 @@ export function MasterDetail({ masterId }: MasterDetailProps) {
               variant="info"
               size="sm"
             />
-            <Confidence level={conf} />
             {masterListItem.ageDays >= 365 && (
               <Pill label="aging > 1 year" variant="danger" size="sm" />
             )}

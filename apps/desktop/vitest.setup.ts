@@ -47,6 +47,5 @@ if (typeof window !== "undefined" && typeof window.localStorage === "undefined")
 
 // Belt-and-braces: tauri-internals is intentionally not present.
 if (typeof window !== "undefined") {
-  // @ts-expect-error — testing-only stub
   delete (window as { __TAURI_INTERNALS__?: unknown }).__TAURI_INTERNALS__;
 }

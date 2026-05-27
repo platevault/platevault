@@ -21,7 +21,6 @@ import type {
   FilterBarProps,
   ToolbarProps,
   DataTableProps,
-  ThreePaneProps,
   WizardShellProps,
   EmptyStateProps,
 } from '@/ui';
@@ -39,7 +38,6 @@ import {
   FilterBar,
   Toolbar,
   DataTable,
-  ThreePane,
   WizardShell,
   EmptyState,
 } from '@/ui';
@@ -139,7 +137,6 @@ export type SmokeCheck = {
   filterBar: typeof FilterBar;
   toolbar: typeof Toolbar;
   dataTable: typeof DataTable;
-  threePane: typeof ThreePane;
   wizardShell: typeof WizardShell;
   emptyState: typeof EmptyState;
   // App
@@ -201,7 +198,6 @@ export type SmokeCheck = {
     FilterBarProps: FilterBarProps;
     ToolbarProps: ToolbarProps;
     DataTableProps: DataTableProps<unknown>;
-    ThreePaneProps: ThreePaneProps;
     WizardShellProps: WizardShellProps;
     EmptyStateProps: EmptyStateProps;
     SessionState: SessionState;

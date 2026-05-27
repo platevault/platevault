@@ -1,6 +1,9 @@
 /**
- * ProjectsPage -- list-detail-sidebar layout for projects.
- * Left: ProjectsList (ListSidebar), Center: ProjectDetail, Right: LifecycleSidebar.
+ * ProjectsPage -- three-pane layout using PageShell + ListDetailLayout.
+ * Left: ProjectsList (ListSidebar), Center: ProjectDetail,
+ * Right: LifecycleSidebar.
+ * Replaces alm-hybrid-layout divs with ListDetailLayout(list, detail, sidebar).
+ * Rewritten per spec 030 composition contracts.
  */
 
 import { useCallback, useState } from 'react';
@@ -9,6 +12,7 @@ import { useQuery, createQueryStore } from '@/data/store';
 import { listProjects } from '@/api/commands';
 import type { ProjectDetail as ProjectDetailType } from '@/bindings/types';
 import { EmptyState, Btn } from '@/ui';
+import { PageShell, ListDetailLayout } from '@/components';
 import { ProjectsList } from './ProjectsList';
 import { ProjectDetailInline } from './ProjectDetail';
 import { LifecycleSidebar } from './LifecycleSidebar';
@@ -32,28 +36,7 @@ export function ProjectsPage() {
     navigate({ to: '/projects/new' });
   }, [navigate]);
 
-  if (loading) {
-    return <div className="alm-page__loading">Loading projects...</div>;
-  }
-
   const projects = data ?? [];
-
-  if (projects.length === 0) {
-    return (
-      <div className="alm-page" data-testid="ProjectsPage">
-        <EmptyState
-          title="No projects yet"
-          description="Create a project to organize sessions, calibration masters, and outputs."
-          action={
-            <Btn variant="primary" onClick={handleNewProject}>
-              + New project
-            </Btn>
-          }
-        />
-      </div>
-    );
-  }
-
   const effectiveId = selectedId ?? projects[0]?.id;
 
   // Only show sidebar data when it belongs to the currently selected project
@@ -63,38 +46,54 @@ export function ProjectsPage() {
       : undefined;
 
   return (
-    <div className="alm-page alm-page--hybrid" data-testid="ProjectsPage">
-      <div className="alm-hybrid-layout">
-        <div className="alm-hybrid-layout__list">
+    <PageShell
+      testId="ProjectsPage"
+      loading={loading}
+      loadingMessage="Loading projects..."
+      empty={{
+        title: 'No projects yet',
+        description: 'Create a project to organize sessions, calibration masters, and outputs.',
+        action: (
+          <Btn variant="primary" onClick={handleNewProject}>
+            + New project
+          </Btn>
+        ),
+      }}
+      hasData={projects.length > 0}
+    >
+      <ListDetailLayout
+        list={
           <ProjectsList
             projects={projects}
             selectedId={effectiveId}
             onSelect={setSelectedId}
             onNewProject={handleNewProject}
           />
-        </div>
-        <div className="alm-hybrid-layout__content">
-          {effectiveId ? (
+        }
+        detail={
+          effectiveId ? (
             <ProjectDetailInline
               projectId={effectiveId}
               onProjectLoaded={handleProjectLoaded}
             />
           ) : (
-            <div className="alm-page__empty">Select a project to view details</div>
-          )}
-        </div>
-        <div className="alm-hybrid-layout__sidebar">
-          {sidebarProject ? (
+            <EmptyState
+              title="Select a project"
+              description="Choose a project from the list to view its details."
+            />
+          )
+        }
+        sidebar={
+          sidebarProject ? (
             <LifecycleSidebar project={sidebarProject} />
           ) : (
-            <div className="alm-page__empty">
-              {effectiveId
-                ? 'Loading sidebar...'
-                : 'Select a project to view lifecycle details'}
-            </div>
-          )}
-        </div>
-      </div>
-    </div>
+            <EmptyState
+              title={effectiveId ? 'Loading...' : 'Select a project'}
+              description={effectiveId ? undefined : 'Choose a project to view lifecycle details.'}
+            />
+          )
+        }
+      />
+    </PageShell>
   );
 }

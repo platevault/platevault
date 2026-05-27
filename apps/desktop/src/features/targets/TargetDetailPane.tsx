@@ -11,9 +11,11 @@ import {
   createParameterizedStore,
 } from '@/data/store';
 import { getTarget } from '@/api/commands';
-import type { TargetDetail as TargetDetailType, AcquisitionSession, ProjectState } from '@/bindings/types';
+import type { TargetDetail as TargetDetailType, AcquisitionSession } from '@/bindings/types';
 import { Select } from '@base-ui-components/react/select';
 import { KV, Pill, Btn, Box, Section } from '@/ui';
+import { formatIntegration } from '@/lib/format';
+import { sessionStateVariant, sessionStateLabel, projectStateVariant, projectStateLabel } from '@/lib/display';
 import { CoverageChart } from './CoverageChart';
 
 const targetDetailStore = createParameterizedStore((id: string) =>
@@ -25,39 +27,7 @@ export interface TargetDetailPaneProps {
 }
 
 function formatHours(seconds: number): string {
-  const h = (seconds / 3600).toFixed(1);
-  return `${h}h`;
-}
-
-function stateVariant(state: string) {
-  switch (state) {
-    case 'confirmed':
-      return 'ok' as const;
-    case 'needs_review':
-      return 'warn' as const;
-    case 'rejected':
-      return 'danger' as const;
-    case 'discovered':
-      return 'info' as const;
-    default:
-      return 'neutral' as const;
-  }
-}
-
-function projectStateVariant(state: ProjectState) {
-  switch (state) {
-    case 'completed':
-      return 'ok' as const;
-    case 'blocked':
-      return 'danger' as const;
-    case 'processing':
-      return 'info' as const;
-    case 'ready':
-    case 'prepared':
-      return 'ghost' as const;
-    default:
-      return 'neutral' as const;
-  }
+  return formatIntegration(seconds);
 }
 
 function formatKind(kind: string): string {
@@ -249,8 +219,8 @@ export function TargetDetailPane({ targetId }: TargetDetailPaneProps) {
                       <td className="alm-mono">{formatHours(s.total_integration_seconds)}</td>
                       <td>
                         <Pill
-                          label={s.state === 'needs_review' ? 'needs review' : s.state}
-                          variant={stateVariant(s.state)}
+                          label={sessionStateLabel(s.state)}
+                          variant={sessionStateVariant(s.state)}
                           size="sm"
                         />
                       </td>
@@ -292,7 +262,7 @@ export function TargetDetailPane({ targetId }: TargetDetailPaneProps) {
                     <td>PixInsight/WBPP</td>
                     <td>
                       <Pill
-                        label={p.state.replace(/_/g, ' ')}
+                        label={projectStateLabel(p.state)}
                         variant={projectStateVariant(p.state)}
                         size="sm"
                       />

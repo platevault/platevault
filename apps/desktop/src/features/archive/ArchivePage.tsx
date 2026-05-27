@@ -1,9 +1,22 @@
+/**
+ * ArchivePage -- two-pane layout using PageShell + ListDetailLayout.
+ * TopActionBar ABOVE the split with Re-queue and Delete permanently actions.
+ * Uses ListItem for list rows.
+ * Rewritten per spec 030 composition contracts.
+ */
+
 import { useState, useMemo } from 'react';
-import { ListSidebar } from '@/components';
-import { TopActionBar } from '@/components';
-import { ConfirmOverlay } from '@/components';
-import type { ActionDef } from '@/components';
 import { EmptyState } from '@/ui';
+import {
+  PageShell,
+  ListDetailLayout,
+  TopActionBar,
+  ListSidebar,
+  ListItem,
+  ConfirmOverlay,
+} from '@/components';
+import type { ActionDef, SelectOption } from '@/components';
+import { formatBytes } from '@/lib/format';
 
 interface ArchivedItem {
   id: string;
@@ -13,12 +26,12 @@ interface ArchivedItem {
   sizeBytes: number;
 }
 
-const GROUP_OPTIONS = [
+const GROUP_OPTIONS: SelectOption[] = [
   { value: 'type', label: 'Type' },
   { value: 'date', label: 'Archive date' },
 ];
 
-const SORT_OPTIONS = [
+const SORT_OPTIONS: SelectOption[] = [
   { value: 'date-desc', label: 'Newest first' },
   { value: 'date-asc', label: 'Oldest first' },
   { value: 'name-asc', label: 'Name A–Z' },
@@ -56,7 +69,7 @@ export function ArchivePage() {
       },
     },
     {
-      label: 'Delete',
+      label: 'Delete permanently',
       hotkey: 'Del',
       variant: 'danger',
       disabled: !selected,
@@ -65,49 +78,61 @@ export function ArchivePage() {
   ];
 
   return (
-    <div className="alm-archive-page">
-      <ListSidebar
-        searchPlaceholder="Search archive…"
-        searchValue={search}
-        onSearchChange={setSearch}
-        groupOptions={GROUP_OPTIONS}
-        groupValue={groupBy}
-        onGroupChange={setGroupBy}
-        sortOptions={SORT_OPTIONS}
-        sortValue={sortBy}
-        onSortChange={setSortBy}
-        itemCount={filtered.length}
-      >
-        {filtered.length === 0 ? (
-          <EmptyState title="No archived items" />
-        ) : (
-          filtered.map((item) => (
-            <button
-              key={item.id}
-              type="button"
-              className={`alm-archive-page__item ${selectedId === item.id ? 'alm-archive-page__item--selected' : ''}`}
-              onClick={() => setSelectedId(item.id)}
-            >
-              <span className="alm-archive-page__item-name">{item.name}</span>
-              <span className="alm-archive-page__item-type">{item.entityType}</span>
-            </button>
-          ))
-        )}
-      </ListSidebar>
-
-      <div className="alm-archive-page__detail">
-        <TopActionBar title="Archive" actions={actions} />
-        {selected ? (
-          <div className="alm-archive-page__detail-content">
-            <h2 className="alm-archive-page__detail-name">{selected.name}</h2>
-            <p className="alm-archive-page__detail-meta">
-              Archived: {selected.archivedAt}
-            </p>
-          </div>
-        ) : (
-          <EmptyState title="Select an archived item" />
-        )}
-      </div>
+    <PageShell testId="ArchivePage">
+      <ListDetailLayout
+        topBar={
+          <TopActionBar title="Archive" actions={actions} />
+        }
+        list={
+          <ListSidebar
+            searchPlaceholder="Search archive..."
+            searchValue={search}
+            onSearchChange={setSearch}
+            groupOptions={GROUP_OPTIONS}
+            groupValue={groupBy}
+            onGroupChange={setGroupBy}
+            sortOptions={SORT_OPTIONS}
+            sortValue={sortBy}
+            onSortChange={setSortBy}
+            itemCount={filtered.length}
+          >
+            {filtered.length === 0 ? (
+              <EmptyState title="No archived items" />
+            ) : (
+              filtered.map((item) => (
+                <ListItem
+                  key={item.id}
+                  id={item.id}
+                  selected={selectedId === item.id}
+                  onSelect={setSelectedId}
+                >
+                  <div className="alm-list-item__row">
+                    <span className="alm-list-item__name">{item.name}</span>
+                    <span className="alm-list-item__badge">{item.entityType}</span>
+                  </div>
+                  <div className="alm-list-item__meta">
+                    <span>{item.archivedAt}</span>
+                    <span className="alm-list-item__dot" />
+                    <span>{formatBytes(item.sizeBytes)}</span>
+                  </div>
+                </ListItem>
+              ))
+            )}
+          </ListSidebar>
+        }
+        detail={
+          selected ? (
+            <div className="alm-archive-detail">
+              <h2 className="alm-archive-detail__name">{selected.name}</h2>
+              <p className="alm-archive-detail__meta">
+                Archived: {selected.archivedAt}
+              </p>
+            </div>
+          ) : (
+            <EmptyState title="Select an archived item" />
+          )
+        }
+      />
 
       <ConfirmOverlay
         open={confirmDelete}
@@ -121,6 +146,6 @@ export function ArchivePage() {
         confirmLabel="Delete permanently"
         confirmVariant="danger"
       />
-    </div>
+    </PageShell>
   );
 }

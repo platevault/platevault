@@ -1,13 +1,24 @@
+/**
+ * SessionsList -- uses the standard ListSidebar component for consistent
+ * search, group, sort, filter pill layout across all list-detail screens.
+ * Rewritten per spec 030 to remove Confidence, inline formatIntegration,
+ * inline stateVariant/stateLabel, and manual set-toggle patterns.
+ */
+
 import { useMemo, useState } from 'react';
-import { clsx } from 'clsx';
 import type { AcquisitionSession, AppPreferences } from '@/bindings/types';
-import { Pill, Confidence, Btn } from '@/ui';
+import { Pill } from '@/ui';
+import { ListSidebar, ListItem } from '@/components';
+import type { SelectOption, FilterPill, DropdownDef } from '@/components';
 import { usePreference } from '@/data/preferences';
+import { formatIntegration } from '@/lib/format';
+import { sessionStateVariant, sessionStateLabel } from '@/lib/display';
+import { useSetToggle } from '@/hooks/useSetToggle';
 
 type GroupByMode = AppPreferences['sessionsGroupBy'];
 type SortMode = 'date_desc' | 'confidence_asc' | 'integration_desc';
 
-const GROUP_MODES: Array<{ value: GroupByMode; label: string }> = [
+const GROUP_OPTIONS: SelectOption[] = [
   { value: 'none', label: 'None' },
   { value: 'target', label: 'Target' },
   { value: 'month', label: 'Month' },
@@ -15,9 +26,8 @@ const GROUP_MODES: Array<{ value: GroupByMode; label: string }> = [
   { value: 'train', label: 'Optical Train' },
 ];
 
-const SORT_MODES: Array<{ value: SortMode; label: string }> = [
+const SORT_OPTIONS: SelectOption[] = [
   { value: 'date_desc', label: 'Date (newest)' },
-  { value: 'confidence_asc', label: 'Confidence (lowest)' },
   { value: 'integration_desc', label: 'Integration (most)' },
 ];
 
@@ -29,39 +39,6 @@ const STATE_FILTERS = [
   'rejected',
   'ignored',
 ] as const;
-
-function stateVariant(state: string) {
-  switch (state) {
-    case 'confirmed': return 'ok' as const;
-    case 'needs_review': return 'warn' as const;
-    case 'rejected': return 'danger' as const;
-    case 'discovered': return 'info' as const;
-    default: return 'neutral' as const;
-  }
-}
-
-function stateLabel(state: string): string {
-  switch (state) {
-    case 'needs_review': return 'needs review';
-    default: return state;
-  }
-}
-
-function formatIntegration(seconds: number): string {
-  const h = Math.floor(seconds / 3600);
-  const m = Math.floor((seconds % 3600) / 60);
-  if (h > 0) return `${h}h ${m}m`;
-  return `${m}m`;
-}
-
-const CONFIDENCE_ORDER: Record<string, number> = {
-  unknown: 0,
-  rejected: 1,
-  low: 2,
-  medium: 3,
-  high: 4,
-  confirmed: 5,
-};
 
 function groupKeyFor(session: AcquisitionSession, groupBy: GroupByMode): string {
   switch (groupBy) {
@@ -83,11 +60,11 @@ export function SessionsList({ sessions, selectedId, onSelect }: SessionsListPro
   const [searchQuery, setSearchQuery] = useState('');
   const [groupBy, setGroupBy] = usePreference('sessionsGroupBy');
   const [sortMode, setSortMode] = useState<SortMode>('date_desc');
-  const [stateFilter, setStateFilter] = useState<Set<string>>(new Set());
-  const [filterFilter, setFilterFilter] = useState<string | null>(null);
-  const [trainFilter, setTrainFilter] = useState<string | null>(null);
+  const [stateFilter, toggleState] = useSetToggle<string>();
+  const [filterFilter, setFilterFilter] = useState<string>('');
+  const [trainFilter, setTrainFilter] = useState<string>('');
 
-  // Unique values for filter chips
+  // Unique values for filter dropdowns
   const filterNames = useMemo(() => {
     const set = new Set(sessions.map((s) => s.session_key.filter));
     return Array.from(set).sort();
@@ -134,12 +111,6 @@ export function SessionsList({ sessions, selectedId, onSelect }: SessionsListPro
       case 'date_desc':
         arr.sort((a, b) => b.session_key.night.localeCompare(a.session_key.night));
         break;
-      case 'confidence_asc':
-        arr.sort(
-          (a, b) =>
-            (CONFIDENCE_ORDER[a.confidence] ?? 0) - (CONFIDENCE_ORDER[b.confidence] ?? 0),
-        );
-        break;
       case 'integration_desc':
         arr.sort((a, b) => b.total_integration_seconds - a.total_integration_seconds);
         break;
@@ -160,16 +131,34 @@ export function SessionsList({ sessions, selectedId, onSelect }: SessionsListPro
     return Array.from(map.entries()).map(([key, items]) => ({ key, items }));
   }, [sorted, groupBy]);
 
-  const toggleState = (state: string) => {
-    setStateFilter((prev) => {
-      const next = new Set(prev);
-      if (next.has(state)) next.delete(state);
-      else next.add(state);
-      return next;
-    });
-  };
+  // Filter pills for state
+  const filterPills: FilterPill[] = STATE_FILTERS.map((state) => ({
+    value: state,
+    label: sessionStateLabel(state),
+    active: stateFilter.has(state),
+  }));
 
-  const hasActiveFilters = stateFilter.size > 0 || filterFilter !== null || trainFilter !== null;
+  // Dropdown defs for filter name and optical train
+  const dropdowns: DropdownDef[] = [
+    {
+      label: 'Filter name',
+      value: filterFilter || 'all',
+      options: [
+        { value: 'all', label: 'All filters' },
+        ...filterNames.map((f) => ({ value: f, label: f })),
+      ],
+      onChange: (v) => setFilterFilter(v === 'all' ? '' : v),
+    },
+    {
+      label: 'Optical train',
+      value: trainFilter || 'all',
+      options: [
+        { value: 'all', label: 'All trains' },
+        ...trainIds.map((t) => ({ value: t, label: `${t.slice(0, 8)}...` })),
+      ],
+      onChange: (v) => setTrainFilter(v === 'all' ? '' : v),
+    },
+  ];
 
   // Track the first reviewable session so we can tag it for the guided tour.
   const firstTourId = useMemo(() => {
@@ -179,173 +168,74 @@ export function SessionsList({ sessions, selectedId, onSelect }: SessionsListPro
   }, [sorted]);
 
   return (
-    <div className="alm-session-list">
-      {/* Search */}
-      <div className="alm-session-list__search">
-        <input
-          type="text"
-          className="alm-session-list__input"
-          placeholder="Search target, filter, train..."
-          value={searchQuery}
-          onChange={(e) => setSearchQuery(e.target.value)}
-          aria-label="Search sessions"
-        />
-      </div>
-
-      {/* Controls: group + sort */}
-      <div className="alm-session-list__controls">
-        <div className="alm-session-list__control-row">
-          <span className="alm-session-list__control-label">Group:</span>
-          <select
-            className="alm-select--sm alm-session-list__select"
-            value={groupBy}
-            onChange={(e) => setGroupBy(e.target.value as GroupByMode)}
-            aria-label="Group sessions by"
-          >
-            {GROUP_MODES.map((m) => (
-              <option key={m.value} value={m.value}>{m.label}</option>
-            ))}
-          </select>
-        </div>
-        <div className="alm-session-list__control-row">
-          <span className="alm-session-list__control-label">Sort:</span>
-          <select
-            className="alm-select--sm alm-session-list__select"
-            value={sortMode}
-            onChange={(e) => setSortMode(e.target.value as SortMode)}
-            aria-label="Sort sessions by"
-          >
-            {SORT_MODES.map((m) => (
-              <option key={m.value} value={m.value}>{m.label}</option>
-            ))}
-          </select>
-        </div>
-      </div>
-
-      {/* Filter chips */}
-      <div className="alm-session-list__filters">
-        <div className="alm-session-list__filter-group">
-          {STATE_FILTERS.map((state) => (
-            <button
-              key={state}
-              type="button"
-              className={clsx(
-                'alm-filter-chip alm-filter-chip--xs',
-                stateFilter.has(state) && 'alm-filter-chip--active',
-              )}
-              onClick={() => toggleState(state)}
-              aria-pressed={stateFilter.has(state)}
+    <ListSidebar
+      searchPlaceholder="Search target, filter, train..."
+      searchValue={searchQuery}
+      onSearchChange={setSearchQuery}
+      groupOptions={GROUP_OPTIONS}
+      groupValue={groupBy}
+      onGroupChange={(v) => setGroupBy(v as GroupByMode)}
+      sortOptions={SORT_OPTIONS}
+      sortValue={sortMode}
+      onSortChange={(v) => setSortMode(v as SortMode)}
+      filterPills={filterPills}
+      onFilterToggle={toggleState}
+      dropdowns={dropdowns}
+      itemCount={sorted.length}
+    >
+      {sorted.length === 0 && (
+        <div className="alm-list-sidebar__empty">No sessions match filters</div>
+      )}
+      {grouped.map((group) => (
+        <div key={group.key || '__all'} role="presentation">
+          {group.key && (
+            <div className="alm-list-sidebar__group-header" role="presentation">
+              {group.key}
+            </div>
+          )}
+          {group.items.map((session) => (
+            <ListItem
+              key={session.id}
+              id={session.id}
+              selected={selectedId === session.id}
+              onSelect={onSelect}
+              {...(session.id === firstTourId ? { 'data-tour': 'first-session' } as Record<string, string> : undefined)}
             >
-              {stateLabel(state)}
-            </button>
+              <div className="alm-list-item__row">
+                <span className="alm-list-item__name">
+                  {session.session_key.target}
+                </span>
+                <Pill
+                  label={session.session_key.filter}
+                  variant="ghost"
+                  size="sm"
+                />
+                {session.warnings.length > 0 && (
+                  <span
+                    className="alm-list-item__warn"
+                    title={session.warnings.join('\n')}
+                  >
+                    &#x26A0;
+                  </span>
+                )}
+              </div>
+              <div className="alm-list-item__meta">
+                <span className="alm-mono">{session.session_key.night}</span>
+                <span className="alm-list-item__dot" />
+                <span className="alm-mono">
+                  {formatIntegration(session.total_integration_seconds)}
+                </span>
+                <span className="alm-list-item__dot" />
+                <Pill
+                  label={sessionStateLabel(session.state)}
+                  variant={sessionStateVariant(session.state)}
+                  size="sm"
+                />
+              </div>
+            </ListItem>
           ))}
         </div>
-        <div className="alm-session-list__filter-group">
-          <select
-            className="alm-select--sm alm-session-list__select"
-            value={filterFilter ?? ''}
-            onChange={(e) => setFilterFilter(e.target.value || null)}
-            aria-label="Filter by filter name"
-          >
-            <option value="">All filters</option>
-            {filterNames.map((f) => (
-              <option key={f} value={f}>{f}</option>
-            ))}
-          </select>
-          <select
-            className="alm-select--sm alm-session-list__select"
-            value={trainFilter ?? ''}
-            onChange={(e) => setTrainFilter(e.target.value || null)}
-            aria-label="Filter by optical train"
-          >
-            <option value="">All trains</option>
-            {trainIds.map((t) => (
-              <option key={t} value={t}>{t.slice(0, 8)}...</option>
-            ))}
-          </select>
-        </div>
-        {hasActiveFilters && (
-          <Btn
-            size="sm"
-            variant="ghost"
-            onClick={() => {
-              setStateFilter(new Set());
-              setFilterFilter(null);
-              setTrainFilter(null);
-            }}
-          >
-            Clear filters
-          </Btn>
-        )}
-      </div>
-
-      {/* Count */}
-      <div className="alm-session-list__count">
-        {sorted.length} session{sorted.length !== 1 ? 's' : ''}
-      </div>
-
-      {/* Session items */}
-      <div className="alm-session-list__items" role="listbox" aria-label="Session list">
-        {sorted.length === 0 && (
-          <div className="alm-session-list__empty">No sessions match filters</div>
-        )}
-        {grouped.map((group) => (
-          <div key={group.key || '__all'}>
-            {group.key && (
-              <div className="alm-session-list__group-header">{group.key}</div>
-            )}
-            {group.items.map((session) => (
-              <button
-                key={session.id}
-                type="button"
-                role="option"
-                aria-selected={selectedId === session.id}
-                className={clsx(
-                  'alm-session-list__item',
-                  selectedId === session.id && 'alm-session-list__item--selected',
-                )}
-                onClick={() => onSelect(session.id)}
-                {...(session.id === firstTourId ? { 'data-tour': 'first-session' } : undefined)}
-              >
-                <div className="alm-session-list__item-top">
-                  <span className="alm-session-list__item-target">
-                    {session.session_key.target}
-                  </span>
-                  <Pill
-                    label={session.session_key.filter}
-                    variant="ghost"
-                    size="sm"
-                  />
-                  {session.warnings.length > 0 && (
-                    <span
-                      className="alm-session-list__item-warn"
-                      title={session.warnings.join('\n')}
-                    >
-                      &#x26A0;
-                    </span>
-                  )}
-                </div>
-                <div className="alm-session-list__item-meta">
-                  <span className="alm-mono">{session.session_key.night}</span>
-                  <span className="alm-session-list__item-dot" />
-                  <span className="alm-mono">
-                    {formatIntegration(session.total_integration_seconds)}
-                  </span>
-                  <span className="alm-session-list__item-dot" />
-                  <Pill
-                    label={stateLabel(session.state)}
-                    variant={stateVariant(session.state)}
-                    size="sm"
-                  />
-                </div>
-                <div className="alm-session-list__item-confidence">
-                  <Confidence level={session.confidence} />
-                </div>
-              </button>
-            ))}
-          </div>
-        ))}
-      </div>
-    </div>
+      ))}
+    </ListSidebar>
   );
 }
