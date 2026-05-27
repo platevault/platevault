@@ -6,20 +6,14 @@
 import { memo } from 'react';
 import { clsx } from 'clsx';
 import type { ProjectArtifactGroup } from '@/bindings/types';
-import { Pill, Confidence, Btn } from '@/ui';
+import { Pill, Btn } from '@/ui';
+import { formatBytes } from '@/lib/format';
 
 export interface CleanupPlanProps {
   artifacts: ProjectArtifactGroup[];
   cleanupLabel: string;
 }
 
-function formatBytes(bytes: number): string {
-  if (bytes === 0) return '0 B';
-  const units = ['B', 'KB', 'MB', 'GB', 'TB'];
-  const i = Math.floor(Math.log(bytes) / Math.log(1024));
-  const value = bytes / Math.pow(1024, i);
-  return `${value.toFixed(value < 10 && i > 0 ? 1 : 0)} ${units[i]}`;
-}
 
 function eligibilityVariant(eligibility: ProjectArtifactGroup['cleanup_eligibility']) {
   switch (eligibility) {
@@ -55,7 +49,6 @@ export const CleanupPlan = memo(function CleanupPlan({
           <span className="alm-cleanup-plan__cell alm-cleanup-plan__cell--count" role="columnheader">Count</span>
           <span className="alm-cleanup-plan__cell alm-cleanup-plan__cell--size" role="columnheader">Size</span>
           <span className="alm-cleanup-plan__cell alm-cleanup-plan__cell--eligibility" role="columnheader">Eligibility</span>
-          <span className="alm-cleanup-plan__cell alm-cleanup-plan__cell--confidence" role="columnheader">Confidence</span>
           <span className="alm-cleanup-plan__cell alm-cleanup-plan__cell--tool" role="columnheader">Tool</span>
         </div>
         {artifacts.map((artifact) => (
@@ -88,9 +81,6 @@ export const CleanupPlan = memo(function CleanupPlan({
                 variant={eligibilityVariant(artifact.cleanup_eligibility)}
                 size="sm"
               />
-            </span>
-            <span className="alm-cleanup-plan__cell alm-cleanup-plan__cell--confidence" role="cell">
-              <Confidence level={artifact.confidence} />
             </span>
             <span className="alm-cleanup-plan__cell alm-cleanup-plan__cell--tool alm-mono" role="cell">
               {artifact.tool}

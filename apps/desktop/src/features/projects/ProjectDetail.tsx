@@ -10,6 +10,7 @@ import { useParameterizedQuery, createParameterizedStore } from '@/data/store';
 import { getProject } from '@/api/commands';
 import type { ProjectDetail as ProjectDetailType, ProjectState } from '@/bindings/types';
 import { Pill, Btn, Section } from '@/ui';
+import { projectStateVariant, projectStateLabel } from '@/lib/display';
 import { PipelineStatsBar } from './PipelineStatsBar';
 import { SourceMap } from './SourceMap';
 import { SourceViewStatus } from './SourceViewStatus';
@@ -20,22 +21,6 @@ const projectStore = createParameterizedStore<string, ProjectDetailType>((id) =>
   getProject({ id }),
 );
 
-function stateVariant(state: ProjectState) {
-  const map: Record<ProjectState, 'warn' | 'ghost' | 'info' | 'ok' | 'neutral' | 'danger'> = {
-    setup_incomplete: 'warn',
-    ready: 'ghost',
-    prepared: 'info',
-    processing: 'info',
-    completed: 'ok',
-    archived: 'neutral',
-    blocked: 'danger',
-  };
-  return map[state];
-}
-
-function stateLabel(state: ProjectState): string {
-  return state.replace(/_/g, ' ');
-}
 
 // Phases where source map editing is allowed
 const EDITABLE_PHASES = new Set<ProjectState>(['setup_incomplete', 'ready']);
@@ -54,8 +39,8 @@ function ProjectDetailContent({ project }: ProjectDetailContentProps) {
         <div className="alm-project-detail__header-left">
           <h2 className="alm-project-detail__name">{project.name}</h2>
           <Pill
-            label={stateLabel(project.state)}
-            variant={stateVariant(project.state)}
+            label={projectStateLabel(project.state)}
+            variant={projectStateVariant(project.state)}
             size="sm"
           />
         </div>

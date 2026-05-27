@@ -1,12 +1,11 @@
 import type { AcquisitionSession } from '@/bindings/types';
-import type { ConfidenceLevel } from '@/bindings/types';
-import { Pill, Confidence, Btn } from '@/ui';
+import { Pill, Btn } from '@/ui';
 
 /** Fixture calibration matches for the inspector sidebar */
 const CAL_MATCHES = [
-  { kind: 'Master Dark', score: 0.92, conf: 'high' as ConfidenceLevel, decision: 'accepted' as const },
-  { kind: 'Master Flat', score: 0.88, conf: 'high' as ConfidenceLevel, decision: 'accepted' as const },
-  { kind: 'Master Bias', score: 0.71, conf: 'medium' as ConfidenceLevel, decision: 'undecided' as const },
+  { kind: 'Master Dark', score: 0.92, decision: 'accepted' as const },
+  { kind: 'Master Flat', score: 0.88, decision: 'accepted' as const },
+  { kind: 'Master Bias', score: 0.71, decision: 'undecided' as const },
 ];
 
 interface SessionInspectorProps {
@@ -50,7 +49,7 @@ export function SessionInspector({
               <span className="alm-session-inspector__prov-origin">
                 {meta.origin === 'reviewed' ? '●' : meta.origin === 'inferred' ? '◐' : '○'}
               </span>
-              <Confidence level={meta.confidence} />
+              <Pill label={meta.confidence} variant="ghost" size="sm" />
             </div>
           ))}
         </div>
@@ -86,7 +85,6 @@ export function SessionInspector({
               </span>
             </div>
             <div style={{ marginTop: 3, display: 'flex', alignItems: 'center', gap: 6 }}>
-              <Confidence level={c.conf} />
               {c.decision === 'accepted' ? (
                 <Pill label="accepted" variant="ok" size="sm" />
               ) : (

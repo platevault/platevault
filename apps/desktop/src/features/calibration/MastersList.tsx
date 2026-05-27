@@ -1,7 +1,15 @@
+/**
+ * MastersList -- uses the standard ListSidebar + ListItem components for
+ * consistent search, group, sort, filter pill layout.
+ * Rewritten per spec 030 to remove native <select>, manual set-toggle,
+ * inline styles, and custom list item markup.
+ */
+
 import { useState, useMemo } from 'react';
-import { clsx } from 'clsx';
 import type { CalibrationMasterFixture } from '@/data/fixtures/calibration';
-import { Btn } from '@/ui';
+import { ListSidebar, ListItem } from '@/components';
+import type { SelectOption, FilterPill } from '@/components';
+import { useSetToggle } from '@/hooks/useSetToggle';
 
 export interface MastersListProps {
   masters: CalibrationMasterFixture[];
@@ -24,17 +32,25 @@ const KIND_LABELS: Record<string, string> = {
   bias: 'Bias',
 };
 
-const SORT_MODES: Array<{ value: SortBy; label: string }> = [
+const GROUP_OPTIONS: SelectOption[] = [
+  { value: 'kind', label: 'Kind' },
+  { value: 'camera', label: 'Camera' },
+  { value: 'age', label: 'Age' },
+  { value: 'none', label: 'None' },
+];
+
+const SORT_OPTIONS: SelectOption[] = [
   { value: 'name', label: 'Name' },
   { value: 'age', label: 'Age' },
   { value: 'sessions', label: 'Sessions' },
 ];
 
-const KIND_FILTER_OPTIONS = [
-  { key: 'dark', label: 'Darks' },
-  { key: 'flat', label: 'Flats' },
-  { key: 'bias', label: 'Bias' },
-] as const;
+const KIND_FILTER_PILLS: { value: string; label: string }[] = [
+  { value: 'dark', label: 'Darks' },
+  { value: 'flat', label: 'Flats' },
+  { value: 'bias', label: 'Bias' },
+  { value: 'aging', label: 'Aging (>90d)' },
+];
 
 // ─── Helpers ─────────────────────────────────────────────────────────────────
 
@@ -100,11 +116,6 @@ function groupMasters(
 
 // ─── Component ───────────────────────────────────────────────────────────────
 
-/**
- * Left pane: grouped master list with kind headers, mono names,
- * exposure/gain/camera metadata, and aging warnings.
- * Matches wireframe: calibration.jsx listPane.
- */
 export function MastersList({
   masters,
   selectedId,
@@ -114,13 +125,7 @@ export function MastersList({
 }: MastersListProps) {
   const [search, setSearch] = useState('');
   const [sortBy, setSortBy] = useState<SortBy>('name');
-  const [kindFilter, setKindFilter] = useState<Set<string>>(new Set());
-  const [agingOnly, setAgingOnly] = useState(false);
-
-  // Derived counts for header
-  const totalDarks = useMemo(() => masters.filter((m) => m.kind === 'dark').length, [masters]);
-  const totalFlats = useMemo(() => masters.filter((m) => m.kind === 'flat').length, [masters]);
-  const totalBias = useMemo(() => masters.filter((m) => m.kind === 'bias').length, [masters]);
+  const [kindFilter, toggleKind] = useSetToggle<string>();
 
   // Filter
   const filtered = useMemo(() => {
@@ -135,8 +140,19 @@ export function MastersList({
       );
     }
 
-    if (kindFilter.size > 0) {
-      result = result.filter((m) => kindFilter.has(m.kind));
+    // Kind filters (dark, flat, bias)
+    const kindFilterValues = new Set<string>();
+    let agingOnly = false;
+    for (const v of kindFilter) {
+      if (v === 'aging') {
+        agingOnly = true;
+      } else {
+        kindFilterValues.add(v);
+      }
+    }
+
+    if (kindFilterValues.size > 0) {
+      result = result.filter((m) => kindFilterValues.has(m.kind));
     }
 
     if (agingOnly) {
@@ -144,170 +160,72 @@ export function MastersList({
     }
 
     return result;
-  }, [masters, search, kindFilter, agingOnly]);
+  }, [masters, search, kindFilter]);
 
   // Sort then group
   const sorted = useMemo(() => sortMasters(filtered, sortBy), [filtered, sortBy]);
   const groups = useMemo(() => groupMasters(sorted, groupValue), [sorted, groupValue]);
 
-  const toggleKind = (kind: string) => {
-    setKindFilter((prev) => {
-      const next = new Set(prev);
-      if (next.has(kind)) next.delete(kind);
-      else next.add(kind);
-      return next;
-    });
-  };
-
-  const hasActiveFilters = kindFilter.size > 0 || agingOnly;
+  // Filter pills
+  const filterPills: FilterPill[] = KIND_FILTER_PILLS.map((f) => ({
+    value: f.value,
+    label: f.label,
+    active: kindFilter.has(f.value),
+  }));
 
   return (
-    <nav className="alm-masters-list" aria-label="Calibration masters">
-      {/* Header */}
-      <div className="alm-masters-list__header">
-        <div className="alm-masters-list__title">Calibration masters</div>
-        <div className="alm-masters-list__counts">
-          {masters.length} masters · {totalDarks} darks · {totalFlats} flats · {totalBias} bias
-        </div>
-      </div>
-
-      {/* Search */}
-      <div className="alm-masters-list__group-bar">
-        <input
-          type="search"
-          placeholder="Search name, camera..."
-          value={search}
-          onChange={(e) => setSearch(e.target.value)}
-          className="alm-masters-list__group-select"
-          aria-label="Search calibration masters"
-        />
-      </div>
-
-      {/* Controls: group + sort */}
-      <div className="alm-proj-list__controls">
-        <label className="alm-proj-list__control-label">
-          <span className="alm-proj-list__control-text">Group</span>
-          <select
-            className="alm-proj-list__select"
-            value={groupValue}
-            onChange={(e) => onGroupChange(e.target.value)}
-            aria-label="Group calibration masters by"
-          >
-            <option value="kind">Kind</option>
-            <option value="camera">Camera</option>
-            <option value="age">Age</option>
-            <option value="none">None</option>
-          </select>
-        </label>
-        <label className="alm-proj-list__control-label">
-          <span className="alm-proj-list__control-text">Sort</span>
-          <select
-            className="alm-proj-list__select"
-            value={sortBy}
-            onChange={(e) => setSortBy(e.target.value as SortBy)}
-            aria-label="Sort calibration masters by"
-          >
-            {SORT_MODES.map((m) => (
-              <option key={m.value} value={m.value}>{m.label}</option>
-            ))}
-          </select>
-        </label>
-      </div>
-
-      {/* Filter chips */}
-      <div className="alm-proj-list__chips">
-        {KIND_FILTER_OPTIONS.map((f) => (
-          <button
-            key={f.key}
-            type="button"
-            className={clsx(
-              'alm-filter-chip alm-filter-chip--xs',
-              kindFilter.has(f.key) && 'alm-filter-chip--active',
-            )}
-            onClick={() => toggleKind(f.key)}
-            aria-pressed={kindFilter.has(f.key)}
-            aria-label={`Filter by ${f.label}`}
-          >
-            {f.label}
-          </button>
-        ))}
-        <button
-          type="button"
-          className={clsx(
-            'alm-filter-chip alm-filter-chip--xs',
-            agingOnly && 'alm-filter-chip--active',
-          )}
-          onClick={() => setAgingOnly((v) => !v)}
-          aria-pressed={agingOnly}
-          aria-label="Show only aging masters (over 90 days)"
-        >
-          aging (&gt;90d)
-        </button>
-        {hasActiveFilters && (
-          <Btn
-            size="sm"
-            variant="ghost"
-            onClick={() => {
-              setKindFilter(new Set());
-              setAgingOnly(false);
-            }}
-          >
-            Clear
-          </Btn>
-        )}
-      </div>
-
-      {/* Grouped items */}
-      {groups.length === 0 && (
-        <div className="alm-masters-list__item-meta" style={{ padding: '16px 12px' }}>
-          No masters match your search
-        </div>
+    <ListSidebar
+      searchPlaceholder="Search name, camera..."
+      searchValue={search}
+      onSearchChange={setSearch}
+      groupOptions={GROUP_OPTIONS}
+      groupValue={groupValue}
+      onGroupChange={onGroupChange}
+      sortOptions={SORT_OPTIONS}
+      sortValue={sortBy}
+      onSortChange={(v) => setSortBy(v as SortBy)}
+      filterPills={filterPills}
+      onFilterToggle={toggleKind}
+      itemCount={sorted.length}
+    >
+      {sorted.length === 0 && (
+        <div className="alm-list-sidebar__empty">No masters match your search</div>
       )}
       {groups.map((group) => (
-        <div key={group.label || '__all'}>
+        <div key={group.label || '__all'} role="presentation">
           {group.label && (
-            <div className="alm-masters-list__kind-header">
+            <div className="alm-list-sidebar__group-header" role="presentation">
               {group.label}
             </div>
           )}
-          {group.items.map((m) => {
-            const isSelected = m.id === selectedId;
-            return (
-              <button
-                key={m.id}
-                type="button"
-                className={clsx(
-                  'alm-masters-list__item',
-                  isSelected && 'alm-masters-list__item--selected',
-                )}
-                onClick={() => onSelect(m.id)}
-                aria-current={isSelected ? 'true' : undefined}
-              >
-                <div
-                  className={clsx(
-                    'alm-masters-list__item-name alm-mono',
-                    isSelected && 'alm-masters-list__item-name--active',
-                  )}
-                  title={m.name}
-                >
+          {group.items.map((m) => (
+            <ListItem
+              key={m.id}
+              id={m.id}
+              selected={m.id === selectedId}
+              onSelect={onSelect}
+            >
+              <div className="alm-list-item__row">
+                <span className="alm-list-item__name alm-mono" title={m.name}>
                   {m.name}
-                </div>
-                <div className="alm-masters-list__item-meta">
-                  <span className="alm-mono">
-                    {m.exp} · g{m.gain}
+                </span>
+              </div>
+              <div className="alm-list-item__meta">
+                <span className="alm-mono">
+                  {m.exp} · g{m.gain}
+                </span>
+                <span className="alm-list-item__dot" />
+                <span>{m.cam.replace('ASI', '')}</span>
+                {m.warn && (
+                  <span className="alm-list-item__warn">
+                    &#x26A0; {m.age}
                   </span>
-                  <span>{m.cam.replace('ASI', '')}</span>
-                  {m.warn && (
-                    <span className="alm-masters-list__item-warn">
-                      ⚠ {m.age}
-                    </span>
-                  )}
-                </div>
-              </button>
-            );
-          })}
+                )}
+              </div>
+            </ListItem>
+          ))}
         </div>
       ))}
-    </nav>
+    </ListSidebar>
   );
 }

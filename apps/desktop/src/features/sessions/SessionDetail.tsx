@@ -16,6 +16,8 @@ import type {
 import { Pill, Btn, Section } from '@/ui';
 import { PropertyTable } from '@/components';
 import type { PropertyDef } from '@/components';
+import { formatBytes, formatIntegration } from '@/lib/format';
+import { sessionStateVariant } from '@/lib/display';
 
 const sessionStore = createParameterizedStore((id: string) =>
   getSession({ id }),
@@ -60,28 +62,6 @@ const FIXTURE_SESSION: SessionDetailType = {
   ],
 };
 
-function formatBytes(bytes: number): string {
-  if (bytes === 0) return '0 B';
-  const units = ['B', 'KB', 'MB', 'GB', 'TB'];
-  const i = Math.floor(Math.log(bytes) / Math.log(1024));
-  const value = bytes / Math.pow(1024, i);
-  return `${value.toFixed(value < 10 && i > 0 ? 1 : 0)} ${units[i]}`;
-}
-
-function formatIntegration(seconds: number): string {
-  const h = Math.floor(seconds / 3600);
-  const m = Math.floor((seconds % 3600) / 60);
-  return h > 0 ? `${h}h ${m}m` : `${m}m`;
-}
-
-function stateVariant(state: string) {
-  switch (state) {
-    case 'confirmed': return 'ok' as const;
-    case 'needs_review': return 'warn' as const;
-    case 'rejected': return 'danger' as const;
-    default: return 'neutral' as const;
-  }
-}
 
 function buildProperties(data: SessionDetailType): PropertyDef[] {
   const props: PropertyDef[] = [];
@@ -201,7 +181,7 @@ function SessionDetailContent({
           <Pill label={`${data.frame_count} frames`} variant="ghost" size="sm" />
           <Pill
             label={data.state === 'needs_review' ? 'needs review' : data.state}
-            variant={stateVariant(data.state)}
+            variant={sessionStateVariant(data.state)}
             size="sm"
           />
         </div>

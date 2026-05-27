@@ -1,28 +1,14 @@
 /**
- * T047 — InboxList: list items rendered within the ListSidebar.
- *
+ * InboxList -- list items rendered within the ListSidebar using ListItem.
  * Each item shows: target name, date, filter, integration time.
- * No confidence scores. Selected state styling via BEM.
+ * No confidence scores. Uses shared format utilities.
+ * Rewritten per spec 030.
  */
 
-import { clsx } from 'clsx';
 import { Pill } from '@/ui';
+import { ListItem } from '@/components';
+import { formatIntegration, formatBytes } from '@/lib/format';
 import type { InboxSession } from './mock-data';
-
-function formatIntegration(seconds: number): string {
-  if (seconds < 1) return '<1s';
-  const h = Math.floor(seconds / 3600);
-  const m = Math.floor((seconds % 3600) / 60);
-  if (h > 0) return `${h}h ${m}m`;
-  return `${m}m`;
-}
-
-function formatSize(bytes: number): string {
-  const gb = bytes / (1024 * 1024 * 1024);
-  if (gb >= 1) return `${gb.toFixed(1)} GB`;
-  const mb = bytes / (1024 * 1024);
-  return `${mb.toFixed(0)} MB`;
-}
 
 export interface InboxListProps {
   sessions: InboxSession[];
@@ -33,7 +19,7 @@ export interface InboxListProps {
 export function InboxList({ sessions, selectedId, onSelect }: InboxListProps) {
   if (sessions.length === 0) {
     return (
-      <div className="alm-inbox-list__empty">
+      <div className="alm-list-sidebar__empty">
         No sessions match the current filters.
       </div>
     );
@@ -42,43 +28,32 @@ export function InboxList({ sessions, selectedId, onSelect }: InboxListProps) {
   return (
     <>
       {sessions.map((session) => (
-        <button
+        <ListItem
           key={session.id}
-          type="button"
-          role="option"
-          aria-selected={selectedId === session.id}
-          className={clsx(
-            'alm-inbox-list__item',
-            selectedId === session.id && 'alm-inbox-list__item--selected',
-          )}
-          onClick={() => onSelect(session.id)}
+          id={session.id}
+          selected={selectedId === session.id}
+          onSelect={onSelect}
         >
-          <div className="alm-inbox-list__item-top">
-            <span className="alm-inbox-list__item-target">
+          <div className="alm-list-item__row">
+            <span className="alm-list-item__name">
               {session.object}
             </span>
             {session.filter && (
               <Pill label={session.filter} variant="ghost" size="sm" />
             )}
           </div>
-          <div className="alm-inbox-list__item-meta">
-            <span className="alm-inbox-list__item-date">{session.date}</span>
-            <span className="alm-inbox-list__item-dot" />
-            <span className="alm-inbox-list__item-integration">
-              {formatIntegration(session.totalIntegrationSeconds)}
-            </span>
-            <span className="alm-inbox-list__item-dot" />
-            <span className="alm-inbox-list__item-size">
-              {formatSize(session.totalSizeBytes)}
-            </span>
+          <div className="alm-list-item__meta">
+            <span>{session.date}</span>
+            <span className="alm-list-item__dot" />
+            <span>{formatIntegration(session.totalIntegrationSeconds)}</span>
+            <span className="alm-list-item__dot" />
+            <span>{formatBytes(session.totalSizeBytes)}</span>
           </div>
-          <div className="alm-inbox-list__item-bottom">
+          <div className="alm-list-item__meta">
             <Pill label={session.frameType} variant="neutral" size="sm" />
-            <span className="alm-inbox-list__item-frames">
-              {session.frameCount} frames
-            </span>
+            <span>{session.frameCount} frames</span>
           </div>
-        </button>
+        </ListItem>
       ))}
     </>
   );

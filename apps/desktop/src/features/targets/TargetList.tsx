@@ -1,14 +1,16 @@
 /**
- * TargetList -- uses ListSidebar with 4 grouping options:
+ * TargetList -- uses ListSidebar + ListItem with 4 grouping options:
  * type, constellation, catalog, project.
- * Refactored per spec 030 T077.
+ * Rewritten per spec 030 to use ListItem for all rows
+ * and useSetToggle for filter state.
  */
 
-import { useState, useMemo, useCallback } from 'react';
-import { clsx } from 'clsx';
+import { useState, useMemo } from 'react';
 import type { Target, TargetKind } from '@/bindings/types';
 import { Pill } from '@/ui';
-import { ListSidebar } from '@/components';
+import { ListSidebar, ListItem } from '@/components';
+import type { SelectOption, FilterPill } from '@/components';
+import { useSetToggle } from '@/hooks/useSetToggle';
 
 export interface TargetListProps {
   targets: Target[];
@@ -23,7 +25,7 @@ type SortBy = 'name' | 'sessions' | 'integration';
 
 // ─── Constants ───────────────────────────────────────────────────────────────
 
-const GROUP_OPTIONS = [
+const GROUP_OPTIONS: SelectOption[] = [
   { value: 'none', label: 'None' },
   { value: 'type', label: 'Type' },
   { value: 'constellation', label: 'Constellation' },
@@ -31,7 +33,7 @@ const GROUP_OPTIONS = [
   { value: 'project', label: 'Project' },
 ];
 
-const SORT_OPTIONS = [
+const SORT_OPTIONS: SelectOption[] = [
   { value: 'name', label: 'Name' },
   { value: 'sessions', label: 'Sessions' },
   { value: 'integration', label: 'Integration hours' },
@@ -132,19 +134,7 @@ export function TargetList({ targets, selectedId, onSelect }: TargetListProps) {
   const [search, setSearch] = useState('');
   const [groupBy, setGroupBy] = useState<GroupBy>('none');
   const [sortBy, setSortBy] = useState<SortBy>('name');
-  const [activeFilters, setActiveFilters] = useState<Set<string>>(new Set());
-
-  const handleFilterToggle = useCallback((value: string) => {
-    setActiveFilters((prev) => {
-      const next = new Set(prev);
-      if (next.has(value)) {
-        next.delete(value);
-      } else {
-        next.add(value);
-      }
-      return next;
-    });
-  }, []);
+  const [activeFilters, toggleFilter] = useSetToggle<string>();
 
   const isUnresolved = (t: Target) => t.name === '(unresolved)';
 
@@ -173,7 +163,7 @@ export function TargetList({ targets, selectedId, onSelect }: TargetListProps) {
   const sorted = useMemo(() => sortTargets(filtered, sortBy), [filtered, sortBy]);
   const groups = useMemo(() => groupTargets(sorted, groupBy), [sorted, groupBy]);
 
-  const filterPills = KIND_FILTERS.map((f) => ({
+  const filterPills: FilterPill[] = KIND_FILTERS.map((f) => ({
     value: f.value,
     label: f.label,
     active: activeFilters.has(f.value),
@@ -191,7 +181,7 @@ export function TargetList({ targets, selectedId, onSelect }: TargetListProps) {
       sortValue={sortBy}
       onSortChange={(v) => setSortBy(v as SortBy)}
       filterPills={filterPills}
-      onFilterToggle={handleFilterToggle}
+      onFilterToggle={toggleFilter}
       itemCount={filtered.length}
     >
       {groups.map((group) => (
@@ -202,45 +192,34 @@ export function TargetList({ targets, selectedId, onSelect }: TargetListProps) {
             </div>
           )}
           {group.items.map((target) => (
-            <div
+            <ListItem
               key={target.id}
-              className={clsx(
-                'alm-list-sidebar__item',
-                target.id === selectedId && 'alm-list-sidebar__item--selected',
-              )}
-              role="option"
-              aria-selected={target.id === selectedId}
-              onClick={() => onSelect(target.id)}
-              onKeyDown={(e) => {
-                if (e.key === 'Enter' || e.key === ' ') {
-                  e.preventDefault();
-                  onSelect(target.id);
-                }
-              }}
-              tabIndex={0}
+              id={target.id}
+              selected={target.id === selectedId}
+              onSelect={onSelect}
             >
-              <div className="alm-list-sidebar__item-row">
-                <span className="alm-list-sidebar__item-name">
+              <div className="alm-list-item__row">
+                <span className="alm-list-item__name">
                   {target.name}
                 </span>
                 {isUnresolved(target) && (
-                  <span className="alm-list-sidebar__item-warn" aria-label="Unresolved target">&#x26A0;</span>
+                  <span className="alm-list-item__warn" aria-label="Unresolved target">&#x26A0;</span>
                 )}
                 {hasCoverageWarning(target) && !isUnresolved(target) && (
-                  <span className="alm-list-sidebar__item-warn" aria-label="Coverage warning">&#x26A0;</span>
+                  <span className="alm-list-item__warn" aria-label="Coverage warning">&#x26A0;</span>
                 )}
               </div>
               {target.aliases.length > 0 && target.aliases[0] && (
-                <div className="alm-list-sidebar__item-alias">{target.aliases[0]}</div>
+                <div className="alm-list-item__alias">{target.aliases[0]}</div>
               )}
-              <div className="alm-list-sidebar__item-meta">
+              <div className="alm-list-item__meta">
                 <span>{target.session_count} sess</span>
-                <span className="alm-list-sidebar__item-dot" aria-hidden="true" />
+                <span className="alm-list-item__dot" aria-hidden="true" />
                 <span>{target.total_integration_hours.toFixed(1)}h</span>
-                <span className="alm-list-sidebar__item-dot" aria-hidden="true" />
+                <span className="alm-list-item__dot" aria-hidden="true" />
                 <span>{target.project_count} proj</span>
               </div>
-            </div>
+            </ListItem>
           ))}
         </div>
       ))}

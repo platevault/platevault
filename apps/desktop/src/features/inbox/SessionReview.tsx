@@ -11,25 +11,12 @@ import { clsx } from 'clsx';
 import { Section, Pill } from '@/ui';
 import { PropertyTable } from '@/components';
 import type { PropertyDef } from '@/components';
+import { formatIntegration, formatBytes } from '@/lib/format';
 import { formatSessionName } from './session-naming';
 import { detectConflicts } from './conflict-detection';
 import { toFrameProperties } from './mock-data';
 import type { InboxSession } from './mock-data';
 
-function formatIntegration(seconds: number): string {
-  if (seconds < 1) return '<1s';
-  const h = Math.floor(seconds / 3600);
-  const m = Math.floor((seconds % 3600) / 60);
-  if (h > 0) return `${h}h ${m}m`;
-  return `${m}m`;
-}
-
-function formatSize(bytes: number): string {
-  const gb = bytes / (1024 * 1024 * 1024);
-  if (gb >= 1) return `${gb.toFixed(1)} GB`;
-  const mb = bytes / (1024 * 1024);
-  return `${mb.toFixed(0)} MB`;
-}
 
 export interface SessionReviewProps {
   session: InboxSession;
@@ -144,7 +131,7 @@ export function SessionReview({ session }: SessionReviewProps) {
                 Total Size
               </span>
               <span className="alm-session-review__frames-value">
-                {formatSize(session.totalSizeBytes)}
+                {formatBytes(session.totalSizeBytes)}
               </span>
             </div>
           </div>

@@ -1,12 +1,13 @@
 /**
- * CalibrationPage -- list-detail layout using TopActionBar.
- * Left: MastersList, Center: MasterDetail (full width, no right sidebar).
- * Refactored per spec 030 T075.
+ * CalibrationPage -- two-pane layout using PageShell + ListDetailLayout.
+ * TopActionBar with spec-correct actions (Use in Project, Reveal in Explorer, Archive).
+ * Removes "Import master" and "Re-run matching" per spec 030.
  */
 
 import { useState } from 'react';
 import { masters, calibrationSummary } from '@/data/fixtures/calibration';
-import { TopActionBar } from '@/components';
+import { EmptyState } from '@/ui';
+import { PageShell, ListDetailLayout, TopActionBar } from '@/components';
 import { MastersList } from './MastersList';
 import { MasterDetail } from './MasterDetail';
 
@@ -14,18 +15,30 @@ export function CalibrationPage() {
   const [selectedId, setSelectedId] = useState<string>('m-1');
   const [groupValue, setGroupValue] = useState('kind');
 
+  const selected = masters.find((m) => m.id === selectedId);
+
   return (
-    <div className="alm-page" data-testid="CalibrationPage">
-      <TopActionBar
-        title="Calibration"
-        subtitle={`${calibrationSummary.totalMasters} masters · ${calibrationSummary.darks} darks · ${calibrationSummary.flats} flats · ${calibrationSummary.bias} bias · ${calibrationSummary.agingCount} aging`}
-        actions={[
-          { label: 'Import master...', onClick: () => {} },
-          { label: 'Re-run matching', onClick: () => {} },
-        ]}
-      />
-      <div className="alm-list-detail-layout">
-        <div className="alm-list-detail-layout__list">
+    <PageShell
+      testId="CalibrationPage"
+      empty={{
+        title: 'No calibration masters',
+        description: 'Calibration masters will appear after scanning your library.',
+      }}
+      hasData={masters.length > 0}
+    >
+      <ListDetailLayout
+        topBar={
+          <TopActionBar
+            title="Calibration"
+            subtitle={`${calibrationSummary.totalMasters} masters · ${calibrationSummary.darks} darks · ${calibrationSummary.flats} flats · ${calibrationSummary.bias} bias · ${calibrationSummary.agingCount} aging`}
+            actions={[
+              { label: 'Use in Project', disabled: !selected, onClick: () => {} },
+              { label: 'Reveal in Explorer', disabled: !selected, onClick: () => {} },
+              { label: 'Archive', variant: 'ghost', disabled: !selected, onClick: () => {} },
+            ]}
+          />
+        }
+        list={
           <MastersList
             masters={masters}
             selectedId={selectedId}
@@ -33,17 +46,18 @@ export function CalibrationPage() {
             groupValue={groupValue}
             onGroupChange={setGroupValue}
           />
-        </div>
-        <div className="alm-list-detail-layout__detail">
-          {selectedId ? (
+        }
+        detail={
+          selectedId ? (
             <MasterDetail masterId={selectedId} />
           ) : (
-            <div className="alm-page__empty">
-              Select a calibration master from the list to view its details.
-            </div>
-          )}
-        </div>
-      </div>
-    </div>
+            <EmptyState
+              title="Select a master"
+              description="Choose a calibration master from the list to view its details."
+            />
+          )
+        }
+      />
+    </PageShell>
   );
 }

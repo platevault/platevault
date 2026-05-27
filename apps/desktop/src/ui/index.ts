@@ -4,9 +4,6 @@
 export { Pill } from './Pill';
 export type { PillProps } from './Pill';
 
-export { Confidence } from './Confidence';
-export type { ConfidenceProps } from './Confidence';
-
 export { Provenance } from './Provenance';
 export type { ProvenanceProps } from './Provenance';
 
@@ -28,17 +25,11 @@ export type { BtnProps } from './Btn';
 export { DirPicker } from './DirPicker';
 export type { DirPickerProps } from './DirPicker';
 
-export { FilterBar } from './FilterBar';
-export type { FilterBarProps } from './FilterBar';
-
 export { Toolbar } from './Toolbar';
 export type { ToolbarProps } from './Toolbar';
 
 export { DataTable } from './DataTable';
 export type { DataTableProps } from './DataTable';
-
-export { ThreePane } from './ThreePane';
-export type { ThreePaneProps } from './ThreePane';
 
 export { WizardShell } from './WizardShell';
 export type { WizardShellProps, WizardStep } from './WizardShell';
@@ -47,3 +38,17 @@ export { EmptyState } from './EmptyState';
 export type { EmptyStateProps } from './EmptyState';
 
 export { ToastContainer } from './ToastContainer';
+
+// DEPRECATED — kept until feature pages are migrated to new shared components:
+// ThreePane -> ListDetailLayout, FilterBar -> ListSidebar, Confidence -> removed
+
+/** @deprecated Use ListDetailLayout from @/components instead. Will be removed after page migration. */
+export { Confidence } from './Confidence';
+/** @deprecated Use ListDetailLayout from @/components instead. Will be removed after page migration. */
+export type { ConfidenceProps } from './Confidence';
+
+/** @deprecated Use ListSidebar from @/components instead. Will be removed after page migration. */
+export { FilterBar } from './FilterBar';
+/** @deprecated Use ListSidebar from @/components instead. Will be removed after page migration. */
+export type { FilterBarProps } from './FilterBar';
+

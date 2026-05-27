@@ -1,11 +1,12 @@
 /**
- * TopActionBar — consistent action bar for data screens (Sessions, Calibration,
+ * TopActionBar -- consistent action bar for data screens (Sessions, Calibration,
  * Targets, Archive). Displays action buttons with optional hotkey hints.
  *
- * Layout: title/subtitle left-aligned, action buttons right-aligned.
- * Uses the existing Btn component from ui/.
+ * Layout: title/subtitle left-aligned, optional children center, action buttons
+ * right-aligned. Uses the existing Btn component from ui/.
  */
 
+import type { ReactNode } from 'react';
 import { Btn } from '@/ui';
 
 export interface ActionDef {
@@ -17,14 +18,15 @@ export interface ActionDef {
 }
 
 export interface TopActionBarProps {
-  actions: ActionDef[];
+  actions?: ActionDef[];
   title?: string;
   subtitle?: string;
+  children?: ReactNode;
 }
 
-export function TopActionBar({ actions, title, subtitle }: TopActionBarProps) {
+export function TopActionBar({ actions, title, subtitle, children }: TopActionBarProps) {
   return (
-    <div className="alm-top-action-bar">
+    <div className="alm-top-action-bar" role="toolbar" aria-label="Page actions">
       {/* Left: title area */}
       {(title || subtitle) && (
         <div className="alm-top-action-bar__heading">
@@ -33,22 +35,31 @@ export function TopActionBar({ actions, title, subtitle }: TopActionBarProps) {
         </div>
       )}
 
+      {/* Center: arbitrary content slot */}
+      {children && (
+        <div className="alm-top-action-bar__content">
+          {children}
+        </div>
+      )}
+
       {/* Right: action buttons */}
-      <div className="alm-top-action-bar__actions">
-        {actions.map((action) => (
-          <Btn
-            key={action.label}
-            variant={action.variant}
-            disabled={action.disabled}
-            onClick={action.onClick}
-          >
-            {action.label}
-            {action.hotkey && (
-              <kbd className="alm-top-action-bar__hotkey">{action.hotkey}</kbd>
-            )}
-          </Btn>
-        ))}
-      </div>
+      {actions && actions.length > 0 && (
+        <div className="alm-top-action-bar__actions">
+          {actions.map((action) => (
+            <Btn
+              key={action.label}
+              variant={action.variant}
+              disabled={action.disabled}
+              onClick={action.onClick}
+            >
+              {action.label}
+              {action.hotkey && (
+                <kbd className="alm-top-action-bar__hotkey">{action.hotkey}</kbd>
+              )}
+            </Btn>
+          ))}
+        </div>
+      )}
     </div>
   );
 }

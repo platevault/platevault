@@ -1,7 +1,8 @@
 /**
- * SessionsPage -- list-detail layout with ListSidebar-based SessionsList
- * and TopActionBar. No right sidebar (removed per spec 030).
+ * SessionsPage -- two-pane layout using PageShell + ListDetailLayout.
+ * TopActionBar above the split with calendar toggle.
  * Calendar view remains as a full-page alternate.
+ * Rewritten per spec 030 composition contracts.
  */
 
 import { useMemo, useState, useEffect } from 'react';
@@ -11,7 +12,7 @@ import { usePreference } from '@/data/preferences';
 import { listSessions } from '@/api/commands';
 import type { AcquisitionSession } from '@/bindings/types';
 import { EmptyState, Btn } from '@/ui';
-import { TopActionBar } from '@/components';
+import { PageShell, ListDetailLayout, TopActionBar } from '@/components';
 import { SessionsList } from './SessionsList';
 import { SessionDetailInline } from './SessionDetail';
 import { CalendarView } from './CalendarView';
@@ -53,27 +54,21 @@ export function SessionsPage() {
     };
   }, [sessions]);
 
-  if (loading) {
-    return <div className="alm-page__loading">Loading sessions...</div>;
-  }
-
   const isCalendar = view === 'calendar';
 
-  const actions = [
-    {
-      label: isCalendar ? 'List' : 'Calendar',
-      variant: 'ghost' as const,
-      onClick: () => setView(isCalendar ? 'list' : 'calendar'),
-    },
-  ];
+  const viewToggleAction = {
+    label: isCalendar ? 'List' : 'Calendar',
+    variant: 'ghost' as const,
+    onClick: () => setView(isCalendar ? 'list' : 'calendar'),
+  };
 
   if (isCalendar) {
     return (
-      <div className="alm-page" data-testid="SessionsPage">
+      <PageShell testId="SessionsPage" loading={loading} loadingMessage="Loading sessions...">
         <TopActionBar
           title="Sessions"
           subtitle={`${counts.total} sessions · ${counts.confirmed} confirmed · ${counts.needsReview} needs review`}
-          actions={actions}
+          actions={[viewToggleAction]}
         />
         <CalendarView
           onDaySelect={(day) => {
@@ -81,46 +76,56 @@ export function SessionsPage() {
             setView('list');
           }}
         />
-      </div>
+      </PageShell>
     );
   }
 
   return (
-    <div className="alm-page" data-testid="SessionsPage">
-      <TopActionBar
-        title="Sessions"
-        subtitle={`${counts.total} sessions · ${counts.confirmed} confirmed · ${counts.needsReview} needs review`}
-        actions={actions}
-      />
-
-      {selectedDay && (
-        <div className="alm-page__filter-bar">
-          <span>Filtered by night: {selectedDay}</span>
-          <Btn size="sm" variant="ghost" onClick={() => setSelectedDay(null)}>
-            Clear
-          </Btn>
-        </div>
-      )}
-
-      <div className="alm-list-detail-layout">
-        <div className="alm-list-detail-layout__list">
+    <PageShell
+      testId="SessionsPage"
+      loading={loading}
+      loadingMessage="Loading sessions..."
+      empty={{
+        title: 'No sessions yet',
+        description: 'Sessions appear here after scanning your library roots.',
+      }}
+      hasData={sessions.length > 0}
+    >
+      <ListDetailLayout
+        topBar={
+          <TopActionBar
+            title="Sessions"
+            subtitle={`${counts.total} sessions · ${counts.confirmed} confirmed · ${counts.needsReview} needs review`}
+            actions={[viewToggleAction]}
+          >
+            {selectedDay && (
+              <div className="alm-top-action-bar__filter-notice">
+                <span>Filtered by night: {selectedDay}</span>
+                <Btn size="sm" variant="ghost" onClick={() => setSelectedDay(null)}>
+                  Clear
+                </Btn>
+              </div>
+            )}
+          </TopActionBar>
+        }
+        list={
           <SessionsList
             sessions={filteredSessions}
             selectedId={selectedId}
             onSelect={setSelectedId}
           />
-        </div>
-        <div className="alm-list-detail-layout__detail">
-          {selectedSession ? (
+        }
+        detail={
+          selectedSession ? (
             <SessionDetailInline session={selectedSession} />
           ) : (
             <EmptyState
               title="Select a session"
               description="Choose a session from the list to view its details."
             />
-          )}
-        </div>
-      </div>
-    </div>
+          )
+        }
+      />
+    </PageShell>
   );
 }
