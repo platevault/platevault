@@ -1,10 +1,4 @@
 export { ProjectsPage } from './ProjectsPage';
-export { ProjectDetail, ProjectDetailInline } from './ProjectDetail';
+export { ProjectDetail } from './ProjectDetail';
 export { ProjectsList } from './ProjectsList';
 export { LifecycleSidebar } from './LifecycleSidebar';
-export { LifecycleStrip } from './LifecycleStrip';
-export { PipelineStatsBar } from './PipelineStatsBar';
-export { SourceMap } from './SourceMap';
-export { SourceViewStatus } from './SourceViewStatus';
-export { ProjectNotes } from './ProjectNotes';
-export { CleanupPlan } from './CleanupPlan';

@@ -128,12 +128,9 @@ export function CalendarScroll({ nights, onNightSelect }: CalendarScrollProps) {
               <span className="alm-calendar-scroll__date alm-mono">{night.date}</span>
               <span className="alm-calendar-scroll__badges">
                 {night.sessions.map((s) => (
-                  <Pill
-                    key={s.id}
-                    label={`${s.target} ${s.filter}`}
-                    variant="ghost"
-                    size="sm"
-                  />
+                  <Pill key={s.id} variant="ghost">
+                    {`${s.target} ${s.filter}`}
+                  </Pill>
                 ))}
               </span>
               <span className="alm-calendar-scroll__frame-count alm-mono">

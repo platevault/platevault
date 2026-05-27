@@ -74,7 +74,7 @@ export function StepReview({ wizardState: _wizardState }: StepReviewProps) {
       {/* ── 2-column grid: plan items (2fr) + disk tree / after creating (1fr) ── */}
       <div style={{ display: 'grid', gridTemplateColumns: '2fr 1fr', gap: 14 }}>
         {/* Left: Plan items */}
-        <Box heading="Plan items (132)">
+        <Box title="Plan items (132)">
           <table className="alm-simple-table">
             <thead>
               <tr>
@@ -86,7 +86,7 @@ export function StepReview({ wizardState: _wizardState }: StepReviewProps) {
             <tbody>
               {PLAN_ITEMS.map((item, i) => (
                 <tr key={i}>
-                  <td><Pill label={item.action} variant="info" size="sm" /></td>
+                  <td><Pill variant="info">{item.action}</Pill></td>
                   <td className="alm-mono" style={{ fontSize: '11px' }}>{item.destination}</td>
                   <td>
                     {item.source === null ? (
@@ -110,7 +110,7 @@ export function StepReview({ wizardState: _wizardState }: StepReviewProps) {
               </tr>
               {/* Final manifest write */}
               <tr>
-                <td><Pill label={FINAL_ITEM.action} variant="info" size="sm" /></td>
+                <td><Pill variant="info">{FINAL_ITEM.action}</Pill></td>
                 <td className="alm-mono" style={{ fontSize: '11px' }}>{FINAL_ITEM.destination}</td>
                 <td>
                   <span className="alm-mono" style={{ fontSize: '11px', color: 'var(--alm-text-muted)' }}>
@@ -125,7 +125,7 @@ export function StepReview({ wizardState: _wizardState }: StepReviewProps) {
         {/* Right column */}
         <div style={{ display: 'flex', flexDirection: 'column', gap: 14 }}>
           {/* Disk tree */}
-          <Box heading="What will exist on disk">
+          <Box title="What will exist on disk">
             <pre
               className="alm-mono"
               style={{
@@ -142,7 +142,7 @@ export function StepReview({ wizardState: _wizardState }: StepReviewProps) {
           </Box>
 
           {/* After creating */}
-          <Box heading="After creating">
+          <Box title="After creating">
             <ol style={{ margin: 0, paddingLeft: 18, fontSize: 'var(--alm-text-xs)' }}>
               <li>
                 Project lifecycle:{' '}

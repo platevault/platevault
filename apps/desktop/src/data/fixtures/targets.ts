@@ -1,5 +1,5 @@
 // Static mock fixture data for Target and TargetDetail
-// Matches wireframe: canvas-wireframes-2026-05-24/project/wireframes/targets.jsx
+// Matches design V3 mock data.
 
 import type {
   Target,
@@ -10,8 +10,30 @@ import type {
   ConfidenceLevel,
 } from '@/bindings/types';
 
+// ─── Design V3 flat fixture shape ───────────────────────────────────────────
+
+export interface TargetFixture {
+  id: number;
+  name: string;
+  common: string;
+  kind: string;
+  sessions: number;
+  hours: number;
+  projects: number;
+  warn?: boolean;
+}
+
+export const TARGETS_DATA: TargetFixture[] = [
+  { id: 1, name: '(unresolved)', common: '', kind: 'unknown', sessions: 3, hours: 4.2, projects: 0, warn: true },
+  { id: 2, name: 'IC 1396', common: "Elephant's Trunk", kind: 'deep sky', sessions: 4, hours: 9.3, projects: 1 },
+  { id: 3, name: 'Jupiter', common: '', kind: 'planetary', sessions: 6, hours: 2.5, projects: 1 },
+  { id: 4, name: 'M31', common: 'Andromeda Galaxy', kind: 'deep sky', sessions: 8, hours: 11.8, projects: 1, warn: true },
+  { id: 5, name: 'M42', common: 'Orion Nebula', kind: 'deep sky', sessions: 5, hours: 3.4, projects: 0 },
+  { id: 6, name: 'NGC 7000', common: 'North America Nebula', kind: 'deep sky', sessions: 12, hours: 14.2, projects: 2 },
+];
+
 // ---------------------------------------------------------------------------
-// List items — shown in the left pane
+// Rich list items — shown in the left pane (existing shape retained)
 // ---------------------------------------------------------------------------
 
 export const targets: Target[] = [

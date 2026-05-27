@@ -30,7 +30,7 @@ export function StatusBar({
   const isIngesting = statusLabel !== 'Idle';
 
   return (
-    <div className="alm-statusbar">
+    <div className="alm-frame__statusbar">
       {/* Inbox badge */}
       {inboxCount > 0 && (
         <Link to="/inbox" className="alm-statusbar__inbox-badge">
@@ -72,15 +72,17 @@ export function StatusBar({
         </span>
       ))}
 
-      {/* Log toggle */}
-      <button
-        type="button"
-        className="alm-statusbar__log-toggle"
-        onClick={toggle}
-        aria-label="Toggle log panel"
-      >
-        Log
-      </button>
+      <span className="alm-statusbar__right">
+        {/* Log toggle */}
+        <button
+          type="button"
+          className="alm-statusbar__log-toggle"
+          onClick={toggle}
+          aria-label="Toggle log panel"
+        >
+          Log
+        </button>
+      </span>
     </div>
   );
 }

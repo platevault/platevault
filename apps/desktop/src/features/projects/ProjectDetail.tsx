@@ -1,130 +1,224 @@
 /**
- * ProjectDetail -- single consolidated view for a project.
- * Header, pipeline stats bar, source map, source views status, notes, cleanup.
- * No tabbed layout -- all sections visible at once.
- * Used both as a standalone route (/projects/$id) and inline.
+ * ProjectDetail -- center pane for Projects page.
+ * Uses fixture data + hardcoded mock sub-data.
+ * Design V3 rewrite.
  */
 
-import { useParams } from '@tanstack/react-router';
-import { useParameterizedQuery, createParameterizedStore } from '@/data/store';
-import { getProject } from '@/api/commands';
-import type { ProjectDetail as ProjectDetailType, ProjectState } from '@/bindings/types';
-import { Pill, Btn, Section } from '@/ui';
-import { projectStateVariant, projectStateLabel } from '@/lib/display';
-import { PipelineStatsBar } from './PipelineStatsBar';
-import { SourceMap } from './SourceMap';
-import { SourceViewStatus } from './SourceViewStatus';
-import { ProjectNotes } from './ProjectNotes';
-import { CleanupPlan } from './CleanupPlan';
+import { DetailHeader, DetailPane } from '@/components';
+import { Pill, Btn, Section, Banner, Table } from '@/ui';
+import { PROJECTS_DATA } from '@/data/fixtures/projects';
+import type { ProjectFixture } from '@/data/fixtures/projects';
+import type { PillVariant } from '@/ui';
 
-const projectStore = createParameterizedStore<string, ProjectDetailType>((id) =>
-  getProject({ id }),
-);
+// ─── Helpers ────────────────────────────────────────────────────────────────
 
-
-// Phases where source map editing is allowed
-const EDITABLE_PHASES = new Set<ProjectState>(['setup_incomplete', 'ready']);
-
-interface ProjectDetailContentProps {
-  project: ProjectDetailType;
+function projectVariant(state: ProjectFixture['state']): PillVariant {
+  switch (state) {
+    case 'completed':
+    case 'archived':
+      return 'ok';
+    case 'processing':
+      return 'info';
+    case 'prepared':
+      return 'accent';
+    case 'ready':
+      return 'neutral';
+    case 'blocked':
+      return 'danger';
+    case 'setup_incomplete':
+      return 'ghost';
+    default:
+      return 'neutral';
+  }
 }
 
-function ProjectDetailContent({ project }: ProjectDetailContentProps) {
-  const editable = EDITABLE_PHASES.has(project.state);
+function stateLabel(state: ProjectFixture['state']): string {
+  switch (state) {
+    case 'setup_incomplete': return 'Setup';
+    case 'ready': return 'Ready';
+    case 'prepared': return 'Prepared';
+    case 'processing': return 'Processing';
+    case 'completed': return 'Completed';
+    case 'archived': return 'Archived';
+    case 'blocked': return 'Blocked';
+    default: return state;
+  }
+}
+
+function sourceTypeVariant(type: string): PillVariant {
+  switch (type) {
+    case 'light': return 'info';
+    case 'dark': return 'neutral';
+    case 'flat': return 'accent';
+    case 'bias': return 'ghost';
+    default: return 'neutral';
+  }
+}
+
+function sourceStatusVariant(status: string): PillVariant {
+  switch (status) {
+    case 'selected': return 'ok';
+    case 'candidate': return 'warn';
+    case 'aging': return 'warn';
+    case 'rejected': return 'danger';
+    default: return 'neutral';
+  }
+}
+
+// ─── Mock sub-data ───────────────────────────────────────────────────────────
+
+const SOURCE_DATA = [
+  { type: 'light', name: 'NGC 7000 · Ha · 2024-11', detail: '3054 frames · 4.5h', status: 'selected' },
+  { type: 'light', name: 'NGC 7000 · OIII · 2024-11', detail: '3038 frames · 3.2h', status: 'selected' },
+  { type: 'light', name: 'NGC 7000 · Ha · 2024-12', detail: '1530 frames · 2.5h', status: 'candidate' },
+  { type: 'dark', name: 'MasterDark_300s_-10C_g100', detail: '1 master', status: 'selected' },
+  { type: 'flat', name: 'MasterFlat_Ha_2024-11', detail: '1 master', status: 'selected' },
+  { type: 'flat', name: 'MasterFlat_OIII_2024-11', detail: '1 master', status: 'selected' },
+  { type: 'bias', name: 'MasterBias_g100', detail: '1 master', status: 'aging' },
+];
+
+const SOURCE_VIEWS = [
+  { name: 'wbpp_input', strategy: 'junction', files: 92, plan: 'plan #18' },
+  { name: 'wbpp_input_p2', strategy: 'symlink', files: 92, plan: 'plan #21' },
+];
+
+const NOTES = [
+  'Reduced star FWHM from 2.8 to 2.4 with drizzle',
+  'Color balance adjusted per PixInsight STF',
+];
+
+// ─── Source map columns ──────────────────────────────────────────────────────
+
+const SOURCE_COLUMNS = [
+  { key: 'type', label: 'Type', style: { width: 72 } },
+  { key: 'name', label: 'Name' },
+  { key: 'detail', label: 'Detail' },
+  { key: 'status', label: 'Status', style: { width: 96 } },
+];
+
+// ─── Props ───────────────────────────────────────────────────────────────────
+
+export interface ProjectDetailContentProps {
+  project: ProjectFixture;
+}
+
+// ─── Inner content component (used by ProjectsPage) ──────────────────────────
+
+export function ProjectDetailContent({ project }: ProjectDetailContentProps) {
+  const projectPath = `D:\\Astrophotography\\Projects\\${project.name.replace(/\s·\s/g, '_').replace(/\s/g, '')}`;
 
   return (
-    <div className="alm-project-detail">
-      {/* Header */}
-      <header className="alm-project-detail__header">
-        <div className="alm-project-detail__header-left">
-          <h2 className="alm-project-detail__name">{project.name}</h2>
-          <Pill
-            label={projectStateLabel(project.state)}
-            variant={projectStateVariant(project.state)}
-            size="sm"
-          />
-        </div>
-        <div className="alm-project-detail__header-right">
-          <span className="alm-project-detail__path alm-mono">{project.root_path}</span>
-          <Btn size="sm">Reveal in Explorer</Btn>
-        </div>
-      </header>
-
-      {/* Pipeline stats bar */}
-      <PipelineStatsBar
-        sourceCount={project.sources.length}
-        viewCount={project.source_views.length}
-        onDiskLabel={project.on_disk_label}
-        outputCount={project.outputs.length}
+    <DetailPane>
+      <DetailHeader
+        title={project.name}
+        titleExtra={
+          <span style={{ marginLeft: 8 }}>
+            <Pill variant={projectVariant(project.state)}>
+              {stateLabel(project.state)}
+            </Pill>
+          </span>
+        }
+        subtitle={projectPath}
+        actions={<Btn size="sm">Reveal in Explorer</Btn>}
       />
 
+      {/* Pipeline stats bar */}
+      <div
+        className="alm-detail__stats-bar"
+        style={{ display: 'flex', gap: 0, borderBottom: '1px solid var(--alm-color-border)' }}
+      >
+        {[
+          { label: 'Sources', value: project.sources },
+          { label: 'Views', value: project.views },
+          { label: 'On disk', value: project.size },
+          { label: 'Outputs', value: project.outputs },
+        ].map((stat) => (
+          <div key={stat.label} className="alm-detail__stat">
+            <span className="alm-detail__stat-value">{stat.value}</span>
+            <span className="alm-detail__stat-label">{stat.label}</span>
+          </div>
+        ))}
+      </div>
+
+      {/* Blocked banner */}
+      {project.state === 'blocked' && project.blockedReason && (
+        <Banner variant="danger" style={{ margin: '12px 16px 0' }}>
+          {project.blockedReason}
+        </Banner>
+      )}
+
       {/* Source map */}
-      <Section title={`Source map (${project.sources.length} sources)`}>
-        <SourceMap sources={project.sources} editable={editable} />
-      </Section>
-
-      {/* Source views status */}
-      <Section title={`Source views (${project.source_views.length})`}>
-        <SourceViewStatus views={project.source_views} />
-      </Section>
-
-      {/* Notes */}
-      <Section title="Notes">
-        <ProjectNotes
-          initialContent={
-            project.notes_count > 0
-              ? '## Processing notes\n\n- Reduced star FWHM from 2.8 to 2.4 with drizzle\n- Color balance adjusted per PixInsight STF'
-              : ''
-          }
-          notesCount={project.notes_count}
+      <Section title="Source map" count={SOURCE_DATA.length}>
+        <Table
+          columns={SOURCE_COLUMNS}
+          rows={SOURCE_DATA.map((row) => ({
+            type: <Pill variant={sourceTypeVariant(row.type)}>{row.type}</Pill>,
+            name: <span className="alm-mono">{row.name}</span>,
+            detail: row.detail,
+            status: <Pill variant={sourceStatusVariant(row.status)}>{row.status}</Pill>,
+          }))}
         />
       </Section>
 
-      {/* Cleanup */}
-      {project.artifacts.length > 0 && (
-        <Section title="Cleanup opportunities">
-          <CleanupPlan
-            artifacts={project.artifacts}
-            cleanupLabel={project.cleanup_label}
-          />
-        </Section>
-      )}
-    </div>
+      {/* Source views */}
+      <Section title="Source views" count={SOURCE_VIEWS.length}>
+        <Table
+          columns={[
+            { key: 'name', label: 'Name' },
+            { key: 'strategy', label: 'Strategy', style: { width: 96 } },
+            { key: 'files', label: 'Files', style: { width: 64 } },
+            { key: 'plan', label: 'Plan', style: { width: 80 } },
+            { key: 'actions', label: '', style: { width: 80 } },
+          ]}
+          rows={SOURCE_VIEWS.map((view) => ({
+            name: (
+              <span>
+                <span className="alm-mono">{view.name}</span>{' '}
+                <Pill variant="ghost">generated</Pill>
+              </span>
+            ),
+            strategy: view.strategy,
+            files: view.files,
+            plan: view.plan,
+            actions: <Btn size="sm">Reveal</Btn>,
+          }))}
+        />
+      </Section>
+
+      {/* Notes */}
+      <Section
+        title="Notes"
+        count={NOTES.length}
+        right={<Btn size="sm">+ Add note</Btn>}
+      >
+        {NOTES.map((note, i) => (
+          <div
+            key={i}
+            style={{
+              display: 'flex',
+              alignItems: 'center',
+              justifyContent: 'space-between',
+              padding: '6px 16px',
+              borderBottom: i < NOTES.length - 1 ? '1px solid var(--alm-color-border)' : undefined,
+            }}
+          >
+            <span style={{ fontSize: 'var(--alm-text-sm)' }}>{note}</span>
+            <span style={{ display: 'flex', gap: 4 }}>
+              <Btn size="sm">Edit</Btn>
+              <Btn size="sm" variant="danger">Delete</Btn>
+            </span>
+          </div>
+        ))}
+      </Section>
+    </DetailPane>
   );
 }
 
-/** Inline variant for use inside the projects page (no route params needed). */
-export interface ProjectDetailInlineProps {
-  projectId: string;
-  onProjectLoaded?: (project: ProjectDetailType) => void;
-}
-
-export function ProjectDetailInline({ projectId, onProjectLoaded }: ProjectDetailInlineProps) {
-  const { data: project, loading } = useParameterizedQuery(projectStore, projectId);
-
-  if (project && onProjectLoaded) {
-    onProjectLoaded(project);
-  }
-
-  if (loading || !project) {
-    return <div className="alm-page__loading">Loading project...</div>;
-  }
-
-  return <ProjectDetailContent project={project} />;
-}
-
-/** Route-level component for /projects/$id. */
+/**
+ * Route-level component for /projects/$id.
+ * Uses the first fixture project as a fallback (fixture data, no real routing).
+ */
 export function ProjectDetail() {
-  const { id } = useParams({ strict: false }) as { id: string };
-  const { data: project, loading } = useParameterizedQuery(projectStore, id);
-
-  if (loading || !project) {
-    return <div className="alm-page__loading">Loading project...</div>;
-  }
-
-  return (
-    <div className="alm-page" data-testid="ProjectDetail">
-      <ProjectDetailContent project={project} />
-    </div>
-  );
+  const project = PROJECTS_DATA[0];
+  return <ProjectDetailContent project={project} />;
 }

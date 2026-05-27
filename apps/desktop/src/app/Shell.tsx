@@ -1,5 +1,5 @@
 /**
- * Shell -- main application shell with sidebar, main content, status bar.
+ * Shell -- main application shell with sidebar, main content area, status bar.
  * Route hybrid layout: Inbox and Projects get their own right sidebar
  * handling (built into their pages). Other routes use full-width main.
  */
@@ -28,10 +28,10 @@ function ShellInner() {
   }, [prefs.setupCompleted, navigate]);
 
   return (
-    <div className={`alm-shell density-${prefs.density}`}>
-      <div className="alm-shell__body">
+    <div className={`alm-frame density-${prefs.density}`}>
+      <div className="alm-frame__body">
         <Sidebar />
-        <main className="alm-shell__main">
+        <main className="alm-frame__main">
           <Outlet />
         </main>
       </div>

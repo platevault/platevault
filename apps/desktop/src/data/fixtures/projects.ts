@@ -1,5 +1,5 @@
 // Static mock fixture data for Project and ProjectDetail
-// Matches canvas wireframe data from docs/design/canvas-wireframes-2026-05-24/project/
+// Matches design V3 mock data.
 
 import type {
   Project,
@@ -15,6 +15,32 @@ import type {
 function uuid(suffix: string): string {
   return `550e8400-e29b-41d4-a716-${suffix}`;
 }
+
+// ─── Design V3 flat fixture shape ───────────────────────────────────────────
+
+export interface ProjectFixture {
+  id: number;
+  name: string;
+  state: 'setup_incomplete' | 'ready' | 'prepared' | 'processing' | 'completed' | 'archived' | 'blocked';
+  profile: string;
+  target: string;
+  hours: number;
+  size: string;
+  views: number;
+  outputs: number;
+  sources: number;
+  blockedReason?: string;
+}
+
+export const PROJECTS_DATA: ProjectFixture[] = [
+  { id: 1, name: 'IC 1396 · HOO', state: 'prepared', profile: 'PixInsight/WBPP', target: 'IC 1396', hours: 9.3, size: '6.9 GB', views: 1, outputs: 0, sources: 4 },
+  { id: 2, name: 'NGC 7000 · HOO', state: 'processing', profile: 'PixInsight/WBPP', target: 'NGC 7000', hours: 7.7, size: '8.4 GB', views: 2, outputs: 4, sources: 7 },
+  { id: 3, name: 'NGC 7000 · SHO mosaic', state: 'ready', profile: 'PixInsight/WBPP', target: 'NGC 7000', hours: 12.0, size: '10.2 GB', views: 0, outputs: 0, sources: 5 },
+  { id: 4, name: 'M31 · LRGB', state: 'completed', profile: 'PixInsight/WBPP', target: 'M31', hours: 11.8, size: '4.8 GB', views: 1, outputs: 2, sources: 3 },
+  { id: 5, name: 'Jupiter 2025-02-03', state: 'completed', profile: 'Planetary', target: 'Jupiter', hours: 0.5, size: '1.8 GB', views: 0, outputs: 3, sources: 2 },
+  { id: 6, name: 'untitled-attempt', state: 'blocked', profile: 'PixInsight/WBPP', target: '?', hours: 0, size: '0', views: 0, outputs: 0, sources: 0, blockedReason: 'Missing calibration masters for SII filter' },
+  { id: 7, name: 'M31 · 2022 (legacy)', state: 'archived', profile: 'PixInsight/WBPP', target: 'M31', hours: 8.4, size: '3.2 GB', views: 0, outputs: 1, sources: 2 },
+];
 
 // ─── Project List ───────────────────────────────────────────────────────────
 
@@ -36,8 +62,8 @@ export const projects: Project[] = [
       bias: [uuid('440407')],
       dark_flats: [],
     },
-    source_view_ids: [uuid('440601')],
-    output_ids: [uuid('440701')],
+    source_view_ids: [uuid('440601'), uuid('440602')],
+    output_ids: [uuid('440701'), uuid('440702b'), uuid('440703b'), uuid('440704b')],
     processing_directory: 'processing/',
     output_directory: 'outputs/',
     updated_at: new Date(Date.now() - 2 * 86_400_000).toISOString(),
@@ -53,7 +79,7 @@ export const projects: Project[] = [
     integration_hours: 12.0,
     target_ids: [uuid('440201')],
     source_map: {
-      lights: [uuid('440010'), uuid('440011'), uuid('440012'), uuid('440013')],
+      lights: [uuid('440010'), uuid('440011'), uuid('440012'), uuid('440013'), uuid('440014')],
       darks: [uuid('440401')],
       flats: [uuid('440403'), uuid('440404'), uuid('440405')],
       bias: [uuid('440407')],
@@ -76,13 +102,13 @@ export const projects: Project[] = [
     integration_hours: 11.8,
     target_ids: [uuid('440202')],
     source_map: {
-      lights: Array.from({ length: 8 }, (_, i) => uuid(`44002${i}`)),
+      lights: Array.from({ length: 3 }, (_, i) => uuid(`44002${i}`)),
       darks: [uuid('440406')],
-      flats: [uuid('440410'), uuid('440411'), uuid('440412'), uuid('440413')],
+      flats: [uuid('440410'), uuid('440411'), uuid('440412')],
       bias: [uuid('440408')],
       dark_flats: [],
     },
-    source_view_ids: [uuid('440602')],
+    source_view_ids: [uuid('440620')],
     output_ids: [uuid('440702'), uuid('440703')],
     processing_directory: 'processing/',
     output_directory: 'outputs/',
@@ -90,52 +116,6 @@ export const projects: Project[] = [
   },
   {
     id: uuid('440304'),
-    name: 'M31 · 2022 (legacy)',
-    workflow_profile_id: 'PixInsight/WBPP',
-    root_path: 'D:\\Astrophotography\\Archive\\M31_2022',
-    state: 'archived',
-    verification_state: 'has_accepted',
-    cleanup_state: { reclaimable_bytes: 0 },
-    integration_hours: 18.4,
-    target_ids: [uuid('440202')],
-    source_map: {
-      lights: Array.from({ length: 12 }, (_, i) => uuid(`44003${i}`)),
-      darks: [uuid('440420')],
-      flats: [uuid('440421'), uuid('440422')],
-      bias: [uuid('440423')],
-      dark_flats: [],
-    },
-    source_view_ids: [uuid('440610')],
-    output_ids: [uuid('440710')],
-    processing_directory: 'processing/',
-    output_directory: 'outputs/',
-    updated_at: new Date(Date.now() - 180 * 86_400_000).toISOString(),
-  },
-  {
-    id: uuid('440305'),
-    name: 'IC 1396 · HOO',
-    workflow_profile_id: 'PixInsight/WBPP',
-    root_path: 'D:\\Astrophotography\\Projects\\IC1396_HOO',
-    state: 'prepared',
-    verification_state: 'unreviewed',
-    cleanup_state: { reclaimable_bytes: 0 },
-    integration_hours: 9.3,
-    target_ids: [uuid('440203')],
-    source_map: {
-      lights: [uuid('440040'), uuid('440041')],
-      darks: [uuid('440401')],
-      flats: [uuid('440403'), uuid('440404')],
-      bias: [uuid('440407')],
-      dark_flats: [],
-    },
-    source_view_ids: [uuid('440620')],
-    output_ids: [],
-    processing_directory: 'processing/',
-    output_directory: 'outputs/',
-    updated_at: new Date(Date.now() - 86_400_000).toISOString(),
-  },
-  {
-    id: uuid('440306'),
     name: 'Jupiter 2025-02-03',
     workflow_profile_id: 'planetary/lunar',
     root_path: 'D:\\Astrophotography\\Projects\\Jupiter_2025-02-03',
@@ -145,25 +125,25 @@ export const projects: Project[] = [
     integration_hours: 0.5,
     target_ids: [uuid('440204')],
     source_map: {
-      lights: [uuid('440050')],
+      lights: [uuid('440050'), uuid('440051')],
       darks: [],
       flats: [],
       bias: [],
       dark_flats: [],
     },
     source_view_ids: [],
-    output_ids: [uuid('440720')],
+    output_ids: [uuid('440720'), uuid('440721'), uuid('440722')],
     processing_directory: 'processing/',
     output_directory: 'outputs/',
     updated_at: new Date(Date.now() - 90 * 86_400_000).toISOString(),
   },
   {
-    id: uuid('440307'),
+    id: uuid('440305'),
     name: 'untitled-attempt',
     workflow_profile_id: '—',
     root_path: 'D:\\Astrophotography\\Misc\\untitled',
     state: 'blocked',
-    blocked_reason: 'non-conforming structure · classified as project-like material',
+    blocked_reason: 'Missing calibration masters for SII filter',
     verification_state: 'unreviewed',
     cleanup_state: { reclaimable_bytes: 0 },
     integration_hours: 0,
@@ -180,6 +160,52 @@ export const projects: Project[] = [
     processing_directory: '',
     output_directory: '',
     updated_at: new Date(Date.now() - 120 * 86_400_000).toISOString(),
+  },
+  {
+    id: uuid('440306'),
+    name: 'IC 1396 · HOO',
+    workflow_profile_id: 'PixInsight/WBPP',
+    root_path: 'D:\\Astrophotography\\Projects\\IC1396_HOO',
+    state: 'prepared',
+    verification_state: 'unreviewed',
+    cleanup_state: { reclaimable_bytes: 0 },
+    integration_hours: 9.3,
+    target_ids: [uuid('440203')],
+    source_map: {
+      lights: [uuid('440040'), uuid('440041'), uuid('440042'), uuid('440043')],
+      darks: [uuid('440401')],
+      flats: [uuid('440403'), uuid('440404')],
+      bias: [uuid('440407')],
+      dark_flats: [],
+    },
+    source_view_ids: [uuid('440630')],
+    output_ids: [],
+    processing_directory: 'processing/',
+    output_directory: 'outputs/',
+    updated_at: new Date(Date.now() - 86_400_000).toISOString(),
+  },
+  {
+    id: uuid('440307'),
+    name: 'M31 · 2022 (legacy)',
+    workflow_profile_id: 'PixInsight/WBPP',
+    root_path: 'D:\\Astrophotography\\Archive\\M31_2022',
+    state: 'archived',
+    verification_state: 'has_accepted',
+    cleanup_state: { reclaimable_bytes: 0 },
+    integration_hours: 8.4,
+    target_ids: [uuid('440202')],
+    source_map: {
+      lights: Array.from({ length: 2 }, (_, i) => uuid(`44003${i}`)),
+      darks: [uuid('440420')],
+      flats: [uuid('440421'), uuid('440422')],
+      bias: [uuid('440423')],
+      dark_flats: [],
+    },
+    source_view_ids: [],
+    output_ids: [uuid('440710')],
+    processing_directory: 'processing/',
+    output_directory: 'outputs/',
+    updated_at: new Date(Date.now() - 180 * 86_400_000).toISOString(),
   },
 ];
 

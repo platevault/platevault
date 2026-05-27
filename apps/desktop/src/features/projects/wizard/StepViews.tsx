@@ -57,9 +57,8 @@ export function StepViews({ data, onChange }: StepViewsProps) {
       </div>
 
       {/* ── Strategy (from settings) ── */}
-      <Box
-        heading="Strategy (from settings)"
-        right={
+      <Box title="Strategy (from settings)">
+        <div style={{ display: 'flex', justifyContent: 'flex-end', marginBottom: 4 }}>
           <a
             href="#"
             onClick={(e) => e.preventDefault()}
@@ -67,10 +66,9 @@ export function StepViews({ data, onChange }: StepViewsProps) {
           >
             Override for this project
           </a>
-        }
-      >
+        </div>
         <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
-          <Pill label="NTFS JUNCTION" variant="ok" size="sm" />
+          <Pill variant="ok">NTFS JUNCTION</Pill>
           <span style={{ fontSize: 'var(--alm-text-sm)' }}>Default for Windows + PixInsight</span>
           <span style={{ marginLeft: 'auto', fontSize: 'var(--alm-text-xs)', color: 'var(--alm-text-muted)' }}>
             ~12 KB on disk &middot; no admin &middot; cleanup-safe
@@ -115,7 +113,7 @@ export function StepViews({ data, onChange }: StepViewsProps) {
                     aria-label="View name"
                   />
                 </td>
-                <td><Pill label={row.strategy} variant="ok" size="sm" /></td>
+                <td><Pill variant="ok">{row.strategy}</Pill></td>
                 <td style={{ fontSize: 'var(--alm-text-xs)' }}>{row.scope}</td>
                 <td className="alm-mono" style={{ fontSize: '11px' }}>{row.items}</td>
                 <td className="alm-mono" style={{ fontSize: '11px' }}>{row.estimatedSize}</td>
@@ -127,9 +125,8 @@ export function StepViews({ data, onChange }: StepViewsProps) {
       </Section>
 
       {/* ── Conflict policy ── */}
-      <Box
-        heading="Conflict policy"
-        right={
+      <Box title="Conflict policy">
+        <div style={{ display: 'flex', justifyContent: 'flex-end', marginBottom: 4 }}>
           <a
             href="#"
             onClick={(e) => e.preventDefault()}
@@ -137,8 +134,7 @@ export function StepViews({ data, onChange }: StepViewsProps) {
           >
             defaults from settings
           </a>
-        }
-      >
+        </div>
         <div style={{ display: 'flex', flexDirection: 'column', gap: 0 }}>
           <label style={{ display: 'block', fontSize: 'var(--alm-text-xs)', padding: '2px 0', cursor: 'pointer' }}>
             <input

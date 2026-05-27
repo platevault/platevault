@@ -24,7 +24,7 @@ export function ArchiveListItem({
     >
       <div className="alm-archive-list__item-row">
         <span className="alm-archive-list__item-name">{name}</span>
-        <Pill label={entityType} />
+        <Pill>{entityType}</Pill>
       </div>
       <span className="alm-archive-list__item-date">{archivedAt}</span>
     </button>

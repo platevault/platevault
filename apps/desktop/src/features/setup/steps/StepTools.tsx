@@ -80,7 +80,7 @@ export function StepTools({ tools, onToolsChange }: StepToolsProps) {
                 <div className="alm-step-tools__row-info">
                   <div className="alm-step-tools__row-header">
                     <span className="alm-step-tools__row-name">{def.name}</span>
-                    <Pill label="Not detected" variant="neutral" size="sm" />
+                    <Pill variant="neutral">Not detected</Pill>
                   </div>
                   <span className="alm-step-tools__row-desc">{def.description}</span>
                 </div>
@@ -140,7 +140,7 @@ function ToolPathPicker({
       {path ? (
         <>
           <span className="alm-step-tools__path-value">{path}</span>
-          <Pill label="OK" variant="ok" size="sm" />
+          <Pill variant="ok">OK</Pill>
         </>
       ) : (
         <span className="alm-step-tools__path-value alm-step-tools__path-value--empty">

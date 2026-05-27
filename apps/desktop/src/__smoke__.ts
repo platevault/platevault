@@ -10,36 +10,44 @@
 
 import type {
   PillProps,
-  ConfidenceProps,
-  ProvenanceProps,
+  PillVariant,
   LockProps,
   KVProps,
   BoxProps,
   SectionProps,
   BtnProps,
+  BtnVariant,
+  BtnSize,
   DirPickerProps,
-  FilterBarProps,
-  ToolbarProps,
-  DataTableProps,
   WizardShellProps,
   EmptyStateProps,
+  TableProps,
+  TableColumn,
+  BannerProps,
+  BannerVariant,
+  ToggleProps,
+  SegControlProps,
+  RadioGroupProps,
+  RadioOption,
+  CoverageBarProps,
 } from '@/ui';
 
 import {
   Pill,
-  Confidence,
-  Provenance,
   Lock,
   KV,
   Box,
   Section,
   Btn,
   DirPicker,
-  FilterBar,
-  Toolbar,
-  DataTable,
   WizardShell,
   EmptyState,
+  Table,
+  Banner,
+  Toggle,
+  SegControl,
+  RadioGroup,
+  CoverageBar,
 } from '@/ui';
 
 // ─── App Shell & Utilities ───────────────────────────────────────────────────
@@ -62,12 +70,8 @@ import { GroupByBar } from '@/features/sessions/GroupByBar';
 
 import { InboxPage } from '@/features/inbox/InboxPage';
 import { InboxList } from '@/features/inbox/InboxList';
-import { SessionReview } from '@/features/inbox/SessionReview';
+import { InboxDetail } from '@/features/inbox/InboxDetail';
 import { ActionSidebar } from '@/features/inbox/ActionSidebar';
-import { SplitPreview } from '@/features/inbox/SplitPreview';
-import { MergeSearch } from '@/features/inbox/MergeSearch';
-import { InboxConfirmOverlay } from '@/features/inbox/InboxConfirmOverlay';
-import { FilterSelect } from '@/features/inbox/FilterSelect';
 
 import { CalibrationPage } from '@/features/calibration/CalibrationPage';
 import { CalibrationDetail } from '@/features/calibration/CalibrationDetail';
@@ -126,19 +130,20 @@ void _routerCheck;
 export type SmokeCheck = {
   // UI
   pill: typeof Pill;
-  confidence: typeof Confidence;
-  provenance: typeof Provenance;
   lock: typeof Lock;
   kv: typeof KV;
   box: typeof Box;
   section: typeof Section;
   btn: typeof Btn;
   dirPicker: typeof DirPicker;
-  filterBar: typeof FilterBar;
-  toolbar: typeof Toolbar;
-  dataTable: typeof DataTable;
   wizardShell: typeof WizardShell;
   emptyState: typeof EmptyState;
+  table: typeof Table;
+  banner: typeof Banner;
+  toggle: typeof Toggle;
+  segControl: typeof SegControl;
+  radioGroup: typeof RadioGroup;
+  coverageBar: typeof CoverageBar;
   // App
   shell: typeof Shell;
   sidebar: typeof Sidebar;
@@ -155,12 +160,8 @@ export type SmokeCheck = {
   groupByBar: typeof GroupByBar;
   inboxPage: typeof InboxPage;
   inboxList: typeof InboxList;
-  sessionReview: typeof SessionReview;
+  inboxDetail: typeof InboxDetail;
   actionSidebar: typeof ActionSidebar;
-  splitPreview: typeof SplitPreview;
-  mergeSearch: typeof MergeSearch;
-  inboxConfirmOverlay: typeof InboxConfirmOverlay;
-  filterSelect: typeof FilterSelect;
   calibrationPage: typeof CalibrationPage;
   calibrationDetail: typeof CalibrationDetail;
   mastersList: typeof MastersList;
@@ -187,19 +188,26 @@ export type SmokeCheck = {
   // Type imports to verify they resolve
   _types: {
     PillProps: PillProps;
-    ConfidenceProps: ConfidenceProps;
-    ProvenanceProps: ProvenanceProps;
+    PillVariant: PillVariant;
     LockProps: LockProps;
     KVProps: KVProps;
     BoxProps: BoxProps;
     SectionProps: SectionProps;
     BtnProps: BtnProps;
+    BtnVariant: BtnVariant;
+    BtnSize: BtnSize;
     DirPickerProps: DirPickerProps;
-    FilterBarProps: FilterBarProps;
-    ToolbarProps: ToolbarProps;
-    DataTableProps: DataTableProps<unknown>;
     WizardShellProps: WizardShellProps;
     EmptyStateProps: EmptyStateProps;
+    TableProps: TableProps;
+    TableColumn: TableColumn;
+    BannerProps: BannerProps;
+    BannerVariant: BannerVariant;
+    ToggleProps: ToggleProps;
+    SegControlProps: SegControlProps;
+    RadioGroupProps: RadioGroupProps;
+    RadioOption: RadioOption;
+    CoverageBarProps: CoverageBarProps;
     SessionState: SessionState;
     ProjectState: ProjectState;
     PlanState: PlanState;

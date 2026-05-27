@@ -1,5 +1,180 @@
 // Static mock fixture data for Settings
-// Wireframe-aligned data matching canvas-wireframes-2026-05-24/project/wireframes/settings.jsx
+// Updated to match design V3 mock data — all settings panes.
+
+// ─── Data Sources ────────────────────────────────────────────────────────────
+
+export interface DataSourceRoot {
+  id: number;
+  path: string;
+  type: 'Raw' | 'Calibration' | 'Projects' | 'Inbox' | 'Archive';
+  online: boolean;
+  files: number | string;
+  size: string;
+  lastScan: string;
+}
+
+export const DATA_SOURCES: DataSourceRoot[] = [
+  { id: 1, path: 'D:\\Astrophotography\\Raw', type: 'Raw', online: true, files: 84231, size: '1.8 TB', lastScan: '2h ago' },
+  { id: 2, path: 'D:\\Astrophotography\\Calibration', type: 'Calibration', online: true, files: 12044, size: '312 GB', lastScan: '2h ago' },
+  { id: 3, path: 'D:\\Astrophotography\\Projects', type: 'Projects', online: true, files: 38112, size: '920 GB', lastScan: '2h ago' },
+  { id: 4, path: 'D:\\Astrophotography\\Inbox', type: 'Inbox', online: true, files: 1842, size: '44 GB', lastScan: '2h ago' },
+  { id: 5, path: '\\\\NAS-2025\\astro\\archive', type: 'Archive', online: false, files: '?', size: '?', lastScan: 'never' },
+  { id: 6, path: 'E:\\AstroOverflow', type: 'Raw', online: true, files: 7931, size: '180 GB', lastScan: '2h ago' },
+];
+
+// ─── Equipment ───────────────────────────────────────────────────────────────
+
+export interface OpticalTrainFixture {
+  id: number;
+  name: string;
+  camera: string;
+  telescope: string;
+  focalLength: string;
+  pixelScale: string;
+}
+
+export interface CameraFixture {
+  id: number;
+  model: string;
+  sensor: string;
+  pixelSize: string;
+  resolution: string;
+  cooled: boolean;
+  color: boolean;
+}
+
+export interface TelescopeFixture {
+  id: number;
+  model: string;
+  aperture: string;
+  focalLength: string;
+  fRatio: string;
+}
+
+export const OPTICAL_TRAINS: OpticalTrainFixture[] = [
+  { id: 1, name: 'FSQ-106 + ASI2600MM', camera: 'ASI2600MM Pro', telescope: 'Takahashi FSQ-106EDX4', focalLength: '530 mm', pixelScale: '1.74″/px' },
+  { id: 2, name: 'GT81 + ASI533MC', camera: 'ASI533MC Pro', telescope: 'William Optics GT81', focalLength: '478 mm', pixelScale: '2.20″/px' },
+];
+
+export const CAMERAS: CameraFixture[] = [
+  { id: 1, model: 'ZWO ASI2600MM Pro', sensor: 'Sony IMX571', pixelSize: '3.76 μm', resolution: '6248 × 4176', cooled: true, color: false },
+  { id: 2, model: 'ZWO ASI533MC Pro', sensor: 'Sony IMX533', pixelSize: '3.76 μm', resolution: '3008 × 3008', cooled: true, color: true },
+];
+
+export const TELESCOPES: TelescopeFixture[] = [
+  { id: 1, model: 'Takahashi FSQ-106EDX4', aperture: '106 mm', focalLength: '530 mm', fRatio: 'f/5' },
+  { id: 2, model: 'William Optics GT81', aperture: '81 mm', focalLength: '478 mm', fRatio: 'f/5.9' },
+];
+
+// ─── Processing Tools ─────────────────────────────────────────────────────────
+
+export interface ProcessingToolFixture {
+  id: number;
+  name: string;
+  version: string | null;
+  path: string | null;
+  enabled: boolean;
+  detected: boolean;
+}
+
+export const PROCESSING_TOOLS: ProcessingToolFixture[] = [
+  { id: 1, name: 'PixInsight', version: '1.8.9-2', path: '/Applications/PixInsight/PixInsight.app', enabled: true, detected: true },
+  { id: 2, name: 'WBPP Script', version: '2.7.0', path: null, enabled: true, detected: true },
+  { id: 3, name: 'Siril', version: null, path: null, enabled: false, detected: false },
+  { id: 4, name: 'AutoStakkert!', version: null, path: null, enabled: false, detected: false },
+];
+
+// ─── Calibration Matching Criteria ───────────────────────────────────────────
+
+export interface CalibrationCriterion {
+  id: number;
+  field: string;
+  required: boolean;
+  tolerance: string | null;
+  notes: string;
+}
+
+export const CALIBRATION_CRITERIA: CalibrationCriterion[] = [
+  { id: 1, field: 'Camera', required: true, tolerance: null, notes: 'Must match exactly' },
+  { id: 2, field: 'Binning', required: true, tolerance: null, notes: 'Must match exactly' },
+  { id: 3, field: 'Gain', required: true, tolerance: null, notes: 'Must match exactly' },
+  { id: 4, field: 'Sensor temperature', required: false, tolerance: '±2 °C', notes: 'Soft mismatch warning outside tolerance' },
+  { id: 5, field: 'Exposure (darks)', required: true, tolerance: null, notes: 'Must match light exposure' },
+  { id: 6, field: 'Filter (flats)', required: true, tolerance: null, notes: 'Must match session filter' },
+  { id: 7, field: 'Flat age', required: false, tolerance: '90 days', notes: 'Warn if older than threshold' },
+  { id: 8, field: 'Dark age', required: false, tolerance: '90 days', notes: 'Warn if older than threshold' },
+];
+
+// ─── Target Catalogs ─────────────────────────────────────────────────────────
+
+export interface TargetCatalogFixture {
+  id: number;
+  name: string;
+  objects: number;
+  enabled: boolean;
+  lastUpdated: string;
+}
+
+export const TARGET_CATALOGS: TargetCatalogFixture[] = [
+  { id: 1, name: 'Messier', objects: 110, enabled: true, lastUpdated: '2025-01-01' },
+  { id: 2, name: 'NGC', objects: 7840, enabled: true, lastUpdated: '2025-01-01' },
+  { id: 3, name: 'IC', objects: 5386, enabled: true, lastUpdated: '2025-01-01' },
+  { id: 4, name: 'Caldwell', objects: 109, enabled: true, lastUpdated: '2025-01-01' },
+  { id: 5, name: 'Sharpless', objects: 313, enabled: false, lastUpdated: '2024-06-01' },
+  { id: 6, name: 'Barnard', objects: 369, enabled: false, lastUpdated: '2024-06-01' },
+];
+
+// ─── Cleanup Per-type Actions ─────────────────────────────────────────────────
+
+export interface CleanupTypeFixture {
+  id: number;
+  type: string;
+  action: 'Keep' | 'Archive' | 'Delete';
+  locked: boolean;
+}
+
+export const CLEANUP_TYPES: CleanupTypeFixture[] = [
+  { id: 1, type: 'Raw light frames', action: 'Keep', locked: true },
+  { id: 2, type: 'Calibration masters', action: 'Keep', locked: true },
+  { id: 3, type: 'Accepted outputs', action: 'Keep', locked: true },
+  { id: 4, type: 'Registered frames', action: 'Delete', locked: false },
+  { id: 5, type: 'Calibrated frames', action: 'Delete', locked: false },
+  { id: 6, type: 'Debayered frames', action: 'Delete', locked: false },
+  { id: 7, type: 'Local normalized', action: 'Delete', locked: false },
+  { id: 8, type: 'Drizzle data', action: 'Delete', locked: false },
+  { id: 9, type: 'Integration cache', action: 'Delete', locked: false },
+  { id: 10, type: 'Stack output (intermediate)', action: 'Keep', locked: false },
+  { id: 11, type: 'Temporary files', action: 'Delete', locked: false },
+  { id: 12, type: 'Processing logs', action: 'Archive', locked: false },
+  { id: 13, type: 'Process icons / tool config', action: 'Keep', locked: false },
+  { id: 14, type: 'Manual notes', action: 'Keep', locked: false },
+  { id: 15, type: 'Unknown files', action: 'Keep', locked: false },
+];
+
+// ─── Audit Log Events ─────────────────────────────────────────────────────────
+
+export interface AuditEventFixture {
+  id: number;
+  timestamp: string;
+  event: string;
+  entity: string;
+  outcome: 'ok' | 'warn' | 'error';
+  actor: 'user' | 'system';
+  detail: string;
+}
+
+export const AUDIT_EVENTS: AuditEventFixture[] = [
+  { id: 1, timestamp: '2026-04-18T21:42:00Z', event: 'session.confirmed', entity: 'NGC 7000 · SII · 2026-04-18', outcome: 'ok', actor: 'user', detail: 'Session confirmed via review queue' },
+  { id: 2, timestamp: '2026-04-18T21:40:00Z', event: 'session.discovered', entity: 'NGC 7000 · SII · 2026-04-18', outcome: 'ok', actor: 'system', detail: 'Inbox scan found 14 new FITS files' },
+  { id: 3, timestamp: '2026-04-16T09:12:00Z', event: 'session.confirmed', entity: 'NGC 7000 · OIII · 2026-04-15', outcome: 'ok', actor: 'user', detail: 'Session confirmed via review queue' },
+  { id: 4, timestamp: '2026-04-15T21:06:00Z', event: 'session.candidate', entity: 'NGC 7000 · OIII · 2026-04-15', outcome: 'ok', actor: 'system', detail: 'Metadata extraction completed; target and filter resolved' },
+  { id: 5, timestamp: '2026-04-12T08:30:00Z', event: 'project.source_added', entity: 'NGC 7000 · SHO mosaic', outcome: 'ok', actor: 'user', detail: 'Session NGC 7000 · Ha · 2026-04-12 added as source' },
+  { id: 6, timestamp: '2026-04-10T14:05:00Z', event: 'calibration.master_imported', entity: 'MasterDark_300s_-10C_g100', outcome: 'ok', actor: 'system', detail: 'Master dark imported from scan #14' },
+  { id: 7, timestamp: '2026-03-30T22:18:00Z', event: 'session.confirmed', entity: 'M31 · R · 2026-03-30', outcome: 'ok', actor: 'user', detail: 'Session confirmed via review queue' },
+  { id: 8, timestamp: '2026-03-28T20:00:00Z', event: 'session.discovered', entity: 'M31 · L · 2026-03-28', outcome: 'warn', actor: 'system', detail: 'Filter origin is inferred — needs review' },
+];
+
+// ─── Legacy / existing settings shape (retained) ──────────────────────────────
 
 interface CleanupPolicyCell {
   action: 'keep' | 'trash' | 'delete' | 'archive' | 'rm_link';

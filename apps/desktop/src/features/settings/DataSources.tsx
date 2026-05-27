@@ -1,85 +1,69 @@
 import { useState } from 'react';
-import clsx from 'clsx';
-import { Btn, Pill } from '@/ui';
+import { Btn, Pill, Table } from '@/ui';
+import {
+  DATA_SOURCES,
+  type DataSourceRoot,
+} from '@/data/fixtures/settings';
 
 interface DataSourcesProps {
   save: (scope: string, values: Record<string, unknown>) => void;
 }
 
-type SourceType = 'raw' | 'calibration' | 'project' | 'inbox' | 'archive' | 'overflow';
-
-const TYPE_VARIANT: Record<SourceType, 'ok' | 'info' | 'warn' | 'neutral' | 'ghost' | 'danger'> = {
-  raw: 'ok',
-  calibration: 'info',
-  project: 'neutral',
-  inbox: 'warn',
-  archive: 'ghost',
-  overflow: 'ghost',
+const TYPE_VARIANT: Record<DataSourceRoot['type'], 'ok' | 'info' | 'neutral' | 'warn' | 'ghost'> = {
+  Raw: 'ok',
+  Calibration: 'info',
+  Projects: 'neutral',
+  Inbox: 'warn',
+  Archive: 'ghost',
 };
 
-interface SourceRoot {
-  id: string;
-  path: string;
-  type: SourceType;
-}
-
-const MOCK_ROOTS: SourceRoot[] = [
-  { id: 'r1', path: 'D:\\Astrophotography\\Raw', type: 'raw' },
-  { id: 'r2', path: 'D:\\Astrophotography\\Calibration', type: 'calibration' },
-  { id: 'r3', path: 'D:\\Astrophotography\\Projects', type: 'project' },
-  { id: 'r4', path: 'D:\\Astrophotography\\Inbox', type: 'inbox' },
-  { id: 'r5', path: '\\\\NAS-2025\\astro\\archive', type: 'archive' },
-  { id: 'r6', path: 'E:\\AstroOverflow', type: 'overflow' },
-];
-
 function makeId() {
-  return `root-${Date.now()}-${Math.random().toString(36).slice(2, 6)}`;
+  return Date.now();
 }
 
 export function DataSources({ save }: DataSourcesProps) {
-  const [roots, setRoots] = useState<SourceRoot[]>(MOCK_ROOTS);
-  const [addingPath, setAddingPath] = useState('');
-  const [addingType, setAddingType] = useState<SourceType>('raw');
+  const [roots, setRoots] = useState<DataSourceRoot[]>(DATA_SOURCES);
   const [showAdd, setShowAdd] = useState(false);
+  const [addingPath, setAddingPath] = useState('');
+  const [addingType, setAddingType] = useState<DataSourceRoot['type']>('Raw');
 
   const handleAdd = () => {
     if (!addingPath.trim()) return;
-    const newRoot: SourceRoot = {
+    const newRoot: DataSourceRoot = {
       id: makeId(),
       path: addingPath.trim(),
       type: addingType,
+      online: true,
+      files: 0,
+      size: '—',
+      lastScan: 'never',
     };
     const updated = [...roots, newRoot];
     setRoots(updated);
     setAddingPath('');
     setShowAdd(false);
-    save('roots', { roots: updated.map((r) => ({ id: r.id, path: r.path, type: r.type })) });
+    save('roots', { roots: updated });
   };
 
-  const handleRemove = (id: string) => {
+  const handleRemove = (id: number) => {
     const updated = roots.filter((r) => r.id !== id);
     setRoots(updated);
-    save('roots', { roots: updated.map((r) => ({ id: r.id, path: r.path, type: r.type })) });
-  };
-
-  const handleReveal = (path: string) => {
-    // Mock: in real app this would call Tauri shell.open
-    console.log('Reveal in explorer:', path);
+    save('roots', { roots: updated });
   };
 
   return (
-    <div className="alm-datasources">
-      <div className="alm-datasources__toolbar">
-        <Btn size="sm" onClick={() => setShowAdd(true)}>
-          Add source folder
-        </Btn>
-      </div>
+    <>
+      <div className="alm-settings__group">
+        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 'var(--alm-sp-3)' }}>
+          <div className="alm-settings__group-title" style={{ marginBottom: 0 }}>Library Roots</div>
+          <Btn size="sm" onClick={() => setShowAdd(true)}>Add source folder</Btn>
+        </div>
 
-      {showAdd && (
-        <div className="alm-datasources__add-form">
-          <div className="alm-datasources__add-row">
+        {showAdd && (
+          <div style={{ display: 'flex', gap: 'var(--alm-sp-2)', marginBottom: 'var(--alm-sp-3)', flexWrap: 'wrap' }}>
             <input
-              className="alm-input alm-datasources__add-input"
+              className="alm-input"
+              style={{ flex: 1, minWidth: 240 }}
               value={addingPath}
               onChange={(e) => setAddingPath(e.target.value)}
               placeholder="e.g. D:\Astrophotography\Raw"
@@ -91,78 +75,71 @@ export function DataSources({ save }: DataSourcesProps) {
               aria-label="Source folder path"
             />
             <select
-              className="alm-select alm-datasources__add-select"
+              className="alm-select"
               value={addingType}
-              onChange={(e) => setAddingType(e.target.value as SourceType)}
+              onChange={(e) => setAddingType(e.target.value as DataSourceRoot['type'])}
               aria-label="Source type"
             >
-              <option value="raw">raw</option>
-              <option value="calibration">calibration</option>
-              <option value="project">project</option>
-              <option value="inbox">inbox</option>
-              <option value="archive">archive</option>
-              <option value="overflow">overflow</option>
+              <option value="Raw">Raw</option>
+              <option value="Calibration">Calibration</option>
+              <option value="Projects">Projects</option>
+              <option value="Inbox">Inbox</option>
+              <option value="Archive">Archive</option>
             </select>
-            <Btn size="sm" onClick={handleAdd} disabled={!addingPath.trim()}>
-              Add
-            </Btn>
-            <Btn size="sm" variant="ghost" onClick={() => setShowAdd(false)}>
-              Cancel
-            </Btn>
+            <Btn size="sm" onClick={handleAdd} disabled={!addingPath.trim()}>Add</Btn>
+            <Btn size="sm" variant="ghost" onClick={() => setShowAdd(false)}>Cancel</Btn>
           </div>
-        </div>
-      )}
+        )}
 
-      <table className="alm-datasources__table">
-        <thead>
-          <tr>
-            <th>Path</th>
-            <th className="alm-datasources__col-type">Type</th>
-            <th className="alm-datasources__col-actions"></th>
-          </tr>
-        </thead>
-        <tbody>
+        <div style={{ display: 'flex', flexDirection: 'column', gap: 'var(--alm-sp-3)' }}>
           {roots.map((root) => (
-            <tr key={root.id} className="alm-datasources__row">
-              <td>
-                <code className="alm-mono">{root.path}</code>
-              </td>
-              <td>
-                <Pill
-                  label={root.type}
-                  variant={TYPE_VARIANT[root.type]}
-                  size="sm"
-                />
-              </td>
-              <td className="alm-datasources__row-actions">
-                <Btn
-                  size="sm"
-                  variant="ghost"
-                  onClick={() => handleReveal(root.path)}
-                  aria-label={`Reveal ${root.path}`}
-                >
+            <div
+              key={root.id}
+              style={{
+                border: '1px solid var(--alm-border)',
+                borderRadius: 'var(--alm-radius)',
+                padding: 'var(--alm-sp-3)',
+                background: root.online ? undefined : 'var(--alm-surface2)',
+              }}
+            >
+              <div style={{ display: 'flex', alignItems: 'flex-start', gap: 'var(--alm-sp-2)', flexWrap: 'wrap' }}>
+                <code className="alm-mono" style={{ flex: 1, fontSize: 'var(--alm-text-xs)', wordBreak: 'break-all' }}>
+                  {root.path}
+                </code>
+                <div style={{ display: 'flex', gap: 'var(--alm-sp-1)', flexShrink: 0 }}>
+                  <Pill variant={TYPE_VARIANT[root.type]}>{root.type}</Pill>
+                  <Pill variant={root.online ? 'ok' : 'danger'}>{root.online ? 'Online' : 'Offline'}</Pill>
+                </div>
+              </div>
+              {root.online && (
+                <div style={{ marginTop: 'var(--alm-sp-2)', fontSize: 'var(--alm-text-xs)', color: 'var(--alm-text-muted)', display: 'flex', gap: 'var(--alm-sp-3)' }}>
+                  <span>{typeof root.files === 'number' ? root.files.toLocaleString() : root.files} files</span>
+                  <span>{root.size}</span>
+                  <span>Last scan: {root.lastScan}</span>
+                </div>
+              )}
+              <div style={{ marginTop: 'var(--alm-sp-2)', display: 'flex', gap: 'var(--alm-sp-1)' }}>
+                <Btn size="sm" variant="ghost" onClick={() => console.log('reveal', root.path)}>
                   Reveal
                 </Btn>
-                <Btn
-                  size="sm"
-                  variant="ghost"
-                  onClick={() => handleRemove(root.id)}
-                  aria-label={`Remove ${root.path}`}
-                >
+                {!root.online && (
+                  <Btn size="sm" variant="ghost" onClick={() => console.log('remap', root.path)}>
+                    Remap
+                  </Btn>
+                )}
+                <Btn size="sm" variant="ghost" onClick={() => handleRemove(root.id)}>
                   Remove
                 </Btn>
-              </td>
-            </tr>
+              </div>
+            </div>
           ))}
           {roots.length === 0 && (
-            <tr>
-              <td colSpan={3} className="alm-datasources__empty">
-                No source folders registered. Click "Add source folder" to get started.
-              </td>
-            </tr>
+            <p style={{ color: 'var(--alm-text-muted)', fontSize: 'var(--alm-text-sm)' }}>
+              No source folders registered. Click "Add source folder" to get started.
+            </p>
           )}
-        </tbody>
-      </table>
-    </div>
+        </div>
+      </div>
+    </>
   );
 }

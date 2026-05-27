@@ -49,7 +49,7 @@ export function SessionInspector({
               <span className="alm-session-inspector__prov-origin">
                 {meta.origin === 'reviewed' ? '●' : meta.origin === 'inferred' ? '◐' : '○'}
               </span>
-              <Pill label={meta.confidence} variant="ghost" size="sm" />
+              <Pill variant="ghost">{meta.confidence}</Pill>
             </div>
           ))}
         </div>
@@ -86,9 +86,9 @@ export function SessionInspector({
             </div>
             <div style={{ marginTop: 3, display: 'flex', alignItems: 'center', gap: 6 }}>
               {c.decision === 'accepted' ? (
-                <Pill label="accepted" variant="ok" size="sm" />
+                <Pill variant="ok">accepted</Pill>
               ) : (
-                <Pill label="undecided" variant="warn" size="sm" />
+                <Pill variant="warn">undecided</Pill>
               )}
             </div>
           </div>

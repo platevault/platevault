@@ -1,5 +1,4 @@
 import { useState, useMemo } from 'react';
-import clsx from 'clsx';
 import { Btn } from '@/ui';
 
 interface NamingStructureProps {
@@ -7,7 +6,6 @@ interface NamingStructureProps {
 }
 
 const AVAILABLE_TOKENS = [
-  '{object}',
   '{target}',
   '{filter}',
   '{date}',
@@ -24,21 +22,17 @@ const AVAILABLE_TOKENS = [
 
 const SEPARATORS = ['/', '_', '-', '.'] as const;
 
-/* No "Dark flat" frame type per task spec */
 const FRAME_TYPES = ['Light', 'Dark', 'Flat', 'Bias'] as const;
 
-/* Default patterns: lights use {object}, darks/flats/bias do not (research R4) */
 const DEFAULT_PATTERNS: Record<string, string[]> = {
-  Light: ['{object}', '/', '{filter}', '/', '{date}', '/', '{frame_type}', '/'],
+  Light: ['{target}', '/', '{filter}', '/', '{date}', '/', '{frame_type}', '/'],
   Dark: ['{camera}', '/', '{exposure}', '/', '{date}', '/', '{frame_type}', '/'],
   Flat: ['{camera}', '/', '{filter}', '/', '{date}', '/', '{frame_type}', '/'],
   Bias: ['{camera}', '/', '{date}', '/', '{frame_type}', '/'],
 };
 
-/* Mock metadata for preview */
 const PREVIEW_VALUES: Record<string, string> = {
-  '{object}': 'M101',
-  '{target}': 'M101',
+  '{target}': 'NGC7000',
   '{filter}': 'Ha',
   '{date}': '2026-04-12',
   '{date_time}': '2026-04-12T22_30',
@@ -47,91 +41,76 @@ const PREVIEW_VALUES: Record<string, string> = {
   '{gain}': 'g100',
   '{binning}': '1x1',
   '{camera}': 'ASI2600MM',
-  '{telescope}': 'Esprit100',
+  '{telescope}': 'FSQ106',
   '{sequence}': '0001',
   '{session_id}': 'a3f7',
 };
 
 function resolvePreview(tokens: string[]): string {
-  return tokens
-    .map((t) => PREVIEW_VALUES[t] ?? t)
-    .join('');
-}
-
-function TokenChip({
-  token,
-  onRemove,
-}: {
-  token: string;
-  onRemove: () => void;
-}) {
-  const isSep = !token.startsWith('{');
-  return (
-    <span
-      className={clsx(
-        'alm-naming__chip',
-        isSep ? 'alm-naming__chip--separator' : 'alm-naming__chip--token',
-      )}
-    >
-      <span>{token}</span>
-      <button
-        type="button"
-        className="alm-naming__chip-remove"
-        onClick={onRemove}
-        aria-label={`Remove ${token}`}
-      >
-        &times;
-      </button>
-    </span>
-  );
+  return tokens.map((t) => PREVIEW_VALUES[t] ?? t).join('');
 }
 
 function PatternEditor({
   tokens,
   onChange,
-  label,
+  frameType,
 }: {
   tokens: string[];
   onChange: (tokens: string[]) => void;
-  label: string;
+  frameType: string;
 }) {
   const [showTokenMenu, setShowTokenMenu] = useState(false);
   const [showSepMenu, setShowSepMenu] = useState(false);
 
-  const handleAddToken = (token: string) => {
-    onChange([...tokens, token]);
-    setShowTokenMenu(false);
-  };
-
-  const handleAddSeparator = (sep: string) => {
-    onChange([...tokens, sep]);
-    setShowSepMenu(false);
-  };
-
-  const handleRemove = (index: number) => {
-    onChange(tokens.filter((_, i) => i !== index));
-  };
-
+  const handleRemove = (index: number) => onChange(tokens.filter((_, i) => i !== index));
+  const handleAddToken = (t: string) => { onChange([...tokens, t]); setShowTokenMenu(false); };
+  const handleAddSep = (s: string) => { onChange([...tokens, s]); setShowSepMenu(false); };
   const preview = resolvePreview(tokens);
 
   return (
-    <div className="alm-naming__editor" aria-label={label}>
-      <div className="alm-naming__dropzone">
-        {tokens.map((tk, i) => (
-          <TokenChip key={`${tk}-${i}`} token={tk} onRemove={() => handleRemove(i)} />
-        ))}
-        <span className="alm-naming__divider" />
-        <div className="alm-naming__add-group">
-          <Btn size="sm" onClick={() => setShowTokenMenu(!showTokenMenu)}>
+    <div style={{ marginBottom: 'var(--alm-sp-2)' }}>
+      <div style={{ display: 'flex', flexWrap: 'wrap', gap: 'var(--alm-sp-1)', alignItems: 'center', minHeight: 32 }}>
+        {tokens.map((tk, i) => {
+          const isSep = !tk.startsWith('{');
+          return (
+            <span key={`${tk}-${i}`} className={isSep ? 'alm-sep-chip' : 'alm-token-chip'}>
+              {tk}
+              <span
+                className="alm-token-chip__x"
+                role="button"
+                tabIndex={0}
+                aria-label={`Remove ${tk}`}
+                onClick={() => handleRemove(i)}
+                onKeyDown={(e) => { if (e.key === 'Enter') handleRemove(i); }}
+              >
+                &times;
+              </span>
+            </span>
+          );
+        })}
+        <div style={{ position: 'relative', display: 'inline-block' }}>
+          <Btn size="sm" onClick={() => { setShowTokenMenu(!showTokenMenu); setShowSepMenu(false); }}>
             + Token
           </Btn>
           {showTokenMenu && (
-            <div className="alm-naming__dropdown">
+            <div style={{
+              position: 'absolute', top: '100%', left: 0, zIndex: 10,
+              background: 'var(--alm-surface)', border: '1px solid var(--alm-border)',
+              borderRadius: 'var(--alm-radius)', padding: 'var(--alm-sp-1)',
+              minWidth: 160, boxShadow: '0 4px 12px rgba(0,0,0,0.12)',
+            }}>
               {AVAILABLE_TOKENS.map((t) => (
                 <button
                   key={t}
                   type="button"
-                  className="alm-naming__dropdown-item"
+                  style={{
+                    display: 'block', width: '100%', textAlign: 'left',
+                    padding: '4px 8px', background: 'none', border: 'none',
+                    cursor: 'pointer', fontFamily: 'var(--alm-font-mono)', fontSize: 'var(--alm-text-xs)',
+                    color: 'var(--alm-text)',
+                  }}
+                  onMouseOver={(e) => (e.currentTarget.style.background = 'var(--alm-hover-bg)')}
+                  onMouseOut={(e) => (e.currentTarget.style.background = 'none')}
                   onClick={() => handleAddToken(t)}
                 >
                   {t}
@@ -140,20 +119,32 @@ function PatternEditor({
             </div>
           )}
         </div>
-        <div className="alm-naming__add-group">
-          <Btn size="sm" onClick={() => setShowSepMenu(!showSepMenu)}>
-            + Separator
+        <div style={{ position: 'relative', display: 'inline-block' }}>
+          <Btn size="sm" onClick={() => { setShowSepMenu(!showSepMenu); setShowTokenMenu(false); }}>
+            + Sep
           </Btn>
           {showSepMenu && (
-            <div className="alm-naming__dropdown">
+            <div style={{
+              position: 'absolute', top: '100%', left: 0, zIndex: 10,
+              background: 'var(--alm-surface)', border: '1px solid var(--alm-border)',
+              borderRadius: 'var(--alm-radius)', padding: 'var(--alm-sp-1)',
+              minWidth: 100, boxShadow: '0 4px 12px rgba(0,0,0,0.12)',
+            }}>
               {SEPARATORS.map((s) => (
                 <button
                   key={s}
                   type="button"
-                  className="alm-naming__dropdown-item"
-                  onClick={() => handleAddSeparator(s)}
+                  style={{
+                    display: 'block', width: '100%', textAlign: 'left',
+                    padding: '4px 8px', background: 'none', border: 'none',
+                    cursor: 'pointer', fontFamily: 'var(--alm-font-mono)', fontSize: 'var(--alm-text-xs)',
+                    color: 'var(--alm-text)',
+                  }}
+                  onMouseOver={(e) => (e.currentTarget.style.background = 'var(--alm-hover-bg)')}
+                  onMouseOut={(e) => (e.currentTarget.style.background = 'none')}
+                  onClick={() => handleAddSep(s)}
                 >
-                  {s === '/' ? '/ (path)' : s}
+                  {s === '/' ? '/ (path separator)' : s}
                 </button>
               ))}
             </div>
@@ -161,9 +152,8 @@ function PatternEditor({
         </div>
       </div>
       {tokens.length > 0 && (
-        <div className="alm-naming__preview-line">
-          <span className="alm-naming__preview-label">Preview:</span>
-          <code className="alm-mono">{preview}</code>
+        <div style={{ marginTop: 'var(--alm-sp-1)', fontSize: 'var(--alm-text-xs)', color: 'var(--alm-text-muted)' }}>
+          Preview: <code className="alm-mono" style={{ color: 'var(--alm-text)' }}>{preview}</code>
         </div>
       )}
     </div>
@@ -173,46 +163,47 @@ function PatternEditor({
 export function NamingStructure({ save }: NamingStructureProps) {
   const [patterns, setPatterns] = useState<Record<string, string[]>>(DEFAULT_PATTERNS);
 
-  const handlePatternChange = (frameType: string, tokens: string[]) => {
-    const updated = { ...patterns, [frameType]: tokens };
+  const handleChange = (ft: string, tokens: string[]) => {
+    const updated = { ...patterns, [ft]: tokens };
     setPatterns(updated);
     save('naming', { patterns: updated });
   };
 
-  /* Combined preview for all frame types */
-  const previewLines = useMemo(() => {
-    return FRAME_TYPES.map((ft) => ({
-      type: ft,
-      path: resolvePreview(patterns[ft] ?? []),
-    }));
-  }, [patterns]);
+  const previewLines = useMemo(
+    () => FRAME_TYPES.map((ft) => ({ type: ft, path: resolvePreview(patterns[ft] ?? []) })),
+    [patterns],
+  );
 
   return (
-    <div className="alm-naming">
-      {/* Per-frame-type patterns */}
+    <>
       {FRAME_TYPES.map((ft) => (
-        <section key={ft} className="alm-naming__section">
-          <h3 className="alm-naming__section-label">{ft} frames</h3>
-          <PatternEditor
-            tokens={patterns[ft] ?? []}
-            onChange={(tokens) => handlePatternChange(ft, tokens)}
-            label={`${ft} naming pattern`}
-          />
-        </section>
+        <div key={ft} className="alm-settings__group">
+          <div className="alm-settings__group-title">{ft} frames</div>
+          <div className="alm-settings__row">
+            <div className="alm-settings__row-content">
+              <PatternEditor
+                tokens={patterns[ft] ?? []}
+                onChange={(tokens) => handleChange(ft, tokens)}
+                frameType={ft}
+              />
+            </div>
+          </div>
+        </div>
       ))}
 
-      {/* Combined preview */}
-      <section className="alm-naming__section">
-        <h3 className="alm-naming__section-label">Live Preview</h3>
-        <div className="alm-naming__preview">
+      <div className="alm-settings__group">
+        <div className="alm-settings__group-title">Live Preview</div>
+        <div style={{ display: 'flex', flexDirection: 'column', gap: 'var(--alm-sp-2)' }}>
           {previewLines.map(({ type, path }) => (
-            <div key={type} className="alm-naming__preview-row">
-              <span className="alm-naming__preview-type">{type}:</span>
-              <code className="alm-mono">{path}</code>
+            <div key={type} style={{ display: 'flex', gap: 'var(--alm-sp-3)', alignItems: 'baseline' }}>
+              <span style={{ width: 60, fontSize: 'var(--alm-text-xs)', color: 'var(--alm-text-muted)', flexShrink: 0 }}>
+                {type}:
+              </span>
+              <code className="alm-mono" style={{ fontSize: 'var(--alm-text-xs)' }}>{path || '—'}</code>
             </div>
           ))}
         </div>
-      </section>
-    </div>
+      </div>
+    </>
   );
 }

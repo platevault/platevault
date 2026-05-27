@@ -1,12 +1,5 @@
-/**
- * CalibrationDetail -- route component for /calibration/$id.
- * Highlighted matching fingerprint section, binary match display,
- * 1-year aging badge. Renders the full CalibrationPage which picks
- * up the $id param internally.
- *
- * Rewritten per spec 030 T076.
- */
-
+// Route-level stub for /calibration/$id — renders the main CalibrationPage.
+// Retained for router and smoke-test import compatibility.
 import { CalibrationPage } from './CalibrationPage';
 
 export function CalibrationDetail() {

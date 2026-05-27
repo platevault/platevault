@@ -1,205 +1,38 @@
 /**
- * InboxPage -- three-pane layout using PageShell + ListDetailLayout.
- * Left: ListSidebar with InboxList, Center: SessionReview detail,
- * Right: ActionSidebar.
- * Replaces ThreePane with ListDetailLayout(list, detail, sidebar).
- * Rewritten per spec 030 composition contracts.
+ * InboxPage -- three-pane layout (list + detail + action sidebar).
+ * Uses fixture data from @/data/fixtures/review.
+ * Design V3 rewrite.
  */
 
-import { useState, useMemo, useCallback } from 'react';
+import { useState } from 'react';
+import { PageShell, ListDetailLayout } from '@/components';
 import { EmptyState } from '@/ui';
-import { PageShell, ListDetailLayout, ListSidebar } from '@/components';
-import type { FilterPill } from '@/components';
-import { useSetToggle } from '@/hooks/useSetToggle';
+import { INBOX_DATA } from '@/data/fixtures/review';
+import type { InboxFixture } from '@/data/fixtures/review';
 import { InboxList } from './InboxList';
-import { SessionReview } from './SessionReview';
+import { InboxDetail } from './InboxDetail';
 import { ActionSidebar } from './ActionSidebar';
-import { SplitPreview } from './SplitPreview';
-import { MergeSearch } from './MergeSearch';
-import { InboxConfirmOverlay } from './InboxConfirmOverlay';
-import { FilterSelect } from './FilterSelect';
-import { MOCK_INBOX_SESSIONS } from './mock-data';
-import type { InboxSession } from './mock-data';
-import type { InboxAction } from './ActionSidebar';
-
-type SortMode = 'date_desc' | 'date_asc' | 'frames_desc' | 'name_asc';
-type GroupMode = 'none' | 'type' | 'date' | 'filter';
-
-const GROUP_OPTIONS = [
-  { value: 'none', label: 'No grouping' },
-  { value: 'type', label: 'Frame type' },
-  { value: 'date', label: 'Date' },
-  { value: 'filter', label: 'Filter' },
-];
-
-const SORT_OPTIONS = [
-  { value: 'date_desc', label: 'Date (newest)' },
-  { value: 'date_asc', label: 'Date (oldest)' },
-  { value: 'frames_desc', label: 'Frames (most)' },
-  { value: 'name_asc', label: 'Name (A-Z)' },
-];
-
-const TYPE_PILL_DEFS = [
-  { value: 'light', label: 'Lights' },
-  { value: 'dark', label: 'Darks' },
-  { value: 'flat', label: 'Flats' },
-  { value: 'bias', label: 'Bias' },
-];
-
-function sortSessions(sessions: InboxSession[], mode: SortMode): InboxSession[] {
-  const arr = [...sessions];
-  switch (mode) {
-    case 'date_desc':
-      arr.sort((a, b) => b.date.localeCompare(a.date));
-      break;
-    case 'date_asc':
-      arr.sort((a, b) => a.date.localeCompare(b.date));
-      break;
-    case 'frames_desc':
-      arr.sort((a, b) => b.frameCount - a.frameCount);
-      break;
-    case 'name_asc':
-      arr.sort((a, b) => a.object.localeCompare(b.object));
-      break;
-  }
-  return arr;
-}
 
 export function InboxPage() {
-  const [searchQuery, setSearchQuery] = useState('');
-  const [groupBy, setGroupBy] = useState<GroupMode>('none');
-  const [sortMode, setSortMode] = useState<SortMode>('date_desc');
-  const [typeFilters, toggleTypeFilter] = useSetToggle<string>();
-  const [filterFilter, setFilterFilter] = useState('');
-  const [selectedId, setSelectedId] = useState<string | null>(null);
+  const [selectedId, setSelectedId] = useState<number | null>(null);
 
-  // Overlay states
-  const [showConfirm, setShowConfirm] = useState(false);
-  const [showSplit, setShowSplit] = useState(false);
-  const [showMerge, setShowMerge] = useState(false);
-
-  const sessions = MOCK_INBOX_SESSIONS;
-
-  // Filter
-  const filtered = useMemo(() => {
-    let result = sessions;
-
-    if (searchQuery.trim()) {
-      const q = searchQuery.trim().toLowerCase();
-      result = result.filter(
-        (s) =>
-          s.object.toLowerCase().includes(q) ||
-          s.filter.toLowerCase().includes(q) ||
-          s.frameType.toLowerCase().includes(q),
-      );
-    }
-
-    if (typeFilters.size > 0) {
-      result = result.filter((s) => typeFilters.has(s.frameType));
-    }
-
-    if (filterFilter) {
-      result = result.filter((s) => s.filter === filterFilter);
-    }
-
-    return result;
-  }, [sessions, searchQuery, typeFilters, filterFilter]);
-
-  // Sort
-  const sorted = useMemo(
-    () => sortSessions(filtered, sortMode),
-    [filtered, sortMode],
-  );
-
-  // Selected session
-  const selectedSession = useMemo(() => {
-    if (!selectedId) return null;
-    return sessions.find((s) => s.id === selectedId) ?? null;
-  }, [sessions, selectedId]);
-
-  // Filter pills with active state
-  const pillState: FilterPill[] = useMemo(
-    () =>
-      TYPE_PILL_DEFS.map((p) => ({
-        ...p,
-        active: typeFilters.has(p.value),
-      })),
-    [typeFilters],
-  );
-
-  const handleAction = useCallback(
-    (action: InboxAction) => {
-      if (!selectedSession) return;
-
-      switch (action) {
-        case 'confirm':
-          setShowConfirm(true);
-          break;
-        case 'reject':
-          // In mock mode, just deselect
-          setSelectedId(null);
-          break;
-        case 'split':
-          setShowSplit(true);
-          break;
-        case 'merge':
-          setShowMerge(true);
-          break;
-        case 'edit':
-          // Edit mode is already the default in SessionReview
-          break;
-      }
-    },
-    [selectedSession],
-  );
-
-  const handleConfirm = useCallback(() => {
-    setShowConfirm(false);
-    setSelectedId(null);
-  }, []);
-
-  const handleSplit = useCallback(() => {
-    setShowSplit(false);
-    setSelectedId(null);
-  }, []);
-
-  const handleMerge = useCallback(
-    (_mergeTargetId: string) => {
-      setShowMerge(false);
-      setSelectedId(null);
-    },
-    [],
-  );
+  const selected: InboxFixture | undefined = selectedId !== null
+    ? INBOX_DATA.find((item) => item.id === selectedId)
+    : undefined;
 
   return (
-    <PageShell testId="InboxPage">
+    <PageShell>
       <ListDetailLayout
         list={
-          <ListSidebar
-            searchPlaceholder="Search inbox..."
-            searchValue={searchQuery}
-            onSearchChange={setSearchQuery}
-            groupOptions={GROUP_OPTIONS}
-            groupValue={groupBy}
-            onGroupChange={(v) => setGroupBy(v as GroupMode)}
-            sortOptions={SORT_OPTIONS}
-            sortValue={sortMode}
-            onSortChange={(v) => setSortMode(v as SortMode)}
-            filterPills={pillState}
-            onFilterToggle={toggleTypeFilter}
-            itemCount={sorted.length}
-          >
-            <FilterSelect value={filterFilter} onChange={setFilterFilter} />
-            <InboxList
-              sessions={sorted}
-              selectedId={selectedId}
-              onSelect={setSelectedId}
-            />
-          </ListSidebar>
+          <InboxList
+            items={INBOX_DATA}
+            selectedId={selectedId}
+            onSelect={setSelectedId}
+          />
         }
         detail={
-          selectedSession ? (
-            <SessionReview session={selectedSession} />
+          selected ? (
+            <InboxDetail item={selected} />
           ) : (
             <EmptyState
               title="Select a session"
@@ -207,38 +40,8 @@ export function InboxPage() {
             />
           )
         }
-        sidebar={
-          <ActionSidebar
-            hasSelection={selectedId !== null}
-            onAction={handleAction}
-          />
-        }
+        sidebar={<ActionSidebar hasSelection={selectedId !== null} />}
       />
-
-      {/* Overlays */}
-      {selectedSession && (
-        <>
-          <InboxConfirmOverlay
-            open={showConfirm}
-            session={selectedSession}
-            onConfirm={handleConfirm}
-            onCancel={() => setShowConfirm(false)}
-          />
-          <SplitPreview
-            open={showSplit}
-            session={selectedSession}
-            onConfirm={handleSplit}
-            onCancel={() => setShowSplit(false)}
-          />
-          <MergeSearch
-            open={showMerge}
-            currentSession={selectedSession}
-            allSessions={sessions}
-            onConfirm={handleMerge}
-            onCancel={() => setShowMerge(false)}
-          />
-        </>
-      )}
     </PageShell>
   );
 }

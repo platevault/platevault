@@ -154,7 +154,7 @@ export function StepCalibration({ selectedSessionIds: _selectedSessionIds, data,
               const currentValue = data.flatMappings[row.filter] || row.options.find((o) => o.isDefault)?.id || '';
               return (
                 <tr key={row.filter}>
-                  <td><Pill label={row.filter} variant="ghost" size="sm" /></td>
+                  <td><Pill variant="ghost">{row.filter}</Pill></td>
                   <td style={{ fontSize: 'var(--alm-text-xs)' }}>{row.lightsCovered}</td>
                   <td>
                     <select
@@ -199,7 +199,7 @@ export function StepCalibration({ selectedSessionIds: _selectedSessionIds, data,
               const currentValue = data[row.field] || row.defaultValue;
               return (
                 <tr key={row.role}>
-                  <td><Pill label={row.role} variant="ghost" size="sm" /></td>
+                  <td><Pill variant="ghost">{row.role}</Pill></td>
                   <td>
                     <select
                       value={currentValue}
@@ -253,7 +253,7 @@ export function StepCalibration({ selectedSessionIds: _selectedSessionIds, data,
       </Section>
 
       {/* ── Why these were recommended ── */}
-      <Box heading="Why these were recommended">
+      <Box title="Why these were recommended">
         <ul style={{ margin: 0, paddingLeft: 16, fontSize: 'var(--alm-text-xs)', color: 'var(--alm-text-secondary)' }}>
           <li><strong>Flats</strong>: matched per filter; same camera; flats &lt; 30d old preferred</li>
           <li><strong>Dark</strong>: exact match on EXPTIME (300s) &middot; temp &#916; 0.1&deg;C &middot; gain 100</li>

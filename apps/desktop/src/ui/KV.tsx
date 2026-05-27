@@ -1,23 +1,22 @@
 import type { ReactNode } from 'react';
-import type { ProvenanceOrigin, ConfidenceLevel } from '@/bindings/types';
-import { Provenance } from './Provenance';
-import { Confidence } from './Confidence';
 
 export interface KVProps {
   label: string;
   value: ReactNode;
-  origin?: ProvenanceOrigin;
-  confidence?: ConfidenceLevel;
+  provenance?: string;
+  mono?: boolean;
 }
 
-export function KV({ label, value, origin, confidence }: KVProps) {
+export function KV({ label, value, provenance, mono }: KVProps) {
   return (
-    <div className="alm-kv-row">
-      <span className="alm-kv-row__label">{label}</span>
-      <span className="alm-kv-row__value">
+    <div className="alm-kv">
+      <span className="alm-kv__label">{label}</span>
+      <span
+        className="alm-kv__value"
+        style={mono ? { fontFamily: 'var(--alm-font-mono)', fontSize: 'var(--alm-text-xs)' } : undefined}
+      >
         {value}
-        {origin && <Provenance origin={origin} />}
-        {confidence && <Confidence level={confidence} />}
+        {provenance && <span className="alm-kv__provenance">{provenance}</span>}
       </span>
     </div>
   );

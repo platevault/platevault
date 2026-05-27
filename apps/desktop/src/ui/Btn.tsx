@@ -1,48 +1,19 @@
-import { type ReactNode } from 'react';
-import { Button } from '@base-ui-components/react/button';
-import { clsx } from 'clsx';
+import type { ReactNode, ButtonHTMLAttributes } from 'react';
 
-export interface BtnProps {
-  variant?: 'primary' | 'danger' | 'ghost';
-  size?: 'sm' | 'md';
-  active?: boolean;
-  disabled?: boolean;
-  onClick?: () => void;
+export type BtnVariant = 'primary' | 'accent' | 'danger' | 'ghost';
+export type BtnSize = 'sm';
+export interface BtnProps extends ButtonHTMLAttributes<HTMLButtonElement> {
+  variant?: BtnVariant;
+  size?: BtnSize;
   children: ReactNode;
-  /** Optional inline style override. */
-  style?: React.CSSProperties;
-  /** Optional extra class name. */
-  className?: string;
-  /** Pass-through HTML attributes (e.g. data-tour for guided tour anchors). */
-  [key: `data-${string}`]: string | undefined;
 }
 
-export function Btn({
-  variant,
-  size = 'md',
-  active,
-  disabled,
-  onClick,
-  children,
-  style: inlineStyle,
-  className: extraClassName,
-  ...rest
-}: BtnProps) {
-  return (
-    <Button
-      className={clsx(
-        'alm-btn',
-        variant && `alm-btn--${variant}`,
-        size === 'sm' && 'alm-btn--sm',
-        active && 'alm-btn--active',
-        extraClassName,
-      )}
-      disabled={disabled}
-      onClick={onClick}
-      style={inlineStyle}
-      {...rest}
-    >
-      {children}
-    </Button>
-  );
+export function Btn({ variant, size, className, children, ...rest }: BtnProps) {
+  const cls = [
+    'alm-btn',
+    variant && `alm-btn--${variant}`,
+    size && `alm-btn--${size}`,
+    className,
+  ].filter(Boolean).join(' ');
+  return <button className={cls} {...rest}>{children}</button>;
 }

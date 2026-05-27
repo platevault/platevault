@@ -1,286 +1,173 @@
-/**
- * SessionDetail -- unified read-only view using PropertyTable.
- * Removes split columns, provenance badges, and confirmed badges.
- * Adds project-membership check to disable "Move to Inbox" when session
- * is used in a project.
- */
+import type { SessionFixture } from '@/data/fixtures/sessions';
+import { DetailPane, DetailHeader } from '@/components';
+import { Pill, Btn, Section, Box, Table, EmptyState } from '@/ui';
 
-import { useState } from 'react';
-import { useParams } from '@tanstack/react-router';
-import { useParameterizedQuery, createParameterizedStore } from '@/data/store';
-import { getSession, transitionSession } from '@/api/commands';
-import type {
-  SessionDetail as SessionDetailType,
-  AcquisitionSession,
-} from '@/bindings/types';
-import { Pill, Btn, Section } from '@/ui';
-import { PropertyTable } from '@/components';
-import type { PropertyDef } from '@/components';
-import { formatBytes, formatIntegration } from '@/lib/format';
-import { sessionStateVariant } from '@/lib/display';
+// Calibration match fixture for detail view
+const CAL_MATCHES = [
+  { kind: 'dark', name: 'MasterDark_300s_-10C_g100', score: 0.97, mismatch: 'none' },
+  { kind: 'flat', name: 'MasterFlat_Ha_2024-11', score: 0.88, mismatch: 'age 34d > 30d threshold' },
+  { kind: 'bias', name: 'MasterBias_g100', score: 0.99, mismatch: 'none' },
+];
 
-const sessionStore = createParameterizedStore((id: string) =>
-  getSession({ id }),
-);
+const HISTORY_ROWS = [
+  { ts: '2026-04-16T09:12:00Z', event: 'session.confirmed', actor: 'user', detail: 'Reviewed and confirmed' },
+  { ts: '2026-04-15T21:06:00Z', event: 'session.candidate', actor: 'system', detail: 'Metadata extraction completed' },
+  { ts: '2026-04-15T21:05:00Z', event: 'session.discovered', actor: 'system', detail: 'Inbox scan detected new FITS files' },
+];
 
-/** Wireframe fixture -- single session detail */
-const FIXTURE_SESSION: SessionDetailType = {
-  id: 'acq-a3f7-2b',
-  session_key: { target: 'NGC 7000', filter: 'Ha', binning: '1', gain: '100', night: '2024-11-30' },
-  state: 'confirmed',
-  confidence: 'confirmed',
-  optical_train_id: 'train-1',
-  frame_count: 54,
-  total_integration_seconds: 16200,
-  total_size_bytes: 3_758_096_384,
-  metadata: {
-    target: { value: 'NGC 7000 (North America Nebula)', origin: 'reviewed', confidence: 'confirmed' },
-    filter: { value: 'Ha (Optolong 7nm)', origin: 'observed', confidence: 'high' },
-    binning: { value: '1x1', origin: 'observed', confidence: 'high' },
-    gain: { value: '100', origin: 'observed', confidence: 'high' },
-    night: { value: '2024-11-30 (local solar noon boundary)', origin: 'inferred', confidence: 'high' },
-    optical_train: { value: 'AT130-EDT + 2600MM-Pro', origin: 'reviewed', confidence: 'confirmed' },
-    camera: { value: 'ZWO ASI2600MM Pro', origin: 'observed', confidence: 'high' },
-    telescope: { value: 'Astro-Tech AT130-EDT', origin: 'observed', confidence: 'high' },
-    focal_length: { value: '910 mm (with 0.8x reducer)', origin: 'reviewed', confidence: 'confirmed' },
-    exposure: { value: '300s x 54', origin: 'observed', confidence: 'high' },
-    first_last: { value: '2024-11-30 03:48 -> 08:18', origin: 'observed', confidence: 'high' },
-    avg_ccd_temp: { value: '-10.1 C (s 0.4)', origin: 'observed', confidence: 'high' },
-  },
-  target_ids: ['target-ngc7000'],
-  project_ids: ['proj-ngc7000-hoo', 'proj-ngc7000-sho'],
-  warnings: [],
-  framesets: [{ filter: 'Ha', count: 54, integration_s: 16200 }],
-  calibration_matches: [
-    { master_id: 'm1', kind: 'dark', score: 0.92, soft_mismatches: [] },
-    { master_id: 'm2', kind: 'flat', score: 0.88, soft_mismatches: [] },
-    { master_id: 'm3', kind: 'bias', score: 0.71, soft_mismatches: ['age'] },
-  ],
-  history: [
-    { timestamp: '2024-12-02T09:00:00Z', event: 'session.discovered', actor: 'system' },
-    { timestamp: '2024-12-02T09:12:00Z', event: 'session.confirmed', actor: 'user' },
-  ],
-};
+const stateVariant = (s: string) =>
+  (({ confirmed: 'ok', needs_review: 'warn', rejected: 'danger', discovered: 'ghost', candidate: 'neutral', ignored: 'neutral' } as Record<string, 'ok' | 'warn' | 'danger' | 'ghost' | 'neutral'>)[s] ?? 'neutral');
 
+interface Props {
+  session: SessionFixture | null;
+}
 
-function buildProperties(data: SessionDetailType): PropertyDef[] {
-  const props: PropertyDef[] = [];
-
-  for (const [key, meta] of Object.entries(data.metadata)) {
-    const sourceMap: Record<string, PropertyDef['source']> = {
-      reviewed: 'user',
-      observed: 'fits',
-      inferred: 'inferred',
-      generated: 'default',
-      planned: 'default',
-      applied: 'default',
-    };
-    props.push({
-      key,
-      label: key.replace(/_/g, ' ').replace(/\b\w/g, (c) => c.toUpperCase()),
-      value: meta.value != null ? String(meta.value) : null,
-      source: sourceMap[meta.origin] ?? 'default',
-    });
+export function SessionDetail({ session }: Props) {
+  if (!session) {
+    return (
+      <DetailPane>
+        <EmptyState
+          title="Select a session"
+          desc="Choose a session from the list to view its details."
+        />
+      </DetailPane>
+    );
   }
 
-  return props;
-}
-
-// ─── Inline variant (rendered inside list-detail layout) ────────────────────
-
-interface SessionDetailInlineProps {
-  session: AcquisitionSession;
-}
-
-export function SessionDetailInline({ session }: SessionDetailInlineProps) {
-  const [reopening, setReopening] = useState(false);
-
-  const data: SessionDetailType = {
-    ...FIXTURE_SESSION,
-    ...session,
-    framesets: FIXTURE_SESSION.framesets,
-    calibration_matches: FIXTURE_SESSION.calibration_matches,
-    history: FIXTURE_SESSION.history,
-  };
-
-  const handleReopen = async () => {
-    setReopening(true);
-    try {
-      await transitionSession({ id: data.id, action: 'reopen' });
-    } finally {
-      setReopening(false);
-    }
-  };
-
   return (
-    <SessionDetailContent
-      data={data}
-      onReopen={handleReopen}
-      reopening={reopening}
-    />
-  );
-}
-
-// ─── Routed variant (standalone page at /sessions/:id) ─────────────────────
-
-export function SessionDetail() {
-  const { id } = useParams({ strict: false }) as { id: string };
-  const { data: remoteData, loading, error } = useParameterizedQuery(sessionStore, id);
-  const [reopening, setReopening] = useState(false);
-
-  const data = remoteData ?? FIXTURE_SESSION;
-
-  if (loading && !remoteData) return <div className="alm-page__loading">Loading session...</div>;
-  if (error && !remoteData) return <div className="alm-page__error">Error: {error.message}</div>;
-
-  const handleReopen = async () => {
-    setReopening(true);
-    try {
-      await transitionSession({ id: data.id, action: 'reopen' });
-      sessionStore.invalidate(data.id);
-    } finally {
-      setReopening(false);
-    }
-  };
-
-  return (
-    <div className="alm-page" data-testid="SessionDetail">
-      <SessionDetailContent
-        data={data}
-        onReopen={handleReopen}
-        reopening={reopening}
-      />
-    </div>
-  );
-}
-
-// ─── Shared content ─────────────────────────────────────────────────────────
-
-interface SessionDetailContentProps {
-  data: SessionDetailType;
-  onReopen: () => void;
-  reopening: boolean;
-}
-
-function SessionDetailContent({
-  data,
-  onReopen,
-  reopening,
-}: SessionDetailContentProps) {
-  const isInProject = data.project_ids.length > 0;
-  const properties = buildProperties(data);
-
-  return (
-    <div className="alm-session-detail">
+    <DetailPane>
       {/* Header */}
-      <header className="alm-session-detail__header">
-        <div className="alm-session-detail__header-left">
-          <h2 className="alm-session-detail__title">
-            {data.session_key.target} &middot; {data.session_key.filter} &middot; {data.session_key.night}
-          </h2>
-          <Pill label={`${data.frame_count} frames`} variant="ghost" size="sm" />
-          <Pill
-            label={data.state === 'needs_review' ? 'needs review' : data.state}
-            variant={sessionStateVariant(data.state)}
-            size="sm"
-          />
-        </div>
-        <div className="alm-session-detail__header-actions">
-          <Btn size="sm" onClick={onReopen} disabled={reopening}>
-            {reopening ? 'Reopening...' : 'Re-open to review'}
-          </Btn>
-          <Btn size="sm" disabled={isInProject}>
-            Move to Inbox
-          </Btn>
-          <Btn size="sm">Use in project</Btn>
-        </div>
-      </header>
+      <DetailHeader
+        title={
+          <>
+            <strong>{session.target}</strong>
+            {' · '}
+            {session.filter}
+            {' · '}
+            {session.date}
+          </>
+        }
+        titleExtra={
+          <>
+            <Pill variant="neutral">{session.frames} frames</Pill>
+            <Pill variant={stateVariant(session.state)}>{session.state.replace(/_/g, ' ')}</Pill>
+          </>
+        }
+        actions={
+          <>
+            <Btn size="sm">Re-open to review</Btn>
+            <Btn size="sm" disabled={session.projects.length > 0}>Move to Inbox</Btn>
+            <Btn size="sm">Use in project</Btn>
+          </>
+        }
+      />
 
-      {/* Summary stats */}
-      <div className="alm-session-detail__summary">
-        <span className="alm-session-detail__stat">
-          <span className="alm-session-detail__stat-label">Integration:</span>
-          <span className="alm-mono">{formatIntegration(data.total_integration_seconds)}</span>
-        </span>
-        <span className="alm-session-detail__stat">
-          <span className="alm-session-detail__stat-label">On disk:</span>
-          <span className="alm-mono">{formatBytes(data.total_size_bytes)}</span>
-        </span>
-        <span className="alm-session-detail__stat">
-          <span className="alm-session-detail__stat-label">Projects:</span>
-          <span className="alm-mono">{data.project_ids.length}</span>
-        </span>
+      {/* Stats bar */}
+      <div className="alm-detail__stats">
+        <div className="alm-detail__stat">
+          <span className="alm-detail__stat-value">{session.integration}</span>
+          <span className="alm-detail__stat-label">integration</span>
+        </div>
+        <div className="alm-detail__stat">
+          <span className="alm-detail__stat-value">{session.size}</span>
+          <span className="alm-detail__stat-label">on disk</span>
+        </div>
+        <div className="alm-detail__stat">
+          <span className="alm-detail__stat-value">{session.projects.length}</span>
+          <span className="alm-detail__stat-label">projects</span>
+        </div>
       </div>
 
-      {/* Unified property table */}
+      {/* Metadata section */}
       <Section title="Metadata">
-        <PropertyTable
-          properties={properties}
-          mode="view"
-          showSource
-        />
+        <Box>
+          <table className="alm-prop-table">
+            <tbody>
+              <tr className="alm-prop-table__row">
+                <td className="alm-prop-table__label">Target</td>
+                <td className="alm-prop-table__value">{session.target}</td>
+                <td className="alm-prop-table__source">reviewed</td>
+              </tr>
+              <tr className="alm-prop-table__row">
+                <td className="alm-prop-table__label">Filter</td>
+                <td className="alm-prop-table__value">{session.filter}</td>
+                <td className="alm-prop-table__source">observed</td>
+              </tr>
+              <tr className="alm-prop-table__row">
+                <td className="alm-prop-table__label">Date</td>
+                <td className="alm-prop-table__value">{session.date}</td>
+                <td className="alm-prop-table__source">observed</td>
+              </tr>
+              <tr className="alm-prop-table__row">
+                <td className="alm-prop-table__label">Frames</td>
+                <td className="alm-prop-table__value">{session.frames}</td>
+                <td className="alm-prop-table__source">observed</td>
+              </tr>
+              <tr className="alm-prop-table__row">
+                <td className="alm-prop-table__label">Integration</td>
+                <td className="alm-prop-table__value">{session.integration}</td>
+                <td className="alm-prop-table__source">computed</td>
+              </tr>
+              <tr className="alm-prop-table__row">
+                <td className="alm-prop-table__label">Size on disk</td>
+                <td className="alm-prop-table__value">{session.size}</td>
+                <td className="alm-prop-table__source">observed</td>
+              </tr>
+            </tbody>
+          </table>
+        </Box>
       </Section>
 
       {/* Calibration matches */}
-      <Section title={`Calibration matches (${data.calibration_matches.length})`}>
-        <table className="alm-simple-table">
-          <thead>
-            <tr>
-              <th>Kind</th>
-              <th>Score</th>
-              <th>Mismatches</th>
-            </tr>
-          </thead>
-          <tbody>
-            {data.calibration_matches.map((m, i) => (
-              <tr key={i}>
-                <td>{m.kind}</td>
-                <td className="alm-mono">{(m.score * 100).toFixed(0)}%</td>
-                <td>
-                  {m.soft_mismatches.length > 0 ? m.soft_mismatches.join(', ') : 'None'}
-                </td>
-              </tr>
-            ))}
-          </tbody>
-        </table>
+      <Section title="Calibration matches" count={CAL_MATCHES.length}>
+        <Table
+          columns={[
+            { key: 'kind', label: 'Kind' },
+            { key: 'name', label: 'Master' },
+            { key: 'score', label: 'Score' },
+            { key: 'mismatch', label: 'Soft mismatches' },
+          ]}
+          rows={CAL_MATCHES.map(m => ({
+            kind: <Pill variant={m.kind === 'dark' ? 'info' : m.kind === 'flat' ? 'accent' : 'neutral'}>{m.kind}</Pill>,
+            name: <span className="alm-mono" style={{ fontSize: 11 }}>{m.name}</span>,
+            score: <span className="alm-mono">{(m.score * 100).toFixed(0)}%</span>,
+            mismatch: m.mismatch === 'none'
+              ? <span style={{ color: 'var(--alm-text-faint)' }}>—</span>
+              : <span style={{ color: 'var(--alm-warn)' }}>{m.mismatch}</span>,
+          }))}
+        />
       </Section>
 
-      {/* Framesets */}
-      <Section title={`Framesets (${data.framesets.length})`}>
-        <table className="alm-simple-table">
-          <thead>
-            <tr>
-              <th>Filter</th>
-              <th>Count</th>
-              <th>Integration</th>
-            </tr>
-          </thead>
-          <tbody>
-            {data.framesets.map((f, i) => (
-              <tr key={i}>
-                <td>{f.filter}</td>
-                <td className="alm-mono">{f.count}</td>
-                <td className="alm-mono">{formatIntegration(f.integration_s)}</td>
-              </tr>
+      {/* Linked projects */}
+      <Section title="Linked projects" count={session.projects.length}>
+        {session.projects.length === 0 ? (
+          <span style={{ color: 'var(--alm-text-muted)', fontSize: 'var(--alm-text-sm)' }}>Not linked to any project</span>
+        ) : (
+          <div style={{ display: 'flex', flexWrap: 'wrap', gap: 6, padding: '6px 0' }}>
+            {session.projects.map(p => (
+              <Pill key={p} variant="info">{p}</Pill>
             ))}
-          </tbody>
-        </table>
+          </div>
+        )}
       </Section>
 
       {/* History */}
       <Section title="History">
-        <ul className="alm-timeline">
-          {data.history.map((h, i) => (
-            <li key={i} className="alm-timeline__entry">
-              <span className="alm-timeline__time">
-                {new Date(h.timestamp).toLocaleString()}
-              </span>
-              <span className="alm-timeline__event">{h.event}</span>
-              <span className="alm-timeline__actor">{h.actor}</span>
-            </li>
-          ))}
-        </ul>
+        <Table
+          columns={[
+            { key: 'ts', label: 'Timestamp', className: 'alm-mono' },
+            { key: 'event', label: 'Event' },
+            { key: 'actor', label: 'Actor' },
+            { key: 'detail', label: 'Detail' },
+          ]}
+          rows={HISTORY_ROWS.map(h => ({
+            ts: <span className="alm-mono" style={{ fontSize: 11 }}>{h.ts}</span>,
+            event: h.event,
+            actor: h.actor,
+            detail: h.detail,
+          }))}
+        />
       </Section>
-    </div>
+    </DetailPane>
   );
 }
