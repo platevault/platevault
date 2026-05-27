@@ -1,9 +1,7 @@
 /**
- * T049 — ActionSidebar: right action sidebar for the inbox.
- *
- * Same-width buttons: Confirm, Reject, Split, Merge, Edit.
- * Each shows a hotkey hint (C, R, S, M, E).
- * Buttons use Btn from @/ui. Disabled when no session is selected.
+ * ActionSidebar -- right sidebar for Inbox page.
+ * Full-width action buttons with keyboard shortcut hints.
+ * Design V3 rewrite.
  */
 
 import { useEffect, useCallback } from 'react';
@@ -13,22 +11,22 @@ export type InboxAction = 'confirm' | 'reject' | 'split' | 'merge' | 'edit';
 
 export interface ActionSidebarProps {
   hasSelection: boolean;
-  onAction: (action: InboxAction) => void;
+  onAction?: (action: InboxAction) => void;
 }
 
 interface ActionDef {
   action: InboxAction;
   label: string;
   hotkey: string;
-  variant: 'primary' | 'danger' | 'ghost';
+  variant?: 'accent' | 'danger';
 }
 
 const ACTIONS: ActionDef[] = [
-  { action: 'confirm', label: 'Confirm', hotkey: 'C', variant: 'primary' },
+  { action: 'confirm', label: 'Confirm', hotkey: 'C', variant: 'accent' },
   { action: 'reject', label: 'Reject', hotkey: 'R', variant: 'danger' },
-  { action: 'split', label: 'Split', hotkey: 'S', variant: 'ghost' },
-  { action: 'merge', label: 'Merge', hotkey: 'M', variant: 'ghost' },
-  { action: 'edit', label: 'Edit', hotkey: 'E', variant: 'ghost' },
+  { action: 'split', label: 'Split', hotkey: 'S' },
+  { action: 'merge', label: 'Merge', hotkey: 'M' },
+  { action: 'edit', label: 'Edit', hotkey: 'E' },
 ];
 
 const HOTKEY_MAP: Record<string, InboxAction> = {
@@ -56,7 +54,7 @@ export function ActionSidebar({ hasSelection, onAction }: ActionSidebarProps) {
       const action = HOTKEY_MAP[e.key.toLowerCase()];
       if (action) {
         e.preventDefault();
-        onAction(action);
+        onAction?.(action);
       }
     },
     [hasSelection, onAction],
@@ -68,30 +66,47 @@ export function ActionSidebar({ hasSelection, onAction }: ActionSidebarProps) {
   }, [handleKeyDown]);
 
   return (
-    <aside className="alm-action-sidebar" aria-label="Session actions">
-      <div className="alm-action-sidebar__header">
-        <h3 className="alm-action-sidebar__title">Actions</h3>
+    <aside
+      className="alm-action-sidebar"
+      aria-label="Session actions"
+      style={{ width: 180, flexShrink: 0, padding: '12px 0' }}
+    >
+      <div
+        style={{
+          padding: '0 12px 8px',
+          fontSize: 11,
+          fontWeight: 600,
+          letterSpacing: '0.08em',
+          textTransform: 'uppercase',
+          color: 'var(--alm-color-fg-muted)',
+        }}
+      >
+        Actions
       </div>
-      <div className="alm-action-sidebar__buttons">
+      <div style={{ display: 'flex', flexDirection: 'column', gap: 4, padding: '0 12px' }}>
         {ACTIONS.map((def) => (
           <Btn
             key={def.action}
             variant={def.variant}
             disabled={!hasSelection}
-            onClick={() => onAction(def.action)}
-            className="alm-action-sidebar__btn"
+            onClick={() => onAction?.(def.action)}
+            style={{ width: '100%', justifyContent: 'space-between' }}
           >
-            <span className="alm-action-sidebar__btn-label">{def.label}</span>
-            <kbd className="alm-action-sidebar__hotkey">{def.hotkey}</kbd>
+            <span>{def.label}</span>
+            <kbd
+              style={{
+                fontSize: 10,
+                opacity: 0.6,
+                background: 'rgba(0,0,0,0.15)',
+                borderRadius: 3,
+                padding: '1px 4px',
+              }}
+            >
+              {def.hotkey}
+            </kbd>
           </Btn>
         ))}
       </div>
-
-      {!hasSelection && (
-        <p className="alm-action-sidebar__hint">
-          Select a session from the list to enable actions.
-        </p>
-      )}
     </aside>
   );
 }

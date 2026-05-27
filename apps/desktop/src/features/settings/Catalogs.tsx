@@ -1,105 +1,44 @@
 import { useState } from 'react';
-import { Switch } from '@base-ui-components/react/switch';
-import { Btn } from '@/ui';
+import { Toggle, Table } from '@/ui';
+import { TARGET_CATALOGS, type TargetCatalogFixture } from '@/data/fixtures/settings';
 
 interface CatalogsProps {
   save: (scope: string, values: Record<string, unknown>) => void;
 }
 
-interface CatalogEntry {
-  id: string;
-  name: string;
-  description: string;
-  objectCount: number;
-  enabled: boolean;
-}
-
-const INITIAL_CATALOGS: CatalogEntry[] = [
-  {
-    id: 'messier',
-    name: 'Messier',
-    description: '110 deep-sky objects catalogued by Charles Messier',
-    objectCount: 110,
-    enabled: true,
-  },
-  {
-    id: 'ngc-ic',
-    name: 'NGC-IC',
-    description: 'New General Catalogue and Index Catalogue',
-    objectCount: 13226,
-    enabled: true,
-  },
-  {
-    id: 'caldwell',
-    name: 'Caldwell',
-    description: 'Caldwell catalogue of 109 deep-sky objects visible in amateur telescopes',
-    objectCount: 109,
-    enabled: false,
-  },
-  {
-    id: 'sharpless',
-    name: 'Sharpless',
-    description: 'Sharpless catalog of HII regions (Sh2)',
-    objectCount: 313,
-    enabled: false,
-  },
-  {
-    id: 'abell',
-    name: 'Abell',
-    description: 'Abell catalog of planetary nebulae and galaxy clusters',
-    objectCount: 86,
-    enabled: false,
-  },
-];
-
 export function Catalogs({ save }: CatalogsProps) {
-  const [catalogs, setCatalogs] = useState<CatalogEntry[]>(INITIAL_CATALOGS);
+  const [catalogs, setCatalogs] = useState<TargetCatalogFixture[]>(TARGET_CATALOGS);
 
-  const handleToggle = (id: string) => {
-    const updated = catalogs.map((c) =>
-      c.id === id ? { ...c, enabled: !c.enabled } : c,
-    );
+  const handleToggle = (id: number, enabled: boolean) => {
+    const updated = catalogs.map((c) => (c.id === id ? { ...c, enabled } : c));
     setCatalogs(updated);
-    save('catalogs', {
-      catalogs: updated.map(({ id, enabled }) => ({ id, enabled })),
-    });
-  };
-
-  const handleDownloadAll = () => {
-    console.log('Download all catalogs triggered');
+    save('catalogs', { catalogs: updated });
   };
 
   return (
-    <div className="alm-catalogs">
-      <div className="alm-catalogs__toolbar">
-        <Btn size="sm" onClick={handleDownloadAll}>
-          Download All
-        </Btn>
+    <>
+      <div className="alm-settings__group">
+        <div className="alm-settings__group-title">Deep-Sky Catalogs</div>
+        <Table
+          columns={[
+            { key: 'name', label: 'Catalog' },
+            { key: 'objects', label: 'Objects', style: { width: 90 } },
+            { key: 'lastUpdated', label: 'Last updated', style: { width: 120 } },
+            { key: 'enabled', label: 'Enabled', style: { width: 80 } },
+          ]}
+          rows={catalogs.map((c) => ({
+            name: <strong>{c.name}</strong>,
+            objects: c.objects.toLocaleString(),
+            lastUpdated: <span style={{ fontSize: 'var(--alm-text-xs)', color: 'var(--alm-text-muted)' }}>{c.lastUpdated}</span>,
+            enabled: (
+              <Toggle
+                checked={c.enabled}
+                onChange={(v) => handleToggle(c.id, v)}
+              />
+            ),
+          }))}
+        />
       </div>
-
-      <ul className="alm-catalogs__list">
-        {catalogs.map((catalog) => (
-          <li key={catalog.id} className="alm-catalogs__item">
-            <label className="alm-catalogs__toggle">
-              <Switch.Root
-                className="alm-switch"
-                checked={catalog.enabled}
-                onCheckedChange={() => handleToggle(catalog.id)}
-                aria-label={`Enable ${catalog.name}`}
-              >
-                <Switch.Thumb className="alm-switch__thumb" />
-              </Switch.Root>
-              <div className="alm-catalogs__info">
-                <strong className="alm-catalogs__name">{catalog.name}</strong>
-                <span className="alm-catalogs__desc">{catalog.description}</span>
-                <span className="alm-catalogs__count">
-                  {catalog.objectCount.toLocaleString()} objects
-                </span>
-              </div>
-            </label>
-          </li>
-        ))}
-      </ul>
-    </div>
+    </>
   );
 }

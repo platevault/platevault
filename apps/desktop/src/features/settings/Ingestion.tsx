@@ -1,223 +1,90 @@
 import { useState } from 'react';
-import { Switch } from '@base-ui-components/react/switch';
-import { Btn } from '@/ui';
+import { Toggle, RadioGroup } from '@/ui';
 
 interface IngestionProps {
   save: (scope: string, values: Record<string, unknown>) => void;
 }
 
-const FILTER_OPTIONS = [
-  'None',
-  'Ha',
-  'OIII',
-  'SII',
-  'L',
-  'R',
-  'G',
-  'B',
-  'Ha-OIII Dual',
-] as const;
+type HashingMode = 'lazy' | 'eager' | 'off';
 
 export function Ingestion({ save }: IngestionProps) {
-  const [watcherEnabled, setWatcherEnabled] = useState(false);
-  const [scanOnStartup, setScanOnStartup] = useState(true);
   const [followSymlinks, setFollowSymlinks] = useState(false);
   const [followJunctions, setFollowJunctions] = useState(false);
-  const [hashingEnabled, setHashingEnabled] = useState(false);
-  const [metadataExtraction, setMetadataExtraction] = useState(true);
-  const [exposureTolerance, setExposureTolerance] = useState('2');
-  const [temperatureTolerance, setTemperatureTolerance] = useState('5');
-  const [defaultFilter, setDefaultFilter] = useState('None');
+  const [scanOnStartup, setScanOnStartup] = useState(true);
+  const [hashingMode, setHashingMode] = useState<HashingMode>('lazy');
 
-  const persistAll = () => {
+  const persist = (patch: Record<string, unknown>) => {
     save('ingestion', {
-      watcher_enabled: watcherEnabled,
-      scan_on_startup: scanOnStartup,
       follow_symlinks: followSymlinks,
       follow_junctions: followJunctions,
-      hashing_enabled: hashingEnabled,
-      metadata_extraction: metadataExtraction,
-      exposure_tolerance: Number(exposureTolerance),
-      temperature_tolerance: Number(temperatureTolerance),
-      default_filter: defaultFilter,
+      scan_on_startup: scanOnStartup,
+      hashing_mode: hashingMode,
+      ...patch,
     });
   };
 
-  const handleToggle = (
-    setter: React.Dispatch<React.SetStateAction<boolean>>,
-    current: boolean,
-  ) => {
-    setter(!current);
-    // Defer persist to next tick so state is updated
-    setTimeout(persistAll, 0);
-  };
-
-  const handleRescan = () => {
-    console.log('Manual rescan triggered');
-  };
-
   return (
-    <div className="alm-ingestion">
-      {/* Watcher */}
-      <section className="alm-ingestion__section">
-        <h3 className="alm-ingestion__subtitle">File Watcher</h3>
-        <div className="alm-ingestion__toggle-row">
-          <label className="alm-ingestion__toggle-label">
-            <Switch.Root
-              className="alm-switch"
-              checked={watcherEnabled}
-              onCheckedChange={() => handleToggle(setWatcherEnabled, watcherEnabled)}
-              aria-label="Enable file watcher"
-            >
-              <Switch.Thumb className="alm-switch__thumb" />
-            </Switch.Root>
-            <span>Watch source folders for new files</span>
-          </label>
-        </div>
-        <div className="alm-ingestion__toggle-row">
-          <label className="alm-ingestion__toggle-label">
-            <Switch.Root
-              className="alm-switch"
+    <>
+      <div className="alm-settings__group">
+        <div className="alm-settings__group-title">Scan Defaults</div>
+
+        <div className="alm-settings__row">
+          <div className="alm-settings__row-label">Scan on startup</div>
+          <div className="alm-settings__row-content">
+            <Toggle
               checked={scanOnStartup}
-              onCheckedChange={() => handleToggle(setScanOnStartup, scanOnStartup)}
-              aria-label="Scan on startup"
-            >
-              <Switch.Thumb className="alm-switch__thumb" />
-            </Switch.Root>
-            <span>Scan all roots on application startup</span>
-          </label>
+              onChange={(v) => { setScanOnStartup(v); persist({ scan_on_startup: v }); }}
+            />
+          </div>
+          <div className="alm-settings__row-desc">Scan all roots each time the application opens.</div>
         </div>
-        <div className="alm-ingestion__actions">
-          <Btn size="sm" onClick={handleRescan}>
-            Rescan all roots now
-          </Btn>
-        </div>
-      </section>
 
-      {/* Scan defaults */}
-      <section className="alm-ingestion__section">
-        <h3 className="alm-ingestion__subtitle">Scan Defaults</h3>
-        <div className="alm-ingestion__toggle-row">
-          <label className="alm-ingestion__toggle-label">
-            <Switch.Root
-              className="alm-switch"
+        <div className="alm-settings__row">
+          <div className="alm-settings__row-label">Follow symbolic links</div>
+          <div className="alm-settings__row-content">
+            <Toggle
               checked={followSymlinks}
-              onCheckedChange={() => handleToggle(setFollowSymlinks, followSymlinks)}
-              aria-label="Follow symlinks during scan"
-            >
-              <Switch.Thumb className="alm-switch__thumb" />
-            </Switch.Root>
-            <span>Follow symbolic links</span>
-          </label>
+              onChange={(v) => { setFollowSymlinks(v); persist({ follow_symlinks: v }); }}
+            />
+          </div>
+          <div className="alm-settings__row-desc">
+            Follow symlinks during filesystem scans. Disabled by default to prevent loops.
+          </div>
         </div>
-        <div className="alm-ingestion__toggle-row">
-          <label className="alm-ingestion__toggle-label">
-            <Switch.Root
-              className="alm-switch"
+
+        <div className="alm-settings__row">
+          <div className="alm-settings__row-label">Follow NTFS junctions</div>
+          <div className="alm-settings__row-content">
+            <Toggle
               checked={followJunctions}
-              onCheckedChange={() => handleToggle(setFollowJunctions, followJunctions)}
-              aria-label="Follow junctions during scan"
-            >
-              <Switch.Thumb className="alm-switch__thumb" />
-            </Switch.Root>
-            <span>Follow NTFS junctions</span>
-          </label>
+              onChange={(v) => { setFollowJunctions(v); persist({ follow_junctions: v }); }}
+            />
+          </div>
+          <div className="alm-settings__row-desc">
+            Follow NTFS directory junctions on Windows. Enable if your library uses junctions for external drives.
+          </div>
         </div>
-        <div className="alm-ingestion__toggle-row">
-          <label className="alm-ingestion__toggle-label">
-            <Switch.Root
-              className="alm-switch"
-              checked={hashingEnabled}
-              onCheckedChange={() => handleToggle(setHashingEnabled, hashingEnabled)}
-              aria-label="Enable file hashing"
-            >
-              <Switch.Thumb className="alm-switch__thumb" />
-            </Switch.Root>
-            <span>Compute file hashes (slower, enables duplicate detection)</span>
-          </label>
-        </div>
-        <div className="alm-ingestion__toggle-row">
-          <label className="alm-ingestion__toggle-label">
-            <Switch.Root
-              className="alm-switch"
-              checked={metadataExtraction}
-              onCheckedChange={() => handleToggle(setMetadataExtraction, metadataExtraction)}
-              aria-label="Enable metadata extraction"
-            >
-              <Switch.Thumb className="alm-switch__thumb" />
-            </Switch.Root>
-            <span>Extract FITS/XISF metadata on scan</span>
-          </label>
-        </div>
-      </section>
+      </div>
 
-      {/* Grouping tolerances */}
-      <section className="alm-ingestion__section">
-        <h3 className="alm-ingestion__subtitle">Grouping Tolerances</h3>
-        <p className="alm-ingestion__hint">
-          Used when grouping frames into acquisition sessions.
-        </p>
-        <div className="alm-ingestion__field">
-          <label className="alm-ingestion__field-label" htmlFor="exposure-tolerance">
-            Exposure tolerance (seconds)
-          </label>
-          <input
-            id="exposure-tolerance"
-            type="number"
-            className="alm-input alm-input--sm"
-            value={exposureTolerance}
-            min={0}
-            max={60}
-            onChange={(e) => {
-              setExposureTolerance(e.target.value);
-              persistAll();
-            }}
-          />
+      <div className="alm-settings__group">
+        <div className="alm-settings__group-title">File Hashing</div>
+        <div className="alm-settings__row">
+          <div className="alm-settings__row-content">
+            <RadioGroup
+              options={[
+                { value: 'lazy', label: 'Lazy', desc: 'Hash only when needed (e.g. duplicate detection)' },
+                { value: 'eager', label: 'Eager', desc: 'Hash every file on first scan — slower but complete' },
+                { value: 'off', label: 'Off', desc: 'Never hash — fastest, no duplicate detection' },
+              ]}
+              value={hashingMode}
+              onChange={(v) => { setHashingMode(v as HashingMode); persist({ hashing_mode: v }); }}
+            />
+          </div>
+          <div className="alm-settings__row-desc">
+            Large-file hashing is optional. Lazy hashing defers work until a feature requires it.
+          </div>
         </div>
-        <div className="alm-ingestion__field">
-          <label className="alm-ingestion__field-label" htmlFor="temperature-tolerance">
-            Temperature tolerance (°C)
-          </label>
-          <input
-            id="temperature-tolerance"
-            type="number"
-            className="alm-input alm-input--sm"
-            value={temperatureTolerance}
-            min={0}
-            max={30}
-            onChange={(e) => {
-              setTemperatureTolerance(e.target.value);
-              persistAll();
-            }}
-          />
-        </div>
-      </section>
-
-      {/* Default filter */}
-      <section className="alm-ingestion__section">
-        <h3 className="alm-ingestion__subtitle">Default Filter</h3>
-        <p className="alm-ingestion__hint">
-          Applied to frames that have no filter metadata in their headers.
-        </p>
-        <div className="alm-ingestion__field">
-          <label className="alm-ingestion__field-label" htmlFor="default-filter">
-            Default filter
-          </label>
-          <select
-            id="default-filter"
-            className="alm-select"
-            value={defaultFilter}
-            onChange={(e) => {
-              setDefaultFilter(e.target.value);
-              persistAll();
-            }}
-          >
-            {FILTER_OPTIONS.map((f) => (
-              <option key={f} value={f}>{f}</option>
-            ))}
-          </select>
-        </div>
-      </section>
-    </div>
+      </div>
+    </>
   );
 }

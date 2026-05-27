@@ -1,81 +1,36 @@
 /**
- * ProjectsPage -- three-pane layout using PageShell + ListDetailLayout.
- * Left: ProjectsList (ListSidebar), Center: ProjectDetail,
- * Right: LifecycleSidebar.
- * Replaces alm-hybrid-layout divs with ListDetailLayout(list, detail, sidebar).
- * Rewritten per spec 030 composition contracts.
+ * ProjectsPage -- three-pane layout (list + detail + lifecycle sidebar).
+ * Uses fixture data from @/data/fixtures/projects.
+ * Design V3 rewrite.
  */
 
-import { useCallback, useState } from 'react';
-import { useNavigate } from '@tanstack/react-router';
-import { useQuery, createQueryStore } from '@/data/store';
-import { listProjects } from '@/api/commands';
-import type { ProjectDetail as ProjectDetailType } from '@/bindings/types';
-import { EmptyState, Btn } from '@/ui';
+import { useState } from 'react';
 import { PageShell, ListDetailLayout } from '@/components';
+import { EmptyState } from '@/ui';
+import { PROJECTS_DATA } from '@/data/fixtures/projects';
+import type { ProjectFixture } from '@/data/fixtures/projects';
 import { ProjectsList } from './ProjectsList';
-import { ProjectDetailInline } from './ProjectDetail';
+import { ProjectDetailContent } from './ProjectDetail';
 import { LifecycleSidebar } from './LifecycleSidebar';
 
-const projectsStore = createQueryStore(() => listProjects());
-
 export function ProjectsPage() {
-  const { data, loading } = useQuery(projectsStore);
-  const navigate = useNavigate();
-  const [selectedId, setSelectedId] = useState<string | undefined>(undefined);
-  const [loadedProject, setLoadedProject] = useState<ProjectDetailType | undefined>(undefined);
+  const [selectedId, setSelectedId] = useState<number>(PROJECTS_DATA[0].id);
 
-  const handleProjectLoaded = useCallback(
-    (project: ProjectDetailType) => {
-      setLoadedProject(project);
-    },
-    [],
-  );
-
-  const handleNewProject = useCallback(() => {
-    navigate({ to: '/projects/new' });
-  }, [navigate]);
-
-  const projects = data ?? [];
-  const effectiveId = selectedId ?? projects[0]?.id;
-
-  // Only show sidebar data when it belongs to the currently selected project
-  const sidebarProject =
-    loadedProject && loadedProject.id === effectiveId
-      ? loadedProject
-      : undefined;
+  const selected: ProjectFixture | undefined = PROJECTS_DATA.find((p) => p.id === selectedId);
 
   return (
-    <PageShell
-      testId="ProjectsPage"
-      loading={loading}
-      loadingMessage="Loading projects..."
-      empty={{
-        title: 'No projects yet',
-        description: 'Create a project to organize sessions, calibration masters, and outputs.',
-        action: (
-          <Btn variant="primary" onClick={handleNewProject}>
-            + New project
-          </Btn>
-        ),
-      }}
-      hasData={projects.length > 0}
-    >
+    <PageShell>
       <ListDetailLayout
         list={
           <ProjectsList
-            projects={projects}
-            selectedId={effectiveId}
+            projects={PROJECTS_DATA}
+            selectedId={selectedId}
             onSelect={setSelectedId}
-            onNewProject={handleNewProject}
           />
         }
         detail={
-          effectiveId ? (
-            <ProjectDetailInline
-              projectId={effectiveId}
-              onProjectLoaded={handleProjectLoaded}
-            />
+          selected ? (
+            <ProjectDetailContent project={selected} />
           ) : (
             <EmptyState
               title="Select a project"
@@ -84,13 +39,10 @@ export function ProjectsPage() {
           )
         }
         sidebar={
-          sidebarProject ? (
-            <LifecycleSidebar project={sidebarProject} />
+          selected ? (
+            <LifecycleSidebar project={selected} />
           ) : (
-            <EmptyState
-              title={effectiveId ? 'Loading...' : 'Select a project'}
-              description={effectiveId ? undefined : 'Choose a project to view lifecycle details.'}
-            />
+            <EmptyState title="Select a project" />
           )
         }
       />

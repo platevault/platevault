@@ -1,30 +1,24 @@
-import { type ReactNode } from 'react';
-import { Collapsible } from '@base-ui-components/react/collapsible';
+import { useState, type ReactNode } from 'react';
 
 export interface SectionProps {
   title: string;
+  count?: string | number | null;
+  right?: ReactNode;
   defaultOpen?: boolean;
   children: ReactNode;
 }
 
-export function Section({ title, defaultOpen = true, children }: SectionProps) {
+export function Section({ title, count, right, defaultOpen = true, children }: SectionProps) {
+  const [open, setOpen] = useState(defaultOpen);
   return (
-    <Collapsible.Root defaultOpen={defaultOpen} className="alm-section">
-      <Collapsible.Trigger className="alm-section__header">
-        <svg
-          className="alm-section__chevron"
-          viewBox="0 0 16 16"
-          fill="none"
-          stroke="currentColor"
-          strokeWidth="2"
-        >
-          <path d="M6 4l4 4-4 4" />
-        </svg>
+    <div className="alm-section">
+      <div className="alm-section__header" onClick={() => setOpen(!open)}>
+        <span className="alm-section__toggle">{open ? '▾' : '▸'}</span>
         <span className="alm-section__title">{title}</span>
-      </Collapsible.Trigger>
-      <Collapsible.Panel className="alm-section__body">
-        {children}
-      </Collapsible.Panel>
-    </Collapsible.Root>
+        {count != null && <span className="alm-section__count">({count})</span>}
+        {right && <span className="alm-section__right" onClick={e => e.stopPropagation()}>{right}</span>}
+      </div>
+      {open && children}
+    </div>
   );
 }

@@ -1,62 +1,29 @@
-/**
- * CalibrationPage -- two-pane layout using PageShell + ListDetailLayout.
- * TopActionBar with spec-correct actions (Use in Project, Reveal in Explorer, Archive).
- * Removes "Import master" and "Re-run matching" per spec 030.
- */
-
 import { useState } from 'react';
-import { masters, calibrationSummary } from '@/data/fixtures/calibration';
-import { EmptyState } from '@/ui';
+import { MASTERS_DATA } from '@/data/fixtures/calibration';
 import { PageShell, ListDetailLayout, TopActionBar } from '@/components';
 import { MastersList } from './MastersList';
 import { MasterDetail } from './MasterDetail';
 
-export function CalibrationPage() {
-  const [selectedId, setSelectedId] = useState<string>('m-1');
-  const [groupValue, setGroupValue] = useState('kind');
+const darks = MASTERS_DATA.filter(m => m.kind === 'dark').length;
+const flats = MASTERS_DATA.filter(m => m.kind === 'flat').length;
+const bias = MASTERS_DATA.filter(m => m.kind === 'bias').length;
+const aging = MASTERS_DATA.filter(m => m.aging).length;
 
-  const selected = masters.find((m) => m.id === selectedId);
+export function CalibrationPage() {
+  const [selected, setSelected] = useState<number | null>(null);
+  const master = MASTERS_DATA.find(m => m.id === selected) ?? null;
 
   return (
-    <PageShell
-      testId="CalibrationPage"
-      empty={{
-        title: 'No calibration masters',
-        description: 'Calibration masters will appear after scanning your library.',
-      }}
-      hasData={masters.length > 0}
-    >
+    <PageShell>
       <ListDetailLayout
         topBar={
           <TopActionBar
             title="Calibration"
-            subtitle={`${calibrationSummary.totalMasters} masters · ${calibrationSummary.darks} darks · ${calibrationSummary.flats} flats · ${calibrationSummary.bias} bias · ${calibrationSummary.agingCount} aging`}
-            actions={[
-              { label: 'Use in Project', disabled: !selected, onClick: () => {} },
-              { label: 'Reveal in Explorer', disabled: !selected, onClick: () => {} },
-              { label: 'Archive', variant: 'ghost', disabled: !selected, onClick: () => {} },
-            ]}
+            subtitle={`${MASTERS_DATA.length} masters · ${darks} darks · ${flats} flats · ${bias} bias · ${aging} aging`}
           />
         }
-        list={
-          <MastersList
-            masters={masters}
-            selectedId={selectedId}
-            onSelect={setSelectedId}
-            groupValue={groupValue}
-            onGroupChange={setGroupValue}
-          />
-        }
-        detail={
-          selectedId ? (
-            <MasterDetail masterId={selectedId} />
-          ) : (
-            <EmptyState
-              title="Select a master"
-              description="Choose a calibration master from the list to view its details."
-            />
-          )
-        }
+        list={<MastersList masters={MASTERS_DATA} selected={selected} onSelect={setSelected} />}
+        detail={<MasterDetail master={master} />}
       />
     </PageShell>
   );

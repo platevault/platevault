@@ -1,5 +1,5 @@
 // Static mock fixture data for the review queue — session-centric.
-// Matches wireframe: review-queue.jsx
+// Matches design V3 mock data.
 
 import type {
   ReviewItem,
@@ -8,7 +8,33 @@ import type {
   MetaValue,
 } from '@/bindings/types';
 
-// ─── Queue items ────────────────────────────────────────────────────────────
+// ─── Design V3 flat fixture shape (Inbox) ───────────────────────────────────
+
+export interface InboxFixture {
+  id: number;
+  target: string;
+  filter: string;
+  date: string;
+  duration: string;
+  size: string;
+  frameType: 'light' | 'dark' | 'flat' | 'bias';
+  frames: number;
+  conflict?: string;
+  gain: number;
+  exposure: number;
+}
+
+export const INBOX_DATA: InboxFixture[] = [
+  { id: 1, target: 'IC 1396', filter: 'Ha', date: '2025-10-10', duration: '1h 30m', size: '810 MB', frameType: 'light', frames: 18, conflict: 'Mixed gains: 100, 120', gain: 100, exposure: 300 },
+  { id: 2, target: 'M42', filter: 'OIII', date: '2025-10-02', duration: '1h 15m', size: '675 MB', frameType: 'light', frames: 15, gain: 100, exposure: 300 },
+  { id: 3, target: 'NGC 7000', filter: 'Ha', date: '2025-09-15', duration: '3h 30m', size: '1.8 GB', frameType: 'light', frames: 42, gain: 100, exposure: 300 },
+  { id: 4, target: 'Dark', filter: '', date: '2025-09-15', duration: '4h 10m', size: '2.2 GB', frameType: 'dark', frames: 50, gain: 100, exposure: 300 },
+  { id: 5, target: 'Flat', filter: 'Ha', date: '2025-09-15', duration: '0s', size: '1.3 GB', frameType: 'flat', frames: 30, gain: 100, exposure: 3 },
+  { id: 6, target: 'Bias', filter: '', date: '2025-09-15', duration: '0s', size: '4.4 GB', frameType: 'bias', frames: 100, gain: 100, exposure: 0 },
+  { id: 7, target: 'M31', filter: 'L', date: '2025-09-14', duration: '1h 24m', size: '1.2 GB', frameType: 'light', frames: 28, gain: 100, exposure: 300 },
+];
+
+// ─── Queue items (rich review shape, retained) ───────────────────────────────
 
 export const reviewItems: ReviewItem[] = [
   {

@@ -53,7 +53,7 @@ export function StepConfirm({
   return (
     <div className="alm-step-confirm">
       {/* Sources summary */}
-      <Box heading={`Library sources (${totalFolders} folder${totalFolders !== 1 ? 's' : ''})`}>
+      <Box title={`Library sources (${totalFolders} folder${totalFolders !== 1 ? 's' : ''})`}>
         <div className="alm-step-confirm__sources">
           {kindsWithFolders.map((kind) => {
             const kindEntries = getSourcesByKind(sources, kind);
@@ -67,7 +67,7 @@ export function StepConfirm({
                     <span className="alm-step-confirm__source-path">
                       {entry.path}
                     </span>
-                    <Pill label="Not scanned" variant="neutral" size="sm" />
+                    <Pill variant="neutral">Not scanned</Pill>
                     <span className="alm-step-confirm__source-depth">
                       {entry.scanDepth === 'recursive' ? 'Recursive' : 'Single level'}
                     </span>
@@ -85,7 +85,7 @@ export function StepConfirm({
       </Box>
 
       {/* Tools summary */}
-      <Box heading={`Processing tools (${enabledTools.length} enabled)`}>
+      <Box title={`Processing tools (${enabledTools.length} enabled)`}>
         <div className="alm-step-confirm__tools">
           {enabledTools.length > 0 ? (
             enabledTools.map((key) => (
@@ -94,10 +94,10 @@ export function StepConfirm({
                 {tools[key].path ? (
                   <>
                     <span className="alm-step-confirm__tool-path">{tools[key].path}</span>
-                    <Pill label="OK" variant="ok" size="sm" />
+                    <Pill variant="ok">OK</Pill>
                   </>
                 ) : (
-                  <Pill label="No path set" variant="warn" size="sm" />
+                  <Pill variant="warn">No path set</Pill>
                 )}
               </div>
             ))
@@ -108,7 +108,7 @@ export function StepConfirm({
       </Box>
 
       {/* Catalogs summary */}
-      <Box heading={`Target catalogs (${enabledCatalogs.length} enabled)`}>
+      <Box title={`Target catalogs (${enabledCatalogs.length} enabled)`}>
         <div className="alm-step-confirm__catalogs">
           {enabledCatalogs.length > 0
             ? enabledCatalogs.map((k) => CATALOG_LABELS[k]).join(', ')
@@ -117,7 +117,7 @@ export function StepConfirm({
       </Box>
 
       {/* What happens next */}
-      <Box heading="What happens next">
+      <Box title="What happens next">
         <div className="alm-step-confirm__next">
           <p>When you complete setup, the app will:</p>
           <ul className="alm-step-confirm__next-list">

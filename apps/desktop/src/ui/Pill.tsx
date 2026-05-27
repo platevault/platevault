@@ -1,21 +1,11 @@
-import { clsx } from 'clsx';
+import type { ReactNode } from 'react';
 
+export type PillVariant = 'neutral' | 'ghost' | 'ok' | 'warn' | 'danger' | 'info' | 'accent';
 export interface PillProps {
-  label: string;
-  variant?: 'neutral' | 'ghost' | 'ok' | 'warn' | 'danger' | 'info';
-  size?: 'sm' | 'md';
+  variant?: PillVariant;
+  children: ReactNode;
 }
 
-export function Pill({ label, variant = 'neutral', size = 'md' }: PillProps) {
-  return (
-    <span
-      className={clsx(
-        'alm-pill',
-        `alm-pill--${variant}`,
-        size === 'sm' && 'alm-pill--sm',
-      )}
-    >
-      {label}
-    </span>
-  );
+export function Pill({ variant = 'neutral', children }: PillProps) {
+  return <span className={`alm-pill alm-pill--${variant}`}>{children}</span>;
 }

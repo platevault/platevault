@@ -1,20 +1,15 @@
-import type { ReactNode } from 'react';
+import type { ReactNode, CSSProperties } from 'react';
 
 export interface BoxProps {
-  heading?: string;
-  right?: ReactNode;
+  title?: string;
+  style?: CSSProperties;
   children: ReactNode;
 }
 
-export function Box({ heading, right, children }: BoxProps) {
+export function Box({ title, style, children }: BoxProps) {
   return (
-    <div className="alm-box">
-      {heading && (
-        <div className="alm-box__header">
-          <h3 className="alm-box__heading">{heading}</h3>
-          {right && <span className="alm-box__right">{right}</span>}
-        </div>
-      )}
+    <div className="alm-box" style={style}>
+      {title && <div className="alm-box__header">{title}</div>}
       <div className="alm-box__body">{children}</div>
     </div>
   );

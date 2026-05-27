@@ -1,105 +1,90 @@
 import { useState } from 'react';
-import { Select } from '@base-ui-components/react/select';
-import { Switch } from '@base-ui-components/react/switch';
-import { Btn, KV, Box } from '@/ui';
+import { Btn, RadioGroup } from '@/ui';
 
 interface AdvancedProps {
   save: (scope: string, values: Record<string, unknown>) => void;
 }
 
-const LOG_LEVELS = ['debug', 'info', 'warn', 'error'] as const;
+type LogLevel = 'trace' | 'debug' | 'info' | 'warn' | 'error';
 
 export function Advanced({ save }: AdvancedProps) {
-  const [logLevel, setLogLevel] = useState<string>('info');
-  const [debugMode, setDebugMode] = useState(false);
+  const [logLevel, setLogLevel] = useState<LogLevel>('info');
 
-  const handleLevelChange = (level: string | null) => {
-    if (level === null) return;
-    setLogLevel(level);
-    save('advanced', { log_level: level, debug_mode: debugMode });
-  };
-
-  const handleDebugToggle = (checked: boolean) => {
-    setDebugMode(checked);
-    save('advanced', { log_level: logLevel, debug_mode: checked });
-  };
-
-  const handleExportDiagnostics = () => {
-    console.log('Export diagnostics triggered');
-  };
+  const handleExport = () => console.log('Export DB triggered');
+  const handleReset = () => console.log('Reset preferences triggered');
 
   return (
-    <div className="alm-advanced">
-      {/* Application log level */}
-      <section className="alm-advanced__section">
-        <h3 className="alm-advanced__subtitle">Application Log Level</h3>
-        <div className="alm-advanced__field">
-          <label className="alm-advanced__field-label" htmlFor="adv-log-level">
-            Log level
-          </label>
-          <Select.Root value={logLevel} onValueChange={handleLevelChange}>
-            <Select.Trigger className="alm-select" aria-label="Log level">
-              <Select.Value />
-              <Select.Icon className="alm-select__icon" />
-            </Select.Trigger>
-            <Select.Portal>
-              <Select.Positioner>
-                <Select.Popup className="alm-select__popup">
-                  {LOG_LEVELS.map((level) => (
-                    <Select.Item key={level} value={level} className="alm-select__item">
-                      <Select.ItemText>{level}</Select.ItemText>
-                    </Select.Item>
-                  ))}
-                </Select.Popup>
-              </Select.Positioner>
-            </Select.Portal>
-          </Select.Root>
-        </div>
-      </section>
-
-      {/* Debug toggle */}
-      <section className="alm-advanced__section">
-        <h3 className="alm-advanced__subtitle">Debug Mode</h3>
-        <div className="alm-advanced__toggle-row">
-          <label className="alm-advanced__toggle-label">
-            <Switch.Root
-              className="alm-switch"
-              checked={debugMode}
-              onCheckedChange={handleDebugToggle}
-              aria-label="Enable debug mode"
-            >
-              <Switch.Thumb className="alm-switch__thumb" />
-            </Switch.Root>
-            <span>
-              Enable verbose logging and developer diagnostics
-            </span>
-          </label>
-        </div>
-      </section>
-
+    <>
       {/* Database info */}
-      <section className="alm-advanced__section">
-        <h3 className="alm-advanced__subtitle">Database</h3>
-        <Box>
-          <KV label="Engine" value="SQLite" />
-          <KV label="Location" value={<code className="alm-mono">~/.alm/astro-library.db</code>} />
-          <KV label="Size" value="24.8 MB" />
-          <KV label="Schema version" value="v1.0" />
-          <KV label="Records" value="142,318 files / 22 sessions / 3 projects" />
-        </Box>
-      </section>
+      <div className="alm-settings__group">
+        <div className="alm-settings__group-title">Database</div>
+        <div className="alm-settings__row">
+          <div className="alm-settings__row-label">Location</div>
+          <div className="alm-settings__row-content">
+            <code className="alm-mono" style={{ fontSize: 'var(--alm-text-xs)' }}>~/.alm/astro-library.db</code>
+          </div>
+        </div>
+        <div className="alm-settings__row">
+          <div className="alm-settings__row-label">Engine</div>
+          <div className="alm-settings__row-content">SQLite</div>
+        </div>
+        <div className="alm-settings__row">
+          <div className="alm-settings__row-label">Size</div>
+          <div className="alm-settings__row-content">24.8 MB</div>
+        </div>
+        <div className="alm-settings__row">
+          <div className="alm-settings__row-label">Schema version</div>
+          <div className="alm-settings__row-content">v1.0</div>
+        </div>
+        <div className="alm-settings__row" style={{ borderBottom: 'none' }}>
+          <div className="alm-settings__row-label">Records</div>
+          <div className="alm-settings__row-content">142,318 files · 22 sessions · 3 projects</div>
+        </div>
+        <div style={{ marginTop: 'var(--alm-sp-3)' }}>
+          <Btn size="sm" onClick={handleExport}>Export database</Btn>
+        </div>
+      </div>
 
-      {/* Export diagnostics */}
-      <section className="alm-advanced__section">
-        <h3 className="alm-advanced__subtitle">Diagnostics</h3>
-        <p className="alm-advanced__hint">
-          Export a diagnostics bundle containing application logs, database
-          statistics, and configuration (no image data or file contents).
-        </p>
-        <Btn onClick={handleExportDiagnostics}>
-          Export diagnostics
-        </Btn>
-      </section>
-    </div>
+      {/* Log level */}
+      <div className="alm-settings__group">
+        <div className="alm-settings__group-title">Log Level</div>
+        <div className="alm-settings__row">
+          <div className="alm-settings__row-content">
+            <RadioGroup
+              options={[
+                { value: 'trace', label: 'Trace', desc: 'All internal events — very verbose' },
+                { value: 'debug', label: 'Debug', desc: 'Diagnostic detail useful during development' },
+                { value: 'info', label: 'Info', desc: 'Normal operational messages (default)' },
+                { value: 'warn', label: 'Warn', desc: 'Warnings only' },
+                { value: 'error', label: 'Error', desc: 'Errors only — quietest' },
+              ]}
+              value={logLevel}
+              onChange={(v) => { setLogLevel(v as LogLevel); save('advanced', { log_level: v }); }}
+            />
+          </div>
+        </div>
+      </div>
+
+      {/* Danger zone */}
+      <div className="alm-settings__group">
+        <div className="alm-settings__group-title">Danger Zone</div>
+        <div style={{
+          border: '1px solid var(--alm-danger)',
+          borderRadius: 'var(--alm-radius)',
+          padding: 'var(--alm-sp-4)',
+        }}>
+          <div style={{ marginBottom: 'var(--alm-sp-2)' }}>
+            <strong style={{ fontSize: 'var(--alm-text-sm)' }}>Reset preferences</strong>
+          </div>
+          <p style={{ fontSize: 'var(--alm-text-xs)', color: 'var(--alm-text-muted)', marginBottom: 'var(--alm-sp-3)' }}>
+            Resets all UI preferences (theme, density, font size) to defaults. Library roots, equipment,
+            and session data are not affected.
+          </p>
+          <Btn size="sm" variant="danger" onClick={handleReset}>
+            Reset preferences
+          </Btn>
+        </div>
+      </div>
+    </>
   );
 }

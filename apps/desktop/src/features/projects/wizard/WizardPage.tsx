@@ -1,6 +1,6 @@
 import { useState, useEffect, useMemo } from 'react';
 import { useNavigate } from '@tanstack/react-router';
-import { WizardShell, Btn, Toolbar } from '@/ui';
+import { WizardShell, Btn } from '@/ui';
 import type { WizardStep } from '@/ui';
 import { StepName, type StepNameData } from './StepName';
 import { StepSources, type StepSourcesData } from './StepSources';
@@ -211,32 +211,31 @@ export function WizardPage() {
   return (
     <div className="alm-page" style={{ display: 'flex', flexDirection: 'column', flex: 1 }}>
       {/* Wizard toolbar */}
-      <Toolbar
-        subBar={
-          <div className="alm-project-sub">
-            <span>Workflow profile: {profileLabel}</span>
-            <span className="alm-project-sub__dot">&middot;</span>
-            {wizardData.name.name && (
-              <span>From target context: {wizardData.name.name.split(/[\s·—]/)[0]}</span>
-            )}
-            <span style={{ marginLeft: 'auto', color: 'var(--alm-text-faint)' }}>
-              Sources are selected here; the filesystem plan is shown at step 6 before anything is created.
-            </span>
-          </div>
-        }
-      >
-        <span style={{ fontSize: 'var(--alm-text-sm)', fontWeight: 600 }}>
-          New project &mdash; {projectLabel}
-        </span>
-        <span style={{ flex: 1 }} />
-        <Btn size="sm" onClick={() => saveDraft(wizardData)}>Save draft</Btn>
-        {devSkip && (
-          <Btn size="sm" onClick={() => { clearDraft(); setWizardData(INITIAL_DATA); setCurrentStep(0); }}>
-            Reset wizard
-          </Btn>
-        )}
-        <Btn size="sm" onClick={handleCancel}>Cancel</Btn>
-      </Toolbar>
+      <div className="alm-toolbar">
+        <div className="alm-toolbar__main">
+          <span style={{ fontSize: 'var(--alm-text-sm)', fontWeight: 600 }}>
+            New project &mdash; {projectLabel}
+          </span>
+          <span style={{ flex: 1 }} />
+          <Btn size="sm" onClick={() => saveDraft(wizardData)}>Save draft</Btn>
+          {devSkip && (
+            <Btn size="sm" onClick={() => { clearDraft(); setWizardData(INITIAL_DATA); setCurrentStep(0); }}>
+              Reset wizard
+            </Btn>
+          )}
+          <Btn size="sm" onClick={handleCancel}>Cancel</Btn>
+        </div>
+        <div className="alm-toolbar__sub alm-project-sub">
+          <span>Workflow profile: {profileLabel}</span>
+          <span className="alm-project-sub__dot">&middot;</span>
+          {wizardData.name.name && (
+            <span>From target context: {wizardData.name.name.split(/[\s·—]/)[0]}</span>
+          )}
+          <span style={{ marginLeft: 'auto', color: 'var(--alm-text-faint)' }}>
+            Sources are selected here; the filesystem plan is shown at step 6 before anything is created.
+          </span>
+        </div>
+      </div>
 
       <WizardShell steps={steps} currentStep={currentStep} summary={summary}>
         {/* Step title + description */}

@@ -78,12 +78,9 @@ export function StepSourceFolders({
           {REQUIRED_KINDS.map((kind) => {
             const isMissing = missingKinds.includes(kind);
             return (
-              <Pill
-                key={kind}
-                label={`${SOURCE_KIND_LABELS[kind]}${isMissing ? ' (missing)' : ''}`}
-                variant={isMissing ? 'warn' : 'ok'}
-                size="sm"
-              />
+              <Pill key={kind} variant={isMissing ? 'warn' : 'ok'}>
+                {`${SOURCE_KIND_LABELS[kind]}${isMissing ? ' (missing)' : ''}`}
+              </Pill>
             );
           })}
         </div>
@@ -126,11 +123,9 @@ function SourceRow({
             </option>
           ))}
         </select>
-        <Pill
-          label={REQUIRED_KINDS.includes(entry.kind) ? 'REQUIRED' : 'OPTIONAL'}
-          variant={REQUIRED_KINDS.includes(entry.kind) ? 'warn' : 'ghost'}
-          size="sm"
-        />
+        <Pill variant={REQUIRED_KINDS.includes(entry.kind) ? 'warn' : 'ghost'}>
+          {REQUIRED_KINDS.includes(entry.kind) ? 'REQUIRED' : 'OPTIONAL'}
+        </Pill>
         <Btn
           size="sm"
           variant="ghost"
