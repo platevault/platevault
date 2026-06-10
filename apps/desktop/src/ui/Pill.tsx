@@ -1,11 +1,16 @@
-import type { ReactNode } from 'react';
+import { forwardRef } from 'react';
+import type { ReactNode, HTMLAttributes } from 'react';
 
 export type PillVariant = 'neutral' | 'ghost' | 'ok' | 'warn' | 'danger' | 'info' | 'accent';
-export interface PillProps {
+export interface PillProps extends HTMLAttributes<HTMLSpanElement> {
   variant?: PillVariant;
   children: ReactNode;
 }
 
-export function Pill({ variant = 'neutral', children }: PillProps) {
-  return <span className={`alm-pill alm-pill--${variant}`}>{children}</span>;
-}
+export const Pill = forwardRef<HTMLSpanElement, PillProps>(
+  function Pill({ variant = 'neutral', className, children, ...rest }, ref) {
+    const cls = ['alm-pill', `alm-pill--${variant}`, className].filter(Boolean).join(' ');
+    return <span ref={ref} className={cls} {...rest}>{children}</span>;
+  }
+);
+Pill.displayName = 'Pill';

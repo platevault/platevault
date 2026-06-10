@@ -24,3 +24,7 @@ export type * as ProvenanceRead from "./generated/provenance.read";
 export type * as NativeDirectoryPick from "./generated/native.directory.pick";
 export type * as NativeFilePick from "./generated/native.file.pick";
 export type * as NativeReveal from "./generated/native.reveal";
+
+// Spec 022 — Desktop theme mode (theme.get / theme.set).
+export type * as ThemeGet from "./generated/theme.get";
+export type * as ThemeSet from "./generated/theme.set";

@@ -31,6 +31,8 @@ const SPEC_CONTRACT_ALLOWLIST = [
   "004-native-filesystem-controls/contracts/native.directory.pick.json",
   "004-native-filesystem-controls/contracts/native.file.pick.json",
   "004-native-filesystem-controls/contracts/native.reveal.json",
+  "022-mantine-prototype-design-system/contracts/theme.get.json",
+  "022-mantine-prototype-design-system/contracts/theme.set.json",
 ];
 
 function findSpecContracts() {

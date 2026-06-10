@@ -1,12 +1,16 @@
-import type { ReactNode, CSSProperties } from 'react';
+import { forwardRef } from 'react';
+import type { ReactNode, HTMLAttributes } from 'react';
 
 export type BannerVariant = 'warn' | 'danger' | 'info';
-export interface BannerProps {
+export interface BannerProps extends HTMLAttributes<HTMLDivElement> {
   variant?: BannerVariant;
-  style?: CSSProperties;
   children: ReactNode;
 }
 
-export function Banner({ variant = 'warn', style, children }: BannerProps) {
-  return <div className={`alm-banner alm-banner--${variant}`} style={style}>{children}</div>;
-}
+export const Banner = forwardRef<HTMLDivElement, BannerProps>(
+  function Banner({ variant = 'warn', className, children, ...rest }, ref) {
+    const cls = ['alm-banner', `alm-banner--${variant}`, className].filter(Boolean).join(' ');
+    return <div ref={ref} className={cls} {...rest}>{children}</div>;
+  }
+);
+Banner.displayName = 'Banner';
