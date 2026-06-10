@@ -1,15 +1,7 @@
-import { Link } from '@tanstack/react-router';
 import { clsx } from 'clsx';
 import { useLogPanel } from './LogPanelContext';
 import { useOperationStatus } from './OperationStatusContext';
-
-interface StatusBarProps {
-  inboxCount?: number;
-  sessionCount?: number;
-  calibrationCount?: number;
-  cleanupReclaimableBytes?: number;
-  volumes?: { path: string; freeBytes: number; totalBytes: number; warning: boolean }[];
-}
+import { useStatusSummary } from './useStatusSummary';
 
 function formatBytes(bytes: number): string {
   if (bytes < 1024) return `${bytes} B`;
@@ -18,62 +10,54 @@ function formatBytes(bytes: number): string {
   return `${(bytes / (1024 * 1024 * 1024)).toFixed(1)} GB`;
 }
 
-export function StatusBar({
-  inboxCount = 0,
-  sessionCount = 0,
-  calibrationCount = 0,
-  cleanupReclaimableBytes = 0,
-  volumes = [],
-}: StatusBarProps) {
+/**
+ * Status bar (design v4): three zones. LEFT = the current operation (transient),
+ * RIGHT = persistent storage/cleanup health, far right = log toggle. Library
+ * inventory counts were removed — those live in the nav badges and on the pages.
+ */
+export function StatusBar() {
   const { toggle } = useLogPanel();
   const { statusLabel } = useOperationStatus();
-  const isIngesting = statusLabel !== 'Idle';
+  const status = useStatusSummary();
+  const isActive = statusLabel !== 'Idle';
 
   return (
     <div className="alm-frame__statusbar">
-      {/* Inbox badge */}
-      {inboxCount > 0 && (
-        <Link to="/inbox" className="alm-statusbar__inbox-badge">
-          {inboxCount} new
-        </Link>
-      )}
+      {/* LEFT — current operation */}
+      <div className="alm-statusbar__op">
+        {isActive ? (
+          <>
+            <span className="alm-statusbar__spinner" />
+            <span>{statusLabel}</span>
+          </>
+        ) : (
+          <span className="alm-statusbar__idle">Ready</span>
+        )}
+      </div>
 
-      {/* Ingestion progress */}
-      {isIngesting && (
-        <span className="alm-statusbar__ingestion">{statusLabel}</span>
-      )}
-
-      {/* Library stats */}
-      <span className="alm-statusbar__stats">
-        {sessionCount} sessions
-        <span className="alm-statusbar__sep">&middot;</span>
-        {calibrationCount} cal
-      </span>
-
-      {/* Cleanup available */}
-      {cleanupReclaimableBytes > 0 && (
-        <span className="alm-statusbar__cleanup">
-          {formatBytes(cleanupReclaimableBytes)} reclaimable
-        </span>
-      )}
-
-      {/* Storage health per volume */}
-      {volumes.map((vol) => (
-        <span
-          key={vol.path}
-          className={clsx(
-            'alm-statusbar__volume',
-            vol.warning && 'alm-statusbar__volume--warn',
-          )}
-          title={`${vol.path}: ${formatBytes(vol.freeBytes)} free / ${formatBytes(vol.totalBytes)}`}
-        >
-          {vol.path.split(/[\\/]/).pop()}
-          {vol.warning && ' ⚠'}
-        </span>
-      ))}
-
-      <span className="alm-statusbar__right">
-        {/* Log toggle */}
+      {/* RIGHT — persistent storage / cleanup health + log */}
+      <div className="alm-statusbar__right">
+        {status.cleanupReclaimableBytes > 0 && (
+          <span>{formatBytes(status.cleanupReclaimableBytes)} reclaimable</span>
+        )}
+        {status.volumes.map((vol) => {
+          const usedPct =
+            vol.totalBytes > 0 ? Math.round(((vol.totalBytes - vol.freeBytes) / vol.totalBytes) * 100) : 0;
+          const label = vol.path.split(/[\\/]/).pop() || vol.path;
+          return (
+            <span
+              key={vol.path}
+              className={clsx('alm-statusbar__vol', vol.warning && 'alm-statusbar__vol--warn')}
+              title={`${vol.path}: ${formatBytes(vol.freeBytes)} free / ${formatBytes(vol.totalBytes)}`}
+            >
+              <span>{label}</span>
+              <span className="alm-statusbar__meter">
+                <i style={{ width: `${usedPct}%` }} />
+              </span>
+              <span>{usedPct}%</span>
+            </span>
+          );
+        })}
         <button
           type="button"
           className="alm-statusbar__log-toggle"
@@ -82,7 +66,7 @@ export function StatusBar({
         >
           Log
         </button>
-      </span>
+      </div>
     </div>
   );
 }

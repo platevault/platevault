@@ -1,5 +1,6 @@
 import { useState } from 'react';
 import { useParams } from '@tanstack/react-router';
+import { PageShell, ListDetailLayout, TopActionBar } from '@/components';
 import { useAutoSave } from './useAutoSave';
 import { DataSources } from './DataSources';
 import { Equipment } from './Equipment';
@@ -103,39 +104,46 @@ export function SettingsPage() {
   const meta = PANE_META[activePane];
 
   return (
-    <div className="alm-settings" data-testid="SettingsPage">
-      <nav className="alm-settings__nav" aria-label="Settings categories">
-        {PANES.map((pane) => (
-          <button
-            key={pane.id}
-            type="button"
-            className={`alm-settings__nav-item${activePane === pane.id ? ' alm-settings__nav-item--active' : ''}`}
-            onClick={() => setActivePane(pane.id)}
-            aria-current={activePane === pane.id ? 'page' : undefined}
-          >
-            {pane.label}
-          </button>
-        ))}
-      </nav>
-
-      <div className="alm-settings__content">
-        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start' }}>
-          <div>
-            <h2 className="alm-settings__title">{meta.title}</h2>
+    <PageShell>
+      <ListDetailLayout
+        topBar={
+          <TopActionBar
+            title="Settings"
+            subtitle={meta.title}
+            right={
+              saved && (
+                <span
+                  style={{ fontSize: 'var(--alm-text-xs)', color: 'var(--alm-ok)' }}
+                  aria-live="polite"
+                >
+                  Saved &#10003;
+                </span>
+              )
+            }
+          />
+        }
+        list={
+          <nav className="alm-settings__nav" aria-label="Settings categories">
+            {PANES.map((pane) => (
+              <button
+                key={pane.id}
+                type="button"
+                className={`alm-settings__nav-item${activePane === pane.id ? ' alm-settings__nav-item--active' : ''}`}
+                onClick={() => setActivePane(pane.id)}
+                aria-current={activePane === pane.id ? 'page' : undefined}
+              >
+                {pane.label}
+              </button>
+            ))}
+          </nav>
+        }
+        detail={
+          <div className="alm-settings__content" data-testid="SettingsPage">
             <p className="alm-settings__desc">{meta.desc}</p>
+            {renderPane(activePane, save)}
           </div>
-          {saved && (
-            <span
-              style={{ fontSize: 'var(--alm-text-xs)', color: 'var(--alm-ok)', flexShrink: 0, marginTop: 4 }}
-              aria-live="polite"
-            >
-              Saved &#10003;
-            </span>
-          )}
-        </div>
-
-        {renderPane(activePane, save)}
-      </div>
-    </div>
+        }
+      />
+    </PageShell>
   );
 }

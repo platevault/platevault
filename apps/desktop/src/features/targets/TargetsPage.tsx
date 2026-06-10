@@ -8,7 +8,7 @@ import { TargetDetailPaneInline } from './TargetDetail';
 
 export function TargetsPage() {
   const [selected, setSelected] = useState<number | null>(null);
-  const target: TargetFixture | null = TARGETS_DATA.find(t => t.id === selected) ?? null;
+  const target: TargetFixture | null = TARGETS_DATA.find((t) => t.id === selected) ?? null;
 
   return (
     <PageShell>
@@ -17,7 +17,17 @@ export function TargetsPage() {
           <TopActionBar
             title="Targets"
             subtitle={`${TARGETS_DATA.length} targets`}
-            right={<Btn variant="accent">New project</Btn>}
+            right={
+              target ? (
+                <>
+                  <Btn size="sm" variant="primary">New project</Btn>
+                  <Btn size="sm">Edit aliases</Btn>
+                  <Btn size="sm">Link plan</Btn>
+                </>
+              ) : (
+                <Btn size="sm">Add target</Btn>
+              )
+            }
           />
         }
         list={<TargetList targets={TARGETS_DATA} selected={selected} onSelect={setSelected} />}

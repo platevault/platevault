@@ -1,33 +1,32 @@
 /**
- * InboxDetail -- center pane for Inbox page.
- * Shows session properties (visual only) + frames summary.
- * Design V3 rewrite.
+ * InboxDetail — center pane for the Inbox review/confirm workflow.
+ * Design v4: identity header → metric line (frames) → editable properties.
+ * The confirm actions live in the right ActionSidebar (3rd pane).
  */
 
-import { DetailHeader, DetailPane } from '@/components';
-import { Pill, Banner, Box, Table } from '@/ui';
+import { DetailHeader, DetailPane, MetricLine } from '@/components';
+import { Pill, Banner, Section, Table } from '@/ui';
 import type { InboxFixture } from '@/data/fixtures/review';
 import type { PillVariant } from '@/ui';
 
-// ─── Helpers ────────────────────────────────────────────────────────────────
-
 function frameTypeVariant(type: InboxFixture['frameType']): PillVariant {
   switch (type) {
-    case 'light': return 'info';
-    case 'dark': return 'neutral';
-    case 'flat': return 'accent';
-    case 'bias': return 'ghost';
-    default: return 'neutral';
+    case 'light':
+      return 'info';
+    case 'dark':
+      return 'neutral';
+    case 'flat':
+      return 'accent';
+    case 'bias':
+      return 'ghost';
+    default:
+      return 'neutral';
   }
 }
-
-// ─── Props ───────────────────────────────────────────────────────────────────
 
 export interface InboxDetailProps {
   item: InboxFixture;
 }
-
-// ─── Component ──────────────────────────────────────────────────────────────
 
 export function InboxDetail({ item }: InboxDetailProps) {
   const title = `${item.target} – ${item.date}${item.filter ? ` – ${item.filter}` : ''}`;
@@ -39,11 +38,8 @@ export function InboxDetail({ item }: InboxDetailProps) {
     { key: 'confirm', label: 'Confirm', style: { width: 72 } },
   ];
 
-  // Parse mixed gain values from the conflict string, e.g. "Mixed gains: 100, 120"
   const gainConflict = item.conflict && /gain/i.test(item.conflict);
-  const gainConflictValues = gainConflict
-    ? item.conflict!.replace(/.*gains?:\s*/i, '').trim()
-    : null;
+  const gainConflictValues = gainConflict ? item.conflict!.replace(/.*gains?:\s*/i, '').trim() : null;
 
   const propertyRows = [
     {
@@ -87,9 +83,13 @@ export function InboxDetail({ item }: InboxDetailProps) {
       property: gainConflict ? (
         <span style={{ display: 'flex', alignItems: 'center', gap: 4 }}>
           Gain
-          <span style={{ color: 'var(--alm-warn)', fontSize: 'var(--alm-text-xs)' }} aria-label="Conflict">&#x26A0;</span>
+          <span style={{ color: 'var(--alm-warn)', fontSize: 'var(--alm-text-xs)' }} aria-label="Conflict">
+            &#x26A0;
+          </span>
         </span>
-      ) : 'Gain',
+      ) : (
+        'Gain'
+      ),
       value: gainConflict ? (
         <span className="alm-mono" style={{ color: 'var(--alm-warn)' }}>
           {gainConflictValues?.replace(',', ' &')}
@@ -99,7 +99,6 @@ export function InboxDetail({ item }: InboxDetailProps) {
       ),
       source: 'fits',
       confirm: <input type="checkbox" defaultChecked />,
-      _rowStyle: gainConflict ? { background: 'var(--alm-warn-bg)' } : undefined,
       _rowClassName: gainConflict ? 'alm-prop-table__row--conflict' : undefined,
     },
     {
@@ -140,42 +139,31 @@ export function InboxDetail({ item }: InboxDetailProps) {
       <DetailHeader
         title={title}
         titleExtra={
-          <span style={{ marginLeft: 8, display: 'inline-flex', gap: 4 }}>
+          <>
             <Pill variant={frameTypeVariant(item.frameType)}>{item.frameType}</Pill>
-            {item.filter && <span style={{ marginLeft: 4 }}><Pill variant="ghost">{item.filter}</Pill></span>}
-          </span>
+            {item.filter && <Pill variant="ghost">{item.filter}</Pill>}
+          </>
         }
       />
 
-      {/* Conflict banner */}
       {item.conflict && (
-        <Banner variant="warn" style={{ margin: '12px 16px 0' }}>
+        <Banner variant="warn" style={{ marginTop: 'var(--alm-sp-3)' }}>
           {item.conflict}
         </Banner>
       )}
 
-      {/* Properties */}
-      <Box title="Properties" style={{ margin: 16 }}>
-        <Table columns={propertyColumns} rows={propertyRows} />
-      </Box>
+      <MetricLine
+        metrics={[
+          { value: item.frames, label: 'frames' },
+          { value: item.duration, label: 'integration' },
+          { value: item.size, label: 'on disk' },
+          { value: `${item.exposure}s`, label: 'exposure' },
+        ]}
+      />
 
-      {/* Frames */}
-      <Box title="Frames" style={{ margin: '0 16px 16px' }}>
-        <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr', gap: 16, padding: '12px 0 4px' }}>
-          <div style={{ textAlign: 'center' }}>
-            <div style={{ fontSize: 'var(--alm-text-lg)', fontWeight: 600 }}>{item.frames}</div>
-            <div style={{ fontSize: 'var(--alm-text-xs)', color: 'var(--alm-color-fg-muted)' }}>Count</div>
-          </div>
-          <div style={{ textAlign: 'center' }}>
-            <div style={{ fontSize: 'var(--alm-text-lg)', fontWeight: 600 }}>{item.duration}</div>
-            <div style={{ fontSize: 'var(--alm-text-xs)', color: 'var(--alm-color-fg-muted)' }}>Total integration</div>
-          </div>
-          <div style={{ textAlign: 'center' }}>
-            <div style={{ fontSize: 'var(--alm-text-lg)', fontWeight: 600 }}>{item.size}</div>
-            <div style={{ fontSize: 'var(--alm-text-xs)', color: 'var(--alm-color-fg-muted)' }}>Total size</div>
-          </div>
-        </div>
-      </Box>
+      <Section title="Properties">
+        <Table columns={propertyColumns} rows={propertyRows} />
+      </Section>
     </DetailPane>
   );
 }

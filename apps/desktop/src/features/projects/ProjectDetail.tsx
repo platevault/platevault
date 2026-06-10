@@ -1,27 +1,19 @@
-import { DetailHeader, DetailPane } from '@/components';
-import { Pill, Btn, Section, Banner, Table, Box, KV, CoverageBar } from '@/ui';
+import {
+  DetailHeader,
+  DetailPane,
+  MetricLine,
+  DetailGrid,
+  Rail,
+  RailCard,
+  Lifecycle,
+} from '@/components';
+import { Pill, Btn, Section, Banner, Table, CoverageBar } from '@/ui';
+import { projectStateLabel, projectStateVariant } from '@/lib/lifecycle';
 import { PROJECTS_DATA } from '@/data/fixtures/projects';
 import type { ProjectFixture } from '@/data/fixtures/projects';
 import type { PillVariant } from '@/ui';
 
-// ─── Helpers ────────────────────────────────────────────────────────────────
-
-function projectVariant(state: ProjectFixture['state']): PillVariant {
-  const map: Record<string, PillVariant> = {
-    completed: 'ok', archived: 'ok', processing: 'info', prepared: 'accent',
-    ready: 'neutral', blocked: 'danger', setup_incomplete: 'ghost',
-  };
-  return map[state] ?? 'neutral';
-}
-
-function stateLabel(state: ProjectFixture['state']): string {
-  const map: Record<string, string> = {
-    setup_incomplete: 'Setup', ready: 'Ready', prepared: 'Prepared',
-    processing: 'Processing', completed: 'Completed', archived: 'Archived',
-    blocked: 'Blocked',
-  };
-  return map[state] ?? state;
-}
+// ─── Source-specific variants (project-local) ────────────────────────────────
 
 function sourceTypeVariant(type: string): PillVariant {
   const map: Record<string, PillVariant> = { light: 'info', dark: 'neutral', flat: 'accent', bias: 'ghost' };
@@ -33,78 +25,7 @@ function sourceStatusVariant(status: string): PillVariant {
   return map[status] ?? 'neutral';
 }
 
-// ─── Phase actions ──────────────────────────────────────────────────────────
-
-type ActionDef = { label: string; variant?: 'primary' | 'accent' | 'danger' };
-
-function phaseActions(state: ProjectFixture['state']): ActionDef[] {
-  switch (state) {
-    case 'setup_incomplete': return [{ label: 'Continue setup', variant: 'primary' }];
-    case 'ready': return [{ label: 'Generate source view', variant: 'primary' }, { label: 'Add sessions' }];
-    case 'prepared': return [{ label: 'Reveal source views', variant: 'primary' }];
-    case 'processing': return [{ label: 'Mark complete', variant: 'primary' }];
-    case 'completed': return [{ label: 'Generate cleanup plan', variant: 'primary' }, { label: 'Archive project' }];
-    case 'archived': return [{ label: 'Unarchive' }];
-    case 'blocked': return [{ label: 'Resolve block', variant: 'danger' }];
-    default: return [];
-  }
-}
-
-// ─── Lifecycle flowchart ────────────────────────────────────────────────────
-
-const LIFECYCLE_STEPS = ['setup', 'ready', 'prepared', 'processing', 'completed', 'archived'] as const;
-const stateToIdx: Record<string, number> = {
-  setup_incomplete: 0, ready: 1, prepared: 2, processing: 3, completed: 4, archived: 5, blocked: -1,
-};
-
-function LifecycleFlowchart({ currentState }: { currentState: string }) {
-  const currentIdx = stateToIdx[currentState] ?? -1;
-  const isBlocked = currentState === 'blocked';
-
-  return (
-    <div className="alm-lifecycle">
-      {LIFECYCLE_STEPS.map((step, i) => {
-        const isDone = !isBlocked && i < currentIdx;
-        const isCurrent = !isBlocked && i === currentIdx;
-
-        const dotClass = [
-          'alm-lifecycle__dot',
-          isDone && 'alm-lifecycle__dot--done',
-          isCurrent && 'alm-lifecycle__dot--active',
-          isBlocked && isCurrent && 'alm-lifecycle__dot--blocked',
-        ].filter(Boolean).join(' ');
-
-        const labelClass = [
-          'alm-lifecycle__label',
-          isDone && 'alm-lifecycle__label--done',
-          isCurrent && 'alm-lifecycle__label--active',
-        ].filter(Boolean).join(' ');
-
-        return (
-          <div key={step} className="alm-lifecycle__step">
-            <div className="alm-lifecycle__connector">
-              {i > 0 && <div className={`alm-lifecycle__line${isDone || isCurrent ? ' alm-lifecycle__line--done' : ''}`} />}
-              <div className={dotClass} />
-              {i < LIFECYCLE_STEPS.length - 1 && <div className={`alm-lifecycle__line${isDone ? ' alm-lifecycle__line--done' : ''}`} />}
-            </div>
-            <span className={labelClass}>{step}</span>
-          </div>
-        );
-      })}
-      {isBlocked && (
-        <div className="alm-lifecycle__step">
-          <div className="alm-lifecycle__connector">
-            <div className="alm-lifecycle__line" />
-            <div className="alm-lifecycle__dot alm-lifecycle__dot--blocked" />
-          </div>
-          <span className="alm-lifecycle__label" style={{ color: 'var(--alm-danger)' }}>blocked</span>
-        </div>
-      )}
-    </div>
-  );
-}
-
-// ─── Mock sub-data ──────────────────────────────────────────────────────────
+// ─── Mock sub-data ───────────────────────────────────────────────────────────
 
 const SOURCE_DATA = [
   { type: 'light', name: 'NGC 7000 · Ha · 2024-11', detail: '3054 frames · 4.5h', status: 'selected' },
@@ -132,7 +53,14 @@ const NOTES = [
   'Color balance adjusted per PixInsight STF',
 ];
 
-// ─── Component ──────────────────────────────────────────────────────────────
+const HISTORY = [
+  { ts: '04-16', detail: 'source view generated' },
+  { ts: '04-15', detail: 'marked processing' },
+  { ts: '04-14', detail: '2 sessions linked' },
+  { ts: '04-13', detail: 'project created' },
+];
+
+// ─── Component ───────────────────────────────────────────────────────────────
 
 export interface ProjectDetailContentProps {
   project: ProjectFixture;
@@ -140,108 +68,118 @@ export interface ProjectDetailContentProps {
 
 export function ProjectDetailContent({ project }: ProjectDetailContentProps) {
   const projectPath = `D:\\Astrophotography\\Projects\\${project.name.replace(/\s·\s/g, '_').replace(/\s/g, '')}`;
-  const actions = phaseActions(project.state);
 
   return (
-    <DetailPane>
+    <DetailPane fill>
       <DetailHeader
         title={project.name}
-        titleExtra={
-          <Pill variant={projectVariant(project.state)}>{stateLabel(project.state)}</Pill>
-        }
+        titleExtra={<Pill variant={projectStateVariant(project.state)}>{projectStateLabel(project.state)}</Pill>}
         subtitle={projectPath}
-        actions={<>
-          {actions.map(a => (
-            <Btn key={a.label} size="sm" variant={a.variant}>{a.label}</Btn>
-          ))}
-          <Btn size="sm">Reveal in Explorer</Btn>
-        </>}
       />
 
-      {/* Blocked banner */}
       {project.state === 'blocked' && project.blockedReason && (
-        <Banner variant="danger" style={{ marginBottom: 'var(--alm-sp-3)' }}>
+        <Banner variant="danger" style={{ marginTop: 'var(--alm-sp-3)' }}>
           {project.blockedReason}
         </Banner>
       )}
 
-      {/* Lifecycle + Integration per channel */}
-      <div style={{ display: 'grid', gridTemplateColumns: '180px 1fr', gap: 'var(--alm-sp-3)', marginBottom: 'var(--alm-sp-4)' }}>
-        <Box title="Lifecycle">
-          <LifecycleFlowchart currentState={project.state} />
-        </Box>
-        <Box title="Integration per channel">
-          <div style={{ display: 'flex', flexDirection: 'column', gap: 'var(--alm-sp-2)' }}>
-            {CHANNEL_DATA.map(c => (
-              <CoverageBar key={c.filter} label={c.filter} value={c.hours} max={c.max} />
-            ))}
-          </div>
-          <div style={{ marginTop: 'var(--alm-sp-3)', fontSize: 'var(--alm-text-xs)', color: 'var(--alm-text-muted)' }}>
-            Total: {project.hours}h · {project.size} on disk · Profile: {project.profile}
-          </div>
-        </Box>
-      </div>
+      <MetricLine
+        metrics={[
+          { value: `${project.hours}h`, label: 'integration' },
+          { value: CHANNEL_DATA.length, label: 'channels' },
+          { value: project.size, label: 'on disk' },
+          { value: project.profile, label: 'profile' },
+        ]}
+      />
 
-      {/* Source map */}
-      <Section title="Source map" count={SOURCE_DATA.length}>
-        <Table
-          columns={[
-            { key: 'type', label: 'Type', style: { width: 72 } },
-            { key: 'name', label: 'Name' },
-            { key: 'detail', label: 'Detail' },
-            { key: 'status', label: 'Status', style: { width: 96 } },
-          ]}
-          rows={SOURCE_DATA.map(row => ({
-            type: <Pill variant={sourceTypeVariant(row.type)}>{row.type}</Pill>,
-            name: <span style={{ fontFamily: 'var(--alm-font-mono)', fontSize: 'var(--alm-text-xs)' }}>{row.name}</span>,
-            detail: row.detail,
-            status: <Pill variant={sourceStatusVariant(row.status)}>{row.status}</Pill>,
-          }))}
-        />
-      </Section>
+      <DetailGrid
+        rail={
+          <Rail>
+            <RailCard title="Lifecycle">
+              <Lifecycle state={project.state} />
+            </RailCard>
+            <RailCard title="Integration / channel">
+              {CHANNEL_DATA.map((c) => (
+                <CoverageBar key={c.filter} label={c.filter} value={c.hours} max={c.max} />
+              ))}
+              <div style={{ marginTop: 'var(--alm-sp-2)', fontSize: 'var(--alm-text-xs)', color: 'var(--alm-text-muted)' }}>
+                Total {project.hours}h
+              </div>
+            </RailCard>
+            <RailCard title="Recent history">
+              <div style={{ display: 'flex', flexDirection: 'column', gap: 'var(--alm-sp-1)', fontSize: 'var(--alm-text-xs)' }}>
+                {HISTORY.map((h, i) => (
+                  <div key={i} style={{ color: 'var(--alm-text-secondary)' }}>
+                    <span className="alm-mono" style={{ color: 'var(--alm-text-faint)' }}>{h.ts}</span> · {h.detail}
+                  </div>
+                ))}
+              </div>
+            </RailCard>
+          </Rail>
+        }
+      >
+        <Section title="Source map" count={SOURCE_DATA.length}>
+          <Table
+            columns={[
+              { key: 'type', label: 'Type', style: { width: 72 } },
+              { key: 'name', label: 'Name' },
+              { key: 'detail', label: 'Detail' },
+              { key: 'status', label: 'Status', style: { width: 96 } },
+            ]}
+            rows={SOURCE_DATA.map((row) => ({
+              type: <Pill variant={sourceTypeVariant(row.type)}>{row.type}</Pill>,
+              name: <span className="alm-mono" style={{ fontSize: 'var(--alm-text-xs)' }}>{row.name}</span>,
+              detail: row.detail,
+              status: <Pill variant={sourceStatusVariant(row.status)}>{row.status}</Pill>,
+            }))}
+          />
+        </Section>
 
-      {/* Source views */}
-      <Section title="Source views" count={SOURCE_VIEWS.length}>
-        <Table
-          columns={[
-            { key: 'name', label: 'Name' },
-            { key: 'strategy', label: 'Strategy', style: { width: 96 } },
-            { key: 'files', label: 'Files', style: { width: 64 } },
-            { key: 'plan', label: 'Plan', style: { width: 80 } },
-            { key: 'actions', label: '', style: { width: 80 } },
-          ]}
-          rows={SOURCE_VIEWS.map(view => ({
-            name: <>
-              <span style={{ fontFamily: 'var(--alm-font-mono)', fontSize: 'var(--alm-text-xs)' }}>{view.name}</span>{' '}
-              <Pill variant="ghost">generated</Pill>
-            </>,
-            strategy: view.strategy,
-            files: view.files,
-            plan: view.plan,
-            actions: <Btn size="sm">Reveal</Btn>,
-          }))}
-        />
-      </Section>
+        <Section title="Source views" count={SOURCE_VIEWS.length}>
+          <Table
+            columns={[
+              { key: 'name', label: 'Name' },
+              { key: 'strategy', label: 'Strategy', style: { width: 96 } },
+              { key: 'files', label: 'Files', style: { width: 64 } },
+              { key: 'plan', label: 'Plan', style: { width: 80 } },
+              { key: 'actions', label: '', style: { width: 80 } },
+            ]}
+            rows={SOURCE_VIEWS.map((view) => ({
+              name: (
+                <>
+                  <span className="alm-mono" style={{ fontSize: 'var(--alm-text-xs)' }}>{view.name}</span>{' '}
+                  <Pill variant="ghost">generated</Pill>
+                </>
+              ),
+              strategy: view.strategy,
+              files: view.files,
+              plan: view.plan,
+              actions: <Btn size="sm">Reveal</Btn>,
+            }))}
+          />
+        </Section>
 
-      {/* Notes */}
-      <Section title="Notes" count={NOTES.length} right={<Btn size="sm">+ Add note</Btn>}>
-        {NOTES.map((note, i) => (
-          <div
-            key={i}
-            style={{
-              display: 'flex', alignItems: 'center', justifyContent: 'space-between',
-              padding: '6px 0',
-              borderBottom: i < NOTES.length - 1 ? '1px solid var(--alm-border-subtle)' : undefined,
-            }}
-          >
-            <span style={{ fontSize: 'var(--alm-text-sm)' }}>{note}</span>
-            <span style={{ display: 'flex', gap: 4 }}>
-              <Btn size="sm">Edit</Btn>
-              <Btn size="sm" variant="danger">Delete</Btn>
-            </span>
-          </div>
-        ))}
-      </Section>
+        <Section title="Notes" count={NOTES.length} right={<Btn size="sm">+ Add note</Btn>}>
+          {NOTES.map((note, i) => (
+            <div
+              key={i}
+              style={{
+                display: 'flex',
+                alignItems: 'center',
+                justifyContent: 'space-between',
+                padding: '6px 0',
+                borderBottom: i < NOTES.length - 1 ? '1px solid var(--alm-border-subtle)' : undefined,
+              }}
+            >
+              <span style={{ fontSize: 'var(--alm-text-sm)' }}>{note}</span>
+              <span style={{ display: 'flex', gap: 4 }}>
+                <Btn size="sm">Edit</Btn>
+                <Btn size="sm" variant="danger">Delete</Btn>
+              </span>
+            </div>
+          ))}
+        </Section>
+      </DetailGrid>
     </DetailPane>
   );
 }

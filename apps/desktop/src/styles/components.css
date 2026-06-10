@@ -3,7 +3,7 @@
 /* === APP FRAME === */
 .alm-frame { display: flex; flex-direction: column; height: 100%; }
 .alm-frame__body { display: flex; flex: 1; min-height: 0; }
-.alm-frame__main { display: flex; flex-direction: column; flex: 1; min-width: 0; }
+.alm-frame__main { display: flex; flex-direction: column; flex: 1; min-width: 0; min-height: 0; }
 .alm-frame__statusbar {
   height: var(--alm-statusbar-height);
   background: var(--alm-surface);
@@ -13,7 +13,28 @@
   gap: var(--alm-sp-4); flex-shrink: 0;
 }
 .alm-statusbar__sep { color: var(--alm-rule); }
-.alm-statusbar__right { margin-left: auto; display: flex; gap: var(--alm-sp-3); }
+.alm-statusbar__right { margin-left: auto; display: flex; gap: var(--alm-sp-3); align-items: center; }
+.alm-statusbar__op { display: flex; align-items: center; gap: var(--alm-sp-2); }
+.alm-statusbar__idle { color: var(--alm-text-faint); }
+.alm-statusbar__spinner {
+  width: 9px; height: 9px; border-radius: 50%;
+  border: 2px solid var(--alm-accent); border-top-color: transparent;
+  animation: alm-spin 1s linear infinite;
+}
+@keyframes alm-spin { to { transform: rotate(360deg); } }
+.alm-statusbar__vol { display: flex; align-items: center; gap: var(--alm-sp-1); }
+.alm-statusbar__vol--warn { color: var(--alm-warn); }
+.alm-statusbar__meter {
+  width: 40px; height: 5px; border-radius: 3px;
+  background: var(--alm-bg3); overflow: hidden;
+}
+.alm-statusbar__meter i { display: block; height: 100%; background: var(--alm-ok); }
+.alm-statusbar__vol--warn .alm-statusbar__meter i { background: var(--alm-warn); }
+.alm-statusbar__log-toggle {
+  border: 1px solid var(--alm-border); border-radius: var(--alm-radius-sm);
+  padding: 0 var(--alm-sp-2); height: 16px; background: var(--alm-bg);
+  cursor: pointer; color: var(--alm-text-secondary); font-size: var(--alm-text-2xs);
+}
 
 /* === SIDEBAR === */
 .alm-sidebar {
@@ -84,6 +105,32 @@
   border-top: 1px solid var(--alm-border-subtle);
   font-size: var(--alm-text-2xs); color: var(--alm-text-faint);
   white-space: nowrap; overflow: hidden;
+}
+
+/* Sidebar v4: 1-line brand, workflow groups, pinned settings */
+.alm-sidebar__mark {
+  width: 22px; height: 22px; border-radius: var(--alm-radius-sm);
+  background: linear-gradient(135deg, var(--alm-accent), #1e3a8a);
+  color: #fff; font-size: var(--alm-text-2xs); font-weight: var(--alm-weight-semibold);
+  display: flex; align-items: center; justify-content: center; flex-shrink: 0;
+}
+.alm-sidebar__brand-name { flex: 1; }
+.alm-sidebar__version { font-size: var(--alm-text-2xs); color: var(--alm-text-faint); }
+.alm-sidebar__collapse { margin-left: auto; }
+.alm-sidebar__group { padding-bottom: var(--alm-sp-1); }
+.alm-sidebar__group-label {
+  font-size: 9.5px; font-weight: var(--alm-weight-semibold);
+  letter-spacing: 0.08em; text-transform: uppercase;
+  color: var(--alm-text-faint);
+  padding: var(--alm-sp-3) var(--alm-sp-3) var(--alm-sp-1);
+}
+.alm-sidebar__settings {
+  border-top: 1px solid var(--alm-border-subtle);
+  padding: var(--alm-sp-1) 0;
+}
+.alm-sidebar__item-badge--alert {
+  color: #fff; background: var(--alm-accent);
+  border-radius: 8px; padding: 0 5px; min-width: 18px; text-align: center;
 }
 
 /* === TOP ACTION BAR === */
@@ -305,6 +352,78 @@
 }
 .alm-section__count { font-size: var(--alm-text-2xs); color: var(--alm-text-muted); }
 .alm-section__right { margin-left: auto; }
+
+/* === DETAIL v4: METRIC LINE + DASHBOARD GRID + UNIFIED RAIL === */
+.alm-metricline {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--alm-sp-5);
+  align-items: baseline;
+  padding: var(--alm-sp-3) 0;
+  border-bottom: 1px solid var(--alm-border-subtle);
+}
+.alm-metricline__m { font-size: var(--alm-text-xs); color: var(--alm-text-muted); }
+.alm-metricline__m b {
+  font-size: var(--alm-text-lg);
+  font-weight: var(--alm-weight-semibold);
+  color: var(--alm-text);
+  margin-right: var(--alm-sp-1);
+}
+
+.alm-dash {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) var(--alm-rail-width);
+  gap: var(--alm-sp-5);
+  margin-top: var(--alm-sp-4);
+}
+.alm-dash__primary { min-width: 0; }
+
+.alm-rail { min-width: 0; }
+.alm-rail__panel {
+  display: flex;
+  flex-direction: column;
+  background: var(--alm-surface);
+  border: 1px solid var(--alm-border-subtle);
+  border-radius: var(--alm-radius-md);
+  overflow: hidden;
+}
+
+/* Dashboard fill mode (DetailPane fill): the pane fills the available height,
+ * header + metric line stay pinned, and the PRIMARY column scrolls on its own
+ * while the rail stays put as a separate region. Robust — no position:sticky. */
+.alm-detail--fill {
+  display: flex;
+  flex-direction: column;
+  height: 100%;
+  min-height: 0;
+  overflow: hidden;
+}
+.alm-detail--fill > .alm-dash {
+  flex: 1;
+  min-height: 0;
+  grid-template-rows: minmax(0, 1fr);
+  margin-top: var(--alm-sp-3);
+}
+.alm-detail--fill .alm-dash__primary {
+  overflow-y: auto;
+  min-height: 0;
+  padding-right: var(--alm-sp-3);
+}
+.alm-detail--fill .alm-rail { min-height: 0; }
+.alm-detail--fill .alm-rail__panel {
+  max-height: 100%;
+  overflow-y: auto;
+}
+.alm-rail__card { padding: var(--alm-sp-3) var(--alm-sp-4); }
+.alm-rail__card + .alm-rail__card { border-top: 1px solid var(--alm-border-subtle); }
+.alm-rail__card-h {
+  font-size: var(--alm-text-2xs);
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  color: var(--alm-text-faint);
+  font-weight: var(--alm-weight-semibold);
+  margin-bottom: var(--alm-sp-2);
+}
 
 /* === BOX / CARD === */
 .alm-box {
