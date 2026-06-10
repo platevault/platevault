@@ -31,14 +31,26 @@ export interface InboxListProps {
   items: InboxFixture[];
   selectedId: number | null;
   onSelect: (id: number) => void;
+  /** Controlled frame-type filter (URL-backed); `'all'` means no filter. */
+  filterType: FilterType;
+  onFilterTypeChange: (type: InboxFixture['frameType'] | undefined) => void;
+  /** Controlled grouping (URL-backed); `'none'` means no grouping. */
+  groupBy: GroupBy;
+  onGroupByChange: (group: GroupBy | undefined) => void;
 }
 
 // ─── Component ──────────────────────────────────────────────────────────────
 
-export function InboxList({ items, selectedId, onSelect }: InboxListProps) {
-  const [groupBy, setGroupBy] = useState<GroupBy>('none');
+export function InboxList({
+  items,
+  selectedId,
+  onSelect,
+  filterType,
+  onFilterTypeChange,
+  groupBy,
+  onGroupByChange,
+}: InboxListProps) {
   const [sortBy, setSortBy] = useState<SortBy>('newest');
-  const [filterType, setFilterType] = useState<FilterType>('all');
 
   const filtered = useMemo(() => {
     let result = items;
@@ -64,7 +76,10 @@ export function InboxList({ items, selectedId, onSelect }: InboxListProps) {
           <select
             className="alm-select"
             value={groupBy}
-            onChange={(e) => setGroupBy(e.target.value as GroupBy)}
+            onChange={(e) => {
+              const v = e.target.value as GroupBy;
+              onGroupByChange(v === 'none' ? undefined : v);
+            }}
             aria-label="Group by"
           >
             <option value="none">Group: none</option>
@@ -84,7 +99,10 @@ export function InboxList({ items, selectedId, onSelect }: InboxListProps) {
           <select
             className="alm-select"
             value={filterType}
-            onChange={(e) => setFilterType(e.target.value as FilterType)}
+            onChange={(e) => {
+              const v = e.target.value as FilterType;
+              onFilterTypeChange(v === 'all' ? undefined : v);
+            }}
             aria-label="Filter frame type"
           >
             <option value="all">All types</option>

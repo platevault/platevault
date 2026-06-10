@@ -1,9 +1,10 @@
-import { useState } from 'react';
+import { useNavigate, useSearch } from '@tanstack/react-router';
 import { SESSIONS_DATA } from '@/data/fixtures/sessions';
 import type { SessionFixture } from '@/data/fixtures/sessions';
 import { PageShell, ListDetailLayout, TopActionBar } from '@/components';
 import { Btn } from '@/ui';
 import type { BtnVariant } from '@/ui';
+import { useStaleSelectionCleanup } from '@/lib/use-stale-selection';
 import { SessionsList } from './SessionsList';
 import { SessionDetail } from './SessionDetail';
 
@@ -32,8 +33,15 @@ function sessionActions(state: SessionFixture['state']): ContextualAction[] {
 }
 
 export function SessionsPage() {
-  const [selected, setSelected] = useState<number | null>(null);
+  const { selected } = useSearch({ from: '/shell/sessions' });
+  const navigate = useNavigate({ from: '/sessions' });
   const session = SESSIONS_DATA.find((s) => s.id === selected);
+
+  useStaleSelectionCleanup(selected, session !== undefined, () =>
+    navigate({ search: (prev) => ({ ...prev, selected: undefined }), replace: true }),
+  );
+
+  const onSelect = (id: number) => navigate({ search: (prev) => ({ ...prev, selected: id }) });
 
   return (
     <PageShell>
@@ -55,7 +63,7 @@ export function SessionsPage() {
             }
           />
         }
-        list={<SessionsList sessions={SESSIONS_DATA} selected={selected} onSelect={setSelected} />}
+        list={<SessionsList sessions={SESSIONS_DATA} selected={selected ?? null} onSelect={onSelect} />}
         detail={<SessionDetail session={session ?? null} />}
       />
     </PageShell>

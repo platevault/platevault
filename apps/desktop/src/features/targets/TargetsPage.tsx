@@ -1,14 +1,22 @@
-import { useState } from 'react';
+import { useNavigate, useSearch } from '@tanstack/react-router';
 import { TARGETS_DATA } from '@/data/fixtures/targets';
 import type { TargetFixture } from '@/data/fixtures/targets';
 import { PageShell, ListDetailLayout, TopActionBar } from '@/components';
 import { Btn } from '@/ui';
+import { useStaleSelectionCleanup } from '@/lib/use-stale-selection';
 import { TargetList } from './TargetList';
 import { TargetDetailPaneInline } from './TargetDetail';
 
 export function TargetsPage() {
-  const [selected, setSelected] = useState<number | null>(null);
+  const { selected } = useSearch({ from: '/shell/targets' });
+  const navigate = useNavigate({ from: '/targets' });
   const target: TargetFixture | null = TARGETS_DATA.find((t) => t.id === selected) ?? null;
+
+  useStaleSelectionCleanup(selected, target !== null, () =>
+    navigate({ search: (prev) => ({ ...prev, selected: undefined }), replace: true }),
+  );
+
+  const onSelect = (id: number) => navigate({ search: (prev) => ({ ...prev, selected: id }) });
 
   return (
     <PageShell>
@@ -30,7 +38,7 @@ export function TargetsPage() {
             }
           />
         }
-        list={<TargetList targets={TARGETS_DATA} selected={selected} onSelect={setSelected} />}
+        list={<TargetList targets={TARGETS_DATA} selected={selected ?? null} onSelect={onSelect} />}
         detail={<TargetDetailPaneInline target={target} />}
       />
     </PageShell>

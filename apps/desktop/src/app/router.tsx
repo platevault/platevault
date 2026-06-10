@@ -9,6 +9,21 @@ import {
 } from '@tanstack/react-router';
 import { Shell } from './Shell';
 import { getPreferences } from '@/data/preferences';
+import {
+  makeValidateSearch,
+  parseNumber,
+  parseEnum,
+  parseCsvEnum,
+  FRAME_TYPES,
+  INBOX_GROUPS,
+  PROJECT_STATES,
+} from '@/lib/route-contract';
+
+/** Parse a path-param id to a number; NaN-safe `selected` search for redirects. */
+function selectedSearch(rawId: string): { selected?: number } {
+  const id = Number(rawId);
+  return Number.isFinite(id) ? { selected: id } : {};
+}
 
 // Root route — bare Outlet so setup can render without the shell
 const rootRoute = createRootRoute({
@@ -27,6 +42,7 @@ const shellRoute = createRoute({
 const sessionsRoute = createRoute({
   getParentRoute: () => shellRoute,
   path: '/sessions',
+  validateSearch: makeValidateSearch({ selected: parseNumber }),
   component: lazyRouteComponent(
     () => import('@/features/sessions/SessionsPage'),
     'SessionsPage',
@@ -37,10 +53,7 @@ const sessionDetailRoute = createRoute({
   getParentRoute: () => shellRoute,
   path: '/sessions/$id',
   beforeLoad: ({ params }) => {
-    throw redirect({
-      to: '/sessions',
-      search: { selected: params.id },
-    });
+    throw redirect({ to: '/sessions', search: selectedSearch(params.id) });
   },
 });
 
@@ -49,6 +62,11 @@ const sessionDetailRoute = createRoute({
 const inboxRoute = createRoute({
   getParentRoute: () => shellRoute,
   path: '/inbox',
+  validateSearch: makeValidateSearch({
+    selected: parseNumber,
+    type: parseEnum(FRAME_TYPES),
+    group: parseEnum(INBOX_GROUPS),
+  }),
   component: lazyRouteComponent(
     () => import('@/features/inbox/InboxPage'),
     'InboxPage',
@@ -60,6 +78,7 @@ const inboxRoute = createRoute({
 const calibrationRoute = createRoute({
   getParentRoute: () => shellRoute,
   path: '/calibration',
+  validateSearch: makeValidateSearch({ selected: parseNumber }),
   component: lazyRouteComponent(
     () => import('@/features/calibration/CalibrationPage'),
     'CalibrationPage',
@@ -69,10 +88,9 @@ const calibrationRoute = createRoute({
 const calibrationDetailRoute = createRoute({
   getParentRoute: () => shellRoute,
   path: '/calibration/$id',
-  component: lazyRouteComponent(
-    () => import('@/features/calibration/CalibrationDetail'),
-    'CalibrationDetail',
-  ),
+  beforeLoad: ({ params }) => {
+    throw redirect({ to: '/calibration', search: selectedSearch(params.id) });
+  },
 });
 
 // --- Targets ---
@@ -80,6 +98,7 @@ const calibrationDetailRoute = createRoute({
 const targetsRoute = createRoute({
   getParentRoute: () => shellRoute,
   path: '/targets',
+  validateSearch: makeValidateSearch({ selected: parseNumber }),
   component: lazyRouteComponent(
     () => import('@/features/targets/TargetsPage'),
     'TargetsPage',
@@ -89,10 +108,9 @@ const targetsRoute = createRoute({
 const targetDetailRoute = createRoute({
   getParentRoute: () => shellRoute,
   path: '/targets/$id',
-  component: lazyRouteComponent(
-    () => import('@/features/targets/TargetDetail'),
-    'TargetDetail',
-  ),
+  beforeLoad: ({ params }) => {
+    throw redirect({ to: '/targets', search: selectedSearch(params.id) });
+  },
 });
 
 // --- Projects ---
@@ -100,6 +118,10 @@ const targetDetailRoute = createRoute({
 const projectsRoute = createRoute({
   getParentRoute: () => shellRoute,
   path: '/projects',
+  validateSearch: makeValidateSearch({
+    selected: parseNumber,
+    lifecycle: parseCsvEnum(PROJECT_STATES),
+  }),
   component: lazyRouteComponent(
     () => import('@/features/projects/ProjectsPage'),
     'ProjectsPage',
@@ -109,10 +131,9 @@ const projectsRoute = createRoute({
 const projectDetailRoute = createRoute({
   getParentRoute: () => shellRoute,
   path: '/projects/$id',
-  component: lazyRouteComponent(
-    () => import('@/features/projects/ProjectDetail'),
-    'ProjectDetail',
-  ),
+  beforeLoad: ({ params }) => {
+    throw redirect({ to: '/projects', search: selectedSearch(params.id) });
+  },
 });
 
 const projectNewRoute = createRoute({
@@ -129,6 +150,7 @@ const projectNewRoute = createRoute({
 const archiveRoute = createRoute({
   getParentRoute: () => shellRoute,
   path: '/archive',
+  validateSearch: makeValidateSearch({ selected: parseNumber }),
   component: lazyRouteComponent(
     () => import('@/features/archive/ArchivePage'),
     'ArchivePage',

@@ -63,25 +63,37 @@ export interface ProjectsListProps {
   projects: ProjectFixture[];
   selectedId: number;
   onSelect: (id: number) => void;
+  /** Controlled lifecycle filter (URL-backed, multi-value). Empty = no filter. */
+  lifecycle: ProjectFixture['state'][];
+  onLifecycleChange: (states: ProjectFixture['state'][]) => void;
 }
 
 // ─── Component ──────────────────────────────────────────────────────────────
 
-export function ProjectsList({ projects, selectedId, onSelect }: ProjectsListProps) {
+export function ProjectsList({
+  projects,
+  selectedId,
+  onSelect,
+  lifecycle,
+  onLifecycleChange,
+}: ProjectsListProps) {
   const [groupBy, setGroupBy] = useState<GroupBy>('none');
   const [sortBy, setSortBy] = useState<SortBy>('updated');
-  const [filter, setFilter] = useState<FilterState>('all');
+
+  // The select is single-value; the URL param is an array. Show the lone
+  // selection, or 'all' when empty / multi-valued (e.g. from a pasted link).
+  const filter: FilterState = lifecycle.length === 1 ? lifecycle[0] : 'all';
 
   const filtered = useMemo(() => {
     let result = projects;
-    if (filter !== 'all') {
-      result = result.filter((p) => p.state === filter);
+    if (lifecycle.length > 0) {
+      result = result.filter((p) => lifecycle.includes(p.state));
     }
     if (sortBy === 'name') {
       result = [...result].sort((a, b) => a.name.localeCompare(b.name));
     }
     return result;
-  }, [projects, filter, sortBy]);
+  }, [projects, lifecycle, sortBy]);
 
   return (
     <ListSidebar
@@ -109,7 +121,10 @@ export function ProjectsList({ projects, selectedId, onSelect }: ProjectsListPro
           <select
             className="alm-select"
             value={filter}
-            onChange={(e) => setFilter(e.target.value as FilterState)}
+            onChange={(e) => {
+              const v = e.target.value as FilterState;
+              onLifecycleChange(v === 'all' ? [] : [v]);
+            }}
             aria-label="Filter"
           >
             {FILTER_OPTIONS.map((o) => (

@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useNavigate, useSearch } from '@tanstack/react-router';
 import { ARCHIVE_DATA } from '@/data/fixtures/archive';
 import type { ArchiveFixture } from '@/data/fixtures/archive';
 import {
@@ -10,6 +10,7 @@ import {
 } from '@/components';
 import { Btn, Pill } from '@/ui';
 import type { BtnVariant } from '@/ui';
+import { useStaleSelectionCleanup } from '@/lib/use-stale-selection';
 import { ArchiveDetail } from './ArchiveDetail';
 
 interface ContextualAction {
@@ -32,8 +33,15 @@ function archiveActions(item: ArchiveFixture): ContextualAction[] {
 }
 
 export function ArchivePage() {
-  const [selected, setSelected] = useState<number | null>(null);
+  const { selected } = useSearch({ from: '/shell/archive' });
+  const navigate = useNavigate({ from: '/archive' });
   const item: ArchiveFixture | null = ARCHIVE_DATA.find((a) => a.id === selected) ?? null;
+
+  useStaleSelectionCleanup(selected, item !== null, () =>
+    navigate({ search: (prev) => ({ ...prev, selected: undefined }), replace: true }),
+  );
+
+  const onSelect = (id: number) => navigate({ search: (prev) => ({ ...prev, selected: id }) });
 
   return (
     <PageShell>
@@ -65,7 +73,7 @@ export function ArchivePage() {
               <ListItem
                 key={a.id}
                 selected={selected === a.id}
-                onClick={() => setSelected(a.id)}
+                onClick={() => onSelect(a.id)}
                 title={
                   <>
                     <strong>{a.name}</strong>
