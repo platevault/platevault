@@ -70,6 +70,42 @@
   through its own tooling. The rewrite is faithful to the user decision and the
   real design-v4 routes; low risk.
 
+### D-008 — 020 implementation specifics
+
+- **Route id vs path asymmetry**: `useSearch({ from })` needs the route **id**
+  (`/shell/sessions`, because routes are children of the `shell` layout route),
+  while `useNavigate({ from })` needs the **path** (`/sessions`). Both are used
+  per page. Not a bug — a TanStack Router layout-route nuance worth knowing.
+- **Projects lifecycle filter**: the contract param `lifecycle` is a CSV array
+  (`ProjectState[]`), but the existing UI is a single-select. Mapped single
+  selection ↔ 1-element array (no UI rebuild); empty array drops the param. A
+  pasted multi-value URL filters correctly but the select shows "all".
+- **Multi-window capability**: granted `core:webview:allow-create-webview-window`
+  and broadened `capabilities/default.json` `windows` to `["main","alm-win-*"]`
+  so spawned windows inherit the full permission set (can invoke commands, spawn
+  further windows). Verified via `cargo check`.
+- **Sessions/Calibration filters deferred**: those pages' list controls are
+  hardcoded (non-stateful) in design-v4, so only `selected` is wired there;
+  their filter params are omitted from `validateSearch` until the controls
+  become interactive. Spec search-param table updated to match.
+
+### D-009 — Pre-existing stale CommandPalette routes (noted, NOT fixed)
+
+- `apps/desktop/src/app/CommandPalette.tsx` lists `PAGES` with `/review`,
+  `/plans`, `/audit` — routes that **do not exist** in design-v4 (dead nav
+  targets). This predates spec 020 and is out of its scope; left as-is.
+  **Recommend**: a small follow-up to align the palette's page list with the
+  real routes (`/inbox`, `/sessions`, `/calibration`, `/targets`, `/projects`,
+  `/archive`, `/settings`).
+
+### D-010 — 020 runtime smoke deferred (sandbox-blocked)
+
+- WSL's command sandbox runs background processes with `--unshare-net` and
+  `--die-with-parent`, so a localhost Vite + Playwright interaction smoke could
+  not run. Deferred to the Windows-native preview (consistent with the GUI
+  constraint). Mitigation: 27 vitest cover the contract/guard logic; `tsc` +
+  `cargo check` pass; the redirect/cleanup paths are loop-safe by construction.
+
 ## Spec 022 — Mantine Prototype / Design System
 
 ### DV-001 — 022 primitive vocabulary superseded by design-v4

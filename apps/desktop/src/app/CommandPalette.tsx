@@ -1,8 +1,9 @@
 import { useState, useEffect, useCallback } from 'react';
 import { Dialog } from '@base-ui-components/react/dialog';
 import { Command } from 'cmdk';
-import { useNavigate } from '@tanstack/react-router';
+import { useNavigate, useRouterState } from '@tanstack/react-router';
 import { searchGlobal } from '@/api/commands';
+import { openInNewWindow } from '@/lib/window';
 import type { SearchResult } from '@/bindings/types';
 
 const PAGES: Array<{ label: string; route: string }> = [
@@ -25,6 +26,7 @@ export function CommandPalette() {
   const [query, setQuery] = useState('');
   const [results, setResults] = useState<SearchResult[]>([]);
   const navigate = useNavigate();
+  const currentHref = useRouterState({ select: (s) => s.location.href });
 
   useEffect(() => {
     function handleKeyDown(e: KeyboardEvent) {
@@ -123,6 +125,16 @@ export function CommandPalette() {
                     <span className="alm-palette__item-label">{a.label}</span>
                   </Command.Item>
                 ))}
+                <Command.Item
+                  className="alm-palette__item"
+                  onSelect={() => {
+                    setOpen(false);
+                    setQuery('');
+                    void openInNewWindow(currentHref);
+                  }}
+                >
+                  <span className="alm-palette__item-label">Open view in new window</span>
+                </Command.Item>
               </Command.Group>
             </Command.List>
           </Command>

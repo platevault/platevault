@@ -5,10 +5,11 @@ import {
   createRoute,
   lazyRouteComponent,
   redirect,
+  Navigate,
   Outlet,
 } from '@tanstack/react-router';
 import { Shell } from './Shell';
-import { getPreferences } from '@/data/preferences';
+import { checkFirstRunComplete } from './first-run';
 import {
   makeValidateSearch,
   parseNumber,
@@ -190,23 +191,6 @@ const setupRoute = createRoute({
 
 // --- Index redirect (first-run gate) ---
 
-async function checkFirstRunComplete(): Promise<boolean> {
-  const prefs = getPreferences();
-  if (prefs.setupCompleted) return true;
-
-  const useMocks = import.meta.env.VITE_USE_MOCKS === 'true';
-  if (useMocks) return !!prefs.setupCompleted;
-
-  try {
-    const { commands } = await import('@/bindings/index');
-    const result = await commands.firstrunState();
-    if (result.status === 'ok') return result.data.completedAt !== null;
-    return !!prefs.setupCompleted;
-  } catch {
-    return !!prefs.setupCompleted;
-  }
-}
-
 const indexRoute = createRoute({
   getParentRoute: () => shellRoute,
   path: '/',
@@ -252,6 +236,9 @@ export const router = createRouter({
   routeTree,
   history: hashHistory,
   defaultPreload: 'intent',
+  // Unknown routes (stale deep links) fall through to the index resolver
+  // rather than flashing a blank not-found page (spec 020 US3 / T031).
+  defaultNotFoundComponent: () => <Navigate to="/" />,
 });
 
 declare module '@tanstack/react-router' {

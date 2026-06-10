@@ -24,7 +24,7 @@ detail-path normalization, stale-id fallback, multi-window, testability.
 - [x] T001 (design-v4) TanStack Router installed + wired in `router.tsx`.
 - [x] T002 (design-v4) Root `Shell` renders `<Outlet>`; hash history via `createHashHistory()`.
 - [x] T003 (design-v4) Index `/` resolver gates on first-run (`getPreferences().setupCompleted` + Tauri `firstrunState`), redirects to `/setup`.
-- [ ] T004 [US1] Create `apps/desktop/src/lib/route-contract.ts`: typed search parsers `parseNumber`, `parseString`, `parseEnum(allow)`, `parseCsvEnum(allow)` (coerce invalid/unknown → `undefined`/empty, drop unknown keys), plus enum allow-list constants re-exported from `@/bindings` (`SessionState`, `ProjectState`, `CalibrationKind`, frame-type, group enums). Export a `validateSearch` factory helper.
+- [x] T004 [US1] Create `apps/desktop/src/lib/route-contract.ts`: typed search parsers `parseNumber`, `parseString`, `parseEnum(allow)`, `parseCsvEnum(allow)` (coerce invalid/unknown → `undefined`/empty, drop unknown keys), plus enum allow-list constants synced to `@/bindings` types (`SESSION_STATES`, `PROJECT_STATES`, `CALIBRATION_KINDS`, `FRAME_TYPES`, group enums). `makeValidateSearch` factory helper.
 
 **Checkpoint**: typed, unit-testable parsers exist as the single validator home.
 
@@ -36,12 +36,12 @@ Each ledger route declares `validateSearch`; each page reads via
 `useSearch({ from })` and writes via `useNavigate({ from })`, removing local
 `useState` for selection/filters. Selection ids are numbers.
 
-- [ ] T010 [US1] `/sessions`: `validateSearch {selected?:number, group?, state?}`. `SessionsPage` reads `selected` from search; `SessionsList` `onSelect` writes `navigate({search})`. Remove `useState` selection.
-- [ ] T011 [US2] `/inbox`: `validateSearch {selected?:number, type?, group?}`. Lift `InboxList` `filterType`/`groupBy` to URL; selection via search.
-- [ ] T012 [US1] `/calibration`: `validateSearch {selected?:number, kind?}`. Selection via search.
-- [ ] T013 [US1] `/targets`: `validateSearch {selected?:number}`. Selection via search.
-- [ ] T014 [US2] `/projects`: `validateSearch {selected?:number, lifecycle?:ProjectState[] (csv)}`. Lift `ProjectsList` lifecycle filter to URL; selection via search (handle the current non-null default — fall back to first item only when `selected` absent).
-- [ ] T015 [US1] `/archive`: `validateSearch {selected?:number}`. Selection via search.
+- [x] T010 [US1] `/sessions`: `validateSearch {selected?:number}`. `SessionsPage` reads `selected` from search; `SessionsList` `onSelect` writes `navigate({search})`. Removed `useState` selection. (Filter params deferred — list controls not yet stateful.)
+- [x] T011 [US2] `/inbox`: `validateSearch {selected?:number, type?, group?}`. Lifted `InboxList` `filterType`/`groupBy` to URL (controlled props); `sortBy` stays local; selection via search.
+- [x] T012 [US1] `/calibration`: `validateSearch {selected?:number}`. Selection via search. (Filter deferred.)
+- [x] T013 [US1] `/targets`: `validateSearch {selected?:number}`. Selection via search.
+- [x] T014 [US2] `/projects`: `validateSearch {selected?:number, lifecycle?:ProjectState[] (csv)}`. Lifted `ProjectsList` lifecycle filter to URL (single-select UI ↔ 1-element array); soft first-item default not written to URL.
+- [x] T015 [US1] `/archive`: `validateSearch {selected?:number}`. Selection via search.
 
 **Checkpoint**: every ledger view round-trips through reload; filters persist.
 
@@ -49,32 +49,38 @@ Each ledger route declares `validateSearch`; each page reads via
 
 ## Phase 3: Detail-path normalization (US1, FR-006)
 
-- [ ] T020 [US1] Normalize `/calibration/$id`, `/targets/$id`, `/projects/$id` to `beforeLoad` redirect → `/<ledger>?selected=$id` (matching the existing `/sessions/$id` pattern). Remove stub/passthrough detail components from the route tree.
+- [x] T020 [US1] Normalize `/calibration/$id`, `/targets/$id`, `/projects/$id` to `beforeLoad` redirect → `/<ledger>?selected=$id` (NaN-safe via `selectedSearch`). Stub/passthrough detail components removed from the route tree.
 
 ---
 
 ## Phase 4: Stale-id graceful fallback (US3)
 
-- [ ] T030 [US3] Add a `useStaleSelectionCleanup(found: boolean)` hook (useRef-guarded) in `route-contract.ts`: when `selected` is present but the entity is missing, call `navigate({ search: prev => ({ ...prev, selected: undefined }), replace: true })` exactly once. Wire into all six ledger pages; render the existing empty detail when nothing is selected/found.
-- [ ] T031 [US3] Confirm unknown route segments fall through to the `/` index resolver (TanStack default); no blank flash.
+- [x] T030 [US3] `useStaleSelectionCleanup(selected, found, clear)` hook (useRef-guarded) in `apps/desktop/src/lib/use-stale-selection.ts` (kept separate from the pure parsers); page supplies the `clear` closure doing `navigate({ search: prev => ({ ...prev, selected: undefined }), replace: true })`. Wired into all six ledger pages.
+- [x] T031 [US3] Added `defaultNotFoundComponent: () => <Navigate to="/" />` to the router so unknown segments fall through to the index resolver (no blank flash).
 
 ---
 
 ## Phase 5: Multi-window (US4)
 
-- [ ] T040 [US4] Add `apps/desktop/src/lib/window.ts`: `openInNewWindow(path: string)` using `@tauri-apps/api/webviewWindow` `WebviewWindow`, guarded by a Tauri-presence check; in browser/dev fall back to `window.open('#'+path)` (or no-op). Generates a unique label per call.
-- [ ] T041 [US4] Add an "Open in new window" affordance (app action bar and/or command palette) that calls `openInNewWindow` with the current `router.state.location.href` (route + search).
-- [ ] T042 [US4] Grant the Tauri capability to create webview windows in `apps/desktop/src-tauri/capabilities/*.json` (`core:webview:allow-create-webview-window` or equivalent). Verify the Rust side builds.
+- [x] T040 [US4] `apps/desktop/src/lib/window.ts`: `openInNewWindow(path)` via `@tauri-apps/api/webviewWindow` (lazy-imported), runtime-guarded by `__TAURI_INTERNALS__`; browser fallback `window.open`. Unique `alm-win-*` label per call.
+- [x] T041 [US4] "Open view in new window" command added to the command palette Actions group; uses `useRouterState` to capture the current href (route + search).
+- [x] T042 [US4] Granted `core:webview:allow-create-webview-window` in `capabilities/default.json` and broadened `windows` to `["main", "alm-win-*"]` so spawned windows are functional. `cargo check -p desktop_shell` passes (capability validated).
 
 ---
 
 ## Phase 6: Tests (testability cross-cut)
 
-- [ ] T050 [P] Vitest: `route-contract` parsers — `parseNumber` rejects non-numeric → `undefined`; `parseEnum`/`parseCsvEnum` drop values outside the allow-list; unknown keys dropped.
-- [ ] T051 [P] Vitest: each route `validateSearch` drops unknown keys and coerces invalid values to `undefined`.
-- [ ] T052 [P] Vitest: index resolver redirects to `/setup` when first-run incomplete and renders Sessions when complete (extend existing `SetupWizard.test` patterns / mock `getPreferences`).
-- [ ] T053 [P] Vitest: stale-id cleanup preserves other params and fires `replace` exactly once (useRef guard).
-- [ ] T054 [P] Vitest: special characters (`%2C`, `%20`, `+`) round-trip through a ledger route's search shape unchanged.
+- [x] T050 [P] Vitest `route-contract.test.ts`: `parseNumber` rejects non-numeric → `undefined`; `parseEnum`/`parseCsvEnum` drop values outside the allow-list; unknown keys dropped.
+- [x] T051 [P] Vitest: `makeValidateSearch` drops unknown keys and coerces invalid values away (representative projects shape).
+- [x] T052 [P] Vitest `first-run.test.ts`: `checkFirstRunComplete` → `false` when setup incomplete (index redirects to `/setup`), `true` when complete. (Gate extracted to `app/first-run.ts` for light testing.)
+- [x] T053 [P] Vitest `use-stale-selection.test.tsx`: cleanup fires `clear` exactly once per stale id (useRef guard), never when found/empty. (The `replace:true` + param-preservation lives in the page's `clear` closure — spreads `prev`, nulls only `selected`.)
+- [x] T054 [P] Vitest: special characters (spaces, `+`, commas) round-trip through the contract layer unchanged.
+
+> Runtime/browser interaction smoke (selection round-trip, back/forward in a
+> real window) is **deferred to the Windows-native preview** — WSL's network
+> sandbox blocks a localhost Vite+Playwright smoke here. Logic is unit-tested and
+> loop-safe by construction. Test totals: **27 vitest passing**; `tsc` clean;
+> `cargo check` clean.
 
 ---
 

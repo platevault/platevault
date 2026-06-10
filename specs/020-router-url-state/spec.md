@@ -228,17 +228,20 @@ validated against allow-lists in `bindings`.
 | Route          | Key        | Type                         | Purpose                         |
 |----------------|------------|------------------------------|---------------------------------|
 | `/sessions`    | `selected` | number?                      | Selected session id.            |
-| `/sessions`    | `group`    | `none\|target\|month`?        | Grouping.                       |
-| `/sessions`    | `state`    | `SessionState`?              | Session-state filter.           |
 | `/inbox`       | `selected` | number?                      | Selected inbox item id.         |
 | `/inbox`       | `type`     | `light\|dark\|flat\|bias`?    | Frame-type filter.              |
 | `/inbox`       | `group`    | `none\|type\|date`?           | Grouping.                       |
 | `/calibration` | `selected` | number?                      | Selected master id.             |
-| `/calibration` | `kind`     | `CalibrationKind`?           | Kind filter.                    |
 | `/targets`     | `selected` | number?                      | Selected target id.             |
 | `/projects`    | `selected` | number?                      | Selected project id.            |
 | `/projects`    | `lifecycle`| `ProjectState`? (csv)         | Lifecycle filter (multi).       |
 | `/archive`     | `selected` | number?                      | Selected archived item id.      |
+
+> Selection (`selected`) is wired on **all** ledger routes. URL **filters** are
+> wired where the page's list controls are already stateful (Inbox `type`/`group`,
+> Projects `lifecycle`). Sessions/Calibration list controls are not yet stateful
+> (hardcoded selects); their filter params are **deferred** until those controls
+> become interactive — selection still round-trips there today.
 
 Each ledger page reads search state via `useSearch({ from })` and writes via
 `useNavigate({ from })` with merged `search`. Unknown keys are dropped by the
