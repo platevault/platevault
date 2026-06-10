@@ -23,7 +23,7 @@ description: "Task list for the desktop prototype design system (Base UI + token
 
 - [x] T001 [mockup-done] Confirm `@base-ui-components/react`, `cmdk`, `react-resizable-panels`, `@tanstack/react-table`, and `@tanstack/react-router` are pinned in `apps/desktop/package.json`.
 - [x] T002 [mockup-done] Confirm `apps/desktop/src/styles/reset.css` is loaded before `tokens.css` and `components.css` from the desktop entry.
-- [ ] T003 [P] Verify no Tailwind, Mantine, or shadcn/ui dependencies are present (repo grep: `mantine`, `tailwind`, `shadcn`, `styled-components`). Document the audit in this spec's `research.md` if any are found.
+- [x] T003 [P] Verify no Tailwind, Mantine, or shadcn/ui dependencies are present (repo grep: `mantine`, `tailwind`, `shadcn`, `styled-components`). Document the audit in this spec's `research.md` if any are found. — VERIFIED clean: no matches in package.json or src (2026-06-10).
 
 ---
 
@@ -44,7 +44,7 @@ description: "Task list for the desktop prototype design system (Base UI + token
 **Independent Test**: Grep `apps/desktop/src/styles/components.css` for hardcoded hex codes, raw `px` values outside token definitions, and raw `ms` durations. Confirm exceptions are documented inline.
 
 - [x] T010 [mockup-done] [US1] Author the token vocabulary in `apps/desktop/src/styles/tokens.css`.
-- [ ] T011 [US1] Audit `apps/desktop/src/styles/components.css` to ensure every color, spacing, radius, shadow, and motion duration references a token. Document any justified exception inline with a comment.
+- [x] T011 [US1] Audit `apps/desktop/src/styles/components.css` to ensure every color, spacing, radius, shadow, and motion duration references a token. Document any justified exception inline with a comment. — Tokenized all color/shadow literals (added `--alm-on-accent`, `--alm-accent-deep`, `--alm-danger-bg-hover`, `--alm-surface-raised`, `--alm-shadow-sm`); documented the component-intrinsic-px exception policy inline (see decisions log D-001).
 - [ ] T012 [P] [US1] (Optional) Add a CI grep guard that fails the build if `components.css` introduces a hex color, raw px (outside token blocks), or raw ms value.
 - [ ] T013 [P] [US1] **DEFERRED to v1.x (R-022-TSDefer, GRILL 2026-05-22)**: Generate `apps/desktop/src/styles/tokens.d.ts` (or `tokens.ts`) so TypeScript can autocomplete token names. Tokens enforced via review only in v1. Do not implement in v1.
 
@@ -65,7 +65,7 @@ description: "Task list for the desktop prototype design system (Base UI + token
 - [x] T024 [mockup-done] [US2] `DataTable` renders `@tanstack/react-table` state through `alm-table-*` CSS.
 - [x] T025 [mockup-done] [US2] `LogPanel` and `TokenPattern` host their feature surfaces (spec 019, spec 015) within the primitive vocabulary.
 - [x] T026 [mockup-done] [US2] `apps/desktop/src/ui/index.ts` re-exports the public primitive API.
-- [ ] T027 [US2] Verify every primitive accepts `className` and spreads remaining props onto its root element. Patch any primitive that violates the rule.
+- [x] T027 [US2] Verify every primitive accepts `className` and spreads remaining props onto its root element. Patch any primitive that violates the rule. — Patched all 15 `ui/` primitives to extend the proper HTML attrs interface, merge `className`, spread `...rest`, and `forwardRef` to root (except `Lock`, whose outer node is a Tooltip provider). `tsc` clean. NOTE: actual primitive set differs from the names listed in T020–T026 — see decisions log DV-001.
 - [ ] T028 [P] [US2] (Optional) Add Vitest unit tests asserting that each primitive forwards `className` and `ref` to its root element.
 
 **Checkpoint**: Feature pages can compose the primitive library without re-deriving accessibility.
@@ -79,8 +79,8 @@ description: "Task list for the desktop prototype design system (Base UI + token
 **Independent Test**: Open Inventory, Inbox, Projects, and Plans pages; each uses `PageHeader`, `Filters`, `DataTable`, and `DockedDrawer`/`DrawerShell` (where applicable).
 
 - [x] T030 [mockup-done] [US3] Ledger pages adopt the page-shell composition.
-- [ ] T031 [US3] Audit feature pages for ad-hoc layout markup that should be replaced by a primitive. Either extract the markup into a new primitive in `ui/` or refactor the page to use existing primitives.
-- [ ] T032 [P] [US3] Update `/DESIGN.md` (repo root) per FR-015 and FR-019. The file already exists at the root (created in commit `314292a`, A1 GRILL 2026-05-22). Ensure it covers: token taxonomy (link to `data-model.md`), primitive vocabulary (including helper exports `FilterLabel`, `FactGroup`, `Facts`, `TokenPatternBuilder`), page composition rules, headless-library policy, density levels (dense/comfortable), `alm-` prefix convention, and token additions process. Do NOT create a new file; update the existing `/DESIGN.md`.
+- [x] T031 [US3] Audit feature pages for ad-hoc layout markup that should be replaced by a primitive. Either extract the markup into a new primitive in `ui/` or refactor the page to use existing primitives. — Audited: 36/55 feature files compose `@/ui` + `@/components` primitives (`DetailGrid`, `MetricLine`, `Rail`, `Section`, `Btn`, `Pill`, `KV`). The 19 non-importers are bespoke charts (`CoverageChart`, `CalendarView`), small controls (`GroupByBar`, `DensitySelector`), and the spec-003 setup wizard — no extractable duplication; no speculative refactor (would risk regressing approved design-v4 UI). See decisions log.
+- [x] T032 [P] [US3] Update `/DESIGN.md` (repo root) per FR-015 and FR-019. The file already exists at the root (created in commit `314292a`, A1 GRILL 2026-05-22). Ensure it covers: token taxonomy (link to `data-model.md`), primitive vocabulary (including helper exports `FilterLabel`, `FactGroup`, `Facts`, `TokenPatternBuilder`), page composition rules, headless-library policy, density levels (dense/comfortable), `alm-` prefix convention, and token additions process. Do NOT create a new file; update the existing `/DESIGN.md`.
 
 **Checkpoint**: Pages follow one composition rulebook.
 
@@ -93,7 +93,7 @@ description: "Task list for the desktop prototype design system (Base UI + token
 **Independent Test**: In Playwright MCP, toggle the mode in Settings and reload; confirm `:root[data-theme]` reflects the chosen mode and persists.
 
 - [x] T040 [mockup-done] [US4] `ThemeProvider` implements the resolution and persistence behavior described in `plan.md` and `data-model.md`.
-- [ ] T041 [US4] Mirror `contracts/theme.get.json` and `contracts/theme.set.json` into `packages/contracts/theme/`.
+- [x] T041 [US4] Mirror `contracts/theme.get.json` and `contracts/theme.set.json` into `packages/contracts/theme/`. — Wired both into the established contracts pipeline instead of a one-off `theme/` dir: added to the `SPEC_CONTRACT_ALLOWLIST` in `build-schemas.mjs` (generates `theme.get.d.ts`/`theme.set.d.ts`) and namespaced-re-exported as `ThemeGet`/`ThemeSet` from `src/index.ts`. Path divergence recorded as decision D-002.
 - [ ] T042 [P] [US4] **OPTIONAL/DEFERRED (D-022-3, GRILL 2026-05-22)**: Wire the Settings page's theme toggle to call a thin adapter that satisfies the `theme.get`/`theme.set` contract shape. The v1 `ThemeProvider` is the canonical implementation; the contract is forward-compat only and does not block v1. Implement only if the Settings-to-contract adapter is explicitly needed by another spec.
 - [ ] T043 [P] [US4] (Optional) Implement `crates/app/core/usecases/theme.rs` as a stub that returns the persisted mode when a backend exists. Not required for v1.
 - [ ] T044 [P] [US4] (Optional) Playwright MCP smoke: toggle each mode, reload, confirm `data-theme` and the visual change. May be added as part of the broader desktop test suite.
@@ -104,10 +104,10 @@ description: "Task list for the desktop prototype design system (Base UI + token
 
 ## Phase 7: Polish & Cross-Cutting Concerns
 
-- [ ] T050 [P] Document the supersession of the Mantine direction in the project changelog (or equivalent) so historical references resolve.
-- [ ] T051 [P] Update `PRODUCT.md` and other docs that still reference Mantine to point to this spec.
-- [ ] T052 Run `just lint` and `just typecheck` to confirm no Mantine or Tailwind imports survive.
-- [ ] T053 Visual regression spot check: open each ledger page in light and dark and confirm no token misses (regions that fail to swap).
+- [x] T050 [P] Document the supersession of the Mantine direction in the project changelog (or equivalent) so historical references resolve. — No changelog exists; documented in DESIGN.md §0 (Stack & framing) + the existing "Supersession Notice" in 022 spec.md. Historical "Mantine" references resolve to the Base UI decision.
+- [x] T051 [P] Update `PRODUCT.md` and other docs that still reference Mantine to point to this spec. — VERIFIED: no "Mantine" references survive in `PRODUCT.md` or any non-`specs/` doc (grep clean). Vacuously satisfied.
+- [x] T052 Run `just lint` and `just typecheck` to confirm no Mantine or Tailwind imports survive. — `tsc --noEmit` clean (frontend + contracts pkg); no Mantine/Tailwind/shadcn in deps or src; no eslint `lint` script is wired for desktop. 022 touched no Rust, so full-workspace clippy was not the relevant gate.
+- [ ] T053 Visual regression spot check: open each ledger page in light and dark and confirm no token misses (regions that fail to swap). — DEFERRED to Windows-native preview (WSL cannot run the Tauri GUI). Rationale: 022 changes are visual no-ops — color literals were replaced by tokens carrying the *same values*, and primitive edits are additive prop-forwarding; nothing visual changed vs the already-approved design-v4.
 
 ---
 

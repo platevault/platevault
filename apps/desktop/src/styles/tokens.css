@@ -12,6 +12,8 @@
   --alm-surface: #f3f2ee;
   --alm-bg3: #ebeae5;
   --alm-chip: #ebeae5;
+  --alm-surface-raised: #ffffff;
+  --alm-on-accent: #ffffff;
 
   /* Status colors */
   --alm-ok: #1f5a3a;
@@ -25,6 +27,7 @@
   --alm-warn-bg: #fef8e8;
   --alm-warn-border: #e5d5a0;
   --alm-danger-bg: #fdf0ee;
+  --alm-danger-bg-hover: #f5ddd8;
   --alm-danger-border: #e5c0b8;
   --alm-info-bg: #edf2f7;
   --alm-info-border: #b8cfe0;
@@ -38,6 +41,7 @@
   --alm-border-subtle: var(--alm-rule2);
   --alm-accent: #2563eb;
   --alm-accent-hover: #1d4ed8;
+  --alm-accent-deep: #1e3a8a;
   --alm-accent-bg: #dbeafe;
   --alm-accent-text: #1e40af;
 
@@ -99,6 +103,9 @@
   --alm-radius-sm: 3px;
   --alm-radius-md: 5px;
   --alm-radius-lg: 8px;
+
+  /* Shadow */
+  --alm-shadow-sm: 0 1px 2px rgba(0, 0, 0, 0.15);
 }
 
 /* Density modifiers */

@@ -1,5 +1,15 @@
 /* Astro Library Manager — Component & Layout CSS */
 
+/*
+ * Token policy (spec 022, T011):
+ * - All colors, shadows, and motion durations MUST reference a token in
+ *   tokens.css. No raw hex / rgb / hsl / named colors, no raw `ms` values.
+ * - Component-intrinsic pixel dimensions (icon/badge/mark sizes, hairline 1px
+ *   borders, fixed panel widths) are INTENTIONALLY raw px: they are geometry,
+ *   not spacing-scale values, and have no semantic token. Spacing/layout that
+ *   maps to the scale uses --alm-sp-* / layout tokens.
+ */
+
 /* === APP FRAME === */
 .alm-frame { display: flex; flex-direction: column; height: 100%; }
 .alm-frame__body { display: flex; flex: 1; min-height: 0; }
@@ -110,8 +120,8 @@
 /* Sidebar v4: 1-line brand, workflow groups, pinned settings */
 .alm-sidebar__mark {
   width: 22px; height: 22px; border-radius: var(--alm-radius-sm);
-  background: linear-gradient(135deg, var(--alm-accent), #1e3a8a);
-  color: #fff; font-size: var(--alm-text-2xs); font-weight: var(--alm-weight-semibold);
+  background: linear-gradient(135deg, var(--alm-accent), var(--alm-accent-deep));
+  color: var(--alm-on-accent); font-size: var(--alm-text-2xs); font-weight: var(--alm-weight-semibold);
   display: flex; align-items: center; justify-content: center; flex-shrink: 0;
 }
 .alm-sidebar__brand-name { flex: 1; }
@@ -129,7 +139,7 @@
   padding: var(--alm-sp-1) 0;
 }
 .alm-sidebar__item-badge--alert {
-  color: #fff; background: var(--alm-accent);
+  color: var(--alm-on-accent); background: var(--alm-accent);
   border-radius: 8px; padding: 0 5px; min-width: 18px; text-align: center;
 }
 
@@ -325,12 +335,12 @@
 .alm-btn:hover { border-color: var(--alm-ink3); color: var(--alm-text); }
 .alm-btn:disabled { opacity: 0.5; cursor: not-allowed; }
 .alm-btn:disabled:hover { border-color: var(--alm-border); color: var(--alm-text-secondary); }
-.alm-btn--primary { background: var(--alm-ink); color: white; border-color: var(--alm-ink); }
+.alm-btn--primary { background: var(--alm-ink); color: var(--alm-on-accent); border-color: var(--alm-ink); }
 .alm-btn--primary:hover { background: var(--alm-ink2); }
-.alm-btn--accent { background: var(--alm-accent); color: white; border-color: var(--alm-accent); }
+.alm-btn--accent { background: var(--alm-accent); color: var(--alm-on-accent); border-color: var(--alm-accent); }
 .alm-btn--accent:hover { background: var(--alm-accent-hover); border-color: var(--alm-accent-hover); }
 .alm-btn--danger { background: var(--alm-danger-bg); color: var(--alm-danger); border-color: var(--alm-danger-border); }
-.alm-btn--danger:hover { background: #f5ddd8; }
+.alm-btn--danger:hover { background: var(--alm-danger-bg-hover); }
 .alm-btn--sm { height: 24px; padding: 0 var(--alm-sp-2); font-size: var(--alm-text-2xs); }
 
 /* === SECTION === */
@@ -618,7 +628,7 @@
 }
 .alm-seg__btn:last-child { border-right: none; }
 .alm-seg__btn:hover { background: var(--alm-hover-bg); }
-.alm-seg__btn--active { background: var(--alm-ink); color: white; }
+.alm-seg__btn--active { background: var(--alm-ink); color: var(--alm-on-accent); }
 .alm-seg__btn--danger.alm-seg__btn--active { background: var(--alm-danger); }
 
 /* Toggle switch */
@@ -632,7 +642,7 @@
 .alm-toggle__thumb {
   position: absolute; top: 2px; left: 2px;
   width: 16px; height: 16px; border-radius: 50%;
-  background: white; box-shadow: 0 1px 2px rgba(0,0,0,0.15);
+  background: var(--alm-surface-raised); box-shadow: var(--alm-shadow-sm);
   transition: transform var(--alm-transition-base);
 }
 .alm-toggle input:checked ~ .alm-toggle__track { background: var(--alm-accent); }
@@ -675,7 +685,7 @@
 .alm-wizard__step:first-child { border-radius: var(--alm-radius-md) 0 0 var(--alm-radius-md); }
 .alm-wizard__step:last-child { border-right: 1px solid var(--alm-border); border-radius: 0 var(--alm-radius-md) var(--alm-radius-md) 0; }
 .alm-wizard__step--active {
-  background: var(--alm-ink); color: white; border-color: var(--alm-ink);
+  background: var(--alm-ink); color: var(--alm-on-accent); border-color: var(--alm-ink);
   font-weight: var(--alm-weight-semibold);
 }
 .alm-wizard__step--done { background: var(--alm-ok-bg); color: var(--alm-ok); border-color: var(--alm-ok-border); }

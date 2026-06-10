@@ -1,23 +1,28 @@
-import type { ReactNode } from 'react';
+import { forwardRef } from 'react';
+import type { ReactNode, HTMLAttributes } from 'react';
 
-export interface KVProps {
+export interface KVProps extends HTMLAttributes<HTMLDivElement> {
   label: string;
   value: ReactNode;
   provenance?: string;
   mono?: boolean;
 }
 
-export function KV({ label, value, provenance, mono }: KVProps) {
-  return (
-    <div className="alm-kv">
-      <span className="alm-kv__label">{label}</span>
-      <span
-        className="alm-kv__value"
-        style={mono ? { fontFamily: 'var(--alm-font-mono)', fontSize: 'var(--alm-text-xs)' } : undefined}
-      >
-        {value}
-        {provenance && <span className="alm-kv__provenance">{provenance}</span>}
-      </span>
-    </div>
-  );
-}
+export const KV = forwardRef<HTMLDivElement, KVProps>(
+  function KV({ label, value, provenance, mono, className, ...rest }, ref) {
+    const cls = ['alm-kv', className].filter(Boolean).join(' ');
+    return (
+      <div ref={ref} className={cls} {...rest}>
+        <span className="alm-kv__label">{label}</span>
+        <span
+          className="alm-kv__value"
+          style={mono ? { fontFamily: 'var(--alm-font-mono)', fontSize: 'var(--alm-text-xs)' } : undefined}
+        >
+          {value}
+          {provenance && <span className="alm-kv__provenance">{provenance}</span>}
+        </span>
+      </div>
+    );
+  }
+);
+KV.displayName = 'KV';

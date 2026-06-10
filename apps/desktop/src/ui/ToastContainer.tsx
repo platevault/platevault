@@ -5,6 +5,8 @@
  * shell (e.g. in `Shell.tsx` or `main.tsx`).
  */
 
+import { forwardRef } from 'react';
+import type { HTMLAttributes } from 'react';
 import { useToasts, type Toast as ToastType } from '@/shared/toast';
 
 const CONTAINER_STYLE: React.CSSProperties = {
@@ -103,16 +105,24 @@ function ToastItem({
   );
 }
 
-export function ToastContainer() {
-  const { toasts, dismiss } = useToasts();
+export interface ToastContainerProps extends HTMLAttributes<HTMLDivElement> {}
 
-  if (toasts.length === 0) return null;
+export const ToastContainer = forwardRef<HTMLDivElement, ToastContainerProps>(
+  function ToastContainer({ className, style, ...rest }, ref) {
+    const { toasts, dismiss } = useToasts();
 
-  return (
-    <div style={CONTAINER_STYLE} aria-live="polite">
-      {toasts.map((toast) => (
-        <ToastItem key={toast.id} toast={toast} onDismiss={dismiss} />
-      ))}
-    </div>
-  );
-}
+    if (toasts.length === 0) return null;
+
+    const cls = className ? `${className}` : undefined;
+    const mergedStyle = style ? { ...CONTAINER_STYLE, ...style } : CONTAINER_STYLE;
+
+    return (
+      <div ref={ref} style={mergedStyle} className={cls} aria-live="polite" {...rest}>
+        {toasts.map((toast) => (
+          <ToastItem key={toast.id} toast={toast} onDismiss={dismiss} />
+        ))}
+      </div>
+    );
+  }
+);
+ToastContainer.displayName = 'ToastContainer';

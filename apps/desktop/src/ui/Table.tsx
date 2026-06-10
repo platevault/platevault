@@ -1,4 +1,5 @@
-import type { ReactNode, CSSProperties } from 'react';
+import { forwardRef } from 'react';
+import type { ReactNode, CSSProperties, TableHTMLAttributes } from 'react';
 
 export interface TableColumn {
   key: string;
@@ -16,26 +17,30 @@ export type TableRow = {
   _rowClassName?: string;
 };
 
-export interface TableProps {
+export interface TableProps extends TableHTMLAttributes<HTMLTableElement> {
   columns: TableColumn[];
   rows: TableRow[];
 }
 
-export function Table({ columns, rows }: TableProps) {
-  return (
-    <table className="alm-table">
-      <thead>
-        <tr>{columns.map((c, i) => <th key={i} style={c.style}>{c.label}</th>)}</tr>
-      </thead>
-      <tbody>
-        {rows.map((row, ri) => (
-          <tr key={ri} style={row._rowStyle as CSSProperties | undefined} className={row._rowClassName as string | undefined}>
-            {columns.map((c, ci) => (
-              <td key={ci} className={c.className} style={c.cellStyle}>{row[c.key] as ReactNode}</td>
-            ))}
-          </tr>
-        ))}
-      </tbody>
-    </table>
-  );
-}
+export const Table = forwardRef<HTMLTableElement, TableProps>(
+  function Table({ columns, rows, className, ...rest }, ref) {
+    const cls = ['alm-table', className].filter(Boolean).join(' ');
+    return (
+      <table ref={ref} className={cls} {...rest}>
+        <thead>
+          <tr>{columns.map((c, i) => <th key={i} style={c.style}>{c.label}</th>)}</tr>
+        </thead>
+        <tbody>
+          {rows.map((row, ri) => (
+            <tr key={ri} style={row._rowStyle as CSSProperties | undefined} className={row._rowClassName as string | undefined}>
+              {columns.map((c, ci) => (
+                <td key={ci} className={c.className} style={c.cellStyle}>{row[c.key] as ReactNode}</td>
+              ))}
+            </tr>
+          ))}
+        </tbody>
+      </table>
+    );
+  }
+);
+Table.displayName = 'Table';

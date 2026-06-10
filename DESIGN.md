@@ -7,6 +7,9 @@
 ## 0. Stack & framing
 
 - **Tauri** (Rust backend) + **React** (front-end) + **Base UI** primitives (`@base-ui-components/react`)
+  - Base UI + a CSS-variable token layer **supersedes** the earlier Mantine-first
+    direction (spec 022; the design pass rejected Mantine to keep the token system
+    and `alm-` CSS canonical). Historical "Mantine" references resolve here.
 - Desktop-first. Windows / macOS / Linux. Windows is a first-class target.
 - **Local-first**, no network required. No cloud sync.
 - Read-only by default. Every filesystem mutation is staged in a reviewable Plan.
@@ -81,6 +84,33 @@ Status backgrounds are tinted but desaturated — never bright. Don't use color 
 - 4 / 6 / 8 / 10 / 12 / 14 / 16 / 18 px scale
 - Section padding 14 px, box padding 10–12 px
 - Toolbars: 6 px vertical, 12 px horizontal
+
+### Token & class conventions (spec 022)
+
+- **Source of truth**: `apps/desktop/src/styles/tokens.css` is the canonical token
+  set. The color/typography/spacing values listed above are *illustrative*; when
+  they drift, `tokens.css` wins. The full token taxonomy (categories, light/dark
+  scopes) is documented in `specs/022-mantine-prototype-design-system/data-model.md`.
+- **`--alm-` prefix**: every design token is a CSS custom property named
+  `--alm-<category>-<name>` (e.g. `--alm-ink`, `--alm-sp-4`, `--alm-radius-md`,
+  `--alm-shadow-sm`). Component CSS lives in `components.css` and uses `alm-`
+  prefixed class names (`.alm-btn`, `.alm-section`, `.alm-pill`).
+- **Token-only rule**: `components.css` MUST reference tokens for every color,
+  shadow, and motion duration — no raw hex/rgb/named colors or `ms` literals.
+  Component-intrinsic pixel geometry (icon/badge sizes, 1px hairlines, fixed
+  panel widths) is exempt — it is geometry, not spacing-scale. (See the policy
+  comment at the top of `components.css`.)
+- **Headless-library policy**: interactive primitives wrap a headless library —
+  Base UI (`@base-ui-components/react`) for menu/dialog/tooltip/select/switch,
+  `cmdk` for the command palette, `react-resizable-panels` for docked drawers,
+  `@tanstack/react-table` for data tables. Primitives own the `alm-` visual
+  layer only; accessibility/interaction comes from the headless library.
+- **Density**: `.density-compact` (24px row), default comfortable (32px), and
+  `.density-spacious` (40px) toggle `--alm-row-height`; set on a container.
+- **Adding a token**: add the variable to `tokens.css` (all relevant scopes),
+  reference it from `components.css`, and update this section + `data-model.md`
+  if it introduces a new category. Primitives must forward `className` and spread
+  remaining props onto their root element so callers can extend them.
 
 ---
 
