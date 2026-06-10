@@ -4,20 +4,28 @@
  * in the right ActionSidebar.
  */
 
-import { useState } from 'react';
+import { useNavigate, useSearch } from '@tanstack/react-router';
 import { PageShell, ListDetailLayout, TopActionBar } from '@/components';
 import { Btn, EmptyState } from '@/ui';
 import { INBOX_DATA } from '@/data/fixtures/review';
 import type { InboxFixture } from '@/data/fixtures/review';
+import { useStaleSelectionCleanup } from '@/lib/use-stale-selection';
 import { InboxList } from './InboxList';
 import { InboxDetail } from './InboxDetail';
 import { ActionSidebar } from './ActionSidebar';
 
 export function InboxPage() {
-  const [selectedId, setSelectedId] = useState<number | null>(null);
+  const { selected, type, group } = useSearch({ from: '/shell/inbox' });
+  const navigate = useNavigate({ from: '/inbox' });
 
-  const selected: InboxFixture | undefined =
-    selectedId !== null ? INBOX_DATA.find((item) => item.id === selectedId) : undefined;
+  const item: InboxFixture | undefined =
+    selected !== undefined ? INBOX_DATA.find((i) => i.id === selected) : undefined;
+
+  useStaleSelectionCleanup(selected, item !== undefined, () =>
+    navigate({ search: (prev) => ({ ...prev, selected: undefined }), replace: true }),
+  );
+
+  const onSelect = (id: number) => navigate({ search: (prev) => ({ ...prev, selected: id }) });
 
   return (
     <PageShell>
@@ -29,10 +37,20 @@ export function InboxPage() {
             right={<Btn size="sm">Rescan inbox</Btn>}
           />
         }
-        list={<InboxList items={INBOX_DATA} selectedId={selectedId} onSelect={setSelectedId} />}
+        list={
+          <InboxList
+            items={INBOX_DATA}
+            selectedId={selected ?? null}
+            onSelect={onSelect}
+            filterType={type ?? 'all'}
+            onFilterTypeChange={(t) => navigate({ search: (prev) => ({ ...prev, type: t }) })}
+            groupBy={group ?? 'none'}
+            onGroupByChange={(g) => navigate({ search: (prev) => ({ ...prev, group: g }) })}
+          />
+        }
         detail={
-          selected ? (
-            <InboxDetail item={selected} />
+          item ? (
+            <InboxDetail item={item} />
           ) : (
             <EmptyState
               title="Select a session"
@@ -40,7 +58,7 @@ export function InboxPage() {
             />
           )
         }
-        sidebar={<ActionSidebar hasSelection={selectedId !== null} />}
+        sidebar={<ActionSidebar hasSelection={item !== undefined} />}
       />
     </PageShell>
   );

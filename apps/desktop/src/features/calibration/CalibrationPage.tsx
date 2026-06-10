@@ -1,9 +1,10 @@
-import { useState } from 'react';
+import { useNavigate, useSearch } from '@tanstack/react-router';
 import { MASTERS_DATA } from '@/data/fixtures/calibration';
 import type { MasterFixture } from '@/data/fixtures/calibration';
 import { PageShell, ListDetailLayout, TopActionBar } from '@/components';
 import { Btn } from '@/ui';
 import type { BtnVariant } from '@/ui';
+import { useStaleSelectionCleanup } from '@/lib/use-stale-selection';
 import { MastersList } from './MastersList';
 import { MasterDetail } from './MasterDetail';
 
@@ -28,8 +29,15 @@ const bias = MASTERS_DATA.filter((m) => m.kind === 'bias').length;
 const aging = MASTERS_DATA.filter((m) => m.aging).length;
 
 export function CalibrationPage() {
-  const [selected, setSelected] = useState<number | null>(null);
+  const { selected } = useSearch({ from: '/shell/calibration' });
+  const navigate = useNavigate({ from: '/calibration' });
   const master = MASTERS_DATA.find((m) => m.id === selected) ?? null;
+
+  useStaleSelectionCleanup(selected, master !== null, () =>
+    navigate({ search: (prev) => ({ ...prev, selected: undefined }), replace: true }),
+  );
+
+  const onSelect = (id: number) => navigate({ search: (prev) => ({ ...prev, selected: id }) });
 
   return (
     <PageShell>
@@ -51,7 +59,7 @@ export function CalibrationPage() {
             }
           />
         }
-        list={<MastersList masters={MASTERS_DATA} selected={selected} onSelect={setSelected} />}
+        list={<MastersList masters={MASTERS_DATA} selected={selected ?? null} onSelect={onSelect} />}
         detail={<MasterDetail master={master} />}
       />
     </PageShell>

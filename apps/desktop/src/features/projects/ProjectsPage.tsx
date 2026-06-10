@@ -1,9 +1,10 @@
-import { useState } from 'react';
+import { useNavigate, useSearch } from '@tanstack/react-router';
 import { PageShell, ListDetailLayout, TopActionBar } from '@/components';
 import { Btn, EmptyState } from '@/ui';
 import type { BtnVariant } from '@/ui';
 import { PROJECTS_DATA } from '@/data/fixtures/projects';
 import type { ProjectFixture } from '@/data/fixtures/projects';
+import { useStaleSelectionCleanup } from '@/lib/use-stale-selection';
 import { ProjectsList } from './ProjectsList';
 import { ProjectDetailContent } from './ProjectDetail';
 
@@ -36,8 +37,23 @@ function projectActions(state: ProjectFixture['state']): ContextualAction[] {
 }
 
 export function ProjectsPage() {
-  const [selectedId, setSelectedId] = useState<number>(PROJECTS_DATA[0].id);
-  const selected: ProjectFixture | undefined = PROJECTS_DATA.find((p) => p.id === selectedId);
+  const { selected, lifecycle } = useSearch({ from: '/shell/projects' });
+  const navigate = useNavigate({ from: '/projects' });
+
+  // Stale-id cleanup only when a selection is explicitly in the URL.
+  const explicit = selected !== undefined ? PROJECTS_DATA.find((p) => p.id === selected) : undefined;
+  useStaleSelectionCleanup(selected, explicit !== undefined, () =>
+    navigate({ search: (prev) => ({ ...prev, selected: undefined }), replace: true }),
+  );
+
+  // Soft default: show the first project when nothing is explicitly selected
+  // (do not write it to the URL, so the URL stays clean until the user picks).
+  const selectedId = selected ?? PROJECTS_DATA[0].id;
+  const project: ProjectFixture | undefined = PROJECTS_DATA.find((p) => p.id === selectedId);
+
+  const onSelect = (id: number) => navigate({ search: (prev) => ({ ...prev, selected: id }) });
+  const onLifecycleChange = (states: ProjectFixture['state'][]) =>
+    navigate({ search: (prev) => ({ ...prev, lifecycle: states.length ? states : undefined }) });
 
   return (
     <PageShell>
@@ -48,9 +64,9 @@ export function ProjectsPage() {
             subtitle={`${PROJECTS_DATA.length} projects`}
             right={
               <>
-                {selected && (
+                {project && (
                   <>
-                    {projectActions(selected.state).map((a) => (
+                    {projectActions(project.state).map((a) => (
                       <Btn key={a.label} size="sm" variant={a.variant}>
                         {a.label}
                       </Btn>
@@ -67,12 +83,14 @@ export function ProjectsPage() {
           <ProjectsList
             projects={PROJECTS_DATA}
             selectedId={selectedId}
-            onSelect={setSelectedId}
+            onSelect={onSelect}
+            lifecycle={lifecycle ?? []}
+            onLifecycleChange={onLifecycleChange}
           />
         }
         detail={
-          selected ? (
-            <ProjectDetailContent project={selected} />
+          project ? (
+            <ProjectDetailContent project={project} />
           ) : (
             <EmptyState
               title="Select a project"

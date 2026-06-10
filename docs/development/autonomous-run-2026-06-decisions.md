@@ -12,6 +12,100 @@
 
 ---
 
+## Spec 020 — Router & URL State
+
+### DV-006 — Spec 020 describes a pre-design-v4 application (BLOCKER, needs user)
+
+- **Context**: 020's tasks/spec assume routes `/welcome`, `/inventory`, `/plans`,
+  `/plans/$planId`, `/settings/$section`, with filter+selection state persisted
+  in the URL via TanStack `validateSearch`/`useSearch` (e.g. inventory
+  `{id,source,frame,review}`). First-run keyed on `alm.first-run.completed`.
+- **Reality (design-v4, merged)**: routes are `/sessions`, `/sessions/$id`,
+  `/inbox`, `/calibration`, `/calibration/$id`, `/targets`, `/targets/$id`,
+  `/projects`, `/projects/$id`, `/projects/new`, `/archive`, `/settings`,
+  `/settings/$pane`, `/setup`, `/`. There is **no** `/welcome`, `/inventory`, or
+  `/plans`. `validateSearch` and `useSearch` are used **nowhere**. Ledger pages
+  hold filters/selection in local `useState`; detail views use **path params**
+  (`/sessions/$id`), not URL search state. First-run reads
+  `getPreferences().setupCompleted` (+ Tauri `firstrunState`), not
+  `alm.first-run.completed`. `window.location.hash` writes: none (T016 moot).
+- **Impact**: 020's `[x] mockup-done` checkboxes (T010–T015, T020–T023) are
+  **false** vs reality. Implementing 020 literally would re-architect design-v4
+  navigation (path-param → search-param), contradicting the "do NOT rebuild
+  design-v4" guardrail and regressing approved UI.
+- **Decision**: **STOP autonomous work on 020** and escalate. This exceeds a
+  record-and-proceed call — it changes what 020 means. Per `specs/CLAUDE.md`,
+  material deviation requires `speckit.iterate` + user approval. Proceeded to
+  spec 016 (independent, gates cleanup specs) pending the user's 020 decision.
+- **Reconciliation options presented to user**: (A) iterate 020 to realign with
+  design-v4 (path-param routing already done; add URL filter persistence only
+  where valuable); (B) implement 020 literally (re-architect to URL state — big,
+  regression-risky); (C) defer/close 020 as superseded by 027/030/032.
+
+### D-007 — 020 RESCOPED to desktop-paying-off features (user decision 2026-06-10)
+
+- **User decision**: "update the spec to implement back/forwards, multi-window,
+  testability. add the features that pay off on desktop."
+- **Decision**: Rewrote `020` `spec.md` + `tasks.md` to the design-v4 reality and
+  a desktop-focused scope:
+  - **KEEP/ADD**: selection + filters in URL search state (`?selected=<id>` +
+    typed filter params) on every ledger route via `validateSearch`/`useSearch`/
+    `useNavigate` → back/forward and refresh restore the filtered+selected view;
+    typed `route-contract.ts` parsers + enum allow-lists (from `bindings`) for
+    testability; stale-id graceful clear; **multi-window** ("open current view in
+    a new desktop window" via Tauri `WebviewWindow`); detail path routes
+    (`/x/$id`) normalize to `/x?selected=$id`.
+  - **DEFER (out of v1 scope)**: `?lib=` library scoping + cross-library refusal
+    (FR-010/011 → Deferred), shareable-"copy link" UX (no address bar), the Rust
+    `crates/app/core/usecases/url_resolve.rs` resolver + `url.resolve` contract
+    (only needed for OS deep-linking, not committed), `DeprecatedParamMap` (no
+    legacy params exist against the fresh design-v4 routes), and the two-tier
+    validator **error banner** (v1 silently drops invalid known-key values).
+- **Process deviation**: `specs/CLAUDE.md` says never hand-edit spec artifacts
+  (use `speckit.iterate`). No iterate skill is available in this environment and
+  the user explicitly instructed "update the spec," so spec.md/tasks.md were
+  rewritten manually. The old (stale) spec content is preserved in git history
+  (pre-`020-router-url-state-desktop` branch).
+- **Reconciliation risk**: A future `speckit` run may want the spec regenerated
+  through its own tooling. The rewrite is faithful to the user decision and the
+  real design-v4 routes; low risk.
+
+### D-008 — 020 implementation specifics
+
+- **Route id vs path asymmetry**: `useSearch({ from })` needs the route **id**
+  (`/shell/sessions`, because routes are children of the `shell` layout route),
+  while `useNavigate({ from })` needs the **path** (`/sessions`). Both are used
+  per page. Not a bug — a TanStack Router layout-route nuance worth knowing.
+- **Projects lifecycle filter**: the contract param `lifecycle` is a CSV array
+  (`ProjectState[]`), but the existing UI is a single-select. Mapped single
+  selection ↔ 1-element array (no UI rebuild); empty array drops the param. A
+  pasted multi-value URL filters correctly but the select shows "all".
+- **Multi-window capability**: granted `core:webview:allow-create-webview-window`
+  and broadened `capabilities/default.json` `windows` to `["main","alm-win-*"]`
+  so spawned windows inherit the full permission set (can invoke commands, spawn
+  further windows). Verified via `cargo check`.
+- **Sessions/Calibration filters deferred**: those pages' list controls are
+  hardcoded (non-stateful) in design-v4, so only `selected` is wired there;
+  their filter params are omitted from `validateSearch` until the controls
+  become interactive. Spec search-param table updated to match.
+
+### D-009 — Pre-existing stale CommandPalette routes (noted, NOT fixed)
+
+- `apps/desktop/src/app/CommandPalette.tsx` lists `PAGES` with `/review`,
+  `/plans`, `/audit` — routes that **do not exist** in design-v4 (dead nav
+  targets). This predates spec 020 and is out of its scope; left as-is.
+  **Recommend**: a small follow-up to align the palette's page list with the
+  real routes (`/inbox`, `/sessions`, `/calibration`, `/targets`, `/projects`,
+  `/archive`, `/settings`).
+
+### D-010 — 020 runtime smoke deferred (sandbox-blocked)
+
+- WSL's command sandbox runs background processes with `--unshare-net` and
+  `--die-with-parent`, so a localhost Vite + Playwright interaction smoke could
+  not run. Deferred to the Windows-native preview (consistent with the GUI
+  constraint). Mitigation: 27 vitest cover the contract/guard logic; `tsc` +
+  `cargo check` pass; the redirect/cleanup paths are loop-safe by construction.
+
 ## Spec 022 — Mantine Prototype / Design System
 
 ### DV-001 — 022 primitive vocabulary superseded by design-v4
