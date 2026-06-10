@@ -12,7 +12,7 @@ import {
 } from 'lucide-react';
 import { clsx } from 'clsx';
 import { usePreference } from '@/data/preferences';
-import { useStatusSummary } from './useStatusSummary';
+import { useStatusSummary, type StatusSummary } from './useStatusSummary';
 
 interface NavItem {
   id: string;
@@ -21,15 +21,52 @@ interface NavItem {
   path: string;
 }
 
-const NAV_ITEMS: NavItem[] = [
-  { id: 'inbox', icon: Inbox, label: 'Inbox', path: '/inbox' },
-  { id: 'sessions', icon: Camera, label: 'Sessions', path: '/sessions' },
-  { id: 'calibration', icon: Crosshair, label: 'Calibration', path: '/calibration' },
-  { id: 'targets', icon: Target, label: 'Targets', path: '/targets' },
-  { id: 'projects', icon: FolderOpen, label: 'Projects', path: '/projects' },
-  { id: 'archive', icon: Archive, label: 'Archive', path: '/archive' },
-  { id: 'settings', icon: Settings, label: 'Settings', path: '/settings' },
+interface NavGroup {
+  label: string;
+  items: NavItem[];
+}
+
+// Grouped by workflow stage: capture → organize → work on.
+const NAV_GROUPS: NavGroup[] = [
+  {
+    label: 'Capture',
+    items: [{ id: 'inbox', icon: Inbox, label: 'Inbox', path: '/inbox' }],
+  },
+  {
+    label: 'Library',
+    items: [
+      { id: 'sessions', icon: Camera, label: 'Sessions', path: '/sessions' },
+      { id: 'calibration', icon: Crosshair, label: 'Calibration', path: '/calibration' },
+      { id: 'targets', icon: Target, label: 'Targets', path: '/targets' },
+    ],
+  },
+  {
+    label: 'Work',
+    items: [
+      { id: 'projects', icon: FolderOpen, label: 'Projects', path: '/projects' },
+      { id: 'archive', icon: Archive, label: 'Archive', path: '/archive' },
+    ],
+  },
 ];
+
+const SETTINGS_ITEM: NavItem = { id: 'settings', icon: Settings, label: 'Settings', path: '/settings' };
+
+function badgeFor(id: string, status: StatusSummary): number {
+  switch (id) {
+    case 'inbox':
+      return status.inboxCount;
+    case 'sessions':
+      return status.sessionCount;
+    case 'calibration':
+      return status.calibrationCount;
+    case 'targets':
+      return status.targetCount;
+    case 'projects':
+      return status.projectCount;
+    default:
+      return 0;
+  }
+}
 
 export function Sidebar() {
   const [collapsed, setCollapsed] = usePreference('sidebarCollapsed');
@@ -39,9 +76,35 @@ export function Sidebar() {
   const onlineRoots = status.roots.filter((r) => r.online);
   const offlineRoots = status.roots.filter((r) => !r.online);
 
-  function getBadge(item: NavItem): number | undefined {
-    if (item.id === 'inbox' && status.inboxCount > 0) return status.inboxCount;
-    return undefined;
+  function renderItem(item: NavItem) {
+    const active = location.pathname.startsWith(item.path);
+    const count = badgeFor(item.id, status);
+    const Icon = item.icon;
+    return (
+      <Link
+        key={item.id}
+        to={item.path}
+        className={clsx('alm-sidebar__item', active && 'alm-sidebar__item--active')}
+        aria-label={item.label}
+        aria-current={active ? 'page' : undefined}
+        title={collapsed ? item.label : undefined}
+      >
+        <span className="alm-sidebar__item-icon">
+          <Icon size={18} />
+        </span>
+        {!collapsed && <span className="alm-sidebar__item-label">{item.label}</span>}
+        {!collapsed && count > 0 && (
+          <span
+            className={clsx(
+              'alm-sidebar__item-badge',
+              item.id === 'inbox' && 'alm-sidebar__item-badge--alert',
+            )}
+          >
+            {count}
+          </span>
+        )}
+      </Link>
+    );
   }
 
   return (
@@ -49,16 +112,11 @@ export function Sidebar() {
       className={clsx('alm-sidebar', collapsed && 'alm-sidebar--collapsed')}
       aria-label="Main navigation"
     >
-      {/* Header: brand + collapse toggle */}
+      {/* Header: brand mark + collapse, single line */}
       <div className="alm-sidebar__header">
-        {!collapsed && (
-          <div className="alm-sidebar__brand">
-            <span className="alm-sidebar__brand-label">Astro Library</span>
-            <span className="alm-sidebar__brand-name">
-              Manager <span className="alm-sidebar__version">v0.4</span>
-            </span>
-          </div>
-        )}
+        {!collapsed && <div className="alm-sidebar__mark">A</div>}
+        {!collapsed && <span className="alm-sidebar__brand-name">ALM</span>}
+        {!collapsed && <span className="alm-sidebar__version">v0.4</span>}
         <button
           type="button"
           className="alm-sidebar__collapse"
@@ -69,33 +127,18 @@ export function Sidebar() {
         </button>
       </div>
 
-      {/* Nav items */}
+      {/* Grouped nav */}
       <div className="alm-sidebar__nav">
-        {NAV_ITEMS.map((item) => {
-          const active = location.pathname.startsWith(item.path);
-          const badge = getBadge(item);
-          const Icon = item.icon;
-          return (
-            <Link
-              key={item.id}
-              to={item.path}
-              className={clsx('alm-sidebar__item', active && 'alm-sidebar__item--active')}
-              aria-label={item.label}
-              aria-current={active ? 'page' : undefined}
-            >
-              <span className="alm-sidebar__item-icon">
-                <Icon size={18} />
-              </span>
-              {!collapsed && (
-                <span className="alm-sidebar__item-label">{item.label}</span>
-              )}
-              {badge !== undefined && badge > 0 && (
-                <span className="alm-sidebar__item-badge">{badge}</span>
-              )}
-            </Link>
-          );
-        })}
+        {NAV_GROUPS.map((group) => (
+          <div key={group.label} className="alm-sidebar__group">
+            {!collapsed && <div className="alm-sidebar__group-label">{group.label}</div>}
+            {group.items.map(renderItem)}
+          </div>
+        ))}
       </div>
+
+      {/* Settings pinned at the bottom, separated from the workflow nav */}
+      <div className="alm-sidebar__settings">{renderItem(SETTINGS_ITEM)}</div>
 
       {/* Footer: root health (hidden when collapsed) */}
       {!collapsed && (

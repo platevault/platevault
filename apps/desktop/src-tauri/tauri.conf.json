@@ -16,8 +16,8 @@
         "title": "Astro Library Manager",
         "width": 1280,
         "height": 820,
-        "minWidth": 1024,
-        "minHeight": 700
+        "minWidth": 1280,
+        "minHeight": 800
       }
     ],
     "security": {

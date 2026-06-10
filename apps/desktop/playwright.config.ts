@@ -35,6 +35,10 @@ export default defineConfig({
   webServer: {
     command: "pnpm --filter @astro-plan/desktop dev",
     cwd: repoRoot,
+    // e2e runs in a headless browser with no Tauri host, so it must use the
+    // mock layer. The app default is now real-backend (VITE_USE_MOCKS=false),
+    // so pin mocks on explicitly here.
+    env: { VITE_USE_MOCKS: "true" },
     url: BASE_URL,
     reuseExistingServer: !process.env.CI,
     timeout: 60_000,
