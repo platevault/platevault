@@ -1,261 +1,128 @@
 ---
-
-description: "Task list for Router And URL State"
+description: "Task list for Router And URL State (rescoped 2026-06-10 to design-v4 + desktop features)"
 ---
 
-# Tasks: Router And URL State
+# Tasks: Router And URL State (desktop rescope)
 
-**Input**: Design documents from `/specs/020-router-url-state/`
-**Prerequisites**: plan.md, spec.md, research.md, data-model.md, contracts/url.resolve.json
+**Input**: `spec.md` (rescoped 2026-06-10), design-v4 router at
+`apps/desktop/src/app/router.tsx`, ledger pages under
+`apps/desktop/src/features/*`.
+**Scope**: selection + filters in URL (back/forward + refresh safe),
+detail-path normalization, stale-id fallback, multi-window, testability.
+**Deferred** (see spec *Out of Scope*): `?lib=` scoping, copy-link UX, Rust
+`url.resolve`, `DeprecatedParamMap`, validator error banner.
 
 ## Format: `[ID] [P?] [Story] Description`
 
-- **[P]**: Can run in parallel (different files, no dependencies)
-- **[Story]**: User story (US1 navigate, US2 filters, US3 stale-id, US4 export)
-- Mockup-done tasks are marked `(mockup-done)` and are kept for traceability and promotion-to-canonical work.
+- **[P]**: parallelizable (different files).
+- **[Story]**: US1 navigate, US2 back/forward filters, US3 stale-id, US4 window.
 
 ---
 
-## Phase 1: Setup (Shared Infrastructure)
+## Phase 1: Foundation — typed route contract
 
-- [x] T001 [P] (mockup-done) TanStack Router installed and wired in `apps/desktop/src/app/router.tsx`.
-- [x] T002 [P] (mockup-done) Root `Shell` layout renders `<Outlet>` and is registered as `rootRoute`.
-- [ ] T003 [P] Create shared `RouteContract` typing in `apps/desktop/src/lib/route-contract.ts` exporting `RouteContract`, `ResolvableEntityRef`, and the `parseSearch` helpers (`parseString`, `parseEnum`, `parseCsv`).
-- [ ] T004 Mirror `specs/020-router-url-state/contracts/url.resolve.json` to `packages/contracts/url/url.resolve.json`.
+- [x] T001 (design-v4) TanStack Router installed + wired in `router.tsx`.
+- [x] T002 (design-v4) Root `Shell` renders `<Outlet>`; hash history via `createHashHistory()`.
+- [x] T003 (design-v4) Index `/` resolver gates on first-run (`getPreferences().setupCompleted` + Tauri `firstrunState`), redirects to `/setup`.
+- [ ] T004 [US1] Create `apps/desktop/src/lib/route-contract.ts`: typed search parsers `parseNumber`, `parseString`, `parseEnum(allow)`, `parseCsvEnum(allow)` (coerce invalid/unknown → `undefined`/empty, drop unknown keys), plus enum allow-list constants re-exported from `@/bindings` (`SessionState`, `ProjectState`, `CalibrationKind`, frame-type, group enums). Export a `validateSearch` factory helper.
 
----
-
-## Phase 2: Foundational (Blocking Prerequisites)
-
-- [x] T005 (mockup-done) Hash history adapter configured via `createHashHistory()` in `apps/desktop/src/app/router.tsx`.
-- [x] T006 (mockup-done) Index resolver at `/` reads `alm.first-run.completed` and redirects via `<Navigate replace>`.
-- [ ] T007 Refactor inline `parseId` helper into shared `parseString` in `route-contract.ts`; replace call sites in `router.tsx`.
-- [ ] T008 Add a `RouteContract` instance per route under `apps/desktop/src/lib/routes/*.contract.ts` (one per route) that re-exports the `validateSearch` and `resolvableEntities` declarations consumed by `router.tsx`.
-
-**Checkpoint**: Foundation ready – per-route contracts are the single source of truth for shape and resolution.
+**Checkpoint**: typed, unit-testable parsers exist as the single validator home.
 
 ---
 
-## Phase 3: User Story 1 - Navigate Predictably (Priority: P1) 🎯 MVP
+## Phase 2: Selection + filters in URL (US1 + US2) 🎯 MVP
 
-**Goal**: Stable, refresh-safe routes for every primary surface.
+Each ledger route declares `validateSearch`; each page reads via
+`useSearch({ from })` and writes via `useNavigate({ from })`, removing local
+`useState` for selection/filters. Selection ids are numbers.
 
-**Independent Test**: Visit each route, refresh, confirm same page.
+- [ ] T010 [US1] `/sessions`: `validateSearch {selected?:number, group?, state?}`. `SessionsPage` reads `selected` from search; `SessionsList` `onSelect` writes `navigate({search})`. Remove `useState` selection.
+- [ ] T011 [US2] `/inbox`: `validateSearch {selected?:number, type?, group?}`. Lift `InboxList` `filterType`/`groupBy` to URL; selection via search.
+- [ ] T012 [US1] `/calibration`: `validateSearch {selected?:number, kind?}`. Selection via search.
+- [ ] T013 [US1] `/targets`: `validateSearch {selected?:number}`. Selection via search.
+- [ ] T014 [US2] `/projects`: `validateSearch {selected?:number, lifecycle?:ProjectState[] (csv)}`. Lift `ProjectsList` lifecycle filter to URL; selection via search (handle the current non-null default — fall back to first item only when `selected` absent).
+- [ ] T015 [US1] `/archive`: `validateSearch {selected?:number}`. Selection via search.
 
-- [x] T010 [US1] (mockup-done) `/welcome` route in `router.tsx`.
-- [x] T011 [US1] (mockup-done) `/inventory` route in `router.tsx`.
-- [x] T012 [US1] (mockup-done) `/inbox` route in `router.tsx`.
-- [x] T013 [US1] (mockup-done) `/projects` route in `router.tsx`.
-- [x] T014 [US1] (mockup-done) `/plans` and `/plans/$planId` routes in `router.tsx`.
-- [x] T015 [US1] (mockup-done) `/settings` redirect and `/settings/$section` route in `router.tsx`.
-- [ ] T016 [US1] Replace any remaining `window.location.hash = ...` writes in the desktop tree with `useNavigate({ from })` calls.
-- [ ] T017 [US1] Add a Vitest covering: `index → welcome` redirect when localStorage is empty, `index → inventory` redirect when `alm.first-run.completed === "1"`, and unknown-route fallthrough to `/`.
-
-**Checkpoint**: Primary navigation works without manual hash mutation.
+**Checkpoint**: every ledger view round-trips through reload; filters persist.
 
 ---
 
-## Phase 4: User Story 2 - Persist Workflow Filters In Route State (Priority: P2)
+## Phase 3: Detail-path normalization (US1, FR-006)
 
-**Goal**: Filters and selection survive refresh and live in URL.
-
-**Independent Test**: Apply filters + select an entity, refresh, confirm restored.
-
-- [x] T020 [US2] (mockup-done) `validateSearch` for `/inventory` declares `{id, source, frame, review}`.
-- [x] T021 [US2] (mockup-done) `validateSearch` for `/inbox` declares `{id, type, source}`.
-- [x] T022 [US2] (mockup-done) `validateSearch` for `/projects` declares `{id, lifecycle, tool}`.
-- [x] T023 [US2] (mockup-done) `validateSearch` for `/plans` declares `{state, origin}`.
-- [ ] T024 [US2] Add Vitest coverage that each `validateSearch` drops unknown keys and coerces non-string values to `undefined`.
-- [ ] T025 [US2] Ensure each ledger page reads filters via `useSearch({ from })` and writes via `useNavigate({ from })` with merged search updates (audit `InventoryPage`, `InboxPage`, `ProjectsPage`, `PlansListPage`).
-- [ ] T026 [US2] Convert `/projects` `lifecycle` filter to comma-separated multiselect parsing via `parseCsv` (per `research.md` R4).
-
-**Checkpoint**: Filters round-trip through reload and copy-paste.
+- [ ] T020 [US1] Normalize `/calibration/$id`, `/targets/$id`, `/projects/$id` to `beforeLoad` redirect → `/<ledger>?selected=$id` (matching the existing `/sessions/$id` pattern). Remove stub/passthrough detail components from the route tree.
 
 ---
 
-## Phase 5: User Story 3 - Graceful Stale-Id Fallback (Priority: P3)
+## Phase 4: Stale-id graceful fallback (US3)
 
-**Goal**: Deleted/archived/unknown entities never strand the user.
-
-**Independent Test**: Deep-link `/plans/missing`, `/inventory?id=does-not-exist`, `/projects?id=archived`; confirm graceful handling.
-
-- [ ] T030 [US3] Implement "plan not found" empty state in `PlanDetailPage` with a link back to `/plans`; do not auto-redirect.
-- [ ] T031 [US3] In each ledger page, when the data layer reports a missing `id`, call `navigate({ search: prev => ({ ...prev, id: undefined }), replace: true })` exactly once.
-- [ ] T032 [US3] Add Vitest coverage that stale-id cleanup preserves the other filter keys and uses `replace: true`.
-- [ ] T033 [US3] Confirm unknown route segments fall through to the index resolver (TanStack Router default 404 path); add a smoke test.
-- [ ] T034 [US3] Ensure `/settings/$section` for unknown section renders a section-not-found empty state inside the settings shell (not a hard redirect).
-
-**Checkpoint**: Zero uncaught errors on stale-id deep links.
+- [ ] T030 [US3] Add a `useStaleSelectionCleanup(found: boolean)` hook (useRef-guarded) in `route-contract.ts`: when `selected` is present but the entity is missing, call `navigate({ search: prev => ({ ...prev, selected: undefined }), replace: true })` exactly once. Wire into all six ledger pages; render the existing empty detail when nothing is selected/found.
+- [ ] T031 [US3] Confirm unknown route segments fall through to the `/` index resolver (TanStack default); no blank flash.
 
 ---
 
-## Phase 6: User Story 4 - Export Shareable Links (Priority: P4)
+## Phase 5: Multi-window (US4)
 
-**Goal**: Users can copy a link that captures their current view.
-
-**Independent Test**: Copy link, paste into a fresh instance, confirm restoration.
-
-- [ ] T040 [US4] Add a `useCurrentLink()` hook that returns `window.location.href` after the router settles (post-navigation tick) for use by future "copy link" affordances.
-- [ ] T041 [US4] Define `url.resolve` contract DTOs in `apps/desktop/src/lib/route-contract.ts` (`UrlResolveRequest`, `UrlResolveResponse`) matching `contracts/url.resolve.json`.
-- [ ] T042 [US4] Implement a desktop-side fallback resolver that uses the in-memory route table to satisfy `url.resolve` until the Rust use-case lands.
-- [ ] T043 [US4] Scaffold `crates/app/core/usecases/url_resolve.rs` with the contract signature; mark the body `unimplemented!()` and add a TODO referencing this spec.
-- [ ] T044 [US4] Confirm special characters round-trip by adding a Vitest that pastes a URL with `%2C`, `%20`, and `+` into the resolver and gets the same search shape back.
-- [ ] T045 [US4] Document the "copy link" UX as deferred; do not add the menu item until US3 fallback is in place.
-
-**Checkpoint**: Shareable-link boundary is locked even though the affordance ships later.
+- [ ] T040 [US4] Add `apps/desktop/src/lib/window.ts`: `openInNewWindow(path: string)` using `@tauri-apps/api/webviewWindow` `WebviewWindow`, guarded by a Tauri-presence check; in browser/dev fall back to `window.open('#'+path)` (or no-op). Generates a unique label per call.
+- [ ] T041 [US4] Add an "Open in new window" affordance (app action bar and/or command palette) that calls `openInNewWindow` with the current `router.state.location.href` (route + search).
+- [ ] T042 [US4] Grant the Tauri capability to create webview windows in `apps/desktop/src-tauri/capabilities/*.json` (`core:webview:allow-create-webview-window` or equivalent). Verify the Rust side builds.
 
 ---
 
-## Phase 7: Polish & Cross-Cutting
+## Phase 6: Tests (testability cross-cut)
 
-- [ ] T050 [P] Update `docs/research/` index to reference `specs/020-router-url-state/research.md` for hash-vs-history rationale.
-- [ ] T051 [P] Add a `RouteContract` audit Vitest that asserts every route in `router.tsx` has a matching contract entry in `data-model.md` (by hand-maintained list to start).
-- [ ] T052 Promote `parseId` callers to typed `parseString`/`parseEnum` via `knip`-driven cleanup pass on `router.tsx`.
-- [ ] T053 Add a Playwright MCP smoke that navigates each route in `data-model.md` and asserts no console errors.
+- [ ] T050 [P] Vitest: `route-contract` parsers — `parseNumber` rejects non-numeric → `undefined`; `parseEnum`/`parseCsvEnum` drop values outside the allow-list; unknown keys dropped.
+- [ ] T051 [P] Vitest: each route `validateSearch` drops unknown keys and coerces invalid values to `undefined`.
+- [ ] T052 [P] Vitest: index resolver redirects to `/setup` when first-run incomplete and renders Sessions when complete (extend existing `SetupWizard.test` patterns / mock `getPreferences`).
+- [ ] T053 [P] Vitest: stale-id cleanup preserves other params and fires `replace` exactly once (useRef guard).
+- [ ] T054 [P] Vitest: special characters (`%2C`, `%20`, `+`) round-trip through a ledger route's search shape unchanged.
 
-## Phase 8: Ratified Decisions (A-020-1 through D-020-H2)
+---
 
-- [ ] T060 [US2] [P] Implement `DeprecatedParamMap` registry in `apps/desktop/src/lib/route-contract.ts`. Apply the map during URL read (before `validateSearch`). Emit a `debug`-level migration log entry per rewrite. Rename `review` → `reviewFilter` at all `useNavigate` call sites and `validateSearch` declarations. (A-020-1, A-020-2, R9)
-- [ ] T061 [US2] [P] Add Vitest: a URL with `?review=foo` is rewritten to `?reviewFilter=foo` by the DeprecatedParamMap before validateSearch runs; `?reviewFilter=foo` passes through unchanged. (A-020-2)
-- [ ] T062 [US2] [P] Implement two-tier validator error banner: when a known param has an invalid value (not in its enum allow-list), display an error banner and drop the param from the URL on the next write. Add Vitest asserting the banner is triggered and the bad param is removed. (A-020-4, R-Validator-Tiered)
-- [ ] T063 [US4] Inject `?lib=<current_library_id>` into all `<Link>` components and `useNavigate` call sites throughout the desktop tree. Requires `current_library_id` from the settings or library context. (R-Lib-V1, FR-010)
-- [ ] T064 [US4] Implement the cross-library refusal banner in the `url.resolve` consumer: when the response is `library.mismatch`, display inline banner "This link is from a different library." and do not navigate. Add Vitest for this path. (A-020-3, FR-011)
-- [ ] T065 [US4] Update `url.resolve` Tauri command and TypeScript DTOs to require `libraryId` in the request; validate against the currently-open library in the use-case. (A-020-3, R-Lib-V1)
-- [ ] T066 [US3] [P] Add Vitest asserting the stale-id `navigate` fires at most once per stale-id encounter (useRef guard pattern from data-model.md). (D-020-H1)
-- [ ] T067 [P] Add enum allow-list constants to `route-contract.ts` for all typed URL params (`FrameType`, `SessionState`, `ProjectLifecycle`, `PlanState`, `PlanOrigin`, `calibration_type`); use them in all `validateSearch` implementations. (D-020-H2)
+## Phase 7: Polish & docs
+
+- [ ] T060 [P] Note the hash-vs-history + desktop-rescope rationale in `docs/research/` index (link to this spec + decisions log).
+- [x] T061 Record rescope decision + deferrals in `docs/development/autonomous-run-2026-06-decisions.md` (D-007).
+
+---
+
+## Deferred (explicitly out of v1 scope — see spec)
+
+- `?lib=` library scoping + cross-library refusal banner (old FR-010/011).
+- "Copy shareable link" UX.
+- Rust `crates/app/core/usecases/url_resolve.rs` + `url.resolve` contract mirror.
+- `DeprecatedParamMap` (no legacy params exist).
+- Two-tier validator **error banner** (v1 silently drops invalid values).
 
 ---
 
 ## Dependencies & Execution Order
 
-### Task Dependencies
-
 ```toml
 [graph]
-
-[graph.T001]
-blocked_by = []
-[graph.T002]
-blocked_by = []
-[graph.T003]
-blocked_by = ["T001"]
-[graph.T004]
-blocked_by = []
-[graph.T005]
-blocked_by = ["T001"]
-[graph.T006]
-blocked_by = ["T001", "T005"]
-[graph.T007]
-blocked_by = ["T003"]
-[graph.T008]
-blocked_by = ["T003"]
-
-[graph.T010]
-blocked_by = ["T002", "T005"]
-[graph.T011]
-blocked_by = ["T002", "T005"]
-[graph.T012]
-blocked_by = ["T002", "T005"]
-[graph.T013]
-blocked_by = ["T002", "T005"]
-[graph.T014]
-blocked_by = ["T002", "T005"]
-[graph.T015]
-blocked_by = ["T002", "T005"]
-[graph.T016]
-blocked_by = ["T008"]
-[graph.T017]
-blocked_by = ["T006"]
-
-[graph.T020]
-blocked_by = ["T011"]
-[graph.T021]
-blocked_by = ["T012"]
-[graph.T022]
-blocked_by = ["T013"]
-[graph.T023]
-blocked_by = ["T014"]
-[graph.T024]
-blocked_by = ["T007", "T020", "T021", "T022", "T023"]
-[graph.T025]
-blocked_by = ["T020", "T021", "T022", "T023"]
-[graph.T026]
-blocked_by = ["T007", "T022"]
-
-[graph.T030]
-blocked_by = ["T014"]
-[graph.T031]
-blocked_by = ["T025"]
-[graph.T032]
-blocked_by = ["T031"]
-[graph.T033]
-blocked_by = ["T006"]
-[graph.T034]
-blocked_by = ["T015"]
-
-[graph.T040]
-blocked_by = ["T025"]
-[graph.T041]
-blocked_by = ["T004", "T003"]
-[graph.T042]
-blocked_by = ["T041", "T008"]
-[graph.T043]
-blocked_by = ["T004"]
-[graph.T044]
-blocked_by = ["T042"]
-[graph.T045]
-blocked_by = ["T031"]
-
-[graph.T050]
-blocked_by = []
-[graph.T051]
-blocked_by = ["T008"]
-[graph.T052]
-blocked_by = ["T007"]
-[graph.T053]
-blocked_by = ["T010", "T011", "T012", "T013", "T014", "T015"]
-
-[graph.T060]
-blocked_by = ["T003", "T007"]
-[graph.T061]
-blocked_by = ["T060"]
-[graph.T062]
-blocked_by = ["T007"]
-[graph.T063]
-blocked_by = ["T025"]
-[graph.T064]
-blocked_by = ["T041", "T065"]
-[graph.T065]
-blocked_by = ["T041"]
-[graph.T066]
-blocked_by = ["T031"]
-[graph.T067]
-blocked_by = ["T003"]
+T004 = { blocked_by = [] }
+T010 = { blocked_by = ["T004"] }
+T011 = { blocked_by = ["T004"] }
+T012 = { blocked_by = ["T004"] }
+T013 = { blocked_by = ["T004"] }
+T014 = { blocked_by = ["T004"] }
+T015 = { blocked_by = ["T004"] }
+T020 = { blocked_by = ["T010","T012","T013","T014"] }
+T030 = { blocked_by = ["T010","T011","T012","T013","T014","T015"] }
+T031 = { blocked_by = ["T003"] }
+T040 = { blocked_by = [] }
+T041 = { blocked_by = ["T040"] }
+T042 = { blocked_by = ["T040"] }
+T050 = { blocked_by = ["T004"] }
+T051 = { blocked_by = ["T010","T011","T012","T013","T014","T015"] }
+T052 = { blocked_by = ["T003"] }
+T053 = { blocked_by = ["T030"] }
+T054 = { blocked_by = ["T010"] }
 ```
 
-### Phase Dependencies
+### Notes
 
-- **Setup (Phase 1)**: T001/T002/T005/T006 already done as mockup; T003/T004 unblock subsequent typed work.
-- **Foundational (Phase 2)**: T007/T008 promote the mockup to typed contracts and block follow-up work in US2/US3/US4.
-- **User Stories (Phase 3-6)**: P1 already mockup-done; P2/P3/P4 layer typed correctness, fallback, and link export on top.
-- **Polish (Phase 7)**: Runs after the cross-story checkpoints.
-
-### Within Each User Story
-
-- Contracts before pages.
-- Validators before tests of validators.
-- Stale-id replace logic before "copy link" affordance (so exported links can't strand pasters).
-
-### Parallel Opportunities
-
-- T020-T023 (per-route `validateSearch` audits) can proceed in parallel.
-- T030, T031, T033, T034 (stale-id behaviors) can be split across pages.
-- T040, T041, T043 (link-export scaffolding) can be split across desktop/Rust.
-
----
-
-## Notes
-
-- Mockup-done tasks are tracked so the promotion path is auditable; they are not re-implemented.
-- Each ledger page MUST stay aligned with the `RouteShape` table in `data-model.md`; adding a search key requires updating both.
-- Avoid: introducing a global filter store; mirroring URL state into `useState`; manual hash mutation.
+- Each ledger page MUST stay aligned with the search-param table in `spec.md`;
+  adding a key requires updating both.
+- Avoid: a global filter store; mirroring URL state into `useState`; manual hash
+  mutation.
+- Selection ids are numbers; `parseNumber` returns `undefined` for non-numeric.

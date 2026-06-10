@@ -12,6 +12,64 @@
 
 ---
 
+## Spec 020 — Router & URL State
+
+### DV-006 — Spec 020 describes a pre-design-v4 application (BLOCKER, needs user)
+
+- **Context**: 020's tasks/spec assume routes `/welcome`, `/inventory`, `/plans`,
+  `/plans/$planId`, `/settings/$section`, with filter+selection state persisted
+  in the URL via TanStack `validateSearch`/`useSearch` (e.g. inventory
+  `{id,source,frame,review}`). First-run keyed on `alm.first-run.completed`.
+- **Reality (design-v4, merged)**: routes are `/sessions`, `/sessions/$id`,
+  `/inbox`, `/calibration`, `/calibration/$id`, `/targets`, `/targets/$id`,
+  `/projects`, `/projects/$id`, `/projects/new`, `/archive`, `/settings`,
+  `/settings/$pane`, `/setup`, `/`. There is **no** `/welcome`, `/inventory`, or
+  `/plans`. `validateSearch` and `useSearch` are used **nowhere**. Ledger pages
+  hold filters/selection in local `useState`; detail views use **path params**
+  (`/sessions/$id`), not URL search state. First-run reads
+  `getPreferences().setupCompleted` (+ Tauri `firstrunState`), not
+  `alm.first-run.completed`. `window.location.hash` writes: none (T016 moot).
+- **Impact**: 020's `[x] mockup-done` checkboxes (T010–T015, T020–T023) are
+  **false** vs reality. Implementing 020 literally would re-architect design-v4
+  navigation (path-param → search-param), contradicting the "do NOT rebuild
+  design-v4" guardrail and regressing approved UI.
+- **Decision**: **STOP autonomous work on 020** and escalate. This exceeds a
+  record-and-proceed call — it changes what 020 means. Per `specs/CLAUDE.md`,
+  material deviation requires `speckit.iterate` + user approval. Proceeded to
+  spec 016 (independent, gates cleanup specs) pending the user's 020 decision.
+- **Reconciliation options presented to user**: (A) iterate 020 to realign with
+  design-v4 (path-param routing already done; add URL filter persistence only
+  where valuable); (B) implement 020 literally (re-architect to URL state — big,
+  regression-risky); (C) defer/close 020 as superseded by 027/030/032.
+
+### D-007 — 020 RESCOPED to desktop-paying-off features (user decision 2026-06-10)
+
+- **User decision**: "update the spec to implement back/forwards, multi-window,
+  testability. add the features that pay off on desktop."
+- **Decision**: Rewrote `020` `spec.md` + `tasks.md` to the design-v4 reality and
+  a desktop-focused scope:
+  - **KEEP/ADD**: selection + filters in URL search state (`?selected=<id>` +
+    typed filter params) on every ledger route via `validateSearch`/`useSearch`/
+    `useNavigate` → back/forward and refresh restore the filtered+selected view;
+    typed `route-contract.ts` parsers + enum allow-lists (from `bindings`) for
+    testability; stale-id graceful clear; **multi-window** ("open current view in
+    a new desktop window" via Tauri `WebviewWindow`); detail path routes
+    (`/x/$id`) normalize to `/x?selected=$id`.
+  - **DEFER (out of v1 scope)**: `?lib=` library scoping + cross-library refusal
+    (FR-010/011 → Deferred), shareable-"copy link" UX (no address bar), the Rust
+    `crates/app/core/usecases/url_resolve.rs` resolver + `url.resolve` contract
+    (only needed for OS deep-linking, not committed), `DeprecatedParamMap` (no
+    legacy params exist against the fresh design-v4 routes), and the two-tier
+    validator **error banner** (v1 silently drops invalid known-key values).
+- **Process deviation**: `specs/CLAUDE.md` says never hand-edit spec artifacts
+  (use `speckit.iterate`). No iterate skill is available in this environment and
+  the user explicitly instructed "update the spec," so spec.md/tasks.md were
+  rewritten manually. The old (stale) spec content is preserved in git history
+  (pre-`020-router-url-state-desktop` branch).
+- **Reconciliation risk**: A future `speckit` run may want the spec regenerated
+  through its own tooling. The rewrite is faithful to the user decision and the
+  real design-v4 routes; low risk.
+
 ## Spec 022 — Mantine Prototype / Design System
 
 ### DV-001 — 022 primitive vocabulary superseded by design-v4
