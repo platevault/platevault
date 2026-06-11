@@ -68,6 +68,7 @@ use crate::commands::settings::{
     settings_get, settings_restore_defaults, settings_source_override_set, settings_update,
 };
 use crate::commands::status::status_summary;
+use crate::commands::target_lookup::{target_lookup, target_resolve};
 use crate::commands::targets::{targets_get, targets_list};
 use crate::commands::tools::{tools_list, tools_update, tools_validate_path};
 use crate::commands::tour::tour_complete_step;
@@ -109,6 +110,9 @@ pub fn specta_builder() -> Builder<tauri::Wry> {
             // targets
             targets_list,
             targets_get,
+            // target lookup + resolve (spec 013)
+            target_lookup,
+            target_resolve,
             // projects
             projects_list,
             projects_get,

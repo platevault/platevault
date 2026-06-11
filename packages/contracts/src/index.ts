@@ -25,6 +25,10 @@ export type * as NativeDirectoryPick from "./generated/native.directory.pick";
 export type * as NativeFilePick from "./generated/native.file.pick";
 export type * as NativeReveal from "./generated/native.reveal";
 
+// Spec 013 — Target Lookup From FITS OBJECT.
+export type * as TargetLookup from "./generated/target.lookup";
+export type * as TargetResolve from "./generated/target.resolve";
+
 // Spec 022 — Desktop theme mode (theme.get / theme.set).
 export type * as ThemeGet from "./generated/theme.get";
 export type * as ThemeSet from "./generated/theme.set";
