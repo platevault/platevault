@@ -1,3 +1,10 @@
+// spec 018 — partial owner: rowDensity is a spec 018 key but FR-006 keeps
+// density fixed for now (T032 removes it). Theme and fontSize are not DB
+// settings: theme persists in localStorage under `alm.theme` (data-model.md
+// §Theme); fontSize has no backend setting in v1.
+//
+// Nothing here needs getSettings() until T032 lands or theme is moved to DB.
+// When that happens, load scope='general' on mount and call save() on change.
 import { useState } from 'react';
 import { usePreference } from '@/data/preferences';
 import type { Density } from '@/bindings/types';
@@ -65,6 +72,9 @@ export function General() {
         <div className="alm-settings__row">
           <div className="alm-settings__row-label">Density</div>
           <div className="alm-settings__row-content">
+            {/* rowDensity is a spec 018 DB key; FR-006 keeps density fixed in
+                v1 so it reads from usePreference (localStorage). T032 will
+                remove this control entirely. */}
             <select
               className="alm-select"
               value={density}

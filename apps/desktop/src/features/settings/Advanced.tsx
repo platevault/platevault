@@ -1,14 +1,37 @@
-import { useState } from 'react';
+// spec 018 — owned pane: logLevel, rememberFollowLogs, devMode.
+// On mount, loads persisted values from backend via settings.get('advanced').
+// Changes are auto-saved via the save() prop (useAutoSave -> settings.update).
+import { useState, useEffect } from 'react';
 import { Btn } from '@/ui';
+import { getSettings } from '@/api/commands';
 
 interface AdvancedProps {
   save: (scope: string, values: Record<string, unknown>) => void;
 }
 
-type LogLevel = 'trace' | 'debug' | 'info' | 'warn' | 'error';
+type LogLevel = 'error' | 'warn' | 'info' | 'debug';
 
 export function Advanced({ save }: AdvancedProps) {
   const [logLevel, setLogLevel] = useState<LogLevel>('info');
+
+  // Load persisted logLevel from backend on mount (T015).
+  useEffect(() => {
+    let cancelled = false;
+    getSettings({ scope: 'advanced' })
+      .then((data) => {
+        if (cancelled) return;
+        const vals = data.values as Record<string, unknown>;
+        if (vals?.logLevel && typeof vals.logLevel === 'string') {
+          setLogLevel(vals.logLevel as LogLevel);
+        }
+      })
+      .catch(() => {
+        // Backend unavailable — stay with in-code default.
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, []);
 
   const handleExport = () => console.log('Export DB triggered');
   const handleReset = () => console.log('Reset preferences triggered');
@@ -45,7 +68,7 @@ export function Advanced({ save }: AdvancedProps) {
         </div>
       </div>
 
-      {/* Log level */}
+      {/* Log level — persisted via spec 018 settings backend */}
       <div className="alm-settings__group">
         <div className="alm-settings__group-title">Log Level</div>
         <div className="alm-settings__row">
@@ -54,17 +77,19 @@ export function Advanced({ save }: AdvancedProps) {
             <select
               className="alm-select"
               value={logLevel}
-              onChange={(e) => { setLogLevel(e.target.value as LogLevel); save('advanced', { log_level: e.target.value }); }}
+              onChange={(e) => {
+                const v = e.target.value as LogLevel;
+                setLogLevel(v);
+                save('advanced', { logLevel: v });
+              }}
               style={{ height: 28 }}
             >
-              <option value="trace">Trace</option>
               <option value="debug">Debug</option>
               <option value="info">Info</option>
               <option value="warn">Warn</option>
               <option value="error">Error</option>
             </select>
             <div className="alm-settings__row-desc">
-              {logLevel === 'trace' && 'All internal events — very verbose'}
               {logLevel === 'debug' && 'Diagnostic detail useful during development'}
               {logLevel === 'info' && 'Normal operational messages (default)'}
               {logLevel === 'warn' && 'Warnings only'}

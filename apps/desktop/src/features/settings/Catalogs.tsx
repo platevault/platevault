@@ -1,3 +1,4 @@
+// TODO(spec 014 (target catalogs)): wire to backend when owning spec implements its command.
 import { useState } from 'react';
 import { Toggle, Table } from '@/ui';
 import { TARGET_CATALOGS, type TargetCatalogFixture } from '@/data/fixtures/settings';

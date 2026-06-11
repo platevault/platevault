@@ -1,3 +1,5 @@
+// spec 018 — partial owner: pattern, autoApplyPattern are spec 018 DB keys.
+// TODO(spec-018-T015): add useEffect to load pattern/autoApplyPattern via getSettings('naming').
 import { useState, useMemo } from 'react';
 import { Btn } from '@/ui';
 

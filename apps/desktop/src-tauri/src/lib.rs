@@ -53,7 +53,9 @@ use crate::commands::sessions::{
     sessions_calendar, sessions_get, sessions_list, sessions_merge, sessions_split,
     sessions_transition,
 };
-use crate::commands::settings::{settings_get, settings_update};
+use crate::commands::settings::{
+    settings_get, settings_restore_defaults, settings_source_override_set, settings_update,
+};
 use crate::commands::status::status_summary;
 use crate::commands::targets::{targets_get, targets_list};
 use crate::commands::tools::{tools_list, tools_update, tools_validate_path};
@@ -123,9 +125,11 @@ pub fn specta_builder() -> Builder<tauri::Wry> {
             firstrun_state,
             firstrun_complete,
             firstrun_restart,
-            // settings
+            // settings (spec 018)
             settings_get,
             settings_update,
+            settings_restore_defaults,
+            settings_source_override_set,
             // preferences
             preferences_get,
             preferences_set,

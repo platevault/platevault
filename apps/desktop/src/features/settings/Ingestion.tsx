@@ -1,3 +1,4 @@
+// TODO(spec 030 (ingestion settings)): wire to backend when owning spec implements its command.
 import { useState } from 'react';
 import { Toggle, RadioGroup } from '@/ui';
 

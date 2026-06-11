@@ -1,3 +1,4 @@
+// TODO(spec 011 (processing tools)): wire to backend when owning spec implements its command.
 import { useState } from 'react';
 import { Toggle, Table, Pill } from '@/ui';
 import { PROCESSING_TOOLS, type ProcessingToolFixture } from '@/data/fixtures/settings';

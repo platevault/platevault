@@ -272,17 +272,40 @@ export const commands = {
 	/**
 	 *  `settings.get` — returns settings for a given scope.
 	 * 
+	 *  Accepts `{ scope: string }` and returns `SettingsData { scope, values }`.
+	 *  Each key that belongs to the scope is resolved via the persistence layer
+	 *  (hydrating the in-code default when no stored row exists).
+	 * 
 	 *  # Errors
-	 *  Returns `Err(String)` on failure; the stub never fails.
+	 *  Returns `Err(String)` on database failure.
 	 */
 	settingsGet: (scope: string) => typedError<SettingsData, string>(__TAURI_INVOKE("settings.get", { scope })),
 	/**
-	 *  `settings.update` — update settings for a given scope.
+	 *  `settings.update` — persists settings values for a given scope.
+	 * 
+	 *  Accepts `{ scope: string, values: Record<string, unknown> }`. Each entry in
+	 *  `values` is persisted as an individual settings key if it is a known valid
+	 *  key. Unknown keys (from fixture-driven panes) are silently skipped so the
+	 *  frontend does not need to filter its payload.
 	 * 
 	 *  # Errors
-	 *  Returns `Err(String)` on failure; the stub never fails.
+	 *  Returns `Err(String)` on database or audit failure.
 	 */
 	settingsUpdate: (scope: string, values: unknown) => typedError<null, string>(__TAURI_INVOKE("settings.update", { scope, values })),
+	/**
+	 *  `settings.restore-defaults` — restore one, several, or all keys to defaults.
+	 * 
+	 *  # Errors
+	 *  Returns `Err(String)` with code `"key.unknown"` for unknown keys.
+	 */
+	settingsRestoreDefaults: (request: RestoreDefaultsRequest) => typedError<RestoreDefaultsResponse, string>(__TAURI_INVOKE("settings.restore-defaults", { request })),
+	/**
+	 *  `settings.source-override.set` — set a per-source override for an overridable key.
+	 * 
+	 *  # Errors
+	 *  Returns `Err(String)` with code `"key.unoverridable"` or `"value.invalid"`.
+	 */
+	settingsSourceOverrideSet: (request: SetSourceOverrideRequest) => typedError<SetSourceOverrideResponse, string>(__TAURI_INVOKE("settings.source-override.set", { request })),
 	/**
 	 *  `preferences.get` — returns current application preferences.
 	 * 
@@ -1893,6 +1916,32 @@ export type RemapVerification = {
 	allVerified: boolean,
 };
 
+/**
+ *  Request DTO for `settings.restore-defaults`.
+ * 
+ *  Pass an empty `keys` slice to restore every v1 key.
+ */
+export type RestoreDefaultsRequest = {
+	/**  Specific keys to restore. Empty = restore all. */
+	keys: string[],
+};
+
+/**  Response DTO for `settings.restore-defaults`. */
+export type RestoreDefaultsResponse = {
+	status: RestoreDefaultsStatus,
+	/**  Keys actually written (restored from non-default value). */
+	restored: string[],
+	/**  Keys already at default (skipped; no write, no audit). */
+	alreadyAtDefault: string[],
+};
+
+/**  Status returned by `settings.restore-defaults`. */
+export type RestoreDefaultsStatus = 
+/**  At least one key was restored to its default. */
+"success" | 
+/**  All requested keys were already at their defaults; nothing written. */
+"noop";
+
 /**  Request payload for `native.reveal`. */
 export type RevealRequest = RevealRequest_Serialize | RevealRequest_Deserialize;
 
@@ -2098,10 +2147,22 @@ export type SessionsGroupBy = "none" | "target" | "month" | "filter" | "train";
 /**  Sessions view mode. */
 export type SessionsView = "list" | "calendar";
 
+/**  Request DTO for `settings.source-override.set`. */
+export type SetSourceOverrideRequest = {
+	sourceId: string,
+	key: string,
+	value: unknown,
+};
+
+/**  Response DTO for `settings.source-override.set`. */
+export type SetSourceOverrideResponse = {
+	sourceId: string,
+	key: string,
+};
+
 /**
- *  Scoped settings data (general, naming, calibration, etc.).
- * 
- *  `values` is a free-form JSON object keyed by setting name.
+ *  Scoped settings data — legacy shim kept for the existing stub command
+ *  surface. New code should use `SettingsGetResponse`.
  */
 export type SettingsData = {
 	scope: string,
