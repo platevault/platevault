@@ -17,6 +17,7 @@ pub mod plans;
 pub mod project_health;
 pub mod project_notes;
 pub mod project_setup;
+pub mod protection;
 pub mod provenance_use_case;
 pub mod sessions;
 pub mod settings;

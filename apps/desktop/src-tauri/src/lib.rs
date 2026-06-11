@@ -64,6 +64,10 @@ use crate::commands::projects::{
     projects_create_plan, projects_get, projects_list, projects_source_add, projects_source_remove,
     projects_update,
 };
+use crate::commands::protection::{
+    plan_protection_check_cmd, protection_plan_acknowledged, source_protection_get,
+    source_protection_set,
+};
 use crate::commands::review::review_queue;
 use crate::commands::roots::{
     equipment_list, roots_list, roots_register, roots_remap, roots_remap_apply, scan_start,
@@ -180,6 +184,11 @@ pub fn specta_builder() -> Builder<tauri::Wry> {
             pattern_validate,
             pattern_resolve,
             pattern_preview,
+            // source protection (spec 016 US2–US4)
+            source_protection_get,
+            source_protection_set,
+            plan_protection_check_cmd,
+            protection_plan_acknowledged,
             // settings (spec 018)
             settings_get,
             settings_update,

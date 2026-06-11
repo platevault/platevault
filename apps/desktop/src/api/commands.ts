@@ -880,3 +880,83 @@ export async function artifactClassify(
 export async function artifactMarkResolved(request: ArtifactMarkResolvedRequest): Promise<void> {
   return invoke<void>('artifact.mark_resolved', { request });
 }
+
+// ── Spec 016: Source Protection (US2–US4) ─────────────────────────────────────
+
+import type {
+  SourceProtectionGetResponse,
+  SourceProtectionSetRequest,
+  SourceProtectionSetResponse,
+  PlanProtectionCheckResponse,
+  ProtectedPlanItem,
+  NonBlockingSummary,
+  ProtectionLevel,
+} from '@/bindings/index';
+
+export type {
+  SourceProtectionGetResponse,
+  SourceProtectionSetRequest,
+  SourceProtectionSetResponse,
+  PlanProtectionCheckResponse,
+  ProtectedPlanItem,
+  NonBlockingSummary,
+  ProtectionLevel,
+};
+
+/**
+ * `source.protection.get` — resolve effective protection for a source.
+ *
+ * Pass `sourceId: null` to retrieve global defaults.
+ */
+export async function sourceProtectionGet(
+  sourceId: string | null,
+): Promise<SourceProtectionGetResponse> {
+  return invoke<SourceProtectionGetResponse>('source.protection.get', { sourceId });
+}
+
+/**
+ * `source.protection.set` — set or replace the protection override for a source
+ * (spec 016 US2, T013).
+ *
+ * Emits a `protection.source.set` audit event.
+ */
+export async function sourceProtectionSet(
+  request: SourceProtectionSetRequest,
+): Promise<SourceProtectionSetResponse> {
+  return invoke<SourceProtectionSetResponse>('source.protection.set', { request });
+}
+
+/**
+ * `plan.protection.check` — return protection-affected plan items (spec 016 US3,
+ * T023).
+ *
+ * Returns only items requiring explicit acknowledgement; normal and unprotected
+ * items appear as counts in `nonBlockingSummary`.
+ */
+export async function planProtectionCheck(
+  planId: string,
+): Promise<PlanProtectionCheckResponse> {
+  return invoke<PlanProtectionCheckResponse>('plan.protection.check', { planId });
+}
+
+/**
+ * `protection.plan.acknowledged` — record user acknowledgement of a protected
+ * plan item (spec 016 US3, T025).
+ *
+ * Returns the audit event id.
+ */
+export async function protectionPlanAcknowledged(
+  planId: string,
+  itemId: string,
+  sourceId: string | null,
+  resolvedLevel: string,
+  reason: string,
+): Promise<string> {
+  return invoke<string>('protection.plan.acknowledged', {
+    planId,
+    itemId,
+    sourceId,
+    resolvedLevel,
+    reason,
+  });
+}

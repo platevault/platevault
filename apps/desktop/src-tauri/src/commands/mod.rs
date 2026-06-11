@@ -32,6 +32,7 @@ pub mod plan_apply;
 pub mod plans;
 pub mod preferences;
 pub mod projects;
+pub mod protection;
 pub mod review;
 pub mod roots;
 pub mod search;

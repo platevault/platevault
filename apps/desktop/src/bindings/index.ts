@@ -570,6 +570,47 @@ export const commands = {
 	 */
 	patternPreview: (request: PatternPreviewRequest_Deserialize) => typedError<PatternPreviewResponse, string>(__TAURI_INVOKE("pattern.preview", { request })),
 	/**
+	 *  `source.protection.get` — resolve effective protection for a source (US2, T012).
+	 * 
+	 *  If `source_id` is `None`, returns the global defaults.
+	 * 
+	 *  # Errors
+	 * 
+	 *  Returns `Err(String)` with the contract error code on failure.
+	 */
+	sourceProtectionGet: (sourceId: string | null) => typedError<SourceProtectionGetResponse_Serialize, string>(__TAURI_INVOKE("source.protection.get", { sourceId })),
+	/**
+	 *  `source.protection.set` — set or replace the protection override for a source
+	 *  (US2, T013, T016).
+	 * 
+	 *  # Errors
+	 * 
+	 *  Returns `Err(String)` with the contract error code on failure.
+	 */
+	sourceProtectionSet: (request: SourceProtectionSetRequest_Deserialize) => typedError<SourceProtectionSetResponse_Serialize, string>(__TAURI_INVOKE("source.protection.set", { request })),
+	/**
+	 *  `plan.protection.check` — return protection-affected plan items (US3, T023).
+	 * 
+	 *  Only items requiring acknowledgement are returned in `protected_items`.
+	 *  Normal and unprotected items appear only as summary counts.
+	 * 
+	 *  # Errors
+	 * 
+	 *  Returns `Err(String)` with `"plan.not_found"` if the plan does not exist.
+	 */
+	planProtectionCheck: (planId: string) => typedError<PlanProtectionCheckResponse_Serialize, string>(__TAURI_INVOKE("plan.protection.check", { planId })),
+	/**
+	 *  `protection.plan.acknowledged` — record user acknowledgement of a protected
+	 *  plan item (US3, T025).
+	 * 
+	 *  Returns the audit event id.
+	 * 
+	 *  # Errors
+	 * 
+	 *  Returns `Err(String)` on audit failure.
+	 */
+	protectionPlanAcknowledged: (planId: string, itemId: string, sourceId: string | null, resolvedLevel: string, reason: string) => typedError<string, string>(__TAURI_INVOKE("protection.plan.acknowledged", { planId, itemId, sourceId, resolvedLevel, reason })),
+	/**
 	 *  `settings.get` — returns settings for a given scope.
 	 * 
 	 *  Accepts `{ scope: string }` and returns `SettingsData { scope, values }`.
@@ -2899,6 +2940,12 @@ export type MismatchedDimDto_Serialize = {
 	delta?: number | null,
 };
 
+/**  Summary of items that do NOT require acknowledgement (R-CheckScope, FR-008). */
+export type NonBlockingSummary = {
+	normalCount: number,
+	unprotectedCount: number,
+};
+
 export type OpticalTrain = {
 	id: string,
 	name: string,
@@ -3191,6 +3238,29 @@ export type PlanListResponse_Serialize = {
 
 /**  Plan origin — which generator created this plan. */
 export type PlanOrigin = "inbox" | "restructure" | "cleanup" | "archive" | "project";
+
+/**  Response DTO for `plan.protection.check`. */
+export type PlanProtectionCheckResponse = PlanProtectionCheckResponse_Serialize | PlanProtectionCheckResponse_Deserialize;
+
+/**  Response DTO for `plan.protection.check`. */
+export type PlanProtectionCheckResponse_Deserialize = {
+	planId: string,
+	hasProtectedItems: boolean,
+	/**  Items that require explicit user acknowledgement before the plan may execute. */
+	protectedItems: ProtectedPlanItem_Deserialize[],
+	/**  Counts of items that do NOT require acknowledgement. */
+	nonBlockingSummary: NonBlockingSummary,
+};
+
+/**  Response DTO for `plan.protection.check`. */
+export type PlanProtectionCheckResponse_Serialize = {
+	planId: string,
+	hasProtectedItems: boolean,
+	/**  Items that require explicit user acknowledgement before the plan may execute. */
+	protectedItems: ProtectedPlanItem_Serialize[],
+	/**  Counts of items that do NOT require acknowledgement. */
+	nonBlockingSummary: NonBlockingSummary,
+};
 
 /**  Response for `plans.resume`. */
 export type PlanResumeResponse = {
@@ -3681,6 +3751,52 @@ export type ProjectionTransitionRequest_Serialize = {
 	actor: TransitionActor,
 };
 
+/**
+ *  A single plan item that requires user acknowledgement (spec 016 data-model
+ *  §`ProtectedPlanItem`, FR-008: only items requiring acknowledgement are
+ *  included; normal/unprotected items appear only in `non_blocking_summary`).
+ */
+export type ProtectedPlanItem = ProtectedPlanItem_Serialize | ProtectedPlanItem_Deserialize;
+
+/**
+ *  A single plan item that requires user acknowledgement (spec 016 data-model
+ *  §`ProtectedPlanItem`, FR-008: only items requiring acknowledgement are
+ *  included; normal/unprotected items appear only in `non_blocking_summary`).
+ */
+export type ProtectedPlanItem_Deserialize = {
+	itemId: string,
+	sourceId: string | null,
+	level: ProtectionLevel,
+	/**  Categories that triggered protection elevation, if any. */
+	matchedCategories: string[],
+	originalAction: string,
+	/**  Set when `block_permanent_delete` rewrote the action (e.g. `delete` → `archive`). */
+	rewrittenAction: string | null,
+	requiresAcknowledgement: boolean,
+	reason: string,
+};
+
+/**
+ *  A single plan item that requires user acknowledgement (spec 016 data-model
+ *  §`ProtectedPlanItem`, FR-008: only items requiring acknowledgement are
+ *  included; normal/unprotected items appear only in `non_blocking_summary`).
+ */
+export type ProtectedPlanItem_Serialize = {
+	itemId: string,
+	sourceId?: string | null,
+	level: ProtectionLevel,
+	/**  Categories that triggered protection elevation, if any. */
+	matchedCategories: string[],
+	originalAction: string,
+	/**  Set when `block_permanent_delete` rewrote the action (e.g. `delete` → `archive`). */
+	rewrittenAction?: string | null,
+	requiresAcknowledgement: boolean,
+	reason: string,
+};
+
+/**  Protection level enum (spec 016 data-model.md). */
+export type ProtectionLevel = "protected" | "normal" | "unprotected";
+
 /**  A provenance label/value pair for how an item was inferred. */
 export type ProvenanceEntry = {
 	label: string,
@@ -4126,6 +4242,109 @@ export type SettingsData = {
 
 /**  Kind of a registered source directory. */
 export type SourceKind = "light_frames" | "dark" | "flat" | "bias" | "project" | "inbox";
+
+/**  Response DTO for `source.protection.get`. */
+export type SourceProtectionGetResponse = SourceProtectionGetResponse_Serialize | SourceProtectionGetResponse_Deserialize;
+
+/**  Response DTO for `source.protection.get`. */
+export type SourceProtectionGetResponse_Deserialize = {
+	/**  Echo of the resolved source id, absent when returning global defaults. */
+	sourceId: string | null,
+	/**  Effective protection level (override wins; category elevates only when no override). */
+	level: ProtectionLevel,
+	/**  Effective `block_permanent_delete` flag (per-source override or global fallback). */
+	blockPermanentDelete: boolean,
+	/**  Effective protected categories for this source. */
+	categories: string[],
+	/**  True when no per-source override row exists and global defaults were used. */
+	inheritsDefault: boolean,
+};
+
+/**  Response DTO for `source.protection.get`. */
+export type SourceProtectionGetResponse_Serialize = {
+	/**  Echo of the resolved source id, absent when returning global defaults. */
+	sourceId?: string | null,
+	/**  Effective protection level (override wins; category elevates only when no override). */
+	level: ProtectionLevel,
+	/**  Effective `block_permanent_delete` flag (per-source override or global fallback). */
+	blockPermanentDelete: boolean,
+	/**  Effective protected categories for this source. */
+	categories: string[],
+	/**  True when no per-source override row exists and global defaults were used. */
+	inheritsDefault: boolean,
+};
+
+/**  Request DTO for `source.protection.set`. */
+export type SourceProtectionSetRequest = SourceProtectionSetRequest_Serialize | SourceProtectionSetRequest_Deserialize;
+
+/**  Request DTO for `source.protection.set`. */
+export type SourceProtectionSetRequest_Deserialize = {
+	sourceId: string,
+	level: ProtectionLevel,
+	/**
+	 *  Per-source override for `block_permanent_delete`.
+	 *  `None` = inherit global; `Some(true/false)` = explicit override.
+	 */
+	blockPermanentDelete: boolean | null,
+	/**
+	 *  Per-source category override.
+	 *  `None` = inherit global protected categories.
+	 */
+	categories: string[] | null,
+};
+
+/**  Request DTO for `source.protection.set`. */
+export type SourceProtectionSetRequest_Serialize = {
+	sourceId: string,
+	level: ProtectionLevel,
+	/**
+	 *  Per-source override for `block_permanent_delete`.
+	 *  `None` = inherit global; `Some(true/false)` = explicit override.
+	 */
+	blockPermanentDelete?: boolean | null,
+	/**
+	 *  Per-source category override.
+	 *  `None` = inherit global protected categories.
+	 */
+	categories?: string[] | null,
+};
+
+/**  Response DTO for `source.protection.set`. */
+export type SourceProtectionSetResponse = SourceProtectionSetResponse_Serialize | SourceProtectionSetResponse_Deserialize;
+
+/**  Response DTO for `source.protection.set`. */
+export type SourceProtectionSetResponse_Deserialize = {
+	sourceId: string,
+	priorLevel: ProtectionLevel,
+	newLevel: ProtectionLevel,
+	/**  Prior per-source `block_permanent_delete` override; `None` = was inheriting global. */
+	priorBlockPermanentDelete: boolean | null,
+	/**  New per-source `block_permanent_delete` override; `None` = now inheriting global. */
+	newBlockPermanentDelete: boolean | null,
+	/**  Prior per-source categories; absent when there was no prior override. */
+	priorCategories: string[] | null,
+	/**  New per-source categories; absent when inheriting global. */
+	newCategories: string[] | null,
+	/**  Audit event id emitted by this call. */
+	auditId: string,
+};
+
+/**  Response DTO for `source.protection.set`. */
+export type SourceProtectionSetResponse_Serialize = {
+	sourceId: string,
+	priorLevel: ProtectionLevel,
+	newLevel: ProtectionLevel,
+	/**  Prior per-source `block_permanent_delete` override; `None` = was inheriting global. */
+	priorBlockPermanentDelete?: boolean | null,
+	/**  New per-source `block_permanent_delete` override; `None` = now inheriting global. */
+	newBlockPermanentDelete?: boolean | null,
+	/**  Prior per-source categories; absent when there was no prior override. */
+	priorCategories?: string[] | null,
+	/**  New per-source categories; absent when inheriting global. */
+	newCategories?: string[] | null,
+	/**  Audit event id emitted by this call. */
+	auditId: string,
+};
 
 /**
  *  Role of a linked source within a project (spec 008 data-model.md §`ProjectSource`).

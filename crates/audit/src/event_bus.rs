@@ -592,3 +592,41 @@ pub struct WorkflowRunCompleted {
 }
 
 pub const TOPIC_WORKFLOW_RUN_COMPLETED: &str = "workflow.run_completed";
+
+// ── Spec 016: Source Protection ───────────────────────────────────────────
+
+/// Payload for the `protection.source.set` topic (spec 016 T016).
+///
+/// Emitted every time a per-source protection override is written or updated.
+#[derive(Clone, Debug, Serialize, Deserialize, JsonSchema, Type)]
+#[serde(rename_all = "camelCase")]
+pub struct ProtectionSourceSet {
+    pub source_id: String,
+    pub prior_level: String,
+    pub new_level: String,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub prior_categories: Option<Vec<String>>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub new_categories: Option<Vec<String>>,
+    pub at: String,
+}
+
+pub const TOPIC_PROTECTION_SOURCE_SET: &str = "protection.source.set";
+
+/// Payload for the `protection.plan.acknowledged` topic (spec 016 T025).
+///
+/// Emitted when the user explicitly acknowledges a protected plan item before
+/// plan execution proceeds.
+#[derive(Clone, Debug, Serialize, Deserialize, JsonSchema, Type)]
+#[serde(rename_all = "camelCase")]
+pub struct ProtectionPlanAcknowledged {
+    pub plan_id: String,
+    pub item_id: String,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub source_id: Option<String>,
+    pub resolved_level: String,
+    pub reason: String,
+    pub at: String,
+}
+
+pub const TOPIC_PROTECTION_PLAN_ACKNOWLEDGED: &str = "protection.plan.acknowledged";

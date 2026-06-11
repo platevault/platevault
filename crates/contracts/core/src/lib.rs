@@ -21,6 +21,7 @@ pub mod plans;
 pub mod preferences;
 pub mod projects;
 pub mod projects_v2;
+pub mod protection;
 pub mod provenance;
 pub mod review;
 pub mod roots;
