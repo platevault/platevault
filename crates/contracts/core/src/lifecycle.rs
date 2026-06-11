@@ -37,7 +37,8 @@ pub enum ProjectState {
     Blocked,
 }
 
-/// Note: `paused` is a domain-internal state (R-Pause-1); not surfaced in the transition contract.
+/// Ten-state plan lifecycle (spec 017 data-model.md `PlanState`).
+/// `paused` is surfaced here so the list/detail contracts can filter on it (R-Pause-1).
 #[derive(
     Clone,
     Copy,
@@ -58,6 +59,8 @@ pub enum PlanState {
     ReadyForReview,
     Approved,
     Applying,
+    /// Mid-apply suspension (R-Pause-1). Written only by spec 025's executor.
+    Paused,
     Applied,
     PartiallyApplied,
     Failed,

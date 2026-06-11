@@ -22,11 +22,14 @@ export type {
   ConfidenceLevel,
   ProvenanceOrigin,
   ViewMode,
-  PlanKind,
   Density,
   CalibrationKind,
   PlanItemAction,
-  PlanItemStatus,
+  PlanItemState,
+  PlanItemProtection,
+  PlanOrigin,
+  PlanType,
+  DestructiveDestination,
   AuditOutcome,
   ReviewItemKind,
   SearchResultKind,
@@ -43,16 +46,20 @@ export type {
   TransitionStatus,
   AuditActor,
   AssetType,
+  // Plan response types
+  PlanApproveResponse,
+  PlanDiscardResponse,
+  PlanRetryResponse,
+  ArchiveSendToTrashResponse,
+  ArchivePermanentlyDeleteResponse,
 } from './index';
 
 /**
- * PlanState — extended from the generated binding to include `"paused"`.
- *
- * The Rust contract marks `paused` as domain-internal (R-Pause-1), so Specta
- * does not surface it.  The frontend UI references it for state-badge rendering
- * so we keep it here until the domain boundary is finalized.
+ * PlanState — re-export from generated bindings. Includes `"paused"` (spec 017
+ * data-model.md §PlanState, R-Pause-1) now that it is surfaced in the Rust
+ * contracts `PlanState` enum.
  */
-export type PlanState = import('./index').PlanState | 'paused';
+export type PlanState = import('./index').PlanState;
 
 // ─── Struct Interfaces (snake_case — matches current frontend convention) ───
 
@@ -163,27 +170,52 @@ export interface Project {
   updated_at: string;
 }
 
+/**
+ * PlanItem — one proposed filesystem operation within a plan.
+ * Matches the Rust `PlanItemDetail` contract DTO (spec 017).
+ */
 export interface PlanItem {
+  id: string;
+  index: number;
+  name: string;
   action: import('./index').PlanItemAction;
-  source_path: string;
-  dest_path: string;
-  status: import('./index').PlanItemStatus;
-  dry_run_ok: boolean;
-  protection_reason?: string;
-  provenance: import('./index').ProvenanceOrigin;
+  from: string;
+  to: string;
+  reason: string;
+  protection: import('./index').PlanItemProtection;
+  linked?: string;
+  state: import('./index').PlanItemState;
+  failure_reason?: string;
+  provenance?: Array<{ label: string; value: string }>;
+  approved_mtime?: string;
+  approved_size_bytes?: number;
+  archive_path?: string;
 }
 
+/**
+ * FilesystemPlan — plan summary row for the list view.
+ * Matches the Rust `PlanSummary` contract DTO (spec 017).
+ */
 export interface FilesystemPlan {
   id: string;
-  kind: import('./index').PlanKind;
-  state: import('./index').PlanState;
-  items: PlanItem[];
-  dry_run_result: { passed: number; warnings: number; failures: number };
-  has_destructive: boolean;
-  reclaim_bytes: number;
+  number: number;
+  title: string;
+  origin: import('./index').PlanOrigin;
+  origin_path?: string;
+  state: PlanState;
+  planType: import('./index').PlanType;
+  destructiveDestination: import('./index').DestructiveDestination;
+  parent_plan_id?: string;
+  items_total: number;
+  items_applied: number;
+  items_failed: number;
+  items_skipped: number;
+  items_cancelled: number;
+  items_pending: number;
+  total_bytes_required: number;
   created_at: string;
   approved_at?: string;
-  applied_at?: string;
+  discarded_at?: string;
 }
 
 export interface AuditEntry {
@@ -329,15 +361,13 @@ export interface ProjectDetail extends Project {
   manifest_count: number;
 }
 
+/**
+ * PlanDetail — full plan detail with items for the review/detail view.
+ * Matches the Rust `PlanDetail` contract DTO (spec 017).
+ */
 export interface PlanDetail extends FilesystemPlan {
-  summary: {
-    item_count: number;
-    reclaim_bytes: number;
-    trash_count: number;
-    archive_count: number;
-    delete_count: number;
-    protected_count: number;
-  };
+  approved_at?: string;
+  items: PlanItem[];
 }
 
 export interface CalendarData {

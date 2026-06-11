@@ -25,9 +25,7 @@ use desktop_shell::commands::calibration::{
     calibration_masters_get, calibration_masters_list, calibration_matches,
 };
 use desktop_shell::commands::lifecycle::AppState;
-use desktop_shell::commands::plans::{
-    plans_apply, plans_approve, plans_discard, plans_get, plans_list,
-};
+use desktop_shell::commands::plans::{plans_apply, plans_discard, plans_retry};
 use desktop_shell::commands::preferences::{preferences_get, preferences_set};
 use desktop_shell::commands::projects::{projects_create_plan, projects_get, projects_list};
 use desktop_shell::commands::review::review_queue;
@@ -174,38 +172,91 @@ async fn stub_projects_create_plan() {
     assert!(res.is_ok(), "projects_create_plan failed: {res:?}");
 }
 
-// ─── Plans (5 commands) ─────────────────────────────────────────────────────
+// ─── Plans (spec 017 — real implementation with in-memory DB) ───────────────
 
-#[tokio::test]
-async fn stub_plans_list() {
-    let res = plans_list(None).await;
-    assert!(res.is_ok(), "plans_list failed: {res:?}");
-    assert!(!res.unwrap().is_empty());
+/// Build an `AppState` backed by an in-memory `SQLite` database.
+async fn make_plans_state() -> AppState {
+    let db = Database::in_memory().await.expect("in-memory DB");
+    db.migrate().await.expect("run migrations");
+    let pool = db.pool().clone();
+    let bus = EventBus::with_pool(pool.clone());
+    let repo = Arc::new(SqliteLifecycleRepository::new(pool, bus.clone()));
+    AppState::new(repo, bus)
 }
 
 #[tokio::test]
-async fn stub_plans_get() {
-    let res = plans_get("plan-001".to_owned()).await;
-    assert!(res.is_ok(), "plans_get failed: {res:?}");
-    assert_eq!(res.unwrap().id, "plan-001");
+async fn plans_list_returns_empty_when_no_plans() {
+    let state = make_plans_state().await;
+    let res = app_core::plans::list_plans(
+        state.repo.pool(),
+        &contracts_core::plans::PlanListRequest {
+            created_after: Some("1970-01-01T00:00:00Z".to_owned()),
+            ..Default::default()
+        },
+    )
+    .await;
+    assert!(res.is_ok(), "list_plans failed: {res:?}");
+    assert!(res.unwrap().plans.is_empty());
 }
 
 #[tokio::test]
-async fn stub_plans_approve() {
-    let res = plans_approve("plan-001".to_owned(), None).await;
-    assert!(res.is_ok(), "plans_approve failed: {res:?}");
+async fn plans_get_returns_not_found() {
+    let state = make_plans_state().await;
+    let res = app_core::plans::get_plan(state.repo.pool(), "nonexistent").await;
+    assert!(res.is_err());
+    assert_eq!(res.unwrap_err().code, "plan.not_found");
 }
 
 #[tokio::test]
-async fn stub_plans_apply() {
-    let res = plans_apply("plan-001".to_owned()).await;
-    assert!(res.is_ok(), "plans_apply failed: {res:?}");
+async fn plans_discard_returns_not_found() {
+    let state = make_plans_state().await;
+    // plans_discard is now a real command; call use case directly to avoid State injection.
+    let res = app_core::plans::discard_plan(state.repo.pool(), &state.bus, "missing").await;
+    assert!(res.is_err());
+    assert_eq!(res.unwrap_err().code, "plan.not_found");
+}
+
+// plans.apply is a spec-025 stub — tested by the compilation smoke test only.
+// The import is kept to verify the function signature compiles.
+#[allow(dead_code)]
+fn _plans_apply_compiles_check() {
+    // Verify plans_apply is importable; State injection cannot be tested outside Tauri app.
+    let _ = plans_apply;
 }
 
 #[tokio::test]
-async fn stub_plans_discard() {
-    let res = plans_discard("plan-001".to_owned()).await;
-    assert!(res.is_ok(), "plans_discard failed: {res:?}");
+async fn plans_retry_requires_terminal_parent() {
+    let state = make_plans_state().await;
+    // Insert a draft plan (non-terminal).
+    persistence_db::repositories::plans::insert_plan(
+        state.repo.pool(),
+        &persistence_db::repositories::plans::InsertPlan {
+            id: "parent-draft",
+            title: "Draft plan",
+            origin: "cleanup",
+            origin_path: None,
+            plan_type: "cleanup",
+            destructive_destination: "archive",
+            parent_plan_id: None,
+            total_bytes_required: 0,
+        },
+    )
+    .await
+    .unwrap();
+
+    let res = app_core::plans::retry_plan(
+        state.repo.pool(),
+        &state.bus,
+        "parent-draft",
+        contracts_core::plans::RetryItemsFilter::Failed,
+    )
+    .await;
+    assert!(res.is_err());
+    assert_eq!(res.unwrap_err().code, "parent.not_terminal");
+
+    // Also verify the import of plans_retry compiles.
+    let _ = plans_retry;
+    let _ = plans_discard;
 }
 
 // ─── Audit (2 commands) ─────────────────────────────────────────────────────

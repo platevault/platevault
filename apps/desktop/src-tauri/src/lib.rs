@@ -42,7 +42,10 @@ use crate::commands::lifecycle::{
 };
 use crate::commands::native::{native_directory_pick, native_file_pick, native_reveal};
 use crate::commands::patterns::{pattern_preview, pattern_resolve, pattern_validate};
-use crate::commands::plans::{plans_apply, plans_approve, plans_discard, plans_get, plans_list};
+use crate::commands::plans::{
+    archive_permanently_delete, archive_send_to_trash, plans_apply, plans_approve, plans_discard,
+    plans_get, plans_list, plans_retry,
+};
 use crate::commands::preferences::{preferences_get, preferences_set};
 use crate::commands::projects::{projects_create_plan, projects_get, projects_list};
 use crate::commands::review::review_queue;
@@ -109,6 +112,9 @@ pub fn specta_builder() -> Builder<tauri::Wry> {
             plans_approve,
             plans_apply,
             plans_discard,
+            plans_retry,
+            archive_send_to_trash,
+            archive_permanently_delete,
             // audit
             audit_list,
             audit_export,
