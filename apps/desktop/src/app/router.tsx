@@ -202,6 +202,23 @@ const settingsPaneRoute = createRoute({
   ),
 });
 
+// --- Developer Contract Diagnostics (spec 021, T012) ---
+// NOTE: This route is registered unconditionally so deep-links do not 404.
+// The ContractsPage component checks devMode on mount and renders a disabled
+// stub when devMode is off (FR-008 acceptance 2).
+// TODO(spec 021 T036): Gate registration on a compile-time constant injected
+// by the build (e.g. import.meta.env.VITE_DEV_TOOLS) once the Tauri
+// dev-tools feature propagation to Vite define is wired up.
+
+const devContractsRoute = createRoute({
+  getParentRoute: () => shellRoute,
+  path: '/dev/contracts',
+  component: lazyRouteComponent(
+    () => import('@/dev/ContractsPage'),
+    'ContractsPage',
+  ),
+});
+
 // --- Setup (standalone, no shell) ---
 
 const setupRoute = createRoute({
@@ -249,6 +266,8 @@ const routeTree = rootRoute.addChildren([
     archiveRoute,
     settingsRoute,
     settingsPaneRoute,
+    // Developer Contract Diagnostics (spec 021) — renders disabled stub when devMode off.
+    devContractsRoute,
   ]),
 ]);
 

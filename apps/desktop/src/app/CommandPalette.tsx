@@ -2,7 +2,7 @@ import { useState, useEffect, useCallback } from 'react';
 import { Dialog } from '@base-ui-components/react/dialog';
 import { Command } from 'cmdk';
 import { useNavigate, useRouterState } from '@tanstack/react-router';
-import { searchGlobal } from '@/api/commands';
+import { searchGlobal, getSettings } from '@/api/commands';
 import { openInNewWindow } from '@/lib/window';
 import type { SearchResult } from '@/bindings/types';
 
@@ -21,12 +21,38 @@ const ACTIONS: Array<{ label: string; route: string }> = [
   { label: 'New project', route: '/projects/new' },
 ];
 
+/**
+ * Developer-only palette entry (spec 021 T013).
+ * Appended to the Pages group only when devMode is on.
+ */
+const DEV_PAGES: Array<{ label: string; route: string }> = [
+  { label: 'Developer / Contracts', route: '/dev/contracts' },
+];
+
 export function CommandPalette() {
   const [open, setOpen] = useState(false);
   const [query, setQuery] = useState('');
   const [results, setResults] = useState<SearchResult[]>([]);
+  const [devMode, setDevMode] = useState(false);
   const navigate = useNavigate();
   const currentHref = useRouterState({ select: (s) => s.location.href });
+
+  // Load devMode from backend settings on mount (spec 021 T013).
+  useEffect(() => {
+    let cancelled = false;
+    getSettings({ scope: 'advanced' })
+      .then((data) => {
+        if (cancelled) return;
+        const vals = data.values as Record<string, unknown>;
+        setDevMode(vals?.devMode === true);
+      })
+      .catch(() => {
+        // Backend unavailable — stay with default false.
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, []);
 
   useEffect(() => {
     function handleKeyDown(e: KeyboardEvent) {
@@ -66,6 +92,9 @@ export function CommandPalette() {
     [navigate],
   );
 
+  // All visible pages: standard pages + dev pages when devMode is on.
+  const visiblePages = devMode ? [...PAGES, ...DEV_PAGES] : PAGES;
+
   return (
     <Dialog.Root open={open} onOpenChange={setOpen}>
       <Dialog.Portal>
@@ -96,16 +125,14 @@ export function CommandPalette() {
                       <span className="alm-palette__item-kind">{r.kind}</span>
                       <span className="alm-palette__item-label">{r.label}</span>
                       {r.sublabel && (
-                        <span className="alm-palette__item-sub">
-                          {r.sublabel}
-                        </span>
+                        <span className="alm-palette__item-sub">{r.sublabel}</span>
                       )}
                     </Command.Item>
                   ))}
                 </Command.Group>
               )}
               <Command.Group heading="Pages">
-                {PAGES.map((p) => (
+                {visiblePages.map((p) => (
                   <Command.Item
                     key={p.route}
                     className="alm-palette__item"

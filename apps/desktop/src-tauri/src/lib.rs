@@ -28,6 +28,10 @@ use crate::commands::catalogs::{
     catalog_attribution_get, catalog_download, catalog_list, catalog_manifest_fetch,
 };
 use crate::commands::cleanup::{cleanup_policy_get, cleanup_policy_update, cleanup_scan};
+#[cfg(feature = "dev-tools")]
+use crate::commands::dev::{
+    dev_calls_list, dev_contracts_list, dev_export, dev_schema_get, CallBuffer,
+};
 use crate::commands::equipment::{
     equipment_cameras_create, equipment_cameras_delete, equipment_cameras_list,
     equipment_cameras_update, equipment_filters_create, equipment_filters_delete,
@@ -95,12 +99,17 @@ use crate::commands::tour::tour_complete_step;
 
 pub const CRATE_NAME: &str = "desktop_shell";
 
-/// Build the tauri-specta [`Builder`] populated with every typed command.
+/// Shared base for specta builder — chain common config and all production
+/// commands.  Returns the builder before any feature-gated commands are added.
 ///
-/// Reused by `run` (production) and `tests/bindings.rs` (TS emission).
-#[must_use]
-#[allow(clippy::too_many_lines)]
-pub fn specta_builder() -> Builder<tauri::Wry> {
+/// # Panics / Design Note
+/// `collect_commands!` does not accept `cfg` attributes inside its token list,
+/// so feature-gated commands must be added in a *separate* `.commands()` call
+/// on a different `Builder` value.  Because `.commands()` **replaces** the
+/// command set, we handle this by having two cfg-gated public `specta_builder`
+/// functions that each call `.commands()` exactly once with the full command
+/// list for that build variant.
+fn base_builder() -> Builder<tauri::Wry> {
     Builder::<tauri::Wry>::new()
         // Several contract DTOs carry `serde_json::Value` "details" payloads;
         // their `Number` inner type erases width info, so specta would block
@@ -111,169 +120,360 @@ pub fn specta_builder() -> Builder<tauri::Wry> {
         // emits it once instead of inlining its self-referential shape, which
         // would otherwise fail with "infinitely recursive inline reference".
         .typ::<serde_json::Value>()
-        .commands(collect_commands![
-            // lifecycle (spec 002)
-            provenance_read,
-            lifecycle_transition_apply,
-            lifecycle_transition_preview,
-            lifecycle_ledger_list,
-            // sessions
-            sessions_list,
-            sessions_get,
-            sessions_calendar,
-            sessions_transition,
-            sessions_split,
-            sessions_merge,
-            // calibration (spec 029 stubs)
-            calibration_masters_list,
-            calibration_masters_get,
-            calibration_matches,
-            // calibration matching (spec 007)
-            calibration_match_suggest,
-            calibration_match_assign,
-            calibration_match_suggest_batch,
-            // targets
-            targets_list,
-            targets_get,
-            // target identity (spec 023)
-            target_identity_cmds::target_get,
-            target_identity_cmds::target_note_update,
-            target_identity_cmds::target_alias_add,
-            target_identity_cmds::target_alias_remove,
-            target_identity_cmds::target_primary_rename,
-            // target lookup + resolve (spec 013)
-            target_lookup,
-            target_resolve,
-            // projects (spec 008)
-            projects_list,
-            projects_get,
-            projects_create,
-            projects_update,
-            projects_source_add,
-            projects_source_remove,
-            projects_channels_reinfer,
-            projects_channels_dismiss_drift,
-            projects_create_plan,
-            // plans (spec 017)
-            plans_list,
-            plans_get,
-            plans_approve,
-            plans_discard,
-            plans_retry,
-            archive_send_to_trash,
-            archive_permanently_delete,
-            // plan apply (spec 025)
-            plans_apply_real,
-            plans_cancel,
-            plans_resume,
-            plans_item_skip,
-            plans_item_retry,
-            plans_apply_status,
-            // audit
-            audit_list,
-            audit_export,
-            // log stream (spec 019)
-            log_recent,
-            log_export,
-            // catalog registry (spec 014)
-            catalog_list,
-            catalog_attribution_get,
-            catalog_manifest_fetch,
-            catalog_download,
-            // review
-            review_queue,
-            // roots & scan & equipment
-            roots_list,
-            roots_register,
-            roots_register_batch,
-            roots_remap,
-            roots_remap_apply,
-            scan_start,
-            equipment_list,
-            // first-run wizard (spec 003)
-            firstrun_state,
-            firstrun_complete,
-            firstrun_restart,
-            // pattern resolver (spec 015)
-            pattern_validate,
-            pattern_resolve,
-            pattern_preview,
-            // source protection (spec 016 US2–US4)
-            source_protection_get,
-            source_protection_set,
-            plan_protection_check_cmd,
-            protection_plan_acknowledged,
-            // settings (spec 018)
-            settings_get,
-            settings_update,
-            settings_restore_defaults,
-            settings_source_override_set,
-            // preferences
-            preferences_get,
-            preferences_set,
-            // search
-            search_global,
-            // tour
-            tour_complete_step,
-            // native filesystem controls (spec 004)
-            native_directory_pick,
-            native_file_pick,
-            native_reveal,
-            // equipment CRUD (spec 030)
-            equipment_cameras_list,
-            equipment_cameras_create,
-            equipment_cameras_update,
-            equipment_cameras_delete,
-            equipment_telescopes_list,
-            equipment_telescopes_create,
-            equipment_telescopes_update,
-            equipment_telescopes_delete,
-            equipment_trains_list,
-            equipment_trains_create,
-            equipment_trains_update,
-            equipment_trains_delete,
-            equipment_filters_list,
-            equipment_filters_create,
-            equipment_filters_update,
-            equipment_filters_delete,
-            // status (spec 030)
-            status_summary,
-            // cleanup policy & scan (spec 030)
-            cleanup_policy_get,
-            cleanup_policy_update,
-            cleanup_scan,
-            // calibration tolerances (spec 030)
-            calibration_tolerances_get,
-            calibration_tolerances_update,
-            // inbox (spec 005 + 030)
-            inbox_scan,
-            inbox_scan_folder,
-            inbox_classify,
-            inbox_confirm,
-            inbox_reclassify,
-            // inventory (spec 006)
-            inventory_list,
-            inventory_session_review,
-            // ingestion settings (spec 030)
-            ingestion_settings_get,
-            ingestion_settings_update,
-            // tools (spec 011/030)
-            tools_launch,
-            tools_list,
-            tools_update,
-            tools_validate_path,
-            tools_discover,
-            // artifacts (spec 012)
-            artifact_list,
-            artifact_classify,
-            artifact_mark_resolved,
-            // manifests + notes (spec 024)
-            manifest_list,
-            manifest_get,
-            note_get,
-            note_update,
-            manifest_reveal_in_os,
-        ])
+}
+
+/// Build the tauri-specta [`Builder`] populated with every typed command.
+///
+/// Reused by `run` (production) and `tests/bindings.rs` (TS emission).
+///
+/// When the `dev-tools` feature is enabled this function includes the
+/// `dev.contracts.list`, `dev.calls.list`, and `dev.export` commands.
+/// Without the feature those commands are absent from the binary entirely.
+#[must_use]
+#[allow(clippy::too_many_lines)]
+#[cfg(not(feature = "dev-tools"))]
+pub fn specta_builder() -> Builder<tauri::Wry> {
+    base_builder().commands(collect_commands![
+        // lifecycle (spec 002)
+        provenance_read,
+        lifecycle_transition_apply,
+        lifecycle_transition_preview,
+        lifecycle_ledger_list,
+        // sessions
+        sessions_list,
+        sessions_get,
+        sessions_calendar,
+        sessions_transition,
+        sessions_split,
+        sessions_merge,
+        // calibration (spec 029 stubs)
+        calibration_masters_list,
+        calibration_masters_get,
+        calibration_matches,
+        // calibration matching (spec 007)
+        calibration_match_suggest,
+        calibration_match_assign,
+        calibration_match_suggest_batch,
+        // targets
+        targets_list,
+        targets_get,
+        // target identity (spec 023)
+        target_identity_cmds::target_get,
+        target_identity_cmds::target_note_update,
+        target_identity_cmds::target_alias_add,
+        target_identity_cmds::target_alias_remove,
+        target_identity_cmds::target_primary_rename,
+        // target lookup + resolve (spec 013)
+        target_lookup,
+        target_resolve,
+        // projects (spec 008)
+        projects_list,
+        projects_get,
+        projects_create,
+        projects_update,
+        projects_source_add,
+        projects_source_remove,
+        projects_channels_reinfer,
+        projects_channels_dismiss_drift,
+        projects_create_plan,
+        // plans (spec 017)
+        plans_list,
+        plans_get,
+        plans_approve,
+        plans_discard,
+        plans_retry,
+        archive_send_to_trash,
+        archive_permanently_delete,
+        // plan apply (spec 025)
+        plans_apply_real,
+        plans_cancel,
+        plans_resume,
+        plans_item_skip,
+        plans_item_retry,
+        plans_apply_status,
+        // audit
+        audit_list,
+        audit_export,
+        // log stream (spec 019)
+        log_recent,
+        log_export,
+        // catalog registry (spec 014)
+        catalog_list,
+        catalog_attribution_get,
+        catalog_manifest_fetch,
+        catalog_download,
+        // review
+        review_queue,
+        // roots & scan & equipment
+        roots_list,
+        roots_register,
+        roots_register_batch,
+        roots_remap,
+        roots_remap_apply,
+        scan_start,
+        equipment_list,
+        // first-run wizard (spec 003)
+        firstrun_state,
+        firstrun_complete,
+        firstrun_restart,
+        // pattern resolver (spec 015)
+        pattern_validate,
+        pattern_resolve,
+        pattern_preview,
+        // source protection (spec 016 US2–US4)
+        source_protection_get,
+        source_protection_set,
+        plan_protection_check_cmd,
+        protection_plan_acknowledged,
+        // settings (spec 018)
+        settings_get,
+        settings_update,
+        settings_restore_defaults,
+        settings_source_override_set,
+        // preferences
+        preferences_get,
+        preferences_set,
+        // search
+        search_global,
+        // tour
+        tour_complete_step,
+        // native filesystem controls (spec 004)
+        native_directory_pick,
+        native_file_pick,
+        native_reveal,
+        // equipment CRUD (spec 030)
+        equipment_cameras_list,
+        equipment_cameras_create,
+        equipment_cameras_update,
+        equipment_cameras_delete,
+        equipment_telescopes_list,
+        equipment_telescopes_create,
+        equipment_telescopes_update,
+        equipment_telescopes_delete,
+        equipment_trains_list,
+        equipment_trains_create,
+        equipment_trains_update,
+        equipment_trains_delete,
+        equipment_filters_list,
+        equipment_filters_create,
+        equipment_filters_update,
+        equipment_filters_delete,
+        // status (spec 030)
+        status_summary,
+        // cleanup policy & scan (spec 030)
+        cleanup_policy_get,
+        cleanup_policy_update,
+        cleanup_scan,
+        // calibration tolerances (spec 030)
+        calibration_tolerances_get,
+        calibration_tolerances_update,
+        // inbox (spec 005 + 030)
+        inbox_scan,
+        inbox_scan_folder,
+        inbox_classify,
+        inbox_confirm,
+        inbox_reclassify,
+        // inventory (spec 006)
+        inventory_list,
+        inventory_session_review,
+        // ingestion settings (spec 030)
+        ingestion_settings_get,
+        ingestion_settings_update,
+        // tools (spec 011/030)
+        tools_launch,
+        tools_list,
+        tools_update,
+        tools_validate_path,
+        tools_discover,
+        // artifacts (spec 012)
+        artifact_list,
+        artifact_classify,
+        artifact_mark_resolved,
+        // manifests + notes (spec 024)
+        manifest_list,
+        manifest_get,
+        note_get,
+        note_update,
+        manifest_reveal_in_os,
+    ])
+}
+
+/// `dev-tools` variant: identical to the production builder plus the three
+/// developer-diagnostics commands (spec 021).
+///
+/// Release binaries MUST NOT be compiled with the `dev-tools` feature.
+#[must_use]
+#[allow(clippy::too_many_lines)]
+#[cfg(feature = "dev-tools")]
+pub fn specta_builder() -> Builder<tauri::Wry> {
+    base_builder().commands(collect_commands![
+        // lifecycle (spec 002)
+        provenance_read,
+        lifecycle_transition_apply,
+        lifecycle_transition_preview,
+        lifecycle_ledger_list,
+        // sessions
+        sessions_list,
+        sessions_get,
+        sessions_calendar,
+        sessions_transition,
+        sessions_split,
+        sessions_merge,
+        // calibration (spec 029 stubs)
+        calibration_masters_list,
+        calibration_masters_get,
+        calibration_matches,
+        // calibration matching (spec 007)
+        calibration_match_suggest,
+        calibration_match_assign,
+        calibration_match_suggest_batch,
+        // targets
+        targets_list,
+        targets_get,
+        // target identity (spec 023)
+        target_identity_cmds::target_get,
+        target_identity_cmds::target_note_update,
+        target_identity_cmds::target_alias_add,
+        target_identity_cmds::target_alias_remove,
+        target_identity_cmds::target_primary_rename,
+        // target lookup + resolve (spec 013)
+        target_lookup,
+        target_resolve,
+        // projects (spec 008)
+        projects_list,
+        projects_get,
+        projects_create,
+        projects_update,
+        projects_source_add,
+        projects_source_remove,
+        projects_channels_reinfer,
+        projects_channels_dismiss_drift,
+        projects_create_plan,
+        // plans (spec 017)
+        plans_list,
+        plans_get,
+        plans_approve,
+        plans_discard,
+        plans_retry,
+        archive_send_to_trash,
+        archive_permanently_delete,
+        // plan apply (spec 025)
+        plans_apply_real,
+        plans_cancel,
+        plans_resume,
+        plans_item_skip,
+        plans_item_retry,
+        plans_apply_status,
+        // audit
+        audit_list,
+        audit_export,
+        // log stream (spec 019)
+        log_recent,
+        log_export,
+        // catalog registry (spec 014)
+        catalog_list,
+        catalog_attribution_get,
+        catalog_manifest_fetch,
+        catalog_download,
+        // review
+        review_queue,
+        // roots & scan & equipment
+        roots_list,
+        roots_register,
+        roots_register_batch,
+        roots_remap,
+        roots_remap_apply,
+        scan_start,
+        equipment_list,
+        // first-run wizard (spec 003)
+        firstrun_state,
+        firstrun_complete,
+        firstrun_restart,
+        // pattern resolver (spec 015)
+        pattern_validate,
+        pattern_resolve,
+        pattern_preview,
+        // source protection (spec 016 US2–US4)
+        source_protection_get,
+        source_protection_set,
+        plan_protection_check_cmd,
+        protection_plan_acknowledged,
+        // settings (spec 018)
+        settings_get,
+        settings_update,
+        settings_restore_defaults,
+        settings_source_override_set,
+        // preferences
+        preferences_get,
+        preferences_set,
+        // search
+        search_global,
+        // tour
+        tour_complete_step,
+        // native filesystem controls (spec 004)
+        native_directory_pick,
+        native_file_pick,
+        native_reveal,
+        // equipment CRUD (spec 030)
+        equipment_cameras_list,
+        equipment_cameras_create,
+        equipment_cameras_update,
+        equipment_cameras_delete,
+        equipment_telescopes_list,
+        equipment_telescopes_create,
+        equipment_telescopes_update,
+        equipment_telescopes_delete,
+        equipment_trains_list,
+        equipment_trains_create,
+        equipment_trains_update,
+        equipment_trains_delete,
+        equipment_filters_list,
+        equipment_filters_create,
+        equipment_filters_update,
+        equipment_filters_delete,
+        // status (spec 030)
+        status_summary,
+        // cleanup policy & scan (spec 030)
+        cleanup_policy_get,
+        cleanup_policy_update,
+        cleanup_scan,
+        // calibration tolerances (spec 030)
+        calibration_tolerances_get,
+        calibration_tolerances_update,
+        // inbox (spec 005 + 030)
+        inbox_scan,
+        inbox_scan_folder,
+        inbox_classify,
+        inbox_confirm,
+        inbox_reclassify,
+        // inventory (spec 006)
+        inventory_list,
+        inventory_session_review,
+        // ingestion settings (spec 030)
+        ingestion_settings_get,
+        ingestion_settings_update,
+        // tools (spec 011/030)
+        tools_launch,
+        tools_list,
+        tools_update,
+        tools_validate_path,
+        tools_discover,
+        // artifacts (spec 012)
+        artifact_list,
+        artifact_classify,
+        artifact_mark_resolved,
+        // manifests + notes (spec 024)
+        manifest_list,
+        manifest_get,
+        note_get,
+        note_update,
+        manifest_reveal_in_os,
+        // developer diagnostics (spec 021) — dev-tools build only
+        dev_contracts_list,
+        dev_calls_list,
+        dev_export,
+        dev_schema_get,
+    ])
 }
 
 /// Build the Tauri [`App`] **without** starting the event loop.
@@ -315,6 +515,12 @@ pub fn run_app(app: tauri::App, pool: SqlitePool) {
     let state = AppState::new(repo, bus);
 
     app.manage(state);
+
+    // Developer diagnostics call buffer (spec 021).
+    // Always managed so the type is available; only populated when dev-tools
+    // feature is compiled in and devMode is on at runtime.
+    #[cfg(feature = "dev-tools")]
+    app.manage(CallBuffer::new());
 
     app.run(|_handle, _event| {});
 }

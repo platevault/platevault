@@ -1,0 +1,50 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://astro-plan/contracts/dev/ContractMeta.v1.json",
+  "title": "ContractMeta",
+  "description": "Metadata for a single registered contract (spec 021, US1).",
+  "type": "object",
+  "required": ["name", "version", "schemaPath", "direction", "replaySafe"],
+  "additionalProperties": false,
+  "properties": {
+    "name": {
+      "type": "string",
+      "description": "Operation name, e.g. plan.create."
+    },
+    "version": {
+      "type": "string",
+      "description": "Semantic version of the contract shape."
+    },
+    "schemaPath": {
+      "type": "string",
+      "description": "Absolute path to the JSON Schema file backing this contract."
+    },
+    "direction": {
+      "type": "string",
+      "enum": ["ui-to-core", "core-to-ui"],
+      "description": "Matches the direction field in the schema's operation block."
+    },
+    "replaySafe": {
+      "type": "boolean",
+      "default": false,
+      "description": "Default false. True only when the contract explicitly opts in. Write contracts must not set true without an allow-list entry (CI lint enforced)."
+    },
+    "sensitiveFields": {
+      "type": "array",
+      "items": { "type": "string" },
+      "description": "Optional JSON Pointer paths whose values are redacted before storage."
+    },
+    "tsHash": {
+      "type": "string",
+      "description": "SHA-256 of canonical JSON serialization of the TypeScript-side schema declaration. Present when known at startup."
+    },
+    "rustHash": {
+      "type": "string",
+      "description": "SHA-256 of canonical JSON serialization of the Rust-side schema declaration. Present when known at startup."
+    },
+    "mismatch": {
+      "type": "boolean",
+      "description": "True when tsHash and rustHash are both present and differ."
+    }
+  }
+}

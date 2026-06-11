@@ -1148,3 +1148,101 @@ export type {
   ManifestOpError,
   ManifestRevealRequest,
 };
+
+// ── Developer Contract Diagnostics (spec 021) ─────────────────────────────────
+// These commands are only available in dev-tools builds. Calling them in
+// production builds will return an error from Tauri (command not found).
+
+export interface ContractMeta {
+  name: string;
+  version: string;
+  schemaPath: string;
+  direction: 'ui-to-core' | 'core-to-ui';
+  replaySafe: boolean;
+  sensitiveFields?: string[];
+  tsHash?: string;
+  rustHash?: string;
+  mismatch?: boolean;
+}
+
+export interface ContractCallError {
+  code: string;
+  message: string;
+}
+
+export interface ContractCall {
+  id: string;
+  contract: string;
+  contractVersion: string;
+  request: unknown;
+  response?: unknown;
+  error?: ContractCallError;
+  startedAt: string;
+  durationMs: number;
+  payloadTruncated: boolean;
+}
+
+export interface DevContractsListResponse {
+  contracts: ContractMeta[];
+}
+
+export interface DevCallsListResponse {
+  calls: ContractCall[];
+}
+
+export interface DevExportResponse {
+  writtenPath: string;
+  callCount: number;
+  contractCount: number;
+}
+
+/**
+ * `dev.contracts.list` — enumerate all registered contracts (spec 021 US1).
+ * Only available in dev-tools builds when devMode is on.
+ */
+export async function devContractsList(args?: {
+  requestId?: string;
+}): Promise<DevContractsListResponse> {
+  return invoke<DevContractsListResponse>('dev.contracts.list', { request: args ?? {} });
+}
+
+/**
+ * `dev.calls.list` — return most-recent recorded calls (spec 021 US2).
+ * Only available in dev-tools builds when devMode is on.
+ */
+export async function devCallsList(args?: {
+  requestId?: string;
+  limit?: number;
+}): Promise<DevCallsListResponse> {
+  return invoke<DevCallsListResponse>('dev.calls.list', { request: args ?? {} });
+}
+
+/**
+ * `dev.export` — export contract registry + calls to a JSON file (spec 021 US4).
+ * Only available in dev-tools builds when devMode is on.
+ */
+export async function devExport(args: {
+  outputPath: string;
+  includeVerbatimPaths?: boolean;
+  includeContracts?: boolean;
+  includeCalls?: boolean;
+  requestId?: string;
+}): Promise<DevExportResponse> {
+  return invoke<DevExportResponse>('dev.export', { request: args });
+}
+
+export interface DevSchemaGetResponse {
+  found: boolean;
+  content?: string;
+}
+
+/**
+ * `dev.schema.get` — read a JSON Schema file server-side (spec 021 US3).
+ * Returns `{ found: true, content }` on success, `{ found: false }` when absent.
+ * Only available in dev-tools builds when devMode is on.
+ */
+export async function devSchemaGet(schemaPath: string): Promise<DevSchemaGetResponse> {
+  return invoke<DevSchemaGetResponse>('dev.schema.get', {
+    request: { schemaPath },
+  });
+}

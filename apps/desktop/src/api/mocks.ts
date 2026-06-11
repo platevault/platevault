@@ -421,6 +421,56 @@ export async function mockInvoke<T>(
       } as T;
     }
 
+    // ── Developer diagnostics (spec 021) ─────────────────────────────────────
+
+    case 'dev.contracts.list': {
+      return {
+        contracts: [
+          {
+            name: 'sessions.list',
+            version: '1.0.0',
+            schemaPath: '',
+            direction: 'ui-to-core',
+            replaySafe: true,
+            sensitiveFields: [],
+          },
+          {
+            name: 'settings.update',
+            version: '1.0.0',
+            schemaPath: '',
+            direction: 'ui-to-core',
+            replaySafe: false,
+            sensitiveFields: [],
+          },
+        ],
+      } as T;
+    }
+
+    case 'dev.calls.list': {
+      return { calls: [] } as T;
+    }
+
+    case 'dev.export': {
+      return {
+        writtenPath: '/tmp/dev-export.json',
+        callCount: 0,
+        contractCount: 2,
+      } as T;
+    }
+
+    case 'dev.schema.get': {
+      const req = (_args as { request?: { schemaPath?: string } } | undefined)?.request;
+      const path = req?.schemaPath ?? '';
+      if (!path) {
+        return { found: false } as T;
+      }
+      // Return a minimal stub schema for any non-empty path.
+      return {
+        found: true,
+        content: JSON.stringify({ '$schema': 'https://json-schema.org/draft/2020-12/schema', title: 'mock-schema', description: `Mock schema for ${path}` }, null, 2),
+      } as T;
+    }
+
     default:
       throw new Error(`Unknown mock command: ${cmd}`);
   }

@@ -43,5 +43,10 @@ uuid = { workspace = true }
 # helpers). Only dev-dependencies pull it in so release builds stay clean.
 tauri = { workspace = true, features = ["test"] }
 
+[features]
+# Developer-mode surface (spec 021). Release binaries MUST NOT enable this.
+# Propagates to app_core so the dev_contracts use-case module is compiled in.
+dev-tools = ["app_core/dev-tools"]
+
 [lints]
 workspace = true
