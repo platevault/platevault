@@ -186,6 +186,43 @@ blocked by a repo hook — don't delete branches.
    025 trash_op (currently safe TrashUnavailable stub).
 8. **project.unarchived** named event (009) not emitted (uses generic transition event).
 
+## ✅ RUN COMPLETE (2026-06-11) — all 21 queue specs implemented + merged to main
+
+Final gates @ HEAD: `cargo test --workspace` 0 failed · `cargo fmt --check` clean ·
+`cargo clippy -D warnings` clean · `just typecheck` clean · vitest **465 passed** ·
+30 migrations (0001–0030). All 32 spec dirs accounted for: foundation (002/003/004/
+020/022/027/029/032) pre-built; 001 closed; 030 Superseded + 031 Closed (v4 reconcile);
+**021 specs built this run**: 018,015,017,025,014,013,008,009,005,006,007,011,012,016,
+023,024,019,021,026,010,028.
+
+Each spec: real backend (persistence migration + repository + app/core use case +
+contracts + Tauri commands + audit) + design-v4 UI wired off fixtures to real
+commands + vitest, reviewed against its diff before commit (orchestrator review gate
+caught + fixed: 018 transport regression, 008 bindings regression, 011 tool-id alias,
+021 SchemaViewer typecheck, 028 33 broken token refs).
+
+### Integration backlog (deferred — needs the Windows-native GUI runtime to verify)
+The per-spec LOGIC is built + unit/vitest-tested; these runtime/cross-spec WIRING
+seams remain for a final integration pass on the real Tauri app (WSL is headless):
+1. **Live event-bus subscriber startup spawns** (mirror spec-002 StalePropagator in
+   `run_app`): inbox plan_listener (005), log forwarder (019, pull path IS live),
+   manifest workflow.run_completed subscriber (024), guided auto-advance (010),
+   artifact watcher notify-loop (012). Each is implemented + tested; only the
+   `tokio::spawn` at Tauri init is deferred.
+2. **Cross-spec data plumbing**: plan_items need source_id/category columns so 016
+   protection gating fires on real plans; inbox confirm must emit inventory.confirmed
+   (010) + populate session root_id (006) + write calibration/acquisition fingerprints
+   (007); target_id FK population from ingestion (023 chips + history).
+3. **External**: astro-plan-catalogs manifest repo/URL+minisign unpublished → 014
+   downloads inert; reqwest 0.13 machinery complete.
+4. **Hardening**: HMAC approval token (025), trash crate (025 trash_op), 002 `project`
+   vs 008 `projects` table reconciliation, 0014↔0019 destructive_destination vocab,
+   014↔013 catalog slug, knip/madge/bundle baseline (028).
+5. **GUI/visual**: Playwright smoke for every UI surface — Windows-native preview.
+
+See `autonomous-run-2026-06-decisions.md` for judgment calls + the Known-cross-spec-
+reconciliation-items list above for specifics.
+
 ## Progress log (newest first)
 
 - 2026-06-11: Item 0 done — 030 marked Superseded, 031 marked Closed (v4 truth).
