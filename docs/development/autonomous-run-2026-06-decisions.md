@@ -12,6 +12,37 @@
 
 ---
 
+## Session 2026-06-11 — Resume + APM tooling fix
+
+### D-013 — Installed opt-in SpecKit layers (steering-speckit + speckit-dag-hooks)
+
+- **Context**: `apm.yml` declared only `packages/speckit` (the six agents + skills).
+  The opinionated workflow layers it documents as opt-in — `steering-speckit`
+  (mandatory-gated Phase 1/2/3 DAG + human-gating rules) and `speckit-dag-hooks`
+  (the DAG dispatcher + enforcement hooks) — were **absent** from the root
+  `apm.yml` even though `.claude/skills/speckit-dag/` was partially deployed.
+- **Decision**: Added both `srobroek/agentic-packages/packages/steering-speckit#main`
+  and `srobroek/agentic-packages/packages/speckit-dag-hooks#main` to the root
+  `apm.yml` dependency list (after the `speckit` entry). User ran the install.
+- **Sandbox finding (for future runs)**: the Claude Code sandbox enforces
+  read-only on `.claude/{skills,hooks,commands,agents,settings*.json}` by ext4
+  RO bind-mounts (matching the sandbox `denyWithinAllow` list). `apm install`
+  writes there and therefore **fails inside the sandbox** with `[Errno 30]
+  Read-only file system` — it must be run with the sandbox disabled (or by the
+  user outside the harness). `.claude/hooks` had additionally been clobbered by
+  a `/dev/null` (1,3) char-device / devtmpfs RO mount.
+
+### D-014 — Implementation-state ground truth before resuming
+
+- **Context**: Per-spec tasks.md checkbox counts undercount reality: design-v4
+  (027/029/030/031/032) landed large frontend+backend work without ticking the
+  older domain specs (005/006/007/008…). "0/0" counts are a checkbox-format
+  artifact, not "no tasks". Implementing blindly off checkboxes would duplicate
+  or conflict with shipped code.
+- **Decision**: Run parallel read-only reconnaissance to map actual code-vs-spec
+  state and v4-deprecation status for every not-yet-verified spec, then execute
+  remaining specs in dependency order one at a time. Results recorded below.
+
 ## Spec 020 — Router & URL State
 
 ### DV-006 — Spec 020 describes a pre-design-v4 application (BLOCKER, needs user)
@@ -105,6 +136,45 @@
   not run. Deferred to the Windows-native preview (consistent with the GUI
   constraint). Mitigation: 27 vitest cover the contract/guard logic; `tsc` +
   `cargo check` pass; the redirect/cleanup paths are loop-safe by construction.
+
+## Spec 016 — Source Protection Defaults
+
+### DV-011 — 016 US2–US4 blocked on unbuilt foundation specs
+
+- **Backend reality (verified 2026-06-10)**: persistence/db has a migration
+  framework (0001–0009) + repositories; audit has `AuditEventType`/`EventBus`;
+  fs/planner has `PlanItem`/`PlanItemAction` + a `permanent_delete_approved`
+  gate. BUT there is **no `Source`/`source_id` concept anywhere** (spec 008
+  Sources unbuilt), **no cleanup pipeline** (017), **no archive pipeline** (025),
+  and **no metadata category tagging** wired (010).
+- **Impact by phase**:
+  - **US1 (T003–T005)** global defaults = persistence row + audit + settings
+    wiring. **Self-contained, buildable now**, and it is the part the
+    constitution actually requires ("protected categories MUST be documented
+    before any cleanup plan").
+  - **US2 (T010–T016)** per-source override → needs Sources (008). **Blocked.**
+  - **US3 (T020–T025)** plan gating → needs cleanup (017) + archive (025) plan
+    generation. **Blocked.**
+  - **US4 (T030–T034)** category enforcement → needs metadata categories (010)
+    + plan items. **Blocked.**
+- **Decision**: implement **US1 only**; defer US2–US4 with the dependency
+  blockers recorded. Building them now would mean coding against absent
+  interfaces. (Pending user confirmation — material scope reduction.)
+
+## Spec 024 — Project Manifests & Notes
+
+### DV-012 — 024 partially buildable; depends on spec 012 + projects backend
+
+- **Reality**: `crates/app/core/src/project_notes.rs` exists but is a **stub**
+  (DB→disk sync, no real `project_notes` table); `crates/project/structure`
+  has no `manifest.rs`. Manifests/notes tables are new and keyed by a
+  `project_id` string.
+- **Buildable**: manifest writer + `manifests`/`project_notes` DB schema,
+  `project.manifest.list/get`, `project.note.update`, notes adapter,
+  `reveal_in_os` shell adapter, audit events, and most integration tests.
+- **Blocked/limited**: T2.4 / T2.7 / TX.8 depend on **spec 012's
+  `workflow.run_completed` event (unbuilt)**; a real `projects` persistence
+  source-of-truth is thin (UI projects are fixtures).
 
 ## Spec 022 — Mantine Prototype / Design System
 
