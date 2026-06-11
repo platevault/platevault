@@ -13,17 +13,25 @@ import { checkFirstRunComplete } from './first-run';
 import {
   makeValidateSearch,
   parseNumber,
+  parseString,
   parseEnum,
   parseCsvEnum,
   FRAME_TYPES,
   INBOX_GROUPS,
   PROJECT_STATES,
+  INVENTORY_FRAME_FILTERS,
+  REVIEW_FILTERS,
 } from '@/lib/route-contract';
 
 /** Parse a path-param id to a number; NaN-safe `selected` search for redirects. */
 function selectedSearch(rawId: string): { selected?: number } {
   const id = Number(rawId);
   return Number.isFinite(id) ? { selected: id } : {};
+}
+
+/** String `selected` redirect for routes where IDs are UUIDs (e.g. sessions). */
+function selectedSearchString(rawId: string): { selected?: string } {
+  return rawId && rawId.trim() !== '' ? { selected: rawId.trim() } : {};
 }
 
 // Root route — bare Outlet so setup can render without the shell
@@ -43,7 +51,14 @@ const shellRoute = createRoute({
 const sessionsRoute = createRoute({
   getParentRoute: () => shellRoute,
   path: '/sessions',
-  validateSearch: makeValidateSearch({ selected: parseNumber }),
+  validateSearch: makeValidateSearch({
+    // Spec 006: session IDs are UUIDs (switched from legacy numeric fixtures).
+    selected: parseString,
+    // Spec 006 inventory filters — applied server-side by inventory.list.
+    sourceFilter: parseEnum(['all'] as const),
+    frameFilter: parseEnum(INVENTORY_FRAME_FILTERS),
+    reviewFilter: parseEnum(REVIEW_FILTERS),
+  }),
   component: lazyRouteComponent(
     () => import('@/features/sessions/SessionsPage'),
     'SessionsPage',
@@ -54,7 +69,7 @@ const sessionDetailRoute = createRoute({
   getParentRoute: () => shellRoute,
   path: '/sessions/$id',
   beforeLoad: ({ params }) => {
-    throw redirect({ to: '/sessions', search: selectedSearch(params.id) });
+    throw redirect({ to: '/sessions', search: selectedSearchString(params.id) });
   },
 });
 

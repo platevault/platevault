@@ -36,6 +36,9 @@ const SPEC_CONTRACT_ALLOWLIST = [
   // Spec 013 — Target Lookup From FITS OBJECT
   "013-target-lookup-from-fits-object/contracts/target.lookup.json",
   "013-target-lookup-from-fits-object/contracts/target.resolve.json",
+  // Spec 006 — Inventory Lifecycle
+  "006-inventory-library-lifecycle/contracts/inventory.list.json",
+  "006-inventory-library-lifecycle/contracts/inventory.session.review.json",
 ];
 
 function findSpecContracts() {

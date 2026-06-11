@@ -4,7 +4,7 @@
 -- Adds 'mkdir' and 'write_manifest' to the plan_items action allowed values.
 --
 -- SQLite does not support ALTER TABLE ... MODIFY CONSTRAINT, so we recreate
--- both tables (plans and plan_items) with the expanded CHECKs.  All existing
+-- both tables (plans and plan_items) with the expanded constraints. All existing
 -- data is preserved via INSERT INTO ... SELECT.
 --
 -- Spec 008: project.create generates a FilesystemPlan of type 'project_create'

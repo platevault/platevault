@@ -363,6 +363,47 @@ export async function mockInvoke<T>(
       } as T;
     }
 
+    // ── Inventory commands (spec 006) ─────────────────────────────────────────
+
+    case 'inventory.list': {
+      const { INVENTORY_LIST_RESPONSE, INVENTORY_SOURCES } = await import(
+        '@/data/fixtures/inventory'
+      );
+      const req = (_args as { req?: { filters?: { reviewFilter?: string } } } | undefined)?.req;
+      const reviewFilter = req?.filters?.reviewFilter;
+      // If reviewFilter=ignored, include ignored sessions; otherwise exclude them.
+      const sources =
+        reviewFilter === 'ignored'
+          ? INVENTORY_SOURCES.map((src) => ({
+              ...src,
+              sessions: src.sessions.filter((s) => s.state === 'ignored'),
+            })).filter((src) => src.sessions.length > 0)
+          : INVENTORY_LIST_RESPONSE.sources;
+      return {
+        ...INVENTORY_LIST_RESPONSE,
+        sources,
+        requestId: req?.filters ? INVENTORY_LIST_RESPONSE.requestId : INVENTORY_LIST_RESPONSE.requestId,
+      } as T;
+    }
+
+    case 'inventory.session.review': {
+      const req = (_args as {
+        req?: { sessionId?: string; nextState?: string; requestId?: string };
+      } | undefined)?.req;
+      const requestId = req?.requestId ?? '00000000-0000-0000-0000-000000000099';
+      // Mock: always succeeds (idempotency handled by noop check in real impl).
+      return {
+        status: 'success',
+        contractVersion: '2.0.0',
+        requestId,
+        appliedAt: new Date().toISOString(),
+        entityType: 'acquisition_session',
+        priorState: 'needs_review',
+        newState: req?.nextState ?? 'confirmed',
+        auditId: `audit-${Date.now()}`,
+      } as T;
+    }
+
     default:
       throw new Error(`Unknown mock command: ${cmd}`);
   }

@@ -12,6 +12,17 @@ import type { CalibrationKind, ProjectState, SessionState } from '@/bindings';
 // --- Local enums not present in bindings (UI-only filter/group vocab) ---
 
 export type FrameType = 'light' | 'dark' | 'flat' | 'bias';
+/** Inventory frame filter — includes 'mixed' sentinel (spec 006 FR-002). */
+export type InventoryFrameFilter = 'light' | 'dark' | 'flat' | 'bias' | 'mixed';
+/** Inventory review filter — 'all' disables state filtering (spec 006 FR-010). */
+export type ReviewFilter =
+  | 'all'
+  | 'discovered'
+  | 'candidate'
+  | 'needs_review'
+  | 'confirmed'
+  | 'rejected'
+  | 'ignored';
 export type SessionsGroup = 'none' | 'target' | 'month';
 export type InboxGroup = 'none' | 'type' | 'date';
 
@@ -45,6 +56,22 @@ export const CALIBRATION_KINDS = [
 ] as const satisfies readonly CalibrationKind[];
 
 export const FRAME_TYPES = ['light', 'dark', 'flat', 'bias'] as const satisfies readonly FrameType[];
+export const INVENTORY_FRAME_FILTERS = [
+  'light',
+  'dark',
+  'flat',
+  'bias',
+  'mixed',
+] as const satisfies readonly InventoryFrameFilter[];
+export const REVIEW_FILTERS = [
+  'all',
+  'discovered',
+  'candidate',
+  'needs_review',
+  'confirmed',
+  'rejected',
+  'ignored',
+] as const satisfies readonly ReviewFilter[];
 export const SESSIONS_GROUPS = ['none', 'target', 'month'] as const satisfies readonly SessionsGroup[];
 export const INBOX_GROUPS = ['none', 'type', 'date'] as const satisfies readonly InboxGroup[];
 

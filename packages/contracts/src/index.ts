@@ -29,6 +29,10 @@ export type * as NativeReveal from "./generated/native.reveal";
 export type * as TargetLookup from "./generated/target.lookup";
 export type * as TargetResolve from "./generated/target.resolve";
 
+// Spec 006 — Inventory Lifecycle.
+export type * as InventoryList from "./generated/inventory.list";
+export type * as InventorySessionReview from "./generated/inventory.session.review";
+
 // Spec 022 — Desktop theme mode (theme.get / theme.set).
 export type * as ThemeGet from "./generated/theme.get";
 export type * as ThemeSet from "./generated/theme.set";
