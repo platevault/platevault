@@ -1,7 +1,7 @@
 # IMAGETYP Normalization Research
 
-**Spec**: 005-inbox-mixed-folder-split  
-**Task**: T0-IMAGETYP-Research  
+**Spec**: 005-inbox-mixed-folder-split
+**Task**: T0-IMAGETYP-Research
 **Status**: Complete — normalization table shipped in `crates/metadata/core/src/lib.rs`
 
 ## Summary

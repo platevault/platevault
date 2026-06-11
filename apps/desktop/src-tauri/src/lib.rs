@@ -15,6 +15,7 @@ use sqlx::SqlitePool;
 use tauri::Manager;
 use tauri_specta::{collect_commands, Builder};
 
+use crate::commands::artifacts::{artifact_classify, artifact_list, artifact_mark_resolved};
 use crate::commands::audit::{audit_export, audit_list};
 use crate::commands::calibration::{
     calibration_masters_get, calibration_masters_list, calibration_match_assign,
@@ -239,6 +240,10 @@ pub fn specta_builder() -> Builder<tauri::Wry> {
             tools_update,
             tools_validate_path,
             tools_discover,
+            // artifacts (spec 012)
+            artifact_list,
+            artifact_classify,
+            artifact_mark_resolved,
         ])
 }
 

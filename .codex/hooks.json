@@ -13,6 +13,19 @@
           }
         ],
         "_apm_source": "speckit"
+      },
+      {
+        "hooks": [
+          {
+            "type": "command",
+            "command": "python3 .codex/hooks/speckit-dag-hooks/scripts/dispatcher.py .codex/hooks/speckit-dag-hooks/scripts/nodes.json",
+            "args": [
+              "pre"
+            ],
+            "timeout": 5
+          }
+        ],
+        "_apm_source": "speckit-dag-hooks"
       }
     ],
     "PreToolUse": [
@@ -28,21 +41,66 @@
           }
         ],
         "_apm_source": "speckit"
-      }
-    ],
-    "PostToolUse": [
+      },
       {
         "hooks": [
           {
             "type": "command",
-            "command": ".agents/skills/speckit-dag/scripts/dispatcher.sh",
+            "command": "python3 .codex/hooks/speckit-dag-hooks/scripts/dispatcher.py .codex/hooks/speckit-dag-hooks/scripts/nodes.json",
+            "args": [
+              "pre"
+            ],
+            "timeout": 5
+          }
+        ],
+        "_apm_source": "speckit-dag-hooks"
+      }
+    ],
+    "PostToolUse": [
+      {
+        "matcher": "Bash",
+        "hooks": [
+          {
+            "type": "command",
+            "command": ".codex/hooks/mcp-repomix/scripts/repomix-refresh-snapshot.sh",
+            "if": "Bash(git switch -c*)|Bash(git switch --create*)|Bash(git checkout -b*)|Bash(git checkout -B*)|Bash(git worktree add*)|Bash(git merge*)|Bash(git pull*)|Bash(git rebase*)"
+          }
+        ],
+        "_apm_source": "mcp-repomix"
+      },
+      {
+        "matcher": "Bash",
+        "hooks": [
+          {
+            "type": "command",
+            "command": ".codex/hooks/speckit/scripts/speckit-task-commit-check.sh",
+            "if": "Bash(git commit*)"
+          }
+        ],
+        "_apm_source": "speckit"
+      },
+      {
+        "matcher": "apply_patch",
+        "hooks": [
+          {
+            "type": "command",
+            "command": ".codex/hooks/speckit/scripts/speckit-task-issue-sync.sh"
+          }
+        ],
+        "_apm_source": "speckit"
+      },
+      {
+        "hooks": [
+          {
+            "type": "command",
+            "command": "python3 .codex/hooks/speckit-dag-hooks/scripts/dispatcher.py .codex/hooks/speckit-dag-hooks/scripts/nodes.json",
             "args": [
               "post"
             ],
             "timeout": 5
           }
         ],
-        "_apm_source": "speckit"
+        "_apm_source": "speckit-dag-hooks"
       }
     ]
   }

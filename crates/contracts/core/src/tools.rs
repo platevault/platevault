@@ -151,3 +151,76 @@ pub struct ToolDiscoveryEntry {
 pub struct ToolDiscoverResponse {
     pub entries: Vec<ToolDiscoveryEntry>,
 }
+
+// ── Spec 012: Artifact observation DTOs ───────────────────────────────────────
+
+/// Summary of a single observed `ProcessingArtifact` row (spec 012, artifact.list).
+///
+/// Matches the `Artifact` shape from `specs/012-processing-artifact-observation/contracts/artifact.list.json`.
+#[derive(Clone, Debug, Serialize, Deserialize, Type)]
+#[serde(rename_all = "camelCase")]
+pub struct ArtifactSummary {
+    pub id: String,
+    pub project_id: String,
+    /// Attribution to a tool launch from spec 011; `None` when unattributed.
+    pub tool_launch_id: Option<String>,
+    /// Project-relative path.
+    pub path: String,
+    /// `intermediate` | `master` | `final`
+    pub kind: String,
+    /// Workflow-profile tool id (e.g. `pixinsight`, `siril`).
+    pub tool: String,
+    pub detected_at: String,
+    pub last_seen_at: String,
+    /// `present` | `missing` | `user_resolved_missing`
+    pub state: String,
+    pub classification_confidence: f64,
+    /// `rule` | `manual_override` | `fallback`
+    pub classification_source: String,
+    pub size_bytes: i64,
+}
+
+/// Request DTO for `artifact.list` (spec 012 T020/TX01).
+#[derive(Clone, Debug, Serialize, Deserialize, Type)]
+#[serde(rename_all = "camelCase")]
+pub struct ArtifactListRequest {
+    pub project_id: String,
+    /// Optional state filter. If empty/omitted, defaults to `["present","missing"]`.
+    #[serde(default)]
+    pub include_states: Vec<String>,
+}
+
+/// Response DTO for `artifact.list`.
+#[derive(Clone, Debug, Serialize, Deserialize, Type)]
+#[serde(rename_all = "camelCase")]
+pub struct ArtifactListResponse {
+    pub artifacts: Vec<ArtifactSummary>,
+}
+
+/// Request DTO for `artifact.classify` (spec 012 T014/TX01).
+///
+/// `kind = None` clears the manual override and triggers rule re-classification (A6).
+#[derive(Clone, Debug, Serialize, Deserialize, Type)]
+#[serde(rename_all = "camelCase")]
+pub struct ArtifactClassifyRequest {
+    pub artifact_id: String,
+    pub project_id: String,
+    /// `Some("intermediate"|"master"|"final")` to override; `None` to clear.
+    pub kind: Option<String>,
+    pub reason: Option<String>,
+}
+
+/// Response DTO for `artifact.classify`.
+#[derive(Clone, Debug, Serialize, Deserialize, Type)]
+#[serde(rename_all = "camelCase")]
+pub struct ArtifactClassifyResponse {
+    pub artifact: ArtifactSummary,
+}
+
+/// Request DTO for `artifact.mark_resolved` (spec 012 T024).
+#[derive(Clone, Debug, Serialize, Deserialize, Type)]
+#[serde(rename_all = "camelCase")]
+pub struct ArtifactMarkResolvedRequest {
+    pub artifact_id: String,
+    pub project_id: String,
+}

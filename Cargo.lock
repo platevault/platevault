@@ -73,6 +73,7 @@ dependencies = [
  "tokio",
  "tracing",
  "uuid",
+ "workflow_artifacts",
  "workflow_profiles",
 ]
 
@@ -6204,6 +6205,16 @@ dependencies = [
  "serde_json",
  "unicode-xid",
  "wasmparser",
+]
+
+[[package]]
+name = "workflow_artifacts"
+version = "0.1.0"
+dependencies = [
+ "serde",
+ "serde_json",
+ "time",
+ "uuid",
 ]
 
 [[package]]

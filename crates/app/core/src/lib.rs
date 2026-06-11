@@ -1,6 +1,7 @@
 //! Application use-case orchestration boundary.
 #![allow(clippy::doc_markdown)] // spec/domain terminology not appropriate for backticks
 
+pub mod artifact;
 pub mod calibration;
 pub mod catalogs;
 pub mod equipment;

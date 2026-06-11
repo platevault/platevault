@@ -251,7 +251,7 @@ dependencies:
   content_hash: sha256:b70bbd9978de5c81e2cbf30a82253d59afb9617a9a4e37f17c40098b3305d7f0
 - repo_url: srobroek/agentic-packages
   host: github.com
-  resolved_commit: 4a5dc403f75cebd036b87f2e48dfce802ebebe7a
+  resolved_commit: ce58db369cc6b5239dcd89911acf18e5245ca263
   resolved_ref: main
   virtual_path: packages/speckit
   is_virtual: true
@@ -259,11 +259,70 @@ dependencies:
   deployed_files:
   - .agents/skills/speckit-bugfix
   - .agents/skills/speckit-dag
+  - .claude/agents/speckit-implement-task.md
+  - .claude/agents/speckit-research.md
+  - .claude/agents/speckit-sync-conflicts.md
+  - .claude/agents/speckit-sync.md
+  - .claude/agents/speckit-verify-tasks.md
+  - .claude/agents/speckit-verify.md
+  - .claude/hooks/speckit/scripts/speckit-context7-reminder.sh
+  - .claude/hooks/speckit/scripts/speckit-deferred-issues.sh
+  - .claude/hooks/speckit/scripts/speckit-issue-close-guard.sh
+  - .claude/hooks/speckit/scripts/speckit-issue-label-guard.sh
+  - .claude/hooks/speckit/scripts/speckit-pr-issue-refs.sh
+  - .claude/hooks/speckit/scripts/speckit-stop-gate.sh
+  - .claude/hooks/speckit/scripts/speckit-task-commit-check.sh
   - .claude/skills/speckit-bugfix
-  - .claude/skills/speckit-dag
-  content_hash: sha256:b6d92fdb6c6d281b03ee95780136a8d55bcf51a413da8733741aa47a3df150b6
+  - .claude/skills/speckit-bugfix/SKILL.md
+  - .claude/skills/speckit-setup
+  - .claude/skills/speckit-setup/SKILL.md
+  - .claude/skills/speckit-setup/scripts/setup-speckit.sh
+  deployed_file_hashes:
+    .claude/agents/speckit-implement-task.md: sha256:c7682647bd3bb447208d770b0cd2b2c7e27cd4e5fc895503a3d980df169f3038
+    .claude/agents/speckit-research.md: sha256:359a3bb4fd22008848dba111f6dfb740602cf371763d7c1624c4c5dbf852e031
+    .claude/agents/speckit-sync-conflicts.md: sha256:880f2f81f09c8291e80653d4d119e82b00a8c47779b353681aaeca0992785c75
+    .claude/agents/speckit-sync.md: sha256:bfd447528b2a186de295d2c5b1700f7be21eab152f11bbae109fdf277802df15
+    .claude/agents/speckit-verify-tasks.md: sha256:81b641804a81c1ec38e5567e4537656fb593d959573d8a1642c55fffc2fe7bc5
+    .claude/agents/speckit-verify.md: sha256:a0c88e1dedc56d8c5d5d2e637c55fd42987ab3898a0a7baa5324be8204bb70cc
+    .claude/hooks/speckit/scripts/speckit-context7-reminder.sh: sha256:a290d9a15b7bbcaa8609cbf07842f3354bf6601bb9cf7247d8e3b7a54152a4c8
+    .claude/hooks/speckit/scripts/speckit-deferred-issues.sh: sha256:84ae87584b66e548a86b2219558751dc9aacfbc45138be3d7b185341ce396414
+    .claude/hooks/speckit/scripts/speckit-issue-close-guard.sh: sha256:49448952989f014d7c6a8bb4ed95acca1b739dd840e9bf2d2ce5d821136767e1
+    .claude/hooks/speckit/scripts/speckit-issue-label-guard.sh: sha256:2d674701adbb6d89ac415eef439bf35956b3edaeb240b85f980b6c9e74e960b9
+    .claude/hooks/speckit/scripts/speckit-pr-issue-refs.sh: sha256:0326e8397f2cc6887f2eb2c98422ab57d34ca9227c977a068536b673c96ddda2
+    .claude/hooks/speckit/scripts/speckit-stop-gate.sh: sha256:762a4f8cafabd626410242ccb57be4c4ff27cca5768e13f895ea1f8677af320c
+    .claude/hooks/speckit/scripts/speckit-task-commit-check.sh: sha256:e71970d892665803d21e84233928b5f82092914709ae19cdef4373acb29c56d8
+    .claude/skills/speckit-bugfix/SKILL.md: sha256:f38e4621680b4d79f5b4362c72819c6c3008ee035b3af1af3ed4612bf19ff75b
+    .claude/skills/speckit-setup/SKILL.md: sha256:c3cd8c25be5fe489fcb437ca455ab50259cdc2396251b8ac5a2c197de5e12ba0
+    .claude/skills/speckit-setup/scripts/setup-speckit.sh: sha256:146b7725d2bad896e388938715f5f4941a50d4a0df1bc99e05048a57f52177f9
+  content_hash: sha256:f1ee45663e35a2921f6ac2a79abb0054fdaac2fa4ae172b3ea9d9306b65138bc
+- repo_url: srobroek/agentic-packages
+  host: github.com
+  resolved_commit: ce58db369cc6b5239dcd89911acf18e5245ca263
+  resolved_ref: main
+  virtual_path: packages/speckit-dag-hooks
+  is_virtual: true
+  package_type: apm_package
+  deployed_files:
+  - .claude/hooks/speckit-dag-hooks/scripts/dispatcher.py
+  - .claude/hooks/speckit-dag-hooks/scripts/nodes.json
+  deployed_file_hashes:
+    .claude/hooks/speckit-dag-hooks/scripts/dispatcher.py: sha256:e724cb55715b632158506b9a5c67f21f19442196041f2072aadcee102f067962
+    .claude/hooks/speckit-dag-hooks/scripts/nodes.json: sha256:1f9e5b9ce1b7e7923855c5383642fc53d5838dd34c393e5f25015fa03ac83521
+  content_hash: sha256:bee702fd0d4010fc57bf389053245efb72e4d7dd6f9643b42fc4fb6e81194b80
   discovered_via: srobroek-agentic
-  marketplace_plugin_name: speckit
+  marketplace_plugin_name: speckit-dag-hooks
+- repo_url: srobroek/agentic-packages
+  host: github.com
+  resolved_commit: ce58db369cc6b5239dcd89911acf18e5245ca263
+  resolved_ref: main
+  virtual_path: packages/steering-speckit
+  is_virtual: true
+  package_type: apm_package
+  deployed_files:
+  - .claude/rules/50-speckit-workflow.md
+  content_hash: sha256:66fe6ea95cb6ea0bffb186b72d29a16ed16453486aff2fe8f1de2258613e40a0
+  discovered_via: srobroek-agentic
+  marketplace_plugin_name: steering-speckit
 - repo_url: wshobson/agents
   host: github.com
   resolved_commit: cbcde3f1f4309f023095181d3e591f983ec7c95d

@@ -6,6 +6,8 @@ dependencies:
   apm:
   - srobroek/agentic-packages/packages/core#main
   - srobroek/agentic-packages/packages/speckit#main
+  - srobroek/agentic-packages/packages/steering-speckit#main
+  - srobroek/agentic-packages/packages/speckit-dag-hooks#main
   - srobroek/agentic-packages/packages/language-rust#main
   - srobroek/agentic-packages/packages/language-typescript#main
   - srobroek/agentic-packages/packages/frontend#main
