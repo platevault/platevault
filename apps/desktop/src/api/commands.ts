@@ -79,6 +79,16 @@ import type {
   TargetPrimaryRenameRequest,
   TargetPrimaryRenameResult,
   TargetOpError_Serialize as TargetOpError,
+  ManifestListRequest_Deserialize as ManifestListRequest,
+  ManifestListResponse_Serialize as ManifestListResponse,
+  ManifestGetRequest,
+  ManifestGetResponse_Serialize as ManifestGetResponse,
+  ProjectNoteUpdateRequest,
+  ProjectNoteUpdateResult,
+  ManifestOpError_Serialize as ManifestOpError,
+  ManifestRevealRequest,
+  ProjectNoteGetRequest,
+  ProjectNoteGetResult,
 } from '@/bindings/index';
 
 // Conditionally import mocks or real Tauri invoke
@@ -1035,3 +1045,65 @@ export async function renameTargetPrimary(
 
 // Re-export TargetOpError type for callers that need to type-narrow errors.
 export type { TargetOpError };
+
+// ── spec 024: Project Manifests & Notes ───────────────────────────────────────
+
+/**
+ * `project.manifest.list` — list manifest snapshots for a project (spec 024).
+ *
+ * Returns summaries ordered newest first, paginated (default 50, max 200).
+ */
+export async function listManifests(
+  request: ManifestListRequest,
+): Promise<ManifestListResponse> {
+  return invoke<ManifestListResponse>('project.manifest.list', { request });
+}
+
+/**
+ * `project.manifest.get` — fetch one manifest with its full structured body (spec 024).
+ */
+export async function getManifest(request: ManifestGetRequest): Promise<ManifestGetResponse> {
+  return invoke<ManifestGetResponse>('project.manifest.get', { request });
+}
+
+/**
+ * `project.note.update` — replace the project's free-text notes (spec 024).
+ *
+ * Max 16 384 UTF-8 bytes. Rejects with `"project.read_only"` when lifecycle is
+ * `"archived"`.
+ */
+export async function updateProjectNote(
+  req: ProjectNoteUpdateRequest,
+): Promise<ProjectNoteUpdateResult> {
+  return invoke<ProjectNoteUpdateResult>('project.note.update', { req });
+}
+
+/**
+ * `project.note.get` — fetch current notes body for a project (spec 024).
+ *
+ * Returns `content: null` when no note has been saved yet.
+ */
+export async function getProjectNote(req: ProjectNoteGetRequest): Promise<ProjectNoteGetResult> {
+  return invoke<ProjectNoteGetResult>('project.note.get', { req });
+}
+
+/**
+ * `project.manifest.reveal_in_os` — open the manifest file in the OS file manager (spec 024).
+ */
+export async function revealManifestInOs(request: ManifestRevealRequest): Promise<void> {
+  return invoke<void>('project.manifest.reveal_in_os', { request });
+}
+
+// Re-export manifest types for callers.
+export type {
+  ManifestListRequest,
+  ManifestListResponse,
+  ManifestGetRequest,
+  ManifestGetResponse,
+  ProjectNoteGetRequest,
+  ProjectNoteGetResult,
+  ProjectNoteUpdateRequest,
+  ProjectNoteUpdateResult,
+  ManifestOpError,
+  ManifestRevealRequest,
+};

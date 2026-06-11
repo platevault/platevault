@@ -15,6 +15,7 @@ pub mod patterns;
 pub mod plan_apply;
 pub mod plans;
 pub mod project_health;
+pub mod project_manifests;
 pub mod project_notes;
 pub mod project_setup;
 pub mod protection;

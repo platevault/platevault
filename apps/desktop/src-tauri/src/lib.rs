@@ -48,6 +48,9 @@ use crate::commands::lifecycle::{
     lifecycle_ledger_list, lifecycle_transition_apply, lifecycle_transition_preview,
     provenance_read, AppState,
 };
+use crate::commands::manifests::{
+    manifest_get, manifest_list, manifest_reveal_in_os, note_get, note_update,
+};
 use crate::commands::native::{native_directory_pick, native_file_pick, native_reveal};
 use crate::commands::patterns::{pattern_preview, pattern_resolve, pattern_validate};
 use crate::commands::plan_apply::{
@@ -260,6 +263,12 @@ pub fn specta_builder() -> Builder<tauri::Wry> {
             artifact_list,
             artifact_classify,
             artifact_mark_resolved,
+            // manifests + notes (spec 024)
+            manifest_list,
+            manifest_get,
+            note_get,
+            note_update,
+            manifest_reveal_in_os,
         ])
 }
 

@@ -26,6 +26,7 @@ pub mod inbox;
 pub mod ingestion;
 pub mod inventory;
 pub mod lifecycle;
+pub mod manifests;
 pub mod native;
 pub mod patterns;
 pub mod plan_apply;

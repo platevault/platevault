@@ -5,6 +5,19 @@
 //!
 //! Constitution III: this crate does NOT invoke `PixInsight` or any processing
 //! tool. It only specifies the folder shape the app creates.
+//!
+//! Spec 024 adds:
+//! - `manifest` — manifest writer (filename, markdown rendering, disk write).
+//! - `notes` — notes file adapter (atomic read/write of `notes/project-notes.md`).
+
+pub mod manifest;
+pub mod notes;
+
+pub use manifest::{
+    manifest_relative_path, now_utc_iso, render_manifest_markdown, write_manifest_file,
+    ManifestBody, ManifestReason, ManifestWriteResult, MANIFEST_VERSION,
+};
+pub use notes::{NotesFileAdapter, RealNotesAdapter, NOTES_FILENAME};
 
 pub const CRATE_NAME: &str = "project_structure";
 

@@ -1039,6 +1039,57 @@ export const commands = {
 	 *  Returns `Err(String)` on DB failure.
 	 */
 	artifactMarkResolved: (request: ArtifactMarkResolvedRequest) => typedError<null, string>(__TAURI_INVOKE("artifact.mark_resolved", { request })),
+	/**
+	 *  `project.manifest.list` — list manifest snapshots for a project.
+	 * 
+	 *  Returns summaries ordered newest first, with cursor-based pagination.
+	 *  Default limit 50, max 200 (A6).
+	 * 
+	 *  # Errors
+	 *  Returns `Err(ManifestOpError)` on database failure.
+	 */
+	projectManifestList: (request: ManifestListRequest_Deserialize) => typedError<ManifestListResponse_Serialize, ManifestOpError_Serialize>(__TAURI_INVOKE("project.manifest.list", { request })),
+	/**
+	 *  `project.manifest.get` — fetch one manifest with its full structured body.
+	 * 
+	 *  # Errors
+	 *  Returns `Err(ManifestOpError)` with code `"manifest.not_found"` when the
+	 *  manifest does not exist.
+	 */
+	projectManifestGet: (request: ManifestGetRequest) => typedError<ManifestGetResponse_Serialize, ManifestOpError_Serialize>(__TAURI_INVOKE("project.manifest.get", { request })),
+	/**
+	 *  `project.note.get` — fetch the current notes body for a project.
+	 * 
+	 *  Returns `content: null` when no note has been saved yet (project never had
+	 *  notes written via `project.note.update`).
+	 * 
+	 *  # Errors
+	 *  Returns `Err(ManifestOpError)` with code `"internal"` on database failure.
+	 */
+	projectNoteGet: (req: ProjectNoteGetRequest) => typedError<ProjectNoteGetResult, ManifestOpError_Serialize>(__TAURI_INVOKE("project.note.get", { req })),
+	/**
+	 *  `project.note.update` — replace the project's notes body.
+	 * 
+	 *  - Max 16 384 UTF-8 bytes (A5).
+	 *  - `project.read_only` when lifecycle is `"archived"` (R-NotesEdit).
+	 * 
+	 *  # Errors
+	 *  Returns `Err(ManifestOpError)` with codes: `"project.not_found"`,
+	 *  `"project.read_only"`, `"note.content_too_large"`.
+	 */
+	projectNoteUpdate: (req: ProjectNoteUpdateRequest) => typedError<ProjectNoteUpdateResult, ManifestOpError_Serialize>(__TAURI_INVOKE("project.note.update", { req })),
+	/**
+	 *  `project.manifest.reveal_in_os` — open the manifest file's folder in the
+	 *  OS file manager.
+	 * 
+	 *  Delegates to `tauri-plugin-opener::reveal_item_in_dir`. On Linux, if the
+	 *  opener plugin fails, falls back to `xdg-open` on the parent directory
+	 *  (matching the pattern from `native.reveal`).
+	 * 
+	 *  # Errors
+	 *  Returns `Err(String)` when the path does not exist or the OS open fails.
+	 */
+	projectManifestRevealInOs: (request: ManifestRevealRequest) => typedError<null, string>(__TAURI_INVOKE("project.manifest.reveal_in_os", { request })),
 };
 
 /* Types */
@@ -2106,6 +2157,12 @@ export type Frameset = {
 	integrationS: number | null,
 };
 
+/**  A reference to a generated source view embedded in a manifest body. */
+export type GeneratedViewRefDto = {
+	id: string,
+	path: string,
+};
+
 /**  One frame-type breakdown entry in a classify response. */
 export type InboxBreakdownEntry = InboxBreakdownEntry_Serialize | InboxBreakdownEntry_Deserialize;
 
@@ -2786,6 +2843,33 @@ export type LookupTargetMatch = {
 	evidence: LookupMatchEvidence,
 };
 
+/**  Structured body of a manifest snapshot. */
+export type ManifestBodyDto = ManifestBodyDto_Serialize | ManifestBodyDto_Deserialize;
+
+/**  Structured body of a manifest snapshot. */
+export type ManifestBodyDto_Deserialize = {
+	lifecycleState: string,
+	/**  Snapshot of linked Inventory items by role (opaque JSON, specta-safe). */
+	sourceMap?: unknown | null,
+	/**  Calibration choice snapshot (opaque JSON, specta-safe). */
+	calibration?: unknown | null,
+	workflowProfile?: string | null,
+	generatedViews?: GeneratedViewRefDto[],
+	notes?: string | null,
+};
+
+/**  Structured body of a manifest snapshot. */
+export type ManifestBodyDto_Serialize = {
+	lifecycleState: string,
+	/**  Snapshot of linked Inventory items by role (opaque JSON, specta-safe). */
+	sourceMap?: unknown | null,
+	/**  Calibration choice snapshot (opaque JSON, specta-safe). */
+	calibration?: unknown | null,
+	workflowProfile?: string | null,
+	generatedViews?: GeneratedViewRefDto[],
+	notes?: string | null,
+};
+
 /**  Per-catalog entry in the signed manifest. */
 export type ManifestCatalogEntry = {
 	/**  Stable catalog slug. */
@@ -2802,6 +2886,31 @@ export type ManifestCatalogEntry = {
 	sizeBytes: number,
 };
 
+/**  Full manifest including structured body. */
+export type ManifestDto = ManifestDto_Serialize | ManifestDto_Deserialize;
+
+/**  Full manifest including structured body. */
+export type ManifestDto_Deserialize = {
+	id: string,
+	projectId: string,
+	reason: ManifestReason,
+	timestamp: string,
+	path: string,
+	version: number,
+	body: ManifestBodyDto_Deserialize,
+};
+
+/**  Full manifest including structured body. */
+export type ManifestDto_Serialize = {
+	id: string,
+	projectId: string,
+	reason: ManifestReason,
+	timestamp: string,
+	path: string,
+	version: number,
+	body: ManifestBodyDto_Serialize,
+};
+
 /**  Status of a `catalog.manifest.fetch` response. */
 export type ManifestFetchStatus = 
 /**  New manifest downloaded and verified. */
@@ -2810,6 +2919,93 @@ export type ManifestFetchStatus =
 "not_modified" | 
 /**  Network or verification failure. */
 "failed";
+
+/**  Thin request wrapper for `project.manifest.get`. */
+export type ManifestGetRequest = {
+	manifestId: string,
+};
+
+/**  Response for `project.manifest.get`. */
+export type ManifestGetResponse = ManifestGetResponse_Serialize | ManifestGetResponse_Deserialize;
+
+/**  Response for `project.manifest.get`. */
+export type ManifestGetResponse_Deserialize = {
+	manifest: ManifestDto_Deserialize,
+};
+
+/**  Response for `project.manifest.get`. */
+export type ManifestGetResponse_Serialize = {
+	manifest: ManifestDto_Serialize,
+};
+
+/**  Request for `project.manifest.list`. */
+export type ManifestListRequest = ManifestListRequest_Serialize | ManifestListRequest_Deserialize;
+
+/**  Request for `project.manifest.list`. */
+export type ManifestListRequest_Deserialize = {
+	projectId: string,
+	cursor?: string | null,
+	limit?: number | null,
+};
+
+/**  Request for `project.manifest.list`. */
+export type ManifestListRequest_Serialize = {
+	projectId: string,
+	cursor?: string | null,
+	limit: number | null,
+};
+
+/**  Response for `project.manifest.list`. */
+export type ManifestListResponse = ManifestListResponse_Serialize | ManifestListResponse_Deserialize;
+
+/**  Response for `project.manifest.list`. */
+export type ManifestListResponse_Deserialize = {
+	manifests: ManifestSummaryDto[],
+	nextCursor?: string | null,
+};
+
+/**  Response for `project.manifest.list`. */
+export type ManifestListResponse_Serialize = {
+	manifests: ManifestSummaryDto[],
+	nextCursor?: string | null,
+};
+
+/**  Error returned by manifest and note operations. */
+export type ManifestOpError = ManifestOpError_Serialize | ManifestOpError_Deserialize;
+
+/**  Error returned by manifest and note operations. */
+export type ManifestOpError_Deserialize = {
+	code: string,
+	message: string,
+	details?: unknown | null,
+};
+
+/**  Error returned by manifest and note operations. */
+export type ManifestOpError_Serialize = {
+	code: string,
+	message: string,
+	details?: unknown | null,
+};
+
+/**  Why a manifest was generated. */
+export type ManifestReason = "created" | "source_change" | "lifecycle_transition" | "cleanup_applied" | "workflow_run";
+
+/**  Request for `project.manifest.reveal_in_os`. */
+export type ManifestRevealRequest = {
+	/**  Absolute path of the manifest file to reveal. */
+	path: string,
+};
+
+/**  Lightweight summary for the manifest list drawer accordion. */
+export type ManifestSummaryDto = {
+	id: string,
+	reason: ManifestReason,
+	timestamp: string,
+	/**  Project-relative path (e.g. `notes/manifest-…md`). */
+	path: string,
+	/**  `true` when the manifest carries an expandable structured body. */
+	hasBody: boolean,
+};
 
 /**  Extended detail view of a calibration master. */
 export type MasterDetail = MasterDetail_Serialize | MasterDetail_Deserialize;
@@ -3581,6 +3777,34 @@ export type ProjectDetailDto_Serialize = {
 	sources: ProjectSourceDto_Serialize[],
 	channels: ProjectChannelDto_Serialize[],
 	createdAt: string,
+	updatedAt: string,
+};
+
+/**  Request for `project.note.get`. */
+export type ProjectNoteGetRequest = {
+	projectId: string,
+};
+
+/**
+ *  Response for `project.note.get`.
+ * 
+ *  `content` is `None` when no note has been saved for this project yet.
+ */
+export type ProjectNoteGetResult = {
+	projectId: string,
+	content: string | null,
+};
+
+/**  Request for `project.note.update`. */
+export type ProjectNoteUpdateRequest = {
+	projectId: string,
+	/**  Full replacement markdown body (≤16 384 UTF-8 bytes). Empty string clears notes. */
+	content: string,
+};
+
+/**  Successful response for `project.note.update`. */
+export type ProjectNoteUpdateResult = {
+	projectId: string,
 	updatedAt: string,
 };
 

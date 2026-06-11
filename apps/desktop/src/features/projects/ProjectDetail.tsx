@@ -41,6 +41,9 @@ import {
   useToolProfiles,
   useToolLaunch,
 } from './tool-launch';
+// spec 024: project notes + manifests
+import { ProjectNotesSection } from './ProjectNotesSection';
+import { ManifestsAccordion } from './ManifestsAccordion';
 
 // ── Helpers ──────────────────────────────────────────────────────────────────
 
@@ -299,14 +302,17 @@ export function ProjectDetailContent({ projectId }: ProjectDetailContentProps) {
           )}
         </Section>
 
-        {/* Notes section */}
-        {project.notes && (
-          <Section title="Notes">
-            <div style={{ whiteSpace: 'pre-wrap', fontSize: 'var(--alm-text-sm)' }}>
-              {project.notes}
-            </div>
-          </Section>
-        )}
+        {/* Notes section — spec 024 T4.2.
+            project.notes is the creation-time inline field (legacy); the canonical
+            per-project note is stored in the project_notes table and loaded via
+            project.note.get / project.note.update. */}
+        <ProjectNotesSection
+          projectId={projectId}
+          readOnly={lifecycle === 'archived'}
+        />
+
+        {/* Manifests accordion — spec 024 T1.7 / T3.4 */}
+        <ManifestsAccordion projectId={projectId} />
 
         {/* spec 007 T034: calibration match panel — batch suggest for light sources */}
         <CalibrationMatchPanel

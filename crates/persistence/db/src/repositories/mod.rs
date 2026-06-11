@@ -3,7 +3,7 @@
 //! spec 008 projects, spec 013 target lookup,
 //! spec 014 catalogs, spec 030 equipment operations, spec 018 settings,
 //! spec 017 plans, spec 025 plan apply runs/events, spec 012 artifacts,
-//! and spec 016 source protection.
+//! spec 016 source protection, and spec 024 manifests/notes.
 
 pub mod artifacts;
 pub mod calibration_assignment;
@@ -13,8 +13,10 @@ pub mod first_run;
 pub mod inbox;
 pub mod inventory;
 pub mod lifecycle;
+pub mod manifests;
 pub mod plan_apply;
 pub mod plans;
+pub mod project_notes;
 pub mod projects;
 pub mod provenance;
 pub mod session_snapshot;
