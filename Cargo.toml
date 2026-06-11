@@ -19,6 +19,7 @@ members = [
   "crates/project/structure",
   "crates/sessions",
   "crates/targeting",
+  "crates/targeting/catalogs",
   "crates/workflow/profiles",
   "tests/contract",
 ]
@@ -29,7 +30,11 @@ license = "Apache-2.0"
 repository = ""
 
 [workspace.dependencies]
+async-trait = "0.1"
+hex = "0.4"
+reqwest = { version = "0.13", default-features = false, features = ["json", "rustls"] }
 quick-xml = "0.39"
+sha2 = "0.10"
 tempfile = "3"
 unicode-normalization = "0.1"
 unicode-security = "0.1"

@@ -355,3 +355,78 @@ pub struct PlanApplyingCompleted {
 }
 
 pub const TOPIC_PLAN_APPLYING_COMPLETED: &str = "plan.applying.completed";
+
+// ── Catalog download audit events (spec 014, T007-event, R-3.1) ───────────────
+
+/// Payload for the `catalog.manifest.fetched` topic (spec 014, R-3.1).
+///
+/// Emitted when the catalog manifest has been downloaded and verified.
+#[derive(Clone, Debug, Serialize, Deserialize, JsonSchema, Type)]
+#[serde(rename_all = "camelCase")]
+pub struct CatalogManifestFetched {
+    /// Number of catalog entries in the manifest.
+    pub catalog_count: usize,
+    /// ETag returned by the server for subsequent conditional fetches.
+    pub etag: Option<String>,
+    pub at: String,
+}
+
+pub const TOPIC_CATALOG_MANIFEST_FETCHED: &str = "catalog.manifest.fetched";
+
+/// Payload for the `catalog.download.started` topic (spec 014, R-3.1).
+///
+/// Emitted when download of a single catalog artifact has started.
+#[derive(Clone, Debug, Serialize, Deserialize, JsonSchema, Type)]
+#[serde(rename_all = "camelCase")]
+pub struct CatalogDownloadStarted {
+    pub catalog_id: String,
+    pub at: String,
+}
+
+pub const TOPIC_CATALOG_DOWNLOAD_STARTED: &str = "catalog.download.started";
+
+/// Payload for the `catalog.download.progress` topic (spec 014, R-3.1).
+///
+/// Emitted periodically during a catalog download for progress UI.
+#[derive(Clone, Debug, Serialize, Deserialize, JsonSchema, Type)]
+#[serde(rename_all = "camelCase")]
+pub struct CatalogDownloadProgress {
+    pub catalog_id: String,
+    /// Bytes received so far.
+    pub bytes_received: u64,
+    /// Total bytes expected (0 if unknown).
+    pub bytes_total: u64,
+    pub at: String,
+}
+
+pub const TOPIC_CATALOG_DOWNLOAD_PROGRESS: &str = "catalog.download.progress";
+
+/// Payload for the `catalog.download.completed` topic (spec 014, R-3.1).
+///
+/// Emitted when a catalog has been verified and installed into SQLite.
+#[derive(Clone, Debug, Serialize, Deserialize, JsonSchema, Type)]
+#[serde(rename_all = "camelCase")]
+pub struct CatalogDownloadCompleted {
+    pub catalog_id: String,
+    /// Audit event id that correlates with the `catalog.download` contract response.
+    pub audit_id: String,
+    pub at: String,
+}
+
+pub const TOPIC_CATALOG_DOWNLOAD_COMPLETED: &str = "catalog.download.completed";
+
+/// Payload for the `catalog.download.failed` topic (spec 014, R-3.1).
+///
+/// Emitted when a catalog download or verification failed. The previously
+/// installed catalog (if any) remains active.
+#[derive(Clone, Debug, Serialize, Deserialize, JsonSchema, Type)]
+#[serde(rename_all = "camelCase")]
+pub struct CatalogDownloadFailed {
+    pub catalog_id: String,
+    /// Contract error code.
+    pub error_code: String,
+    pub message: String,
+    pub at: String,
+}
+
+pub const TOPIC_CATALOG_DOWNLOAD_FAILED: &str = "catalog.download.failed";

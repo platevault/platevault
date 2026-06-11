@@ -12,14 +12,6 @@ export interface StepConfirmProps {
   isSubmitting: boolean;
 }
 
-const CATALOG_LABELS: Record<keyof CatalogSettings, string> = {
-  messier: 'Messier',
-  ngcIc: 'NGC / IC',
-  caldwell: 'Caldwell',
-  sharpless: 'Sharpless',
-  abell: 'Abell',
-};
-
 const TOOL_LABELS: Record<keyof ToolsState, string> = {
   pixinsight: 'PixInsight',
   siril: 'Siril',
@@ -38,9 +30,6 @@ export function StepConfirm({
 }: StepConfirmProps) {
   const missingKinds = getMissingRequiredKinds(sources);
   const totalFolders = sources.length;
-
-  const enabledCatalogs = (Object.keys(CATALOG_LABELS) as Array<keyof CatalogSettings>)
-    .filter((key) => catalogSettings[key]);
 
   const enabledTools = (Object.keys(TOOL_LABELS) as Array<keyof ToolsState>)
     .filter((key) => tools[key].enabled);
@@ -108,11 +97,11 @@ export function StepConfirm({
       </Box>
 
       {/* Catalogs summary */}
-      <Box title={`Target catalogs (${enabledCatalogs.length} enabled)`}>
+      <Box title="Target catalogs">
         <div className="alm-step-confirm__catalogs">
-          {enabledCatalogs.length > 0
-            ? enabledCatalogs.map((k) => CATALOG_LABELS[k]).join(', ')
-            : 'No catalogs selected'}
+          {catalogSettings.downloadAll
+            ? 'All v1 catalogs will be downloaded after setup'
+            : 'Catalog download skipped — install from Settings later'}
         </div>
       </Box>
 

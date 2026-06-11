@@ -14,6 +14,7 @@ domain_core = { path = "../../domain/core" }
 fs_executor = { path = "../../fs/executor" }
 patterns = { path = "../../patterns" }
 persistence_db = { path = "../../persistence/db" }
+targeting_catalogs = { path = "../../targeting/catalogs" }
 serde = { workspace = true }
 serde_json.workspace = true
 sqlx.workspace = true
@@ -22,6 +23,10 @@ time = { workspace = true }
 tokio.workspace = true
 tracing = { workspace = true }
 uuid = { workspace = true }
+
+[dev-dependencies]
+sha2.workspace = true
+hex.workspace = true
 
 [features]
 # Developer-mode surface (spec 021). Release binaries must NOT enable this.
