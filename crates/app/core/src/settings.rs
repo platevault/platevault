@@ -86,6 +86,9 @@ pub fn is_valid_key(key: &str) -> bool {
     // Structured-path keys.
     is_calibration_override_penalty_key(key)
         || is_tools_bundle_id_key(key)
+        || is_tools_executable_path_key(key)
+        || is_tools_enabled_key(key)
+        || is_tools_auto_detected_key(key)
         || is_workflow_profile_watch_extensions_key(key)
         || is_workflow_profile_attribution_window_key(key)
 }
@@ -115,6 +118,33 @@ fn is_tools_bundle_id_key(key: &str) -> bool {
         }
     }
     false
+}
+
+fn is_tools_key_with_suffix(key: &str, suffix: &str) -> bool {
+    if let Some(rest) = key.strip_prefix("tools.") {
+        if let Some(tool_id) = rest.strip_suffix(suffix) {
+            return !tool_id.is_empty()
+                && tool_id
+                    .chars()
+                    .all(|c| c.is_ascii_lowercase() || c.is_ascii_digit() || c == '_');
+        }
+    }
+    false
+}
+
+fn is_tools_executable_path_key(key: &str) -> bool {
+    // ^tools\.[a-z0-9_]+\.executable_path$
+    is_tools_key_with_suffix(key, ".executable_path")
+}
+
+fn is_tools_enabled_key(key: &str) -> bool {
+    // ^tools\.[a-z0-9_]+\.enabled$
+    is_tools_key_with_suffix(key, ".enabled")
+}
+
+fn is_tools_auto_detected_key(key: &str) -> bool {
+    // ^tools\.[a-z0-9_]+\.auto_detected$
+    is_tools_key_with_suffix(key, ".auto_detected")
 }
 
 fn is_workflow_profile_watch_extensions_key(key: &str) -> bool {
@@ -262,6 +292,21 @@ pub fn validate_value(key: &str, value: &Value) -> Result<(), ContractError> {
         _ if is_tools_bundle_id_key(key) => {
             if !value.is_null() && !value.is_string() {
                 return Err(invalid("must be a string or null"));
+            }
+        }
+        _ if is_tools_executable_path_key(key) => {
+            if !value.is_null() && !value.is_string() {
+                return Err(invalid("must be a string or null"));
+            }
+        }
+        _ if is_tools_enabled_key(key) => {
+            if !value.is_boolean() {
+                return Err(invalid("must be a boolean"));
+            }
+        }
+        _ if is_tools_auto_detected_key(key) => {
+            if !value.is_boolean() {
+                return Err(invalid("must be a boolean"));
             }
         }
         _ if is_workflow_profile_watch_extensions_key(key) => {
@@ -1070,6 +1115,9 @@ mod tests {
         assert!(is_valid_key("pattern"));
         assert!(is_valid_key("calibration.dark.override_penalty"));
         assert!(is_valid_key("tools.pixinsight.bundle_id"));
+        assert!(is_valid_key("tools.pixinsight.executable_path"));
+        assert!(is_valid_key("tools.siril.enabled"));
+        assert!(is_valid_key("tools.startools.auto_detected"));
         assert!(is_valid_key("workflow_profile.my_profile.watch_extensions"));
         assert!(is_valid_key("workflow_profile.my_profile.launch_attribution_window_hours"));
     }

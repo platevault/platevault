@@ -784,3 +784,52 @@ export async function inventorySessionReview(
 ): Promise<InventorySessionReviewResponse> {
   return invoke<InventorySessionReviewResponse>('inventory.session.review', { req });
 }
+
+// ── Spec 011: Processing Tool Launch ─────────────────────────────────────────
+
+import type {
+  ToolProfileListResponse,
+  ToolProfileSummary,
+  ToolLaunchRequest,
+  ToolLaunchResponse,
+  ToolDiscoverRequest,
+  ToolDiscoverResponse,
+  UpdateProcessingTool,
+  ToolPathValidation,
+} from '@/bindings/index';
+
+export type {
+  ToolProfileListResponse,
+  ToolProfileSummary,
+  ToolLaunchRequest,
+  ToolLaunchResponse,
+  ToolDiscoverRequest,
+  ToolDiscoverResponse,
+  UpdateProcessingTool,
+  ToolPathValidation,
+};
+
+/** List all seeded tool profiles joined with settings state. */
+export async function toolProfileList(): Promise<ToolProfileListResponse> {
+  return invoke<ToolProfileListResponse>('tools.list');
+}
+
+/** Launch a processing tool for a project. */
+export async function toolLaunch(request: ToolLaunchRequest): Promise<ToolLaunchResponse> {
+  return invoke<ToolLaunchResponse>('tools.launch', { request });
+}
+
+/** Save `executable_path` / enabled for a tool. */
+export async function toolUpdate(request: UpdateProcessingTool): Promise<ToolProfileSummary> {
+  return invoke<ToolProfileSummary>('tools.update', { request });
+}
+
+/** Validate an executable path. */
+export async function toolValidatePath(path: string): Promise<ToolPathValidation> {
+  return invoke<ToolPathValidation>('tools.validate_path', { path });
+}
+
+/** Auto-detect installed tool paths. */
+export async function toolDiscover(request: ToolDiscoverRequest): Promise<ToolDiscoverResponse> {
+  return invoke<ToolDiscoverResponse>('tools.discover', { request });
+}

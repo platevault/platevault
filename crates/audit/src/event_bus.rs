@@ -430,3 +430,25 @@ pub struct CatalogDownloadFailed {
 }
 
 pub const TOPIC_CATALOG_DOWNLOAD_FAILED: &str = "catalog.download.failed";
+
+/// Payload for the `tool.launch` topic (spec 011, T009).
+///
+/// Emitted after a processing tool is spawned (or attempted) for a project.
+/// `outcome` values mirror `LaunchOutcome` in the data model:
+///   `spawned` | `spawn_failed` | `tool_not_configured` | `executable_not_found`
+#[derive(Clone, Debug, Serialize, Deserialize, JsonSchema, Type)]
+#[serde(rename_all = "camelCase")]
+pub struct ToolLaunchEvent {
+    pub launch_id: String,
+    pub project_id: String,
+    pub tool_id: String,
+    /// Resolved working directory passed to the child process.
+    pub working_dir: Option<String>,
+    /// BLAKE3 hex of `canonicalized_executable_path || rendered_argv`.
+    pub args_hash: Option<String>,
+    /// `spawned` | `spawn_failed` | `tool_not_configured` | `executable_not_found`
+    pub outcome: String,
+    pub at: String,
+}
+
+pub const TOPIC_TOOL_LAUNCH: &str = "tool.launch";

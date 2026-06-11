@@ -86,6 +86,21 @@ pub async fn list_roots_with_sessions(pool: &SqlitePool) -> DbResult<Vec<Library
     Ok(rows)
 }
 
+/// List ALL `LibraryRoot` rows (regardless of session presence).
+///
+/// Used by spec 011 cwd-containment check (R-CwdContain, FR-010).
+///
+/// # Errors
+/// Returns [`DbError::Database`] on query failure.
+pub async fn list_all_roots(pool: &SqlitePool) -> DbResult<Vec<LibraryRootRow>> {
+    let rows = sqlx::query_as::<_, LibraryRootRow>(
+        "SELECT id, current_path, kind, state FROM library_root ORDER BY current_path ASC",
+    )
+    .fetch_all(pool)
+    .await?;
+    Ok(rows)
+}
+
 /// List sessions under a given `LibraryRoot` with optional filters applied.
 ///
 /// Acquisition sessions are joined with `target` for `target_name`.

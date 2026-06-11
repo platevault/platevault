@@ -184,6 +184,34 @@ fn extract_json_string_field(json: &str, field: &str) -> Option<String> {
     Some(inner[..end].to_owned())
 }
 
+// ── Working-folder resolution ─────────────────────────────────────────────────
+
+/// Resolve the working folder to pass to a processing tool for the given
+/// project (spec 011 T019, US3).
+///
+/// Resolution rule:
+/// 1. When the project has a generated source-view folder (spec 026), prefer
+///    it.  The caller passes an `Option<&str>` for this — typically loaded
+///    from the project's `source_view_folder` DB column.
+/// 2. Otherwise fall back to the project root.
+///
+/// Returns the resolved path as an `std::path::PathBuf`.
+#[must_use]
+pub fn resolve_working_folder(
+    project_root: &std::path::Path,
+    source_view_folder: Option<&str>,
+) -> std::path::PathBuf {
+    if let Some(sv) = source_view_folder.filter(|s| !s.trim().is_empty()) {
+        let sv_path = std::path::Path::new(sv);
+        if sv_path.is_absolute() {
+            return sv_path.to_path_buf();
+        }
+        // Relative source-view path — join with the project root.
+        return project_root.join(sv_path);
+    }
+    project_root.to_path_buf()
+}
+
 // ── Tests ─────────────────────────────────────────────────────────────────────
 
 #[cfg(test)]
@@ -248,5 +276,34 @@ mod tests {
     #[test]
     fn processing_tool_from_str_rejects_unknown() {
         assert!(ProcessingTool::parse("Photoshop").is_err());
+    }
+
+    #[test]
+    fn resolve_working_folder_uses_project_root_when_no_source_view() {
+        let root = std::path::Path::new("/mnt/library/my_project");
+        let result = resolve_working_folder(root, None);
+        assert_eq!(result, root);
+    }
+
+    #[test]
+    fn resolve_working_folder_uses_source_view_when_absolute() {
+        let root = std::path::Path::new("/mnt/library/my_project");
+        let sv = "/mnt/library/my_project/_source_view";
+        let result = resolve_working_folder(root, Some(sv));
+        assert_eq!(result, std::path::Path::new(sv));
+    }
+
+    #[test]
+    fn resolve_working_folder_joins_relative_source_view() {
+        let root = std::path::Path::new("/mnt/library/my_project");
+        let result = resolve_working_folder(root, Some("_source_view"));
+        assert_eq!(result, root.join("_source_view"));
+    }
+
+    #[test]
+    fn resolve_working_folder_treats_blank_as_missing() {
+        let root = std::path::Path::new("/mnt/library/my_project");
+        let result = resolve_working_folder(root, Some("  "));
+        assert_eq!(result, root);
     }
 }
