@@ -27,6 +27,22 @@ import type {
   CatalogDownloadResponse,
   CatalogManifest,
 } from '@/bindings/types';
+import type {
+  ProjectSummaryDto,
+  ProjectDetailDto,
+  ProjectCreateRequest,
+  ProjectCreateResult,
+  ProjectUpdateRequest,
+  ProjectUpdateResult,
+  ProjectSourceAddRequest,
+  ProjectSourceAddResult,
+  ProjectSourceRemoveRequest,
+  ProjectSourceRemoveResult,
+  ProjectChannelsReinferRequest,
+  ProjectChannelsReinferResult,
+  ProjectChannelsDismissDriftRequest,
+  ProjectChannelsDismissDriftResult,
+} from '@/bindings/index';
 
 // Conditionally import mocks or real Tauri invoke
 const useMocks = import.meta.env.VITE_USE_MOCKS === 'true';
@@ -349,6 +365,60 @@ export async function patternPreview(
 ): Promise<PatternPreviewResponse> {
   return invoke<PatternPreviewResponse>('pattern.preview', {
     request: { pattern, sampleMetadata },
+  });
+}
+
+// ── Project commands (spec 008) ───────────────────────────────────────────────
+
+/** List all projects as summary rows (real DB, not fixtures). */
+export async function listProjects008(args?: {
+  filters?: unknown;
+}): Promise<ProjectSummaryDto[]> {
+  return invoke<ProjectSummaryDto[]>('projects.list', { filters: args?.filters ?? null });
+}
+
+/** Get a single project with sources and channels. */
+export async function getProject008(args: { id: string }): Promise<ProjectDetailDto> {
+  return invoke<ProjectDetailDto>('projects.get', { id: args.id });
+}
+
+/** Create a new project (validates, persists, generates folder plan). */
+export async function createProject(args: ProjectCreateRequest): Promise<ProjectCreateResult> {
+  return invoke<ProjectCreateResult>('projects.create', { req: args });
+}
+
+/** Update name, tool, or notes on an existing project. */
+export async function updateProject(args: ProjectUpdateRequest): Promise<ProjectUpdateResult> {
+  return invoke<ProjectUpdateResult>('projects.update', { req: args });
+}
+
+/** Link an Inventory session to a project as a source. */
+export async function addProjectSource(
+  args: ProjectSourceAddRequest,
+): Promise<ProjectSourceAddResult> {
+  return invoke<ProjectSourceAddResult>('projects.source.add', { req: args });
+}
+
+/** Unlink a source from a project. */
+export async function removeProjectSource(
+  args: ProjectSourceRemoveRequest,
+): Promise<ProjectSourceRemoveResult> {
+  return invoke<ProjectSourceRemoveResult>('projects.source.remove', { req: args });
+}
+
+/** Re-infer channels from all linked sources (discards manual overrides). */
+export async function reinferProjectChannels(
+  args: ProjectChannelsReinferRequest,
+): Promise<ProjectChannelsReinferResult> {
+  return invoke<ProjectChannelsReinferResult>('projects.channels.reinfer', { req: args });
+}
+
+/** Dismiss the channel-drift banner without re-inferring. */
+export async function dismissProjectChannelDrift(
+  args: ProjectChannelsDismissDriftRequest,
+): Promise<ProjectChannelsDismissDriftResult> {
+  return invoke<ProjectChannelsDismissDriftResult>('projects.channels.dismiss_drift', {
+    req: args,
   });
 }
 

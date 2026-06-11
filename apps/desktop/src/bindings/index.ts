@@ -138,23 +138,79 @@ export const commands = {
 	 */
 	targetResolve: (req: TargetResolveRequest) => typedError<TargetResolveResponse_Serialize, string>(__TAURI_INVOKE("target.resolve", { req })),
 	/**
-	 *  `projects.list` — returns all projects.
+	 *  `projects.list` — list all projects from the database.
 	 * 
 	 *  # Errors
-	 *  Returns `Err(String)` on failure; the stub never fails.
+	 * 
+	 *  Returns `Err(String)` on database failure.
 	 */
-	projectsList: (filters: unknown | null) => typedError<Project_Serialize[], string>(__TAURI_INVOKE("projects.list", { filters })),
+	projectsList: (filters: unknown | null) => typedError<ProjectSummaryDto_Serialize[], string>(__TAURI_INVOKE("projects.list", { filters })),
 	/**
-	 *  `projects.get` — returns a single project detail.
+	 *  `projects.get` — get a single project with sources and channels.
 	 * 
 	 *  # Errors
-	 *  Returns `Err(String)` on failure; the stub never fails.
+	 * 
+	 *  Returns `Err(String)` with `"project.not_found"` when the project does not
+	 *  exist.
 	 */
-	projectsGet: (id: string) => typedError<ProjectDetail_Serialize, string>(__TAURI_INVOKE("projects.get", { id })),
+	projectsGet: (id: string) => typedError<ProjectDetailDto_Serialize, string>(__TAURI_INVOKE("projects.get", { id })),
+	/**
+	 *  `projects.create` — create a new project.
+	 * 
+	 *  # Errors
+	 * 
+	 *  Returns `Err(String)` with the error code on validation or database failure.
+	 */
+	projectsCreate: (req: ProjectCreateRequest_Deserialize) => typedError<ProjectCreateResult_Serialize, string>(__TAURI_INVOKE("projects.create", { req })),
+	/**
+	 *  `projects.update` — update name, tool, or notes on an existing project.
+	 * 
+	 *  # Errors
+	 * 
+	 *  Returns `Err(String)` on validation failure or when the project is not found.
+	 */
+	projectsUpdate: (req: ProjectUpdateRequest_Deserialize) => typedError<ProjectUpdateResult, string>(__TAURI_INVOKE("projects.update", { req })),
+	/**
+	 *  `projects.source.add` — link an Inventory session to a project.
+	 * 
+	 *  # Errors
+	 * 
+	 *  Returns `Err(String)` on validation failure or duplicate link.
+	 */
+	projectsSourceAdd: (req: ProjectSourceAddRequest) => typedError<ProjectSourceAddResult_Serialize, string>(__TAURI_INVOKE("projects.source.add", { req })),
+	/**
+	 *  `projects.source.remove` — unlink a source from a project.
+	 * 
+	 *  # Errors
+	 * 
+	 *  Returns `Err(String)` when lifecycle is locked or source not found.
+	 */
+	projectsSourceRemove: (req: ProjectSourceRemoveRequest) => typedError<ProjectSourceRemoveResult_Serialize, string>(__TAURI_INVOKE("projects.source.remove", { req })),
+	/**
+	 *  `projects.channels.reinfer` — re-infer channels from all linked sources.
+	 * 
+	 *  # Errors
+	 * 
+	 *  Returns `Err(String)` when the project is not found or archived.
+	 */
+	projectsChannelsReinfer: (req: ProjectChannelsReinferRequest) => typedError<ProjectChannelsReinferResult_Serialize, string>(__TAURI_INVOKE("projects.channels.reinfer", { req })),
+	/**
+	 *  `projects.channels.dismiss_drift` — dismiss the channel drift banner.
+	 * 
+	 *  # Errors
+	 * 
+	 *  Returns `Err(String)` when the project is not found.
+	 */
+	projectsChannelsDismissDrift: (req: ProjectChannelsDismissDriftRequest) => typedError<ProjectChannelsDismissDriftResult, string>(__TAURI_INVOKE("projects.channels.dismiss_drift", { req })),
 	/**
 	 *  `projects.create_plan` — create a filesystem plan from wizard state.
 	 * 
+	 *  This stub is retained for UI compatibility until spec 025 folder-plan
+	 *  integration is wired into `project_setup::create`. The real flow will
+	 *  call into `crates/fs/planner/` and return a live `PlanDetail`.
+	 * 
 	 *  # Errors
+	 * 
 	 *  Returns `Err(String)` on failure; the stub never fails.
 	 */
 	projectsCreatePlan: (wizardState: unknown) => typedError<PlanDetail_Serialize, string>(__TAURI_INVOKE("projects.create_plan", { wizardState })),
@@ -1261,6 +1317,13 @@ export type Catalog_Serialize = {
 	entryCount?: number | null,
 };
 
+/**  Channel drift state embedded in project.get (FR-010). */
+export type ChannelDriftDto = {
+	hasNewSources: boolean,
+	/**  `"re_infer"` or `"dismiss"` — only meaningful when `has_new_sources == true`. */
+	suggestedAction: string,
+};
+
 export type CleanupAction = "keep" | "archive" | "delete";
 
 export type CleanupCandidate = {
@@ -1269,9 +1332,6 @@ export type CleanupCandidate = {
 	sizeBytes: number,
 	reason: string,
 };
-
-/**  Cleanup eligibility for an artifact group. */
-export type CleanupEligibility = "eligible" | "archive" | "keep" | "none";
 
 export type CleanupPolicy = {
 	entries: CleanupPolicyEntry[],
@@ -1287,11 +1347,6 @@ export type CleanupScanResult = {
 	projectId: string,
 	candidates: CleanupCandidate[],
 	totalReclaimableBytes: number,
-};
-
-/**  Cleanup state summary for a project. */
-export type CleanupState = {
-	reclaimableBytes: number,
 };
 
 /**  A compatible session entry within a master detail view. */
@@ -1920,9 +1975,6 @@ export type OpticalTrain = {
 	focalLengthMm: number,
 };
 
-/**  Verification state for a single output. */
-export type OutputVerification = "accepted" | "unreviewed" | "superseded";
-
 /**
  *  One element of an ordered token pattern (data-model.md §PatternPart).
  * 
@@ -2302,7 +2354,9 @@ export type PlanTransitionRequest_Serialize = {
 };
 
 /**  Execution shape of a plan. */
-export type PlanType = "split" | "restructure" | "cleanup" | "archive" | "source_map";
+export type PlanType = "split" | "restructure" | "cleanup" | "archive" | "source_map" | 
+/**  Folder structure + project marker write plan (spec 008, Constitution II). */
+"project_create";
 
 export type PreparedSourceState = "not_created" | "planned" | "ready" | "stale" | "retired";
 
@@ -2339,152 +2393,291 @@ export type ProcessingTool = {
 	enabled: boolean,
 };
 
-/**  A project as seen in list views. */
-export type Project = Project_Serialize | Project_Deserialize;
+/**  A project channel (inferred or manually added). */
+export type ProjectChannelDto = ProjectChannelDto_Serialize | ProjectChannelDto_Deserialize;
 
-/**  A group of processing artifacts within a project detail view. */
-export type ProjectArtifactGroup = ProjectArtifactGroup_Serialize | ProjectArtifactGroup_Deserialize;
-
-/**  A group of processing artifacts within a project detail view. */
-export type ProjectArtifactGroup_Deserialize = {
-	/**  Artifact type label (e.g. "registered", "`drizzle_data`"). */
-	type: string,
-	count: number,
-	totalSizeBytes: number,
-	cleanupEligibility: CleanupEligibility,
-	confidence: ConfidenceLevel,
-	tool: string,
-	protected: boolean,
-	warning: string | null,
+/**  A project channel (inferred or manually added). */
+export type ProjectChannelDto_Deserialize = {
+	label: string,
+	/**  `"inferred"` or `"manual"` */
+	source: string,
+	addedAt: string | null,
 };
 
-/**  A group of processing artifacts within a project detail view. */
-export type ProjectArtifactGroup_Serialize = {
-	/**  Artifact type label (e.g. "registered", "`drizzle_data`"). */
-	type: string,
-	count: number,
-	totalSizeBytes: number,
-	cleanupEligibility: CleanupEligibility,
-	confidence: ConfidenceLevel,
-	tool: string,
-	protected: boolean,
-	warning?: string | null,
+/**  A project channel (inferred or manually added). */
+export type ProjectChannelDto_Serialize = {
+	label: string,
+	/**  `"inferred"` or `"manual"` */
+	source: string,
+	addedAt?: string | null,
 };
 
-/**  Extended detail view of a project. */
-export type ProjectDetail = ProjectDetail_Serialize | ProjectDetail_Deserialize;
+/**  Request body for `projects.channels.dismiss_drift`. */
+export type ProjectChannelsDismissDriftRequest = {
+	requestId: string,
+	projectId: string,
+};
 
-/**  Extended detail view of a project. */
-export type ProjectDetail_Deserialize = {
-	id: string,
-	name: string,
-	workflowProfileId: string,
-	rootPath: string,
-	state: ProjectState,
-	blockedReason: string | null,
-	verificationState: VerificationState,
-	cleanupState: CleanupState,
-	integrationHours: number | null,
-	targetIds: string[],
-	sourceMap: SourceMap,
-	sourceViewIds: string[],
-	outputIds: string[],
-	processingDirectory: string,
-	outputDirectory: string,
+/**  Successful result from `projects.channels.dismiss_drift`. */
+export type ProjectChannelsDismissDriftResult = {
+	projectId: string,
+	auditId: string,
+	dismissedAt: string,
+};
+
+/**  Request body for `projects.channels.reinfer`. */
+export type ProjectChannelsReinferRequest = {
+	requestId: string,
+	projectId: string,
+};
+
+/**  Successful result from `projects.channels.reinfer`. */
+export type ProjectChannelsReinferResult = ProjectChannelsReinferResult_Serialize | ProjectChannelsReinferResult_Deserialize;
+
+/**  Successful result from `projects.channels.reinfer`. */
+export type ProjectChannelsReinferResult_Deserialize = {
+	projectId: string,
+	channels: ProjectChannelDto_Deserialize[],
+	auditId: string,
 	updatedAt: string,
-	targets: string[],
-	sources: ProjectSource_Deserialize[],
-	sourceViews: ProjectSourceView[],
-	outputs: ProjectOutput[],
-	artifacts: ProjectArtifactGroup_Deserialize[],
-	lifecycleStageIndex: number,
-	auditCount: number,
-	planCount: number,
-	cleanupBytes: number,
-	cleanupLabel: string,
-	totalIntegrationLabel: string,
-	onDiskLabel: string,
-	notesCount: number,
-	manifestCount: number,
 };
 
-/**  Extended detail view of a project. */
-export type ProjectDetail_Serialize = {
-	id: string,
-	name: string,
-	workflowProfileId: string,
-	rootPath: string,
-	state: ProjectState,
-	blockedReason?: string | null,
-	verificationState: VerificationState,
-	cleanupState: CleanupState,
-	integrationHours: number | null,
-	targetIds: string[],
-	sourceMap: SourceMap,
-	sourceViewIds: string[],
-	outputIds: string[],
-	processingDirectory: string,
-	outputDirectory: string,
+/**  Successful result from `projects.channels.reinfer`. */
+export type ProjectChannelsReinferResult_Serialize = {
+	projectId: string,
+	channels: ProjectChannelDto_Serialize[],
+	auditId: string,
 	updatedAt: string,
-	targets: string[],
-	sources: ProjectSource_Serialize[],
-	sourceViews: ProjectSourceView[],
-	outputs: ProjectOutput[],
-	artifacts: ProjectArtifactGroup_Serialize[],
-	lifecycleStageIndex: number,
-	auditCount: number,
-	planCount: number,
-	cleanupBytes: number,
-	cleanupLabel: string,
-	totalIntegrationLabel: string,
-	onDiskLabel: string,
-	notesCount: number,
-	manifestCount: number,
 };
 
-/**  An output artifact within a project detail view. */
-export type ProjectOutput = {
-	id: string,
-	filename: string,
-	kind: string,
-	sizeBytes: number,
-	date: string,
-	verification: OutputVerification,
-	protected: boolean,
-};
+/**  Request body for `projects.create` (spec 008, contract version 2.0.0). */
+export type ProjectCreateRequest = ProjectCreateRequest_Serialize | ProjectCreateRequest_Deserialize;
 
-/**  A source entry within a project detail view. */
-export type ProjectSource = ProjectSource_Serialize | ProjectSource_Deserialize;
-
-/**  A source view within a project detail view. */
-export type ProjectSourceView = {
+/**  Request body for `projects.create` (spec 008, contract version 2.0.0). */
+export type ProjectCreateRequest_Deserialize = {
+	requestId: string,
 	name: string,
-	strategy: SourceViewStrategy,
-	linkCount: number,
-	planRef: string,
+	tool: ProjectTool,
+	path: string,
+	initialSources?: string[],
+	notes: string | null,
 };
 
-/**  A source entry within a project detail view. */
-export type ProjectSource_Deserialize = {
-	role: SourceRole,
+/**  Request body for `projects.create` (spec 008, contract version 2.0.0). */
+export type ProjectCreateRequest_Serialize = {
+	requestId: string,
+	name: string,
+	tool: ProjectTool,
+	path: string,
+	initialSources: string[],
+	notes?: string | null,
+};
+
+/**  Successful result from `projects.create`. */
+export type ProjectCreateResult = ProjectCreateResult_Serialize | ProjectCreateResult_Deserialize;
+
+/**  Successful result from `projects.create`. */
+export type ProjectCreateResult_Deserialize = {
+	projectId: string,
+	/**  Always `"setup_incomplete"` (invariant per data-model.md). */
+	lifecycle: string,
+	planId: string | null,
+	channels: ProjectChannelDto_Deserialize[],
+	auditId: string,
+	createdAt: string,
+};
+
+/**  Successful result from `projects.create`. */
+export type ProjectCreateResult_Serialize = {
+	projectId: string,
+	/**  Always `"setup_incomplete"` (invariant per data-model.md). */
+	lifecycle: string,
+	planId?: string | null,
+	channels: ProjectChannelDto_Serialize[],
+	auditId: string,
+	createdAt: string,
+};
+
+/**  A project detail (sources + channels included). */
+export type ProjectDetailDto = ProjectDetailDto_Serialize | ProjectDetailDto_Deserialize;
+
+/**  A project detail (sources + channels included). */
+export type ProjectDetailDto_Deserialize = {
+	id: string,
+	name: string,
+	tool: ProjectTool,
+	lifecycle: string,
+	path: string,
+	notes: string | null,
+	channelDrift: ChannelDriftDto,
+	sources: ProjectSourceDto_Deserialize[],
+	channels: ProjectChannelDto_Deserialize[],
+	createdAt: string,
+	updatedAt: string,
+};
+
+/**  A project detail (sources + channels included). */
+export type ProjectDetailDto_Serialize = {
+	id: string,
+	name: string,
+	tool: ProjectTool,
+	lifecycle: string,
+	path: string,
+	notes?: string | null,
+	channelDrift: ChannelDriftDto,
+	sources: ProjectSourceDto_Serialize[],
+	channels: ProjectChannelDto_Serialize[],
+	createdAt: string,
+	updatedAt: string,
+};
+
+/**  Request body for `projects.source.add`. */
+export type ProjectSourceAddRequest = {
+	requestId: string,
+	projectId: string,
+	inventorySessionId: string,
+};
+
+/**  Successful result from `projects.source.add`. */
+export type ProjectSourceAddResult = ProjectSourceAddResult_Serialize | ProjectSourceAddResult_Deserialize;
+
+/**  Successful result from `projects.source.add`. */
+export type ProjectSourceAddResult_Deserialize = {
+	projectId: string,
+	sourceAdded: ProjectSourceDto_Deserialize,
+	channels: ProjectChannelDto_Deserialize[],
+	auditId: string,
+	linkedAt: string,
+	newLifecycle: string | null,
+};
+
+/**  Successful result from `projects.source.add`. */
+export type ProjectSourceAddResult_Serialize = {
+	projectId: string,
+	sourceAdded: ProjectSourceDto_Serialize,
+	channels: ProjectChannelDto_Serialize[],
+	auditId: string,
+	linkedAt: string,
+	newLifecycle?: string | null,
+};
+
+/**
+ *  A project source (Inventory session link with snapshot fields).
+ * 
+ *  `role` and `selection` are present in the spec 008 data model
+ *  (data-model.md §`ProjectSource`). They are spec 008's canonical definition
+ *  and ensure `SourceRole` + `SourceSelection` are emitted by specta.
+ */
+export type ProjectSourceDto = ProjectSourceDto_Serialize | ProjectSourceDto_Deserialize;
+
+/**
+ *  A project source (Inventory session link with snapshot fields).
+ * 
+ *  `role` and `selection` are present in the spec 008 data model
+ *  (data-model.md §`ProjectSource`). They are spec 008's canonical definition
+ *  and ensure `SourceRole` + `SourceSelection` are emitted by specta.
+ */
+export type ProjectSourceDto_Deserialize = {
+	inventoryId: string,
 	name: string,
 	frames: number,
-	hours: string,
-	selection: SourceSelection,
-	warning: string | null,
+	filter: string,
+	exposure: string,
+	linkedAt: string,
+	/**  Calibration frame role for this source (light, dark, flat, bias). */
+	role: SourceRole | null,
+	/**  Selection state (selected = included in processing; candidate = pending review). */
+	selection: SourceSelection | null,
 };
 
-/**  A source entry within a project detail view. */
-export type ProjectSource_Serialize = {
-	role: SourceRole,
+/**
+ *  A project source (Inventory session link with snapshot fields).
+ * 
+ *  `role` and `selection` are present in the spec 008 data model
+ *  (data-model.md §`ProjectSource`). They are spec 008's canonical definition
+ *  and ensure `SourceRole` + `SourceSelection` are emitted by specta.
+ */
+export type ProjectSourceDto_Serialize = {
+	inventoryId: string,
 	name: string,
 	frames: number,
-	hours: string,
-	selection: SourceSelection,
-	warning?: string | null,
+	filter: string,
+	exposure: string,
+	linkedAt: string,
+	/**  Calibration frame role for this source (light, dark, flat, bias). */
+	role?: SourceRole | null,
+	/**  Selection state (selected = included in processing; candidate = pending review). */
+	selection?: SourceSelection | null,
+};
+
+/**  Request body for `projects.source.remove`. */
+export type ProjectSourceRemoveRequest = {
+	requestId: string,
+	projectId: string,
+	/**  The `inventory_session_id` of the `ProjectSource` to remove. */
+	projectSourceId: string,
+	confirmLastSource?: boolean,
+};
+
+/**  Successful result from `projects.source.remove`. */
+export type ProjectSourceRemoveResult = ProjectSourceRemoveResult_Serialize | ProjectSourceRemoveResult_Deserialize;
+
+/**  Successful result from `projects.source.remove`. */
+export type ProjectSourceRemoveResult_Deserialize = {
+	projectId: string,
+	removedSourceId: string,
+	auditId: string,
+	newLifecycle: string | null,
+};
+
+/**  Successful result from `projects.source.remove`. */
+export type ProjectSourceRemoveResult_Serialize = {
+	projectId: string,
+	removedSourceId: string,
+	auditId: string,
+	newLifecycle?: string | null,
 };
 
 export type ProjectState = "setup_incomplete" | "ready" | "prepared" | "processing" | "completed" | "archived" | "blocked";
+
+/**  A project summary for list views (spec 008 read surface). */
+export type ProjectSummaryDto = ProjectSummaryDto_Serialize | ProjectSummaryDto_Deserialize;
+
+/**  A project summary for list views (spec 008 read surface). */
+export type ProjectSummaryDto_Deserialize = {
+	id: string,
+	name: string,
+	tool: ProjectTool,
+	lifecycle: string,
+	path: string,
+	notes: string | null,
+	channelDrift: boolean,
+	sourceCount: number,
+	createdAt: string,
+	updatedAt: string,
+};
+
+/**  A project summary for list views (spec 008 read surface). */
+export type ProjectSummaryDto_Serialize = {
+	id: string,
+	name: string,
+	tool: ProjectTool,
+	lifecycle: string,
+	path: string,
+	notes?: string | null,
+	channelDrift: boolean,
+	sourceCount: number,
+	createdAt: string,
+	updatedAt: string,
+};
+
+/**
+ *  Processing tool selection for a project (canonical list from data-model.md).
+ * 
+ *  Renamed `ProjectTool` to avoid collision with `contracts_core::tools::ProcessingTool`
+ *  (the tool-detection/registration struct). Same three values; different purpose.
+ */
+export type ProjectTool = "PixInsight" | "Siril" | "Planetary Suite";
 
 export type ProjectTransitionRequest = ProjectTransitionRequest_Serialize | ProjectTransitionRequest_Deserialize;
 
@@ -2510,43 +2703,32 @@ export type ProjectTransitionRequest_Serialize = {
 	actor: TransitionActor,
 };
 
-/**  A project as seen in list views. */
-export type Project_Deserialize = {
-	id: string,
-	name: string,
-	workflowProfileId: string,
-	rootPath: string,
-	state: ProjectState,
-	blockedReason: string | null,
-	verificationState: VerificationState,
-	cleanupState: CleanupState,
-	integrationHours: number | null,
-	targetIds: string[],
-	sourceMap: SourceMap,
-	sourceViewIds: string[],
-	outputIds: string[],
-	processingDirectory: string,
-	outputDirectory: string,
-	updatedAt: string,
+/**  Request body for `projects.update`. */
+export type ProjectUpdateRequest = ProjectUpdateRequest_Serialize | ProjectUpdateRequest_Deserialize;
+
+/**  Request body for `projects.update`. */
+export type ProjectUpdateRequest_Deserialize = {
+	requestId: string,
+	projectId: string,
+	name: string | null,
+	tool: ProjectTool | null,
+	notes: string | null,
 };
 
-/**  A project as seen in list views. */
-export type Project_Serialize = {
-	id: string,
-	name: string,
-	workflowProfileId: string,
-	rootPath: string,
-	state: ProjectState,
-	blockedReason?: string | null,
-	verificationState: VerificationState,
-	cleanupState: CleanupState,
-	integrationHours: number | null,
-	targetIds: string[],
-	sourceMap: SourceMap,
-	sourceViewIds: string[],
-	outputIds: string[],
-	processingDirectory: string,
-	outputDirectory: string,
+/**  Request body for `projects.update`. */
+export type ProjectUpdateRequest_Serialize = {
+	requestId: string,
+	projectId: string,
+	name?: string | null,
+	tool?: ProjectTool | null,
+	notes?: string | null,
+};
+
+/**  Successful result from `projects.update`. */
+export type ProjectUpdateResult = {
+	projectId: string,
+	fieldsUpdated: string[],
+	auditId: string,
 	updatedAt: string,
 };
 
@@ -3019,23 +3201,20 @@ export type SettingsData = {
 /**  Kind of a registered source directory. */
 export type SourceKind = "light_frames" | "dark" | "flat" | "bias" | "project" | "inbox";
 
-/**  Map of calibration frame roles to file paths within a project. */
-export type SourceMap = {
-	lights: string[],
-	darks: string[],
-	flats: string[],
-	bias: string[],
-	darkFlats: string[],
-};
-
-/**  Role of a source within a project. */
+/**
+ *  Role of a linked source within a project (spec 008 data-model.md §`ProjectSource`).
+ * 
+ *  Canonical definition for this spec. Re-exported from `projects.rs` so existing
+ *  command code that imports from that module continues to compile.
+ */
 export type SourceRole = "light" | "dark" | "flat" | "bias";
 
-/**  Selection state for a source within a project. */
+/**
+ *  Selection state for a linked source within a project (spec 008).
+ * 
+ *  Canonical definition for this spec. Re-exported from `projects.rs`.
+ */
 export type SourceSelection = "selected" | "candidate";
-
-/**  Link strategy for a source view. */
-export type SourceViewStrategy = "junction" | "symlink" | "hardlink" | "copy";
 
 export type StatusSummary = {
 	inboxCount: number,
@@ -3393,9 +3572,6 @@ export type UpdateTelescope = {
 	aliases: string[],
 	focalLengthMm: number | null,
 };
-
-/**  Verification state for a project's outputs. */
-export type VerificationState = "unreviewed" | "has_accepted" | "all_rejected";
 
 /**  Project detail view mode. */
 export type ViewMode = "center" | "pipeline" | "combined";

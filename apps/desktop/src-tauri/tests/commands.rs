@@ -28,7 +28,7 @@ use desktop_shell::commands::lifecycle::AppState;
 use desktop_shell::commands::plan_apply::plans_apply_real;
 use desktop_shell::commands::plans::{plans_discard, plans_retry};
 use desktop_shell::commands::preferences::{preferences_get, preferences_set};
-use desktop_shell::commands::projects::{projects_create_plan, projects_get, projects_list};
+use desktop_shell::commands::projects::projects_create_plan;
 use desktop_shell::commands::review::review_queue;
 use desktop_shell::commands::roots::{
     equipment_list, roots_list, roots_remap, roots_remap_apply, scan_start,
@@ -150,20 +150,52 @@ async fn stub_targets_get() {
     assert_eq!(res.unwrap().id, "target-001");
 }
 
-// ─── Projects (3 commands) ──────────────────────────────────────────────────
+// ─── Projects (spec 008 — real implementation with in-memory DB) ────────────
 
-#[tokio::test]
-async fn stub_projects_list() {
-    let res = projects_list(None).await;
-    assert!(res.is_ok(), "projects_list failed: {res:?}");
-    assert!(!res.unwrap().is_empty());
+/// Build an `AppState` backed by an in-memory `SQLite` database (projects tests).
+async fn make_projects_state() -> AppState {
+    let db = Database::in_memory().await.expect("in-memory DB");
+    db.migrate().await.expect("run migrations");
+    let pool = db.pool().clone();
+    let bus = EventBus::with_pool(pool.clone());
+    let repo = Arc::new(SqliteLifecycleRepository::new(pool, bus.clone()));
+    AppState::new(repo, bus)
 }
 
 #[tokio::test]
-async fn stub_projects_get() {
-    let res = projects_get("proj-001".to_owned()).await;
-    assert!(res.is_ok(), "projects_get failed: {res:?}");
-    assert_eq!(res.unwrap().id, "proj-001");
+async fn projects_list_returns_empty_initially() {
+    let state = make_projects_state().await;
+    let res = app_core::project_setup::list(state.repo.pool()).await;
+    assert!(res.is_ok(), "project list failed: {res:?}");
+    assert!(res.unwrap().is_empty());
+}
+
+#[tokio::test]
+async fn projects_get_returns_not_found() {
+    let state = make_projects_state().await;
+    let res = app_core::project_setup::get(state.repo.pool(), "nonexistent").await;
+    assert!(res.is_err());
+    assert_eq!(res.unwrap_err().code, "project.not_found");
+}
+
+#[tokio::test]
+async fn projects_create_and_list() {
+    let state = make_projects_state().await;
+    let req = contracts_core::projects_v2::ProjectCreateRequest {
+        request_id: uuid::Uuid::new_v4().to_string(),
+        name: "NGC 7000 NB".to_owned(),
+        tool: contracts_core::projects_v2::ProjectTool::PixInsight,
+        path: "projects/NGC7000_NB".to_owned(),
+        initial_sources: vec![],
+        notes: None,
+    };
+    let result = app_core::project_setup::create(state.repo.pool(), &state.bus, &req).await;
+    assert!(result.is_ok(), "create failed: {result:?}");
+    assert_eq!(result.unwrap().lifecycle, "setup_incomplete");
+
+    let list = app_core::project_setup::list(state.repo.pool()).await.unwrap();
+    assert_eq!(list.len(), 1);
+    assert_eq!(list[0].name, "NGC 7000 NB");
 }
 
 #[tokio::test]

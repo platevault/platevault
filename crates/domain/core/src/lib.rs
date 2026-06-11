@@ -4,6 +4,7 @@
 pub mod actor;
 pub mod ids;
 pub mod lifecycle;
+pub mod project;
 
 pub use actor::Actor;
 pub use ids::{AuditId, ContentHash, EntityId, Timestamp};

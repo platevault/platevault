@@ -54,7 +54,11 @@ use crate::commands::plans::{
     plans_list, plans_retry,
 };
 use crate::commands::preferences::{preferences_get, preferences_set};
-use crate::commands::projects::{projects_create_plan, projects_get, projects_list};
+use crate::commands::projects::{
+    projects_channels_dismiss_drift, projects_channels_reinfer, projects_create,
+    projects_create_plan, projects_get, projects_list, projects_source_add, projects_source_remove,
+    projects_update,
+};
 use crate::commands::review::review_queue;
 use crate::commands::roots::{
     equipment_list, roots_list, roots_register, roots_remap, roots_remap_apply, scan_start,
@@ -79,6 +83,7 @@ pub const CRATE_NAME: &str = "desktop_shell";
 ///
 /// Reused by `run` (production) and `tests/bindings.rs` (TS emission).
 #[must_use]
+#[allow(clippy::too_many_lines)]
 pub fn specta_builder() -> Builder<tauri::Wry> {
     Builder::<tauri::Wry>::new()
         // Several contract DTOs carry `serde_json::Value` "details" payloads;
@@ -113,9 +118,15 @@ pub fn specta_builder() -> Builder<tauri::Wry> {
             // target lookup + resolve (spec 013)
             target_lookup,
             target_resolve,
-            // projects
+            // projects (spec 008)
             projects_list,
             projects_get,
+            projects_create,
+            projects_update,
+            projects_source_add,
+            projects_source_remove,
+            projects_channels_reinfer,
+            projects_channels_dismiss_drift,
             projects_create_plan,
             // plans (spec 017)
             plans_list,

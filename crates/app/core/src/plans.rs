@@ -118,6 +118,7 @@ fn parse_plan_type(s: &str) -> PlanType {
         "restructure" => PlanType::Restructure,
         "archive" => PlanType::Archive,
         "source_map" => PlanType::SourceMap,
+        "project_create" => PlanType::ProjectCreate,
         _ => PlanType::Cleanup,
     }
 }

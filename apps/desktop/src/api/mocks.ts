@@ -137,12 +137,64 @@ export async function mockInvoke<T>(
       return targetDetail as T;
     }
     case 'projects.list': {
-      const { projects } = await import('@/data/fixtures/projects');
-      return projects as T;
+      // spec 008 real shape: ProjectSummaryDto[]
+      const { mockProjectSummaries } = await import('@/data/fixtures/projects');
+      return mockProjectSummaries as T;
     }
     case 'projects.get': {
-      const { projectDetail } = await import('@/data/fixtures/projects');
-      return projectDetail as T;
+      // spec 008 real shape: ProjectDetailDto
+      const { mockProjectDetail008 } = await import('@/data/fixtures/projects');
+      return mockProjectDetail008 as T;
+    }
+    case 'projects.create': {
+      // Return a minimal success result; tests override this via vi.mock.
+      return {
+        projectId: 'mock-project-id',
+        lifecycle: 'setup_incomplete',
+        planId: 'mock-plan-id',
+        channels: [],
+        auditId: 'mock-audit-id',
+        createdAt: new Date().toISOString(),
+      } as T;
+    }
+    case 'projects.update': {
+      return {
+        projectId: (_args as Record<string, Record<string, string>>)?.req?.projectId ?? 'mock-id',
+        fieldsUpdated: [],
+        auditId: 'mock-audit-id',
+        updatedAt: new Date().toISOString(),
+      } as T;
+    }
+    case 'projects.source.add': {
+      return {
+        projectId: (_args as Record<string, Record<string, string>>)?.req?.projectId ?? 'mock-id',
+        sourceAdded: { inventoryId: 'mock-inv', name: '', frames: 0, filter: '', exposure: '', linkedAt: new Date().toISOString() },
+        channels: [],
+        auditId: 'mock-audit-id',
+        linkedAt: new Date().toISOString(),
+      } as T;
+    }
+    case 'projects.source.remove': {
+      return {
+        projectId: (_args as Record<string, Record<string, string>>)?.req?.projectId ?? 'mock-id',
+        removedSourceId: (_args as Record<string, Record<string, string>>)?.req?.projectSourceId ?? 'mock-src',
+        auditId: 'mock-audit-id',
+      } as T;
+    }
+    case 'projects.channels.reinfer': {
+      return {
+        projectId: (_args as Record<string, Record<string, string>>)?.req?.projectId ?? 'mock-id',
+        channels: [],
+        auditId: 'mock-audit-id',
+        updatedAt: new Date().toISOString(),
+      } as T;
+    }
+    case 'projects.channels.dismiss_drift': {
+      return {
+        projectId: (_args as Record<string, Record<string, string>>)?.req?.projectId ?? 'mock-id',
+        auditId: 'mock-audit-id',
+        dismissedAt: new Date().toISOString(),
+      } as T;
     }
     case 'plans.list': {
       const { plans } = await import('@/data/fixtures/plans');
