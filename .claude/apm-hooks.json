@@ -1,0 +1,132 @@
+{
+  "UserPromptExpansion": [
+    {
+      "matcher": "speckit.*",
+      "hooks": [
+        {
+          "type": "command",
+          "command": ".claude/skills/speckit-dag/scripts/dispatcher.sh",
+          "args": [
+            "pre"
+          ],
+          "timeout": 5,
+          "statusMessage": "Checking SpecKit DAG preconditions..."
+        }
+      ],
+      "_apm_source": "speckit"
+    },
+    {
+      "matcher": "speckit.*",
+      "hooks": [
+        {
+          "type": "command",
+          "command": "python3 .claude/hooks/speckit-dag-hooks/scripts/dispatcher.py .claude/hooks/speckit-dag-hooks/scripts/nodes.json",
+          "args": [
+            "pre"
+          ],
+          "timeout": 5,
+          "statusMessage": "Checking SpecKit DAG preconditions..."
+        }
+      ],
+      "_apm_source": "speckit-dag-hooks"
+    }
+  ],
+  "PreToolUse": [
+    {
+      "matcher": "Skill",
+      "hooks": [
+        {
+          "type": "command",
+          "command": ".claude/hooks/speckit/scripts/speckit-context7-reminder.sh"
+        }
+      ],
+      "_apm_source": "speckit"
+    },
+    {
+      "matcher": "Bash",
+      "hooks": [
+        {
+          "type": "command",
+          "command": ".claude/hooks/speckit/scripts/speckit-issue-close-guard.sh",
+          "if": "Bash(gh issue close*)|Bash(*gh issue close*)|Bash(glab issue close*)"
+        },
+        {
+          "type": "command",
+          "command": ".claude/hooks/speckit/scripts/speckit-issue-label-guard.sh",
+          "if": "Bash(gh issue create*)|Bash(*gh issue create*)|Bash(glab issue create*)|Bash(*glab issue create*)"
+        },
+        {
+          "type": "command",
+          "command": ".claude/hooks/speckit/scripts/speckit-pr-issue-refs.sh",
+          "if": "Bash(gh pr create*)|Bash(*gh pr create*)|Bash(*gh-api.py*pr create*)|Bash(glab mr create*)|Bash(*glab mr create*)"
+        }
+      ],
+      "_apm_source": "speckit"
+    },
+    {
+      "matcher": "Skill",
+      "hooks": [
+        {
+          "type": "command",
+          "command": "python3 .claude/hooks/speckit-dag-hooks/scripts/dispatcher.py .claude/hooks/speckit-dag-hooks/scripts/nodes.json",
+          "args": [
+            "pre"
+          ],
+          "timeout": 5,
+          "statusMessage": "Checking SpecKit DAG preconditions..."
+        }
+      ],
+      "_apm_source": "speckit-dag-hooks"
+    }
+  ],
+  "PostToolUse": [
+    {
+      "matcher": "Bash",
+      "hooks": [
+        {
+          "type": "command",
+          "command": ".claude/hooks/speckit/scripts/speckit-task-commit-check.sh",
+          "if": "Bash(git commit*)"
+        }
+      ],
+      "_apm_source": "speckit"
+    },
+    {
+      "matcher": "Skill",
+      "hooks": [
+        {
+          "type": "command",
+          "command": "python3 .claude/hooks/speckit-dag-hooks/scripts/dispatcher.py .claude/hooks/speckit-dag-hooks/scripts/nodes.json",
+          "args": [
+            "post"
+          ],
+          "timeout": 5,
+          "statusMessage": "Loading SpecKit next-step context..."
+        }
+      ],
+      "_apm_source": "speckit-dag-hooks"
+    }
+  ],
+  "UserPromptSubmit": [
+    {
+      "hooks": [
+        {
+          "type": "command",
+          "command": ".claude/hooks/speckit/scripts/speckit-deferred-issues.sh"
+        }
+      ],
+      "_apm_source": "speckit"
+    }
+  ],
+  "Stop": [
+    {
+      "hooks": [
+        {
+          "type": "command",
+          "command": ".claude/hooks/speckit/scripts/speckit-stop-gate.sh"
+        }
+      ],
+      "_apm_source": "speckit"
+    }
+  ]
+}

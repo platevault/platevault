@@ -33,6 +33,11 @@ export type * as TargetResolve from "./generated/target.resolve";
 export type * as InventoryList from "./generated/inventory.list";
 export type * as InventorySessionReview from "./generated/inventory.session.review";
 
+// Spec 012 — Processing Artifact Observation.
+export type * as ArtifactList from "./generated/artifact.list";
+export type * as ArtifactClassify from "./generated/artifact.classify";
+export type * as WorkflowRunCompleted from "./generated/workflow.run_completed";
+
 // Spec 022 — Desktop theme mode (theme.get / theme.set).
 export type * as ThemeGet from "./generated/theme.get";
 export type * as ThemeSet from "./generated/theme.set";

@@ -833,3 +833,50 @@ export async function toolValidatePath(path: string): Promise<ToolPathValidation
 export async function toolDiscover(request: ToolDiscoverRequest): Promise<ToolDiscoverResponse> {
   return invoke<ToolDiscoverResponse>('tools.discover', { request });
 }
+
+// ── Spec 012: Processing Artifact Observation ─────────────────────────────────
+
+import type {
+  ArtifactListRequest,
+  ArtifactListResponse,
+  ArtifactClassifyRequest,
+  ArtifactClassifyResponse,
+  ArtifactMarkResolvedRequest,
+  ArtifactSummary,
+} from '@/bindings/index';
+
+export type {
+  ArtifactListRequest,
+  ArtifactListResponse,
+  ArtifactClassifyRequest,
+  ArtifactClassifyResponse,
+  ArtifactMarkResolvedRequest,
+  ArtifactSummary,
+};
+
+/**
+ * `artifact.list` — list processing artifacts for a project.
+ *
+ * Defaults to `["present","missing"]` states when `includeStates` is empty.
+ */
+export async function artifactList(request: ArtifactListRequest): Promise<ArtifactListResponse> {
+  return invoke<ArtifactListResponse>('artifact.list', { request });
+}
+
+/**
+ * `artifact.classify` — apply or clear a manual classification override.
+ *
+ * Pass `kind: null` to clear the override and re-apply workflow-profile rules.
+ */
+export async function artifactClassify(
+  request: ArtifactClassifyRequest,
+): Promise<ArtifactClassifyResponse> {
+  return invoke<ArtifactClassifyResponse>('artifact.classify', { request });
+}
+
+/**
+ * `artifact.mark_resolved` — mark a `missing` artifact as user-resolved.
+ */
+export async function artifactMarkResolved(request: ArtifactMarkResolvedRequest): Promise<void> {
+  return invoke<void>('artifact.mark_resolved', { request });
+}

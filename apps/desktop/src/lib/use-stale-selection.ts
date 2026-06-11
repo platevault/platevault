@@ -8,12 +8,12 @@
 
 import { useEffect, useRef } from 'react';
 
-export function useStaleSelectionCleanup(
-  selected: number | undefined,
+export function useStaleSelectionCleanup<T extends string | number>(
+  selected: T | undefined,
   found: boolean,
   clear: () => void,
 ): void {
-  const clearedFor = useRef<number | undefined>(undefined);
+  const clearedFor = useRef<T | undefined>(undefined);
 
   useEffect(() => {
     if (selected === undefined) {

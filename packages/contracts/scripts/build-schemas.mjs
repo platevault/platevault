@@ -39,6 +39,10 @@ const SPEC_CONTRACT_ALLOWLIST = [
   // Spec 006 — Inventory Lifecycle
   "006-inventory-library-lifecycle/contracts/inventory.list.json",
   "006-inventory-library-lifecycle/contracts/inventory.session.review.json",
+  // Spec 012 — Processing Artifact Observation
+  "012-processing-artifact-observation/contracts/artifact.list.json",
+  "012-processing-artifact-observation/contracts/artifact.classify.json",
+  "012-processing-artifact-observation/contracts/workflow.run_completed.json",
 ];
 
 function findSpecContracts() {

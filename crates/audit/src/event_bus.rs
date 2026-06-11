@@ -452,3 +452,143 @@ pub struct ToolLaunchEvent {
 }
 
 pub const TOPIC_TOOL_LAUNCH: &str = "tool.launch";
+
+// ── Artifact observation audit events (spec 012, T007/T007b/FR-008) ──────────
+
+/// Payload for the `artifact.detected` topic (spec 012, T007).
+///
+/// Emitted when a new `ProcessingArtifact` row is created.
+/// Constitution III: file was observed, never written or opened.
+#[derive(Clone, Debug, Serialize, Deserialize, JsonSchema, Type)]
+#[serde(rename_all = "camelCase")]
+pub struct ArtifactDetected {
+    /// UUID of the new `ProcessingArtifact` row.
+    pub artifact_id: String,
+    pub project_id: String,
+    /// Project-relative path of the observed file.
+    pub path: String,
+    pub kind: String,
+    pub tool: String,
+    pub classification_source: String,
+    pub classification_confidence: f64,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub tool_launch_id: Option<String>,
+    pub detected_at: String,
+}
+
+pub const TOPIC_ARTIFACT_DETECTED: &str = "artifact.detected";
+
+/// Payload for the `artifact.updated` topic (spec 012, T007, A8).
+///
+/// Emitted when a tool overwrites a path already indexed; the row is updated
+/// in-place (`content_hash` refreshed). No new `artifact.detected` is emitted.
+#[derive(Clone, Debug, Serialize, Deserialize, JsonSchema, Type)]
+#[serde(rename_all = "camelCase")]
+pub struct ArtifactUpdated {
+    pub artifact_id: String,
+    pub project_id: String,
+    pub path: String,
+    pub tool: String,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub prior_content_hash: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub new_content_hash: Option<String>,
+    pub updated_at: String,
+}
+
+pub const TOPIC_ARTIFACT_UPDATED: &str = "artifact.updated";
+
+/// Payload for the `artifact.missing` topic (spec 012, T007).
+///
+/// Emitted when a reconciliation scan finds that a previously `present` file
+/// is no longer on disk (state → `missing`).
+#[derive(Clone, Debug, Serialize, Deserialize, JsonSchema, Type)]
+#[serde(rename_all = "camelCase")]
+pub struct ArtifactMissing {
+    pub artifact_id: String,
+    pub project_id: String,
+    pub path: String,
+    pub at: String,
+}
+
+pub const TOPIC_ARTIFACT_MISSING: &str = "artifact.missing";
+
+/// Payload for the `artifact.recovered` topic (spec 012, T007).
+///
+/// Emitted when a `missing` artifact is found again on disk.
+#[derive(Clone, Debug, Serialize, Deserialize, JsonSchema, Type)]
+#[serde(rename_all = "camelCase")]
+pub struct ArtifactRecovered {
+    pub artifact_id: String,
+    pub project_id: String,
+    pub path: String,
+    pub at: String,
+}
+
+pub const TOPIC_ARTIFACT_RECOVERED: &str = "artifact.recovered";
+
+/// Payload for the `artifact.classify.override` topic (spec 012, T014).
+///
+/// Emitted when a user manually overrides an artifact's classification kind.
+/// Override is sticky; subsequent re-classifications skip manual rows (T015).
+#[derive(Clone, Debug, Serialize, Deserialize, JsonSchema, Type)]
+#[serde(rename_all = "camelCase")]
+pub struct ArtifactClassifyOverride {
+    pub artifact_id: String,
+    pub project_id: String,
+    pub new_kind: String,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub reason: Option<String>,
+    pub at: String,
+}
+
+pub const TOPIC_ARTIFACT_CLASSIFY_OVERRIDE: &str = "artifact.classify.override";
+
+/// Payload for the `artifact.classify.override.cleared` topic (spec 012, T014, A6).
+///
+/// Emitted when a `kind: null` call deletes the override row and triggers
+/// rule re-classification.
+#[derive(Clone, Debug, Serialize, Deserialize, JsonSchema, Type)]
+#[serde(rename_all = "camelCase")]
+pub struct ArtifactClassifyOverrideCleared {
+    pub artifact_id: String,
+    pub project_id: String,
+    /// Kind the artifact held before the override was cleared.
+    pub prior_kind: String,
+    /// Kind assigned by rule re-classification after clearing.
+    pub new_kind: String,
+    pub at: String,
+}
+
+pub const TOPIC_ARTIFACT_CLASSIFY_OVERRIDE_CLEARED: &str = "artifact.classify.override.cleared";
+
+/// Payload for the `artifact.user_resolved` topic (spec 012).
+///
+/// Emitted when the user marks a `missing` artifact as resolved.
+#[derive(Clone, Debug, Serialize, Deserialize, JsonSchema, Type)]
+#[serde(rename_all = "camelCase")]
+pub struct ArtifactUserResolved {
+    pub artifact_id: String,
+    pub project_id: String,
+    pub at: String,
+}
+
+pub const TOPIC_ARTIFACT_USER_RESOLVED: &str = "artifact.user_resolved";
+
+/// Payload for the `workflow.run_completed` topic (spec 012, FR-010, R-Event-Light).
+///
+/// Emitted when the attribution pass sets `ToolLaunch.completed_at`.
+/// Spec 024 subscribes to this event to write `workflow_run` manifests.
+/// Source is always `system` for this event.
+#[derive(Clone, Debug, Serialize, Deserialize, JsonSchema, Type)]
+#[serde(rename_all = "camelCase")]
+pub struct WorkflowRunCompleted {
+    pub project_id: String,
+    pub tool_id: String,
+    pub tool_launch_id: String,
+    pub completed_at: String,
+    /// UUIDs of `ProcessingArtifact` rows attributed to this launch.
+    pub artifact_ids: Vec<String>,
+}
+
+pub const TOPIC_WORKFLOW_RUN_COMPLETED: &str = "workflow.run_completed";

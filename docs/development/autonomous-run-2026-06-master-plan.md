@@ -37,31 +37,50 @@ Shared surfaces every spec touches (do sequentially to avoid conflict):
 
 Legend: [ ] todo  [~] in progress  [x] done  [S] skipped (with reason)
 
-1. [ ] **018 settings backend** (M) — persistence + use cases + Tauri + wire UI.
-   Unblocks 019, 021. Establishes the backend-wiring pattern. NO blockers.
-2. [ ] **015 token-pattern resolver** (M) — `crates/patterns` resolver + sanitize
-   + validate + override persistence + contracts. Unblocks 005. NO hard blocker.
-3. [ ] **017 cleanup/archive review plans** (L) — plan use cases + persistence +
-   Tauri + UI. Domain model in `crates/fs/planner` exists. Gates 005/008/016/026.
-4. [ ] **025 filesystem plan application** (L) — `crates/fs/executor` + apply/cancel
-   /pause/resume + failure taxonomy + Tauri. With 017 completes mutation spine.
-   Unblocks 026, 008 atomic create, 016 US3.
-5. [ ] **014 catalog index licensing** (M) — download/registry/license + persistence
-   + UI panel + wizard step. Unblocks 013.
-6. [ ] **013 target lookup from FITS OBJECT** (L) — `crates/targeting` catalog
-   loader + exact/fuzzy lookup + persistence. Unblocks 023.
-7. [ ] **008 project create/onboard/edit** (L) — create/update/source use cases
-   (uses 025 for atomic folder), onboarding wizard, channel inference. Unblocks
-   009 auto-transition, 010, 011, 016 US2.
-8. [ ] **009 lifecycle enforcement** (M) — plan-gating, auto-blocked detection,
-   setup→ready auto-transition, unarchive UX. Uses 025.
-9. [ ] **005 inbox mixed-folder split** (L) — metadata extract (fits/xisf) +
-   classify + confirm→plan. Uses 015 + 017/025.
-10. [ ] **006 inventory library lifecycle** (M) — inventory projection + review
-    actions + UI. Uses 005.
-11. [ ] **007 calibration matching rules** (M) — matcher engine + dark/flat/bias
-    rules + assignment persistence + UI.
-12. [ ] **011 processing tool launch** (L) — tool.launch spawn + profiles +
+1. [x] **018 settings backend** (M) — DONE, merged to main (cf5912d). Backend +
+   stable transport + Advanced/Cleanup panes wired. Deferred tail (revisit before
+   final closure): T020 debounce-timer wiring, T025/T028 override+restore UI,
+   NamingStructure pattern-key wiring (→ folded into spec 015), v1→v2 schema
+   migration (T029–T031, no v2 yet), JSON-schema mirror T001/T002 (repo uses
+   build-schemas allowlist, not per-spec dirs — N/A per prior D-002).
+2. [x] **015 token-pattern resolver** (M) — DONE, merged. crates/patterns (56
+   tests), contracts, use case, Tauri, NamingStructure wired. Deferred: per-source
+   pattern override (needs "pattern" added to OVERRIDABLE_KEYS in app/core
+   settings; store in source_overrides); preview against real inventory sessions
+   (needs 006); JSON-schema conformance test.
+3. [x] **017 cleanup/archive review plans** (L) — DONE, merged. Backend only;
+   plan-review UI deferred to consumer specs (DV-015). plans.apply = 025 stub.
+4. [x] **025 filesystem plan application** (L) — DONE, merged. crates/fs/executor
+   (ops+CAS+rollback+cancel/pause/resume), 0015 migration, use cases, Tauri.
+   Deferred: HMAC token upgrade, trash crate, apply UI trigger (consumer specs).
+5. [x] **014 catalog index licensing** (M) — DONE, merged. registry + license +
+   download lifecycle (fake-fetcher tested) + 0016 migration + UI + wizard step.
+   External blocker: astro-plan-catalogs manifest repo/URL not published → real
+   downloads inert until that ships (machinery complete).
+6. [x] **013 target lookup from FITS OBJECT** (L) — DONE, merged. targeting crate
+   (normalize/exact/fuzzy/resolve), 0017 migration, contracts, use cases, Tauri,
+   seeded fixture. Deferred: ingestion auto-route→005, alias UI→023, equivalence
+   seeding (needs catalog event). KNOWN: 014↔013 catalog-slug mismatch to reconcile
+   when real catalog loader wired.
+7. [x] **008 project create/onboard/edit** (L) — DONE, merged. Backend + create->
+   plan seam + frontend (CreateProjectDialog/EditProjectPane/channels/list-detail,
+   49 vitest). Deferred: AddSourcePicker (needs 003 inventory), onboard wizard
+   (needs design), source.not_confirmed guard (003 seam), 009 owns auto-transition.
+8. [x] **009 lifecycle enforcement** (M) — DONE, merged. plan-gating + project_health
+   (auto-ready/auto-block/debounce) + BlockedBanner + transition wiring (93 vitest).
+   Deferred: calibration_unmatched(007), prepared_source_stale(012), plan drawer(017).
+   KNOWN: 002 'project' vs 008 'projects' table divergence; project.unarchived event.
+9. [x] **005 inbox mixed-folder split** (L) — DONE, merged. metadata (fits/xisf/video)
+   + classify + confirm→real-plan + reclassify + plan_listener + UI (107 vitest).
+   Deferred: plan_listener startup spawn (runtime seam), repair scheduler. KNOWN:
+   destructive_destination non-null constraint forces 'archive' on split plans.
+10. [x] **006 inventory library lifecycle** (M) — DONE, merged. projection + review
+    actions wired onto Sessions page (Inventory==Sessions in v4); 0021 root_id FK;
+    154 vitest. Known: inbox confirm must set session root_id for real grouping.
+11. [x] **007 calibration matching rules** — DONE, merged. engine (66 tests) + 0022/
+    0023 + use cases + Calibration page + MatchCandidatesPanel + project T034 panel
+    (185 vitest). Known: fingerprint rows unpopulated (metadata seam).
+12. [~] **011 processing tool launch** (L) — tool.launch spawn + profiles +
     auto-discovery + settings UI. Uses 008.
 13. [ ] **012 processing artifact observation** (L) — notify watcher + classify +
     attribution + workflow.run_completed. Uses 011 + 024.
@@ -105,6 +124,14 @@ reviews actual diffs (not summaries) before accepting, sending corrections to th
 SAME agent via SendMessage so it keeps context. GUI runtime smoke deferred
 (WSL headless) — backend proven by `cargo test`, frontend by `tsc`/vitest.
 
+**Frontend bar (corrected at spec 008)**: React component LOGIC is buildable AND
+testable headless via vitest + @testing-library/react (jsdom) by mocking the
+`@/api/commands`/`invoke` layer — the repo already has vitest. So per-spec
+frontend (dialogs, wiring pages off fixtures to real commands, action handlers)
+MUST be built and vitest-tested. ONLY Playwright/visual-regression smoke is a
+legitimate WSL-headless deferral. Do NOT defer buildable component logic citing
+"needs a browser". Every coder brief must say this.
+
 Reusable backend-wiring PATTERN (established by 018): persistence migration +
 repository → `crates/app/core` use case → `crates/contracts/core` DTOs (regen TS
 via `pnpm run build` in packages/contracts) → Tauri command (keep STABLE frontend
@@ -112,6 +139,43 @@ transport shapes; add new commands rather than changing existing invoke
 signatures, since typecheck can't catch runtime invoke shape drift) → wire only
 the panes/pages the spec OWNS, leaving other-spec surfaces on their current
 source with a `// TODO(spec-NNN)` marker.
+
+## Per-spec verification routine (MUST all pass before commit)
+
+`cargo test --workspace` · `cargo clippy --workspace --all-targets -- -D warnings`
+· `cargo fmt --all --check` · `just typecheck` · `cd apps/desktop && pnpm test`
+· **`just lint`** (pre-commit: typos + trailing-whitespace + EOF — added to routine
+at spec 006 after a pre-existing typo in 0019 slipped through fmt/clippy).
+
+**LINT CONSTRAINT (spec 011)**: `just lint` runs pre-commit `--all-files`, whose
+stash-unstaged step FAILS in-sandbox: the user's uncommitted `apm install` churn
+(~182 modified `.agents`/`.claude`/`.codex` files) sits on the sandbox READ-ONLY
+`.claude` mount, so git can't unlink them ("Read-only file system"). Full
+`just lint`/pre-commit cannot run in-sandbox until that APM churn is committed
+(needs sandbox-disabled git — APM/user domain). Per-spec lint is verified instead
+via `cargo fmt`/`clippy` + `git diff --cached --check` + EOF + `typos` on CHANGED
+files. TODO(user): commit/discard the APM runtime churn to unblock `just lint`.
+
+## Known cross-spec reconciliation items (revisit before final closure)
+
+1. **Two project tables**: spec 002 `project` (migration 0002, used by the generic
+   `lifecycle_transition_apply`) vs spec 008 `projects` (active lifecycle source of
+   truth). Auto-transitions/health write to `projects`. Reconcile/deprecate `project`.
+2. **destructive_destination vocab drift**: 0014 (`archive`/`os_trash`) vs 0019 which
+   recreated `plans` with (`trash`/`archive`/`none`). 'none' IS valid now → 005 split
+   plans needn't force 'archive'. Any code writing 'os_trash' would now violate the
+   constraint (trash path is a 025 stub, not exercised). Pick ONE canonical vocab.
+3. **Catalog slug mismatch**: 014 registry (`common-names`/`opengc`/`abell-pn`) vs
+   013 data-model (`common`/`openngc`/`abell_pn`). Reconcile when real loader wired.
+4. **inbox confirm doesn't set session `root_id`** → 006 inventory grouping orphaned
+   for real data (fixtures/tests fine). Patch 005 confirm to populate root_id.
+5. **plan_listener startup spawn** (005) not wired into Tauri init (EventBus not in
+   setup closure); listener logic unit-tested.
+6. **External blocker**: astro-plan-catalogs manifest repo/URL+minisign key unpublished
+   → 014 real downloads inert.
+7. **HMAC approval token** (025) upgrade from token-equality; **trash crate** for
+   025 trash_op (currently safe TrashUnavailable stub).
+8. **project.unarchived** named event (009) not emitted (uses generic transition event).
 
 ## Progress log (newest first)
 

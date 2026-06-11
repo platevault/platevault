@@ -12,6 +12,24 @@
 
 ---
 
+## Session 2026-06-11 (cont.) — backend build-out divergences
+
+### DV-015 — Spec 017 plan-review UI deferred to consumer specs (v4 divergence)
+
+- **Context**: 017 tasks assume `PlansListPage.tsx`/`PlanDetailPage.tsx` + a plans
+  route. Design-v4 has **no plans page** — only an Archive page (archived entities,
+  Restore/Delete) and no plans routes/components.
+- **Decision**: Implement 017's BACKEND (persistence 0014_plans, use cases
+  list/get/approve/discard/retry + archive send-to-trash/permanently-delete with
+  the spec-016 `blockPermanentDelete` gate, audit events, Tauri commands) and DEFER
+  the plan-review UI to the specs that generate+review plans inline (005 inbox
+  confirm, 008 project create, 025 apply review, 026 source-view removal; Archive
+  page for US6). Building a standalone Plans page now would contradict v4 and depend
+  on unbuilt generating flows. Documented in 017 spec header.
+- **Reconciliation risk**: low. Backend is the durable contract; UI lands with its
+  natural consumer. `plans.apply` stays a 025 stub; per-item FS snapshot + HMAC
+  approval token are 025-coordination TODOs (flagged in `approve_plan`).
+
 ## Session 2026-06-11 — Resume + APM tooling fix
 
 ### D-013 — Installed opt-in SpecKit layers (steering-speckit + speckit-dag-hooks)
