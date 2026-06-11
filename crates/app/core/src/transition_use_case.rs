@@ -102,16 +102,17 @@ where
     }
 
     // 4. actor=system policy (GRILL spec 009 ratification, data-model.md
-    //    §AuditLogEntry §Invariants): only allowed on edges entering or
-    //    leaving `blocked`.
-    if command.actor == "system" && !touches_blocked(&command.from_state, &command.to_state) {
+    //    §AuditLogEntry §Invariants + A4 reconciliation): allowed on edges
+    //    entering or leaving `blocked` AND on the invariant-driven
+    //    `setup_incomplete → ready` auto-transition (R-Ready-Trigger).
+    if command.actor == "system" && !is_system_permitted(&command.from_state, &command.to_state) {
         return record_refused(
             repo,
             &command,
             request_id,
             TransitionErrorCode::ActorNotAuthorised,
             "actor.not_authorised",
-            "actor=system is only permitted on edges entering or leaving `blocked`".to_owned(),
+            "actor=system is only permitted on edges entering or leaving `blocked`, or on the setup_incomplete → ready invariant transition".to_owned(),
             None,
         )
         .await;
@@ -382,12 +383,12 @@ pub fn preview_transition(request: TransitionRequest) -> TransitionResponse {
             },
         );
     }
-    if command.actor == "system" && !touches_blocked(&command.from_state, &command.to_state) {
+    if command.actor == "system" && !is_system_permitted(&command.from_state, &command.to_state) {
         return TransitionResponse::error(
             request_id,
             TransitionError {
                 code: TransitionErrorCode::ActorNotAuthorised,
-                message: "actor=system is only permitted on edges entering or leaving `blocked`"
+                message: "actor=system is only permitted on edges entering or leaving `blocked`, or on the setup_incomplete → ready invariant transition"
                     .to_owned(),
                 details: None,
             },
@@ -446,8 +447,16 @@ fn validate_edge(entity_type: EntityType, from: &str, to: &str) -> bool {
     }
 }
 
-fn touches_blocked(from: &str, to: &str) -> bool {
-    from == "blocked" || to == "blocked"
+/// Returns true when `actor=system` is permitted on this edge.
+///
+/// Per data-model.md §A4 (reconciliation note, GRILL 2026-05-22):
+/// system actor is allowed on:
+/// 1. All edges that enter or leave `blocked` (`* → blocked`, `blocked → *`).
+/// 2. The deterministic invariant-driven `setup_incomplete → ready`
+///    auto-transition (R-Ready-Trigger). This is the only non-blocked edge
+///    that may be driven by actor=system.
+fn is_system_permitted(from: &str, to: &str) -> bool {
+    from == "blocked" || to == "blocked" || (from == "setup_incomplete" && to == "ready")
 }
 
 // ── string → enum parsers ────────────────────────────────────────────────
@@ -722,5 +731,212 @@ mod tests {
         .await;
 
         assert_eq!(resp.status, contracts_core::lifecycle::TransitionStatus::Noop);
+    }
+
+    // R-Ready-Trigger (A4): system actor IS permitted on setup_incomplete → ready
+    #[tokio::test]
+    async fn allows_system_on_setup_incomplete_to_ready() {
+        let repo = InMemoryLifecycleRepository;
+        let bus = test_bus().await;
+        let table = crate::lifecycle_use_case::build_edge_table();
+
+        let resp = apply_transition(
+            &repo,
+            &bus,
+            project_request(
+                ProjectState::SetupIncomplete,
+                ProjectState::Ready,
+                TransitionActor::System,
+            ),
+            &table,
+        )
+        .await;
+
+        // Must NOT be ActorNotAuthorised
+        assert!(
+            resp.error.is_none()
+                || resp.error.as_ref().map(|e| e.code)
+                    != Some(TransitionErrorCode::ActorNotAuthorised),
+            "system actor must be permitted on setup_incomplete → ready"
+        );
+    }
+
+    // A4: system actor must still be rejected on non-permitted non-blocked edges
+    #[tokio::test]
+    async fn rejects_system_on_ready_to_processing() {
+        let repo = InMemoryLifecycleRepository;
+        let bus = test_bus().await;
+        let table = crate::lifecycle_use_case::build_edge_table();
+
+        let resp = apply_transition(
+            &repo,
+            &bus,
+            project_request(ProjectState::Ready, ProjectState::Processing, TransitionActor::System),
+            &table,
+        )
+        .await;
+
+        assert_eq!(
+            resp.error.as_ref().map(|e| e.code),
+            Some(TransitionErrorCode::ActorNotAuthorised)
+        );
+    }
+
+    // Plan-required: completed → archived requires plan
+    #[tokio::test]
+    async fn flags_plan_required_for_completed_to_archived() {
+        let repo = InMemoryLifecycleRepository;
+        let bus = test_bus().await;
+        let table = crate::lifecycle_use_case::build_edge_table();
+
+        let resp = apply_transition(
+            &repo,
+            &bus,
+            project_request(ProjectState::Completed, ProjectState::Archived, TransitionActor::User),
+            &table,
+        )
+        .await;
+
+        assert_eq!(resp.error.as_ref().map(|e| e.code), Some(TransitionErrorCode::PlanRequired));
+    }
+
+    // Plan-required: blocked → archived requires plan
+    #[tokio::test]
+    async fn flags_plan_required_for_blocked_to_archived() {
+        let repo = InMemoryLifecycleRepository;
+        let bus = test_bus().await;
+        let table = crate::lifecycle_use_case::build_edge_table();
+
+        // blocked → archived: system actor is permitted (touches blocked), but plan is required
+        let resp = apply_transition(
+            &repo,
+            &bus,
+            project_request(ProjectState::Blocked, ProjectState::Archived, TransitionActor::User),
+            &table,
+        )
+        .await;
+
+        assert_eq!(resp.error.as_ref().map(|e| e.code), Some(TransitionErrorCode::PlanRequired));
+    }
+
+    // Plan-required: archived → ready requires plan (R-Unarchive)
+    #[tokio::test]
+    async fn flags_plan_required_for_archived_to_ready() {
+        let repo = InMemoryLifecycleRepository;
+        let bus = test_bus().await;
+        let table = crate::lifecycle_use_case::build_edge_table();
+
+        let resp = apply_transition(
+            &repo,
+            &bus,
+            project_request(ProjectState::Archived, ProjectState::Ready, TransitionActor::User),
+            &table,
+        )
+        .await;
+
+        assert_eq!(resp.error.as_ref().map(|e| e.code), Some(TransitionErrorCode::PlanRequired));
+    }
+
+    // Plan-required: archived → processing requires plan
+    #[tokio::test]
+    async fn flags_plan_required_for_archived_to_processing() {
+        let repo = InMemoryLifecycleRepository;
+        let bus = test_bus().await;
+        let table = crate::lifecycle_use_case::build_edge_table();
+
+        let resp = apply_transition(
+            &repo,
+            &bus,
+            project_request(
+                ProjectState::Archived,
+                ProjectState::Processing,
+                TransitionActor::User,
+            ),
+            &table,
+        )
+        .await;
+
+        assert_eq!(resp.error.as_ref().map(|e| e.code), Some(TransitionErrorCode::PlanRequired));
+    }
+
+    // Forbidden edge: processing → ready must be refused
+    #[tokio::test]
+    async fn rejects_processing_to_ready() {
+        let repo = InMemoryLifecycleRepository;
+        let bus = test_bus().await;
+        let table = crate::lifecycle_use_case::build_edge_table();
+
+        let resp = apply_transition(
+            &repo,
+            &bus,
+            project_request(ProjectState::Processing, ProjectState::Ready, TransitionActor::User),
+            &table,
+        )
+        .await;
+
+        assert_eq!(
+            resp.error.as_ref().map(|e| e.code),
+            Some(TransitionErrorCode::TransitionRefused)
+        );
+    }
+
+    // Forbidden edge: blocked → completed must be refused (A3)
+    #[tokio::test]
+    async fn rejects_blocked_to_completed() {
+        let repo = InMemoryLifecycleRepository;
+        let bus = test_bus().await;
+        let table = crate::lifecycle_use_case::build_edge_table();
+
+        let resp = apply_transition(
+            &repo,
+            &bus,
+            project_request(ProjectState::Blocked, ProjectState::Completed, TransitionActor::User),
+            &table,
+        )
+        .await;
+
+        assert_eq!(
+            resp.error.as_ref().map(|e| e.code),
+            Some(TransitionErrorCode::TransitionRefused)
+        );
+    }
+
+    // Forbidden edge: archived → completed must be refused
+    #[tokio::test]
+    async fn rejects_archived_to_completed() {
+        let repo = InMemoryLifecycleRepository;
+        let bus = test_bus().await;
+        let table = crate::lifecycle_use_case::build_edge_table();
+
+        let resp = apply_transition(
+            &repo,
+            &bus,
+            project_request(ProjectState::Archived, ProjectState::Completed, TransitionActor::User),
+            &table,
+        )
+        .await;
+
+        assert_eq!(
+            resp.error.as_ref().map(|e| e.code),
+            Some(TransitionErrorCode::TransitionRefused)
+        );
+    }
+
+    // Allowed unrestricted edges: ready → processing (no plan, user actor)
+    #[tokio::test]
+    async fn allows_ready_to_processing_user() {
+        let repo = InMemoryLifecycleRepository;
+        let bus = test_bus().await;
+        let table = crate::lifecycle_use_case::build_edge_table();
+
+        let resp = apply_transition(
+            &repo,
+            &bus,
+            project_request(ProjectState::Ready, ProjectState::Processing, TransitionActor::User),
+            &table,
+        )
+        .await;
+
+        assert!(resp.error.is_none(), "ready → processing (user) should be allowed");
     }
 }

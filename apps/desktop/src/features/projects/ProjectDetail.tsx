@@ -19,9 +19,18 @@ import {
 import { Pill, Btn, Section, Banner } from '@/ui';
 import type { PillVariant } from '@/ui';
 import { projectStateLabel, projectStateVariant } from '@/lib/lifecycle';
-import { useProjectDetail, useDismissChannelDrift, useReinferChannels } from './store';
+import {
+  useProjectDetail,
+  useDismissChannelDrift,
+  useReinferChannels,
+  useTransitionLifecycle,
+} from './store';
+import type { ProjectLifecycleState } from './store';
 import { EditProjectPane } from './edit/EditProjectPane';
 import { addToast } from '@/shared/toast';
+import { BlockedBanner } from './BlockedBanner';
+import type { BlockedReason, RecoveryEdge } from './BlockedBanner';
+import { lifecycleFooterActions, isPlanRequiredError } from './lifecycle-actions';
 
 // ── Helpers ──────────────────────────────────────────────────────────────────
 
@@ -49,6 +58,7 @@ export function ProjectDetailContent({ projectId }: ProjectDetailContentProps) {
   const { data: project, loading, error } = useProjectDetail(projectId);
   const [editOpen, setEditOpen] = useState(false);
   const [channelWorking, setChannelWorking] = useState(false);
+  const [transitionWorking, setTransitionWorking] = useState(false);
 
   if (loading && !project) {
     return (
@@ -97,6 +107,59 @@ export function ProjectDetailContent({ projectId }: ProjectDetailContentProps) {
     }
   };
 
+  /**
+   * Handle a lifecycle transition. Surfaces plan.required as an info toast
+   * directing the user to the plan flow (US3-4 / US3-5).
+   */
+  const handleTransition = async (
+    nextState: ProjectLifecycleState,
+    actionLabel?: string,
+  ) => {
+    if (transitionWorking) return;
+    setTransitionWorking(true);
+    try {
+      const resp = await useTransitionLifecycle(
+        projectId,
+        lifecycle as ProjectLifecycleState,
+        nextState,
+        actionLabel,
+      );
+      if (resp.status === 'success') {
+        addToast({ message: `Project ${resp.newState ?? nextState}.`, variant: 'success' });
+      } else if (resp.status === 'error' && isPlanRequiredError(resp.error?.code)) {
+        addToast({
+          message: 'A filesystem plan is required before this transition. Create or approve a plan first.',
+          variant: 'info',
+        });
+      } else if (resp.status === 'error') {
+        addToast({
+          message: resp.error?.message ?? 'Transition refused.',
+          variant: 'error',
+        });
+      }
+    } catch {
+      addToast({ message: 'Transition failed.', variant: 'error' });
+    } finally {
+      setTransitionWorking(false);
+    }
+  };
+
+  /** Handle blocked resolve — dispatches the recovery edge from BlockedBanner. */
+  const handleResolveBlocked = (edge: RecoveryEdge) => {
+    void handleTransition(edge as ProjectLifecycleState, 'Resolved blocker');
+  };
+
+  // Derive contextual footer actions for the current lifecycle state.
+  const footerActions = lifecycleFooterActions(lifecycle as ProjectLifecycleState);
+
+  // Derive blocked reason from project (spec 009 US4-2).
+  // The DB currently stores block_reason as a plain string. Until the BlockedReason
+  // typed field is wired, we synthesize a 'user' reason from any available string.
+  const blockedReason: BlockedReason | undefined =
+    lifecycle === 'blocked'
+      ? { kind: 'user', note: 'Project is blocked. Resolve to continue.' }
+      : undefined;
+
   return (
     <DetailPane fill>
       <DetailHeader
@@ -115,6 +178,15 @@ export function ProjectDetailContent({ projectId }: ProjectDetailContentProps) {
           )
         }
       />
+
+      {/* Blocked banner (spec 009 US4-2) — shown above all other content */}
+      {lifecycle === 'blocked' && blockedReason && (
+        <BlockedBanner
+          reason={blockedReason}
+          onResolve={handleResolveBlocked}
+          disabled={transitionWorking}
+        />
+      )}
 
       {/* Channel drift banner (US1c / US4) */}
       {project.channelDrift?.hasNewSources && (
@@ -214,6 +286,32 @@ export function ProjectDetailContent({ projectId }: ProjectDetailContentProps) {
           </Section>
         )}
       </DetailGrid>
+
+      {/* Lifecycle footer actions (spec 009 US3-3) */}
+      {footerActions.length > 0 && (
+        <div
+          style={{
+            display: 'flex',
+            gap: 'var(--alm-sp-2)',
+            padding: 'var(--alm-sp-3) var(--alm-sp-4)',
+            borderTop: '1px solid var(--alm-border)',
+          }}
+          data-testid="lifecycle-footer-actions"
+        >
+          {footerActions.map((action) => (
+            <Btn
+              key={action.nextState}
+              size="sm"
+              variant={action.variant}
+              disabled={transitionWorking}
+              onClick={() => void handleTransition(action.nextState, action.label)}
+              data-testid={`transition-btn-${action.nextState}`}
+            >
+              {action.label}
+            </Btn>
+          ))}
+        </div>
+      )}
 
       {/* Edit pane overlay */}
       {editOpen && (
