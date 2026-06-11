@@ -1,22 +1,39 @@
+/**
+ * ProjectsPage — spec 008 wired.
+ *
+ * List+detail layout for projects. Reads from `projects.list` / `projects.get`
+ * (real commands) instead of PROJECTS_DATA fixture.
+ *
+ * URL state:
+ *   - `selected`: numeric index into the list (preserves existing router contract).
+ *   - `lifecycle`: CSV state filter.
+ *
+ * "New project" button opens CreateProjectDialog (US1). On success, the list
+ * is invalidated and the new project is navigated to.
+ */
+
+import { useState, useCallback } from 'react';
 import { useNavigate, useSearch } from '@tanstack/react-router';
 import { PageShell, ListDetailLayout, TopActionBar } from '@/components';
 import { Btn, EmptyState } from '@/ui';
 import type { BtnVariant } from '@/ui';
-import { PROJECTS_DATA } from '@/data/fixtures/projects';
-import type { ProjectFixture } from '@/data/fixtures/projects';
 import { useStaleSelectionCleanup } from '@/lib/use-stale-selection';
 import { ProjectsList } from './ProjectsList';
 import { ProjectDetailContent } from './ProjectDetail';
+import { useProjects } from './store';
+import { CreateProjectDialog } from './create/CreateProjectDialog';
+import { addToast } from '@/shared/toast';
+import type { ProjectSummaryDto } from '@/bindings/index';
+
+// ── Contextual actions per lifecycle state ────────────────────────────────────
 
 interface ContextualAction {
   label: string;
   variant?: BtnVariant;
 }
 
-// Contextual primary actions for the selected project, driven by lifecycle
-// state (design v4: item actions live in the one toolbar row, not the header).
-function projectActions(state: ProjectFixture['state']): ContextualAction[] {
-  switch (state) {
+function projectActions(lifecycle: string): ContextualAction[] {
+  switch (lifecycle) {
     case 'setup_incomplete':
       return [{ label: 'Continue setup', variant: 'primary' }];
     case 'ready':
@@ -26,7 +43,10 @@ function projectActions(state: ProjectFixture['state']): ContextualAction[] {
     case 'processing':
       return [{ label: 'Mark complete', variant: 'primary' }];
     case 'completed':
-      return [{ label: 'Generate cleanup plan', variant: 'primary' }, { label: 'Archive project' }];
+      return [
+        { label: 'Generate cleanup plan', variant: 'primary' },
+        { label: 'Archive project' },
+      ];
     case 'archived':
       return [{ label: 'Unarchive' }];
     case 'blocked':
@@ -36,24 +56,59 @@ function projectActions(state: ProjectFixture['state']): ContextualAction[] {
   }
 }
 
+// ── Component ────────────────────────────────────────────────────────────────
+
 export function ProjectsPage() {
   const { selected, lifecycle } = useSearch({ from: '/shell/projects' });
   const navigate = useNavigate({ from: '/projects' });
 
-  // Stale-id cleanup only when a selection is explicitly in the URL.
-  const explicit = selected !== undefined ? PROJECTS_DATA.find((p) => p.id === selected) : undefined;
-  useStaleSelectionCleanup(selected, explicit !== undefined, () =>
+  const { data: projects = [], loading } = useProjects();
+  const [createOpen, setCreateOpen] = useState(false);
+
+  // Stale-id cleanup: if selected index is out of range, clear it.
+  const selectedIdx = selected ?? 0;
+  const inRange = projects.length > 0 && selectedIdx < projects.length;
+  useStaleSelectionCleanup(selected, inRange, () =>
     navigate({ search: (prev) => ({ ...prev, selected: undefined }), replace: true }),
   );
 
-  // Soft default: show the first project when nothing is explicitly selected
-  // (do not write it to the URL, so the URL stays clean until the user picks).
-  const selectedId = selected ?? PROJECTS_DATA[0].id;
-  const project: ProjectFixture | undefined = PROJECTS_DATA.find((p) => p.id === selectedId);
+  const project: ProjectSummaryDto | undefined = inRange ? projects[selectedIdx] : undefined;
 
-  const onSelect = (id: number) => navigate({ search: (prev) => ({ ...prev, selected: id }) });
-  const onLifecycleChange = (states: ProjectFixture['state'][]) =>
-    navigate({ search: (prev) => ({ ...prev, lifecycle: states.length ? states : undefined }) });
+  const onSelect = (idx: number) =>
+    navigate({ search: (prev) => ({ ...prev, selected: idx }) });
+
+  type ProjectLifecycleFilter = NonNullable<typeof lifecycle>;
+  const onLifecycleChange = (states: string[]) =>
+    navigate({
+      search: (prev) => ({
+        ...prev,
+        lifecycle: states.length ? (states as ProjectLifecycleFilter) : undefined,
+      }),
+    });
+
+  const handleCreateSuccess = useCallback(
+    (result: { projectId: string; planId?: string | null }) => {
+      // Navigate to first slot (list will re-fetch and show the new project)
+      navigate({ search: (prev) => ({ ...prev, selected: 0 }) });
+      if (result.planId) {
+        addToast({
+          message: `Project created. Review the folder plan before applying.`,
+          variant: 'info',
+          action: {
+            label: 'View plan',
+            onClick: () => navigate({ to: '/archive', search: { selected: undefined } as never }),
+          },
+        });
+      } else {
+        addToast({ message: 'Project created.', variant: 'success' });
+      }
+    },
+    [navigate],
+  );
+
+  const filteredProjects = lifecycle?.length
+    ? projects.filter((p) => (lifecycle as string[]).includes(p.lifecycle))
+    : projects;
 
   return (
     <PageShell>
@@ -61,12 +116,12 @@ export function ProjectsPage() {
         topBar={
           <TopActionBar
             title="Projects"
-            subtitle={`${PROJECTS_DATA.length} projects`}
+            subtitle={loading ? 'Loading…' : `${filteredProjects.length} projects`}
             right={
               <>
                 {project && (
                   <>
-                    {projectActions(project.state).map((a) => (
+                    {projectActions(project.lifecycle).map((a) => (
                       <Btn key={a.label} size="sm" variant={a.variant}>
                         {a.label}
                       </Btn>
@@ -74,23 +129,31 @@ export function ProjectsPage() {
                     <Btn size="sm">Reveal in Explorer</Btn>
                   </>
                 )}
-                <Btn size="sm">+ New project</Btn>
+                <Btn size="sm" variant="primary" onClick={() => setCreateOpen(true)}>
+                  + New project
+                </Btn>
               </>
             }
           />
         }
         list={
           <ProjectsList
-            projects={PROJECTS_DATA}
-            selectedId={selectedId}
-            onSelect={onSelect}
+            projects={filteredProjects}
+            selectedId={project?.id}
+            onSelect={(id) => {
+              const idx = projects.findIndex((p) => p.id === id);
+              if (idx >= 0) onSelect(idx);
+            }}
             lifecycle={lifecycle ?? []}
             onLifecycleChange={onLifecycleChange}
+            loading={loading}
           />
         }
         detail={
           project ? (
-            <ProjectDetailContent project={project} />
+            <ProjectDetailContent projectId={project.id} />
+          ) : loading ? (
+            <EmptyState title="Loading projects…" desc="" />
           ) : (
             <EmptyState
               title="Select a project"
@@ -98,6 +161,12 @@ export function ProjectsPage() {
             />
           )
         }
+      />
+
+      <CreateProjectDialog
+        open={createOpen}
+        onClose={() => setCreateOpen(false)}
+        onSuccess={handleCreateSuccess}
       />
     </PageShell>
   );

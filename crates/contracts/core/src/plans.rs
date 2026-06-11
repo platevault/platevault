@@ -64,6 +64,8 @@ pub enum PlanType {
     Cleanup,
     Archive,
     SourceMap,
+    /// Folder structure + project marker write plan (spec 008, Constitution II).
+    ProjectCreate,
 }
 
 /// Per-plan destination for destructive items (R-Trash-1).

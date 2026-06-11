@@ -9,6 +9,10 @@ import type {
   ProjectOutput,
   ProjectArtifactGroup,
 } from '@/bindings/types';
+import type {
+  ProjectSummaryDto,
+  ProjectDetailDto,
+} from '@/bindings/index';
 
 // ─── Helpers ────────────────────────────────────────────────────────────────
 
@@ -273,4 +277,82 @@ export const projectDetail: ProjectDetail = {
   on_disk_label: '8.4 GB',
   notes_count: 2,
   manifest_count: 3,
+};
+
+// ── Spec 008 real-command fixtures (ProjectSummaryDto / ProjectDetailDto) ─────
+
+export const mockProjectSummaries: ProjectSummaryDto[] = [
+  {
+    id: 'proj-001',
+    name: 'NGC 7000 Narrowband',
+    tool: 'PixInsight',
+    lifecycle: 'processing',
+    path: 'projects/NGC7000_NB',
+    notes: 'SHO palette, Ha dominant',
+    channelDrift: false,
+    sourceCount: 3,
+    createdAt: '2026-05-01T10:00:00Z',
+    updatedAt: '2026-05-20T22:15:00Z',
+  },
+  {
+    id: 'proj-002',
+    name: 'M31 LRGB',
+    tool: 'PixInsight',
+    lifecycle: 'ready',
+    path: 'projects/M31_LRGB',
+    channelDrift: false,
+    sourceCount: 1,
+    createdAt: '2026-05-10T08:00:00Z',
+    updatedAt: '2026-05-19T20:00:00Z',
+  },
+  {
+    id: 'proj-003',
+    name: 'IC 1396 SHO',
+    tool: 'Siril',
+    lifecycle: 'setup_incomplete',
+    path: 'projects/IC1396_SHO',
+    channelDrift: false,
+    sourceCount: 0,
+    createdAt: '2026-05-15T12:00:00Z',
+    updatedAt: '2026-05-18T18:00:00Z',
+  },
+];
+
+export const mockProjectDetail008: ProjectDetailDto = {
+  id: 'proj-001',
+  name: 'NGC 7000 Narrowband',
+  tool: 'PixInsight',
+  lifecycle: 'processing',
+  path: 'projects/NGC7000_NB',
+  notes: 'SHO palette, Ha dominant',
+  channelDrift: { hasNewSources: false, suggestedAction: 'dismiss' },
+  sources: [
+    {
+      inventoryId: 'inv-001',
+      name: 'NGC 7000 Ha 2024-11',
+      frames: 54,
+      filter: 'Ha',
+      exposure: '120s',
+      linkedAt: '2026-05-01T10:05:00Z',
+    },
+    {
+      inventoryId: 'inv-002',
+      name: 'NGC 7000 OIII 2024-11',
+      frames: 38,
+      filter: 'OIII',
+      exposure: '120s',
+      linkedAt: '2026-05-01T10:06:00Z',
+    },
+  ],
+  channels: [
+    { label: 'Ha', source: 'inferred', addedAt: '2026-05-01T10:05:00Z' },
+    { label: 'OIII', source: 'inferred', addedAt: '2026-05-01T10:06:00Z' },
+  ],
+  createdAt: '2026-05-01T10:00:00Z',
+  updatedAt: '2026-05-20T22:15:00Z',
+};
+
+export const mockProjectDetail008WithDrift: ProjectDetailDto = {
+  ...mockProjectDetail008,
+  channelDrift: { hasNewSources: true, suggestedAction: 're_infer' },
 };

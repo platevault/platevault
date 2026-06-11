@@ -35,11 +35,13 @@ export type {
   SearchResultKind,
   TargetKind,
   RootCategory,
+  // Spec 008: project source role + selection (canonical in projects_v2.rs)
   SourceRole,
   SourceSelection,
-  SourceViewStrategy,
-  OutputVerification,
-  CleanupEligibility,
+  // SourceViewStrategy — moved to spec 026 (generated source views); remove this
+  //   re-export when spec 026 registers its command and emits the type.
+  // OutputVerification  — moved to spec 012 (artifact verification); same.
+  // CleanupEligibility  — moved to spec 017 cleanup planner; same.
   SessionsGroupBy,
   SessionsView,
   TransitionActor,
