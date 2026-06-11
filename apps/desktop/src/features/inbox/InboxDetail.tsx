@@ -1,137 +1,119 @@
 /**
- * InboxDetail — center pane for the Inbox review/confirm workflow.
- * Design v4: identity header → metric line (frames) → editable properties.
- * The confirm actions live in the right ActionSidebar (3rd pane).
+ * InboxDetail — centre pane for the Inbox classify/confirm workflow.
+ *
+ * Shows:
+ * - Classification type pill + content signature.
+ * - Breakdown table: one row per frame type with count, destination preview,
+ *   and sample files.
+ * - "Needs review" section: files with unclassified = true, with an inline
+ *   frame-type picker and "Apply override" button (calls inbox.reclassify).
  */
 
+import { useState } from 'react';
 import { DetailHeader, DetailPane, MetricLine } from '@/components';
 import { Pill, Banner, Section, Table } from '@/ui';
-import type { InboxFixture } from '@/data/fixtures/review';
+import type { InboxItemSummary } from '@/api/commands';
+import type { InboxClassifyResponse } from './store';
 import type { PillVariant } from '@/ui';
+import { useInboxReclassify } from './store';
 
-function frameTypeVariant(type: InboxFixture['frameType']): PillVariant {
+// ── Helpers ──────────────────────────────────────────────────────────────────
+
+function classificationVariant(type: string): PillVariant {
   switch (type) {
-    case 'light':
-      return 'info';
-    case 'dark':
-      return 'neutral';
-    case 'flat':
-      return 'accent';
-    case 'bias':
-      return 'ghost';
-    default:
-      return 'neutral';
+    case 'single_type': return 'info';
+    case 'mixed':       return 'warn' as PillVariant;
+    case 'unclassified': return 'neutral';
+    default:            return 'neutral';
   }
 }
 
+const FRAME_TYPE_OPTIONS = ['light', 'dark', 'bias', 'flat', 'dark_flat'] as const;
+
+// ── Props ────────────────────────────────────────────────────────────────────
+
 export interface InboxDetailProps {
-  item: InboxFixture;
+  item: InboxItemSummary;
+  rootAbsolutePath: string;
+  classification: InboxClassifyResponse | null;
 }
 
-export function InboxDetail({ item }: InboxDetailProps) {
-  const title = `${item.target} – ${item.date}${item.filter ? ` – ${item.filter}` : ''}`;
+// ── Component ────────────────────────────────────────────────────────────────
 
-  const propertyColumns = [
-    { key: 'property', label: 'Property', style: { width: 140 } },
-    { key: 'value', label: 'Value' },
-    { key: 'source', label: 'Source', style: { width: 80 } },
-    { key: 'confirm', label: 'Confirm', style: { width: 72 } },
+export function InboxDetail({ item, classification }: InboxDetailProps) {
+  const { reclassify, loading: reclassifyLoading } = useInboxReclassify(item.inboxItemId);
+
+  // Per-file overrides the user has selected but not yet submitted.
+  const [pendingOverrides, setPendingOverrides] = useState<Record<string, string>>({});
+
+  const handleOverrideChange = (filePath: string, frameType: string) => {
+    setPendingOverrides((prev) => ({ ...prev, [filePath]: frameType }));
+  };
+
+  const handleApplyOverrides = async () => {
+    const overrides = Object.entries(pendingOverrides).map(([filePath, frameType]) => ({
+      filePath,
+      frameType,
+    }));
+    if (overrides.length === 0) return;
+    await reclassify(overrides);
+    setPendingOverrides({});
+  };
+
+  const title = item.relativePath || '(root)';
+  const classType = classification?.type ?? 'pending';
+  const unclassifiedCount = classification?.unclassifiedFiles?.length ?? 0;
+
+  const breakdownColumns = [
+    { key: 'kind', label: 'Frame type', style: { width: 100 } },
+    { key: 'count', label: 'Files' },
+    { key: 'destination', label: 'Destination preview' },
+    { key: 'samples', label: 'Sample files' },
   ];
 
-  const gainConflict = item.conflict && /gain/i.test(item.conflict);
-  const gainConflictValues = gainConflict ? item.conflict!.replace(/.*gains?:\s*/i, '').trim() : null;
+  const breakdownRows =
+    classification?.breakdown?.map((entry) => ({
+      kind: <Pill variant={classificationVariant('single_type')}>{entry.kind}</Pill>,
+      count: entry.count,
+      destination: entry.destinationPreview ? (
+        <code style={{ fontSize: 'var(--alm-text-xs)' }}>{entry.destinationPreview}</code>
+      ) : (
+        <span style={{ color: 'var(--alm-color-fg-muted)' }}>—</span>
+      ),
+      samples: (
+        <span style={{ color: 'var(--alm-color-fg-muted)', fontSize: 'var(--alm-text-xs)' }}>
+          {entry.sampleFiles?.slice(0, 3).join(', ')}
+          {(entry.sampleFiles?.length ?? 0) > 3 ? ' …' : ''}
+        </span>
+      ),
+    })) ?? [];
 
-  const propertyRows = [
-    {
-      property: 'Object',
-      value: <input className="alm-input alm-input--sm" defaultValue={item.target} />,
-      source: 'fits',
-      confirm: <input type="checkbox" defaultChecked={item.frameType !== 'dark' && item.frameType !== 'bias'} />,
-    },
-    {
-      property: 'Frame Type',
-      value: (
-        <select className="alm-select alm-select--sm" defaultValue={item.frameType}>
-          <option value="light">light</option>
-          <option value="dark">dark</option>
-          <option value="flat">flat</option>
-          <option value="bias">bias</option>
-          <option value="dark_flat">dark_flat</option>
+  const unclassifiedRows =
+    classification?.unclassifiedFiles?.map((filePath) => ({
+      file: (
+        <code style={{ fontSize: 'var(--alm-text-xs)', wordBreak: 'break-all' }}>{filePath}</code>
+      ),
+      override: (
+        <select
+          className="alm-select alm-select--sm"
+          value={pendingOverrides[filePath] ?? ''}
+          onChange={(e) => handleOverrideChange(filePath, e.target.value)}
+          aria-label={`Frame type for ${filePath}`}
+          data-testid={`override-select-${filePath}`}
+        >
+          <option value="">— select type —</option>
+          {FRAME_TYPE_OPTIONS.map((ft) => (
+            <option key={ft} value={ft}>
+              {ft}
+            </option>
+          ))}
         </select>
       ),
-      source: 'fits',
-      confirm: <input type="checkbox" defaultChecked />,
-    },
-    {
-      property: 'Filter',
-      value: (
-        <select className="alm-select alm-select--sm" defaultValue={item.filter || '--'}>
-          <option value="Ha">Ha</option>
-          <option value="OIII">OIII</option>
-          <option value="SII">SII</option>
-          <option value="L">L</option>
-          <option value="R">R</option>
-          <option value="G">G</option>
-          <option value="B">B</option>
-          <option value="--">--</option>
-        </select>
-      ),
-      source: 'fits',
-      confirm: <input type="checkbox" />,
-    },
-    {
-      property: gainConflict ? (
-        <span style={{ display: 'flex', alignItems: 'center', gap: 4 }}>
-          Gain
-          <span style={{ color: 'var(--alm-warn)', fontSize: 'var(--alm-text-xs)' }} aria-label="Conflict">
-            &#x26A0;
-          </span>
-        </span>
-      ) : (
-        'Gain'
-      ),
-      value: gainConflict ? (
-        <span className="alm-mono" style={{ color: 'var(--alm-warn)' }}>
-          {gainConflictValues?.replace(',', ' &')}
-        </span>
-      ) : (
-        <span className="alm-mono">{item.gain}</span>
-      ),
-      source: 'fits',
-      confirm: <input type="checkbox" defaultChecked />,
-      _rowClassName: gainConflict ? 'alm-prop-table__row--conflict' : undefined,
-    },
-    {
-      property: 'Binning',
-      value: (
-        <select className="alm-select alm-select--sm" defaultValue="1×1">
-          <option>1×1</option>
-          <option>2×2</option>
-          <option>3×3</option>
-          <option>4×4</option>
-        </select>
-      ),
-      source: 'fits',
-      confirm: <input type="checkbox" defaultChecked />,
-    },
-    {
-      property: 'Exposure',
-      value: <span className="alm-mono">{item.exposure}s</span>,
-      source: 'fits',
-      confirm: <input type="checkbox" defaultChecked />,
-    },
-    {
-      property: 'Temperature',
-      value: <input className="alm-input alm-input--sm" defaultValue="-10°C" />,
-      source: 'fits',
-      confirm: <input type="checkbox" />,
-    },
-    {
-      property: 'Set Temperature',
-      value: <input className="alm-input alm-input--sm" defaultValue="-10°C" />,
-      source: 'fits',
-      confirm: <input type="checkbox" />,
-    },
+    })) ?? [];
+
+  const unclassifiedColumns = [
+    { key: 'file', label: 'File' },
+    { key: 'override', label: 'Assign type', style: { width: 160 } },
   ];
 
   return (
@@ -140,30 +122,74 @@ export function InboxDetail({ item }: InboxDetailProps) {
         title={title}
         titleExtra={
           <>
-            <Pill variant={frameTypeVariant(item.frameType)}>{item.frameType}</Pill>
-            {item.filter && <Pill variant="ghost">{item.filter}</Pill>}
+            <Pill variant={classificationVariant(classType)}>
+              {classType === 'single_type'
+                ? classification?.frameType ?? 'single'
+                : classType}
+            </Pill>
+            {item.lane === 'video' && <Pill variant="ghost">video</Pill>}
           </>
         }
       />
 
-      {item.conflict && (
+      {classType === 'mixed' && (
         <Banner variant="warn" style={{ marginTop: 'var(--alm-sp-3)' }}>
-          {item.conflict}
+          Mixed folder — multiple frame types detected. Generate a split plan to
+          move each type to its canonical location.
         </Banner>
       )}
 
-      <MetricLine
-        metrics={[
-          { value: item.frames, label: 'frames' },
-          { value: item.duration, label: 'integration' },
-          { value: item.size, label: 'on disk' },
-          { value: `${item.exposure}s`, label: 'exposure' },
-        ]}
-      />
+      {classType === 'unclassified' && (
+        <Banner variant="warn" style={{ marginTop: 'var(--alm-sp-3)' }}>
+          No IMAGETYP headers could be read. Assign frame types below before confirming.
+        </Banner>
+      )}
 
-      <Section title="Properties">
-        <Table columns={propertyColumns} rows={propertyRows} />
-      </Section>
+      {classification && (
+        <MetricLine
+          metrics={[
+            { value: item.fileCount, label: 'files' },
+            { value: classType, label: 'classification' },
+            ...(unclassifiedCount > 0
+              ? [{ value: unclassifiedCount, label: 'needs review' }]
+              : []),
+          ]}
+        />
+      )}
+
+      {breakdownRows.length > 0 && (
+        <Section title="Frame type breakdown">
+          <Table columns={breakdownColumns} rows={breakdownRows} />
+        </Section>
+      )}
+
+      {unclassifiedRows.length > 0 && (
+        <Section title={`Needs review (${unclassifiedRows.length})`}>
+          <Table columns={unclassifiedColumns} rows={unclassifiedRows} />
+          <div style={{ marginTop: 'var(--alm-sp-2)', display: 'flex', gap: 8 }}>
+            <button
+              className="alm-btn alm-btn--sm alm-btn--accent"
+              onClick={handleApplyOverrides}
+              disabled={Object.keys(pendingOverrides).length === 0 || reclassifyLoading}
+              aria-label="Apply manual overrides"
+            >
+              {reclassifyLoading ? 'Applying…' : `Apply ${Object.keys(pendingOverrides).length} override${Object.keys(pendingOverrides).length !== 1 ? 's' : ''}`}
+            </button>
+          </div>
+        </Section>
+      )}
+
+      {!classification && (
+        <EmptyClassification />
+      )}
     </DetailPane>
+  );
+}
+
+function EmptyClassification() {
+  return (
+    <div style={{ padding: 'var(--alm-sp-4)', color: 'var(--alm-color-fg-muted)' }}>
+      Loading classification…
+    </div>
   );
 }

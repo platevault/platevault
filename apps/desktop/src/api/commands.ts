@@ -28,6 +28,31 @@ import type {
   CatalogManifest,
 } from '@/bindings/types';
 import type {
+  InboxClassifyRequest,
+  InboxClassifyResponse_Serialize as InboxClassifyResponse,
+  InboxConfirmRequest_Deserialize as InboxConfirmRequest,
+  InboxConfirmResponse,
+  InboxItemSummary,
+  InboxReclassifyOverride,
+  InboxReclassifyRequest,
+  InboxReclassifyResponse_Serialize as InboxReclassifyResponse,
+  InboxScanFolderRequest,
+  InboxScanFolderResponse,
+} from '@/bindings/index';
+export type {
+  InboxClassifyRequest,
+  InboxClassifyResponse,
+  InboxConfirmRequest,
+  InboxConfirmResponse,
+  InboxItemSummary,
+  InboxReclassifyOverride,
+  InboxReclassifyRequest,
+  InboxReclassifyResponse,
+  InboxScanFolderRequest,
+  InboxScanFolderResponse,
+};
+
+import type {
   ProjectSummaryDto,
   ProjectDetailDto,
   ProjectCreateRequest,
@@ -537,4 +562,36 @@ export async function catalogDownload(args: {
   return invoke<CatalogDownloadResponse>('catalog.download', {
     args: { catalog_id: args.catalogId, manifest: args.manifest },
   });
+}
+
+// ── Inbox commands (spec 005) ─────────────────────────────────────────────────
+
+/** Scan a root folder and upsert inbox items for each FITS/video leaf directory. */
+export async function inboxScanFolder(
+  req: InboxScanFolderRequest,
+): Promise<InboxScanFolderResponse> {
+  return invoke<InboxScanFolderResponse>('inbox.scan.folder', { req });
+}
+
+/**
+ * Classify an Inbox item using IMAGETYP-only evidence.
+ * Idempotent unless `forceRescan` is true.
+ */
+export async function inboxClassify(req: InboxClassifyRequest): Promise<InboxClassifyResponse> {
+  return invoke<InboxClassifyResponse>('inbox.classify', { req });
+}
+
+/**
+ * Generate a reviewable plan from a classified Inbox item.
+ * `action`: `"split"` for mixed items, `"confirm"` for `single_type`.
+ */
+export async function inboxConfirm(req: InboxConfirmRequest): Promise<InboxConfirmResponse> {
+  return invoke<InboxConfirmResponse>('inbox.confirm', { req });
+}
+
+/** Write manual frame-type overrides and re-aggregate the classification. */
+export async function inboxReclassify(
+  req: InboxReclassifyRequest,
+): Promise<InboxReclassifyResponse> {
+  return invoke<InboxReclassifyResponse>('inbox.reclassify', { req });
 }

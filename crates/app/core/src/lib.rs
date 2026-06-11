@@ -4,6 +4,7 @@
 pub mod catalogs;
 pub mod equipment;
 pub mod first_run;
+pub mod inbox;
 pub mod ledger_use_case;
 pub mod lifecycle_use_case;
 pub mod native;

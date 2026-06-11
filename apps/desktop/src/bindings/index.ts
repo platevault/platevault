@@ -789,15 +789,46 @@ export const commands = {
 	 */
 	calibrationTolerancesUpdate: (request: UpdateCalibrationTolerances) => typedError<CalibrationTolerances, string>(__TAURI_INVOKE("calibration.tolerances.update", { request })),
 	/**
-	 *  `inbox.scan` — on-demand inbox folder scan.
+	 *  `inbox.scan` — legacy stub returning fixture data.
 	 * 
-	 *  Returns a stub list of discovered file entries. The real implementation
-	 *  will delegate to the filesystem inventory scanner.
+	 *  Kept for backward compat; real scanning uses `inbox.scan.folder`.
 	 * 
 	 *  # Errors
-	 *  Returns `Err(String)` on failure; the stub never fails.
+	 *  Never fails; always returns `Ok`.
 	 */
 	inboxScan: (rootId: string | null) => typedError<InboxScanResult, string>(__TAURI_INVOKE("inbox.scan", { rootId })),
+	/**
+	 *  `inbox.scan.folder` — recursively scan a root directory, discover leaf
+	 *  FITS/video folders, upsert `InboxItem`s, and return a summary list.
+	 * 
+	 *  # Errors
+	 *  Returns a string error if the root is not accessible.
+	 */
+	inboxScanFolder: (req: InboxScanFolderRequest) => typedError<InboxScanFolderResponse, string>(__TAURI_INVOKE("inbox.scan.folder", { req })),
+	/**
+	 *  `inbox.classify` — classify an Inbox folder using IMAGETYP-only evidence.
+	 *  Idempotent unless `force_rescan: true`. Returns `contentSignature` for use
+	 *  with `inbox.confirm`.
+	 * 
+	 *  # Errors
+	 *  `inbox.item.not_found` | `metadata.unreadable`
+	 */
+	inboxClassify: (req: InboxClassifyRequest) => typedError<InboxClassifyResponse_Serialize, string>(__TAURI_INVOKE("inbox.classify", { req })),
+	/**
+	 *  `inbox.confirm` — generate a reviewable plan from a classified Inbox item.
+	 * 
+	 *  # Errors
+	 *  `inbox.item.not_found` | `inbox.has.open.plan` | `classification.ambiguous`
+	 *  | `classification.stale` | `pattern.unset`
+	 */
+	inboxConfirm: (req: InboxConfirmRequest_Deserialize) => typedError<InboxConfirmResponse, string>(__TAURI_INVOKE("inbox.confirm", { req })),
+	/**
+	 *  `inbox.reclassify` — write manual frame-type overrides and re-aggregate.
+	 * 
+	 *  # Errors
+	 *  Returns `"inbox.item.not_found"`, `"inbox.has.open.plan"`, or `"file.not_found"`.
+	 */
+	inboxReclassify: (req: InboxReclassifyRequest) => typedError<InboxReclassifyResponse_Serialize, string>(__TAURI_INVOKE("inbox.reclassify", { req })),
 	/**
 	 *  `ingestion.settings.get` — returns current ingestion/scan settings.
 	 * 
@@ -1587,12 +1618,174 @@ export type Frameset = {
 	integrationS: number | null,
 };
 
+/**  One frame-type breakdown entry in a classify response. */
+export type InboxBreakdownEntry = InboxBreakdownEntry_Serialize | InboxBreakdownEntry_Deserialize;
+
+/**  One frame-type breakdown entry in a classify response. */
+export type InboxBreakdownEntry_Deserialize = {
+	kind: string,
+	count: number,
+	destinationPreview: string | null,
+	sampleFiles: string[],
+};
+
+/**  One frame-type breakdown entry in a classify response. */
+export type InboxBreakdownEntry_Serialize = {
+	kind: string,
+	count: number,
+	destinationPreview?: string | null,
+	sampleFiles: string[],
+};
+
+/**  Request for `inbox.classify`. */
+export type InboxClassifyRequest = {
+	inboxItemId: string,
+	forceRescan?: boolean,
+	/**
+	 *  Absolute path to the inbox root on disk (needed by the use case to
+	 *  locate files). Not in the JSON Schema (transport detail).
+	 */
+	rootAbsolutePath: string,
+};
+
+/**  Response from `inbox.classify`. */
+export type InboxClassifyResponse = InboxClassifyResponse_Serialize | InboxClassifyResponse_Deserialize;
+
+/**  Response from `inbox.classify`. */
+export type InboxClassifyResponse_Deserialize = {
+	inboxItemId: string,
+	/**  `"single_type"` | `"mixed"` | `"unclassified"` */
+	type: string,
+	/**  Present only when `type == "single_type"`. */
+	frameType: string | null,
+	contentSignature: string,
+	breakdown: InboxBreakdownEntry_Deserialize[],
+	/**  Relative file paths whose IMAGETYP was absent, unreadable, or unmapped. */
+	unclassifiedFiles: string[],
+	sampleFiles: string[],
+	computedAt: string,
+};
+
+/**  Response from `inbox.classify`. */
+export type InboxClassifyResponse_Serialize = {
+	inboxItemId: string,
+	/**  `"single_type"` | `"mixed"` | `"unclassified"` */
+	type: string,
+	/**  Present only when `type == "single_type"`. */
+	frameType?: string | null,
+	contentSignature: string,
+	breakdown: InboxBreakdownEntry_Serialize[],
+	/**  Relative file paths whose IMAGETYP was absent, unreadable, or unmapped. */
+	unclassifiedFiles: string[],
+	sampleFiles: string[],
+	computedAt: string,
+};
+
+/**  Request for `inbox.confirm`. */
+export type InboxConfirmRequest = InboxConfirmRequest_Serialize | InboxConfirmRequest_Deserialize;
+
+/**  Request for `inbox.confirm`. */
+export type InboxConfirmRequest_Deserialize = {
+	inboxItemId: string,
+	/**  `"split"` for mixed items; `"confirm"` for `single_type` items. */
+	action: string,
+	contentSignature: string,
+	destructiveDestination: string | null,
+	/**
+	 *  Absolute path to the inbox root on disk (needed to read FITS/XISF
+	 *  headers for destination resolution). Not in the JSON Schema contract
+	 *  (Tauri transport detail only).
+	 */
+	rootAbsolutePath: string,
+};
+
+/**  Request for `inbox.confirm`. */
+export type InboxConfirmRequest_Serialize = {
+	inboxItemId: string,
+	/**  `"split"` for mixed items; `"confirm"` for `single_type` items. */
+	action: string,
+	contentSignature: string,
+	destructiveDestination?: string | null,
+	/**
+	 *  Absolute path to the inbox root on disk (needed to read FITS/XISF
+	 *  headers for destination resolution). Not in the JSON Schema contract
+	 *  (Tauri transport detail only).
+	 */
+	rootAbsolutePath: string,
+};
+
+/**  Response from `inbox.confirm`. */
+export type InboxConfirmResponse = {
+	planId: string,
+	/**  Always `"ready_for_review"` for plans created here. */
+	planState: string,
+	itemsTotal: number,
+};
+
 /**  A file entry discovered during an inbox scan. */
 export type InboxFileEntry = {
 	path: string,
 	fileName: string,
 	sizeBytes: number,
 	extension: string,
+};
+
+/**  A discovered inbox item returned from the scan. */
+export type InboxItemSummary = {
+	inboxItemId: string,
+	relativePath: string,
+	fileCount: number,
+	lane: string,
+	state: string,
+	contentSignature: string,
+};
+
+/**  A single file override in a reclassify request. */
+export type InboxReclassifyOverride = {
+	filePath: string,
+	frameType: string,
+};
+
+/**  Request for `inbox.reclassify`. */
+export type InboxReclassifyRequest = {
+	inboxItemId: string,
+	overrides: InboxReclassifyOverride[],
+};
+
+/**  Response from `inbox.reclassify`. */
+export type InboxReclassifyResponse = InboxReclassifyResponse_Serialize | InboxReclassifyResponse_Deserialize;
+
+/**  Response from `inbox.reclassify`. */
+export type InboxReclassifyResponse_Deserialize = {
+	inboxItemId: string,
+	/**  `"single_type"` | `"mixed"` | `"unclassified"` after re-aggregation. */
+	updatedType: string,
+	frameType: string | null,
+	remainingUnclassified: number,
+	appliedCount: number,
+};
+
+/**  Response from `inbox.reclassify`. */
+export type InboxReclassifyResponse_Serialize = {
+	inboxItemId: string,
+	/**  `"single_type"` | `"mixed"` | `"unclassified"` after re-aggregation. */
+	updatedType: string,
+	frameType?: string | null,
+	remainingUnclassified: number,
+	appliedCount: number,
+};
+
+/**  Request to scan a root directory and discover inbox items. */
+export type InboxScanFolderRequest = {
+	rootId: string,
+	rootAbsolutePath: string,
+	followSymlinks?: boolean,
+};
+
+/**  Response from `inbox.scan.folder`. */
+export type InboxScanFolderResponse = {
+	rootId: string,
+	items: InboxItemSummary[],
 };
 
 /**  Result of an inbox scan operation. */
