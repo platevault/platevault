@@ -156,6 +156,15 @@ stash-unstaged step FAILS in-sandbox: the user's uncommitted `apm install` churn
 via `cargo fmt`/`clippy` + `git diff --cached --check` + EOF + `typos` on CHANGED
 files. TODO(user): commit/discard the APM runtime churn to unblock `just lint`.
 
+**GIT STRATEGY CHANGE (spec 012→onward)**: branch SWITCHES (`git checkout`) try to
+sync the uncommitted RO `.claude` churn and FAIL ("Read-only file system"),
+corrupting branch state (012 nearly lost — recovered with sandbox-disabled
+`git checkout -f main` + merge). So from spec 016 on: **commit directly on `main`,
+NO feature branches / no checkouts** (commit + add don't touch the working tree's
+`.claude`). Coders are told to work on main without branching. Specs 018–012 used
+feature-branch+merge; 016+ are direct commits on main. `git branch -D` is also
+blocked by a repo hook — don't delete branches.
+
 ## Known cross-spec reconciliation items (revisit before final closure)
 
 1. **Two project tables**: spec 002 `project` (migration 0002, used by the generic
