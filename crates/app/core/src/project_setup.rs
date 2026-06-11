@@ -26,6 +26,7 @@
 //! Constitution V: SQLite is the durable record; audit events are emitted via
 //! the `EventBus` for every mutation.
 
+use crate::project_health;
 use audit::bus::EventBus;
 use audit::event_bus::Source;
 use contracts_core::projects_v2::{
@@ -125,23 +126,23 @@ async fn persist_channels(
 
 /// Attempt the `setup_incomplete → ready` auto-transition (R-Ready-Trigger).
 ///
-/// Fires when: `lifecycle == "setup_incomplete"` AND the project has ≥ 1 linked
-/// source. Returns the new lifecycle string if the transition was applied.
+/// Delegates to `project_health::check_project_ready_invariant` which is the
+/// single source of truth for this invariant (spec 009 P8). The lifecycle
+/// service writes the audit row and publishes `project.lifecycle.ready`.
+///
+/// Returns the new lifecycle string if the transition was applied.
 async fn maybe_auto_ready(
     pool: &SqlitePool,
+    bus: &EventBus,
     project_id: &str,
     current_lifecycle: &str,
 ) -> Result<Option<String>, persistence_db::DbError> {
     if current_lifecycle != "setup_incomplete" {
         return Ok(None);
     }
-    let sources = repo::list_project_sources(pool, project_id).await?;
-    if sources.is_empty() {
-        return Ok(None);
-    }
-    // Transition to ready.
-    repo::update_project_lifecycle(pool, project_id, "ready").await?;
-    Ok(Some("ready".to_owned()))
+    project_health::check_project_ready_invariant(pool, bus, project_id)
+        .await
+        .map_err(|e| persistence_db::DbError::NotFound(e.to_string()))
 }
 
 /// Attempt the `ready → setup_incomplete` regression when all sources removed.
@@ -371,7 +372,7 @@ pub async fn create(
     persist_channels(pool, &project_id, &channels).await.map_err(db_err)?;
 
     // 8. Auto-transition setup_incomplete → ready if sources are present.
-    let final_lifecycle = maybe_auto_ready(pool, &project_id, "setup_incomplete")
+    let final_lifecycle = maybe_auto_ready(pool, bus, &project_id, "setup_incomplete")
         .await
         .map_err(db_err)?
         .unwrap_or_else(|| "setup_incomplete".to_owned());
@@ -627,7 +628,7 @@ pub async fn add_source(
 
     // Auto-transition setup_incomplete → ready.
     let new_lifecycle =
-        maybe_auto_ready(pool, &req.project_id, &row.lifecycle).await.map_err(db_err)?;
+        maybe_auto_ready(pool, bus, &req.project_id, &row.lifecycle).await.map_err(db_err)?;
 
     // Audit.
     let audit_id = new_id();

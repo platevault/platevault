@@ -1,0 +1,194 @@
+/// <reference types="@testing-library/jest-dom" />
+/**
+ * ProjectDetail lifecycle wiring tests — spec 009 US3-3 / US4.
+ *
+ * Uses mocked Tauri invoke. Tests:
+ * 1. Lifecycle footer actions render for a 'ready' project.
+ * 2. Clicking a transition button dispatches the correct invoke call.
+ * 3. A plan.required error response surfaces an info toast, not an error toast.
+ * 4. A transition.refused error surfaces an error toast.
+ * 5. Blocked banner renders when lifecycle='blocked'.
+ * 6. Clicking resolve on BlockedBanner dispatches a transition to the correct recovery edge.
+ */
+
+import { render, screen, fireEvent, waitFor } from '@testing-library/react';
+import { describe, it, expect, vi, beforeEach } from 'vitest';
+
+// Mock Tauri invoke
+vi.mock('@tauri-apps/api/core', () => ({
+  invoke: vi.fn(),
+}));
+
+// Mock VITE_USE_MOCKS so commands.ts goes through the mocked invoke path
+vi.mock('@/api/commands', async (importOriginal) => {
+  const original = await importOriginal<typeof import('@/api/commands')>();
+  return {
+    ...original,
+    applyProjectLifecycleTransition: vi.fn(),
+    getProject008: vi.fn(),
+    reinferProjectChannels: vi.fn(),
+    dismissProjectChannelDrift: vi.fn(),
+  };
+});
+
+// Mock the project detail store
+vi.mock('./store', async (importOriginal) => {
+  const original = await importOriginal<typeof import('./store')>();
+  return {
+    ...original,
+    useProjectDetail: vi.fn(),
+    useTransitionLifecycle: vi.fn(),
+    useReinferChannels: vi.fn(),
+    useDismissChannelDrift: vi.fn(),
+  };
+});
+
+// Mock toast
+vi.mock('@/shared/toast', () => ({
+  addToast: vi.fn(),
+}));
+
+import { ProjectDetailContent } from './ProjectDetail';
+import * as store from './store';
+import { addToast } from '@/shared/toast';
+import type { ProjectDetailDto } from '@/bindings/index';
+
+const mockProject: ProjectDetailDto = {
+  id: 'proj-001',
+  name: 'NGC 7000',
+  tool: 'PixInsight',
+  lifecycle: 'ready',
+  path: 'projects/NGC7000',
+  notes: null,
+  channelDrift: { hasNewSources: false, suggestedAction: 'dismiss' },
+  sources: [],
+  channels: [],
+  createdAt: '2026-06-01T00:00:00Z',
+  updatedAt: '2026-06-10T00:00:00Z',
+};
+
+function setupStore(project: Partial<ProjectDetailDto> = {}) {
+  vi.mocked(store.useProjectDetail).mockReturnValue({
+    data: { ...mockProject, ...project },
+    loading: false,
+    error: undefined,
+  });
+}
+
+describe('ProjectDetail lifecycle transitions (spec 009 US3-3)', () => {
+  beforeEach(() => {
+    vi.clearAllMocks();
+  });
+
+  it('renders lifecycle footer actions for ready state', () => {
+    setupStore({ lifecycle: 'ready' });
+    render(<ProjectDetailContent projectId="proj-001" />);
+    expect(screen.getByTestId('lifecycle-footer-actions')).toBeInTheDocument();
+    // Should have a "Prepare" button (ready → prepared)
+    expect(screen.getByTestId('transition-btn-prepared')).toBeInTheDocument();
+    // Should have a "Mark as Processing" button (ready → processing)
+    expect(screen.getByTestId('transition-btn-processing')).toBeInTheDocument();
+  });
+
+  it('dispatches transition when action button is clicked', async () => {
+    setupStore({ lifecycle: 'processing' });
+    vi.mocked(store.useTransitionLifecycle).mockResolvedValue({
+      status: 'success',
+      contractVersion: '2.0.0',
+      requestId: 'req-1',
+      newState: 'completed',
+    });
+
+    render(<ProjectDetailContent projectId="proj-001" />);
+    fireEvent.click(screen.getByTestId('transition-btn-completed'));
+
+    await waitFor(() => {
+      expect(store.useTransitionLifecycle).toHaveBeenCalledWith(
+        'proj-001',
+        'processing',
+        'completed',
+        'Mark as Completed',
+      );
+    });
+  });
+
+  it('shows info toast when plan.required is returned (plan-gated edge)', async () => {
+    setupStore({ lifecycle: 'ready' });
+    vi.mocked(store.useTransitionLifecycle).mockResolvedValue({
+      status: 'error',
+      contractVersion: '2.0.0',
+      requestId: 'req-2',
+      error: { code: 'plan.required', message: 'Plan required' },
+    });
+
+    render(<ProjectDetailContent projectId="proj-001" />);
+    fireEvent.click(screen.getByTestId('transition-btn-prepared'));
+
+    await waitFor(() => {
+      expect(addToast).toHaveBeenCalledWith(
+        expect.objectContaining({ variant: 'info' }),
+      );
+    });
+  });
+
+  it('shows error toast when transition is refused', async () => {
+    setupStore({ lifecycle: 'ready' });
+    vi.mocked(store.useTransitionLifecycle).mockResolvedValue({
+      status: 'error',
+      contractVersion: '2.0.0',
+      requestId: 'req-3',
+      error: { code: 'transition.refused', message: 'Transition refused: edge not allowed' },
+    });
+
+    render(<ProjectDetailContent projectId="proj-001" />);
+    fireEvent.click(screen.getByTestId('transition-btn-processing'));
+
+    await waitFor(() => {
+      expect(addToast).toHaveBeenCalledWith(
+        expect.objectContaining({ variant: 'error' }),
+      );
+    });
+  });
+
+  it('renders the blocked banner when lifecycle=blocked', () => {
+    setupStore({ lifecycle: 'blocked' });
+    render(<ProjectDetailContent projectId="proj-001" />);
+    expect(screen.getByRole('alert')).toBeInTheDocument();
+    expect(screen.getByTestId('blocked-resolve-btn')).toBeInTheDocument();
+  });
+
+  it('dispatches blocked → ready transition on resolve click (user reason)', async () => {
+    setupStore({ lifecycle: 'blocked' });
+    vi.mocked(store.useTransitionLifecycle).mockResolvedValue({
+      status: 'success',
+      contractVersion: '2.0.0',
+      requestId: 'req-4',
+      newState: 'ready',
+    });
+
+    render(<ProjectDetailContent projectId="proj-001" />);
+    fireEvent.click(screen.getByTestId('blocked-resolve-btn'));
+
+    await waitFor(() => {
+      expect(store.useTransitionLifecycle).toHaveBeenCalledWith(
+        'proj-001',
+        'blocked',
+        'ready',
+        'Resolved blocker',
+      );
+    });
+  });
+
+  it('does not render footer actions when lifecycle=setup_incomplete', () => {
+    setupStore({ lifecycle: 'setup_incomplete' });
+    render(<ProjectDetailContent projectId="proj-001" />);
+    expect(screen.queryByTestId('lifecycle-footer-actions')).not.toBeInTheDocument();
+  });
+
+  it('renders unarchive actions for archived state', () => {
+    setupStore({ lifecycle: 'archived' });
+    render(<ProjectDetailContent projectId="proj-001" />);
+    expect(screen.getByTestId('transition-btn-ready')).toBeInTheDocument();
+    expect(screen.getByTestId('transition-btn-processing')).toBeInTheDocument();
+  });
+});

@@ -422,6 +422,75 @@ export async function dismissProjectChannelDrift(
   });
 }
 
+// ── Lifecycle transition commands (spec 009) ──────────────────────────────────
+
+/**
+ * Lifecycle state for a project (mirrors domain_core::lifecycle::project::ProjectState).
+ * Must stay in sync with the Rust enum and contracts/project.lifecycle.transition.json.
+ */
+export type ProjectLifecycleState =
+  | 'setup_incomplete'
+  | 'ready'
+  | 'prepared'
+  | 'processing'
+  | 'completed'
+  | 'archived'
+  | 'blocked';
+
+export type TransitionActor = 'user' | 'system';
+
+export interface ProjectLifecycleTransitionRequest {
+  contractVersion: string;
+  requestId: string;
+  entityType: 'project';
+  entityId: string;
+  currentState: ProjectLifecycleState;
+  nextState: ProjectLifecycleState;
+  actionLabel?: string;
+  actor: TransitionActor;
+}
+
+export type TransitionErrorCode =
+  | 'transition.refused'
+  | 'entity.not_found'
+  | 'actor.not_authorised'
+  | 'plan.required'
+  | 'plan.not_approved'
+  | 'provenance.unreviewed';
+
+export interface TransitionError {
+  code: TransitionErrorCode;
+  message: string;
+  details?: unknown;
+}
+
+export type TransitionStatus = 'success' | 'noop' | 'error';
+
+export interface LifecycleTransitionResponse {
+  status: TransitionStatus;
+  contractVersion: string;
+  requestId: string;
+  appliedAt?: string;
+  priorState?: string;
+  newState?: string;
+  auditId?: string;
+  planId?: string;
+  error?: TransitionError;
+}
+
+/**
+ * Apply a project lifecycle transition.
+ * Returns the transition response (check response.status for success/error).
+ * Plan-required edges return status='error' with error.code='plan.required'.
+ */
+export async function applyProjectLifecycleTransition(
+  req: ProjectLifecycleTransitionRequest,
+): Promise<LifecycleTransitionResponse> {
+  return invoke<LifecycleTransitionResponse>('lifecycle_transition_apply', {
+    request: { project: req },
+  });
+}
+
 // ── Catalog commands (spec 014) ───────────────────────────────────────────────
 
 /**

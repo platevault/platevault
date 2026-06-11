@@ -22,6 +22,11 @@ import {
   removeProjectSource,
   reinferProjectChannels,
   dismissProjectChannelDrift,
+  applyProjectLifecycleTransition,
+} from '@/api/commands';
+import type {
+  ProjectLifecycleState,
+  LifecycleTransitionResponse,
 } from '@/api/commands';
 import type { ProjectSummaryDto, ProjectDetailDto } from '@/bindings/index';
 import type {
@@ -138,3 +143,37 @@ export async function useDismissChannelDrift(
   invalidateProject(req.projectId);
   return result;
 }
+
+/**
+ * Apply a lifecycle transition to a project.
+ *
+ * - Invalidates the project list + detail on success.
+ * - When the response has status='error' with code='plan.required', the caller
+ *   is responsible for surfacing the plan-create flow (US3-4 / US3-5).
+ * - When the response has status='error' with any other code, the caller
+ *   should surface an inline error toast.
+ */
+export async function useTransitionLifecycle(
+  projectId: string,
+  currentState: ProjectLifecycleState,
+  nextState: ProjectLifecycleState,
+  actionLabel?: string,
+): Promise<LifecycleTransitionResponse> {
+  const result = await applyProjectLifecycleTransition({
+    contractVersion: '2.0.0',
+    requestId: crypto.randomUUID(),
+    entityType: 'project',
+    entityId: projectId,
+    currentState,
+    nextState,
+    actionLabel,
+    actor: 'user',
+  });
+  if (result.status === 'success') {
+    invalidateProject(projectId);
+  }
+  return result;
+}
+
+// Re-export types needed by consumers
+export type { ProjectLifecycleState, LifecycleTransitionResponse };
