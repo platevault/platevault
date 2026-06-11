@@ -1,48 +1,46 @@
 /**
- * ActionSidebar -- right sidebar for Inbox page.
- * Full-width action buttons with keyboard shortcut hints.
- * Design V3 rewrite.
+ * ActionSidebar — right action bar for the Inbox workflow.
+ *
+ * Shows context-sensitive actions:
+ * - "Confirm to Inventory" (single_type) or "Generate Split Plan" (mixed).
+ * - "Open Existing Plan" when state = plan_open.
+ * - Keyboard shortcuts: C = confirm/split, O = open plan.
  */
 
 import { useEffect, useCallback } from 'react';
 import { Btn } from '@/ui';
-
-export type InboxAction = 'confirm' | 'reject' | 'split' | 'merge' | 'edit';
+import type { InboxClassifyResponse } from './store';
 
 export interface ActionSidebarProps {
   hasSelection: boolean;
-  onAction?: (action: InboxAction) => void;
+  classification: InboxClassifyResponse | null;
+  hasOpenPlan: boolean;
+  confirmLoading: boolean;
+  canConfirm: boolean;
+  onConfirm: () => void;
+  onOpenExistingPlan: () => void;
 }
 
-interface ActionDef {
-  action: InboxAction;
-  label: string;
-  hotkey: string;
-  variant?: 'accent' | 'danger';
-}
+export function ActionSidebar({
+  hasSelection,
+  classification,
+  hasOpenPlan,
+  confirmLoading,
+  canConfirm,
+  onConfirm,
+  onOpenExistingPlan,
+}: ActionSidebarProps) {
+  const isMixed = classification?.type === 'mixed';
+  const confirmLabel = hasOpenPlan
+    ? 'Open existing plan'
+    : isMixed
+      ? 'Generate split plan'
+      : 'Confirm to inventory';
 
-const ACTIONS: ActionDef[] = [
-  { action: 'confirm', label: 'Confirm', hotkey: 'C', variant: 'accent' },
-  { action: 'reject', label: 'Reject', hotkey: 'R', variant: 'danger' },
-  { action: 'split', label: 'Split', hotkey: 'S' },
-  { action: 'merge', label: 'Merge', hotkey: 'M' },
-  { action: 'edit', label: 'Edit', hotkey: 'E' },
-];
-
-const HOTKEY_MAP: Record<string, InboxAction> = {
-  c: 'confirm',
-  r: 'reject',
-  s: 'split',
-  m: 'merge',
-  e: 'edit',
-};
-
-export function ActionSidebar({ hasSelection, onAction }: ActionSidebarProps) {
-  const handleKeyDown = useCallback(
+  const handleConfirmKey = useCallback(
     (e: KeyboardEvent) => {
       if (!hasSelection) return;
       if (e.metaKey || e.ctrlKey || e.altKey) return;
-
       const target = e.target as HTMLElement;
       const isInput =
         target.tagName === 'INPUT' ||
@@ -51,25 +49,33 @@ export function ActionSidebar({ hasSelection, onAction }: ActionSidebarProps) {
         target.isContentEditable;
       if (isInput) return;
 
-      const action = HOTKEY_MAP[e.key.toLowerCase()];
-      if (action) {
+      if (e.key.toLowerCase() === 'c') {
         e.preventDefault();
-        onAction?.(action);
+        if (hasOpenPlan) onOpenExistingPlan();
+        else if (canConfirm) onConfirm();
+      }
+      if (e.key.toLowerCase() === 'o' && hasOpenPlan) {
+        e.preventDefault();
+        onOpenExistingPlan();
       }
     },
-    [hasSelection, onAction],
+    [hasSelection, hasOpenPlan, canConfirm, onConfirm, onOpenExistingPlan],
   );
 
   useEffect(() => {
-    document.addEventListener('keydown', handleKeyDown);
-    return () => document.removeEventListener('keydown', handleKeyDown);
-  }, [handleKeyDown]);
+    document.addEventListener('keydown', handleConfirmKey);
+    return () => document.removeEventListener('keydown', handleConfirmKey);
+  }, [handleConfirmKey]);
+
+  const unclassifiedCount = classification?.unclassifiedFiles?.length ?? 0;
+  const hasUnclassified = unclassifiedCount > 0;
+  const isUnclassified = classification?.type === 'unclassified';
 
   return (
     <aside
       className="alm-action-sidebar"
-      aria-label="Session actions"
-      style={{ width: 180, flexShrink: 0, padding: '12px 0' }}
+      aria-label="Inbox actions"
+      style={{ width: 200, flexShrink: 0, padding: '12px 0' }}
     >
       <div
         style={{
@@ -83,30 +89,62 @@ export function ActionSidebar({ hasSelection, onAction }: ActionSidebarProps) {
       >
         Actions
       </div>
+
       <div style={{ display: 'flex', flexDirection: 'column', gap: 4, padding: '0 12px' }}>
-        {ACTIONS.map((def) => (
-          <Btn
-            key={def.action}
-            variant={def.variant}
-            disabled={!hasSelection}
-            onClick={() => onAction?.(def.action)}
-            style={{ width: '100%', justifyContent: 'space-between' }}
+        {/* Primary action: confirm or open existing plan */}
+        <Btn
+          variant={hasOpenPlan ? undefined : 'accent'}
+          disabled={!hasSelection || confirmLoading || (!hasOpenPlan && !canConfirm)}
+          onClick={hasOpenPlan ? onOpenExistingPlan : onConfirm}
+          style={{ width: '100%', justifyContent: 'space-between' }}
+          aria-label={confirmLabel}
+          data-testid="inbox-confirm-btn"
+        >
+          <span>{confirmLoading ? 'Working…' : confirmLabel}</span>
+          <kbd
+            style={{
+              fontSize: 10,
+              opacity: 0.6,
+              background: 'rgba(0,0,0,0.15)',
+              borderRadius: 3,
+              padding: '1px 4px',
+            }}
           >
-            <span>{def.label}</span>
-            <kbd
-              style={{
-                fontSize: 10,
-                opacity: 0.6,
-                background: 'rgba(0,0,0,0.15)',
-                borderRadius: 3,
-                padding: '1px 4px',
-              }}
-            >
-              {def.hotkey}
-            </kbd>
-          </Btn>
-        ))}
+            {hasOpenPlan ? 'O' : 'C'}
+          </kbd>
+        </Btn>
       </div>
+
+      {/* Classification summary */}
+      {hasSelection && classification && (
+        <div
+          style={{
+            margin: '12px 12px 0',
+            padding: '8px',
+            background: 'var(--alm-color-surface-2, rgba(0,0,0,0.05))',
+            borderRadius: 4,
+            fontSize: 'var(--alm-text-xs)',
+            color: 'var(--alm-color-fg-muted)',
+          }}
+        >
+          <div>
+            <strong>Type:</strong>{' '}
+            {classification.type === 'single_type'
+              ? classification.frameType ?? 'single'
+              : classification.type}
+          </div>
+          {hasUnclassified && (
+            <div style={{ color: 'var(--alm-color-warn, #c07d00)', marginTop: 4 }}>
+              ⚠ {unclassifiedCount} file{unclassifiedCount !== 1 ? 's' : ''} need review
+            </div>
+          )}
+          {isUnclassified && !hasUnclassified && (
+            <div style={{ color: 'var(--alm-color-warn, #c07d00)', marginTop: 4 }}>
+              No IMAGETYP headers found
+            </div>
+          )}
+        </div>
+      )}
     </aside>
   );
 }

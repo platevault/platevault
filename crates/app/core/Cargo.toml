@@ -12,13 +12,19 @@ audit = { path = "../../audit" }
 contracts_core = { path = "../../contracts/core" }
 domain_core = { path = "../../domain/core" }
 fs_executor = { path = "../../fs/executor" }
+metadata_core = { path = "../../metadata/core" }
+metadata_fits = { path = "../../metadata/fits" }
+metadata_xisf = { path = "../../metadata/xisf" }
+metadata_video = { path = "../../metadata/video" }
 patterns = { path = "../../patterns" }
 persistence_db = { path = "../../persistence/db" }
 project_structure = { path = "../../project/structure" }
 targeting = { path = "../../targeting" }
 targeting_catalogs = { path = "../../targeting/catalogs" }
+hex.workspace = true
 serde = { workspace = true }
 serde_json.workspace = true
+sha2.workspace = true
 sqlx.workspace = true
 thiserror.workspace = true
 time = { workspace = true }
@@ -27,8 +33,7 @@ tracing = { workspace = true }
 uuid = { workspace = true }
 
 [dev-dependencies]
-sha2.workspace = true
-hex.workspace = true
+tempfile = { workspace = true }
 
 [features]
 # Developer-mode surface (spec 021). Release binaries must NOT enable this.

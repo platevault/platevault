@@ -37,7 +37,9 @@ use crate::commands::equipment::{
 use crate::commands::firstrun::{
     firstrun_complete, firstrun_restart, firstrun_state, roots_register_batch,
 };
-use crate::commands::inbox::inbox_scan;
+use crate::commands::inbox::{
+    inbox_classify, inbox_confirm, inbox_reclassify, inbox_scan, inbox_scan_folder,
+};
 use crate::commands::ingestion::{ingestion_settings_get, ingestion_settings_update};
 use crate::commands::lifecycle::{
     lifecycle_ledger_list, lifecycle_transition_apply, lifecycle_transition_preview,
@@ -211,8 +213,12 @@ pub fn specta_builder() -> Builder<tauri::Wry> {
             // calibration tolerances (spec 030)
             calibration_tolerances_get,
             calibration_tolerances_update,
-            // inbox (spec 030)
+            // inbox (spec 005 + 030)
             inbox_scan,
+            inbox_scan_folder,
+            inbox_classify,
+            inbox_confirm,
+            inbox_reclassify,
             // ingestion settings (spec 030)
             ingestion_settings_get,
             ingestion_settings_update,

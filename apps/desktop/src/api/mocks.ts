@@ -315,6 +315,54 @@ export async function mockInvoke<T>(
       return { completed: false } as T;
     }
 
+    // ── Inbox commands (spec 005) ──────────────────────────────────────────────
+    case 'inbox.scan.folder': {
+      return {
+        rootId: 'root-inbox-001',
+        items: [
+          { inboxItemId: 'item-001', relativePath: '2025-10-10/NGC7000', fileCount: 18, lane: 'fits', state: 'classified', contentSignature: 'sig-abc' },
+          { inboxItemId: 'item-002', relativePath: '2025-10-10/darks', fileCount: 50, lane: 'fits', state: 'pending_classification', contentSignature: 'sig-def' },
+        ],
+      } as T;
+    }
+    case 'inbox.classify': {
+      const args = _args as { req: { inboxItemId: string } } | undefined;
+      const id = args?.req?.inboxItemId ?? 'item-001';
+      const isMixed = id === 'item-001';
+      return {
+        inboxItemId: id,
+        type: isMixed ? 'mixed' : 'single_type',
+        frameType: isMixed ? undefined : 'dark',
+        contentSignature: `sig-${id}`,
+        breakdown: isMixed
+          ? [
+              { kind: 'light', count: 16, destinationPreview: 'NGC7000/Ha/2025-10-10/light/', sampleFiles: ['NGC7000_Ha_001.fits', 'NGC7000_Ha_002.fits'] },
+              { kind: 'dark', count: 2, destinationPreview: 'unclassified/2025-10-10/dark/', sampleFiles: ['dark_001.fits'] },
+            ]
+          : [{ kind: 'dark', count: 50, destinationPreview: 'darks/2025-10-10/dark/', sampleFiles: ['dark_001.fits'] }],
+        unclassifiedFiles: isMixed ? ['NGC7000_Ha_mixed.fits'] : [],
+        sampleFiles: ['NGC7000_Ha_001.fits'],
+        computedAt: new Date().toISOString(),
+      } as T;
+    }
+    case 'inbox.confirm': {
+      return {
+        planId: `plan-${Date.now()}`,
+        planState: 'ready_for_review',
+        itemsTotal: 18,
+      } as T;
+    }
+    case 'inbox.reclassify': {
+      const args = _args as { req: { inboxItemId: string } } | undefined;
+      return {
+        inboxItemId: args?.req?.inboxItemId ?? 'item-001',
+        updatedType: 'single_type',
+        frameType: 'light',
+        remainingUnclassified: 0,
+        appliedCount: 1,
+      } as T;
+    }
+
     default:
       throw new Error(`Unknown mock command: ${cmd}`);
   }
