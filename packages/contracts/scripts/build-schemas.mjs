@@ -33,6 +33,9 @@ const SPEC_CONTRACT_ALLOWLIST = [
   "004-native-filesystem-controls/contracts/native.reveal.json",
   "022-mantine-prototype-design-system/contracts/theme.get.json",
   "022-mantine-prototype-design-system/contracts/theme.set.json",
+  // Spec 013 — Target Lookup From FITS OBJECT
+  "013-target-lookup-from-fits-object/contracts/target.lookup.json",
+  "013-target-lookup-from-fits-object/contracts/target.resolve.json",
 ];
 
 function findSpecContracts() {

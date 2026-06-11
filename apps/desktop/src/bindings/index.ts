@@ -114,6 +114,30 @@ export const commands = {
 	 */
 	targetsGet: (id: string) => typedError<TargetDetail_Serialize, string>(__TAURI_INVOKE("targets.get", { id })),
 	/**
+	 *  `target.lookup` — ranked candidate list from a free-form query.
+	 * 
+	 *  Runs the normalize → exact → fuzzy → edit-distance pipeline and returns
+	 *  ranked matches for the UI catalog picker.
+	 * 
+	 *  # Errors
+	 * 
+	 *  Returns `Err(String)` on unexpected internal failure. Lookup errors
+	 *  (empty query, catalog not installed) are encoded in the response body.
+	 */
+	targetLookup: (req: TargetLookupRequest) => typedError<TargetLookupResponse_Serialize, string>(__TAURI_INVOKE("target.lookup", { req })),
+	/**
+	 *  `target.resolve` — resolve a FITS OBJECT header value to a stable target.
+	 * 
+	 *  Non-blocking: callers MUST handle `unresolved`, `ambiguous`, and `error`
+	 *  responses without blocking the ingestion flow (FR-006, constitution §II).
+	 * 
+	 *  # Errors
+	 * 
+	 *  Returns `Err(String)` on unexpected internal failure. Resolution errors
+	 *  (empty query, catalog not installed) are encoded in the response status.
+	 */
+	targetResolve: (req: TargetResolveRequest) => typedError<TargetResolveResponse_Serialize, string>(__TAURI_INVOKE("target.resolve", { req })),
+	/**
 	 *  `projects.list` — returns all projects.
 	 * 
 	 *  # Errors
@@ -1034,6 +1058,14 @@ export type Camera = {
 	autoDetected: boolean,
 };
 
+/**  Abbreviated candidate summary for the `ambiguous` response (target.resolve.json). */
+export type CandidateSummary = {
+	targetId: string,
+	primaryDesignation: string,
+	catalogDisplay: string,
+	score: number | null,
+};
+
 /**  Registered catalog index visible to the app (data-model.md §Catalog). */
 export type Catalog = Catalog_Serialize | Catalog_Deserialize;
 
@@ -1678,6 +1710,41 @@ export type LicenseAttribution_Serialize = {
 	licenseUri?: string | null,
 	/**  Nature of any project-made modifications (optional). */
 	modificationsNotice?: string | null,
+};
+
+/**  Confidence bucket for a target match (research.md R2, R3). */
+export type LookupConfidence = "high" | "medium" | "low";
+
+/**  Error item in a `target.lookup` or `target.resolve` error response. */
+export type LookupError = {
+	code: string,
+	message: string,
+};
+
+/**  Evidence for a single match (data-model.md §MatchEvidence). */
+export type LookupMatchEvidence = {
+	matchedAlias: string,
+	normalizedQuery: string,
+	strategy: LookupStrategy,
+	/**  Raw similarity score in `[0, 100]`. */
+	score: number | null,
+};
+
+/**  Which matching strategy produced the score. */
+export type LookupStrategy = "exact" | "token_set" | "edit_distance";
+
+/**  A single candidate match in the `target.lookup` response. */
+export type LookupTargetMatch = {
+	/**  Stable UUIDv5 target identifier. */
+	targetId: string,
+	/**  Canonical display designation chosen by precedence table (R6). */
+	primaryDesignation: string,
+	/**  Human-readable name of the precedence-winning catalog. */
+	catalogDisplay: string,
+	confidence: LookupConfidence,
+	/**  Raw similarity score in `[0, 100]`. */
+	score: number | null,
+	evidence: LookupMatchEvidence,
 };
 
 /**  Per-catalog entry in the signed manifest. */
@@ -2685,6 +2752,17 @@ export type RemapVerification = {
 	allVerified: boolean,
 };
 
+/**  Discriminated status for `target.resolve` (target.resolve.json §ResolveStatus). */
+export type ResolveStatus = 
+/**  Single confident match. */
+"resolved" | 
+/**  Multiple candidates within the gap rule. */
+"ambiguous" | 
+/**  No candidate above the discard threshold. */
+"unresolved" | 
+/**  Catalog unavailable or request invalid. */
+"error";
+
 /**
  *  Request DTO for `settings.restore-defaults`.
  * 
@@ -3010,11 +3088,109 @@ export type TargetDetail_Serialize = {
 /**  Classification of an astronomical target. */
 export type TargetKind = "deep_sky" | "planetary" | "lunar" | "solar" | "landscape";
 
+/**  Request for `target.lookup` (target.lookup.json §Request). */
+export type TargetLookupRequest = {
+	contractVersion: string,
+	requestId: string,
+	/**  Free-form lookup query (typically the raw FITS OBJECT value). */
+	query: string,
+	/**  Maximum number of matches to return, ranked by confidence then score. */
+	limit?: number,
+};
+
+/**
+ *  Response for `target.lookup`.
+ * 
+ *  `status = "success"` when `matches` is populated (may be empty when no
+ *  candidates are above the discard threshold).
+ *  `status = "error"` when `errors` is populated.
+ */
+export type TargetLookupResponse = TargetLookupResponse_Serialize | TargetLookupResponse_Deserialize;
+
+/**
+ *  Response for `target.lookup`.
+ * 
+ *  `status = "success"` when `matches` is populated (may be empty when no
+ *  candidates are above the discard threshold).
+ *  `status = "error"` when `errors` is populated.
+ */
+export type TargetLookupResponse_Deserialize = {
+	status: string,
+	contractVersion: string,
+	requestId: string,
+	matches: LookupTargetMatch[] | null,
+	errors: LookupError[] | null,
+};
+
+/**
+ *  Response for `target.lookup`.
+ * 
+ *  `status = "success"` when `matches` is populated (may be empty when no
+ *  candidates are above the discard threshold).
+ *  `status = "error"` when `errors` is populated.
+ */
+export type TargetLookupResponse_Serialize = {
+	status: string,
+	contractVersion: string,
+	requestId: string,
+	matches?: LookupTargetMatch[] | null,
+	errors?: LookupError[] | null,
+};
+
 /**  A project stub within the target detail view. */
 export type TargetProjectStub = {
 	id: string,
 	name: string,
 	state: ProjectState,
+};
+
+/**  Request for `target.resolve` (target.resolve.json §Request). */
+export type TargetResolveRequest = {
+	contractVersion: string,
+	requestId: string,
+	/**  Raw FITS OBJECT header value as extracted from the light frame. */
+	fitsObjectValue: string,
+};
+
+/**  Response for `target.resolve`. */
+export type TargetResolveResponse = TargetResolveResponse_Serialize | TargetResolveResponse_Deserialize;
+
+/**  Response for `target.resolve`. */
+export type TargetResolveResponse_Deserialize = {
+	status: ResolveStatus,
+	contractVersion: string,
+	requestId: string,
+	/**  Present when `status = resolved`. */
+	targetId: string | null,
+	/**  Present when `status = resolved`. */
+	primaryDesignation: string | null,
+	/**  Present when `status = resolved`. */
+	catalogDisplay: string | null,
+	/**  Present when `status = resolved`. */
+	confidence: LookupConfidence | null,
+	/**  Present when `status = ambiguous`. */
+	candidates: CandidateSummary[] | null,
+	/**  Present when `status = error`. */
+	errors: LookupError[] | null,
+};
+
+/**  Response for `target.resolve`. */
+export type TargetResolveResponse_Serialize = {
+	status: ResolveStatus,
+	contractVersion: string,
+	requestId: string,
+	/**  Present when `status = resolved`. */
+	targetId?: string | null,
+	/**  Present when `status = resolved`. */
+	primaryDesignation?: string | null,
+	/**  Present when `status = resolved`. */
+	catalogDisplay?: string | null,
+	/**  Present when `status = resolved`. */
+	confidence?: LookupConfidence | null,
+	/**  Present when `status = ambiguous`. */
+	candidates?: CandidateSummary[] | null,
+	/**  Present when `status = error`. */
+	errors?: LookupError[] | null,
 };
 
 /**  An astronomical target as seen in list views. */
