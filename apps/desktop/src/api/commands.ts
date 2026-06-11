@@ -282,3 +282,66 @@ export async function restartFirstRun(): Promise<FirstRunRestartResult> {
 export async function getFirstRunState(): Promise<FirstRunState> {
   return invoke<FirstRunState>('firstrun.state');
 }
+
+// ---------- Pattern Commands (spec 015) ----------
+
+/** One element of an ordered token pattern. */
+export interface PatternPart {
+  id: string;
+  /** `"token"` or `"separator"` */
+  kind: string;
+  /** Token name (e.g. `"target"`) or literal separator character. */
+  value: string;
+}
+
+/** Metadata bundle for pattern resolution (all fields optional). */
+export interface MetadataBundle {
+  target?: string;
+  filter?: string;
+  /** Local date YYYY-MM-DD (Ref: R-Date-1) */
+  date?: string;
+  /** Per-file frame type: light | dark | flat | bias | dark_flat */
+  frame_type?: string;
+  camera?: string;
+  exposure?: string;
+  gain?: string;
+  binning?: string;
+  set_temp?: string;
+}
+
+/** Response from pattern.validate. */
+export interface PatternValidateResponse {
+  valid: boolean;
+  warnings: string[];
+  errorCode?: string;
+  errorMessage?: string;
+  errorToken?: string;
+}
+
+/** Response from pattern.resolve and pattern.preview. */
+export interface PatternPreviewResponse {
+  resolvedPath: string;
+  missingTokens: string[];
+  warnings: string[];
+}
+
+/**
+ * Validate a pattern structurally (no metadata required).
+ * Never rejects — all error states are in the response body.
+ */
+export async function patternValidate(pattern: PatternPart[]): Promise<PatternValidateResponse> {
+  return invoke<PatternValidateResponse>('pattern.validate', { request: { pattern } });
+}
+
+/**
+ * Preview a pattern against sample metadata for the Settings UI live preview.
+ * Applies the same validation and sanitization pipeline as pattern.resolve.
+ */
+export async function patternPreview(
+  pattern: PatternPart[],
+  sampleMetadata: MetadataBundle,
+): Promise<PatternPreviewResponse> {
+  return invoke<PatternPreviewResponse>('pattern.preview', {
+    request: { pattern, sampleMetadata },
+  });
+}

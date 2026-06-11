@@ -270,6 +270,38 @@ export const commands = {
 	 */
 	firstrunRestart: (request: FirstRunRestartRequest) => typedError<FirstRunRestartResponse, string>(__TAURI_INVOKE("firstrun.restart", { request })),
 	/**
+	 *  `pattern.validate` — structural validation without resolving against metadata.
+	 * 
+	 *  Returns `PatternValidateResponse { valid, warnings, error_code?, ... }`.
+	 *  Never returns `Err`; all error states are encoded in the response body so the
+	 *  frontend can call this unconditionally.
+	 * 
+	 *  # Errors
+	 * 
+	 *  Returns `Err(String)` on internal failure (none expected in v1).
+	 */
+	patternValidate: (request: PatternValidateRequest) => typedError<PatternValidateResponse_Serialize, string>(__TAURI_INVOKE("pattern.validate", { request })),
+	/**
+	 *  `pattern.resolve` — resolve a pattern against a metadata bundle.
+	 * 
+	 *  Returns `PatternResolveResponse { relative_path, missing_tokens, warnings }`.
+	 * 
+	 *  # Errors
+	 * 
+	 *  Returns `Err(String)` with the error code on invalid patterns or paths.
+	 */
+	patternResolve: (request: PatternResolveRequest_Deserialize) => typedError<PatternResolveResponse, string>(__TAURI_INVOKE("pattern.resolve", { request })),
+	/**
+	 *  `pattern.preview` — resolve a pattern against sample metadata for the UI.
+	 * 
+	 *  Returns `PatternPreviewResponse { resolved_path, missing_tokens, warnings }`.
+	 * 
+	 *  # Errors
+	 * 
+	 *  Returns `Err(String)` with the error code on invalid patterns or paths.
+	 */
+	patternPreview: (request: PatternPreviewRequest_Deserialize) => typedError<PatternPreviewResponse, string>(__TAURI_INVOKE("pattern.preview", { request })),
+	/**
 	 *  `settings.get` — returns settings for a given scope.
 	 * 
 	 *  Accepts `{ scope: string }` and returns `SettingsData { scope, values }`.
@@ -1359,6 +1391,57 @@ export type MetaValue_Serialize = {
 	evidenceRef?: string | null,
 };
 
+/**
+ *  Flat metadata map for resolution / preview (data-model.md §MetadataBundle).
+ * 
+ *  All fields are optional; absent keys cause fallback substitution. The
+ *  `frame_type` field accepts the closed enum
+ *  `["light","dark","flat","bias","dark_flat"]`.
+ */
+export type MetadataBundleDto = MetadataBundleDto_Serialize | MetadataBundleDto_Deserialize;
+
+/**
+ *  Flat metadata map for resolution / preview (data-model.md §MetadataBundle).
+ * 
+ *  All fields are optional; absent keys cause fallback substitution. The
+ *  `frame_type` field accepts the closed enum
+ *  `["light","dark","flat","bias","dark_flat"]`.
+ */
+export type MetadataBundleDto_Deserialize = {
+	target: string | null,
+	filter: string | null,
+	/**  Local date `YYYY-MM-DD`. Falls back to UTC when observer_location unset. */
+	date: string | null,
+	/**  Per-file frame type. `"mixed"` is NOT valid here (folder-level only). */
+	frameType: string | null,
+	camera: string | null,
+	exposure: string | null,
+	gain: string | null,
+	binning: string | null,
+	setTemp: string | null,
+};
+
+/**
+ *  Flat metadata map for resolution / preview (data-model.md §MetadataBundle).
+ * 
+ *  All fields are optional; absent keys cause fallback substitution. The
+ *  `frame_type` field accepts the closed enum
+ *  `["light","dark","flat","bias","dark_flat"]`.
+ */
+export type MetadataBundleDto_Serialize = {
+	target?: string | null,
+	filter?: string | null,
+	/**  Local date `YYYY-MM-DD`. Falls back to UTC when observer_location unset. */
+	date?: string | null,
+	/**  Per-file frame type. `"mixed"` is NOT valid here (folder-level only). */
+	frameType?: string | null,
+	camera?: string | null,
+	exposure?: string | null,
+	gain?: string | null,
+	binning?: string | null,
+	setTemp?: string | null,
+};
+
 export type OpticalTrain = {
 	id: string,
 	name: string,
@@ -1369,6 +1452,98 @@ export type OpticalTrain = {
 
 /**  Verification state for a single output. */
 export type OutputVerification = "accepted" | "unreviewed" | "superseded";
+
+/**
+ *  One element of an ordered token pattern (data-model.md §PatternPart).
+ * 
+ *  Re-exported from `crates/contracts/core` so the Tauri command layer can
+ *  reference it without importing `crates/patterns` directly. The shape matches
+ *  [`patterns::PatternPart`] exactly.
+ */
+export type PatternPartDto = {
+	/**  Stable client-side identifier. */
+	id: string,
+	/**  `"token"` or `"separator"`. */
+	kind: string,
+	/**  Token name (e.g. `"target"`) or literal separator character. */
+	value: string,
+};
+
+/**  Request for `pattern.preview` (UI live preview, Ref: R-Preview). */
+export type PatternPreviewRequest = PatternPreviewRequest_Serialize | PatternPreviewRequest_Deserialize;
+
+/**  Request for `pattern.preview` (UI live preview, Ref: R-Preview). */
+export type PatternPreviewRequest_Deserialize = {
+	pattern: PatternPartDto[],
+	sampleMetadata: MetadataBundleDto_Deserialize,
+};
+
+/**  Request for `pattern.preview` (UI live preview, Ref: R-Preview). */
+export type PatternPreviewRequest_Serialize = {
+	pattern: PatternPartDto[],
+	sampleMetadata: MetadataBundleDto_Serialize,
+};
+
+/**  Successful preview response. */
+export type PatternPreviewResponse = {
+	/**  The resolved relative path for display. */
+	resolvedPath: string,
+	/**  Token names resolved via fallback (shown as dim segments in the UI). */
+	missingTokens: string[],
+	warnings: string[],
+};
+
+/**  Request for `pattern.resolve`. */
+export type PatternResolveRequest = PatternResolveRequest_Serialize | PatternResolveRequest_Deserialize;
+
+/**  Request for `pattern.resolve`. */
+export type PatternResolveRequest_Deserialize = {
+	pattern: PatternPartDto[],
+	metadata: MetadataBundleDto_Deserialize,
+};
+
+/**  Request for `pattern.resolve`. */
+export type PatternResolveRequest_Serialize = {
+	pattern: PatternPartDto[],
+	metadata: MetadataBundleDto_Serialize,
+};
+
+/**  Response for `pattern.resolve`. */
+export type PatternResolveResponse = {
+	relativePath: string,
+	missingTokens: string[],
+	warnings: string[],
+};
+
+/**  Request for `pattern.validate`. */
+export type PatternValidateRequest = {
+	pattern: PatternPartDto[],
+};
+
+/**  Response for `pattern.validate`. */
+export type PatternValidateResponse = PatternValidateResponse_Serialize | PatternValidateResponse_Deserialize;
+
+/**  Response for `pattern.validate`. */
+export type PatternValidateResponse_Deserialize = {
+	valid: boolean,
+	warnings: string[],
+	/**  Present when `valid = false`. First error code and message. */
+	errorCode: string | null,
+	errorMessage: string | null,
+	/**  Details payload for `token.unknown`: the offending token name. */
+	errorToken: string | null,
+};
+
+/**  Response for `pattern.validate`. */
+export type PatternValidateResponse_Serialize = {
+	valid: boolean,
+	warnings: string[],
+	/**  Present when `valid = false`. First error code and message. */
+	errorCode?: string | null,
+	errorMessage?: string | null,
+	/**  Details payload for `token.unknown`: the offending token name. */
+	errorToken?: string | null,
+};
 
 /**  Extended detail view of a filesystem plan. */
 export type PlanDetail = PlanDetail_Serialize | PlanDetail_Deserialize;
