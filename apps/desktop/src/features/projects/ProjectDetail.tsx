@@ -44,6 +44,8 @@ import {
 // spec 024: project notes + manifests
 import { ProjectNotesSection } from './ProjectNotesSection';
 import { ManifestsAccordion } from './ManifestsAccordion';
+// spec 026: generated source view removal
+import { SourceViewsSection } from './SourceViewsSection';
 
 // ── Helpers ──────────────────────────────────────────────────────────────────
 
@@ -313,6 +315,9 @@ export function ProjectDetailContent({ projectId }: ProjectDetailContentProps) {
 
         {/* Manifests accordion — spec 024 T1.7 / T3.4 */}
         <ManifestsAccordion projectId={projectId} />
+
+        {/* Source views — spec 026 (remove/regenerate generated views) */}
+        <SourceViewsSection projectId={projectId} />
 
         {/* spec 007 T034: calibration match panel — batch suggest for light sources */}
         <CalibrationMatchPanel

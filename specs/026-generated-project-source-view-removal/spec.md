@@ -9,12 +9,31 @@
 **Status**: Draft  
 **Input**: User description: "Specify removing generated project source views and app-created links/folders without touching original Inventory data."
 
-## Implementation Status: NOT IMPLEMENTED
+## Implementation Status: IMPLEMENTED
 
-This feature is specified only. No application code, persistence schema,
-contract handlers, or UI surfaces have been written. The canonical project
-database remains the source of truth; prepared source views are reproducible
-projections and removing them MUST be reversible by regeneration.
+Core persistence (migration 0029), domain types, persistence repository,
+app-core use cases, contract DTOs, Tauri commands, and frontend helpers
+(source-views.ts + SourceViewsSection) are implemented.
+
+Deferred/partial items (see tasks.md):
+- T005 cross-platform per-item apply: SourceViewRemove plan is created; the
+  actual filesystem unlink/archive at apply time is handled by the existing
+  spec 025 executor via the `archive` action type. Windows junction/reparse-
+  point specifics deferred to v1.x (same as spec 025 cross-platform scope).
+- T006a data-migration scan for pre-existing kind_diverged records: deferred;
+  no PreparedSourceView records exist in a fresh DB.
+- T008/T013 integration tests requiring end-to-end plan apply: deferred (spec
+  025 executor integration tests are out of scope for this agent).
+- T014–T017 stale-detection sweep: repo and domain types support it, active
+  sweep not implemented.
+- T018–T020 audit emission per view item: deferred to when the apply executor
+  calls the hook.
+- T019 UI audit history surface: deferred.
+- E-026-1 envelope sweep: explicitly deferred per spec.
+
+The canonical project database remains the source of truth; prepared source
+views are reproducible projections and removing them MUST be reversible by
+regeneration.
 
 ### User Story 3 - Regenerate a Removed Source View (Priority: P2)
 

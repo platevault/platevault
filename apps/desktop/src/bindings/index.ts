@@ -1108,6 +1108,49 @@ export const commands = {
 	 *  Returns `Err(String)` when the path does not exist or the OS open fails.
 	 */
 	projectManifestRevealInOs: (request: ManifestRevealRequest) => typedError<null, string>(__TAURI_INVOKE("project.manifest.reveal_in_os", { request })),
+	/**
+	 *  `preparedview.list` — list all prepared source views for a project.
+	 * 
+	 *  # Errors
+	 * 
+	 *  Returns `Err(ContractError)` on database failure or if the project does not
+	 *  exist.
+	 */
+	preparedviewList: (projectId: string) => typedError<PreparedViewListResponse, string>(__TAURI_INVOKE("preparedview.list", { projectId })),
+	/**
+	 *  `preparedview.remove` — create a `ViewRemovalPlan` for a prepared source
+	 *  view.
+	 * 
+	 *  The response `planId` should be routed through `plans.approve` then
+	 *  `plan.apply` to physically remove the view links/copies.
+	 * 
+	 *  Destructive destination is always `archive` (R-026-Dest-Archive).
+	 * 
+	 *  # Errors
+	 * 
+	 *  Returns `Err(ContractError)` with codes:
+	 *  - `view.not_found`         — view does not exist.
+	 *  - `view.in_use`            — another plan is applying against this view.
+	 *  - `view.mixed_kind`        — view is in `kind_diverged` state.
+	 *  - `view.unsupported_kind`  — view uses `hardlink` (deferred to v1.x).
+	 *  - `lifecycle.read_only`    — owning project is `archived`.
+	 */
+	preparedviewRemove: (viewId: string) => typedError<PreparedViewRemoveResponse, string>(__TAURI_INVOKE("preparedview.remove", { viewId })),
+	/**
+	 *  `preparedview.regenerate` — create a `ViewRegenerationPlan` for a
+	 *  previously prepared (possibly removed) source view.
+	 * 
+	 *  Removed views have an indefinite regenerable lifetime (A4).
+	 * 
+	 *  # Errors
+	 * 
+	 *  Returns `Err(ContractError)` with codes:
+	 *  - `view.not_found`         — view does not exist.
+	 *  - `view.mixed_kind`        — view is in `kind_diverged` state.
+	 *  - `view.unsupported_kind`  — view uses `hardlink` (deferred to v1.x).
+	 *  - `lifecycle.read_only`    — owning project is `archived`.
+	 */
+	preparedviewRegenerate: (viewId: string) => typedError<PreparedViewRegenerateResponse, string>(__TAURI_INVOKE("preparedview.regenerate", { viewId })),
 };
 
 /* Types */
@@ -3641,7 +3684,11 @@ export type PlanListResponse_Serialize = {
 };
 
 /**  Plan origin — which generator created this plan. */
-export type PlanOrigin = "inbox" | "restructure" | "cleanup" | "archive" | "project";
+export type PlanOrigin = "inbox" | "restructure" | "cleanup" | "archive" | "project" | 
+/**  Spec 026 — generated source view removal plan. */
+"prepared_view_removal" | 
+/**  Spec 026 — generated source view regeneration plan. */
+"prepared_view_regeneration";
 
 /**  Response DTO for `plan.protection.check`. */
 export type PlanProtectionCheckResponse = PlanProtectionCheckResponse_Serialize | PlanProtectionCheckResponse_Deserialize;
@@ -3762,7 +3809,11 @@ export type PlanTransitionRequest_Serialize = {
 /**  Execution shape of a plan. */
 export type PlanType = "split" | "restructure" | "cleanup" | "archive" | "source_map" | 
 /**  Folder structure + project marker write plan (spec 008, Constitution II). */
-"project_create";
+"project_create" | 
+/**  Spec 026 — removes generated source view links/copies. */
+"source_view_removal" | 
+/**  Spec 026 — re-creates previously removed source view. */
+"source_view_regeneration";
 
 export type PreparedSourceState = "not_created" | "planned" | "ready" | "stale" | "retired";
 
@@ -3788,6 +3839,51 @@ export type PreparedSourceTransitionRequest_Serialize = {
 	nextState: PreparedSourceState,
 	actionLabel?: string | null,
 	actor: TransitionActor,
+};
+
+/**  Response: list of view summaries. */
+export type PreparedViewListResponse = {
+	views: PreparedViewSummary[],
+};
+
+/**  Success response for `preparedview.regenerate`. */
+export type PreparedViewRegenerateResponse = {
+	/**
+	 *  The id of the `ViewRegenerationPlan` (a `FilesystemPlan` with origin
+	 *  `prepared_view_regeneration`). Route through spec 017/025 pipeline.
+	 */
+	planId: string,
+	/**
+	 *  Warnings for inventory items that could not be resolved in the current
+	 *  inventory (e.g. root remapped or item deleted).
+	 */
+	unresolvedItemCount: number,
+};
+
+/**
+ *  Success response for `preparedview.remove`. The caller should route
+ *  `plan_id` through the standard plan review (`plans.approve` then
+ *  `plan.apply`) before the view is physically removed.
+ */
+export type PreparedViewRemoveResponse = {
+	/**
+	 *  The id of the `ViewRemovalPlan` (a `FilesystemPlan` with origin
+	 *  `prepared_view_removal`). Route through spec 017/025 pipeline.
+	 */
+	planId: string,
+};
+
+/**  Summary of a `PreparedSourceView` for display in project detail. */
+export type PreparedViewSummary = {
+	id: string,
+	projectId: string,
+	/**  View strategy: `symlink`, `junction`, `copy`, or `hardlink` (reserved). */
+	kind: string,
+	/**  View lifecycle state (spec 026 data-model). */
+	state: string,
+	createdAt: string,
+	removedAt: string | null,
+	itemCount: number,
 };
 
 /**  A project channel (inferred or manually added). */

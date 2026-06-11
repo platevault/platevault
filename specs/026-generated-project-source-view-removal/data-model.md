@@ -1,7 +1,7 @@
 # Data Model: Generated Project Source View Removal
 
 **Spec**: `specs/026-generated-project-source-view-removal/spec.md`  
-**Status**: NOT IMPLEMENTED
+**Status**: IMPLEMENTED
 
 ## Entities
 

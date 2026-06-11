@@ -1,10 +1,13 @@
 //! PreparedSource lifecycle state model (spec 002 data-model.md).
+//! PreparedSourceView model extended for spec 026 (removal/regeneration).
 
 use schemars::JsonSchema;
 use serde::{Deserialize, Serialize};
 use specta::Type;
 
-use crate::ids::{EntityId, Timestamp};
+use crate::ids::EntityId;
+
+// ── Spec 002 legacy state (kept for lifecycle ledger compatibility) ────────────
 
 #[derive(
     Clone,
@@ -53,5 +56,312 @@ pub struct PreparedSourceView {
     pub id: EntityId,
     pub project_id: EntityId,
     pub state: PreparedSourceState,
-    pub created_at: Timestamp,
+    pub created_at: String,
+}
+
+// ── Spec 026 view model ───────────────────────────────────────────────────────
+
+/// The strategy used to materialise a view item on disk.
+/// `Hardlink` is reserved for v1.x; v1 only implements symlink/junction/copy
+/// (R-026-Strategies, GRILL 2026-05-22).
+#[derive(
+    Clone,
+    Copy,
+    Debug,
+    Eq,
+    Hash,
+    Ord,
+    PartialEq,
+    PartialOrd,
+    Serialize,
+    Deserialize,
+    JsonSchema,
+    Type,
+)]
+#[serde(rename_all = "snake_case")]
+pub enum ViewKind {
+    Symlink,
+    Junction,
+    Copy,
+    /// Reserved — not implemented in v1 (R-026-Strategies).
+    Hardlink,
+}
+
+impl ViewKind {
+    #[must_use]
+    pub fn as_str(self) -> &'static str {
+        match self {
+            ViewKind::Symlink => "symlink",
+            ViewKind::Junction => "junction",
+            ViewKind::Copy => "copy",
+            ViewKind::Hardlink => "hardlink",
+        }
+    }
+
+    #[must_use]
+    pub fn parse_str(s: &str) -> Option<Self> {
+        match s {
+            "symlink" => Some(ViewKind::Symlink),
+            "junction" => Some(ViewKind::Junction),
+            "copy" => Some(ViewKind::Copy),
+            "hardlink" => Some(ViewKind::Hardlink),
+            _ => None,
+        }
+    }
+
+    /// Returns true for the three v1-supported kinds (not hardlink).
+    #[must_use]
+    pub fn is_v1_supported(self) -> bool {
+        matches!(self, ViewKind::Symlink | ViewKind::Junction | ViewKind::Copy)
+    }
+}
+
+/// Lifecycle state of a `PreparedSourceView026` record (spec 026 data-model).
+#[derive(
+    Clone,
+    Copy,
+    Debug,
+    Eq,
+    Hash,
+    Ord,
+    PartialEq,
+    PartialOrd,
+    Serialize,
+    Deserialize,
+    JsonSchema,
+    Type,
+)]
+#[serde(rename_all = "snake_case")]
+pub enum ViewState {
+    /// The view exists on disk and all items are present.
+    Current,
+    /// At least one item is missing, changed kind, or (for copy-kind) has a
+    /// content-hash mismatch.
+    Stale,
+    /// The entire view folder is missing.
+    Missing,
+    /// The `ViewRemovalPlan` was successfully applied; membership preserved.
+    Removed,
+    /// A plan apply reported per-item failures; retry context is in audit.
+    Failed,
+    /// Pre-existing record whose `kind` disagrees with an item's
+    /// `materialization` (D-026-H2). Requires manual resolution.
+    KindDiverged,
+}
+
+impl ViewState {
+    #[must_use]
+    pub fn as_str(self) -> &'static str {
+        match self {
+            ViewState::Current => "current",
+            ViewState::Stale => "stale",
+            ViewState::Missing => "missing",
+            ViewState::Removed => "removed",
+            ViewState::Failed => "failed",
+            ViewState::KindDiverged => "kind_diverged",
+        }
+    }
+
+    #[must_use]
+    pub fn parse_str(s: &str) -> Option<Self> {
+        match s {
+            "current" => Some(ViewState::Current),
+            "stale" => Some(ViewState::Stale),
+            "missing" => Some(ViewState::Missing),
+            "removed" => Some(ViewState::Removed),
+            "failed" => Some(ViewState::Failed),
+            "kind_diverged" => Some(ViewState::KindDiverged),
+            _ => None,
+        }
+    }
+
+    /// Returns true when view operations (remove / regenerate) are allowed
+    /// from this state. `kind_diverged` blocks all ops — user must resolve
+    /// via UI first (D-026-H2).
+    #[must_use]
+    pub fn allows_mutation(self) -> bool {
+        !matches!(self, ViewState::KindDiverged)
+    }
+}
+
+/// Last-observed per-item state from a stale-detection sweep.
+#[derive(
+    Clone,
+    Copy,
+    Debug,
+    Eq,
+    Hash,
+    Ord,
+    PartialEq,
+    PartialOrd,
+    Serialize,
+    Deserialize,
+    JsonSchema,
+    Type,
+)]
+#[serde(rename_all = "snake_case")]
+pub enum ItemObservedState {
+    Present,
+    Missing,
+    ChangedKind,
+    Diverged,
+    /// Copy-kind only: content hash no longer matches recorded hash (A3).
+    HashDiverged,
+}
+
+impl ItemObservedState {
+    #[must_use]
+    pub fn as_str(self) -> &'static str {
+        match self {
+            ItemObservedState::Present => "present",
+            ItemObservedState::Missing => "missing",
+            ItemObservedState::ChangedKind => "changed_kind",
+            ItemObservedState::Diverged => "diverged",
+            ItemObservedState::HashDiverged => "hash_diverged",
+        }
+    }
+
+    #[must_use]
+    pub fn parse_str(s: &str) -> Option<Self> {
+        match s {
+            "present" => Some(ItemObservedState::Present),
+            "missing" => Some(ItemObservedState::Missing),
+            "changed_kind" => Some(ItemObservedState::ChangedKind),
+            "diverged" => Some(ItemObservedState::Diverged),
+            "hash_diverged" => Some(ItemObservedState::HashDiverged),
+            _ => None,
+        }
+    }
+}
+
+/// A single item within a `PreparedSourceView026`.
+#[derive(Clone, Debug, Serialize, Deserialize)]
+pub struct PreparedSourceViewItem {
+    pub id: EntityId,
+    pub view_id: EntityId,
+    /// Canonical inventory item this projection references.
+    pub inventory_item_id: EntityId,
+    /// Path relative to the project workspace where the link/copy lives.
+    pub view_relative_path: String,
+    /// Actual kind recorded at creation time.
+    pub materialization: ViewKind,
+    /// State from the last sweep.
+    pub last_observed_state: ItemObservedState,
+}
+
+/// The canonical record of a generated project source view (spec 026).
+///
+/// Records are never hard-deleted after removal; `removed_at` is set and
+/// `items` membership is preserved for later regeneration indefinitely (A4).
+#[derive(Clone, Debug, Serialize, Deserialize)]
+pub struct PreparedSourceView026 {
+    pub id: EntityId,
+    pub project_id: EntityId,
+    /// View strategy — all items share this kind at creation (FR-008).
+    pub kind: ViewKind,
+    pub state: ViewState,
+    pub items: Vec<PreparedSourceViewItem>,
+    pub created_at: String,
+    /// Set when a `ViewRemovalPlan` apply succeeds.
+    pub removed_at: Option<String>,
+}
+
+impl PreparedSourceView026 {
+    /// Returns true if the view's `kind` mismatches any item's `materialization`
+    /// (FR-008 / A2 mixed-kind check).
+    #[must_use]
+    pub fn has_mixed_kind(&self) -> bool {
+        self.items.iter().any(|item| item.materialization != self.kind)
+    }
+}
+
+/// Allowed project lifecycle states for view remove/regenerate operations
+/// (R-026-Lifecycle, GRILL 2026-05-22).
+pub const ALLOWED_PROJECT_STATES_FOR_VIEW_OPS: &[&str] =
+    &["setup_incomplete", "ready", "prepared", "processing", "blocked", "completed"];
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn view_kind_roundtrip() {
+        for (kind, s) in [
+            (ViewKind::Symlink, "symlink"),
+            (ViewKind::Junction, "junction"),
+            (ViewKind::Copy, "copy"),
+            (ViewKind::Hardlink, "hardlink"),
+        ] {
+            assert_eq!(kind.as_str(), s);
+            assert_eq!(ViewKind::parse_str(s), Some(kind));
+        }
+    }
+
+    #[test]
+    fn view_state_roundtrip() {
+        for (state, s) in [
+            (ViewState::Current, "current"),
+            (ViewState::Stale, "stale"),
+            (ViewState::Missing, "missing"),
+            (ViewState::Removed, "removed"),
+            (ViewState::Failed, "failed"),
+            (ViewState::KindDiverged, "kind_diverged"),
+        ] {
+            assert_eq!(state.as_str(), s);
+            assert_eq!(ViewState::parse_str(s), Some(state));
+        }
+    }
+
+    #[test]
+    fn hardlink_is_not_v1_supported() {
+        assert!(!ViewKind::Hardlink.is_v1_supported());
+        assert!(ViewKind::Symlink.is_v1_supported());
+        assert!(ViewKind::Junction.is_v1_supported());
+        assert!(ViewKind::Copy.is_v1_supported());
+    }
+
+    #[test]
+    fn kind_diverged_blocks_mutation() {
+        assert!(!ViewState::KindDiverged.allows_mutation());
+        assert!(ViewState::Current.allows_mutation());
+        assert!(ViewState::Removed.allows_mutation());
+        assert!(ViewState::Stale.allows_mutation());
+    }
+
+    #[test]
+    fn mixed_kind_detection() {
+        let view_id = EntityId::new();
+        let item = PreparedSourceViewItem {
+            id: EntityId::new(),
+            view_id,
+            inventory_item_id: EntityId::new(),
+            view_relative_path: "src/file.fit".to_owned(),
+            materialization: ViewKind::Junction,
+            last_observed_state: ItemObservedState::Present,
+        };
+        let view = PreparedSourceView026 {
+            id: view_id,
+            project_id: EntityId::new(),
+            kind: ViewKind::Symlink,
+            state: ViewState::Current,
+            items: vec![item],
+            created_at: "2026-01-01T00:00:00Z".to_owned(),
+            removed_at: None,
+        };
+        assert!(view.has_mixed_kind());
+    }
+
+    #[test]
+    fn no_items_is_not_mixed_kind() {
+        let view = PreparedSourceView026 {
+            id: EntityId::new(),
+            project_id: EntityId::new(),
+            kind: ViewKind::Symlink,
+            state: ViewState::Removed,
+            items: vec![],
+            created_at: "2026-01-01T00:00:00Z".to_owned(),
+            removed_at: Some("2026-06-01T00:00:00Z".to_owned()),
+        };
+        assert!(!view.has_mixed_kind());
+    }
 }

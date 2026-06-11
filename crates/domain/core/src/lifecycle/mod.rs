@@ -17,6 +17,10 @@ pub use data_source::DataSourceState;
 pub use inventory::InventoryState;
 pub use plan::PlanState;
 pub use prepared_source::PreparedSourceState;
+pub use prepared_source::{
+    ItemObservedState, PreparedSourceView026, PreparedSourceViewItem, ViewKind, ViewState,
+    ALLOWED_PROJECT_STATES_FOR_VIEW_OPS,
+};
 pub use project::ProjectState;
 pub use projection::ProjectionState;
 pub use provenance::{ProvenanceEntry, ProvenanceTag, ProvenancedValue};

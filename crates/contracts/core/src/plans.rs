@@ -40,6 +40,10 @@ pub enum PlanOrigin {
     Cleanup,
     Archive,
     Project,
+    /// Spec 026 — generated source view removal plan.
+    PreparedViewRemoval,
+    /// Spec 026 — generated source view regeneration plan.
+    PreparedViewRegeneration,
 }
 
 /// Execution shape of a plan.
@@ -66,6 +70,10 @@ pub enum PlanType {
     SourceMap,
     /// Folder structure + project marker write plan (spec 008, Constitution II).
     ProjectCreate,
+    /// Spec 026 — removes generated source view links/copies.
+    SourceViewRemoval,
+    /// Spec 026 — re-creates previously removed source view.
+    SourceViewRegeneration,
 }
 
 /// Per-plan destination for destructive items (R-Trash-1).

@@ -35,6 +35,7 @@ pub mod patterns;
 pub mod plan_apply;
 pub mod plans;
 pub mod preferences;
+pub mod prepared_views;
 pub mod projects;
 pub mod protection;
 pub mod review;

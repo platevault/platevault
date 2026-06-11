@@ -67,6 +67,9 @@ use crate::commands::plans::{
     plans_list, plans_retry,
 };
 use crate::commands::preferences::{preferences_get, preferences_set};
+use crate::commands::prepared_views::{
+    preparedview_list, preparedview_regenerate, preparedview_remove,
+};
 use crate::commands::projects::{
     projects_channels_dismiss_drift, projects_channels_reinfer, projects_create,
     projects_create_plan, projects_get, projects_list, projects_source_add, projects_source_remove,
@@ -295,6 +298,10 @@ pub fn specta_builder() -> Builder<tauri::Wry> {
         note_get,
         note_update,
         manifest_reveal_in_os,
+        // prepared source views (spec 026)
+        preparedview_list,
+        preparedview_remove,
+        preparedview_regenerate,
     ])
 }
 
@@ -468,6 +475,10 @@ pub fn specta_builder() -> Builder<tauri::Wry> {
         note_get,
         note_update,
         manifest_reveal_in_os,
+        // prepared source views (spec 026)
+        preparedview_list,
+        preparedview_remove,
+        preparedview_regenerate,
         // developer diagnostics (spec 021) — dev-tools build only
         dev_contracts_list,
         dev_calls_list,
