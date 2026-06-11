@@ -91,10 +91,12 @@ const inboxRoute = createRoute({
 
 // --- Calibration ---
 
+// spec 007: calibration IDs are UUIDs from the real backend (switched from
+// legacy numeric fixtures). Route search uses parseString.
 const calibrationRoute = createRoute({
   getParentRoute: () => shellRoute,
   path: '/calibration',
-  validateSearch: makeValidateSearch({ selected: parseNumber }),
+  validateSearch: makeValidateSearch({ selected: parseString }),
   component: lazyRouteComponent(
     () => import('@/features/calibration/CalibrationPage'),
     'CalibrationPage',
@@ -105,7 +107,7 @@ const calibrationDetailRoute = createRoute({
   getParentRoute: () => shellRoute,
   path: '/calibration/$id',
   beforeLoad: ({ params }) => {
-    throw redirect({ to: '/calibration', search: selectedSearch(params.id) });
+    throw redirect({ to: '/calibration', search: selectedSearchString(params.id) });
   },
 });
 

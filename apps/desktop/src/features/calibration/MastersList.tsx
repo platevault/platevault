@@ -1,73 +1,141 @@
-import type { MasterFixture } from '@/data/fixtures/calibration';
-import { ListSidebar, ListItem } from '@/components';
-import { Pill } from '@/ui';
+/**
+ * MastersList — spec 007 wired.
+ *
+ * Renders calibration masters from the real `calibration.masters.list` backend
+ * response. Grouped by kind (dark / flat / bias). Dark-flat is not shown in v1
+ * (FR-001).
+ */
 
-const KIND_ORDER: Array<MasterFixture['kind']> = ['dark', 'flat', 'bias'];
-const GROUP_LABELS: Record<MasterFixture['kind'], string> = {
+import { ListSidebar, ListItem } from '@/components';
+import { Pill, EmptyState } from '@/ui';
+import type { CalibrationMaster } from '@/bindings/types';
+
+type Kind = 'dark' | 'flat' | 'bias';
+
+const KIND_ORDER: Kind[] = ['dark', 'flat', 'bias'];
+const GROUP_LABELS: Record<Kind, string> = {
   dark: 'DARKS',
   flat: 'FLATS',
   bias: 'BIAS',
 };
 
-interface Props {
-  masters: MasterFixture[];
-  selected: number | null;
-  onSelect: (id: number) => void;
+function kindLabel(kind: string): Kind | null {
+  if (kind === 'dark' || kind === 'flat' || kind === 'bias') return kind;
+  return null;
 }
 
-export function MastersList({ masters, selected, onSelect }: Props) {
-  const grouped = KIND_ORDER.map(kind => ({
-    kind,
-    items: masters.filter(m => m.kind === kind),
-  })).filter(g => g.items.length > 0);
+interface Props {
+  masters: CalibrationMaster[];
+  loading: boolean;
+  error: string | undefined;
+  selected: string | null;
+  onSelect: (id: string) => void;
+}
+
+export function MastersList({ masters, loading, error, selected, onSelect }: Props) {
+  if (loading) {
+    return (
+      <ListSidebar footer="Loading…">
+        <div
+          style={{ padding: 'var(--alm-sp-2)', fontSize: 'var(--alm-text-sm)', color: 'var(--alm-text-muted)' }}
+          data-testid="masters-loading"
+        >
+          Loading calibration masters…
+        </div>
+      </ListSidebar>
+    );
+  }
+
+  if (error) {
+    return (
+      <ListSidebar footer="Error">
+        <EmptyState title="Failed to load" desc={error} data-testid="masters-error" />
+      </ListSidebar>
+    );
+  }
+
+  if (masters.length === 0) {
+    return (
+      <ListSidebar footer="0 items">
+        <EmptyState
+          title="No calibration masters"
+          desc="Run a scan to import calibration frames."
+          data-testid="masters-empty"
+        />
+      </ListSidebar>
+    );
+  }
+
+  const grouped = KIND_ORDER.map((k) => ({
+    kind: k,
+    items: masters.filter((m) => kindLabel(m.kind.toLowerCase()) === k),
+  })).filter((g) => g.items.length > 0);
 
   return (
     <ListSidebar
-      placeholder="Search name, camera..."
+      placeholder="Search camera, kind…"
       controls={
         <>
           <select defaultValue="kind">
             <option value="kind">Group: kind</option>
             <option value="camera">camera</option>
-            <option value="none">none</option>
           </select>
           <select defaultValue="name">
             <option value="name">Sort: name</option>
             <option value="age">age</option>
-            <option value="sessions">sessions</option>
           </select>
         </>
       }
       footer={`${masters.length} items`}
     >
-      {grouped.map(group => (
+      {grouped.map((group) => (
         <div key={group.kind}>
           <div className="alm-group-header">{GROUP_LABELS[group.kind]}</div>
-          {group.items.map(m => (
-            <ListItem
-              key={m.id}
-              selected={selected === m.id}
-              onClick={() => onSelect(m.id)}
-              title={
-                <span className="alm-mono" style={{ fontSize: 11 }}>{m.name}</span>
-              }
-              meta={
-                <>
-                  {m.exposure !== '--' && <>{m.exposure}<span className="alm-list-item__meta-sep">·</span></>}
-                  {m.temp !== '--' && <>{m.temp}<span className="alm-list-item__meta-sep">·</span></>}
-                  g{m.gain}
-                  <span className="alm-list-item__meta-sep">·</span>
-                  {m.camera.replace('ASI', '')}
-                  {m.aging && (
-                    <>
-                      <span className="alm-list-item__meta-sep">·</span>
-                      <Pill variant="warn">aging {m.age}d</Pill>
-                    </>
-                  )}
-                </>
-              }
-            />
-          ))}
+          {group.items.map((m) => {
+            const isAging = m.age_days > 90;
+            const gainStr = `g${m.fingerprint.gain}`;
+            const tempStr =
+              m.fingerprint.temp_c != null ? `${m.fingerprint.temp_c}°C` : '';
+            const expStr = `${m.fingerprint.exposure_s}s`;
+
+            return (
+              <ListItem
+                key={m.id}
+                selected={selected === m.id}
+                onClick={() => onSelect(m.id)}
+                title={
+                  <span className="alm-mono" style={{ fontSize: 11 }}>
+                    {m.id.slice(0, 8)}…
+                  </span>
+                }
+                meta={
+                  <>
+                    {m.kind !== 'bias' && (
+                      <>
+                        {expStr}
+                        <span className="alm-list-item__meta-sep">·</span>
+                      </>
+                    )}
+                    {tempStr && (
+                      <>
+                        {tempStr}
+                        <span className="alm-list-item__meta-sep">·</span>
+                      </>
+                    )}
+                    {gainStr}
+                    <span className="alm-list-item__meta-sep">·</span>
+                    {m.fingerprint.camera.replace('ASI', '')}
+                    {isAging && (
+                      <>
+                        <span className="alm-list-item__meta-sep">·</span>
+                        <Pill variant="warn">aging {m.age_days}d</Pill>
+                      </>
+                    )}
+                  </>
+                }
+              />
+            );
+          })}
         </div>
       ))}
     </ListSidebar>

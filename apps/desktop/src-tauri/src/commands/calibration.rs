@@ -1,12 +1,22 @@
-//! Spec 029 calibration stubs exposed to the Tauri webview.
+//! Calibration commands (spec 029 stubs + spec 007 matching).
 //!
-//! Stub implementations returning hardcoded fixture data matching the mock
-//! layer until the real persistence layer is wired.
+//! Spec 029 stubs: `calibration.masters.list`, `calibration.masters.get`,
+//!   `calibration.matches` — return hardcoded fixture data.
+//! Spec 007 commands: `calibration.match.suggest`, `calibration.match.assign`,
+//!   `calibration.match.suggest.batch` — wired to the real matching engine.
 
+use app_core::calibration as cal_uc;
 use contracts_core::calibration::{
     CalibrationFingerprint, CalibrationKind, CalibrationMaster, CompatibleSessionEntry,
     MasterDetail, MasterUsageStats, MatchCandidate,
 };
+use contracts_core::calibration_match::{
+    CalibrationMatchAssignRequest, CalibrationMatchAssignResponse, CalibrationMatchBatchRequest,
+    CalibrationMatchBatchResponse, CalibrationMatchSuggestRequest, CalibrationMatchSuggestResponse,
+};
+use tauri::State;
+
+use crate::AppState;
 
 /// `calibration.masters.list` — returns all calibration masters.
 ///
@@ -154,4 +164,60 @@ pub async fn calibration_matches(session_id: String) -> Result<Vec<MatchCandidat
             soft_mismatches: vec![],
         },
     ])
+}
+
+// ── Spec 007 — calibration matching commands ──────────────────────────────────
+
+/// `calibration.match.suggest` — suggest ranked calibration masters for a session.
+///
+/// Read-only; never persists state. Returns ranked candidates with confidence
+/// and dimension breakdown per spec 007 contract.
+///
+/// # Errors
+/// Returns `Err(String)` on database error.
+#[tauri::command]
+#[specta::specta(rename = "calibration.match.suggest")]
+pub async fn calibration_match_suggest(
+    state: State<'_, AppState>,
+    req: CalibrationMatchSuggestRequest,
+) -> Result<CalibrationMatchSuggestResponse, String> {
+    tracing::debug!("calibration.match.suggest session_id={}", req.session_id);
+    cal_uc::suggest(state.repo.pool(), req).await
+}
+
+/// `calibration.match.assign` — persist a calibration master assignment.
+///
+/// Hard-rule mismatches require `override: true`. Emits audit event on success.
+///
+/// # Errors
+/// Returns `Err(String)` on database error.
+#[tauri::command]
+#[specta::specta(rename = "calibration.match.assign")]
+pub async fn calibration_match_assign(
+    state: State<'_, AppState>,
+    req: CalibrationMatchAssignRequest,
+) -> Result<CalibrationMatchAssignResponse, String> {
+    tracing::debug!(
+        "calibration.match.assign session_id={} master_id={}",
+        req.session_id,
+        req.master_id
+    );
+    cal_uc::assign(state.repo.pool(), &state.bus, req).await
+}
+
+/// `calibration.match.suggest.batch` — suggest calibration masters for multiple sessions.
+///
+/// Supports partial success: sessions with `observer_location_missing` or
+/// `session.mixed_state` return per-item status, not a top-level error.
+///
+/// # Errors
+/// Returns `Err(String)` on database error.
+#[tauri::command]
+#[specta::specta(rename = "calibration.match.suggest.batch")]
+pub async fn calibration_match_suggest_batch(
+    state: State<'_, AppState>,
+    req: CalibrationMatchBatchRequest,
+) -> Result<CalibrationMatchBatchResponse, String> {
+    tracing::debug!("calibration.match.suggest.batch session_count={}", req.session_ids.len());
+    cal_uc::batch_suggest(state.repo.pool(), req).await
 }

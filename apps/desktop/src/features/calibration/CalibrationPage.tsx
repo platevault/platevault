@@ -1,43 +1,66 @@
+/**
+ * CalibrationPage — spec 007 wired.
+ *
+ * Replaces fixture data (MASTERS_DATA) with real `calibration.masters.list`
+ * backend data. The selected master's compatible-sessions accordion uses
+ * `calibration.match.suggest` to fetch ranked candidates with confidence +
+ * dimension breakdown.
+ *
+ * URL state: `?selected=<master-id>` (string UUID from the real backend).
+ * The route parameter is kept as-is; MastersList receives string IDs now.
+ */
+
 import { useNavigate, useSearch } from '@tanstack/react-router';
-import { MASTERS_DATA } from '@/data/fixtures/calibration';
-import type { MasterFixture } from '@/data/fixtures/calibration';
 import { PageShell, ListDetailLayout, TopActionBar } from '@/components';
 import { Btn } from '@/ui';
-import type { BtnVariant } from '@/ui';
 import { useStaleSelectionCleanup } from '@/lib/use-stale-selection';
 import { MastersList } from './MastersList';
 import { MasterDetail } from './MasterDetail';
+import { useCalibrationMasters, useCalibrationSettings } from './useCalibration';
+import type { CalibrationMaster } from '@/bindings/types';
+
+// ── Contextual toolbar actions for the selected master ────────────────────────
 
 interface ContextualAction {
   label: string;
-  variant?: BtnVariant;
+  variant?: 'primary' | 'danger' | 'ghost';
 }
 
-// Contextual toolbar actions for the selected master, driven by kind/aging state.
-function masterActions(master: MasterFixture): ContextualAction[] {
+function masterActions(master: CalibrationMaster): ContextualAction[] {
+  const isAging = master.age_days > 90;
   const actions: ContextualAction[] = [{ label: 'Use in project', variant: 'primary' }];
-  if (master.aging) {
-    actions.push({ label: 'Replace master', variant: 'danger' });
-  }
+  if (isAging) actions.push({ label: 'Replace master', variant: 'danger' });
   actions.push({ label: 'Reveal in Explorer' });
   return actions;
 }
 
-const darks = MASTERS_DATA.filter((m) => m.kind === 'dark').length;
-const flats = MASTERS_DATA.filter((m) => m.kind === 'flat').length;
-const bias = MASTERS_DATA.filter((m) => m.kind === 'bias').length;
-const aging = MASTERS_DATA.filter((m) => m.aging).length;
+// ── Component ─────────────────────────────────────────────────────────────────
 
 export function CalibrationPage() {
   const { selected } = useSearch({ from: '/shell/calibration' });
   const navigate = useNavigate({ from: '/calibration' });
-  const master = MASTERS_DATA.find((m) => m.id === selected) ?? null;
+  const { masters, loading, error } = useCalibrationMasters();
+  const { prefillSuggestion } = useCalibrationSettings();
+
+  const master = masters.find((m) => m.id === selected) ?? null;
 
   useStaleSelectionCleanup(selected, master !== null, () =>
     navigate({ search: (prev) => ({ ...prev, selected: undefined }), replace: true }),
   );
 
-  const onSelect = (id: number) => navigate({ search: (prev) => ({ ...prev, selected: id }) });
+  const onSelect = (id: string) =>
+    navigate({ search: (prev) => ({ ...prev, selected: id }) });
+
+  const darks = masters.filter((m) => m.kind === 'dark').length;
+  const flats = masters.filter((m) => m.kind === 'flat').length;
+  const bias = masters.filter((m) => m.kind === 'bias').length;
+  const aging = masters.filter((m) => m.age_days > 90).length;
+
+  const subtitle = loading
+    ? 'Loading…'
+    : error
+      ? 'Failed to load masters'
+      : `${masters.length} masters · ${darks} darks · ${flats} flats · ${bias} bias${aging > 0 ? ` · ${aging} aging` : ''}`;
 
   return (
     <PageShell>
@@ -45,7 +68,7 @@ export function CalibrationPage() {
         topBar={
           <TopActionBar
             title="Calibration"
-            subtitle={`${MASTERS_DATA.length} masters · ${darks} darks · ${flats} flats · ${bias} bias · ${aging} aging`}
+            subtitle={subtitle}
             right={
               master && (
                 <>
@@ -59,8 +82,16 @@ export function CalibrationPage() {
             }
           />
         }
-        list={<MastersList masters={MASTERS_DATA} selected={selected ?? null} onSelect={onSelect} />}
-        detail={<MasterDetail master={master} />}
+        list={
+          <MastersList
+            masters={masters}
+            loading={loading}
+            error={error}
+            selected={selected ?? null}
+            onSelect={onSelect}
+          />
+        }
+        detail={<MasterDetail master={master} prefillSuggestion={prefillSuggestion} />}
       />
     </PageShell>
   );

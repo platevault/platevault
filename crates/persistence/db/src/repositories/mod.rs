@@ -1,8 +1,10 @@
 //! Repository trait definitions for spec 002 lifecycle, spec 003 first-run,
-//! spec 005 inbox, spec 006 inventory, spec 008 projects, spec 013 target lookup,
+//! spec 005 inbox, spec 006 inventory, spec 007 calibration assignments,
+//! spec 008 projects, spec 013 target lookup,
 //! spec 014 catalogs, spec 030 equipment operations, spec 018 settings,
 //! spec 017 plans, and spec 025 plan apply runs/events.
 
+pub mod calibration_assignment;
 pub mod catalogs;
 pub mod equipment;
 pub mod first_run;

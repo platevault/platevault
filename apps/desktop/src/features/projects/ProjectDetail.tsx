@@ -28,6 +28,8 @@ import {
 import type { ProjectLifecycleState } from './store';
 import { EditProjectPane } from './edit/EditProjectPane';
 import { addToast } from '@/shared/toast';
+// spec 007 T034: calibration match panel (batch suggest per project source).
+import { CalibrationMatchPanel } from './CalibrationMatchPanel';
 import { BlockedBanner } from './BlockedBanner';
 import type { BlockedReason, RecoveryEdge } from './BlockedBanner';
 import { lifecycleFooterActions, isPlanRequiredError } from './lifecycle-actions';
@@ -285,6 +287,11 @@ export function ProjectDetailContent({ projectId }: ProjectDetailContentProps) {
             </div>
           </Section>
         )}
+
+        {/* spec 007 T034: calibration match panel — batch suggest for light sources */}
+        <CalibrationMatchPanel
+          sessionIds={project.sources.map((s) => s.inventoryId)}
+        />
       </DetailGrid>
 
       {/* Lifecycle footer actions (spec 009 US3-3) */}

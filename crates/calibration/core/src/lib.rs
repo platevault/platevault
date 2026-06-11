@@ -1,13 +1,393 @@
-//! Calibration reuse, candidate matching, and confidence model boundaries.
+//! Calibration matching engine (spec 007).
+//!
+//! Pure domain crate — no filesystem reads, no header parsing, no persistence.
+//! All inputs arrive as already-extracted metadata.
+//!
+//! Public surface:
+//! - [`CalibrationKind`] — dark / flat / bias (dark_flat reserved, not matched).
+//! - [`Dimension`] / [`SoftDimension`] / [`MatchingRuleConfig`] — rule configuration.
+//! - [`CalibrationMatch`] — ranked suggestion with dimension breakdown.
+//! - [`SessionInfo`] / [`MasterInfo`] — pure-data input types (no DB row types).
+//! - [`suggest`] — fan-out dispatcher for single session.
+//! - [`batch_suggest`] — multi-session dispatcher.
+//! - [`assign`] module — override/assignment logic.
+#![allow(
+    clippy::doc_markdown, // spec/domain terminology
+    clippy::must_use_candidate, // domain fns are often called for side-effects in tests
+)]
+
+pub mod assign;
+pub mod candidate;
+pub mod ranking;
+pub mod rules;
+
+pub use candidate::{CalibrationMatch, MatchedDim, MismatchReason, MismatchedDim, SelectionReason};
+pub use ranking::MatchingRuleConfig;
+
+// ── Domain enums ──────────────────────────────────────────────────────────────
+
+use serde::{Deserialize, Serialize};
+
+/// Kind of calibration frame.
+///
+/// `DarkFlat` is reserved for forward-compatibility (FR-001) but MUST NOT be
+/// matched, suggested, or assigned in v1. Files landing with dark_flat IMAGETYP
+/// are classified as `unclassified` at the inbox level (spec 005).
+#[derive(Clone, Copy, Debug, Eq, Hash, Ord, PartialEq, PartialOrd, Serialize, Deserialize)]
+#[serde(rename_all = "snake_case")]
+pub enum CalibrationKind {
+    Dark,
+    Flat,
+    Bias,
+    /// Reserved — not matched or exposed in v1 UI.
+    DarkFlat,
+}
+
+/// A named matching dimension (metadata field).
+#[derive(Clone, Copy, Debug, Eq, Hash, PartialEq, Serialize, Deserialize)]
+#[serde(rename_all = "snake_case")]
+pub enum Dimension {
+    Gain,
+    Offset,
+    Exposure,
+    Temperature,
+    Filter,
+    Rotation,
+    Binning,
+    OpticTrain,
+    ObservingNightProximity,
+    DateProximity,
+}
+
+impl CalibrationKind {
+    /// Lowercase string name used in DB and contracts.
+    #[must_use]
+    pub fn as_str(self) -> &'static str {
+        match self {
+            Self::Dark => "dark",
+            Self::Flat => "flat",
+            Self::Bias => "bias",
+            Self::DarkFlat => "dark_flat",
+        }
+    }
+}
+
+impl Dimension {
+    /// Human-readable name (used in dimension breakdown responses).
+    #[must_use]
+    pub fn as_str(self) -> &'static str {
+        match self {
+            Self::Gain => "gain",
+            Self::Offset => "offset",
+            Self::Exposure => "exposure",
+            Self::Temperature => "temperature",
+            Self::Filter => "filter",
+            Self::Rotation => "rotation",
+            Self::Binning => "binning",
+            Self::OpticTrain => "optic_train",
+            Self::ObservingNightProximity => "observing_night_proximity",
+            Self::DateProximity => "date_proximity",
+        }
+    }
+}
+
+/// Metadata for a light session as input to the matcher.
+///
+/// All fields are optional because metadata extraction may be incomplete.
+/// Missing required fields (hard dimensions) exclude candidates; missing soft
+/// dimensions reduce confidence via `metadata_missing` mismatch entries.
+#[derive(Clone, Debug, Default)]
+pub struct SessionInfo {
+    pub id: String,
+    /// `"light"` | `"dark"` | `"flat"` | `"bias"` | `"mixed"`
+    pub session_type: String,
+    pub gain: Option<f64>,
+    pub offset: Option<f64>,
+    pub exposure_s: Option<f64>,
+    pub temp_c: Option<f64>,
+    pub filter: Option<String>,
+    pub rotation_deg: Option<f64>,
+    pub binning: Option<String>,
+    pub optic_train: Option<String>,
+    /// ISO-8601 date string of the observing night (local date, noon-to-noon).
+    pub observing_night_date: Option<String>,
+    /// Whether the session has a known observer_location (required for
+    /// observing-night semantics; guards A6).
+    pub has_observer_location: bool,
+    /// Whether exposure_start_utc is populated (required for A6 guard).
+    pub has_exposure_start_utc: bool,
+}
+
+/// Metadata for a calibration master as input to the matcher.
+///
+/// All fingerprint fields optional; hard-rule missing fields cause `metadata_missing` mismatch.
+#[derive(Clone, Debug)]
+pub struct MasterInfo {
+    pub id: String,
+    pub kind: CalibrationKind,
+    pub gain: Option<f64>,
+    pub offset: Option<f64>,
+    pub exposure_s: Option<f64>,
+    pub temp_c: Option<f64>,
+    pub filter: Option<String>,
+    pub rotation_deg: Option<f64>,
+    pub binning: Option<String>,
+    pub optic_train: Option<String>,
+    /// Originating session id (used for same_session selection reason).
+    pub source_session_id: Option<String>,
+    /// ISO-8601 date string of the observing night of the calibration session.
+    pub observing_night_date: Option<String>,
+}
+
+// ── Suggest dispatcher ────────────────────────────────────────────────────────
+
+/// Suggest ranked calibration masters for a single light session.
+///
+/// Returns an error string for hard-guard failures (`session.mixed_state`,
+/// `match.observer_location_missing`). Returns an empty vec when no masters
+/// match; callers map that to `"no_match"` status.
+///
+/// # Errors
+/// Returns `Err` with a contract error code string on hard-guard violations.
+pub fn suggest(
+    session: &SessionInfo,
+    masters: &[MasterInfo],
+    calibration_types: &[CalibrationKind],
+    config: &MatchingRuleConfig,
+) -> Result<Vec<CalibrationMatch>, String> {
+    // Guard E5: mixed-session check.
+    if session.session_type == "mixed" {
+        return Err("session.mixed_state".to_owned());
+    }
+
+    // Guard A6: observer location + exposure_start_utc required.
+    if !session.has_observer_location || !session.has_exposure_start_utc {
+        return Err("match.observer_location_missing".to_owned());
+    }
+
+    let types_to_run: Vec<CalibrationKind> = if calibration_types.is_empty() {
+        vec![CalibrationKind::Dark, CalibrationKind::Flat, CalibrationKind::Bias]
+    } else {
+        calibration_types.to_vec()
+    };
+
+    let mut all_matches: Vec<CalibrationMatch> = Vec::new();
+
+    for kind in &types_to_run {
+        let type_masters: Vec<&MasterInfo> = masters.iter().filter(|m| m.kind == *kind).collect();
+
+        let mut type_matches: Vec<CalibrationMatch> =
+            type_masters.iter().filter_map(|m| evaluate_master(session, m, config)).collect();
+
+        ranking::rank_matches(&mut type_matches);
+        all_matches.extend(type_matches);
+    }
+
+    Ok(all_matches)
+}
+
+/// Batch suggest for multiple sessions.
+///
+/// Returns per-(session, calibration_type) results. Hard-guard failures for
+/// individual sessions are represented as per-item status rather than top-level errors.
+pub fn batch_suggest(
+    sessions: &[SessionInfo],
+    masters: &[MasterInfo],
+    calibration_types: &[CalibrationKind],
+    config: &MatchingRuleConfig,
+) -> Vec<BatchSessionResult> {
+    sessions
+        .iter()
+        .map(|session| {
+            let result = suggest(session, masters, calibration_types, config);
+            BatchSessionResult { session_id: session.id.clone(), result }
+        })
+        .collect()
+}
+
+/// Result for a single session in a batch suggest call.
+#[derive(Debug)]
+pub struct BatchSessionResult {
+    pub session_id: String,
+    /// `Ok(matches)` on success; `Err(error_code)` for hard-guard failures.
+    pub result: Result<Vec<CalibrationMatch>, String>,
+}
+
+// ── Internal dispatch ─────────────────────────────────────────────────────────
+
+fn evaluate_master(
+    session: &SessionInfo,
+    master: &MasterInfo,
+    config: &MatchingRuleConfig,
+) -> Option<CalibrationMatch> {
+    match master.kind {
+        CalibrationKind::Dark => rules::dark::evaluate(session, master, config),
+        CalibrationKind::Flat => rules::flat::evaluate(session, master, config),
+        CalibrationKind::Bias => rules::bias::evaluate(session, master, config),
+        CalibrationKind::DarkFlat => None, // FR-001: never matched in v1
+    }
+}
 
 pub const CRATE_NAME: &str = "calibration_core";
 
 #[cfg(test)]
 mod tests {
-    use super::CRATE_NAME;
+    use super::*;
+    use crate::ranking::MatchingRuleConfig;
+
+    fn default_session() -> SessionInfo {
+        SessionInfo {
+            id: "ses-001".to_owned(),
+            session_type: "light".to_owned(),
+            gain: Some(100.0),
+            offset: Some(50.0),
+            exposure_s: Some(300.0),
+            temp_c: Some(-10.0),
+            filter: Some("Ha".to_owned()),
+            rotation_deg: Some(0.0),
+            binning: Some("1x1".to_owned()),
+            optic_train: Some("train-a".to_owned()),
+            observing_night_date: Some("2026-01-15".to_owned()),
+            has_observer_location: true,
+            has_exposure_start_utc: true,
+        }
+    }
+
+    fn dark_master(id: &str, gain: f64, offset: f64, exposure_s: f64, temp_c: f64) -> MasterInfo {
+        MasterInfo {
+            id: id.to_owned(),
+            kind: CalibrationKind::Dark,
+            gain: Some(gain),
+            offset: Some(offset),
+            exposure_s: Some(exposure_s),
+            temp_c: Some(temp_c),
+            filter: None,
+            rotation_deg: None,
+            binning: None,
+            optic_train: None,
+            source_session_id: None,
+            observing_night_date: None,
+        }
+    }
 
     #[test]
     fn exposes_crate_name() {
         assert_eq!(CRATE_NAME, "calibration_core");
+    }
+
+    #[test]
+    fn suggest_rejects_mixed_session() {
+        let session = SessionInfo {
+            session_type: "mixed".to_owned(),
+            has_observer_location: true,
+            has_exposure_start_utc: true,
+            ..Default::default()
+        };
+        let result = suggest(&session, &[], &[], &MatchingRuleConfig::default());
+        assert_eq!(result.unwrap_err(), "session.mixed_state");
+    }
+
+    #[test]
+    fn suggest_rejects_missing_observer_location() {
+        let session = SessionInfo {
+            session_type: "light".to_owned(),
+            has_observer_location: false,
+            has_exposure_start_utc: true,
+            ..Default::default()
+        };
+        let result = suggest(&session, &[], &[], &MatchingRuleConfig::default());
+        assert_eq!(result.unwrap_err(), "match.observer_location_missing");
+    }
+
+    #[test]
+    fn suggest_rejects_missing_exposure_start_utc() {
+        let session = SessionInfo {
+            session_type: "light".to_owned(),
+            has_observer_location: true,
+            has_exposure_start_utc: false,
+            ..Default::default()
+        };
+        let result = suggest(&session, &[], &[], &MatchingRuleConfig::default());
+        assert_eq!(result.unwrap_err(), "match.observer_location_missing");
+    }
+
+    #[test]
+    fn suggest_returns_empty_when_no_masters() {
+        let session = default_session();
+        let matches = suggest(&session, &[], &[], &MatchingRuleConfig::default()).unwrap();
+        assert!(matches.is_empty());
+    }
+
+    #[test]
+    fn suggest_skips_dark_flat_masters() {
+        let session = default_session();
+        let dark_flat_master = MasterInfo {
+            id: "m-df".to_owned(),
+            kind: CalibrationKind::DarkFlat,
+            gain: Some(100.0),
+            offset: Some(50.0),
+            exposure_s: Some(300.0),
+            temp_c: Some(-10.0),
+            filter: None,
+            rotation_deg: None,
+            binning: None,
+            optic_train: None,
+            source_session_id: None,
+            observing_night_date: None,
+        };
+        let matches =
+            suggest(&session, &[dark_flat_master], &[], &MatchingRuleConfig::default()).unwrap();
+        assert!(matches.is_empty());
+    }
+
+    #[test]
+    fn suggest_dark_exact_match_returns_high_confidence() {
+        let session = default_session();
+        let master = dark_master("m-dark-001", 100.0, 50.0, 300.0, -10.0);
+        let config = MatchingRuleConfig::default();
+        let matches = suggest(&session, &[master], &[CalibrationKind::Dark], &config).unwrap();
+        assert_eq!(matches.len(), 1);
+        assert!((matches[0].confidence - 1.0).abs() < 1e-9, "exact match should be 1.0");
+    }
+
+    #[test]
+    fn suggest_dark_gain_mismatch_excluded() {
+        let session = default_session();
+        let master = dark_master("m-dark-002", 200.0, 50.0, 300.0, -10.0);
+        let config = MatchingRuleConfig::default();
+        let matches = suggest(&session, &[master], &[CalibrationKind::Dark], &config).unwrap();
+        assert!(matches.is_empty(), "gain hard-rule mismatch should exclude");
+    }
+
+    #[test]
+    fn suggest_calibration_type_filter_respected() {
+        let session = default_session();
+        let dark = dark_master("m-dark-001", 100.0, 50.0, 300.0, -10.0);
+        let config = MatchingRuleConfig::default();
+        // Only request flat — dark master should not appear
+        let matches = suggest(&session, &[dark], &[CalibrationKind::Flat], &config).unwrap();
+        assert!(matches.is_empty());
+    }
+
+    #[test]
+    fn batch_suggest_mixed_state_returns_per_item_error() {
+        let mixed = SessionInfo {
+            id: "ses-mixed".to_owned(),
+            session_type: "mixed".to_owned(),
+            has_observer_location: true,
+            has_exposure_start_utc: true,
+            ..Default::default()
+        };
+        let normal = SessionInfo {
+            id: "ses-001".to_owned(),
+            session_type: "light".to_owned(),
+            has_observer_location: true,
+            has_exposure_start_utc: true,
+            ..Default::default()
+        };
+        let results = batch_suggest(&[mixed, normal], &[], &[], &MatchingRuleConfig::default());
+        assert_eq!(results.len(), 2);
+        assert!(results[0].result.is_err());
+        assert!(results[1].result.is_ok());
     }
 }

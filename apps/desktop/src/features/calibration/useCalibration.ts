@@ -1,0 +1,163 @@
+/**
+ * Calibration feature hooks — spec 007.
+ *
+ * useCalibrationMasters   : loads CalibrationMaster[] from the real backend.
+ * useCalibrationSuggest   : calls calibration.match.suggest for one session.
+ * useCalibrationAssign    : calls calibration.match.assign; returns loading / result.
+ * useCalibrationSettings  : reads prefill_suggestion from persisted settings.
+ */
+
+import { useState, useEffect, useCallback } from 'react';
+import {
+  listCalibrationMasters,
+  calibrationMatchSuggest,
+  calibrationMatchAssign,
+  getSettings,
+} from '@/api/commands';
+import type {
+  CalibrationMatchSuggestResponse,
+  CalibrationMatchAssignResponse,
+  CalibrationMatchType,
+} from '@/api/commands';
+import type { CalibrationMaster } from '@/bindings/types';
+
+// ── Masters list ─────────────────────────────────────────────────────────────
+
+export interface UseMastersState {
+  masters: CalibrationMaster[];
+  loading: boolean;
+  error: string | undefined;
+}
+
+export function useCalibrationMasters(): UseMastersState {
+  const [state, setState] = useState<UseMastersState>({
+    masters: [],
+    loading: true,
+    error: undefined,
+  });
+
+  useEffect(() => {
+    let cancelled = false;
+    listCalibrationMasters()
+      .then((masters) => {
+        if (!cancelled) setState({ masters, loading: false, error: undefined });
+      })
+      .catch((err: unknown) => {
+        if (!cancelled)
+          setState({ masters: [], loading: false, error: String(err) });
+      });
+    return () => { cancelled = true; };
+  }, []);
+
+  return state;
+}
+
+// ── Suggest for one session ───────────────────────────────────────────────────
+
+export interface UseSuggestState {
+  response: CalibrationMatchSuggestResponse | undefined;
+  loading: boolean;
+  error: string | undefined;
+  /** Re-run the suggest call (e.g. after an assign). */
+  refresh: () => void;
+}
+
+export function useCalibrationSuggest(
+  sessionId: string | undefined,
+  calibrationTypes?: CalibrationMatchType[],
+): UseSuggestState {
+  const [response, setResponse] = useState<CalibrationMatchSuggestResponse | undefined>(undefined);
+  const [loading, setLoading] = useState(false);
+  const [error, setError] = useState<string | undefined>(undefined);
+  const [rev, setRev] = useState(0);
+
+  const refresh = useCallback(() => setRev((r) => r + 1), []);
+
+  useEffect(() => {
+    if (!sessionId) {
+      setResponse(undefined);
+      setLoading(false);
+      return undefined;
+    }
+    let cancelled = false;
+    setLoading(true);
+    setError(undefined);
+    calibrationMatchSuggest({
+      requestId: `suggest-${sessionId}-${Date.now()}`,
+      sessionId,
+      calibrationTypes,
+    })
+      .then((res) => {
+        if (!cancelled) {
+          setResponse(res);
+          setLoading(false);
+        }
+      })
+      .catch((err: unknown) => {
+        if (!cancelled) {
+          setError(String(err));
+          setLoading(false);
+        }
+      });
+    return () => { cancelled = true; };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [sessionId, rev]);
+
+  return { response, loading, error, refresh };
+}
+
+// ── Assign ────────────────────────────────────────────────────────────────────
+
+export interface UseAssignState {
+  assigning: boolean;
+  result: CalibrationMatchAssignResponse | undefined;
+  /** Call to persist an assignment. `override` must be true for hard-rule violations. */
+  assign: (sessionId: string, masterId: string, override?: boolean) => Promise<CalibrationMatchAssignResponse>;
+}
+
+export function useCalibrationAssign(): UseAssignState {
+  const [assigning, setAssigning] = useState(false);
+  const [result, setResult] = useState<CalibrationMatchAssignResponse | undefined>(undefined);
+
+  const assign = useCallback(
+    async (sessionId: string, masterId: string, override = false) => {
+      setAssigning(true);
+      try {
+        const res = await calibrationMatchAssign({
+          requestId: `assign-${sessionId}-${Date.now()}`,
+          sessionId,
+          masterId,
+          override,
+        });
+        setResult(res);
+        return res;
+      } finally {
+        setAssigning(false);
+      }
+    },
+    [],
+  );
+
+  return { assigning, result, assign };
+}
+
+// ── Settings: prefill_suggestion ─────────────────────────────────────────────
+
+export function useCalibrationSettings(): { prefillSuggestion: boolean } {
+  const [prefillSuggestion, setPrefillSuggestion] = useState(true);
+
+  useEffect(() => {
+    getSettings({ scope: 'calibration' })
+      .then((data) => {
+        const v = data.values as Record<string, unknown>;
+        if (typeof v['calibration.prefill_suggestion'] === 'boolean') {
+          setPrefillSuggestion(v['calibration.prefill_suggestion'] as boolean);
+        }
+      })
+      .catch(() => {
+        // Backend unavailable — keep default.
+      });
+  }, []);
+
+  return { prefillSuggestion };
+}

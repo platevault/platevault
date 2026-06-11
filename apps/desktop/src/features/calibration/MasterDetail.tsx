@@ -1,5 +1,18 @@
-import type { MasterFixture } from '@/data/fixtures/calibration';
-import { focusedMaster } from '@/data/fixtures/calibration';
+/**
+ * MasterDetail — spec 007 wired.
+ *
+ * Shows master fingerprint facts (from the real CalibrationMaster DTO) and
+ * the ranked match candidates panel (from calibration.match.suggest using the
+ * master's source_session_id as the anchor session).
+ *
+ * The calibration.match.suggest contract targets *light* sessions, not master
+ * sessions. The MatchCandidatesPanel below is surfaced here so that when a user
+ * selects a master they can see which sessions it would match (from that master's
+ * originating session perspective). For the project-level accordion (T034) see
+ * ProjectDetail.
+ */
+
+import type { CalibrationMaster } from '@/bindings/types';
 import {
   DetailPane,
   DetailHeader,
@@ -9,73 +22,84 @@ import {
   RailCard,
   PropertyTable,
 } from '@/components';
-import { Pill, Section, Table, EmptyState, Lock } from '@/ui';
+import { Pill, Section, EmptyState, Lock } from '@/ui';
 import type { PillVariant } from '@/ui';
+import { useCalibrationSuggest, useCalibrationAssign } from './useCalibration';
+import { MatchCandidatesPanel } from './MatchCandidatesPanel';
 
-// ─── Local variant helpers ────────────────────────────────────────────────────
+// ── Helpers ───────────────────────────────────────────────────────────────────
 
 function kindVariant(kind: string): PillVariant {
   const map: Record<string, PillVariant> = { dark: 'info', flat: 'accent', bias: 'neutral' };
-  return map[kind] ?? 'neutral';
+  return map[kind.toLowerCase()] ?? 'neutral';
 }
 
-function confVariant(conf: string): PillVariant {
-  return conf === 'confirmed' ? 'ok' : conf === 'high' ? 'accent' : 'neutral';
+function fmtBytes(bytes: number): string {
+  if (bytes >= 1_073_741_824) return `${(bytes / 1_073_741_824).toFixed(1)} GB`;
+  if (bytes >= 1_048_576) return `${(bytes / 1_048_576).toFixed(0)} MB`;
+  return `${(bytes / 1024).toFixed(0)} KB`;
 }
 
-function decisionVariant(decision: string): PillVariant {
-  return decision === 'accepted' ? 'ok' : 'warn';
-}
-
-// ─── Sub-fixtures (same data as before, kept in this module) ─────────────────
-
-const MATCHED_SESSIONS = [
-  { session: 'NGC 7000 · Ha · 2024-11-30', filter: 'Ha', frames: 54, status: 'accepted' as const },
-  { session: 'NGC 7000 · OIII · 2024-11-30', filter: 'OIII', frames: 38, status: 'accepted' as const },
-  { session: 'NGC 7000 · SII · 2024-12-01', filter: 'SII', frames: 22, status: 'undecided' as const },
-];
-
-const LINKED_PROJECTS = [
-  { project: 'NGC 7000 · HOO', profile: 'PixInsight/WBPP', state: 'processing' as const },
-  { project: 'NGC 7000 · SHO mosaic', profile: 'PixInsight/WBPP', state: 'ready' as const },
-  { project: 'IC 1396 · HOO', profile: 'PixInsight/WBPP', state: 'prepared' as const },
-  { project: 'M42 · HOO', profile: 'PixInsight/WBPP', state: 'ready' as const },
-];
-
-const COMPAT_SESSIONS = [
-  { check: 'ok', session: 'NGC 7000 · Ha · 2024-11-30', frames: 54, score: 0.92, softMismatch: '—', decision: 'accepted' as const },
-  { check: 'ok', session: 'NGC 7000 · OIII · 2024-11-30', frames: 38, score: 0.92, softMismatch: '—', decision: 'accepted' as const },
-  { check: 'ok', session: 'NGC 7000 · SII · 2024-12-01', frames: 22, score: 0.91, softMismatch: '—', decision: 'undecided' as const },
-  { check: 'soft', session: 'NGC 7000 · Ha · 2024-12-15', frames: 30, score: 0.88, softMismatch: '−10.3°C vs −10°C (Δ 0.3)', decision: 'undecided' as const },
-];
-
-const HISTORY = [
-  { ts: '01-30', detail: 'imported via scan #14' },
-  { ts: '01-30', detail: 'matched to 4 sessions' },
-  { ts: '12-18', detail: 'linked to NGC 7000 · SHO mosaic' },
-  { ts: '12-02', detail: 'linked to NGC 7000 · HOO' },
-];
-
-// ─── Component ────────────────────────────────────────────────────────────────
+// ── Props ─────────────────────────────────────────────────────────────────────
 
 interface Props {
-  master: MasterFixture | null;
+  master: CalibrationMaster | null;
+  prefillSuggestion: boolean;
 }
 
-export function MasterDetail({ master }: Props) {
+// ── Component ─────────────────────────────────────────────────────────────────
+
+export function MasterDetail({ master, prefillSuggestion }: Props) {
+  // Use source_session_id as the session anchor for suggest.
+  // This is the calibration session that produced the master — we use it
+  // to find which other masters would match the same fingerprint.
+  const sessionId = master?.source_session_id ?? undefined;
+
+  const { response, loading: suggestLoading, error: suggestError, refresh } = useCalibrationSuggest(sessionId);
+  const { assigning, assign } = useCalibrationAssign();
+
+  const handleAssign = async (masterId: string, override: boolean) => {
+    if (!sessionId) return { status: 'error' as const, error: { code: 'session.not_found', message: 'No session' } };
+    const res = await assign(sessionId, masterId, override);
+    if (res.status === 'success') {
+      refresh();
+    }
+    return res as { status: string; error?: { code: string; message: string; details?: { dimensions: string[] } } };
+  };
+
   if (!master) {
     return (
       <DetailPane>
         <EmptyState
           title="Select a master"
-          desc="Choose a calibration master from the list to view its details."
+          desc="Choose a calibration master from the list to view its details and suggestions."
         />
       </DetailPane>
     );
   }
 
-  const isAging1Year = master.age >= 365;
-  const isAgingWarn = master.aging && !isAging1Year;
+  const isAging1Year = master.age_days >= 365;
+  const isAgingWarn = master.age_days > 90 && !isAging1Year;
+  const kindStr = master.kind.toString().toLowerCase().replace('_', ' ');
+
+  const fp = master.fingerprint;
+  const properties: Array<{ key: string; label: string; value: string }> = [
+    { key: 'kind', label: 'Kind', value: kindStr },
+    { key: 'camera', label: 'Camera', value: fp.camera },
+    { key: 'gain', label: 'Gain', value: String(fp.gain) },
+    { key: 'exposure', label: 'Exposure', value: `${fp.exposure_s}s` },
+  ];
+  if (fp.temp_c != null) {
+    properties.push({ key: 'temp', label: 'Temperature', value: `${fp.temp_c}°C` });
+  }
+  if (fp.filter) {
+    properties.push({ key: 'filter', label: 'Filter', value: fp.filter });
+  }
+  if (fp.sensor_mode) {
+    properties.push({ key: 'sensor_mode', label: 'Sensor mode', value: fp.sensor_mode });
+  }
+  properties.push({ key: 'binning', label: 'Binning', value: fp.binning });
+  properties.push({ key: 'size', label: 'Size', value: fmtBytes(master.size_bytes) });
 
   return (
     <DetailPane fill>
@@ -83,157 +107,67 @@ export function MasterDetail({ master }: Props) {
         title={
           <>
             <Lock />
-            <span className="alm-mono">{master.name}</span>
+            <span className="alm-mono">{master.id.slice(0, 12)}…</span>
           </>
         }
         titleExtra={
           <>
-            <Pill variant={kindVariant(master.kind)}>{master.kind.toUpperCase()}</Pill>
+            <Pill variant={kindVariant(kindStr)}>{kindStr.toUpperCase()}</Pill>
             {isAging1Year && <Pill variant="danger">aging &gt; 1 year</Pill>}
-            {isAgingWarn && <Pill variant="warn">aging {master.age}d</Pill>}
+            {isAgingWarn && <Pill variant="warn">aging {master.age_days}d</Pill>}
           </>
         }
-        subtitle={`${master.name}.xisf · ${master.size}`}
+        subtitle={`${kindStr} · ${fmtBytes(master.size_bytes)}`}
       />
 
       <MetricLine
         metrics={[
-          { value: master.size, label: 'on disk' },
-          { value: `${master.age}d`, label: 'age' },
-          { value: master.sessions, label: 'sessions' },
-          { value: master.projects, label: 'projects' },
+          { value: fmtBytes(master.size_bytes), label: 'on disk' },
+          { value: `${master.age_days}d`, label: 'age' },
+          { value: master.used_by_session_ids.length, label: 'sessions' },
+          { value: master.used_by_project_ids.length, label: 'projects' },
         ]}
       />
 
       <DetailGrid
         rail={
           <Rail>
-            <RailCard title="Master facts">
-              <PropertyTable
-                mode="view"
-                properties={[
-                  { key: 'kind', label: 'Kind', value: master.kind },
-                  { key: 'exposure', label: 'Exposure', value: master.exposure },
-                  { key: 'temp', label: 'Temperature', value: master.temp },
-                  { key: 'gain', label: 'Gain', value: String(master.gain) },
-                  { key: 'camera', label: 'Camera', value: master.camera },
-                  { key: 'binning', label: 'Binning', value: master.binning },
-                  { key: 'size', label: 'Size', value: master.size },
-                ]}
-              />
+            <RailCard title="Master fingerprint">
+              <PropertyTable mode="view" properties={properties} />
             </RailCard>
 
             <RailCard title="Reuse">
               <div style={{ display: 'flex', flexDirection: 'column', gap: 'var(--alm-sp-1)', fontSize: 'var(--alm-text-xs)' }}>
                 <div style={{ color: 'var(--alm-text-secondary)' }}>
                   <span style={{ color: 'var(--alm-text-faint)' }}>Sessions matched</span>{' '}
-                  <strong>{master.sessions}</strong>
+                  <strong>{master.used_by_session_ids.length}</strong>
                 </div>
                 <div style={{ color: 'var(--alm-text-secondary)' }}>
                   <span style={{ color: 'var(--alm-text-faint)' }}>Projects linked</span>{' '}
-                  <strong>{master.projects}</strong>
+                  <strong>{master.used_by_project_ids.length}</strong>
                 </div>
                 <div style={{ color: 'var(--alm-text-secondary)' }}>
-                  <span style={{ color: 'var(--alm-text-faint)' }}>Last used in</span>{' '}
-                  {focusedMaster.lastUsedProject}
+                  <span style={{ color: 'var(--alm-text-faint)' }}>Created</span>{' '}
+                  {master.created_at.split('T')[0]}
                 </div>
-                <div style={{ marginTop: 'var(--alm-sp-1)' }}>
-                  <Pill variant={confVariant(focusedMaster.conf)}>{focusedMaster.conf}</Pill>
-                </div>
-              </div>
-            </RailCard>
-
-            <RailCard title="Recent history">
-              <div style={{ display: 'flex', flexDirection: 'column', gap: 'var(--alm-sp-1)', fontSize: 'var(--alm-text-xs)' }}>
-                {HISTORY.map((h, i) => (
-                  <div key={i} style={{ color: 'var(--alm-text-secondary)' }}>
-                    <span className="alm-mono" style={{ color: 'var(--alm-text-faint)' }}>{h.ts}</span> · {h.detail}
-                  </div>
-                ))}
               </div>
             </RailCard>
           </Rail>
         }
       >
-        <Section title="Matching fingerprint" count={focusedMaster.fingerprint.length}>
-          <PropertyTable
-            mode="view"
-            showSource
-            properties={focusedMaster.fingerprint.map((row) => ({
-              key: row.k,
-              label: row.k,
-              value: row.v,
-              source: row.prov === 'reviewed' ? 'user' : row.prov === 'inferred' ? 'inferred' : 'fits',
-            }))}
-          />
-          <div style={{ marginTop: 'var(--alm-sp-2)', fontSize: 'var(--alm-text-xs)', color: 'var(--alm-text-muted)' }}>
-            Binary match:{' '}
-            <span className="alm-mono">exact ({focusedMaster.fingerprint.length}/{focusedMaster.fingerprint.length} fields)</span>
-          </div>
+        <Section title="Calibration fingerprint" count={properties.length}>
+          <PropertyTable mode="view" properties={properties} />
         </Section>
 
-        <Section title="Compatible acquisition sessions" count={COMPAT_SESSIONS.length}>
-          <Table
-            columns={[
-              { key: 'check', label: '', style: { width: 24 } },
-              { key: 'session', label: 'Session' },
-              { key: 'frames', label: 'Frames', style: { width: 72 } },
-              { key: 'score', label: 'Score', style: { width: 64 } },
-              { key: 'softMismatch', label: 'Soft mismatches' },
-              { key: 'decision', label: 'Decision', style: { width: 100 } },
-            ]}
-            rows={COMPAT_SESSIONS.map((s) => ({
-              check:
-                s.check === 'ok'
-                  ? <span style={{ color: 'var(--alm-ok)' }}>✓</span>
-                  : <span style={{ color: 'var(--alm-warn)' }}>~</span>,
-              session: <span className="alm-mono" style={{ fontSize: 'var(--alm-text-xs)' }}>{s.session}</span>,
-              frames: <span className="alm-mono">{s.frames}</span>,
-              score: <span className="alm-mono">{s.score.toFixed(2)}</span>,
-              softMismatch:
-                s.softMismatch === '—'
-                  ? <span style={{ color: 'var(--alm-text-faint)' }}>—</span>
-                  : <span style={{ color: 'var(--alm-warn)' }}>{s.softMismatch}</span>,
-              decision: <Pill variant={decisionVariant(s.decision)}>{s.decision}</Pill>,
-            }))}
-          />
-        </Section>
-
-        <Section title="Matched sessions" count={MATCHED_SESSIONS.length}>
-          <Table
-            columns={[
-              { key: 'session', label: 'Session' },
-              { key: 'filter', label: 'Filter', style: { width: 60 } },
-              { key: 'frames', label: 'Frames', style: { width: 72 } },
-              { key: 'status', label: 'Match status', style: { width: 100 } },
-            ]}
-            rows={MATCHED_SESSIONS.map((s) => ({
-              session: <span className="alm-mono" style={{ fontSize: 'var(--alm-text-xs)' }}>{s.session}</span>,
-              filter: <Pill variant="ghost">{s.filter}</Pill>,
-              frames: <span className="alm-mono">{s.frames}</span>,
-              status: <Pill variant={s.status === 'accepted' ? 'ok' : 'warn'}>{s.status}</Pill>,
-            }))}
-          />
-        </Section>
-
-        <Section title="Linked projects" count={LINKED_PROJECTS.length}>
-          <Table
-            columns={[
-              { key: 'project', label: 'Project' },
-              { key: 'profile', label: 'Workflow profile' },
-              { key: 'state', label: 'Lifecycle' },
-            ]}
-            rows={LINKED_PROJECTS.map((p) => ({
-              project: <span className="alm-mono" style={{ fontSize: 'var(--alm-text-xs)' }}>{p.project}</span>,
-              profile: p.profile,
-              state: (
-                <Pill variant={p.state === 'processing' ? 'info' : p.state === 'prepared' ? 'accent' : 'neutral'}>
-                  {p.state}
-                </Pill>
-              ),
-            }))}
-          />
-        </Section>
+        <MatchCandidatesPanel
+          sessionId={sessionId ?? ''}
+          response={response}
+          loading={suggestLoading}
+          error={suggestError}
+          onAssign={handleAssign}
+          assigning={assigning}
+          prefillSuggestion={prefillSuggestion}
+        />
       </DetailGrid>
     </DetailPane>
   );
