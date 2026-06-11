@@ -68,6 +68,18 @@ import type {
   ProjectChannelsDismissDriftRequest,
   ProjectChannelsDismissDriftResult,
 } from '@/bindings/index';
+import type {
+  TargetGetResult_Serialize as TargetGetResult,
+  TargetNoteUpdateRequest,
+  TargetNoteUpdateResult,
+  TargetAliasAddRequest,
+  TargetAliasAddResult,
+  TargetAliasRemoveRequest,
+  TargetAliasRemoveResult,
+  TargetPrimaryRenameRequest,
+  TargetPrimaryRenameResult,
+  TargetOpError_Serialize as TargetOpError,
+} from '@/bindings/index';
 
 // Conditionally import mocks or real Tauri invoke
 const useMocks = import.meta.env.VITE_USE_MOCKS === 'true';
@@ -960,3 +972,66 @@ export async function protectionPlanAcknowledged(
     reason,
   });
 }
+
+
+// ── Spec 023: Target Identity, History, and Notes ─────────────────────────────
+
+/**
+ * `target.get` — load the full target aggregate (spec 023).
+ *
+ * Returns identity, aliases, catalog refs, sessions, projects, and notes for
+ * a target by id. Uses the spec-023 backend (`target.get` command) rather
+ * than the legacy `targets.get` stub.
+ */
+export async function getTargetIdentity(args: {
+  targetId: string;
+}): Promise<TargetGetResult> {
+  return invoke<TargetGetResult>('target.get', args);
+}
+
+/**
+ * `target.note.update` — replace the per-target free-text note (spec 023).
+ */
+export async function updateTargetNote(
+  req: TargetNoteUpdateRequest,
+): Promise<TargetNoteUpdateResult> {
+  return invoke<TargetNoteUpdateResult>('target.note.update', { req });
+}
+
+/**
+ * `target.alias.add` — append an alias to a target (spec 023).
+ *
+ * Idempotent: re-adding an alias already on this target returns `added=false`.
+ * Returns `alias.duplicate` error when the normalized alias belongs to another target.
+ */
+export async function addTargetAlias(
+  req: TargetAliasAddRequest,
+): Promise<TargetAliasAddResult> {
+  return invoke<TargetAliasAddResult>('target.alias.add', { req });
+}
+
+/**
+ * `target.alias.remove` — remove an alias from a target (spec 023).
+ *
+ * Rejects with `alias.is_primary` if the alias is the current primary.
+ */
+export async function removeTargetAlias(
+  req: TargetAliasRemoveRequest,
+): Promise<TargetAliasRemoveResult> {
+  return invoke<TargetAliasRemoveResult>('target.alias.remove', { req });
+}
+
+/**
+ * `target.primary.rename` — promote an existing alias to primary_designation (spec 023).
+ *
+ * The alias MUST already be in the target's alias list. On success the old
+ * primary becomes an alias.
+ */
+export async function renameTargetPrimary(
+  req: TargetPrimaryRenameRequest,
+): Promise<TargetPrimaryRenameResult> {
+  return invoke<TargetPrimaryRenameResult>('target.primary.rename', { req });
+}
+
+// Re-export TargetOpError type for callers that need to type-narrow errors.
+export type { TargetOpError };

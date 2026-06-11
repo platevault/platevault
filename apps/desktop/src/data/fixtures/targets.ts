@@ -11,9 +11,16 @@ import type {
 } from '@/bindings/types';
 
 // ─── Design V3 flat fixture shape ───────────────────────────────────────────
+//
+// `uuid` maps each fixture entry to the stable UUIDv5 used by the spec-013/023
+// backend.  When a row is selected in the list, its `uuid` is put into the URL
+// search param and passed to `TargetDetailV2` so the detail loads from the real
+// `target.get` backend command.
 
 export interface TargetFixture {
   id: number;
+  /** Stable UUIDv5 — matches the backend `targets` table row. */
+  uuid: string;
   name: string;
   common: string;
   kind: string;
@@ -24,12 +31,12 @@ export interface TargetFixture {
 }
 
 export const TARGETS_DATA: TargetFixture[] = [
-  { id: 1, name: '(unresolved)', common: '', kind: 'unknown', sessions: 3, hours: 4.2, projects: 0, warn: true },
-  { id: 2, name: 'IC 1396', common: "Elephant's Trunk", kind: 'deep sky', sessions: 4, hours: 9.3, projects: 1 },
-  { id: 3, name: 'Jupiter', common: '', kind: 'planetary', sessions: 6, hours: 2.5, projects: 1 },
-  { id: 4, name: 'M31', common: 'Andromeda Galaxy', kind: 'deep sky', sessions: 8, hours: 11.8, projects: 1, warn: true },
-  { id: 5, name: 'M42', common: 'Orion Nebula', kind: 'deep sky', sessions: 5, hours: 3.4, projects: 0 },
-  { id: 6, name: 'NGC 7000', common: 'North America Nebula', kind: 'deep sky', sessions: 12, hours: 14.2, projects: 2 },
+  { id: 1, uuid: '550e8400-e29b-41d4-a716-446655440206', name: '(unresolved)', common: '', kind: 'unknown', sessions: 3, hours: 4.2, projects: 0, warn: true },
+  { id: 2, uuid: '550e8400-e29b-41d4-a716-446655440203', name: 'IC 1396', common: "Elephant's Trunk", kind: 'deep sky', sessions: 4, hours: 9.3, projects: 1 },
+  { id: 3, uuid: '550e8400-e29b-41d4-a716-446655440204', name: 'Jupiter', common: '', kind: 'planetary', sessions: 6, hours: 2.5, projects: 1 },
+  { id: 4, uuid: '550e8400-e29b-41d4-a716-446655440202', name: 'M31', common: 'Andromeda Galaxy', kind: 'deep sky', sessions: 8, hours: 11.8, projects: 1, warn: true },
+  { id: 5, uuid: '550e8400-e29b-41d4-a716-446655440205', name: 'M42', common: 'Orion Nebula', kind: 'deep sky', sessions: 5, hours: 3.4, projects: 0 },
+  { id: 6, uuid: '550e8400-e29b-41d4-a716-446655440201', name: 'NGC 7000', common: 'North America Nebula', kind: 'deep sky', sessions: 12, hours: 14.2, projects: 2 },
 ];
 
 // ---------------------------------------------------------------------------

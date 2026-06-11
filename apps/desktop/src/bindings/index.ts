@@ -143,6 +143,52 @@ export const commands = {
 	 */
 	targetsGet: (id: string) => typedError<TargetDetail_Serialize, string>(__TAURI_INVOKE("targets.get", { id })),
 	/**
+	 *  `target.get` — load the full target aggregate.
+	 * 
+	 *  Returns [`TargetGetResult`] on success or [`TargetOpError`] as `Err`.
+	 * 
+	 *  # Errors
+	 * 
+	 *  Returns `Err(TargetOpError)` with code `"target.not_found"` when the
+	 *  target does not exist.
+	 */
+	targetGet: (targetId: string) => typedError<TargetGetResult_Serialize, TargetOpError_Serialize>(__TAURI_INVOKE("target.get", { targetId })),
+	/**
+	 *  `target.note.update` — replace the per-target free-text note.
+	 * 
+	 *  # Errors
+	 * 
+	 *  Returns `Err(TargetOpError)` with codes: `"target.not_found"`, `"note.too_long"`.
+	 */
+	targetNoteUpdate: (req: TargetNoteUpdateRequest) => typedError<TargetNoteUpdateResult, TargetOpError_Serialize>(__TAURI_INVOKE("target.note.update", { req })),
+	/**
+	 *  `target.alias.add` — append an alias to a target.
+	 * 
+	 *  # Errors
+	 * 
+	 *  Returns `Err(TargetOpError)` with codes: `"target.not_found"`, `"alias.invalid"`,
+	 *  `"alias.duplicate"`.
+	 */
+	targetAliasAdd: (req: TargetAliasAddRequest) => typedError<TargetAliasAddResult, TargetOpError_Serialize>(__TAURI_INVOKE("target.alias.add", { req })),
+	/**
+	 *  `target.alias.remove` — remove an alias from a target.
+	 * 
+	 *  # Errors
+	 * 
+	 *  Returns `Err(TargetOpError)` with codes: `"target.not_found"`,
+	 *  `"alias.is_primary"`, `"alias.not_found"`.
+	 */
+	targetAliasRemove: (req: TargetAliasRemoveRequest) => typedError<TargetAliasRemoveResult, TargetOpError_Serialize>(__TAURI_INVOKE("target.alias.remove", { req })),
+	/**
+	 *  `target.primary.rename` — promote an existing alias to `primary_designation`.
+	 * 
+	 *  # Errors
+	 * 
+	 *  Returns `Err(TargetOpError)` with codes: `"target.not_found"`,
+	 *  `"designation.not_in_aliases"`, `"designation.already_primary"`.
+	 */
+	targetPrimaryRename: (req: TargetPrimaryRenameRequest) => typedError<TargetPrimaryRenameResult, TargetOpError_Serialize>(__TAURI_INVOKE("target.primary.rename", { req })),
+	/**
 	 *  `target.lookup` — ranked candidate list from a free-form query.
 	 * 
 	 *  Runs the normalize → exact → fuzzy → edit-distance pipeline and returns
@@ -1735,6 +1781,20 @@ export type CatalogManifestFetchResponse_Serialize = {
  *  - `user`: reserved for v1.x; backend rejects with `origin.not_implemented`.
  */
 export type CatalogOrigin = "built_in" | "downloaded" | "user";
+
+/**
+ *  Structured catalog reference for a target (spec 023 data-model.md).
+ * 
+ *  Mirrors `CatalogRef` in `target.get.json`.
+ */
+export type CatalogRef = {
+	/**  Closed enum slug (e.g. `"messier"`, `"openngc"`). */
+	catalogId: string,
+	/**  Human-readable catalog name (e.g. `"Messier"`, `"OpenNGC"`). */
+	catalogDisplay: string,
+	/**  Catalog-local designation (e.g. `"M31"`, `"NGC 224"`). */
+	designation: string,
+};
 
 /**  Registered catalog index visible to the app (data-model.md §Catalog). */
 export type Catalog_Deserialize = {
@@ -4383,6 +4443,34 @@ export type SuggestStatus = "match" | "ambiguous" | "no_match" |
 /**  An astronomical target as seen in list views. */
 export type Target = Target_Serialize | Target_Deserialize;
 
+/**  Request for `target.alias.add`. */
+export type TargetAliasAddRequest = {
+	targetId: string,
+	/**  User-supplied alias display form. Server normalizes for uniqueness. */
+	alias: string,
+};
+
+/**  Response for `target.alias.add`. */
+export type TargetAliasAddResult = {
+	targetId: string,
+	/**  `true` if newly persisted; `false` if the alias already existed (idempotent). */
+	added: boolean,
+};
+
+/**  Request for `target.alias.remove`. */
+export type TargetAliasRemoveRequest = {
+	targetId: string,
+	/**  Display form of the alias to remove. Server normalizes for lookup. */
+	alias: string,
+};
+
+/**  Response for `target.alias.remove`. */
+export type TargetAliasRemoveResult = {
+	targetId: string,
+	removedAlias: string,
+	auditId: string,
+};
+
 /**  Extended detail view of a target. */
 export type TargetDetail = TargetDetail_Serialize | TargetDetail_Deserialize;
 
@@ -4418,6 +4506,66 @@ export type TargetDetail_Serialize = {
 	recommendedHours: { [key in string]: number | null },
 	sessions: AcquisitionSession_Serialize[],
 	projects: TargetProjectStub[],
+};
+
+/**  Full aggregate returned by the `target.get` use case. */
+export type TargetGetResult = TargetGetResult_Serialize | TargetGetResult_Deserialize;
+
+/**  Full aggregate returned by the `target.get` use case. */
+export type TargetGetResult_Deserialize = {
+	target: TargetIdentity_Deserialize,
+	/**
+	 *  Reverse-chronological by `captured_on`. Sessions with `null`
+	 *  `captured_on` are excluded (R-3.1).
+	 */
+	sessions: TargetSession_Deserialize[],
+	/**  Ordered by lifecycle then name. */
+	projects: TargetProject[],
+};
+
+/**  Full aggregate returned by the `target.get` use case. */
+export type TargetGetResult_Serialize = {
+	target: TargetIdentity_Serialize,
+	/**
+	 *  Reverse-chronological by `captured_on`. Sessions with `null`
+	 *  `captured_on` are excluded (R-3.1).
+	 */
+	sessions: TargetSession_Serialize[],
+	/**  Ordered by lifecycle then name. */
+	projects: TargetProject[],
+};
+
+/**  Full target identity returned by `target.get` (spec 023 contract). */
+export type TargetIdentity = TargetIdentity_Serialize | TargetIdentity_Deserialize;
+
+/**  Full target identity returned by `target.get` (spec 023 contract). */
+export type TargetIdentity_Deserialize = {
+	id: string,
+	/**  Canonical display name (e.g. `"M 31"`). */
+	primaryDesignation: string,
+	/**  User-editable aliases (display form, ordered alpha). */
+	aliases: string[],
+	/**  Structured catalog identifiers. */
+	catalogRefs: CatalogRef[],
+	/**  Per-target free-text note (max 16 KB UTF-8). */
+	notes: string | null,
+	createdAt: string,
+	updatedAt: string,
+};
+
+/**  Full target identity returned by `target.get` (spec 023 contract). */
+export type TargetIdentity_Serialize = {
+	id: string,
+	/**  Canonical display name (e.g. `"M 31"`). */
+	primaryDesignation: string,
+	/**  User-editable aliases (display form, ordered alpha). */
+	aliases: string[],
+	/**  Structured catalog identifiers. */
+	catalogRefs: CatalogRef[],
+	/**  Per-target free-text note (max 16 KB UTF-8). */
+	notes?: string | null,
+	createdAt: string,
+	updatedAt: string,
 };
 
 /**  Classification of an astronomical target. */
@@ -4470,6 +4618,62 @@ export type TargetLookupResponse_Serialize = {
 	requestId: string,
 	matches?: LookupTargetMatch[] | null,
 	errors?: LookupError[] | null,
+};
+
+/**  Request for `target.note.update`. */
+export type TargetNoteUpdateRequest = {
+	targetId: string,
+	/**  Replacement note body. Empty string clears the note. Max 16384 bytes. */
+	content: string,
+};
+
+/**  Response for `target.note.update`. */
+export type TargetNoteUpdateResult = {
+	targetId: string,
+	updatedAt: string,
+};
+
+/**  Generic error envelope for target operations. */
+export type TargetOpError = TargetOpError_Serialize | TargetOpError_Deserialize;
+
+/**  Generic error envelope for target operations. */
+export type TargetOpError_Deserialize = {
+	/**  Error code string (e.g. `"target.not_found"`, `"alias.duplicate"`). */
+	code: string,
+	message: string,
+	details: unknown | null,
+};
+
+/**  Generic error envelope for target operations. */
+export type TargetOpError_Serialize = {
+	/**  Error code string (e.g. `"target.not_found"`, `"alias.duplicate"`). */
+	code: string,
+	message: string,
+	details?: unknown | null,
+};
+
+/**  Request for `target.primary.rename`. */
+export type TargetPrimaryRenameRequest = {
+	targetId: string,
+	/**  Designation to promote. MUST be an existing alias on this target. */
+	newPrimaryDesignation: string,
+};
+
+/**  Response for `target.primary.rename`. */
+export type TargetPrimaryRenameResult = {
+	targetId: string,
+	priorPrimary: string,
+	newPrimary: string,
+	auditId: string,
+};
+
+/**  A project linked to a target (spec 023 `TargetProject`). */
+export type TargetProject = {
+	projectId: string,
+	name: string,
+	lifecycle: string,
+	/**  Processing tool — REQUIRED per spec 008 R-Tool-Req (GRILL 2026-05-22). */
+	tool: string,
 };
 
 /**  A project stub within the target detail view. */
@@ -4526,6 +4730,41 @@ export type TargetResolveResponse_Serialize = {
 	candidates?: CandidateSummary[] | null,
 	/**  Present when `status = error`. */
 	errors?: LookupError[] | null,
+};
+
+/**  A single session row in the target history (spec 023 `TargetSession`). */
+export type TargetSession = TargetSession_Serialize | TargetSession_Deserialize;
+
+/**  A single session row in the target history (spec 023 `TargetSession`). */
+export type TargetSession_Deserialize = {
+	sessionId: string,
+	/**
+	 *  Night of acquisition per R3 solar-noon formula.
+	 *  `None` when `observer_location` is null/unreviewed — excluded from
+	 *  the response entirely by the use case (R-3.1).
+	 */
+	capturedOn: string | null,
+	filter: string | null,
+	exposure: string | null,
+	frames: number | null,
+	/**  Deep-link to the Inventory entry. */
+	inventoryId: string,
+};
+
+/**  A single session row in the target history (spec 023 `TargetSession`). */
+export type TargetSession_Serialize = {
+	sessionId: string,
+	/**
+	 *  Night of acquisition per R3 solar-noon formula.
+	 *  `None` when `observer_location` is null/unreviewed — excluded from
+	 *  the response entirely by the use case (R-3.1).
+	 */
+	capturedOn?: string | null,
+	filter?: string | null,
+	exposure?: string | null,
+	frames?: number | null,
+	/**  Deep-link to the Inventory entry. */
+	inventoryId: string,
 };
 
 /**  An astronomical target as seen in list views. */

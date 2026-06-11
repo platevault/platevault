@@ -4,8 +4,9 @@ import { Pill } from '@/ui';
 
 interface Props {
   targets: TargetFixture[];
-  selected: number | null;
-  onSelect: (id: number) => void;
+  /** The selected target UUID string (spec 023: IDs are UUIDs, not numerics). */
+  selected: string | null;
+  onSelect: (uuid: string) => void;
 }
 
 export function TargetList({ targets, selected, onSelect }: Props) {
@@ -31,8 +32,8 @@ export function TargetList({ targets, selected, onSelect }: Props) {
       {targets.map(t => (
         <ListItem
           key={t.id}
-          selected={selected === t.id}
-          onClick={() => onSelect(t.id)}
+          selected={selected === t.uuid}
+          onClick={() => onSelect(t.uuid)}
           title={
             <>
               <strong>{t.name}</strong>

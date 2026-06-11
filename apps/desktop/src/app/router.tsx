@@ -112,11 +112,15 @@ const calibrationDetailRoute = createRoute({
 });
 
 // --- Targets ---
+//
+// spec 023: target IDs are UUIDs (strings), not legacy numeric fixture IDs.
+// `selected` uses parseString so Cmd+K navigation (which uses UUID routes like
+// /targets/550e8400-...) redirects cleanly to /targets?selected=<uuid>.
 
 const targetsRoute = createRoute({
   getParentRoute: () => shellRoute,
   path: '/targets',
-  validateSearch: makeValidateSearch({ selected: parseNumber }),
+  validateSearch: makeValidateSearch({ selected: parseString }),
   component: lazyRouteComponent(
     () => import('@/features/targets/TargetsPage'),
     'TargetsPage',
@@ -127,7 +131,10 @@ const targetDetailRoute = createRoute({
   getParentRoute: () => shellRoute,
   path: '/targets/$id',
   beforeLoad: ({ params }) => {
-    throw redirect({ to: '/targets', search: selectedSearch(params.id) });
+    // Redirect deep-link /targets/<uuid> → /targets?selected=<uuid>
+    // so Cmd+K target results land on the list+detail view with the right
+    // target pre-selected (spec 023 T008).
+    throw redirect({ to: '/targets', search: selectedSearchString(params.id) });
   },
 });
 

@@ -8,32 +8,32 @@ deferred until each story passes review.
 
 ## Foundations
 
-- T001. Create `crates/targeting/` with the `Target`, `CatalogRef`, and
+- T001. [DONE] Create `crates/targeting/` with the `Target`, `CatalogRef`, and
   alias-normalization types defined in `data-model.md`. Unit-test
   normalization (whitespace, case, "M 31" vs "M31" vs "Messier 31"),
   alias conflict detection, alias removal (`alias.is_primary` guard), and
   primary rename (`designation.not_in_aliases` guard).
-- T002. Add target/alias/catalog_ref tables and indexes to
+- T002. [DONE] Add target/alias/catalog_ref tables and indexes to
   `crates/persistence/db` via a new migration. Add `target_id` FKs on
   `sessions` and `projects` (nullable for v1 to support existing rows).
   Use `primary_designation` column name (not `primary`).
-- T003. Generate Rust DTOs in `crates/contracts/core/` and TypeScript types
+- T003. [DONE] Generate Rust DTOs in `crates/contracts/core/` and TypeScript types
   in `packages/contracts/generated/` from the five JSON Schemas
   (`target.get`, `target.note.update`, `target.alias.add`,
   `target.alias.remove`, `target.primary.rename`).
-- T004. Add Tauri command adapters mapping each contract to a use case in
+- T004. [DONE] Add Tauri command adapters mapping each contract to a use case in
   `crates/app/core/`.
 
 ## US 1 — View Target Identity (P1)
 
-- T005. Implement `target_get` use case: load `Target` by id; on miss
+- T005. [DONE] Implement `target_get` use case: load `Target` by id; on miss
   return `target.not_found`.
-- T006. Wire `routes/targets.$targetId.tsx` in the desktop app with header
+- T006. [DONE — TargetDetailV2.tsx] Wire `routes/targets.$targetId.tsx` in the desktop app with header
   (primary name, `updated_at`, alias chips, catalog ref chips).
-- T007. Confirm the router config does NOT register Targets as a primary
+- T007. [DONE — target-identity.test.ts] Confirm the router config does NOT register Targets as a primary
   nav entry; add a regression test that fails if the sidebar manifest gains
   a Targets entry.
-- T008. Add alias-aware results to the Cmd+K palette: match on
+- T008. [DONE — CommandPalette.test.tsx + palette-target-search.test.ts; router uses parseString so /targets/$uuid redirects to ?selected=<uuid>] Add alias-aware results to the Cmd+K palette: match on
   `primary` and any `alias_normalized` row; selecting routes to
   `/targets/$targetId`.
 - T009. Add a target chip on Inventory rows that have a resolved
@@ -73,29 +73,29 @@ deferred until each story passes review.
 
 ## US 4 — Observing Notes Per Target (P4)
 
-- T021. Implement `target_note_update` use case: replace `notes`, bump
+- T021. [DONE] Implement `target_note_update` use case: replace `notes`, bump
   `updated_at`, write one audit event via `crates/audit/`.
-- T022. Render an editable notes section on target detail with a
+- T022. [DONE — TargetDetailV2.tsx + TargetDetailV2.test.tsx tests 5-6] Render an editable notes section on target detail with a
   5-second debounced save through `target.note.update` (A7).
 - T023. Confirm per-target notes render only here; per-session notes remain
   on session rows inside the sessions list (R4).
-- T024. Add `target_alias_add` use case: validate, conflict-check
+- T024. [DONE] Add `target_alias_add` use case: validate, conflict-check
   (`alias.duplicate` with `conflicting_target_id` in `details`), write
   alias and one audit event.
-- T025. Wire an alias-add control in the target detail header; surface
+- T025. [DONE — TargetDetailV2.tsx alias add form + tests 7-11] Wire an alias-add control in the target detail header; surface
   inline error toasts for `alias.duplicate` and `alias.invalid`.
 - T026. Tests: note round-trip survives alias rename; alias duplicate
   rejection returns conflicting target id; idempotent re-add of an existing
   alias returns `added=false`.
-- T027. Implement `target_alias_remove` use case: look up alias by
+- T027. [DONE] Implement `target_alias_remove` use case: look up alias by
   normalized form; reject with `alias.is_primary` if it matches
   `primary_designation`; else delete row and write audit event
   `target.alias_removed` + provenance entry.
-- T028. Implement `target_primary_rename` use case: verify
+- T028. [DONE] Implement `target_primary_rename` use case: verify
   `newPrimaryDesignation` is in `aliases[]`; swap primary and alias;
   write audit event `target.primary_renamed` + provenance entry. Reject
   with `designation.not_in_aliases` or `designation.already_primary`.
-- T029. Wire alias-remove and primary-rename controls in the target detail
+- T029. [DONE — TargetDetailV2.tsx remove/make-primary buttons + tests 9-10,12-13] Wire alias-remove and primary-rename controls in the target detail
   header; surface inline error toasts for `alias.is_primary`,
   `designation.not_in_aliases`, and `designation.already_primary`.
 - T030. Tests: alias.remove happy path; alias.is_primary rejection;

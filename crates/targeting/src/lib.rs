@@ -1,7 +1,8 @@
-//! Target catalog, aliases, identifiers, and lookup for spec 013.
+//! Target catalog, aliases, identifiers, and lookup for spec 013 + spec 023.
 //!
 //! # Module layout
 //!
+//! - [`aliases`]: alias validation, conflict-detection, and primary-rename guards (spec 023).
 //! - [`catalog`]: in-memory catalog types — [`catalog::TargetCatalog`],
 //!   [`catalog::CatalogEntry`], [`catalog::TargetMatch`], [`catalog::MatchEvidence`].
 //! - [`normalize`]: query normalization pipeline (casefold, NFKC, prefix expansion).
@@ -13,6 +14,7 @@
 
 #![allow(clippy::doc_markdown)] // spec/domain terminology is not suited for backticks
 
+pub mod aliases;
 pub mod catalog;
 pub mod identity;
 pub mod load;

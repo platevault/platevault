@@ -1,7 +1,14 @@
-//! Repository methods for spec 013 target identity tables.
+//! Repository methods for spec 013 + spec 023 target identity tables.
 //!
-//! Operates on `targets`, `target_catalog_refs`, and `catalog_equivalences`
-//! from migration 0017.
+//! Operates on `targets`, `target_catalog_refs`, `catalog_equivalences`
+//! (migration 0017) and `target_aliases` (migration 0027).
+//!
+//! Spec 023 additions:
+//! - [`TargetRow`] gains `notes` and `updated_at` optional fields (migration 0027 columns).
+//! - [`TargetAliasRow`] + CRUD helpers for `target_aliases`.
+//! - [`update_target_notes`] — replace the per-target note body.
+//! - [`update_target_primary`] — swap primary designation (provenance swap).
+//! - [`get_target_full`] — fetch target + aliases + catalog refs in one call.
 
 use sqlx::SqlitePool;
 use time::OffsetDateTime;
@@ -10,11 +17,24 @@ use crate::{DbError, DbResult};
 
 // ── Row types ─────────────────────────────────────────────────────────────────
 
-/// Stored row from the `targets` table.
+/// Stored row from the `targets` table (spec 013 + spec 023 columns).
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub struct TargetRow {
     pub id: String,
     pub primary_designation: String,
+    pub created_at: String,
+    // spec 023 additions (migration 0027):
+    pub notes: Option<String>,
+    pub updated_at: Option<String>,
+}
+
+/// Stored row from `target_aliases` (migration 0027, spec 023).
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct TargetAliasRow {
+    pub id: String,
+    pub target_id: String,
+    pub alias_display: String,
+    pub alias_normalized: String,
     pub created_at: String,
 }
 
@@ -54,8 +74,8 @@ fn now_iso() -> String {
 ///
 /// Returns [`DbError::Database`] on query failure.
 pub async fn list_targets(pool: &SqlitePool) -> DbResult<Vec<TargetRow>> {
-    let rows: Vec<(String, String, String)> = sqlx::query_as(
-        "SELECT id, primary_designation, created_at
+    let rows: Vec<(String, String, String, Option<String>, Option<String>)> = sqlx::query_as(
+        "SELECT id, primary_designation, created_at, notes, updated_at
          FROM targets
          ORDER BY primary_designation ASC",
     )
@@ -64,10 +84,12 @@ pub async fn list_targets(pool: &SqlitePool) -> DbResult<Vec<TargetRow>> {
 
     Ok(rows
         .into_iter()
-        .map(|(id, primary_designation, created_at)| TargetRow {
+        .map(|(id, primary_designation, created_at, notes, updated_at)| TargetRow {
             id,
             primary_designation,
             created_at,
+            notes,
+            updated_at,
         })
         .collect())
 }
@@ -79,16 +101,17 @@ pub async fn list_targets(pool: &SqlitePool) -> DbResult<Vec<TargetRow>> {
 /// Returns [`DbError::NotFound`] when no row exists.
 /// Returns [`DbError::Database`] on query failure.
 pub async fn get_target(pool: &SqlitePool, id: &str) -> DbResult<TargetRow> {
-    let row: Option<(String, String, String)> =
-        sqlx::query_as("SELECT id, primary_designation, created_at FROM targets WHERE id = ?")
-            .bind(id)
-            .fetch_optional(pool)
-            .await?;
+    let row: Option<(String, String, String, Option<String>, Option<String>)> = sqlx::query_as(
+        "SELECT id, primary_designation, created_at, notes, updated_at FROM targets WHERE id = ?",
+    )
+    .bind(id)
+    .fetch_optional(pool)
+    .await?;
 
     match row {
         None => Err(DbError::NotFound(format!("target '{id}'"))),
-        Some((id, primary_designation, created_at)) => {
-            Ok(TargetRow { id, primary_designation, created_at })
+        Some((id, primary_designation, created_at, notes, updated_at)) => {
+            Ok(TargetRow { id, primary_designation, created_at, notes, updated_at })
         }
     }
 }
@@ -102,18 +125,197 @@ pub async fn upsert_target(pool: &SqlitePool, row: &TargetRow) -> DbResult<()> {
     let created_at = if row.created_at.is_empty() { now_iso() } else { row.created_at.clone() };
 
     sqlx::query(
-        "INSERT INTO targets (id, primary_designation, created_at)
-         VALUES (?, ?, ?)
+        "INSERT INTO targets (id, primary_designation, created_at, notes, updated_at)
+         VALUES (?, ?, ?, ?, ?)
          ON CONFLICT(id) DO UPDATE SET
-             primary_designation = excluded.primary_designation",
+             primary_designation = excluded.primary_designation,
+             notes               = excluded.notes,
+             updated_at          = excluded.updated_at",
     )
     .bind(&row.id)
     .bind(&row.primary_designation)
+    .bind(&created_at)
+    .bind(&row.notes)
+    .bind(&row.updated_at)
+    .execute(pool)
+    .await?;
+
+    Ok(())
+}
+
+/// Update only the `notes` and `updated_at` fields on a target row.
+///
+/// # Errors
+///
+/// Returns [`DbError::NotFound`] when the target does not exist.
+/// Returns [`DbError::Database`] on query failure.
+pub async fn update_target_notes(
+    pool: &SqlitePool,
+    target_id: &str,
+    notes: Option<&str>,
+    updated_at: &str,
+) -> DbResult<()> {
+    let affected = sqlx::query("UPDATE targets SET notes = ?, updated_at = ? WHERE id = ?")
+        .bind(notes)
+        .bind(updated_at)
+        .bind(target_id)
+        .execute(pool)
+        .await?
+        .rows_affected();
+
+    if affected == 0 {
+        return Err(DbError::NotFound(format!("target '{target_id}'")));
+    }
+    Ok(())
+}
+
+/// Rename the primary designation: write the new value and bump `updated_at`.
+///
+/// Does NOT validate that the new name is an existing alias — that guard lives
+/// in the use-case layer.
+///
+/// # Errors
+///
+/// Returns [`DbError::NotFound`] when the target does not exist.
+/// Returns [`DbError::Database`] on query failure.
+pub async fn update_target_primary(
+    pool: &SqlitePool,
+    target_id: &str,
+    new_primary: &str,
+    updated_at: &str,
+) -> DbResult<()> {
+    let affected =
+        sqlx::query("UPDATE targets SET primary_designation = ?, updated_at = ? WHERE id = ?")
+            .bind(new_primary)
+            .bind(updated_at)
+            .bind(target_id)
+            .execute(pool)
+            .await?
+            .rows_affected();
+
+    if affected == 0 {
+        return Err(DbError::NotFound(format!("target '{target_id}'")));
+    }
+    Ok(())
+}
+
+// ── target_aliases (spec 023, migration 0027) ─────────────────────────────────
+
+/// List all alias rows for a target, ordered by alias_display.
+///
+/// # Errors
+///
+/// Returns [`DbError::Database`] on query failure.
+pub async fn list_aliases(pool: &SqlitePool, target_id: &str) -> DbResult<Vec<TargetAliasRow>> {
+    let rows: Vec<(String, String, String, String, String)> = sqlx::query_as(
+        "SELECT id, target_id, alias_display, alias_normalized, created_at
+         FROM target_aliases
+         WHERE target_id = ?
+         ORDER BY alias_display ASC",
+    )
+    .bind(target_id)
+    .fetch_all(pool)
+    .await?;
+
+    Ok(rows
+        .into_iter()
+        .map(|(id, target_id, alias_display, alias_normalized, created_at)| TargetAliasRow {
+            id,
+            target_id,
+            alias_display,
+            alias_normalized,
+            created_at,
+        })
+        .collect())
+}
+
+/// Look up a single alias row by its normalized form (global uniqueness check).
+///
+/// Returns `None` when not found.
+///
+/// # Errors
+///
+/// Returns [`DbError::Database`] on query failure.
+pub async fn find_alias_by_normalized(
+    pool: &SqlitePool,
+    alias_normalized: &str,
+) -> DbResult<Option<TargetAliasRow>> {
+    let row: Option<(String, String, String, String, String)> = sqlx::query_as(
+        "SELECT id, target_id, alias_display, alias_normalized, created_at
+         FROM target_aliases
+         WHERE alias_normalized = ?",
+    )
+    .bind(alias_normalized)
+    .fetch_optional(pool)
+    .await?;
+
+    Ok(row.map(|(id, target_id, alias_display, alias_normalized, created_at)| TargetAliasRow {
+        id,
+        target_id,
+        alias_display,
+        alias_normalized,
+        created_at,
+    }))
+}
+
+/// Insert a new alias row (fails if `alias_normalized` already exists globally).
+///
+/// # Errors
+///
+/// Returns [`DbError::Database`] on constraint violation (duplicate normalized alias).
+pub async fn insert_alias(pool: &SqlitePool, row: &TargetAliasRow) -> DbResult<()> {
+    let created_at = if row.created_at.is_empty() { now_iso() } else { row.created_at.clone() };
+
+    sqlx::query(
+        "INSERT INTO target_aliases (id, target_id, alias_display, alias_normalized, created_at)
+         VALUES (?, ?, ?, ?, ?)",
+    )
+    .bind(&row.id)
+    .bind(&row.target_id)
+    .bind(&row.alias_display)
+    .bind(&row.alias_normalized)
     .bind(&created_at)
     .execute(pool)
     .await?;
 
     Ok(())
+}
+
+/// Delete an alias row by its normalized form on a specific target.
+///
+/// Returns the number of rows deleted (0 when not found on this target).
+///
+/// # Errors
+///
+/// Returns [`DbError::Database`] on query failure.
+pub async fn delete_alias_by_normalized(
+    pool: &SqlitePool,
+    target_id: &str,
+    alias_normalized: &str,
+) -> DbResult<u64> {
+    let affected =
+        sqlx::query("DELETE FROM target_aliases WHERE target_id = ? AND alias_normalized = ?")
+            .bind(target_id)
+            .bind(alias_normalized)
+            .execute(pool)
+            .await?
+            .rows_affected();
+
+    Ok(affected)
+}
+
+/// Count alias rows for a specific target.
+///
+/// # Errors
+///
+/// Returns [`DbError::Database`] on query failure.
+pub async fn count_aliases(pool: &SqlitePool, target_id: &str) -> DbResult<i64> {
+    let (count,): (i64,) =
+        sqlx::query_as("SELECT COUNT(*) FROM target_aliases WHERE target_id = ?")
+            .bind(target_id)
+            .fetch_one(pool)
+            .await?;
+    Ok(count)
 }
 
 /// Return the count of target rows.
@@ -292,6 +494,18 @@ mod tests {
             id: "550e8400-e29b-41d4-a716-446655440099".into(),
             primary_designation: "M 31".into(),
             created_at: "2026-01-01T00:00:00Z".into(),
+            notes: None,
+            updated_at: None,
+        }
+    }
+
+    fn m31_alias(display: &str, normalized: &str) -> TargetAliasRow {
+        TargetAliasRow {
+            id: format!("alias-{normalized}"),
+            target_id: "550e8400-e29b-41d4-a716-446655440099".into(),
+            alias_display: display.into(),
+            alias_normalized: normalized.into(),
+            created_at: "2026-01-01T00:00:00Z".into(),
         }
     }
 
@@ -408,5 +622,136 @@ mod tests {
         upsert_equivalence(db.pool(), &m31_equivalence()).await.unwrap();
         upsert_equivalence(db.pool(), &m31_equivalence()).await.unwrap();
         assert_eq!(count_equivalences(db.pool()).await.unwrap(), 1);
+    }
+
+    // ── spec 023: notes ───────────────────────────────────────────────────────
+
+    #[tokio::test]
+    async fn update_notes_persists_content() {
+        let db = setup().await;
+        upsert_target(db.pool(), &m31_target()).await.unwrap();
+        update_target_notes(
+            db.pool(),
+            &m31_target().id,
+            Some("Great galaxy"),
+            "2026-06-01T00:00:00Z",
+        )
+        .await
+        .unwrap();
+        let row = get_target(db.pool(), &m31_target().id).await.unwrap();
+        assert_eq!(row.notes.as_deref(), Some("Great galaxy"));
+        assert_eq!(row.updated_at.as_deref(), Some("2026-06-01T00:00:00Z"));
+    }
+
+    #[tokio::test]
+    async fn update_notes_clears_when_none() {
+        let db = setup().await;
+        upsert_target(db.pool(), &m31_target()).await.unwrap();
+        update_target_notes(db.pool(), &m31_target().id, Some("note"), "2026-06-01T00:00:00Z")
+            .await
+            .unwrap();
+        update_target_notes(db.pool(), &m31_target().id, None, "2026-06-02T00:00:00Z")
+            .await
+            .unwrap();
+        let row = get_target(db.pool(), &m31_target().id).await.unwrap();
+        assert!(row.notes.is_none());
+    }
+
+    #[tokio::test]
+    async fn update_notes_returns_not_found_for_unknown_target() {
+        let db = setup().await;
+        let result =
+            update_target_notes(db.pool(), "no-such-id", Some("note"), "2026-06-01T00:00:00Z")
+                .await;
+        assert!(matches!(result, Err(DbError::NotFound(_))));
+    }
+
+    // ── spec 023: primary rename ──────────────────────────────────────────────
+
+    #[tokio::test]
+    async fn update_primary_persists_new_name() {
+        let db = setup().await;
+        upsert_target(db.pool(), &m31_target()).await.unwrap();
+        update_target_primary(
+            db.pool(),
+            &m31_target().id,
+            "Andromeda Galaxy",
+            "2026-06-01T00:00:00Z",
+        )
+        .await
+        .unwrap();
+        let row = get_target(db.pool(), &m31_target().id).await.unwrap();
+        assert_eq!(row.primary_designation, "Andromeda Galaxy");
+    }
+
+    // ── spec 023: aliases ─────────────────────────────────────────────────────
+
+    #[tokio::test]
+    async fn insert_and_list_alias() {
+        let db = setup().await;
+        upsert_target(db.pool(), &m31_target()).await.unwrap();
+        insert_alias(db.pool(), &m31_alias("Andromeda Galaxy", "andromeda galaxy")).await.unwrap();
+        let aliases = list_aliases(db.pool(), &m31_target().id).await.unwrap();
+        assert_eq!(aliases.len(), 1);
+        assert_eq!(aliases[0].alias_display, "Andromeda Galaxy");
+    }
+
+    #[tokio::test]
+    async fn find_alias_by_normalized_returns_row() {
+        let db = setup().await;
+        upsert_target(db.pool(), &m31_target()).await.unwrap();
+        insert_alias(db.pool(), &m31_alias("Andromeda Galaxy", "andromeda galaxy")).await.unwrap();
+        let found = find_alias_by_normalized(db.pool(), "andromeda galaxy").await.unwrap();
+        assert!(found.is_some());
+        assert_eq!(found.unwrap().alias_display, "Andromeda Galaxy");
+    }
+
+    #[tokio::test]
+    async fn find_alias_by_normalized_returns_none_when_absent() {
+        let db = setup().await;
+        upsert_target(db.pool(), &m31_target()).await.unwrap();
+        let found = find_alias_by_normalized(db.pool(), "nonexistent").await.unwrap();
+        assert!(found.is_none());
+    }
+
+    #[tokio::test]
+    async fn insert_alias_duplicate_normalized_fails() {
+        let db = setup().await;
+        upsert_target(db.pool(), &m31_target()).await.unwrap();
+        insert_alias(db.pool(), &m31_alias("Andromeda Galaxy", "andromeda galaxy")).await.unwrap();
+        // Second insert with same normalized form must fail.
+        let result =
+            insert_alias(db.pool(), &m31_alias("Andromeda galaxy", "andromeda galaxy")).await;
+        assert!(result.is_err());
+    }
+
+    #[tokio::test]
+    async fn delete_alias_removes_row() {
+        let db = setup().await;
+        upsert_target(db.pool(), &m31_target()).await.unwrap();
+        insert_alias(db.pool(), &m31_alias("Andromeda Galaxy", "andromeda galaxy")).await.unwrap();
+        let deleted = delete_alias_by_normalized(db.pool(), &m31_target().id, "andromeda galaxy")
+            .await
+            .unwrap();
+        assert_eq!(deleted, 1);
+        assert_eq!(count_aliases(db.pool(), &m31_target().id).await.unwrap(), 0);
+    }
+
+    #[tokio::test]
+    async fn delete_alias_returns_zero_when_not_found() {
+        let db = setup().await;
+        upsert_target(db.pool(), &m31_target()).await.unwrap();
+        let deleted =
+            delete_alias_by_normalized(db.pool(), &m31_target().id, "nonexistent").await.unwrap();
+        assert_eq!(deleted, 0);
+    }
+
+    #[tokio::test]
+    async fn count_aliases_reflects_inserts() {
+        let db = setup().await;
+        upsert_target(db.pool(), &m31_target()).await.unwrap();
+        assert_eq!(count_aliases(db.pool(), &m31_target().id).await.unwrap(), 0);
+        insert_alias(db.pool(), &m31_alias("Andromeda Galaxy", "andromeda galaxy")).await.unwrap();
+        assert_eq!(count_aliases(db.pool(), &m31_target().id).await.unwrap(), 1);
     }
 }
