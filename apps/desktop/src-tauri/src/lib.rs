@@ -41,6 +41,7 @@ use crate::commands::lifecycle::{
     provenance_read, AppState,
 };
 use crate::commands::native::{native_directory_pick, native_file_pick, native_reveal};
+use crate::commands::patterns::{pattern_preview, pattern_resolve, pattern_validate};
 use crate::commands::plans::{plans_apply, plans_approve, plans_discard, plans_get, plans_list};
 use crate::commands::preferences::{preferences_get, preferences_set};
 use crate::commands::projects::{projects_create_plan, projects_get, projects_list};
@@ -125,6 +126,10 @@ pub fn specta_builder() -> Builder<tauri::Wry> {
             firstrun_state,
             firstrun_complete,
             firstrun_restart,
+            // pattern resolver (spec 015)
+            pattern_validate,
+            pattern_resolve,
+            pattern_preview,
             // settings (spec 018)
             settings_get,
             settings_update,

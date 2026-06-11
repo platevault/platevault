@@ -13,6 +13,7 @@ members = [
   "crates/metadata/fits",
   "crates/metadata/video",
   "crates/metadata/xisf",
+  "crates/patterns",
   "crates/persistence/db",
   "crates/project/structure",
   "crates/sessions",
@@ -28,6 +29,8 @@ repository = ""
 
 [workspace.dependencies]
 quick-xml = "0.39"
+unicode-normalization = "0.1"
+unicode-security = "0.1"
 # Ratified stack (spec 002 2026-05-23 — wired with network access):
 #   sqlx 0.9 renamed runtime-tokio-rustls -> runtime-tokio + tls-rustls (two separate features).
 #   specta is on the 2.x rc track; specta-typescript and tauri-specta follow the same rc series.
