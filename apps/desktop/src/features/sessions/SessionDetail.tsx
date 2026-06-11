@@ -1,4 +1,16 @@
-import type { SessionFixture } from '@/data/fixtures/sessions';
+/**
+ * SessionDetail — spec 006 wired.
+ *
+ * Detail drawer for an InventorySession. Shows Lifecycle, Facts, Provenance,
+ * and Linked sections per spec 006 research.md §5. Review actions are
+ * action-bound (FR-006): Confirm only appears when eligible, Re-open only
+ * when already confirmed/rejected, Reject as danger.
+ *
+ * SC-004: no column is named Tags or Handling.
+ * FR-004: state renders as plain structured data, not a decorative bubble.
+ */
+
+import type { InventorySession } from '@/api/commands';
 import {
   DetailPane,
   DetailHeader,
@@ -8,37 +20,114 @@ import {
   RailCard,
   PropertyTable,
 } from '@/components';
-import { Pill, Section, Table, EmptyState, Lock } from '@/ui';
+import { Pill, Section, EmptyState, Lock } from '@/ui';
 import { sessionStateLabel, sessionStateVariant } from '@/lib/lifecycle';
 
-const CAL_MATCHES = [
-  { kind: 'dark', name: 'MasterDark_300s_-10C_g100', score: 0.97, mismatch: 'none' },
-  { kind: 'flat', name: 'MasterFlat_Ha_2024-11', score: 0.88, mismatch: 'age 34d > 30d threshold' },
-  { kind: 'bias', name: 'MasterBias_g100', score: 0.99, mismatch: 'none' },
-];
-
-const HISTORY = [
-  { ts: '04-16', detail: 'reviewed and confirmed' },
-  { ts: '04-15', detail: 'metadata extraction completed' },
-  { ts: '04-15', detail: 'discovered in inbox scan' },
-  { ts: '04-14', detail: 'target corrected to NGC 7000' },
-];
-
 interface Props {
-  session: SessionFixture | null;
+  session: InventorySession | null;
+  onConfirm: () => void;
+  onReopen: () => void;
+  onReject: () => void;
+  isPending?: boolean;
 }
 
-export function SessionDetail({ session }: Props) {
+export function SessionDetail({ session, onConfirm, onReopen, onReject, isPending }: Props) {
   if (!session) {
     return (
       <DetailPane>
-        <EmptyState title="Select a session" desc="Choose a session from the list to view its details." />
+        <EmptyState
+          title="Select a session"
+          desc="Choose a session from the list to view its details."
+        />
       </DetailPane>
     );
   }
 
-  const isLinked = session.projects.length > 0;
-  const path = `D:\\Astrophotography\\Inbox\\${session.date}\\${session.filter}`;
+  const isLinked = (session.linked?.projects?.length ?? 0) > 0;
+
+  // Action-bound CTA visibility (spec 006 FR-006):
+  // Confirm only when in discovered / candidate / needs_review.
+  // Re-open only when confirmed or rejected.
+  // Reject always except when already rejected.
+  const confirmVisible = ['discovered', 'candidate', 'needs_review'].includes(session.state);
+  const reopenVisible = ['confirmed', 'rejected'].includes(session.state);
+  const rejectVisible = session.state !== 'rejected';
+
+  const displayPath = session.name;
+
+  const facts = [
+    { key: 'target', label: 'Target', value: session.target ?? '—', source: 'fits' as const },
+    { key: 'filter', label: 'Filter', value: session.filter ?? '—', source: 'fits' as const },
+    {
+      key: 'exposure',
+      label: 'Exposure',
+      value: session.exposure ?? '—',
+      source: 'fits' as const,
+    },
+    {
+      key: 'capturedOn',
+      label: 'Captured',
+      value: session.capturedOn ?? '—',
+      source: 'fits' as const,
+    },
+    { key: 'camera', label: 'Camera', value: session.camera ?? '—', source: 'fits' as const },
+    { key: 'gain', label: 'Gain', value: session.gain ?? '—', source: 'fits' as const },
+    {
+      key: 'binning',
+      label: 'Binning',
+      value: session.binning ?? '—',
+      source: 'fits' as const,
+    },
+    {
+      key: 'setTemp',
+      label: 'Sensor temp',
+      value: session.setTemp ?? '—',
+      source: 'fits' as const,
+    },
+  ];
+
+  // Provenance summary rows — confidence/evidence detail NOT shown (spec 002 FR-006).
+  const provenanceFacts = session.provenance
+    ? ([
+        session.provenance.target
+          ? {
+              key: 'prov-target',
+              label: 'Target provenance',
+              value: session.provenance.target,
+              source: 'inferred' as const,
+            }
+          : null,
+        session.provenance.filter
+          ? {
+              key: 'prov-filter',
+              label: 'Filter provenance',
+              value: session.provenance.filter,
+              source: 'inferred' as const,
+            }
+          : null,
+        session.provenance.inferred
+          ? {
+              key: 'prov-inferred',
+              label: 'Inferred',
+              value: session.provenance.inferred,
+              source: 'inferred' as const,
+            }
+          : null,
+        session.provenance.confirmedBy
+          ? {
+              key: 'prov-confirmed',
+              label: 'Confirmed by',
+              value: session.provenance.confirmedBy,
+              source: 'user' as const,
+            }
+          : null,
+      ].filter(Boolean) as Array<{
+        key: string;
+        label: string;
+        value: string;
+        source: 'fits' | 'user' | 'inferred';
+      }>)
+    : [];
 
   return (
     <DetailPane fill>
@@ -46,101 +135,158 @@ export function SessionDetail({ session }: Props) {
         title={
           <>
             {isLinked && <Lock />}
-            <strong>{session.target}</strong>
-            {' · '}
-            {session.filter}
-            {' · '}
-            {session.date}
+            <strong>{session.target ?? session.name}</strong>
+            {session.filter ? ` · ${session.filter}` : null}
+            {session.capturedOn ? ` · ${session.capturedOn}` : null}
           </>
         }
         titleExtra={
           <>
             <Pill variant="neutral">{session.frames} frames</Pill>
-            <Pill variant={sessionStateVariant(session.state)}>{sessionStateLabel(session.state)}</Pill>
+            {/* FR-004: state as plain structured data, not a decorative bubble */}
+            <Pill variant={sessionStateVariant(session.state)}>
+              {session.state === 'discovered' || session.state === 'candidate'
+                ? 'Needs review'
+                : sessionStateLabel(session.state)}
+            </Pill>
           </>
         }
-        subtitle={path}
+        subtitle={displayPath}
       />
 
       <MetricLine
         metrics={[
-          { value: session.integration, label: 'integration' },
           { value: session.frames, label: 'frames' },
-          { value: session.size, label: 'on disk' },
-          { value: session.filter, label: 'filter' },
+          { value: session.exposure ?? '—', label: 'exposure' },
+          { value: session.type, label: 'type' },
         ]}
       />
 
       <DetailGrid
         rail={
           <Rail>
-            <RailCard title="State">
-              <Pill variant={sessionStateVariant(session.state)}>{sessionStateLabel(session.state)}</Pill>
-              <div style={{ marginTop: 'var(--alm-sp-2)', fontSize: 'var(--alm-text-xs)', color: 'var(--alm-text-muted)' }}>
-                {isLinked
-                  ? 'Linked to a project — metadata is locked while in use.'
-                  : 'Not yet linked to a project.'}
+            <RailCard title="Review state">
+              <Pill variant={sessionStateVariant(session.state)}>
+                {session.state === 'discovered' || session.state === 'candidate'
+                  ? 'Needs review'
+                  : sessionStateLabel(session.state)}
+              </Pill>
+              <div
+                style={{
+                  marginTop: 'var(--alm-sp-2)',
+                  display: 'flex',
+                  flexDirection: 'column',
+                  gap: 'var(--alm-sp-1)',
+                }}
+              >
+                {confirmVisible && (
+                  <button
+                    className="alm-btn alm-btn--primary alm-btn--sm"
+                    onClick={onConfirm}
+                    disabled={isPending}
+                    data-testid="btn-confirm"
+                  >
+                    Confirm
+                  </button>
+                )}
+                {reopenVisible && (
+                  <button
+                    className="alm-btn alm-btn--sm"
+                    onClick={onReopen}
+                    disabled={isPending}
+                    data-testid="btn-reopen"
+                  >
+                    Re-open review
+                  </button>
+                )}
+                {rejectVisible && (
+                  <button
+                    className="alm-btn alm-btn--danger alm-btn--sm"
+                    onClick={onReject}
+                    disabled={isPending}
+                    data-testid="btn-reject"
+                  >
+                    Reject session
+                  </button>
+                )}
+                {isLinked && (
+                  <div
+                    style={{
+                      marginTop: 'var(--alm-sp-1)',
+                      fontSize: 'var(--alm-text-xs)',
+                      color: 'var(--alm-text-muted)',
+                    }}
+                  >
+                    Linked to a project — metadata locked while in use.
+                  </div>
+                )}
               </div>
             </RailCard>
+
             <RailCard title="Linked projects">
               {isLinked ? (
                 <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap' }}>
-                  {session.projects.map((p) => (
-                    <Pill key={p} variant="info">{p}</Pill>
+                  {session.linked?.projects?.map((p) => (
+                    <Pill key={p.id} variant="info">
+                      {p.name}
+                    </Pill>
                   ))}
                 </div>
               ) : (
-                <span style={{ fontSize: 'var(--alm-text-xs)', color: 'var(--alm-text-faint)' }}>None</span>
+                <span
+                  style={{
+                    fontSize: 'var(--alm-text-xs)',
+                    color: 'var(--alm-text-faint)',
+                  }}
+                >
+                  None
+                </span>
               )}
-            </RailCard>
-            <RailCard title="Recent history">
-              <div style={{ display: 'flex', flexDirection: 'column', gap: 'var(--alm-sp-1)', fontSize: 'var(--alm-text-xs)' }}>
-                {HISTORY.map((h, i) => (
-                  <div key={i} style={{ color: 'var(--alm-text-secondary)' }}>
-                    <span className="alm-mono" style={{ color: 'var(--alm-text-faint)' }}>{h.ts}</span> · {h.detail}
-                  </div>
-                ))}
-              </div>
             </RailCard>
           </Rail>
         }
       >
-        <Section title="Metadata">
-          <PropertyTable
-            mode="view"
-            showSource
-            properties={[
-              { key: 'target', label: 'Target', value: session.target, source: 'user' },
-              { key: 'filter', label: 'Filter', value: session.filter, source: 'fits' },
-              { key: 'date', label: 'Date', value: session.date, source: 'fits' },
-              { key: 'frames', label: 'Frames', value: session.frames, source: 'fits' },
-              { key: 'integration', label: 'Integration', value: session.integration, source: 'inferred' },
-              { key: 'size', label: 'Size on disk', value: session.size, source: 'fits' },
-            ]}
-          />
+        <Section title="Facts">
+          <PropertyTable mode="view" showSource properties={facts} />
         </Section>
 
-        <Section title="Calibration matches" count={CAL_MATCHES.length}>
-          <Table
-            columns={[
-              { key: 'kind', label: 'Kind' },
-              { key: 'name', label: 'Master' },
-              { key: 'score', label: 'Score' },
-              { key: 'mismatch', label: 'Soft mismatches' },
-            ]}
-            rows={CAL_MATCHES.map((m) => ({
-              kind: <Pill variant={m.kind === 'dark' ? 'info' : m.kind === 'flat' ? 'accent' : 'neutral'}>{m.kind}</Pill>,
-              name: <span className="alm-mono" style={{ fontSize: 11 }}>{m.name}</span>,
-              score: <span className="alm-mono">{(m.score * 100).toFixed(0)}%</span>,
-              mismatch:
-                m.mismatch === 'none' ? (
-                  <span style={{ color: 'var(--alm-text-faint)' }}>—</span>
-                ) : (
-                  <span style={{ color: 'var(--alm-warn)' }}>{m.mismatch}</span>
-                ),
-            }))}
-          />
-        </Section>
+        {provenanceFacts.length > 0 && (
+          <Section title="Provenance">
+            <PropertyTable mode="view" showSource properties={provenanceFacts} />
+          </Section>
+        )}
+
+        {(session.linked?.calibration != null || session.linked?.session != null) && (
+          <Section title="Linked">
+            <PropertyTable
+              mode="view"
+              showSource
+              properties={([
+                session.linked?.session
+                  ? {
+                      key: 'linked-session',
+                      label: 'Session',
+                      value: session.linked.session,
+                      source: 'fits' as const,
+                    }
+                  : null,
+                session.linked?.calibration
+                  ? {
+                      key: 'linked-calibration',
+                      label: 'Calibration',
+                      value: session.linked.calibration,
+                      source: 'fits' as const,
+                    }
+                  : null,
+              ].filter(Boolean)) as Array<{
+                key: string;
+                label: string;
+                value: string;
+                source: 'fits' | 'user' | 'inferred';
+              }>}
+            />
+          </Section>
+        )}
       </DetailGrid>
     </DetailPane>
   );

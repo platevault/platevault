@@ -23,6 +23,7 @@ pub mod equipment;
 pub mod firstrun;
 pub mod inbox;
 pub mod ingestion;
+pub mod inventory;
 pub mod lifecycle;
 pub mod native;
 pub mod patterns;

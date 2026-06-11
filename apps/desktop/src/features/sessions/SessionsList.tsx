@@ -1,69 +1,176 @@
-import type { SessionFixture } from '@/data/fixtures/sessions';
+/**
+ * SessionsList — spec 006, grouped by InventorySource (LibraryRoot).
+ *
+ * Renders the grouped inventory ledger with source/frame/review filter controls.
+ * Each group header shows the source path, kind, and state.
+ * Review state is rendered as plain text (no badge bubbles, FR-004).
+ */
+
+import type { InventorySource, InventorySession } from '@/api/commands';
 import { ListSidebar, ListItem } from '@/components';
 import { Pill } from '@/ui';
+import { sessionStateLabel, sessionStateVariant } from '@/lib/lifecycle';
+import type { InventoryFrameFilter, ReviewFilter } from '@/lib/route-contract';
+import { INVENTORY_FRAME_FILTERS, REVIEW_FILTERS } from '@/lib/route-contract';
 
-const stateVariant = (s: string) =>
-  (({ confirmed: 'ok', needs_review: 'warn', rejected: 'danger', discovered: 'ghost', candidate: 'neutral', ignored: 'neutral' } as Record<string, 'ok' | 'warn' | 'danger' | 'ghost' | 'neutral'>)[s] ?? 'neutral');
+// ── Source-state label helpers ────────────────────────────────────────────────
 
-const stateLabel = (s: string) => s.replace(/_/g, ' ');
+const SOURCE_STATE_LABELS: Record<string, string> = {
+  active: 'active',
+  missing: 'missing',
+  disabled: 'disabled',
+  reconnect_required: 'reconnect required',
+};
 
-interface Props {
-  sessions: SessionFixture[];
-  selected: number | null;
-  onSelect: (id: number) => void;
+const SOURCE_KIND_LABELS: Record<string, string> = {
+  local_disk: 'local disk',
+  external_disk: 'external disk',
+  removable: 'removable',
+  network_share: 'network share',
+};
+
+function sourceMetaLine(src: InventorySource): string {
+  const kind = SOURCE_KIND_LABELS[src.kind] ?? src.kind;
+  const state = SOURCE_STATE_LABELS[src.state] ?? src.state;
+  return src.state === 'active' ? kind : `${kind} · ${state}`;
 }
 
-export function SessionsList({ sessions, selected, onSelect }: Props) {
+// ── Review-filter display labels ──────────────────────────────────────────────
+// UI maps discovered+candidate → "Needs review" per spec 006 §InventorySession.state.
+
+function reviewFilterLabel(v: string): string {
+  if (v === 'discovered' || v === 'candidate') return 'Needs review (discovered/candidate)';
+  if (v === 'needs_review') return 'Needs review';
+  if (v === 'all') return 'All states';
+  return sessionStateLabel(v);
+}
+
+// ── Component ────────────────────────────────────────────────────────────────
+
+interface Props {
+  sources: InventorySource[];
+  selected: string | null;
+  onSelect: (id: string) => void;
+  loading?: boolean;
+  frameFilter?: string;
+  reviewFilter?: string;
+  onFrameFilter: (v: InventoryFrameFilter | null) => void;
+  onReviewFilter: (v: ReviewFilter | null) => void;
+}
+
+export function SessionsList({
+  sources,
+  selected,
+  onSelect,
+  loading,
+  frameFilter,
+  reviewFilter,
+  onFrameFilter,
+  onReviewFilter,
+}: Props) {
+  const totalSessions = sources.reduce((acc, src) => acc + src.sessions.length, 0);
+
   return (
     <ListSidebar
-      placeholder="Search target, filter, train..."
+      placeholder="Search target, filter, source…"
       controls={
         <>
-          <select defaultValue="none">
-            <option value="none">Group: none</option>
-            <option value="target">target</option>
-            <option value="month">month</option>
+          {/* Frame type filter — SC-001: one interaction */}
+          <select
+            value={frameFilter ?? ''}
+            onChange={(e) => onFrameFilter((e.target.value as InventoryFrameFilter) || null)}
+            aria-label="Frame type filter"
+          >
+            <option value="">Frame type: all</option>
+            {INVENTORY_FRAME_FILTERS.map((ft) => (
+              <option key={ft} value={ft}>
+                {ft}
+              </option>
+            ))}
           </select>
-          <select defaultValue="date_desc">
-            <option value="date_desc">Sort: newest</option>
-            <option value="date_asc">oldest</option>
-            <option value="name">name</option>
-          </select>
-          <select defaultValue="all">
-            <option value="all">Filter: all states</option>
-            <option value="confirmed">Confirmed</option>
-            <option value="needs_review">Needs review</option>
-            <option value="discovered">Discovered</option>
-            <option value="candidate">Candidate</option>
-            <option value="rejected">Rejected</option>
-            <option value="ignored">Ignored</option>
+
+          {/* Review state filter */}
+          <select
+            value={reviewFilter ?? ''}
+            onChange={(e) => onReviewFilter((e.target.value as ReviewFilter) || null)}
+            aria-label="Review state filter"
+          >
+            <option value="">Review: default</option>
+            {REVIEW_FILTERS.map((rf) => (
+              <option key={rf} value={rf}>
+                {reviewFilterLabel(rf)}
+              </option>
+            ))}
           </select>
         </>
       }
-      footer={`${sessions.length} items`}
+      footer={loading ? 'Loading…' : `${totalSessions} sessions`}
     >
-      {sessions.map(s => (
-        <ListItem
-          key={s.id}
-          selected={selected === s.id}
-          onClick={() => onSelect(s.id)}
-          title={
-            <>
-              <strong>{s.target}</strong>
-              <Pill variant="neutral">{s.filter}</Pill>
-              {s.state === 'discovered' && <span style={{ color: 'var(--alm-warn)' }}>&#x26A0;</span>}
-            </>
-          }
-          meta={
-            <>
-              {s.date}
-              <span className="alm-list-item__meta-sep">·</span>
-              {s.integration}
-              <span className="alm-list-item__meta-sep">·</span>
-              <Pill variant={stateVariant(s.state)}>{stateLabel(s.state)}</Pill>
-            </>
-          }
-        />
+      {sources.length === 0 && !loading && (
+        <div style={{ padding: 'var(--alm-sp-4)', color: 'var(--alm-text-faint)', fontSize: 'var(--alm-text-sm)' }}>
+          No sessions match the current filters.
+        </div>
+      )}
+
+      {sources.map((src) => (
+        <div key={src.id}>
+          {/* Group header: source path + kind · state (FR-005, T400) */}
+          <div
+            style={{
+              padding: 'var(--alm-sp-1) var(--alm-sp-3)',
+              fontSize: 'var(--alm-text-xs)',
+              color: 'var(--alm-text-muted)',
+              borderBottom: '1px solid var(--alm-border)',
+              background: 'var(--alm-surface-subtle)',
+            }}
+          >
+            <span style={{ fontWeight: 600, color: 'var(--alm-text-secondary)' }}>
+              {src.path}
+            </span>
+            {' · '}
+            <span>{sourceMetaLine(src)}</span>
+            {src.state !== 'active' && (
+              <Pill
+                variant={src.state === 'disabled' ? 'danger' : 'warn'}
+                style={{ marginLeft: 'var(--alm-sp-2)' }}
+              >
+                {SOURCE_STATE_LABELS[src.state] ?? src.state}
+              </Pill>
+            )}
+          </div>
+
+          {/* Session rows */}
+          {src.sessions.map((s: InventorySession) => (
+            <ListItem
+              key={s.id}
+              selected={selected === s.id}
+              onClick={() => onSelect(s.id)}
+              title={
+                <>
+                  <strong>{s.target ?? s.name}</strong>
+                  {s.filter && <Pill variant="neutral">{s.filter}</Pill>}
+                  {(s.state === 'discovered' || s.state === 'candidate') && (
+                    <span style={{ color: 'var(--alm-warn)' }}>&#x26A0;</span>
+                  )}
+                </>
+              }
+              meta={
+                <>
+                  {s.capturedOn ?? '—'}
+                  <span className="alm-list-item__meta-sep">·</span>
+                  {s.frames} frames
+                  <span className="alm-list-item__meta-sep">·</span>
+                  {/* Plain-text state label — no bubble (FR-004) */}
+                  <Pill variant={sessionStateVariant(s.state)}>
+                    {s.state === 'discovered' || s.state === 'candidate'
+                      ? 'Needs review'
+                      : sessionStateLabel(s.state)}
+                  </Pill>
+                </>
+              }
+            />
+          ))}
+        </div>
       ))}
     </ListSidebar>
   );

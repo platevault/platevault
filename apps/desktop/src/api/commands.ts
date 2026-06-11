@@ -595,3 +595,45 @@ export async function inboxReclassify(
 ): Promise<InboxReclassifyResponse> {
   return invoke<InboxReclassifyResponse>('inbox.reclassify', { req });
 }
+
+// ── Inventory commands (spec 006) ─────────────────────────────────────────────
+
+import type {
+  InventoryListRequest,
+  InventoryListResponse,
+  InventorySessionReviewRequest,
+  InventorySessionReviewResponse,
+} from '@/data/fixtures/inventory';
+
+export type {
+  InventoryListRequest,
+  InventoryListResponse,
+  InventorySessionReviewRequest,
+  InventorySessionReviewResponse,
+  InventorySource,
+  InventorySession,
+  SessionState as InventorySessionState,
+  FrameType as InventoryFrameType,
+  SourceState as InventorySourceState,
+} from '@/data/fixtures/inventory';
+
+/**
+ * `inventory.list` — return the grouped inventory ledger with optional filters.
+ * Filters are applied server-side (source, frame type, review state).
+ */
+export async function inventoryList(req: InventoryListRequest): Promise<InventoryListResponse> {
+  return invoke<InventoryListResponse>('inventory.list', { req });
+}
+
+/**
+ * `inventory.session.review` — apply a session review-state transition
+ * (Confirm / Re-open review / Reject session).
+ *
+ * Returns `status: "success"` | `"noop"` (same-state re-application) |
+ * `"error"` with a typed error envelope.
+ */
+export async function inventorySessionReview(
+  req: InventorySessionReviewRequest,
+): Promise<InventorySessionReviewResponse> {
+  return invoke<InventorySessionReviewResponse>('inventory.session.review', { req });
+}

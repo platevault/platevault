@@ -1,0 +1,144 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://astro-plan.local/contracts/inventory.session.review.json",
+  "title": "inventory.session.review",
+  "description": "Session-scoped wrapper around lifecycle.transition (spec 002) for the Inventory surface. Pre-fills entityType based on the session kind resolved server-side from sessionId. Returns a status-discriminated response: success (transition applied), noop (state unchanged, no audit entry), or error.",
+  "type": "object",
+  "oneOf": [
+    { "$ref": "#/$defs/Request" },
+    { "$ref": "#/$defs/Response" }
+  ],
+  "$defs": {
+    "ContractVersion": {
+      "type": "string",
+      "const": "2.0.0"
+    },
+    "Uuid": {
+      "type": "string",
+      "format": "uuid"
+    },
+    "Timestamp": {
+      "type": "string",
+      "format": "date-time"
+    },
+    "Actor": {
+      "type": "string",
+      "enum": ["user", "system"]
+    },
+    "ResolvedEntityType": {
+      "type": "string",
+      "description": "Resolved server-side from sessionId; included in the response so audit correlation is unambiguous.",
+      "enum": ["acquisition_session", "calibration_session"]
+    },
+    "SessionState": {
+      "type": "string",
+      "description": "Canonical spec 002 six-value session state. Used for both nextState (request) and newState/priorState (response). No presentational projection.",
+      "enum": [
+        "discovered",
+        "candidate",
+        "needs_review",
+        "confirmed",
+        "rejected",
+        "ignored"
+      ]
+    },
+    "ErrorCode": {
+      "type": "string",
+      "enum": [
+        "session.not_found",
+        "session.mixed_state",
+        "transition.refused",
+        "actor.not_authorised",
+        "source.unavailable",
+        "contract.version_unsupported"
+      ]
+    },
+    "ErrorEnvelope": {
+      "type": "object",
+      "required": ["code", "message"],
+      "additionalProperties": false,
+      "properties": {
+        "code": { "$ref": "#/$defs/ErrorCode" },
+        "message": {
+          "type": "string",
+          "description": "Human-readable explanation. MUST NOT include absolute filesystem paths or secrets."
+        },
+        "details": {
+          "type": "object",
+          "description": "Optional structured detail. Examples: { allowedNextStates: [...] } for transition.refused; { sourceState: 'missing' } for source.unavailable; {} for session.mixed_state (user must split via spec 005 reclassify).",
+          "additionalProperties": true
+        }
+      }
+    },
+    "Request": {
+      "type": "object",
+      "description": "Request envelope for inventory.session.review. Caller supplies the session id and target canonical state; the server resolves the entityType and delegates to lifecycle.transition.",
+      "required": [
+        "contractVersion",
+        "requestId",
+        "sessionId",
+        "nextState",
+        "actor"
+      ],
+      "additionalProperties": false,
+      "properties": {
+        "contractVersion": { "$ref": "#/$defs/ContractVersion" },
+        "requestId": { "$ref": "#/$defs/Uuid" },
+        "sessionId": { "$ref": "#/$defs/Uuid" },
+        "nextState": {
+          "$ref": "#/$defs/SessionState",
+          "description": "Canonical spec 002 session state to transition to. When nextState equals current state, the response is status='noop' (no audit entry, no error). The state.unchanged error code is not used."
+        },
+        "actionLabel": {
+          "type": "string",
+          "description": "Human-readable label recorded on the audit entry (e.g. 'Confirmed', 'Re-opened review', 'Rejected session').",
+          "minLength": 1,
+          "maxLength": 120
+        },
+        "actor": { "$ref": "#/$defs/Actor" }
+      }
+    },
+    "Response": {
+      "type": "object",
+      "description": "Response envelope for inventory.session.review. Status is 'success' (transition applied), 'noop' (no change needed, no audit entry), or 'error'.",
+      "required": ["status", "contractVersion", "requestId"],
+      "additionalProperties": false,
+      "properties": {
+        "status": { "type": "string", "enum": ["success", "noop", "error"] },
+        "contractVersion": { "$ref": "#/$defs/ContractVersion" },
+        "requestId": { "$ref": "#/$defs/Uuid" },
+        "appliedAt": { "$ref": "#/$defs/Timestamp" },
+        "entityType": { "$ref": "#/$defs/ResolvedEntityType" },
+        "priorState": { "$ref": "#/$defs/SessionState" },
+        "newState": { "$ref": "#/$defs/SessionState" },
+        "auditId": { "$ref": "#/$defs/Uuid" },
+        "error": { "$ref": "#/$defs/ErrorEnvelope" }
+      },
+      "allOf": [
+        {
+          "if": { "properties": { "status": { "const": "success" } } },
+          "then": {
+            "required": [
+              "appliedAt",
+              "entityType",
+              "priorState",
+              "newState",
+              "auditId"
+            ],
+            "not": { "required": ["error"] }
+          }
+        },
+        {
+          "if": { "properties": { "status": { "const": "noop" } } },
+          "then": {
+            "not": { "required": ["error", "auditId"] }
+          }
+        },
+        {
+          "if": { "properties": { "status": { "const": "error" } } },
+          "then": { "required": ["error"] }
+        }
+      ]
+    }
+  }
+}

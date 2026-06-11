@@ -41,6 +41,7 @@ use crate::commands::inbox::{
     inbox_classify, inbox_confirm, inbox_reclassify, inbox_scan, inbox_scan_folder,
 };
 use crate::commands::ingestion::{ingestion_settings_get, ingestion_settings_update};
+use crate::commands::inventory::{inventory_list, inventory_session_review};
 use crate::commands::lifecycle::{
     lifecycle_ledger_list, lifecycle_transition_apply, lifecycle_transition_preview,
     provenance_read, AppState,
@@ -219,6 +220,9 @@ pub fn specta_builder() -> Builder<tauri::Wry> {
             inbox_classify,
             inbox_confirm,
             inbox_reclassify,
+            // inventory (spec 006)
+            inventory_list,
+            inventory_session_review,
             // ingestion settings (spec 030)
             ingestion_settings_get,
             ingestion_settings_update,

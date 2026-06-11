@@ -830,6 +830,23 @@ export const commands = {
 	 */
 	inboxReclassify: (req: InboxReclassifyRequest) => typedError<InboxReclassifyResponse_Serialize, string>(__TAURI_INVOKE("inbox.reclassify", { req })),
 	/**
+	 *  `inventory.list` — return the grouped inventory ledger with optional filters.
+	 * 
+	 *  # Errors
+	 *  Returns `Err(String)` on database error.
+	 */
+	inventoryList: (req: InventoryListRequest_Deserialize) => typedError<InventoryListResponse_Serialize, string>(__TAURI_INVOKE("inventory.list", { req })),
+	/**
+	 *  `inventory.session.review` — apply a session review-state transition.
+	 * 
+	 *  Wraps `lifecycle.transition` for the inventory surface.
+	 *  Returns `status: "success"` | `"noop"` | `"error"`.
+	 * 
+	 *  # Errors
+	 *  Returns `Err(String)` on infrastructure failure.
+	 */
+	inventorySessionReview: (req: InventorySessionReviewRequest_Deserialize) => typedError<InventorySessionReviewResponse_Serialize, string>(__TAURI_INVOKE("inventory.session.review", { req })),
+	/**
 	 *  `ingestion.settings.get` — returns current ingestion/scan settings.
 	 * 
 	 *  # Errors
@@ -1808,6 +1825,221 @@ export type IngestionSettings = {
 	defaultFilter: string | null,
 };
 
+/**
+ *  Frame type for an inventory session.
+ *  `DarkFlat` is reserved but never returned in v1.
+ *  `Mixed` is a server-derived sentinel for post-promotion regressions.
+ */
+export type InventoryFrameType = "light" | "dark" | "flat" | "bias" | "mixed";
+
+/**  Outbound references shown in the drawer's "Linked" section. */
+export type InventoryLinkedRefs = InventoryLinkedRefs_Serialize | InventoryLinkedRefs_Deserialize;
+
+/**  Outbound references shown in the drawer's "Linked" section. */
+export type InventoryLinkedRefs_Deserialize = {
+	projects: LinkedProjectRef[] | null,
+	session: string | null,
+	calibration: string | null,
+};
+
+/**  Outbound references shown in the drawer's "Linked" section. */
+export type InventoryLinkedRefs_Serialize = {
+	projects?: LinkedProjectRef[] | null,
+	session?: string | null,
+	calibration?: string | null,
+};
+
+/**  Optional filters for `inventory.list`. */
+export type InventoryListFilters = InventoryListFilters_Serialize | InventoryListFilters_Deserialize;
+
+/**  Optional filters for `inventory.list`. */
+export type InventoryListFilters_Deserialize = {
+	/**  When set, limits the response to a single `LibraryRoot`. */
+	sourceFilter: string | null,
+	/**  When set, limits sessions to the given frame type. */
+	frameFilter: InventoryFrameType | null,
+	/**
+	 *  When set, limits sessions to the given canonical state.
+	 *  `ignored` sessions are excluded from the default ledger.
+	 *  Use `reviewFilter=ignored` to surface them (FR-010).
+	 */
+	reviewFilter: string | null,
+};
+
+/**  Optional filters for `inventory.list`. */
+export type InventoryListFilters_Serialize = {
+	/**  When set, limits the response to a single `LibraryRoot`. */
+	sourceFilter?: string | null,
+	/**  When set, limits sessions to the given frame type. */
+	frameFilter?: InventoryFrameType | null,
+	/**
+	 *  When set, limits sessions to the given canonical state.
+	 *  `ignored` sessions are excluded from the default ledger.
+	 *  Use `reviewFilter=ignored` to surface them (FR-010).
+	 */
+	reviewFilter?: string | null,
+};
+
+/**  Request envelope for `inventory.list`. */
+export type InventoryListRequest = InventoryListRequest_Serialize | InventoryListRequest_Deserialize;
+
+/**  Request envelope for `inventory.list`. */
+export type InventoryListRequest_Deserialize = {
+	contractVersion: string,
+	requestId: string,
+	filters: InventoryListFilters_Deserialize | null,
+};
+
+/**  Request envelope for `inventory.list`. */
+export type InventoryListRequest_Serialize = {
+	contractVersion: string,
+	requestId: string,
+	filters?: InventoryListFilters_Serialize | null,
+};
+
+/**  Successful response payload for `inventory.list`. */
+export type InventoryListResponse = InventoryListResponse_Serialize | InventoryListResponse_Deserialize;
+
+/**  Successful response payload for `inventory.list`. */
+export type InventoryListResponse_Deserialize = {
+	status: string,
+	contractVersion: string,
+	requestId: string,
+	generatedAt: string,
+	sources: InventorySource_Deserialize[],
+};
+
+/**  Successful response payload for `inventory.list`. */
+export type InventoryListResponse_Serialize = {
+	status: string,
+	contractVersion: string,
+	requestId: string,
+	generatedAt: string,
+	sources: InventorySource_Serialize[],
+};
+
+/**
+ *  Provenance summary for the detail drawer. MUST NOT include
+ *  confidence/evidence detail (spec 002 FR-006). Summary only.
+ */
+export type InventoryProvenanceSummary = InventoryProvenanceSummary_Serialize | InventoryProvenanceSummary_Deserialize;
+
+/**
+ *  Provenance summary for the detail drawer. MUST NOT include
+ *  confidence/evidence detail (spec 002 FR-006). Summary only.
+ */
+export type InventoryProvenanceSummary_Deserialize = {
+	target: string | null,
+	filter: string | null,
+	inferred: string | null,
+	confirmedBy: string | null,
+};
+
+/**
+ *  Provenance summary for the detail drawer. MUST NOT include
+ *  confidence/evidence detail (spec 002 FR-006). Summary only.
+ */
+export type InventoryProvenanceSummary_Serialize = {
+	target?: string | null,
+	filter?: string | null,
+	inferred?: string | null,
+	confirmedBy?: string | null,
+};
+
+/**  Error payload for `inventory.session.review`. */
+export type InventoryReviewError = InventoryReviewError_Serialize | InventoryReviewError_Deserialize;
+
+/**  Error payload for `inventory.session.review`. */
+export type InventoryReviewError_Deserialize = {
+	code: string,
+	message: string,
+	details: unknown | null,
+};
+
+/**  Error payload for `inventory.session.review`. */
+export type InventoryReviewError_Serialize = {
+	code: string,
+	message: string,
+	details?: unknown | null,
+};
+
+/**
+ *  One row in the inventory ledger. Projects one `AcquisitionSession` OR one
+ *  `CalibrationSession` into a unified DTO.
+ */
+export type InventorySession = InventorySession_Serialize | InventorySession_Deserialize;
+
+/**  Request envelope for `inventory.session.review`. */
+export type InventorySessionReviewRequest = InventorySessionReviewRequest_Serialize | InventorySessionReviewRequest_Deserialize;
+
+/**  Request envelope for `inventory.session.review`. */
+export type InventorySessionReviewRequest_Deserialize = {
+	contractVersion: string,
+	requestId: string,
+	sessionId: string,
+	/**  Target canonical state. When equal to current state → noop (no error). */
+	nextState: InventorySessionState,
+	actionLabel: string | null,
+	/**  "user" or "system" */
+	actor: string,
+};
+
+/**  Request envelope for `inventory.session.review`. */
+export type InventorySessionReviewRequest_Serialize = {
+	contractVersion: string,
+	requestId: string,
+	sessionId: string,
+	/**  Target canonical state. When equal to current state → noop (no error). */
+	nextState: InventorySessionState,
+	actionLabel?: string | null,
+	/**  "user" or "system" */
+	actor: string,
+};
+
+/**
+ *  Response envelope for `inventory.session.review`.
+ *  Status is "success", "noop", or "error".
+ */
+export type InventorySessionReviewResponse = InventorySessionReviewResponse_Serialize | InventorySessionReviewResponse_Deserialize;
+
+/**
+ *  Response envelope for `inventory.session.review`.
+ *  Status is "success", "noop", or "error".
+ */
+export type InventorySessionReviewResponse_Deserialize = {
+	status: string,
+	contractVersion: string,
+	requestId: string,
+	appliedAt: string | null,
+	entityType: string | null,
+	priorState: InventorySessionState | null,
+	newState: InventorySessionState | null,
+	auditId: string | null,
+	error: InventoryReviewError_Deserialize | null,
+};
+
+/**
+ *  Response envelope for `inventory.session.review`.
+ *  Status is "success", "noop", or "error".
+ */
+export type InventorySessionReviewResponse_Serialize = {
+	status: string,
+	contractVersion: string,
+	requestId: string,
+	appliedAt?: string | null,
+	entityType?: string | null,
+	priorState?: InventorySessionState | null,
+	newState?: InventorySessionState | null,
+	auditId?: string | null,
+	error?: InventoryReviewError_Serialize | null,
+};
+
+/**
+ *  Canonical spec 002 session state. Six values; no presentational projection.
+ *  UI maps display labels locally: `discovered` and `candidate` → "Needs review".
+ */
+export type InventorySessionState = "discovered" | "candidate" | "needs_review" | "confirmed" | "rejected" | "ignored";
+
 export type InventorySessionTransitionRequest = InventorySessionTransitionRequest_Serialize | InventorySessionTransitionRequest_Deserialize;
 
 export type InventorySessionTransitionRequest_Deserialize = {
@@ -1830,6 +2062,88 @@ export type InventorySessionTransitionRequest_Serialize = {
 	nextState: SessionState,
 	actionLabel?: string | null,
 	actor: TransitionActor,
+};
+
+/**
+ *  One row in the inventory ledger. Projects one `AcquisitionSession` OR one
+ *  `CalibrationSession` into a unified DTO.
+ */
+export type InventorySession_Deserialize = {
+	id: string,
+	name: string,
+	sourceId: string,
+	frames: number,
+	type: InventoryFrameType,
+	target: string | null,
+	filter: string | null,
+	exposure: string | null,
+	state: InventorySessionState,
+	camera: string | null,
+	gain: string | null,
+	binning: string | null,
+	setTemp: string | null,
+	capturedOn: string | null,
+	provenance: InventoryProvenanceSummary_Deserialize | null,
+	linked: InventoryLinkedRefs_Deserialize | null,
+};
+
+/**
+ *  One row in the inventory ledger. Projects one `AcquisitionSession` OR one
+ *  `CalibrationSession` into a unified DTO.
+ */
+export type InventorySession_Serialize = {
+	id: string,
+	name: string,
+	sourceId: string,
+	frames: number,
+	type: InventoryFrameType,
+	target: string | null,
+	filter: string | null,
+	exposure: string | null,
+	state: InventorySessionState,
+	camera?: string | null,
+	gain?: string | null,
+	binning?: string | null,
+	setTemp?: string | null,
+	capturedOn?: string | null,
+	provenance?: InventoryProvenanceSummary_Serialize | null,
+	linked?: InventoryLinkedRefs_Serialize | null,
+};
+
+/**
+ *  One group header in the inventory ledger. One per `LibraryRoot` that has at
+ *  least one session under it.
+ */
+export type InventorySource = InventorySource_Serialize | InventorySource_Deserialize;
+
+/**  Library root media kind (refined from `LibraryRoot.kind`). */
+export type InventorySourceKind = "local_disk" | "external_disk" | "removable" | "network_share";
+
+/**  Library root connectivity state (mirrors `LibraryRoot.state` from spec 002). */
+export type InventorySourceState = "active" | "missing" | "disabled" | "reconnect_required";
+
+/**
+ *  One group header in the inventory ledger. One per `LibraryRoot` that has at
+ *  least one session under it.
+ */
+export type InventorySource_Deserialize = {
+	id: string,
+	path: string,
+	kind: InventorySourceKind,
+	state: InventorySourceState,
+	sessions: InventorySession_Deserialize[],
+};
+
+/**
+ *  One group header in the inventory ledger. One per `LibraryRoot` that has at
+ *  least one session under it.
+ */
+export type InventorySource_Serialize = {
+	id: string,
+	path: string,
+	kind: InventorySourceKind,
+	state: InventorySourceState,
+	sessions: InventorySession_Serialize[],
 };
 
 /**  Handle for a long-running operation (scan, plan apply, etc.). */
@@ -1958,6 +2272,12 @@ export type LicenseAttribution_Serialize = {
 	licenseUri?: string | null,
 	/**  Nature of any project-made modifications (optional). */
 	modificationsNotice?: string | null,
+};
+
+/**  Lightweight project stub in the linked section. */
+export type LinkedProjectRef = {
+	id: string,
+	name: string,
 };
 
 /**  Confidence bucket for a target match (research.md R2, R3). */
