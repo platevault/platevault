@@ -51,6 +51,7 @@ dependencies = [
  "audit",
  "contracts_core",
  "domain_core",
+ "fs_executor",
  "patterns",
  "persistence_db",
  "serde",
@@ -1231,6 +1232,21 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "cb4cb245038516f5f85277875cdaa4f7d2c9a0fa0468de06ed190163b1581fcf"
 dependencies = [
  "percent-encoding",
+]
+
+[[package]]
+name = "fs_executor"
+version = "0.1.0"
+dependencies = [
+ "fs_planner",
+ "serde",
+ "serde_json",
+ "tempfile",
+ "thiserror 2.0.18",
+ "time",
+ "tokio",
+ "tracing",
+ "uuid",
 ]
 
 [[package]]

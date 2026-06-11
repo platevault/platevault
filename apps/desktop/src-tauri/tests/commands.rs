@@ -25,7 +25,8 @@ use desktop_shell::commands::calibration::{
     calibration_masters_get, calibration_masters_list, calibration_matches,
 };
 use desktop_shell::commands::lifecycle::AppState;
-use desktop_shell::commands::plans::{plans_apply, plans_discard, plans_retry};
+use desktop_shell::commands::plan_apply::plans_apply_real;
+use desktop_shell::commands::plans::{plans_discard, plans_retry};
 use desktop_shell::commands::preferences::{preferences_get, preferences_set};
 use desktop_shell::commands::projects::{projects_create_plan, projects_get, projects_list};
 use desktop_shell::commands::review::review_queue;
@@ -216,12 +217,12 @@ async fn plans_discard_returns_not_found() {
     assert_eq!(res.unwrap_err().code, "plan.not_found");
 }
 
-// plans.apply is a spec-025 stub — tested by the compilation smoke test only.
-// The import is kept to verify the function signature compiles.
+// plans.apply (spec 025) — tested by the compilation smoke test only.
+// The import is kept to verify the real function signature compiles.
 #[allow(dead_code)]
 fn _plans_apply_compiles_check() {
-    // Verify plans_apply is importable; State injection cannot be tested outside Tauri app.
-    let _ = plans_apply;
+    // Verify plans_apply_real is importable; State injection cannot be tested outside Tauri app.
+    let _ = plans_apply_real;
 }
 
 #[tokio::test]

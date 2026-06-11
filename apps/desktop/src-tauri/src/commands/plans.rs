@@ -20,7 +20,6 @@ use contracts_core::plans::{
     ArchivePermanentlyDeleteResponse, ArchiveSendToTrashResponse, PlanApproveResponse, PlanDetail,
     PlanDiscardResponse, PlanListRequest, PlanListResponse, PlanRetryResponse, RetryItemsFilter,
 };
-use contracts_core::roots::IpcOperationHandle;
 use tauri::State;
 
 use crate::commands::lifecycle::AppState;
@@ -75,25 +74,10 @@ pub async fn plans_approve(
     approve_plan(state.repo.pool(), &state.bus, &id, "user").await.map_err(|e| e.code)
 }
 
-// ── plans.apply (stub — spec 025) ─────────────────────────────────────────────
-
-/// `plans.apply` — start applying an approved plan (owned by spec 025).
-///
-/// This stub returns an operation handle for the frontend; the real executor
-/// is implemented in spec 025.
-///
-/// # Errors
-///
-/// Always returns `Err("not_implemented")` until spec 025 lands.
-#[tauri::command]
-#[specta::specta(rename = "plans.apply")]
-pub async fn plans_apply(
-    _state: State<'_, AppState>,
-    id: String,
-) -> Result<IpcOperationHandle, String> {
-    tracing::debug!("stub: plans.apply id={id} — apply executor belongs to spec 025");
-    Err("not_implemented: plan apply is owned by spec 025".to_owned())
-}
+// ── plans.apply (superseded by spec 025) ─────────────────────────────────────
+// The real `plans.apply` command lives in `commands/plan_apply.rs` (spec 025).
+// This stub is retained for source compatibility only and is NOT registered
+// in the collect_commands! macro.
 
 // ── plans.discard ─────────────────────────────────────────────────────────────
 

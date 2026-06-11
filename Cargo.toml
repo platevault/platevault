@@ -7,6 +7,7 @@ members = [
   "crates/calibration/core",
   "crates/contracts/core",
   "crates/domain/core",
+  "crates/fs/executor",
   "crates/fs/inventory",
   "crates/fs/planner",
   "crates/metadata/core",
@@ -29,6 +30,7 @@ repository = ""
 
 [workspace.dependencies]
 quick-xml = "0.39"
+tempfile = "3"
 unicode-normalization = "0.1"
 unicode-security = "0.1"
 # Ratified stack (spec 002 2026-05-23 — wired with network access):

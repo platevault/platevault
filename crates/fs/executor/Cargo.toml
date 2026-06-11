@@ -1,0 +1,25 @@
+[package]
+name = "fs_executor"
+version = "0.1.0"
+edition.workspace = true
+license.workspace = true
+
+[lib]
+path = "src/lib.rs"
+
+[dependencies]
+fs_planner = { path = "../planner" }
+serde.workspace = true
+serde_json.workspace = true
+thiserror.workspace = true
+tokio = { workspace = true }
+tracing.workspace = true
+uuid.workspace = true
+time.workspace = true
+
+[dev-dependencies]
+tempfile.workspace = true
+tokio = { workspace = true, features = ["rt", "macros"] }
+
+[lints]
+workspace = true

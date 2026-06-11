@@ -279,3 +279,79 @@ pub struct ArchivePermanentlyDeleted {
 }
 
 pub const TOPIC_ARCHIVE_PERMANENTLY_DELETED: &str = "archive.permanently_deleted";
+
+// ── Plan apply audit events (spec 025, A7) ────────────────────────────────────
+
+/// Payload for the `plan.applying.started` topic (spec 025, A7).
+#[derive(Clone, Debug, Serialize, Deserialize, JsonSchema, Type)]
+#[serde(rename_all = "camelCase")]
+pub struct PlanApplyingStarted {
+    pub plan_id: String,
+    pub run_id: String,
+    pub items_total: i64,
+    pub at: String,
+}
+
+pub const TOPIC_PLAN_APPLYING_STARTED: &str = "plan.applying.started";
+
+/// Payload for the `plan.item.progress` topic (spec 025, A7).
+///
+/// Emitted per item state transition. `failure` is present when
+/// `new_state` is `"failed"` or `"stale"`.
+#[derive(Clone, Debug, Serialize, Deserialize, JsonSchema, Type)]
+#[serde(rename_all = "camelCase")]
+pub struct PlanItemProgress {
+    pub plan_id: String,
+    pub run_id: String,
+    pub item_id: String,
+    pub prior_state: String,
+    pub new_state: String,
+    pub at: String,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub failure_code: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub failure_message: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub failure_recoverable: Option<bool>,
+}
+
+pub const TOPIC_PLAN_ITEM_PROGRESS: &str = "plan.item.progress";
+
+/// Payload for the `plan.applying.paused` topic (spec 025, A7, R-Pause-1).
+#[derive(Clone, Debug, Serialize, Deserialize, JsonSchema, Type)]
+#[serde(rename_all = "camelCase")]
+pub struct PlanApplyingPaused {
+    pub plan_id: String,
+    pub run_id: String,
+    pub pause_reason: String,
+    pub at: String,
+}
+
+pub const TOPIC_PLAN_APPLYING_PAUSED: &str = "plan.applying.paused";
+
+/// Payload for the `plan.applying.resumed` topic (spec 025, A7, R-Pause-1).
+#[derive(Clone, Debug, Serialize, Deserialize, JsonSchema, Type)]
+#[serde(rename_all = "camelCase")]
+pub struct PlanApplyingResumed {
+    pub plan_id: String,
+    pub run_id: String,
+    pub at: String,
+}
+
+pub const TOPIC_PLAN_APPLYING_RESUMED: &str = "plan.applying.resumed";
+
+/// Payload for the `plan.applying.completed` topic (spec 025, A7).
+#[derive(Clone, Debug, Serialize, Deserialize, JsonSchema, Type)]
+#[serde(rename_all = "camelCase")]
+pub struct PlanApplyingCompleted {
+    pub plan_id: String,
+    pub run_id: String,
+    pub terminal_state: String,
+    pub items_applied: i64,
+    pub items_failed: i64,
+    pub items_skipped: i64,
+    pub items_cancelled: i64,
+    pub at: String,
+}
+
+pub const TOPIC_PLAN_APPLYING_COMPLETED: &str = "plan.applying.completed";

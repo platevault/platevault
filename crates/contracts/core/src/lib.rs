@@ -13,6 +13,7 @@ pub mod json_any;
 pub mod lifecycle;
 pub mod native;
 pub mod patterns;
+pub mod plan_apply;
 pub mod plans;
 pub mod preferences;
 pub mod projects;

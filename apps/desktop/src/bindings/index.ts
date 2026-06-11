@@ -160,17 +160,6 @@ export const commands = {
 	 */
 	plansApprove: (id: string) => typedError<PlanApproveResponse, string>(__TAURI_INVOKE("plans.approve", { id })),
 	/**
-	 *  `plans.apply` — start applying an approved plan (owned by spec 025).
-	 * 
-	 *  This stub returns an operation handle for the frontend; the real executor
-	 *  is implemented in spec 025.
-	 * 
-	 *  # Errors
-	 * 
-	 *  Always returns `Err("not_implemented")` until spec 025 lands.
-	 */
-	plansApply: (id: string) => typedError<IpcOperationHandle, string>(__TAURI_INVOKE("plans.apply", { id })),
-	/**
 	 *  `plans.discard` — soft-delete a plan (US4, T030).
 	 * 
 	 *  # Errors
@@ -209,6 +198,83 @@ export const commands = {
 	 *  `"plan.not_found"`, or `"archive.empty"` on failure.
 	 */
 	archivePermanentlyDelete: (planId: string, confirmText: string) => typedError<ArchivePermanentlyDeleteResponse, string>(__TAURI_INVOKE("archive.permanently_delete", { planId, confirmText })),
+	/**
+	 *  `plans.apply` — start applying an approved plan (US1, T019).
+	 * 
+	 *  Returns immediately with the run id and new state (`"applying"`).
+	 *  Progress is streamed via audit bus events (`plan.item.progress`,
+	 *  `plan.applying.completed`).
+	 * 
+	 *  # Errors
+	 * 
+	 *  Returns `Err(String)` with:
+	 *  - `"plan.not_found"` — plan not found.
+	 *  - `"plan.invalid_state"` — plan is not approved or CAS race.
+	 *  - `"plan.approval.stale"` — approval token mismatch.
+	 *  - `"plan.conflict.overlap"` — concurrent apply already running.
+	 */
+	plansApply: (planId: string, approvalToken: string) => typedError<PlanApplyResponse, string>(__TAURI_INVOKE("plans.apply", { planId, approvalToken })),
+	/**
+	 *  `plans.cancel` — cancel an in-flight apply (US3, T033).
+	 * 
+	 *  Signals the cancellation token; the executor finishes its current item
+	 *  and stops. Remaining pending items are batch-transitioned to `cancelled`.
+	 * 
+	 *  # Errors
+	 * 
+	 *  Returns `Err(String)` with:
+	 *  - `"plan.not_found"` — plan not found.
+	 *  - `"plan.not_in_apply"` — plan is not in applying or paused state.
+	 */
+	plansCancel: (planId: string) => typedError<PlanCancelResponse, string>(__TAURI_INVOKE("plans.cancel", { planId })),
+	/**
+	 *  `plans.resume` — resume a paused apply run (R-Pause-1, T053).
+	 * 
+	 *  # Errors
+	 * 
+	 *  Returns `Err(String)` with:
+	 *  - `"plan.not_found"` — plan not found.
+	 *  - `"run.not_paused"` — plan is not in paused state.
+	 *  - `"run.not_found"` — run id does not match active run.
+	 */
+	plansResume: (planId: string, runId: string) => typedError<PlanResumeResponse, string>(__TAURI_INVOKE("plans.resume", { planId, runId })),
+	/**
+	 *  `plans.item.skip` — skip a pending item during an active apply (US4, T041).
+	 * 
+	 *  The item must be `pending` and the plan must be `applying`.
+	 * 
+	 *  # Errors
+	 * 
+	 *  Returns `Err(String)` with:
+	 *  - `"plan.not_found"` — plan not found.
+	 *  - `"plan.not_in_apply"` — plan is not applying.
+	 *  - `"item.not_found"` — item not found.
+	 *  - `"item.not_pending"` — item is not in pending state.
+	 */
+	plansItemSkip: (planId: string, itemId: string) => typedError<PlanItemSkipResponse, string>(__TAURI_INVOKE("plans.item.skip", { planId, itemId })),
+	/**
+	 *  `plans.item.retry` — retry a failed item within a running apply (US4, T041).
+	 * 
+	 *  The item must be `failed` and the plan must be `applying`.
+	 *  Use `plans.retry` for plan-level retry after a terminal plan.
+	 * 
+	 *  # Errors
+	 * 
+	 *  Returns `Err(String)` with:
+	 *  - `"plan.not_found"` — plan not found.
+	 *  - `"plan.not_in_apply"` — plan is not applying (use plans.retry for terminal).
+	 *  - `"item.not_found"` — item not found.
+	 *  - `"item.not_failed"` — item is not in failed state.
+	 */
+	plansItemRetry: (planId: string, itemId: string) => typedError<PlanItemRetryResponse, string>(__TAURI_INVOKE("plans.item.retry", { planId, itemId })),
+	/**
+	 *  `plans.apply.status` — fetch current apply progress for a plan.
+	 * 
+	 *  # Errors
+	 * 
+	 *  Returns `Err(String)` with `"plan.not_found"` if the plan does not exist.
+	 */
+	plansApplyStatus: (planId: string) => typedError<PlanApplyStatus_Serialize, string>(__TAURI_INVOKE("plans.apply.status", { planId })),
 	/**
 	 *  `audit.list` — returns paginated audit entries.
 	 * 
@@ -1564,6 +1630,45 @@ export type PatternValidateResponse_Serialize = {
 	errorToken?: string | null,
 };
 
+/**  Response for `plans.apply` on success. */
+export type PlanApplyResponse = {
+	planId: string,
+	/**  Id of the `PlanApplyRun` row (mandatory, R-Run-1). */
+	runId: string,
+	newState: string,
+};
+
+/**  Apply status for the frontend (current run state). */
+export type PlanApplyStatus = PlanApplyStatus_Serialize | PlanApplyStatus_Deserialize;
+
+/**  Apply status for the frontend (current run state). */
+export type PlanApplyStatus_Deserialize = {
+	planId: string,
+	runId: string | null,
+	planState: string,
+	itemsTotal: number,
+	itemsApplied: number,
+	itemsFailed: number,
+	itemsSkipped: number,
+	itemsCancelled: number,
+	itemsPending: number,
+	pauseReason: string | null,
+};
+
+/**  Apply status for the frontend (current run state). */
+export type PlanApplyStatus_Serialize = {
+	planId: string,
+	runId?: string | null,
+	planState: string,
+	itemsTotal: number,
+	itemsApplied: number,
+	itemsFailed: number,
+	itemsSkipped: number,
+	itemsCancelled: number,
+	itemsPending: number,
+	pauseReason?: string | null,
+};
+
 /**  Response for `plans.approve` (A1, R-FS-1). */
 export type PlanApproveResponse = {
 	planId: string,
@@ -1571,6 +1676,16 @@ export type PlanApproveResponse = {
 	/**  HMAC token (A1): consumed by spec 025 `plan.apply`. */
 	approvalToken: string,
 	approvedAt: string,
+};
+
+/**  Response for `plans.cancel`. */
+export type PlanCancelResponse = {
+	planId: string,
+	cancelledAt: string,
+	/**  Items that finished (succeeded or failed) before cancellation. */
+	itemsApplied: number,
+	/**  Items transitioned from pending to cancelled. */
+	itemsCancelled: number,
 };
 
 /**  Full plan detail returned by `plans.get`. */
@@ -1677,6 +1792,18 @@ export type PlanItemDetail_Serialize = {
 /**  Protection status from spec 016. */
 export type PlanItemProtection = "normal" | "protected";
 
+/**  Response for `plans.item.retry`. */
+export type PlanItemRetryResponse = {
+	itemId: string,
+	newState: string,
+};
+
+/**  Response for `plans.item.skip`. */
+export type PlanItemSkipResponse = {
+	itemId: string,
+	newState: string,
+};
+
 /**  Per-item lifecycle state. */
 export type PlanItemState = "pending" | "applying" | "succeeded" | "failed" | "skipped" | "cancelled";
 
@@ -1695,6 +1822,13 @@ export type PlanListResponse_Serialize = {
 
 /**  Plan origin — which generator created this plan. */
 export type PlanOrigin = "inbox" | "restructure" | "cleanup" | "archive" | "project";
+
+/**  Response for `plans.resume`. */
+export type PlanResumeResponse = {
+	planId: string,
+	runId: string,
+	resumedAt: string,
+};
 
 /**  Response for `plans.retry`. */
 export type PlanRetryResponse = {

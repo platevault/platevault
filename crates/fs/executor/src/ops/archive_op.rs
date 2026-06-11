@@ -1,0 +1,73 @@
+//! Archive operation primitive (spec 025, research R2).
+//!
+//! Delegates to `move_op::move_file` with the configured archive root as the
+//! destination. The archive path is pre-computed at plan generation time and
+//! stored in `plan_items.archive_path`.
+
+use std::path::{Path, PathBuf};
+
+use crate::failure::PlanItemFailure;
+use crate::ops::move_op::{move_file, MoveResult};
+
+/// Archive a file by moving it to `archive_destination`.
+///
+/// `archive_destination` is the absolute resolved path under the app-managed
+/// archive root (e.g. `<library_root>/.astro-plan-archive/<planId>/...`).
+/// Pre-computed at plan generation; passed in from the item's `archive_path`.
+///
+/// # Errors
+///
+/// Propagates move failures with the same error contract as `move_op`.
+pub fn archive_file(
+    source: &Path,
+    archive_destination: &Path,
+) -> Result<(), (PlanItemFailure, MoveResult)> {
+    move_file(source, archive_destination)
+}
+
+/// Build the absolute archive destination from a library root path and the
+/// relative archive path stored in `plan_items.archive_path`.
+///
+/// Returns `None` if `archive_relative` is empty or the path cannot be joined.
+#[must_use]
+pub fn resolve_archive_destination(library_root: &Path, archive_relative: &str) -> Option<PathBuf> {
+    if archive_relative.is_empty() {
+        return None;
+    }
+    let rel = std::path::Path::new(archive_relative);
+    Some(library_root.join(rel))
+}
+
+// ── Tests ──────────────────────────────────────────────────────────────────────
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn archive_moves_to_destination() {
+        let dir = tempfile::tempdir().unwrap();
+        let src = dir.path().join("raw.fits");
+        let dst = dir.path().join(".astro-plan-archive/p1/raw.fits");
+        std::fs::write(&src, b"fits data").unwrap();
+
+        archive_file(&src, &dst).unwrap();
+
+        assert!(!src.exists());
+        assert!(dst.exists());
+    }
+
+    #[test]
+    fn resolve_archive_destination_builds_path() {
+        let root = PathBuf::from("/mnt/library");
+        let rel = ".astro-plan-archive/p1/file.fits";
+        let resolved = resolve_archive_destination(&root, rel).unwrap();
+        assert_eq!(resolved, PathBuf::from("/mnt/library/.astro-plan-archive/p1/file.fits"));
+    }
+
+    #[test]
+    fn resolve_archive_destination_empty_relative_returns_none() {
+        let root = PathBuf::from("/mnt/library");
+        assert!(resolve_archive_destination(&root, "").is_none());
+    }
+}
