@@ -413,3 +413,79 @@ export interface ProgressEvent {
   warnings: string[];
   completion_state?: 'completed' | 'failed' | 'paused';
 }
+
+// ─── Catalog types (spec 014) ─────────────────────────────────────────────────
+
+export type CatalogOrigin = 'built_in' | 'downloaded' | 'user';
+
+export type ManifestFetchStatus = 'fetched' | 'not_modified' | 'failed';
+
+export type CatalogDownloadStatus = 'success' | 'failure';
+
+export interface CatalogError {
+  code: string;
+  message: string;
+}
+
+/** Registered catalog index visible to the app (data-model.md §Catalog). */
+export interface Catalog {
+  id: string;
+  name: string;
+  version: string;
+  license: string;
+  origin: CatalogOrigin;
+  sourceUrl: string;
+  lastUpdated: string;
+  entryCount?: number;
+}
+
+/** Per-catalog license attribution notice (data-model.md §LicenseAttribution). */
+export interface LicenseAttribution {
+  catalogId: string;
+  license: string;
+  text: string;
+  link: string;
+  accessedOn?: string;
+  author?: string;
+  title?: string;
+  licenseUri?: string;
+  modificationsNotice?: string;
+}
+
+/** Per-catalog entry in the signed manifest. */
+export interface ManifestCatalogEntry {
+  catalogId: string;
+  version: string;
+  url: string;
+  checksum: string;
+  license: string;
+  sizeBytes: number;
+}
+
+/** The signed manifest returned from catalog.manifest.fetch. */
+export interface CatalogManifest {
+  version: string;
+  signature: string;
+  catalogs: ManifestCatalogEntry[];
+}
+
+export interface CatalogListResponse {
+  catalogs: Catalog[];
+}
+
+export interface CatalogAttributionGetResponse {
+  attributions: LicenseAttribution[];
+}
+
+export interface CatalogManifestFetchResponse {
+  status: ManifestFetchStatus;
+  manifest?: CatalogManifest;
+  etag?: string;
+  error?: CatalogError;
+}
+
+export interface CatalogDownloadResponse {
+  status: CatalogDownloadStatus;
+  auditId?: string;
+  error?: CatalogError;
+}

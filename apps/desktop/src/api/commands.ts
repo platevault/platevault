@@ -20,6 +20,12 @@ import type {
   SettingsData,
   RemapVerification,
   MatchCandidate,
+  // Catalog types (spec 014)
+  CatalogListResponse,
+  CatalogAttributionGetResponse,
+  CatalogManifestFetchResponse,
+  CatalogDownloadResponse,
+  CatalogManifest,
 } from '@/bindings/types';
 
 // Conditionally import mocks or real Tauri invoke
@@ -343,5 +349,53 @@ export async function patternPreview(
 ): Promise<PatternPreviewResponse> {
   return invoke<PatternPreviewResponse>('pattern.preview', {
     request: { pattern, sampleMetadata },
+  });
+}
+
+// ── Catalog commands (spec 014) ───────────────────────────────────────────────
+
+/**
+ * List all installed catalogs.
+ * Returns every catalog in the `catalog_downloaded` table ordered by name.
+ */
+export async function catalogList(): Promise<CatalogListResponse> {
+  return invoke<CatalogListResponse>('catalog.list');
+}
+
+/**
+ * Get license attribution rows for all installed catalogs.
+ * Separated from catalogList so the (potentially large) notice text is not
+ * fetched on every Settings page open.
+ */
+export async function catalogAttributionGet(): Promise<CatalogAttributionGetResponse> {
+  return invoke<CatalogAttributionGetResponse>('catalog.attribution.get');
+}
+
+/**
+ * Fetch the catalog manifest from the project-hosted URL.
+ * Pass `etag` from a prior successful fetch to enable HTTP 304 conditional
+ * requests. Returns `status = 'not_modified'` when the ETag matches.
+ */
+export async function catalogManifestFetch(args?: {
+  etag?: string;
+}): Promise<CatalogManifestFetchResponse> {
+  return invoke<CatalogManifestFetchResponse>('catalog.manifest.fetch', {
+    etag: args?.etag,
+  });
+}
+
+/**
+ * Download, verify (SHA-256), and install a single catalog.
+ * The `manifest` must come from a prior successful `catalogManifestFetch`.
+ * Returns `status = 'success'` with `auditId` on success, or `status = 'failure'`
+ * with an error envelope. The previously installed catalog (if any) remains
+ * active until the new one is verified (FR-008).
+ */
+export async function catalogDownload(args: {
+  catalogId: string;
+  manifest: CatalogManifest;
+}): Promise<CatalogDownloadResponse> {
+  return invoke<CatalogDownloadResponse>('catalog.download', {
+    args: { catalog_id: args.catalogId, manifest: args.manifest },
   });
 }

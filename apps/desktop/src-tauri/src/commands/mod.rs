@@ -16,6 +16,7 @@
 pub mod audit;
 pub mod calibration;
 pub mod calibration_tolerances;
+pub mod catalogs;
 pub mod cleanup;
 pub mod envelope;
 pub mod equipment;

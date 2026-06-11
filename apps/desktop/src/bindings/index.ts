@@ -290,6 +290,59 @@ export const commands = {
 	 */
 	auditExport: (filters: unknown | null) => typedError<string, string>(__TAURI_INVOKE("audit.export", { filters })),
 	/**
+	 *  `catalog.list` — list all installed catalogs.
+	 * 
+	 *  Returns every catalog in the `catalog_downloaded` table, ordered by origin
+	 *  (`downloaded` first) then by name.
+	 * 
+	 *  # Errors
+	 * 
+	 *  Returns `Err(String)` on database failure.
+	 */
+	catalogList: () => typedError<CatalogListResponse_Serialize, string>(__TAURI_INVOKE("catalog.list")),
+	/**
+	 *  `catalog.attribution.get` — list all license attribution rows.
+	 * 
+	 *  Returns attribution data for every installed catalog.  Separated from
+	 *  `catalog.list` so the (potentially large) notice text payload is not paid
+	 *  for on the metadata listing.
+	 * 
+	 *  # Errors
+	 * 
+	 *  Returns `Err(String)` on database failure.
+	 */
+	catalogAttributionGet: () => typedError<CatalogAttributionGetResponse_Serialize, string>(__TAURI_INVOKE("catalog.attribution.get")),
+	/**
+	 *  `catalog.manifest.fetch` — fetch the catalog manifest from the hosted URL.
+	 * 
+	 *  Accepts an optional `etag` for conditional HTTP (HTTP 304 → `not_modified`).
+	 *  On success, the manifest is returned in the response for the caller to pass
+	 *  to `catalog.download` for each catalog.
+	 * 
+	 *  # Errors
+	 * 
+	 *  Returns `Err(String)` on unexpected internal failure. Network / verification
+	 *  failures are encoded in the response `status = failed` field.
+	 */
+	catalogManifestFetch: (etag: string | null) => typedError<CatalogManifestFetchResponse_Serialize, string>(__TAURI_INVOKE("catalog.manifest.fetch", { etag })),
+	/**
+	 *  `catalog.download` — download, verify (SHA-256), and install a single catalog.
+	 * 
+	 *  The backend resolves the download URL and checksum from the provided
+	 *  manifest. Bytes are verified in memory before being installed into SQLite.
+	 *  The previously installed catalog (if any) remains active until the new one
+	 *  is verified (FR-008).
+	 * 
+	 *  Returns `origin.not_implemented` when `catalog_id` matches a `user` origin
+	 *  request (A2, FR-009). In v1 all downloads are `downloaded` origin.
+	 * 
+	 *  # Errors
+	 * 
+	 *  Returns `Err(String)` on unexpected internal failure. Download and
+	 *  verification failures are encoded in the response `status = failure` field.
+	 */
+	catalogDownload: (args: CatalogDownloadArgs) => typedError<CatalogDownloadResponse_Serialize, string>(__TAURI_INVOKE("catalog.download", { args })),
+	/**
 	 *  `review.queue` — returns items awaiting user review.
 	 * 
 	 *  # Errors
@@ -981,6 +1034,73 @@ export type Camera = {
 	autoDetected: boolean,
 };
 
+/**  Registered catalog index visible to the app (data-model.md §Catalog). */
+export type Catalog = Catalog_Serialize | Catalog_Deserialize;
+
+/**  Response for `catalog.attribution.get`. */
+export type CatalogAttributionGetResponse = CatalogAttributionGetResponse_Serialize | CatalogAttributionGetResponse_Deserialize;
+
+/**  Response for `catalog.attribution.get`. */
+export type CatalogAttributionGetResponse_Deserialize = {
+	/**  Per-catalog attribution rows. One catalog may produce multiple rows. */
+	attributions: LicenseAttribution_Deserialize[],
+};
+
+/**  Response for `catalog.attribution.get`. */
+export type CatalogAttributionGetResponse_Serialize = {
+	/**  Per-catalog attribution rows. One catalog may produce multiple rows. */
+	attributions: LicenseAttribution_Serialize[],
+};
+
+/**
+ *  Payload shape for `catalog.download` (wraps the contract request fields).
+ * 
+ *  The `manifest` field carries the `CatalogManifest` that was returned by a
+ *  prior `catalog.manifest.fetch` call. The frontend is responsible for
+ *  caching the manifest between the fetch step and the per-catalog download
+ *  loop (T010-dl).
+ */
+export type CatalogDownloadArgs = {
+	catalogId: string,
+	manifest: CatalogManifest,
+};
+
+/**  Response for `catalog.download`. */
+export type CatalogDownloadResponse = CatalogDownloadResponse_Serialize | CatalogDownloadResponse_Deserialize;
+
+/**  Response for `catalog.download`. */
+export type CatalogDownloadResponse_Deserialize = {
+	status: CatalogDownloadStatus,
+	/**  Audit event id on successful install.  Present when `status = success`. */
+	auditId: string | null,
+	/**  Present when `status = failure`. */
+	error: CatalogError | null,
+};
+
+/**  Response for `catalog.download`. */
+export type CatalogDownloadResponse_Serialize = {
+	status: CatalogDownloadStatus,
+	/**  Audit event id on successful install.  Present when `status = success`. */
+	auditId?: string | null,
+	/**  Present when `status = failure`. */
+	error?: CatalogError | null,
+};
+
+/**  Status of a `catalog.download` response. */
+export type CatalogDownloadStatus = 
+/**  Catalog fetched, signature verified, installed into SQLite. */
+"success" | 
+/**  Failure; previously installed catalog (if any) remains active. */
+"failure";
+
+/**  Error envelope for catalog operations. */
+export type CatalogError = {
+	/**  Contract error code (closed enum from the contract schemas). */
+	code: string,
+	/**  Human-readable message. */
+	message: string,
+};
+
 /**  Catalog identifiers for a target (NGC, IC, Messier, etc.). */
 export type CatalogIds = CatalogIds_Serialize | CatalogIds_Deserialize;
 
@@ -996,6 +1116,117 @@ export type CatalogIds_Serialize = {
 	ngc?: string | null,
 	ic?: string | null,
 	messier?: string | null,
+};
+
+/**
+ *  Response for `catalog.list`.
+ * 
+ *  Catalogs are ordered by origin (`downloaded` first) then by name.
+ */
+export type CatalogListResponse = CatalogListResponse_Serialize | CatalogListResponse_Deserialize;
+
+/**
+ *  Response for `catalog.list`.
+ * 
+ *  Catalogs are ordered by origin (`downloaded` first) then by name.
+ */
+export type CatalogListResponse_Deserialize = {
+	/**  All registered catalogs. */
+	catalogs: Catalog_Deserialize[],
+};
+
+/**
+ *  Response for `catalog.list`.
+ * 
+ *  Catalogs are ordered by origin (`downloaded` first) then by name.
+ */
+export type CatalogListResponse_Serialize = {
+	/**  All registered catalogs. */
+	catalogs: Catalog_Serialize[],
+};
+
+/**  The signed manifest returned on a successful `catalog.manifest.fetch`. */
+export type CatalogManifest = {
+	/**  Manifest schema version. */
+	version: string,
+	/**  Minisign signature (base64-encoded). */
+	signature: string,
+	/**  Catalog entries. */
+	catalogs: ManifestCatalogEntry[],
+};
+
+/**  Response for `catalog.manifest.fetch`. */
+export type CatalogManifestFetchResponse = CatalogManifestFetchResponse_Serialize | CatalogManifestFetchResponse_Deserialize;
+
+/**  Response for `catalog.manifest.fetch`. */
+export type CatalogManifestFetchResponse_Deserialize = {
+	status: ManifestFetchStatus,
+	/**  Present when `status = fetched`. */
+	manifest: CatalogManifest | null,
+	/**  ETag for the next conditional request. */
+	etag: string | null,
+	/**  Present when `status = failed`. */
+	error: CatalogError | null,
+};
+
+/**  Response for `catalog.manifest.fetch`. */
+export type CatalogManifestFetchResponse_Serialize = {
+	status: ManifestFetchStatus,
+	/**  Present when `status = fetched`. */
+	manifest?: CatalogManifest | null,
+	/**  ETag for the next conditional request. */
+	etag?: string | null,
+	/**  Present when `status = failed`. */
+	error?: CatalogError | null,
+};
+
+/**
+ *  Closed enum of catalog origins (R-1.3).
+ * 
+ *  - `downloaded`: all v1 catalogs, installed from the project-hosted manifest.
+ *  - `built_in`: reserved for forward-compat; unused in v1.
+ *  - `user`: reserved for v1.x; backend rejects with `origin.not_implemented`.
+ */
+export type CatalogOrigin = "built_in" | "downloaded" | "user";
+
+/**  Registered catalog index visible to the app (data-model.md §Catalog). */
+export type Catalog_Deserialize = {
+	/**  Stable slug identifier. */
+	id: string,
+	/**  Human-readable display name. */
+	name: string,
+	/**  Bundle version string. */
+	version: string,
+	/**  License short code (closed enum string, e.g. `"public-domain"`). */
+	license: string,
+	/**  Origin of this catalog record. */
+	origin: CatalogOrigin,
+	/**  Upstream source URL. */
+	sourceUrl: string,
+	/**  RFC 3339 UTC timestamp of the last bundle update. */
+	lastUpdated: string,
+	/**  Number of entries in this catalog index (optional). */
+	entryCount: number | null,
+};
+
+/**  Registered catalog index visible to the app (data-model.md §Catalog). */
+export type Catalog_Serialize = {
+	/**  Stable slug identifier. */
+	id: string,
+	/**  Human-readable display name. */
+	name: string,
+	/**  Bundle version string. */
+	version: string,
+	/**  License short code (closed enum string, e.g. `"public-domain"`). */
+	license: string,
+	/**  Origin of this catalog record. */
+	origin: CatalogOrigin,
+	/**  Upstream source URL. */
+	sourceUrl: string,
+	/**  RFC 3339 UTC timestamp of the last bundle update. */
+	lastUpdated: string,
+	/**  Number of entries in this catalog index (optional). */
+	entryCount?: number | null,
 };
 
 export type CleanupAction = "keep" | "archive" | "delete";
@@ -1386,6 +1617,93 @@ export type LibraryStats = {
 	targets: number,
 	projects: number,
 };
+
+/**
+ *  Per-catalog license attribution record (data-model.md §LicenseAttribution).
+ * 
+ *  For `cc-by-4.0` and `cc-by-sa-4.0` licenses, `author`, `title`, and
+ *  `license_uri` are required (R-2.2).
+ */
+export type LicenseAttribution = LicenseAttribution_Serialize | LicenseAttribution_Deserialize;
+
+/**
+ *  Per-catalog license attribution record (data-model.md §LicenseAttribution).
+ * 
+ *  For `cc-by-4.0` and `cc-by-sa-4.0` licenses, `author`, `title`, and
+ *  `license_uri` are required (R-2.2).
+ */
+export type LicenseAttribution_Deserialize = {
+	/**  FK to `Catalog.id`. */
+	catalogId: string,
+	/**  License short code. */
+	license: string,
+	/**  Full required notice text, verbatim. */
+	text: string,
+	/**  Stable source link referenced by the notice. */
+	link: string,
+	/**  Date the source was accessed (ISO 8601). Optional. */
+	accessedOn: string | null,
+	/**  Author / rights-holder. Required for CC-BY and CC-BY-SA (R-2.2). */
+	author: string | null,
+	/**  Work title. Required for CC-BY and CC-BY-SA (R-2.2). */
+	title: string | null,
+	/**  Canonical license URI. Required for CC-BY and CC-BY-SA (R-2.2). */
+	licenseUri: string | null,
+	/**  Nature of any project-made modifications (optional). */
+	modificationsNotice: string | null,
+};
+
+/**
+ *  Per-catalog license attribution record (data-model.md §LicenseAttribution).
+ * 
+ *  For `cc-by-4.0` and `cc-by-sa-4.0` licenses, `author`, `title`, and
+ *  `license_uri` are required (R-2.2).
+ */
+export type LicenseAttribution_Serialize = {
+	/**  FK to `Catalog.id`. */
+	catalogId: string,
+	/**  License short code. */
+	license: string,
+	/**  Full required notice text, verbatim. */
+	text: string,
+	/**  Stable source link referenced by the notice. */
+	link: string,
+	/**  Date the source was accessed (ISO 8601). Optional. */
+	accessedOn?: string | null,
+	/**  Author / rights-holder. Required for CC-BY and CC-BY-SA (R-2.2). */
+	author?: string | null,
+	/**  Work title. Required for CC-BY and CC-BY-SA (R-2.2). */
+	title?: string | null,
+	/**  Canonical license URI. Required for CC-BY and CC-BY-SA (R-2.2). */
+	licenseUri?: string | null,
+	/**  Nature of any project-made modifications (optional). */
+	modificationsNotice?: string | null,
+};
+
+/**  Per-catalog entry in the signed manifest. */
+export type ManifestCatalogEntry = {
+	/**  Stable catalog slug. */
+	catalogId: string,
+	/**  Semver-ish version string. */
+	version: string,
+	/**  GitHub Releases download URL. */
+	url: string,
+	/**  SHA-256 hex checksum. */
+	checksum: string,
+	/**  License short code. */
+	license: string,
+	/**  Uncompressed size in bytes (for progress estimation). */
+	sizeBytes: number,
+};
+
+/**  Status of a `catalog.manifest.fetch` response. */
+export type ManifestFetchStatus = 
+/**  New manifest downloaded and verified. */
+"fetched" | 
+/**  ETag matched; local manifest is current (HTTP 304). */
+"not_modified" | 
+/**  Network or verification failure. */
+"failed";
 
 /**  Extended detail view of a calibration master. */
 export type MasterDetail = MasterDetail_Serialize | MasterDetail_Deserialize;
