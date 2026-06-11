@@ -17,6 +17,8 @@ pub type DbResult<T> = Result<T, DbError>;
 pub enum DbError {
     #[error("entity not found: {0}")]
     NotFound(String),
+    #[error("compare-and-swap failed: {0}")]
+    CasFailed(String),
     #[error("serialisation error: {0}")]
     Serialise(#[from] serde_json::Error),
     #[error("database error: {0}")]

@@ -42,9 +42,13 @@ use crate::commands::lifecycle::{
 };
 use crate::commands::native::{native_directory_pick, native_file_pick, native_reveal};
 use crate::commands::patterns::{pattern_preview, pattern_resolve, pattern_validate};
+use crate::commands::plan_apply::{
+    plans_apply_real, plans_apply_status, plans_cancel, plans_item_retry, plans_item_skip,
+    plans_resume,
+};
 use crate::commands::plans::{
-    archive_permanently_delete, archive_send_to_trash, plans_apply, plans_approve, plans_discard,
-    plans_get, plans_list, plans_retry,
+    archive_permanently_delete, archive_send_to_trash, plans_approve, plans_discard, plans_get,
+    plans_list, plans_retry,
 };
 use crate::commands::preferences::{preferences_get, preferences_set};
 use crate::commands::projects::{projects_create_plan, projects_get, projects_list};
@@ -106,15 +110,21 @@ pub fn specta_builder() -> Builder<tauri::Wry> {
             projects_list,
             projects_get,
             projects_create_plan,
-            // plans
+            // plans (spec 017)
             plans_list,
             plans_get,
             plans_approve,
-            plans_apply,
             plans_discard,
             plans_retry,
             archive_send_to_trash,
             archive_permanently_delete,
+            // plan apply (spec 025)
+            plans_apply_real,
+            plans_cancel,
+            plans_resume,
+            plans_item_skip,
+            plans_item_retry,
+            plans_apply_status,
             // audit
             audit_list,
             audit_export,

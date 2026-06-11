@@ -9,10 +9,15 @@ pub mod stale_propagator;
 pub use bus::EventBus;
 pub use event::{AuditLogEntry, Outcome, Severity, SeverityFilter};
 pub use event_bus::{
-    EventEnvelope, FirstRunCompleted, LifecycleTransitionApplied, SettingsChanged, SettingsRepair,
-    SettingsSnapshot, Source, SourceCountByKind, TOPIC_FIRST_RUN_COMPLETED,
-    TOPIC_LIFECYCLE_TRANSITION_APPLIED, TOPIC_SETTINGS_CHANGED, TOPIC_SETTINGS_REPAIR,
-    TOPIC_SETTINGS_SNAPSHOT,
+    ArchivePermanentlyDeleted, ArchiveSentToTrash, EventEnvelope, FirstRunCompleted,
+    LifecycleTransitionApplied, PlanApplyingCompleted, PlanApplyingPaused, PlanApplyingResumed,
+    PlanApplyingStarted, PlanApproved, PlanDiscarded, PlanItemProgress, PlanRetryCreated,
+    SettingsChanged, SettingsRepair, SettingsSnapshot, Source, SourceCountByKind,
+    TOPIC_ARCHIVE_PERMANENTLY_DELETED, TOPIC_ARCHIVE_SENT_TO_TRASH, TOPIC_FIRST_RUN_COMPLETED,
+    TOPIC_LIFECYCLE_TRANSITION_APPLIED, TOPIC_PLAN_APPLYING_COMPLETED, TOPIC_PLAN_APPLYING_PAUSED,
+    TOPIC_PLAN_APPLYING_RESUMED, TOPIC_PLAN_APPLYING_STARTED, TOPIC_PLAN_APPROVED,
+    TOPIC_PLAN_DISCARDED, TOPIC_PLAN_ITEM_PROGRESS, TOPIC_PLAN_RETRY_CREATED,
+    TOPIC_SETTINGS_CHANGED, TOPIC_SETTINGS_REPAIR, TOPIC_SETTINGS_SNAPSHOT,
 };
 pub use stale_propagator::{PropagatorFn, StalePropagator};
 
