@@ -33,6 +33,14 @@ import { CalibrationMatchPanel } from './CalibrationMatchPanel';
 import { BlockedBanner } from './BlockedBanner';
 import type { BlockedReason, RecoveryEdge } from './BlockedBanner';
 import { lifecycleFooterActions, isPlanRequiredError } from './lifecycle-actions';
+// spec 011: tool launch CTA
+import {
+  toolIdFromProjectTool,
+  toolLaunchDisabledReason,
+  toolLaunchDisabledTooltip,
+  useToolProfiles,
+  useToolLaunch,
+} from './tool-launch';
 
 // ── Helpers ──────────────────────────────────────────────────────────────────
 
@@ -61,6 +69,18 @@ export function ProjectDetailContent({ projectId }: ProjectDetailContentProps) {
   const [editOpen, setEditOpen] = useState(false);
   const [channelWorking, setChannelWorking] = useState(false);
   const [transitionWorking, setTransitionWorking] = useState(false);
+
+  // spec 011: tool launch (hooks must be called unconditionally)
+  const projectToolStr = typeof project?.tool === 'string' ? project.tool : '';
+  const toolId = projectToolStr ? toolIdFromProjectTool(projectToolStr) : '';
+  const { profiles } = useToolProfiles();
+  const toolProfile = profiles.find((p) => p.id === toolId);
+  const { state: launchState, launch: launchTool, dismissPriorWarning } = useToolLaunch(
+    projectId,
+    toolId,
+    projectToolStr || 'tool',
+  );
+  const launchDisabledReason = toolLaunchDisabledReason(toolProfile);
 
   if (loading && !project) {
     return (
@@ -317,6 +337,92 @@ export function ProjectDetailContent({ projectId }: ProjectDetailContentProps) {
               {action.label}
             </Btn>
           ))}
+        </div>
+      )}
+
+      {/* spec 011: Open in {tool} CTA */}
+      {toolId && (
+        <div
+          style={{
+            display: 'flex',
+            alignItems: 'center',
+            gap: 'var(--alm-sp-2)',
+            padding: 'var(--alm-sp-3) var(--alm-sp-4)',
+            borderTop: '1px solid var(--alm-border)',
+          }}
+          data-testid="tool-launch-footer"
+        >
+          <Btn
+            size="sm"
+            variant="primary"
+            disabled={launchDisabledReason !== null || launchState.working}
+            title={
+              launchDisabledReason
+                ? toolLaunchDisabledTooltip(launchDisabledReason)
+                : `Open this project in ${projectToolStr}`
+            }
+            onClick={() => void launchTool()}
+            data-testid="tool-launch-btn"
+          >
+            {launchState.working ? 'Launching…' : `Open in ${projectToolStr}`}
+          </Btn>
+          {launchDisabledReason === 'not_configured' && (
+            <span
+              style={{ fontSize: 'var(--alm-text-xs)', color: 'var(--alm-text-muted)' }}
+            >
+              Tool path not configured —{' '}
+              <a href="#/settings?pane=tools" style={{ color: 'var(--alm-color-primary)' }}>
+                Configure
+              </a>
+            </span>
+          )}
+        </div>
+      )}
+
+      {/* spec 011: Re-launch confirmation modal */}
+      {launchState.priorInstanceAlive && (
+        <div
+          role="dialog"
+          aria-modal="true"
+          aria-label={`${projectToolStr} may already be running`}
+          style={{
+            position: 'absolute',
+            inset: 0,
+            background: 'rgba(0,0,0,0.5)',
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: 'center',
+            zIndex: 20,
+          }}
+          data-testid="relaunch-modal"
+        >
+          <div
+            style={{
+              background: 'var(--alm-surface)',
+              border: '1px solid var(--alm-border)',
+              borderRadius: '8px',
+              padding: 'var(--alm-sp-6)',
+              maxWidth: '360px',
+              width: '100%',
+            }}
+          >
+            <p style={{ marginBottom: 'var(--alm-sp-4)' }}>
+              {projectToolStr} may already be open for this project. Open another instance?
+            </p>
+            <div style={{ display: 'flex', gap: 'var(--alm-sp-2)', justifyContent: 'flex-end' }}>
+              <Btn size="sm" variant="ghost" onClick={dismissPriorWarning} data-testid="relaunch-cancel">
+                Cancel
+              </Btn>
+              <Btn
+                size="sm"
+                variant="primary"
+                onClick={() => void launchTool(true)}
+                data-testid="relaunch-confirm"
+              >
+                Open another instance
+              </Btn>
+            </div>
+          </div>
         </div>
       )}
 

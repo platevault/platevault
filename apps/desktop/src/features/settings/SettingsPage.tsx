@@ -86,7 +86,7 @@ function renderPane(
     case 'equipment': return <Equipment save={save} />;
     case 'ingestion': return <Ingestion save={save} />;
     case 'naming':    return <NamingStructure save={save} />;
-    case 'tools':     return <ProcessingTools save={save} />;
+    case 'tools':     return <ProcessingTools />;
     case 'cal':       return <CalibrationMatching save={save} />;
     case 'catalogs':  return <Catalogs save={save} />;
     case 'cleanup':   return <Cleanup save={save} />;

@@ -78,7 +78,9 @@ use crate::commands::settings::{
 use crate::commands::status::status_summary;
 use crate::commands::target_lookup::{target_lookup, target_resolve};
 use crate::commands::targets::{targets_get, targets_list};
-use crate::commands::tools::{tools_list, tools_update, tools_validate_path};
+use crate::commands::tools::{
+    tools_discover, tools_launch, tools_list, tools_update, tools_validate_path,
+};
 use crate::commands::tour::tour_complete_step;
 
 pub const CRATE_NAME: &str = "desktop_shell";
@@ -231,10 +233,12 @@ pub fn specta_builder() -> Builder<tauri::Wry> {
             // ingestion settings (spec 030)
             ingestion_settings_get,
             ingestion_settings_update,
-            // tools (spec 030)
+            // tools (spec 011/030)
+            tools_launch,
             tools_list,
             tools_update,
             tools_validate_path,
+            tools_discover,
         ])
 }
 

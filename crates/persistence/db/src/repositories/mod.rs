@@ -18,3 +18,4 @@ pub mod provenance;
 pub mod session_snapshot;
 pub mod settings;
 pub mod targets;
+pub mod tool_launches;

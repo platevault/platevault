@@ -49,23 +49,31 @@ name = "app_core"
 version = "0.1.0"
 dependencies = [
  "audit",
+ "calibration_core",
  "contracts_core",
  "domain_core",
  "fs_executor",
  "hex",
+ "metadata_core",
+ "metadata_fits",
+ "metadata_video",
+ "metadata_xisf",
  "patterns",
  "persistence_db",
+ "project_structure",
  "serde",
  "serde_json",
  "sha2 0.10.9",
  "sqlx",
  "targeting",
  "targeting_catalogs",
+ "tempfile",
  "thiserror 2.0.18",
  "time",
  "tokio",
  "tracing",
  "uuid",
+ "workflow_profiles",
 ]
 
 [[package]]
@@ -426,6 +434,11 @@ dependencies = [
 [[package]]
 name = "calibration_core"
 version = "0.1.0"
+dependencies = [
+ "serde",
+ "serde_json",
+ "uuid",
+]
 
 [[package]]
 name = "camino"
@@ -590,6 +603,7 @@ dependencies = [
 name = "contracts_core"
 version = "0.1.0"
 dependencies = [
+ "calibration_core",
  "domain_core",
  "schemars 0.8.22",
  "serde",
@@ -875,6 +889,7 @@ dependencies = [
  "tokio",
  "tracing",
  "uuid",
+ "workflow_profiles",
 ]
 
 [[package]]
@@ -2411,10 +2426,18 @@ dependencies = [
 [[package]]
 name = "metadata_core"
 version = "0.1.0"
+dependencies = [
+ "serde",
+ "thiserror 2.0.18",
+]
 
 [[package]]
 name = "metadata_fits"
 version = "0.1.0"
+dependencies = [
+ "metadata_core",
+ "thiserror 2.0.18",
+]
 
 [[package]]
 name = "metadata_video"
@@ -2424,6 +2447,7 @@ version = "0.1.0"
 name = "metadata_xisf"
 version = "0.1.0"
 dependencies = [
+ "metadata_core",
  "quick-xml",
  "thiserror 2.0.18",
 ]
