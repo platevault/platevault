@@ -445,6 +445,24 @@ export const commands = {
 	 */
 	auditExport: (filters: unknown | null) => typedError<string, string>(__TAURI_INVOKE("audit.export", { filters })),
 	/**
+	 *  `log.recent` — return the most-recent log entries (initial hydration window).
+	 * 
+	 *  Accepts optional `cursor`, `level_min`, `include_diagnostics`, and
+	 *  `source_filter` parameters.
+	 * 
+	 *  # Errors
+	 *  Returns `Err(String)` on database failure.
+	 */
+	logRecent: (cursor: string | null, levelMin: "debug" | "info" | "warn" | "error" | null, includeDiagnostics: boolean | null, sourceFilter: LogEntrySource[] | null, windowSize: number | null) => typedError<LogRecentResponse_Serialize, string>(__TAURI_INVOKE("log.recent", { cursor, levelMin, includeDiagnostics, sourceFilter, windowSize })),
+	/**
+	 *  `log.export` — export filtered log entries to a JSON file.
+	 * 
+	 *  # Errors
+	 *  Returns `Err(String)` with code `"path.parent.missing"`, `"path.write.denied"`,
+	 *  `"range.invalid"`, or `"format.unsupported"`.
+	 */
+	logExport: (requestId: string, filePath: string, format: string | null, levelMin: "debug" | "info" | "warn" | "error" | null, since: string | null, until: string | null, includeDiagnostics: boolean | null) => typedError<LogExportResponse_Serialize, string>(__TAURI_INVOKE("log.export", { requestId, filePath, format, levelMin, since, until, includeDiagnostics })),
+	/**
 	 *  `catalog.list` — list all installed catalogs.
 	 * 
 	 *  Returns every catalog in the `catalog_downloaded` table, ordered by origin
@@ -2806,6 +2824,136 @@ export type LicenseAttribution_Serialize = {
 export type LinkedProjectRef = {
 	id: string,
 	name: string,
+};
+
+/**
+ *  A projected log entry sent to the frontend.
+ * 
+ *  Stable shape; `contractVersion` is always `"1"` for this spec version (H1).
+ */
+export type LogEntry = LogEntry_Serialize | LogEntry_Deserialize;
+
+/**
+ *  Source of a log entry: derived from the spec 002 event-bus topic prefix.
+ * 
+ *  Closed enum aligned to the `source` field in `log.stream.json`
+ *  (R-SourceEnum). `Diagnostic` entries bypass audit and are never persisted.
+ */
+export type LogEntrySource = "audit" | "diagnostic" | "catalog" | "plan" | "workflow" | "lifecycle" | "inventory" | "settings" | "project" | "target" | "tool";
+
+/**
+ *  A projected log entry sent to the frontend.
+ * 
+ *  Stable shape; `contractVersion` is always `"1"` for this spec version (H1).
+ */
+export type LogEntry_Deserialize = {
+	/**
+	 *  Stable prefixed id: `aud:<event_id>` for audit-sourced entries,
+	 *  `dia:<monotonic_n>` for diagnostic entries (A1).
+	 */
+	id: string,
+	/**  Schema version. Always `"1"`. */
+	contractVersion: string,
+	/**  ISO-8601 UTC timestamp at server-side emission. */
+	time: string,
+	level: LogLevel,
+	source: LogEntrySource,
+	/**  Single-line human-readable summary. No newlines. */
+	message: string,
+	/**
+	 *  Operation id correlating one user intent across multiple events.
+	 *  Required for workflow events; optional for diagnostics.
+	 */
+	requestId: string | null,
+	/**
+	 *  Referenced entity kind (e.g. `"plan"`, `"project"`, `"session"`).
+	 *  Omitted for diagnostics and events without an entity.
+	 */
+	entityType: string | null,
+	/**  Stable id of the referenced entity. Present when `entity_type` is present. */
+	entityId: string | null,
+};
+
+/**
+ *  A projected log entry sent to the frontend.
+ * 
+ *  Stable shape; `contractVersion` is always `"1"` for this spec version (H1).
+ */
+export type LogEntry_Serialize = {
+	/**
+	 *  Stable prefixed id: `aud:<event_id>` for audit-sourced entries,
+	 *  `dia:<monotonic_n>` for diagnostic entries (A1).
+	 */
+	id: string,
+	/**  Schema version. Always `"1"`. */
+	contractVersion: string,
+	/**  ISO-8601 UTC timestamp at server-side emission. */
+	time: string,
+	level: LogLevel,
+	source: LogEntrySource,
+	/**  Single-line human-readable summary. No newlines. */
+	message: string,
+	/**
+	 *  Operation id correlating one user intent across multiple events.
+	 *  Required for workflow events; optional for diagnostics.
+	 */
+	requestId?: string | null,
+	/**
+	 *  Referenced entity kind (e.g. `"plan"`, `"project"`, `"session"`).
+	 *  Omitted for diagnostics and events without an entity.
+	 */
+	entityType?: string | null,
+	/**  Stable id of the referenced entity. Present when `entity_type` is present. */
+	entityId?: string | null,
+};
+
+/**  Success response from `log.export`. */
+export type LogExportResponse = LogExportResponse_Serialize | LogExportResponse_Deserialize;
+
+/**  Success response from `log.export`. */
+export type LogExportResponse_Deserialize = {
+	contractVersion: string,
+	requestId: string,
+	/**  Absolute path of the written file. */
+	filePath: string,
+	/**  Number of `LogEntry` rows written. */
+	count: number,
+	/**  Byte size of the written file. */
+	bytes: number | null,
+};
+
+/**  Success response from `log.export`. */
+export type LogExportResponse_Serialize = {
+	contractVersion: string,
+	requestId: string,
+	/**  Absolute path of the written file. */
+	filePath: string,
+	/**  Number of `LogEntry` rows written. */
+	count: number,
+	/**  Byte size of the written file. */
+	bytes?: number | null,
+};
+
+/**  Minimum log level filter. */
+export type LogLevel = "debug" | "info" | "warn" | "error";
+
+/**  Response from `log.recent` (pull rather than stream). */
+export type LogRecentResponse = LogRecentResponse_Serialize | LogRecentResponse_Deserialize;
+
+/**  Response from `log.recent` (pull rather than stream). */
+export type LogRecentResponse_Deserialize = {
+	contractVersion: string,
+	entries: LogEntry_Deserialize[],
+	truncated?: boolean,
+	truncatedCount: number | null,
+};
+
+/**  Response from `log.recent` (pull rather than stream). */
+export type LogRecentResponse_Serialize = {
+	contractVersion: string,
+	entries: LogEntry_Serialize[],
+	truncated: boolean,
+	truncatedCount?: number | null,
 };
 
 /**  Confidence bucket for a target match (research.md R2, R3). */

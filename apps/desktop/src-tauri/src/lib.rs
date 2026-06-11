@@ -48,6 +48,7 @@ use crate::commands::lifecycle::{
     lifecycle_ledger_list, lifecycle_transition_apply, lifecycle_transition_preview,
     provenance_read, AppState,
 };
+use crate::commands::log::{log_export, log_recent};
 use crate::commands::manifests::{
     manifest_get, manifest_list, manifest_reveal_in_os, note_get, note_update,
 };
@@ -171,6 +172,9 @@ pub fn specta_builder() -> Builder<tauri::Wry> {
             // audit
             audit_list,
             audit_export,
+            // log stream (spec 019)
+            log_recent,
+            log_export,
             // catalog registry (spec 014)
             catalog_list,
             catalog_attribution_get,

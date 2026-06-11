@@ -41,3 +41,7 @@ export type * as WorkflowRunCompleted from "./generated/workflow.run_completed";
 // Spec 022 — Desktop theme mode (theme.get / theme.set).
 export type * as ThemeGet from "./generated/theme.get";
 export type * as ThemeSet from "./generated/theme.set";
+
+// Spec 019 — Bottom Log Viewer.
+export type * as LogStream from "./generated/log.stream";
+export type * as LogExport from "./generated/log.export";

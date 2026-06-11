@@ -43,6 +43,9 @@ const SPEC_CONTRACT_ALLOWLIST = [
   "012-processing-artifact-observation/contracts/artifact.list.json",
   "012-processing-artifact-observation/contracts/artifact.classify.json",
   "012-processing-artifact-observation/contracts/workflow.run_completed.json",
+  // Spec 019 — Bottom Log Viewer
+  "019-bottom-log-viewer/contracts/log.stream.json",
+  "019-bottom-log-viewer/contracts/log.export.json",
 ];
 
 function findSpecContracts() {

@@ -14,6 +14,7 @@ pub mod ingestion;
 pub mod inventory;
 pub mod json_any;
 pub mod lifecycle;
+pub mod log;
 pub mod manifests;
 pub mod native;
 pub mod patterns;

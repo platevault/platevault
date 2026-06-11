@@ -210,6 +210,23 @@ export async function mockInvoke<T>(
     case 'audit.export': {
       return mockAuditEntries.map((e) => JSON.stringify(e)).join('\n') as T;
     }
+    case 'log.recent': {
+      const { MOCK_LOG_ENTRIES } = await import('@/data/mockLogEntries');
+      return {
+        contractVersion: '1',
+        entries: MOCK_LOG_ENTRIES,
+        truncated: false,
+      } as T;
+    }
+    case 'log.export': {
+      return {
+        contractVersion: '1',
+        requestId: (_args as Record<string, string>)?.requestId ?? 'mock-req',
+        filePath: (_args as Record<string, string>)?.filePath ?? '/tmp/log-export.json',
+        count: 8,
+        bytes: 1024,
+      } as T;
+    }
     case 'settings.get': {
       return mockSettingsData as T;
     }

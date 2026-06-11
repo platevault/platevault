@@ -1,34 +1,131 @@
-import { useEffect } from 'react';
+/**
+ * Bottom log panel (spec 019).
+ *
+ * - Full-width fold-out driven by `LogPanelContext`.
+ * - Level filter chips (session-only, resets to 'all' on open).
+ * - Follow-tail toggle (persisted via `rememberFollowLogs` setting).
+ * - Diagnostics toggle (gated by `logLevel === "debug"`).
+ * - Cross-link: clicking a row with `entityType` + `entityId` navigates to
+ *   the entity page; rows with only `requestId` navigate to the audit timeline.
+ * - Export action in the panel header.
+ * - Truncation marker when history gap is detected.
+ * - Escape key closes the panel.
+ */
+import { useEffect, useRef, useCallback, useSyncExternalStore, useState } from 'react';
 import { Collapsible } from '@base-ui-components/react/collapsible';
-import { Progress } from '@base-ui-components/react/progress';
+import { useNavigate } from '@tanstack/react-router';
 import { useLogPanel } from './LogPanelContext';
-import type { ProgressEvent } from '@/bindings/types';
+import {
+  subscribeLog,
+  getLogSnapshot,
+  type LogEntry,
+  type LogLevel,
+  type LogEntrySource,
+} from '@/data/logStore';
+import { startLogSubscription } from '@/data/logSubscription';
+import { logExport } from '@/api/commands';
+import type { LevelFilter } from './LogPanelContext';
 
-type LogLevel = 'info' | 'warn' | 'error' | 'debug';
+// ── Level chip display helpers ────────────────────────────────────────────────
 
-const MOCK_EVENTS: Array<{ time: string; level: LogLevel; message: string }> = [
-  { time: '22:15:04', level: 'info',  message: 'Scan completed: 1,247 files indexed' },
-  { time: '22:15:02', level: 'warn',  message: 'FITS keyword OBJECT missing on 3 frames in /raw/2026-04-18/' },
-  { time: '22:14:59', level: 'error', message: 'Failed to read: /raw/2026-04-17/frame_0043.fit — permission denied' },
-  { time: '22:14:58', level: 'info',  message: 'Processing /astro/raw/2026-04-18/' },
-  { time: '22:14:56', level: 'debug', message: 'Metadata cache hit for root hash a3f9c12' },
-  { time: '22:14:55', level: 'info',  message: 'Scan started for root /astro/raw' },
-  { time: '22:14:50', level: 'debug', message: 'Loaded preferences: density=comfortable, theme=system' },
-  { time: '22:14:48', level: 'warn',  message: 'Root /external/drive not found — reconnect drive to restore' },
+const LEVEL_CHIPS: { value: LevelFilter; label: string }[] = [
+  { value: 'all', label: 'All' },
+  { value: 'error', label: 'Error' },
+  { value: 'warn', label: 'Warn' },
+  { value: 'info', label: 'Info' },
+  { value: 'debug', label: 'Debug' },
 ];
 
-const MOCK_OPERATIONS: Array<{
-  id: string;
-  label: string;
-  progress: number;
-}> = [
-  { id: 'op-001', label: 'Indexing metadata', progress: 100 },
-];
+const LEVEL_RANK: Record<LogLevel, number> = {
+  debug: 0,
+  info: 1,
+  warn: 2,
+  error: 3,
+};
+
+function passesLevelFilter(entryLevel: LogLevel, filter: LevelFilter): boolean {
+  if (filter === 'all') return true;
+  return entryLevel === filter;
+}
+
+function passesSourceFilter(entrySource: LogEntrySource, filter: LogEntrySource[]): boolean {
+  if (filter.length === 0) return true;
+  return filter.includes(entrySource);
+}
+
+function formatTime(isoTime: string): string {
+  try {
+    const d = new Date(isoTime);
+    return d.toLocaleTimeString(undefined, {
+      hour: '2-digit',
+      minute: '2-digit',
+      second: '2-digit',
+    });
+  } catch {
+    return isoTime;
+  }
+}
+
+// ── Entity navigation helpers ─────────────────────────────────────────────────
+
+type EntityNavigateFn = (entityType: string, entityId: string) => void;
+type AuditNavigateFn = (requestId: string) => void;
+
+function buildEntityPath(entityType: string, entityId: string): string {
+  switch (entityType) {
+    case 'plan':
+      return `/plans/${entityId}`;
+    case 'project':
+      return `/projects/${entityId}`;
+    case 'session':
+      return `/sessions/${entityId}`;
+    case 'target':
+      return `/targets/${entityId}`;
+    case 'catalog':
+      return `/settings?tab=catalogs`;
+    default:
+      return `/audit?entityType=${entityType}&entityId=${entityId}`;
+  }
+}
+
+// ── LogPanel component ────────────────────────────────────────────────────────
 
 export function LogPanel() {
-  const { expanded, toggle } = useLogPanel();
+  const {
+    expanded,
+    toggle,
+    logLevel,
+    followLogs,
+    setFollowLogs,
+    levelFilter,
+    setLevelFilter,
+    sourceFilter,
+  } = useLogPanel();
 
-  // Close log panel on Escape key
+  const navigate = useNavigate();
+  const listRef = useRef<HTMLUListElement>(null);
+  const [showDiagnostics, setShowDiagnostics] = useState(false);
+  const [exportError, setExportError] = useState<string | null>(null);
+  // Temporary scroll-up pause (does not mutate persisted preference).
+  const [scrollPaused, setScrollPaused] = useState(false);
+
+  // Reduced-motion preference.
+  const prefersReducedMotion =
+    typeof window !== 'undefined' &&
+    window.matchMedia?.('(prefers-reduced-motion: reduce)').matches;
+
+  // Subscribe to the log ring buffer.
+  const { entries, truncated, truncatedCount } = useSyncExternalStore(
+    subscribeLog,
+    getLogSnapshot,
+  );
+
+  // Start subscription on mount.
+  useEffect(() => {
+    void startLogSubscription();
+  }, []);
+
+  // Close panel on Escape.
   useEffect(() => {
     function handleKeyDown(e: KeyboardEvent) {
       if (e.key === 'Escape' && expanded) {
@@ -40,6 +137,79 @@ export function LogPanel() {
     return () => document.removeEventListener('keydown', handleKeyDown);
   }, [expanded, toggle]);
 
+  // Follow-tail scroll.
+  useEffect(() => {
+    if (!expanded || !followLogs || scrollPaused) return;
+    const list = listRef.current;
+    if (!list) return;
+    // Entries are newest-first: scroll to top to see the latest.
+    if (prefersReducedMotion) {
+      list.scrollTop = 0;
+    } else {
+      list.scrollTo({ top: 0, behavior: 'smooth' });
+    }
+  }, [entries, expanded, followLogs, scrollPaused, prefersReducedMotion]);
+
+  // Pause follow on manual scroll-up, resume on scroll-to-top.
+  const handleScroll = useCallback(() => {
+    const list = listRef.current;
+    if (!list) return;
+    // If user scrolled away from top (top = newest), pause follow.
+    if (list.scrollTop > 20) {
+      setScrollPaused(true);
+    } else {
+      setScrollPaused(false);
+    }
+  }, []);
+
+  // Navigation handlers.
+  const navigateToEntity: EntityNavigateFn = useCallback(
+    (entityType, entityId) => {
+      const path = buildEntityPath(entityType, entityId);
+      void navigate({ to: path as never });
+    },
+    [navigate],
+  );
+
+  const navigateToAudit: AuditNavigateFn = useCallback(
+    (requestId) => {
+      void navigate({ to: `/audit?requestId=${requestId}` as never });
+    },
+    [navigate],
+  );
+
+  // Export action.
+  const handleExport = useCallback(async () => {
+    setExportError(null);
+    try {
+      const requestId = crypto.randomUUID?.() ?? `req-${Date.now()}`;
+      // Use a fixed temp path; a future dialog can replace this.
+      const filePath = `/tmp/astro-log-export-${Date.now()}.json`;
+
+      await logExport({
+        requestId,
+        filePath,
+        format: 'json',
+        includeDiagnostics: showDiagnostics,
+      });
+    } catch (err) {
+      setExportError(err instanceof Error ? err.message : String(err));
+    }
+  }, [showDiagnostics]);
+
+  // Filter entries for render.
+  const visibleEntries = entries.filter((entry) => {
+    if (!passesLevelFilter(entry.level, levelFilter)) return false;
+    if (!passesSourceFilter(entry.source, sourceFilter)) return false;
+    if (entry.source === 'diagnostic' && !showDiagnostics) return false;
+    // Gate diagnostics on logLevel setting (A3).
+    if (entry.source === 'diagnostic' && logLevel !== 'debug') return false;
+    return true;
+  });
+
+  // Idle preview: show the most-recent visible entry message.
+  const previewEntry = visibleEntries[0];
+
   return (
     <Collapsible.Root
       open={expanded}
@@ -50,36 +220,179 @@ export function LogPanel() {
     >
       <div className="alm-logpanel__header">
         <span className="alm-logpanel__title">Activity</span>
+
+        {/* Idle preview line (collapsed state) */}
+        {!expanded && previewEntry && (
+          <span
+            className={`alm-logpanel__preview alm-logpanel__event-level--${previewEntry.level}`}
+            aria-label="Latest log entry"
+          >
+            {formatTime(previewEntry.time)} {previewEntry.message}
+          </span>
+        )}
+
+        {/* Level filter chips (expanded state) */}
+        {expanded && (
+          <div className="alm-logpanel__filters" role="group" aria-label="Level filter">
+            {LEVEL_CHIPS.map((chip) => (
+              <button
+                key={chip.value}
+                type="button"
+                className={`alm-btn alm-btn--ghost alm-btn--xs alm-logpanel__chip${
+                  levelFilter === chip.value ? ' alm-logpanel__chip--active' : ''
+                }`}
+                onClick={() => setLevelFilter(chip.value)}
+                aria-pressed={levelFilter === chip.value}
+              >
+                {chip.label}
+              </button>
+            ))}
+
+            {/* Diagnostics toggle (only when logLevel === "debug") */}
+            {logLevel === 'debug' && (
+              <button
+                type="button"
+                className={`alm-btn alm-btn--ghost alm-btn--xs alm-logpanel__chip${
+                  showDiagnostics ? ' alm-logpanel__chip--active' : ''
+                }`}
+                onClick={() => setShowDiagnostics((v) => !v)}
+                aria-pressed={showDiagnostics}
+              >
+                Diagnostics
+              </button>
+            )}
+          </div>
+        )}
+
+        {/* Follow toggle */}
+        {expanded && (
+          <button
+            type="button"
+            className={`alm-btn alm-btn--ghost alm-btn--xs${followLogs ? ' alm-logpanel__chip--active' : ''}`}
+            onClick={() => setFollowLogs(!followLogs)}
+            aria-pressed={followLogs}
+            aria-label={followLogs ? 'Follow tail on (click to pause)' : 'Follow tail off (click to enable)'}
+            title={scrollPaused && followLogs ? 'Paused (scroll to bottom to resume)' : undefined}
+          >
+            {followLogs ? (scrollPaused ? '⏸ Follow' : '↓ Follow') : '— Follow'}
+          </button>
+        )}
+
+        {/* Export button */}
+        {expanded && (
+          <button
+            type="button"
+            className="alm-btn alm-btn--ghost alm-btn--xs"
+            onClick={() => void handleExport()}
+            aria-label="Export log to JSON file"
+          >
+            Export
+          </button>
+        )}
+
         <Collapsible.Trigger
           className="alm-btn alm-btn--ghost alm-btn--sm"
-          aria-label="Collapse log panel"
+          aria-label={expanded ? 'Collapse log panel' : 'Expand log panel'}
         >
-          ▾
+          {expanded ? '▾' : '▸'}
         </Collapsible.Trigger>
       </div>
+
+      {exportError && (
+        <div className="alm-logpanel__export-error" role="alert">
+          Export failed: {exportError}
+        </div>
+      )}
+
       <Collapsible.Panel className="alm-logpanel__body">
-        {MOCK_OPERATIONS.map((op) => (
-          <div key={op.id} className="alm-logpanel__op">
-            <Progress.Root value={op.progress} className="alm-logpanel__progress-root">
-              <Progress.Label className="alm-logpanel__op-label">
-                {op.label}
-              </Progress.Label>
-              <Progress.Track className="alm-logpanel__progress">
-                <Progress.Indicator className="alm-logpanel__progress-fill" />
-              </Progress.Track>
-            </Progress.Root>
+        {/* Truncation marker (A4) */}
+        {truncated && (
+          <div className="alm-logpanel__truncation-marker" role="note">
+            {truncatedCount != null
+              ? `History gap — ${truncatedCount} entries older than this point are no longer retained.`
+              : 'History gap — some entries older than this point are no longer retained.'}
           </div>
-        ))}
-        <ul className="alm-logpanel__events">
-          {MOCK_EVENTS.map((ev, i) => (
-            <li key={i} className="alm-logpanel__event">
-              <span className="alm-logpanel__event-time">{ev.time}</span>
-              <span className={`alm-logpanel__event-level alm-logpanel__event-level--${ev.level}`}>{ev.level}</span>
-              <span className="alm-logpanel__event-msg">{ev.message}</span>
-            </li>
-          ))}
+        )}
+
+        <ul className="alm-logpanel__events" ref={listRef} onScroll={handleScroll}>
+          {visibleEntries.length === 0 ? (
+            <li className="alm-logpanel__empty">No log entries</li>
+          ) : (
+            visibleEntries.map((entry) => (
+              <LogEntryRow
+                key={entry.id}
+                entry={entry}
+                onNavigateEntity={navigateToEntity}
+                onNavigateAudit={navigateToAudit}
+              />
+            ))
+          )}
         </ul>
       </Collapsible.Panel>
     </Collapsible.Root>
+  );
+}
+
+// ── LogEntryRow sub-component ─────────────────────────────────────────────────
+
+interface LogEntryRowProps {
+  entry: LogEntry;
+  onNavigateEntity: EntityNavigateFn;
+  onNavigateAudit: AuditNavigateFn;
+}
+
+function LogEntryRow({ entry, onNavigateEntity, onNavigateAudit }: LogEntryRowProps) {
+  const hasEntityLink = entry.entityType != null && entry.entityId != null;
+  const hasAuditLink = entry.requestId != null && !hasEntityLink;
+
+  const handleClick = useCallback(() => {
+    if (hasEntityLink && entry.entityType && entry.entityId) {
+      onNavigateEntity(entry.entityType, entry.entityId);
+    } else if (hasAuditLink && entry.requestId) {
+      onNavigateAudit(entry.requestId);
+    }
+  }, [entry, hasEntityLink, hasAuditLink, onNavigateEntity, onNavigateAudit]);
+
+  const isClickable = hasEntityLink || hasAuditLink;
+
+  return (
+    <li
+      className={`alm-logpanel__event${isClickable ? ' alm-logpanel__event--link' : ''}`}
+      onClick={isClickable ? handleClick : undefined}
+      role={isClickable ? 'button' : 'listitem'}
+      tabIndex={isClickable ? 0 : undefined}
+      onKeyDown={
+        isClickable
+          ? (e) => {
+              if (e.key === 'Enter' || e.key === ' ') {
+                e.preventDefault();
+                handleClick();
+              }
+            }
+          : undefined
+      }
+      aria-label={
+        isClickable
+          ? `${entry.level}: ${entry.message} — click to navigate`
+          : undefined
+      }
+    >
+      <span className="alm-logpanel__event-time">{formatTime(entry.time)}</span>
+      <span
+        className={`alm-logpanel__event-level alm-logpanel__event-level--${entry.level}`}
+        aria-label={entry.level}
+      >
+        {entry.level}
+      </span>
+      <span className="alm-logpanel__event-source alm-logpanel__event-source--{entry.source}">
+        {entry.source}
+      </span>
+      <span className="alm-logpanel__event-msg">{entry.message}</span>
+      {hasEntityLink && (
+        <span className="alm-logpanel__event-link-indicator" aria-hidden="true">
+          →
+        </span>
+      )}
+    </li>
   );
 }

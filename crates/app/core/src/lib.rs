@@ -10,6 +10,7 @@ pub mod inbox;
 pub mod inventory;
 pub mod ledger_use_case;
 pub mod lifecycle_use_case;
+pub mod log_stream;
 pub mod native;
 pub mod patterns;
 pub mod plan_apply;

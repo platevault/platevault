@@ -182,6 +182,47 @@ export async function exportAudit(args?: {
   return invoke<string>('audit.export', args);
 }
 
+// ── Log stream (spec 019) ────────────────────────────────────────────────────
+
+export interface LogRecentResponse {
+  contractVersion: string;
+  entries: import('@/data/logStore').LogEntry[];
+  truncated?: boolean;
+  truncatedCount?: number;
+}
+
+export interface LogExportResponse {
+  contractVersion: string;
+  requestId: string;
+  filePath: string;
+  count: number;
+  bytes?: number;
+}
+
+/** `log.recent` — fetch the most-recent log entries (initial hydration window). */
+export async function logRecent(args?: {
+  cursor?: string;
+  levelMin?: string;
+  includeDiagnostics?: boolean;
+  sourceFilter?: string[];
+  windowSize?: number;
+}): Promise<LogRecentResponse> {
+  return invoke<LogRecentResponse>('log.recent', args ?? {});
+}
+
+/** `log.export` — export filtered log entries to a JSON file. */
+export async function logExport(args: {
+  requestId: string;
+  filePath: string;
+  format?: string;
+  levelMin?: string;
+  since?: string;
+  until?: string;
+  includeDiagnostics?: boolean;
+}): Promise<LogExportResponse> {
+  return invoke<LogExportResponse>('log.export', args);
+}
+
 export async function getSettings(args: { scope: string }): Promise<SettingsData> {
   return invoke<SettingsData>('settings.get', args);
 }
