@@ -142,3 +142,61 @@ pub struct NativeRevealFailed {
 }
 
 pub const TOPIC_NATIVE_REVEAL_FAILED: &str = "native.reveal.failed";
+
+// ── Settings audit events (spec 018, T005) ────────────────────────────────
+
+/// Payload for the `settings.changed` topic (spec 018, T005).
+///
+/// Emitted for non-noisy key writes when the value actually changed.
+/// Noisy keys (pattern, protectedCategories, plans.list.default_age_cutoff_days,
+/// rememberFollowLogs) appear in `settings.snapshot` instead.
+#[derive(Clone, Debug, Serialize, Deserialize, JsonSchema, Type)]
+#[serde(rename_all = "camelCase")]
+pub struct SettingsChanged {
+    /// The settings key that was written.
+    pub key: String,
+    /// Value before the write (JSON value).
+    pub prior_value: serde_json::Value,
+    /// Value after the write (JSON value).
+    pub new_value: serde_json::Value,
+    /// ISO-8601 timestamp.
+    pub at: String,
+}
+
+pub const TOPIC_SETTINGS_CHANGED: &str = "settings.changed";
+
+/// Payload for the `settings.snapshot` topic (spec 018, T005).
+///
+/// Emitted at session start and after a 5-minute inactivity debounce following
+/// noisy-key writes (R-Aud-1). Contains the current value of noisy keys only.
+#[derive(Clone, Debug, Serialize, Deserialize, JsonSchema, Type)]
+#[serde(rename_all = "camelCase")]
+pub struct SettingsSnapshot {
+    /// Reason the snapshot was taken: "session_start" or "inactivity_debounce".
+    pub trigger: String,
+    /// Snapshot of noisy key values at the time of emission.
+    pub noisy_keys: serde_json::Value,
+    /// ISO-8601 timestamp.
+    pub at: String,
+}
+
+pub const TOPIC_SETTINGS_SNAPSHOT: &str = "settings.snapshot";
+
+/// Payload for the `settings.repair` topic (spec 018, T005).
+///
+/// Emitted at warn level when a stored settings value fails schema validation
+/// and is reset to its in-code default (T019).
+#[derive(Clone, Debug, Serialize, Deserialize, JsonSchema, Type)]
+#[serde(rename_all = "camelCase")]
+pub struct SettingsRepair {
+    /// The settings key that was reset.
+    pub key: String,
+    /// The invalid stored value that triggered the repair.
+    pub invalid_value: serde_json::Value,
+    /// The default value restored.
+    pub default_value: serde_json::Value,
+    /// ISO-8601 timestamp.
+    pub at: String,
+}
+
+pub const TOPIC_SETTINGS_REPAIR: &str = "settings.repair";

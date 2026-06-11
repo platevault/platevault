@@ -1,3 +1,4 @@
+// TODO(spec 007 (calibration matching)): wire to backend when owning spec implements its command.
 import { useState } from 'react';
 import { Table } from '@/ui';
 import { CALIBRATION_CRITERIA } from '@/data/fixtures/settings';

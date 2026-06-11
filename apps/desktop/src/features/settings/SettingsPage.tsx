@@ -89,7 +89,7 @@ function renderPane(
     case 'tools':     return <ProcessingTools save={save} />;
     case 'cal':       return <CalibrationMatching save={save} />;
     case 'catalogs':  return <Catalogs save={save} />;
-    case 'cleanup':   return <Cleanup />;
+    case 'cleanup':   return <Cleanup save={save} />;
     case 'general':   return <General />;
     case 'advanced':  return <Advanced save={save} />;
     case 'audit':     return <AuditLog />;

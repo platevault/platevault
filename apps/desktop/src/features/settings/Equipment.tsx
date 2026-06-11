@@ -1,3 +1,4 @@
+// TODO(spec 007 (equipment)): wire to backend when owning spec implements its command.
 import { useState } from 'react';
 import { Btn, Table, Pill } from '@/ui';
 import {

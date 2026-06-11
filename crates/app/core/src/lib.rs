@@ -9,6 +9,7 @@ pub mod native;
 pub mod project_notes;
 pub mod provenance_use_case;
 pub mod sessions;
+pub mod settings;
 pub mod transition_use_case;
 
 use std::collections::BTreeMap;

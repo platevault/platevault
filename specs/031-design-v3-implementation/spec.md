@@ -1,6 +1,9 @@
 # Spec 031: Design V3 Implementation
 
-**Status**: In Progress
+**Status**: Closed (2026-06-11) — Design V3 shipped, then superseded by
+[Spec 032 — Design V4](../032-design-v4-implementation/spec.md), which unified the
+detail layout, sidebar, and status bar. V4 is the current UI truth; this spec is
+retained as historical record of the V3 redesign.
 **Source**: Claude Design artifact "Astro-plan v3.zip" (design_handoff/)
 
 ## Summary

@@ -4,7 +4,13 @@
 
 **Created**: 2026-05-26
 
-**Status**: Draft
+**Status**: Superseded (2026-06-11) — UI/component tasks delivered by
+[Spec 032 — Design V4](../032-design-v4-implementation/spec.md) (the current UI
+truth, reached via Spec 031 Design V3). Surviving domain/back-end concepts
+(equipment CRUD, session grouping, calibration matching, lifecycle states,
+cleanup policy) are owned by their dependent backend specs (002, 005–019,
+023–026), not by this audit. Retained as the historical design-audit baseline;
+its 109 task checkboxes are NOT a live work queue.
 
 **Input**: Interactive screen-by-screen UI audit of every screen in the Astro
 Library Manager desktop app, consolidating findings into a comprehensive

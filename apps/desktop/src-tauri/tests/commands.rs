@@ -39,7 +39,7 @@ use desktop_shell::commands::sessions::{
     sessions_calendar, sessions_get, sessions_list, sessions_merge, sessions_split,
     sessions_transition,
 };
-use desktop_shell::commands::settings::{settings_get, settings_update};
+
 use desktop_shell::commands::targets::{targets_get, targets_list};
 use desktop_shell::commands::tour::tour_complete_step;
 
@@ -290,20 +290,81 @@ async fn stub_equipment_list() {
     assert!(!res.unwrap().is_empty());
 }
 
-// ─── Settings (2 commands) ──────────────────────────────────────────────────
+// ─── Settings (spec 018) ─────────────────────────────────────────────────────
 
 #[tokio::test]
-async fn stub_settings_get() {
-    let res = settings_get("global".to_owned()).await;
-    assert!(res.is_ok(), "settings_get failed: {res:?}");
-    assert_eq!(res.unwrap().scope, "global");
+async fn settings_get_returns_defaults() {
+    let db = Database::in_memory().await.expect("in-memory database");
+    db.migrate().await.expect("run migrations");
+    let bus = EventBus::with_pool(db.pool().clone());
+    let resp = app_core::settings::get_settings(db.pool(), &bus).await;
+    assert!(resp.is_ok(), "settings_get failed: {resp:?}");
+    let state = resp.unwrap().settings;
+    assert_eq!(state.log_level, "info");
+    assert!(!state.follow_symlinks);
 }
 
 #[tokio::test]
-async fn stub_settings_update() {
-    let vals = contracts_core::JsonAny::from(serde_json::json!({"key": "value"}));
-    let res = settings_update("global".to_owned(), vals).await;
-    assert!(res.is_ok(), "settings_update failed: {res:?}");
+async fn settings_update_and_persist() {
+    use contracts_core::settings::{SettingsUpdateRequest, SettingsUpdateStatus};
+    let db = Database::in_memory().await.expect("in-memory database");
+    db.migrate().await.expect("run migrations");
+    let bus = EventBus::with_pool(db.pool().clone());
+    let req = SettingsUpdateRequest {
+        key: "logLevel".to_owned(),
+        value: contracts_core::JsonAny::from(serde_json::json!("debug")),
+    };
+    let resp = app_core::settings::update_setting(db.pool(), &bus, &req).await;
+    assert!(resp.is_ok(), "settings_update failed: {resp:?}");
+    assert_eq!(resp.unwrap().status, SettingsUpdateStatus::Success);
+}
+
+#[tokio::test]
+async fn settings_scope_roundtrip_via_usecase() {
+    // Proves: write { scope="advanced", values={logLevel:"debug"} } persists
+    // logLevel=debug, and a subsequent get of the "advanced" scope returns the
+    // updated value. This simulates the stable transport (T015).
+    use contracts_core::settings::{SettingsUpdateRequest, SettingsUpdateStatus};
+    use persistence_db::repositories::settings as repo;
+
+    let db = Database::in_memory().await.expect("in-memory database");
+    db.migrate().await.expect("run migrations");
+    let bus = EventBus::with_pool(db.pool().clone());
+
+    // 1. Write logLevel via the per-key use case (same path as settings.update).
+    let req = SettingsUpdateRequest {
+        key: "logLevel".to_owned(),
+        value: contracts_core::JsonAny::from(serde_json::json!("debug")),
+    };
+    let resp = app_core::settings::update_setting(db.pool(), &bus, &req).await.unwrap();
+    assert_eq!(resp.status, SettingsUpdateStatus::Success);
+
+    // 2. Read back via resolve_setting (same path as settings.get per-key resolution).
+    let resolved = app_core::settings::resolve_setting(db.pool(), "logLevel", None).await.unwrap();
+    assert_eq!(resolved, serde_json::json!("debug"));
+
+    // 3. Verify the raw stored row is correct (proves persistence, not just in-memory).
+    let raw = repo::get_raw(db.pool(), "logLevel").await.unwrap();
+    assert_eq!(raw, Some(serde_json::json!("debug")));
+
+    // 4. Write rememberFollowLogs (noisy key — same scope, no audit_id).
+    let req2 = SettingsUpdateRequest {
+        key: "rememberFollowLogs".to_owned(),
+        value: contracts_core::JsonAny::from(serde_json::json!(true)),
+    };
+    let resp2 = app_core::settings::update_setting(db.pool(), &bus, &req2).await.unwrap();
+    assert_eq!(resp2.status, SettingsUpdateStatus::Success);
+    assert!(resp2.audit_id.is_none(), "noisy key must not emit per-change audit_id");
+
+    // 5. Restore logLevel to default — scope round-trip complete.
+    let restore_req =
+        contracts_core::settings::RestoreDefaultsRequest { keys: vec!["logLevel".to_owned()] };
+    let restore_resp =
+        app_core::settings::restore_defaults(db.pool(), &bus, &restore_req).await.unwrap();
+    assert!(restore_resp.restored.contains(&"logLevel".to_owned()));
+    let after_restore =
+        app_core::settings::resolve_setting(db.pool(), "logLevel", None).await.unwrap();
+    assert_eq!(after_restore, serde_json::json!("info"), "logLevel must be back to default");
 }
 
 // ─── Preferences (2 commands) ───────────────────────────────────────────────

@@ -33,15 +33,15 @@ already implemented in the desktop mockup; reuse the existing code.
 
 ## Phase 2: Foundational
 
-- [ ] T003 Add a `settings` table and a `source_overrides` table to
+- [x] T003 Add a `settings` table and a `source_overrides` table to
       `crates/persistence/db/` migrations: `(key TEXT PRIMARY KEY, value JSON,
       updated_at TEXT)` and `(source_id TEXT, key TEXT, value JSON, updated_at
       TEXT, PRIMARY KEY(source_id, key))`.
-- [ ] T004 [P] Add a Rust mirror of `SettingsState v1` and `SourceOverride` in
+- [x] T004 [P] Add a Rust mirror of `SettingsState v1` and `SourceOverride` in
       `crates/contracts/core/src/settings.rs` matching the JSON Schemas.
-- [ ] T005 [P] Add a `settings` audit event variant to `crates/audit/` with
+- [x] T005 [P] Add a `settings` audit event variant to `crates/audit/` with
       fields `key`, `prior_value`, `new_value`, optional `snapshot`.
-- [ ] T006 Create the `crates/app/core/usecases/settings.rs` module skeleton
+- [x] T006 Create the `crates/app/core/usecases/settings.rs` module skeleton
       with `get_settings`, `update_setting`, `restore_defaults`,
       `set_source_override` entry points returning typed errors.
 
@@ -60,10 +60,10 @@ non-noisy change.
 
 ### Tests for User Story 1
 
-- [ ] T007 [P] [US1] Contract test for `settings.get` in
+- [x] T007 [P] [US1] Contract test for `settings.get` in
       `crates/app/core/tests/settings_get.rs` against
       `contracts/settings.get.json`.
-- [ ] T008 [P] [US1] Contract test for `settings.update` happy path,
+- [x] T008 [P] [US1] Contract test for `settings.update` happy path,
       `key.unknown`, `value.invalid`, and the no-op informational path in
       `crates/app/core/tests/settings_update.rs`.
 - [ ] T009 [P] [US1] Desktop unit test for `updateSettings` no-op guard and
@@ -88,7 +88,7 @@ non-noisy change.
 - [ ] T012 [US1] MOCKUP-DONE: Theme persistence under `alm.theme` in
       `apps/desktop/src/app/theme.tsx`. Keep Appearance section wired to this
       module rather than to `useSettings()`.
-- [ ] T013 [US1] Implement `get_settings` and `update_setting` use cases in
+- [x] T013 [US1] Implement `get_settings` and `update_setting` use cases in
       `crates/app/core/usecases/settings.rs` with no-op guard, JSON Schema
       validation against the per-key sub-schema, and audit emission for
       non-noisy keys. Implementation notes:
@@ -98,7 +98,7 @@ non-noisy change.
         (element-wise, order-sensitive) (R-Set-1). Cover in T009.
       - Response shape is `{ status: "success"|"noop", key, prior_value,
         new_value, audit_id? }` (E1+E4; no `value.unchanged` error code).
-- [ ] T014 [US1] Add Tauri commands `settings_get` and `settings_update` in
+- [x] T014 [US1] Add Tauri commands `settings_get` and `settings_update` in
       `apps/desktop/src-tauri/` wired to the use-case crate.
 - [ ] T015 [US1] Replace the localStorage write path in
       `apps/desktop/src/data/settings.ts` with a Tauri dispatch that falls
@@ -120,7 +120,7 @@ once; close and reopen; confirm exactly one audit entry exists for
 
 ### Tests for User Story 2
 
-- [ ] T016 [P] [US2] Integration test that an invalid stored value resets to
+- [x] T016 [P] [US2] Integration test that an invalid stored value resets to
       default with one `warn` audit entry in
       `crates/app/core/tests/settings_repair.rs`.
 - [ ] T017 [P] [US2] Integration test that updates to `pattern` and
@@ -130,11 +130,11 @@ once; close and reopen; confirm exactly one audit entry exists for
 
 ### Implementation for User Story 2
 
-- [ ] T018 [US2] Hydrate defaults at `settings.get` time for missing rows in
+- [x] T018 [US2] Hydrate defaults at `settings.get` time for missing rows in
       the use-case crate.
-- [ ] T019 [US2] Validate stored values against the v1 schema on read; on
+- [x] T019 [US2] Validate stored values against the v1 schema on read; on
       failure, delete the bad row and emit a `warn` audit entry.
-- [ ] T020 [US2] Emit a `settings.snapshot` audit event at session start and
+- [x] T020 [US2] Emit a `settings.snapshot` audit event at session start and
       via a 5-minute inactivity debounce after noisy-key writes (R-Aud-1).
       The "page close" trigger is dropped. Implementation notes:
       - Debounce timer is per-session; resets on each noisy-key write.
@@ -160,18 +160,18 @@ wins. Attempt to override `logLevel`; confirm `key.unoverridable`.
 
 ### Tests for User Story 3
 
-- [ ] T021 [P] [US3] Contract test for `settings.source-override.set` in
+- [x] T021 [P] [US3] Contract test for `settings.source-override.set` in
       `crates/app/core/tests/settings_override_set.rs` covering happy path,
       `source.not_found`, and `key.unoverridable`.
-- [ ] T022 [P] [US3] Unit test of resolution order in
+- [x] T022 [P] [US3] Unit test of resolution order in
       `crates/app/core/tests/settings_resolution.rs`.
 
 ### Implementation for User Story 3
 
-- [ ] T023 [US3] Implement `set_source_override` in
+- [x] T023 [US3] Implement `set_source_override` in
       `crates/app/core/usecases/settings.rs` with overridable-key whitelist
       and source existence check.
-- [ ] T024 [US3] Add a resolver helper `resolve_setting(key, source_id?)` used
+- [x] T024 [US3] Add a resolver helper `resolve_setting(key, source_id?)` used
       by scan and protection code paths.
 - [ ] T025 [US3] Add the per-source override stub wiring in
       `apps/desktop/src/features/settings/SettingsPage.tsx` (Naming &
@@ -191,13 +191,13 @@ two are back to default and the other three are still customized.
 
 ### Tests for User Story 4
 
-- [ ] T026 [P] [US4] Contract test for `settings.restore-defaults` covering
+- [x] T026 [P] [US4] Contract test for `settings.restore-defaults` covering
       empty `keys`, partial `keys`, and `key.unknown` rejection in
       `crates/app/core/tests/settings_restore.rs`.
 
 ### Implementation for User Story 4
 
-- [ ] T027 [US4] Implement `restore_defaults` by writing the literal in-code
+- [x] T027 [US4] Implement `restore_defaults` by writing the literal in-code
       default value as an explicit row for each requested key (A3). Keys
       already at default are collected in `already_at_default` and skipped
       (no write, no audit event — R-3.1). When all keys are already at
