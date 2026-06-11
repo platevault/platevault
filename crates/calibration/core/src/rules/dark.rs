@@ -1,0 +1,308 @@
+//! Dark frame matching rule (spec 007 US1, FR-003).
+//!
+//! Hard dimensions: `gain`, `offset` — exact match required.
+//! Soft dimensions: `exposure` ±5% (default), `temperature` ±2°C (default).
+//!
+//! Missing temperature metadata falls back to gain+offset+exposure matching
+//! with reduced confidence (metadata_missing penalty per spec edge-case).
+#![allow(clippy::collapsible_match, clippy::single_match_else, clippy::must_use_candidate)]
+
+use crate::candidate::{CalibrationMatch, MatchedDim, MismatchedDim, SelectionReason};
+use crate::ranking::MatchingRuleConfig;
+use crate::{CalibrationKind, Dimension, MasterInfo, SessionInfo};
+
+/// Evaluate a single dark master against a light session.
+///
+/// Returns `None` when any hard-rule dimension fails (candidate excluded).
+/// Returns `Some(CalibrationMatch)` otherwise, with confidence reduced by soft penalties.
+pub fn evaluate(
+    session: &SessionInfo,
+    master: &MasterInfo,
+    config: &MatchingRuleConfig,
+) -> Option<CalibrationMatch> {
+    debug_assert_eq!(master.kind, CalibrationKind::Dark);
+
+    let mut matched: Vec<MatchedDim> = Vec::new();
+    let mut mismatched: Vec<MismatchedDim> = Vec::new();
+    let mut confidence = 1.0_f64;
+
+    // ── Hard rule: gain ───────────────────────────────────────────────────────
+    match (session.gain, master.gain) {
+        (Some(sg), Some(mg)) => {
+            if (sg - mg).abs() < 1e-9 {
+                matched.push(MatchedDim::exact(Dimension::Gain));
+            } else {
+                // Hard rule violation — exclude candidate.
+                return None;
+            }
+        }
+        _ => {
+            // Missing metadata on either side — hard rule cannot be satisfied.
+            return None;
+        }
+    }
+
+    // ── Hard rule: offset ─────────────────────────────────────────────────────
+    match (session.offset, master.offset) {
+        (Some(so), Some(mo)) => {
+            if (so - mo).abs() < 1e-9 {
+                matched.push(MatchedDim::exact(Dimension::Offset));
+            } else {
+                return None;
+            }
+        }
+        _ => {
+            return None;
+        }
+    }
+
+    // ── Soft rule: exposure (±tolerance%) ─────────────────────────────────────
+    let exp_cfg = config.dark_exposure_config();
+    match (session.exposure_s, master.exposure_s) {
+        (Some(se), Some(me)) => {
+            if me == 0.0 {
+                mismatched.push(MismatchedDim::metadata_missing(Dimension::Exposure));
+                confidence -= exp_cfg.max_penalty;
+            } else {
+                // Compute percentage difference relative to reference exposure.
+                let pct_diff = ((se - me).abs() / me) * 100.0;
+                match exp_cfg.penalty(pct_diff) {
+                    Some(penalty) => {
+                        matched.push(MatchedDim::soft(
+                            Dimension::Exposure,
+                            se,
+                            me,
+                            (se - me).abs(),
+                        ));
+                        confidence -= penalty;
+                    }
+                    None => {
+                        mismatched
+                            .push(MismatchedDim::out_of_tolerance(Dimension::Exposure, pct_diff));
+                        confidence -= exp_cfg.max_penalty;
+                    }
+                }
+            }
+        }
+        _ => {
+            mismatched.push(MismatchedDim::metadata_missing(Dimension::Exposure));
+            confidence -= exp_cfg.max_penalty;
+        }
+    }
+
+    // ── Soft rule: temperature (±tolerance °C) ────────────────────────────────
+    let temp_cfg = config.dark_temp_config();
+    match (session.temp_c, master.temp_c) {
+        (Some(st), Some(mt)) => {
+            let delta = (st - mt).abs();
+            match temp_cfg.penalty(delta) {
+                Some(penalty) => {
+                    matched.push(MatchedDim::soft(Dimension::Temperature, st, mt, delta));
+                    confidence -= penalty;
+                }
+                None => {
+                    mismatched.push(MismatchedDim::out_of_tolerance(Dimension::Temperature, delta));
+                    confidence -= temp_cfg.max_penalty;
+                }
+            }
+        }
+        _ => {
+            // Missing temperature: falls back to gain+offset+exposure matching.
+            // Adds metadata_missing entry but does NOT exclude (spec edge-case).
+            mismatched.push(MismatchedDim::metadata_missing(Dimension::Temperature));
+            confidence -= temp_cfg.max_penalty;
+        }
+    }
+
+    Some(CalibrationMatch::new(
+        session.id.clone(),
+        master.id.clone(),
+        CalibrationKind::Dark,
+        confidence,
+        matched,
+        mismatched,
+        SelectionReason::CompatibleFallback, // darks don't use observing-night
+    ))
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    fn session(gain: f64, offset: f64, exposure_s: f64, temp_c: f64) -> SessionInfo {
+        SessionInfo {
+            id: "ses-001".to_owned(),
+            session_type: "light".to_owned(),
+            gain: Some(gain),
+            offset: Some(offset),
+            exposure_s: Some(exposure_s),
+            temp_c: Some(temp_c),
+            has_observer_location: true,
+            has_exposure_start_utc: true,
+            ..Default::default()
+        }
+    }
+
+    fn master(gain: f64, offset: f64, exposure_s: f64, temp_c: f64) -> MasterInfo {
+        MasterInfo {
+            id: "m-dark-001".to_owned(),
+            kind: CalibrationKind::Dark,
+            gain: Some(gain),
+            offset: Some(offset),
+            exposure_s: Some(exposure_s),
+            temp_c: Some(temp_c),
+            filter: None,
+            rotation_deg: None,
+            binning: None,
+            optic_train: None,
+            source_session_id: None,
+            observing_night_date: None,
+        }
+    }
+
+    #[test]
+    fn exact_match_confidence_1_0() {
+        let m = evaluate(
+            &session(100.0, 50.0, 300.0, -10.0),
+            &master(100.0, 50.0, 300.0, -10.0),
+            &MatchingRuleConfig::default(),
+        );
+        let m = m.unwrap();
+        assert!((m.confidence - 1.0).abs() < 1e-9, "exact match confidence={}", m.confidence);
+        assert!(m.dimensions_mismatched.is_empty());
+    }
+
+    #[test]
+    fn gain_hard_rule_violation_excludes() {
+        let r = evaluate(
+            &session(100.0, 50.0, 300.0, -10.0),
+            &master(200.0, 50.0, 300.0, -10.0),
+            &MatchingRuleConfig::default(),
+        );
+        assert!(r.is_none(), "gain mismatch should exclude");
+    }
+
+    #[test]
+    fn offset_hard_rule_violation_excludes() {
+        let r = evaluate(
+            &session(100.0, 50.0, 300.0, -10.0),
+            &master(100.0, 75.0, 300.0, -10.0),
+            &MatchingRuleConfig::default(),
+        );
+        assert!(r.is_none(), "offset mismatch should exclude");
+    }
+
+    #[test]
+    fn missing_gain_excludes() {
+        let mut s = session(100.0, 50.0, 300.0, -10.0);
+        s.gain = None;
+        let r = evaluate(&s, &master(100.0, 50.0, 300.0, -10.0), &MatchingRuleConfig::default());
+        assert!(r.is_none(), "missing session gain should exclude");
+    }
+
+    #[test]
+    fn missing_master_offset_excludes() {
+        let mut m = master(100.0, 50.0, 300.0, -10.0);
+        m.offset = None;
+        let r = evaluate(&session(100.0, 50.0, 300.0, -10.0), &m, &MatchingRuleConfig::default());
+        assert!(r.is_none(), "missing master offset should exclude");
+    }
+
+    #[test]
+    fn exposure_within_tolerance_matched() {
+        // 300s session, 295s master → delta is 5s → 5/295 * 100 ≈ 1.7% < 5%
+        let r = evaluate(
+            &session(100.0, 50.0, 300.0, -10.0),
+            &master(100.0, 50.0, 295.0, -10.0),
+            &MatchingRuleConfig::default(),
+        );
+        let r = r.unwrap();
+        assert!(r.confidence < 1.0, "soft penalty should reduce confidence");
+        assert!(r.dimensions_matched.iter().any(|d| d.dimension == "exposure"));
+    }
+
+    #[test]
+    fn exposure_out_of_tolerance_reduces_confidence() {
+        // 300s session, 100s master → 200% difference > 5%
+        let r = evaluate(
+            &session(100.0, 50.0, 300.0, -10.0),
+            &master(100.0, 50.0, 100.0, -10.0),
+            &MatchingRuleConfig::default(),
+        );
+        let r = r.unwrap(); // still returned (soft fail, not excluded)
+        assert!(r.dimensions_mismatched.iter().any(|d| d.dimension == "exposure"));
+    }
+
+    #[test]
+    fn temperature_within_tolerance_matched() {
+        // -10 vs -11.5 → delta 1.5 < 2.0
+        let r = evaluate(
+            &session(100.0, 50.0, 300.0, -10.0),
+            &master(100.0, 50.0, 300.0, -11.5),
+            &MatchingRuleConfig::default(),
+        );
+        let r = r.unwrap();
+        assert!(r.dimensions_matched.iter().any(|d| d.dimension == "temperature"));
+        assert!(r.confidence < 1.0);
+    }
+
+    #[test]
+    fn temperature_out_of_tolerance_reported_in_mismatched() {
+        // -10 vs -20 → delta 10 > 2
+        let r = evaluate(
+            &session(100.0, 50.0, 300.0, -10.0),
+            &master(100.0, 50.0, 300.0, -20.0),
+            &MatchingRuleConfig::default(),
+        );
+        let r = r.unwrap();
+        assert!(r.dimensions_mismatched.iter().any(|d| d.dimension == "temperature"));
+    }
+
+    #[test]
+    fn missing_temperature_metadata_fallback_not_excluded() {
+        let mut m = master(100.0, 50.0, 300.0, -10.0);
+        m.temp_c = None;
+        let r = evaluate(&session(100.0, 50.0, 300.0, -10.0), &m, &MatchingRuleConfig::default());
+        assert!(r.is_some(), "missing temp should NOT exclude (fallback to gain+offset+exposure)");
+        let r = r.unwrap();
+        assert!(r.dimensions_mismatched.iter().any(|d| d.dimension == "temperature"
+            && d.reason == crate::candidate::MismatchReason::MetadataMissing));
+    }
+
+    #[test]
+    fn wide_temperature_tolerance_accepts_far_master() {
+        let config = MatchingRuleConfig { dark_temp_tolerance_c: 20.0, ..Default::default() };
+        // -10 vs -25 → delta 15 < 20
+        let r = evaluate(
+            &session(100.0, 50.0, 300.0, -10.0),
+            &master(100.0, 50.0, 300.0, -25.0),
+            &config,
+        );
+        let r = r.unwrap();
+        assert!(
+            r.dimensions_matched.iter().any(|d| d.dimension == "temperature"),
+            "wider tolerance should now accept; got mismatched={:?}",
+            r.dimensions_mismatched
+        );
+    }
+
+    #[test]
+    fn dimensions_matched_union_mismatched_covers_all() {
+        let r = evaluate(
+            &session(100.0, 50.0, 300.0, -10.0),
+            &master(100.0, 50.0, 200.0, -15.0),
+            &MatchingRuleConfig::default(),
+        )
+        .unwrap();
+        let all_dims: std::collections::HashSet<&str> = r
+            .dimensions_matched
+            .iter()
+            .map(|d| d.dimension.as_str())
+            .chain(r.dimensions_mismatched.iter().map(|d| d.dimension.as_str()))
+            .collect();
+        // All 4 active dimensions for dark should be present
+        for dim in &["gain", "offset", "exposure", "temperature"] {
+            assert!(all_dims.contains(dim), "missing dimension: {dim}");
+        }
+    }
+}

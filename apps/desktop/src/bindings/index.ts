@@ -100,6 +100,35 @@ export const commands = {
 	 */
 	calibrationMatches: (sessionId: string) => typedError<MatchCandidate_Serialize[], string>(__TAURI_INVOKE("calibration.matches", { sessionId })),
 	/**
+	 *  `calibration.match.suggest` — suggest ranked calibration masters for a session.
+	 * 
+	 *  Read-only; never persists state. Returns ranked candidates with confidence
+	 *  and dimension breakdown per spec 007 contract.
+	 * 
+	 *  # Errors
+	 *  Returns `Err(String)` on database error.
+	 */
+	calibrationMatchSuggest: (req: CalibrationMatchSuggestRequest_Deserialize) => typedError<CalibrationMatchSuggestResponse_Serialize, string>(__TAURI_INVOKE("calibration.match.suggest", { req })),
+	/**
+	 *  `calibration.match.assign` — persist a calibration master assignment.
+	 * 
+	 *  Hard-rule mismatches require `override: true`. Emits audit event on success.
+	 * 
+	 *  # Errors
+	 *  Returns `Err(String)` on database error.
+	 */
+	calibrationMatchAssign: (req: CalibrationMatchAssignRequest) => typedError<CalibrationMatchAssignResponse_Serialize, string>(__TAURI_INVOKE("calibration.match.assign", { req })),
+	/**
+	 *  `calibration.match.suggest.batch` — suggest calibration masters for multiple sessions.
+	 * 
+	 *  Supports partial success: sessions with `observer_location_missing` or
+	 *  `session.mixed_state` return per-item status, not a top-level error.
+	 * 
+	 *  # Errors
+	 *  Returns `Err(String)` on database error.
+	 */
+	calibrationMatchSuggestBatch: (req: CalibrationMatchBatchRequest_Deserialize) => typedError<CalibrationMatchBatchResponse_Serialize, string>(__TAURI_INVOKE("calibration.match.suggest.batch", { req })),
+	/**
 	 *  `targets.list` — returns all targets, optionally filtered by search.
 	 * 
 	 *  # Errors
@@ -964,6 +993,53 @@ export type AssetType = "file_record" | "acquisition_session" | "calibration_ses
 /**  target: alias and primaryDesignation provenance tracking (R-3.2). */
 "target";
 
+/**  Error details for `incompatible.dimensions`. */
+export type AssignErrorDetails = {
+	dimensions: string[],
+};
+
+/**  Error envelope for assign. */
+export type AssignErrorDto = AssignErrorDto_Serialize | AssignErrorDto_Deserialize;
+
+/**  Error envelope for assign. */
+export type AssignErrorDto_Deserialize = {
+	code: string,
+	message: string,
+	details: AssignErrorDetails | null,
+};
+
+/**  Error envelope for assign. */
+export type AssignErrorDto_Serialize = {
+	code: string,
+	message: string,
+	details?: AssignErrorDetails | null,
+};
+
+/**  Successful assign payload. */
+export type AssignedDto = AssignedDto_Serialize | AssignedDto_Deserialize;
+
+/**  Successful assign payload. */
+export type AssignedDto_Deserialize = {
+	assignmentId: string,
+	sessionId: string,
+	masterId: string,
+	calibrationType: CalibrationType,
+	wasOverride: boolean,
+	mismatchedDimensions: string[] | null,
+	assignedAt: string,
+};
+
+/**  Successful assign payload. */
+export type AssignedDto_Serialize = {
+	assignmentId: string,
+	sessionId: string,
+	masterId: string,
+	calibrationType: CalibrationType,
+	wasOverride: boolean,
+	mismatchedDimensions?: string[] | null,
+	assignedAt: string,
+};
+
 /**  Actor that triggered the audited action. */
 export type AuditActor = "user" | "system";
 
@@ -1016,6 +1092,23 @@ export type AuditListResponse_Serialize = {
 /**  Outcome of an audited action. */
 export type AuditOutcome = "applied" | "ok" | "refused" | "failed" | "paused";
 
+/**  Hard error for sessions that could not be evaluated at all (e.g. not found). */
+export type BatchErrorDto = BatchErrorDto_Serialize | BatchErrorDto_Deserialize;
+
+/**  Hard error for sessions that could not be evaluated at all (e.g. not found). */
+export type BatchErrorDto_Deserialize = {
+	code: string,
+	message: string,
+	sessionId: string | null,
+};
+
+/**  Hard error for sessions that could not be evaluated at all (e.g. not found). */
+export type BatchErrorDto_Serialize = {
+	code: string,
+	message: string,
+	sessionId?: string | null,
+};
+
 /**  Individual item result within a batch registration. */
 export type BatchItem = BatchItem_Serialize | BatchItem_Deserialize;
 
@@ -1035,6 +1128,27 @@ export type BatchItem_Serialize = {
 	sourceId?: string | null,
 	error?: string | null,
 	errorDetail?: unknown | null,
+};
+
+/**  Per-(session, `calibration_type`) result within a batch response. */
+export type BatchSessionResultDto = BatchSessionResultDto_Serialize | BatchSessionResultDto_Deserialize;
+
+/**  Per-(session, `calibration_type`) result within a batch response. */
+export type BatchSessionResultDto_Deserialize = {
+	sessionId: string,
+	calibrationType: CalibrationType,
+	/**  `"match"` | `"ambiguous"` | `"no_match"` | `"observer_location_missing"` | `"session.mixed_state"` */
+	status: string,
+	candidates: CalibrationMatchDto_Deserialize[] | null,
+};
+
+/**  Per-(session, `calibration_type`) result within a batch response. */
+export type BatchSessionResultDto_Serialize = {
+	sessionId: string,
+	calibrationType: CalibrationType,
+	/**  `"match"` | `"ambiguous"` | `"no_match"` | `"observer_location_missing"` | `"session.mixed_state"` */
+	status: string,
+	candidates?: CalibrationMatchDto_Serialize[] | null,
 };
 
 /**  Overall batch operation status. */
@@ -1122,6 +1236,151 @@ export type CalibrationMaster_Serialize = {
 	usedByProjectIds: string[],
 };
 
+/**  Request DTO for `calibration.match.assign`. */
+export type CalibrationMatchAssignRequest = {
+	contractVersion: string,
+	requestId: string,
+	sessionId: string,
+	masterId: string,
+	override: boolean,
+};
+
+/**  Response DTO for `calibration.match.assign`. */
+export type CalibrationMatchAssignResponse = CalibrationMatchAssignResponse_Serialize | CalibrationMatchAssignResponse_Deserialize;
+
+/**  Response DTO for `calibration.match.assign`. */
+export type CalibrationMatchAssignResponse_Deserialize = {
+	status: string,
+	contractVersion: string,
+	requestId: string,
+	assigned: AssignedDto_Deserialize | null,
+	confidence: number | null,
+	error: AssignErrorDto_Deserialize | null,
+};
+
+/**  Response DTO for `calibration.match.assign`. */
+export type CalibrationMatchAssignResponse_Serialize = {
+	status: string,
+	contractVersion: string,
+	requestId: string,
+	assigned?: AssignedDto_Serialize | null,
+	confidence?: number | null,
+	error?: AssignErrorDto_Serialize | null,
+};
+
+/**  Request DTO for `calibration.match.suggest.batch`. */
+export type CalibrationMatchBatchRequest = CalibrationMatchBatchRequest_Serialize | CalibrationMatchBatchRequest_Deserialize;
+
+/**  Request DTO for `calibration.match.suggest.batch`. */
+export type CalibrationMatchBatchRequest_Deserialize = {
+	contractVersion: string,
+	requestId: string,
+	/**  Non-empty list of light session IDs. */
+	sessionIds: string[],
+	calibrationTypes: CalibrationType[] | null,
+};
+
+/**  Request DTO for `calibration.match.suggest.batch`. */
+export type CalibrationMatchBatchRequest_Serialize = {
+	contractVersion: string,
+	requestId: string,
+	/**  Non-empty list of light session IDs. */
+	sessionIds: string[],
+	calibrationTypes?: CalibrationType[] | null,
+};
+
+/**  Response DTO for `calibration.match.suggest.batch`. */
+export type CalibrationMatchBatchResponse = CalibrationMatchBatchResponse_Serialize | CalibrationMatchBatchResponse_Deserialize;
+
+/**  Response DTO for `calibration.match.suggest.batch`. */
+export type CalibrationMatchBatchResponse_Deserialize = {
+	/**  `"success"` | `"partial"` | `"error"` */
+	status: string,
+	contractVersion: string,
+	requestId: string,
+	results: BatchSessionResultDto_Deserialize[] | null,
+	errors: BatchErrorDto_Deserialize[] | null,
+};
+
+/**  Response DTO for `calibration.match.suggest.batch`. */
+export type CalibrationMatchBatchResponse_Serialize = {
+	/**  `"success"` | `"partial"` | `"error"` */
+	status: string,
+	contractVersion: string,
+	requestId: string,
+	results?: BatchSessionResultDto_Serialize[] | null,
+	errors?: BatchErrorDto_Serialize[] | null,
+};
+
+/**  A ranked calibration master suggestion. */
+export type CalibrationMatchDto = CalibrationMatchDto_Serialize | CalibrationMatchDto_Deserialize;
+
+/**  A ranked calibration master suggestion. */
+export type CalibrationMatchDto_Deserialize = {
+	sessionId: string,
+	masterId: string,
+	calibrationType: CalibrationType,
+	confidence: number | null,
+	dimensionsMatched: MatchedDimDto_Deserialize[],
+	dimensionsMismatched: MismatchedDimDto_Deserialize[],
+	selectionReason: SelectionReason,
+};
+
+/**  A ranked calibration master suggestion. */
+export type CalibrationMatchDto_Serialize = {
+	sessionId: string,
+	masterId: string,
+	calibrationType: CalibrationType,
+	confidence: number | null,
+	dimensionsMatched: MatchedDimDto_Serialize[],
+	dimensionsMismatched: MismatchedDimDto_Serialize[],
+	selectionReason: SelectionReason,
+};
+
+/**  Request DTO for `calibration.match.suggest`. */
+export type CalibrationMatchSuggestRequest = CalibrationMatchSuggestRequest_Serialize | CalibrationMatchSuggestRequest_Deserialize;
+
+/**  Request DTO for `calibration.match.suggest`. */
+export type CalibrationMatchSuggestRequest_Deserialize = {
+	contractVersion: string,
+	requestId: string,
+	sessionId: string,
+	/**  Subset to suggest. When absent, all three types are returned. */
+	calibrationTypes: CalibrationType[] | null,
+};
+
+/**  Request DTO for `calibration.match.suggest`. */
+export type CalibrationMatchSuggestRequest_Serialize = {
+	contractVersion: string,
+	requestId: string,
+	sessionId: string,
+	/**  Subset to suggest. When absent, all three types are returned. */
+	calibrationTypes?: CalibrationType[] | null,
+};
+
+/**  Response DTO for `calibration.match.suggest`. */
+export type CalibrationMatchSuggestResponse = CalibrationMatchSuggestResponse_Serialize | CalibrationMatchSuggestResponse_Deserialize;
+
+/**  Response DTO for `calibration.match.suggest`. */
+export type CalibrationMatchSuggestResponse_Deserialize = {
+	status: string,
+	contractVersion: string,
+	requestId: string,
+	suggestStatus: SuggestStatus | null,
+	matches: CalibrationMatchDto_Deserialize[] | null,
+	error: SuggestErrorDto | null,
+};
+
+/**  Response DTO for `calibration.match.suggest`. */
+export type CalibrationMatchSuggestResponse_Serialize = {
+	status: string,
+	contractVersion: string,
+	requestId: string,
+	suggestStatus?: SuggestStatus | null,
+	matches?: CalibrationMatchDto_Serialize[] | null,
+	error?: SuggestErrorDto | null,
+};
+
 export type CalibrationSessionTransitionRequest = CalibrationSessionTransitionRequest_Serialize | CalibrationSessionTransitionRequest_Deserialize;
 
 export type CalibrationSessionTransitionRequest_Deserialize = {
@@ -1154,6 +1413,13 @@ export type CalibrationTolerances = {
 	requireSameGain: boolean,
 	requireSameBinning: boolean,
 };
+
+/**
+ *  Calibration type exposed in v1 contracts.
+ * 
+ *  `dark_flat` is intentionally absent per FR-001 (R-DarkFlat-Reserved).
+ */
+export type CalibrationType = "dark" | "flat" | "bias";
 
 export type Camera = {
 	id: string,
@@ -2400,6 +2666,35 @@ export type MatchCandidate_Serialize = {
 	softMismatches: string[],
 };
 
+/**  A dimension that matched. */
+export type MatchedDimDto = MatchedDimDto_Serialize | MatchedDimDto_Deserialize;
+
+/**  A dimension that matched. */
+export type MatchedDimDto_Deserialize = {
+	dimension: string,
+	/**
+	 *  Observed value (may be numeric, string, or absent).
+	 *  Uses `JsonAny` to avoid an infinitely-recursive specta TypeScript type.
+	 */
+	observed: unknown | null,
+	/**  Reference value from the matching rule. */
+	reference: unknown | null,
+	delta: number | null,
+};
+
+/**  A dimension that matched. */
+export type MatchedDimDto_Serialize = {
+	dimension: string,
+	/**
+	 *  Observed value (may be numeric, string, or absent).
+	 *  Uses `JsonAny` to avoid an infinitely-recursive specta TypeScript type.
+	 */
+	observed?: unknown | null,
+	/**  Reference value from the matching rule. */
+	reference?: unknown | null,
+	delta?: number | null,
+};
+
 /**  A single metadata value with provenance and confidence tracking. */
 export type MetaValue = MetaValue_Serialize | MetaValue_Deserialize;
 
@@ -2478,6 +2773,26 @@ export type MetadataBundleDto_Serialize = {
 	gain?: string | null,
 	binning?: string | null,
 	setTemp?: string | null,
+};
+
+/**  Why a dimension was not satisfied. */
+export type MismatchReason = "out_of_tolerance" | "metadata_missing" | "hard_rule_violation";
+
+/**  A dimension that did not match. */
+export type MismatchedDimDto = MismatchedDimDto_Serialize | MismatchedDimDto_Deserialize;
+
+/**  A dimension that did not match. */
+export type MismatchedDimDto_Deserialize = {
+	dimension: string,
+	reason: MismatchReason,
+	delta: number | null,
+};
+
+/**  A dimension that did not match. */
+export type MismatchedDimDto_Serialize = {
+	dimension: string,
+	reason: MismatchReason,
+	delta?: number | null,
 };
 
 export type OpticalTrain = {
@@ -3597,6 +3912,9 @@ export type SearchResult_Serialize = {
 	score: number | null,
 };
 
+/**  How a candidate was selected (observing-night provenance). */
+export type SelectionReason = "same_session" | "same_night" | "compatible_fallback";
+
 /**  A calibration match entry for a session detail view. */
 export type SessionCalibrationMatch = {
 	masterId: string,
@@ -3736,6 +4054,17 @@ export type StatusSummary = {
 	volumes: VolumeHealth[],
 	roots: RootHealth[],
 };
+
+/**  Error envelope for suggest. */
+export type SuggestErrorDto = {
+	code: string,
+	message: string,
+};
+
+/**  Result status for a suggest call. */
+export type SuggestStatus = "match" | "ambiguous" | "no_match" | 
+/**  Session lacks `observer_location` or `exposure_start_utc` (A6). */
+"observer_location_missing";
 
 /**  An astronomical target as seen in list views. */
 export type Target = Target_Serialize | Target_Deserialize;

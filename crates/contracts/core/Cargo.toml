@@ -12,6 +12,7 @@ name = "generate-contracts"
 path = "src/bin/generate-contracts.rs"
 
 [dependencies]
+calibration_core = { path = "../../calibration/core" }
 domain_core = { path = "../../domain/core" }
 schemars.workspace = true
 serde.workspace = true

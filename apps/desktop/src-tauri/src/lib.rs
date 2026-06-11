@@ -17,7 +17,8 @@ use tauri_specta::{collect_commands, Builder};
 
 use crate::commands::audit::{audit_export, audit_list};
 use crate::commands::calibration::{
-    calibration_masters_get, calibration_masters_list, calibration_matches,
+    calibration_masters_get, calibration_masters_list, calibration_match_assign,
+    calibration_match_suggest, calibration_match_suggest_batch, calibration_matches,
 };
 use crate::commands::calibration_tolerances::{
     calibration_tolerances_get, calibration_tolerances_update,
@@ -111,10 +112,14 @@ pub fn specta_builder() -> Builder<tauri::Wry> {
             sessions_transition,
             sessions_split,
             sessions_merge,
-            // calibration
+            // calibration (spec 029 stubs)
             calibration_masters_list,
             calibration_masters_get,
             calibration_matches,
+            // calibration matching (spec 007)
+            calibration_match_suggest,
+            calibration_match_assign,
+            calibration_match_suggest_batch,
             // targets
             targets_list,
             targets_get,

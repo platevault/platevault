@@ -9,6 +9,7 @@ path = "src/lib.rs"
 
 [dependencies]
 audit = { path = "../../audit" }
+calibration_core = { path = "../../calibration/core" }
 contracts_core = { path = "../../contracts/core" }
 domain_core = { path = "../../domain/core" }
 fs_executor = { path = "../../fs/executor" }

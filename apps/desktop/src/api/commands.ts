@@ -596,6 +596,153 @@ export async function inboxReclassify(
   return invoke<InboxReclassifyResponse>('inbox.reclassify', { req });
 }
 
+// ── Calibration matching commands (spec 007) ──────────────────────────────────
+
+/** Calibration type for matching (dark_flat excluded per FR-001). */
+export type CalibrationMatchType = 'dark' | 'flat' | 'bias';
+
+/** Result status for a single suggest call. */
+export type SuggestStatus = 'match' | 'ambiguous' | 'no_match' | 'observer_location_missing';
+
+/** Why a dimension was not satisfied. */
+export type MismatchReason = 'out_of_tolerance' | 'metadata_missing' | 'hard_rule_violation';
+
+/** Selection reason (observing-night provenance). */
+export type SelectionReason = 'same_session' | 'same_night' | 'compatible_fallback';
+
+/** A matched dimension with optional delta. */
+export interface MatchedDim {
+  dimension: string;
+  observed?: unknown;
+  reference?: unknown;
+  delta?: number;
+}
+
+/** A dimension that failed to match. */
+export interface MismatchedDim {
+  dimension: string;
+  reason: MismatchReason;
+  delta?: number;
+}
+
+/** A ranked calibration master suggestion. */
+export interface CalibrationMatchDto {
+  sessionId: string;
+  masterId: string;
+  calibrationType: CalibrationMatchType;
+  confidence: number;
+  dimensionsMatched: MatchedDim[];
+  dimensionsMismatched: MismatchedDim[];
+  selectionReason: SelectionReason;
+}
+
+/** Response from calibration.match.suggest. */
+export interface CalibrationMatchSuggestResponse {
+  status: 'success' | 'error';
+  contractVersion: string;
+  requestId: string;
+  suggestStatus?: SuggestStatus;
+  matches?: CalibrationMatchDto[];
+  error?: { code: string; message: string };
+}
+
+/** Successful assign payload. */
+export interface AssignedDto {
+  assignmentId: string;
+  sessionId: string;
+  masterId: string;
+  calibrationType: CalibrationMatchType;
+  wasOverride: boolean;
+  mismatchedDimensions?: string[];
+  assignedAt: string;
+}
+
+/** Response from calibration.match.assign. */
+export interface CalibrationMatchAssignResponse {
+  status: 'success' | 'error';
+  contractVersion: string;
+  requestId: string;
+  assigned?: AssignedDto;
+  confidence?: number;
+  error?: { code: string; message: string; details?: { dimensions: string[] } };
+}
+
+/** Per-(session, calibrationType) result in a batch response. */
+export interface BatchSessionResultDto {
+  sessionId: string;
+  calibrationType: CalibrationMatchType;
+  status: string;
+  candidates?: CalibrationMatchDto[];
+}
+
+/** Response from calibration.match.suggest.batch. */
+export interface CalibrationMatchBatchResponse {
+  status: 'success' | 'partial' | 'error';
+  contractVersion: string;
+  requestId: string;
+  results?: BatchSessionResultDto[];
+  errors?: Array<{ code: string; message: string; sessionId?: string }>;
+}
+
+/**
+ * `calibration.match.suggest` — suggest ranked calibration masters for a session.
+ * Read-only; never persists state.
+ */
+export async function calibrationMatchSuggest(args: {
+  requestId: string;
+  sessionId: string;
+  calibrationTypes?: CalibrationMatchType[];
+}): Promise<CalibrationMatchSuggestResponse> {
+  return invoke<CalibrationMatchSuggestResponse>('calibration.match.suggest', {
+    req: {
+      contractVersion: '2.0.0',
+      requestId: args.requestId,
+      sessionId: args.sessionId,
+      calibrationTypes: args.calibrationTypes,
+    },
+  });
+}
+
+/**
+ * `calibration.match.assign` — persist a calibration master assignment.
+ * Hard-rule mismatches require `override: true`.
+ */
+export async function calibrationMatchAssign(args: {
+  requestId: string;
+  sessionId: string;
+  masterId: string;
+  override: boolean;
+}): Promise<CalibrationMatchAssignResponse> {
+  return invoke<CalibrationMatchAssignResponse>('calibration.match.assign', {
+    req: {
+      contractVersion: '2.0.0',
+      requestId: args.requestId,
+      sessionId: args.sessionId,
+      masterId: args.masterId,
+      override: args.override,
+    },
+  });
+}
+
+/**
+ * `calibration.match.suggest.batch` — suggest for multiple sessions in one call.
+ * Supports partial success.
+ */
+export async function calibrationMatchSuggestBatch(args: {
+  requestId: string;
+  sessionIds: string[];
+  calibrationTypes?: CalibrationMatchType[];
+}): Promise<CalibrationMatchBatchResponse> {
+  return invoke<CalibrationMatchBatchResponse>('calibration.match.suggest.batch', {
+    req: {
+      contractVersion: '1.0',
+      requestId: args.requestId,
+      sessionIds: args.sessionIds,
+      calibrationTypes: args.calibrationTypes,
+    },
+  });
+}
+
 // ── Inventory commands (spec 006) ─────────────────────────────────────────────
 
 import type {
