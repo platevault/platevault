@@ -15,7 +15,6 @@ import type { ArtifactSummary } from '@/api/commands';
 import {
   groupArtifactsByLaunch,
   useArtifacts,
-  useArtifactClassify,
   useArtifactMarkResolved,
   type ArtifactGroup,
 } from './artifacts';
@@ -43,7 +42,7 @@ function ArtifactRow({ artifact, projectId, onResolved }: ArtifactRowProps) {
   const isFallback = artifact.classificationSource === 'fallback';
 
   const handleMarkResolved = useCallback(() => {
-    markResolved(projectId, artifact.id);
+    void markResolved(projectId, artifact.id);
   }, [markResolved, projectId, artifact.id]);
 
   const fileName = artifact.path.split('/').pop() ?? artifact.path;
@@ -82,7 +81,7 @@ function ArtifactRow({ artifact, projectId, onResolved }: ArtifactRowProps) {
       {isMissing && (
         <span
           className="artifact-badge artifact-badge-missing"
-          style={{ fontSize: 10, color: 'var(--mantine-color-red-6, #c92a2a)' }}
+          style={{ fontSize: 10, color: 'var(--alm-danger)' }}
         >
           Missing
         </span>
@@ -91,7 +90,7 @@ function ArtifactRow({ artifact, projectId, onResolved }: ArtifactRowProps) {
       {isManualOverride && (
         <span
           className="artifact-badge artifact-badge-manual"
-          style={{ fontSize: 10, color: 'var(--mantine-color-blue-6, #1971c2)' }}
+          style={{ fontSize: 10, color: 'var(--alm-info)' }}
           title="Classification manually overridden"
         >
           (manual)
@@ -148,7 +147,7 @@ function ArtifactGroupSection({ group, projectId, onAction }: GroupSectionProps)
           className="artifact-count-badge"
           style={{
             fontSize: 10,
-            background: 'var(--mantine-color-gray-2, #e9ecef)',
+            background: 'var(--alm-bg3)',
             borderRadius: 4,
             padding: '1px 5px',
           }}
@@ -183,7 +182,7 @@ export function ToolLaunchesAccordion({ projectId, launchOrder = [] }: Props) {
 
   if (error) {
     return (
-      <div className="tool-launches-error" style={{ fontSize: 12, color: 'var(--mantine-color-red-6, #c92a2a)' }}>
+      <div className="tool-launches-error" style={{ fontSize: 12, color: 'var(--alm-danger)' }}>
         Failed to load artifacts: {error}
       </div>
     );

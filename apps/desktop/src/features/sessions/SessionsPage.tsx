@@ -29,7 +29,6 @@ import {
   useSessionReview,
   type InventoryFilters,
 } from './store';
-import type { InventoryFrameType } from '@/api/commands';
 import { addToast } from '@/shared/toast';
 import type { InventoryFrameFilter, ReviewFilter } from '@/lib/route-contract';
 
@@ -43,7 +42,7 @@ export function SessionsPage() {
   useEffect(() => {
     const filters: InventoryFilters = {};
     if (sourceFilter && sourceFilter !== 'all') filters.sourceFilter = sourceFilter;
-    if (frameFilter) filters.frameFilter = frameFilter as InventoryFrameType;
+    if (frameFilter) filters.frameFilter = frameFilter;
     if (reviewFilter && reviewFilter !== 'all') filters.reviewFilter = reviewFilter;
     setInventoryFilters(filters);
   }, [sourceFilter, frameFilter, reviewFilter]);

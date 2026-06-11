@@ -86,7 +86,7 @@ export function SourceViewsSection({ projectId, onPlanCreated }: SourceViewsSect
     } catch (err: unknown) {
       const code =
         typeof err === 'object' && err !== null && 'code' in err
-          ? String((err as { code: unknown }).code)
+          ? String((err).code)
           : 'internal';
       addToast({
         variant: 'warn',
@@ -115,7 +115,7 @@ export function SourceViewsSection({ projectId, onPlanCreated }: SourceViewsSect
     } catch (err: unknown) {
       const code =
         typeof err === 'object' && err !== null && 'code' in err
-          ? String((err as { code: unknown }).code)
+          ? String((err).code)
           : 'internal';
       addToast({
         variant: 'warn',

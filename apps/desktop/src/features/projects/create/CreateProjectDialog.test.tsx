@@ -35,12 +35,12 @@ vi.mock('@/api/commands', () => ({
 
 // Mock the store's useCreateProject so it calls our mock
 vi.mock('@/features/projects/store', () => ({
-  useCreateProject: (req: Record<string, unknown>) => mockCreateProject(req),
-  useUpdateProject: vi.fn(),
-  useAddProjectSource: vi.fn(),
-  useRemoveProjectSource: vi.fn(),
-  useReinferChannels: vi.fn(),
-  useDismissChannelDrift: vi.fn(),
+  callCreateProject: (req: Record<string, unknown>) => mockCreateProject(req),
+  callUpdateProject: vi.fn(),
+  callAddProjectSource: vi.fn(),
+  callRemoveProjectSource: vi.fn(),
+  callReinferChannels: vi.fn(),
+  callDismissChannelDrift: vi.fn(),
   useProjects: () => ({ data: [], loading: false, error: undefined }),
   useProjectDetail: () => ({ data: undefined, loading: false, error: undefined }),
   projectListStore: { subscribe: vi.fn(), getSnapshot: vi.fn(() => ({ data: [], loading: false, error: undefined })), fetch: vi.fn(), invalidate: vi.fn() },
@@ -60,7 +60,7 @@ import { CreateProjectDialog } from './CreateProjectDialog';
 
 // ── Helpers ────────────────────────────────────────────────────────────────
 
-const noop = () => {};
+const _noop = () => {};
 
 function renderDialog(open = true) {
   const onClose = vi.fn();

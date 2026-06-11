@@ -230,7 +230,7 @@ export function SetupWizard() {
 
       setPreference('setupCompleted', true);
       clearWizardState();
-      navigate({ to: '/inbox' });
+      void navigate({ to: '/inbox' });
     } catch {
       setIsSubmitting(false);
     }

@@ -1,6 +1,6 @@
 // TODO(spec 003 (roots/sources)): wire to backend when owning spec implements its command.
 import { useState } from 'react';
-import { Btn, Pill, Table } from '@/ui';
+import { Btn, Pill } from '@/ui';
 import {
   DATA_SOURCES,
   type DataSourceRoot,

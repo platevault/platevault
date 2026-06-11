@@ -14,7 +14,7 @@
 
 import { useState, useEffect, useCallback } from 'react';
 import { Btn, Banner } from '@/ui';
-import { useUpdateProject, useReinferChannels, useDismissChannelDrift } from '@/features/projects/store';
+import { callUpdateProject, callReinferChannels, callDismissChannelDrift } from '@/features/projects/store';
 import type { ProjectDetailDto, ProjectChannelDto } from '@/bindings/index';
 
 // ── Tool-lock and read-only helpers ──────────────────────────────────────────
@@ -46,7 +46,7 @@ export function EditProjectPane({ project, onClose }: EditProjectPaneProps) {
   const [name, setName] = useState(project.name);
   type ToolValue = 'PixInsight' | 'Siril' | 'Planetary Suite';
   const [tool, setTool] = useState<ToolValue>(
-    (typeof project.tool === 'string' ? project.tool : 'PixInsight') as ToolValue,
+    (typeof project.tool === 'string' ? project.tool : 'PixInsight'),
   );
   const [notes, setNotes] = useState(project.notes ?? '');
   const [saving, setSaving] = useState(false);
@@ -58,7 +58,7 @@ export function EditProjectPane({ project, onClose }: EditProjectPaneProps) {
   // Sync if parent project changes (e.g. detail re-fetched)
   useEffect(() => {
     setName(project.name);
-    setTool((typeof project.tool === 'string' ? project.tool : 'PixInsight') as ToolValue);
+    setTool((typeof project.tool === 'string' ? project.tool : 'PixInsight'));
     setNotes(project.notes ?? '');
     setChannels(project.channels ?? []);
   }, [project]);
@@ -79,12 +79,12 @@ export function EditProjectPane({ project, onClose }: EditProjectPaneProps) {
     setSaving(true);
     setServerError(null);
     try {
-      await useUpdateProject({
+      await callUpdateProject({
         requestId: crypto.randomUUID(),
         projectId: project.id,
         name: trimmed !== project.name ? trimmed : undefined,
         tool: tool !== (typeof project.tool === 'string' ? project.tool : 'PixInsight')
-          ? (tool as 'PixInsight' | 'Siril' | 'Planetary Suite')
+          ? (tool)
           : undefined,
         notes: notes !== (project.notes ?? '') ? notes : undefined,
       });
@@ -103,7 +103,7 @@ export function EditProjectPane({ project, onClose }: EditProjectPaneProps) {
     if (channelWorking) return;
     setChannelWorking(true);
     try {
-      const result = await useReinferChannels({
+      const result = await callReinferChannels({
         requestId: crypto.randomUUID(),
         projectId: project.id,
       });
@@ -119,7 +119,7 @@ export function EditProjectPane({ project, onClose }: EditProjectPaneProps) {
     if (channelWorking) return;
     setChannelWorking(true);
     try {
-      await useDismissChannelDrift({
+      await callDismissChannelDrift({
         requestId: crypto.randomUUID(),
         projectId: project.id,
       });

@@ -25,7 +25,7 @@ function ShellInner() {
   // Redirect to /setup if first-run setup is not completed
   useEffect(() => {
     if (!prefs.setupCompleted) {
-      navigate({ to: '/setup' });
+      void navigate({ to: '/setup' });
     }
   }, [prefs.setupCompleted, navigate]);
 

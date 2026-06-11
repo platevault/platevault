@@ -5,7 +5,6 @@ import type {
   ReviewItem,
   ConfidenceLevel,
   ProvenanceOrigin,
-  MetaValue,
 } from '@/bindings/types';
 
 // ─── Design V3 flat fixture shape (Inbox) ───────────────────────────────────

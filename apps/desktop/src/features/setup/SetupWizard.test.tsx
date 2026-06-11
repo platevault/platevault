@@ -83,7 +83,7 @@ function renderWizard() {
  * Click the primary "Continue" button.
  * Throws if the button is not found.
  */
-function clickContinue() {
+function _clickContinue() {
   const btn = getContinueButton();
   fireEvent.click(btn);
 }

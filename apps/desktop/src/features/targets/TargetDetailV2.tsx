@@ -272,7 +272,7 @@ export function TargetDetailV2({ targetId }: Props) {
             placeholder="Add alias…"
             value={aliasInput}
             onChange={(e) => setAliasInput(e.target.value)}
-            onKeyDown={(e) => { if (e.key === 'Enter') handleAliasAdd(); }}
+            onKeyDown={(e) => { if (e.key === 'Enter') void handleAliasAdd(); }}
             style={{ flex: 1, padding: 'var(--alm-sp-1)', fontSize: 'var(--alm-text-sm)' }}
           />
           <button onClick={handleAliasAdd} style={{ padding: 'var(--alm-sp-1) var(--alm-sp-2)' }}>

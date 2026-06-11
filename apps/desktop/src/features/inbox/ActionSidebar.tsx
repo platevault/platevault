@@ -84,7 +84,7 @@ export function ActionSidebar({
           fontWeight: 600,
           letterSpacing: '0.08em',
           textTransform: 'uppercase',
-          color: 'var(--alm-color-fg-muted)',
+          color: 'var(--alm-text-muted)',
         }}
       >
         Actions
@@ -122,10 +122,10 @@ export function ActionSidebar({
           style={{
             margin: '12px 12px 0',
             padding: '8px',
-            background: 'var(--alm-color-surface-2, rgba(0,0,0,0.05))',
+            background: 'var(--alm-bg3, rgba(0,0,0,0.05))',
             borderRadius: 4,
             fontSize: 'var(--alm-text-xs)',
-            color: 'var(--alm-color-fg-muted)',
+            color: 'var(--alm-text-muted)',
           }}
         >
           <div>
@@ -135,12 +135,12 @@ export function ActionSidebar({
               : classification.type}
           </div>
           {hasUnclassified && (
-            <div style={{ color: 'var(--alm-color-warn, #c07d00)', marginTop: 4 }}>
+            <div style={{ color: 'var(--alm-warn, #c07d00)', marginTop: 4 }}>
               ⚠ {unclassifiedCount} file{unclassifiedCount !== 1 ? 's' : ''} need review
             </div>
           )}
           {isUnclassified && !hasUnclassified && (
-            <div style={{ color: 'var(--alm-color-warn, #c07d00)', marginTop: 4 }}>
+            <div style={{ color: 'var(--alm-warn, #c07d00)', marginTop: 4 }}>
               No IMAGETYP headers found
             </div>
           )}

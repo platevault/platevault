@@ -22,9 +22,9 @@
 
 import { useState, useCallback } from 'react';
 import { Dialog } from '@base-ui-components/react/dialog';
-import { Btn, RadioGroup, Section } from '@/ui';
+import { Btn, RadioGroup } from '@/ui';
 import type { RadioOption } from '@/ui';
-import { useCreateProject } from '@/features/projects/store';
+import { callCreateProject } from '@/features/projects/store';
 import { listProjects008 } from '@/api/commands';
 import type { ProjectCreateResult } from '@/bindings/index';
 
@@ -127,7 +127,7 @@ export function CreateProjectDialog({ open, onClose, onSuccess }: CreateProjectD
     setServerError(null);
 
     try {
-      const result = await useCreateProject({
+      const result = await callCreateProject({
         requestId: crypto.randomUUID(),
         name: name.trim(),
         tool: tool as 'PixInsight' | 'Siril' | 'Planetary Suite',

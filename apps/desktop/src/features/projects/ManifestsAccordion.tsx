@@ -109,7 +109,7 @@ export function ManifestsAccordion({ projectId }: ManifestsAccordionProps) {
       <Section title="Manifests">
         <div
           data-testid="manifests-loading"
-          style={{ fontSize: 'var(--alm-text-sm)', color: 'var(--alm-color-muted)' }}
+          style={{ fontSize: 'var(--alm-text-sm)', color: 'var(--alm-text-muted)' }}
         >
           Loading…
         </div>
@@ -122,7 +122,7 @@ export function ManifestsAccordion({ projectId }: ManifestsAccordionProps) {
       <Section title="Manifests">
         <div
           data-testid="manifests-error"
-          style={{ fontSize: 'var(--alm-text-sm)', color: 'var(--alm-color-danger)' }}
+          style={{ fontSize: 'var(--alm-text-sm)', color: 'var(--alm-danger)' }}
         >
           Could not load manifests.
         </div>
@@ -135,7 +135,7 @@ export function ManifestsAccordion({ projectId }: ManifestsAccordionProps) {
       {manifests.length === 0 ? (
         <div
           data-testid="manifests-empty"
-          style={{ fontSize: 'var(--alm-text-sm)', color: 'var(--alm-color-muted)' }}
+          style={{ fontSize: 'var(--alm-text-sm)', color: 'var(--alm-text-muted)' }}
         >
           No manifests yet. Manifests are generated automatically at lifecycle
           checkpoints.
@@ -177,7 +177,7 @@ export function ManifestsAccordion({ projectId }: ManifestsAccordionProps) {
                   <span
                     style={{
                       marginLeft: 'var(--alm-sp-2)',
-                      color: 'var(--alm-color-muted)',
+                      color: 'var(--alm-text-muted)',
                       fontSize: 'var(--alm-text-xs)',
                     }}
                   >
@@ -203,7 +203,7 @@ export function ManifestsAccordion({ projectId }: ManifestsAccordionProps) {
                   style={{
                     marginTop: 'var(--alm-sp-2)',
                     padding: 'var(--alm-sp-2)',
-                    background: 'var(--alm-color-muted-bg)',
+                    background: 'var(--alm-bg3)',
                     borderRadius: 4,
                     fontSize: 'var(--alm-text-xs)',
                   }}
@@ -231,7 +231,7 @@ export function ManifestsAccordion({ projectId }: ManifestsAccordionProps) {
                       <div
                         style={{
                           marginTop: 'var(--alm-sp-1)',
-                          color: 'var(--alm-color-muted)',
+                          color: 'var(--alm-text-muted)',
                           fontFamily: 'var(--alm-font-mono)',
                         }}
                       >

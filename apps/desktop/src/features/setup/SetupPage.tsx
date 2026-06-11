@@ -10,7 +10,7 @@ export function SetupPage() {
 
   useEffect(() => {
     if (setupCompleted) {
-      navigate({ to: '/inbox' });
+      void navigate({ to: '/inbox' });
       return;
     }
 
@@ -26,7 +26,7 @@ export function SetupPage() {
       .then((result) => {
         if (cancelled) return;
         if (result.status === 'ok' && result.data.completedAt !== null) {
-          navigate({ to: '/inbox' });
+          void navigate({ to: '/inbox' });
         } else {
           setChecking(false);
         }

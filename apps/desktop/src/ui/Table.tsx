@@ -32,7 +32,7 @@ export const Table = forwardRef<HTMLTableElement, TableProps>(
         </thead>
         <tbody>
           {rows.map((row, ri) => (
-            <tr key={ri} style={row._rowStyle as CSSProperties | undefined} className={row._rowClassName as string | undefined}>
+            <tr key={ri} style={row._rowStyle} className={row._rowClassName}>
               {columns.map((c, ci) => (
                 <td key={ci} className={c.className} style={c.cellStyle}>{row[c.key] as ReactNode}</td>
               ))}

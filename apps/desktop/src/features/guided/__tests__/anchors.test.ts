@@ -27,7 +27,7 @@ const ANCHOR_SOURCES = import.meta.glob(
     '../../projects/ProjectDetail.tsx',
   ],
   { as: 'raw', eager: true },
-) as Record<string, string>;
+);
 
 describe('T026 — anchor CI gate', () => {
   it('ALL_ANCHOR_IDS has exactly three entries (matching the three flow steps)', () => {

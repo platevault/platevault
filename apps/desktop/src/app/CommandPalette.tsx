@@ -73,7 +73,7 @@ export function CommandPalette() {
     const controller = new AbortController();
     // Debounce search by 200ms to avoid excessive API calls
     const timeoutId = setTimeout(() => {
-      searchGlobal({ query }).then((r) => {
+      void searchGlobal({ query }).then((r) => {
         if (!controller.signal.aborted) setResults(r);
       });
     }, 200);
@@ -87,7 +87,7 @@ export function CommandPalette() {
     (route: string) => {
       setOpen(false);
       setQuery('');
-      navigate({ to: route });
+      void navigate({ to: route });
     },
     [navigate],
   );

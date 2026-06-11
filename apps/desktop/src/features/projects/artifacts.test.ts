@@ -5,7 +5,7 @@
  * Does NOT test real filesystem watchers (deferred — needs GUI).
  */
 
-import { describe, it, expect, vi, beforeEach } from 'vitest';
+import { describe, it, expect } from 'vitest';
 import { groupArtifactsByLaunch } from './artifacts';
 import type { ArtifactSummary } from '@/api/commands';
 

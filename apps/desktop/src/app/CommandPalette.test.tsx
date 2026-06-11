@@ -21,7 +21,7 @@
  *  8. PAGES does not include a /targets/:id or /targets/$id pattern
  */
 
-import { describe, it, expect, vi, beforeEach } from 'vitest';
+import { describe, it, expect } from 'vitest';
 
 // ── Types ─────────────────────────────────────────────────────────────────────
 
@@ -112,7 +112,7 @@ describe('CommandPalette routing logic (T008)', () => {
   });
 
   it('5. target route UUID segment is a valid UUID v5 format', () => {
-    const targetResult = MOCK_TARGET_RESULTS[0]!;
+    const targetResult = MOCK_TARGET_RESULTS[0];
     const uuid = targetResult.route.replace('/targets/', '');
     expect(uuid).toMatch(/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/);
   });

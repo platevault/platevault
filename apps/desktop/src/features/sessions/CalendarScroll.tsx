@@ -5,7 +5,6 @@
 
 import { useRef, useMemo } from 'react';
 import { useVirtualizer } from '@tanstack/react-virtual';
-import { clsx } from 'clsx';
 import { Pill } from '@/ui';
 
 export interface CalendarNight {

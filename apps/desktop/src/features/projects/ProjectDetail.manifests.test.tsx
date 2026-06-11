@@ -117,7 +117,7 @@ const MANIFEST_BODY = {
 
 function setupStore(project: Partial<ProjectDetailDto> = {}) {
   vi.mocked(store.useProjectDetail).mockReturnValue({
-    data: { ...BASE_PROJECT, ...project } as ProjectDetailDto,
+    data: { ...BASE_PROJECT, ...project },
     loading: false,
     error: undefined,
   });

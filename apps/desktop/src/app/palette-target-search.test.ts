@@ -83,7 +83,7 @@ describe('palette target search routing (T008)', () => {
   });
 
   it('getRoute returns the verbatim route from the result', () => {
-    const result = MOCK_RESULTS[0]!;
+    const result = MOCK_RESULTS[0];
     expect(getRoute(result)).toBe('/targets/550e8400-e29b-41d4-a716-446655440099');
   });
 

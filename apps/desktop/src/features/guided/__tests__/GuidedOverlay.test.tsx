@@ -133,7 +133,7 @@ describe('GuidedOverlay', () => {
     removeAnchor(anchorEl);
 
     const state = makeState({ currentStep: 'inbox.confirm_first' });
-    const { container } = render(
+    render(
       <GuidedOverlay guidedState={state} onDismiss={() => {}} />,
     );
     // The hook resolves async so nothing renders immediately.

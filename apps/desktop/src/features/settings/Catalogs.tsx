@@ -34,7 +34,7 @@ function useCatalogList() {
     }
   }, []);
 
-  useEffect(() => { load(); }, [load]);
+  useEffect(() => { void load(); }, [load]);
 
   return { catalogs, loading, error, reload: load };
 }
@@ -59,7 +59,7 @@ function useCatalogAttributions() {
     }
   }, []);
 
-  useEffect(() => { load(); }, [load]);
+  useEffect(() => { void load(); }, [load]);
 
   return { attributions, loading, error, reload: load };
 }

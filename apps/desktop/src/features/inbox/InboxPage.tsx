@@ -16,7 +16,6 @@ import { InboxList } from './InboxList';
 import { InboxDetail } from './InboxDetail';
 import { ActionSidebar } from './ActionSidebar';
 import { useInboxScan, useInboxClassification, useInboxConfirm } from './store';
-import type { InboxClassifyResponse } from './store';
 import type { FrameType, InboxGroup } from '@/lib/route-contract';
 
 // Temporary: during development use stub root values until a settings-backed

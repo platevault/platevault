@@ -21,9 +21,9 @@ import type { PillVariant } from '@/ui';
 import { projectStateLabel, projectStateVariant } from '@/lib/lifecycle';
 import {
   useProjectDetail,
-  useDismissChannelDrift,
-  useReinferChannels,
-  useTransitionLifecycle,
+  callDismissChannelDrift,
+  callReinferChannels,
+  callTransitionLifecycle,
 } from './store';
 import type { ProjectLifecycleState } from './store';
 import { EditProjectPane } from './edit/EditProjectPane';
@@ -90,7 +90,7 @@ export function ProjectDetailContent({ projectId }: ProjectDetailContentProps) {
   if (loading && !project) {
     return (
       <DetailPane fill>
-        <div style={{ padding: 'var(--alm-sp-4)', color: 'var(--alm-color-muted)' }}>
+        <div style={{ padding: 'var(--alm-sp-4)', color: 'var(--alm-text-muted)' }}>
           Loading project…
         </div>
       </DetailPane>
@@ -114,7 +114,7 @@ export function ProjectDetailContent({ projectId }: ProjectDetailContentProps) {
     if (channelWorking) return;
     setChannelWorking(true);
     try {
-      await useReinferChannels({ requestId: crypto.randomUUID(), projectId });
+      await callReinferChannels({ requestId: crypto.randomUUID(), projectId });
     } catch {
       addToast({ message: 'Re-infer failed.', variant: 'error' });
     } finally {
@@ -126,7 +126,7 @@ export function ProjectDetailContent({ projectId }: ProjectDetailContentProps) {
     if (channelWorking) return;
     setChannelWorking(true);
     try {
-      await useDismissChannelDrift({ requestId: crypto.randomUUID(), projectId });
+      await callDismissChannelDrift({ requestId: crypto.randomUUID(), projectId });
     } catch {
       addToast({ message: 'Dismiss failed.', variant: 'error' });
     } finally {
@@ -145,7 +145,7 @@ export function ProjectDetailContent({ projectId }: ProjectDetailContentProps) {
     if (transitionWorking) return;
     setTransitionWorking(true);
     try {
-      const resp = await useTransitionLifecycle(
+      const resp = await callTransitionLifecycle(
         projectId,
         lifecycle as ProjectLifecycleState,
         nextState,
@@ -173,7 +173,7 @@ export function ProjectDetailContent({ projectId }: ProjectDetailContentProps) {
 
   /** Handle blocked resolve — dispatches the recovery edge from BlockedBanner. */
   const handleResolveBlocked = (edge: RecoveryEdge) => {
-    void handleTransition(edge as ProjectLifecycleState, 'Resolved blocker');
+    void handleTransition(edge, 'Resolved blocker');
   };
 
   // Derive contextual footer actions for the current lifecycle state.
@@ -256,8 +256,8 @@ export function ProjectDetailContent({ projectId }: ProjectDetailContentProps) {
                         borderRadius: 4,
                         fontSize: 'var(--alm-text-xs)',
                         background: ch.source === 'inferred'
-                          ? 'var(--alm-color-muted-bg)'
-                          : 'var(--alm-color-accent-bg)',
+                          ? 'var(--alm-bg3)'
+                          : 'var(--alm-accent-bg)',
                       }}
                     >
                       {ch.label}
@@ -275,7 +275,7 @@ export function ProjectDetailContent({ projectId }: ProjectDetailContentProps) {
         {/* Sources section */}
         <Section title="Sources" count={project.sources.length}>
           {project.sources.length === 0 ? (
-            <div style={{ padding: 'var(--alm-sp-2)', color: 'var(--alm-color-muted)' }}>
+            <div style={{ padding: 'var(--alm-sp-2)', color: 'var(--alm-text-muted)' }}>
               No sources linked yet.
             </div>
           ) : (
@@ -295,7 +295,7 @@ export function ProjectDetailContent({ projectId }: ProjectDetailContentProps) {
                 )}
                 <span style={{ flex: 1 }}>{src.name || src.inventoryId}</span>
                 {src.frames > 0 && (
-                  <span style={{ color: 'var(--alm-color-muted)', fontSize: 'var(--alm-text-xs)' }}>
+                  <span style={{ color: 'var(--alm-text-muted)', fontSize: 'var(--alm-text-xs)' }}>
                     {src.frames} frames
                   </span>
                 )}
@@ -383,7 +383,7 @@ export function ProjectDetailContent({ projectId }: ProjectDetailContentProps) {
               style={{ fontSize: 'var(--alm-text-xs)', color: 'var(--alm-text-muted)' }}
             >
               Tool path not configured —{' '}
-              <a href="#/settings?pane=tools" style={{ color: 'var(--alm-color-primary)' }}>
+              <a href="#/settings?pane=tools" style={{ color: 'var(--alm-accent)' }}>
                 Configure
               </a>
             </span>

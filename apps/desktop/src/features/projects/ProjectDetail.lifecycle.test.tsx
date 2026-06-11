@@ -37,9 +37,9 @@ vi.mock('./store', async (importOriginal) => {
   return {
     ...original,
     useProjectDetail: vi.fn(),
-    useTransitionLifecycle: vi.fn(),
-    useReinferChannels: vi.fn(),
-    useDismissChannelDrift: vi.fn(),
+    callTransitionLifecycle: vi.fn(),
+    callReinferChannels: vi.fn(),
+    callDismissChannelDrift: vi.fn(),
   };
 });
 
@@ -92,7 +92,7 @@ describe('ProjectDetail lifecycle transitions (spec 009 US3-3)', () => {
 
   it('dispatches transition when action button is clicked', async () => {
     setupStore({ lifecycle: 'processing' });
-    vi.mocked(store.useTransitionLifecycle).mockResolvedValue({
+    vi.mocked(store.callTransitionLifecycle).mockResolvedValue({
       status: 'success',
       contractVersion: '2.0.0',
       requestId: 'req-1',
@@ -103,7 +103,7 @@ describe('ProjectDetail lifecycle transitions (spec 009 US3-3)', () => {
     fireEvent.click(screen.getByTestId('transition-btn-completed'));
 
     await waitFor(() => {
-      expect(store.useTransitionLifecycle).toHaveBeenCalledWith(
+      expect(store.callTransitionLifecycle).toHaveBeenCalledWith(
         'proj-001',
         'processing',
         'completed',
@@ -114,7 +114,7 @@ describe('ProjectDetail lifecycle transitions (spec 009 US3-3)', () => {
 
   it('shows info toast when plan.required is returned (plan-gated edge)', async () => {
     setupStore({ lifecycle: 'ready' });
-    vi.mocked(store.useTransitionLifecycle).mockResolvedValue({
+    vi.mocked(store.callTransitionLifecycle).mockResolvedValue({
       status: 'error',
       contractVersion: '2.0.0',
       requestId: 'req-2',
@@ -133,7 +133,7 @@ describe('ProjectDetail lifecycle transitions (spec 009 US3-3)', () => {
 
   it('shows error toast when transition is refused', async () => {
     setupStore({ lifecycle: 'ready' });
-    vi.mocked(store.useTransitionLifecycle).mockResolvedValue({
+    vi.mocked(store.callTransitionLifecycle).mockResolvedValue({
       status: 'error',
       contractVersion: '2.0.0',
       requestId: 'req-3',
@@ -159,7 +159,7 @@ describe('ProjectDetail lifecycle transitions (spec 009 US3-3)', () => {
 
   it('dispatches blocked → ready transition on resolve click (user reason)', async () => {
     setupStore({ lifecycle: 'blocked' });
-    vi.mocked(store.useTransitionLifecycle).mockResolvedValue({
+    vi.mocked(store.callTransitionLifecycle).mockResolvedValue({
       status: 'success',
       contractVersion: '2.0.0',
       requestId: 'req-4',
@@ -170,7 +170,7 @@ describe('ProjectDetail lifecycle transitions (spec 009 US3-3)', () => {
     fireEvent.click(screen.getByTestId('blocked-resolve-btn'));
 
     await waitFor(() => {
-      expect(store.useTransitionLifecycle).toHaveBeenCalledWith(
+      expect(store.callTransitionLifecycle).toHaveBeenCalledWith(
         'proj-001',
         'blocked',
         'ready',

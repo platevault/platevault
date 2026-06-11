@@ -4,10 +4,6 @@
 import type {
   Target,
   TargetDetail as TargetDetailType,
-  AcquisitionSession,
-  ProjectState,
-  SessionState,
-  ConfidenceLevel,
 } from '@/bindings/types';
 
 // ─── Design V3 flat fixture shape ───────────────────────────────────────────
@@ -134,8 +130,8 @@ export const targetDetail: TargetDetailType = {
     {
       id: 's-001',
       session_key: { target: 'NGC 7000', filter: 'Ha', binning: '1x1', gain: '100', night: '2024-11-30' },
-      state: 'confirmed' as SessionState,
-      confidence: 'confirmed' as ConfidenceLevel,
+      state: 'confirmed',
+      confidence: 'confirmed',
       optical_train_id: 'ot-2600mm',
       frame_count: 54,
       total_integration_seconds: 16200,
@@ -148,8 +144,8 @@ export const targetDetail: TargetDetailType = {
     {
       id: 's-002',
       session_key: { target: 'NGC 7000', filter: 'OIII', binning: '1x1', gain: '100', night: '2024-11-30' },
-      state: 'confirmed' as SessionState,
-      confidence: 'confirmed' as ConfidenceLevel,
+      state: 'confirmed',
+      confidence: 'confirmed',
       optical_train_id: 'ot-2600mm',
       frame_count: 38,
       total_integration_seconds: 11520,
@@ -162,8 +158,8 @@ export const targetDetail: TargetDetailType = {
     {
       id: 's-003',
       session_key: { target: 'NGC 7000', filter: 'SII', binning: '1x1', gain: '100', night: '2024-12-01' },
-      state: 'needs_review' as SessionState,
-      confidence: 'high' as ConfidenceLevel,
+      state: 'needs_review',
+      confidence: 'high',
       optical_train_id: 'ot-2600mm',
       frame_count: 22,
       total_integration_seconds: 6480,
@@ -176,8 +172,8 @@ export const targetDetail: TargetDetailType = {
     {
       id: 's-004',
       session_key: { target: 'NGC 7000', filter: 'Ha', binning: '1x1', gain: '100', night: '2024-12-15' },
-      state: 'confirmed' as SessionState,
-      confidence: 'confirmed' as ConfidenceLevel,
+      state: 'confirmed',
+      confidence: 'confirmed',
       optical_train_id: 'ot-2600mm',
       frame_count: 30,
       total_integration_seconds: 9000,
@@ -189,7 +185,7 @@ export const targetDetail: TargetDetailType = {
     },
   ],
   projects: [
-    { id: 'proj-hoo', name: 'NGC 7000 · HOO', state: 'processing' as ProjectState },
-    { id: 'proj-sho', name: 'NGC 7000 · SHO mosaic', state: 'ready' as ProjectState },
+    { id: 'proj-hoo', name: 'NGC 7000 · HOO', state: 'processing' },
+    { id: 'proj-sho', name: 'NGC 7000 · SHO mosaic', state: 'ready' },
   ],
 };

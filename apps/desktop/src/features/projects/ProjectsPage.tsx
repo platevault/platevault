@@ -75,7 +75,7 @@ export function ProjectsPage() {
   const project: ProjectSummaryDto | undefined = inRange ? projects[selectedIdx] : undefined;
 
   const onSelect = (idx: number) =>
-    navigate({ search: (prev) => ({ ...prev, selected: idx }) });
+    void navigate({ search: (prev) => ({ ...prev, selected: idx }) });
 
   type ProjectLifecycleFilter = NonNullable<typeof lifecycle>;
   const onLifecycleChange = (states: string[]) =>
@@ -89,14 +89,14 @@ export function ProjectsPage() {
   const handleCreateSuccess = useCallback(
     (result: { projectId: string; planId?: string | null }) => {
       // Navigate to first slot (list will re-fetch and show the new project)
-      navigate({ search: (prev) => ({ ...prev, selected: 0 }) });
+      void navigate({ search: (prev) => ({ ...prev, selected: 0 }) });
       if (result.planId) {
         addToast({
           message: `Project created. Review the folder plan before applying.`,
           variant: 'info',
           action: {
             label: 'View plan',
-            onClick: () => navigate({ to: '/archive', search: { selected: undefined } as never }),
+            onClick: () => void navigate({ to: '/archive', search: { selected: undefined } as never }),
           },
         });
       } else {

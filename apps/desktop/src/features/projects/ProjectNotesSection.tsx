@@ -127,7 +127,7 @@ export function ProjectNotesSection({
         ) : (
           <span
             data-testid="notes-empty"
-            style={{ color: 'var(--alm-color-muted)', fontSize: 'var(--alm-text-sm)' }}
+            style={{ color: 'var(--alm-text-muted)', fontSize: 'var(--alm-text-sm)' }}
           >
             No notes.
           </span>
@@ -142,7 +142,7 @@ export function ProjectNotesSection({
         {lastSaved && (
           <span
             data-testid="notes-saved-indicator"
-            style={{ fontSize: 'var(--alm-text-xs)', color: 'var(--alm-color-muted)' }}
+            style={{ fontSize: 'var(--alm-text-xs)', color: 'var(--alm-text-muted)' }}
           >
             Saved
           </span>
@@ -176,10 +176,10 @@ export function ProjectNotesSection({
           data-testid="notes-byte-counter"
           style={{
             color: overLimit
-              ? 'var(--alm-color-danger)'
+              ? 'var(--alm-danger)'
               : nearLimit
-                ? 'var(--alm-color-warn)'
-                : 'var(--alm-color-muted)',
+                ? 'var(--alm-warn)'
+                : 'var(--alm-text-muted)',
           }}
         >
           {byteCount.toLocaleString()} / {MAX_NOTE_BYTES.toLocaleString()} bytes

@@ -5,7 +5,7 @@
 
 import { useState, useMemo } from 'react';
 import { ListSidebar, ListItem } from '@/components';
-import { Pill, Btn } from '@/ui';
+import { Pill } from '@/ui';
 import type { PillVariant } from '@/ui';
 import type { ProjectSummaryDto } from '@/bindings/index';
 
@@ -92,7 +92,7 @@ export function ProjectsList({
   if (loading && projects.length === 0) {
     return (
       <ListSidebar placeholder="Search projects…">
-        <div style={{ padding: 'var(--alm-sp-4)', color: 'var(--alm-color-muted)' }}>
+        <div style={{ padding: 'var(--alm-sp-4)', color: 'var(--alm-text-muted)' }}>
           Loading projects…
         </div>
       </ListSidebar>
@@ -135,7 +135,7 @@ export function ProjectsList({
       }
     >
       {filtered.length === 0 && (
-        <div style={{ padding: 'var(--alm-sp-4)', color: 'var(--alm-color-muted)' }}>
+        <div style={{ padding: 'var(--alm-sp-4)', color: 'var(--alm-text-muted)' }}>
           No projects found.
         </div>
       )}
@@ -148,7 +148,7 @@ export function ProjectsList({
             <>
               {project.lifecycle === 'blocked' && (
                 <span
-                  style={{ color: 'var(--alm-color-danger)', marginRight: 4 }}
+                  style={{ color: 'var(--alm-danger)', marginRight: 4 }}
                   aria-label="Blocked"
                 >
                   &#x26A0;
@@ -167,7 +167,7 @@ export function ProjectsList({
               {project.sourceCount > 0 && <>{project.sourceCount} sources</>}
               {project.channelDrift && (
                 <span
-                  style={{ color: 'var(--alm-color-warn)', marginLeft: 4 }}
+                  style={{ color: 'var(--alm-warn)', marginLeft: 4 }}
                   title="Channel drift detected"
                 >
                   ⚠ channels

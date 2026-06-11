@@ -67,8 +67,8 @@ export function groupArtifactsByLaunch(
   const attributedGroups: ArtifactGroup[] = [...buckets.entries()]
     .map(([toolLaunchId, arts]) => ({ toolLaunchId, artifacts: arts }))
     .sort((a, b) => {
-      const ia = launchOrder.indexOf(a.toolLaunchId!);
-      const ib = launchOrder.indexOf(b.toolLaunchId!);
+      const ia = launchOrder.indexOf(a.toolLaunchId);
+      const ib = launchOrder.indexOf(b.toolLaunchId);
       // Both in launch order list → use that order.
       if (ia !== -1 && ib !== -1) return ia - ib;
       // One is in list → that one first.

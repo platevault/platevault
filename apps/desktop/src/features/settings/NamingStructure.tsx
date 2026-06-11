@@ -4,7 +4,6 @@ import { useState, useEffect, useCallback } from 'react';
 import { Btn } from '@/ui';
 import {
   getSettings,
-  updateSettings,
   patternValidate,
   patternPreview,
   type PatternPart,
@@ -240,7 +239,7 @@ function PatternChipsEditor({
           style={{
             marginTop: 'var(--alm-sp-1)',
             fontSize: 'var(--alm-text-xs)',
-            color: 'var(--alm-error, #c0392b)',
+            color: 'var(--alm-danger, #c0392b)',
           }}
           role="alert"
         >
@@ -400,7 +399,7 @@ export function NamingStructure({ save }: NamingStructureProps) {
           </div>
         )}
         {previewError && (
-          <div style={{ fontSize: 'var(--alm-text-xs)', color: 'var(--alm-error, #c0392b)' }}>
+          <div style={{ fontSize: 'var(--alm-text-xs)', color: 'var(--alm-danger, #c0392b)' }}>
             {previewError}
           </div>
         )}

@@ -22,12 +22,12 @@ const { mockUpdateProject, mockReinferChannels, mockDismissDrift } = vi.hoisted(
 }));
 
 vi.mock('@/features/projects/store', () => ({
-  useUpdateProject: mockUpdateProject,
-  useReinferChannels: mockReinferChannels,
-  useDismissChannelDrift: mockDismissDrift,
-  useCreateProject: vi.fn(),
-  useAddProjectSource: vi.fn(),
-  useRemoveProjectSource: vi.fn(),
+  callUpdateProject: mockUpdateProject,
+  callReinferChannels: mockReinferChannels,
+  callDismissChannelDrift: mockDismissDrift,
+  callCreateProject: vi.fn(),
+  callAddProjectSource: vi.fn(),
+  callRemoveProjectSource: vi.fn(),
   useProjects: () => ({ data: [], loading: false }),
   useProjectDetail: () => ({ data: undefined, loading: false }),
   projectListStore: { subscribe: vi.fn(), getSnapshot: vi.fn(), fetch: vi.fn(), invalidate: vi.fn() },

@@ -75,7 +75,6 @@ vi.stubEnv('VITE_USE_MOCKS', 'true');
 // ── Fixtures ──────────────────────────────────────────────────────────────
 
 import type { InboxClassifyResponse, InboxItemSummary } from '@/api/commands';
-import type { InboxClassifyResponse_Serialize } from '@/bindings/index';
 
 const mixedClassification: InboxClassifyResponse = {
   inboxItemId: 'item-001',

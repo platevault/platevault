@@ -24,7 +24,7 @@ function makeMaster(overrides: Partial<CalibrationMaster> & { id: string }): Cal
   const { id, kind, age_days, fingerprint, ...rest } = overrides;
   return {
     id,
-    kind: (kind ?? 'dark') as CalibrationMaster['kind'],
+    kind: (kind ?? 'dark'),
     fingerprint: {
       camera: 'ASI2600MM',
       exposure_s: 300,
@@ -44,10 +44,10 @@ function makeMaster(overrides: Partial<CalibrationMaster> & { id: string }): Cal
 }
 
 const masters: CalibrationMaster[] = [
-  makeMaster({ id: 'dark-1', kind: 'dark' as CalibrationMaster['kind'], age_days: 30 }),
-  makeMaster({ id: 'dark-2', kind: 'dark' as CalibrationMaster['kind'], age_days: 95 }), // aging
-  makeMaster({ id: 'flat-1', kind: 'flat' as CalibrationMaster['kind'], age_days: 10, fingerprint: { camera: 'ASI2600MM', exposure_s: 3, gain: 100, binning: '1x1', filter: 'Ha' } }),
-  makeMaster({ id: 'bias-1', kind: 'bias' as CalibrationMaster['kind'], age_days: 20 }),
+  makeMaster({ id: 'dark-1', kind: 'dark', age_days: 30 }),
+  makeMaster({ id: 'dark-2', kind: 'dark', age_days: 95 }), // aging
+  makeMaster({ id: 'flat-1', kind: 'flat', age_days: 10, fingerprint: { camera: 'ASI2600MM', exposure_s: 3, gain: 100, binning: '1x1', filter: 'Ha' } }),
+  makeMaster({ id: 'bias-1', kind: 'bias', age_days: 20 }),
 ];
 
 // ── Tests ─────────────────────────────────────────────────────────────────────
@@ -121,7 +121,7 @@ describe('MastersList (spec 007)', () => {
   it('8. dark_flat kind is not shown in the grouped list (FR-001)', () => {
     const darkFlatMaster = makeMaster({
       id: 'df-1',
-      kind: 'dark_flat' as CalibrationMaster['kind'],
+      kind: 'dark_flat',
       age_days: 5,
     });
     render(

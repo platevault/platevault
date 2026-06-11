@@ -7,7 +7,7 @@
  */
 
 import { useState, useCallback } from 'react';
-import { createQueryStore, useQuery, invalidateStores } from '@/data/store';
+import { createQueryStore, useQuery } from '@/data/store';
 import { inventoryList, inventorySessionReview } from '@/api/commands';
 import type {
   InventoryListResponse,
@@ -60,7 +60,7 @@ export function setInventoryFilters(filters: InventoryFilters): void {
   inventoryStore = createQueryStore<InventoryListResponse>(() =>
     inventoryList(makeRequest(currentFilters)),
   );
-  inventoryStore.fetch();
+  void inventoryStore.fetch();
 }
 
 /** Invalidate the inventory list (call after a successful review action). */

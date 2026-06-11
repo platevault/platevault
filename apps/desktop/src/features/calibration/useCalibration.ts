@@ -151,7 +151,7 @@ export function useCalibrationSettings(): { prefillSuggestion: boolean } {
       .then((data) => {
         const v = data.values as Record<string, unknown>;
         if (typeof v['calibration.prefill_suggestion'] === 'boolean') {
-          setPrefillSuggestion(v['calibration.prefill_suggestion'] as boolean);
+          setPrefillSuggestion(v['calibration.prefill_suggestion']);
         }
       })
       .catch(() => {

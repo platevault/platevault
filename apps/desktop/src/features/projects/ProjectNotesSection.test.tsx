@@ -95,7 +95,7 @@ describe('ProjectNotesSection', () => {
     await act(async () => {
       fireEvent.click(screen.getByRole('button', { name: /edit/i }));
     });
-    const textarea = screen.getByTestId('notes-textarea') as HTMLTextAreaElement;
+    const textarea = screen.getByTestId('notes-textarea');
     fireEvent.change(textarea, { target: { value: 'Modified' } });
     await act(async () => {
       fireEvent.click(screen.getByRole('button', { name: /cancel/i }));
@@ -124,7 +124,7 @@ describe('ProjectNotesSection', () => {
     await act(async () => {
       fireEvent.click(screen.getByRole('button', { name: /edit/i }));
     });
-    const textarea = screen.getByTestId('notes-textarea') as HTMLTextAreaElement;
+    const textarea = screen.getByTestId('notes-textarea');
     // Set content to 1 byte over the limit.
     fireEvent.change(textarea, { target: { value: 'x'.repeat(MAX_NOTE_BYTES + 1) } });
     // Save button should be disabled (overLimit guard).
@@ -139,7 +139,7 @@ describe('ProjectNotesSection', () => {
     await act(async () => {
       fireEvent.click(screen.getByRole('button', { name: /edit/i }));
     });
-    const textarea = screen.getByTestId('notes-textarea') as HTMLTextAreaElement;
+    const textarea = screen.getByTestId('notes-textarea');
     fireEvent.change(textarea, { target: { value: 'abc' } });
     expect(screen.getByTestId('notes-byte-counter')).toHaveTextContent('3');
   });

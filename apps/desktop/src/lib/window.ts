@@ -29,7 +29,6 @@ export async function openInNewWindow(path: string): Promise<void> {
   // Lazy import so the Tauri API is never pulled into browser-only builds.
   const { WebviewWindow } = await import('@tauri-apps/api/webviewWindow');
   const label = `alm-win-${Date.now()}-${windowSeq++}`;
-  // eslint-disable-next-line no-new -- constructor performs the async create
   new WebviewWindow(label, {
     url: fullUrl,
     title: 'Astro Library Manager',

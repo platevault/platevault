@@ -80,7 +80,6 @@ export async function revealInOs(
   ctx?: RevealContext,
 ): Promise<RevealResult> {
   if (!isTauri()) {
-    // eslint-disable-next-line no-console
     console.info('[reveal-stub]', path, ctx);
     return { revealed: true, selection: 'target' };
   }

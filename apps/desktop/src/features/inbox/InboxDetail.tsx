@@ -22,7 +22,7 @@ import { useInboxReclassify } from './store';
 function classificationVariant(type: string): PillVariant {
   switch (type) {
     case 'single_type': return 'info';
-    case 'mixed':       return 'warn' as PillVariant;
+    case 'mixed':       return 'warn';
     case 'unclassified': return 'neutral';
     default:            return 'neutral';
   }
@@ -78,10 +78,10 @@ export function InboxDetail({ item, classification }: InboxDetailProps) {
       destination: entry.destinationPreview ? (
         <code style={{ fontSize: 'var(--alm-text-xs)' }}>{entry.destinationPreview}</code>
       ) : (
-        <span style={{ color: 'var(--alm-color-fg-muted)' }}>—</span>
+        <span style={{ color: 'var(--alm-text-muted)' }}>—</span>
       ),
       samples: (
-        <span style={{ color: 'var(--alm-color-fg-muted)', fontSize: 'var(--alm-text-xs)' }}>
+        <span style={{ color: 'var(--alm-text-muted)', fontSize: 'var(--alm-text-xs)' }}>
           {entry.sampleFiles?.slice(0, 3).join(', ')}
           {(entry.sampleFiles?.length ?? 0) > 3 ? ' …' : ''}
         </span>
@@ -188,7 +188,7 @@ export function InboxDetail({ item, classification }: InboxDetailProps) {
 
 function EmptyClassification() {
   return (
-    <div style={{ padding: 'var(--alm-sp-4)', color: 'var(--alm-color-fg-muted)' }}>
+    <div style={{ padding: 'var(--alm-sp-4)', color: 'var(--alm-text-muted)' }}>
       Loading classification…
     </div>
   );

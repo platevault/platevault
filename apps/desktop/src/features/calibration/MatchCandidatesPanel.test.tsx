@@ -99,7 +99,7 @@ const mixedStateResponse: CalibrationMatchSuggestResponse = {
 
 // ── Helpers ─────────────────────────────────────────────────────────────────
 
-const noop = async () => ({ status: 'success' as const });
+const _noop = async () => ({ status: 'success' as const });
 
 type OnAssignFn = (masterId: string, override: boolean) => Promise<{
   status: string;
@@ -118,7 +118,7 @@ function renderPanel(props: {
     response,
     loading = false,
     error,
-    onAssign = vi.fn().mockResolvedValue({ status: 'success' }) as unknown as OnAssignFn,
+    onAssign = vi.fn().mockResolvedValue({ status: 'success' }),
     assigning = false,
     prefillSuggestion = true,
   } = props;

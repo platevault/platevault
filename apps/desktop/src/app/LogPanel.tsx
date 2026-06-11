@@ -36,13 +36,6 @@ const LEVEL_CHIPS: { value: LevelFilter; label: string }[] = [
   { value: 'debug', label: 'Debug' },
 ];
 
-const LEVEL_RANK: Record<LogLevel, number> = {
-  debug: 0,
-  info: 1,
-  warn: 2,
-  error: 3,
-};
-
 function passesLevelFilter(entryLevel: LogLevel, filter: LevelFilter): boolean {
   if (filter === 'all') return true;
   return entryLevel === filter;

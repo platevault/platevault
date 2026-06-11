@@ -12,7 +12,7 @@
  * 8. Review response contract: transition.refused error code shape.
  */
 
-import { describe, it, expect, vi, beforeEach } from 'vitest';
+import { describe, it, expect, vi } from 'vitest';
 import {
   INVENTORY_SOURCES,
   INVENTORY_LIST_RESPONSE,

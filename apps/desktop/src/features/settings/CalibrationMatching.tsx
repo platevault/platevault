@@ -42,19 +42,19 @@ export function CalibrationMatching({ save }: CalibrationMatchingProps) {
       .then((data) => {
         const v = data.values as Record<string, unknown>;
         if (typeof v['calibration.dark_temp_tolerance'] === 'number') {
-          setDarkTempTolerance(v['calibration.dark_temp_tolerance'] as number);
+          setDarkTempTolerance(v['calibration.dark_temp_tolerance']);
         }
         if (typeof v['calibration.prefill_suggestion'] === 'boolean') {
-          setPrefillSuggestion(v['calibration.prefill_suggestion'] as boolean);
+          setPrefillSuggestion(v['calibration.prefill_suggestion']);
         }
         if (typeof v['calibration.dark.override_penalty'] === 'number') {
-          setDarkOverridePenalty(v['calibration.dark.override_penalty'] as number);
+          setDarkOverridePenalty(v['calibration.dark.override_penalty']);
         }
         if (typeof v['calibration.flat.override_penalty'] === 'number') {
-          setFlatOverridePenalty(v['calibration.flat.override_penalty'] as number);
+          setFlatOverridePenalty(v['calibration.flat.override_penalty']);
         }
         if (typeof v['calibration.bias.override_penalty'] === 'number') {
-          setBiasOverridePenalty(v['calibration.bias.override_penalty'] as number);
+          setBiasOverridePenalty(v['calibration.bias.override_penalty']);
         }
       })
       .catch(() => {

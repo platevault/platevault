@@ -1,6 +1,6 @@
 import { Pill } from '@/ui/Pill';
 import { Box } from '@/ui/Box';
-import type { SourcesState, SourceKind } from '../sources-store';
+import type { SourcesState } from '../sources-store';
 import { SOURCE_KIND_LABELS, getMissingRequiredKinds, getSourcesByKind, ALL_SOURCE_KINDS } from '../sources-store';
 import type { CatalogSettings } from './StepCatalogs';
 import type { ToolsState } from './StepTools';

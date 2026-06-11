@@ -3,7 +3,6 @@ import { Box } from '@/ui/Box';
 import { Btn } from '@/ui/Btn';
 import { Pill } from '@/ui/Pill';
 import { useDirectoryPicker } from '@/shared/native/picker';
-import { clsx } from 'clsx';
 import type { SourceEntry, SourceKind, ScanDepth } from '../sources-store';
 import {
   ALL_SOURCE_KINDS,

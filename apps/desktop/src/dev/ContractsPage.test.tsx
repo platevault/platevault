@@ -37,7 +37,7 @@ const mockDevExport = vi.mocked(devExport);
 
 // ── Fixtures ──────────────────────────────────────────────────────────────────
 
-function settingsResponse(devMode: boolean) {
+function _settingsResponse(devMode: boolean) {
   return {
     scope: 'advanced',
     values: { devMode, logLevel: 'info' },
@@ -49,8 +49,8 @@ beforeEach(() => {
   // Default: devMode off.
   mockGetSettings.mockResolvedValue({
     scope: 'advanced',
-    values: { devMode: false, logLevel: 'info' } as unknown,
-  } as Awaited<ReturnType<typeof getSettings>>);
+    values: { devMode: false, logLevel: 'info' },
+  });
   mockDevContractsList.mockResolvedValue({ contracts: [] });
   mockDevCallsList.mockResolvedValue({ calls: [] });
   mockDevExport.mockResolvedValue({ writtenPath: '/tmp/out.json', callCount: 0, contractCount: 0 });
@@ -81,8 +81,8 @@ describe('ContractsPage (T010)', () => {
   it('renders contract list when devMode = true', async () => {
     mockGetSettings.mockResolvedValue({
       scope: 'advanced',
-      values: { devMode: true } as unknown,
-    } as Awaited<ReturnType<typeof getSettings>>);
+      values: { devMode: true },
+    });
 
     mockDevContractsList.mockResolvedValue({
       contracts: [
@@ -107,8 +107,8 @@ describe('ContractsPage (T010)', () => {
   it('shows contract count heading when devMode = true', async () => {
     mockGetSettings.mockResolvedValue({
       scope: 'advanced',
-      values: { devMode: true } as unknown,
-    } as Awaited<ReturnType<typeof getSettings>>);
+      values: { devMode: true },
+    });
     mockDevContractsList.mockResolvedValue({
       contracts: [
         {
@@ -139,8 +139,8 @@ describe('ContractsPage (T010)', () => {
   it('shows Export button when devMode = true', async () => {
     mockGetSettings.mockResolvedValue({
       scope: 'advanced',
-      values: { devMode: true } as unknown,
-    } as Awaited<ReturnType<typeof getSettings>>);
+      values: { devMode: true },
+    });
     mockDevContractsList.mockResolvedValue({ contracts: [] });
     mockDevCallsList.mockResolvedValue({ calls: [] });
 

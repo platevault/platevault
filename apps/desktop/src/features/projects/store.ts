@@ -80,8 +80,11 @@ function invalidateProject(id?: string) {
  * Create a project. Invalidates the project list on success.
  *
  * Returns the full result including `planId` for the folder-structure plan.
+ *
+ * Note: named `callCreateProject` (not `useCreateProject`) because this is an
+ * async command, not a React hook — it is safe to call inside event handlers.
  */
-export async function useCreateProject(
+export async function callCreateProject(
   req: ProjectCreateRequest,
 ): Promise<ProjectCreateResult> {
   const result = await createProject(req);
@@ -92,7 +95,7 @@ export async function useCreateProject(
 /**
  * Update project name/tool/notes. Invalidates list + detail.
  */
-export async function useUpdateProject(
+export async function callUpdateProject(
   req: ProjectUpdateRequest,
 ): Promise<ProjectUpdateResult> {
   const result = await updateProject(req);
@@ -103,7 +106,7 @@ export async function useUpdateProject(
 /**
  * Add a source link to a project.
  */
-export async function useAddProjectSource(
+export async function callAddProjectSource(
   req: ProjectSourceAddRequest,
 ): Promise<ProjectSourceAddResult> {
   const result = await addProjectSource(req);
@@ -114,7 +117,7 @@ export async function useAddProjectSource(
 /**
  * Remove a source link from a project.
  */
-export async function useRemoveProjectSource(
+export async function callRemoveProjectSource(
   req: ProjectSourceRemoveRequest,
 ): Promise<ProjectSourceRemoveResult> {
   const result = await removeProjectSource(req);
@@ -125,7 +128,7 @@ export async function useRemoveProjectSource(
 /**
  * Re-infer channels from all linked sources, discarding manual overrides.
  */
-export async function useReinferChannels(
+export async function callReinferChannels(
   req: ProjectChannelsReinferRequest,
 ): Promise<ProjectChannelsReinferResult> {
   const result = await reinferProjectChannels(req);
@@ -136,7 +139,7 @@ export async function useReinferChannels(
 /**
  * Dismiss the channel-drift banner without re-inferring.
  */
-export async function useDismissChannelDrift(
+export async function callDismissChannelDrift(
   req: ProjectChannelsDismissDriftRequest,
 ): Promise<ProjectChannelsDismissDriftResult> {
   const result = await dismissProjectChannelDrift(req);
@@ -153,7 +156,7 @@ export async function useDismissChannelDrift(
  * - When the response has status='error' with any other code, the caller
  *   should surface an inline error toast.
  */
-export async function useTransitionLifecycle(
+export async function callTransitionLifecycle(
   projectId: string,
   currentState: ProjectLifecycleState,
   nextState: ProjectLifecycleState,

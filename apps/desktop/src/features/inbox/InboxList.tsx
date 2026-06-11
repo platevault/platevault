@@ -116,7 +116,7 @@ export function InboxList({
         <span className="alm-list-sidebar__count">{filtered.length} folder{filtered.length !== 1 ? 's' : ''}</span>
       }
     >
-      {filtered.map((item, listIdx) => {
+      {filtered.map((item, _listIdx) => {
         // Find original index so selection maps back correctly.
         const originalIdx = items.indexOf(item);
         return (
@@ -143,7 +143,7 @@ export function InboxList({
             </div>
             <div
               className="alm-list-item__meta"
-              style={{ display: 'flex', gap: 8, fontSize: 'var(--alm-text-xs)', color: 'var(--alm-color-fg-muted)' }}
+              style={{ display: 'flex', gap: 8, fontSize: 'var(--alm-text-xs)', color: 'var(--alm-text-muted)' }}
             >
               <span>{item.fileCount} file{item.fileCount !== 1 ? 's' : ''}</span>
             </div>

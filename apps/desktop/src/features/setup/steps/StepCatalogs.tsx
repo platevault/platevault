@@ -161,7 +161,7 @@ export function StepCatalogs({ settings: _settings, onSettingsChange: _onChange 
     // Reset only pending rows (don't re-download already succeeded ones).
     setRows((prev) =>
       prev.length === 0
-        ? currentManifest!.catalogs.map((e) => ({ catalogId: e.catalogId, status: 'pending' as RowStatus }))
+        ? currentManifest.catalogs.map((e) => ({ catalogId: e.catalogId, status: 'pending' }))
         : prev.map((r) => (r.status !== 'success' ? { ...r, status: 'pending', error: undefined } : r)),
     );
 

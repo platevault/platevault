@@ -74,7 +74,7 @@ export const STEP_HINT_TEXT: Record<string, { title: string; body: string }> = {
 
 // ── Mock fallback ─────────────────────────────────────────────────────────────
 
-function useMocks(): boolean {
+function isMockMode(): boolean {
   return import.meta.env.VITE_USE_MOCKS === 'true';
 }
 
@@ -89,7 +89,7 @@ const IDLE_STATE: GuidedFlowStateDto = {
 // ── Command wrappers ──────────────────────────────────────────────────────────
 
 export async function getGuidedState(): Promise<GuidedFlowStateDto> {
-  if (useMocks()) return IDLE_STATE;
+  if (isMockMode()) return IDLE_STATE;
   try {
     const resp = await invoke<GuidedStateGetResponse>('guided.state.get');
     return resp.state;
@@ -105,7 +105,7 @@ export async function getGuidedState(): Promise<GuidedFlowStateDto> {
 }
 
 export async function activateGuidedFlow(): Promise<GuidedFlowStateDto> {
-  if (useMocks()) return { ...IDLE_STATE, currentStep: STEP_INBOX_CONFIRM_FIRST };
+  if (isMockMode()) return { ...IDLE_STATE, currentStep: STEP_INBOX_CONFIRM_FIRST };
   try {
     return await invoke<GuidedFlowStateDto>('guided.activate');
   } catch {
@@ -116,7 +116,7 @@ export async function activateGuidedFlow(): Promise<GuidedFlowStateDto> {
 export async function completeGuidedStep(
   stepId: string,
 ): Promise<GuidedStepCompleteResponse> {
-  if (useMocks()) {
+  if (isMockMode()) {
     const idx = STEP_ORDER.indexOf(stepId as (typeof STEP_ORDER)[number]);
     const nextStep = idx >= 0 && idx < STEP_ORDER.length - 1 ? STEP_ORDER[idx + 1] : null;
     return {
@@ -129,12 +129,12 @@ export async function completeGuidedStep(
 }
 
 export async function dismissGuidedFlow(): Promise<GuidedDismissResponse> {
-  if (useMocks()) return { dismissedAt: new Date().toISOString() };
+  if (isMockMode()) return { dismissedAt: new Date().toISOString() };
   return invoke<GuidedDismissResponse>('guided.dismiss');
 }
 
 export async function restartGuidedFlow(): Promise<GuidedFlowStateDto> {
-  if (useMocks()) return { ...IDLE_STATE, currentStep: STEP_INBOX_CONFIRM_FIRST };
+  if (isMockMode()) return { ...IDLE_STATE, currentStep: STEP_INBOX_CONFIRM_FIRST };
   try {
     const resp = await invoke<GuidedRestartResponse>('guided.restart');
     return resp.state;

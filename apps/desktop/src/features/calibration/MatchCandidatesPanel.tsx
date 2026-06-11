@@ -53,7 +53,7 @@ function reasonLabel(reason: MismatchReason): string {
   }
 }
 
-function mismatchVariant(reason: MismatchReason): PillVariant {
+function _mismatchVariant(reason: MismatchReason): PillVariant {
   return reason === 'hard_rule_violation' ? 'danger' : 'warn';
 }
 

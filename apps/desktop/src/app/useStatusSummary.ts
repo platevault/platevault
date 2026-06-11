@@ -61,7 +61,7 @@ export function useStatusSummary(): StatusSummary {
       }
     }
 
-    fetch();
+    void fetch();
     const interval = setInterval(fetch, 30_000);
     return () => {
       cancelled = true;

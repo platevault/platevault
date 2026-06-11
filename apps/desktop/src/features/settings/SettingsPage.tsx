@@ -97,7 +97,7 @@ function renderPane(
 }
 
 export function SettingsPage() {
-  const params = useParams({ strict: false }) as { pane?: string };
+  const params = useParams({ strict: false });
   const initialPane = PANES.find((p) => p.id === params.pane)?.id ?? 'sources';
   const [activePane, setActivePane] = useState<PaneId>(initialPane);
   const { save, saved } = useAutoSave();

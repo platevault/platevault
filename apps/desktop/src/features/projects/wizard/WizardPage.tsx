@@ -1,11 +1,11 @@
-import { useState, useEffect, useMemo } from 'react';
+import { useState, useEffect } from 'react';
 import { useNavigate } from '@tanstack/react-router';
 import { WizardShell, Btn } from '@/ui';
 import type { WizardStep } from '@/ui';
 import { StepName, type StepNameData } from './StepName';
 import { StepSources, type StepSourcesData } from './StepSources';
 import { StepCalibration, type CalibrationMapping } from './StepCalibration';
-import { StepViews, type StepViewsData, type SourceViewStrategy } from './StepViews';
+import { StepViews, type StepViewsData } from './StepViews';
 import { StepLayout, type StepLayoutData } from './StepLayout';
 import { StepReview } from './StepReview';
 
@@ -114,7 +114,7 @@ export function WizardPage() {
 
   function handleCancel() {
     clearDraft();
-    navigate({ to: '/projects' });
+    void navigate({ to: '/projects' });
   }
 
   const steps: WizardStep[] = STEP_LABELS.map((label, i) => ({
