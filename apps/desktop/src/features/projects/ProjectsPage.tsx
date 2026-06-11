@@ -129,7 +129,12 @@ export function ProjectsPage() {
                     <Btn size="sm">Reveal in Explorer</Btn>
                   </>
                 )}
-                <Btn size="sm" variant="primary" onClick={() => setCreateOpen(true)}>
+                <Btn
+                  size="sm"
+                  variant="primary"
+                  onClick={() => setCreateOpen(true)}
+                  data-guide-anchor="projects.create-cta"
+                >
                   + New project
                 </Btn>
               </>

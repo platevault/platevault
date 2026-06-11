@@ -10,6 +10,7 @@ pub mod dev;
 pub mod enums;
 pub mod equipment;
 pub mod first_run;
+pub mod guided;
 pub mod inbox;
 pub mod ingestion;
 pub mod inventory;

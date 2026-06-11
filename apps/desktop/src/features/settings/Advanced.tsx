@@ -1,9 +1,12 @@
 // spec 018 — owned pane: logLevel, rememberFollowLogs, devMode.
 // On mount, loads persisted values from backend via settings.get('advanced').
 // Changes are auto-saved via the save() prop (useAutoSave -> settings.update).
+// spec 010 — Guided flow restart control added (T042).
 import { useState, useEffect } from 'react';
 import { Btn } from '@/ui';
 import { getSettings } from '@/api/commands';
+import { getGuidedState, restartGuidedFlow, type GuidedFlowStateDto } from '@/features/guided/store';
+import { STEP_ORDER } from '@/features/guided/store';
 
 interface AdvancedProps {
   save: (scope: string, values: Record<string, unknown>) => void;
@@ -13,6 +16,8 @@ type LogLevel = 'error' | 'warn' | 'info' | 'debug';
 
 export function Advanced({ save }: AdvancedProps) {
   const [logLevel, setLogLevel] = useState<LogLevel>('info');
+  const [guidedState, setGuidedState] = useState<GuidedFlowStateDto | null>(null);
+  const [guidedRestarting, setGuidedRestarting] = useState(false);
 
   // Load persisted logLevel from backend on mount (T015).
   useEffect(() => {
@@ -32,6 +37,34 @@ export function Advanced({ save }: AdvancedProps) {
       cancelled = true;
     };
   }, []);
+
+  // Load guided flow state on mount (spec 010, T042).
+  useEffect(() => {
+    let cancelled = false;
+    getGuidedState()
+      .then((state) => {
+        if (!cancelled) setGuidedState(state);
+      })
+      .catch(() => {/* Backend unavailable — hide control */});
+    return () => { cancelled = true; };
+  }, []);
+
+  const handleGuidedRestart = async () => {
+    setGuidedRestarting(true);
+    try {
+      const newState = await restartGuidedFlow();
+      setGuidedState(newState);
+    } catch {
+      // Best-effort.
+    } finally {
+      setGuidedRestarting(false);
+    }
+  };
+
+  // A "Completed" flow is one where all steps are in completedSteps.
+  const guidedCompleted = guidedState
+    ? STEP_ORDER.every((id) => guidedState.completedSteps.includes(id))
+    : false;
 
   const handleExport = () => console.log('Export DB triggered');
   const handleReset = () => console.log('Reset preferences triggered');
@@ -98,6 +131,40 @@ export function Advanced({ save }: AdvancedProps) {
           </div>
         </div>
       </div>
+
+      {/* Guided first-project-flow restart (spec 010, T042) */}
+      {guidedState !== null && (
+        <div className="alm-settings__group">
+          <div className="alm-settings__group-title">Guided Tour</div>
+          <div className="alm-settings__row" style={{ borderBottom: 'none' }}>
+            <div className="alm-settings__row-label">First project flow</div>
+            <div className="alm-settings__row-content">
+              <p
+                style={{
+                  fontSize: 'var(--alm-text-xs)',
+                  color: 'var(--alm-text-muted)',
+                  marginBottom: 'var(--alm-sp-3)',
+                  marginTop: 0,
+                }}
+              >
+                {guidedCompleted
+                  ? 'The guided flow has been completed. Restart to replay it from the beginning.'
+                  : guidedState.dismissed
+                    ? 'The guided flow is currently dismissed. Restart to resume from your last position.'
+                    : 'The guided flow is active.'}
+              </p>
+              <Btn
+                size="sm"
+                onClick={() => void handleGuidedRestart()}
+                disabled={guidedRestarting}
+                data-testid="guided-restart-btn"
+              >
+                {guidedRestarting ? 'Restarting…' : 'Restart guided flow'}
+              </Btn>
+            </div>
+          </div>
+        </div>
+      )}
 
       {/* Danger zone */}
       <div className="alm-settings__group">

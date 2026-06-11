@@ -4,13 +4,14 @@
 //! spec 014 catalogs, spec 030 equipment operations, spec 018 settings,
 //! spec 017 plans, spec 025 plan apply runs/events, spec 012 artifacts,
 //! spec 016 source protection, spec 024 manifests/notes,
-//! and spec 026 prepared source views.
+//! spec 026 prepared source views, and spec 010 guided flow.
 
 pub mod artifacts;
 pub mod calibration_assignment;
 pub mod catalogs;
 pub mod equipment;
 pub mod first_run;
+pub mod guided_flow;
 pub mod inbox;
 pub mod inventory;
 pub mod lifecycle;

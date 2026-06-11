@@ -740,6 +740,57 @@ export const commands = {
 	 */
 	tourCompleteStep: (step: string) => typedError<null, string>(__TAURI_INVOKE("tour.complete_step", { step })),
 	/**
+	 *  `guided.state.get` — read current coach state for UI hydration.
+	 * 
+	 *  Returns the current `GuidedFlowStateDto`.  On the first call after a
+	 *  corruption reset, returns `Err` with code `state_corrupted`; the row has
+	 *  already been reset to Idle server-side.  Retry to get the fresh state.
+	 * 
+	 *  # Errors
+	 *  Returns `Err(String)` on corruption (informational) or database failure.
+	 */
+	guidedStateGet: () => typedError<GuidedStateGetResponse, string>(__TAURI_INVOKE("guided.state.get")),
+	/**
+	 *  `guided.step.complete` — mark a step complete and advance the coach.
+	 * 
+	 *  The step must be a known registry id (e.g. `inbox.confirm_first`).
+	 *  If the flow is dismissed, returns an error.
+	 * 
+	 *  # Errors
+	 *  Returns `Err(String)` on unknown step id, dismissed flow, or database failure.
+	 */
+	guidedStepComplete: (request: GuidedStepCompleteRequest) => typedError<GuidedStepCompleteResponse, string>(__TAURI_INVOKE("guided.step.complete", { request })),
+	/**
+	 *  `guided.dismiss` — dismiss the coach, hiding all hints.
+	 * 
+	 *  Idempotent: calling again on an already-dismissed flow returns the
+	 *  original `dismissedAt` timestamp.
+	 * 
+	 *  # Errors
+	 *  Returns `Err(String)` on database failure.
+	 */
+	guidedDismiss: () => typedError<GuidedDismissResponse, string>(__TAURI_INVOKE("guided.dismiss")),
+	/**
+	 *  `guided.restart` — restart the coach from Settings.
+	 * 
+	 *  - `Dismissed → Active(lowest uncompleted step)`: retains completed steps.
+	 *  - `Completed → Idle`: resets all progress (A1 ratified 2026-05-22).
+	 * 
+	 *  # Errors
+	 *  Returns `Err(String)` on database failure.
+	 */
+	guidedRestart: () => typedError<GuidedRestartResponse, string>(__TAURI_INVOKE("guided.restart")),
+	/**
+	 *  `guided.activate` — activate the flow after first-run setup completes.
+	 * 
+	 *  If the flow is Idle, transitions to `Active(first uncompleted step)`.
+	 *  Idempotent when already active or dismissed.
+	 * 
+	 *  # Errors
+	 *  Returns `Err(String)` on database failure.
+	 */
+	guidedActivate: () => typedError<GuidedFlowStateDto, string>(__TAURI_INVOKE("guided.activate")),
+	/**
 	 *  `native.directory.pick` — open the OS directory picker.
 	 * 
 	 *  # Errors
@@ -2222,6 +2273,64 @@ export type Frameset = {
 export type GeneratedViewRefDto = {
 	id: string,
 	path: string,
+};
+
+/**  Response from `guided.dismiss`. */
+export type GuidedDismissResponse = {
+	/**  RFC-3339 UTC timestamp the dismiss was recorded. */
+	dismissedAt: string,
+};
+
+/**  Current coach state returned by `guided.state.get` and after transitions. */
+export type GuidedFlowStateDto = {
+	/**  Id of the active step, or `null` when dismissed/idle/completed. */
+	currentStep: string | null,
+	/**  Ids of completed steps in order of completion. */
+	completedSteps: string[],
+	/**  True when the coach has been dismissed. */
+	dismissed: boolean,
+	/**  RFC-3339 UTC timestamp when dismissed, or `null`. */
+	dismissedAt: string | null,
+	/**  RFC-3339 UTC timestamp of the last transition. */
+	updatedAt: string,
+};
+
+/**
+ *  Response from `guided.restart`.
+ * 
+ *  - If flow was `Dismissed`: resumes at the lowest uncompleted step; previously
+ *    completed steps retained.
+ *  - If flow was `Completed`: resets all progress to Idle (replay from step 1).
+ */
+export type GuidedRestartResponse = {
+	/**  Updated state after restart. */
+	state: GuidedFlowStateDto,
+};
+
+/**
+ *  Response from `guided.state.get`.
+ * 
+ *  On `state_corrupted` the row has already been reset to Idle server-side;
+ *  the caller should display a non-blocking notice and retry.
+ */
+export type GuidedStateGetResponse = {
+	state: GuidedFlowStateDto,
+};
+
+/**  Request for `guided.step.complete`. */
+export type GuidedStepCompleteRequest = {
+	/**  Stable id of the step to complete (e.g. `inbox.confirm_first`). */
+	stepId: string,
+};
+
+/**  Response from `guided.step.complete`. */
+export type GuidedStepCompleteResponse = {
+	/**  True when this call transitioned the step into `completedSteps`. */
+	completed: boolean,
+	/**  Id of the next uncompleted step, or `null` when the flow is complete. */
+	nextStep: string | null,
+	/**  Updated state after the transition. */
+	state: GuidedFlowStateDto,
 };
 
 /**  One frame-type breakdown entry in a classify response. */

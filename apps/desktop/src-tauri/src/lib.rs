@@ -43,6 +43,9 @@ use crate::commands::equipment::{
 use crate::commands::firstrun::{
     firstrun_complete, firstrun_restart, firstrun_state, roots_register_batch,
 };
+use crate::commands::guided::{
+    guided_activate, guided_dismiss, guided_restart, guided_state_get, guided_step_complete,
+};
 use crate::commands::inbox::{
     inbox_classify, inbox_confirm, inbox_reclassify, inbox_scan, inbox_scan_folder,
 };
@@ -240,6 +243,12 @@ pub fn specta_builder() -> Builder<tauri::Wry> {
         search_global,
         // tour
         tour_complete_step,
+        // guided first-project-flow (spec 010)
+        guided_state_get,
+        guided_step_complete,
+        guided_dismiss,
+        guided_restart,
+        guided_activate,
         // native filesystem controls (spec 004)
         native_directory_pick,
         native_file_pick,
@@ -417,6 +426,12 @@ pub fn specta_builder() -> Builder<tauri::Wry> {
         search_global,
         // tour
         tour_complete_step,
+        // guided first-project-flow (spec 010)
+        guided_state_get,
+        guided_step_complete,
+        guided_dismiss,
+        guided_restart,
+        guided_activate,
         // native filesystem controls (spec 004)
         native_directory_pick,
         native_file_pick,

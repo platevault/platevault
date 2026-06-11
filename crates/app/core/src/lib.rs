@@ -8,6 +8,7 @@ pub mod catalogs;
 pub mod dev_contracts;
 pub mod equipment;
 pub mod first_run;
+pub mod guided_flow;
 pub mod inbox;
 pub mod inventory;
 pub mod ledger_use_case;

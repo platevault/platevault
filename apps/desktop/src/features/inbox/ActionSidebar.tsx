@@ -99,6 +99,7 @@ export function ActionSidebar({
           style={{ width: '100%', justifyContent: 'space-between' }}
           aria-label={confirmLabel}
           data-testid="inbox-confirm-btn"
+          data-guide-anchor="inbox.confirm-row"
         >
           <span>{confirmLoading ? 'Working…' : confirmLabel}</span>
           <kbd

@@ -374,6 +374,7 @@ export function ProjectDetailContent({ projectId }: ProjectDetailContentProps) {
             }
             onClick={() => void launchTool()}
             data-testid="tool-launch-btn"
+            data-guide-anchor="project.open-in-tool"
           >
             {launchState.working ? 'Launching…' : `Open in ${projectToolStr}`}
           </Btn>

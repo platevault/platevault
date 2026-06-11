@@ -630,3 +630,39 @@ pub struct ProtectionPlanAcknowledged {
 }
 
 pub const TOPIC_PROTECTION_PLAN_ACKNOWLEDGED: &str = "protection.plan.acknowledged";
+
+// ── Guided first project flow audit events (spec 010) ────────────────────────
+
+/// Payload for the `inventory.confirmed` topic (spec 010 / spec 005 T027).
+///
+/// Emitted when an inbox item is confirmed into inventory through the normal
+/// confirm path. `source` on the envelope MUST be checked by guided-flow
+/// subscriber: ignore events where `source == Restore`.
+#[derive(Clone, Debug, Serialize, Deserialize, JsonSchema, Type)]
+#[serde(rename_all = "camelCase")]
+pub struct InventoryConfirmed {
+    /// The inbox item id that was confirmed.
+    pub inbox_item_id: String,
+    /// The resulting plan id.
+    pub plan_id: String,
+    pub at: String,
+}
+
+pub const TOPIC_INVENTORY_CONFIRMED: &str = "inventory.confirmed";
+
+/// Payload for the `guided_flow.state.corrupted` diagnostic topic (spec 010,
+/// FR-010, R-Corrupt).
+///
+/// Emitted when the guided_flow_state row fails to deserialize. The row is
+/// reset to Idle before this event is emitted.
+#[derive(Clone, Debug, Serialize, Deserialize, JsonSchema, Type)]
+#[serde(rename_all = "camelCase")]
+pub struct GuidedFlowStateCorrupted {
+    /// Raw corrupt value that was found in the database.
+    pub corrupt_raw: String,
+    /// Parse error detail.
+    pub parse_error: String,
+    pub at: String,
+}
+
+pub const TOPIC_GUIDED_FLOW_STATE_CORRUPTED: &str = "guided_flow.state.corrupted";
