@@ -5,14 +5,14 @@
 
 use contracts_core::lifecycle::{PlanState, ProjectState};
 use contracts_core::plans::{
-    DryRunResult, FilesystemPlan, PlanItem, PlanItemAction, PlanItemStatus, PlanKind,
+    DestructiveDestination, PlanDetail, PlanItemAction, PlanItemDetail, PlanItemProtection,
+    PlanItemState, PlanOrigin, PlanType,
 };
 use contracts_core::projects::{
     CleanupEligibility, CleanupState, OutputVerification, Project, ProjectArtifactGroup,
     ProjectDetail, ProjectOutput, ProjectSource, ProjectSourceView, SourceMap, SourceRole,
     SourceSelection, SourceViewStrategy, VerificationState,
 };
-use contracts_core::provenance::ProvenanceOrigin;
 use contracts_core::sessions::ConfidenceLevel;
 use contracts_core::JsonAny;
 
@@ -164,38 +164,64 @@ fn stub_project_artifacts() -> Vec<ProjectArtifactGroup> {
 /// Returns `Err(String)` on failure; the stub never fails.
 #[tauri::command]
 #[specta::specta(rename = "projects.create_plan")]
-pub async fn projects_create_plan(wizard_state: JsonAny) -> Result<FilesystemPlan, String> {
+pub async fn projects_create_plan(wizard_state: JsonAny) -> Result<PlanDetail, String> {
     tracing::debug!("stub: projects.create_plan wizard_state={wizard_state:?}");
-    Ok(FilesystemPlan {
+    Ok(PlanDetail {
         id: "plan-new-001".to_owned(),
-        kind: PlanKind::ProjectStructure,
+        number: 1,
+        title: "Create project NGC 7000 NB".to_owned(),
+        origin: PlanOrigin::Project,
+        origin_path: None,
         state: PlanState::ReadyForReview,
+        plan_type: PlanType::SourceMap,
+        destructive_destination: DestructiveDestination::Archive,
+        parent_plan_id: None,
+        items_total: 2,
+        items_applied: 0,
+        items_failed: 0,
+        items_skipped: 0,
+        items_cancelled: 0,
+        items_pending: 2,
+        total_bytes_required: 0,
+        approved_at: None,
+        discarded_at: None,
+        created_at: "2026-05-25T12:00:00Z".to_owned(),
         items: vec![
-            PlanItem {
-                action: PlanItemAction::Mkdir,
-                source_path: String::new(),
-                dest_path: "/astro/projects/NGC7000_NB".to_owned(),
-                status: PlanItemStatus::Pending,
-                dry_run_ok: true,
-                protection_reason: None,
-                provenance: ProvenanceOrigin::Generated,
-            },
-            PlanItem {
+            PlanItemDetail {
+                id: "item-001".to_owned(),
+                index: 1,
+                name: "NGC7000_NB".to_owned(),
                 action: PlanItemAction::Link,
-                source_path: "/astro/raw/NGC7000/Ha/light_001.fits".to_owned(),
-                dest_path: "/astro/projects/NGC7000_NB/lights/Ha/light_001.fits".to_owned(),
-                status: PlanItemStatus::Pending,
-                dry_run_ok: true,
-                protection_reason: None,
-                provenance: ProvenanceOrigin::Generated,
+                from: String::new(),
+                to: "/astro/projects/NGC7000_NB".to_owned(),
+                reason: "Create project folder".to_owned(),
+                protection: PlanItemProtection::Normal,
+                linked: None,
+                state: PlanItemState::Pending,
+                failure_reason: None,
+                provenance: None,
+                approved_mtime: None,
+                approved_size_bytes: None,
+                archive_path: None,
+            },
+            PlanItemDetail {
+                id: "item-002".to_owned(),
+                index: 2,
+                name: "light_001.fits".to_owned(),
+                action: PlanItemAction::Link,
+                from: "/astro/raw/NGC7000/Ha/light_001.fits".to_owned(),
+                to: "/astro/projects/NGC7000_NB/lights/Ha/light_001.fits".to_owned(),
+                reason: "Link acquisition frame".to_owned(),
+                protection: PlanItemProtection::Normal,
+                linked: None,
+                state: PlanItemState::Pending,
+                failure_reason: None,
+                provenance: None,
+                approved_mtime: None,
+                approved_size_bytes: None,
+                archive_path: None,
             },
         ],
-        dry_run_result: DryRunResult { passed: 2, warnings: 0, failures: 0 },
-        has_destructive: false,
-        reclaim_bytes: 0,
-        created_at: "2026-05-25T12:00:00Z".to_owned(),
-        approved_at: None,
-        applied_at: None,
     })
 }
 

@@ -200,3 +200,82 @@ pub struct SettingsRepair {
 }
 
 pub const TOPIC_SETTINGS_REPAIR: &str = "settings.repair";
+
+// ── Plan lifecycle audit events (spec 017, A7) ────────────────────────────────
+
+/// Payload for the `plan.approved` topic (spec 017, A7).
+///
+/// Emitted when a reviewer approves a plan. Includes the actor and prior state.
+#[derive(Clone, Debug, Serialize, Deserialize, JsonSchema, Type)]
+#[serde(rename_all = "camelCase")]
+pub struct PlanApproved {
+    /// Stable plan id.
+    pub plan_id: String,
+    /// Prior state before approval (always `ready_for_review`).
+    pub prior_state: String,
+    /// Actor who approved the plan.
+    pub actor: String,
+    /// ISO-8601 timestamp of approval.
+    pub approved_at: String,
+}
+
+pub const TOPIC_PLAN_APPROVED: &str = "plan.approved";
+
+/// Payload for the `plan.discarded` topic (spec 017, A7, A5).
+///
+/// Emitted when a plan is soft-deleted. The audit record is retained even after
+/// the plan's `discardedAt` is set.
+#[derive(Clone, Debug, Serialize, Deserialize, JsonSchema, Type)]
+#[serde(rename_all = "camelCase")]
+pub struct PlanDiscarded {
+    /// Stable plan id.
+    pub plan_id: String,
+    /// State at the time of discard.
+    pub prior_state: String,
+    /// ISO-8601 timestamp of discard.
+    pub discarded_at: String,
+}
+
+pub const TOPIC_PLAN_DISCARDED: &str = "plan.discarded";
+
+/// Payload for the `plan.retry_created` topic (spec 017, A7).
+///
+/// Emitted when a retry plan is created from a terminal parent.
+#[derive(Clone, Debug, Serialize, Deserialize, JsonSchema, Type)]
+#[serde(rename_all = "camelCase")]
+pub struct PlanRetryCreated {
+    /// The new (retry) plan id.
+    pub new_plan_id: String,
+    /// The terminal parent plan id.
+    pub parent_plan_id: String,
+    /// Which items filter was used: "failed", "cancelled", or "all".
+    pub items_filter: String,
+    /// Number of items materialised into the retry plan.
+    pub items_total: i64,
+    /// ISO-8601 timestamp.
+    pub at: String,
+}
+
+pub const TOPIC_PLAN_RETRY_CREATED: &str = "plan.retry_created";
+
+/// Payload for the `archive.sent_to_trash` topic (spec 017, R-Archive-2).
+#[derive(Clone, Debug, Serialize, Deserialize, JsonSchema, Type)]
+#[serde(rename_all = "camelCase")]
+pub struct ArchiveSentToTrash {
+    pub plan_id: String,
+    pub items_moved: i64,
+    pub at: String,
+}
+
+pub const TOPIC_ARCHIVE_SENT_TO_TRASH: &str = "archive.sent_to_trash";
+
+/// Payload for the `archive.permanently_deleted` topic (spec 017, R-Archive-2).
+#[derive(Clone, Debug, Serialize, Deserialize, JsonSchema, Type)]
+#[serde(rename_all = "camelCase")]
+pub struct ArchivePermanentlyDeleted {
+    pub plan_id: String,
+    pub items_deleted: i64,
+    pub at: String,
+}
+
+pub const TOPIC_ARCHIVE_PERMANENTLY_DELETED: &str = "archive.permanently_deleted";

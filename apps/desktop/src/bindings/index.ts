@@ -133,42 +133,82 @@ export const commands = {
 	 *  # Errors
 	 *  Returns `Err(String)` on failure; the stub never fails.
 	 */
-	projectsCreatePlan: (wizardState: unknown) => typedError<FilesystemPlan_Serialize, string>(__TAURI_INVOKE("projects.create_plan", { wizardState })),
+	projectsCreatePlan: (wizardState: unknown) => typedError<PlanDetail_Serialize, string>(__TAURI_INVOKE("projects.create_plan", { wizardState })),
 	/**
-	 *  `plans.list` — returns all filesystem plans.
+	 *  `plans.list` — list reviewable plans, failed-first ordering (US1, T014).
 	 * 
 	 *  # Errors
-	 *  Returns `Err(String)` on failure; the stub never fails.
+	 * 
+	 *  Returns `Err(String)` with the contract error code on failure.
 	 */
-	plansList: (filters: unknown | null) => typedError<FilesystemPlan_Serialize[], string>(__TAURI_INVOKE("plans.list", { filters })),
+	plansList: (stateFilter: string[] | null, originFilter: string[] | null, createdAfter: string | null, limit: number | null) => typedError<PlanListResponse_Serialize, string>(__TAURI_INVOKE("plans.list", { stateFilter, originFilter, createdAfter, limit })),
 	/**
-	 *  `plans.get` — returns a single plan detail.
+	 *  `plans.get` — fetch a plan with all its items (US1, T014).
 	 * 
 	 *  # Errors
-	 *  Returns `Err(String)` on failure; the stub never fails.
+	 * 
+	 *  Returns `Err(String)` with `"plan.not_found"` if the plan does not exist.
 	 */
 	plansGet: (id: string) => typedError<PlanDetail_Serialize, string>(__TAURI_INVOKE("plans.get", { id })),
 	/**
-	 *  `plans.approve` — approve a plan for application.
+	 *  `plans.approve` — move a plan to `approved`; snapshot item FS metadata (US3, T025).
 	 * 
 	 *  # Errors
-	 *  Returns `Err(String)` on failure; the stub never fails.
+	 * 
+	 *  Returns `Err(String)` with `"plan.not_found"`, `"plan.invalid_state"`, or
+	 *  `"plan.items.empty"` on failure.
 	 */
-	plansApprove: (id: string, deleteAcknowledged: boolean | null) => typedError<FilesystemPlan_Serialize, string>(__TAURI_INVOKE("plans.approve", { id, deleteAcknowledged })),
+	plansApprove: (id: string) => typedError<PlanApproveResponse, string>(__TAURI_INVOKE("plans.approve", { id })),
 	/**
-	 *  `plans.apply` — apply an approved plan, returning an operation handle.
+	 *  `plans.apply` — start applying an approved plan (owned by spec 025).
+	 * 
+	 *  This stub returns an operation handle for the frontend; the real executor
+	 *  is implemented in spec 025.
 	 * 
 	 *  # Errors
-	 *  Returns `Err(String)` on failure; the stub never fails.
+	 * 
+	 *  Always returns `Err("not_implemented")` until spec 025 lands.
 	 */
 	plansApply: (id: string) => typedError<IpcOperationHandle, string>(__TAURI_INVOKE("plans.apply", { id })),
 	/**
-	 *  `plans.discard` — discard a plan.
+	 *  `plans.discard` — soft-delete a plan (US4, T030).
 	 * 
 	 *  # Errors
-	 *  Returns `Err(String)` on failure; the stub never fails.
+	 * 
+	 *  Returns `Err(String)` with `"plan.not_found"` or `"plan.in_progress"` on failure.
 	 */
-	plansDiscard: (id: string) => typedError<null, string>(__TAURI_INVOKE("plans.discard", { id })),
+	plansDiscard: (id: string) => typedError<PlanDiscardResponse, string>(__TAURI_INVOKE("plans.discard", { id })),
+	/**
+	 *  `plans.retry` — create a new plan from failed/cancelled/all items of a
+	 *  terminal parent (US5, T035).
+	 * 
+	 *  `items_filter` must be one of `"failed"`, `"cancelled"`, or `"all"` (R-Retry-1).
+	 * 
+	 *  # Errors
+	 * 
+	 *  Returns `Err(String)` with `"parent.not_found"`, `"parent.not_terminal"`,
+	 *  `"no.items.to.retry"`, or `"value.invalid"` on failure.
+	 */
+	plansRetry: (parentPlanId: string, itemsFilter: string) => typedError<PlanRetryResponse, string>(__TAURI_INVOKE("plans.retry", { parentPlanId, itemsFilter })),
+	/**
+	 *  `archive.send_to_trash` — send the archive subtree to OS trash (US6, T045).
+	 * 
+	 *  # Errors
+	 * 
+	 *  Returns `Err(String)` with `"plan.not_found"` or `"archive.empty"` on failure.
+	 */
+	archiveSendToTrash: (planId: string) => typedError<ArchiveSendToTrashResponse, string>(__TAURI_INVOKE("archive.send_to_trash", { planId })),
+	/**
+	 *  `archive.permanently_delete` — permanently remove archive subtree (US6, T046).
+	 * 
+	 *  Requires `confirm_text == "DELETE"`. Blocked if spec-016 `blockPermanentDelete` is true.
+	 * 
+	 *  # Errors
+	 * 
+	 *  Returns `Err(String)` with `"confirm.text.mismatch"`, `"plan.blocked_by_protection"`,
+	 *  `"plan.not_found"`, or `"archive.empty"` on failure.
+	 */
+	archivePermanentlyDelete: (planId: string, confirmText: string) => typedError<ArchivePermanentlyDeleteResponse, string>(__TAURI_INVOKE("archive.permanently_delete", { planId, confirmText })),
 	/**
 	 *  `audit.list` — returns paginated audit entries.
 	 * 
@@ -659,6 +699,20 @@ export type AppPreferences = {
 	setupCompleted: boolean,
 };
 
+/**  Response for `archive.permanently_delete`. */
+export type ArchivePermanentlyDeleteResponse = {
+	planId: string,
+	itemsDeleted: number,
+	auditId: string,
+};
+
+/**  Response for `archive.send_to_trash`. */
+export type ArchiveSendToTrashResponse = {
+	planId: string,
+	itemsMoved: number,
+	auditId: string,
+};
+
 export type AssetType = "file_record" | "acquisition_session" | "calibration_session" | "project" | "prepared_source" | "processing_artifact" | "filesystem_plan" | "data_source" | 
 /**  target: alias and primaryDesignation provenance tracking (R-3.2). */
 "target";
@@ -988,6 +1042,9 @@ export type DataSourceTransitionRequest_Serialize = {
 /**  UI density preference. */
 export type Density = "compact" | "comfortable" | "spacious";
 
+/**  Per-plan destination for destructive items (R-Trash-1). */
+export type DestructiveDestination = "archive" | "os_trash";
+
 /**  Request payload for `native.directory.pick`. */
 export type DirectoryPickRequest = DirectoryPickRequest_Serialize | DirectoryPickRequest_Deserialize;
 
@@ -1009,13 +1066,6 @@ export type DirectoryPickResponse = {
 	path: string | null,
 	/**  True when the user dismissed the dialog without selecting. */
 	cancelled: boolean,
-};
-
-/**  Dry-run result summary. */
-export type DryRunResult = {
-	passed: number,
-	warnings: number,
-	failures: number,
 };
 
 /**  Entity kind for audit-log correlation on reveal operations. */
@@ -1103,37 +1153,6 @@ export type FileRecordTransitionRequest_Serialize = {
 	nextState: FileRecordState,
 	actionLabel?: string | null,
 	actor: TransitionActor,
-};
-
-/**  A filesystem plan as seen in list/detail views. */
-export type FilesystemPlan = FilesystemPlan_Serialize | FilesystemPlan_Deserialize;
-
-/**  A filesystem plan as seen in list/detail views. */
-export type FilesystemPlan_Deserialize = {
-	id: string,
-	kind: PlanKind,
-	state: PlanState,
-	items: PlanItem_Deserialize[],
-	dryRunResult: DryRunResult,
-	hasDestructive: boolean,
-	reclaimBytes: number,
-	createdAt: string,
-	approvedAt: string | null,
-	appliedAt: string | null,
-};
-
-/**  A filesystem plan as seen in list/detail views. */
-export type FilesystemPlan_Serialize = {
-	id: string,
-	kind: PlanKind,
-	state: PlanState,
-	items: PlanItem_Serialize[],
-	dryRunResult: DryRunResult,
-	hasDestructive: boolean,
-	reclaimBytes: number,
-	createdAt: string,
-	approvedAt?: string | null,
-	appliedAt?: string | null,
 };
 
 export type Filter = {
@@ -1545,85 +1564,199 @@ export type PatternValidateResponse_Serialize = {
 	errorToken?: string | null,
 };
 
-/**  Extended detail view of a filesystem plan. */
+/**  Response for `plans.approve` (A1, R-FS-1). */
+export type PlanApproveResponse = {
+	planId: string,
+	newState: string,
+	/**  HMAC token (A1): consumed by spec 025 `plan.apply`. */
+	approvalToken: string,
+	approvedAt: string,
+};
+
+/**  Full plan detail returned by `plans.get`. */
 export type PlanDetail = PlanDetail_Serialize | PlanDetail_Deserialize;
 
-/**  Extended detail view of a filesystem plan. */
+/**  Full plan detail returned by `plans.get`. */
 export type PlanDetail_Deserialize = {
 	id: string,
-	kind: PlanKind,
+	number: number,
+	title: string,
+	origin: PlanOrigin,
+	originPath: string | null,
 	state: PlanState,
-	items: PlanItem_Deserialize[],
-	dryRunResult: DryRunResult,
-	hasDestructive: boolean,
-	reclaimBytes: number,
-	createdAt: string,
+	planType: PlanType,
+	destructiveDestination: DestructiveDestination,
+	parentPlanId: string | null,
+	itemsTotal: number,
+	itemsApplied: number,
+	itemsFailed: number,
+	itemsSkipped: number,
+	itemsCancelled: number,
+	itemsPending: number,
+	totalBytesRequired: number,
 	approvedAt: string | null,
-	appliedAt: string | null,
-	summary: PlanSafetySummary,
+	discardedAt: string | null,
+	createdAt: string,
+	items: PlanItemDetail_Deserialize[],
 };
 
-/**  Extended detail view of a filesystem plan. */
+/**  Full plan detail returned by `plans.get`. */
 export type PlanDetail_Serialize = {
 	id: string,
-	kind: PlanKind,
+	number: number,
+	title: string,
+	origin: PlanOrigin,
+	originPath?: string | null,
 	state: PlanState,
-	items: PlanItem_Serialize[],
-	dryRunResult: DryRunResult,
-	hasDestructive: boolean,
-	reclaimBytes: number,
-	createdAt: string,
+	planType: PlanType,
+	destructiveDestination: DestructiveDestination,
+	parentPlanId?: string | null,
+	itemsTotal: number,
+	itemsApplied: number,
+	itemsFailed: number,
+	itemsSkipped: number,
+	itemsCancelled: number,
+	itemsPending: number,
+	totalBytesRequired: number,
 	approvedAt?: string | null,
-	appliedAt?: string | null,
-	summary: PlanSafetySummary,
+	discardedAt?: string | null,
+	createdAt: string,
+	items: PlanItemDetail_Serialize[],
 };
 
-/**  A single item within a filesystem plan. */
-export type PlanItem = PlanItem_Serialize | PlanItem_Deserialize;
+/**  Response for `plans.discard` (A5). */
+export type PlanDiscardResponse = {
+	planId: string,
+	discardedAt: string,
+};
 
 /**  Action to perform on a single filesystem item. */
-export type PlanItemAction = "mkdir" | "move" | "copy" | "link" | "junction" | "write" | "archive" | "trash" | "delete";
+export type PlanItemAction = "move" | "archive" | "delete" | "link" | "write";
 
-/**  Status of a single plan item. */
-export type PlanItemStatus = "pending" | "applied" | "failed" | "skipped" | "protected";
+/**  A single item within a plan detail view. */
+export type PlanItemDetail = PlanItemDetail_Serialize | PlanItemDetail_Deserialize;
 
-/**  A single item within a filesystem plan. */
-export type PlanItem_Deserialize = {
+/**  A single item within a plan detail view. */
+export type PlanItemDetail_Deserialize = {
+	id: string,
+	index: number,
+	name: string,
 	action: PlanItemAction,
-	sourcePath: string,
-	destPath: string,
-	status: PlanItemStatus,
-	dryRunOk: boolean,
-	protectionReason: string | null,
-	provenance: ProvenanceOrigin,
+	from: string,
+	to: string,
+	reason: string,
+	protection: PlanItemProtection,
+	linked: string | null,
+	state: PlanItemState,
+	failureReason: string | null,
+	provenance: ProvenanceEntry[] | null,
+	approvedMtime: string | null,
+	approvedSizeBytes: number | null,
+	archivePath: string | null,
 };
 
-/**  A single item within a filesystem plan. */
-export type PlanItem_Serialize = {
+/**  A single item within a plan detail view. */
+export type PlanItemDetail_Serialize = {
+	id: string,
+	index: number,
+	name: string,
 	action: PlanItemAction,
-	sourcePath: string,
-	destPath: string,
-	status: PlanItemStatus,
-	dryRunOk: boolean,
-	protectionReason?: string | null,
-	provenance: ProvenanceOrigin,
+	from: string,
+	to: string,
+	reason: string,
+	protection: PlanItemProtection,
+	linked?: string | null,
+	state: PlanItemState,
+	failureReason?: string | null,
+	provenance?: ProvenanceEntry[] | null,
+	approvedMtime?: string | null,
+	approvedSizeBytes?: number | null,
+	archivePath?: string | null,
 };
 
-/**  Kind of filesystem plan. */
-export type PlanKind = "project_structure" | "source_view" | "source_view_removal" | "archive" | "cleanup" | "root_remap" | "manifest";
+/**  Protection status from spec 016. */
+export type PlanItemProtection = "normal" | "protected";
 
-/**  Safety summary for a plan detail view. */
-export type PlanSafetySummary = {
-	itemCount: number,
-	reclaimBytes: number,
-	trashCount: number,
-	archiveCount: number,
-	deleteCount: number,
-	protectedCount: number,
+/**  Per-item lifecycle state. */
+export type PlanItemState = "pending" | "applying" | "succeeded" | "failed" | "skipped" | "cancelled";
+
+/**  Response for `plans.list`. */
+export type PlanListResponse = PlanListResponse_Serialize | PlanListResponse_Deserialize;
+
+/**  Response for `plans.list`. */
+export type PlanListResponse_Deserialize = {
+	plans: PlanSummary_Deserialize[],
 };
 
-/**  Note: `paused` is a domain-internal state (R-Pause-1); not surfaced in the transition contract. */
-export type PlanState = "draft" | "ready_for_review" | "approved" | "applying" | "applied" | "partially_applied" | "failed" | "cancelled" | "discarded";
+/**  Response for `plans.list`. */
+export type PlanListResponse_Serialize = {
+	plans: PlanSummary_Serialize[],
+};
+
+/**  Plan origin — which generator created this plan. */
+export type PlanOrigin = "inbox" | "restructure" | "cleanup" | "archive" | "project";
+
+/**  Response for `plans.retry`. */
+export type PlanRetryResponse = {
+	newPlanId: string,
+	parentPlanId: string,
+	itemsTotal: number,
+};
+
+/**
+ *  Ten-state plan lifecycle (spec 017 data-model.md `PlanState`).
+ *  `paused` is surfaced here so the list/detail contracts can filter on it (R-Pause-1).
+ */
+export type PlanState = "draft" | "ready_for_review" | "approved" | "applying" | 
+/**  Mid-apply suspension (R-Pause-1). Written only by spec 025's executor. */
+"paused" | "applied" | "partially_applied" | "failed" | "cancelled" | "discarded";
+
+/**  Plan summary row — returned by `plans.list`. */
+export type PlanSummary = PlanSummary_Serialize | PlanSummary_Deserialize;
+
+/**  Plan summary row — returned by `plans.list`. */
+export type PlanSummary_Deserialize = {
+	id: string,
+	number: number,
+	title: string,
+	origin: PlanOrigin,
+	originPath: string | null,
+	state: PlanState,
+	createdAt: string,
+	discardedAt: string | null,
+	itemsTotal: number,
+	itemsApplied: number,
+	itemsFailed: number,
+	itemsSkipped: number,
+	itemsCancelled: number,
+	itemsPending: number,
+	totalBytesRequired: number,
+	destructiveDestination: DestructiveDestination,
+	planType: PlanType,
+	parentPlanId: string | null,
+};
+
+/**  Plan summary row — returned by `plans.list`. */
+export type PlanSummary_Serialize = {
+	id: string,
+	number: number,
+	title: string,
+	origin: PlanOrigin,
+	originPath?: string | null,
+	state: PlanState,
+	createdAt: string,
+	discardedAt?: string | null,
+	itemsTotal: number,
+	itemsApplied: number,
+	itemsFailed: number,
+	itemsSkipped: number,
+	itemsCancelled: number,
+	itemsPending: number,
+	totalBytesRequired: number,
+	destructiveDestination: DestructiveDestination,
+	planType: PlanType,
+	parentPlanId?: string | null,
+};
 
 export type PlanTransitionRequest = PlanTransitionRequest_Serialize | PlanTransitionRequest_Deserialize;
 
@@ -1648,6 +1781,9 @@ export type PlanTransitionRequest_Serialize = {
 	actionLabel?: string | null,
 	actor: TransitionActor,
 };
+
+/**  Execution shape of a plan. */
+export type PlanType = "split" | "restructure" | "cleanup" | "archive" | "source_map";
 
 export type PreparedSourceState = "not_created" | "planned" | "ready" | "stale" | "retired";
 
@@ -1919,6 +2055,12 @@ export type ProjectionTransitionRequest_Serialize = {
 	nextState: ProjectionState,
 	actionLabel?: string | null,
 	actor: TransitionActor,
+};
+
+/**  A provenance label/value pair for how an item was inferred. */
+export type ProvenanceEntry = {
+	label: string,
+	value: string,
 };
 
 export type ProvenanceError = ProvenanceError_Serialize | ProvenanceError_Deserialize;

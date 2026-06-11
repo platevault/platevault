@@ -6,8 +6,19 @@
 
 **Feature Branch**: `017-cleanup-archive-review-plans`  
 **Created**: 2026-05-09  
-**Status**: Draft  
+**Status**: Backend implemented (2026-06-11); UI contextual per v4 reconciliation  
 **Input**: User description: "Specify what cleanup/archive plans mean, how users review them, and how destructive operations are gated."
+
+> **v4 reconciliation (2026-06-11)**: The plan persistence + use cases
+> (list/get/approve/discard/retry + archive send-to-trash / permanently-delete
+> with the spec-016 protection gate) and audit events are implemented and tested.
+> Design-v4 has NO standalone Plans review page (no `PlansListPage`/`PlanDetailPage`
+> route); plans are generated *contextually* by consumer flows, so the plan-review
+> UI tasks (T015/T016/T027/T031/T037/T048) are deferred to the specs that GENERATE
+> plans and review them inline: 005 (inbox confirm), 008 (project create), 025
+> (apply review), 026 (source-view removal), and the Archive page for US6. The
+> archive plan GENERATOR (US2, T017–T021) is deferred pending 008 project sources
+> + 015 patterns (now available). `plans.apply` remains a spec-025 stub.
 
 ## User Scenarios & Testing *(mandatory)*
 
