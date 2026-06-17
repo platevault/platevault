@@ -68,6 +68,16 @@ pub struct PlanItemRow {
     pub approved_size_bytes: Option<i64>,
     pub archive_path: Option<String>,
     pub created_at: String,
+    // Fields added by migration 0031.
+    pub source_id: Option<String>,
+    pub category: Option<String>,
+    /// 0/1 bool: derived from action type (delete/trash). Added by migration 0031.
+    pub requires_destructive_confirm: Option<i64>,
+    pub resolved_pattern: Option<String>,
+    /// 0/1 bool: whether the user has confirmed the destructive action.
+    /// Not yet a DB column — defaults to None / treated as false until wired.
+    #[sqlx(default)]
+    pub destructive_confirmed: Option<i64>,
 }
 
 /// Data required to insert a new plan.

@@ -68,6 +68,12 @@ pub enum FailureCode {
     DiskFull,
     /// Path resolves outside a registered library root (FR-014).
     PathInvalid,
+    /// Path escapes the library root via `..` traversal (FR-001, D8).
+    RootEscape,
+    /// A path component is a symlink or junction (FR-002, D8).
+    SymlinkComponent,
+    /// Destructive item blocked — `requires_destructive_confirm` not satisfied (FR-003, D9).
+    DestructiveUnconfirmed,
     /// Item is protected by source policy (FR-008).
     ProtectedSource,
     /// OS trash not available on this platform / volume combination.
@@ -103,6 +109,9 @@ impl FailureCode {
             Self::VolumeUnavailable => "volume.unavailable",
             Self::DiskFull => "disk.full",
             Self::PathInvalid => "path.invalid",
+            Self::RootEscape => "root_escape",
+            Self::SymlinkComponent => "symlink",
+            Self::DestructiveUnconfirmed => "destructive_unconfirmed",
             Self::ProtectedSource => "protected.source",
             Self::TrashUnavailable => "trash.unavailable",
             Self::CopySucceededDeleteFailed => "copy.succeeded.delete.failed",
@@ -135,6 +144,9 @@ impl FailureCode {
             Self::ConflictDestinationExists
             | Self::SourceMissing
             | Self::PathInvalid
+            | Self::RootEscape
+            | Self::SymlinkComponent
+            | Self::DestructiveUnconfirmed
             | Self::ProtectedSource
             | Self::TrashUnavailable
             | Self::CopySucceededDeleteFailedRollbackFailed

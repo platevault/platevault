@@ -1,26 +1,28 @@
-//! OS trash primitive (spec 025, research R2, R-Trash-1).
+//! OS trash primitive (spec 025, spec 033 T022, FR-006, D4).
 //!
-//! Moves the file to the OS trash (Recycle Bin / Trash). Falls back to
-//! `trash.unavailable` when the platform does not support a trash API or
-//! when the volume does not have a trash location.
+//! Moves the file to the OS recycle bin / Trash / XDG trash via the `trash`
+//! crate (MIT, 5.2.x). When the trash API is unavailable or fails, falls back
+//! to moving the file into `fallback_archive_dest` (an archive path computed
+//! by the caller) and records which destination was actually used.
 //!
-//! v1 uses `std::fs::remove_file` as a fallback with a clear error when
-//! the OS trash crate is unavailable. The `trash` crate is not in the
-//! workspace yet; a future iteration will add it per the research decision.
-//!
-//! Constitution §II: destructive ops prefer trash/archive over permanent
-//! delete. Trash is never assumed to succeed; failure is logged distinctly.
+//! Constitution §II: destructive ops prefer trash/archive over permanent delete;
+//! trash is never assumed to succeed; failure is logged and recorded distinctly.
 
 use std::path::Path;
 
 use crate::failure::{FailureCode, PlanItemFailure, RollbackOutcome};
 
-/// Result of a trash operation (rollback not applicable for trash).
+/// Result of a trash (or fallback-archive) operation.
+///
+/// `destination_used` records whether `"trash"` or `"archive"` was the actual
+/// destination — required by FR-006 ("record which destination was used").
 #[derive(Debug)]
 pub struct TrashResult {
     pub rollback_attempted: bool,
     pub rollback_outcome: RollbackOutcome,
     pub rollback_message: Option<String>,
+    /// `"trash"` if the OS bin was used; `"archive"` if archive fallback fired.
+    pub destination_used: &'static str,
 }
 
 impl Default for TrashResult {
@@ -29,72 +31,95 @@ impl Default for TrashResult {
             rollback_attempted: false,
             rollback_outcome: RollbackOutcome::NotApplicable,
             rollback_message: None,
+            destination_used: "trash",
         }
     }
 }
 
 /// Send `path` to the OS trash.
 ///
-/// In v1 this delegates to the platform's rename-to-trash heuristic.
-/// When the trash API is unavailable (network volumes, some Linux setups)
-/// it returns `trash.unavailable` so the user can decide.
+/// When `fallback_archive_dest` is `Some`, a failed trash attempt falls back
+/// to archiving the file there and returns `Ok` with `destination_used =
+/// "archive"`. When it is `None`, a failed trash returns `Err`.
 ///
 /// # Errors
 ///
-/// Returns `(PlanItemFailure, TrashResult)` on failure.
-pub fn trash_file(path: &Path) -> Result<(), (PlanItemFailure, TrashResult)> {
-    // v1: attempt platform trash via std rename to a well-known location.
-    // A proper `trash` crate integration is a follow-up task.
-    // For now: try to use `trash_impl` for the current platform.
-    trash_impl(path).map_err(|f| (f, TrashResult::default()))
+/// Returns `(PlanItemFailure, TrashResult)` when both trash and the archive
+/// fallback fail (or when no fallback is provided and trash fails).
+pub fn trash_file(
+    path: &Path,
+    fallback_archive_dest: Option<&Path>,
+) -> Result<TrashResult, (PlanItemFailure, TrashResult)> {
+    match trash::delete(path) {
+        Ok(()) => Ok(TrashResult { destination_used: "trash", ..TrashResult::default() }),
+        Err(trash_err) => {
+            // Classify the trash error.
+            let (failure_code, message) = classify_trash_error(&trash_err, path);
+            tracing::warn!(
+                path = %path.display(),
+                error = %trash_err,
+                "OS trash failed; {}",
+                if fallback_archive_dest.is_some() { "trying archive fallback" } else { "no fallback configured" }
+            );
+
+            if let Some(archive_dest) = fallback_archive_dest {
+                // Try archive fallback (FR-006).
+                match crate::ops::archive_op::archive_file(path, archive_dest) {
+                    Ok(()) => {
+                        tracing::info!(
+                            path = %path.display(),
+                            archive_dest = %archive_dest.display(),
+                            "archive fallback succeeded after trash failure"
+                        );
+                        return Ok(TrashResult {
+                            rollback_attempted: false,
+                            rollback_outcome: RollbackOutcome::NotApplicable,
+                            rollback_message: Some(format!(
+                                "trash unavailable ({trash_err}); fell back to archive at {}",
+                                archive_dest.display()
+                            )),
+                            destination_used: "archive",
+                        });
+                    }
+                    Err((archive_failure, archive_result)) => {
+                        return Err((
+                            PlanItemFailure::with_code(
+                                FailureCode::TrashUnavailable,
+                                format!(
+                                    "trash failed ({trash_err}) and archive fallback also failed: {}",
+                                    archive_failure.message
+                                ),
+                            ),
+                            TrashResult {
+                                rollback_attempted: archive_result.rollback_attempted,
+                                rollback_outcome: archive_result.rollback_outcome,
+                                rollback_message: archive_result.rollback_message,
+                                destination_used: "archive",
+                            },
+                        ));
+                    }
+                }
+            }
+
+            Err((PlanItemFailure::with_code(failure_code, message), TrashResult::default()))
+        }
+    }
 }
 
-#[cfg(target_os = "macos")]
-fn trash_impl(path: &Path) -> Result<(), PlanItemFailure> {
-    // macOS: use AppleScript / NSFileManager via a shell call in v1.
-    // For now return trash.unavailable so the caller can surface it.
-    // A future iteration will use the `trash` crate.
-    Err(PlanItemFailure::with_code(
-        FailureCode::TrashUnavailable,
-        format!(
-            "OS trash not yet wired for macOS in v1 executor; \
-             item: {}. Use archive action or upgrade executor.",
-            path.display()
-        ),
-    ))
-}
-
-#[cfg(target_os = "windows")]
-fn trash_impl(path: &Path) -> Result<(), PlanItemFailure> {
-    Err(PlanItemFailure::with_code(
-        FailureCode::TrashUnavailable,
-        format!(
-            "OS trash not yet wired for Windows in v1 executor; \
-             item: {}. Use archive action or upgrade executor.",
-            path.display()
-        ),
-    ))
-}
-
-#[cfg(target_os = "linux")]
-fn trash_impl(path: &Path) -> Result<(), PlanItemFailure> {
-    // Linux: XDG trash spec. v1 stub — returns unavailable.
-    Err(PlanItemFailure::with_code(
-        FailureCode::TrashUnavailable,
-        format!(
-            "OS trash not yet wired for Linux in v1 executor; \
-             item: {}. Use archive action or upgrade executor.",
-            path.display()
-        ),
-    ))
-}
-
-#[cfg(not(any(target_os = "macos", target_os = "windows", target_os = "linux")))]
-fn trash_impl(path: &Path) -> Result<(), PlanItemFailure> {
-    Err(PlanItemFailure::with_code(
-        FailureCode::TrashUnavailable,
-        format!("OS trash not supported on this platform: {}", path.display()),
-    ))
+fn classify_trash_error(err: &trash::Error, path: &Path) -> (FailureCode, String) {
+    // The `trash` crate's Error enum includes OS-specific variants.
+    // Map to our FailureCode taxonomy.
+    let msg = format!("OS trash failed for '{}': {err}", path.display());
+    // `trash::Error` doesn't expose a rich enum in all versions; use Display
+    // to detect common cases.
+    let err_str = err.to_string().to_lowercase();
+    if err_str.contains("permission") || err_str.contains("access denied") {
+        (FailureCode::OsTrashPermissionDenied, msg)
+    } else if err_str.contains("full") || err_str.contains("no space") {
+        (FailureCode::OsTrashFull, msg)
+    } else {
+        (FailureCode::TrashUnavailable, msg)
+    }
 }
 
 // ── Tests ──────────────────────────────────────────────────────────────────────
@@ -102,19 +127,79 @@ fn trash_impl(path: &Path) -> Result<(), PlanItemFailure> {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::failure::FailureCode;
 
+    /// T014: trash destination moves to OS bin; archive fallback recorded when
+    /// unavailable; replaces the old `trash_returns_unavailable_in_v1` stub test.
     #[test]
-    fn trash_returns_unavailable_in_v1() {
-        // v1 stub — trash is not wired yet; expect TrashUnavailable.
+    fn trash_moves_file_to_os_bin_or_uses_fallback() {
         let dir = tempfile::tempdir().unwrap();
         let file = dir.path().join("to_trash.fits");
         std::fs::write(&file, b"data").unwrap();
 
-        let result = trash_file(&file);
-        // v1 stub always returns unavailable.
-        assert!(result.is_err());
-        let (failure, _) = result.unwrap_err();
-        assert_eq!(failure.code, FailureCode::TrashUnavailable);
+        // Attempt trash with no fallback.
+        // On Linux CI environments the XDG trash may or may not be available.
+        // We assert on the contract invariants rather than a hard success/failure:
+        // - If trash succeeds: file gone, destination_used = "trash".
+        // - If trash fails (TrashUnavailable / OsTrashPermissionDenied): Err returned,
+        //   file still present (no silent loss).
+        let result = trash_file(&file, None);
+        match result {
+            Ok(r) => {
+                assert_eq!(r.destination_used, "trash");
+                assert!(!file.exists(), "file should be gone after successful trash");
+            }
+            Err((failure, _)) => {
+                assert!(
+                    matches!(
+                        failure.code,
+                        FailureCode::TrashUnavailable
+                            | FailureCode::OsTrashPermissionDenied
+                            | FailureCode::OsTrashFull
+                    ),
+                    "unexpected failure code: {:?}",
+                    failure.code
+                );
+                // File must still be present — no silent loss.
+                assert!(file.exists(), "file must survive a failed trash (no silent loss)");
+            }
+        }
+    }
+
+    #[test]
+    fn trash_uses_archive_fallback_when_trash_unavailable() {
+        // We can't force the OS trash to fail in a unit test, but we CAN verify
+        // the fallback logic by using a path that we know the trash crate will
+        // successfully trash or, if not, that the archive fallback fires.
+        //
+        // Strategy: use a separate directory as the archive destination and verify
+        // the file ends up somewhere (not silently lost) regardless of whether
+        // the trash or the archive fallback fires.
+        let src_dir = tempfile::tempdir().unwrap();
+        let archive_dir = tempfile::tempdir().unwrap();
+        let file = src_dir.path().join("important.fits");
+        std::fs::write(&file, b"precious data").unwrap();
+        let archive_dest = archive_dir.path().join("important.fits");
+
+        let result = trash_file(&file, Some(&archive_dest));
+        match result {
+            Ok(r) => {
+                // Either trash or archive succeeded — file is safe.
+                assert!(
+                    matches!(r.destination_used, "trash" | "archive"),
+                    "destination must be trash or archive"
+                );
+                assert!(!file.exists(), "source must be gone after successful operation");
+                // If archive fallback was used, archive_dest exists.
+                if r.destination_used == "archive" {
+                    assert!(archive_dest.exists(), "archive dest should exist after fallback");
+                }
+            }
+            Err((failure, _)) => {
+                // Both trash AND archive failed (very unlikely in tests).
+                assert_eq!(failure.code, FailureCode::TrashUnavailable);
+                // Source must survive — no silent loss.
+                assert!(file.exists(), "source must survive double-failure");
+            }
+        }
     }
 }

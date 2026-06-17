@@ -438,6 +438,23 @@ pub async fn item_retry_applying(pool: &SqlitePool, item_id: &str, plan_id: &str
     Ok(())
 }
 
+/// List the IDs of all `pending` items for a plan.
+///
+/// Used to emit per-item audit rows before batch-cancelling (FR-005, T021).
+///
+/// # Errors
+///
+/// Returns [`DbError::Database`] on connection failure.
+pub async fn list_pending_items(pool: &SqlitePool, plan_id: &str) -> DbResult<Vec<String>> {
+    let ids: Vec<String> = sqlx::query_scalar(
+        "SELECT id FROM plan_items WHERE plan_id = ? AND item_state = 'pending' ORDER BY item_index ASC",
+    )
+    .bind(plan_id)
+    .fetch_all(pool)
+    .await?;
+    Ok(ids)
+}
+
 /// Batch-transition all `pending` items to `cancelled`; update plan counters.
 ///
 /// # Errors

@@ -1,4 +1,7 @@
 //! Regression R-3 — `run_app` startup wiring: plan listener + log forwarder.
+// Pre-existing doc comments reference identifiers without backticks; suppress
+// the pedantic lint rather than rewriting all module-level comments.
+#![allow(clippy::doc_markdown)]
 //!
 //! Before the 2026-06-17 fix, `start_inbox_plan_listener` (spec 005) and
 //! `start_log_forwarder` (spec 019) were implemented and tested in isolation

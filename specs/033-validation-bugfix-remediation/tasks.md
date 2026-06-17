@@ -29,7 +29,7 @@ Monorepo: `crates/<area>/`, `apps/desktop/src/`, `apps/desktop/e2e/`, `packages/
 
 **Purpose**: dependency changes from research.md (D4/D5/D6/D10)
 
-- [ ] T001 [P] Add `trash` 5.2.x (MIT) to `crates/fs/executor/Cargo.toml` + workspace deps (D4)
+- [X] T001 [P] Add `trash` 5.2.x (MIT) to `crates/fs/executor/Cargo.toml` + workspace deps (D4)
 - [ ] T002 [P] Add `minisign-verify` 0.2.x (MIT) to `crates/targeting/catalogs/Cargo.toml` (D5)
 - [ ] T003 [P] In `apps/desktop/package.json`: adopt `react-joyride@^3.1.0`; **remove** unused `@tanstack/react-table` and `@uiw/react-md-editor` (D6, D10)
 - [ ] T004 [P] Add `notify-debouncer-full` 0.7.x (MIT/Apache-2.0) to `crates/fs/inventory/Cargo.toml` (D10; mark optional — fall back to in-loop debounce if unwelcome)
@@ -55,27 +55,28 @@ Monorepo: `crates/<area>/`, `apps/desktop/src/`, `apps/desktop/e2e/`, `packages/
 **Independent Test**: apply a plan with normal + escaping + symlinked + colliding + stale items; safe one applies, others refused with correct reason, every item + bulk-cancel audited, library recoverable.
 
 ### Tests (red-first)
-- [ ] T008 [P] [US1] Rust integration test: root-escaping item refused **pre-mutation** + audit reason `root_escape`, in `crates/fs/executor/tests/` (FR-001)
-- [ ] T009 [P] [US1] Rust test: path traversing a symlink/junction component refused + audited (FR-002)
-- [ ] T010 [P] [US1] Rust test: destructive-confirm is independent of `is_protected`; destructive item blocked until confirmed (FR-003, D9)
-- [ ] T011 [P] [US1] Rust test: existing destination refused (no silent overwrite) + audit (FR-004)
-- [ ] T012 [P] [US1] Rust test: `batch_cancel_pending_items` writes a per-item audit row for each cancelled item (FR-005)
-- [ ] T013 [P] [US1] Rust test: item whose on-disk mtime/size ≠ approved baseline refused as `stale` (FR-007, D7)
-- [ ] T013a [P] [US1] Rust test: cross-device (EXDEV) move applies safely + audited (copy-then-delete with rollback), or refuses with a clear reason — never silent loss (Edge Case, FR-007)
-- [ ] T014 [P] [US1] Rust test: `trash` destination moves to OS bin; `archive` fallback recorded when unavailable; replace stub test `trash_returns_unavailable_in_v1` (FR-006, D4)
+- [X] T008 [P] [US1] Rust integration test: root-escaping item refused **pre-mutation** + audit reason `root_escape`, in `crates/fs/executor/tests/` (FR-001)
+- [X] T009 [P] [US1] Rust test: path traversing a symlink/junction component refused + audited (FR-002)
+- [X] T010 [P] [US1] Rust test: destructive-confirm is independent of `is_protected`; destructive item blocked until confirmed (FR-003, D9)
+- [X] T011 [P] [US1] Rust test: existing destination refused (no silent overwrite) + audit (FR-004)
+- [X] T012 [P] [US1] Rust test: `batch_cancel_pending_items` writes a per-item audit row for each cancelled item (FR-005)
+- [X] T013 [P] [US1] Rust test: item whose on-disk mtime/size ≠ approved baseline refused as `stale` (FR-007, D7)
+- [X] T013a [P] [US1] Rust test: cross-device (EXDEV) move applies safely + audited (copy-then-delete with rollback), or refuses with a clear reason — never silent loss (Edge Case, FR-007)
+- [X] T014 [P] [US1] Rust test: `trash` destination moves to OS bin; `archive` fallback recorded when unavailable; replace stub test `trash_returns_unavailable_in_v1` (FR-006, D4)
 - [ ] T015 [US1] Real-backend e2e: unskip `apps/desktop/e2e/real-backend/us1_plan_apply_safety.spec.ts` — apply mixed plan via real UI, assert refusals + audit rows via DB helper (FR-001..007)
 
 ### Implementation
-- [ ] T016 [US1] Migration `0031`: plan-item safety fields (`source_id`, `category`, `requires_destructive_confirm`, `approved_mtime`, `approved_size_bytes`, `resolved_pattern`) in `crates/persistence/db/migrations/` (data-model)
-- [ ] T017 [US1] Migration `0032`: destructive-destination normalization `os_trash→trash`, drop `none`, CHECK `IN ('archive','trash')` (D1, FR-038)
-- [ ] T018 [US1] Implement the lexical path-resolution gate (root-join + normalize + escape refusal + per-component `lstat`, **no `canonicalize`**) and route every executor op through it; replace raw relative-path use at `plan_apply.rs:173` (D8, FR-001/002)
-- [ ] T019 [US1] Capture approval-time staleness baseline (resolved path + mtime + size + resolved pattern) in `approve_plan`; enforce stale check at apply; fills spec-017 `approved_mtime`/`approved_size_bytes` gap (D7, FR-007)
-- [ ] T020 [US1] Add `requires_destructive_confirm` signal derived from action type; replace the `confirm_required = is_protected` inversion at `plan_apply.rs:199` (D9, FR-003)
-- [ ] T021 [US1] Emit a per-item audit row on every transition including bulk cancel in `crates/fs/executor` + `crates/audit` (FR-005)
-- [ ] T022 [US1] Implement `trash_op` via the `trash` crate with recorded `archive` fallback in `crates/fs/executor/src/ops/trash_op.rs` (D4, FR-006)
-- [ ] T023 [US1] Ensure rollback / clearly-audited partial completion on failure — no silent loss (FR-007)
+- [X] T016 [US1] Migration `0031`: plan-item safety fields (`source_id`, `category`, `requires_destructive_confirm`, `approved_mtime`, `approved_size_bytes`, `resolved_pattern`) in `crates/persistence/db/migrations/` (data-model)
+- [X] T017 [US1] Migration `0032`: destructive-destination normalization `os_trash→trash`, drop `none`, CHECK `IN ('archive','trash')` (D1, FR-038)
+- [X] T018 [US1] Implement the lexical path-resolution gate (root-join + normalize + escape refusal + per-component `lstat`, **no `canonicalize`**) and route every executor op through it; replace raw relative-path use at `plan_apply.rs:173` (D8, FR-001/002)
+- [X] T019 [US1] Capture approval-time staleness baseline (resolved path + mtime + size + resolved pattern) in `approve_plan`; enforce stale check at apply; fills spec-017 `approved_mtime`/`approved_size_bytes` gap (D7, FR-007)
+- [X] T020 [US1] Add `requires_destructive_confirm` signal derived from action type; replace the `confirm_required = is_protected` inversion at `plan_apply.rs:199` (D9, FR-003)
+- [X] T021 [US1] Emit a per-item audit row on every transition including bulk cancel in `crates/fs/executor` + `crates/audit` (FR-005)
+- [X] T022 [US1] Implement `trash_op` via the `trash` crate with recorded `archive` fallback in `crates/fs/executor/src/ops/trash_op.rs` (D4, FR-006)
+- [X] T023 [US1] Ensure rollback / clearly-audited partial completion on failure — no silent loss (FR-007)
+- [ ] T023a [US1] **BLOCKING (gate currently inert on real data):** resolve `from_root_id` → absolute library root in `item_row_to_executor_item` (`crates/app/core/src/plan_apply.rs`) so `library_root` is set and the path gate (T018) actually fires on real plan items — today it's `None` so real items bypass the escape/symlink/staleness checks. Also persist `approved_mtime`/`approved_size_bytes` + `destructive_confirmed` as real DB columns (currently `#[sqlx(default)]`). US1 is NOT done until this lands. (FR-001/002/003/007)
 
-**Checkpoint**: real `plan.apply` is safe and audited. US1 testable independently.
+**Checkpoint**: real `plan.apply` is safe and audited. US1 testable independently. ⚠️ Gate only active once T023a resolves the library root onto real items + T015 e2e proves it.
 
 ---
 

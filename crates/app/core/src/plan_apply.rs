@@ -155,22 +155,24 @@ fn item_row_to_executor_item(row: &plans_repo::PlanItemRow) -> ExecutorItem {
     let action = match row.action.as_str() {
         "move" => ExecutorItemAction::Move,
         "archive" => {
-            // Resolve archive destination: stored in archive_path as a
-            // relative path; caller passes library root via resolved path.
-            // v1: use the archive_path as-is (absolute resolution is a
-            // follow-up when library root resolution is wired).
+            // archive_path stores the pre-computed relative archive path.
+            // v1: pass as-is (absolute root resolution is a follow-up for FR-014).
             let archive_dest = row
                 .archive_path
                 .as_deref()
                 .map_or_else(|| PathBuf::from(&row.to_relative_path), PathBuf::from);
             ExecutorItemAction::Archive { archive_destination: archive_dest }
         }
+        // T022: map "trash" action to the Trash variant.
+        "trash" => ExecutorItemAction::Trash { fallback_archive_destination: None },
         "delete" => ExecutorItemAction::Delete,
         _ => ExecutorItemAction::NoOp,
     };
 
-    // v1: resolve paths as plain relative paths. A proper library-root
-    // resolver will be wired in a follow-up (FR-014).
+    // Paths stored as relative; library_root is None here because the
+    // path-gate pre-validation requires root resolution that is wired at a
+    // higher level (FR-014 follow-up). When library_root is None the path
+    // gate is skipped and paths are treated as-is (legacy mode).
     let source_path = if row.from_relative_path.is_empty() {
         None
     } else {
@@ -185,18 +187,31 @@ fn item_row_to_executor_item(row: &plans_repo::PlanItemRow) -> ExecutorItem {
 
     let is_protected = row.protection == "protected";
 
+    // T020: `requires_destructive_confirm` is derived from action type,
+    // independent of `is_protected`. Replaces the old `confirm_required = is_protected` inversion.
+    let requires_destructive_confirm = matches!(row.action.as_str(), "delete" | "trash")
+        || row.requires_destructive_confirm.unwrap_or(0) != 0;
+
+    // `destructive_confirmed` tracks whether the user has explicitly confirmed
+    // the destructive action. In v1 we read it from the DB field; when absent
+    // we default to false (safe — blocks unconfirmed destructive items).
+    // A future iteration will wire the UI confirmation through to this field.
+    let destructive_confirmed = row.destructive_confirmed.unwrap_or(0) != 0;
+
     ExecutorItem {
         id: row.id.clone(),
         plan_id: row.plan_id.clone(),
         action,
         source_path,
         destination_path,
+        library_root: None, // FR-014 follow-up: wire library root here
         cas_snapshot: CasSnapshot {
             approved_mtime: row.approved_mtime.clone(),
             approved_size_bytes: row.approved_size_bytes,
         },
         is_protected,
-        confirm_required: is_protected, // protected items require explicit confirm
+        requires_destructive_confirm,
+        destructive_confirmed,
         current_state: row.item_state.clone(),
     }
 }
@@ -508,8 +523,33 @@ pub async fn apply_plan(
             ApplyOutcome::Cancelled(counts) => {
                 let at = now_iso();
 
-                // Batch-cancel remaining pending items.
-                let _ = apply_repo::batch_cancel_pending_items(&pool_clone, &plan_id_owned).await;
+                // Batch-cancel remaining pending items (T021: emit per-item audit row for EACH).
+                match apply_repo::list_pending_items(&pool_clone, &plan_id_owned).await {
+                    Ok(pending_ids) => {
+                        let _ = apply_repo::batch_cancel_pending_items(&pool_clone, &plan_id_owned)
+                            .await;
+                        for item_id in &pending_ids {
+                            let _ = apply_repo::append_event(
+                                &pool_clone,
+                                &new_id(),
+                                &run_id_owned,
+                                &plan_id_owned,
+                                Some(item_id.as_str()),
+                                "pending",
+                                "cancelled",
+                                &at,
+                                None,
+                                None,
+                            )
+                            .await;
+                        }
+                    }
+                    Err(e) => {
+                        tracing::error!(error=%e, "failed to list pending items for per-item cancel audit");
+                        let _ = apply_repo::batch_cancel_pending_items(&pool_clone, &plan_id_owned)
+                            .await;
+                    }
+                }
 
                 let _ = apply_repo::complete_run(
                     &pool_clone,
