@@ -476,6 +476,78 @@ pub async fn count_equivalences(pool: &SqlitePool) -> DbResult<i64> {
     Ok(count)
 }
 
+// ── Session / project target FK helpers (T038, FR-014) ────────────────────────
+
+/// Set `acq_target_id` on an `acquisition_session` row (T038, FR-014).
+///
+/// Uses `acq_target_id` (the spec-023 FK) rather than the legacy `target_id`.
+/// Only updates rows where `acq_target_id IS NULL` so existing links are not
+/// overwritten.
+///
+/// # Errors
+/// Returns [`DbError::Database`] on query failure.
+pub async fn set_session_acq_target_id(
+    pool: &SqlitePool,
+    session_id: &str,
+    target_id: &str,
+) -> DbResult<()> {
+    sqlx::query(
+        "UPDATE acquisition_session SET acq_target_id = ? \
+         WHERE id = ? AND acq_target_id IS NULL",
+    )
+    .bind(target_id)
+    .bind(session_id)
+    .execute(pool)
+    .await?;
+    Ok(())
+}
+
+/// List sessions linked to a target via `acq_target_id` (T038, FR-014).
+///
+/// Returns lightweight session rows for the `target.get` aggregate.
+///
+/// # Errors
+/// Returns [`DbError::Database`] on query failure.
+pub async fn list_sessions_for_target(
+    pool: &SqlitePool,
+    target_id: &str,
+) -> DbResult<Vec<(String, Option<String>, Option<String>)>> {
+    // Returns (session_id, session_key, created_at)
+    let rows: Vec<(String, String, String)> = sqlx::query_as(
+        "SELECT id, session_key, created_at
+         FROM acquisition_session
+         WHERE acq_target_id = ?
+         ORDER BY created_at DESC",
+    )
+    .bind(target_id)
+    .fetch_all(pool)
+    .await?;
+
+    Ok(rows.into_iter().map(|(id, key, at)| (id, Some(key), Some(at))).collect())
+}
+
+/// List projects linked to a target via `target_id` (T038, FR-014).
+///
+/// Returns (project_id, name, lifecycle, tool_id) rows for the `target.get` aggregate.
+///
+/// # Errors
+/// Returns [`DbError::Database`] on query failure.
+pub async fn list_projects_for_target(
+    pool: &SqlitePool,
+    target_id: &str,
+) -> DbResult<Vec<(String, String, String, Option<String>)>> {
+    let rows: Vec<(String, String, String, String)> = sqlx::query_as(
+        "SELECT id, name, lifecycle, tool
+         FROM projects
+         WHERE target_id = ?
+         ORDER BY lifecycle ASC, name ASC",
+    )
+    .bind(target_id)
+    .fetch_all(pool)
+    .await?;
+    Ok(rows.into_iter().map(|(id, name, lc, tool)| (id, name, lc, Some(tool))).collect())
+}
+
 // ── Tests ─────────────────────────────────────────────────────────────────────
 
 #[cfg(test)]

@@ -25,6 +25,7 @@ pub mod project_notes;
 pub mod project_setup;
 pub mod protection;
 pub mod provenance_use_case;
+pub mod search;
 pub mod sessions;
 pub mod settings;
 pub mod target_identity;

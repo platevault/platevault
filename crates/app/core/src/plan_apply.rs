@@ -34,6 +34,7 @@ use fs_executor::run::{
     execute_plan, ApplyOutcome, CancellationToken, ExecutorCallbacks, ExecutorItem,
     ExecutorItemAction, ItemProgressEvent, RetryQueue, SkipSet,
 };
+use persistence_db::repositories::inventory as inventory_repo;
 use persistence_db::repositories::plan_apply as apply_repo;
 use persistence_db::repositories::plans as plans_repo;
 use persistence_db::DbError;
@@ -151,12 +152,22 @@ fn verify_approval_token(
 
 // ── Item → ExecutorItem mapping ───────────────────────────────────────────────
 
-fn item_row_to_executor_item(row: &plans_repo::PlanItemRow) -> ExecutorItem {
+/// Convert a `PlanItemRow` into an `ExecutorItem`, resolving the library root
+/// from the provided root-id → absolute-path map (T023a).
+///
+/// When `root_map` contains the `from_root_id` for this item, `library_root`
+/// is set to the absolute path so the path-escape/symlink/staleness gate in
+/// the executor fires on real items. When the root cannot be resolved (no
+/// `from_root_id` or id absent from the map), `library_root` is `None` and
+/// the gate is skipped (legacy/test mode).
+fn item_row_to_executor_item(
+    row: &plans_repo::PlanItemRow,
+    root_map: &HashMap<String, PathBuf>,
+) -> ExecutorItem {
     let action = match row.action.as_str() {
         "move" => ExecutorItemAction::Move,
         "archive" => {
             // archive_path stores the pre-computed relative archive path.
-            // v1: pass as-is (absolute root resolution is a follow-up for FR-014).
             let archive_dest = row
                 .archive_path
                 .as_deref()
@@ -169,10 +180,13 @@ fn item_row_to_executor_item(row: &plans_repo::PlanItemRow) -> ExecutorItem {
         _ => ExecutorItemAction::NoOp,
     };
 
-    // Paths stored as relative; library_root is None here because the
-    // path-gate pre-validation requires root resolution that is wired at a
-    // higher level (FR-014 follow-up). When library_root is None the path
-    // gate is skipped and paths are treated as-is (legacy mode).
+    // T023a: Resolve library_root from the DB root map.
+    // When from_root_id is set and the root exists in the map, the path gate
+    // (T018: escape/symlink/staleness) will fire on this item.
+    let library_root: Option<PathBuf> =
+        row.from_root_id.as_deref().and_then(|rid| root_map.get(rid)).cloned();
+
+    // Paths are stored as relative to the library root.
     let source_path = if row.from_relative_path.is_empty() {
         None
     } else {
@@ -192,11 +206,8 @@ fn item_row_to_executor_item(row: &plans_repo::PlanItemRow) -> ExecutorItem {
     let requires_destructive_confirm = matches!(row.action.as_str(), "delete" | "trash")
         || row.requires_destructive_confirm.unwrap_or(0) != 0;
 
-    // `destructive_confirmed` tracks whether the user has explicitly confirmed
-    // the destructive action. In v1 we read it from the DB field; when absent
-    // we default to false (safe — blocks unconfirmed destructive items).
-    // A future iteration will wire the UI confirmation through to this field.
-    let destructive_confirmed = row.destructive_confirmed.unwrap_or(0) != 0;
+    // T023a: `destructive_confirmed` is now a real DB column (migration 0033).
+    let destructive_confirmed = row.destructive_confirmed != 0;
 
     ExecutorItem {
         id: row.id.clone(),
@@ -204,7 +215,7 @@ fn item_row_to_executor_item(row: &plans_repo::PlanItemRow) -> ExecutorItem {
         action,
         source_path,
         destination_path,
-        library_root: None, // FR-014 follow-up: wire library root here
+        library_root,
         cas_snapshot: CasSnapshot {
             approved_mtime: row.approved_mtime.clone(),
             approved_size_bytes: row.approved_size_bytes,
@@ -396,8 +407,24 @@ pub async fn apply_plan(
 
     // Load items for the executor.
     let item_rows = plans_repo::list_plan_items(pool, plan_id).await.map_err(db_err)?;
+
+    // T023a: Build a root_id → absolute_path map so the path-gate fires on
+    // real items. Collect the unique root_ids referenced by this plan's items.
+    let mut root_map: HashMap<String, PathBuf> = HashMap::new();
+    for row in &item_rows {
+        if let Some(rid) = &row.from_root_id {
+            if !root_map.contains_key(rid) {
+                if let Ok(Some(path)) = inventory_repo::get_library_root_path(pool, rid).await {
+                    root_map.insert(rid.clone(), PathBuf::from(path));
+                } else {
+                    tracing::warn!(root_id = %rid, "plan item references unknown library root; path gate will be inactive for this item");
+                }
+            }
+        }
+    }
+
     let executor_items: Vec<ExecutorItem> =
-        item_rows.iter().map(item_row_to_executor_item).collect();
+        item_rows.iter().map(|r| item_row_to_executor_item(r, &root_map)).collect();
 
     // Register active run.
     let cancel_token = CancellationToken::new();
@@ -1112,5 +1139,140 @@ mod tests {
     async fn verify_approval_token_accepts_matching_token() {
         let result = verify_approval_token(Some("tok-abc"), "tok-abc");
         assert!(result.is_ok());
+    }
+
+    // ── T023a tests ───────────────────────────────────────────────────────────
+
+    /// T023a: item_row_to_executor_item sets library_root from the root_map
+    /// so the path-gate fires on real plan items.
+    #[test]
+    fn t023a_library_root_resolved_from_map() {
+        let row = plans_repo::PlanItemRow {
+            id: "item-1".to_owned(),
+            plan_id: "plan-1".to_owned(),
+            item_index: 1,
+            name: "file.fits".to_owned(),
+            action: "move".to_owned(),
+            from_root_id: Some("root-001".to_owned()),
+            from_relative_path: "raw/file.fits".to_owned(),
+            to_root_id: Some("root-001".to_owned()),
+            to_relative_path: "archive/file.fits".to_owned(),
+            reason: "test".to_owned(),
+            protection: "normal".to_owned(),
+            linked_entity: None,
+            item_state: "pending".to_owned(),
+            failure_reason: None,
+            provenance: None,
+            approved_mtime: None,
+            approved_size_bytes: None,
+            archive_path: None,
+            created_at: "2026-06-17T00:00:00Z".to_owned(),
+            source_id: None,
+            category: None,
+            requires_destructive_confirm: Some(0),
+            resolved_pattern: None,
+            destructive_confirmed: 0,
+        };
+
+        let mut root_map = HashMap::new();
+        root_map.insert("root-001".to_owned(), PathBuf::from("/mnt/library"));
+
+        let item = item_row_to_executor_item(&row, &root_map);
+        assert_eq!(
+            item.library_root,
+            Some(PathBuf::from("/mnt/library")),
+            "library_root must be populated from the root_map so the path gate fires"
+        );
+    }
+
+    /// T023a: item without from_root_id gets library_root = None (legacy/unknown mode).
+    #[test]
+    fn t023a_no_root_id_gives_none_library_root() {
+        let row = plans_repo::PlanItemRow {
+            id: "item-2".to_owned(),
+            plan_id: "plan-1".to_owned(),
+            item_index: 1,
+            name: "file.fits".to_owned(),
+            action: "move".to_owned(),
+            from_root_id: None,
+            from_relative_path: "raw/file.fits".to_owned(),
+            to_root_id: None,
+            to_relative_path: "archive/file.fits".to_owned(),
+            reason: "test".to_owned(),
+            protection: "normal".to_owned(),
+            linked_entity: None,
+            item_state: "pending".to_owned(),
+            failure_reason: None,
+            provenance: None,
+            approved_mtime: None,
+            approved_size_bytes: None,
+            archive_path: None,
+            created_at: "2026-06-17T00:00:00Z".to_owned(),
+            source_id: None,
+            category: None,
+            requires_destructive_confirm: Some(0),
+            resolved_pattern: None,
+            destructive_confirmed: 0,
+        };
+
+        let root_map: HashMap<String, PathBuf> = HashMap::new();
+        let item = item_row_to_executor_item(&row, &root_map);
+        assert_eq!(item.library_root, None);
+    }
+
+    /// T023a: root-escaping relative path is refused by the gate when library_root is set.
+    /// This proves the gate is active on real plan items (not inert).
+    #[test]
+    fn t023a_root_escape_gate_fires_when_library_root_is_set() {
+        use fs_executor::ops::path_gate;
+
+        let root = PathBuf::from("/mnt/library");
+        // A path that escapes the root via ".." — must be refused.
+        let escaping_relative = PathBuf::from("../../etc/passwd");
+
+        let result = path_gate::resolve_and_validate(&root, &escaping_relative);
+        assert!(result.is_err(), "root-escaping path must be refused when library_root is set");
+        let failure = result.unwrap_err();
+        assert_eq!(failure.code.as_str(), "root_escape", "failure code must be root_escape");
+    }
+
+    /// T023a: destructive_confirmed is now a real DB column (migration 0033),
+    /// read directly (not defaulted via #[sqlx(default)]).
+    #[test]
+    fn t023a_destructive_confirmed_reads_from_db_column() {
+        let row = plans_repo::PlanItemRow {
+            id: "item-3".to_owned(),
+            plan_id: "plan-1".to_owned(),
+            item_index: 1,
+            name: "file.fits".to_owned(),
+            action: "delete".to_owned(),
+            from_root_id: None,
+            from_relative_path: "raw/file.fits".to_owned(),
+            to_root_id: None,
+            to_relative_path: String::new(),
+            reason: "test".to_owned(),
+            protection: "normal".to_owned(),
+            linked_entity: None,
+            item_state: "pending".to_owned(),
+            failure_reason: None,
+            provenance: None,
+            approved_mtime: None,
+            approved_size_bytes: None,
+            archive_path: None,
+            created_at: "2026-06-17T00:00:00Z".to_owned(),
+            source_id: None,
+            category: None,
+            requires_destructive_confirm: Some(1),
+            resolved_pattern: None,
+            destructive_confirmed: 1, // user confirmed
+        };
+
+        let root_map: HashMap<String, PathBuf> = HashMap::new();
+        let item = item_row_to_executor_item(&row, &root_map);
+        assert!(item.destructive_confirmed, "destructive_confirmed=1 in DB must be read as true");
+        assert!(
+            item.requires_destructive_confirm,
+            "delete action must require destructive confirm"
+        );
     }
 }

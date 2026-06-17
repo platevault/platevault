@@ -79,21 +79,29 @@ export const commands = {
 	 */
 	sessionsMerge: (ids: string[]) => typedError<AcquisitionSession_Serialize, string>(__TAURI_INVOKE("sessions.merge", { ids })),
 	/**
-	 *  `calibration.masters.list` — returns all calibration masters.
+	 *  `calibration.masters.list` — returns all calibration masters from real DB rows.
+	 * 
+	 *  Backed by `calibration_master_view` (migration 0033) which joins
+	 *  `calibration_session` with `calibration_fingerprint`. Returns an empty list
+	 *  when no calibration sessions with fingerprints exist (not fixtures).
 	 * 
 	 *  # Errors
-	 *  Returns `Err(String)` on failure; the stub never fails.
+	 *  Returns `Err(String)` on database failure.
 	 */
 	calibrationMastersList: () => typedError<CalibrationMaster_Serialize[], string>(__TAURI_INVOKE("calibration.masters.list")),
 	/**
 	 *  `calibration.masters.get` — returns a single calibration master detail.
 	 * 
 	 *  # Errors
-	 *  Returns `Err(String)` on failure; the stub never fails.
+	 *  Returns `Err(String)` with `"master.not_found: <id>"` when not found.
 	 */
 	calibrationMastersGet: (id: string) => typedError<MasterDetail_Serialize, string>(__TAURI_INVOKE("calibration.masters.get", { id })),
 	/**
 	 *  `calibration.matches` — returns calibration match candidates for a session.
+	 * 
+	 *  Still returns fixture data for the scored candidate list (requires per-session
+	 *  scoring pass via spec 007 `calibration.match.suggest`). Use
+	 *  `calibration.match.suggest` for real scored results.
 	 * 
 	 *  # Errors
 	 *  Returns `Err(String)` on failure; the stub never fails.
@@ -728,8 +736,11 @@ export const commands = {
 	/**
 	 *  `search.global` — performs a global search across all entity types.
 	 * 
+	 *  Returns results ranked by relevance to `query`. The result set always
+	 *  reflects the query string — an empty query returns recent suggestions.
+	 * 
 	 *  # Errors
-	 *  Returns `Err(String)` on failure; the stub never fails.
+	 *  Returns `Err(String)` on database failure.
 	 */
 	searchGlobal: (query: string) => typedError<SearchResult_Serialize[], string>(__TAURI_INVOKE("search.global", { query })),
 	/**

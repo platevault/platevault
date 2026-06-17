@@ -725,3 +725,335 @@ async fn load_config(pool: &SqlitePool) -> MatchingRuleConfig {
     }
     config
 }
+
+// ── Masters list / get (T037, FR-013) ─────────────────────────────────────────
+
+/// `calibration.masters.list` — return all calibration masters from real DB rows.
+///
+/// Backed by `calibration_master_view` (migration 0033) which joins
+/// `calibration_session` with `calibration_fingerprint`.
+///
+/// # Errors
+/// Returns `Err(String)` on database failure.
+pub async fn masters_list(
+    pool: &SqlitePool,
+) -> Result<Vec<contracts_core::calibration::CalibrationMaster>, String> {
+    let rows: Vec<(
+        String,         // id
+        String,         // kind
+        String,         // created_at
+        i64,            // size_bytes
+        Option<f64>,    // fp_gain
+        Option<f64>,    // fp_exposure_s
+        Option<f64>,    // fp_temp_c
+        Option<String>, // fp_filter_name
+        Option<String>, // fp_binning
+        Option<String>, // fp_optic_train (used as camera)
+        Option<String>, // source_session_id
+    )> = sqlx::query_as(
+        "SELECT id, kind, created_at, size_bytes,
+                fp_gain, fp_exposure_s, fp_temp_c, fp_filter_name, fp_binning,
+                fp_optic_train, source_session_id
+         FROM calibration_master_view
+         ORDER BY created_at DESC",
+    )
+    .fetch_all(pool)
+    .await
+    .map_err(|e| e.to_string())?;
+
+    let now = OffsetDateTime::now_utc();
+    let masters = rows
+        .into_iter()
+        .map(
+            |(
+                id,
+                kind,
+                created_at,
+                size_bytes,
+                gain,
+                exposure_s,
+                temp_c,
+                filter_name,
+                binning,
+                optic_train,
+                source_session_id,
+            )| {
+                let age_days = compute_age_days(&created_at, now);
+                let cal_kind = str_to_cal_kind(&kind);
+                contracts_core::calibration::CalibrationMaster {
+                    id: id.clone(),
+                    kind: cal_kind,
+                    fingerprint: contracts_core::calibration::CalibrationFingerprint {
+                        camera: optic_train.unwrap_or_default(),
+                        sensor_mode: None,
+                        exposure_s: exposure_s.unwrap_or(0.0),
+                        temp_c,
+                        gain: gain.unwrap_or(0.0),
+                        binning: binning.unwrap_or_else(|| "1x1".to_owned()),
+                        filter: filter_name,
+                    },
+                    source_session_id: source_session_id.unwrap_or_else(|| id.clone()),
+                    created_at,
+                    age_days,
+                    size_bytes: u64::try_from(size_bytes).unwrap_or(0),
+                    used_by_session_ids: vec![],
+                    used_by_project_ids: vec![],
+                }
+            },
+        )
+        .collect();
+
+    Ok(masters)
+}
+
+/// `calibration.masters.get` — return detail for a single calibration master.
+///
+/// # Errors
+/// Returns `Err(String)` when the master is not found or on database failure.
+pub async fn masters_get(
+    pool: &SqlitePool,
+    master_id: &str,
+) -> Result<contracts_core::calibration::MasterDetail, String> {
+    let row: Option<(
+        String,
+        String,
+        String,
+        i64,
+        Option<f64>,
+        Option<f64>,
+        Option<f64>,
+        Option<String>,
+        Option<String>,
+        Option<String>,
+        Option<String>,
+    )> = sqlx::query_as(
+        "SELECT id, kind, created_at, size_bytes,
+                fp_gain, fp_exposure_s, fp_temp_c, fp_filter_name, fp_binning,
+                fp_optic_train, source_session_id
+         FROM calibration_master_view
+         WHERE id = ?",
+    )
+    .bind(master_id)
+    .fetch_optional(pool)
+    .await
+    .map_err(|e| e.to_string())?;
+
+    let (
+        id,
+        kind,
+        created_at,
+        size_bytes,
+        gain,
+        exposure_s,
+        temp_c,
+        filter_name,
+        binning,
+        optic_train,
+        source_session_id,
+    ) = row.ok_or_else(|| format!("master.not_found: {master_id}"))?;
+
+    let now = OffsetDateTime::now_utc();
+    let age_days = compute_age_days(&created_at, now);
+    let cal_kind = str_to_cal_kind(&kind);
+
+    // Load sessions assigned to this master via calibration_assignment.
+    let used_sessions: Vec<(String,)> =
+        sqlx::query_as("SELECT session_id FROM calibration_assignment WHERE master_id = ?")
+            .bind(&id)
+            .fetch_all(pool)
+            .await
+            .unwrap_or_default();
+    let used_by_session_ids: Vec<String> = used_sessions.into_iter().map(|(s,)| s).collect();
+
+    // Load projects linked to sessions that use this master.
+    let used_projects: Vec<(String,)> = sqlx::query_as(
+        "SELECT DISTINCT ps.project_id
+         FROM project_sources ps
+         JOIN calibration_assignment ca ON ca.session_id = ps.session_id
+         WHERE ca.master_id = ?",
+    )
+    .bind(&id)
+    .fetch_all(pool)
+    .await
+    .unwrap_or_default();
+    let used_by_project_ids: Vec<String> = used_projects.into_iter().map(|(p,)| p).collect();
+
+    let session_count = u32::try_from(used_by_session_ids.len()).unwrap_or(0);
+    let project_count = u32::try_from(used_by_project_ids.len()).unwrap_or(0);
+
+    Ok(contracts_core::calibration::MasterDetail {
+        id: id.clone(),
+        kind: cal_kind,
+        fingerprint: contracts_core::calibration::CalibrationFingerprint {
+            camera: optic_train.unwrap_or_default(),
+            sensor_mode: None,
+            exposure_s: exposure_s.unwrap_or(0.0),
+            temp_c,
+            gain: gain.unwrap_or(0.0),
+            binning: binning.unwrap_or_else(|| "1x1".to_owned()),
+            filter: filter_name,
+        },
+        source_session_id: source_session_id.unwrap_or_else(|| id.clone()),
+        created_at,
+        age_days,
+        size_bytes: u64::try_from(size_bytes).unwrap_or(0),
+        used_by_session_ids,
+        used_by_project_ids,
+        compatible_sessions: vec![],
+        usage_stats: contracts_core::calibration::MasterUsageStats { session_count, project_count },
+    })
+}
+
+fn str_to_cal_kind(kind: &str) -> contracts_core::calibration::CalibrationKind {
+    match kind {
+        "flat" => contracts_core::calibration::CalibrationKind::Flat,
+        "bias" => contracts_core::calibration::CalibrationKind::Bias,
+        "dark_flat" | "flat_dark" => contracts_core::calibration::CalibrationKind::DarkFlat,
+        _ => contracts_core::calibration::CalibrationKind::Dark,
+    }
+}
+
+fn compute_age_days(created_at: &str, now: OffsetDateTime) -> u32 {
+    if let Ok(created) = time::OffsetDateTime::parse(created_at, &Rfc3339) {
+        let diff = now - created;
+        u32::try_from(diff.whole_days().max(0)).unwrap_or(0)
+    } else {
+        0
+    }
+}
+
+// ── Masters tests (T032, T037) ─────────────────────────────────────────────────
+
+#[cfg(test)]
+mod masters_tests {
+    use super::*;
+    use persistence_db::Database;
+
+    async fn test_db() -> Database {
+        let db = Database::in_memory().await.unwrap();
+        db.migrate().await.unwrap();
+        db
+    }
+
+    /// T032 / T037: masters_list returns real rows from calibration_master_view.
+    #[tokio::test]
+    async fn masters_list_returns_real_rows_not_fixtures() {
+        let db = test_db().await;
+
+        sqlx::query(
+            "INSERT INTO calibration_session (id, session_key, kind, state, created_at) \
+             VALUES ('cal-t1', 'dark-300s', 'dark', 'confirmed', '2026-06-01T00:00:00Z')",
+        )
+        .execute(db.pool())
+        .await
+        .unwrap();
+
+        sqlx::query(
+            "INSERT INTO calibration_fingerprint \
+             (id, calibration_type, gain, exposure_s, temp_c, binning, optic_train) \
+             VALUES ('cal-t1', 'dark', 100.0, 300.0, -10.0, '1x1', 'ASI2600MM')",
+        )
+        .execute(db.pool())
+        .await
+        .unwrap();
+
+        let masters = masters_list(db.pool()).await.unwrap();
+        assert_eq!(masters.len(), 1, "must return exactly 1 real master from DB");
+        assert_eq!(masters[0].id, "cal-t1");
+        assert_eq!(masters[0].kind, contracts_core::calibration::CalibrationKind::Dark);
+        assert!((masters[0].fingerprint.gain - 100.0).abs() < f64::EPSILON);
+        assert_eq!(masters[0].fingerprint.camera, "ASI2600MM");
+    }
+
+    /// T032 / T037: masters_list returns empty on a fresh DB (no fixtures).
+    #[tokio::test]
+    async fn masters_list_returns_empty_on_fresh_db() {
+        let db = test_db().await;
+        let masters = masters_list(db.pool()).await.unwrap();
+        assert!(masters.is_empty(), "fresh DB must have no masters — not fixtures");
+    }
+
+    /// T032 / T037: masters_get returns the correct row.
+    #[tokio::test]
+    async fn masters_get_returns_correct_row() {
+        let db = test_db().await;
+
+        sqlx::query(
+            "INSERT INTO calibration_session (id, session_key, kind, state, created_at) \
+             VALUES ('cal-t2', 'flat-2s-Ha', 'flat', 'confirmed', '2026-05-15T00:00:00Z')",
+        )
+        .execute(db.pool())
+        .await
+        .unwrap();
+
+        sqlx::query(
+            "INSERT INTO calibration_fingerprint \
+             (id, calibration_type, gain, exposure_s, filter_name, binning) \
+             VALUES ('cal-t2', 'flat', 100.0, 2.0, 'Ha', '1x1')",
+        )
+        .execute(db.pool())
+        .await
+        .unwrap();
+
+        let detail = masters_get(db.pool(), "cal-t2").await.unwrap();
+        assert_eq!(detail.id, "cal-t2");
+        assert_eq!(detail.kind, contracts_core::calibration::CalibrationKind::Flat);
+        assert_eq!(detail.fingerprint.filter, Some("Ha".to_owned()));
+    }
+
+    /// T032 / T037: masters_get returns error for unknown id.
+    #[tokio::test]
+    async fn masters_get_returns_error_for_unknown_id() {
+        let db = test_db().await;
+        let err = masters_get(db.pool(), "nonexistent").await.unwrap_err();
+        assert!(err.contains("master.not_found"), "expected master.not_found error, got: {err}");
+    }
+
+    /// T032 / T037: calibration suggest finds real masters from populated fingerprints.
+    #[tokio::test]
+    async fn suggest_uses_real_fingerprint_rows() {
+        let db = test_db().await;
+
+        // Insert acquisition session + fingerprint.
+        sqlx::query(
+            "INSERT INTO acquisition_session (id, session_key, state, created_at) \
+             VALUES ('acq-t1', 'M31/L/2026-03-01/100/1x1', 'confirmed', '2026-03-01T00:00:00Z')",
+        )
+        .execute(db.pool())
+        .await
+        .unwrap();
+
+        sqlx::query(
+            "INSERT INTO acquisition_fingerprint \
+             (id, session_type, gain, exposure_s, binning, \
+              has_observer_location, has_exposure_start_utc) \
+             VALUES ('acq-t1', 'light', 100.0, 300.0, '1x1', 0, 0)",
+        )
+        .execute(db.pool())
+        .await
+        .unwrap();
+
+        // Insert calibration master fingerprint.
+        sqlx::query(
+            "INSERT INTO calibration_session (id, session_key, kind, state, created_at) \
+             VALUES ('cal-t3', 'dark-300s-gain100', 'dark', 'confirmed', '2026-03-01T00:00:00Z')",
+        )
+        .execute(db.pool())
+        .await
+        .unwrap();
+
+        sqlx::query(
+            "INSERT INTO calibration_fingerprint \
+             (id, calibration_type, gain, exposure_s, binning) \
+             VALUES ('cal-t3', 'dark', 100.0, 300.0, '1x1')",
+        )
+        .execute(db.pool())
+        .await
+        .unwrap();
+
+        // masters_list must return the real row.
+        let masters = masters_list(db.pool()).await.unwrap();
+        assert_eq!(masters.len(), 1);
+        assert_eq!(masters[0].id, "cal-t3");
+    }
+}

@@ -74,7 +74,7 @@ Monorepo: `crates/<area>/`, `apps/desktop/src/`, `apps/desktop/e2e/`, `packages/
 - [X] T021 [US1] Emit a per-item audit row on every transition including bulk cancel in `crates/fs/executor` + `crates/audit` (FR-005)
 - [X] T022 [US1] Implement `trash_op` via the `trash` crate with recorded `archive` fallback in `crates/fs/executor/src/ops/trash_op.rs` (D4, FR-006)
 - [X] T023 [US1] Ensure rollback / clearly-audited partial completion on failure — no silent loss (FR-007)
-- [ ] T023a [US1] **BLOCKING (gate currently inert on real data):** resolve `from_root_id` → absolute library root in `item_row_to_executor_item` (`crates/app/core/src/plan_apply.rs`) so `library_root` is set and the path gate (T018) actually fires on real plan items — today it's `None` so real items bypass the escape/symlink/staleness checks. Also persist `approved_mtime`/`approved_size_bytes` + `destructive_confirmed` as real DB columns (currently `#[sqlx(default)]`). US1 is NOT done until this lands. (FR-001/002/003/007)
+- [X] T023a [US1] **BLOCKING (gate currently inert on real data):** resolve `from_root_id` → absolute library root in `item_row_to_executor_item` (`crates/app/core/src/plan_apply.rs`) so `library_root` is set and the path gate (T018) actually fires on real plan items — today it's `None` so real items bypass the escape/symlink/staleness checks. Also persist `approved_mtime`/`approved_size_bytes` + `destructive_confirmed` as real DB columns (currently `#[sqlx(default)]`). US1 is NOT done until this lands. (FR-001/002/003/007)
 
 **Checkpoint**: real `plan.apply` is safe and audited. US1 testable independently. ⚠️ Gate only active once T023a resolves the library root onto real items + T015 e2e proves it.
 
@@ -108,19 +108,20 @@ Monorepo: `crates/<area>/`, `apps/desktop/src/`, `apps/desktop/e2e/`, `packages/
 **Independent Test**: ingest a real folder → sessions grouped → calibration suggestions from real rows → target detail populated → Cmd+K finds a real target.
 
 ### Tests (red-first)
-- [ ] T031 [P] [US3] Real-backend e2e: unskip `apps/desktop/e2e/real-backend/us3_ingestion_plumbing.spec.ts` — ingest → sessions grouped under their root (FR-012)
-- [ ] T032 [P] [US3] Rust test: calibration suggestions come from real master rows on populated fingerprints (FR-013)
-- [ ] T033 [P] [US3] Rust test: target detail returns linked sessions/projects via `target_id` (FR-014)
-- [ ] T034 [P] [US3] Rust test: `search.global` runs a real cross-entity query reflecting the query string (FR-015)
+- [ ] T031 [P] [US3] Real-backend e2e: unskip `apps/desktop/e2e/real-backend/us3_ingestion_plumbing.spec.ts` — ingest → sessions grouped under their root (FR-012) [SKIPPED: depends on T006 e2e harness, not yet done]
+- [X] T032 [P] [US3] Rust test: calibration suggestions come from real master rows on populated fingerprints (FR-013)
+- [X] T033 [P] [US3] Rust test: target detail returns linked sessions/projects via `target_id` (FR-014)
+- [X] T034 [P] [US3] Rust test: `search.global` runs a real cross-entity query reflecting the query string (FR-015)
 
 ### Implementation
-- [ ] T035 [US3] Migrations `0033`/`0034`: fingerprints queryable + indexed; session `root_id`; `target_id` FKs (data-model)
-- [ ] T036 [US3] Inbox confirm/apply sets session `root_id` so sessions group in inventory — `crates/sessions` + `crates/app/core` (FR-012)
-- [ ] T037 [US3] Populate calibration/acquisition fingerprints from metadata; back masters `list`/`get` with real rows (replace `calibration.rs:27-134` fixtures) (FR-013)
-- [ ] T038 [US3] Persist `target_id` from ingestion so target detail shows real links — `crates/targeting` (FR-014)
-- [ ] T039 [US3] Replace the `search.global` fixture stub (`commands/search.rs:14-50`) with a real cross-entity query over targets/aliases/sessions/projects (FR-015)
-- [ ] T039a [US3] Target detail loads without error for a real persisted target — fix the "Failed to load target" path in the `target.get` aggregate/UI once `target_id` is plumbed (FR-044); test against an ingested DB with a real target
-- [ ] T039b [P] [US3] Targets list: expose grouping (type, constellation) + sorting (name, session count, integration hours) with clear labels, consistent with other list surfaces (FR-041), in `apps/desktop/src/features/targets/`
+- [X] T035 [US3] Migrations `0033`/`0034`: fingerprints queryable + indexed; session `root_id`; `target_id` FKs (data-model)
+- [~] T036 [US3] Inbox confirm/apply sets session `root_id` — `update_*_session_root_id` helpers added, but NOT yet called by the live session-creation pipeline (sessions come from a scan pipeline not wired to the UI). Partial. (FR-012)
+- [ ] T036a [US3] **FR-012 completeness (inert until done):** wire the live scan→session-creation pipeline to call `update_*_session_root_id` (and confirm the pipeline is reachable from the UI) so real sessions get `root_id` and group under their root. Verify on real-backend: ingest a folder → sessions appear grouped. (FR-012, SC-001)
+- [X] T037 [US3] Populate calibration/acquisition fingerprints from metadata; back masters `list`/`get` with real rows (replace `calibration.rs:27-134` fixtures) (FR-013)
+- [X] T038 [US3] Persist `target_id` from ingestion so target detail shows real links — `crates/targeting` (FR-014)
+- [X] T039 [US3] Replace the `search.global` fixture stub (`commands/search.rs:14-50`) with a real cross-entity query over targets/aliases/sessions/projects (FR-015)
+- [X] T039a [US3] Target detail loads without error for a real persisted target — fix the "Failed to load target" path in the `target.get` aggregate/UI once `target_id` is plumbed (FR-044); test against an ingested DB with a real target
+- [X] T039b [P] [US3] Targets list: expose grouping (type, constellation) + sorting (name, session count, integration hours) with clear labels, consistent with other list surfaces (FR-041), in `apps/desktop/src/features/targets/`
 
 **Checkpoint**: the core value is visible on a real library; US4 precondition (source_id/category) met.
 

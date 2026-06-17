@@ -75,9 +75,8 @@ pub struct PlanItemRow {
     pub requires_destructive_confirm: Option<i64>,
     pub resolved_pattern: Option<String>,
     /// 0/1 bool: whether the user has confirmed the destructive action.
-    /// Not yet a DB column — defaults to None / treated as false until wired.
-    #[sqlx(default)]
-    pub destructive_confirmed: Option<i64>,
+    /// Real DB column added by migration 0033. Default 0 (false) — safe.
+    pub destructive_confirmed: i64,
 }
 
 /// Data required to insert a new plan.

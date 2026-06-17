@@ -24,7 +24,8 @@ use contracts_core::targets::{
 };
 use persistence_db::repositories::targets::{
     delete_alias_by_normalized, find_alias_by_normalized, get_target, insert_alias, list_aliases,
-    list_catalog_refs, update_target_notes, update_target_primary, TargetAliasRow,
+    list_catalog_refs, list_projects_for_target, list_sessions_for_target, update_target_notes,
+    update_target_primary, TargetAliasRow,
 };
 use targeting::aliases::{
     check_alias_add, check_alias_remove_not_primary, check_primary_rename, validate_alias,
@@ -139,11 +140,49 @@ pub async fn target_get(pool: &SqlitePool, target_id: &str) -> TargetResult<Targ
         updated_at,
     };
 
-    // Sessions and projects are deferred (T012, T017): the FK columns on
-    // acquisition_session and projects are nullable and not yet populated by
-    // the ingestion pipeline. The use case returns empty slices so the UI can
-    // render the empty state (T015).
-    Ok(TargetGetResult { target: identity, sessions: vec![], projects: vec![] })
+    // T038 (FR-014): load sessions linked via acq_target_id.
+    let session_rows =
+        list_sessions_for_target(pool, target_id).await.map_err(|e| TargetOpError {
+            code: "internal".to_owned(),
+            message: format!("Failed to load sessions: {e}"),
+            details: None,
+        })?;
+
+    let sessions: Vec<contracts_core::targets::TargetSession> = session_rows
+        .into_iter()
+        .map(|(session_id, session_key, _created_at)| contracts_core::targets::TargetSession {
+            // inventory_id mirrors session_id for v1 (spec 023 T012)
+            inventory_id: session_id.clone(),
+            session_id,
+            captured_on: None,
+            filter: session_key.as_deref().and_then(|k| {
+                // session_key format: "target/filter/date/gain/binning"
+                k.split('/').nth(1).map(str::to_owned)
+            }),
+            exposure: None,
+            frames: None,
+        })
+        .collect();
+
+    // T038 (FR-014): load projects linked via target_id.
+    let project_rows =
+        list_projects_for_target(pool, target_id).await.map_err(|e| TargetOpError {
+            code: "internal".to_owned(),
+            message: format!("Failed to load projects: {e}"),
+            details: None,
+        })?;
+
+    let projects: Vec<contracts_core::targets::TargetProject> = project_rows
+        .into_iter()
+        .map(|(project_id, name, lifecycle, tool_id)| contracts_core::targets::TargetProject {
+            project_id,
+            name,
+            lifecycle,
+            tool: tool_id.unwrap_or_else(|| "none".to_owned()),
+        })
+        .collect();
+
+    Ok(TargetGetResult { target: identity, sessions, projects })
 }
 
 // ── target_note_update ────────────────────────────────────────────────────────

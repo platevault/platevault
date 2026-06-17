@@ -89,6 +89,7 @@ export function TargetDetailV2({ targetId }: Props) {
   const navigate = useNavigate();
 
   // Load target data.
+  // T039a (FR-044): handle not_found / internal errors gracefully without throwing.
   useEffect(() => {
     setLoadState({ status: 'loading' });
     getTargetIdentity({ targetId })
@@ -96,8 +97,15 @@ export function TargetDetailV2({ targetId }: Props) {
         setLoadState({ status: 'loaded', data });
         setNoteContent(data.target.notes ?? '');
       })
-      .catch(() => {
-        setLoadState({ status: 'error', message: 'Failed to load target.' });
+      .catch((err: unknown) => {
+        // Tauri IPC errors arrive as strings containing the error code.
+        const raw = typeof err === 'string' ? err : String(err ?? '');
+        const message = raw.includes('target.not_found')
+          ? 'Target not found. It may have been removed or the ID is stale.'
+          : raw.includes('not_found')
+          ? 'Target not found.'
+          : 'Failed to load target.';
+        setLoadState({ status: 'error', message });
       });
   }, [targetId]);
 
