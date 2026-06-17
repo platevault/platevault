@@ -1100,7 +1100,7 @@ export const commands = {
 	 *  # Errors
 	 *  Returns `Err(String)` on DB failure or if the artifact is not found.
 	 */
-	artifactClassify: (request: ArtifactClassifyRequest) => typedError<ArtifactClassifyResponse, string>(__TAURI_INVOKE("artifact.classify", { request })),
+	artifactClassify: (request: ArtifactClassifyRequest) => typedError<ArtifactClassifyResponse_Serialize, string>(__TAURI_INVOKE("artifact.classify", { request })),
 	/**
 	 *  `artifact.mark_resolved` — mark a `missing` artifact as user-resolved.
 	 * 
@@ -1294,9 +1294,41 @@ export type ArtifactClassifyRequest = {
 	reason: string | null,
 };
 
-/**  Response DTO for `artifact.classify`. */
-export type ArtifactClassifyResponse = {
-	artifact: ArtifactSummary,
+/**
+ *  Response DTO for `artifact.classify` (flat contract shape, spec 033 T028).
+ * 
+ *  Canonical shape is flat fields matching the published contract.
+ *  The prior nested `{ artifact: ArtifactSummary }` envelope is replaced
+ *  so the response matches `artifact-events.md`.
+ */
+export type ArtifactClassifyResponse = ArtifactClassifyResponse_Serialize | ArtifactClassifyResponse_Deserialize;
+
+/**
+ *  Response DTO for `artifact.classify` (flat contract shape, spec 033 T028).
+ * 
+ *  Canonical shape is flat fields matching the published contract.
+ *  The prior nested `{ artifact: ArtifactSummary }` envelope is replaced
+ *  so the response matches `artifact-events.md`.
+ */
+export type ArtifactClassifyResponse_Deserialize = {
+	artifactId: string,
+	classification: string,
+	confidence: number | null,
+	classifiedAt: string,
+};
+
+/**
+ *  Response DTO for `artifact.classify` (flat contract shape, spec 033 T028).
+ * 
+ *  Canonical shape is flat fields matching the published contract.
+ *  The prior nested `{ artifact: ArtifactSummary }` envelope is replaced
+ *  so the response matches `artifact-events.md`.
+ */
+export type ArtifactClassifyResponse_Serialize = {
+	artifactId: string,
+	classification: string,
+	confidence?: number | null,
+	classifiedAt: string,
 };
 
 /**  Request DTO for `artifact.list` (spec 012 T020/TX01). */

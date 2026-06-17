@@ -24,11 +24,12 @@
 
 use audit::bus::EventBus;
 use audit::event_bus::{
-    ArtifactClassifyOverride, ArtifactClassifyOverrideCleared, ArtifactDetected, ArtifactMissing,
-    ArtifactRecovered, ArtifactUpdated, ArtifactUserResolved, Source, WorkflowRunCompleted,
-    TOPIC_ARTIFACT_CLASSIFY_OVERRIDE, TOPIC_ARTIFACT_CLASSIFY_OVERRIDE_CLEARED,
-    TOPIC_ARTIFACT_DETECTED, TOPIC_ARTIFACT_MISSING, TOPIC_ARTIFACT_RECOVERED,
-    TOPIC_ARTIFACT_UPDATED, TOPIC_ARTIFACT_USER_RESOLVED, TOPIC_WORKFLOW_RUN_COMPLETED,
+    ArtifactClassified, ArtifactClassifyOverride, ArtifactClassifyOverrideCleared,
+    ArtifactDetected, ArtifactMissing, ArtifactRecovered, ArtifactUpdated, ArtifactUserResolved,
+    Source, WorkflowRunCompleted, TOPIC_ARTIFACT_CLASSIFIED, TOPIC_ARTIFACT_CLASSIFY_OVERRIDE,
+    TOPIC_ARTIFACT_CLASSIFY_OVERRIDE_CLEARED, TOPIC_ARTIFACT_DETECTED, TOPIC_ARTIFACT_MISSING,
+    TOPIC_ARTIFACT_RECOVERED, TOPIC_ARTIFACT_UPDATED, TOPIC_ARTIFACT_USER_RESOLVED,
+    TOPIC_WORKFLOW_RUN_COMPLETED,
 };
 use sqlx::SqlitePool;
 use time::OffsetDateTime;
@@ -164,6 +165,23 @@ pub async fn detect(
                 classification_confidence: classification.confidence,
                 tool_launch_id: tool_launch_id.clone(),
                 detected_at: detected_at.to_owned(),
+            },
+        )
+        .await;
+
+    // Emit artifact.classified (spec 033 T028, FR-009) — the second required
+    // event that was previously absent from the bus.  Carries the classification
+    // result with confidence so UI and audit consumers see both events.
+    let _ = bus
+        .publish(
+            TOPIC_ARTIFACT_CLASSIFIED,
+            Source::System,
+            ArtifactClassified {
+                artifact_id: id.clone(),
+                project_id: project_id.to_owned(),
+                classification: kind_str.to_owned(),
+                confidence: Some(classification.confidence),
+                classified_at: detected_at.to_owned(),
             },
         )
         .await;
@@ -728,5 +746,104 @@ mod tests {
         // Idempotent second call.
         let updated2 = complete_run(&pool, &bus, "proj-1", "pixinsight", "tl-1").await.unwrap();
         assert!(!updated2);
+    }
+
+    // ── T028: artifact.detected AND artifact.classified both emitted (FR-009) ──
+
+    #[tokio::test]
+    async fn detect_emits_artifact_detected_and_artifact_classified() {
+        use audit::event_bus::{TOPIC_ARTIFACT_CLASSIFIED, TOPIC_ARTIFACT_DETECTED};
+
+        let pool = make_pool().await;
+        let bus = make_bus(&pool);
+
+        // Subscribe BEFORE detect so we capture the events.
+        let mut rx = bus.subscribe();
+
+        detect(
+            &pool,
+            &bus,
+            "proj-t028",
+            "output/MasterFlat_bin1x1.xisf",
+            "pixinsight",
+            1024,
+            "2026-06-01T09:55:00Z",
+            "2026-06-01T10:00:00Z",
+        )
+        .await
+        .unwrap();
+
+        // Collect events published synchronously by the detect call.
+        // EventBus.publish is async; read with a short timeout.
+        let mut detected = false;
+        let mut classified = false;
+        let deadline = tokio::time::Instant::now() + std::time::Duration::from_secs(1);
+        while !(detected && classified) {
+            match tokio::time::timeout_at(deadline, rx.recv()).await {
+                Ok(Ok(env)) if env.topic == TOPIC_ARTIFACT_DETECTED => {
+                    detected = true;
+                    // Payload must have artifact_id.
+                    assert!(env.payload.get("artifactId").is_some());
+                    assert_eq!(env.payload["projectId"].as_str(), Some("proj-t028"));
+                }
+                Ok(Ok(env)) if env.topic == TOPIC_ARTIFACT_CLASSIFIED => {
+                    classified = true;
+                    // Payload must have classification and confidence.
+                    assert!(env.payload.get("classification").is_some());
+                    assert!(env.payload.get("confidence").is_some());
+                    assert_eq!(env.payload["projectId"].as_str(), Some("proj-t028"));
+                }
+                Ok(Ok(_)) => {} // other topics, keep draining
+                Ok(Err(_)) | Err(_) => break,
+            }
+        }
+
+        assert!(detected, "artifact.detected must be emitted by detect()");
+        assert!(classified, "artifact.classified must be emitted by detect() (T028 FR-009)");
+    }
+
+    #[tokio::test]
+    async fn artifact_classify_response_is_flat_shape() {
+        // Verifies the contract: ArtifactClassifyResponse has flat fields,
+        // not a nested { artifact: … } envelope (spec 033 T028 regression guard).
+        use contracts_core::tools::ArtifactClassifyResponse;
+        let pool = make_pool().await;
+        let bus = make_bus(&pool);
+
+        let art_id = detect(
+            &pool,
+            &bus,
+            "proj-flat",
+            "output/img.xisf",
+            "pixinsight",
+            512,
+            "2026-06-01T09:55:00Z",
+            "2026-06-01T10:00:00Z",
+        )
+        .await
+        .unwrap();
+
+        // Simulate what the Tauri command does: call classify_override then build
+        // ArtifactClassifyResponse with the flat shape.
+        let summary = classify_override(&pool, &bus, "proj-flat", &art_id, Some("final"), None)
+            .await
+            .unwrap();
+
+        let resp = ArtifactClassifyResponse {
+            artifact_id: summary.id.clone(),
+            classification: summary.kind.clone(),
+            confidence: Some(summary.classification_confidence),
+            classified_at: "2026-06-01T10:01:00Z".to_owned(),
+        };
+
+        // Serialise and check the JSON does NOT have a nested "artifact" key.
+        let json = serde_json::to_value(&resp).unwrap();
+        assert!(
+            json.get("artifact").is_none(),
+            "flat shape must not have nested 'artifact' key; got: {json}"
+        );
+        assert_eq!(json["artifactId"].as_str(), Some(summary.id.as_str()));
+        assert_eq!(json["classification"].as_str(), Some("final"));
+        assert!(json.get("confidence").is_some());
     }
 }

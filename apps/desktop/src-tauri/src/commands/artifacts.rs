@@ -60,7 +60,16 @@ pub async fn artifact_classify(
         request.reason.as_deref(),
     )
     .await?;
-    Ok(ArtifactClassifyResponse { artifact: summary })
+    // Return the flat contract shape (spec 033 T028; drift fix from nested envelope).
+    let now = time::OffsetDateTime::now_utc()
+        .format(&time::format_description::well_known::Rfc3339)
+        .unwrap_or_else(|_| "1970-01-01T00:00:00Z".to_owned());
+    Ok(ArtifactClassifyResponse {
+        artifact_id: summary.id,
+        classification: summary.kind,
+        confidence: Some(summary.classification_confidence),
+        classified_at: now,
+    })
 }
 
 // ── artifact.mark_resolved ────────────────────────────────────────────────────

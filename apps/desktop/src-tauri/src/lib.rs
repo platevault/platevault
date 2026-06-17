@@ -544,6 +544,11 @@ pub fn run_app(app: tauri::App, pool: SqlitePool) {
         contracts_core::log::LogLevel::Debug,
         pool.clone(),
     );
+    // spec 024: manifest auto-generation on workflow-run completion.
+    // The JoinHandle is intentionally dropped — the task runs independently.
+    drop(app_core::project_manifests::spawn_workflow_run_subscriber(pool.clone(), bus.clone()));
+    // spec 012: artifact filesystem watcher → artifact.detected + artifact.classified events.
+    crate::watcher::spawn_artifact_watcher(pool.clone(), bus.clone());
 
     let repo = Arc::new(SqliteLifecycleRepository::new(pool, bus.clone()));
     let state = AppState::new(repo, bus);

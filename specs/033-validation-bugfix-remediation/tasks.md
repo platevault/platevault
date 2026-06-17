@@ -31,8 +31,8 @@ Monorepo: `crates/<area>/`, `apps/desktop/src/`, `apps/desktop/e2e/`, `packages/
 
 - [X] T001 [P] Add `trash` 5.2.x (MIT) to `crates/fs/executor/Cargo.toml` + workspace deps (D4)
 - [ ] T002 [P] Add `minisign-verify` 0.2.x (MIT) to `crates/targeting/catalogs/Cargo.toml` (D5)
-- [ ] T003 [P] In `apps/desktop/package.json`: adopt `react-joyride@^3.1.0`; **remove** unused `@tanstack/react-table` and `@uiw/react-md-editor` (D6, D10)
-- [ ] T004 [P] Add `notify-debouncer-full` 0.7.x (MIT/Apache-2.0) to `crates/fs/inventory/Cargo.toml` (D10; mark optional — fall back to in-loop debounce if unwelcome)
+- [X] T003 [P] In `apps/desktop/package.json`: adopt `react-joyride@^3.1.0`; **remove** unused `@tanstack/react-table` and `@uiw/react-md-editor` (D6, D10)
+- [X] T004 [P] Add `notify-debouncer-full` 0.7.x (MIT/Apache-2.0) to `crates/fs/inventory/Cargo.toml` (D10; mark optional — fall back to in-loop debounce if unwelcome)
 - [ ] T005 Verify deps resolve and gates stay green: `cargo build --workspace`, `pnpm install`, `just lint`, `just typecheck`
 
 ---
@@ -89,13 +89,13 @@ Monorepo: `crates/<area>/`, `apps/desktop/src/`, `apps/desktop/e2e/`, `packages/
 ### Tests (red-first)
 - [ ] T024 [P] [US2] Real-backend e2e: unskip `apps/desktop/e2e/real-backend/us2_subscriber_startup.spec.ts` — workflow completion auto-generates a manifest (FR-008)
 - [ ] T025 [P] [US2] Real-backend e2e: artifact dropped into a watched root emits `artifact.detected` AND `artifact.classified` with contract-valid payloads (FR-009)
-- [ ] T026 [P] [US2] vitest: guided bridge advances on `inventory.confirmed`/`project.created`/`tool.opened`, ignores `source="restore"`, in `apps/desktop/src/features/guided/` (FR-010)
+- [X] T026 [P] [US2] vitest: guided bridge advances on `inventory.confirmed`/`project.created`/`tool.opened`, ignores `source="restore"`, in `apps/desktop/src/features/guided/` (FR-010)
 
 ### Implementation
-- [ ] T027 [US2] Redesign `spawn_workflow_run_subscriber` with an async DB project-root resolver; spawn it in `run_app` in `crates/app/core` (FR-008)
-- [ ] T028 [US2] Artifact watcher: notify loop + debounce + watch-paths-from-registered-roots; spawn in `run_app`; add `artifact.classified` to the event bus; fix `artifact.classify` response to the flat contract shape — `crates/fs/inventory` + `crates/contracts/core` + `packages/contracts` (FR-009, contracts/artifact-events.md)
-- [ ] T029 [US2] Build the guided event→step bridge modeled on `apps/desktop/src/data/logSubscription.ts`; subscribe to domain events, filter `source != "restore"`, call `completeGuidedStep` (FR-010)
-- [ ] T030 [US2] Replace the `GuidedOverlay` render layer with a controlled `<Joyride>` (react-joyride 3.1), `spotlightClicks:true`, keep state machine/anchors/store; drop the dead inline `@media` at `GuidedOverlay.tsx:188` (FR-011, D6)
+- [X] T027 [US2] Redesign `spawn_workflow_run_subscriber` with an async DB project-root resolver; spawn it in `run_app` in `crates/app/core` (FR-008)
+- [X] T028 [US2] Artifact watcher: notify loop + debounce + watch-paths-from-registered-roots; spawn in `run_app`; add `artifact.classified` to the event bus; fix `artifact.classify` response to the flat contract shape — `crates/fs/inventory` + `crates/contracts/core` + `packages/contracts` (FR-009, contracts/artifact-events.md)
+- [X] T029 [US2] Build the guided event→step bridge modeled on `apps/desktop/src/data/logSubscription.ts`; subscribe to domain events, filter `source != "restore"`, call `completeGuidedStep` (FR-010)
+- [X] T030 [US2] Replace the `GuidedOverlay` render layer with a controlled `<Joyride>` (react-joyride 3.1), `spotlightClicks:true`, keep state machine/anchors/store; drop the dead inline `@media` at `GuidedOverlay.tsx:188` (FR-011, D6)
 
 **Checkpoint**: the five previously-inert features fire at runtime (SC-003).
 
