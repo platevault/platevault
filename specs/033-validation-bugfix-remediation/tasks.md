@@ -222,19 +222,19 @@ Monorepo: `crates/<area>/`, `apps/desktop/src/`, `apps/desktop/e2e/`, `packages/
 **Independent Test**: dev build auto-captures + exports to chosen path; release build has no dev surface; toggle/show-ignored/frame-type/inventory-refs behave.
 
 ### Tests (red-first)
-- [ ] T072 [P] [US8] Test: a release build (no `dev-tools` feature) has no reachable developer route or commands (FR-031, SC-009)
-- [ ] T073 [P] [US8] Test: a dev build auto-captures an operation via the recording proxy and exports to a chosen path (FR-030)
-- [ ] T074 [P] [US8] vitest/e2e: inbox destructive-destination toggle is surfaced and the chosen value is honored (FR-032)
-- [ ] T074a [P] [US8] vitest/e2e: "Show ignored items" Cmd+K entry exists and works; mixed frame-type is derived dynamically (not a fixture string); per-item inventory refs render in `SourceViewsSection` (FR-033)
+- [X] T072 [P] [US8] Test: a release build (no `dev-tools` feature) has no reachable developer route or commands (FR-031, SC-009)
+- [X] T073 [P] [US8] Test: a dev build auto-captures an operation via the recording proxy and exports to a chosen path (FR-030)
+- [X] T074 [P] [US8] vitest/e2e: inbox destructive-destination toggle is surfaced and the chosen value is honored (FR-032)
+- [X] T074a [P] [US8] vitest/e2e: "Show ignored items" Cmd+K entry exists and works; mixed frame-type is derived dynamically (not a fixture string); per-item inventory refs render in `SourceViewsSection` (FR-033)
 
 ### Implementation
-- [ ] T075 [US8] Wrap the Tauri dispatcher at boot for recording-proxy auto-capture; fix `dev_export` relative-path bug; gate the dev frontend bundle out of release (T031/T036) (FR-030/031)
-- [ ] T076 [US8] Surface the destructive-destination toggle in inbox confirm (`ActionSidebar`/`InboxPage.tsx:56`); decide/implement-or-remove the `repair` scheduler reference; snapshot the resolved pattern onto the plan (FR-032)
-- [ ] T077 [US8] Add the "Show ignored items" Cmd+K entry; derive `mixed` frame-type dynamically (FR-033)
-- [ ] T078 [US8] Drop stale "Status: NOT IMPLEMENTED" contract descriptions (026); show per-item inventory refs in `SourceViewsSection` (FR-033)
-- [ ] T078a [P] [US8] Inbox grouping: support group-by date / classification-state / capture-type and rename the "lane" label to a user-meaningful term (image vs video) in `apps/desktop/src/features/inbox/InboxList.tsx` (FR-040)
-- [ ] T078b [P] [US8] Projects list: add sort options consistent with other list surfaces (beyond name/updated) in `apps/desktop/src/features/projects/ProjectsList.tsx` (FR-042)
-- [ ] T078c [US8] New-project flow: render inside the main window with design-v4 layout, wire the existing `features/projects/wizard/WizardPage.tsx` (session + calibration selection) as the reachable create flow, ensure create succeeds end-to-end, and open it from the target "new project" action (FR-043); add a vitest/e2e covering session+calibration selection and successful creation
+- [X] T075 [US8] Wrap the Tauri dispatcher at boot for recording-proxy auto-capture; fix `dev_export` relative-path bug; gate the dev frontend bundle out of release (T031/T036) (FR-030/031)
+- [X] T076 [US8] Surface the destructive-destination toggle in inbox confirm (`ActionSidebar`/`InboxPage.tsx:56`); decide/implement-or-remove the `repair` scheduler reference; snapshot the resolved pattern onto the plan (FR-032)
+- [X] T077 [US8] Add the "Show ignored items" Cmd+K entry; derive `mixed` frame-type dynamically (FR-033)
+- [X] T078 [US8] Drop stale "Status: NOT IMPLEMENTED" contract descriptions (026); show per-item inventory refs in `SourceViewsSection` (FR-033)
+- [X] T078a [P] [US8] Inbox grouping: support group-by date / classification-state / capture-type and rename the "lane" label to a user-meaningful term (image vs video) in `apps/desktop/src/features/inbox/InboxList.tsx` (FR-040)
+- [X] T078b [P] [US8] Projects list: add sort options consistent with other list surfaces (beyond name/updated) in `apps/desktop/src/features/projects/ProjectsList.tsx` (FR-042)
+- [X] T078c [US8] New-project flow: render inside the main window with design-v4 layout, wire the existing `features/projects/wizard/WizardPage.tsx` (session + calibration selection) as the reachable create flow, ensure create succeeds end-to-end, and open it from the target "new project" action (FR-043); add a vitest/e2e covering session+calibration selection and successful creation
 
 **Checkpoint**: dev surface correct; UI affordances complete.
 

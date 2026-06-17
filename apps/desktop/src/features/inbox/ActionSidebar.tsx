@@ -4,6 +4,7 @@
  * Shows context-sensitive actions:
  * - "Confirm to Inventory" (single_type) or "Generate Split Plan" (mixed).
  * - "Open Existing Plan" when state = plan_open.
+ * - Destructive-destination toggle (archive | trash) — FR-032.
  * - Keyboard shortcuts: C = confirm/split, O = open plan.
  */
 
@@ -17,6 +18,8 @@ export interface ActionSidebarProps {
   hasOpenPlan: boolean;
   confirmLoading: boolean;
   canConfirm: boolean;
+  destructiveDestination: 'archive' | 'trash';
+  onDestructiveDestinationChange: (dest: 'archive' | 'trash') => void;
   onConfirm: () => void;
   onOpenExistingPlan: () => void;
 }
@@ -27,6 +30,8 @@ export function ActionSidebar({
   hasOpenPlan,
   confirmLoading,
   canConfirm,
+  destructiveDestination,
+  onDestructiveDestinationChange,
   onConfirm,
   onOpenExistingPlan,
 }: ActionSidebarProps) {
@@ -115,6 +120,63 @@ export function ActionSidebar({
           </kbd>
         </Btn>
       </div>
+
+      {/* FR-032: Destructive-destination toggle (archive | trash) */}
+      {hasSelection && (
+        <div style={{ padding: '8px 12px', borderTop: '1px solid var(--alm-border)' }}>
+          <div
+            style={{
+              fontSize: 11,
+              fontWeight: 600,
+              letterSpacing: '0.08em',
+              textTransform: 'uppercase',
+              color: 'var(--alm-text-muted)',
+              marginBottom: 6,
+            }}
+          >
+            Move destination
+          </div>
+          <label
+            style={{
+              display: 'flex',
+              alignItems: 'center',
+              gap: 6,
+              cursor: 'pointer',
+              fontSize: 'var(--alm-text-xs)',
+              marginBottom: 4,
+            }}
+          >
+            <input
+              type="radio"
+              name="destructive-destination"
+              value="archive"
+              checked={destructiveDestination === 'archive'}
+              onChange={() => onDestructiveDestinationChange('archive')}
+              aria-label="Move to archive folder"
+            />
+            Archive folder
+          </label>
+          <label
+            style={{
+              display: 'flex',
+              alignItems: 'center',
+              gap: 6,
+              cursor: 'pointer',
+              fontSize: 'var(--alm-text-xs)',
+            }}
+          >
+            <input
+              type="radio"
+              name="destructive-destination"
+              value="trash"
+              checked={destructiveDestination === 'trash'}
+              onChange={() => onDestructiveDestinationChange('trash')}
+              aria-label="Move to system trash"
+            />
+            System trash
+          </label>
+        </div>
+      )}
 
       {/* Classification summary */}
       {hasSelection && classification && (

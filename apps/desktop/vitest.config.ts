@@ -9,6 +9,13 @@ export default defineConfig({
       "@": resolve(__dirname, "./src"),
     },
   },
+  define: {
+    // Tests do NOT enable dev-tools; the release gate checks this is "false".
+    // VITE_USE_MOCKS is intentionally not set here — tests that need mocks
+    // use vi.mock('@tauri-apps/api/core') directly (see recorder.test.ts,
+    // source-views.test.ts). WizardPage tests use vi.mock for store/commands.
+    "import.meta.env.VITE_DEV_TOOLS": JSON.stringify("false"),
+  },
   test: {
     environment: "jsdom",
     globals: true,

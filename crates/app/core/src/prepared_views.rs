@@ -23,8 +23,8 @@
 //! - T004 invariant: plan actions are restricted to recorded view paths only.
 
 use contracts_core::prepared_views::{
-    PreparedViewListResponse, PreparedViewRegenerateResponse, PreparedViewRemoveResponse,
-    PreparedViewSummary,
+    PreparedViewItemDetail, PreparedViewListResponse, PreparedViewRegenerateResponse,
+    PreparedViewRemoveResponse, PreparedViewSummary,
 };
 use contracts_core::{ContractError, ErrorSeverity};
 use domain_core::lifecycle::prepared_source::ALLOWED_PROJECT_STATES_FOR_VIEW_OPS;
@@ -98,7 +98,18 @@ pub async fn list_views(
 
     let mut views = Vec::with_capacity(rows.len());
     for row in rows {
-        let items = views_repo::list_view_items(pool, &row.id).await.map_err(db_err)?;
+        let raw_items = views_repo::list_view_items(pool, &row.id).await.map_err(db_err)?;
+        let item_count = i64::try_from(raw_items.len()).unwrap_or(i64::MAX);
+        let items: Vec<PreparedViewItemDetail> = raw_items
+            .into_iter()
+            .map(|it| PreparedViewItemDetail {
+                id: it.id,
+                inventory_item_id: it.inventory_item_id,
+                view_relative_path: it.view_relative_path,
+                materialization: it.materialization,
+                last_observed_state: it.last_observed_state,
+            })
+            .collect();
         views.push(PreparedViewSummary {
             id: row.id,
             project_id: row.project_id,
@@ -106,7 +117,8 @@ pub async fn list_views(
             state: row.state,
             created_at: row.created_at,
             removed_at: row.removed_at,
-            item_count: i64::try_from(items.len()).unwrap_or(i64::MAX),
+            item_count,
+            items,
         });
     }
 

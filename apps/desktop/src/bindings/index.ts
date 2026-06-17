@@ -3997,6 +3997,15 @@ export type PreparedSourceTransitionRequest_Serialize = {
 	actor: TransitionActor,
 };
 
+/**  Detail of a single view item. */
+export type PreparedViewItemDetail = {
+	id: string,
+	inventoryItemId: string,
+	viewRelativePath: string,
+	materialization: string,
+	lastObservedState: string,
+};
+
 /**  Response: list of view summaries. */
 export type PreparedViewListResponse = {
 	views: PreparedViewSummary[],
@@ -4040,6 +4049,11 @@ export type PreparedViewSummary = {
 	createdAt: string,
 	removedAt: string | null,
 	itemCount: number,
+	/**
+	 *  Per-item inventory references (FR-033 / T078).
+	 *  Each entry is the `view_relative_path` recorded for that inventory item.
+	 */
+	items: PreparedViewItemDetail[],
 };
 
 /**  A project channel (inferred or manually added). */

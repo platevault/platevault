@@ -488,6 +488,18 @@ export async function mockInvoke<T>(
       } as T;
     }
 
+    case 'preparedview.list': {
+      return { views: [] } as T;
+    }
+
+    case 'preparedview.remove': {
+      return { planId: 'mock-plan-remove-001' } as T;
+    }
+
+    case 'preparedview.regenerate': {
+      return { planId: 'mock-plan-regen-001', unresolvedItemCount: 0 } as T;
+    }
+
     default:
       throw new Error(`Unknown mock command: ${cmd}`);
   }

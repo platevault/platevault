@@ -60,6 +60,9 @@ pub struct PreparedViewSummary {
     pub created_at: String,
     pub removed_at: Option<String>,
     pub item_count: i64,
+    /// Per-item inventory references (FR-033 / T078).
+    /// Each entry is the `view_relative_path` recorded for that inventory item.
+    pub items: Vec<PreparedViewItemDetail>,
 }
 
 /// Detail of a single view item.

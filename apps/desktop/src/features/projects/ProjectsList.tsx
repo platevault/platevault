@@ -44,7 +44,7 @@ function stateLabel(lifecycle: string): string {
   }
 }
 
-type SortBy = 'updated' | 'name';
+type SortBy = 'updated' | 'name' | 'created' | 'sources';
 
 // All selectable lifecycle states (excludes the synthetic 'all' sentinel — empty array means all).
 const LIFECYCLE_STATES: Array<{ value: string; label: string }> = [
@@ -82,10 +82,18 @@ export function ProjectsList({
   const [filterOpen, setFilterOpen] = useState(false);
 
   const filtered = useMemo(() => {
-    const sorted =
-      sortBy === 'name'
-        ? [...projects].sort((a, b) => a.name.localeCompare(b.name))
-        : projects; // already updated_at-desc from the backend
+    let sorted: typeof projects;
+    if (sortBy === 'name') {
+      sorted = [...projects].sort((a, b) => a.name.localeCompare(b.name));
+    } else if (sortBy === 'created') {
+      sorted = [...projects].sort(
+        (a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime(),
+      );
+    } else if (sortBy === 'sources') {
+      sorted = [...projects].sort((a, b) => b.sourceCount - a.sourceCount);
+    } else {
+      sorted = projects; // 'updated': already updated_at-desc from the backend
+    }
     // Apply multiselect lifecycle filter (empty = show all).
     if (lifecycle.length === 0) return sorted;
     return sorted.filter((p) => lifecycle.includes(p.lifecycle));
@@ -121,7 +129,9 @@ export function ProjectsList({
             aria-label="Sort by"
           >
             <option value="updated">Sort: updated</option>
+            <option value="created">Sort: created</option>
             <option value="name">Sort: name</option>
+            <option value="sources">Sort: sources</option>
           </select>
           {/* FR-022 / T055: multiselect lifecycle filter */}
           <div style={{ position: 'relative' }}>

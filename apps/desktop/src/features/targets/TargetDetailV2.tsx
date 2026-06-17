@@ -339,7 +339,7 @@ export function TargetDetailV2({ targetId }: Props) {
         ) : null}
       </Section>
 
-      {/* Projects — empty state (T017 deferred) */}
+      {/* Projects — empty state + new-project action (T078c / FR-043) */}
       <Section title="Projects" count={projects.length}>
         {projects.length === 0 ? (
           <EmptyState
@@ -347,6 +347,18 @@ export function TargetDetailV2({ targetId }: Props) {
             desc="Projects appear here once they are created with a target reference."
           />
         ) : null}
+        <button
+          style={{
+            marginTop: 'var(--alm-sp-2)',
+            padding: 'var(--alm-sp-1) var(--alm-sp-3)',
+            fontSize: 'var(--alm-text-sm)',
+            cursor: 'pointer',
+          }}
+          onClick={() => navigate({ to: '/projects/new' })}
+          data-testid="target-new-project-btn"
+        >
+          + New project
+        </button>
       </Section>
 
       {/* Back button */}
