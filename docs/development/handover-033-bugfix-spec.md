@@ -1,208 +1,256 @@
-# Handover — Create SpecKit spec 033: Validation Bugfix & Remediation
+# Handover — Implement Astro Library Manager to a working app
 
-> **Your task (next session):** produce a complete SpecKit feature spec —
-> `specs/033-validation-bugfix-remediation/` — that resolves every open issue
-> found in the 2026-06-17 independent validation, then implement it per the
-> project's SpecKit gates. This is a *remediation* feature: the bugs are already
-> diagnosed with file:line evidence; your job is to turn that diagnosis into a
-> reviewed spec + plan + tasks and a verified implementation.
+> **Mission:** take the app from *"gates green, but many features are inert on
+> real data and two crashes were just fixed"* to *"a fully working desktop
+> application a user can actually run end-to-end."* You do this by creating
+> **SpecKit spec `033-validation-bugfix-remediation`** and implementing it,
+> user-story by user-story, each verified against the **real backend** (not just
+> mocks) and committed.
+>
+> This is not a greenfield build. The frontend (design-v4) and most backend
+> crates already exist; the work is wiring, data-plumbing, safety, and contract
+> fidelity so the implemented logic actually fires for a real user. Do **not**
+> rebuild design-v4 UI.
 
-## Source of truth (read these first, in order)
+---
 
+## 1. Where things stand (read before touching anything)
+
+Authoritative state, with file:line evidence:
 1. `docs/development/autonomous-run-2026-06-validation-findings.md` — per-spec
-   verdicts, the Tier-1/Tier-2 issue catalog, the "Fixes applied" + "Remaining"
-   sections. **This is the authoritative issue list.**
-2. `docs/development/autonomous-run-2026-06-backlog-decisions-review.md` — the
-   cross-spec reconciliation items and decision assessments.
-3. `docs/development/windows-validation-runbook.md` — how to validate each screen
-   against the real backend.
-4. `.specify/memory/constitution.md` (in CLAUDE.md) — the gates you MUST satisfy.
+   verdicts, the Tier-1/Tier-2 issue catalog, **"Fixes applied"** + **"Remaining"**.
+   This is the canonical issue list.
+2. `docs/development/autonomous-run-2026-06-backlog-decisions-review.md` — cross-spec
+   reconciliations + decision assessments.
+3. `docs/development/windows-validation-runbook.md` — per-screen "what correct
+   looks like" vs. "known-broken", for real-backend review.
+4. `.specify/memory/constitution.md` (echoed in `CLAUDE.md`) — the gates you MUST honor.
 
-## Process (per `specs/CLAUDE.md` + constitution)
+**Already true (don't redo):**
+- All gates pass: `cargo test --workspace` (1087), `vitest` (465), clippy/fmt/typecheck.
+- 30 sequential migrations (0001–0030); crates have real bodies, not stubs.
+- Fixed 2026-06-17 (regression-test these, don't re-implement): **R-1** index `/`
+  redirects to `/sessions`; **R-2** `MastersList` fingerprint null-safety;
+  **005/019** `run_app` spawns `start_inbox_plan_listener` + `start_log_forwarder`;
+  **028** token refs + a desktop `lint` script wired into `just lint`.
 
-Do NOT write product code before the spec artifacts exist and pass review.
-Produce, in order, under `specs/033-validation-bugfix-remediation/`:
-`spec.md` → `plan.md` → `research.md` → `data-model.md` → `contracts/` →
-`tasks.md`. Run the Constitution Check before Phase 0 and again after Phase 1.
-Group tasks by independently testable user story with an exhaustive dependency
-graph. Use the project's speckit agents/skills (steering-speckit DAG).
+**The core problem to solve:** green gates only prove *tested* logic. Many features
+are implemented but **cannot fire on real data** (protection gating, calibration
+matching, target search, inventory grouping) or are **dead at runtime** (several
+event-bus subscribers never spawned), and the filesystem-apply path has **safety
+holes**. The validation docs pinpoint each with evidence.
 
-**Verification is now stronger than the original run assumed:** the real Tauri
-app runs headless here via `xvfb-run pnpm tauri dev` (webkit2gtk-4.1 present) and
-can be driven with `tauri-driver` + `WebKitWebDriver`. Every fix MUST be verified
-against the **real backend**, not just mocks — add real-backend acceptance checks,
-not only vitest.
+---
 
-## Already fixed (2026-06-17, on main — treat as regression-test targets, not new work)
+## 2. The verification loop (this is what makes "fully working" provable)
 
-These four are DONE and verified; the spec should add regression tests so they
-don't recur, but must not re-implement them:
-- **R-1** index route `/` → redirect to `/sessions` (was crashing returning users).
-- **R-2** `MastersList` fingerprint null-safety (Calibration crash).
-- **005/019** `run_app` now spawns `start_inbox_plan_listener` + `start_log_forwarder`.
-- **028** token refs (`--alm-radius-md`, no hex fallbacks) + a desktop `lint`
-  script wired into `just lint`.
+You have more verification power than the original autonomous run assumed. Use all
+four layers; **no story is "done" until it's verified against the real backend.**
 
-## Scope — issues the spec MUST resolve (grouped as candidate user stories)
+- **Gates (every change):** `just lint` · `cargo test --workspace` · `just typecheck`
+  · `cd apps/desktop && pnpm test`. All must stay green.
+- **Mocks UI smoke (fast, frontend logic):** `VITE_USE_MOCKS=true pnpm --filter
+  @astro-plan/desktop exec vite --host 127.0.0.1 --port 5180 --strictPort`, then
+  drive with Playwright. Routing/render/forms only; data is fixtures.
+- **Real-backend headless (the important one):** the real Tauri app runs in WSL —
+  `webkit2gtk-4.1`, `xvfb`, `tauri-driver`, `WebKitWebDriver` are installed.
+  ```bash
+  xvfb-run -a -s "-screen 0 1400x900x24" pnpm --filter @astro-plan/desktop exec tauri dev --no-watch \
+    --config '{"build":{"devUrl":"http://localhost:1420","beforeDevCommand":"VITE_USE_MOCKS=false pnpm --filter @astro-plan/desktop exec vite --port 1420 --strictPort"}}'
+  ```
+  Real SQLite at `~/.local/share/dev.astro-plan.astro-library-manager/alm.db`
+  (delete to re-test first-run). Drive it programmatically with `tauri-driver` +
+  `WebKitWebDriver` (W3C WebDriver) for real-IPC assertions. Prefer Rust
+  integration tests against in-memory SQLite for backend logic — strongest signal.
+- **Windows-native review (for the human):** see §6.
 
-### US1 — Filesystem-apply safety (Constitution §II; HIGHEST priority) — spec 025
-- Resolve plan-item paths against the **library root** (join + canonicalize) with
-  a root-escape / symlink-escape refusal before any mutation. Today raw relative
-  paths are passed to move/archive/delete/trash and the CAS check
-  (`plan_apply.rs:173`, `:199`).
-- Introduce a **destructive-confirm** signal distinct from `is_protected`
-  (`confirm_required = is_protected` is a logic inversion).
-- Emit a per-item audit row on **bulk cancel** (`batch_cancel_pending_items`
-  currently bulk-updates with no per-item events).
-- Decide HMAC approval token vs documented token-equality; real trash crate vs
-  the `TrashUnavailable` stub.
-- **Gate: no real `plan.apply` ships until US1 lands.**
+**Rhythm that worked:** small, single-concern change → run the relevant gate(s) +
+a real-backend check → commit directly on `main` with a clear message → next.
+- Backend specs share surfaces (migrations, `contracts/core`, `commands/mod.rs`
+  invoke handler, event bus) — **implement them sequentially**, not in parallel.
+- Commit messages: **no AI attribution** (a repo hook blocks `Co-Authored-By`,
+  "generated by", agent mentions). Commit on `main`; `git push origin main` when a
+  story is green (push needs the command sandbox disabled).
 
-### US2 — Protection gating becomes real (016 / Constitution §II)
-- The cleanup/archive **plan generator** must tag plan items with real
-  `source_id` + `category`, then call `resolve_protection` so
-  `plan_protection_check` fires on real plans (today every generator hardcodes
-  `protection:"normal"`; the gate is dead). Note this is blocked on the unbuilt
-  cleanup-plan generator — sequence accordingly. Populate `source_id` on
-  `ProtectedPlanItem` so the acknowledgement audit is complete.
-- Wire global protection defaults persistence (016 T-003/T-005) + the
-  `protection.default.changed` audit event (T-004).
+---
 
-### US3 — Lifecycle integrity (009)
-- Persist a **typed blocked reason** (migration + `project_health` write + DTO)
-  so `BlockedBanner` shows the real kind instead of a hardcoded `{kind:'user'}`.
-- **Reconcile the two project tables**: spec-002 `project.state` (legacy, written
-  by user IPC transitions) vs spec-008 `projects.lifecycle` (written by
-  auto-transitions/health). Pick one canonical table; migrate the other.
-- Write an **audit row** for auto-block / auto-ready transitions (today event-bus
-  only). Emit the `project.unarchived` named event.
-- Make the lifecycle filter multiselect (SC-004) or update the spec.
+## 3. Process — create spec 033, then implement (per `specs/CLAUDE.md` + constitution)
 
-### US4 — Ingestion data plumbing (006 / 007 / 023)
-- Inbox confirm (or the apply path that creates sessions) sets session `root_id`
-  so real sessions appear in the inventory ledger.
-- Populate `calibration_fingerprint` / `acquisition_fingerprint` from metadata
-  extraction so calibration matching fires on real data; back the calibration
-  masters list/get with real rows (not the fixture stub).
+Do **not** write product code before the spec artifacts exist and pass the gates.
+Under `specs/033-validation-bugfix-remediation/`, produce in order:
+`spec.md` → `plan.md` → `research.md` → `data-model.md` → `contracts/` → `tasks.md`.
+Run the Constitution Check before Phase 0 and again after Phase 1. Group tasks by
+the independently-testable user stories below with an exhaustive dependency graph.
+Use the project's speckit agents/skills (steering-speckit DAG).
+
+`research.md` MUST record an explicit decision for each cross-cutting reconciliation
+(§5). The spec is *remediation*: every issue is already diagnosed — your spec turns
+diagnosis into FR/SC + tasks, then you implement and verify.
+
+Then implement story-by-story in the order in §4, keeping the gates green and
+adding **real-backend acceptance checks** (not only vitest) per story.
+
+---
+
+## 4. Work queue — the issues to resolve (candidate user stories, in build order)
+
+Each story is independently testable. Evidence/file:line is in the validation docs.
+
+### US1 — Filesystem-apply safety (Constitution §II) — **do first; gates real `plan.apply`**
+- Resolve plan-item paths against the **library root** (join + canonicalize) with a
+  root-/symlink-escape refusal before any mutation (`plan_apply.rs:173`). Today raw
+  relative paths reach move/archive/delete/trash and the CAS check.
+- Add a **destructive-confirm** signal distinct from `is_protected`
+  (`plan_apply.rs:199` conflates them — a logic inversion).
+- Emit a per-item audit row on **bulk cancel** (`batch_cancel_pending_items` bulk-
+  updates with no per-item events).
+- Decide HMAC approval token vs token-equality; real trash crate vs `TrashUnavailable`.
+- DoD: a real-backend test applies a plan with a colliding/escaping/stale item and
+  proves refusal + full per-item audit + recoverable state. **No real apply ships
+  before this.**
+
+### US2 — Subscriber startup wiring (unblocks 012/024/010 at runtime)
+- **024 manifest subscriber:** redesign `spawn_workflow_run_subscriber` so its
+  project-root resolver can do async DB lookups (current sync `Fn(String)->Option<PathBuf>`
+  can't), then spawn in `run_app`.
+- **012 artifact watcher:** add the notify loop + watch-paths-from-registered-roots,
+  spawn it; emit the missing `artifact.classified` event; fix the `artifact.classify`
+  response shape vs its contract.
+- **010 guided auto-advance:** wire frontend domain events → `completeGuidedStep`.
+- DoD: real-backend run shows manifests auto-generate on workflow completion,
+  artifacts get detected, and guided steps advance on real events.
+
+### US3 — Ingestion data plumbing (unblocks 006/007/023 on real data)
+- Inbox confirm / apply sets session `root_id` so real sessions appear in inventory.
+- Populate `calibration_fingerprint` / `acquisition_fingerprint` from metadata so
+  calibration matching fires; back the masters list/get with real rows (not the
+  fixture stub).
 - Populate `target_id` FK from ingestion (target chips + history).
-- Replace the `search.global` fixture stub (`commands/search.rs:14-50`) with a
-  real cross-entity query over targets/aliases/sessions/projects (Cmd+K).
+- Replace the `search.global` fixture stub (`commands/search.rs:14-50`) with a real
+  cross-entity query (targets/aliases/sessions/projects) for Cmd+K.
+- DoD: ingest a real folder → sessions appear grouped, calibration suggests real
+  candidates, Cmd+K finds real targets.
 
-### US5 — Subscriber startup wiring (012 / 024 / 010)
-- 024 manifest subscriber: needs an **async-capable project-root resolver** (the
-  current `spawn_workflow_run_subscriber` takes a sync `Fn(String)->Option<PathBuf>`
-  that can't do DB lookups) — redesign the resolver, then spawn in `run_app`.
-- 012 artifact watcher: add the notify loop + watch-paths-from-registered-roots,
-  then spawn. Emit the missing `artifact.classified` event + fix the
-  `artifact.classify` response shape vs its contract.
-- 010 guided auto-advance: wire frontend domain events → `completeGuidedStep`;
-  decide whether to keep `react-joyride` (declared but unused) or formalize the
-  hand-rolled overlay.
+### US4 — Protection gating becomes real (016 / Constitution §II)
+- The cleanup/archive **plan generator** must tag items with real `source_id` +
+  `category`, then call `resolve_protection` so `plan_protection_check` fires
+  (today every generator hardcodes `protection:"normal"` → the gate is dead).
+  *(Blocked on building the cleanup-plan generator — sequence after US1.)*
+- Populate `source_id` on `ProtectedPlanItem`; wire global-defaults persistence
+  (016 T-003/T-005) + the `protection.default.changed` audit event (T-004).
+- DoD: a real cleanup plan over a protected source is blocked + audited.
 
-### US6 — Catalog integrity (014 / 013)
-- Implement **minisign signature verification** (today the signature is
-  parsed+stored but never verified — checksum only) before the
-  `astro-plan-catalogs` repo ships. Hard-fail on unknown license codes instead of
-  silently falling back to `PublicDomain`. Make the catalog upsert + attribution
-  transactional.
-- Reconcile the **catalog slug mismatch**: 013 closed enum
-  `common/openngc/abell_pn` vs 014 strings `opengc/...` (mismatched slugs parse
-  to `Unknown` and are silently dropped).
-- Wire FR-009 origin guard so `origin.not_implemented` is actually reachable.
+### US5 — Lifecycle integrity (009)
+- Persist a **typed blocked reason** (migration + `project_health` write + DTO) so
+  `BlockedBanner` shows the real kind, not a hardcoded `{kind:'user'}`.
+- **Reconcile the two project tables**: spec-002 `project.state` (user IPC) vs
+  spec-008 `projects.lifecycle` (auto-transitions). Pick one canonical; migrate.
+- Audit auto-block/auto-ready transitions; emit `project.unarchived`. Make the
+  lifecycle filter multiselect (SC-004) or update the spec.
 
-### US7 — Settings & contract fidelity (018 / 007 / 019 / 012 / 008)
+### US6 — Settings & contract fidelity (018/007/019/012/008)
 - Fix the **silent settings data-loss**: the aging-threshold control saves to a
-  non-existent scope (`calibration_matching`) with a key absent from the v1 set,
-  so it is silently dropped (same bug in 007). Pick a real scope/key and have a
-  consumer read it (today `m.age_days > 90` is hardcoded in `MastersList`).
-- Wire the 018 debounce/snapshot timer (`emit_snapshot` has no caller despite a
-  `[x]`). Move the Cleanup per-type table off fixtures.
-- Reconcile contract/schema drift with no conformance tests: 019
-  `contractVersion` runtime "1" vs schema "2.0.0" (+ `dia:` cursor, export file
-  picker, `log.export` `status` field); 012 `artifact.classify` response shape;
-  008 `project.create` stale `lifecycle const`. Consider adding JSON-Schema
-  conformance tests (deferred everywhere today).
+  non-existent scope (`calibration_matching`) with a key absent from the v1 set →
+  silently dropped (same in 007). Pick a real scope/key and have a consumer read it
+  (today `m.age_days > 90` is hardcoded in `MastersList`).
+- Wire the 018 debounce/snapshot timer (`emit_snapshot` has no caller). Move the
+  Cleanup per-type table off fixtures.
+- Reconcile contract/schema drift (no conformance tests today): 019 `contractVersion`
+  "1" vs schema "2.0.0" (+ `dia:` cursor, export file picker, `log.export` `status`);
+  012 `artifact.classify` shape; 008 `project.create` stale `lifecycle const`. Add
+  JSON-Schema conformance tests.
 
-### US8 — Dev surface & misc (021 / 005 / 006 / 026)
+### US7 — Catalog integrity (014/013)
+- Implement **minisign signature verification** (today parsed+stored, never verified
+  — checksum only) before the `astro-plan-catalogs` repo ships. Hard-fail on unknown
+  license codes (no silent `PublicDomain` fallback). Make catalog upsert+attribution
+  transactional. Wire the FR-009 origin guard so `origin.not_implemented` is reachable.
+- Reconcile the **catalog slug mismatch**: 013 closed enum `common/openngc/abell_pn`
+  vs 014 strings `opengc/...` (mismatched slugs parse to `Unknown` and vanish).
+
+### US8 — Dev surface & misc (021/005/006/026)
 - 021: wrap the Tauri dispatcher at boot so the recording proxy auto-captures
-  (SC-002); fix the `dev_export` relative-path bug; decide frontend bundle gating
-  (T031/T036) so the dev route/recorder aren't bundled in release.
-- 005: surface the destructive-destination toggle (Archive / OS-trash) in the
-  inbox confirm UI; implement the referenced `repair` scheduler (or remove the
-  reference); snapshot the resolved pattern onto the plan.
-- 006: add the "Show ignored items" Cmd+K entry; derive `mixed` frame-type
-  dynamically.
-- 026: remove the stale "Status: NOT IMPLEMENTED" contract descriptions; show
-  per-item inventory refs in `SourceViewsSection`.
+  (SC-002); fix the `dev_export` relative-path bug; gate the dev frontend bundle out
+  of release (T031/T036).
+- 005: surface the destructive-destination toggle (Archive/OS-trash) in inbox
+  confirm; implement (or remove the reference to) the `repair` scheduler; snapshot
+  the resolved pattern onto the plan.
+- 006: add the "Show ignored items" Cmd+K entry; derive `mixed` frame-type dynamically.
+- 026: drop the stale "Status: NOT IMPLEMENTED" contract descriptions; show per-item
+  inventory refs in `SourceViewsSection`.
 
-### Cross-cutting reconciliations (must each have an explicit decision in research.md)
+---
+
+## 5. Cross-cutting reconciliations — decide explicitly in `research.md`
 - `destructive_destination` vocab drift: 0014 (`archive`/`os_trash`) vs 0019
   (`trash`/`archive`/`none`) — pick one canonical vocabulary.
-- The two project tables (US3 above).
-- The catalog slug mismatch (US6 above).
-- `tasks.md` checkbox hygiene: the existing per-spec checkboxes are unreliable;
-  the spec should not trust them.
+- The two project tables (US5).
+- The catalog slug mismatch (US7).
+- `tasks.md` checkboxes are unreliable — don't trust the existing per-spec ticks.
 
-### Product decisions to surface to the user (do NOT decide silently)
-- **023 nav**: "Targets" is a primary-nav entry, which spec 023 FR-005 says it
-  MUST NOT be. design-v4 (approved) put it there. Needs a product call:
-  realign the spec to v4, or remove Targets from primary nav.
-- Whether to keep `react-joyride` (010) or adopt the shipped hand-rolled overlay.
+## Product decisions to get from the user (do NOT decide silently)
+- **023 nav:** "Targets" is a primary-nav entry; spec 023 FR-005 says it MUST NOT be,
+  but design-v4 (approved) put it there. Realign the spec to v4, or remove from nav?
+- **010 tour library:** keep `react-joyride` (declared but unused) or formalize the
+  shipped hand-rolled overlay?
 
-## Suggested implementation order (encode in the dependency graph)
-US1 (safety) → US5 (subscriber wiring; unblocks 012/024/010 runtime) →
-US4 (data plumbing; unblocks 006/007/023) → US2 (protection, after the cleanup
-generator) → US3 (lifecycle) → US7 (settings/contracts) → US6 (catalog) →
-US8 (dev/misc). Each story independently testable and verified against the real
-backend headless boot.
+---
 
-## Syncing to Windows + launching for review (validated procedure, 2026-06-17)
+## 6. Syncing to Windows + launching for review (validated procedure, 2026-06-17)
 
-The canonical repo is the WSL checkout; `C:\dev\astro-plan` is a Windows-native
-runtime mirror (see `windows-native-rust-dev.md`). **Do all git + node + cargo on
-the native `C:\` filesystem via PowerShell.** Do NOT pull the Windows checkout
-from the WSL repo over a `\\wsl.localhost\…` UNC path — `node`/`pnpm` break over
-UNC (and git is slow/flaky there). The working round-trip:
+Canonical repo = the WSL checkout; `C:\dev\astro-plan` is a Windows-native runtime
+mirror. **Do all git + node + cargo on the native `C:\` filesystem via PowerShell.**
+Do NOT pull the Windows checkout from the WSL repo over a `\\wsl.localhost\…` UNC
+path — `node`/`pnpm` break over UNC. Round-trip:
 
-1. **WSL → origin:** `git push origin main` (origin is GitHub
-   `nightwatch-astro/alm`). Push needs network + creds, so run it with the command
-   sandbox disabled.
-2. **Windows pull (native git on `C:\`):** the mirror tree is usually dirty and on
-   a divergent/old commit, so a plain `git pull` won't fast-forward. Use, via
-   PowerShell:
+1. **WSL → origin:** `git push origin main` (origin = GitHub `nightwatch-astro/alm`;
+   needs network + creds → run with the command sandbox disabled).
+2. **Windows pull (native git):** the mirror tree is often dirty/divergent, so a
+   plain `git pull` won't fast-forward:
    ```powershell
    git config --global --add safe.directory '*'
    cd C:\dev\astro-plan
-   git stash push -m 'mirror mods'   # only if the tree is dirty — preserves, doesn't destroy
+   git stash push -m 'mirror mods'   # only if dirty — preserves, recover via `git stash list`
    git fetch origin
-   git reset --hard origin/main      # land exactly on the pushed commit
+   git reset --hard origin/main
    ```
-   Recover stashed mirror mods later with `git stash list` if needed.
 3. **Deps (native):** `pnpm install` then `pnpm rebuild esbuild`.
-4. **Port gotcha (cost me a failed launch):** a Vite dev server left running in WSL
-   on `:5173` is forwarded to Windows `localhost:5173`; with Vite `strictPort`,
-   the Windows `tauri dev` `beforeDevCommand` then fails with
-   `ERR_PNPM_RECURSIVE_RUN_FIRST_FAIL … Exit status 4294967295`. **Kill any WSL
-   `:5173` server first** (`lsof -ti :5173 | xargs kill`), or change the port.
-5. **Launch detached (real backend) so the window opens for review:**
+4. **Port gotcha:** a Vite dev server left running **in WSL** on `:5173` is forwarded
+   to Windows `localhost:5173`; with Vite `strictPort` the Windows `tauri dev`
+   `beforeDevCommand` then fails (`ERR_PNPM_RECURSIVE_RUN_FIRST_FAIL … Exit status
+   4294967295`). Kill the WSL `:5173` server first (`lsof -ti :5173 | xargs kill`).
+5. **Launch detached (real backend) so a window opens for review:**
    ```powershell
    Start-Process cmd.exe -WindowStyle Hidden -WorkingDirectory C:\dev\astro-plan\apps\desktop `
      -ArgumentList '/c','set VITE_USE_MOCKS=false&& set CHOKIDAR_USEPOLLING=true&& pnpm tauri dev > C:\dev\astro-plan\tauri-dev.log 2>&1'
    ```
-   First build compiles the whole MSVC workspace (minutes); subsequent ~12 s.
-   Verify: `tauri-dev.log` shows `VITE … ready` + `Running …desktop_shell.exe`,
-   `Get-Process desktop_shell` is alive, and `Invoke-WebRequest http://127.0.0.1:5173/`
-   returns 200. `VITE_USE_MOCKS=false` → real SQLite at
-   `%APPDATA%\dev.astro-plan.astro-library-manager\alm.db`.
-6. The entire sequence is drivable from WSL via `powershell.exe -NoProfile -Command "…"`.
+   Verify: `tauri-dev.log` shows `VITE … ready` + `Running …desktop_shell.exe`;
+   `Get-Process desktop_shell` alive; `Invoke-WebRequest http://127.0.0.1:5173/` → 200.
+   The whole sequence is drivable from WSL via `powershell.exe -NoProfile -Command "…"`.
+6. Stop: `Get-Process desktop_shell,cargo | Stop-Process -Force`.
 
-**Headless alternative (no Windows window needed):** in WSL,
-`xvfb-run -a pnpm --filter @astro-plan/desktop exec tauri dev` runs the real
-backend headless (webkit2gtk-4.1 present); drive it with `tauri-driver` +
-`WebKitWebDriver` for automated real-IPC checks.
+See `windows-native-rust-dev.md` for full setup; `windows-validation-runbook.md` for
+the per-screen review checklist.
 
-## Definition of done
-Every issue maps to a numbered FR/SC; the four already-fixed items have
-regression tests; all gates green (`just lint`, `cargo test --workspace`,
-`just typecheck`, vitest); and a real-backend headless smoke (per the runbook)
-shows each remediated screen working — not just mocks.
+---
+
+## 7. Definition of done — the app is "working"
+- spec 033 artifacts exist and passed the Constitution Check + review.
+- Every issue maps to a numbered FR/SC; the 4 already-fixed items have regression tests.
+- All gates green (`just lint`, `cargo test --workspace`, `just typecheck`, vitest).
+- A **real-backend** pass (headless and/or Windows, per the runbook) shows the core
+  user journeys actually work on real data — not fixtures:
+  ingest a folder → sessions appear & group → confirm/inbox split → calibration
+  suggests real matches → create a project → generate a reviewable plan →
+  apply it safely (audited, no escape, recoverable) → manifests/notes persist →
+  cleanup/archive respects protected sources → Cmd+K finds real targets.
+- The two product decisions (§5) are resolved with the user.
+- `git push origin main` done; Windows mirror updated and launched for the user.
+
+## 8. Guardrails
+- Constitution: §II reviewable+audited mutation (no silent overwrite, prefer
+  archive/trash), §III PixInsight boundary (organize/prepare/observe — never
+  process images), §V durable DB record (manifests are reproducible projections).
+- Do NOT rebuild design-v4 components; wire the existing UI to real commands.
+- "Verify before closing" — ticked tasks/self-reports are not proof; real-backend
+  evidence is. Surface product decisions; don't make them silently.
