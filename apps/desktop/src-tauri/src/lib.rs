@@ -526,17 +526,25 @@ pub fn build_app() -> tauri::App {
         .expect("error while building tauri application")
 }
 
-/// Manage application state on a pre-built [`App`] and start the event loop.
-///
-/// Caller is responsible for providing an already-migrated [`SqlitePool`];
-/// the persistence layer expects migrations to have run before commands hit
-/// the database.
-///
-/// # Panics
-/// Panics if the Tauri event loop fails to start — there is no recovery path
-/// once the GUI process is requested but cannot be started.
 pub fn run_app(app: tauri::App, pool: SqlitePool) {
     let bus = EventBus::with_pool(pool.clone());
+
+    // Live event-bus subscribers. Start these *before* `bus`/`pool` are moved
+    // into `AppState` below. Each spawns a tokio task on the runtime that
+    // `#[tokio::main]` establishes around `run_app`.
+    //  - spec 005: inbox plan listener → marks inbox items `resolved` once their
+    //    split/restructure plan is applied.
+    //  - spec 019: log forwarder → pushes audit + diagnostic entries to the
+    //    webview `log:entry` channel. Forward at the most permissive level; the
+    //    client filters by level.
+    app_core::inbox::plan_listener::start_inbox_plan_listener(pool.clone(), &bus);
+    crate::commands::log::start_log_forwarder(
+        app.handle().clone(),
+        &bus,
+        contracts_core::log::LogLevel::Debug,
+        pool.clone(),
+    );
+
     let repo = Arc::new(SqliteLifecycleRepository::new(pool, bus.clone()));
     let state = AppState::new(repo, bus);
 
