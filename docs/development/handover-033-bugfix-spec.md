@@ -156,6 +156,51 @@ generator) → US3 (lifecycle) → US7 (settings/contracts) → US6 (catalog) �
 US8 (dev/misc). Each story independently testable and verified against the real
 backend headless boot.
 
+## Syncing to Windows + launching for review (validated procedure, 2026-06-17)
+
+The canonical repo is the WSL checkout; `C:\dev\astro-plan` is a Windows-native
+runtime mirror (see `windows-native-rust-dev.md`). **Do all git + node + cargo on
+the native `C:\` filesystem via PowerShell.** Do NOT pull the Windows checkout
+from the WSL repo over a `\\wsl.localhost\…` UNC path — `node`/`pnpm` break over
+UNC (and git is slow/flaky there). The working round-trip:
+
+1. **WSL → origin:** `git push origin main` (origin is GitHub
+   `nightwatch-astro/alm`). Push needs network + creds, so run it with the command
+   sandbox disabled.
+2. **Windows pull (native git on `C:\`):** the mirror tree is usually dirty and on
+   a divergent/old commit, so a plain `git pull` won't fast-forward. Use, via
+   PowerShell:
+   ```powershell
+   git config --global --add safe.directory '*'
+   cd C:\dev\astro-plan
+   git stash push -m 'mirror mods'   # only if the tree is dirty — preserves, doesn't destroy
+   git fetch origin
+   git reset --hard origin/main      # land exactly on the pushed commit
+   ```
+   Recover stashed mirror mods later with `git stash list` if needed.
+3. **Deps (native):** `pnpm install` then `pnpm rebuild esbuild`.
+4. **Port gotcha (cost me a failed launch):** a Vite dev server left running in WSL
+   on `:5173` is forwarded to Windows `localhost:5173`; with Vite `strictPort`,
+   the Windows `tauri dev` `beforeDevCommand` then fails with
+   `ERR_PNPM_RECURSIVE_RUN_FIRST_FAIL … Exit status 4294967295`. **Kill any WSL
+   `:5173` server first** (`lsof -ti :5173 | xargs kill`), or change the port.
+5. **Launch detached (real backend) so the window opens for review:**
+   ```powershell
+   Start-Process cmd.exe -WindowStyle Hidden -WorkingDirectory C:\dev\astro-plan\apps\desktop `
+     -ArgumentList '/c','set VITE_USE_MOCKS=false&& set CHOKIDAR_USEPOLLING=true&& pnpm tauri dev > C:\dev\astro-plan\tauri-dev.log 2>&1'
+   ```
+   First build compiles the whole MSVC workspace (minutes); subsequent ~12 s.
+   Verify: `tauri-dev.log` shows `VITE … ready` + `Running …desktop_shell.exe`,
+   `Get-Process desktop_shell` is alive, and `Invoke-WebRequest http://127.0.0.1:5173/`
+   returns 200. `VITE_USE_MOCKS=false` → real SQLite at
+   `%APPDATA%\dev.astro-plan.astro-library-manager\alm.db`.
+6. The entire sequence is drivable from WSL via `powershell.exe -NoProfile -Command "…"`.
+
+**Headless alternative (no Windows window needed):** in WSL,
+`xvfb-run -a pnpm --filter @astro-plan/desktop exec tauri dev` runs the real
+backend headless (webkit2gtk-4.1 present); drive it with `tauri-driver` +
+`WebKitWebDriver` for automated real-IPC checks.
+
 ## Definition of done
 Every issue maps to a numbered FR/SC; the four already-fixed items have
 regression tests; all gates green (`just lint`, `cargo test --workspace`,
