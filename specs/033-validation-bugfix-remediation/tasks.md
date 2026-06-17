@@ -118,6 +118,8 @@ Monorepo: `crates/<area>/`, `apps/desktop/src/`, `apps/desktop/e2e/`, `packages/
 - [ ] T037 [US3] Populate calibration/acquisition fingerprints from metadata; back masters `list`/`get` with real rows (replace `calibration.rs:27-134` fixtures) (FR-013)
 - [ ] T038 [US3] Persist `target_id` from ingestion so target detail shows real links — `crates/targeting` (FR-014)
 - [ ] T039 [US3] Replace the `search.global` fixture stub (`commands/search.rs:14-50`) with a real cross-entity query over targets/aliases/sessions/projects (FR-015)
+- [ ] T039a [US3] Target detail loads without error for a real persisted target — fix the "Failed to load target" path in the `target.get` aggregate/UI once `target_id` is plumbed (FR-044); test against an ingested DB with a real target
+- [ ] T039b [P] [US3] Targets list: expose grouping (type, constellation) + sorting (name, session count, integration hours) with clear labels, consistent with other list surfaces (FR-041), in `apps/desktop/src/features/targets/`
 
 **Checkpoint**: the core value is visible on a real library; US4 precondition (source_id/category) met.
 
@@ -228,6 +230,9 @@ Monorepo: `crates/<area>/`, `apps/desktop/src/`, `apps/desktop/e2e/`, `packages/
 - [ ] T076 [US8] Surface the destructive-destination toggle in inbox confirm (`ActionSidebar`/`InboxPage.tsx:56`); decide/implement-or-remove the `repair` scheduler reference; snapshot the resolved pattern onto the plan (FR-032)
 - [ ] T077 [US8] Add the "Show ignored items" Cmd+K entry; derive `mixed` frame-type dynamically (FR-033)
 - [ ] T078 [US8] Drop stale "Status: NOT IMPLEMENTED" contract descriptions (026); show per-item inventory refs in `SourceViewsSection` (FR-033)
+- [ ] T078a [P] [US8] Inbox grouping: support group-by date / classification-state / capture-type and rename the "lane" label to a user-meaningful term (image vs video) in `apps/desktop/src/features/inbox/InboxList.tsx` (FR-040)
+- [ ] T078b [P] [US8] Projects list: add sort options consistent with other list surfaces (beyond name/updated) in `apps/desktop/src/features/projects/ProjectsList.tsx` (FR-042)
+- [ ] T078c [US8] New-project flow: render inside the main window with design-v4 layout, wire the existing `features/projects/wizard/WizardPage.tsx` (session + calibration selection) as the reachable create flow, ensure create succeeds end-to-end, and open it from the target "new project" action (FR-043); add a vitest/e2e covering session+calibration selection and successful creation
 
 **Checkpoint**: dev surface correct; UI affordances complete.
 
@@ -299,5 +304,6 @@ Add US4 → US5 → US6 (P2) → US7 → US8 (P3), each independently testable, 
 - Commit per task or logical group, directly on `main`, no AI attribution (repo hook).
 - Implementation runs via the agent-assign flow (`/speckit.agent-assign.assign` → `validate` → `execute`), NOT `/speckit.implement`.
 - "Verify before closing": a task is done only with passing automated evidence + (for user-facing behavior) a runbook step — never a checkbox alone (FR-039).
-- 89 tasks total: Setup 5, Foundational 2, US1 17 (incl. T013a EXDEV), US2 7, US3 9, US4 6, US5 10, US6 8, US7 8, US8 8 (incl. T074a FR-033 tests), US9 6, Polish 3.
+- 94 tasks total: Setup 5, Foundational 2, US1 17, US2 7, US3 11 (incl. T039a/b targets detail+grouping), US4 6, US5 10, US6 8, US7 8, US8 11 (incl. T074a, T078a/b/c inbox/projects/create-flow), US9 6, Polish 3.
+- Interactive-run findings (2026-06-17): FR-040..FR-044 added from real-backend testing; see `runtime-findings-2026-06-17.md`. Stale-binary items (#2/#4/#7-create) pending retest on a freshly-built binary before being treated as bugs.
 - Migrations are numbered in build/creation order (0031–0038): US1 0031/0032, US3 0033/0034, US4 0035, US5 0036/0037, US7 0038.

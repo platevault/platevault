@@ -406,6 +406,23 @@ and one runbook step, with no unmatched rows on either side.
   rendering with null fingerprints; startup wiring of the inbox plan listener and log forwarder; design-token
   and lint repair) MUST each have a regression test that fails if the defect reappears.
 
+**Interactive-run UX findings (2026-06-17; see runtime-findings-2026-06-17.md)**
+
+- **FR-040**: The inbox list MUST support grouping by multiple meaningful dimensions — at least date,
+  classification/state, and capture type — and MUST replace the unexplained "lane" label with a
+  user-meaningful term (capture type: image vs video). Today grouping is only `none | lane`.
+- **FR-041**: The targets list MUST offer grouping and sorting options consistent with the other list
+  surfaces (grouping incl. type and constellation; sorting incl. name, session count, integration hours),
+  presented with clear labels.
+- **FR-042**: The projects list MUST offer sorting options consistent with the other list surfaces (beyond
+  name and updated-time).
+- **FR-043**: The new-project flow MUST render inside the main application window (not detached/mislaid),
+  MUST apply the design-v4 layout, MUST let the user select the sessions and calibration frames to include
+  during creation (wiring the existing project-creation wizard as the reachable flow), and project creation
+  MUST succeed end-to-end. The "new project" action from a target MUST open this flow.
+- **FR-044**: Selecting a target MUST load its detail without error for any real, persisted target (no
+  "Failed to load target"); this strengthens FR-014 to cover the error path, not just empty links.
+
 **Cross-cutting reconciliations (decided in planning/research, enforced here)**
 
 - **FR-038**: The system MUST use a single canonical vocabulary for destructive destinations across all
