@@ -61,6 +61,7 @@ Monorepo: `crates/<area>/`, `apps/desktop/src/`, `apps/desktop/e2e/`, `packages/
 - [ ] T011 [P] [US1] Rust test: existing destination refused (no silent overwrite) + audit (FR-004)
 - [ ] T012 [P] [US1] Rust test: `batch_cancel_pending_items` writes a per-item audit row for each cancelled item (FR-005)
 - [ ] T013 [P] [US1] Rust test: item whose on-disk mtime/size ≠ approved baseline refused as `stale` (FR-007, D7)
+- [ ] T013a [P] [US1] Rust test: cross-device (EXDEV) move applies safely + audited (copy-then-delete with rollback), or refuses with a clear reason — never silent loss (Edge Case, FR-007)
 - [ ] T014 [P] [US1] Rust test: `trash` destination moves to OS bin; `archive` fallback recorded when unavailable; replace stub test `trash_returns_unavailable_in_v1` (FR-006, D4)
 - [ ] T015 [US1] Real-backend e2e: unskip `apps/desktop/e2e/real-backend/us1_plan_apply_safety.spec.ts` — apply mixed plan via real UI, assert refusals + audit rows via DB helper (FR-001..007)
 
@@ -112,7 +113,7 @@ Monorepo: `crates/<area>/`, `apps/desktop/src/`, `apps/desktop/e2e/`, `packages/
 - [ ] T034 [P] [US3] Rust test: `search.global` runs a real cross-entity query reflecting the query string (FR-015)
 
 ### Implementation
-- [ ] T035 [US3] Migrations `0036`/`0037`: fingerprints queryable + indexed; session `root_id`; `target_id` FKs (data-model)
+- [ ] T035 [US3] Migrations `0033`/`0034`: fingerprints queryable + indexed; session `root_id`; `target_id` FKs (data-model)
 - [ ] T036 [US3] Inbox confirm/apply sets session `root_id` so sessions group in inventory — `crates/sessions` + `crates/app/core` (FR-012)
 - [ ] T037 [US3] Populate calibration/acquisition fingerprints from metadata; back masters `list`/`get` with real rows (replace `calibration.rs:27-134` fixtures) (FR-013)
 - [ ] T038 [US3] Persist `target_id` from ingestion so target detail shows real links — `crates/targeting` (FR-014)
@@ -155,8 +156,8 @@ Monorepo: `crates/<area>/`, `apps/desktop/src/`, `apps/desktop/e2e/`, `packages/
 - [ ] T049 [P] [US5] Real-backend lifecycle round-trip: the 2 mocks-UI Playwright tests (`lifecycle_detail` + `lifecycle_transitions`) were re-aligned to the current UI out-of-band (commit "test(e2e): realign stale lifecycle specs") and now pass against mocks, with one `test.skip` documenting the real round-trip; this task adds the real-backend assertion (pill updates after a real state change) and re-points everything to the canonical `projects.lifecycle` (depends on T050/T052)
 
 ### Implementation
-- [ ] T050 [US5] Migration `0033`: backfill `projects.lifecycle` from `project.state`, map states, **drop** `project.state` (D2)
-- [ ] T051 [US5] Migration `0034`: typed `blocked_reason_kind` + `blocked_reason_note` (data-model)
+- [ ] T050 [US5] Migration `0036`: backfill `projects.lifecycle` from `project.state`, map states, **drop** `project.state` (D2)
+- [ ] T051 [US5] Migration `0037`: typed `blocked_reason_kind` + `blocked_reason_note` (data-model)
 - [ ] T052 [US5] Re-point the user-IPC transition use-case (`transition_use_case.rs`) to the canonical `projects.lifecycle` (FR-019)
 - [ ] T053 [US5] Persist the typed blocked reason and surface it in the `BlockedBanner` DTO (replace `ProjectDetail.tsx:185` hardcode) (FR-020)
 - [ ] T054 [US5] Audit auto block/ready/unarchive transitions + emit `project.unarchived` (FR-021)
@@ -204,7 +205,7 @@ Monorepo: `crates/<area>/`, `apps/desktop/src/`, `apps/desktop/e2e/`, `packages/
 - [ ] T068 [US7] Implement minisign verification with embedded trusted key in `crates/targeting/catalogs/src/download.rs` (replace the no-op at `:374`) (FR-026, D5)
 - [ ] T069 [US7] Hard-fail unknown license codes at `catalogs.rs:166` (FR-027)
 - [ ] T070 [US7] Canonical slug enum reconcile: fix 014 strings (`opengc→openngc`) to the 013 closed enum; hard-fail unknown (FR-029, D3)
-- [ ] T071 [US7] Make catalog upsert + attribution transactional; wire the `origin.not_implemented` guard to be reachable (FR-028)
+- [ ] T071 [US7] Migration `0038` (catalog signature-status column + license CHECK + unique constraints); make catalog upsert + attribution transactional using those constraints; wire the `origin.not_implemented` guard to be reachable (FR-028, data-model)
 
 **Checkpoint**: catalog authenticity holds (on fixtures).
 
@@ -220,6 +221,7 @@ Monorepo: `crates/<area>/`, `apps/desktop/src/`, `apps/desktop/e2e/`, `packages/
 - [ ] T072 [P] [US8] Test: a release build (no `dev-tools` feature) has no reachable developer route or commands (FR-031, SC-009)
 - [ ] T073 [P] [US8] Test: a dev build auto-captures an operation via the recording proxy and exports to a chosen path (FR-030)
 - [ ] T074 [P] [US8] vitest/e2e: inbox destructive-destination toggle is surfaced and the chosen value is honored (FR-032)
+- [ ] T074a [P] [US8] vitest/e2e: "Show ignored items" Cmd+K entry exists and works; mixed frame-type is derived dynamically (not a fixture string); per-item inventory refs render in `SourceViewsSection` (FR-033)
 
 ### Implementation
 - [ ] T075 [US8] Wrap the Tauri dispatcher at boot for recording-proxy auto-capture; fix `dev_export` relative-path bug; gate the dev frontend bundle out of release (T031/T036) (FR-030/031)
@@ -297,4 +299,5 @@ Add US4 → US5 → US6 (P2) → US7 → US8 (P3), each independently testable, 
 - Commit per task or logical group, directly on `main`, no AI attribution (repo hook).
 - Implementation runs via the agent-assign flow (`/speckit.agent-assign.assign` → `validate` → `execute`), NOT `/speckit.implement`.
 - "Verify before closing": a task is done only with passing automated evidence + (for user-facing behavior) a runbook step — never a checkbox alone (FR-039).
-- 87 tasks total: Setup 5, Foundational 2, US1 16, US2 7, US3 9, US4 6, US5 10, US6 8, US7 8, US8 7, US9 6, Polish 3.
+- 89 tasks total: Setup 5, Foundational 2, US1 17 (incl. T013a EXDEV), US2 7, US3 9, US4 6, US5 10, US6 8, US7 8, US8 8 (incl. T074a FR-033 tests), US9 6, Polish 3.
+- Migrations are numbered in build/creation order (0031–0038): US1 0031/0032, US3 0033/0034, US4 0035, US5 0036/0037, US7 0038.
