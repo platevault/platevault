@@ -154,18 +154,18 @@ Monorepo: `crates/<area>/`, `apps/desktop/src/`, `apps/desktop/e2e/`, `packages/
 **Independent Test**: drive user + auto transitions → one consistent state; block by a real condition → banner shows typed kind; auto transitions audited.
 
 ### Tests (red-first)
-- [ ] T046 [P] [US5] Rust test: user-IPC and automatic transitions read the same canonical `projects.lifecycle` row (FR-019, D2)
-- [ ] T047 [P] [US5] vitest: `BlockedBanner` shows the typed `kind` from `project_health`, not hardcoded `user` (FR-020)
-- [ ] T048 [P] [US5] Rust test: auto block/ready/unarchive write audit rows; `project.unarchived` emitted (FR-021)
-- [ ] T049 [P] [US5] Real-backend lifecycle round-trip: the 2 mocks-UI Playwright tests (`lifecycle_detail` + `lifecycle_transitions`) were re-aligned to the current UI out-of-band (commit "test(e2e): realign stale lifecycle specs") and now pass against mocks, with one `test.skip` documenting the real round-trip; this task adds the real-backend assertion (pill updates after a real state change) and re-points everything to the canonical `projects.lifecycle` (depends on T050/T052)
+- [X] T046 [P] [US5] Rust test: user-IPC and automatic transitions read the same canonical `projects.lifecycle` row (FR-019, D2)
+- [X] T047 [P] [US5] vitest: `BlockedBanner` shows the typed `kind` from `project_health`, not hardcoded `user` (FR-020)
+- [X] T048 [P] [US5] Rust test: auto block/ready/unarchive write audit rows; `project.unarchived` emitted (FR-021)
+- [~] T049 [P] [US5] Real-backend lifecycle round-trip: the 2 mocks-UI Playwright tests (`lifecycle_detail` + `lifecycle_transitions`) were re-aligned to the current UI out-of-band (commit "test(e2e): realign stale lifecycle specs") and now pass against mocks, with one `test.skip` documenting the real round-trip; this task adds the real-backend assertion (pill updates after a real state change) and re-points everything to the canonical `projects.lifecycle` (depends on T050/T052). NOTE: real-backend e2e stays skipped pending T006 harness; `test.skip` is in place with documentation.
 
 ### Implementation
-- [ ] T050 [US5] Migration `0036`: backfill `projects.lifecycle` from `project.state`, map states, **drop** `project.state` (D2)
-- [ ] T051 [US5] Migration `0037`: typed `blocked_reason_kind` + `blocked_reason_note` (data-model)
-- [ ] T052 [US5] Re-point the user-IPC transition use-case (`transition_use_case.rs`) to the canonical `projects.lifecycle` (FR-019)
-- [ ] T053 [US5] Persist the typed blocked reason and surface it in the `BlockedBanner` DTO (replace `ProjectDetail.tsx:185` hardcode) (FR-020)
-- [ ] T054 [US5] Audit auto block/ready/unarchive transitions + emit `project.unarchived` (FR-021)
-- [ ] T055 [US5] Make the lifecycle filter multiselect (FR-022)
+- [X] T050 [US5] Migration `0036`: backfill `projects.lifecycle` from `project.state`, map states, **drop** `project.state` (D2)
+- [X] T051 [US5] Migration `0037`: typed `blocked_reason_kind` + `blocked_reason_note` (data-model)
+- [X] T052 [US5] Re-point the user-IPC transition use-case (`transition_use_case.rs`) to the canonical `projects.lifecycle` (FR-019)
+- [X] T053 [US5] Persist the typed blocked reason and surface it in the `BlockedBanner` DTO (replace `ProjectDetail.tsx:185` hardcode) (FR-020)
+- [X] T054 [US5] Audit auto block/ready/unarchive transitions + emit `project.unarchived` (FR-021)
+- [X] T055 [US5] Make the lifecycle filter multiselect (FR-022)
 
 **Checkpoint**: lifecycle is single-sourced and audited.
 

@@ -131,6 +131,12 @@ pub struct ProjectSummaryDto {
     pub source_count: u32,
     pub created_at: String,
     pub updated_at: String,
+    /// FR-020: typed blocked reason kind when lifecycle == "blocked". Null otherwise.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub blocked_reason_kind: Option<String>,
+    /// FR-020: free-form note for the blocked reason.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub blocked_reason_note: Option<String>,
 }
 
 /// A project detail (sources + channels included).
@@ -149,6 +155,12 @@ pub struct ProjectDetailDto {
     pub channels: Vec<ProjectChannelDto>,
     pub created_at: String,
     pub updated_at: String,
+    /// FR-020: typed blocked reason kind when lifecycle == "blocked". Null otherwise.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub blocked_reason_kind: Option<String>,
+    /// FR-020: free-form note for the blocked reason.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub blocked_reason_note: Option<String>,
 }
 
 /// Channel drift state embedded in project.get (FR-010).

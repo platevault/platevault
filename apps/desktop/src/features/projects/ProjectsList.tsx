@@ -46,10 +46,11 @@ function stateLabel(lifecycle: string): string {
 
 type SortBy = 'updated' | 'name';
 
-const LIFECYCLE_OPTIONS = [
-  { value: 'all', label: 'All' },
+// All selectable lifecycle states (excludes the synthetic 'all' sentinel — empty array means all).
+const LIFECYCLE_STATES: Array<{ value: string; label: string }> = [
   { value: 'processing', label: 'Processing' },
   { value: 'ready', label: 'Ready' },
+  { value: 'prepared', label: 'Prepared' },
   { value: 'completed', label: 'Completed' },
   { value: 'archived', label: 'Archived' },
   { value: 'blocked', label: 'Blocked' },
@@ -78,16 +79,25 @@ export function ProjectsList({
   loading = false,
 }: ProjectsListProps) {
   const [sortBy, setSortBy] = useState<SortBy>('updated');
-
-  const filterValue = lifecycle.length === 1 ? lifecycle[0] : 'all';
+  const [filterOpen, setFilterOpen] = useState(false);
 
   const filtered = useMemo(() => {
     const sorted =
       sortBy === 'name'
         ? [...projects].sort((a, b) => a.name.localeCompare(b.name))
         : projects; // already updated_at-desc from the backend
-    return sorted;
-  }, [projects, sortBy]);
+    // Apply multiselect lifecycle filter (empty = show all).
+    if (lifecycle.length === 0) return sorted;
+    return sorted.filter((p) => lifecycle.includes(p.lifecycle));
+  }, [projects, sortBy, lifecycle]);
+
+  const handleLifecycleToggle = (value: string, checked: boolean) => {
+    if (checked) {
+      onLifecycleChange([...lifecycle, value]);
+    } else {
+      onLifecycleChange(lifecycle.filter((v) => v !== value));
+    }
+  };
 
   if (loading && projects.length === 0) {
     return (
@@ -113,19 +123,70 @@ export function ProjectsList({
             <option value="updated">Sort: updated</option>
             <option value="name">Sort: name</option>
           </select>
-          <select
-            className="alm-select"
-            value={filterValue}
-            onChange={(e) => {
-              const v = e.target.value;
-              onLifecycleChange(v === 'all' ? [] : [v]);
-            }}
-            aria-label="Filter lifecycle"
-          >
-            {LIFECYCLE_OPTIONS.map((o) => (
-              <option key={o.value} value={o.value}>{o.label}</option>
-            ))}
-          </select>
+          {/* FR-022 / T055: multiselect lifecycle filter */}
+          <div style={{ position: 'relative' }}>
+            <button
+              className="alm-select"
+              type="button"
+              aria-label="Filter lifecycle"
+              aria-expanded={filterOpen}
+              aria-haspopup="listbox"
+              onClick={() => setFilterOpen((o) => !o)}
+              style={{ cursor: 'pointer', minWidth: 110, textAlign: 'left' }}
+            >
+              {lifecycle.length === 0
+                ? 'State: all'
+                : lifecycle.length === 1
+                  ? `State: ${LIFECYCLE_STATES.find((s) => s.value === lifecycle[0])?.label ?? lifecycle[0]}`
+                  : `State: ${lifecycle.length} selected`}
+            </button>
+            {filterOpen && (
+              <div
+                role="listbox"
+                aria-multiselectable="true"
+                aria-label="Lifecycle states"
+                style={{
+                  position: 'absolute',
+                  top: '100%',
+                  left: 0,
+                  zIndex: 100,
+                  background: 'var(--alm-surface)',
+                  border: '1px solid var(--alm-border)',
+                  borderRadius: 'var(--alm-radius-sm)',
+                  padding: 'var(--alm-sp-1)',
+                  minWidth: 160,
+                  boxShadow: '0 4px 12px rgba(0,0,0,0.15)',
+                }}
+              >
+                <label
+                  style={{ display: 'flex', alignItems: 'center', gap: 6, padding: '3px 6px', cursor: 'pointer', fontSize: 'var(--alm-text-sm)' }}
+                >
+                  <input
+                    type="checkbox"
+                    checked={lifecycle.length === 0}
+                    onChange={(e) => { if (e.target.checked) onLifecycleChange([]); }}
+                    aria-label="All states"
+                  />
+                  All
+                </label>
+                {LIFECYCLE_STATES.map((opt) => (
+                  <label
+                    key={opt.value}
+                    style={{ display: 'flex', alignItems: 'center', gap: 6, padding: '3px 6px', cursor: 'pointer', fontSize: 'var(--alm-text-sm)' }}
+                  >
+                    <input
+                      type="checkbox"
+                      value={opt.value}
+                      checked={lifecycle.includes(opt.value)}
+                      onChange={(e) => handleLifecycleToggle(opt.value, e.target.checked)}
+                      aria-label={opt.label}
+                    />
+                    {opt.label}
+                  </label>
+                ))}
+              </div>
+            )}
+          </div>
         </div>
       }
       footer={

@@ -904,6 +904,8 @@ pub async fn list(pool: &SqlitePool) -> Result<Vec<ProjectSummaryDto>, ContractE
             source_count: u32::try_from(sources.len()).unwrap_or(0),
             created_at: row.created_at,
             updated_at: row.updated_at,
+            blocked_reason_kind: row.blocked_reason_kind,
+            blocked_reason_note: row.blocked_reason_note,
         });
     }
     Ok(dtos)
@@ -941,6 +943,8 @@ pub async fn get(pool: &SqlitePool, id: &str) -> Result<ProjectDetailDto, Contra
         channels: channels_to_dto(&channels),
         created_at: row.created_at,
         updated_at: row.updated_at,
+        blocked_reason_kind: row.blocked_reason_kind,
+        blocked_reason_note: row.blocked_reason_note,
     })
 }
 
