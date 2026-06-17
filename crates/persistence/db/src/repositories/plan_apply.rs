@@ -633,6 +633,8 @@ mod tests {
                     linked_entity: None,
                     provenance_json: None,
                     archive_path: None,
+                    source_id: None,
+                    category: None,
                 },
             )
             .await

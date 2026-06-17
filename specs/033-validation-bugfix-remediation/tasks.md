@@ -134,14 +134,14 @@ Monorepo: `crates/<area>/`, `apps/desktop/src/`, `apps/desktop/e2e/`, `packages/
 **Independent Test**: protect a source; generate a real plan including it → blocked, protected items carry real `source_id`, block audited; default change persists + audited.
 
 ### Tests (red-first)
-- [ ] T040 [P] [US4] Rust test: real cleanup/archive plan over a protected source is blocked; items carry real `source_id`; block emits an audit event (FR-016/017)
-- [ ] T041 [P] [US4] Rust test: changing the global default persists and emits `protection.default.changed` (FR-018)
-- [ ] T042 [P] [US4] Rust test: a plan over a non-protected source applies (gate is real, not always-on)
+- [X] T040 [P] [US4] Rust test: real cleanup/archive plan over a protected source is blocked; items carry real `source_id`; block emits an audit event (FR-016/017)
+- [X] T041 [P] [US4] Rust test: changing the global default persists and emits `protection.default.changed` (FR-018)
+- [X] T042 [P] [US4] Rust test: a plan over a non-protected source applies (gate is real, not always-on)
 
 ### Implementation
-- [ ] T043 [US4] Migration `0035`: `protection_defaults` table + ensure `protected_plan_items.source_id` populated (data-model)
-- [ ] T044 [US4] Make cleanup/archive generators tag items with real `source_id` + `category` and call `resolve_protection` (replace hardcoded `protection:"normal"` at `prepared_views.rs:222`, `project_setup.rs:219`, `plans.rs:550`) (FR-016)
-- [ ] T045 [US4] Populate `source_id` on `ProtectedPlanItem` (`protection.rs:287`); wire global-defaults persistence + `protection.default.changed` audit event (FR-017/018)
+- [X] T043 [US4] Migration `0035`: `protection_defaults` table + ensure `protected_plan_items.source_id` populated (data-model)
+- [X] T044 [US4] Make cleanup/archive generators tag items with real `source_id` + `category` and call `resolve_protection` (replace hardcoded `protection:"normal"` at `prepared_views.rs:222`, `project_setup.rs:219`, `plans.rs:550`) (FR-016)
+- [X] T045 [US4] Populate `source_id` on `ProtectedPlanItem` (`protection.rs:287`); wire global-defaults persistence + `protection.default.changed` audit event (FR-017/018)
 
 **Checkpoint**: Constitution §II protection gate fires on real plans.
 

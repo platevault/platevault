@@ -2,7 +2,7 @@ import { useState } from 'react';
 import type { TargetFixture } from '@/data/fixtures/targets';
 import { ListSidebar, ListItem } from '@/components';
 import { Pill } from '@/ui';
-import { groupTargets, sortTargets } from './target-list-utils';
+import { groupTargets } from './target-list-utils';
 import type { GroupBy, SortBy } from './target-list-utils';
 
 interface Props {

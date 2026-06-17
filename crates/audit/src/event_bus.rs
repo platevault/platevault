@@ -650,6 +650,28 @@ pub struct ProtectionPlanAcknowledged {
 
 pub const TOPIC_PROTECTION_PLAN_ACKNOWLEDGED: &str = "protection.plan.acknowledged";
 
+/// Payload for the `protection.default.changed` topic (spec 033 T045, FR-018).
+///
+/// Emitted when a global protection default (level, blockPermanentDelete, or
+/// protectedCategories) is changed by the user or system.
+#[derive(Clone, Debug, Serialize, Deserialize, JsonSchema, Type)]
+#[serde(rename_all = "camelCase")]
+pub struct ProtectionDefaultChanged {
+    /// Scope of the default (e.g. `"global"`).
+    pub scope: String,
+    /// Key that changed (e.g. `"defaultProtection"`, `"blockPermanentDelete"`,
+    /// `"protectedCategories"`).
+    pub key: String,
+    /// Prior raw JSON value; absent if the row was newly created.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub old: Option<serde_json::Value>,
+    /// New raw JSON value.
+    pub new: serde_json::Value,
+    pub changed_at: String,
+}
+
+pub const TOPIC_PROTECTION_DEFAULT_CHANGED: &str = "protection.default.changed";
+
 // ── Guided first project flow audit events (spec 010) ────────────────────────
 
 /// Payload for the `inventory.confirmed` topic (spec 010 / spec 005 T027).

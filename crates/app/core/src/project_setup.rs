@@ -220,6 +220,10 @@ async fn build_folder_plan(
             linked_entity: Some(project_id),
             provenance_json: None,
             archive_path: None,
+            // Project setup items create app-managed folders/files; source protection
+            // does not apply.
+            source_id: None,
+            category: None,
         };
         plans_repo::insert_plan_item(pool, &item_data).await?;
     }
@@ -243,6 +247,9 @@ async fn build_folder_plan(
         linked_entity: Some(project_id),
         provenance_json: None,
         archive_path: None,
+        // Project marker file creation; source protection does not apply.
+        source_id: None,
+        category: None,
     };
     plans_repo::insert_plan_item(pool, &marker_item).await?;
 

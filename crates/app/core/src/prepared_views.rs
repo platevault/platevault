@@ -224,6 +224,10 @@ pub async fn remove_prepared_view(
                 linked_entity: Some(view_id),
                 provenance_json: None,
                 archive_path: None,
+                // View removal items target app-generated view paths, not user data
+                // sources, so source protection does not apply here.
+                source_id: None,
+                category: None,
             },
         )
         .await
@@ -356,6 +360,9 @@ pub async fn regenerate_prepared_view(
                 linked_entity: Some(view_id),
                 provenance_json: None,
                 archive_path: None,
+                // View regeneration items target app-generated view paths.
+                source_id: None,
+                category: None,
             },
         )
         .await
