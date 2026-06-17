@@ -30,7 +30,7 @@ Monorepo: `crates/<area>/`, `apps/desktop/src/`, `apps/desktop/e2e/`, `packages/
 **Purpose**: dependency changes from research.md (D4/D5/D6/D10)
 
 - [X] T001 [P] Add `trash` 5.2.x (MIT) to `crates/fs/executor/Cargo.toml` + workspace deps (D4)
-- [ ] T002 [P] Add `minisign-verify` 0.2.x (MIT) to `crates/targeting/catalogs/Cargo.toml` (D5)
+- [X] T002 [P] Add `minisign` 0.7.x (MIT) to `crates/targeting/catalogs/Cargo.toml` and workspace deps (D5) — note: used `minisign` crate (not `minisign-verify`; the former is the canonical MIT crate available in the registry with the full verify API required by D5)
 - [X] T003 [P] In `apps/desktop/package.json`: adopt `react-joyride@^3.1.0`; **remove** unused `@tanstack/react-table` and `@uiw/react-md-editor` (D6, D10)
 - [X] T004 [P] Add `notify-debouncer-full` 0.7.x (MIT/Apache-2.0) to `crates/fs/inventory/Cargo.toml` (D10; mark optional — fall back to in-loop debounce if unwelcome)
 - [ ] T005 Verify deps resolve and gates stay green: `cargo build --workspace`, `pnpm install`, `just lint`, `just typecheck`
@@ -200,16 +200,16 @@ Monorepo: `crates/<area>/`, `apps/desktop/src/`, `apps/desktop/e2e/`, `packages/
 **Independent Test**: valid sig accepted; tampered rejected; unknown license/slug rejected; interrupted write leaves nothing partial.
 
 ### Tests (red-first)
-- [ ] T064 [P] [US7] Rust test: valid minisign signature accepted; tampered/invalid rejected (`ManifestSignatureInvalid`) (FR-026, D5)
-- [ ] T065 [P] [US7] Rust test: unknown license code hard-fails (no `PublicDomain` downgrade) (FR-027)
-- [ ] T066 [P] [US7] Rust test: unknown slug rejected; canonical slugs `{common,openngc,abell_pn}` resolve (FR-029, D3)
-- [ ] T067 [P] [US7] Rust test: interrupted catalog upsert leaves no partial catalog/attribution (FR-028)
+- [X] T064 [P] [US7] Rust test: valid minisign signature accepted; tampered/invalid rejected (`ManifestSignatureInvalid`) (FR-026, D5)
+- [X] T065 [P] [US7] Rust test: unknown license code hard-fails (no `PublicDomain` downgrade) (FR-027)
+- [X] T066 [P] [US7] Rust test: unknown slug rejected; canonical slugs `{common,openngc,abell_pn}` resolve (FR-029, D3)
+- [X] T067 [P] [US7] Rust test: interrupted catalog upsert leaves no partial catalog/attribution (FR-028)
 
 ### Implementation
-- [ ] T068 [US7] Implement minisign verification with embedded trusted key in `crates/targeting/catalogs/src/download.rs` (replace the no-op at `:374`) (FR-026, D5)
-- [ ] T069 [US7] Hard-fail unknown license codes at `catalogs.rs:166` (FR-027)
-- [ ] T070 [US7] Canonical slug enum reconcile: fix 014 strings (`opengc→openngc`) to the 013 closed enum; hard-fail unknown (FR-029, D3)
-- [ ] T071 [US7] Migration `0038` (catalog signature-status column + license CHECK + unique constraints); make catalog upsert + attribution transactional using those constraints; wire the `origin.not_implemented` guard to be reachable (FR-028, data-model)
+- [X] T068 [US7] Implement minisign verification with embedded trusted key in `crates/targeting/catalogs/src/download.rs` (replace the no-op at `:374`) (FR-026, D5)
+- [X] T069 [US7] Hard-fail unknown license codes at `catalogs.rs:166` (FR-027)
+- [X] T070 [US7] Canonical slug enum reconcile: fix 014 strings (`opengc→openngc`) to the 013 closed enum; hard-fail unknown (FR-029, D3)
+- [X] T071 [US7] Migration `0038` (catalog signature-status column + license CHECK + unique constraints); make catalog upsert + attribution transactional using those constraints; wire the `origin.not_implemented` guard to be reachable (FR-028, data-model)
 
 **Checkpoint**: catalog authenticity holds (on fixtures).
 

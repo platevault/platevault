@@ -169,7 +169,10 @@ pub fn v1_catalogs() -> Vec<CatalogMeta> {
             entry_count: Some(300),
         },
         CatalogMeta {
-            id: "opengc".into(),
+            // Canonical slug is "openngc" (matches the spec 013 CatalogId::Openngc
+            // closed enum). "opengc" was a typo in spec 014 strings — fixed here
+            // per D3 (FR-029, T070).
+            id: "openngc".into(),
             name: "OpenNGC (NGC + IC)".into(),
             license: LicenseShortCode::CcBySa4_0,
             origin: CatalogOrigin::Downloaded,
@@ -233,9 +236,16 @@ mod tests {
     }
 
     #[test]
-    fn opengc_has_cc_by_sa_license() {
-        let c = find_catalog("opengc").expect("opengc must be in registry");
+    fn openngc_has_cc_by_sa_license() {
+        // Slug corrected from "opengc" (typo) to "openngc" per D3 / FR-029 / T070.
+        let c = find_catalog("openngc").expect("openngc must be in registry");
         assert_eq!(c.license, LicenseShortCode::CcBySa4_0);
+    }
+
+    #[test]
+    fn opengc_typo_is_not_in_registry() {
+        // "opengc" (missing second n) must NOT be a registered slug (D3, T070).
+        assert!(find_catalog("opengc").is_none(), "opengc typo slug must not exist in registry");
     }
 
     #[test]

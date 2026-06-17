@@ -1,5 +1,6 @@
-//! Manifest fetch, per-catalog download, SHA-256 verification, and install
-//! lifecycle for spec 014 — Catalog Index Licensing.
+//! Manifest fetch, per-catalog download, SHA-256 verification, minisign
+//! signature verification, and install lifecycle for spec 014 — Catalog Index
+//! Licensing.
 //!
 //! # Design
 //!
@@ -7,6 +8,15 @@
 //! download lifecycle state-machine is fully unit-testable with a
 //! [`FakeFetcher`] (no real network in tests). The real HTTP implementation
 //! is [`ReqwestFetcher`].
+//!
+//! # Signature verification (FR-026, D5, T068)
+//!
+//! Every manifest is verified against the embedded trusted public key using
+//! minisign before any catalog data is accepted. The signature covers the
+//! canonical JSON bytes of the `catalogs` array. Tampered or invalid
+//! signatures hard-fail with [`DownloadError::ManifestSignatureInvalid`].
+//!
+//! The SHA-256 checksum on each catalog artifact is a complementary check.
 //!
 //! # Event topics (R-3.1)
 //!
@@ -18,9 +28,30 @@
 //! - `"catalog.download.completed"` — catalog verified and installed.
 //! - `"catalog.download.failed"` — download or verification failure.
 
+use std::io::Cursor;
+
 use serde::{Deserialize, Serialize};
 
 use crate::license::LicenseShortCode;
+
+// ── Trusted public key (FR-026, D5) ──────────────────────────────────────────
+
+/// Embedded trusted minisign public key for the astro-plan-catalogs repo.
+///
+/// This key is embedded at compile time. The catalog repo is not yet published
+/// externally (real downloads remain blocked), but the verification path is
+/// fully operational and tested with fixtures using the test keypair in the
+/// test suite.
+///
+/// Format: minisign public key box string (two lines: untrusted comment +
+/// base64-encoded public key).
+///
+/// Replace with the real key once the catalogs repo is published. The constant
+/// below is a placeholder that will NOT verify any real signature — replace it
+/// with the output of `minisign -G` before distributing catalogs.
+pub const TRUSTED_PUBLIC_KEY: &str = "\
+untrusted comment: astro-plan catalog signing key (placeholder — replace before shipping)\
+\nRWQAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA=";
 
 // ── Error ─────────────────────────────────────────────────────────────────────
 
@@ -45,6 +76,10 @@ pub enum DownloadError {
     NetworkUnavailable(String),
     #[error("origin 'user' is not implemented in v1 (A2)")]
     OriginNotImplemented,
+    #[error("unknown license code '{0}' — not in the recognised closed set")]
+    UnknownLicenseCode(String),
+    #[error("unknown catalog slug '{0}' — not in the v1 closed enum")]
+    UnknownCatalogSlug(String),
 }
 
 /// Error code strings matching the `catalog.download.json` contract.
@@ -61,6 +96,8 @@ impl DownloadError {
             Self::InstallFailed(_) => "catalog.install_failed",
             Self::NetworkUnavailable(_) => "network.unavailable",
             Self::OriginNotImplemented => "origin.not_implemented",
+            Self::UnknownLicenseCode(_) => "manifest.unknown_license_code",
+            Self::UnknownCatalogSlug(_) => "manifest.unknown_catalog_slug",
         }
     }
 }
@@ -69,6 +106,11 @@ impl DownloadError {
 
 /// Per-catalog entry in the signed manifest (mirrors `catalog.manifest.fetch.json`
 /// §ManifestCatalogEntry).
+///
+/// The `license` field is a raw string here so that unknown codes can be
+/// hard-failed at parse time rather than silently falling back (FR-027, T069).
+/// Use [`ManifestEntry::parse_license`] to obtain a validated
+/// [`LicenseShortCode`].
 #[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
 pub struct ManifestEntry {
     /// Stable catalog slug.
@@ -79,10 +121,63 @@ pub struct ManifestEntry {
     pub url: String,
     /// SHA-256 hex checksum of the catalog artifact bytes.
     pub checksum: String,
-    /// License short code (closed enum — R-2.1).
-    pub license: LicenseShortCode,
+    /// License short code (raw string from JSON — validated via parse_license).
+    pub license: String,
     /// Uncompressed size in bytes (for progress estimation).
     pub size_bytes: u64,
+}
+
+impl ManifestEntry {
+    /// Validate and parse the raw `license` string to a [`LicenseShortCode`].
+    ///
+    /// Hard-fails with [`DownloadError::UnknownLicenseCode`] for unrecognised
+    /// codes (FR-027, T069). No silent fallback to `PublicDomain`.
+    ///
+    /// # Errors
+    ///
+    /// Returns `DownloadError::UnknownLicenseCode` for any code not in the
+    /// recognised closed set.
+    pub fn parse_license(&self) -> Result<LicenseShortCode, DownloadError> {
+        LicenseShortCode::parse_code(&self.license)
+            .ok_or_else(|| DownloadError::UnknownLicenseCode(self.license.clone()))
+    }
+
+    /// Validate the `catalog_id` slug against the spec 013 closed enum.
+    ///
+    /// Hard-fails with [`DownloadError::UnknownCatalogSlug`] for unknown slugs
+    /// (FR-029, D3, T070). No silent `Unknown` skip.
+    ///
+    /// # Errors
+    ///
+    /// Returns `DownloadError::UnknownCatalogSlug` when the slug is not in the
+    /// v1 closed set.
+    pub fn validate_slug(&self) -> Result<(), DownloadError> {
+        // Import the 013 CatalogId to use its closed-enum parse.
+        // We deliberately avoid adding a dep on the targeting crate here;
+        // instead we inline the closed-slug check (D3: common, openngc, abell_pn
+        // are the three slug groups referenced in the contract, but the full
+        // v1 set from catalog.rs is what we validate against).
+        let known = [
+            "messier",
+            "caldwell",
+            "sharpless",
+            "abell_pn",
+            "abell_galaxies",
+            "arp",
+            "vdb",
+            "barnard",
+            "lbn",
+            "ldn",
+            "melotte",
+            "common",
+            "openngc",
+        ];
+        if known.contains(&self.catalog_id.as_str()) {
+            Ok(())
+        } else {
+            Err(DownloadError::UnknownCatalogSlug(self.catalog_id.clone()))
+        }
+    }
 }
 
 /// The parsed manifest returned from a successful fetch.
@@ -90,7 +185,9 @@ pub struct ManifestEntry {
 pub struct Manifest {
     /// Semver manifest schema version.
     pub version: String,
-    /// Minisign signature (base64-encoded). Verified in memory before use.
+    /// Minisign signature box string. Verified against the embedded trusted
+    /// public key before any catalog data is accepted (FR-026).
+    /// The signature covers the canonical JSON bytes of the `catalogs` array.
     pub signature: String,
     /// Ordered list of catalog entries.
     pub catalogs: Vec<ManifestEntry>,
@@ -182,10 +279,6 @@ pub trait CatalogFetcher: Send + Sync {
         progress: &mut (dyn FnMut(u64, u64) + Send),
     ) -> Result<Vec<u8>, DownloadError>;
 }
-
-// This module uses async_trait; add it to Cargo.toml transitively via the
-// reqwest feature set or declare it explicitly if needed.
-// For now we use a simple re-export shim.
 
 // ── ReqwestFetcher ────────────────────────────────────────────────────────────
 
@@ -291,6 +384,60 @@ pub fn verify_sha256(bytes: &[u8], hex_checksum: &str) -> Result<(), DownloadErr
     Ok(())
 }
 
+// ── Minisign signature verification (FR-026, D5, T068) ───────────────────────
+
+/// Verify that `data_bytes` was signed with the minisign key whose public key
+/// box string is `trusted_pk_box`.
+///
+/// `signature_box_str` is the full minisign signature box (the `.minisig` file
+/// contents). `data_bytes` is the canonical data that was signed — for
+/// manifests this is the JSON bytes of the `catalogs` array.
+///
+/// # Errors
+///
+/// Returns [`DownloadError::ManifestSignatureInvalid`] when:
+/// - The public key box or signature box cannot be parsed.
+/// - The signature is cryptographically invalid (tampered data or wrong key).
+pub fn verify_minisign_signature(
+    trusted_pk_box: &str,
+    signature_box_str: &str,
+    data_bytes: &[u8],
+) -> Result<(), DownloadError> {
+    use minisign::PublicKeyBox;
+
+    let pk_box = PublicKeyBox::from_string(trusted_pk_box).map_err(|e| {
+        DownloadError::ManifestSignatureInvalid(format!("public key parse error: {e}"))
+    })?;
+    let pk = minisign::PublicKey::from_box(pk_box).map_err(|e| {
+        DownloadError::ManifestSignatureInvalid(format!("public key decode error: {e}"))
+    })?;
+
+    let sig_box = minisign::SignatureBox::from_string(signature_box_str).map_err(|e| {
+        DownloadError::ManifestSignatureInvalid(format!("signature box parse error: {e}"))
+    })?;
+
+    let reader = Cursor::new(data_bytes);
+    minisign::verify(&pk, &sig_box, reader, true, false, false).map_err(|e| {
+        DownloadError::ManifestSignatureInvalid(format!("signature verification failed: {e}"))
+    })
+}
+
+/// Derive the canonical signed bytes for a manifest's signature.
+///
+/// The signature covers the JSON serialization of the `catalogs` array.  Using
+/// a sub-document (rather than the whole manifest JSON) avoids the circularity
+/// of signing a document that contains its own signature field.
+///
+/// # Errors
+///
+/// Returns [`DownloadError::ManifestFetchFailed`] on JSON serialization failure
+/// (should be infallible in practice).
+pub fn manifest_signed_bytes(catalogs: &[ManifestEntry]) -> Result<Vec<u8>, DownloadError> {
+    serde_json::to_vec(catalogs).map_err(|e| {
+        DownloadError::ManifestFetchFailed(format!("catalog serialization error: {e}"))
+    })
+}
+
 // ── FakeFetcher (test double) ──────────────────────────────────────────────────
 
 /// In-memory test double for [`CatalogFetcher`].
@@ -368,10 +515,11 @@ impl CatalogFetcher for FakeFetcher {
 
 /// Parse raw manifest bytes into a [`Manifest`].
 ///
-/// The manifest is expected to be JSON (v1 format). Signature verification
-/// against the embedded minisign public key is deferred to a future iteration
-/// (the `signature` field is parsed and stored but not yet cryptographically
-/// verified in v1 — the astro-plan-catalogs repo is not yet published).
+/// The manifest is expected to be JSON (v1 format). After parsing, the
+/// signature in the `signature` field is NOT verified here — verification
+/// requires the trusted public key and is done in [`fetch_manifest`] after
+/// parsing. Callers that bypass `fetch_manifest` MUST call
+/// [`verify_minisign_signature`] themselves.
 ///
 /// # Errors
 ///
@@ -384,16 +532,24 @@ pub fn parse_manifest(bytes: &[u8]) -> Result<Manifest, DownloadError> {
 
 // ── High-level fetch + download functions ──────────────────────────────────────
 
-/// Fetch the manifest using the provided fetcher.
+/// Fetch the manifest using the provided fetcher, verify its minisign
+/// signature, and validate all entry license codes and catalog slugs.
 ///
 /// Returns a [`ManifestFetchResult`] describing whether the manifest was newly
 /// downloaded, unchanged (ETag matched), or failed.
+///
+/// Verification steps (all must pass before accepting):
+/// 1. JSON parse.
+/// 2. Minisign signature verification against `trusted_pk_box` (FR-026).
+/// 3. All entry license codes in the recognised closed set (FR-027).
+/// 4. All catalog slugs in the v1 closed enum (FR-029).
 ///
 /// Emits `DownloadEvent::ManifestFetched` via `on_event` on success.
 pub async fn fetch_manifest<F, E>(
     fetcher: &F,
     url: &str,
     etag: Option<&str>,
+    trusted_pk_box: &str,
     mut on_event: E,
 ) -> ManifestFetchResult
 where
@@ -406,6 +562,31 @@ where
         Ok(Some((bytes, server_etag))) => match parse_manifest(&bytes) {
             Err(e) => ManifestFetchResult::Failed(e),
             Ok(manifest) => {
+                // Step 1: verify minisign signature (FR-026, T068).
+                let signed_data = match manifest_signed_bytes(&manifest.catalogs) {
+                    Ok(b) => b,
+                    Err(e) => return ManifestFetchResult::Failed(e),
+                };
+                if let Err(e) =
+                    verify_minisign_signature(trusted_pk_box, &manifest.signature, &signed_data)
+                {
+                    return ManifestFetchResult::Failed(e);
+                }
+
+                // Step 2: validate license codes — hard-fail unknown (FR-027, T069).
+                for entry in &manifest.catalogs {
+                    if let Err(e) = entry.parse_license() {
+                        return ManifestFetchResult::Failed(e);
+                    }
+                }
+
+                // Step 3: validate catalog slugs — hard-fail unknown (FR-029, T070).
+                for entry in &manifest.catalogs {
+                    if let Err(e) = entry.validate_slug() {
+                        return ManifestFetchResult::Failed(e);
+                    }
+                }
+
                 on_event(DownloadEvent::ManifestFetched { catalog_count: manifest.catalogs.len() });
                 ManifestFetchResult::Fetched { manifest, etag: server_etag }
             }
@@ -503,19 +684,36 @@ where
 #[cfg(test)]
 mod tests {
     use super::*;
+    use minisign::KeyPair;
 
-    fn make_manifest(catalog_id: &str, checksum: &str) -> Manifest {
-        Manifest {
+    // ── Test keypair helpers ───────────────────────────────────────────────
+
+    /// Generate a fresh unencrypted keypair for test use.
+    fn test_keypair() -> KeyPair {
+        KeyPair::generate_unencrypted_keypair().expect("keypair generation failed")
+    }
+
+    /// Produce the public key box string for a test keypair.
+    fn pk_box_string(kp: &KeyPair) -> String {
+        kp.pk.to_box().expect("pk to_box failed").to_string()
+    }
+
+    /// Sign `data` with the secret key from `kp` and return the signature box
+    /// string.
+    fn sign_data(kp: &KeyPair, data: &[u8]) -> String {
+        let sig_box = minisign::sign(None, &kp.sk, std::io::Cursor::new(data), None, None)
+            .expect("sign failed");
+        sig_box.into_string()
+    }
+
+    fn make_entry(catalog_id: &str, checksum: &str, license: &str) -> ManifestEntry {
+        ManifestEntry {
+            catalog_id: catalog_id.into(),
             version: "1.0.0".into(),
-            signature: "fake-sig".into(),
-            catalogs: vec![ManifestEntry {
-                catalog_id: catalog_id.into(),
-                version: "1.0.0".into(),
-                url: "https://example.com/messier.json".into(),
-                checksum: checksum.into(),
-                license: LicenseShortCode::PublicDomain,
-                size_bytes: 1024,
-            }],
+            url: "https://example.com/catalog.json".into(),
+            checksum: checksum.into(),
+            license: license.into(),
+            size_bytes: 1024,
         }
     }
 
@@ -525,6 +723,153 @@ mod tests {
         hasher.update(bytes);
         hex::encode(hasher.finalize())
     }
+
+    // ── T064: minisign signature verification ─────────────────────────────
+
+    /// T064-a: valid minisign signature is accepted (FR-026, D5).
+    #[test]
+    fn valid_minisign_signature_is_accepted() {
+        let kp = test_keypair();
+        let pk_str = pk_box_string(&kp);
+        let data = b"catalog data bytes to sign";
+        let sig_str = sign_data(&kp, data);
+        assert!(
+            verify_minisign_signature(&pk_str, &sig_str, data).is_ok(),
+            "valid signature must be accepted"
+        );
+    }
+
+    /// T064-b: tampered data is rejected with ManifestSignatureInvalid (FR-026).
+    #[test]
+    fn tampered_data_rejected_with_signature_invalid() {
+        let kp = test_keypair();
+        let pk_str = pk_box_string(&kp);
+        let original_data = b"catalog data bytes to sign";
+        let sig_str = sign_data(&kp, original_data);
+
+        // Tamper: flip one byte.
+        let tampered = b"catalog data bytes to sign!";
+        let result = verify_minisign_signature(&pk_str, &sig_str, tampered);
+        assert!(
+            matches!(result, Err(DownloadError::ManifestSignatureInvalid(_))),
+            "tampered data must be rejected: {result:?}"
+        );
+    }
+
+    /// T064-c: invalid signature string is rejected (FR-026).
+    #[test]
+    fn invalid_signature_string_rejected() {
+        let kp = test_keypair();
+        let pk_str = pk_box_string(&kp);
+        let data = b"some data";
+        let result = verify_minisign_signature(&pk_str, "not-a-valid-sig-box", data);
+        assert!(
+            matches!(result, Err(DownloadError::ManifestSignatureInvalid(_))),
+            "invalid sig box string must be rejected: {result:?}"
+        );
+    }
+
+    /// T064-d: wrong key is rejected (FR-026).
+    #[test]
+    fn signature_from_different_key_rejected() {
+        let kp1 = test_keypair();
+        let kp2 = test_keypair();
+        let pk_str = pk_box_string(&kp2); // pk from kp2
+        let data = b"data signed by kp1";
+        let sig_str = sign_data(&kp1, data); // signed by kp1
+        let result = verify_minisign_signature(&pk_str, &sig_str, data);
+        assert!(
+            matches!(result, Err(DownloadError::ManifestSignatureInvalid(_))),
+            "signature from wrong key must be rejected: {result:?}"
+        );
+    }
+
+    // ── T065: unknown license code hard-fails (FR-027) ────────────────────
+
+    /// T065-a: unknown license code hard-fails (no PublicDomain downgrade).
+    #[test]
+    fn unknown_license_code_hard_fails() {
+        let entry = make_entry("messier", "abc", "gpl-3.0");
+        let result = entry.parse_license();
+        assert!(
+            matches!(result, Err(DownloadError::UnknownLicenseCode(ref s)) if s == "gpl-3.0"),
+            "unknown license must hard-fail: {result:?}"
+        );
+    }
+
+    /// T065-b: empty license code hard-fails.
+    #[test]
+    fn empty_license_code_hard_fails() {
+        let entry = make_entry("messier", "abc", "");
+        let result = entry.parse_license();
+        assert!(
+            matches!(result, Err(DownloadError::UnknownLicenseCode(_))),
+            "empty license must hard-fail: {result:?}"
+        );
+    }
+
+    /// T065-c: all recognised license codes succeed.
+    #[test]
+    fn recognised_license_codes_succeed() {
+        for code in [
+            "public-domain",
+            "apache-2.0",
+            "mit",
+            "cc0-1.0",
+            "cc-by-4.0",
+            "cc-by-sa-4.0",
+            "hyperleda",
+            "esa-free",
+        ] {
+            let entry = make_entry("messier", "abc", code);
+            assert!(entry.parse_license().is_ok(), "license '{code}' must be recognised");
+        }
+    }
+
+    // ── T066: catalog slug validation (FR-029, D3) ────────────────────────
+
+    /// T066-a: unknown slug is rejected (no silent Unknown skip).
+    #[test]
+    fn unknown_slug_rejected() {
+        let entry = make_entry("opengc", "abc", "cc-by-sa-4.0"); // typo slug
+        let result = entry.validate_slug();
+        assert!(
+            matches!(result, Err(DownloadError::UnknownCatalogSlug(ref s)) if s == "opengc"),
+            "unknown slug must be rejected: {result:?}"
+        );
+    }
+
+    /// T066-b: canonical slugs resolve without error.
+    #[test]
+    fn canonical_slugs_resolve() {
+        for slug in ["common", "openngc", "abell_pn", "messier", "caldwell"] {
+            let entry = make_entry(slug, "abc", "public-domain");
+            assert!(
+                entry.validate_slug().is_ok(),
+                "canonical slug '{slug}' must resolve: {:?}",
+                entry.validate_slug()
+            );
+        }
+    }
+
+    /// T066-c: corrected slug openngc resolves; old typo opengc does not.
+    #[test]
+    fn openngc_resolves_opengc_does_not() {
+        let good = make_entry("openngc", "abc", "cc-by-sa-4.0");
+        assert!(good.validate_slug().is_ok(), "openngc must resolve");
+
+        let bad = make_entry("opengc", "abc", "cc-by-sa-4.0");
+        assert!(
+            matches!(bad.validate_slug(), Err(DownloadError::UnknownCatalogSlug(_))),
+            "opengc (typo) must be rejected"
+        );
+    }
+
+    // ── T067: atomic upsert — tested in persistence crate (catalogs.rs tests) ──
+    // The atomicity property (interrupted upsert leaves no partial row) is
+    // verified by the persistence-layer test
+    // `upsert_catalog_and_attribution_is_atomic` in
+    // `crates/persistence/db/src/repositories/catalogs.rs`.
 
     // ── Checksum tests ────────────────────────────────────────────────────
 
@@ -570,54 +915,161 @@ mod tests {
         assert_eq!(result.catalogs[0].catalog_id, "messier");
     }
 
-    // ── FakeFetcher + fetch_manifest tests ────────────────────────────────
+    // ── fetch_manifest with real signature verification ───────────────────
+
+    /// Build a correctly signed manifest JSON for use in fetch_manifest tests.
+    fn build_signed_manifest_bytes(kp: &KeyPair, entries: Vec<ManifestEntry>) -> (Vec<u8>, String) {
+        let signed_bytes = manifest_signed_bytes(&entries).unwrap();
+        let sig_str = sign_data(kp, &signed_bytes);
+        let manifest =
+            Manifest { version: "1.0.0".into(), signature: sig_str.clone(), catalogs: entries };
+        (serde_json::to_vec(&manifest).unwrap(), sig_str)
+    }
 
     #[tokio::test]
     async fn fetch_manifest_returns_not_modified_on_304() {
         let fetcher = FakeFetcher::not_modified();
+        let kp = test_keypair();
+        let pk_str = pk_box_string(&kp);
         let mut events = Vec::new();
-        let result =
-            fetch_manifest(&fetcher, "https://example.com/manifest.json", Some("\"etag\""), |e| {
+        let result = fetch_manifest(
+            &fetcher,
+            "https://example.com/manifest.json",
+            Some("\"etag\""),
+            &pk_str,
+            |e| {
                 events.push(e);
-            })
-            .await;
+            },
+        )
+        .await;
         assert_eq!(result, ManifestFetchResult::NotModified);
         assert!(events.is_empty());
     }
 
     #[tokio::test]
-    async fn fetch_manifest_emits_fetched_event_on_success() {
-        let manifest = serde_json::json!({
-            "version": "1.0.0",
-            "signature": "abc",
-            "catalogs": [{
-                "catalog_id": "messier",
-                "version": "1.0.0",
-                "url": "https://example.com/messier.json",
-                "checksum": "abc123",
-                "license": "public-domain",
-                "size_bytes": 1024
-            }]
-        });
-        let bytes = serde_json::to_vec(&manifest).unwrap();
-        let fetcher = FakeFetcher::success(bytes, vec![]);
+    async fn fetch_manifest_verifies_valid_signature_and_emits_fetched_event() {
+        let kp = test_keypair();
+        let pk_str = pk_box_string(&kp);
+        let entries = vec![make_entry("messier", "abc123", "public-domain")];
+        let (manifest_bytes, _) = build_signed_manifest_bytes(&kp, entries);
+
+        let fetcher = FakeFetcher::success(manifest_bytes, vec![]);
         let mut events = Vec::new();
         let result =
-            fetch_manifest(&fetcher, "https://example.com/manifest.json", None, |e| events.push(e))
-                .await;
-        assert!(matches!(result, ManifestFetchResult::Fetched { .. }));
+            fetch_manifest(&fetcher, "https://example.com/manifest.json", None, &pk_str, |e| {
+                events.push(e);
+            })
+            .await;
+        assert!(
+            matches!(result, ManifestFetchResult::Fetched { .. }),
+            "expected Fetched: {result:?}"
+        );
         assert_eq!(events.len(), 1);
         assert!(matches!(&events[0], DownloadEvent::ManifestFetched { catalog_count: 1 }));
     }
 
     #[tokio::test]
+    async fn fetch_manifest_rejects_tampered_manifest() {
+        let kp = test_keypair();
+        let pk_str = pk_box_string(&kp);
+        let entries = vec![make_entry("messier", "abc123", "public-domain")];
+        let (mut manifest_bytes, _) = build_signed_manifest_bytes(&kp, entries);
+
+        // Tamper: modify a byte in the manifest JSON.
+        let last = manifest_bytes.last_mut().unwrap();
+        *last = if *last == b'}' { b'X' } else { b'}' };
+
+        let fetcher = FakeFetcher::success(manifest_bytes, vec![]);
+        let mut events = Vec::new();
+        let result =
+            fetch_manifest(&fetcher, "https://example.com/manifest.json", None, &pk_str, |e| {
+                events.push(e);
+            })
+            .await;
+        // Either parse failure or signature failure — both are ManifestFetchFailed
+        // or ManifestSignatureInvalid; key point is it must NOT be Fetched.
+        assert!(
+            !matches!(result, ManifestFetchResult::Fetched { .. }),
+            "tampered manifest must not be accepted: {result:?}"
+        );
+    }
+
+    #[tokio::test]
+    async fn fetch_manifest_rejects_wrong_trusted_key() {
+        let kp1 = test_keypair();
+        let kp2 = test_keypair();
+        let pk_str = pk_box_string(&kp2); // trust kp2's key
+        let entries = vec![make_entry("messier", "abc123", "public-domain")];
+        let (manifest_bytes, _) = build_signed_manifest_bytes(&kp1, entries); // signed by kp1
+
+        let fetcher = FakeFetcher::success(manifest_bytes, vec![]);
+        let mut events = Vec::new();
+        let result =
+            fetch_manifest(&fetcher, "https://example.com/manifest.json", None, &pk_str, |e| {
+                events.push(e);
+            })
+            .await;
+        assert!(
+            matches!(
+                result,
+                ManifestFetchResult::Failed(DownloadError::ManifestSignatureInvalid(_))
+            ),
+            "wrong key must be rejected: {result:?}"
+        );
+    }
+
+    #[tokio::test]
+    async fn fetch_manifest_rejects_unknown_license_code() {
+        let kp = test_keypair();
+        let pk_str = pk_box_string(&kp);
+        let entries = vec![make_entry("messier", "abc123", "gpl-3.0")];
+        let (manifest_bytes, _) = build_signed_manifest_bytes(&kp, entries);
+
+        let fetcher = FakeFetcher::success(manifest_bytes, vec![]);
+        let mut events = Vec::new();
+        let result =
+            fetch_manifest(&fetcher, "https://example.com/manifest.json", None, &pk_str, |e| {
+                events.push(e);
+            })
+            .await;
+        assert!(
+            matches!(result, ManifestFetchResult::Failed(DownloadError::UnknownLicenseCode(_))),
+            "unknown license must hard-fail: {result:?}"
+        );
+    }
+
+    #[tokio::test]
+    async fn fetch_manifest_rejects_unknown_catalog_slug() {
+        let kp = test_keypair();
+        let pk_str = pk_box_string(&kp);
+        let entries = vec![make_entry("opengc", "abc123", "cc-by-sa-4.0")]; // typo slug
+        let (manifest_bytes, _) = build_signed_manifest_bytes(&kp, entries);
+
+        let fetcher = FakeFetcher::success(manifest_bytes, vec![]);
+        let mut events = Vec::new();
+        let result =
+            fetch_manifest(&fetcher, "https://example.com/manifest.json", None, &pk_str, |e| {
+                events.push(e);
+            })
+            .await;
+        assert!(
+            matches!(result, ManifestFetchResult::Failed(DownloadError::UnknownCatalogSlug(_))),
+            "unknown slug must hard-fail: {result:?}"
+        );
+    }
+
+    #[tokio::test]
     async fn fetch_manifest_returns_failed_on_error() {
+        let kp = test_keypair();
+        let pk_str = pk_box_string(&kp);
         let fetcher =
             FakeFetcher::manifest_error(DownloadError::NetworkUnavailable("timeout".into()));
         let mut events = Vec::new();
         let result =
-            fetch_manifest(&fetcher, "https://example.com/manifest.json", None, |e| events.push(e))
-                .await;
+            fetch_manifest(&fetcher, "https://example.com/manifest.json", None, &pk_str, |e| {
+                events.push(e);
+            })
+            .await;
         assert!(matches!(
             result,
             ManifestFetchResult::Failed(DownloadError::NetworkUnavailable(_))
@@ -626,11 +1078,19 @@ mod tests {
 
     // ── FakeFetcher + download_catalog tests ──────────────────────────────
 
+    fn make_manifest_for_download(catalog_id: &str, checksum: &str) -> Manifest {
+        Manifest {
+            version: "1.0.0".into(),
+            signature: "fake-sig-download-test".into(),
+            catalogs: vec![make_entry(catalog_id, checksum, "public-domain")],
+        }
+    }
+
     #[tokio::test]
     async fn download_catalog_succeeds_with_correct_checksum() {
         let data = b"catalog data bytes";
         let checksum = sha256_of(data);
-        let manifest = make_manifest("messier", &checksum);
+        let manifest = make_manifest_for_download("messier", &checksum);
         let manifest_bytes = serde_json::to_vec(&serde_json::json!({
             "version": "1.0.0", "signature": "abc", "catalogs": []
         }))
@@ -657,7 +1117,7 @@ mod tests {
 
     #[tokio::test]
     async fn download_catalog_fails_on_checksum_mismatch() {
-        let manifest = make_manifest("messier", "wrongchecksum");
+        let manifest = make_manifest_for_download("messier", "wrongchecksum");
         let manifest_bytes = serde_json::to_vec(&serde_json::json!({
             "version": "1.0.0", "signature": "abc", "catalogs": []
         }))
@@ -699,7 +1159,7 @@ mod tests {
     async fn download_catalog_emits_failed_on_fetch_error() {
         let data = b"catalog data bytes";
         let checksum = sha256_of(data);
-        let manifest = make_manifest("messier", &checksum);
+        let manifest = make_manifest_for_download("messier", &checksum);
         let manifest_bytes = vec![];
         let fetcher = FakeFetcher::catalog_error(
             manifest_bytes,
@@ -751,5 +1211,24 @@ mod tests {
             "network.unavailable"
         );
         assert_eq!(DownloadError::OriginNotImplemented.error_code(), "origin.not_implemented");
+        assert_eq!(
+            DownloadError::UnknownLicenseCode("gpl-3.0".into()).error_code(),
+            "manifest.unknown_license_code"
+        );
+        assert_eq!(
+            DownloadError::UnknownCatalogSlug("opengc".into()).error_code(),
+            "manifest.unknown_catalog_slug"
+        );
+    }
+
+    // ── manifest_signed_bytes ─────────────────────────────────────────────
+
+    #[test]
+    fn manifest_signed_bytes_is_deterministic() {
+        let entries = vec![make_entry("messier", "abc", "public-domain")];
+        let b1 = manifest_signed_bytes(&entries).unwrap();
+        let b2 = manifest_signed_bytes(&entries).unwrap();
+        assert_eq!(b1, b2);
+        assert!(!b1.is_empty());
     }
 }

@@ -23,6 +23,8 @@ sha2.workspace = true
 hex.workspace = true
 # Async trait object support for CatalogFetcher.
 async-trait.workspace = true
+# Minisign signature verification (MIT, D5, FR-026).
+minisign.workspace = true
 
 [dev-dependencies]
 tokio = { workspace = true }

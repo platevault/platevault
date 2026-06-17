@@ -145,11 +145,13 @@ pub async fn catalog_download(
 
 /// Convert a `contracts_core::catalogs::CatalogManifest` into the internal
 /// `targeting_catalogs::download::Manifest` type.
+///
+/// The license string is passed through verbatim — it was validated against
+/// the closed set at `fetch_manifest` time (FR-027, T069). No silent fallback.
 fn contract_manifest_to_internal(
     m: &contracts_core::catalogs::CatalogManifest,
 ) -> targeting_catalogs::download::Manifest {
     use targeting_catalogs::download::ManifestEntry;
-    use targeting_catalogs::license::LicenseShortCode;
 
     targeting_catalogs::download::Manifest {
         version: m.version.clone(),
@@ -162,8 +164,8 @@ fn contract_manifest_to_internal(
                 version: e.version.clone(),
                 url: e.url.clone(),
                 checksum: e.checksum.clone(),
-                license: LicenseShortCode::parse_code(&e.license)
-                    .unwrap_or(LicenseShortCode::PublicDomain),
+                // license is a raw String (validated upstream at fetch_manifest time).
+                license: e.license.clone(),
                 size_bytes: e.size_bytes,
             })
             .collect(),

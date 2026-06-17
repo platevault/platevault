@@ -19,10 +19,14 @@ use contracts_core::catalogs::{
     LicenseAttribution as ContractAttribution, ManifestCatalogEntry, ManifestFetchStatus,
 };
 use contracts_core::{ContractError, ErrorSeverity};
-use persistence_db::repositories::catalogs::{self as repo, AttributionRow, CatalogRow};
+use persistence_db::repositories::catalogs::{
+    self as repo, AttributionRow, CatalogInstallRequest, CatalogOrigin as RepoCatalogOrigin,
+    CatalogRow,
+};
 use sqlx::SqlitePool;
 use targeting_catalogs::download::{
     CatalogDownloadResult, CatalogFetcher, DownloadEvent, Manifest, ManifestFetchResult,
+    TRUSTED_PUBLIC_KEY,
 };
 use time::OffsetDateTime;
 use uuid::Uuid;
@@ -80,7 +84,8 @@ fn download_manifest_to_contract(manifest: &Manifest) -> CatalogManifest {
                 version: e.version.clone(),
                 url: e.url.clone(),
                 checksum: e.checksum.clone(),
-                license: e.license.as_str().to_owned(),
+                // license is now a raw String (validated at fetch_manifest time).
+                license: e.license.clone(),
                 size_bytes: e.size_bytes,
             })
             .collect(),
@@ -139,11 +144,29 @@ pub async fn manifest_fetch<F: CatalogFetcher>(
     req: &CatalogManifestFetchRequest,
     manifest_url: &str,
 ) -> Result<CatalogManifestFetchResponse, ContractError> {
+    manifest_fetch_with_key(fetcher, req, manifest_url, TRUSTED_PUBLIC_KEY).await
+}
+
+/// Like [`manifest_fetch`] but accepts an explicit trusted public key box string.
+///
+/// Used by tests to inject a test keypair; production callers use
+/// [`manifest_fetch`] which uses the embedded [`TRUSTED_PUBLIC_KEY`].
+///
+/// # Errors
+///
+/// Returns `ContractError` on unexpected internal failure.
+pub async fn manifest_fetch_with_key<F: CatalogFetcher>(
+    fetcher: &F,
+    req: &CatalogManifestFetchRequest,
+    manifest_url: &str,
+    trusted_pk_box: &str,
+) -> Result<CatalogManifestFetchResponse, ContractError> {
     let mut events = Vec::new();
     let result = targeting_catalogs::download::fetch_manifest(
         fetcher,
         manifest_url,
         req.etag.as_deref(),
+        trusted_pk_box,
         |e| events.push(e),
     )
     .await;
@@ -236,12 +259,11 @@ pub async fn download<F: CatalogFetcher>(
                     (Some(e), Some(meta)) => (
                         e.version.clone(),
                         meta.source_url.clone(),
-                        e.license.as_str().to_owned(),
+                        // license is now a raw String (validated upstream).
+                        e.license.clone(),
                         meta.entry_count,
                     ),
-                    (Some(e), None) => {
-                        (e.version.clone(), e.url.clone(), e.license.as_str().to_owned(), None)
-                    }
+                    (Some(e), None) => (e.version.clone(), e.url.clone(), e.license.clone(), None),
                     _ => ("unknown".to_owned(), String::new(), "public-domain".to_owned(), None),
                 };
 
@@ -255,15 +277,20 @@ pub async fn download<F: CatalogFetcher>(
                 entry_count,
             };
 
-            // Upsert catalog row.
-            repo::upsert_catalog(pool, &catalog_row).await.map_err(|e| db_err(&e))?;
-
             // Build attribution from registry. For v1 we write a minimal
-            // public-domain "verified" string for catalogs without richer data.
-            // The full attribution text ships with the catalog bundle in v1.x.
+            // attribution from registry metadata; the catalog bundle supplies
+            // richer attribution sidecar in v1.x.
             let attribution = build_attribution(catalog_id, &catalog_row.license);
-            repo::delete_attributions(pool, catalog_id).await.map_err(|e| db_err(&e))?;
-            repo::insert_attribution(pool, &attribution).await.map_err(|e| db_err(&e))?;
+
+            // Atomic install — catalog row + attribution in one transaction
+            // (FR-028, T071). Signature was verified by fetch_manifest above.
+            let install_req = CatalogInstallRequest {
+                origin: RepoCatalogOrigin::Downloaded,
+                catalog: &catalog_row,
+                attributions: &[attribution],
+                signature_verified: true,
+            };
+            repo::upsert_catalog_atomic(pool, &install_req).await.map_err(|e| db_err(&e))?;
 
             tracing::info!("catalog.download installed {catalog_id} audit={audit_id}");
 
@@ -289,7 +316,8 @@ fn build_attribution(catalog_id: &str, license_str: &str) -> AttributionRow {
         let today = now_iso()[..10].to_owned(); // YYYY-MM-DD slice
 
         return match meta.license {
-            LicenseShortCode::CcBySa4_0 if catalog_id == "opengc" => AttributionRow {
+            // Slug corrected from "opengc" to "openngc" per D3 / FR-029 / T070.
+            LicenseShortCode::CcBySa4_0 if catalog_id == "openngc" => AttributionRow {
                 catalog_id: catalog_id.to_owned(),
                 license: license_str.to_owned(),
                 text: "OpenNGC database by Mattia Verga, licensed under CC BY-SA 4.0. Column subset (name, ra, dec, identifiers) used. Source: https://github.com/mattiaverga/OpenNGC".to_owned(),
@@ -345,9 +373,11 @@ fn build_attribution(catalog_id: &str, license_str: &str) -> AttributionRow {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use minisign::KeyPair;
     use persistence_db::Database;
-    use targeting_catalogs::download::{DownloadError, FakeFetcher, Manifest, ManifestEntry};
-    use targeting_catalogs::license::LicenseShortCode;
+    use targeting_catalogs::download::{
+        manifest_signed_bytes, DownloadError, FakeFetcher, Manifest, ManifestEntry,
+    };
 
     async fn setup() -> Database {
         let db = Database::in_memory().await.expect("in-memory DB");
@@ -355,16 +385,46 @@ mod tests {
         db
     }
 
+    // ── Test keypair helpers ───────────────────────────────────────────────
+
+    fn test_keypair() -> KeyPair {
+        KeyPair::generate_unencrypted_keypair().expect("keypair generation failed")
+    }
+
+    fn pk_box_string(kp: &KeyPair) -> String {
+        kp.pk.to_box().expect("pk to_box failed").to_string()
+    }
+
+    fn sign_data(kp: &KeyPair, data: &[u8]) -> String {
+        let sig_box = minisign::sign(None, &kp.sk, std::io::Cursor::new(data), None, None)
+            .expect("sign failed");
+        sig_box.into_string()
+    }
+
+    /// Build a correctly-signed manifest with a fresh test keypair.
+    /// Returns (manifest, pk_box_string) so tests can call manifest_fetch_with_key.
+    fn make_signed_manifest(entries: Vec<ManifestEntry>) -> (Manifest, String, KeyPair) {
+        let kp = test_keypair();
+        let signed_bytes = manifest_signed_bytes(&entries).unwrap();
+        let sig_str = sign_data(&kp, &signed_bytes);
+        let pk_str = pk_box_string(&kp);
+        let manifest = Manifest { version: "1.0.0".into(), signature: sig_str, catalogs: entries };
+        (manifest, pk_str, kp)
+    }
+
     fn make_manifest(catalog_id: &str, checksum: &str) -> Manifest {
+        // Pre-signed manifest for use in download tests (signature not verified
+        // in download_catalog — only fetch_manifest verifies it).
         Manifest {
             version: "1.0.0".into(),
-            signature: "fake-sig".into(),
+            signature: "fake-sig-download-test".into(),
             catalogs: vec![ManifestEntry {
                 catalog_id: catalog_id.into(),
                 version: "1.0.0".into(),
                 url: "https://example.com/catalog.json".into(),
                 checksum: checksum.into(),
-                license: LicenseShortCode::PublicDomain,
+                // license is now a raw String; use the canonical code string.
+                license: "public-domain".into(),
                 size_bytes: 1024,
             }],
         }
@@ -463,32 +523,35 @@ mod tests {
     #[tokio::test]
     async fn manifest_fetch_returns_not_modified_on_304() {
         let fetcher = FakeFetcher::not_modified();
+        let kp = test_keypair();
+        let pk_str = pk_box_string(&kp);
         let req = CatalogManifestFetchRequest { etag: Some("\"etag-1\"".into()) };
         let resp =
-            manifest_fetch(&fetcher, &req, "https://example.com/manifest.json").await.unwrap();
+            manifest_fetch_with_key(&fetcher, &req, "https://example.com/manifest.json", &pk_str)
+                .await
+                .unwrap();
         assert_eq!(resp.status, ManifestFetchStatus::NotModified);
         assert!(resp.manifest.is_none());
     }
 
     #[tokio::test]
     async fn manifest_fetch_returns_fetched_on_success() {
-        let manifest_json = serde_json::json!({
-            "version": "1.0.0",
-            "signature": "abc",
-            "catalogs": [{
-                "catalog_id": "messier",
-                "version": "1.0.0",
-                "url": "https://example.com/messier.json",
-                "checksum": "abc123",
-                "license": "public-domain",
-                "size_bytes": 1024
-            }]
-        });
-        let bytes = serde_json::to_vec(&manifest_json).unwrap();
+        let entries = vec![ManifestEntry {
+            catalog_id: "messier".into(),
+            version: "1.0.0".into(),
+            url: "https://example.com/messier.json".into(),
+            checksum: "abc123".into(),
+            license: "public-domain".into(),
+            size_bytes: 1024,
+        }];
+        let (manifest, pk_str, _kp) = make_signed_manifest(entries);
+        let bytes = serde_json::to_vec(&manifest).unwrap();
         let fetcher = FakeFetcher::success(bytes, vec![]);
         let req = CatalogManifestFetchRequest { etag: None };
         let resp =
-            manifest_fetch(&fetcher, &req, "https://example.com/manifest.json").await.unwrap();
+            manifest_fetch_with_key(&fetcher, &req, "https://example.com/manifest.json", &pk_str)
+                .await
+                .unwrap();
         assert_eq!(resp.status, ManifestFetchStatus::Fetched);
         assert!(resp.manifest.is_some());
         assert_eq!(resp.manifest.unwrap().catalogs.len(), 1);
@@ -498,9 +561,13 @@ mod tests {
     async fn manifest_fetch_returns_failed_on_network_error() {
         let fetcher =
             FakeFetcher::manifest_error(DownloadError::NetworkUnavailable("offline".into()));
+        let kp = test_keypair();
+        let pk_str = pk_box_string(&kp);
         let req = CatalogManifestFetchRequest { etag: None };
         let resp =
-            manifest_fetch(&fetcher, &req, "https://example.com/manifest.json").await.unwrap();
+            manifest_fetch_with_key(&fetcher, &req, "https://example.com/manifest.json", &pk_str)
+                .await
+                .unwrap();
         assert_eq!(resp.status, ManifestFetchStatus::Failed);
         assert!(resp.error.is_some());
         assert_eq!(resp.error.unwrap().code, "network.unavailable");
@@ -574,33 +641,34 @@ mod tests {
     }
 
     #[tokio::test]
-    async fn download_opengc_writes_cc_attribution() {
+    async fn download_openngc_writes_cc_attribution() {
+        // Slug corrected from "opengc" (typo) to "openngc" per D3 / FR-029 / T070.
         let db = setup().await;
-        let data = b"opengc data";
+        let data = b"openngc data";
         let checksum = sha256_of(data);
 
         let manifest = Manifest {
             version: "1.0.0".into(),
-            signature: "abc".into(),
+            signature: "fake-sig-download-test".into(),
             catalogs: vec![ManifestEntry {
-                catalog_id: "opengc".into(),
+                catalog_id: "openngc".into(),
                 version: "2024.01".into(),
-                url: "https://example.com/opengc.json".into(),
+                url: "https://example.com/openngc.json".into(),
                 checksum: checksum.clone(),
-                license: LicenseShortCode::CcBySa4_0,
+                license: "cc-by-sa-4.0".into(),
                 size_bytes: 1024,
             }],
         };
         let fetcher = FakeFetcher::success(vec![], data.to_vec());
 
-        let req = CatalogDownloadRequest { catalog_id: "opengc".into() };
+        let req = CatalogDownloadRequest { catalog_id: "openngc".into() };
         let resp = download(db.pool(), &fetcher, &manifest, &req).await.unwrap();
         assert_eq!(resp.status, CatalogDownloadStatus::Success);
 
         let attrs = attribution_get(db.pool()).await.unwrap();
-        let opengc_attr = attrs.attributions.iter().find(|a| a.catalog_id == "opengc").unwrap();
-        assert_eq!(opengc_attr.author.as_deref(), Some("Mattia Verga"));
-        assert!(opengc_attr.license_uri.is_some());
+        let openngc_attr = attrs.attributions.iter().find(|a| a.catalog_id == "openngc").unwrap();
+        assert_eq!(openngc_attr.author.as_deref(), Some("Mattia Verga"));
+        assert!(openngc_attr.license_uri.is_some());
     }
 
     // ── T003 / T010: origin.not_implemented test ──────────────────────────
