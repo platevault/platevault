@@ -122,6 +122,7 @@ pub async fn log_export(
         log_stream::export_entries(pool, options).await.map_err(|e| e.code_str().to_owned())?;
 
     Ok(LogExportResponse {
+        status: "success".to_owned(),
         contract_version: LOG_ENTRY_CONTRACT_VERSION.to_owned(),
         request_id,
         file_path: out_path,

@@ -4,7 +4,14 @@
   "title": "LogEntry",
   "description": "A projected log entry from the audit event bus or diagnostic stream (spec 019).",
   "type": "object",
-  "required": ["id", "contractVersion", "time", "level", "source", "message"],
+  "required": [
+    "id",
+    "contractVersion",
+    "time",
+    "level",
+    "source",
+    "message"
+  ],
   "additionalProperties": false,
   "properties": {
     "id": {
@@ -14,8 +21,8 @@
     },
     "contractVersion": {
       "type": "string",
-      "const": "1",
-      "description": "Schema version of this LogEntry shape (H1)."
+      "const": "2.0.0",
+      "description": "Schema version of this LogEntry shape (H1). Always \"2.0.0\"."
     },
     "time": {
       "type": "string",
@@ -24,7 +31,12 @@
     },
     "level": {
       "type": "string",
-      "enum": ["error", "warn", "info", "debug"]
+      "enum": [
+        "error",
+        "warn",
+        "info",
+        "debug"
+      ]
     },
     "source": {
       "type": "string",

@@ -222,6 +222,7 @@ export async function mockInvoke<T>(
       return {
         contractVersion: '1',
         requestId: (_args as Record<string, string>)?.requestId ?? 'mock-req',
+        status: 'success',
         filePath: (_args as Record<string, string>)?.filePath ?? '/tmp/log-export.json',
         count: 8,
         bytes: 1024,

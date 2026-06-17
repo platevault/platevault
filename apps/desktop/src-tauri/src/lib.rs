@@ -550,6 +550,32 @@ pub fn run_app(app: tauri::App, pool: SqlitePool) {
     // spec 012: artifact filesystem watcher → artifact.detected + artifact.classified events.
     crate::watcher::spawn_artifact_watcher(pool.clone(), bus.clone());
 
+    // spec 018 T020: emit a settings.snapshot at session start, then every 5 minutes.
+    // This gives the audit log a durable record of the active configuration even when
+    // noisy keys (pattern, protectedCategories, …) haven't changed individually.
+    {
+        let snap_pool = pool.clone();
+        let snap_bus = bus.clone();
+        tokio::spawn(async move {
+            // Session-start snapshot.
+            if let Err(e) =
+                app_core::settings::emit_snapshot(&snap_pool, &snap_bus, "session_start").await
+            {
+                tracing::warn!("settings.snapshot (session_start) failed: {e:?}");
+            }
+            // Debounce loop: emit every 5 minutes while the app is running.
+            let interval = std::time::Duration::from_mins(5);
+            loop {
+                tokio::time::sleep(interval).await;
+                if let Err(e) =
+                    app_core::settings::emit_snapshot(&snap_pool, &snap_bus, "debounce_5min").await
+                {
+                    tracing::warn!("settings.snapshot (debounce_5min) failed: {e:?}");
+                }
+            }
+        });
+    }
+
     let repo = Arc::new(SqliteLifecycleRepository::new(pool, bus.clone()));
     let state = AppState::new(repo, bus);
 

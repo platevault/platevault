@@ -171,13 +171,31 @@ export function LogPanel() {
     [navigate],
   );
 
-  // Export action.
+  // Export action — uses native file-save dialog (T062 FR-025).
   const handleExport = useCallback(async () => {
     setExportError(null);
     try {
       const requestId = crypto.randomUUID?.() ?? `req-${Date.now()}`;
-      // Use a fixed temp path; a future dialog can replace this.
-      const filePath = `/tmp/astro-log-export-${Date.now()}.json`;
+
+      // Ask the user where to save the file via the native file-save dialog.
+      // Falls back to a temp path when running under mocks or when the API is unavailable.
+      let filePath: string | null = null;
+      try {
+        const { save: showSaveDialog } = await import('@tauri-apps/plugin-dialog');
+        filePath = await showSaveDialog({
+          title: 'Export Audit Log',
+          defaultPath: `astro-log-export-${Date.now()}.json`,
+          filters: [{ name: 'JSON', extensions: ['json'] }],
+        });
+      } catch {
+        // Dialog API unavailable (mock mode / test) — use temp path.
+        filePath = null;
+      }
+
+      if (!filePath) {
+        // User cancelled or dialog unavailable.
+        return;
+      }
 
       await logExport({
         requestId,

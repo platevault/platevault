@@ -193,7 +193,8 @@ pub struct ProjectCreateRequest {
 #[serde(rename_all = "camelCase")]
 pub struct ProjectCreateResult {
     pub project_id: String,
-    /// Always `"setup_incomplete"` (invariant per data-model.md).
+    /// Initial lifecycle state. `"setup_incomplete"` when the project has no sources at create time;
+    /// may auto-transition to `"ready"` when sources are provided in the create request (FR-008).
     pub lifecycle: String,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub plan_id: Option<String>,

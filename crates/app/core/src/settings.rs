@@ -60,6 +60,7 @@ pub const ALL_V1_KEYS: &[&str] = &[
     "calibration.dark.override_penalty",
     "calibration.flat.override_penalty",
     "calibration.bias.override_penalty",
+    "calibration.aging_threshold_days",
     "imagetyp_normalization.user_mappings",
 ];
 
@@ -234,6 +235,12 @@ pub fn validate_value(key: &str, value: &Value) -> Result<(), ContractError> {
             let n = value.as_f64().ok_or_else(|| invalid("must be a number"))?;
             if n < 0.0 {
                 return Err(invalid("must be >= 0"));
+            }
+        }
+        "calibration.aging_threshold_days" => {
+            let n = value.as_f64().ok_or_else(|| invalid("must be a number"))?;
+            if !(1.0..=3650.0).contains(&n) {
+                return Err(invalid("must be in [1, 3650]"));
             }
         }
         k if k == "calibration.dark.override_penalty"
@@ -514,6 +521,11 @@ fn apply_value_to_state(key: &str, value: Value, state: &mut SettingsState) {
                 state.calibration_bias_override_penalty = v;
             }
         }
+        "calibration.aging_threshold_days" => {
+            if let Some(v) = value.as_f64() {
+                state.calibration_aging_threshold_days = v;
+            }
+        }
         "imagetyp_normalization.user_mappings" => {
             if let Ok(v) = serde_json::from_value(value) {
                 state.imagetyp_normalization_user_mappings = v;
@@ -565,6 +577,9 @@ fn default_value_for_key(key: &str) -> Value {
         }
         "calibration.bias.override_penalty" => {
             serde_json::json!(defaults.calibration_bias_override_penalty)
+        }
+        "calibration.aging_threshold_days" => {
+            serde_json::json!(defaults.calibration_aging_threshold_days)
         }
         "imagetyp_normalization.user_mappings" => {
             serde_json::to_value(&defaults.imagetyp_normalization_user_mappings)
@@ -1128,6 +1143,68 @@ mod tests {
         assert!(!is_valid_key("tools.UPPERCASE.bundle_id"));
         assert!(!is_valid_key("tools..bundle_id"));
         assert!(!is_valid_key("calibration.video.override_penalty")); // video not valid frame type
+    }
+
+    // ── T056: aging_threshold_days persists + consumer reads it (FR-023) ──
+
+    #[tokio::test]
+    async fn aging_threshold_days_persists_and_is_readable() {
+        let (db, bus) = setup().await;
+
+        // Default should be 90.
+        let defaults = SettingsState::default();
+        assert!(
+            (defaults.calibration_aging_threshold_days - 90.0).abs() < f64::EPSILON,
+            "default aging threshold must be 90 days"
+        );
+
+        // Persist a custom value.
+        let req = SettingsUpdateRequest {
+            key: "calibration.aging_threshold_days".to_owned(),
+            value: contracts_core::JsonAny::from(serde_json::json!(180)),
+        };
+        let resp = update_setting(db.pool(), &bus, &req).await.unwrap();
+        assert_eq!(resp.status, SettingsUpdateStatus::Success);
+
+        // Read it back via get_settings — consumer path.
+        let get_resp = get_settings(db.pool(), &bus).await.unwrap();
+        assert!(
+            (get_resp.settings.calibration_aging_threshold_days - 180.0).abs() < f64::EPSILON,
+            "calibration.aging_threshold_days must round-trip: got {}",
+            get_resp.settings.calibration_aging_threshold_days
+        );
+    }
+
+    #[tokio::test]
+    async fn aging_threshold_days_rejects_bogus_scope_key() {
+        // The old bug key 'aging_threshold_days' under scope 'calibration_matching'
+        // was not in ALL_V1_KEYS. Verify this key is correctly rejected.
+        let (db, bus) = setup().await;
+        let req = SettingsUpdateRequest {
+            key: "aging_threshold_days".to_owned(), // the old buggy key name
+            value: contracts_core::JsonAny::from(serde_json::json!(90)),
+        };
+        let err = update_setting(db.pool(), &bus, &req).await.unwrap_err();
+        assert_eq!(
+            err.code, "key.unknown",
+            "old bogus key 'aging_threshold_days' must be rejected"
+        );
+    }
+
+    // ── T057: emit_snapshot fires (FR-024) ────────────────────────────
+
+    #[tokio::test]
+    async fn emit_snapshot_fires_and_publishes_event() {
+        let (db, bus) = setup().await;
+        let mut rx = bus.subscribe();
+
+        // Call emit_snapshot — must not error.
+        emit_snapshot(db.pool(), &bus, "test_trigger").await.unwrap();
+
+        // There must be at least one event published on the bus.
+        // Use try_recv to avoid blocking — the publish is synchronous inside the call.
+        let msg = rx.try_recv();
+        assert!(msg.is_ok(), "emit_snapshot must publish a settings.snapshot event on the bus");
     }
 
     #[test]

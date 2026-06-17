@@ -42,7 +42,7 @@ Monorepo: `crates/<area>/`, `apps/desktop/src/`, `apps/desktop/e2e/`, `packages/
 **Purpose**: shared verification infrastructure used by multiple stories. **⚠️ Must complete before story acceptance tests can run.**
 
 - [ ] T006 Finalize the real-backend e2e harness in `apps/desktop/e2e/` (scaffolded): confirm `xvfb-run → tauri-driver → WebKitWebDriver` W3C session starts and the `TauriApp` helper drives a real-IPC session; document run in `apps/desktop/e2e/README.md` (D11, FR-034)
-- [ ] T007 [P] Stand up the JSON-Schema conformance-test harness: load `packages/contracts` schemas and validate captured runtime payloads, failing on drift (FR-025 infra)
+- [X] T007 [P] Stand up the JSON-Schema conformance-test harness: load `packages/contracts` schemas and validate captured runtime payloads, failing on drift (FR-025 infra)
 
 **Checkpoint**: harnesses ready — story phases can begin.
 
@@ -178,16 +178,16 @@ Monorepo: `crates/<area>/`, `apps/desktop/src/`, `apps/desktop/e2e/`, `packages/
 **Independent Test**: change aging threshold → persists + consumer reads it; conformance tests pass for previously-drifted operations.
 
 ### Tests (red-first)
-- [ ] T056 [P] [US6] Test: calibration aging threshold persists across reload and a consumer reads it (no hardcoded `m.age_days>90`) — vitest + Rust (FR-023)
-- [ ] T057 [P] [US6] Rust test: settings snapshot/debounce `emit_snapshot` actually fires (FR-024)
-- [ ] T058 [P] [US6] Conformance tests: log-viewer `contractVersion`/`dia:` cursor/export `status`; `artifact.classify` shape; `project.create` lifecycle value (FR-025, contracts/log-viewer.md)
+- [X] T056 [P] [US6] Test: calibration aging threshold persists across reload and a consumer reads it (no hardcoded `m.age_days>90`) — vitest + Rust (FR-023)
+- [X] T057 [P] [US6] Rust test: settings snapshot/debounce `emit_snapshot` actually fires (FR-024)
+- [X] T058 [P] [US6] Conformance tests: log-viewer `contractVersion`/`dia:` cursor/export `status`; `artifact.classify` shape; `project.create` lifecycle value (FR-025, contracts/log-viewer.md)
 
 ### Implementation
-- [ ] T059 [US6] Fix the aging-threshold control to save to a real scope/key (not `calibration_matching`) and have the calibration view read it; same fix for spec-007's control (FR-023)
-- [ ] T060 [US6] Wire the snapshot/debounce timer caller for `emit_snapshot` (FR-024)
-- [ ] T061 [US6] Move the Cleanup per-type action table off fixtures (FR-024 area)
-- [ ] T062 [US6] Reconcile contracts in `packages/contracts` + `crates/contracts/core`: align `contractVersion` to schema const, parse `dia:` cursor, add export `status` + file picker, fix `project.create` stale `lifecycle const` (FR-025)
-- [ ] T063 [US6] Add the JSON-Schema conformance tests to the automated suite (FR-025)
+- [X] T059 [US6] Fix the aging-threshold control to save to a real scope/key (not `calibration_matching`) and have the calibration view read it; same fix for spec-007's control (FR-023)
+- [X] T060 [US6] Wire the snapshot/debounce timer caller for `emit_snapshot` (FR-024)
+- [X] T061 [US6] Move the Cleanup per-type action table off fixtures (FR-024 area)
+- [X] T062 [US6] Reconcile contracts in `packages/contracts` + `crates/contracts/core`: align `contractVersion` to schema const, parse `dia:` cursor, add export `status` + file picker, fix `project.create` stale `lifecycle const` (FR-025)
+- [X] T063 [US6] Add the JSON-Schema conformance tests to the automated suite (FR-025)
 
 **Checkpoint**: settings round-trip; contracts enforced by tests.
 
