@@ -7,6 +7,55 @@
 > *known-deferred (acceptable)* or *surprise gap / phantom completion (dangerous)*.
 > This file — not the `tasks.md` checkboxes — is the accurate open-work ledger.
 
+## Fixes applied (2026-06-17, committed on main)
+
+Verified with: full gate suite re-run after the changes (`cargo fmt`/`clippy -D
+warnings` clean, **rust 1087/0**, typecheck clean, **vitest 465**), a mocks
+runtime re-smoke, and a real-backend headless boot (`xvfb` + `tauri dev`,
+`VITE_USE_MOCKS=false`) that starts cleanly with no panics.
+
+- **R-1 fixed** — index route `/` now `redirect`s to `/sessions` instead of
+  rendering `SessionsPage`; returning users land on the app, not the error
+  boundary. Re-smoked: `/` → `/sessions`, 0 console errors.
+- **R-2 fixed** — `MastersList` null-guards every `fingerprint` field; the
+  Calibration ledger renders even when a master has no fingerprint. Re-smoked:
+  `/calibration` renders "11 masters", 0 errors.
+- **Backlog A-1 (partial)** — `start_inbox_plan_listener` (005) and
+  `start_log_forwarder` (019) are now spawned in `run_app`, so inbox items
+  auto-resolve after apply and the live log push works. (024 manifest subscriber,
+  012 watcher, 010 auto-advance still need more than wiring — see below.)
+- **028** — undefined `var(--alm-radius)` → `--alm-radius-md`; dead raw-hex
+  `var()` fallbacks removed; added a desktop `lint` script so `just lint`
+  actually runs eslint + the token guard (neither ran before).
+
+### Tooling correction (supersedes the run's "WSL is headless" assumption)
+The real Tauri app **does** run headless here: `webkit2gtk-4.1`, `xvfb`,
+`tauri-driver`, and `WebKitWebDriver` are installed, and WSLg provides a display.
+`xvfb-run tauri dev` (real backend, real SQLite IPC) boots cleanly. Future
+validation can drive the real app via `tauri-driver`/WebDriver, not just mocks.
+
+### Remaining (deliberately NOT hot-fixed — backend+migration efforts / design calls)
+Each carries real regression risk or needs a decision; fixing hastily would
+violate the project's "verify before closing" bar. Tracked here, unchanged:
+- **025 T1-2 (safety)** — library-root path join + escape/symlink check before
+  apply; separate destructive-confirm signal from `is_protected`; per-item audit
+  on bulk cancel. Do before any real `plan.apply`.
+- **016 T1-1** — protection gating is blocked on the unbuilt cleanup-plan
+  generator, not just tagging; reviving it needs that generator to emit items
+  carrying real source/category (then call `resolve_protection`).
+- **009 T1-3** — persist a typed blocked-reason (migration + `project_health`
+  write + DTO) so the banner shows the real reason; reconcile the two project
+  tables; audit auto-transitions.
+- **006 / 007 / 023** — populate session `root_id`, calibration fingerprints, and
+  `target_id` FK from ingestion; replace the `search.global` fixture stub with a
+  real cross-entity query. **023 nav**: "Targets" in primary nav is a v4-vs-spec
+  conflict needing a product decision (not silently changed).
+- **014 T1-4** — implement minisign signature verification before the catalogs
+  repo ships (external-blocked today).
+- **024 / 012 / 010** — manifest subscriber (needs async-capable root resolver),
+  artifact watcher (needs notify loop + watch paths), guided auto-advance
+  (frontend event wiring).
+
 ## Gate truth (independently re-run in WSL, 2026-06-17)
 
 | Gate | Result |
