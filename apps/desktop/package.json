@@ -11,6 +11,7 @@
     "test:watch": "vitest",
     "test:e2e": "playwright test",
     "typecheck": "tsc --noEmit",
+    "lint": "eslint src/ && bash ../../scripts/check-tokens.sh",
     "lint:eslint": "eslint src/",
     "check:tokens": "bash ../../scripts/check-tokens.sh"
   },

@@ -146,7 +146,7 @@ function PatternChipsEditor({
                 zIndex: 10,
                 background: 'var(--alm-surface)',
                 border: '1px solid var(--alm-border)',
-                borderRadius: 'var(--alm-radius)',
+                borderRadius: 'var(--alm-radius-md)',
                 padding: 'var(--alm-sp-1)',
                 minWidth: 160,
                 boxShadow: '0 4px 12px rgba(0,0,0,0.12)',
@@ -199,7 +199,7 @@ function PatternChipsEditor({
                 zIndex: 10,
                 background: 'var(--alm-surface)',
                 border: '1px solid var(--alm-border)',
-                borderRadius: 'var(--alm-radius)',
+                borderRadius: 'var(--alm-radius-md)',
                 padding: 'var(--alm-sp-1)',
                 minWidth: 100,
                 boxShadow: '0 4px 12px rgba(0,0,0,0.12)',
@@ -239,7 +239,7 @@ function PatternChipsEditor({
           style={{
             marginTop: 'var(--alm-sp-1)',
             fontSize: 'var(--alm-text-xs)',
-            color: 'var(--alm-danger, #c0392b)',
+            color: 'var(--alm-danger)',
           }}
           role="alert"
         >
@@ -399,7 +399,7 @@ export function NamingStructure({ save }: NamingStructureProps) {
           </div>
         )}
         {previewError && (
-          <div style={{ fontSize: 'var(--alm-text-xs)', color: 'var(--alm-danger, #c0392b)' }}>
+          <div style={{ fontSize: 'var(--alm-text-xs)', color: 'var(--alm-danger)' }}>
             {previewError}
           </div>
         )}
