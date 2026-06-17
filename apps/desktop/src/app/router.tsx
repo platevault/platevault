@@ -240,11 +240,11 @@ const indexRoute = createRoute({
     if (!complete) {
       throw redirect({ to: '/setup' });
     }
+    // Setup complete: land on the Sessions ledger. We MUST redirect rather than
+    // render SessionsPage here — SessionsPage calls useSearch({from:'/shell/sessions'}),
+    // which throws an invariant when the active match is the index route ('/shell/').
+    throw redirect({ to: '/sessions' });
   },
-  component: lazyRouteComponent(
-    () => import('@/features/sessions/SessionsPage'),
-    'SessionsPage',
-  ),
 });
 
 // --- Route tree ---

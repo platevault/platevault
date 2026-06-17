@@ -93,10 +93,13 @@ export function MastersList({ masters, loading, error, selected, onSelect }: Pro
           <div className="alm-group-header">{GROUP_LABELS[group.kind]}</div>
           {group.items.map((m) => {
             const isAging = m.age_days > 90;
-            const gainStr = `g${m.fingerprint.gain}`;
-            const tempStr =
-              m.fingerprint.temp_c != null ? `${m.fingerprint.temp_c}°C` : '';
-            const expStr = `${m.fingerprint.exposure_s}s`;
+            // Fingerprint may be absent on real master rows (e.g. metadata not yet
+            // extracted); guard every field rather than assuming it is populated.
+            const fp = m.fingerprint;
+            const gainStr = fp?.gain != null ? `g${fp.gain}` : '';
+            const tempStr = fp?.temp_c != null ? `${fp.temp_c}°C` : '';
+            const expStr = fp?.exposure_s != null ? `${fp.exposure_s}s` : '';
+            const cameraStr = fp?.camera ? fp.camera.replace('ASI', '') : '';
 
             return (
               <ListItem
@@ -110,7 +113,7 @@ export function MastersList({ masters, loading, error, selected, onSelect }: Pro
                 }
                 meta={
                   <>
-                    {m.kind !== 'bias' && (
+                    {m.kind !== 'bias' && expStr && (
                       <>
                         {expStr}
                         <span className="alm-list-item__meta-sep">·</span>
@@ -122,9 +125,13 @@ export function MastersList({ masters, loading, error, selected, onSelect }: Pro
                         <span className="alm-list-item__meta-sep">·</span>
                       </>
                     )}
-                    {gainStr}
-                    <span className="alm-list-item__meta-sep">·</span>
-                    {m.fingerprint.camera.replace('ASI', '')}
+                    {gainStr && (
+                      <>
+                        {gainStr}
+                        {cameraStr && <span className="alm-list-item__meta-sep">·</span>}
+                      </>
+                    )}
+                    {cameraStr}
                     {isAging && (
                       <>
                         <span className="alm-list-item__meta-sep">·</span>
