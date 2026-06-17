@@ -155,7 +155,7 @@ export function CalibrationMatchPanel({ sessionIds }: Props) {
               gap: 'var(--alm-sp-1)',
               padding: 'var(--alm-sp-2)',
               background: 'var(--alm-surface-overlay)',
-              borderRadius: 'var(--alm-radius)',
+              borderRadius: 'var(--alm-radius-md)',
             }}
             data-testid={`cal-session-${sid}`}
           >
