@@ -83,9 +83,11 @@ export function StepTools({ tools, onToolsChange }: StepToolsProps) {
   }, []);
 
   const handleToggle = (key: keyof ToolsState, checked: boolean) => {
+    // Only flip `enabled`; keep the (detected or manually-set) path so disabling →
+    // re-enabling doesn't lose detection and flip the tool back to "Not detected".
     onToolsChange({
       ...tools,
-      [key]: { ...tools[key], enabled: checked, path: checked ? tools[key].path : null },
+      [key]: { ...tools[key], enabled: checked },
     });
   };
 
