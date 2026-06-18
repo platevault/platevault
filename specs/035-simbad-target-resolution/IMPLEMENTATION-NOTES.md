@@ -134,9 +134,14 @@ Real bugs found (the gates earned their keep — these were integration gaps the
 - Minor: frontend endpoint default aligned to `.../sim-tap/sync`. `common_name` non-determinism +
   `map_otype` NGC 7000→OpenCluster remain accepted cosmetic notes.
 
-The two pre-logged gaps (US1 project↔target persistence; US4 not wired to a live per-image ingest
-pipeline / spec-002) are **still open and need your input** — they were confirmed by the verify gate,
-not fixed here (cross-spec scope decisions).
+UPDATE (later in the run): **gap #1 (project↔target persistence) is now RESOLVED additively** —
+migration 0033 adds nullable `projects.canonical_target_id` (+ optional `canonicalTargetId` on
+ProjectCreateRequest + persistence/validation + CreateProjectDialog wiring), leaving the old
+spec-013 `projects.target_id` untouched. **Decision logged:** new column, not a unify/migrate of the
+old `targets` table — that deeper reconciliation (two coexisting target tables) is still your call,
+as is surfacing `canonical_target_id` in the ProjectDetail UI (persisted but not yet displayed).
+**Gap #2 (US4 not wired to a live per-image ingest / spec-002 inventory) remains open** — it needs
+the spec-002 `file_record` ingest pipeline (no production writer exists), a feature decision, not a fix.
 
 ## SEED-SCALING FINDING (kept the 487 MVP seed; full seed deferred)
 

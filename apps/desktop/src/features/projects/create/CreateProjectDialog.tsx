@@ -142,6 +142,7 @@ export function CreateProjectDialog({ open, onClose, onSuccess }: CreateProjectD
         path: path.trim(),
         initialSources: [],
         notes: notes.trim() || undefined,
+        canonicalTargetId: target?.targetId ?? null,
       });
       handleOpenChange(false);
       onSuccess(result);
