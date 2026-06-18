@@ -8,8 +8,9 @@
 //! - **macOS**: scan `/Applications` for `.app` bundles by name.
 //! - **Linux**: search `PATH` + known directories (`/usr/bin`, `/usr/local/bin`,
 //!   `/opt/pixinsight/bin`, etc.).
-//! - **Windows**: check `HKLM\SOFTWARE\...` registry (compile-time stub on
-//!   non-Windows) and fall back to `%ProgramFiles%` scan.
+//! - **Windows**: scan `%ProgramFiles%` and `%ProgramFiles(x86)%` for each tool's
+//!   `bin\<exe>` (the real install layout) with a non-`bin` fallback. (A registry
+//!   `HKLM\SOFTWARE\...` lookup is a future enhancement for non-standard installs.)
 //!
 //! All paths are absolute; relative paths are never returned.
 
@@ -68,17 +69,39 @@ pub fn discover_all() -> Vec<DiscoveryResult> {
 #[cfg(target_os = "windows")]
 #[must_use]
 pub fn discover_all() -> Vec<DiscoveryResult> {
-    let program_files =
-        std::env::var("ProgramFiles").unwrap_or_else(|_| r"C:\Program Files".to_owned());
-    let pf = Path::new(&program_files);
-    let candidates_raw: Vec<(&str, PathBuf)> = vec![
-        ("pixinsight", pf.join("PixInsight").join("PixInsight.exe")),
-        ("siril", pf.join("Siril").join("siril.exe")),
-        ("startools", pf.join("StarTools").join("StarTools.exe")),
+    // Probe both Program Files locations. PixInsight and Siril install their
+    // executable under a `bin\` subdirectory (e.g.
+    // `C:\Program Files\PixInsight\bin\PixInsight.exe`), so the `bin\` variant is
+    // the primary candidate; the non-`bin` path is kept as a fallback for atypical
+    // installs. Probed in order; `dedup_by_tool` keeps the first match per tool.
+    let mut program_dirs: Vec<String> = Vec::new();
+    if let Ok(pf) = std::env::var("ProgramFiles") {
+        program_dirs.push(pf);
+    } else {
+        program_dirs.push(r"C:\Program Files".to_owned());
+    }
+    if let Ok(pf86) = std::env::var("ProgramFiles(x86)") {
+        program_dirs.push(pf86);
+    }
+
+    // (tool_id, install_subdir, exe_name) — probed as both `<sub>\bin\<exe>` and `<sub>\<exe>`.
+    let tools: &[(&str, &str, &str)] = &[
+        ("pixinsight", "PixInsight", "PixInsight.exe"),
+        ("siril", "Siril", "siril.exe"),
+        ("startools", "StarTools", "StarTools.exe"),
     ];
+
+    let mut candidates_raw: Vec<(&str, PathBuf)> = Vec::new();
+    for dir in &program_dirs {
+        let pf = Path::new(dir);
+        for &(tool_id, subdir, exe) in tools {
+            candidates_raw.push((tool_id, pf.join(subdir).join("bin").join(exe)));
+            candidates_raw.push((tool_id, pf.join(subdir).join(exe)));
+        }
+    }
     let candidates: Vec<(&str, &str)> =
         candidates_raw.iter().filter_map(|(id, p)| p.to_str().map(|s| (*id, s))).collect();
-    probe_candidates(&candidates)
+    dedup_by_tool(probe_candidates(&candidates))
 }
 
 // ── Fallback for other platforms ──────────────────────────────────────────────
@@ -121,7 +144,7 @@ fn discover_from_path(names: &[(&'static str, &str)]) -> Vec<DiscoveryResult> {
     results
 }
 
-#[cfg(target_os = "linux")]
+#[cfg(any(target_os = "linux", target_os = "windows"))]
 fn dedup_by_tool(items: Vec<DiscoveryResult>) -> Vec<DiscoveryResult> {
     let mut seen = std::collections::HashSet::new();
     items.into_iter().filter(|r| seen.insert(r.tool_id.clone())).collect()
