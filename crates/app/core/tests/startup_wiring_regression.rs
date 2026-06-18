@@ -11,7 +11,7 @@
 //!
 //! This test suite pins that behaviour by:
 //!
-//! 1. Directly calling `start_inbox_plan_listener` with an in-memory SQLite
+//! 1. Directly calling `start_inbox_plan_listener` with an in-memory `SQLite`
 //!    pool and an `EventBus`, proving the public API is callable and the spawn
 //!    does not panic.
 //!
@@ -28,8 +28,8 @@
 //! See:
 //!   - docs/development/autonomous-run-2026-06-validation-findings.md  § Backlog A-1
 //!   - docs/development/test-strategy-033.md  § R-3, § 005-4, § 019-7
-//!   - crates/app/core/src/inbox/plan_listener.rs
-//!   - apps/desktop/src-tauri/src/lib.rs  run_app() lines 540–548
+//!   - `crates/app/core/src/inbox/plan_listener.rs`
+//!   - apps/desktop/src-tauri/src/lib.rs  `run_app()` lines 540–548
 
 use app_core::inbox::plan_listener::start_inbox_plan_listener;
 use audit::bus::EventBus;
@@ -45,12 +45,12 @@ async fn setup_db() -> Database {
     db
 }
 
-/// Insert a library_root row that satisfies all NOT NULL + CHECK constraints.
+/// Insert a `library_root` row that satisfies all NOT NULL + CHECK constraints.
 ///
-/// Schema (migration 0002_lifecycle.sql):
-///   id TEXT PK, label TEXT, current_path TEXT, kind TEXT CHECK('local'|'external'|'network'),
-///   state TEXT CHECK('active'|'missing'|'disabled'|'reconnect_required'),
-///   last_seen_at TEXT, created_at TEXT
+/// Schema (migration `0002_lifecycle.sql)`:
+///   id TEXT PK, label TEXT, `current_path` TEXT, kind TEXT CHECK('local'|'external'|'network'),
+///   state TEXT CHECK('active'|'missing'|'disabled'|'`reconnect_required`'),
+///   `last_seen_at` TEXT, `created_at` TEXT
 async fn insert_root(pool: &sqlx::SqlitePool, root_id: &str) {
     sqlx::query(
         "INSERT OR IGNORE INTO library_root \
@@ -65,10 +65,10 @@ async fn insert_root(pool: &sqlx::SqlitePool, root_id: &str) {
 
 /// Insert an inbox item in `classified` state and link it to a plan.
 ///
-/// Schema (migration 0020_inbox.sql):
-///   Table: inbox_items (not inbox_item)
-///   Columns: id, root_id, relative_path, file_count, discovered_at, last_scanned_at,
-///            content_signature, state, lane
+/// Schema (migration `0020_inbox.sql)`:
+///   Table: `inbox_items` (not `inbox_item`)
+///   Columns: id, `root_id`, `relative_path`, `file_count`, `discovered_at`, `last_scanned_at`,
+///            `content_signature`, state, lane
 async fn insert_inbox_item(pool: &sqlx::SqlitePool, root_id: &str, item_id: &str, plan_id: &str) {
     // Insert the inbox item in `classified` state.
     sqlx::query(
