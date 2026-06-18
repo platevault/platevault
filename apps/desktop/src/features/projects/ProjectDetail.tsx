@@ -244,6 +244,29 @@ export function ProjectDetailContent({ projectId }: ProjectDetailContentProps) {
             <RailCard title="Lifecycle">
               <Lifecycle state={lifecycle} />
             </RailCard>
+            {/* spec 035 US1 #2: associated canonical target (resolved on the read path) */}
+            {project.canonicalTarget && (
+              <RailCard title="Target">
+                <div
+                  style={{ display: 'flex', flexDirection: 'column', gap: '2px' }}
+                  data-testid="project-canonical-target"
+                >
+                  <span style={{ fontWeight: 600 }}>
+                    {project.canonicalTarget.primaryDesignation}
+                  </span>
+                  {project.canonicalTarget.commonName && (
+                    <span
+                      style={{
+                        fontSize: 'var(--alm-text-xs)',
+                        color: 'var(--alm-text-muted)',
+                      }}
+                    >
+                      {project.canonicalTarget.commonName}
+                    </span>
+                  )}
+                </div>
+              </RailCard>
+            )}
             {project.channels && project.channels.length > 0 && (
               <RailCard title="Channels">
                 <div style={{ display: 'flex', flexWrap: 'wrap', gap: 'var(--alm-sp-1)' }}>
