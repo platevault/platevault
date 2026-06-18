@@ -1,3 +1,4 @@
+import { useEffect } from 'react';
 import { Btn } from '@/ui/Btn';
 import { Pill } from '@/ui/Pill';
 import { Box } from '@/ui/Box';
@@ -46,10 +47,43 @@ const TOOL_DEFS: ToolDef[] = [
 
 /**
  * Step 2 -- Processing Tools.
- * Toggle-based tool configuration with optional executable path picker.
- * Backend commands are stubs for now -- this is a UI-only step.
+ * Auto-detects installed tools (`tools.discover`, application-based per OS) on mount,
+ * then lets the user toggle/override the executable path.
  */
 export function StepTools({ tools, onToolsChange }: StepToolsProps) {
+  // Auto-detect installed tools once on mount and fill in any unset paths.
+  useEffect(() => {
+    if (import.meta.env.VITE_USE_MOCKS === 'true') return undefined;
+    let cancelled = false;
+    void (async () => {
+      try {
+        const { commands } = await import('@/bindings/index');
+        const res = await commands.toolsDiscover({ toolId: null });
+        if (cancelled || res.status !== 'ok') return;
+        const found = new Map(
+          res.data.entries.filter((e) => e.available).map((e) => [e.toolId, e.path]),
+        );
+        let changed = false;
+        const next: ToolsState = { ...tools };
+        for (const def of TOOL_DEFS) {
+          const path = found.get(def.key);
+          if (path && !next[def.key].path) {
+            next[def.key] = { enabled: true, path };
+            changed = true;
+          }
+        }
+        if (changed) onToolsChange(next);
+      } catch {
+        // detection is best-effort; the user can still set paths manually.
+      }
+    })();
+    return () => {
+      cancelled = true;
+    };
+    // Run once on mount; merging only fills empty paths so re-runs are safe.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
   const handleToggle = (key: keyof ToolsState, checked: boolean) => {
     onToolsChange({
       ...tools,
@@ -68,7 +102,8 @@ export function StepTools({ tools, onToolsChange }: StepToolsProps) {
     <div className="alm-step-tools">
       <p className="alm-step-tools__intro">
         Configure your processing tools so the app can prepare project inputs and
-        suggest workflow profiles. Auto-detection will be available in a future update.
+        suggest workflow profiles. Installed tools are detected automatically; you can
+        override or set a path manually.
       </p>
 
       <div className="alm-step-tools__list">
@@ -80,7 +115,11 @@ export function StepTools({ tools, onToolsChange }: StepToolsProps) {
                 <div className="alm-step-tools__row-info">
                   <div className="alm-step-tools__row-header">
                     <span className="alm-step-tools__row-name">{def.name}</span>
-                    <Pill variant="neutral">Not detected</Pill>
+                    {config.path ? (
+                      <Pill variant="ok">Detected</Pill>
+                    ) : (
+                      <Pill variant="neutral">Not detected</Pill>
+                    )}
                   </div>
                   <span className="alm-step-tools__row-desc">{def.description}</span>
                 </div>
