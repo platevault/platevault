@@ -8,9 +8,10 @@
 //! - **macOS**: scan `/Applications` for `.app` bundles by name.
 //! - **Linux**: search `PATH` + known directories (`/usr/bin`, `/usr/local/bin`,
 //!   `/opt/pixinsight/bin`, etc.).
-//! - **Windows**: scan `%ProgramFiles%` and `%ProgramFiles(x86)%` for each tool's
-//!   `bin\<exe>` (the real install layout) with a non-`bin` fallback. (A registry
-//!   `HKLM\SOFTWARE\...` lookup is a future enhancement for non-standard installs.)
+//! - **Windows**: query the registry — `App Paths` plus `Uninstall` entries (matched
+//!   by `DisplayName`, exe resolved from `DisplayIcon`/`InstallLocation`) across the
+//!   64-bit, 32-bit (`WOW6432Node`) and per-user hives — so a tool is found wherever
+//!   it was installed; falls back to a `%ProgramFiles%[(x86)]\<Tool>\bin\<exe>` scan.
 //!
 //! All paths are absolute; relative paths are never returned.
 
@@ -66,42 +67,125 @@ pub fn discover_all() -> Vec<DiscoveryResult> {
 
 // ── Windows ───────────────────────────────────────────────────────────────────
 
+/// Known tools: `(tool_id, display-name substring [lowercased], install subdir, exe filename)`.
+#[cfg(target_os = "windows")]
+const WINDOWS_TOOLS: &[(&str, &str, &str, &str)] = &[
+    ("pixinsight", "pixinsight", "PixInsight", "PixInsight.exe"),
+    ("siril", "siril", "Siril", "siril.exe"),
+    ("startools", "startools", "StarTools", "StarTools.exe"),
+];
+
 #[cfg(target_os = "windows")]
 #[must_use]
 pub fn discover_all() -> Vec<DiscoveryResult> {
-    // Probe both Program Files locations. PixInsight and Siril install their
-    // executable under a `bin\` subdirectory (e.g.
-    // `C:\Program Files\PixInsight\bin\PixInsight.exe`), so the `bin\` variant is
-    // the primary candidate; the non-`bin` path is kept as a fallback for atypical
-    // installs. Probed in order; `dedup_by_tool` keeps the first match per tool.
-    let mut program_dirs: Vec<String> = Vec::new();
-    if let Ok(pf) = std::env::var("ProgramFiles") {
-        program_dirs.push(pf);
-    } else {
-        program_dirs.push(r"C:\Program Files".to_owned());
-    }
-    if let Ok(pf86) = std::env::var("ProgramFiles(x86)") {
-        program_dirs.push(pf86);
-    }
+    // Application-based detection: ask the OS where the app is installed (registry)
+    // rather than assuming a fixed path, so a tool installed to a non-default
+    // location is still found. The Program Files scan is a fallback. `dedup_by_tool`
+    // keeps the first (registry-preferred) match per tool.
+    let mut results: Vec<DiscoveryResult> = Vec::new();
+    results.extend(registry_discover());
+    results.extend(program_files_scan());
+    dedup_by_tool(results)
+}
 
-    // (tool_id, install_subdir, exe_name) — probed as both `<sub>\bin\<exe>` and `<sub>\<exe>`.
-    let tools: &[(&str, &str, &str)] = &[
-        ("pixinsight", "PixInsight", "PixInsight.exe"),
-        ("siril", "Siril", "siril.exe"),
-        ("startools", "StarTools", "StarTools.exe"),
-    ];
+/// Resolve installed apps from the Windows registry: per-exe `App Paths` and the
+/// `Uninstall` entries (matched by `DisplayName`, exe derived from `DisplayIcon`
+/// or `InstallLocation`). Covers 64-bit, 32-bit (`WOW6432Node`), and per-user hives.
+#[cfg(target_os = "windows")]
+fn registry_discover() -> Vec<DiscoveryResult> {
+    use winreg::enums::{HKEY_CURRENT_USER, HKEY_LOCAL_MACHINE};
+    use winreg::RegKey;
 
-    let mut candidates_raw: Vec<(&str, PathBuf)> = Vec::new();
-    for dir in &program_dirs {
-        let pf = Path::new(dir);
-        for &(tool_id, subdir, exe) in tools {
-            candidates_raw.push((tool_id, pf.join(subdir).join("bin").join(exe)));
-            candidates_raw.push((tool_id, pf.join(subdir).join(exe)));
+    let mut results: Vec<DiscoveryResult> = Vec::new();
+
+    // 1. App Paths — default value of `...\App Paths\<exe>` is the full exe path.
+    for hive in [HKEY_LOCAL_MACHINE, HKEY_CURRENT_USER] {
+        let root = RegKey::predef(hive);
+        for &(tool_id, _name, _subdir, exe) in WINDOWS_TOOLS {
+            let key_path = format!(r"SOFTWARE\Microsoft\Windows\CurrentVersion\App Paths\{exe}");
+            if let Ok(k) = root.open_subkey(&key_path) {
+                if let Ok(p) = k.get_value::<String, _>("") {
+                    push_if_exe(&mut results, tool_id, p.trim().trim_matches('"'));
+                }
+            }
         }
     }
-    let candidates: Vec<(&str, &str)> =
-        candidates_raw.iter().filter_map(|(id, p)| p.to_str().map(|s| (*id, s))).collect();
-    dedup_by_tool(probe_candidates(&candidates))
+
+    // 2. Uninstall entries — match DisplayName, derive the exe from DisplayIcon/InstallLocation.
+    let uninstall_roots = [
+        (HKEY_LOCAL_MACHINE, r"SOFTWARE\Microsoft\Windows\CurrentVersion\Uninstall"),
+        (HKEY_LOCAL_MACHINE, r"SOFTWARE\WOW6432Node\Microsoft\Windows\CurrentVersion\Uninstall"),
+        (HKEY_CURRENT_USER, r"SOFTWARE\Microsoft\Windows\CurrentVersion\Uninstall"),
+    ];
+    for (hive, path) in uninstall_roots {
+        let root = RegKey::predef(hive);
+        let Ok(unkey) = root.open_subkey(path) else { continue };
+        for name in unkey.enum_keys().flatten() {
+            let Ok(sub) = unkey.open_subkey(&name) else { continue };
+            let display: String = sub.get_value("DisplayName").unwrap_or_default();
+            let dl = display.to_lowercase();
+            for &(tool_id, name_sub, _subdir, exe) in WINDOWS_TOOLS {
+                if !dl.contains(name_sub) {
+                    continue;
+                }
+                // DisplayIcon is often the exe itself (with an optional ",<index>" suffix).
+                if let Ok(icon) = sub.get_value::<String, _>("DisplayIcon") {
+                    let icon_path = icon.split(',').next().unwrap_or("").trim().trim_matches('"');
+                    push_if_exe(&mut results, tool_id, icon_path);
+                }
+                // InstallLocation is the install dir — probe `bin\<exe>` then `<exe>`.
+                if let Ok(loc) = sub.get_value::<String, _>("InstallLocation") {
+                    let loc = loc.trim().trim_matches('"');
+                    if !loc.is_empty() {
+                        let base = Path::new(loc);
+                        push_if_exe_path(&mut results, tool_id, base.join("bin").join(exe));
+                        push_if_exe_path(&mut results, tool_id, base.join(exe));
+                    }
+                }
+            }
+        }
+    }
+    results
+}
+
+/// Fallback: scan the default Program Files layout (`<Tool>\bin\<exe>` + non-`bin`).
+#[cfg(target_os = "windows")]
+fn program_files_scan() -> Vec<DiscoveryResult> {
+    let mut dirs: Vec<String> = Vec::new();
+    if let Ok(pf) = std::env::var("ProgramFiles") {
+        dirs.push(pf);
+    } else {
+        dirs.push(r"C:\Program Files".to_owned());
+    }
+    if let Ok(pf86) = std::env::var("ProgramFiles(x86)") {
+        dirs.push(pf86);
+    }
+    let mut results: Vec<DiscoveryResult> = Vec::new();
+    for dir in &dirs {
+        let pf = Path::new(dir);
+        for &(tool_id, _name, subdir, exe) in WINDOWS_TOOLS {
+            push_if_exe_path(&mut results, tool_id, pf.join(subdir).join("bin").join(exe));
+            push_if_exe_path(&mut results, tool_id, pf.join(subdir).join(exe));
+        }
+    }
+    results
+}
+
+/// Push a result if `path_str` is an absolute, existing `.exe`.
+#[cfg(target_os = "windows")]
+fn push_if_exe(results: &mut Vec<DiscoveryResult>, tool_id: &str, path_str: &str) {
+    if !path_str.is_empty() {
+        push_if_exe_path(results, tool_id, PathBuf::from(path_str));
+    }
+}
+
+#[cfg(target_os = "windows")]
+fn push_if_exe_path(results: &mut Vec<DiscoveryResult>, tool_id: &str, path: PathBuf) {
+    let is_exe =
+        path.extension().and_then(|e| e.to_str()).is_some_and(|s| s.eq_ignore_ascii_case("exe"));
+    if path.is_absolute() && is_exe && path.exists() {
+        results.push(DiscoveryResult { tool_id: tool_id.to_owned(), available: true, path });
+    }
 }
 
 // ── Fallback for other platforms ──────────────────────────────────────────────
