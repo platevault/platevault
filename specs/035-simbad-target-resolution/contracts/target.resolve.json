@@ -1,0 +1,81 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://astro-plan.local/contracts/target.resolve.json",
+  "title": "target.resolve",
+  "description": "Resolve a designation/name (or a selected search suggestion, or a FITS OBJECT value) to a canonical target identity (spec 035). Checks the local cache first; on a miss consults SIMBAD (when online_enabled) and writes the result to the cache. Also used to record a manual user override.",
+  "type": "object",
+  "oneOf": [ { "$ref": "#/$defs/Request" }, { "$ref": "#/$defs/Response" } ],
+  "$defs": {
+    "ContractVersion": { "type": "string", "const": "1.0" },
+    "Uuid": { "type": "string", "format": "uuid" },
+    "ObjectType": {
+      "type": "string",
+      "enum": ["galaxy", "planetary_nebula", "emission_nebula", "reflection_nebula", "dark_nebula", "open_cluster", "globular_cluster", "supernova_remnant", "galaxy_cluster", "double_star", "asterism", "other"]
+    },
+    "ResolveStatus": {
+      "type": "string",
+      "enum": ["resolved", "unresolved"],
+      "description": "'resolved': a canonical target was determined (from cache or SIMBAD). 'unresolved': unknown/garbled, or SIMBAD unreachable with no cached entry — marked pending, retryable; coordinates never fabricated."
+    },
+    "ResolvedTarget": {
+      "type": "object",
+      "required": ["targetId", "primaryDesignation", "objectType", "raDeg", "decDeg", "aliases", "source"],
+      "additionalProperties": false,
+      "properties": {
+        "targetId": { "$ref": "#/$defs/Uuid" },
+        "simbadOid": { "type": "integer", "description": "SIMBAD physical-object id (dedup key) when resolved online." },
+        "primaryDesignation": { "type": "string" },
+        "commonName": { "type": "string" },
+        "objectType": { "$ref": "#/$defs/ObjectType" },
+        "raDeg": { "type": "number", "minimum": 0, "exclusiveMaximum": 360 },
+        "decDeg": { "type": "number", "minimum": -90, "maximum": 90 },
+        "aliases": { "type": "array", "items": { "type": "string" } },
+        "source": { "type": "string", "enum": ["seed", "resolved", "user-override"] }
+      }
+    },
+    "ErrorCode": {
+      "type": "string",
+      "enum": ["resolver.unreachable", "resolver.disabled", "resolver.timeout", "actor.not_authorised"]
+    },
+    "ErrorEnvelope": {
+      "type": "object",
+      "required": ["code", "message"],
+      "additionalProperties": false,
+      "properties": { "code": { "$ref": "#/$defs/ErrorCode" }, "message": { "type": "string" } }
+    },
+    "Request": {
+      "type": "object",
+      "required": ["contractVersion", "requestId", "query"],
+      "additionalProperties": false,
+      "properties": {
+        "contractVersion": { "$ref": "#/$defs/ContractVersion" },
+        "requestId": { "$ref": "#/$defs/Uuid" },
+        "query": { "type": "string", "minLength": 1, "description": "Complete designation or common name, or a FITS OBJECT value." },
+        "override": {
+          "type": "object",
+          "description": "When present, records a manual user override: bind `query` to this canonical target. Persisted as source=user-override and wins over future SIMBAD results (FR-014).",
+          "required": ["targetId"],
+          "additionalProperties": false,
+          "properties": { "targetId": { "$ref": "#/$defs/Uuid" } }
+        }
+      }
+    },
+    "Response": {
+      "type": "object",
+      "required": ["contractVersion", "requestId", "status"],
+      "additionalProperties": false,
+      "properties": {
+        "contractVersion": { "$ref": "#/$defs/ContractVersion" },
+        "requestId": { "$ref": "#/$defs/Uuid" },
+        "status": { "$ref": "#/$defs/ResolveStatus" },
+        "target": { "$ref": "#/$defs/ResolvedTarget" },
+        "unresolvedReason": { "type": "string", "description": "Present when status=unresolved (e.g. 'unknown', 'offline', 'ambiguous')." },
+        "error": { "$ref": "#/$defs/ErrorEnvelope" }
+      },
+      "allOf": [
+        { "if": { "properties": { "status": { "const": "resolved" } } }, "then": { "required": ["target"] } },
+        { "if": { "properties": { "status": { "const": "unresolved" } } }, "then": { "required": ["unresolvedReason"] } }
+      ]
+    }
+  }
+}
