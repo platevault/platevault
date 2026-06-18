@@ -15,9 +15,9 @@ use std::{collections::BTreeSet, fs, path::PathBuf};
 
 use contracts_core::targets::{
     ResolvedTarget, ResolverSettings, ResolverSettingsGetRequest, ResolverSettingsResponse,
-    ResolverSettingsUpdateRequest, TargetCatalogId, TargetObjectType, TargetResolveSimbadRequest,
-    TargetResolveSimbadResponse, TargetResolveErrorCode, TargetResolveError,
-    TargetResolveOverride, TargetResolveStatus, TargetSearchRequest, TargetSearchResponse,
+    ResolverSettingsUpdateRequest, TargetCatalogId, TargetObjectType, TargetResolveError,
+    TargetResolveErrorCode, TargetResolveOverride, TargetResolveSimbadRequest,
+    TargetResolveSimbadResponse, TargetResolveStatus, TargetSearchRequest, TargetSearchResponse,
     TargetSource, TargetSuggestion,
 };
 use serde_json::{json, Value};
@@ -33,8 +33,7 @@ fn repo_root() -> PathBuf {
 }
 
 fn load_schema(name: &str) -> Value {
-    let path =
-        repo_root().join(format!("specs/035-simbad-target-resolution/contracts/{name}"));
+    let path = repo_root().join(format!("specs/035-simbad-target-resolution/contracts/{name}"));
     let contents = fs::read_to_string(&path).unwrap_or_else(|error| {
         panic!("failed to read schema at {}: {error}", path.display());
     });
@@ -112,20 +111,41 @@ fn object_type_enum_matches_search_contract() {
         TargetObjectType::Other,
     ]);
 
-    assert_eq!(contract, rust, "TargetObjectType wire values must match ObjectType enum in target.search.json");
+    assert_eq!(
+        contract, rust,
+        "TargetObjectType wire values must match ObjectType enum in target.search.json"
+    );
 }
 
 #[test]
 fn object_type_snake_case_spellings_exact() {
     assert_eq!(serde_json::to_value(TargetObjectType::Galaxy).unwrap(), json!("galaxy"));
-    assert_eq!(serde_json::to_value(TargetObjectType::PlanetaryNebula).unwrap(), json!("planetary_nebula"));
-    assert_eq!(serde_json::to_value(TargetObjectType::EmissionNebula).unwrap(), json!("emission_nebula"));
-    assert_eq!(serde_json::to_value(TargetObjectType::ReflectionNebula).unwrap(), json!("reflection_nebula"));
+    assert_eq!(
+        serde_json::to_value(TargetObjectType::PlanetaryNebula).unwrap(),
+        json!("planetary_nebula")
+    );
+    assert_eq!(
+        serde_json::to_value(TargetObjectType::EmissionNebula).unwrap(),
+        json!("emission_nebula")
+    );
+    assert_eq!(
+        serde_json::to_value(TargetObjectType::ReflectionNebula).unwrap(),
+        json!("reflection_nebula")
+    );
     assert_eq!(serde_json::to_value(TargetObjectType::DarkNebula).unwrap(), json!("dark_nebula"));
     assert_eq!(serde_json::to_value(TargetObjectType::OpenCluster).unwrap(), json!("open_cluster"));
-    assert_eq!(serde_json::to_value(TargetObjectType::GlobularCluster).unwrap(), json!("globular_cluster"));
-    assert_eq!(serde_json::to_value(TargetObjectType::SupernovaRemnant).unwrap(), json!("supernova_remnant"));
-    assert_eq!(serde_json::to_value(TargetObjectType::GalaxyCluster).unwrap(), json!("galaxy_cluster"));
+    assert_eq!(
+        serde_json::to_value(TargetObjectType::GlobularCluster).unwrap(),
+        json!("globular_cluster")
+    );
+    assert_eq!(
+        serde_json::to_value(TargetObjectType::SupernovaRemnant).unwrap(),
+        json!("supernova_remnant")
+    );
+    assert_eq!(
+        serde_json::to_value(TargetObjectType::GalaxyCluster).unwrap(),
+        json!("galaxy_cluster")
+    );
     assert_eq!(serde_json::to_value(TargetObjectType::DoubleStar).unwrap(), json!("double_star"));
     assert_eq!(serde_json::to_value(TargetObjectType::Asterism).unwrap(), json!("asterism"));
     assert_eq!(serde_json::to_value(TargetObjectType::Other).unwrap(), json!("other"));
@@ -134,9 +154,18 @@ fn object_type_snake_case_spellings_exact() {
 #[test]
 fn object_type_roundtrips() {
     for wire in [
-        "galaxy", "planetary_nebula", "emission_nebula", "reflection_nebula",
-        "dark_nebula", "open_cluster", "globular_cluster", "supernova_remnant",
-        "galaxy_cluster", "double_star", "asterism", "other",
+        "galaxy",
+        "planetary_nebula",
+        "emission_nebula",
+        "reflection_nebula",
+        "dark_nebula",
+        "open_cluster",
+        "globular_cluster",
+        "supernova_remnant",
+        "galaxy_cluster",
+        "double_star",
+        "asterism",
+        "other",
     ] {
         let deserialized: TargetObjectType =
             serde_json::from_value(json!(wire)).unwrap_or_else(|e| {
@@ -159,13 +188,13 @@ fn source_enum_matches_search_contract() {
         .filter_map(|v| v.as_str().map(String::from))
         .collect::<BTreeSet<_>>();
 
-    let rust = serialized_enum(&[
-        TargetSource::Seed,
-        TargetSource::Resolved,
-        TargetSource::UserOverride,
-    ]);
+    let rust =
+        serialized_enum(&[TargetSource::Seed, TargetSource::Resolved, TargetSource::UserOverride]);
 
-    assert_eq!(contract, rust, "TargetSource wire values must match Suggestion.source enum in target.search.json");
+    assert_eq!(
+        contract, rust,
+        "TargetSource wire values must match Suggestion.source enum in target.search.json"
+    );
 }
 
 #[test]
@@ -179,10 +208,9 @@ fn source_user_override_has_hyphen() {
 #[test]
 fn source_roundtrips() {
     for wire in ["seed", "resolved", "user-override"] {
-        let deserialized: TargetSource =
-            serde_json::from_value(json!(wire)).unwrap_or_else(|e| {
-                panic!("\"{wire}\" should deserialize to TargetSource: {e}");
-            });
+        let deserialized: TargetSource = serde_json::from_value(json!(wire)).unwrap_or_else(|e| {
+            panic!("\"{wire}\" should deserialize to TargetSource: {e}");
+        });
         assert_eq!(serde_json::to_value(deserialized).unwrap(), json!(wire));
     }
 }
@@ -210,7 +238,10 @@ fn catalog_id_enum_matches_search_contract() {
         TargetCatalogId::Openngc,
     ]);
 
-    assert_eq!(contract, rust, "TargetCatalogId wire values must match CatalogId enum in target.search.json");
+    assert_eq!(
+        contract, rust,
+        "TargetCatalogId wire values must match CatalogId enum in target.search.json"
+    );
 }
 
 // ── target.search — TargetSuggestion (Suggestion) ────────────────────────────
@@ -232,7 +263,10 @@ fn suggestion_required_fields_present() {
     let keys = object_keys(&value);
 
     for required_key in &required {
-        assert!(keys.contains(required_key), "TargetSuggestion missing required key: {required_key}");
+        assert!(
+            keys.contains(required_key),
+            "TargetSuggestion missing required key: {required_key}"
+        );
     }
 }
 
@@ -310,7 +344,10 @@ fn search_request_required_fields_present() {
     let keys = object_keys(&value);
 
     for required_key in &required {
-        assert!(keys.contains(required_key), "TargetSearchRequest missing required key: {required_key}");
+        assert!(
+            keys.contains(required_key),
+            "TargetSearchRequest missing required key: {required_key}"
+        );
     }
 }
 
@@ -403,7 +440,10 @@ fn search_response_required_fields_present() {
     let keys = object_keys(&value);
 
     for required_key in &required {
-        assert!(keys.contains(required_key), "TargetSearchResponse missing required key: {required_key}");
+        assert!(
+            keys.contains(required_key),
+            "TargetSearchResponse missing required key: {required_key}"
+        );
     }
 }
 
@@ -433,7 +473,10 @@ fn resolve_status_enum_matches_contract() {
 
     let rust = serialized_enum(&[TargetResolveStatus::Resolved, TargetResolveStatus::Unresolved]);
 
-    assert_eq!(contract, rust, "TargetResolveStatus wire values must match ResolveStatus enum in target.resolve.json");
+    assert_eq!(
+        contract, rust,
+        "TargetResolveStatus wire values must match ResolveStatus enum in target.resolve.json"
+    );
 }
 
 #[test]
@@ -456,7 +499,10 @@ fn resolve_error_code_enum_matches_contract() {
         TargetResolveErrorCode::ActorNotAuthorised,
     ]);
 
-    assert_eq!(contract, rust, "TargetResolveErrorCode wire values must match ErrorCode enum in target.resolve.json");
+    assert_eq!(
+        contract, rust,
+        "TargetResolveErrorCode wire values must match ErrorCode enum in target.resolve.json"
+    );
 }
 
 #[test]
@@ -481,9 +527,11 @@ fn resolve_error_code_dotted_spellings_exact() {
 
 #[test]
 fn resolve_error_code_roundtrips() {
-    for wire in ["resolver.unreachable", "resolver.disabled", "resolver.timeout", "actor.not_authorised"] {
-        let deserialized: TargetResolveErrorCode =
-            serde_json::from_value(json!(wire)).unwrap_or_else(|e| {
+    for wire in
+        ["resolver.unreachable", "resolver.disabled", "resolver.timeout", "actor.not_authorised"]
+    {
+        let deserialized: TargetResolveErrorCode = serde_json::from_value(json!(wire))
+            .unwrap_or_else(|e| {
                 panic!("\"{wire}\" should deserialize to TargetResolveErrorCode: {e}");
             });
         assert_eq!(serde_json::to_value(deserialized).unwrap(), json!(wire));
@@ -505,7 +553,10 @@ fn resolve_error_envelope_required_fields_present() {
     let keys = object_keys(&value);
 
     for required_key in &required {
-        assert!(keys.contains(required_key), "TargetResolveError missing required key: {required_key}");
+        assert!(
+            keys.contains(required_key),
+            "TargetResolveError missing required key: {required_key}"
+        );
     }
 }
 
@@ -575,7 +626,7 @@ fn resolved_target_optional_fields_absent_when_none() {
 fn resolved_target_optional_fields_present_when_set() {
     let target = ResolvedTarget {
         target_id: "a1b2c3d4-e5f6-7890-abcd-ef1234567890".to_owned(),
-        simbad_oid: Some(1575544),
+        simbad_oid: Some(1_575_544),
         primary_designation: "M 31".to_owned(),
         common_name: Some("Andromeda Galaxy".to_owned()),
         object_type: TargetObjectType::Galaxy,
@@ -586,7 +637,7 @@ fn resolved_target_optional_fields_present_when_set() {
     };
     let value = serde_json::to_value(&target).expect("resolved target should serialize");
 
-    assert_eq!(value["simbadOid"], json!(1575544));
+    assert_eq!(value["simbadOid"], json!(1_575_544));
     assert_eq!(value["commonName"], json!("Andromeda Galaxy"));
     assert_eq!(value["raDeg"], json!(10.685));
     assert_eq!(value["decDeg"], json!(41.269));
@@ -600,7 +651,7 @@ fn resolved_target_no_extra_keys_beyond_contract() {
 
     let target = ResolvedTarget {
         target_id: "a1b2c3d4-e5f6-7890-abcd-ef1234567890".to_owned(),
-        simbad_oid: Some(1575544),
+        simbad_oid: Some(1_575_544),
         primary_designation: "M 31".to_owned(),
         common_name: Some("Andromeda Galaxy".to_owned()),
         object_type: TargetObjectType::Galaxy,
@@ -620,7 +671,7 @@ fn resolved_target_no_extra_keys_beyond_contract() {
 fn resolved_target_roundtrip() {
     let target = ResolvedTarget {
         target_id: "a1b2c3d4-e5f6-7890-abcd-ef1234567890".to_owned(),
-        simbad_oid: Some(1575544),
+        simbad_oid: Some(1_575_544),
         primary_designation: "M 31".to_owned(),
         common_name: Some("Andromeda Galaxy".to_owned()),
         object_type: TargetObjectType::Galaxy,
@@ -654,7 +705,10 @@ fn resolve_request_required_fields_present() {
     let keys = object_keys(&value);
 
     for required_key in &required {
-        assert!(keys.contains(required_key), "TargetResolveSimbadRequest missing required key: {required_key}");
+        assert!(
+            keys.contains(required_key),
+            "TargetResolveSimbadRequest missing required key: {required_key}"
+        );
     }
 }
 
@@ -764,7 +818,10 @@ fn resolve_response_required_fields_present() {
     let keys = object_keys(&value);
 
     for required_key in &required {
-        assert!(keys.contains(required_key), "TargetResolveSimbadResponse missing required key: {required_key}");
+        assert!(
+            keys.contains(required_key),
+            "TargetResolveSimbadResponse missing required key: {required_key}"
+        );
     }
 }
 
@@ -787,8 +844,10 @@ fn resolve_response_unresolved_shape() {
     assert_eq!(value["unresolvedReason"], json!("unknown"));
     assert_eq!(value["error"]["code"], json!("resolver.disabled"));
     // target should be absent
-    assert!(value["target"].is_null() || !value.as_object().unwrap().contains_key("target"),
-        "target should be absent when None");
+    assert!(
+        value["target"].is_null() || !value.as_object().unwrap().contains_key("target"),
+        "target should be absent when None"
+    );
 }
 
 #[test]
@@ -822,7 +881,7 @@ fn resolve_response_roundtrip_resolved() {
         status: TargetResolveStatus::Resolved,
         target: Some(ResolvedTarget {
             target_id: "a1b2c3d4-e5f6-7890-abcd-ef1234567890".to_owned(),
-            simbad_oid: Some(1575544),
+            simbad_oid: Some(1_575_544),
             primary_designation: "M 31".to_owned(),
             common_name: Some("Andromeda Galaxy".to_owned()),
             object_type: TargetObjectType::Galaxy,
@@ -839,7 +898,10 @@ fn resolve_response_roundtrip_resolved() {
         serde_json::from_value(serialized.clone()).expect("should deserialize");
     let reserialized = serde_json::to_value(&deserialized).expect("should reserialize");
 
-    assert_eq!(serialized, reserialized, "TargetResolveSimbadResponse (resolved) round-trip must be stable");
+    assert_eq!(
+        serialized, reserialized,
+        "TargetResolveSimbadResponse (resolved) round-trip must be stable"
+    );
 }
 
 // ── target.resolution-settings — ResolverSettings ────────────────────────────
@@ -859,7 +921,10 @@ fn resolver_settings_required_fields_present() {
     let keys = object_keys(&value);
 
     for required_key in &required {
-        assert!(keys.contains(required_key), "ResolverSettings missing required key: {required_key}");
+        assert!(
+            keys.contains(required_key),
+            "ResolverSettings missing required key: {required_key}"
+        );
     }
 }
 
@@ -929,7 +994,10 @@ fn settings_get_request_required_fields_present() {
     let keys = object_keys(&value);
 
     for required_key in &required {
-        assert!(keys.contains(required_key), "ResolverSettingsGetRequest missing required key: {required_key}");
+        assert!(
+            keys.contains(required_key),
+            "ResolverSettingsGetRequest missing required key: {required_key}"
+        );
     }
 }
 
@@ -985,7 +1053,10 @@ fn settings_update_request_required_fields_present() {
     let keys = object_keys(&value);
 
     for required_key in &required {
-        assert!(keys.contains(required_key), "ResolverSettingsUpdateRequest missing required key: {required_key}");
+        assert!(
+            keys.contains(required_key),
+            "ResolverSettingsUpdateRequest missing required key: {required_key}"
+        );
     }
 }
 
@@ -1073,7 +1144,10 @@ fn settings_response_required_fields_present() {
     let keys = object_keys(&value);
 
     for required_key in &required {
-        assert!(keys.contains(required_key), "ResolverSettingsResponse missing required key: {required_key}");
+        assert!(
+            keys.contains(required_key),
+            "ResolverSettingsResponse missing required key: {required_key}"
+        );
     }
 }
 
