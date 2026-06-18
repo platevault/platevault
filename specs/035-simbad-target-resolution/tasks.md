@@ -39,9 +39,9 @@ description: "Task list for SIMBAD Target Resolution (spec 035)"
 
 - [X] T010 [P] [US1] Normalized-alias typeahead lookup (prefix/substring over `target_alias.normalized`) in `crates/targeting/src/resolver/cache.rs`
 - [X] T011 [US1] `target.search` use-case (local seed+cache query, ranking) in `crates/app/core/src/`
-- [ ] T012 [US1] `target_search` Tauri command in `apps/desktop/src-tauri/src/commands/targets.rs`
+- [X] T012 [US1] `target_search` Tauri command in `apps/desktop/src-tauri/src/commands/target_lookup.rs` (sibling of target_lookup/target_resolve; spec said targets.rs but that is the spec-029 fixture stub)
 - [ ] T013 [US1] Project-creation target search UI (debounced input, suggestion list with type/catalogue badges) in `apps/desktop/src/components/`
-- [ ] T014 [P] [US1] Unit test: `target.search` returns ranked local suggestions; respects `limit` (`crates/app/core` + `tests/contract`)
+- [X] T014 [P] [US1] Unit test: `target.search` returns ranked local suggestions; respects `limit` (`crates/app/core` + `tests/contract`)
 
 ---
 
@@ -53,7 +53,7 @@ description: "Task list for SIMBAD Target Resolution (spec 035)"
 - [X] T015 [US2] One-time seed build script (offline; SIMBAD acronym map + OpenNGC for NGC/IC; CaldwellMap) → `assets/seed/` artifact, in `scripts/`
 - [X] T016 [US2] Bundled-seed loader (load asset into cache at first run, `source=seed`) in `crates/targeting/src/resolver/seed.rs`
 - [X] T017 [P] [US2] Commit the static C1–C109 → NGC/IC `CaldwellMap` + loader (Caldwell not in SIMBAD) in `crates/targeting/src/resolver/`
-- [ ] T018 [P] [US2] Test: first-run seed load populates cache; offline typeahead for seeded objects works (`tests/contract` or crate test with bundled fixture). MUST assert SC-001: seeded typeahead returns suggestions in < 100 ms with no network call (measure against the seeded-cache fixture; resolver online path not invoked).
+- [X] T018 [P] [US2] Test: first-run seed load populates cache; offline typeahead for seeded objects works (`tests/contract` or crate test with bundled fixture). MUST assert SC-001: seeded typeahead returns suggestions in < 100 ms with no network call (measure against the seeded-cache fixture; resolver online path not invoked).
 
 ---
 

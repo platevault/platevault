@@ -21,6 +21,7 @@
 use contracts_core::target_lookup::{
     TargetLookupRequest, TargetLookupResponse, TargetResolveRequest, TargetResolveResponse,
 };
+use contracts_core::targets::{TargetSearchRequest, TargetSearchResponse};
 use tauri::State;
 
 use crate::commands::lifecycle::AppState;
@@ -69,4 +70,26 @@ pub async fn target_resolve(
     let catalog =
         targeting::load::load_from_db(state.repo.pool()).await.map_err(|e| e.to_string())?;
     Ok(app_core::target_lookup::resolve(&catalog, &req))
+}
+
+// ── target.search (spec 035, US1) ───────────────────────────────────────────────
+
+/// `target.search` — as-you-type target suggestions from local seed + cache.
+///
+/// Served purely from the local resolution cache / bundled seed (no network);
+/// long-tail SIMBAD enrichment is a separate `target.resolve` call. Returns
+/// ranked, de-duplicated [`TargetSuggestion`]s for the project-creation /
+/// target-selection typeahead (spec 035 FR-005).
+///
+/// # Errors
+///
+/// Returns `Err(String)` on an unexpected internal (database) failure.
+#[tauri::command]
+#[specta::specta(rename = "target.search")]
+pub async fn target_search(
+    state: State<'_, AppState>,
+    req: TargetSearchRequest,
+) -> Result<TargetSearchResponse, String> {
+    tracing::debug!("target.search query={:?} limit={}", req.query, req.limit);
+    app_core::target_search::search(state.repo.pool(), &req).await.map_err(|e| e.message)
 }

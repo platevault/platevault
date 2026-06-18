@@ -213,6 +213,19 @@ export const commands = {
 	 */
 	targetResolve: (req: TargetResolveRequest) => typedError<TargetResolveResponse_Serialize, string>(__TAURI_INVOKE("target.resolve", { req })),
 	/**
+	 *  `target.search` — as-you-type target suggestions from local seed + cache.
+	 * 
+	 *  Served purely from the local resolution cache / bundled seed (no network);
+	 *  long-tail SIMBAD enrichment is a separate `target.resolve` call. Returns
+	 *  ranked, de-duplicated [`TargetSuggestion`]s for the project-creation /
+	 *  target-selection typeahead (spec 035 FR-005).
+	 * 
+	 *  # Errors
+	 * 
+	 *  Returns `Err(String)` on an unexpected internal (database) failure.
+	 */
+	targetSearch: (req: TargetSearchRequest_Deserialize) => typedError<TargetSearchResponse_Serialize, string>(__TAURI_INVOKE("target.search", { req })),
+	/**
 	 *  `projects.list` — list all projects from the database.
 	 * 
 	 *  # Errors

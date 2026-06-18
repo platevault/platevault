@@ -370,4 +370,107 @@ mod tests {
         // Second call is a no-op (already populated).
         assert!(load_bundled_on_first_run(db.pool()).await.unwrap().is_none());
     }
+
+    /// T018 — SC-001: offline typeahead from bundled seed in < 100 ms (no network).
+    ///
+    /// After `load_bundled_on_first_run` populates the in-memory SQLite cache,
+    /// `search_by_normalized` for seeded objects must:
+    ///   1. Return non-empty results (the seed populated the cache).
+    ///   2. Complete in < 100 ms (SC-001 latency bound).
+    ///   3. Never touch the network — the entire path is local SQLite.
+    ///
+    /// The timed region is the search call ONLY: seed load and DB setup are
+    /// outside the measurement to isolate typeahead query latency.
+    #[tokio::test]
+    async fn t018_sc001_offline_seed_typeahead_under_100ms() {
+        let db = setup().await;
+
+        // Load the bundled seed (this is setup, NOT in the timed region).
+        let loaded = load_bundled_on_first_run(db.pool())
+            .await
+            .expect("seed load must not fail")
+            .expect("first-run seed must produce a count");
+        assert!(loaded >= 110, "seed must load >= 110 objects for this test to be meaningful");
+
+        // ── Timed region start ────────────────────────────────────────────────
+        // Only the search call is timed: this is the SC-001 typeahead path.
+        // No network is invoked: the resolver online path is entirely absent here.
+        let t0 = std::time::Instant::now();
+        let results_m42 = cache::search_by_normalized(db.pool(), "m 42", 20)
+            .await
+            .expect("search must not fail");
+        let elapsed_m42 = t0.elapsed();
+        // ── Timed region end ─────────────────────────────────────────────────
+
+        // (a) Non-empty: the seeded object must be found.
+        assert!(
+            !results_m42.is_empty(),
+            "offline search for 'm 42' must return results from seeded cache"
+        );
+        assert_eq!(
+            results_m42[0].target.primary_designation, "M 42",
+            "top result for 'm 42' must be M 42 (Orion Nebula)"
+        );
+
+        // (b) SC-001: < 100 ms.
+        assert!(
+            elapsed_m42 < std::time::Duration::from_millis(100),
+            "SC-001 violated: offline typeahead for 'm 42' took {:?}, must be < 100 ms",
+            elapsed_m42
+        );
+
+        // Repeat measurement for a common-name query ("androm" → M 31) to
+        // confirm the latency bound holds for prefix/substring paths too.
+        let t1 = std::time::Instant::now();
+        let results_androm = cache::search_by_normalized(db.pool(), "androm", 20)
+            .await
+            .expect("search must not fail");
+        let elapsed_androm = t1.elapsed();
+
+        assert!(
+            !results_androm.is_empty(),
+            "offline prefix search 'androm' must return results from seeded cache"
+        );
+        let found_m31 = results_androm.iter().any(|h| h.target.primary_designation == "M 31");
+        assert!(found_m31, "prefix 'androm' must include M 31 (Andromeda Galaxy)");
+
+        assert!(
+            elapsed_androm < std::time::Duration::from_millis(100),
+            "SC-001 violated: offline prefix typeahead for 'androm' took {:?}, must be < 100 ms",
+            elapsed_androm
+        );
+    }
+
+    /// T018 (additional) — second call to `load_bundled_on_first_run` is a
+    /// no-op AND the cache remains queryable, proving the offline guarantee
+    /// persists across repeated startup calls.
+    #[tokio::test]
+    async fn t018_offline_guarantee_persists_after_no_op_load() {
+        let db = setup().await;
+
+        // First run: seed the cache.
+        load_bundled_on_first_run(db.pool()).await.unwrap().unwrap();
+
+        // Second run: should be a no-op (cache already populated).
+        let second = load_bundled_on_first_run(db.pool()).await.unwrap();
+        assert!(
+            second.is_none(),
+            "second call to load_bundled_on_first_run must return None (already populated)"
+        );
+
+        // Cache must still be queryable — offline guarantee holds.
+        let norm = crate::normalize::normalize("M 31");
+        let got = cache::get_by_normalized(db.pool(), &norm)
+            .await
+            .unwrap();
+        assert!(
+            got.is_some(),
+            "M 31 must remain resolvable from the cache after a no-op second load"
+        );
+        assert_eq!(
+            got.unwrap().primary_designation,
+            "M 31",
+            "cached M 31 must retain its primary designation after no-op reload"
+        );
+    }
 }
