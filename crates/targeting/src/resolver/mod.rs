@@ -53,6 +53,48 @@ pub enum ObjectType {
     Other,
 }
 
+impl ObjectType {
+    /// The snake_case wire/DB string for this object type (matches the contract
+    /// enum and the `canonical_target.object_type` column).
+    #[must_use]
+    pub fn as_wire(self) -> &'static str {
+        match self {
+            Self::Galaxy => "galaxy",
+            Self::PlanetaryNebula => "planetary_nebula",
+            Self::EmissionNebula => "emission_nebula",
+            Self::ReflectionNebula => "reflection_nebula",
+            Self::DarkNebula => "dark_nebula",
+            Self::OpenCluster => "open_cluster",
+            Self::GlobularCluster => "globular_cluster",
+            Self::SupernovaRemnant => "supernova_remnant",
+            Self::GalaxyCluster => "galaxy_cluster",
+            Self::DoubleStar => "double_star",
+            Self::Asterism => "asterism",
+            Self::Other => "other",
+        }
+    }
+
+    /// Parse a wire/DB string into an [`ObjectType`]. Unknown strings map to
+    /// [`ObjectType::Other`] (closed enum, forward-compatible read).
+    #[must_use]
+    pub fn from_wire(s: &str) -> Self {
+        match s {
+            "galaxy" => Self::Galaxy,
+            "planetary_nebula" => Self::PlanetaryNebula,
+            "emission_nebula" => Self::EmissionNebula,
+            "reflection_nebula" => Self::ReflectionNebula,
+            "dark_nebula" => Self::DarkNebula,
+            "open_cluster" => Self::OpenCluster,
+            "globular_cluster" => Self::GlobularCluster,
+            "supernova_remnant" => Self::SupernovaRemnant,
+            "galaxy_cluster" => Self::GalaxyCluster,
+            "double_star" => Self::DoubleStar,
+            "asterism" => Self::Asterism,
+            _ => Self::Other,
+        }
+    }
+}
+
 /// Map a raw SIMBAD `otype` string to the closed [`ObjectType`] enum.
 ///
 /// SIMBAD `otype` values are short, case-sensitive condensed codes (e.g. `G`
@@ -113,6 +155,53 @@ pub enum TargetSource {
     UserOverride,
 }
 
+impl TargetSource {
+    /// The wire/DB string for this source (matches the `canonical_target.source`
+    /// CHECK constraint; `UserOverride` is the hyphenated `user-override`).
+    #[must_use]
+    pub fn as_wire(self) -> &'static str {
+        match self {
+            Self::Seed => "seed",
+            Self::Resolved => "resolved",
+            Self::UserOverride => "user-override",
+        }
+    }
+
+    /// Parse a wire/DB string into a [`TargetSource`]. Returns `None` for an
+    /// unrecognised value (the DB CHECK constraint prevents this in practice).
+    #[must_use]
+    pub fn from_wire(s: &str) -> Option<Self> {
+        match s {
+            "seed" => Some(Self::Seed),
+            "resolved" => Some(Self::Resolved),
+            "user-override" => Some(Self::UserOverride),
+            _ => None,
+        }
+    }
+
+    /// Source precedence rank for conflicting writes (FR-014): higher wins.
+    /// `user-override` (2) > `resolved` (1) > `seed` (0).
+    #[must_use]
+    pub fn precedence(self) -> u8 {
+        match self {
+            Self::Seed => 0,
+            Self::Resolved => 1,
+            Self::UserOverride => 2,
+        }
+    }
+
+    /// Whether a write with `self` as the incoming source may overwrite an
+    /// existing row whose source is `existing` (FR-014).
+    ///
+    /// A `user-override` row is sticky: a later `resolved`/`seed` result MUST
+    /// NOT overwrite it. An equal-or-higher-precedence incoming source wins
+    /// (re-resolving refreshes a `resolved` row; an override always wins).
+    #[must_use]
+    pub fn may_overwrite(self, existing: Self) -> bool {
+        self.precedence() >= existing.precedence()
+    }
+}
+
 // ── ResolvedAlias / ResolvedIdentity ────────────────────────────────────────────
 
 /// The kind of an alias attached to a resolved identity (data-model.md
@@ -124,6 +213,26 @@ pub enum AliasKind {
     Designation,
     /// A SIMBAD `NAME …` curated common name (e.g. `Andromeda Galaxy`).
     CommonName,
+}
+
+impl AliasKind {
+    /// The wire/DB string (matches the `target_alias.kind` CHECK constraint).
+    #[must_use]
+    pub fn as_wire(self) -> &'static str {
+        match self {
+            Self::Designation => "designation",
+            Self::CommonName => "common_name",
+        }
+    }
+
+    /// Parse a wire/DB string into an [`AliasKind`]; unknown → `Designation`.
+    #[must_use]
+    pub fn from_wire(s: &str) -> Self {
+        match s {
+            "common_name" => Self::CommonName,
+            _ => Self::Designation,
+        }
+    }
 }
 
 /// One alternate designation/name for a resolved identity (data-model.md

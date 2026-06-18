@@ -27,8 +27,8 @@ description: "Task list for SIMBAD Target Resolution (spec 035)"
 - [X] T005 [P] Implement SIMBAD `otype` → closed `ObjectType` enum mapping in `crates/targeting/src/resolver/mod.rs`
 - [X] T006 Implement the resolution-cache + resolver-settings schema in `0031_target_resolution.sql` (`canonical_target`, `target_alias`, `resolver_settings`, `ingest_resolution`) per data-model.md, and in the same forward migration `DROP TABLE IF EXISTS` the superseded `0016_catalogs.sql` tables (forward-only; never edit `0016`)
 - [X] T007 [P] Add `target.search` / `target.resolve` / resolver-settings DTOs to `crates/contracts/core/src/targets.rs` (camelCase, `specta::Type`) and regenerate TS bindings (`apps/desktop/src/bindings/index.ts`)
-- [ ] T008 Implement cache read/write + dedupe-by-`simbad_oid` + source precedence (`user-override` > `resolved` > `seed`) in `crates/targeting/src/resolver/cache.rs`
-- [ ] T009 [P] Contract conformance test scaffold in `tests/contract/target_resolution_parity_test.rs` (DTO ↔ JSON-schema round-trip parity for the 3 contracts)
+- [X] T008 Implement cache read/write + dedupe-by-`simbad_oid` + source precedence (`user-override` > `resolved` > `seed`) in `crates/targeting/src/resolver/cache.rs`
+- [X] T009 [P] Contract conformance test scaffold in `tests/contract/target_resolution_parity_test.rs` (DTO ↔ JSON-schema round-trip parity for the 3 contracts)
 
 ---
 

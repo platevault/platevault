@@ -40,6 +40,22 @@ pub fn target_id(catalog_id: &str, designation: &str) -> Uuid {
     Uuid::new_v5(&target_namespace(), canonical.as_bytes())
 }
 
+/// Derive the deterministic UUIDv5 for a target from its canonical designation
+/// alone (data-model.md §CanonicalTarget: "namespaced from the canonical
+/// designation").
+///
+/// Used by the spec-035 resolution cache, where a SIMBAD-resolved identity is
+/// keyed by its precedence-winning `primary_designation` rather than a single
+/// catalog slug. The derivation is `UUIDv5(NAMESPACE, "<designation>")`; it is
+/// stable across machines for the same designation.
+///
+/// The `designation` must be non-empty; callers choose the precedence-winning
+/// designation (see `CatalogId::precedence`).
+#[must_use]
+pub fn target_id_from_designation(designation: &str) -> Uuid {
+    Uuid::new_v5(&target_namespace(), designation.as_bytes())
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
