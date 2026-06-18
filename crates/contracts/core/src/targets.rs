@@ -275,3 +275,268 @@ pub struct TargetOpError {
     #[serde(skip_serializing_if = "Option::is_none")]
     pub details: Option<crate::JsonAny>,
 }
+
+// ── Spec 035 DTOs — SIMBAD target resolution ──────────────────────────────────
+//
+// These types implement the three JSON Schema contracts in
+// `specs/035-simbad-target-resolution/contracts/`:
+// - `target.search.json`
+// - `target.resolve.json`
+// - `target.resolution-settings.json`
+//
+// Pure DTOs (no logic): wire parity with the contracts is verified by T009.
+
+/// Closed astronomical object classification (spec 035 `ObjectType`).
+///
+/// Mapped uniformly from SIMBAD `otype`; unknown values map to `Other`.
+#[derive(
+    Clone, Copy, Debug, Eq, Hash, Ord, PartialEq, PartialOrd, Serialize, Deserialize, Type,
+)]
+#[serde(rename_all = "snake_case")]
+pub enum TargetObjectType {
+    Galaxy,
+    PlanetaryNebula,
+    EmissionNebula,
+    ReflectionNebula,
+    DarkNebula,
+    OpenCluster,
+    GlobularCluster,
+    SupernovaRemnant,
+    GalaxyCluster,
+    DoubleStar,
+    Asterism,
+    Other,
+}
+
+/// Closed catalogue identifier slug (spec 035 `CatalogId`).
+#[derive(
+    Clone, Copy, Debug, Eq, Hash, Ord, PartialEq, PartialOrd, Serialize, Deserialize, Type,
+)]
+#[serde(rename_all = "snake_case")]
+pub enum TargetCatalogId {
+    Messier,
+    Caldwell,
+    Sharpless,
+    AbellPn,
+    AbellGalaxies,
+    Arp,
+    Vdb,
+    Barnard,
+    Lbn,
+    Ldn,
+    Melotte,
+    Common,
+    Openngc,
+}
+
+/// Provenance of a canonical target identity (spec 035).
+///
+/// `UserOverride` serializes as the hyphenated wire form `user-override`
+/// (DTO↔wire parity, T009); the other variants are lower-case words.
+#[derive(
+    Clone, Copy, Debug, Eq, Hash, Ord, PartialEq, PartialOrd, Serialize, Deserialize, Type,
+)]
+pub enum TargetSource {
+    #[serde(rename = "seed")]
+    Seed,
+    #[serde(rename = "resolved")]
+    Resolved,
+    #[serde(rename = "user-override")]
+    UserOverride,
+}
+
+// ── target.search ─────────────────────────────────────────────────────────────
+
+/// A single ranked typeahead suggestion (`target.search.json` §`Suggestion`).
+#[derive(Clone, Debug, PartialEq, Serialize, Deserialize, Type)]
+#[serde(rename_all = "camelCase")]
+pub struct TargetSuggestion {
+    pub target_id: String,
+    pub primary_designation: String,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub common_name: Option<String>,
+    pub object_type: TargetObjectType,
+    /// The alias that matched the query.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub matched_alias: Option<String>,
+    pub source: TargetSource,
+}
+
+/// Request for `target.search` (`target.search.json` §`Request`).
+#[derive(Clone, Debug, PartialEq, Serialize, Deserialize, Type)]
+#[serde(rename_all = "camelCase")]
+pub struct TargetSearchRequest {
+    pub contract_version: String,
+    pub request_id: String,
+    /// Partial designation or common name.
+    pub query: String,
+    /// Optional; empty/absent = all catalogues.
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub catalog_filter: Vec<TargetCatalogId>,
+    /// Optional; empty/absent = all types.
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub type_filter: Vec<TargetObjectType>,
+    #[serde(default = "default_search_limit")]
+    pub limit: u32,
+}
+
+fn default_search_limit() -> u32 {
+    20
+}
+
+/// Response for `target.search` (`target.search.json` §`Response`).
+///
+/// Local matches only; ordered by match quality. Long-tail/SIMBAD results
+/// arrive via `target.resolve`.
+#[derive(Clone, Debug, PartialEq, Serialize, Deserialize, Type)]
+#[serde(rename_all = "camelCase")]
+pub struct TargetSearchResponse {
+    pub contract_version: String,
+    pub request_id: String,
+    pub suggestions: Vec<TargetSuggestion>,
+}
+
+// ── target.resolve ────────────────────────────────────────────────────────────
+
+/// Discriminated status for `target.resolve` (`target.resolve.json` §`ResolveStatus`).
+#[derive(
+    Clone, Copy, Debug, Eq, Hash, Ord, PartialEq, PartialOrd, Serialize, Deserialize, Type,
+)]
+#[serde(rename_all = "snake_case")]
+pub enum TargetResolveStatus {
+    /// A canonical target was determined (from cache or SIMBAD).
+    Resolved,
+    /// Unknown/garbled, or SIMBAD unreachable with no cached entry — marked
+    /// pending, retryable; coordinates never fabricated.
+    Unresolved,
+}
+
+/// Canonical identity returned by `target.resolve` (`target.resolve.json` §`ResolvedTarget`).
+#[derive(Clone, Debug, PartialEq, Serialize, Deserialize, Type)]
+#[serde(rename_all = "camelCase")]
+pub struct ResolvedTarget {
+    pub target_id: String,
+    /// SIMBAD physical-object id (dedup key) when resolved online.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub simbad_oid: Option<i64>,
+    pub primary_designation: String,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub common_name: Option<String>,
+    pub object_type: TargetObjectType,
+    /// ICRS J2000 right ascension in `[0, 360)` decimal degrees.
+    pub ra_deg: f64,
+    /// ICRS J2000 declination in `[-90, 90]` decimal degrees.
+    pub dec_deg: f64,
+    pub aliases: Vec<String>,
+    pub source: TargetSource,
+}
+
+/// Closed error codes for `target.resolve` (`target.resolve.json` §`ErrorCode`).
+#[derive(
+    Clone, Copy, Debug, Eq, Hash, Ord, PartialEq, PartialOrd, Serialize, Deserialize, Type,
+)]
+pub enum TargetResolveErrorCode {
+    #[serde(rename = "resolver.unreachable")]
+    ResolverUnreachable,
+    #[serde(rename = "resolver.disabled")]
+    ResolverDisabled,
+    #[serde(rename = "resolver.timeout")]
+    ResolverTimeout,
+    #[serde(rename = "actor.not_authorised")]
+    ActorNotAuthorised,
+}
+
+/// Error envelope for `target.resolve` (`target.resolve.json` §`ErrorEnvelope`).
+#[derive(Clone, Debug, PartialEq, Serialize, Deserialize, Type)]
+#[serde(rename_all = "camelCase")]
+pub struct TargetResolveError {
+    pub code: TargetResolveErrorCode,
+    pub message: String,
+}
+
+/// Manual user-override directive (`target.resolve.json` §`Request.override`).
+///
+/// When present, binds `query` to this canonical target; persisted as
+/// `source=user-override` and wins over future SIMBAD results (FR-014).
+#[derive(Clone, Debug, PartialEq, Serialize, Deserialize, Type)]
+#[serde(rename_all = "camelCase")]
+pub struct TargetResolveOverride {
+    pub target_id: String,
+}
+
+/// Request for `target.resolve` (`target.resolve.json` §`Request`).
+#[derive(Clone, Debug, PartialEq, Serialize, Deserialize, Type)]
+#[serde(rename_all = "camelCase")]
+pub struct TargetResolveSimbadRequest {
+    pub contract_version: String,
+    pub request_id: String,
+    /// Complete designation or common name, or a FITS OBJECT value.
+    pub query: String,
+    /// When present, records a manual user override.
+    #[serde(rename = "override", skip_serializing_if = "Option::is_none")]
+    pub override_target: Option<TargetResolveOverride>,
+}
+
+/// Response for `target.resolve` (`target.resolve.json` §`Response`).
+///
+/// `target` is present when `status = Resolved`; `unresolvedReason` is present
+/// when `status = Unresolved`.
+#[derive(Clone, Debug, PartialEq, Serialize, Deserialize, Type)]
+#[serde(rename_all = "camelCase")]
+pub struct TargetResolveSimbadResponse {
+    pub contract_version: String,
+    pub request_id: String,
+    pub status: TargetResolveStatus,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub target: Option<ResolvedTarget>,
+    /// Present when `status = Unresolved` (e.g. `"unknown"`, `"offline"`,
+    /// `"ambiguous"`).
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub unresolved_reason: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub error: Option<TargetResolveError>,
+}
+
+// ── target.resolution.settings ────────────────────────────────────────────────
+
+/// SIMBAD resolver settings (`target.resolution-settings.json` §`Settings`).
+#[derive(Clone, Debug, PartialEq, Serialize, Deserialize, Type)]
+#[serde(rename_all = "camelCase")]
+pub struct ResolverSettings {
+    /// Enable/disable online SIMBAD resolution (FR-015; default true). When
+    /// false, only seed+cache are used.
+    pub online_enabled: bool,
+    pub simbad_endpoint: String,
+    pub debounce_ms: u32,
+    pub request_timeout_secs: u32,
+}
+
+/// Get request for resolver settings (`target.resolution-settings.json` §`GetRequest`).
+#[derive(Clone, Debug, PartialEq, Serialize, Deserialize, Type)]
+#[serde(rename_all = "camelCase")]
+pub struct ResolverSettingsGetRequest {
+    pub contract_version: String,
+    pub request_id: String,
+    /// Discriminant; always `"get"`.
+    pub op: String,
+}
+
+/// Update request for resolver settings (`target.resolution-settings.json` §`UpdateRequest`).
+#[derive(Clone, Debug, PartialEq, Serialize, Deserialize, Type)]
+#[serde(rename_all = "camelCase")]
+pub struct ResolverSettingsUpdateRequest {
+    pub contract_version: String,
+    pub request_id: String,
+    /// Discriminant; always `"update"`.
+    pub op: String,
+    pub settings: ResolverSettings,
+}
+
+/// Response for resolver settings get/update (`target.resolution-settings.json` §`Response`).
+#[derive(Clone, Debug, PartialEq, Serialize, Deserialize, Type)]
+#[serde(rename_all = "camelCase")]
+pub struct ResolverSettingsResponse {
+    pub contract_version: String,
+    pub request_id: String,
+    pub settings: ResolverSettings,
+}

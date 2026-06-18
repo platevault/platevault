@@ -4621,6 +4621,77 @@ export type ResolveStatus =
 /**  Catalog unavailable or request invalid. */
 "error";
 
+/**  Canonical identity returned by `target.resolve` (`target.resolve.json` §`ResolvedTarget`). */
+export type ResolvedTarget = ResolvedTarget_Serialize | ResolvedTarget_Deserialize;
+
+/**  Canonical identity returned by `target.resolve` (`target.resolve.json` §`ResolvedTarget`). */
+export type ResolvedTarget_Deserialize = {
+	targetId: string,
+	/**  SIMBAD physical-object id (dedup key) when resolved online. */
+	simbadOid: number | null,
+	primaryDesignation: string,
+	commonName: string | null,
+	objectType: TargetObjectType,
+	/**  ICRS J2000 right ascension in `[0, 360)` decimal degrees. */
+	raDeg: number | null,
+	/**  ICRS J2000 declination in `[-90, 90]` decimal degrees. */
+	decDeg: number | null,
+	aliases: string[],
+	source: TargetSource,
+};
+
+/**  Canonical identity returned by `target.resolve` (`target.resolve.json` §`ResolvedTarget`). */
+export type ResolvedTarget_Serialize = {
+	targetId: string,
+	/**  SIMBAD physical-object id (dedup key) when resolved online. */
+	simbadOid?: number | null,
+	primaryDesignation: string,
+	commonName?: string | null,
+	objectType: TargetObjectType,
+	/**  ICRS J2000 right ascension in `[0, 360)` decimal degrees. */
+	raDeg: number | null,
+	/**  ICRS J2000 declination in `[-90, 90]` decimal degrees. */
+	decDeg: number | null,
+	aliases: string[],
+	source: TargetSource,
+};
+
+/**  SIMBAD resolver settings (`target.resolution-settings.json` §`Settings`). */
+export type ResolverSettings = {
+	/**
+	 *  Enable/disable online SIMBAD resolution (FR-015; default true). When
+	 *  false, only seed+cache are used.
+	 */
+	onlineEnabled: boolean,
+	simbadEndpoint: string,
+	debounceMs: number,
+	requestTimeoutSecs: number,
+};
+
+/**  Get request for resolver settings (`target.resolution-settings.json` §`GetRequest`). */
+export type ResolverSettingsGetRequest = {
+	contractVersion: string,
+	requestId: string,
+	/**  Discriminant; always `"get"`. */
+	op: string,
+};
+
+/**  Response for resolver settings get/update (`target.resolution-settings.json` §`Response`). */
+export type ResolverSettingsResponse = {
+	contractVersion: string,
+	requestId: string,
+	settings: ResolverSettings,
+};
+
+/**  Update request for resolver settings (`target.resolution-settings.json` §`UpdateRequest`). */
+export type ResolverSettingsUpdateRequest = {
+	contractVersion: string,
+	requestId: string,
+	/**  Discriminant; always `"update"`. */
+	op: string,
+	settings: ResolverSettings,
+};
+
 /**
  *  Request DTO for `settings.restore-defaults`.
  * 
@@ -5048,6 +5119,9 @@ export type TargetAliasRemoveResult = {
 	auditId: string,
 };
 
+/**  Closed catalogue identifier slug (spec 035 `CatalogId`). */
+export type TargetCatalogId = "messier" | "caldwell" | "sharpless" | "abell_pn" | "abell_galaxies" | "arp" | "vdb" | "barnard" | "lbn" | "ldn" | "melotte" | "common" | "openngc";
+
 /**  Extended detail view of a target. */
 export type TargetDetail = TargetDetail_Serialize | TargetDetail_Deserialize;
 
@@ -5210,6 +5284,13 @@ export type TargetNoteUpdateResult = {
 	updatedAt: string,
 };
 
+/**
+ *  Closed astronomical object classification (spec 035 `ObjectType`).
+ * 
+ *  Mapped uniformly from SIMBAD `otype`; unknown values map to `Other`.
+ */
+export type TargetObjectType = "galaxy" | "planetary_nebula" | "emission_nebula" | "reflection_nebula" | "dark_nebula" | "open_cluster" | "globular_cluster" | "supernova_remnant" | "galaxy_cluster" | "double_star" | "asterism" | "other";
+
 /**  Generic error envelope for target operations. */
 export type TargetOpError = TargetOpError_Serialize | TargetOpError_Deserialize;
 
@@ -5258,6 +5339,25 @@ export type TargetProjectStub = {
 	id: string,
 	name: string,
 	state: ProjectState,
+};
+
+/**  Error envelope for `target.resolve` (`target.resolve.json` §`ErrorEnvelope`). */
+export type TargetResolveError = {
+	code: TargetResolveErrorCode,
+	message: string,
+};
+
+/**  Closed error codes for `target.resolve` (`target.resolve.json` §`ErrorCode`). */
+export type TargetResolveErrorCode = "resolver.unreachable" | "resolver.disabled" | "resolver.timeout" | "actor.not_authorised";
+
+/**
+ *  Manual user-override directive (`target.resolve.json` §`Request.override`).
+ * 
+ *  When present, binds `query` to this canonical target; persisted as
+ *  `source=user-override` and wins over future SIMBAD results (FR-014).
+ */
+export type TargetResolveOverride = {
+	targetId: string,
 };
 
 /**  Request for `target.resolve` (target.resolve.json §Request). */
@@ -5309,6 +5409,146 @@ export type TargetResolveResponse_Serialize = {
 	errors?: LookupError[] | null,
 };
 
+/**  Request for `target.resolve` (`target.resolve.json` §`Request`). */
+export type TargetResolveSimbadRequest = TargetResolveSimbadRequest_Serialize | TargetResolveSimbadRequest_Deserialize;
+
+/**  Request for `target.resolve` (`target.resolve.json` §`Request`). */
+export type TargetResolveSimbadRequest_Deserialize = {
+	contractVersion: string,
+	requestId: string,
+	/**  Complete designation or common name, or a FITS OBJECT value. */
+	query: string,
+	/**  When present, records a manual user override. */
+	override: TargetResolveOverride | null,
+};
+
+/**  Request for `target.resolve` (`target.resolve.json` §`Request`). */
+export type TargetResolveSimbadRequest_Serialize = {
+	contractVersion: string,
+	requestId: string,
+	/**  Complete designation or common name, or a FITS OBJECT value. */
+	query: string,
+	/**  When present, records a manual user override. */
+	override?: TargetResolveOverride | null,
+};
+
+/**
+ *  Response for `target.resolve` (`target.resolve.json` §`Response`).
+ * 
+ *  `target` is present when `status = Resolved`; `unresolvedReason` is present
+ *  when `status = Unresolved`.
+ */
+export type TargetResolveSimbadResponse = TargetResolveSimbadResponse_Serialize | TargetResolveSimbadResponse_Deserialize;
+
+/**
+ *  Response for `target.resolve` (`target.resolve.json` §`Response`).
+ * 
+ *  `target` is present when `status = Resolved`; `unresolvedReason` is present
+ *  when `status = Unresolved`.
+ */
+export type TargetResolveSimbadResponse_Deserialize = {
+	contractVersion: string,
+	requestId: string,
+	status: TargetResolveStatus,
+	target: ResolvedTarget_Deserialize | null,
+	/**
+	 *  Present when `status = Unresolved` (e.g. `"unknown"`, `"offline"`,
+	 *  `"ambiguous"`).
+	 */
+	unresolvedReason: string | null,
+	error: TargetResolveError | null,
+};
+
+/**
+ *  Response for `target.resolve` (`target.resolve.json` §`Response`).
+ * 
+ *  `target` is present when `status = Resolved`; `unresolvedReason` is present
+ *  when `status = Unresolved`.
+ */
+export type TargetResolveSimbadResponse_Serialize = {
+	contractVersion: string,
+	requestId: string,
+	status: TargetResolveStatus,
+	target?: ResolvedTarget_Serialize | null,
+	/**
+	 *  Present when `status = Unresolved` (e.g. `"unknown"`, `"offline"`,
+	 *  `"ambiguous"`).
+	 */
+	unresolvedReason?: string | null,
+	error?: TargetResolveError | null,
+};
+
+/**  Discriminated status for `target.resolve` (`target.resolve.json` §`ResolveStatus`). */
+export type TargetResolveStatus = 
+/**  A canonical target was determined (from cache or SIMBAD). */
+"resolved" | 
+/**
+ *  Unknown/garbled, or SIMBAD unreachable with no cached entry — marked
+ *  pending, retryable; coordinates never fabricated.
+ */
+"unresolved";
+
+/**  Request for `target.search` (`target.search.json` §`Request`). */
+export type TargetSearchRequest = TargetSearchRequest_Serialize | TargetSearchRequest_Deserialize;
+
+/**  Request for `target.search` (`target.search.json` §`Request`). */
+export type TargetSearchRequest_Deserialize = {
+	contractVersion: string,
+	requestId: string,
+	/**  Partial designation or common name. */
+	query: string,
+	/**  Optional; empty/absent = all catalogues. */
+	catalogFilter?: TargetCatalogId[],
+	/**  Optional; empty/absent = all types. */
+	typeFilter?: TargetObjectType[],
+	limit?: number,
+};
+
+/**  Request for `target.search` (`target.search.json` §`Request`). */
+export type TargetSearchRequest_Serialize = {
+	contractVersion: string,
+	requestId: string,
+	/**  Partial designation or common name. */
+	query: string,
+	/**  Optional; empty/absent = all catalogues. */
+	catalogFilter?: TargetCatalogId[],
+	/**  Optional; empty/absent = all types. */
+	typeFilter?: TargetObjectType[],
+	limit: number,
+};
+
+/**
+ *  Response for `target.search` (`target.search.json` §`Response`).
+ * 
+ *  Local matches only; ordered by match quality. Long-tail/SIMBAD results
+ *  arrive via `target.resolve`.
+ */
+export type TargetSearchResponse = TargetSearchResponse_Serialize | TargetSearchResponse_Deserialize;
+
+/**
+ *  Response for `target.search` (`target.search.json` §`Response`).
+ * 
+ *  Local matches only; ordered by match quality. Long-tail/SIMBAD results
+ *  arrive via `target.resolve`.
+ */
+export type TargetSearchResponse_Deserialize = {
+	contractVersion: string,
+	requestId: string,
+	suggestions: TargetSuggestion_Deserialize[],
+};
+
+/**
+ *  Response for `target.search` (`target.search.json` §`Response`).
+ * 
+ *  Local matches only; ordered by match quality. Long-tail/SIMBAD results
+ *  arrive via `target.resolve`.
+ */
+export type TargetSearchResponse_Serialize = {
+	contractVersion: string,
+	requestId: string,
+	suggestions: TargetSuggestion_Serialize[],
+};
+
 /**  A single session row in the target history (spec 023 `TargetSession`). */
 export type TargetSession = TargetSession_Serialize | TargetSession_Deserialize;
 
@@ -5342,6 +5582,39 @@ export type TargetSession_Serialize = {
 	frames?: number | null,
 	/**  Deep-link to the Inventory entry. */
 	inventoryId: string,
+};
+
+/**
+ *  Provenance of a canonical target identity (spec 035).
+ * 
+ *  `UserOverride` serializes as the hyphenated wire form `user-override`
+ *  (DTO↔wire parity, T009); the other variants are lower-case words.
+ */
+export type TargetSource = "seed" | "resolved" | "user-override";
+
+/**  A single ranked typeahead suggestion (`target.search.json` §`Suggestion`). */
+export type TargetSuggestion = TargetSuggestion_Serialize | TargetSuggestion_Deserialize;
+
+/**  A single ranked typeahead suggestion (`target.search.json` §`Suggestion`). */
+export type TargetSuggestion_Deserialize = {
+	targetId: string,
+	primaryDesignation: string,
+	commonName: string | null,
+	objectType: TargetObjectType,
+	/**  The alias that matched the query. */
+	matchedAlias: string | null,
+	source: TargetSource,
+};
+
+/**  A single ranked typeahead suggestion (`target.search.json` §`Suggestion`). */
+export type TargetSuggestion_Serialize = {
+	targetId: string,
+	primaryDesignation: string,
+	commonName?: string | null,
+	objectType: TargetObjectType,
+	/**  The alias that matched the query. */
+	matchedAlias?: string | null,
+	source: TargetSource,
 };
 
 /**  An astronomical target as seen in list views. */

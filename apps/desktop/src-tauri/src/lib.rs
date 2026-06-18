@@ -126,6 +126,18 @@ fn base_builder() -> Builder<tauri::Wry> {
         // emits it once instead of inlining its self-referential shape, which
         // would otherwise fail with "infinitely recursive inline reference".
         .typ::<serde_json::Value>()
+        // Spec 035 — SIMBAD target resolution DTOs (T007). These are pure
+        // contract types whose commands land in later tasks (US1–5); register
+        // them explicitly so the TypeScript surface exists ahead of the
+        // commands that will reference them. Request/response roots pull in all
+        // nested structs and enums transitively.
+        .typ::<contracts_core::targets::TargetSearchRequest>()
+        .typ::<contracts_core::targets::TargetSearchResponse>()
+        .typ::<contracts_core::targets::TargetResolveSimbadRequest>()
+        .typ::<contracts_core::targets::TargetResolveSimbadResponse>()
+        .typ::<contracts_core::targets::ResolverSettingsGetRequest>()
+        .typ::<contracts_core::targets::ResolverSettingsUpdateRequest>()
+        .typ::<contracts_core::targets::ResolverSettingsResponse>()
 }
 
 /// Build the tauri-specta [`Builder`] populated with every typed command.
