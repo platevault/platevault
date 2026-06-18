@@ -99,24 +99,28 @@ function getContinueButton(): HTMLElement {
 }
 
 /**
- * Select the folder type in the type-first add bar before adding a folder.
+ * Map a SourceKind to the display label used in each group's add-button
+ * aria-label ("Add <Label> folder").
  */
-function selectFolderType(kind: string) {
-  const select = screen.getByLabelText('Folder type');
-  fireEvent.change(select, { target: { value: kind } });
-}
+const KIND_LABEL: Record<string, string> = {
+  light_frames: 'Light frames',
+  dark: 'Darks',
+  flat: 'Flats',
+  bias: 'Bias',
+  project: 'Projects',
+  inbox: 'Inbox',
+};
 
 /**
- * Simulate adding a folder by (optionally) selecting the folder type, then
- * configuring the mocked pickDirectory() to resolve with the desired path and
- * clicking the "+ Add folder" button. The folder is added with the currently
- * selected type (type-first flow).
+ * Simulate adding a folder to a specific group by configuring the mocked
+ * pickDirectory() and clicking that group's own "+ Add folder" button (located
+ * via its per-kind aria-label). Defaults to the light_frames group.
  */
-async function addFolder(path: string, kind?: string) {
-  if (kind) selectFolderType(kind);
+async function addFolder(path: string, kind = 'light_frames') {
   mockPickDirectory.mockResolvedValueOnce({ path, cancelled: false });
 
-  const addBtn = screen.getByRole('button', { name: /add folder/i });
+  const label = KIND_LABEL[kind] ?? kind;
+  const addBtn = screen.getByRole('button', { name: new RegExp(`add ${label} folder`, 'i') });
 
   await act(async () => {
     fireEvent.click(addBtn);
@@ -187,25 +191,32 @@ describe('SetupWizard 4-step flow', () => {
     });
   });
 
-  it('renders required-source pills reflecting met/unmet groups', async () => {
+  it('renders one persistent group card per source kind, even when empty', () => {
     renderWizard();
 
-    // Both required pills present; both unmet initially.
-    const lightPill = screen.getByTestId('requirement-pill-light_frames');
-    const projectPill = screen.getByTestId('requirement-pill-project');
-    expect(lightPill).toHaveAttribute('data-met', 'false');
-    expect(projectPill).toHaveAttribute('data-met', 'false');
-
-    // Add a light_frames folder -> its pill flips to met.
-    await addFolder('/astro/lights', 'light_frames');
-    await waitFor(() => {
-      expect(screen.getByTestId('requirement-pill-light_frames')).toHaveAttribute('data-met', 'true');
-    });
-    // Project still unmet.
-    expect(screen.getByTestId('requirement-pill-project')).toHaveAttribute('data-met', 'false');
+    for (const kind of ['light_frames', 'dark', 'flat', 'bias', 'project', 'inbox']) {
+      expect(screen.getByTestId(`source-group-${kind}`)).toBeInTheDocument();
+    }
   });
 
-  it('groups added folders by type with a section per type', async () => {
+  it('highlights required group cards with met/unmet status', async () => {
+    renderWizard();
+
+    // Required groups start unmet; optional groups carry no requirement flag.
+    expect(screen.getByTestId('source-group-light_frames')).toHaveAttribute('data-requirement-met', 'false');
+    expect(screen.getByTestId('source-group-project')).toHaveAttribute('data-requirement-met', 'false');
+    expect(screen.getByTestId('source-group-dark')).not.toHaveAttribute('data-requirement-met');
+
+    // Adding to the light_frames group flips its card to met.
+    await addFolder('/astro/lights', 'light_frames');
+    await waitFor(() => {
+      expect(screen.getByTestId('source-group-light_frames')).toHaveAttribute('data-requirement-met', 'true');
+    });
+    // Project still unmet.
+    expect(screen.getByTestId('source-group-project')).toHaveAttribute('data-requirement-met', 'false');
+  });
+
+  it('lists added folders inside their own kind group card', async () => {
     renderWizard();
 
     await addFolder('/astro/lights', 'light_frames');
@@ -214,7 +225,6 @@ describe('SetupWizard 4-step flow', () => {
     await addFolder('/astro/darks', 'dark');
     await waitFor(() => expect(screen.getByText('/astro/darks')).toBeInTheDocument());
 
-    // Each type gets its own group container.
     const lightGroup = screen.getByTestId('source-group-light_frames');
     const darkGroup = screen.getByTestId('source-group-dark');
     expect(lightGroup).toContainElement(screen.getByText('/astro/lights'));

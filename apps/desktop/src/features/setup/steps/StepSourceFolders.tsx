@@ -1,8 +1,6 @@
 import { useState } from 'react';
-import { Box } from '@/ui/Box';
 import { Btn } from '@/ui/Btn';
 import { Pill } from '@/ui/Pill';
-import { EmptyState } from '@/ui/EmptyState';
 import { useDirectoryPicker } from '@/shared/native';
 import type { LastPathKind } from '@/shared/native';
 import type { SourceEntry, SourceKind, ScanDepth } from '../sources-store';
@@ -10,7 +8,6 @@ import {
   ALL_SOURCE_KINDS,
   SOURCE_KIND_LABELS,
   REQUIRED_KINDS,
-  getMissingRequiredKinds,
 } from '../sources-store';
 
 export interface StepSourceFoldersProps {
@@ -35,10 +32,11 @@ const KIND_TO_LAST_PATH: Record<SourceKind, LastPathKind> = {
 /**
  * Step 1 -- Source Folders.
  *
- * Type-first add flow: the user picks the frame/source type, then clicks
- * "Add folder" to open the OS picker; the chosen folder is added with that
- * pre-selected type. Added folders are listed grouped by type, and the
- * required source types render as met/unmet pills.
+ * One persistent card per source kind. Each card has its own "Add folder"
+ * button (type-first by construction) that opens the OS picker and registers
+ * the folder under that card's kind. Required kinds highlight their card to
+ * convey met / unmet status; the surrounding wizard still gates "Continue" on
+ * getMissingRequiredKinds().
  */
 export function StepSourceFolders({
   entries,
@@ -47,9 +45,6 @@ export function StepSourceFolders({
   onScanDepthChange,
   errors,
 }: StepSourceFoldersProps) {
-  const [selectedKind, setSelectedKind] = useState<SourceKind>('light_frames');
-  const missingKinds = getMissingRequiredKinds(entries);
-
   // Stable index lookup so per-row remove/advanced map back to the flat array.
   const indexed = entries.map((entry, index) => ({ entry, index }));
 
@@ -69,164 +64,145 @@ export function StepSourceFolders({
       >
         Organize your astrophotography library, map sessions to targets and projects,
         prepare inputs for PixInsight, and safely plan filesystem changes — all without
-        touching your raw files. Choose a folder type, then add the folder where that
-        data lives.
+        touching your raw files. Add at least one folder to each required type below.
       </p>
 
-      {/* Required-source indicator: one pill per required type-group. */}
       <div
-        className="alm-step-sources__requirements"
-        style={{ display: 'flex', alignItems: 'center', gap: 'var(--alm-sp-2)', flexWrap: 'wrap' }}
+        className="alm-step-sources__groups"
+        style={{ display: 'flex', flexDirection: 'column', gap: 'var(--alm-sp-4)' }}
       >
-        <span
-          style={{
-            fontSize: 'var(--alm-text-2xs)',
-            fontWeight: 'var(--alm-weight-semibold)',
-            textTransform: 'uppercase',
-            letterSpacing: '0.04em',
-            color: 'var(--alm-text-muted)',
-          }}
-        >
-          Required
-        </span>
-        {REQUIRED_KINDS.map((kind) => {
-          const isMet = !missingKinds.includes(kind);
+        {ALL_SOURCE_KINDS.map((kind) => {
+          const rows = indexed.filter(({ entry }) => entry.kind === kind);
           return (
-            <Pill
+            <SourceGroup
               key={kind}
-              variant={isMet ? 'ok' : 'warn'}
-              data-testid={`requirement-pill-${kind}`}
-              data-met={isMet ? 'true' : 'false'}
-            >
-              {SOURCE_KIND_LABELS[kind]} {isMet ? '✓' : '✗'}
-            </Pill>
+              kind={kind}
+              rows={rows}
+              errors={errors}
+              onAdd={onAdd}
+              onRemove={onRemove}
+              onScanDepthChange={onScanDepthChange}
+            />
           );
         })}
       </div>
-
-      {/* Type-first add bar: select type, then open the OS picker. */}
-      <Box title="Add a source folder">
-        <div
-          className="alm-step-sources__add"
-          style={{ display: 'flex', alignItems: 'flex-end', gap: 'var(--alm-sp-3)', flexWrap: 'wrap' }}
-        >
-          <label
-            style={{ display: 'flex', flexDirection: 'column', gap: 'var(--alm-sp-1)' }}
-          >
-            <span
-              style={{
-                fontSize: 'var(--alm-text-2xs)',
-                fontWeight: 'var(--alm-weight-semibold)',
-                textTransform: 'uppercase',
-                letterSpacing: '0.04em',
-                color: 'var(--alm-text-muted)',
-              }}
-            >
-              Folder type
-            </span>
-            <select
-              className="alm-step-sources__kind-select"
-              value={selectedKind}
-              onChange={(e) => setSelectedKind(e.target.value as SourceKind)}
-              aria-label="Folder type"
-            >
-              {ALL_SOURCE_KINDS.map((kind) => (
-                <option key={kind} value={kind}>
-                  {SOURCE_KIND_LABELS[kind]}
-                  {REQUIRED_KINDS.includes(kind) ? ' (required)' : ''}
-                </option>
-              ))}
-            </select>
-          </label>
-
-          <AddFolderButton kind={selectedKind} onAdd={onAdd} />
-        </div>
-      </Box>
-
-      {/* Grouped list of added folders, one section per type. */}
-      {entries.length === 0 ? (
-        <EmptyState
-          title="No folders added yet"
-          desc="Pick a folder type above and click “Add folder” to register your first source."
-        />
-      ) : (
-        <div
-          className="alm-step-sources__groups"
-          style={{ display: 'flex', flexDirection: 'column', gap: 'var(--alm-sp-4)' }}
-        >
-          {ALL_SOURCE_KINDS.map((kind) => {
-            const rows = indexed.filter(({ entry }) => entry.kind === kind);
-            if (rows.length === 0) return null;
-            return (
-              <SourceGroup
-                key={kind}
-                kind={kind}
-                rows={rows}
-                errors={errors}
-                onRemove={onRemove}
-                onScanDepthChange={onScanDepthChange}
-              />
-            );
-          })}
-        </div>
-      )}
     </div>
   );
 }
 
-/** A type group: heading + count + its folder rows. */
+/** A persistent type group card: heading + requirement highlight + folder rows + add button. */
 function SourceGroup({
   kind,
   rows,
   errors,
+  onAdd,
   onRemove,
   onScanDepthChange,
 }: {
   kind: SourceKind;
   rows: { entry: SourceEntry; index: number }[];
   errors: Record<number, string>;
+  onAdd: (path: string, kind: SourceKind) => void;
   onRemove: (index: number) => void;
   onScanDepthChange: (index: number, depth: ScanDepth) => void;
 }) {
   const isRequired = REQUIRED_KINDS.includes(kind);
+  const isMet = rows.length > 0;
+
+  // Requirement highlight: met required → ok accent; unmet required → warn
+  // accent; optional kinds render with the neutral box treatment.
+  let cardBorder = '1px solid var(--alm-border)';
+  let cardBackground = 'var(--alm-bg)';
+  let headerBorder = '1px solid var(--alm-border-subtle)';
+  if (isRequired && isMet) {
+    cardBorder = '1px solid var(--alm-ok-border)';
+    cardBackground = 'var(--alm-ok-bg)';
+    headerBorder = '1px solid var(--alm-ok-border)';
+  } else if (isRequired && !isMet) {
+    cardBorder = '1px solid var(--alm-warn-border)';
+    cardBackground = 'var(--alm-warn-bg)';
+    headerBorder = '1px solid var(--alm-warn-border)';
+  }
+
   return (
-    <div className="alm-step-sources__group" data-testid={`source-group-${kind}`}>
+    <div
+      className="alm-step-sources__group"
+      data-testid={`source-group-${kind}`}
+      data-required={isRequired ? 'true' : 'false'}
+      data-requirement-met={isRequired ? (isMet ? 'true' : 'false') : undefined}
+      style={{
+        border: cardBorder,
+        borderRadius: 'var(--alm-radius-md)',
+        background: cardBackground,
+        overflow: 'hidden',
+      }}
+    >
+      {/* Group header: type name + count + requirement status + add button */}
       <div
         className="alm-step-sources__group-header"
         style={{
           display: 'flex',
           alignItems: 'center',
           gap: 'var(--alm-sp-2)',
-          padding: 'var(--alm-sp-1) 0',
-          borderBottom: '1px solid var(--alm-border)',
-          marginBottom: 'var(--alm-sp-2)',
+          padding: 'var(--alm-sp-2) var(--alm-sp-3)',
+          borderBottom: headerBorder,
         }}
       >
         <span
           style={{
             fontSize: 'var(--alm-text-xs)',
             fontWeight: 'var(--alm-weight-semibold)',
+            textTransform: 'uppercase',
+            letterSpacing: '0.04em',
             color: 'var(--alm-text-secondary)',
           }}
         >
           {SOURCE_KIND_LABELS[kind]}
         </span>
-        <span style={{ fontSize: 'var(--alm-text-xs)', color: 'var(--alm-text-muted)' }}>
-          ({rows.length})
-        </span>
-        {isRequired && <Pill variant="info">required</Pill>}
+        {isMet && (
+          <span style={{ fontSize: 'var(--alm-text-xs)', color: 'var(--alm-text-muted)' }}>
+            ({rows.length})
+          </span>
+        )}
+        {isRequired && (
+          <Pill
+            variant={isMet ? 'ok' : 'warn'}
+            data-testid={`requirement-status-${kind}`}
+          >
+            {isMet ? 'required ✓' : 'required — add one'}
+          </Pill>
+        )}
+        <span style={{ flex: 1 }} />
+        <AddFolderButton kind={kind} onAdd={onAdd} />
       </div>
 
-      <div style={{ display: 'flex', flexDirection: 'column', gap: 'var(--alm-sp-2)' }}>
-        {rows.map(({ entry, index }) => (
-          <SourceRow
-            key={`${entry.path}-${index}`}
-            entry={entry}
-            error={errors[index]}
-            onRemove={() => onRemove(index)}
-            onScanDepthChange={(depth) => onScanDepthChange(index, depth)}
-          />
-        ))}
+      {/* Folder rows for this kind, or a slim empty hint */}
+      <div
+        style={{
+          display: 'flex',
+          flexDirection: 'column',
+          gap: 'var(--alm-sp-2)',
+          padding: 'var(--alm-sp-3)',
+        }}
+      >
+        {rows.length === 0 ? (
+          <div
+            className="alm-step-sources__group-empty"
+            style={{ fontSize: 'var(--alm-text-sm)', color: 'var(--alm-text-faint)' }}
+          >
+            No {SOURCE_KIND_LABELS[kind].toLowerCase()} folders added yet.
+          </div>
+        ) : (
+          rows.map(({ entry, index }) => (
+            <SourceRow
+              key={`${entry.path}-${index}`}
+              entry={entry}
+              error={errors[index]}
+              onRemove={() => onRemove(index)}
+              onScanDepthChange={(depth) => onScanDepthChange(index, depth)}
+            />
+          ))
+        )}
       </div>
     </div>
   );
@@ -253,7 +229,7 @@ function SourceRow({
         border: '1px solid var(--alm-border)',
         borderRadius: 'var(--alm-radius-sm)',
         padding: 'var(--alm-sp-2) var(--alm-sp-3)',
-        background: 'var(--alm-bg)',
+        background: 'var(--alm-surface-raised)',
       }}
     >
       <div
@@ -332,8 +308,8 @@ function SourceRow({
 }
 
 /**
- * Button that opens the native directory picker and calls onAdd with the
- * selected path and the currently selected kind (type-first add).
+ * Per-group button that opens the native directory picker and adds the chosen
+ * folder under this group's kind (type-first by construction).
  */
 function AddFolderButton({
   kind,
@@ -352,8 +328,14 @@ function AddFolderButton({
   };
 
   return (
-    <div style={{ display: 'flex', flexDirection: 'column', gap: 'var(--alm-sp-1)' }}>
-      <Btn variant="primary" size="sm" onClick={handleChoose} disabled={loading}>
+    <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'flex-end', gap: 'var(--alm-sp-1)' }}>
+      <Btn
+        size="sm"
+        variant="primary"
+        onClick={handleChoose}
+        disabled={loading}
+        aria-label={`Add ${SOURCE_KIND_LABELS[kind]} folder`}
+      >
         {loading ? 'Choosing…' : '+ Add folder…'}
       </Btn>
       {error && (
