@@ -99,10 +99,21 @@ function getContinueButton(): HTMLElement {
 }
 
 /**
- * Simulate adding a folder by configuring the mocked pickDirectory() to
- * resolve with the desired path, then clicking the "+ Add folder" button.
+ * Select the folder type in the type-first add bar before adding a folder.
  */
-async function addFolder(path: string) {
+function selectFolderType(kind: string) {
+  const select = screen.getByLabelText('Folder type');
+  fireEvent.change(select, { target: { value: kind } });
+}
+
+/**
+ * Simulate adding a folder by (optionally) selecting the folder type, then
+ * configuring the mocked pickDirectory() to resolve with the desired path and
+ * clicking the "+ Add folder" button. The folder is added with the currently
+ * selected type (type-first flow).
+ */
+async function addFolder(path: string, kind?: string) {
+  if (kind) selectFolderType(kind);
   mockPickDirectory.mockResolvedValueOnce({ path, cancelled: false });
 
   const addBtn = screen.getByRole('button', { name: /add folder/i });
@@ -113,14 +124,6 @@ async function addFolder(path: string) {
     // queue so React processes the state update.
     await new Promise((r) => setTimeout(r, 0));
   });
-}
-
-/**
- * Change the source kind dropdown for a given folder row (by index, 0-based).
- */
-function changeKind(index: number, kind: string) {
-  const selects = screen.getAllByLabelText('Source type');
-  fireEvent.change(selects[index], { target: { value: kind } });
 }
 
 // ---------------------------------------------------------------------------
@@ -166,25 +169,56 @@ describe('SetupWizard 4-step flow', () => {
   it('enables Continue on Step 1 after adding both light_frames and project folders', async () => {
     renderWizard();
 
-    // Add light_frames folder (default kind for new folders)
-    await addFolder('/astro/lights');
+    // Add light_frames folder (default selected type)
+    await addFolder('/astro/lights', 'light_frames');
     await waitFor(() => {
       expect(screen.getByText('/astro/lights')).toBeInTheDocument();
     });
 
-    // Add project folder
-    await addFolder('/astro/projects');
+    // Type-first: select "project" type, then add the project folder
+    await addFolder('/astro/projects', 'project');
     await waitFor(() => {
       expect(screen.getByText('/astro/projects')).toBeInTheDocument();
     });
-
-    // Change second folder to project kind
-    changeKind(1, 'project');
 
     // Should now be enabled
     await waitFor(() => {
       expect(getContinueButton()).not.toBeDisabled();
     });
+  });
+
+  it('renders required-source pills reflecting met/unmet groups', async () => {
+    renderWizard();
+
+    // Both required pills present; both unmet initially.
+    const lightPill = screen.getByTestId('requirement-pill-light_frames');
+    const projectPill = screen.getByTestId('requirement-pill-project');
+    expect(lightPill).toHaveAttribute('data-met', 'false');
+    expect(projectPill).toHaveAttribute('data-met', 'false');
+
+    // Add a light_frames folder -> its pill flips to met.
+    await addFolder('/astro/lights', 'light_frames');
+    await waitFor(() => {
+      expect(screen.getByTestId('requirement-pill-light_frames')).toHaveAttribute('data-met', 'true');
+    });
+    // Project still unmet.
+    expect(screen.getByTestId('requirement-pill-project')).toHaveAttribute('data-met', 'false');
+  });
+
+  it('groups added folders by type with a section per type', async () => {
+    renderWizard();
+
+    await addFolder('/astro/lights', 'light_frames');
+    await waitFor(() => expect(screen.getByText('/astro/lights')).toBeInTheDocument());
+
+    await addFolder('/astro/darks', 'dark');
+    await waitFor(() => expect(screen.getByText('/astro/darks')).toBeInTheDocument());
+
+    // Each type gets its own group container.
+    const lightGroup = screen.getByTestId('source-group-light_frames');
+    const darkGroup = screen.getByTestId('source-group-dark');
+    expect(lightGroup).toContainElement(screen.getByText('/astro/lights'));
+    expect(darkGroup).toContainElement(screen.getByText('/astro/darks'));
   });
 
   it('allows Step 2 (Processing Tools) to advance without changes', async () => {
