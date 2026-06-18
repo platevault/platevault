@@ -13,6 +13,7 @@
 //!
 //! - [`simbad`]: SIMBAD TAP/Sesame HTTP client (`reqwest`) → canonical identity.
 //! - [`cache`]: cache read/write, dedupe by SIMBAD oid, source precedence.
+//! - [`caldwell`]: static C1–C109 → NGC/IC designation map (Caldwell is not in SIMBAD).
 //! - [`seed`]: bundled-seed load at first run.
 //!
 //! # The resolver seam (T004)
@@ -23,6 +24,7 @@
 //! resolve / ingest-queue logic is unit-tested offline with [`FakeResolver`].
 
 pub mod cache;
+pub mod caldwell;
 pub mod seed;
 pub mod simbad;
 
@@ -495,8 +497,14 @@ mod tests {
 
     #[test]
     fn object_type_serializes_snake_case() {
-        assert_eq!(serde_json::to_string(&ObjectType::PlanetaryNebula).unwrap(), "\"planetary_nebula\"");
-        assert_eq!(serde_json::to_string(&ObjectType::GalaxyCluster).unwrap(), "\"galaxy_cluster\"");
+        assert_eq!(
+            serde_json::to_string(&ObjectType::PlanetaryNebula).unwrap(),
+            "\"planetary_nebula\""
+        );
+        assert_eq!(
+            serde_json::to_string(&ObjectType::GalaxyCluster).unwrap(),
+            "\"galaxy_cluster\""
+        );
         assert_eq!(serde_json::to_string(&ObjectType::Other).unwrap(), "\"other\"");
     }
 
@@ -504,7 +512,10 @@ mod tests {
 
     #[test]
     fn target_source_user_override_is_hyphenated() {
-        assert_eq!(serde_json::to_string(&TargetSource::UserOverride).unwrap(), "\"user-override\"");
+        assert_eq!(
+            serde_json::to_string(&TargetSource::UserOverride).unwrap(),
+            "\"user-override\""
+        );
         assert_eq!(serde_json::to_string(&TargetSource::Seed).unwrap(), "\"seed\"");
         assert_eq!(serde_json::to_string(&TargetSource::Resolved).unwrap(), "\"resolved\"");
         assert_eq!(
@@ -534,15 +545,16 @@ mod tests {
 
     #[tokio::test]
     async fn fake_resolver_canned_error() {
-        let resolver =
-            FakeResolver::new().with_error("M31", ResolveError::Ambiguous { query: "M31".to_owned(), count: 2 });
+        let resolver = FakeResolver::new()
+            .with_error("M31", ResolveError::Ambiguous { query: "M31".to_owned(), count: 2 });
         let err = resolver.resolve("M 31").await.unwrap_err();
         assert!(matches!(err, ResolveError::Ambiguous { count: 2, .. }));
     }
 
     #[tokio::test]
     async fn fake_resolver_default_error_simulates_offline() {
-        let resolver = FakeResolver::new().with_default_error(ResolveError::Network("down".to_owned()));
+        let resolver =
+            FakeResolver::new().with_default_error(ResolveError::Network("down".to_owned()));
         let err = resolver.resolve("anything").await.unwrap_err();
         assert!(matches!(err, ResolveError::Network(_)));
     }

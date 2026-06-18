@@ -37,8 +37,8 @@ description: "Task list for SIMBAD Target Resolution (spec 035)"
 **Goal**: instant local typeahead search for project-creation target selection.
 **Independent test**: with cache seeded by a fixture, typing `androm`/`M3` returns ranked suggestions (designation + common name + type); selecting one associates the project to that canonical target.
 
-- [ ] T010 [P] [US1] Normalized-alias typeahead lookup (prefix/substring over `target_alias.normalized`) in `crates/targeting/src/resolver/cache.rs`
-- [ ] T011 [US1] `target.search` use-case (local seed+cache query, ranking) in `crates/app/core/src/`
+- [X] T010 [P] [US1] Normalized-alias typeahead lookup (prefix/substring over `target_alias.normalized`) in `crates/targeting/src/resolver/cache.rs`
+- [X] T011 [US1] `target.search` use-case (local seed+cache query, ranking) in `crates/app/core/src/`
 - [ ] T012 [US1] `target_search` Tauri command in `apps/desktop/src-tauri/src/commands/targets.rs`
 - [ ] T013 [US1] Project-creation target search UI (debounced input, suggestion list with type/catalogue badges) in `apps/desktop/src/components/`
 - [ ] T014 [P] [US1] Unit test: `target.search` returns ranked local suggestions; respects `limit` (`crates/app/core` + `tests/contract`)
@@ -50,9 +50,9 @@ description: "Task list for SIMBAD Target Resolution (spec 035)"
 **Goal**: bundled seed pre-populates the cache at first run; common objects resolve instantly offline.
 **Independent test**: fresh install with network disabled → searching `M42`/`NGC 7000` returns results < 100 ms with no network call.
 
-- [ ] T015 [US2] One-time seed build script (offline; SIMBAD acronym map + OpenNGC for NGC/IC; CaldwellMap) → `assets/seed/` artifact, in `scripts/`
-- [ ] T016 [US2] Bundled-seed loader (load asset into cache at first run, `source=seed`) in `crates/targeting/src/resolver/seed.rs`
-- [ ] T017 [P] [US2] Commit the static C1–C109 → NGC/IC `CaldwellMap` + loader (Caldwell not in SIMBAD) in `crates/targeting/src/resolver/`
+- [X] T015 [US2] One-time seed build script (offline; SIMBAD acronym map + OpenNGC for NGC/IC; CaldwellMap) → `assets/seed/` artifact, in `scripts/`
+- [X] T016 [US2] Bundled-seed loader (load asset into cache at first run, `source=seed`) in `crates/targeting/src/resolver/seed.rs`
+- [X] T017 [P] [US2] Commit the static C1–C109 → NGC/IC `CaldwellMap` + loader (Caldwell not in SIMBAD) in `crates/targeting/src/resolver/`
 - [ ] T018 [P] [US2] Test: first-run seed load populates cache; offline typeahead for seeded objects works (`tests/contract` or crate test with bundled fixture). MUST assert SC-001: seeded typeahead returns suggestions in < 100 ms with no network call (measure against the seeded-cache fixture; resolver online path not invoked).
 
 ---
