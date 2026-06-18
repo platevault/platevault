@@ -36,7 +36,12 @@ import {
 import type { TargetSuggestion, ResolvedTarget } from '@/api/commands';
 import type { TargetCatalogId, TargetObjectType } from '@/bindings/index';
 import { Pill } from '@/ui';
-import { objectTypeLabel } from './objectType';
+import {
+  objectTypeLabel,
+  catalogLabel,
+  OBJECT_TYPES,
+  CATALOG_IDS,
+} from './objectType';
 
 // ── Constants ────────────────────────────────────────────────────────────────
 
@@ -66,6 +71,21 @@ export interface TargetSearchProps {
   inputId?: string;
   /** Forwarded to the input for autofocus. */
   autoFocus?: boolean;
+  /**
+   * Show the optional catalogue/type filter control (T029, US5). Default off.
+   * The control seeds from `catalogFilter`/`typeFilter` and overrides them.
+   */
+  showFilters?: boolean;
+  /**
+   * Enable the per-row "Correct…" manual-override action (T032, US4/FR-014).
+   * Binds the current query to the chosen target as `source=user-override`.
+   */
+  enableOverride?: boolean;
+  /**
+   * Called after a successful manual override with the user-override suggestion
+   * (source = `user-override`). Defaults to `onSelect` when omitted.
+   */
+  onOverride?: (suggestion: TargetSuggestion) => void;
 }
 
 // ── Helpers ────────────────────────────────────────────────────────────────
@@ -112,10 +132,37 @@ export function TargetSearch({
   hideLabel = false,
   inputId,
   autoFocus = false,
+  showFilters = false,
+  enableOverride = false,
+  onOverride,
 }: TargetSearchProps) {
   const generatedId = useId();
   const id = inputId ?? `tgt-search-${generatedId}`;
   const listboxId = `${id}-listbox`;
+  const typeFilterId = `${id}-type-filter`;
+  const catalogFilterId = `${id}-catalog-filter`;
+
+  // Optional filter state (T029). Seeds from props; "all" = no filter.
+  const [typeSel, setTypeSel] = useState<TargetObjectType | ''>(
+    typeFilter && typeFilter.length === 1 ? typeFilter[0] : '',
+  );
+  const [catalogSel, setCatalogSel] = useState<TargetCatalogId | ''>(
+    catalogFilter && catalogFilter.length === 1 ? catalogFilter[0] : '',
+  );
+  // Effective filters sent to the backend (internal control wins when shown).
+  const effectiveTypeFilter = showFilters
+    ? typeSel
+      ? [typeSel]
+      : undefined
+    : typeFilter;
+  const effectiveCatalogFilter = showFilters
+    ? catalogSel
+      ? [catalogSel]
+      : undefined
+    : catalogFilter;
+  // Stable string keys so the search callback only re-creates on real changes.
+  const typeFilterKey = (effectiveTypeFilter ?? []).join(',');
+  const catalogFilterKey = (effectiveCatalogFilter ?? []).join(',');
 
   const [query, setQuery] = useState('');
   const [suggestions, setSuggestions] = useState<TargetSuggestion[]>([]);
@@ -159,8 +206,8 @@ export function TargetSearch({
           contractVersion: TARGET_SEARCH_CONTRACT_VERSION,
           requestId: crypto.randomUUID(),
           query: trimmed,
-          catalogFilter,
-          typeFilter,
+          catalogFilter: effectiveCatalogFilter,
+          typeFilter: effectiveTypeFilter,
           limit,
         });
         if (!isCurrent()) return; // superseded — drop stale result
@@ -207,7 +254,11 @@ export function TargetSearch({
         if (isCurrent()) setResolving(false);
       }
     },
-    [catalogFilter, typeFilter, limit],
+    // Re-create when the effective filters change. `*FilterKey` are stable
+    // string keys derived from the filter arrays; the arrays themselves are
+    // read inside the callback (intentionally not listed).
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+    [catalogFilterKey, typeFilterKey, limit],
   );
 
   // Debounce query changes.
@@ -232,6 +283,39 @@ export function TargetSearch({
       setOpen(false);
     },
     [onSelect],
+  );
+
+  // Manual override (T032, FR-014): bind the current query to the chosen target
+  // as `source=user-override`. Persisted server-side and wins over future
+  // SIMBAD/seed resolutions for that query.
+  const [overriding, setOverriding] = useState<string | null>(null);
+  const handleOverride = useCallback(
+    async (s: TargetSuggestion) => {
+      const trimmed = query.trim();
+      if (!trimmed) return;
+      setOverriding(s.targetId);
+      setError(null);
+      try {
+        const res = await resolveTarget({
+          contractVersion: TARGET_SEARCH_CONTRACT_VERSION,
+          requestId: crypto.randomUUID(),
+          query: trimmed,
+          override: { targetId: s.targetId },
+        });
+        const result: TargetSuggestion =
+          res.status === 'resolved' && res.target
+            ? resolvedToSuggestion(res.target)
+            : { ...s, source: 'user-override' };
+        (onOverride ?? onSelect)(result);
+        setOpen(false);
+      } catch (err: unknown) {
+        const code = typeof err === 'string' ? err : (err as Error)?.message ?? 'unknown';
+        setError(`Could not set target (${code}).`);
+      } finally {
+        setOverriding(null);
+      }
+    },
+    [query, onOverride, onSelect],
   );
 
   function handleKeyDown(e: React.KeyboardEvent<HTMLInputElement>) {
@@ -297,6 +381,43 @@ export function TargetSearch({
         onKeyDown={handleKeyDown}
       />
 
+      {showFilters && (
+        <div className="alm-target-search__filters" role="group" aria-label="Search filters">
+          <label className="alm-target-search__filter-label" htmlFor={typeFilterId}>
+            Type
+            <select
+              id={typeFilterId}
+              className="alm-select alm-target-search__filter-select"
+              value={typeSel}
+              onChange={(e) => setTypeSel(e.target.value as TargetObjectType | '')}
+            >
+              <option value="">All types</option>
+              {OBJECT_TYPES.map((t) => (
+                <option key={t} value={t}>
+                  {objectTypeLabel(t)}
+                </option>
+              ))}
+            </select>
+          </label>
+          <label className="alm-target-search__filter-label" htmlFor={catalogFilterId}>
+            Catalogue
+            <select
+              id={catalogFilterId}
+              className="alm-select alm-target-search__filter-select"
+              value={catalogSel}
+              onChange={(e) => setCatalogSel(e.target.value as TargetCatalogId | '')}
+            >
+              <option value="">All catalogues</option>
+              {CATALOG_IDS.map((c) => (
+                <option key={c} value={c}>
+                  {catalogLabel(c)}
+                </option>
+              ))}
+            </select>
+          </label>
+        </div>
+      )}
+
       {error && (
         <span id={`${id}-error`} role="alert" className="alm-field-error">
           {error}
@@ -346,7 +467,25 @@ export function TargetSearch({
                 )}
                 <span className="alm-target-search__badges">
                   <Pill variant="info">{objectTypeLabel(s.objectType)}</Pill>
-                  <Pill variant="ghost">{s.source}</Pill>
+                  <Pill variant={s.source === 'user-override' ? 'accent' : 'ghost'}>
+                    {s.source}
+                  </Pill>
+                  {enableOverride && (
+                    <button
+                      type="button"
+                      className="alm-target-search__override"
+                      aria-label={`Set "${query.trim()}" to ${s.primaryDesignation}`}
+                      disabled={overriding != null || query.trim().length === 0}
+                      onMouseDown={(e) => {
+                        // Don't trigger the row's select-on-mousedown.
+                        e.preventDefault();
+                        e.stopPropagation();
+                        void handleOverride(s);
+                      }}
+                    >
+                      {overriding === s.targetId ? 'Setting…' : 'Correct…'}
+                    </button>
+                  )}
                 </span>
               </li>
             );

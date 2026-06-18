@@ -24,7 +24,7 @@ const TOOL_LABELS: Record<keyof ToolsState, string> = {
  */
 export function StepConfirm({
   sources,
-  catalogSettings,
+  catalogSettings: _catalogSettings,
   tools,
   isSubmitting,
 }: StepConfirmProps) {
@@ -96,12 +96,12 @@ export function StepConfirm({
         </div>
       </Box>
 
-      {/* Catalogs summary */}
-      <Box title="Target catalogs">
+      {/* Target resolution summary */}
+      <Box title="Target resolution">
         <div className="alm-step-confirm__catalogs">
-          {catalogSettings.downloadAll
-            ? 'All v1 catalogs will be downloaded after setup'
-            : 'Catalog download skipped — install from Settings later'}
+          Targets resolve on demand from SIMBAD, backed by a bundled seed and a
+          local cache. You can toggle online resolution in Settings → Target
+          Resolution.
         </div>
       </Box>
 

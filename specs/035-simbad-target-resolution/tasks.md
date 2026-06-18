@@ -88,11 +88,11 @@ description: "Task list for SIMBAD Target Resolution (spec 035)"
 **Goal**: optional catalogue/type filter; online-resolver enable toggle; persisted manual override.
 **Independent test**: apply a type filter → only matching results; toggle online off → seed/cache only; override a resolution → override wins on re-resolve.
 
-- [ ] T029 [US5] Optional catalogue/type filter in `target.search` use-case + a filter control in the search UI
+- [X] T029 [US5] Optional catalogue/type filter in `target.search` use-case + a filter control in the search UI
 - [X] T030 [US5] `target.resolution.settings` get/update use-case + `target_resolution_settings` / `_update` Tauri commands (reads/writes `resolver_settings`)
-- [ ] T031 [US5] Resolver settings UI (online toggle default-ON, endpoint, debounce/timeout) replacing the catalog manifest/minisign settings section in `apps/desktop/src/components/settings/`
-- [ ] T032 [P] [US5] Manual override (`target.resolve` with `override` → `source=user-override`, precedence locked) + a "correct target" UI action (FR-014)
-- [ ] T033 [P] [US5] Test: filter narrows results; online-off → seed/cache only (`resolver.disabled`); `user-override` wins over SIMBAD on re-resolve
+- [X] T031 [US5] Resolver settings UI (online toggle default-ON, endpoint, debounce/timeout) replacing the catalog manifest/minisign settings section in `apps/desktop/src/components/settings/`
+- [X] T032 [P] [US5] Manual override (`target.resolve` with `override` → `source=user-override`, precedence locked) + a "correct target" UI action (FR-014)
+- [X] T033 [P] [US5] Test: filter narrows results; online-off → seed/cache only (`resolver.disabled`); `user-override` wins over SIMBAD on re-resolve
 
 ---
 
@@ -100,7 +100,7 @@ description: "Task list for SIMBAD Target Resolution (spec 035)"
 
 - [X] T034 Remove the superseded catalog-download surface: `crates/targeting/catalogs/src/download.rs` + `loader.rs` machinery, the `catalog.*` Tauri commands, and `catalog.download.*` event topics (per the 002/003/013/014/018/033 reconciliation)
 - [X] T035 [P] Remove the spec-014 contracts (`catalog.manifest.fetch` / `catalog.download` / `catalog.entry-file`) + regenerate TS bindings. The `0016_catalogs.sql` tables are removed by the forward `DROP TABLE IF EXISTS` in `0031` (T006) — do NOT edit or delete the `0016` migration file itself.
-- [ ] T036 [P] Attribution/NOTICE surface for CDS/SIMBAD + OpenNGC (FR-012) in the app's notices
+- [X] T036 [P] Attribution/NOTICE surface for CDS/SIMBAD + OpenNGC (FR-012) in the app's notices
 - [X] T039 [P] Emit audit events for resolution outcomes via `crates/audit`: a `target.resolved` audit record (source `resolved`) wired into the `target.resolve` use-case (T020) and a `target.user-override` audit record wired into the manual-override action (T032). Honors plan.md §II/§V and constitution §V (durable audit record for resolution + override). Test: resolving and overriding each write one audit row.
 - [ ] T037 [P] `just lint` + `cargo clippy --workspace -D warnings` + `cargo fmt --all --check` + `just test` green; quickstart S1–S5 pass
 - [ ] T038 Windows verify (push → pull → recompile → restart → exercise search/ingest/settings) per `spec-033-windows-verify-loop`

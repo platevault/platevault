@@ -93,6 +93,14 @@ afterEach(() => {
   vi.useRealTimers();
 });
 
+/**
+ * The search input (a `combobox`). When `showFilters` is on, native `<select>`
+ * elements also expose role `combobox`, so query by the input's accessible name.
+ */
+function getInput(): HTMLElement {
+  return screen.getByRole('combobox', { name: 'Search for a target' });
+}
+
 /** Flush the debounce + both async phases (search → resolve) to completion. */
 async function typeAndFlush(input: HTMLElement, value: string) {
   fireEvent.change(input, { target: { value } });
@@ -329,5 +337,117 @@ describe('TargetSearch', () => {
     expect(options).toHaveLength(1);
     expect(options[0]).toHaveTextContent('NGC 7000');
     expect(screen.queryByText('STALE OBJ')).toBeNull();
+  });
+
+  // ── T029 (US5): optional catalogue / type filter ────────────────────────────
+
+  it('renders the filter control only when showFilters is set', () => {
+    const { rerender } = render(<TargetSearch onSelect={vi.fn()} />);
+    expect(screen.queryByLabelText('Search filters')).toBeNull();
+
+    rerender(<TargetSearch onSelect={vi.fn()} showFilters />);
+    expect(screen.getByLabelText('Search filters')).toBeInTheDocument();
+    // Defaults to "all" — no filter selected.
+    expect(screen.getByLabelText('Type')).toHaveValue('');
+    expect(screen.getByLabelText('Catalogue')).toHaveValue('');
+  });
+
+  it('passes selected type + catalogue filters to target.search', async () => {
+    mockSearchTargets.mockResolvedValue({
+      contractVersion: '1.0',
+      requestId: 'r',
+      suggestions: [M31],
+    });
+    render(<TargetSearch onSelect={vi.fn()} showFilters />);
+
+    fireEvent.change(screen.getByLabelText('Type'), { target: { value: 'galaxy' } });
+    fireEvent.change(screen.getByLabelText('Catalogue'), { target: { value: 'messier' } });
+
+    await typeAndFlush(getInput(), 'm31');
+
+    expect(mockSearchTargets).toHaveBeenLastCalledWith(
+      expect.objectContaining({
+        query: 'm31',
+        typeFilter: ['galaxy'],
+        catalogFilter: ['messier'],
+      }),
+    );
+  });
+
+  it('omits filters from the request when set to "all"', async () => {
+    mockSearchTargets.mockResolvedValue({
+      contractVersion: '1.0',
+      requestId: 'r',
+      suggestions: [M31],
+    });
+    render(<TargetSearch onSelect={vi.fn()} showFilters />);
+    await typeAndFlush(getInput(), 'm31');
+
+    const call = mockSearchTargets.mock.calls[0][0] as {
+      typeFilter?: unknown;
+      catalogFilter?: unknown;
+    };
+    expect(call.typeFilter).toBeUndefined();
+    expect(call.catalogFilter).toBeUndefined();
+  });
+
+  // ── T032 (US4/FR-014): manual "correct target" override ──────────────────────
+
+  it('shows the override action only when enableOverride is set', async () => {
+    mockSearchTargets.mockResolvedValue({
+      contractVersion: '1.0',
+      requestId: 'r',
+      suggestions: [M31],
+    });
+    const { rerender } = render(<TargetSearch onSelect={vi.fn()} />);
+    await typeAndFlush(screen.getByRole('combobox'), 'm31');
+    expect(screen.queryByRole('button', { name: /set "m31" to/i })).toBeNull();
+
+    rerender(<TargetSearch onSelect={vi.fn()} enableOverride />);
+    expect(screen.getByRole('button', { name: /set "m31" to M 31/i })).toBeInTheDocument();
+  });
+
+  it('override calls target.resolve with the override targetId and reports user-override', async () => {
+    const onOverride = vi.fn();
+    mockSearchTargets.mockResolvedValue({
+      contractVersion: '1.0',
+      requestId: 'r',
+      suggestions: [M31],
+    });
+    // The override resolve returns the chosen target as user-override.
+    mockResolveTarget.mockResolvedValue(
+      resolved({
+        targetId: 'tgt-m31',
+        simbadOid: null,
+        primaryDesignation: 'M 31',
+        commonName: 'Andromeda Galaxy',
+        objectType: 'galaxy',
+        raDeg: null,
+        decDeg: null,
+        aliases: ['M 31'],
+        source: 'user-override',
+      }),
+    );
+
+    render(<TargetSearch onSelect={vi.fn()} enableOverride onOverride={onOverride} />);
+    await typeAndFlush(screen.getByRole('combobox'), 'andromeda');
+
+    const overrideBtn = screen.getByRole('button', { name: /set "andromeda" to M 31/i });
+    await act(async () => {
+      fireEvent.mouseDown(overrideBtn);
+      for (let i = 0; i < 8; i++) await Promise.resolve();
+    });
+
+    // Last resolve call carried the override directive bound to the typed query.
+    expect(mockResolveTarget).toHaveBeenLastCalledWith(
+      expect.objectContaining({
+        query: 'andromeda',
+        override: { targetId: 'tgt-m31' },
+      }),
+    );
+    expect(onOverride).toHaveBeenCalledTimes(1);
+    const result = onOverride.mock.calls[0][0] as TargetSuggestion;
+    expect(result.targetId).toBe('tgt-m31');
+    expect(result.source).toBe('user-override');
   });
 });

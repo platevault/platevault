@@ -20,12 +20,6 @@ import type {
   SettingsData,
   RemapVerification,
   MatchCandidate,
-  // Catalog types (spec 014)
-  CatalogListResponse,
-  CatalogAttributionGetResponse,
-  CatalogManifestFetchResponse,
-  CatalogDownloadResponse,
-  CatalogManifest,
 } from '@/bindings/types';
 import type {
   InboxClassifyRequest,
@@ -86,6 +80,8 @@ import type {
   TargetResolveSimbadRequest_Serialize as TargetResolveSimbadRequest,
   TargetResolveSimbadResponse_Deserialize as TargetResolveSimbadResponse,
   ResolvedTarget_Deserialize as ResolvedTarget,
+  ResolverSettings,
+  ResolverSettingsResponse,
   ManifestListRequest_Deserialize as ManifestListRequest,
   ManifestListResponse_Serialize as ManifestListResponse,
   ManifestGetRequest,
@@ -583,54 +579,6 @@ export async function applyProjectLifecycleTransition(
 ): Promise<LifecycleTransitionResponse> {
   return invoke<LifecycleTransitionResponse>('lifecycle_transition_apply', {
     request: { project: req },
-  });
-}
-
-// ── Catalog commands (spec 014) ───────────────────────────────────────────────
-
-/**
- * List all installed catalogs.
- * Returns every catalog in the `catalog_downloaded` table ordered by name.
- */
-export async function catalogList(): Promise<CatalogListResponse> {
-  return invoke<CatalogListResponse>('catalog.list');
-}
-
-/**
- * Get license attribution rows for all installed catalogs.
- * Separated from catalogList so the (potentially large) notice text is not
- * fetched on every Settings page open.
- */
-export async function catalogAttributionGet(): Promise<CatalogAttributionGetResponse> {
-  return invoke<CatalogAttributionGetResponse>('catalog.attribution.get');
-}
-
-/**
- * Fetch the catalog manifest from the project-hosted URL.
- * Pass `etag` from a prior successful fetch to enable HTTP 304 conditional
- * requests. Returns `status = 'not_modified'` when the ETag matches.
- */
-export async function catalogManifestFetch(args?: {
-  etag?: string;
-}): Promise<CatalogManifestFetchResponse> {
-  return invoke<CatalogManifestFetchResponse>('catalog.manifest.fetch', {
-    etag: args?.etag,
-  });
-}
-
-/**
- * Download, verify (SHA-256), and install a single catalog.
- * The `manifest` must come from a prior successful `catalogManifestFetch`.
- * Returns `status = 'success'` with `auditId` on success, or `status = 'failure'`
- * with an error envelope. The previously installed catalog (if any) remains
- * active until the new one is verified (FR-008).
- */
-export async function catalogDownload(args: {
-  catalogId: string;
-  manifest: CatalogManifest;
-}): Promise<CatalogDownloadResponse> {
-  return invoke<CatalogDownloadResponse>('catalog.download', {
-    args: { catalog_id: args.catalogId, manifest: args.manifest },
   });
 }
 
@@ -1133,6 +1081,40 @@ export async function resolveTarget(
   req: TargetResolveSimbadRequest,
 ): Promise<TargetResolveSimbadResponse> {
   return invoke<TargetResolveSimbadResponse>('target.resolve', { req });
+}
+
+// Re-export resolver-settings DTO so the settings UI imports from one place.
+export type { ResolverSettings };
+
+/**
+ * `target.resolution.settings` — read the SIMBAD resolver settings
+ * (online toggle, endpoint, debounce, request timeout) (spec 035, FR-015).
+ */
+export async function getResolverSettings(): Promise<ResolverSettingsResponse> {
+  return invoke<ResolverSettingsResponse>('target.resolution.settings', {
+    req: {
+      contractVersion: TARGET_SEARCH_CONTRACT_VERSION,
+      requestId: crypto.randomUUID(),
+      op: 'get',
+    },
+  });
+}
+
+/**
+ * `target.resolution.settings.update` — persist new resolver settings
+ * (spec 035, FR-015). Returns the saved settings.
+ */
+export async function updateResolverSettings(
+  settings: ResolverSettings,
+): Promise<ResolverSettingsResponse> {
+  return invoke<ResolverSettingsResponse>('target.resolution.settings.update', {
+    req: {
+      contractVersion: TARGET_SEARCH_CONTRACT_VERSION,
+      requestId: crypto.randomUUID(),
+      op: 'update',
+      settings,
+    },
+  });
 }
 
 // ── spec 024: Project Manifests & Notes ───────────────────────────────────────
