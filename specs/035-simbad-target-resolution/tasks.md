@@ -62,9 +62,9 @@ description: "Task list for SIMBAD Target Resolution (spec 035)"
 **Goal**: long-tail resolution against SIMBAD, cached after first resolve.
 **Independent test**: online, search an unseeded designation → resolved via SIMBAD, merged into suggestions, written to cache; repeat offline → served from cache.
 
-- [ ] T019 [US3] `SimbadResolver` (reqwest TAP `sim-tap/sync` + Sesame fallback; `basic ⋈ ident ⋈ ids` → canonical identity + aliases + common name) in `crates/targeting/src/resolver/simbad.rs`
-- [ ] T020 [US3] `target.resolve` use-case (cache → SIMBAD on miss → upsert cache) in `crates/app/core/src/`
-- [ ] T021 [US3] `target_resolve` Tauri command in `apps/desktop/src-tauri/src/commands/targets.rs`
+- [X] T019 [US3] `SimbadResolver` (reqwest TAP `sim-tap/sync` + Sesame fallback; `basic ⋈ ident ⋈ ids` → canonical identity + aliases + common name) in `crates/targeting/src/resolver/simbad.rs`
+- [X] T020 [US3] `target.resolve` use-case (cache → SIMBAD on miss → upsert cache) in `crates/app/core/src/`
+- [X] T021 [US3] `target_resolve` Tauri command in `apps/desktop/src-tauri/src/commands/targets.rs`
 - [ ] T022 [P] [US3] Debounced (~300 ms), min-length, cancel-in-flight long-tail query in the search UI; merge + de-dupe against local hits (`apps/desktop/src/components/`)
 - [ ] T023 [P] [US3] Test: long-tail resolve via `FakeResolver`; cached after; cancel-in-flight discards stale results
 - [ ] T024 [P] [US3] Gated online integration test against live SIMBAD (ignored by default) in `tests/`

@@ -415,8 +415,7 @@ mod tests {
         // (b) SC-001: < 100 ms.
         assert!(
             elapsed_m42 < std::time::Duration::from_millis(100),
-            "SC-001 violated: offline typeahead for 'm 42' took {:?}, must be < 100 ms",
-            elapsed_m42
+            "SC-001 violated: offline typeahead for 'm 42' took {elapsed_m42:?}, must be < 100 ms",
         );
 
         // Repeat measurement for a common-name query ("androm" → M 31) to
@@ -436,8 +435,7 @@ mod tests {
 
         assert!(
             elapsed_androm < std::time::Duration::from_millis(100),
-            "SC-001 violated: offline prefix typeahead for 'androm' took {:?}, must be < 100 ms",
-            elapsed_androm
+            "SC-001 violated: offline prefix typeahead for 'androm' took {elapsed_androm:?}, must be < 100 ms",
         );
     }
 

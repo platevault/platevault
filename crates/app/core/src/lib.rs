@@ -29,6 +29,7 @@ pub mod sessions;
 pub mod settings;
 pub mod target_identity;
 pub mod target_lookup;
+pub mod target_resolve;
 pub mod target_search;
 pub mod tool_launch;
 pub mod transition_use_case;

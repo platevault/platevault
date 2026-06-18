@@ -96,7 +96,9 @@ use crate::commands::settings::{
 };
 use crate::commands::status::status_summary;
 use crate::commands::target_identity as target_identity_cmds;
-use crate::commands::target_lookup::{target_lookup, target_resolve, target_search};
+use crate::commands::target_lookup::{
+    target_lookup, target_resolve, target_resolve_fits, target_search,
+};
 use crate::commands::targets::{targets_get, targets_list};
 use crate::commands::tools::{
     tools_discover, tools_launch, tools_list, tools_update, tools_validate_path,
@@ -181,8 +183,10 @@ pub fn specta_builder() -> Builder<tauri::Wry> {
         target_identity_cmds::target_alias_add,
         target_identity_cmds::target_alias_remove,
         target_identity_cmds::target_primary_rename,
-        // target lookup + resolve (spec 013)
+        // target lookup (spec 013) + resolve (spec 035 supersedes 013;
+        // spec-013 local resolution kept as target.resolve.fits)
         target_lookup,
+        target_resolve_fits,
         target_resolve,
         // target search (spec 035, US1)
         target_search,
@@ -366,8 +370,10 @@ pub fn specta_builder() -> Builder<tauri::Wry> {
         target_identity_cmds::target_alias_add,
         target_identity_cmds::target_alias_remove,
         target_identity_cmds::target_primary_rename,
-        // target lookup + resolve (spec 013)
+        // target lookup (spec 013) + resolve (spec 035 supersedes 013;
+        // spec-013 local resolution kept as target.resolve.fits)
         target_lookup,
+        target_resolve_fits,
         target_resolve,
         // target search (spec 035, US1)
         target_search,

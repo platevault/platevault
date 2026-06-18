@@ -201,7 +201,8 @@ export const commands = {
 	 */
 	targetLookup: (req: TargetLookupRequest) => typedError<TargetLookupResponse_Serialize, string>(__TAURI_INVOKE("target.lookup", { req })),
 	/**
-	 *  `target.resolve` — resolve a FITS OBJECT header value to a stable target.
+	 *  `target.resolve.fits` — resolve a FITS OBJECT header value against the local
+	 *  in-memory catalog (spec 013).
 	 * 
 	 *  Non-blocking: callers MUST handle `unresolved`, `ambiguous`, and `error`
 	 *  responses without blocking the ingestion flow (FR-006, constitution §II).
@@ -211,7 +212,24 @@ export const commands = {
 	 *  Returns `Err(String)` on unexpected internal failure. Resolution errors
 	 *  (empty query, catalog not installed) are encoded in the response status.
 	 */
-	targetResolve: (req: TargetResolveRequest) => typedError<TargetResolveResponse_Serialize, string>(__TAURI_INVOKE("target.resolve", { req })),
+	targetResolveFits: (req: TargetResolveRequest) => typedError<TargetResolveResponse_Serialize, string>(__TAURI_INVOKE("target.resolve.fits", { req })),
+	/**
+	 *  `target.resolve` — cache-first resolution of a designation / common name (or
+	 *  FITS OBJECT value) against the local cache + bundled seed, falling back to
+	 *  SIMBAD on a miss when online resolution is enabled (spec 035).
+	 * 
+	 *  The live `SimbadResolver` is built on demand from the persisted
+	 *  `resolver_settings` (endpoint + timeout). Cache hits never re-query SIMBAD
+	 *  (FR-006); offline / unknown / ambiguous outcomes return `unresolved` and
+	 *  never fabricate coordinates (FR-009). The manual `override` write path is
+	 *  T032.
+	 * 
+	 *  # Errors
+	 * 
+	 *  Returns `Err(String)` only on a local database failure. Resolver outcomes
+	 *  (offline / unknown / ambiguous) are encoded in the response status.
+	 */
+	targetResolve: (req: TargetResolveSimbadRequest_Deserialize) => typedError<TargetResolveSimbadResponse_Serialize, string>(__TAURI_INVOKE("target.resolve", { req })),
 	/**
 	 *  `target.search` — as-you-type target suggestions from local seed + cache.
 	 * 
