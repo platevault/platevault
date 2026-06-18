@@ -23,9 +23,9 @@ fn sample_batch_request() -> RegisterSourceBatchRequest {
                 scan_depth: ScanDepth::Recursive,
             },
             RegisterSourceRequest {
-                kind: SourceKind::Dark,
-                path: "/astro/darks".to_owned(),
-                kind_subtype: Some("dark".to_owned()),
+                kind: SourceKind::Calibration,
+                path: "/astro/cals".to_owned(),
+                kind_subtype: Some("calibration".to_owned()),
                 scan_depth: ScanDepth::Single,
             },
         ],
@@ -114,7 +114,7 @@ fn batch_request_preserves_source_order() {
 
     assert_eq!(sources[0]["kind"], json!("light_frames"));
     assert_eq!(sources[1]["kind"], json!("project"));
-    assert_eq!(sources[2]["kind"], json!("dark"));
+    assert_eq!(sources[2]["kind"], json!("calibration"));
 }
 
 // ── batch status enum ──────────────────────────────────────────────────────

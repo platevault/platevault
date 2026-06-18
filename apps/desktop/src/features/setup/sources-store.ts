@@ -2,23 +2,23 @@ import { registerRootBatch } from '@/api/commands';
 
 const STORAGE_KEY = 'alm-setup-wizard-state';
 
-export type SourceKind = 'light_frames' | 'dark' | 'flat' | 'bias' | 'project' | 'inbox';
+// Per-image frame type (light/dark/flat/bias) is detected from image metadata
+// (FITS IMAGETYP header) during scan/ingest — NOT inferred from which source
+// folder the file is in. 'calibration' here is only a user-facing folder
+// category that covers darks, flats, and bias frames together.
+export type SourceKind = 'light_frames' | 'calibration' | 'project' | 'inbox';
 export type ScanDepth = 'recursive' | 'single';
 
 export const ALL_SOURCE_KINDS: SourceKind[] = [
   'light_frames',
-  'dark',
-  'flat',
-  'bias',
+  'calibration',
   'project',
   'inbox',
 ];
 
 export const SOURCE_KIND_LABELS: Record<SourceKind, string> = {
   light_frames: 'Light frames',
-  dark: 'Darks',
-  flat: 'Flats',
-  bias: 'Bias',
+  calibration: 'Calibration frames',
   project: 'Projects',
   inbox: 'Inbox',
 };

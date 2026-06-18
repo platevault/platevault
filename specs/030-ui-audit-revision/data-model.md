@@ -3,24 +3,29 @@
 Changes to the data model required by the UI redesign. Most changes are in
 settings/configuration domain, not core domain entities.
 
-## Source Folder Type Expansion
+## Source Folder Type Unification
 
-The current source folder type enum (`raw`, `calibration`, `project`, `inbox`)
-expands to match the wizard's per-type registration:
+The source folder kind enum is a 4-value set used only as a user-facing folder
+category in the setup wizard and settings. It does NOT determine per-image frame
+type; that is detected from image metadata (FITS `IMAGETYP` header) during
+scan/ingest.
 
 ```
-SourceFolderType:
+SourceFolderKind:
   - light_frames    (was: raw)
-  - dark
-  - flat
-  - bias
+  - calibration     (covers darks, flats, and bias — kind collapsed from 6→4)
   - project
   - inbox
 ```
 
-Migration: existing `raw` entries map to `light_frames`. Existing `calibration`
-entries need user disambiguation (could be dark, flat, or bias). A migration
-prompt or re-registration flow handles this.
+Migration notes:
+- `raw` → `light_frames` (migration 0010).
+- `dark`, `flat`, `bias` → `calibration` (migration 0032). Where the same path
+  was registered under multiple of these kinds, only the earliest entry is kept
+  (INSERT OR IGNORE by `created_at ASC`) and duplicates are silently dropped.
+- Per-image frame type (light / dark / flat / bias) remains authoritative from
+  FITS `IMAGETYP` metadata, so no information is lost by collapsing the folder
+  kind.
 
 ## Equipment Entities
 
