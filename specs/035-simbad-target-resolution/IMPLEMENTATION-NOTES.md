@@ -5,14 +5,14 @@ unattended implementation run (2026-06-18). Newest sections appended over time.
 
 ## ⚠️ NEEDS YOUR INPUT (decisions I could not make alone)
 
-1. **Project ↔ target persistence gap (US1 acceptance #2).** The `TargetSearch` component
-   (T013) lets a user search + select a canonical target during project creation, but
-   `ProjectCreateRequest` (the `projects.create` contract, spec 008) has **no target field**, so
-   the selection is **not persisted**. Wiring it requires a backend contract + schema change to the
-   projects feature (cross-spec). I did NOT expand into spec 008 unilaterally. **Decision needed:**
-   add `targetId` to project create/edit (and a `project_target` association), or handle target
-   association elsewhere (e.g. via the image→target grouping only)? Until then, project-creation
-   target selection is UI-only.
+1. ~~**Project ↔ target persistence gap (US1 acceptance #2).**~~ **RESOLVED (closed end-to-end).**
+   The selection now persists via `ProjectCreateRequest.canonicalTargetId` (additive, optional;
+   migration 0033 nullable `projects.canonical_target_id`), validated+stored in `project_setup.rs`,
+   joined back on the read path into `ProjectDetailDto.canonicalTarget` (`ProjectCanonicalTarget`
+   DTO), and displayed as a "Target" rail card on `ProjectDetail` (tested in
+   `ProjectDetail.target.test.tsx`). **One sub-item still your call:** the legacy spec-013 `targets`
+   table coexists with `canonical_target` — reconciling/retiring it is an architecture decision, not
+   a fix. I did NOT unify them unilaterally.
 
 2. **US4 ingest grouping is a ready seam, not wired to live ingest.** `associate_or_enqueue` +
    the `ingest_resolution` queue (T025/T026) are implemented and unit-tested (alias variants group
@@ -175,3 +175,31 @@ Generated the full seed (`seed-builder --full`) to test scaling: it produced **5
   feels too slow, the simple change is to background it** (spawn the load in main.rs instead of
   awaiting) — accepting a brief window where first searches see fewer results. Your call; left
   synchronous for now. A `seed_load_timing` regression test guards the batched-load performance.
+
+## VERIFY CLOSEOUT (2026-06-19, after gap #1 closure)
+
+Re-ran `/speckit.verify` (read-only, fresh subagent) now that gap #1 is closed. Result:
+**adherence-complete — 19/20 implemented, 1 partial, 0 missing, 0 diverged, no must-fix.**
+
+- All 15 FRs and 5 SCs have concrete tested evidence end-to-end, including the now-closed
+  project↔target persistence (contract field → persist/validate → read join → UI rail card).
+- **SC-002 is "partial" only in measurement**: the select→associate→display path is implemented and
+  unit-tested, but the "find+select a common target in <10 s" UX timing is not separately asserted.
+  Confirm during T038 interactive verify (the path is local typeahead + one click, so it's fast).
+- **VF-4 fixed**: stale `target.search` doc comment claimed `catalog_filter` wasn't applied; the code
+  AND-combines both filters and has passing tests. Comment corrected.
+- Constitution: all five principles PASS. §II confidence-levels clause correctly N/A (resolution is
+  exact-match, non-inferential).
+- Linux gates all green: `cargo fmt --check`, `clippy -D warnings`, `cargo test --workspace`
+  (68 suites, 0 failed), `just typecheck`, `vitest` (incl. `ProjectDetail.target.test.tsx`).
+
+**Still open (by design, your call — NOT spec-035 defects):**
+1. **T038 Windows interactive verify** — recompile + quickstart S1–S5 on Windows. Cannot be done
+   autonomously. Watch the stale-binary trap (push→pull→recompile→verify).
+2. **US4 live ingest (gap #2)** — `associate_or_enqueue`/`resolve_pending` are a tested seam; no
+   production per-image `file_record` ingest exists to call them (needs spec-002 inventory).
+3. **Two-target-table reconciliation** — legacy spec-013 `targets` vs `canonical_target`.
+4. **SC-004 live SIMBAD** — validated by a gated test (`cargo test -p targeting -- --ignored`);
+   run once against the live service before final close.
+
+Recommended before merge: T038 on Windows, then squash-merge PR #250.
