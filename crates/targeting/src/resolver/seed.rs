@@ -181,14 +181,20 @@ pub async fn is_first_run(pool: &SqlitePool) -> Result<bool, SeedError> {
 ///
 /// Returns [`SeedError::Cache`] if a cache write fails.
 pub async fn load_seed(pool: &SqlitePool, seed: &SeedAsset) -> Result<usize, SeedError> {
+    // Batch the entire load into ONE transaction so a large seed (~14k rows)
+    // commits with a single fsync instead of one per entry. Dedup/precedence
+    // are unchanged — each entry still flows through `upsert_resolved_conn`,
+    // and earlier rows in this same transaction are visible to later lookups.
+    let mut tx = pool.begin().await?;
     let mut loaded = 0usize;
     for entry in &seed.entries {
         let identity = entry.to_identity();
-        let (_, outcome) = cache::upsert_resolved(pool, &identity).await?;
+        let (_, outcome) = cache::upsert_resolved_conn(&mut tx, &identity).await?;
         if matches!(outcome, UpsertOutcome::Inserted | UpsertOutcome::Updated) {
             loaded += 1;
         }
     }
+    tx.commit().await?;
     Ok(loaded)
 }
 

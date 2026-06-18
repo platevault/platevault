@@ -15,7 +15,7 @@
 //! Typeahead prefix/substring search over `target_alias.normalized` is NOT
 //! implemented here — that is T010 (US1).
 
-use sqlx::SqlitePool;
+use sqlx::{SqliteConnection, SqlitePool};
 use uuid::Uuid;
 
 use crate::identity::target_id_from_designation;
@@ -369,7 +369,7 @@ struct ExistingRow {
 /// oid exists, that row is the canonical one (keep its id so alias / ingest
 /// FKs stay valid). Otherwise fall back to the designation-derived id.
 async fn find_existing(
-    pool: &SqlitePool,
+    conn: &mut SqliteConnection,
     identity: &ResolvedIdentity,
     derived: &str,
 ) -> CacheResult<Option<ExistingRow>> {
@@ -377,7 +377,7 @@ async fn find_existing(
         let row: Option<(String, String)> =
             sqlx::query_as("SELECT id, source FROM canonical_target WHERE simbad_oid = ?")
                 .bind(oid)
-                .fetch_optional(pool)
+                .fetch_optional(&mut *conn)
                 .await?;
         if let Some((id, source)) = row {
             let source = TargetSource::from_wire(&source)
@@ -388,7 +388,7 @@ async fn find_existing(
     let row: Option<(String, String)> =
         sqlx::query_as("SELECT id, source FROM canonical_target WHERE id = ?")
             .bind(derived)
-            .fetch_optional(pool)
+            .fetch_optional(&mut *conn)
             .await?;
     match row {
         None => Ok(None),
@@ -407,13 +407,13 @@ async fn find_existing(
 /// `(target_id, normalized)` uniqueness constraint when SIMBAD returns the same
 /// normalized form twice.
 async fn write_aliases(
-    pool: &SqlitePool,
+    conn: &mut SqliteConnection,
     target_id: &str,
     aliases: &[ResolvedAlias],
 ) -> CacheResult<()> {
     sqlx::query("DELETE FROM target_alias WHERE target_id = ?")
         .bind(target_id)
-        .execute(pool)
+        .execute(&mut *conn)
         .await?;
     for a in aliases {
         let alias_id = Uuid::new_v4().to_string();
@@ -426,7 +426,7 @@ async fn write_aliases(
         .bind(&a.alias)
         .bind(&a.normalized)
         .bind(a.kind.as_wire())
-        .execute(pool)
+        .execute(&mut *conn)
         .await?;
     }
     Ok(())
@@ -446,6 +446,11 @@ async fn write_aliases(
 ///
 /// Returns the persisted target id and the [`UpsertOutcome`].
 ///
+/// This is the per-call entry point: it acquires a connection from `pool` and
+/// delegates to [`upsert_resolved_conn`]. To batch many upserts in a single
+/// transaction (e.g. the seed loader), open a transaction and call
+/// [`upsert_resolved_conn`] directly with `&mut *tx`.
+///
 /// # Errors
 ///
 /// Returns [`CacheError::Database`] on query failure, or a parse error when an
@@ -454,8 +459,27 @@ pub async fn upsert_resolved(
     pool: &SqlitePool,
     identity: &ResolvedIdentity,
 ) -> CacheResult<(Uuid, UpsertOutcome)> {
+    let mut conn = pool.acquire().await?;
+    upsert_resolved_conn(&mut conn, identity).await
+}
+
+/// Upsert a resolved identity (and its aliases) onto an existing connection or
+/// transaction (`&mut *tx`).
+///
+/// Dedup + precedence semantics are identical to [`upsert_resolved`]; this
+/// variant lets a caller batch many upserts inside one transaction so the whole
+/// batch commits with a single fsync (the seed loader uses this).
+///
+/// # Errors
+///
+/// Returns [`CacheError::Database`] on query failure, or a parse error when an
+/// existing row holds a corrupt value.
+pub async fn upsert_resolved_conn(
+    conn: &mut SqliteConnection,
+    identity: &ResolvedIdentity,
+) -> CacheResult<(Uuid, UpsertOutcome)> {
     let derived = derived_id(&identity.primary_designation).to_string();
-    let existing = find_existing(pool, identity, &derived).await?;
+    let existing = find_existing(&mut *conn, identity, &derived).await?;
     let resolved_at = now_iso();
 
     match existing {
@@ -486,9 +510,9 @@ pub async fn upsert_resolved(
             .bind(identity.source.as_wire())
             .bind(&resolved_at)
             .bind(&row.id)
-            .execute(pool)
+            .execute(&mut *conn)
             .await?;
-            write_aliases(pool, &row.id, &identity.aliases).await?;
+            write_aliases(&mut *conn, &row.id, &identity.aliases).await?;
             let id =
                 Uuid::parse_str(&row.id).map_err(|e| CacheError::InvalidUuid(row.id.clone(), e))?;
             Ok((id, UpsertOutcome::Updated))
@@ -507,9 +531,9 @@ pub async fn upsert_resolved(
             .bind(identity.dec_deg)
             .bind(identity.source.as_wire())
             .bind(&resolved_at)
-            .execute(pool)
+            .execute(&mut *conn)
             .await?;
-            write_aliases(pool, &derived, &identity.aliases).await?;
+            write_aliases(&mut *conn, &derived, &identity.aliases).await?;
             let id = Uuid::parse_str(&derived)
                 .map_err(|e| CacheError::InvalidUuid(derived.clone(), e))?;
             Ok((id, UpsertOutcome::Inserted))

@@ -23,27 +23,36 @@
 //! # Usage
 //!
 //! ```text
-//! # Build the committed MVP subset (Messier + Caldwell + a small NGC slice):
-//! cargo run -p seed-builder -- --out assets/seed/seed.json
+//! # DEFAULT — the curated "popular catalogues" seed (spec 035 scale, ~14k
+//! # objects / a few MB). This is what ships as the committed asset:
+//! cargo run -p seed-builder --release -- --out assets/seed/seed.json
+//! cargo run -p seed-builder --release -- --out assets/seed/seed.json --popular
 //!
-//! # Build the MVP subset plus the first N NGC objects:
+//! # Fast smoke build: Messier + Caldwell + the first N NGC objects only:
 //! cargo run -p seed-builder -- --out assets/seed/seed.json --ngc 500
+//! cargo run -p seed-builder -- --out assets/seed/seed.json --slice --ngc 200
 //!
-//! # Regenerate the COMPLETE seed (~14k objects). This pulls every popular
-//! # catalogue by SIMBAD prefix (research.md R2) and the full NGC/IC range.
-//! # It is large and slow (minutes; many TAP round-trips). Run deliberately:
+//! # COMPLETE seed (everything, ~56k objects / ~19.5 MB). Large + slow; not the
+//! # committed asset. Run deliberately:
 //! cargo run -p seed-builder --release -- --out assets/seed/seed.json --full
 //! ```
 //!
-//! `--full` enumerates the R2 prefix families: `M `, `NGC `, `IC `, `SH  2-`,
-//! `Barnard `, `PN A66 `, `ACO `, `APG `, `VDB `, `LBN `, `LDN `,
-//! `Cl Melotte ` (plus the Caldwell map). It is gated behind the flag because it
-//! hammers CDS; the committed asset in the repo is the MVP subset.
+//! Modes (Messier + Caldwell map are always pulled):
+//!
+//! `--popular` (DEFAULT): all NGC + all IC + Sharpless (`SH  2-`) + Barnard +
+//! vdB (`VDB`) + Abell-PN (`PN A66`) + Melotte (`Cl Melotte`). Named (`NAME …`)
+//! common names ride along via alias enrichment. EXCLUDES the bulk obscure sets
+//! that inflated `--full`: ACO (Abell galaxy clusters), and the full LDN / LBN
+//! dark/bright-nebula lists (and APG/Arp).
+//!
+//! `--slice` / `--ngc N`: Messier + Caldwell + the first `N` NGC objects.
+//!
+//! `--full`: every R2 prefix family incl. `ACO`, `APG`, `LBN`, `LDN`.
 //!
 //! Network host used: `simbad.cds.unistra.fr` (TAP). `OpenNGC`
 //! (`raw.githubusercontent.com`) is reachable and can be folded in for richer
-//! NGC/IC coverage when the complete seed is rebuilt; the committed asset is
-//! sourced from SIMBAD alone.
+//! NGC/IC coverage when the seed is rebuilt; the committed asset is sourced from
+//! SIMBAD alone.
 
 use std::collections::BTreeMap;
 use std::time::Duration;
@@ -51,7 +60,7 @@ use std::time::Duration;
 use targeting::resolver::caldwell;
 use targeting::resolver::map_otype;
 use targeting::resolver::seed::{SeedAlias, SeedAsset, SeedEntry};
-use targeting::resolver::AliasKind;
+use targeting::resolver::{AliasKind, ObjectType};
 
 const TAP_ENDPOINT: &str = "https://simbad.cds.unistra.fr/simbad/sim-tap/sync";
 const USER_AGENT: &str = "astro-plan-seed-builder/0.1 (+https://github.com/; spec-035)";
@@ -79,11 +88,26 @@ const KEPT_ALIAS_PREFIXES: &[&str] = &[
     "C ",
 ];
 
+/// Build mode (which catalogue families to pull).
+#[derive(Clone, Copy, PartialEq, Eq)]
+enum Mode {
+    /// Messier + Caldwell + a small `--ngc N` slice (fast smoke build).
+    Slice,
+    /// Curated "popular catalogues" (DEFAULT): all NGC, all IC, Messier,
+    /// Caldwell, named (`NAME …`), Sharpless, Barnard, vdB, Abell-PN, Melotte.
+    /// EXCLUDES the bulk obscure sets (ACO, LDN, LBN) that bloated `--full`.
+    /// Targets the spec's ~14k-object / few-MB scale.
+    Popular,
+    /// Everything (incl. ACO/LDN/LBN) — ~56k objects / ~19.5 MB. Slow + large.
+    Full,
+}
+
 fn main() {
     let args: Vec<String> = std::env::args().skip(1).collect();
     let mut out = String::from("assets/seed/seed.json");
     let mut ngc_slice: u32 = 200;
-    let mut full = false;
+    // Default to the curated "popular" set (spec 035 seed scaling).
+    let mut mode = Mode::Popular;
     let mut i = 0;
     while i < args.len() {
         match args[i].as_str() {
@@ -94,8 +118,11 @@ fn main() {
             "--ngc" => {
                 i += 1;
                 ngc_slice = args.get(i).and_then(|v| v.parse().ok()).unwrap_or(ngc_slice);
+                mode = Mode::Slice;
             }
-            "--full" => full = true,
+            "--slice" => mode = Mode::Slice,
+            "--popular" => mode = Mode::Popular,
+            "--full" => mode = Mode::Full,
             other => {
                 eprintln!("unknown argument: {other}");
                 std::process::exit(2);
@@ -104,13 +131,13 @@ fn main() {
         i += 1;
     }
 
-    if let Err(e) = run(&out, ngc_slice, full) {
+    if let Err(e) = run(&out, ngc_slice, mode) {
         eprintln!("seed-builder failed: {e}");
         std::process::exit(1);
     }
 }
 
-fn run(out: &str, ngc_slice: u32, full: bool) -> Result<(), Box<dyn std::error::Error>> {
+fn run(out: &str, ngc_slice: u32, mode: Mode) -> Result<(), Box<dyn std::error::Error>> {
     let client = reqwest::blocking::Client::builder()
         .user_agent(USER_AGENT)
         .timeout(Duration::from_mins(2))
@@ -136,32 +163,75 @@ fn run(out: &str, ngc_slice: u32, full: bool) -> Result<(), Box<dyn std::error::
     }
     ingest_exact_ids(&client, &caldwell_ids, &mut by_oid)?;
 
-    // 3) NGC slice (or full range with --full).
-    if full {
-        eprintln!("--full: pulling all popular catalogue prefixes (slow)…");
-        for prefix in [
-            "NGC %",
-            "IC %",
-            "SH  2-%",
-            "Barnard %",
-            "PN A66 %",
-            "ACO %",
-            "APG %",
-            "VDB %",
-            "LBN %",
-            "LDN %",
-            "Cl Melotte %",
-        ] {
-            eprintln!("  prefix {prefix}…");
-            ingest_prefix(&client, prefix, &mut by_oid)?;
+    // 3) Catalogue families per mode.
+    match mode {
+        Mode::Slice => {
+            if ngc_slice > 0 {
+                eprintln!("pulling NGC slice (NGC 1..NGC {ngc_slice})…");
+                let ids: Vec<String> = (1..=ngc_slice).map(|n| format!("NGC {n}")).collect();
+                ingest_exact_ids(&client, &ids, &mut by_oid)?;
+            }
         }
-    } else if ngc_slice > 0 {
-        eprintln!("pulling NGC slice (NGC 1..NGC {ngc_slice})…");
-        let ids: Vec<String> = (1..=ngc_slice).map(|n| format!("NGC {n}")).collect();
-        ingest_exact_ids(&client, &ids, &mut by_oid)?;
+        Mode::Popular => {
+            // Curated "popular catalogues" (DEFAULT). Includes all NGC + all IC
+            // + Sharpless + Barnard + vdB + Abell-PN + Melotte. Named (`NAME …`)
+            // common names ride along via alias enrichment on these objects.
+            // EXCLUDES the bulk obscure sets — ACO (Abell galaxy clusters),
+            // LDN and LBN dark/bright-nebula lists — which inflated `--full`.
+            eprintln!("--popular: pulling curated catalogue prefixes…");
+            for prefix in [
+                "NGC %",
+                "IC %",
+                "SH  2-%",
+                "Barnard %",
+                "PN A66 %",
+                "VDB %",
+                "Cl Melotte %",
+            ] {
+                eprintln!("  prefix {prefix}…");
+                ingest_prefix(&client, prefix, &mut by_oid)?;
+            }
+        }
+        Mode::Full => {
+            eprintln!("--full: pulling ALL catalogue prefixes (slow, large)…");
+            for prefix in [
+                "NGC %",
+                "IC %",
+                "SH  2-%",
+                "Barnard %",
+                "PN A66 %",
+                "ACO %",
+                "APG %",
+                "VDB %",
+                "LBN %",
+                "LDN %",
+                "Cl Melotte %",
+            ] {
+                eprintln!("  prefix {prefix}…");
+                ingest_prefix(&client, prefix, &mut by_oid)?;
+            }
+        }
     }
 
     let mut entries: Vec<SeedEntry> = by_oid.into_values().collect();
+
+    // Cap (spec 035 scaling): the curated `--popular` prefix LIKEs match the
+    // `basic` row of any object carrying a prefixed cross-ID — which pulls in
+    // tens of thousands of stellar/cluster MEMBERS (otype `Other`: HD, 2MASS,
+    // BD…) that are not popular imaging targets. Drop unmapped `Other` rows so
+    // the popular seed is the recognised DSO set (galaxy/nebula/cluster/…),
+    // landing at the spec's intended ~13–14k objects / few-MB scale instead of
+    // ~49k / ~17 MB. `--full` and `--slice` keep every row.
+    if mode == Mode::Popular {
+        let before = entries.len();
+        entries.retain(|e| e.object_type != ObjectType::Other);
+        eprintln!(
+            "--popular cap: kept {} recognised-DSO objects (dropped {} otype=Other members)",
+            entries.len(),
+            before - entries.len()
+        );
+    }
+
     entries.sort_by(|a, b| a.primary_designation.cmp(&b.primary_designation));
 
     let asset = SeedAsset {

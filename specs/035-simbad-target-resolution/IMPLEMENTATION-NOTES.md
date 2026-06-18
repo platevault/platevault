@@ -149,9 +149,19 @@ Generated the full seed (`seed-builder --full`) to test scaling: it produced **5
   `upsert_resolved`** — fine for 487 (sub-second), but ~56k entries × several queries each would hang
   the first launch for minutes (violates responsiveness).
 
-**Kept the committed 487-object MVP seed** (Messier + Caldwell + NGC 1–300 — fast first run, covers the
-common demo cases). **To ship a larger seed later**, two things are needed first: (1) a curated
-"popular catalogues" membership (~14k, not the full 56k — e.g. NGC/IC + M/C + named + a popular
-Sharpless/Barnard/vdB/Abell-PN subset, excluding the bulk ACO/LDN/LBN), and (2) a **batched or
-background** seed loader (single transaction / bulk insert, or load off the startup path) so first-run
-stays responsive. The `seed-builder` already supports `--ngc <N>` slices for tuning membership.
+**RESOLVED — the curated seed + batched loader are now done** (both follow-ups implemented):
+- **Loader batched**: `cache::upsert_resolved_conn(&mut SqliteConnection, …)` added; `load_seed` now
+  runs all upserts in a SINGLE transaction (one fsync). The per-call `upsert_resolved(&SqlitePool)`
+  wrapper is unchanged, so all other callers are untouched. Dedup/precedence identical.
+- **Curated `--popular` seed (now the seed-builder default)**: NGC + IC + Messier + Caldwell + named +
+  Sharpless + Barnard + vdB + Abell-PN + Melotte; EXCLUDES ACO/LDN/LBN/APG; **DSO-only cap** drops
+  `object_type == Other` (35k stellar/cluster-member rows the prefix LIKE pulled in). Committed
+  `assets/seed/seed.json` is now **13,073 objects / 4.5 MB** (was 487 / 191 KB) — at the spec's
+  ~14k / few-MB target. Breakdown: 9479 galaxy, 1490 double_star, 850 open_cluster, 437 emission_neb,
+  394 dark_neb, 222 planetary_neb, 135 globular, 54 reflection_neb, 8 SNR, 4 galaxy_cluster.
+- **DECISION LOGGED — first-run load is synchronous (~4.5s release, one-time)**: the batched 13k load
+  blocks the FIRST app launch for ~4.5s (guarded by `is_first_run`, so only at install). Kept
+  synchronous for correctness (seed guaranteed ready before the UI). **If that first-launch delay
+  feels too slow, the simple change is to background it** (spawn the load in main.rs instead of
+  awaiting) — accepting a brief window where first searches see fewer results. Your call; left
+  synchronous for now. A `seed_load_timing` regression test guards the batched-load performance.
