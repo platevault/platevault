@@ -140,7 +140,10 @@ fn cached_to_resolved(target: &CachedTarget) -> ResolvedTarget {
 
 // ── Response builders ───────────────────────────────────────────────────────
 
-fn resolved(req: &TargetResolveSimbadRequest, target: ResolvedTarget) -> TargetResolveSimbadResponse {
+fn resolved(
+    req: &TargetResolveSimbadRequest,
+    target: ResolvedTarget,
+) -> TargetResolveSimbadResponse {
     TargetResolveSimbadResponse {
         contract_version: req.contract_version.clone(),
         request_id: req.request_id.clone(),
@@ -180,7 +183,9 @@ async fn read_settings(pool: &SqlitePool) -> Result<OnlineSettings, ContractErro
     )
     .fetch_optional(pool)
     .await
-    .map_err(|e| ContractError::new("internal.database", e.to_string(), ErrorSeverity::Fatal, true))?;
+    .map_err(|e| {
+        ContractError::new("internal.database", e.to_string(), ErrorSeverity::Fatal, true)
+    })?;
 
     Ok(row.map_or(
         OnlineSettings {
@@ -256,8 +261,15 @@ pub async fn resolve<R: Resolver + ?Sized>(
                 cache::upsert_resolved(pool, &identity).await.map_err(|e| db_err(&e))?;
             if let Some(target) = cache::get_by_id(pool, id).await.map_err(|e| db_err(&e))? {
                 // T039: durable audit record for the resolved outcome.
-                write_audit(pool, &id.to_string(), "target.resolved", "system", &req.request_id, query)
-                    .await;
+                write_audit(
+                    pool,
+                    &id.to_string(),
+                    "target.resolved",
+                    "system",
+                    &req.request_id,
+                    query,
+                )
+                .await;
                 Ok(resolved(req, cached_to_resolved(&target)))
             } else {
                 // Should not happen (we just wrote it); never fabricate.
@@ -580,8 +592,7 @@ mod tests {
         let db = setup().await;
         let resolver = FakeResolver::new();
         let missing = Uuid::new_v4().to_string();
-        let resp =
-            resolve(db.pool(), &resolver, &override_req("X", &missing)).await.unwrap();
+        let resp = resolve(db.pool(), &resolver, &override_req("X", &missing)).await.unwrap();
         assert_eq!(resp.status, TargetResolveStatus::Unresolved);
     }
 
@@ -596,12 +607,11 @@ mod tests {
     // ── T039: durable audit records ────────────────────────────────────────────
 
     async fn audit_rows(db: &Database, trigger: &str) -> i64 {
-        let (n,): (i64,) =
-            sqlx::query_as("SELECT COUNT(*) FROM audit_log_entry WHERE trigger = ?")
-                .bind(trigger)
-                .fetch_one(db.pool())
-                .await
-                .unwrap();
+        let (n,): (i64,) = sqlx::query_as("SELECT COUNT(*) FROM audit_log_entry WHERE trigger = ?")
+            .bind(trigger)
+            .fetch_one(db.pool())
+            .await
+            .unwrap();
         n
     }
 
@@ -623,9 +633,8 @@ mod tests {
         let db = setup().await;
         let (id, _) = upsert_resolved(db.pool(), &m31()).await.unwrap();
         let resolver = FakeResolver::new();
-        let resp = resolve(db.pool(), &resolver, &override_req("MyObj", &id.to_string()))
-            .await
-            .unwrap();
+        let resp =
+            resolve(db.pool(), &resolver, &override_req("MyObj", &id.to_string())).await.unwrap();
         assert_eq!(resp.status, TargetResolveStatus::Resolved);
 
         assert_eq!(

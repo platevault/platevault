@@ -192,14 +192,12 @@ async fn write_resolved_row(
     .map_err(db_err)?;
 
     if let Some((id,)) = existing {
-        sqlx::query(
-            "UPDATE ingest_resolution SET state = 'resolved', target_id = ? WHERE id = ?",
-        )
-        .bind(target_id)
-        .bind(&id)
-        .execute(pool)
-        .await
-        .map_err(db_err)?;
+        sqlx::query("UPDATE ingest_resolution SET state = 'resolved', target_id = ? WHERE id = ?")
+            .bind(target_id)
+            .bind(&id)
+            .execute(pool)
+            .await
+            .map_err(db_err)?;
     } else {
         sqlx::query(
             "INSERT INTO ingest_resolution (id, image_id, object_raw, state, target_id, attempts)
@@ -302,9 +300,7 @@ pub async fn resolve_pending<R: Resolver + ?Sized>(
                 let target_id = id.to_string();
                 mark_resolved(pool, &row.id, &target_id).await?;
                 if let Some(bus) = bus {
-                    if let Some(target) =
-                        cache::get_by_id(pool, id).await.map_err(db_err)?
-                    {
+                    if let Some(target) = cache::get_by_id(pool, id).await.map_err(db_err)? {
                         emit_resolved(bus, &target, Some(&row.object_raw)).await;
                     }
                 }
@@ -362,14 +358,12 @@ async fn mark_unresolved(
     row_id: &str,
     attempts: i64,
 ) -> Result<(), ContractError> {
-    sqlx::query(
-        "UPDATE ingest_resolution SET state = 'unresolved', attempts = ? WHERE id = ?",
-    )
-    .bind(attempts + 1)
-    .bind(row_id)
-    .execute(pool)
-    .await
-    .map_err(db_err)?;
+    sqlx::query("UPDATE ingest_resolution SET state = 'unresolved', attempts = ? WHERE id = ?")
+        .bind(attempts + 1)
+        .bind(row_id)
+        .execute(pool)
+        .await
+        .map_err(db_err)?;
     Ok(())
 }
 
@@ -396,8 +390,7 @@ mod tests {
     use persistence_db::Database;
     use targeting::resolver::cache::upsert_resolved;
     use targeting::resolver::{
-        AliasKind, FakeResolver, ObjectType, ResolvedAlias, ResolvedIdentity,
-        TargetSource as Src,
+        AliasKind, FakeResolver, ObjectType, ResolvedAlias, ResolvedIdentity, TargetSource as Src,
     };
 
     async fn setup() -> Database {
@@ -450,13 +443,12 @@ mod tests {
     }
 
     async fn target_id_of(db: &Database, image_id: &str) -> Option<String> {
-        let row: Option<(Option<String>, String)> = sqlx::query_as(
-            "SELECT target_id, state FROM ingest_resolution WHERE image_id = ?",
-        )
-        .bind(image_id)
-        .fetch_optional(db.pool())
-        .await
-        .unwrap();
+        let row: Option<(Option<String>, String)> =
+            sqlx::query_as("SELECT target_id, state FROM ingest_resolution WHERE image_id = ?")
+                .bind(image_id)
+                .fetch_optional(db.pool())
+                .await
+                .unwrap();
         row.and_then(|(tid, _)| tid)
     }
 
@@ -466,8 +458,7 @@ mod tests {
         upsert_resolved(db.pool(), &m31()).await.unwrap();
         let img = make_image(&db, "a.fits").await;
 
-        let outcome =
-            associate_or_enqueue(db.pool(), None, &img, "NGC 224").await.unwrap();
+        let outcome = associate_or_enqueue(db.pool(), None, &img, "NGC 224").await.unwrap();
         match outcome {
             AssociateOutcome::ResolvedInline(tid) => {
                 assert_eq!(target_id_of(&db, &img).await.as_deref(), Some(tid.as_str()));
@@ -519,8 +510,10 @@ mod tests {
         let img = make_image(&db, "blank.fits").await;
         let outcome = associate_or_enqueue(db.pool(), None, &img, "   ").await.unwrap();
         assert_eq!(outcome, AssociateOutcome::NoObject);
-        let (count,): (i64,) =
-            sqlx::query_as("SELECT COUNT(*) FROM ingest_resolution").fetch_one(db.pool()).await.unwrap();
+        let (count,): (i64,) = sqlx::query_as("SELECT COUNT(*) FROM ingest_resolution")
+            .fetch_one(db.pool())
+            .await
+            .unwrap();
         assert_eq!(count, 0);
     }
 
@@ -532,8 +525,7 @@ mod tests {
         associate_or_enqueue(db.pool(), None, &img, "M 31").await.unwrap();
 
         let resolver = FakeResolver::new().with_response("M 31", m31());
-        let summary =
-            resolve_pending(db.pool(), &resolver, None, true, 50).await.unwrap();
+        let summary = resolve_pending(db.pool(), &resolver, None, true, 50).await.unwrap();
         assert_eq!(summary.considered, 1);
         assert_eq!(summary.resolved, 1);
         assert_eq!(summary.unresolved, 0);
@@ -601,8 +593,10 @@ mod tests {
         let id1 = enqueue(db.pool(), &img, "X").await.unwrap();
         let id2 = enqueue(db.pool(), &img, "X").await.unwrap();
         assert_eq!(id1, id2);
-        let (count,): (i64,) =
-            sqlx::query_as("SELECT COUNT(*) FROM ingest_resolution").fetch_one(db.pool()).await.unwrap();
+        let (count,): (i64,) = sqlx::query_as("SELECT COUNT(*) FROM ingest_resolution")
+            .fetch_one(db.pool())
+            .await
+            .unwrap();
         assert_eq!(count, 1);
     }
 }

@@ -34,10 +34,7 @@ fn assert_deg_approx(label: &str, actual: f64, expected: f64, tolerance: f64) {
 
 /// Return true if the alias list contains a designation or common-name entry
 /// whose display form equals `needle` (case-sensitive, as SIMBAD returns it).
-fn has_alias(
-    aliases: &[targeting::resolver::ResolvedAlias],
-    needle: &str,
-) -> bool {
+fn has_alias(aliases: &[targeting::resolver::ResolvedAlias], needle: &str) -> bool {
     aliases.iter().any(|a| a.alias == needle)
 }
 
@@ -63,10 +60,8 @@ async fn live_resolve_m31_andromeda_galaxy() {
     let resolver = SimbadResolver::new(&SimbadConfig::default())
         .expect("SimbadResolver should build from default config");
 
-    let identity = resolver
-        .resolve("M 31")
-        .await
-        .expect("live SIMBAD resolve of 'M 31' must succeed");
+    let identity =
+        resolver.resolve("M 31").await.expect("live SIMBAD resolve of 'M 31' must succeed");
 
     // Coordinates — ICRS J2000 decimal degrees. M 31 centroid is well-known:
     // ra ≈ 10.6847°, dec ≈ 41.2692°. Tolerance ±0.5° covers any future
@@ -102,10 +97,7 @@ async fn live_resolve_m31_andromeda_galaxy() {
         .filter(|a| matches!(a.kind, AliasKind::CommonName))
         .map(|a| a.alias.as_str())
         .collect();
-    assert!(
-        !common_names.is_empty(),
-        "at least one CommonName alias must be present for M 31"
-    );
+    assert!(!common_names.is_empty(), "at least one CommonName alias must be present for M 31");
     assert!(
         common_names.iter().any(|n| n.contains("Andromeda")),
         "a CommonName alias containing 'Andromeda' must be present; got: {common_names:?}"
@@ -136,10 +128,8 @@ async fn live_resolve_ngc7293_helix_nebula() {
     let resolver = SimbadResolver::new(&SimbadConfig::default())
         .expect("SimbadResolver should build from default config");
 
-    let identity = resolver
-        .resolve("NGC 7293")
-        .await
-        .expect("live SIMBAD resolve of 'NGC 7293' must succeed");
+    let identity =
+        resolver.resolve("NGC 7293").await.expect("live SIMBAD resolve of 'NGC 7293' must succeed");
 
     // Coordinates — Helix Nebula centroid: ra ≈ 337.41°, dec ≈ −20.84°.
     assert_deg_approx("ra_deg", identity.ra_deg, 337.4, 1.0);

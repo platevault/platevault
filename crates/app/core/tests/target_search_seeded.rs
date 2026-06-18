@@ -51,9 +51,8 @@ fn req(query: &str, limit: u32) -> TargetSearchRequest {
 #[tokio::test]
 async fn t014_a_exact_designation_ranked_first() {
     let db = seeded_db().await;
-    let resp = target_search::search(db.pool(), &req("M 31", 20))
-        .await
-        .expect("search must not fail");
+    let resp =
+        target_search::search(db.pool(), &req("M 31", 20)).await.expect("search must not fail");
 
     assert!(
         !resp.suggestions.is_empty(),
@@ -75,25 +74,17 @@ async fn t014_a_exact_designation_ranked_first() {
         first.common_name.is_some(),
         "first result for 'M 31' must carry at least one common name from the bundled seed"
     );
-    assert_eq!(
-        first.object_type,
-        TargetObjectType::Galaxy,
-        "M 31 must be typed as galaxy"
-    );
+    assert_eq!(first.object_type, TargetObjectType::Galaxy, "M 31 must be typed as galaxy");
 }
 
 /// Query "androm" (prefix of the common name) must surface M 31 / Andromeda.
 #[tokio::test]
 async fn t014_a_prefix_common_name_surfaces_andromeda() {
     let db = seeded_db().await;
-    let resp = target_search::search(db.pool(), &req("androm", 20))
-        .await
-        .expect("search must not fail");
+    let resp =
+        target_search::search(db.pool(), &req("androm", 20)).await.expect("search must not fail");
 
-    assert!(
-        !resp.suggestions.is_empty(),
-        "prefix 'androm' must match at least one seeded object"
-    );
+    assert!(!resp.suggestions.is_empty(), "prefix 'androm' must match at least one seeded object");
 
     let found_andromeda = resp.suggestions.iter().any(|s| s.primary_designation == "M 31");
     assert!(
@@ -111,14 +102,10 @@ async fn t014_a_ranking_exact_before_prefix_before_substring() {
 
     // "M 42" is the exact designation for the Orion Nebula; querying for the
     // exact string should rank it first above any prefix/substring hits.
-    let resp = target_search::search(db.pool(), &req("M 42", 20))
-        .await
-        .expect("search must not fail");
+    let resp =
+        target_search::search(db.pool(), &req("M 42", 20)).await.expect("search must not fail");
 
-    assert!(
-        !resp.suggestions.is_empty(),
-        "search for 'M 42' must return results"
-    );
+    assert!(!resp.suggestions.is_empty(), "search for 'M 42' must return results");
 
     let first = &resp.suggestions[0];
     assert_eq!(
@@ -135,9 +122,7 @@ async fn t014_a_ranking_exact_before_prefix_before_substring() {
 #[tokio::test]
 async fn t014_b_limit_1_returns_at_most_one() {
     let db = seeded_db().await;
-    let resp = target_search::search(db.pool(), &req("M", 1))
-        .await
-        .expect("search must not fail");
+    let resp = target_search::search(db.pool(), &req("M", 1)).await.expect("search must not fail");
 
     assert!(
         resp.suggestions.len() <= 1,
@@ -150,9 +135,8 @@ async fn t014_b_limit_1_returns_at_most_one() {
 #[tokio::test]
 async fn t014_b_limit_5_returns_at_most_five() {
     let db = seeded_db().await;
-    let resp = target_search::search(db.pool(), &req("NGC", 5))
-        .await
-        .expect("search must not fail");
+    let resp =
+        target_search::search(db.pool(), &req("NGC", 5)).await.expect("search must not fail");
 
     assert!(
         resp.suggestions.len() <= 5,
@@ -167,9 +151,8 @@ async fn t014_b_default_limit_20_not_exceeded() {
     let db = seeded_db().await;
     // "NGC" matches many seeded objects; with default limit the result must
     // cap at 20.
-    let resp = target_search::search(db.pool(), &req("NGC", 0))
-        .await
-        .expect("search must not fail");
+    let resp =
+        target_search::search(db.pool(), &req("NGC", 0)).await.expect("search must not fail");
 
     assert!(
         resp.suggestions.len() <= 20,
@@ -211,9 +194,8 @@ async fn t014_c_common_name_query_orion_nebula() {
 #[tokio::test]
 async fn t014_c_partial_common_name_crab_surfaces_m1() {
     let db = seeded_db().await;
-    let resp = target_search::search(db.pool(), &req("Crab", 20))
-        .await
-        .expect("search must not fail");
+    let resp =
+        target_search::search(db.pool(), &req("Crab", 20)).await.expect("search must not fail");
 
     assert!(
         !resp.suggestions.is_empty(),

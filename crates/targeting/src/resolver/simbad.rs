@@ -125,7 +125,8 @@ impl SimbadResolver {
             self.endpoint,
             url_encode(query)
         );
-        let resp = self.client.get(&url).send().await.map_err(|e| classify_reqwest(&e, self.timeout))?;
+        let resp =
+            self.client.get(&url).send().await.map_err(|e| classify_reqwest(&e, self.timeout))?;
         let resp = resp.error_for_status().map_err(|e| classify_reqwest(&e, self.timeout))?;
         let body = resp.text().await.map_err(|e| classify_reqwest(&e, self.timeout))?;
 

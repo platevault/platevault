@@ -120,7 +120,8 @@ pub async fn target_resolve(
     .map_err(|e| e.to_string())?;
     let (endpoint, timeout_secs) =
         settings.unwrap_or_else(|| (DEFAULT_TAP_ENDPOINT.to_owned(), 10));
-    let config = SimbadConfig::from_settings(endpoint, u64::try_from(timeout_secs.max(1)).unwrap_or(10));
+    let config =
+        SimbadConfig::from_settings(endpoint, u64::try_from(timeout_secs.max(1)).unwrap_or(10));
     let resolver = SimbadResolver::new(&config).map_err(|e| e.to_string())?;
 
     app_core::target_resolve::resolve(pool, &resolver, &req).await.map_err(|e| e.message)
@@ -176,6 +177,9 @@ pub async fn target_resolution_settings_update(
     state: State<'_, AppState>,
     req: ResolverSettingsUpdateRequest,
 ) -> Result<ResolverSettingsResponse, String> {
-    tracing::debug!("target.resolution.settings.update online_enabled={}", req.settings.online_enabled);
+    tracing::debug!(
+        "target.resolution.settings.update online_enabled={}",
+        req.settings.online_enabled
+    );
     app_core::resolver_settings::update(state.repo.pool(), &req).await.map_err(|e| e.message)
 }

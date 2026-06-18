@@ -43,14 +43,15 @@ async fn read_row(pool: &SqlitePool) -> Result<ResolverSettings, ContractError> 
     .await
     .map_err(db_err)?;
 
-    Ok(row.map_or_else(defaults, |(online_enabled, simbad_endpoint, debounce_ms, request_timeout_secs)| {
-        ResolverSettings {
+    Ok(row.map_or_else(
+        defaults,
+        |(online_enabled, simbad_endpoint, debounce_ms, request_timeout_secs)| ResolverSettings {
             online_enabled: online_enabled != 0,
             simbad_endpoint,
             debounce_ms: u32::try_from(debounce_ms.max(0)).unwrap_or(300),
             request_timeout_secs: u32::try_from(request_timeout_secs.max(0)).unwrap_or(10),
-        }
-    }))
+        },
+    ))
 }
 
 /// `target.resolution.settings` (get) — return the current resolver settings.

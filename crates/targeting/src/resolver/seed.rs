@@ -396,9 +396,8 @@ mod tests {
         // Only the search call is timed: this is the SC-001 typeahead path.
         // No network is invoked: the resolver online path is entirely absent here.
         let t0 = std::time::Instant::now();
-        let results_m42 = cache::search_by_normalized(db.pool(), "m 42", 20)
-            .await
-            .expect("search must not fail");
+        let results_m42 =
+            cache::search_by_normalized(db.pool(), "m 42", 20).await.expect("search must not fail");
         let elapsed_m42 = t0.elapsed();
         // ── Timed region end ─────────────────────────────────────────────────
 
@@ -458,9 +457,7 @@ mod tests {
 
         // Cache must still be queryable — offline guarantee holds.
         let norm = crate::normalize::normalize("M 31");
-        let got = cache::get_by_normalized(db.pool(), &norm)
-            .await
-            .unwrap();
+        let got = cache::get_by_normalized(db.pool(), &norm).await.unwrap();
         assert!(
             got.is_some(),
             "M 31 must remain resolvable from the cache after a no-op second load"
