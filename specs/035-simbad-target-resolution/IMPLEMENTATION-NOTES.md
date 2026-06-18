@@ -137,3 +137,21 @@ Real bugs found (the gates earned their keep — these were integration gaps the
 The two pre-logged gaps (US1 project↔target persistence; US4 not wired to a live per-image ingest
 pipeline / spec-002) are **still open and need your input** — they were confirmed by the verify gate,
 not fixed here (cross-spec scope decisions).
+
+## SEED-SCALING FINDING (kept the 487 MVP seed; full seed deferred)
+
+Generated the full seed (`seed-builder --full`) to test scaling: it produced **56,826 objects /
+19.5 MB** — it pulls *every* object in the R2 prefix families (all of ACO/LDN/LBN, not just the
+"popular" subset the spec intends). **Did NOT commit it**, because:
+- It overshoots the spec's "~14k objects / a few MB" and includes obscure objects.
+- 19.5 MB committed + `include_bytes!`-embedded bloats the repo and binary.
+- **Loader doesn't scale**: FIX-1 loads the seed **synchronously at startup via per-entry
+  `upsert_resolved`** — fine for 487 (sub-second), but ~56k entries × several queries each would hang
+  the first launch for minutes (violates responsiveness).
+
+**Kept the committed 487-object MVP seed** (Messier + Caldwell + NGC 1–300 — fast first run, covers the
+common demo cases). **To ship a larger seed later**, two things are needed first: (1) a curated
+"popular catalogues" membership (~14k, not the full 56k — e.g. NGC/IC + M/C + named + a popular
+Sharpless/Barnard/vdB/Abell-PN subset, excluding the bulk ACO/LDN/LBN), and (2) a **batched or
+background** seed loader (single transaction / bulk insert, or load off the startup path) so first-run
+stays responsive. The `seed-builder` already supports `--ngc <N>` slices for tuning membership.
