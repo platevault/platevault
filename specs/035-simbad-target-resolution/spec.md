@@ -37,6 +37,14 @@ and require no network.
 This replaces the previous plan to build, host, sign, and auto-update our own catalog files. Because
 SIMBAD is trusted over TLS, no catalog signing/verification or hosted manifest is required.
 
+## Clarifications
+
+### Session 2026-06-18
+
+- Q: When ingesting images, how should OBJECT-header resolution against SIMBAD happen? → A: Asynchronous background queue — ingest never blocks; seed/cache hits resolve immediately, the long tail is enqueued and resolved in the background (images marked pending until resolved).
+- Q: Can the user manually override/correct a resolved target identity, and does it persist over SIMBAD? → A: Yes — a manual override is stored (source = user-override) and takes precedence over future SIMBAD/seed resolutions for that object.
+- Q: Should there be a settings toggle to enable/disable online SIMBAD resolution? → A: Yes — an enable/disable toggle, default ON; when disabled, resolution uses only the bundled seed + local cache.
+
 ## User Scenarios & Testing *(mandatory)*
 
 ### User Story 1 - Find a target while creating a project (Priority: P1)
@@ -199,6 +207,14 @@ confirm only matching objects appear; remove the filter and confirm the full res
   without blocking the user.
 - **FR-012**: The system MUST surface the attribution required by the data sources (CDS/SIMBAD,
   OpenNGC) in the app's notices.
+- **FR-013**: Image-ingest resolution MUST be asynchronous — cache/seed hits resolve immediately, but
+  uncached objects MUST be enqueued and resolved in the background without blocking ingest; images
+  awaiting resolution are marked pending (per FR-009) until resolved.
+- **FR-014**: The user MUST be able to manually set or correct a target's canonical identity; a manual
+  override MUST be persisted (source = `user-override`) and MUST take precedence over SIMBAD/seed
+  resolutions for that object on subsequent encounters.
+- **FR-015**: The app MUST provide a setting to enable/disable online SIMBAD resolution (default
+  enabled); when disabled, resolution uses only the bundled seed + local cache.
 
 ### Key Entities *(include if feature involves data)*
 
@@ -208,7 +224,8 @@ confirm only matching objects appear; remove the filter and confirm the full res
 - **Alias / Designation**: an alternate name or catalogue designation pointing to a canonical target
   (e.g. `M 31`, `NGC 224`, `NAME Andromeda Galaxy`); used for search matching and ingest resolution.
 - **Resolution Cache Entry**: a durable local record of a resolved target — its identity, aliases,
-  source (`seed` | `resolved`), and when it was resolved.
+  source (`seed` | `resolved` | `user-override`), and when it was resolved. A `user-override` entry
+  takes precedence over `resolved`/`seed` for the same object (FR-014).
 - **Seed Index**: the bundled set of popular catalogue objects that pre-populates the cache at first
   run.
 - **Catalogue / Type (filter vocabulary)**: the set of catalogues and object types used for the
