@@ -65,7 +65,12 @@ function loadWizardState(): WizardState {
       return {
         currentStep: parsed.currentStep ?? 0,
         sources: Array.isArray(parsed.sources) ? parsed.sources : loadSources(),
-        catalogSettings: parsed.catalogSettings ?? DEFAULT_CATALOG_SETTINGS,
+        // Migrate/guard: older persisted state used `{ downloadAll }` (no
+        // `selectedCatalogIds`); coerce any shape lacking the array to the default so
+        // consumers reading `selectedCatalogIds.length` never hit `undefined`.
+        catalogSettings: Array.isArray(parsed.catalogSettings?.selectedCatalogIds)
+          ? parsed.catalogSettings
+          : DEFAULT_CATALOG_SETTINGS,
         tools: parsed.tools ?? DEFAULT_TOOLS_STATE,
       };
     }
