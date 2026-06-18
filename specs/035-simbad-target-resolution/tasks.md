@@ -98,10 +98,10 @@ description: "Task list for SIMBAD Target Resolution (spec 035)"
 
 ## Phase 8: Polish & Cross-Cutting (retire superseded surface)
 
-- [ ] T034 Remove the superseded catalog-download surface: `crates/targeting/catalogs/src/download.rs` + `loader.rs` machinery, the `catalog.*` Tauri commands, and `catalog.download.*` event topics (per the 002/003/013/014/018/033 reconciliation)
-- [ ] T035 [P] Remove the spec-014 contracts (`catalog.manifest.fetch` / `catalog.download` / `catalog.entry-file`) + regenerate TS bindings. The `0016_catalogs.sql` tables are removed by the forward `DROP TABLE IF EXISTS` in `0031` (T006) — do NOT edit or delete the `0016` migration file itself.
+- [X] T034 Remove the superseded catalog-download surface: `crates/targeting/catalogs/src/download.rs` + `loader.rs` machinery, the `catalog.*` Tauri commands, and `catalog.download.*` event topics (per the 002/003/013/014/018/033 reconciliation)
+- [X] T035 [P] Remove the spec-014 contracts (`catalog.manifest.fetch` / `catalog.download` / `catalog.entry-file`) + regenerate TS bindings. The `0016_catalogs.sql` tables are removed by the forward `DROP TABLE IF EXISTS` in `0031` (T006) — do NOT edit or delete the `0016` migration file itself.
 - [ ] T036 [P] Attribution/NOTICE surface for CDS/SIMBAD + OpenNGC (FR-012) in the app's notices
-- [ ] T039 [P] Emit audit events for resolution outcomes via `crates/audit`: a `target.resolved` audit record (source `resolved`) wired into the `target.resolve` use-case (T020) and a `target.user-override` audit record wired into the manual-override action (T032). Honors plan.md §II/§V and constitution §V (durable audit record for resolution + override). Test: resolving and overriding each write one audit row.
+- [X] T039 [P] Emit audit events for resolution outcomes via `crates/audit`: a `target.resolved` audit record (source `resolved`) wired into the `target.resolve` use-case (T020) and a `target.user-override` audit record wired into the manual-override action (T032). Honors plan.md §II/§V and constitution §V (durable audit record for resolution + override). Test: resolving and overriding each write one audit row.
 - [ ] T037 [P] `just lint` + `cargo clippy --workspace -D warnings` + `cargo fmt --all --check` + `just test` green; quickstart S1–S5 pass
 - [ ] T038 Windows verify (push → pull → recompile → restart → exercise search/ingest/settings) per `spec-033-windows-verify-loop`
 

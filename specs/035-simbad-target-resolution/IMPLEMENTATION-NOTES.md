@@ -1,0 +1,81 @@
+# Spec 035 — Implementation Notes (autonomous run log)
+
+Running log of decisions, assumptions, and items needing your input. Started during the
+unattended implementation run (2026-06-18). Newest sections appended over time.
+
+## ⚠️ NEEDS YOUR INPUT (decisions I could not make alone)
+
+1. **Project ↔ target persistence gap (US1 acceptance #2).** The `TargetSearch` component
+   (T013) lets a user search + select a canonical target during project creation, but
+   `ProjectCreateRequest` (the `projects.create` contract, spec 008) has **no target field**, so
+   the selection is **not persisted**. Wiring it requires a backend contract + schema change to the
+   projects feature (cross-spec). I did NOT expand into spec 008 unilaterally. **Decision needed:**
+   add `targetId` to project create/edit (and a `project_target` association), or handle target
+   association elsewhere (e.g. via the image→target grouping only)? Until then, project-creation
+   target selection is UI-only.
+
+2. **US4 ingest grouping is a ready seam, not wired to live ingest.** `associate_or_enqueue` +
+   the `ingest_resolution` queue (T025/T026) are implemented and unit-tested (alias variants group
+   under one target; unknown/offline → pending/retry; never fabricated). BUT no production code path
+   creates per-image `file_record` rows — per-image inventory ingest is **spec-002 territory and is
+   not implemented**. So the grouping logic can't run end-to-end through real file ingest yet.
+   **Decision needed:** should spec 035 also build the per-image ingest path (out of its task
+   breakdown, into spec-002 scope), or leave `associate_or_enqueue` as the documented seam for
+   spec-002 to call later? Current choice: leave the seam (logic complete + tested).
+
+3. **`common_name` display is non-deterministic.** A target with multiple SIMBAD `NAME` aliases
+   (e.g. M 31 has 4) returns the first by DB insertion order. Minor UX nit. Options: store a primary
+   common name on `canonical_target`, or pick shortest/curated. Left as-is for now.
+
+## DECISIONS TAKEN (applied)
+
+- **Migration numbering:** spec said `0017_target_resolution.sql`, but `0017` is taken by spec-013's
+  `0017_targets.sql`. Used **`0031_target_resolution.sql`** (next free). Reconciled tasks.md/agent
+  -assignments. The separate calibration-flatten change uses **`0032`** (see below).
+- **`target_search`/`target_resolve` command home:** placed in `commands/target_lookup.rs` (the
+  spec-013/035 target command family with DB access), NOT the spec-named `commands/targets.rs`
+  (which is the spec-029 fixture stub with no pool). tasks.md updated.
+- **spec-013 `target_resolve` collision:** renamed the old FITS-against-local-catalog command to
+  `target.resolve.fits`; the new spec-035 SIMBAD resolver owns `target.resolve`.
+- **`CanonicalTarget.id` derivation:** `target_id_from_designation` (UUIDv5 from the bare canonical
+  designation). `simbad_oid` is the real dedup key when present; the derived id only governs
+  null-oid (seed/override-only) rows.
+- **Catalogue filter (T029):** no catalogue column on the cache → derived from a target's alias
+  designation prefixes (M→messier, NGC/IC→openngc, etc.) via the existing normalize vocabulary.
+- **Sesame fallback (T019):** NOT added — SIMBAD TAP `ident IN (...)` (verbatim + space-collapsed)
+  already covers single-identifier resolution. Flag if a Sesame backstop is wanted.
+- **Event topics (T027):** `target.resolved` / `target.resolve_batch.completed` added as Rust event
+  -bus string constants (`crates/audit/event_bus.rs`). There is no frontend `events.ts` topic
+  registry (frontend uses `listen()` inline), so no frontend/bindings change — matches existing
+  convention.
+- **Calibration source-folder flatten (your request, separate concern):** unified `dark/flat/bias`
+  source kinds → a single `calibration` kind in the setup wizard. Done on its own branch
+  `feat/unify-calibration-source-kind` (off main) → **PR #251** (migration 0032). Per-image frame
+  type stays detected from FITS `IMAGETYP` metadata (verified already decoupled). Spec-007
+  calibration-MATCHING model (Dark/Flat/Bias) intentionally untouched. **Left unmerged for your
+  review/Windows test.**
+
+## ASSUMPTIONS
+
+- `map_otype` input code set uses the published SIMBAD object-type vocabulary; should be validated/
+  extended against live SIMBAD responses over time (fallback `Other` keeps it safe).
+- Seed asset (`assets/seed/seed.json`) committed as a 487-object MVP subset (all Messier + Caldwell
+  + NGC 1–300); full ~14k regen via `cargo run -p seed-builder -- --full`. NGC 7000 excluded from the
+  live test because SIMBAD classifies it `Cl*` not emission-nebula; used NGC 7293 instead.
+
+## KNOWN TRANSIENT STATE / RISKS
+
+- **`catalogs` repo tests fail** (`no such table: catalog_downloaded`) because migration 0031 drops
+  the spec-014 catalog tables. This is **fixed by T034/T035** (remove the superseded catalog-download
+  surface) — in progress. Until then `cargo test --workspace` shows ~7 failures, all in that one
+  superseded module.
+- Pre-existing `clippy --all-targets` lints in non-035 files (`inbox/plan_listener.rs`,
+  `tests/startup_wiring_regression.rs`) — `just lint` gate (T037) must reconcile; not introduced by
+  035.
+
+## INTERACTIVE TESTING REQUIRED (for the handover / your return)
+
+- Live browser exercise of the `TargetSearch` UI (typeahead, long-tail SIMBAD, cancel-in-flight,
+  settings toggle, override action) via the running app — deferred to the Windows rebuild + quickstart.
+- Windows rebuild + full quickstart S1–S5 (T038) — will run push→pull→recompile and hand over the
+  GUI test scenario.

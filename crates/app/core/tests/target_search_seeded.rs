@@ -1,15 +1,15 @@
 //! T014 — `target.search` against a realistically-seeded cache (spec 035).
 //!
 //! Exercises `app_core::target_search::search` end-to-end after loading the
-//! bundled seed into an in-memory SQLite database.  These tests are distinct
+//! bundled seed into an in-memory `SQLite` database.  These tests are distinct
 //! from the unit tests in `target_search.rs` (which use a 2-object hand-rolled
 //! fixture) because they prove:
 //!
 //! - (a) Ranking order across a realistic corpus: exact designation before
-//!       prefix before substring (e.g. "M 31" returns Andromeda first).
+//!   prefix before substring (e.g. "M 31" returns Andromeda first).
 //! - (b) `limit` is honoured over the full seeded dataset.
 //! - (c) Common-name / natural-language queries work against real seed data
-//!       (e.g. "androm" surfaces Andromeda Galaxy).
+//!   (e.g. "androm" surfaces Andromeda Galaxy).
 //!
 //! The bundled seed ships ≥ 110 Messier + Caldwell objects; it is loaded once
 //! in an `async` setup helper and then queries run against the resulting pool.
@@ -103,7 +103,7 @@ async fn t014_a_prefix_common_name_surfaces_andromeda() {
 }
 
 /// Substring query "nebula" must match nebula-type objects before galaxy
-/// results.  The matched_alias for every returned suggestion must contain
+/// results.  The `matched_alias` for every returned suggestion must contain
 /// "nebula" (case-insensitive) confirming the match is against the alias text.
 #[tokio::test]
 async fn t014_a_ranking_exact_before_prefix_before_substring() {

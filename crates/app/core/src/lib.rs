@@ -3,7 +3,6 @@
 
 pub mod artifact;
 pub mod calibration;
-pub mod catalogs;
 #[cfg(feature = "dev-tools")]
 pub mod dev_contracts;
 pub mod equipment;

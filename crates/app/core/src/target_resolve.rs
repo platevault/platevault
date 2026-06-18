@@ -39,6 +39,50 @@ use targeting::resolver::{
 };
 use uuid::Uuid;
 
+// ── Durable audit record (T039, constitution §V) ──────────────────────────────
+
+/// Write a durable `audit_log_entry` row for a resolution outcome.
+///
+/// `actor` must be `user` or `system`; `trigger` is the resolution kind
+/// (`target.resolved` / `target.user_override`). The entity is the resolved
+/// `canonical_target`. The query that triggered the resolution is captured in
+/// the JSON payload. Best-effort: an audit-write failure does not fail the
+/// resolution (it is logged), so resolution remains non-blocking.
+async fn write_audit(
+    pool: &SqlitePool,
+    target_id: &str,
+    trigger: &str,
+    actor: &str,
+    request_id: &str,
+    query: &str,
+) {
+    let audit_id = Uuid::new_v4().to_string();
+    let at = time::OffsetDateTime::now_utc()
+        .format(&time::format_description::well_known::Rfc3339)
+        .unwrap_or_else(|_| "1970-01-01T00:00:00Z".to_owned());
+    let payload = serde_json::json!({ "query": query }).to_string();
+
+    let result = sqlx::query(
+        "INSERT INTO audit_log_entry \
+         (audit_id, entity_type, entity_id, from_state, to_state, trigger, actor, \
+          outcome, severity, request_id, at, payload) \
+         VALUES (?, 'canonical_target', ?, NULL, NULL, ?, ?, 'applied', 'workflow', ?, ?, ?)",
+    )
+    .bind(&audit_id)
+    .bind(target_id)
+    .bind(trigger)
+    .bind(actor)
+    .bind(request_id)
+    .bind(&at)
+    .bind(&payload)
+    .execute(pool)
+    .await;
+
+    if let Err(e) = result {
+        tracing::warn!("failed to write resolution audit record: {e}");
+    }
+}
+
 // ── Error mapping ───────────────────────────────────────────────────────────
 
 fn db_err(e: &cache::CacheError) -> ContractError {
@@ -211,6 +255,9 @@ pub async fn resolve<R: Resolver + ?Sized>(
             let (id, _outcome) =
                 cache::upsert_resolved(pool, &identity).await.map_err(|e| db_err(&e))?;
             if let Some(target) = cache::get_by_id(pool, id).await.map_err(|e| db_err(&e))? {
+                // T039: durable audit record for the resolved outcome.
+                write_audit(pool, &id.to_string(), "target.resolved", "system", &req.request_id, query)
+                    .await;
                 Ok(resolved(req, cached_to_resolved(&target)))
             } else {
                 // Should not happen (we just wrote it); never fabricate.
@@ -283,6 +330,16 @@ async fn apply_override(
     let (written_id, _outcome) =
         cache::upsert_resolved(pool, &identity).await.map_err(|e| db_err(&e))?;
     if let Some(target) = cache::get_by_id(pool, written_id).await.map_err(|e| db_err(&e))? {
+        // T039: durable audit record for the manual user-override (actor = user).
+        write_audit(
+            pool,
+            &written_id.to_string(),
+            "target.user_override",
+            "user",
+            &req.request_id,
+            query,
+        )
+        .await;
         Ok(resolved(req, cached_to_resolved(&target)))
     } else {
         Ok(unresolved(req, "unknown"))
@@ -534,5 +591,54 @@ mod tests {
         let resolver = FakeResolver::new();
         let err = resolve(db.pool(), &resolver, &override_req("X", "not-a-uuid")).await;
         assert!(err.is_err());
+    }
+
+    // ── T039: durable audit records ────────────────────────────────────────────
+
+    async fn audit_rows(db: &Database, trigger: &str) -> i64 {
+        let (n,): (i64,) =
+            sqlx::query_as("SELECT COUNT(*) FROM audit_log_entry WHERE trigger = ?")
+                .bind(trigger)
+                .fetch_one(db.pool())
+                .await
+                .unwrap();
+        n
+    }
+
+    #[tokio::test]
+    async fn resolve_writes_one_audit_record() {
+        let db = setup().await;
+        let resolver = FakeResolver::new().with_response("M 31", m31());
+        let resp = resolve(db.pool(), &resolver, &req("M 31")).await.unwrap();
+        assert_eq!(resp.status, TargetResolveStatus::Resolved);
+
+        assert_eq!(audit_rows(&db, "target.resolved").await, 1, "one resolved audit record");
+        // A cache hit on the next call must NOT write a second resolved record.
+        let _ = resolve(db.pool(), &resolver, &req("M 31")).await.unwrap();
+        assert_eq!(audit_rows(&db, "target.resolved").await, 1, "cache hit writes no audit record");
+    }
+
+    #[tokio::test]
+    async fn override_writes_one_user_override_audit_record() {
+        let db = setup().await;
+        let (id, _) = upsert_resolved(db.pool(), &m31()).await.unwrap();
+        let resolver = FakeResolver::new();
+        let resp = resolve(db.pool(), &resolver, &override_req("MyObj", &id.to_string()))
+            .await
+            .unwrap();
+        assert_eq!(resp.status, TargetResolveStatus::Resolved);
+
+        assert_eq!(
+            audit_rows(&db, "target.user_override").await,
+            1,
+            "one user-override audit record (actor = user)"
+        );
+        let (actor,): (String,) = sqlx::query_as(
+            "SELECT actor FROM audit_log_entry WHERE trigger = 'target.user_override'",
+        )
+        .fetch_one(db.pool())
+        .await
+        .unwrap();
+        assert_eq!(actor, "user");
     }
 }

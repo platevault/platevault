@@ -66,7 +66,6 @@ dependencies = [
  "sha2 0.10.9",
  "sqlx",
  "targeting",
- "targeting_catalogs",
  "tempfile",
  "thiserror 2.0.18",
  "time",
@@ -879,7 +878,6 @@ dependencies = [
  "specta-typescript",
  "sqlx",
  "targeting",
- "targeting_catalogs",
  "tauri",
  "tauri-build",
  "tauri-plugin-dialog",
@@ -4463,23 +4461,6 @@ dependencies = [
  "tokio",
  "tracing",
  "unicode-normalization",
- "uuid",
-]
-
-[[package]]
-name = "targeting_catalogs"
-version = "0.1.0"
-dependencies = [
- "async-trait",
- "hex",
- "reqwest",
- "serde",
- "serde_json",
- "sha2 0.10.9",
- "thiserror 2.0.18",
- "time",
- "tokio",
- "tracing",
  "uuid",
 ]
 

@@ -121,7 +121,7 @@ async fn live_resolve_m31_andromeda_galaxy() {
 ///
 /// NGC 7293 is classified as `PN` (planetary nebula) in SIMBAD — one of the
 /// most stable object-type assignments in the database. Confirmed live:
-/// oid 1283906, ra ≈ 337.41°, dec ≈ −20.84°, otype_txt = "PN".
+/// oid 1283906, ra ≈ 337.41°, dec ≈ −20.84°, `otype_txt` = "PN".
 ///
 /// Assertions:
 /// - status: `Ok`

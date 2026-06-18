@@ -24,9 +24,6 @@ use crate::commands::calibration::{
 use crate::commands::calibration_tolerances::{
     calibration_tolerances_get, calibration_tolerances_update,
 };
-use crate::commands::catalogs::{
-    catalog_attribution_get, catalog_download, catalog_list, catalog_manifest_fetch,
-};
 use crate::commands::cleanup::{cleanup_policy_get, cleanup_policy_update, cleanup_scan};
 #[cfg(feature = "dev-tools")]
 use crate::commands::dev::{
@@ -225,11 +222,6 @@ pub fn specta_builder() -> Builder<tauri::Wry> {
         // log stream (spec 019)
         log_recent,
         log_export,
-        // catalog registry (spec 014)
-        catalog_list,
-        catalog_attribution_get,
-        catalog_manifest_fetch,
-        catalog_download,
         // review
         review_queue,
         // roots & scan & equipment
@@ -415,11 +407,6 @@ pub fn specta_builder() -> Builder<tauri::Wry> {
         // log stream (spec 019)
         log_recent,
         log_export,
-        // catalog registry (spec 014)
-        catalog_list,
-        catalog_attribution_get,
-        catalog_manifest_fetch,
-        catalog_download,
         // review
         review_queue,
         // roots & scan & equipment

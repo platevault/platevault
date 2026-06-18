@@ -23,7 +23,6 @@ patterns = { path = "../../patterns" }
 persistence_db = { path = "../../persistence/db" }
 project_structure = { path = "../../project/structure" }
 targeting = { path = "../../targeting" }
-targeting_catalogs = { path = "../../targeting/catalogs" }
 hex.workspace = true
 serde = { workspace = true }
 serde_json.workspace = true
