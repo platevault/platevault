@@ -24,11 +24,11 @@ assignments:
   # Phase 1 — Setup
   T001: { agent: "rust-pro", reason: "Create crates/targeting resolver module + lib.rs registration" }
   T002: { agent: "rust-pro", reason: "Add reqwest/tokio/serde deps to crates/targeting Cargo.toml" }
-  T003: { agent: "database-architect", reason: "New append-only SQLite migration scaffold (0017)" }
+  T003: { agent: "database-architect", reason: "New append-only SQLite migration scaffold (0031)" }
   # Phase 2 — Foundational
   T004: { agent: "rust-pro", reason: "Resolver trait + ResolveError + FakeResolver seam" }
   T005: { agent: "rust-pro", reason: "SIMBAD otype -> closed ObjectType enum mapping" }
-  T006: { agent: "database-architect", reason: "Resolution-cache/settings schema + DROP IF EXISTS superseded tables in 0017" }
+  T006: { agent: "database-architect", reason: "Resolution-cache/settings schema + DROP IF EXISTS superseded tables in 0031" }
   T007: { agent: "rust-pro", reason: "Rust contract DTOs (specta) + regenerate TS bindings" }
   T008: { agent: "rust-pro", reason: "Cache read/write + dedupe + source precedence" }
   T009: { agent: "test-automator", reason: "DTO<->wire contract conformance test scaffold" }

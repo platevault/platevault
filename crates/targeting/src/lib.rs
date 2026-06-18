@@ -9,6 +9,7 @@
 //! - [`identity`]: deterministic UUIDv5 generation for `Target.id` (R6).
 //! - [`lookup`]: exact, fuzzy, and edit-distance matchers.
 //! - [`resolve`]: ambiguity policy (R3) wrapping the lookup pipeline.
+//! - [`resolver`]: on-demand SIMBAD resolution + bundled seed + local cache (spec 035).
 //! - [`load`]: SQLite-backed catalog loader (T005).
 //! - [`fixture`]: seeded in-memory test catalog (no network, no files).
 
@@ -21,6 +22,7 @@ pub mod load;
 pub mod lookup;
 pub mod normalize;
 pub mod resolve;
+pub mod resolver;
 
 #[cfg(any(test, feature = "test-fixture"))]
 pub mod fixture;
