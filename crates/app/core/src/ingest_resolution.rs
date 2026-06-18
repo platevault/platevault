@@ -319,7 +319,9 @@ pub async fn resolve_pending<R: Resolver + ?Sized>(
             }
             // Genuine content misses (unknown / ambiguous / malformed response)
             // → unresolved + attempts++ (retryable later); never fabricate (FR-009).
-            Err(ResolveError::NotFound(_) | ResolveError::Ambiguous { .. } | ResolveError::Parse(_)) => {
+            Err(
+                ResolveError::NotFound(_) | ResolveError::Ambiguous { .. } | ResolveError::Parse(_),
+            ) => {
                 mark_unresolved(pool, &row.id, row.attempts).await?;
                 num_unresolved += 1;
             }

@@ -132,8 +132,7 @@ impl SimbadResolver {
         );
         let resp =
             self.client.get(&url).send().await.map_err(|e| classify_reqwest(&e, self.timeout))?;
-        let mut resp =
-            resp.error_for_status().map_err(|e| classify_reqwest(&e, self.timeout))?;
+        let mut resp = resp.error_for_status().map_err(|e| classify_reqwest(&e, self.timeout))?;
 
         // FIX-5b: bound the response read. Reject an advertised oversize body up
         // front, then stream chunks with a hard cap so a misbehaving/hostile
@@ -147,7 +146,9 @@ impl SimbadResolver {
         }
         let mut buf: Vec<u8> = Vec::new();
         let mut total: u64 = 0;
-        while let Some(chunk) = resp.chunk().await.map_err(|e| classify_reqwest(&e, self.timeout))? {
+        while let Some(chunk) =
+            resp.chunk().await.map_err(|e| classify_reqwest(&e, self.timeout))?
+        {
             total += chunk.len() as u64;
             if total > MAX_RESPONSE_BYTES {
                 return Err(ResolveError::Parse(format!(

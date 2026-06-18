@@ -245,7 +245,9 @@ mod tests {
     #[tokio::test]
     async fn update_accepts_https_and_localhost_http() {
         let db = setup().await;
-        assert!(update(db.pool(), &upd_with_endpoint("https://simbad.cds.unistra.fr/x")).await.is_ok());
+        assert!(update(db.pool(), &upd_with_endpoint("https://simbad.cds.unistra.fr/x"))
+            .await
+            .is_ok());
         assert!(update(db.pool(), &upd_with_endpoint("http://localhost:8080/tap")).await.is_ok());
         assert!(update(db.pool(), &upd_with_endpoint("http://127.0.0.1/tap")).await.is_ok());
     }

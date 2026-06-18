@@ -120,8 +120,8 @@ pub async fn target_resolve(
     .fetch_optional(pool)
     .await
     .map_err(|e| e.to_string())?;
-    let (online_enabled, endpoint, timeout_secs) =
-        settings.map_or_else(|| (true, DEFAULT_TAP_ENDPOINT.to_owned(), 10), |(o, e, t)| (o != 0, e, t));
+    let (online_enabled, endpoint, timeout_secs) = settings
+        .map_or_else(|| (true, DEFAULT_TAP_ENDPOINT.to_owned(), 10), |(o, e, t)| (o != 0, e, t));
 
     // FIX-3: when online resolution is disabled, do NOT construct a reqwest/TLS
     // client (it can fail to build, turning an offline-by-config call into an
