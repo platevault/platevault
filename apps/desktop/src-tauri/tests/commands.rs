@@ -188,6 +188,7 @@ async fn projects_create_and_list() {
         path: "projects/NGC7000_NB".to_owned(),
         initial_sources: vec![],
         notes: None,
+        canonical_target_id: None,
     };
     let result = app_core::project_setup::create(state.repo.pool(), &state.bus, &req).await;
     assert!(result.is_ok(), "create failed: {result:?}");

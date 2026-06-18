@@ -326,6 +326,34 @@ pub async fn create(
     let project_id = new_id();
     let now = now_iso();
 
+    // Validate the optional canonical target exists (cheap point lookup) so a
+    // dangling id is rejected rather than silently stored. Spec-035 additive
+    // association; absent → stored as NULL (existing behaviour unchanged).
+    if let Some(ctid) = req.canonical_target_id.as_deref() {
+        let exists: Option<(String,)> =
+            sqlx::query_as("SELECT id FROM canonical_target WHERE id = ?")
+                .bind(ctid)
+                .fetch_optional(pool)
+                .await
+                .map_err(|e| {
+                    ContractError::new(
+                        "internal.database",
+                        format!("{e}"),
+                        ErrorSeverity::Fatal,
+                        true,
+                    )
+                })?;
+        if exists.is_none() {
+            return Err(ContractError::new(
+                "canonical_target.not_found",
+                "The selected target was not found.",
+                ErrorSeverity::Blocking,
+                false,
+            )
+            .with_details(serde_json::json!({ "canonicalTargetId": ctid })));
+        }
+    }
+
     // 5. Persist the project row (setup_incomplete).
     let insert = repo::InsertProject {
         id: &project_id,
@@ -334,6 +362,7 @@ pub async fn create(
         lifecycle: "setup_incomplete",
         path: &req.path,
         notes: req.notes.as_deref(),
+        canonical_target_id: req.canonical_target_id.as_deref(),
     };
     repo::insert_project(pool, &insert).await.map_err(db_err)?;
 
@@ -959,6 +988,7 @@ mod tests {
             path: format!("projects/{name}"),
             initial_sources: vec![],
             notes: None,
+            canonical_target_id: None,
         }
     }
 
@@ -1259,5 +1289,57 @@ mod tests {
         let folder_names: Vec<&str> =
             items.iter().filter(|i| i.action == "mkdir").map(|i| i.name.as_str()).collect();
         assert!(!folder_names.contains(&"processing"), "Siril has no processing/ folder");
+    }
+
+    // ── spec 035 US1 #2: project ↔ canonical_target association ──────────────────
+
+    /// Insert a minimal `canonical_target` row so the create use case's existence
+    /// check passes and the FK target is present.
+    async fn seed_canonical_target(pool: &SqlitePool, id: &str) {
+        sqlx::query(
+            "INSERT INTO canonical_target
+                (id, simbad_oid, primary_designation, object_type, ra_deg, dec_deg, source, resolved_at)
+             VALUES (?, NULL, 'M 31', 'galaxy', 10.68, 41.27, 'resolved', '2026-01-01T00:00:00Z')",
+        )
+        .bind(id)
+        .execute(pool)
+        .await
+        .unwrap();
+    }
+
+    #[tokio::test]
+    async fn create_without_canonical_target_stores_null() {
+        let (pool, bus) = setup().await;
+        let req = make_create_req("No Target Project", ProjectTool::PixInsight);
+        let result = create(&pool, &bus, &req).await.unwrap();
+        let stored = repo::get_project_canonical_target_id(&pool, &result.project_id)
+            .await
+            .unwrap();
+        assert_eq!(stored, None, "absent canonicalTargetId must persist as NULL");
+    }
+
+    #[tokio::test]
+    async fn create_with_canonical_target_persists_and_reads_back() {
+        let (pool, bus) = setup().await;
+        let ctid = "11111111-1111-5111-8111-111111111111";
+        seed_canonical_target(&pool, ctid).await;
+
+        let mut req = make_create_req("Targeted Project", ProjectTool::PixInsight);
+        req.canonical_target_id = Some(ctid.to_owned());
+        let result = create(&pool, &bus, &req).await.unwrap();
+
+        let stored = repo::get_project_canonical_target_id(&pool, &result.project_id)
+            .await
+            .unwrap();
+        assert_eq!(stored.as_deref(), Some(ctid), "canonicalTargetId must round-trip");
+    }
+
+    #[tokio::test]
+    async fn create_with_unknown_canonical_target_is_rejected() {
+        let (pool, bus) = setup().await;
+        let mut req = make_create_req("Dangling Target", ProjectTool::PixInsight);
+        req.canonical_target_id = Some("22222222-2222-5222-8222-222222222222".to_owned());
+        let err = create(&pool, &bus, &req).await.unwrap_err();
+        assert_eq!(err.code, "canonical_target.not_found");
     }
 }

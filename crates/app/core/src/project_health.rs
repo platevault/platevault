@@ -317,6 +317,7 @@ mod tests {
             path: format!("projects/{name}"),
             initial_sources: vec![],
             notes: None,
+            canonical_target_id: None,
         }
     }
 

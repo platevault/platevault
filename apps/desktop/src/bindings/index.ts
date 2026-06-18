@@ -3792,6 +3792,13 @@ export type ProjectCreateRequest_Deserialize = {
 	path: string,
 	initialSources?: string[],
 	notes: string | null,
+	/**
+	 *  Optional UUID of a spec-035 `canonical_target` the user selected in the
+	 *  project-creation target search. Additive and nullable; coexists with the
+	 *  legacy spec-013 `projects.target_id` (reconciliation is a future
+	 *  decision). Existing callers omit it.
+	 */
+	canonicalTargetId?: string | null,
 };
 
 /**  Request body for `projects.create` (spec 008, contract version 2.0.0). */
@@ -3802,6 +3809,13 @@ export type ProjectCreateRequest_Serialize = {
 	path: string,
 	initialSources: string[],
 	notes?: string | null,
+	/**
+	 *  Optional UUID of a spec-035 `canonical_target` the user selected in the
+	 *  project-creation target search. Additive and nullable; coexists with the
+	 *  legacy spec-013 `projects.target_id` (reconciliation is a future
+	 *  decision). Existing callers omit it.
+	 */
+	canonicalTargetId?: string | null,
 };
 
 /**  Successful result from `projects.create`. */

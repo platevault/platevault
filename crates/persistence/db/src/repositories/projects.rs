@@ -69,6 +69,9 @@ pub struct InsertProject<'a> {
     pub lifecycle: &'a str,
     pub path: &'a str,
     pub notes: Option<&'a str>,
+    /// Optional spec-035 `canonical_target` id (additive; nullable). Coexists
+    /// with the legacy spec-013 `target_id` column.
+    pub canonical_target_id: Option<&'a str>,
 }
 
 /// Data required to insert a project source link.
@@ -95,8 +98,8 @@ pub struct InsertProjectSource<'a> {
 pub async fn insert_project(pool: &SqlitePool, data: &InsertProject<'_>) -> DbResult<String> {
     let now = now_iso();
     sqlx::query(
-        "INSERT INTO projects (id, name, tool, lifecycle, path, notes, channel_drift, created_at, updated_at)
-         VALUES (?, ?, ?, ?, ?, ?, 0, ?, ?)",
+        "INSERT INTO projects (id, name, tool, lifecycle, path, notes, canonical_target_id, channel_drift, created_at, updated_at)
+         VALUES (?, ?, ?, ?, ?, ?, ?, 0, ?, ?)",
     )
     .bind(data.id)
     .bind(data.name)
@@ -104,6 +107,7 @@ pub async fn insert_project(pool: &SqlitePool, data: &InsertProject<'_>) -> DbRe
     .bind(data.lifecycle)
     .bind(data.path)
     .bind(data.notes)
+    .bind(data.canonical_target_id)
     .bind(&now)
     .bind(&now)
     .execute(pool)
@@ -141,6 +145,25 @@ pub async fn get_project(pool: &SqlitePool, id: &str) -> DbResult<ProjectRow> {
         created_at,
         updated_at,
     })
+}
+
+/// Read the spec-035 `canonical_target_id` association for a project (spec 035
+/// US1 #2). Returns `Ok(None)` when the project has no canonical target set, or
+/// when the project id does not exist.
+///
+/// # Errors
+///
+/// Returns [`DbError::Database`] on query failure.
+pub async fn get_project_canonical_target_id(
+    pool: &SqlitePool,
+    id: &str,
+) -> DbResult<Option<String>> {
+    let row: Option<(Option<String>,)> =
+        sqlx::query_as("SELECT canonical_target_id FROM projects WHERE id = ?")
+            .bind(id)
+            .fetch_optional(pool)
+            .await?;
+    Ok(row.and_then(|(ctid,)| ctid))
 }
 
 /// List all projects ordered by updated_at descending.
@@ -534,6 +557,7 @@ mod tests {
             lifecycle: "setup_incomplete",
             path: "projects/NGC7000_NB",
             notes: None,
+            canonical_target_id: None,
         }
     }
 
@@ -561,6 +585,7 @@ mod tests {
                 lifecycle: "ready",
                 path: "projects/M31_LRGB",
                 notes: Some("test notes"),
+                canonical_target_id: None,
             },
         )
         .await

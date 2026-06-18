@@ -174,6 +174,12 @@ pub struct ProjectCreateRequest {
     pub initial_sources: Vec<String>,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub notes: Option<String>,
+    /// Optional UUID of a spec-035 `canonical_target` the user selected in the
+    /// project-creation target search. Additive and nullable; coexists with the
+    /// legacy spec-013 `projects.target_id` (reconciliation is a future
+    /// decision). Existing callers omit it.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub canonical_target_id: Option<String>,
 }
 
 /// Successful result from `projects.create`.
