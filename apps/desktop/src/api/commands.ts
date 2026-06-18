@@ -79,6 +79,10 @@ import type {
   TargetPrimaryRenameRequest,
   TargetPrimaryRenameResult,
   TargetOpError_Serialize as TargetOpError,
+  // spec 035: SIMBAD target resolution
+  TargetSearchRequest_Serialize as TargetSearchRequest,
+  TargetSearchResponse_Deserialize as TargetSearchResponse,
+  TargetSuggestion_Deserialize as TargetSuggestion,
   ManifestListRequest_Deserialize as ManifestListRequest,
   ManifestListResponse_Serialize as ManifestListResponse,
   ManifestGetRequest,
@@ -1086,6 +1090,23 @@ export async function renameTargetPrimary(
 
 // Re-export TargetOpError type for callers that need to type-narrow errors.
 export type { TargetOpError };
+
+// ── spec 035: SIMBAD target resolution ────────────────────────────────────────
+
+// Re-export search DTOs so UI components import from one place.
+export type { TargetSearchRequest, TargetSearchResponse, TargetSuggestion };
+
+/** Contract version for the spec-035 `target.*` resolution commands. */
+export const TARGET_SEARCH_CONTRACT_VERSION = '1.0';
+
+/**
+ * `target.search` — as-you-type target suggestions from the local seed + cache
+ * (spec 035, FR-003). Served purely from local data (no network); long-tail
+ * SIMBAD enrichment is a separate `target.resolve` call.
+ */
+export async function searchTargets(req: TargetSearchRequest): Promise<TargetSearchResponse> {
+  return invoke<TargetSearchResponse>('target.search', { req });
+}
 
 // ── spec 024: Project Manifests & Notes ───────────────────────────────────────
 

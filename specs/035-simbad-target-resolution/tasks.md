@@ -40,7 +40,7 @@ description: "Task list for SIMBAD Target Resolution (spec 035)"
 - [X] T010 [P] [US1] Normalized-alias typeahead lookup (prefix/substring over `target_alias.normalized`) in `crates/targeting/src/resolver/cache.rs`
 - [X] T011 [US1] `target.search` use-case (local seed+cache query, ranking) in `crates/app/core/src/`
 - [X] T012 [US1] `target_search` Tauri command in `apps/desktop/src-tauri/src/commands/target_lookup.rs` (sibling of target_lookup/target_resolve; spec said targets.rs but that is the spec-029 fixture stub)
-- [ ] T013 [US1] Project-creation target search UI (debounced input, suggestion list with type/catalogue badges) in `apps/desktop/src/components/`
+- [X] T013 [US1] Project-creation target search UI (debounced input, suggestion list with type/catalogue badges) in `apps/desktop/src/components/`
 - [X] T014 [P] [US1] Unit test: `target.search` returns ranked local suggestions; respects `limit` (`crates/app/core` + `tests/contract`)
 
 ---

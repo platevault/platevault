@@ -806,6 +806,93 @@
   color: var(--alm-ok);
 }
 
+/* === TARGET SEARCH (spec 035 — SIMBAD target resolution) === */
+
+/* Shared form-field classes used by the target search and other forms. */
+.alm-field-label {
+  display: block;
+  font-size: var(--alm-text-xs);
+  font-weight: var(--alm-weight-medium);
+  color: var(--alm-text-secondary);
+  margin-bottom: var(--alm-sp-1);
+}
+.alm-field-hint { color: var(--alm-text-faint); font-weight: 400; }
+.alm-field-error {
+  display: block;
+  font-size: var(--alm-text-xs);
+  color: var(--alm-danger);
+  margin-top: var(--alm-sp-1);
+}
+.alm-input {
+  width: 100%;
+  padding: var(--alm-sp-2) var(--alm-sp-3);
+  border: 1px solid var(--alm-border);
+  border-radius: var(--alm-radius-sm);
+  font-size: var(--alm-text-sm);
+  font-family: var(--alm-font-sans);
+  background: var(--alm-bg);
+  color: var(--alm-text);
+  outline: none;
+  transition: border-color var(--alm-transition-fast);
+}
+.alm-input:focus { border-color: var(--alm-accent); }
+.alm-input::placeholder { color: var(--alm-text-faint); }
+
+.alm-target-search { position: relative; }
+.alm-target-search__label--sr {
+  position: absolute;
+  width: 1px; height: 1px;
+  padding: 0; margin: -1px;
+  overflow: hidden;
+  clip: rect(0, 0, 0, 0);
+  white-space: nowrap;
+  border: 0;
+}
+.alm-target-search__list {
+  list-style: none;
+  margin: var(--alm-sp-1) 0 0 0;
+  padding: var(--alm-sp-1);
+  position: absolute;
+  z-index: 20;
+  left: 0; right: 0;
+  max-height: 320px;
+  overflow-y: auto;
+  background: var(--alm-surface-raised);
+  border: 1px solid var(--alm-border);
+  border-radius: var(--alm-radius-md);
+  box-shadow: var(--alm-shadow-sm);
+}
+.alm-target-search__status {
+  padding: var(--alm-sp-2) var(--alm-sp-3);
+  font-size: var(--alm-text-xs);
+  color: var(--alm-text-muted);
+}
+.alm-target-search__option {
+  display: flex;
+  align-items: center;
+  gap: var(--alm-sp-2);
+  padding: var(--alm-sp-2) var(--alm-sp-3);
+  border-radius: var(--alm-radius-sm);
+  cursor: pointer;
+}
+.alm-target-search__option--active { background: var(--alm-selected-bg); }
+.alm-target-search__primary {
+  font-size: var(--alm-text-sm);
+  font-weight: var(--alm-weight-semibold);
+  color: var(--alm-text);
+}
+.alm-target-search__secondary {
+  font-size: var(--alm-text-xs);
+  color: var(--alm-text-muted);
+}
+.alm-target-search__badges {
+  margin-left: auto;
+  display: flex;
+  align-items: center;
+  gap: var(--alm-sp-1);
+  flex-shrink: 0;
+}
+
 /* === SCROLLBAR === */
 ::-webkit-scrollbar { width: 6px; height: 6px; }
 ::-webkit-scrollbar-track { background: transparent; }
