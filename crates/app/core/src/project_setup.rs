@@ -944,6 +944,17 @@ pub async fn get(pool: &SqlitePool, id: &str) -> Result<ProjectDetailDto, Contra
     let tool = ProjectTool::from_db_str(&row.tool)
         .map_err(|e| ContractError::new("internal.data", e, ErrorSeverity::Fatal, false))?;
 
+    // Spec 035 US1 #2: surface the associated canonical target (LEFT JOIN);
+    // `None` when the project has no canonical-target association.
+    let canonical_target = repo::get_project_canonical_target(pool, id)
+        .await
+        .map_err(db_err)?
+        .map(|ct| contracts_core::projects_v2::ProjectCanonicalTarget {
+            id: ct.id,
+            primary_designation: ct.primary_designation,
+            common_name: ct.common_name,
+        });
+
     Ok(ProjectDetailDto {
         id: row.id,
         name: row.name,
@@ -963,6 +974,7 @@ pub async fn get(pool: &SqlitePool, id: &str) -> Result<ProjectDetailDto, Contra
         channels: channels_to_dto(&channels),
         created_at: row.created_at,
         updated_at: row.updated_at,
+        canonical_target,
     })
 }
 
@@ -1341,5 +1353,59 @@ mod tests {
         req.canonical_target_id = Some("22222222-2222-5222-8222-222222222222".to_owned());
         let err = create(&pool, &bus, &req).await.unwrap_err();
         assert_eq!(err.code, "canonical_target.not_found");
+    }
+
+    // ── spec 035 US1 #2: canonical target surfaced on the detail READ path ───────
+
+    #[tokio::test]
+    async fn get_returns_canonical_target_with_designation_and_common_name() {
+        let (pool, bus) = setup().await;
+        let ctid = "33333333-3333-5333-8333-333333333333";
+        seed_canonical_target(&pool, ctid).await;
+        // A common_name alias so the read populates `common_name`.
+        sqlx::query(
+            "INSERT INTO target_alias (id, target_id, alias, normalized, kind)
+             VALUES ('a1', ?, 'Andromeda Galaxy', 'andromeda galaxy', 'common_name')",
+        )
+        .bind(ctid)
+        .execute(&pool)
+        .await
+        .unwrap();
+
+        let mut req = make_create_req("Detail With Target", ProjectTool::PixInsight);
+        req.canonical_target_id = Some(ctid.to_owned());
+        let created = create(&pool, &bus, &req).await.unwrap();
+
+        let detail = get(&pool, &created.project_id).await.unwrap();
+        let ct = detail.canonical_target.expect("canonical_target must be present");
+        assert_eq!(ct.id, ctid);
+        assert_eq!(ct.primary_designation, "M 31");
+        assert_eq!(ct.common_name.as_deref(), Some("Andromeda Galaxy"));
+    }
+
+    #[tokio::test]
+    async fn get_canonical_target_is_none_without_alias_common_name() {
+        let (pool, bus) = setup().await;
+        let ctid = "44444444-4444-5444-8444-444444444444";
+        seed_canonical_target(&pool, ctid).await; // no common_name alias
+
+        let mut req = make_create_req("Detail No Common Name", ProjectTool::PixInsight);
+        req.canonical_target_id = Some(ctid.to_owned());
+        let created = create(&pool, &bus, &req).await.unwrap();
+
+        let detail = get(&pool, &created.project_id).await.unwrap();
+        let ct = detail.canonical_target.expect("association present");
+        assert_eq!(ct.primary_designation, "M 31");
+        assert_eq!(ct.common_name, None, "no common-name alias → null");
+    }
+
+    #[tokio::test]
+    async fn get_returns_no_canonical_target_when_unassociated() {
+        let (pool, bus) = setup().await;
+        let req = make_create_req("Detail No Target", ProjectTool::PixInsight);
+        let created = create(&pool, &bus, &req).await.unwrap();
+
+        let detail = get(&pool, &created.project_id).await.unwrap();
+        assert!(detail.canonical_target.is_none(), "no association → None");
     }
 }

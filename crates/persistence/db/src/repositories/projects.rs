@@ -166,6 +166,51 @@ pub async fn get_project_canonical_target_id(
     Ok(row.and_then(|(ctid,)| ctid))
 }
 
+/// A project's associated spec-035 canonical target, resolved via LEFT JOIN
+/// (spec 035 US1 #2). `None` when the project has no `canonical_target_id` set
+/// (or the join finds no matching row).
+#[derive(Clone, Debug)]
+pub struct ProjectCanonicalTargetRow {
+    pub id: String,
+    pub primary_designation: String,
+    pub common_name: Option<String>,
+}
+
+/// Read a project's associated canonical target (id, primary designation, and
+/// a `common_name` alias when present) via LEFT JOIN on
+/// `projects.canonical_target_id`. Returns `Ok(None)` when there is no
+/// association.
+///
+/// The common name is the first `kind = 'common_name'` alias for the target
+/// (alphabetical), or `None` when the target has no common-name alias.
+///
+/// # Errors
+///
+/// Returns [`DbError::Database`] on query failure.
+pub async fn get_project_canonical_target(
+    pool: &SqlitePool,
+    id: &str,
+) -> DbResult<Option<ProjectCanonicalTargetRow>> {
+    let row: Option<(String, String, Option<String>)> = sqlx::query_as(
+        "SELECT ct.id, ct.primary_designation,
+                (SELECT ta.alias FROM target_alias ta
+                  WHERE ta.target_id = ct.id AND ta.kind = 'common_name'
+                  ORDER BY ta.alias ASC LIMIT 1) AS common_name
+         FROM projects p
+         JOIN canonical_target ct ON ct.id = p.canonical_target_id
+         WHERE p.id = ?",
+    )
+    .bind(id)
+    .fetch_optional(pool)
+    .await?;
+
+    Ok(row.map(|(id, primary_designation, common_name)| ProjectCanonicalTargetRow {
+        id,
+        primary_designation,
+        common_name,
+    }))
+}
+
 /// List all projects ordered by updated_at descending.
 ///
 /// # Errors

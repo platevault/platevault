@@ -3724,6 +3724,38 @@ export type PreparedViewSummary = {
 	itemCount: number,
 };
 
+/**
+ *  A project's associated spec-035 canonical target, resolved for display on the
+ *  project detail read path (spec 035 US1 #2).
+ */
+export type ProjectCanonicalTarget = ProjectCanonicalTarget_Serialize | ProjectCanonicalTarget_Deserialize;
+
+/**
+ *  A project's associated spec-035 canonical target, resolved for display on the
+ *  project detail read path (spec 035 US1 #2).
+ */
+export type ProjectCanonicalTarget_Deserialize = {
+	/**  UUID of the `canonical_target`. */
+	id: string,
+	/**  Canonical display designation (e.g. `M 31`). */
+	primaryDesignation: string,
+	/**  Curated common name (e.g. `Andromeda Galaxy`) when one exists. */
+	commonName: string | null,
+};
+
+/**
+ *  A project's associated spec-035 canonical target, resolved for display on the
+ *  project detail read path (spec 035 US1 #2).
+ */
+export type ProjectCanonicalTarget_Serialize = {
+	/**  UUID of the `canonical_target`. */
+	id: string,
+	/**  Canonical display designation (e.g. `M 31`). */
+	primaryDesignation: string,
+	/**  Curated common name (e.g. `Andromeda Galaxy`) when one exists. */
+	commonName?: string | null,
+};
+
 /**  A project channel (inferred or manually added). */
 export type ProjectChannelDto = ProjectChannelDto_Serialize | ProjectChannelDto_Deserialize;
 
@@ -3859,6 +3891,13 @@ export type ProjectDetailDto_Deserialize = {
 	channels: ProjectChannelDto_Deserialize[],
 	createdAt: string,
 	updatedAt: string,
+	/**
+	 *  The associated spec-035 canonical target (when one was selected at
+	 *  project creation), resolved for display. `None` when the project has no
+	 *  canonical-target association. Additive; coexists with the legacy
+	 *  spec-013 target association.
+	 */
+	canonicalTarget: ProjectCanonicalTarget_Deserialize | null,
 };
 
 /**  A project detail (sources + channels included). */
@@ -3874,6 +3913,13 @@ export type ProjectDetailDto_Serialize = {
 	channels: ProjectChannelDto_Serialize[],
 	createdAt: string,
 	updatedAt: string,
+	/**
+	 *  The associated spec-035 canonical target (when one was selected at
+	 *  project creation), resolved for display. `None` when the project has no
+	 *  canonical-target association. Additive; coexists with the legacy
+	 *  spec-013 target association.
+	 */
+	canonicalTarget?: ProjectCanonicalTarget_Serialize | null,
 };
 
 /**  Request for `project.note.get`. */
