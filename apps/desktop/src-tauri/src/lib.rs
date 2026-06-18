@@ -97,7 +97,8 @@ use crate::commands::settings::{
 use crate::commands::status::status_summary;
 use crate::commands::target_identity as target_identity_cmds;
 use crate::commands::target_lookup::{
-    target_lookup, target_resolve, target_resolve_fits, target_search,
+    target_lookup, target_resolution_settings, target_resolution_settings_update, target_resolve,
+    target_resolve_fits, target_search,
 };
 use crate::commands::targets::{targets_get, targets_list};
 use crate::commands::tools::{
@@ -190,6 +191,9 @@ pub fn specta_builder() -> Builder<tauri::Wry> {
         target_resolve,
         // target search (spec 035, US1)
         target_search,
+        // resolver settings (spec 035, US5)
+        target_resolution_settings,
+        target_resolution_settings_update,
         // projects (spec 008)
         projects_list,
         projects_get,
@@ -377,6 +381,9 @@ pub fn specta_builder() -> Builder<tauri::Wry> {
         target_resolve,
         // target search (spec 035, US1)
         target_search,
+        // resolver settings (spec 035, US5)
+        target_resolution_settings,
+        target_resolution_settings_update,
         // projects (spec 008)
         projects_list,
         projects_get,

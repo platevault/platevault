@@ -89,7 +89,7 @@ description: "Task list for SIMBAD Target Resolution (spec 035)"
 **Independent test**: apply a type filter → only matching results; toggle online off → seed/cache only; override a resolution → override wins on re-resolve.
 
 - [ ] T029 [US5] Optional catalogue/type filter in `target.search` use-case + a filter control in the search UI
-- [ ] T030 [US5] `target.resolution.settings` get/update use-case + `target_resolution_settings` / `_update` Tauri commands (reads/writes `resolver_settings`)
+- [X] T030 [US5] `target.resolution.settings` get/update use-case + `target_resolution_settings` / `_update` Tauri commands (reads/writes `resolver_settings`)
 - [ ] T031 [US5] Resolver settings UI (online toggle default-ON, endpoint, debounce/timeout) replacing the catalog manifest/minisign settings section in `apps/desktop/src/components/settings/`
 - [ ] T032 [P] [US5] Manual override (`target.resolve` with `override` → `source=user-override`, precedence locked) + a "correct target" UI action (FR-014)
 - [ ] T033 [P] [US5] Test: filter narrows results; online-off → seed/cache only (`resolver.disabled`); `user-override` wins over SIMBAD on re-resolve

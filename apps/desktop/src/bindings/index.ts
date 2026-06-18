@@ -244,6 +244,22 @@ export const commands = {
 	 */
 	targetSearch: (req: TargetSearchRequest_Deserialize) => typedError<TargetSearchResponse_Serialize, string>(__TAURI_INVOKE("target.search", { req })),
 	/**
+	 *  `target.resolution.settings` — read the SIMBAD resolver settings.
+	 * 
+	 *  # Errors
+	 * 
+	 *  Returns `Err(String)` on a local database failure.
+	 */
+	targetResolutionSettings: (req: ResolverSettingsGetRequest) => typedError<ResolverSettingsResponse, string>(__TAURI_INVOKE("target.resolution.settings", { req })),
+	/**
+	 *  `target.resolution.settings.update` — persist new resolver settings.
+	 * 
+	 *  # Errors
+	 * 
+	 *  Returns `Err(String)` on a local database failure.
+	 */
+	targetResolutionSettingsUpdate: (req: ResolverSettingsUpdateRequest) => typedError<ResolverSettingsResponse, string>(__TAURI_INVOKE("target.resolution.settings.update", { req })),
+	/**
 	 *  `projects.list` — list all projects from the database.
 	 * 
 	 *  # Errors

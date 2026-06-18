@@ -33,7 +33,11 @@ use contracts_core::targets::{
 use contracts_core::{ContractError, ErrorSeverity};
 use targeting::normalize::normalize;
 use targeting::resolver::cache::{self, CachedTarget};
-use targeting::resolver::{ObjectType, ResolveError, Resolver, TargetSource as CacheSource};
+use targeting::resolver::{
+    AliasKind, ObjectType, ResolveError, ResolvedAlias, ResolvedIdentity, Resolver,
+    TargetSource as CacheSource,
+};
+use uuid::Uuid;
 
 // ── Error mapping ───────────────────────────────────────────────────────────
 
@@ -158,9 +162,10 @@ async fn read_settings(pool: &SqlitePool) -> Result<OnlineSettings, ContractErro
 /// `online_enabled` flag here (the live `SimbadResolver` already carries the
 /// endpoint + timeout from the same settings).
 ///
-/// `override` (manual user override) is NOT written here — that path is T032.
-/// When `req.override_target` is present we currently treat the request as a
-/// normal resolve (read-only); the override write/precedence-lock lands in T032.
+/// When `req.override_target` is present (manual override, FR-014/T032), the
+/// `query` is bound to the chosen canonical target and persisted with
+/// `source = user-override`; the cache precedence lock keeps it sticky against
+/// later SIMBAD resolutions.
 ///
 /// # Errors
 ///
@@ -175,6 +180,13 @@ pub async fn resolve<R: Resolver + ?Sized>(
     let query = req.query.trim();
     if query.is_empty() {
         return Ok(unresolved(req, "unknown"));
+    }
+
+    // 0) Manual override (FR-014, T032): bind `query` to the chosen canonical
+    // target and persist as source = user-override. The cache precedence lock
+    // (T008) makes this sticky: a later SIMBAD resolve will NOT overwrite it.
+    if let Some(ov) = &req.override_target {
+        return apply_override(pool, req, query, &ov.target_id).await;
     }
 
     // 1) Cache-first (FR-006): a cached/seeded object is never re-queried.
@@ -212,6 +224,68 @@ pub async fn resolve<R: Resolver + ?Sized>(
         Err(ResolveError::Network(_) | ResolveError::Timeout(_) | ResolveError::Disabled) => {
             Ok(unresolved(req, "offline"))
         }
+    }
+}
+
+// ── Manual override write (T032, FR-014) ────────────────────────────────────────
+
+/// Bind `query` to the canonical target `target_id` and persist as
+/// `source = user-override`.
+///
+/// The existing canonical row is loaded and re-written with
+/// `source = UserOverride`, with `query` added as a designation alias so a later
+/// `target.resolve` of the same query is a cache hit returning the override. The
+/// cache precedence lock ([`cache::upsert_resolved`]) guarantees a subsequent
+/// SIMBAD `resolved` write cannot overwrite it (FR-014).
+async fn apply_override(
+    pool: &SqlitePool,
+    req: &TargetResolveSimbadRequest,
+    query: &str,
+    target_id: &str,
+) -> Result<TargetResolveSimbadResponse, ContractError> {
+    let id = Uuid::parse_str(target_id).map_err(|e| {
+        ContractError::new(
+            "target.invalid_id",
+            format!("override target_id '{target_id}' is not a valid UUID: {e}"),
+            ErrorSeverity::Blocking,
+            false,
+        )
+    })?;
+
+    let Some(existing) = cache::get_by_id(pool, id).await.map_err(|e| db_err(&e))? else {
+        // The override target must already exist in the cache; never fabricate.
+        return Ok(unresolved(req, "unknown"));
+    };
+
+    // Carry over the existing identity, flip source to user-override, and ensure
+    // the user's query is bound as an alias so it resolves to this target later.
+    let mut aliases: Vec<ResolvedAlias> = existing.aliases.clone();
+    let query_norm = normalize(query);
+    if !aliases.iter().any(|a| a.normalized == query_norm) {
+        aliases.push(ResolvedAlias::new(query, AliasKind::Designation));
+    }
+
+    let identity = ResolvedIdentity {
+        simbad_oid: existing.simbad_oid,
+        primary_designation: existing.primary_designation.clone(),
+        common_name: existing
+            .aliases
+            .iter()
+            .find(|a| a.kind == AliasKind::CommonName)
+            .map(|a| a.alias.clone()),
+        object_type: existing.object_type,
+        ra_deg: existing.ra_deg,
+        dec_deg: existing.dec_deg,
+        aliases,
+        source: CacheSource::UserOverride,
+    };
+
+    let (written_id, _outcome) =
+        cache::upsert_resolved(pool, &identity).await.map_err(|e| db_err(&e))?;
+    if let Some(target) = cache::get_by_id(pool, written_id).await.map_err(|e| db_err(&e))? {
+        Ok(resolved(req, cached_to_resolved(&target)))
+    } else {
+        Ok(unresolved(req, "unknown"))
     }
 }
 
@@ -377,5 +451,88 @@ mod tests {
             1,
             "resolver must be invoked exactly once; second call must be served from cache (FR-006)"
         );
+    }
+
+    // ── T032: manual override write path (FR-014) ──────────────────────────────
+
+    fn m101() -> ResolvedIdentity {
+        ResolvedIdentity {
+            simbad_oid: Some(3_456_789),
+            primary_designation: "M 101".to_owned(),
+            common_name: Some("Pinwheel Galaxy".to_owned()),
+            object_type: ObjectType::Galaxy,
+            ra_deg: 210.802_42,
+            dec_deg: 54.348_95,
+            aliases: vec![
+                ResolvedAlias::new("M 101", AliasKind::Designation),
+                ResolvedAlias::new("NGC 5457", AliasKind::Designation),
+            ],
+            source: CacheSource::Resolved,
+        }
+    }
+
+    fn override_req(query: &str, target_id: &str) -> TargetResolveSimbadRequest {
+        TargetResolveSimbadRequest {
+            contract_version: "1.0".into(),
+            request_id: "req-ov".into(),
+            query: query.into(),
+            override_target: Some(contracts_core::targets::TargetResolveOverride {
+                target_id: target_id.into(),
+            }),
+        }
+    }
+
+    #[tokio::test]
+    async fn override_binds_query_to_target_as_user_override() {
+        let db = setup().await;
+        // Seed the override target (M 101) in the cache.
+        let (m101_id, _) = upsert_resolved(db.pool(), &m101()).await.unwrap();
+
+        // User overrides the ambiguous OBJECT "Pinwheel" → M 101.
+        let resolver = FakeResolver::new(); // would NotFound
+        let resp = resolve(db.pool(), &resolver, &override_req("Pinwheel", &m101_id.to_string()))
+            .await
+            .unwrap();
+        assert_eq!(resp.status, TargetResolveStatus::Resolved);
+        let t = resp.target.unwrap();
+        assert_eq!(t.source, TargetSource::UserOverride);
+        assert_eq!(t.primary_designation, "M 101");
+    }
+
+    #[tokio::test]
+    async fn override_is_sticky_against_later_simbad_resolve() {
+        let db = setup().await;
+        let (m101_id, _) = upsert_resolved(db.pool(), &m101()).await.unwrap();
+
+        // 1) Override "MyObj" → M 101.
+        let none = FakeResolver::new();
+        resolve(db.pool(), &none, &override_req("MyObj", &m101_id.to_string())).await.unwrap();
+
+        // 2) A later normal resolve of "MyObj" — even though the FakeResolver
+        // would return M 31 — must return the sticky user-override (M 101).
+        let wrong = FakeResolver::new().with_response("MyObj", m31());
+        let resp = resolve(db.pool(), &wrong, &req("MyObj")).await.unwrap();
+        assert_eq!(resp.status, TargetResolveStatus::Resolved);
+        let t = resp.target.unwrap();
+        assert_eq!(t.source, TargetSource::UserOverride);
+        assert_eq!(t.primary_designation, "M 101", "override must win over SIMBAD (FR-014)");
+    }
+
+    #[tokio::test]
+    async fn override_unknown_target_is_unresolved() {
+        let db = setup().await;
+        let resolver = FakeResolver::new();
+        let missing = Uuid::new_v4().to_string();
+        let resp =
+            resolve(db.pool(), &resolver, &override_req("X", &missing)).await.unwrap();
+        assert_eq!(resp.status, TargetResolveStatus::Unresolved);
+    }
+
+    #[tokio::test]
+    async fn override_invalid_uuid_errors() {
+        let db = setup().await;
+        let resolver = FakeResolver::new();
+        let err = resolve(db.pool(), &resolver, &override_req("X", "not-a-uuid")).await;
+        assert!(err.is_err());
     }
 }

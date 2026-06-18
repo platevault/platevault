@@ -15,11 +15,12 @@
 use sqlx::SqlitePool;
 
 use contracts_core::targets::{
-    TargetObjectType, TargetSearchRequest, TargetSearchResponse, TargetSource, TargetSuggestion,
+    TargetCatalogId, TargetObjectType, TargetSearchRequest, TargetSearchResponse, TargetSource,
+    TargetSuggestion,
 };
 use contracts_core::{ContractError, ErrorSeverity};
 use targeting::resolver::cache::{search_by_normalized, CachedTarget, SearchHit};
-use targeting::resolver::{ObjectType, TargetSource as CacheSource};
+use targeting::resolver::{AliasKind, ObjectType, TargetSource as CacheSource};
 
 // ── Error mapping ───────────────────────────────────────────────────────────
 
@@ -63,6 +64,62 @@ fn common_name(target: &CachedTarget) -> Option<String> {
         .map(|a| a.alias.clone())
 }
 
+// ── Catalogue derivation (T029) ─────────────────────────────────────────────
+//
+// The cache has no catalogue column, so a target's catalogue membership is
+// derived from its alias *designations*: the leading designation prefix maps to
+// a closed `TargetCatalogId` (reusing the spec-013 catalogue vocabulary —
+// `targeting::normalize` already expands these prefixes, so cached designations
+// are space-separated like `M 31`, `NGC 224`, `SH 2-155`). NGC/IC both map to
+// `Openngc`. Common names carry no catalogue and are ignored here.
+
+/// Map a single designation to its catalogue, by leading prefix token.
+fn designation_to_catalog(designation: &str) -> Option<TargetCatalogId> {
+    let norm = targeting::normalize::normalize(designation);
+    let prefix = norm.split_whitespace().next().unwrap_or("");
+    match prefix {
+        "m" => Some(TargetCatalogId::Messier),
+        // Caldwell `C n` (normalize keeps the `c` prefix). Caldwell maps to an
+        // NGC/IC object physically, but the *designation* prefix is the filter key.
+        "c" | "caldwell" => Some(TargetCatalogId::Caldwell),
+        "ngc" | "ic" | "openngc" => Some(TargetCatalogId::Openngc),
+        "sh2" | "sharpless" => Some(TargetCatalogId::Sharpless),
+        "abell" => Some(TargetCatalogId::AbellGalaxies),
+        "arp" => Some(TargetCatalogId::Arp),
+        "vdb" => Some(TargetCatalogId::Vdb),
+        "b" | "barnard" => Some(TargetCatalogId::Barnard),
+        "lbn" => Some(TargetCatalogId::Lbn),
+        "ldn" => Some(TargetCatalogId::Ldn),
+        "mel" | "melotte" => Some(TargetCatalogId::Melotte),
+        _ => None,
+    }
+}
+
+/// The set of catalogues a target belongs to, derived from its designations.
+fn target_catalogs(target: &CachedTarget) -> Vec<TargetCatalogId> {
+    let mut out: Vec<TargetCatalogId> = Vec::new();
+    for a in &target.aliases {
+        if a.kind == AliasKind::Designation {
+            if let Some(cat) = designation_to_catalog(&a.alias) {
+                if !out.contains(&cat) {
+                    out.push(cat);
+                }
+            }
+        }
+    }
+    out
+}
+
+/// Whether a target matches the (non-empty) catalogue filter: it belongs to at
+/// least one of the requested catalogues.
+fn matches_catalog_filter(target: &CachedTarget, filter: &[TargetCatalogId]) -> bool {
+    if filter.is_empty() {
+        return true;
+    }
+    let cats = target_catalogs(target);
+    filter.iter().any(|f| cats.contains(f))
+}
+
 fn hit_to_suggestion(hit: SearchHit) -> TargetSuggestion {
     let object_type = map_object_type(hit.target.object_type);
     let source = map_source(hit.target.source);
@@ -97,11 +154,13 @@ pub async fn search(
 
     let hits = search_by_normalized(pool, &req.query, limit).await.map_err(|e| db_err(&e))?;
 
-    // TODO(T029): apply `req.catalog_filter` (needs catalogue membership in the
-    // cache schema). For now only the trivial type filter is applied.
+    // Both filters AND together (T029): catalogue membership is derived from the
+    // target's alias designations; the type filter checks the object type.
+    let catalog_filter = &req.catalog_filter;
     let type_filter = &req.type_filter;
     let suggestions: Vec<TargetSuggestion> = hits
         .into_iter()
+        .filter(|hit| matches_catalog_filter(&hit.target, catalog_filter))
         .map(hit_to_suggestion)
         .filter(|s| type_filter.is_empty() || type_filter.contains(&s.object_type))
         .collect();
@@ -229,6 +288,53 @@ mod tests {
         let resp = search(db.pool(), &r).await.unwrap();
         assert_eq!(resp.suggestions.len(), 1);
         assert_eq!(resp.suggestions[0].primary_designation, "NGC 7000");
+    }
+
+    #[tokio::test]
+    async fn search_catalog_filter_messier_narrows_to_m31() {
+        let db = setup().await;
+        seed(&db).await;
+        // "NGC" prefix-matches both M31 (NGC 224) and NGC 7000, but only M31
+        // also belongs to the Messier catalogue.
+        let mut r = req("NGC");
+        r.catalog_filter = vec![TargetCatalogId::Messier];
+        let resp = search(db.pool(), &r).await.unwrap();
+        assert_eq!(resp.suggestions.len(), 1);
+        assert_eq!(resp.suggestions[0].primary_designation, "M 31");
+    }
+
+    #[tokio::test]
+    async fn search_catalog_filter_openngc_matches_both() {
+        let db = setup().await;
+        seed(&db).await;
+        let mut r = req("NGC");
+        r.catalog_filter = vec![TargetCatalogId::Openngc];
+        let resp = search(db.pool(), &r).await.unwrap();
+        assert_eq!(resp.suggestions.len(), 2);
+    }
+
+    #[tokio::test]
+    async fn search_catalog_and_type_filter_and_together() {
+        let db = setup().await;
+        seed(&db).await;
+        // openngc ∩ galaxy → only M 31 (NGC 7000 is an emission nebula).
+        let mut r = req("NGC");
+        r.catalog_filter = vec![TargetCatalogId::Openngc];
+        r.type_filter = vec![TargetObjectType::Galaxy];
+        let resp = search(db.pool(), &r).await.unwrap();
+        assert_eq!(resp.suggestions.len(), 1);
+        assert_eq!(resp.suggestions[0].primary_designation, "M 31");
+    }
+
+    #[tokio::test]
+    async fn search_catalog_filter_excludes_non_members() {
+        let db = setup().await;
+        seed(&db).await;
+        // Filtering to Sharpless only → neither seeded target qualifies.
+        let mut r = req("NGC");
+        r.catalog_filter = vec![TargetCatalogId::Sharpless];
+        let resp = search(db.pool(), &r).await.unwrap();
+        assert!(resp.suggestions.is_empty());
     }
 
     #[tokio::test]

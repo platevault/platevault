@@ -22,6 +22,7 @@ use contracts_core::target_lookup::{
     TargetLookupRequest, TargetLookupResponse, TargetResolveRequest, TargetResolveResponse,
 };
 use contracts_core::targets::{
+    ResolverSettingsGetRequest, ResolverSettingsResponse, ResolverSettingsUpdateRequest,
     TargetResolveSimbadRequest, TargetResolveSimbadResponse, TargetSearchRequest,
     TargetSearchResponse,
 };
@@ -145,4 +146,36 @@ pub async fn target_search(
 ) -> Result<TargetSearchResponse, String> {
     tracing::debug!("target.search query={:?} limit={}", req.query, req.limit);
     app_core::target_search::search(state.repo.pool(), &req).await.map_err(|e| e.message)
+}
+
+// ── target.resolution.settings (spec 035, US5 — FR-015) ─────────────────────────
+
+/// `target.resolution.settings` — read the SIMBAD resolver settings.
+///
+/// # Errors
+///
+/// Returns `Err(String)` on a local database failure.
+#[tauri::command]
+#[specta::specta(rename = "target.resolution.settings")]
+pub async fn target_resolution_settings(
+    state: State<'_, AppState>,
+    req: ResolverSettingsGetRequest,
+) -> Result<ResolverSettingsResponse, String> {
+    tracing::debug!("target.resolution.settings (get)");
+    app_core::resolver_settings::get(state.repo.pool(), &req).await.map_err(|e| e.message)
+}
+
+/// `target.resolution.settings.update` — persist new resolver settings.
+///
+/// # Errors
+///
+/// Returns `Err(String)` on a local database failure.
+#[tauri::command]
+#[specta::specta(rename = "target.resolution.settings.update")]
+pub async fn target_resolution_settings_update(
+    state: State<'_, AppState>,
+    req: ResolverSettingsUpdateRequest,
+) -> Result<ResolverSettingsResponse, String> {
+    tracing::debug!("target.resolution.settings.update online_enabled={}", req.settings.online_enabled);
+    app_core::resolver_settings::update(state.repo.pool(), &req).await.map_err(|e| e.message)
 }
