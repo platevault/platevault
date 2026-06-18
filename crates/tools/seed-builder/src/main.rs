@@ -179,15 +179,9 @@ fn run(out: &str, ngc_slice: u32, mode: Mode) -> Result<(), Box<dyn std::error::
             // EXCLUDES the bulk obscure sets — ACO (Abell galaxy clusters),
             // LDN and LBN dark/bright-nebula lists — which inflated `--full`.
             eprintln!("--popular: pulling curated catalogue prefixes…");
-            for prefix in [
-                "NGC %",
-                "IC %",
-                "SH  2-%",
-                "Barnard %",
-                "PN A66 %",
-                "VDB %",
-                "Cl Melotte %",
-            ] {
+            for prefix in
+                ["NGC %", "IC %", "SH  2-%", "Barnard %", "PN A66 %", "VDB %", "Cl Melotte %"]
+            {
                 eprintln!("  prefix {prefix}…");
                 ingest_prefix(&client, prefix, &mut by_oid)?;
             }

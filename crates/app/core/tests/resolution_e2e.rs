@@ -19,10 +19,10 @@
 //!      differently.
 
 use app_core::{ingest_resolution, target_resolve, target_search};
+use contracts_core::targets::TargetSearchRequest;
 use contracts_core::targets::{
     TargetResolveOverride, TargetResolveSimbadRequest, TargetResolveStatus, TargetSource,
 };
-use contracts_core::targets::{TargetSearchRequest};
 use persistence_db::Database;
 use targeting::resolver::seed;
 use targeting::resolver::{
@@ -152,9 +152,8 @@ async fn step1_seed_load_populates_cache() {
     assert!(first >= 110, "seed must load >= 110 objects; got {first}");
 
     // Second call: already seeded → returns None (idempotent).
-    let second = seed::load_bundled_on_first_run(db.pool())
-        .await
-        .expect("second call must not error");
+    let second =
+        seed::load_bundled_on_first_run(db.pool()).await.expect("second call must not error");
     assert!(second.is_none(), "second call must be a no-op (already seeded)");
 }
 
@@ -207,7 +206,11 @@ async fn step3_long_tail_resolve_caches_result() {
         TargetSource::Resolved,
         "first resolve source must be 'resolved' (from SIMBAD)"
     );
-    assert_eq!(online_resolver.call_count(), 1, "resolver must be called exactly once (cache miss)");
+    assert_eq!(
+        online_resolver.call_count(),
+        1,
+        "resolver must be called exactly once (cache miss)"
+    );
 
     // Second call with an offline resolver: cache hit must be served.
     let offline_resolver =
@@ -243,9 +246,10 @@ async fn step4_alias_variants_group_to_same_target() {
 
     let out_m31 =
         ingest_resolution::associate_or_enqueue(db.pool(), None, &img_m31, "M 31").await.unwrap();
-    let out_ngc224 = ingest_resolution::associate_or_enqueue(db.pool(), None, &img_ngc224, "NGC 224")
-        .await
-        .unwrap();
+    let out_ngc224 =
+        ingest_resolution::associate_or_enqueue(db.pool(), None, &img_ngc224, "NGC 224")
+            .await
+            .unwrap();
 
     // Both must resolve inline (seed hit).
     assert!(
@@ -274,7 +278,7 @@ async fn step4_alias_variants_group_to_same_target() {
         db.pool(),
         None,
         &img_pending,
-        "Messier 31",  // not a registered alias in the seed
+        "Messier 31", // not a registered alias in the seed
     )
     .await
     .unwrap();
@@ -360,21 +364,14 @@ async fn step5_override_wins_and_is_sticky() {
 
     // (a) Apply the override: bind "MyGalaxy" → M 101.
     let noop_resolver = FakeResolver::new(); // would NotFound for anything
-    let resp_ov = target_resolve::resolve(
-        db.pool(),
-        &noop_resolver,
-        &override_req("MyGalaxy", &m101_id),
-    )
-    .await
-    .unwrap();
+    let resp_ov =
+        target_resolve::resolve(db.pool(), &noop_resolver, &override_req("MyGalaxy", &m101_id))
+            .await
+            .unwrap();
 
     assert_eq!(resp_ov.status, TargetResolveStatus::Resolved, "override must resolve");
     let t_ov = resp_ov.target.as_ref().expect("override response must carry a target");
-    assert_eq!(
-        t_ov.source,
-        TargetSource::UserOverride,
-        "override source must be 'user-override'"
-    );
+    assert_eq!(t_ov.source, TargetSource::UserOverride, "override source must be 'user-override'");
     assert_eq!(
         t_ov.primary_designation, m101_desig,
         "override must return the chosen target (M 101)"
@@ -395,10 +392,9 @@ async fn step5_override_wins_and_is_sticky() {
             source: CacheSrc::Resolved,
         },
     );
-    let resp_sticky =
-        target_resolve::resolve(db.pool(), &wrong_resolver, &resolve_req("MyGalaxy"))
-            .await
-            .unwrap();
+    let resp_sticky = target_resolve::resolve(db.pool(), &wrong_resolver, &resolve_req("MyGalaxy"))
+        .await
+        .unwrap();
 
     assert_eq!(resp_sticky.status, TargetResolveStatus::Resolved, "sticky override must resolve");
     let t_sticky = resp_sticky.target.as_ref().expect("sticky response must carry a target");

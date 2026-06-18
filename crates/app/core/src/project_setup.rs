@@ -946,13 +946,13 @@ pub async fn get(pool: &SqlitePool, id: &str) -> Result<ProjectDetailDto, Contra
 
     // Spec 035 US1 #2: surface the associated canonical target (LEFT JOIN);
     // `None` when the project has no canonical-target association.
-    let canonical_target = repo::get_project_canonical_target(pool, id)
-        .await
-        .map_err(db_err)?
-        .map(|ct| contracts_core::projects_v2::ProjectCanonicalTarget {
-            id: ct.id,
-            primary_designation: ct.primary_designation,
-            common_name: ct.common_name,
+    let canonical_target =
+        repo::get_project_canonical_target(pool, id).await.map_err(db_err)?.map(|ct| {
+            contracts_core::projects_v2::ProjectCanonicalTarget {
+                id: ct.id,
+                primary_designation: ct.primary_designation,
+                common_name: ct.common_name,
+            }
         });
 
     Ok(ProjectDetailDto {
@@ -1324,9 +1324,8 @@ mod tests {
         let (pool, bus) = setup().await;
         let req = make_create_req("No Target Project", ProjectTool::PixInsight);
         let result = create(&pool, &bus, &req).await.unwrap();
-        let stored = repo::get_project_canonical_target_id(&pool, &result.project_id)
-            .await
-            .unwrap();
+        let stored =
+            repo::get_project_canonical_target_id(&pool, &result.project_id).await.unwrap();
         assert_eq!(stored, None, "absent canonicalTargetId must persist as NULL");
     }
 
@@ -1340,9 +1339,8 @@ mod tests {
         req.canonical_target_id = Some(ctid.to_owned());
         let result = create(&pool, &bus, &req).await.unwrap();
 
-        let stored = repo::get_project_canonical_target_id(&pool, &result.project_id)
-            .await
-            .unwrap();
+        let stored =
+            repo::get_project_canonical_target_id(&pool, &result.project_id).await.unwrap();
         assert_eq!(stored.as_deref(), Some(ctid), "canonicalTargetId must round-trip");
     }
 
