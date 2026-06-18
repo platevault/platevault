@@ -82,7 +82,8 @@ the setup wizard's repurposed step).
 
 ## Known gaps (see specs/035-simbad-target-resolution/IMPLEMENTATION-NOTES.md)
 
-1. Project↔target persistence: the create dialog selects a canonical target but `ProjectCreateRequest`
-   has no target field; also two target tables coexist (old spec-013 `targets` vs `canonical_target`) —
-   reconciliation is an open architecture decision.
+1. Two target tables coexist (old spec-013 `targets` vs `canonical_target`) — reconciliation is an
+   open architecture decision. (Project↔target persistence itself is now wired end-to-end:
+   `ProjectCreateRequest.canonicalTargetId` persists the selection, and `ProjectDetail` displays the
+   joined `canonicalTarget`.)
 2. Ingest grouping is a tested seam, not wired to a live per-image ingest (spec-002 inventory).

@@ -138,8 +138,13 @@ UPDATE (later in the run): **gap #1 (project↔target persistence) is now RESOLV
 migration 0033 adds nullable `projects.canonical_target_id` (+ optional `canonicalTargetId` on
 ProjectCreateRequest + persistence/validation + CreateProjectDialog wiring), leaving the old
 spec-013 `projects.target_id` untouched. **Decision logged:** new column, not a unify/migrate of the
-old `targets` table — that deeper reconciliation (two coexisting target tables) is still your call,
-as is surfacing `canonical_target_id` in the ProjectDetail UI (persisted but not yet displayed).
+old `targets` table — that deeper reconciliation (two coexisting target tables) is still your call.
+
+UPDATE (read+display now done): the canonical target is surfaced **end-to-end**. Backend adds
+`ProjectCanonicalTarget` DTO + optional `ProjectDetailDto.canonicalTarget`, joined from
+`canonical_target` via `projects.canonical_target_id` (common_name from `target_alias`); frontend
+renders a "Target" RailCard on `ProjectDetail` (primary designation + common name). So create →
+persist → read → display is complete. **Only the two-target-table reconciliation remains your call.**
 **Gap #2 (US4 not wired to a live per-image ingest / spec-002 inventory) remains open** — it needs
 the spec-002 `file_record` ingest pipeline (no production writer exists), a feature decision, not a fix.
 
