@@ -77,5 +77,34 @@ unattended implementation run (2026-06-18). Newest sections appended over time.
 
 - Live browser exercise of the `TargetSearch` UI (typeahead, long-tail SIMBAD, cancel-in-flight,
   settings toggle, override action) via the running app — deferred to the Windows rebuild + quickstart.
-- Windows rebuild + full quickstart S1–S5 (T038) — will run push→pull→recompile and hand over the
-  GUI test scenario.
+- Windows rebuild + full quickstart S1–S5 (T038) — see status below.
+
+## FINAL STATUS (autonomous run)
+
+**Spec 035 implementation: 38/39 tasks done. Workspace fully GREEN on Linux/WSL** —
+`cargo fmt --check`, `cargo clippy --workspace --all-targets -D warnings`, `cargo test --workspace`
+(66 ok, 0 fail), `just typecheck`, and `vitest` (50 files / 496 tests) all pass. All commits pushed
+to `origin/035-simbad-target-resolution` (PR #250, draft).
+
+**T038 (Windows verify) — NOT done; needs you.** The Windows checkout `/mnt/c/dev/astro-plan` was
+on branch `033` with **2542 uncommitted files** (autocrlf line-ending churn / stale state) AND a
+**running Tauri dev server** (locked `tauri-dev.log`). I did not force a branch switch / rebuild over
+your active session. A recoverable `git stash` entry ("pre-035-rebuild stash") was created on that
+checkout (a partial-stash artifact) — `git stash drop` it, or `pop` if you want the churn back.
+
+To do the Windows verify yourself:
+1. Stop the running Tauri dev server on Windows.
+2. In `C:\dev\astro-plan`: reconcile the working tree (it's a testing mirror — `git stash drop` the
+   churn, or `git reset --hard origin/035-simbad-target-resolution`).
+3. `git fetch && git checkout 035-simbad-target-resolution` (and merge PR #251 first if you also
+   want the calibration-flatten in the same build).
+4. Recompile (Windows cargo) + `pnpm -C apps/desktop build` and relaunch — avoids the stale-binary
+   "command not found" trap from `spec-033-windows-verify-loop`.
+5. Exercise quickstart S1–S5: project-creation target search (typeahead) · offline seeded search
+   (M42/M31) · long-tail SIMBAD resolve of an unseeded object · ingest grouping (see caveat: needs
+   per-image ingest, gap #2 above) · catalogue/type filter + resolver settings toggle + "Correct…"
+   override.
+
+**Open PRs awaiting your review/merge:** #250 (spec 035, draft — mark ready when you've reviewed the
+gaps above), #251 (calibration source-kind flatten), #309 (apm setup-speckit fix — already merged;
+release PR #310 bumps speckit 0.1.2).
