@@ -37,7 +37,7 @@ use crate::commands::lifecycle::AppState;
 /// Returns `Err(String)` on unexpected internal failure. Lookup errors
 /// (empty query, catalog not installed) are encoded in the response body.
 #[tauri::command]
-#[specta::specta(rename = "target.lookup")]
+#[specta::specta]
 pub async fn target_lookup(
     state: State<'_, AppState>,
     req: TargetLookupRequest,
@@ -60,7 +60,7 @@ pub async fn target_lookup(
 /// Returns `Err(String)` on unexpected internal failure. Resolution errors
 /// (empty query, catalog not installed) are encoded in the response status.
 #[tauri::command]
-#[specta::specta(rename = "target.resolve")]
+#[specta::specta]
 pub async fn target_resolve(
     state: State<'_, AppState>,
     req: TargetResolveRequest,

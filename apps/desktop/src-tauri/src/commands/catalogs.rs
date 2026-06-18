@@ -43,7 +43,7 @@ const CATALOG_MANIFEST_URL: &str =
 ///
 /// Returns `Err(String)` on database failure.
 #[tauri::command]
-#[specta::specta(rename = "catalog.list")]
+#[specta::specta]
 pub async fn catalog_list(state: State<'_, AppState>) -> Result<CatalogListResponse, String> {
     tracing::debug!("catalog.list");
     app_core::catalogs::list(state.repo.pool()).await.map_err(|e| e.message)
@@ -61,7 +61,7 @@ pub async fn catalog_list(state: State<'_, AppState>) -> Result<CatalogListRespo
 ///
 /// Returns `Err(String)` on database failure.
 #[tauri::command]
-#[specta::specta(rename = "catalog.attribution.get")]
+#[specta::specta]
 pub async fn catalog_attribution_get(
     state: State<'_, AppState>,
 ) -> Result<CatalogAttributionGetResponse, String> {
@@ -82,7 +82,7 @@ pub async fn catalog_attribution_get(
 /// Returns `Err(String)` on unexpected internal failure. Network / verification
 /// failures are encoded in the response `status = failed` field.
 #[tauri::command]
-#[specta::specta(rename = "catalog.manifest.fetch")]
+#[specta::specta]
 pub async fn catalog_manifest_fetch(
     _state: State<'_, AppState>,
     etag: Option<String>,
@@ -125,7 +125,7 @@ pub struct CatalogDownloadArgs {
 /// Returns `Err(String)` on unexpected internal failure. Download and
 /// verification failures are encoded in the response `status = failure` field.
 #[tauri::command]
-#[specta::specta(rename = "catalog.download")]
+#[specta::specta]
 pub async fn catalog_download(
     state: State<'_, AppState>,
     args: CatalogDownloadArgs,

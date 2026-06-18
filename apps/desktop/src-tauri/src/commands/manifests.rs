@@ -29,7 +29,7 @@ use crate::commands::lifecycle::AppState;
 /// # Errors
 /// Returns `Err(ManifestOpError)` on database failure.
 #[tauri::command]
-#[specta::specta(rename = "project.manifest.list")]
+#[specta::specta]
 pub async fn manifest_list(
     state: State<'_, AppState>,
     request: ManifestListRequest,
@@ -46,7 +46,7 @@ pub async fn manifest_list(
 /// Returns `Err(ManifestOpError)` with code `"manifest.not_found"` when the
 /// manifest does not exist.
 #[tauri::command]
-#[specta::specta(rename = "project.manifest.get")]
+#[specta::specta]
 pub async fn manifest_get(
     state: State<'_, AppState>,
     request: ManifestGetRequest,
@@ -72,7 +72,7 @@ pub struct ManifestGetRequest {
 /// # Errors
 /// Returns `Err(ManifestOpError)` with code `"internal"` on database failure.
 #[tauri::command]
-#[specta::specta(rename = "project.note.get")]
+#[specta::specta]
 pub async fn note_get(
     state: State<'_, AppState>,
     req: ProjectNoteGetRequest,
@@ -99,7 +99,7 @@ pub async fn note_get(
 /// Returns `Err(ManifestOpError)` with codes: `"project.not_found"`,
 /// `"project.read_only"`, `"note.content_too_large"`.
 #[tauri::command]
-#[specta::specta(rename = "project.note.update")]
+#[specta::specta]
 pub async fn note_update(
     state: State<'_, AppState>,
     req: ProjectNoteUpdateRequest,
@@ -120,7 +120,7 @@ pub async fn note_update(
 /// # Errors
 /// Returns `Err(String)` when the path does not exist or the OS open fails.
 #[tauri::command]
-#[specta::specta(rename = "project.manifest.reveal_in_os")]
+#[specta::specta]
 pub async fn manifest_reveal_in_os(
     _state: State<'_, AppState>,
     app: AppHandle,

@@ -20,7 +20,7 @@ use crate::commands::lifecycle::AppState;
 /// # Errors
 /// Returns `Err(String)` on corruption (informational) or database failure.
 #[tauri::command]
-#[specta::specta(rename = "guided.state.get")]
+#[specta::specta]
 pub async fn guided_state_get(
     state: State<'_, AppState>,
 ) -> Result<GuidedStateGetResponse, String> {
@@ -36,7 +36,7 @@ pub async fn guided_state_get(
 /// # Errors
 /// Returns `Err(String)` on unknown step id, dismissed flow, or database failure.
 #[tauri::command]
-#[specta::specta(rename = "guided.step.complete")]
+#[specta::specta]
 pub async fn guided_step_complete(
     state: State<'_, AppState>,
     request: GuidedStepCompleteRequest,
@@ -55,7 +55,7 @@ pub async fn guided_step_complete(
 /// # Errors
 /// Returns `Err(String)` on database failure.
 #[tauri::command]
-#[specta::specta(rename = "guided.dismiss")]
+#[specta::specta]
 pub async fn guided_dismiss(state: State<'_, AppState>) -> Result<GuidedDismissResponse, String> {
     tracing::debug!("guided.dismiss");
     app_core::guided_flow::dismiss(state.repo.pool()).await.map_err(|e| e.to_string())
@@ -69,7 +69,7 @@ pub async fn guided_dismiss(state: State<'_, AppState>) -> Result<GuidedDismissR
 /// # Errors
 /// Returns `Err(String)` on database failure.
 #[tauri::command]
-#[specta::specta(rename = "guided.restart")]
+#[specta::specta]
 pub async fn guided_restart(state: State<'_, AppState>) -> Result<GuidedRestartResponse, String> {
     tracing::debug!("guided.restart");
     app_core::guided_flow::restart(state.repo.pool()).await.map_err(|e| e.to_string())
@@ -83,7 +83,7 @@ pub async fn guided_restart(state: State<'_, AppState>) -> Result<GuidedRestartR
 /// # Errors
 /// Returns `Err(String)` on database failure.
 #[tauri::command]
-#[specta::specta(rename = "guided.activate")]
+#[specta::specta]
 pub async fn guided_activate(
     state: State<'_, AppState>,
 ) -> Result<contracts_core::guided::GuidedFlowStateDto, String> {

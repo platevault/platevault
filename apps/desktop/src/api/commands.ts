@@ -126,76 +126,76 @@ export async function listSessions(args?: {
   sort?: string;
   group_by?: string;
 }): Promise<AcquisitionSession[]> {
-  return invoke<AcquisitionSession[]>('sessions.list', args);
+  return invoke<AcquisitionSession[]>('sessions_list', args);
 }
 
 export async function getSession(args: { id: string }): Promise<SessionDetail> {
-  return invoke<SessionDetail>('sessions.get', args);
+  return invoke<SessionDetail>('sessions_get', args);
 }
 
 export async function getSessionsCalendar(args: {
   start_month: string;
   end_month: string;
 }): Promise<CalendarData> {
-  return invoke<CalendarData>('sessions.calendar', args);
+  return invoke<CalendarData>('sessions_calendar', args);
 }
 
 export async function listCalibrationMasters(args?: {
   group_by?: string;
   filters?: Record<string, unknown>;
 }): Promise<CalibrationMaster[]> {
-  return invoke<CalibrationMaster[]>('calibration.masters.list', args);
+  return invoke<CalibrationMaster[]>('calibration_masters_list', args);
 }
 
 export async function getCalibrationMaster(args: { id: string }): Promise<MasterDetail> {
-  return invoke<MasterDetail>('calibration.masters.get', args);
+  return invoke<MasterDetail>('calibration_masters_get', args);
 }
 
 export async function getCalibrationMatches(args: {
   session_id: string;
 }): Promise<MatchCandidate[]> {
-  return invoke<MatchCandidate[]>('calibration.matches', args);
+  return invoke<MatchCandidate[]>('calibration_matches', args);
 }
 
 export async function listTargets(args?: { search?: string }): Promise<Target[]> {
-  return invoke<Target[]>('targets.list', args);
+  return invoke<Target[]>('targets_list', args);
 }
 
 export async function getTarget(args: { id: string }): Promise<TargetDetail> {
-  return invoke<TargetDetail>('targets.get', args);
+  return invoke<TargetDetail>('targets_get', args);
 }
 
 export async function listProjects(args?: {
   filters?: Record<string, unknown>;
 }): Promise<Project[]> {
-  return invoke<Project[]>('projects.list', args);
+  return invoke<Project[]>('projects_list', args);
 }
 
 export async function getProject(args: { id: string }): Promise<ProjectDetail> {
-  return invoke<ProjectDetail>('projects.get', args);
+  return invoke<ProjectDetail>('projects_get', args);
 }
 
 export async function listPlans(args?: {
   filters?: Record<string, unknown>;
 }): Promise<FilesystemPlan[]> {
-  return invoke<FilesystemPlan[]>('plans.list', args);
+  return invoke<FilesystemPlan[]>('plans_list', args);
 }
 
 export async function getPlan(args: { id: string }): Promise<PlanDetail> {
-  return invoke<PlanDetail>('plans.get', args);
+  return invoke<PlanDetail>('plans_get', args);
 }
 
 export async function listAuditEntries(args?: {
   filters?: Record<string, unknown>;
   pagination?: { offset: number; limit: number };
 }): Promise<{ entries: AuditEntry[]; total: number }> {
-  return invoke<{ entries: AuditEntry[]; total: number }>('audit.list', args);
+  return invoke<{ entries: AuditEntry[]; total: number }>('audit_list', args);
 }
 
 export async function exportAudit(args?: {
   filters?: Record<string, unknown>;
 }): Promise<string> {
-  return invoke<string>('audit.export', args);
+  return invoke<string>('audit_export', args);
 }
 
 // ── Log stream (spec 019) ────────────────────────────────────────────────────
@@ -223,7 +223,7 @@ export async function logRecent(args?: {
   sourceFilter?: string[];
   windowSize?: number;
 }): Promise<LogRecentResponse> {
-  return invoke<LogRecentResponse>('log.recent', args ?? {});
+  return invoke<LogRecentResponse>('log_recent', args ?? {});
 }
 
 /** `log.export` — export filtered log entries to a JSON file. */
@@ -236,33 +236,33 @@ export async function logExport(args: {
   until?: string;
   includeDiagnostics?: boolean;
 }): Promise<LogExportResponse> {
-  return invoke<LogExportResponse>('log.export', args);
+  return invoke<LogExportResponse>('log_export', args);
 }
 
 export async function getSettings(args: { scope: string }): Promise<SettingsData> {
-  return invoke<SettingsData>('settings.get', args);
+  return invoke<SettingsData>('settings_get', args);
 }
 
 export async function listRoots(): Promise<LibraryRoot[]> {
-  return invoke<LibraryRoot[]>('roots.list');
+  return invoke<LibraryRoot[]>('roots_list');
 }
 
 export async function listEquipment(): Promise<Equipment[]> {
-  return invoke<Equipment[]>('equipment.list');
+  return invoke<Equipment[]>('equipment_list');
 }
 
 export async function getReviewQueue(args?: {
   filter?: string;
 }): Promise<ReviewItem[]> {
-  return invoke<ReviewItem[]>('review.queue', args);
+  return invoke<ReviewItem[]>('review_queue', args);
 }
 
 export async function getPreferences(): Promise<AppPreferences> {
-  return invoke<AppPreferences>('preferences.get');
+  return invoke<AppPreferences>('preferences_get');
 }
 
 export async function searchGlobal(args: { query: string }): Promise<SearchResult[]> {
-  return invoke<SearchResult[]>('search.global', args);
+  return invoke<SearchResult[]>('search_global', args);
 }
 
 // ---------- Mutation Commands ----------
@@ -272,7 +272,7 @@ export async function transitionSession(args: {
   action: string;
   metadata?: Record<string, unknown>;
 }): Promise<AcquisitionSession> {
-  return invoke<AcquisitionSession>('sessions.transition', args);
+  return invoke<AcquisitionSession>('sessions_transition', args);
 }
 
 export async function splitSession(args: {
@@ -280,7 +280,7 @@ export async function splitSession(args: {
   split_at_index: number;
 }): Promise<{ original: AcquisitionSession; new: AcquisitionSession }> {
   return invoke<{ original: AcquisitionSession; new: AcquisitionSession }>(
-    'sessions.split',
+    'sessions_split',
     args,
   );
 }
@@ -288,35 +288,35 @@ export async function splitSession(args: {
 export async function mergeSessions(args: {
   ids: string[];
 }): Promise<AcquisitionSession> {
-  return invoke<AcquisitionSession>('sessions.merge', args);
+  return invoke<AcquisitionSession>('sessions_merge', args);
 }
 
 export async function createProjectPlan(args: {
   wizard_state: Record<string, unknown>;
 }): Promise<FilesystemPlan> {
-  return invoke<FilesystemPlan>('projects.create_plan', args);
+  return invoke<FilesystemPlan>('projects_create_plan', args);
 }
 
 export async function approvePlan(args: {
   id: string;
   delete_acknowledged?: boolean;
 }): Promise<FilesystemPlan> {
-  return invoke<FilesystemPlan>('plans.approve', args);
+  return invoke<FilesystemPlan>('plans_approve', args);
 }
 
 export async function applyPlan(args: { id: string }): Promise<OperationHandle> {
-  return invoke<OperationHandle>('plans.apply', args);
+  return invoke<OperationHandle>('plans_apply_real', args);
 }
 
 export async function discardPlan(args: { id: string }): Promise<void> {
-  return invoke<void>('plans.discard', args);
+  return invoke<void>('plans_discard', args);
 }
 
 export async function updateSettings(args: {
   scope: string;
   values: Record<string, unknown>;
 }): Promise<void> {
-  return invoke<void>('settings.update', args);
+  return invoke<void>('settings_update', args);
 }
 
 export async function registerRoot(args: {
@@ -324,38 +324,38 @@ export async function registerRoot(args: {
   category: string;
   scanSettings: Record<string, unknown>;
 }): Promise<LibraryRoot> {
-  return invoke<LibraryRoot>('roots.register', args);
+  return invoke<LibraryRoot>('roots_register', args);
 }
 
 export async function remapRoot(args: {
   root_id: string;
   new_path: string;
 }): Promise<RemapVerification> {
-  return invoke<RemapVerification>('roots.remap', args);
+  return invoke<RemapVerification>('roots_remap', args);
 }
 
 export async function applyRootRemap(args: {
   root_id: string;
   verified: boolean;
 }): Promise<void> {
-  return invoke<void>('roots.remap.apply', args);
+  return invoke<void>('roots_remap_apply', args);
 }
 
 export async function startScan(args?: {
   root_ids?: string[];
 }): Promise<OperationHandle> {
-  return invoke<OperationHandle>('scan.start', args);
+  return invoke<OperationHandle>('scan_start', args);
 }
 
 export async function setPreference(args: {
   key: string;
   value: unknown;
 }): Promise<void> {
-  return invoke<void>('preferences.set', args);
+  return invoke<void>('preferences_set', args);
 }
 
 export async function completeTourStep(args: { step: string }): Promise<void> {
-  return invoke<void>('tour.complete_step', args);
+  return invoke<void>('tour_complete_step', args);
 }
 
 // ---------- First-Run / Batch Commands ----------
@@ -394,19 +394,19 @@ export interface FirstRunRestartResult {
 export async function registerRootBatch(args: {
   sources: BatchSourceEntry[];
 }): Promise<BatchRegisterResult> {
-  return invoke<BatchRegisterResult>('roots.register.batch', args);
+  return invoke<BatchRegisterResult>('roots_register_batch', args);
 }
 
 export async function completeFirstRun(): Promise<FirstRunCompleteResult> {
-  return invoke<FirstRunCompleteResult>('firstrun.complete');
+  return invoke<FirstRunCompleteResult>('firstrun_complete');
 }
 
 export async function restartFirstRun(): Promise<FirstRunRestartResult> {
-  return invoke<FirstRunRestartResult>('firstrun.restart', { request: { confirm: true } });
+  return invoke<FirstRunRestartResult>('firstrun_restart', { request: { confirm: true } });
 }
 
 export async function getFirstRunState(): Promise<FirstRunState> {
-  return invoke<FirstRunState>('firstrun.state');
+  return invoke<FirstRunState>('firstrun_state');
 }
 
 // ---------- Pattern Commands (spec 015) ----------
@@ -456,7 +456,7 @@ export interface PatternPreviewResponse {
  * Never rejects — all error states are in the response body.
  */
 export async function patternValidate(pattern: PatternPart[]): Promise<PatternValidateResponse> {
-  return invoke<PatternValidateResponse>('pattern.validate', { request: { pattern } });
+  return invoke<PatternValidateResponse>('pattern_validate', { request: { pattern } });
 }
 
 /**
@@ -467,7 +467,7 @@ export async function patternPreview(
   pattern: PatternPart[],
   sampleMetadata: MetadataBundle,
 ): Promise<PatternPreviewResponse> {
-  return invoke<PatternPreviewResponse>('pattern.preview', {
+  return invoke<PatternPreviewResponse>('pattern_preview', {
     request: { pattern, sampleMetadata },
   });
 }
@@ -478,50 +478,50 @@ export async function patternPreview(
 export async function listProjects008(args?: {
   filters?: unknown;
 }): Promise<ProjectSummaryDto[]> {
-  return invoke<ProjectSummaryDto[]>('projects.list', { filters: args?.filters ?? null });
+  return invoke<ProjectSummaryDto[]>('projects_list', { filters: args?.filters ?? null });
 }
 
 /** Get a single project with sources and channels. */
 export async function getProject008(args: { id: string }): Promise<ProjectDetailDto> {
-  return invoke<ProjectDetailDto>('projects.get', { id: args.id });
+  return invoke<ProjectDetailDto>('projects_get', { id: args.id });
 }
 
 /** Create a new project (validates, persists, generates folder plan). */
 export async function createProject(args: ProjectCreateRequest): Promise<ProjectCreateResult> {
-  return invoke<ProjectCreateResult>('projects.create', { req: args });
+  return invoke<ProjectCreateResult>('projects_create', { req: args });
 }
 
 /** Update name, tool, or notes on an existing project. */
 export async function updateProject(args: ProjectUpdateRequest): Promise<ProjectUpdateResult> {
-  return invoke<ProjectUpdateResult>('projects.update', { req: args });
+  return invoke<ProjectUpdateResult>('projects_update', { req: args });
 }
 
 /** Link an Inventory session to a project as a source. */
 export async function addProjectSource(
   args: ProjectSourceAddRequest,
 ): Promise<ProjectSourceAddResult> {
-  return invoke<ProjectSourceAddResult>('projects.source.add', { req: args });
+  return invoke<ProjectSourceAddResult>('projects_source_add', { req: args });
 }
 
 /** Unlink a source from a project. */
 export async function removeProjectSource(
   args: ProjectSourceRemoveRequest,
 ): Promise<ProjectSourceRemoveResult> {
-  return invoke<ProjectSourceRemoveResult>('projects.source.remove', { req: args });
+  return invoke<ProjectSourceRemoveResult>('projects_source_remove', { req: args });
 }
 
 /** Re-infer channels from all linked sources (discards manual overrides). */
 export async function reinferProjectChannels(
   args: ProjectChannelsReinferRequest,
 ): Promise<ProjectChannelsReinferResult> {
-  return invoke<ProjectChannelsReinferResult>('projects.channels.reinfer', { req: args });
+  return invoke<ProjectChannelsReinferResult>('projects_channels_reinfer', { req: args });
 }
 
 /** Dismiss the channel-drift banner without re-inferring. */
 export async function dismissProjectChannelDrift(
   args: ProjectChannelsDismissDriftRequest,
 ): Promise<ProjectChannelsDismissDriftResult> {
-  return invoke<ProjectChannelsDismissDriftResult>('projects.channels.dismiss_drift', {
+  return invoke<ProjectChannelsDismissDriftResult>('projects_channels_dismiss_drift', {
     req: args,
   });
 }
@@ -602,7 +602,7 @@ export async function applyProjectLifecycleTransition(
  * Returns every catalog in the `catalog_downloaded` table ordered by name.
  */
 export async function catalogList(): Promise<CatalogListResponse> {
-  return invoke<CatalogListResponse>('catalog.list');
+  return invoke<CatalogListResponse>('catalog_list');
 }
 
 /**
@@ -611,7 +611,7 @@ export async function catalogList(): Promise<CatalogListResponse> {
  * fetched on every Settings page open.
  */
 export async function catalogAttributionGet(): Promise<CatalogAttributionGetResponse> {
-  return invoke<CatalogAttributionGetResponse>('catalog.attribution.get');
+  return invoke<CatalogAttributionGetResponse>('catalog_attribution_get');
 }
 
 /**
@@ -622,7 +622,7 @@ export async function catalogAttributionGet(): Promise<CatalogAttributionGetResp
 export async function catalogManifestFetch(args?: {
   etag?: string;
 }): Promise<CatalogManifestFetchResponse> {
-  return invoke<CatalogManifestFetchResponse>('catalog.manifest.fetch', {
+  return invoke<CatalogManifestFetchResponse>('catalog_manifest_fetch', {
     etag: args?.etag,
   });
 }
@@ -638,7 +638,7 @@ export async function catalogDownload(args: {
   catalogId: string;
   manifest: CatalogManifest;
 }): Promise<CatalogDownloadResponse> {
-  return invoke<CatalogDownloadResponse>('catalog.download', {
+  return invoke<CatalogDownloadResponse>('catalog_download', {
     args: { catalog_id: args.catalogId, manifest: args.manifest },
   });
 }
@@ -649,7 +649,7 @@ export async function catalogDownload(args: {
 export async function inboxScanFolder(
   req: InboxScanFolderRequest,
 ): Promise<InboxScanFolderResponse> {
-  return invoke<InboxScanFolderResponse>('inbox.scan.folder', { req });
+  return invoke<InboxScanFolderResponse>('inbox_scan_folder', { req });
 }
 
 /**
@@ -657,7 +657,7 @@ export async function inboxScanFolder(
  * Idempotent unless `forceRescan` is true.
  */
 export async function inboxClassify(req: InboxClassifyRequest): Promise<InboxClassifyResponse> {
-  return invoke<InboxClassifyResponse>('inbox.classify', { req });
+  return invoke<InboxClassifyResponse>('inbox_classify', { req });
 }
 
 /**
@@ -665,14 +665,14 @@ export async function inboxClassify(req: InboxClassifyRequest): Promise<InboxCla
  * `action`: `"split"` for mixed items, `"confirm"` for `single_type`.
  */
 export async function inboxConfirm(req: InboxConfirmRequest): Promise<InboxConfirmResponse> {
-  return invoke<InboxConfirmResponse>('inbox.confirm', { req });
+  return invoke<InboxConfirmResponse>('inbox_confirm', { req });
 }
 
 /** Write manual frame-type overrides and re-aggregate the classification. */
 export async function inboxReclassify(
   req: InboxReclassifyRequest,
 ): Promise<InboxReclassifyResponse> {
-  return invoke<InboxReclassifyResponse>('inbox.reclassify', { req });
+  return invoke<InboxReclassifyResponse>('inbox_reclassify', { req });
 }
 
 // ── Calibration matching commands (spec 007) ──────────────────────────────────
@@ -772,7 +772,7 @@ export async function calibrationMatchSuggest(args: {
   sessionId: string;
   calibrationTypes?: CalibrationMatchType[];
 }): Promise<CalibrationMatchSuggestResponse> {
-  return invoke<CalibrationMatchSuggestResponse>('calibration.match.suggest', {
+  return invoke<CalibrationMatchSuggestResponse>('calibration_match_suggest', {
     req: {
       contractVersion: '2.0.0',
       requestId: args.requestId,
@@ -792,7 +792,7 @@ export async function calibrationMatchAssign(args: {
   masterId: string;
   override: boolean;
 }): Promise<CalibrationMatchAssignResponse> {
-  return invoke<CalibrationMatchAssignResponse>('calibration.match.assign', {
+  return invoke<CalibrationMatchAssignResponse>('calibration_match_assign', {
     req: {
       contractVersion: '2.0.0',
       requestId: args.requestId,
@@ -812,7 +812,7 @@ export async function calibrationMatchSuggestBatch(args: {
   sessionIds: string[];
   calibrationTypes?: CalibrationMatchType[];
 }): Promise<CalibrationMatchBatchResponse> {
-  return invoke<CalibrationMatchBatchResponse>('calibration.match.suggest.batch', {
+  return invoke<CalibrationMatchBatchResponse>('calibration_match_suggest_batch', {
     req: {
       contractVersion: '1.0',
       requestId: args.requestId,
@@ -848,7 +848,7 @@ export type {
  * Filters are applied server-side (source, frame type, review state).
  */
 export async function inventoryList(req: InventoryListRequest): Promise<InventoryListResponse> {
-  return invoke<InventoryListResponse>('inventory.list', { req });
+  return invoke<InventoryListResponse>('inventory_list', { req });
 }
 
 /**
@@ -861,7 +861,7 @@ export async function inventoryList(req: InventoryListRequest): Promise<Inventor
 export async function inventorySessionReview(
   req: InventorySessionReviewRequest,
 ): Promise<InventorySessionReviewResponse> {
-  return invoke<InventorySessionReviewResponse>('inventory.session.review', { req });
+  return invoke<InventorySessionReviewResponse>('inventory_session_review', { req });
 }
 
 // ── Spec 011: Processing Tool Launch ─────────────────────────────────────────
@@ -890,27 +890,27 @@ export type {
 
 /** List all seeded tool profiles joined with settings state. */
 export async function toolProfileList(): Promise<ToolProfileListResponse> {
-  return invoke<ToolProfileListResponse>('tools.list');
+  return invoke<ToolProfileListResponse>('tools_list');
 }
 
 /** Launch a processing tool for a project. */
 export async function toolLaunch(request: ToolLaunchRequest): Promise<ToolLaunchResponse> {
-  return invoke<ToolLaunchResponse>('tools.launch', { request });
+  return invoke<ToolLaunchResponse>('tools_launch', { request });
 }
 
 /** Save `executable_path` / enabled for a tool. */
 export async function toolUpdate(request: UpdateProcessingTool): Promise<ToolProfileSummary> {
-  return invoke<ToolProfileSummary>('tools.update', { request });
+  return invoke<ToolProfileSummary>('tools_update', { request });
 }
 
 /** Validate an executable path. */
 export async function toolValidatePath(path: string): Promise<ToolPathValidation> {
-  return invoke<ToolPathValidation>('tools.validate_path', { path });
+  return invoke<ToolPathValidation>('tools_validate_path', { path });
 }
 
 /** Auto-detect installed tool paths. */
 export async function toolDiscover(request: ToolDiscoverRequest): Promise<ToolDiscoverResponse> {
-  return invoke<ToolDiscoverResponse>('tools.discover', { request });
+  return invoke<ToolDiscoverResponse>('tools_discover', { request });
 }
 
 // ── Spec 012: Processing Artifact Observation ─────────────────────────────────
@@ -939,7 +939,7 @@ export type {
  * Defaults to `["present","missing"]` states when `includeStates` is empty.
  */
 export async function artifactList(request: ArtifactListRequest): Promise<ArtifactListResponse> {
-  return invoke<ArtifactListResponse>('artifact.list', { request });
+  return invoke<ArtifactListResponse>('artifact_list', { request });
 }
 
 /**
@@ -950,14 +950,14 @@ export async function artifactList(request: ArtifactListRequest): Promise<Artifa
 export async function artifactClassify(
   request: ArtifactClassifyRequest,
 ): Promise<ArtifactClassifyResponse> {
-  return invoke<ArtifactClassifyResponse>('artifact.classify', { request });
+  return invoke<ArtifactClassifyResponse>('artifact_classify', { request });
 }
 
 /**
  * `artifact.mark_resolved` — mark a `missing` artifact as user-resolved.
  */
 export async function artifactMarkResolved(request: ArtifactMarkResolvedRequest): Promise<void> {
-  return invoke<void>('artifact.mark_resolved', { request });
+  return invoke<void>('artifact_mark_resolved', { request });
 }
 
 // ── Spec 016: Source Protection (US2–US4) ─────────────────────────────────────
@@ -990,7 +990,7 @@ export type {
 export async function sourceProtectionGet(
   sourceId: string | null,
 ): Promise<SourceProtectionGetResponse> {
-  return invoke<SourceProtectionGetResponse>('source.protection.get', { sourceId });
+  return invoke<SourceProtectionGetResponse>('source_protection_get', { sourceId });
 }
 
 /**
@@ -1002,7 +1002,7 @@ export async function sourceProtectionGet(
 export async function sourceProtectionSet(
   request: SourceProtectionSetRequest,
 ): Promise<SourceProtectionSetResponse> {
-  return invoke<SourceProtectionSetResponse>('source.protection.set', { request });
+  return invoke<SourceProtectionSetResponse>('source_protection_set', { request });
 }
 
 /**
@@ -1015,7 +1015,7 @@ export async function sourceProtectionSet(
 export async function planProtectionCheck(
   planId: string,
 ): Promise<PlanProtectionCheckResponse> {
-  return invoke<PlanProtectionCheckResponse>('plan.protection.check', { planId });
+  return invoke<PlanProtectionCheckResponse>('plan_protection_check_cmd', { planId });
 }
 
 /**
@@ -1031,7 +1031,7 @@ export async function protectionPlanAcknowledged(
   resolvedLevel: string,
   reason: string,
 ): Promise<string> {
-  return invoke<string>('protection.plan.acknowledged', {
+  return invoke<string>('protection_plan_acknowledged', {
     planId,
     itemId,
     sourceId,
@@ -1053,7 +1053,7 @@ export async function protectionPlanAcknowledged(
 export async function getTargetIdentity(args: {
   targetId: string;
 }): Promise<TargetGetResult> {
-  return invoke<TargetGetResult>('target.get', args);
+  return invoke<TargetGetResult>('target_get', args);
 }
 
 /**
@@ -1062,7 +1062,7 @@ export async function getTargetIdentity(args: {
 export async function updateTargetNote(
   req: TargetNoteUpdateRequest,
 ): Promise<TargetNoteUpdateResult> {
-  return invoke<TargetNoteUpdateResult>('target.note.update', { req });
+  return invoke<TargetNoteUpdateResult>('target_note_update', { req });
 }
 
 /**
@@ -1074,7 +1074,7 @@ export async function updateTargetNote(
 export async function addTargetAlias(
   req: TargetAliasAddRequest,
 ): Promise<TargetAliasAddResult> {
-  return invoke<TargetAliasAddResult>('target.alias.add', { req });
+  return invoke<TargetAliasAddResult>('target_alias_add', { req });
 }
 
 /**
@@ -1085,7 +1085,7 @@ export async function addTargetAlias(
 export async function removeTargetAlias(
   req: TargetAliasRemoveRequest,
 ): Promise<TargetAliasRemoveResult> {
-  return invoke<TargetAliasRemoveResult>('target.alias.remove', { req });
+  return invoke<TargetAliasRemoveResult>('target_alias_remove', { req });
 }
 
 /**
@@ -1097,7 +1097,7 @@ export async function removeTargetAlias(
 export async function renameTargetPrimary(
   req: TargetPrimaryRenameRequest,
 ): Promise<TargetPrimaryRenameResult> {
-  return invoke<TargetPrimaryRenameResult>('target.primary.rename', { req });
+  return invoke<TargetPrimaryRenameResult>('target_primary_rename', { req });
 }
 
 // Re-export TargetOpError type for callers that need to type-narrow errors.
@@ -1113,14 +1113,14 @@ export type { TargetOpError };
 export async function listManifests(
   request: ManifestListRequest,
 ): Promise<ManifestListResponse> {
-  return invoke<ManifestListResponse>('project.manifest.list', { request });
+  return invoke<ManifestListResponse>('manifest_list', { request });
 }
 
 /**
  * `project.manifest.get` — fetch one manifest with its full structured body (spec 024).
  */
 export async function getManifest(request: ManifestGetRequest): Promise<ManifestGetResponse> {
-  return invoke<ManifestGetResponse>('project.manifest.get', { request });
+  return invoke<ManifestGetResponse>('manifest_get', { request });
 }
 
 /**
@@ -1132,7 +1132,7 @@ export async function getManifest(request: ManifestGetRequest): Promise<Manifest
 export async function updateProjectNote(
   req: ProjectNoteUpdateRequest,
 ): Promise<ProjectNoteUpdateResult> {
-  return invoke<ProjectNoteUpdateResult>('project.note.update', { req });
+  return invoke<ProjectNoteUpdateResult>('note_update', { req });
 }
 
 /**
@@ -1141,14 +1141,14 @@ export async function updateProjectNote(
  * Returns `content: null` when no note has been saved yet.
  */
 export async function getProjectNote(req: ProjectNoteGetRequest): Promise<ProjectNoteGetResult> {
-  return invoke<ProjectNoteGetResult>('project.note.get', { req });
+  return invoke<ProjectNoteGetResult>('note_get', { req });
 }
 
 /**
  * `project.manifest.reveal_in_os` — open the manifest file in the OS file manager (spec 024).
  */
 export async function revealManifestInOs(request: ManifestRevealRequest): Promise<void> {
-  return invoke<void>('project.manifest.reveal_in_os', { request });
+  return invoke<void>('manifest_reveal_in_os', { request });
 }
 
 // Re-export manifest types for callers.
@@ -1219,7 +1219,7 @@ export interface DevExportResponse {
 export async function devContractsList(args?: {
   requestId?: string;
 }): Promise<DevContractsListResponse> {
-  return invoke<DevContractsListResponse>('dev.contracts.list', { request: args ?? {} });
+  return invoke<DevContractsListResponse>('dev_contracts_list', { request: args ?? {} });
 }
 
 /**
@@ -1230,7 +1230,7 @@ export async function devCallsList(args?: {
   requestId?: string;
   limit?: number;
 }): Promise<DevCallsListResponse> {
-  return invoke<DevCallsListResponse>('dev.calls.list', { request: args ?? {} });
+  return invoke<DevCallsListResponse>('dev_calls_list', { request: args ?? {} });
 }
 
 /**
@@ -1244,7 +1244,7 @@ export async function devExport(args: {
   includeCalls?: boolean;
   requestId?: string;
 }): Promise<DevExportResponse> {
-  return invoke<DevExportResponse>('dev.export', { request: args });
+  return invoke<DevExportResponse>('dev_export', { request: args });
 }
 
 export interface DevSchemaGetResponse {
@@ -1258,7 +1258,7 @@ export interface DevSchemaGetResponse {
  * Only available in dev-tools builds when devMode is on.
  */
 export async function devSchemaGet(schemaPath: string): Promise<DevSchemaGetResponse> {
-  return invoke<DevSchemaGetResponse>('dev.schema.get', {
+  return invoke<DevSchemaGetResponse>('dev_schema_get', {
     request: { schemaPath },
   });
 }

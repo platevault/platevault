@@ -28,7 +28,7 @@ use crate::commands::lifecycle::AppState;
 /// # Errors
 /// Returns `Err(String)` on infrastructure failure.
 #[tauri::command]
-#[specta::specta(rename = "tools.launch")]
+#[specta::specta]
 pub async fn tools_launch(
     state: State<'_, AppState>,
     request: ToolLaunchRequest,
@@ -45,7 +45,7 @@ pub async fn tools_launch(
 /// # Errors
 /// Returns `Err(String)` on DB failure.
 #[tauri::command]
-#[specta::specta(rename = "tools.list")]
+#[specta::specta]
 pub async fn tools_list(state: State<'_, AppState>) -> Result<ToolProfileListResponse, String> {
     tracing::debug!("tools.list");
     tool_launch::list_profiles(state.repo.pool()).await
@@ -58,7 +58,7 @@ pub async fn tools_list(state: State<'_, AppState>) -> Result<ToolProfileListRes
 /// # Errors
 /// Returns `Err(String)` on DB failure.
 #[tauri::command]
-#[specta::specta(rename = "tools.update")]
+#[specta::specta]
 pub async fn tools_update(
     state: State<'_, AppState>,
     request: UpdateProcessingTool,
@@ -74,7 +74,7 @@ pub async fn tools_update(
 /// # Errors
 /// Returns `Err(String)` on failure; this command never fails in practice.
 #[tauri::command]
-#[specta::specta(rename = "tools.validate_path")]
+#[specta::specta]
 pub async fn tools_validate_path(path: String) -> Result<ToolPathValidation, String> {
     tracing::debug!("tools.validate_path path={path}");
     Ok(tool_launch::validate_path(&path))
@@ -89,7 +89,7 @@ pub async fn tools_validate_path(path: String) -> Result<ToolPathValidation, Str
 /// # Errors
 /// Returns `Err(String)` on unexpected failure.
 #[tauri::command]
-#[specta::specta(rename = "tools.discover")]
+#[specta::specta]
 pub async fn tools_discover(request: ToolDiscoverRequest) -> Result<ToolDiscoverResponse, String> {
     tracing::debug!("tools.discover tool_id={:?}", request.tool_id);
     tool_launch::discover(request.tool_id.as_deref())

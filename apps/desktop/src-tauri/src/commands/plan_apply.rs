@@ -39,7 +39,7 @@ use crate::commands::lifecycle::AppState;
 /// - `"plan.approval.stale"` — approval token mismatch.
 /// - `"plan.conflict.overlap"` — concurrent apply already running.
 #[tauri::command]
-#[specta::specta(rename = "plans.apply")]
+#[specta::specta]
 pub async fn plans_apply_real(
     state: State<'_, AppState>,
     plan_id: String,
@@ -61,7 +61,7 @@ pub async fn plans_apply_real(
 /// - `"plan.not_found"` — plan not found.
 /// - `"plan.not_in_apply"` — plan is not in applying or paused state.
 #[tauri::command]
-#[specta::specta(rename = "plans.cancel")]
+#[specta::specta]
 pub async fn plans_cancel(
     state: State<'_, AppState>,
     plan_id: String,
@@ -80,7 +80,7 @@ pub async fn plans_cancel(
 /// - `"run.not_paused"` — plan is not in paused state.
 /// - `"run.not_found"` — run id does not match active run.
 #[tauri::command]
-#[specta::specta(rename = "plans.resume")]
+#[specta::specta]
 pub async fn plans_resume(
     state: State<'_, AppState>,
     plan_id: String,
@@ -103,7 +103,7 @@ pub async fn plans_resume(
 /// - `"item.not_found"` — item not found.
 /// - `"item.not_pending"` — item is not in pending state.
 #[tauri::command]
-#[specta::specta(rename = "plans.item.skip")]
+#[specta::specta]
 pub async fn plans_item_skip(
     state: State<'_, AppState>,
     plan_id: String,
@@ -127,7 +127,7 @@ pub async fn plans_item_skip(
 /// - `"item.not_found"` — item not found.
 /// - `"item.not_failed"` — item is not in failed state.
 #[tauri::command]
-#[specta::specta(rename = "plans.item.retry")]
+#[specta::specta]
 pub async fn plans_item_retry(
     state: State<'_, AppState>,
     plan_id: String,
@@ -144,7 +144,7 @@ pub async fn plans_item_retry(
 ///
 /// Returns `Err(String)` with `"plan.not_found"` if the plan does not exist.
 #[tauri::command]
-#[specta::specta(rename = "plans.apply.status")]
+#[specta::specta]
 pub async fn plans_apply_status(
     state: State<'_, AppState>,
     plan_id: String,

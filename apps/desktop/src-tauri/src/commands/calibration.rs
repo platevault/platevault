@@ -27,7 +27,7 @@ use crate::AppState;
 /// # Errors
 /// Returns `Err(String)` on database failure.
 #[tauri::command]
-#[specta::specta(rename = "calibration.masters.list")]
+#[specta::specta]
 pub async fn calibration_masters_list(
     state: State<'_, AppState>,
 ) -> Result<Vec<CalibrationMaster>, String> {
@@ -40,7 +40,7 @@ pub async fn calibration_masters_list(
 /// # Errors
 /// Returns `Err(String)` with `"master.not_found: <id>"` when not found.
 #[tauri::command]
-#[specta::specta(rename = "calibration.masters.get")]
+#[specta::specta]
 pub async fn calibration_masters_get(
     state: State<'_, AppState>,
     id: String,
@@ -58,7 +58,7 @@ pub async fn calibration_masters_get(
 /// # Errors
 /// Returns `Err(String)` on failure; the stub never fails.
 #[tauri::command]
-#[specta::specta(rename = "calibration.matches")]
+#[specta::specta]
 pub async fn calibration_matches(session_id: String) -> Result<Vec<MatchCandidate>, String> {
     tracing::debug!("calibration.matches session_id={session_id}");
     // This command remains a simple list until the spec-007 scoring pass is
@@ -76,7 +76,7 @@ pub async fn calibration_matches(session_id: String) -> Result<Vec<MatchCandidat
 /// # Errors
 /// Returns `Err(String)` on database error.
 #[tauri::command]
-#[specta::specta(rename = "calibration.match.suggest")]
+#[specta::specta]
 pub async fn calibration_match_suggest(
     state: State<'_, AppState>,
     req: CalibrationMatchSuggestRequest,
@@ -92,7 +92,7 @@ pub async fn calibration_match_suggest(
 /// # Errors
 /// Returns `Err(String)` on database error.
 #[tauri::command]
-#[specta::specta(rename = "calibration.match.assign")]
+#[specta::specta]
 pub async fn calibration_match_assign(
     state: State<'_, AppState>,
     req: CalibrationMatchAssignRequest,
@@ -113,7 +113,7 @@ pub async fn calibration_match_assign(
 /// # Errors
 /// Returns `Err(String)` on database error.
 #[tauri::command]
-#[specta::specta(rename = "calibration.match.suggest.batch")]
+#[specta::specta]
 pub async fn calibration_match_suggest_batch(
     state: State<'_, AppState>,
     req: CalibrationMatchBatchRequest,

@@ -25,7 +25,7 @@ use crate::commands::lifecycle::AppState;
 /// # Errors
 /// Returns `Err(String)` on DB failure.
 #[tauri::command]
-#[specta::specta(rename = "artifact.list")]
+#[specta::specta]
 pub async fn artifact_list(
     state: State<'_, AppState>,
     request: ArtifactListRequest,
@@ -45,7 +45,7 @@ pub async fn artifact_list(
 /// # Errors
 /// Returns `Err(String)` on DB failure or if the artifact is not found.
 #[tauri::command]
-#[specta::specta(rename = "artifact.classify")]
+#[specta::specta]
 pub async fn artifact_classify(
     state: State<'_, AppState>,
     request: ArtifactClassifyRequest,
@@ -79,7 +79,7 @@ pub async fn artifact_classify(
 /// # Errors
 /// Returns `Err(String)` on DB failure.
 #[tauri::command]
-#[specta::specta(rename = "artifact.mark_resolved")]
+#[specta::specta]
 pub async fn artifact_mark_resolved(
     state: State<'_, AppState>,
     request: ArtifactMarkResolvedRequest,

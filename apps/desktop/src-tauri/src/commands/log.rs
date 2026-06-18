@@ -37,7 +37,7 @@ use crate::commands::lifecycle::AppState;
 /// # Errors
 /// Returns `Err(String)` on database failure.
 #[tauri::command]
-#[specta::specta(rename = "log.recent")]
+#[specta::specta]
 pub async fn log_recent(
     state: State<'_, AppState>,
     cursor: Option<String>,
@@ -84,7 +84,7 @@ pub async fn log_recent(
 /// Returns `Err(String)` with code `"path.parent.missing"`, `"path.write.denied"`,
 /// `"range.invalid"`, or `"format.unsupported"`.
 #[tauri::command]
-#[specta::specta(rename = "log.export")]
+#[specta::specta]
 pub async fn log_export(
     state: State<'_, AppState>,
     request_id: String,

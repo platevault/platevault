@@ -32,7 +32,7 @@ use crate::commands::lifecycle::AppState;
 ///
 /// Returns `Err(String)` with the contract error code on failure.
 #[tauri::command]
-#[specta::specta(rename = "plans.list")]
+#[specta::specta]
 pub async fn plans_list(
     state: State<'_, AppState>,
     state_filter: Option<Vec<String>>,
@@ -52,7 +52,7 @@ pub async fn plans_list(
 ///
 /// Returns `Err(String)` with `"plan.not_found"` if the plan does not exist.
 #[tauri::command]
-#[specta::specta(rename = "plans.get")]
+#[specta::specta]
 pub async fn plans_get(state: State<'_, AppState>, id: String) -> Result<PlanDetail, String> {
     get_plan(state.repo.pool(), &id).await.map_err(|e| e.code)
 }
@@ -66,7 +66,7 @@ pub async fn plans_get(state: State<'_, AppState>, id: String) -> Result<PlanDet
 /// Returns `Err(String)` with `"plan.not_found"`, `"plan.invalid_state"`, or
 /// `"plan.items.empty"` on failure.
 #[tauri::command]
-#[specta::specta(rename = "plans.approve")]
+#[specta::specta]
 pub async fn plans_approve(
     state: State<'_, AppState>,
     id: String,
@@ -87,7 +87,7 @@ pub async fn plans_approve(
 ///
 /// Returns `Err(String)` with `"plan.not_found"` or `"plan.in_progress"` on failure.
 #[tauri::command]
-#[specta::specta(rename = "plans.discard")]
+#[specta::specta]
 pub async fn plans_discard(
     state: State<'_, AppState>,
     id: String,
@@ -107,7 +107,7 @@ pub async fn plans_discard(
 /// Returns `Err(String)` with `"parent.not_found"`, `"parent.not_terminal"`,
 /// `"no.items.to.retry"`, or `"value.invalid"` on failure.
 #[tauri::command]
-#[specta::specta(rename = "plans.retry")]
+#[specta::specta]
 pub async fn plans_retry(
     state: State<'_, AppState>,
     parent_plan_id: String,
@@ -131,7 +131,7 @@ pub async fn plans_retry(
 ///
 /// Returns `Err(String)` with `"plan.not_found"` or `"archive.empty"` on failure.
 #[tauri::command]
-#[specta::specta(rename = "archive.send_to_trash")]
+#[specta::specta]
 pub async fn archive_send_to_trash(
     state: State<'_, AppState>,
     plan_id: String,
@@ -150,7 +150,7 @@ pub async fn archive_send_to_trash(
 /// Returns `Err(String)` with `"confirm.text.mismatch"`, `"plan.blocked_by_protection"`,
 /// `"plan.not_found"`, or `"archive.empty"` on failure.
 #[tauri::command]
-#[specta::specta(rename = "archive.permanently_delete")]
+#[specta::specta]
 pub async fn archive_permanently_delete(
     state: State<'_, AppState>,
     plan_id: String,

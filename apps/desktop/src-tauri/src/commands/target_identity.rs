@@ -32,7 +32,7 @@ use crate::commands::lifecycle::AppState;
 /// Returns `Err(TargetOpError)` with code `"target.not_found"` when the
 /// target does not exist.
 #[tauri::command]
-#[specta::specta(rename = "target.get")]
+#[specta::specta]
 pub async fn target_get(
     state: State<'_, AppState>,
     target_id: String,
@@ -48,7 +48,7 @@ pub async fn target_get(
 ///
 /// Returns `Err(TargetOpError)` with codes: `"target.not_found"`, `"note.too_long"`.
 #[tauri::command]
-#[specta::specta(rename = "target.note.update")]
+#[specta::specta]
 pub async fn target_note_update(
     state: State<'_, AppState>,
     req: TargetNoteUpdateRequest,
@@ -65,7 +65,7 @@ pub async fn target_note_update(
 /// Returns `Err(TargetOpError)` with codes: `"target.not_found"`, `"alias.invalid"`,
 /// `"alias.duplicate"`.
 #[tauri::command]
-#[specta::specta(rename = "target.alias.add")]
+#[specta::specta]
 pub async fn target_alias_add(
     state: State<'_, AppState>,
     req: TargetAliasAddRequest,
@@ -82,7 +82,7 @@ pub async fn target_alias_add(
 /// Returns `Err(TargetOpError)` with codes: `"target.not_found"`,
 /// `"alias.is_primary"`, `"alias.not_found"`.
 #[tauri::command]
-#[specta::specta(rename = "target.alias.remove")]
+#[specta::specta]
 pub async fn target_alias_remove(
     state: State<'_, AppState>,
     req: TargetAliasRemoveRequest,
@@ -99,7 +99,7 @@ pub async fn target_alias_remove(
 /// Returns `Err(TargetOpError)` with codes: `"target.not_found"`,
 /// `"designation.not_in_aliases"`, `"designation.already_primary"`.
 #[tauri::command]
-#[specta::specta(rename = "target.primary.rename")]
+#[specta::specta]
 pub async fn target_primary_rename(
     state: State<'_, AppState>,
     req: TargetPrimaryRenameRequest,

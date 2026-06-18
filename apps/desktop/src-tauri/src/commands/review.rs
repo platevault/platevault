@@ -14,7 +14,7 @@ use contracts_core::JsonAny;
 /// # Errors
 /// Returns `Err(String)` on failure; the stub never fails.
 #[tauri::command]
-#[specta::specta(rename = "review.queue")]
+#[specta::specta]
 pub async fn review_queue(filter: Option<String>) -> Result<Vec<ReviewItem>, String> {
     tracing::debug!("stub: review.queue filter={filter:?}");
     Ok(vec![

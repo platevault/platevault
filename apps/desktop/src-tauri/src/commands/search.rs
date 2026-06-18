@@ -18,7 +18,7 @@ use crate::AppState;
 /// # Errors
 /// Returns `Err(String)` on database failure.
 #[tauri::command]
-#[specta::specta(rename = "search.global")]
+#[specta::specta]
 pub async fn search_global(
     state: State<'_, AppState>,
     query: String,

@@ -20,7 +20,7 @@ use crate::commands::lifecycle::AppState;
 /// # Errors
 /// Returns `Err(String)` on failure; the stub never fails.
 #[tauri::command]
-#[specta::specta(rename = "roots.list")]
+#[specta::specta]
 pub async fn roots_list() -> Result<Vec<LibraryRoot>, String> {
     tracing::debug!("stub: roots.list");
     Ok(stub_roots())
@@ -36,7 +36,7 @@ pub async fn roots_list() -> Result<Vec<LibraryRoot>, String> {
 /// # Errors
 /// Returns `Err(String)` on path validation failure, duplicate, or DB error.
 #[tauri::command]
-#[specta::specta(rename = "roots.register")]
+#[specta::specta]
 pub async fn roots_register(
     state: State<'_, AppState>,
     path: String,
@@ -76,7 +76,7 @@ pub async fn roots_register(
 /// # Errors
 /// Returns `Err(String)` on failure; the stub never fails.
 #[tauri::command]
-#[specta::specta(rename = "roots.remap")]
+#[specta::specta]
 pub async fn roots_remap(root_id: String, new_path: String) -> Result<RemapVerification, String> {
     tracing::debug!("stub: roots.remap root_id={root_id} new_path={new_path}");
     Ok(RemapVerification {
@@ -97,7 +97,7 @@ pub async fn roots_remap(root_id: String, new_path: String) -> Result<RemapVerif
 /// # Errors
 /// Returns `Err(String)` on failure; the stub never fails.
 #[tauri::command]
-#[specta::specta(rename = "roots.remap.apply")]
+#[specta::specta]
 pub async fn roots_remap_apply(root_id: String, verified: bool) -> Result<(), String> {
     tracing::debug!("stub: roots.remap.apply root_id={root_id} verified={verified}");
     Ok(())
@@ -108,7 +108,7 @@ pub async fn roots_remap_apply(root_id: String, verified: bool) -> Result<(), St
 /// # Errors
 /// Returns `Err(String)` on failure; the stub never fails.
 #[tauri::command]
-#[specta::specta(rename = "scan.start")]
+#[specta::specta]
 pub async fn scan_start(root_ids: Option<Vec<String>>) -> Result<IpcOperationHandle, String> {
     tracing::debug!("stub: scan.start root_ids={root_ids:?}");
     Ok(IpcOperationHandle { operation_id: "op-scan-001".to_owned(), kind: "scan".to_owned() })
@@ -119,7 +119,7 @@ pub async fn scan_start(root_ids: Option<Vec<String>>) -> Result<IpcOperationHan
 /// # Errors
 /// Returns `Err(String)` on failure; the stub never fails.
 #[tauri::command]
-#[specta::specta(rename = "equipment.list")]
+#[specta::specta]
 pub async fn equipment_list() -> Result<Vec<Equipment>, String> {
     tracing::debug!("stub: equipment.list");
     Ok(vec![

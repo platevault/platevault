@@ -11,7 +11,7 @@ use contracts_core::JsonAny;
 /// # Errors
 /// Returns `Err(String)` on failure; the stub never fails.
 #[tauri::command]
-#[specta::specta(rename = "audit.list")]
+#[specta::specta]
 pub async fn audit_list(
     filters: Option<JsonAny>,
     pagination: Option<JsonAny>,
@@ -27,7 +27,7 @@ pub async fn audit_list(
 /// # Errors
 /// Returns `Err(String)` on failure; the stub never fails.
 #[tauri::command]
-#[specta::specta(rename = "audit.export")]
+#[specta::specta]
 pub async fn audit_export(filters: Option<JsonAny>) -> Result<String, String> {
     tracing::debug!("stub: audit.export filters={filters:?}");
     let entries = stub_audit_entries();

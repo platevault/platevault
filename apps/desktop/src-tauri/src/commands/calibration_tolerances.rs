@@ -10,7 +10,7 @@ use contracts_core::calibration_tolerances::{CalibrationTolerances, UpdateCalibr
 /// # Errors
 /// Returns `Err(String)` on failure; the stub never fails.
 #[tauri::command]
-#[specta::specta(rename = "calibration.tolerances.get")]
+#[specta::specta]
 pub async fn calibration_tolerances_get() -> Result<CalibrationTolerances, String> {
     tracing::debug!("stub: calibration.tolerances.get");
     Ok(default_tolerances())
@@ -21,7 +21,7 @@ pub async fn calibration_tolerances_get() -> Result<CalibrationTolerances, Strin
 /// # Errors
 /// Returns `Err(String)` on failure; the stub never fails.
 #[tauri::command]
-#[specta::specta(rename = "calibration.tolerances.update")]
+#[specta::specta]
 pub async fn calibration_tolerances_update(
     request: UpdateCalibrationTolerances,
 ) -> Result<CalibrationTolerances, String> {
