@@ -44,6 +44,18 @@ SIMBAD is trusted over TLS, no catalog signing/verification or hosted manifest i
 - Q: When ingesting images, how should OBJECT-header resolution against SIMBAD happen? → A: Asynchronous background queue — ingest never blocks; seed/cache hits resolve immediately, the long tail is enqueued and resolved in the background (images marked pending until resolved).
 - Q: Can the user manually override/correct a resolved target identity, and does it persist over SIMBAD? → A: Yes — a manual override is stored (source = user-override) and takes precedence over future SIMBAD/seed resolutions for that object.
 - Q: Should there be a settings toggle to enable/disable online SIMBAD resolution? → A: Yes — an enable/disable toggle, default ON; when disabled, resolution uses only the bundled seed + local cache.
+- Q: Is ingest `OBJECT`→target resolution exact-match or fuzzy/inferred? → A: Exact normalized designation/identifier match against cache/seed/SIMBAD only — no fuzzy or probabilistic matching. A value that does not match exactly (or is ambiguous across physical objects with no user selection) is marked unresolved/pending (FR-009). Because resolution is not inferential, no confidence score is attached (constitution §II "confidence levels where inference is used" is therefore N/A for this feature).
+
+## Iterations
+
+### Iteration 2026-06-18: close /speckit.analyze gaps (clarifications + coverage hardening)
+
+**Change**: Closed the gaps surfaced by `/speckit.analyze` — no scope change.
+**Scope**: Coverage hardening (spec clarification + tasks.md additions).
+**Artifacts updated**: spec.md (FR-008 exact-match wording + Clarifications entry), data-model.md (exact-match note + `source` serde-rename note), plan.md (command list: override folded into `target_resolve`), tasks.md (T003/T006/T035 append-only migration; T018 SC-001 <100 ms assertion; T039 audit emission added).
+**Tasks added**: T039 (audit events for resolve + user-override via `crates/audit`).
+**Tasks removed**: none.
+**Tasks marked complete**: none (implementation not started).
 
 ## User Scenarios & Testing *(mandatory)*
 
@@ -197,7 +209,11 @@ confirm only matching objects appear; remove the filter and confirm the full res
 - **FR-007**: The system MUST treat aliases of one physical object as a single canonical target
   (de-duplication), so a target is never split across alias variants or catalogues.
 - **FR-008**: During image ingest, the FITS `OBJECT` value MUST be resolved (via cache then SIMBAD)
-  and the image associated with the resulting canonical target.
+  and the image associated with the resulting canonical target. Resolution MUST be exact normalized
+  designation/identifier matching only (no fuzzy or probabilistic matching); a value with no exact
+  match — or one ambiguous across multiple physical objects with no user selection — MUST be marked
+  unresolved/pending per FR-009 rather than guessed. (No confidence score is attached because
+  resolution is not inferential.)
 - **FR-009**: When an `OBJECT` value or query cannot be resolved (unknown, malformed, or SIMBAD
   unreachable), the system MUST mark it unresolved/pending — never fabricate coordinates and never
   mis-assign — and MUST allow later retry.

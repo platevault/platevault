@@ -90,7 +90,7 @@ crates/
 
 apps/desktop/
 ├── src-tauri/src/commands/
-│   └── targets.rs                 # Tauri commands: target_search, target_resolve, target_override, resolver_settings(_update)
+│   └── targets.rs                 # Tauri commands: target_search, target_resolve (override via its `override` field), resolver_settings(_update)
 └── src/
     ├── components/                # target search/typeahead (debounced) + optional catalogue/type filter
     └── settings/                  # resolver settings (enable toggle, endpoint, cache) — replaces catalog manifest UI

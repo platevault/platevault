@@ -15,7 +15,7 @@ description: "Task list for SIMBAD Target Resolution (spec 035)"
 
 - [ ] T001 Create `crates/targeting/src/resolver/` module (`mod.rs`, `simbad.rs`, `cache.rs`, `seed.rs`) and register `pub mod resolver;` in `crates/targeting/src/lib.rs`
 - [ ] T002 Add `reqwest` (+ `tokio`, `serde`, `serde_json` if missing) to `crates/targeting/Cargo.toml` for the SIMBAD client; behind the `Resolver` trait
-- [ ] T003 [P] Create migration `crates/persistence/db/migrations/0017_target_resolution.sql` scaffold (supersedes the catalog-download tables in `0016_catalogs.sql`)
+- [ ] T003 [P] Create a NEW append-only migration `crates/persistence/db/migrations/0017_target_resolution.sql` scaffold. Append-only: do NOT edit or delete the prior `0016_catalogs.sql`; `0017` both creates the resolution tables and (T006) drops the superseded catalog tables via `DROP TABLE IF EXISTS` so it is safe whether or not `0016` was ever applied.
 
 ---
 
@@ -25,7 +25,7 @@ description: "Task list for SIMBAD Target Resolution (spec 035)"
 
 - [ ] T004 Define `Resolver` trait + `ResolveError` + `FakeResolver` in `crates/targeting/src/resolver/mod.rs` (no-network test seam, mirrors retired `download::CatalogFetcher`)
 - [ ] T005 [P] Implement SIMBAD `otype` → closed `ObjectType` enum mapping in `crates/targeting/src/resolver/mod.rs`
-- [ ] T006 Implement the resolution-cache + resolver-settings schema in `0017_target_resolution.sql` (`canonical_target`, `target_alias`, `resolver_settings`, `ingest_resolution`) per data-model.md
+- [ ] T006 Implement the resolution-cache + resolver-settings schema in `0017_target_resolution.sql` (`canonical_target`, `target_alias`, `resolver_settings`, `ingest_resolution`) per data-model.md, and in the same forward migration `DROP TABLE IF EXISTS` the superseded `0016_catalogs.sql` tables (forward-only; never edit `0016`)
 - [ ] T007 [P] Add `target.search` / `target.resolve` / resolver-settings DTOs to `crates/contracts/core/src/targets.rs` (camelCase, `specta::Type`) and regenerate TS bindings (`apps/desktop/src/bindings/index.ts`)
 - [ ] T008 Implement cache read/write + dedupe-by-`simbad_oid` + source precedence (`user-override` > `resolved` > `seed`) in `crates/targeting/src/resolver/cache.rs`
 - [ ] T009 [P] Contract conformance test scaffold in `tests/contract/target_resolution_parity_test.rs` (DTO ↔ JSON-schema round-trip parity for the 3 contracts)
@@ -53,7 +53,7 @@ description: "Task list for SIMBAD Target Resolution (spec 035)"
 - [ ] T015 [US2] One-time seed build script (offline; SIMBAD acronym map + OpenNGC for NGC/IC; CaldwellMap) → `assets/seed/` artifact, in `scripts/`
 - [ ] T016 [US2] Bundled-seed loader (load asset into cache at first run, `source=seed`) in `crates/targeting/src/resolver/seed.rs`
 - [ ] T017 [P] [US2] Commit the static C1–C109 → NGC/IC `CaldwellMap` + loader (Caldwell not in SIMBAD) in `crates/targeting/src/resolver/`
-- [ ] T018 [P] [US2] Test: first-run seed load populates cache; offline typeahead for seeded objects works (`tests/contract` or crate test with bundled fixture)
+- [ ] T018 [P] [US2] Test: first-run seed load populates cache; offline typeahead for seeded objects works (`tests/contract` or crate test with bundled fixture). MUST assert SC-001: seeded typeahead returns suggestions in < 100 ms with no network call (measure against the seeded-cache fixture; resolver online path not invoked).
 
 ---
 
@@ -99,8 +99,9 @@ description: "Task list for SIMBAD Target Resolution (spec 035)"
 ## Phase 8: Polish & Cross-Cutting (retire superseded surface)
 
 - [ ] T034 Remove the superseded catalog-download surface: `crates/targeting/catalogs/src/download.rs` + `loader.rs` machinery, the `catalog.*` Tauri commands, and `catalog.download.*` event topics (per the 002/003/013/014/018/033 reconciliation)
-- [ ] T035 [P] Remove the spec-014 contracts (`catalog.manifest.fetch` / `catalog.download` / `catalog.entry-file`) + the `0016_catalogs.sql` tables (drop migration) + regenerate TS bindings
+- [ ] T035 [P] Remove the spec-014 contracts (`catalog.manifest.fetch` / `catalog.download` / `catalog.entry-file`) + regenerate TS bindings. The `0016_catalogs.sql` tables are removed by the forward `DROP TABLE IF EXISTS` in `0017` (T006) — do NOT edit or delete the `0016` migration file itself.
 - [ ] T036 [P] Attribution/NOTICE surface for CDS/SIMBAD + OpenNGC (FR-012) in the app's notices
+- [ ] T039 [P] Emit audit events for resolution outcomes via `crates/audit`: a `target.resolved` audit record (source `resolved`) wired into the `target.resolve` use-case (T020) and a `target.user-override` audit record wired into the manual-override action (T032). Honors plan.md §II/§V and constitution §V (durable audit record for resolution + override). Test: resolving and overriding each write one audit row.
 - [ ] T037 [P] `just lint` + `cargo clippy --workspace -D warnings` + `cargo fmt --all --check` + `just test` green; quickstart S1–S5 pass
 - [ ] T038 Windows verify (push → pull → recompile → restart → exercise search/ingest/settings) per `spec-033-windows-verify-loop`
 
@@ -113,7 +114,7 @@ description: "Task list for SIMBAD Target Resolution (spec 035)"
 - **US3 (T019–T024)** depends on Foundational + the `Resolver` trait; independent of US1/US2 UI.
 - **US4 (T025–T028)** depends on `target.resolve` (T020) for the queue's resolve step; otherwise independent.
 - **US5 (T029–T033)** depends on `target.search` (US1) for the filter and on settings/cache; override depends on cache (T008).
-- **Polish (T034–T038)** runs after the resolver surface replaces the catalog-download surface.
+- **Polish (T034–T039)** runs after the resolver surface replaces the catalog-download surface. Audit emission (T039) depends on `target.resolve` (T020) and the override action (T032).
 
 ## Parallel Execution Examples
 

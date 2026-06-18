@@ -18,7 +18,7 @@ The stable identity for one physical object.
 | `primary_designation` | string | Canonical display designation (precedence table, spec 013). |
 | `object_type` | ObjectType | Closed enum (galaxy, planetary_nebula, …, other) from SIMBAD `otype` mapping. |
 | `ra_deg` / `dec_deg` | f64 | ICRS J2000 coordinates (decimal degrees, from SIMBAD `basic`). |
-| `source` | enum `seed`\|`resolved`\|`user-override` | Provenance of the current identity (FR-006/014). |
+| `source` | enum `seed`\|`resolved`\|`user-override` | Provenance of the current identity (FR-006/014). Rust variant `UserOverride` serializes with `#[serde(rename = "user-override")]`; the hyphenated form is the wire/DB value across all three contracts (DTO↔wire parity, T009). |
 | `resolved_at` | string (RFC 3339) | When this entry was last resolved/seeded/overridden. |
 
 Invariants:
@@ -64,7 +64,9 @@ Tracks async resolution of FITS `OBJECT` values during ingest (FR-013).
 | `attempts` | int | Retry count (for later retry of `unresolved`). |
 
 Invariants: a resolved row associates the image to exactly one `CanonicalTarget`; `unresolved` rows
-are retryable and never silently mis-assigned (FR-009).
+are retryable and never silently mis-assigned (FR-009). Matching is **exact normalized
+designation/identifier** only (no fuzzy/probabilistic match, no confidence score, FR-008): a
+non-matching or ambiguous `object_raw` stays `unresolved` rather than being guessed.
 
 ### CaldwellMap (static, bundled)
 
