@@ -29,15 +29,87 @@ pub struct DiscoveryResult {
 
 // ── macOS ─────────────────────────────────────────────────────────────────────
 
+/// Known tools: `(tool_id, CFBundleIdentifier, executable name inside Contents/MacOS)`.
+#[cfg(target_os = "macos")]
+const MACOS_TOOLS: &[(&str, &str, &str)] = &[
+    ("pixinsight", "com.pixinsight.PixInsight", "PixInsight"),
+    ("siril", "org.free-astro.siril", "Siril"),
+    ("startools", "com.startools.startools", "StarTools"),
+];
+
 #[cfg(target_os = "macos")]
 #[must_use]
 pub fn discover_all() -> Vec<DiscoveryResult> {
-    let candidates: &[(&str, &str)] = &[
-        ("pixinsight", "/Applications/PixInsight/PixInsight.app/Contents/MacOS/PixInsight"),
-        ("siril", "/Applications/Siril.app/Contents/MacOS/Siril"),
-        ("startools", "/Applications/StarTools.app/Contents/MacOS/StarTools"),
+    // Application-based detection: ask Launch Services / Spotlight where the app is
+    // (by bundle id), so a `.app` is found wherever the user keeps it; fall back to
+    // scanning the standard Applications folders. `dedup_by_tool` keeps the first match.
+    let mut results: Vec<DiscoveryResult> = Vec::new();
+    results.extend(spotlight_discover());
+    results.extend(applications_scan());
+    dedup_by_tool(results)
+}
+
+/// Resolve installed apps via Spotlight: `mdfind` by `CFBundleIdentifier` returns the
+/// `.app` bundle path regardless of install location.
+#[cfg(target_os = "macos")]
+fn spotlight_discover() -> Vec<DiscoveryResult> {
+    use std::process::Command;
+    let mut results: Vec<DiscoveryResult> = Vec::new();
+    for &(tool_id, bundle_id, exe) in MACOS_TOOLS {
+        let query = format!("kMDItemCFBundleIdentifier == '{bundle_id}'");
+        let Ok(out) = Command::new("mdfind").arg(&query).output() else { continue };
+        if !out.status.success() {
+            continue;
+        }
+        let stdout = String::from_utf8_lossy(&out.stdout);
+        for line in stdout.lines() {
+            let app = line.trim();
+            if app.is_empty() {
+                continue;
+            }
+            let exe_path = Path::new(app).join("Contents").join("MacOS").join(exe);
+            if exe_path.exists() {
+                results.push(DiscoveryResult {
+                    tool_id: tool_id.to_owned(),
+                    available: true,
+                    path: exe_path,
+                });
+                break; // first hit per tool is enough
+            }
+        }
+    }
+    results
+}
+
+/// Fallback: scan `/Applications` and `~/Applications` for the known `.app` names.
+#[cfg(target_os = "macos")]
+fn applications_scan() -> Vec<DiscoveryResult> {
+    let mut dirs: Vec<PathBuf> = vec![PathBuf::from("/Applications")];
+    if let Ok(home) = std::env::var("HOME") {
+        dirs.push(Path::new(&home).join("Applications"));
+    }
+    // (tool_id, relative `.app` path under the dir, exe). PixInsight historically nests
+    // under `PixInsight/PixInsight.app`; the flat form is kept as a fallback.
+    let apps: &[(&str, &str, &str)] = &[
+        ("pixinsight", "PixInsight/PixInsight.app", "PixInsight"),
+        ("pixinsight", "PixInsight.app", "PixInsight"),
+        ("siril", "Siril.app", "Siril"),
+        ("startools", "StarTools.app", "StarTools"),
     ];
-    probe_candidates(candidates)
+    let mut results: Vec<DiscoveryResult> = Vec::new();
+    for dir in &dirs {
+        for &(tool_id, app, exe) in apps {
+            let p = dir.join(app).join("Contents").join("MacOS").join(exe);
+            if p.exists() {
+                results.push(DiscoveryResult {
+                    tool_id: tool_id.to_owned(),
+                    available: true,
+                    path: p,
+                });
+            }
+        }
+    }
+    results
 }
 
 // ── Linux ─────────────────────────────────────────────────────────────────────
@@ -45,24 +117,102 @@ pub fn discover_all() -> Vec<DiscoveryResult> {
 #[cfg(target_os = "linux")]
 #[must_use]
 pub fn discover_all() -> Vec<DiscoveryResult> {
+    // Application-based detection: PATH (the canonical CLI mechanism, great for Siril),
+    // the freedesktop `.desktop` registry (the standard "installed apps" index — covers
+    // non-standard locations), plus known install dirs and Flatpak/Snap export wrappers.
     let candidates: &[(&str, &str)] = &[
         ("pixinsight", "/opt/PixInsight/bin/PixInsight"),
         ("pixinsight", "/usr/local/bin/PixInsight"),
         ("siril", "/usr/bin/siril"),
         ("siril", "/usr/local/bin/siril"),
         ("siril", "/snap/bin/siril"),
+        // Flatpak export wrappers are directly executable (they shell out to `flatpak run`).
+        ("siril", "/var/lib/flatpak/exports/bin/org.free_astro.Siril"),
         ("startools", "/usr/bin/startools"),
         ("startools", "/usr/local/bin/startools"),
     ];
     let mut results = probe_candidates(candidates);
-    // Also check PATH
+    // PATH search.
     results.extend(discover_from_path(&[
         ("pixinsight", "PixInsight"),
         ("siril", "siril"),
         ("startools", "startools"),
     ]));
-    // Deduplicate: keep first found per tool_id
+    // `.desktop` registry scan (resolves apps installed to non-standard locations).
+    results.extend(desktop_file_discover());
+    // Deduplicate: keep first found per tool_id.
     dedup_by_tool(results)
+}
+
+/// Scan freedesktop `.desktop` files (system + per-user + Flatpak/Snap export dirs),
+/// match by filename/`Exec`, and resolve the `Exec` command to an absolute binary.
+/// Flatpak/Snap *launcher* commands (`flatpak run …` / `snap run …`) are skipped here —
+/// those are covered by their directly-executable export wrappers in the candidate list,
+/// because a launcher command does not map to a single tool executable path.
+#[cfg(target_os = "linux")]
+fn desktop_file_discover() -> Vec<DiscoveryResult> {
+    // (tool_id, lowercase name substring)
+    let tools: &[(&str, &str)] =
+        &[("pixinsight", "pixinsight"), ("siril", "siril"), ("startools", "startools")];
+
+    let mut dirs: Vec<PathBuf> = vec![
+        PathBuf::from("/usr/share/applications"),
+        PathBuf::from("/usr/local/share/applications"),
+        PathBuf::from("/var/lib/flatpak/exports/share/applications"),
+        PathBuf::from("/var/lib/snapd/desktop/applications"),
+    ];
+    if let Ok(home) = std::env::var("HOME") {
+        dirs.push(Path::new(&home).join(".local/share/applications"));
+        dirs.push(Path::new(&home).join(".local/share/flatpak/exports/share/applications"));
+    }
+
+    let mut results: Vec<DiscoveryResult> = Vec::new();
+    for dir in &dirs {
+        let Ok(entries) = std::fs::read_dir(dir) else { continue };
+        for entry in entries.flatten() {
+            let path = entry.path();
+            if path.extension().and_then(|e| e.to_str()) != Some("desktop") {
+                continue;
+            }
+            let fname = path.file_name().and_then(|n| n.to_str()).unwrap_or("").to_lowercase();
+            let Ok(contents) = std::fs::read_to_string(&path) else { continue };
+            let Some(exec_line) = contents.lines().find(|l| l.trim_start().starts_with("Exec="))
+            else {
+                continue;
+            };
+            let exec = exec_line.trim_start().trim_start_matches("Exec=").trim();
+            let cmd = exec.split_whitespace().next().unwrap_or("");
+            // Skip launcher commands — their export wrappers are probed separately.
+            if cmd.is_empty() || cmd == "flatpak" || cmd == "snap" {
+                continue;
+            }
+            let cmd_lower = cmd.to_lowercase();
+            for &(tool_id, name_sub) in tools {
+                if fname.contains(name_sub) || cmd_lower.contains(name_sub) {
+                    if let Some(abs) = resolve_executable(cmd) {
+                        results.push(DiscoveryResult {
+                            tool_id: tool_id.to_owned(),
+                            available: true,
+                            path: abs,
+                        });
+                    }
+                }
+            }
+        }
+    }
+    results
+}
+
+/// Resolve a `.desktop` `Exec` command to an absolute path: absolute as-is, otherwise
+/// searched on `PATH`.
+#[cfg(target_os = "linux")]
+fn resolve_executable(cmd: &str) -> Option<PathBuf> {
+    let p = Path::new(cmd);
+    if p.is_absolute() {
+        return p.exists().then(|| p.to_path_buf());
+    }
+    let path_var = std::env::var("PATH").ok()?;
+    path_var.split(':').map(|dir| Path::new(dir).join(cmd)).find(|c| c.exists())
 }
 
 // ── Windows ───────────────────────────────────────────────────────────────────
@@ -228,7 +378,7 @@ fn discover_from_path(names: &[(&'static str, &str)]) -> Vec<DiscoveryResult> {
     results
 }
 
-#[cfg(any(target_os = "linux", target_os = "windows"))]
+#[cfg(any(target_os = "linux", target_os = "windows", target_os = "macos"))]
 fn dedup_by_tool(items: Vec<DiscoveryResult>) -> Vec<DiscoveryResult> {
     let mut seen = std::collections::HashSet::new();
     items.into_iter().filter(|r| seen.insert(r.tool_id.clone())).collect()
