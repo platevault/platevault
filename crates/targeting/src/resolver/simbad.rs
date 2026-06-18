@@ -49,6 +49,11 @@ pub const DEFAULT_TAP_ENDPOINT: &str = "https://simbad.cds.unistra.fr/simbad/sim
 /// Polite identifying `User-Agent` (CDS norm).
 pub const DEFAULT_USER_AGENT: &str = "astro-plan/0.1 (+https://github.com/; spec-035 resolver)";
 
+/// Hard cap on a single TAP response body (FIX-5b). A resolve query targets one
+/// object plus its alias list; even rich objects are well under 1 MB, so 8 MB is
+/// a generous bound that still prevents memory exhaustion from a hostile body.
+const MAX_RESPONSE_BYTES: u64 = 8 * 1024 * 1024;
+
 /// Configuration for a [`SimbadResolver`].
 ///
 /// Built from the persisted `resolver_settings` row by the use-case layer
@@ -127,8 +132,31 @@ impl SimbadResolver {
         );
         let resp =
             self.client.get(&url).send().await.map_err(|e| classify_reqwest(&e, self.timeout))?;
-        let resp = resp.error_for_status().map_err(|e| classify_reqwest(&e, self.timeout))?;
-        let body = resp.text().await.map_err(|e| classify_reqwest(&e, self.timeout))?;
+        let mut resp =
+            resp.error_for_status().map_err(|e| classify_reqwest(&e, self.timeout))?;
+
+        // FIX-5b: bound the response read. Reject an advertised oversize body up
+        // front, then stream chunks with a hard cap so a misbehaving/hostile
+        // endpoint can't exhaust memory with an unbounded `text()`.
+        if let Some(len) = resp.content_length() {
+            if len > MAX_RESPONSE_BYTES {
+                return Err(ResolveError::Parse(format!(
+                    "SIMBAD response too large ({len} bytes > {MAX_RESPONSE_BYTES} cap)"
+                )));
+            }
+        }
+        let mut buf: Vec<u8> = Vec::new();
+        let mut total: u64 = 0;
+        while let Some(chunk) = resp.chunk().await.map_err(|e| classify_reqwest(&e, self.timeout))? {
+            total += chunk.len() as u64;
+            if total > MAX_RESPONSE_BYTES {
+                return Err(ResolveError::Parse(format!(
+                    "SIMBAD response exceeded {MAX_RESPONSE_BYTES} byte cap"
+                )));
+            }
+            buf.extend_from_slice(&chunk);
+        }
+        let body = String::from_utf8_lossy(&buf).into_owned();
 
         // A TAP error is returned as a VOTable/text body with HTTP 200 in some
         // cases; treat an obviously non-tabular error body as a parse error.
@@ -210,7 +238,19 @@ impl Resolver for SimbadResolver {
             return Err(ResolveError::NotFound(String::new()));
         }
 
-        let objects = self.find_objects(query).await?;
+        // FIX-2: Caldwell is NOT a SIMBAD designation. Translate a Caldwell query
+        // (`C 14`, `Caldwell 14`) to its NGC/IC designation via the committed map,
+        // resolve THAT, and attach the original `C n` as an alias. C99 (the
+        // Coalsack) maps to None → NotFound (no single resolvable designation).
+        let (simbad_query, caldwell_alias) = match parse_caldwell_number(query) {
+            Some(n) => match crate::resolver::caldwell::caldwell_to_designation(n) {
+                Some(desig) => (desig.to_owned(), Some(format!("C {n}"))),
+                None => return Err(ResolveError::NotFound(query.to_owned())),
+            },
+            None => (query.to_owned(), None),
+        };
+
+        let objects = self.find_objects(&simbad_query).await?;
         match objects.len() {
             0 => Err(ResolveError::NotFound(query.to_owned())),
             1 => {
@@ -219,6 +259,11 @@ impl Resolver for SimbadResolver {
                 let (mut aliases, common_name) = self.fetch_aliases(oid).await?;
                 // Guarantee the primary designation is present as a designation alias.
                 push_unique(&mut aliases, &primary_designation, AliasKind::Designation);
+                // FIX-2: bind the original Caldwell designation so future lookups
+                // of `C n` are cache hits pointing at this object.
+                if let Some(c) = &caldwell_alias {
+                    push_unique(&mut aliases, c, AliasKind::Designation);
+                }
 
                 Ok(ResolvedIdentity {
                     simbad_oid: Some(oid),
@@ -234,6 +279,41 @@ impl Resolver for SimbadResolver {
             n => Err(ResolveError::Ambiguous { query: query.to_owned(), count: n }),
         }
     }
+}
+
+/// A zero-cost [`Resolver`] that never reaches the network (FIX-3).
+///
+/// Used when online resolution is disabled in settings, so the command layer
+/// can run the cache-first use case without constructing a `reqwest`/TLS client.
+/// Every call reports [`ResolveError::Disabled`], which the use case maps to an
+/// `unresolved("offline")` outcome (FR-015).
+pub struct OfflineResolver;
+
+#[async_trait]
+impl Resolver for OfflineResolver {
+    async fn resolve(&self, _query: &str) -> Result<ResolvedIdentity, ResolveError> {
+        Err(ResolveError::Disabled)
+    }
+}
+
+/// Detect a Caldwell query and extract its number.
+///
+/// Recognizes the normalized prefix forms `c <n>` / `caldwell <n>` (spec-013
+/// `normalize` expands `C14`→`c 14`, `Caldwell14`→`caldwell 14`). Returns the
+/// Caldwell number when the query is a bare Caldwell designation, else `None`.
+fn parse_caldwell_number(query: &str) -> Option<u16> {
+    let norm = crate::normalize::normalize(query);
+    let mut parts = norm.split_whitespace();
+    let prefix = parts.next()?;
+    if prefix != "c" && prefix != "caldwell" {
+        return None;
+    }
+    let num: u16 = parts.next()?.parse().ok()?;
+    // Reject trailing tokens (e.g. "c 14 foo") so only bare designations match.
+    if parts.next().is_some() {
+        return None;
+    }
+    Some(num)
 }
 
 // ── Helpers (ported from the seed-builder, T015) ─────────────────────────────────
@@ -259,6 +339,14 @@ fn parse_basic_row(line: &str) -> Option<(i64, String, f64, f64, String)> {
     let ra: f64 = unquote(cols[2]).parse().ok()?;
     let dec: f64 = unquote(cols[3]).parse().ok()?;
     let otype = unquote(cols[4]);
+    // FIX-5c: range-validate ICRS coords so an out-of-range value degrades to a
+    // no-result row (NotFound) instead of hitting the DB CHECK on cache write.
+    if !ra.is_finite() || !(0.0..360.0).contains(&ra) {
+        return None;
+    }
+    if !dec.is_finite() || !(-90.0..=90.0).contains(&dec) {
+        return None;
+    }
     Some((oid, main_id, ra, dec, otype))
 }
 
@@ -363,5 +451,33 @@ mod tests {
     fn resolver_builds_from_config() {
         let r = SimbadResolver::new(&SimbadConfig::default());
         assert!(r.is_ok());
+    }
+
+    // ── FIX-2: Caldwell query detection + translation ──────────────────────────
+
+    #[test]
+    fn parse_caldwell_number_recognizes_forms() {
+        assert_eq!(parse_caldwell_number("C 14"), Some(14));
+        assert_eq!(parse_caldwell_number("C14"), Some(14));
+        assert_eq!(parse_caldwell_number("Caldwell 14"), Some(14));
+        assert_eq!(parse_caldwell_number("caldwell14"), Some(14));
+    }
+
+    #[test]
+    fn parse_caldwell_number_rejects_non_caldwell() {
+        assert_eq!(parse_caldwell_number("M 31"), None);
+        assert_eq!(parse_caldwell_number("NGC 224"), None);
+        // A common name starting with C must not be mistaken for Caldwell.
+        assert_eq!(parse_caldwell_number("Cassiopeia"), None);
+        assert_eq!(parse_caldwell_number("C 14 extra"), None);
+    }
+
+    #[test]
+    fn caldwell_translates_to_resolvable_designation() {
+        // C 14 → the Double Cluster (NGC 869) per the committed map.
+        let n = parse_caldwell_number("C 14").unwrap();
+        assert!(crate::resolver::caldwell::caldwell_to_designation(n).is_some());
+        // C 99 (Coalsack) has no single resolvable designation → None.
+        assert_eq!(crate::resolver::caldwell::caldwell_to_designation(99), None);
     }
 }

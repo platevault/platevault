@@ -33,6 +33,37 @@ fn defaults() -> ResolverSettings {
     }
 }
 
+/// Validate a resolver endpoint URL (FIX-5a).
+///
+/// Accepts `https://…`; accepts `http://…` ONLY when the host is loopback
+/// (`localhost`, `127.0.0.1`, `[::1]`). Anything else is a Blocking
+/// `ContractError` so an insecure or malformed endpoint never reaches the
+/// network layer. (No `url` crate in the workspace, so this is a focused manual
+/// check sufficient for the scheme/host policy.)
+#[allow(clippy::result_large_err)] // ContractError is the project-wide error DTO
+fn validate_endpoint(endpoint: &str) -> Result<(), ContractError> {
+    fn reject(msg: &str) -> ContractError {
+        ContractError::new("resolver.endpoint_invalid", msg, ErrorSeverity::Blocking, false)
+    }
+
+    if let Some(rest) = endpoint.strip_prefix("https://") {
+        if rest.is_empty() {
+            return Err(reject("simbad_endpoint is missing a host"));
+        }
+        return Ok(());
+    }
+    if let Some(rest) = endpoint.strip_prefix("http://") {
+        // Host is everything up to the first '/', ':', or end.
+        let host = rest.split(['/', ':']).next().unwrap_or("");
+        let is_loopback = host == "localhost" || host == "127.0.0.1" || host == "[::1]";
+        if is_loopback {
+            return Ok(());
+        }
+        return Err(reject("simbad_endpoint over http is only allowed for localhost; use https"));
+    }
+    Err(reject("simbad_endpoint must be an https URL (http allowed only for localhost)"))
+}
+
 /// Read the singleton `resolver_settings` row.
 async fn read_row(pool: &SqlitePool) -> Result<ResolverSettings, ContractError> {
     let row: Option<(i64, String, i64, i64)> = sqlx::query_as(
@@ -85,6 +116,12 @@ pub async fn update(
     req: &ResolverSettingsUpdateRequest,
 ) -> Result<ResolverSettingsResponse, ContractError> {
     let s = &req.settings;
+
+    // FIX-5a: validate the endpoint is an HTTPS URL (HTTP allowed only for
+    // localhost) before persisting, so a bad/insecure endpoint is rejected up
+    // front rather than failing opaquely at resolve time.
+    validate_endpoint(&s.simbad_endpoint)?;
+
     let debounce_ms = i64::from(s.debounce_ms.max(1));
     let timeout_secs = i64::from(s.request_timeout_secs.max(1));
 
@@ -187,5 +224,47 @@ mod tests {
         let resp = update(db.pool(), &upd).await.unwrap();
         assert_eq!(resp.settings.debounce_ms, 1);
         assert_eq!(resp.settings.request_timeout_secs, 1);
+    }
+
+    // ── FIX-5a: endpoint URL validation ────────────────────────────────────────
+
+    fn upd_with_endpoint(endpoint: &str) -> ResolverSettingsUpdateRequest {
+        ResolverSettingsUpdateRequest {
+            contract_version: "1.0".into(),
+            request_id: "req-ep".into(),
+            op: "update".into(),
+            settings: ResolverSettings {
+                online_enabled: true,
+                simbad_endpoint: endpoint.into(),
+                debounce_ms: 300,
+                request_timeout_secs: 10,
+            },
+        }
+    }
+
+    #[tokio::test]
+    async fn update_accepts_https_and_localhost_http() {
+        let db = setup().await;
+        assert!(update(db.pool(), &upd_with_endpoint("https://simbad.cds.unistra.fr/x")).await.is_ok());
+        assert!(update(db.pool(), &upd_with_endpoint("http://localhost:8080/tap")).await.is_ok());
+        assert!(update(db.pool(), &upd_with_endpoint("http://127.0.0.1/tap")).await.is_ok());
+    }
+
+    #[tokio::test]
+    async fn update_rejects_insecure_or_malformed_endpoint() {
+        let db = setup().await;
+        for bad in ["http://evil.example/tap", "ftp://x/y", "not-a-url", "https://"] {
+            let err = update(db.pool(), &upd_with_endpoint(bad)).await;
+            assert!(err.is_err(), "endpoint '{bad}' must be rejected");
+            assert_eq!(err.unwrap_err().code, "resolver.endpoint_invalid");
+        }
+    }
+
+    #[test]
+    fn validate_endpoint_unit() {
+        assert!(validate_endpoint("https://a.b/c").is_ok());
+        assert!(validate_endpoint("http://localhost/x").is_ok());
+        assert!(validate_endpoint("http://example.com/x").is_err());
+        assert!(validate_endpoint("https://").is_err());
     }
 }

@@ -108,3 +108,32 @@ To do the Windows verify yourself:
 **Open PRs awaiting your review/merge:** #250 (spec 035, draft — mark ready when you've reviewed the
 gaps above), #251 (calibration source-kind flatten), #309 (apm setup-speckit fix — already merged;
 release PR #310 bumps speckit 0.1.2).
+
+## PHASE 3 QUALITY-GATE FINDINGS (verify / code-review / security) + fixes
+
+Ran the mandatory Phase-3 gates (verify FR/SC, code-review, security-audit) after implementation.
+Real bugs found (the gates earned their keep — these were integration gaps the per-task build missed):
+
+- **CRITICAL — bundled seed never loaded at app startup.** `load_bundled_on_first_run` existed +
+  unit-tested but was not called in `main.rs`/`lib.rs`, so a fresh/offline install had an empty cache
+  → US2 / FR-002 / FR-003 / FR-011 / SC-001 / SC-005 silently non-functional in the running app.
+  **→ FIXED** (wired into startup after migrations).
+- **H1 — Caldwell live-resolve broken.** `caldwell_to_designation` was only used by the seed-builder;
+  the live `SimbadResolver` sent raw `C n` to SIMBAD (which doesn't know Caldwell) → `NotFound` for
+  non-seeded Caldwell objects (breaks R2). **→ FIXED** (translate Caldwell→NGC/IC in resolve).
+- **H2** — `target.resolve` command built a SimbadResolver even when online disabled. **→ FIXED**
+  (gate on `online_enabled`).
+- **M2** — ingest drain burned `attempts` on transient `Network`/`Timeout` errors. **→ FIXED**
+  (transient → stays `pending`, no attempt increment; only real misses → `unresolved`).
+- **L4** — `AbortController` in TargetSearch was decorative (signal never wired; cancel-in-flight
+  actually works via the generation guard). **→ FIXED** (removed dead machinery).
+- **Security** — ADQL escaping is CORRECT and not exploitable (quote-doubling + percent-encode); all
+  SQL is sqlx-parameterized; LIKE wildcards escaped; response parsing panic-free, never fabricates
+  coords. Two low hardening items applied: https-scheme validation on user-set `simbad_endpoint`,
+  bounded response read.
+- Minor: frontend endpoint default aligned to `.../sim-tap/sync`. `common_name` non-determinism +
+  `map_otype` NGC 7000→OpenCluster remain accepted cosmetic notes.
+
+The two pre-logged gaps (US1 project↔target persistence; US4 not wired to a live per-image ingest
+pipeline / spec-002) are **still open and need your input** — they were confirmed by the verify gate,
+not fixed here (cross-spec scope decisions).

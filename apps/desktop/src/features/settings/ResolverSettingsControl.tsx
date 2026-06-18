@@ -22,7 +22,7 @@ import {
 
 const DEFAULT_SETTINGS: ResolverSettings = {
   onlineEnabled: true,
-  simbadEndpoint: 'https://simbad.cds.unistra.fr/simbad/sim-tap',
+  simbadEndpoint: 'https://simbad.cds.unistra.fr/simbad/sim-tap/sync',
   debounceMs: 300,
   requestTimeoutSecs: 10,
 };

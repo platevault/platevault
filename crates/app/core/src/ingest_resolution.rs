@@ -222,6 +222,9 @@ pub struct DrainSummary {
     pub considered: usize,
     pub resolved: usize,
     pub unresolved: usize,
+    /// Rows left `pending` due to a transient/offline condition (no `attempts`
+    /// increment) — retried on the next drain pass (FIX-4).
+    pub pending: usize,
 }
 
 /// Drain the pending ingest-resolution queue, resolving each row via the
@@ -272,6 +275,7 @@ pub async fn resolve_pending<R: Resolver + ?Sized>(
     let considered = pending.len();
     let mut num_resolved = 0usize;
     let mut num_unresolved = 0usize;
+    let mut num_pending = 0usize;
 
     for row in pending {
         let norm = normalize(row.object_raw.trim());
@@ -286,10 +290,11 @@ pub async fn resolve_pending<R: Resolver + ?Sized>(
             continue;
         }
 
-        // 2) Miss → online resolve when enabled.
+        // 2) Miss → online resolve when enabled. FIX-4: when online is disabled
+        // this is a transient/offline condition (config or outage), NOT a real
+        // content miss — leave the row `pending` and do NOT burn the retry budget.
         if !online_enabled {
-            mark_unresolved(pool, &row.id, row.attempts).await?;
-            num_unresolved += 1;
+            num_pending += 1;
             continue;
         }
 
@@ -306,15 +311,15 @@ pub async fn resolve_pending<R: Resolver + ?Sized>(
                 }
                 num_resolved += 1;
             }
-            Err(
-                ResolveError::NotFound(_)
-                | ResolveError::Ambiguous { .. }
-                | ResolveError::Network(_)
-                | ResolveError::Timeout(_)
-                | ResolveError::Disabled
-                | ResolveError::Parse(_),
-            ) => {
-                // Never fabricate (FR-009); leave retryable.
+            // FIX-4: transient/offline failures (SIMBAD outage, timeout, disabled)
+            // leave the row `pending` with attempts UNCHANGED, so a single outage
+            // during a large ingest doesn't exhaust the retry budget on every row.
+            Err(ResolveError::Network(_) | ResolveError::Timeout(_) | ResolveError::Disabled) => {
+                num_pending += 1;
+            }
+            // Genuine content misses (unknown / ambiguous / malformed response)
+            // → unresolved + attempts++ (retryable later); never fabricate (FR-009).
+            Err(ResolveError::NotFound(_) | ResolveError::Ambiguous { .. } | ResolveError::Parse(_)) => {
                 mark_unresolved(pool, &row.id, row.attempts).await?;
                 num_unresolved += 1;
             }
@@ -330,13 +335,19 @@ pub async fn resolve_pending<R: Resolver + ?Sized>(
                     considered,
                     resolved: num_resolved,
                     unresolved: num_unresolved,
+                    pending: num_pending,
                     at: now_iso(),
                 },
             )
             .await;
     }
 
-    Ok(DrainSummary { considered, resolved: num_resolved, unresolved: num_unresolved })
+    Ok(DrainSummary {
+        considered,
+        resolved: num_resolved,
+        unresolved: num_unresolved,
+        pending: num_pending,
+    })
 }
 
 async fn mark_resolved(
@@ -558,17 +569,49 @@ mod tests {
     }
 
     #[tokio::test]
-    async fn drain_offline_disabled_keeps_unresolved() {
+    async fn drain_offline_disabled_keeps_pending_no_attempt_burn() {
         let db = setup().await;
         let img = make_image(&db, "m31.fits").await;
         associate_or_enqueue(db.pool(), None, &img, "M 31").await.unwrap();
 
-        // Resolver would succeed, but online disabled → must not be called.
+        // Resolver would succeed, but online disabled → must not be called, and
+        // the row stays `pending` with attempts unchanged (FIX-4).
         let resolver = FakeResolver::new().with_response("M 31", m31());
         let summary = resolve_pending(db.pool(), &resolver, None, false, 50).await.unwrap();
-        assert_eq!(summary.unresolved, 1);
+        assert_eq!(summary.pending, 1);
+        assert_eq!(summary.unresolved, 0);
+
+        let (state, attempts): (String, i64) =
+            sqlx::query_as("SELECT state, attempts FROM ingest_resolution WHERE image_id = ?")
+                .bind(&img)
+                .fetch_one(db.pool())
+                .await
+                .unwrap();
+        assert_eq!(state, "pending", "offline leaves row pending, not unresolved");
+        assert_eq!(attempts, 0, "transient/offline must NOT burn the retry budget");
         assert!(target_id_of(&db, &img).await.is_none());
-        assert!(cache::get_by_simbad_oid(db.pool(), 1_575_544).await.unwrap().is_none());
+    }
+
+    #[tokio::test]
+    async fn drain_transient_network_error_keeps_pending() {
+        let db = setup().await;
+        let img = make_image(&db, "m31.fits").await;
+        enqueue(db.pool(), &img, "M 31").await.unwrap();
+
+        // SIMBAD outage: a Network error must leave the row pending, attempts 0.
+        let resolver = FakeResolver::new().with_default_error(ResolveError::Network("down".into()));
+        let summary = resolve_pending(db.pool(), &resolver, None, true, 50).await.unwrap();
+        assert_eq!(summary.pending, 1);
+        assert_eq!(summary.unresolved, 0);
+
+        let (state, attempts): (String, i64) =
+            sqlx::query_as("SELECT state, attempts FROM ingest_resolution WHERE image_id = ?")
+                .bind(&img)
+                .fetch_one(db.pool())
+                .await
+                .unwrap();
+        assert_eq!(state, "pending");
+        assert_eq!(attempts, 0, "an outage must not exhaust the retry budget per row");
     }
 
     #[tokio::test]

@@ -640,8 +640,13 @@ pub struct TargetResolveBatchCompleted {
     pub considered: usize,
     /// Rows that resolved to a canonical target and were associated.
     pub resolved: usize,
-    /// Rows left unresolved (unknown/offline/ambiguous) — retryable.
+    /// Rows left unresolved — genuine content misses (unknown/ambiguous),
+    /// `attempts` incremented, retryable.
     pub unresolved: usize,
+    /// Rows left `pending` due to a transient/offline condition (no `attempts`
+    /// increment), retried on the next drain pass (FIX-4).
+    #[serde(default)]
+    pub pending: usize,
     pub at: String,
 }
 

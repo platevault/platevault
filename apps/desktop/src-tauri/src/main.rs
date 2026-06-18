@@ -33,5 +33,15 @@ async fn main() {
     let db = Database::connect(&db_url).await.expect("connect SQLite");
     db.migrate().await.expect("run migrations");
 
+    // Spec 035 FIX-1: load the bundled target seed into the resolution cache on
+    // first run (after migrations, before the UI starts). First-run-guarded and
+    // fast (~487 rows), so a synchronous call here is fine. Seeding failure must
+    // NOT block startup — the resolver degrades to online/empty cache.
+    match targeting::resolver::seed::load_bundled_on_first_run(db.pool()).await {
+        Ok(Some(count)) => tracing::info!("loaded {count} bundled target seed entries"),
+        Ok(None) => tracing::debug!("target seed already present; skipping first-run load"),
+        Err(e) => tracing::warn!("failed to load bundled target seed: {e}"),
+    }
+
     run_app(app, db.pool().clone());
 }

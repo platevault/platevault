@@ -16,9 +16,10 @@
  *      FR-015) is treated as a normal, non-fatal outcome — no error is shown.
  *
  * Cancel-in-flight (US3 acceptance scenario #2): every query change bumps a
- * generation counter and aborts the previous AbortController. Both phases check
- * their captured generation before committing state, so a stale resolve can
- * never overwrite the current query's results.
+ * monotonic generation counter. Both phases check their captured generation
+ * before committing state, so a stale (superseded) response can never overwrite
+ * the current query's results. (Tauri `invoke` exposes no AbortSignal, so this
+ * generation guard is the cancel mechanism — no AbortController is involved.)
  *
  * Selecting a suggestion (mouse or keyboard) invokes `onSelect(suggestion)`,
  * exposing the canonical `targetId` so the caller can associate it.
@@ -172,22 +173,20 @@ export function TargetSearch({
   const [activeIndex, setActiveIndex] = useState(-1);
   const [open, setOpen] = useState(false);
 
-  // Cancel-in-flight: a generation counter + AbortController per query. Only the
-  // latest generation may commit results; superseded generations are aborted.
+  // Cancel-in-flight: a monotonic generation counter. Each query bumps `gen`;
+  // only the latest generation may commit results, so a slow response from a
+  // superseded query is dropped. (Tauri `invoke` has no AbortSignal, so this
+  // generation guard — not an AbortController — is the actual cancel mechanism.)
   const genRef = useRef(0);
-  const abortRef = useRef<AbortController | null>(null);
   const debounceRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   const runSearch = useCallback(
     async (raw: string) => {
       const trimmed = raw.trim();
 
-      // Supersede any in-flight pipeline.
-      abortRef.current?.abort();
-      const ac = new AbortController();
-      abortRef.current = ac;
+      // Supersede any in-flight pipeline by bumping the generation.
       const gen = ++genRef.current;
-      const isCurrent = () => gen === genRef.current && !ac.signal.aborted;
+      const isCurrent = () => gen === genRef.current;
 
       if (!trimmed) {
         setSuggestions([]);
@@ -271,11 +270,6 @@ export function TargetSearch({
       if (debounceRef.current) clearTimeout(debounceRef.current);
     };
   }, [query, runSearch]);
-
-  // Abort any in-flight pipeline on unmount.
-  useEffect(() => {
-    return () => abortRef.current?.abort();
-  }, []);
 
   const handleSelect = useCallback(
     (s: TargetSuggestion) => {

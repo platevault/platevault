@@ -106,20 +106,33 @@ pub async fn target_resolve(
     state: State<'_, AppState>,
     req: TargetResolveSimbadRequest,
 ) -> Result<TargetResolveSimbadResponse, String> {
-    use targeting::resolver::simbad::{SimbadConfig, SimbadResolver, DEFAULT_TAP_ENDPOINT};
+    use targeting::resolver::simbad::{
+        OfflineResolver, SimbadConfig, SimbadResolver, DEFAULT_TAP_ENDPOINT,
+    };
 
     tracing::debug!("target.resolve query={:?}", req.query);
     let pool = state.repo.pool();
 
-    // Build the live resolver from persisted settings (endpoint + timeout).
-    let settings: Option<(String, i64)> = sqlx::query_as(
-        "SELECT simbad_endpoint, request_timeout_secs FROM resolver_settings WHERE id = 1",
+    // Read settings (incl. online_enabled) to decide whether to build a client.
+    let settings: Option<(i64, String, i64)> = sqlx::query_as(
+        "SELECT online_enabled, simbad_endpoint, request_timeout_secs FROM resolver_settings WHERE id = 1",
     )
     .fetch_optional(pool)
     .await
     .map_err(|e| e.to_string())?;
-    let (endpoint, timeout_secs) =
-        settings.unwrap_or_else(|| (DEFAULT_TAP_ENDPOINT.to_owned(), 10));
+    let (online_enabled, endpoint, timeout_secs) =
+        settings.map_or_else(|| (true, DEFAULT_TAP_ENDPOINT.to_owned(), 10), |(o, e, t)| (o != 0, e, t));
+
+    // FIX-3: when online resolution is disabled, do NOT construct a reqwest/TLS
+    // client (it can fail to build, turning an offline-by-config call into an
+    // error). The use case is still cache-first; the offline resolver only ever
+    // reports `Disabled`, which the use case maps to `unresolved("offline")`.
+    if !online_enabled {
+        return app_core::target_resolve::resolve(pool, &OfflineResolver, &req)
+            .await
+            .map_err(|e| e.message);
+    }
+
     let config =
         SimbadConfig::from_settings(endpoint, u64::try_from(timeout_secs.max(1)).unwrap_or(10));
     let resolver = SimbadResolver::new(&config).map_err(|e| e.to_string())?;
