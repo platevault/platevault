@@ -50,12 +50,12 @@
     },
     "Request": {
       "type": "object",
-      "required": ["contractVersion", "requestId", "catalog_id"],
+      "required": ["contractVersion", "requestId", "catalogId"],
       "additionalProperties": false,
       "properties": {
         "contractVersion": { "$ref": "#/$defs/ContractVersion" },
         "requestId": { "$ref": "#/$defs/Uuid" },
-        "catalog_id": { "$ref": "#/$defs/CatalogId" }
+        "catalogId": { "$ref": "#/$defs/CatalogId" }
       }
     },
     "Response": {

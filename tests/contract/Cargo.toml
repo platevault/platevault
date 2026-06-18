@@ -37,8 +37,17 @@ path = "audit_first_run_completed_test.rs"
 name = "native_contracts_test"
 path = "native_contracts_test.rs"
 
+[[test]]
+name = "catalog_manifest_parity_test"
+path = "catalog_manifest_parity_test.rs"
+
+[[test]]
+name = "catalog_entry_file_test"
+path = "catalog_entry_file_test.rs"
+
 [dev-dependencies]
 contracts_core = { path = "../../crates/contracts/core" }
+targeting_catalogs = { path = "../../crates/targeting/catalogs" }
 serde.workspace = true
 serde_json.workspace = true
 

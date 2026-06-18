@@ -112,6 +112,7 @@ impl DownloadError {
 /// Use [`ManifestEntry::parse_license`] to obtain a validated
 /// [`LicenseShortCode`].
 #[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
 pub struct ManifestEntry {
     /// Stable catalog slug.
     pub catalog_id: String,
@@ -125,6 +126,30 @@ pub struct ManifestEntry {
     pub license: String,
     /// Uncompressed size in bytes (for progress estimation).
     pub size_bytes: u64,
+}
+
+/// The v1 closed catalog slug set (spec 013 `CatalogId` / D3). Single source of
+/// truth shared by manifest slug validation and the entry-file reader.
+pub const KNOWN_CATALOG_SLUGS: [&str; 13] = [
+    "messier",
+    "caldwell",
+    "sharpless",
+    "abell_pn",
+    "abell_galaxies",
+    "arp",
+    "vdb",
+    "barnard",
+    "lbn",
+    "ldn",
+    "melotte",
+    "common",
+    "openngc",
+];
+
+/// Returns `true` when `slug` is in the v1 closed catalog set.
+#[must_use]
+pub fn is_known_catalog_slug(slug: &str) -> bool {
+    KNOWN_CATALOG_SLUGS.contains(&slug)
 }
 
 impl ManifestEntry {
@@ -152,27 +177,9 @@ impl ManifestEntry {
     /// Returns `DownloadError::UnknownCatalogSlug` when the slug is not in the
     /// v1 closed set.
     pub fn validate_slug(&self) -> Result<(), DownloadError> {
-        // Import the 013 CatalogId to use its closed-enum parse.
-        // We deliberately avoid adding a dep on the targeting crate here;
-        // instead we inline the closed-slug check (D3: common, openngc, abell_pn
-        // are the three slug groups referenced in the contract, but the full
-        // v1 set from catalog.rs is what we validate against).
-        let known = [
-            "messier",
-            "caldwell",
-            "sharpless",
-            "abell_pn",
-            "abell_galaxies",
-            "arp",
-            "vdb",
-            "barnard",
-            "lbn",
-            "ldn",
-            "melotte",
-            "common",
-            "openngc",
-        ];
-        if known.contains(&self.catalog_id.as_str()) {
+        // We deliberately avoid a dep on the targeting crate here; the closed
+        // v1 set from catalog.rs `CatalogId` is mirrored in `KNOWN_CATALOG_SLUGS`.
+        if is_known_catalog_slug(&self.catalog_id) {
             Ok(())
         } else {
             Err(DownloadError::UnknownCatalogSlug(self.catalog_id.clone()))
@@ -182,6 +189,7 @@ impl ManifestEntry {
 
 /// The parsed manifest returned from a successful fetch.
 #[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
 pub struct Manifest {
     /// Semver manifest schema version.
     pub version: String,
@@ -901,12 +909,12 @@ mod tests {
             "version": "1.0.0",
             "signature": "abc",
             "catalogs": [{
-                "catalog_id": "messier",
+                "catalogId": "messier",
                 "version": "1.0.0",
                 "url": "https://example.com/messier.json",
                 "checksum": "abc123",
                 "license": "public-domain",
-                "size_bytes": 1024
+                "sizeBytes": 1024
             }]
         });
         let bytes = serde_json::to_vec(&manifest).unwrap();

@@ -97,7 +97,7 @@ pub fn v1_catalogs() -> Vec<CatalogMeta> {
             entry_count: Some(313),
         },
         CatalogMeta {
-            id: "abell-pn".into(),
+            id: "abell_pn".into(),
             name: "Abell Planetary Nebulae".into(),
             license: LicenseShortCode::PublicDomain,
             origin: CatalogOrigin::Downloaded,
@@ -105,7 +105,7 @@ pub fn v1_catalogs() -> Vec<CatalogMeta> {
             entry_count: Some(86),
         },
         CatalogMeta {
-            id: "abell-clusters".into(),
+            id: "abell_galaxies".into(),
             name: "Abell Galaxy Clusters".into(),
             license: LicenseShortCode::PublicDomain,
             origin: CatalogOrigin::Downloaded,
@@ -161,7 +161,7 @@ pub fn v1_catalogs() -> Vec<CatalogMeta> {
             entry_count: Some(245),
         },
         CatalogMeta {
-            id: "common-names".into(),
+            id: "common".into(),
             name: "Common Names (app-authored)".into(),
             license: LicenseShortCode::Apache2,
             origin: CatalogOrigin::Downloaded,
@@ -251,6 +251,30 @@ mod tests {
     #[test]
     fn find_catalog_returns_none_for_unknown_id() {
         assert!(find_catalog("nonexistent").is_none());
+    }
+
+    #[test]
+    fn all_registry_ids_pass_download_slug_validation() {
+        // Spec 033 F2: registry slugs drifted (`abell-pn`, `abell-clusters`,
+        // `common-names`) out of the closed enum that `validate_slug` enforces,
+        // so real manifests for those catalogs failed `UnknownCatalogSlug`.
+        // Lock the registry to the download-side closed set so they can't diverge.
+        use crate::download::ManifestEntry;
+        for c in v1_catalogs() {
+            let entry = ManifestEntry {
+                catalog_id: c.id.clone(),
+                version: "1.0.0".into(),
+                url: "https://example.com/catalog.json".into(),
+                checksum: "0".repeat(64),
+                license: "public-domain".into(),
+                size_bytes: 1,
+            };
+            assert!(
+                entry.validate_slug().is_ok(),
+                "registry catalog id '{}' is not in the download validate_slug closed set",
+                c.id
+            );
+        }
     }
 
     #[test]

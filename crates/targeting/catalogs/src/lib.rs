@@ -11,8 +11,8 @@
 //!   fetch is abstracted behind [`download::CatalogFetcher`] so the lifecycle
 //!   state-machine is unit-testable with a [`download::FakeFetcher`] (no real
 //!   network in tests).
-//! - [`loader`]: placeholder module; the [`loader::CatalogReader`] trait
-//!   (entry-format readers) is owned by spec 013 and is not implemented here.
+//! - [`loader`]: reader for the per-catalog `<slug>.json` entry file
+//!   ([`loader::read_catalog_file`]); the ratified F3 format consumed by spec 013.
 
 pub mod download;
 pub mod license;

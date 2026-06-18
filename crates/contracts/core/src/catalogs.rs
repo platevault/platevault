@@ -242,6 +242,79 @@ pub struct CatalogError {
     pub message: String,
 }
 
+// ── catalog entry file (<slug>.json) ───────────────────────────────────────────
+
+/// Object type taxonomy for a catalog entry (closed enum, `Other` fallback).
+///
+/// Maps to `specs/014-catalog-index-licensing/contracts/catalog.entry-file.json`.
+/// An unrecognised string deserialises to `Other` (forward-compat, F3 decision 2).
+#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize, Type)]
+#[serde(rename_all = "snake_case")]
+pub enum ObjectType {
+    Galaxy,
+    PlanetaryNebula,
+    EmissionNebula,
+    ReflectionNebula,
+    DarkNebula,
+    OpenCluster,
+    GlobularCluster,
+    SupernovaRemnant,
+    GalaxyCluster,
+    DoubleStar,
+    Asterism,
+    #[serde(other)]
+    Other,
+}
+
+/// A cross-catalog equivalence carried inline in a catalog entry (F3 decision 3).
+#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize, Type)]
+#[serde(rename_all = "camelCase")]
+pub struct CatalogEntryEquivalent {
+    /// Slug of the equivalent catalog (closed enum).
+    pub catalog_id: CatalogId,
+    /// Designation within that catalog, e.g. `"M 31"`.
+    pub designation: String,
+}
+
+/// One entry in a per-catalog `<slug>.json` file (spec 013 CatalogRef source).
+#[derive(Clone, Debug, PartialEq, Serialize, Deserialize, Type)]
+#[serde(rename_all = "camelCase")]
+pub struct CatalogEntry {
+    /// Catalog-local designation, e.g. `"NGC 224"`.
+    pub designation: String,
+    /// Alternate names / aliases used for query matching.
+    pub names: Vec<String>,
+    /// Right ascension, sexagesimal hours `"HH MM SS.sss"` (F3 decision 1).
+    pub ra: String,
+    /// Declination, sexagesimal degrees `"±DD MM SS.ss"` (F3 decision 1).
+    pub dec: String,
+    /// Object type.
+    pub r#type: ObjectType,
+    /// IAU constellation abbreviation, e.g. `"And"`.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub constellation: Option<String>,
+    /// Apparent magnitude.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub magnitude: Option<f64>,
+    /// Inline cross-catalog equivalences (may be empty).
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub equivalents: Vec<CatalogEntryEquivalent>,
+}
+
+/// A per-catalog entry file installed by `catalog.download` (`<slug>.json`).
+#[derive(Clone, Debug, PartialEq, Serialize, Deserialize, Type)]
+#[serde(rename_all = "camelCase")]
+pub struct CatalogEntryFile {
+    /// Catalog slug (closed enum).
+    pub catalog_id: CatalogId,
+    /// Human-readable catalog name.
+    pub catalog_display: String,
+    /// Date-based catalog version (e.g. `"2026.06.18"`).
+    pub version: String,
+    /// All entries in this catalog.
+    pub entries: Vec<CatalogEntry>,
+}
+
 // ── Tests ─────────────────────────────────────────────────────────────────────
 
 #[cfg(test)]

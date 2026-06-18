@@ -609,6 +609,7 @@ dependencies = [
  "contracts_core",
  "serde",
  "serde_json",
+ "targeting_catalogs",
 ]
 
 [[package]]
