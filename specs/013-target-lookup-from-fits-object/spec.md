@@ -1,5 +1,12 @@
 # Feature Specification: Target Lookup From FITS OBJECT
 
+> **⚠ PARTIALLY SUPERSEDED (2026-06-18) by [Spec 035 — SIMBAD Target Resolution](../035-simbad-target-resolution/spec.md).**
+> The offline-only resolution approach and the research-R4 deferral of online providers
+> (Sesame/SIMBAD) are reversed: spec 035 makes **online SIMBAD resolution the primary path**, seeded by
+> a bundled index + local cache; the spec-014 download flow this spec depended on is superseded. The
+> **target-identity model** here (canonical target, `CatalogRef`, aliases, dedup) is **retained and
+> reused** by spec 035.
+
 > **See Spec 030**: UI implementation of this feature must follow
 > [Spec 030 — UI Audit & Revision](../030-ui-audit-revision/spec.md)
 > for layout, navigation, and component patterns.

@@ -1,5 +1,10 @@
 # Feature Specification: Settings Configuration Model
 
+> **⚠ Partial supersession (2026-06-18)**: any catalog settings here (manifest URL / signing key /
+> downloaded-catalog files) are superseded by [Spec 035 — SIMBAD Target Resolution](../035-simbad-target-resolution/spec.md);
+> the catalog settings surface becomes the SIMBAD resolver settings (endpoint, enable/disable, cache).
+> All other settings are unaffected.
+
 > **See Spec 030**: UI implementation of this feature must follow
 > [Spec 030 — UI Audit & Revision](../030-ui-audit-revision/spec.md)
 > for layout, navigation, and component patterns.

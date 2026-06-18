@@ -1,5 +1,10 @@
 # Feature Specification: Data Lifecycle State Model
 
+> **⚠ Partial supersession (2026-06-18)**: the `catalog.manifest.fetched` / `catalog.download.*` event
+> topics registered here are superseded by [Spec 035 — SIMBAD Target Resolution](../035-simbad-target-resolution/spec.md),
+> which resolves targets on demand against SIMBAD (no catalog download). All other lifecycle states /
+> events are unaffected.
+
 > **See Spec 030**: UI implementation of this feature must follow
 > [Spec 030 — UI Audit & Revision](../030-ui-audit-revision/spec.md)
 > for layout, navigation, and component patterns.

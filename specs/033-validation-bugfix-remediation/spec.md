@@ -1,5 +1,11 @@
 # Feature Specification: Validation Bugfix & Remediation
 
+> **⚠ Partial supersession (2026-06-18)**: the catalog signature-verification work here (D5 minisign,
+> `catalog.manifest.fetch` / `catalog.download`, tasks T002 / T064 / T068) is superseded by
+> [Spec 035 — SIMBAD Target Resolution](../035-simbad-target-resolution/spec.md), which drops catalog
+> download + signing in favour of on-demand SIMBAD resolution. The non-catalog 033 remediation work
+> (setup wizard, tool detection, etc.) is unaffected.
+
 **Feature Branch**: `main` (worked on `main` per the 2026-06-17 handover and the validated Windows sync loop; not a dedicated feature branch)
 
 **Created**: 2026-06-17
