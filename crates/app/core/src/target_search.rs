@@ -138,9 +138,10 @@ fn hit_to_suggestion(hit: SearchHit) -> TargetSuggestion {
 /// `target.search` — ranked typeahead suggestions from local seed + cache.
 ///
 /// Respects `limit` (default 20, see the request DTO). A blank query yields an
-/// empty suggestion list. The optional `type_filter` is applied as a simple
-/// post-filter on the object type; the `catalog_filter` is NOT yet applied
-/// (full catalogue filtering is T029).
+/// empty suggestion list. Both optional filters are applied as a post-filter and
+/// AND together: `catalog_filter` against the target's catalogue membership
+/// (derived from its alias designations) and `type_filter` against the object
+/// type.
 ///
 /// # Errors
 ///
