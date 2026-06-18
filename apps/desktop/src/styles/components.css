@@ -867,6 +867,13 @@
   font-size: var(--alm-text-xs);
   color: var(--alm-text-muted);
 }
+.alm-target-search__status--resolving {
+  display: flex;
+  align-items: center;
+  gap: var(--alm-sp-2);
+  color: var(--alm-text-faint);
+  border-top: 1px solid var(--alm-border-subtle);
+}
 .alm-target-search__option {
   display: flex;
   align-items: center;

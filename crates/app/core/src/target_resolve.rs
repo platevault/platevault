@@ -355,4 +355,27 @@ mod tests {
         let resp = resolve(db.pool(), &resolver, &req("Garbled OBJECT value")).await.unwrap();
         assert!(resp.target.is_none(), "no coordinates fabricated for an unresolved query");
     }
+
+    // T023 (backend): resolver is invoked exactly once across two resolves of the
+    // same query. The second call must be served from the local cache (FR-006)
+    // without re-invoking the network resolver.
+    #[tokio::test]
+    async fn resolver_invoked_exactly_once_for_repeated_query() {
+        let db = setup().await;
+        let resolver = FakeResolver::new().with_response("M 31", m31());
+
+        // First call: cache miss → resolver called, result cached.
+        let resp1 = resolve(db.pool(), &resolver, &req("M 31")).await.unwrap();
+        assert_eq!(resp1.status, TargetResolveStatus::Resolved);
+
+        // Second call: cache hit → resolver must NOT be called again.
+        let resp2 = resolve(db.pool(), &resolver, &req("M 31")).await.unwrap();
+        assert_eq!(resp2.status, TargetResolveStatus::Resolved);
+
+        assert_eq!(
+            resolver.call_count(),
+            1,
+            "resolver must be invoked exactly once; second call must be served from cache (FR-006)"
+        );
+    }
 }

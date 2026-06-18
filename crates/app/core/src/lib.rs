@@ -10,6 +10,7 @@ pub mod equipment;
 pub mod first_run;
 pub mod guided_flow;
 pub mod inbox;
+pub mod ingest_resolution;
 pub mod inventory;
 pub mod ledger_use_case;
 pub mod lifecycle_use_case;

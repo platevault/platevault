@@ -83,6 +83,9 @@ import type {
   TargetSearchRequest_Serialize as TargetSearchRequest,
   TargetSearchResponse_Deserialize as TargetSearchResponse,
   TargetSuggestion_Deserialize as TargetSuggestion,
+  TargetResolveSimbadRequest_Serialize as TargetResolveSimbadRequest,
+  TargetResolveSimbadResponse_Deserialize as TargetResolveSimbadResponse,
+  ResolvedTarget_Deserialize as ResolvedTarget,
   ManifestListRequest_Deserialize as ManifestListRequest,
   ManifestListResponse_Serialize as ManifestListResponse,
   ManifestGetRequest,
@@ -1093,8 +1096,15 @@ export type { TargetOpError };
 
 // ── spec 035: SIMBAD target resolution ────────────────────────────────────────
 
-// Re-export search DTOs so UI components import from one place.
-export type { TargetSearchRequest, TargetSearchResponse, TargetSuggestion };
+// Re-export search/resolve DTOs so UI components import from one place.
+export type {
+  TargetSearchRequest,
+  TargetSearchResponse,
+  TargetSuggestion,
+  TargetResolveSimbadRequest,
+  TargetResolveSimbadResponse,
+  ResolvedTarget,
+};
 
 /** Contract version for the spec-035 `target.*` resolution commands. */
 export const TARGET_SEARCH_CONTRACT_VERSION = '1.0';
@@ -1106,6 +1116,23 @@ export const TARGET_SEARCH_CONTRACT_VERSION = '1.0';
  */
 export async function searchTargets(req: TargetSearchRequest): Promise<TargetSearchResponse> {
   return invoke<TargetSearchResponse>('target.search', { req });
+}
+
+/**
+ * `target.resolve` — the SIMBAD long-tail resolver (spec 035, FR-004/FR-005).
+ *
+ * Resolves a complete designation / common name not present in the local
+ * seed + cache by consulting SIMBAD, then caches the result. Returns
+ * `status = "resolved"` with a `ResolvedTarget`, or `status = "unresolved"`
+ * with an `unresolvedReason` (e.g. `"unknown"`, `"offline"`, `"ambiguous"`).
+ * When online resolution is disabled (FR-015) the backend returns unresolved
+ * rather than an error, so callers should treat unresolved as a normal,
+ * non-fatal outcome.
+ */
+export async function resolveTarget(
+  req: TargetResolveSimbadRequest,
+): Promise<TargetResolveSimbadResponse> {
+  return invoke<TargetResolveSimbadResponse>('target.resolve', { req });
 }
 
 // ── spec 024: Project Manifests & Notes ───────────────────────────────────────

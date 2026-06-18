@@ -65,9 +65,9 @@ description: "Task list for SIMBAD Target Resolution (spec 035)"
 - [X] T019 [US3] `SimbadResolver` (reqwest TAP `sim-tap/sync` + Sesame fallback; `basic ⋈ ident ⋈ ids` → canonical identity + aliases + common name) in `crates/targeting/src/resolver/simbad.rs`
 - [X] T020 [US3] `target.resolve` use-case (cache → SIMBAD on miss → upsert cache) in `crates/app/core/src/`
 - [X] T021 [US3] `target_resolve` Tauri command in `apps/desktop/src-tauri/src/commands/targets.rs`
-- [ ] T022 [P] [US3] Debounced (~300 ms), min-length, cancel-in-flight long-tail query in the search UI; merge + de-dupe against local hits (`apps/desktop/src/components/`)
-- [ ] T023 [P] [US3] Test: long-tail resolve via `FakeResolver`; cached after; cancel-in-flight discards stale results
-- [ ] T024 [P] [US3] Gated online integration test against live SIMBAD (ignored by default) in `tests/`
+- [X] T022 [P] [US3] Debounced (~300 ms), min-length, cancel-in-flight long-tail query in the search UI; merge + de-dupe against local hits (`apps/desktop/src/components/`)
+- [X] T023 [P] [US3] Test: long-tail resolve via `FakeResolver`; cached after; cancel-in-flight discards stale results
+- [X] T024 [P] [US3] Gated online integration test against live SIMBAD (ignored by default) in `tests/`
 
 ---
 
@@ -76,10 +76,10 @@ description: "Task list for SIMBAD Target Resolution (spec 035)"
 **Goal**: async background resolution of FITS `OBJECT`; group images under one canonical target.
 **Independent test**: ingest `M31`/`NGC 224`/`Andromeda` images → all group under one target; unknown `OBJECT` → pending, not mis-assigned.
 
-- [ ] T025 [US4] `ingest_resolution` pending-queue + background resolver task (async, retry) in `crates/app/core/src/`
-- [ ] T026 [US4] Wire the scan→ingest pipeline to enqueue `OBJECT` resolution and associate image → canonical target (cache hit inline, miss enqueued pending)
-- [ ] T027 [P] [US4] Register `target.resolved` / `target.resolve_batch.completed` event topics (replace `catalog.download.*`) in `apps/desktop/src/lib/events.ts` + the Rust event bus
-- [ ] T028 [P] [US4] Test: alias-variant images group under one target; unknown/offline `OBJECT` → `unresolved`/pending, retryable, never fabricated
+- [X] T025 [US4] `ingest_resolution` pending-queue + background resolver task (async, retry) in `crates/app/core/src/`
+- [X] T026 [US4] Wire the scan→ingest pipeline to enqueue `OBJECT` resolution and associate image → canonical target (cache hit inline, miss enqueued pending)
+- [X] T027 [P] [US4] Register `target.resolved` / `target.resolve_batch.completed` event topics (replace `catalog.download.*`) in `apps/desktop/src/lib/events.ts` + the Rust event bus
+- [X] T028 [P] [US4] Test: alias-variant images group under one target; unknown/offline `OBJECT` → `unresolved`/pending, retryable, never fabricated
 
 ---
 

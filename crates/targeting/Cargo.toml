@@ -36,6 +36,10 @@ time.workspace = true
 # in other crates. Must NOT be enabled in production builds.
 test-fixture = []
 
+[[test]]
+name = "simbad_live"
+path = "tests/simbad_live.rs"
+
 [dev-dependencies]
 persistence_db = { path = "../persistence/db" }
 

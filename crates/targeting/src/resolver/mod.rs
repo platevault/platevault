@@ -388,8 +388,13 @@ pub trait Resolver: Send + Sync {
 ///
 /// Lookups are keyed by the *normalized* query (spec 013 normalize) so callers
 /// can register a canned identity under any of its aliases.
+///
+/// The `call_count` atomic counter increments on every call to
+/// [`Resolver::resolve`]; read it with [`FakeResolver::call_count`] to assert
+/// the resolver was invoked an exact number of times (useful for verifying
+/// cache-first behaviour in T023).
 #[cfg(any(test, feature = "test-fixture"))]
-#[derive(Clone, Debug, Default)]
+#[derive(Debug, Default)]
 pub struct FakeResolver {
     /// Normalized query → canned successful identity.
     responses: std::collections::HashMap<String, ResolvedIdentity>,
@@ -397,6 +402,8 @@ pub struct FakeResolver {
     errors: std::collections::HashMap<String, ResolveError>,
     /// Error returned for any query with no registered response/error.
     default_error: Option<ResolveError>,
+    /// Number of times [`Resolver::resolve`] has been called.
+    call_count: std::sync::atomic::AtomicUsize,
 }
 
 #[cfg(any(test, feature = "test-fixture"))]
@@ -429,12 +436,37 @@ impl FakeResolver {
         self.default_error = Some(error);
         self
     }
+
+    /// Return the number of times [`Resolver::resolve`] has been called.
+    ///
+    /// Uses `Relaxed` ordering; suitable for single-threaded test assertions
+    /// after all async work has completed.
+    #[must_use]
+    pub fn call_count(&self) -> usize {
+        self.call_count.load(std::sync::atomic::Ordering::Relaxed)
+    }
+}
+
+// `FakeResolver` cannot derive `Clone` because `AtomicUsize` does not implement
+// `Clone`. Provide a manual impl that resets the counter in the clone so each
+// clone starts from zero (mirroring the prior derived behaviour).
+#[cfg(any(test, feature = "test-fixture"))]
+impl Clone for FakeResolver {
+    fn clone(&self) -> Self {
+        Self {
+            responses: self.responses.clone(),
+            errors: self.errors.clone(),
+            default_error: self.default_error.clone(),
+            call_count: std::sync::atomic::AtomicUsize::new(0),
+        }
+    }
 }
 
 #[cfg(any(test, feature = "test-fixture"))]
 #[async_trait::async_trait]
 impl Resolver for FakeResolver {
     async fn resolve(&self, query: &str) -> Result<ResolvedIdentity, ResolveError> {
+        self.call_count.fetch_add(1, std::sync::atomic::Ordering::Relaxed);
         let key = crate::normalize::normalize(query);
         if let Some(err) = self.errors.get(&key) {
             return Err(err.clone());

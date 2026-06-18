@@ -666,3 +666,55 @@ pub struct GuidedFlowStateCorrupted {
 }
 
 pub const TOPIC_GUIDED_FLOW_STATE_CORRUPTED: &str = "guided_flow.state.corrupted";
+
+// ── Spec 035: SIMBAD target resolution ────────────────────────────────────────
+//
+// These topics REPLACE the spec-014 `catalog.download.*` topics (the
+// catalog-download surface removal is T034). For now both coexist; T034 removes
+// the `catalog.*` topics. Emitted by the resolve/upsert path and the ingest
+// background drain (FR-013, FR-006).
+
+/// Payload for the `target.resolved` topic (spec 035).
+///
+/// Emitted when a target identity is resolved and written to the cache — either
+/// from an interactive `target.resolve` or from the background ingest drain.
+/// Coordinates are never fabricated (FR-009); this event only fires for an
+/// actually-resolved canonical target.
+#[derive(Clone, Debug, Serialize, Deserialize, JsonSchema, Type)]
+#[serde(rename_all = "camelCase")]
+pub struct TargetResolved {
+    /// Canonical target id (UUIDv5) the object was resolved to.
+    pub target_id: String,
+    /// SIMBAD physical-object id (dedup key) when resolved online.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub simbad_oid: Option<i64>,
+    /// Canonical display designation.
+    pub primary_designation: String,
+    /// Provenance of the identity (`seed` | `resolved` | `user-override`).
+    pub source: String,
+    /// The query/`OBJECT` value that triggered the resolution, when applicable.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub query: Option<String>,
+    pub at: String,
+}
+
+pub const TOPIC_TARGET_RESOLVED: &str = "target.resolved";
+
+/// Payload for the `target.resolve_batch.completed` topic (spec 035, FR-013).
+///
+/// Emitted when the background ingest-resolution drain finishes a pass over the
+/// pending queue. Reports how many images resolved vs. stayed unresolved
+/// (retryable — never silently mis-assigned, FR-009).
+#[derive(Clone, Debug, Serialize, Deserialize, JsonSchema, Type)]
+#[serde(rename_all = "camelCase")]
+pub struct TargetResolveBatchCompleted {
+    /// Pending rows considered in this drain pass.
+    pub considered: usize,
+    /// Rows that resolved to a canonical target and were associated.
+    pub resolved: usize,
+    /// Rows left unresolved (unknown/offline/ambiguous) — retryable.
+    pub unresolved: usize,
+    pub at: String,
+}
+
+pub const TOPIC_TARGET_RESOLVE_BATCH_COMPLETED: &str = "target.resolve_batch.completed";
