@@ -1,4 +1,3 @@
-import { useState } from 'react';
 import { Btn } from '@/ui/Btn';
 import { Pill } from '@/ui/Pill';
 import { useDirectoryPicker } from '@/shared/native';
@@ -32,10 +31,11 @@ const KIND_TO_LAST_PATH: Record<SourceKind, LastPathKind> = {
 /**
  * Step 1 -- Source Folders.
  *
- * One persistent card per source kind. Each card has its own "Add folder"
- * button (type-first by construction) that opens the OS picker and registers
- * the folder under that card's kind. Required kinds highlight their card to
- * convey met / unmet status; the surrounding wizard still gates "Continue" on
+ * One persistent, compact card per source kind. Each card has its own "Add
+ * folder" button (type-first by construction) that opens the OS picker and
+ * registers the folder under that card's kind. Empty groups collapse to a
+ * single header row; required kinds highlight their card to convey met / unmet
+ * status. The surrounding wizard still gates "Continue" on
  * getMissingRequiredKinds().
  */
 export function StepSourceFolders({
@@ -51,25 +51,24 @@ export function StepSourceFolders({
   return (
     <div
       className="alm-step-sources"
-      style={{ display: 'flex', flexDirection: 'column', gap: 'var(--alm-sp-5)' }}
+      style={{ display: 'flex', flexDirection: 'column', gap: 'var(--alm-sp-3)' }}
     >
       <p
         className="alm-step-sources__intro"
         style={{
           margin: 0,
-          fontSize: 'var(--alm-text-base)',
-          lineHeight: 'var(--alm-leading-relaxed)',
+          fontSize: 'var(--alm-text-sm)',
+          lineHeight: 'var(--alm-leading-normal)',
           color: 'var(--alm-text-secondary)',
         }}
       >
-        Organize your astrophotography library, map sessions to targets and projects,
-        prepare inputs for PixInsight, and safely plan filesystem changes — all without
-        touching your raw files. Add at least one folder to each required type below.
+        Add the folders where your data lives. At least one folder is required for each
+        required type below; raw files are never moved or copied.
       </p>
 
       <div
         className="alm-step-sources__groups"
-        style={{ display: 'flex', flexDirection: 'column', gap: 'var(--alm-sp-4)' }}
+        style={{ display: 'flex', flexDirection: 'column', gap: 'var(--alm-sp-2)' }}
       >
         {ALL_SOURCE_KINDS.map((kind) => {
           const rows = indexed.filter(({ entry }) => entry.kind === kind);
@@ -90,7 +89,7 @@ export function StepSourceFolders({
   );
 }
 
-/** A persistent type group card: heading + requirement highlight + folder rows + add button. */
+/** A compact type group card: one header row, plus folder rows only when present. */
 function SourceGroup({
   kind,
   rows,
@@ -108,6 +107,7 @@ function SourceGroup({
 }) {
   const isRequired = REQUIRED_KINDS.includes(kind);
   const isMet = rows.length > 0;
+  const hasRows = rows.length > 0;
 
   // Requirement highlight: met required → ok accent; unmet required → warn
   // accent; optional kinds render with the neutral box treatment.
@@ -132,109 +132,104 @@ function SourceGroup({
       data-requirement-met={isRequired ? (isMet ? 'true' : 'false') : undefined}
       style={{
         border: cardBorder,
-        borderRadius: 'var(--alm-radius-md)',
+        borderRadius: 'var(--alm-radius-sm)',
         background: cardBackground,
         overflow: 'hidden',
       }}
     >
-      {/* Group header: type name + count + requirement status + add button */}
+      {/* Single compact header row: label + count + status + add button.
+          When empty this is the entire card height. */}
       <div
         className="alm-step-sources__group-header"
         style={{
           display: 'flex',
           alignItems: 'center',
           gap: 'var(--alm-sp-2)',
-          padding: 'var(--alm-sp-2) var(--alm-sp-3)',
-          borderBottom: headerBorder,
+          padding: 'var(--alm-sp-1) var(--alm-sp-2)',
+          minHeight: 'var(--alm-row-height)',
+          borderBottom: hasRows ? headerBorder : 'none',
         }}
       >
         <span
           style={{
             fontSize: 'var(--alm-text-xs)',
             fontWeight: 'var(--alm-weight-semibold)',
-            textTransform: 'uppercase',
-            letterSpacing: '0.04em',
             color: 'var(--alm-text-secondary)',
           }}
         >
           {SOURCE_KIND_LABELS[kind]}
         </span>
-        {isMet && (
-          <span style={{ fontSize: 'var(--alm-text-xs)', color: 'var(--alm-text-muted)' }}>
-            ({rows.length})
+        {hasRows && (
+          <span style={{ fontSize: 'var(--alm-text-2xs)', color: 'var(--alm-text-muted)' }}>
+            {rows.length}
           </span>
         )}
-        {isRequired && (
+        {isRequired ? (
           <Pill
             variant={isMet ? 'ok' : 'warn'}
             data-testid={`requirement-status-${kind}`}
           >
-            {isMet ? 'required ✓' : 'required — add one'}
+            {isMet ? 'required ✓' : 'required'}
           </Pill>
+        ) : (
+          <span style={{ fontSize: 'var(--alm-text-2xs)', color: 'var(--alm-text-faint)' }}>
+            optional
+          </span>
         )}
         <span style={{ flex: 1 }} />
         <AddFolderButton kind={kind} onAdd={onAdd} />
       </div>
 
-      {/* Folder rows for this kind, or a slim empty hint */}
-      <div
-        style={{
-          display: 'flex',
-          flexDirection: 'column',
-          gap: 'var(--alm-sp-2)',
-          padding: 'var(--alm-sp-3)',
-        }}
-      >
-        {rows.length === 0 ? (
-          <div
-            className="alm-step-sources__group-empty"
-            style={{ fontSize: 'var(--alm-text-sm)', color: 'var(--alm-text-faint)' }}
-          >
-            No {SOURCE_KIND_LABELS[kind].toLowerCase()} folders added yet.
-          </div>
-        ) : (
-          rows.map(({ entry, index }) => (
+      {/* Folder rows only render when present — no empty-state block. */}
+      {hasRows && (
+        <div
+          style={{
+            display: 'flex',
+            flexDirection: 'column',
+          }}
+        >
+          {rows.map(({ entry, index }, i) => (
             <SourceRow
               key={`${entry.path}-${index}`}
               entry={entry}
               error={errors[index]}
+              isLast={i === rows.length - 1}
               onRemove={() => onRemove(index)}
               onScanDepthChange={(depth) => onScanDepthChange(index, depth)}
             />
-          ))
-        )}
-      </div>
+          ))}
+        </div>
+      )}
     </div>
   );
 }
 
-/** A single source row with path, advanced scan-depth toggle, and remove button. */
+/** A single, single-line source row: path + scan-depth selector + remove. */
 function SourceRow({
   entry,
   error,
+  isLast,
   onRemove,
   onScanDepthChange,
 }: {
   entry: SourceEntry;
   error?: string;
+  isLast: boolean;
   onRemove: () => void;
   onScanDepthChange: (depth: ScanDepth) => void;
 }) {
-  const [showAdvanced, setShowAdvanced] = useState(false);
-
   return (
     <div
       className="alm-step-sources__row"
       style={{
-        border: '1px solid var(--alm-border)',
-        borderRadius: 'var(--alm-radius-sm)',
-        padding: 'var(--alm-sp-2) var(--alm-sp-3)',
+        padding: 'var(--alm-sp-1) var(--alm-sp-2)',
         background: 'var(--alm-surface-raised)',
+        borderBottom: isLast ? 'none' : '1px solid var(--alm-border-subtle)',
       }}
     >
       <div
         className="alm-step-sources__row-main"
-        style={{ display: 'flex', alignItems: 'center', gap: 'var(--alm-sp-2)' }}
+        style={{ display: 'flex', alignItems: 'center', gap: 'var(--alm-sp-2)', minHeight: 'var(--alm-row-height)' }}
       >
         <span
           className="alm-step-sources__row-path alm-mono"
@@ -250,15 +245,17 @@ function SourceRow({
         >
           {entry.path}
         </span>
-        <Btn
-          size="sm"
-          variant="ghost"
-          onClick={() => setShowAdvanced(!showAdvanced)}
-          className="alm-step-sources__advanced-btn"
+        <select
+          className="alm-step-sources__depth-select"
+          value={entry.scanDepth}
+          onChange={(e) => onScanDepthChange(e.target.value as ScanDepth)}
+          aria-label="Scan depth"
+          style={{ fontSize: 'var(--alm-text-2xs)' }}
         >
-          Advanced
-        </Btn>
-        <Btn size="sm" onClick={onRemove}>
+          <option value="recursive">Recursive</option>
+          <option value="single">Single level</option>
+        </select>
+        <Btn size="sm" variant="ghost" onClick={onRemove}>
           Remove
         </Btn>
       </div>
@@ -267,40 +264,12 @@ function SourceRow({
         <div
           className="alm-step-sources__row-error"
           style={{
-            marginTop: 'var(--alm-sp-1)',
-            fontSize: 'var(--alm-text-xs)',
+            marginTop: 'var(--alm-sp-0)',
+            fontSize: 'var(--alm-text-2xs)',
             color: 'var(--alm-danger)',
           }}
         >
           {error}
-        </div>
-      )}
-
-      {showAdvanced && (
-        <div
-          className="alm-step-sources__row-advanced"
-          style={{
-            marginTop: 'var(--alm-sp-2)',
-            display: 'flex',
-            alignItems: 'center',
-            gap: 'var(--alm-sp-2)',
-          }}
-        >
-          <span
-            className="alm-step-sources__row-advanced-label"
-            style={{ fontSize: 'var(--alm-text-xs)', color: 'var(--alm-text-muted)' }}
-          >
-            Scan depth:
-          </span>
-          <select
-            className="alm-step-sources__depth-select"
-            value={entry.scanDepth}
-            onChange={(e) => onScanDepthChange(e.target.value as ScanDepth)}
-            aria-label="Scan depth"
-          >
-            <option value="recursive">Recursive (all subfolders)</option>
-            <option value="single">Single level (top folder only)</option>
-          </select>
         </div>
       )}
     </div>
@@ -328,7 +297,7 @@ function AddFolderButton({
   };
 
   return (
-    <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'flex-end', gap: 'var(--alm-sp-1)' }}>
+    <>
       <Btn
         size="sm"
         variant="primary"
@@ -339,13 +308,13 @@ function AddFolderButton({
         {loading ? 'Choosing…' : '+ Add folder…'}
       </Btn>
       {error && (
-        <div
+        <span
           className="alm-step-sources__picker-error"
-          style={{ fontSize: 'var(--alm-text-xs)', color: 'var(--alm-danger)' }}
+          style={{ fontSize: 'var(--alm-text-2xs)', color: 'var(--alm-danger)' }}
         >
           {error.message}
-        </div>
+        </span>
       )}
-    </div>
+    </>
   );
 }

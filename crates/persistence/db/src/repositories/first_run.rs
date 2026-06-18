@@ -273,7 +273,10 @@ pub async fn get_first_run_state(pool: &SqlitePool) -> DbResult<FirstRunStateRes
 /// Returns [`DbError::NotFound`] if preconditions are not met (at least one
 /// raw source and one project source must be registered).
 pub async fn complete_first_run(pool: &SqlitePool) -> DbResult<FirstRunCompleteResponse> {
-    // Check preconditions: at least one light_frames + one project source.
+    // Check preconditions: at least one light_frames + one project + one inbox source.
+    // The inbox is the ingestion entry point for the core classify/split workflow, so it
+    // is mandatory alongside light frames and a project (kept in sync with the frontend
+    // REQUIRED_KINDS gate).
     let light_count: (i64,) =
         sqlx::query_as("SELECT COUNT(*) FROM registered_sources WHERE kind = 'light_frames'")
             .fetch_one(pool)
@@ -282,10 +285,14 @@ pub async fn complete_first_run(pool: &SqlitePool) -> DbResult<FirstRunCompleteR
         sqlx::query_as("SELECT COUNT(*) FROM registered_sources WHERE kind = 'project'")
             .fetch_one(pool)
             .await?;
+    let inbox_count: (i64,) =
+        sqlx::query_as("SELECT COUNT(*) FROM registered_sources WHERE kind = 'inbox'")
+            .fetch_one(pool)
+            .await?;
 
-    if light_count.0 == 0 || project_count.0 == 0 {
+    if light_count.0 == 0 || project_count.0 == 0 || inbox_count.0 == 0 {
         return Err(DbError::NotFound(
-            "first_run.incomplete: at least one light_frames and one project source required"
+            "first_run.incomplete: at least one light_frames, one project, and one inbox source required"
                 .to_owned(),
         ));
     }
@@ -466,10 +473,21 @@ mod tests {
         let result = complete_first_run(&pool).await;
         assert!(result.is_err());
 
-        // Add project: should succeed.
+        // Add project: still missing inbox, should fail.
         let req = RegisterSourceRequest {
             kind: SourceKind::Project,
             path: "/astro/projects".to_owned(),
+            kind_subtype: None,
+            scan_depth: ScanDepth::Recursive,
+        };
+        register_source(&pool, &req).await.unwrap();
+        let result = complete_first_run(&pool).await;
+        assert!(result.is_err());
+
+        // Add inbox: now light + project + inbox are present, should succeed.
+        let req = RegisterSourceRequest {
+            kind: SourceKind::Inbox,
+            path: "/astro/inbox".to_owned(),
             kind_subtype: None,
             scan_depth: ScanDepth::Recursive,
         };
@@ -499,12 +517,19 @@ mod tests {
             kind_subtype: None,
             scan_depth: ScanDepth::Recursive,
         };
+        let inbox = RegisterSourceRequest {
+            kind: SourceKind::Inbox,
+            path: "/astro/inbox".to_owned(),
+            kind_subtype: None,
+            scan_depth: ScanDepth::Recursive,
+        };
         register_source(&pool, &raw).await.unwrap();
         register_source(&pool, &proj).await.unwrap();
+        register_source(&pool, &inbox).await.unwrap();
         complete_first_run(&pool).await.unwrap();
 
         let resp = restart_first_run(&pool).await.unwrap();
-        assert_eq!(resp.prefilled_sources.len(), 2);
+        assert_eq!(resp.prefilled_sources.len(), 3);
 
         let state = get_first_run_state(&pool).await.unwrap();
         assert!(state.completed_at.is_none());

@@ -170,19 +170,23 @@ describe('SetupWizard 4-step flow', () => {
     expect(continueBtn).toBeDisabled();
   });
 
-  it('enables Continue on Step 1 after adding both light_frames and project folders', async () => {
+  it('enables Continue on Step 1 after adding all required folder types', async () => {
     renderWizard();
 
-    // Add light_frames folder (default selected type)
+    // Add a folder to each required group via its own per-group add button.
     await addFolder('/astro/lights', 'light_frames');
     await waitFor(() => {
       expect(screen.getByText('/astro/lights')).toBeInTheDocument();
     });
 
-    // Type-first: select "project" type, then add the project folder
     await addFolder('/astro/projects', 'project');
     await waitFor(() => {
       expect(screen.getByText('/astro/projects')).toBeInTheDocument();
+    });
+
+    await addFolder('/astro/inbox', 'inbox');
+    await waitFor(() => {
+      expect(screen.getByText('/astro/inbox')).toBeInTheDocument();
     });
 
     // Should now be enabled
@@ -302,12 +306,13 @@ describe('SetupWizard 4-step flow', () => {
   });
 
   it('shows Confirm step (Step 4) with Complete setup button', async () => {
-    // Seed state at step 3 (Confirm)
+    // Seed state at step 3 (Confirm) with all required kinds satisfied.
     const seeded = {
       currentStep: 3,
       sources: [
         { path: '/astro/lights', kind: 'light_frames', scanDepth: 'recursive' },
         { path: '/astro/projects', kind: 'project', scanDepth: 'recursive' },
+        { path: '/astro/inbox', kind: 'inbox', scanDepth: 'recursive' },
       ],
       catalogSettings: {
         messier: true,

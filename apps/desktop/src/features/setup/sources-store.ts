@@ -23,7 +23,7 @@ export const SOURCE_KIND_LABELS: Record<SourceKind, string> = {
   inbox: 'Inbox',
 };
 
-export const REQUIRED_KINDS: SourceKind[] = ['light_frames', 'project'];
+export const REQUIRED_KINDS: SourceKind[] = ['light_frames', 'project', 'inbox'];
 
 export interface SourceEntry {
   path: string;
