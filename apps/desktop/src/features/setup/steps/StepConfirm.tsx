@@ -99,9 +99,11 @@ export function StepConfirm({
       {/* Catalogs summary */}
       <Box title="Target catalogs">
         <div className="alm-step-confirm__catalogs">
-          {catalogSettings.downloadAll
-            ? 'All v1 catalogs will be downloaded after setup'
-            : 'Catalog download skipped — install from Settings later'}
+          {catalogSettings.selectedCatalogIds.length > 0
+            ? `${catalogSettings.selectedCatalogIds.length} catalog${
+                catalogSettings.selectedCatalogIds.length !== 1 ? 's' : ''
+              } selected for download`
+            : 'No catalogs selected — install from Settings later'}
         </div>
       </Box>
 

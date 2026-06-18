@@ -48,10 +48,15 @@ vi.mock('@tanstack/react-router', () => ({
 }));
 
 // Mock Tauri backend commands so they never reach the native bridge.
+// Catalog manifest fetch resolves to 'failed' so StepCatalogs renders its
+// graceful unavailable state in these gating tests (download flow is covered
+// in StepCatalogs.test.tsx).
 vi.mock('@/api/commands', () => ({
   completeFirstRun: vi.fn().mockResolvedValue({ success: true }),
   registerRoot: vi.fn().mockResolvedValue({ id: 'mock-root', path: '' }),
   registerRootBatch: vi.fn().mockResolvedValue({ results: [] }),
+  catalogManifestFetch: vi.fn().mockResolvedValue({ status: 'failed', manifest: null, etag: null, error: null }),
+  catalogDownload: vi.fn().mockResolvedValue({ status: 'success', auditId: 'mock', error: null }),
 }));
 
 // Mock @tauri-apps/api/core to prevent any accidental live invoke.
@@ -244,11 +249,7 @@ describe('SetupWizard 4-step flow', () => {
         { path: '/astro/projects', kind: 'project', scanDepth: 'recursive' },
       ],
       catalogSettings: {
-        messier: true,
-        ngcIc: true,
-        caldwell: true,
-        sharpless: true,
-        abell: true,
+        selectedCatalogIds: ['common', 'openngc'],
       },
       tools: {
         pixinsight: { enabled: false, path: null },
@@ -281,11 +282,7 @@ describe('SetupWizard 4-step flow', () => {
         { path: '/astro/projects', kind: 'project', scanDepth: 'recursive' },
       ],
       catalogSettings: {
-        messier: true,
-        ngcIc: true,
-        caldwell: true,
-        sharpless: true,
-        abell: true,
+        selectedCatalogIds: ['common', 'openngc'],
       },
       tools: {
         pixinsight: { enabled: false, path: null },
@@ -315,11 +312,7 @@ describe('SetupWizard 4-step flow', () => {
         { path: '/astro/inbox', kind: 'inbox', scanDepth: 'recursive' },
       ],
       catalogSettings: {
-        messier: true,
-        ngcIc: true,
-        caldwell: true,
-        sharpless: true,
-        abell: true,
+        selectedCatalogIds: ['common', 'openngc'],
       },
       tools: {
         pixinsight: { enabled: false, path: null },
@@ -346,11 +339,7 @@ describe('SetupWizard 4-step flow', () => {
         { path: '/astro/lights', kind: 'light_frames', scanDepth: 'recursive' },
       ],
       catalogSettings: {
-        messier: true,
-        ngcIc: true,
-        caldwell: true,
-        sharpless: true,
-        abell: true,
+        selectedCatalogIds: ['common', 'openngc'],
       },
       tools: {
         pixinsight: { enabled: false, path: null },
