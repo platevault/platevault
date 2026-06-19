@@ -126,8 +126,8 @@ export function MasterDetail({ master, prefillSuggestion, agingThresholdDays }: 
         metrics={[
           { value: fmtBytes(master.size_bytes), label: 'on disk' },
           { value: `${master.age_days}d`, label: 'age' },
-          { value: master.used_by_session_ids.length, label: 'sessions' },
-          { value: master.used_by_project_ids.length, label: 'projects' },
+          { value: (master.used_by_session_ids ?? []).length, label: 'sessions' },
+          { value: (master.used_by_project_ids ?? []).length, label: 'projects' },
         ]}
       />
 
@@ -142,11 +142,11 @@ export function MasterDetail({ master, prefillSuggestion, agingThresholdDays }: 
               <div style={{ display: 'flex', flexDirection: 'column', gap: 'var(--alm-sp-1)', fontSize: 'var(--alm-text-xs)' }}>
                 <div style={{ color: 'var(--alm-text-secondary)' }}>
                   <span style={{ color: 'var(--alm-text-faint)' }}>Sessions matched</span>{' '}
-                  <strong>{master.used_by_session_ids.length}</strong>
+                  <strong>{(master.used_by_session_ids ?? []).length}</strong>
                 </div>
                 <div style={{ color: 'var(--alm-text-secondary)' }}>
                   <span style={{ color: 'var(--alm-text-faint)' }}>Projects linked</span>{' '}
-                  <strong>{master.used_by_project_ids.length}</strong>
+                  <strong>{(master.used_by_project_ids ?? []).length}</strong>
                 </div>
                 <div style={{ color: 'var(--alm-text-secondary)' }}>
                   <span style={{ color: 'var(--alm-text-faint)' }}>Created</span>{' '}
