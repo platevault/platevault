@@ -60,7 +60,7 @@ async fn register_source_rejects_duplicate_same_kind() {
     let path = dir.path().to_str().expect("utf8 path").to_owned();
 
     let req = RegisterSourceRequest {
-        kind: SourceKind::Dark,
+        kind: SourceKind::Calibration,
         path: path.clone(),
         kind_subtype: None,
         scan_depth: ScanDepth::Single,
@@ -88,7 +88,7 @@ async fn register_source_rejects_nonexistent_path() {
     let (db, _repo, _bus) = support::setup().await;
 
     let req = RegisterSourceRequest {
-        kind: SourceKind::Flat,
+        kind: SourceKind::Calibration,
         // A path that is almost certainly absent on any CI machine.
         path: "/tmp/__astro_plan_037_nonexistent_source_path_xyzzy__".to_owned(),
         kind_subtype: None,

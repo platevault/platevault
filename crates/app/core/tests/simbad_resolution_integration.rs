@@ -1,198 +1,140 @@
+#![allow(clippy::doc_markdown)]
 //! Layer-1 integration tests for the `target.resolve` use case (spec 035, #14).
 //!
-//! Uses the `seeded_catalog()` test double from `targeting::fixture` (offline,
-//! deterministic, no network, no SIMBAD calls) to exercise the full resolve
-//! pipeline in `app_core::target_lookup::resolve`:
-//!
-//!  exact-match → R3 policy → `TargetResolveResponse`.
+//! Uses a `FakeResolver` (offline, deterministic, no network, no SIMBAD calls)
+//! together with the real SQLite backend to exercise the full resolve pipeline
+//! in `app_core::target_resolve::resolve`.
 //!
 //! Covered cases:
 //!  1. Successful resolve via primary designation ("M31") → `Resolved`.
 //!  2. Cross-catalog alias ("NGC 224") maps to the same target as "M31".
 //!  3. Unknown / junk query ("XYZ-UNKNOWN-9999") → `Unresolved`.
-//!  4. Empty FITS OBJECT value → `Error` with `query.empty` code.
+//!  4. Empty FITS OBJECT value → `Unresolved` with reason "unknown".
 
-use app_core::target_lookup::resolve;
-use contracts_core::target_lookup::{ResolveStatus, TargetResolveRequest};
-use targeting::catalog::{CatalogEntry, CatalogId, CatalogRef, TargetCatalog};
-use targeting::identity::target_id;
+mod support;
+
+use app_core::target_resolve::resolve;
+use contracts_core::targets::{TargetResolveSimbadRequest, TargetResolveStatus};
+use targeting::resolver::{
+    AliasKind, FakeResolver, ObjectType, ResolvedAlias, ResolvedIdentity, TargetSource,
+};
 use uuid::Uuid;
 
 // ── helpers ───────────────────────────────────────────────────────────────────
 
-/// Build the same three-entry seeded catalog used in unit tests.
-///
-/// Entries:
-/// - M31 ≡ NGC 224 ≡ Andromeda Galaxy
-/// - M101 ≡ NGC 5457 ≡ Pinwheel Galaxy
-/// - IC 1396 ≡ Elephant Trunk Nebula
-fn seeded_catalog() -> TargetCatalog {
-    let m31 = CatalogEntry {
-        target_id: target_id("messier", "M31"),
+/// Build a canonical M31 identity the FakeResolver will return.
+fn m31_identity() -> ResolvedIdentity {
+    ResolvedIdentity {
+        simbad_oid: Some(1_575_544),
         primary_designation: "M 31".to_owned(),
-        primary_catalog_display: "Messier".to_owned(),
-        refs: vec![
-            CatalogRef {
-                catalog_id: CatalogId::Messier,
-                catalog_display: "Messier".to_owned(),
-                designation: "M31".to_owned(),
-            },
-            CatalogRef {
-                catalog_id: CatalogId::Openngc,
-                catalog_display: "OpenNGC".to_owned(),
-                designation: "NGC 224".to_owned(),
-            },
-            CatalogRef {
-                catalog_id: CatalogId::Common,
-                catalog_display: "Common Names".to_owned(),
-                designation: "Andromeda Galaxy".to_owned(),
-            },
+        common_name: Some("Andromeda Galaxy".to_owned()),
+        object_type: ObjectType::Galaxy,
+        ra_deg: 10.684_708,
+        dec_deg: 41.268_75,
+        aliases: vec![
+            ResolvedAlias::new("M 31", AliasKind::Designation),
+            ResolvedAlias::new("NGC 224", AliasKind::Designation),
+            ResolvedAlias::new("Andromeda Galaxy", AliasKind::CommonName),
         ],
-    };
-
-    let m101 = CatalogEntry {
-        target_id: target_id("messier", "M101"),
-        primary_designation: "M 101".to_owned(),
-        primary_catalog_display: "Messier".to_owned(),
-        refs: vec![
-            CatalogRef {
-                catalog_id: CatalogId::Messier,
-                catalog_display: "Messier".to_owned(),
-                designation: "M101".to_owned(),
-            },
-            CatalogRef {
-                catalog_id: CatalogId::Openngc,
-                catalog_display: "OpenNGC".to_owned(),
-                designation: "NGC 5457".to_owned(),
-            },
-            CatalogRef {
-                catalog_id: CatalogId::Common,
-                catalog_display: "Common Names".to_owned(),
-                designation: "Pinwheel Galaxy".to_owned(),
-            },
-        ],
-    };
-
-    let ic1396 = CatalogEntry {
-        target_id: target_id("openngc", "IC 1396"),
-        primary_designation: "IC 1396".to_owned(),
-        primary_catalog_display: "OpenNGC".to_owned(),
-        refs: vec![
-            CatalogRef {
-                catalog_id: CatalogId::Openngc,
-                catalog_display: "OpenNGC".to_owned(),
-                designation: "IC 1396".to_owned(),
-            },
-            CatalogRef {
-                catalog_id: CatalogId::Common,
-                catalog_display: "Common Names".to_owned(),
-                designation: "Elephant Trunk Nebula".to_owned(),
-            },
-        ],
-    };
-
-    TargetCatalog::from_entries(vec![m31, m101, ic1396])
+        source: TargetSource::Resolved,
+    }
 }
 
-/// Build a minimal valid `TargetResolveRequest`.
-fn make_req(fits_object_value: impl Into<String>) -> TargetResolveRequest {
-    TargetResolveRequest {
+/// Build a minimal valid `TargetResolveSimbadRequest`.
+fn make_req(query: impl Into<String>) -> TargetResolveSimbadRequest {
+    TargetResolveSimbadRequest {
         contract_version: "1.0".to_owned(),
         request_id: Uuid::new_v4().to_string(),
-        fits_object_value: fits_object_value.into(),
+        query: query.into(),
+        override_target: None,
     }
 }
 
 // ── tests ─────────────────────────────────────────────────────────────────────
 
-/// A well-known FITS OBJECT value ("M31") maps to a single confident match.
-///
-/// Exercises: exact-match → single candidate → R3 high-confidence branch →
-/// `Resolved`.
-#[test]
-fn resolve_m31_by_primary_designation_returns_resolved() {
-    let catalog = seeded_catalog();
-    let req = make_req("M31");
+/// TC-14.1: A well-known FITS OBJECT value ("M31") maps to a single confident
+/// match. The `FakeResolver` is pre-loaded with M31 so the cache-miss path
+/// writes it to SQLite, and the response carries `Resolved` + `target_id`.
+#[tokio::test]
+async fn resolve_m31_by_primary_designation_returns_resolved() {
+    let (db, _repo, _bus) = support::setup().await;
+    // "M 31" is the normalized form after trimming; register under the exact
+    // query the resolver receives (after trim in target_resolve.rs).
+    let resolver = FakeResolver::new().with_response("M 31", m31_identity());
 
-    let resp = resolve(&catalog, &req);
+    let resp = resolve(db.pool(), &resolver, &make_req("M 31")).await.unwrap();
 
     assert_eq!(
         resp.status,
-        ResolveStatus::Resolved,
+        TargetResolveStatus::Resolved,
         "expected Resolved for M31, got {:?}",
         resp.status
     );
-    assert!(resp.target_id.is_some(), "Resolved response must carry a target_id");
-
-    let returned_id = resp.target_id.as_deref().unwrap();
-    let expected_id = target_id("messier", "M31").to_string();
-    assert_eq!(returned_id, expected_id, "resolved target_id must be the UUIDv5 for M31");
-
-    assert_eq!(resp.request_id, req.request_id, "response must echo the caller request_id");
+    let target = resp.target.expect("Resolved response must carry a target");
+    assert_eq!(target.primary_designation, "M 31");
+    assert_eq!(target.simbad_oid, Some(1_575_544));
 }
 
-/// "NGC 224" is an alias for M31; resolving it must return the same stable
-/// `target_id` as resolving "M31".
-///
-/// Exercises cross-catalog equivalence through the full resolve pipeline.
-#[test]
-fn resolve_ngc224_maps_to_same_target_as_m31() {
-    let catalog = seeded_catalog();
+/// TC-14.2: "NGC 224" is an alias for M31; resolving it after the cache was
+/// seeded by a prior M31 resolution must return the same stable `target_id`.
+/// Exercises cross-catalog cache-hit dedup.
+#[tokio::test]
+async fn resolve_ngc224_maps_to_same_target_as_m31() {
+    let (db, _repo, _bus) = support::setup().await;
+    let resolver = FakeResolver::new()
+        .with_response("M 31", m31_identity())
+        .with_response("NGC 224", m31_identity());
 
-    let m31_resp = resolve(&catalog, &make_req("M31"));
-    let ngc_resp = resolve(&catalog, &make_req("NGC 224"));
+    // First, resolve "M 31" to seed the cache.
+    let m31_resp = resolve(db.pool(), &resolver, &make_req("M 31")).await.unwrap();
+    assert_eq!(m31_resp.status, TargetResolveStatus::Resolved);
+    let m31_target = m31_resp.target.unwrap();
 
-    assert_eq!(m31_resp.status, ResolveStatus::Resolved, "M31 must resolve");
-    assert_eq!(ngc_resp.status, ResolveStatus::Resolved, "NGC 224 must resolve");
+    // Now resolve "NGC 224" — the FakeResolver returns the same simbad_oid, so
+    // dedup merges them to the same canonical row.
+    let ngc_resp = resolve(db.pool(), &resolver, &make_req("NGC 224")).await.unwrap();
+    assert_eq!(ngc_resp.status, TargetResolveStatus::Resolved);
+    let ngc_target = ngc_resp.target.unwrap();
 
     assert_eq!(
-        m31_resp.target_id, ngc_resp.target_id,
+        m31_target.target_id, ngc_target.target_id,
         "M31 and NGC 224 must resolve to the same stable target_id"
     );
 }
 
-/// A completely unknown query must yield `Unresolved`, not an error.
-///
-/// Per FR-006 and constitution §II, unresolved outcomes are non-blocking and
-/// must NOT be classified as errors.
-#[test]
-fn resolve_unknown_query_returns_unresolved() {
-    let catalog = seeded_catalog();
-    let req = make_req("XYZ-UNKNOWN-9999");
+/// TC-14.3: A completely unknown query must yield `Unresolved`, not an error.
+/// Per FR-006, unresolved outcomes are non-blocking.
+#[tokio::test]
+async fn resolve_unknown_query_returns_unresolved() {
+    let (db, _repo, _bus) = support::setup().await;
+    // FakeResolver with no configured response → default NotFound.
+    let resolver = FakeResolver::new();
 
-    let resp = resolve(&catalog, &req);
+    let resp = resolve(db.pool(), &resolver, &make_req("XYZ-UNKNOWN-9999")).await.unwrap();
 
     assert_eq!(
         resp.status,
-        ResolveStatus::Unresolved,
+        TargetResolveStatus::Unresolved,
         "junk query must yield Unresolved, got {:?}",
         resp.status
     );
-    assert!(resp.target_id.is_none(), "Unresolved response must not carry a target_id");
-    assert!(resp.errors.is_none(), "Unresolved is a valid non-error outcome; errors must be None");
+    assert!(resp.target.is_none(), "Unresolved response must not carry a target");
 }
 
-/// An empty FITS OBJECT value must yield `Error` with code `query.empty`.
-///
-/// This is the only resolution path that returns a hard error; ingestion
-/// callers must guard against empty headers before calling resolve.
-#[test]
-fn resolve_empty_fits_object_returns_query_empty_error() {
-    let catalog = seeded_catalog();
-    let req = make_req("   ");
+/// TC-14.4: An empty/whitespace FITS OBJECT value must yield `Unresolved`
+/// (reason "unknown"). The resolver is never called.
+#[tokio::test]
+async fn resolve_empty_fits_object_returns_unresolved() {
+    let (db, _repo, _bus) = support::setup().await;
+    let resolver = FakeResolver::new();
 
-    let resp = resolve(&catalog, &req);
+    let resp = resolve(db.pool(), &resolver, &make_req("   ")).await.unwrap();
 
     assert_eq!(
         resp.status,
-        ResolveStatus::Error,
-        "empty query must yield Error, got {:?}",
+        TargetResolveStatus::Unresolved,
+        "empty query must yield Unresolved, got {:?}",
         resp.status
     );
-
-    let errors = resp.errors.as_deref().unwrap_or(&[]);
-    assert!(!errors.is_empty(), "Error response must contain at least one error item");
-
-    let code = &errors[0].code;
-    assert_eq!(code, "query.empty", "error code must be 'query.empty', got '{code}'");
+    assert!(resp.target.is_none(), "no target should be fabricated for empty query");
 }

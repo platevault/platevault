@@ -37,6 +37,7 @@ fn make_create_req(name: &str, tool: ProjectTool) -> ProjectCreateRequest {
         path: format!("projects/{name}"),
         initial_sources: vec![],
         notes: None,
+        canonical_target_id: None,
     }
 }
 
@@ -57,6 +58,7 @@ async fn create_then_get_returns_persisted_fields() {
         path: format!("projects/{name}"),
         initial_sources: vec![],
         notes: Some("Initial observing notes".to_owned()),
+        canonical_target_id: None,
     };
 
     let result = project_setup::create(db.pool(), &bus, &req).await.expect("create must succeed");

@@ -34,13 +34,16 @@ pub async fn insert_target(pool: &sqlx::SqlitePool, id: &str) {
 }
 
 /// Seed a minimal `project` row in a given lifecycle state.
-pub async fn insert_project(pool: &sqlx::SqlitePool, id: &str, target: &str, state: &str) {
+pub async fn insert_project(pool: &sqlx::SqlitePool, id: &str, _target: &str, state: &str) {
+    // Since migration 0036, the canonical lifecycle is `projects.lifecycle`.
+    // The legacy `project.state` column no longer exists; seed into `projects`
+    // so that `transition_use_case` (which reads/writes `projects.lifecycle`)
+    // can find and transition this row.
     sqlx::query(
-        "INSERT INTO project (id, name, target_id, state, created_at) \
-         VALUES (?, 'P', ?, ?, '2026-05-01T00:00:00Z')",
+        "INSERT INTO projects (id, name, tool, lifecycle, path, created_at, updated_at) \
+         VALUES (?, 'P', 'PixInsight', ?, '/tmp/p', '2026-05-01T00:00:00Z', '2026-05-01T00:00:00Z')",
     )
     .bind(id)
-    .bind(target)
     .bind(state)
     .execute(pool)
     .await

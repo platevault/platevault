@@ -63,6 +63,8 @@ async fn seed_approved_plan_with_real_files(
             linked_entity: None,
             provenance_json: None,
             archive_path: None,
+            source_id: None,
+            category: None,
         },
     )
     .await
@@ -300,6 +302,8 @@ async fn full_review_to_apply_audit_round_trip() {
             linked_entity: None,
             provenance_json: None,
             archive_path: None,
+            source_id: None,
+            category: None,
         },
     )
     .await
