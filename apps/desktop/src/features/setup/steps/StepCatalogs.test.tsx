@@ -63,8 +63,7 @@ describe('StepCatalogs (Configuration)', () => {
     await waitFor(() => expect(mockGetSettings).toHaveBeenCalled());
     expect(screen.getByLabelText('Default source protection')).toBeInTheDocument();
     expect(screen.getByLabelText('Default scan depth')).toBeInTheDocument();
-    // DensitySelector exposes a radio group labelled "Display density".
-    expect(screen.getByRole('radiogroup', { name: /display density/i })).toBeInTheDocument();
+    expect(screen.getByLabelText('Display density')).toBeInTheDocument();
   });
 
   it('shows a disabled theme control marked coming soon', () => {

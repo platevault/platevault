@@ -9,8 +9,8 @@
 
 import { useEffect, useState, type ReactNode } from 'react';
 import { ResolverSettingsControl } from '@/features/settings/ResolverSettingsControl';
-import { DensitySelector } from '@/features/settings/DensitySelector';
 import { usePreference } from '@/data/preferences';
+import type { Density } from '@/bindings/types';
 import { getSettings, updateSettings } from '@/api/commands';
 
 // ── Types ─────────────────────────────────────────────────────────────────────
@@ -71,6 +71,25 @@ function DefaultProtectionControl() {
       <option value="protected">Protected</option>
       <option value="normal">Normal</option>
       <option value="unprotected">Unprotected</option>
+    </select>
+  );
+}
+
+// ── Display density (frontend preference; applied app-wide) ───────────────────
+
+function DensityControl() {
+  const [density, setDensity] = usePreference('density');
+  return (
+    <select
+      className="alm-select"
+      value={density}
+      aria-label="Display density"
+      onChange={(e) => setDensity(e.target.value as Density)}
+      style={{ height: 28 }}
+    >
+      <option value="compact">Compact</option>
+      <option value="comfortable">Comfortable</option>
+      <option value="spacious">Spacious</option>
     </select>
   );
 }
@@ -139,16 +158,14 @@ export function StepCatalogs(_props: StepCatalogsProps) {
       className="alm-step-catalogs"
       style={{ display: 'flex', flexDirection: 'column', gap: 'var(--alm-sp-5)' }}
     >
-      <p className="alm-step-catalogs__intro">
-        Set a few defaults to get started. You can change all of these any time in
-        Settings.
-      </p>
-
       {/* Online SIMBAD resolution (label + toggle on one line, desc below). */}
       <ResolverSettingsControl compact />
 
-      {/* Display density — DensitySelector renders its own legend + radios. */}
-      <DensitySelector />
+      <ConfigOption
+        title="Display density"
+        description="How compact the interface is — affects row heights and spacing across the app."
+        control={<DensityControl />}
+      />
 
       <ConfigOption
         title="Default source protection"
