@@ -11,8 +11,8 @@ export function ListDetailLayout({ topBar, list, detail, sidebar }: ListDetailLa
   if (sidebar) {
     return (
       <>
-        {topBar}
-        <div className="alm-three-pane" style={{ flex: 1 }}>
+        {topBar && <div className="alm-page__bar">{topBar}</div>}
+        <div className="alm-three-pane">
           {list}
           <div className="alm-three-pane__content">{detail}</div>
           <div className="alm-three-pane__sidebar">{sidebar}</div>
@@ -22,7 +22,7 @@ export function ListDetailLayout({ topBar, list, detail, sidebar }: ListDetailLa
   }
   return (
     <>
-      {topBar}
+      {topBar && <div className="alm-page__bar">{topBar}</div>}
       <div className="alm-two-pane">
         {list}
         <div className="alm-two-pane__detail">{detail}</div>

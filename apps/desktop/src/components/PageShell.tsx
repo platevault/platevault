@@ -5,5 +5,5 @@ export interface PageShellProps {
 }
 
 export function PageShell({ children }: PageShellProps) {
-  return <div className="alm-frame__main">{children}</div>;
+  return <div className="alm-page">{children}</div>;
 }

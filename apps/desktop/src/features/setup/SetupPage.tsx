@@ -39,11 +39,15 @@ export function SetupPage() {
 
   if (setupCompleted || checking) {
     return (
-      <div style={{ display: 'flex', justifyContent: 'center', alignItems: 'center', flex: 1, color: 'var(--alm-text-muted)' }}>
+      <div className="alm-page" style={{ justifyContent: 'center', alignItems: 'center', color: 'var(--alm-text-muted)' }}>
         Loading…
       </div>
     );
   }
 
-  return <SetupWizard />;
+  return (
+    <div className="alm-page">
+      <SetupWizard />
+    </div>
+  );
 }
