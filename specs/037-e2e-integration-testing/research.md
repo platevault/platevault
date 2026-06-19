@@ -1,0 +1,256 @@
+# Research: End-to-End & Integration Testing (Full App Coverage)
+
+**Feature**: 037-e2e-integration-testing
+**Date**: 2026-06-19
+**Phase**: 0 (Outline & Research)
+
+This document resolves the open questions deferred from the spec and records the
+technology decisions that the plan and tasks depend on. Format per decision:
+**Decision / Rationale / Alternatives considered**.
+
+---
+
+## D1 — Layer 1 (real-backend integration) approach
+
+**Decision**: Implement Layer 1 as Rust integration tests that exercise the real
+`app_core` use cases through the real `SqliteLifecycleRepository` / `AppState`
+against a **real, file-backed SQLite database** created per test in a
+`tempfile::tempdir()`, with real `sqlx::migrate!()` migrations applied. The
+`#[tauri::command]` shells stay thin (they already are — they delegate to
+`app_core::*`), so tests target the use-case layer directly without booting any
+Tauri runtime. Tests live in crate-level `tests/` dirs (notably
+`crates/app/core/tests/`, `crates/persistence/db/tests/`) and run under
+`cargo test --workspace`.
+
+**Rationale**: The command handlers are already thin adapters
+(`apps/desktop/src-tauri/src/commands/*.rs` delegate to `app_core`), so the real
+behavior lives in `app_core` + `persistence/db` and is fully testable without a
+webview or event loop. File-backed SQLite (vs `sqlite::memory:`) exercises real
+migration application and on-disk semantics, closer to production. `cargo test`
+runs natively on all three OS — this layer needs no platform-specific tooling and
+carries the bulk of the assertions (cheap, deterministic).
+
+**Alternatives considered**:
+- *Tauri mock runtime (`get_ipc_response`)* — runs real command/serde/state but
+  stubs the webview. Rejected as the primary mechanism because it adds Tauri test
+  scaffolding for little gain over calling `app_core` directly; the IPC
+  dispatch/serialization path is instead proven by Layer 2 (real binary).
+- *In-memory SQLite only* — already used in unit tests; kept for fast unit cases
+  but Layer 1 prefers file-backed to catch migration/disk issues.
+
+---
+
+## D2 — External network boundary (SIMBAD)
+
+**Decision**: For backend code that calls the external SIMBAD service (target
+resolution, spec 035), stub **only at the HTTP boundary** using `wiremock`
+(already in the Rust ecosystem; add as dev-dependency), so the application's own
+request-building, parsing, caching, and fallback logic executes for real. Provide
+canned SIMBAD response fixtures (success, ambiguous, not-found, network-error).
+
+**Rationale**: Keeps integration tests deterministic and offline-capable
+(edge case + FR-003, SC-006) while still exercising real resolver logic — not a
+function-level mock that would hide wiring bugs. Aligns with the recommendation's
+"mock only at the network boundary" principle.
+
+**Alternatives considered**:
+- *Live SIMBAD calls* — spec 035 already added one live SC-004 smoke test; keep
+  that as a separately-tagged, network-gated test, but Layer 1 must not depend on
+  live network for determinism.
+- *Mocking the resolver trait* — rejected; hides the exact serialization/parsing
+  path we want to protect.
+
+---
+
+## D3 — Layer 2 (E2E) approach on Linux & Windows: reuse the 033 scaffold
+
+**Decision**: Complete and reuse the existing real-backend E2E scaffold rather
+than rebuilding it. The scaffold already present:
+- `apps/desktop/e2e/helpers/tauri-app.ts` — launches `tauri-driver` (port 4444)
+  wrapping the built app, under `xvfb-run` on Linux.
+- `apps/desktop/e2e/playwright.real-backend.config.ts` — Playwright config
+  driving the WebDriver endpoint; Vite on `localhost:1420`.
+- `apps/desktop/e2e/real-backend/*.spec.ts` — four journey skeletons, currently
+  `test.skip()` pending wiring.
+- `apps/desktop/e2e/helpers/db.ts` — SQLite assertion helper, currently a
+  placeholder pending a query library.
+
+Work: replace the `db.ts` placeholder with a real read-only SQLite reader
+(`better-sqlite3` as a dev-dependency) pointed at the app DB
+(`~/.local/share/dev.astro-plan.astro-library-manager/alm.db` and the Windows/mac
+equivalents), un-skip and flesh out the journeys, and add a fresh-DB reset in
+`beforeAll`. Linux uses official `tauri-driver` + `WebKitWebDriver`
+(`webkit2gtk-driver`) under `xvfb`; Windows uses official `tauri-driver` +
+version-matched `msedgedriver.exe`.
+
+**Rationale**: The hard part (driver lifecycle, Playmaker config, xvfb wrapping)
+already exists from spec 033. Reuse avoids duplicate harnesses and honors the
+assumption in the spec. Official `tauri-driver` covers exactly Linux + Windows.
+
+**Alternatives considered**:
+- *WebdriverIO* (as in the upstream Tauri docs) — rejected; the repo already
+  standardized on Playwright for E2E, and a second runner adds maintenance.
+- *Rebuild from scratch* — rejected; wasteful given working scaffold.
+
+---
+
+## D4 — macOS Layer 2 (the deferred decision)
+
+**Context**: Verified current as of 2026 — Apple ships no WebDriver for embedded
+WKWebView, so the official `tauri-driver` supports **only Linux and Windows**.
+Third-party W3C plugins now fill the gap by embedding a WebDriver server inside
+the app (most mature: Choochmeque `tauri-plugin-webdriver`; also danielraffel's
+two-crate `tauri-plugin-webdriver-automation`; CrabNebula Cloud is hosted/paid).
+
+**Decision**:
+1. **macOS Layer 1 (integration) is REQUIRED** and runs in CI on every change —
+   it needs no special tooling (`cargo test`).
+2. **macOS Layer 2 (real-UI E2E) is BEST-EFFORT / non-merge-blocking** for this
+   feature. The plan provisions it as an **optional CI job** evaluating
+   `tauri-plugin-webdriver` (Choochmeque), gated behind a **debug/dev-only
+   feature flag** so the embedded WebDriver server is **never present in release
+   builds** (mirrors the existing `dev-tools` compile-gate pattern from spec 021,
+   per CLAUDE.md). If it proves stable it can be promoted to required in a
+   follow-up; until then macOS Layer-2 failures do not block merge, and SC-002's
+   "every required platform" treats macOS-E2E as not-required (FR-013's explicit
+   not-applicable reporting applies if the plugin path is not yet adopted).
+
+**Rationale**: Honors "decide in research" with a concrete recommended default.
+Embedding a WebDriver server in the app is a real attack-surface/maintenance cost,
+so gating it behind debug-only build config respects Constitution Principle V and
+the release-build discipline already established for dev-tools. Making it
+best-effort first avoids blocking the whole cross-platform pipeline on the most
+fragile, newest-tooling path while still delivering required macOS *integration*
+coverage immediately.
+
+**Alternatives considered**:
+- *Require macOS E2E now via a plugin* — rejected initially: newest tooling,
+  highest flakiness risk, ships an automation surface; revisit once proven.
+- *Skip macOS entirely* — rejected: macOS is a supported product OS and at minimum
+  needs the required integration layer.
+- *CrabNebula Cloud* — rejected for now: paid/hosted dependency; revisit only if
+  self-hosted plugin proves inadequate.
+
+---
+
+## D5 — CI/CD topology
+
+**Decision**: Add GitHub Actions workflows under `.github/workflows/` (currently
+empty). A `ci.yml` with a 3-OS matrix (`ubuntu-latest`, `windows-latest`,
+`macos-latest`):
+- **Stage A (all 3 OS, required)**: `cargo build --workspace`, lint, then the
+  Layer 1 integration suite (`cargo test --workspace`) + frontend unit tests.
+- **Stage B (Linux + Windows, required)**: build the app, then the Layer 2 E2E
+  smoke suite — Linux under `xvfb-run` with `WebKitWebDriver`; Windows with a
+  fetched version-matched `msedgedriver`.
+- **Stage C (macOS, optional / `continue-on-error`)**: the best-effort
+  `tauri-plugin-webdriver` E2E job (D4).
+
+Stage A gates Stage B/C (fast failures first, FR-012). Caching for cargo and
+pnpm. Concurrency-cancel on superseding pushes.
+
+**Rationale**: Matches FR-010/FR-011/FR-012 — every change, all 3 OS, fast layer
+first, per-platform/per-layer attribution. macOS E2E isolated as optional per D4.
+
+**Alternatives considered**:
+- *Single combined job* — rejected; loses per-platform attribution and fast-fail
+  ordering.
+- *Non-GitHub CI* — N/A; repo is on GitHub.
+
+---
+
+## D6 — Local developer ergonomics
+
+**Decision**: Add/standardize task-runner targets so each layer is one command,
+matching CI:
+- `just test-integration` → Layer 1 (`cargo test --workspace`, integration-tagged).
+- `just test-e2e` → Layer 2 smoke (`pnpm --filter @astro-plan/desktop test:e2e:real`).
+- Keep existing `just test` (unit + workspace) and `just check`.
+- `package.json` keeps `test:e2e:real` (already present); add a matching
+  integration script if useful.
+Each target preconditions on documented prerequisites and fails with a named,
+actionable message when a prerequisite (e.g. `WebKitWebDriver`, `msedgedriver`,
+`tauri-driver`) is missing (FR-015).
+
+**Rationale**: FR-014/FR-015, SC-005 — same commands locally and in CI, clear
+missing-prerequisite errors.
+
+**Alternatives considered**:
+- *CI-only execution* — rejected; defeats the local-feedback goal (US4).
+
+---
+
+## D7 — Implemented feature-area enumeration (coverage mapping basis)
+
+**Decision**: The coverage mapping (FR-019, SC-001) is anchored to this concrete
+list of implemented feature areas, derived from merged specs (001–035) and the
+desktop UI feature folders (`apps/desktop/src/features/*`). Each area needs ≥1
+Layer-1 test; primary areas additionally appear in a Layer-2 smoke journey.
+
+| # | Feature area | Source specs | Layer 2 smoke? |
+|---|---|---|---|
+| 1 | First-run source setup | 003, 010 | Yes |
+| 2 | Native filesystem controls | 004 | via plans |
+| 3 | Inbox mixed-folder split | 005, 013 | Yes |
+| 4 | Inventory / data lifecycle state | 002, 006 | Yes |
+| 5 | Calibration matching & masters | 007 | Yes |
+| 6 | Sessions (acquisition/calibration) | 001 | Yes |
+| 7 | Projects: create/onboard/edit | 008 | Yes |
+| 8 | Project lifecycle model | 009 | Yes |
+| 9 | Project manifests & notes | 024 | Yes |
+| 10 | Processing tool launch | 011 | smoke (no real launch) |
+| 11 | Processing artifact observation | 012 | Yes |
+| 12 | Target lookup from FITS OBJECT | 013 | Yes |
+| 13 | Target identity, history, notes | 023 | Yes |
+| 14 | SIMBAD target resolution | 035 | Yes (boundary-mocked) |
+| 15 | Token pattern builder | 015 | Yes |
+| 16 | Source protection defaults | 016 | via plans |
+| 17 | Cleanup & archive review plans | 017 | Yes |
+| 18 | Filesystem plan application | 025 | Yes (mutation+audit) |
+| 19 | Settings / configuration model | 018 | Yes |
+| 20 | Bottom log viewer | 019 | Yes |
+| 21 | Router & URL state | 020 | Yes (all screens load) |
+| 22 | Audit event model | (cross-cutting) | asserted in #18 |
+
+Catalog index licensing (014), developer contract diagnostics (021), and the
+design/UI-implementation specs (022, 026–032) are infrastructure/UI-only and are
+covered implicitly via screen-load smoke (#21) and the design system; they do not
+get dedicated Layer-1 backend tests. Spec 033 (validation bugfix) and 036 (legacy
+target retirement) are remediation — their behaviors fold into the areas above.
+
+**Rationale**: Makes "100% of implemented feature areas" auditable (resolves the
+spec's fuzzy "roughly 001–035"). The exact per-test mapping is finalized in
+`tasks.md`.
+
+**Alternatives considered**:
+- *Per-spec coverage (one test per spec number)* — rejected; many specs are UI
+  iterations of the same area, which would inflate and confuse the matrix.
+
+---
+
+## D8 — Seeded-regression validation scope (SC-007)
+
+**Decision**: Scope SC-007 to a **one-time, representative validation during
+implementation**, not an ongoing mutation-testing gate. For ~3–5 covered
+behaviors (e.g. drop a persisted field, rename a payload key, skip an audit
+write), temporarily introduce the regression, confirm a Layer-1 or Layer-2 test
+fails, then revert. Record the exercise in the feature's implementation notes.
+
+**Rationale**: Proves the suites actually catch regressions (the whole point)
+without committing to maintaining a mutation-testing harness, which is
+out-of-scope cost. Keeps SC-007 verifiable and bounded.
+
+**Alternatives considered**:
+- *Full mutation testing (e.g. `cargo-mutants`)* — rejected as scope creep for
+  this feature; could be a future enhancement.
+- *Drop SC-007* — rejected; the catch-rate guarantee is the feature's reason to
+  exist.
+
+---
+
+## Open items carried to tasks
+
+- Confirm exact app-DB paths per OS for the Layer-2 DB reader (`db.ts`).
+- Confirm `msedgedriver` acquisition step on `windows-latest` runners.
+- Decide tagging mechanism to separate network-gated live-SIMBAD test from the
+  deterministic default suite.
