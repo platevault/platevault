@@ -14,6 +14,23 @@
 .alm-frame { display: flex; flex-direction: column; height: 100%; }
 .alm-frame__body { display: flex; flex: 1; min-height: 0; }
 .alm-frame__main { display: flex; flex-direction: column; flex: 1; min-width: 0; min-height: 0; }
+
+/* === PAGE LAYOUT PRIMITIVES ===
+ * Every route page renders into a bounded flex column (.alm-frame__main).
+ * Use these three classes to enforce: headers always visible, only content scrolls.
+ *
+ * .alm-page        — fills the bounded content area (must be the page root)
+ * .alm-page__bar   — pinned header / toolbar / action-bar; never scrolls
+ * .alm-page__scroll — the ONE scrolling region per pane; holds main content
+ *
+ * Rule: every route page uses .alm-page as its root; all bars/toolbars use
+ * .alm-page__bar (flex-shrink:0); exactly one .alm-page__scroll per scroll
+ * region. Two/three-pane pages: each pane that scrolls is itself a bounded
+ * flex column with its own .alm-page__scroll.
+ */
+.alm-page { display: flex; flex-direction: column; flex: 1; min-height: 0; height: 100%; }
+.alm-page__bar { flex-shrink: 0; }
+.alm-page__scroll { flex: 1; min-height: 0; overflow-y: auto; }
 .alm-frame__statusbar {
   height: var(--alm-statusbar-height);
   background: var(--alm-surface);
