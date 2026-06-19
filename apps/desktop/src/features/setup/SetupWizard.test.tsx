@@ -1,10 +1,10 @@
 /// <reference types="@testing-library/jest-dom" />
 /**
- * SetupWizard gating tests (T044 — rewritten for 4-step flow).
+ * SetupWizard gating tests (T044 — rewritten for 5-step flow).
  *
  * Validates that Step 1 (Source Folders) blocks advancement when required
- * folder types (light_frames, project) are missing, and that Steps 2 and 3
- * advance freely.
+ * folder types (light_frames, project) are missing, and that Steps 2–3
+ * advance freely. The Scan step (step 5) has its own StepScan.test.tsx.
  */
 import { render, screen, fireEvent, waitFor, act } from '@testing-library/react';
 import { describe, it, expect, beforeEach, vi } from 'vitest';
@@ -72,6 +72,10 @@ vi.mock('@/api/commands', () => ({
   // Configuration step also reads/writes the default source-protection setting.
   getSettings: vi.fn().mockResolvedValue({ values: { defaultProtection: 'protected' } }),
   updateSettings: vi.fn().mockResolvedValue(undefined),
+  // StepScan calls these — stub with empty responses so render doesn't throw
+  // if the Scan step is reached during tests that navigate that far.
+  inboxScanFolder: vi.fn().mockResolvedValue({ rootId: 'root-mock', items: [] }),
+  inboxClassify: vi.fn().mockResolvedValue(null),
 }));
 
 // Mock @tauri-apps/api/core to prevent any accidental live invoke.
@@ -162,11 +166,11 @@ beforeEach(() => {
 // Tests
 // ---------------------------------------------------------------------------
 
-describe('SetupWizard 4-step flow', () => {
+describe('SetupWizard 5-step flow', () => {
   it('starts on Step 1 (Source Folders) and shows the heading', () => {
     renderWizard();
     expect(screen.getByText(/where does your data live/i)).toBeInTheDocument();
-    expect(screen.getByText(/step 1 of 4/i)).toBeInTheDocument();
+    expect(screen.getByText(/step 1 of 5/i)).toBeInTheDocument();
   });
 
   it('blocks Continue on Step 1 when no paths are added', () => {
@@ -275,7 +279,7 @@ describe('SetupWizard 4-step flow', () => {
 
     // We should be on the Processing Tools step (heading)
     expect(screen.getByRole('heading', { name: /processing tools/i })).toBeInTheDocument();
-    expect(screen.getByText(/step 2 of 4/i)).toBeInTheDocument();
+    expect(screen.getByText(/step 2 of 5/i)).toBeInTheDocument();
 
     // Continue should be enabled (tools step has no requirements)
     const continueBtn = getContinueButton();
@@ -308,14 +312,14 @@ describe('SetupWizard 4-step flow', () => {
 
     // We should be on the Catalogs step (heading)
     expect(screen.getByRole('heading', { name: /configuration/i })).toBeInTheDocument();
-    expect(screen.getByText(/step 3 of 4/i)).toBeInTheDocument();
+    expect(screen.getByText(/step 3 of 5/i)).toBeInTheDocument();
 
     // Continue should be enabled
     const continueBtn = getContinueButton();
     expect(continueBtn).not.toBeDisabled();
   });
 
-  it('shows Confirm step (Step 4) with Complete setup button', async () => {
+  it('shows Confirm step (Step 4) with Start scan button', async () => {
     // Seed state at step 3 (Confirm) with all required kinds satisfied.
     const seeded = {
       currentStep: 3,
@@ -338,13 +342,15 @@ describe('SetupWizard 4-step flow', () => {
 
     // Verify we are on the Confirm step
     expect(screen.getByText(/ready to go/i)).toBeInTheDocument();
+    expect(screen.getByText(/step 4 of 5/i)).toBeInTheDocument();
 
-    // Complete setup button should be present and enabled
-    const completeBtn = screen.getByRole('button', { name: /complete setup/i });
-    expect(completeBtn).not.toBeDisabled();
+    // "Start scan" button should be present and enabled (not "Complete setup")
+    const startScanBtn = screen.getByRole('button', { name: /start scan/i });
+    expect(startScanBtn).not.toBeDisabled();
+    expect(screen.queryByRole('button', { name: /complete setup/i })).toBeNull();
   });
 
-  it('blocks Complete setup on Confirm step when required folders are missing', async () => {
+  it('blocks Start scan on Confirm step when required folders are missing', async () => {
     // Seed at step 3 but WITHOUT a project folder
     const seeded = {
       currentStep: 3,
@@ -365,9 +371,9 @@ describe('SetupWizard 4-step flow', () => {
 
     expect(screen.getByText(/ready to go/i)).toBeInTheDocument();
 
-    // Complete setup should be disabled
-    const completeBtn = screen.getByRole('button', { name: /complete setup/i });
-    expect(completeBtn).toBeDisabled();
+    // Start scan should be disabled
+    const startScanBtn = screen.getByRole('button', { name: /start scan/i });
+    expect(startScanBtn).toBeDisabled();
 
     // Should show the blocked message
     expect(screen.getByText(/cannot complete setup/i)).toBeInTheDocument();

@@ -46,6 +46,8 @@ export interface FlushRowResult {
   kind: SourceKind;
   path: string;
   success: boolean;
+  /** The registered root's id (present on successful rows); used to scan the source. */
+  rootId?: string;
   error?: string;
 }
 
@@ -198,7 +200,12 @@ export async function flushToDB(sources: SourcesState): Promise<FlushResult> {
 
   if (isMockMode) {
     return {
-      results: validSources.map((s) => ({ kind: s.kind, path: s.path, success: true })),
+      results: validSources.map((s) => ({
+        kind: s.kind,
+        path: s.path,
+        success: true,
+        rootId: s.path,
+      })),
       allSucceeded: true,
     };
   }
@@ -216,7 +223,13 @@ export async function flushToDB(sources: SourcesState): Promise<FlushResult> {
 
     const results: FlushRowResult[] = batchResult.results.map((item) => {
       if (item.success) {
-        return { kind: item.kind as SourceKind, path: item.path, success: true };
+        // Carry the assigned root id so the wizard scan step can scan this source.
+        return {
+          kind: item.kind as SourceKind,
+          path: item.path,
+          success: true,
+          rootId: item.root?.id,
+        };
       }
       const errorCode = item.error ?? 'unknown';
       const message = ERROR_MESSAGES[errorCode] ?? `Registration failed: ${errorCode}`;
