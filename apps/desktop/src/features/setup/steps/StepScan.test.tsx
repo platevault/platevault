@@ -85,6 +85,27 @@ const SCAN_RESPONSE_EMPTY = {
   items: [],
 };
 
+// A single detected calibration master file (spec 040 FR-005/FR-006): the item
+// carries its own frame type / exposure rather than relying on the breakdown.
+const SCAN_RESPONSE_WITH_MASTER = {
+  rootId: 'root-003',
+  items: [
+    {
+      inboxItemId: 'master-001',
+      relativePath: 'masters/masterDark_300s.xisf',
+      fileCount: 1,
+      lane: 'xisf',
+      format: 'xisf',
+      state: 'classified',
+      contentSignature: 'sig-master',
+      isMaster: true,
+      masterFrameType: 'dark',
+      masterFilter: null,
+      masterExposureS: 300,
+    },
+  ],
+};
+
 // ── Helpers ──────────────────────────────────────────────────────────────────
 
 function renderStep(overrides: Partial<StepScanProps> = {}) {
@@ -260,6 +281,27 @@ describe('StepScan', () => {
       // Breakdown kinds visible (light=16, dark=2)
       expect(screen.getByText('16 light')).toBeInTheDocument();
       expect(screen.getByText('2 dark')).toBeInTheDocument();
+    });
+
+    it('renders a Master pill and the frame type for individual masters (spec 040 FR-006)', async () => {
+      mockInboxScanFolder.mockResolvedValue(SCAN_RESPONSE_WITH_MASTER);
+      mockInboxClassify.mockResolvedValue(CLASSIFY_RESPONSE);
+
+      renderStep({ sources: [SOURCES[0]] });
+
+      await waitFor(() => {
+        expect(
+          within(screen.getByTestId('scan-source-/astro/lights')).getByText(/1 folder/),
+        ).toBeInTheDocument();
+      });
+
+      expandSource('/astro/lights');
+
+      const row = screen.getByTestId('scan-item-master-001');
+      // "Master" pill in the Folder/File cell
+      expect(within(row).getByText('Master')).toBeInTheDocument();
+      // Frame type + exposure in the Detected types cell (filter null → omitted)
+      expect(within(row).getByText('Master Dark · 300s')).toBeInTheDocument();
     });
 
     it('shows the scan summary when all sources are done', async () => {
