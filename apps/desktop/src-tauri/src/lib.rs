@@ -587,6 +587,12 @@ pub fn run_app(app: tauri::App, pool: SqlitePool) {
         });
     }
 
+    // Inbox + inventory commands take `State<'_, SqlitePool>` directly (rather
+    // than via AppState), so the raw pool must be managed too. Without this they
+    // fail at runtime with "state not managed for field `pool`" — which is why
+    // the Inbox scan/classify pipeline only ever worked under mock mode.
+    app.manage(pool.clone());
+
     let repo = Arc::new(SqliteLifecycleRepository::new(pool, bus.clone()));
     let state = AppState::new(repo, bus);
 
