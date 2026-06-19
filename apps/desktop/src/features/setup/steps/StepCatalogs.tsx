@@ -94,24 +94,6 @@ function DensityControl() {
   );
 }
 
-// ── Default scan depth (frontend preference; applied to newly added folders) ──
-
-function DefaultScanDepthControl() {
-  const [scanDepth, setScanDepth] = usePreference('defaultScanDepth');
-  return (
-    <select
-      className="alm-select"
-      value={scanDepth}
-      aria-label="Default scan depth"
-      onChange={(e) => setScanDepth(e.target.value as 'recursive' | 'single')}
-      style={{ height: 28 }}
-    >
-      <option value="recursive">Recursive (include subfolders)</option>
-      <option value="single">Single folder only</option>
-    </select>
-  );
-}
-
 // ── A labelled config row: title + control on one line, description below ──────
 
 function ConfigOption({
@@ -171,12 +153,6 @@ export function StepCatalogs(_props: StepCatalogsProps) {
         title="Default source protection"
         description="Protection level applied to newly added source folders. Protected sources are skipped by cleanup plans unless explicitly approved."
         control={<DefaultProtectionControl />}
-      />
-
-      <ConfigOption
-        title="Default scan depth"
-        description="Whether newly added source folders are scanned recursively (including subfolders) or as a single folder."
-        control={<DefaultScanDepthControl />}
       />
 
       <ConfigOption

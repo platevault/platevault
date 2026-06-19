@@ -62,7 +62,6 @@ describe('StepCatalogs (Configuration)', () => {
     renderStep();
     await waitFor(() => expect(mockGetSettings).toHaveBeenCalled());
     expect(screen.getByLabelText('Default source protection')).toBeInTheDocument();
-    expect(screen.getByLabelText('Default scan depth')).toBeInTheDocument();
     expect(screen.getByLabelText('Display density')).toBeInTheDocument();
   });
 

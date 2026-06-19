@@ -17,7 +17,6 @@ const defaults: AppPreferences = {
   sessionsView: 'list',
   tourCompleted: { step1: false, step2: false, step3: false },
   setupCompleted: false,
-  defaultScanDepth: 'recursive',
 };
 
 function notify(): void {
