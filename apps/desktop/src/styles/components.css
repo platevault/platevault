@@ -545,28 +545,32 @@
 /* === SETTINGS === */
 .alm-settings { display: flex; flex: 1; min-height: 0; }
 .alm-settings__nav {
-  width: 200px; flex-shrink: 0;
+  width: 180px; flex-shrink: 0;
   border-right: 1px solid var(--alm-border);
   padding: var(--alm-sp-3) 0;
   overflow-y: auto;
 }
 .alm-settings__nav-item {
   display: block; width: 100%;
-  padding: 6px var(--alm-sp-4);
+  padding: 7px var(--alm-sp-4);
   font-size: var(--alm-text-sm); color: var(--alm-text-secondary);
   cursor: pointer; border: none; background: none; text-align: left;
   font-family: var(--alm-font-sans); font-weight: var(--alm-weight-medium);
   transition: all var(--alm-transition-fast);
+  white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
 }
 .alm-settings__nav-item:hover { background: var(--alm-hover-bg); color: var(--alm-text); }
 .alm-settings__nav-item--active {
   color: var(--alm-text); background: var(--alm-bg);
   font-weight: var(--alm-weight-semibold);
   border-left: 2px solid var(--alm-accent);
+  padding-left: calc(var(--alm-sp-4) - 2px);
 }
 .alm-settings__content {
-  flex: 1; overflow-y: auto; padding: var(--alm-sp-5);
-  max-width: 720px;
+  /* Scroll independently within the two-pane detail column */
+  flex: 1; min-width: 0; overflow-y: auto;
+  padding: var(--alm-sp-5) var(--alm-sp-6) var(--alm-sp-7);
+  max-width: 680px;
 }
 .alm-settings__title {
   font-size: var(--alm-text-xl); font-weight: var(--alm-weight-semibold);
@@ -574,20 +578,24 @@
 }
 .alm-settings__desc {
   font-size: var(--alm-text-sm); color: var(--alm-text-muted);
-  margin-bottom: var(--alm-sp-5);
+  margin: 0 0 var(--alm-sp-5);
+  line-height: 1.6;
 }
-.alm-settings__group { margin-bottom: var(--alm-sp-5); }
+.alm-settings__group { margin-bottom: var(--alm-sp-6); }
+.alm-settings__group:last-child { margin-bottom: 0; }
 .alm-settings__group-title {
-  font-size: var(--alm-text-md); font-weight: var(--alm-weight-semibold);
+  font-size: var(--alm-text-sm); font-weight: var(--alm-weight-semibold);
+  color: var(--alm-text);
   margin-bottom: var(--alm-sp-3);
   padding-bottom: var(--alm-sp-2);
   border-bottom: 1px solid var(--alm-border-subtle);
+  text-transform: uppercase; letter-spacing: 0.05em;
 }
 .alm-settings__group-note {
   font-size: var(--alm-text-xs);
   color: var(--alm-text-muted);
   margin: 0 0 var(--alm-sp-3) 0;
-  line-height: 1.5;
+  line-height: 1.6;
 }
 .alm-attribution__list {
   list-style: none;
@@ -626,16 +634,36 @@
   display: flex; gap: var(--alm-sp-4); align-items: flex-start;
   padding: var(--alm-sp-3) 0;
   border-bottom: 1px solid var(--alm-border-subtle);
+  min-width: 0;
 }
 .alm-settings__row:last-child { border-bottom: none; }
 .alm-settings__row-label {
-  width: 140px; flex-shrink: 0;
+  width: 160px; flex-shrink: 0;
   font-size: var(--alm-text-sm); font-weight: var(--alm-weight-medium);
+  color: var(--alm-text-secondary);
+  padding-top: 4px; /* align with input element vertical centre */
 }
-.alm-settings__row-content { flex: 1; }
+.alm-settings__row-content { flex: 1; min-width: 0; }
 .alm-settings__row-desc {
   font-size: var(--alm-text-xs); color: var(--alm-text-muted);
-  margin-top: var(--alm-sp-1);
+  margin-top: var(--alm-sp-2);
+  line-height: 1.5;
+}
+/* Flex header row inside a group: title on left, action button on right */
+.alm-settings__group-header {
+  display: flex; align-items: center; justify-content: space-between;
+  margin-bottom: var(--alm-sp-3);
+}
+.alm-settings__group-header .alm-settings__group-title { margin-bottom: 0; border-bottom: none; padding-bottom: 0; }
+/* Inline error message for settings save failures */
+.alm-settings__error {
+  font-size: var(--alm-text-xs);
+  color: var(--alm-danger, #dc2626);
+  margin-top: var(--alm-sp-2);
+  padding: var(--alm-sp-2) var(--alm-sp-3);
+  background: var(--alm-danger-bg, rgba(220,38,38,0.08));
+  border-radius: var(--alm-radius-sm);
+  border: 1px solid var(--alm-danger-border, rgba(220,38,38,0.2));
 }
 
 /* Radio group */
@@ -706,7 +734,7 @@
 }
 
 /* === WIZARD === */
-.alm-wizard { display: flex; flex-direction: column; flex: 1; min-height: 0; overflow-y: auto; }
+.alm-wizard { display: flex; flex-direction: column; flex: 1; min-height: 0; }
 .alm-wizard__steps {
   display: flex; gap: 0; padding: var(--alm-sp-4) var(--alm-sp-7);
   border-bottom: 1px solid var(--alm-border);
@@ -729,8 +757,13 @@
 }
 .alm-wizard__step--done { background: var(--alm-ok-bg); color: var(--alm-ok); border-color: var(--alm-ok-border); }
 .alm-wizard__body {
-  flex: 1; padding: var(--alm-sp-5) var(--alm-sp-7);
+  /* Flex column so child steps can use flex:1 + min-height:0 to scroll internally */
+  display: flex; flex-direction: column;
+  flex: 1; min-height: 0;
+  padding: var(--alm-sp-5) var(--alm-sp-7);
   max-width: 720px; margin: 0 auto; width: 100%;
+  /* Horizontal overflow guard for min-window-size */
+  overflow-x: hidden;
 }
 .alm-wizard__footer {
   padding: var(--alm-sp-3) var(--alm-sp-7);
