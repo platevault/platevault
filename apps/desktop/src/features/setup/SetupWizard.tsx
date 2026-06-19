@@ -2,7 +2,7 @@ import { useState, useEffect, useCallback, useMemo } from 'react';
 import { useNavigate } from '@tanstack/react-router';
 import { WizardShell } from '@/ui/WizardShell';
 import { Btn } from '@/ui/Btn';
-import { setPreference, getPreferences } from '@/data/preferences';
+import { setPreference } from '@/data/preferences';
 import { completeFirstRun } from '@/api/commands';
 import {
   StepSourceFolders,
@@ -152,7 +152,7 @@ export function SetupWizard() {
       if (validationError) {
         setState((prev) => ({
           ...prev,
-          sources: addSource(prev.sources, kind, path, getPreferences().defaultScanDepth),
+          sources: addSource(prev.sources, kind, path),
         }));
         setErrors((prev) => ({
           ...prev,
@@ -163,7 +163,7 @@ export function SetupWizard() {
 
       setState((prev) => ({
         ...prev,
-        sources: addSource(prev.sources, kind, path, getPreferences().defaultScanDepth),
+        sources: addSource(prev.sources, kind, path),
       }));
       // Clear any error for this index
       setErrors((prev) => {

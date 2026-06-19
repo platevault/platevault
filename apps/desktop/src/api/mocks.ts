@@ -52,7 +52,6 @@ const mockPreferences: AppPreferences = {
   sessionsView: 'list',
   tourCompleted: { step1: false, step2: false, step3: false },
   setupCompleted: false,
-  defaultScanDepth: 'recursive',
 };
 
 // Review items are loaded from the wireframe-aligned fixture file (review.queue case below).
