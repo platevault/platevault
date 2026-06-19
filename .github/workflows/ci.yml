@@ -80,3 +80,70 @@ jobs:
       # --- Generated contract / binding drift gate (review finding W1) ---
       - name: Generated contract/binding drift
         run: just check-generated
+
+  # Stage B — Layer-2 full-stack E2E. Required on Linux + Windows (research D4).
+  # Drives the built app via tauri-driver. Gated behind Stage A (FR-012).
+  e2e:
+    name: E2E (Layer 2) — ${{ matrix.os }}
+    needs: integration
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-latest, windows-latest]
+    runs-on: ${{ matrix.os }}
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install Tauri + E2E system deps (Linux)
+        if: runner.os == 'Linux'
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y \
+            libwebkit2gtk-4.1-dev libgtk-3-dev librsvg2-dev \
+            libayatana-appindicator3-dev webkit2gtk-driver xvfb
+
+      - uses: dtolnay/rust-toolchain@stable
+      - uses: Swatinem/rust-cache@v2
+      - uses: pnpm/action-setup@v4
+        with:
+          version: 10.33.0
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: pnpm
+
+      - name: Install tauri-driver
+        run: cargo install tauri-driver --locked
+
+      # Windows: tauri-driver needs msedgedriver version-matched to installed Edge.
+      - name: Setup Edge WebDriver (Windows)
+        if: runner.os == 'Windows'
+        uses: browser-actions/setup-edge@v1
+
+      - name: Install JS deps
+        run: pnpm install --frozen-lockfile
+
+      - name: Install Playwright chromium
+        run: pnpm --filter @astro-plan/desktop exec playwright install --with-deps chromium
+
+      - name: Build desktop app (debug)
+        run: cargo build -p desktop_shell
+
+      # The harness (e2e/helpers/tauri-app.ts) launches tauri-driver under
+      # xvfb-run on Linux. Real-UI journeys that drive IPC are validated here.
+      - name: Real-backend E2E (Layer 2)
+        run: pnpm --filter @astro-plan/desktop test:e2e:real
+
+  # Stage C — macOS best-effort (research D4): official tauri-driver has no macOS
+  # support; real-UI E2E needs a debug-only plugin. Non-merge-blocking.
+  e2e-macos:
+    name: E2E (Layer 2) — macOS (best-effort)
+    needs: integration
+    runs-on: macos-latest
+    continue-on-error: true
+    steps:
+      - uses: actions/checkout@v4
+      - name: Not-applicable notice (FR-013)
+        run: |
+          echo "macOS real-UI E2E requires tauri-plugin-webdriver (research D4)."
+          echo "Best-effort / non-merge-blocking. macOS Layer-1 runs in the integration job."
