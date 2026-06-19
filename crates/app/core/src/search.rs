@@ -81,17 +81,19 @@ async fn search_targets(pool: &SqlitePool, q: &str) -> Result<Vec<SearchResult>,
 
     // Returns (id, primary_designation, best_alias_normalized_match)
     let rows: Vec<(String, String, Option<String>)> = sqlx::query_as(
-        "SELECT t.id, t.primary_designation,
-                (SELECT ta.alias_display FROM target_aliases ta
+        // spec 036 reconciliation: query the gen-3 canonical_target / target_alias
+        // tables (the legacy spec-013 targets / target_aliases were retired).
+        "SELECT t.id, COALESCE(t.display_alias, t.primary_designation) AS label,
+                (SELECT ta.alias FROM target_alias ta
                  WHERE ta.target_id = t.id
-                   AND LOWER(ta.alias_normalized) LIKE ?
+                   AND ta.normalized LIKE ?
                  LIMIT 1) AS alias_match
-         FROM targets t
+         FROM canonical_target t
          WHERE LOWER(t.primary_designation) LIKE ?
             OR EXISTS (
-                SELECT 1 FROM target_aliases ta2
+                SELECT 1 FROM target_alias ta2
                 WHERE ta2.target_id = t.id
-                  AND LOWER(ta2.alias_normalized) LIKE ?
+                  AND ta2.normalized LIKE ?
             )
          ORDER BY t.primary_designation ASC
          LIMIT 10",
@@ -127,7 +129,8 @@ async fn search_targets(pool: &SqlitePool, q: &str) -> Result<Vec<SearchResult>,
 
 async fn recent_targets(pool: &SqlitePool) -> Result<Vec<SearchResult>, String> {
     let rows: Vec<(String, String)> = sqlx::query_as(
-        "SELECT id, primary_designation FROM targets ORDER BY created_at DESC LIMIT 5",
+        "SELECT id, COALESCE(display_alias, primary_designation) FROM canonical_target \
+         ORDER BY resolved_at DESC LIMIT 5",
     )
     .fetch_all(pool)
     .await
@@ -284,8 +287,8 @@ mod tests {
 
         // Insert a real target.
         sqlx::query(
-            "INSERT INTO targets (id, primary_designation, created_at) \
-             VALUES ('t-001', 'NGC 7000 - North America Nebula', '2026-06-01T00:00:00Z')",
+            "INSERT INTO canonical_target (id, primary_designation, object_type, ra_deg, dec_deg, source, resolved_at) \
+             VALUES ('t-001', 'NGC 7000 - North America Nebula', 'other', 0, 0, 'seed', '2026-06-01T00:00:00Z')",
         )
         .execute(db.pool())
         .await
@@ -293,8 +296,8 @@ mod tests {
 
         // Insert a second target that should NOT match.
         sqlx::query(
-            "INSERT INTO targets (id, primary_designation, created_at) \
-             VALUES ('t-002', 'M31 - Andromeda Galaxy', '2026-06-01T00:00:00Z')",
+            "INSERT INTO canonical_target (id, primary_designation, object_type, ra_deg, dec_deg, source, resolved_at) \
+             VALUES ('t-002', 'M31 - Andromeda Galaxy', 'other', 0, 0, 'seed', '2026-06-01T00:00:00Z')",
         )
         .execute(db.pool())
         .await
@@ -318,9 +321,9 @@ mod tests {
         let db = test_db().await;
 
         sqlx::query(
-            "INSERT INTO targets (id, primary_designation, created_at) \
-             VALUES ('t-003', 'M42 - Orion Nebula', '2026-06-01T00:00:00Z'),
-                    ('t-004', 'IC 1396 - Elephant Trunk Nebula', '2026-06-01T00:00:00Z')",
+            "INSERT INTO canonical_target (id, primary_designation, object_type, ra_deg, dec_deg, source, resolved_at) \
+             VALUES ('t-003', 'M42 - Orion Nebula', 'other', 0, 0, 'seed', '2026-06-01T00:00:00Z'),
+                    ('t-004', 'IC 1396 - Elephant Trunk Nebula', 'other', 0, 0, 'seed', '2026-06-01T00:00:00Z')",
         )
         .execute(db.pool())
         .await
@@ -342,16 +345,16 @@ mod tests {
         let db = test_db().await;
 
         sqlx::query(
-            "INSERT INTO targets (id, primary_designation, created_at) \
-             VALUES ('t-005', 'NGC 1976', '2026-06-01T00:00:00Z')",
+            "INSERT INTO canonical_target (id, primary_designation, object_type, ra_deg, dec_deg, source, resolved_at) \
+             VALUES ('t-005', 'NGC 1976', 'other', 0, 0, 'seed', '2026-06-01T00:00:00Z')",
         )
         .execute(db.pool())
         .await
         .unwrap();
 
         sqlx::query(
-            "INSERT INTO target_aliases (id, target_id, alias_display, alias_normalized, created_at) \
-             VALUES ('a-001', 't-005', 'Great Orion Nebula', 'great orion nebula', '2026-06-01T00:00:00Z')",
+            "INSERT INTO target_alias (id, target_id, alias, normalized, kind) \
+             VALUES ('a-001', 't-005', 'Great Orion Nebula', 'great orion nebula', 'user')",
         )
         .execute(db.pool())
         .await
