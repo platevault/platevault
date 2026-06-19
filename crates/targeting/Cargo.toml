@@ -18,14 +18,29 @@ unicode-normalization.workspace = true
 # strsim is already in the lockfile (pulled by other workspace members).
 # Fuzzy matching: token-set similarity + Damerau-Levenshtein (R2).
 strsim = "0.11"
+# spec 035 (SIMBAD resolver): async HTTP client for SIMBAD TAP/Sesame.
+# reqwest 0.13 uses default-features = false + ["json", "rustls"] (no openssl);
+# the `rustls-tls` feature was renamed to `rustls` in 0.13. Consumed only by
+# the `resolver` module. tokio provides the async runtime for the client.
+reqwest = { workspace = true }
+tokio = { workspace = true }
+# spec 035 (SIMBAD resolver): async trait seam for the `Resolver` trait,
+# mirroring the retired `download::CatalogFetcher` pattern.
+async-trait.workspace = true
+# spec 035 (resolution cache): RFC-3339 `resolved_at` timestamps, matching the
+# `persistence_db` repositories' time convention.
+time.workspace = true
 
 [features]
 # Enables the seeded in-memory test fixture for use in integration tests
 # in other crates. Must NOT be enabled in production builds.
 test-fixture = []
 
+[[test]]
+name = "simbad_live"
+path = "tests/simbad_live.rs"
+
 [dev-dependencies]
-tokio = { workspace = true }
 persistence_db = { path = "../persistence/db" }
 
 [lints]

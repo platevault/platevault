@@ -8,7 +8,7 @@ import { Ingestion } from './Ingestion';
 import { NamingStructure } from './NamingStructure';
 import { ProcessingTools } from './ProcessingTools';
 import { CalibrationMatching } from './CalibrationMatching';
-import { Catalogs } from './Catalogs';
+import { ResolverSettings } from './ResolverSettings';
 import { Cleanup } from './Cleanup';
 import { General } from './General';
 import { Advanced } from './Advanced';
@@ -21,7 +21,7 @@ const PANES = [
   { id: 'naming', label: 'Naming & Structure' },
   { id: 'tools', label: 'Processing Tools' },
   { id: 'cal', label: 'Calibration Matching' },
-  { id: 'catalogs', label: 'Target Catalogs' },
+  { id: 'catalogs', label: 'Target Resolution' },
   { id: 'cleanup', label: 'Cleanup' },
   { id: 'general', label: 'General' },
   { id: 'advanced', label: 'Advanced' },
@@ -56,8 +56,8 @@ const PANE_META: Record<PaneId, { title: string; desc: string }> = {
     desc: 'Tolerances and requirements for automatic calibration frame matching.',
   },
   catalogs: {
-    title: 'Target Catalogs',
-    desc: 'Deep-sky catalogs used for target identification and alias resolution.',
+    title: 'Target Resolution',
+    desc: 'How object names in your files are resolved to canonical targets — online SIMBAD resolution plus the bundled seed and local cache.',
   },
   cleanup: {
     title: 'Cleanup',
@@ -88,7 +88,7 @@ function renderPane(
     case 'naming':    return <NamingStructure save={save} />;
     case 'tools':     return <ProcessingTools />;
     case 'cal':       return <CalibrationMatching save={save} />;
-    case 'catalogs':  return <Catalogs save={save} />;
+    case 'catalogs':  return <ResolverSettings save={save} />;
     case 'cleanup':   return <Cleanup save={save} />;
     case 'general':   return <General />;
     case 'advanced':  return <Advanced save={save} />;

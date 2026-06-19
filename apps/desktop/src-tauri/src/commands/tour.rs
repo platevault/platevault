@@ -7,7 +7,7 @@
 /// # Errors
 /// Returns `Err(String)` on failure; the stub never fails.
 #[tauri::command]
-#[specta::specta(rename = "tour.complete_step")]
+#[specta::specta]
 pub async fn tour_complete_step(step: String) -> Result<(), String> {
     tracing::debug!("stub: tour.complete_step step={step}");
     Ok(())

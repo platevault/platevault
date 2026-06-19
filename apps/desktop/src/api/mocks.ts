@@ -107,46 +107,108 @@ export async function mockInvoke<T>(
   switch (cmd) {
     // ---------- Query Commands ----------
 
-    case 'sessions.list': {
+    case 'sessions_list': {
       const { sessions } = await import('@/data/fixtures/sessions');
       return sessions as T;
     }
-    case 'sessions.get': {
+    case 'sessions_get': {
       const { sessionDetail } = await import('@/data/fixtures/sessions');
       return sessionDetail as T;
     }
-    case 'sessions.calendar': {
+    case 'sessions_calendar': {
       return mockCalendarData as T;
     }
-    case 'calibration.masters.list': {
+    case 'calibration_masters_list': {
       const { masters } = await import('@/data/fixtures/calibration');
       return masters as T;
     }
-    case 'calibration.masters.get': {
+    case 'calibration_masters_get': {
       return mockMasterDetail as T;
     }
-    case 'calibration.matches': {
+    case 'calibration_matches': {
       return mockMatchCandidates as T;
     }
-    case 'targets.list': {
+    case 'targets_list': {
       const { targets } = await import('@/data/fixtures/targets');
       return targets as T;
     }
-    case 'targets.get': {
+    case 'targets_get': {
       const { targetDetail } = await import('@/data/fixtures/targets');
       return targetDetail as T;
     }
-    case 'projects.list': {
+
+    // ── gen-3 target commands (spec 036) ──────────────────────────────────────
+    case 'target_list': {
+      return [
+        { id: 'tgt-m31', effectiveLabel: 'M 31', primaryDesignation: 'M 31', objectType: 'galaxy' },
+        { id: 'tgt-ngc7000', effectiveLabel: 'NGC 7000', primaryDesignation: 'NGC 7000', objectType: 'emission_nebula' },
+      ] as T;
+    }
+    case 'target_get': {
+      const req = (_args as { req?: { targetId?: string } } | undefined)?.req;
+      return {
+        id: req?.targetId ?? 'tgt-m31',
+        primaryDesignation: 'M 31',
+        effectiveLabel: 'M 31',
+        displayAlias: null,
+        objectType: 'galaxy',
+        raDeg: 10.68,
+        decDeg: 41.27,
+        simbadOid: 1_234_567,
+        source: 'resolved',
+        aliases: [],
+      } as T;
+    }
+    case 'target_search': {
+      const req = (_args as { req?: { query?: string } } | undefined)?.req;
+      const q = (req?.query ?? '').toLowerCase();
+      const allSuggestions = [
+        { targetId: 'tgt-m31', primaryDesignation: 'M 31', commonName: 'Andromeda Galaxy', objectType: 'galaxy', matchedAlias: 'Andromeda', source: 'seed' },
+        { targetId: 'tgt-ngc7000', primaryDesignation: 'NGC 7000', commonName: null, objectType: 'emission_nebula', matchedAlias: 'North America Nebula', source: 'seed' },
+      ];
+      const suggestions = q
+        ? allSuggestions.filter(
+            (s) =>
+              s.primaryDesignation.toLowerCase().includes(q) ||
+              (s.commonName?.toLowerCase().includes(q) ?? false) ||
+              (s.matchedAlias?.toLowerCase().includes(q) ?? false),
+          )
+        : allSuggestions;
+      return { contractVersion: '1.0', requestId: crypto.randomUUID(), suggestions } as T;
+    }
+    case 'target_resolve': {
+      const req = (_args as { req?: { query?: string } } | undefined)?.req;
+      const query = req?.query ?? 'M 31';
+      return {
+        contractVersion: '1.0',
+        requestId: crypto.randomUUID(),
+        status: 'resolved',
+        target: {
+          targetId: `tgt-resolved-${Date.now()}`,
+          primaryDesignation: query,
+          commonName: null,
+          objectType: 'other',
+          source: 'resolved',
+          raDeg: 0,
+          decDeg: 0,
+          simbadOid: null,
+        },
+        unresolvedReason: null,
+        error: null,
+      } as T;
+    }
+
+    case 'projects_list': {
       // spec 008 real shape: ProjectSummaryDto[]
       const { mockProjectSummaries } = await import('@/data/fixtures/projects');
       return mockProjectSummaries as T;
     }
-    case 'projects.get': {
+    case 'projects_get': {
       // spec 008 real shape: ProjectDetailDto
       const { mockProjectDetail008 } = await import('@/data/fixtures/projects');
       return mockProjectDetail008 as T;
     }
-    case 'projects.create': {
+    case 'projects_create': {
       // Return a minimal success result; tests override this via vi.mock.
       return {
         projectId: 'mock-project-id',
@@ -157,7 +219,7 @@ export async function mockInvoke<T>(
         createdAt: new Date().toISOString(),
       } as T;
     }
-    case 'projects.update': {
+    case 'projects_update': {
       return {
         projectId: (_args as Record<string, Record<string, string>>)?.req?.projectId ?? 'mock-id',
         fieldsUpdated: [],
@@ -165,7 +227,7 @@ export async function mockInvoke<T>(
         updatedAt: new Date().toISOString(),
       } as T;
     }
-    case 'projects.source.add': {
+    case 'projects_source_add': {
       return {
         projectId: (_args as Record<string, Record<string, string>>)?.req?.projectId ?? 'mock-id',
         sourceAdded: { inventoryId: 'mock-inv', name: '', frames: 0, filter: '', exposure: '', linkedAt: new Date().toISOString() },
@@ -174,14 +236,14 @@ export async function mockInvoke<T>(
         linkedAt: new Date().toISOString(),
       } as T;
     }
-    case 'projects.source.remove': {
+    case 'projects_source_remove': {
       return {
         projectId: (_args as Record<string, Record<string, string>>)?.req?.projectId ?? 'mock-id',
         removedSourceId: (_args as Record<string, Record<string, string>>)?.req?.projectSourceId ?? 'mock-src',
         auditId: 'mock-audit-id',
       } as T;
     }
-    case 'projects.channels.reinfer': {
+    case 'projects_channels_reinfer': {
       return {
         projectId: (_args as Record<string, Record<string, string>>)?.req?.projectId ?? 'mock-id',
         channels: [],
@@ -189,28 +251,28 @@ export async function mockInvoke<T>(
         updatedAt: new Date().toISOString(),
       } as T;
     }
-    case 'projects.channels.dismiss_drift': {
+    case 'projects_channels_dismiss_drift': {
       return {
         projectId: (_args as Record<string, Record<string, string>>)?.req?.projectId ?? 'mock-id',
         auditId: 'mock-audit-id',
         dismissedAt: new Date().toISOString(),
       } as T;
     }
-    case 'plans.list': {
+    case 'plans_list': {
       const { plans } = await import('@/data/fixtures/plans');
       return plans as T;
     }
-    case 'plans.get': {
+    case 'plans_get': {
       const { planDetail } = await import('@/data/fixtures/plans');
       return planDetail as T;
     }
-    case 'audit.list': {
+    case 'audit_list': {
       return { entries: mockAuditEntries, total: mockAuditEntries.length } as T;
     }
-    case 'audit.export': {
+    case 'audit_export': {
       return mockAuditEntries.map((e) => JSON.stringify(e)).join('\n') as T;
     }
-    case 'log.recent': {
+    case 'log_recent': {
       const { MOCK_LOG_ENTRIES } = await import('@/data/mockLogEntries');
       return {
         contractVersion: '1',
@@ -218,32 +280,33 @@ export async function mockInvoke<T>(
         truncated: false,
       } as T;
     }
-    case 'log.export': {
+    case 'log_export': {
       return {
         contractVersion: '1',
         requestId: (_args as Record<string, string>)?.requestId ?? 'mock-req',
+        status: 'success',
         filePath: (_args as Record<string, string>)?.filePath ?? '/tmp/log-export.json',
         count: 8,
         bytes: 1024,
       } as T;
     }
-    case 'settings.get': {
+    case 'settings_get': {
       return mockSettingsData as T;
     }
-    case 'roots.list': {
+    case 'roots_list': {
       return mockRoots as T;
     }
-    case 'equipment.list': {
+    case 'equipment_list': {
       return mockEquipment as T;
     }
-    case 'review.queue': {
+    case 'review_queue': {
       const { reviewItems } = await import('@/data/fixtures/review');
       return reviewItems as T;
     }
-    case 'preferences.get': {
+    case 'preferences_get': {
       return mockPreferences as T;
     }
-    case 'search.global': {
+    case 'search_global': {
       return mockSearchResults as T;
     }
 
@@ -265,39 +328,39 @@ export async function mockInvoke<T>(
       } as T;
     }
 
-    case 'sessions.transition': {
+    case 'sessions_transition': {
       const { sessions } = await import('@/data/fixtures/sessions');
       return sessions[0] as T;
     }
-    case 'sessions.split': {
+    case 'sessions_split': {
       const { sessions } = await import('@/data/fixtures/sessions');
       return { original: sessions[0], new: sessions[1] } as T;
     }
-    case 'sessions.merge': {
+    case 'sessions_merge': {
       const { sessions } = await import('@/data/fixtures/sessions');
       return sessions[0] as T;
     }
-    case 'projects.create_plan': {
+    case 'projects_create_plan': {
       const { plans } = await import('@/data/fixtures/plans');
       return plans[0] as T;
     }
-    case 'plans.approve': {
+    case 'plans_approve': {
       const { plans } = await import('@/data/fixtures/plans');
       return plans[0] as T;
     }
-    case 'plans.apply': {
+    case 'plans_apply_real': {
       return { operation_id: 'op-mock-001', kind: 'plan_apply' } as T;
     }
-    case 'plans.discard': {
+    case 'plans_discard': {
       return undefined as T;
     }
-    case 'settings.update': {
+    case 'settings_update': {
       return undefined as T;
     }
-    case 'roots.register': {
+    case 'roots_register': {
       return mockRoots[0] as T;
     }
-    case 'roots.remap': {
+    case 'roots_remap': {
       return {
         root_id: (_args?.root_id as string) ?? 'root-1',
         original_path: '/old/path',
@@ -309,23 +372,25 @@ export async function mockInvoke<T>(
         all_verified: true,
       } as T;
     }
-    case 'roots.remap.apply': {
+    case 'roots_remap_apply': {
       return undefined as T;
     }
-    case 'scan.start': {
+    case 'scan_start': {
       return { operation_id: 'op-scan-001', kind: 'scan' } as T;
     }
-    case 'preferences.set': {
+    case 'preferences_set': {
       return undefined as T;
     }
-    case 'tour.complete_step': {
+    case 'tour_complete_step': {
       return undefined as T;
     }
 
     // ---------- First-Run / Batch Commands ----------
 
-    case 'roots.register.batch': {
-      const sources = (_args?.sources as Array<{ kind: string; path: string }>) ?? [];
+    case 'roots_register_batch': {
+      // Payload is { request: { sources } }; tolerate a legacy top-level shape too.
+      const req = (_args?.request as { sources?: Array<{ kind: string; path: string }> }) ?? _args;
+      const sources = (req?.sources as Array<{ kind: string; path: string }>) ?? [];
       return {
         results: sources.map((s, i) => ({
           kind: s.kind,
@@ -335,21 +400,60 @@ export async function mockInvoke<T>(
         })),
       } as T;
     }
-    case 'firstrun.complete': {
+    case 'firstrun_complete': {
       return { success: true } as T;
     }
-    case 'firstrun.restart': {
+    case 'firstrun_restart': {
       return {
         success: true,
         prefilled_sources: mockRoots.map((r) => ({ kind: r.category, path: r.path })),
       } as T;
     }
-    case 'firstrun.state': {
+    case 'firstrun_state': {
       return { completed: false } as T;
     }
 
-    // ── Inbox commands (spec 005) ──────────────────────────────────────────────
-    case 'inbox.scan.folder': {
+    // ── Inbox commands (spec 005 + 039) ───────────────────────────────────────
+    case 'inbox_list': {
+      // Mock: two roots each with unacknowledged items (SC-001 cross-root).
+      return {
+        items: [
+          {
+            inboxItemId: 'item-001',
+            rootId: 'root-lights-001',
+            rootAbsolutePath: '/astro/raw',
+            relativePath: '2025-10-10/NGC7000',
+            fileCount: 18,
+            lane: 'fits',
+            state: 'classified',
+            contentSignature: 'sig-abc',
+          },
+          {
+            inboxItemId: 'item-002',
+            rootId: 'root-lights-001',
+            rootAbsolutePath: '/astro/raw',
+            relativePath: '2025-10-10/darks',
+            fileCount: 50,
+            lane: 'fits',
+            state: 'pending_classification',
+            contentSignature: 'sig-def',
+          },
+          {
+            inboxItemId: 'item-003',
+            rootId: 'root-inbox-001',
+            rootAbsolutePath: '/astro/inbox',
+            relativePath: '2025-11-01/Jupiter',
+            fileCount: 3,
+            lane: 'video',
+            state: 'pending_classification',
+            contentSignature: 'sig-ghi',
+          },
+        ],
+        capped: false,
+        limit: 500,
+      } as T;
+    }
+    case 'inbox_scan_folder': {
       return {
         rootId: 'root-inbox-001',
         items: [
@@ -358,7 +462,7 @@ export async function mockInvoke<T>(
         ],
       } as T;
     }
-    case 'inbox.classify': {
+    case 'inbox_classify': {
       const args = _args as { req: { inboxItemId: string } } | undefined;
       const id = args?.req?.inboxItemId ?? 'item-001';
       const isMixed = id === 'item-001';
@@ -378,14 +482,14 @@ export async function mockInvoke<T>(
         computedAt: new Date().toISOString(),
       } as T;
     }
-    case 'inbox.confirm': {
+    case 'inbox_confirm': {
       return {
         planId: `plan-${Date.now()}`,
         planState: 'ready_for_review',
         itemsTotal: 18,
       } as T;
     }
-    case 'inbox.reclassify': {
+    case 'inbox_reclassify': {
       const args = _args as { req: { inboxItemId: string } } | undefined;
       return {
         inboxItemId: args?.req?.inboxItemId ?? 'item-001',
@@ -398,7 +502,7 @@ export async function mockInvoke<T>(
 
     // ── Inventory commands (spec 006) ─────────────────────────────────────────
 
-    case 'inventory.list': {
+    case 'inventory_list': {
       const { INVENTORY_LIST_RESPONSE, INVENTORY_SOURCES } = await import(
         '@/data/fixtures/inventory'
       );
@@ -419,7 +523,7 @@ export async function mockInvoke<T>(
       } as T;
     }
 
-    case 'inventory.session.review': {
+    case 'inventory_session_review': {
       const req = (_args as {
         req?: { sessionId?: string; nextState?: string; requestId?: string };
       } | undefined)?.req;
@@ -439,11 +543,11 @@ export async function mockInvoke<T>(
 
     // ── Developer diagnostics (spec 021) ─────────────────────────────────────
 
-    case 'dev.contracts.list': {
+    case 'dev_contracts_list': {
       return {
         contracts: [
           {
-            name: 'sessions.list',
+            name: 'sessions_list',
             version: '1.0.0',
             schemaPath: '',
             direction: 'ui-to-core',
@@ -451,7 +555,7 @@ export async function mockInvoke<T>(
             sensitiveFields: [],
           },
           {
-            name: 'settings.update',
+            name: 'settings_update',
             version: '1.0.0',
             schemaPath: '',
             direction: 'ui-to-core',
@@ -462,11 +566,11 @@ export async function mockInvoke<T>(
       } as T;
     }
 
-    case 'dev.calls.list': {
+    case 'dev_calls_list': {
       return { calls: [] } as T;
     }
 
-    case 'dev.export': {
+    case 'dev_export': {
       return {
         writtenPath: '/tmp/dev-export.json',
         callCount: 0,
@@ -474,7 +578,7 @@ export async function mockInvoke<T>(
       } as T;
     }
 
-    case 'dev.schema.get': {
+    case 'dev_schema_get': {
       const req = (_args as { request?: { schemaPath?: string } } | undefined)?.request;
       const path = req?.schemaPath ?? '';
       if (!path) {
@@ -485,6 +589,18 @@ export async function mockInvoke<T>(
         found: true,
         content: JSON.stringify({ '$schema': 'https://json-schema.org/draft/2020-12/schema', title: 'mock-schema', description: `Mock schema for ${path}` }, null, 2),
       } as T;
+    }
+
+    case 'preparedview_list': {
+      return { views: [] } as T;
+    }
+
+    case 'preparedview_remove': {
+      return { planId: 'mock-plan-remove-001' } as T;
+    }
+
+    case 'preparedview_regenerate': {
+      return { planId: 'mock-plan-regen-001', unresolvedItemCount: 0 } as T;
     }
 
     default:

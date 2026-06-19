@@ -131,6 +131,12 @@ pub struct ProjectSummaryDto {
     pub source_count: u32,
     pub created_at: String,
     pub updated_at: String,
+    /// FR-020: typed blocked reason kind when lifecycle == "blocked". Null otherwise.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub blocked_reason_kind: Option<String>,
+    /// FR-020: free-form note for the blocked reason.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub blocked_reason_note: Option<String>,
 }
 
 /// A project detail (sources + channels included).
@@ -149,6 +155,32 @@ pub struct ProjectDetailDto {
     pub channels: Vec<ProjectChannelDto>,
     pub created_at: String,
     pub updated_at: String,
+    /// The associated spec-035 canonical target (when one was selected at
+    /// project creation), resolved for display. `None` when the project has no
+    /// canonical-target association. Additive; coexists with the legacy
+    /// spec-013 target association.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub canonical_target: Option<ProjectCanonicalTarget>,
+    /// FR-020: typed blocked reason kind when lifecycle == "blocked". Null otherwise.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub blocked_reason_kind: Option<String>,
+    /// FR-020: free-form note for the blocked reason.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub blocked_reason_note: Option<String>,
+}
+
+/// A project's associated spec-035 canonical target, resolved for display on the
+/// project detail read path (spec 035 US1 #2).
+#[derive(Clone, Debug, Serialize, Deserialize, Type)]
+#[serde(rename_all = "camelCase")]
+pub struct ProjectCanonicalTarget {
+    /// UUID of the `canonical_target`.
+    pub id: String,
+    /// Canonical display designation (e.g. `M 31`).
+    pub primary_designation: String,
+    /// Curated common name (e.g. `Andromeda Galaxy`) when one exists.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub common_name: Option<String>,
 }
 
 /// Channel drift state embedded in project.get (FR-010).
@@ -174,6 +206,12 @@ pub struct ProjectCreateRequest {
     pub initial_sources: Vec<String>,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub notes: Option<String>,
+    /// Optional UUID of a spec-035 `canonical_target` the user selected in the
+    /// project-creation target search. Additive and nullable; coexists with the
+    /// legacy spec-013 `projects.target_id` (reconciliation is a future
+    /// decision). Existing callers omit it.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub canonical_target_id: Option<String>,
 }
 
 /// Successful result from `projects.create`.
@@ -181,7 +219,8 @@ pub struct ProjectCreateRequest {
 #[serde(rename_all = "camelCase")]
 pub struct ProjectCreateResult {
     pub project_id: String,
-    /// Always `"setup_incomplete"` (invariant per data-model.md).
+    /// Initial lifecycle state. `"setup_incomplete"` when the project has no sources at create time;
+    /// may auto-transition to `"ready"` when sources are provided in the create request (FR-008).
     pub lifecycle: String,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub plan_id: Option<String>,

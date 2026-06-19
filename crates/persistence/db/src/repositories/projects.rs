@@ -34,6 +34,11 @@ pub struct ProjectRow {
     pub channel_drift: bool,
     pub created_at: String,
     pub updated_at: String,
+    /// FR-020: typed blocked reason kind (migration 0037).
+    /// Populated when lifecycle == "blocked"; NULL otherwise.
+    pub blocked_reason_kind: Option<String>,
+    /// FR-020: free-form blocked reason note (migration 0037).
+    pub blocked_reason_note: Option<String>,
 }
 
 /// Flat row from the `project_sources` table.
@@ -69,6 +74,9 @@ pub struct InsertProject<'a> {
     pub lifecycle: &'a str,
     pub path: &'a str,
     pub notes: Option<&'a str>,
+    /// Optional spec-035 `canonical_target` id (additive; nullable). Coexists
+    /// with the legacy spec-013 `target_id` column.
+    pub canonical_target_id: Option<&'a str>,
 }
 
 /// Data required to insert a project source link.
@@ -84,6 +92,24 @@ pub struct InsertProjectSource<'a> {
     pub linked_at: &'a str,
 }
 
+// ── Type aliases for complex query row types ──────────────────────────────────
+
+/// Row tuple returned by `get_project` and `list_projects` queries.
+/// Factored out to satisfy clippy::type_complexity.
+type ProjectRowTuple = (
+    String,
+    String,
+    String,
+    String,
+    String,
+    Option<String>,
+    i64,
+    String,
+    String,
+    Option<String>,
+    Option<String>,
+);
+
 // ── projects CRUD ─────────────────────────────────────────────────────────────
 
 /// Insert a new project row. Returns `DbError::Database` (UNIQUE violation) when
@@ -95,8 +121,8 @@ pub struct InsertProjectSource<'a> {
 pub async fn insert_project(pool: &SqlitePool, data: &InsertProject<'_>) -> DbResult<String> {
     let now = now_iso();
     sqlx::query(
-        "INSERT INTO projects (id, name, tool, lifecycle, path, notes, channel_drift, created_at, updated_at)
-         VALUES (?, ?, ?, ?, ?, ?, 0, ?, ?)",
+        "INSERT INTO projects (id, name, tool, lifecycle, path, notes, canonical_target_id, channel_drift, created_at, updated_at)
+         VALUES (?, ?, ?, ?, ?, ?, ?, 0, ?, ?)",
     )
     .bind(data.id)
     .bind(data.name)
@@ -104,6 +130,7 @@ pub async fn insert_project(pool: &SqlitePool, data: &InsertProject<'_>) -> DbRe
     .bind(data.lifecycle)
     .bind(data.path)
     .bind(data.notes)
+    .bind(data.canonical_target_id)
     .bind(&now)
     .bind(&now)
     .execute(pool)
@@ -118,17 +145,28 @@ pub async fn insert_project(pool: &SqlitePool, data: &InsertProject<'_>) -> DbRe
 /// Returns [`DbError::NotFound`] when no project with the given id exists.
 /// Returns [`DbError::Database`] on query failure.
 pub async fn get_project(pool: &SqlitePool, id: &str) -> DbResult<ProjectRow> {
-    let row: Option<(String, String, String, String, String, Option<String>, i64, String, String)> =
-        sqlx::query_as(
-            "SELECT id, name, tool, lifecycle, path, notes, channel_drift, created_at, updated_at
-             FROM projects WHERE id = ?",
-        )
-        .bind(id)
-        .fetch_optional(pool)
-        .await?;
+    let row: Option<ProjectRowTuple> = sqlx::query_as(
+        "SELECT id, name, tool, lifecycle, path, notes, channel_drift, created_at, updated_at,
+                blocked_reason_kind, blocked_reason_note
+         FROM projects WHERE id = ?",
+    )
+    .bind(id)
+    .fetch_optional(pool)
+    .await?;
 
-    let (id, name, tool, lifecycle, path, notes, channel_drift, created_at, updated_at) =
-        row.ok_or_else(|| DbError::NotFound(format!("project {id}")))?;
+    let (
+        id,
+        name,
+        tool,
+        lifecycle,
+        path,
+        notes,
+        channel_drift,
+        created_at,
+        updated_at,
+        blocked_reason_kind,
+        blocked_reason_note,
+    ) = row.ok_or_else(|| DbError::NotFound(format!("project {id}")))?;
 
     Ok(ProjectRow {
         id,
@@ -140,7 +178,73 @@ pub async fn get_project(pool: &SqlitePool, id: &str) -> DbResult<ProjectRow> {
         channel_drift: channel_drift != 0,
         created_at,
         updated_at,
+        blocked_reason_kind,
+        blocked_reason_note,
     })
+}
+
+/// Read the spec-035 `canonical_target_id` association for a project (spec 035
+/// US1 #2). Returns `Ok(None)` when the project has no canonical target set, or
+/// when the project id does not exist.
+///
+/// # Errors
+///
+/// Returns [`DbError::Database`] on query failure.
+pub async fn get_project_canonical_target_id(
+    pool: &SqlitePool,
+    id: &str,
+) -> DbResult<Option<String>> {
+    let row: Option<(Option<String>,)> =
+        sqlx::query_as("SELECT canonical_target_id FROM projects WHERE id = ?")
+            .bind(id)
+            .fetch_optional(pool)
+            .await?;
+    Ok(row.and_then(|(ctid,)| ctid))
+}
+
+/// A project's associated spec-035 canonical target, resolved via LEFT JOIN
+/// (spec 035 US1 #2). `None` when the project has no `canonical_target_id` set
+/// (or the join finds no matching row).
+#[derive(Clone, Debug)]
+pub struct ProjectCanonicalTargetRow {
+    pub id: String,
+    pub primary_designation: String,
+    pub common_name: Option<String>,
+}
+
+/// Read a project's associated canonical target (id, primary designation, and
+/// a `common_name` alias when present) via LEFT JOIN on
+/// `projects.canonical_target_id`. Returns `Ok(None)` when there is no
+/// association.
+///
+/// The common name is the first `kind = 'common_name'` alias for the target
+/// (alphabetical), or `None` when the target has no common-name alias.
+///
+/// # Errors
+///
+/// Returns [`DbError::Database`] on query failure.
+pub async fn get_project_canonical_target(
+    pool: &SqlitePool,
+    id: &str,
+) -> DbResult<Option<ProjectCanonicalTargetRow>> {
+    let row: Option<(String, String, Option<String>)> = sqlx::query_as(
+        "SELECT ct.id, ct.primary_designation,
+                (SELECT ta.alias FROM target_alias ta
+                  WHERE ta.target_id = ct.id AND ta.kind = 'common_name'
+                  ORDER BY ta.alias ASC LIMIT 1) AS common_name
+         FROM projects p
+         JOIN canonical_target ct ON ct.id = p.canonical_target_id
+         WHERE p.id = ?",
+    )
+    .bind(id)
+    .fetch_optional(pool)
+    .await?;
+
+    Ok(row.map(|(id, primary_designation, common_name)| ProjectCanonicalTargetRow {
+        id,
+        primary_designation,
+        common_name,
+    }))
 }
 
 /// List all projects ordered by updated_at descending.
@@ -149,29 +253,45 @@ pub async fn get_project(pool: &SqlitePool, id: &str) -> DbResult<ProjectRow> {
 ///
 /// Returns [`DbError::Database`] on query failure.
 pub async fn list_projects(pool: &SqlitePool) -> DbResult<Vec<ProjectRow>> {
-    let rows: Vec<(String, String, String, String, String, Option<String>, i64, String, String)> =
-        sqlx::query_as(
-            "SELECT id, name, tool, lifecycle, path, notes, channel_drift, created_at, updated_at
-             FROM projects ORDER BY updated_at DESC",
-        )
-        .fetch_all(pool)
-        .await?;
+    let rows: Vec<ProjectRowTuple> = sqlx::query_as(
+        "SELECT id, name, tool, lifecycle, path, notes, channel_drift, created_at, updated_at,
+                blocked_reason_kind, blocked_reason_note
+         FROM projects ORDER BY updated_at DESC",
+    )
+    .fetch_all(pool)
+    .await?;
 
     Ok(rows
         .into_iter()
-        .map(|(id, name, tool, lifecycle, path, notes, channel_drift, created_at, updated_at)| {
-            ProjectRow {
+        .map(
+            |(
                 id,
                 name,
                 tool,
                 lifecycle,
                 path,
                 notes,
-                channel_drift: channel_drift != 0,
+                channel_drift,
                 created_at,
                 updated_at,
-            }
-        })
+                blocked_reason_kind,
+                blocked_reason_note,
+            )| {
+                ProjectRow {
+                    id,
+                    name,
+                    tool,
+                    lifecycle,
+                    path,
+                    notes,
+                    channel_drift: channel_drift != 0,
+                    created_at,
+                    updated_at,
+                    blocked_reason_kind,
+                    blocked_reason_note,
+                }
+            },
+        )
         .collect())
 }
 
@@ -282,6 +402,62 @@ pub async fn update_project_lifecycle(
         .bind(id)
         .execute(pool)
         .await?;
+    Ok(now)
+}
+
+/// Update a project's lifecycle to "blocked" and persist the typed blocked reason.
+///
+/// FR-020 / T053: stores `blocked_reason_kind` and `blocked_reason_note` so the
+/// `BlockedBanner` DTO can surface the real reason instead of a hardcoded value.
+///
+/// # Errors
+///
+/// Returns [`DbError::Database`] on query failure.
+pub async fn update_project_lifecycle_blocked(
+    pool: &SqlitePool,
+    id: &str,
+    reason_kind: &str,
+    reason_note: Option<&str>,
+) -> DbResult<String> {
+    let now = now_iso();
+    sqlx::query(
+        "UPDATE projects SET lifecycle = 'blocked', \
+         blocked_reason_kind = ?, blocked_reason_note = ?, updated_at = ? \
+         WHERE id = ?",
+    )
+    .bind(reason_kind)
+    .bind(reason_note)
+    .bind(&now)
+    .bind(id)
+    .execute(pool)
+    .await?;
+    Ok(now)
+}
+
+/// Update a project's lifecycle state and clear the blocked reason columns.
+///
+/// FR-020 / T053: should be called when transitioning OUT of "blocked" so that
+/// stale blocked_reason_kind/note are not left behind.
+///
+/// # Errors
+///
+/// Returns [`DbError::Database`] on query failure.
+pub async fn update_project_lifecycle_unblock(
+    pool: &SqlitePool,
+    id: &str,
+    lifecycle: &str,
+) -> DbResult<String> {
+    let now = now_iso();
+    sqlx::query(
+        "UPDATE projects SET lifecycle = ?, \
+         blocked_reason_kind = NULL, blocked_reason_note = NULL, updated_at = ? \
+         WHERE id = ?",
+    )
+    .bind(lifecycle)
+    .bind(&now)
+    .bind(id)
+    .execute(pool)
+    .await?;
     Ok(now)
 }
 
@@ -534,6 +710,7 @@ mod tests {
             lifecycle: "setup_incomplete",
             path: "projects/NGC7000_NB",
             notes: None,
+            canonical_target_id: None,
         }
     }
 
@@ -561,6 +738,7 @@ mod tests {
                 lifecycle: "ready",
                 path: "projects/M31_LRGB",
                 notes: Some("test notes"),
+                canonical_target_id: None,
             },
         )
         .await

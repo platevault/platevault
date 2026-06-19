@@ -3,17 +3,19 @@ import { useNavigate } from '@tanstack/react-router';
 import { WizardShell } from '@/ui/WizardShell';
 import { Btn } from '@/ui/Btn';
 import { setPreference } from '@/data/preferences';
-import { completeFirstRun } from '@/api/commands';
+import { completeFirstRun, toolUpdate } from '@/api/commands';
 import {
   StepSourceFolders,
   StepTools,
   StepCatalogs,
   StepConfirm,
+  StepScan,
   DEFAULT_CATALOG_SETTINGS,
   DEFAULT_TOOLS_STATE,
 } from './steps';
 import type { CatalogSettings, ToolsState } from './steps';
 import type { SourcesState, SourceKind, ScanDepth } from './sources-store';
+import type { FlushResult } from './sources-store';
 import {
   loadSources,
   saveSources,
@@ -46,26 +48,44 @@ const STEPS = [
     description: 'Configure the astrophotography processing tools installed on your system.',
   },
   {
-    label: 'Catalogs',
-    heading: 'Target catalogs',
-    description: 'Choose which astronomical catalogs to use for resolving object names in your files.',
+    label: 'Configuration',
+    heading: 'Configuration',
+    description: 'Set a few defaults now — you can change all of these later in Settings.',
   },
   {
     label: 'Confirm',
     heading: 'Ready to go',
     description: 'Review your configuration before starting the initial scan.',
   },
+  {
+    label: 'Scan',
+    heading: 'Scanning your library',
+    description: 'Scanning each source folder and detecting ingestion groups.',
+  },
 ];
+
+// Index of the Scan step (last step).
+const SCAN_STEP = STEPS.length - 1;
 
 function loadWizardState(): WizardState {
   try {
     const raw = localStorage.getItem(STORAGE_KEY);
     if (raw) {
       const parsed = JSON.parse(raw);
+      // If persisted state had the wizard already at the scan step, reset to
+      // confirm so the scan always starts fresh (avoids stale scan guard).
+      const currentStep = parsed.currentStep === SCAN_STEP
+        ? SCAN_STEP - 1
+        : (parsed.currentStep ?? 0);
       return {
-        currentStep: parsed.currentStep ?? 0,
+        currentStep,
         sources: Array.isArray(parsed.sources) ? parsed.sources : loadSources(),
-        catalogSettings: parsed.catalogSettings ?? DEFAULT_CATALOG_SETTINGS,
+        // Migrate/guard: older persisted state used `{ downloadAll }` (no
+        // `selectedCatalogIds`); coerce any shape lacking the array to the default so
+        // consumers reading `selectedCatalogIds.length` never hit `undefined`.
+        catalogSettings: Array.isArray(parsed.catalogSettings?.selectedCatalogIds)
+          ? parsed.catalogSettings
+          : DEFAULT_CATALOG_SETTINGS,
         tools: parsed.tools ?? DEFAULT_TOOLS_STATE,
       };
     }
@@ -100,9 +120,17 @@ export function SetupWizard() {
   const navigate = useNavigate();
   const [state, setState] = useState<WizardState>(loadWizardState);
   const [isSubmitting, setIsSubmitting] = useState(false);
+  const [isFinishing, setIsFinishing] = useState(false);
   const [errors, setErrors] = useState<Record<number, string>>({});
 
-  // Persist wizard progress on every state change
+  // flushResult is set when the user advances from Confirm → Scan so StepScan
+  // can use the registered rootIds.  Null until flushToDB has been called.
+  const [flushResult, setFlushResult] = useState<FlushResult | null>(null);
+
+  // Persist wizard progress on every state change.
+  // The Scan step (SCAN_STEP) is intentionally NOT persisted — persisting it
+  // would require restoring scan state across sessions, which we don't support.
+  // loadWizardState() guards against this by resetting to Confirm.
   useEffect(() => {
     saveWizardState(state);
     saveSources(state.sources);
@@ -215,16 +243,43 @@ export function SetupWizard() {
   // Derived folder count for footer
   const totalFolders = state.sources.length;
 
-  const handleComplete = useCallback(async () => {
+  // Called from the Confirm step footer: register roots, then advance to Scan.
+  const handleEnterScan = useCallback(async () => {
     setIsSubmitting(true);
     try {
-      const flushResult = await flushToDB(state.sources);
+      const result = await flushToDB(state.sources);
 
-      if (!flushResult.allSucceeded) {
-        console.warn('Some source registrations failed:', flushResult.results.filter((r) => !r.success));
+      if (!result.allSucceeded) {
+        console.warn('Some source registrations failed:', result.results.filter((r) => !r.success));
       }
 
+      setFlushResult(result);
+      goTo(SCAN_STEP);
+    } catch (err) {
+      console.error('Failed to register sources:', err);
+    } finally {
+      setIsSubmitting(false);
+    }
+  }, [state.sources, goTo]);
+
+  // Tracks whether all sources on the Scan step have finished (done/error).
+  // Updated via StepScan's onAllDoneChange callback and used to enable the
+  // Finish button in the shared footer.
+  const [scanComplete, setScanComplete] = useState(false);
+
+  // Called from StepScan's Finish button: complete first-run and navigate.
+  const handleFinish = useCallback(async () => {
+    setIsFinishing(true);
+    try {
       if (!isMockMode) {
+        // Persist processing-tool config from the wizard so Settings →
+        // Processing Tools reflects whatever the user set in Step 2.
+        const toolEntries: Array<{ id: string; enabled: boolean; path: string | null }> = [
+          { id: 'pixinsight', enabled: state.tools.pixinsight.enabled, path: state.tools.pixinsight.path },
+          { id: 'siril', enabled: state.tools.siril.enabled, path: state.tools.siril.path },
+        ];
+        await Promise.all(toolEntries.map((t) => toolUpdate({ id: t.id, enabled: t.enabled, path: t.path })));
+
         await completeFirstRun();
       }
 
@@ -232,21 +287,19 @@ export function SetupWizard() {
       clearWizardState();
       void navigate({ to: '/inbox' });
     } catch {
-      setIsSubmitting(false);
+      setIsFinishing(false);
     }
-  }, [state.sources, isMockMode, navigate]);
+  }, [isMockMode, navigate]);
 
-  // Determine whether "Continue" should be enabled
-  // Step 0 (Source Folders) requires at least one light_frames and one project folder.
-  // All other steps advance freely.
+  // Determine whether "Continue" should be enabled.
+  // Step 0 (Source Folders) and step 3 (Confirm) require all required folder kinds.
+  // All other intermediate steps advance freely.
+  // The Scan step (SCAN_STEP) uses the shared footer Finish button, which is
+  // enabled by scanComplete — canProceed is not consulted for that step.
   const canProceed = useMemo(() => {
     if (isMockMode) return true;
     const step = state.currentStep;
-    if (step === 0) {
-      return getMissingRequiredKinds(state.sources).length === 0;
-    }
-    // On the confirm step, also gate on required folders
-    if (step === 3) {
+    if (step === 0 || step === SCAN_STEP - 1) {
       return getMissingRequiredKinds(state.sources).length === 0;
     }
     return true;
@@ -260,24 +313,46 @@ export function SetupWizard() {
     completed: i < step,
   }));
 
-  // Build the navigation footer for the current step
+  const isOnScanStep = step === SCAN_STEP;
+
+  // Build the navigation footer for the current step.
+  // The Scan step (SCAN_STEP) now renders Back + Finish here, consistent with
+  // every other step; StepScan no longer owns its own action buttons.
   const footer = (
     <>
       {step > 0 ? (
-        <Btn variant="ghost" onClick={() => goTo(step - 1)} disabled={isSubmitting}>
+        <Btn
+          variant="ghost"
+          onClick={() => goTo(isOnScanStep ? SCAN_STEP - 1 : step - 1)}
+          disabled={isSubmitting || isFinishing}
+        >
           &larr; Back
         </Btn>
       ) : (
         <span />
       )}
-      <div className="alm-wizard-footer__spacer" />
+      <div style={{ flex: 1 }} />
       {/* Folder count summary on source step */}
       {step === 0 && totalFolders > 0 && (
-        <span className="alm-wizard-footer__count">
+        <span
+          style={{ fontSize: 'var(--alm-text-xs)', color: 'var(--alm-text-muted)' }}
+        >
           {totalFolders} folder{totalFolders !== 1 ? 's' : ''} selected
         </span>
       )}
-      {step < STEPS.length - 1 ? (
+      {isOnScanStep ? (
+        // Scan step: Finish navigates to /inbox after completing first-run.
+        // Enabled only once all source scans are done (or errored).
+        <Btn
+          data-testid="finish-button"
+          variant="primary"
+          onClick={() => { void handleFinish(); }}
+          disabled={!scanComplete || isFinishing}
+        >
+          {isFinishing ? 'Finishing…' : 'Finish'}
+        </Btn>
+      ) : step < SCAN_STEP - 1 ? (
+        // Steps 0–2: "Continue to <next>"
         <Btn
           variant="primary"
           onClick={() => goTo(step + 1)}
@@ -286,33 +361,60 @@ export function SetupWizard() {
           Continue to {STEPS[step + 1].label.toLowerCase()} &rarr;
         </Btn>
       ) : (
+        // Step 3 (Confirm): register + enter Scan
         <Btn
           variant="primary"
-          onClick={handleComplete}
+          onClick={() => { void handleEnterScan(); }}
           disabled={isSubmitting || !canProceed}
         >
-          {isSubmitting ? 'Setting up...' : 'Complete setup'}
+          {isSubmitting ? 'Registering…' : 'Start scan →'}
         </Btn>
       )}
     </>
   );
 
   return (
-    <div className="alm-wizard-wrapper">
-      <div className="alm-wizard-wrapper__inner">
-        <WizardShell steps={wizardSteps} currentStep={step} footer={footer}>
-          {/* Step label + heading */}
-          <div className="alm-wizard__step-label">
-            Setup &middot; Step {step + 1} of {STEPS.length}
-          </div>
-          <h1 className="alm-wizard__step-heading">
-            {stepMeta.heading}
-          </h1>
-          {stepMeta.description && (
-            <p className="alm-wizard__step-description">
-              {stepMeta.description}
-            </p>
-          )}
+    // Layout fix (mirrors the project wizard): flex column + minHeight:0 so the
+    // WizardShell fills the main content area instead of overflowing/mis-placing.
+    <div
+      className="alm-page alm-setup-wizard"
+      style={{ display: 'flex', flexDirection: 'column', flex: 1, minHeight: 0 }}
+    >
+      <WizardShell steps={wizardSteps} currentStep={step} footer={footer} style={{ flex: 1, minHeight: 0 }}>
+        {/* Step label + heading */}
+        <div
+          style={{
+            fontSize: 'var(--alm-text-2xs)',
+            fontWeight: 'var(--alm-weight-semibold)',
+            textTransform: 'uppercase',
+            letterSpacing: '0.06em',
+            color: 'var(--alm-text-muted)',
+          }}
+        >
+          Setup &middot; Step {step + 1} of {STEPS.length}
+        </div>
+        <h1
+          style={{
+            margin: 'var(--alm-sp-1) 0 0',
+            fontSize: 'var(--alm-text-2xl)',
+            fontWeight: 'var(--alm-weight-semibold)',
+            color: 'var(--alm-text)',
+          }}
+        >
+          {stepMeta.heading}
+        </h1>
+        {stepMeta.description && (
+          <p
+            style={{
+              margin: 'var(--alm-sp-2) 0 var(--alm-sp-5)',
+              fontSize: 'var(--alm-text-base)',
+              lineHeight: 'var(--alm-leading-normal)',
+              color: 'var(--alm-text-secondary)',
+            }}
+          >
+            {stepMeta.description}
+          </p>
+        )}
 
           {/* Step body */}
           {step === 0 && (
@@ -345,8 +447,14 @@ export function SetupWizard() {
               isSubmitting={isSubmitting}
             />
           )}
-        </WizardShell>
-      </div>
+          {step === SCAN_STEP && flushResult && (
+            <StepScan
+              sources={state.sources}
+              flushResult={flushResult}
+              onAllDoneChange={setScanComplete}
+            />
+          )}
+      </WizardShell>
     </div>
   );
 }

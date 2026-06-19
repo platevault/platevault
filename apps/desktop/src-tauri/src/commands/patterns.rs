@@ -23,7 +23,7 @@ use contracts_core::patterns::{
 ///
 /// Returns `Err(String)` on internal failure (none expected in v1).
 #[tauri::command]
-#[specta::specta(rename = "pattern.validate")]
+#[specta::specta]
 #[allow(clippy::needless_pass_by_value)] // Tauri deserializes the request by value
 pub fn pattern_validate(
     request: PatternValidateRequest,
@@ -40,7 +40,7 @@ pub fn pattern_validate(
 ///
 /// Returns `Err(String)` with the error code on invalid patterns or paths.
 #[tauri::command]
-#[specta::specta(rename = "pattern.resolve")]
+#[specta::specta]
 #[allow(clippy::needless_pass_by_value)] // Tauri deserializes the request by value
 pub fn pattern_resolve(request: PatternResolveRequest) -> Result<PatternResolveResponse, String> {
     tracing::debug!("pattern.resolve parts={}", request.pattern.len());
@@ -55,7 +55,7 @@ pub fn pattern_resolve(request: PatternResolveRequest) -> Result<PatternResolveR
 ///
 /// Returns `Err(String)` with the error code on invalid patterns or paths.
 #[tauri::command]
-#[specta::specta(rename = "pattern.preview")]
+#[specta::specta]
 #[allow(clippy::needless_pass_by_value)] // Tauri deserializes the request by value
 pub fn pattern_preview(request: PatternPreviewRequest) -> Result<PatternPreviewResponse, String> {
     tracing::debug!("pattern.preview parts={}", request.pattern.len());

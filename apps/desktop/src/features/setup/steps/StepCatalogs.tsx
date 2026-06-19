@@ -1,21 +1,25 @@
-// First-run wizard: Download Catalogs step (spec 014, T010-dl).
+// First-run wizard: "Configuration" step.
 //
-// 1. On mount (or when the user clicks "Download All"), calls
-//    catalog.manifest.fetch to get the manifest.
-// 2. Iterates the manifest catalog list and calls catalog.download for each
-//    (sequential in v1; parallel-N can be added in v1.x).
-// 3. Shows per-row download status with individual Retry buttons on failure.
-// 4. The step does NOT block Finish if skipped — the wizard can proceed.
+// Originally the spec-014 catalog-download step; that backend was removed (spec
+// 035 — targets resolve on demand from SIMBAD + a bundled seed + local cache).
+// The step slot is retained (first_run_state.last_step CHECK still includes
+// 'catalogs' — no migration) and repurposed as a small first-run Configuration
+// screen: a few defaults the user can set up front (all changeable later in
+// Settings).
 
-import { useState, useCallback, useEffect } from 'react';
-import { Btn } from '@/ui/Btn';
-import { catalogManifestFetch, catalogDownload } from '@/api/commands';
-import type { CatalogManifest, CatalogDownloadStatus } from '@/bindings/types';
+import { useEffect, useState, type ReactNode } from 'react';
+import { ResolverSettingsControl } from '@/features/settings/ResolverSettingsControl';
+import { usePreference } from '@/data/preferences';
+import type { Density } from '@/bindings/types';
+import { getSettings, updateSettings } from '@/api/commands';
 
 // ── Types ─────────────────────────────────────────────────────────────────────
+//
+// Kept for compatibility with SetupWizard state persistence and StepConfirm.
+// `downloadAll` is an inert legacy flag — nothing is downloaded.
 
 export interface CatalogSettings {
-  /** Kept for API compatibility; all v1 catalogs are downloaded, not toggled. */
+  /** Legacy flag retained for state-shape compatibility; no longer used. */
   downloadAll: boolean;
 }
 
@@ -28,271 +32,143 @@ export interface StepCatalogsProps {
   onSettingsChange: (settings: CatalogSettings) => void;
 }
 
-type RowStatus = 'pending' | 'downloading' | 'success' | 'failed' | 'skipped';
+type DefaultProtection = 'protected' | 'normal' | 'unprotected';
 
-interface CatalogRowState {
-  catalogId: string;
-  status: RowStatus;
-  error?: string;
-}
+// ── Default source protection (spec 018, persisted via the settings backend) ──
 
-// ── StepCatalogs ──────────────────────────────────────────────────────────────
+function DefaultProtectionControl() {
+  const [value, setValue] = useState<DefaultProtection>('protected');
 
-/**
- * Step 3 — Download Catalogs.
- *
- * Fetches the manifest and downloads all thirteen v1 catalogs. Shows per-row
- * progress and individual Retry buttons on failure. The step does not block
- * Finish if skipped.
- */
-export function StepCatalogs({ settings: _settings, onSettingsChange: _onChange }: StepCatalogsProps) {
-  const [manifest, setManifest] = useState<CatalogManifest | null>(null);
-  const [manifestEtag, setManifestEtag] = useState<string | undefined>(undefined);
-  const [manifestStatus, setManifestStatus] = useState<
-    'idle' | 'fetching' | 'ready' | 'failed' | 'not_modified'
-  >('idle');
-  const [manifestError, setManifestError] = useState<string | undefined>(undefined);
-  const [rows, setRows] = useState<CatalogRowState[]>([]);
-  const [isRunning, setIsRunning] = useState(false);
-
-  // Initialise rows from manifest when manifest becomes available.
   useEffect(() => {
-    if (manifest) {
-      setRows(
-        manifest.catalogs.map((e) => ({
-          catalogId: e.catalogId,
-          status: 'pending',
-        })),
-      );
-    }
-  }, [manifest]);
+    let cancelled = false;
+    getSettings({ scope: 'cleanup' })
+      .then((data) => {
+        const vals = data?.values as Record<string, unknown> | undefined;
+        const v = vals?.defaultProtection;
+        if (!cancelled && typeof v === 'string') setValue(v as DefaultProtection);
+      })
+      .catch(() => {
+        // Backend unavailable — keep the default.
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, []);
 
-  const fetchManifest = useCallback(async () => {
-    setManifestStatus('fetching');
-    setManifestError(undefined);
-    try {
-      const resp = await catalogManifestFetch({ etag: manifestEtag });
-      if (resp.status === 'fetched' && resp.manifest) {
-        setManifest(resp.manifest);
-        setManifestEtag(resp.etag);
-        setManifestStatus('ready');
-      } else if (resp.status === 'not_modified') {
-        setManifestStatus('not_modified');
-      } else {
-        setManifestStatus('failed');
-        setManifestError(resp.error?.message ?? 'Unknown error fetching manifest');
-      }
-    } catch (e) {
-      setManifestStatus('failed');
-      setManifestError(e instanceof Error ? e.message : String(e));
-    }
-  }, [manifestEtag]);
-
-  const downloadSingle = useCallback(
-    async (catalogId: string, currentManifest: CatalogManifest): Promise<CatalogDownloadStatus> => {
-      setRows((prev) =>
-        prev.map((r) => (r.catalogId === catalogId ? { ...r, status: 'downloading', error: undefined } : r)),
-      );
-      try {
-        const resp = await catalogDownload({ catalogId, manifest: currentManifest });
-        if (resp.status === 'success') {
-          setRows((prev) =>
-            prev.map((r) => (r.catalogId === catalogId ? { ...r, status: 'success' } : r)),
-          );
-        } else {
-          setRows((prev) =>
-            prev.map((r) =>
-              r.catalogId === catalogId
-                ? { ...r, status: 'failed', error: resp.error?.message ?? 'Download failed' }
-                : r,
-            ),
-          );
-        }
-        return resp.status;
-      } catch (e) {
-        const msg = e instanceof Error ? e.message : String(e);
-        setRows((prev) =>
-          prev.map((r) => (r.catalogId === catalogId ? { ...r, status: 'failed', error: msg } : r)),
-        );
-        return 'failure';
-      }
-    },
-    [],
-  );
-
-  const handleDownloadAll = useCallback(async () => {
-    if (isRunning) return;
-    setIsRunning(true);
-
-    // Step 1: fetch manifest if not yet available.
-    let currentManifest = manifest;
-    if (!currentManifest) {
-      setManifestStatus('fetching');
-      setManifestError(undefined);
-      try {
-        const resp = await catalogManifestFetch({ etag: manifestEtag });
-        if (resp.status === 'fetched' && resp.manifest) {
-          currentManifest = resp.manifest;
-          setManifest(resp.manifest);
-          setManifestEtag(resp.etag);
-          setManifestStatus('ready');
-        } else if (resp.status === 'not_modified' && manifest) {
-          currentManifest = manifest;
-          setManifestStatus('not_modified');
-        } else {
-          setManifestStatus('failed');
-          setManifestError(resp.error?.message ?? 'Failed to fetch manifest');
-          setIsRunning(false);
-          return;
-        }
-      } catch (e) {
-        setManifestStatus('failed');
-        setManifestError(e instanceof Error ? e.message : String(e));
-        setIsRunning(false);
-        return;
-      }
-    }
-
-    if (!currentManifest) {
-      setIsRunning(false);
-      return;
-    }
-
-    // Reset only pending rows (don't re-download already succeeded ones).
-    setRows((prev) =>
-      prev.length === 0
-        ? currentManifest.catalogs.map((e) => ({ catalogId: e.catalogId, status: 'pending' }))
-        : prev.map((r) => (r.status !== 'success' ? { ...r, status: 'pending', error: undefined } : r)),
-    );
-
-    // Step 2: download each catalog sequentially.
-    for (const entry of currentManifest.catalogs) {
-      const rowStatus = rows.find((r) => r.catalogId === entry.catalogId)?.status;
-      if (rowStatus === 'success') continue; // skip already downloaded
-      await downloadSingle(entry.catalogId, currentManifest);
-    }
-
-    setIsRunning(false);
-  }, [isRunning, manifest, manifestEtag, rows, downloadSingle]);
-
-  const handleRetry = useCallback(
-    async (catalogId: string) => {
-      if (!manifest || isRunning) return;
-      await downloadSingle(catalogId, manifest);
-    },
-    [manifest, isRunning, downloadSingle],
-  );
-
-  const successCount = rows.filter((r) => r.status === 'success').length;
-  const failedCount = rows.filter((r) => r.status === 'failed').length;
-  const totalCount = rows.length;
-
-  const allDone = totalCount > 0 && rows.every((r) => r.status === 'success' || r.status === 'failed');
+  const onChange = (v: DefaultProtection) => {
+    setValue(v);
+    void updateSettings({ scope: 'cleanup', values: { defaultProtection: v } }).catch(() => {});
+  };
 
   return (
-    <div className="alm-step-catalogs">
-      <p className="alm-step-catalogs__intro">
-        Target catalogs are used to resolve OBJECT headers in your FITS/XISF files
-        to known astronomical objects. Click &ldquo;Download All&rdquo; to install
-        all thirteen v1 catalogs. You can skip this step and install them later from
-        Settings → Catalogs.
-      </p>
+    <select
+      className="alm-select"
+      value={value}
+      aria-label="Default source protection"
+      onChange={(e) => onChange(e.target.value as DefaultProtection)}
+      style={{ height: 28 }}
+    >
+      <option value="protected">Protected</option>
+      <option value="normal">Normal</option>
+      <option value="unprotected">Unprotected</option>
+    </select>
+  );
+}
 
-      {/* Manifest status */}
-      {manifestStatus === 'fetching' && (
-        <div className="alm-step-catalogs__status">Fetching catalog manifest…</div>
-      )}
-      {manifestStatus === 'failed' && (
-        <div className="alm-step-catalogs__error">
-          Manifest fetch failed: {manifestError}
-          <button
-            className="alm-btn alm-btn--sm"
-            onClick={fetchManifest}
-            type="button"
-            style={{ marginLeft: 8 }}
-          >
-            Retry
-          </button>
-        </div>
-      )}
+// ── Display density (frontend preference; applied app-wide) ───────────────────
 
-      {/* Per-row status list (shown once manifest is ready) */}
-      {rows.length > 0 && (
-        <div className="alm-step-catalogs__list">
-          {rows.map((row) => (
-            <div key={row.catalogId} className="alm-step-catalogs__row">
-              <div className="alm-step-catalogs__row-info">
-                <span className="alm-step-catalogs__row-name">{row.catalogId}</span>
-              </div>
-              <div className="alm-step-catalogs__row-status">
-                {row.status === 'pending' && (
-                  <span className="alm-step-catalogs__badge alm-step-catalogs__badge--pending">
-                    Pending
-                  </span>
-                )}
-                {row.status === 'downloading' && (
-                  <span className="alm-step-catalogs__badge alm-step-catalogs__badge--downloading">
-                    Downloading…
-                  </span>
-                )}
-                {row.status === 'success' && (
-                  <span className="alm-step-catalogs__badge alm-step-catalogs__badge--success">
-                    ✓ Installed
-                  </span>
-                )}
-                {row.status === 'failed' && (
-                  <>
-                    <span
-                      className="alm-step-catalogs__badge alm-step-catalogs__badge--failed"
-                      title={row.error}
-                    >
-                      ✗ Failed
-                    </span>
-                    <button
-                      className="alm-btn alm-btn--sm"
-                      onClick={() => handleRetry(row.catalogId)}
-                      disabled={isRunning}
-                      type="button"
-                      style={{ marginLeft: 6 }}
-                    >
-                      Retry
-                    </button>
-                  </>
-                )}
-              </div>
-            </div>
-          ))}
-        </div>
-      )}
+function DensityControl() {
+  const [density, setDensity] = usePreference('density');
+  return (
+    <select
+      className="alm-select"
+      value={density}
+      aria-label="Display density"
+      onChange={(e) => setDensity(e.target.value as Density)}
+      style={{ height: 28 }}
+    >
+      <option value="compact">Compact</option>
+      <option value="comfortable">Comfortable</option>
+      <option value="spacious">Spacious</option>
+    </select>
+  );
+}
 
-      <div className="alm-step-catalogs__footer">
-        <Btn
-          size="sm"
-          onClick={handleDownloadAll}
-          disabled={isRunning}
-        >
-          {isRunning ? 'Downloading…' : rows.length === 0 ? 'Download All' : 'Retry All'}
-        </Btn>
+// ── A labelled config row: title + control on one line, description below ──────
 
-        {totalCount > 0 && (
-          <span className="alm-step-catalogs__count">
-            {successCount} / {totalCount} installed
-            {failedCount > 0 && ` · ${failedCount} failed`}
-          </span>
-        )}
+function ConfigOption({
+  title,
+  description,
+  control,
+}: {
+  title: string;
+  description: string;
+  control: ReactNode;
+}) {
+  return (
+    <div style={{ display: 'flex', flexDirection: 'column', gap: 'var(--alm-sp-2)' }}>
+      <div
+        style={{
+          display: 'flex',
+          alignItems: 'center',
+          justifyContent: 'space-between',
+          gap: 'var(--alm-sp-3)',
+        }}
+      >
+        <span style={{ fontWeight: 'var(--alm-weight-semibold)', whiteSpace: 'nowrap' }}>
+          {title}
+        </span>
+        {control}
       </div>
+      <div className="alm-settings__row-desc">{description}</div>
+    </div>
+  );
+}
 
-      {allDone && failedCount === 0 && (
-        <div className="alm-step-catalogs__note alm-step-catalogs__note--success">
-          All catalogs installed successfully.
-        </div>
-      )}
+// ── StepCatalogs (Configuration) ──────────────────────────────────────────────
 
-      {(manifestStatus === 'idle' || manifestStatus === 'not_modified') && rows.length === 0 && (
-        <div className="alm-step-catalogs__note">
-          Catalogs can also be installed later from Settings → Catalogs.
-        </div>
-      )}
+/**
+ * Step 3 — Configuration.
+ *
+ * A few first-run defaults: online SIMBAD resolution, display density, default
+ * source protection, and default scan depth. All are changeable later in
+ * Settings; the step never blocks Finish.
+ */
+export function StepCatalogs(_props: StepCatalogsProps) {
+  return (
+    <div
+      className="alm-step-catalogs"
+      style={{ display: 'flex', flexDirection: 'column', gap: 'var(--alm-sp-5)' }}
+    >
+      {/* Online SIMBAD resolution (label + toggle on one line, desc below). */}
+      <ResolverSettingsControl compact />
+
+      <ConfigOption
+        title="Display density"
+        description="How compact the interface is — affects row heights and spacing across the app."
+        control={<DensityControl />}
+      />
+
+      <ConfigOption
+        title="Default source protection"
+        description="Protection level applied to newly added source folders. Protected sources are skipped by cleanup plans unless explicitly approved."
+        control={<DefaultProtectionControl />}
+      />
+
+      <ConfigOption
+        title="Appearance / theme"
+        description="Light / dark theme is coming soon — the app currently uses a single light theme."
+        control={
+          <select
+            className="alm-select"
+            disabled
+            aria-label="Theme (coming soon)"
+            style={{ height: 28 }}
+          >
+            <option>Light (coming soon)</option>
+          </select>
+        }
+      />
     </div>
   );
 }

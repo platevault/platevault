@@ -37,6 +37,10 @@ path = "audit_first_run_completed_test.rs"
 name = "native_contracts_test"
 path = "native_contracts_test.rs"
 
+[[test]]
+name = "target_resolution_parity_test"
+path = "target_resolution_parity_test.rs"
+
 [dev-dependencies]
 contracts_core = { path = "../../crates/contracts/core" }
 serde.workspace = true

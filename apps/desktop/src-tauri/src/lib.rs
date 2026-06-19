@@ -24,9 +24,6 @@ use crate::commands::calibration::{
 use crate::commands::calibration_tolerances::{
     calibration_tolerances_get, calibration_tolerances_update,
 };
-use crate::commands::catalogs::{
-    catalog_attribution_get, catalog_download, catalog_list, catalog_manifest_fetch,
-};
 use crate::commands::cleanup::{cleanup_policy_get, cleanup_policy_update, cleanup_scan};
 #[cfg(feature = "dev-tools")]
 use crate::commands::dev::{
@@ -47,7 +44,7 @@ use crate::commands::guided::{
     guided_activate, guided_dismiss, guided_restart, guided_state_get, guided_step_complete,
 };
 use crate::commands::inbox::{
-    inbox_classify, inbox_confirm, inbox_reclassify, inbox_scan, inbox_scan_folder,
+    inbox_classify, inbox_confirm, inbox_list, inbox_reclassify, inbox_scan, inbox_scan_folder,
 };
 use crate::commands::ingestion::{ingestion_settings_get, ingestion_settings_update};
 use crate::commands::inventory::{inventory_list, inventory_session_review};
@@ -95,8 +92,10 @@ use crate::commands::settings::{
     settings_get, settings_restore_defaults, settings_source_override_set, settings_update,
 };
 use crate::commands::status::status_summary;
-use crate::commands::target_identity as target_identity_cmds;
-use crate::commands::target_lookup::{target_lookup, target_resolve};
+use crate::commands::target_lookup::{
+    target_resolution_settings, target_resolution_settings_update, target_resolve, target_search,
+};
+use crate::commands::target_management as target_mgmt_cmds;
 use crate::commands::targets::{targets_get, targets_list};
 use crate::commands::tools::{
     tools_discover, tools_launch, tools_list, tools_update, tools_validate_path,
@@ -126,6 +125,18 @@ fn base_builder() -> Builder<tauri::Wry> {
         // emits it once instead of inlining its self-referential shape, which
         // would otherwise fail with "infinitely recursive inline reference".
         .typ::<serde_json::Value>()
+        // Spec 035 — SIMBAD target resolution DTOs (T007). These are pure
+        // contract types whose commands land in later tasks (US1–5); register
+        // them explicitly so the TypeScript surface exists ahead of the
+        // commands that will reference them. Request/response roots pull in all
+        // nested structs and enums transitively.
+        .typ::<contracts_core::targets::TargetSearchRequest>()
+        .typ::<contracts_core::targets::TargetSearchResponse>()
+        .typ::<contracts_core::targets::TargetResolveSimbadRequest>()
+        .typ::<contracts_core::targets::TargetResolveSimbadResponse>()
+        .typ::<contracts_core::targets::ResolverSettingsGetRequest>()
+        .typ::<contracts_core::targets::ResolverSettingsUpdateRequest>()
+        .typ::<contracts_core::targets::ResolverSettingsResponse>()
 }
 
 /// Build the tauri-specta [`Builder`] populated with every typed command.
@@ -160,18 +171,23 @@ pub fn specta_builder() -> Builder<tauri::Wry> {
         calibration_match_suggest,
         calibration_match_assign,
         calibration_match_suggest_batch,
-        // targets
+        // targets (spec 029 stubs — legacy list/get)
         targets_list,
         targets_get,
-        // target identity (spec 023)
-        target_identity_cmds::target_get,
-        target_identity_cmds::target_note_update,
-        target_identity_cmds::target_alias_add,
-        target_identity_cmds::target_alias_remove,
-        target_identity_cmds::target_primary_rename,
-        // target lookup + resolve (spec 013)
-        target_lookup,
+        // target management (spec 036 — gen-3, canonical_target model)
+        target_mgmt_cmds::target_get,
+        target_mgmt_cmds::target_list,
+        target_mgmt_cmds::target_alias_add,
+        target_mgmt_cmds::target_alias_remove,
+        target_mgmt_cmds::target_display_alias_set,
+        target_mgmt_cmds::target_display_alias_clear,
+        // target resolve (spec 035 — SIMBAD cache-first resolution)
         target_resolve,
+        // target search (spec 035, US1)
+        target_search,
+        // resolver settings (spec 035, US5)
+        target_resolution_settings,
+        target_resolution_settings_update,
         // projects (spec 008)
         projects_list,
         projects_get,
@@ -203,11 +219,6 @@ pub fn specta_builder() -> Builder<tauri::Wry> {
         // log stream (spec 019)
         log_recent,
         log_export,
-        // catalog registry (spec 014)
-        catalog_list,
-        catalog_attribution_get,
-        catalog_manifest_fetch,
-        catalog_download,
         // review
         review_queue,
         // roots & scan & equipment
@@ -279,12 +290,13 @@ pub fn specta_builder() -> Builder<tauri::Wry> {
         // calibration tolerances (spec 030)
         calibration_tolerances_get,
         calibration_tolerances_update,
-        // inbox (spec 005 + 030)
+        // inbox (spec 005 + 030 + 039)
         inbox_scan,
         inbox_scan_folder,
         inbox_classify,
         inbox_confirm,
         inbox_reclassify,
+        inbox_list,
         // inventory (spec 006)
         inventory_list,
         inventory_session_review,
@@ -343,18 +355,23 @@ pub fn specta_builder() -> Builder<tauri::Wry> {
         calibration_match_suggest,
         calibration_match_assign,
         calibration_match_suggest_batch,
-        // targets
+        // targets (spec 029 stubs — legacy list/get)
         targets_list,
         targets_get,
-        // target identity (spec 023)
-        target_identity_cmds::target_get,
-        target_identity_cmds::target_note_update,
-        target_identity_cmds::target_alias_add,
-        target_identity_cmds::target_alias_remove,
-        target_identity_cmds::target_primary_rename,
-        // target lookup + resolve (spec 013)
-        target_lookup,
+        // target management (spec 036 — gen-3, canonical_target model)
+        target_mgmt_cmds::target_get,
+        target_mgmt_cmds::target_list,
+        target_mgmt_cmds::target_alias_add,
+        target_mgmt_cmds::target_alias_remove,
+        target_mgmt_cmds::target_display_alias_set,
+        target_mgmt_cmds::target_display_alias_clear,
+        // target resolve (spec 035 — SIMBAD cache-first resolution)
         target_resolve,
+        // target search (spec 035, US1)
+        target_search,
+        // resolver settings (spec 035, US5)
+        target_resolution_settings,
+        target_resolution_settings_update,
         // projects (spec 008)
         projects_list,
         projects_get,
@@ -386,11 +403,6 @@ pub fn specta_builder() -> Builder<tauri::Wry> {
         // log stream (spec 019)
         log_recent,
         log_export,
-        // catalog registry (spec 014)
-        catalog_list,
-        catalog_attribution_get,
-        catalog_manifest_fetch,
-        catalog_download,
         // review
         review_queue,
         // roots & scan & equipment
@@ -462,12 +474,13 @@ pub fn specta_builder() -> Builder<tauri::Wry> {
         // calibration tolerances (spec 030)
         calibration_tolerances_get,
         calibration_tolerances_update,
-        // inbox (spec 005 + 030)
+        // inbox (spec 005 + 030 + 039)
         inbox_scan,
         inbox_scan_folder,
         inbox_classify,
         inbox_confirm,
         inbox_reclassify,
+        inbox_list,
         // inventory (spec 006)
         inventory_list,
         inventory_session_review,
@@ -544,6 +557,43 @@ pub fn run_app(app: tauri::App, pool: SqlitePool) {
         contracts_core::log::LogLevel::Debug,
         pool.clone(),
     );
+    // spec 024: manifest auto-generation on workflow-run completion.
+    // The JoinHandle is intentionally dropped — the task runs independently.
+    drop(app_core::project_manifests::spawn_workflow_run_subscriber(pool.clone(), bus.clone()));
+    // spec 012: artifact filesystem watcher → artifact.detected + artifact.classified events.
+    crate::watcher::spawn_artifact_watcher(pool.clone(), bus.clone());
+
+    // spec 018 T020: emit a settings.snapshot at session start, then every 5 minutes.
+    // This gives the audit log a durable record of the active configuration even when
+    // noisy keys (pattern, protectedCategories, …) haven't changed individually.
+    {
+        let snap_pool = pool.clone();
+        let snap_bus = bus.clone();
+        tokio::spawn(async move {
+            // Session-start snapshot.
+            if let Err(e) =
+                app_core::settings::emit_snapshot(&snap_pool, &snap_bus, "session_start").await
+            {
+                tracing::warn!("settings.snapshot (session_start) failed: {e:?}");
+            }
+            // Debounce loop: emit every 5 minutes while the app is running.
+            let interval = std::time::Duration::from_mins(5);
+            loop {
+                tokio::time::sleep(interval).await;
+                if let Err(e) =
+                    app_core::settings::emit_snapshot(&snap_pool, &snap_bus, "debounce_5min").await
+                {
+                    tracing::warn!("settings.snapshot (debounce_5min) failed: {e:?}");
+                }
+            }
+        });
+    }
+
+    // Inbox + inventory commands take `State<'_, SqlitePool>` directly (rather
+    // than via AppState), so the raw pool must be managed too. Without this they
+    // fail at runtime with "state not managed for field `pool`" — which is why
+    // the Inbox scan/classify pipeline only ever worked under mock mode.
+    app.manage(pool.clone());
 
     let repo = Arc::new(SqliteLifecycleRepository::new(pool, bus.clone()));
     let state = AppState::new(repo, bus);

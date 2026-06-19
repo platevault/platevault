@@ -17,9 +17,11 @@ import { describe, it, expect, vi, beforeEach } from 'vitest';
 
 // ── Mock API commands ──────────────────────────────────────────────────────
 
-const { mockCreateProject, mockListProjects } = vi.hoisted(() => ({
+const { mockCreateProject, mockListProjects, mockSearchTargets, mockResolveTarget } = vi.hoisted(() => ({
   mockCreateProject: vi.fn(),
   mockListProjects: vi.fn(),
+  mockSearchTargets: vi.fn(),
+  mockResolveTarget: vi.fn(),
 }));
 
 vi.mock('@/api/commands', () => ({
@@ -31,6 +33,10 @@ vi.mock('@/api/commands', () => ({
   reinferProjectChannels: vi.fn(),
   dismissProjectChannelDrift: vi.fn(),
   getProject008: vi.fn(),
+  // TargetSearch (spec 035) is embedded in the dialog.
+  searchTargets: mockSearchTargets,
+  resolveTarget: mockResolveTarget,
+  TARGET_SEARCH_CONTRACT_VERSION: '1.0',
 }));
 
 // Mock the store's useCreateProject so it calls our mock
@@ -77,6 +83,22 @@ describe('CreateProjectDialog', () => {
   beforeEach(() => {
     mockCreateProject.mockReset();
     mockListProjects.mockResolvedValue([]);
+    mockSearchTargets.mockReset();
+    mockResolveTarget.mockReset();
+    // Default: TargetSearch finds nothing / resolves nothing (no network).
+    mockSearchTargets.mockResolvedValue({
+      contractVersion: '1.0',
+      requestId: 'r',
+      suggestions: [],
+    });
+    mockResolveTarget.mockResolvedValue({
+      contractVersion: '1.0',
+      requestId: 'r',
+      status: 'unresolved',
+      target: null,
+      unresolvedReason: 'offline',
+      error: null,
+    });
   });
 
   it('renders the dialog when open', () => {
@@ -153,8 +175,64 @@ describe('CreateProjectDialog', () => {
         name: 'NGC 7000 NB',
         path: 'projects/NGC7000_NB',
         tool: 'PixInsight',
+        // No target selected → canonicalTargetId is null (spec 035 US1 #2).
+        canonicalTargetId: null,
       }),
     );
+  });
+
+  it('sends the selected target as canonicalTargetId (spec 035 US1)', async () => {
+    mockListProjects.mockResolvedValue([]);
+    mockCreateProject.mockResolvedValue({
+      projectId: 'proj-new',
+      lifecycle: 'setup_incomplete',
+      planId: 'plan-001',
+      channels: [],
+      auditId: 'audit-001',
+      createdAt: '2026-06-01T00:00:00Z',
+    });
+    // TargetSearch returns one local suggestion for the typed query.
+    mockSearchTargets.mockResolvedValue({
+      contractVersion: '1.0',
+      requestId: 'r',
+      suggestions: [
+        {
+          targetId: 'tgt-m31',
+          primaryDesignation: 'M 31',
+          commonName: 'Andromeda Galaxy',
+          objectType: 'galaxy',
+          matchedAlias: 'Andromeda',
+          source: 'seed',
+        },
+      ],
+    });
+
+    renderDialog();
+
+    // Select a target via the embedded TargetSearch typeahead.
+    const targetInput = screen.getByRole('combobox', { name: /target/i });
+    fireEvent.change(targetInput, { target: { value: 'andromeda' } });
+    // Wait past the ~300ms debounce, then flush the search promise.
+    const option = await screen.findByRole('option', {}, { timeout: 2000 });
+    fireEvent.mouseDown(option);
+
+    // Fill the required fields and submit.
+    fireEvent.change(screen.getByLabelText(/project name/i), { target: { value: 'M31 Project' } });
+    fireEvent.change(screen.getByLabelText(/folder path/i), { target: { value: 'projects/M31' } });
+
+    await act(async () => {
+      fireEvent.click(screen.getByRole('button', { name: /create project/i }));
+    });
+
+    await waitFor(() => {
+      expect(mockCreateProject).toHaveBeenCalledWith(
+        expect.objectContaining({
+          name: 'M31 Project',
+          path: 'projects/M31',
+          canonicalTargetId: 'tgt-m31',
+        }),
+      );
+    });
   });
 
   it('shows error message when command returns an error code', async () => {

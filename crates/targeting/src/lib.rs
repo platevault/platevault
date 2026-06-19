@@ -1,29 +1,19 @@
-//! Target catalog, aliases, identifiers, and lookup for spec 013 + spec 023.
+//! Target identity, normalization, and on-demand resolution for spec 035.
 //!
 //! # Module layout
 //!
-//! - [`aliases`]: alias validation, conflict-detection, and primary-rename guards (spec 023).
-//! - [`catalog`]: in-memory catalog types — [`catalog::TargetCatalog`],
-//!   [`catalog::CatalogEntry`], [`catalog::TargetMatch`], [`catalog::MatchEvidence`].
 //! - [`normalize`]: query normalization pipeline (casefold, NFKC, prefix expansion).
-//! - [`identity`]: deterministic UUIDv5 generation for `Target.id` (R6).
-//! - [`lookup`]: exact, fuzzy, and edit-distance matchers.
-//! - [`resolve`]: ambiguity policy (R3) wrapping the lookup pipeline.
-//! - [`load`]: SQLite-backed catalog loader (T005).
-//! - [`fixture`]: seeded in-memory test catalog (no network, no files).
+//! - [`identity`]: deterministic UUIDv5 generation for `canonical_target.id`.
+//! - [`resolver`]: on-demand SIMBAD resolution + bundled seed + local cache (spec 035).
+//!
+//! The spec-013 in-memory catalog engine (`catalog`, `lookup`, `resolve`,
+//! `aliases`, `fixture`) was removed by spec 036.
 
 #![allow(clippy::doc_markdown)] // spec/domain terminology is not suited for backticks
 
-pub mod aliases;
-pub mod catalog;
 pub mod identity;
-pub mod load;
-pub mod lookup;
 pub mod normalize;
-pub mod resolve;
-
-#[cfg(any(test, feature = "test-fixture"))]
-pub mod fixture;
+pub mod resolver;
 
 pub const CRATE_NAME: &str = "targeting";
 

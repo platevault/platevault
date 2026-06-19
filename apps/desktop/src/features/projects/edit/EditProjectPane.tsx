@@ -44,10 +44,10 @@ export function EditProjectPane({ project, onClose }: EditProjectPaneProps) {
   const toolLocked = isToolLocked(project.lifecycle);
 
   const [name, setName] = useState(project.name);
-  type ToolValue = 'PixInsight' | 'Siril' | 'Planetary Suite';
-  const [tool, setTool] = useState<ToolValue>(
-    (typeof project.tool === 'string' ? project.tool : 'PixInsight'),
-  );
+  type ToolValue = 'PixInsight' | 'Siril';
+  const toToolValue = (t: string | undefined): ToolValue =>
+    t === 'Siril' ? 'Siril' : 'PixInsight';
+  const [tool, setTool] = useState<ToolValue>(toToolValue(project.tool));
   const [notes, setNotes] = useState(project.notes ?? '');
   const [saving, setSaving] = useState(false);
   const [fieldErrors, setFieldErrors] = useState<Record<string, string>>({});
@@ -58,7 +58,7 @@ export function EditProjectPane({ project, onClose }: EditProjectPaneProps) {
   // Sync if parent project changes (e.g. detail re-fetched)
   useEffect(() => {
     setName(project.name);
-    setTool((typeof project.tool === 'string' ? project.tool : 'PixInsight'));
+    setTool(toToolValue(project.tool));
     setNotes(project.notes ?? '');
     setChannels(project.channels ?? []);
   }, [project]);
@@ -191,7 +191,6 @@ export function EditProjectPane({ project, onClose }: EditProjectPaneProps) {
           >
             <option value="PixInsight">PixInsight</option>
             <option value="Siril">Siril</option>
-            <option value="Planetary Suite">Planetary Suite</option>
           </select>
           {toolLocked && (
             <span id="ep-tool-lock" className="alm-field-hint">

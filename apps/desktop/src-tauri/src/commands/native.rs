@@ -22,7 +22,7 @@ use crate::commands::lifecycle::AppState;
 /// # Errors
 /// Returns `Err(String)` on validation failure or if the dialog cannot be shown.
 #[tauri::command]
-#[specta::specta(rename = "native.directory.pick")]
+#[specta::specta]
 pub async fn native_directory_pick(
     app: tauri::AppHandle,
     _state: State<'_, AppState>,
@@ -54,7 +54,7 @@ pub async fn native_directory_pick(
 /// # Errors
 /// Returns `Err(String)` on filter validation failure or if the dialog cannot be shown.
 #[tauri::command]
-#[specta::specta(rename = "native.file.pick")]
+#[specta::specta]
 pub async fn native_file_pick(
     app: tauri::AppHandle,
     _state: State<'_, AppState>,
@@ -102,7 +102,7 @@ pub async fn native_file_pick(
 /// # Errors
 /// Returns `Err(String)` if the path does not exist or the OS command fails.
 #[tauri::command]
-#[specta::specta(rename = "native.reveal")]
+#[specta::specta]
 pub async fn native_reveal(
     app: tauri::AppHandle,
     state: State<'_, AppState>,

@@ -45,11 +45,13 @@ function fmtBytes(bytes: number): string {
 interface Props {
   master: CalibrationMaster | null;
   prefillSuggestion: boolean;
+  /** Days threshold for aging warnings. Comes from persisted settings (FR-023). */
+  agingThresholdDays: number;
 }
 
 // ── Component ─────────────────────────────────────────────────────────────────
 
-export function MasterDetail({ master, prefillSuggestion }: Props) {
+export function MasterDetail({ master, prefillSuggestion, agingThresholdDays }: Props) {
   // Use source_session_id as the session anchor for suggest.
   // This is the calibration session that produced the master — we use it
   // to find which other masters would match the same fingerprint.
@@ -79,7 +81,7 @@ export function MasterDetail({ master, prefillSuggestion }: Props) {
   }
 
   const isAging1Year = master.age_days >= 365;
-  const isAgingWarn = master.age_days > 90 && !isAging1Year;
+  const isAgingWarn = master.age_days > agingThresholdDays && !isAging1Year;
   const kindStr = master.kind.toString().toLowerCase().replace('_', ' ');
 
   const fp = master.fingerprint;

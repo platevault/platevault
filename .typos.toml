@@ -27,3 +27,7 @@ PN = "PN"
 DBE = "DBE"
 # optical train ID prefix
 ot = "ot"
+# legitimate hyphenated prefix split on '-' (mis-prioritized, mis-resolve)
+mis = "mis"
+# accepted spelling in a test description
+unparseable = "unparseable"

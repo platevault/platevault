@@ -551,6 +551,9 @@ pub async fn retry_plan(
                 linked_entity: item.linked_entity.as_deref(),
                 provenance_json: item.provenance.as_deref(),
                 archive_path: item.archive_path.as_deref(),
+                // Propagate real source identity when retrying items (FR-016).
+                source_id: item.source_id.as_deref(),
+                category: item.category.as_deref(),
             },
         )
         .await
@@ -762,6 +765,8 @@ mod tests {
                 linked_entity: None,
                 provenance_json: None,
                 archive_path: Some(".astro-plan-archive/p1/file.fits"),
+                source_id: None,
+                category: None,
             },
         )
         .await

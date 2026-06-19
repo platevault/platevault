@@ -2,27 +2,29 @@ import { registerRootBatch } from '@/api/commands';
 
 const STORAGE_KEY = 'alm-setup-wizard-state';
 
-export type SourceKind = 'light_frames' | 'dark' | 'flat' | 'bias' | 'project' | 'inbox';
+// Per-image frame type (light/dark/flat/bias) is detected from image metadata
+// (FITS IMAGETYP header) during scan/ingest — NOT inferred from which source
+// folder the file is in. 'calibration' here is only a user-facing folder
+// category that covers darks, flats, and bias frames together.
+export type SourceKind = 'light_frames' | 'calibration' | 'project' | 'inbox';
 export type ScanDepth = 'recursive' | 'single';
 
 export const ALL_SOURCE_KINDS: SourceKind[] = [
   'light_frames',
-  'dark',
-  'flat',
-  'bias',
+  'calibration',
   'project',
   'inbox',
 ];
 
 export const SOURCE_KIND_LABELS: Record<SourceKind, string> = {
   light_frames: 'Light frames',
-  dark: 'Darks',
-  flat: 'Flats',
-  bias: 'Bias',
+  calibration: 'Calibration frames',
   project: 'Projects',
   inbox: 'Inbox',
 };
 
+// spec 039: inbox is now optional — users do not need a dedicated drop folder
+// to use the Inbox (which aggregates unacknowledged items across all roots).
 export const REQUIRED_KINDS: SourceKind[] = ['light_frames', 'project'];
 
 export interface SourceEntry {
@@ -46,6 +48,8 @@ export interface FlushRowResult {
   kind: SourceKind;
   path: string;
   success: boolean;
+  /** The registered root's id (present on successful rows); used to scan the source. */
+  rootId?: string;
   error?: string;
 }
 
@@ -198,7 +202,12 @@ export async function flushToDB(sources: SourcesState): Promise<FlushResult> {
 
   if (isMockMode) {
     return {
-      results: validSources.map((s) => ({ kind: s.kind, path: s.path, success: true })),
+      results: validSources.map((s) => ({
+        kind: s.kind,
+        path: s.path,
+        success: true,
+        rootId: s.path,
+      })),
       allSucceeded: true,
     };
   }
@@ -208,13 +217,21 @@ export async function flushToDB(sources: SourcesState): Promise<FlushResult> {
       sources: validSources.map((s) => ({
         kind: s.kind,
         path: s.path,
-        scan_depth: s.scanDepth,
+        // Backend RegisterSourceRequest is camelCase — must be `scanDepth`,
+        // not `scan_depth`, or the whole batch arg fails to deserialize.
+        scanDepth: s.scanDepth,
       })),
     });
 
     const results: FlushRowResult[] = batchResult.results.map((item) => {
       if (item.success) {
-        return { kind: item.kind as SourceKind, path: item.path, success: true };
+        // Carry the assigned root id so the wizard scan step can scan this source.
+        return {
+          kind: item.kind as SourceKind,
+          path: item.path,
+          success: true,
+          rootId: item.root?.id,
+        };
       }
       const errorCode = item.error ?? 'unknown';
       const message = ERROR_MESSAGES[errorCode] ?? `Registration failed: ${errorCode}`;

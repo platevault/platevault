@@ -164,3 +164,34 @@ pub struct InboxScanFolderResponse {
     pub root_id: String,
     pub items: Vec<InboxItemSummary>,
 }
+
+// ── Cross-root unacknowledged list (spec 039) ─────────────────────────────────
+
+/// One unacknowledged inbox item returned by `inbox.list`.
+///
+/// Extends `InboxItemSummary` with the root's id and absolute path so the UI
+/// can group/label items by root without a second call.
+#[derive(Clone, Debug, Serialize, Deserialize, Type)]
+#[serde(rename_all = "camelCase")]
+pub struct InboxListItem {
+    pub inbox_item_id: String,
+    pub root_id: String,
+    /// Absolute path of the registered root (for display and confirm calls).
+    pub root_absolute_path: String,
+    pub relative_path: String,
+    pub file_count: u32,
+    pub lane: String,
+    pub state: String,
+    pub content_signature: String,
+}
+
+/// Response from `inbox.list`.
+#[derive(Clone, Debug, Serialize, Deserialize, Type)]
+#[serde(rename_all = "camelCase")]
+pub struct InboxListResponse {
+    pub items: Vec<InboxListItem>,
+    /// Whether the list was capped at `limit` (true = there may be more).
+    pub capped: bool,
+    /// Maximum items per response (matches the server-side cap).
+    pub limit: u32,
+}

@@ -1,94 +1,135 @@
-// TODO(spec 003 (roots/sources)): wire to backend when owning spec implements its command.
-import { useState } from 'react';
+// spec 003 (roots/sources) — wired to real backend via listRoots/registerRoot.
+import { useState, useEffect, useCallback } from 'react';
 import { Btn, Pill } from '@/ui';
-import {
-  DATA_SOURCES,
-  type DataSourceRoot,
-} from '@/data/fixtures/settings';
+import { DirPicker } from '@/ui/DirPicker';
+import { listRoots, registerRoot } from '@/api/commands';
+import type { LibraryRoot } from '@/bindings/types';
 
 interface DataSourcesProps {
   save: (scope: string, values: Record<string, unknown>) => void;
 }
 
-const TYPE_VARIANT: Record<DataSourceRoot['type'], 'ok' | 'info' | 'neutral' | 'warn' | 'ghost'> = {
-  Raw: 'ok',
-  Calibration: 'info',
-  Projects: 'neutral',
-  Inbox: 'warn',
-  Archive: 'ghost',
+type RootCategory = LibraryRoot['category'];
+
+const CATEGORY_VARIANT: Record<RootCategory, 'ok' | 'info' | 'neutral' | 'warn' | 'ghost'> = {
+  raw: 'ok',
+  calibration: 'info',
+  project: 'neutral',
+  inbox: 'warn',
 };
 
-function makeId() {
-  return Date.now();
-}
+const CATEGORY_LABEL: Record<RootCategory, string> = {
+  raw: 'Raw',
+  calibration: 'Calibration',
+  project: 'Project',
+  inbox: 'Inbox',
+};
 
-export function DataSources({ save }: DataSourcesProps) {
-  const [roots, setRoots] = useState<DataSourceRoot[]>(DATA_SOURCES);
+export function DataSources({ save: _save }: DataSourcesProps) {
+  const [roots, setRoots] = useState<LibraryRoot[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [loadError, setLoadError] = useState<string | null>(null);
+
   const [showAdd, setShowAdd] = useState(false);
   const [addingPath, setAddingPath] = useState('');
-  const [addingType, setAddingType] = useState<DataSourceRoot['type']>('Raw');
+  const [addingCategory, setAddingCategory] = useState<RootCategory>('raw');
+  const [addError, setAddError] = useState<string | null>(null);
+  const [adding, setAdding] = useState(false);
 
-  const handleAdd = () => {
+  const loadRoots = useCallback(() => {
+    setLoading(true);
+    setLoadError(null);
+    listRoots()
+      .then((data) => setRoots(data))
+      .catch((err: unknown) => setLoadError(String(err)))
+      .finally(() => setLoading(false));
+  }, []);
+
+  useEffect(() => {
+    loadRoots();
+  }, [loadRoots]);
+
+  const handleAdd = async () => {
     if (!addingPath.trim()) return;
-    const newRoot: DataSourceRoot = {
-      id: makeId(),
-      path: addingPath.trim(),
-      type: addingType,
-      online: true,
-      files: 0,
-      size: '—',
-      lastScan: 'never',
-    };
-    const updated = [...roots, newRoot];
-    setRoots(updated);
-    setAddingPath('');
-    setShowAdd(false);
-    save('roots', { roots: updated });
-  };
-
-  const handleRemove = (id: number) => {
-    const updated = roots.filter((r) => r.id !== id);
-    setRoots(updated);
-    save('roots', { roots: updated });
+    setAdding(true);
+    setAddError(null);
+    try {
+      await registerRoot({
+        path: addingPath.trim(),
+        category: addingCategory,
+        scanSettings: {},
+      });
+      setAddingPath('');
+      setAddingCategory('raw');
+      setShowAdd(false);
+      loadRoots();
+    } catch (err: unknown) {
+      setAddError(String(err));
+    } finally {
+      setAdding(false);
+    }
   };
 
   return (
     <>
       <div className="alm-settings__group">
-        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 'var(--alm-sp-3)' }}>
-          <div className="alm-settings__group-title" style={{ marginBottom: 0 }}>Library Roots</div>
-          <Btn size="sm" onClick={() => setShowAdd(true)}>Add source folder</Btn>
+        <div className="alm-settings__group-header">
+          <div className="alm-settings__group-title">Library Roots</div>
+          <Btn size="sm" onClick={() => { setShowAdd(true); setAddError(null); }}>
+            Add source folder
+          </Btn>
         </div>
 
         {showAdd && (
-          <div style={{ display: 'flex', gap: 'var(--alm-sp-2)', marginBottom: 'var(--alm-sp-3)', flexWrap: 'wrap' }}>
-            <input
-              className="alm-input"
-              style={{ flex: 1, minWidth: 240 }}
+          <div style={{ marginBottom: 'var(--alm-sp-3)', display: 'flex', flexDirection: 'column', gap: 'var(--alm-sp-2)' }}>
+            <DirPicker
               value={addingPath}
-              onChange={(e) => setAddingPath(e.target.value)}
-              placeholder="e.g. D:\Astrophotography\Raw"
-              onKeyDown={(e) => {
-                if (e.key === 'Enter') handleAdd();
-                if (e.key === 'Escape') setShowAdd(false);
-              }}
-              autoFocus
-              aria-label="Source folder path"
+              onChange={setAddingPath}
+              label="Folder"
+              lastPathKind="inbox"
             />
-            <select
-              className="alm-select"
-              value={addingType}
-              onChange={(e) => setAddingType(e.target.value as DataSourceRoot['type'])}
-              aria-label="Source type"
-            >
-              <option value="Raw">Raw</option>
-              <option value="Calibration">Calibration</option>
-              <option value="Projects">Projects</option>
-              <option value="Inbox">Inbox</option>
-              <option value="Archive">Archive</option>
-            </select>
-            <Btn size="sm" onClick={handleAdd} disabled={!addingPath.trim()}>Add</Btn>
-            <Btn size="sm" variant="ghost" onClick={() => setShowAdd(false)}>Cancel</Btn>
+            <div style={{ display: 'flex', gap: 'var(--alm-sp-2)', flexWrap: 'wrap', alignItems: 'center' }}>
+              <select
+                className="alm-select"
+                value={addingCategory}
+                onChange={(e) => setAddingCategory(e.target.value as RootCategory)}
+                aria-label="Source category"
+              >
+                <option value="raw">Raw</option>
+                <option value="calibration">Calibration</option>
+                <option value="project">Project</option>
+                <option value="inbox">Inbox</option>
+              </select>
+              <Btn size="sm" onClick={handleAdd} disabled={!addingPath.trim() || adding}>
+                {adding ? 'Adding…' : 'Add'}
+              </Btn>
+              <Btn size="sm" variant="ghost" onClick={() => { setShowAdd(false); setAddError(null); setAddingPath(''); }}>
+                Cancel
+              </Btn>
+            </div>
+            {addError && (
+              <div style={{ fontSize: 'var(--alm-text-xs)', color: 'var(--alm-danger, #dc2626)' }}>
+                {addError}
+              </div>
+            )}
+          </div>
+        )}
+
+        {loading && (
+          <div style={{ color: 'var(--alm-text-muted)', fontSize: 'var(--alm-text-sm)' }}>
+            Loading…
+          </div>
+        )}
+
+        {loadError && (
+          <div style={{ color: 'var(--alm-danger, #dc2626)', fontSize: 'var(--alm-text-xs)' }}>
+            Could not load roots: {loadError}
+          </div>
+        )}
+
+        {!loading && !loadError && roots.length === 0 && (
+          <div style={{ color: 'var(--alm-text-muted)', fontSize: 'var(--alm-text-sm)' }}>
+            No source folders registered yet. Add one above.
           </div>
         )}
 
@@ -98,7 +139,7 @@ export function DataSources({ save }: DataSourcesProps) {
               key={root.id}
               style={{
                 border: '1px solid var(--alm-border)',
-                borderRadius: 'var(--alm-radius)',
+                borderRadius: 'var(--alm-radius-md)',
                 padding: 'var(--alm-sp-3)',
                 background: root.online ? undefined : 'var(--alm-surface2)',
               }}
@@ -108,37 +149,21 @@ export function DataSources({ save }: DataSourcesProps) {
                   {root.path}
                 </code>
                 <div style={{ display: 'flex', gap: 'var(--alm-sp-1)', flexShrink: 0 }}>
-                  <Pill variant={TYPE_VARIANT[root.type]}>{root.type}</Pill>
-                  <Pill variant={root.online ? 'ok' : 'danger'}>{root.online ? 'Online' : 'Offline'}</Pill>
+                  <Pill variant={CATEGORY_VARIANT[root.category]}>
+                    {CATEGORY_LABEL[root.category]}
+                  </Pill>
+                  <Pill variant={root.online ? 'ok' : 'danger'}>
+                    {root.online ? 'Online' : 'Offline'}
+                  </Pill>
                 </div>
               </div>
-              {root.online && (
-                <div style={{ marginTop: 'var(--alm-sp-2)', fontSize: 'var(--alm-text-xs)', color: 'var(--alm-text-muted)', display: 'flex', gap: 'var(--alm-sp-3)' }}>
-                  <span>{typeof root.files === 'number' ? root.files.toLocaleString() : root.files} files</span>
-                  <span>{root.size}</span>
-                  <span>Last scan: {root.lastScan}</span>
+              {root.last_scanned && (
+                <div style={{ marginTop: 'var(--alm-sp-2)', fontSize: 'var(--alm-text-xs)', color: 'var(--alm-text-muted)' }}>
+                  Last scan: {root.last_scanned}
                 </div>
               )}
-              <div style={{ marginTop: 'var(--alm-sp-2)', display: 'flex', gap: 'var(--alm-sp-1)' }}>
-                <Btn size="sm" variant="ghost" onClick={() => console.log('reveal', root.path)}>
-                  Reveal
-                </Btn>
-                {!root.online && (
-                  <Btn size="sm" variant="ghost" onClick={() => console.log('remap', root.path)}>
-                    Remap
-                  </Btn>
-                )}
-                <Btn size="sm" variant="ghost" onClick={() => handleRemove(root.id)}>
-                  Remove
-                </Btn>
-              </div>
             </div>
           ))}
-          {roots.length === 0 && (
-            <p style={{ color: 'var(--alm-text-muted)', fontSize: 'var(--alm-text-sm)' }}>
-              No source folders registered. Click "Add source folder" to get started.
-            </p>
-          )}
         </div>
       </div>
     </>

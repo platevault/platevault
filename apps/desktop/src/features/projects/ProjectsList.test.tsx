@@ -8,6 +8,9 @@
  * 3. Shows loading state.
  * 4. Calls onSelect with the correct project id on click.
  * 5. Shows drift warning badge when channelDrift is true.
+ * 6. (T055) Lifecycle filter is multiselect — selecting multiple states shows matching projects.
+ * 7. (T055) Selecting a single state shows only matching projects.
+ * 8. (T055) "All" checkbox clears the filter.
  */
 
 import { render, screen, fireEvent } from '@testing-library/react';
@@ -126,5 +129,138 @@ describe('ProjectsList', () => {
     expect(selectedItems).toHaveLength(1);
     // The selected item should contain the NGC 7000 name
     expect(selectedItems[0]).toHaveTextContent('NGC 7000 Narrowband');
+  });
+});
+
+// ── T055: Lifecycle multiselect filter (FR-022 / spec-009 SC-004) ─────────────
+
+const multiProjects: ProjectSummaryDto[] = [
+  {
+    id: 'p1', name: 'A Processing', tool: 'PixInsight', lifecycle: 'processing',
+    path: 'p/a', channelDrift: false, sourceCount: 1,
+    createdAt: '2026-06-01T00:00:00Z', updatedAt: '2026-06-10T00:00:00Z',
+  },
+  {
+    id: 'p2', name: 'B Ready', tool: 'PixInsight', lifecycle: 'ready',
+    path: 'p/b', channelDrift: false, sourceCount: 0,
+    createdAt: '2026-06-01T00:00:00Z', updatedAt: '2026-06-09T00:00:00Z',
+  },
+  {
+    id: 'p3', name: 'C Blocked', tool: 'PixInsight', lifecycle: 'blocked',
+    path: 'p/c', channelDrift: false, sourceCount: 0,
+    createdAt: '2026-06-01T00:00:00Z', updatedAt: '2026-06-08T00:00:00Z',
+  },
+  {
+    id: 'p4', name: 'D Archived', tool: 'PixInsight', lifecycle: 'archived',
+    path: 'p/d', channelDrift: false, sourceCount: 0,
+    createdAt: '2026-06-01T00:00:00Z', updatedAt: '2026-06-07T00:00:00Z',
+  },
+];
+
+describe('T055: ProjectsList lifecycle multiselect filter (FR-022)', () => {
+  it('shows all projects when no lifecycle filter is active', () => {
+    render(
+      <ProjectsList
+        projects={multiProjects}
+        selectedId={undefined}
+        onSelect={vi.fn()}
+        lifecycle={[]}
+        onLifecycleChange={vi.fn()}
+      />,
+    );
+    expect(screen.getByText('A Processing')).toBeInTheDocument();
+    expect(screen.getByText('B Ready')).toBeInTheDocument();
+    expect(screen.getByText('C Blocked')).toBeInTheDocument();
+    expect(screen.getByText('D Archived')).toBeInTheDocument();
+  });
+
+  it('shows only matching projects when a single lifecycle is selected', () => {
+    render(
+      <ProjectsList
+        projects={multiProjects}
+        selectedId={undefined}
+        onSelect={vi.fn()}
+        lifecycle={['ready']}
+        onLifecycleChange={vi.fn()}
+      />,
+    );
+    expect(screen.getByText('B Ready')).toBeInTheDocument();
+    expect(screen.queryByText('A Processing')).not.toBeInTheDocument();
+    expect(screen.queryByText('C Blocked')).not.toBeInTheDocument();
+    expect(screen.queryByText('D Archived')).not.toBeInTheDocument();
+  });
+
+  it('shows projects matching ANY of the selected lifecycle states (multiselect)', () => {
+    render(
+      <ProjectsList
+        projects={multiProjects}
+        selectedId={undefined}
+        onSelect={vi.fn()}
+        lifecycle={['processing', 'blocked']}
+        onLifecycleChange={vi.fn()}
+      />,
+    );
+    expect(screen.getByText('A Processing')).toBeInTheDocument();
+    expect(screen.getByText('C Blocked')).toBeInTheDocument();
+    expect(screen.queryByText('B Ready')).not.toBeInTheDocument();
+    expect(screen.queryByText('D Archived')).not.toBeInTheDocument();
+  });
+
+  it('calls onLifecycleChange when a state checkbox is toggled', () => {
+    const onLifecycleChange = vi.fn();
+    render(
+      <ProjectsList
+        projects={multiProjects}
+        selectedId={undefined}
+        onSelect={vi.fn()}
+        lifecycle={[]}
+        onLifecycleChange={onLifecycleChange}
+      />,
+    );
+    // Open the filter dropdown
+    fireEvent.click(screen.getByLabelText('Filter lifecycle'));
+    // Check 'Processing'
+    const processingCheckbox = screen.getByLabelText('Processing');
+    fireEvent.click(processingCheckbox);
+    expect(onLifecycleChange).toHaveBeenCalledWith(['processing']);
+  });
+
+  it('filter button shows "State: all" when no filter is active', () => {
+    render(
+      <ProjectsList
+        projects={multiProjects}
+        selectedId={undefined}
+        onSelect={vi.fn()}
+        lifecycle={[]}
+        onLifecycleChange={vi.fn()}
+      />,
+    );
+    expect(screen.getByLabelText('Filter lifecycle')).toHaveTextContent('State: all');
+  });
+
+  it('filter button shows the state name when exactly one state is selected', () => {
+    render(
+      <ProjectsList
+        projects={multiProjects}
+        selectedId={undefined}
+        onSelect={vi.fn()}
+        lifecycle={['archived']}
+        onLifecycleChange={vi.fn()}
+      />,
+    );
+    expect(screen.getByLabelText('Filter lifecycle')).toHaveTextContent('State: Archived');
+  });
+
+  it('filter button shows count when multiple states are selected', () => {
+    render(
+      <ProjectsList
+        projects={multiProjects}
+        selectedId={undefined}
+        onSelect={vi.fn()}
+        lifecycle={['ready', 'blocked']}
+        onLifecycleChange={vi.fn()}
+      />,
+    );
+    expect(screen.getByLabelText('Filter lifecycle')).toHaveTextContent('State: 2 selected');
   });
 });

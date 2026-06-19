@@ -82,7 +82,7 @@ export function SchemaViewer({
         style={{
           background: 'var(--alm-surface)',
           border: '1px solid var(--alm-border)',
-          borderRadius: 'var(--alm-radius)',
+          borderRadius: 'var(--alm-radius-md)',
           width: '80vw',
           maxWidth: 900,
           maxHeight: '80vh',

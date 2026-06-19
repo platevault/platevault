@@ -135,8 +135,9 @@ pub enum HealthError {
 ///
 /// Condition: `lifecycle == "setup_incomplete"` AND `≥1 source mapped`.
 ///
-/// Writes to the `projects` table via `repo::update_project_lifecycle`, then
-/// publishes `project.lifecycle.ready` on the event bus (P8-3).
+/// Writes to the `projects` table via `repo::update_project_lifecycle`, writes
+/// an audit row (FR-021), then publishes `project.lifecycle.ready` on the event
+/// bus (P8-3).
 ///
 /// Returns `Some("ready")` when the transition fires, `None` when the condition
 /// is not met or the project is already past `setup_incomplete`.
@@ -166,8 +167,20 @@ pub async fn check_project_ready_invariant(
         .await
         .map_err(HealthError::Persistence)?;
 
-    // Publish project.lifecycle.ready event (P8-3).
     let now = domain_core::ids::Timestamp::now_utc();
+
+    // FR-021: write an audit row for the automatic ready transition.
+    write_auto_transition_audit(
+        pool,
+        project_id,
+        "setup_incomplete",
+        "ready",
+        "auto: setup_incomplete→ready invariant",
+    )
+    .await
+    .map_err(HealthError::Persistence)?;
+
+    // Publish project.lifecycle.ready event (P8-3).
     let _ = bus
         .publish(
             "project.lifecycle.ready",
@@ -200,7 +213,9 @@ pub struct BlockTransitionRecord {
 ///
 /// - Performs debounce (P7): if the same `(project_id, condition_kind)` was
 ///   emitted within `DEBOUNCE_WINDOW`, the transition is suppressed.
-/// - Writes the new `blocked` lifecycle to the `projects` table.
+/// - Writes the new `blocked` lifecycle + typed blocked reason (FR-020) to
+///   the `projects` table.
+/// - Writes an audit row for the auto-transition (FR-021).
 /// - Publishes `TOPIC_LIFECYCLE_TRANSITION_APPLIED` and
 ///   `project.lifecycle.blocked` on the event bus.
 ///
@@ -241,9 +256,26 @@ pub async fn emit_block_transition(
     let from_state = row.lifecycle.clone();
     let message = condition.message();
 
-    repo::update_project_lifecycle(pool, project_id, "blocked")
-        .await
-        .map_err(HealthError::Persistence)?;
+    // FR-020: persist typed blocked reason alongside the lifecycle transition.
+    repo::update_project_lifecycle_blocked(
+        pool,
+        project_id,
+        condition_kind,
+        Some(message.as_str()),
+    )
+    .await
+    .map_err(HealthError::Persistence)?;
+
+    // FR-021: write an audit row for this auto block transition.
+    write_auto_transition_audit(
+        pool,
+        project_id,
+        &from_state,
+        "blocked",
+        &format!("auto block: {condition_kind} — {message}"),
+    )
+    .await
+    .map_err(HealthError::Persistence)?;
 
     let now = domain_core::ids::Timestamp::now_utc();
 
@@ -282,6 +314,108 @@ pub async fn emit_block_transition(
     }))
 }
 
+/// Emit a system-driven `archived → ready` unarchive transition for a project
+/// (R-Unarchive, FR-021). This is a plan-required edge; this helper is called
+/// after the plan is applied to write the audit row and emit `project.unarchived`.
+///
+/// # Errors
+/// Returns `HealthError` on database failure.
+pub async fn emit_unarchive_transition(
+    pool: &SqlitePool,
+    bus: &EventBus,
+    project_id: &str,
+) -> Result<(), HealthError> {
+    let row = repo::get_project(pool, project_id)
+        .await
+        .map_err(|e| HealthError::NotFound(format!("project {project_id}: {e}")))?;
+
+    if row.lifecycle != "archived" {
+        return Ok(());
+    }
+
+    repo::update_project_lifecycle_unblock(pool, project_id, "ready")
+        .await
+        .map_err(HealthError::Persistence)?;
+
+    // FR-021: audit row for the unarchive auto-transition.
+    write_auto_transition_audit(pool, project_id, "archived", "ready", "auto: project.unarchived")
+        .await
+        .map_err(HealthError::Persistence)?;
+
+    let now = domain_core::ids::Timestamp::now_utc();
+
+    let _ = bus
+        .publish(
+            TOPIC_LIFECYCLE_TRANSITION_APPLIED,
+            Source::System,
+            LifecycleTransitionApplied {
+                entity_type: domain_core::lifecycle::data_asset::EntityType::Project,
+                entity_id: project_id.to_owned(),
+                from_state: "archived".to_owned(),
+                to_state: "ready".to_owned(),
+                actor: "system".to_owned(),
+                at: now,
+            },
+        )
+        .await;
+
+    // FR-021: emit the `project.unarchived` named event.
+    let _ = bus
+        .publish(
+            "project.unarchived",
+            Source::System,
+            serde_json::json!({
+                "projectId": project_id,
+                "at": now.as_offset_date_time()
+                    .format(&time::format_description::well_known::Rfc3339)
+                    .unwrap_or_else(|_| "1970-01-01T00:00:00Z".to_owned()),
+            }),
+        )
+        .await;
+
+    Ok(())
+}
+
+// ── Internal helpers ──────────────────────────────────────────────────────────
+
+/// Write a durable audit row for a system-driven (actor=system) lifecycle
+/// transition. Used by `check_project_ready_invariant`, `emit_block_transition`,
+/// and `emit_unarchive_transition` to satisfy FR-021 (Constitution §V).
+async fn write_auto_transition_audit(
+    pool: &SqlitePool,
+    project_id: &str,
+    from_state: &str,
+    to_state: &str,
+    trigger: &str,
+) -> persistence_db::DbResult<()> {
+    use time::format_description::well_known::Rfc3339;
+    use uuid::Uuid;
+
+    let audit_id = Uuid::new_v4().to_string();
+    let request_id = Uuid::new_v4().to_string();
+    let at = time::OffsetDateTime::now_utc()
+        .format(&Rfc3339)
+        .unwrap_or_else(|_| "1970-01-01T00:00:00Z".to_owned());
+
+    sqlx::query(
+        "INSERT INTO audit_log_entry \
+         (audit_id, entity_type, entity_id, from_state, to_state, trigger, actor, \
+          outcome, severity, request_id, at, payload) \
+         VALUES (?, 'project', ?, ?, ?, ?, 'system', 'applied', 'workflow', ?, ?, NULL)",
+    )
+    .bind(&audit_id)
+    .bind(project_id)
+    .bind(from_state)
+    .bind(to_state)
+    .bind(trigger)
+    .bind(&request_id)
+    .bind(&at)
+    .execute(pool)
+    .await?;
+
+    Ok(())
+}
+
 // ── Tests ─────────────────────────────────────────────────────────────────────
 
 #[cfg(test)]
@@ -317,6 +451,7 @@ mod tests {
             path: format!("projects/{name}"),
             initial_sources: vec![],
             notes: None,
+            canonical_target_id: None,
         }
     }
 

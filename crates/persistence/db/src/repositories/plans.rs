@@ -68,6 +68,15 @@ pub struct PlanItemRow {
     pub approved_size_bytes: Option<i64>,
     pub archive_path: Option<String>,
     pub created_at: String,
+    // Fields added by migration 0031.
+    pub source_id: Option<String>,
+    pub category: Option<String>,
+    /// 0/1 bool: derived from action type (delete/trash). Added by migration 0031.
+    pub requires_destructive_confirm: Option<i64>,
+    pub resolved_pattern: Option<String>,
+    /// 0/1 bool: whether the user has confirmed the destructive action.
+    /// Real DB column added by migration 0033. Default 0 (false) — safe.
+    pub destructive_confirmed: i64,
 }
 
 /// Data required to insert a new plan.
@@ -100,6 +109,11 @@ pub struct InsertPlanItem<'a> {
     pub linked_entity: Option<&'a str>,
     pub provenance_json: Option<&'a str>,
     pub archive_path: Option<&'a str>,
+    /// Real source FK (FR-016/017, migration 0031).
+    /// Set by plan generators so `plan_protection_check` can surface the real source.
+    pub source_id: Option<&'a str>,
+    /// Classification category used by protection resolution (FR-016, migration 0031).
+    pub category: Option<&'a str>,
 }
 
 // ── Plan CRUD ─────────────────────────────────────────────────────────────────
@@ -153,8 +167,8 @@ pub async fn insert_plan_item(pool: &SqlitePool, item: &InsertPlanItem<'_>) -> D
             id, plan_id, item_index, name, action,
             from_root_id, from_relative_path, to_root_id, to_relative_path,
             reason, protection, linked_entity, item_state, provenance,
-            archive_path, created_at
-        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'pending', ?, ?, ?)",
+            archive_path, source_id, category, created_at
+        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'pending', ?, ?, ?, ?, ?)",
     )
     .bind(item.id)
     .bind(item.plan_id)
@@ -170,6 +184,8 @@ pub async fn insert_plan_item(pool: &SqlitePool, item: &InsertPlanItem<'_>) -> D
     .bind(item.linked_entity)
     .bind(item.provenance_json)
     .bind(item.archive_path)
+    .bind(item.source_id)
+    .bind(item.category)
     .bind(&now)
     .execute(pool)
     .await?;
@@ -502,6 +518,8 @@ mod tests {
             linked_entity: None,
             provenance_json: None,
             archive_path: None,
+            source_id: None,
+            category: None,
         };
         insert_plan_item(db.pool(), &item).await.unwrap();
 

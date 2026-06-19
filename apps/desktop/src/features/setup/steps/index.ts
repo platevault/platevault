@@ -8,3 +8,5 @@ export type { CatalogSettings, StepCatalogsProps } from './StepCatalogs';
 export { DEFAULT_CATALOG_SETTINGS } from './StepCatalogs';
 export { StepConfirm } from './StepConfirm';
 export type { StepConfirmProps } from './StepConfirm';
+export { StepScan } from './StepScan';
+export type { StepScanProps } from './StepScan';

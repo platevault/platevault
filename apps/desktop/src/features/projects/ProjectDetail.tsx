@@ -179,13 +179,31 @@ export function ProjectDetailContent({ projectId }: ProjectDetailContentProps) {
   // Derive contextual footer actions for the current lifecycle state.
   const footerActions = lifecycleFooterActions(lifecycle as ProjectLifecycleState);
 
-  // Derive blocked reason from project (spec 009 US4-2).
-  // The DB currently stores block_reason as a plain string. Until the BlockedReason
-  // typed field is wired, we synthesize a 'user' reason from any available string.
-  const blockedReason: BlockedReason | undefined =
-    lifecycle === 'blocked'
-      ? { kind: 'user', note: 'Project is blocked. Resolve to continue.' }
-      : undefined;
+  // Derive typed blocked reason from project DTO (FR-020 / spec 033 US5 T053).
+  // `blockedReasonKind` is populated by project_health.rs emit_block_transition
+  // and stored in `projects.blocked_reason_kind` (migration 0037).
+  const blockedReason: BlockedReason | undefined = (() => {
+    if (lifecycle !== 'blocked') return undefined;
+    const kind = project.blockedReasonKind;
+    const note = project.blockedReasonNote ?? undefined;
+    if (kind === 'source_missing') {
+      // Extract inventoryId from the note ("Source missing: <id>") or use note as-is.
+      const inventoryId = note?.replace(/^Source missing:\s*/i, '') ?? 'unknown';
+      return { kind: 'source_missing', inventoryId } satisfies BlockedReason;
+    }
+    if (kind === 'tool_unconfigured') {
+      const tool = note?.replace(/^Tool path not configured:\s*/i, '') ?? 'unknown';
+      return { kind: 'tool_unconfigured', tool } satisfies BlockedReason;
+    }
+    if (kind === 'calibration_unmatched') {
+      return { kind: 'calibration_unmatched', calibrationSetId: note ?? 'unknown' } satisfies BlockedReason;
+    }
+    if (kind === 'prepared_source_stale') {
+      return { kind: 'prepared_source_stale', preparedId: note ?? 'unknown' } satisfies BlockedReason;
+    }
+    // user reason or unknown kind: use the note as the message, or a generic fallback.
+    return { kind: 'user', note: note ?? 'Blocked — check project status.' } satisfies BlockedReason;
+  })();
 
   return (
     <DetailPane fill>
@@ -244,6 +262,29 @@ export function ProjectDetailContent({ projectId }: ProjectDetailContentProps) {
             <RailCard title="Lifecycle">
               <Lifecycle state={lifecycle} />
             </RailCard>
+            {/* spec 035 US1 #2: associated canonical target (resolved on the read path) */}
+            {project.canonicalTarget && (
+              <RailCard title="Target">
+                <div
+                  style={{ display: 'flex', flexDirection: 'column', gap: '2px' }}
+                  data-testid="project-canonical-target"
+                >
+                  <span style={{ fontWeight: 600 }}>
+                    {project.canonicalTarget.primaryDesignation}
+                  </span>
+                  {project.canonicalTarget.commonName && (
+                    <span
+                      style={{
+                        fontSize: 'var(--alm-text-xs)',
+                        color: 'var(--alm-text-muted)',
+                      }}
+                    >
+                      {project.canonicalTarget.commonName}
+                    </span>
+                  )}
+                </div>
+              </RailCard>
+            )}
             {project.channels && project.channels.length > 0 && (
               <RailCard title="Channels">
                 <div style={{ display: 'flex', flexWrap: 'wrap', gap: 'var(--alm-sp-1)' }}>

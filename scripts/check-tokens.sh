@@ -8,6 +8,9 @@
 #      (motion durations must use --alm-transition-* variables).
 #   3. Legacy/non-ALM token namespaces appear in TSX/TS source files
 #      (--mantine-color-* and --alm-color-* do not exist in tokens.css).
+#   4. Bare --alm-radius (without -sm/-md/-lg suffix) appears in TSX/TS
+#      source files — pin the R-4 regression fix (spec 028, 2026-06-17).
+#      Valid radius tokens: --alm-radius-sm, --alm-radius-md, --alm-radius-lg.
 #
 # Exceptions documented in components.css policy comment (spec 022 T011):
 #   - Component-intrinsic geometry px values are intentionally raw.
@@ -62,6 +65,22 @@ if [ -n "$LEGACY_HITS" ]; then
   PASS=false
 else
   echo "  OK: No legacy token namespaces."
+fi
+
+# ── Check 4: No bare --alm-radius (R-4 regression pin, spec 028) ─────────────
+echo ""
+echo "4. Checking for bare --alm-radius (undefined; use --alm-radius-{sm,md,lg}) in source files..."
+# Match var(--alm-radius) or --alm-radius followed by a non-dash character (i.e., not a suffix).
+# The grep uses a negative lookahead: --alm-radius not followed by -
+BARE_RADIUS_HITS=$(grep -rnP "var\(--alm-radius\)" \
+  --include="*.tsx" --include="*.ts" \
+  "$SRC_DIR" | grep -v "\.test\." | grep -v "bindings/" || true)
+if [ -n "$BARE_RADIUS_HITS" ]; then
+  echo "FAIL: Bare --alm-radius found (R-4 regression: token is undefined; use --alm-radius-md instead):"
+  echo "$BARE_RADIUS_HITS"
+  PASS=false
+else
+  echo "  OK: No bare --alm-radius references."
 fi
 
 # ── Result ────────────────────────────────────────────────────────────────────

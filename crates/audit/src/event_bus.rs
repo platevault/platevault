@@ -68,13 +68,16 @@ pub struct LifecycleTransitionApplied {
 pub const TOPIC_LIFECYCLE_TRANSITION_APPLIED: &str = "lifecycle.transition.applied";
 
 /// Per-kind source counts for the `first_run.completed` audit event.
+///
+/// `calibration` replaces the former `dark`, `flat`, and `bias` fields now
+/// that the source-folder kind is unified into a single `calibration` bucket.
+/// Per-image frame type is detected from image metadata (FITS `IMAGETYP`),
+/// not from the source-folder kind.
 #[derive(Clone, Debug, Serialize, Deserialize, JsonSchema, Type)]
 #[serde(rename_all = "camelCase")]
 pub struct SourceCountByKind {
     pub light_frames: usize,
-    pub dark: usize,
-    pub flat: usize,
-    pub bias: usize,
+    pub calibration: usize,
     pub project: usize,
     pub inbox: usize,
 }
@@ -356,80 +359,9 @@ pub struct PlanApplyingCompleted {
 
 pub const TOPIC_PLAN_APPLYING_COMPLETED: &str = "plan.applying.completed";
 
-// ── Catalog download audit events (spec 014, T007-event, R-3.1) ───────────────
-
-/// Payload for the `catalog.manifest.fetched` topic (spec 014, R-3.1).
-///
-/// Emitted when the catalog manifest has been downloaded and verified.
-#[derive(Clone, Debug, Serialize, Deserialize, JsonSchema, Type)]
-#[serde(rename_all = "camelCase")]
-pub struct CatalogManifestFetched {
-    /// Number of catalog entries in the manifest.
-    pub catalog_count: usize,
-    /// ETag returned by the server for subsequent conditional fetches.
-    pub etag: Option<String>,
-    pub at: String,
-}
-
-pub const TOPIC_CATALOG_MANIFEST_FETCHED: &str = "catalog.manifest.fetched";
-
-/// Payload for the `catalog.download.started` topic (spec 014, R-3.1).
-///
-/// Emitted when download of a single catalog artifact has started.
-#[derive(Clone, Debug, Serialize, Deserialize, JsonSchema, Type)]
-#[serde(rename_all = "camelCase")]
-pub struct CatalogDownloadStarted {
-    pub catalog_id: String,
-    pub at: String,
-}
-
-pub const TOPIC_CATALOG_DOWNLOAD_STARTED: &str = "catalog.download.started";
-
-/// Payload for the `catalog.download.progress` topic (spec 014, R-3.1).
-///
-/// Emitted periodically during a catalog download for progress UI.
-#[derive(Clone, Debug, Serialize, Deserialize, JsonSchema, Type)]
-#[serde(rename_all = "camelCase")]
-pub struct CatalogDownloadProgress {
-    pub catalog_id: String,
-    /// Bytes received so far.
-    pub bytes_received: u64,
-    /// Total bytes expected (0 if unknown).
-    pub bytes_total: u64,
-    pub at: String,
-}
-
-pub const TOPIC_CATALOG_DOWNLOAD_PROGRESS: &str = "catalog.download.progress";
-
-/// Payload for the `catalog.download.completed` topic (spec 014, R-3.1).
-///
-/// Emitted when a catalog has been verified and installed into SQLite.
-#[derive(Clone, Debug, Serialize, Deserialize, JsonSchema, Type)]
-#[serde(rename_all = "camelCase")]
-pub struct CatalogDownloadCompleted {
-    pub catalog_id: String,
-    /// Audit event id that correlates with the `catalog.download` contract response.
-    pub audit_id: String,
-    pub at: String,
-}
-
-pub const TOPIC_CATALOG_DOWNLOAD_COMPLETED: &str = "catalog.download.completed";
-
-/// Payload for the `catalog.download.failed` topic (spec 014, R-3.1).
-///
-/// Emitted when a catalog download or verification failed. The previously
-/// installed catalog (if any) remains active.
-#[derive(Clone, Debug, Serialize, Deserialize, JsonSchema, Type)]
-#[serde(rename_all = "camelCase")]
-pub struct CatalogDownloadFailed {
-    pub catalog_id: String,
-    /// Contract error code.
-    pub error_code: String,
-    pub message: String,
-    pub at: String,
-}
-
-pub const TOPIC_CATALOG_DOWNLOAD_FAILED: &str = "catalog.download.failed";
+// Catalog download audit events (spec 014) were removed in spec 035 T034: the
+// hosted catalog-download surface is superseded by SIMBAD resolve-on-demand.
+// See `target.resolved` / `target.resolve_batch.completed` below.
 
 /// Payload for the `tool.launch` topic (spec 011, T009).
 ///
@@ -542,6 +474,25 @@ pub struct ArtifactClassifyOverride {
     pub at: String,
 }
 
+/// Payload for the `artifact.classified` topic (spec 012, FR-009, spec 033 T028).
+///
+/// Emitted by the artifact watcher after a file is detected AND classified.
+/// Carries the classification result with a confidence level (Constitution §II).
+#[derive(Clone, Debug, Serialize, Deserialize, JsonSchema, Type)]
+#[serde(rename_all = "camelCase")]
+pub struct ArtifactClassified {
+    pub artifact_id: String,
+    pub project_id: String,
+    /// `intermediate` | `master` | `final`
+    pub classification: String,
+    /// Confidence in [0.0, 1.0]. Present when inference is used.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub confidence: Option<f64>,
+    pub classified_at: String,
+}
+
+pub const TOPIC_ARTIFACT_CLASSIFIED: &str = "artifact.classified";
+
 pub const TOPIC_ARTIFACT_CLASSIFY_OVERRIDE: &str = "artifact.classify.override";
 
 /// Payload for the `artifact.classify.override.cleared` topic (spec 012, T014, A6).
@@ -631,6 +582,28 @@ pub struct ProtectionPlanAcknowledged {
 
 pub const TOPIC_PROTECTION_PLAN_ACKNOWLEDGED: &str = "protection.plan.acknowledged";
 
+/// Payload for the `protection.default.changed` topic (spec 033 T045, FR-018).
+///
+/// Emitted when a global protection default (level, blockPermanentDelete, or
+/// protectedCategories) is changed by the user or system.
+#[derive(Clone, Debug, Serialize, Deserialize, JsonSchema, Type)]
+#[serde(rename_all = "camelCase")]
+pub struct ProtectionDefaultChanged {
+    /// Scope of the default (e.g. `"global"`).
+    pub scope: String,
+    /// Key that changed (e.g. `"defaultProtection"`, `"blockPermanentDelete"`,
+    /// `"protectedCategories"`).
+    pub key: String,
+    /// Prior raw JSON value; absent if the row was newly created.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub old: Option<serde_json::Value>,
+    /// New raw JSON value.
+    pub new: serde_json::Value,
+    pub changed_at: String,
+}
+
+pub const TOPIC_PROTECTION_DEFAULT_CHANGED: &str = "protection.default.changed";
+
 // ── Guided first project flow audit events (spec 010) ────────────────────────
 
 /// Payload for the `inventory.confirmed` topic (spec 010 / spec 005 T027).
@@ -666,3 +639,59 @@ pub struct GuidedFlowStateCorrupted {
 }
 
 pub const TOPIC_GUIDED_FLOW_STATE_CORRUPTED: &str = "guided_flow.state.corrupted";
+
+// ── Spec 035: SIMBAD target resolution ────────────────────────────────────────
+//
+// These topics REPLACE the spec-014 `catalog.download.*` topics, which were
+// removed in T034. Emitted by the resolve/upsert path and the ingest
+// background drain (FR-013, FR-006).
+
+/// Payload for the `target.resolved` topic (spec 035).
+///
+/// Emitted when a target identity is resolved and written to the cache — either
+/// from an interactive `target.resolve` or from the background ingest drain.
+/// Coordinates are never fabricated (FR-009); this event only fires for an
+/// actually-resolved canonical target.
+#[derive(Clone, Debug, Serialize, Deserialize, JsonSchema, Type)]
+#[serde(rename_all = "camelCase")]
+pub struct TargetResolved {
+    /// Canonical target id (UUIDv5) the object was resolved to.
+    pub target_id: String,
+    /// SIMBAD physical-object id (dedup key) when resolved online.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub simbad_oid: Option<i64>,
+    /// Canonical display designation.
+    pub primary_designation: String,
+    /// Provenance of the identity (`seed` | `resolved` | `user-override`).
+    pub source: String,
+    /// The query/`OBJECT` value that triggered the resolution, when applicable.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub query: Option<String>,
+    pub at: String,
+}
+
+pub const TOPIC_TARGET_RESOLVED: &str = "target.resolved";
+
+/// Payload for the `target.resolve_batch.completed` topic (spec 035, FR-013).
+///
+/// Emitted when the background ingest-resolution drain finishes a pass over the
+/// pending queue. Reports how many images resolved vs. stayed unresolved
+/// (retryable — never silently mis-assigned, FR-009).
+#[derive(Clone, Debug, Serialize, Deserialize, JsonSchema, Type)]
+#[serde(rename_all = "camelCase")]
+pub struct TargetResolveBatchCompleted {
+    /// Pending rows considered in this drain pass.
+    pub considered: usize,
+    /// Rows that resolved to a canonical target and were associated.
+    pub resolved: usize,
+    /// Rows left unresolved — genuine content misses (unknown/ambiguous),
+    /// `attempts` incremented, retryable.
+    pub unresolved: usize,
+    /// Rows left `pending` due to a transient/offline condition (no `attempts`
+    /// increment), retried on the next drain pass (FIX-4).
+    #[serde(default)]
+    pub pending: usize,
+    pub at: String,
+}
+
+pub const TOPIC_TARGET_RESOLVE_BATCH_COMPLETED: &str = "target.resolve_batch.completed";

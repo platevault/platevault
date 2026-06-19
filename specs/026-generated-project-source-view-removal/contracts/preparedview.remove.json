@@ -2,7 +2,7 @@
   "$schema": "https://json-schema.org/draft/2020-12/schema",
   "$id": "https://astro-plan.local/contracts/preparedview.remove.json",
   "title": "preparedview.remove",
-  "description": "Create a reviewable filesystem plan that removes a generated project source view. Only paths recorded as part of the view are included; inventory data is never targeted. Destructive destination is always 'archive' (R-026-Dest-Archive). The response planId enters the standard spec 017/025 pipeline (approve → apply). All spec 017/025 error codes can surface during apply. Allowed only when the owning project lifecycle is setup_incomplete|ready|prepared|processing|blocked|completed; refused on archived with lifecycle.read_only (R-026-Lifecycle). Status: NOT IMPLEMENTED.",
+  "description": "Create a reviewable filesystem plan that removes a generated project source view. Only paths recorded as part of the view are included; inventory data is never targeted. Destructive destination is always 'archive' (R-026-Dest-Archive). The response planId enters the standard spec 017/025 pipeline (approve → apply). All spec 017/025 error codes can surface during apply. Allowed only when the owning project lifecycle is setup_incomplete|ready|prepared|processing|blocked|completed; refused on archived with lifecycle.read_only (R-026-Lifecycle).",
   "type": "object",
   "properties": {
     "request": {

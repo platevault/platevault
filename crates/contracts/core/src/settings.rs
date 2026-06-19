@@ -109,9 +109,6 @@ pub struct SettingsState {
     /// UI hides terminal plans older than this many days. Noisy.
     pub plans_list_default_age_cutoff_days: f64,
 
-    /// Active catalog set for target lookup (spec 013 R-2.2).
-    pub target_lookup_active_catalogs: Vec<String>,
-
     /// Dark frame temperature matching tolerance in °C (spec 007 A5).
     pub calibration_dark_temp_tolerance: f64,
 
@@ -126,6 +123,10 @@ pub struct SettingsState {
 
     /// Confidence penalty when user overrides bias suggestion [0,1] (spec 007).
     pub calibration_bias_override_penalty: f64,
+
+    /// Days after which a calibration master is considered aging (spec 007/018 FR-023).
+    /// Consumers compare `master.age_days` against this value instead of hardcoding 90.
+    pub calibration_aging_threshold_days: f64,
 
     /// User-extensible IMAGETYP normalization entries (spec 005 R-IMAGETYP-Norm).
     pub imagetyp_normalization_user_mappings: Vec<ImageTypMapping>,
@@ -155,12 +156,12 @@ impl Default for SettingsState {
             current_library_id: None,
             dev_mode: false,
             plans_list_default_age_cutoff_days: 90.0,
-            target_lookup_active_catalogs: default_catalog_ids(),
             calibration_dark_temp_tolerance: 2.0,
             calibration_prefill_suggestion: true,
             calibration_dark_override_penalty: 0.3,
             calibration_flat_override_penalty: 0.3,
             calibration_bias_override_penalty: 0.3,
+            calibration_aging_threshold_days: 90.0,
             imagetyp_normalization_user_mappings: vec![],
         }
     }
@@ -181,28 +182,6 @@ fn default_pattern() -> Vec<PatternPart> {
         },
         PatternPart { id: "p7".to_owned(), kind: "separator".to_owned(), value: "/".to_owned() },
     ]
-}
-
-fn default_catalog_ids() -> Vec<String> {
-    // All 13 v1 catalog ids from spec 013.
-    [
-        "ngc",
-        "ic",
-        "messier",
-        "caldwell",
-        "herschel400",
-        "common",
-        "sac",
-        "tycho2",
-        "hipparcos",
-        "gcvs",
-        "washington_dsc",
-        "pk",
-        "arp",
-    ]
-    .iter()
-    .map(|s| (*s).to_owned())
-    .collect()
 }
 
 // ── SourceOverride ────────────────────────────────────────────────────────

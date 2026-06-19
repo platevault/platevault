@@ -1,15 +1,20 @@
 /// <reference types="@testing-library/jest-dom" />
 /**
- * TargetsPage tests — spec 023 swapped-in page wiring.
+ * TargetsPage tests — spec 036 gen-3 page wiring.
  *
  * Tests:
- *  1. Renders the fixture target list (names visible).
- *  2. Shows EmptyState when no target is selected.
- *  3. Selecting a list item puts its UUID in onSelect callback.
- *  4. When selected UUID is provided, TargetDetailV2 mounts and calls getTargetIdentity.
- *  5. Primary designation from backend renders in the detail pane.
- *  6. TargetList selectedId prop matches the selected UUID.
- *  7. Cmd+K route pattern: /targets/$uuid → detail renders for that UUID.
+ *  1. Shows loading state while listTargets is in flight.
+ *  2. Renders target list items from listTargets backend response.
+ *  3. Shows EmptyState when no target is selected.
+ *  4. Selecting a list item triggers navigate with the target id.
+ *  5. When selected UUID provided, TargetDetailV2 mounts and calls getTargetDetail.
+ *  6. effectiveLabel from backend renders in the detail pane.
+ *  7. Shows error state when listTargets rejects.
+ *  8. Target count appears in the subtitle.
+ *  H1. Search input filters the target list by primaryDesignation.
+ *  H2. Search input filters by effectiveLabel.
+ *  H3. Clearing search restores the full list.
+ *  G1. "Add target" button opens the add dialog.
  */
 
 import { render, screen, fireEvent, waitFor } from '@testing-library/react';
@@ -17,29 +22,31 @@ import { describe, it, expect, vi, beforeEach } from 'vitest';
 
 // ── Hoist mocks ───────────────────────────────────────────────────────────────
 
-const { mockGetTargetIdentity } = vi.hoisted(() => ({
-  mockGetTargetIdentity: vi.fn(),
+const { mockListTargets, mockGetTargetDetail, mockSearchTargets, mockResolveTarget } = vi.hoisted(() => ({
+  mockListTargets: vi.fn(),
+  mockGetTargetDetail: vi.fn(),
+  mockSearchTargets: vi.fn(),
+  mockResolveTarget: vi.fn(),
 }));
 
 vi.mock('@/api/commands', () => ({
-  getTargetIdentity: mockGetTargetIdentity,
-  updateTargetNote: vi.fn().mockResolvedValue({}),
-  addTargetAlias: vi.fn().mockResolvedValue({ added: true }),
-  removeTargetAlias: vi.fn().mockResolvedValue({}),
-  renameTargetPrimary: vi.fn().mockResolvedValue({}),
+  listTargets: mockListTargets,
+  getTargetDetail: mockGetTargetDetail,
+  searchTargets: mockSearchTargets,
+  resolveTarget: mockResolveTarget,
+  TARGET_SEARCH_CONTRACT_VERSION: '1.0',
+  addTargetAlias: vi.fn().mockResolvedValue({ alias: { id: 'a', alias: 'x', kind: 'user' } }),
+  removeTargetAlias: vi.fn().mockResolvedValue({ removed: true }),
+  setDisplayAlias: vi.fn().mockResolvedValue({}),
+  clearDisplayAlias: vi.fn().mockResolvedValue({}),
 }));
 
-// Mock router — useSearch provides the selected UUID; useNavigate is a no-op
 const mockNavigate = vi.fn();
-const mockSelectedUuid = { current: undefined as string | undefined };
+const mockSelectedId = { current: undefined as string | undefined };
 
 vi.mock('@tanstack/react-router', () => ({
   useNavigate: () => mockNavigate,
-  useSearch: () => ({ selected: mockSelectedUuid.current }),
-}));
-
-vi.mock('@/lib/use-stale-selection', () => ({
-  useStaleSelectionCleanup: vi.fn(),
+  useSearch: () => ({ selected: mockSelectedId.current }),
 }));
 
 vi.mock('@tauri-apps/api/core', () => ({
@@ -49,92 +56,166 @@ vi.mock('@tauri-apps/api/core', () => ({
 // ── Import under test ─────────────────────────────────────────────────────────
 
 import { TargetsPage } from './TargetsPage';
-import { TARGETS_DATA } from '@/data/fixtures/targets';
 
-// ── Fixture ───────────────────────────────────────────────────────────────────
+// ── Fixtures ──────────────────────────────────────────────────────────────────
 
-const NGC7000_UUID = '550e8400-e29b-41d4-a716-446655440201';
+const TARGET_ID = '550e8400-e29b-41d4-a716-446655440201';
 
-const makeBackendResult = (primaryDesignation = 'NGC 7000') => ({
-  target: {
-    id: NGC7000_UUID,
-    primaryDesignation,
-    aliases: ['North America Nebula'],
-    catalogRefs: [],
-    notes: null,
-    createdAt: '2026-01-01T00:00:00Z',
-    updatedAt: '2026-06-01T00:00:00Z',
+const listItems = [
+  {
+    id: TARGET_ID,
+    effectiveLabel: 'NGC 7000',
+    primaryDesignation: 'NGC 7000',
+    objectType: 'emission_nebula',
   },
-  sessions: [],
-  projects: [],
-});
+  {
+    id: '550e8400-e29b-41d4-a716-446655440202',
+    effectiveLabel: 'M 31',
+    primaryDesignation: 'M 31',
+    objectType: 'galaxy',
+  },
+];
+
+function makeDetail() {
+  return {
+    id: TARGET_ID,
+    primaryDesignation: 'NGC 7000',
+    effectiveLabel: 'NGC 7000',
+    objectType: 'emission_nebula',
+    raDeg: 314.75,
+    decDeg: 44.37,
+    simbadOid: 2_222_222,
+    source: 'resolved',
+    aliases: [],
+  };
+}
 
 beforeEach(() => {
   vi.clearAllMocks();
-  mockSelectedUuid.current = undefined;
-  mockGetTargetIdentity.mockResolvedValue(makeBackendResult());
+  mockSelectedId.current = undefined;
+  mockListTargets.mockResolvedValue(listItems);
+  mockGetTargetDetail.mockResolvedValue(makeDetail());
+  mockSearchTargets.mockResolvedValue({ contractVersion: '1.0', requestId: 'r', suggestions: [] });
+  mockResolveTarget.mockResolvedValue({ contractVersion: '1.0', requestId: 'r', status: 'unresolved', target: null, unresolvedReason: 'offline', error: null });
 });
 
 // ── Tests ─────────────────────────────────────────────────────────────────────
 
 describe('TargetsPage', () => {
-  it('1. renders fixture target list with target names', () => {
+  it('1. shows loading state while listTargets is in flight', () => {
+    mockListTargets.mockReturnValue(new Promise(() => {}));
     render(<TargetsPage />);
-    expect(screen.getByText('NGC 7000')).toBeInTheDocument();
-    expect(screen.getByText('M31')).toBeInTheDocument();
-    expect(screen.getByText('IC 1396')).toBeInTheDocument();
+    // List is in "..." subtitle state
+    expect(screen.getByText('… targets')).toBeInTheDocument();
   });
 
-  it('2. shows empty-state when no target is selected', () => {
-    render(<TargetsPage />);
-    expect(screen.getByText('Select a target')).toBeInTheDocument();
-  });
-
-  it('3. clicking a list item calls navigate with the target UUID', () => {
-    render(<TargetsPage />);
-    // Find the NGC 7000 list item by text and click it
-    const ngcItem = screen.getAllByText('NGC 7000')[0];
-    fireEvent.click(ngcItem.closest('li') ?? ngcItem);
-    // navigate should be called with search updater
-    expect(mockNavigate).toHaveBeenCalled();
-  });
-
-  it('4. when selected UUID provided, TargetDetailV2 calls getTargetIdentity', async () => {
-    mockSelectedUuid.current = NGC7000_UUID;
-    render(<TargetsPage />);
-    await waitFor(() =>
-      expect(mockGetTargetIdentity).toHaveBeenCalledWith({ targetId: NGC7000_UUID }),
-    );
-  });
-
-  it('5. primary designation from backend renders in detail pane', async () => {
-    mockSelectedUuid.current = NGC7000_UUID;
+  it('2. renders target list items from backend response', async () => {
     render(<TargetsPage />);
     await waitFor(() => {
-      // Primary designation from backend response should appear
-      const headings = screen.getAllByText('NGC 7000');
-      expect(headings.length).toBeGreaterThanOrEqual(1);
+      expect(screen.getByText('NGC 7000')).toBeInTheDocument();
+      expect(screen.getByText('M 31')).toBeInTheDocument();
     });
   });
 
-  it('6. TARGETS_DATA entries all have uuid fields', () => {
-    for (const t of TARGETS_DATA) {
-      expect(t.uuid).toBeTruthy();
-      // UUID format: 8-4-4-4-12 hex
-      expect(t.uuid).toMatch(
-        /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/,
-      );
-    }
+  it('3. shows EmptyState when no target is selected', async () => {
+    render(<TargetsPage />);
+    await waitFor(() =>
+      expect(screen.getByText('Select a target')).toBeInTheDocument(),
+    );
   });
 
-  it('7. TARGETS_DATA uuids are unique (no duplicates)', () => {
-    const uuids = TARGETS_DATA.map((t) => t.uuid);
-    const unique = new Set(uuids);
-    expect(unique.size).toBe(uuids.length);
+  it('4. clicking a list item triggers navigate', async () => {
+    render(<TargetsPage />);
+    await waitFor(() => screen.getByText('NGC 7000'));
+
+    const item = screen.getAllByText('NGC 7000')[0];
+    fireEvent.click(item.closest('li') ?? item);
+
+    expect(mockNavigate).toHaveBeenCalled();
   });
 
-  it('8. NGC 7000 UUID matches the expected fixture backend UUID', () => {
-    const ngc7000 = TARGETS_DATA.find((t) => t.name === 'NGC 7000');
-    expect(ngc7000?.uuid).toBe(NGC7000_UUID);
+  it('5. when selected UUID provided, getTargetDetail is called', async () => {
+    mockSelectedId.current = TARGET_ID;
+    render(<TargetsPage />);
+    await waitFor(() =>
+      expect(mockGetTargetDetail).toHaveBeenCalledWith({ targetId: TARGET_ID }),
+    );
+  });
+
+  it('6. effectiveLabel from backend renders in detail pane', async () => {
+    mockSelectedId.current = TARGET_ID;
+    render(<TargetsPage />);
+    await waitFor(() => {
+      const items = screen.getAllByText('NGC 7000');
+      expect(items.length).toBeGreaterThanOrEqual(1);
+    });
+  });
+
+  it('7. shows error message when listTargets rejects', async () => {
+    mockListTargets.mockRejectedValue(new Error('db error'));
+    render(<TargetsPage />);
+    await waitFor(() =>
+      expect(screen.getByText('Failed to load targets.')).toBeInTheDocument(),
+    );
+  });
+
+  it('8. target count appears in the subtitle', async () => {
+    render(<TargetsPage />);
+    await waitFor(() =>
+      expect(screen.getByText('2 targets')).toBeInTheDocument(),
+    );
+  });
+
+  // ── H: Search filters ──────────────────────────────────────────────────────
+
+  it('H1. search input filters by primaryDesignation', async () => {
+    render(<TargetsPage />);
+    await waitFor(() => screen.getByText('NGC 7000'));
+
+    const searchInput = screen.getByPlaceholderText('Search targets...');
+    fireEvent.change(searchInput, { target: { value: 'NGC' } });
+
+    // NGC 7000 matches; M 31 does not
+    expect(screen.getByText('NGC 7000')).toBeInTheDocument();
+    expect(screen.queryByText('M 31')).not.toBeInTheDocument();
+  });
+
+  it('H2. search input filters by effectiveLabel (case-insensitive)', async () => {
+    render(<TargetsPage />);
+    await waitFor(() => screen.getByText('M 31'));
+
+    const searchInput = screen.getByPlaceholderText('Search targets...');
+    fireEvent.change(searchInput, { target: { value: 'm 31' } });
+
+    expect(screen.getByText('M 31')).toBeInTheDocument();
+    expect(screen.queryByText('NGC 7000')).not.toBeInTheDocument();
+  });
+
+  it('H3. clearing search restores the full list', async () => {
+    render(<TargetsPage />);
+    await waitFor(() => screen.getByText('NGC 7000'));
+
+    const searchInput = screen.getByPlaceholderText('Search targets...');
+    fireEvent.change(searchInput, { target: { value: 'NGC' } });
+    expect(screen.queryByText('M 31')).not.toBeInTheDocument();
+
+    fireEvent.change(searchInput, { target: { value: '' } });
+    expect(screen.getByText('NGC 7000')).toBeInTheDocument();
+    expect(screen.getByText('M 31')).toBeInTheDocument();
+  });
+
+  // ── G: Add target button ───────────────────────────────────────────────────
+
+  it('G1. "Add target" button opens the add dialog', async () => {
+    render(<TargetsPage />);
+    await waitFor(() => screen.getByText('NGC 7000'));
+
+    const addBtn = screen.getByRole('button', { name: /Add target/i });
+    fireEvent.click(addBtn);
+
+    // Dialog should open — the dialog element itself should be present
+    await waitFor(() =>
+      expect(screen.getByRole('dialog', { name: /Add target/i })).toBeInTheDocument(),
+    );
   });
 });

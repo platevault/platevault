@@ -38,13 +38,15 @@ async fn insert_target(pool: &sqlx::SqlitePool, id: &str) {
     .unwrap();
 }
 
-async fn insert_project(pool: &sqlx::SqlitePool, id: &str, target: &str, state: &str) {
+/// Insert a project into the canonical `projects` table (spec-008 / migration 0018).
+/// After migration 0036, `EntityType::Project` transitions read/write `projects.lifecycle`.
+async fn insert_project(pool: &sqlx::SqlitePool, id: &str, _target: &str, state: &str) {
     sqlx::query(
-        "INSERT INTO project (id, name, target_id, state, created_at) \
-         VALUES (?, 'P', ?, ?, '2026-05-01T00:00:00Z')",
+        "INSERT INTO projects \
+         (id, name, tool, lifecycle, path, created_at, updated_at) \
+         VALUES (?, 'P', 'PixInsight', ?, 'projects/P', '2026-05-01T00:00:00Z', '2026-05-01T00:00:00Z')",
     )
     .bind(id)
-    .bind(target)
     .bind(state)
     .execute(pool)
     .await
@@ -60,8 +62,9 @@ async fn audit_row_count(pool: &sqlx::SqlitePool, entity_id: &str) -> i64 {
     n
 }
 
+/// Read project lifecycle from the canonical `projects` table.
 async fn project_state(pool: &sqlx::SqlitePool, id: &str) -> String {
-    let (s,): (String,) = sqlx::query_as("SELECT state FROM project WHERE id = ?")
+    let (s,): (String,) = sqlx::query_as("SELECT lifecycle FROM projects WHERE id = ?")
         .bind(id)
         .fetch_one(pool)
         .await

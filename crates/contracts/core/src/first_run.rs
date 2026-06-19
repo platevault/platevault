@@ -11,15 +11,18 @@ use crate::JsonAny;
 // ── Enums ───────────────────────────────────────────────────────────────────
 
 /// Kind of a registered source directory.
+///
+/// `Calibration` replaces the former `Dark`, `Flat`, and `Bias` variants.
+/// Per-image frame type (light / dark / flat / bias) is detected from image
+/// metadata (FITS `IMAGETYP` header) during scan/ingest — the source-folder
+/// kind is only a user-facing folder category.
 #[derive(
     Clone, Copy, Debug, Eq, Hash, Ord, PartialEq, PartialOrd, Serialize, Deserialize, Type,
 )]
 #[serde(rename_all = "snake_case")]
 pub enum SourceKind {
     LightFrames,
-    Dark,
-    Flat,
-    Bias,
+    Calibration,
     Project,
     Inbox,
 }
@@ -150,9 +153,7 @@ mod tests {
     #[test]
     fn source_kind_serializes_snake_case() {
         assert_eq!(serde_json::to_value(SourceKind::LightFrames).unwrap(), json!("light_frames"));
-        assert_eq!(serde_json::to_value(SourceKind::Dark).unwrap(), json!("dark"));
-        assert_eq!(serde_json::to_value(SourceKind::Flat).unwrap(), json!("flat"));
-        assert_eq!(serde_json::to_value(SourceKind::Bias).unwrap(), json!("bias"));
+        assert_eq!(serde_json::to_value(SourceKind::Calibration).unwrap(), json!("calibration"));
         assert_eq!(serde_json::to_value(SourceKind::Project).unwrap(), json!("project"));
         assert_eq!(serde_json::to_value(SourceKind::Inbox).unwrap(), json!("inbox"));
     }
@@ -175,6 +176,16 @@ mod tests {
         assert_eq!(value["scanDepth"], json!("recursive"));
         assert_eq!(value["kind"], json!("light_frames"));
         assert!(value.get("kindSubtype").is_none()); // skip_serializing_if
+
+        // Calibration kind serializes as "calibration"
+        let cal_req = RegisterSourceRequest {
+            kind: SourceKind::Calibration,
+            path: "/astro/cals".to_owned(),
+            kind_subtype: None,
+            scan_depth: ScanDepth::Recursive,
+        };
+        let cal_value = serde_json::to_value(cal_req).unwrap();
+        assert_eq!(cal_value["kind"], json!("calibration"));
     }
 
     #[test]

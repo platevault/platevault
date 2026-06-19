@@ -20,10 +20,10 @@
     "ManifestCatalogEntry": {
       "type": "object",
       "description": "Per-catalog entry in the signed manifest.",
-      "required": ["catalog_id", "version", "url", "checksum", "license", "size_bytes"],
+      "required": ["catalogId", "version", "url", "checksum", "license", "sizeBytes"],
       "additionalProperties": false,
       "properties": {
-        "catalog_id": {
+        "catalogId": {
           "type": "string",
           "minLength": 1,
           "maxLength": 64,
@@ -45,7 +45,7 @@
           "description": "SHA-256 hex checksum of the catalog artifact bytes."
         },
         "license": { "$ref": "#/$defs/LicenseShortCode" },
-        "size_bytes": {
+        "sizeBytes": {
           "type": "integer",
           "minimum": 1,
           "description": "Uncompressed size in bytes. Used for progress estimation."

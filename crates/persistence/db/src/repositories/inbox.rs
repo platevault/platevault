@@ -475,6 +475,67 @@ pub async fn find_orphaned_plan_links(
     Ok(rows)
 }
 
+// ── Cross-root unacknowledged listing ────────────────────────────────────────
+
+/// A row returned by [`list_unacknowledged_across_roots`].
+///
+/// Carries both the item's own fields and the root path so the UI can group
+/// by root without a second query.
+#[derive(Clone, Debug, Serialize, Deserialize, sqlx::FromRow)]
+pub struct InboxListRow {
+    pub id: String,
+    pub root_id: String,
+    pub root_path: String,
+    pub relative_path: String,
+    pub file_count: i64,
+    pub discovered_at: String,
+    pub last_scanned_at: String,
+    pub content_signature: Option<String>,
+    pub state: String,
+    pub lane: String,
+}
+
+/// Return all `inbox_items` whose `state` is **unacknowledged**
+/// (`pending_classification` or `classified`) across every registered root,
+/// joined with the root's path so the UI can label/group by root.
+///
+/// Items whose state is `plan_open` or `resolved` are excluded — the
+/// `resolved` state is the terminal acknowledged state; `plan_open` means the
+/// user has already acted and is awaiting plan application.
+///
+/// Results are ordered by root path then by relative path.
+/// Pass `limit` to cap the result set (FR-006 bounding).
+///
+/// # Errors
+/// Returns [`DbError::Database`] on connection failure.
+pub async fn list_unacknowledged_across_roots(
+    pool: &SqlitePool,
+    limit: i64,
+) -> DbResult<Vec<InboxListRow>> {
+    let rows = sqlx::query_as::<_, InboxListRow>(
+        "SELECT
+             i.id,
+             i.root_id,
+             r.path          AS root_path,
+             i.relative_path,
+             i.file_count,
+             i.discovered_at,
+             i.last_scanned_at,
+             i.content_signature,
+             i.state,
+             i.lane
+         FROM inbox_items i
+         JOIN registered_sources r ON r.id = i.root_id
+         WHERE i.state IN ('pending_classification', 'classified')
+         ORDER BY r.path, i.relative_path
+         LIMIT ?",
+    )
+    .bind(limit)
+    .fetch_all(pool)
+    .await?;
+    Ok(rows)
+}
+
 // ── Tests ─────────────────────────────────────────────────────────────────────
 
 #[cfg(test)]
@@ -598,7 +659,7 @@ mod tests {
             origin: "inbox",
             origin_path: None,
             plan_type: "split",
-            destructive_destination: "none",
+            destructive_destination: "archive",
             parent_plan_id: None,
             total_bytes_required: 0,
         };
@@ -620,7 +681,7 @@ mod tests {
             origin: "inbox",
             origin_path: None,
             plan_type: "split",
-            destructive_destination: "none",
+            destructive_destination: "archive",
             parent_plan_id: None,
             total_bytes_required: 0,
         };
@@ -630,5 +691,54 @@ mod tests {
         // Second insert must fail (PK constraint)
         let err = insert_plan_link(db.pool(), "item-7", "plan-inbox-2").await;
         assert!(err.is_err());
+    }
+
+    /// C1 integration test (no mocks): register a real source via
+    /// `register_source_batch`, insert an inbox item for that source's id, then
+    /// call `list_unacknowledged_across_roots` and assert the row comes back
+    /// with the correct `root_path`. Verifies the JOIN hits `registered_sources`
+    /// not the absent `library_root` table.
+    #[tokio::test]
+    async fn list_unacknowledged_joins_registered_sources() {
+        use contracts_core::first_run::{
+            RegisterSourceBatchRequest, RegisterSourceRequest, ScanDepth, SourceKind,
+        };
+
+        let db = test_db().await;
+        let pool = db.pool();
+
+        // Register a source via the real batch function (same path the wizard uses).
+        let batch_req = RegisterSourceBatchRequest {
+            sources: vec![RegisterSourceRequest {
+                kind: SourceKind::Inbox,
+                path: "/astro/inbox".to_owned(),
+                kind_subtype: None,
+                scan_depth: ScanDepth::Recursive,
+            }],
+        };
+        let batch_resp =
+            crate::repositories::first_run::register_source_batch(pool, &batch_req).await.unwrap();
+        let source_id = batch_resp.items[0].source_id.as_deref().unwrap().to_owned();
+
+        // Insert an inbox item pointing at that source id.
+        let item = InsertInboxItem {
+            id: "cross-root-item-1",
+            root_id: &source_id,
+            relative_path: "2025-11-01/lights",
+            file_count: 5,
+            content_signature: Some("sig-cross"),
+            lane: "fits",
+        };
+        insert_inbox_item(pool, &item).await.unwrap();
+
+        // Must return ≥1 row with the correct root_path.
+        let rows = list_unacknowledged_across_roots(pool, 100).await.unwrap();
+        assert_eq!(rows.len(), 1, "expected 1 unacknowledged item");
+        assert_eq!(
+            rows[0].root_path, "/astro/inbox",
+            "root_path must match registered_sources.path"
+        );
+        assert_eq!(rows[0].id, "cross-root-item-1");
+        assert_eq!(rows[0].state, "pending_classification");
     }
 }

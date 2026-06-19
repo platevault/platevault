@@ -26,8 +26,8 @@ interface ContextualAction {
   variant?: 'primary' | 'danger' | 'ghost';
 }
 
-function masterActions(master: CalibrationMaster): ContextualAction[] {
-  const isAging = master.age_days > 90;
+function masterActions(master: CalibrationMaster, agingThresholdDays: number): ContextualAction[] {
+  const isAging = master.age_days > agingThresholdDays;
   const actions: ContextualAction[] = [{ label: 'Use in project', variant: 'primary' }];
   if (isAging) actions.push({ label: 'Replace master', variant: 'danger' });
   actions.push({ label: 'Reveal in Explorer' });
@@ -40,7 +40,7 @@ export function CalibrationPage() {
   const { selected } = useSearch({ from: '/shell/calibration' });
   const navigate = useNavigate({ from: '/calibration' });
   const { masters, loading, error } = useCalibrationMasters();
-  const { prefillSuggestion } = useCalibrationSettings();
+  const { prefillSuggestion, agingThresholdDays } = useCalibrationSettings();
 
   const master = masters.find((m) => m.id === selected) ?? null;
 
@@ -54,7 +54,7 @@ export function CalibrationPage() {
   const darks = masters.filter((m) => m.kind === 'dark').length;
   const flats = masters.filter((m) => m.kind === 'flat').length;
   const bias = masters.filter((m) => m.kind === 'bias').length;
-  const aging = masters.filter((m) => m.age_days > 90).length;
+  const aging = masters.filter((m) => m.age_days > agingThresholdDays).length;
 
   const subtitle = loading
     ? 'Loading…'
@@ -72,7 +72,7 @@ export function CalibrationPage() {
             right={
               master && (
                 <>
-                  {masterActions(master).map((a) => (
+                  {masterActions(master, agingThresholdDays).map((a) => (
                     <Btn key={a.label} size="sm" variant={a.variant}>
                       {a.label}
                     </Btn>
@@ -89,9 +89,10 @@ export function CalibrationPage() {
             error={error}
             selected={selected ?? null}
             onSelect={onSelect}
+            agingThresholdDays={agingThresholdDays}
           />
         }
-        detail={<MasterDetail master={master} prefillSuggestion={prefillSuggestion} />}
+        detail={<MasterDetail master={master} prefillSuggestion={prefillSuggestion} agingThresholdDays={agingThresholdDays} />}
       />
     </PageShell>
   );

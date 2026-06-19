@@ -1,8 +1,7 @@
 //! Root/scan/equipment commands exposed to the Tauri webview.
 //!
-//! `roots.register` delegates to the real `app_core::first_run` use case
-//! (spec 003). Remaining commands are stubs returning fixture data until
-//! the real persistence layer is wired.
+//! `roots.register` and `roots.list` delegate to the persistence layer.
+//! Remaining commands are stubs until the real persistence layer is wired.
 
 use contracts_core::first_run::{
     RegisterSourceRequest, RegisterSourceResponse, ScanDepth, SourceKind,
@@ -15,15 +14,43 @@ use tauri::State;
 
 use crate::commands::lifecycle::AppState;
 
-/// `roots.list` — returns all registered library roots.
+/// `roots.list` — returns all registered library roots from the database.
+///
+/// Each root's `online` flag reflects whether the path is currently accessible.
 ///
 /// # Errors
-/// Returns `Err(String)` on failure; the stub never fails.
+/// Returns `Err(String)` on database failure.
 #[tauri::command]
-#[specta::specta(rename = "roots.list")]
-pub async fn roots_list() -> Result<Vec<LibraryRoot>, String> {
-    tracing::debug!("stub: roots.list");
-    Ok(stub_roots())
+#[specta::specta]
+pub async fn roots_list(state: State<'_, AppState>) -> Result<Vec<LibraryRoot>, String> {
+    tracing::debug!("roots.list");
+
+    let sources = persistence_db::repositories::first_run::list_sources(state.repo.pool())
+        .await
+        .map_err(|e| e.to_string())?;
+
+    let roots = sources
+        .into_iter()
+        .map(|s| {
+            let online = std::path::Path::new(&s.path).exists();
+            let category = match s.kind {
+                contracts_core::first_run::SourceKind::Calibration => RootCategory::Calibration,
+                contracts_core::first_run::SourceKind::Project => RootCategory::Project,
+                contracts_core::first_run::SourceKind::Inbox => RootCategory::Inbox,
+                contracts_core::first_run::SourceKind::LightFrames => RootCategory::Raw,
+            };
+            LibraryRoot {
+                id: s.source_id,
+                path: s.path,
+                category,
+                online,
+                file_count: 0,
+                last_scanned: None,
+            }
+        })
+        .collect();
+
+    Ok(roots)
 }
 
 /// `roots.register` — register a new library root.
@@ -36,7 +63,7 @@ pub async fn roots_list() -> Result<Vec<LibraryRoot>, String> {
 /// # Errors
 /// Returns `Err(String)` on path validation failure, duplicate, or DB error.
 #[tauri::command]
-#[specta::specta(rename = "roots.register")]
+#[specta::specta]
 pub async fn roots_register(
     state: State<'_, AppState>,
     path: String,
@@ -48,9 +75,7 @@ pub async fn roots_register(
     );
 
     let kind = match category.as_str() {
-        "dark" => SourceKind::Dark,
-        "flat" => SourceKind::Flat,
-        "bias" => SourceKind::Bias,
+        "calibration" => SourceKind::Calibration,
         "project" => SourceKind::Project,
         "inbox" => SourceKind::Inbox,
         // "light_frames" and any unknown category default to LightFrames.
@@ -76,7 +101,7 @@ pub async fn roots_register(
 /// # Errors
 /// Returns `Err(String)` on failure; the stub never fails.
 #[tauri::command]
-#[specta::specta(rename = "roots.remap")]
+#[specta::specta]
 pub async fn roots_remap(root_id: String, new_path: String) -> Result<RemapVerification, String> {
     tracing::debug!("stub: roots.remap root_id={root_id} new_path={new_path}");
     Ok(RemapVerification {
@@ -97,7 +122,7 @@ pub async fn roots_remap(root_id: String, new_path: String) -> Result<RemapVerif
 /// # Errors
 /// Returns `Err(String)` on failure; the stub never fails.
 #[tauri::command]
-#[specta::specta(rename = "roots.remap.apply")]
+#[specta::specta]
 pub async fn roots_remap_apply(root_id: String, verified: bool) -> Result<(), String> {
     tracing::debug!("stub: roots.remap.apply root_id={root_id} verified={verified}");
     Ok(())
@@ -108,7 +133,7 @@ pub async fn roots_remap_apply(root_id: String, verified: bool) -> Result<(), St
 /// # Errors
 /// Returns `Err(String)` on failure; the stub never fails.
 #[tauri::command]
-#[specta::specta(rename = "scan.start")]
+#[specta::specta]
 pub async fn scan_start(root_ids: Option<Vec<String>>) -> Result<IpcOperationHandle, String> {
     tracing::debug!("stub: scan.start root_ids={root_ids:?}");
     Ok(IpcOperationHandle { operation_id: "op-scan-001".to_owned(), kind: "scan".to_owned() })
@@ -119,7 +144,7 @@ pub async fn scan_start(root_ids: Option<Vec<String>>) -> Result<IpcOperationHan
 /// # Errors
 /// Returns `Err(String)` on failure; the stub never fails.
 #[tauri::command]
-#[specta::specta(rename = "equipment.list")]
+#[specta::specta]
 pub async fn equipment_list() -> Result<Vec<Equipment>, String> {
     tracing::debug!("stub: equipment.list");
     Ok(vec![
@@ -142,37 +167,4 @@ pub async fn equipment_list() -> Result<Vec<Equipment>, String> {
             aliases: vec!["EQ6R".to_owned()],
         },
     ])
-}
-
-// ---------------------------------------------------------------------------
-// Fixture data
-// ---------------------------------------------------------------------------
-
-fn stub_roots() -> Vec<LibraryRoot> {
-    vec![
-        LibraryRoot {
-            id: "root-001".to_owned(),
-            path: "/astro/raw".to_owned(),
-            category: RootCategory::Raw,
-            online: true,
-            file_count: 1247,
-            last_scanned: Some("2026-05-19T23:30:00Z".to_owned()),
-        },
-        LibraryRoot {
-            id: "root-002".to_owned(),
-            path: "/astro/calibration".to_owned(),
-            category: RootCategory::Calibration,
-            online: true,
-            file_count: 342,
-            last_scanned: Some("2026-05-19T23:30:00Z".to_owned()),
-        },
-        LibraryRoot {
-            id: "root-003".to_owned(),
-            path: "/astro/projects".to_owned(),
-            category: RootCategory::Project,
-            online: true,
-            file_count: 856,
-            last_scanned: Some("2026-05-18T20:00:00Z".to_owned()),
-        },
-    ]
 }

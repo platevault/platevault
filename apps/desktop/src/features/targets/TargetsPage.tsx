@@ -1,64 +1,92 @@
 /**
- * TargetsPage — spec 023 wired list+detail layout.
+ * TargetsPage — spec 036 gen-3 list+detail layout.
  *
- * List side: fixture data (TARGETS_DATA) — the legacy `targets.list` Tauri
- * command returns the spec-029 stub shape (Target), not spec-023 TargetIdentity.
- * Migrating the list to the backend is a follow-up once a spec-023
- * `target.list` command is added; keeping the list on fixtures here is
- * intentional and documented.
+ * List side: loaded from the real `target.list` backend (gen-3
+ * `canonical_target` table). No fixture data — the legacy `TARGETS_DATA`
+ * fixture and the `targets.list` stub command are retired by spec 036.
  *
- * Detail side: fully wired to the real `target.get` backend via TargetDetailV2.
- * Selecting any list item puts its UUID in `?selected=<uuid>` and the detail
- * loads identity + aliases + catalog refs + notes from SQLite.
- *
- * The Cmd+K palette navigates directly to `/targets/$id` which redirects to
- * this page with `?selected=<uuid>` (see router.tsx targetDetailRoute).
+ * Detail side: wired to `target.get` (gen-3) via TargetDetailV2.
+ * Selecting any list item puts its id in `?selected=<uuid>` and the detail
+ * pane loads the full gen-3 TargetDetailV3 from SQLite.
  */
 
+import { useState, useEffect, useCallback } from 'react';
 import { useNavigate, useSearch } from '@tanstack/react-router';
-import { TARGETS_DATA } from '@/data/fixtures/targets';
+import { listTargets } from '@/api/commands';
+import type { TargetListItem } from '@/api/commands';
 import { PageShell, ListDetailLayout, TopActionBar } from '@/components';
 import { Btn, EmptyState } from '@/ui';
-import { useStaleSelectionCleanup } from '@/lib/use-stale-selection';
 import { TargetList } from './TargetList';
 import { TargetDetailV2 } from './TargetDetailV2';
+import { AddTargetDialog } from './AddTargetDialog';
+
+type ListState =
+  | { status: 'loading' }
+  | { status: 'error'; message: string }
+  | { status: 'loaded'; items: TargetListItem[] };
 
 export function TargetsPage() {
   const { selected } = useSearch({ from: '/shell/targets' });
   const navigate = useNavigate({ from: '/targets' });
+  const [listState, setListState] = useState<ListState>({ status: 'loading' });
+  const [addOpen, setAddOpen] = useState(false);
 
-  // `selected` is now a UUID string (spec 023). Verify it matches a known
-  // fixture entry so stale links from a different library are cleaned up.
-  const isKnownTarget = selected != null && TARGETS_DATA.some((t) => t.uuid === selected);
+  const load = useCallback(() => {
+    setListState({ status: 'loading' });
+    listTargets()
+      .then((items) => setListState({ status: 'loaded', items }))
+      .catch(() => setListState({ status: 'error', message: 'Failed to load targets.' }));
+  }, []);
 
-  useStaleSelectionCleanup(selected, isKnownTarget, () =>
-    navigate({ search: (prev) => ({ ...prev, selected: undefined }), replace: true }),
+  useEffect(() => {
+    load();
+  }, [load]);
+
+  const onSelect = (id: string) =>
+    navigate({ search: (prev) => ({ ...prev, selected: id }) });
+
+  const handleAdded = useCallback(
+    (targetId: string) => {
+      load();
+      void navigate({ search: (prev) => ({ ...prev, selected: targetId }) });
+    },
+    [load, navigate],
   );
 
-  const onSelect = (uuid: string) => navigate({ search: (prev) => ({ ...prev, selected: uuid }) });
+  const targets = listState.status === 'loaded' ? listState.items : [];
+  const count = listState.status === 'loaded' ? listState.items.length : '…';
 
   return (
     <PageShell>
+      <AddTargetDialog
+        open={addOpen}
+        onClose={() => setAddOpen(false)}
+        onAdded={handleAdded}
+      />
       <ListDetailLayout
         topBar={
           <TopActionBar
             title="Targets"
-            subtitle={`${TARGETS_DATA.length} targets`}
+            subtitle={`${count} targets`}
             right={
               selected ? (
                 <Btn size="sm" variant="primary">New project</Btn>
               ) : (
-                <Btn size="sm">Add target</Btn>
+                <Btn size="sm" onClick={() => setAddOpen(true)}>Add target</Btn>
               )
             }
           />
         }
         list={
-          <TargetList
-            targets={TARGETS_DATA}
-            selected={selected ?? null}
-            onSelect={onSelect}
-          />
+          listState.status === 'error' ? (
+            <EmptyState title="Error" desc={listState.message} />
+          ) : (
+            <TargetList
+              targets={targets}
+              selected={selected ?? null}
+              onSelect={onSelect}
+            />
+          )
         }
         detail={
           selected ? (
@@ -66,7 +94,7 @@ export function TargetsPage() {
           ) : (
             <EmptyState
               title="Select a target"
-              desc="Choose a target from the list to view its identity, aliases, notes, and history."
+              desc="Choose a target from the list to view its identity, aliases, and coordinates."
             />
           )
         }

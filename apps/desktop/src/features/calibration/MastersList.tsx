@@ -30,9 +30,11 @@ interface Props {
   error: string | undefined;
   selected: string | null;
   onSelect: (id: string) => void;
+  /** Days threshold for the "aging" warning pill. Comes from persisted settings (FR-023). */
+  agingThresholdDays: number;
 }
 
-export function MastersList({ masters, loading, error, selected, onSelect }: Props) {
+export function MastersList({ masters, loading, error, selected, onSelect, agingThresholdDays }: Props) {
   if (loading) {
     return (
       <ListSidebar footer="Loading…">
@@ -92,7 +94,7 @@ export function MastersList({ masters, loading, error, selected, onSelect }: Pro
         <div key={group.kind}>
           <div className="alm-group-header">{GROUP_LABELS[group.kind]}</div>
           {group.items.map((m) => {
-            const isAging = m.age_days > 90;
+            const isAging = m.age_days > agingThresholdDays;
             // Fingerprint may be absent on real master rows (e.g. metadata not yet
             // extracted); guard every field rather than assuming it is populated.
             const fp = m.fingerprint;

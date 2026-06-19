@@ -17,7 +17,6 @@ pub mod artifacts;
 pub mod audit;
 pub mod calibration;
 pub mod calibration_tolerances;
-pub mod catalogs;
 pub mod cleanup;
 #[cfg(feature = "dev-tools")]
 pub mod dev;
@@ -45,8 +44,8 @@ pub mod search;
 pub mod sessions;
 pub mod settings;
 pub mod status;
-pub mod target_identity;
 pub mod target_lookup;
+pub mod target_management;
 pub mod targets;
 pub mod tools;
 pub mod tour;

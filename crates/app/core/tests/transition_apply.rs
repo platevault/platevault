@@ -45,13 +45,17 @@ async fn insert_target(pool: &sqlx::SqlitePool, id: &str) {
     .unwrap();
 }
 
-async fn insert_project(pool: &sqlx::SqlitePool, id: &str, target: &str, state: &str) {
+/// Insert a project into the canonical `projects` table (spec-008, migration 0018).
+/// After migration 0036, this is the sole owner of project lifecycle state.
+/// The legacy `project.state` column was dropped; user-IPC transitions now
+/// read/write `projects.lifecycle` via `table_for(EntityType::Project)` = "projects".
+async fn insert_project(pool: &sqlx::SqlitePool, id: &str, _target: &str, state: &str) {
     sqlx::query(
-        "INSERT INTO project (id, name, target_id, state, created_at) \
-         VALUES (?, 'P', ?, ?, '2026-05-01T00:00:00Z')",
+        "INSERT INTO projects \
+         (id, name, tool, lifecycle, path, created_at, updated_at) \
+         VALUES (?, 'P', 'PixInsight', ?, 'projects/P', '2026-05-01T00:00:00Z', '2026-05-01T00:00:00Z')",
     )
     .bind(id)
-    .bind(target)
     .bind(state)
     .execute(pool)
     .await
@@ -101,7 +105,8 @@ async fn success_path_commits_both_sides() {
     .await;
 
     assert_eq!(resp.status, TransitionStatus::Success);
-    let (state,): (String,) = sqlx::query_as("SELECT state FROM project WHERE id = ?")
+    // FR-019 / T052: canonical lifecycle is now in `projects.lifecycle`
+    let (state,): (String,) = sqlx::query_as("SELECT lifecycle FROM projects WHERE id = ?")
         .bind(&project)
         .fetch_one(db.pool())
         .await
@@ -135,8 +140,8 @@ async fn refused_no_mutation_disallowed_edge() {
     .await;
 
     assert_eq!(resp.error.as_ref().map(|e| e.code), Some(TransitionErrorCode::TransitionRefused));
-    // Entity unchanged.
-    let (state,): (String,) = sqlx::query_as("SELECT state FROM project WHERE id = ?")
+    // Entity unchanged — FR-019: canonical lifecycle in `projects.lifecycle`.
+    let (state,): (String,) = sqlx::query_as("SELECT lifecycle FROM projects WHERE id = ?")
         .bind(&project)
         .fetch_one(db.pool())
         .await
@@ -227,8 +232,8 @@ async fn plan_required_refusal() {
     .await;
 
     assert_eq!(resp.error.as_ref().map(|e| e.code), Some(TransitionErrorCode::PlanRequired));
-    // Entity unchanged.
-    let (state,): (String,) = sqlx::query_as("SELECT state FROM project WHERE id = ?")
+    // Entity unchanged — FR-019: canonical lifecycle in `projects.lifecycle`.
+    let (state,): (String,) = sqlx::query_as("SELECT lifecycle FROM projects WHERE id = ?")
         .bind(&project)
         .fetch_one(db.pool())
         .await

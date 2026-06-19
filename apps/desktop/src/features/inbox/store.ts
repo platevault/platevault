@@ -6,17 +6,20 @@
  * by `${rootId}|${rootAbsolutePath}`.
  */
 
-import { useCallback, useState } from 'react';
+import { useCallback, useEffect, useState } from 'react';
 import { createParameterizedStore, useParameterizedQuery } from '@/data/store';
 import {
   inboxScanFolder,
   inboxClassify,
   inboxConfirm,
+  inboxList,
   inboxReclassify,
 } from '@/api/commands';
 import type {
   InboxClassifyResponse,
   InboxConfirmResponse,
+  InboxListItem,
+  InboxListResponse,
   InboxReclassifyResponse,
   InboxScanFolderResponse,
 } from '@/api/commands';
@@ -24,6 +27,8 @@ import type {
 export type {
   InboxClassifyResponse,
   InboxConfirmResponse,
+  InboxListItem,
+  InboxListResponse,
   InboxReclassifyResponse,
   InboxScanFolderResponse,
 };
@@ -153,4 +158,87 @@ export function useInboxReclassify(inboxItemId: string) {
   );
 
   return { ...state, reclassify };
+}
+
+// ── Cross-root list hooks (spec 039) ─────────────────────────────────────────
+
+export interface InboxListState {
+  data: InboxListResponse | null;
+  loading: boolean;
+  error: string | null;
+}
+
+/**
+ * Load and cache the cross-root unacknowledged inbox list.
+ * Call `refresh()` to re-fetch (e.g. after a rescan).
+ */
+export function useInboxList() {
+  const [epoch, setEpoch] = useState(0);
+  const [state, setState] = useState<InboxListState>({
+    data: null,
+    loading: true,
+    error: null,
+  });
+
+  useEffect(() => {
+    let cancelled = false;
+    setState((s) => ({ ...s, loading: true, error: null }));
+    inboxList()
+      .then((resp) => {
+        if (!cancelled) setState({ data: resp, loading: false, error: null });
+      })
+      .catch((e: unknown) => {
+        if (!cancelled)
+          setState({ data: null, loading: false, error: String(e) });
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [epoch]);
+
+  const refresh = useCallback(() => setEpoch((n) => n + 1), []);
+
+  return { ...state, refresh };
+}
+
+export interface RescanState {
+  loading: boolean;
+  error: string | null;
+}
+
+/**
+ * Trigger a rescan of all registered roots (FR-005).
+ * Each root with a known `rootId` and `rootAbsolutePath` is re-scanned via
+ * `inboxScanFolder`; confirmed items are not resurrected (the scan only
+ * INSERT OR IGNOREs — existing resolved rows keep their state).
+ * On completion, `onComplete` is called so the caller can refresh the list.
+ */
+export function useInboxRescan(
+  roots: Array<{ rootId: string; rootAbsolutePath: string }>,
+  onComplete: () => void,
+) {
+  const [state, setState] = useState<RescanState>({ loading: false, error: null });
+
+  const rescan = useCallback(async () => {
+    if (roots.length === 0) {
+      onComplete();
+      return;
+    }
+    setState({ loading: true, error: null });
+    try {
+      await Promise.all(
+        roots.map((r) =>
+          inboxScanFolder({ rootId: r.rootId, rootAbsolutePath: r.rootAbsolutePath, followSymlinks: false }),
+        ),
+      );
+      setState({ loading: false, error: null });
+      onComplete();
+    } catch (e: unknown) {
+      setState({ loading: false, error: String(e) });
+      // Still refresh so any partial results appear.
+      onComplete();
+    }
+  }, [roots, onComplete]);
+
+  return { ...state, rescan };
 }

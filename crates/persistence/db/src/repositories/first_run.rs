@@ -25,9 +25,7 @@ fn now_iso() -> String {
 fn source_kind_to_str(kind: SourceKind) -> &'static str {
     match kind {
         SourceKind::LightFrames => "light_frames",
-        SourceKind::Dark => "dark",
-        SourceKind::Flat => "flat",
-        SourceKind::Bias => "bias",
+        SourceKind::Calibration => "calibration",
         SourceKind::Project => "project",
         SourceKind::Inbox => "inbox",
     }
@@ -35,9 +33,7 @@ fn source_kind_to_str(kind: SourceKind) -> &'static str {
 
 fn str_to_source_kind(s: &str) -> SourceKind {
     match s {
-        "dark" => SourceKind::Dark,
-        "flat" => SourceKind::Flat,
-        "bias" => SourceKind::Bias,
+        "calibration" => SourceKind::Calibration,
         "project" => SourceKind::Project,
         "inbox" => SourceKind::Inbox,
         // "light_frames" and any unknown value default to LightFrames.
@@ -229,10 +225,16 @@ pub async fn list_sources(pool: &SqlitePool) -> DbResult<Vec<RegisterSourceRespo
 
 /// Remove a registered source by ID.
 ///
+/// Also deletes any `inbox_items` whose `root_id` references this source so
+/// that no orphaned rows remain after removal (H1 — no FK cascade in schema).
+///
 /// # Errors
 ///
 /// Returns [`DbError::NotFound`] if the ID does not exist.
 pub async fn remove_source(pool: &SqlitePool, id: &str) -> DbResult<()> {
+    // Clean up inbox items that belong to this source before removing it.
+    sqlx::query("DELETE FROM inbox_items WHERE root_id = ?").bind(id).execute(pool).await?;
+
     let result =
         sqlx::query("DELETE FROM registered_sources WHERE id = ?").bind(id).execute(pool).await?;
 
@@ -271,9 +273,10 @@ pub async fn get_first_run_state(pool: &SqlitePool) -> DbResult<FirstRunStateRes
 /// # Errors
 ///
 /// Returns [`DbError::NotFound`] if preconditions are not met (at least one
-/// raw source and one project source must be registered).
+/// light_frames source and one project source must be registered).
 pub async fn complete_first_run(pool: &SqlitePool) -> DbResult<FirstRunCompleteResponse> {
     // Check preconditions: at least one light_frames + one project source.
+    // Inbox is optional (spec 039 removed it from REQUIRED_KINDS).
     let light_count: (i64,) =
         sqlx::query_as("SELECT COUNT(*) FROM registered_sources WHERE kind = 'light_frames'")
             .fetch_one(pool)
@@ -448,14 +451,14 @@ mod tests {
     }
 
     #[tokio::test]
-    async fn complete_first_run_requires_raw_and_project() {
+    async fn complete_first_run_requires_light_and_project() {
         let pool = setup_db().await;
 
         // No sources: should fail.
         let result = complete_first_run(&pool).await;
         assert!(result.is_err());
 
-        // Only raw: should fail.
+        // Only light_frames: should fail (project missing).
         let req = RegisterSourceRequest {
             kind: SourceKind::LightFrames,
             path: "/astro/raw".to_owned(),
@@ -466,7 +469,7 @@ mod tests {
         let result = complete_first_run(&pool).await;
         assert!(result.is_err());
 
-        // Add project: should succeed.
+        // Add project: light + project present — inbox is not required (spec 039).
         let req = RegisterSourceRequest {
             kind: SourceKind::Project,
             path: "/astro/projects".to_owned(),
@@ -499,12 +502,19 @@ mod tests {
             kind_subtype: None,
             scan_depth: ScanDepth::Recursive,
         };
+        let inbox = RegisterSourceRequest {
+            kind: SourceKind::Inbox,
+            path: "/astro/inbox".to_owned(),
+            kind_subtype: None,
+            scan_depth: ScanDepth::Recursive,
+        };
         register_source(&pool, &raw).await.unwrap();
         register_source(&pool, &proj).await.unwrap();
+        register_source(&pool, &inbox).await.unwrap();
         complete_first_run(&pool).await.unwrap();
 
         let resp = restart_first_run(&pool).await.unwrap();
-        assert_eq!(resp.prefilled_sources.len(), 2);
+        assert_eq!(resp.prefilled_sources.len(), 3);
 
         let state = get_first_run_state(&pool).await.unwrap();
         assert!(state.completed_at.is_none());
@@ -546,5 +556,123 @@ mod tests {
         update_first_run_step(&pool, "processing_tools").await.unwrap();
         let state = get_first_run_state(&pool).await.unwrap();
         assert_eq!(state.last_step, "processing_tools");
+    }
+
+    /// C2: `complete_first_run` must succeed with only light_frames + project
+    /// (no inbox source required — spec 039 removed inbox from REQUIRED_KINDS).
+    #[tokio::test]
+    async fn complete_first_run_succeeds_without_inbox() {
+        let pool = setup_db().await;
+
+        register_source(
+            &pool,
+            &RegisterSourceRequest {
+                kind: SourceKind::LightFrames,
+                path: "/astro/lights".to_owned(),
+                kind_subtype: None,
+                scan_depth: ScanDepth::Recursive,
+            },
+        )
+        .await
+        .unwrap();
+
+        register_source(
+            &pool,
+            &RegisterSourceRequest {
+                kind: SourceKind::Project,
+                path: "/astro/projects".to_owned(),
+                kind_subtype: None,
+                scan_depth: ScanDepth::Recursive,
+            },
+        )
+        .await
+        .unwrap();
+
+        // No inbox registered — must succeed now.
+        let resp = complete_first_run(&pool).await.unwrap();
+        assert!(!resp.completed_at.is_empty(), "completed_at must be set");
+        assert_eq!(resp.registered_source_count, 2);
+
+        let state = get_first_run_state(&pool).await.unwrap();
+        assert_eq!(state.last_step, "complete");
+    }
+
+    /// C2 boundary: still fails when only light_frames is registered (project missing).
+    #[tokio::test]
+    async fn complete_first_run_still_requires_light_and_project() {
+        let pool = setup_db().await;
+
+        register_source(
+            &pool,
+            &RegisterSourceRequest {
+                kind: SourceKind::LightFrames,
+                path: "/astro/lights".to_owned(),
+                kind_subtype: None,
+                scan_depth: ScanDepth::Recursive,
+            },
+        )
+        .await
+        .unwrap();
+
+        let err = complete_first_run(&pool).await;
+        assert!(err.is_err(), "should fail without a project source");
+    }
+
+    /// H1: `remove_source` must delete orphaned `inbox_items` for the removed
+    /// source so no zombie rows remain.
+    #[tokio::test]
+    async fn remove_source_deletes_inbox_items() {
+        use crate::repositories::inbox::{insert_inbox_item, InsertInboxItem};
+
+        let pool = setup_db().await;
+
+        let resp = register_source(
+            &pool,
+            &RegisterSourceRequest {
+                kind: SourceKind::Inbox,
+                path: "/astro/inbox".to_owned(),
+                kind_subtype: None,
+                scan_depth: ScanDepth::Recursive,
+            },
+        )
+        .await
+        .unwrap();
+        let source_id = resp.source_id;
+
+        // Insert an inbox item for this source.
+        insert_inbox_item(
+            &pool,
+            &InsertInboxItem {
+                id: "orphan-item-1",
+                root_id: &source_id,
+                relative_path: "2025-10-01/lights",
+                file_count: 3,
+                content_signature: None,
+                lane: "fits",
+            },
+        )
+        .await
+        .unwrap();
+
+        // Verify it exists.
+        let count_before: (i64,) =
+            sqlx::query_as("SELECT COUNT(*) FROM inbox_items WHERE root_id = ?")
+                .bind(&source_id)
+                .fetch_one(&pool)
+                .await
+                .unwrap();
+        assert_eq!(count_before.0, 1, "inbox item should exist before removal");
+
+        // Remove the source.
+        remove_source(&pool, &source_id).await.unwrap();
+
+        // Inbox items for that root must be gone.
+        let count_after: (i64,) =
+            sqlx::query_as("SELECT COUNT(*) FROM inbox_items WHERE root_id = ?")
+                .bind(&source_id)
+                .fetch_one(&pool)
+                .await
+                .unwrap();
+        assert_eq!(count_after.0, 0, "inbox items must be deleted with the source");
     }
 }

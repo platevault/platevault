@@ -11,12 +11,17 @@ use app_core::inbox::reclassify::{reclassify, ReclassifyOverride, ReclassifyRequ
 use app_core::inbox::scan::{scan_root, ScanOptions};
 use contracts_core::inbox::{
     InboxBreakdownEntry, InboxClassifyRequest, InboxClassifyResponse, InboxConfirmRequest,
-    InboxConfirmResponse, InboxFileEntry, InboxItemSummary, InboxReclassifyRequest,
-    InboxReclassifyResponse, InboxScanFolderRequest, InboxScanFolderResponse, InboxScanResult,
+    InboxConfirmResponse, InboxFileEntry, InboxItemSummary, InboxListItem, InboxListResponse,
+    InboxReclassifyRequest, InboxReclassifyResponse, InboxScanFolderRequest,
+    InboxScanFolderResponse, InboxScanResult,
 };
+use persistence_db::repositories::inbox::list_unacknowledged_across_roots;
 use sqlx::SqlitePool;
 use std::path::PathBuf;
 use uuid::Uuid;
+
+/// Cap on cross-root listing (FR-006 — no unbounded loads).
+const INBOX_LIST_LIMIT: i64 = 500;
 
 // ── inbox.classify ────────────────────────────────────────────────────────────
 
@@ -27,7 +32,7 @@ use uuid::Uuid;
 /// # Errors
 /// `inbox.item.not_found` | `metadata.unreadable`
 #[tauri::command]
-#[specta::specta(rename = "inbox.classify")]
+#[specta::specta]
 pub async fn inbox_classify(
     req: InboxClassifyRequest,
     pool: tauri::State<'_, SqlitePool>,
@@ -69,7 +74,7 @@ pub async fn inbox_classify(
 /// `inbox.item.not_found` | `inbox.has.open.plan` | `classification.ambiguous`
 /// | `classification.stale` | `pattern.unset`
 #[tauri::command]
-#[specta::specta(rename = "inbox.confirm")]
+#[specta::specta]
 pub async fn inbox_confirm(
     req: InboxConfirmRequest,
     pool: tauri::State<'_, SqlitePool>,
@@ -98,7 +103,7 @@ pub async fn inbox_confirm(
 /// # Errors
 /// Returns `"inbox.item.not_found"`, `"inbox.has.open.plan"`, or `"file.not_found"`.
 #[tauri::command]
-#[specta::specta(rename = "inbox.reclassify")]
+#[specta::specta]
 pub async fn inbox_reclassify(
     req: InboxReclassifyRequest,
     pool: tauri::State<'_, SqlitePool>,
@@ -131,7 +136,7 @@ pub async fn inbox_reclassify(
 /// # Errors
 /// Returns a string error if the root is not accessible.
 #[tauri::command]
-#[specta::specta(rename = "inbox.scan.folder")]
+#[specta::specta]
 pub async fn inbox_scan_folder(
     req: InboxScanFolderRequest,
     pool: tauri::State<'_, SqlitePool>,
@@ -191,6 +196,47 @@ pub async fn inbox_scan_folder(
     Ok(InboxScanFolderResponse { root_id: req.root_id, items })
 }
 
+// ── inbox.list (spec 039) ─────────────────────────────────────────────────────
+
+/// `inbox.list` — return all unacknowledged inbox items across all registered
+/// roots (states `pending_classification` and `classified`).
+///
+/// Results are capped at 500 items (FR-006). Each item carries its root's
+/// absolute path so the UI can group/label by root without a second call.
+///
+/// # Errors
+/// Returns a string error on database failure.
+#[tauri::command]
+#[specta::specta]
+pub async fn inbox_list(pool: tauri::State<'_, SqlitePool>) -> Result<InboxListResponse, String> {
+    let rows = list_unacknowledged_across_roots(&pool, INBOX_LIST_LIMIT)
+        .await
+        .map_err(|e| e.to_string())?;
+
+    let total = rows.len();
+    let capped = total >= usize::try_from(INBOX_LIST_LIMIT).unwrap_or(usize::MAX);
+
+    let items = rows
+        .into_iter()
+        .map(|r| InboxListItem {
+            inbox_item_id: r.id,
+            root_id: r.root_id,
+            root_absolute_path: r.root_path,
+            relative_path: r.relative_path,
+            file_count: u32::try_from(r.file_count).unwrap_or(u32::MAX),
+            lane: r.lane,
+            state: r.state,
+            content_signature: r.content_signature.unwrap_or_default(),
+        })
+        .collect();
+
+    Ok(InboxListResponse {
+        items,
+        capped,
+        limit: u32::try_from(INBOX_LIST_LIMIT).unwrap_or(u32::MAX),
+    })
+}
+
 // ── Legacy inbox.scan (retained for spec 030 compatibility) ──────────────────
 
 /// `inbox.scan` — legacy stub returning fixture data.
@@ -200,7 +246,7 @@ pub async fn inbox_scan_folder(
 /// # Errors
 /// Never fails; always returns `Ok`.
 #[tauri::command]
-#[specta::specta(rename = "inbox.scan")]
+#[specta::specta]
 pub async fn inbox_scan(root_id: Option<String>) -> Result<InboxScanResult, String> {
     let root = root_id.unwrap_or_else(|| "root-inbox-001".to_owned());
     tracing::debug!("stub: inbox.scan root_id={root}");

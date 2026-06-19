@@ -370,18 +370,29 @@
       ]
     },
     "PlanState": {
-      "description": "Note: `paused` is a domain-internal state (R-Pause-1); not surfaced in the transition contract.",
-      "type": "string",
-      "enum": [
-        "draft",
-        "ready_for_review",
-        "approved",
-        "applying",
-        "applied",
-        "partially_applied",
-        "failed",
-        "cancelled",
-        "discarded"
+      "description": "Ten-state plan lifecycle (spec 017 data-model.md `PlanState`). `paused` is surfaced here so the list/detail contracts can filter on it (R-Pause-1).",
+      "oneOf": [
+        {
+          "type": "string",
+          "enum": [
+            "draft",
+            "ready_for_review",
+            "approved",
+            "applying",
+            "applied",
+            "partially_applied",
+            "failed",
+            "cancelled",
+            "discarded"
+          ]
+        },
+        {
+          "description": "Mid-apply suspension (R-Pause-1). Written only by spec 025's executor.",
+          "type": "string",
+          "enum": [
+            "paused"
+          ]
+        }
       ]
     },
     "PreparedSourceState": {

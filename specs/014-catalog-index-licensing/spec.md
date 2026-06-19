@@ -1,5 +1,12 @@
 # Feature Specification: Catalog Index Licensing
 
+> **⚠ SUPERSEDED (2026-06-18) by [Spec 035 — SIMBAD Target Resolution](../035-simbad-target-resolution/spec.md).**
+> The download-bundled-catalogs mechanism specified here — project-hosted signed manifest,
+> `catalog.manifest.fetch` / `catalog.download` contracts, minisign verification, the separate
+> `astro-plan-catalogs` repo, and in-app auto-update — is **no longer the product direction**. Targets
+> are now resolved on demand against SIMBAD with a bundled seed index + local cache (spec 035). The
+> **license-attribution** model here (CDS/OpenNGC CC-BY attribution) remains relevant.
+
 > **See Spec 030**: UI implementation of this feature must follow
 > [Spec 030 — UI Audit & Revision](../030-ui-audit-revision/spec.md)
 > for layout, navigation, and component patterns.
