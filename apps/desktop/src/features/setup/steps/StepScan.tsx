@@ -35,6 +35,8 @@ export interface StepScanProps {
   /** Callback when scan step is done and Finish is clicked. */
   onFinish: () => Promise<void>;
   isFinishing: boolean;
+  /** Go back to the review step to correct sources, then re-scan. */
+  onBack: () => void;
 }
 
 // ── Helpers ───────────────────────────────────────────────────────────────────
@@ -213,7 +215,7 @@ function SourceSummary({ state }: SourceSummaryProps) {
  * per-source detection summary.  Ingestion-group approval stays in the Inbox;
  * Finish navigates there without calling inbox_confirm.
  */
-export function StepScan({ sources, flushResult, onFinish, isFinishing }: StepScanProps) {
+export function StepScan({ sources, flushResult, onFinish, isFinishing, onBack }: StepScanProps) {
   const [sourceStates, setSourceStates] = useState<SourceScanState[]>(() =>
     sources
       .filter((s) => s.path)
@@ -329,8 +331,26 @@ export function StepScan({ sources, flushResult, onFinish, isFinishing }: StepSc
         </>
       )}
 
-      {/* Finish button — always visible, enabled once all scans complete */}
-      <div style={{ marginTop: 'var(--alm-sp-5)' }}>
+      {/* Back (correct sources, then re-scan) + Finish (enabled once scans complete) */}
+      <div style={{ marginTop: 'var(--alm-sp-5)', display: 'flex', gap: 'var(--alm-sp-3)' }}>
+        <button
+          data-testid="back-button"
+          onClick={onBack}
+          disabled={isFinishing}
+          style={{
+            padding: 'var(--alm-sp-2) var(--alm-sp-5)',
+            background: 'transparent',
+            color: 'var(--alm-text)',
+            border: '1px solid var(--alm-border)',
+            borderRadius: 'var(--alm-radius-md)',
+            fontWeight: 'var(--alm-weight-medium)',
+            fontSize: 'var(--alm-text-sm)',
+            cursor: isFinishing ? 'not-allowed' : 'pointer',
+            opacity: isFinishing ? 0.6 : 1,
+          }}
+        >
+          &larr; Back to review
+        </button>
         <button
           data-testid="finish-button"
           onClick={() => { void onFinish(); }}
