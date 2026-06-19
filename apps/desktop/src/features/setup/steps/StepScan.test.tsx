@@ -85,6 +85,7 @@ function renderStep(overrides: Partial<StepScanProps> = {}) {
       flushResult={FLUSH_RESULT}
       onFinish={onFinish}
       isFinishing={false}
+      onBack={vi.fn()}
       {...overrides}
     />,
   );
@@ -321,6 +322,7 @@ describe('StepScan', () => {
           flushResult={FLUSH_RESULT}
           onFinish={vi.fn().mockResolvedValue(undefined)}
           isFinishing={false}
+          onBack={vi.fn()}
         />,
       );
 

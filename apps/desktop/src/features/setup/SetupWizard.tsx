@@ -427,6 +427,7 @@ export function SetupWizard() {
               flushResult={flushResult}
               onFinish={handleFinish}
               isFinishing={isFinishing}
+              onBack={() => goTo(SCAN_STEP - 1)}
             />
           )}
       </WizardShell>
