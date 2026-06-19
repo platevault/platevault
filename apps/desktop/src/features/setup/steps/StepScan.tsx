@@ -84,6 +84,7 @@ interface SourceSummaryProps {
 
 function SourceSummary({ state }: SourceSummaryProps) {
   const { source, phase, items, classifications, error } = state;
+  const [expanded, setExpanded] = useState(false);
 
   const totalItems = items.length;
   const totalFiles = items.reduce((acc, it) => acc + it.fileCount, 0);
@@ -102,19 +103,68 @@ function SourceSummary({ state }: SourceSummaryProps) {
   );
   const cell = { padding: 'var(--alm-sp-1) var(--alm-sp-2)', textAlign: 'left' } as const;
 
+  // The detail panel (chips + table) is expandable only when scan is done and
+  // there are items to show.
+  const isExpandable = phase === 'done' && totalItems > 0;
+
+  // Compact count summary for the always-visible header line.
+  const countSummary =
+    phase === 'done' && totalItems > 0
+      ? `${totalItems} folder${totalItems !== 1 ? 's' : ''} · ${totalFiles} file${totalFiles !== 1 ? 's' : ''}`
+      : null;
+
   return (
     <div
       data-testid={`scan-source-${source.path}`}
       style={{
         border: '1px solid var(--alm-border)',
         borderRadius: 'var(--alm-radius-md)',
-        padding: 'var(--alm-sp-4)',
         marginBottom: 'var(--alm-sp-3)',
         background: 'var(--alm-surface)',
+        overflow: 'hidden',
       }}
     >
-      {/* Header row */}
-      <div style={{ display: 'flex', alignItems: 'center', gap: 'var(--alm-sp-3)', marginBottom: 'var(--alm-sp-2)' }}>
+      {/* ── Always-visible header row ─────────────────────────────────────── */}
+      <div
+        role={isExpandable ? 'button' : undefined}
+        tabIndex={isExpandable ? 0 : undefined}
+        aria-expanded={isExpandable ? expanded : undefined}
+        onClick={isExpandable ? () => setExpanded((v) => !v) : undefined}
+        onKeyDown={
+          isExpandable
+            ? (e) => {
+                if (e.key === 'Enter' || e.key === ' ') {
+                  e.preventDefault();
+                  setExpanded((v) => !v);
+                }
+              }
+            : undefined
+        }
+        style={{
+          display: 'flex',
+          alignItems: 'center',
+          gap: 'var(--alm-sp-3)',
+          padding: 'var(--alm-sp-4)',
+          cursor: isExpandable ? 'pointer' : 'default',
+          userSelect: 'none',
+        }}
+      >
+        {/* Chevron — only shown when expandable */}
+        {isExpandable && (
+          <span
+            aria-hidden="true"
+            style={{
+              fontSize: 'var(--alm-text-xs)',
+              color: 'var(--alm-text-muted)',
+              flexShrink: 0,
+              lineHeight: 1,
+            }}
+          >
+            {expanded ? '▾' : '▸'}
+          </span>
+        )}
+
+        {/* Source path */}
         <span
           style={{
             flex: 1,
@@ -126,47 +176,90 @@ function SourceSummary({ state }: SourceSummaryProps) {
         >
           {source.path}
         </span>
+
+        {/* Kind label (muted, small) */}
+        <span
+          style={{
+            fontSize: 'var(--alm-text-xs)',
+            color: 'var(--alm-text-muted)',
+            flexShrink: 0,
+          }}
+        >
+          {source.kind.replace('_', ' ')}
+        </span>
+
+        {/* Compact count summary */}
+        {countSummary && (
+          <span
+            style={{
+              fontSize: 'var(--alm-text-xs)',
+              color: 'var(--alm-text-secondary)',
+              flexShrink: 0,
+            }}
+          >
+            {countSummary}
+          </span>
+        )}
+
+        {/* Phase pill */}
         <Pill variant={phasePillVariant(phase)}>{phaseLabel(phase)}</Pill>
       </div>
 
-      {/* Kind label */}
-      <div style={{ fontSize: 'var(--alm-text-xs)', color: 'var(--alm-text-muted)', marginBottom: 'var(--alm-sp-2)' }}>
-        {source.kind.replace('_', ' ')}
-      </div>
-
-      {/* Error state */}
+      {/* ── Always-visible transient states (below header, outside collapse) ── */}
+      {/* These are small/short and don't benefit from collapse. */}
       {phase === 'error' && error && (
-        <p style={{ fontSize: 'var(--alm-text-sm)', color: 'var(--alm-text-error)', margin: 0 }}>
+        <p
+          style={{
+            fontSize: 'var(--alm-text-sm)',
+            color: 'var(--alm-text-error)',
+            margin: 0,
+            padding: '0 var(--alm-sp-4) var(--alm-sp-4)',
+          }}
+        >
           {error}
         </p>
       )}
 
-      {/* Scanning state */}
       {phase === 'scanning' && (
-        <p style={{ fontSize: 'var(--alm-text-sm)', color: 'var(--alm-text-secondary)', margin: 0 }}>
+        <p
+          style={{
+            fontSize: 'var(--alm-text-sm)',
+            color: 'var(--alm-text-secondary)',
+            margin: 0,
+            padding: '0 var(--alm-sp-4) var(--alm-sp-4)',
+          }}
+        >
           Scanning…
         </p>
       )}
 
-      {/* Done: empty state */}
       {phase === 'done' && totalItems === 0 && (
         <p
           data-testid="scan-empty"
-          style={{ fontSize: 'var(--alm-text-sm)', color: 'var(--alm-text-muted)', margin: 0 }}
+          style={{
+            fontSize: 'var(--alm-text-sm)',
+            color: 'var(--alm-text-muted)',
+            margin: 0,
+            padding: '0 var(--alm-sp-4) var(--alm-sp-4)',
+          }}
         >
           Nothing detected in this folder.
         </p>
       )}
 
-      {/* Done: detection summary */}
-      {phase === 'done' && totalItems > 0 && (
-        <div>
-          <div style={{ fontSize: 'var(--alm-text-sm)', color: 'var(--alm-text-secondary)', marginBottom: 'var(--alm-sp-2)' }}>
-            {totalItems} folder{totalItems !== 1 ? 's' : ''} detected
-            {totalFiles > 0 ? ` · ${totalFiles} file${totalFiles !== 1 ? 's' : ''}` : ''}
-          </div>
+      {/* ── Collapsible detail panel (chips + table) ─────────────────────── */}
+      {isExpandable && expanded && (
+        <div style={{ padding: '0 var(--alm-sp-4) var(--alm-sp-4)' }}>
+          {/* Kind-count chips */}
           {kindCounts.size > 0 && (
-            <div style={{ display: 'flex', flexWrap: 'wrap', gap: 'var(--alm-sp-2)' }}>
+            <div
+              style={{
+                display: 'flex',
+                flexWrap: 'wrap',
+                gap: 'var(--alm-sp-2)',
+                marginBottom: 'var(--alm-sp-3)',
+              }}
+            >
               {Array.from(kindCounts.entries()).map(([kind, count]) => (
                 <span
                   key={kind}
@@ -184,10 +277,10 @@ function SourceSummary({ state }: SourceSummaryProps) {
               ))}
             </div>
           )}
+
           {/* Scrollable metadata table of detected ingestion groups */}
           <div
             style={{
-              marginTop: 'var(--alm-sp-3)',
               maxHeight: 280,
               overflowY: 'auto',
               border: '1px solid var(--alm-border-subtle)',
@@ -213,7 +306,7 @@ function SourceSummary({ state }: SourceSummaryProps) {
                 >
                   <th style={cell}>Folder</th>
                   <th style={cell}>Files</th>
-                  <th style={cell}>Lane</th>
+                  <th style={cell}>Extension</th>
                   <th style={cell}>Detected types</th>
                 </tr>
               </thead>
@@ -343,8 +436,15 @@ export function StepScan({ sources, flushResult, onFinish, isFinishing, onBack }
         </p>
       ) : (
         <>
-          {/* Per-source results */}
-          <div style={{ marginBottom: 'var(--alm-sp-4)' }}>
+          {/* Per-source results — scrollable container so N sources don't grow the page */}
+          <div
+            style={{
+              flex: 1,
+              minHeight: 0,
+              overflowY: 'auto',
+              marginBottom: 'var(--alm-sp-4)',
+            }}
+          >
             {sourceStates.map((s) => (
               <SourceSummary key={s.source.path} state={s} />
             ))}
