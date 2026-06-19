@@ -502,6 +502,8 @@ mod tests {
                     raw_value: Some("Light Frame"),
                     unclassified: false,
                     manual_override: None,
+                    is_master: false,
+                    master_detector: None,
                 },
             )
             .await
@@ -650,6 +652,8 @@ mod tests {
                     raw_value: Some(if ft == "light" { "Light Frame" } else { "Dark Frame" }),
                     unclassified: false,
                     manual_override: None,
+                    is_master: false,
+                    master_detector: None,
                 },
             )
             .await
@@ -741,6 +745,8 @@ mod tests {
                     raw_value: None,
                     unclassified: false,
                     manual_override: None,
+                    is_master: false,
+                    master_detector: None,
                 },
             )
             .await

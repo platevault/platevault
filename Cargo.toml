@@ -5,6 +5,7 @@ members = [
   "crates/app/core",
   "crates/audit",
   "crates/calibration/core",
+  "crates/calibration/master-detect",
   "crates/contracts/core",
   "crates/domain/core",
   "crates/fs/executor",

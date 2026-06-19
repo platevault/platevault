@@ -214,6 +214,8 @@ mod tests {
                 raw_value: None,
                 unclassified: true,
                 manual_override: None,
+                is_master: false,
+                master_detector: None,
             },
         )
         .await
@@ -230,6 +232,8 @@ mod tests {
                 raw_value: None,
                 unclassified: true,
                 manual_override: None,
+                is_master: false,
+                master_detector: None,
             },
         )
         .await

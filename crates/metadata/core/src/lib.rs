@@ -232,6 +232,11 @@ pub struct RawFileMetadata {
     pub telescop: Option<String>,
     /// `DATE-OBS` (ISO 8601 string or FITS-style `YYYY-MM-DDTHH:MM:SS`).
     pub date_obs: Option<String>,
+    /// Integration count from `STACKCNT` (preferred) or `NCOMBINE`.
+    ///
+    /// Present only in stacked/master files that carry this keyword.
+    /// Used by the master-detect crate to identify stacked calibration frames.
+    pub stack_count: Option<u32>,
 }
 
 // ── MetadataExtractor ─────────────────────────────────────────────────────────
