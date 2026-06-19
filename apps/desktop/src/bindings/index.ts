@@ -4877,8 +4877,15 @@ export type SettingsData = {
 	values: unknown,
 };
 
-/**  Kind of a registered source directory. */
-export type SourceKind = "light_frames" | "dark" | "flat" | "bias" | "project" | "inbox";
+/**
+ *  Kind of a registered source directory.
+ * 
+ *  `Calibration` replaces the former `Dark`, `Flat`, and `Bias` variants.
+ *  Per-image frame type (light / dark / flat / bias) is detected from image
+ *  metadata (FITS `IMAGETYP` header) during scan/ingest — the source-folder
+ *  kind is only a user-facing folder category.
+ */
+export type SourceKind = "light_frames" | "calibration" | "project" | "inbox";
 
 /**  Response DTO for `source.protection.get`. */
 export type SourceProtectionGetResponse = SourceProtectionGetResponse_Serialize | SourceProtectionGetResponse_Deserialize;
