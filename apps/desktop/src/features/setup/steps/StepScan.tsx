@@ -96,6 +96,12 @@ function SourceSummary({ state }: SourceSummaryProps) {
     }
   }
 
+  // Stable sort for the table: by lane, then folder path.
+  const sortedItems = [...items].sort(
+    (a, b) => a.lane.localeCompare(b.lane) || a.relativePath.localeCompare(b.relativePath),
+  );
+  const cell = { padding: 'var(--alm-sp-1) var(--alm-sp-2)', textAlign: 'left' } as const;
+
   return (
     <div
       data-testid={`scan-source-${source.path}`}
@@ -178,27 +184,58 @@ function SourceSummary({ state }: SourceSummaryProps) {
               ))}
             </div>
           )}
-          {/* List inbox items using a compact format (reusing InboxItemSummary data) */}
-          <div style={{ marginTop: 'var(--alm-sp-3)' }}>
-            {items.map((item) => (
-              <div
-                key={item.inboxItemId}
-                data-testid={`scan-item-${item.inboxItemId}`}
-                style={{
-                  display: 'flex',
-                  alignItems: 'center',
-                  gap: 'var(--alm-sp-2)',
-                  padding: 'var(--alm-sp-1) 0',
-                  fontSize: 'var(--alm-text-xs)',
-                  color: 'var(--alm-text-secondary)',
-                  borderTop: '1px solid var(--alm-border-subtle)',
-                }}
-              >
-                <span style={{ flex: 1, wordBreak: 'break-all' }}>{item.relativePath}</span>
-                <span>{item.fileCount} file{item.fileCount !== 1 ? 's' : ''}</span>
-                <Pill variant="neutral">{item.lane.toUpperCase()}</Pill>
-              </div>
-            ))}
+          {/* Scrollable metadata table of detected ingestion groups */}
+          <div
+            style={{
+              marginTop: 'var(--alm-sp-3)',
+              maxHeight: 280,
+              overflowY: 'auto',
+              border: '1px solid var(--alm-border-subtle)',
+              borderRadius: 'var(--alm-radius-sm)',
+            }}
+          >
+            <table
+              style={{
+                width: '100%',
+                borderCollapse: 'collapse',
+                fontSize: 'var(--alm-text-xs)',
+                color: 'var(--alm-text-secondary)',
+              }}
+            >
+              <thead>
+                <tr
+                  style={{
+                    position: 'sticky',
+                    top: 0,
+                    background: 'var(--alm-surface-raised)',
+                    color: 'var(--alm-text)',
+                  }}
+                >
+                  <th style={cell}>Folder</th>
+                  <th style={cell}>Files</th>
+                  <th style={cell}>Lane</th>
+                  <th style={cell}>Detected types</th>
+                </tr>
+              </thead>
+              <tbody>
+                {sortedItems.map((item) => {
+                  const breakdown = classifications.get(item.inboxItemId)?.breakdown ?? [];
+                  const types = breakdown.map((b) => `${b.count} ${b.kind}`).join(', ');
+                  return (
+                    <tr
+                      key={item.inboxItemId}
+                      data-testid={`scan-item-${item.inboxItemId}`}
+                      style={{ borderTop: '1px solid var(--alm-border-subtle)' }}
+                    >
+                      <td style={{ ...cell, wordBreak: 'break-all' }}>{item.relativePath}</td>
+                      <td style={cell}>{item.fileCount}</td>
+                      <td style={cell}>{item.lane.toUpperCase()}</td>
+                      <td style={cell}>{types || '—'}</td>
+                    </tr>
+                  );
+                })}
+              </tbody>
+            </table>
           </div>
         </div>
       )}
