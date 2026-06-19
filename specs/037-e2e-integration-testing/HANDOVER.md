@@ -32,12 +32,13 @@ in **CI / on Windows** (a webview cannot run in the WSL dev sandbox).
   Linux+Windows (builds app, installs tauri-driver/msedgedriver/webkit driver,
   runs `pnpm test:e2e:real`); Stage C = macOS best-effort.
 - **`screen_load_smoke.spec.ts`** added (real-env chromium shell-boot smoke).
-- **`sessions.list/get` de-stub** — **DEFERRED** (reverted). A coder attempt
-  corrupted `crates/app/core/src/sessions.rs` (stray escapes) and left
-  `commands/sessions.rs` referencing a removed fn; both reverted to main. This is
-  product work (not core 037 testing) — see follow-ups. The pattern to follow is
-  `calibration::masters_list/get` → query `acquisition_session` → map to the
-  `AcquisitionSession`/`SessionDetail` contracts.
+- **`sessions.list/get` de-stub** — **DONE** (commit `4dd335f`).
+  `app_core::sessions::list_sessions/get_session` query the real
+  `acquisition_session` table and map to the `AcquisitionSession`/`SessionDetail`
+  contracts; `commands/sessions.rs` wired; stub fixtures removed;
+  `sessions_integration.rs` real tests pass (9). This was the last fixture
+  command — with main's earlier de-stub of `search.global` + `calibration.masters`,
+  **all US3 data commands now return real data.**
 
 ## ⚠️ CRITICAL pre-existing finding (NOT introduced by 037)
 
@@ -104,7 +105,7 @@ added). This is out of 037's scope but blocks a green workspace gate.
 
 ## Next steps (recommended order)
 
-1. Finish `sessions.list/get` de-stub (if not already) + Layer-1 test.
+1. ~~Finish `sessions.list/get` de-stub + Layer-1 test~~ — **DONE** (`4dd335f`).
 2. On a CI run of the US3 PR, un-skip and iterate the real-backend journeys whose
    backends are now wired (search, calibration, sessions, plan_apply), using CI
    Stage B as the verifier.
