@@ -76,6 +76,24 @@ function getRootId(flushResult: FlushResult, path: string): string {
   return row?.rootId ?? path;
 }
 
+/** Capitalize the first letter (e.g. "dark" → "Dark"). */
+function titleCase(s: string): string {
+  return s.length > 0 ? s[0].toUpperCase() + s.slice(1) : s;
+}
+
+/**
+ * Human label for a detected calibration master item (spec 040 FR-006).
+ * e.g. "Master Dark", "Master Flat · Ha · 120s".  Falls back to a generic
+ * "Master" when the base frame type couldn't be inferred.
+ */
+function masterLabel(item: InboxItemSummary): string {
+  const ft = item.masterFrameType ? `Master ${titleCase(item.masterFrameType)}` : 'Master';
+  const parts = [ft];
+  if (item.masterFilter) parts.push(item.masterFilter);
+  if (item.masterExposureS != null) parts.push(`${item.masterExposureS}s`);
+  return parts.join(' · ');
+}
+
 // ── Per-source detection summary ──────────────────────────────────────────────
 
 interface SourceSummaryProps {
@@ -314,16 +332,31 @@ function SourceSummary({ state }: SourceSummaryProps) {
                 {sortedItems.map((item) => {
                   const breakdown = classifications.get(item.inboxItemId)?.breakdown ?? [];
                   const types = breakdown.map((b) => `${b.count} ${b.kind}`).join(', ');
+                  // Individual calibration masters carry their frame type on the
+                  // item itself (spec 040 FR-006); grouped sub-frame folders rely
+                  // on the classify breakdown instead.
+                  const detectedTypes = item.isMaster ? masterLabel(item) : types || '—';
                   return (
                     <tr
                       key={item.inboxItemId}
                       data-testid={`scan-item-${item.inboxItemId}`}
                       style={{ borderTop: '1px solid var(--alm-border-subtle)' }}
                     >
-                      <td style={{ ...cell, wordBreak: 'break-all' }}>{item.relativePath}</td>
+                      <td style={{ ...cell, wordBreak: 'break-all' }}>
+                        <span
+                          style={{
+                            display: 'inline-flex',
+                            alignItems: 'center',
+                            gap: 'var(--alm-sp-2)',
+                          }}
+                        >
+                          {item.isMaster && <Pill variant="info">Master</Pill>}
+                          {item.relativePath}
+                        </span>
+                      </td>
                       <td style={cell}>{item.fileCount}</td>
                       <td style={cell}>{(item.format ?? item.lane).toUpperCase()}</td>
-                      <td style={cell}>{types || '—'}</td>
+                      <td style={cell}>{detectedTypes}</td>
                     </tr>
                   );
                 })}

@@ -396,7 +396,9 @@ export interface BatchRegisterResult {
     kind: string;
     path: string;
     success: boolean;
-    root?: LibraryRoot;
+    /** Assigned registered-source id (UUID) on success — used as the scan rootId
+     *  so inbox items JOIN back to `registered_sources`. */
+    rootId?: string;
     error?: string;
   }>;
 }
@@ -421,11 +423,32 @@ export async function registerRootBatch(args: {
 }): Promise<BatchRegisterResult> {
   // The generated rootsRegisterBatch(request) wraps in `{ request }` automatically;
   // pass `{ sources: args.sources }` as the RegisterSourceBatchRequest payload.
-  return unwrap(
+  const resp = unwrap(
     await commands.rootsRegisterBatch({ sources: args.sources } as Parameters<
       typeof commands.rootsRegisterBatch
     >[0]),
-  ) as unknown as BatchRegisterResult;
+  ) as {
+    status: string;
+    items: Array<{ index: number; status: string; sourceId?: string | null; error?: string | null }>;
+  };
+
+  // The real backend response carries per-item results in `items`, correlated to
+  // the request by `index`; the assigned source id is `sourceId`.  Map back to the
+  // wizard's row shape (kind/path come from the request by index) so the scan step
+  // receives the registered-source UUID — not the folder path — as rootId.  Passing
+  // the path made inbox items fail the `registered_sources` JOIN and vanish.
+  const results = (resp.items ?? []).map((item) => {
+    const src = args.sources[item.index];
+    const success = item.status === 'success';
+    return {
+      kind: src?.kind ?? '',
+      path: src?.path ?? '',
+      success,
+      rootId: success ? (item.sourceId ?? undefined) : undefined,
+      error: item.error ?? undefined,
+    };
+  });
+  return { results };
 }
 
 export async function completeFirstRun(): Promise<FirstRunCompleteResult> {

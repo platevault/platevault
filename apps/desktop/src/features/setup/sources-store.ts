@@ -230,7 +230,7 @@ export async function flushToDB(sources: SourcesState): Promise<FlushResult> {
           kind: item.kind as SourceKind,
           path: item.path,
           success: true,
-          rootId: item.root?.id,
+          rootId: item.rootId,
         };
       }
       const errorCode = item.error ?? 'unknown';
