@@ -49,22 +49,27 @@ async fn insert_target(pool: &sqlx::SqlitePool, id: &str) {
     .unwrap();
 }
 
+/// Insert a project into the canonical `projects` table (spec-008 / migration 0018).
+/// After migration 0036, the ledger view reads project state from `projects.lifecycle`.
 async fn insert_project(
     pool: &sqlx::SqlitePool,
     id: &str,
     name: &str,
-    target_id: &str,
+    _target_id: &str,
     state: &str,
     created_at: &str,
 ) {
+    // Use the id as part of the path to avoid UNIQUE(path) collisions.
+    let path = format!("projects/{id}");
     sqlx::query(
-        "INSERT INTO project (id, name, target_id, state, created_at) \
-         VALUES (?, ?, ?, ?, ?)",
+        "INSERT INTO projects (id, name, tool, lifecycle, path, created_at, updated_at) \
+         VALUES (?, ?, 'PixInsight', ?, ?, ?, ?)",
     )
     .bind(id)
     .bind(name)
-    .bind(target_id)
     .bind(state)
+    .bind(&path)
+    .bind(created_at)
     .bind(created_at)
     .execute(pool)
     .await

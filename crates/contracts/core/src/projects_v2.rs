@@ -131,6 +131,12 @@ pub struct ProjectSummaryDto {
     pub source_count: u32,
     pub created_at: String,
     pub updated_at: String,
+    /// FR-020: typed blocked reason kind when lifecycle == "blocked". Null otherwise.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub blocked_reason_kind: Option<String>,
+    /// FR-020: free-form note for the blocked reason.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub blocked_reason_note: Option<String>,
 }
 
 /// A project detail (sources + channels included).
@@ -155,6 +161,12 @@ pub struct ProjectDetailDto {
     /// spec-013 target association.
     #[serde(skip_serializing_if = "Option::is_none")]
     pub canonical_target: Option<ProjectCanonicalTarget>,
+    /// FR-020: typed blocked reason kind when lifecycle == "blocked". Null otherwise.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub blocked_reason_kind: Option<String>,
+    /// FR-020: free-form note for the blocked reason.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub blocked_reason_note: Option<String>,
 }
 
 /// A project's associated spec-035 canonical target, resolved for display on the
@@ -207,7 +219,8 @@ pub struct ProjectCreateRequest {
 #[serde(rename_all = "camelCase")]
 pub struct ProjectCreateResult {
     pub project_id: String,
-    /// Always `"setup_incomplete"` (invariant per data-model.md).
+    /// Initial lifecycle state. `"setup_incomplete"` when the project has no sources at create time;
+    /// may auto-transition to `"ready"` when sources are provided in the create request (FR-008).
     pub lifecycle: String,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub plan_id: Option<String>,

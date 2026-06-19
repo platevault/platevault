@@ -11,7 +11,7 @@ use contracts_core::ingestion::{IngestionSettings, UpdateIngestionSettings};
 /// # Errors
 /// Returns `Err(String)` on failure; the stub never fails.
 #[tauri::command]
-#[specta::specta(rename = "ingestion.settings.get")]
+#[specta::specta]
 pub async fn ingestion_settings_get() -> Result<IngestionSettings, String> {
     tracing::debug!("stub: ingestion.settings.get");
     Ok(default_ingestion_settings())
@@ -22,7 +22,7 @@ pub async fn ingestion_settings_get() -> Result<IngestionSettings, String> {
 /// # Errors
 /// Returns `Err(String)` on failure; the stub never fails.
 #[tauri::command]
-#[specta::specta(rename = "ingestion.settings.update")]
+#[specta::specta]
 pub async fn ingestion_settings_update(
     request: UpdateIngestionSettings,
 ) -> Result<IngestionSettings, String> {

@@ -159,6 +159,7 @@ const sampleView: PreparedViewSummary = {
   state: 'current',
   createdAt: '2026-01-01T00:00:00Z',
   itemCount: 3,
+  items: [],
 };
 
 describe('listPreparedViews', () => {

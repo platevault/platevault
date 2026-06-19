@@ -42,63 +42,71 @@ export const commands = {
 	 *  # Errors
 	 *  Returns `Err(String)` on failure; the stub never fails.
 	 */
-	sessionsList: () => typedError<AcquisitionSession_Serialize[], string>(__TAURI_INVOKE("sessions.list")),
+	sessionsList: () => typedError<AcquisitionSession_Serialize[], string>(__TAURI_INVOKE("sessions_list")),
 	/**
 	 *  `sessions.get` — returns a single session detail.
 	 * 
 	 *  # Errors
 	 *  Returns `Err(String)` on failure; the stub never fails.
 	 */
-	sessionsGet: (id: string) => typedError<SessionDetail_Serialize, string>(__TAURI_INVOKE("sessions.get", { id })),
+	sessionsGet: (id: string) => typedError<SessionDetail_Serialize, string>(__TAURI_INVOKE("sessions_get", { id })),
 	/**
 	 *  `sessions.calendar` — returns calendar data for a month range.
 	 * 
 	 *  # Errors
 	 *  Returns `Err(String)` on failure; the stub never fails.
 	 */
-	sessionsCalendar: (startMonth: string, endMonth: string) => typedError<CalendarData, string>(__TAURI_INVOKE("sessions.calendar", { startMonth, endMonth })),
+	sessionsCalendar: (startMonth: string, endMonth: string) => typedError<CalendarData, string>(__TAURI_INVOKE("sessions_calendar", { startMonth, endMonth })),
 	/**
 	 *  `sessions.transition` — transition a session to a new state.
 	 * 
 	 *  # Errors
 	 *  Returns `Err(String)` on failure; the stub never fails.
 	 */
-	sessionsTransition: (id: string, action: string, metadata: unknown | null) => typedError<AcquisitionSession_Serialize, string>(__TAURI_INVOKE("sessions.transition", { id, action, metadata })),
+	sessionsTransition: (id: string, action: string, metadata: unknown | null) => typedError<AcquisitionSession_Serialize, string>(__TAURI_INVOKE("sessions_transition", { id, action, metadata })),
 	/**
 	 *  `sessions.split` — split a session at a given frame index.
 	 * 
 	 *  # Errors
 	 *  Returns `Err(String)` on failure; the stub never fails.
 	 */
-	sessionsSplit: (id: string, splitAtIndex: number) => typedError<SessionSplitResult_Serialize, string>(__TAURI_INVOKE("sessions.split", { id, splitAtIndex })),
+	sessionsSplit: (id: string, splitAtIndex: number) => typedError<SessionSplitResult_Serialize, string>(__TAURI_INVOKE("sessions_split", { id, splitAtIndex })),
 	/**
 	 *  `sessions.merge` — merge multiple sessions into one.
 	 * 
 	 *  # Errors
 	 *  Returns `Err(String)` on failure; the stub never fails.
 	 */
-	sessionsMerge: (ids: string[]) => typedError<AcquisitionSession_Serialize, string>(__TAURI_INVOKE("sessions.merge", { ids })),
+	sessionsMerge: (ids: string[]) => typedError<AcquisitionSession_Serialize, string>(__TAURI_INVOKE("sessions_merge", { ids })),
 	/**
-	 *  `calibration.masters.list` — returns all calibration masters.
+	 *  `calibration.masters.list` — returns all calibration masters from real DB rows.
+	 * 
+	 *  Backed by `calibration_master_view` (migration 0033) which joins
+	 *  `calibration_session` with `calibration_fingerprint`. Returns an empty list
+	 *  when no calibration sessions with fingerprints exist (not fixtures).
 	 * 
 	 *  # Errors
-	 *  Returns `Err(String)` on failure; the stub never fails.
+	 *  Returns `Err(String)` on database failure.
 	 */
-	calibrationMastersList: () => typedError<CalibrationMaster_Serialize[], string>(__TAURI_INVOKE("calibration.masters.list")),
+	calibrationMastersList: () => typedError<CalibrationMaster_Serialize[], string>(__TAURI_INVOKE("calibration_masters_list")),
 	/**
 	 *  `calibration.masters.get` — returns a single calibration master detail.
 	 * 
 	 *  # Errors
-	 *  Returns `Err(String)` on failure; the stub never fails.
+	 *  Returns `Err(String)` with `"master.not_found: <id>"` when not found.
 	 */
-	calibrationMastersGet: (id: string) => typedError<MasterDetail_Serialize, string>(__TAURI_INVOKE("calibration.masters.get", { id })),
+	calibrationMastersGet: (id: string) => typedError<MasterDetail_Serialize, string>(__TAURI_INVOKE("calibration_masters_get", { id })),
 	/**
 	 *  `calibration.matches` — returns calibration match candidates for a session.
+	 * 
+	 *  Still returns fixture data for the scored candidate list (requires per-session
+	 *  scoring pass via spec 007 `calibration.match.suggest`). Use
+	 *  `calibration.match.suggest` for real scored results.
 	 * 
 	 *  # Errors
 	 *  Returns `Err(String)` on failure; the stub never fails.
 	 */
-	calibrationMatches: (sessionId: string) => typedError<MatchCandidate_Serialize[], string>(__TAURI_INVOKE("calibration.matches", { sessionId })),
+	calibrationMatches: (sessionId: string) => typedError<MatchCandidate_Serialize[], string>(__TAURI_INVOKE("calibration_matches", { sessionId })),
 	/**
 	 *  `calibration.match.suggest` — suggest ranked calibration masters for a session.
 	 * 
@@ -108,7 +116,7 @@ export const commands = {
 	 *  # Errors
 	 *  Returns `Err(String)` on database error.
 	 */
-	calibrationMatchSuggest: (req: CalibrationMatchSuggestRequest_Deserialize) => typedError<CalibrationMatchSuggestResponse_Serialize, string>(__TAURI_INVOKE("calibration.match.suggest", { req })),
+	calibrationMatchSuggest: (req: CalibrationMatchSuggestRequest_Deserialize) => typedError<CalibrationMatchSuggestResponse_Serialize, string>(__TAURI_INVOKE("calibration_match_suggest", { req })),
 	/**
 	 *  `calibration.match.assign` — persist a calibration master assignment.
 	 * 
@@ -117,7 +125,7 @@ export const commands = {
 	 *  # Errors
 	 *  Returns `Err(String)` on database error.
 	 */
-	calibrationMatchAssign: (req: CalibrationMatchAssignRequest) => typedError<CalibrationMatchAssignResponse_Serialize, string>(__TAURI_INVOKE("calibration.match.assign", { req })),
+	calibrationMatchAssign: (req: CalibrationMatchAssignRequest) => typedError<CalibrationMatchAssignResponse_Serialize, string>(__TAURI_INVOKE("calibration_match_assign", { req })),
 	/**
 	 *  `calibration.match.suggest.batch` — suggest calibration masters for multiple sessions.
 	 * 
@@ -127,21 +135,21 @@ export const commands = {
 	 *  # Errors
 	 *  Returns `Err(String)` on database error.
 	 */
-	calibrationMatchSuggestBatch: (req: CalibrationMatchBatchRequest_Deserialize) => typedError<CalibrationMatchBatchResponse_Serialize, string>(__TAURI_INVOKE("calibration.match.suggest.batch", { req })),
+	calibrationMatchSuggestBatch: (req: CalibrationMatchBatchRequest_Deserialize) => typedError<CalibrationMatchBatchResponse_Serialize, string>(__TAURI_INVOKE("calibration_match_suggest_batch", { req })),
 	/**
 	 *  `targets.list` — returns all targets, optionally filtered by search.
 	 * 
 	 *  # Errors
 	 *  Returns `Err(String)` on failure; the stub never fails.
 	 */
-	targetsList: (search: string | null) => typedError<Target_Serialize[], string>(__TAURI_INVOKE("targets.list", { search })),
+	targetsList: (search: string | null) => typedError<Target_Serialize[], string>(__TAURI_INVOKE("targets_list", { search })),
 	/**
 	 *  `targets.get` — returns a single target detail.
 	 * 
 	 *  # Errors
 	 *  Returns `Err(String)` on failure; the stub never fails.
 	 */
-	targetsGet: (id: string) => typedError<TargetDetail_Serialize, string>(__TAURI_INVOKE("targets.get", { id })),
+	targetsGet: (id: string) => typedError<TargetDetail_Serialize, string>(__TAURI_INVOKE("targets_get", { id })),
 	/**
 	 *  `target.get` — return full detail for a canonical target (gen-3).
 	 * 
@@ -150,7 +158,7 @@ export const commands = {
 	 *  Returns `Err(TargetOpError)` with code `target.not_found`,
 	 *  `target.invalid_id`, or `internal.database`.
 	 */
-	targetGet: (req: TargetGetRequest) => typedError<TargetDetailV3_Serialize, TargetOpError_Serialize>(__TAURI_INVOKE("target.get", { req })),
+	targetGet: (req: TargetGetRequest) => typedError<TargetDetailV3_Serialize, TargetOpError_Serialize>(__TAURI_INVOKE("target_get", { req })),
 	/**
 	 *  `target.list` — list all canonical targets ordered by primary designation.
 	 * 
@@ -158,7 +166,7 @@ export const commands = {
 	 * 
 	 *  Returns `Err(TargetOpError)` with code `internal.database`.
 	 */
-	targetList: () => typedError<TargetListItem[], TargetOpError_Serialize>(__TAURI_INVOKE("target.list")),
+	targetList: () => typedError<TargetListItem[], TargetOpError_Serialize>(__TAURI_INVOKE("target_list")),
 	/**
 	 *  `target.alias.add` — add a user alias to a canonical target (gen-3).
 	 * 
@@ -167,7 +175,7 @@ export const commands = {
 	 *  Returns `Err(TargetOpError)` with code `target.not_found`, `alias.blank`,
 	 *  or `internal.database`.
 	 */
-	targetAliasAdd: (req: TargetAliasAddRequest) => typedError<TargetAliasAddResult, TargetOpError_Serialize>(__TAURI_INVOKE("target.alias.add", { req })),
+	targetAliasAdd: (req: TargetAliasAddRequest) => typedError<TargetAliasAddResult, TargetOpError_Serialize>(__TAURI_INVOKE("target_alias_add", { req })),
 	/**
 	 *  `target.alias.remove` — remove a user alias from a canonical target (gen-3).
 	 * 
@@ -179,7 +187,7 @@ export const commands = {
 	 *  Returns `Err(TargetOpError)` with code `alias.not_found`,
 	 *  `alias.not_removable`, or `internal.database`.
 	 */
-	targetAliasRemove: (req: TargetAliasRemoveRequest) => typedError<TargetAliasRemoveResult, TargetOpError_Serialize>(__TAURI_INVOKE("target.alias.remove", { req })),
+	targetAliasRemove: (req: TargetAliasRemoveRequest) => typedError<TargetAliasRemoveResult, TargetOpError_Serialize>(__TAURI_INVOKE("target_alias_remove", { req })),
 	/**
 	 *  `target.display_alias.set` — set the user presentation label (FR-012).
 	 * 
@@ -191,7 +199,7 @@ export const commands = {
 	 *  Returns `Err(TargetOpError)` with code `target.not_found`,
 	 *  `target.invalid_id`, or `internal.database`.
 	 */
-	targetDisplayAliasSet: (req: TargetDisplayAliasSetRequest) => typedError<TargetDetailV3_Serialize, TargetOpError_Serialize>(__TAURI_INVOKE("target.display_alias.set", { req })),
+	targetDisplayAliasSet: (req: TargetDisplayAliasSetRequest) => typedError<TargetDetailV3_Serialize, TargetOpError_Serialize>(__TAURI_INVOKE("target_display_alias_set", { req })),
 	/**
 	 *  `target.display_alias.clear` — clear the user presentation label (FR-012).
 	 * 
@@ -203,7 +211,7 @@ export const commands = {
 	 *  Returns `Err(TargetOpError)` with code `target.not_found`,
 	 *  `target.invalid_id`, or `internal.database`.
 	 */
-	targetDisplayAliasClear: (req: TargetDisplayAliasClearRequest) => typedError<TargetDetailV3_Serialize, TargetOpError_Serialize>(__TAURI_INVOKE("target.display_alias.clear", { req })),
+	targetDisplayAliasClear: (req: TargetDisplayAliasClearRequest) => typedError<TargetDetailV3_Serialize, TargetOpError_Serialize>(__TAURI_INVOKE("target_display_alias_clear", { req })),
 	/**
 	 *  `target.resolve` — cache-first resolution of a designation / common name (or
 	 *  FITS OBJECT value) against the local cache + bundled seed, falling back to
@@ -220,7 +228,7 @@ export const commands = {
 	 *  Returns `Err(String)` only on a local database failure. Resolver outcomes
 	 *  (offline / unknown / ambiguous) are encoded in the response status.
 	 */
-	targetResolve: (req: TargetResolveSimbadRequest_Deserialize) => typedError<TargetResolveSimbadResponse_Serialize, string>(__TAURI_INVOKE("target.resolve", { req })),
+	targetResolve: (req: TargetResolveSimbadRequest_Deserialize) => typedError<TargetResolveSimbadResponse_Serialize, string>(__TAURI_INVOKE("target_resolve", { req })),
 	/**
 	 *  `target.search` — as-you-type target suggestions from local seed + cache.
 	 * 
@@ -233,7 +241,7 @@ export const commands = {
 	 * 
 	 *  Returns `Err(String)` on an unexpected internal (database) failure.
 	 */
-	targetSearch: (req: TargetSearchRequest_Deserialize) => typedError<TargetSearchResponse_Serialize, string>(__TAURI_INVOKE("target.search", { req })),
+	targetSearch: (req: TargetSearchRequest_Deserialize) => typedError<TargetSearchResponse_Serialize, string>(__TAURI_INVOKE("target_search", { req })),
 	/**
 	 *  `target.resolution.settings` — read the SIMBAD resolver settings.
 	 * 
@@ -241,7 +249,7 @@ export const commands = {
 	 * 
 	 *  Returns `Err(String)` on a local database failure.
 	 */
-	targetResolutionSettings: (req: ResolverSettingsGetRequest) => typedError<ResolverSettingsResponse, string>(__TAURI_INVOKE("target.resolution.settings", { req })),
+	targetResolutionSettings: (req: ResolverSettingsGetRequest) => typedError<ResolverSettingsResponse, string>(__TAURI_INVOKE("target_resolution_settings", { req })),
 	/**
 	 *  `target.resolution.settings.update` — persist new resolver settings.
 	 * 
@@ -249,7 +257,7 @@ export const commands = {
 	 * 
 	 *  Returns `Err(String)` on a local database failure.
 	 */
-	targetResolutionSettingsUpdate: (req: ResolverSettingsUpdateRequest) => typedError<ResolverSettingsResponse, string>(__TAURI_INVOKE("target.resolution.settings.update", { req })),
+	targetResolutionSettingsUpdate: (req: ResolverSettingsUpdateRequest) => typedError<ResolverSettingsResponse, string>(__TAURI_INVOKE("target_resolution_settings_update", { req })),
 	/**
 	 *  `projects.list` — list all projects from the database.
 	 * 
@@ -257,7 +265,7 @@ export const commands = {
 	 * 
 	 *  Returns `Err(String)` on database failure.
 	 */
-	projectsList: (filters: unknown | null) => typedError<ProjectSummaryDto_Serialize[], string>(__TAURI_INVOKE("projects.list", { filters })),
+	projectsList: (filters: unknown | null) => typedError<ProjectSummaryDto_Serialize[], string>(__TAURI_INVOKE("projects_list", { filters })),
 	/**
 	 *  `projects.get` — get a single project with sources and channels.
 	 * 
@@ -266,7 +274,7 @@ export const commands = {
 	 *  Returns `Err(String)` with `"project.not_found"` when the project does not
 	 *  exist.
 	 */
-	projectsGet: (id: string) => typedError<ProjectDetailDto_Serialize, string>(__TAURI_INVOKE("projects.get", { id })),
+	projectsGet: (id: string) => typedError<ProjectDetailDto_Serialize, string>(__TAURI_INVOKE("projects_get", { id })),
 	/**
 	 *  `projects.create` — create a new project.
 	 * 
@@ -274,7 +282,7 @@ export const commands = {
 	 * 
 	 *  Returns `Err(String)` with the error code on validation or database failure.
 	 */
-	projectsCreate: (req: ProjectCreateRequest_Deserialize) => typedError<ProjectCreateResult_Serialize, string>(__TAURI_INVOKE("projects.create", { req })),
+	projectsCreate: (req: ProjectCreateRequest_Deserialize) => typedError<ProjectCreateResult_Serialize, string>(__TAURI_INVOKE("projects_create", { req })),
 	/**
 	 *  `projects.update` — update name, tool, or notes on an existing project.
 	 * 
@@ -282,7 +290,7 @@ export const commands = {
 	 * 
 	 *  Returns `Err(String)` on validation failure or when the project is not found.
 	 */
-	projectsUpdate: (req: ProjectUpdateRequest_Deserialize) => typedError<ProjectUpdateResult, string>(__TAURI_INVOKE("projects.update", { req })),
+	projectsUpdate: (req: ProjectUpdateRequest_Deserialize) => typedError<ProjectUpdateResult, string>(__TAURI_INVOKE("projects_update", { req })),
 	/**
 	 *  `projects.source.add` — link an Inventory session to a project.
 	 * 
@@ -290,7 +298,7 @@ export const commands = {
 	 * 
 	 *  Returns `Err(String)` on validation failure or duplicate link.
 	 */
-	projectsSourceAdd: (req: ProjectSourceAddRequest) => typedError<ProjectSourceAddResult_Serialize, string>(__TAURI_INVOKE("projects.source.add", { req })),
+	projectsSourceAdd: (req: ProjectSourceAddRequest) => typedError<ProjectSourceAddResult_Serialize, string>(__TAURI_INVOKE("projects_source_add", { req })),
 	/**
 	 *  `projects.source.remove` — unlink a source from a project.
 	 * 
@@ -298,7 +306,7 @@ export const commands = {
 	 * 
 	 *  Returns `Err(String)` when lifecycle is locked or source not found.
 	 */
-	projectsSourceRemove: (req: ProjectSourceRemoveRequest) => typedError<ProjectSourceRemoveResult_Serialize, string>(__TAURI_INVOKE("projects.source.remove", { req })),
+	projectsSourceRemove: (req: ProjectSourceRemoveRequest) => typedError<ProjectSourceRemoveResult_Serialize, string>(__TAURI_INVOKE("projects_source_remove", { req })),
 	/**
 	 *  `projects.channels.reinfer` — re-infer channels from all linked sources.
 	 * 
@@ -306,7 +314,7 @@ export const commands = {
 	 * 
 	 *  Returns `Err(String)` when the project is not found or archived.
 	 */
-	projectsChannelsReinfer: (req: ProjectChannelsReinferRequest) => typedError<ProjectChannelsReinferResult_Serialize, string>(__TAURI_INVOKE("projects.channels.reinfer", { req })),
+	projectsChannelsReinfer: (req: ProjectChannelsReinferRequest) => typedError<ProjectChannelsReinferResult_Serialize, string>(__TAURI_INVOKE("projects_channels_reinfer", { req })),
 	/**
 	 *  `projects.channels.dismiss_drift` — dismiss the channel drift banner.
 	 * 
@@ -314,7 +322,7 @@ export const commands = {
 	 * 
 	 *  Returns `Err(String)` when the project is not found.
 	 */
-	projectsChannelsDismissDrift: (req: ProjectChannelsDismissDriftRequest) => typedError<ProjectChannelsDismissDriftResult, string>(__TAURI_INVOKE("projects.channels.dismiss_drift", { req })),
+	projectsChannelsDismissDrift: (req: ProjectChannelsDismissDriftRequest) => typedError<ProjectChannelsDismissDriftResult, string>(__TAURI_INVOKE("projects_channels_dismiss_drift", { req })),
 	/**
 	 *  `projects.create_plan` — create a filesystem plan from wizard state.
 	 * 
@@ -326,7 +334,7 @@ export const commands = {
 	 * 
 	 *  Returns `Err(String)` on failure; the stub never fails.
 	 */
-	projectsCreatePlan: (wizardState: unknown) => typedError<PlanDetail_Serialize, string>(__TAURI_INVOKE("projects.create_plan", { wizardState })),
+	projectsCreatePlan: (wizardState: unknown) => typedError<PlanDetail_Serialize, string>(__TAURI_INVOKE("projects_create_plan", { wizardState })),
 	/**
 	 *  `plans.list` — list reviewable plans, failed-first ordering (US1, T014).
 	 * 
@@ -334,7 +342,7 @@ export const commands = {
 	 * 
 	 *  Returns `Err(String)` with the contract error code on failure.
 	 */
-	plansList: (stateFilter: string[] | null, originFilter: string[] | null, createdAfter: string | null, limit: number | null) => typedError<PlanListResponse_Serialize, string>(__TAURI_INVOKE("plans.list", { stateFilter, originFilter, createdAfter, limit })),
+	plansList: (stateFilter: string[] | null, originFilter: string[] | null, createdAfter: string | null, limit: number | null) => typedError<PlanListResponse_Serialize, string>(__TAURI_INVOKE("plans_list", { stateFilter, originFilter, createdAfter, limit })),
 	/**
 	 *  `plans.get` — fetch a plan with all its items (US1, T014).
 	 * 
@@ -342,7 +350,7 @@ export const commands = {
 	 * 
 	 *  Returns `Err(String)` with `"plan.not_found"` if the plan does not exist.
 	 */
-	plansGet: (id: string) => typedError<PlanDetail_Serialize, string>(__TAURI_INVOKE("plans.get", { id })),
+	plansGet: (id: string) => typedError<PlanDetail_Serialize, string>(__TAURI_INVOKE("plans_get", { id })),
 	/**
 	 *  `plans.approve` — move a plan to `approved`; snapshot item FS metadata (US3, T025).
 	 * 
@@ -351,7 +359,7 @@ export const commands = {
 	 *  Returns `Err(String)` with `"plan.not_found"`, `"plan.invalid_state"`, or
 	 *  `"plan.items.empty"` on failure.
 	 */
-	plansApprove: (id: string) => typedError<PlanApproveResponse, string>(__TAURI_INVOKE("plans.approve", { id })),
+	plansApprove: (id: string) => typedError<PlanApproveResponse, string>(__TAURI_INVOKE("plans_approve", { id })),
 	/**
 	 *  `plans.discard` — soft-delete a plan (US4, T030).
 	 * 
@@ -359,7 +367,7 @@ export const commands = {
 	 * 
 	 *  Returns `Err(String)` with `"plan.not_found"` or `"plan.in_progress"` on failure.
 	 */
-	plansDiscard: (id: string) => typedError<PlanDiscardResponse, string>(__TAURI_INVOKE("plans.discard", { id })),
+	plansDiscard: (id: string) => typedError<PlanDiscardResponse, string>(__TAURI_INVOKE("plans_discard", { id })),
 	/**
 	 *  `plans.retry` — create a new plan from failed/cancelled/all items of a
 	 *  terminal parent (US5, T035).
@@ -371,7 +379,7 @@ export const commands = {
 	 *  Returns `Err(String)` with `"parent.not_found"`, `"parent.not_terminal"`,
 	 *  `"no.items.to.retry"`, or `"value.invalid"` on failure.
 	 */
-	plansRetry: (parentPlanId: string, itemsFilter: string) => typedError<PlanRetryResponse, string>(__TAURI_INVOKE("plans.retry", { parentPlanId, itemsFilter })),
+	plansRetry: (parentPlanId: string, itemsFilter: string) => typedError<PlanRetryResponse, string>(__TAURI_INVOKE("plans_retry", { parentPlanId, itemsFilter })),
 	/**
 	 *  `archive.send_to_trash` — send the archive subtree to OS trash (US6, T045).
 	 * 
@@ -379,7 +387,7 @@ export const commands = {
 	 * 
 	 *  Returns `Err(String)` with `"plan.not_found"` or `"archive.empty"` on failure.
 	 */
-	archiveSendToTrash: (planId: string) => typedError<ArchiveSendToTrashResponse, string>(__TAURI_INVOKE("archive.send_to_trash", { planId })),
+	archiveSendToTrash: (planId: string) => typedError<ArchiveSendToTrashResponse, string>(__TAURI_INVOKE("archive_send_to_trash", { planId })),
 	/**
 	 *  `archive.permanently_delete` — permanently remove archive subtree (US6, T046).
 	 * 
@@ -390,7 +398,7 @@ export const commands = {
 	 *  Returns `Err(String)` with `"confirm.text.mismatch"`, `"plan.blocked_by_protection"`,
 	 *  `"plan.not_found"`, or `"archive.empty"` on failure.
 	 */
-	archivePermanentlyDelete: (planId: string, confirmText: string) => typedError<ArchivePermanentlyDeleteResponse, string>(__TAURI_INVOKE("archive.permanently_delete", { planId, confirmText })),
+	archivePermanentlyDelete: (planId: string, confirmText: string) => typedError<ArchivePermanentlyDeleteResponse, string>(__TAURI_INVOKE("archive_permanently_delete", { planId, confirmText })),
 	/**
 	 *  `plans.apply` — start applying an approved plan (US1, T019).
 	 * 
@@ -406,7 +414,7 @@ export const commands = {
 	 *  - `"plan.approval.stale"` — approval token mismatch.
 	 *  - `"plan.conflict.overlap"` — concurrent apply already running.
 	 */
-	plansApply: (planId: string, approvalToken: string) => typedError<PlanApplyResponse, string>(__TAURI_INVOKE("plans.apply", { planId, approvalToken })),
+	plansApplyReal: (planId: string, approvalToken: string) => typedError<PlanApplyResponse, string>(__TAURI_INVOKE("plans_apply_real", { planId, approvalToken })),
 	/**
 	 *  `plans.cancel` — cancel an in-flight apply (US3, T033).
 	 * 
@@ -419,7 +427,7 @@ export const commands = {
 	 *  - `"plan.not_found"` — plan not found.
 	 *  - `"plan.not_in_apply"` — plan is not in applying or paused state.
 	 */
-	plansCancel: (planId: string) => typedError<PlanCancelResponse, string>(__TAURI_INVOKE("plans.cancel", { planId })),
+	plansCancel: (planId: string) => typedError<PlanCancelResponse, string>(__TAURI_INVOKE("plans_cancel", { planId })),
 	/**
 	 *  `plans.resume` — resume a paused apply run (R-Pause-1, T053).
 	 * 
@@ -430,7 +438,7 @@ export const commands = {
 	 *  - `"run.not_paused"` — plan is not in paused state.
 	 *  - `"run.not_found"` — run id does not match active run.
 	 */
-	plansResume: (planId: string, runId: string) => typedError<PlanResumeResponse, string>(__TAURI_INVOKE("plans.resume", { planId, runId })),
+	plansResume: (planId: string, runId: string) => typedError<PlanResumeResponse, string>(__TAURI_INVOKE("plans_resume", { planId, runId })),
 	/**
 	 *  `plans.item.skip` — skip a pending item during an active apply (US4, T041).
 	 * 
@@ -444,7 +452,7 @@ export const commands = {
 	 *  - `"item.not_found"` — item not found.
 	 *  - `"item.not_pending"` — item is not in pending state.
 	 */
-	plansItemSkip: (planId: string, itemId: string) => typedError<PlanItemSkipResponse, string>(__TAURI_INVOKE("plans.item.skip", { planId, itemId })),
+	plansItemSkip: (planId: string, itemId: string) => typedError<PlanItemSkipResponse, string>(__TAURI_INVOKE("plans_item_skip", { planId, itemId })),
 	/**
 	 *  `plans.item.retry` — retry a failed item within a running apply (US4, T041).
 	 * 
@@ -459,7 +467,7 @@ export const commands = {
 	 *  - `"item.not_found"` — item not found.
 	 *  - `"item.not_failed"` — item is not in failed state.
 	 */
-	plansItemRetry: (planId: string, itemId: string) => typedError<PlanItemRetryResponse, string>(__TAURI_INVOKE("plans.item.retry", { planId, itemId })),
+	plansItemRetry: (planId: string, itemId: string) => typedError<PlanItemRetryResponse, string>(__TAURI_INVOKE("plans_item_retry", { planId, itemId })),
 	/**
 	 *  `plans.apply.status` — fetch current apply progress for a plan.
 	 * 
@@ -467,21 +475,21 @@ export const commands = {
 	 * 
 	 *  Returns `Err(String)` with `"plan.not_found"` if the plan does not exist.
 	 */
-	plansApplyStatus: (planId: string) => typedError<PlanApplyStatus_Serialize, string>(__TAURI_INVOKE("plans.apply.status", { planId })),
+	plansApplyStatus: (planId: string) => typedError<PlanApplyStatus_Serialize, string>(__TAURI_INVOKE("plans_apply_status", { planId })),
 	/**
 	 *  `audit.list` — returns paginated audit entries.
 	 * 
 	 *  # Errors
 	 *  Returns `Err(String)` on failure; the stub never fails.
 	 */
-	auditList: (filters: unknown | null, pagination: unknown | null) => typedError<AuditListResponse_Serialize, string>(__TAURI_INVOKE("audit.list", { filters, pagination })),
+	auditList: (filters: unknown | null, pagination: unknown | null) => typedError<AuditListResponse_Serialize, string>(__TAURI_INVOKE("audit_list", { filters, pagination })),
 	/**
 	 *  `audit.export` — export audit entries as newline-delimited JSON.
 	 * 
 	 *  # Errors
 	 *  Returns `Err(String)` on failure; the stub never fails.
 	 */
-	auditExport: (filters: unknown | null) => typedError<string, string>(__TAURI_INVOKE("audit.export", { filters })),
+	auditExport: (filters: unknown | null) => typedError<string, string>(__TAURI_INVOKE("audit_export", { filters })),
 	/**
 	 *  `log.recent` — return the most-recent log entries (initial hydration window).
 	 * 
@@ -491,7 +499,7 @@ export const commands = {
 	 *  # Errors
 	 *  Returns `Err(String)` on database failure.
 	 */
-	logRecent: (cursor: string | null, levelMin: "debug" | "info" | "warn" | "error" | null, includeDiagnostics: boolean | null, sourceFilter: LogEntrySource[] | null, windowSize: number | null) => typedError<LogRecentResponse_Serialize, string>(__TAURI_INVOKE("log.recent", { cursor, levelMin, includeDiagnostics, sourceFilter, windowSize })),
+	logRecent: (cursor: string | null, levelMin: "debug" | "info" | "warn" | "error" | null, includeDiagnostics: boolean | null, sourceFilter: LogEntrySource[] | null, windowSize: number | null) => typedError<LogRecentResponse_Serialize, string>(__TAURI_INVOKE("log_recent", { cursor, levelMin, includeDiagnostics, sourceFilter, windowSize })),
 	/**
 	 *  `log.export` — export filtered log entries to a JSON file.
 	 * 
@@ -499,21 +507,21 @@ export const commands = {
 	 *  Returns `Err(String)` with code `"path.parent.missing"`, `"path.write.denied"`,
 	 *  `"range.invalid"`, or `"format.unsupported"`.
 	 */
-	logExport: (requestId: string, filePath: string, format: string | null, levelMin: "debug" | "info" | "warn" | "error" | null, since: string | null, until: string | null, includeDiagnostics: boolean | null) => typedError<LogExportResponse_Serialize, string>(__TAURI_INVOKE("log.export", { requestId, filePath, format, levelMin, since, until, includeDiagnostics })),
+	logExport: (requestId: string, filePath: string, format: string | null, levelMin: "debug" | "info" | "warn" | "error" | null, since: string | null, until: string | null, includeDiagnostics: boolean | null) => typedError<LogExportResponse_Serialize, string>(__TAURI_INVOKE("log_export", { requestId, filePath, format, levelMin, since, until, includeDiagnostics })),
 	/**
 	 *  `review.queue` — returns items awaiting user review.
 	 * 
 	 *  # Errors
 	 *  Returns `Err(String)` on failure; the stub never fails.
 	 */
-	reviewQueue: (filter: string | null) => typedError<ReviewItem_Serialize[], string>(__TAURI_INVOKE("review.queue", { filter })),
+	reviewQueue: (filter: string | null) => typedError<ReviewItem_Serialize[], string>(__TAURI_INVOKE("review_queue", { filter })),
 	/**
 	 *  `roots.list` — returns all registered library roots.
 	 * 
 	 *  # Errors
 	 *  Returns `Err(String)` on failure; the stub never fails.
 	 */
-	rootsList: () => typedError<LibraryRoot_Serialize[], string>(__TAURI_INVOKE("roots.list")),
+	rootsList: () => typedError<LibraryRoot_Serialize[], string>(__TAURI_INVOKE("roots_list")),
 	/**
 	 *  `roots.register` — register a new library root.
 	 * 
@@ -525,49 +533,49 @@ export const commands = {
 	 *  # Errors
 	 *  Returns `Err(String)` on path validation failure, duplicate, or DB error.
 	 */
-	rootsRegister: (path: string, category: string, scanSettings: unknown) => typedError<RegisterSourceResponse, string>(__TAURI_INVOKE("roots.register", { path, category, scanSettings })),
+	rootsRegister: (path: string, category: string, scanSettings: unknown) => typedError<RegisterSourceResponse, string>(__TAURI_INVOKE("roots_register", { path, category, scanSettings })),
 	/**
 	 *  `roots.register.batch` — register multiple source directories at once.
 	 * 
 	 *  # Errors
 	 *  Returns `Err(String)` on catastrophic failure; per-item errors are in the response.
 	 */
-	rootsRegisterBatch: (request: RegisterSourceBatchRequest_Deserialize) => typedError<RegisterSourceBatchResponse_Serialize, string>(__TAURI_INVOKE("roots.register.batch", { request })),
+	rootsRegisterBatch: (request: RegisterSourceBatchRequest_Deserialize) => typedError<RegisterSourceBatchResponse_Serialize, string>(__TAURI_INVOKE("roots_register_batch", { request })),
 	/**
 	 *  `roots.remap` — preview a root path remap.
 	 * 
 	 *  # Errors
 	 *  Returns `Err(String)` on failure; the stub never fails.
 	 */
-	rootsRemap: (rootId: string, newPath: string) => typedError<RemapVerification, string>(__TAURI_INVOKE("roots.remap", { rootId, newPath })),
+	rootsRemap: (rootId: string, newPath: string) => typedError<RemapVerification, string>(__TAURI_INVOKE("roots_remap", { rootId, newPath })),
 	/**
 	 *  `roots.remap.apply` — apply a verified root remap.
 	 * 
 	 *  # Errors
 	 *  Returns `Err(String)` on failure; the stub never fails.
 	 */
-	rootsRemapApply: (rootId: string, verified: boolean) => typedError<null, string>(__TAURI_INVOKE("roots.remap.apply", { rootId, verified })),
+	rootsRemapApply: (rootId: string, verified: boolean) => typedError<null, string>(__TAURI_INVOKE("roots_remap_apply", { rootId, verified })),
 	/**
 	 *  `scan.start` — start a filesystem scan, optionally for specific roots.
 	 * 
 	 *  # Errors
 	 *  Returns `Err(String)` on failure; the stub never fails.
 	 */
-	scanStart: (rootIds: string[] | null) => typedError<IpcOperationHandle, string>(__TAURI_INVOKE("scan.start", { rootIds })),
+	scanStart: (rootIds: string[] | null) => typedError<IpcOperationHandle, string>(__TAURI_INVOKE("scan_start", { rootIds })),
 	/**
 	 *  `equipment.list` — returns all registered equipment.
 	 * 
 	 *  # Errors
 	 *  Returns `Err(String)` on failure; the stub never fails.
 	 */
-	equipmentList: () => typedError<Equipment[], string>(__TAURI_INVOKE("equipment.list")),
+	equipmentList: () => typedError<Equipment[], string>(__TAURI_INVOKE("equipment_list")),
 	/**
 	 *  `firstrun.state` — get the current first-run wizard state.
 	 * 
 	 *  # Errors
 	 *  Returns `Err(String)` on database failure.
 	 */
-	firstrunState: () => typedError<FirstRunStateResponse_Serialize, string>(__TAURI_INVOKE("firstrun.state")),
+	firstrunState: () => typedError<FirstRunStateResponse_Serialize, string>(__TAURI_INVOKE("firstrun_state")),
 	/**
 	 *  `firstrun.complete` — mark the first-run wizard as complete.
 	 * 
@@ -576,7 +584,7 @@ export const commands = {
 	 *  # Errors
 	 *  Returns `Err(String)` if preconditions are not met or on database failure.
 	 */
-	firstrunComplete: () => typedError<FirstRunCompleteResponse, string>(__TAURI_INVOKE("firstrun.complete")),
+	firstrunComplete: () => typedError<FirstRunCompleteResponse, string>(__TAURI_INVOKE("firstrun_complete")),
 	/**
 	 *  `firstrun.restart` — restart the first-run wizard, returning existing sources.
 	 * 
@@ -585,7 +593,7 @@ export const commands = {
 	 *  # Errors
 	 *  Returns `Err(String)` if `confirm` is not `true` or on database failure.
 	 */
-	firstrunRestart: (request: FirstRunRestartRequest) => typedError<FirstRunRestartResponse, string>(__TAURI_INVOKE("firstrun.restart", { request })),
+	firstrunRestart: (request: FirstRunRestartRequest) => typedError<FirstRunRestartResponse, string>(__TAURI_INVOKE("firstrun_restart", { request })),
 	/**
 	 *  `pattern.validate` — structural validation without resolving against metadata.
 	 * 
@@ -597,7 +605,7 @@ export const commands = {
 	 * 
 	 *  Returns `Err(String)` on internal failure (none expected in v1).
 	 */
-	patternValidate: (request: PatternValidateRequest) => typedError<PatternValidateResponse_Serialize, string>(__TAURI_INVOKE("pattern.validate", { request })),
+	patternValidate: (request: PatternValidateRequest) => typedError<PatternValidateResponse_Serialize, string>(__TAURI_INVOKE("pattern_validate", { request })),
 	/**
 	 *  `pattern.resolve` — resolve a pattern against a metadata bundle.
 	 * 
@@ -607,7 +615,7 @@ export const commands = {
 	 * 
 	 *  Returns `Err(String)` with the error code on invalid patterns or paths.
 	 */
-	patternResolve: (request: PatternResolveRequest_Deserialize) => typedError<PatternResolveResponse, string>(__TAURI_INVOKE("pattern.resolve", { request })),
+	patternResolve: (request: PatternResolveRequest_Deserialize) => typedError<PatternResolveResponse, string>(__TAURI_INVOKE("pattern_resolve", { request })),
 	/**
 	 *  `pattern.preview` — resolve a pattern against sample metadata for the UI.
 	 * 
@@ -617,7 +625,7 @@ export const commands = {
 	 * 
 	 *  Returns `Err(String)` with the error code on invalid patterns or paths.
 	 */
-	patternPreview: (request: PatternPreviewRequest_Deserialize) => typedError<PatternPreviewResponse, string>(__TAURI_INVOKE("pattern.preview", { request })),
+	patternPreview: (request: PatternPreviewRequest_Deserialize) => typedError<PatternPreviewResponse, string>(__TAURI_INVOKE("pattern_preview", { request })),
 	/**
 	 *  `source.protection.get` — resolve effective protection for a source (US2, T012).
 	 * 
@@ -627,7 +635,7 @@ export const commands = {
 	 * 
 	 *  Returns `Err(String)` with the contract error code on failure.
 	 */
-	sourceProtectionGet: (sourceId: string | null) => typedError<SourceProtectionGetResponse_Serialize, string>(__TAURI_INVOKE("source.protection.get", { sourceId })),
+	sourceProtectionGet: (sourceId: string | null) => typedError<SourceProtectionGetResponse_Serialize, string>(__TAURI_INVOKE("source_protection_get", { sourceId })),
 	/**
 	 *  `source.protection.set` — set or replace the protection override for a source
 	 *  (US2, T013, T016).
@@ -636,7 +644,7 @@ export const commands = {
 	 * 
 	 *  Returns `Err(String)` with the contract error code on failure.
 	 */
-	sourceProtectionSet: (request: SourceProtectionSetRequest_Deserialize) => typedError<SourceProtectionSetResponse_Serialize, string>(__TAURI_INVOKE("source.protection.set", { request })),
+	sourceProtectionSet: (request: SourceProtectionSetRequest_Deserialize) => typedError<SourceProtectionSetResponse_Serialize, string>(__TAURI_INVOKE("source_protection_set", { request })),
 	/**
 	 *  `plan.protection.check` — return protection-affected plan items (US3, T023).
 	 * 
@@ -647,7 +655,7 @@ export const commands = {
 	 * 
 	 *  Returns `Err(String)` with `"plan.not_found"` if the plan does not exist.
 	 */
-	planProtectionCheck: (planId: string) => typedError<PlanProtectionCheckResponse_Serialize, string>(__TAURI_INVOKE("plan.protection.check", { planId })),
+	planProtectionCheckCmd: (planId: string) => typedError<PlanProtectionCheckResponse_Serialize, string>(__TAURI_INVOKE("plan_protection_check_cmd", { planId })),
 	/**
 	 *  `protection.plan.acknowledged` — record user acknowledgement of a protected
 	 *  plan item (US3, T025).
@@ -658,7 +666,7 @@ export const commands = {
 	 * 
 	 *  Returns `Err(String)` on audit failure.
 	 */
-	protectionPlanAcknowledged: (planId: string, itemId: string, sourceId: string | null, resolvedLevel: string, reason: string) => typedError<string, string>(__TAURI_INVOKE("protection.plan.acknowledged", { planId, itemId, sourceId, resolvedLevel, reason })),
+	protectionPlanAcknowledged: (planId: string, itemId: string, sourceId: string | null, resolvedLevel: string, reason: string) => typedError<string, string>(__TAURI_INVOKE("protection_plan_acknowledged", { planId, itemId, sourceId, resolvedLevel, reason })),
 	/**
 	 *  `settings.get` — returns settings for a given scope.
 	 * 
@@ -669,7 +677,7 @@ export const commands = {
 	 *  # Errors
 	 *  Returns `Err(String)` on database failure.
 	 */
-	settingsGet: (scope: string) => typedError<SettingsData, string>(__TAURI_INVOKE("settings.get", { scope })),
+	settingsGet: (scope: string) => typedError<SettingsData, string>(__TAURI_INVOKE("settings_get", { scope })),
 	/**
 	 *  `settings.update` — persists settings values for a given scope.
 	 * 
@@ -681,49 +689,52 @@ export const commands = {
 	 *  # Errors
 	 *  Returns `Err(String)` on database or audit failure.
 	 */
-	settingsUpdate: (scope: string, values: unknown) => typedError<null, string>(__TAURI_INVOKE("settings.update", { scope, values })),
+	settingsUpdate: (scope: string, values: unknown) => typedError<null, string>(__TAURI_INVOKE("settings_update", { scope, values })),
 	/**
 	 *  `settings.restore-defaults` — restore one, several, or all keys to defaults.
 	 * 
 	 *  # Errors
 	 *  Returns `Err(String)` with code `"key.unknown"` for unknown keys.
 	 */
-	settingsRestoreDefaults: (request: RestoreDefaultsRequest) => typedError<RestoreDefaultsResponse, string>(__TAURI_INVOKE("settings.restore-defaults", { request })),
+	settingsRestoreDefaults: (request: RestoreDefaultsRequest) => typedError<RestoreDefaultsResponse, string>(__TAURI_INVOKE("settings_restore_defaults", { request })),
 	/**
 	 *  `settings.source-override.set` — set a per-source override for an overridable key.
 	 * 
 	 *  # Errors
 	 *  Returns `Err(String)` with code `"key.unoverridable"` or `"value.invalid"`.
 	 */
-	settingsSourceOverrideSet: (request: SetSourceOverrideRequest) => typedError<SetSourceOverrideResponse, string>(__TAURI_INVOKE("settings.source-override.set", { request })),
+	settingsSourceOverrideSet: (request: SetSourceOverrideRequest) => typedError<SetSourceOverrideResponse, string>(__TAURI_INVOKE("settings_source_override_set", { request })),
 	/**
 	 *  `preferences.get` — returns current application preferences.
 	 * 
 	 *  # Errors
 	 *  Returns `Err(String)` on failure; the stub never fails.
 	 */
-	preferencesGet: () => typedError<AppPreferences, string>(__TAURI_INVOKE("preferences.get")),
+	preferencesGet: () => typedError<AppPreferences, string>(__TAURI_INVOKE("preferences_get")),
 	/**
 	 *  `preferences.set` — update a single preference key.
 	 * 
 	 *  # Errors
 	 *  Returns `Err(String)` on failure; the stub never fails.
 	 */
-	preferencesSet: (key: string, value: unknown) => typedError<null, string>(__TAURI_INVOKE("preferences.set", { key, value })),
+	preferencesSet: (key: string, value: unknown) => typedError<null, string>(__TAURI_INVOKE("preferences_set", { key, value })),
 	/**
 	 *  `search.global` — performs a global search across all entity types.
 	 * 
+	 *  Returns results ranked by relevance to `query`. The result set always
+	 *  reflects the query string — an empty query returns recent suggestions.
+	 * 
 	 *  # Errors
-	 *  Returns `Err(String)` on failure; the stub never fails.
+	 *  Returns `Err(String)` on database failure.
 	 */
-	searchGlobal: (query: string) => typedError<SearchResult_Serialize[], string>(__TAURI_INVOKE("search.global", { query })),
+	searchGlobal: (query: string) => typedError<SearchResult_Serialize[], string>(__TAURI_INVOKE("search_global", { query })),
 	/**
 	 *  `tour.complete_step` — mark a tour step as completed.
 	 * 
 	 *  # Errors
 	 *  Returns `Err(String)` on failure; the stub never fails.
 	 */
-	tourCompleteStep: (step: string) => typedError<null, string>(__TAURI_INVOKE("tour.complete_step", { step })),
+	tourCompleteStep: (step: string) => typedError<null, string>(__TAURI_INVOKE("tour_complete_step", { step })),
 	/**
 	 *  `guided.state.get` — read current coach state for UI hydration.
 	 * 
@@ -734,7 +745,7 @@ export const commands = {
 	 *  # Errors
 	 *  Returns `Err(String)` on corruption (informational) or database failure.
 	 */
-	guidedStateGet: () => typedError<GuidedStateGetResponse, string>(__TAURI_INVOKE("guided.state.get")),
+	guidedStateGet: () => typedError<GuidedStateGetResponse, string>(__TAURI_INVOKE("guided_state_get")),
 	/**
 	 *  `guided.step.complete` — mark a step complete and advance the coach.
 	 * 
@@ -744,7 +755,7 @@ export const commands = {
 	 *  # Errors
 	 *  Returns `Err(String)` on unknown step id, dismissed flow, or database failure.
 	 */
-	guidedStepComplete: (request: GuidedStepCompleteRequest) => typedError<GuidedStepCompleteResponse, string>(__TAURI_INVOKE("guided.step.complete", { request })),
+	guidedStepComplete: (request: GuidedStepCompleteRequest) => typedError<GuidedStepCompleteResponse, string>(__TAURI_INVOKE("guided_step_complete", { request })),
 	/**
 	 *  `guided.dismiss` — dismiss the coach, hiding all hints.
 	 * 
@@ -754,7 +765,7 @@ export const commands = {
 	 *  # Errors
 	 *  Returns `Err(String)` on database failure.
 	 */
-	guidedDismiss: () => typedError<GuidedDismissResponse, string>(__TAURI_INVOKE("guided.dismiss")),
+	guidedDismiss: () => typedError<GuidedDismissResponse, string>(__TAURI_INVOKE("guided_dismiss")),
 	/**
 	 *  `guided.restart` — restart the coach from Settings.
 	 * 
@@ -764,7 +775,7 @@ export const commands = {
 	 *  # Errors
 	 *  Returns `Err(String)` on database failure.
 	 */
-	guidedRestart: () => typedError<GuidedRestartResponse, string>(__TAURI_INVOKE("guided.restart")),
+	guidedRestart: () => typedError<GuidedRestartResponse, string>(__TAURI_INVOKE("guided_restart")),
 	/**
 	 *  `guided.activate` — activate the flow after first-run setup completes.
 	 * 
@@ -774,21 +785,21 @@ export const commands = {
 	 *  # Errors
 	 *  Returns `Err(String)` on database failure.
 	 */
-	guidedActivate: () => typedError<GuidedFlowStateDto, string>(__TAURI_INVOKE("guided.activate")),
+	guidedActivate: () => typedError<GuidedFlowStateDto, string>(__TAURI_INVOKE("guided_activate")),
 	/**
 	 *  `native.directory.pick` — open the OS directory picker.
 	 * 
 	 *  # Errors
 	 *  Returns `Err(String)` on validation failure or if the dialog cannot be shown.
 	 */
-	nativeDirectoryPick: (request: DirectoryPickRequest_Deserialize) => typedError<DirectoryPickResponse, string>(__TAURI_INVOKE("native.directory.pick", { request })),
+	nativeDirectoryPick: (request: DirectoryPickRequest_Deserialize) => typedError<DirectoryPickResponse, string>(__TAURI_INVOKE("native_directory_pick", { request })),
 	/**
 	 *  `native.file.pick` — open the OS file picker with type filters.
 	 * 
 	 *  # Errors
 	 *  Returns `Err(String)` on filter validation failure or if the dialog cannot be shown.
 	 */
-	nativeFilePick: (request: FilePickRequest_Deserialize) => typedError<FilePickResponse_Serialize, string>(__TAURI_INVOKE("native.file.pick", { request })),
+	nativeFilePick: (request: FilePickRequest_Deserialize) => typedError<FilePickResponse_Serialize, string>(__TAURI_INVOKE("native_file_pick", { request })),
 	/**
 	 *  `native.reveal` — reveal a path in the OS file browser.
 	 * 
@@ -799,140 +810,140 @@ export const commands = {
 	 *  # Errors
 	 *  Returns `Err(String)` if the path does not exist or the OS command fails.
 	 */
-	nativeReveal: (request: RevealRequest_Deserialize) => typedError<RevealResponse, string>(__TAURI_INVOKE("native.reveal", { request })),
+	nativeReveal: (request: RevealRequest_Deserialize) => typedError<RevealResponse, string>(__TAURI_INVOKE("native_reveal", { request })),
 	/**
 	 *  `equipment.cameras.list` — list all cameras.
 	 * 
 	 *  # Errors
 	 *  Returns `Err(String)` on database failure.
 	 */
-	equipmentCamerasList: () => typedError<Camera[], string>(__TAURI_INVOKE("equipment.cameras.list")),
+	equipmentCamerasList: () => typedError<Camera[], string>(__TAURI_INVOKE("equipment_cameras_list")),
 	/**
 	 *  `equipment.cameras.create` — create a new camera.
 	 * 
 	 *  # Errors
 	 *  Returns `Err(String)` on duplicate or database failure.
 	 */
-	equipmentCamerasCreate: (request: CreateCamera) => typedError<Camera, string>(__TAURI_INVOKE("equipment.cameras.create", { request })),
+	equipmentCamerasCreate: (request: CreateCamera) => typedError<Camera, string>(__TAURI_INVOKE("equipment_cameras_create", { request })),
 	/**
 	 *  `equipment.cameras.update` — update an existing camera.
 	 * 
 	 *  # Errors
 	 *  Returns `Err(String)` if the camera is not found.
 	 */
-	equipmentCamerasUpdate: (request: UpdateCamera) => typedError<Camera, string>(__TAURI_INVOKE("equipment.cameras.update", { request })),
+	equipmentCamerasUpdate: (request: UpdateCamera) => typedError<Camera, string>(__TAURI_INVOKE("equipment_cameras_update", { request })),
 	/**
 	 *  `equipment.cameras.delete` — delete a camera by ID.
 	 * 
 	 *  # Errors
 	 *  Returns `Err(String)` if the camera is not found.
 	 */
-	equipmentCamerasDelete: (id: string) => typedError<null, string>(__TAURI_INVOKE("equipment.cameras.delete", { id })),
+	equipmentCamerasDelete: (id: string) => typedError<null, string>(__TAURI_INVOKE("equipment_cameras_delete", { id })),
 	/**
 	 *  `equipment.telescopes.list` — list all telescopes.
 	 * 
 	 *  # Errors
 	 *  Returns `Err(String)` on database failure.
 	 */
-	equipmentTelescopesList: () => typedError<Telescope[], string>(__TAURI_INVOKE("equipment.telescopes.list")),
+	equipmentTelescopesList: () => typedError<Telescope[], string>(__TAURI_INVOKE("equipment_telescopes_list")),
 	/**
 	 *  `equipment.telescopes.create` — create a new telescope.
 	 * 
 	 *  # Errors
 	 *  Returns `Err(String)` on duplicate or database failure.
 	 */
-	equipmentTelescopesCreate: (request: CreateTelescope) => typedError<Telescope, string>(__TAURI_INVOKE("equipment.telescopes.create", { request })),
+	equipmentTelescopesCreate: (request: CreateTelescope) => typedError<Telescope, string>(__TAURI_INVOKE("equipment_telescopes_create", { request })),
 	/**
 	 *  `equipment.telescopes.update` — update an existing telescope.
 	 * 
 	 *  # Errors
 	 *  Returns `Err(String)` if the telescope is not found.
 	 */
-	equipmentTelescopesUpdate: (request: UpdateTelescope) => typedError<Telescope, string>(__TAURI_INVOKE("equipment.telescopes.update", { request })),
+	equipmentTelescopesUpdate: (request: UpdateTelescope) => typedError<Telescope, string>(__TAURI_INVOKE("equipment_telescopes_update", { request })),
 	/**
 	 *  `equipment.telescopes.delete` — delete a telescope by ID.
 	 * 
 	 *  # Errors
 	 *  Returns `Err(String)` if the telescope is not found.
 	 */
-	equipmentTelescopesDelete: (id: string) => typedError<null, string>(__TAURI_INVOKE("equipment.telescopes.delete", { id })),
+	equipmentTelescopesDelete: (id: string) => typedError<null, string>(__TAURI_INVOKE("equipment_telescopes_delete", { id })),
 	/**
 	 *  `equipment.trains.list` — list all optical trains.
 	 * 
 	 *  # Errors
 	 *  Returns `Err(String)` on database failure.
 	 */
-	equipmentTrainsList: () => typedError<OpticalTrain[], string>(__TAURI_INVOKE("equipment.trains.list")),
+	equipmentTrainsList: () => typedError<OpticalTrain[], string>(__TAURI_INVOKE("equipment_trains_list")),
 	/**
 	 *  `equipment.trains.create` — create a new optical train.
 	 * 
 	 *  # Errors
 	 *  Returns `Err(String)` on database failure.
 	 */
-	equipmentTrainsCreate: (request: CreateOpticalTrain) => typedError<OpticalTrain, string>(__TAURI_INVOKE("equipment.trains.create", { request })),
+	equipmentTrainsCreate: (request: CreateOpticalTrain) => typedError<OpticalTrain, string>(__TAURI_INVOKE("equipment_trains_create", { request })),
 	/**
 	 *  `equipment.trains.update` — update an existing optical train.
 	 * 
 	 *  # Errors
 	 *  Returns `Err(String)` if the optical train is not found.
 	 */
-	equipmentTrainsUpdate: (request: UpdateOpticalTrain) => typedError<OpticalTrain, string>(__TAURI_INVOKE("equipment.trains.update", { request })),
+	equipmentTrainsUpdate: (request: UpdateOpticalTrain) => typedError<OpticalTrain, string>(__TAURI_INVOKE("equipment_trains_update", { request })),
 	/**
 	 *  `equipment.trains.delete` — delete an optical train by ID.
 	 * 
 	 *  # Errors
 	 *  Returns `Err(String)` if the optical train is not found.
 	 */
-	equipmentTrainsDelete: (id: string) => typedError<null, string>(__TAURI_INVOKE("equipment.trains.delete", { id })),
+	equipmentTrainsDelete: (id: string) => typedError<null, string>(__TAURI_INVOKE("equipment_trains_delete", { id })),
 	/**
 	 *  `equipment.filters.list` — list all filters.
 	 * 
 	 *  # Errors
 	 *  Returns `Err(String)` on database failure.
 	 */
-	equipmentFiltersList: () => typedError<Filter[], string>(__TAURI_INVOKE("equipment.filters.list")),
+	equipmentFiltersList: () => typedError<Filter[], string>(__TAURI_INVOKE("equipment_filters_list")),
 	/**
 	 *  `equipment.filters.create` — create a new filter.
 	 * 
 	 *  # Errors
 	 *  Returns `Err(String)` on duplicate name or database failure.
 	 */
-	equipmentFiltersCreate: (request: CreateFilter) => typedError<Filter, string>(__TAURI_INVOKE("equipment.filters.create", { request })),
+	equipmentFiltersCreate: (request: CreateFilter) => typedError<Filter, string>(__TAURI_INVOKE("equipment_filters_create", { request })),
 	/**
 	 *  `equipment.filters.update` — update an existing filter.
 	 * 
 	 *  # Errors
 	 *  Returns `Err(String)` if the filter is not found.
 	 */
-	equipmentFiltersUpdate: (request: UpdateFilter) => typedError<Filter, string>(__TAURI_INVOKE("equipment.filters.update", { request })),
+	equipmentFiltersUpdate: (request: UpdateFilter) => typedError<Filter, string>(__TAURI_INVOKE("equipment_filters_update", { request })),
 	/**
 	 *  `equipment.filters.delete` — delete a filter by ID.
 	 * 
 	 *  # Errors
 	 *  Returns `Err(String)` if the filter is not found.
 	 */
-	equipmentFiltersDelete: (id: string) => typedError<null, string>(__TAURI_INVOKE("equipment.filters.delete", { id })),
+	equipmentFiltersDelete: (id: string) => typedError<null, string>(__TAURI_INVOKE("equipment_filters_delete", { id })),
 	/**
 	 *  `status.summary` — returns current library status overview.
 	 * 
 	 *  # Errors
 	 *  Returns `Err(String)` on failure; the stub never fails.
 	 */
-	statusSummary: () => typedError<StatusSummary, string>(__TAURI_INVOKE("status.summary")),
+	statusSummary: () => typedError<StatusSummary, string>(__TAURI_INVOKE("status_summary")),
 	/**
 	 *  `cleanup.policy.get` — returns the current cleanup policy.
 	 * 
 	 *  # Errors
 	 *  Returns `Err(String)` on failure; the stub never fails.
 	 */
-	cleanupPolicyGet: () => typedError<CleanupPolicy, string>(__TAURI_INVOKE("cleanup.policy.get")),
+	cleanupPolicyGet: () => typedError<CleanupPolicy, string>(__TAURI_INVOKE("cleanup_policy_get")),
 	/**
 	 *  `cleanup.policy.update` — update the cleanup policy.
 	 * 
 	 *  # Errors
 	 *  Returns `Err(String)` on failure; the stub never fails.
 	 */
-	cleanupPolicyUpdate: (request: UpdateCleanupPolicy) => typedError<CleanupPolicy, string>(__TAURI_INVOKE("cleanup.policy.update", { request })),
+	cleanupPolicyUpdate: (request: UpdateCleanupPolicy) => typedError<CleanupPolicy, string>(__TAURI_INVOKE("cleanup_policy_update", { request })),
 	/**
 	 *  `cleanup.scan` — scan a project for cleanup candidates.
 	 * 
@@ -943,21 +954,21 @@ export const commands = {
 	 *  # Errors
 	 *  Returns `Err(String)` on failure; the stub never fails.
 	 */
-	cleanupScan: (projectId: string) => typedError<CleanupScanResult, string>(__TAURI_INVOKE("cleanup.scan", { projectId })),
+	cleanupScan: (projectId: string) => typedError<CleanupScanResult, string>(__TAURI_INVOKE("cleanup_scan", { projectId })),
 	/**
 	 *  `calibration.tolerances.get` — returns current calibration matching tolerances.
 	 * 
 	 *  # Errors
 	 *  Returns `Err(String)` on failure; the stub never fails.
 	 */
-	calibrationTolerancesGet: () => typedError<CalibrationTolerances, string>(__TAURI_INVOKE("calibration.tolerances.get")),
+	calibrationTolerancesGet: () => typedError<CalibrationTolerances, string>(__TAURI_INVOKE("calibration_tolerances_get")),
 	/**
 	 *  `calibration.tolerances.update` — update calibration matching tolerances.
 	 * 
 	 *  # Errors
 	 *  Returns `Err(String)` on failure; the stub never fails.
 	 */
-	calibrationTolerancesUpdate: (request: UpdateCalibrationTolerances) => typedError<CalibrationTolerances, string>(__TAURI_INVOKE("calibration.tolerances.update", { request })),
+	calibrationTolerancesUpdate: (request: UpdateCalibrationTolerances) => typedError<CalibrationTolerances, string>(__TAURI_INVOKE("calibration_tolerances_update", { request })),
 	/**
 	 *  `inbox.scan` — legacy stub returning fixture data.
 	 * 
@@ -966,7 +977,7 @@ export const commands = {
 	 *  # Errors
 	 *  Never fails; always returns `Ok`.
 	 */
-	inboxScan: (rootId: string | null) => typedError<InboxScanResult, string>(__TAURI_INVOKE("inbox.scan", { rootId })),
+	inboxScan: (rootId: string | null) => typedError<InboxScanResult, string>(__TAURI_INVOKE("inbox_scan", { rootId })),
 	/**
 	 *  `inbox.scan.folder` — recursively scan a root directory, discover leaf
 	 *  FITS/video folders, upsert `InboxItem`s, and return a summary list.
@@ -974,7 +985,7 @@ export const commands = {
 	 *  # Errors
 	 *  Returns a string error if the root is not accessible.
 	 */
-	inboxScanFolder: (req: InboxScanFolderRequest) => typedError<InboxScanFolderResponse, string>(__TAURI_INVOKE("inbox.scan.folder", { req })),
+	inboxScanFolder: (req: InboxScanFolderRequest) => typedError<InboxScanFolderResponse, string>(__TAURI_INVOKE("inbox_scan_folder", { req })),
 	/**
 	 *  `inbox.classify` — classify an Inbox folder using IMAGETYP-only evidence.
 	 *  Idempotent unless `force_rescan: true`. Returns `contentSignature` for use
@@ -983,7 +994,7 @@ export const commands = {
 	 *  # Errors
 	 *  `inbox.item.not_found` | `metadata.unreadable`
 	 */
-	inboxClassify: (req: InboxClassifyRequest) => typedError<InboxClassifyResponse_Serialize, string>(__TAURI_INVOKE("inbox.classify", { req })),
+	inboxClassify: (req: InboxClassifyRequest) => typedError<InboxClassifyResponse_Serialize, string>(__TAURI_INVOKE("inbox_classify", { req })),
 	/**
 	 *  `inbox.confirm` — generate a reviewable plan from a classified Inbox item.
 	 * 
@@ -991,21 +1002,21 @@ export const commands = {
 	 *  `inbox.item.not_found` | `inbox.has.open.plan` | `classification.ambiguous`
 	 *  | `classification.stale` | `pattern.unset`
 	 */
-	inboxConfirm: (req: InboxConfirmRequest_Deserialize) => typedError<InboxConfirmResponse, string>(__TAURI_INVOKE("inbox.confirm", { req })),
+	inboxConfirm: (req: InboxConfirmRequest_Deserialize) => typedError<InboxConfirmResponse, string>(__TAURI_INVOKE("inbox_confirm", { req })),
 	/**
 	 *  `inbox.reclassify` — write manual frame-type overrides and re-aggregate.
 	 * 
 	 *  # Errors
 	 *  Returns `"inbox.item.not_found"`, `"inbox.has.open.plan"`, or `"file.not_found"`.
 	 */
-	inboxReclassify: (req: InboxReclassifyRequest) => typedError<InboxReclassifyResponse_Serialize, string>(__TAURI_INVOKE("inbox.reclassify", { req })),
+	inboxReclassify: (req: InboxReclassifyRequest) => typedError<InboxReclassifyResponse_Serialize, string>(__TAURI_INVOKE("inbox_reclassify", { req })),
 	/**
 	 *  `inventory.list` — return the grouped inventory ledger with optional filters.
 	 * 
 	 *  # Errors
 	 *  Returns `Err(String)` on database error.
 	 */
-	inventoryList: (req: InventoryListRequest_Deserialize) => typedError<InventoryListResponse_Serialize, string>(__TAURI_INVOKE("inventory.list", { req })),
+	inventoryList: (req: InventoryListRequest_Deserialize) => typedError<InventoryListResponse_Serialize, string>(__TAURI_INVOKE("inventory_list", { req })),
 	/**
 	 *  `inventory.session.review` — apply a session review-state transition.
 	 * 
@@ -1015,49 +1026,49 @@ export const commands = {
 	 *  # Errors
 	 *  Returns `Err(String)` on infrastructure failure.
 	 */
-	inventorySessionReview: (req: InventorySessionReviewRequest_Deserialize) => typedError<InventorySessionReviewResponse_Serialize, string>(__TAURI_INVOKE("inventory.session.review", { req })),
+	inventorySessionReview: (req: InventorySessionReviewRequest_Deserialize) => typedError<InventorySessionReviewResponse_Serialize, string>(__TAURI_INVOKE("inventory_session_review", { req })),
 	/**
 	 *  `ingestion.settings.get` — returns current ingestion/scan settings.
 	 * 
 	 *  # Errors
 	 *  Returns `Err(String)` on failure; the stub never fails.
 	 */
-	ingestionSettingsGet: () => typedError<IngestionSettings, string>(__TAURI_INVOKE("ingestion.settings.get")),
+	ingestionSettingsGet: () => typedError<IngestionSettings, string>(__TAURI_INVOKE("ingestion_settings_get")),
 	/**
 	 *  `ingestion.settings.update` — update ingestion/scan settings.
 	 * 
 	 *  # Errors
 	 *  Returns `Err(String)` on failure; the stub never fails.
 	 */
-	ingestionSettingsUpdate: (request: UpdateIngestionSettings) => typedError<IngestionSettings, string>(__TAURI_INVOKE("ingestion.settings.update", { request })),
+	ingestionSettingsUpdate: (request: UpdateIngestionSettings) => typedError<IngestionSettings, string>(__TAURI_INVOKE("ingestion_settings_update", { request })),
 	/**
 	 *  `tools.launch` — launch the configured processing tool for a project.
 	 * 
 	 *  # Errors
 	 *  Returns `Err(String)` on infrastructure failure.
 	 */
-	toolsLaunch: (request: ToolLaunchRequest) => typedError<ToolLaunchResponse, string>(__TAURI_INVOKE("tools.launch", { request })),
+	toolsLaunch: (request: ToolLaunchRequest) => typedError<ToolLaunchResponse, string>(__TAURI_INVOKE("tools_launch", { request })),
 	/**
 	 *  `tools.list` — list all tool profiles joined with settings state.
 	 * 
 	 *  # Errors
 	 *  Returns `Err(String)` on DB failure.
 	 */
-	toolsList: () => typedError<ToolProfileListResponse, string>(__TAURI_INVOKE("tools.list")),
+	toolsList: () => typedError<ToolProfileListResponse, string>(__TAURI_INVOKE("tools_list")),
 	/**
 	 *  `tools.update` — save `executable_path` / enabled for a tool.
 	 * 
 	 *  # Errors
 	 *  Returns `Err(String)` on DB failure.
 	 */
-	toolsUpdate: (request: UpdateProcessingTool) => typedError<ToolProfileSummary, string>(__TAURI_INVOKE("tools.update", { request })),
+	toolsUpdate: (request: UpdateProcessingTool) => typedError<ToolProfileSummary, string>(__TAURI_INVOKE("tools_update", { request })),
 	/**
 	 *  `tools.validate_path` — validate an executable path without spawning.
 	 * 
 	 *  # Errors
 	 *  Returns `Err(String)` on failure; this command never fails in practice.
 	 */
-	toolsValidatePath: (path: string) => typedError<ToolPathValidation, string>(__TAURI_INVOKE("tools.validate_path", { path })),
+	toolsValidatePath: (path: string) => typedError<ToolPathValidation, string>(__TAURI_INVOKE("tools_validate_path", { path })),
 	/**
 	 *  `tools.discover` — auto-detect installed tool executables for the current OS.
 	 * 
@@ -1066,7 +1077,7 @@ export const commands = {
 	 *  # Errors
 	 *  Returns `Err(String)` on unexpected failure.
 	 */
-	toolsDiscover: (request: ToolDiscoverRequest) => typedError<ToolDiscoverResponse, string>(__TAURI_INVOKE("tools.discover", { request })),
+	toolsDiscover: (request: ToolDiscoverRequest) => typedError<ToolDiscoverResponse, string>(__TAURI_INVOKE("tools_discover", { request })),
 	/**
 	 *  `artifact.list` — list processing artifacts for a project.
 	 * 
@@ -1076,7 +1087,7 @@ export const commands = {
 	 *  # Errors
 	 *  Returns `Err(String)` on DB failure.
 	 */
-	artifactList: (request: ArtifactListRequest) => typedError<ArtifactListResponse, string>(__TAURI_INVOKE("artifact.list", { request })),
+	artifactList: (request: ArtifactListRequest) => typedError<ArtifactListResponse, string>(__TAURI_INVOKE("artifact_list", { request })),
 	/**
 	 *  `artifact.classify` — apply or clear a manual classification override.
 	 * 
@@ -1085,14 +1096,14 @@ export const commands = {
 	 *  # Errors
 	 *  Returns `Err(String)` on DB failure or if the artifact is not found.
 	 */
-	artifactClassify: (request: ArtifactClassifyRequest) => typedError<ArtifactClassifyResponse, string>(__TAURI_INVOKE("artifact.classify", { request })),
+	artifactClassify: (request: ArtifactClassifyRequest) => typedError<ArtifactClassifyResponse_Serialize, string>(__TAURI_INVOKE("artifact_classify", { request })),
 	/**
 	 *  `artifact.mark_resolved` — mark a `missing` artifact as user-resolved.
 	 * 
 	 *  # Errors
 	 *  Returns `Err(String)` on DB failure.
 	 */
-	artifactMarkResolved: (request: ArtifactMarkResolvedRequest) => typedError<null, string>(__TAURI_INVOKE("artifact.mark_resolved", { request })),
+	artifactMarkResolved: (request: ArtifactMarkResolvedRequest) => typedError<null, string>(__TAURI_INVOKE("artifact_mark_resolved", { request })),
 	/**
 	 *  `project.manifest.list` — list manifest snapshots for a project.
 	 * 
@@ -1102,7 +1113,7 @@ export const commands = {
 	 *  # Errors
 	 *  Returns `Err(ManifestOpError)` on database failure.
 	 */
-	projectManifestList: (request: ManifestListRequest_Deserialize) => typedError<ManifestListResponse_Serialize, ManifestOpError_Serialize>(__TAURI_INVOKE("project.manifest.list", { request })),
+	manifestList: (request: ManifestListRequest_Deserialize) => typedError<ManifestListResponse_Serialize, ManifestOpError_Serialize>(__TAURI_INVOKE("manifest_list", { request })),
 	/**
 	 *  `project.manifest.get` — fetch one manifest with its full structured body.
 	 * 
@@ -1110,7 +1121,7 @@ export const commands = {
 	 *  Returns `Err(ManifestOpError)` with code `"manifest.not_found"` when the
 	 *  manifest does not exist.
 	 */
-	projectManifestGet: (request: ManifestGetRequest) => typedError<ManifestGetResponse_Serialize, ManifestOpError_Serialize>(__TAURI_INVOKE("project.manifest.get", { request })),
+	manifestGet: (request: ManifestGetRequest) => typedError<ManifestGetResponse_Serialize, ManifestOpError_Serialize>(__TAURI_INVOKE("manifest_get", { request })),
 	/**
 	 *  `project.note.get` — fetch the current notes body for a project.
 	 * 
@@ -1120,7 +1131,7 @@ export const commands = {
 	 *  # Errors
 	 *  Returns `Err(ManifestOpError)` with code `"internal"` on database failure.
 	 */
-	projectNoteGet: (req: ProjectNoteGetRequest) => typedError<ProjectNoteGetResult, ManifestOpError_Serialize>(__TAURI_INVOKE("project.note.get", { req })),
+	noteGet: (req: ProjectNoteGetRequest) => typedError<ProjectNoteGetResult, ManifestOpError_Serialize>(__TAURI_INVOKE("note_get", { req })),
 	/**
 	 *  `project.note.update` — replace the project's notes body.
 	 * 
@@ -1131,7 +1142,7 @@ export const commands = {
 	 *  Returns `Err(ManifestOpError)` with codes: `"project.not_found"`,
 	 *  `"project.read_only"`, `"note.content_too_large"`.
 	 */
-	projectNoteUpdate: (req: ProjectNoteUpdateRequest) => typedError<ProjectNoteUpdateResult, ManifestOpError_Serialize>(__TAURI_INVOKE("project.note.update", { req })),
+	noteUpdate: (req: ProjectNoteUpdateRequest) => typedError<ProjectNoteUpdateResult, ManifestOpError_Serialize>(__TAURI_INVOKE("note_update", { req })),
 	/**
 	 *  `project.manifest.reveal_in_os` — open the manifest file's folder in the
 	 *  OS file manager.
@@ -1143,7 +1154,7 @@ export const commands = {
 	 *  # Errors
 	 *  Returns `Err(String)` when the path does not exist or the OS open fails.
 	 */
-	projectManifestRevealInOs: (request: ManifestRevealRequest) => typedError<null, string>(__TAURI_INVOKE("project.manifest.reveal_in_os", { request })),
+	manifestRevealInOs: (request: ManifestRevealRequest) => typedError<null, string>(__TAURI_INVOKE("manifest_reveal_in_os", { request })),
 	/**
 	 *  `preparedview.list` — list all prepared source views for a project.
 	 * 
@@ -1152,7 +1163,7 @@ export const commands = {
 	 *  Returns `Err(ContractError)` on database failure or if the project does not
 	 *  exist.
 	 */
-	preparedviewList: (projectId: string) => typedError<PreparedViewListResponse, string>(__TAURI_INVOKE("preparedview.list", { projectId })),
+	preparedviewList: (projectId: string) => typedError<PreparedViewListResponse, string>(__TAURI_INVOKE("preparedview_list", { projectId })),
 	/**
 	 *  `preparedview.remove` — create a `ViewRemovalPlan` for a prepared source
 	 *  view.
@@ -1171,7 +1182,7 @@ export const commands = {
 	 *  - `view.unsupported_kind`  — view uses `hardlink` (deferred to v1.x).
 	 *  - `lifecycle.read_only`    — owning project is `archived`.
 	 */
-	preparedviewRemove: (viewId: string) => typedError<PreparedViewRemoveResponse, string>(__TAURI_INVOKE("preparedview.remove", { viewId })),
+	preparedviewRemove: (viewId: string) => typedError<PreparedViewRemoveResponse, string>(__TAURI_INVOKE("preparedview_remove", { viewId })),
 	/**
 	 *  `preparedview.regenerate` — create a `ViewRegenerationPlan` for a
 	 *  previously prepared (possibly removed) source view.
@@ -1186,7 +1197,7 @@ export const commands = {
 	 *  - `view.unsupported_kind`  — view uses `hardlink` (deferred to v1.x).
 	 *  - `lifecycle.read_only`    — owning project is `archived`.
 	 */
-	preparedviewRegenerate: (viewId: string) => typedError<PreparedViewRegenerateResponse, string>(__TAURI_INVOKE("preparedview.regenerate", { viewId })),
+	preparedviewRegenerate: (viewId: string) => typedError<PreparedViewRegenerateResponse, string>(__TAURI_INVOKE("preparedview_regenerate", { viewId })),
 };
 
 /* Types */
@@ -1288,9 +1299,41 @@ export type ArtifactClassifyRequest = {
 	reason: string | null,
 };
 
-/**  Response DTO for `artifact.classify`. */
-export type ArtifactClassifyResponse = {
-	artifact: ArtifactSummary,
+/**
+ *  Response DTO for `artifact.classify` (flat contract shape, spec 033 T028).
+ * 
+ *  Canonical shape is flat fields matching the published contract.
+ *  The prior nested `{ artifact: ArtifactSummary }` envelope is replaced
+ *  so the response matches `artifact-events.md`.
+ */
+export type ArtifactClassifyResponse = ArtifactClassifyResponse_Serialize | ArtifactClassifyResponse_Deserialize;
+
+/**
+ *  Response DTO for `artifact.classify` (flat contract shape, spec 033 T028).
+ * 
+ *  Canonical shape is flat fields matching the published contract.
+ *  The prior nested `{ artifact: ArtifactSummary }` envelope is replaced
+ *  so the response matches `artifact-events.md`.
+ */
+export type ArtifactClassifyResponse_Deserialize = {
+	artifactId: string,
+	classification: string,
+	confidence: number | null,
+	classifiedAt: string,
+};
+
+/**
+ *  Response DTO for `artifact.classify` (flat contract shape, spec 033 T028).
+ * 
+ *  Canonical shape is flat fields matching the published contract.
+ *  The prior nested `{ artifact: ArtifactSummary }` envelope is replaced
+ *  so the response matches `artifact-events.md`.
+ */
+export type ArtifactClassifyResponse_Serialize = {
+	artifactId: string,
+	classification: string,
+	confidence?: number | null,
+	classifiedAt: string,
 };
 
 /**  Request DTO for `artifact.list` (spec 012 T020/TX01). */
@@ -2713,7 +2756,7 @@ export type LinkedProjectRef = {
 /**
  *  A projected log entry sent to the frontend.
  * 
- *  Stable shape; `contractVersion` is always `"1"` for this spec version (H1).
+ *  Stable shape; `contractVersion` is always `"2.0.0"` for this spec version (H1).
  */
 export type LogEntry = LogEntry_Serialize | LogEntry_Deserialize;
 
@@ -2728,7 +2771,7 @@ export type LogEntrySource = "audit" | "diagnostic" | "catalog" | "plan" | "work
 /**
  *  A projected log entry sent to the frontend.
  * 
- *  Stable shape; `contractVersion` is always `"1"` for this spec version (H1).
+ *  Stable shape; `contractVersion` is always `"2.0.0"` for this spec version (H1).
  */
 export type LogEntry_Deserialize = {
 	/**
@@ -2736,7 +2779,7 @@ export type LogEntry_Deserialize = {
 	 *  `dia:<monotonic_n>` for diagnostic entries (A1).
 	 */
 	id: string,
-	/**  Schema version. Always `"1"`. */
+	/**  Schema version. Always `"2.0.0"`. */
 	contractVersion: string,
 	/**  ISO-8601 UTC timestamp at server-side emission. */
 	time: string,
@@ -2761,7 +2804,7 @@ export type LogEntry_Deserialize = {
 /**
  *  A projected log entry sent to the frontend.
  * 
- *  Stable shape; `contractVersion` is always `"1"` for this spec version (H1).
+ *  Stable shape; `contractVersion` is always `"2.0.0"` for this spec version (H1).
  */
 export type LogEntry_Serialize = {
 	/**
@@ -2769,7 +2812,7 @@ export type LogEntry_Serialize = {
 	 *  `dia:<monotonic_n>` for diagnostic entries (A1).
 	 */
 	id: string,
-	/**  Schema version. Always `"1"`. */
+	/**  Schema version. Always `"2.0.0"`. */
 	contractVersion: string,
 	/**  ISO-8601 UTC timestamp at server-side emission. */
 	time: string,
@@ -2796,6 +2839,8 @@ export type LogExportResponse = LogExportResponse_Serialize | LogExportResponse_
 
 /**  Success response from `log.export`. */
 export type LogExportResponse_Deserialize = {
+	/**  Outcome discriminator. Always `"success"` when the Tauri command returns `Ok`. */
+	status: string,
 	contractVersion: string,
 	requestId: string,
 	/**  Absolute path of the written file. */
@@ -2808,6 +2853,8 @@ export type LogExportResponse_Deserialize = {
 
 /**  Success response from `log.export`. */
 export type LogExportResponse_Serialize = {
+	/**  Outcome discriminator. Always `"success"` when the Tauri command returns `Ok`. */
+	status: string,
 	contractVersion: string,
 	requestId: string,
 	/**  Absolute path of the written file. */
@@ -3622,6 +3669,15 @@ export type PreparedSourceTransitionRequest_Serialize = {
 	actor: TransitionActor,
 };
 
+/**  Detail of a single view item. */
+export type PreparedViewItemDetail = {
+	id: string,
+	inventoryItemId: string,
+	viewRelativePath: string,
+	materialization: string,
+	lastObservedState: string,
+};
+
 /**  Response: list of view summaries. */
 export type PreparedViewListResponse = {
 	views: PreparedViewSummary[],
@@ -3665,6 +3721,11 @@ export type PreparedViewSummary = {
 	createdAt: string,
 	removedAt: string | null,
 	itemCount: number,
+	/**
+	 *  Per-item inventory references (FR-033 / T078).
+	 *  Each entry is the `view_relative_path` recorded for that inventory item.
+	 */
+	items: PreparedViewItemDetail[],
 };
 
 /**
@@ -3799,7 +3860,10 @@ export type ProjectCreateResult = ProjectCreateResult_Serialize | ProjectCreateR
 /**  Successful result from `projects.create`. */
 export type ProjectCreateResult_Deserialize = {
 	projectId: string,
-	/**  Always `"setup_incomplete"` (invariant per data-model.md). */
+	/**
+	 *  Initial lifecycle state. `"setup_incomplete"` when the project has no sources at create time;
+	 *  may auto-transition to `"ready"` when sources are provided in the create request (FR-008).
+	 */
 	lifecycle: string,
 	planId: string | null,
 	channels: ProjectChannelDto_Deserialize[],
@@ -3810,7 +3874,10 @@ export type ProjectCreateResult_Deserialize = {
 /**  Successful result from `projects.create`. */
 export type ProjectCreateResult_Serialize = {
 	projectId: string,
-	/**  Always `"setup_incomplete"` (invariant per data-model.md). */
+	/**
+	 *  Initial lifecycle state. `"setup_incomplete"` when the project has no sources at create time;
+	 *  may auto-transition to `"ready"` when sources are provided in the create request (FR-008).
+	 */
 	lifecycle: string,
 	planId?: string | null,
 	channels: ProjectChannelDto_Serialize[],
@@ -3841,6 +3908,10 @@ export type ProjectDetailDto_Deserialize = {
 	 *  spec-013 target association.
 	 */
 	canonicalTarget: ProjectCanonicalTarget_Deserialize | null,
+	/**  FR-020: typed blocked reason kind when lifecycle == "blocked". Null otherwise. */
+	blockedReasonKind: string | null,
+	/**  FR-020: free-form note for the blocked reason. */
+	blockedReasonNote: string | null,
 };
 
 /**  A project detail (sources + channels included). */
@@ -3863,6 +3934,10 @@ export type ProjectDetailDto_Serialize = {
 	 *  spec-013 target association.
 	 */
 	canonicalTarget?: ProjectCanonicalTarget_Serialize | null,
+	/**  FR-020: typed blocked reason kind when lifecycle == "blocked". Null otherwise. */
+	blockedReasonKind?: string | null,
+	/**  FR-020: free-form note for the blocked reason. */
+	blockedReasonNote?: string | null,
 };
 
 /**  Request for `project.note.get`. */
@@ -4017,6 +4092,10 @@ export type ProjectSummaryDto_Deserialize = {
 	sourceCount: number,
 	createdAt: string,
 	updatedAt: string,
+	/**  FR-020: typed blocked reason kind when lifecycle == "blocked". Null otherwise. */
+	blockedReasonKind: string | null,
+	/**  FR-020: free-form note for the blocked reason. */
+	blockedReasonNote: string | null,
 };
 
 /**  A project summary for list views (spec 008 read surface). */
@@ -4031,6 +4110,10 @@ export type ProjectSummaryDto_Serialize = {
 	sourceCount: number,
 	createdAt: string,
 	updatedAt: string,
+	/**  FR-020: typed blocked reason kind when lifecycle == "blocked". Null otherwise. */
+	blockedReasonKind?: string | null,
+	/**  FR-020: free-form note for the blocked reason. */
+	blockedReasonNote?: string | null,
 };
 
 /**

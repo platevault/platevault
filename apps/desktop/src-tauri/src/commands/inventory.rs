@@ -26,7 +26,7 @@ use crate::commands::lifecycle::AppState;
 /// # Errors
 /// Returns `Err(String)` on database error.
 #[tauri::command]
-#[specta::specta(rename = "inventory.list")]
+#[specta::specta]
 pub async fn inventory_list(
     req: InventoryListRequest,
     pool: State<'_, SqlitePool>,
@@ -58,7 +58,7 @@ pub async fn inventory_list(
 /// # Errors
 /// Returns `Err(String)` on infrastructure failure.
 #[tauri::command]
-#[specta::specta(rename = "inventory.session.review")]
+#[specta::specta]
 pub async fn inventory_session_review(
     req: InventorySessionReviewRequest,
     pool: State<'_, SqlitePool>,

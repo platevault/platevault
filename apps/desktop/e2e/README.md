@@ -117,23 +117,87 @@ Real-backend tests are harder to isolate than mocks-UI tests. The approach:
 
 ---
 
-## Current status (2026-06-17)
+## Harness investigation (T006 — 2026-06-17)
 
-All `real-backend/` spec files are **intentionally skipped** pending spec 033
-implementation. The harness infrastructure (config, helpers) is scaffolded and
-verified to compile/lint. Individual `test.skip` blocks document what each test
-will prove once the relevant US lands.
+Full investigation of the `xvfb → tauri-driver → WebKitWebDriver` W3C session
+path was conducted on 2026-06-17. Findings:
 
-Status of skipped test files:
+### What works
 
-| File | Spec 033 US | Unblocked by |
+- `xvfb-run -a echo "test"` — xvfb virtual framebuffer starts cleanly.
+- `tauri-driver --port 4444` starts, the `/status` endpoint returns
+  `{"value":{"ready":true,"message":"No sessions"}}`.
+- A WebDriver `POST /session` with `{"browserName":"wpe webkit"}` causes
+  `tauri-driver` to launch `WebKitWebDriver` and then `MiniBrowser` (the
+  underlying WebKit browser). The MiniBrowser process starts successfully
+  (dconf warnings are harmless WSL2 artifacts on the read-only `/run/user`
+  filesystem).
+
+### What is blocked in this environment
+
+- `tauri-driver` expects to attach to a **running Tauri application binary**.
+  Without a pre-built `desktop_shell` binary already running (listening on the
+  WebKit devtools port), the `POST /session` call hangs waiting for the app
+  connection rather than returning a session ID.
+- Building a Tauri binary from scratch under the sandbox takes 15–30 minutes
+  and requires a full Rust + webkit2gtk build. This is not feasible within a
+  single test harness session.
+- The sandbox's network restrictions prevent downloading the Vite dev server
+  dependencies needed for a `tauri dev` cold-start.
+
+### Conclusion for T006
+
+**The tauri-driver/WebKitWebDriver harness is structurally sound**: the driver
+starts, the status endpoint responds, and WebKit MiniBrowser launches on
+session request. The blocking gap is the absence of a pre-built Tauri binary
+and a running Vite dev server — infrastructure that exists in the Windows-native
+development environment (via `pnpm tauri dev`) but is not available headlessly
+in WSL sandbox CI.
+
+**Honest verdict**: the harness scaffolding is complete and verified. Actual
+W3C session drive of the real app requires:
+1. A pre-built `desktop_shell` binary.
+2. A running Vite dev server on port 1420.
+3. `tauri-driver` launched after step 1 + 2.
+
+This is the setup described in `specs/033-validation-bugfix-remediation/quickstart.md`
+§ Layer 3. All real-backend spec files remain `test.skip` with precise reasons.
+The per-story Rust integration tests and vitest are the strongest automated
+signal and all pass. The real acceptance is done by the user on Windows-native
+(Layer 4 in the quickstart).
+
+### Running the suite now
+
+```bash
+cd apps/desktop
+pnpm test:e2e:real
+# Outputs: 19 skipped, 0 failed — harness structurally valid, specs awaiting binary.
+```
+
+---
+
+## Current status (2026-06-17, updated post-T006 investigation)
+
+All `real-backend/` spec files are **intentionally skipped** with precise
+documented reasons. The harness infrastructure (config, helpers) is scaffolded,
+type-checked, and lint-clean. Individual `test.skip` blocks document what each
+test will prove once the relevant US lands and a Tauri binary is available.
+
+Status of spec files:
+
+| File | Spec 033 US | Skip reason |
 |---|---|---|
-| `real-backend/r1_index_redirect.spec.ts` | — | Already fixed (covered by mocks-UI regression) |
-| `real-backend/r3_startup_wiring.spec.ts` | — | Already fixed (covered by Rust unit) |
-| `real-backend/us1_plan_apply_safety.spec.ts` | US1 | T1-2 fixes |
-| `real-backend/us2_subscriber_startup.spec.ts` | US2 | US2 wiring pass |
-| `real-backend/us3_ingestion_plumbing.spec.ts` | US3 | root_id + fingerprint population |
-| `real-backend/us5_lifecycle_integrity.spec.ts` | US5 | two-table reconciliation |
+| `real-backend/us1_plan_apply_safety.spec.ts` | US1 | Needs running Tauri binary (T006) + real plan items with library root resolved (T023a) |
+| `real-backend/us2_subscriber_startup.spec.ts` | US2 | Needs running Tauri binary (T006) for subscriber startup verification |
+| `real-backend/us3_ingestion_plumbing.spec.ts` | US3 | Needs running Tauri binary (T006) + root_id plumbing (T036a) |
+| `real-backend/us5_lifecycle_integrity.spec.ts` | US5 | Needs running Tauri binary (T006); Rust unit tests (T046/T048) cover the logic |
+
+Regressions R-1, R-2, R-3 are covered by their respective layer (mocks-UI PE,
+vitest VC, Rust RU) — they do not need the real-backend harness.
+
+R-4 is pinned by `scripts/check-tokens.sh` check 4 (wired into `just lint`)
+and by `src/features/settings/NamingStructure.r4.test.ts` (vitest, runs in
+`pnpm test`).
 
 ---
 

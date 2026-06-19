@@ -7,6 +7,7 @@
  * Right bar  : Confirm / Split action wired to inbox.confirm → plan review.
  */
 
+import { useState } from 'react';
 import { useNavigate, useSearch } from '@tanstack/react-router';
 import { PageShell, ListDetailLayout, TopActionBar } from '@/components';
 import { Btn, EmptyState } from '@/ui';
@@ -48,6 +49,8 @@ export function InboxPage() {
   );
 
   const { confirm, loading: confirmLoading } = useInboxConfirm();
+  // FR-032: destructive-destination choice, defaults to 'archive' (Constitution §II).
+  const [destructiveDestination, setDestructiveDestination] = useState<'archive' | 'trash'>('archive');
 
   const handleConfirm = async () => {
     if (!selectedItem || !classification) return;
@@ -58,6 +61,7 @@ export function InboxPage() {
         action,
         contentSignature: classification.contentSignature,
         rootAbsolutePath: DEV_ROOT_PATH,
+        destructiveDestination,
       });
       addToast({
         message: `Plan created (${result.itemsTotal} items). Review before applying.`,
@@ -134,6 +138,8 @@ export function InboxPage() {
             hasOpenPlan={hasOpenPlan}
             confirmLoading={confirmLoading}
             canConfirm={canConfirm}
+            destructiveDestination={destructiveDestination}
+            onDestructiveDestinationChange={setDestructiveDestination}
             onConfirm={handleConfirm}
             onOpenExistingPlan={() =>
               navigate({ to: '/archive', search: { selected: undefined } as never })

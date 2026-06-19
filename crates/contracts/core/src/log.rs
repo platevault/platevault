@@ -11,7 +11,7 @@ use serde::{Deserialize, Serialize};
 use specta::Type;
 
 /// Schema version for this `LogEntry` shape (H1).
-pub const LOG_ENTRY_CONTRACT_VERSION: &str = "1";
+pub const LOG_ENTRY_CONTRACT_VERSION: &str = "2.0.0";
 
 /// Source of a log entry: derived from the spec 002 event-bus topic prefix.
 ///
@@ -137,14 +137,14 @@ impl LogLevel {
 
 /// A projected log entry sent to the frontend.
 ///
-/// Stable shape; `contractVersion` is always `"1"` for this spec version (H1).
+/// Stable shape; `contractVersion` is always `"2.0.0"` for this spec version (H1).
 #[derive(Clone, Debug, PartialEq, Serialize, Deserialize, Type)]
 #[serde(rename_all = "camelCase")]
 pub struct LogEntry {
     /// Stable prefixed id: `aud:<event_id>` for audit-sourced entries,
     /// `dia:<monotonic_n>` for diagnostic entries (A1).
     pub id: String,
-    /// Schema version. Always `"1"`.
+    /// Schema version. Always `"2.0.0"`.
     pub contract_version: String,
     /// ISO-8601 UTC timestamp at server-side emission.
     pub time: String,
@@ -415,6 +415,8 @@ pub struct LogExportRequest {
 #[derive(Clone, Debug, PartialEq, Serialize, Deserialize, Type)]
 #[serde(rename_all = "camelCase")]
 pub struct LogExportResponse {
+    /// Outcome discriminator. Always `"success"` when the Tauri command returns `Ok`.
+    pub status: String,
     pub contract_version: String,
     pub request_id: String,
     /// Absolute path of the written file.
@@ -536,7 +538,7 @@ mod tests {
         let payload = json!({ "plan_id": "plan-abc", "actor": "user", "approved_at": "2026-01-01T00:00:00Z" });
         let entry = LogEntry::from_event_bus(42, "plan.approved", "2026-01-01T00:00:00Z", &payload);
         assert_eq!(entry.id, "aud:42");
-        assert_eq!(entry.contract_version, "1");
+        assert_eq!(entry.contract_version, "2.0.0");
         assert_eq!(entry.source, LogEntrySource::Plan);
         assert_eq!(entry.entity_type, Some("plan".to_owned()));
         assert_eq!(entry.entity_id, Some("plan-abc".to_owned()));
@@ -587,7 +589,7 @@ mod tests {
     #[test]
     fn log_stream_event_deserialises_truncated_fields() {
         let json_str = r#"{
-            "contractVersion": "1",
+            "contractVersion": "2.0.0",
             "added": [],
             "truncated": true,
             "truncatedCount": 42

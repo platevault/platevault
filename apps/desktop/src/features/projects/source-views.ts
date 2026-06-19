@@ -23,6 +23,15 @@ export type ViewState =
 /** View strategy (v1: symlink | junction | copy; hardlink reserved). */
 export type ViewKind = 'symlink' | 'junction' | 'copy' | 'hardlink';
 
+/** Per-item detail within a prepared source view (FR-033 / T078). */
+export interface PreparedViewItemDetail {
+  id: string;
+  inventoryItemId: string;
+  viewRelativePath: string;
+  materialization: string;
+  lastObservedState: string;
+}
+
 /** Summary of a prepared source view as returned by `preparedview.list`. */
 export interface PreparedViewSummary {
   id: string;
@@ -34,6 +43,8 @@ export interface PreparedViewSummary {
   createdAt: string;
   removedAt?: string;
   itemCount: number;
+  /** Per-item inventory references (FR-033 / T078). */
+  items: PreparedViewItemDetail[];
 }
 
 /** Response from `preparedview.list`. */

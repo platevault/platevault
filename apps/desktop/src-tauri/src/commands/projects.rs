@@ -42,7 +42,7 @@ use crate::commands::lifecycle::AppState;
 ///
 /// Returns `Err(String)` on database failure.
 #[tauri::command]
-#[specta::specta(rename = "projects.list")]
+#[specta::specta]
 pub async fn projects_list(
     state: State<'_, AppState>,
     _filters: Option<JsonAny>,
@@ -59,7 +59,7 @@ pub async fn projects_list(
 /// Returns `Err(String)` with `"project.not_found"` when the project does not
 /// exist.
 #[tauri::command]
-#[specta::specta(rename = "projects.get")]
+#[specta::specta]
 pub async fn projects_get(
     state: State<'_, AppState>,
     id: String,
@@ -75,7 +75,7 @@ pub async fn projects_get(
 ///
 /// Returns `Err(String)` with the error code on validation or database failure.
 #[tauri::command]
-#[specta::specta(rename = "projects.create")]
+#[specta::specta]
 pub async fn projects_create(
     state: State<'_, AppState>,
     req: ProjectCreateRequest,
@@ -91,7 +91,7 @@ pub async fn projects_create(
 ///
 /// Returns `Err(String)` on validation failure or when the project is not found.
 #[tauri::command]
-#[specta::specta(rename = "projects.update")]
+#[specta::specta]
 pub async fn projects_update(
     state: State<'_, AppState>,
     req: ProjectUpdateRequest,
@@ -107,7 +107,7 @@ pub async fn projects_update(
 ///
 /// Returns `Err(String)` on validation failure or duplicate link.
 #[tauri::command]
-#[specta::specta(rename = "projects.source.add")]
+#[specta::specta]
 pub async fn projects_source_add(
     state: State<'_, AppState>,
     req: ProjectSourceAddRequest,
@@ -123,7 +123,7 @@ pub async fn projects_source_add(
 ///
 /// Returns `Err(String)` when lifecycle is locked or source not found.
 #[tauri::command]
-#[specta::specta(rename = "projects.source.remove")]
+#[specta::specta]
 pub async fn projects_source_remove(
     state: State<'_, AppState>,
     req: ProjectSourceRemoveRequest,
@@ -139,7 +139,7 @@ pub async fn projects_source_remove(
 ///
 /// Returns `Err(String)` when the project is not found or archived.
 #[tauri::command]
-#[specta::specta(rename = "projects.channels.reinfer")]
+#[specta::specta]
 pub async fn projects_channels_reinfer(
     state: State<'_, AppState>,
     req: ProjectChannelsReinferRequest,
@@ -155,7 +155,7 @@ pub async fn projects_channels_reinfer(
 ///
 /// Returns `Err(String)` when the project is not found.
 #[tauri::command]
-#[specta::specta(rename = "projects.channels.dismiss_drift")]
+#[specta::specta]
 pub async fn projects_channels_dismiss_drift(
     state: State<'_, AppState>,
     req: ProjectChannelsDismissDriftRequest,
@@ -175,7 +175,7 @@ pub async fn projects_channels_dismiss_drift(
 ///
 /// Returns `Err(String)` on failure; the stub never fails.
 #[tauri::command]
-#[specta::specta(rename = "projects.create_plan")]
+#[specta::specta]
 pub async fn projects_create_plan(wizard_state: JsonAny) -> Result<PlanDetail, String> {
     tracing::debug!("stub: projects.create_plan wizard_state={wizard_state:?}");
     Ok(PlanDetail {

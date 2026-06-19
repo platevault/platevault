@@ -14,7 +14,7 @@ use contracts_core::JsonAny;
 /// # Errors
 /// Returns `Err(String)` on failure; the stub never fails.
 #[tauri::command]
-#[specta::specta(rename = "preferences.get")]
+#[specta::specta]
 pub async fn preferences_get() -> Result<AppPreferences, String> {
     tracing::debug!("stub: preferences.get");
     Ok(AppPreferences {
@@ -34,7 +34,7 @@ pub async fn preferences_get() -> Result<AppPreferences, String> {
 /// # Errors
 /// Returns `Err(String)` on failure; the stub never fails.
 #[tauri::command]
-#[specta::specta(rename = "preferences.set")]
+#[specta::specta]
 pub async fn preferences_set(key: String, value: JsonAny) -> Result<(), String> {
     tracing::debug!("stub: preferences.set key={key} value={value:?}");
     Ok(())

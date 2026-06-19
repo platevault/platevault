@@ -141,10 +141,17 @@ export function useCalibrationAssign(): UseAssignState {
   return { assigning, result, assign };
 }
 
-// ── Settings: prefill_suggestion ─────────────────────────────────────────────
+// ── Settings: prefill_suggestion + aging threshold ───────────────────────────
 
-export function useCalibrationSettings(): { prefillSuggestion: boolean } {
+/** Default aging threshold in days — matches SettingsState::default() on Rust side. */
+export const DEFAULT_AGING_THRESHOLD_DAYS = 90;
+
+export function useCalibrationSettings(): {
+  prefillSuggestion: boolean;
+  agingThresholdDays: number;
+} {
   const [prefillSuggestion, setPrefillSuggestion] = useState(true);
+  const [agingThresholdDays, setAgingThresholdDays] = useState(DEFAULT_AGING_THRESHOLD_DAYS);
 
   useEffect(() => {
     getSettings({ scope: 'calibration' })
@@ -153,11 +160,14 @@ export function useCalibrationSettings(): { prefillSuggestion: boolean } {
         if (typeof v['calibration.prefill_suggestion'] === 'boolean') {
           setPrefillSuggestion(v['calibration.prefill_suggestion']);
         }
+        if (typeof v['calibration.aging_threshold_days'] === 'number') {
+          setAgingThresholdDays(v['calibration.aging_threshold_days'] as number);
+        }
       })
       .catch(() => {
-        // Backend unavailable — keep default.
+        // Backend unavailable — keep defaults.
       });
   }, []);
 
-  return { prefillSuggestion };
+  return { prefillSuggestion, agingThresholdDays };
 }

@@ -34,6 +34,11 @@ pub struct ProjectRow {
     pub channel_drift: bool,
     pub created_at: String,
     pub updated_at: String,
+    /// FR-020: typed blocked reason kind (migration 0037).
+    /// Populated when lifecycle == "blocked"; NULL otherwise.
+    pub blocked_reason_kind: Option<String>,
+    /// FR-020: free-form blocked reason note (migration 0037).
+    pub blocked_reason_note: Option<String>,
 }
 
 /// Flat row from the `project_sources` table.
@@ -87,6 +92,24 @@ pub struct InsertProjectSource<'a> {
     pub linked_at: &'a str,
 }
 
+// ── Type aliases for complex query row types ──────────────────────────────────
+
+/// Row tuple returned by `get_project` and `list_projects` queries.
+/// Factored out to satisfy clippy::type_complexity.
+type ProjectRowTuple = (
+    String,
+    String,
+    String,
+    String,
+    String,
+    Option<String>,
+    i64,
+    String,
+    String,
+    Option<String>,
+    Option<String>,
+);
+
 // ── projects CRUD ─────────────────────────────────────────────────────────────
 
 /// Insert a new project row. Returns `DbError::Database` (UNIQUE violation) when
@@ -122,17 +145,28 @@ pub async fn insert_project(pool: &SqlitePool, data: &InsertProject<'_>) -> DbRe
 /// Returns [`DbError::NotFound`] when no project with the given id exists.
 /// Returns [`DbError::Database`] on query failure.
 pub async fn get_project(pool: &SqlitePool, id: &str) -> DbResult<ProjectRow> {
-    let row: Option<(String, String, String, String, String, Option<String>, i64, String, String)> =
-        sqlx::query_as(
-            "SELECT id, name, tool, lifecycle, path, notes, channel_drift, created_at, updated_at
-             FROM projects WHERE id = ?",
-        )
-        .bind(id)
-        .fetch_optional(pool)
-        .await?;
+    let row: Option<ProjectRowTuple> = sqlx::query_as(
+        "SELECT id, name, tool, lifecycle, path, notes, channel_drift, created_at, updated_at,
+                blocked_reason_kind, blocked_reason_note
+         FROM projects WHERE id = ?",
+    )
+    .bind(id)
+    .fetch_optional(pool)
+    .await?;
 
-    let (id, name, tool, lifecycle, path, notes, channel_drift, created_at, updated_at) =
-        row.ok_or_else(|| DbError::NotFound(format!("project {id}")))?;
+    let (
+        id,
+        name,
+        tool,
+        lifecycle,
+        path,
+        notes,
+        channel_drift,
+        created_at,
+        updated_at,
+        blocked_reason_kind,
+        blocked_reason_note,
+    ) = row.ok_or_else(|| DbError::NotFound(format!("project {id}")))?;
 
     Ok(ProjectRow {
         id,
@@ -144,6 +178,8 @@ pub async fn get_project(pool: &SqlitePool, id: &str) -> DbResult<ProjectRow> {
         channel_drift: channel_drift != 0,
         created_at,
         updated_at,
+        blocked_reason_kind,
+        blocked_reason_note,
     })
 }
 
@@ -217,29 +253,45 @@ pub async fn get_project_canonical_target(
 ///
 /// Returns [`DbError::Database`] on query failure.
 pub async fn list_projects(pool: &SqlitePool) -> DbResult<Vec<ProjectRow>> {
-    let rows: Vec<(String, String, String, String, String, Option<String>, i64, String, String)> =
-        sqlx::query_as(
-            "SELECT id, name, tool, lifecycle, path, notes, channel_drift, created_at, updated_at
-             FROM projects ORDER BY updated_at DESC",
-        )
-        .fetch_all(pool)
-        .await?;
+    let rows: Vec<ProjectRowTuple> = sqlx::query_as(
+        "SELECT id, name, tool, lifecycle, path, notes, channel_drift, created_at, updated_at,
+                blocked_reason_kind, blocked_reason_note
+         FROM projects ORDER BY updated_at DESC",
+    )
+    .fetch_all(pool)
+    .await?;
 
     Ok(rows
         .into_iter()
-        .map(|(id, name, tool, lifecycle, path, notes, channel_drift, created_at, updated_at)| {
-            ProjectRow {
+        .map(
+            |(
                 id,
                 name,
                 tool,
                 lifecycle,
                 path,
                 notes,
-                channel_drift: channel_drift != 0,
+                channel_drift,
                 created_at,
                 updated_at,
-            }
-        })
+                blocked_reason_kind,
+                blocked_reason_note,
+            )| {
+                ProjectRow {
+                    id,
+                    name,
+                    tool,
+                    lifecycle,
+                    path,
+                    notes,
+                    channel_drift: channel_drift != 0,
+                    created_at,
+                    updated_at,
+                    blocked_reason_kind,
+                    blocked_reason_note,
+                }
+            },
+        )
         .collect())
 }
 
@@ -350,6 +402,62 @@ pub async fn update_project_lifecycle(
         .bind(id)
         .execute(pool)
         .await?;
+    Ok(now)
+}
+
+/// Update a project's lifecycle to "blocked" and persist the typed blocked reason.
+///
+/// FR-020 / T053: stores `blocked_reason_kind` and `blocked_reason_note` so the
+/// `BlockedBanner` DTO can surface the real reason instead of a hardcoded value.
+///
+/// # Errors
+///
+/// Returns [`DbError::Database`] on query failure.
+pub async fn update_project_lifecycle_blocked(
+    pool: &SqlitePool,
+    id: &str,
+    reason_kind: &str,
+    reason_note: Option<&str>,
+) -> DbResult<String> {
+    let now = now_iso();
+    sqlx::query(
+        "UPDATE projects SET lifecycle = 'blocked', \
+         blocked_reason_kind = ?, blocked_reason_note = ?, updated_at = ? \
+         WHERE id = ?",
+    )
+    .bind(reason_kind)
+    .bind(reason_note)
+    .bind(&now)
+    .bind(id)
+    .execute(pool)
+    .await?;
+    Ok(now)
+}
+
+/// Update a project's lifecycle state and clear the blocked reason columns.
+///
+/// FR-020 / T053: should be called when transitioning OUT of "blocked" so that
+/// stale blocked_reason_kind/note are not left behind.
+///
+/// # Errors
+///
+/// Returns [`DbError::Database`] on query failure.
+pub async fn update_project_lifecycle_unblock(
+    pool: &SqlitePool,
+    id: &str,
+    lifecycle: &str,
+) -> DbResult<String> {
+    let now = now_iso();
+    sqlx::query(
+        "UPDATE projects SET lifecycle = ?, \
+         blocked_reason_kind = NULL, blocked_reason_note = NULL, updated_at = ? \
+         WHERE id = ?",
+    )
+    .bind(lifecycle)
+    .bind(&now)
+    .bind(id)
+    .execute(pool)
+    .await?;
     Ok(now)
 }
 

@@ -290,6 +290,67 @@ pub async fn get_calibration_session_state(
     Ok(row)
 }
 
+/// Set `root_id` on an `acquisition_session` row (T036, FR-012).
+///
+/// Called when the inbox confirm pipeline resolves the root for a session.
+/// Only updates rows where `root_id IS NULL` to avoid overwriting a correctly
+/// set root with a different one.
+///
+/// # Errors
+/// Returns [`DbError::Database`] on query failure.
+pub async fn update_acquisition_session_root_id(
+    pool: &SqlitePool,
+    session_id: &str,
+    root_id: &str,
+) -> DbResult<()> {
+    sqlx::query(
+        "UPDATE acquisition_session SET root_id = ? \
+         WHERE id = ? AND root_id IS NULL",
+    )
+    .bind(root_id)
+    .bind(session_id)
+    .execute(pool)
+    .await?;
+    Ok(())
+}
+
+/// Set `root_id` on a `calibration_session` row (T036, FR-012).
+///
+/// See [`update_acquisition_session_root_id`] for semantics.
+///
+/// # Errors
+/// Returns [`DbError::Database`] on query failure.
+pub async fn update_calibration_session_root_id(
+    pool: &SqlitePool,
+    session_id: &str,
+    root_id: &str,
+) -> DbResult<()> {
+    sqlx::query(
+        "UPDATE calibration_session SET root_id = ? \
+         WHERE id = ? AND root_id IS NULL",
+    )
+    .bind(root_id)
+    .bind(session_id)
+    .execute(pool)
+    .await?;
+    Ok(())
+}
+
+/// Look up the absolute `current_path` of a `library_root` row (T023a).
+///
+/// Returns `Some(path_string)` when found, `None` when not found.
+///
+/// # Errors
+/// Returns [`DbError::Database`] on query failure.
+pub async fn get_library_root_path(pool: &SqlitePool, root_id: &str) -> DbResult<Option<String>> {
+    let row: Option<(String,)> =
+        sqlx::query_as("SELECT current_path FROM library_root WHERE id = ?")
+            .bind(root_id)
+            .fetch_optional(pool)
+            .await?;
+    Ok(row.map(|(p,)| p))
+}
+
 /// Look up the `state` of a `library_root` row.
 ///
 /// Returns `Some(state)` when found, `None` when not found.

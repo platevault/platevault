@@ -103,6 +103,7 @@ describe("MastersList R-2 regression · null/undefined fingerprints", () => {
           error={undefined}
           selected={null}
           onSelect={vi.fn()}
+        agingThresholdDays={90}
         />,
       );
     }).not.toThrow();
@@ -120,6 +121,7 @@ describe("MastersList R-2 regression · null/undefined fingerprints", () => {
           error={undefined}
           selected={null}
           onSelect={vi.fn()}
+        agingThresholdDays={90}
         />,
       );
     }).not.toThrow();
@@ -136,6 +138,7 @@ describe("MastersList R-2 regression · null/undefined fingerprints", () => {
           error={undefined}
           selected={null}
           onSelect={vi.fn()}
+        agingThresholdDays={90}
         />,
       );
     }).not.toThrow();
@@ -170,6 +173,7 @@ describe("MastersList R-2 regression · null/undefined fingerprints", () => {
           error={undefined}
           selected={null}
           onSelect={vi.fn()}
+        agingThresholdDays={90}
         />,
       );
     }).not.toThrow();
@@ -186,6 +190,7 @@ describe("MastersList R-2 regression · null/undefined fingerprints", () => {
         error={undefined}
         selected={null}
         onSelect={vi.fn()}
+        agingThresholdDays={90}
       />,
     );
 

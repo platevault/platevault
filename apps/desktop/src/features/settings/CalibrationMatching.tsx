@@ -6,6 +6,7 @@
 //   - calibration.dark.override_penalty (number, 0-1)
 //   - calibration.flat.override_penalty (number, 0-1)
 //   - calibration.bias.override_penalty (number, 0-1)
+//   - calibration.aging_threshold_days (number, days) — aging warning threshold (FR-023)
 //
 // On mount, loads persisted values from backend via settings.get('calibration').
 // Changes are auto-saved via the save() prop (useAutoSave → settings.update).
@@ -232,7 +233,7 @@ export function CalibrationMatching({ save }: CalibrationMatchingProps) {
                 onChange={(e) => {
                   const v = Number(e.target.value);
                   setAgingThreshold(v);
-                  save('calibration_matching', { aging_threshold_days: v });
+                  save('calibration', { 'calibration.aging_threshold_days': v });
                 }}
               />
               <span style={{ fontSize: 'var(--alm-text-sm)', color: 'var(--alm-text-muted)' }}>days</span>

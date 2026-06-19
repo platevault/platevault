@@ -54,9 +54,10 @@ export const WizardShell = forwardRef<HTMLDivElement, WizardShellProps>(
             style={{
               display: 'flex',
               alignItems: 'center',
-              gap: 'var(--alm-space-3)',
-              padding: 'var(--alm-space-5) var(--alm-space-7)',
+              gap: 'var(--alm-sp-3)',
+              padding: 'var(--alm-sp-4) var(--alm-sp-5)',
               borderBottom: '1px solid var(--alm-border)',
+              flexShrink: 0,
             }}
           >
             {steps.map((step, i) => (
@@ -64,7 +65,7 @@ export const WizardShell = forwardRef<HTMLDivElement, WizardShellProps>(
                 key={step.label}
                 className="alm-wizard__step"
                 aria-current={i === currentStep ? 'step' : undefined}
-                style={{ display: 'flex', alignItems: 'center', gap: 'var(--alm-space-2)' }}
+                style={{ display: 'flex', alignItems: 'center', gap: 'var(--alm-sp-2)' }}
               >
                 <span
                   style={{
@@ -75,12 +76,12 @@ export const WizardShell = forwardRef<HTMLDivElement, WizardShellProps>(
                     height: 20,
                     borderRadius: '50%',
                     fontSize: 'var(--alm-text-xs)',
-                    fontWeight: 600,
+                    fontWeight: 'var(--alm-weight-semibold)',
                     ...(i === currentStep
-                      ? { background: 'var(--alm-gray-900)', color: '#fff' }
+                      ? { background: 'var(--alm-ink)', color: 'var(--alm-on-accent)' }
                       : step.completed
-                        ? { background: 'var(--alm-gray-200)', color: 'var(--alm-gray-600)' }
-                        : { background: 'transparent', border: '1.5px solid var(--alm-gray-300)', color: 'var(--alm-gray-400)' }),
+                        ? { background: 'var(--alm-chip)', color: 'var(--alm-text-secondary)' }
+                        : { background: 'transparent', border: '1.5px solid var(--alm-border)', color: 'var(--alm-text-faint)' }),
                   }}
                 >
                   {step.completed && i !== currentStep ? '✓' : i + 1}
@@ -98,7 +99,7 @@ export const WizardShell = forwardRef<HTMLDivElement, WizardShellProps>(
                     style={{
                       width: 16,
                       height: 1,
-                      background: 'var(--alm-gray-200)',
+                      background: 'var(--alm-border-subtle)',
                       display: 'inline-block',
                     }}
                   />
@@ -111,15 +112,15 @@ export const WizardShell = forwardRef<HTMLDivElement, WizardShellProps>(
         {/* Body */}
         {hasSidebar ? (
           /* Sidebar layout (project wizard) */
-          <div style={{ display: 'flex', flex: 1, overflow: 'hidden' }}>
-            <div style={{ flex: 1, overflow: 'auto', padding: 'var(--alm-space-7)' }}>
+          <div style={{ display: 'flex', flex: 1, minHeight: 0, overflow: 'hidden' }}>
+            <div style={{ flex: 1, minWidth: 0, overflow: 'auto', padding: 'var(--alm-sp-5)' }}>
               {children}
             </div>
             <aside
               style={{
-                width: 240,
+                width: 'var(--alm-rail-width)',
                 borderLeft: '1px solid var(--alm-border)',
-                padding: 'var(--alm-space-7)',
+                padding: 'var(--alm-sp-5)',
                 overflow: 'auto',
                 background: 'var(--alm-surface)',
               }}
@@ -133,8 +134,9 @@ export const WizardShell = forwardRef<HTMLDivElement, WizardShellProps>(
             <div
               style={{
                 flex: 1,
+                minHeight: 0,
                 overflow: 'auto',
-                padding: 'var(--alm-space-9) var(--alm-space-7)',
+                padding: 'var(--alm-sp-6) var(--alm-sp-5)',
               }}
             >
               <div style={{ maxWidth: 720, margin: '0 auto' }}>
@@ -143,8 +145,8 @@ export const WizardShell = forwardRef<HTMLDivElement, WizardShellProps>(
                   aria-label="Setup progress"
                   style={{
                     display: 'flex',
-                    gap: 'var(--alm-space-1)',
-                    marginBottom: 'var(--alm-space-9)',
+                    gap: 'var(--alm-sp-1)',
+                    marginBottom: 'var(--alm-sp-6)',
                   }}
                 >
                   {steps.map((step, i) => {
@@ -156,14 +158,14 @@ export const WizardShell = forwardRef<HTMLDivElement, WizardShellProps>(
                         aria-current={isActive ? 'step' : undefined}
                         style={{
                           flex: 1,
-                          padding: 'var(--alm-space-2) var(--alm-space-3)',
+                          padding: 'var(--alm-sp-2) var(--alm-sp-3)',
                           border: '1px solid var(--alm-border)',
                           borderRadius: 'var(--alm-radius-sm)',
                           background: isPast || isActive ? 'var(--alm-surface)' : 'var(--alm-bg)',
                           fontSize: 'var(--alm-text-xs)',
                           textAlign: 'center',
                           color: isActive ? 'var(--alm-text)' : 'var(--alm-text-muted)',
-                          fontWeight: isActive ? 600 : 400,
+                          fontWeight: isActive ? 'var(--alm-weight-semibold)' : 'var(--alm-weight-normal)',
                         }}
                       >
                         {i + 1}. {step.label}
@@ -181,7 +183,9 @@ export const WizardShell = forwardRef<HTMLDivElement, WizardShellProps>(
               <div
                 style={{
                   borderTop: '1px solid var(--alm-border)',
-                  padding: 'var(--alm-space-5) var(--alm-space-7)',
+                  padding: 'var(--alm-sp-4) var(--alm-sp-5)',
+                  flexShrink: 0,
+                  background: 'var(--alm-surface)',
                 }}
               >
                 <div
@@ -190,7 +194,7 @@ export const WizardShell = forwardRef<HTMLDivElement, WizardShellProps>(
                     margin: '0 auto',
                     display: 'flex',
                     alignItems: 'center',
-                    gap: 'var(--alm-space-4)',
+                    gap: 'var(--alm-sp-4)',
                   }}
                 >
                   {footer}

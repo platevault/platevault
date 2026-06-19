@@ -10,9 +10,14 @@ export default defineConfig(({ mode, command }) => {
   const fileEnv = loadEnv(mode, resolve(__dirname), "");
   const useMocks =
     process.env.VITE_USE_MOCKS ?? fileEnv.VITE_USE_MOCKS ?? "false";
+  // VITE_DEV_TOOLS: set to "true" only in dev-tools builds (mirrors the
+  // Cargo `dev-tools` feature). Release builds omit the flag so the entire
+  // dev surface is tree-shaken by the bundler. Default is "false".
+  const devTools =
+    process.env.VITE_DEV_TOOLS ?? fileEnv.VITE_DEV_TOOLS ?? "false";
   if (command === "serve") {
     // eslint-disable-next-line no-console
-    console.log(`[vite] VITE_USE_MOCKS="${useMocks}" (mode=${mode})`);
+    console.log(`[vite] VITE_USE_MOCKS="${useMocks}" VITE_DEV_TOOLS="${devTools}" (mode=${mode})`);
   }
 
   return {
@@ -29,6 +34,7 @@ export default defineConfig(({ mode, command }) => {
     },
     define: {
       "import.meta.env.VITE_USE_MOCKS": JSON.stringify(useMocks),
+      "import.meta.env.VITE_DEV_TOOLS": JSON.stringify(devTools),
     },
   };
 });

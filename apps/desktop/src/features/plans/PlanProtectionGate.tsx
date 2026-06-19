@@ -123,7 +123,7 @@ export function PlanProtectionGate({ planId, onAcknowledgedChange }: PlanProtect
           gap: 'var(--alm-sp-2)',
           padding: 'var(--alm-sp-2) var(--alm-sp-3)',
           border: '1px solid var(--alm-border)',
-          borderRadius: 'var(--alm-radius)',
+          borderRadius: 'var(--alm-radius-md)',
           background: allDone ? 'var(--alm-surface)' : 'var(--alm-surface2)',
         }}
       >
@@ -144,7 +144,7 @@ export function PlanProtectionGate({ planId, onAcknowledgedChange }: PlanProtect
             key={item.itemId}
             style={{
               border: '1px solid var(--alm-border)',
-              borderRadius: 'var(--alm-radius)',
+              borderRadius: 'var(--alm-radius-md)',
               padding: 'var(--alm-sp-3)',
               background: isDone ? 'var(--alm-surface)' : undefined,
               opacity: isDone ? 0.7 : 1,

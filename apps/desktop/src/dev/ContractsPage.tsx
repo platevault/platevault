@@ -16,11 +16,12 @@ import {
   devExport,
   type ContractMeta,
   type ContractCall,
+  getSettings,
 } from '@/api/commands';
 import { ContractList } from './ContractList';
 import { CallList } from './CallList';
 import { SchemaViewer } from './SchemaViewer';
-import { getSettings } from '@/api/commands';
+import { pickDirectory } from '@/shared/native/picker';
 
 // ── Disabled stub ─────────────────────────────────────────────────────────────
 
@@ -112,11 +113,19 @@ export function ContractsPage() {
   );
 
   const handleExport = useCallback(async () => {
+    // T075 / FR-030: pick an absolute directory so the output path is never
+    // relative (which would trigger path.write.denied from the Rust side).
+    const dirResult = await pickDirectory(undefined, 'export');
+    if (dirResult.cancelled || !dirResult.path) return;
+
+    const sep = dirResult.path.includes('\\') ? '\\' : '/';
+    const outputPath = `${dirResult.path}${sep}${Date.now()}-dev-export.json`;
+
     setExporting(true);
     setExportResult(null);
     try {
       const resp = await devExport({
-        outputPath: `${Date.now()}-dev-export.json`,
+        outputPath,
         includeContracts: true,
         includeCalls: true,
       });

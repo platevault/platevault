@@ -127,6 +127,8 @@ describe('ActionSidebar', () => {
         hasOpenPlan={false}
         confirmLoading={false}
         canConfirm
+        destructiveDestination="archive"
+        onDestructiveDestinationChange={vi.fn()}
         onConfirm={vi.fn()}
         onOpenExistingPlan={vi.fn()}
       />,
@@ -142,6 +144,8 @@ describe('ActionSidebar', () => {
         hasOpenPlan={false}
         confirmLoading={false}
         canConfirm
+        destructiveDestination="archive"
+        onDestructiveDestinationChange={vi.fn()}
         onConfirm={vi.fn()}
         onOpenExistingPlan={vi.fn()}
       />,
@@ -157,6 +161,8 @@ describe('ActionSidebar', () => {
         hasOpenPlan={false}
         confirmLoading={false}
         canConfirm={false}
+        destructiveDestination="archive"
+        onDestructiveDestinationChange={vi.fn()}
         onConfirm={vi.fn()}
         onOpenExistingPlan={vi.fn()}
       />,
@@ -173,6 +179,8 @@ describe('ActionSidebar', () => {
         hasOpenPlan
         confirmLoading={false}
         canConfirm={false}
+        destructiveDestination="archive"
+        onDestructiveDestinationChange={vi.fn()}
         onConfirm={vi.fn()}
         onOpenExistingPlan={onOpen}
       />,
@@ -191,6 +199,8 @@ describe('ActionSidebar', () => {
         hasOpenPlan={false}
         confirmLoading={false}
         canConfirm
+        destructiveDestination="archive"
+        onDestructiveDestinationChange={vi.fn()}
         onConfirm={vi.fn()}
         onOpenExistingPlan={vi.fn()}
       />,
@@ -378,6 +388,8 @@ describe('Confirm payload and toast', () => {
         hasOpenPlan={false}
         confirmLoading={false}
         canConfirm
+        destructiveDestination="archive"
+        onDestructiveDestinationChange={vi.fn()}
         onConfirm={onConfirm}
         onOpenExistingPlan={vi.fn()}
       />,
@@ -419,6 +431,8 @@ describe('Confirm payload and toast', () => {
         hasOpenPlan={false}
         confirmLoading={false}
         canConfirm
+        destructiveDestination="archive"
+        onDestructiveDestinationChange={vi.fn()}
         onConfirm={onConfirm}
         onOpenExistingPlan={vi.fn()}
       />,

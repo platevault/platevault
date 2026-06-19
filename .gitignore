@@ -348,3 +348,6 @@ apps/desktop/playwright-report/
 /.ripgreprc
 /.idea/
 .idea
+
+# parked: needs workflow-scoped push (content in docs/development/ci/)
+.github/workflows/ci.yml

@@ -210,11 +210,19 @@ pub struct ArtifactClassifyRequest {
     pub reason: Option<String>,
 }
 
-/// Response DTO for `artifact.classify`.
+/// Response DTO for `artifact.classify` (flat contract shape, spec 033 T028).
+///
+/// Canonical shape is flat fields matching the published contract.
+/// The prior nested `{ artifact: ArtifactSummary }` envelope is replaced
+/// so the response matches `artifact-events.md`.
 #[derive(Clone, Debug, Serialize, Deserialize, Type)]
 #[serde(rename_all = "camelCase")]
 pub struct ArtifactClassifyResponse {
-    pub artifact: ArtifactSummary,
+    pub artifact_id: String,
+    pub classification: String,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub confidence: Option<f64>,
+    pub classified_at: String,
 }
 
 /// Request DTO for `artifact.mark_resolved` (spec 012 T024).

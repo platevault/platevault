@@ -33,7 +33,7 @@ fn contract_err(e: contracts_core::ContractError) -> String {
 /// Returns `Err(ContractError)` on database failure or if the project does not
 /// exist.
 #[tauri::command]
-#[specta::specta(rename = "preparedview.list")]
+#[specta::specta]
 #[allow(clippy::needless_pass_by_value)] // Tauri deserializes String args by value
 pub async fn preparedview_list(
     state: State<'_, AppState>,
@@ -61,7 +61,7 @@ pub async fn preparedview_list(
 /// - `view.unsupported_kind`  — view uses `hardlink` (deferred to v1.x).
 /// - `lifecycle.read_only`    — owning project is `archived`.
 #[tauri::command]
-#[specta::specta(rename = "preparedview.remove")]
+#[specta::specta]
 pub async fn preparedview_remove(
     state: State<'_, AppState>,
     view_id: String,
@@ -84,7 +84,7 @@ pub async fn preparedview_remove(
 /// - `view.unsupported_kind`  — view uses `hardlink` (deferred to v1.x).
 /// - `lifecycle.read_only`    — owning project is `archived`.
 #[tauri::command]
-#[specta::specta(rename = "preparedview.regenerate")]
+#[specta::specta]
 pub async fn preparedview_regenerate(
     state: State<'_, AppState>,
     view_id: String,

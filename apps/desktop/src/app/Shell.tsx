@@ -16,6 +16,7 @@ import { OperationStatusProvider } from './OperationStatusContext';
 import { ToastContainer } from '@/ui/ToastContainer';
 import { GuidedOverlay } from '@/features/guided/GuidedOverlay';
 import { useGuidedFlow } from '@/features/guided/useGuidedFlow';
+import { startGuidedEventBridge, stopGuidedEventBridge } from '@/features/guided/eventBridge';
 
 function ShellInner() {
   const prefs = usePreferences();
@@ -31,6 +32,13 @@ function ShellInner() {
 
   // Guided first-project-flow coach (spec 010).
   const guided = useGuidedFlow(prefs.setupCompleted);
+
+  // Spec 033 US2/T029: drive guided auto-advance off real domain events.
+  useEffect(() => {
+    if (!prefs.setupCompleted) return undefined;
+    void startGuidedEventBridge();
+    return () => stopGuidedEventBridge();
+  }, [prefs.setupCompleted]);
 
   return (
     <div className={`alm-frame density-${prefs.density}`}>

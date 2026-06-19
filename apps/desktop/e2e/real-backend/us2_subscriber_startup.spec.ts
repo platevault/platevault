@@ -4,18 +4,22 @@
  * These tests verify that the event-bus subscribers that were built but
  * never spawned at startup actually fire on the real application.
  *
- * STATUS: All tests are skipped pending spec 033 implementation (US2 wiring pass).
- * Do NOT unskip until the following subscribers are started in run_app:
- *   - spawn_workflow_run_subscriber (024 manifests)
- *   - artifact watcher loop (012)
- *   - guided auto-advance (010)
+ * STATUS: Tests remain skipped pending the T006 tauri-driver real-backend harness.
+ * The Rust-level integration tests (T027/T028) prove the subscribers fire correctly.
+ * These e2e tests (T024/T025) provide the real-UI layer once T006 is complete.
  *
- * Note: start_inbox_plan_listener and start_log_forwarder ARE already spawned
- * (fixed 2026-06-17). Those are covered by the R-3 regression test.
+ * Wiring status (spec 033 T027/T028/T029 completed):
+ *   [x] spawn_workflow_run_subscriber → spawned in run_app (lib.rs)
+ *   [x] artifact watcher loop         → spawn_artifact_watcher in run_app (lib.rs)
+ *   [x] guided auto-advance           → startGuidedEventBridge (eventBridge.ts)
+ *   [x] start_inbox_plan_listener     → already spawned (fixed 2026-06-17)
+ *   [x] start_log_forwarder           → already spawned (fixed 2026-06-17)
+ *
+ * Blocked on: T006 (tauri-driver + WebKitWebDriver W3C session harness).
  *
  * See:
  *   - docs/development/autonomous-run-2026-06-validation-findings.md § theme #1
- *   - docs/development/test-strategy-033.md § J-2.8, J-6.4, 012-4, 024-3
+ *   - specs/033-validation-bugfix-remediation/tasks.md § T006, T024, T025
  */
 import { test, expect } from "@playwright/test";
 

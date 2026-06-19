@@ -12,7 +12,7 @@ use contracts_core::cleanup::{
 /// # Errors
 /// Returns `Err(String)` on failure; the stub never fails.
 #[tauri::command]
-#[specta::specta(rename = "cleanup.policy.get")]
+#[specta::specta]
 pub async fn cleanup_policy_get() -> Result<CleanupPolicy, String> {
     tracing::debug!("stub: cleanup.policy.get");
     Ok(default_cleanup_policy())
@@ -23,7 +23,7 @@ pub async fn cleanup_policy_get() -> Result<CleanupPolicy, String> {
 /// # Errors
 /// Returns `Err(String)` on failure; the stub never fails.
 #[tauri::command]
-#[specta::specta(rename = "cleanup.policy.update")]
+#[specta::specta]
 pub async fn cleanup_policy_update(request: UpdateCleanupPolicy) -> Result<CleanupPolicy, String> {
     tracing::debug!(
         "stub: cleanup.policy.update ({} entries, auto={})",
@@ -43,7 +43,7 @@ pub async fn cleanup_policy_update(request: UpdateCleanupPolicy) -> Result<Clean
 /// # Errors
 /// Returns `Err(String)` on failure; the stub never fails.
 #[tauri::command]
-#[specta::specta(rename = "cleanup.scan")]
+#[specta::specta]
 pub async fn cleanup_scan(project_id: String) -> Result<CleanupScanResult, String> {
     tracing::debug!("stub: cleanup.scan project_id={project_id}");
     Ok(CleanupScanResult { project_id, candidates: vec![], total_reclaimable_bytes: 0 })

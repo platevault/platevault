@@ -34,13 +34,14 @@ async fn insert_target(pool: &sqlx::SqlitePool, id: &str) {
     .unwrap();
 }
 
-async fn insert_project(pool: &sqlx::SqlitePool, id: &str, target_id: &str) {
+/// Insert a project into the canonical `projects` table (spec-008 / migration 0018).
+async fn insert_project(pool: &sqlx::SqlitePool, id: &str, _target_id: &str) {
     sqlx::query(
-        "INSERT INTO project (id, name, target_id, state, created_at) \
-         VALUES (?, 'P', ?, 'ready', '2026-05-01T00:00:00Z')",
+        "INSERT INTO projects \
+         (id, name, tool, lifecycle, path, created_at, updated_at) \
+         VALUES (?, 'P', 'PixInsight', 'ready', 'projects/P', '2026-05-01T00:00:00Z', '2026-05-01T00:00:00Z')",
     )
     .bind(id)
-    .bind(target_id)
     .execute(pool)
     .await
     .unwrap();

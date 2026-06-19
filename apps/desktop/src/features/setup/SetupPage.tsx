@@ -25,7 +25,7 @@ export function SetupPage() {
       .then(({ commands }) => commands.firstrunState())
       .then((result) => {
         if (cancelled) return;
-        if (result.status === 'ok' && result.data.completedAt !== null) {
+        if (result.status === 'ok' && Boolean(result.data.completedAt)) {
           void navigate({ to: '/inbox' });
         } else {
           setChecking(false);

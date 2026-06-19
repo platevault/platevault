@@ -205,6 +205,94 @@ pub async fn resolve_protection(
     })
 }
 
+// ── Protection defaults (migration 0035, FR-018) ─────────────────────────
+
+/// Raw DB row from the `protection_defaults` table.
+#[derive(Clone, Debug, sqlx::FromRow)]
+pub struct ProtectionDefaultRow {
+    pub scope: String,
+    pub key: String,
+    pub value: String,
+    pub updated_at: String,
+}
+
+/// Get the raw JSON value for a specific (scope, key) protection default.
+///
+/// Returns `None` when no row exists (caller should fall back to hard-coded
+/// defaults).
+///
+/// # Errors
+///
+/// Returns [`DbError::Database`] on query failure.
+pub async fn get_protection_default(
+    pool: &SqlitePool,
+    scope: &str,
+    key: &str,
+) -> DbResult<Option<serde_json::Value>> {
+    let row: Option<(String,)> =
+        sqlx::query_as("SELECT value FROM protection_defaults WHERE scope = ? AND key = ?")
+            .bind(scope)
+            .bind(key)
+            .fetch_optional(pool)
+            .await?;
+
+    match row {
+        None => Ok(None),
+        Some((json,)) => {
+            let v = serde_json::from_str(&json).map_err(DbError::Serialise)?;
+            Ok(Some(v))
+        }
+    }
+}
+
+/// Upsert a (scope, key, value) protection default row.
+///
+/// # Errors
+///
+/// Returns [`DbError::Database`] on query failure or [`DbError::Serialise`]
+/// on JSON encoding failure.
+pub async fn set_protection_default(
+    pool: &SqlitePool,
+    scope: &str,
+    key: &str,
+    value: &serde_json::Value,
+) -> DbResult<()> {
+    let json = serde_json::to_string(value).map_err(DbError::Serialise)?;
+    let now = now_iso();
+
+    sqlx::query(
+        "INSERT INTO protection_defaults (scope, key, value, updated_at) VALUES (?, ?, ?, ?)
+         ON CONFLICT(scope, key) DO UPDATE SET value = excluded.value, updated_at = excluded.updated_at",
+    )
+    .bind(scope)
+    .bind(key)
+    .bind(&json)
+    .bind(&now)
+    .execute(pool)
+    .await?;
+
+    Ok(())
+}
+
+/// List all protection defaults for a given scope.
+///
+/// # Errors
+///
+/// Returns [`DbError::Database`] on query failure.
+pub async fn list_protection_defaults(
+    pool: &SqlitePool,
+    scope: &str,
+) -> DbResult<Vec<ProtectionDefaultRow>> {
+    let rows: Vec<ProtectionDefaultRow> = sqlx::query_as(
+        "SELECT scope, key, value, updated_at FROM protection_defaults WHERE scope = ? ORDER BY key ASC",
+    )
+    .bind(scope)
+    .fetch_all(pool)
+    .await?;
+
+    Ok(rows)
+}
+
 /// Resolve effective protection using hard-coded fallback defaults.
 ///
 /// Used when global settings row is absent (e.g. first run before migration).

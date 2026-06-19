@@ -25,7 +25,7 @@ use crate::commands::lifecycle::AppState;
 /// # Errors
 /// Returns `Err(String)` on DB failure.
 #[tauri::command]
-#[specta::specta(rename = "artifact.list")]
+#[specta::specta]
 pub async fn artifact_list(
     state: State<'_, AppState>,
     request: ArtifactListRequest,
@@ -45,7 +45,7 @@ pub async fn artifact_list(
 /// # Errors
 /// Returns `Err(String)` on DB failure or if the artifact is not found.
 #[tauri::command]
-#[specta::specta(rename = "artifact.classify")]
+#[specta::specta]
 pub async fn artifact_classify(
     state: State<'_, AppState>,
     request: ArtifactClassifyRequest,
@@ -60,7 +60,16 @@ pub async fn artifact_classify(
         request.reason.as_deref(),
     )
     .await?;
-    Ok(ArtifactClassifyResponse { artifact: summary })
+    // Return the flat contract shape (spec 033 T028; drift fix from nested envelope).
+    let now = time::OffsetDateTime::now_utc()
+        .format(&time::format_description::well_known::Rfc3339)
+        .unwrap_or_else(|_| "1970-01-01T00:00:00Z".to_owned());
+    Ok(ArtifactClassifyResponse {
+        artifact_id: summary.id,
+        classification: summary.kind,
+        confidence: Some(summary.classification_confidence),
+        classified_at: now,
+    })
 }
 
 // ── artifact.mark_resolved ────────────────────────────────────────────────────
@@ -70,7 +79,7 @@ pub async fn artifact_classify(
 /// # Errors
 /// Returns `Err(String)` on DB failure.
 #[tauri::command]
-#[specta::specta(rename = "artifact.mark_resolved")]
+#[specta::specta]
 pub async fn artifact_mark_resolved(
     state: State<'_, AppState>,
     request: ArtifactMarkResolvedRequest,

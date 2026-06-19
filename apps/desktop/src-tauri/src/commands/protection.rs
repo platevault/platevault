@@ -29,7 +29,7 @@ use crate::commands::lifecycle::AppState;
 ///
 /// Returns `Err(String)` with the contract error code on failure.
 #[tauri::command]
-#[specta::specta(rename = "source.protection.get")]
+#[specta::specta]
 pub async fn source_protection_get(
     state: State<'_, AppState>,
     source_id: Option<String>,
@@ -48,7 +48,7 @@ pub async fn source_protection_get(
 ///
 /// Returns `Err(String)` with the contract error code on failure.
 #[tauri::command]
-#[specta::specta(rename = "source.protection.set")]
+#[specta::specta]
 pub async fn source_protection_set(
     state: State<'_, AppState>,
     request: SourceProtectionSetRequest,
@@ -72,7 +72,7 @@ pub async fn source_protection_set(
 ///
 /// Returns `Err(String)` with `"plan.not_found"` if the plan does not exist.
 #[tauri::command]
-#[specta::specta(rename = "plan.protection.check")]
+#[specta::specta]
 pub async fn plan_protection_check_cmd(
     state: State<'_, AppState>,
     plan_id: String,
@@ -93,7 +93,7 @@ pub async fn plan_protection_check_cmd(
 ///
 /// Returns `Err(String)` on audit failure.
 #[tauri::command]
-#[specta::specta(rename = "protection.plan.acknowledged")]
+#[specta::specta]
 pub async fn protection_plan_acknowledged(
     state: State<'_, AppState>,
     plan_id: String,

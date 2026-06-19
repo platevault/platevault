@@ -98,7 +98,7 @@ export function DataSources({ save }: DataSourcesProps) {
               key={root.id}
               style={{
                 border: '1px solid var(--alm-border)',
-                borderRadius: 'var(--alm-radius)',
+                borderRadius: 'var(--alm-radius-md)',
                 padding: 'var(--alm-sp-3)',
                 background: root.online ? undefined : 'var(--alm-surface2)',
               }}

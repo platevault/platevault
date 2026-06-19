@@ -33,7 +33,7 @@ use crate::commands::lifecycle::AppState;
 /// Returns `Err(TargetOpError)` with code `target.not_found`,
 /// `target.invalid_id`, or `internal.database`.
 #[tauri::command]
-#[specta::specta(rename = "target.get")]
+#[specta::specta]
 pub async fn target_get(
     state: State<'_, AppState>,
     req: TargetGetRequest,
@@ -50,7 +50,7 @@ pub async fn target_get(
 ///
 /// Returns `Err(TargetOpError)` with code `internal.database`.
 #[tauri::command]
-#[specta::specta(rename = "target.list")]
+#[specta::specta]
 pub async fn target_list(state: State<'_, AppState>) -> Result<Vec<TargetListItem>, TargetOpError> {
     tracing::debug!("target.list");
     app_core::target_management::list(state.repo.pool()).await
@@ -65,7 +65,7 @@ pub async fn target_list(state: State<'_, AppState>) -> Result<Vec<TargetListIte
 /// Returns `Err(TargetOpError)` with code `target.not_found`, `alias.blank`,
 /// or `internal.database`.
 #[tauri::command]
-#[specta::specta(rename = "target.alias.add")]
+#[specta::specta]
 pub async fn target_alias_add(
     state: State<'_, AppState>,
     req: TargetAliasAddRequest,
@@ -86,7 +86,7 @@ pub async fn target_alias_add(
 /// Returns `Err(TargetOpError)` with code `alias.not_found`,
 /// `alias.not_removable`, or `internal.database`.
 #[tauri::command]
-#[specta::specta(rename = "target.alias.remove")]
+#[specta::specta]
 pub async fn target_alias_remove(
     state: State<'_, AppState>,
     req: TargetAliasRemoveRequest,
@@ -107,7 +107,7 @@ pub async fn target_alias_remove(
 /// Returns `Err(TargetOpError)` with code `target.not_found`,
 /// `target.invalid_id`, or `internal.database`.
 #[tauri::command]
-#[specta::specta(rename = "target.display_alias.set")]
+#[specta::specta]
 pub async fn target_display_alias_set(
     state: State<'_, AppState>,
     req: TargetDisplayAliasSetRequest,
@@ -132,7 +132,7 @@ pub async fn target_display_alias_set(
 /// Returns `Err(TargetOpError)` with code `target.not_found`,
 /// `target.invalid_id`, or `internal.database`.
 #[tauri::command]
-#[specta::specta(rename = "target.display_alias.clear")]
+#[specta::specta]
 pub async fn target_display_alias_clear(
     state: State<'_, AppState>,
     req: TargetDisplayAliasClearRequest,

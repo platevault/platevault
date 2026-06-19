@@ -21,7 +21,7 @@
 //! Constitution §II: never overwrite silently; per-item audit via callbacks.
 
 use std::collections::HashSet;
-use std::path::{Path, PathBuf};
+use std::path::PathBuf;
 use std::sync::Arc;
 
 use tokio::sync::{watch, Mutex};
@@ -31,6 +31,7 @@ use crate::ops::archive_op;
 use crate::ops::cas_check::{check_cas, CasSnapshot};
 use crate::ops::delete_op;
 use crate::ops::move_op;
+use crate::ops::path_gate;
 use crate::ops::trash_op;
 
 // ── Public types ──────────────────────────────────────────────────────────────
@@ -72,6 +73,10 @@ pub struct ItemProgressEvent {
     pub rollback_attempted: bool,
     pub rollback_outcome: RollbackOutcome,
     pub rollback_message: Option<String>,
+    /// Structured audit reason for refusals (e.g. `"root_escape"`, `"symlink"`,
+    /// `"stale"`, `"destination_exists"`, `"destructive_unconfirmed"`).
+    /// `None` for normal success/failure transitions.
+    pub audit_reason: Option<String>,
 }
 
 /// Final outcome of an `execute_plan` call.
@@ -110,16 +115,29 @@ pub struct ExecutorItem {
     pub id: String,
     pub plan_id: String,
     pub action: ExecutorItemAction,
-    /// Absolute resolved source path (caller resolves root+relative).
+    /// **Relative** source path (executor resolves against `library_root` via the path gate).
+    ///
+    /// Set to `None` for actions that have no source (e.g. `NoOp`, `Mkdir`).
     pub source_path: Option<PathBuf>,
-    /// Absolute resolved destination path (caller resolves root+relative).
+    /// **Relative** destination path (executor resolves against `library_root` via the path gate).
+    ///
+    /// Set to `None` when the destination is implicit (e.g. `Trash`).
     pub destination_path: Option<PathBuf>,
+    /// Absolute library root — all relative paths are joined against this.
+    ///
+    /// `None` means "use the path as-is" (legacy / test items with pre-resolved paths).
+    pub library_root: Option<PathBuf>,
     /// Approval-time CAS snapshot (R-FS-1).
     pub cas_snapshot: CasSnapshot,
     /// Protection status from spec-016 (FR-008).
     pub is_protected: bool,
-    /// Whether permanent delete is explicitly confirmed (FR-004).
-    pub confirm_required: bool,
+    /// Whether this item requires destructive confirmation (FR-003, D9).
+    ///
+    /// Derived from action type: `delete` and `trash` ⇒ `true`. Independent of
+    /// `is_protected`. Replaces the old `confirm_required = is_protected` inversion.
+    pub requires_destructive_confirm: bool,
+    /// Whether the destructive confirmation has been satisfied by the user (FR-003).
+    pub destructive_confirmed: bool,
     /// Current state when the executor picks it up.
     pub current_state: String,
 }
@@ -131,7 +149,11 @@ pub enum ExecutorItemAction {
     Archive {
         archive_destination: PathBuf,
     },
-    Trash,
+    /// Move to OS trash. Falls back to archive at `fallback_archive_destination` if provided.
+    Trash {
+        /// Absolute path to use as the archive fallback destination when OS trash is unavailable.
+        fallback_archive_destination: Option<PathBuf>,
+    },
     Delete,
     /// RecordOnly / Mkdir / Link / Junction — no FS mutation; mark succeeded.
     NoOp,
@@ -278,17 +300,89 @@ pub async fn execute_plan<C: ExecutorCallbacks>(
                     rollback_attempted: false,
                     rollback_outcome: RollbackOutcome::NotApplicable,
                     rollback_message: None,
+                    audit_reason: None,
                 })
                 .await;
             counts.skipped += 1;
             continue;
         }
 
+        // Destructive-confirm gate (FR-003, D9, T020).
+        // `requires_destructive_confirm` is derived from the action type (delete/trash),
+        // independent of protection status. Replaces the old `confirm_required = is_protected`
+        // inversion at plan_apply.rs:199.
+        if item.requires_destructive_confirm && !item.destructive_confirmed {
+            let failure = PlanItemFailure::with_code(
+                FailureCode::DestructiveUnconfirmed,
+                format!(
+                    "item {} requires destructive confirmation (action is destructive); \
+                     confirm before applying",
+                    item.id
+                ),
+            );
+            callbacks
+                .on_item_progress(ItemProgressEvent {
+                    item_id: item.id.clone(),
+                    prior_state: "pending".to_owned(),
+                    new_state: "refused".to_owned(),
+                    at: now_iso(),
+                    failure: Some(failure),
+                    rollback_attempted: false,
+                    rollback_outcome: RollbackOutcome::NotApplicable,
+                    rollback_message: None,
+                    audit_reason: Some("destructive_unconfirmed".to_owned()),
+                })
+                .await;
+            counts.failed += 1;
+            continue;
+        }
+
         // Notify start.
         callbacks.on_item_start(&item.id).await;
 
+        // Path-resolution gate (FR-001/002, D8, T018): resolve + validate source path
+        // against the library root before any filesystem CAS or mutation.
+        if let (Some(ref src_rel), Some(ref root)) = (&item.source_path, &item.library_root) {
+            match path_gate::resolve_and_validate(root, src_rel) {
+                Err(gate_failure) => {
+                    let audit_reason = gate_failure.code.as_str().to_owned();
+                    let triggers_pause = gate_failure.code.triggers_pause();
+                    callbacks
+                        .on_item_progress(ItemProgressEvent {
+                            item_id: item.id.clone(),
+                            prior_state: "applying".to_owned(),
+                            new_state: "refused".to_owned(),
+                            at: now_iso(),
+                            failure: Some(gate_failure),
+                            rollback_attempted: false,
+                            rollback_outcome: RollbackOutcome::NotApplicable,
+                            rollback_message: None,
+                            audit_reason: Some(audit_reason),
+                        })
+                        .await;
+                    counts.failed += 1;
+                    if triggers_pause {
+                        return ApplyOutcome::Paused { reason: "path.invalid".to_owned(), counts };
+                    }
+                    continue;
+                }
+                Ok(_resolved) => {
+                    // Path is safe; the resolved absolute path will be used by execute_item.
+                }
+            }
+        }
+
         // Per-item FS CAS revalidation (R-FS-1).
-        if let Some(ref src) = item.source_path {
+        // Use the library-root-resolved path if available; otherwise use the raw path (legacy).
+        let resolved_source_for_cas: Option<PathBuf> =
+            if let (Some(ref src_rel), Some(ref root)) = (&item.source_path, &item.library_root) {
+                // Already validated above; re-resolve (cheap lexical op).
+                path_gate::resolve_and_validate(root, src_rel).ok().map(|r| r.0)
+            } else {
+                item.source_path.clone()
+            };
+
+        if let Some(ref src) = resolved_source_for_cas {
             if let Err(stale_failure) = check_cas(src, &item.cas_snapshot) {
                 let triggers_pause = stale_failure.code.triggers_pause();
                 let failure_clone = stale_failure.clone();
@@ -303,6 +397,7 @@ pub async fn execute_plan<C: ExecutorCallbacks>(
                         rollback_attempted: false,
                         rollback_outcome: RollbackOutcome::NotApplicable,
                         rollback_message: None,
+                        audit_reason: Some("stale".to_owned()),
                     })
                     .await;
 
@@ -334,6 +429,7 @@ pub async fn execute_plan<C: ExecutorCallbacks>(
                     rollback_attempted: false,
                     rollback_outcome: RollbackOutcome::NotApplicable,
                     rollback_message: None,
+                    audit_reason: Some("protected".to_owned()),
                 })
                 .await;
             counts.failed += 1;
@@ -355,6 +451,7 @@ pub async fn execute_plan<C: ExecutorCallbacks>(
                         rollback_attempted: false,
                         rollback_outcome: RollbackOutcome::NotApplicable,
                         rollback_message: None,
+                        audit_reason: None,
                     })
                     .await;
                 counts.succeeded += 1;
@@ -373,6 +470,7 @@ pub async fn execute_plan<C: ExecutorCallbacks>(
                         rollback_attempted,
                         rollback_outcome,
                         rollback_message,
+                        audit_reason: None,
                     })
                     .await;
                 counts.failed += 1;
@@ -406,38 +504,71 @@ pub async fn execute_plan<C: ExecutorCallbacks>(
 type OpError = (PlanItemFailure, bool, RollbackOutcome, Option<String>);
 
 fn execute_item(item: &ExecutorItem) -> Result<(), OpError> {
+    // Resolve the source and destination paths against the library root (if set).
+    // The path gate has already validated them earlier in the loop; this is the
+    // absolute-path computation for the actual filesystem operation.
+    let resolved_src: Option<PathBuf> =
+        resolve_item_path(item.source_path.as_deref(), item.library_root.as_deref());
+    let resolved_dst: Option<PathBuf> =
+        resolve_item_path(item.destination_path.as_deref(), item.library_root.as_deref());
+
     match &item.action {
         ExecutorItemAction::NoOp => Ok(()),
 
         ExecutorItemAction::Move => {
-            let src = require_path(item.source_path.as_ref(), "source")?;
-            let dst = require_path(item.destination_path.as_ref(), "destination")?;
+            let src = require_resolved_path(resolved_src.as_deref(), "source")?;
+            let dst = require_resolved_path(resolved_dst.as_deref(), "destination")?;
             move_op::move_file(src, dst)
                 .map_err(|(f, r)| (f, r.rollback_attempted, r.rollback_outcome, r.rollback_message))
         }
 
         ExecutorItemAction::Archive { archive_destination } => {
-            let src = require_path(item.source_path.as_ref(), "source")?;
+            let src = require_resolved_path(resolved_src.as_deref(), "source")?;
+            // archive_destination is already absolute (pre-computed at plan generation).
             archive_op::archive_file(src, archive_destination)
                 .map_err(|(f, r)| (f, r.rollback_attempted, r.rollback_outcome, r.rollback_message))
         }
 
-        ExecutorItemAction::Trash => {
-            let src = require_path(item.source_path.as_ref(), "source")?;
-            trash_op::trash_file(src)
+        ExecutorItemAction::Trash { fallback_archive_destination } => {
+            let src = require_resolved_path(resolved_src.as_deref(), "source")?;
+            trash_op::trash_file(src, fallback_archive_destination.as_deref())
+                .map(|_| ()) // discard TrashResult (audit_reason recorded by caller)
                 .map_err(|(f, r)| (f, r.rollback_attempted, r.rollback_outcome, r.rollback_message))
         }
 
         ExecutorItemAction::Delete => {
-            let src = require_path(item.source_path.as_ref(), "source")?;
-            delete_op::delete_file(src, item.confirm_required)
+            let src = require_resolved_path(resolved_src.as_deref(), "source")?;
+            // T020: use `destructive_confirmed`, not `is_protected`.
+            delete_op::delete_file(src, item.destructive_confirmed)
                 .map_err(|(f, r)| (f, r.rollback_attempted, r.rollback_outcome, None))
         }
     }
 }
 
-fn require_path<'a>(p: Option<&'a PathBuf>, label: &str) -> Result<&'a Path, OpError> {
-    p.map(PathBuf::as_path).ok_or_else(|| {
+/// Resolve a relative path against an optional library root.
+/// Returns `None` if either argument is `None`.
+fn resolve_item_path(
+    relative: Option<&std::path::Path>,
+    root: Option<&std::path::Path>,
+) -> Option<PathBuf> {
+    match (relative, root) {
+        (Some(rel), Some(r)) => {
+            // Use the validated lexical normalization (path_gate already checked safety).
+            Some(path_gate::lexical_normalize(&r.join(rel)))
+        }
+        (Some(rel), None) => {
+            // Legacy: no root — use path as-is.
+            Some(rel.to_path_buf())
+        }
+        _ => None,
+    }
+}
+
+fn require_resolved_path<'a>(
+    p: Option<&'a std::path::Path>,
+    label: &str,
+) -> Result<&'a std::path::Path, OpError> {
+    p.ok_or_else(|| {
         (
             PlanItemFailure::with_code(
                 FailureCode::PathInvalid,
@@ -461,6 +592,7 @@ fn now_iso() -> String {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use std::path::Path;
     use std::sync::Arc;
     use tokio::sync::Mutex;
 
@@ -495,11 +627,14 @@ mod tests {
             id: id.to_owned(),
             plan_id: "p1".to_owned(),
             action: ExecutorItemAction::Move,
+            // No library_root: pass absolute paths as-is (legacy mode).
             source_path: Some(src.to_path_buf()),
             destination_path: Some(dst.to_path_buf()),
+            library_root: None,
             cas_snapshot: CasSnapshot { approved_mtime: None, approved_size_bytes: None },
             is_protected: false,
-            confirm_required: false,
+            requires_destructive_confirm: false,
+            destructive_confirmed: false,
             current_state: "pending".to_owned(),
         }
     }
@@ -543,9 +678,11 @@ mod tests {
             action: ExecutorItemAction::NoOp,
             source_path: None,
             destination_path: None,
+            library_root: None,
             cas_snapshot: CasSnapshot { approved_mtime: None, approved_size_bytes: None },
             is_protected: false,
-            confirm_required: false,
+            requires_destructive_confirm: false,
+            destructive_confirmed: false,
             current_state: "failed".to_owned(), // already terminal
         };
 
@@ -642,12 +779,14 @@ mod tests {
             action: ExecutorItemAction::Move,
             source_path: Some(src.clone()),
             destination_path: Some(dst),
+            library_root: None,
             cas_snapshot: CasSnapshot {
                 approved_mtime: None,
                 approved_size_bytes: Some(999), // wrong size → stale
             },
             is_protected: false,
-            confirm_required: false,
+            requires_destructive_confirm: false,
+            destructive_confirmed: false,
             current_state: "pending".to_owned(),
         };
 

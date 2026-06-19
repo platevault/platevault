@@ -65,7 +65,12 @@ function loadWizardState(): WizardState {
       return {
         currentStep: parsed.currentStep ?? 0,
         sources: Array.isArray(parsed.sources) ? parsed.sources : loadSources(),
-        catalogSettings: parsed.catalogSettings ?? DEFAULT_CATALOG_SETTINGS,
+        // Migrate/guard: older persisted state used `{ downloadAll }` (no
+        // `selectedCatalogIds`); coerce any shape lacking the array to the default so
+        // consumers reading `selectedCatalogIds.length` never hit `undefined`.
+        catalogSettings: Array.isArray(parsed.catalogSettings?.selectedCatalogIds)
+          ? parsed.catalogSettings
+          : DEFAULT_CATALOG_SETTINGS,
         tools: parsed.tools ?? DEFAULT_TOOLS_STATE,
       };
     }
@@ -270,10 +275,12 @@ export function SetupWizard() {
       ) : (
         <span />
       )}
-      <div className="alm-wizard-footer__spacer" />
+      <div style={{ flex: 1 }} />
       {/* Folder count summary on source step */}
       {step === 0 && totalFolders > 0 && (
-        <span className="alm-wizard-footer__count">
+        <span
+          style={{ fontSize: 'var(--alm-text-xs)', color: 'var(--alm-text-muted)' }}
+        >
           {totalFolders} folder{totalFolders !== 1 ? 's' : ''} selected
         </span>
       )}
@@ -298,21 +305,47 @@ export function SetupWizard() {
   );
 
   return (
-    <div className="alm-wizard-wrapper">
-      <div className="alm-wizard-wrapper__inner">
-        <WizardShell steps={wizardSteps} currentStep={step} footer={footer}>
-          {/* Step label + heading */}
-          <div className="alm-wizard__step-label">
-            Setup &middot; Step {step + 1} of {STEPS.length}
-          </div>
-          <h1 className="alm-wizard__step-heading">
-            {stepMeta.heading}
-          </h1>
-          {stepMeta.description && (
-            <p className="alm-wizard__step-description">
-              {stepMeta.description}
-            </p>
-          )}
+    // Layout fix (mirrors the project wizard): flex column + minHeight:0 so the
+    // WizardShell fills the main content area instead of overflowing/mis-placing.
+    <div
+      className="alm-page alm-setup-wizard"
+      style={{ display: 'flex', flexDirection: 'column', flex: 1, minHeight: 0 }}
+    >
+      <WizardShell steps={wizardSteps} currentStep={step} footer={footer} style={{ flex: 1, minHeight: 0 }}>
+        {/* Step label + heading */}
+        <div
+          style={{
+            fontSize: 'var(--alm-text-2xs)',
+            fontWeight: 'var(--alm-weight-semibold)',
+            textTransform: 'uppercase',
+            letterSpacing: '0.06em',
+            color: 'var(--alm-text-muted)',
+          }}
+        >
+          Setup &middot; Step {step + 1} of {STEPS.length}
+        </div>
+        <h1
+          style={{
+            margin: 'var(--alm-sp-1) 0 0',
+            fontSize: 'var(--alm-text-2xl)',
+            fontWeight: 'var(--alm-weight-semibold)',
+            color: 'var(--alm-text)',
+          }}
+        >
+          {stepMeta.heading}
+        </h1>
+        {stepMeta.description && (
+          <p
+            style={{
+              margin: 'var(--alm-sp-2) 0 var(--alm-sp-5)',
+              fontSize: 'var(--alm-text-base)',
+              lineHeight: 'var(--alm-leading-normal)',
+              color: 'var(--alm-text-secondary)',
+            }}
+          >
+            {stepMeta.description}
+          </p>
+        )}
 
           {/* Step body */}
           {step === 0 && (
@@ -345,8 +378,7 @@ export function SetupWizard() {
               isSubmitting={isSubmitting}
             />
           )}
-        </WizardShell>
-      </div>
+      </WizardShell>
     </div>
   );
 }

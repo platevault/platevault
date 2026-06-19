@@ -81,7 +81,7 @@ impl CallBuffer {
 /// # Errors
 /// Returns `Err(String)` on database failure or when `devMode` is disabled.
 #[tauri::command]
-#[specta::specta(rename = "dev.contracts.list")]
+#[specta::specta]
 pub async fn dev_contracts_list(
     state: State<'_, AppState>,
     request: DevContractsListRequest,
@@ -102,7 +102,7 @@ pub async fn dev_contracts_list(
 /// # Errors
 /// Returns `Err(String)` when `devMode` is disabled or on database failure.
 #[tauri::command]
-#[specta::specta(rename = "dev.calls.list")]
+#[specta::specta]
 pub async fn dev_calls_list(
     state: State<'_, AppState>,
     buffer: State<'_, CallBuffer>,
@@ -128,7 +128,7 @@ pub async fn dev_calls_list(
 /// Returns `Err(String)` when `devMode` is disabled, the path is outside the
 /// allowed write envelope, or the file cannot be written.
 #[tauri::command]
-#[specta::specta(rename = "dev.export")]
+#[specta::specta]
 pub async fn dev_export(
     state: State<'_, AppState>,
     buffer: State<'_, CallBuffer>,
@@ -192,7 +192,7 @@ pub async fn dev_export(
 /// # Errors
 /// Returns `Err(String)` when `devMode` is disabled.
 #[tauri::command]
-#[specta::specta(rename = "dev.schema.get")]
+#[specta::specta]
 pub async fn dev_schema_get(
     state: State<'_, AppState>,
     request: DevSchemaGetRequest,

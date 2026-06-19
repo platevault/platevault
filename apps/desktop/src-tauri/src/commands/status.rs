@@ -10,7 +10,7 @@ use contracts_core::status::{LibraryStats, StatusSummary};
 /// # Errors
 /// Returns `Err(String)` on failure; the stub never fails.
 #[tauri::command]
-#[specta::specta(rename = "status.summary")]
+#[specta::specta]
 pub async fn status_summary() -> Result<StatusSummary, String> {
     tracing::debug!("stub: status.summary");
     Ok(StatusSummary {

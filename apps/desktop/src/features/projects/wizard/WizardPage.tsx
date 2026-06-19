@@ -8,6 +8,8 @@ import { StepCalibration, type CalibrationMapping } from './StepCalibration';
 import { StepViews, type StepViewsData } from './StepViews';
 import { StepLayout, type StepLayoutData } from './StepLayout';
 import { StepReview } from './StepReview';
+import { callCreateProject } from '@/features/projects/store';
+import { addToast } from '@/shared/toast';
 
 const STORAGE_KEY = 'alm-project-wizard-draft';
 
@@ -68,15 +70,23 @@ const PROFILE_LABELS: Record<string, string> = {
   planetary: 'planetary/lunar',
 };
 
+// Map wizard workflowProfile to the ProjectTool enum expected by the backend.
+const PROFILE_TO_TOOL: Record<string, 'PixInsight' | 'Siril' | 'Planetary Suite'> = {
+  pixinsight: 'PixInsight',
+  siril: 'Siril',
+  planetary: 'Planetary Suite',
+};
+
 export function WizardPage() {
   const navigate = useNavigate();
   const [currentStep, setCurrentStep] = useState(0);
   const [wizardData, setWizardData] = useState<WizardData>(loadDraft);
+  const [creating, setCreating] = useState(false);
 
   // In mock mode, allow skipping all validation to walk through the wizard quickly
   const devSkip = import.meta.env.VITE_USE_MOCKS === 'true';
 
-  // Save draft on step change
+  // Save draft on step/data change
   useEffect(() => {
     saveDraft(wizardData);
   }, [currentStep, wizardData]);
@@ -115,6 +125,54 @@ export function WizardPage() {
   function handleCancel() {
     clearDraft();
     void navigate({ to: '/projects' });
+  }
+
+  // T078c: wire actual project creation at step 5 (Review & create).
+  async function handleCreate() {
+    if (creating) return;
+    setCreating(true);
+    try {
+      const tool = PROFILE_TO_TOOL[wizardData.name.workflowProfile] ?? 'PixInsight';
+      // Derive a safe path from the project name (kebab-case, no special chars).
+      const safeName = wizardData.name.name
+        .trim()
+        .toLowerCase()
+        .replace(/[^a-z0-9_-]+/g, '-')
+        .replace(/^-+|-+$/g, '');
+      const path = `projects/${safeName || 'new-project'}`;
+
+      const result = await callCreateProject({
+        requestId: crypto.randomUUID(),
+        name: wizardData.name.name.trim(),
+        tool,
+        path,
+        initialSources: wizardData.sources.selectedSessionIds,
+        notes: null,
+      });
+
+      clearDraft();
+
+      if (result.planId) {
+        addToast({
+          message: `Project "${wizardData.name.name}" created. Review the folder plan before applying.`,
+          variant: 'info',
+          action: {
+            label: 'View plan',
+            onClick: () => void navigate({ to: '/archive', search: { selected: undefined } as never }),
+          },
+        });
+      } else {
+        addToast({ message: `Project "${wizardData.name.name}" created.`, variant: 'success' });
+      }
+
+      // Navigate back to projects list; the list re-fetches automatically.
+      void navigate({ to: '/projects' });
+    } catch (err: unknown) {
+      const msg = err instanceof Error ? err.message : String(err);
+      addToast({ message: `Could not create project: ${msg}`, variant: 'error' });
+    } finally {
+      setCreating(false);
+    }
   }
 
   const steps: WizardStep[] = STEP_LABELS.map((label, i) => ({
@@ -204,40 +262,76 @@ export function WizardPage() {
             {nextLabels[currentStep]}
           </Btn>
         )}
+        {currentStep === 5 && (
+          <Btn
+            variant="primary"
+            size="sm"
+            onClick={() => void handleCreate()}
+            disabled={creating || !wizardData.name.name.trim()}
+            style={{ flex: 1 }}
+            data-testid="wizard-create-btn"
+          >
+            {creating ? 'Creating…' : 'Create project'}
+          </Btn>
+        )}
       </div>
     </div>
   );
 
+  // T078c layout fix: min-height: 0 prevents flex overflow that caused the
+  // wizard to render at the bottom of the window instead of filling the main area.
   return (
-    <div className="alm-page" style={{ display: 'flex', flexDirection: 'column', flex: 1 }}>
-      {/* Wizard toolbar */}
-      <div className="alm-toolbar">
-        <div className="alm-toolbar__main">
-          <span style={{ fontSize: 'var(--alm-text-sm)', fontWeight: 600 }}>
-            New project &mdash; {projectLabel}
-          </span>
-          <span style={{ flex: 1 }} />
-          <Btn size="sm" onClick={() => saveDraft(wizardData)}>Save draft</Btn>
-          {devSkip && (
-            <Btn size="sm" onClick={() => { clearDraft(); setWizardData(INITIAL_DATA); setCurrentStep(0); }}>
-              Reset wizard
-            </Btn>
-          )}
-          <Btn size="sm" onClick={handleCancel}>Cancel</Btn>
-        </div>
-        <div className="alm-toolbar__sub alm-project-sub">
-          <span>Workflow profile: {profileLabel}</span>
-          <span className="alm-project-sub__dot">&middot;</span>
-          {wizardData.name.name && (
-            <span>From target context: {wizardData.name.name.split(/[\s·—]/)[0]}</span>
-          )}
-          <span style={{ marginLeft: 'auto', color: 'var(--alm-text-faint)' }}>
-            Sources are selected here; the filesystem plan is shown at step 6 before anything is created.
-          </span>
-        </div>
+    <div className="alm-page" style={{ display: 'flex', flexDirection: 'column', flex: 1, minHeight: 0 }}>
+      {/* Wizard toolbar — styled consistently with other page toolbars */}
+      <div
+        style={{
+          display: 'flex',
+          alignItems: 'center',
+          gap: 'var(--alm-space-3)',
+          padding: '0 var(--alm-space-4)',
+          height: 'var(--alm-toolbar-height, 44px)',
+          borderBottom: '1px solid var(--alm-border)',
+          flexShrink: 0,
+        }}
+      >
+        <span style={{ fontSize: 'var(--alm-text-sm)', fontWeight: 600 }}>
+          New project &mdash; {projectLabel}
+        </span>
+        <span style={{ flex: 1 }} />
+        <Btn size="sm" onClick={() => saveDraft(wizardData)}>Save draft</Btn>
+        {devSkip && (
+          <Btn size="sm" onClick={() => { clearDraft(); setWizardData(INITIAL_DATA); setCurrentStep(0); }}>
+            Reset wizard
+          </Btn>
+        )}
+        <Btn size="sm" onClick={handleCancel}>Cancel</Btn>
       </div>
 
-      <WizardShell steps={steps} currentStep={currentStep} summary={summary}>
+      {/* Sub-toolbar: workflow profile breadcrumb */}
+      <div
+        style={{
+          display: 'flex',
+          alignItems: 'center',
+          gap: 'var(--alm-space-2)',
+          padding: '4px var(--alm-space-4)',
+          fontSize: 'var(--alm-text-xs)',
+          color: 'var(--alm-text-muted)',
+          borderBottom: '1px solid var(--alm-border)',
+          flexShrink: 0,
+        }}
+      >
+        <span>Workflow profile: {profileLabel}</span>
+        <span>&middot;</span>
+        {wizardData.name.name && (
+          <span>From target context: {wizardData.name.name.split(/[\s·—]/)[0]}</span>
+        )}
+        <span style={{ marginLeft: 'auto', color: 'var(--alm-text-faint)' }}>
+          Sources are selected here; the filesystem plan is shown at step 6 before anything is created.
+        </span>
+      </div>
+
+      {/* WizardShell fills the remaining space */}
+      <WizardShell steps={steps} currentStep={currentStep} summary={summary} style={{ flex: 1, minHeight: 0 }}>
         {/* Step title + description */}
         {currentStep < 5 && (
           <div style={{ marginBottom: 'var(--alm-space-5)' }}>

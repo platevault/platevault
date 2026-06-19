@@ -598,7 +598,7 @@ mod tests {
             origin: "inbox",
             origin_path: None,
             plan_type: "split",
-            destructive_destination: "none",
+            destructive_destination: "archive",
             parent_plan_id: None,
             total_bytes_required: 0,
         };
@@ -620,7 +620,7 @@ mod tests {
             origin: "inbox",
             origin_path: None,
             plan_type: "split",
-            destructive_destination: "none",
+            destructive_destination: "archive",
             parent_plan_id: None,
             total_bytes_required: 0,
         };

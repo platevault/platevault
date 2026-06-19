@@ -16,7 +16,7 @@ use crate::commands::lifecycle::AppState;
 /// # Errors
 /// Returns `Err(String)` on database failure.
 #[tauri::command]
-#[specta::specta(rename = "firstrun.state")]
+#[specta::specta]
 pub async fn firstrun_state(state: State<'_, AppState>) -> Result<FirstRunStateResponse, String> {
     tracing::debug!("firstrun.state");
     app_core::first_run::get_first_run_state(state.repo.pool()).await.map_err(|e| e.message)
@@ -29,7 +29,7 @@ pub async fn firstrun_state(state: State<'_, AppState>) -> Result<FirstRunStateR
 /// # Errors
 /// Returns `Err(String)` if preconditions are not met or on database failure.
 #[tauri::command]
-#[specta::specta(rename = "firstrun.complete")]
+#[specta::specta]
 pub async fn firstrun_complete(
     state: State<'_, AppState>,
 ) -> Result<FirstRunCompleteResponse, String> {
@@ -46,7 +46,7 @@ pub async fn firstrun_complete(
 /// # Errors
 /// Returns `Err(String)` if `confirm` is not `true` or on database failure.
 #[tauri::command]
-#[specta::specta(rename = "firstrun.restart")]
+#[specta::specta]
 pub async fn firstrun_restart(
     state: State<'_, AppState>,
     request: FirstRunRestartRequest,
@@ -63,7 +63,7 @@ pub async fn firstrun_restart(
 /// # Errors
 /// Returns `Err(String)` on catastrophic failure; per-item errors are in the response.
 #[tauri::command]
-#[specta::specta(rename = "roots.register.batch")]
+#[specta::specta]
 pub async fn roots_register_batch(
     state: State<'_, AppState>,
     request: RegisterSourceBatchRequest,
