@@ -2287,9 +2287,18 @@ export type InboxConfirmRequest_Serialize = {
 /**  Response from `inbox.confirm`. */
 export type InboxConfirmResponse = {
 	planId: string,
-	/**  Always `"ready_for_review"` for plans created here. */
+	/**
+	 *  Always `"ready_for_review"` for plans created here; empty string for
+	 *  master-registration responses.
+	 */
 	planState: string,
 	itemsTotal: number,
+	/**
+	 *  True when the item was a detected calibration master that was registered
+	 *  directly to `calibration_session` + `calibration_fingerprint` (Path 1 —
+	 *  no file move).  `plan_id` is an empty string in this case.
+	 */
+	registeredAsMaster: boolean,
 };
 
 /**  A file entry discovered during an inbox scan. */

@@ -31,6 +31,13 @@ pub struct InboxItemRow {
     pub content_signature: Option<String>,
     pub state: String,
     pub lane: String,
+    /// File format (`"fits"` | `"xisf"` | `"video"` | `"mixed"`).  Spec 040 FR-006.
+    pub format: Option<String>,
+    /// Non-zero when this row represents a single detected calibration master file.
+    pub is_master_item: i64,
+    pub master_frame_type: Option<String>,
+    pub master_filter: Option<String>,
+    pub master_exposure_s: Option<f64>,
 }
 
 /// Data required to insert a new inbox item.

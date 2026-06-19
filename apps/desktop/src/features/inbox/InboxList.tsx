@@ -1,7 +1,7 @@
 /**
  * InboxList — left sidebar listing scanned inbox folders.
  *
- * Each row shows the relative path, lane pill (fits/video), classification
+ * Each row shows the relative path, file type pill (fits/video), classification
  * state, and a conflict/needs-review indicator.
  */
 
@@ -105,9 +105,9 @@ export function InboxList({
               const v = e.target.value as FilterType;
               onFilterTypeChange(v === 'all' ? undefined : v);
             }}
-            aria-label="Filter lane"
+            aria-label="Filter file type"
           >
-            <option value="all">All lanes</option>
+            <option value="all">All file types</option>
             <option value="fits">FITS</option>
             <option value="video">Video</option>
           </select>

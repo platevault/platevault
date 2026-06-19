@@ -93,6 +93,7 @@ pub async fn inbox_confirm(
         plan_id: resp.plan_id,
         plan_state: resp.plan_state,
         items_total: u32::try_from(resp.items_total).unwrap_or(u32::MAX),
+        registered_as_master: resp.registered_as_master,
     })
 }
 

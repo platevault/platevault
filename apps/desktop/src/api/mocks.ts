@@ -542,6 +542,7 @@ export async function mockInvoke<T>(
         planId: `plan-${Date.now()}`,
         planState: 'ready_for_review',
         itemsTotal: 18,
+        registeredAsMaster: false,
       } as T;
     }
     case 'inbox_reclassify': {
