@@ -270,9 +270,7 @@ pub async fn complete_first_run(
     let sources = repo::list_sources(pool).await.map_err(db_to_contract)?;
     let source_count_by_kind = SourceCountByKind {
         light_frames: sources.iter().filter(|s| s.kind == SourceKind::LightFrames).count(),
-        dark: sources.iter().filter(|s| s.kind == SourceKind::Dark).count(),
-        flat: sources.iter().filter(|s| s.kind == SourceKind::Flat).count(),
-        bias: sources.iter().filter(|s| s.kind == SourceKind::Bias).count(),
+        calibration: sources.iter().filter(|s| s.kind == SourceKind::Calibration).count(),
         project: sources.iter().filter(|s| s.kind == SourceKind::Project).count(),
         inbox: sources.iter().filter(|s| s.kind == SourceKind::Inbox).count(),
     };

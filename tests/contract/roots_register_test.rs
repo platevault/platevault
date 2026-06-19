@@ -16,9 +16,9 @@ fn sample_request() -> RegisterSourceRequest {
 
 fn sample_request_with_subtype() -> RegisterSourceRequest {
     RegisterSourceRequest {
-        kind: SourceKind::Dark,
-        path: "/astro/darks".to_owned(),
-        kind_subtype: Some("dark".to_owned()),
+        kind: SourceKind::Calibration,
+        path: "/astro/cals".to_owned(),
+        kind_subtype: Some("calibration".to_owned()),
         scan_depth: ScanDepth::Single,
     }
 }
@@ -52,7 +52,7 @@ fn request_with_kind_subtype_includes_field() {
         serde_json::to_value(sample_request_with_subtype()).expect("request should serialize");
     let obj = value.as_object().expect("request should be an object");
 
-    assert_eq!(obj["kindSubtype"], json!("dark"));
+    assert_eq!(obj["kindSubtype"], json!("calibration"));
     assert_eq!(obj["scanDepth"], json!("single"));
 }
 
@@ -62,9 +62,7 @@ fn request_with_kind_subtype_includes_field() {
 fn source_kind_variants_match_contract_enum() {
     let expected = [
         (SourceKind::LightFrames, "light_frames"),
-        (SourceKind::Dark, "dark"),
-        (SourceKind::Flat, "flat"),
-        (SourceKind::Bias, "bias"),
+        (SourceKind::Calibration, "calibration"),
         (SourceKind::Project, "project"),
         (SourceKind::Inbox, "inbox"),
     ];
@@ -80,7 +78,7 @@ fn source_kind_variants_match_contract_enum() {
 
 #[test]
 fn source_kind_roundtrips_from_json() {
-    for variant_str in ["light_frames", "dark", "flat", "bias", "project", "inbox"] {
+    for variant_str in ["light_frames", "calibration", "project", "inbox"] {
         let deserialized: SourceKind =
             serde_json::from_value(json!(variant_str)).unwrap_or_else(|e| {
                 panic!("\"{variant_str}\" should deserialize to SourceKind: {e}");

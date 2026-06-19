@@ -25,9 +25,7 @@ fn now_iso() -> String {
 fn source_kind_to_str(kind: SourceKind) -> &'static str {
     match kind {
         SourceKind::LightFrames => "light_frames",
-        SourceKind::Dark => "dark",
-        SourceKind::Flat => "flat",
-        SourceKind::Bias => "bias",
+        SourceKind::Calibration => "calibration",
         SourceKind::Project => "project",
         SourceKind::Inbox => "inbox",
     }
@@ -35,9 +33,7 @@ fn source_kind_to_str(kind: SourceKind) -> &'static str {
 
 fn str_to_source_kind(s: &str) -> SourceKind {
     match s {
-        "dark" => SourceKind::Dark,
-        "flat" => SourceKind::Flat,
-        "bias" => SourceKind::Bias,
+        "calibration" => SourceKind::Calibration,
         "project" => SourceKind::Project,
         "inbox" => SourceKind::Inbox,
         // "light_frames" and any unknown value default to LightFrames.

@@ -68,13 +68,16 @@ pub struct LifecycleTransitionApplied {
 pub const TOPIC_LIFECYCLE_TRANSITION_APPLIED: &str = "lifecycle.transition.applied";
 
 /// Per-kind source counts for the `first_run.completed` audit event.
+///
+/// `calibration` replaces the former `dark`, `flat`, and `bias` fields now
+/// that the source-folder kind is unified into a single `calibration` bucket.
+/// Per-image frame type is detected from image metadata (FITS `IMAGETYP`),
+/// not from the source-folder kind.
 #[derive(Clone, Debug, Serialize, Deserialize, JsonSchema, Type)]
 #[serde(rename_all = "camelCase")]
 pub struct SourceCountByKind {
     pub light_frames: usize,
-    pub dark: usize,
-    pub flat: usize,
-    pub bias: usize,
+    pub calibration: usize,
     pub project: usize,
     pub inbox: usize,
 }
