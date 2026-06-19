@@ -30,8 +30,8 @@ describe('registerRootBatch maps the generated response shape', () => {
 
     const out = await registerRootBatch({
       sources: [
-        { kind: 'capture', path: 'D:/Astro/Captures', scanDepth: 2 },
-        { kind: 'inbox', path: 'D:/Astro/Inbox', scanDepth: 0 },
+        { kind: 'capture', path: 'D:/Astro/Captures', scanDepth: 'recursive' },
+        { kind: 'inbox', path: 'D:/Astro/Inbox', scanDepth: 'single' },
       ],
     });
 

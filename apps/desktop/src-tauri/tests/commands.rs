@@ -356,9 +356,16 @@ async fn roots_register_via_use_case() {
     let db = Database::in_memory().await.expect("in-memory database");
     db.migrate().await.expect("run migrations");
 
+    // Path must be absolute on the host OS (validate_path rejects POSIX-style
+    // paths on Windows).
+    #[cfg(windows)]
+    let source_path = "C:\\Temp";
+    #[cfg(not(windows))]
+    let source_path = "/tmp";
+
     let req = contracts_core::first_run::RegisterSourceRequest {
         kind: contracts_core::first_run::SourceKind::LightFrames,
-        path: "/tmp".to_owned(),
+        path: source_path.to_owned(),
         kind_subtype: None,
         scan_depth: contracts_core::first_run::ScanDepth::Recursive,
     };
@@ -367,7 +374,7 @@ async fn roots_register_via_use_case() {
     assert!(resp.is_ok(), "register_source failed: {resp:?}");
     let resp = resp.unwrap();
     assert_eq!(resp.kind, contracts_core::first_run::SourceKind::LightFrames);
-    assert_eq!(resp.path, "/tmp");
+    assert_eq!(resp.path, source_path);
 }
 
 #[tokio::test]

@@ -121,9 +121,12 @@ mod tests {
     #[tokio::test]
     async fn file_create_fires_event() {
         let dir = tempfile::tempdir().unwrap();
-        let (mut rx, _guard) = start_artifact_watcher(&[dir.path().to_path_buf()], 64).unwrap();
+        // Canonicalize so emitted event paths match `file_path` (macOS reports
+        // /private/var/... while tempdir() returns /var/...).
+        let root = dir.path().canonicalize().unwrap();
+        let (mut rx, _guard) = start_artifact_watcher(std::slice::from_ref(&root), 64).unwrap();
 
-        let file_path = dir.path().join("test_artifact.xisf");
+        let file_path = root.join("test_artifact.xisf");
         std::fs::write(&file_path, b"data").unwrap();
 
         // Wait for event with a 2-second deadline.
