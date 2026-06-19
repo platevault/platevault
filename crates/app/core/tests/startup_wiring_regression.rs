@@ -1,3 +1,4 @@
+#![allow(clippy::doc_markdown)] // prose doc-comments reference code idents; pedantic noise in a test
 //! Regression R-3 — `run_app` startup wiring: plan listener + log forwarder.
 // Pre-existing doc comments reference identifiers without backticks; suppress
 // the pedantic lint rather than rewriting all module-level comments.

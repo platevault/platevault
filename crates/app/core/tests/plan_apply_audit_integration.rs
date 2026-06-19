@@ -1,0 +1,360 @@
+#![allow(clippy::doc_markdown)]
+//! Integration tests for plan apply, filesystem execution, and audit records
+//! (spec 017 cleanup/archive plans #17, spec 025 filesystem plan apply #18,
+//! audit record #22).
+//!
+//! These tests exercise the full Layer-1 path:
+//!   seed plan → approve → apply → executor runs real FS → audit events written.
+//!
+//! The harness uses an in-memory SQLite database (via `support::setup()`).
+//! All filesystem operations use `tempfile::tempdir()` — never real user paths.
+
+mod support;
+
+use persistence_db::repositories::plans as plans_repo;
+use uuid::Uuid;
+
+// ── Seeding helpers ───────────────────────────────────────────────────────────
+
+/// Insert a draft plan, add `item_count` move-action items pointing at real
+/// tempdir paths, then transition plan to `approved` with a known token.
+///
+/// Returns `(plan_id, approval_token, tempdir)`.  Caller must hold `_dir`
+/// alive for the duration of the test so the tempfile paths remain valid.
+async fn seed_approved_plan_with_real_files(
+    pool: &sqlx::SqlitePool,
+    plan_id: &str,
+    src_path: &std::path::Path,
+    dst_path: &std::path::Path,
+) {
+    // Insert plan row (draft state).
+    plans_repo::insert_plan(
+        pool,
+        &plans_repo::InsertPlan {
+            id: plan_id,
+            title: "Integration Test Plan",
+            origin: "cleanup",
+            origin_path: None,
+            plan_type: "cleanup",
+            destructive_destination: "archive",
+            parent_plan_id: None,
+            total_bytes_required: 0,
+        },
+    )
+    .await
+    .expect("insert_plan");
+
+    // Insert one move item pointing at the real tempdir paths.
+    // approved_mtime/approved_size_bytes are NULL → CAS check skipped (permissive).
+    plans_repo::insert_plan_item(
+        pool,
+        &plans_repo::InsertPlanItem {
+            id: &format!("{plan_id}-item-0"),
+            plan_id,
+            item_index: 1,
+            name: "file.fits",
+            action: "move",
+            from_root_id: None,
+            from_relative_path: src_path.to_str().expect("utf-8 src path"),
+            to_root_id: None,
+            to_relative_path: dst_path.to_str().expect("utf-8 dst path"),
+            reason: "integration test",
+            protection: "normal",
+            linked_entity: None,
+            provenance_json: None,
+            archive_path: None,
+            source_id: None,
+            category: None,
+        },
+    )
+    .await
+    .expect("insert_plan_item");
+
+    // Advance state: draft → ready_for_review → approved.
+    plans_repo::update_plan_state(pool, plan_id, "ready_for_review")
+        .await
+        .expect("update to ready_for_review");
+    plans_repo::set_approved(pool, plan_id, "2026-06-19T00:00:00Z", "tok-test-fixed")
+        .await
+        .expect("set_approved");
+}
+
+// ── Test 1: plan content round-trip ──────────────────────────────────────────
+
+/// A freshly-seeded approved plan has its items readable via `get_plan`
+/// and reports the correct state and item counts.
+#[tokio::test]
+async fn approved_plan_content_round_trip() {
+    let (db, _repo, _bus) = support::setup().await;
+    let plan_id = Uuid::new_v4().to_string();
+
+    let dir = tempfile::tempdir().expect("tempdir");
+    let src = dir.path().join("source.fits");
+    let dst = dir.path().join("archive/source.fits");
+    std::fs::write(&src, b"fits-content").expect("write src");
+
+    seed_approved_plan_with_real_files(db.pool(), &plan_id, &src, &dst).await;
+
+    // Verify via the use-case layer (not raw SQL).
+    let detail =
+        app_core::plans::get_plan(db.pool(), &plan_id).await.expect("get_plan should succeed");
+
+    assert_eq!(detail.id, plan_id);
+    assert_eq!(
+        detail.state,
+        contracts_core::plans::PlanState::Approved,
+        "plan should be in approved state"
+    );
+    assert_eq!(detail.items_total, 1, "expected 1 item");
+    assert_eq!(detail.items.len(), 1);
+    assert_eq!(detail.items[0].name, "file.fits");
+    assert_eq!(detail.items[0].action, contracts_core::plans::PlanItemAction::Move);
+}
+
+// ── Test 2: apply produces real FS side effect + audit events ────────────────
+
+/// Applying an approved plan with a move item:
+///   (a) moves the source file to the destination on the real filesystem, and
+///   (b) writes `plan_apply_events` rows including a plan-level `approved→applying`
+///       start event and an item `pending→succeeded` event.
+#[tokio::test]
+async fn apply_plan_moves_file_and_writes_audit_events() {
+    let (db, _repo, bus) = support::setup().await;
+    let plan_id = Uuid::new_v4().to_string();
+
+    let dir = tempfile::tempdir().expect("tempdir");
+    let src = dir.path().join("capture.fits");
+    let dst = dir.path().join("processed/capture.fits");
+    std::fs::write(&src, b"raw-light-frame").expect("write src");
+
+    seed_approved_plan_with_real_files(db.pool(), &plan_id, &src, &dst).await;
+
+    // Apply the plan.
+    let resp = app_core::plan_apply::apply_plan(db.pool(), &bus, &plan_id, "tok-test-fixed")
+        .await
+        .expect("apply_plan should succeed");
+    assert_eq!(resp.plan_id, plan_id);
+    assert_eq!(resp.new_state, "applying");
+    assert!(!resp.run_id.is_empty(), "run_id should be non-empty");
+
+    // Wait for the background executor task to complete.
+    tokio::time::sleep(tokio::time::Duration::from_millis(200)).await;
+
+    // (a) FS side effect: source gone, destination present.
+    assert!(!src.exists(), "source file should have been moved away");
+    assert!(dst.exists(), "destination file should exist after move");
+    assert_eq!(std::fs::read(&dst).expect("read dst"), b"raw-light-frame");
+
+    // (b) Audit: at least a plan-level start event should be recorded.
+    let (event_count,): (i64,) =
+        sqlx::query_as("SELECT COUNT(*) FROM plan_apply_events WHERE plan_id = ?")
+            .bind(&plan_id)
+            .fetch_one(db.pool())
+            .await
+            .expect("query plan_apply_events");
+
+    assert!(
+        event_count >= 1,
+        "expected at least 1 plan_apply_event for plan {plan_id}, found {event_count}"
+    );
+
+    // Verify the plan-level start event: approved → applying.
+    let (start_count,): (i64,) = sqlx::query_as(
+        "SELECT COUNT(*) FROM plan_apply_events \
+         WHERE plan_id = ? AND item_id IS NULL AND prior_state = 'approved' AND new_state = 'applying'",
+    )
+    .bind(&plan_id)
+    .fetch_one(db.pool())
+    .await
+    .expect("query start event");
+
+    assert_eq!(
+        start_count, 1,
+        "expected 1 plan-level start event (approved→applying) for plan {plan_id}"
+    );
+
+    // Verify that an item-level succeeded event was written.
+    let (item_succeeded_count,): (i64,) = sqlx::query_as(
+        "SELECT COUNT(*) FROM plan_apply_events \
+         WHERE plan_id = ? AND item_id IS NOT NULL AND new_state = 'succeeded'",
+    )
+    .bind(&plan_id)
+    .fetch_one(db.pool())
+    .await
+    .expect("query item succeeded event");
+
+    assert_eq!(item_succeeded_count, 1, "expected 1 item-level succeeded event for plan {plan_id}");
+
+    // Plan should have reached terminal state 'applied'.
+    let plan_row = plans_repo::get_plan(db.pool(), &plan_id, false).await.expect("get_plan row");
+    assert_eq!(
+        plan_row.state, "applied",
+        "plan should reach terminal state 'applied' after all items succeed"
+    );
+}
+
+// ── Test 3: no-overwrite safety guarantee ────────────────────────────────────
+
+/// Attempting to move a file to a destination that already exists must
+/// produce a `failed` item event (ConflictDestinationExists), leaving the
+/// source file intact and the plan in a terminal failed/partially_applied state.
+///
+/// This verifies Constitution §II: "never overwrite silently".
+#[tokio::test]
+async fn apply_plan_refuses_to_overwrite_existing_destination() {
+    let (db, _repo, bus) = support::setup().await;
+    let plan_id = Uuid::new_v4().to_string();
+
+    let dir = tempfile::tempdir().expect("tempdir");
+    let src = dir.path().join("source.fits");
+    let dst = dir.path().join("destination.fits");
+
+    // Both source and destination already exist — triggers ConflictDestinationExists.
+    std::fs::write(&src, b"source-content").expect("write src");
+    std::fs::write(&dst, b"existing-content").expect("write dst");
+
+    seed_approved_plan_with_real_files(db.pool(), &plan_id, &src, &dst).await;
+
+    let resp = app_core::plan_apply::apply_plan(db.pool(), &bus, &plan_id, "tok-test-fixed")
+        .await
+        .expect("apply_plan should succeed (apply start, not item execution)");
+    assert_eq!(resp.new_state, "applying");
+
+    // Wait for background executor to complete.
+    tokio::time::sleep(tokio::time::Duration::from_millis(200)).await;
+
+    // Source must be untouched — no silent overwrite.
+    assert!(src.exists(), "source file must remain when destination already exists");
+    assert_eq!(
+        std::fs::read(&dst).expect("read dst"),
+        b"existing-content",
+        "destination must not be overwritten"
+    );
+
+    // A failed item event must be recorded.
+    let (failed_count,): (i64,) = sqlx::query_as(
+        "SELECT COUNT(*) FROM plan_apply_events \
+         WHERE plan_id = ? AND item_id IS NOT NULL AND new_state = 'failed'",
+    )
+    .bind(&plan_id)
+    .fetch_one(db.pool())
+    .await
+    .expect("query failed events");
+
+    assert!(
+        failed_count >= 1,
+        "expected at least 1 failed item event when destination already exists; found {failed_count}"
+    );
+
+    // Plan terminal state must be 'failed' (0 successes, 1 failure).
+    let plan_row = plans_repo::get_plan(db.pool(), &plan_id, false).await.expect("get_plan row");
+    assert_eq!(plan_row.state, "failed", "plan should reach 'failed' when the only item conflicts");
+}
+
+// ── Test 4: approve + apply round-trip via use-case layer ────────────────────
+
+/// Verifies the full review pipeline via public use-case functions:
+///   insert draft → approve_plan → apply_plan → audit events.
+///
+/// This mirrors the UI-driven happy-path without touching repo internals
+/// (except for the initial draft insert which has no public use-case yet).
+#[tokio::test]
+async fn full_review_to_apply_audit_round_trip() {
+    let (db, _repo, bus) = support::setup().await;
+    let plan_id = Uuid::new_v4().to_string();
+
+    let dir = tempfile::tempdir().expect("tempdir");
+    let src = dir.path().join("light.fits");
+    let dst = dir.path().join("sorted/light.fits");
+    std::fs::write(&src, b"light-frame").expect("write src");
+
+    // 1. Insert draft plan + item via repo (no public use-case for plan generation yet).
+    plans_repo::insert_plan(
+        db.pool(),
+        &plans_repo::InsertPlan {
+            id: &plan_id,
+            title: "Full Round-Trip Plan",
+            origin: "cleanup",
+            origin_path: None,
+            plan_type: "cleanup",
+            destructive_destination: "archive",
+            parent_plan_id: None,
+            total_bytes_required: 0,
+        },
+    )
+    .await
+    .expect("insert_plan");
+
+    plans_repo::insert_plan_item(
+        db.pool(),
+        &plans_repo::InsertPlanItem {
+            id: &format!("{plan_id}-item-0"),
+            plan_id: &plan_id,
+            item_index: 1,
+            name: "light.fits",
+            action: "move",
+            from_root_id: None,
+            from_relative_path: src.to_str().expect("utf-8"),
+            to_root_id: None,
+            to_relative_path: dst.to_str().expect("utf-8"),
+            reason: "round-trip test",
+            protection: "normal",
+            linked_entity: None,
+            provenance_json: None,
+            archive_path: None,
+            source_id: None,
+            category: None,
+        },
+    )
+    .await
+    .expect("insert_plan_item");
+
+    // 2. Transition to ready_for_review (required pre-condition for approve_plan).
+    plans_repo::update_plan_state(db.pool(), &plan_id, "ready_for_review")
+        .await
+        .expect("update_plan_state");
+
+    // 3. Approve via use-case layer.
+    let approve_resp = app_core::plans::approve_plan(db.pool(), &bus, &plan_id, "tester")
+        .await
+        .expect("approve_plan");
+    assert_eq!(approve_resp.new_state, "approved");
+    assert!(!approve_resp.approval_token.is_empty());
+
+    // 4. Apply via use-case layer.
+    let apply_resp =
+        app_core::plan_apply::apply_plan(db.pool(), &bus, &plan_id, &approve_resp.approval_token)
+            .await
+            .expect("apply_plan");
+    assert_eq!(apply_resp.new_state, "applying");
+
+    // Wait for background executor task.
+    tokio::time::sleep(tokio::time::Duration::from_millis(200)).await;
+
+    // 5. FS side effect.
+    assert!(!src.exists(), "source should be moved");
+    assert!(dst.exists(), "destination should exist");
+
+    // 6. Audit: plan-level terminal event written.
+    let (terminal_event_count,): (i64,) = sqlx::query_as(
+        "SELECT COUNT(*) FROM plan_apply_events \
+         WHERE plan_id = ? AND item_id IS NULL AND new_state = 'applied'",
+    )
+    .bind(&plan_id)
+    .fetch_one(db.pool())
+    .await
+    .expect("query terminal event");
+
+    assert_eq!(
+        terminal_event_count, 1,
+        "expected 1 plan-level terminal event (new_state='applied') for plan {plan_id}"
+    );
+
+    // 7. get_apply_status reflects completed state.
+    let status = app_core::plan_apply::get_apply_status(db.pool(), &plan_id)
+        .await
+        .expect("get_apply_status");
+    assert_eq!(status.plan_state, "applied");
+    assert_eq!(status.items_applied, 1);
+    assert_eq!(status.items_failed, 0);
+}

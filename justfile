@@ -68,3 +68,11 @@ speckit-resume RUN_ID:
 
 speckit-status:
     specify workflow status
+
+# Run all Rust workspace tests (integration layer).
+test-integration:
+    cargo test --workspace
+
+# Run end-to-end tests against the real Tauri backend.
+test-e2e:
+    cd apps/desktop && pnpm test:e2e:real
