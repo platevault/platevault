@@ -143,7 +143,10 @@ export async function getSessionsCalendar(args: {
   start_month: string;
   end_month: string;
 }): Promise<CalendarData> {
-  return invoke<CalendarData>('sessions_calendar', args);
+  return invoke<CalendarData>('sessions_calendar', {
+    startMonth: args.start_month,
+    endMonth: args.end_month,
+  });
 }
 
 export async function listCalibrationMasters(args?: {
@@ -160,7 +163,7 @@ export async function getCalibrationMaster(args: { id: string }): Promise<Master
 export async function getCalibrationMatches(args: {
   session_id: string;
 }): Promise<MatchCandidate[]> {
-  return invoke<MatchCandidate[]>('calibration_matches', args);
+  return invoke<MatchCandidate[]>('calibration_matches', { sessionId: args.session_id });
 }
 
 export async function listProjects(args?: {
@@ -277,10 +280,10 @@ export async function splitSession(args: {
   id: string;
   split_at_index: number;
 }): Promise<{ original: AcquisitionSession; new: AcquisitionSession }> {
-  return invoke<{ original: AcquisitionSession; new: AcquisitionSession }>(
-    'sessions_split',
-    args,
-  );
+  return invoke<{ original: AcquisitionSession; new: AcquisitionSession }>('sessions_split', {
+    id: args.id,
+    splitAtIndex: args.split_at_index,
+  });
 }
 
 export async function mergeSessions(args: {
@@ -292,7 +295,7 @@ export async function mergeSessions(args: {
 export async function createProjectPlan(args: {
   wizard_state: Record<string, unknown>;
 }): Promise<FilesystemPlan> {
-  return invoke<FilesystemPlan>('projects_create_plan', args);
+  return invoke<FilesystemPlan>('projects_create_plan', { wizardState: args.wizard_state });
 }
 
 export async function approvePlan(args: {
@@ -329,20 +332,28 @@ export async function remapRoot(args: {
   root_id: string;
   new_path: string;
 }): Promise<RemapVerification> {
-  return invoke<RemapVerification>('roots_remap', args);
+  return invoke<RemapVerification>('roots_remap', {
+    rootId: args.root_id,
+    newPath: args.new_path,
+  });
 }
 
 export async function applyRootRemap(args: {
   root_id: string;
   verified: boolean;
 }): Promise<void> {
-  return invoke<void>('roots_remap_apply', args);
+  return invoke<void>('roots_remap_apply', {
+    rootId: args.root_id,
+    verified: args.verified,
+  });
 }
 
 export async function startScan(args?: {
   root_ids?: string[];
 }): Promise<OperationHandle> {
-  return invoke<OperationHandle>('scan_start', args);
+  // Backend expects camelCase `rootIds`; sending `root_ids` is silently ignored
+  // and scans ALL roots instead of the requested subset.
+  return invoke<OperationHandle>('scan_start', { rootIds: args?.root_ids });
 }
 
 export async function setPreference(args: {
