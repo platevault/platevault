@@ -326,7 +326,9 @@ export async function mockInvoke<T>(
     // ---------- First-Run / Batch Commands ----------
 
     case 'roots_register_batch': {
-      const sources = (_args?.sources as Array<{ kind: string; path: string }>) ?? [];
+      // Payload is { request: { sources } }; tolerate a legacy top-level shape too.
+      const req = (_args?.request as { sources?: Array<{ kind: string; path: string }> }) ?? _args;
+      const sources = (req?.sources as Array<{ kind: string; path: string }>) ?? [];
       return {
         results: sources.map((s, i) => ({
           kind: s.kind,
