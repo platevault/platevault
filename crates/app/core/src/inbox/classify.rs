@@ -13,6 +13,7 @@
 use std::collections::HashMap;
 use std::path::{Path, PathBuf};
 
+use calibration_master_detect::{detect_master, DetectInput};
 use metadata_core::{v1_normalization_table, EvidenceSource, FrameType, MetadataExtractor};
 use metadata_fits::FitsExtractor;
 use metadata_xisf::XisfExtractor;
@@ -139,8 +140,33 @@ pub async fn classify(
         };
 
         let image_typ_raw = raw_meta.as_ref().and_then(|m| m.image_typ.as_deref());
-        let (frame_type, evidence_source, raw_value, is_unclassified) =
-            if let Some(raw) = image_typ_raw {
+        let stack_count = raw_meta.as_ref().and_then(|m| m.stack_count);
+        let file_name = abs_path.file_name().and_then(|n| n.to_str()).unwrap_or("");
+
+        // Run master detection first (spec 040 FR-004).
+        // detect_master provides both frame_type and is_master when it matches.
+        let detect_input =
+            DetectInput { imagetyp: image_typ_raw, stack_count, file_name, rel_path: &rel };
+        let master_result = detect_master(&detect_input);
+
+        let (frame_type, evidence_source, raw_value, is_unclassified, is_master, master_detector) =
+            if let Some(ref det) = master_result {
+                // Detector produced a classification — use it directly.
+                let src = if ext == "xisf" {
+                    EvidenceSource::XisfProperty
+                } else {
+                    EvidenceSource::ImagetypHeader
+                };
+                (
+                    Some(det.frame_type),
+                    src,
+                    image_typ_raw.map(str::to_owned),
+                    false,
+                    det.is_master,
+                    Some(det.detector),
+                )
+            } else if let Some(raw) = image_typ_raw {
+                // No master detector matched; fall back to the normalization table.
                 match norm_table.normalize(raw) {
                     Some(ft) => {
                         let src = if ext == "xisf" {
@@ -148,12 +174,12 @@ pub async fn classify(
                         } else {
                             EvidenceSource::ImagetypHeader
                         };
-                        (Some(ft), src, Some(raw.to_owned()), false)
+                        (Some(ft), src, Some(raw.to_owned()), false, false, None)
                     }
-                    None => (None, EvidenceSource::None, Some(raw.to_owned()), true),
+                    None => (None, EvidenceSource::None, Some(raw.to_owned()), true, false, None),
                 }
             } else {
-                (None, EvidenceSource::None, None, true)
+                (None, EvidenceSource::None, None, true, false, None)
             };
 
         // Persist evidence
@@ -167,6 +193,8 @@ pub async fn classify(
             raw_value: raw_value.as_deref(),
             unclassified: is_unclassified,
             manual_override: None,
+            is_master,
+            master_detector,
         };
         repo::insert_evidence(pool, &ev).await.ok();
 

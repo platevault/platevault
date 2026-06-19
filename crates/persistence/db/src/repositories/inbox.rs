@@ -89,6 +89,10 @@ pub struct InsertEvidence<'a> {
     pub raw_value: Option<&'a str>,
     pub unclassified: bool,
     pub manual_override: Option<&'a str>,
+    /// Whether this file was detected as a calibration master (spec 040).
+    pub is_master: bool,
+    /// Provenance string from the detector, e.g. `"siril"` or `"pixinsight"`.
+    pub master_detector: Option<&'a str>,
 }
 
 /// Flat row from `inbox_classification_breakdown`.
@@ -254,8 +258,8 @@ pub async fn insert_evidence(pool: &SqlitePool, ev: &InsertEvidence<'_>) -> DbRe
     sqlx::query(
         "INSERT INTO inbox_classification_evidence
             (id, inbox_item_id, relative_file_path, frame_type, evidence_source,
-             raw_value, unclassified, manual_override)
-         VALUES (?, ?, ?, ?, ?, ?, ?, ?)",
+             raw_value, unclassified, manual_override, is_master, master_detector)
+         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
     )
     .bind(ev.id)
     .bind(ev.inbox_item_id)
@@ -265,6 +269,8 @@ pub async fn insert_evidence(pool: &SqlitePool, ev: &InsertEvidence<'_>) -> DbRe
     .bind(ev.raw_value)
     .bind(i64::from(ev.unclassified))
     .bind(ev.manual_override)
+    .bind(i64::from(ev.is_master))
+    .bind(ev.master_detector)
     .execute(pool)
     .await?;
     Ok(())
@@ -612,6 +618,8 @@ mod tests {
             raw_value: Some("Light Frame"),
             unclassified: false,
             manual_override: None,
+            is_master: false,
+            master_detector: None,
         };
         insert_evidence(db.pool(), &ev).await.unwrap();
 
@@ -635,6 +643,8 @@ mod tests {
             raw_value: None,
             unclassified: true,
             manual_override: None,
+            is_master: false,
+            master_detector: None,
         };
         insert_evidence(db.pool(), &ev).await.unwrap();
 
