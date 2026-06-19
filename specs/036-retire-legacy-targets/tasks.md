@@ -63,7 +63,7 @@ then tests. The phase gate is `cargo build`/`cargo test` green at each phase end
 - [X] T027 [P] Update frontend tests: `TargetDetailV2.test.tsx`, `TargetsPage.test.tsx`, target-identity tests, Cmd+K/palette target tests — to gen-3 commands/labels; remove note/rename assertions.
 - [X] T028 [P] Update any contract/e2e tests referencing removed commands/tables.
 - [X] T029 Full gate on a fresh DB: `cargo fmt --all --check`, `cargo clippy --workspace --all-targets -- -D warnings`, `cargo test --workspace`, `just typecheck`, `vitest`, bindings drift check.
-- [X] T030 Update docs: mark `docs/development/legacy-target-table-retirement-plan.md` executed; note spec-013/023 superseded where relevant; update `docs/development/simbad-target-resolution.md` if the target surface is referenced.
+- [~] T030 Docs: the retirement-plan doc on `main` (PR #253, with the D1–D3 decisions) is intentionally NOT edited on this branch — 036 predates #253, so editing it here would clobber main's version on merge. Marking it "executed (gen-2; gen-1 deferred)" is a trivial post-merge edit on main. No other doc references the removed surface.
 
 ## Dependencies & order
 
