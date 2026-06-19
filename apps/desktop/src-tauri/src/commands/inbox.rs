@@ -27,7 +27,7 @@ use uuid::Uuid;
 /// # Errors
 /// `inbox.item.not_found` | `metadata.unreadable`
 #[tauri::command]
-#[specta::specta(rename = "inbox.classify")]
+#[specta::specta]
 pub async fn inbox_classify(
     req: InboxClassifyRequest,
     pool: tauri::State<'_, SqlitePool>,
@@ -69,7 +69,7 @@ pub async fn inbox_classify(
 /// `inbox.item.not_found` | `inbox.has.open.plan` | `classification.ambiguous`
 /// | `classification.stale` | `pattern.unset`
 #[tauri::command]
-#[specta::specta(rename = "inbox.confirm")]
+#[specta::specta]
 pub async fn inbox_confirm(
     req: InboxConfirmRequest,
     pool: tauri::State<'_, SqlitePool>,
@@ -98,7 +98,7 @@ pub async fn inbox_confirm(
 /// # Errors
 /// Returns `"inbox.item.not_found"`, `"inbox.has.open.plan"`, or `"file.not_found"`.
 #[tauri::command]
-#[specta::specta(rename = "inbox.reclassify")]
+#[specta::specta]
 pub async fn inbox_reclassify(
     req: InboxReclassifyRequest,
     pool: tauri::State<'_, SqlitePool>,
@@ -131,7 +131,7 @@ pub async fn inbox_reclassify(
 /// # Errors
 /// Returns a string error if the root is not accessible.
 #[tauri::command]
-#[specta::specta(rename = "inbox.scan.folder")]
+#[specta::specta]
 pub async fn inbox_scan_folder(
     req: InboxScanFolderRequest,
     pool: tauri::State<'_, SqlitePool>,
@@ -200,7 +200,7 @@ pub async fn inbox_scan_folder(
 /// # Errors
 /// Never fails; always returns `Ok`.
 #[tauri::command]
-#[specta::specta(rename = "inbox.scan")]
+#[specta::specta]
 pub async fn inbox_scan(root_id: Option<String>) -> Result<InboxScanResult, String> {
     let root = root_id.unwrap_or_else(|| "root-inbox-001".to_owned());
     tracing::debug!("stub: inbox.scan root_id={root}");

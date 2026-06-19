@@ -48,6 +48,9 @@ vi.mock('@tanstack/react-router', () => ({
 }));
 
 // Mock Tauri backend commands so they never reach the native bridge.
+// Catalog manifest fetch resolves to 'failed' so StepCatalogs renders its
+// graceful unavailable state in these gating tests (download flow is covered
+// in StepCatalogs.test.tsx).
 vi.mock('@/api/commands', () => ({
   completeFirstRun: vi.fn().mockResolvedValue({ success: true }),
   registerRoot: vi.fn().mockResolvedValue({ id: 'mock-root', path: '' }),
@@ -113,13 +116,26 @@ function getContinueButton(): HTMLElement {
 }
 
 /**
- * Simulate adding a folder by configuring the mocked pickDirectory() to
- * resolve with the desired path, then clicking the "+ Add folder" button.
+ * Map a SourceKind to the display label used in each group's add-button
+ * aria-label ("Add <Label> folder").
  */
-async function addFolder(path: string) {
+const KIND_LABEL: Record<string, string> = {
+  light_frames: 'Light frames',
+  calibration: 'Calibration frames',
+  project: 'Projects',
+  inbox: 'Inbox',
+};
+
+/**
+ * Simulate adding a folder to a specific group by configuring the mocked
+ * pickDirectory() and clicking that group's own "+ Add folder" button (located
+ * via its per-kind aria-label). Defaults to the light_frames group.
+ */
+async function addFolder(path: string, kind = 'light_frames') {
   mockPickDirectory.mockResolvedValueOnce({ path, cancelled: false });
 
-  const addBtn = screen.getByRole('button', { name: /add folder/i });
+  const label = KIND_LABEL[kind] ?? kind;
+  const addBtn = screen.getByRole('button', { name: new RegExp(`add ${label} folder`, 'i') });
 
   await act(async () => {
     fireEvent.click(addBtn);
@@ -127,14 +143,6 @@ async function addFolder(path: string) {
     // queue so React processes the state update.
     await new Promise((r) => setTimeout(r, 0));
   });
-}
-
-/**
- * Change the source kind dropdown for a given folder row (by index, 0-based).
- */
-function changeKind(index: number, kind: string) {
-  const selects = screen.getAllByLabelText('Source type');
-  fireEvent.change(selects[index], { target: { value: kind } });
 }
 
 // ---------------------------------------------------------------------------
@@ -177,28 +185,69 @@ describe('SetupWizard 4-step flow', () => {
     expect(continueBtn).toBeDisabled();
   });
 
-  it('enables Continue on Step 1 after adding both light_frames and project folders', async () => {
+  it('enables Continue on Step 1 after adding all required folder types', async () => {
     renderWizard();
 
-    // Add light_frames folder (default kind for new folders)
-    await addFolder('/astro/lights');
+    // Add a folder to each required group via its own per-group add button.
+    await addFolder('/astro/lights', 'light_frames');
     await waitFor(() => {
       expect(screen.getByText('/astro/lights')).toBeInTheDocument();
     });
 
-    // Add project folder
-    await addFolder('/astro/projects');
+    await addFolder('/astro/projects', 'project');
     await waitFor(() => {
       expect(screen.getByText('/astro/projects')).toBeInTheDocument();
     });
 
-    // Change second folder to project kind
-    changeKind(1, 'project');
+    await addFolder('/astro/inbox', 'inbox');
+    await waitFor(() => {
+      expect(screen.getByText('/astro/inbox')).toBeInTheDocument();
+    });
 
     // Should now be enabled
     await waitFor(() => {
       expect(getContinueButton()).not.toBeDisabled();
     });
+  });
+
+  it('renders one persistent group card per source kind, even when empty', () => {
+    renderWizard();
+
+    for (const kind of ['light_frames', 'calibration', 'project', 'inbox']) {
+      expect(screen.getByTestId(`source-group-${kind}`)).toBeInTheDocument();
+    }
+  });
+
+  it('highlights required group cards with met/unmet status', async () => {
+    renderWizard();
+
+    // Required groups start unmet; optional groups carry no requirement flag.
+    expect(screen.getByTestId('source-group-light_frames')).toHaveAttribute('data-requirement-met', 'false');
+    expect(screen.getByTestId('source-group-project')).toHaveAttribute('data-requirement-met', 'false');
+    expect(screen.getByTestId('source-group-calibration')).not.toHaveAttribute('data-requirement-met');
+
+    // Adding to the light_frames group flips its card to met.
+    await addFolder('/astro/lights', 'light_frames');
+    await waitFor(() => {
+      expect(screen.getByTestId('source-group-light_frames')).toHaveAttribute('data-requirement-met', 'true');
+    });
+    // Project still unmet.
+    expect(screen.getByTestId('source-group-project')).toHaveAttribute('data-requirement-met', 'false');
+  });
+
+  it('lists added folders inside their own kind group card', async () => {
+    renderWizard();
+
+    await addFolder('/astro/lights', 'light_frames');
+    await waitFor(() => expect(screen.getByText('/astro/lights')).toBeInTheDocument());
+
+    await addFolder('/astro/cals', 'calibration');
+    await waitFor(() => expect(screen.getByText('/astro/cals')).toBeInTheDocument());
+
+    const lightGroup = screen.getByTestId('source-group-light_frames');
+    const calGroup = screen.getByTestId('source-group-calibration');
+    expect(lightGroup).toContainElement(screen.getByText('/astro/lights'));
+    expect(calGroup).toContainElement(screen.getByText('/astro/cals'));
   });
 
   it('allows Step 2 (Processing Tools) to advance without changes', async () => {
@@ -210,11 +259,7 @@ describe('SetupWizard 4-step flow', () => {
         { path: '/astro/projects', kind: 'project', scanDepth: 'recursive' },
       ],
       catalogSettings: {
-        messier: true,
-        ngcIc: true,
-        caldwell: true,
-        sharpless: true,
-        abell: true,
+        selectedCatalogIds: ['common', 'openngc'],
       },
       tools: {
         pixinsight: { enabled: false, path: null },
@@ -247,11 +292,7 @@ describe('SetupWizard 4-step flow', () => {
         { path: '/astro/projects', kind: 'project', scanDepth: 'recursive' },
       ],
       catalogSettings: {
-        messier: true,
-        ngcIc: true,
-        caldwell: true,
-        sharpless: true,
-        abell: true,
+        selectedCatalogIds: ['common', 'openngc'],
       },
       tools: {
         pixinsight: { enabled: false, path: null },
@@ -272,19 +313,16 @@ describe('SetupWizard 4-step flow', () => {
   });
 
   it('shows Confirm step (Step 4) with Complete setup button', async () => {
-    // Seed state at step 3 (Confirm)
+    // Seed state at step 3 (Confirm) with all required kinds satisfied.
     const seeded = {
       currentStep: 3,
       sources: [
         { path: '/astro/lights', kind: 'light_frames', scanDepth: 'recursive' },
         { path: '/astro/projects', kind: 'project', scanDepth: 'recursive' },
+        { path: '/astro/inbox', kind: 'inbox', scanDepth: 'recursive' },
       ],
       catalogSettings: {
-        messier: true,
-        ngcIc: true,
-        caldwell: true,
-        sharpless: true,
-        abell: true,
+        selectedCatalogIds: ['common', 'openngc'],
       },
       tools: {
         pixinsight: { enabled: false, path: null },
@@ -311,11 +349,7 @@ describe('SetupWizard 4-step flow', () => {
         { path: '/astro/lights', kind: 'light_frames', scanDepth: 'recursive' },
       ],
       catalogSettings: {
-        messier: true,
-        ngcIc: true,
-        caldwell: true,
-        sharpless: true,
-        abell: true,
+        selectedCatalogIds: ['common', 'openngc'],
       },
       tools: {
         pixinsight: { enabled: false, path: null },

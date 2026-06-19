@@ -18,7 +18,7 @@ use crate::commands::lifecycle::AppState;
 /// # Errors
 /// Returns `Err(String)` on database failure.
 #[tauri::command]
-#[specta::specta(rename = "equipment.cameras.list")]
+#[specta::specta]
 pub async fn equipment_cameras_list(state: State<'_, AppState>) -> Result<Vec<Camera>, String> {
     tracing::debug!("equipment.cameras.list");
     app_core::equipment::list_cameras(state.repo.pool()).await.map_err(|e| e.message)
@@ -29,7 +29,7 @@ pub async fn equipment_cameras_list(state: State<'_, AppState>) -> Result<Vec<Ca
 /// # Errors
 /// Returns `Err(String)` on duplicate or database failure.
 #[tauri::command]
-#[specta::specta(rename = "equipment.cameras.create")]
+#[specta::specta]
 pub async fn equipment_cameras_create(
     state: State<'_, AppState>,
     request: CreateCamera,
@@ -43,7 +43,7 @@ pub async fn equipment_cameras_create(
 /// # Errors
 /// Returns `Err(String)` if the camera is not found.
 #[tauri::command]
-#[specta::specta(rename = "equipment.cameras.update")]
+#[specta::specta]
 pub async fn equipment_cameras_update(
     state: State<'_, AppState>,
     request: UpdateCamera,
@@ -57,7 +57,7 @@ pub async fn equipment_cameras_update(
 /// # Errors
 /// Returns `Err(String)` if the camera is not found.
 #[tauri::command]
-#[specta::specta(rename = "equipment.cameras.delete")]
+#[specta::specta]
 pub async fn equipment_cameras_delete(
     state: State<'_, AppState>,
     id: String,
@@ -73,7 +73,7 @@ pub async fn equipment_cameras_delete(
 /// # Errors
 /// Returns `Err(String)` on database failure.
 #[tauri::command]
-#[specta::specta(rename = "equipment.telescopes.list")]
+#[specta::specta]
 pub async fn equipment_telescopes_list(
     state: State<'_, AppState>,
 ) -> Result<Vec<Telescope>, String> {
@@ -86,7 +86,7 @@ pub async fn equipment_telescopes_list(
 /// # Errors
 /// Returns `Err(String)` on duplicate or database failure.
 #[tauri::command]
-#[specta::specta(rename = "equipment.telescopes.create")]
+#[specta::specta]
 pub async fn equipment_telescopes_create(
     state: State<'_, AppState>,
     request: CreateTelescope,
@@ -100,7 +100,7 @@ pub async fn equipment_telescopes_create(
 /// # Errors
 /// Returns `Err(String)` if the telescope is not found.
 #[tauri::command]
-#[specta::specta(rename = "equipment.telescopes.update")]
+#[specta::specta]
 pub async fn equipment_telescopes_update(
     state: State<'_, AppState>,
     request: UpdateTelescope,
@@ -114,7 +114,7 @@ pub async fn equipment_telescopes_update(
 /// # Errors
 /// Returns `Err(String)` if the telescope is not found.
 #[tauri::command]
-#[specta::specta(rename = "equipment.telescopes.delete")]
+#[specta::specta]
 pub async fn equipment_telescopes_delete(
     state: State<'_, AppState>,
     id: String,
@@ -130,7 +130,7 @@ pub async fn equipment_telescopes_delete(
 /// # Errors
 /// Returns `Err(String)` on database failure.
 #[tauri::command]
-#[specta::specta(rename = "equipment.trains.list")]
+#[specta::specta]
 pub async fn equipment_trains_list(
     state: State<'_, AppState>,
 ) -> Result<Vec<OpticalTrain>, String> {
@@ -143,7 +143,7 @@ pub async fn equipment_trains_list(
 /// # Errors
 /// Returns `Err(String)` on database failure.
 #[tauri::command]
-#[specta::specta(rename = "equipment.trains.create")]
+#[specta::specta]
 pub async fn equipment_trains_create(
     state: State<'_, AppState>,
     request: CreateOpticalTrain,
@@ -159,7 +159,7 @@ pub async fn equipment_trains_create(
 /// # Errors
 /// Returns `Err(String)` if the optical train is not found.
 #[tauri::command]
-#[specta::specta(rename = "equipment.trains.update")]
+#[specta::specta]
 pub async fn equipment_trains_update(
     state: State<'_, AppState>,
     request: UpdateOpticalTrain,
@@ -175,7 +175,7 @@ pub async fn equipment_trains_update(
 /// # Errors
 /// Returns `Err(String)` if the optical train is not found.
 #[tauri::command]
-#[specta::specta(rename = "equipment.trains.delete")]
+#[specta::specta]
 pub async fn equipment_trains_delete(state: State<'_, AppState>, id: String) -> Result<(), String> {
     tracing::debug!("equipment.trains.delete id={id}");
     app_core::equipment::delete_optical_train(state.repo.pool(), &id).await.map_err(|e| e.message)
@@ -188,7 +188,7 @@ pub async fn equipment_trains_delete(state: State<'_, AppState>, id: String) -> 
 /// # Errors
 /// Returns `Err(String)` on database failure.
 #[tauri::command]
-#[specta::specta(rename = "equipment.filters.list")]
+#[specta::specta]
 pub async fn equipment_filters_list(state: State<'_, AppState>) -> Result<Vec<Filter>, String> {
     tracing::debug!("equipment.filters.list");
     app_core::equipment::list_filters(state.repo.pool()).await.map_err(|e| e.message)
@@ -199,7 +199,7 @@ pub async fn equipment_filters_list(state: State<'_, AppState>) -> Result<Vec<Fi
 /// # Errors
 /// Returns `Err(String)` on duplicate name or database failure.
 #[tauri::command]
-#[specta::specta(rename = "equipment.filters.create")]
+#[specta::specta]
 pub async fn equipment_filters_create(
     state: State<'_, AppState>,
     request: CreateFilter,
@@ -213,7 +213,7 @@ pub async fn equipment_filters_create(
 /// # Errors
 /// Returns `Err(String)` if the filter is not found.
 #[tauri::command]
-#[specta::specta(rename = "equipment.filters.update")]
+#[specta::specta]
 pub async fn equipment_filters_update(
     state: State<'_, AppState>,
     request: UpdateFilter,
@@ -227,7 +227,7 @@ pub async fn equipment_filters_update(
 /// # Errors
 /// Returns `Err(String)` if the filter is not found.
 #[tauri::command]
-#[specta::specta(rename = "equipment.filters.delete")]
+#[specta::specta]
 pub async fn equipment_filters_delete(
     state: State<'_, AppState>,
     id: String,

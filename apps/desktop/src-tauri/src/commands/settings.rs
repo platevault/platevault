@@ -62,6 +62,7 @@ fn scope_keys(scope: &str) -> &'static [&'static str] {
             "calibration.dark.override_penalty",
             "calibration.flat.override_penalty",
             "calibration.bias.override_penalty",
+            "calibration.aging_threshold_days",
         ],
         "plans" => &["plans.list.default_age_cutoff_days"],
         // Empty scope or "global" returns every stable key.
@@ -86,6 +87,7 @@ fn scope_keys(scope: &str) -> &'static [&'static str] {
             "calibration.dark.override_penalty",
             "calibration.flat.override_penalty",
             "calibration.bias.override_penalty",
+            "calibration.aging_threshold_days",
             "plans.list.default_age_cutoff_days",
             "current_library_id",
         ],
@@ -103,7 +105,7 @@ fn scope_keys(scope: &str) -> &'static [&'static str] {
 /// # Errors
 /// Returns `Err(String)` on database failure.
 #[tauri::command]
-#[specta::specta(rename = "settings.get")]
+#[specta::specta]
 pub async fn settings_get(
     state: State<'_, AppState>,
     scope: String,
@@ -135,7 +137,7 @@ pub async fn settings_get(
 /// # Errors
 /// Returns `Err(String)` on database or audit failure.
 #[tauri::command]
-#[specta::specta(rename = "settings.update")]
+#[specta::specta]
 pub async fn settings_update(
     state: State<'_, AppState>,
     scope: String,
@@ -178,7 +180,7 @@ pub async fn settings_update(
 /// # Errors
 /// Returns `Err(String)` with code `"key.unknown"` for unknown keys.
 #[tauri::command]
-#[specta::specta(rename = "settings.restore-defaults")]
+#[specta::specta]
 pub async fn settings_restore_defaults(
     state: State<'_, AppState>,
     request: RestoreDefaultsRequest,
@@ -194,7 +196,7 @@ pub async fn settings_restore_defaults(
 /// # Errors
 /// Returns `Err(String)` with code `"key.unoverridable"` or `"value.invalid"`.
 #[tauri::command]
-#[specta::specta(rename = "settings.source-override.set")]
+#[specta::specta]
 pub async fn settings_source_override_set(
     state: State<'_, AppState>,
     request: SetSourceOverrideRequest,

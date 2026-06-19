@@ -19,7 +19,7 @@ use contracts_core::JsonAny;
 /// # Errors
 /// Returns `Err(String)` on failure; the stub never fails.
 #[tauri::command]
-#[specta::specta(rename = "targets.list")]
+#[specta::specta]
 pub async fn targets_list(search: Option<String>) -> Result<Vec<Target>, String> {
     tracing::debug!("stub: targets.list search={search:?}");
     let targets = stub_targets();
@@ -36,7 +36,7 @@ pub async fn targets_list(search: Option<String>) -> Result<Vec<Target>, String>
 /// # Errors
 /// Returns `Err(String)` on failure; the stub never fails.
 #[tauri::command]
-#[specta::specta(rename = "targets.get")]
+#[specta::specta]
 pub async fn targets_get(id: String) -> Result<TargetDetail, String> {
     tracing::debug!("stub: targets.get id={id}");
     let base =

@@ -87,9 +87,12 @@ export async function startLogSubscription(): Promise<void> {
   subscribed = true;
 
   // Get the most recent cursor from the current buffer to resume from.
+  // Entries are newest-first; we prefer the latest aud: entry as cursor because
+  // dia: (diagnostic) entries are in-memory only and have no DB row to resume from.
+  // Without this, a dia: entry as the last seen causes a full replay (T062 FR-025).
   const snapshot = getLogSnapshot();
-  const lastEntry = snapshot.entries[0]; // newest-first; index 0 = newest
-  const cursor = lastEntry?.id.startsWith('aud:') ? lastEntry.id : undefined;
+  const audEntry = snapshot.entries.find((e) => e.id.startsWith('aud:'));
+  const cursor = audEntry?.id;
 
   await fetchRecentEntries(cursor);
   await startLiveListener();

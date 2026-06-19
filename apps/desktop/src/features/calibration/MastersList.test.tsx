@@ -55,37 +55,47 @@ const masters: CalibrationMaster[] = [
 describe('MastersList (spec 007)', () => {
   it('1. Loading state renders loading indicator', () => {
     render(
-      <MastersList masters={[]} loading error={undefined} selected={null} onSelect={vi.fn()} />,
+      <MastersList masters={[]} loading error={undefined} selected={null} onSelect={vi.fn()}
+        agingThresholdDays={90}
+      />,
     );
     expect(screen.getByTestId('masters-loading')).toBeInTheDocument();
   });
 
   it('2. Error state renders error message', () => {
     render(
-      <MastersList masters={[]} loading={false} error="DB error" selected={null} onSelect={vi.fn()} />,
+      <MastersList masters={[]} loading={false} error="DB error" selected={null} onSelect={vi.fn()}
+        agingThresholdDays={90}
+      />,
     );
     expect(screen.getByTestId('masters-error')).toBeInTheDocument();
   });
 
   it('3. Empty state when no masters', () => {
     render(
-      <MastersList masters={[]} loading={false} error={undefined} selected={null} onSelect={vi.fn()} />,
+      <MastersList masters={[]} loading={false} error={undefined} selected={null} onSelect={vi.fn()}
+        agingThresholdDays={90}
+      />,
     );
     expect(screen.getByTestId('masters-empty')).toBeInTheDocument();
   });
 
   it('4. Masters render with group headers DARKS, FLATS, BIAS', () => {
     render(
-      <MastersList masters={masters} loading={false} error={undefined} selected={null} onSelect={vi.fn()} />,
+      <MastersList masters={masters} loading={false} error={undefined} selected={null} onSelect={vi.fn()}
+        agingThresholdDays={90}
+      />,
     );
     expect(screen.getByText('DARKS')).toBeInTheDocument();
     expect(screen.getByText('FLATS')).toBeInTheDocument();
     expect(screen.getByText('BIAS')).toBeInTheDocument();
   });
 
-  it('5. Aging pill renders for age_days > 90', () => {
+  it('5. Aging pill renders for age_days > agingThresholdDays (default 90)', () => {
     render(
-      <MastersList masters={masters} loading={false} error={undefined} selected={null} onSelect={vi.fn()} />,
+      <MastersList masters={masters} loading={false} error={undefined} selected={null} onSelect={vi.fn()}
+        agingThresholdDays={90}
+      />,
     );
     // dark-2 has age_days=95
     expect(screen.getByText(/aging 95d/)).toBeInTheDocument();
@@ -96,7 +106,9 @@ describe('MastersList (spec 007)', () => {
   it('6. Clicking a master calls onSelect with its string id', () => {
     const onSelect = vi.fn();
     render(
-      <MastersList masters={masters} loading={false} error={undefined} selected={null} onSelect={onSelect} />,
+      <MastersList masters={masters} loading={false} error={undefined} selected={null} onSelect={onSelect}
+        agingThresholdDays={90}
+      />,
     );
     // Find any clickable list items within the DARKS section.
     // The master ID `dark-1` is 6 chars — slice(0,8) gives the whole id.
@@ -110,7 +122,9 @@ describe('MastersList (spec 007)', () => {
 
   it('7. Selected master item has selection class', () => {
     render(
-      <MastersList masters={masters} loading={false} error={undefined} selected="flat-1" onSelect={vi.fn()} />,
+      <MastersList masters={masters} loading={false} error={undefined} selected="flat-1" onSelect={vi.fn()}
+        agingThresholdDays={90}
+      />,
     );
     // We look for a selected list item — check the component renders
     // We can't know the exact DOM structure of ListItem but the selected prop is passed
@@ -131,6 +145,7 @@ describe('MastersList (spec 007)', () => {
         error={undefined}
         selected={null}
         onSelect={vi.fn()}
+        agingThresholdDays={90}
       />,
     );
     // No DARK FLAT group header

@@ -152,7 +152,10 @@ fn table_for(entity_type: EntityType) -> &'static str {
         // InventorySession shares the acquisition_session table
         EntityType::AcquisitionSession | EntityType::InventorySession => "acquisition_session",
         EntityType::CalibrationSession => "calibration_session",
-        EntityType::Project => "project",
+        // FR-019 / T052: canonical project lifecycle lives in `projects.lifecycle`
+        // (spec-008 table). The legacy spec-002 `project.state` was removed in
+        // migration 0036.
+        EntityType::Project => "projects",
         // Plan is an alias for FilesystemPlan in the contract layer
         EntityType::FilesystemPlan | EntityType::Plan => "filesystem_plan",
         EntityType::PreparedSource => "prepared_source_view",
@@ -166,6 +169,8 @@ fn table_for(entity_type: EntityType) -> &'static str {
 fn state_column_for(entity_type: EntityType) -> &'static str {
     match entity_type {
         EntityType::ProcessingArtifact | EntityType::Projection => "staleness",
+        // FR-019 / T052: projects table uses `lifecycle` not `state`.
+        EntityType::Project => "lifecycle",
         _ => "state",
     }
 }
@@ -378,6 +383,19 @@ impl LifecycleRepository for SqliteLifecycleRepository {
                 "{:?} {} not in state '{}' (CAS failed)",
                 transition.entity_type, transition.entity_id, transition.from_state
             )));
+        }
+
+        // FR-020 / T053: when a Project entity transitions OUT of "blocked",
+        // clear the blocked_reason_kind/note columns in the same transaction
+        // so stale reason data is never visible after an unblock.
+        if transition.entity_type == EntityType::Project && transition.from_state == "blocked" {
+            sqlx::query(
+                "UPDATE projects SET blocked_reason_kind = NULL, blocked_reason_note = NULL \
+                 WHERE id = ?",
+            )
+            .bind(&id_str)
+            .execute(&mut *tx)
+            .await?;
         }
 
         // Insert audit log entry.

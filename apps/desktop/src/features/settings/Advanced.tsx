@@ -171,7 +171,7 @@ export function Advanced({ save }: AdvancedProps) {
         <div className="alm-settings__group-title">Danger Zone</div>
         <div style={{
           border: '1px solid var(--alm-danger)',
-          borderRadius: 'var(--alm-radius)',
+          borderRadius: 'var(--alm-radius-md)',
           padding: 'var(--alm-sp-4)',
         }}>
           <div style={{ marginBottom: 'var(--alm-sp-2)' }}>

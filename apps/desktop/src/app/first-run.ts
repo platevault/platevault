@@ -19,7 +19,9 @@ export async function checkFirstRunComplete(): Promise<boolean> {
   try {
     const { commands } = await import('@/bindings/index');
     const result = await commands.firstrunState();
-    if (result.status === 'ok') return result.data.completedAt !== null;
+    // `completedAt` is optional in the serialized response (omitted when null),
+    // so it can be `undefined` *or* `null` when incomplete — treat both as not done.
+    if (result.status === 'ok') return Boolean(result.data.completedAt);
     return !!prefs.setupCompleted;
   } catch {
     return !!prefs.setupCompleted;

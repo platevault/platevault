@@ -112,26 +112,47 @@ async fn stub_sessions_merge() {
 }
 
 // ─── Calibration (3 commands) ───────────────────────────────────────────────
-
-#[tokio::test]
-async fn stub_calibration_masters_list() {
-    let res = calibration_masters_list().await;
-    assert!(res.is_ok(), "calibration_masters_list failed: {res:?}");
-    assert!(!res.unwrap().is_empty());
+//
+// calibration_masters_list / calibration_masters_get now require AppState.
+// We test the use-case layer directly (same pattern as plans tests above).
+// The command import is kept to prove the new signature compiles.
+#[allow(dead_code)]
+fn _calibration_masters_list_compiles_check() {
+    let _ = calibration_masters_list;
+}
+#[allow(dead_code)]
+fn _calibration_masters_get_compiles_check() {
+    let _ = calibration_masters_get;
 }
 
+/// T037: calibration.masters.list returns real rows from DB (empty on fresh DB, not fixtures).
 #[tokio::test]
-async fn stub_calibration_masters_get() {
-    let res = calibration_masters_get("master-001".to_owned()).await;
-    assert!(res.is_ok(), "calibration_masters_get failed: {res:?}");
-    assert_eq!(res.unwrap().id, "master-001");
+async fn calibration_masters_list_returns_real_rows() {
+    let state = make_plans_state().await;
+    let res = app_core::calibration::masters_list(state.repo.pool()).await;
+    assert!(res.is_ok(), "masters_list failed: {res:?}");
+    // Fresh DB has no calibration sessions → empty list (not fixtures).
+    assert!(res.unwrap().is_empty(), "fresh DB must return empty masters list — not fixture stubs");
+}
+
+/// T037: calibration.masters.get returns error for unknown id.
+#[tokio::test]
+async fn calibration_masters_get_returns_not_found() {
+    let state = make_plans_state().await;
+    let res = app_core::calibration::masters_get(state.repo.pool(), "nonexistent").await;
+    assert!(res.is_err(), "expected error for nonexistent master");
+    assert!(res.unwrap_err().contains("master.not_found"), "error must contain master.not_found");
 }
 
 #[tokio::test]
 async fn stub_calibration_matches() {
     let res = calibration_matches("ses-001".to_owned()).await;
     assert!(res.is_ok(), "calibration_matches failed: {res:?}");
-    assert!(!res.unwrap().is_empty());
+    // calibration_matches now returns empty (stub replaced by calibration.match.suggest).
+    assert!(
+        res.unwrap().is_empty(),
+        "calibration_matches must return empty; use calibration.match.suggest for real results"
+    );
 }
 
 // ─── Targets (2 commands) ───────────────────────────────────────────────────
@@ -468,12 +489,30 @@ async fn stub_preferences_set() {
 }
 
 // ─── Search (1 command) ─────────────────────────────────────────────────────
+//
+// search_global now requires AppState (real cross-entity DB query, T039).
+// We test the use-case layer directly and keep the command import to prove
+// the new signature compiles.
+#[allow(dead_code)]
+fn _search_global_compiles_check() {
+    let _ = search_global;
+}
 
+/// T034 / T039: search.global queries the real DB and reflects the query string.
 #[tokio::test]
-async fn stub_search_global() {
-    let res = search_global("M31".to_owned()).await;
-    assert!(res.is_ok(), "search_global failed: {res:?}");
-    assert!(!res.unwrap().is_empty());
+async fn search_global_queries_real_db() {
+    let state = make_plans_state().await;
+    // Empty query on a fresh DB: must return empty without error.
+    let res = app_core::search::search_global(state.repo.pool(), "").await;
+    assert!(res.is_ok(), "search_global empty query failed: {res:?}");
+
+    // Query for something that doesn't exist: must return empty (not fixtures).
+    let res = app_core::search::search_global(state.repo.pool(), "M31").await;
+    assert!(res.is_ok(), "search_global M31 query failed: {res:?}");
+    assert!(
+        res.unwrap().is_empty(),
+        "search_global must return empty on fresh DB (no fixture data injected)"
+    );
 }
 
 // ─── Tour (1 command) ───────────────────────────────────────────────────────

@@ -1,112 +1,32 @@
 /**
- * GuidedOverlay — non-blocking coach hint overlay (spec 010, US1–US4).
+ * GuidedOverlay — controlled react-joyride coach overlay (spec 010, FR-011, spec 033 T030).
  *
- * Renders a dismissible tooltip anchored to a DOM element identified by
- * `data-guide-anchor="<anchorId>"`.  If the anchor element is absent on the
- * current route the hint is deferred (hidden) per FR-007.
+ * Replaced the hand-rolled MutationObserver portal with a controlled <Joyride>
+ * driven by `stepIndex`/`run` derived from the guided store (react-joyride 3.1 API).
  *
- * Reduced-motion: when `prefers-reduced-motion: reduce` is active, all
- * CSS transitions are disabled.
+ * Key design decisions (D6):
+ * - `blockTargetInteraction: false` per step — non-modal; user can interact with
+ *   the app while the hint is visible (FR-011, equivalent to v2 `spotlightClicks: true`).
+ * - `onEvent` callback drives dismiss on STATUS.FINISHED / STATUS.SKIPPED.
+ * - Steps are derived from STEP_ORDER + STEP_HINT_TEXT + STEP_ANCHOR so the
+ *   existing anchor constants (data-guide-anchor="…") remain in use.
+ * - State machine, persistence, Settings restart, and store wiring are unchanged.
  *
- * Non-blocking: `pointer-events: none` on the backdrop; only the hint card
- * itself is interactive.
+ * Note: the dead `@media (prefers-reduced-motion: …)` inline style from the old
+ * GuidedOverlay.tsx:188 has been removed (it was a no-op in React inline styles).
  */
 
-import { useEffect, useRef, useState, useCallback } from 'react';
-import { createPortal } from 'react-dom';
-import { GUIDE_ANCHOR_ATTR } from './anchors';
-import type { GuidedFlowStateDto } from './store';
-import { STEP_HINT_TEXT, STEP_ORDER } from './store';
-
-// ── Style constants ───────────────────────────────────────────────────────────
-
-const HINT_OFFSET_PX = 12;
-
-interface Position {
-  top: number;
-  left: number;
-}
-
-// ── Hook: anchor resolution ───────────────────────────────────────────────────
-
-/**
- * Resolve the DOM element for the given anchor id on the current page.
- * Re-runs when the DOM changes (MutationObserver).
- */
-function useAnchorElement(anchorId: string | null): HTMLElement | null {
-  const [el, setEl] = useState<HTMLElement | null>(null);
-
-  useEffect(() => {
-    if (!anchorId) {
-      setEl(null);
-      return;
-    }
-
-    const find = () =>
-      document.querySelector<HTMLElement>(
-        `[${GUIDE_ANCHOR_ATTR}="${CSS.escape(anchorId)}"]`,
-      ) ?? null;
-
-    setEl(find());
-
-    const observer = new MutationObserver(() => setEl(find()));
-    observer.observe(document.body, { childList: true, subtree: true });
-    return () => observer.disconnect();
-  }, [anchorId]);
-
-  return el;
-}
-
-// ── Hook: floating position ───────────────────────────────────────────────────
-
-/**
- * Compute the top-left position for the hint card, placed below the anchor.
- * Re-computes on scroll and resize.
- */
-function useHintPosition(anchorEl: HTMLElement | null): Position | null {
-  const [pos, setPos] = useState<Position | null>(null);
-
-  const compute = useCallback(() => {
-    if (!anchorEl) {
-      setPos(null);
-      return;
-    }
-    const rect = anchorEl.getBoundingClientRect();
-    setPos({
-      top: rect.bottom + window.scrollY + HINT_OFFSET_PX,
-      left: rect.left + window.scrollX,
-    });
-  }, [anchorEl]);
-
-  useEffect(() => {
-    compute();
-    window.addEventListener('resize', compute);
-    window.addEventListener('scroll', compute, true);
-    return () => {
-      window.removeEventListener('resize', compute);
-      window.removeEventListener('scroll', compute, true);
-    };
-  }, [compute]);
-
-  return pos;
-}
-
-// ── Props ────────────────────────────────────────────────────────────────────
-
-export interface GuidedOverlayProps {
-  /** Current coach state. Pass null to hide the overlay. */
-  guidedState: GuidedFlowStateDto | null;
-  /** Called when the user clicks "Dismiss". */
-  onDismiss: () => void;
-}
-
-// ── Step → anchor id mapping ─────────────────────────────────────────────────
-
+import { Joyride, STATUS, type EventData, type Step } from 'react-joyride';
 import {
+  GUIDE_ANCHOR_ATTR,
   ANCHOR_INBOX_CONFIRM_ROW,
   ANCHOR_PROJECTS_CREATE_CTA,
   ANCHOR_PROJECT_OPEN_IN_TOOL,
 } from './anchors';
+import type { GuidedFlowStateDto } from './store';
+import { STEP_HINT_TEXT, STEP_ORDER } from './store';
+
+// ── Step → anchor id mapping ─────────────────────────────────────────────────
 
 const STEP_ANCHOR: Record<string, string> = {
   'inbox.confirm_first': ANCHOR_INBOX_CONFIRM_ROW,
@@ -114,139 +34,85 @@ const STEP_ANCHOR: Record<string, string> = {
   'tool.open_first': ANCHOR_PROJECT_OPEN_IN_TOOL,
 };
 
+// ── Joyride step definitions ─────────────────────────────────────────────────
+
+/**
+ * Build the joyride Step array from STEP_ORDER + STEP_HINT_TEXT + STEP_ANCHOR.
+ * The `target` uses the `data-guide-anchor` attribute selector so we reuse the
+ * existing anchor constants without any DOM changes.
+ * `blockTargetInteraction: false` makes each step non-modal (FR-011).
+ */
+function buildJoyrideSteps(): Step[] {
+  return STEP_ORDER.map((id) => {
+    const hint = STEP_HINT_TEXT[id] ?? { title: id, body: '' };
+    const anchor = STEP_ANCHOR[id];
+    return {
+      target: anchor ? `[${GUIDE_ANCHOR_ATTR}="${anchor}"]` : 'body',
+      title: hint.title,
+      content: hint.body,
+      // Non-modal: let the user click through the spotlight cutout (FR-011).
+      blockTargetInteraction: false,
+    };
+  });
+}
+
+const JOYRIDE_STEPS: Step[] = buildJoyrideSteps();
+
+// ── Props ────────────────────────────────────────────────────────────────────
+
+export interface GuidedOverlayProps {
+  /** Current coach state. Pass null to hide the overlay. */
+  guidedState: GuidedFlowStateDto | null;
+  /** Called when the user dismisses / finishes the guide. */
+  onDismiss: () => void;
+}
+
 // ── Component ─────────────────────────────────────────────────────────────────
 
 export function GuidedOverlay({ guidedState, onDismiss }: GuidedOverlayProps) {
-  const dismissBtnRef = useRef<HTMLButtonElement>(null);
-
-  const currentStep = guidedState?.currentStep ?? null;
   const isDismissed = guidedState?.dismissed ?? true;
+  const currentStep = guidedState?.currentStep ?? null;
 
-  // Derive anchor id for the current step.
-  const anchorId = currentStep ? (STEP_ANCHOR[currentStep] ?? null) : null;
-  const anchorEl = useAnchorElement(anchorId);
-  const pos = useHintPosition(anchorEl);
+  // `run` — joyride runs the tour when not dismissed and there is an active step.
+  const run = !isDismissed && currentStep !== null;
 
-  const hint = currentStep ? STEP_HINT_TEXT[currentStep] : null;
+  // `stepIndex` — derived from the current step id position in STEP_ORDER.
+  const stepIndex = currentStep
+    ? Math.max(0, STEP_ORDER.indexOf(currentStep as (typeof STEP_ORDER)[number]))
+    : 0;
 
-  // Keyboard: Escape dismisses the overlay when it is focused.
-  useEffect(() => {
-    const handleKey = (e: KeyboardEvent) => {
-      if (e.key === 'Escape' && currentStep && !isDismissed) {
-        onDismiss();
-      }
-    };
-    document.addEventListener('keydown', handleKey);
-    return () => document.removeEventListener('keydown', handleKey);
-  }, [currentStep, isDismissed, onDismiss]);
+  // onEvent: handle tour events in react-joyride 3.1 (replaces v2 `callback`).
+  const handleEvent = (data: EventData) => {
+    const { status } = data;
 
-  // Don't render when: dismissed, no active step, or all done (no currentStep).
-  if (isDismissed || !currentStep || !hint) return null;
+    if (status === STATUS.FINISHED || status === STATUS.SKIPPED) {
+      onDismiss();
+    }
+  };
 
-  // Deferred: anchor not found on this route — show nothing (FR-007).
-  if (!anchorEl || !pos) return null;
+  if (!guidedState || isDismissed || currentStep === null) {
+    return null;
+  }
 
-  const allDone = guidedState
-    ? STEP_ORDER.every((id) => guidedState.completedSteps.includes(id))
-    : false;
-  if (allDone) return null;
-
-  const stepIndex = STEP_ORDER.indexOf(currentStep as (typeof STEP_ORDER)[number]);
-  const totalSteps = STEP_ORDER.length;
-
-  return createPortal(
-    /* Backdrop: pointer-events none so it never traps clicks (FR-002). */
-    <div
-      aria-hidden="true"
-      style={{
-        position: 'fixed',
-        inset: 0,
-        pointerEvents: 'none',
+  return (
+    <Joyride
+      steps={JOYRIDE_STEPS}
+      stepIndex={stepIndex}
+      run={run}
+      continuous={false}
+      onEvent={handleEvent}
+      options={{
         zIndex: 9000,
+        primaryColor: 'var(--alm-accent, #7c6af7)',
+        backgroundColor: 'var(--alm-surface, #1e1e2e)',
+        textColor: 'var(--alm-text, #e2e2f0)',
+        arrowColor: 'var(--alm-surface, #1e1e2e)',
+        overlayColor: 'rgba(0,0,0,0.35)',
       }}
-    >
-      {/* Hint card — pointer-events auto so dismiss is clickable */}
-      <div
-        role="status"
-        aria-live="polite"
-        aria-atomic="true"
-        aria-label={`Coach hint: ${hint.title}`}
-        data-testid="guided-hint-card"
-        style={{
-          position: 'absolute',
-          top: pos.top,
-          left: pos.left,
-          maxWidth: 320,
-          pointerEvents: 'auto',
-          background: 'var(--alm-surface, #1e1e2e)',
-          border: '1px solid var(--alm-border, #3a3a5c)',
-          borderRadius: 'var(--alm-radius, 6px)',
-          boxShadow: '0 4px 16px rgba(0,0,0,0.4)',
-          padding: 'var(--alm-sp-4, 16px)',
-          zIndex: 9001,
-          /* Respect prefers-reduced-motion */
-          '@media (prefers-reduced-motion: no-preference)': {
-            transition: 'opacity 0.15s ease',
-          },
-        } as React.CSSProperties}
-      >
-        {/* Step progress */}
-        <div
-          style={{
-            fontSize: 'var(--alm-text-xs, 11px)',
-            color: 'var(--alm-text-muted, #888)',
-            marginBottom: 'var(--alm-sp-1, 4px)',
-          }}
-        >
-          Step {stepIndex + 1} of {totalSteps}
-        </div>
-
-        {/* Title */}
-        <strong
-          style={{
-            display: 'block',
-            fontSize: 'var(--alm-text-sm, 13px)',
-            marginBottom: 'var(--alm-sp-2, 8px)',
-            color: 'var(--alm-text, #e2e2f0)',
-          }}
-        >
-          {hint.title}
-        </strong>
-
-        {/* Body */}
-        <p
-          style={{
-            fontSize: 'var(--alm-text-xs, 11px)',
-            color: 'var(--alm-text-muted, #aaa)',
-            margin: 0,
-            marginBottom: 'var(--alm-sp-3, 12px)',
-            lineHeight: 1.5,
-          }}
-        >
-          {hint.body}
-        </p>
-
-        {/* Dismiss button */}
-        <button
-          ref={dismissBtnRef}
-          type="button"
-          onClick={onDismiss}
-          aria-label="Dismiss guided coach"
-          data-testid="guided-dismiss-btn"
-          style={{
-            background: 'transparent',
-            border: '1px solid var(--alm-border, #3a3a5c)',
-            borderRadius: 'var(--alm-radius, 4px)',
-            color: 'var(--alm-text-muted, #aaa)',
-            cursor: 'pointer',
-            fontSize: 'var(--alm-text-xs, 11px)',
-            padding: '4px 10px',
-          }}
-        >
-          Dismiss
-        </button>
-      </div>
-    </div>,
-    document.body,
+      locale={{
+        skip: 'Dismiss',
+        last: 'Done',
+      }}
+    />
   );
 }

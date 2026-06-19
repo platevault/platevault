@@ -28,7 +28,7 @@ pub struct SessionSplitResult {
 /// # Errors
 /// Returns `Err(String)` on failure; the stub never fails.
 #[tauri::command]
-#[specta::specta(rename = "sessions.list")]
+#[specta::specta]
 pub async fn sessions_list() -> Result<Vec<AcquisitionSession>, String> {
     tracing::debug!("stub: sessions.list");
     Ok(stub_sessions())
@@ -39,7 +39,7 @@ pub async fn sessions_list() -> Result<Vec<AcquisitionSession>, String> {
 /// # Errors
 /// Returns `Err(String)` on failure; the stub never fails.
 #[tauri::command]
-#[specta::specta(rename = "sessions.get")]
+#[specta::specta]
 pub async fn sessions_get(id: String) -> Result<SessionDetail, String> {
     tracing::debug!("stub: sessions.get id={id}");
     let base = &stub_sessions()[0];
@@ -95,7 +95,7 @@ pub async fn sessions_get(id: String) -> Result<SessionDetail, String> {
 /// # Errors
 /// Returns `Err(String)` on failure; the stub never fails.
 #[tauri::command]
-#[specta::specta(rename = "sessions.calendar")]
+#[specta::specta]
 pub async fn sessions_calendar(
     start_month: String,
     end_month: String,
@@ -147,7 +147,7 @@ pub async fn sessions_calendar(
 /// # Errors
 /// Returns `Err(String)` on failure; the stub never fails.
 #[tauri::command]
-#[specta::specta(rename = "sessions.transition")]
+#[specta::specta]
 pub async fn sessions_transition(
     id: String,
     action: String,
@@ -167,7 +167,7 @@ pub async fn sessions_transition(
 /// # Errors
 /// Returns `Err(String)` on failure; the stub never fails.
 #[tauri::command]
-#[specta::specta(rename = "sessions.split")]
+#[specta::specta]
 pub async fn sessions_split(id: String, split_at_index: u32) -> Result<SessionSplitResult, String> {
     tracing::debug!("stub: sessions.split id={id} split_at_index={split_at_index}");
     let sessions = stub_sessions();
@@ -187,7 +187,7 @@ pub async fn sessions_split(id: String, split_at_index: u32) -> Result<SessionSp
 /// # Errors
 /// Returns `Err(String)` on failure; the stub never fails.
 #[tauri::command]
-#[specta::specta(rename = "sessions.merge")]
+#[specta::specta]
 pub async fn sessions_merge(ids: Vec<String>) -> Result<AcquisitionSession, String> {
     tracing::debug!("stub: sessions.merge ids={ids:?}");
     let mut merged =

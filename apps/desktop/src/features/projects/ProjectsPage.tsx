@@ -12,7 +12,7 @@
  * is invalidated and the new project is navigated to.
  */
 
-import { useState, useCallback } from 'react';
+import { useCallback } from 'react';
 import { useNavigate, useSearch } from '@tanstack/react-router';
 import { PageShell, ListDetailLayout, TopActionBar } from '@/components';
 import { Btn, EmptyState } from '@/ui';
@@ -21,8 +21,6 @@ import { useStaleSelectionCleanup } from '@/lib/use-stale-selection';
 import { ProjectsList } from './ProjectsList';
 import { ProjectDetailContent } from './ProjectDetail';
 import { useProjects } from './store';
-import { CreateProjectDialog } from './create/CreateProjectDialog';
-import { addToast } from '@/shared/toast';
 import type { ProjectSummaryDto } from '@/bindings/index';
 
 // ── Contextual actions per lifecycle state ────────────────────────────────────
@@ -63,7 +61,6 @@ export function ProjectsPage() {
   const navigate = useNavigate({ from: '/projects' });
 
   const { data: projects = [], loading } = useProjects();
-  const [createOpen, setCreateOpen] = useState(false);
 
   // Stale-id cleanup: if selected index is out of range, clear it.
   const selectedIdx = selected ?? 0;
@@ -86,25 +83,10 @@ export function ProjectsPage() {
       }),
     });
 
-  const handleCreateSuccess = useCallback(
-    (result: { projectId: string; planId?: string | null }) => {
-      // Navigate to first slot (list will re-fetch and show the new project)
-      void navigate({ search: (prev) => ({ ...prev, selected: 0 }) });
-      if (result.planId) {
-        addToast({
-          message: `Project created. Review the folder plan before applying.`,
-          variant: 'info',
-          action: {
-            label: 'View plan',
-            onClick: () => void navigate({ to: '/archive', search: { selected: undefined } as never }),
-          },
-        });
-      } else {
-        addToast({ message: 'Project created.', variant: 'success' });
-      }
-    },
-    [navigate],
-  );
+  // T078c: navigate to wizard instead of opening modal
+  const handleNewProject = useCallback(() => {
+    void navigate({ to: '/projects/new' });
+  }, [navigate]);
 
   const filteredProjects = lifecycle?.length
     ? projects.filter((p) => (lifecycle as string[]).includes(p.lifecycle))
@@ -132,7 +114,7 @@ export function ProjectsPage() {
                 <Btn
                   size="sm"
                   variant="primary"
-                  onClick={() => setCreateOpen(true)}
+                  onClick={handleNewProject}
                   data-guide-anchor="projects.create-cta"
                 >
                   + New project
@@ -168,11 +150,6 @@ export function ProjectsPage() {
         }
       />
 
-      <CreateProjectDialog
-        open={createOpen}
-        onClose={() => setCreateOpen(false)}
-        onSuccess={handleCreateSuccess}
-      />
     </PageShell>
   );
 }

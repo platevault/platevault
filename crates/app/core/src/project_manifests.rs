@@ -277,9 +277,9 @@ pub async fn write(
 /// Spawn an event-bus subscriber that listens for `workflow.run_completed`
 /// events and writes a `workflow_run` manifest for the named project.
 ///
-/// This is called once at app startup with the shared pool, bus, and a
-/// library-root resolver closure (needed to turn a project_id into an
-/// absolute path without a hard DB call here).
+/// The resolver performs an async DB lookup to turn a `project_id` into the
+/// project's root path (`projects.path`), which is used as the base directory
+/// for the manifest file write.
 ///
 /// The subscriber uses the same idempotent write pattern as any other trigger;
 /// a retry produces a new file with a later timestamp.
@@ -287,9 +287,9 @@ pub async fn write(
 pub fn spawn_workflow_run_subscriber(
     pool: SqlitePool,
     bus: EventBus,
-    project_root_resolver: impl Fn(String) -> Option<std::path::PathBuf> + Send + Sync + 'static,
 ) -> tokio::task::JoinHandle<()> {
     use audit::event_bus::TOPIC_WORKFLOW_RUN_COMPLETED;
+    use persistence_db::repositories::projects::get_project;
     use tokio::sync::broadcast::error::RecvError;
 
     let mut rx = bus.subscribe();
@@ -303,8 +303,18 @@ pub fn spawn_workflow_run_subscriber(
                         env.payload.get("toolId").and_then(|v| v.as_str()).map(str::to_owned);
 
                     if let Some(pid) = project_id {
-                        let root = project_root_resolver(pid.clone());
-                        if let Some(project_root) = root {
+                        // Async DB lookup: resolve project root from projects.path.
+                        let project_root = match get_project(&pool, &pid).await {
+                            Ok(row) => Some(std::path::PathBuf::from(&row.path)),
+                            Err(e) => {
+                                tracing::debug!(
+                                    "workflow.run_completed: could not look up project {pid}: {e}; skipping manifest"
+                                );
+                                None
+                            }
+                        };
+
+                        if let Some(project_root) = project_root {
                             // Best-effort: log but do not crash the subscriber.
                             let result = write(
                                 &pool,
@@ -325,10 +335,6 @@ pub fn spawn_workflow_run_subscriber(
                                     "workflow_run manifest write failed for project {pid}: {e}"
                                 );
                             }
-                        } else {
-                            tracing::debug!(
-                                "workflow.run_completed: no project root for {pid}; skipping manifest"
-                            );
                         }
                     }
                 }
@@ -525,6 +531,71 @@ mod tests {
         let (rows, _) = list_manifests_for_project(&pool, "proj-notes", None, 1).await.unwrap();
         let body: ManifestBody = serde_json::from_str(&rows[0].body_json).unwrap();
         assert_eq!(body.notes.as_deref(), Some("My telescope notes"));
+    }
+
+    // ── T027: spawn_workflow_run_subscriber integration test (FR-008) ─────────
+
+    #[tokio::test]
+    async fn workflow_run_subscriber_generates_and_persists_manifest() {
+        // Arrange: in-memory DB with a real project row.
+        let pool = setup().await;
+        let dir = tempfile::tempdir().unwrap();
+        // Insert project whose path points to our temp dir.
+        sqlx::query(
+            "INSERT INTO projects (id, name, tool, lifecycle, path, notes, channel_drift, created_at, updated_at) \
+             VALUES (?,?,?,?,?,?,?,?,?)",
+        )
+        .bind("proj-sub-1")
+        .bind("SubTest")
+        .bind("PixInsight")
+        .bind("ready")
+        .bind(dir.path().to_str().unwrap())
+        .bind::<Option<String>>(None)
+        .bind(false)
+        .bind("2026-01-01T00:00:00Z")
+        .bind("2026-01-01T00:00:00Z")
+        .execute(&pool)
+        .await
+        .unwrap();
+
+        let bus = make_bus(&pool);
+
+        // Spawn the subscriber (it listens on the bus).
+        let _handle = spawn_workflow_run_subscriber(pool.clone(), bus.clone());
+
+        // Act: publish a workflow.run_completed event.
+        let _ = bus
+            .publish(
+                "workflow.run_completed",
+                audit::event_bus::Source::System,
+                serde_json::json!({
+                    "projectId": "proj-sub-1",
+                    "toolId": "pixinsight",
+                    "toolLaunchId": "tl-sub-1",
+                    "completedAt": "2026-06-01T10:00:00Z",
+                    "artifactIds": [],
+                }),
+            )
+            .await;
+
+        // Assert: manifest row appears within a short timeout.
+        let deadline = tokio::time::Instant::now() + std::time::Duration::from_secs(2);
+        loop {
+            let (rows, _) =
+                list_manifests_for_project(&pool, "proj-sub-1", None, 10).await.unwrap();
+            if !rows.is_empty() {
+                // Verify reason and file existence.
+                assert_eq!(rows[0].reason, "workflow_run");
+                let abs_path = dir.path().join(&rows[0].path);
+                assert!(abs_path.exists(), "manifest file should exist at {}", abs_path.display());
+                return; // success
+            }
+            assert!(
+                tokio::time::Instant::now() < deadline,
+                "manifest row not found within 2 s after workflow.run_completed event"
+            );
+            tokio::time::sleep(std::time::Duration::from_millis(50)).await;
+        }
     }
 
     #[tokio::test]

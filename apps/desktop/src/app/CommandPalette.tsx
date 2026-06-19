@@ -17,7 +17,15 @@ const PAGES: Array<{ label: string; route: string }> = [
   { label: 'Settings', route: '/settings' },
 ];
 
-const ACTIONS: Array<{ label: string; route: string }> = [
+interface PaletteAction {
+  label: string;
+  /** Route path for simple navigation actions. */
+  route?: string;
+  /** Custom handler for actions that need search params or other side effects. */
+  onSelect?: () => void;
+}
+
+const ACTIONS: Array<PaletteAction> = [
   { label: 'New project', route: '/projects/new' },
 ];
 
@@ -92,6 +100,33 @@ export function CommandPalette() {
     [navigate],
   );
 
+  const selectAction = useCallback(
+    (action: PaletteAction) => {
+      setOpen(false);
+      setQuery('');
+      if (action.onSelect) {
+        action.onSelect();
+      } else if (action.route) {
+        void navigate({ to: action.route });
+      }
+    },
+    [navigate],
+  );
+
+  // FR-033 / T077: "Show ignored items" navigates to sessions with ignored review filter.
+  const showIgnoredAction = useCallback(() => {
+    setOpen(false);
+    setQuery('');
+    // Cast needed: TanStack Router search types are route-specific; reviewFilter
+    // is a valid sessions-route param (route-contract.ts REVIEW_FILTERS).
+    void navigate({ to: '/sessions', search: { reviewFilter: 'ignored' } as never });
+  }, [navigate]);
+
+  const ALL_ACTIONS: Array<PaletteAction> = [
+    ...ACTIONS,
+    { label: 'Show ignored items', onSelect: showIgnoredAction },
+  ];
+
   // All visible pages: standard pages + dev pages when devMode is on.
   const visiblePages = devMode ? [...PAGES, ...DEV_PAGES] : PAGES;
 
@@ -143,11 +178,11 @@ export function CommandPalette() {
                 ))}
               </Command.Group>
               <Command.Group heading="Actions">
-                {ACTIONS.map((a) => (
+                {ALL_ACTIONS.map((a) => (
                   <Command.Item
-                    key={a.route}
+                    key={a.label}
                     className="alm-palette__item"
-                    onSelect={() => select(a.route)}
+                    onSelect={() => selectAction(a)}
                   >
                     <span className="alm-palette__item-label">{a.label}</span>
                   </Command.Item>

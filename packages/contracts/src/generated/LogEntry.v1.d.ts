@@ -14,9 +14,9 @@ export interface LogEntry {
    */
   id: string;
   /**
-   * Schema version of this LogEntry shape (H1).
+   * Schema version of this LogEntry shape (H1). Always "2.0.0".
    */
-  contractVersion: "1";
+  contractVersion: "2.0.0";
   /**
    * ISO-8601 UTC timestamp at server-side emission.
    */

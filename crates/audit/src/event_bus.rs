@@ -474,6 +474,25 @@ pub struct ArtifactClassifyOverride {
     pub at: String,
 }
 
+/// Payload for the `artifact.classified` topic (spec 012, FR-009, spec 033 T028).
+///
+/// Emitted by the artifact watcher after a file is detected AND classified.
+/// Carries the classification result with a confidence level (Constitution §II).
+#[derive(Clone, Debug, Serialize, Deserialize, JsonSchema, Type)]
+#[serde(rename_all = "camelCase")]
+pub struct ArtifactClassified {
+    pub artifact_id: String,
+    pub project_id: String,
+    /// `intermediate` | `master` | `final`
+    pub classification: String,
+    /// Confidence in [0.0, 1.0]. Present when inference is used.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub confidence: Option<f64>,
+    pub classified_at: String,
+}
+
+pub const TOPIC_ARTIFACT_CLASSIFIED: &str = "artifact.classified";
+
 pub const TOPIC_ARTIFACT_CLASSIFY_OVERRIDE: &str = "artifact.classify.override";
 
 /// Payload for the `artifact.classify.override.cleared` topic (spec 012, T014, A6).
@@ -562,6 +581,28 @@ pub struct ProtectionPlanAcknowledged {
 }
 
 pub const TOPIC_PROTECTION_PLAN_ACKNOWLEDGED: &str = "protection.plan.acknowledged";
+
+/// Payload for the `protection.default.changed` topic (spec 033 T045, FR-018).
+///
+/// Emitted when a global protection default (level, blockPermanentDelete, or
+/// protectedCategories) is changed by the user or system.
+#[derive(Clone, Debug, Serialize, Deserialize, JsonSchema, Type)]
+#[serde(rename_all = "camelCase")]
+pub struct ProtectionDefaultChanged {
+    /// Scope of the default (e.g. `"global"`).
+    pub scope: String,
+    /// Key that changed (e.g. `"defaultProtection"`, `"blockPermanentDelete"`,
+    /// `"protectedCategories"`).
+    pub key: String,
+    /// Prior raw JSON value; absent if the row was newly created.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub old: Option<serde_json::Value>,
+    /// New raw JSON value.
+    pub new: serde_json::Value,
+    pub changed_at: String,
+}
+
+pub const TOPIC_PROTECTION_DEFAULT_CHANGED: &str = "protection.default.changed";
 
 // ── Guided first project flow audit events (spec 010) ────────────────────────
 

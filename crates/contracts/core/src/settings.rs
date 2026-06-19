@@ -124,6 +124,10 @@ pub struct SettingsState {
     /// Confidence penalty when user overrides bias suggestion [0,1] (spec 007).
     pub calibration_bias_override_penalty: f64,
 
+    /// Days after which a calibration master is considered aging (spec 007/018 FR-023).
+    /// Consumers compare `master.age_days` against this value instead of hardcoding 90.
+    pub calibration_aging_threshold_days: f64,
+
     /// User-extensible IMAGETYP normalization entries (spec 005 R-IMAGETYP-Norm).
     pub imagetyp_normalization_user_mappings: Vec<ImageTypMapping>,
 }
@@ -157,6 +161,7 @@ impl Default for SettingsState {
             calibration_dark_override_penalty: 0.3,
             calibration_flat_override_penalty: 0.3,
             calibration_bias_override_penalty: 0.3,
+            calibration_aging_threshold_days: 90.0,
             imagetyp_normalization_user_mappings: vec![],
         }
     }

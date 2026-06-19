@@ -26,7 +26,7 @@ vi.mock('@/api/commands', () => ({
     values: { logLevel: 'info', rememberFollowLogs: false },
   }),
   updateSettings: vi.fn().mockResolvedValue(undefined),
-  logExport: vi.fn().mockResolvedValue({ contractVersion: '1', requestId: 'r', filePath: '/tmp/x.json', count: 0 }),
+  logExport: vi.fn().mockResolvedValue({ contractVersion: '2.0.0', requestId: 'r', filePath: '/tmp/x.json', count: 0, status: 'success' }),
 }));
 
 vi.mock('@/data/logSubscription', () => ({

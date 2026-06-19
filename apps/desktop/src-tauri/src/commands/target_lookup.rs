@@ -36,7 +36,7 @@ use crate::commands::lifecycle::AppState;
 /// Returns `Err(String)` only on a local database failure. Resolver outcomes
 /// (offline / unknown / ambiguous) are encoded in the response status.
 #[tauri::command]
-#[specta::specta(rename = "target.resolve")]
+#[specta::specta]
 pub async fn target_resolve(
     state: State<'_, AppState>,
     req: TargetResolveSimbadRequest,
@@ -88,7 +88,7 @@ pub async fn target_resolve(
 ///
 /// Returns `Err(String)` on an unexpected internal (database) failure.
 #[tauri::command]
-#[specta::specta(rename = "target.search")]
+#[specta::specta]
 pub async fn target_search(
     state: State<'_, AppState>,
     req: TargetSearchRequest,
@@ -105,7 +105,7 @@ pub async fn target_search(
 ///
 /// Returns `Err(String)` on a local database failure.
 #[tauri::command]
-#[specta::specta(rename = "target.resolution.settings")]
+#[specta::specta]
 pub async fn target_resolution_settings(
     state: State<'_, AppState>,
     req: ResolverSettingsGetRequest,
@@ -120,7 +120,7 @@ pub async fn target_resolution_settings(
 ///
 /// Returns `Err(String)` on a local database failure.
 #[tauri::command]
-#[specta::specta(rename = "target.resolution.settings.update")]
+#[specta::specta]
 pub async fn target_resolution_settings_update(
     state: State<'_, AppState>,
     req: ResolverSettingsUpdateRequest,

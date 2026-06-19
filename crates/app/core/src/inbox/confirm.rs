@@ -238,6 +238,8 @@ pub async fn confirm(
             linked_entity: None,
             provenance_json: None,
             archive_path: None,
+            source_id: None,
+            category: None,
         };
 
         plans_repo::insert_plan_item(pool, &plan_item).await.map_err(|e| {

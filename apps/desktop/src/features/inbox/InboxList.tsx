@@ -32,7 +32,7 @@ function stateLabel(state: string): string {
   }
 }
 
-type GroupBy = 'none' | 'lane';
+type GroupBy = 'none' | 'type' | 'date';
 type SortBy  = 'name' | 'state';
 type FilterType = 'all' | 'fits' | 'video';
 
@@ -86,7 +86,8 @@ export function InboxList({
             aria-label="Group by"
           >
             <option value="none">Group: none</option>
-            <option value="lane">Group: lane</option>
+            <option value="type">Group: image / video</option>
+            <option value="date">Group: date</option>
           </select>
           <select
             className="alm-select"

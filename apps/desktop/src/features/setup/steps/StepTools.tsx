@@ -1,9 +1,8 @@
+import { useEffect } from 'react';
 import { Btn } from '@/ui/Btn';
 import { Pill } from '@/ui/Pill';
-import { Box } from '@/ui/Box';
+import { Toggle } from '@/ui/Toggle';
 import { useDirectoryPicker } from '@/shared/native/picker';
-import { Switch } from '@base-ui-components/react/switch';
-import { clsx } from 'clsx';
 
 export interface ToolConfig {
   enabled: boolean;
@@ -46,14 +45,49 @@ const TOOL_DEFS: ToolDef[] = [
 
 /**
  * Step 2 -- Processing Tools.
- * Toggle-based tool configuration with optional executable path picker.
- * Backend commands are stubs for now -- this is a UI-only step.
+ * Auto-detects installed tools (`tools.discover`, application-based per OS) on mount,
+ * then lets the user toggle/override the executable path.
  */
 export function StepTools({ tools, onToolsChange }: StepToolsProps) {
+  // Auto-detect installed tools once on mount and fill in any unset paths.
+  useEffect(() => {
+    if (import.meta.env.VITE_USE_MOCKS === 'true') return undefined;
+    let cancelled = false;
+    void (async () => {
+      try {
+        const { commands } = await import('@/bindings/index');
+        const res = await commands.toolsDiscover({ toolId: null });
+        if (cancelled || res.status !== 'ok') return;
+        const found = new Map(
+          res.data.entries.filter((e) => e.available).map((e) => [e.toolId, e.path]),
+        );
+        let changed = false;
+        const next: ToolsState = { ...tools };
+        for (const def of TOOL_DEFS) {
+          const path = found.get(def.key);
+          if (path && !next[def.key].path) {
+            next[def.key] = { enabled: true, path };
+            changed = true;
+          }
+        }
+        if (changed) onToolsChange(next);
+      } catch {
+        // detection is best-effort; the user can still set paths manually.
+      }
+    })();
+    return () => {
+      cancelled = true;
+    };
+    // Run once on mount; merging only fills empty paths so re-runs are safe.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
   const handleToggle = (key: keyof ToolsState, checked: boolean) => {
+    // Only flip `enabled`; keep the (detected or manually-set) path so disabling →
+    // re-enabling doesn't lose detection and flip the tool back to "Not detected".
     onToolsChange({
       ...tools,
-      [key]: { ...tools[key], enabled: checked, path: checked ? tools[key].path : null },
+      [key]: { ...tools[key], enabled: checked },
     });
   };
 
@@ -65,53 +99,140 @@ export function StepTools({ tools, onToolsChange }: StepToolsProps) {
   };
 
   return (
-    <div className="alm-step-tools">
-      <p className="alm-step-tools__intro">
-        Configure your processing tools so the app can prepare project inputs and
-        suggest workflow profiles. Auto-detection will be available in a future update.
+    <div
+      className="alm-step-tools"
+      style={{ display: 'flex', flexDirection: 'column', gap: 'var(--alm-sp-3)' }}
+    >
+      <p
+        className="alm-step-tools__intro"
+        style={{
+          margin: 0,
+          fontSize: 'var(--alm-text-sm)',
+          lineHeight: 'var(--alm-leading-normal)',
+          color: 'var(--alm-text-secondary)',
+        }}
+      >
+        Configure your processing tools so the app can prepare project inputs and suggest
+        workflow profiles. Installed tools are detected automatically; you can override or
+        set a path manually.
       </p>
 
-      <div className="alm-step-tools__list">
+      <div
+        className="alm-step-tools__list"
+        style={{ display: 'flex', flexDirection: 'column', gap: 'var(--alm-sp-2)' }}
+      >
         {TOOL_DEFS.map((def) => {
           const config = tools[def.key];
           return (
-            <Box key={def.key}>
-              <div className="alm-step-tools__row">
-                <div className="alm-step-tools__row-info">
-                  <div className="alm-step-tools__row-header">
-                    <span className="alm-step-tools__row-name">{def.name}</span>
-                    <Pill variant="neutral">Not detected</Pill>
-                  </div>
-                  <span className="alm-step-tools__row-desc">{def.description}</span>
-                </div>
-                <Switch.Root
-                  className={clsx('alm-switch', config.enabled && 'alm-switch--checked')}
-                  checked={config.enabled}
-                  onCheckedChange={(checked) => handleToggle(def.key, checked)}
-                  aria-label={`Enable ${def.name}`}
-                >
-                  <Switch.Thumb className="alm-switch__thumb" />
-                </Switch.Root>
-              </div>
-
-              {config.enabled && (
-                <div className="alm-step-tools__path-row">
-                  <ToolPathPicker
-                    toolName={def.name}
-                    path={config.path}
-                    onPathChange={(path) => handlePathChange(def.key, path)}
-                  />
-                </div>
-              )}
-            </Box>
+            <ToolCard
+              key={def.key}
+              def={def}
+              config={config}
+              onToggle={(checked) => handleToggle(def.key, checked)}
+              onPathChange={(path) => handlePathChange(def.key, path)}
+            />
           );
         })}
       </div>
 
-      <p className="alm-step-tools__note">
-        You can skip this step. Tool configuration can be changed later in
-        Settings.
+      <p
+        className="alm-step-tools__note"
+        style={{
+          margin: 0,
+          fontSize: 'var(--alm-text-xs)',
+          color: 'var(--alm-text-faint)',
+        }}
+      >
+        You can skip this step. Tool configuration can be changed later in Settings.
       </p>
+    </div>
+  );
+}
+
+/** A single tool card: name + detected status + description + enable toggle + path picker. */
+function ToolCard({
+  def,
+  config,
+  onToggle,
+  onPathChange,
+}: {
+  def: ToolDef;
+  config: ToolConfig;
+  onToggle: (checked: boolean) => void;
+  onPathChange: (path: string | null) => void;
+}) {
+  const detected = Boolean(config.path);
+
+  return (
+    <div
+      className="alm-step-tools__card"
+      data-testid={`tool-card-${def.key}`}
+      style={{
+        border: '1px solid var(--alm-border)',
+        borderRadius: 'var(--alm-radius-sm)',
+        background: 'var(--alm-bg)',
+        overflow: 'hidden',
+      }}
+    >
+      {/* Header row: name + detected pill + description + enable toggle */}
+      <div
+        className="alm-step-tools__header"
+        style={{
+          display: 'flex',
+          alignItems: 'center',
+          gap: 'var(--alm-sp-3)',
+          padding: 'var(--alm-sp-2) var(--alm-sp-3)',
+          minHeight: 'var(--alm-row-height)',
+        }}
+      >
+        <div style={{ flex: 1, minWidth: 0, display: 'flex', flexDirection: 'column', gap: 'var(--alm-sp-0)' }}>
+          <div style={{ display: 'flex', alignItems: 'center', gap: 'var(--alm-sp-2)' }}>
+            <span
+              style={{
+                fontSize: 'var(--alm-text-sm)',
+                fontWeight: 'var(--alm-weight-semibold)',
+                color: 'var(--alm-text)',
+              }}
+            >
+              {def.name}
+            </span>
+            {detected ? (
+              <Pill variant="ok">Detected</Pill>
+            ) : (
+              <Pill variant="neutral">Not detected</Pill>
+            )}
+          </div>
+          <span style={{ fontSize: 'var(--alm-text-xs)', color: 'var(--alm-text-muted)' }}>
+            {def.description}
+          </span>
+        </div>
+        <Toggle
+          checked={config.enabled}
+          onChange={onToggle}
+          aria-label={`Enable ${def.name}`}
+        />
+      </div>
+
+      {/* Executable path picker, only when enabled */}
+      {config.enabled && (
+        <div
+          className="alm-step-tools__path-row"
+          style={{
+            display: 'flex',
+            alignItems: 'center',
+            gap: 'var(--alm-sp-2)',
+            padding: 'var(--alm-sp-2) var(--alm-sp-3)',
+            borderTop: '1px solid var(--alm-border-subtle)',
+            background: 'var(--alm-surface-raised)',
+          }}
+        >
+          <ToolPathPicker
+            toolName={def.name}
+            path={config.path}
+            onPathChange={onPathChange}
+          />
+        </div>
+      )}
     </div>
   );
 }
@@ -135,21 +256,37 @@ function ToolPathPicker({
   };
 
   return (
-    <div className="alm-step-tools__path-picker">
-      <span className="alm-step-tools__path-label">Executable:</span>
-      {path ? (
-        <>
-          <span className="alm-step-tools__path-value">{path}</span>
-          <Pill variant="ok">OK</Pill>
-        </>
-      ) : (
-        <span className="alm-step-tools__path-value alm-step-tools__path-value--empty">
-          No path set
-        </span>
-      )}
+    <>
+      <span
+        style={{
+          fontSize: 'var(--alm-text-2xs)',
+          fontWeight: 'var(--alm-weight-semibold)',
+          textTransform: 'uppercase',
+          letterSpacing: '0.04em',
+          color: 'var(--alm-text-muted)',
+        }}
+      >
+        Executable
+      </span>
+      <span
+        className="alm-mono"
+        title={path ?? undefined}
+        style={{
+          flex: 1,
+          minWidth: 0,
+          fontSize: 'var(--alm-text-sm)',
+          overflow: 'hidden',
+          textOverflow: 'ellipsis',
+          whiteSpace: 'nowrap',
+          color: path ? 'var(--alm-text-secondary)' : 'var(--alm-text-faint)',
+        }}
+      >
+        {path ?? 'No path set'}
+      </span>
+      {path && <Pill variant="ok">OK</Pill>}
       <Btn size="sm" onClick={handleChoose} disabled={loading}>
-        {loading ? 'Choosing...' : `Choose ${toolName} executable...`}
+        {loading ? 'Choosing…' : `Choose ${toolName}…`}
       </Btn>
-    </div>
+    </>
   );
 }

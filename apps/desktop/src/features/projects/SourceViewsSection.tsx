@@ -28,7 +28,7 @@ import {
   canRemoveView,
   canRegenerateView,
 } from './source-views';
-import type { PreparedViewSummary } from './source-views';
+import type { PreparedViewSummary, PreparedViewItemDetail } from './source-views';
 
 // ── Props ─────────────────────────────────────────────────────────────────────
 
@@ -172,6 +172,34 @@ export function SourceViewsSection({ projectId, onPlanCreated }: SourceViewsSect
                 <span className="text-xs text-muted">{view.kind}</span>
                 <span className="text-xs text-muted">{view.itemCount} items</span>
               </div>
+
+              {/* FR-033 / T078: per-item inventory refs */}
+              {view.items.length > 0 && (
+                <details className="text-xs text-muted" style={{ marginTop: 4 }}>
+                  <summary style={{ cursor: 'pointer', userSelect: 'none' }}>
+                    {view.items.length} inventory ref{view.items.length !== 1 ? 's' : ''}
+                  </summary>
+                  <ul
+                    style={{
+                      marginTop: 4,
+                      paddingLeft: 12,
+                      listStyle: 'disc',
+                      fontFamily: 'var(--alm-font-mono)',
+                    }}
+                    data-testid={`source-view-items-${view.id}`}
+                  >
+                    {view.items.map((item: PreparedViewItemDetail) => (
+                      <li
+                        key={item.id}
+                        title={`Inventory item: ${item.inventoryItemId}`}
+                        style={{ padding: '1px 0', wordBreak: 'break-all' }}
+                      >
+                        {item.viewRelativePath}
+                      </li>
+                    ))}
+                  </ul>
+                </details>
+              )}
 
               {/* kind_diverged resolution affordance (D-026-H2) */}
               {view.state === 'kind_diverged' && (

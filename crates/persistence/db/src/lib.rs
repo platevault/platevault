@@ -27,6 +27,10 @@ pub enum DbError {
     Migration(#[from] sqlx::migrate::MigrateError),
     #[error("not implemented")]
     NotImplemented,
+    /// Catalog origin 'user' is not implemented in v1 (A2 — deferred to v1.x).
+    /// Returned by catalog install functions when `origin == CatalogOrigin::User`.
+    #[error("origin 'user' is not implemented in v1 (A2)")]
+    OriginNotImplemented,
 }
 
 pub trait Repository {

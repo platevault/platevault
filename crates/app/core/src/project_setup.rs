@@ -220,6 +220,10 @@ async fn build_folder_plan(
             linked_entity: Some(project_id),
             provenance_json: None,
             archive_path: None,
+            // Project setup items create app-managed folders/files; source protection
+            // does not apply.
+            source_id: None,
+            category: None,
         };
         plans_repo::insert_plan_item(pool, &item_data).await?;
     }
@@ -243,6 +247,9 @@ async fn build_folder_plan(
         linked_entity: Some(project_id),
         provenance_json: None,
         archive_path: None,
+        // Project marker file creation; source protection does not apply.
+        source_id: None,
+        category: None,
     };
     plans_repo::insert_plan_item(pool, &marker_item).await?;
 
@@ -926,6 +933,8 @@ pub async fn list(pool: &SqlitePool) -> Result<Vec<ProjectSummaryDto>, ContractE
             source_count: u32::try_from(sources.len()).unwrap_or(0),
             created_at: row.created_at,
             updated_at: row.updated_at,
+            blocked_reason_kind: row.blocked_reason_kind,
+            blocked_reason_note: row.blocked_reason_note,
         });
     }
     Ok(dtos)
@@ -975,6 +984,8 @@ pub async fn get(pool: &SqlitePool, id: &str) -> Result<ProjectDetailDto, Contra
         created_at: row.created_at,
         updated_at: row.updated_at,
         canonical_target,
+        blocked_reason_kind: row.blocked_reason_kind,
+        blocked_reason_note: row.blocked_reason_note,
     })
 }
 
