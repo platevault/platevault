@@ -33,7 +33,6 @@ pub mod search;
 pub mod sessions;
 pub mod settings;
 pub mod status;
-pub mod target_lookup;
 pub mod targets;
 pub mod tools;
 

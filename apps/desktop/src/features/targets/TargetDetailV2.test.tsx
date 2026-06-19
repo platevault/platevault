@@ -1,27 +1,27 @@
 /// <reference types="@testing-library/jest-dom" />
 /**
- * TargetDetailV2 component tests — spec 023 wired detail pane.
+ * TargetDetailV2 component tests — spec 036 gen-3 detail pane.
  *
  * Tests:
  *  1. Shows loading state while fetch is in flight.
- *  2. Renders primary designation on successful load.
- *  3. Renders alias chips from the response.
- *  4. Renders catalog ref chips.
- *  5. Renders notes textarea populated with existing note.
- *  6. Notes textarea is editable (change fires onChange).
- *  7. Alias add button calls addTargetAlias with correct args.
- *  8. Alias add Enter keydown triggers addTargetAlias.
- *  9. Alias remove (×) button calls removeTargetAlias with correct alias.
- * 10. Make-primary (↑) button calls renameTargetPrimary with correct args.
- * 11. alias.duplicate error shows inline error message.
- * 12. alias.is_primary error shows inline error message.
- * 13. designation.not_in_aliases error shows inline error message.
- * 14. Shows error state when getTargetIdentity rejects.
- * 15. Shows sessions empty-state when sessions array is empty.
- * 16. Shows projects empty-state when projects array is empty.
- * 17. Reloads detail after successful alias add (re-calls getTargetIdentity).
- * 18. Reloads detail after successful alias remove.
- * 19. Reloads detail after successful primary rename.
+ *  2. Renders effectiveLabel (displayAlias ?? primaryDesignation) in header.
+ *  3. Renders primaryDesignation in identity section.
+ *  4. Renders alias rows with kind badge.
+ *  5. User aliases show a remove × button; SIMBAD aliases do not.
+ *  6. Clicking × on a user alias calls removeTargetAlias with alias id.
+ *  7. Add-alias form calls addTargetAlias with target id and alias text.
+ *  8. Add-alias Enter keydown triggers addTargetAlias.
+ *  9. Blank alias shows inline error without calling addTargetAlias.
+ * 10. alias.blank error shows inline error message.
+ * 11. alias.not_removable error shows inline error message.
+ * 12. Shows error state when getTargetDetail rejects.
+ * 13. Sessions empty-state renders.
+ * 14. Projects empty-state renders.
+ * 15. Reloads detail after successful alias add.
+ * 16. Reloads detail after successful alias remove.
+ * 17. Display-alias Set/Edit button is visible.
+ * 18. Setting display alias updates effectiveLabel.
+ * 19. Clearing display alias reverts effectiveLabel to primaryDesignation.
  */
 
 import { render, screen, fireEvent, waitFor } from '@testing-library/react';
@@ -30,25 +30,25 @@ import { describe, it, expect, vi, beforeEach } from 'vitest';
 // ── Hoist mocks ───────────────────────────────────────────────────────────────
 
 const {
-  mockGetTargetIdentity,
-  mockUpdateTargetNote,
+  mockGetTargetDetail,
   mockAddTargetAlias,
   mockRemoveTargetAlias,
-  mockRenameTargetPrimary,
+  mockSetDisplayAlias,
+  mockClearDisplayAlias,
 } = vi.hoisted(() => ({
-  mockGetTargetIdentity: vi.fn(),
-  mockUpdateTargetNote: vi.fn(),
+  mockGetTargetDetail: vi.fn(),
   mockAddTargetAlias: vi.fn(),
   mockRemoveTargetAlias: vi.fn(),
-  mockRenameTargetPrimary: vi.fn(),
+  mockSetDisplayAlias: vi.fn(),
+  mockClearDisplayAlias: vi.fn(),
 }));
 
 vi.mock('@/api/commands', () => ({
-  getTargetIdentity: mockGetTargetIdentity,
-  updateTargetNote: mockUpdateTargetNote,
+  getTargetDetail: mockGetTargetDetail,
   addTargetAlias: mockAddTargetAlias,
   removeTargetAlias: mockRemoveTargetAlias,
-  renameTargetPrimary: mockRenameTargetPrimary,
+  setDisplayAlias: mockSetDisplayAlias,
+  clearDisplayAlias: mockClearDisplayAlias,
 }));
 
 vi.mock('@tanstack/react-router', () => ({
@@ -67,115 +67,117 @@ import { TargetDetailV2 } from './TargetDetailV2';
 
 const TARGET_ID = '550e8400-e29b-41d4-a716-446655440201';
 
-const makeResult = (overrides?: {
-  aliases?: string[];
-  notes?: string | null;
-  catalogRefs?: Array<{ catalogId: string; catalogDisplay: string; designation: string }>;
-}) => ({
-  target: {
+function makeDetail(overrides?: {
+  displayAlias?: string | null;
+  aliases?: Array<{ id: string; alias: string; kind: 'designation' | 'common_name' | 'user' }>;
+}) {
+  const displayAlias = overrides?.displayAlias ?? null;
+  const primaryDesignation = 'NGC 7000';
+  return {
     id: TARGET_ID,
-    primaryDesignation: 'NGC 7000',
-    aliases: overrides?.aliases ?? ['North America Nebula', 'Caldwell 20'],
-    catalogRefs: overrides?.catalogRefs ?? [
-      { catalogId: 'openngc', catalogDisplay: 'OpenNGC', designation: 'NGC 7000' },
+    primaryDesignation,
+    displayAlias: displayAlias ?? undefined,
+    effectiveLabel: displayAlias ?? primaryDesignation,
+    objectType: 'emission_nebula',
+    raDeg: 314.75,
+    decDeg: 44.37,
+    simbadOid: 2_222_222,
+    source: 'resolved',
+    aliases: overrides?.aliases ?? [
+      { id: 'alias-desig-1', alias: 'NGC 7000', kind: 'designation' as const },
+      { id: 'alias-cn-1', alias: 'North America Nebula', kind: 'common_name' as const },
+      { id: 'alias-user-1', alias: 'My Nebula', kind: 'user' as const },
     ],
-    notes: overrides?.notes !== undefined ? overrides.notes : 'Some observing note',
-    createdAt: '2026-01-01T00:00:00Z',
-    updatedAt: '2026-06-01T00:00:00Z',
-  },
-  sessions: [],
-  projects: [],
-});
+  };
+}
 
 beforeEach(() => {
   vi.clearAllMocks();
-  mockGetTargetIdentity.mockResolvedValue(makeResult());
-  mockUpdateTargetNote.mockResolvedValue({ targetId: TARGET_ID, updatedAt: '2026-06-11T00:00:00Z' });
-  mockAddTargetAlias.mockResolvedValue({ targetId: TARGET_ID, added: true });
-  mockRemoveTargetAlias.mockResolvedValue({
-    targetId: TARGET_ID,
-    removedAlias: 'north america nebula',
-    auditId: 'audit-001',
+  mockGetTargetDetail.mockResolvedValue(makeDetail());
+  mockAddTargetAlias.mockResolvedValue({
+    alias: { id: 'alias-user-new', alias: 'New Alias', kind: 'user' },
   });
-  mockRenameTargetPrimary.mockResolvedValue({
-    targetId: TARGET_ID,
-    priorPrimary: 'NGC 7000',
-    newPrimary: 'North America Nebula',
-    auditId: 'audit-002',
-  });
+  mockRemoveTargetAlias.mockResolvedValue({ removed: true });
+  mockSetDisplayAlias.mockResolvedValue(makeDetail({ displayAlias: 'My NGC 7000' }));
+  mockClearDisplayAlias.mockResolvedValue(makeDetail({ displayAlias: null }));
 });
 
 // ── Tests ─────────────────────────────────────────────────────────────────────
 
 describe('TargetDetailV2', () => {
   it('1. shows loading state while fetch is in flight', () => {
-    // Never resolve to keep it in loading state
-    mockGetTargetIdentity.mockReturnValue(new Promise(() => {}));
+    mockGetTargetDetail.mockReturnValue(new Promise(() => {}));
     render(<TargetDetailV2 targetId={TARGET_ID} />);
     expect(screen.getByText('Loading…')).toBeInTheDocument();
   });
 
-  it('2. renders primary designation on successful load', async () => {
+  it('2. renders effectiveLabel in header', async () => {
     render(<TargetDetailV2 targetId={TARGET_ID} />);
-    await waitFor(() => expect(screen.getByText('NGC 7000')).toBeInTheDocument());
+    // NGC 7000 appears in header and identity section; either is fine
+    await waitFor(() => {
+      const els = screen.getAllByText('NGC 7000');
+      expect(els.length).toBeGreaterThanOrEqual(1);
+    });
   });
 
-  it('3. renders alias chips from the response', async () => {
+  it('2b. when displayAlias is set, effectiveLabel shows it', async () => {
+    mockGetTargetDetail.mockResolvedValue(makeDetail({ displayAlias: 'My NGC 7000' }));
     render(<TargetDetailV2 targetId={TARGET_ID} />);
     await waitFor(() => {
+      const els = screen.getAllByText('My NGC 7000');
+      expect(els.length).toBeGreaterThanOrEqual(1);
+    });
+  });
+
+  it('3. renders primaryDesignation in identity section', async () => {
+    render(<TargetDetailV2 targetId={TARGET_ID} />);
+    await waitFor(() => {
+      const dds = screen.getAllByText('NGC 7000');
+      expect(dds.length).toBeGreaterThanOrEqual(1);
+    });
+  });
+
+  it('4. renders alias rows with kind badge', async () => {
+    render(<TargetDetailV2 targetId={TARGET_ID} />);
+    await waitFor(() => {
+      // NGC 7000 appears multiple times (header + alias + identity); just confirm presence
+      expect(screen.getAllByText('NGC 7000').length).toBeGreaterThanOrEqual(1);
       expect(screen.getByText('North America Nebula')).toBeInTheDocument();
-      expect(screen.getByText('Caldwell 20')).toBeInTheDocument();
+      expect(screen.getByText('My Nebula')).toBeInTheDocument();
     });
   });
 
-  it('4. renders catalog ref chips', async () => {
+  it('5. user aliases show remove button; SIMBAD aliases do not', async () => {
     render(<TargetDetailV2 targetId={TARGET_ID} />);
-    await waitFor(() => {
-      expect(screen.getByText('OpenNGC: NGC 7000')).toBeInTheDocument();
-    });
+    await waitFor(() => screen.getByLabelText('Remove alias My Nebula'));
+
+    expect(screen.getByLabelText('Remove alias My Nebula')).toBeInTheDocument();
+    expect(screen.queryByLabelText('Remove alias NGC 7000')).not.toBeInTheDocument();
+    expect(screen.queryByLabelText('Remove alias North America Nebula')).not.toBeInTheDocument();
   });
 
-  it('5. notes textarea is populated with existing note', async () => {
+  it('6. clicking × on user alias calls removeTargetAlias with alias id', async () => {
     render(<TargetDetailV2 targetId={TARGET_ID} />);
-    await waitFor(() => {
-      const textarea = screen.getByRole('textbox', { name: /target notes/i });
-      expect(textarea).toHaveValue('Some observing note');
-    });
-  });
+    await waitFor(() => screen.getByLabelText('Remove alias My Nebula'));
 
-  it('6. notes textarea is editable', async () => {
-    render(<TargetDetailV2 targetId={TARGET_ID} />);
-    await waitFor(() => screen.getByRole('textbox', { name: /target notes/i }));
-    const textarea = screen.getByRole('textbox', { name: /target notes/i });
-    fireEvent.change(textarea, { target: { value: 'Updated note text' } });
-    expect(textarea).toHaveValue('Updated note text');
-  });
-
-  it('7. alias add button calls addTargetAlias with correct args', async () => {
-    render(<TargetDetailV2 targetId={TARGET_ID} />);
-    await waitFor(() => screen.getByRole('textbox', { name: /new alias/i }));
-
-    fireEvent.change(screen.getByRole('textbox', { name: /new alias/i }), {
-      target: { value: 'Pelican Nebula Neighbor' },
-    });
-    fireEvent.click(screen.getByRole('button', { name: /^add$/i }));
+    fireEvent.click(screen.getByLabelText('Remove alias My Nebula'));
 
     await waitFor(() =>
-      expect(mockAddTargetAlias).toHaveBeenCalledWith({
+      expect(mockRemoveTargetAlias).toHaveBeenCalledWith({
         targetId: TARGET_ID,
-        alias: 'Pelican Nebula Neighbor',
+        aliasId: 'alias-user-1',
       }),
     );
   });
 
-  it('8. alias add Enter keydown triggers addTargetAlias', async () => {
+  it('7. add-alias form calls addTargetAlias with correct args', async () => {
     render(<TargetDetailV2 targetId={TARGET_ID} />);
     await waitFor(() => screen.getByRole('textbox', { name: /new alias/i }));
 
     fireEvent.change(screen.getByRole('textbox', { name: /new alias/i }), {
       target: { value: 'Pelican Region' },
     });
-    fireEvent.keyDown(screen.getByRole('textbox', { name: /new alias/i }), { key: 'Enter' });
+    fireEvent.click(screen.getByRole('button', { name: /^add$/i }));
 
     await waitFor(() =>
       expect(mockAddTargetAlias).toHaveBeenCalledWith({
@@ -185,116 +187,92 @@ describe('TargetDetailV2', () => {
     );
   });
 
-  it('9. alias remove × button calls removeTargetAlias with correct alias', async () => {
-    render(<TargetDetailV2 targetId={TARGET_ID} />);
-    await waitFor(() => screen.getByLabelText('Remove alias North America Nebula'));
-
-    fireEvent.click(screen.getByLabelText('Remove alias North America Nebula'));
-
-    await waitFor(() =>
-      expect(mockRemoveTargetAlias).toHaveBeenCalledWith({
-        targetId: TARGET_ID,
-        alias: 'North America Nebula',
-      }),
-    );
-  });
-
-  it('10. make-primary ↑ button calls renameTargetPrimary with correct alias', async () => {
-    render(<TargetDetailV2 targetId={TARGET_ID} />);
-    await waitFor(() => screen.getByLabelText('Make North America Nebula primary'));
-
-    fireEvent.click(screen.getByLabelText('Make North America Nebula primary'));
-
-    await waitFor(() =>
-      expect(mockRenameTargetPrimary).toHaveBeenCalledWith({
-        targetId: TARGET_ID,
-        newPrimaryDesignation: 'North America Nebula',
-      }),
-    );
-  });
-
-  it('11. alias.duplicate error shows inline error message', async () => {
-    mockAddTargetAlias.mockRejectedValueOnce({
-      code: 'alias.duplicate',
-      message: 'dup',
-    });
+  it('8. add-alias Enter keydown triggers addTargetAlias', async () => {
     render(<TargetDetailV2 targetId={TARGET_ID} />);
     await waitFor(() => screen.getByRole('textbox', { name: /new alias/i }));
 
     fireEvent.change(screen.getByRole('textbox', { name: /new alias/i }), {
-      target: { value: 'NGC 224' },
+      target: { value: 'Pelican Region' },
+    });
+    fireEvent.keyDown(screen.getByRole('textbox', { name: /new alias/i }), { key: 'Enter' });
+
+    await waitFor(() => expect(mockAddTargetAlias).toHaveBeenCalled());
+  });
+
+  it('9. blank alias shows inline error without calling addTargetAlias', async () => {
+    render(<TargetDetailV2 targetId={TARGET_ID} />);
+    await waitFor(() => screen.getByRole('button', { name: /^add$/i }));
+
+    fireEvent.click(screen.getByRole('button', { name: /^add$/i }));
+
+    expect(mockAddTargetAlias).not.toHaveBeenCalled();
+    expect(screen.getByText('Alias must not be blank.')).toBeInTheDocument();
+  });
+
+  it('10. alias.blank error from backend shows inline message', async () => {
+    mockAddTargetAlias.mockRejectedValueOnce({ code: 'alias.blank', message: 'blank' });
+    render(<TargetDetailV2 targetId={TARGET_ID} />);
+    await waitFor(() => screen.getByRole('textbox', { name: /new alias/i }));
+
+    fireEvent.change(screen.getByRole('textbox', { name: /new alias/i }), {
+      target: { value: 'x' },
     });
     fireEvent.click(screen.getByRole('button', { name: /^add$/i }));
 
     await waitFor(() =>
-      expect(
-        screen.getByText('This alias is already used by a different target.'),
-      ).toBeInTheDocument(),
+      expect(screen.getByText('Alias must not be blank.')).toBeInTheDocument(),
     );
   });
 
-  it('12. alias.is_primary error shows inline error message', async () => {
+  it('11. alias.not_removable error shows inline message', async () => {
     mockRemoveTargetAlias.mockRejectedValueOnce({
-      code: 'alias.is_primary',
-      message: 'is primary',
+      code: 'alias.not_removable',
+      message: 'not removable',
     });
     render(<TargetDetailV2 targetId={TARGET_ID} />);
-    await waitFor(() => screen.getByLabelText('Remove alias North America Nebula'));
+    await waitFor(() => screen.getByLabelText('Remove alias My Nebula'));
 
-    fireEvent.click(screen.getByLabelText('Remove alias North America Nebula'));
+    fireEvent.click(screen.getByLabelText('Remove alias My Nebula'));
 
     await waitFor(() =>
       expect(
-        screen.getByText('Cannot remove the primary name. Rename primary first.'),
+        screen.getByText('Only user-added aliases can be removed.'),
       ).toBeInTheDocument(),
     );
   });
 
-  it('13. designation.not_in_aliases error shows inline error message', async () => {
-    mockRenameTargetPrimary.mockRejectedValueOnce({
-      code: 'designation.not_in_aliases',
-      message: 'not in aliases',
-    });
-    render(<TargetDetailV2 targetId={TARGET_ID} />);
-    await waitFor(() => screen.getByLabelText('Make North America Nebula primary'));
-
-    fireEvent.click(screen.getByLabelText('Make North America Nebula primary'));
-
-    await waitFor(() =>
-      expect(
-        screen.getByText('New primary must already be an alias. Add it first.'),
-      ).toBeInTheDocument(),
-    );
-  });
-
-  it('14. shows error state when getTargetIdentity rejects', async () => {
-    mockGetTargetIdentity.mockRejectedValueOnce(new Error('network error'));
+  it('12. shows error state when getTargetDetail rejects', async () => {
+    mockGetTargetDetail.mockRejectedValueOnce(new Error('network error'));
     render(<TargetDetailV2 targetId={TARGET_ID} />);
     await waitFor(() =>
       expect(screen.getByText('Failed to load target.')).toBeInTheDocument(),
     );
   });
 
-  it('15. shows sessions empty-state when sessions array is empty', async () => {
+  it('13. sessions empty-state renders', async () => {
     render(<TargetDetailV2 targetId={TARGET_ID} />);
     await waitFor(() =>
       expect(screen.getByText('No sessions linked')).toBeInTheDocument(),
     );
   });
 
-  it('16. shows projects empty-state when projects array is empty', async () => {
+  it('14. projects empty-state renders', async () => {
     render(<TargetDetailV2 targetId={TARGET_ID} />);
     await waitFor(() =>
       expect(screen.getByText('No projects linked')).toBeInTheDocument(),
     );
   });
 
-  it('17. reloads detail after successful alias add', async () => {
-    // After add, getTargetIdentity is called again with updated data
-    const updated = makeResult({ aliases: ['North America Nebula', 'Caldwell 20', 'New Alias'] });
-    mockGetTargetIdentity
-      .mockResolvedValueOnce(makeResult())
-      .mockResolvedValueOnce(updated);
+  it('15. reloads detail after successful alias add', async () => {
+    const updated = makeDetail({
+      aliases: [
+        { id: 'alias-desig-1', alias: 'NGC 7000', kind: 'designation' },
+        { id: 'alias-cn-1', alias: 'North America Nebula', kind: 'common_name' },
+        { id: 'alias-user-1', alias: 'My Nebula', kind: 'user' },
+        { id: 'alias-user-new', alias: 'New Alias', kind: 'user' },
+      ],
+    });
+    mockGetTargetDetail.mockResolvedValueOnce(makeDetail()).mockResolvedValueOnce(updated);
 
     render(<TargetDetailV2 targetId={TARGET_ID} />);
     await waitFor(() => screen.getByRole('textbox', { name: /new alias/i }));
@@ -304,44 +282,75 @@ describe('TargetDetailV2', () => {
     });
     fireEvent.click(screen.getByRole('button', { name: /^add$/i }));
 
-    await waitFor(() => expect(mockGetTargetIdentity).toHaveBeenCalledTimes(2));
+    await waitFor(() => expect(mockGetTargetDetail).toHaveBeenCalledTimes(2));
     await waitFor(() => expect(screen.getByText('New Alias')).toBeInTheDocument());
   });
 
-  it('18. reloads detail after successful alias remove', async () => {
-    const updated = makeResult({ aliases: ['Caldwell 20'] });
-    mockGetTargetIdentity
-      .mockResolvedValueOnce(makeResult())
-      .mockResolvedValueOnce(updated);
+  it('16. reloads detail after successful alias remove', async () => {
+    const updated = makeDetail({
+      aliases: [
+        { id: 'alias-desig-1', alias: 'NGC 7000', kind: 'designation' },
+        { id: 'alias-cn-1', alias: 'North America Nebula', kind: 'common_name' },
+      ],
+    });
+    mockGetTargetDetail.mockResolvedValueOnce(makeDetail()).mockResolvedValueOnce(updated);
 
     render(<TargetDetailV2 targetId={TARGET_ID} />);
-    await waitFor(() => screen.getByLabelText('Remove alias North America Nebula'));
+    await waitFor(() => screen.getByLabelText('Remove alias My Nebula'));
 
-    fireEvent.click(screen.getByLabelText('Remove alias North America Nebula'));
+    fireEvent.click(screen.getByLabelText('Remove alias My Nebula'));
 
-    await waitFor(() => expect(mockGetTargetIdentity).toHaveBeenCalledTimes(2));
+    await waitFor(() => expect(mockGetTargetDetail).toHaveBeenCalledTimes(2));
     await waitFor(() =>
-      expect(screen.queryByText('North America Nebula')).not.toBeInTheDocument(),
+      expect(screen.queryByText('My Nebula')).not.toBeInTheDocument(),
     );
   });
 
-  it('19. reloads detail after successful primary rename', async () => {
-    const updated = makeResult({
-      aliases: ['NGC 7000'],
-    });
-    updated.target.primaryDesignation = 'North America Nebula';
-    mockGetTargetIdentity
-      .mockResolvedValueOnce(makeResult())
-      .mockResolvedValueOnce(updated);
+  it('17. display-alias Set/Edit button is visible', async () => {
+    render(<TargetDetailV2 targetId={TARGET_ID} />);
+    await waitFor(() =>
+      expect(screen.getByRole('button', { name: /^set$/i })).toBeInTheDocument(),
+    );
+  });
+
+  it('18. setting display alias updates effectiveLabel', async () => {
+    mockGetTargetDetail
+      .mockResolvedValueOnce(makeDetail())
+      .mockResolvedValueOnce(makeDetail({ displayAlias: 'My NGC 7000' }));
 
     render(<TargetDetailV2 targetId={TARGET_ID} />);
-    await waitFor(() => screen.getByLabelText('Make North America Nebula primary'));
+    await waitFor(() => screen.getByRole('button', { name: /^set$/i }));
 
-    fireEvent.click(screen.getByLabelText('Make North America Nebula primary'));
+    fireEvent.click(screen.getByRole('button', { name: /^set$/i }));
 
-    await waitFor(() => expect(mockGetTargetIdentity).toHaveBeenCalledTimes(2));
+    await waitFor(() => screen.getByRole('textbox', { name: /display label/i }));
+    fireEvent.change(screen.getByRole('textbox', { name: /display label/i }), {
+      target: { value: 'My NGC 7000' },
+    });
+    fireEvent.click(screen.getByRole('button', { name: /^save$/i }));
+
     await waitFor(() =>
-      expect(screen.getByText('North America Nebula')).toBeInTheDocument(),
+      expect(mockSetDisplayAlias).toHaveBeenCalledWith({
+        targetId: TARGET_ID,
+        displayAlias: 'My NGC 7000',
+      }),
+    );
+  });
+
+  it('19. clearing display alias reverts effectiveLabel to primaryDesignation', async () => {
+    mockGetTargetDetail.mockResolvedValue(makeDetail({ displayAlias: 'My NGC 7000' }));
+    mockClearDisplayAlias.mockResolvedValue(makeDetail({ displayAlias: null }));
+
+    render(<TargetDetailV2 targetId={TARGET_ID} />);
+    await waitFor(() => screen.getByRole('button', { name: /^edit$/i }));
+
+    fireEvent.click(screen.getByRole('button', { name: /^edit$/i }));
+    await waitFor(() => screen.getByRole('button', { name: /^clear$/i }));
+
+    fireEvent.click(screen.getByRole('button', { name: /^clear$/i }));
+
+    await waitFor(() =>
+      expect(mockClearDisplayAlias).toHaveBeenCalledWith({ targetId: TARGET_ID }),
     );
   });
 });

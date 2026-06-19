@@ -1,30 +1,28 @@
 /**
- * TargetDetailV2 — spec 023 wired detail pane for a single target.
+ * TargetDetailV2 — spec 036 gen-3 detail pane for a single canonical target.
  *
- * Fetches the target aggregate via `target.get` and renders:
- *   - Header: primary name, updated_at, alias chips, catalog ref chips.
- *   - Notes: editable text area with 5-second debounced auto-save.
- *   - Alias controls: add-alias form, remove button per alias, primary-rename button.
- *   - Sessions: empty state (sessions list deferred to T012/T013 when FK populated).
- *   - Projects: empty state (projects list deferred to T017/T018 when FK populated).
+ * Fetches target detail via `target.get` and renders:
+ *   - Header: effectiveLabel (displayAlias ?? primaryDesignation), objectType pill,
+ *     coordinates, source, simbadOid.
+ *   - Display-alias control: set / clear the user presentation label (FR-012).
+ *   - Alias list: all aliases with kind badge; only kind='user' aliases have a
+ *     remove button (SIMBAD designations/common names are read-only).
+ *   - Add-alias form: adds a user alias.
  *
- * Targets are NOT in the primary nav. This component is reachable via:
- *   - Cmd+K alias-aware search → /targets/$id
- *   - Inventory row target chip → /targets/$id  (T009 deferred pending FK wiring)
- *   - Project source row target chip → /targets/$id  (T010 deferred)
+ * Sessions and Projects sections are empty-state stubs — cross-spec FK wiring
+ * is deferred (see spec 036 open gaps).
  */
 
-import { useState, useEffect, useRef, useCallback } from 'react';
+import { useState, useEffect, useCallback } from 'react';
 import { useNavigate } from '@tanstack/react-router';
 import {
-  getTargetIdentity,
-  updateTargetNote,
+  getTargetDetail,
   addTargetAlias,
   removeTargetAlias,
-  renameTargetPrimary,
+  setDisplayAlias,
+  clearDisplayAlias,
 } from '@/api/commands';
-import type { TargetGetResult_Serialize as TargetGetResult } from '@/bindings/index';
-import type { TargetOpError } from '@/api/commands';
+import type { TargetDetailV3, TargetOpError } from '@/api/commands';
 import { DetailPane, DetailHeader } from '@/components';
 import { Pill, Section, EmptyState, Banner } from '@/ui';
 
@@ -37,40 +35,56 @@ interface Props {
 type LoadState =
   | { status: 'loading' }
   | { status: 'error'; message: string }
-  | { status: 'loaded'; data: TargetGetResult };
+  | { status: 'loaded'; data: TargetDetailV3 };
 
 // ── Helpers ───────────────────────────────────────────────────────────────────
 
-/** Format an ISO timestamp to a human-readable date. */
-function formatDate(iso: string): string {
-  try {
-    return new Date(iso).toLocaleDateString(undefined, {
-      year: 'numeric',
-      month: 'short',
-      day: 'numeric',
-    });
-  } catch {
-    return iso;
+/** Map an AliasKind string to a human label for the badge. */
+function kindLabel(kind: string): string {
+  switch (kind) {
+    case 'designation':
+      return 'desig';
+    case 'common_name':
+      return 'name';
+    case 'user':
+      return 'user';
+    default:
+      return kind;
   }
+}
+
+/** Format decimal degrees to a short sexagesimal string for display. */
+function fmtDeg(deg: number, isRa: boolean): string {
+  if (!Number.isFinite(deg)) return '—';
+  if (isRa) {
+    // RA in hours
+    const h = deg / 15;
+    const hh = Math.floor(h);
+    const mm = Math.floor((h - hh) * 60);
+    const ss = ((h - hh) * 60 - mm) * 60;
+    return `${hh}h ${mm}m ${ss.toFixed(1)}s`;
+  }
+  const sign = deg < 0 ? '−' : '+';
+  const abs = Math.abs(deg);
+  const dd = Math.floor(abs);
+  const mm = Math.floor((abs - dd) * 60);
+  const ss = ((abs - dd) * 60 - mm) * 60;
+  return `${sign}${dd}° ${mm}′ ${ss.toFixed(0)}″`;
 }
 
 /** Map TargetOpError.code to a user-readable message. */
 function errorMessage(err: TargetOpError, fallback: string): string {
   switch (err.code) {
-    case 'alias.duplicate':
-      return 'This alias is already used by a different target.';
-    case 'alias.invalid':
-      return 'Alias must not be empty.';
-    case 'alias.is_primary':
-      return 'Cannot remove the primary name. Rename primary first.';
+    case 'alias.blank':
+      return 'Alias must not be blank.';
     case 'alias.not_found':
       return 'Alias not found on this target.';
-    case 'designation.not_in_aliases':
-      return 'New primary must already be an alias. Add it first.';
-    case 'designation.already_primary':
-      return 'This is already the primary name.';
+    case 'alias.not_removable':
+      return 'Only user-added aliases can be removed.';
     case 'target.not_found':
       return 'Target not found.';
+    case 'target.invalid_id':
+      return 'Invalid target ID.';
     default:
       return fallback;
   }
@@ -80,101 +94,89 @@ function errorMessage(err: TargetOpError, fallback: string): string {
 
 export function TargetDetailV2({ targetId }: Props) {
   const [loadState, setLoadState] = useState<LoadState>({ status: 'loading' });
-  const [noteContent, setNoteContent] = useState('');
-  const [noteStatus, setNoteStatus] = useState<'idle' | 'saving' | 'saved' | 'error'>('idle');
   const [aliasInput, setAliasInput] = useState('');
   const [aliasError, setAliasError] = useState<string | null>(null);
   const [actionError, setActionError] = useState<string | null>(null);
-  const noteTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const [displayAliasInput, setDisplayAliasInput] = useState('');
+  const [displayAliasEditing, setDisplayAliasEditing] = useState(false);
   const navigate = useNavigate();
 
-  // Load target data.
-  useEffect(() => {
+  const load = useCallback(() => {
     setLoadState({ status: 'loading' });
-    getTargetIdentity({ targetId })
+    getTargetDetail({ targetId })
       .then((data) => {
         setLoadState({ status: 'loaded', data });
-        setNoteContent(data.target.notes ?? '');
+        setDisplayAliasInput(data.displayAlias ?? '');
       })
       .catch(() => {
         setLoadState({ status: 'error', message: 'Failed to load target.' });
       });
   }, [targetId]);
 
-  // Debounced note save (5 seconds after last keystroke).
-  const handleNoteChange = useCallback(
-    (value: string) => {
-      setNoteContent(value);
-      if (noteTimer.current) clearTimeout(noteTimer.current);
-      noteTimer.current = setTimeout(() => {
-        setNoteStatus('saving');
-        updateTargetNote({ targetId, content: value })
-          .then(() => setNoteStatus('saved'))
-          .catch(() => setNoteStatus('error'));
-      }, 5000);
-    },
-    [targetId],
-  );
+  useEffect(() => {
+    load();
+  }, [load]);
 
-  // Cleanup timer on unmount.
-  useEffect(
-    () => () => {
-      if (noteTimer.current) clearTimeout(noteTimer.current);
-    },
-    [],
-  );
-
-  // Add alias.
+  // Add user alias.
   const handleAliasAdd = useCallback(async () => {
     const alias = aliasInput.trim();
     if (!alias) {
-      setAliasError('Alias must not be empty.');
+      setAliasError('Alias must not be blank.');
       return;
     }
     setAliasError(null);
     try {
       await addTargetAlias({ targetId, alias });
       setAliasInput('');
-      // Reload target data to reflect new alias.
-      const data = await getTargetIdentity({ targetId });
-      setLoadState({ status: 'loaded', data });
+      load();
     } catch (err) {
       const e = err as TargetOpError;
       setAliasError(errorMessage(e, 'Failed to add alias.'));
     }
-  }, [targetId, aliasInput]);
+  }, [targetId, aliasInput, load]);
 
-  // Remove alias.
+  // Remove user alias by id.
   const handleAliasRemove = useCallback(
-    async (alias: string) => {
+    async (aliasId: string) => {
       setActionError(null);
       try {
-        await removeTargetAlias({ targetId, alias });
-        const data = await getTargetIdentity({ targetId });
-        setLoadState({ status: 'loaded', data });
+        await removeTargetAlias({ targetId, aliasId });
+        load();
       } catch (err) {
         const e = err as TargetOpError;
         setActionError(errorMessage(e, 'Failed to remove alias.'));
       }
     },
-    [targetId],
+    [targetId, load],
   );
 
-  // Rename primary.
-  const handlePrimaryRename = useCallback(
-    async (newPrimary: string) => {
-      setActionError(null);
-      try {
-        await renameTargetPrimary({ targetId, newPrimaryDesignation: newPrimary });
-        const data = await getTargetIdentity({ targetId });
-        setLoadState({ status: 'loaded', data });
-      } catch (err) {
-        const e = err as TargetOpError;
-        setActionError(errorMessage(e, 'Failed to rename primary.'));
-      }
-    },
-    [targetId],
-  );
+  // Set display alias.
+  const handleDisplayAliasSet = useCallback(async () => {
+    setActionError(null);
+    try {
+      const data = await setDisplayAlias({ targetId, displayAlias: displayAliasInput.trim() });
+      setLoadState({ status: 'loaded', data });
+      setDisplayAliasInput(data.displayAlias ?? '');
+      setDisplayAliasEditing(false);
+    } catch (err) {
+      const e = err as TargetOpError;
+      setActionError(errorMessage(e, 'Failed to set display alias.'));
+    }
+  }, [targetId, displayAliasInput]);
+
+  // Clear display alias.
+  const handleDisplayAliasClear = useCallback(async () => {
+    setActionError(null);
+    try {
+      const data = await clearDisplayAlias({ targetId });
+      setLoadState({ status: 'loaded', data });
+      setDisplayAliasInput('');
+      setDisplayAliasEditing(false);
+    } catch (err) {
+      const e = err as TargetOpError;
+      setActionError(errorMessage(e, 'Failed to clear display alias.'));
+    }
+  }, [targetId]);
 
   // ── Render ──────────────────────────────────────────────────────────────────
 
@@ -194,88 +196,175 @@ export function TargetDetailV2({ targetId }: Props) {
     );
   }
 
-  const { target, sessions, projects } = loadState.data;
+  const detail = loadState.data;
 
   return (
     <DetailPane fill>
       <DetailHeader
-        title={<strong>{target.primaryDesignation}</strong>}
+        title={<strong>{detail.effectiveLabel}</strong>}
         titleExtra={
           <span style={{ color: 'var(--alm-text-muted)', fontSize: 'var(--alm-text-sm)' }}>
-            Updated {formatDate(target.updatedAt)}
+            <Pill variant="neutral">{detail.objectType.replace('_', ' ')}</Pill>
           </span>
         }
       />
 
-      {/* Alias chips */}
-      <Section title="Aliases">
+      {/* Coordinates + metadata */}
+      <Section title="Identity">
+        <dl
+          style={{
+            display: 'grid',
+            gridTemplateColumns: 'max-content 1fr',
+            gap: 'var(--alm-sp-1) var(--alm-sp-3)',
+            fontSize: 'var(--alm-text-sm)',
+          }}
+        >
+          <dt style={{ color: 'var(--alm-text-muted)' }}>Designation</dt>
+          <dd>{detail.primaryDesignation}</dd>
+          <dt style={{ color: 'var(--alm-text-muted)' }}>RA</dt>
+          <dd>{detail.raDeg != null ? fmtDeg(detail.raDeg, true) : '—'}</dd>
+          <dt style={{ color: 'var(--alm-text-muted)' }}>Dec</dt>
+          <dd>{detail.decDeg != null ? fmtDeg(detail.decDeg, false) : '—'}</dd>
+          <dt style={{ color: 'var(--alm-text-muted)' }}>Source</dt>
+          <dd>
+            <Pill variant="ghost">{detail.source}</Pill>
+          </dd>
+          {detail.simbadOid != null && (
+            <>
+              <dt style={{ color: 'var(--alm-text-muted)' }}>SIMBAD OID</dt>
+              <dd>{detail.simbadOid}</dd>
+            </>
+          )}
+        </dl>
+      </Section>
+
+      {/* Display alias (FR-012: user presentation label) */}
+      <Section title="Display label">
+        {displayAliasEditing ? (
+          <div style={{ display: 'flex', gap: 'var(--alm-sp-2)', flexWrap: 'wrap' }}>
+            <input
+              aria-label="Display label"
+              placeholder={detail.primaryDesignation}
+              value={displayAliasInput}
+              onChange={(e) => setDisplayAliasInput(e.target.value)}
+              onKeyDown={(e) => {
+                if (e.key === 'Enter') void handleDisplayAliasSet();
+                if (e.key === 'Escape') setDisplayAliasEditing(false);
+              }}
+              style={{ flex: 1, padding: 'var(--alm-sp-1)', fontSize: 'var(--alm-text-sm)' }}
+              autoFocus
+            />
+            <button
+              onClick={handleDisplayAliasSet}
+              style={{ padding: 'var(--alm-sp-1) var(--alm-sp-2)' }}
+            >
+              Save
+            </button>
+            {detail.displayAlias != null && (
+              <button
+                onClick={handleDisplayAliasClear}
+                style={{
+                  padding: 'var(--alm-sp-1) var(--alm-sp-2)',
+                  color: 'var(--alm-text-muted)',
+                }}
+              >
+                Clear
+              </button>
+            )}
+            <button
+              onClick={() => setDisplayAliasEditing(false)}
+              style={{
+                padding: 'var(--alm-sp-1) var(--alm-sp-2)',
+                color: 'var(--alm-text-muted)',
+              }}
+            >
+              Cancel
+            </button>
+          </div>
+        ) : (
+          <div style={{ display: 'flex', alignItems: 'center', gap: 'var(--alm-sp-2)' }}>
+            <span style={{ fontSize: 'var(--alm-text-sm)' }}>
+              {detail.displayAlias ?? (
+                <em style={{ color: 'var(--alm-text-faint)' }}>
+                  Not set — showing primary designation
+                </em>
+              )}
+            </span>
+            <button
+              onClick={() => setDisplayAliasEditing(true)}
+              style={{
+                background: 'none',
+                border: '1px solid var(--alm-border)',
+                borderRadius: 'var(--alm-radius-sm)',
+                cursor: 'pointer',
+                padding: '2px var(--alm-sp-2)',
+                fontSize: 'var(--alm-text-xs)',
+              }}
+            >
+              {detail.displayAlias != null ? 'Edit' : 'Set'}
+            </button>
+          </div>
+        )}
+      </Section>
+
+      {/* Aliases */}
+      <Section title="Aliases" count={detail.aliases.length}>
         <div style={{ display: 'flex', flexWrap: 'wrap', gap: 'var(--alm-sp-1)' }}>
-          {target.aliases.map((alias: string) => (
-            <Pill key={alias} variant="ghost">
-              {alias}
-              <button
-                aria-label={`Remove alias ${alias}`}
-                style={{
-                  background: 'none',
-                  border: 'none',
-                  cursor: 'pointer',
-                  marginLeft: 'var(--alm-sp-1)',
-                  padding: 0,
-                  color: 'var(--alm-text-muted)',
-                }}
-                onClick={() => handleAliasRemove(alias)}
-              >
-                ×
-              </button>
-              <button
-                aria-label={`Make ${alias} primary`}
-                style={{
-                  background: 'none',
-                  border: 'none',
-                  cursor: 'pointer',
-                  marginLeft: 'var(--alm-sp-1)',
-                  padding: 0,
-                  fontSize: 'var(--alm-text-xs)',
-                  color: 'var(--alm-text-muted)',
-                }}
-                title="Make primary"
-                onClick={() => handlePrimaryRename(alias)}
-              >
-                ↑
-              </button>
+          {detail.aliases.map((a) => (
+            <Pill key={a.id} variant={a.kind === 'user' ? 'accent' : 'ghost'}>
+              <span title={`kind: ${a.kind}`}>
+                <span
+                  style={{
+                    fontSize: 'var(--alm-text-xs)',
+                    color: 'var(--alm-text-muted)',
+                    marginRight: 'var(--alm-sp-1)',
+                  }}
+                >
+                  [{kindLabel(a.kind)}]
+                </span>
+                {a.alias}
+              </span>
+              {a.kind === 'user' && (
+                <button
+                  aria-label={`Remove alias ${a.alias}`}
+                  style={{
+                    background: 'none',
+                    border: 'none',
+                    cursor: 'pointer',
+                    marginLeft: 'var(--alm-sp-1)',
+                    padding: 0,
+                    color: 'var(--alm-text-muted)',
+                  }}
+                  onClick={() => handleAliasRemove(a.id)}
+                >
+                  ×
+                </button>
+              )}
             </Pill>
           ))}
-          {target.aliases.length === 0 && (
+          {detail.aliases.length === 0 && (
             <span style={{ color: 'var(--alm-text-faint)', fontSize: 'var(--alm-text-sm)' }}>
               No aliases
             </span>
           )}
         </div>
 
-        {/* Catalog ref chips */}
-        {target.catalogRefs.length > 0 && (
-          <div
-            style={{ display: 'flex', flexWrap: 'wrap', gap: 'var(--alm-sp-1)', marginTop: 'var(--alm-sp-2)' }}
-          >
-            {target.catalogRefs.map((ref: { catalogId: string; catalogDisplay: string; designation: string }) => (
-              <Pill key={`${ref.catalogId}:${ref.designation}`} variant="neutral">
-                {ref.catalogDisplay}: {ref.designation}
-              </Pill>
-            ))}
-          </div>
-        )}
-
-        {/* Add alias form */}
+        {/* Add user alias form */}
         <div style={{ display: 'flex', gap: 'var(--alm-sp-2)', marginTop: 'var(--alm-sp-2)' }}>
           <input
             aria-label="New alias"
-            placeholder="Add alias…"
+            placeholder="Add user alias…"
             value={aliasInput}
             onChange={(e) => setAliasInput(e.target.value)}
-            onKeyDown={(e) => { if (e.key === 'Enter') void handleAliasAdd(); }}
+            onKeyDown={(e) => {
+              if (e.key === 'Enter') void handleAliasAdd();
+            }}
             style={{ flex: 1, padding: 'var(--alm-sp-1)', fontSize: 'var(--alm-text-sm)' }}
           />
-          <button onClick={handleAliasAdd} style={{ padding: 'var(--alm-sp-1) var(--alm-sp-2)' }}>
+          <button
+            onClick={handleAliasAdd}
+            style={{ padding: 'var(--alm-sp-1) var(--alm-sp-2)' }}
+          >
             Add
           </button>
         </div>
@@ -291,54 +380,20 @@ export function TargetDetailV2({ targetId }: Props) {
         )}
       </Section>
 
-      {/* Notes editor */}
-      <Section title="Notes">
-        <textarea
-          aria-label="Target notes"
-          value={noteContent}
-          onChange={(e) => handleNoteChange(e.target.value)}
-          rows={5}
-          style={{
-            width: '100%',
-            padding: 'var(--alm-sp-2)',
-            fontFamily: 'inherit',
-            fontSize: 'var(--alm-text-sm)',
-            resize: 'vertical',
-          }}
+      {/* Sessions — empty state (cross-spec FK wiring deferred) */}
+      <Section title="Sessions">
+        <EmptyState
+          title="No sessions linked"
+          desc="Sessions appear here once the ingestion pipeline populates target_id from FITS OBJECT data."
         />
-        {noteStatus === 'saving' && (
-          <span style={{ color: 'var(--alm-text-muted)', fontSize: 'var(--alm-text-xs)' }}>
-            Saving…
-          </span>
-        )}
-        {noteStatus === 'saved' && (
-          <span style={{ color: 'var(--alm-text-muted)', fontSize: 'var(--alm-text-xs)' }}>
-            Saved.
-          </span>
-        )}
-        {noteStatus === 'error' && (
-          <Banner variant="danger">Failed to save note. Try again.</Banner>
-        )}
       </Section>
 
-      {/* Sessions — empty state (T012 deferred) */}
-      <Section title="Sessions" count={sessions.length}>
-        {sessions.length === 0 ? (
-          <EmptyState
-            title="No sessions linked"
-            desc="Sessions appear here once the ingestion pipeline populates target_id from FITS OBJECT data."
-          />
-        ) : null}
-      </Section>
-
-      {/* Projects — empty state (T017 deferred) */}
-      <Section title="Projects" count={projects.length}>
-        {projects.length === 0 ? (
-          <EmptyState
-            title="No projects linked"
-            desc="Projects appear here once they are created with a target reference."
-          />
-        ) : null}
+      {/* Projects — empty state (cross-spec FK wiring deferred) */}
+      <Section title="Projects">
+        <EmptyState
+          title="No projects linked"
+          desc="Projects appear here once they are created with a target reference."
+        />
       </Section>
 
       {/* Back button */}

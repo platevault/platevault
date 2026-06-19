@@ -103,8 +103,9 @@ pub async fn list_all_roots(pool: &SqlitePool) -> DbResult<Vec<LibraryRootRow>> 
 
 /// List sessions under a given `LibraryRoot` with optional filters applied.
 ///
-/// Acquisition sessions are joined with `target` for `target_name`.
 /// Calibration sessions expose `kind` as the `frame_type`.
+/// `target_name` is always `None` — gen-1 `target` table is unreferenced
+/// (spec 036, T007); the gen-3 `canonical_target` is the live store.
 ///
 /// # Errors
 /// Returns [`DbError::Database`] on query failure.
@@ -119,7 +120,9 @@ pub async fn list_sessions_for_root(
     let state_filter = filters.review_state.as_deref();
     let frame_filter = filters.frame_type.as_deref();
 
-    // Acquisition sessions
+    // Acquisition sessions — target_name is always NULL (gen-1 `target`
+    // table is unreferenced per spec 036 T007; gen-3 canonical_target is
+    // the live store and is not part of the inventory projection).
     let acq_rows: Vec<SessionProjectionRow> = sqlx::query_as(
         r"
         SELECT
@@ -131,10 +134,9 @@ pub async fn list_sessions_for_root(
             acs.frame_ids                   AS frame_ids,
             acs.state                       AS state,
             acs.target_id                   AS target_id,
-            t.primary_designation           AS target_name,
+            NULL                            AS target_name,
             acs.created_at                  AS created_at
         FROM acquisition_session acs
-        LEFT JOIN target t ON t.id = acs.target_id
         WHERE acs.root_id = ?
         ORDER BY acs.created_at DESC
         ",

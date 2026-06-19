@@ -215,6 +215,8 @@ pub enum AliasKind {
     Designation,
     /// A SIMBAD `NAME …` curated common name (e.g. `Andromeda Galaxy`).
     CommonName,
+    /// A user-added alias (removable via `target.alias.remove`).
+    User,
 }
 
 impl AliasKind {
@@ -224,6 +226,7 @@ impl AliasKind {
         match self {
             Self::Designation => "designation",
             Self::CommonName => "common_name",
+            Self::User => "user",
         }
     }
 
@@ -232,6 +235,7 @@ impl AliasKind {
     pub fn from_wire(s: &str) -> Self {
         match s {
             "common_name" => Self::CommonName,
+            "user" => Self::User,
             _ => Self::Designation,
         }
     }

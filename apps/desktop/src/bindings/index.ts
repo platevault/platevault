@@ -143,76 +143,67 @@ export const commands = {
 	 */
 	targetsGet: (id: string) => typedError<TargetDetail_Serialize, string>(__TAURI_INVOKE("targets.get", { id })),
 	/**
-	 *  `target.get` — load the full target aggregate.
-	 * 
-	 *  Returns [`TargetGetResult`] on success or [`TargetOpError`] as `Err`.
+	 *  `target.get` — return full detail for a canonical target (gen-3).
 	 * 
 	 *  # Errors
 	 * 
-	 *  Returns `Err(TargetOpError)` with code `"target.not_found"` when the
-	 *  target does not exist.
+	 *  Returns `Err(TargetOpError)` with code `target.not_found`,
+	 *  `target.invalid_id`, or `internal.database`.
 	 */
-	targetGet: (targetId: string) => typedError<TargetGetResult_Serialize, TargetOpError_Serialize>(__TAURI_INVOKE("target.get", { targetId })),
+	targetGet: (req: TargetGetRequest) => typedError<TargetDetailV3_Serialize, TargetOpError_Serialize>(__TAURI_INVOKE("target.get", { req })),
 	/**
-	 *  `target.note.update` — replace the per-target free-text note.
+	 *  `target.list` — list all canonical targets ordered by primary designation.
 	 * 
 	 *  # Errors
 	 * 
-	 *  Returns `Err(TargetOpError)` with codes: `"target.not_found"`, `"note.too_long"`.
+	 *  Returns `Err(TargetOpError)` with code `internal.database`.
 	 */
-	targetNoteUpdate: (req: TargetNoteUpdateRequest) => typedError<TargetNoteUpdateResult, TargetOpError_Serialize>(__TAURI_INVOKE("target.note.update", { req })),
+	targetList: () => typedError<TargetListItem[], TargetOpError_Serialize>(__TAURI_INVOKE("target.list")),
 	/**
-	 *  `target.alias.add` — append an alias to a target.
+	 *  `target.alias.add` — add a user alias to a canonical target (gen-3).
 	 * 
 	 *  # Errors
 	 * 
-	 *  Returns `Err(TargetOpError)` with codes: `"target.not_found"`, `"alias.invalid"`,
-	 *  `"alias.duplicate"`.
+	 *  Returns `Err(TargetOpError)` with code `target.not_found`, `alias.blank`,
+	 *  or `internal.database`.
 	 */
 	targetAliasAdd: (req: TargetAliasAddRequest) => typedError<TargetAliasAddResult, TargetOpError_Serialize>(__TAURI_INVOKE("target.alias.add", { req })),
 	/**
-	 *  `target.alias.remove` — remove an alias from a target.
+	 *  `target.alias.remove` — remove a user alias from a canonical target (gen-3).
+	 * 
+	 *  Only aliases with `kind='user'` are removable; returns `alias.not_removable`
+	 *  for SIMBAD designations/common names.
 	 * 
 	 *  # Errors
 	 * 
-	 *  Returns `Err(TargetOpError)` with codes: `"target.not_found"`,
-	 *  `"alias.is_primary"`, `"alias.not_found"`.
+	 *  Returns `Err(TargetOpError)` with code `alias.not_found`,
+	 *  `alias.not_removable`, or `internal.database`.
 	 */
 	targetAliasRemove: (req: TargetAliasRemoveRequest) => typedError<TargetAliasRemoveResult, TargetOpError_Serialize>(__TAURI_INVOKE("target.alias.remove", { req })),
 	/**
-	 *  `target.primary.rename` — promote an existing alias to `primary_designation`.
+	 *  `target.display_alias.set` — set the user presentation label (FR-012).
+	 * 
+	 *  Blank/empty input is stored as NULL (treated as a clear). Returns the
+	 *  updated full detail.
 	 * 
 	 *  # Errors
 	 * 
-	 *  Returns `Err(TargetOpError)` with codes: `"target.not_found"`,
-	 *  `"designation.not_in_aliases"`, `"designation.already_primary"`.
+	 *  Returns `Err(TargetOpError)` with code `target.not_found`,
+	 *  `target.invalid_id`, or `internal.database`.
 	 */
-	targetPrimaryRename: (req: TargetPrimaryRenameRequest) => typedError<TargetPrimaryRenameResult, TargetOpError_Serialize>(__TAURI_INVOKE("target.primary.rename", { req })),
+	targetDisplayAliasSet: (req: TargetDisplayAliasSetRequest) => typedError<TargetDetailV3_Serialize, TargetOpError_Serialize>(__TAURI_INVOKE("target.display_alias.set", { req })),
 	/**
-	 *  `target.lookup` — ranked candidate list from a free-form query.
+	 *  `target.display_alias.clear` — clear the user presentation label (FR-012).
 	 * 
-	 *  Runs the normalize → exact → fuzzy → edit-distance pipeline and returns
-	 *  ranked matches for the UI catalog picker.
-	 * 
-	 *  # Errors
-	 * 
-	 *  Returns `Err(String)` on unexpected internal failure. Lookup errors
-	 *  (empty query, catalog not installed) are encoded in the response body.
-	 */
-	targetLookup: (req: TargetLookupRequest) => typedError<TargetLookupResponse_Serialize, string>(__TAURI_INVOKE("target.lookup", { req })),
-	/**
-	 *  `target.resolve.fits` — resolve a FITS OBJECT header value against the local
-	 *  in-memory catalog (spec 013).
-	 * 
-	 *  Non-blocking: callers MUST handle `unresolved`, `ambiguous`, and `error`
-	 *  responses without blocking the ingestion flow (FR-006, constitution §II).
+	 *  Sets `display_alias = NULL`; `effectiveLabel` reverts to `primaryDesignation`.
+	 *  Returns the updated full detail.
 	 * 
 	 *  # Errors
 	 * 
-	 *  Returns `Err(String)` on unexpected internal failure. Resolution errors
-	 *  (empty query, catalog not installed) are encoded in the response status.
+	 *  Returns `Err(TargetOpError)` with code `target.not_found`,
+	 *  `target.invalid_id`, or `internal.database`.
 	 */
-	targetResolveFits: (req: TargetResolveRequest) => typedError<TargetResolveResponse_Serialize, string>(__TAURI_INVOKE("target.resolve.fits", { req })),
+	targetDisplayAliasClear: (req: TargetDisplayAliasClearRequest) => typedError<TargetDetailV3_Serialize, TargetOpError_Serialize>(__TAURI_INVOKE("target.display_alias.clear", { req })),
 	/**
 	 *  `target.resolve` — cache-first resolution of a designation / common name (or
 	 *  FITS OBJECT value) against the local cache + bundled seed, falling back to
@@ -1249,6 +1240,15 @@ export type AcquisitionSession_Serialize = {
 	warnings: string[],
 };
 
+/**
+ *  Kind of a target alias (gen-3).
+ * 
+ *  - `"designation"` — a SIMBAD catalog designation (read-only, not removable).
+ *  - `"common_name"` — a SIMBAD curated common name (read-only, not removable).
+ *  - `"user"` — a user-added alias (removable via `target.alias.remove`).
+ */
+export type AliasKind = "designation" | "common_name" | "user";
+
 /**  Application-level user preferences. */
 export type AppPreferences = {
 	sidebarCollapsed: boolean,
@@ -1776,14 +1776,6 @@ export type Camera = {
 	autoDetected: boolean,
 };
 
-/**  Abbreviated candidate summary for the `ambiguous` response (target.resolve.json). */
-export type CandidateSummary = {
-	targetId: string,
-	primaryDesignation: string,
-	catalogDisplay: string,
-	score: number | null,
-};
-
 /**  Catalog identifiers for a target (NGC, IC, Messier, etc.). */
 export type CatalogIds = CatalogIds_Serialize | CatalogIds_Deserialize;
 
@@ -1799,20 +1791,6 @@ export type CatalogIds_Serialize = {
 	ngc?: string | null,
 	ic?: string | null,
 	messier?: string | null,
-};
-
-/**
- *  Structured catalog reference for a target (spec 023 data-model.md).
- * 
- *  Mirrors `CatalogRef` in `target.get.json`.
- */
-export type CatalogRef = {
-	/**  Closed enum slug (e.g. `"messier"`, `"openngc"`). */
-	catalogId: string,
-	/**  Human-readable catalog name (e.g. `"Messier"`, `"OpenNGC"`). */
-	catalogDisplay: string,
-	/**  Catalog-local designation (e.g. `"M31"`, `"NGC 224"`). */
-	designation: string,
 };
 
 /**  Channel drift state embedded in project.get (FR-010). */
@@ -2860,41 +2838,6 @@ export type LogRecentResponse_Serialize = {
 	entries: LogEntry_Serialize[],
 	truncated: boolean,
 	truncatedCount?: number | null,
-};
-
-/**  Confidence bucket for a target match (research.md R2, R3). */
-export type LookupConfidence = "high" | "medium" | "low";
-
-/**  Error item in a `target.lookup` or `target.resolve` error response. */
-export type LookupError = {
-	code: string,
-	message: string,
-};
-
-/**  Evidence for a single match (data-model.md §MatchEvidence). */
-export type LookupMatchEvidence = {
-	matchedAlias: string,
-	normalizedQuery: string,
-	strategy: LookupStrategy,
-	/**  Raw similarity score in `[0, 100]`. */
-	score: number | null,
-};
-
-/**  Which matching strategy produced the score. */
-export type LookupStrategy = "exact" | "token_set" | "edit_distance";
-
-/**  A single candidate match in the `target.lookup` response. */
-export type LookupTargetMatch = {
-	/**  Stable UUIDv5 target identifier. */
-	targetId: string,
-	/**  Canonical display designation chosen by precedence table (R6). */
-	primaryDesignation: string,
-	/**  Human-readable name of the precedence-winning catalog. */
-	catalogDisplay: string,
-	confidence: LookupConfidence,
-	/**  Raw similarity score in `[0, 100]`. */
-	score: number | null,
-	evidence: LookupMatchEvidence,
 };
 
 /**  Structured body of a manifest snapshot. */
@@ -4399,17 +4342,6 @@ export type RemapVerification = {
 	allVerified: boolean,
 };
 
-/**  Discriminated status for `target.resolve` (target.resolve.json §ResolveStatus). */
-export type ResolveStatus = 
-/**  Single confident match. */
-"resolved" | 
-/**  Multiple candidates within the gap rule. */
-"ambiguous" | 
-/**  No candidate above the discard threshold. */
-"unresolved" | 
-/**  Catalog unavailable or request invalid. */
-"error";
-
 /**  Canonical identity returned by `target.resolve` (`target.resolve.json` §`ResolvedTarget`). */
 export type ResolvedTarget = ResolvedTarget_Serialize | ResolvedTarget_Deserialize;
 
@@ -4884,44 +4816,109 @@ export type SuggestStatus = "match" | "ambiguous" | "no_match" |
 /**  Session lacks `observer_location` or `exposure_start_utc` (A6). */
 "observer_location_missing";
 
-/**  An astronomical target as seen in list views. */
+/**  An astronomical target as seen in list views (spec 029 stub). */
 export type Target = Target_Serialize | Target_Deserialize;
 
-/**  Request for `target.alias.add`. */
+/**  Request for `target.alias.add` (gen-3). */
 export type TargetAliasAddRequest = {
 	targetId: string,
-	/**  User-supplied alias display form. Server normalizes for uniqueness. */
+	/**  User-supplied alias display form; server normalizes. */
 	alias: string,
 };
 
-/**  Response for `target.alias.add`. */
+/**  Response for `target.alias.add` (gen-3). */
 export type TargetAliasAddResult = {
-	targetId: string,
-	/**  `true` if newly persisted; `false` if the alias already existed (idempotent). */
-	added: boolean,
+	/**  The newly created alias row. */
+	alias: TargetAliasDto,
 };
 
-/**  Request for `target.alias.remove`. */
+/**  A single alias row returned by `target.get` (gen-3). */
+export type TargetAliasDto = {
+	id: string,
+	alias: string,
+	kind: AliasKind,
+};
+
+/**  Request for `target.alias.remove` (gen-3). */
 export type TargetAliasRemoveRequest = {
 	targetId: string,
-	/**  Display form of the alias to remove. Server normalizes for lookup. */
-	alias: string,
+	/**  The `id` of the alias row to remove (only `kind=user` is removable). */
+	aliasId: string,
 };
 
-/**  Response for `target.alias.remove`. */
+/**  Response for `target.alias.remove` (gen-3). */
 export type TargetAliasRemoveResult = {
-	targetId: string,
-	removedAlias: string,
-	auditId: string,
+	removed: boolean,
 };
 
 /**  Closed catalogue identifier slug (spec 035 `CatalogId`). */
 export type TargetCatalogId = "messier" | "caldwell" | "sharpless" | "abell_pn" | "abell_galaxies" | "arp" | "vdb" | "barnard" | "lbn" | "ldn" | "melotte" | "common" | "openngc";
 
-/**  Extended detail view of a target. */
+/**  Extended detail view of a target (spec 029 stub). */
 export type TargetDetail = TargetDetail_Serialize | TargetDetail_Deserialize;
 
-/**  Extended detail view of a target. */
+/**
+ *  Full target detail returned by `target.get` (gen-3).
+ * 
+ *  `effectiveLabel` = `displayAlias ?? primaryDesignation`.
+ */
+export type TargetDetailV3 = TargetDetailV3_Serialize | TargetDetailV3_Deserialize;
+
+/**
+ *  Full target detail returned by `target.get` (gen-3).
+ * 
+ *  `effectiveLabel` = `displayAlias ?? primaryDesignation`.
+ */
+export type TargetDetailV3_Deserialize = {
+	id: string,
+	/**  Canonical SIMBAD designation (read-only). */
+	primaryDesignation: string,
+	/**  User-set presentation label; `null` when not set. */
+	displayAlias: string | null,
+	/**  `displayAlias ?? primaryDesignation` — always non-null. */
+	effectiveLabel: string,
+	/**  Closed object-type string (e.g. `"galaxy"`, `"emission_nebula"`). */
+	objectType: string,
+	/**  ICRS J2000 right ascension in decimal degrees. */
+	raDeg: number | null,
+	/**  ICRS J2000 declination in decimal degrees. */
+	decDeg: number | null,
+	/**  SIMBAD physical-object id (dedup key); `null` for seed/override entries. */
+	simbadOid: number | null,
+	/**  Provenance: `"seed"`, `"resolved"`, or `"user-override"`. */
+	source: string,
+	/**  All aliases (designations, common names, user-added). */
+	aliases: TargetAliasDto[],
+};
+
+/**
+ *  Full target detail returned by `target.get` (gen-3).
+ * 
+ *  `effectiveLabel` = `displayAlias ?? primaryDesignation`.
+ */
+export type TargetDetailV3_Serialize = {
+	id: string,
+	/**  Canonical SIMBAD designation (read-only). */
+	primaryDesignation: string,
+	/**  User-set presentation label; `null` when not set. */
+	displayAlias?: string | null,
+	/**  `displayAlias ?? primaryDesignation` — always non-null. */
+	effectiveLabel: string,
+	/**  Closed object-type string (e.g. `"galaxy"`, `"emission_nebula"`). */
+	objectType: string,
+	/**  ICRS J2000 right ascension in decimal degrees. */
+	raDeg: number | null,
+	/**  ICRS J2000 declination in decimal degrees. */
+	decDeg: number | null,
+	/**  SIMBAD physical-object id (dedup key); `null` for seed/override entries. */
+	simbadOid?: number | null,
+	/**  Provenance: `"seed"`, `"resolved"`, or `"user-override"`. */
+	source: string,
+	/**  All aliases (designations, common names, user-added). */
+	aliases: TargetAliasDto[],
+};
+
+/**  Extended detail view of a target (spec 029 stub). */
 export type TargetDetail_Deserialize = {
 	id: string,
 	name: string,
@@ -4938,7 +4935,7 @@ export type TargetDetail_Deserialize = {
 	projects: TargetProjectStub[],
 };
 
-/**  Extended detail view of a target. */
+/**  Extended detail view of a target (spec 029 stub). */
 export type TargetDetail_Serialize = {
 	id: string,
 	name: string,
@@ -4955,129 +4952,32 @@ export type TargetDetail_Serialize = {
 	projects: TargetProjectStub[],
 };
 
-/**  Full aggregate returned by the `target.get` use case. */
-export type TargetGetResult = TargetGetResult_Serialize | TargetGetResult_Deserialize;
-
-/**  Full aggregate returned by the `target.get` use case. */
-export type TargetGetResult_Deserialize = {
-	target: TargetIdentity_Deserialize,
-	/**
-	 *  Reverse-chronological by `captured_on`. Sessions with `null`
-	 *  `captured_on` are excluded (R-3.1).
-	 */
-	sessions: TargetSession_Deserialize[],
-	/**  Ordered by lifecycle then name. */
-	projects: TargetProject[],
+/**  Request for `target.display_alias.clear` (gen-3). */
+export type TargetDisplayAliasClearRequest = {
+	targetId: string,
 };
 
-/**  Full aggregate returned by the `target.get` use case. */
-export type TargetGetResult_Serialize = {
-	target: TargetIdentity_Serialize,
-	/**
-	 *  Reverse-chronological by `captured_on`. Sessions with `null`
-	 *  `captured_on` are excluded (R-3.1).
-	 */
-	sessions: TargetSession_Serialize[],
-	/**  Ordered by lifecycle then name. */
-	projects: TargetProject[],
+/**  Request for `target.display_alias.set` (gen-3). */
+export type TargetDisplayAliasSetRequest = {
+	targetId: string,
+	/**  Presentation label. Empty/blank is treated as a clear (NULL). */
+	displayAlias: string,
 };
 
-/**  Full target identity returned by `target.get` (spec 023 contract). */
-export type TargetIdentity = TargetIdentity_Serialize | TargetIdentity_Deserialize;
-
-/**  Full target identity returned by `target.get` (spec 023 contract). */
-export type TargetIdentity_Deserialize = {
-	id: string,
-	/**  Canonical display name (e.g. `"M 31"`). */
-	primaryDesignation: string,
-	/**  User-editable aliases (display form, ordered alpha). */
-	aliases: string[],
-	/**  Structured catalog identifiers. */
-	catalogRefs: CatalogRef[],
-	/**  Per-target free-text note (max 16 KB UTF-8). */
-	notes: string | null,
-	createdAt: string,
-	updatedAt: string,
-};
-
-/**  Full target identity returned by `target.get` (spec 023 contract). */
-export type TargetIdentity_Serialize = {
-	id: string,
-	/**  Canonical display name (e.g. `"M 31"`). */
-	primaryDesignation: string,
-	/**  User-editable aliases (display form, ordered alpha). */
-	aliases: string[],
-	/**  Structured catalog identifiers. */
-	catalogRefs: CatalogRef[],
-	/**  Per-target free-text note (max 16 KB UTF-8). */
-	notes?: string | null,
-	createdAt: string,
-	updatedAt: string,
+/**  Request for `target.get` (gen-3). */
+export type TargetGetRequest = {
+	targetId: string,
 };
 
 /**  Classification of an astronomical target. */
 export type TargetKind = "deep_sky" | "planetary" | "lunar" | "solar" | "landscape";
 
-/**  Request for `target.lookup` (target.lookup.json §Request). */
-export type TargetLookupRequest = {
-	contractVersion: string,
-	requestId: string,
-	/**  Free-form lookup query (typically the raw FITS OBJECT value). */
-	query: string,
-	/**  Maximum number of matches to return, ranked by confidence then score. */
-	limit?: number,
-};
-
-/**
- *  Response for `target.lookup`.
- * 
- *  `status = "success"` when `matches` is populated (may be empty when no
- *  candidates are above the discard threshold).
- *  `status = "error"` when `errors` is populated.
- */
-export type TargetLookupResponse = TargetLookupResponse_Serialize | TargetLookupResponse_Deserialize;
-
-/**
- *  Response for `target.lookup`.
- * 
- *  `status = "success"` when `matches` is populated (may be empty when no
- *  candidates are above the discard threshold).
- *  `status = "error"` when `errors` is populated.
- */
-export type TargetLookupResponse_Deserialize = {
-	status: string,
-	contractVersion: string,
-	requestId: string,
-	matches: LookupTargetMatch[] | null,
-	errors: LookupError[] | null,
-};
-
-/**
- *  Response for `target.lookup`.
- * 
- *  `status = "success"` when `matches` is populated (may be empty when no
- *  candidates are above the discard threshold).
- *  `status = "error"` when `errors` is populated.
- */
-export type TargetLookupResponse_Serialize = {
-	status: string,
-	contractVersion: string,
-	requestId: string,
-	matches?: LookupTargetMatch[] | null,
-	errors?: LookupError[] | null,
-};
-
-/**  Request for `target.note.update`. */
-export type TargetNoteUpdateRequest = {
-	targetId: string,
-	/**  Replacement note body. Empty string clears the note. Max 16384 bytes. */
-	content: string,
-};
-
-/**  Response for `target.note.update`. */
-export type TargetNoteUpdateResult = {
-	targetId: string,
-	updatedAt: string,
+/**  A single row in the target list returned by `target.list` (gen-3). */
+export type TargetListItem = {
+	id: string,
+	effectiveLabel: string,
+	primaryDesignation: string,
+	objectType: string,
 };
 
 /**
@@ -5087,10 +4987,10 @@ export type TargetNoteUpdateResult = {
  */
 export type TargetObjectType = "galaxy" | "planetary_nebula" | "emission_nebula" | "reflection_nebula" | "dark_nebula" | "open_cluster" | "globular_cluster" | "supernova_remnant" | "galaxy_cluster" | "double_star" | "asterism" | "other";
 
-/**  Generic error envelope for target operations. */
+/**  Generic error envelope for target operations (gen-3). */
 export type TargetOpError = TargetOpError_Serialize | TargetOpError_Deserialize;
 
-/**  Generic error envelope for target operations. */
+/**  Generic error envelope for target operations (gen-3). */
 export type TargetOpError_Deserialize = {
 	/**  Error code string (e.g. `"target.not_found"`, `"alias.duplicate"`). */
 	code: string,
@@ -5098,7 +4998,7 @@ export type TargetOpError_Deserialize = {
 	details: unknown | null,
 };
 
-/**  Generic error envelope for target operations. */
+/**  Generic error envelope for target operations (gen-3). */
 export type TargetOpError_Serialize = {
 	/**  Error code string (e.g. `"target.not_found"`, `"alias.duplicate"`). */
 	code: string,
@@ -5106,31 +5006,7 @@ export type TargetOpError_Serialize = {
 	details?: unknown | null,
 };
 
-/**  Request for `target.primary.rename`. */
-export type TargetPrimaryRenameRequest = {
-	targetId: string,
-	/**  Designation to promote. MUST be an existing alias on this target. */
-	newPrimaryDesignation: string,
-};
-
-/**  Response for `target.primary.rename`. */
-export type TargetPrimaryRenameResult = {
-	targetId: string,
-	priorPrimary: string,
-	newPrimary: string,
-	auditId: string,
-};
-
-/**  A project linked to a target (spec 023 `TargetProject`). */
-export type TargetProject = {
-	projectId: string,
-	name: string,
-	lifecycle: string,
-	/**  Processing tool — REQUIRED per spec 008 R-Tool-Req (GRILL 2026-05-22). */
-	tool: string,
-};
-
-/**  A project stub within the target detail view. */
+/**  A project stub within the target detail view (spec 029 stub). */
 export type TargetProjectStub = {
 	id: string,
 	name: string,
@@ -5154,55 +5030,6 @@ export type TargetResolveErrorCode = "resolver.unreachable" | "resolver.disabled
  */
 export type TargetResolveOverride = {
 	targetId: string,
-};
-
-/**  Request for `target.resolve` (target.resolve.json §Request). */
-export type TargetResolveRequest = {
-	contractVersion: string,
-	requestId: string,
-	/**  Raw FITS OBJECT header value as extracted from the light frame. */
-	fitsObjectValue: string,
-};
-
-/**  Response for `target.resolve`. */
-export type TargetResolveResponse = TargetResolveResponse_Serialize | TargetResolveResponse_Deserialize;
-
-/**  Response for `target.resolve`. */
-export type TargetResolveResponse_Deserialize = {
-	status: ResolveStatus,
-	contractVersion: string,
-	requestId: string,
-	/**  Present when `status = resolved`. */
-	targetId: string | null,
-	/**  Present when `status = resolved`. */
-	primaryDesignation: string | null,
-	/**  Present when `status = resolved`. */
-	catalogDisplay: string | null,
-	/**  Present when `status = resolved`. */
-	confidence: LookupConfidence | null,
-	/**  Present when `status = ambiguous`. */
-	candidates: CandidateSummary[] | null,
-	/**  Present when `status = error`. */
-	errors: LookupError[] | null,
-};
-
-/**  Response for `target.resolve`. */
-export type TargetResolveResponse_Serialize = {
-	status: ResolveStatus,
-	contractVersion: string,
-	requestId: string,
-	/**  Present when `status = resolved`. */
-	targetId?: string | null,
-	/**  Present when `status = resolved`. */
-	primaryDesignation?: string | null,
-	/**  Present when `status = resolved`. */
-	catalogDisplay?: string | null,
-	/**  Present when `status = resolved`. */
-	confidence?: LookupConfidence | null,
-	/**  Present when `status = ambiguous`. */
-	candidates?: CandidateSummary[] | null,
-	/**  Present when `status = error`. */
-	errors?: LookupError[] | null,
 };
 
 /**  Request for `target.resolve` (`target.resolve.json` §`Request`). */
@@ -5345,41 +5172,6 @@ export type TargetSearchResponse_Serialize = {
 	suggestions: TargetSuggestion_Serialize[],
 };
 
-/**  A single session row in the target history (spec 023 `TargetSession`). */
-export type TargetSession = TargetSession_Serialize | TargetSession_Deserialize;
-
-/**  A single session row in the target history (spec 023 `TargetSession`). */
-export type TargetSession_Deserialize = {
-	sessionId: string,
-	/**
-	 *  Night of acquisition per R3 solar-noon formula.
-	 *  `None` when `observer_location` is null/unreviewed — excluded from
-	 *  the response entirely by the use case (R-3.1).
-	 */
-	capturedOn: string | null,
-	filter: string | null,
-	exposure: string | null,
-	frames: number | null,
-	/**  Deep-link to the Inventory entry. */
-	inventoryId: string,
-};
-
-/**  A single session row in the target history (spec 023 `TargetSession`). */
-export type TargetSession_Serialize = {
-	sessionId: string,
-	/**
-	 *  Night of acquisition per R3 solar-noon formula.
-	 *  `None` when `observer_location` is null/unreviewed — excluded from
-	 *  the response entirely by the use case (R-3.1).
-	 */
-	capturedOn?: string | null,
-	filter?: string | null,
-	exposure?: string | null,
-	frames?: number | null,
-	/**  Deep-link to the Inventory entry. */
-	inventoryId: string,
-};
-
 /**
  *  Provenance of a canonical target identity (spec 035).
  * 
@@ -5413,7 +5205,7 @@ export type TargetSuggestion_Serialize = {
 	source: TargetSource,
 };
 
-/**  An astronomical target as seen in list views. */
+/**  An astronomical target as seen in list views (spec 029 stub). */
 export type Target_Deserialize = {
 	id: string,
 	name: string,
@@ -5430,7 +5222,7 @@ export type Target_Deserialize = {
 	recommendedHours: { [key in string]: number | null },
 };
 
-/**  An astronomical target as seen in list views. */
+/**  An astronomical target as seen in list views (spec 029 stub). */
 export type Target_Serialize = {
 	id: string,
 	name: string,

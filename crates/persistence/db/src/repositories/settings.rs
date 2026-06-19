@@ -180,10 +180,6 @@ fn apply_key_to_state(key: &str, value: Value, state: &mut SettingsState) -> DbR
             state.plans_list_default_age_cutoff_days =
                 serde_json::from_value(value).map_err(DbError::Serialise)?;
         }
-        "target_lookup.active_catalogs" => {
-            state.target_lookup_active_catalogs =
-                serde_json::from_value(value).map_err(DbError::Serialise)?;
-        }
         "calibration.dark_temp_tolerance" => {
             state.calibration_dark_temp_tolerance =
                 serde_json::from_value(value).map_err(DbError::Serialise)?;
