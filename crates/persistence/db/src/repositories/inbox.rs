@@ -475,6 +475,67 @@ pub async fn find_orphaned_plan_links(
     Ok(rows)
 }
 
+// ── Cross-root unacknowledged listing ────────────────────────────────────────
+
+/// A row returned by [`list_unacknowledged_across_roots`].
+///
+/// Carries both the item's own fields and the root path so the UI can group
+/// by root without a second query.
+#[derive(Clone, Debug, Serialize, Deserialize, sqlx::FromRow)]
+pub struct InboxListRow {
+    pub id: String,
+    pub root_id: String,
+    pub root_path: String,
+    pub relative_path: String,
+    pub file_count: i64,
+    pub discovered_at: String,
+    pub last_scanned_at: String,
+    pub content_signature: Option<String>,
+    pub state: String,
+    pub lane: String,
+}
+
+/// Return all `inbox_items` whose `state` is **unacknowledged**
+/// (`pending_classification` or `classified`) across every registered root,
+/// joined with the root's path so the UI can label/group by root.
+///
+/// Items whose state is `plan_open` or `resolved` are excluded — the
+/// `resolved` state is the terminal acknowledged state; `plan_open` means the
+/// user has already acted and is awaiting plan application.
+///
+/// Results are ordered by root path then by relative path.
+/// Pass `limit` to cap the result set (FR-006 bounding).
+///
+/// # Errors
+/// Returns [`DbError::Database`] on connection failure.
+pub async fn list_unacknowledged_across_roots(
+    pool: &SqlitePool,
+    limit: i64,
+) -> DbResult<Vec<InboxListRow>> {
+    let rows = sqlx::query_as::<_, InboxListRow>(
+        "SELECT
+             i.id,
+             i.root_id,
+             r.current_path  AS root_path,
+             i.relative_path,
+             i.file_count,
+             i.discovered_at,
+             i.last_scanned_at,
+             i.content_signature,
+             i.state,
+             i.lane
+         FROM inbox_items i
+         JOIN library_root r ON r.id = i.root_id
+         WHERE i.state IN ('pending_classification', 'classified')
+         ORDER BY r.current_path, i.relative_path
+         LIMIT ?",
+    )
+    .bind(limit)
+    .fetch_all(pool)
+    .await?;
+    Ok(rows)
+}
+
 // ── Tests ─────────────────────────────────────────────────────────────────────
 
 #[cfg(test)]

@@ -193,6 +193,7 @@ describe('SetupWizard 5-step flow', () => {
   });
 
   it('enables Continue on Step 1 after adding all required folder types', async () => {
+    // spec 039: inbox is now optional — only light_frames + project are required.
     renderWizard();
 
     // Add a folder to each required group via its own per-group add button.
@@ -206,15 +207,28 @@ describe('SetupWizard 5-step flow', () => {
       expect(screen.getByText('/astro/projects')).toBeInTheDocument();
     });
 
-    await addFolder('/astro/inbox', 'inbox');
-    await waitFor(() => {
-      expect(screen.getByText('/astro/inbox')).toBeInTheDocument();
-    });
-
-    // Should now be enabled
+    // Should now be enabled — inbox NOT required (spec 039 FR-004).
     await waitFor(() => {
       expect(getContinueButton()).not.toBeDisabled();
     });
+  });
+
+  it('allows Step 1 to advance without an inbox folder (spec 039 FR-004)', async () => {
+    // Completing setup without an inbox folder must be allowed.
+    renderWizard();
+
+    await addFolder('/astro/lights', 'light_frames');
+    await addFolder('/astro/projects', 'project');
+
+    // Continue must become enabled with only the two required kinds.
+    await waitFor(() => {
+      expect(getContinueButton()).not.toBeDisabled();
+    });
+
+    // The inbox group card is still present (it's a supported optional kind).
+    expect(screen.getByTestId('source-group-inbox')).toBeInTheDocument();
+    // But it must NOT carry a data-requirement-met attribute (it's optional).
+    expect(screen.getByTestId('source-group-inbox')).not.toHaveAttribute('data-requirement-met');
   });
 
   it('renders one persistent group card per source kind, even when empty', () => {
@@ -231,7 +245,9 @@ describe('SetupWizard 5-step flow', () => {
     // Required groups start unmet; optional groups carry no requirement flag.
     expect(screen.getByTestId('source-group-light_frames')).toHaveAttribute('data-requirement-met', 'false');
     expect(screen.getByTestId('source-group-project')).toHaveAttribute('data-requirement-met', 'false');
+    // calibration and inbox are optional (spec 039: inbox removed from required kinds).
     expect(screen.getByTestId('source-group-calibration')).not.toHaveAttribute('data-requirement-met');
+    expect(screen.getByTestId('source-group-inbox')).not.toHaveAttribute('data-requirement-met');
 
     // Adding to the light_frames group flips its card to met.
     await addFolder('/astro/lights', 'light_frames');

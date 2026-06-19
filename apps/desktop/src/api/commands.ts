@@ -27,6 +27,8 @@ import type {
   InboxConfirmRequest_Deserialize as InboxConfirmRequest,
   InboxConfirmResponse,
   InboxItemSummary,
+  InboxListItem,
+  InboxListResponse,
   InboxReclassifyOverride,
   InboxReclassifyRequest,
   InboxReclassifyResponse_Serialize as InboxReclassifyResponse,
@@ -39,6 +41,8 @@ export type {
   InboxConfirmRequest,
   InboxConfirmResponse,
   InboxItemSummary,
+  InboxListItem,
+  InboxListResponse,
   InboxReclassifyOverride,
   InboxReclassifyRequest,
   InboxReclassifyResponse,
@@ -616,6 +620,16 @@ export async function inboxReclassify(
   req: InboxReclassifyRequest,
 ): Promise<InboxReclassifyResponse> {
   return invoke<InboxReclassifyResponse>('inbox_reclassify', { req });
+}
+
+/**
+ * List all unacknowledged inbox items across all registered roots (spec 039).
+ * Items in `pending_classification` or `classified` state are returned.
+ * Confirmed/plan_open/resolved items are excluded.
+ * Results are capped at 500 (check `capped` flag for truncation).
+ */
+export async function inboxList(): Promise<InboxListResponse> {
+  return invoke<InboxListResponse>('inbox_list');
 }
 
 // ── Calibration matching commands (spec 007) ──────────────────────────────────
