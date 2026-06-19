@@ -1,5 +1,11 @@
 *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
 html, body, #root { height: 100%; overflow: hidden; }
+/* #root is a bounded flex column so top-level pages (the setup wizard uses
+   flex:1) fill the viewport and scroll INTERNALLY — without this, a flex:1 page
+   has no flex parent, grows to content height, and its footer (Back/Finish,
+   action bars) is clipped by the overflow:hidden above. Action bars must stay
+   visible regardless of content. */
+#root { display: flex; flex-direction: column; }
 body {
   font-family: var(--alm-font-sans);
   font-size: var(--alm-text-base);
