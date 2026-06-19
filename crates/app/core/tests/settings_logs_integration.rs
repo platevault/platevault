@@ -1,0 +1,180 @@
+#![allow(clippy::doc_markdown)]
+//! Layer-1 integration tests for settings/configuration model (#19) and
+//! bottom log viewer (#20) — feature 037 (T006/T007).
+//!
+//! All tests run against a real in-memory SQLite database with all migrations
+//! applied via the shared `support::setup()` harness.
+
+mod support;
+
+use app_core::log_stream::{self, RecentOptions};
+use app_core::settings;
+use audit::event_bus::TOPIC_SETTINGS_CHANGED;
+use contracts_core::settings::{
+    RestoreDefaultsRequest, RestoreDefaultsStatus, SettingsUpdateRequest, SettingsUpdateStatus,
+};
+use contracts_core::JsonAny;
+
+// ── settings: update + get round-trip ────────────────────────────────────────
+
+/// Update a setting, then read it back via `get_settings` and assert the
+/// persisted value is present — a restart-equivalent round-trip.
+#[tokio::test]
+async fn setting_update_persists_and_reads_back() {
+    let (db, _repo, bus) = support::setup().await;
+    let pool = db.pool();
+
+    // Default log_level is "info"; update to "debug".
+    let req = SettingsUpdateRequest {
+        key: "logLevel".to_owned(),
+        value: JsonAny::from(serde_json::Value::String("debug".to_owned())),
+    };
+    let resp =
+        settings::update_setting(pool, &bus, &req).await.expect("update_setting should succeed");
+
+    assert_eq!(
+        resp.status,
+        SettingsUpdateStatus::Success,
+        "expected Success status, got {:?}",
+        resp.status
+    );
+    assert_eq!(resp.key, "logLevel");
+
+    // Re-read via get_settings (simulates a restart / fresh load).
+    let get_resp = settings::get_settings(pool, &bus).await.expect("get_settings should succeed");
+
+    assert_eq!(
+        get_resp.settings.log_level, "debug",
+        "log_level should be 'debug' after update, got '{}'",
+        get_resp.settings.log_level
+    );
+}
+
+// ── settings: no-op guard ─────────────────────────────────────────────────────
+
+/// Writing a value identical to the stored value must return `Noop` and not
+/// emit an audit event.
+#[tokio::test]
+async fn setting_update_noop_when_value_unchanged() {
+    let (db, _repo, bus) = support::setup().await;
+    let pool = db.pool();
+
+    // First write: set hashOnScan to "eager".
+    let req = SettingsUpdateRequest {
+        key: "hashOnScan".to_owned(),
+        value: JsonAny::from(serde_json::Value::String("eager".to_owned())),
+    };
+    settings::update_setting(pool, &bus, &req).await.expect("first update should succeed");
+
+    // Count events before the no-op attempt.
+    let (before,): (i64,) = sqlx::query_as("SELECT COUNT(*) FROM events WHERE topic = ?")
+        .bind(TOPIC_SETTINGS_CHANGED)
+        .fetch_one(pool)
+        .await
+        .expect("events count query failed");
+
+    // Second write with same value — must be a no-op.
+    let resp =
+        settings::update_setting(pool, &bus, &req).await.expect("second update should succeed");
+
+    assert_eq!(
+        resp.status,
+        SettingsUpdateStatus::Noop,
+        "expected Noop on identical value, got {:?}",
+        resp.status
+    );
+
+    let (after,): (i64,) = sqlx::query_as("SELECT COUNT(*) FROM events WHERE topic = ?")
+        .bind(TOPIC_SETTINGS_CHANGED)
+        .fetch_one(pool)
+        .await
+        .expect("events count query failed");
+
+    assert_eq!(before, after, "no audit event should be emitted for a no-op update");
+}
+
+// ── settings: restore_defaults round-trip ────────────────────────────────────
+
+/// Change a setting, then restore it to default and assert the default value
+/// reads back from `get_settings`.
+#[tokio::test]
+async fn restore_defaults_reverts_to_default_value() {
+    let (db, _repo, bus) = support::setup().await;
+    let pool = db.pool();
+
+    // Mutate rowDensity away from its in-code default ("dense") to "comfortable".
+    let req = SettingsUpdateRequest {
+        key: "rowDensity".to_owned(),
+        value: JsonAny::from(serde_json::Value::String("comfortable".to_owned())),
+    };
+    settings::update_setting(pool, &bus, &req).await.expect("update rowDensity should succeed");
+
+    // Confirm mutation landed.
+    let get1 = settings::get_settings(pool, &bus).await.expect("get_settings after mutation");
+    assert_eq!(
+        get1.settings.row_density, "comfortable",
+        "precondition: should be 'comfortable' after write"
+    );
+
+    // Restore only the rowDensity key.
+    let restore_req = RestoreDefaultsRequest { keys: vec!["rowDensity".to_owned()] };
+    let restore_resp = settings::restore_defaults(pool, &bus, &restore_req)
+        .await
+        .expect("restore_defaults should succeed");
+
+    assert_eq!(
+        restore_resp.status,
+        RestoreDefaultsStatus::Success,
+        "expected Success from restore, got {:?}",
+        restore_resp.status
+    );
+    assert!(
+        restore_resp.restored.contains(&"rowDensity".to_owned()),
+        "restored list should include 'rowDensity'"
+    );
+
+    // Read back after restore — should be back at the in-code default ("dense").
+    let get2 = settings::get_settings(pool, &bus).await.expect("get_settings after restore");
+    assert_eq!(
+        get2.settings.row_density, "dense",
+        "rowDensity should revert to 'dense' (in-code default) after restore_defaults"
+    );
+}
+
+// ── log stream: events written by settings surface in recent_entries ──────────
+
+/// Updating a non-noisy setting emits an event to the `events` table. Assert
+/// that `recent_entries` returns at least that entry.
+#[tokio::test]
+async fn log_stream_recent_entries_returns_emitted_events() {
+    let (db, _repo, bus) = support::setup().await;
+    let pool = db.pool();
+
+    // Precondition: no events yet.
+    let empty = log_stream::recent_entries(pool, RecentOptions::default())
+        .await
+        .expect("recent_entries on empty db should succeed");
+    assert!(empty.is_empty(), "expected empty log on fresh DB, got {} entries", empty.len());
+
+    // Trigger an audit event via a non-noisy setting update (logLevel is not noisy).
+    let req = SettingsUpdateRequest {
+        key: "logLevel".to_owned(),
+        value: JsonAny::from(serde_json::Value::String("warn".to_owned())),
+    };
+    settings::update_setting(pool, &bus, &req).await.expect("update_setting should succeed");
+
+    // recent_entries should now include at least one entry.
+    let entries = log_stream::recent_entries(pool, RecentOptions::default())
+        .await
+        .expect("recent_entries should succeed after event emit");
+
+    assert!(!entries.is_empty(), "expected at least one log entry after settings update, got 0");
+
+    // The entry's id must follow the "aud:<n>" convention.
+    let first = &entries[0];
+    assert!(
+        first.id.starts_with("aud:"),
+        "log entry id should start with 'aud:', got '{}'",
+        first.id
+    );
+}
