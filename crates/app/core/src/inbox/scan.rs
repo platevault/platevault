@@ -1,8 +1,14 @@
 //! Recursive inbox folder scan (spec 005, T-RecursiveScanImpl).
-//!
 //! Each leaf directory containing at least one FITS or XISF file becomes one
 //! `ScannedInboxItem`. Intermediate folders containing only sub-folders are
 //! not items. Video-only folders produce items with `lane = "video"`.
+//!
+//! Spec 040 Phase 2a: detected calibration masters in a leaf folder are
+//! extracted from the folder group and represented as individual
+//! `ScannedMasterFile` entries within the same `ScannedInboxItem`. The
+//! persist layer (inbox_scan_folder command) then creates individual
+//! `inbox_items` rows for each master and a single grouped row for the
+//! remaining sub-frames.
 //!
 //! Constitution §I: symlinks/junctions are NOT followed unless explicitly
 //! enabled (default: false). Hashing is lazy — only the 64 KB partial read
@@ -11,9 +17,93 @@
 
 use std::path::{Path, PathBuf};
 
+use calibration_master_detect::{detect_master, DetectInput, MasterDetection};
+use metadata_core::MetadataExtractor;
+use metadata_fits::FitsExtractor;
 use metadata_video::is_video_extension;
+use metadata_xisf::XisfExtractor;
 
 use super::signature::compute_content_signature;
+
+// ── FileFormat ────────────────────────────────────────────────────────────────
+
+/// The actual file format detected during scan.
+///
+/// Distinct from `Lane` — a FITS lane may contain either FITS or XISF files,
+/// or a mix. This enum carries the real format so the UI can display it
+/// accurately instead of always showing "FITS".
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum FileFormat {
+    /// `.fits` / `.fit` / `.fts`
+    Fits,
+    /// `.xisf`
+    Xisf,
+    /// Video files (`.ser`, `.avi`, etc.)
+    Video,
+    /// Folder contains both FITS and XISF files.
+    Mixed,
+}
+
+impl FileFormat {
+    #[must_use]
+    pub fn as_str(self) -> &'static str {
+        match self {
+            FileFormat::Fits => "fits",
+            FileFormat::Xisf => "xisf",
+            FileFormat::Video => "video",
+            FileFormat::Mixed => "mixed",
+        }
+    }
+}
+
+/// Derive the folder-level format from the file lists.
+fn folder_format(
+    fits_files: &[PathBuf],
+    xisf_files: &[PathBuf],
+    video_files: &[PathBuf],
+) -> FileFormat {
+    let has_fits = !fits_files.is_empty();
+    let has_xisf = !xisf_files.is_empty();
+    let has_video = !video_files.is_empty();
+
+    match (has_fits || has_xisf, has_video) {
+        (true, _) if has_fits && has_xisf => FileFormat::Mixed,
+        (true, _) if has_xisf => FileFormat::Xisf,
+        (true, _) => FileFormat::Fits,
+        (false, true) => FileFormat::Video,
+        _ => FileFormat::Fits, // fallback; unreachable in practice
+    }
+}
+
+/// Derive per-file format from extension.
+fn file_format_from_ext(ext: &str) -> FileFormat {
+    match ext {
+        "xisf" => FileFormat::Xisf,
+        "fits" | "fit" | "fts" => FileFormat::Fits,
+        _ => FileFormat::Video,
+    }
+}
+
+// ── ScannedMasterFile ─────────────────────────────────────────────────────────
+
+/// A single calibration master file detected during scan within a leaf folder.
+///
+/// Each master becomes its own `inbox_items` row (spec 040 FR-005, FR-006).
+#[derive(Clone, Debug)]
+pub struct ScannedMasterFile {
+    /// Absolute path to the master file.
+    pub abs_path: PathBuf,
+    /// Relative path from the scan root (= the key for the inbox_items row).
+    pub relative_path: String,
+    /// File format (Fits or Xisf).
+    pub format: FileFormat,
+    /// Master detection result (frame type, detector provenance).
+    pub detection: MasterDetection,
+    /// Filter extracted from metadata, if available.
+    pub filter: Option<String>,
+    /// Exposure in seconds extracted from metadata, if available.
+    pub exposure_s: Option<f64>,
+}
 
 // ── ScannedInboxItem ──────────────────────────────────────────────────────────
 
@@ -24,14 +114,25 @@ pub struct ScannedInboxItem {
     pub folder_path: PathBuf,
     /// Relative path from the scan root.
     pub relative_path: String,
-    /// Absolute paths to FITS/XISF files inside this folder (direct children only).
+    /// FITS (.fits/.fit/.fts) files inside this folder (direct children only).
+    ///
+    /// Does NOT include XISF files (those are in `xisf_files`).
     pub fits_files: Vec<PathBuf>,
+    /// XISF files inside this folder (direct children only).
+    pub xisf_files: Vec<PathBuf>,
     /// Video files in this folder.
     pub video_files: Vec<PathBuf>,
     /// Content signature of the folder (computed from FITS/XISF files only).
     pub content_signature: String,
     /// Classification lane.
     pub lane: Lane,
+    /// Folder-level format (Fits | Xisf | Mixed | Video).
+    pub format: FileFormat,
+    /// Calibration masters detected within this folder.
+    ///
+    /// Each entry becomes its own `inbox_items` row. The remaining non-master
+    /// FITS/XISF files are grouped into the folder-level row.
+    pub masters: Vec<ScannedMasterFile>,
 }
 
 /// Whether this item should be classified as FITS or routed to the video lane.
@@ -62,17 +163,67 @@ pub struct ScanOptions {
 
 // ── FITS / XISF extensions ────────────────────────────────────────────────────
 
-const FITS_EXTENSIONS: &[&str] = &["fits", "fit", "fts", "xisf"];
+const FITS_ONLY_EXTENSIONS: &[&str] = &["fits", "fit", "fts"];
+const XISF_EXTENSIONS: &[&str] = &["xisf"];
 
-fn is_fits_or_xisf_extension(ext: &str) -> bool {
-    let lower = ext.to_ascii_lowercase();
-    FITS_EXTENSIONS.contains(&lower.as_str())
+fn is_fits_extension(ext: &str) -> bool {
+    FITS_ONLY_EXTENSIONS.contains(&ext)
+}
+
+fn is_xisf_extension(ext: &str) -> bool {
+    XISF_EXTENSIONS.contains(&ext)
+}
+
+// ── Master detection at scan time ─────────────────────────────────────────────
+
+/// Attempt to extract metadata and detect whether `path` is a calibration
+/// master.  Called only for FITS/XISF files in leaf folders.
+///
+/// Returns `Some(ScannedMasterFile)` when the file is identified as a master.
+/// Returns `None` when not a master or metadata is unreadable.
+fn try_detect_master(abs_path: &Path, rel_path: &str, ext: &str) -> Option<ScannedMasterFile> {
+    // Extract metadata — same extractors used by classify.rs.
+    let bundle = if XisfExtractor.supports_extension(ext) {
+        XisfExtractor.extract(abs_path).ok().flatten()?
+    } else if FitsExtractor.supports_extension(ext) {
+        FitsExtractor.extract(abs_path).ok().flatten()?
+    } else {
+        return None;
+    };
+
+    let image_typ_raw = bundle.image_typ.as_deref();
+    let stack_count = bundle.stack_count;
+    let file_name = abs_path.file_name().and_then(|n| n.to_str()).unwrap_or("");
+
+    let detect_input = DetectInput { imagetyp: image_typ_raw, stack_count, file_name, rel_path };
+
+    let detection = detect_master(&detect_input)?;
+
+    if !detection.is_master {
+        return None;
+    }
+
+    let format = file_format_from_ext(ext);
+    let filter = bundle.filter.clone();
+    let exposure_s = bundle.exposure.as_deref().and_then(|v| v.parse::<f64>().ok());
+
+    Some(ScannedMasterFile {
+        abs_path: abs_path.to_owned(),
+        relative_path: rel_path.to_owned(),
+        format,
+        detection,
+        filter,
+        exposure_s,
+    })
 }
 
 // ── scan_root ────────────────────────────────────────────────────────────────
 
 /// Recursively scan `root` and return one `ScannedInboxItem` per leaf folder
 /// that directly contains FITS/XISF or video files.
+///
+/// For FITS-lane folders, master detection is run per-file so that detected
+/// masters can be split into individual `inbox_items` rows by the caller.
 ///
 /// Intermediate folders are not items. Symlinks are not followed unless
 /// `options.follow_symlinks = true`.
@@ -100,6 +251,7 @@ fn scan_dir(
         .map_err(|e| format!("cannot read directory {}: {e}", dir.display()))?;
 
     let mut fits_files: Vec<PathBuf> = Vec::new();
+    let mut xisf_files: Vec<PathBuf> = Vec::new();
     let mut video_files: Vec<PathBuf> = Vec::new();
     let mut subdirs: Vec<PathBuf> = Vec::new();
 
@@ -119,36 +271,68 @@ fn scan_dir(
         } else if file_type.is_file() || (file_type.is_symlink() && options.follow_symlinks) {
             let ext = path.extension().and_then(|e| e.to_str()).unwrap_or("").to_ascii_lowercase();
 
-            if is_fits_or_xisf_extension(&ext) {
+            if is_fits_extension(&ext) {
                 fits_files.push(path);
+            } else if is_xisf_extension(&ext) {
+                xisf_files.push(path);
             } else if is_video_extension(&ext) {
                 video_files.push(path);
             }
         }
     }
 
-    if !fits_files.is_empty() || !video_files.is_empty() {
+    let all_image_files: Vec<&PathBuf> = fits_files.iter().chain(xisf_files.iter()).collect();
+
+    if !all_image_files.is_empty() || !video_files.is_empty() {
         // This is a leaf with content — make it an InboxItem.
         let relative_path = dir
             .strip_prefix(root)
             .map(|p| p.to_string_lossy().replace('\\', "/"))
             .unwrap_or_default();
 
-        let (lane, sig_files) = if fits_files.is_empty() {
+        let (lane, sig_files) = if all_image_files.is_empty() {
             let sig_refs: Vec<&Path> = video_files.iter().map(PathBuf::as_path).collect();
             (Lane::Video, compute_content_signature(&sig_refs))
         } else {
-            let sig_refs: Vec<&Path> = fits_files.iter().map(PathBuf::as_path).collect();
+            let sig_refs: Vec<&Path> = all_image_files.iter().map(|p| p.as_path()).collect();
             (Lane::Fits, compute_content_signature(&sig_refs))
+        };
+
+        let format = folder_format(&fits_files, &xisf_files, &video_files);
+
+        // Run master detection for FITS-lane folders only.
+        // Performance: we only open files that have calibration-like metadata;
+        // detection returns None quickly for unreadable or non-calib files.
+        let masters: Vec<ScannedMasterFile> = if lane == Lane::Fits {
+            all_image_files
+                .iter()
+                .filter_map(|abs_path| {
+                    let ext = abs_path
+                        .extension()
+                        .and_then(|e| e.to_str())
+                        .unwrap_or("")
+                        .to_ascii_lowercase();
+                    let rel = abs_path
+                        .strip_prefix(root)
+                        .map(|p| p.to_string_lossy().replace('\\', "/"))
+                        .unwrap_or_default();
+                    try_detect_master(abs_path, &rel, &ext)
+                })
+                .collect()
+        } else {
+            vec![]
         };
 
         items.push(ScannedInboxItem {
             folder_path: dir.to_owned(),
             relative_path,
             fits_files,
+            xisf_files,
             video_files,
             content_signature: sig_files,
             lane,
+            format,
+            masters,
         });
     }
 
@@ -243,7 +427,9 @@ mod tests {
         let items = scan_root(tmp.path(), &ScanOptions::default()).unwrap();
         assert_eq!(items.len(), 1);
         assert_eq!(items[0].lane, Lane::Fits);
-        assert_eq!(items[0].fits_files.len(), 1);
+        // xisf_files list populated, fits_files empty
+        assert_eq!(items[0].xisf_files.len(), 1);
+        assert_eq!(items[0].fits_files.len(), 0);
     }
 
     #[test]
@@ -253,5 +439,50 @@ mod tests {
         write_file(tmp.path(), "not_a_dir.fits", b"x");
         let err = scan_root(&file_path, &ScanOptions::default());
         assert!(err.is_err());
+    }
+
+    #[test]
+    fn format_fits_for_fits_only_folder() {
+        let tmp = tmpdir();
+        write_file(tmp.path(), "dark_001.fits", b"f1");
+        let items = scan_root(tmp.path(), &ScanOptions::default()).unwrap();
+        assert_eq!(items[0].format, FileFormat::Fits);
+    }
+
+    #[test]
+    fn format_xisf_for_xisf_only_folder() {
+        let tmp = tmpdir();
+        write_file(tmp.path(), "dark_001.xisf", b"f1");
+        let items = scan_root(tmp.path(), &ScanOptions::default()).unwrap();
+        assert_eq!(items[0].format, FileFormat::Xisf);
+    }
+
+    #[test]
+    fn format_mixed_for_folder_with_fits_and_xisf() {
+        let tmp = tmpdir();
+        write_file(tmp.path(), "dark_001.fits", b"f1");
+        write_file(tmp.path(), "dark_002.xisf", b"f2");
+        let items = scan_root(tmp.path(), &ScanOptions::default()).unwrap();
+        assert_eq!(items[0].format, FileFormat::Mixed);
+    }
+
+    #[test]
+    fn format_video_for_video_only_folder() {
+        let tmp = tmpdir();
+        let planetary = tmp.path().join("p");
+        fs::create_dir_all(&planetary).unwrap();
+        write_file(&planetary, "jupiter.ser", b"SER");
+        let items = scan_root(tmp.path(), &ScanOptions::default()).unwrap();
+        assert_eq!(items[0].format, FileFormat::Video);
+    }
+
+    /// Non-FITS dummy files yield no masters (metadata unreadable → None).
+    #[test]
+    fn no_masters_for_dummy_fits_content() {
+        let tmp = tmpdir();
+        write_file(tmp.path(), "dark_001.fits", b"not a real fits file");
+        let items = scan_root(tmp.path(), &ScanOptions::default()).unwrap();
+        assert_eq!(items.len(), 1);
+        assert!(items[0].masters.is_empty(), "dummy file cannot be a master");
     }
 }

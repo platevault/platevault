@@ -108,8 +108,13 @@ const sampleItem: InboxItemSummary = {
   relativePath: '2025-10-10/NGC7000',
   fileCount: 18,
   lane: 'fits',
+  format: 'fits',
   state: 'classified',
   contentSignature: 'sig-abc',
+  isMaster: false,
+  masterFrameType: null,
+  masterFilter: null,
+  masterExposureS: null,
 };
 
 // ── Tests: ActionSidebar ──────────────────────────────────────────────────
@@ -295,16 +300,26 @@ describe('InboxList', () => {
     relativePath: 'lights/NGC7000',
     fileCount: 18,
     lane: 'fits',
+    format: 'fits',
     state: 'classified',
     contentSignature: 'sig-a',
+    isMaster: false,
+    masterFrameType: null,
+    masterFilter: null,
+    masterExposureS: null,
   };
   const videoItem: InboxItemSummary = {
     inboxItemId: 'item-video',
     relativePath: 'planetary/Jupiter',
     fileCount: 1,
     lane: 'video',
+    format: 'video',
     state: 'pending_classification',
     contentSignature: 'sig-b',
+    isMaster: false,
+    masterFrameType: null,
+    masterFilter: null,
+    masterExposureS: null,
   };
 
   it('renders items with state pill', () => {

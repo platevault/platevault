@@ -33,8 +33,13 @@ const itemRoot1a: InboxListItem = {
   relativePath: '2025-10-10/NGC7000',
   fileCount: 18,
   lane: 'fits',
+  format: 'fits',
   state: 'classified',
   contentSignature: 'sig-a',
+  isMaster: false,
+  masterFrameType: null,
+  masterFilter: null,
+  masterExposureS: null,
 };
 
 const itemRoot1b: InboxListItem = {
@@ -44,8 +49,13 @@ const itemRoot1b: InboxListItem = {
   relativePath: '2025-10-10/darks',
   fileCount: 50,
   lane: 'fits',
+  format: 'fits',
   state: 'pending_classification',
   contentSignature: 'sig-b',
+  isMaster: false,
+  masterFrameType: null,
+  masterFilter: null,
+  masterExposureS: null,
 };
 
 const itemRoot2a: InboxListItem = {
@@ -55,8 +65,13 @@ const itemRoot2a: InboxListItem = {
   relativePath: '2025-11-01/Jupiter',
   fileCount: 3,
   lane: 'video',
+  format: 'video',
   state: 'pending_classification',
   contentSignature: 'sig-c',
+  isMaster: false,
+  masterFrameType: null,
+  masterFilter: null,
+  masterExposureS: null,
 };
 
 const multiRootResponse: InboxListResponse = {

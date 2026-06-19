@@ -153,8 +153,27 @@ pub struct InboxItemSummary {
     pub relative_path: String,
     pub file_count: u32,
     pub lane: String,
+    /// Real file format for this item: `"fits"` | `"xisf"` | `"video"` | `"mixed"`.
+    ///
+    /// Unlike `lane` (which only distinguishes FITS vs video), `format` tells
+    /// the UI whether the item contains FITS files, XISF files, a mix of both,
+    /// or video files.  Spec 040 FR-006.
+    pub format: String,
     pub state: String,
     pub content_signature: String,
+    /// `true` when this item represents a single detected calibration master
+    /// file (relative_path is a file path, not a folder path).  Spec 040 FR-005.
+    pub is_master: bool,
+    /// Base frame type for master items (`"dark"` | `"flat"` | `"bias"` | …).
+    /// `null` for grouped sub-frame folder items.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub master_frame_type: Option<String>,
+    /// Filter label extracted from master file metadata (if available).
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub master_filter: Option<String>,
+    /// Exposure in seconds extracted from master file metadata (if available).
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub master_exposure_s: Option<f64>,
 }
 
 /// Response from `inbox.scan.folder`.
@@ -181,8 +200,19 @@ pub struct InboxListItem {
     pub relative_path: String,
     pub file_count: u32,
     pub lane: String,
+    /// Real file format: `"fits"` | `"xisf"` | `"video"` | `"mixed"`.  Spec 040 FR-006.
+    pub format: String,
     pub state: String,
     pub content_signature: String,
+    /// `true` when this row represents a single detected calibration master file.
+    pub is_master: bool,
+    /// Base frame type for master items; `null` for grouped sub-frame folders.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub master_frame_type: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub master_filter: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub master_exposure_s: Option<f64>,
 }
 
 /// Response from `inbox.list`.

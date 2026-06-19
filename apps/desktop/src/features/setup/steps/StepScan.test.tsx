@@ -55,8 +55,13 @@ const SCAN_RESPONSE_WITH_ITEMS = {
       relativePath: '2025-10-10/NGC7000',
       fileCount: 18,
       lane: 'fits',
+      format: 'fits',
       state: 'classified',
       contentSignature: 'sig-abc',
+      isMaster: false,
+      masterFrameType: null,
+      masterFilter: null,
+      masterExposureS: null,
     },
   ],
 };
