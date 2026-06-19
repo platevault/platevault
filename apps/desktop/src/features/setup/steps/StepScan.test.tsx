@@ -7,7 +7,7 @@
  * (same pattern as SetupWizard.test.tsx).
  */
 
-import { render, screen, waitFor, fireEvent, act } from '@testing-library/react';
+import { render, screen, waitFor, fireEvent, act, within } from '@testing-library/react';
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 
 // ── Hoisted mocks ────────────────────────────────────────────────────────────
@@ -91,6 +91,13 @@ function renderStep(overrides: Partial<StepScanProps> = {}) {
   );
 }
 
+/** Click the source header button to expand its accordion panel. */
+function expandSource(path: string) {
+  const sourceEl = screen.getByTestId(`scan-source-${path}`);
+  const header = sourceEl.querySelector('[role="button"]') as HTMLElement;
+  fireEvent.click(header);
+}
+
 // ── Tests ────────────────────────────────────────────────────────────────────
 
 beforeEach(() => {
@@ -145,8 +152,87 @@ describe('StepScan', () => {
     });
   });
 
+  describe('accordion — collapsed by default', () => {
+    it('table rows are hidden by default before the accordion is expanded', async () => {
+      mockInboxScanFolder.mockResolvedValue(SCAN_RESPONSE_WITH_ITEMS);
+      mockInboxClassify.mockResolvedValue(CLASSIFY_RESPONSE);
+
+      renderStep({ sources: [SOURCES[0]] });
+
+      // Wait for scan to finish — compact count summary appears in the header
+      await waitFor(() => {
+        expect(within(screen.getByTestId('scan-source-/astro/lights')).getByText(/1 folder/)).toBeInTheDocument();
+      });
+
+      // Table row must NOT be visible — accordion is still collapsed
+      expect(screen.queryByTestId('scan-item-item-001')).not.toBeInTheDocument();
+    });
+
+    it('reveals table rows after clicking the source header', async () => {
+      mockInboxScanFolder.mockResolvedValue(SCAN_RESPONSE_WITH_ITEMS);
+      mockInboxClassify.mockResolvedValue(CLASSIFY_RESPONSE);
+
+      renderStep({ sources: [SOURCES[0]] });
+
+      await waitFor(() => {
+        expect(within(screen.getByTestId('scan-source-/astro/lights')).getByText(/1 folder/)).toBeInTheDocument();
+      });
+
+      expandSource('/astro/lights');
+
+      expect(screen.getByTestId('scan-item-item-001')).toBeInTheDocument();
+    });
+
+    it('shows ▸ when collapsed and ▾ when expanded', async () => {
+      mockInboxScanFolder.mockResolvedValue(SCAN_RESPONSE_WITH_ITEMS);
+      mockInboxClassify.mockResolvedValue(CLASSIFY_RESPONSE);
+
+      renderStep({ sources: [SOURCES[0]] });
+
+      await waitFor(() => {
+        expect(within(screen.getByTestId('scan-source-/astro/lights')).getByText(/1 folder/)).toBeInTheDocument();
+      });
+
+      const sourceEl = screen.getByTestId('scan-source-/astro/lights');
+      expect(sourceEl).toHaveTextContent('▸');
+      expect(sourceEl).not.toHaveTextContent('▾');
+
+      expandSource('/astro/lights');
+
+      expect(sourceEl).toHaveTextContent('▾');
+      expect(sourceEl).not.toHaveTextContent('▸');
+    });
+
+    it('collapses again on second click', async () => {
+      mockInboxScanFolder.mockResolvedValue(SCAN_RESPONSE_WITH_ITEMS);
+      mockInboxClassify.mockResolvedValue(CLASSIFY_RESPONSE);
+
+      renderStep({ sources: [SOURCES[0]] });
+
+      await waitFor(() => {
+        expect(within(screen.getByTestId('scan-source-/astro/lights')).getByText(/1 folder/)).toBeInTheDocument();
+      });
+
+      expandSource('/astro/lights');
+      expect(screen.getByTestId('scan-item-item-001')).toBeInTheDocument();
+
+      expandSource('/astro/lights');
+      expect(screen.queryByTestId('scan-item-item-001')).not.toBeInTheDocument();
+    });
+
+    it('does not show a chevron while source is still scanning', () => {
+      mockInboxScanFolder.mockReturnValue(new Promise(() => {}));
+
+      renderStep({ sources: [SOURCES[0]] });
+
+      const sourceEl = screen.getByTestId('scan-source-/astro/lights');
+      expect(sourceEl.querySelector('[role="button"]')).not.toBeInTheDocument();
+      expect(sourceEl).not.toHaveTextContent('▸');
+    });
+  });
+
   describe('done state with detections', () => {
-    it('shows detected items and frame-type breakdown when scan completes', async () => {
+    it('shows detected items and frame-type breakdown when scan completes (after expanding)', async () => {
       mockInboxScanFolder.mockResolvedValue(SCAN_RESPONSE_WITH_ITEMS);
       mockInboxClassify.mockResolvedValue(CLASSIFY_RESPONSE);
 
@@ -154,9 +240,13 @@ describe('StepScan', () => {
 
       // Wait for scan to complete
       await waitFor(() => {
-        expect(screen.getByTestId('scan-item-item-001')).toBeInTheDocument();
+        expect(within(screen.getByTestId('scan-source-/astro/lights')).getByText(/1 folder/)).toBeInTheDocument();
       });
 
+      // Must expand the accordion to see the detail panel
+      expandSource('/astro/lights');
+
+      expect(screen.getByTestId('scan-item-item-001')).toBeInTheDocument();
       // Item path visible
       expect(screen.getByText('2025-10-10/NGC7000')).toBeInTheDocument();
       // Breakdown kinds visible (light=16, dark=2)
@@ -256,10 +346,13 @@ describe('StepScan', () => {
         expect(screen.getByText(/disk read error/i)).toBeInTheDocument();
       });
 
-      // Second source should still complete: item detected
+      // Second source completes — wait for compact count summary, then expand
       await waitFor(() => {
-        expect(screen.getByTestId('scan-item-item-001')).toBeInTheDocument();
+        expect(within(screen.getByTestId('scan-source-/astro/projects')).getByText(/1 folder/)).toBeInTheDocument();
       });
+
+      expandSource('/astro/projects');
+      expect(screen.getByTestId('scan-item-item-001')).toBeInTheDocument();
     });
 
     it('enables Finish even when a source has errored (FR-005)', async () => {
