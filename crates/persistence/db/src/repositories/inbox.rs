@@ -516,7 +516,7 @@ pub async fn list_unacknowledged_across_roots(
         "SELECT
              i.id,
              i.root_id,
-             r.current_path  AS root_path,
+             r.path          AS root_path,
              i.relative_path,
              i.file_count,
              i.discovered_at,
@@ -525,9 +525,9 @@ pub async fn list_unacknowledged_across_roots(
              i.state,
              i.lane
          FROM inbox_items i
-         JOIN library_root r ON r.id = i.root_id
+         JOIN registered_sources r ON r.id = i.root_id
          WHERE i.state IN ('pending_classification', 'classified')
-         ORDER BY r.current_path, i.relative_path
+         ORDER BY r.path, i.relative_path
          LIMIT ?",
     )
     .bind(limit)
@@ -691,5 +691,54 @@ mod tests {
         // Second insert must fail (PK constraint)
         let err = insert_plan_link(db.pool(), "item-7", "plan-inbox-2").await;
         assert!(err.is_err());
+    }
+
+    /// C1 integration test (no mocks): register a real source via
+    /// `register_source_batch`, insert an inbox item for that source's id, then
+    /// call `list_unacknowledged_across_roots` and assert the row comes back
+    /// with the correct `root_path`. Verifies the JOIN hits `registered_sources`
+    /// not the absent `library_root` table.
+    #[tokio::test]
+    async fn list_unacknowledged_joins_registered_sources() {
+        use contracts_core::first_run::{
+            RegisterSourceBatchRequest, RegisterSourceRequest, ScanDepth, SourceKind,
+        };
+
+        let db = test_db().await;
+        let pool = db.pool();
+
+        // Register a source via the real batch function (same path the wizard uses).
+        let batch_req = RegisterSourceBatchRequest {
+            sources: vec![RegisterSourceRequest {
+                kind: SourceKind::Inbox,
+                path: "/astro/inbox".to_owned(),
+                kind_subtype: None,
+                scan_depth: ScanDepth::Recursive,
+            }],
+        };
+        let batch_resp =
+            crate::repositories::first_run::register_source_batch(pool, &batch_req).await.unwrap();
+        let source_id = batch_resp.items[0].source_id.as_deref().unwrap().to_owned();
+
+        // Insert an inbox item pointing at that source id.
+        let item = InsertInboxItem {
+            id: "cross-root-item-1",
+            root_id: &source_id,
+            relative_path: "2025-11-01/lights",
+            file_count: 5,
+            content_signature: Some("sig-cross"),
+            lane: "fits",
+        };
+        insert_inbox_item(pool, &item).await.unwrap();
+
+        // Must return ≥1 row with the correct root_path.
+        let rows = list_unacknowledged_across_roots(pool, 100).await.unwrap();
+        assert_eq!(rows.len(), 1, "expected 1 unacknowledged item");
+        assert_eq!(
+            rows[0].root_path, "/astro/inbox",
+            "root_path must match registered_sources.path"
+        );
+        assert_eq!(rows[0].id, "cross-root-item-1");
+        assert_eq!(rows[0].state, "pending_classification");
     }
 }
