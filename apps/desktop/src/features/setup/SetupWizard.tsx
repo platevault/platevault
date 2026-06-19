@@ -262,6 +262,11 @@ export function SetupWizard() {
     }
   }, [state.sources, goTo]);
 
+  // Tracks whether all sources on the Scan step have finished (done/error).
+  // Updated via StepScan's onAllDoneChange callback and used to enable the
+  // Finish button in the shared footer.
+  const [scanComplete, setScanComplete] = useState(false);
+
   // Called from StepScan's Finish button: complete first-run and navigate.
   const handleFinish = useCallback(async () => {
     setIsFinishing(true);
@@ -289,7 +294,8 @@ export function SetupWizard() {
   // Determine whether "Continue" should be enabled.
   // Step 0 (Source Folders) and step 3 (Confirm) require all required folder kinds.
   // All other intermediate steps advance freely.
-  // The Scan step (SCAN_STEP) manages its own Finish button internally.
+  // The Scan step (SCAN_STEP) uses the shared footer Finish button, which is
+  // enabled by scanComplete — canProceed is not consulted for that step.
   const canProceed = useMemo(() => {
     if (isMockMode) return true;
     const step = state.currentStep;
@@ -307,15 +313,19 @@ export function SetupWizard() {
     completed: i < step,
   }));
 
-  // The Scan step renders its own Finish button inside StepScan; the wizard
-  // footer only shows navigation for steps 0–3.
   const isOnScanStep = step === SCAN_STEP;
 
-  // Build the navigation footer for the current step
+  // Build the navigation footer for the current step.
+  // The Scan step (SCAN_STEP) now renders Back + Finish here, consistent with
+  // every other step; StepScan no longer owns its own action buttons.
   const footer = (
     <>
-      {step > 0 && !isOnScanStep ? (
-        <Btn variant="ghost" onClick={() => goTo(step - 1)} disabled={isSubmitting}>
+      {step > 0 ? (
+        <Btn
+          variant="ghost"
+          onClick={() => goTo(isOnScanStep ? SCAN_STEP - 1 : step - 1)}
+          disabled={isSubmitting || isFinishing}
+        >
           &larr; Back
         </Btn>
       ) : (
@@ -330,27 +340,35 @@ export function SetupWizard() {
           {totalFolders} folder{totalFolders !== 1 ? 's' : ''} selected
         </span>
       )}
-      {/* Scan step: no footer button — StepScan owns its Finish */}
-      {!isOnScanStep && (
-        step < SCAN_STEP - 1 ? (
-          // Steps 0–2: "Continue to <next>"
-          <Btn
-            variant="primary"
-            onClick={() => goTo(step + 1)}
-            disabled={!canProceed}
-          >
-            Continue to {STEPS[step + 1].label.toLowerCase()} &rarr;
-          </Btn>
-        ) : (
-          // Step 3 (Confirm): register + enter Scan
-          <Btn
-            variant="primary"
-            onClick={() => { void handleEnterScan(); }}
-            disabled={isSubmitting || !canProceed}
-          >
-            {isSubmitting ? 'Registering…' : 'Start scan →'}
-          </Btn>
-        )
+      {isOnScanStep ? (
+        // Scan step: Finish navigates to /inbox after completing first-run.
+        // Enabled only once all source scans are done (or errored).
+        <Btn
+          data-testid="finish-button"
+          variant="primary"
+          onClick={() => { void handleFinish(); }}
+          disabled={!scanComplete || isFinishing}
+        >
+          {isFinishing ? 'Finishing…' : 'Finish'}
+        </Btn>
+      ) : step < SCAN_STEP - 1 ? (
+        // Steps 0–2: "Continue to <next>"
+        <Btn
+          variant="primary"
+          onClick={() => goTo(step + 1)}
+          disabled={!canProceed}
+        >
+          Continue to {STEPS[step + 1].label.toLowerCase()} &rarr;
+        </Btn>
+      ) : (
+        // Step 3 (Confirm): register + enter Scan
+        <Btn
+          variant="primary"
+          onClick={() => { void handleEnterScan(); }}
+          disabled={isSubmitting || !canProceed}
+        >
+          {isSubmitting ? 'Registering…' : 'Start scan →'}
+        </Btn>
       )}
     </>
   );
@@ -433,9 +451,7 @@ export function SetupWizard() {
             <StepScan
               sources={state.sources}
               flushResult={flushResult}
-              onFinish={handleFinish}
-              isFinishing={isFinishing}
-              onBack={() => goTo(SCAN_STEP - 1)}
+              onAllDoneChange={setScanComplete}
             />
           )}
       </WizardShell>
