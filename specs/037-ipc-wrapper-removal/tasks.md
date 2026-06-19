@@ -23,8 +23,8 @@ suite green (FR-005). Bindings regeneration uses `cargo test -p desktop-shell ex
 **Goal**: `commands.ts` contains no `invoke('...')` literals; public surface unchanged.
 **Independent test**: suite green; `grep "invoke('" commands.ts` returns nothing.
 
-- [ ] T007 Rewrite each `commands.ts` wrapper as `unwrap(await commands.<name>(...))`, preserving param mapping and any post-processing from T001.
-- [ ] T008 Update/relax `commands.bindings-guard.test.ts` (its inline-payload scan no longer applies once literals are gone; keep the name-conformance idea or mark for removal in Phase 4).
+- [x] T007 Rewrite each `commands.ts` wrapper as `unwrap(await commands.<name>(...))`, preserving param mapping and any post-processing from T001.
+- [x] T008 Update/relax `commands.bindings-guard.test.ts` (its inline-payload scan no longer applies once literals are gone; keep the name-conformance idea or mark for removal in Phase 4).
 
 ## Phase 3: Caller migration — call generated bindings directly (US1, P1)
 

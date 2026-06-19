@@ -104,8 +104,10 @@ import type {
 // IPC dispatch + the dev-tools recording override live in the shared switcher
 // (spec 037, api/ipc.ts) so these wrappers and the generated bindings use one
 // dispatcher. Re-exported to keep the `@/api/commands` public surface stable.
-import { invoke, setInvokeOverride } from './ipc';
+import { invoke, unwrap, setInvokeOverride } from './ipc';
 export { setInvokeOverride };
+
+import { commands } from '@/bindings';
 
 // ---------- Query Commands ----------
 
@@ -114,71 +116,78 @@ export async function listSessions(args?: {
   sort?: string;
   group_by?: string;
 }): Promise<AcquisitionSession[]> {
-  return invoke<AcquisitionSession[]>('sessions_list', args);
+  void args; // generated fn takes no args; pass-through not needed
+  return unwrap(await commands.sessionsList()) as unknown as AcquisitionSession[];
 }
 
 export async function getSession(args: { id: string }): Promise<SessionDetail> {
-  return invoke<SessionDetail>('sessions_get', args);
+  return unwrap(await commands.sessionsGet(args.id)) as unknown as SessionDetail;
 }
 
 export async function getSessionsCalendar(args: {
   start_month: string;
   end_month: string;
 }): Promise<CalendarData> {
-  return invoke<CalendarData>('sessions_calendar', {
-    startMonth: args.start_month,
-    endMonth: args.end_month,
-  });
+  return unwrap(await commands.sessionsCalendar(args.start_month, args.end_month));
 }
 
 export async function listCalibrationMasters(args?: {
   group_by?: string;
   filters?: Record<string, unknown>;
 }): Promise<CalibrationMaster[]> {
-  return invoke<CalibrationMaster[]>('calibration_masters_list', args);
+  void args; // generated fn takes no args
+  return unwrap(await commands.calibrationMastersList()) as unknown as CalibrationMaster[];
 }
 
 export async function getCalibrationMaster(args: { id: string }): Promise<MasterDetail> {
-  return invoke<MasterDetail>('calibration_masters_get', args);
+  return unwrap(await commands.calibrationMastersGet(args.id)) as unknown as MasterDetail;
 }
 
 export async function getCalibrationMatches(args: {
   session_id: string;
 }): Promise<MatchCandidate[]> {
-  return invoke<MatchCandidate[]>('calibration_matches', { sessionId: args.session_id });
+  return unwrap(await commands.calibrationMatches(args.session_id)) as unknown as MatchCandidate[];
 }
 
 export async function listProjects(args?: {
   filters?: Record<string, unknown>;
 }): Promise<Project[]> {
-  return invoke<Project[]>('projects_list', args);
+  return unwrap(await commands.projectsList(args?.filters ?? null)) as unknown as Project[];
 }
 
 export async function getProject(args: { id: string }): Promise<ProjectDetail> {
-  return invoke<ProjectDetail>('projects_get', args);
+  return unwrap(await commands.projectsGet(args.id)) as unknown as ProjectDetail;
 }
 
 export async function listPlans(args?: {
   filters?: Record<string, unknown>;
 }): Promise<FilesystemPlan[]> {
+  // Generated plansList has 4 positional filter args (stateFilter, originFilter,
+  // createdAfter, limit); the old wrapper only forwarded a generic `filters` bag.
+  // The return type is PlanListResponse_Serialize { plans } vs FilesystemPlan[].
+  // No callers exist in the app — leave on invoke until Phase 3/4 cleanup.
+  void args;
   return invoke<FilesystemPlan[]>('plans_list', args);
 }
 
 export async function getPlan(args: { id: string }): Promise<PlanDetail> {
-  return invoke<PlanDetail>('plans_get', args);
+  return unwrap(await commands.plansGet(args.id)) as unknown as PlanDetail;
 }
 
 export async function listAuditEntries(args?: {
   filters?: Record<string, unknown>;
   pagination?: { offset: number; limit: number };
 }): Promise<{ entries: AuditEntry[]; total: number }> {
-  return invoke<{ entries: AuditEntry[]; total: number }>('audit_list', args);
+  const result = unwrap(
+    await commands.auditList(args?.filters ?? null, args?.pagination ?? null),
+  );
+  return result as unknown as { entries: AuditEntry[]; total: number };
 }
 
 export async function exportAudit(args?: {
   filters?: Record<string, unknown>;
 }): Promise<string> {
-  return invoke<string>('audit_export', args);
+  return unwrap(await commands.auditExport(args?.filters ?? null));
 }
 
 // ── Log stream (spec 019) ────────────────────────────────────────────────────
@@ -206,7 +215,17 @@ export async function logRecent(args?: {
   sourceFilter?: string[];
   windowSize?: number;
 }): Promise<LogRecentResponse> {
-  return invoke<LogRecentResponse>('log_recent', args ?? {});
+  // Generated fn takes 5 positional args; cast levelMin and sourceFilter to the
+  // generated union/array types — values are identical at runtime.
+  return unwrap(
+    await commands.logRecent(
+      args?.cursor ?? null,
+      (args?.levelMin ?? null) as 'debug' | 'info' | 'warn' | 'error' | null,
+      args?.includeDiagnostics ?? null,
+      (args?.sourceFilter ?? null) as Parameters<typeof commands.logRecent>[3],
+      args?.windowSize ?? null,
+    ),
+  ) as LogRecentResponse;
 }
 
 /** `log.export` — export filtered log entries to a JSON file. */
@@ -219,33 +238,43 @@ export async function logExport(args: {
   until?: string;
   includeDiagnostics?: boolean;
 }): Promise<LogExportResponse> {
-  return invoke<LogExportResponse>('log_export', args);
+  return unwrap(
+    await commands.logExport(
+      args.requestId,
+      args.filePath,
+      args.format ?? null,
+      (args.levelMin ?? null) as 'debug' | 'info' | 'warn' | 'error' | null,
+      args.since ?? null,
+      args.until ?? null,
+      args.includeDiagnostics ?? null,
+    ),
+  ) as LogExportResponse;
 }
 
 export async function getSettings(args: { scope: string }): Promise<SettingsData> {
-  return invoke<SettingsData>('settings_get', args);
+  return unwrap(await commands.settingsGet(args.scope)) as SettingsData;
 }
 
 export async function listRoots(): Promise<LibraryRoot[]> {
-  return invoke<LibraryRoot[]>('roots_list');
+  return unwrap(await commands.rootsList()) as unknown as LibraryRoot[];
 }
 
 export async function listEquipment(): Promise<Equipment[]> {
-  return invoke<Equipment[]>('equipment_list');
+  return unwrap(await commands.equipmentList()) as unknown as Equipment[];
 }
 
 export async function getReviewQueue(args?: {
   filter?: string;
 }): Promise<ReviewItem[]> {
-  return invoke<ReviewItem[]>('review_queue', args);
+  return unwrap(await commands.reviewQueue(args?.filter ?? null)) as unknown as ReviewItem[];
 }
 
 export async function getPreferences(): Promise<AppPreferences> {
-  return invoke<AppPreferences>('preferences_get');
+  return unwrap(await commands.preferencesGet()) as AppPreferences;
 }
 
 export async function searchGlobal(args: { query: string }): Promise<SearchResult[]> {
-  return invoke<SearchResult[]>('search_global', args);
+  return unwrap(await commands.searchGlobal(args.query)) as SearchResult[];
 }
 
 // ---------- Mutation Commands ----------
@@ -255,51 +284,59 @@ export async function transitionSession(args: {
   action: string;
   metadata?: Record<string, unknown>;
 }): Promise<AcquisitionSession> {
-  return invoke<AcquisitionSession>('sessions_transition', args);
+  return unwrap(
+    await commands.sessionsTransition(args.id, args.action, args.metadata ?? null),
+  ) as unknown as AcquisitionSession;
 }
 
 export async function splitSession(args: {
   id: string;
   split_at_index: number;
 }): Promise<{ original: AcquisitionSession; new: AcquisitionSession }> {
-  return invoke<{ original: AcquisitionSession; new: AcquisitionSession }>('sessions_split', {
-    id: args.id,
-    splitAtIndex: args.split_at_index,
-  });
+  return unwrap(await commands.sessionsSplit(args.id, args.split_at_index)) as unknown as {
+    original: AcquisitionSession;
+    new: AcquisitionSession;
+  };
 }
 
 export async function mergeSessions(args: {
   ids: string[];
 }): Promise<AcquisitionSession> {
-  return invoke<AcquisitionSession>('sessions_merge', args);
+  return unwrap(await commands.sessionsMerge(args.ids)) as unknown as AcquisitionSession;
 }
 
 export async function createProjectPlan(args: {
   wizard_state: Record<string, unknown>;
 }): Promise<FilesystemPlan> {
-  return invoke<FilesystemPlan>('projects_create_plan', { wizardState: args.wizard_state });
+  return unwrap(await commands.projectsCreatePlan(args.wizard_state)) as unknown as FilesystemPlan;
 }
 
 export async function approvePlan(args: {
   id: string;
   delete_acknowledged?: boolean;
 }): Promise<FilesystemPlan> {
+  // Generated plansApprove(id) returns PlanApproveResponse (not FilesystemPlan).
+  // delete_acknowledged was silently ignored by the old invoke path; no callers
+  // exist. Leave on invoke until Phase 4 teardown reworks the plan workflow.
+  void args.delete_acknowledged;
   return invoke<FilesystemPlan>('plans_approve', args);
 }
 
 export async function applyPlan(args: { id: string }): Promise<OperationHandle> {
+  // Generated plansApplyReal(planId, approvalToken) requires a token the wrapper
+  // doesn't carry. No callers exist. Leave on invoke (Phase 4 will remove it).
   return invoke<OperationHandle>('plans_apply_real', args);
 }
 
 export async function discardPlan(args: { id: string }): Promise<void> {
-  return invoke<void>('plans_discard', args);
+  await unwrap(await commands.plansDiscard(args.id));
 }
 
 export async function updateSettings(args: {
   scope: string;
   values: Record<string, unknown>;
 }): Promise<void> {
-  return invoke<void>('settings_update', args);
+  await unwrap(await commands.settingsUpdate(args.scope, args.values));
 }
 
 export async function registerRoot(args: {
@@ -307,27 +344,23 @@ export async function registerRoot(args: {
   category: string;
   scanSettings: Record<string, unknown>;
 }): Promise<LibraryRoot> {
-  return invoke<LibraryRoot>('roots_register', args);
+  return unwrap(
+    await commands.rootsRegister(args.path, args.category, args.scanSettings),
+  ) as unknown as LibraryRoot;
 }
 
 export async function remapRoot(args: {
   root_id: string;
   new_path: string;
 }): Promise<RemapVerification> {
-  return invoke<RemapVerification>('roots_remap', {
-    rootId: args.root_id,
-    newPath: args.new_path,
-  });
+  return unwrap(await commands.rootsRemap(args.root_id, args.new_path)) as unknown as RemapVerification;
 }
 
 export async function applyRootRemap(args: {
   root_id: string;
   verified: boolean;
 }): Promise<void> {
-  return invoke<void>('roots_remap_apply', {
-    rootId: args.root_id,
-    verified: args.verified,
-  });
+  await unwrap(await commands.rootsRemapApply(args.root_id, args.verified));
 }
 
 export async function startScan(args?: {
@@ -335,18 +368,18 @@ export async function startScan(args?: {
 }): Promise<OperationHandle> {
   // Backend expects camelCase `rootIds`; sending `root_ids` is silently ignored
   // and scans ALL roots instead of the requested subset.
-  return invoke<OperationHandle>('scan_start', { rootIds: args?.root_ids });
+  return unwrap(await commands.scanStart(args?.root_ids ?? null)) as unknown as OperationHandle;
 }
 
 export async function setPreference(args: {
   key: string;
   value: unknown;
 }): Promise<void> {
-  return invoke<void>('preferences_set', args);
+  await unwrap(await commands.preferencesSet(args.key, args.value));
 }
 
 export async function completeTourStep(args: { step: string }): Promise<void> {
-  return invoke<void>('tour_complete_step', args);
+  await unwrap(await commands.tourCompleteStep(args.step));
 }
 
 // ---------- First-Run / Batch Commands ----------
@@ -386,22 +419,29 @@ export interface FirstRunRestartResult {
 export async function registerRootBatch(args: {
   sources: BatchSourceEntry[];
 }): Promise<BatchRegisterResult> {
-  // The backend command takes a single `request: RegisterSourceBatchRequest`
-  // param, so the payload must be wrapped: { request: { sources } }. Sending
-  // { sources } top-level fails to deserialize on the real backend.
-  return invoke<BatchRegisterResult>('roots_register_batch', { request: args });
+  // The generated rootsRegisterBatch(request) wraps in `{ request }` automatically;
+  // pass `{ sources: args.sources }` as the RegisterSourceBatchRequest payload.
+  return unwrap(
+    await commands.rootsRegisterBatch({ sources: args.sources } as Parameters<
+      typeof commands.rootsRegisterBatch
+    >[0]),
+  ) as unknown as BatchRegisterResult;
 }
 
 export async function completeFirstRun(): Promise<FirstRunCompleteResult> {
-  return invoke<FirstRunCompleteResult>('firstrun_complete');
+  return unwrap(await commands.firstrunComplete()) as unknown as FirstRunCompleteResult;
 }
 
 export async function restartFirstRun(): Promise<FirstRunRestartResult> {
-  return invoke<FirstRunRestartResult>('firstrun_restart', { request: { confirm: true } });
+  return unwrap(
+    await commands.firstrunRestart({ confirm: true } as Parameters<
+      typeof commands.firstrunRestart
+    >[0]),
+  ) as unknown as FirstRunRestartResult;
 }
 
 export async function getFirstRunState(): Promise<FirstRunState> {
-  return invoke<FirstRunState>('firstrun_state');
+  return unwrap(await commands.firstrunState()) as unknown as FirstRunState;
 }
 
 // ---------- Pattern Commands (spec 015) ----------
@@ -451,7 +491,9 @@ export interface PatternPreviewResponse {
  * Never rejects — all error states are in the response body.
  */
 export async function patternValidate(pattern: PatternPart[]): Promise<PatternValidateResponse> {
-  return invoke<PatternValidateResponse>('pattern_validate', { request: { pattern } });
+  return unwrap(
+    await commands.patternValidate({ pattern } as Parameters<typeof commands.patternValidate>[0]),
+  ) as PatternValidateResponse;
 }
 
 /**
@@ -462,9 +504,11 @@ export async function patternPreview(
   pattern: PatternPart[],
   sampleMetadata: MetadataBundle,
 ): Promise<PatternPreviewResponse> {
-  return invoke<PatternPreviewResponse>('pattern_preview', {
-    request: { pattern, sampleMetadata },
-  });
+  return unwrap(
+    await commands.patternPreview(
+      { pattern, sampleMetadata } as Parameters<typeof commands.patternPreview>[0],
+    ),
+  ) as PatternPreviewResponse;
 }
 
 // ── Project commands (spec 008) ───────────────────────────────────────────────
@@ -473,52 +517,54 @@ export async function patternPreview(
 export async function listProjects008(args?: {
   filters?: unknown;
 }): Promise<ProjectSummaryDto[]> {
-  return invoke<ProjectSummaryDto[]>('projects_list', { filters: args?.filters ?? null });
+  return unwrap(await commands.projectsList(args?.filters ?? null)) as ProjectSummaryDto[];
 }
 
 /** Get a single project with sources and channels. */
 export async function getProject008(args: { id: string }): Promise<ProjectDetailDto> {
-  return invoke<ProjectDetailDto>('projects_get', { id: args.id });
+  return unwrap(await commands.projectsGet(args.id)) as ProjectDetailDto;
 }
 
 /** Create a new project (validates, persists, generates folder plan). */
 export async function createProject(args: ProjectCreateRequest): Promise<ProjectCreateResult> {
-  return invoke<ProjectCreateResult>('projects_create', { req: args });
+  return unwrap(
+    await commands.projectsCreate(args as Parameters<typeof commands.projectsCreate>[0]),
+  ) as unknown as ProjectCreateResult;
 }
 
 /** Update name, tool, or notes on an existing project. */
 export async function updateProject(args: ProjectUpdateRequest): Promise<ProjectUpdateResult> {
-  return invoke<ProjectUpdateResult>('projects_update', { req: args });
+  return unwrap(
+    await commands.projectsUpdate(args as Parameters<typeof commands.projectsUpdate>[0]),
+  ) as unknown as ProjectUpdateResult;
 }
 
 /** Link an Inventory session to a project as a source. */
 export async function addProjectSource(
   args: ProjectSourceAddRequest,
 ): Promise<ProjectSourceAddResult> {
-  return invoke<ProjectSourceAddResult>('projects_source_add', { req: args });
+  return unwrap(await commands.projectsSourceAdd(args)) as unknown as ProjectSourceAddResult;
 }
 
 /** Unlink a source from a project. */
 export async function removeProjectSource(
   args: ProjectSourceRemoveRequest,
 ): Promise<ProjectSourceRemoveResult> {
-  return invoke<ProjectSourceRemoveResult>('projects_source_remove', { req: args });
+  return unwrap(await commands.projectsSourceRemove(args)) as unknown as ProjectSourceRemoveResult;
 }
 
 /** Re-infer channels from all linked sources (discards manual overrides). */
 export async function reinferProjectChannels(
   args: ProjectChannelsReinferRequest,
 ): Promise<ProjectChannelsReinferResult> {
-  return invoke<ProjectChannelsReinferResult>('projects_channels_reinfer', { req: args });
+  return unwrap(await commands.projectsChannelsReinfer(args)) as unknown as ProjectChannelsReinferResult;
 }
 
 /** Dismiss the channel-drift banner without re-inferring. */
 export async function dismissProjectChannelDrift(
   args: ProjectChannelsDismissDriftRequest,
 ): Promise<ProjectChannelsDismissDriftResult> {
-  return invoke<ProjectChannelsDismissDriftResult>('projects_channels_dismiss_drift', {
-    req: args,
-  });
+  return unwrap(await commands.projectsChannelsDismissDrift(args)) as unknown as ProjectChannelsDismissDriftResult;
 }
 
 // ── Lifecycle transition commands (spec 009) ──────────────────────────────────
@@ -585,9 +631,11 @@ export interface LifecycleTransitionResponse {
 export async function applyProjectLifecycleTransition(
   req: ProjectLifecycleTransitionRequest,
 ): Promise<LifecycleTransitionResponse> {
-  return invoke<LifecycleTransitionResponse>('lifecycle_transition_apply', {
-    request: { project: req },
-  });
+  return unwrap(
+    await commands.lifecycleTransitionApply(
+      { project: req } as Parameters<typeof commands.lifecycleTransitionApply>[0],
+    ),
+  ) as LifecycleTransitionResponse;
 }
 
 // ── Inbox commands (spec 005) ─────────────────────────────────────────────────
@@ -596,7 +644,7 @@ export async function applyProjectLifecycleTransition(
 export async function inboxScanFolder(
   req: InboxScanFolderRequest,
 ): Promise<InboxScanFolderResponse> {
-  return invoke<InboxScanFolderResponse>('inbox_scan_folder', { req });
+  return unwrap(await commands.inboxScanFolder(req));
 }
 
 /**
@@ -604,7 +652,7 @@ export async function inboxScanFolder(
  * Idempotent unless `forceRescan` is true.
  */
 export async function inboxClassify(req: InboxClassifyRequest): Promise<InboxClassifyResponse> {
-  return invoke<InboxClassifyResponse>('inbox_classify', { req });
+  return unwrap(await commands.inboxClassify(req)) as InboxClassifyResponse;
 }
 
 /**
@@ -612,14 +660,16 @@ export async function inboxClassify(req: InboxClassifyRequest): Promise<InboxCla
  * `action`: `"split"` for mixed items, `"confirm"` for `single_type`.
  */
 export async function inboxConfirm(req: InboxConfirmRequest): Promise<InboxConfirmResponse> {
-  return invoke<InboxConfirmResponse>('inbox_confirm', { req });
+  return unwrap(
+    await commands.inboxConfirm(req as Parameters<typeof commands.inboxConfirm>[0]),
+  );
 }
 
 /** Write manual frame-type overrides and re-aggregate the classification. */
 export async function inboxReclassify(
   req: InboxReclassifyRequest,
 ): Promise<InboxReclassifyResponse> {
-  return invoke<InboxReclassifyResponse>('inbox_reclassify', { req });
+  return unwrap(await commands.inboxReclassify(req)) as InboxReclassifyResponse;
 }
 
 /**
@@ -629,7 +679,7 @@ export async function inboxReclassify(
  * Results are capped at 500 (check `capped` flag for truncation).
  */
 export async function inboxList(): Promise<InboxListResponse> {
-  return invoke<InboxListResponse>('inbox_list');
+  return unwrap(await commands.inboxList());
 }
 
 // ── Calibration matching commands (spec 007) ──────────────────────────────────
@@ -729,14 +779,16 @@ export async function calibrationMatchSuggest(args: {
   sessionId: string;
   calibrationTypes?: CalibrationMatchType[];
 }): Promise<CalibrationMatchSuggestResponse> {
-  return invoke<CalibrationMatchSuggestResponse>('calibration_match_suggest', {
-    req: {
+  return unwrap(
+    await commands.calibrationMatchSuggest({
       contractVersion: '2.0.0',
       requestId: args.requestId,
       sessionId: args.sessionId,
-      calibrationTypes: args.calibrationTypes,
-    },
-  });
+      calibrationTypes: (args.calibrationTypes ?? null) as Parameters<
+        typeof commands.calibrationMatchSuggest
+      >[0]['calibrationTypes'],
+    }),
+  ) as CalibrationMatchSuggestResponse;
 }
 
 /**
@@ -749,15 +801,15 @@ export async function calibrationMatchAssign(args: {
   masterId: string;
   override: boolean;
 }): Promise<CalibrationMatchAssignResponse> {
-  return invoke<CalibrationMatchAssignResponse>('calibration_match_assign', {
-    req: {
+  return unwrap(
+    await commands.calibrationMatchAssign({
       contractVersion: '2.0.0',
       requestId: args.requestId,
       sessionId: args.sessionId,
       masterId: args.masterId,
       override: args.override,
-    },
-  });
+    }),
+  ) as CalibrationMatchAssignResponse;
 }
 
 /**
@@ -769,14 +821,16 @@ export async function calibrationMatchSuggestBatch(args: {
   sessionIds: string[];
   calibrationTypes?: CalibrationMatchType[];
 }): Promise<CalibrationMatchBatchResponse> {
-  return invoke<CalibrationMatchBatchResponse>('calibration_match_suggest_batch', {
-    req: {
+  return unwrap(
+    await commands.calibrationMatchSuggestBatch({
       contractVersion: '1.0',
       requestId: args.requestId,
       sessionIds: args.sessionIds,
-      calibrationTypes: args.calibrationTypes,
-    },
-  });
+      calibrationTypes: (args.calibrationTypes ?? null) as Parameters<
+        typeof commands.calibrationMatchSuggestBatch
+      >[0]['calibrationTypes'],
+    }),
+  ) as CalibrationMatchBatchResponse;
 }
 
 // ── Inventory commands (spec 006) ─────────────────────────────────────────────
@@ -805,7 +859,9 @@ export type {
  * Filters are applied server-side (source, frame type, review state).
  */
 export async function inventoryList(req: InventoryListRequest): Promise<InventoryListResponse> {
-  return invoke<InventoryListResponse>('inventory_list', { req });
+  return unwrap(
+    await commands.inventoryList(req as Parameters<typeof commands.inventoryList>[0]),
+  ) as InventoryListResponse;
 }
 
 /**
@@ -818,7 +874,11 @@ export async function inventoryList(req: InventoryListRequest): Promise<Inventor
 export async function inventorySessionReview(
   req: InventorySessionReviewRequest,
 ): Promise<InventorySessionReviewResponse> {
-  return invoke<InventorySessionReviewResponse>('inventory_session_review', { req });
+  return unwrap(
+    await commands.inventorySessionReview(
+      req as Parameters<typeof commands.inventorySessionReview>[0],
+    ),
+  ) as InventorySessionReviewResponse;
 }
 
 // ── Spec 011: Processing Tool Launch ─────────────────────────────────────────
@@ -847,27 +907,27 @@ export type {
 
 /** List all seeded tool profiles joined with settings state. */
 export async function toolProfileList(): Promise<ToolProfileListResponse> {
-  return invoke<ToolProfileListResponse>('tools_list');
+  return unwrap(await commands.toolsList()) as ToolProfileListResponse;
 }
 
 /** Launch a processing tool for a project. */
 export async function toolLaunch(request: ToolLaunchRequest): Promise<ToolLaunchResponse> {
-  return invoke<ToolLaunchResponse>('tools_launch', { request });
+  return unwrap(await commands.toolsLaunch(request));
 }
 
 /** Save `executable_path` / enabled for a tool. */
 export async function toolUpdate(request: UpdateProcessingTool): Promise<ToolProfileSummary> {
-  return invoke<ToolProfileSummary>('tools_update', { request });
+  return unwrap(await commands.toolsUpdate(request)) as ToolProfileSummary;
 }
 
 /** Validate an executable path. */
 export async function toolValidatePath(path: string): Promise<ToolPathValidation> {
-  return invoke<ToolPathValidation>('tools_validate_path', { path });
+  return unwrap(await commands.toolsValidatePath(path));
 }
 
 /** Auto-detect installed tool paths. */
 export async function toolDiscover(request: ToolDiscoverRequest): Promise<ToolDiscoverResponse> {
-  return invoke<ToolDiscoverResponse>('tools_discover', { request });
+  return unwrap(await commands.toolsDiscover(request));
 }
 
 // ── Spec 012: Processing Artifact Observation ─────────────────────────────────
@@ -896,7 +956,7 @@ export type {
  * Defaults to `["present","missing"]` states when `includeStates` is empty.
  */
 export async function artifactList(request: ArtifactListRequest): Promise<ArtifactListResponse> {
-  return invoke<ArtifactListResponse>('artifact_list', { request });
+  return unwrap(await commands.artifactList(request));
 }
 
 /**
@@ -907,14 +967,14 @@ export async function artifactList(request: ArtifactListRequest): Promise<Artifa
 export async function artifactClassify(
   request: ArtifactClassifyRequest,
 ): Promise<ArtifactClassifyResponse> {
-  return invoke<ArtifactClassifyResponse>('artifact_classify', { request });
+  return unwrap(await commands.artifactClassify(request));
 }
 
 /**
  * `artifact.mark_resolved` — mark a `missing` artifact as user-resolved.
  */
 export async function artifactMarkResolved(request: ArtifactMarkResolvedRequest): Promise<void> {
-  return invoke<void>('artifact_mark_resolved', { request });
+  await unwrap(await commands.artifactMarkResolved(request));
 }
 
 // ── Spec 016: Source Protection (US2–US4) ─────────────────────────────────────
@@ -947,7 +1007,7 @@ export type {
 export async function sourceProtectionGet(
   sourceId: string | null,
 ): Promise<SourceProtectionGetResponse> {
-  return invoke<SourceProtectionGetResponse>('source_protection_get', { sourceId });
+  return unwrap(await commands.sourceProtectionGet(sourceId));
 }
 
 /**
@@ -959,7 +1019,11 @@ export async function sourceProtectionGet(
 export async function sourceProtectionSet(
   request: SourceProtectionSetRequest,
 ): Promise<SourceProtectionSetResponse> {
-  return invoke<SourceProtectionSetResponse>('source_protection_set', { request });
+  return unwrap(
+    await commands.sourceProtectionSet(
+      request as Parameters<typeof commands.sourceProtectionSet>[0],
+    ),
+  );
 }
 
 /**
@@ -972,7 +1036,7 @@ export async function sourceProtectionSet(
 export async function planProtectionCheck(
   planId: string,
 ): Promise<PlanProtectionCheckResponse> {
-  return invoke<PlanProtectionCheckResponse>('plan_protection_check_cmd', { planId });
+  return unwrap(await commands.planProtectionCheckCmd(planId));
 }
 
 /**
@@ -988,13 +1052,9 @@ export async function protectionPlanAcknowledged(
   resolvedLevel: string,
   reason: string,
 ): Promise<string> {
-  return invoke<string>('protection_plan_acknowledged', {
-    planId,
-    itemId,
-    sourceId,
-    resolvedLevel,
-    reason,
-  });
+  return unwrap(
+    await commands.protectionPlanAcknowledged(planId, itemId, sourceId, resolvedLevel, reason),
+  );
 }
 
 
@@ -1007,14 +1067,14 @@ export async function protectionPlanAcknowledged(
  * coordinates, source, simbadOid, and all aliases.
  */
 export async function getTargetDetail(req: TargetGetRequest): Promise<TargetDetailV3> {
-  return invoke<TargetDetailV3>('target_get', { req });
+  return unwrap(await commands.targetGet(req)) as TargetDetailV3;
 }
 
 /**
  * `target.list` — list all canonical targets ordered by primaryDesignation (spec 036 gen-3).
  */
 export async function listTargets(): Promise<TargetListItem[]> {
-  return invoke<TargetListItem[]>('target_list');
+  return unwrap(await commands.targetList()) as TargetListItem[];
 }
 
 /**
@@ -1026,7 +1086,7 @@ export async function listTargets(): Promise<TargetListItem[]> {
 export async function addTargetAlias(
   req: TargetAliasAddRequest,
 ): Promise<TargetAliasAddResult> {
-  return invoke<TargetAliasAddResult>('target_alias_add', { req });
+  return unwrap(await commands.targetAliasAdd(req));
 }
 
 /**
@@ -1038,7 +1098,7 @@ export async function addTargetAlias(
 export async function removeTargetAlias(
   req: TargetAliasRemoveRequest,
 ): Promise<TargetAliasRemoveResult> {
-  return invoke<TargetAliasRemoveResult>('target_alias_remove', { req });
+  return unwrap(await commands.targetAliasRemove(req));
 }
 
 /**
@@ -1049,7 +1109,7 @@ export async function removeTargetAlias(
 export async function setDisplayAlias(
   req: TargetDisplayAliasSetRequest,
 ): Promise<TargetDetailV3> {
-  return invoke<TargetDetailV3>('target_display_alias_set', { req });
+  return unwrap(await commands.targetDisplayAliasSet(req)) as TargetDetailV3;
 }
 
 /**
@@ -1061,7 +1121,7 @@ export async function setDisplayAlias(
 export async function clearDisplayAlias(
   req: TargetDisplayAliasClearRequest,
 ): Promise<TargetDetailV3> {
-  return invoke<TargetDetailV3>('target_display_alias_clear', { req });
+  return unwrap(await commands.targetDisplayAliasClear(req)) as TargetDetailV3;
 }
 
 // Re-export gen-3 target types for callers.
@@ -1100,7 +1160,9 @@ export const TARGET_SEARCH_CONTRACT_VERSION = '1.0';
  * SIMBAD enrichment is a separate `target.resolve` call.
  */
 export async function searchTargets(req: TargetSearchRequest): Promise<TargetSearchResponse> {
-  return invoke<TargetSearchResponse>('target_search', { req });
+  return unwrap(
+    await commands.targetSearch(req as Parameters<typeof commands.targetSearch>[0]),
+  ) as TargetSearchResponse;
 }
 
 /**
@@ -1117,7 +1179,9 @@ export async function searchTargets(req: TargetSearchRequest): Promise<TargetSea
 export async function resolveTarget(
   req: TargetResolveSimbadRequest,
 ): Promise<TargetResolveSimbadResponse> {
-  return invoke<TargetResolveSimbadResponse>('target_resolve', { req });
+  return unwrap(
+    await commands.targetResolve(req as Parameters<typeof commands.targetResolve>[0]),
+  ) as TargetResolveSimbadResponse;
 }
 
 // Re-export resolver-settings DTO so the settings UI imports from one place.
@@ -1128,13 +1192,13 @@ export type { ResolverSettings };
  * (online toggle, endpoint, debounce, request timeout) (spec 035, FR-015).
  */
 export async function getResolverSettings(): Promise<ResolverSettingsResponse> {
-  return invoke<ResolverSettingsResponse>('target_resolution_settings', {
-    req: {
+  return unwrap(
+    await commands.targetResolutionSettings({
       contractVersion: TARGET_SEARCH_CONTRACT_VERSION,
       requestId: crypto.randomUUID(),
       op: 'get',
-    },
-  });
+    }),
+  );
 }
 
 /**
@@ -1144,14 +1208,14 @@ export async function getResolverSettings(): Promise<ResolverSettingsResponse> {
 export async function updateResolverSettings(
   settings: ResolverSettings,
 ): Promise<ResolverSettingsResponse> {
-  return invoke<ResolverSettingsResponse>('target_resolution_settings_update', {
-    req: {
+  return unwrap(
+    await commands.targetResolutionSettingsUpdate({
       contractVersion: TARGET_SEARCH_CONTRACT_VERSION,
       requestId: crypto.randomUUID(),
       op: 'update',
       settings,
-    },
-  });
+    }),
+  );
 }
 
 // ── spec 024: Project Manifests & Notes ───────────────────────────────────────
@@ -1164,14 +1228,16 @@ export async function updateResolverSettings(
 export async function listManifests(
   request: ManifestListRequest,
 ): Promise<ManifestListResponse> {
-  return invoke<ManifestListResponse>('manifest_list', { request });
+  return unwrap(
+    await commands.manifestList(request as Parameters<typeof commands.manifestList>[0]),
+  ) as ManifestListResponse;
 }
 
 /**
  * `project.manifest.get` — fetch one manifest with its full structured body (spec 024).
  */
 export async function getManifest(request: ManifestGetRequest): Promise<ManifestGetResponse> {
-  return invoke<ManifestGetResponse>('manifest_get', { request });
+  return unwrap(await commands.manifestGet(request)) as ManifestGetResponse;
 }
 
 /**
@@ -1183,7 +1249,7 @@ export async function getManifest(request: ManifestGetRequest): Promise<Manifest
 export async function updateProjectNote(
   req: ProjectNoteUpdateRequest,
 ): Promise<ProjectNoteUpdateResult> {
-  return invoke<ProjectNoteUpdateResult>('note_update', { req });
+  return unwrap(await commands.noteUpdate(req));
 }
 
 /**
@@ -1192,14 +1258,14 @@ export async function updateProjectNote(
  * Returns `content: null` when no note has been saved yet.
  */
 export async function getProjectNote(req: ProjectNoteGetRequest): Promise<ProjectNoteGetResult> {
-  return invoke<ProjectNoteGetResult>('note_get', { req });
+  return unwrap(await commands.noteGet(req));
 }
 
 /**
  * `project.manifest.reveal_in_os` — open the manifest file in the OS file manager (spec 024).
  */
 export async function revealManifestInOs(request: ManifestRevealRequest): Promise<void> {
-  return invoke<void>('manifest_reveal_in_os', { request });
+  await unwrap(await commands.manifestRevealInOs(request));
 }
 
 // Re-export manifest types for callers.
