@@ -70,10 +70,8 @@ function phasePillVariant(phase: ScanPhase): PillVariant {
  *  failed — we still try to scan using the path directly). */
 function getRootId(flushResult: FlushResult, path: string): string {
   const row = flushResult.results.find((r) => r.path === path);
-  // FlushRowResult.root may carry the assigned rootId in successful rows.
-  // The actual shape is cast via the batch response; we read it if present.
-  const root = (row as { root?: { id?: string } } | undefined)?.root;
-  return root?.id ?? path;
+  // Successful rows carry the assigned rootId; fall back to the path if absent.
+  return row?.rootId ?? path;
 }
 
 // ── Per-source detection summary ──────────────────────────────────────────────
