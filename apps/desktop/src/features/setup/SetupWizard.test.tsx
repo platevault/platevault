@@ -76,6 +76,17 @@ vi.mock('@/api/commands', () => ({
   // if the Scan step is reached during tests that navigate that far.
   inboxScanFolder: vi.fn().mockResolvedValue({ rootId: 'root-mock', items: [] }),
   inboxClassify: vi.fn().mockResolvedValue(null),
+  // Processing-tool persistence: called in handleFinish before completeFirstRun.
+  toolUpdate: vi.fn().mockResolvedValue({
+    id: 'pixinsight',
+    name: 'PixInsight',
+    enabled: false,
+    configured: false,
+    available: false,
+    supportsOpenFolder: false,
+    autoDetected: false,
+    executablePath: null,
+  }),
 }));
 
 // Mock @tauri-apps/api/core to prevent any accidental live invoke.
@@ -417,5 +428,70 @@ describe('SetupWizard 5-step flow', () => {
       expect(pathElements).toHaveLength(1);
     });
     expect(screen.getByText(/1 folder selected/i)).toBeInTheDocument();
+  });
+
+  it('persists wizard processing-tool config to the backend when finishing', async () => {
+    // Access the mocked module to spy on calls.
+    const commands = await import('@/api/commands');
+    vi.mocked(commands.toolUpdate).mockClear();
+    vi.mocked(commands.completeFirstRun).mockClear();
+
+    // Seed at the Confirm step (step 3) with PixInsight enabled+pathed and
+    // Siril disabled, so we can verify both tools are sent to toolUpdate.
+    const seeded = {
+      currentStep: 3,
+      sources: [
+        { path: '/astro/lights', kind: 'light_frames', scanDepth: 'recursive' },
+        { path: '/astro/projects', kind: 'project', scanDepth: 'recursive' },
+      ],
+      catalogSettings: { selectedCatalogIds: [] },
+      tools: {
+        pixinsight: { enabled: true, path: '/Applications/PixInsight/PixInsight.app' },
+        siril: { enabled: false, path: null },
+      },
+    };
+    window.localStorage.setItem(WIZARD_STORAGE_KEY, JSON.stringify(seeded));
+
+    renderWizard();
+
+    // Confirm step renders.
+    expect(screen.getByText(/ready to go/i)).toBeInTheDocument();
+
+    // Advance to the Scan step by clicking "Start scan →".
+    const startScanBtn = screen.getByRole('button', { name: /start scan/i });
+    await act(async () => {
+      fireEvent.click(startScanBtn);
+      // Give flushToDB (mocked registerRootBatch) time to resolve.
+      await new Promise((r) => setTimeout(r, 0));
+    });
+
+    // StepScan mounts and immediately calls inboxScanFolder for each source.
+    // The mock resolves synchronously, so after a tick the scan is 'done'
+    // and the Finish button becomes enabled.
+    const finishBtn = await screen.findByTestId('finish-button');
+    await waitFor(() => expect(finishBtn).not.toBeDisabled());
+
+    await act(async () => {
+      fireEvent.click(finishBtn);
+      await new Promise((r) => setTimeout(r, 0));
+    });
+
+    // handleFinish (non-mock path: VITE_USE_MOCKS='false') must call toolUpdate
+    // once per tool before completeFirstRun.
+    await waitFor(() => expect(vi.mocked(commands.toolUpdate)).toHaveBeenCalledTimes(2));
+
+    expect(vi.mocked(commands.toolUpdate)).toHaveBeenCalledWith({
+      id: 'pixinsight',
+      enabled: true,
+      path: '/Applications/PixInsight/PixInsight.app',
+    });
+    expect(vi.mocked(commands.toolUpdate)).toHaveBeenCalledWith({
+      id: 'siril',
+      enabled: false,
+      path: null,
+    });
+
+    // completeFirstRun must be called exactly once, after the tool updates.
+    expect(vi.mocked(commands.completeFirstRun)).toHaveBeenCalledTimes(1);
   });
 });
