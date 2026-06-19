@@ -1,3 +1,4 @@
+#![allow(clippy::doc_markdown)]
 //! US1 coverage smoke tests — feature 037 (T006/T007).
 //!
 //! Validates that the real `SQLite` backend is wired correctly for:

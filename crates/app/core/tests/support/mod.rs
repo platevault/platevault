@@ -1,3 +1,4 @@
+#![allow(clippy::doc_markdown)]
 //! Shared real-backend integration-test harness — feature 037 (T005).
 //!
 //! Real SQLite + real migrations + a wired `SqliteLifecycleRepository` and
