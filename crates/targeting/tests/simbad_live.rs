@@ -1,27 +1,54 @@
-//! Gated online integration tests against the live SIMBAD CDS service.
+//! Online integration tests against the live SIMBAD CDS service (SC-004).
 //!
-//! These tests require a real network connection to simbad.cds.unistra.fr and
-//! are marked `#[ignore]` so they are excluded from the default `cargo test`
-//! run. Execute them explicitly when network access is available:
-//!
-//! ```text
-//! cargo test -p targeting --test simbad_live -- --ignored
-//! ```
-//!
-//! They exercise the real [`SimbadResolver`] end-to-end: two ADQL round-trips
+//! These exercise the real [`SimbadResolver`] end-to-end: two ADQL round-trips
 //! to the TAP sync endpoint, TSV parsing, alias set construction, and
 //! coordinate/object-type mapping.
 //!
+//! Unlike a `#[ignore]`-gated suite, these run as part of the **default**
+//! `cargo test` so SC-004 has live coverage. To stay deterministic where there
+//! is no network (offline dev, sandboxed CI), each test issues a **single**
+//! resolve via [`resolve_or_skip`] and distinguishes a transient outage
+//! (`Network`/`Timeout`/`Disabled` → log + skip, never fail) from a genuine
+//! data/parse mismatch (→ fail). One network request per test keeps SIMBAD
+//! from rate-limiting the suite. Set `ALM_SKIP_LIVE_SIMBAD=1` to force-skip.
+//!
 //! # Spec 035 coverage
 //!
-//! - **T024**: live SIMBAD round-trip for M 31 (Andromeda Galaxy) and NGC 7000
-//!   (North America Nebula) — verifies canonical identity, plausible ICRS
+//! - **T024 / SC-004**: live SIMBAD round-trip for M 31 (Andromeda Galaxy) and
+//!   NGC 7293 (Helix Nebula) — verifies canonical identity, plausible ICRS
 //!   coordinates, object type, and cross-ID alias set.
 
 use targeting::resolver::simbad::{SimbadConfig, SimbadResolver};
-use targeting::resolver::{AliasKind, ObjectType, Resolver};
+use targeting::resolver::{AliasKind, ObjectType, ResolveError, ResolvedIdentity, Resolver};
 
 // ── helpers ──────────────────────────────────────────────────────────────────
+
+/// Resolve `query` against live SIMBAD with exactly one network request.
+///
+/// Returns `Some(identity)` to proceed with assertions; returns `None` (after
+/// logging) to **skip** when the outage is transient — `ALM_SKIP_LIVE_SIMBAD`
+/// is set, or the resolver reports `Network`/`Timeout`/`Disabled` (offline dev,
+/// sandboxed CI, or a rate-limit hiccup). A genuine data failure
+/// (`NotFound`/`Ambiguous`/`Parse`) **panics**, so real regressions still fail.
+async fn resolve_or_skip(query: &str, test: &str) -> Option<ResolvedIdentity> {
+    if std::env::var_os("ALM_SKIP_LIVE_SIMBAD").is_some() {
+        eprintln!("SKIP {test}: ALM_SKIP_LIVE_SIMBAD set — SC-004 not exercised this run");
+        return None;
+    }
+    let resolver = SimbadResolver::new(&SimbadConfig::default())
+        .expect("SimbadResolver should build from default config");
+    match resolver.resolve(query).await {
+        Ok(identity) => Some(identity),
+        Err(e @ (ResolveError::Network(_) | ResolveError::Timeout(_) | ResolveError::Disabled)) => {
+            eprintln!(
+                "SKIP {test}: live SIMBAD unreachable resolving {query:?} ({e}) — \
+                 SC-004 live assertions not exercised this run"
+            );
+            None
+        }
+        Err(e) => panic!("live SIMBAD resolve of {query:?} failed (non-transient): {e}"),
+    }
+}
 
 /// Assert `actual` is within `tolerance` degrees of `expected`.
 fn assert_deg_approx(label: &str, actual: f64, expected: f64, tolerance: f64) {
@@ -42,8 +69,8 @@ fn has_alias(aliases: &[targeting::resolver::ResolvedAlias], needle: &str) -> bo
 
 /// Live SIMBAD resolution of M 31 (Andromeda Galaxy).
 ///
-/// Requires network access to simbad.cds.unistra.fr — ignored by default.
-/// Run with: `cargo test -p targeting --test simbad_live -- --ignored`
+/// Runs in the default suite; skips gracefully when SIMBAD is unreachable.
+/// Force-skip with `ALM_SKIP_LIVE_SIMBAD=1`.
 ///
 /// Assertions (tolerances generous; SIMBAD coords are precise but we avoid
 /// hard-coding excessive decimal places):
@@ -55,13 +82,10 @@ fn has_alias(aliases: &[targeting::resolver::ResolvedAlias], needle: &str) -> bo
 /// - a `CommonName` alias for "Andromeda Galaxy" is present
 /// - `simbad_oid` is populated (non-None)
 #[tokio::test]
-#[ignore = "requires network access to simbad.cds.unistra.fr; run with --ignored"]
 async fn live_resolve_m31_andromeda_galaxy() {
-    let resolver = SimbadResolver::new(&SimbadConfig::default())
-        .expect("SimbadResolver should build from default config");
-
-    let identity =
-        resolver.resolve("M 31").await.expect("live SIMBAD resolve of 'M 31' must succeed");
+    let Some(identity) = resolve_or_skip("M 31", "live_resolve_m31_andromeda_galaxy").await else {
+        return;
+    };
 
     // Coordinates — ICRS J2000 decimal degrees. M 31 centroid is well-known:
     // ra ≈ 10.6847°, dec ≈ 41.2692°. Tolerance ±0.5° covers any future
@@ -108,8 +132,8 @@ async fn live_resolve_m31_andromeda_galaxy() {
 
 /// Live SIMBAD resolution of NGC 7293 (Helix Nebula).
 ///
-/// Requires network access to simbad.cds.unistra.fr — ignored by default.
-/// Run with: `cargo test -p targeting --test simbad_live -- --ignored`
+/// Runs in the default suite; skips gracefully when SIMBAD is unreachable.
+/// Force-skip with `ALM_SKIP_LIVE_SIMBAD=1`.
 ///
 /// NGC 7293 is classified as `PN` (planetary nebula) in SIMBAD — one of the
 /// most stable object-type assignments in the database. Confirmed live:
@@ -123,13 +147,11 @@ async fn live_resolve_m31_andromeda_galaxy() {
 /// - `simbad_oid` is populated
 /// - alias set is non-empty
 #[tokio::test]
-#[ignore = "requires network access to simbad.cds.unistra.fr; run with --ignored"]
 async fn live_resolve_ngc7293_helix_nebula() {
-    let resolver = SimbadResolver::new(&SimbadConfig::default())
-        .expect("SimbadResolver should build from default config");
-
-    let identity =
-        resolver.resolve("NGC 7293").await.expect("live SIMBAD resolve of 'NGC 7293' must succeed");
+    let Some(identity) = resolve_or_skip("NGC 7293", "live_resolve_ngc7293_helix_nebula").await
+    else {
+        return;
+    };
 
     // Coordinates — Helix Nebula centroid: ra ≈ 337.41°, dec ≈ −20.84°.
     assert_deg_approx("ra_deg", identity.ra_deg, 337.4, 1.0);
