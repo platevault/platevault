@@ -82,6 +82,8 @@ export interface AppPreferences {
   sessionsView: 'list' | 'calendar';
   tourCompleted: { step1: boolean; step2: boolean; step3: boolean };
   setupCompleted: boolean;
+  /** Default scan depth applied to newly added source folders (first-run config). */
+  defaultScanDepth: 'recursive' | 'single';
 }
 
 export interface SourceMap {

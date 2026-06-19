@@ -1,23 +1,27 @@
 /// <reference types="@testing-library/jest-dom" />
 /**
- * StepCatalogs tests — spec 035 (repurposed first-run "Target resolution" step).
+ * StepCatalogs tests — first-run "Configuration" step.
  *
- * The step no longer downloads catalogs (spec-014 backend removed). It now shows
- * the SIMBAD online-resolution toggle plus an explanatory note. These tests
- * confirm the new content and the absence of any catalog-download affordance.
+ * The step no longer downloads catalogs (spec-014 backend removed). It is now a
+ * small Configuration screen: SIMBAD online-resolution toggle, display density,
+ * default source protection, default scan depth, and a disabled theme control.
  */
 
 import { render, screen, waitFor } from '@testing-library/react';
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 
-const { mockGet, mockUpdate } = vi.hoisted(() => ({
+const { mockGet, mockUpdate, mockGetSettings, mockUpdateSettings } = vi.hoisted(() => ({
   mockGet: vi.fn(),
   mockUpdate: vi.fn(),
+  mockGetSettings: vi.fn(),
+  mockUpdateSettings: vi.fn(),
 }));
 
 vi.mock('@/api/commands', () => ({
   getResolverSettings: mockGet,
   updateResolverSettings: mockUpdate,
+  getSettings: mockGetSettings,
+  updateSettings: mockUpdateSettings,
 }));
 
 import { StepCatalogs, DEFAULT_CATALOG_SETTINGS } from './StepCatalogs';
@@ -25,6 +29,8 @@ import { StepCatalogs, DEFAULT_CATALOG_SETTINGS } from './StepCatalogs';
 beforeEach(() => {
   mockGet.mockReset();
   mockUpdate.mockReset();
+  mockGetSettings.mockReset();
+  mockUpdateSettings.mockReset();
   mockGet.mockResolvedValue({
     contractVersion: '1.0',
     requestId: 'r',
@@ -35,31 +41,40 @@ beforeEach(() => {
       requestTimeoutSecs: 10,
     },
   });
+  mockGetSettings.mockResolvedValue({ values: { defaultProtection: 'protected' } });
+  mockUpdateSettings.mockResolvedValue(undefined);
 });
 
-describe('StepCatalogs (Target resolution)', () => {
+function renderStep() {
+  return render(
+    <StepCatalogs settings={DEFAULT_CATALOG_SETTINGS} onSettingsChange={vi.fn()} />,
+  );
+}
+
+describe('StepCatalogs (Configuration)', () => {
   it('renders the SIMBAD online-resolution toggle', async () => {
-    render(
-      <StepCatalogs settings={DEFAULT_CATALOG_SETTINGS} onSettingsChange={vi.fn()} />,
-    );
+    renderStep();
     await waitFor(() => expect(mockGet).toHaveBeenCalled());
-    expect(
-      screen.getByLabelText('Enable online SIMBAD resolution'),
-    ).toBeInTheDocument();
+    expect(screen.getByLabelText('Enable online SIMBAD resolution')).toBeInTheDocument();
   });
 
-  it('explains on-demand SIMBAD resolution with a bundled seed', () => {
-    render(
-      <StepCatalogs settings={DEFAULT_CATALOG_SETTINGS} onSettingsChange={vi.fn()} />,
-    );
-    expect(screen.getAllByText(/SIMBAD/).length).toBeGreaterThan(0);
-    expect(screen.getAllByText(/bundled seed/i).length).toBeGreaterThan(0);
+  it('renders the display density, protection, and scan-depth controls', async () => {
+    renderStep();
+    await waitFor(() => expect(mockGetSettings).toHaveBeenCalled());
+    expect(screen.getByLabelText('Default source protection')).toBeInTheDocument();
+    expect(screen.getByLabelText('Default scan depth')).toBeInTheDocument();
+    // DensitySelector exposes a radio group labelled "Display density".
+    expect(screen.getByRole('radiogroup', { name: /display density/i })).toBeInTheDocument();
+  });
+
+  it('shows a disabled theme control marked coming soon', () => {
+    renderStep();
+    const theme = screen.getByLabelText('Theme (coming soon)') as HTMLSelectElement;
+    expect(theme).toBeDisabled();
   });
 
   it('shows no catalog-download affordance', () => {
-    render(
-      <StepCatalogs settings={DEFAULT_CATALOG_SETTINGS} onSettingsChange={vi.fn()} />,
-    );
+    renderStep();
     expect(screen.queryByRole('button', { name: /download/i })).toBeNull();
   });
 });

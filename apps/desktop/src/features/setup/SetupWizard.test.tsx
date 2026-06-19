@@ -69,6 +69,9 @@ vi.mock('@/api/commands', () => ({
   updateResolverSettings: vi.fn().mockImplementation((settings) =>
     Promise.resolve({ contractVersion: '1.0', requestId: 'r', settings }),
   ),
+  // Configuration step also reads/writes the default source-protection setting.
+  getSettings: vi.fn().mockResolvedValue({ values: { defaultProtection: 'protected' } }),
+  updateSettings: vi.fn().mockResolvedValue(undefined),
 }));
 
 // Mock @tauri-apps/api/core to prevent any accidental live invoke.
