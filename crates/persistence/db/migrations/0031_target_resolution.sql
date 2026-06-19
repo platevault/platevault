@@ -44,7 +44,10 @@ CREATE TABLE IF NOT EXISTS canonical_target (
     ra_deg              REAL    NOT NULL CHECK (ra_deg  >= 0   AND ra_deg  < 360),
     dec_deg             REAL    NOT NULL CHECK (dec_deg >= -90 AND dec_deg <= 90),
     source              TEXT    NOT NULL CHECK (source IN ('seed', 'resolved', 'user-override')),
-    resolved_at         TEXT    NOT NULL                  -- RFC 3339 UTC
+    resolved_at         TEXT    NOT NULL,                 -- RFC 3339 UTC
+    -- spec 036: optional user-owned display label. NULL = show primary_designation.
+    -- Presentation only — never matched/normalized; preserved across re-resolution.
+    display_alias       TEXT
 );
 
 -- Dedup uniqueness applies only when an oid is present (seed/override rows may be null).
@@ -61,7 +64,8 @@ CREATE TABLE IF NOT EXISTS target_alias (
     target_id   TEXT NOT NULL REFERENCES canonical_target(id) ON DELETE CASCADE,
     alias       TEXT NOT NULL,                            -- display designation / NAME common name
     normalized  TEXT NOT NULL,                            -- normalized form for matching (spec 013)
-    kind        TEXT NOT NULL CHECK (kind IN ('designation', 'common_name')),
+    -- spec 036: 'user' marks a user-added alias (only these are user-removable).
+    kind        TEXT NOT NULL CHECK (kind IN ('designation', 'common_name', 'user')),
     UNIQUE (target_id, normalized)
 );
 

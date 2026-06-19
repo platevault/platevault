@@ -10,15 +10,15 @@ then tests. The phase gate is `cargo build`/`cargo test` green at each phase end
 
 ## Phase 1: Setup
 
-- [ ] T001 Confirm a clean baseline on a fresh DB: `cargo build --workspace` green on branch `036-retire-legacy-targets` before changes.
+- [X] T001 Confirm a clean baseline on a fresh DB: `cargo build --workspace` green on branch `036-retire-legacy-targets` before changes.
 
 ## Phase 2: Foundational — schema (blocks all user stories)
 
-- [ ] T002 Edit `crates/persistence/db/migrations/0031_target_resolution.sql`: add nullable `display_alias TEXT` to the `canonical_target` CREATE, and extend the `target_alias.kind` CHECK to `('designation','common_name','user')`.
+- [X] T002 Edit `crates/persistence/db/migrations/0031_target_resolution.sql`: add nullable `display_alias TEXT` to the `canonical_target` CREATE, and extend the `target_alias.kind` CHECK to `('designation','common_name','user')`.
 - [ ] T003 ~~Edit 0002 to remove the gen-1 `target` table~~ **DEFERRED** (user decision 2026-06-19): leave `0002_lifecycle.sql` untouched. The dormant gen-1 singular generation (`target`/`project`/`catalog_equivalence` + NOT-NULL FK chains) is a separate future cleanup. This spec only makes gen-1 `target` unreferenced via T007 (drop the inventory join).
-- [ ] T004 Delete `crates/persistence/db/migrations/0017_targets.sql` (entire gen-2 target schema).
-- [ ] T005 Delete `crates/persistence/db/migrations/0027_target_identity.sql` (gen-2 extensions + legacy FK columns `acq_target_id`, `projects.target_id`, `project_sources.target_id`).
-- [ ] T006 Grep all later migrations (0028–0035) for references to removed objects; fix/confirm none. Then delete the local DB and run migrations to confirm a fresh DB builds cleanly (`cargo build -p persistence_db`; migration smoke).
+- [X] T004 Delete `crates/persistence/db/migrations/0017_targets.sql` (entire gen-2 target schema).
+- [X] T005 Delete `crates/persistence/db/migrations/0027_target_identity.sql` (gen-2 extensions + legacy FK columns `acq_target_id`, `projects.target_id`, `project_sources.target_id`).
+- [X] T006 Grep all later migrations (0028–0035) for references to removed objects; fix/confirm none. Then delete the local DB and run migrations to confirm a fresh DB builds cleanly (`cargo build -p persistence_db`; migration smoke).
 
 ## Phase 3: User Story 1 — One source of target truth (P1)
 

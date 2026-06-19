@@ -8,7 +8,7 @@
       "enabled": true,
       "priority": 10,
       "registered_commands": {
-        "codex": [
+        "claude": [
           "speckit.archive.run"
         ]
       },
@@ -22,7 +22,7 @@
       "enabled": true,
       "priority": 10,
       "registered_commands": {
-        "codex": [
+        "claude": [
           "speckit.brownfield.scan",
           "speckit.brownfield.bootstrap",
           "speckit.brownfield.validate",
@@ -39,7 +39,7 @@
       "enabled": true,
       "priority": 10,
       "registered_commands": {
-        "codex": [
+        "claude": [
           "speckit.bugfix.report",
           "speckit.bugfix.patch",
           "speckit.bugfix.verify"
@@ -55,7 +55,7 @@
       "enabled": true,
       "priority": 10,
       "registered_commands": {
-        "codex": [
+        "claude": [
           "speckit.checkpoint.commit"
         ]
       },
@@ -69,7 +69,7 @@
       "enabled": true,
       "priority": 10,
       "registered_commands": {
-        "codex": [
+        "claude": [
           "speckit.cleanup.run",
           "speckit.cleanup"
         ]
@@ -84,7 +84,7 @@
       "enabled": true,
       "priority": 10,
       "registered_commands": {
-        "codex": [
+        "claude": [
           "speckit.conduct.run"
         ]
       },
@@ -98,7 +98,7 @@
       "enabled": true,
       "priority": 10,
       "registered_commands": {
-        "codex": [
+        "claude": [
           "speckit.critique.run"
         ]
       },
@@ -112,7 +112,7 @@
       "enabled": true,
       "priority": 10,
       "registered_commands": {
-        "codex": [
+        "claude": [
           "speckit.diagram.workflow",
           "speckit.diagram.status",
           "speckit.diagram.dependencies"
@@ -128,7 +128,7 @@
       "enabled": true,
       "priority": 10,
       "registered_commands": {
-        "codex": [
+        "claude": [
           "speckit.doctor.check",
           "speckit.doctor"
         ]
@@ -143,7 +143,7 @@
       "enabled": true,
       "priority": 10,
       "registered_commands": {
-        "codex": [
+        "claude": [
           "speckit.fix-findings.run",
           "speckit.fix-findings"
         ]
@@ -158,7 +158,7 @@
       "enabled": true,
       "priority": 10,
       "registered_commands": {
-        "codex": [
+        "claude": [
           "speckit.fleet.run",
           "speckit.fleet.review"
         ]
@@ -173,7 +173,7 @@
       "enabled": true,
       "priority": 10,
       "registered_commands": {
-        "codex": [
+        "claude": [
           "speckit.github-issues.import",
           "speckit.github-issues.sync",
           "speckit.github-issues.link"
@@ -189,7 +189,7 @@
       "enabled": true,
       "priority": 10,
       "registered_commands": {
-        "codex": [
+        "claude": [
           "speckit.iterate.define",
           "speckit.iterate.apply"
         ]
@@ -204,7 +204,7 @@
       "enabled": true,
       "priority": 10,
       "registered_commands": {
-        "codex": [
+        "claude": [
           "speckit.onboard.start",
           "speckit.onboard.explain",
           "speckit.onboard.trail",
@@ -224,7 +224,7 @@
       "enabled": true,
       "priority": 10,
       "registered_commands": {
-        "codex": [
+        "claude": [
           "speckit.optimize.run",
           "speckit.optimize.tokens",
           "speckit.optimize.learn"
@@ -240,7 +240,7 @@
       "enabled": true,
       "priority": 10,
       "registered_commands": {
-        "codex": [
+        "claude": [
           "speckit.qa.run"
         ]
       },
@@ -254,7 +254,7 @@
       "enabled": true,
       "priority": 10,
       "registered_commands": {
-        "codex": [
+        "claude": [
           "speckit.reconcile.run"
         ]
       },
@@ -268,7 +268,7 @@
       "enabled": true,
       "priority": 10,
       "registered_commands": {
-        "codex": [
+        "claude": [
           "speckit.refine.update",
           "speckit.refine.propagate",
           "speckit.refine.diff",
@@ -285,7 +285,7 @@
       "enabled": true,
       "priority": 10,
       "registered_commands": {
-        "codex": [
+        "claude": [
           "speckit.retro.run"
         ]
       },
@@ -299,7 +299,7 @@
       "enabled": true,
       "priority": 10,
       "registered_commands": {
-        "codex": [
+        "claude": [
           "speckit.review.run",
           "speckit.review.code",
           "speckit.review.comments",
@@ -319,7 +319,7 @@
       "enabled": true,
       "priority": 10,
       "registered_commands": {
-        "codex": [
+        "claude": [
           "speckit.security-review.audit",
           "speckit.security-review.staged",
           "speckit.security-review.branch",
@@ -339,7 +339,7 @@
       "enabled": true,
       "priority": 10,
       "registered_commands": {
-        "codex": [
+        "claude": [
           "speckit.status.show",
           "speckit.status"
         ]
@@ -354,7 +354,7 @@
       "enabled": true,
       "priority": 10,
       "registered_commands": {
-        "codex": [
+        "claude": [
           "speckit.tinyspec.tinyspec",
           "speckit.tinyspec.implement",
           "speckit.tinyspec.classify"
@@ -370,7 +370,7 @@
       "enabled": true,
       "priority": 10,
       "registered_commands": {
-        "codex": [
+        "claude": [
           "speckit.verify.run"
         ]
       },
@@ -384,7 +384,7 @@
       "enabled": true,
       "priority": 10,
       "registered_commands": {
-        "codex": [
+        "claude": [
           "speckit.verify-tasks.run",
           "speckit.verify-tasks"
         ]
@@ -399,7 +399,7 @@
       "enabled": true,
       "priority": 10,
       "registered_commands": {
-        "codex": [
+        "claude": [
           "speckit.worktree.create",
           "speckit.worktree.list",
           "speckit.worktree.clean"
@@ -432,15 +432,6 @@
           "speckit.memory-md.audit",
           "speckit.memory-md.log-finding",
           "speckit.memory-md.token-report"
-        ],
-        "codex": [
-          "speckit.memory-md.init",
-          "speckit.memory-md.plan-with-memory",
-          "speckit.memory-md.capture",
-          "speckit.memory-md.capture-from-diff",
-          "speckit.memory-md.audit",
-          "speckit.memory-md.log-finding",
-          "speckit.memory-md.token-report"
         ]
       },
       "registered_skills": [],
@@ -466,13 +457,6 @@
           "speckit.git.remote",
           "speckit.git.initialize",
           "speckit.git.commit"
-        ],
-        "codex": [
-          "speckit.git.feature",
-          "speckit.git.validate",
-          "speckit.git.remote",
-          "speckit.git.initialize",
-          "speckit.git.commit"
         ]
       },
       "registered_skills": [],
@@ -491,11 +475,6 @@
           "speckit.agent-assign.execute"
         ],
         "claude": [
-          "speckit.agent-assign.assign",
-          "speckit.agent-assign.validate",
-          "speckit.agent-assign.execute"
-        ],
-        "codex": [
           "speckit.agent-assign.assign",
           "speckit.agent-assign.validate",
           "speckit.agent-assign.execute"
