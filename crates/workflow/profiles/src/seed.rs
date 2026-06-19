@@ -1,7 +1,7 @@
 //! Seeded processing-tool profiles (spec 011 T002).
 //!
-//! Includes PixInsight, Siril, and Planetary Suite with per-OS bundle IDs
-//! (R-BundleId) and args templates (R3).
+//! Includes PixInsight and Siril with per-OS bundle IDs (R-BundleId) and
+//! args templates (R3).
 //!
 //! `all()` returns a fixed-size array of owned `ToolProfile` values.
 //! `validate_seeds()` is called once at app boot to assert seed integrity.
@@ -30,23 +30,12 @@ fn siril_profile() -> ToolProfile {
     }
 }
 
-fn startools_profile() -> ToolProfile {
-    ToolProfile {
-        id: "startools",
-        name: "StarTools",
-        bundle_id: Some("com.startools.startools"),
-        args_template: vec![],
-        supports_open_folder: false,
-        detach_strategy: DetachStrategy::OpenBundleId,
-    }
-}
-
 /// Return all seeded processing-tool profiles as an owned `Vec`.
 ///
 /// Call `validate_seeds()` at app boot to assert integrity.
 #[must_use]
 pub fn all() -> Vec<ToolProfile> {
-    vec![pixinsight_profile(), siril_profile(), startools_profile()]
+    vec![pixinsight_profile(), siril_profile()]
 }
 
 /// Validate all seed profiles.
@@ -86,16 +75,6 @@ mod tests {
     }
 
     #[test]
-    fn planetary_suite_has_no_folder_token() {
-        let profile = find("startools").expect("startools must be seeded");
-        assert!(!profile.supports_open_folder);
-        assert!(
-            !profile.args_template.contains(&ArgsToken::Folder),
-            "startools must not have {{folder}} token"
-        );
-    }
-
-    #[test]
     fn pixinsight_supports_open_folder() {
         let p = find("pixinsight").expect("pixinsight must be seeded");
         assert!(p.supports_open_folder);
@@ -114,7 +93,7 @@ mod tests {
     }
 
     #[test]
-    fn three_seeds_are_registered() {
-        assert_eq!(all().len(), 3);
+    fn two_seeds_are_registered() {
+        assert_eq!(all().len(), 2);
     }
 }

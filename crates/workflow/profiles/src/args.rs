@@ -145,8 +145,8 @@ mod tests {
     }
 
     #[test]
-    fn render_planetary_empty_template() {
-        // StarTools has no args template tokens; render should return empty vec.
+    fn render_empty_template() {
+        // An empty args template renders to an empty vec.
         let ctx = RenderContext { folder: Some("/project"), file: None };
         assert_eq!(render(&[], &ctx), Vec::<String>::new());
     }

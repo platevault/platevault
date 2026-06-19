@@ -1,23 +1,48 @@
 //! Spec 030 status summary command (T023).
 //!
-//! Returns a `StatusSummary` DTO with zeroed counts. Real aggregation from
-//! the database will be wired in a later task.
+//! Returns a `StatusSummary` DTO populated from the database.
 
-use contracts_core::status::{LibraryStats, StatusSummary};
+use std::path::Path;
+
+use contracts_core::status::{LibraryStats, RootHealth, StatusSummary};
+use tauri::State;
+
+use crate::commands::lifecycle::AppState;
 
 /// `status.summary` — returns current library status overview.
 ///
+/// Roots are fetched from `registered_sources`; each root's `online` flag is
+/// set by testing whether its path is currently accessible on the filesystem.
+///
 /// # Errors
-/// Returns `Err(String)` on failure; the stub never fails.
+/// Returns `Err(String)` on database failure.
 #[tauri::command]
 #[specta::specta]
-pub async fn status_summary() -> Result<StatusSummary, String> {
-    tracing::debug!("stub: status.summary");
+pub async fn status_summary(state: State<'_, AppState>) -> Result<StatusSummary, String> {
+    tracing::debug!("status.summary");
+
+    let sources = persistence_db::repositories::first_run::list_sources(state.repo.pool())
+        .await
+        .map_err(|e| e.to_string())?;
+
+    let roots: Vec<RootHealth> = sources
+        .into_iter()
+        .map(|s| {
+            let online = Path::new(&s.path).exists();
+            RootHealth {
+                id: s.source_id,
+                path: s.path,
+                kind: format!("{:?}", s.kind).to_lowercase(),
+                online,
+            }
+        })
+        .collect();
+
     Ok(StatusSummary {
         inbox_count: 0,
         library: LibraryStats { sessions: 0, calibration_sets: 0, targets: 0, projects: 0 },
         cleanup_reclaimable_bytes: 0,
         volumes: vec![],
-        roots: vec![],
+        roots,
     })
 }

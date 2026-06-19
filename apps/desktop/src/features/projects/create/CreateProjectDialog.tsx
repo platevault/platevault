@@ -35,7 +35,6 @@ import type { ProjectCreateResult } from '@/bindings/index';
 const TOOL_OPTIONS: RadioOption[] = [
   { value: 'PixInsight', label: 'PixInsight', desc: 'WBPP, StarAlignment, integration' },
   { value: 'Siril', label: 'Siril', desc: 'Free open-source stacking' },
-  { value: 'Planetary Suite', label: 'Planetary Suite', desc: 'Planetary / lunar capture' },
 ];
 
 const MAX_NAME_LEN = 120;
@@ -138,7 +137,7 @@ export function CreateProjectDialog({ open, onClose, onSuccess }: CreateProjectD
       const result = await callCreateProject({
         requestId: crypto.randomUUID(),
         name: name.trim(),
-        tool: tool as 'PixInsight' | 'Siril' | 'Planetary Suite',
+        tool: tool as 'PixInsight' | 'Siril',
         path: path.trim(),
         initialSources: [],
         notes: notes.trim() || undefined,

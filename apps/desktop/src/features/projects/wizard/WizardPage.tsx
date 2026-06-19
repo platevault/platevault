@@ -71,10 +71,10 @@ const PROFILE_LABELS: Record<string, string> = {
 };
 
 // Map wizard workflowProfile to the ProjectTool enum expected by the backend.
-const PROFILE_TO_TOOL: Record<string, 'PixInsight' | 'Siril' | 'Planetary Suite'> = {
+const PROFILE_TO_TOOL: Record<string, 'PixInsight' | 'Siril'> = {
   pixinsight: 'PixInsight',
   siril: 'Siril',
-  planetary: 'Planetary Suite',
+  planetary: 'Siril',
 };
 
 export function WizardPage() {
