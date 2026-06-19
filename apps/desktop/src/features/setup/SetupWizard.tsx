@@ -3,7 +3,7 @@ import { useNavigate } from '@tanstack/react-router';
 import { WizardShell } from '@/ui/WizardShell';
 import { Btn } from '@/ui/Btn';
 import { setPreference } from '@/data/preferences';
-import { completeFirstRun } from '@/api/commands';
+import { completeFirstRun, toolUpdate } from '@/api/commands';
 import {
   StepSourceFolders,
   StepTools,
@@ -267,6 +267,14 @@ export function SetupWizard() {
     setIsFinishing(true);
     try {
       if (!isMockMode) {
+        // Persist processing-tool config from the wizard so Settings →
+        // Processing Tools reflects whatever the user set in Step 2.
+        const toolEntries: Array<{ id: string; enabled: boolean; path: string | null }> = [
+          { id: 'pixinsight', enabled: state.tools.pixinsight.enabled, path: state.tools.pixinsight.path },
+          { id: 'siril', enabled: state.tools.siril.enabled, path: state.tools.siril.path },
+        ];
+        await Promise.all(toolEntries.map((t) => toolUpdate({ id: t.id, enabled: t.enabled, path: t.path })));
+
         await completeFirstRun();
       }
 
