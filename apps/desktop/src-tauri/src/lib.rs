@@ -92,11 +92,10 @@ use crate::commands::settings::{
     settings_get, settings_restore_defaults, settings_source_override_set, settings_update,
 };
 use crate::commands::status::status_summary;
-use crate::commands::target_identity as target_identity_cmds;
 use crate::commands::target_lookup::{
-    target_lookup, target_resolution_settings, target_resolution_settings_update, target_resolve,
-    target_resolve_fits, target_search,
+    target_resolution_settings, target_resolution_settings_update, target_resolve, target_search,
 };
+use crate::commands::target_management as target_mgmt_cmds;
 use crate::commands::targets::{targets_get, targets_list};
 use crate::commands::tools::{
     tools_discover, tools_launch, tools_list, tools_update, tools_validate_path,
@@ -172,19 +171,17 @@ pub fn specta_builder() -> Builder<tauri::Wry> {
         calibration_match_suggest,
         calibration_match_assign,
         calibration_match_suggest_batch,
-        // targets
+        // targets (spec 029 stubs — legacy list/get)
         targets_list,
         targets_get,
-        // target identity (spec 023)
-        target_identity_cmds::target_get,
-        target_identity_cmds::target_note_update,
-        target_identity_cmds::target_alias_add,
-        target_identity_cmds::target_alias_remove,
-        target_identity_cmds::target_primary_rename,
-        // target lookup (spec 013) + resolve (spec 035 supersedes 013;
-        // spec-013 local resolution kept as target.resolve.fits)
-        target_lookup,
-        target_resolve_fits,
+        // target management (spec 036 — gen-3, canonical_target model)
+        target_mgmt_cmds::target_get,
+        target_mgmt_cmds::target_list,
+        target_mgmt_cmds::target_alias_add,
+        target_mgmt_cmds::target_alias_remove,
+        target_mgmt_cmds::target_display_alias_set,
+        target_mgmt_cmds::target_display_alias_clear,
+        // target resolve (spec 035 — SIMBAD cache-first resolution)
         target_resolve,
         // target search (spec 035, US1)
         target_search,
@@ -357,19 +354,17 @@ pub fn specta_builder() -> Builder<tauri::Wry> {
         calibration_match_suggest,
         calibration_match_assign,
         calibration_match_suggest_batch,
-        // targets
+        // targets (spec 029 stubs — legacy list/get)
         targets_list,
         targets_get,
-        // target identity (spec 023)
-        target_identity_cmds::target_get,
-        target_identity_cmds::target_note_update,
-        target_identity_cmds::target_alias_add,
-        target_identity_cmds::target_alias_remove,
-        target_identity_cmds::target_primary_rename,
-        // target lookup (spec 013) + resolve (spec 035 supersedes 013;
-        // spec-013 local resolution kept as target.resolve.fits)
-        target_lookup,
-        target_resolve_fits,
+        // target management (spec 036 — gen-3, canonical_target model)
+        target_mgmt_cmds::target_get,
+        target_mgmt_cmds::target_list,
+        target_mgmt_cmds::target_alias_add,
+        target_mgmt_cmds::target_alias_remove,
+        target_mgmt_cmds::target_display_alias_set,
+        target_mgmt_cmds::target_display_alias_clear,
+        // target resolve (spec 035 — SIMBAD cache-first resolution)
         target_resolve,
         // target search (spec 035, US1)
         target_search,

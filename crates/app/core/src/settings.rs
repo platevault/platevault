@@ -54,7 +54,6 @@ pub const ALL_V1_KEYS: &[&str] = &[
     "current_library_id",
     "devMode",
     "plans.list.default_age_cutoff_days",
-    "target_lookup.active_catalogs",
     "calibration.dark_temp_tolerance",
     "calibration.prefill_suggestion",
     "calibration.dark.override_penalty",
@@ -280,10 +279,7 @@ pub fn validate_value(key: &str, value: &Value) -> Result<(), ContractError> {
             }
         }
         // Array keys — basic type check only.
-        "pattern"
-        | "protectedCategories"
-        | "target_lookup.active_catalogs"
-        | "imagetyp_normalization.user_mappings" => {
+        "pattern" | "protectedCategories" | "imagetyp_normalization.user_mappings" => {
             if !value.is_array() {
                 return Err(invalid("must be an array"));
             }
@@ -484,11 +480,6 @@ fn apply_value_to_state(key: &str, value: Value, state: &mut SettingsState) {
                 state.plans_list_default_age_cutoff_days = v;
             }
         }
-        "target_lookup.active_catalogs" => {
-            if let Ok(v) = serde_json::from_value(value) {
-                state.target_lookup_active_catalogs = v;
-            }
-        }
         "calibration.dark_temp_tolerance" => {
             if let Some(v) = value.as_f64() {
                 state.calibration_dark_temp_tolerance = v;
@@ -549,9 +540,6 @@ fn default_value_for_key(key: &str) -> Value {
         "devMode" => Value::Bool(defaults.dev_mode),
         "plans.list.default_age_cutoff_days" => {
             serde_json::json!(defaults.plans_list_default_age_cutoff_days)
-        }
-        "target_lookup.active_catalogs" => {
-            serde_json::to_value(&defaults.target_lookup_active_catalogs).unwrap_or(Value::Null)
         }
         "calibration.dark_temp_tolerance" => {
             serde_json::json!(defaults.calibration_dark_temp_tolerance)

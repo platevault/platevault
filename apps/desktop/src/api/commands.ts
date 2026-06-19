@@ -63,15 +63,18 @@ import type {
   ProjectChannelsDismissDriftResult,
 } from '@/bindings/index';
 import type {
-  TargetGetResult_Serialize as TargetGetResult,
-  TargetNoteUpdateRequest,
-  TargetNoteUpdateResult,
+  // spec 036 gen-3 target management
+  TargetGetRequest,
+  TargetDetailV3_Deserialize as TargetDetailV3,
+  TargetListItem,
+  TargetAliasDto,
+  AliasKind as TargetAliasKind,
   TargetAliasAddRequest,
   TargetAliasAddResult,
   TargetAliasRemoveRequest,
   TargetAliasRemoveResult,
-  TargetPrimaryRenameRequest,
-  TargetPrimaryRenameResult,
+  TargetDisplayAliasSetRequest,
+  TargetDisplayAliasClearRequest,
   TargetOpError_Serialize as TargetOpError,
   // spec 035: SIMBAD target resolution
   TargetSearchRequest_Serialize as TargetSearchRequest,
@@ -142,14 +145,6 @@ export async function getCalibrationMatches(args: {
   session_id: string;
 }): Promise<MatchCandidate[]> {
   return invoke<MatchCandidate[]>('calibration.matches', args);
-}
-
-export async function listTargets(args?: { search?: string }): Promise<Target[]> {
-  return invoke<Target[]>('targets.list', args);
-}
-
-export async function getTarget(args: { id: string }): Promise<TargetDetail> {
-  return invoke<TargetDetail>('targets.get', args);
 }
 
 export async function listProjects(args?: {
@@ -980,35 +975,30 @@ export async function protectionPlanAcknowledged(
 }
 
 
-// ── Spec 023: Target Identity, History, and Notes ─────────────────────────────
+// ── Spec 036: Gen-3 target management ────────────────────────────────────────────
 
 /**
- * `target.get` — load the full target aggregate (spec 023).
+ * `target.get` — load full detail for a canonical target (spec 036 gen-3).
  *
- * Returns identity, aliases, catalog refs, sessions, projects, and notes for
- * a target by id. Uses the spec-023 backend (`target.get` command) rather
- * than the legacy `targets.get` stub.
+ * Returns primaryDesignation, displayAlias, effectiveLabel, objectType,
+ * coordinates, source, simbadOid, and all aliases.
  */
-export async function getTargetIdentity(args: {
-  targetId: string;
-}): Promise<TargetGetResult> {
-  return invoke<TargetGetResult>('target.get', args);
+export async function getTargetDetail(req: TargetGetRequest): Promise<TargetDetailV3> {
+  return invoke<TargetDetailV3>('target.get', { req });
 }
 
 /**
- * `target.note.update` — replace the per-target free-text note (spec 023).
+ * `target.list` — list all canonical targets ordered by primaryDesignation (spec 036 gen-3).
  */
-export async function updateTargetNote(
-  req: TargetNoteUpdateRequest,
-): Promise<TargetNoteUpdateResult> {
-  return invoke<TargetNoteUpdateResult>('target.note.update', { req });
+export async function listTargets(): Promise<TargetListItem[]> {
+  return invoke<TargetListItem[]>('target.list');
 }
 
 /**
- * `target.alias.add` — append an alias to a target (spec 023).
+ * `target.alias.add` — add a user alias to a target (spec 036 gen-3).
  *
- * Idempotent: re-adding an alias already on this target returns `added=false`.
- * Returns `alias.duplicate` error when the normalized alias belongs to another target.
+ * Only kind='user' aliases can be added via this command; SIMBAD designations
+ * and common names are managed by the resolver.
  */
 export async function addTargetAlias(
   req: TargetAliasAddRequest,
@@ -1017,9 +1007,10 @@ export async function addTargetAlias(
 }
 
 /**
- * `target.alias.remove` — remove an alias from a target (spec 023).
+ * `target.alias.remove` — remove a user alias from a target by id (spec 036 gen-3).
  *
- * Rejects with `alias.is_primary` if the alias is the current primary.
+ * Only kind='user' aliases are removable; returns `alias.not_removable` for
+ * SIMBAD designations/common names.
  */
 export async function removeTargetAlias(
   req: TargetAliasRemoveRequest,
@@ -1028,20 +1019,43 @@ export async function removeTargetAlias(
 }
 
 /**
- * `target.primary.rename` — promote an existing alias to primary_designation (spec 023).
+ * `target.display_alias.set` — set the user presentation label (spec 036, FR-012).
  *
- * The alias MUST already be in the target's alias list. On success the old
- * primary becomes an alias.
+ * Blank input is treated as a clear. Returns the updated full detail.
  */
-export async function renameTargetPrimary(
-  req: TargetPrimaryRenameRequest,
-): Promise<TargetPrimaryRenameResult> {
-  return invoke<TargetPrimaryRenameResult>('target.primary.rename', { req });
+export async function setDisplayAlias(
+  req: TargetDisplayAliasSetRequest,
+): Promise<TargetDetailV3> {
+  return invoke<TargetDetailV3>('target.display_alias.set', { req });
 }
 
-// Re-export TargetOpError type for callers that need to type-narrow errors.
-export type { TargetOpError };
+/**
+ * `target.display_alias.clear` — clear the user presentation label (spec 036, FR-012).
+ *
+ * Sets displayAlias to null; effectiveLabel reverts to primaryDesignation.
+ * Returns the updated full detail.
+ */
+export async function clearDisplayAlias(
+  req: TargetDisplayAliasClearRequest,
+): Promise<TargetDetailV3> {
+  return invoke<TargetDetailV3>('target.display_alias.clear', { req });
+}
 
+// Re-export gen-3 target types for callers.
+export type {
+  TargetGetRequest,
+  TargetDetailV3,
+  TargetListItem,
+  TargetAliasDto,
+  TargetAliasKind,
+  TargetAliasAddRequest,
+  TargetAliasAddResult,
+  TargetAliasRemoveRequest,
+  TargetAliasRemoveResult,
+  TargetDisplayAliasSetRequest,
+  TargetDisplayAliasClearRequest,
+  TargetOpError,
+};
 // ── spec 035: SIMBAD target resolution ────────────────────────────────────────
 
 // Re-export search/resolve DTOs so UI components import from one place.
