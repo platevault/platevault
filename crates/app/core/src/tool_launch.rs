@@ -677,11 +677,10 @@ mod tests {
     async fn list_profiles_returns_all_seeds() {
         let db = setup_db().await;
         let resp = list_profiles(db.pool()).await.unwrap();
-        assert_eq!(resp.tools.len(), 3);
+        assert_eq!(resp.tools.len(), 2);
         let ids: Vec<&str> = resp.tools.iter().map(|t| t.id.as_str()).collect();
         assert!(ids.contains(&"pixinsight"));
         assert!(ids.contains(&"siril"));
-        assert!(ids.contains(&"startools"));
     }
 
     #[tokio::test]

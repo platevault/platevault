@@ -34,7 +34,6 @@ pub struct DiscoveryResult {
 const MACOS_TOOLS: &[(&str, &str, &str)] = &[
     ("pixinsight", "com.pixinsight.PixInsight", "PixInsight"),
     ("siril", "org.free-astro.siril", "Siril"),
-    ("startools", "com.startools.startools", "StarTools"),
 ];
 
 #[cfg(target_os = "macos")]
@@ -94,7 +93,6 @@ fn applications_scan() -> Vec<DiscoveryResult> {
         ("pixinsight", "PixInsight/PixInsight.app", "PixInsight"),
         ("pixinsight", "PixInsight.app", "PixInsight"),
         ("siril", "Siril.app", "Siril"),
-        ("startools", "StarTools.app", "StarTools"),
     ];
     let mut results: Vec<DiscoveryResult> = Vec::new();
     for dir in &dirs {
@@ -128,16 +126,10 @@ pub fn discover_all() -> Vec<DiscoveryResult> {
         ("siril", "/snap/bin/siril"),
         // Flatpak export wrappers are directly executable (they shell out to `flatpak run`).
         ("siril", "/var/lib/flatpak/exports/bin/org.free_astro.Siril"),
-        ("startools", "/usr/bin/startools"),
-        ("startools", "/usr/local/bin/startools"),
     ];
     let mut results = probe_candidates(candidates);
     // PATH search.
-    results.extend(discover_from_path(&[
-        ("pixinsight", "PixInsight"),
-        ("siril", "siril"),
-        ("startools", "startools"),
-    ]));
+    results.extend(discover_from_path(&[("pixinsight", "PixInsight"), ("siril", "siril")]));
     // `.desktop` registry scan (resolves apps installed to non-standard locations).
     results.extend(desktop_file_discover());
     // Deduplicate: keep first found per tool_id.
@@ -152,8 +144,7 @@ pub fn discover_all() -> Vec<DiscoveryResult> {
 #[cfg(target_os = "linux")]
 fn desktop_file_discover() -> Vec<DiscoveryResult> {
     // (tool_id, lowercase name substring)
-    let tools: &[(&str, &str)] =
-        &[("pixinsight", "pixinsight"), ("siril", "siril"), ("startools", "startools")];
+    let tools: &[(&str, &str)] = &[("pixinsight", "pixinsight"), ("siril", "siril")];
 
     let mut dirs: Vec<PathBuf> = vec![
         PathBuf::from("/usr/share/applications"),
@@ -222,7 +213,6 @@ fn resolve_executable(cmd: &str) -> Option<PathBuf> {
 const WINDOWS_TOOLS: &[(&str, &str, &str, &str)] = &[
     ("pixinsight", "pixinsight", "PixInsight", "PixInsight.exe"),
     ("siril", "siril", "Siril", "siril.exe"),
-    ("startools", "startools", "StarTools", "StarTools.exe"),
 ];
 
 #[cfg(target_os = "windows")]

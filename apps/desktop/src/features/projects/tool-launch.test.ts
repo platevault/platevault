@@ -28,14 +28,6 @@ describe('toolIdFromProjectTool', () => {
     expect(toolIdFromProjectTool('Siril')).toBe('siril');
   });
 
-  it('aliases Planetary Suite to the seeded startools profile id', () => {
-    expect(toolIdFromProjectTool('Planetary Suite')).toBe('startools');
-  });
-
-  it('converts StarTools to startools', () => {
-    expect(toolIdFromProjectTool('StarTools')).toBe('startools');
-  });
-
   it('handles already lowercase input', () => {
     expect(toolIdFromProjectTool('pixinsight')).toBe('pixinsight');
   });

@@ -24,15 +24,10 @@ import { addToast } from '@/shared/toast';
  * Derive the stable `tool_id` from the project's `tool` string.
  *
  * Rule from data-model.md §WorkflowBinding: lowercase source name, replace spaces
- * with `_`. `"PixInsight"` → `"pixinsight"`, `"Siril"` → `"siril"`. The planetary
- * tool's user-facing label is "Planetary Suite" but its seeded profile id is
- * "startools" (bundle com.startools.startools), so it is aliased explicitly to
- * match `crates/workflow/profiles/src/seed.rs`.
+ * with `_`. `"PixInsight"` → `"pixinsight"`, `"Siril"` → `"siril"`.
  */
 export function toolIdFromProjectTool(projectTool: string): string {
-  const normalized = projectTool.toLowerCase().replace(/\s+/g, '_');
-  if (normalized === 'planetary_suite') return 'startools';
-  return normalized;
+  return projectTool.toLowerCase().replace(/\s+/g, '_');
 }
 
 // ── disabled-state copy ───────────────────────────────────────────────────────
