@@ -384,6 +384,7 @@ describe('Confirm payload and toast', () => {
       planId: 'plan-abc',
       planState: 'ready_for_review',
       itemsTotal: 18,
+      registeredAsMaster: false,
     });
 
     const onConfirm = async () => {
@@ -427,6 +428,7 @@ describe('Confirm payload and toast', () => {
       planId: 'plan-def',
       planState: 'ready_for_review',
       itemsTotal: 18,
+      registeredAsMaster: false,
     });
 
     const onConfirm = async () => {
@@ -462,6 +464,62 @@ describe('Confirm payload and toast', () => {
         action: 'confirm',
         contentSignature: 'sig-def',
       }),
+    );
+  });
+
+  it('shows "Registered as calibration master." toast when registeredAsMaster is true', async () => {
+    mockInboxConfirm.mockResolvedValue({
+      planId: '',
+      planState: '',
+      itemsTotal: 1,
+      registeredAsMaster: true,
+    });
+
+    // Simulate what InboxPage.handleConfirm does on the master path.
+    const onConfirm = async () => {
+      const result = await mockInboxConfirm({
+        inboxItemId: 'item-master-001',
+        action: 'confirm',
+        contentSignature: singleTypeClassification.contentSignature,
+        rootAbsolutePath: '/astro/inbox',
+        destructiveDestination: null,
+      });
+      if (result.registeredAsMaster) {
+        mockAddToast({ message: 'Registered as calibration master.', variant: 'info' });
+      } else {
+        mockAddToast({
+          message: `Plan created (${result.itemsTotal} items). Review before applying.`,
+          variant: 'info',
+        });
+      }
+    };
+
+    render(
+      <ActionSidebar
+        hasSelection
+        classification={singleTypeClassification}
+        hasOpenPlan={false}
+        confirmLoading={false}
+        canConfirm
+        destructiveDestination="archive"
+        onDestructiveDestinationChange={vi.fn()}
+        onConfirm={onConfirm}
+        onOpenExistingPlan={vi.fn()}
+      />,
+    );
+
+    await act(async () => {
+      fireEvent.click(screen.getByTestId('inbox-confirm-btn'));
+    });
+
+    expect(mockAddToast).toHaveBeenCalledWith(
+      expect.objectContaining({
+        message: 'Registered as calibration master.',
+        variant: 'info',
+      }),
+    );
+    expect(mockAddToast).not.toHaveBeenCalledWith(
+      expect.objectContaining({ message: expect.stringContaining('Plan created') }),
     );
   });
 });

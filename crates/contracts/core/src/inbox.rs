@@ -97,9 +97,14 @@ pub struct InboxConfirmRequest {
 #[serde(rename_all = "camelCase")]
 pub struct InboxConfirmResponse {
     pub plan_id: String,
-    /// Always `"ready_for_review"` for plans created here.
+    /// Always `"ready_for_review"` for plans created here; empty string for
+    /// master-registration responses.
     pub plan_state: String,
     pub items_total: u32,
+    /// True when the item was a detected calibration master that was registered
+    /// directly to `calibration_session` + `calibration_fingerprint` (Path 1 —
+    /// no file move).  `plan_id` is an empty string in this case.
+    pub registered_as_master: bool,
 }
 
 // ── inbox.reclassify ──────────────────────────────────────────────────────────

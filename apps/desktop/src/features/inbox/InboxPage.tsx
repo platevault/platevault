@@ -90,15 +90,23 @@ export function InboxPage() {
         rootAbsolutePath: selectedRootPath,
         destructiveDestination,
       });
-      addToast({
-        message: `Plan created (${result.itemsTotal} items). Review before applying.`,
-        variant: 'info',
-        action: {
-          label: 'View plan',
-          onClick: () =>
-            navigate({ to: '/archive', search: { selected: undefined } as never }),
-        },
-      });
+      if (result.registeredAsMaster) {
+        // Master path (Path 1): registered directly, no plan to review.
+        addToast({
+          message: 'Registered as calibration master.',
+          variant: 'info',
+        });
+      } else {
+        addToast({
+          message: `Plan created (${result.itemsTotal} items). Review before applying.`,
+          variant: 'info',
+          action: {
+            label: 'View plan',
+            onClick: () =>
+              navigate({ to: '/archive', search: { selected: undefined } as never }),
+          },
+        });
+      }
       // Refresh so confirmed item drops out (FR-003).
       refreshList();
     } catch (e) {
