@@ -39,6 +39,13 @@ in **CI / on Windows** (a webview cannot run in the WSL dev sandbox).
   `sessions_integration.rs` real tests pass (9). This was the last fixture
   command — with main's earlier de-stub of `search.global` + `calibration.masters`,
   **all US3 data commands now return real data.**
+  - *Caveats*: some `SessionDetail` fields are populated with real-derived/empty
+    defaults marked `// TODO(037):` (confidence, optical_train_id,
+    total_integration_seconds, total_size_bytes, metadata, warnings, framesets) —
+    honest defaults, not fixtures; hydrate fully in a follow-up.
+  - The pre-existing `tests/commands.rs` fix (below) should also update/remove the
+    old session command tests there to expect real data — real coverage already
+    lives in `sessions_integration.rs`, so this is cleanup, not new coverage.
 
 ## ⚠️ CRITICAL pre-existing finding (NOT introduced by 037)
 
