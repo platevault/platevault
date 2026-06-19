@@ -58,8 +58,11 @@ the existing spec-035 model; no new external surface beyond documented contracts
 
 ### A. Schema deletion (greenfield — edit source migrations)
 
-- `0002_lifecycle.sql`: remove the `target` table CREATE and the
-  `acquisition_session.target_id` column (+ any index/FK referencing `target`).
+- **Gen-1 (0002) is DEFERRED** (user decision 2026-06-19): removing the singular `target`
+  table is entangled with the dormant original schema generation (singular `project`,
+  `catalog_equivalence`, NOT-NULL FK chains). Leave `0002_lifecycle.sql` untouched; this
+  spec only ensures gen-1 `target` has no live reader (drop the inventory join, §B). The
+  0002 original-generation cleanup is a separate future spec.
 - Delete `0017_targets.sql` entirely (whole file is gen-2 target schema).
 - Delete `0027_target_identity.sql` entirely (whole file is gen-2 target extensions: the
   `targets.notes`/`updated_at` ALTERs, `target_aliases`, and the FK columns

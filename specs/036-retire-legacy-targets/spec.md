@@ -134,12 +134,16 @@ canonical designation is unchanged; clear it; confirm the UI reverts to canonica
 
 ### Functional Requirements
 
-- **FR-001**: The system MUST remove the legacy `target` table and the spec-013/023
-  `targets`, `target_aliases`, `target_catalog_refs`, and `catalog_equivalences` tables
-  from the schema so a freshly initialised database does not contain them.
-- **FR-002**: The system MUST remove the now-unused legacy target foreign-key columns
-  (`acquisition_session.target_id`, `acquisition_session.acq_target_id`,
-  `projects.target_id`, `project_sources.target_id`) and their indexes.
+- **FR-001**: The system MUST remove the spec-013/023 (gen-2) `targets`, `target_aliases`,
+  `target_catalog_refs`, and `catalog_equivalences` tables from the schema so a freshly
+  initialised database does not contain them. *(Scope note: the dormant gen-1 original
+  schema — the singular `target`, `project`, `catalog_equivalence` tables in migration
+  0002 — is DEFERRED to a separate cleanup; see Assumptions. This spec only ensures gen-1
+  `target` becomes fully unreferenced.)*
+- **FR-002**: The system MUST remove the now-unused gen-2 target foreign-key columns
+  (`acquisition_session.acq_target_id`, `projects.target_id`, `project_sources.target_id`)
+  and their indexes. The gen-1 `acquisition_session.target_id` column (migration 0002) is
+  left in place (deferred) but MUST have no remaining live reader.
 - **FR-003**: The system MUST retain the spec-035 `canonical_target` / `target_alias`
   model and the `projects.canonical_target_id` association unchanged as the sole target
   store.
@@ -186,10 +190,12 @@ canonical designation is unchanged; clear it; confirm the UI reverts to canonica
 
 ### Measurable Outcomes
 
-- **SC-001**: On a freshly initialised database, zero legacy target tables and zero
-  legacy target FK columns exist; the spec-035 target tables exist.
-- **SC-002**: Zero source references to the legacy target tables or removed commands
-  remain in non-test and test code (verifiable by search).
+- **SC-001**: On a freshly initialised database, zero gen-2 target tables
+  (`targets`, `target_aliases`, `target_catalog_refs`, `catalog_equivalences`) and zero
+  gen-2 target FK columns exist; the spec-035 target tables exist. (Dormant gen-1 0002
+  tables may remain but are unreferenced — deferred.)
+- **SC-002**: Zero source references to the gen-2 target tables, the gen-1 `target`
+  table, or the removed commands remain in non-test and test code (verifiable by search).
 - **SC-003**: The full build, lint, type-check, and test suite pass on a fresh database
   with no legacy-target references.
 - **SC-004**: A user can open a target, view its identity and aliases, and add then
@@ -203,6 +209,12 @@ canonical designation is unchanged; clear it; confirm the UI reverts to canonica
 
 - Greenfield: there is no production target data to preserve; legacy rows are discarded
   with their tables, and no data-migration/backfill is performed.
+- **Gen-1 deferral (decided 2026-06-19):** removing the gen-1 `target` table from
+  migration 0002 is entangled with the dormant original singular-table generation
+  (`project`, `catalog_equivalence`, NOT-NULL FK chains). That original-generation cleanup
+  is OUT OF SCOPE here and deferred to its own spec. This spec only removes the single
+  dead consumer of gen-1 (the inventory `LEFT JOIN target`), leaving the dormant 0002
+  tables physically present but fully unreferenced.
 - The spec-035 `canonical_target` / `target_alias` model is sufficient to back the
   rebuilt Targets page (identity, object type, coordinates, aliases) — confirmed by the
   spec-035 schema.

@@ -4,8 +4,8 @@
 
 | Object | Source migration | Action |
 |--------|------------------|--------|
-| `target` table (gen-1) | 0002 | remove CREATE |
-| `acquisition_session.target_id` | 0002 | remove column (+ index/FK if any) |
+| `target` table (gen-1) | 0002 | **DEFERRED** — left in place, made unreferenced |
+| `acquisition_session.target_id` (gen-1) | 0002 | **DEFERRED** — left in place, reader removed |
 | `targets` + `.notes`/`.updated_at` | 0017 / 0027 | delete files |
 | `target_aliases` | 0027 | delete file |
 | `target_catalog_refs` | 0017 | delete file |
