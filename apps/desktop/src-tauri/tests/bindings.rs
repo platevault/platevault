@@ -46,6 +46,23 @@ fn exports_typescript_bindings() {
         .export(Typescript::default(), &out_path)
         .expect("export typescript bindings");
 
+    // Redirect the generated invoke import through our mock/recorder dispatch
+    // switcher (spec 037 FR-002) so generated `commands.*` honor VITE_USE_MOCKS
+    // and the spec-021 recording proxy. Fail loudly if the upstream import
+    // string changes (e.g. a tauri-specta rc bump) so this can't silently break.
+    {
+        let generated =
+            std::fs::read_to_string(&out_path).expect("read generated bindings for redirect");
+        let needle = "import { invoke as __TAURI_INVOKE } from \"@tauri-apps/api/core\";";
+        assert!(
+            generated.contains(needle),
+            "tauri-specta invoke import not found — did specta-typescript change its output?"
+        );
+        let redirected =
+            generated.replace(needle, "import { invoke as __TAURI_INVOKE } from \"../api/ipc\";");
+        std::fs::write(&out_path, redirected).expect("write redirected bindings");
+    }
+
     let written = std::fs::read_to_string(&out_path).expect("read written bindings");
 
     // Core lifecycle commands (always `snake_case` — these were already correct).

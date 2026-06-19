@@ -97,33 +97,11 @@ import type {
   ProjectNoteGetResult,
 } from '@/bindings/index';
 
-// Conditionally import mocks or real Tauri invoke
-const useMocks = import.meta.env.VITE_USE_MOCKS === 'true';
-
-/**
- * T075 / SC-002: optional recording-proxy override installed by bootRecorder
- * in dev-tools builds. Null in release builds (zero overhead).
- */
-let _invokeOverride: ((cmd: string, args?: Record<string, unknown>) => Promise<unknown>) | null = null;
-
-/** Install a recording proxy over the Tauri dispatcher (dev-tools builds only). */
-export function setInvokeOverride(
-  fn: ((cmd: string, args?: Record<string, unknown>) => Promise<unknown>) | null,
-): void {
-  _invokeOverride = fn;
-}
-
-async function invoke<T>(cmd: string, args?: Record<string, unknown>): Promise<T> {
-  if (_invokeOverride) {
-    return _invokeOverride(cmd, args) as Promise<T>;
-  }
-  if (useMocks) {
-    const { mockInvoke } = await import('./mocks');
-    return mockInvoke<T>(cmd, args);
-  }
-  const { invoke: tauriInvoke } = await import('@tauri-apps/api/core');
-  return tauriInvoke<T>(cmd, args);
-}
+// IPC dispatch + the dev-tools recording override live in the shared switcher
+// (spec 037, api/ipc.ts) so these wrappers and the generated bindings use one
+// dispatcher. Re-exported to keep the `@/api/commands` public surface stable.
+import { invoke, setInvokeOverride } from './ipc';
+export { setInvokeOverride };
 
 // ---------- Query Commands ----------
 
