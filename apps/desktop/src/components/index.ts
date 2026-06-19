@@ -25,6 +25,10 @@ export type { LifecycleProps } from './Lifecycle';
 export { ConfirmOverlay } from './ConfirmOverlay';
 export type { ConfirmOverlayProps } from './ConfirmOverlay';
 
+// spec 035: SIMBAD target resolution — project-creation target typeahead.
+export { TargetSearch } from './TargetSearch';
+export type { TargetSearchProps } from './TargetSearch';
+
 // PropertyTable is retained for feature files that still import it directly.
 // Migrate callers to inline prop-table markup with alm-* CSS classes over time.
 export { PropertyTable } from './PropertyTable';

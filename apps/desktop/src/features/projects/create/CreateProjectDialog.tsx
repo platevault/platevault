@@ -22,10 +22,12 @@
 
 import { useState, useCallback } from 'react';
 import { Dialog } from '@base-ui-components/react/dialog';
-import { Btn, RadioGroup } from '@/ui';
+import { Btn, RadioGroup, Pill } from '@/ui';
 import type { RadioOption } from '@/ui';
 import { callCreateProject } from '@/features/projects/store';
 import { listProjects008 } from '@/api/commands';
+import type { TargetSuggestion } from '@/api/commands';
+import { TargetSearch } from '@/components';
 import type { ProjectCreateResult } from '@/bindings/index';
 
 // ── Constants ────────────────────────────────────────────────────────────────
@@ -54,6 +56,11 @@ export function CreateProjectDialog({ open, onClose, onSuccess }: CreateProjectD
   const [tool, setTool] = useState('PixInsight');
   const [path, setPath] = useState('');
   const [notes, setNotes] = useState('');
+  // spec 035 US1: selected canonical target (optional). The current
+  // projects.create contract has no target field, so the selection is held in
+  // local state for now; persisting the association requires a backend contract
+  // field (tracked separately, not part of T013).
+  const [target, setTarget] = useState<TargetSuggestion | null>(null);
   const [submitting, setSubmitting] = useState(false);
   const [fieldErrors, setFieldErrors] = useState<Record<string, string>>({});
   const [serverError, setServerError] = useState<string | null>(null);
@@ -66,6 +73,7 @@ export function CreateProjectDialog({ open, onClose, onSuccess }: CreateProjectD
         setTool('PixInsight');
         setPath('');
         setNotes('');
+        setTarget(null);
         setFieldErrors({});
         setServerError(null);
         setSubmitting(false);
@@ -134,6 +142,7 @@ export function CreateProjectDialog({ open, onClose, onSuccess }: CreateProjectD
         path: path.trim(),
         initialSources: [],
         notes: notes.trim() || undefined,
+        canonicalTargetId: target?.targetId ?? null,
       });
       handleOpenChange(false);
       onSuccess(result);
@@ -185,6 +194,30 @@ export function CreateProjectDialog({ open, onClose, onSuccess }: CreateProjectD
                   <span id="name-error" role="alert" className="alm-field-error">
                     {fieldErrors.name}
                   </span>
+                )}
+              </div>
+
+              {/* Target (optional) — spec 035 US1 */}
+              <div>
+                {target ? (
+                  <>
+                    <span className="alm-field-label">Target</span>
+                    <div style={{ display: 'flex', alignItems: 'center', gap: 'var(--alm-sp-2)' }}>
+                      <Pill variant="accent">{target.primaryDesignation}</Pill>
+                      {target.commonName && (
+                        <span className="alm-field-hint">{target.commonName}</span>
+                      )}
+                      <Btn type="button" variant="ghost" onClick={() => setTarget(null)}>
+                        Change
+                      </Btn>
+                    </div>
+                  </>
+                ) : (
+                  <TargetSearch
+                    label="Target (optional)"
+                    placeholder="e.g. M31, NGC 224, Andromeda"
+                    onSelect={setTarget}
+                  />
                 )}
               </div>
 

@@ -1,0 +1,56 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://astro-plan.local/contracts/target.search.json",
+  "title": "target.search",
+  "description": "As-you-type target search for project creation / target selection (spec 035). Served instantly from the local seed+cache index; the caller separately triggers target.resolve for long-tail/SIMBAD enrichment. Optional catalogue/type filter; default spans all.",
+  "type": "object",
+  "oneOf": [ { "$ref": "#/$defs/Request" }, { "$ref": "#/$defs/Response" } ],
+  "$defs": {
+    "ContractVersion": { "type": "string", "const": "1.0" },
+    "Uuid": { "type": "string", "format": "uuid" },
+    "ObjectType": {
+      "type": "string",
+      "enum": ["galaxy", "planetary_nebula", "emission_nebula", "reflection_nebula", "dark_nebula", "open_cluster", "globular_cluster", "supernova_remnant", "galaxy_cluster", "double_star", "asterism", "other"]
+    },
+    "CatalogId": {
+      "type": "string",
+      "enum": ["messier", "caldwell", "sharpless", "abell_pn", "abell_galaxies", "arp", "vdb", "barnard", "lbn", "ldn", "melotte", "common", "openngc"]
+    },
+    "Suggestion": {
+      "type": "object",
+      "required": ["targetId", "primaryDesignation", "objectType", "source"],
+      "additionalProperties": false,
+      "properties": {
+        "targetId": { "$ref": "#/$defs/Uuid" },
+        "primaryDesignation": { "type": "string" },
+        "commonName": { "type": "string" },
+        "objectType": { "$ref": "#/$defs/ObjectType" },
+        "matchedAlias": { "type": "string", "description": "The alias that matched the query." },
+        "source": { "type": "string", "enum": ["seed", "resolved", "user-override"] }
+      }
+    },
+    "Request": {
+      "type": "object",
+      "required": ["contractVersion", "requestId", "query"],
+      "additionalProperties": false,
+      "properties": {
+        "contractVersion": { "$ref": "#/$defs/ContractVersion" },
+        "requestId": { "$ref": "#/$defs/Uuid" },
+        "query": { "type": "string", "minLength": 1, "description": "Partial designation or common name." },
+        "catalogFilter": { "type": "array", "items": { "$ref": "#/$defs/CatalogId" }, "description": "Optional; empty/absent = all catalogues." },
+        "typeFilter": { "type": "array", "items": { "$ref": "#/$defs/ObjectType" }, "description": "Optional; empty/absent = all types." },
+        "limit": { "type": "integer", "minimum": 1, "maximum": 100, "default": 20 }
+      }
+    },
+    "Response": {
+      "type": "object",
+      "required": ["contractVersion", "requestId", "suggestions"],
+      "additionalProperties": false,
+      "properties": {
+        "contractVersion": { "$ref": "#/$defs/ContractVersion" },
+        "requestId": { "$ref": "#/$defs/Uuid" },
+        "suggestions": { "type": "array", "items": { "$ref": "#/$defs/Suggestion" }, "description": "Local matches only; ordered by match quality. Long-tail/SIMBAD results arrive via target.resolve." }
+      }
+    }
+  }
+}

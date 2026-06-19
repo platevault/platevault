@@ -3,13 +3,13 @@
 
 pub mod artifact;
 pub mod calibration;
-pub mod catalogs;
 #[cfg(feature = "dev-tools")]
 pub mod dev_contracts;
 pub mod equipment;
 pub mod first_run;
 pub mod guided_flow;
 pub mod inbox;
+pub mod ingest_resolution;
 pub mod inventory;
 pub mod ledger_use_case;
 pub mod lifecycle_use_case;
@@ -25,10 +25,13 @@ pub mod project_notes;
 pub mod project_setup;
 pub mod protection;
 pub mod provenance_use_case;
+pub mod resolver_settings;
 pub mod sessions;
 pub mod settings;
 pub mod target_identity;
 pub mod target_lookup;
+pub mod target_resolve;
+pub mod target_search;
 pub mod tool_launch;
 pub mod transition_use_case;
 

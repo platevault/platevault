@@ -18,7 +18,6 @@ app_core = { path = "../../../crates/app/core" }
 workflow_profiles = { path = "../../../crates/workflow/profiles" }
 audit = { path = "../../../crates/audit" }
 targeting = { path = "../../../crates/targeting" }
-targeting_catalogs = { path = "../../../crates/targeting/catalogs" }
 contracts_core = { path = "../../../crates/contracts/core" }
 domain_core = { path = "../../../crates/domain/core" }
 fs_inventory = { path = "../../../crates/fs/inventory" }

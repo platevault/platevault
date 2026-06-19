@@ -24,9 +24,6 @@ use crate::commands::calibration::{
 use crate::commands::calibration_tolerances::{
     calibration_tolerances_get, calibration_tolerances_update,
 };
-use crate::commands::catalogs::{
-    catalog_attribution_get, catalog_download, catalog_list, catalog_manifest_fetch,
-};
 use crate::commands::cleanup::{cleanup_policy_get, cleanup_policy_update, cleanup_scan};
 #[cfg(feature = "dev-tools")]
 use crate::commands::dev::{
@@ -96,7 +93,10 @@ use crate::commands::settings::{
 };
 use crate::commands::status::status_summary;
 use crate::commands::target_identity as target_identity_cmds;
-use crate::commands::target_lookup::{target_lookup, target_resolve};
+use crate::commands::target_lookup::{
+    target_lookup, target_resolution_settings, target_resolution_settings_update, target_resolve,
+    target_resolve_fits, target_search,
+};
 use crate::commands::targets::{targets_get, targets_list};
 use crate::commands::tools::{
     tools_discover, tools_launch, tools_list, tools_update, tools_validate_path,
@@ -126,6 +126,18 @@ fn base_builder() -> Builder<tauri::Wry> {
         // emits it once instead of inlining its self-referential shape, which
         // would otherwise fail with "infinitely recursive inline reference".
         .typ::<serde_json::Value>()
+        // Spec 035 — SIMBAD target resolution DTOs (T007). These are pure
+        // contract types whose commands land in later tasks (US1–5); register
+        // them explicitly so the TypeScript surface exists ahead of the
+        // commands that will reference them. Request/response roots pull in all
+        // nested structs and enums transitively.
+        .typ::<contracts_core::targets::TargetSearchRequest>()
+        .typ::<contracts_core::targets::TargetSearchResponse>()
+        .typ::<contracts_core::targets::TargetResolveSimbadRequest>()
+        .typ::<contracts_core::targets::TargetResolveSimbadResponse>()
+        .typ::<contracts_core::targets::ResolverSettingsGetRequest>()
+        .typ::<contracts_core::targets::ResolverSettingsUpdateRequest>()
+        .typ::<contracts_core::targets::ResolverSettingsResponse>()
 }
 
 /// Build the tauri-specta [`Builder`] populated with every typed command.
@@ -169,9 +181,16 @@ pub fn specta_builder() -> Builder<tauri::Wry> {
         target_identity_cmds::target_alias_add,
         target_identity_cmds::target_alias_remove,
         target_identity_cmds::target_primary_rename,
-        // target lookup + resolve (spec 013)
+        // target lookup (spec 013) + resolve (spec 035 supersedes 013;
+        // spec-013 local resolution kept as target.resolve.fits)
         target_lookup,
+        target_resolve_fits,
         target_resolve,
+        // target search (spec 035, US1)
+        target_search,
+        // resolver settings (spec 035, US5)
+        target_resolution_settings,
+        target_resolution_settings_update,
         // projects (spec 008)
         projects_list,
         projects_get,
@@ -203,11 +222,6 @@ pub fn specta_builder() -> Builder<tauri::Wry> {
         // log stream (spec 019)
         log_recent,
         log_export,
-        // catalog registry (spec 014)
-        catalog_list,
-        catalog_attribution_get,
-        catalog_manifest_fetch,
-        catalog_download,
         // review
         review_queue,
         // roots & scan & equipment
@@ -352,9 +366,16 @@ pub fn specta_builder() -> Builder<tauri::Wry> {
         target_identity_cmds::target_alias_add,
         target_identity_cmds::target_alias_remove,
         target_identity_cmds::target_primary_rename,
-        // target lookup + resolve (spec 013)
+        // target lookup (spec 013) + resolve (spec 035 supersedes 013;
+        // spec-013 local resolution kept as target.resolve.fits)
         target_lookup,
+        target_resolve_fits,
         target_resolve,
+        // target search (spec 035, US1)
+        target_search,
+        // resolver settings (spec 035, US5)
+        target_resolution_settings,
+        target_resolution_settings_update,
         // projects (spec 008)
         projects_list,
         projects_get,
@@ -386,11 +407,6 @@ pub fn specta_builder() -> Builder<tauri::Wry> {
         // log stream (spec 019)
         log_recent,
         log_export,
-        // catalog registry (spec 014)
-        catalog_list,
-        catalog_attribution_get,
-        catalog_manifest_fetch,
-        catalog_download,
         // review
         review_queue,
         // roots & scan & equipment

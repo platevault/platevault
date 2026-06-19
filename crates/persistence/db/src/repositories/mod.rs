@@ -8,7 +8,6 @@
 
 pub mod artifacts;
 pub mod calibration_assignment;
-pub mod catalogs;
 pub mod equipment;
 pub mod first_run;
 pub mod guided_flow;

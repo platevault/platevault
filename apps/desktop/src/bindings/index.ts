@@ -201,7 +201,8 @@ export const commands = {
 	 */
 	targetLookup: (req: TargetLookupRequest) => typedError<TargetLookupResponse_Serialize, string>(__TAURI_INVOKE("target.lookup", { req })),
 	/**
-	 *  `target.resolve` — resolve a FITS OBJECT header value to a stable target.
+	 *  `target.resolve.fits` — resolve a FITS OBJECT header value against the local
+	 *  in-memory catalog (spec 013).
 	 * 
 	 *  Non-blocking: callers MUST handle `unresolved`, `ambiguous`, and `error`
 	 *  responses without blocking the ingestion flow (FR-006, constitution §II).
@@ -211,7 +212,53 @@ export const commands = {
 	 *  Returns `Err(String)` on unexpected internal failure. Resolution errors
 	 *  (empty query, catalog not installed) are encoded in the response status.
 	 */
-	targetResolve: (req: TargetResolveRequest) => typedError<TargetResolveResponse_Serialize, string>(__TAURI_INVOKE("target.resolve", { req })),
+	targetResolveFits: (req: TargetResolveRequest) => typedError<TargetResolveResponse_Serialize, string>(__TAURI_INVOKE("target.resolve.fits", { req })),
+	/**
+	 *  `target.resolve` — cache-first resolution of a designation / common name (or
+	 *  FITS OBJECT value) against the local cache + bundled seed, falling back to
+	 *  SIMBAD on a miss when online resolution is enabled (spec 035).
+	 * 
+	 *  The live `SimbadResolver` is built on demand from the persisted
+	 *  `resolver_settings` (endpoint + timeout). Cache hits never re-query SIMBAD
+	 *  (FR-006); offline / unknown / ambiguous outcomes return `unresolved` and
+	 *  never fabricate coordinates (FR-009). The manual `override` write path is
+	 *  T032.
+	 * 
+	 *  # Errors
+	 * 
+	 *  Returns `Err(String)` only on a local database failure. Resolver outcomes
+	 *  (offline / unknown / ambiguous) are encoded in the response status.
+	 */
+	targetResolve: (req: TargetResolveSimbadRequest_Deserialize) => typedError<TargetResolveSimbadResponse_Serialize, string>(__TAURI_INVOKE("target.resolve", { req })),
+	/**
+	 *  `target.search` — as-you-type target suggestions from local seed + cache.
+	 * 
+	 *  Served purely from the local resolution cache / bundled seed (no network);
+	 *  long-tail SIMBAD enrichment is a separate `target.resolve` call. Returns
+	 *  ranked, de-duplicated [`TargetSuggestion`]s for the project-creation /
+	 *  target-selection typeahead (spec 035 FR-005).
+	 * 
+	 *  # Errors
+	 * 
+	 *  Returns `Err(String)` on an unexpected internal (database) failure.
+	 */
+	targetSearch: (req: TargetSearchRequest_Deserialize) => typedError<TargetSearchResponse_Serialize, string>(__TAURI_INVOKE("target.search", { req })),
+	/**
+	 *  `target.resolution.settings` — read the SIMBAD resolver settings.
+	 * 
+	 *  # Errors
+	 * 
+	 *  Returns `Err(String)` on a local database failure.
+	 */
+	targetResolutionSettings: (req: ResolverSettingsGetRequest) => typedError<ResolverSettingsResponse, string>(__TAURI_INVOKE("target.resolution.settings", { req })),
+	/**
+	 *  `target.resolution.settings.update` — persist new resolver settings.
+	 * 
+	 *  # Errors
+	 * 
+	 *  Returns `Err(String)` on a local database failure.
+	 */
+	targetResolutionSettingsUpdate: (req: ResolverSettingsUpdateRequest) => typedError<ResolverSettingsResponse, string>(__TAURI_INVOKE("target.resolution.settings.update", { req })),
 	/**
 	 *  `projects.list` — list all projects from the database.
 	 * 
@@ -462,59 +509,6 @@ export const commands = {
 	 *  `"range.invalid"`, or `"format.unsupported"`.
 	 */
 	logExport: (requestId: string, filePath: string, format: string | null, levelMin: "debug" | "info" | "warn" | "error" | null, since: string | null, until: string | null, includeDiagnostics: boolean | null) => typedError<LogExportResponse_Serialize, string>(__TAURI_INVOKE("log.export", { requestId, filePath, format, levelMin, since, until, includeDiagnostics })),
-	/**
-	 *  `catalog.list` — list all installed catalogs.
-	 * 
-	 *  Returns every catalog in the `catalog_downloaded` table, ordered by origin
-	 *  (`downloaded` first) then by name.
-	 * 
-	 *  # Errors
-	 * 
-	 *  Returns `Err(String)` on database failure.
-	 */
-	catalogList: () => typedError<CatalogListResponse_Serialize, string>(__TAURI_INVOKE("catalog.list")),
-	/**
-	 *  `catalog.attribution.get` — list all license attribution rows.
-	 * 
-	 *  Returns attribution data for every installed catalog.  Separated from
-	 *  `catalog.list` so the (potentially large) notice text payload is not paid
-	 *  for on the metadata listing.
-	 * 
-	 *  # Errors
-	 * 
-	 *  Returns `Err(String)` on database failure.
-	 */
-	catalogAttributionGet: () => typedError<CatalogAttributionGetResponse_Serialize, string>(__TAURI_INVOKE("catalog.attribution.get")),
-	/**
-	 *  `catalog.manifest.fetch` — fetch the catalog manifest from the hosted URL.
-	 * 
-	 *  Accepts an optional `etag` for conditional HTTP (HTTP 304 → `not_modified`).
-	 *  On success, the manifest is returned in the response for the caller to pass
-	 *  to `catalog.download` for each catalog.
-	 * 
-	 *  # Errors
-	 * 
-	 *  Returns `Err(String)` on unexpected internal failure. Network / verification
-	 *  failures are encoded in the response `status = failed` field.
-	 */
-	catalogManifestFetch: (etag: string | null) => typedError<CatalogManifestFetchResponse_Serialize, string>(__TAURI_INVOKE("catalog.manifest.fetch", { etag })),
-	/**
-	 *  `catalog.download` — download, verify (SHA-256), and install a single catalog.
-	 * 
-	 *  The backend resolves the download URL and checksum from the provided
-	 *  manifest. Bytes are verified in memory before being installed into SQLite.
-	 *  The previously installed catalog (if any) remains active until the new one
-	 *  is verified (FR-008).
-	 * 
-	 *  Returns `origin.not_implemented` when `catalog_id` matches a `user` origin
-	 *  request (A2, FR-009). In v1 all downloads are `downloaded` origin.
-	 * 
-	 *  # Errors
-	 * 
-	 *  Returns `Err(String)` on unexpected internal failure. Download and
-	 *  verification failures are encoded in the response `status = failure` field.
-	 */
-	catalogDownload: (args: CatalogDownloadArgs) => typedError<CatalogDownloadResponse_Serialize, string>(__TAURI_INVOKE("catalog.download", { args })),
 	/**
 	 *  `review.queue` — returns items awaiting user review.
 	 * 
@@ -1790,73 +1784,6 @@ export type CandidateSummary = {
 	score: number | null,
 };
 
-/**  Registered catalog index visible to the app (data-model.md §Catalog). */
-export type Catalog = Catalog_Serialize | Catalog_Deserialize;
-
-/**  Response for `catalog.attribution.get`. */
-export type CatalogAttributionGetResponse = CatalogAttributionGetResponse_Serialize | CatalogAttributionGetResponse_Deserialize;
-
-/**  Response for `catalog.attribution.get`. */
-export type CatalogAttributionGetResponse_Deserialize = {
-	/**  Per-catalog attribution rows. One catalog may produce multiple rows. */
-	attributions: LicenseAttribution_Deserialize[],
-};
-
-/**  Response for `catalog.attribution.get`. */
-export type CatalogAttributionGetResponse_Serialize = {
-	/**  Per-catalog attribution rows. One catalog may produce multiple rows. */
-	attributions: LicenseAttribution_Serialize[],
-};
-
-/**
- *  Payload shape for `catalog.download` (wraps the contract request fields).
- * 
- *  The `manifest` field carries the `CatalogManifest` that was returned by a
- *  prior `catalog.manifest.fetch` call. The frontend is responsible for
- *  caching the manifest between the fetch step and the per-catalog download
- *  loop (T010-dl).
- */
-export type CatalogDownloadArgs = {
-	catalogId: string,
-	manifest: CatalogManifest,
-};
-
-/**  Response for `catalog.download`. */
-export type CatalogDownloadResponse = CatalogDownloadResponse_Serialize | CatalogDownloadResponse_Deserialize;
-
-/**  Response for `catalog.download`. */
-export type CatalogDownloadResponse_Deserialize = {
-	status: CatalogDownloadStatus,
-	/**  Audit event id on successful install.  Present when `status = success`. */
-	auditId: string | null,
-	/**  Present when `status = failure`. */
-	error: CatalogError | null,
-};
-
-/**  Response for `catalog.download`. */
-export type CatalogDownloadResponse_Serialize = {
-	status: CatalogDownloadStatus,
-	/**  Audit event id on successful install.  Present when `status = success`. */
-	auditId?: string | null,
-	/**  Present when `status = failure`. */
-	error?: CatalogError | null,
-};
-
-/**  Status of a `catalog.download` response. */
-export type CatalogDownloadStatus = 
-/**  Catalog fetched, signature verified, installed into SQLite. */
-"success" | 
-/**  Failure; previously installed catalog (if any) remains active. */
-"failure";
-
-/**  Error envelope for catalog operations. */
-export type CatalogError = {
-	/**  Contract error code (closed enum from the contract schemas). */
-	code: string,
-	/**  Human-readable message. */
-	message: string,
-};
-
 /**  Catalog identifiers for a target (NGC, IC, Messier, etc.). */
 export type CatalogIds = CatalogIds_Serialize | CatalogIds_Deserialize;
 
@@ -1875,77 +1802,6 @@ export type CatalogIds_Serialize = {
 };
 
 /**
- *  Response for `catalog.list`.
- * 
- *  Catalogs are ordered by origin (`downloaded` first) then by name.
- */
-export type CatalogListResponse = CatalogListResponse_Serialize | CatalogListResponse_Deserialize;
-
-/**
- *  Response for `catalog.list`.
- * 
- *  Catalogs are ordered by origin (`downloaded` first) then by name.
- */
-export type CatalogListResponse_Deserialize = {
-	/**  All registered catalogs. */
-	catalogs: Catalog_Deserialize[],
-};
-
-/**
- *  Response for `catalog.list`.
- * 
- *  Catalogs are ordered by origin (`downloaded` first) then by name.
- */
-export type CatalogListResponse_Serialize = {
-	/**  All registered catalogs. */
-	catalogs: Catalog_Serialize[],
-};
-
-/**  The signed manifest returned on a successful `catalog.manifest.fetch`. */
-export type CatalogManifest = {
-	/**  Manifest schema version. */
-	version: string,
-	/**  Minisign signature (base64-encoded). */
-	signature: string,
-	/**  Catalog entries. */
-	catalogs: ManifestCatalogEntry[],
-};
-
-/**  Response for `catalog.manifest.fetch`. */
-export type CatalogManifestFetchResponse = CatalogManifestFetchResponse_Serialize | CatalogManifestFetchResponse_Deserialize;
-
-/**  Response for `catalog.manifest.fetch`. */
-export type CatalogManifestFetchResponse_Deserialize = {
-	status: ManifestFetchStatus,
-	/**  Present when `status = fetched`. */
-	manifest: CatalogManifest | null,
-	/**  ETag for the next conditional request. */
-	etag: string | null,
-	/**  Present when `status = failed`. */
-	error: CatalogError | null,
-};
-
-/**  Response for `catalog.manifest.fetch`. */
-export type CatalogManifestFetchResponse_Serialize = {
-	status: ManifestFetchStatus,
-	/**  Present when `status = fetched`. */
-	manifest?: CatalogManifest | null,
-	/**  ETag for the next conditional request. */
-	etag?: string | null,
-	/**  Present when `status = failed`. */
-	error?: CatalogError | null,
-};
-
-/**
- *  Closed enum of catalog origins (R-1.3).
- * 
- *  - `downloaded`: all v1 catalogs, installed from the project-hosted manifest.
- *  - `built_in`: reserved for forward-compat; unused in v1.
- *  - `user`: reserved for v1.x; backend rejects with `origin.not_implemented`.
- */
-export type CatalogOrigin = "built_in" | "downloaded" | "user";
-
-/**
  *  Structured catalog reference for a target (spec 023 data-model.md).
  * 
  *  Mirrors `CatalogRef` in `target.get.json`.
@@ -1957,46 +1813,6 @@ export type CatalogRef = {
 	catalogDisplay: string,
 	/**  Catalog-local designation (e.g. `"M31"`, `"NGC 224"`). */
 	designation: string,
-};
-
-/**  Registered catalog index visible to the app (data-model.md §Catalog). */
-export type Catalog_Deserialize = {
-	/**  Stable slug identifier. */
-	id: string,
-	/**  Human-readable display name. */
-	name: string,
-	/**  Bundle version string. */
-	version: string,
-	/**  License short code (closed enum string, e.g. `"public-domain"`). */
-	license: string,
-	/**  Origin of this catalog record. */
-	origin: CatalogOrigin,
-	/**  Upstream source URL. */
-	sourceUrl: string,
-	/**  RFC 3339 UTC timestamp of the last bundle update. */
-	lastUpdated: string,
-	/**  Number of entries in this catalog index (optional). */
-	entryCount: number | null,
-};
-
-/**  Registered catalog index visible to the app (data-model.md §Catalog). */
-export type Catalog_Serialize = {
-	/**  Stable slug identifier. */
-	id: string,
-	/**  Human-readable display name. */
-	name: string,
-	/**  Bundle version string. */
-	version: string,
-	/**  License short code (closed enum string, e.g. `"public-domain"`). */
-	license: string,
-	/**  Origin of this catalog record. */
-	origin: CatalogOrigin,
-	/**  Upstream source URL. */
-	sourceUrl: string,
-	/**  RFC 3339 UTC timestamp of the last bundle update. */
-	lastUpdated: string,
-	/**  Number of entries in this catalog index (optional). */
-	entryCount?: number | null,
 };
 
 /**  Channel drift state embedded in project.get (FR-010). */
@@ -2910,68 +2726,6 @@ export type LibraryStats = {
 	projects: number,
 };
 
-/**
- *  Per-catalog license attribution record (data-model.md §LicenseAttribution).
- * 
- *  For `cc-by-4.0` and `cc-by-sa-4.0` licenses, `author`, `title`, and
- *  `license_uri` are required (R-2.2).
- */
-export type LicenseAttribution = LicenseAttribution_Serialize | LicenseAttribution_Deserialize;
-
-/**
- *  Per-catalog license attribution record (data-model.md §LicenseAttribution).
- * 
- *  For `cc-by-4.0` and `cc-by-sa-4.0` licenses, `author`, `title`, and
- *  `license_uri` are required (R-2.2).
- */
-export type LicenseAttribution_Deserialize = {
-	/**  FK to `Catalog.id`. */
-	catalogId: string,
-	/**  License short code. */
-	license: string,
-	/**  Full required notice text, verbatim. */
-	text: string,
-	/**  Stable source link referenced by the notice. */
-	link: string,
-	/**  Date the source was accessed (ISO 8601). Optional. */
-	accessedOn: string | null,
-	/**  Author / rights-holder. Required for CC-BY and CC-BY-SA (R-2.2). */
-	author: string | null,
-	/**  Work title. Required for CC-BY and CC-BY-SA (R-2.2). */
-	title: string | null,
-	/**  Canonical license URI. Required for CC-BY and CC-BY-SA (R-2.2). */
-	licenseUri: string | null,
-	/**  Nature of any project-made modifications (optional). */
-	modificationsNotice: string | null,
-};
-
-/**
- *  Per-catalog license attribution record (data-model.md §LicenseAttribution).
- * 
- *  For `cc-by-4.0` and `cc-by-sa-4.0` licenses, `author`, `title`, and
- *  `license_uri` are required (R-2.2).
- */
-export type LicenseAttribution_Serialize = {
-	/**  FK to `Catalog.id`. */
-	catalogId: string,
-	/**  License short code. */
-	license: string,
-	/**  Full required notice text, verbatim. */
-	text: string,
-	/**  Stable source link referenced by the notice. */
-	link: string,
-	/**  Date the source was accessed (ISO 8601). Optional. */
-	accessedOn?: string | null,
-	/**  Author / rights-holder. Required for CC-BY and CC-BY-SA (R-2.2). */
-	author?: string | null,
-	/**  Work title. Required for CC-BY and CC-BY-SA (R-2.2). */
-	title?: string | null,
-	/**  Canonical license URI. Required for CC-BY and CC-BY-SA (R-2.2). */
-	licenseUri?: string | null,
-	/**  Nature of any project-made modifications (optional). */
-	modificationsNotice?: string | null,
-};
-
 /**  Lightweight project stub in the linked section. */
 export type LinkedProjectRef = {
 	id: string,
@@ -3170,22 +2924,6 @@ export type ManifestBodyDto_Serialize = {
 	notes?: string | null,
 };
 
-/**  Per-catalog entry in the signed manifest. */
-export type ManifestCatalogEntry = {
-	/**  Stable catalog slug. */
-	catalogId: string,
-	/**  Semver-ish version string. */
-	version: string,
-	/**  GitHub Releases download URL. */
-	url: string,
-	/**  SHA-256 hex checksum. */
-	checksum: string,
-	/**  License short code. */
-	license: string,
-	/**  Uncompressed size in bytes (for progress estimation). */
-	sizeBytes: number,
-};
-
 /**  Full manifest including structured body. */
 export type ManifestDto = ManifestDto_Serialize | ManifestDto_Deserialize;
 
@@ -3210,15 +2948,6 @@ export type ManifestDto_Serialize = {
 	version: number,
 	body: ManifestBodyDto_Serialize,
 };
-
-/**  Status of a `catalog.manifest.fetch` response. */
-export type ManifestFetchStatus = 
-/**  New manifest downloaded and verified. */
-"fetched" | 
-/**  ETag matched; local manifest is current (HTTP 304). */
-"not_modified" | 
-/**  Network or verification failure. */
-"failed";
 
 /**  Thin request wrapper for `project.manifest.get`. */
 export type ManifestGetRequest = {
@@ -3995,6 +3724,38 @@ export type PreparedViewSummary = {
 	itemCount: number,
 };
 
+/**
+ *  A project's associated spec-035 canonical target, resolved for display on the
+ *  project detail read path (spec 035 US1 #2).
+ */
+export type ProjectCanonicalTarget = ProjectCanonicalTarget_Serialize | ProjectCanonicalTarget_Deserialize;
+
+/**
+ *  A project's associated spec-035 canonical target, resolved for display on the
+ *  project detail read path (spec 035 US1 #2).
+ */
+export type ProjectCanonicalTarget_Deserialize = {
+	/**  UUID of the `canonical_target`. */
+	id: string,
+	/**  Canonical display designation (e.g. `M 31`). */
+	primaryDesignation: string,
+	/**  Curated common name (e.g. `Andromeda Galaxy`) when one exists. */
+	commonName: string | null,
+};
+
+/**
+ *  A project's associated spec-035 canonical target, resolved for display on the
+ *  project detail read path (spec 035 US1 #2).
+ */
+export type ProjectCanonicalTarget_Serialize = {
+	/**  UUID of the `canonical_target`. */
+	id: string,
+	/**  Canonical display designation (e.g. `M 31`). */
+	primaryDesignation: string,
+	/**  Curated common name (e.g. `Andromeda Galaxy`) when one exists. */
+	commonName?: string | null,
+};
+
 /**  A project channel (inferred or manually added). */
 export type ProjectChannelDto = ProjectChannelDto_Serialize | ProjectChannelDto_Deserialize;
 
@@ -4063,6 +3824,13 @@ export type ProjectCreateRequest_Deserialize = {
 	path: string,
 	initialSources?: string[],
 	notes: string | null,
+	/**
+	 *  Optional UUID of a spec-035 `canonical_target` the user selected in the
+	 *  project-creation target search. Additive and nullable; coexists with the
+	 *  legacy spec-013 `projects.target_id` (reconciliation is a future
+	 *  decision). Existing callers omit it.
+	 */
+	canonicalTargetId?: string | null,
 };
 
 /**  Request body for `projects.create` (spec 008, contract version 2.0.0). */
@@ -4073,6 +3841,13 @@ export type ProjectCreateRequest_Serialize = {
 	path: string,
 	initialSources: string[],
 	notes?: string | null,
+	/**
+	 *  Optional UUID of a spec-035 `canonical_target` the user selected in the
+	 *  project-creation target search. Additive and nullable; coexists with the
+	 *  legacy spec-013 `projects.target_id` (reconciliation is a future
+	 *  decision). Existing callers omit it.
+	 */
+	canonicalTargetId?: string | null,
 };
 
 /**  Successful result from `projects.create`. */
@@ -4116,6 +3891,13 @@ export type ProjectDetailDto_Deserialize = {
 	channels: ProjectChannelDto_Deserialize[],
 	createdAt: string,
 	updatedAt: string,
+	/**
+	 *  The associated spec-035 canonical target (when one was selected at
+	 *  project creation), resolved for display. `None` when the project has no
+	 *  canonical-target association. Additive; coexists with the legacy
+	 *  spec-013 target association.
+	 */
+	canonicalTarget: ProjectCanonicalTarget_Deserialize | null,
 };
 
 /**  A project detail (sources + channels included). */
@@ -4131,6 +3913,13 @@ export type ProjectDetailDto_Serialize = {
 	channels: ProjectChannelDto_Serialize[],
 	createdAt: string,
 	updatedAt: string,
+	/**
+	 *  The associated spec-035 canonical target (when one was selected at
+	 *  project creation), resolved for display. `None` when the project has no
+	 *  canonical-target association. Additive; coexists with the legacy
+	 *  spec-013 target association.
+	 */
+	canonicalTarget?: ProjectCanonicalTarget_Serialize | null,
 };
 
 /**  Request for `project.note.get`. */
@@ -4621,6 +4410,77 @@ export type ResolveStatus =
 /**  Catalog unavailable or request invalid. */
 "error";
 
+/**  Canonical identity returned by `target.resolve` (`target.resolve.json` §`ResolvedTarget`). */
+export type ResolvedTarget = ResolvedTarget_Serialize | ResolvedTarget_Deserialize;
+
+/**  Canonical identity returned by `target.resolve` (`target.resolve.json` §`ResolvedTarget`). */
+export type ResolvedTarget_Deserialize = {
+	targetId: string,
+	/**  SIMBAD physical-object id (dedup key) when resolved online. */
+	simbadOid: number | null,
+	primaryDesignation: string,
+	commonName: string | null,
+	objectType: TargetObjectType,
+	/**  ICRS J2000 right ascension in `[0, 360)` decimal degrees. */
+	raDeg: number | null,
+	/**  ICRS J2000 declination in `[-90, 90]` decimal degrees. */
+	decDeg: number | null,
+	aliases: string[],
+	source: TargetSource,
+};
+
+/**  Canonical identity returned by `target.resolve` (`target.resolve.json` §`ResolvedTarget`). */
+export type ResolvedTarget_Serialize = {
+	targetId: string,
+	/**  SIMBAD physical-object id (dedup key) when resolved online. */
+	simbadOid?: number | null,
+	primaryDesignation: string,
+	commonName?: string | null,
+	objectType: TargetObjectType,
+	/**  ICRS J2000 right ascension in `[0, 360)` decimal degrees. */
+	raDeg: number | null,
+	/**  ICRS J2000 declination in `[-90, 90]` decimal degrees. */
+	decDeg: number | null,
+	aliases: string[],
+	source: TargetSource,
+};
+
+/**  SIMBAD resolver settings (`target.resolution-settings.json` §`Settings`). */
+export type ResolverSettings = {
+	/**
+	 *  Enable/disable online SIMBAD resolution (FR-015; default true). When
+	 *  false, only seed+cache are used.
+	 */
+	onlineEnabled: boolean,
+	simbadEndpoint: string,
+	debounceMs: number,
+	requestTimeoutSecs: number,
+};
+
+/**  Get request for resolver settings (`target.resolution-settings.json` §`GetRequest`). */
+export type ResolverSettingsGetRequest = {
+	contractVersion: string,
+	requestId: string,
+	/**  Discriminant; always `"get"`. */
+	op: string,
+};
+
+/**  Response for resolver settings get/update (`target.resolution-settings.json` §`Response`). */
+export type ResolverSettingsResponse = {
+	contractVersion: string,
+	requestId: string,
+	settings: ResolverSettings,
+};
+
+/**  Update request for resolver settings (`target.resolution-settings.json` §`UpdateRequest`). */
+export type ResolverSettingsUpdateRequest = {
+	contractVersion: string,
+	requestId: string,
+	/**  Discriminant; always `"update"`. */
+	op: string,
+	settings: ResolverSettings,
+};
+
 /**
  *  Request DTO for `settings.restore-defaults`.
  * 
@@ -5055,6 +4915,9 @@ export type TargetAliasRemoveResult = {
 	auditId: string,
 };
 
+/**  Closed catalogue identifier slug (spec 035 `CatalogId`). */
+export type TargetCatalogId = "messier" | "caldwell" | "sharpless" | "abell_pn" | "abell_galaxies" | "arp" | "vdb" | "barnard" | "lbn" | "ldn" | "melotte" | "common" | "openngc";
+
 /**  Extended detail view of a target. */
 export type TargetDetail = TargetDetail_Serialize | TargetDetail_Deserialize;
 
@@ -5217,6 +5080,13 @@ export type TargetNoteUpdateResult = {
 	updatedAt: string,
 };
 
+/**
+ *  Closed astronomical object classification (spec 035 `ObjectType`).
+ * 
+ *  Mapped uniformly from SIMBAD `otype`; unknown values map to `Other`.
+ */
+export type TargetObjectType = "galaxy" | "planetary_nebula" | "emission_nebula" | "reflection_nebula" | "dark_nebula" | "open_cluster" | "globular_cluster" | "supernova_remnant" | "galaxy_cluster" | "double_star" | "asterism" | "other";
+
 /**  Generic error envelope for target operations. */
 export type TargetOpError = TargetOpError_Serialize | TargetOpError_Deserialize;
 
@@ -5265,6 +5135,25 @@ export type TargetProjectStub = {
 	id: string,
 	name: string,
 	state: ProjectState,
+};
+
+/**  Error envelope for `target.resolve` (`target.resolve.json` §`ErrorEnvelope`). */
+export type TargetResolveError = {
+	code: TargetResolveErrorCode,
+	message: string,
+};
+
+/**  Closed error codes for `target.resolve` (`target.resolve.json` §`ErrorCode`). */
+export type TargetResolveErrorCode = "resolver.unreachable" | "resolver.disabled" | "resolver.timeout" | "actor.not_authorised";
+
+/**
+ *  Manual user-override directive (`target.resolve.json` §`Request.override`).
+ * 
+ *  When present, binds `query` to this canonical target; persisted as
+ *  `source=user-override` and wins over future SIMBAD results (FR-014).
+ */
+export type TargetResolveOverride = {
+	targetId: string,
 };
 
 /**  Request for `target.resolve` (target.resolve.json §Request). */
@@ -5316,6 +5205,146 @@ export type TargetResolveResponse_Serialize = {
 	errors?: LookupError[] | null,
 };
 
+/**  Request for `target.resolve` (`target.resolve.json` §`Request`). */
+export type TargetResolveSimbadRequest = TargetResolveSimbadRequest_Serialize | TargetResolveSimbadRequest_Deserialize;
+
+/**  Request for `target.resolve` (`target.resolve.json` §`Request`). */
+export type TargetResolveSimbadRequest_Deserialize = {
+	contractVersion: string,
+	requestId: string,
+	/**  Complete designation or common name, or a FITS OBJECT value. */
+	query: string,
+	/**  When present, records a manual user override. */
+	override: TargetResolveOverride | null,
+};
+
+/**  Request for `target.resolve` (`target.resolve.json` §`Request`). */
+export type TargetResolveSimbadRequest_Serialize = {
+	contractVersion: string,
+	requestId: string,
+	/**  Complete designation or common name, or a FITS OBJECT value. */
+	query: string,
+	/**  When present, records a manual user override. */
+	override?: TargetResolveOverride | null,
+};
+
+/**
+ *  Response for `target.resolve` (`target.resolve.json` §`Response`).
+ * 
+ *  `target` is present when `status = Resolved`; `unresolvedReason` is present
+ *  when `status = Unresolved`.
+ */
+export type TargetResolveSimbadResponse = TargetResolveSimbadResponse_Serialize | TargetResolveSimbadResponse_Deserialize;
+
+/**
+ *  Response for `target.resolve` (`target.resolve.json` §`Response`).
+ * 
+ *  `target` is present when `status = Resolved`; `unresolvedReason` is present
+ *  when `status = Unresolved`.
+ */
+export type TargetResolveSimbadResponse_Deserialize = {
+	contractVersion: string,
+	requestId: string,
+	status: TargetResolveStatus,
+	target: ResolvedTarget_Deserialize | null,
+	/**
+	 *  Present when `status = Unresolved` (e.g. `"unknown"`, `"offline"`,
+	 *  `"ambiguous"`).
+	 */
+	unresolvedReason: string | null,
+	error: TargetResolveError | null,
+};
+
+/**
+ *  Response for `target.resolve` (`target.resolve.json` §`Response`).
+ * 
+ *  `target` is present when `status = Resolved`; `unresolvedReason` is present
+ *  when `status = Unresolved`.
+ */
+export type TargetResolveSimbadResponse_Serialize = {
+	contractVersion: string,
+	requestId: string,
+	status: TargetResolveStatus,
+	target?: ResolvedTarget_Serialize | null,
+	/**
+	 *  Present when `status = Unresolved` (e.g. `"unknown"`, `"offline"`,
+	 *  `"ambiguous"`).
+	 */
+	unresolvedReason?: string | null,
+	error?: TargetResolveError | null,
+};
+
+/**  Discriminated status for `target.resolve` (`target.resolve.json` §`ResolveStatus`). */
+export type TargetResolveStatus = 
+/**  A canonical target was determined (from cache or SIMBAD). */
+"resolved" | 
+/**
+ *  Unknown/garbled, or SIMBAD unreachable with no cached entry — marked
+ *  pending, retryable; coordinates never fabricated.
+ */
+"unresolved";
+
+/**  Request for `target.search` (`target.search.json` §`Request`). */
+export type TargetSearchRequest = TargetSearchRequest_Serialize | TargetSearchRequest_Deserialize;
+
+/**  Request for `target.search` (`target.search.json` §`Request`). */
+export type TargetSearchRequest_Deserialize = {
+	contractVersion: string,
+	requestId: string,
+	/**  Partial designation or common name. */
+	query: string,
+	/**  Optional; empty/absent = all catalogues. */
+	catalogFilter?: TargetCatalogId[],
+	/**  Optional; empty/absent = all types. */
+	typeFilter?: TargetObjectType[],
+	limit?: number,
+};
+
+/**  Request for `target.search` (`target.search.json` §`Request`). */
+export type TargetSearchRequest_Serialize = {
+	contractVersion: string,
+	requestId: string,
+	/**  Partial designation or common name. */
+	query: string,
+	/**  Optional; empty/absent = all catalogues. */
+	catalogFilter?: TargetCatalogId[],
+	/**  Optional; empty/absent = all types. */
+	typeFilter?: TargetObjectType[],
+	limit: number,
+};
+
+/**
+ *  Response for `target.search` (`target.search.json` §`Response`).
+ * 
+ *  Local matches only; ordered by match quality. Long-tail/SIMBAD results
+ *  arrive via `target.resolve`.
+ */
+export type TargetSearchResponse = TargetSearchResponse_Serialize | TargetSearchResponse_Deserialize;
+
+/**
+ *  Response for `target.search` (`target.search.json` §`Response`).
+ * 
+ *  Local matches only; ordered by match quality. Long-tail/SIMBAD results
+ *  arrive via `target.resolve`.
+ */
+export type TargetSearchResponse_Deserialize = {
+	contractVersion: string,
+	requestId: string,
+	suggestions: TargetSuggestion_Deserialize[],
+};
+
+/**
+ *  Response for `target.search` (`target.search.json` §`Response`).
+ * 
+ *  Local matches only; ordered by match quality. Long-tail/SIMBAD results
+ *  arrive via `target.resolve`.
+ */
+export type TargetSearchResponse_Serialize = {
+	contractVersion: string,
+	requestId: string,
+	suggestions: TargetSuggestion_Serialize[],
+};
+
 /**  A single session row in the target history (spec 023 `TargetSession`). */
 export type TargetSession = TargetSession_Serialize | TargetSession_Deserialize;
 
@@ -5349,6 +5378,39 @@ export type TargetSession_Serialize = {
 	frames?: number | null,
 	/**  Deep-link to the Inventory entry. */
 	inventoryId: string,
+};
+
+/**
+ *  Provenance of a canonical target identity (spec 035).
+ * 
+ *  `UserOverride` serializes as the hyphenated wire form `user-override`
+ *  (DTO↔wire parity, T009); the other variants are lower-case words.
+ */
+export type TargetSource = "seed" | "resolved" | "user-override";
+
+/**  A single ranked typeahead suggestion (`target.search.json` §`Suggestion`). */
+export type TargetSuggestion = TargetSuggestion_Serialize | TargetSuggestion_Deserialize;
+
+/**  A single ranked typeahead suggestion (`target.search.json` §`Suggestion`). */
+export type TargetSuggestion_Deserialize = {
+	targetId: string,
+	primaryDesignation: string,
+	commonName: string | null,
+	objectType: TargetObjectType,
+	/**  The alias that matched the query. */
+	matchedAlias: string | null,
+	source: TargetSource,
+};
+
+/**  A single ranked typeahead suggestion (`target.search.json` §`Suggestion`). */
+export type TargetSuggestion_Serialize = {
+	targetId: string,
+	primaryDesignation: string,
+	commonName?: string | null,
+	objectType: TargetObjectType,
+	/**  The alias that matched the query. */
+	matchedAlias?: string | null,
+	source: TargetSource,
 };
 
 /**  An astronomical target as seen in list views. */

@@ -46,9 +46,9 @@ const STEPS = [
     description: 'Configure the astrophotography processing tools installed on your system.',
   },
   {
-    label: 'Catalogs',
-    heading: 'Target catalogs',
-    description: 'Choose which astronomical catalogs to use for resolving object names in your files.',
+    label: 'Resolution',
+    heading: 'Target resolution',
+    description: 'How object names in your files are resolved to known astronomical targets.',
   },
   {
     label: 'Confirm',

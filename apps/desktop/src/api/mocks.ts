@@ -249,6 +249,22 @@ export async function mockInvoke<T>(
 
     // ---------- Mutation Commands ----------
 
+    case 'lifecycle_transition_apply': {
+      // Mock: always succeeds. The request carries the desired nextState inside
+      // `args.request.project.nextState` — echo it back so the UI can update.
+      const req = (_args as { request?: { project?: { nextState?: string; currentState?: string; entityId?: string } } } | undefined)
+        ?.request?.project;
+      return {
+        status: 'success',
+        contractVersion: '2.0.0',
+        requestId: crypto.randomUUID(),
+        appliedAt: new Date().toISOString(),
+        priorState: req?.currentState ?? 'processing',
+        newState: req?.nextState ?? 'completed',
+        auditId: 'mock-audit-transition',
+      } as T;
+    }
+
     case 'sessions.transition': {
       const { sessions } = await import('@/data/fixtures/sessions');
       return sessions[0] as T;

@@ -23,7 +23,6 @@ patterns = { path = "../../patterns" }
 persistence_db = { path = "../../persistence/db" }
 project_structure = { path = "../../project/structure" }
 targeting = { path = "../../targeting" }
-targeting_catalogs = { path = "../../targeting/catalogs" }
 hex.workspace = true
 serde = { workspace = true }
 serde_json.workspace = true
@@ -37,6 +36,9 @@ uuid = { workspace = true }
 
 [dev-dependencies]
 tempfile = { workspace = true }
+# spec 035 (T020): the `FakeResolver` test double lives behind targeting's
+# `test-fixture` feature; enable it for offline target.resolve use-case tests.
+targeting = { path = "../../targeting", features = ["test-fixture"] }
 
 [features]
 # Developer-mode surface (spec 021). Release binaries must NOT enable this.

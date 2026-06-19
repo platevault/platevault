@@ -17,7 +17,6 @@ pub mod artifacts;
 pub mod audit;
 pub mod calibration;
 pub mod calibration_tolerances;
-pub mod catalogs;
 pub mod cleanup;
 #[cfg(feature = "dev-tools")]
 pub mod dev;

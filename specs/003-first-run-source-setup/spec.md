@@ -1,5 +1,10 @@
 # Feature Specification: First-Run Source Setup
 
+> **⚠ Partial supersession (2026-06-18)**: the "Download Catalogs" wizard step (backed by spec 014's
+> `catalog.manifest.fetch` / `catalog.download`) is superseded by [Spec 035 — SIMBAD Target Resolution](../035-simbad-target-resolution/spec.md).
+> Under 035 there is no catalog download at first run; if a catalog/resolver step remains it becomes a
+> lightweight SIMBAD-reachability check. All other first-run setup steps are unaffected.
+
 > **UI Revised**: The UI design in this spec has been revised by
 > [Spec 030 — UI Audit & Revision](../030-ui-audit-revision/spec.md).
 > When implementing, follow spec 030 for layout, navigation, and component patterns.

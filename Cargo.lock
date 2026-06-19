@@ -66,7 +66,6 @@ dependencies = [
  "sha2 0.10.9",
  "sqlx",
  "targeting",
- "targeting_catalogs",
  "tempfile",
  "thiserror 2.0.18",
  "time",
@@ -879,7 +878,6 @@ dependencies = [
  "specta-typescript",
  "sqlx",
  "targeting",
- "targeting_catalogs",
  "tauri",
  "tauri-build",
  "tauri-plugin-dialog",
@@ -3389,6 +3387,7 @@ checksum = "62e0021ea2c22aed41653bc7e1419abb2c97e038ff2c33d0e1309e49a97deec0"
 dependencies = [
  "base64 0.22.1",
  "bytes",
+ "futures-channel",
  "futures-core",
  "futures-util",
  "http",
@@ -3665,6 +3664,17 @@ checksum = "6ce2691df843ecc5d231c0b14ece2acc3efb62c0a398c7e1d875f3983ce020e3"
 dependencies = [
  "core-foundation-sys",
  "libc",
+]
+
+[[package]]
+name = "seed-builder"
+version = "0.1.0"
+dependencies = [
+ "reqwest",
+ "serde",
+ "serde_json",
+ "targeting",
+ "time",
 ]
 
 [[package]]
@@ -4439,32 +4449,18 @@ checksum = "61c41af27dd6d1e27b1b16b489db798443478cef1f06a660c96db617ba5de3b1"
 name = "targeting"
 version = "0.1.0"
 dependencies = [
+ "async-trait",
  "persistence_db",
+ "reqwest",
  "serde",
  "serde_json",
  "sqlx",
  "strsim",
  "thiserror 2.0.18",
- "tokio",
- "tracing",
- "unicode-normalization",
- "uuid",
-]
-
-[[package]]
-name = "targeting_catalogs"
-version = "0.1.0"
-dependencies = [
- "async-trait",
- "hex",
- "reqwest",
- "serde",
- "serde_json",
- "sha2 0.10.9",
- "thiserror 2.0.18",
  "time",
  "tokio",
  "tracing",
+ "unicode-normalization",
  "uuid",
 ]
 

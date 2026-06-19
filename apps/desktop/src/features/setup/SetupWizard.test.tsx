@@ -52,6 +52,20 @@ vi.mock('@/api/commands', () => ({
   completeFirstRun: vi.fn().mockResolvedValue({ success: true }),
   registerRoot: vi.fn().mockResolvedValue({ id: 'mock-root', path: '' }),
   registerRootBatch: vi.fn().mockResolvedValue({ results: [] }),
+  // Repurposed "Target resolution" step reads/writes resolver settings.
+  getResolverSettings: vi.fn().mockResolvedValue({
+    contractVersion: '1.0',
+    requestId: 'r',
+    settings: {
+      onlineEnabled: true,
+      simbadEndpoint: 'https://simbad.example/tap',
+      debounceMs: 300,
+      requestTimeoutSecs: 10,
+    },
+  }),
+  updateResolverSettings: vi.fn().mockImplementation((settings) =>
+    Promise.resolve({ contractVersion: '1.0', requestId: 'r', settings }),
+  ),
 }));
 
 // Mock @tauri-apps/api/core to prevent any accidental live invoke.
@@ -221,7 +235,7 @@ describe('SetupWizard 4-step flow', () => {
 
     // Click Continue — should advance to Catalogs step
     fireEvent.click(continueBtn);
-    expect(screen.getByRole('heading', { name: /target catalogs/i })).toBeInTheDocument();
+    expect(screen.getByRole('heading', { name: /target resolution/i })).toBeInTheDocument();
   });
 
   it('allows Step 3 (Catalogs) to advance without changes', async () => {
@@ -249,7 +263,7 @@ describe('SetupWizard 4-step flow', () => {
     renderWizard();
 
     // We should be on the Catalogs step (heading)
-    expect(screen.getByRole('heading', { name: /target catalogs/i })).toBeInTheDocument();
+    expect(screen.getByRole('heading', { name: /target resolution/i })).toBeInTheDocument();
     expect(screen.getByText(/step 3 of 4/i)).toBeInTheDocument();
 
     // Continue should be enabled
