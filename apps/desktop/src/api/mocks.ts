@@ -413,7 +413,46 @@ export async function mockInvoke<T>(
       return { completed: false } as T;
     }
 
-    // ── Inbox commands (spec 005) ──────────────────────────────────────────────
+    // ── Inbox commands (spec 005 + 039) ───────────────────────────────────────
+    case 'inbox_list': {
+      // Mock: two roots each with unacknowledged items (SC-001 cross-root).
+      return {
+        items: [
+          {
+            inboxItemId: 'item-001',
+            rootId: 'root-lights-001',
+            rootAbsolutePath: '/astro/raw',
+            relativePath: '2025-10-10/NGC7000',
+            fileCount: 18,
+            lane: 'fits',
+            state: 'classified',
+            contentSignature: 'sig-abc',
+          },
+          {
+            inboxItemId: 'item-002',
+            rootId: 'root-lights-001',
+            rootAbsolutePath: '/astro/raw',
+            relativePath: '2025-10-10/darks',
+            fileCount: 50,
+            lane: 'fits',
+            state: 'pending_classification',
+            contentSignature: 'sig-def',
+          },
+          {
+            inboxItemId: 'item-003',
+            rootId: 'root-inbox-001',
+            rootAbsolutePath: '/astro/inbox',
+            relativePath: '2025-11-01/Jupiter',
+            fileCount: 3,
+            lane: 'video',
+            state: 'pending_classification',
+            contentSignature: 'sig-ghi',
+          },
+        ],
+        capped: false,
+        limit: 500,
+      } as T;
+    }
     case 'inbox_scan_folder': {
       return {
         rootId: 'root-inbox-001',

@@ -1011,6 +1011,17 @@ export const commands = {
 	 */
 	inboxReclassify: (req: InboxReclassifyRequest) => typedError<InboxReclassifyResponse_Serialize, string>(__TAURI_INVOKE("inbox_reclassify", { req })),
 	/**
+	 *  `inbox.list` — return all unacknowledged inbox items across all registered
+	 *  roots (states `pending_classification` and `classified`).
+	 * 
+	 *  Results are capped at 500 items (FR-006). Each item carries its root's
+	 *  absolute path so the UI can group/label by root without a second call.
+	 * 
+	 *  # Errors
+	 *  Returns a string error on database failure.
+	 */
+	inboxList: () => typedError<InboxListResponse, string>(__TAURI_INVOKE("inbox_list")),
+	/**
 	 *  `inventory.list` — return the grouped inventory ledger with optional filters.
 	 * 
 	 *  # Errors
@@ -2290,6 +2301,33 @@ export type InboxItemSummary = {
 	lane: string,
 	state: string,
 	contentSignature: string,
+};
+
+/**
+ *  One unacknowledged inbox item returned by `inbox.list`.
+ * 
+ *  Extends `InboxItemSummary` with the root's id and absolute path so the UI
+ *  can group/label items by root without a second call.
+ */
+export type InboxListItem = {
+	inboxItemId: string,
+	rootId: string,
+	/**  Absolute path of the registered root (for display and confirm calls). */
+	rootAbsolutePath: string,
+	relativePath: string,
+	fileCount: number,
+	lane: string,
+	state: string,
+	contentSignature: string,
+};
+
+/**  Response from `inbox.list`. */
+export type InboxListResponse = {
+	items: InboxListItem[],
+	/**  Whether the list was capped at `limit` (true = there may be more). */
+	capped: boolean,
+	/**  Maximum items per response (matches the server-side cap). */
+	limit: number,
 };
 
 /**  A single file override in a reclassify request. */

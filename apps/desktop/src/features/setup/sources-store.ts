@@ -23,7 +23,9 @@ export const SOURCE_KIND_LABELS: Record<SourceKind, string> = {
   inbox: 'Inbox',
 };
 
-export const REQUIRED_KINDS: SourceKind[] = ['light_frames', 'project', 'inbox'];
+// spec 039: inbox is now optional — users do not need a dedicated drop folder
+// to use the Inbox (which aggregates unacknowledged items across all roots).
+export const REQUIRED_KINDS: SourceKind[] = ['light_frames', 'project'];
 
 export interface SourceEntry {
   path: string;

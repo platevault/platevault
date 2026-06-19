@@ -1,13 +1,16 @@
 /**
  * InboxPage — three-pane classify / confirm / reclassify workflow.
  *
- * Left list  : inbox items from inbox.scan.folder (real command).
- * Centre pane: per-item classification breakdown from inbox.classify with
- *              "Needs review" group and reclassify picker.
- * Right bar  : Confirm / Split action wired to inbox.confirm → plan review.
+ * spec 039: the left list is now a cross-root aggregate of all unacknowledged
+ * items (inbox.list), grouped/labelled by their registered root.  The
+ * hardcoded DEV_ROOT_ID / DEV_ROOT_PATH stub has been removed.
+ *
+ * Left list  : unacknowledged items from all registered roots (inbox.list).
+ * Centre pane: per-item classification breakdown (inbox.classify).
+ * Right bar  : Confirm / Split → plan review (inbox.confirm).
  */
 
-import { useState } from 'react';
+import { useCallback, useMemo, useState } from 'react';
 import { useNavigate, useSearch } from '@tanstack/react-router';
 import { PageShell, ListDetailLayout, TopActionBar } from '@/components';
 import { Btn, EmptyState } from '@/ui';
@@ -16,21 +19,42 @@ import { addToast } from '@/shared/toast';
 import { InboxList } from './InboxList';
 import { InboxDetail } from './InboxDetail';
 import { ActionSidebar } from './ActionSidebar';
-import { useInboxScan, useInboxClassification, useInboxConfirm } from './store';
+import {
+  useInboxList,
+  useInboxRescan,
+  useInboxClassification,
+  useInboxConfirm,
+} from './store';
 import type { FrameType, InboxGroup } from '@/lib/route-contract';
-
-// Temporary: during development use stub root values until a settings-backed
-// root is available. Replace with a real lookup from the roots store once
-// spec 006 is wired. These values are also used by mocks.ts.
-const DEV_ROOT_ID = 'root-inbox-001';
-const DEV_ROOT_PATH = '/astro/inbox';
 
 export function InboxPage() {
   const { selected, type, group } = useSearch({ from: '/shell/inbox' });
   const navigate = useNavigate({ from: '/inbox' });
 
-  const { data: scan, loading: scanLoading } = useInboxScan(DEV_ROOT_ID, DEV_ROOT_PATH);
-  const items = scan?.items ?? [];
+  // FR-001 / FR-002: cross-root aggregate list replaces the hardcoded scan.
+  const { data: listData, loading: listLoading, refresh: refreshList } = useInboxList();
+  const items = listData?.items ?? [];
+
+  // Derive the unique roots from the current item list so rescan knows which
+  // roots to ping (FR-005). Deduplicated by rootId.
+  const roots = useMemo(() => {
+    const seen = new Set<string>();
+    const result: Array<{ rootId: string; rootAbsolutePath: string }> = [];
+    for (const item of items) {
+      if (!seen.has(item.rootId)) {
+        seen.add(item.rootId);
+        result.push({ rootId: item.rootId, rootAbsolutePath: item.rootAbsolutePath });
+      }
+    }
+    return result;
+  }, [items]);
+
+  const onRescanComplete = useCallback(() => refreshList(), [refreshList]);
+  const { loading: rescanLoading, rescan } = useInboxRescan(roots, onRescanComplete);
+
+  // FR-006: items are already bounded at 500 by the backend; surface a notice
+  // when the cap is hit.
+  const isCapped = listData?.capped ?? false;
 
   // URL-backed selection is by list index so it stays stable across re-fetches.
   const selectedItem = selected !== undefined ? items[selected] : undefined;
@@ -42,10 +66,13 @@ export function InboxPage() {
   const onSelect = (idx: number) =>
     navigate({ search: (prev) => ({ ...prev, selected: idx }) });
 
+  // Each item carries its own root path — use it for classify / confirm calls.
+  const selectedRootPath = selectedItem?.rootAbsolutePath ?? '';
+
   // Load classification for the selected item (no-op when nothing selected).
   const { data: classification } = useInboxClassification(
     selectedItem?.inboxItemId ?? '',
-    DEV_ROOT_PATH,
+    selectedRootPath,
   );
 
   const { confirm, loading: confirmLoading } = useInboxConfirm();
@@ -60,7 +87,7 @@ export function InboxPage() {
         inboxItemId: selectedItem.inboxItemId,
         action,
         contentSignature: classification.contentSignature,
-        rootAbsolutePath: DEV_ROOT_PATH,
+        rootAbsolutePath: selectedRootPath,
         destructiveDestination,
       });
       addToast({
@@ -72,6 +99,8 @@ export function InboxPage() {
             navigate({ to: '/archive', search: { selected: undefined } as never }),
         },
       });
+      // Refresh so confirmed item drops out (FR-003).
+      refreshList();
     } catch (e) {
       const msg = String(e);
       if (msg.includes('inbox.has.open.plan')) {
@@ -88,18 +117,29 @@ export function InboxPage() {
   const canConfirm =
     !!selectedItem && !!classification && classification.type !== 'unclassified' && !hasOpenPlan;
 
+  const subtitle = listLoading
+    ? 'Loading…'
+    : isCapped
+      ? `${items.length}+ folders to review (showing first ${listData?.limit ?? 500})`
+      : `${items.length} folder${items.length !== 1 ? 's' : ''} to review`;
+
   return (
     <PageShell>
       <ListDetailLayout
         topBar={
           <TopActionBar
             title="Inbox"
-            subtitle={
-              scanLoading
-                ? 'Scanning…'
-                : `${items.length} folder${items.length !== 1 ? 's' : ''} to review`
+            subtitle={subtitle}
+            right={
+              <Btn
+                size="sm"
+                disabled={rescanLoading}
+                onClick={() => void rescan()}
+                aria-label="Rescan all roots"
+              >
+                {rescanLoading ? 'Rescanning…' : 'Rescan'}
+              </Btn>
             }
-            right={<Btn size="sm">Rescan inbox</Btn>}
           />
         }
         list={
@@ -121,7 +161,7 @@ export function InboxPage() {
           selectedItem ? (
             <InboxDetail
               item={selectedItem}
-              rootAbsolutePath={DEV_ROOT_PATH}
+              rootAbsolutePath={selectedRootPath}
               classification={classification ?? null}
             />
           ) : (

@@ -11,12 +11,17 @@ use app_core::inbox::reclassify::{reclassify, ReclassifyOverride, ReclassifyRequ
 use app_core::inbox::scan::{scan_root, ScanOptions};
 use contracts_core::inbox::{
     InboxBreakdownEntry, InboxClassifyRequest, InboxClassifyResponse, InboxConfirmRequest,
-    InboxConfirmResponse, InboxFileEntry, InboxItemSummary, InboxReclassifyRequest,
-    InboxReclassifyResponse, InboxScanFolderRequest, InboxScanFolderResponse, InboxScanResult,
+    InboxConfirmResponse, InboxFileEntry, InboxItemSummary, InboxListItem, InboxListResponse,
+    InboxReclassifyRequest, InboxReclassifyResponse, InboxScanFolderRequest,
+    InboxScanFolderResponse, InboxScanResult,
 };
+use persistence_db::repositories::inbox::list_unacknowledged_across_roots;
 use sqlx::SqlitePool;
 use std::path::PathBuf;
 use uuid::Uuid;
+
+/// Cap on cross-root listing (FR-006 — no unbounded loads).
+const INBOX_LIST_LIMIT: i64 = 500;
 
 // ── inbox.classify ────────────────────────────────────────────────────────────
 
@@ -189,6 +194,47 @@ pub async fn inbox_scan_folder(
     }
 
     Ok(InboxScanFolderResponse { root_id: req.root_id, items })
+}
+
+// ── inbox.list (spec 039) ─────────────────────────────────────────────────────
+
+/// `inbox.list` — return all unacknowledged inbox items across all registered
+/// roots (states `pending_classification` and `classified`).
+///
+/// Results are capped at 500 items (FR-006). Each item carries its root's
+/// absolute path so the UI can group/label by root without a second call.
+///
+/// # Errors
+/// Returns a string error on database failure.
+#[tauri::command]
+#[specta::specta]
+pub async fn inbox_list(pool: tauri::State<'_, SqlitePool>) -> Result<InboxListResponse, String> {
+    let rows = list_unacknowledged_across_roots(&pool, INBOX_LIST_LIMIT)
+        .await
+        .map_err(|e| e.to_string())?;
+
+    let total = rows.len();
+    let capped = total >= usize::try_from(INBOX_LIST_LIMIT).unwrap_or(usize::MAX);
+
+    let items = rows
+        .into_iter()
+        .map(|r| InboxListItem {
+            inbox_item_id: r.id,
+            root_id: r.root_id,
+            root_absolute_path: r.root_path,
+            relative_path: r.relative_path,
+            file_count: u32::try_from(r.file_count).unwrap_or(u32::MAX),
+            lane: r.lane,
+            state: r.state,
+            content_signature: r.content_signature.unwrap_or_default(),
+        })
+        .collect();
+
+    Ok(InboxListResponse {
+        items,
+        capped,
+        limit: u32::try_from(INBOX_LIST_LIMIT).unwrap_or(u32::MAX),
+    })
 }
 
 // ── Legacy inbox.scan (retained for spec 030 compatibility) ──────────────────
