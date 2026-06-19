@@ -280,7 +280,7 @@ describe('SetupWizard 4-step flow', () => {
 
     // Click Continue — should advance to Catalogs step
     fireEvent.click(continueBtn);
-    expect(screen.getByRole('heading', { name: /target resolution/i })).toBeInTheDocument();
+    expect(screen.getByRole('heading', { name: /configuration/i })).toBeInTheDocument();
   });
 
   it('allows Step 3 (Catalogs) to advance without changes', async () => {
@@ -304,7 +304,7 @@ describe('SetupWizard 4-step flow', () => {
     renderWizard();
 
     // We should be on the Catalogs step (heading)
-    expect(screen.getByRole('heading', { name: /target resolution/i })).toBeInTheDocument();
+    expect(screen.getByRole('heading', { name: /configuration/i })).toBeInTheDocument();
     expect(screen.getByText(/step 3 of 4/i)).toBeInTheDocument();
 
     // Continue should be enabled

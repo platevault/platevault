@@ -77,21 +77,50 @@ export function ResolverSettingsControl({ compact = false }: ResolverSettingsCon
 
   return (
     <>
-      <div className="alm-settings__row">
-        <div className="alm-settings__row-label">Online SIMBAD resolution</div>
-        <div className="alm-settings__row-content">
-          <Toggle
-            checked={settings.onlineEnabled}
-            aria-label="Enable online SIMBAD resolution"
-            onChange={(v) => void persist({ onlineEnabled: v })}
-          />
+      {compact ? (
+        // First-run Configuration step: label + toggle on one line, description
+        // below the control (not beside it).
+        <div style={{ display: 'flex', flexDirection: 'column', gap: 'var(--alm-sp-2)' }}>
+          <div
+            style={{
+              display: 'flex',
+              alignItems: 'center',
+              justifyContent: 'space-between',
+              gap: 'var(--alm-sp-3)',
+            }}
+          >
+            <span style={{ fontWeight: 'var(--alm-weight-semibold)', whiteSpace: 'nowrap' }}>
+              Online SIMBAD resolution
+            </span>
+            <Toggle
+              checked={settings.onlineEnabled}
+              aria-label="Enable online SIMBAD resolution"
+              onChange={(v) => void persist({ onlineEnabled: v })}
+            />
+          </div>
           <div className="alm-settings__row-desc">
             {settings.onlineEnabled
               ? 'Targets not in the bundled seed or local cache are resolved on demand from SIMBAD, then cached.'
               : 'Online resolution is off — only the bundled seed and local cache are used. Unknown objects are marked unresolved.'}
           </div>
         </div>
-      </div>
+      ) : (
+        <div className="alm-settings__row">
+          <div className="alm-settings__row-label">Online SIMBAD resolution</div>
+          <div className="alm-settings__row-content">
+            <Toggle
+              checked={settings.onlineEnabled}
+              aria-label="Enable online SIMBAD resolution"
+              onChange={(v) => void persist({ onlineEnabled: v })}
+            />
+            <div className="alm-settings__row-desc">
+              {settings.onlineEnabled
+                ? 'Targets not in the bundled seed or local cache are resolved on demand from SIMBAD, then cached.'
+                : 'Online resolution is off — only the bundled seed and local cache are used. Unknown objects are marked unresolved.'}
+            </div>
+          </div>
+        </div>
+      )}
 
       {!compact && (
         <>

@@ -2,7 +2,7 @@ import { useEffect } from 'react';
 import { Btn } from '@/ui/Btn';
 import { Pill } from '@/ui/Pill';
 import { Toggle } from '@/ui/Toggle';
-import { useDirectoryPicker } from '@/shared/native/picker';
+import { useFilePicker } from '@/shared/native/picker';
 
 export interface ToolConfig {
   enabled: boolean;
@@ -246,10 +246,15 @@ function ToolPathPicker({
   path: string | null;
   onPathChange: (path: string | null) => void;
 }) {
-  const { pick, loading } = useDirectoryPicker();
+  const { pick, loading } = useFilePicker();
 
   const handleChoose = async () => {
-    const result = await pick();
+    // The processing tool's executable is a file (e.g. PixInsight.exe /
+    // pixinsight / Siril), not a directory — pick the binary, not a folder.
+    const result = await pick([
+      { name: 'Executable', extensions: ['exe', 'app', 'bin'] },
+      { name: 'All files', extensions: ['*'] },
+    ]);
     if (result.path) {
       onPathChange(result.path);
     }
@@ -284,8 +289,13 @@ function ToolPathPicker({
         {path ?? 'No path set'}
       </span>
       {path && <Pill variant="ok">OK</Pill>}
-      <Btn size="sm" onClick={handleChoose} disabled={loading}>
-        {loading ? 'Choosing…' : `Choose ${toolName}…`}
+      <Btn
+        size="sm"
+        onClick={handleChoose}
+        disabled={loading}
+        aria-label={`Select ${toolName} binary`}
+      >
+        {loading ? 'Choosing…' : 'Select binary…'}
       </Btn>
     </>
   );
