@@ -73,8 +73,8 @@ export function DataSources({ save: _save }: DataSourcesProps) {
   return (
     <>
       <div className="alm-settings__group">
-        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 'var(--alm-sp-3)' }}>
-          <div className="alm-settings__group-title" style={{ marginBottom: 0 }}>Library Roots</div>
+        <div className="alm-settings__group-header">
+          <div className="alm-settings__group-title">Library Roots</div>
           <Btn size="sm" onClick={() => { setShowAdd(true); setAddError(null); }}>
             Add source folder
           </Btn>

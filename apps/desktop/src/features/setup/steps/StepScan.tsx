@@ -429,20 +429,29 @@ export function StepScan({ sources, flushResult, onFinish, isFinishing, onBack }
   const totalDetected = sourceStates.reduce((acc, s) => acc + s.items.length, 0);
 
   return (
-    <div className="alm-step-scan" data-testid="step-scan">
+    <div
+      className="alm-step-scan"
+      data-testid="step-scan"
+      style={{
+        display: 'flex',
+        flexDirection: 'column',
+        flex: 1,
+        minHeight: 0,
+      }}
+    >
       {sourceStates.length === 0 ? (
         <p style={{ fontSize: 'var(--alm-text-sm)', color: 'var(--alm-text-muted)' }}>
           No sources registered. Go back and add at least one folder.
         </p>
       ) : (
         <>
-          {/* Per-source results — scrollable container so N sources don't grow the page */}
+          {/* Per-source results — scrollable region; expanding accordions scroll here,
+              not the whole wizard page. */}
           <div
             style={{
               flex: 1,
               minHeight: 0,
               overflowY: 'auto',
-              marginBottom: 'var(--alm-sp-4)',
             }}
           >
             {sourceStates.map((s) => (
@@ -450,14 +459,15 @@ export function StepScan({ sources, flushResult, onFinish, isFinishing, onBack }
             ))}
           </div>
 
-          {/* Summary footer (shown when all sources are complete) */}
+          {/* Summary line (shown when all sources are complete) */}
           {allDone && (
             <p
               data-testid="scan-summary"
               style={{
                 fontSize: 'var(--alm-text-sm)',
                 color: 'var(--alm-text-secondary)',
-                margin: 0,
+                margin: 'var(--alm-sp-3) 0 0',
+                flexShrink: 0,
               }}
             >
               {totalDetected > 0
@@ -468,8 +478,17 @@ export function StepScan({ sources, flushResult, onFinish, isFinishing, onBack }
         </>
       )}
 
-      {/* Back (correct sources, then re-scan) + Finish (enabled once scans complete) */}
-      <div style={{ marginTop: 'var(--alm-sp-5)', display: 'flex', gap: 'var(--alm-sp-3)' }}>
+      {/* Back / Finish — pinned footer, never scrolls off-screen */}
+      <div
+        style={{
+          flexShrink: 0,
+          marginTop: 'var(--alm-sp-4)',
+          paddingTop: 'var(--alm-sp-4)',
+          borderTop: '1px solid var(--alm-border)',
+          display: 'flex',
+          gap: 'var(--alm-sp-3)',
+        }}
+      >
         <button
           data-testid="back-button"
           onClick={onBack}
