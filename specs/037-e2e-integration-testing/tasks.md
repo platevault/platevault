@@ -128,8 +128,8 @@ Story labels map to spec user stories US1–US5.
 
 ## Phase 8: Polish & Cross-Cutting
 
-- [ ] T036 **Seeded-regression validation (D8 / SC-007)**: for ~3–5 covered behaviors, temporarily introduce a regression (drop a persisted field, rename a payload key, skip an audit write), confirm a Layer-1 or Layer-2 test fails, revert; record outcomes in an IMPLEMENTATION-NOTES.md
-- [ ] T037 Confirm determinism: run Layer 1 offline and repeatedly to rule out order-dependent/shared-state flakiness (SC-006)
+- [X] T036 **Seeded-regression validation (D8 / SC-007)**: for ~3–5 covered behaviors, temporarily introduce a regression (drop a persisted field, rename a payload key, skip an audit write), confirm a Layer-1 or Layer-2 test fails, revert; record outcomes in an IMPLEMENTATION-NOTES.md
+- [X] T037 Confirm determinism: run Layer 1 offline and repeatedly to rule out order-dependent/shared-state flakiness (SC-006)
 - [ ] T038 Final verification gate: `just lint`, `just test`, `just typecheck`, `just test-integration`, and `just test-e2e` (Linux) all green; per-OS CI green on a test PR (required platforms per FR-010); confirm the feature diff adds only test/CI/fixture/doc code and touches **no product `src` logic** beyond thin test hooks (FR-018 guard, addresses F5); then `speckit.verify`
 - [ ] T039 Update `specs/037-e2e-integration-testing/checklists/requirements.md` and coverage-matrix to final state; ensure no implemented area is silently uncovered
 
