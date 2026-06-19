@@ -1,18 +1,22 @@
-// First-run wizard: "Target resolution" step (spec 035, repurposed).
+// First-run wizard: "Configuration" step.
 //
-// This step previously downloaded hosted catalog files (spec 014). That backend
-// surface has been removed: targets now resolve on demand from SIMBAD, backed by
-// a bundled seed of popular catalogues and a growing local cache. The wizard
-// step slot is retained (first_run_state.last_step CHECK still includes
-// 'catalogs' — no migration), but its content is now the SIMBAD
-// online-resolution toggle plus a short explanatory note.
+// Originally the spec-014 catalog-download step; that backend was removed (spec
+// 035 — targets resolve on demand from SIMBAD + a bundled seed + local cache).
+// The step slot is retained (first_run_state.last_step CHECK still includes
+// 'catalogs' — no migration) and repurposed as a small first-run Configuration
+// screen: a few defaults the user can set up front (all changeable later in
+// Settings).
 
+import { useEffect, useState, type ReactNode } from 'react';
 import { ResolverSettingsControl } from '@/features/settings/ResolverSettingsControl';
+import { DensitySelector } from '@/features/settings/DensitySelector';
+import { usePreference } from '@/data/preferences';
+import { getSettings, updateSettings } from '@/api/commands';
 
 // ── Types ─────────────────────────────────────────────────────────────────────
 //
 // Kept for compatibility with SetupWizard state persistence and StepConfirm.
-// `downloadAll` is now an inert legacy flag — nothing is downloaded.
+// `downloadAll` is an inert legacy flag — nothing is downloaded.
 
 export interface CatalogSettings {
   /** Legacy flag retained for state-shape compatibility; no longer used. */
@@ -28,35 +32,150 @@ export interface StepCatalogsProps {
   onSettingsChange: (settings: CatalogSettings) => void;
 }
 
-// ── StepCatalogs (Target resolution) ────────────────────────────────────────
+type DefaultProtection = 'protected' | 'normal' | 'unprotected';
+
+// ── Default source protection (spec 018, persisted via the settings backend) ──
+
+function DefaultProtectionControl() {
+  const [value, setValue] = useState<DefaultProtection>('protected');
+
+  useEffect(() => {
+    let cancelled = false;
+    getSettings({ scope: 'cleanup' })
+      .then((data) => {
+        const vals = data?.values as Record<string, unknown> | undefined;
+        const v = vals?.defaultProtection;
+        if (!cancelled && typeof v === 'string') setValue(v as DefaultProtection);
+      })
+      .catch(() => {
+        // Backend unavailable — keep the default.
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, []);
+
+  const onChange = (v: DefaultProtection) => {
+    setValue(v);
+    void updateSettings({ scope: 'cleanup', values: { defaultProtection: v } }).catch(() => {});
+  };
+
+  return (
+    <select
+      className="alm-select"
+      value={value}
+      aria-label="Default source protection"
+      onChange={(e) => onChange(e.target.value as DefaultProtection)}
+      style={{ height: 28 }}
+    >
+      <option value="protected">Protected</option>
+      <option value="normal">Normal</option>
+      <option value="unprotected">Unprotected</option>
+    </select>
+  );
+}
+
+// ── Default scan depth (frontend preference; applied to newly added folders) ──
+
+function DefaultScanDepthControl() {
+  const [scanDepth, setScanDepth] = usePreference('defaultScanDepth');
+  return (
+    <select
+      className="alm-select"
+      value={scanDepth}
+      aria-label="Default scan depth"
+      onChange={(e) => setScanDepth(e.target.value as 'recursive' | 'single')}
+      style={{ height: 28 }}
+    >
+      <option value="recursive">Recursive (include subfolders)</option>
+      <option value="single">Single folder only</option>
+    </select>
+  );
+}
+
+// ── A labelled config row: title + control on one line, description below ──────
+
+function ConfigOption({
+  title,
+  description,
+  control,
+}: {
+  title: string;
+  description: string;
+  control: ReactNode;
+}) {
+  return (
+    <div style={{ display: 'flex', flexDirection: 'column', gap: 'var(--alm-sp-2)' }}>
+      <div
+        style={{
+          display: 'flex',
+          alignItems: 'center',
+          justifyContent: 'space-between',
+          gap: 'var(--alm-sp-3)',
+        }}
+      >
+        <span style={{ fontWeight: 'var(--alm-weight-semibold)', whiteSpace: 'nowrap' }}>
+          {title}
+        </span>
+        {control}
+      </div>
+      <div className="alm-settings__row-desc">{description}</div>
+    </div>
+  );
+}
+
+// ── StepCatalogs (Configuration) ──────────────────────────────────────────────
 
 /**
- * Step 3 — Target resolution.
+ * Step 3 — Configuration.
  *
- * Shows the SIMBAD online-resolution toggle (reusing the Settings control) and
- * explains that targets resolve on demand with a bundled seed + local cache.
- * The step never blocks Finish.
+ * A few first-run defaults: online SIMBAD resolution, display density, default
+ * source protection, and default scan depth. All are changeable later in
+ * Settings; the step never blocks Finish.
  */
 export function StepCatalogs(_props: StepCatalogsProps) {
   return (
-    <div className="alm-step-catalogs">
+    <div
+      className="alm-step-catalogs"
+      style={{ display: 'flex', flexDirection: 'column', gap: 'var(--alm-sp-5)' }}
+    >
       <p className="alm-step-catalogs__intro">
-        Astro Library Manager identifies the targets in your files by resolving
-        each object name against{' '}
-        <strong>SIMBAD</strong> (CDS, Université de Strasbourg). Common objects
-        come from a <strong>bundled seed</strong> of popular catalogues and a
-        growing <strong>local cache</strong>, so they resolve instantly with no
-        network call. Less-common objects are looked up on demand when you are
-        online, then cached.
+        Set a few defaults to get started. You can change all of these any time in
+        Settings.
       </p>
 
+      {/* Online SIMBAD resolution (label + toggle on one line, desc below). */}
       <ResolverSettingsControl compact />
 
-      <div className="alm-step-catalogs__note">
-        You can change this any time in Settings → Target Resolution. With online
-        resolution off, only the bundled seed and local cache are used; unknown
-        objects are marked unresolved and can be retried later.
-      </div>
+      {/* Display density — DensitySelector renders its own legend + radios. */}
+      <DensitySelector />
+
+      <ConfigOption
+        title="Default source protection"
+        description="Protection level applied to newly added source folders. Protected sources are skipped by cleanup plans unless explicitly approved."
+        control={<DefaultProtectionControl />}
+      />
+
+      <ConfigOption
+        title="Default scan depth"
+        description="Whether newly added source folders are scanned recursively (including subfolders) or as a single folder."
+        control={<DefaultScanDepthControl />}
+      />
+
+      <ConfigOption
+        title="Appearance / theme"
+        description="Light / dark theme is coming soon — the app currently uses a single light theme."
+        control={
+          <select
+            className="alm-select"
+            disabled
+            aria-label="Theme (coming soon)"
+            style={{ height: 28 }}
+          >
+            <option>Light (coming soon)</option>
+          </select>
+        }
+      />
     </div>
   );
 }
