@@ -46,9 +46,9 @@ const STEPS = [
     description: 'Configure the astrophotography processing tools installed on your system.',
   },
   {
-    label: 'Resolution',
-    heading: 'Target resolution',
-    description: 'How object names in your files are resolved to known astronomical targets.',
+    label: 'Configuration',
+    heading: 'Configuration',
+    description: 'Set a few defaults now — you can change all of these later in Settings.',
   },
   {
     label: 'Confirm',
