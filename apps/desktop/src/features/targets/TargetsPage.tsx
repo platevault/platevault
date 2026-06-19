@@ -18,6 +18,7 @@ import { PageShell, ListDetailLayout, TopActionBar } from '@/components';
 import { Btn, EmptyState } from '@/ui';
 import { TargetList } from './TargetList';
 import { TargetDetailV2 } from './TargetDetailV2';
+import { AddTargetDialog } from './AddTargetDialog';
 
 type ListState =
   | { status: 'loading' }
@@ -28,6 +29,7 @@ export function TargetsPage() {
   const { selected } = useSearch({ from: '/shell/targets' });
   const navigate = useNavigate({ from: '/targets' });
   const [listState, setListState] = useState<ListState>({ status: 'loading' });
+  const [addOpen, setAddOpen] = useState(false);
 
   const load = useCallback(() => {
     setListState({ status: 'loading' });
@@ -43,11 +45,24 @@ export function TargetsPage() {
   const onSelect = (id: string) =>
     navigate({ search: (prev) => ({ ...prev, selected: id }) });
 
+  const handleAdded = useCallback(
+    (targetId: string) => {
+      load();
+      void navigate({ search: (prev) => ({ ...prev, selected: targetId }) });
+    },
+    [load, navigate],
+  );
+
   const targets = listState.status === 'loaded' ? listState.items : [];
   const count = listState.status === 'loaded' ? listState.items.length : '…';
 
   return (
     <PageShell>
+      <AddTargetDialog
+        open={addOpen}
+        onClose={() => setAddOpen(false)}
+        onAdded={handleAdded}
+      />
       <ListDetailLayout
         topBar={
           <TopActionBar
@@ -57,7 +72,7 @@ export function TargetsPage() {
               selected ? (
                 <Btn size="sm" variant="primary">New project</Btn>
               ) : (
-                <Btn size="sm">Add target</Btn>
+                <Btn size="sm" onClick={() => setAddOpen(true)}>Add target</Btn>
               )
             }
           />

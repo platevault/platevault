@@ -1,3 +1,4 @@
+import { useState } from 'react';
 import type { TargetListItem } from '@/api/commands';
 import { ListSidebar, ListItem } from '@/components';
 import { Pill } from '@/ui';
@@ -8,10 +9,23 @@ interface Props {
   onSelect: (id: string) => void;
 }
 
+function matchesSearch(t: TargetListItem, query: string): boolean {
+  const q = query.toLowerCase();
+  return (
+    t.primaryDesignation.toLowerCase().includes(q) ||
+    t.effectiveLabel.toLowerCase().includes(q)
+  );
+}
+
 export function TargetList({ targets, selected, onSelect }: Props) {
+  const [search, setSearch] = useState('');
+  const filtered = search.trim() ? targets.filter((t) => matchesSearch(t, search.trim())) : targets;
+
   return (
     <ListSidebar
       placeholder="Search targets..."
+      searchValue={search}
+      onSearchChange={setSearch}
       controls={
         <>
           <select defaultValue="name">
@@ -19,9 +33,9 @@ export function TargetList({ targets, selected, onSelect }: Props) {
           </select>
         </>
       }
-      footer={`${targets.length} items`}
+      footer={`${filtered.length} items`}
     >
-      {targets.map((t) => (
+      {filtered.map((t) => (
         <ListItem
           key={t.id}
           selected={selected === t.id}
