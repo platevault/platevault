@@ -416,6 +416,7 @@ export async function mockInvoke<T>(
     // ── Inbox commands (spec 005 + 039) ───────────────────────────────────────
     case 'inbox_list': {
       // Mock: two roots each with unacknowledged items (SC-001 cross-root).
+      // Spec 040 P2a: includes individual master items + real format field.
       return {
         items: [
           {
@@ -425,18 +426,38 @@ export async function mockInvoke<T>(
             relativePath: '2025-10-10/NGC7000',
             fileCount: 18,
             lane: 'fits',
+            format: 'fits',
             state: 'classified',
             contentSignature: 'sig-abc',
+            isMaster: false,
           },
           {
             inboxItemId: 'item-002',
             rootId: 'root-lights-001',
             rootAbsolutePath: '/astro/raw',
             relativePath: '2025-10-10/darks',
-            fileCount: 50,
+            fileCount: 46,
             lane: 'fits',
+            format: 'fits',
             state: 'pending_classification',
             contentSignature: 'sig-def',
+            isMaster: false,
+          },
+          {
+            // Individual master item — spec 040 FR-005
+            inboxItemId: 'item-master-dark',
+            rootId: 'root-lights-001',
+            rootAbsolutePath: '/astro/raw',
+            relativePath: '2025-10-10/darks/masterDark_Ha_300s.xisf',
+            fileCount: 1,
+            lane: 'fits',
+            format: 'xisf',
+            state: 'pending_classification',
+            contentSignature: '',
+            isMaster: true,
+            masterFrameType: 'dark',
+            masterFilter: 'Ha',
+            masterExposureS: 300,
           },
           {
             inboxItemId: 'item-003',
@@ -445,8 +466,10 @@ export async function mockInvoke<T>(
             relativePath: '2025-11-01/Jupiter',
             fileCount: 3,
             lane: 'video',
+            format: 'video',
             state: 'pending_classification',
             contentSignature: 'sig-ghi',
+            isMaster: false,
           },
         ],
         capped: false,
@@ -457,8 +480,40 @@ export async function mockInvoke<T>(
       return {
         rootId: 'root-inbox-001',
         items: [
-          { inboxItemId: 'item-001', relativePath: '2025-10-10/NGC7000', fileCount: 18, lane: 'fits', state: 'classified', contentSignature: 'sig-abc' },
-          { inboxItemId: 'item-002', relativePath: '2025-10-10/darks', fileCount: 50, lane: 'fits', state: 'pending_classification', contentSignature: 'sig-def' },
+          {
+            inboxItemId: 'item-001',
+            relativePath: '2025-10-10/NGC7000',
+            fileCount: 18,
+            lane: 'fits',
+            format: 'fits',
+            state: 'classified',
+            contentSignature: 'sig-abc',
+            isMaster: false,
+          },
+          {
+            inboxItemId: 'item-002',
+            relativePath: '2025-10-10/darks',
+            fileCount: 46,
+            lane: 'fits',
+            format: 'fits',
+            state: 'pending_classification',
+            contentSignature: 'sig-def',
+            isMaster: false,
+          },
+          {
+            // Individual master item detected during scan — spec 040 FR-005
+            inboxItemId: 'item-master-dark',
+            relativePath: '2025-10-10/darks/masterDark_Ha_300s.xisf',
+            fileCount: 1,
+            lane: 'fits',
+            format: 'xisf',
+            state: 'pending_classification',
+            contentSignature: '',
+            isMaster: true,
+            masterFrameType: 'dark',
+            masterFilter: 'Ha',
+            masterExposureS: 300,
+          },
         ],
       } as T;
     }
@@ -487,6 +542,7 @@ export async function mockInvoke<T>(
         planId: `plan-${Date.now()}`,
         planState: 'ready_for_review',
         itemsTotal: 18,
+        registeredAsMaster: false,
       } as T;
     }
     case 'inbox_reclassify': {

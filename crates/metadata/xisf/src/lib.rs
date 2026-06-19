@@ -190,6 +190,13 @@ fn apply_fits_keyword(meta: &mut RawFileMetadata, keyword: &str, raw_value: &str
         "INSTRUME" => meta.instrume = non_empty(value),
         "TELESCOP" => meta.telescop = non_empty(value),
         "DATE-OBS" => meta.date_obs = non_empty(value),
+        // Stack/integration count: STACKCNT (preferred) or NCOMBINE fallback.
+        "STACKCNT" => {
+            meta.stack_count = non_empty(value).and_then(|s| s.trim().parse::<u32>().ok());
+        }
+        "NCOMBINE" if meta.stack_count.is_none() => {
+            meta.stack_count = non_empty(value).and_then(|s| s.trim().parse::<u32>().ok());
+        }
         _ => {}
     }
 }

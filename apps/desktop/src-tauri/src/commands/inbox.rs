@@ -93,6 +93,7 @@ pub async fn inbox_confirm(
         plan_id: resp.plan_id,
         plan_state: resp.plan_state,
         items_total: u32::try_from(resp.items_total).unwrap_or(u32::MAX),
+        registered_as_master: resp.registered_as_master,
     })
 }
 
@@ -148,47 +149,137 @@ pub async fn inbox_scan_folder(
     let mut items: Vec<InboxItemSummary> = Vec::new();
 
     for scanned_item in &scanned {
-        let item_id = Uuid::new_v4().to_string();
+        // ── A. Individual rows for detected calibration masters ────────────────
+        for master in &scanned_item.masters {
+            let master_item_id = Uuid::new_v4().to_string();
+            let frame_type_str = format!("{:?}", master.detection.frame_type).to_ascii_lowercase();
+            let format_str = master.format.as_str();
 
-        // Upsert: insert if new, leave state/sig unchanged if already known.
+            sqlx::query(
+                "INSERT OR IGNORE INTO inbox_items
+                    (id, root_id, relative_path, file_count, discovered_at, last_scanned_at,
+                     content_signature, state, lane, format, is_master_item,
+                     master_frame_type, master_filter, master_exposure_s)
+                 VALUES (?, ?, ?, 1, datetime('now'), datetime('now'), '', 'pending_classification',
+                         ?, ?, 1, ?, ?, ?)",
+            )
+            .bind(&master_item_id)
+            .bind(&req.root_id)
+            .bind(&master.relative_path)
+            .bind(scanned_item.lane.as_str())
+            .bind(format_str)
+            .bind(&frame_type_str)
+            .bind(&master.filter)
+            .bind(master.exposure_s)
+            .execute(&*pool)
+            .await
+            .map_err(|e| e.to_string())?;
+
+            // Fetch authoritative row (may have existed from a prior scan).
+            let row: Option<(
+                String,
+                String,
+                i64,
+                String,
+                Option<String>,
+                i64,
+                Option<String>,
+                Option<String>,
+                Option<f64>,
+            )> = sqlx::query_as(
+                "SELECT id, state, file_count, lane, content_signature,
+                            is_master_item, master_frame_type, master_filter, master_exposure_s
+                     FROM inbox_items WHERE root_id = ? AND relative_path = ?",
+            )
+            .bind(&req.root_id)
+            .bind(&master.relative_path)
+            .fetch_optional(&*pool)
+            .await
+            .map_err(|e| e.to_string())?;
+
+            if let Some((id, state, fc, lane, sig, _is_m, mft, mfilt, mexp)) = row {
+                items.push(InboxItemSummary {
+                    inbox_item_id: id,
+                    relative_path: master.relative_path.clone(),
+                    file_count: u32::try_from(fc).unwrap_or(u32::MAX),
+                    lane,
+                    format: format_str.to_owned(),
+                    state,
+                    content_signature: sig.unwrap_or_default(),
+                    is_master: true,
+                    master_frame_type: mft,
+                    master_filter: mfilt,
+                    master_exposure_s: mexp,
+                });
+            }
+        }
+
+        // ── B. Grouped row for the remaining sub-frames in the folder ─────────
+        //
+        // If ALL files in this folder are masters, skip the grouped row — there
+        // are no remaining subs.
+        let master_count = scanned_item.masters.len();
+        let total_image_count = scanned_item.fits_files.len() + scanned_item.xisf_files.len();
+        let sub_count =
+            total_image_count.saturating_sub(master_count) + scanned_item.video_files.len();
+
+        if sub_count == 0 && !scanned_item.masters.is_empty() {
+            // Every file in this folder was a master — no grouped sub row.
+            continue;
+        }
+
+        let item_id = Uuid::new_v4().to_string();
+        let folder_format_str = scanned_item.format.as_str();
+
+        // For sub-count: use total minus masters for FITS-lane items.
+        let persist_file_count = if scanned_item.masters.is_empty() {
+            total_image_count + scanned_item.video_files.len()
+        } else {
+            sub_count
+        };
+
         sqlx::query(
             "INSERT OR IGNORE INTO inbox_items
                 (id, root_id, relative_path, file_count, discovered_at, last_scanned_at,
-                 content_signature, state, lane)
-             VALUES (?, ?, ?, ?, datetime('now'), datetime('now'), ?, 'pending_classification', ?)",
+                 content_signature, state, lane, format, is_master_item)
+             VALUES (?, ?, ?, ?, datetime('now'), datetime('now'), ?, 'pending_classification', ?, ?, 0)",
         )
         .bind(&item_id)
         .bind(&req.root_id)
         .bind(&scanned_item.relative_path)
-        .bind(
-            i64::try_from(scanned_item.fits_files.len() + scanned_item.video_files.len())
-                .unwrap_or(i64::MAX),
-        )
+        .bind(i64::try_from(persist_file_count).unwrap_or(i64::MAX))
         .bind(&scanned_item.content_signature)
         .bind(scanned_item.lane.as_str())
+        .bind(folder_format_str)
         .execute(&*pool)
         .await
         .map_err(|e| e.to_string())?;
 
         // Fetch the authoritative row (may have existed before).
-        let row: Option<(String, String, i64, String, Option<String>)> = sqlx::query_as(
-            "SELECT id, state, file_count, lane, content_signature
-             FROM inbox_items WHERE root_id = ? AND relative_path = ?",
-        )
-        .bind(&req.root_id)
-        .bind(&scanned_item.relative_path)
-        .fetch_optional(&*pool)
-        .await
-        .map_err(|e| e.to_string())?;
+        let row: Option<(String, String, i64, String, Option<String>, Option<String>)> =
+            sqlx::query_as(
+                "SELECT id, state, file_count, lane, content_signature, format
+                 FROM inbox_items WHERE root_id = ? AND relative_path = ?",
+            )
+            .bind(&req.root_id)
+            .bind(&scanned_item.relative_path)
+            .fetch_optional(&*pool)
+            .await
+            .map_err(|e| e.to_string())?;
 
-        if let Some((id, state, fc, lane, sig)) = row {
+        if let Some((id, state, fc, lane, sig, fmt)) = row {
             items.push(InboxItemSummary {
                 inbox_item_id: id,
                 relative_path: scanned_item.relative_path.clone(),
                 file_count: u32::try_from(fc).unwrap_or(u32::MAX),
                 lane,
+                format: fmt.unwrap_or_else(|| folder_format_str.to_owned()),
                 state,
                 content_signature: sig.unwrap_or_default(),
+                is_master: false,
+                master_frame_type: None,
+                master_filter: None,
+                master_exposure_s: None,
             });
         }
     }
@@ -225,8 +316,13 @@ pub async fn inbox_list(pool: tauri::State<'_, SqlitePool>) -> Result<InboxListR
             relative_path: r.relative_path,
             file_count: u32::try_from(r.file_count).unwrap_or(u32::MAX),
             lane: r.lane,
+            format: r.format.unwrap_or_else(|| "fits".to_owned()),
             state: r.state,
             content_signature: r.content_signature.unwrap_or_default(),
+            is_master: r.is_master != 0,
+            master_frame_type: r.master_frame_type,
+            master_filter: r.master_filter,
+            master_exposure_s: r.master_exposure_s,
         })
         .collect();
 

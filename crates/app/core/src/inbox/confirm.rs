@@ -48,6 +48,10 @@ pub struct ConfirmResponse {
     pub plan_id: String,
     pub plan_state: String,
     pub items_total: usize,
+    /// True when the inbox item was a detected calibration master and was
+    /// registered directly to `calibration_session` + `calibration_fingerprint`
+    /// (Path 1 — no file move).  `plan_id` is empty string in this case.
+    pub registered_as_master: bool,
 }
 
 // ── confirm ───────────────────────────────────────────────────────────────────
@@ -76,7 +80,82 @@ pub async fn confirm(
         )
     })?;
 
-    // 2. Dedupe open plan (Ref: E1)
+    // 2. Fast path: detected calibration master (spec 040 US3, Path 1).
+    //
+    // Masters are already at their final path — register them directly to the
+    // calibration tables and resolve the inbox item as `resolved` without
+    // creating a filesystem plan.
+    if item.is_master_item != 0 {
+        // TOCTOU guard: validate signature even for masters.
+        if item.content_signature.as_deref() != Some(&req.content_signature) {
+            return Err(ContractError::new(
+                "classification.stale",
+                "Folder has changed since classification. Re-classify before confirming.",
+                ErrorSeverity::Blocking,
+                false,
+            ));
+        }
+
+        let frame_type_str = item.master_frame_type.as_deref().unwrap_or("dark");
+        let cal_kind = match frame_type_str {
+            "flat" => "flat",
+            "bias" => "bias",
+            _ => "dark",
+        };
+        let cal_type = match frame_type_str {
+            "flat" => "flat",
+            "bias" => "bias",
+            _ => "dark",
+        };
+
+        let session_id = Uuid::new_v4().to_string();
+        let session_key =
+            format!("{}-{}", cal_kind, item.master_frame_type.as_deref().unwrap_or("unknown"));
+
+        // Insert calibration_session.
+        sqlx::query(
+            "INSERT INTO calibration_session
+                (id, session_key, frame_ids, kind, state, created_at, source_inbox_item_id)
+             VALUES (?, ?, '[]', ?, 'confirmed', datetime('now'), ?)",
+        )
+        .bind(&session_id)
+        .bind(&session_key)
+        .bind(cal_kind)
+        .bind(&req.inbox_item_id)
+        .execute(pool)
+        .await
+        .map_err(|e| {
+            ContractError::new("internal.database", e.to_string(), ErrorSeverity::Fatal, true)
+        })?;
+
+        // Insert calibration_fingerprint (exposure, filter from master metadata).
+        sqlx::query(
+            "INSERT INTO calibration_fingerprint
+                (id, calibration_type, exposure_s, filter_name)
+             VALUES (?, ?, ?, ?)",
+        )
+        .bind(&session_id)
+        .bind(cal_type)
+        .bind(item.master_exposure_s)
+        .bind(item.master_filter.as_deref())
+        .execute(pool)
+        .await
+        .map_err(|e| {
+            ContractError::new("internal.database", e.to_string(), ErrorSeverity::Fatal, true)
+        })?;
+
+        // Mark inbox item as resolved (drops out of the unacknowledged list).
+        inbox_repo::update_inbox_item_state(pool, &req.inbox_item_id, "resolved").await.ok();
+
+        return Ok(ConfirmResponse {
+            plan_id: String::new(),
+            plan_state: String::new(),
+            items_total: 1,
+            registered_as_master: true,
+        });
+    }
+
+    // 3. Dedupe open plan (Ref: E1)
     if let Some(link) = inbox_repo::get_plan_link(pool, &req.inbox_item_id).await.unwrap_or(None) {
         return Err(ContractError::new(
             "inbox.has.open.plan",
@@ -86,7 +165,7 @@ pub async fn confirm(
         ));
     }
 
-    // 3. Load classification
+    // 4. Load classification
     let classification = inbox_repo::get_classification(pool, &req.inbox_item_id)
         .await
         .unwrap_or(None)
@@ -99,7 +178,7 @@ pub async fn confirm(
             )
         })?;
 
-    // 4. TOCTOU content_signature guard (Ref: A8)
+    // 5. TOCTOU content_signature guard (Ref: A8)
     if item.content_signature.as_deref() != Some(&req.content_signature) {
         return Err(ContractError::new(
             "classification.stale",
@@ -109,7 +188,7 @@ pub async fn confirm(
         ));
     }
 
-    // 5. Validate action / classification match
+    // 7. Validate action / classification match
     let valid = matches!(
         (req.action.as_str(), classification.result.as_str()),
         ("split", "mixed") | ("confirm", "single_type")
@@ -126,10 +205,10 @@ pub async fn confirm(
         ));
     }
 
-    // 6. Load the active Naming & Structure pattern from settings.
+    // 8. Load the active Naming & Structure pattern from settings.
     let active_pattern = load_active_pattern(pool).await?;
 
-    // 7. Enumerate files from evidence (Ref: A9) — NOT from file_count
+    // 9. Enumerate files from evidence (Ref: A9) — NOT from file_count
     let evidence_rows = inbox_repo::list_evidence(pool, &req.inbox_item_id).await.map_err(|e| {
         ContractError::new("internal.database", e.to_string(), ErrorSeverity::Fatal, true)
     })?;
@@ -190,7 +269,7 @@ pub async fn confirm(
         }
     }
 
-    // 9. Build the plan.
+    // 10. Build the plan.
     // A move-only split is non-destructive from the user perspective but the
     // plans table CHECK constraint only accepts 'archive' | 'os_trash'.
     // We default to 'archive' (app-managed archive) unless the caller specifies.
@@ -218,7 +297,7 @@ pub async fn confirm(
         ContractError::new("internal.database", e.to_string(), ErrorSeverity::Fatal, true)
     })?;
 
-    // 10. Insert plan items — one per classified file, with resolved destinations.
+    // 11. Insert plan items — one per classified file, with resolved destinations.
     let items_total = resolved_items.len();
     for (idx, (source_rel, dest_rel, item_name)) in resolved_items.iter().enumerate() {
         let item_id = Uuid::new_v4().to_string();
@@ -247,7 +326,7 @@ pub async fn confirm(
         })?;
     }
 
-    // 11. Transition plan to ready_for_review
+    // 12. Transition plan to ready_for_review
     sqlx::query("UPDATE plans SET state = 'ready_for_review' WHERE id = ?")
         .bind(&plan_id)
         .execute(pool)
@@ -256,14 +335,19 @@ pub async fn confirm(
             ContractError::new("internal.database", e.to_string(), ErrorSeverity::Fatal, true)
         })?;
 
-    // 12. Create plan link and update item state
+    // 13. Create plan link and update item state
     inbox_repo::insert_plan_link(pool, &req.inbox_item_id, &plan_id).await.map_err(|e| {
         ContractError::new("internal.database", e.to_string(), ErrorSeverity::Fatal, true)
     })?;
 
     inbox_repo::update_inbox_item_state(pool, &req.inbox_item_id, "plan_open").await.ok();
 
-    Ok(ConfirmResponse { plan_id, plan_state: "ready_for_review".to_owned(), items_total })
+    Ok(ConfirmResponse {
+        plan_id,
+        plan_state: "ready_for_review".to_owned(),
+        items_total,
+        registered_as_master: false,
+    })
 }
 
 // ── Helpers ───────────────────────────────────────────────────────────────────
@@ -502,6 +586,8 @@ mod tests {
                     raw_value: Some("Light Frame"),
                     unclassified: false,
                     manual_override: None,
+                    is_master: false,
+                    master_detector: None,
                 },
             )
             .await
@@ -650,6 +736,8 @@ mod tests {
                     raw_value: Some(if ft == "light" { "Light Frame" } else { "Dark Frame" }),
                     unclassified: false,
                     manual_override: None,
+                    is_master: false,
+                    master_detector: None,
                 },
             )
             .await
@@ -741,6 +829,8 @@ mod tests {
                     raw_value: None,
                     unclassified: false,
                     manual_override: None,
+                    is_master: false,
+                    master_detector: None,
                 },
             )
             .await

@@ -31,6 +31,13 @@ pub struct InboxItemRow {
     pub content_signature: Option<String>,
     pub state: String,
     pub lane: String,
+    /// File format (`"fits"` | `"xisf"` | `"video"` | `"mixed"`).  Spec 040 FR-006.
+    pub format: Option<String>,
+    /// Non-zero when this row represents a single detected calibration master file.
+    pub is_master_item: i64,
+    pub master_frame_type: Option<String>,
+    pub master_filter: Option<String>,
+    pub master_exposure_s: Option<f64>,
 }
 
 /// Data required to insert a new inbox item.
@@ -89,6 +96,10 @@ pub struct InsertEvidence<'a> {
     pub raw_value: Option<&'a str>,
     pub unclassified: bool,
     pub manual_override: Option<&'a str>,
+    /// Whether this file was detected as a calibration master (spec 040).
+    pub is_master: bool,
+    /// Provenance string from the detector, e.g. `"siril"` or `"pixinsight"`.
+    pub master_detector: Option<&'a str>,
 }
 
 /// Flat row from `inbox_classification_breakdown`.
@@ -254,8 +265,8 @@ pub async fn insert_evidence(pool: &SqlitePool, ev: &InsertEvidence<'_>) -> DbRe
     sqlx::query(
         "INSERT INTO inbox_classification_evidence
             (id, inbox_item_id, relative_file_path, frame_type, evidence_source,
-             raw_value, unclassified, manual_override)
-         VALUES (?, ?, ?, ?, ?, ?, ?, ?)",
+             raw_value, unclassified, manual_override, is_master, master_detector)
+         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
     )
     .bind(ev.id)
     .bind(ev.inbox_item_id)
@@ -265,6 +276,8 @@ pub async fn insert_evidence(pool: &SqlitePool, ev: &InsertEvidence<'_>) -> DbRe
     .bind(ev.raw_value)
     .bind(i64::from(ev.unclassified))
     .bind(ev.manual_override)
+    .bind(i64::from(ev.is_master))
+    .bind(ev.master_detector)
     .execute(pool)
     .await?;
     Ok(())
@@ -493,6 +506,13 @@ pub struct InboxListRow {
     pub content_signature: Option<String>,
     pub state: String,
     pub lane: String,
+    /// Real file format (`"fits"` | `"xisf"` | `"video"` | `"mixed"`).  Spec 040 FR-006.
+    pub format: Option<String>,
+    /// Non-zero when this row represents a single detected calibration master file.
+    pub is_master: i64,
+    pub master_frame_type: Option<String>,
+    pub master_filter: Option<String>,
+    pub master_exposure_s: Option<f64>,
 }
 
 /// Return all `inbox_items` whose `state` is **unacknowledged**
@@ -516,14 +536,19 @@ pub async fn list_unacknowledged_across_roots(
         "SELECT
              i.id,
              i.root_id,
-             r.path          AS root_path,
+             r.path              AS root_path,
              i.relative_path,
              i.file_count,
              i.discovered_at,
              i.last_scanned_at,
              i.content_signature,
              i.state,
-             i.lane
+             i.lane,
+             i.format,
+             COALESCE(i.is_master_item, 0) AS is_master,
+             i.master_frame_type,
+             i.master_filter,
+             i.master_exposure_s
          FROM inbox_items i
          JOIN registered_sources r ON r.id = i.root_id
          WHERE i.state IN ('pending_classification', 'classified')
@@ -612,6 +637,8 @@ mod tests {
             raw_value: Some("Light Frame"),
             unclassified: false,
             manual_override: None,
+            is_master: false,
+            master_detector: None,
         };
         insert_evidence(db.pool(), &ev).await.unwrap();
 
@@ -635,6 +662,8 @@ mod tests {
             raw_value: None,
             unclassified: true,
             manual_override: None,
+            is_master: false,
+            master_detector: None,
         };
         insert_evidence(db.pool(), &ev).await.unwrap();
 

@@ -129,6 +129,15 @@ fn parse_cards(cards: &[[u8; CARD_SIZE]]) -> RawFileMetadata {
             "INSTRUME" => meta.instrume = extract_string_value(card),
             "TELESCOP" => meta.telescop = extract_string_value(card),
             "DATE-OBS" => meta.date_obs = extract_string_value(card),
+            // Stack/integration count: STACKCNT (preferred) or NCOMBINE fallback.
+            "STACKCNT" => {
+                meta.stack_count =
+                    extract_numeric_string(card).and_then(|s| s.trim().parse::<u32>().ok());
+            }
+            "NCOMBINE" if meta.stack_count.is_none() => {
+                meta.stack_count =
+                    extract_numeric_string(card).and_then(|s| s.trim().parse::<u32>().ok());
+            }
             _ => {}
         }
     }

@@ -10,6 +10,7 @@ path = "src/lib.rs"
 [dependencies]
 audit = { path = "../../audit" }
 calibration_core = { path = "../../calibration/core" }
+calibration_master_detect = { path = "../../calibration/master-detect" }
 workflow_artifacts = { path = "../../workflow/artifacts" }
 workflow_profiles = { path = "../../workflow/profiles" }
 contracts_core = { path = "../../contracts/core" }
