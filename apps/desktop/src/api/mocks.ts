@@ -136,6 +136,68 @@ export async function mockInvoke<T>(
       const { targetDetail } = await import('@/data/fixtures/targets');
       return targetDetail as T;
     }
+
+    // ── gen-3 target commands (spec 036) ──────────────────────────────────────
+    case 'target_list': {
+      return [
+        { id: 'tgt-m31', effectiveLabel: 'M 31', primaryDesignation: 'M 31', objectType: 'galaxy' },
+        { id: 'tgt-ngc7000', effectiveLabel: 'NGC 7000', primaryDesignation: 'NGC 7000', objectType: 'emission_nebula' },
+      ] as T;
+    }
+    case 'target_get': {
+      const req = (_args as { req?: { targetId?: string } } | undefined)?.req;
+      return {
+        id: req?.targetId ?? 'tgt-m31',
+        primaryDesignation: 'M 31',
+        effectiveLabel: 'M 31',
+        displayAlias: null,
+        objectType: 'galaxy',
+        raDeg: 10.68,
+        decDeg: 41.27,
+        simbadOid: 1_234_567,
+        source: 'resolved',
+        aliases: [],
+      } as T;
+    }
+    case 'target_search': {
+      const req = (_args as { req?: { query?: string } } | undefined)?.req;
+      const q = (req?.query ?? '').toLowerCase();
+      const allSuggestions = [
+        { targetId: 'tgt-m31', primaryDesignation: 'M 31', commonName: 'Andromeda Galaxy', objectType: 'galaxy', matchedAlias: 'Andromeda', source: 'seed' },
+        { targetId: 'tgt-ngc7000', primaryDesignation: 'NGC 7000', commonName: null, objectType: 'emission_nebula', matchedAlias: 'North America Nebula', source: 'seed' },
+      ];
+      const suggestions = q
+        ? allSuggestions.filter(
+            (s) =>
+              s.primaryDesignation.toLowerCase().includes(q) ||
+              (s.commonName?.toLowerCase().includes(q) ?? false) ||
+              (s.matchedAlias?.toLowerCase().includes(q) ?? false),
+          )
+        : allSuggestions;
+      return { contractVersion: '1.0', requestId: crypto.randomUUID(), suggestions } as T;
+    }
+    case 'target_resolve': {
+      const req = (_args as { req?: { query?: string } } | undefined)?.req;
+      const query = req?.query ?? 'M 31';
+      return {
+        contractVersion: '1.0',
+        requestId: crypto.randomUUID(),
+        status: 'resolved',
+        target: {
+          targetId: `tgt-resolved-${Date.now()}`,
+          primaryDesignation: query,
+          commonName: null,
+          objectType: 'other',
+          source: 'resolved',
+          raDeg: 0,
+          decDeg: 0,
+          simbadOid: null,
+        },
+        unresolvedReason: null,
+        error: null,
+      } as T;
+    }
+
     case 'projects_list': {
       // spec 008 real shape: ProjectSummaryDto[]
       const { mockProjectSummaries } = await import('@/data/fixtures/projects');
