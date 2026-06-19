@@ -7,6 +7,13 @@
 This feature **is** test infrastructure — "implementation tasks" are the tests,
 harnesses, CI, and docs themselves. Paths are repo-relative.
 
+> **Status 2026-06-19**: **US1 (Layer-1) COMPLETE** — all backend feature areas
+> (#1–#20, #22) have ≥1 passing real-backend integration test; full workspace 76
+> suites ok, 0 failed, 0 ignored. Done: T005, T009–T020, T030. Superseded:
+> T001/T003/T006 `wiremock`+fixtures plan replaced by the existing `FakeResolver`/
+> `FakeSpawner` test doubles (no new deps). Remaining: US2 (CI), US3 (E2E
+> completion + T002/T007/T008), US4/US5 (docs), T036 (regression validation).
+
 **Legend**: `[P]` = parallelizable (different files, no incomplete-task dep).
 Story labels map to spec user stories US1–US5.
 
@@ -21,7 +28,7 @@ Story labels map to spec user stories US1–US5.
 
 ## Phase 2: Foundational (blocking prerequisites)
 
-- [ ] T005 Create a Layer-1 test harness helper providing an isolated, file-backed SQLite DB in a `tempfile::tempdir()` with `sqlx::migrate!()` applied and a built `AppState`/`SqliteLifecycleRepository`, in `crates/app/core/tests/support/mod.rs` (or a small `crates/testkit` if cleaner) — per research D1, data-model isolation model
+- [X] T005 Create a Layer-1 test harness helper providing an isolated, file-backed SQLite DB in a `tempfile::tempdir()` with `sqlx::migrate!()` applied and a built `AppState`/`SqliteLifecycleRepository`, in `crates/app/core/tests/support/mod.rs` (or a small `crates/testkit` if cleaner) — per research D1, data-model isolation model
 - [ ] T006 [P] Add a `wiremock`-based SIMBAD boundary stub helper (serves the T003 fixtures on localhost) usable by resolver tests, in the test support module — per research D2
 - [ ] T007 Replace the placeholder `apps/desktop/e2e/helpers/db.ts` with a real read-only `better-sqlite3` reader resolving the app DB at the OS-specific app-data path (Linux/Windows/macOS), per research D3 + open items
 - [ ] T008 Add a fresh-DB reset + freshly-built-binary guarantee to `apps/desktop/e2e/helpers/tauri-app.ts` / `playwright.real-backend.config.ts` (`beforeAll` deletes the app DB; build step before tests), satisfying FR-006 — reuse existing 033 scaffold
@@ -35,18 +42,18 @@ Story labels map to spec user stories US1–US5.
 **Goal**: Every implemented feature area (coverage-matrix #1–22) has ≥1 real-backend integration test against real SQLite, network mocked only at the boundary.
 **Independent test**: `cargo test --workspace` provisions real DBs, runs all area tests, deterministic offline; introducing a backend regression fails ≥1 named test.
 
-- [ ] T009 [P] [US1] Integration tests for **first-run setup + roots/native FS** (areas #1,#2,#16): register source, validate path, protection defaults — in `crates/app/core/tests/first_run_integration.rs`
-- [ ] T010 [P] [US1] Integration tests for **inbox split + lifecycle/inventory** (areas #3,#4): classify, split, ledger, transitions — in `crates/app/core/tests/inbox_lifecycle_integration.rs`
-- [ ] T011 [P] [US1] Integration tests for **calibration matching & masters** (area #5): suggest, batch-suggest, assign — in `crates/app/core/tests/calibration_integration.rs`
-- [ ] T012 [P] [US1] Integration tests for **sessions** (area #6): list/get/merge/split/transition/calendar — in `crates/app/core/tests/sessions_integration.rs`
-- [ ] T013 [P] [US1] Integration tests for **projects + lifecycle + manifests/notes** (areas #7,#8,#9): create/onboard/edit, blocked/ready transitions, manifest + note persistence — in `crates/app/core/tests/projects_integration.rs`
-- [ ] T014 [P] [US1] Integration tests for **processing tool launch + artifact observation** (areas #10,#11): launch wiring with **no real tool invocation** (FR-018), artifact detection — in `crates/app/core/tests/tools_artifacts_integration.rs`
-- [ ] T015 [P] [US1] Integration tests for **target lookup + identity/history/notes** (areas #12,#13): OBJECT→canonical, identity, notes — in `crates/app/core/tests/targets_integration.rs`
-- [ ] T016 [P] [US1] Integration tests for **SIMBAD resolution via wiremock boundary** (area #14): resolve/search/settings, cache + offline fallback paths — in `crates/targeting/tests/simbad_resolution_integration.rs`
-- [ ] T017 [P] [US1] Integration tests for **token pattern builder** (area #15): parse + resolve tokens against real data — in `crates/patterns/tests/pattern_integration.rs` (or `app/core`)
-- [ ] T018 [P] [US1] Integration tests for **cleanup/archive plans + filesystem plan application + audit** (areas #17,#18,#22): generate plan, apply real mutation inside tempdir, assert side effect **and** audit record — in `crates/app/core/tests/plan_apply_audit_integration.rs`
-- [ ] T019 [P] [US1] Integration tests for **settings + log viewer** (areas #19,#20): persist/reload settings, log stream — in `crates/app/core/tests/settings_logs_integration.rs`
-- [ ] T020 [US1] Produce the coverage report: confirm each of the 22 areas maps to ≥1 passing test; update `specs/037-e2e-integration-testing/contracts/coverage-matrix.md` with concrete test names and flag any gap explicitly (FR-002, FR-019)
+- [X] T009 [P] [US1] Integration tests for **first-run setup + roots/native FS** (areas #1,#2,#16): register source, validate path, protection defaults — in `crates/app/core/tests/first_run_integration.rs`
+- [X] T010 [P] [US1] Integration tests for **inbox split + lifecycle/inventory** (areas #3,#4): classify, split, ledger, transitions — in `crates/app/core/tests/inbox_lifecycle_integration.rs`
+- [X] T011 [P] [US1] Integration tests for **calibration matching & masters** (area #5): suggest, batch-suggest, assign — in `crates/app/core/tests/calibration_integration.rs`
+- [X] T012 [P] [US1] Integration tests for **sessions** (area #6): list/get/merge/split/transition/calendar — in `crates/app/core/tests/sessions_integration.rs`
+- [X] T013 [P] [US1] Integration tests for **projects + lifecycle + manifests/notes** (areas #7,#8,#9): create/onboard/edit, blocked/ready transitions, manifest + note persistence — in `crates/app/core/tests/projects_integration.rs`
+- [X] T014 [P] [US1] Integration tests for **processing tool launch + artifact observation** (areas #10,#11): launch wiring with **no real tool invocation** (FR-018), artifact detection — in `crates/app/core/tests/tools_artifacts_integration.rs`
+- [X] T015 [P] [US1] Integration tests for **target lookup + identity/history/notes** (areas #12,#13): OBJECT→canonical, identity, notes — in `crates/app/core/tests/targets_integration.rs`
+- [X] T016 [P] [US1] Integration tests for **SIMBAD resolution via wiremock boundary** (area #14): resolve/search/settings, cache + offline fallback paths — in `crates/targeting/tests/simbad_resolution_integration.rs`
+- [X] T017 [P] [US1] Integration tests for **token pattern builder** (area #15): parse + resolve tokens against real data — in `crates/patterns/tests/pattern_integration.rs` (or `app/core`)
+- [X] T018 [P] [US1] Integration tests for **cleanup/archive plans + filesystem plan application + audit** (areas #17,#18,#22): generate plan, apply real mutation inside tempdir, assert side effect **and** audit record — in `crates/app/core/tests/plan_apply_audit_integration.rs`
+- [X] T019 [P] [US1] Integration tests for **settings + log viewer** (areas #19,#20): persist/reload settings, log stream — in `crates/app/core/tests/settings_logs_integration.rs`
+- [X] T020 [US1] Produce the coverage report: confirm each of the 22 areas maps to ≥1 passing test; update `specs/037-e2e-integration-testing/contracts/coverage-matrix.md` with concrete test names and flag any gap explicitly (FR-002, FR-019)
 
 **Checkpoint**: Layer 1 complete and green on the local OS — MVP delivered.
 
@@ -88,7 +95,7 @@ Story labels map to spec user stories US1–US5.
 **Goal**: Each layer runnable locally on all 3 OS via one documented command matching CI, with clear missing-prerequisite errors.
 **Independent test**: from a clean checkout on each OS, the documented command runs the layer; a missing driver yields a named error.
 
-- [ ] T030 [US4] Add `just test-integration` (→ `cargo test --workspace`, integration-tagged) and `just test-e2e` (→ `pnpm --filter @astro-plan/desktop test:e2e:real`) targets to `justfile`, mirroring CI (FR-014)
+- [X] T030 [US4] Add `just test-integration` (→ `cargo test --workspace`, integration-tagged) and `just test-e2e` (→ `pnpm --filter @astro-plan/desktop test:e2e:real`) targets to `justfile`, mirroring CI (FR-014)
 - [ ] T031 [P] [US4] Add prerequisite preflight checks (named, actionable failure when `tauri-driver`/`WebKitWebDriver`/`msedgedriver` missing) to the E2E entry path / `tauri-app.ts` (FR-015)
 - [ ] T032 [P] [US4] Add matching `package.json` script(s) if useful and confirm command names are consistent across `justfile`, `package.json`, and docs
 
