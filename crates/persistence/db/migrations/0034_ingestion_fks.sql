@@ -24,16 +24,8 @@ CREATE INDEX IF NOT EXISTS idx_acq_session_root_state
     ON acquisition_session (root_id, state)
     WHERE root_id IS NOT NULL;
 
--- ── acq_target_id covering index (FR-014) ────────────────────────────────────
--- Accelerates target.get aggregate which loads sessions linked to a target.
-
-CREATE INDEX IF NOT EXISTS idx_acq_session_target_id_state
-    ON acquisition_session (acq_target_id, state)
-    WHERE acq_target_id IS NOT NULL;
-
--- ── projects.target_id covering index (FR-014) ───────────────────────────────
--- Already indexed in 0027 but add covering index for lifecycle queries.
-
-CREATE INDEX IF NOT EXISTS idx_projects_target_lifecycle
-    ON projects (target_id, lifecycle)
-    WHERE target_id IS NOT NULL;
+-- NOTE (spec 036 reconciliation): the FR-014 covering indices on the gen-2
+-- target columns (acquisition_session.acq_target_id, projects.target_id) were
+-- removed here — those columns were dropped when spec 036 retired the legacy
+-- spec-013/023 target schema. Target↔session/project association now lives on
+-- the spec-035 canonical_target model (projects.canonical_target_id).
