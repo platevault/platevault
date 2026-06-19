@@ -382,7 +382,10 @@ export interface FirstRunRestartResult {
 export async function registerRootBatch(args: {
   sources: BatchSourceEntry[];
 }): Promise<BatchRegisterResult> {
-  return invoke<BatchRegisterResult>('roots_register_batch', args);
+  // The backend command takes a single `request: RegisterSourceBatchRequest`
+  // param, so the payload must be wrapped: { request: { sources } }. Sending
+  // { sources } top-level fails to deserialize on the real backend.
+  return invoke<BatchRegisterResult>('roots_register_batch', { request: args });
 }
 
 export async function completeFirstRun(): Promise<FirstRunCompleteResult> {
