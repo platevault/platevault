@@ -1,4 +1,4 @@
-import { useEffect } from 'react';
+import { useEffect, useState } from 'react';
 import { Btn } from '@/ui/Btn';
 import { Pill } from '@/ui/Pill';
 import { Toggle } from '@/ui/Toggle';
@@ -98,6 +98,24 @@ export function StepTools({ tools, onToolsChange }: StepToolsProps) {
     });
   };
 
+  // Re-run auto-detection for a single tool (the "Redetect" button). Returns
+  // true if a binary was found (and the path was filled in), false otherwise.
+  const handleRedetect = async (key: keyof ToolsState): Promise<boolean> => {
+    try {
+      const { commands } = await import('@/bindings/index');
+      const res = await commands.toolsDiscover({ toolId: key });
+      if (res.status !== 'ok') return false;
+      const entry = res.data.entries.find((e) => e.toolId === key && e.available);
+      if (entry?.path) {
+        onToolsChange({ ...tools, [key]: { enabled: true, path: entry.path } });
+        return true;
+      }
+      return false;
+    } catch {
+      return false;
+    }
+  };
+
   return (
     <div
       className="alm-step-tools"
@@ -130,6 +148,7 @@ export function StepTools({ tools, onToolsChange }: StepToolsProps) {
               config={config}
               onToggle={(checked) => handleToggle(def.key, checked)}
               onPathChange={(path) => handlePathChange(def.key, path)}
+              onRedetect={() => handleRedetect(def.key)}
             />
           );
         })}
@@ -155,13 +174,25 @@ function ToolCard({
   config,
   onToggle,
   onPathChange,
+  onRedetect,
 }: {
   def: ToolDef;
   config: ToolConfig;
   onToggle: (checked: boolean) => void;
   onPathChange: (path: string | null) => void;
+  onRedetect: () => Promise<boolean>;
 }) {
   const detected = Boolean(config.path);
+  const [redetecting, setRedetecting] = useState(false);
+  const [notFound, setNotFound] = useState(false);
+
+  const handleRedetect = async () => {
+    setRedetecting(true);
+    setNotFound(false);
+    const found = await onRedetect();
+    setRedetecting(false);
+    if (!found) setNotFound(true);
+  };
 
   return (
     <div
@@ -206,11 +237,35 @@ function ToolCard({
             {def.description}
           </span>
         </div>
-        <Toggle
-          checked={config.enabled}
-          onChange={onToggle}
-          aria-label={`Enable ${def.name}`}
-        />
+        <div
+          style={{
+            display: 'flex',
+            flexDirection: 'column',
+            alignItems: 'flex-end',
+            gap: 'var(--alm-sp-1)',
+          }}
+        >
+          <div style={{ display: 'flex', alignItems: 'center', gap: 'var(--alm-sp-2)' }}>
+            <Btn
+              variant="ghost"
+              onClick={handleRedetect}
+              disabled={redetecting}
+              aria-label={`Redetect ${def.name} binary`}
+            >
+              {redetecting ? 'Detecting…' : 'Redetect'}
+            </Btn>
+            <Toggle
+              checked={config.enabled}
+              onChange={onToggle}
+              aria-label={`Enable ${def.name}`}
+            />
+          </div>
+          {notFound && (
+            <span style={{ fontSize: 'var(--alm-text-xs)', color: 'var(--alm-text-muted)' }}>
+              No installation found
+            </span>
+          )}
+        </div>
       </div>
 
       {/* Executable path picker, only when enabled */}
