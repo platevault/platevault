@@ -60,7 +60,7 @@ const STEPS = [
   {
     label: 'Scan',
     heading: 'Scanning your library',
-    description: 'Scanning each source folder and detecting ingestion groups. Approval happens in the Inbox.',
+    description: 'Scanning each source folder and detecting ingestion groups.',
   },
 ];
 

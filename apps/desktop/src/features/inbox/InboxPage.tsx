@@ -166,8 +166,8 @@ export function InboxPage() {
             />
           ) : (
             <EmptyState
-              title="Select a folder"
-              description="Choose an inbox folder to review its classification before confirming."
+              title="Select a detection"
+              description="Pick an item from the list to review its classification before confirming."
             />
           )
         }
