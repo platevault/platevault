@@ -248,6 +248,47 @@ out-of-scope cost. Keeps SC-007 verifiable and bounded.
 
 ---
 
+## D9 — W3 backend-wiring smoke outcome (2026-06-19)
+
+**Context**: Before building the US3 real-UI journeys, a reconnaissance smoke
+(review finding W3) assessed whether the backend is wired enough for real-signal
+E2E. Findings:
+
+- **Harness: READY.** `tauri-driver`, `WebKitWebDriver`, `xvfb-run` all present;
+  `playwright.real-backend.config.ts` correct; `cargo build -p desktop_shell`
+  passes; the Chromium project path (`chromium-real-env`, Vite with
+  `VITE_USE_MOCKS=false`) loads the app end-to-end and a smoke assertion passed.
+- **US3 data commands are STUBS.** `search.global` (`commands/search.rs`),
+  `sessions.list`/`sessions.get` (`commands/sessions.rs`), and
+  `calibration.masters.list`/`get` (`commands/calibration.rs`) explicitly return
+  hardcoded fixture data ("until the real persistence layer is wired"). Real-UI
+  E2E over these would assert fixtures, i.e. **false positives**.
+- **US1 `plan_apply` commands look fully wired** (no stubs).
+- **US2 subscriber startup gaps** documented in the spec-033 scaffold headers
+  (`spawn_workflow_run_subscriber`, artifact watcher, guided auto-advance).
+- The webkit/`tauri-driver` IPC project is **not yet defined** in the config and
+  a real IPC run (3–5 min cold build under xvfb) was **not verified**.
+
+**Decision**:
+1. **Do NOT author US3 journeys over stubbed commands.** That would violate the
+   feature's core principle (no false passes). The stub→real wiring for
+   `search.global`/`sessions`/`calibration.masters` is **product work belonging to
+   specs 033/035** (ties to spec-035 gap #2 per-image ingest), not to 037. 037
+   records this as an explicit, documented dependency/gap (FR-002, FR-013) rather
+   than faking coverage.
+2. **US3 is gated**: the real-UI E2E journeys are deferred until (a) the webkit
+   Tauri project is wired into the Playwright config and verified once, and (b)
+   the dependent commands are de-stubbed. The only real-signal journey ready now
+   is **US1 `plan_apply`** (wiring complete) — recommended as the first journey,
+   to be executed in CI (Linux) where the heavy build runs, since it can't be
+   verified in this WSL sandbox.
+3. **Per-OS execution**: real IPC E2E runs in CI/Windows per the standing
+   "validate the Windows UI" preference; not in this dev sandbox.
+
+**Rationale**: Honest coverage over fake-green. The harness investment from
+spec-033 is sound; the blocker is backend stubs, which 037 must surface, not
+paper over.
+
 ## Open items carried to tasks
 
 - Confirm exact app-DB paths per OS for the Layer-2 DB reader (`db.ts`).

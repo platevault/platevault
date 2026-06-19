@@ -79,6 +79,16 @@ Story labels map to spec user stories US1–US5.
 **Independent test**: `pnpm test:e2e:real` launches the built app, runs journeys, asserts non-mock round-trip + real mutation/audit.
 **Depends on**: Phase 2 (T007, T008).
 
+> **GATED (W3 smoke, research D9, 2026-06-19)**: harness is READY and `cargo build
+> -p desktop_shell` passes, but US3 data journeys are **blocked on backend stubs**
+> — `search.global`, `sessions.list`, `calibration.masters.list` return hardcoded
+> fixtures (de-stubbing is product work in specs 033/035, not 037). Authoring
+> journeys over stubs would be false positives (violates FR-008/the feature's
+> purpose). Only **US1 `plan_apply`** (T024-equivalent) is real-signal-ready; the
+> webkit/tauri-driver IPC project also still needs wiring into the Playwright
+> config + one verified run (deferred to CI/Windows, not this WSL sandbox). These
+> tasks therefore remain OPEN with documented reasons rather than faked.
+
 - [ ] T024 [P] [US3] Complete the **first-run setup → target resolve → project create** journey (un-skip + flesh out), asserting a UI→real-backend round-trip value (FR-008), in `apps/desktop/e2e/real-backend/us1_*.spec.ts`
 - [ ] T025 [P] [US3] Complete the **filesystem plan review → apply** journey asserting the real side effect **and** durable audit record, inside disposable test locations (FR-009, FR-016), in `apps/desktop/e2e/real-backend/*plan*.spec.ts`
 - [ ] T026 [P] [US3] Add an **all-top-level-screens-load** smoke spec covering every navigable feature screen without error (FR-007, coverage-matrix #21), in `apps/desktop/e2e/real-backend/screens_load.spec.ts`
