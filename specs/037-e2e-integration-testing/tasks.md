@@ -65,9 +65,9 @@ Story labels map to spec user stories US1–US5.
 **Independent test**: open a PR; CI launches Layer-1 on all 3 OS (+ later Layer-2), reports per-platform/per-layer, blocks on failure.
 **Depends on**: US1 (Layer-1 suite must exist); Layer-2 stage extended in US3 (T028).
 
-- [ ] T021 [US2] Create `.github/workflows/ci.yml` with a 3-OS matrix (`ubuntu-latest`, `windows-latest`, `macos-latest`): checkout, toolchain + pnpm setup, cargo/pnpm caching, concurrency-cancel — per research D5
-- [ ] T022 [US2] Add **Stage A (required, all 3 OS)** to `ci.yml`: `cargo build --workspace`, lint, `cargo test --workspace` (Layer 1) + frontend unit tests; ordered before any E2E (FR-012)
-- [ ] T023 [P] [US2] Add per-platform/per-layer result reporting/labels and merge-blocking required-checks notes in `ci.yml` + a short `.github/` note, so a platform-specific failure is attributable (FR-011)
+- [X] T021 [US2] Create `.github/workflows/ci.yml` with a 3-OS matrix (`ubuntu-latest`, `windows-latest`, `macos-latest`): checkout, toolchain + pnpm setup, cargo/pnpm caching, concurrency-cancel — per research D5
+- [X] T022 [US2] Add **Stage A (required, all 3 OS)** to `ci.yml`: `cargo build --workspace`, lint, `cargo test --workspace` (Layer 1) + frontend unit tests; ordered before any E2E (FR-012)
+- [X] T023 [US2] Add per-platform/per-layer result reporting/labels and merge-blocking required-checks notes in `ci.yml` + a short `.github/` note, so a platform-specific failure is attributable (FR-011)
 
 **Checkpoint**: Every PR runs Layer 1 on all 3 OS and is blocked on failure.
 
@@ -108,9 +108,9 @@ Story labels map to spec user stories US1–US5.
 **Goal**: Two-layer strategy, per-OS instructions/caveats, and "new features ship with real-stack coverage" are in standing instructions + contributor doc.
 **Independent test**: a new contributor can state which layer to extend and how to run it per OS, from docs alone.
 
-- [ ] T033 [P] [US5] Write `docs/development/testing.md`: the two layers, what each covers, per-OS run commands + prerequisites + caveats (incl. macOS not-applicable), and the coverage-mapping expectation (FR-017)
-- [ ] T034 [US5] Update the standing instructions at the **`.apm/` source** (e.g. `.apm/instructions/` build-and-workflow + testing convention) and `PRODUCT.md`, then run `apm compile` to regenerate `CLAUDE.md`/`AGENTS.md` (do not hand-edit generated files) — FR-017, repo APM rule
-- [ ] T035 [P] [US5] Add a short "new features ship with real-stack coverage; update the coverage matrix" rule to the testing convention so it's enforced going forward
+- [X] T033 [P] [US5] Write `docs/development/testing.md`: the two layers, what each covers, per-OS run commands + prerequisites + caveats (incl. macOS not-applicable), and the coverage-mapping expectation (FR-017)
+- [X] T034 [US5] Update the standing instructions at the **`.apm/` source** (e.g. `.apm/instructions/` build-and-workflow + testing convention) and `PRODUCT.md`, then run `apm compile` to regenerate `CLAUDE.md`/`AGENTS.md` (do not hand-edit generated files) — FR-017, repo APM rule
+- [X] T035 [P] [US5] Add a short "new features ship with real-stack coverage; update the coverage matrix" rule to the testing convention so it's enforced going forward
 
 **Checkpoint**: Strategy is durable and discoverable.
 
