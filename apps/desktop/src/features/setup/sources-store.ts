@@ -208,7 +208,9 @@ export async function flushToDB(sources: SourcesState): Promise<FlushResult> {
       sources: validSources.map((s) => ({
         kind: s.kind,
         path: s.path,
-        scan_depth: s.scanDepth,
+        // Backend RegisterSourceRequest is camelCase — must be `scanDepth`,
+        // not `scan_depth`, or the whole batch arg fails to deserialize.
+        scanDepth: s.scanDepth,
       })),
     });
 

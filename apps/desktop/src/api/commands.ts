@@ -361,7 +361,8 @@ export async function completeTourStep(args: { step: string }): Promise<void> {
 export interface BatchSourceEntry {
   kind: string;
   path: string;
-  scan_depth?: string;
+  // Backend RegisterSourceRequest is camelCase — must be `scanDepth`.
+  scanDepth: string;
 }
 
 export interface BatchRegisterResult {
