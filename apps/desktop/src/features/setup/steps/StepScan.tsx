@@ -304,9 +304,9 @@ function SourceSummary({ state }: SourceSummaryProps) {
                     color: 'var(--alm-text)',
                   }}
                 >
-                  <th style={cell}>Folder</th>
+                  <th style={cell}>Folder / File</th>
                   <th style={cell}>Files</th>
-                  <th style={cell}>Extension</th>
+                  <th style={cell}>Format</th>
                   <th style={cell}>Detected types</th>
                 </tr>
               </thead>
@@ -322,7 +322,7 @@ function SourceSummary({ state }: SourceSummaryProps) {
                     >
                       <td style={{ ...cell, wordBreak: 'break-all' }}>{item.relativePath}</td>
                       <td style={cell}>{item.fileCount}</td>
-                      <td style={cell}>{item.lane.toUpperCase()}</td>
+                      <td style={cell}>{(item.format ?? item.lane).toUpperCase()}</td>
                       <td style={cell}>{types || '—'}</td>
                     </tr>
                   );

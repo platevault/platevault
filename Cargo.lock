@@ -50,6 +50,7 @@ version = "0.1.0"
 dependencies = [
  "audit",
  "calibration_core",
+ "calibration_master_detect",
  "contracts_core",
  "domain_core",
  "fs_executor",
@@ -438,6 +439,13 @@ dependencies = [
  "serde",
  "serde_json",
  "uuid",
+]
+
+[[package]]
+name = "calibration_master_detect"
+version = "0.1.0"
+dependencies = [
+ "metadata_core",
 ]
 
 [[package]]

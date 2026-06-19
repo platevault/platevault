@@ -499,6 +499,13 @@ pub struct InboxListRow {
     pub content_signature: Option<String>,
     pub state: String,
     pub lane: String,
+    /// Real file format (`"fits"` | `"xisf"` | `"video"` | `"mixed"`).  Spec 040 FR-006.
+    pub format: Option<String>,
+    /// Non-zero when this row represents a single detected calibration master file.
+    pub is_master: i64,
+    pub master_frame_type: Option<String>,
+    pub master_filter: Option<String>,
+    pub master_exposure_s: Option<f64>,
 }
 
 /// Return all `inbox_items` whose `state` is **unacknowledged**
@@ -522,14 +529,19 @@ pub async fn list_unacknowledged_across_roots(
         "SELECT
              i.id,
              i.root_id,
-             r.path          AS root_path,
+             r.path              AS root_path,
              i.relative_path,
              i.file_count,
              i.discovered_at,
              i.last_scanned_at,
              i.content_signature,
              i.state,
-             i.lane
+             i.lane,
+             i.format,
+             COALESCE(i.is_master_item, 0) AS is_master,
+             i.master_frame_type,
+             i.master_filter,
+             i.master_exposure_s
          FROM inbox_items i
          JOIN registered_sources r ON r.id = i.root_id
          WHERE i.state IN ('pending_classification', 'classified')

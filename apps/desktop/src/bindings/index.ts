@@ -516,10 +516,12 @@ export const commands = {
 	 */
 	reviewQueue: (filter: string | null) => typedError<ReviewItem_Serialize[], string>(__TAURI_INVOKE("review_queue", { filter })),
 	/**
-	 *  `roots.list` — returns all registered library roots.
+	 *  `roots.list` — returns all registered library roots from the database.
+	 * 
+	 *  Each root's `online` flag reflects whether the path is currently accessible.
 	 * 
 	 *  # Errors
-	 *  Returns `Err(String)` on failure; the stub never fails.
+	 *  Returns `Err(String)` on database failure.
 	 */
 	rootsList: () => typedError<LibraryRoot_Serialize[], string>(__TAURI_INVOKE("roots_list")),
 	/**
@@ -926,8 +928,13 @@ export const commands = {
 	/**
 	 *  `status.summary` — returns current library status overview.
 	 * 
+	 *  Roots are fetched from `registered_sources`; each root's `online` flag is
+	 *  set by testing whether its path is currently accessible on the filesystem.
+	 *  `inbox_count` reflects the real number of unacknowledged inbox items
+	 *  (`pending_classification` or `classified`) across all registered sources.
+	 * 
 	 *  # Errors
-	 *  Returns `Err(String)` on failure; the stub never fails.
+	 *  Returns `Err(String)` on database failure.
 	 */
 	statusSummary: () => typedError<StatusSummary, string>(__TAURI_INVOKE("status_summary")),
 	/**
@@ -985,7 +992,7 @@ export const commands = {
 	 *  # Errors
 	 *  Returns a string error if the root is not accessible.
 	 */
-	inboxScanFolder: (req: InboxScanFolderRequest) => typedError<InboxScanFolderResponse, string>(__TAURI_INVOKE("inbox_scan_folder", { req })),
+	inboxScanFolder: (req: InboxScanFolderRequest) => typedError<InboxScanFolderResponse_Serialize, string>(__TAURI_INVOKE("inbox_scan_folder", { req })),
 	/**
 	 *  `inbox.classify` — classify an Inbox folder using IMAGETYP-only evidence.
 	 *  Idempotent unless `force_rescan: true`. Returns `contentSignature` for use
@@ -1020,7 +1027,7 @@ export const commands = {
 	 *  # Errors
 	 *  Returns a string error on database failure.
 	 */
-	inboxList: () => typedError<InboxListResponse, string>(__TAURI_INVOKE("inbox_list")),
+	inboxList: () => typedError<InboxListResponse_Serialize, string>(__TAURI_INVOKE("inbox_list")),
 	/**
 	 *  `inventory.list` — return the grouped inventory ledger with optional filters.
 	 * 
@@ -2294,13 +2301,70 @@ export type InboxFileEntry = {
 };
 
 /**  A discovered inbox item returned from the scan. */
-export type InboxItemSummary = {
+export type InboxItemSummary = InboxItemSummary_Serialize | InboxItemSummary_Deserialize;
+
+/**  A discovered inbox item returned from the scan. */
+export type InboxItemSummary_Deserialize = {
 	inboxItemId: string,
 	relativePath: string,
 	fileCount: number,
 	lane: string,
+	/**
+	 *  Real file format for this item: `"fits"` | `"xisf"` | `"video"` | `"mixed"`.
+	 * 
+	 *  Unlike `lane` (which only distinguishes FITS vs video), `format` tells
+	 *  the UI whether the item contains FITS files, XISF files, a mix of both,
+	 *  or video files.  Spec 040 FR-006.
+	 */
+	format: string,
 	state: string,
 	contentSignature: string,
+	/**
+	 *  `true` when this item represents a single detected calibration master
+	 *  file (relative_path is a file path, not a folder path).  Spec 040 FR-005.
+	 */
+	isMaster: boolean,
+	/**
+	 *  Base frame type for master items (`"dark"` | `"flat"` | `"bias"` | …).
+	 *  `null` for grouped sub-frame folder items.
+	 */
+	masterFrameType: string | null,
+	/**  Filter label extracted from master file metadata (if available). */
+	masterFilter: string | null,
+	/**  Exposure in seconds extracted from master file metadata (if available). */
+	masterExposureS: number | null,
+};
+
+/**  A discovered inbox item returned from the scan. */
+export type InboxItemSummary_Serialize = {
+	inboxItemId: string,
+	relativePath: string,
+	fileCount: number,
+	lane: string,
+	/**
+	 *  Real file format for this item: `"fits"` | `"xisf"` | `"video"` | `"mixed"`.
+	 * 
+	 *  Unlike `lane` (which only distinguishes FITS vs video), `format` tells
+	 *  the UI whether the item contains FITS files, XISF files, a mix of both,
+	 *  or video files.  Spec 040 FR-006.
+	 */
+	format: string,
+	state: string,
+	contentSignature: string,
+	/**
+	 *  `true` when this item represents a single detected calibration master
+	 *  file (relative_path is a file path, not a folder path).  Spec 040 FR-005.
+	 */
+	isMaster: boolean,
+	/**
+	 *  Base frame type for master items (`"dark"` | `"flat"` | `"bias"` | …).
+	 *  `null` for grouped sub-frame folder items.
+	 */
+	masterFrameType?: string | null,
+	/**  Filter label extracted from master file metadata (if available). */
+	masterFilter?: string | null,
+	/**  Exposure in seconds extracted from master file metadata (if available). */
+	masterExposureS?: number | null,
 };
 
 /**
@@ -2309,7 +2373,15 @@ export type InboxItemSummary = {
  *  Extends `InboxItemSummary` with the root's id and absolute path so the UI
  *  can group/label items by root without a second call.
  */
-export type InboxListItem = {
+export type InboxListItem = InboxListItem_Serialize | InboxListItem_Deserialize;
+
+/**
+ *  One unacknowledged inbox item returned by `inbox.list`.
+ * 
+ *  Extends `InboxItemSummary` with the root's id and absolute path so the UI
+ *  can group/label items by root without a second call.
+ */
+export type InboxListItem_Deserialize = {
 	inboxItemId: string,
 	rootId: string,
 	/**  Absolute path of the registered root (for display and confirm calls). */
@@ -2317,13 +2389,59 @@ export type InboxListItem = {
 	relativePath: string,
 	fileCount: number,
 	lane: string,
+	/**  Real file format: `"fits"` | `"xisf"` | `"video"` | `"mixed"`.  Spec 040 FR-006. */
+	format: string,
 	state: string,
 	contentSignature: string,
+	/**  `true` when this row represents a single detected calibration master file. */
+	isMaster: boolean,
+	/**  Base frame type for master items; `null` for grouped sub-frame folders. */
+	masterFrameType: string | null,
+	masterFilter: string | null,
+	masterExposureS: number | null,
+};
+
+/**
+ *  One unacknowledged inbox item returned by `inbox.list`.
+ * 
+ *  Extends `InboxItemSummary` with the root's id and absolute path so the UI
+ *  can group/label items by root without a second call.
+ */
+export type InboxListItem_Serialize = {
+	inboxItemId: string,
+	rootId: string,
+	/**  Absolute path of the registered root (for display and confirm calls). */
+	rootAbsolutePath: string,
+	relativePath: string,
+	fileCount: number,
+	lane: string,
+	/**  Real file format: `"fits"` | `"xisf"` | `"video"` | `"mixed"`.  Spec 040 FR-006. */
+	format: string,
+	state: string,
+	contentSignature: string,
+	/**  `true` when this row represents a single detected calibration master file. */
+	isMaster: boolean,
+	/**  Base frame type for master items; `null` for grouped sub-frame folders. */
+	masterFrameType?: string | null,
+	masterFilter?: string | null,
+	masterExposureS?: number | null,
 };
 
 /**  Response from `inbox.list`. */
-export type InboxListResponse = {
-	items: InboxListItem[],
+export type InboxListResponse = InboxListResponse_Serialize | InboxListResponse_Deserialize;
+
+/**  Response from `inbox.list`. */
+export type InboxListResponse_Deserialize = {
+	items: InboxListItem_Deserialize[],
+	/**  Whether the list was capped at `limit` (true = there may be more). */
+	capped: boolean,
+	/**  Maximum items per response (matches the server-side cap). */
+	limit: number,
+};
+
+/**  Response from `inbox.list`. */
+export type InboxListResponse_Serialize = {
+	items: InboxListItem_Serialize[],
 	/**  Whether the list was capped at `limit` (true = there may be more). */
 	capped: boolean,
 	/**  Maximum items per response (matches the server-side cap). */
@@ -2373,9 +2491,18 @@ export type InboxScanFolderRequest = {
 };
 
 /**  Response from `inbox.scan.folder`. */
-export type InboxScanFolderResponse = {
+export type InboxScanFolderResponse = InboxScanFolderResponse_Serialize | InboxScanFolderResponse_Deserialize;
+
+/**  Response from `inbox.scan.folder`. */
+export type InboxScanFolderResponse_Deserialize = {
 	rootId: string,
-	items: InboxItemSummary[],
+	items: InboxItemSummary_Deserialize[],
+};
+
+/**  Response from `inbox.scan.folder`. */
+export type InboxScanFolderResponse_Serialize = {
+	rootId: string,
+	items: InboxItemSummary_Serialize[],
 };
 
 /**  Result of an inbox scan operation. */

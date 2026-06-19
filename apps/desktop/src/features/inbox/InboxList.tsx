@@ -136,7 +136,17 @@ export function InboxList({
               <span style={{ marginLeft: 6 }}>
                 <Pill variant={stateVariant(item.state)}>{stateLabel(item.state)}</Pill>
               </span>
-              {item.lane === 'video' && (
+              {item.isMaster && (
+                <span style={{ marginLeft: 4 }}>
+                  <Pill variant="info">{item.masterFrameType ?? 'master'} master</Pill>
+                </span>
+              )}
+              {!item.isMaster && item.format && item.format !== 'fits' && (
+                <span style={{ marginLeft: 4 }}>
+                  <Pill variant="ghost">{item.format}</Pill>
+                </span>
+              )}
+              {!item.isMaster && !item.format && item.lane === 'video' && (
                 <span style={{ marginLeft: 4 }}>
                   <Pill variant="ghost">video</Pill>
                 </span>
