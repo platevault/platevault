@@ -1,9 +1,9 @@
 # Legacy target-table retirement plan
 
 **Status:** PLAN ONLY — not executed. This is a sprawling, cross-spec refactor that
-breaks live features if done naively; it needs its own SpecKit feature and a couple
-of product decisions (called out below). Do **not** drop the tables before the
-prerequisite rewrites land.
+breaks live features if done naively; it needs its own SpecKit feature. The product
+decisions (D1–D3 below) are now **decided** (2026-06-19), so it's ready to spec. Do
+**not** drop the tables before the prerequisite rewrites land.
 
 ## Why this exists
 
@@ -39,19 +39,46 @@ Retiring gen 2 breaks these **live** paths unless they are rewritten first:
 `crates/app/core/src/ingest_resolution.rs` and `project_setup.rs` already use gen 3
 only — they are safe.
 
-## Product decisions required (cannot proceed without these)
+## Product decisions
 
-- **D1 — Target notes.** Gen-3 `canonical_target` has **no `notes` field**; spec-023
-  notes live on `targets.notes`. Decide: add `notes`/`updated_at` to `canonical_target`
-  (or a side `canonical_target_notes` table), or drop the notes feature.
-- **D2 — Primary-designation rename.** Spec-023 `target.primary.rename` edits
-  `targets.primary_designation` freely. Gen 3 derives the primary from
-  `target_alias.kind='designation'` + `canonical_target.primary_designation` sourced
-  from SIMBAD. Decide whether user free-rename of a SIMBAD-canonical target is still
-  allowed, and how it persists (manual-override precedence already exists for
-  resolution; rename is a different axis).
-- **D3 — Targets page.** Confirm the Targets page is rebuilt on gen-3 data (it must be,
-  since its commands get rewritten).
+### D1 — Target notes (DECIDED 2026-06-19: project notes only)
+
+**Finding:** notes exist in TWO places today, not one:
+- **Project notes** (spec 024): `project_notes` table, `project.note.update`, shown on
+  ProjectDetail. Active — the keeper.
+- **Target notes** (spec 023): `targets.notes`, `target.note.update`, shown on the
+  Targets page (`TargetsPage` → `TargetDetailV2`, debounced save). Active/wired but being
+  **deprecated**.
+
+**Decision:** keep **only project notes**. Per-target notes are dropped; any future
+per-target notes feature is **deferred** (out of scope for this retirement). On
+retirement: drop `targets.notes`, remove the note box + `target.note.update` from the
+Targets page / `TargetDetailV2`, and add **no** notes field to gen-3 `canonical_target`.
+Existing `targets.notes` data is discarded with the table (export once first if any
+production data matters — confirm during the spec).
+
+### D2 — Primary-designation rename (DECIDED 2026-06-19: no rename, display alias instead)
+
+**Decision:** free rename is **NOT allowed**. A target's primary designation always stays
+the SIMBAD-canonical identity (`canonical_target.primary_designation` +
+`target_alias.kind='designation'`); a target must always link to SIMBAD. Instead, the
+user may set an optional **display alias** — a user-provided label the UI shows in place
+of (or alongside) the canonical designation, without changing the canonical identity or
+the resolve link.
+
+Implementation shape: add a user-settable display alias to gen 3 — either a
+`canonical_target.display_alias` column or a `target_alias` row with `kind='display'`
+(user-sourced) that takes display precedence (mirrors the existing user-override
+precedence pattern). `target.primary.rename` is removed and replaced by a
+`target.display_alias.set/clear` capability; the canonical designation and SIMBAD link
+are immutable by the user.
+
+### D3 — Targets page (must rebuild on gen 3)
+
+The Targets page (`TargetsPage` → `TargetDetailV2`) is rebuilt on gen-3 data, since its
+backing commands (`target.get`/`alias`/etc.) get rewritten. With D1+D2: the page keeps
+identity + aliases + the new display-alias control, and **loses** the per-target note
+box.
 
 ## Dependency-ordered execution (each step ships + is verified before the next)
 
@@ -59,8 +86,10 @@ only — they are safe.
    `canonical_target` + `target_alias`. Keep `target.lookup`/`target.resolve.fits`
    working off gen 3 (or retire `target.resolve.fits`, already superseded by spec-035
    `target.resolve` and not called by the frontend).
-2. **Identity commands → gen 3.** Rewrite the 5 `target_identity` use-cases + commands
-   to `canonical_target`/`target_alias` (needs D1/D2). Migrate the Targets page (D3).
+2. **Identity commands → gen 3.** Rewrite the `target_identity` use-cases + commands to
+   `canonical_target`/`target_alias`. Per D1: drop `target.note.update` (no notes on gen
+   3). Per D2: drop `target.primary.rename`, add `target.display_alias.set/clear`.
+   Migrate the Targets page (D3) accordingly.
 3. **Inventory projection → gen 3.** Repoint `inventory.rs` `target_name` join at the
    keeper table; backfill/relink `acquisition_session` target ids.
 4. **Project link backfill.** For every `projects.target_id IS NOT NULL AND
@@ -79,7 +108,7 @@ only — they are safe.
 ## Recommendation
 
 Run this as a dedicated SpecKit feature (`/speckit.specify` "retire legacy target
-tables, consolidate on spec-035 canonical_target") so D1–D3 get clarified and each
-rewrite step is tasked + verified. Estimated effort: multi-day, not a single PR.
-Executing it blind/unattended would break the Targets page, catalog lookup, and the
-Inbox target column.
+tables, consolidate on spec-035 canonical_target"). D1–D3 are now decided (above), so
+the spec can go straight to scoping the rewrite steps; each step is tasked + verified.
+Estimated effort: multi-day, not a single PR. Executing it blind/unattended would break
+the Targets page, catalog lookup, and the Inbox target column.
