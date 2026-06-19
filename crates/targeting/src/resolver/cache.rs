@@ -40,12 +40,21 @@ pub enum CacheError {
 /// Convenience result alias for cache operations.
 pub type CacheResult<T> = Result<T, CacheError>;
 
+/// Raw row tuple for a `canonical_target` SELECT (9 columns).
+///
+/// Order: id, simbad_oid, primary_designation, display_alias,
+///        object_type, ra_deg, dec_deg, source, resolved_at.
+type CanonicalTargetRow =
+    (String, Option<i64>, String, Option<String>, String, f64, f64, String, String);
+
 // ── Read model ────────────────────────────────────────────────────────────────
 
 /// A cached canonical target plus its aliases, as read back from the cache.
 ///
 /// Mirrors [`ResolvedIdentity`] but additionally carries the persisted
-/// [`CachedTarget::id`] and [`CachedTarget::resolved_at`].
+/// [`CachedTarget::id`], [`CachedTarget::resolved_at`], and the optional
+/// user-set [`CachedTarget::display_alias`] (FR-012 — user-owned, never
+/// overwritten by re-resolution).
 #[derive(Clone, Debug, PartialEq)]
 pub struct CachedTarget {
     /// The persisted `canonical_target.id` (UUIDv5).
@@ -54,6 +63,8 @@ pub struct CachedTarget {
     pub simbad_oid: Option<i64>,
     /// Canonical display designation.
     pub primary_designation: String,
+    /// User-set presentation label; `None` when not set.
+    pub display_alias: Option<String>,
     /// Closed object-type enum.
     pub object_type: ObjectType,
     /// ICRS J2000 right ascension in decimal degrees.
@@ -64,7 +75,7 @@ pub struct CachedTarget {
     pub source: TargetSource,
     /// RFC 3339 timestamp of the last seed/resolve/override.
     pub resolved_at: String,
-    /// All aliases (designations + common names) for this target.
+    /// All aliases (designations + common names + user-added) for this target.
     pub aliases: Vec<ResolvedAlias>,
 }
 
@@ -109,14 +120,15 @@ async fn load_aliases(pool: &SqlitePool, target_id: &str) -> CacheResult<Vec<Res
 }
 
 /// Assemble a [`CachedTarget`] from a `canonical_target` row tuple.
-async fn assemble(
-    pool: &SqlitePool,
-    row: (String, Option<i64>, String, String, f64, f64, String, String),
-) -> CacheResult<CachedTarget> {
+///
+/// The tuple is 9 columns: id, simbad_oid, primary_designation, display_alias,
+/// object_type, ra_deg, dec_deg, source, resolved_at.
+async fn assemble(pool: &SqlitePool, row: CanonicalTargetRow) -> CacheResult<CachedTarget> {
     let (
         id_str,
         simbad_oid,
         primary_designation,
+        display_alias,
         object_type,
         ra_deg,
         dec_deg,
@@ -131,6 +143,7 @@ async fn assemble(
         id,
         simbad_oid,
         primary_designation,
+        display_alias,
         object_type: ObjectType::from_wire(&object_type),
         ra_deg,
         dec_deg,
@@ -147,9 +160,8 @@ async fn assemble(
 /// Returns [`CacheError::Database`] on query failure, or [`CacheError::InvalidUuid`] /
 /// [`CacheError::InvalidSource`] on a corrupt stored value.
 pub async fn get_by_id(pool: &SqlitePool, id: Uuid) -> CacheResult<Option<CachedTarget>> {
-    let row: Option<(String, Option<i64>, String, String, f64, f64, String, String)> =
-        sqlx::query_as(
-            "SELECT id, simbad_oid, primary_designation, object_type, ra_deg, dec_deg, source, resolved_at
+    let row: Option<CanonicalTargetRow> = sqlx::query_as(
+            "SELECT id, simbad_oid, primary_designation, display_alias, object_type, ra_deg, dec_deg, source, resolved_at
              FROM canonical_target WHERE id = ?",
         )
         .bind(id.to_string())
@@ -171,9 +183,8 @@ pub async fn get_by_simbad_oid(
     pool: &SqlitePool,
     simbad_oid: i64,
 ) -> CacheResult<Option<CachedTarget>> {
-    let row: Option<(String, Option<i64>, String, String, f64, f64, String, String)> =
-        sqlx::query_as(
-            "SELECT id, simbad_oid, primary_designation, object_type, ra_deg, dec_deg, source, resolved_at
+    let row: Option<CanonicalTargetRow> = sqlx::query_as(
+            "SELECT id, simbad_oid, primary_designation, display_alias, object_type, ra_deg, dec_deg, source, resolved_at
              FROM canonical_target WHERE simbad_oid = ?",
         )
         .bind(simbad_oid)
@@ -491,6 +502,8 @@ pub async fn upsert_resolved_conn(
         }
         Some(row) => {
             // Update in place, keeping the existing id (preserve FK targets).
+            // display_alias is NOT included — it is user-owned and must never
+            // be overwritten by a re-resolution or seed load (FR-012).
             sqlx::query(
                 "UPDATE canonical_target SET
                      simbad_oid          = ?,
@@ -539,6 +552,143 @@ pub async fn upsert_resolved_conn(
             Ok((id, UpsertOutcome::Inserted))
         }
     }
+}
+
+// ── Gen-3 management operations (spec 036) ──────────────────────────────────
+
+/// A minimal list-row for the `target.list` surface.
+#[derive(Clone, Debug, PartialEq)]
+pub struct TargetListRow {
+    pub id: Uuid,
+    pub primary_designation: String,
+    /// User-set label; `None` when not set. `effectiveLabel = display_alias ?? primary_designation`.
+    pub display_alias: Option<String>,
+    pub object_type: String,
+}
+
+/// List all canonical targets ordered by `primary_designation` (gen-3).
+///
+/// # Errors
+///
+/// Returns [`CacheError::Database`] on query failure, or [`CacheError::InvalidUuid`]
+/// on a corrupt stored id.
+pub async fn list_all(pool: &SqlitePool) -> CacheResult<Vec<TargetListRow>> {
+    let rows: Vec<(String, String, Option<String>, String)> = sqlx::query_as(
+        "SELECT id, primary_designation, display_alias, object_type
+         FROM canonical_target
+         ORDER BY primary_designation ASC",
+    )
+    .fetch_all(pool)
+    .await?;
+
+    rows.into_iter()
+        .map(|(id_str, primary_designation, display_alias, object_type)| {
+            let id =
+                Uuid::parse_str(&id_str).map_err(|e| CacheError::InvalidUuid(id_str.clone(), e))?;
+            Ok(TargetListRow { id, primary_designation, display_alias, object_type })
+        })
+        .collect()
+}
+
+/// Insert a user-added alias for `target_id`.
+///
+/// The alias is stored with `kind = 'user'`. The `normalized` form is computed
+/// here via [`crate::normalize::normalize`]. Rejects a duplicate via the
+/// `UNIQUE(target_id, normalized)` constraint — returns `false` when the alias
+/// already exists (idempotent), `true` when newly inserted.
+///
+/// # Errors
+///
+/// Returns [`CacheError::Database`] for any failure other than the uniqueness
+/// constraint.
+pub async fn insert_user_alias(
+    pool: &SqlitePool,
+    target_id: Uuid,
+    alias: &str,
+) -> CacheResult<Option<(String, String)>> {
+    let normalized = crate::normalize::normalize(alias);
+    if normalized.is_empty() {
+        return Ok(None);
+    }
+    let alias_id = Uuid::new_v4().to_string();
+    let target_id_str = target_id.to_string();
+    let result = sqlx::query(
+        "INSERT OR IGNORE INTO target_alias (id, target_id, alias, normalized, kind)
+         VALUES (?, ?, ?, ?, 'user')",
+    )
+    .bind(&alias_id)
+    .bind(&target_id_str)
+    .bind(alias)
+    .bind(&normalized)
+    .execute(pool)
+    .await?;
+
+    if result.rows_affected() == 0 {
+        // Alias already exists — return the existing id.
+        let existing: Option<(String,)> =
+            sqlx::query_as("SELECT id FROM target_alias WHERE target_id = ? AND normalized = ?")
+                .bind(&target_id_str)
+                .bind(&normalized)
+                .fetch_optional(pool)
+                .await?;
+        Ok(existing.map(|(id,)| (id, alias.to_owned())))
+    } else {
+        Ok(Some((alias_id, alias.to_owned())))
+    }
+}
+
+/// Delete a user alias by its id, but only if its `kind = 'user'`.
+///
+/// Returns `true` if a row was deleted, `false` if not found or not a user
+/// alias (SIMBAD designations/common names are not removable).
+///
+/// # Errors
+///
+/// Returns [`CacheError::Database`] on query failure.
+pub async fn delete_user_alias(pool: &SqlitePool, alias_id: &str) -> CacheResult<bool> {
+    let result = sqlx::query("DELETE FROM target_alias WHERE id = ? AND kind = 'user'")
+        .bind(alias_id)
+        .execute(pool)
+        .await?;
+    Ok(result.rows_affected() > 0)
+}
+
+/// Set the `display_alias` column for a target (FR-012).
+///
+/// Blank/empty input is stored as NULL (treated as a clear). Returns `true` if
+/// the target exists and was updated.
+///
+/// # Errors
+///
+/// Returns [`CacheError::Database`] on query failure.
+pub async fn set_display_alias(
+    pool: &SqlitePool,
+    target_id: Uuid,
+    display_alias: &str,
+) -> CacheResult<bool> {
+    let value: Option<&str> =
+        if display_alias.trim().is_empty() { None } else { Some(display_alias) };
+    let result = sqlx::query("UPDATE canonical_target SET display_alias = ? WHERE id = ?")
+        .bind(value)
+        .bind(target_id.to_string())
+        .execute(pool)
+        .await?;
+    Ok(result.rows_affected() > 0)
+}
+
+/// Clear the `display_alias` column for a target (sets to NULL).
+///
+/// Returns `true` if the target exists and was updated.
+///
+/// # Errors
+///
+/// Returns [`CacheError::Database`] on query failure.
+pub async fn clear_display_alias(pool: &SqlitePool, target_id: Uuid) -> CacheResult<bool> {
+    let result = sqlx::query("UPDATE canonical_target SET display_alias = NULL WHERE id = ?")
+        .bind(target_id.to_string())
+        .execute(pool)
+        .await?;
+    Ok(result.rows_affected() > 0)
 }
 
 #[cfg(test)]

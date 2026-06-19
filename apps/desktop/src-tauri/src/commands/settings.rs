@@ -63,7 +63,6 @@ fn scope_keys(scope: &str) -> &'static [&'static str] {
             "calibration.flat.override_penalty",
             "calibration.bias.override_penalty",
         ],
-        "catalogs" => &["target_lookup.active_catalogs"],
         "plans" => &["plans.list.default_age_cutoff_days"],
         // Empty scope or "global" returns every stable key.
         _ => &[
@@ -87,7 +86,6 @@ fn scope_keys(scope: &str) -> &'static [&'static str] {
             "calibration.dark.override_penalty",
             "calibration.flat.override_penalty",
             "calibration.bias.override_penalty",
-            "target_lookup.active_catalogs",
             "plans.list.default_age_cutoff_days",
             "current_library_id",
         ],
