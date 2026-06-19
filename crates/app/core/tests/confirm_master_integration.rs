@@ -142,7 +142,7 @@ async fn confirm_master_registers_to_calibration_and_resolves_inbox_item() {
     assert_eq!(state, "resolved", "inbox item must be resolved after master confirm");
 }
 
-/// T040-US3-2: masters_list returns the registered master.
+/// T040-US3-2: `masters_list` returns the registered master.
 #[tokio::test]
 async fn masters_list_returns_confirmed_master() {
     let tmp = tempfile::tempdir().unwrap();

@@ -8,7 +8,7 @@
 use app_core::inbox::classify::{classify, ClassifyRequest};
 use app_core::inbox::confirm::{confirm, ConfirmRequest};
 use app_core::inbox::reclassify::{reclassify, ReclassifyOverride, ReclassifyRequest};
-use app_core::inbox::scan::{scan_root, ScanOptions};
+use app_core::inbox::scan::{scan_root, ScanOptions, ScannedMasterFile};
 use contracts_core::inbox::{
     InboxBreakdownEntry, InboxClassifyRequest, InboxClassifyResponse, InboxConfirmRequest,
     InboxConfirmResponse, InboxFileEntry, InboxItemSummary, InboxListItem, InboxListResponse,
@@ -151,66 +151,10 @@ pub async fn inbox_scan_folder(
     for scanned_item in &scanned {
         // ── A. Individual rows for detected calibration masters ────────────────
         for master in &scanned_item.masters {
-            let master_item_id = Uuid::new_v4().to_string();
-            let frame_type_str = format!("{:?}", master.detection.frame_type).to_ascii_lowercase();
-            let format_str = master.format.as_str();
-
-            sqlx::query(
-                "INSERT OR IGNORE INTO inbox_items
-                    (id, root_id, relative_path, file_count, discovered_at, last_scanned_at,
-                     content_signature, state, lane, format, is_master_item,
-                     master_frame_type, master_filter, master_exposure_s)
-                 VALUES (?, ?, ?, 1, datetime('now'), datetime('now'), '', 'pending_classification',
-                         ?, ?, 1, ?, ?, ?)",
-            )
-            .bind(&master_item_id)
-            .bind(&req.root_id)
-            .bind(&master.relative_path)
-            .bind(scanned_item.lane.as_str())
-            .bind(format_str)
-            .bind(&frame_type_str)
-            .bind(&master.filter)
-            .bind(master.exposure_s)
-            .execute(&*pool)
-            .await
-            .map_err(|e| e.to_string())?;
-
-            // Fetch authoritative row (may have existed from a prior scan).
-            let row: Option<(
-                String,
-                String,
-                i64,
-                String,
-                Option<String>,
-                i64,
-                Option<String>,
-                Option<String>,
-                Option<f64>,
-            )> = sqlx::query_as(
-                "SELECT id, state, file_count, lane, content_signature,
-                            is_master_item, master_frame_type, master_filter, master_exposure_s
-                     FROM inbox_items WHERE root_id = ? AND relative_path = ?",
-            )
-            .bind(&req.root_id)
-            .bind(&master.relative_path)
-            .fetch_optional(&*pool)
-            .await
-            .map_err(|e| e.to_string())?;
-
-            if let Some((id, state, fc, lane, sig, _is_m, mft, mfilt, mexp)) = row {
-                items.push(InboxItemSummary {
-                    inbox_item_id: id,
-                    relative_path: master.relative_path.clone(),
-                    file_count: u32::try_from(fc).unwrap_or(u32::MAX),
-                    lane,
-                    format: format_str.to_owned(),
-                    state,
-                    content_signature: sig.unwrap_or_default(),
-                    is_master: true,
-                    master_frame_type: mft,
-                    master_filter: mfilt,
-                    master_exposure_s: mexp,
-                });
+            if let Some(summary) =
+                persist_master_item(&pool, &req.root_id, scanned_item.lane.as_str(), master).await?
+            {
+                items.push(summary);
             }
         }
 
@@ -285,6 +229,71 @@ pub async fn inbox_scan_folder(
     }
 
     Ok(InboxScanFolderResponse { root_id: req.root_id, items })
+}
+
+/// Row shape for an individual master `inbox_items` lookup: `(id, state,
+/// file_count, lane, content_signature, is_master_item, master_frame_type,
+/// master_filter, master_exposure_s)`.
+type MasterItemRow =
+    (String, String, i64, String, Option<String>, i64, Option<String>, Option<String>, Option<f64>);
+
+/// Insert (or reuse) the individual `inbox_items` row for a single detected
+/// calibration master and return its summary, if the row is present.
+async fn persist_master_item(
+    pool: &SqlitePool,
+    root_id: &str,
+    lane: &str,
+    master: &ScannedMasterFile,
+) -> Result<Option<InboxItemSummary>, String> {
+    let master_item_id = Uuid::new_v4().to_string();
+    let frame_type_str = format!("{:?}", master.detection.frame_type).to_ascii_lowercase();
+    let format_str = master.format.as_str();
+
+    sqlx::query(
+        "INSERT OR IGNORE INTO inbox_items
+            (id, root_id, relative_path, file_count, discovered_at, last_scanned_at,
+             content_signature, state, lane, format, is_master_item,
+             master_frame_type, master_filter, master_exposure_s)
+         VALUES (?, ?, ?, 1, datetime('now'), datetime('now'), '', 'pending_classification',
+                 ?, ?, 1, ?, ?, ?)",
+    )
+    .bind(&master_item_id)
+    .bind(root_id)
+    .bind(&master.relative_path)
+    .bind(lane)
+    .bind(format_str)
+    .bind(&frame_type_str)
+    .bind(&master.filter)
+    .bind(master.exposure_s)
+    .execute(pool)
+    .await
+    .map_err(|e| e.to_string())?;
+
+    // Fetch authoritative row (may have existed from a prior scan).
+    let row: Option<MasterItemRow> = sqlx::query_as(
+        "SELECT id, state, file_count, lane, content_signature,
+                    is_master_item, master_frame_type, master_filter, master_exposure_s
+             FROM inbox_items WHERE root_id = ? AND relative_path = ?",
+    )
+    .bind(root_id)
+    .bind(&master.relative_path)
+    .fetch_optional(pool)
+    .await
+    .map_err(|e| e.to_string())?;
+
+    Ok(row.map(|(id, state, fc, lane, sig, _is_m, mft, mfilt, mexp)| InboxItemSummary {
+        inbox_item_id: id,
+        relative_path: master.relative_path.clone(),
+        file_count: u32::try_from(fc).unwrap_or(u32::MAX),
+        lane,
+        format: format_str.to_owned(),
+        state,
+        content_signature: sig.unwrap_or_default(),
+        is_master: true,
+        master_frame_type: mft,
+        master_filter: mfilt,
+        master_exposure_s: mexp,
+    }))
 }
 
 // ── inbox.list (spec 039) ─────────────────────────────────────────────────────

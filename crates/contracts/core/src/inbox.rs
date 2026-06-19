@@ -167,7 +167,7 @@ pub struct InboxItemSummary {
     pub state: String,
     pub content_signature: String,
     /// `true` when this item represents a single detected calibration master
-    /// file (relative_path is a file path, not a folder path).  Spec 040 FR-005.
+    /// file (`relative_path` is a file path, not a folder path).  Spec 040 FR-005.
     pub is_master: bool,
     /// Base frame type for master items (`"dark"` | `"flat"` | `"bias"` | …).
     /// `null` for grouped sub-frame folder items.

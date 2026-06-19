@@ -50,7 +50,7 @@ fn write_fits(dir: &Path, name: &str, imagetyp: &str, stackcnt: Option<u32>) {
         cards.push(format!("STACKCNT=                  {n:3} / number of stacked frames"));
     }
 
-    let card_refs: Vec<&str> = cards.iter().map(|s| s.as_str()).collect();
+    let card_refs: Vec<&str> = cards.iter().map(String::as_str).collect();
     let header = minimal_fits_header(&card_refs);
 
     let path = dir.join(name);
