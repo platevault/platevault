@@ -195,8 +195,15 @@ pub async fn launch(
     // ── Step 4: canonicalize cwd + library-root containment check ────────────
     let canonical_cwd = working_dir_path.canonicalize().unwrap_or(working_dir_path.clone());
     let all_roots = inv_repo::list_all_roots(pool).await.map_err(|e| format!("{e}"))?;
-    let root_paths: Vec<std::path::PathBuf> =
-        all_roots.iter().map(|r| std::path::PathBuf::from(&r.current_path)).collect();
+    // Canonicalize roots the same way as `canonical_cwd` so containment compares
+    // like-for-like (e.g. macOS `/var` -> `/private/var`, symlinked roots).
+    let root_paths: Vec<std::path::PathBuf> = all_roots
+        .iter()
+        .map(|r| {
+            let p = std::path::PathBuf::from(&r.current_path);
+            p.canonicalize().unwrap_or(p)
+        })
+        .collect();
     let root_refs: Vec<&std::path::Path> =
         root_paths.iter().map(std::path::PathBuf::as_path).collect();
 
@@ -695,22 +702,25 @@ mod tests {
 
     #[tokio::test]
     async fn update_tool_writes_settings() {
+        // Path must be absolute on the host OS (Windows rejects POSIX-style paths).
+        #[cfg(windows)]
+        let exe = "C:\\Apps\\PixInsight\\PixInsight.exe";
+        #[cfg(not(windows))]
+        let exe = "/Applications/PixInsight/PixInsight.app";
+
         let db = setup_db().await;
         let summary = update_tool(
             db.pool(),
             UpdateProcessingTool {
                 id: "pixinsight".to_owned(),
-                path: Some("/Applications/PixInsight/PixInsight.app".to_owned()),
+                path: Some(exe.to_owned()),
                 enabled: true,
             },
         )
         .await
         .unwrap();
         assert!(summary.configured);
-        assert_eq!(
-            summary.executable_path.as_deref(),
-            Some("/Applications/PixInsight/PixInsight.app")
-        );
+        assert_eq!(summary.executable_path.as_deref(), Some(exe));
         assert!(!summary.auto_detected, "user save should clear auto_detected");
     }
 
@@ -723,8 +733,13 @@ mod tests {
 
     #[tokio::test]
     async fn validate_path_accepts_nonexistent_absolute() {
-        // An absolute path that doesn't exist returns valid=false
-        let v = validate_path("/no/such/binary");
+        // An absolute path that doesn't exist returns valid=false. The literal
+        // must be absolute on the host OS (Windows rejects POSIX-style paths).
+        #[cfg(windows)]
+        let missing = "C:\\no\\such\\binary";
+        #[cfg(not(windows))]
+        let missing = "/no/such/binary";
+        let v = validate_path(missing);
         assert!(!v.valid);
         assert!(v.reason.unwrap().contains("exist"));
     }

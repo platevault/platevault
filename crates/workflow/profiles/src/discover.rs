@@ -338,6 +338,9 @@ pub fn discover_all() -> Vec<DiscoveryResult> {
 
 // ── Helpers ───────────────────────────────────────────────────────────────────
 
+// Only `discover_all()` on Linux uses this helper; keep it available for the
+// unit test on every platform.
+#[cfg(any(target_os = "linux", test))]
 fn probe_candidates(candidates: &[(&str, &str)]) -> Vec<DiscoveryResult> {
     let mut results = Vec::new();
     for &(tool_id, path_str) in candidates {

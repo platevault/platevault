@@ -35,7 +35,7 @@ impl MasterDetector for PixInsightDetector {
     }
 
     fn detect(&self, input: &DetectInput<'_>) -> Option<MasterDetection> {
-        let imagetyp_lc = input.imagetyp.map(|s| s.to_ascii_lowercase());
+        let imagetyp_lc = input.imagetyp.map(str::to_ascii_lowercase);
 
         // Determine whether the IMAGETYP itself signals a master.
         let imagetyp_has_master = imagetyp_lc.as_deref().is_some_and(|s| s.contains("master"));

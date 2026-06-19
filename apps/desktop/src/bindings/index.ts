@@ -37,17 +37,22 @@ export const commands = {
 	 */
 	lifecycleLedgerList: (filter: LedgerFilterDto) => typedError<LedgerRowDto[], string>(__TAURI_INVOKE("lifecycle_ledger_list", { filter })),
 	/**
-	 *  `sessions.list` — returns all acquisition sessions.
+	 *  `sessions.list` -- returns all acquisition sessions from real DB rows.
+	 * 
+	 *  Backed by `acquisition_session` table (migration 0002). Returns an empty
+	 *  list when no sessions exist (not fixtures).
 	 * 
 	 *  # Errors
-	 *  Returns `Err(String)` on failure; the stub never fails.
+	 *  Returns `Err(String)` on database failure.
 	 */
 	sessionsList: () => typedError<AcquisitionSession_Serialize[], string>(__TAURI_INVOKE("sessions_list")),
 	/**
-	 *  `sessions.get` — returns a single session detail.
+	 *  `sessions.get` -- returns a single session detail from real DB rows.
+	 * 
+	 *  Returns `Err("session.not_found: <id>")` when the session does not exist.
 	 * 
 	 *  # Errors
-	 *  Returns `Err(String)` on failure; the stub never fails.
+	 *  Returns `Err(String)` on database failure or when the session is absent.
 	 */
 	sessionsGet: (id: string) => typedError<SessionDetail_Serialize, string>(__TAURI_INVOKE("sessions_get", { id })),
 	/**
@@ -2330,7 +2335,7 @@ export type InboxItemSummary_Deserialize = {
 	contentSignature: string,
 	/**
 	 *  `true` when this item represents a single detected calibration master
-	 *  file (relative_path is a file path, not a folder path).  Spec 040 FR-005.
+	 *  file (`relative_path` is a file path, not a folder path).  Spec 040 FR-005.
 	 */
 	isMaster: boolean,
 	/**
@@ -2362,7 +2367,7 @@ export type InboxItemSummary_Serialize = {
 	contentSignature: string,
 	/**
 	 *  `true` when this item represents a single detected calibration master
-	 *  file (relative_path is a file path, not a folder path).  Spec 040 FR-005.
+	 *  file (`relative_path` is a file path, not a folder path).  Spec 040 FR-005.
 	 */
 	isMaster: boolean,
 	/**

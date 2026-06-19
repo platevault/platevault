@@ -70,18 +70,17 @@ async fn mock_lifecycle_app() -> tauri::App<tauri::test::MockRuntime> {
 
 // ─── Sessions (6 commands) ──────────────────────────────────────────────────
 
-#[tokio::test]
-async fn stub_sessions_list() {
-    let res = sessions_list().await;
-    assert!(res.is_ok(), "sessions_list failed: {res:?}");
-    assert!(!res.unwrap().is_empty(), "sessions_list should return fixtures");
+// sessions_list / sessions_get now require AppState (spec 037 de-stub, 4dd335f):
+// they query real acquisition_session rows. Real runtime coverage lives in
+// crates/app/core/tests/sessions_integration.rs. The command imports are kept
+// here to prove the new signatures compile.
+#[allow(dead_code)]
+fn _sessions_list_compiles_check() {
+    let _ = sessions_list;
 }
-
-#[tokio::test]
-async fn stub_sessions_get() {
-    let res = sessions_get("ses-001".to_owned()).await;
-    assert!(res.is_ok(), "sessions_get failed: {res:?}");
-    assert_eq!(res.unwrap().id, "ses-001");
+#[allow(dead_code)]
+fn _sessions_get_compiles_check() {
+    let _ = sessions_get;
 }
 
 #[tokio::test]
@@ -341,11 +340,12 @@ async fn stub_review_queue() {
 
 // ─── Roots & Scan & Equipment (6 commands) ──────────────────────────────────
 
-#[tokio::test]
-async fn stub_roots_list() {
-    let res = roots_list().await;
-    assert!(res.is_ok(), "roots_list failed: {res:?}");
-    assert!(!res.unwrap().is_empty());
+// `roots_list` now requires `State<'_, AppState>` (spec 003 real impl). Real
+// runtime coverage lives in the use-case tests below; the command import is
+// kept to prove the new signature compiles.
+#[allow(dead_code)]
+fn _roots_list_compiles_check() {
+    let _ = roots_list;
 }
 
 // `roots_register` now requires `State<'_, AppState>` (spec 003 real impl).
@@ -356,9 +356,16 @@ async fn roots_register_via_use_case() {
     let db = Database::in_memory().await.expect("in-memory database");
     db.migrate().await.expect("run migrations");
 
+    // Path must be absolute on the host OS (validate_path rejects POSIX-style
+    // paths on Windows).
+    #[cfg(windows)]
+    let source_path = "C:\\Temp";
+    #[cfg(not(windows))]
+    let source_path = "/tmp";
+
     let req = contracts_core::first_run::RegisterSourceRequest {
         kind: contracts_core::first_run::SourceKind::LightFrames,
-        path: "/tmp".to_owned(),
+        path: source_path.to_owned(),
         kind_subtype: None,
         scan_depth: contracts_core::first_run::ScanDepth::Recursive,
     };
@@ -367,7 +374,7 @@ async fn roots_register_via_use_case() {
     assert!(resp.is_ok(), "register_source failed: {resp:?}");
     let resp = resp.unwrap();
     assert_eq!(resp.kind, contracts_core::first_run::SourceKind::LightFrames);
-    assert_eq!(resp.path, "/tmp");
+    assert_eq!(resp.path, source_path);
 }
 
 #[tokio::test]

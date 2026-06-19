@@ -1,19 +1,24 @@
-//! Spec 029 session stubs exposed to the Tauri webview.
+//! Spec 029 / spec 037 session commands exposed to the Tauri webview.
 //!
-//! Stub implementations returning hardcoded fixture data matching the mock
-//! layer until the real persistence layer is wired.
+//! Real implementations (T037):
+//!   `sessions_list` -- backed by `app_core::sessions::list_sessions` (real DB).
+//!   `sessions_get`  -- backed by `app_core::sessions::get_session` (real DB).
+//!
+//! Remaining stubs (no persistence layer yet):
+//!   `sessions_calendar`, `sessions_transition`, `sessions_split`, `sessions_merge`.
 
-use std::collections::HashMap;
-
-use contracts_core::calibration::CalibrationKind;
+use app_core::sessions as sessions_uc;
 use contracts_core::sessions::{
     AcquisitionSession, CalendarData, CalendarDay, CalendarMonth, CalendarSessionStub,
-    ConfidenceLevel, Frameset, MetaValue, ProvenanceOrigin, SessionCalibrationMatch, SessionDetail,
-    SessionHistoryEntry, SessionKey, SessionState,
+    ConfidenceLevel, MetaValue, ProvenanceOrigin, SessionDetail, SessionKey, SessionState,
 };
 use contracts_core::JsonAny;
 use serde::{Deserialize, Serialize};
 use specta::Type;
+use std::collections::HashMap;
+use tauri::State;
+
+use crate::AppState;
 
 /// Wrapper for `sessions.split` return value.
 #[derive(Clone, Debug, Serialize, Deserialize, Type)]
@@ -23,71 +28,31 @@ pub struct SessionSplitResult {
     pub new: AcquisitionSession,
 }
 
-/// `sessions.list` — returns all acquisition sessions.
+/// `sessions.list` -- returns all acquisition sessions from real DB rows.
+///
+/// Backed by `acquisition_session` table (migration 0002). Returns an empty
+/// list when no sessions exist (not fixtures).
 ///
 /// # Errors
-/// Returns `Err(String)` on failure; the stub never fails.
+/// Returns `Err(String)` on database failure.
 #[tauri::command]
 #[specta::specta]
-pub async fn sessions_list() -> Result<Vec<AcquisitionSession>, String> {
-    tracing::debug!("stub: sessions.list");
-    Ok(stub_sessions())
+pub async fn sessions_list(state: State<'_, AppState>) -> Result<Vec<AcquisitionSession>, String> {
+    tracing::debug!("sessions.list");
+    sessions_uc::list_sessions(state.repo.pool()).await
 }
 
-/// `sessions.get` — returns a single session detail.
+/// `sessions.get` -- returns a single session detail from real DB rows.
+///
+/// Returns `Err("session.not_found: <id>")` when the session does not exist.
 ///
 /// # Errors
-/// Returns `Err(String)` on failure; the stub never fails.
+/// Returns `Err(String)` on database failure or when the session is absent.
 #[tauri::command]
 #[specta::specta]
-pub async fn sessions_get(id: String) -> Result<SessionDetail, String> {
-    tracing::debug!("stub: sessions.get id={id}");
-    let base = &stub_sessions()[0];
-    Ok(SessionDetail {
-        id: id.clone(),
-        session_key: base.session_key.clone(),
-        state: base.state,
-        confidence: base.confidence,
-        optical_train_id: base.optical_train_id.clone(),
-        frame_count: base.frame_count,
-        total_integration_seconds: base.total_integration_seconds,
-        total_size_bytes: base.total_size_bytes,
-        metadata: base.metadata.clone(),
-        target_ids: base.target_ids.clone(),
-        project_ids: base.project_ids.clone(),
-        warnings: base.warnings.clone(),
-        framesets: vec![
-            Frameset { filter: "Ha".to_owned(), count: 18, integration_s: 10800.0 },
-            Frameset { filter: "OIII".to_owned(), count: 15, integration_s: 9000.0 },
-            Frameset { filter: "SII".to_owned(), count: 12, integration_s: 7200.0 },
-        ],
-        calibration_matches: vec![
-            SessionCalibrationMatch {
-                master_id: "master-001".to_owned(),
-                kind: CalibrationKind::Dark,
-                score: 0.97,
-                soft_mismatches: vec![],
-            },
-            SessionCalibrationMatch {
-                master_id: "master-002".to_owned(),
-                kind: CalibrationKind::Flat,
-                score: 0.92,
-                soft_mismatches: vec!["age > 60 days".to_owned()],
-            },
-        ],
-        history: vec![
-            SessionHistoryEntry {
-                timestamp: "2026-04-12T22:00:00Z".to_owned(),
-                event: "discovered".to_owned(),
-                actor: "system".to_owned(),
-            },
-            SessionHistoryEntry {
-                timestamp: "2026-04-13T10:30:00Z".to_owned(),
-                event: "confirmed".to_owned(),
-                actor: "user".to_owned(),
-            },
-        ],
-    })
+pub async fn sessions_get(state: State<'_, AppState>, id: String) -> Result<SessionDetail, String> {
+    tracing::debug!("sessions.get id={id}");
+    sessions_uc::get_session(state.repo.pool(), &id).await
 }
 
 /// `sessions.calendar` — returns calendar data for a month range.

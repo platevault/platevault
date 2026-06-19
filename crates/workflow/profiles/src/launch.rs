@@ -135,6 +135,7 @@ impl ProcessSpawner for FakeSpawner {
 // ── Platform implementations ──────────────────────────────────────────────────
 
 #[cfg(target_os = "windows")]
+#[allow(clippy::needless_pass_by_value)] // signature kept uniform across platform variants
 fn spawn_platform(req: SpawnRequest) -> Result<SpawnResult, LaunchError> {
     use std::os::windows::process::CommandExt;
     const DETACHED_PROCESS: u32 = 0x0000_0008;
@@ -148,6 +149,7 @@ fn spawn_platform(req: SpawnRequest) -> Result<SpawnResult, LaunchError> {
 }
 
 #[cfg(target_os = "macos")]
+#[allow(clippy::needless_pass_by_value)] // signature kept uniform across platform variants
 fn spawn_platform(req: SpawnRequest) -> Result<SpawnResult, LaunchError> {
     use std::os::unix::process::CommandExt;
 

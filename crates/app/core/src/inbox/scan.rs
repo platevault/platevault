@@ -69,9 +69,9 @@ fn folder_format(
     match (has_fits || has_xisf, has_video) {
         (true, _) if has_fits && has_xisf => FileFormat::Mixed,
         (true, _) if has_xisf => FileFormat::Xisf,
-        (true, _) => FileFormat::Fits,
         (false, true) => FileFormat::Video,
-        _ => FileFormat::Fits, // fallback; unreachable in practice
+        // (true, _) FITS-only, plus the (false, false) fallback.
+        _ => FileFormat::Fits,
     }
 }
 

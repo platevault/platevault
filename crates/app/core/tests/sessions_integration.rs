@@ -17,6 +17,7 @@ mod support;
 
 use app_core::inventory::review_session;
 use contracts_core::inventory::{InventorySessionReviewRequest, InventorySessionState};
+use contracts_core::sessions::SessionState;
 use uuid::Uuid;
 
 // ── Seed helpers ─────────────────────────────────────────────────────────────
@@ -152,4 +153,75 @@ async fn merge_and_split_stubs_return_not_implemented_errors() {
         merge_result.unwrap_err().contains("not yet implemented"),
         "error message must mention 'not yet implemented'"
     );
+}
+
+// ── 5. list_sessions: returns real rows, empty on fresh DB ───────────────────
+
+#[tokio::test]
+async fn list_sessions_returns_empty_on_fresh_db() {
+    let (db, _repo, _bus) = support::setup().await;
+    let res = app_core::sessions::list_sessions(db.pool()).await;
+    assert!(res.is_ok(), "list_sessions failed: {res:?}");
+    assert!(res.unwrap().is_empty(), "fresh DB must have no sessions -- not fixtures");
+}
+
+#[tokio::test]
+async fn list_sessions_reads_back_seeded_rows() {
+    let (db, _repo, _bus) = support::setup().await;
+    let pool = db.pool();
+
+    insert_acquisition_session(pool, "ses-t1", "discovered").await;
+    insert_acquisition_session(pool, "ses-t2", "confirmed").await;
+
+    let res = app_core::sessions::list_sessions(pool).await;
+    assert!(res.is_ok(), "list_sessions failed: {res:?}");
+    let sessions = res.unwrap();
+    assert_eq!(sessions.len(), 2, "must return exactly 2 seeded sessions");
+
+    // Both IDs must be present (order is by created_at DESC; both same timestamp
+    // so order may vary -- just check presence).
+    let ids: Vec<&str> = sessions.iter().map(|s| s.id.as_str()).collect();
+    assert!(ids.contains(&"ses-t1"), "ses-t1 must be in the list");
+    assert!(ids.contains(&"ses-t2"), "ses-t2 must be in the list");
+}
+
+#[tokio::test]
+async fn list_sessions_maps_state_from_db() {
+    let (db, _repo, _bus) = support::setup().await;
+    let pool = db.pool();
+
+    insert_acquisition_session(pool, "ses-t3", "confirmed").await;
+
+    let sessions = app_core::sessions::list_sessions(pool).await.unwrap();
+    let ses = sessions.iter().find(|s| s.id == "ses-t3").expect("ses-t3 must be in list");
+
+    assert!(matches!(ses.state, SessionState::Confirmed), "state must be Confirmed");
+}
+
+// ── 6. get_session: returns detail or not_found ───────────────────────────────
+
+#[tokio::test]
+async fn get_session_returns_not_found_for_missing_id() {
+    let (db, _repo, _bus) = support::setup().await;
+    let res = app_core::sessions::get_session(db.pool(), "nonexistent-id").await;
+    assert!(res.is_err(), "get_session must return Err for unknown id");
+    assert!(res.unwrap_err().contains("session.not_found"), "error must contain session.not_found");
+}
+
+#[tokio::test]
+async fn get_session_returns_detail_for_seeded_row() {
+    let (db, _repo, _bus) = support::setup().await;
+    let pool = db.pool();
+
+    insert_acquisition_session(pool, "ses-t4", "needs_review").await;
+
+    let res = app_core::sessions::get_session(pool, "ses-t4").await;
+    assert!(res.is_ok(), "get_session failed: {res:?}");
+    let detail = res.unwrap();
+    assert_eq!(detail.id, "ses-t4", "returned id must match seeded id");
+
+    assert!(matches!(detail.state, SessionState::NeedsReview), "state must be NeedsReview");
+    // calibration_matches and history are empty for a minimal seed row.
+    assert!(detail.calibration_matches.is_empty(), "no calibration matches on fresh seed");
+    assert!(detail.history.is_empty(), "no history on fresh seed");
 }

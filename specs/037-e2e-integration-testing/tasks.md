@@ -79,22 +79,24 @@ Story labels map to spec user stories US1–US5.
 **Independent test**: `pnpm test:e2e:real` launches the built app, runs journeys, asserts non-mock round-trip + real mutation/audit.
 **Depends on**: Phase 2 (T007, T008).
 
-> **GATED (W3 smoke, research D9, 2026-06-19)**: harness is READY and `cargo build
-> -p desktop_shell` passes, but US3 data journeys are **blocked on backend stubs**
-> — `search.global`, `sessions.list`, `calibration.masters.list` return hardcoded
-> fixtures (de-stubbing is product work in specs 033/035, not 037). Authoring
-> journeys over stubs would be false positives (violates FR-008/the feature's
-> purpose). Only **US1 `plan_apply`** (T024-equivalent) is real-signal-ready; the
-> webkit/tauri-driver IPC project also still needs wiring into the Playwright
-> config + one verified run (deferred to CI/Windows, not this WSL sandbox). These
-> tasks therefore remain OPEN with documented reasons rather than faked.
+> **STATUS (updated after merge to main, 2026-06-19)**: W3 smoke confirmed the
+> harness is READY (`cargo build -p desktop_shell` passes). Backend stub blockers
+> have largely cleared on main: **`search.global` and `calibration.masters.list/get`
+> are now de-stubbed** (real SQLite, spec-033/035). **`sessions.list/get` de-stub**
+> is the last backend prerequisite (use cases over the existing `acquisition_session`
+> table — bounded; tracked separately). CI **Stage B (E2E Linux+Windows)** and
+> **Stage C (macOS best-effort)** are wired in `.github/workflows/ci.yml`, plus a
+> `screen_load_smoke.spec.ts` real-env smoke. **The webview/`tauri-driver` IPC
+> journeys cannot run in the WSL dev sandbox** — they are first-verified by CI
+> Stage B and on Windows (handover item). Authoring + un-skipping the full journey
+> set against the real backend is the remaining US3 work, to be verified in CI.
 
 - [ ] T024 [P] [US3] Complete the **first-run setup → target resolve → project create** journey (un-skip + flesh out), asserting a UI→real-backend round-trip value (FR-008), in `apps/desktop/e2e/real-backend/us1_*.spec.ts`
 - [ ] T025 [P] [US3] Complete the **filesystem plan review → apply** journey asserting the real side effect **and** durable audit record, inside disposable test locations (FR-009, FR-016), in `apps/desktop/e2e/real-backend/*plan*.spec.ts`
 - [ ] T026 [P] [US3] Add an **all-top-level-screens-load** smoke spec covering every navigable feature screen without error (FR-007, coverage-matrix #21), in `apps/desktop/e2e/real-backend/screens_load.spec.ts`
 - [ ] T027 [P] [US3] Complete remaining 033 journey skeletons (subscriber startup, ingestion plumbing, lifecycle integrity) or convert to explicit, documented not-applicable if superseded — `apps/desktop/e2e/real-backend/us{2,3,5}_*.spec.ts`
-- [ ] T028 [US3] Extend `ci.yml` with **Stage B (required, Linux+Windows)**: build app, run Layer-2 (Linux under `xvfb-run` + `WebKitWebDriver`; Windows fetch version-matched `msedgedriver`) — gated after Stage A (FR-010/FR-012); ensure the `better-sqlite3` native binding is installed/rebuilt per-OS runner so the `db.ts` reader loads (addresses F4 native-module risk)
-- [ ] T029 [US3] Add **Stage C (macOS, optional/`continue-on-error`)** for best-effort macOS E2E via debug-only `tauri-plugin-webdriver`, OR wire FR-013 explicit not-applicable reporting if the plugin path is deferred — per research D4; ensure the plugin is compile-gated to debug builds (Constitution V)
+- [X] T028 [US3] Extend `ci.yml` with **Stage B (required, Linux+Windows)**: build app, run Layer-2 (Linux under `xvfb-run` + `WebKitWebDriver`; Windows fetch version-matched `msedgedriver`) — gated after Stage A (FR-010/FR-012); ensure the `better-sqlite3` native binding is installed/rebuilt per-OS runner so the `db.ts` reader loads (addresses F4 native-module risk)
+- [X] T029 [US3] Add **Stage C (macOS, optional/`continue-on-error`)** for best-effort macOS E2E via debug-only `tauri-plugin-webdriver`, OR wire FR-013 explicit not-applicable reporting if the plugin path is deferred — per research D4; ensure the plugin is compile-gated to debug builds (Constitution V)
 
 **Checkpoint**: Real UI↔backend wiring proven on Linux+Windows; macOS handled per D4.
 
