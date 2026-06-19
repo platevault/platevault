@@ -2,12 +2,17 @@
 /**
  * StepScan tests — first-run wizard "Scan" step (spec 038).
  *
- * Covers: scanning/done/empty/error states and the Finish flow.
- * Mocks inboxScanFolder + inboxClassify at the @/api/commands layer
+ * Covers: scanning/done/empty/error states and the onAllDoneChange callback
+ * contract.  Mocks inboxScanFolder + inboxClassify at the @/api/commands layer
  * (same pattern as SetupWizard.test.tsx).
+ *
+ * NOTE: Back and Finish buttons now live in the SetupWizard footer, not inside
+ * StepScan.  Tests for those buttons are in SetupWizard.test.tsx.  This file
+ * tests StepScan's visual states and the `onAllDoneChange` callback that the
+ * footer relies on to enable/disable Finish.
  */
 
-import { render, screen, waitFor, fireEvent, act, within } from '@testing-library/react';
+import { render, screen, waitFor, fireEvent, within } from '@testing-library/react';
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 
 // ── Hoisted mocks ────────────────────────────────────────────────────────────
@@ -78,14 +83,12 @@ const SCAN_RESPONSE_EMPTY = {
 // ── Helpers ──────────────────────────────────────────────────────────────────
 
 function renderStep(overrides: Partial<StepScanProps> = {}) {
-  const onFinish = overrides.onFinish ?? vi.fn().mockResolvedValue(undefined);
+  const onAllDoneChange = overrides.onAllDoneChange ?? vi.fn();
   return render(
     <StepScan
       sources={SOURCES}
       flushResult={FLUSH_RESULT}
-      onFinish={onFinish}
-      isFinishing={false}
-      onBack={vi.fn()}
+      onAllDoneChange={onAllDoneChange}
       {...overrides}
     />,
   );
@@ -265,35 +268,16 @@ describe('StepScan', () => {
       });
     });
 
-    it('enables the Finish button once all sources are done', async () => {
+    it('calls onAllDoneChange(true) once all sources finish', async () => {
       mockInboxScanFolder.mockResolvedValue(SCAN_RESPONSE_WITH_ITEMS);
       mockInboxClassify.mockResolvedValue(CLASSIFY_RESPONSE);
 
-      renderStep();
+      const onAllDoneChange = vi.fn();
+      renderStep({ onAllDoneChange });
 
       await waitFor(() => {
-        const finishBtn = screen.getByTestId('finish-button');
-        expect(finishBtn).not.toBeDisabled();
+        expect(onAllDoneChange).toHaveBeenCalledWith(true);
       });
-    });
-
-    it('calls onFinish when Finish is clicked', async () => {
-      mockInboxScanFolder.mockResolvedValue(SCAN_RESPONSE_WITH_ITEMS);
-      mockInboxClassify.mockResolvedValue(CLASSIFY_RESPONSE);
-
-      const onFinish = vi.fn().mockResolvedValue(undefined);
-      renderStep({ sources: [SOURCES[0]], onFinish });
-
-      await waitFor(() => {
-        expect(screen.getByTestId('finish-button')).not.toBeDisabled();
-      });
-
-      await act(async () => {
-        fireEvent.click(screen.getByTestId('finish-button'));
-        await new Promise((r) => setTimeout(r, 0));
-      });
-
-      expect(onFinish).toHaveBeenCalledTimes(1);
     });
   });
 
@@ -355,38 +339,30 @@ describe('StepScan', () => {
       expect(screen.getByTestId('scan-item-item-001')).toBeInTheDocument();
     });
 
-    it('enables Finish even when a source has errored (FR-005)', async () => {
+    it('calls onAllDoneChange(true) even when a source has errored (FR-005)', async () => {
       mockInboxScanFolder
         .mockRejectedValueOnce(new Error('disk read error'))
         .mockResolvedValueOnce(SCAN_RESPONSE_EMPTY);
 
-      renderStep();
+      const onAllDoneChange = vi.fn();
+      renderStep({ onAllDoneChange });
 
       await waitFor(() => {
-        const finishBtn = screen.getByTestId('finish-button');
-        expect(finishBtn).not.toBeDisabled();
+        expect(onAllDoneChange).toHaveBeenCalledWith(true);
       });
     });
   });
 
-  describe('Finish button state', () => {
-    it('keeps Finish disabled while scans are still running', () => {
+  describe('onAllDoneChange callback', () => {
+    it('does not call onAllDoneChange(true) while scans are still running', () => {
       // Never-resolving promise keeps sources in scanning state
       mockInboxScanFolder.mockReturnValue(new Promise(() => {}));
 
-      renderStep();
+      const onAllDoneChange = vi.fn();
+      renderStep({ onAllDoneChange });
 
-      const finishBtn = screen.getByTestId('finish-button');
-      expect(finishBtn).toBeDisabled();
-    });
-
-    it('shows "Finishing…" label when isFinishing is true', async () => {
-      mockInboxScanFolder.mockResolvedValue(SCAN_RESPONSE_EMPTY);
-
-      renderStep({ isFinishing: true });
-
-      // Even before scan completes the label reflects the prop
-      expect(screen.getByTestId('finish-button')).toHaveTextContent('Finishing…');
+      // May be called with false on initial render but must never be called with true
+      expect(onAllDoneChange).not.toHaveBeenCalledWith(true);
     });
   });
 
@@ -413,9 +389,7 @@ describe('StepScan', () => {
         <StepScan
           sources={[SOURCES[0]]}
           flushResult={FLUSH_RESULT}
-          onFinish={vi.fn().mockResolvedValue(undefined)}
-          isFinishing={false}
-          onBack={vi.fn()}
+          onAllDoneChange={vi.fn()}
         />,
       );
 

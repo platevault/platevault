@@ -32,11 +32,11 @@ export interface StepScanProps {
   sources: SourceEntry[];
   /** Result of flushToDB; rootId per path lets us pass the right id to scan. */
   flushResult: FlushResult;
-  /** Callback when scan step is done and Finish is clicked. */
-  onFinish: () => Promise<void>;
-  isFinishing: boolean;
-  /** Go back to the review step to correct sources, then re-scan. */
-  onBack: () => void;
+  /**
+   * Called whenever the "all scans done" state changes so the parent can
+   * enable/disable the Finish button that now lives in the wizard footer.
+   */
+  onAllDoneChange: (done: boolean) => void;
 }
 
 // ── Helpers ───────────────────────────────────────────────────────────────────
@@ -344,8 +344,12 @@ function SourceSummary({ state }: SourceSummaryProps) {
  * Runs inbox_scan_folder + inbox_classify per registered source and shows a
  * per-source detection summary.  Ingestion-group approval stays in the Inbox;
  * Finish navigates there without calling inbox_confirm.
+ *
+ * Back and Finish buttons are rendered by the shared WizardShell footer in
+ * SetupWizard.  StepScan notifies the parent of scan completion via
+ * `onAllDoneChange` so the footer can enable/disable the Finish button.
  */
-export function StepScan({ sources, flushResult, onFinish, isFinishing, onBack }: StepScanProps) {
+export function StepScan({ sources, flushResult, onAllDoneChange }: StepScanProps) {
   const [sourceStates, setSourceStates] = useState<SourceScanState[]>(() =>
     sources
       .filter((s) => s.path)
@@ -428,6 +432,12 @@ export function StepScan({ sources, flushResult, onFinish, isFinishing, onBack }
   const allDone = sourceStates.every((s) => s.phase === 'done' || s.phase === 'error');
   const totalDetected = sourceStates.reduce((acc, s) => acc + s.items.length, 0);
 
+  // Notify parent whenever the allDone state changes so the footer can
+  // enable/disable the Finish button.
+  useEffect(() => {
+    onAllDoneChange(allDone);
+  }, [allDone, onAllDoneChange]);
+
   return (
     <div
       className="alm-step-scan"
@@ -477,55 +487,6 @@ export function StepScan({ sources, flushResult, onFinish, isFinishing, onBack }
           )}
         </>
       )}
-
-      {/* Back / Finish — pinned footer, never scrolls off-screen */}
-      <div
-        style={{
-          flexShrink: 0,
-          marginTop: 'var(--alm-sp-4)',
-          paddingTop: 'var(--alm-sp-4)',
-          borderTop: '1px solid var(--alm-border)',
-          display: 'flex',
-          gap: 'var(--alm-sp-3)',
-        }}
-      >
-        <button
-          data-testid="back-button"
-          onClick={onBack}
-          disabled={isFinishing}
-          style={{
-            padding: 'var(--alm-sp-2) var(--alm-sp-5)',
-            background: 'transparent',
-            color: 'var(--alm-text)',
-            border: '1px solid var(--alm-border)',
-            borderRadius: 'var(--alm-radius-md)',
-            fontWeight: 'var(--alm-weight-medium)',
-            fontSize: 'var(--alm-text-sm)',
-            cursor: isFinishing ? 'not-allowed' : 'pointer',
-            opacity: isFinishing ? 0.6 : 1,
-          }}
-        >
-          &larr; Back to review
-        </button>
-        <button
-          data-testid="finish-button"
-          onClick={() => { void onFinish(); }}
-          disabled={isFinishing || !allDone}
-          style={{
-            padding: 'var(--alm-sp-2) var(--alm-sp-5)',
-            background: 'var(--alm-accent)',
-            color: 'var(--alm-accent-text)',
-            border: 'none',
-            borderRadius: 'var(--alm-radius-md)',
-            fontWeight: 'var(--alm-weight-medium)',
-            fontSize: 'var(--alm-text-sm)',
-            cursor: isFinishing || !allDone ? 'not-allowed' : 'pointer',
-            opacity: isFinishing || !allDone ? 0.6 : 1,
-          }}
-        >
-          {isFinishing ? 'Finishing…' : 'Finish'}
-        </button>
-      </div>
     </div>
   );
 }
