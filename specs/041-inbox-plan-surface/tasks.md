@@ -91,9 +91,9 @@
 **Goal**: queue summary shows folders/masters/images per type.
 **Independent test**: seeded mix → summary counts match.
 
-- [ ] T038 [US6] Add `inbox.stats` aggregate query in `crates/persistence/db/src/repositories/inbox.rs` (folders/masters/images per type from breakdown + `is_master_item`) + app/core use-case + Tauri command.
+- [X] T038 [US6] Add `inbox.stats` aggregate query in `crates/persistence/db/src/repositories/inbox.rs` (folders/masters/images per type from breakdown + `is_master_item`) + app/core use-case + Tauri command.
 - [ ] T039 [US6] Regenerate bindings; `commands.ts` wrapper; frontend queue summary renders the per-type breakdown (`InboxPage.tsx`).
-- [ ] T040 [P] [US6] Tests: stats query against a seeded fixture (`-p persistence_db`); Vitest for the summary.
+- [X] T040 [P] [US6] Tests: stats query against a seeded fixture (`-p persistence_db`); Vitest for the summary.
 
 ## Phase 9: User Story 7 — Archive-vs-Trash destructive control (P3)
 
