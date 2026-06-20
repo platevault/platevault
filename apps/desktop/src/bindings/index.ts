@@ -1114,6 +1114,18 @@ export const commands = {
 	 */
 	inboxPlanCancel: (inboxItemId: string) => typedError<InboxPlanCancelResponse, string>(__TAURI_INVOKE("inbox_plan_cancel", { inboxItemId })),
 	/**
+	 *  `inbox.stats` — aggregate per-type frame counts across all active inbox items
+	 *  (spec 041, US6 T038).
+	 * 
+	 *  Returns counts of folders, masters, and images broken down by effective frame
+	 *  type. The effective type is `manual_override` when set, otherwise
+	 *  `frame_type` from classification evidence.
+	 * 
+	 *  # Errors
+	 *  Returns a string error on database failure.
+	 */
+	inboxStats: () => typedError<InboxStatsResponse, string>(__TAURI_INVOKE("inbox_stats")),
+	/**
 	 *  `inbox.plan.list_open` — return every open plan across all roots (spec 041, US2).
 	 * 
 	 *  Aggregate surface so the UI can show every active planned action at once,
@@ -2963,6 +2975,30 @@ export type InboxScanResult = {
 	entries: InboxFileEntry[],
 	totalCount: number,
 	totalSizeBytes: number,
+};
+
+/**  Per-frame-type queue stats entry. */
+export type InboxStatsPerType = {
+	frameType: string,
+	/**  Number of folder-grouped inbox items of this type. */
+	folderCount: number,
+	/**  Number of master inbox items of this type. */
+	masterCount: number,
+	/**  Total image (file) count across all items of this type. */
+	imageCount: number,
+};
+
+/**  Response from `inbox.stats`. */
+export type InboxStatsResponse = {
+	perType: InboxStatsPerType[],
+	totals: InboxStatsTotals,
+};
+
+/**  Aggregate totals across all frame types. */
+export type InboxStatsTotals = {
+	folders: number,
+	masters: number,
+	images: number,
 };
 
 export type IngestionSettings = {
