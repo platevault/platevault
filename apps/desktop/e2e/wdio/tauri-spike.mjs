@@ -79,8 +79,10 @@ async function main() {
       path: "/",
       connectionRetryCount: 0,
       logLevel: "error",
+      // tauri-driver manages the native WebDriver itself; specifying a
+      // browserName makes the native driver (WebKitWebDriver) reject the
+      // session as "failed to match capabilities". Only tauri:options is needed.
       capabilities: {
-        browserName: "wry",
         "tauri:options": { application: appBinary },
       },
     });
