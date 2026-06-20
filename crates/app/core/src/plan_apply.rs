@@ -177,6 +177,8 @@ fn item_row_to_executor_item(
         // T022: map "trash" action to the Trash variant.
         "trash" => ExecutorItemAction::Trash { fallback_archive_destination: None },
         "delete" => ExecutorItemAction::Delete,
+        // spec 041: catalogue = record-in-place, no filesystem mutation.
+        "catalogue" => ExecutorItemAction::Catalogue,
         _ => ExecutorItemAction::NoOp,
     };
 

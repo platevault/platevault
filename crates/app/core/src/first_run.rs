@@ -303,6 +303,7 @@ pub async fn restart_first_run(
 #[cfg(test)]
 mod tests {
     use super::*;
+    use contracts_core::first_run::OrganizationState;
 
     #[test]
     fn validate_path_not_exists() {
@@ -343,6 +344,7 @@ mod tests {
             path: "/tmp".to_owned(),
             kind_subtype: None,
             scan_depth: contracts_core::first_run::ScanDepth::Recursive,
+            organization_state: OrganizationState::Organized,
         };
         repo::register_source(&pool, &req).await.unwrap();
 
@@ -361,6 +363,7 @@ mod tests {
             path: "/tmp".to_owned(),
             kind_subtype: None,
             scan_depth: contracts_core::first_run::ScanDepth::Recursive,
+            organization_state: OrganizationState::Organized,
         };
         repo::register_source(&pool, &req).await.unwrap();
 

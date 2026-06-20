@@ -5,8 +5,9 @@
 
 use contracts_core::first_run::{
     BatchItem, BatchStatus, FirstRunCompleteResponse, FirstRunRestartResponse,
-    FirstRunStateResponse, ItemStatus, RegisterSourceBatchRequest, RegisterSourceBatchResponse,
-    RegisterSourceRequest, RegisterSourceResponse, ScanDepth, SourceKind,
+    FirstRunStateResponse, ItemStatus, OrganizationState, RegisterSourceBatchRequest,
+    RegisterSourceBatchResponse, RegisterSourceRequest, RegisterSourceResponse, ScanDepth,
+    SourceKind,
 };
 use sqlx::SqlitePool;
 use time::OffsetDateTime;
@@ -48,6 +49,20 @@ fn scan_depth_to_str(depth: ScanDepth) -> &'static str {
     }
 }
 
+fn organization_state_to_str(state: OrganizationState) -> &'static str {
+    match state {
+        OrganizationState::Organized => "organized",
+        OrganizationState::Unorganized => "unorganized",
+    }
+}
+
+fn str_to_organization_state(s: &str) -> OrganizationState {
+    match s {
+        "organized" => OrganizationState::Organized,
+        _ => OrganizationState::Unorganized,
+    }
+}
+
 /// Determine `created_via` based on first_run_state.completed_at.
 async fn resolve_created_via(pool: &SqlitePool) -> DbResult<&'static str> {
     let row: Option<(Option<String>,)> =
@@ -71,19 +86,22 @@ pub async fn find_sources_by_path(
     pool: &SqlitePool,
     path: &str,
 ) -> DbResult<Vec<RegisterSourceResponse>> {
-    let rows: Vec<(String, String, String, String)> =
-        sqlx::query_as("SELECT id, kind, path, created_at FROM registered_sources WHERE path = ?")
-            .bind(path)
-            .fetch_all(pool)
-            .await?;
+    let rows: Vec<(String, String, String, String, String)> = sqlx::query_as(
+        "SELECT id, kind, path, created_at, organization_state \
+         FROM registered_sources WHERE path = ?",
+    )
+    .bind(path)
+    .fetch_all(pool)
+    .await?;
 
     Ok(rows
         .into_iter()
-        .map(|(id, kind, path, created_at)| RegisterSourceResponse {
+        .map(|(id, kind, path, created_at, org_state)| RegisterSourceResponse {
             source_id: id,
             kind: str_to_source_kind(&kind),
             path,
             created_at,
+            organization_state: str_to_organization_state(&org_state),
         })
         .collect())
 }
@@ -104,9 +122,11 @@ pub async fn register_source(
     let created_at = now_iso();
     let created_via = resolve_created_via(pool).await?;
 
+    let org_state_str = organization_state_to_str(req.organization_state);
     sqlx::query(
-        "INSERT INTO registered_sources (id, kind, path, kind_subtype, scan_depth, created_at, created_via) \
-         VALUES (?, ?, ?, ?, ?, ?, ?)",
+        "INSERT INTO registered_sources \
+         (id, kind, path, kind_subtype, scan_depth, created_at, created_via, organization_state) \
+         VALUES (?, ?, ?, ?, ?, ?, ?, ?)",
     )
     .bind(&id)
     .bind(kind_str)
@@ -115,10 +135,17 @@ pub async fn register_source(
     .bind(scan_depth_str)
     .bind(&created_at)
     .bind(created_via)
+    .bind(org_state_str)
     .execute(pool)
     .await?;
 
-    Ok(RegisterSourceResponse { source_id: id, kind: req.kind, path: req.path.clone(), created_at })
+    Ok(RegisterSourceResponse {
+        source_id: id,
+        kind: req.kind,
+        path: req.path.clone(),
+        created_at,
+        organization_state: req.organization_state,
+    })
 }
 
 /// Register multiple sources in a single transaction with partial-success
@@ -148,10 +175,12 @@ pub async fn register_source_batch(
         let id = Uuid::new_v4().to_string();
         let kind_str = source_kind_to_str(source.kind);
         let scan_depth_str = scan_depth_to_str(source.scan_depth);
+        let org_state_str = organization_state_to_str(source.organization_state);
 
         let result = sqlx::query(
-            "INSERT INTO registered_sources (id, kind, path, kind_subtype, scan_depth, created_at, created_via) \
-             VALUES (?, ?, ?, ?, ?, ?, ?)",
+            "INSERT INTO registered_sources \
+             (id, kind, path, kind_subtype, scan_depth, created_at, created_via, organization_state) \
+             VALUES (?, ?, ?, ?, ?, ?, ?, ?)",
         )
         .bind(&id)
         .bind(kind_str)
@@ -160,6 +189,7 @@ pub async fn register_source_batch(
         .bind(scan_depth_str)
         .bind(&created_at)
         .bind(created_via)
+        .bind(org_state_str)
         .execute(&mut *tx)
         .await;
 
@@ -206,19 +236,21 @@ pub async fn register_source_batch(
 ///
 /// Returns [`DbError::Database`] on query failure.
 pub async fn list_sources(pool: &SqlitePool) -> DbResult<Vec<RegisterSourceResponse>> {
-    let rows: Vec<(String, String, String, String)> = sqlx::query_as(
-        "SELECT id, kind, path, created_at FROM registered_sources ORDER BY created_at ASC",
+    let rows: Vec<(String, String, String, String, String)> = sqlx::query_as(
+        "SELECT id, kind, path, created_at, organization_state \
+         FROM registered_sources ORDER BY created_at ASC",
     )
     .fetch_all(pool)
     .await?;
 
     Ok(rows
         .into_iter()
-        .map(|(id, kind, path, created_at)| RegisterSourceResponse {
+        .map(|(id, kind, path, created_at, org_state)| RegisterSourceResponse {
             source_id: id,
             kind: str_to_source_kind(&kind),
             path,
             created_at,
+            organization_state: str_to_organization_state(&org_state),
         })
         .collect())
 }
@@ -391,6 +423,7 @@ mod tests {
             path: "/astro/raw".to_owned(),
             kind_subtype: None,
             scan_depth: ScanDepth::Recursive,
+            organization_state: OrganizationState::Organized,
         };
 
         let resp = register_source(&pool, &req).await.unwrap();
@@ -411,6 +444,7 @@ mod tests {
             path: "/astro/raw".to_owned(),
             kind_subtype: None,
             scan_depth: ScanDepth::Recursive,
+            organization_state: OrganizationState::Organized,
         };
 
         register_source(&pool, &req).await.unwrap();
@@ -426,6 +460,7 @@ mod tests {
             path: "/astro/projects".to_owned(),
             kind_subtype: None,
             scan_depth: ScanDepth::Recursive,
+            organization_state: OrganizationState::Organized,
         };
 
         let resp = register_source(&pool, &req).await.unwrap();
@@ -464,6 +499,7 @@ mod tests {
             path: "/astro/raw".to_owned(),
             kind_subtype: None,
             scan_depth: ScanDepth::Recursive,
+            organization_state: OrganizationState::Organized,
         };
         register_source(&pool, &req).await.unwrap();
         let result = complete_first_run(&pool).await;
@@ -475,6 +511,7 @@ mod tests {
             path: "/astro/projects".to_owned(),
             kind_subtype: None,
             scan_depth: ScanDepth::Recursive,
+            organization_state: OrganizationState::Organized,
         };
         register_source(&pool, &req).await.unwrap();
         let resp = complete_first_run(&pool).await.unwrap();
@@ -495,18 +532,21 @@ mod tests {
             path: "/astro/lights".to_owned(),
             kind_subtype: None,
             scan_depth: ScanDepth::Recursive,
+            organization_state: OrganizationState::Organized,
         };
         let proj = RegisterSourceRequest {
             kind: SourceKind::Project,
             path: "/astro/projects".to_owned(),
             kind_subtype: None,
             scan_depth: ScanDepth::Recursive,
+            organization_state: OrganizationState::Organized,
         };
         let inbox = RegisterSourceRequest {
             kind: SourceKind::Inbox,
             path: "/astro/inbox".to_owned(),
             kind_subtype: None,
             scan_depth: ScanDepth::Recursive,
+            organization_state: OrganizationState::Organized,
         };
         register_source(&pool, &raw).await.unwrap();
         register_source(&pool, &proj).await.unwrap();
@@ -532,12 +572,14 @@ mod tests {
                     path: "/astro/raw".to_owned(),
                     kind_subtype: None,
                     scan_depth: ScanDepth::Recursive,
+                    organization_state: OrganizationState::Organized,
                 },
                 RegisterSourceRequest {
                     kind: SourceKind::LightFrames,
                     path: "/astro/raw".to_owned(), // duplicate — will fail
                     kind_subtype: None,
                     scan_depth: ScanDepth::Recursive,
+                    organization_state: OrganizationState::Organized,
                 },
             ],
         };
@@ -571,6 +613,7 @@ mod tests {
                 path: "/astro/lights".to_owned(),
                 kind_subtype: None,
                 scan_depth: ScanDepth::Recursive,
+                organization_state: OrganizationState::Organized,
             },
         )
         .await
@@ -583,6 +626,7 @@ mod tests {
                 path: "/astro/projects".to_owned(),
                 kind_subtype: None,
                 scan_depth: ScanDepth::Recursive,
+                organization_state: OrganizationState::Organized,
             },
         )
         .await
@@ -609,6 +653,7 @@ mod tests {
                 path: "/astro/lights".to_owned(),
                 kind_subtype: None,
                 scan_depth: ScanDepth::Recursive,
+                organization_state: OrganizationState::Organized,
             },
         )
         .await
@@ -633,6 +678,7 @@ mod tests {
                 path: "/astro/inbox".to_owned(),
                 kind_subtype: None,
                 scan_depth: ScanDepth::Recursive,
+                organization_state: OrganizationState::Unorganized,
             },
         )
         .await

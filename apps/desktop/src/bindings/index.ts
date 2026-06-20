@@ -1014,14 +1014,14 @@ export const commands = {
 	 *  `inbox.item.not_found` | `inbox.has.open.plan` | `classification.ambiguous`
 	 *  | `classification.stale` | `pattern.unset`
 	 */
-	inboxConfirm: (req: InboxConfirmRequest_Deserialize) => typedError<InboxConfirmResponse, string>(__TAURI_INVOKE("inbox_confirm", { req })),
+	inboxConfirm: (req: InboxConfirmRequest_Deserialize) => typedError<InboxConfirmResponse_Serialize, string>(__TAURI_INVOKE("inbox_confirm", { req })),
 	/**
 	 *  `inbox.reclassify` — write manual frame-type overrides and re-aggregate.
 	 * 
 	 *  # Errors
 	 *  Returns `"inbox.item.not_found"`, `"inbox.has.open.plan"`, or `"file.not_found"`.
 	 */
-	inboxReclassify: (req: InboxReclassifyRequest) => typedError<InboxReclassifyResponse_Serialize, string>(__TAURI_INVOKE("inbox_reclassify", { req })),
+	inboxReclassify: (req: InboxReclassifyRequest_Deserialize) => typedError<InboxReclassifyResponse_Serialize, string>(__TAURI_INVOKE("inbox_reclassify", { req })),
 	/**
 	 *  `inbox.list` — return all unacknowledged inbox items across all registered
 	 *  roots (states `pending_classification` and `classified`).
@@ -2256,6 +2256,18 @@ export type InboxClassifyResponse_Serialize = {
 	computedAt: string,
 };
 
+/**
+ *  Summary of plan actions split by type (spec 041 US4/US5/FR-020).
+ * 
+ *  Lets the UI show "N move / M catalogue" without iterating plan items.
+ */
+export type InboxConfirmActionsSummary = {
+	/**  Number of plan items with `action = "move"`. */
+	moveCount: number,
+	/**  Number of plan items with `action = "catalogue"`. */
+	catalogueCount: number,
+};
+
 /**  Request for `inbox.confirm`. */
 export type InboxConfirmRequest = InboxConfirmRequest_Serialize | InboxConfirmRequest_Deserialize;
 
@@ -2290,7 +2302,10 @@ export type InboxConfirmRequest_Serialize = {
 };
 
 /**  Response from `inbox.confirm`. */
-export type InboxConfirmResponse = {
+export type InboxConfirmResponse = InboxConfirmResponse_Serialize | InboxConfirmResponse_Deserialize;
+
+/**  Response from `inbox.confirm`. */
+export type InboxConfirmResponse_Deserialize = {
 	planId: string,
 	/**
 	 *  Always `"ready_for_review"` for plans created here; empty string for
@@ -2304,6 +2319,43 @@ export type InboxConfirmResponse = {
 	 *  no file move).  `plan_id` is an empty string in this case.
 	 */
 	registeredAsMaster: boolean,
+	/**
+	 *  Breakdown of plan actions produced (spec 041 US4/FR-020).
+	 *  `None` when `registered_as_master` is true (no plan was created).
+	 */
+	actionsSummary: InboxConfirmActionsSummary | null,
+	/**
+	 *  Organization state of the source owning this item (spec 041 R-7).
+	 *  `"organized"` | `"unorganized"`. `None` when `registered_as_master`.
+	 */
+	organizationState: string | null,
+};
+
+/**  Response from `inbox.confirm`. */
+export type InboxConfirmResponse_Serialize = {
+	planId: string,
+	/**
+	 *  Always `"ready_for_review"` for plans created here; empty string for
+	 *  master-registration responses.
+	 */
+	planState: string,
+	itemsTotal: number,
+	/**
+	 *  True when the item was a detected calibration master that was registered
+	 *  directly to `calibration_session` + `calibration_fingerprint` (Path 1 —
+	 *  no file move).  `plan_id` is an empty string in this case.
+	 */
+	registeredAsMaster: boolean,
+	/**
+	 *  Breakdown of plan actions produced (spec 041 US4/FR-020).
+	 *  `None` when `registered_as_master` is true (no plan was created).
+	 */
+	actionsSummary?: InboxConfirmActionsSummary | null,
+	/**
+	 *  Organization state of the source owning this item (spec 041 R-7).
+	 *  `"organized"` | `"unorganized"`. `None` when `registered_as_master`.
+	 */
+	organizationState?: string | null,
 };
 
 /**  A file entry discovered during an inbox scan. */
@@ -2386,6 +2438,9 @@ export type InboxItemSummary_Serialize = {
  * 
  *  Extends `InboxItemSummary` with the root's id and absolute path so the UI
  *  can group/label items by root without a second call.
+ * 
+ *  Spec 041: gains `organization_state` so the list can show
+ *  move-vs-catalogue intent per item without a separate source lookup.
  */
 export type InboxListItem = InboxListItem_Serialize | InboxListItem_Deserialize;
 
@@ -2394,6 +2449,9 @@ export type InboxListItem = InboxListItem_Serialize | InboxListItem_Deserialize;
  * 
  *  Extends `InboxItemSummary` with the root's id and absolute path so the UI
  *  can group/label items by root without a second call.
+ * 
+ *  Spec 041: gains `organization_state` so the list can show
+ *  move-vs-catalogue intent per item without a separate source lookup.
  */
 export type InboxListItem_Deserialize = {
 	inboxItemId: string,
@@ -2413,6 +2471,11 @@ export type InboxListItem_Deserialize = {
 	masterFrameType: string | null,
 	masterFilter: string | null,
 	masterExposureS: number | null,
+	/**
+	 *  Organization state of the owning source: `"organized"` | `"unorganized"`.
+	 *  Spec 041 — lets the list surface move-vs-catalogue intent per item.
+	 */
+	organizationState: string,
 };
 
 /**
@@ -2420,6 +2483,9 @@ export type InboxListItem_Deserialize = {
  * 
  *  Extends `InboxItemSummary` with the root's id and absolute path so the UI
  *  can group/label items by root without a second call.
+ * 
+ *  Spec 041: gains `organization_state` so the list can show
+ *  move-vs-catalogue intent per item without a separate source lookup.
  */
 export type InboxListItem_Serialize = {
 	inboxItemId: string,
@@ -2439,6 +2505,11 @@ export type InboxListItem_Serialize = {
 	masterFrameType?: string | null,
 	masterFilter?: string | null,
 	masterExposureS?: number | null,
+	/**
+	 *  Organization state of the owning source: `"organized"` | `"unorganized"`.
+	 *  Spec 041 — lets the list surface move-vs-catalogue intent per item.
+	 */
+	organizationState: string,
 };
 
 /**  Response from `inbox.list`. */
@@ -2462,16 +2533,66 @@ export type InboxListResponse_Serialize = {
 	limit: number,
 };
 
-/**  A single file override in a reclassify request. */
-export type InboxReclassifyOverride = {
+/**
+ *  A single file override in a reclassify request.
+ * 
+ *  Extended by spec 041 (R-3) to carry optional filter/exposure/binning
+ *  overrides alongside frame type. Any subset of fields may be set per file;
+ *  omitted fields leave the existing persisted override unchanged.
+ */
+export type InboxReclassifyOverride = InboxReclassifyOverride_Serialize | InboxReclassifyOverride_Deserialize;
+
+/**
+ *  A single file override in a reclassify request.
+ * 
+ *  Extended by spec 041 (R-3) to carry optional filter/exposure/binning
+ *  overrides alongside frame type. Any subset of fields may be set per file;
+ *  omitted fields leave the existing persisted override unchanged.
+ */
+export type InboxReclassifyOverride_Deserialize = {
 	filePath: string,
-	frameType: string,
+	/**  Override for the IMAGETYP / frame type.  `None` = leave unchanged. */
+	frameType: string | null,
+	/**  Override for the FILTER header value.  `None` = leave unchanged. */
+	filter: string | null,
+	/**  Override for exposure in seconds (EXPTIME/EXPOSURE).  `None` = leave unchanged. */
+	exposureS: number | null,
+	/**  Override for binning as a human-readable string e.g. `"2x2"`.  `None` = leave unchanged. */
+	binning: string | null,
+};
+
+/**
+ *  A single file override in a reclassify request.
+ * 
+ *  Extended by spec 041 (R-3) to carry optional filter/exposure/binning
+ *  overrides alongside frame type. Any subset of fields may be set per file;
+ *  omitted fields leave the existing persisted override unchanged.
+ */
+export type InboxReclassifyOverride_Serialize = {
+	filePath: string,
+	/**  Override for the IMAGETYP / frame type.  `None` = leave unchanged. */
+	frameType?: string | null,
+	/**  Override for the FILTER header value.  `None` = leave unchanged. */
+	filter?: string | null,
+	/**  Override for exposure in seconds (EXPTIME/EXPOSURE).  `None` = leave unchanged. */
+	exposureS?: number | null,
+	/**  Override for binning as a human-readable string e.g. `"2x2"`.  `None` = leave unchanged. */
+	binning?: string | null,
 };
 
 /**  Request for `inbox.reclassify`. */
-export type InboxReclassifyRequest = {
+export type InboxReclassifyRequest = InboxReclassifyRequest_Serialize | InboxReclassifyRequest_Deserialize;
+
+/**  Request for `inbox.reclassify`. */
+export type InboxReclassifyRequest_Deserialize = {
 	inboxItemId: string,
-	overrides: InboxReclassifyOverride[],
+	overrides: InboxReclassifyOverride_Deserialize[],
+};
+
+/**  Request for `inbox.reclassify`. */
+export type InboxReclassifyRequest_Serialize = {
+	inboxItemId: string,
+	overrides: InboxReclassifyOverride_Serialize[],
 };
 
 /**  Response from `inbox.reclassify`. */
@@ -2484,7 +2605,10 @@ export type InboxReclassifyResponse_Deserialize = {
 	updatedType: string,
 	frameType: string | null,
 	remainingUnclassified: number,
+	/**  Number of files whose overrides were applied (FR-014). */
 	appliedCount: number,
+	/**  Rebuilt breakdown after overrides (FR-015). */
+	breakdown: InboxBreakdownEntry_Deserialize[],
 };
 
 /**  Response from `inbox.reclassify`. */
@@ -2494,7 +2618,10 @@ export type InboxReclassifyResponse_Serialize = {
 	updatedType: string,
 	frameType?: string | null,
 	remainingUnclassified: number,
+	/**  Number of files whose overrides were applied (FR-014). */
 	appliedCount: number,
+	/**  Rebuilt breakdown after overrides (FR-015). */
+	breakdown: InboxBreakdownEntry_Serialize[],
 };
 
 /**  Request to scan a root directory and discover inbox items. */
@@ -3407,6 +3534,20 @@ export type OpticalTrain = {
 	cameraId: string | null,
 	focalLengthMm: number,
 };
+
+/**
+ *  Organization state of a registered source (spec 041, R-7).
+ * 
+ *  `Organized` — files are already in their final location; confirm produces
+ *  only `catalogue` (record-in-place) plan actions; no file moves.
+ * 
+ *  `Unorganized` — files should be moved to pattern-resolved destinations on
+ *  confirm. `Inbox` sources are always `Unorganized`.
+ * 
+ *  Serializes as `"organized"` / `"unorganized"` (lowercase) to match the
+ *  DB CHECK constraint and the IPC camelCase surface.
+ */
+export type OrganizationState = "organized" | "unorganized";
 
 /**
  *  One element of an ordered token pattern (data-model.md §PatternPart).
@@ -4562,23 +4703,51 @@ export type RegisterSourceBatchResponse_Serialize = {
 	items: BatchItem_Serialize[],
 };
 
-/**  Request payload for `roots.register`. */
+/**
+ *  Request payload for `roots.register`.
+ * 
+ *  `organization_state` is required for non-inbox sources (the UI forces an
+ *  explicit choice). For `inbox` kind the value MUST be `unorganized`;
+ *  supplying `organized` returns `source.invalid_organization_state`.
+ */
 export type RegisterSourceRequest = RegisterSourceRequest_Serialize | RegisterSourceRequest_Deserialize;
 
-/**  Request payload for `roots.register`. */
+/**
+ *  Request payload for `roots.register`.
+ * 
+ *  `organization_state` is required for non-inbox sources (the UI forces an
+ *  explicit choice). For `inbox` kind the value MUST be `unorganized`;
+ *  supplying `organized` returns `source.invalid_organization_state`.
+ */
 export type RegisterSourceRequest_Deserialize = {
 	kind: SourceKind,
 	path: string,
 	kindSubtype: string | null,
 	scanDepth: ScanDepth,
+	/**
+	 *  Organization state for this source (spec 041 R-7).
+	 *  Inbox sources MUST be `unorganized`; non-inbox sources must be explicit.
+	 */
+	organizationState: OrganizationState,
 };
 
-/**  Request payload for `roots.register`. */
+/**
+ *  Request payload for `roots.register`.
+ * 
+ *  `organization_state` is required for non-inbox sources (the UI forces an
+ *  explicit choice). For `inbox` kind the value MUST be `unorganized`;
+ *  supplying `organized` returns `source.invalid_organization_state`.
+ */
 export type RegisterSourceRequest_Serialize = {
 	kind: SourceKind,
 	path: string,
 	kindSubtype?: string | null,
 	scanDepth: ScanDepth,
+	/**
+	 *  Organization state for this source (spec 041 R-7).
+	 *  Inbox sources MUST be `unorganized`; non-inbox sources must be explicit.
+	 */
+	organizationState: OrganizationState,
 };
 
 /**  Response payload for `roots.register`. */
@@ -4587,6 +4756,8 @@ export type RegisterSourceResponse = {
 	kind: SourceKind,
 	path: string,
 	createdAt: string,
+	/**  Organization state persisted for this source (spec 041 R-7). */
+	organizationState: OrganizationState,
 };
 
 /**  A sample path match result within a remap verification. */

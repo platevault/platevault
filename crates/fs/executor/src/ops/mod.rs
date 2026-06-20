@@ -9,6 +9,7 @@
 
 pub mod archive_op;
 pub mod cas_check;
+pub mod catalogue_op;
 pub mod delete_op;
 pub mod move_op;
 pub mod path_gate;
@@ -16,6 +17,7 @@ pub mod trash_op;
 
 pub use archive_op::archive_file;
 pub use cas_check::{check_cas, CasSnapshot};
+pub use catalogue_op::catalogue_noop;
 pub use delete_op::delete_file;
 pub use move_op::move_file;
 pub use path_gate::{lexical_normalize, resolve_and_validate};

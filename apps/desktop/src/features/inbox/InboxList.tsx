@@ -1,26 +1,16 @@
 /**
  * InboxList — left sidebar listing scanned inbox folders.
  *
- * Each row shows the relative path, file type pill (fits/video), classification
- * state, and a conflict/needs-review indicator.
+ * Each row shows the relative path, state, file count, format, and master
+ * indicator using aligned text columns (FR-008) — no Pill components in the
+ * per-row layout so nothing overflows horizontally at 1100×720.
  */
 
 import { useState, useMemo } from 'react';
 import { ListSidebar } from '@/components';
-import { Pill } from '@/ui';
 import type { InboxItemSummary } from '@/api/commands';
-import type { PillVariant } from '@/ui';
 
-// ── Helpers ──────────────────────────────────────────────────────────────────
-
-function stateVariant(state: string): PillVariant {
-  switch (state) {
-    case 'classified':      return 'info';
-    case 'plan_open':       return 'accent';
-    case 'resolved':        return 'success' as PillVariant;
-    default:                return 'neutral';
-  }
-}
+// ── Helpers ───────────────────────────────────────────────────────────────────
 
 function stateLabel(state: string): string {
   switch (state) {
@@ -30,6 +20,17 @@ function stateLabel(state: string): string {
     case 'resolved':               return 'resolved';
     default:                       return state;
   }
+}
+
+/**
+ * Short, uppercase format tag shown in the format column.
+ * Keeps width predictable for alignment.
+ */
+function formatTag(item: InboxItemSummary): string {
+  if (item.lane === 'video') return 'VIDEO';
+  if (item.format === 'xisf') return 'XISF';
+  if (item.format === 'mixed') return 'MIXED';
+  return 'FITS';
 }
 
 type GroupBy = 'none' | 'type' | 'date';
@@ -117,7 +118,7 @@ export function InboxList({
         <span className="alm-list-sidebar__count">{filtered.length} folder{filtered.length !== 1 ? 's' : ''}</span>
       }
     >
-      {filtered.map((item, _listIdx) => {
+      {filtered.map((item) => {
         // Find original index so selection maps back correctly.
         const originalIdx = items.indexOf(item);
         return (
@@ -131,32 +132,53 @@ export function InboxList({
             onKeyDown={(e) => e.key === 'Enter' && onSelect(originalIdx)}
             aria-selected={selectedIdx === originalIdx}
           >
+            {/* ── Primary line: path ── */}
             <div className="alm-list-item__title">
               <strong>{item.relativePath || '(root)'}</strong>
-              <span style={{ marginLeft: 6 }}>
-                <Pill variant={stateVariant(item.state)}>{stateLabel(item.state)}</Pill>
-              </span>
-              {item.isMaster && (
-                <span style={{ marginLeft: 4 }}>
-                  <Pill variant="info">{item.masterFrameType ?? 'master'} master</Pill>
-                </span>
-              )}
-              {!item.isMaster && item.format && item.format !== 'fits' && (
-                <span style={{ marginLeft: 4 }}>
-                  <Pill variant="ghost">{item.format}</Pill>
-                </span>
-              )}
-              {!item.isMaster && !item.format && item.lane === 'video' && (
-                <span style={{ marginLeft: 4 }}>
-                  <Pill variant="ghost">video</Pill>
-                </span>
-              )}
             </div>
+
+            {/* ── Secondary line: structured columns ── */}
             <div
               className="alm-list-item__meta"
-              style={{ display: 'flex', gap: 8, fontSize: 'var(--alm-text-xs)', color: 'var(--alm-text-muted)' }}
+              style={{
+                display: 'grid',
+                gridTemplateColumns: 'minmax(0,1fr) auto auto',
+                gap: '0 var(--alm-sp-2)',
+                alignItems: 'baseline',
+                fontSize: 'var(--alm-text-xs)',
+                color: 'var(--alm-text-muted)',
+                marginTop: 2,
+              }}
             >
-              <span>{item.fileCount} file{item.fileCount !== 1 ? 's' : ''}</span>
+              {/* State — left column, truncates if narrow */}
+              <span
+                style={{
+                  overflow: 'hidden',
+                  textOverflow: 'ellipsis',
+                  whiteSpace: 'nowrap',
+                  color: 'var(--alm-text-secondary)',
+                }}
+              >
+                {stateLabel(item.state)}
+              </span>
+
+              {/* File count — fixed right */}
+              <span style={{ whiteSpace: 'nowrap' }}>
+                {item.fileCount} {item.fileCount !== 1 ? 'files' : 'file'}
+              </span>
+
+              {/* Format / master indicator — fixed right */}
+              <span
+                style={{
+                  whiteSpace: 'nowrap',
+                  fontFamily: 'var(--alm-font-mono, monospace)',
+                  letterSpacing: '0.02em',
+                }}
+              >
+                {item.isMaster
+                  ? `${item.masterFrameType ?? 'master'} master`
+                  : formatTag(item)}
+              </span>
             </div>
           </div>
         );

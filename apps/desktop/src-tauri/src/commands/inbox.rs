@@ -94,6 +94,9 @@ pub async fn inbox_confirm(
         plan_state: resp.plan_state,
         items_total: u32::try_from(resp.items_total).unwrap_or(u32::MAX),
         registered_as_master: resp.registered_as_master,
+        // spec 041 fields — not yet populated by the use case (phase 3+)
+        actions_summary: None,
+        organization_state: None,
     })
 }
 
@@ -114,7 +117,10 @@ pub async fn inbox_reclassify(
         overrides: req
             .overrides
             .into_iter()
-            .map(|o| ReclassifyOverride { file_path: o.file_path, frame_type: o.frame_type })
+            .map(|o| ReclassifyOverride {
+                file_path: o.file_path,
+                frame_type: o.frame_type.unwrap_or_default(),
+            })
             .collect(),
     };
 
@@ -126,6 +132,8 @@ pub async fn inbox_reclassify(
         frame_type: resp.frame_type,
         remaining_unclassified: u32::try_from(resp.remaining_unclassified).unwrap_or(u32::MAX),
         applied_count: u32::try_from(resp.applied_count).unwrap_or(u32::MAX),
+        // spec 041 — breakdown populated in phase 3+ when use case returns it
+        breakdown: vec![],
     })
 }
 
@@ -332,6 +340,9 @@ pub async fn inbox_list(pool: tauri::State<'_, SqlitePool>) -> Result<InboxListR
             master_frame_type: r.master_frame_type,
             master_filter: r.master_filter,
             master_exposure_s: r.master_exposure_s,
+            // spec 041 — phase 3+ will query this from registered_sources via
+            // the root_id; stub to "unorganized" for now so bindings compile.
+            organization_state: "unorganized".to_owned(),
         })
         .collect();
 

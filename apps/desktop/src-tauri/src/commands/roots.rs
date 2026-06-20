@@ -91,7 +91,15 @@ pub async fn roots_register(
         },
     );
 
-    let req = RegisterSourceRequest { kind, path, kind_subtype: None, scan_depth };
+    // Inbox sources are always unorganized; all other sources default to organized.
+    let organization_state = if kind == SourceKind::Inbox {
+        contracts_core::first_run::OrganizationState::Unorganized
+    } else {
+        contracts_core::first_run::OrganizationState::Organized
+    };
+
+    let req =
+        RegisterSourceRequest { kind, path, kind_subtype: None, scan_depth, organization_state };
 
     app_core::first_run::register_source(state.repo.pool(), &req).await.map_err(|e| e.message)
 }

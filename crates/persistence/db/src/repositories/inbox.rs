@@ -730,7 +730,8 @@ mod tests {
     #[tokio::test]
     async fn list_unacknowledged_joins_registered_sources() {
         use contracts_core::first_run::{
-            RegisterSourceBatchRequest, RegisterSourceRequest, ScanDepth, SourceKind,
+            OrganizationState, RegisterSourceBatchRequest, RegisterSourceRequest, ScanDepth,
+            SourceKind,
         };
 
         let db = test_db().await;
@@ -743,6 +744,7 @@ mod tests {
                 path: "/astro/inbox".to_owned(),
                 kind_subtype: None,
                 scan_depth: ScanDepth::Recursive,
+                organization_state: OrganizationState::Unorganized,
             }],
         };
         let batch_resp =
