@@ -241,7 +241,8 @@ export async function flushToDB(sources: SourcesState): Promise<FlushResult> {
         scanDepth: s.scanDepth,
         // organizationState is required by the backend contract (spec 041 R-7).
         // Inbox is always unorganized; non-inbox carries the user's explicit choice.
-        organizationState: s.kind === 'inbox' ? 'unorganized' : s.organizationState,
+        organizationState:
+          s.kind === 'inbox' ? 'unorganized' : (s.organizationState ?? 'organized'),
       })),
     });
 
