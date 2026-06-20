@@ -28,13 +28,13 @@
 **Goal**: confirming an item yields a reviewable plan shown in the inbox surface; planned items stay greyed/visible; explicit Apply/Cancel + apply-all; staleness refusal; no Archive nav.
 **Independent test**: confirm an item → item stays as "planned", in-context plan panel lists actions, files not moved; Apply moves + audits; Cancel discards.
 
-- [ ] T009 [US1] In `crates/app/core/src/inbox/confirm.rs`, ensure confirm creates a plan, links it via `inbox_plan_links`, sets item state `plan_open`, and returns plan id + `actions_summary`. Keep the item listed (don't resolve until applied).
-- [ ] T010 [US1] Add Tauri commands `inbox.plan` (list plan for item via `inbox_plan_links`), `inbox.plan.apply`, `inbox.plan.apply_all`, reusing the existing executor/audit/CAS apply path; map `plans.discard` for cancel. Files: `apps/desktop/src-tauri/src/commands/inbox.rs` (+ app/core use-cases).
-- [ ] T011 [US1] Staleness: surface CAS/`plan.stale` as a refuse-and-prompt-regenerate outcome from apply (FR-007); add app/core handling + error code.
-- [ ] T012 [US1] Regenerate bindings; add `commands.ts` wrappers for the new inbox.plan operations in `apps/desktop/src/api/commands.ts`.
+- [X] T009 [US1] In `crates/app/core/src/inbox/confirm.rs`, ensure confirm creates a plan, links it via `inbox_plan_links`, sets item state `plan_open`, and returns plan id + `actions_summary`. Keep the item listed (don't resolve until applied).
+- [X] T010 [US1] Add Tauri commands `inbox.plan` (list plan for item via `inbox_plan_links`), `inbox.plan.apply`, `inbox.plan.apply_all`, reusing the existing executor/audit/CAS apply path; map `plans.discard` for cancel. Files: `apps/desktop/src-tauri/src/commands/inbox.rs` (+ app/core use-cases).
+- [X] T011 [US1] Staleness: surface CAS/`plan.stale` as a refuse-and-prompt-regenerate outcome from apply (FR-007); add app/core handling + error code.
+- [X] T012 [US1] Regenerate bindings; add `commands.ts` wrappers for the new inbox.plan operations in `apps/desktop/src/api/commands.ts`.
 - [X] T013 [P] [US1] Frontend: add an in-context plan panel component at the bottom of the inbox central area (`apps/desktop/src/features/inbox/PlanPanel.tsx`) listing actions + destination previews, with Apply / Cancel / Apply-all and a stale state.
-- [ ] T014 [US1] Frontend: render planned items greyed with a "planned" badge in the list; keep them selectable (`InboxList.tsx`, `InboxPage.tsx`); remove the confirm→`/archive` navigation (`InboxPage.tsx:~106`), replacing it with the in-context panel.
-- [ ] T015 [P] [US1] Tests: app/core confirm-produces-plan + apply/cancel/apply-all + staleness (`-p app_core`); Vitest for PlanPanel + planned-state rendering (`apps/desktop/src/features/inbox/__tests__/`).
+- [X] T014 [US1] Frontend: render planned items greyed with a "planned" badge in the list; keep them selectable (`InboxList.tsx`, `InboxPage.tsx`); remove the confirm→`/archive` navigation (`InboxPage.tsx:~106`), replacing it with the in-context panel.
+- [X] T015 [P] [US1] Tests: app/core confirm-produces-plan + apply/cancel/apply-all + staleness (`-p app_core`); Vitest for PlanPanel + planned-state rendering (`apps/desktop/src/features/inbox/__tests__/`).
 
 **Checkpoint**: US1 independently demoable (move-only plans, in-context).
 
@@ -49,7 +49,7 @@
 - [ ] T019 [US2] Regenerate bindings; `commands.ts` wrapper for `inbox.item.metadata`.
 - [X] T020 [P] [US2] Frontend: restructure `InboxList.tsx` to a structured (no-pill) row layout following the standard sidebar layout (verify 1100×720, no overflow).
 - [ ] T021 [US2] Frontend: multi-level grouping control + nested collapsible groups over target/frame-type/filter/exposure/date/source in `InboxList.tsx` (+ a small grouping state module); items missing a dimension under a "none" group.
-- [ ] T022 [P] [US2] Frontend: `InboxDetail.tsx` — per-file metadata table (image type, filter, exposure, binning, gain, temperature, object, date) and explicit mixed-folder composition (per-type counts) instead of a bare "mixed".
+- [X] T022 [P] [US2] Frontend: `InboxDetail.tsx` — per-file metadata table (image type, filter, exposure, binning, gain, temperature, object, date) and explicit mixed-folder composition (per-type counts) instead of a bare "mixed".
 - [ ] T023 [P] [US2] Tests: persistence metadata upsert (`-p persistence_db`); Vitest for grouping + metadata table + composition rendering.
 
 **Checkpoint**: US1 + US2 = usable reviewable inbox (MVP complete).
