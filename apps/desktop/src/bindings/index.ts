@@ -4875,7 +4875,12 @@ export type RootHealth = {
 	online: boolean,
 };
 
-/**  Scan depth strategy for a registered source. */
+/**
+ *  Scan depth strategy for a registered source.
+ * 
+ *  `strum` `serialize_all` mirrors the serde `rename_all` (`recursive`,
+ *  `single`).
+ */
 export type ScanDepth = "recursive" | "single";
 
 /**  A single search result from global search. */
@@ -5028,6 +5033,10 @@ export type SettingsData = {
  *  Per-image frame type (light / dark / flat / bias) is detected from image
  *  metadata (FITS `IMAGETYP` header) during scan/ingest — the source-folder
  *  kind is only a user-facing folder category.
+ * 
+ *  The `strum` `serialize_all` mirrors the serde `rename_all`, so the
+ *  `FromStr` / `Into<&'static str>` conversions produce byte-identical persisted
+ *  strings (`light_frames`, `calibration`, `project`, `inbox`).
  */
 export type SourceKind = "light_frames" | "calibration" | "project" | "inbox";
 
