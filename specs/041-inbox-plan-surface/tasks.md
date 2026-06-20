@@ -61,9 +61,9 @@
 
 - [X] T024 [US3] Extend `crates/app/core/src/inbox/reclassify.rs` to apply non-type overrides (`override_filter`/`override_exposure_s`/`override_binning`) per file, recompute effective values, rebuild breakdown (already rebuilds type breakdown — extend to metadata), and return accurate `applied_count`.
 - [X] T025 [US3] Override persistence: on classify/rescan, re-apply overrides whose `(path,size,mtime)` is unchanged; mark `override_stale=1` when changed (R-4). Repo + classify logic.
-- [ ] T026 [US3] Regenerate bindings; extend `commands.ts` reclassify wrapper for the multi-field, multi-file override shape.
-- [ ] T027 [P] [US3] Frontend: multi-select of files (within item + across grouped list) and an "apply override to selection" affordance for type/filter/exposure/binning in `InboxDetail.tsx`/`InboxList.tsx`; accurate "Apply N overrides" count; stale-override indicator.
-- [ ] T028 [P] [US3] Tests: reclassify non-type + multi-file (`-p app_core`); override persistence/stale (`-p persistence_db`); Vitest for multi-select apply-all.
+- [X] T026 [US3] Regenerate bindings; extend `commands.ts` reclassify wrapper for the multi-field, multi-file override shape.
+- [X] T027 [P] [US3] Frontend: multi-select of files (within item + across grouped list) and an "apply override to selection" affordance for type/filter/exposure/binning in `InboxDetail.tsx`/`InboxList.tsx`; accurate "Apply N overrides" count; stale-override indicator.
+- [X] T028 [P] [US3] Tests: reclassify non-type + multi-file (`-p app_core`); override persistence/stale (`-p persistence_db`); Vitest for multi-select apply-all.
 
 ## Phase 6: User Story 4 — Move vs catalogue-in-place by organization state (P2)
 
