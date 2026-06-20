@@ -250,12 +250,14 @@ pub async fn confirm(
 
     // 10. Build the plan.
     // A move-only split is non-destructive from the user perspective but the
-    // plans table CHECK constraint only accepts 'archive' | 'os_trash'.
-    // We default to 'archive' (app-managed archive) unless the caller specifies.
+    // plans table CHECK constraint only accepts the canonical 'archive' | 'trash'
+    // vocabulary (spec 033, migration 0040). Anything else (incl. the legacy
+    // 'os_trash' / 'none') falls back to 'archive' so confirm can never schedule
+    // a permanent delete without a recoverable step.
     let destructive_dest = req
         .destructive_destination
         .as_deref()
-        .filter(|s| matches!(*s, "archive" | "os_trash"))
+        .filter(|s| matches!(*s, "archive" | "trash"))
         .unwrap_or("archive");
 
     let plan_id = Uuid::new_v4().to_string();
@@ -642,6 +644,77 @@ mod tests {
 
         assert_eq!(resp.plan_state, "ready_for_review");
         assert_eq!(resp.items_total, 3);
+    }
+
+    /// US7 / T042-T043: the chosen destructive destination must be persisted on
+    /// the plan (the durable audit record), default to `archive` when unset, and
+    /// coerce any non-recoverable value to `archive` so confirm can never schedule
+    /// a permanent delete without a recoverable step.
+    #[tokio::test]
+    async fn confirm_persists_destructive_destination() {
+        let tmp = tempfile::tempdir().unwrap();
+        write_fits(
+            tmp.path(),
+            "light_001.fits",
+            "Light Frame",
+            Some("M42"),
+            Some("Ha"),
+            Some("2025-10-10T22:00:00"),
+        );
+
+        // (input destructive_destination, expected persisted value).
+        // Canonical vocabulary is `archive | trash` (spec 033, migration 0040).
+        let cases = [
+            (None, "archive"),
+            (Some("archive"), "archive"),
+            (Some("trash"), "trash"),
+            // Legacy `os_trash` is no longer canonical → coerced to safe archive.
+            (Some("os_trash"), "archive"),
+            // Anything outside the recoverable set must fall back to archive —
+            // never a permanent delete.
+            (Some("delete"), "archive"),
+            (Some(""), "archive"),
+        ];
+
+        for (dest, expected) in &cases {
+            // Fresh DB per case: setup_classified_item hardcodes the
+            // (root_id, relative_path) key, so it supports one item per DB.
+            let db = test_db().await;
+            setup_classified_item(
+                &db,
+                "item-dd",
+                "single_type",
+                Some("light"),
+                "sig-dd",
+                &["light_001.fits"],
+            )
+            .await;
+
+            let resp = confirm(
+                db.pool(),
+                ConfirmRequest {
+                    inbox_item_id: "item-dd".to_owned(),
+                    action: "confirm".to_owned(),
+                    content_signature: "sig-dd".to_owned(),
+                    destructive_destination: dest.map(str::to_owned),
+                    root_absolute_path: tmp.path().to_owned(),
+                },
+            )
+            .await
+            .unwrap();
+
+            let (persisted,): (String,) =
+                sqlx::query_as("SELECT destructive_destination FROM plans WHERE id = ?")
+                    .bind(&resp.plan_id)
+                    .fetch_one(db.pool())
+                    .await
+                    .unwrap();
+
+            assert_eq!(
+                &persisted, expected,
+                "input {dest:?} must persist as {expected}, never a permanent delete"
+            );
+        }
     }
 
     #[tokio::test]

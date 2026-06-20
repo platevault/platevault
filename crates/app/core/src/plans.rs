@@ -128,7 +128,7 @@ fn parse_plan_type(s: &str) -> PlanType {
 }
 
 fn parse_destructive_destination(s: &str) -> DestructiveDestination {
-    if s == "os_trash" {
+    if s == "trash" {
         DestructiveDestination::OsTrash
     } else {
         DestructiveDestination::Archive
