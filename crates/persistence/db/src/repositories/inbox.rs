@@ -113,6 +113,57 @@ pub struct InboxBreakdownRow {
     pub sample_files: String,
 }
 
+/// Flat row from `inbox_file_metadata` (spec 041 US2, migration 0045).
+///
+/// Per-file extracted image-header metadata, keyed 1:1 with the matching
+/// `inbox_classification_evidence` row by `(inbox_item_id, relative_file_path)`.
+#[derive(Clone, Debug, Serialize, Deserialize, sqlx::FromRow)]
+pub struct InboxFileMetadataRow {
+    pub id: String,
+    pub inbox_item_id: String,
+    pub relative_file_path: String,
+    pub filter: Option<String>,
+    pub exposure_s: Option<f64>,
+    pub gain: Option<String>,
+    pub binning_x: Option<i64>,
+    pub binning_y: Option<i64>,
+    pub temperature_c: Option<f64>,
+    pub object: Option<String>,
+    pub date_obs: Option<String>,
+    pub instrume: Option<String>,
+    pub telescop: Option<String>,
+    pub naxis1: Option<i64>,
+    pub naxis2: Option<i64>,
+    pub stack_count: Option<i64>,
+    pub file_size_bytes: Option<i64>,
+    pub file_mtime: Option<String>,
+}
+
+/// Data to upsert one `inbox_file_metadata` row (spec 041 US2).
+///
+/// `gain` stays a string: some cameras report a non-integer/scaled gain value,
+/// so the column is TEXT and we never coerce it to a number.
+#[derive(Clone, Debug, Default)]
+pub struct UpsertFileMetadata<'a> {
+    pub inbox_item_id: &'a str,
+    pub relative_file_path: &'a str,
+    pub filter: Option<&'a str>,
+    pub exposure_s: Option<f64>,
+    pub gain: Option<&'a str>,
+    pub binning_x: Option<i64>,
+    pub binning_y: Option<i64>,
+    pub temperature_c: Option<f64>,
+    pub object: Option<&'a str>,
+    pub date_obs: Option<&'a str>,
+    pub instrume: Option<&'a str>,
+    pub telescop: Option<&'a str>,
+    pub naxis1: Option<i64>,
+    pub naxis2: Option<i64>,
+    pub stack_count: Option<i64>,
+    pub file_size_bytes: Option<i64>,
+    pub file_mtime: Option<&'a str>,
+}
+
 /// Flat row from `inbox_plan_links`.
 #[derive(Clone, Debug, Serialize, Deserialize, sqlx::FromRow)]
 pub struct InboxPlanLinkRow {
@@ -393,6 +444,95 @@ pub async fn list_breakdown(
 ) -> DbResult<Vec<InboxBreakdownRow>> {
     Ok(sqlx::query_as::<_, InboxBreakdownRow>(
         "SELECT * FROM inbox_classification_breakdown WHERE inbox_item_id = ? ORDER BY kind",
+    )
+    .bind(inbox_item_id)
+    .fetch_all(pool)
+    .await?)
+}
+
+// ── File metadata CRUD (spec 041 US2) ─────────────────────────────────────────
+
+/// Upsert one per-file metadata row, keyed on
+/// `UNIQUE(inbox_item_id, relative_file_path)`.
+///
+/// Called from the classify/reclassify loop alongside the evidence row.
+///
+/// # Errors
+/// Returns [`DbError::Database`] on constraint or connection failure.
+pub async fn upsert_inbox_file_metadata(
+    pool: &SqlitePool,
+    m: &UpsertFileMetadata<'_>,
+) -> DbResult<()> {
+    let id = uuid::Uuid::new_v4().to_string();
+    sqlx::query(
+        "INSERT INTO inbox_file_metadata
+            (id, inbox_item_id, relative_file_path, filter, exposure_s, gain,
+             binning_x, binning_y, temperature_c, object, date_obs, instrume,
+             telescop, naxis1, naxis2, stack_count, file_size_bytes, file_mtime)
+         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+         ON CONFLICT(inbox_item_id, relative_file_path) DO UPDATE SET
+             filter = excluded.filter,
+             exposure_s = excluded.exposure_s,
+             gain = excluded.gain,
+             binning_x = excluded.binning_x,
+             binning_y = excluded.binning_y,
+             temperature_c = excluded.temperature_c,
+             object = excluded.object,
+             date_obs = excluded.date_obs,
+             instrume = excluded.instrume,
+             telescop = excluded.telescop,
+             naxis1 = excluded.naxis1,
+             naxis2 = excluded.naxis2,
+             stack_count = excluded.stack_count,
+             file_size_bytes = excluded.file_size_bytes,
+             file_mtime = excluded.file_mtime",
+    )
+    .bind(&id)
+    .bind(m.inbox_item_id)
+    .bind(m.relative_file_path)
+    .bind(m.filter)
+    .bind(m.exposure_s)
+    .bind(m.gain)
+    .bind(m.binning_x)
+    .bind(m.binning_y)
+    .bind(m.temperature_c)
+    .bind(m.object)
+    .bind(m.date_obs)
+    .bind(m.instrume)
+    .bind(m.telescop)
+    .bind(m.naxis1)
+    .bind(m.naxis2)
+    .bind(m.stack_count)
+    .bind(m.file_size_bytes)
+    .bind(m.file_mtime)
+    .execute(pool)
+    .await?;
+    Ok(())
+}
+
+/// Delete all per-file metadata rows for an item (used before a re-scan so
+/// stale rows do not linger).
+///
+/// # Errors
+/// Returns [`DbError::Database`] on connection failure.
+pub async fn delete_file_metadata_for_item(pool: &SqlitePool, inbox_item_id: &str) -> DbResult<()> {
+    sqlx::query("DELETE FROM inbox_file_metadata WHERE inbox_item_id = ?")
+        .bind(inbox_item_id)
+        .execute(pool)
+        .await?;
+    Ok(())
+}
+
+/// Fetch all per-file metadata rows for an item, ordered by relative path.
+///
+/// # Errors
+/// Returns [`DbError::Database`] on connection failure.
+pub async fn list_inbox_file_metadata(
+    pool: &SqlitePool,
+    inbox_item_id: &str,
+) -> DbResult<Vec<InboxFileMetadataRow>> {
+    Ok(sqlx::query_as::<_, InboxFileMetadataRow>(
+        "SELECT * FROM inbox_file_metadata WHERE inbox_item_id = ? ORDER BY relative_file_path",
     )
     .bind(inbox_item_id)
     .fetch_all(pool)

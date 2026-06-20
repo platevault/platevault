@@ -17,39 +17,13 @@
 import { useState } from 'react';
 import { DetailHeader, DetailPane, MetricLine } from '@/components';
 import { Pill, Banner, Section, Table } from '@/ui';
-import type { InboxItemSummary } from '@/api/commands';
+import type { InboxItemSummary, InboxFileMetadata } from '@/api/commands';
 import type { InboxClassifyResponse } from './store';
 import type { PillVariant } from '@/ui';
 import { useInboxReclassify } from './store';
 
-// ── InboxFileMetadata (local until T019 regenerates bindings) ─────────────────
-//
-// Field names mirror the snake_case contract shape from
-// specs/041-inbox-plan-surface/contracts/operations.md (inbox.item.metadata).
-// When the generated bindings export `InboxFileMetadata` (Specta camelCase),
-// swap this interface for an import from '@/bindings' and update field access.
-
-/** @todo replace with import from '@/bindings' once T019 regenerates bindings */
-export interface InboxFileMetadata {
-  relative_file_path: string;
-  frame_type_effective: string | null;
-  image_typ: string | null;
-  filter: string | null;
-  exposure_s: number | null;
-  gain: number | null;
-  binning_x: number | null;
-  binning_y: number | null;
-  temperature_c: number | null;
-  object: string | null;
-  date_obs: string | null;
-  instrume: string | null;
-  telescop: string | null;
-  naxis1: number | null;
-  naxis2: number | null;
-  stack_count: number | null;
-  is_master: boolean;
-  override_stale: boolean;
-}
+// `InboxFileMetadata` is the generated Specta type (camelCase) re-exported from
+// '@/api/commands' (spec 041 US2/FR-010 — T019 wired the real binding).
 
 // ── Helpers ──────────────────────────────────────────────────────────────────
 
@@ -73,24 +47,24 @@ function fmtOrDash(value: string | number | null | undefined): React.ReactNode {
 }
 
 /** Format binning as "XxY" or dash. */
-function fmtBinning(x: number | null, y: number | null): React.ReactNode {
-  if (x === null && y === null) {
+function fmtBinning(x: number | null | undefined, y: number | null | undefined): React.ReactNode {
+  if (x == null && y == null) {
     return <span style={{ color: 'var(--alm-text-muted)' }}>—</span>;
   }
-  const xStr = x !== null ? String(x) : '?';
-  const yStr = y !== null ? String(y) : '?';
+  const xStr = x != null ? String(x) : '?';
+  const yStr = y != null ? String(y) : '?';
   return `${xStr}x${yStr}`;
 }
 
 /** Format exposure in seconds (e.g. "120 s"). */
-function fmtExposure(s: number | null): React.ReactNode {
-  if (s === null) return <span style={{ color: 'var(--alm-text-muted)' }}>—</span>;
+function fmtExposure(s: number | null | undefined): React.ReactNode {
+  if (s == null) return <span style={{ color: 'var(--alm-text-muted)' }}>—</span>;
   return `${s} s`;
 }
 
 /** Format temperature in °C. */
-function fmtTemp(c: number | null): React.ReactNode {
-  if (c === null) return <span style={{ color: 'var(--alm-text-muted)' }}>—</span>;
+function fmtTemp(c: number | null | undefined): React.ReactNode {
+  if (c == null) return <span style={{ color: 'var(--alm-text-muted)' }}>—</span>;
   return `${c} °C`;
 }
 
@@ -254,7 +228,7 @@ export function InboxDetail({ item, classification, fileMetadata }: InboxDetailP
     (fileMetadata ?? []).map((f) => ({
       file: (
         <span
-          title={f.relative_file_path}
+          title={f.relativeFilePath}
           style={{
             display: 'block',
             overflow: 'hidden',
@@ -263,18 +237,18 @@ export function InboxDetail({ item, classification, fileMetadata }: InboxDetailP
             fontSize: 'var(--alm-text-xs)',
           }}
         >
-          {f.relative_file_path}
+          {f.relativeFilePath}
         </span>
       ),
-      type:     fmtOrDash(f.frame_type_effective),
+      type:     fmtOrDash(f.frameTypeEffective),
       filter:   fmtOrDash(f.filter),
-      exposure: fmtExposure(f.exposure_s),
-      binning:  fmtBinning(f.binning_x, f.binning_y),
+      exposure: fmtExposure(f.exposureS),
+      binning:  fmtBinning(f.binningX, f.binningY),
       gain:     fmtOrDash(f.gain),
-      temp:     fmtTemp(f.temperature_c),
+      temp:     fmtTemp(f.temperatureC),
       object:   fmtOrDash(f.object),
-      date:     fmtOrDash(f.date_obs),
-      _rowStyle: f.override_stale
+      date:     fmtOrDash(f.dateObs),
+      _rowStyle: f.overrideStale
         ? { background: 'var(--alm-color-warn-subtle, rgba(255,200,0,0.08))' }
         : undefined,
     }));

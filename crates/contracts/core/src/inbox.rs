@@ -296,7 +296,12 @@ pub struct InboxListResponse {
 pub struct InboxFileMetadata {
     pub relative_file_path: String,
     /// Effective frame type (override ?? extracted from header).
-    pub frame_type_effective: String,
+    /// `None` when the file remains unclassified.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub frame_type_effective: Option<String>,
+    /// Raw `IMAGETYP` header value (before normalization), if any.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub image_typ: Option<String>,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub filter: Option<String>,
     #[serde(skip_serializing_if = "Option::is_none")]

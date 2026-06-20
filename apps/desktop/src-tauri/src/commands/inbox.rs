@@ -12,14 +12,16 @@ use app_core::inbox::inbox_plan::{
     apply_all_inbox_plans, apply_inbox_plan, apply_selected_inbox_plans, cancel_inbox_plan,
     get_inbox_plan, list_open_inbox_plans,
 };
+use app_core::inbox::metadata::get_inbox_item_metadata;
 use app_core::inbox::reclassify::{reclassify, ReclassifyOverride, ReclassifyRequest};
 use app_core::inbox::scan::{scan_root, ScanOptions, ScannedMasterFile};
 use contracts_core::inbox::{
     InboxApplyAllResponse, InboxApplySelectedRequest, InboxBreakdownEntry, InboxClassifyRequest,
     InboxClassifyResponse, InboxConfirmRequest, InboxConfirmResponse, InboxFileEntry,
-    InboxItemSummary, InboxListItem, InboxListResponse, InboxOpenPlansResponse,
-    InboxPlanCancelResponse, InboxPlanView, InboxReclassifyRequest, InboxReclassifyResponse,
-    InboxScanFolderRequest, InboxScanFolderResponse, InboxScanResult,
+    InboxItemMetadataRequest, InboxItemMetadataResponse, InboxItemSummary, InboxListItem,
+    InboxListResponse, InboxOpenPlansResponse, InboxPlanCancelResponse, InboxPlanView,
+    InboxReclassifyRequest, InboxReclassifyResponse, InboxScanFolderRequest,
+    InboxScanFolderResponse, InboxScanResult,
 };
 use contracts_core::plan_apply::PlanApplyResponse;
 use persistence_db::repositories::inbox::list_unacknowledged_across_roots;
@@ -152,6 +154,23 @@ pub async fn inbox_reclassify(
         // spec 041 — breakdown populated in phase 3+ when use case returns it
         breakdown: vec![],
     })
+}
+
+// ── inbox.item.metadata ───────────────────────────────────────────────────────
+
+/// `inbox.item.metadata` — assemble per-file extracted metadata for an inbox
+/// item (spec 041 US2/FR-010).
+///
+/// # Errors
+/// Returns a string error if the item is missing or a query fails.
+#[tauri::command]
+#[specta::specta]
+pub async fn inbox_item_metadata(
+    req: InboxItemMetadataRequest,
+    pool: tauri::State<'_, SqlitePool>,
+) -> Result<InboxItemMetadataResponse, String> {
+    let files = get_inbox_item_metadata(&pool, &req.inbox_item_id).await.map_err(|e| e.message)?;
+    Ok(InboxItemMetadataResponse { inbox_item_id: req.inbox_item_id, files })
 }
 
 // ── inbox.scan.folder ─────────────────────────────────────────────────────────

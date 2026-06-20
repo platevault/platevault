@@ -13,6 +13,7 @@ import {
   inboxClassify,
   inboxConfirm,
   inboxList,
+  inboxItemMetadata,
   inboxReclassify,
   inboxPlan,
   inboxPlanApply,
@@ -27,6 +28,7 @@ import type {
   InboxListItem,
   InboxListResponse,
   InboxReclassifyResponse,
+  InboxFileMetadata,
   InboxScanFolderResponse,
   InboxApplyAllResponse,
   InboxPlanCancelResponse,
@@ -38,6 +40,7 @@ import type {
 } from '@/api/commands';
 
 export type {
+  InboxFileMetadata,
   InboxClassifyResponse,
   InboxConfirmResponse,
   InboxListItem,
@@ -219,6 +222,48 @@ export function useInboxList() {
   const refresh = useCallback(() => setEpoch((n) => n + 1), []);
 
   return { ...state, refresh };
+}
+
+export interface InboxItemMetadataState {
+  data: InboxFileMetadata[];
+  loading: boolean;
+  error: string | null;
+}
+
+/**
+ * Load per-file extracted metadata for one inbox item (spec 041 US2/FR-010).
+ *
+ * Mirrors `useInboxList`: a `useState` + `useEffect` + cancelled-flag pattern
+ * (this app does not use React Query). Pass `null` to skip fetching (e.g. when
+ * no item is selected). Re-fetches whenever `itemId` changes.
+ */
+export function useInboxItemMetadata(itemId: string | null) {
+  const [state, setState] = useState<InboxItemMetadataState>({
+    data: [],
+    loading: false,
+    error: null,
+  });
+
+  useEffect(() => {
+    if (!itemId) {
+      setState({ data: [], loading: false, error: null });
+      return;
+    }
+    let cancelled = false;
+    setState((s) => ({ ...s, loading: true, error: null }));
+    inboxItemMetadata(itemId)
+      .then((files) => {
+        if (!cancelled) setState({ data: files, loading: false, error: null });
+      })
+      .catch((e: unknown) => {
+        if (!cancelled) setState({ data: [], loading: false, error: String(e) });
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [itemId]);
+
+  return state;
 }
 
 export interface RescanState {

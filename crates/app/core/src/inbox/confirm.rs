@@ -355,7 +355,9 @@ fn effective_frame_type(
 ///
 /// # Errors
 /// Returns `pattern.unset` when the stored pattern fails to deserialize.
-async fn load_active_pattern(pool: &SqlitePool) -> Result<Vec<PatternPart>, ContractError> {
+pub(crate) async fn load_active_pattern(
+    pool: &SqlitePool,
+) -> Result<Vec<PatternPart>, ContractError> {
     // Try to read the stored pattern JSON.
     let raw_opt = settings_repo::get_raw(pool, "pattern").await.unwrap_or(None);
 
@@ -394,7 +396,7 @@ async fn load_active_pattern(pool: &SqlitePool) -> Result<Vec<PatternPart>, Cont
 /// Source fields follow the v1 registry in `crates/patterns/src/registry.rs`:
 /// `target`, `filter`, `date`, `frame_type`, `camera`, `exposure`, `gain`,
 /// `binning`, `set_temp`.
-fn build_metadata_bundle(
+pub(crate) fn build_metadata_bundle(
     abs_path: &std::path::Path,
     frame_type: &str,
     norm_table: &metadata_core::ImageTypNormalizationTable,

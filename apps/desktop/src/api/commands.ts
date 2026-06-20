@@ -30,6 +30,8 @@ import type {
   InboxReclassifyOverride,
   InboxReclassifyRequest,
   InboxReclassifyResponse_Serialize as InboxReclassifyResponse,
+  InboxFileMetadata_Serialize as InboxFileMetadata,
+  InboxItemMetadataRequest,
   InboxScanFolderRequest,
   InboxScanFolderResponse,
   CalibrationMaster_Serialize as CalibrationMaster,
@@ -55,6 +57,7 @@ export type {
   InboxReclassifyOverride,
   InboxReclassifyRequest,
   InboxReclassifyResponse,
+  InboxFileMetadata,
   InboxScanFolderRequest,
   InboxScanFolderResponse,
   InboxApplyAllResponse,
@@ -745,6 +748,18 @@ export async function inboxReclassify(
  */
 export async function inboxList(): Promise<InboxListResponse> {
   return unwrap(await commands.inboxList());
+}
+
+/**
+ * Fetch per-file extracted metadata for one inbox item (spec 041 US2/FR-010).
+ * Returns one entry per classified file. The invoke arg mirrors the generated
+ * binding exactly (`{ req: { inboxItemId } }`).
+ */
+export async function inboxItemMetadata(
+  inboxItemId: InboxItemMetadataRequest['inboxItemId'],
+): Promise<InboxFileMetadata[]> {
+  const resp = unwrap(await commands.inboxItemMetadata({ inboxItemId }));
+  return resp.files;
 }
 
 // ── Inbox plan surface (spec 041) ─────────────────────────────────────────────

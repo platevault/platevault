@@ -1036,6 +1036,14 @@ export const commands = {
 	 */
 	inboxReclassify: (req: InboxReclassifyRequest_Deserialize) => typedError<InboxReclassifyResponse_Serialize, string>(__TAURI_INVOKE("inbox_reclassify", { req })),
 	/**
+	 *  `inbox.item.metadata` — assemble per-file extracted metadata for an inbox
+	 *  item (spec 041 US2/FR-010).
+	 * 
+	 *  # Errors
+	 *  Returns a string error if the item is missing or a query fails.
+	 */
+	inboxItemMetadata: (req: InboxItemMetadataRequest) => typedError<InboxItemMetadataResponse_Serialize, string>(__TAURI_INVOKE("inbox_item_metadata", { req })),
+	/**
 	 *  `inbox.list` — return all unacknowledged inbox items across all registered
 	 *  roots (states `pending_classification` and `classified`).
 	 * 
@@ -2456,6 +2464,108 @@ export type InboxFileEntry = {
 	fileName: string,
 	sizeBytes: number,
 	extension: string,
+};
+
+/**
+ *  Per-file metadata entry for one file within an inbox item.
+ * 
+ *  All header fields are nullable — not every file type carries all headers.
+ *  `frame_type_effective` reflects override-if-present-else-extracted.
+ *  `override_stale` is true when the file was changed (size/mtime) since the
+ *  override was recorded (R-4); the override is surfaced but flagged.
+ */
+export type InboxFileMetadata = InboxFileMetadata_Serialize | InboxFileMetadata_Deserialize;
+
+/**
+ *  Per-file metadata entry for one file within an inbox item.
+ * 
+ *  All header fields are nullable — not every file type carries all headers.
+ *  `frame_type_effective` reflects override-if-present-else-extracted.
+ *  `override_stale` is true when the file was changed (size/mtime) since the
+ *  override was recorded (R-4); the override is surfaced but flagged.
+ */
+export type InboxFileMetadata_Deserialize = {
+	relativeFilePath: string,
+	/**
+	 *  Effective frame type (override ?? extracted from header).
+	 *  `None` when the file remains unclassified.
+	 */
+	frameTypeEffective: string | null,
+	/**  Raw `IMAGETYP` header value (before normalization), if any. */
+	imageTyp: string | null,
+	filter: string | null,
+	exposureS: number | null,
+	gain: string | null,
+	binningX: number | null,
+	binningY: number | null,
+	temperatureC: number | null,
+	object: string | null,
+	dateObs: string | null,
+	instrume: string | null,
+	telescop: string | null,
+	naxis1: number | null,
+	naxis2: number | null,
+	stackCount: number | null,
+	/**  True when this file has been identified as a stacked calibration master. */
+	isMaster: boolean,
+	/**  True when the persisted override no longer matches the file's size/mtime (R-4). */
+	overrideStale: boolean,
+};
+
+/**
+ *  Per-file metadata entry for one file within an inbox item.
+ * 
+ *  All header fields are nullable — not every file type carries all headers.
+ *  `frame_type_effective` reflects override-if-present-else-extracted.
+ *  `override_stale` is true when the file was changed (size/mtime) since the
+ *  override was recorded (R-4); the override is surfaced but flagged.
+ */
+export type InboxFileMetadata_Serialize = {
+	relativeFilePath: string,
+	/**
+	 *  Effective frame type (override ?? extracted from header).
+	 *  `None` when the file remains unclassified.
+	 */
+	frameTypeEffective?: string | null,
+	/**  Raw `IMAGETYP` header value (before normalization), if any. */
+	imageTyp?: string | null,
+	filter?: string | null,
+	exposureS?: number | null,
+	gain?: string | null,
+	binningX?: number | null,
+	binningY?: number | null,
+	temperatureC?: number | null,
+	object?: string | null,
+	dateObs?: string | null,
+	instrume?: string | null,
+	telescop?: string | null,
+	naxis1?: number | null,
+	naxis2?: number | null,
+	stackCount?: number | null,
+	/**  True when this file has been identified as a stacked calibration master. */
+	isMaster: boolean,
+	/**  True when the persisted override no longer matches the file's size/mtime (R-4). */
+	overrideStale: boolean,
+};
+
+/**  Request for `inbox.item.metadata`. */
+export type InboxItemMetadataRequest = {
+	inboxItemId: string,
+};
+
+/**  Response from `inbox.item.metadata`. */
+export type InboxItemMetadataResponse = InboxItemMetadataResponse_Serialize | InboxItemMetadataResponse_Deserialize;
+
+/**  Response from `inbox.item.metadata`. */
+export type InboxItemMetadataResponse_Deserialize = {
+	inboxItemId: string,
+	files: InboxFileMetadata_Deserialize[],
+};
+
+/**  Response from `inbox.item.metadata`. */
+export type InboxItemMetadataResponse_Serialize = {
+	inboxItemId: string,
+	files: InboxFileMetadata_Serialize[],
 };
 
 /**  A discovered inbox item returned from the scan. */

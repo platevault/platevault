@@ -30,6 +30,7 @@ import {
   useInboxList,
   useInboxRescan,
   useInboxClassification,
+  useInboxItemMetadata,
   useInboxConfirm,
   useInboxPlanApplyAll,
   useInboxPlanCancel,
@@ -101,6 +102,11 @@ export function InboxPage() {
   const { data: classification } = useInboxClassification(
     selectedItem?.inboxItemId ?? '',
     selectedRootPath,
+  );
+
+  // Load per-file extracted metadata for the selected item (spec 041 US2/FR-010).
+  const { data: fileMetadata } = useInboxItemMetadata(
+    selectedItem?.inboxItemId ?? null,
   );
 
   const { confirm, loading: confirmLoading } = useInboxConfirm();
@@ -264,6 +270,7 @@ export function InboxPage() {
                   item={selectedItem}
                   rootAbsolutePath={selectedRootPath}
                   classification={classification ?? null}
+                  fileMetadata={fileMetadata}
                 />
               ) : (
                 <EmptyState

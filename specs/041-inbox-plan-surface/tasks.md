@@ -43,10 +43,10 @@
 **Goal**: structured no-pill list with multi-level grouping; detail shows persisted per-file metadata + explicit mixed composition; masters resolve.
 **Independent test**: list shows structured rows without overflow; group by target→type→filter nests; detail lists per-file metadata; master resolves.
 
-- [ ] T016 [US2] Persist per-file metadata: in `crates/app/core/src/inbox/classify.rs` (and reclassify), upsert `inbox_file_metadata` rows (filter/exposure/gain/binning/temp/object/date/instrume/telescop/naxis/stack_count/size/mtime) during classification. Repo writes in `crates/persistence/db/src/repositories/inbox.rs`.
-- [ ] T017 [US2] Add `inbox.item.metadata` command + app/core use-case returning per-file effective metadata (override-if-present). Files: app/core inbox + `commands/inbox.rs`.
-- [ ] T018 [US2] Populate `inbox_classification_breakdown.destination_preview` at classify/confirm using `resolve_v1(active_pattern, effective_metadata)` (FR-024) instead of `None`.
-- [ ] T019 [US2] Regenerate bindings; `commands.ts` wrapper for `inbox.item.metadata`.
+- [X] T016 [US2] Persist per-file metadata: in `crates/app/core/src/inbox/classify.rs` (and reclassify), upsert `inbox_file_metadata` rows (filter/exposure/gain/binning/temp/object/date/instrume/telescop/naxis/stack_count/size/mtime) during classification. Repo writes in `crates/persistence/db/src/repositories/inbox.rs`.
+- [X] T017 [US2] Add `inbox.item.metadata` command + app/core use-case returning per-file effective metadata (override-if-present). Files: app/core inbox + `commands/inbox.rs`.
+- [X] T018 [US2] Populate `inbox_classification_breakdown.destination_preview` at classify/confirm using `resolve_v1(active_pattern, effective_metadata)` (FR-024) instead of `None`.
+- [X] T019 [US2] Regenerate bindings; `commands.ts` wrapper for `inbox.item.metadata`.
 - [X] T020 [P] [US2] Frontend: restructure `InboxList.tsx` to a structured (no-pill) row layout following the standard sidebar layout (verify 1100×720, no overflow).
 - [ ] T021 [US2] Frontend: multi-level grouping control + nested collapsible groups over target/frame-type/filter/exposure/date/source in `InboxList.tsx` (+ a small grouping state module); items missing a dimension under a "none" group.
 - [X] T022 [P] [US2] Frontend: `InboxDetail.tsx` — per-file metadata table (image type, filter, exposure, binning, gain, temperature, object, date) and explicit mixed-folder composition (per-type counts) instead of a bare "mixed".

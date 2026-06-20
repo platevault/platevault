@@ -6,11 +6,11 @@
  * Scope: ONLY InboxDetail.tsx. Uses fixtures; no IPC mocks needed because
  * InboxDetail never fetches — it renders the data it receives.
  *
- * InboxFileMetadata field names in the local interface (snake_case, pending
- * T019 regenerating bindings):
- *   relative_file_path, frame_type_effective, filter, exposure_s, binning_x,
- *   binning_y, gain, temperature_c, object, date_obs, instrume, telescop,
- *   naxis1, naxis2, stack_count, is_master, override_stale
+ * InboxFileMetadata is the generated Specta type (camelCase), re-exported via
+ * '@/api/commands' (spec 041 US2/FR-010 — wired in T019):
+ *   relativeFilePath, frameTypeEffective, imageTyp, filter, exposureS, binningX,
+ *   binningY, gain (string), temperatureC, object, dateObs, instrume, telescop,
+ *   naxis1, naxis2, stackCount, isMaster, overrideStale
  */
 import React from 'react';
 import { render, screen } from '@testing-library/react';
@@ -20,11 +20,9 @@ import type {
   InboxItemSummary_Serialize as InboxItemSummary,
   InboxClassifyResponse_Serialize as InboxClassifyResponse,
 } from '@/bindings';
+import type { InboxFileMetadata } from '@/api/commands';
 
-import {
-  InboxDetail,
-  type InboxFileMetadata,
-} from '../InboxDetail';
+import { InboxDetail } from '../InboxDetail';
 
 // ── Mock reclassify hook ─────────────────────────────────────────────────────
 vi.mock('@/api/commands', async (importOriginal) => {
@@ -87,44 +85,44 @@ const singleTypeClassification: InboxClassifyResponse = {
 /** Two-row fixture for the per-file metadata table (FR-010). */
 const fileMetadataFixture: InboxFileMetadata[] = [
   {
-    relative_file_path: 'light_0001.fits',
-    frame_type_effective: 'light',
-    image_typ: 'LIGHT',
+    relativeFilePath: 'light_0001.fits',
+    frameTypeEffective: 'light',
+    imageTyp: 'LIGHT',
     filter: 'Ha',
-    exposure_s: 300,
-    binning_x: 1,
-    binning_y: 1,
-    gain: 100,
-    temperature_c: -10,
+    exposureS: 300,
+    binningX: 1,
+    binningY: 1,
+    gain: '100',
+    temperatureC: -10,
     object: 'NGC7000',
-    date_obs: '2025-10-10T22:00:00Z',
+    dateObs: '2025-10-10T22:00:00Z',
     instrume: 'ASI2600MM',
     telescop: null,
     naxis1: 6248,
     naxis2: 4176,
-    stack_count: null,
-    is_master: false,
-    override_stale: false,
+    stackCount: null,
+    isMaster: false,
+    overrideStale: false,
   },
   {
-    relative_file_path: 'calib_dark_0001.fits',
-    frame_type_effective: 'dark',
-    image_typ: 'DARK',
+    relativeFilePath: 'calib_dark_0001.fits',
+    frameTypeEffective: 'dark',
+    imageTyp: 'DARK',
     filter: null,
-    exposure_s: null,
-    binning_x: 1,
-    binning_y: 1,
-    gain: 100,
-    temperature_c: null,
+    exposureS: null,
+    binningX: 1,
+    binningY: 1,
+    gain: '100',
+    temperatureC: null,
     object: null,
-    date_obs: null,
+    dateObs: null,
     instrume: null,
     telescop: null,
     naxis1: null,
     naxis2: null,
-    stack_count: 30,
-    is_master: true,
-    override_stale: false,
+    stackCount: 30,
+    isMaster: true,
+    overrideStale: false,
   },
 ];
 

@@ -115,6 +115,15 @@ pub async fn reclassify(
         }
     }
 
+    // spec 041 US2/T016: per-file `inbox_file_metadata` rows are NOT rewritten
+    // here. Reclassify carries no root path and cannot re-read file headers, so
+    // the extracted header values persisted at classify time remain authoritative
+    // for the (unchanged) files. Override values (frame type / filter / exposure /
+    // binning) live on the evidence row and are assembled into the metadata DTO
+    // by `get_inbox_item_metadata`; `override_stale` (size/mtime drift, R-4) is
+    // computed there. Clearing the table without re-extraction would destroy
+    // valid header data, so we deliberately leave it intact.
+
     // 5. Re-aggregate: re-load all evidence (overrides now set)
     let updated_evidence =
         inbox_repo::list_evidence(pool, &req.inbox_item_id).await.map_err(|e| {

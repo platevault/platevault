@@ -44,9 +44,9 @@ use crate::commands::guided::{
     guided_activate, guided_dismiss, guided_restart, guided_state_get, guided_step_complete,
 };
 use crate::commands::inbox::{
-    inbox_classify, inbox_confirm, inbox_list, inbox_plan, inbox_plan_apply, inbox_plan_apply_all,
-    inbox_plan_apply_selected, inbox_plan_cancel, inbox_plan_list_open, inbox_reclassify,
-    inbox_scan, inbox_scan_folder,
+    inbox_classify, inbox_confirm, inbox_item_metadata, inbox_list, inbox_plan, inbox_plan_apply,
+    inbox_plan_apply_all, inbox_plan_apply_selected, inbox_plan_cancel, inbox_plan_list_open,
+    inbox_reclassify, inbox_scan, inbox_scan_folder,
 };
 use crate::commands::ingestion::{ingestion_settings_get, ingestion_settings_update};
 use crate::commands::inventory::{inventory_list, inventory_session_review};
@@ -300,6 +300,7 @@ pub fn specta_builder() -> Builder<tauri::Wry> {
         inbox_classify,
         inbox_confirm,
         inbox_reclassify,
+        inbox_item_metadata,
         inbox_list,
         inbox_plan,
         inbox_plan_apply,
@@ -491,6 +492,7 @@ pub fn specta_builder() -> Builder<tauri::Wry> {
         inbox_classify,
         inbox_confirm,
         inbox_reclassify,
+        inbox_item_metadata,
         inbox_list,
         inbox_plan,
         inbox_plan_apply,

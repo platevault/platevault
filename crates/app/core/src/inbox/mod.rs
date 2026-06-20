@@ -12,6 +12,7 @@
 pub mod classify;
 pub mod confirm;
 pub mod inbox_plan;
+pub mod metadata;
 pub mod plan_listener;
 pub mod reclassify;
 pub mod scan;
