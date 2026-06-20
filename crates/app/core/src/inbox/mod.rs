@@ -17,3 +17,4 @@ pub mod plan_listener;
 pub mod reclassify;
 pub mod scan;
 pub mod signature;
+pub mod stats;

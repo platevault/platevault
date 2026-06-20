@@ -633,6 +633,75 @@ pub async fn list_inbox_file_metadata(
     .await?)
 }
 
+// ── Stats aggregates (spec 041 US6) ──────────────────────────────────────────
+
+/// Per-frame-type aggregate row returned by [`inbox_stats`].
+#[derive(Clone, Debug)]
+pub struct InboxStatsRow {
+    pub frame_type: String,
+    pub folder_count: i64,
+    pub master_count: i64,
+    pub image_count: i64,
+}
+
+/// Aggregate per-frame-type counts across all unacknowledged inbox items.
+///
+/// "Unacknowledged" = items whose `state` is one of
+/// `pending_classification`, `classified`, or `plan_open` — the same
+/// predicate used by `list_unacknowledged_across_roots`.
+///
+/// Semantics per type:
+/// - `folder_count` — distinct non-master inbox items that have at least one
+///   file of that effective frame type.
+/// - `master_count` — evidence rows where `is_master = 1` of that type.
+/// - `image_count` — non-master evidence rows of that type.
+///
+/// Effective frame type = `COALESCE(manual_override, frame_type)`.
+/// Rows with NULL effective type (unclassified) are excluded.
+///
+/// # Errors
+/// Returns [`DbError::Database`] on connection failure.
+pub async fn inbox_stats(pool: &SqlitePool) -> DbResult<Vec<InboxStatsRow>> {
+    // sqlx does not derive FromRow for plain tuples with more than 3 elements
+    // in some configurations, so we map manually via a named intermediate.
+    #[derive(sqlx::FromRow)]
+    struct StatsRow {
+        eff_type: String,
+        folder_count: i64,
+        master_count: i64,
+        image_count: i64,
+    }
+
+    let rows = sqlx::query_as::<_, StatsRow>(
+        "SELECT
+             COALESCE(ev.manual_override, ev.frame_type)          AS eff_type,
+             COUNT(DISTINCT CASE WHEN i.is_master_item = 0
+                                 THEN i.id END)                   AS folder_count,
+             CAST(SUM(CASE WHEN ev.is_master = 1 THEN 1 ELSE 0 END) AS INTEGER)
+                                                                   AS master_count,
+             CAST(SUM(CASE WHEN ev.is_master = 0 THEN 1 ELSE 0 END) AS INTEGER)
+                                                                   AS image_count
+         FROM inbox_items i
+         JOIN inbox_classification_evidence ev ON ev.inbox_item_id = i.id
+         WHERE i.state IN ('pending_classification', 'classified', 'plan_open')
+           AND COALESCE(ev.manual_override, ev.frame_type) IS NOT NULL
+         GROUP BY eff_type
+         ORDER BY eff_type",
+    )
+    .fetch_all(pool)
+    .await?;
+
+    Ok(rows
+        .into_iter()
+        .map(|r| InboxStatsRow {
+            frame_type: r.eff_type,
+            folder_count: r.folder_count,
+            master_count: r.master_count,
+            image_count: r.image_count,
+        })
+        .collect())
+}
+
 // ── Plan link CRUD ────────────────────────────────────────────────────────────
 
 /// Insert a plan link, establishing the "open plan" invariant.
@@ -1594,5 +1663,138 @@ mod tests {
         assert_eq!(after.filter.as_deref(), Some("Ha"));
         assert_eq!(after.exposure_s, Some(300.0));
         assert_eq!(after.file_size_bytes, Some(4_194_304));
+    }
+
+    /// T040 — `inbox_stats` returns per-type counts across active items.
+    ///
+    /// Fixture:
+    ///   item-stats-1  (state=classified):  2 light frames (is_master=0)
+    ///   item-stats-2  (state=classified):  1 dark frame  (is_master=0)
+    ///   item-stats-3  (state=classified):  1 dark master (is_master=1)
+    ///
+    /// Expected stats:
+    ///   light → folder_count=1, image_count=2, master_count=0
+    ///   dark  → folder_count=2, image_count=1, master_count=1
+    #[tokio::test]
+    #[allow(clippy::too_many_lines)]
+    async fn inbox_stats_returns_per_type_counts() {
+        let db = test_db().await;
+        let pool = db.pool();
+
+        // item-stats-1: two light frames
+        insert_inbox_item(
+            pool,
+            &InsertInboxItem {
+                id: "item-stats-1",
+                root_id: "root-1",
+                relative_path: "2025-10-10/lights-stats",
+                file_count: 2,
+                content_signature: Some("sig-s1"),
+                lane: "fits",
+            },
+        )
+        .await
+        .unwrap();
+        update_inbox_item_state(pool, "item-stats-1", "classified").await.unwrap();
+        for (ev_id, path) in [
+            ("ev-stats-1a", "lights-stats/frame_001.fits"),
+            ("ev-stats-1b", "lights-stats/frame_002.fits"),
+        ] {
+            insert_evidence(
+                pool,
+                &InsertEvidence {
+                    id: ev_id,
+                    inbox_item_id: "item-stats-1",
+                    relative_file_path: path,
+                    frame_type: Some("light"),
+                    evidence_source: "imagetyp_header",
+                    raw_value: Some("Light Frame"),
+                    unclassified: false,
+                    manual_override: None,
+                    is_master: false,
+                    master_detector: None,
+                },
+            )
+            .await
+            .unwrap();
+        }
+
+        // item-stats-2: one dark frame
+        insert_inbox_item(
+            pool,
+            &InsertInboxItem {
+                id: "item-stats-2",
+                root_id: "root-1",
+                relative_path: "2025-10-10/darks-stats",
+                file_count: 1,
+                content_signature: Some("sig-s2"),
+                lane: "fits",
+            },
+        )
+        .await
+        .unwrap();
+        update_inbox_item_state(pool, "item-stats-2", "classified").await.unwrap();
+        insert_evidence(
+            pool,
+            &InsertEvidence {
+                id: "ev-stats-2",
+                inbox_item_id: "item-stats-2",
+                relative_file_path: "darks-stats/dark_001.fits",
+                frame_type: Some("dark"),
+                evidence_source: "imagetyp_header",
+                raw_value: Some("Dark Frame"),
+                unclassified: false,
+                manual_override: None,
+                is_master: false,
+                master_detector: None,
+            },
+        )
+        .await
+        .unwrap();
+
+        // item-stats-3: one dark master (is_master=true)
+        insert_inbox_item(
+            pool,
+            &InsertInboxItem {
+                id: "item-stats-3",
+                root_id: "root-1",
+                relative_path: "2025-10-10/dark-masters-stats",
+                file_count: 1,
+                content_signature: Some("sig-s3"),
+                lane: "fits",
+            },
+        )
+        .await
+        .unwrap();
+        update_inbox_item_state(pool, "item-stats-3", "classified").await.unwrap();
+        insert_evidence(
+            pool,
+            &InsertEvidence {
+                id: "ev-stats-3",
+                inbox_item_id: "item-stats-3",
+                relative_file_path: "dark-masters-stats/master_dark.fits",
+                frame_type: Some("dark"),
+                evidence_source: "imagetyp_header",
+                raw_value: Some("Dark Frame"),
+                unclassified: false,
+                manual_override: None,
+                is_master: true,
+                master_detector: None,
+            },
+        )
+        .await
+        .unwrap();
+
+        let rows = inbox_stats(pool).await.unwrap();
+
+        let light = rows.iter().find(|r| r.frame_type == "light").unwrap();
+        assert_eq!(light.image_count, 2, "light image_count");
+        assert_eq!(light.master_count, 0, "light master_count");
+        assert_eq!(light.folder_count, 1, "light folder_count");
+
+        let dark = rows.iter().find(|r| r.frame_type == "dark").unwrap();
+        assert_eq!(dark.image_count, 1, "dark image_count");
+        assert_eq!(dark.master_count, 1, "dark master_count");
+        assert_eq!(dark.folder_count, 2, "dark folder_count");
     }
 }

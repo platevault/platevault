@@ -15,13 +15,14 @@ use app_core::inbox::inbox_plan::{
 use app_core::inbox::metadata::get_inbox_item_metadata;
 use app_core::inbox::reclassify::{reclassify, ReclassifyOverride, ReclassifyRequest};
 use app_core::inbox::scan::{scan_root, ScanOptions, ScannedMasterFile};
+use app_core::inbox::stats::inbox_stats as inbox_stats_uc;
 use contracts_core::inbox::{
     InboxApplyAllResponse, InboxApplySelectedRequest, InboxBreakdownEntry, InboxClassifyRequest,
     InboxClassifyResponse, InboxConfirmRequest, InboxConfirmResponse, InboxFileEntry,
     InboxItemMetadataRequest, InboxItemMetadataResponse, InboxItemSummary, InboxListItem,
     InboxListResponse, InboxOpenPlansResponse, InboxPlanCancelResponse, InboxPlanView,
     InboxReclassifyRequest, InboxReclassifyResponse, InboxScanFolderRequest,
-    InboxScanFolderResponse, InboxScanResult,
+    InboxScanFolderResponse, InboxScanResult, InboxStatsResponse,
 };
 use contracts_core::plan_apply::PlanApplyResponse;
 use persistence_db::repositories::inbox::{
@@ -552,4 +553,19 @@ pub async fn inbox_plan_cancel(
     state: tauri::State<'_, AppState>,
 ) -> Result<InboxPlanCancelResponse, String> {
     cancel_inbox_plan(state.repo.pool(), &state.bus, &inbox_item_id).await.map_err(|e| e.message)
+}
+
+/// `inbox.stats` — aggregate per-type frame counts across all active inbox items
+/// (spec 041, US6 T038).
+///
+/// Returns counts of folders, masters, and images broken down by effective frame
+/// type. The effective type is `manual_override` when set, otherwise
+/// `frame_type` from classification evidence.
+///
+/// # Errors
+/// Returns a string error on database failure.
+#[tauri::command]
+#[specta::specta]
+pub async fn inbox_stats(pool: tauri::State<'_, SqlitePool>) -> Result<InboxStatsResponse, String> {
+    inbox_stats_uc(&pool).await.map_err(|e| e.message)
 }
