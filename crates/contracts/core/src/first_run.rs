@@ -5,6 +5,7 @@
 
 use serde::{Deserialize, Serialize};
 use specta::Type;
+use strum::{EnumString, IntoStaticStr};
 
 use crate::JsonAny;
 
@@ -16,10 +17,27 @@ use crate::JsonAny;
 /// Per-image frame type (light / dark / flat / bias) is detected from image
 /// metadata (FITS `IMAGETYP` header) during scan/ingest — the source-folder
 /// kind is only a user-facing folder category.
+///
+/// The `strum` `serialize_all` mirrors the serde `rename_all`, so the
+/// `FromStr` / `Into<&'static str>` conversions produce byte-identical persisted
+/// strings (`light_frames`, `calibration`, `project`, `inbox`).
 #[derive(
-    Clone, Copy, Debug, Eq, Hash, Ord, PartialEq, PartialOrd, Serialize, Deserialize, Type,
+    Clone,
+    Copy,
+    Debug,
+    Eq,
+    Hash,
+    Ord,
+    PartialEq,
+    PartialOrd,
+    Serialize,
+    Deserialize,
+    Type,
+    EnumString,
+    IntoStaticStr,
 )]
 #[serde(rename_all = "snake_case")]
+#[strum(serialize_all = "snake_case")]
 pub enum SourceKind {
     LightFrames,
     Calibration,
@@ -28,10 +46,26 @@ pub enum SourceKind {
 }
 
 /// Scan depth strategy for a registered source.
+///
+/// `strum` `serialize_all` mirrors the serde `rename_all` (`recursive`,
+/// `single`).
 #[derive(
-    Clone, Copy, Debug, Eq, Hash, Ord, PartialEq, PartialOrd, Serialize, Deserialize, Type,
+    Clone,
+    Copy,
+    Debug,
+    Eq,
+    Hash,
+    Ord,
+    PartialEq,
+    PartialOrd,
+    Serialize,
+    Deserialize,
+    Type,
+    EnumString,
+    IntoStaticStr,
 )]
 #[serde(rename_all = "lowercase")]
+#[strum(serialize_all = "lowercase")]
 pub enum ScanDepth {
     Recursive,
     Single,

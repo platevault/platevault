@@ -97,11 +97,11 @@ Frontend: `cd apps/desktop && npx tsc --noEmit` + `npx vitest run <feature>`. Ru
 
 ## Phase 5 — US9 Rust string/enum typing (P2)
 
-- [ ] T130 `CalibrationKind` `TryFrom<&str>`/`FromStr` single fallback; replace inline
+- [X] T130 `CalibrationKind` `TryFrom<&str>`/`FromStr` single fallback; replace inline
   parses (`sessions.rs:332`, `calibration.rs:594/666/907`); confirm canonical fallback
   vs stored values.
-- [ ] T131 Inventory state `TryFrom`/`From` (`inventory.rs:331`).
-- [ ] T132 `strum` for first_run + prepared_source enum↔string converters.
+- [X] T131 Inventory state `TryFrom`/`From` (`inventory.rs:331`).
+- [X] T132 `strum` for first_run + prepared_source enum↔string converters.
 - [ ] **US9 checkpoint**: commit `feat(042): US9 typed enum conversions`.
 
 ## Phase 6 — US11 Rust duplication → shared homes (P2) — needs T010

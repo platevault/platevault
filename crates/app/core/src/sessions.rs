@@ -329,11 +329,9 @@ async fn load_calibration_matches(
     Ok(rows
         .into_iter()
         .map(|(master_id, calibration_type, score, mismatch_json)| {
-            let kind = match calibration_type.as_str() {
-                "flat" => CalibrationKind::Flat,
-                "bias" => CalibrationKind::Bias,
-                _ => CalibrationKind::Dark,
-            };
+            // DB CHECK constrains `calibration_type` to dark/flat/bias; unknown
+            // values fall back to Dark, preserving prior behavior.
+            let kind = calibration_type.parse().unwrap_or(CalibrationKind::Dark);
             let soft_mismatches: Vec<String> =
                 serde_json::from_str(&mismatch_json).unwrap_or_default();
             SessionCalibrationMatch { master_id, kind, score, soft_mismatches }

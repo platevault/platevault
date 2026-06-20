@@ -72,6 +72,46 @@ impl CalibrationKind {
     }
 }
 
+/// Error returned when a string cannot be parsed into a [`CalibrationKind`].
+#[derive(Clone, Debug, Eq, PartialEq)]
+pub struct ParseCalibrationKindError(pub String);
+
+impl std::fmt::Display for ParseCalibrationKindError {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        write!(f, "unknown calibration kind: {}", self.0)
+    }
+}
+
+impl std::error::Error for ParseCalibrationKindError {}
+
+/// Single canonical, strict parser for [`CalibrationKind`].
+///
+/// Accepts the canonical serde strings plus the legacy `flat_dark` alias for
+/// `DarkFlat`. Unknown values are rejected (no silent fallback); callers apply
+/// any fallback explicitly (e.g. `.unwrap_or(CalibrationKind::Dark)` or
+/// `.ok()`), keeping the fallback policy visible at each call site.
+impl std::str::FromStr for CalibrationKind {
+    type Err = ParseCalibrationKindError;
+
+    fn from_str(s: &str) -> Result<Self, Self::Err> {
+        match s {
+            "dark" => Ok(Self::Dark),
+            "flat" => Ok(Self::Flat),
+            "bias" => Ok(Self::Bias),
+            "dark_flat" | "flat_dark" => Ok(Self::DarkFlat),
+            other => Err(ParseCalibrationKindError(other.to_owned())),
+        }
+    }
+}
+
+impl TryFrom<&str> for CalibrationKind {
+    type Error = ParseCalibrationKindError;
+
+    fn try_from(s: &str) -> Result<Self, Self::Error> {
+        s.parse()
+    }
+}
+
 impl Dimension {
     /// Human-readable name (used in dimension breakdown responses).
     #[must_use]

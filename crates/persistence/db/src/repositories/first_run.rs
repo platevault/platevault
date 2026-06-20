@@ -23,29 +23,19 @@ fn now_iso() -> String {
 }
 
 fn source_kind_to_str(kind: SourceKind) -> &'static str {
-    match kind {
-        SourceKind::LightFrames => "light_frames",
-        SourceKind::Calibration => "calibration",
-        SourceKind::Project => "project",
-        SourceKind::Inbox => "inbox",
-    }
+    // `strum::IntoStaticStr` yields the canonical snake_case strings.
+    kind.into()
 }
 
 fn str_to_source_kind(s: &str) -> SourceKind {
-    match s {
-        "calibration" => SourceKind::Calibration,
-        "project" => SourceKind::Project,
-        "inbox" => SourceKind::Inbox,
-        // "light_frames" and any unknown value default to LightFrames.
-        _ => SourceKind::LightFrames,
-    }
+    // `strum::EnumString` parses the canonical strings; "light_frames" and any
+    // unknown value default to LightFrames (preserving prior behavior).
+    s.parse().unwrap_or(SourceKind::LightFrames)
 }
 
 fn scan_depth_to_str(depth: ScanDepth) -> &'static str {
-    match depth {
-        ScanDepth::Recursive => "recursive",
-        ScanDepth::Single => "single",
-    }
+    // `strum::IntoStaticStr` yields the canonical lowercase strings.
+    depth.into()
 }
 
 /// Determine `created_via` based on first_run_state.completed_at.

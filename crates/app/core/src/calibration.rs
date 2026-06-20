@@ -591,12 +591,9 @@ async fn load_masters(
                 source_session_id,
                 observing_night_date,
             )| {
-                let kind = match ct.as_str() {
-                    "dark" => CalibrationKind::Dark,
-                    "flat" => CalibrationKind::Flat,
-                    "bias" => CalibrationKind::Bias,
-                    _ => return None,
-                };
+                // DB CHECK constrains `calibration_type` to dark/flat/bias;
+                // anything unparseable is skipped, preserving prior behavior.
+                let kind: CalibrationKind = ct.parse().ok()?;
                 Some(MasterInfo {
                     id,
                     kind,
@@ -663,12 +660,9 @@ async fn load_master_by_id(
             source_session_id,
             observing_night_date,
         )| {
-            let kind = match ct.as_str() {
-                "dark" => CalibrationKind::Dark,
-                "flat" => CalibrationKind::Flat,
-                "bias" => CalibrationKind::Bias,
-                _ => return None,
-            };
+            // DB CHECK constrains `calibration_type` to dark/flat/bias;
+            // anything unparseable is skipped, preserving prior behavior.
+            let kind: CalibrationKind = ct.parse().ok()?;
             Some(MasterInfo {
                 id,
                 kind,
@@ -905,12 +899,9 @@ pub async fn masters_get(
 }
 
 fn str_to_cal_kind(kind: &str) -> contracts_core::calibration::CalibrationKind {
-    match kind {
-        "flat" => contracts_core::calibration::CalibrationKind::Flat,
-        "bias" => contracts_core::calibration::CalibrationKind::Bias,
-        "dark_flat" | "flat_dark" => contracts_core::calibration::CalibrationKind::DarkFlat,
-        _ => contracts_core::calibration::CalibrationKind::Dark,
-    }
+    // Canonical parser handles the `flat_dark` legacy alias; unknown values
+    // fall back to Dark, preserving prior behavior.
+    kind.parse().unwrap_or(contracts_core::calibration::CalibrationKind::Dark)
 }
 
 fn compute_age_days(created_at: &str, now: OffsetDateTime) -> u32 {

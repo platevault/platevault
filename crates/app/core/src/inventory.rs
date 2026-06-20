@@ -329,14 +329,9 @@ fn map_frame_type(db_kind: &str) -> InventoryFrameType {
 }
 
 fn str_to_contract_state(s: &str) -> ContractSessionState {
-    match s {
-        "candidate" => ContractSessionState::Candidate,
-        "needs_review" => ContractSessionState::NeedsReview,
-        "confirmed" => ContractSessionState::Confirmed,
-        "rejected" => ContractSessionState::Rejected,
-        "ignored" => ContractSessionState::Ignored,
-        _ => ContractSessionState::Discovered,
-    }
+    // Canonical strict parser; unknown values fall back to Discovered,
+    // preserving prior behavior.
+    s.parse().unwrap_or(ContractSessionState::Discovered)
 }
 
 fn inventory_state_to_contract(s: InventorySessionState) -> ContractSessionState {
