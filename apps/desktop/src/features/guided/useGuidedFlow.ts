@@ -3,13 +3,20 @@
  *
  * On first mount after first-run setup, activates the flow.
  * Exposes state + dismiss/restart actions consumed by GuidedOverlay and Settings.
+ *
+ * T105: server state reads/mutations are now keyed via queryKeys.guided.state()
+ * so TanStack Query owns the cache layer. activate/dismiss/restart are useMutation;
+ * the state returned is derived from query cache via setQueryData on success.
  */
 
-import { useState, useEffect, useCallback } from 'react';
+import { useEffect } from 'react';
+import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
+import { queryKeys } from '@/data/queryKeys';
 import {
   activateGuidedFlow,
   dismissGuidedFlow,
   restartGuidedFlow,
+  getGuidedState,
   type GuidedFlowStateDto,
 } from './store';
 
@@ -28,50 +35,75 @@ export interface GuidedFlowHook {
  *   skip (e.g. when still in first-run setup).
  */
 export function useGuidedFlow(setupCompleted: boolean | undefined): GuidedFlowHook {
-  const [state, setState] = useState<GuidedFlowStateDto | null>(null);
-  const [loading, setLoading] = useState(false);
+  const queryClient = useQueryClient();
+  const guidedKey = queryKeys.guided.state();
+
+  // Server read — keyed so TanStack Query owns the cache.
+  // Only enabled when setupCompleted is true so it doesn't fire prematurely.
+  const { data: queryState, isFetching } = useQuery<GuidedFlowStateDto>({
+    queryKey: guidedKey,
+    queryFn: getGuidedState,
+    enabled: !!setupCompleted,
+    // Guided state rarely changes except through explicit mutations — stale
+    // immediately so any re-mount after a mutation picks up the updated data.
+    staleTime: 0,
+  });
+
+  // Activate mutation — called once when setupCompleted transitions to true.
+  const activateMutation = useMutation<GuidedFlowStateDto, Error>({
+    mutationFn: activateGuidedFlow,
+    onSuccess: (dto) => {
+      queryClient.setQueryData(guidedKey, dto);
+    },
+    onError: () => {
+      // Backend unavailable — degrade gracefully (FR-007).
+    },
+  });
 
   // Activate the flow once setup is complete.
   useEffect(() => {
     if (!setupCompleted) return;
-    let cancelled = false;
-    setLoading(true);
-    activateGuidedFlow()
-      .then((dto) => {
-        if (!cancelled) setState(dto);
-      })
-      .catch(() => {
-        // Backend unavailable — degrade gracefully (FR-007).
-      })
-      .finally(() => {
-        if (!cancelled) setLoading(false);
-      });
-    return () => {
-      cancelled = true;
-    };
+    activateMutation.mutate();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [setupCompleted]);
 
-  const dismiss = useCallback(async () => {
-    try {
-      await dismissGuidedFlow();
-      setState((prev) =>
+  // Dismiss mutation.
+  const dismissMutation = useMutation<{ dismissedAt: string }, Error>({
+    mutationFn: dismissGuidedFlow,
+    onSuccess: () => {
+      queryClient.setQueryData<GuidedFlowStateDto | null>(guidedKey, (prev) =>
         prev
           ? { ...prev, dismissed: true, dismissedAt: new Date().toISOString(), currentStep: null }
-          : prev,
+          : prev ?? null,
       );
+    },
+  });
+
+  const dismiss = async () => {
+    try {
+      await dismissMutation.mutateAsync();
     } catch {
       // Best-effort; silent failure keeps UI responsive.
     }
-  }, []);
+  };
 
-  const restart = useCallback(async () => {
+  // Restart mutation.
+  const restartMutation = useMutation<GuidedFlowStateDto, Error>({
+    mutationFn: restartGuidedFlow,
+    onSuccess: (dto) => {
+      queryClient.setQueryData(guidedKey, dto);
+    },
+  });
+
+  const restart = async () => {
     try {
-      const newState = await restartGuidedFlow();
-      setState(newState);
+      await restartMutation.mutateAsync();
     } catch {
       // Best-effort.
     }
-  }, []);
+  };
 
-  return { state, loading, dismiss, restart };
+  const loading = isFetching || activateMutation.isPending;
+
+  return { state: queryState ?? null, loading, dismiss, restart };
 }

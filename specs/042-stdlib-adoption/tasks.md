@@ -16,11 +16,11 @@ Frontend: `cd apps/desktop && npx tsc --noEmit` + `npx vitest run <feature>`. Ru
 
 ## Phase 0 — Setup
 
-- [ ] T001 Add new npm deps to `apps/desktop/package.json` at pinned versions:
+- [X] T001 Add new npm deps to `apps/desktop/package.json` at pinned versions:
   `@tanstack/react-query@5.101.0`, `@tanstack/react-table@8.21.3`, `use-debounce@10.1.1`,
   `date-fns@4.4.0`, `tinykeys@4.0.0`, `pathe@2.0.3`, `zod@4.4.3`, `react-hook-form@7.80.0`,
   `@hookform/resolvers@5.4.0`; run install; `npx tsc --noEmit` clean.
-- [ ] T002 [P] Add new Rust deps to workspace `Cargo.toml` (pin to current via cargo):
+- [X] T002 [P] Add new Rust deps to workspace `Cargo.toml` (pin to current via cargo):
   `anyhow`, `tracing-subscriber`, `strum`+`strum_macros`, `percent-encoding`, `globset`,
   `itertools`, `csv`, `byteorder`, `path-clean`, `camino`, `moka`, `dashmap`; dev-deps
   `rstest`, `proptest`. `cargo metadata` resolves clean (do not wire usage yet).
@@ -37,17 +37,17 @@ Frontend: `cd apps/desktop && npx tsc --noEmit` + `npx vitest run <feature>`. Ru
 
 ## Phase 2 — US1 Server-state store → TanStack Query (P1, ANCHOR) 🎯
 
-- [ ] T100 Add `QueryClientProvider` + a configured `QueryClient` at the app root
+- [X] T100 Add `QueryClientProvider` + a configured `QueryClient` at the app root
   (`apps/desktop/src/main.tsx` / app shell); `gcTime`/`staleTime` defaults.
-- [ ] T101 Create `apps/desktop/src/data/queryKeys.ts` (factory per `data-model.md` §1).
-- [ ] T102 Migrate projects: `useProjects`/`useProjectDetail` → `useQuery`; create/update/
+- [X] T101 Create `apps/desktop/src/data/queryKeys.ts` (factory per `data-model.md` §1).
+- [X] T102 Migrate projects: `useProjects`/`useProjectDetail` → `useQuery`; create/update/
   source/channel/lifecycle mutations → `useMutation` + `invalidateQueries` per the map.
-- [ ] T103 Migrate sessions (`useInventorySources`, review mutation) → Query.
-- [ ] T104 Migrate inbox (`inbox/store.ts` list/classify/confirm/reclassify) → Query.
-- [ ] T105 Migrate guided + setup (`sources-store`, wizard `sessionsStore`) → Query.
-- [ ] T106 Delete `apps/desktop/src/data/store.ts`; remove all imports; ensure no
+- [X] T103 Migrate sessions (`useInventorySources`, review mutation) → Query.
+- [X] T104 Migrate inbox (`inbox/store.ts` list/classify/confirm/reclassify) → Query.
+- [X] T105 Migrate guided + setup (`sources-store`, wizard `sessionsStore`) → Query.
+- [X] T106 Delete `apps/desktop/src/data/store.ts`; remove all imports; ensure no
   render-phase fetch remains.
-- [ ] T107 Tests: update/extend vitest for projects/sessions/inbox to assert single-fetch
+- [X] T107 Tests: update/extend vitest for projects/sessions/inbox to assert single-fetch
   on mount + invalidation refresh. Gate: `vitest run` for touched features + `tsc`.
 - [ ] **US1 checkpoint**: gates green; commit `feat(042): US1 store→TanStack Query`.
 

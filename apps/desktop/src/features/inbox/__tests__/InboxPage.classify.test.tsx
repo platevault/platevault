@@ -19,7 +19,16 @@
  */
 
 import { render, screen, fireEvent, waitFor, act } from '@testing-library/react';
+import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
+import type { ReactNode } from 'react';
 import { describe, it, expect, vi, beforeEach } from 'vitest';
+
+// ── QueryClient wrapper ────────────────────────────────────────────────────
+// Each call creates a FRESH QueryClient so tests are isolated.
+function withQueryClient(ui: ReactNode) {
+  const qc = new QueryClient({ defaultOptions: { queries: { retry: false } } });
+  return <QueryClientProvider client={qc}>{ui}</QueryClientProvider>;
+}
 
 // ── Hoist mocks ────────────────────────────────────────────────────────────
 
@@ -49,7 +58,10 @@ vi.mock('@/shared/toast', () => ({
   useToasts: () => ({ toasts: [], dismiss: vi.fn() }),
 }));
 
-// Mock the store so we can inject classification directly.
+// Mock the store so we can inject classification directly without real Query
+// network calls. useInboxReclassify is kept real so InboxDetail can call it
+// (it uses useQueryClient internally — the withQueryClient wrapper provides
+// the provider that satisfies that requirement).
 const mockClassifyState: { data: unknown; loading: boolean; error: string | null } = {
   data: null,
   loading: false,
@@ -118,6 +130,7 @@ const sampleItem: InboxItemSummary = {
 };
 
 // ── Tests: ActionSidebar ──────────────────────────────────────────────────
+// ActionSidebar is a pure presentational component — no QueryClient needed.
 
 import { ActionSidebar } from '../ActionSidebar';
 import { InboxDetail } from '../InboxDetail';
@@ -136,7 +149,7 @@ describe('ActionSidebar', () => {
         onDestructiveDestinationChange={vi.fn()}
         onConfirm={vi.fn()}
         onOpenExistingPlan={vi.fn()}
-      />,
+      />
     );
     expect(screen.getByRole('button', { name: /generate split plan/i })).toBeInTheDocument();
   });
@@ -153,7 +166,7 @@ describe('ActionSidebar', () => {
         onDestructiveDestinationChange={vi.fn()}
         onConfirm={vi.fn()}
         onOpenExistingPlan={vi.fn()}
-      />,
+      />
     );
     expect(screen.getByRole('button', { name: /confirm to inventory/i })).toBeInTheDocument();
   });
@@ -170,7 +183,7 @@ describe('ActionSidebar', () => {
         onDestructiveDestinationChange={vi.fn()}
         onConfirm={vi.fn()}
         onOpenExistingPlan={vi.fn()}
-      />,
+      />
     );
     expect(screen.getByTestId('inbox-confirm-btn')).toBeDisabled();
   });
@@ -188,7 +201,7 @@ describe('ActionSidebar', () => {
         onDestructiveDestinationChange={vi.fn()}
         onConfirm={vi.fn()}
         onOpenExistingPlan={onOpen}
-      />,
+      />
     );
     const btn = screen.getByRole('button', { name: /open existing plan/i });
     expect(btn).toBeInTheDocument();
@@ -208,23 +221,24 @@ describe('ActionSidebar', () => {
         onDestructiveDestinationChange={vi.fn()}
         onConfirm={vi.fn()}
         onOpenExistingPlan={vi.fn()}
-      />,
+      />
     );
     expect(screen.getByText(/1 file.*need.*review/i)).toBeInTheDocument();
   });
 });
 
 // ── Tests: InboxDetail ────────────────────────────────────────────────────
+// InboxDetail uses useInboxReclassify which calls useQueryClient — needs wrapper.
 
 describe('InboxDetail', () => {
   it('renders breakdown rows from mixed classify response', () => {
-    render(
+    render(withQueryClient(
       <InboxDetail
         item={sampleItem}
         rootAbsolutePath="/astro/inbox"
         classification={mixedClassification}
-      />,
-    );
+      />
+    ));
     // Breakdown pills are inside the breakdown section, distinct from dropdown options
     const pills = screen.getAllByText('light');
     expect(pills.length).toBeGreaterThanOrEqual(1);
@@ -234,13 +248,13 @@ describe('InboxDetail', () => {
   });
 
   it('renders "Needs review" section for unclassified files', () => {
-    render(
+    render(withQueryClient(
       <InboxDetail
         item={sampleItem}
         rootAbsolutePath="/astro/inbox"
         classification={mixedClassification}
-      />,
-    );
+      />
+    ));
     // Section title contains "Needs review (1)"
     expect(screen.getAllByText(/needs review/i).length).toBeGreaterThanOrEqual(1);
     // Override picker has the file-specific data-testid
@@ -255,13 +269,13 @@ describe('InboxDetail', () => {
       appliedCount: 1,
     });
 
-    render(
+    render(withQueryClient(
       <InboxDetail
         item={sampleItem}
         rootAbsolutePath="/astro/inbox"
         classification={mixedClassification}
-      />,
-    );
+      />
+    ));
 
     // Select a frame type for the unclassified file
     fireEvent.change(screen.getByTestId('override-select-mystery.fits'), {
@@ -281,13 +295,13 @@ describe('InboxDetail', () => {
   });
 
   it('renders destination preview from breakdown', () => {
-    render(
+    render(withQueryClient(
       <InboxDetail
         item={sampleItem}
         rootAbsolutePath="/astro/inbox"
         classification={singleTypeClassification}
-      />,
-    );
+      />
+    ));
     expect(screen.getByText('NGC7000/Ha/2025-10-10/light/')).toBeInTheDocument();
   });
 });
@@ -332,7 +346,7 @@ describe('InboxList', () => {
         onFilterTypeChange={vi.fn()}
         groupBy="none"
         onGroupByChange={vi.fn()}
-      />,
+      />
     );
     expect(screen.getByTestId('inbox-item-item-fits')).toBeInTheDocument();
     expect(screen.getByText('classified')).toBeInTheDocument();
@@ -348,7 +362,7 @@ describe('InboxList', () => {
         onFilterTypeChange={vi.fn()}
         groupBy="none"
         onGroupByChange={vi.fn()}
-      />,
+      />
     );
     expect(screen.queryByTestId('inbox-item-item-fits')).not.toBeInTheDocument();
     expect(screen.getByTestId('inbox-item-item-video')).toBeInTheDocument();
@@ -365,7 +379,7 @@ describe('InboxList', () => {
         onFilterTypeChange={vi.fn()}
         groupBy="none"
         onGroupByChange={vi.fn()}
-      />,
+      />
     );
     fireEvent.click(screen.getByTestId('inbox-item-item-video'));
     expect(onSelect).toHaveBeenCalledWith(1);
@@ -408,7 +422,7 @@ describe('Confirm payload and toast', () => {
         onDestructiveDestinationChange={vi.fn()}
         onConfirm={onConfirm}
         onOpenExistingPlan={vi.fn()}
-      />,
+      />
     );
 
     await act(async () => {
@@ -452,7 +466,7 @@ describe('Confirm payload and toast', () => {
         onDestructiveDestinationChange={vi.fn()}
         onConfirm={onConfirm}
         onOpenExistingPlan={vi.fn()}
-      />,
+      />
     );
 
     await act(async () => {
@@ -505,7 +519,7 @@ describe('Confirm payload and toast', () => {
         onDestructiveDestinationChange={vi.fn()}
         onConfirm={onConfirm}
         onOpenExistingPlan={vi.fn()}
-      />,
+      />
     );
 
     await act(async () => {

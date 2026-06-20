@@ -1,11 +1,10 @@
 import { useState, useMemo } from 'react';
 import { Checkbox } from '@base-ui-components/react/checkbox';
-import { useQuery, createQueryStore } from '@/data/store';
+import { useQuery } from '@tanstack/react-query';
+import { queryKeys } from '@/data/queryKeys';
 import { listSessions } from '@/api/commands';
 
 import { formatIntegration } from '@/lib/format';
-
-const sessionsStore = createQueryStore(() => listSessions());
 
 export interface StepSourcesData {
   selectedSessionIds: string[];
@@ -17,7 +16,10 @@ export interface StepSourcesProps {
 }
 
 export function StepSources({ data, onChange }: StepSourcesProps) {
-  const { data: sessions, loading } = useQuery(sessionsStore);
+  const { data: sessions, isFetching: loading } = useQuery({
+    queryKey: queryKeys.sessions.all(),
+    queryFn: () => listSessions(),
+  });
   const [filterTarget, setFilterTarget] = useState('');
   const [filterFilter, setFilterFilter] = useState('');
 

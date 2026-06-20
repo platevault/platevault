@@ -97,7 +97,7 @@ import { SetupWizard } from '@/features/setup/SetupWizard';
 // ─── Data Layer ──────────────────────────────────────────────────────────────
 
 import { usePreference, usePreferences, getPreferences, setPreference } from '@/data/preferences';
-import { useQuery, createQueryStore } from '@/data/store';
+import { queryKeys } from '@/data/queryKeys';
 
 // ─── API Types ───────────────────────────────────────────────────────────────
 
@@ -183,8 +183,7 @@ export type SmokeCheck = {
   usePreferences: typeof usePreferences;
   getPreferences: typeof getPreferences;
   setPreference: typeof setPreference;
-  useQuery: typeof useQuery;
-  createQueryStore: typeof createQueryStore;
+  queryKeys: typeof queryKeys;
   // Type imports to verify they resolve
   _types: {
     PillProps: PillProps;
