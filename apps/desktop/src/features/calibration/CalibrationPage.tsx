@@ -17,7 +17,7 @@ import { useStaleSelectionCleanup } from '@/lib/use-stale-selection';
 import { MastersList } from './MastersList';
 import { MasterDetail } from './MasterDetail';
 import { useCalibrationMasters, useCalibrationSettings } from './useCalibration';
-import type { CalibrationMaster } from '@/bindings/types';
+import type { CalibrationMaster_Serialize as CalibrationMaster } from '@/bindings/index';
 
 // ── Contextual toolbar actions for the selected master ────────────────────────
 
@@ -27,7 +27,7 @@ interface ContextualAction {
 }
 
 function masterActions(master: CalibrationMaster, agingThresholdDays: number): ContextualAction[] {
-  const isAging = master.age_days > agingThresholdDays;
+  const isAging = master.ageDays > agingThresholdDays;
   const actions: ContextualAction[] = [{ label: 'Use in project', variant: 'primary' }];
   if (isAging) actions.push({ label: 'Replace master', variant: 'danger' });
   actions.push({ label: 'Reveal in Explorer' });
@@ -54,7 +54,7 @@ export function CalibrationPage() {
   const darks = masters.filter((m) => m.kind === 'dark').length;
   const flats = masters.filter((m) => m.kind === 'flat').length;
   const bias = masters.filter((m) => m.kind === 'bias').length;
-  const aging = masters.filter((m) => m.age_days > agingThresholdDays).length;
+  const aging = masters.filter((m) => m.ageDays > agingThresholdDays).length;
 
   const subtitle = loading
     ? 'Loading…'

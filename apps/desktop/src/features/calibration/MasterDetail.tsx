@@ -3,7 +3,7 @@
  *
  * Shows master fingerprint facts (from the real CalibrationMaster DTO) and
  * the ranked match candidates panel (from calibration.match.suggest using the
- * master's source_session_id as the anchor session).
+ * master's sourceSessionId as the anchor session).
  *
  * The calibration.match.suggest contract targets *light* sessions, not master
  * sessions. The MatchCandidatesPanel below is surfaced here so that when a user
@@ -12,7 +12,7 @@
  * ProjectDetail.
  */
 
-import type { CalibrationMaster } from '@/bindings/types';
+import type { CalibrationMaster_Serialize as CalibrationMaster } from '@/bindings/index';
 import {
   DetailPane,
   DetailHeader,
@@ -52,10 +52,10 @@ interface Props {
 // ── Component ─────────────────────────────────────────────────────────────────
 
 export function MasterDetail({ master, prefillSuggestion, agingThresholdDays }: Props) {
-  // Use source_session_id as the session anchor for suggest.
+  // Use sourceSessionId as the session anchor for suggest.
   // This is the calibration session that produced the master — we use it
   // to find which other masters would match the same fingerprint.
-  const sessionId = master?.source_session_id ?? undefined;
+  const sessionId = master?.sourceSessionId ?? undefined;
 
   const { response, loading: suggestLoading, error: suggestError, refresh } = useCalibrationSuggest(sessionId);
   const { assigning, assign } = useCalibrationAssign();
@@ -80,8 +80,8 @@ export function MasterDetail({ master, prefillSuggestion, agingThresholdDays }: 
     );
   }
 
-  const isAging1Year = master.age_days >= 365;
-  const isAgingWarn = master.age_days > agingThresholdDays && !isAging1Year;
+  const isAging1Year = master.ageDays >= 365;
+  const isAgingWarn = master.ageDays > agingThresholdDays && !isAging1Year;
   const kindStr = master.kind.toString().toLowerCase().replace('_', ' ');
 
   const fp = master.fingerprint;
@@ -89,19 +89,19 @@ export function MasterDetail({ master, prefillSuggestion, agingThresholdDays }: 
     { key: 'kind', label: 'Kind', value: kindStr },
     { key: 'camera', label: 'Camera', value: fp.camera },
     { key: 'gain', label: 'Gain', value: String(fp.gain) },
-    { key: 'exposure', label: 'Exposure', value: `${fp.exposure_s}s` },
+    { key: 'exposure', label: 'Exposure', value: `${fp.exposureS}s` },
   ];
-  if (fp.temp_c != null) {
-    properties.push({ key: 'temp', label: 'Temperature', value: `${fp.temp_c}°C` });
+  if (fp.tempC != null) {
+    properties.push({ key: 'temp', label: 'Temperature', value: `${fp.tempC}°C` });
   }
   if (fp.filter) {
     properties.push({ key: 'filter', label: 'Filter', value: fp.filter });
   }
-  if (fp.sensor_mode) {
-    properties.push({ key: 'sensor_mode', label: 'Sensor mode', value: fp.sensor_mode });
+  if (fp.sensorMode) {
+    properties.push({ key: 'sensor_mode', label: 'Sensor mode', value: fp.sensorMode });
   }
   properties.push({ key: 'binning', label: 'Binning', value: fp.binning });
-  properties.push({ key: 'size', label: 'Size', value: fmtBytes(master.size_bytes) });
+  properties.push({ key: 'size', label: 'Size', value: fmtBytes(master.sizeBytes) });
 
   return (
     <DetailPane fill>
@@ -116,18 +116,18 @@ export function MasterDetail({ master, prefillSuggestion, agingThresholdDays }: 
           <>
             <Pill variant={kindVariant(kindStr)}>{kindStr.toUpperCase()}</Pill>
             {isAging1Year && <Pill variant="danger">aging &gt; 1 year</Pill>}
-            {isAgingWarn && <Pill variant="warn">aging {master.age_days}d</Pill>}
+            {isAgingWarn && <Pill variant="warn">aging {master.ageDays}d</Pill>}
           </>
         }
-        subtitle={`${kindStr} · ${fmtBytes(master.size_bytes)}`}
+        subtitle={`${kindStr} · ${fmtBytes(master.sizeBytes)}`}
       />
 
       <MetricLine
         metrics={[
-          { value: fmtBytes(master.size_bytes), label: 'on disk' },
-          { value: `${master.age_days}d`, label: 'age' },
-          { value: (master.used_by_session_ids ?? []).length, label: 'sessions' },
-          { value: (master.used_by_project_ids ?? []).length, label: 'projects' },
+          { value: fmtBytes(master.sizeBytes), label: 'on disk' },
+          { value: `${master.ageDays}d`, label: 'age' },
+          { value: (master.usedBySessionIds ?? []).length, label: 'sessions' },
+          { value: (master.usedByProjectIds ?? []).length, label: 'projects' },
         ]}
       />
 
@@ -142,15 +142,15 @@ export function MasterDetail({ master, prefillSuggestion, agingThresholdDays }: 
               <div style={{ display: 'flex', flexDirection: 'column', gap: 'var(--alm-sp-1)', fontSize: 'var(--alm-text-xs)' }}>
                 <div style={{ color: 'var(--alm-text-secondary)' }}>
                   <span style={{ color: 'var(--alm-text-faint)' }}>Sessions matched</span>{' '}
-                  <strong>{(master.used_by_session_ids ?? []).length}</strong>
+                  <strong>{(master.usedBySessionIds ?? []).length}</strong>
                 </div>
                 <div style={{ color: 'var(--alm-text-secondary)' }}>
                   <span style={{ color: 'var(--alm-text-faint)' }}>Projects linked</span>{' '}
-                  <strong>{(master.used_by_project_ids ?? []).length}</strong>
+                  <strong>{(master.usedByProjectIds ?? []).length}</strong>
                 </div>
                 <div style={{ color: 'var(--alm-text-secondary)' }}>
                   <span style={{ color: 'var(--alm-text-faint)' }}>Created</span>{' '}
-                  {master.created_at.split('T')[0]}
+                  {master.createdAt.split('T')[0]}
                 </div>
               </div>
             </RailCard>
