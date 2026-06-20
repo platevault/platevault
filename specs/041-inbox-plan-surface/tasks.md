@@ -100,9 +100,9 @@
 **Goal**: clearly labelled, well-placed destructive-destination control in the plan surface, default Archive.
 **Independent test**: plan with a destructive action shows the labelled control defaulting to Archive; switching to Trash routes destructive files to system trash, audited.
 
-- [ ] T041 [US7] Frontend: move the destructive-destination (Archive/System-Trash) control into the in-context plan panel (`PlanPanel.tsx`), clearly labelled with an at-point-of-use explanation, default Archive; remove the orphaned radios from the dropped right sidebar (`ActionSidebar.tsx`).
-- [ ] T042 [US7] Ensure `inbox.confirm`/plan carries the chosen `destructive_destination` through to plan items and audit; default archive; never permanent-delete without a recoverable step.
-- [ ] T043 [P] [US7] Tests: destructive-destination selection flows into plan items + audit (`-p app_core`); Vitest for the control default/labels.
+- [X] T041 [US7] Frontend: move the destructive-destination (Archive/System-Trash) control into the in-context plan panel (`PlanPanel.tsx`), clearly labelled with an at-point-of-use explanation, default Archive; remove the orphaned radios from the dropped right sidebar (`ActionSidebar.tsx`).
+- [X] T042 [US7] Ensure `inbox.confirm`/plan carries the chosen `destructive_destination` through to plan items and audit; default archive; never permanent-delete without a recoverable step.
+- [X] T043 [P] [US7] Tests: destructive-destination selection flows into plan items + audit (`-p app_core`); Vitest for the control default/labels.
 
 ## Phase 10: Polish & cross-cutting
 
