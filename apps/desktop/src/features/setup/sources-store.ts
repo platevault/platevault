@@ -8,6 +8,7 @@ const STORAGE_KEY = 'alm-setup-wizard-state';
 // category that covers darks, flats, and bias frames together.
 export type SourceKind = 'light_frames' | 'calibration' | 'project' | 'inbox';
 export type ScanDepth = 'recursive' | 'single';
+export type OrganizationState = 'organized' | 'unorganized';
 
 export const ALL_SOURCE_KINDS: SourceKind[] = [
   'light_frames',
@@ -31,6 +32,10 @@ export interface SourceEntry {
   path: string;
   kind: SourceKind;
   scanDepth: ScanDepth;
+  /** Organization state for this source (spec 041 R-7).
+   *  Inbox kind is always 'unorganized'. Non-inbox defaults to 'organized' (local-first safe default).
+   */
+  organizationState: OrganizationState;
 }
 
 /** Flat array of source entries — replaces the old per-kind object shape. */
@@ -79,14 +84,23 @@ export function loadSources(): SourcesState {
     if (raw) {
       const parsed = JSON.parse(raw);
       if (Array.isArray(parsed?.sources)) {
-        return parsed.sources.filter(
-          (e: unknown): e is SourceEntry =>
+        // Accept persisted entries; supply organizationState default for
+      // entries written before this field existed (backward compat).
+      return parsed.sources
+        .filter(
+          (e: unknown): e is Omit<SourceEntry, 'organizationState'> & { organizationState?: OrganizationState } =>
             typeof e === 'object' &&
             e !== null &&
             typeof (e as SourceEntry).path === 'string' &&
             typeof (e as SourceEntry).kind === 'string' &&
             ALL_SOURCE_KINDS.includes((e as SourceEntry).kind),
-        );
+        )
+        .map((e) => ({
+          ...e,
+          organizationState: e.kind === 'inbox'
+            ? 'unorganized' as OrganizationState
+            : (e.organizationState ?? 'organized'),
+        }));
       }
     }
   } catch {
@@ -133,14 +147,19 @@ export function checkDeduplication(
   };
 }
 
-/** Add a source entry, returning updated state. */
+/** Add a source entry, returning updated state.
+ *  Inbox kind is always forced to 'unorganized'; non-inbox defaults to 'organized'.
+ */
 export function addSource(
   sources: SourcesState,
   kind: SourceKind,
   path: string,
   scanDepth: ScanDepth = 'recursive',
+  organizationState?: OrganizationState,
 ): SourcesState {
-  return [...sources, { path, kind, scanDepth }];
+  const state: OrganizationState =
+    kind === 'inbox' ? 'unorganized' : (organizationState ?? 'organized');
+  return [...sources, { path, kind, scanDepth, organizationState: state }];
 }
 
 /** Remove a source entry by index, returning updated state. */
@@ -220,6 +239,9 @@ export async function flushToDB(sources: SourcesState): Promise<FlushResult> {
         // Backend RegisterSourceRequest is camelCase — must be `scanDepth`,
         // not `scan_depth`, or the whole batch arg fails to deserialize.
         scanDepth: s.scanDepth,
+        // organizationState is required by the backend contract (spec 041 R-7).
+        // Inbox is always unorganized; non-inbox carries the user's explicit choice.
+        organizationState: s.kind === 'inbox' ? 'unorganized' : s.organizationState,
       })),
     });
 

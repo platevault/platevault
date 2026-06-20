@@ -399,6 +399,8 @@ export interface BatchSourceEntry {
   path: string;
   // Backend RegisterSourceRequest is camelCase — must be `scanDepth`.
   scanDepth: string;
+  /** Required by the backend contract (spec 041 R-7). 'organized' | 'unorganized'. */
+  organizationState: string;
 }
 
 export interface BatchRegisterResult {

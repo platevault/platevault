@@ -544,6 +544,9 @@ export const commands = {
 	/**
 	 *  `roots.register.batch` — register multiple source directories at once.
 	 * 
+	 *  Enforces that `inbox` kind sources are always `unorganized`, overriding
+	 *  any value supplied by the frontend (spec 041 R-7).
+	 * 
 	 *  # Errors
 	 *  Returns `Err(String)` on catastrophic failure; per-item errors are in the response.
 	 */
