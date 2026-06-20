@@ -21,6 +21,7 @@ import {
   inboxPlanCancel,
   listOpenInboxPlans,
   applySelectedInboxPlans,
+  inboxStats,
 } from '@/api/commands';
 import type {
   InboxClassifyResponse,
@@ -37,6 +38,9 @@ import type {
   InboxOpenPlansResponse,
   InboxPlanAction,
   PlanApplyResponse,
+  InboxStatsResponse,
+  InboxStatsPerType,
+  InboxStatsTotals,
 } from '@/api/commands';
 
 export type {
@@ -54,6 +58,9 @@ export type {
   InboxOpenPlansResponse,
   InboxPlanAction,
   PlanApplyResponse,
+  InboxStatsResponse,
+  InboxStatsPerType,
+  InboxStatsTotals,
 };
 
 // ── Parameterised stores ──────────────────────────────────────────────────────
@@ -481,4 +488,45 @@ export function useApplySelectedInboxPlans() {
   );
 
   return { ...state, applySelected };
+}
+
+// ── Inbox stats hook (spec 041, US6 T039) ────────────────────────────────────
+
+interface InboxStatsState {
+  data: InboxStatsResponse | null;
+  loading: boolean;
+  error: string | null;
+}
+
+/**
+ * Load aggregate per-type frame counts across all active inbox items.
+ * Mirrors `useOpenInboxPlans`: a useState + useEffect + cancelled-flag pattern
+ * keyed by a monotonic `epoch`. Call `refresh()` to re-fetch.
+ */
+export function useInboxStats() {
+  const [epoch, setEpoch] = useState(0);
+  const [state, setState] = useState<InboxStatsState>({
+    data: null,
+    loading: true,
+    error: null,
+  });
+
+  useEffect(() => {
+    let cancelled = false;
+    setState((s) => ({ ...s, loading: true, error: null }));
+    inboxStats()
+      .then((resp) => {
+        if (!cancelled) setState({ data: resp, loading: false, error: null });
+      })
+      .catch((e: unknown) => {
+        if (!cancelled) setState({ data: null, loading: false, error: String(e) });
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [epoch]);
+
+  const refresh = useCallback(() => setEpoch((n) => n + 1), []);
+
+  return { ...state, refresh };
 }

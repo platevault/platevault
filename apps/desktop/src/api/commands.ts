@@ -45,6 +45,9 @@ import type {
   InboxPlanCancelResponse,
   InboxPlanView,
   PlanApplyResponse,
+  InboxStatsResponse,
+  InboxStatsPerType,
+  InboxStatsTotals,
 } from '@/bindings/index';
 export type {
   InboxClassifyRequest,
@@ -69,6 +72,9 @@ export type {
   InboxPlanCancelResponse,
   InboxPlanView,
   PlanApplyResponse,
+  InboxStatsResponse,
+  InboxStatsPerType,
+  InboxStatsTotals,
 };
 
 import type {
@@ -814,6 +820,11 @@ export async function applySelectedInboxPlans(
  */
 export async function inboxPlanCancel(inboxItemId: string): Promise<InboxPlanCancelResponse> {
   return unwrap(await commands.inboxPlanCancel(inboxItemId));
+}
+
+/** inbox.stats — aggregate per-type frame counts across all active inbox items (spec 041, US6). */
+export async function inboxStats(): Promise<InboxStatsResponse> {
+  return unwrap(await commands.inboxStats());
 }
 
 // ── Calibration matching commands (spec 007) ──────────────────────────────────

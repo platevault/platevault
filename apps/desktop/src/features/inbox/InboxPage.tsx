@@ -36,7 +36,9 @@ import {
   useInboxPlanCancel,
   useOpenInboxPlans,
   useApplySelectedInboxPlans,
+  useInboxStats,
 } from './store';
+import { InboxStatsSummary } from './InboxStatsSummary';
 import { PlanPanel } from './PlanPanel';
 import type { DestructiveDestination } from './PlanPanel';
 import type { FrameType } from '@/lib/route-contract';
@@ -54,6 +56,9 @@ export function InboxPage() {
     data: openPlansData,
     refresh: refreshOpenPlans,
   } = useOpenInboxPlans();
+
+  // spec 041 US6: aggregate inbox queue stats summary.
+  const { data: statsData } = useInboxStats();
   const openPlans = openPlansData?.plans ?? [];
   const totalActions = openPlansData?.totalActions ?? 0;
 
@@ -254,6 +259,8 @@ export function InboxPage() {
         }
         detail={
           <div className="alm-inbox-center" style={{ display: 'flex', flexDirection: 'column', height: '100%', minHeight: 0 }}>
+            {/* spec 041 US6: stats summary strip — always visible, never scrolls. */}
+            {statsData && <InboxStatsSummary stats={statsData} />}
             <div
               className="alm-inbox-center__detail"
               style={{ flex: '1 1 auto', minHeight: 0, overflowY: 'auto' }}
