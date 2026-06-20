@@ -702,6 +702,30 @@ pub async fn inbox_stats(pool: &SqlitePool) -> DbResult<Vec<InboxStatsRow>> {
         .collect())
 }
 
+/// Count distinct unacknowledged inbox folders that carry at least one
+/// classified file, across all frame types.
+///
+/// Unlike summing the per-type `folder_count` returned by [`inbox_stats`], this
+/// counts each folder once even when it contains multiple frame types (e.g.
+/// lights + darks), so it is the correct value for a "total folders in queue"
+/// figure. Uses the same unacknowledged-state predicate as `inbox_stats` and
+/// [`list_unacknowledged_across_roots`].
+///
+/// # Errors
+/// Returns [`DbError::Database`] on query failure.
+pub async fn count_distinct_inbox_folders(pool: &SqlitePool) -> DbResult<i64> {
+    let (count,): (i64,) = sqlx::query_as(
+        "SELECT COUNT(DISTINCT i.id)
+         FROM inbox_items i
+         JOIN inbox_classification_evidence ev ON ev.inbox_item_id = i.id
+         WHERE i.state IN ('pending_classification', 'classified', 'plan_open')
+           AND COALESCE(ev.manual_override, ev.frame_type) IS NOT NULL",
+    )
+    .fetch_one(pool)
+    .await?;
+    Ok(count)
+}
+
 // ── Plan link CRUD ────────────────────────────────────────────────────────────
 
 /// Insert a plan link, establishing the "open plan" invariant.
@@ -822,12 +846,14 @@ pub struct InboxListRow {
 }
 
 /// Return all `inbox_items` whose `state` is **unacknowledged**
-/// (`pending_classification` or `classified`) across every registered root,
-/// joined with the root's path so the UI can label/group by root.
+/// (`pending_classification`, `classified`, or `plan_open`) across every
+/// registered root, joined with the root's path so the UI can label/group by
+/// root.
 ///
-/// Items whose state is `plan_open` or `resolved` are excluded — the
-/// `resolved` state is the terminal acknowledged state; `plan_open` means the
-/// user has already acted and is awaiting plan application.
+/// `plan_open` IS included — spec 041 keeps items awaiting plan application on
+/// the plan surface so the user can review/apply them. Only the terminal
+/// `resolved` (acknowledged) state is excluded. `inbox_stats` uses the same
+/// predicate, so the queue list and the stats summary always agree.
 ///
 /// Results are ordered by root path then by relative path.
 /// Pass `limit` to cap the result set (FR-006 bounding).

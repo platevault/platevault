@@ -20,7 +20,15 @@ pub async fn inbox_stats(pool: &SqlitePool) -> Result<InboxStatsResponse, Contra
         ContractError::new("internal.database", e.to_string(), ErrorSeverity::Fatal, true)
     })?;
 
-    let mut total_folders: u32 = 0;
+    // Masters and images partition cleanly by frame type, so summing the
+    // per-type buckets is correct. Folders do NOT: a mixed light+dark folder
+    // appears in both per-type rows, so summing folder_count would double-count
+    // it. Use a distinct count for the folder total instead.
+    let total_folders =
+        u32::try_from(repo::count_distinct_inbox_folders(pool).await.map_err(|e| {
+            ContractError::new("internal.database", e.to_string(), ErrorSeverity::Fatal, true)
+        })?)
+        .unwrap_or(u32::MAX);
     let mut total_masters: u32 = 0;
     let mut total_images: u32 = 0;
 
@@ -30,7 +38,6 @@ pub async fn inbox_stats(pool: &SqlitePool) -> Result<InboxStatsResponse, Contra
             let folder_count = u32::try_from(r.folder_count).unwrap_or(u32::MAX);
             let master_count = u32::try_from(r.master_count).unwrap_or(u32::MAX);
             let image_count = u32::try_from(r.image_count).unwrap_or(u32::MAX);
-            total_folders = total_folders.saturating_add(folder_count);
             total_masters = total_masters.saturating_add(master_count);
             total_images = total_images.saturating_add(image_count);
             InboxStatsPerType { frame_type: r.frame_type, folder_count, master_count, image_count }
@@ -132,6 +139,63 @@ mod tests {
 
         assert_eq!(resp.totals.folders, 1);
         assert_eq!(resp.totals.masters, 0);
+        assert_eq!(resp.totals.images, 2);
+    }
+
+    /// A folder containing more than one frame type appears in each per-type
+    /// row, but `totals.folders` must count it ONCE (distinct), not sum the
+    /// per-type buckets. Regression guard for double-counting.
+    #[tokio::test]
+    async fn stats_totals_folders_distinct_for_mixed_type_folder() {
+        let db = test_db().await;
+        let pool = db.pool();
+
+        repo::insert_inbox_item(
+            pool,
+            &InsertInboxItem {
+                id: "item-mixed",
+                root_id: "root-1",
+                relative_path: "stats/mixed",
+                file_count: 2,
+                content_signature: Some("sig-mixed"),
+                lane: "fits",
+            },
+        )
+        .await
+        .unwrap();
+        repo::update_inbox_item_state(pool, "item-mixed", "classified").await.unwrap();
+
+        for (id, fname, ft, raw) in [
+            ("ev-mx-l", "stats/mixed/light_001.fits", "light", "Light Frame"),
+            ("ev-mx-d", "stats/mixed/dark_001.fits", "dark", "Dark Frame"),
+        ] {
+            repo::insert_evidence(
+                pool,
+                &InsertEvidence {
+                    id,
+                    inbox_item_id: "item-mixed",
+                    relative_file_path: fname,
+                    frame_type: Some(ft),
+                    evidence_source: "imagetyp_header",
+                    raw_value: Some(raw),
+                    unclassified: false,
+                    manual_override: None,
+                    is_master: false,
+                    master_detector: None,
+                },
+            )
+            .await
+            .unwrap();
+        }
+
+        let resp = inbox_stats(pool).await.unwrap();
+
+        assert_eq!(resp.per_type.len(), 2, "light + dark rows");
+        for row in &resp.per_type {
+            assert_eq!(row.folder_count, 1, "the single folder appears in each type row");
+        }
+        // The folder is ONE distinct folder despite two type rows.
+        assert_eq!(resp.totals.folders, 1, "mixed-type folder must not be double-counted");
         assert_eq!(resp.totals.images, 2);
     }
 }
