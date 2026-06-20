@@ -157,7 +157,7 @@ pub async fn confirm(
     })?;
 
     // Only include files that have a frame type (classified or manually overridden)
-    let plan_files: Vec<&persistence_db::repositories::inbox::InboxEvidenceRow> =
+    let mut plan_files: Vec<&persistence_db::repositories::inbox::InboxEvidenceRow> =
         evidence_rows.iter().filter(|ev| effective_frame_type(ev).is_some()).collect();
 
     if plan_files.is_empty() {
@@ -168,6 +168,18 @@ pub async fn confirm(
             false,
         ));
     }
+
+    // US5 (T036): order files by effective frame type so confirm emits one
+    // contiguous action group per type within a single plan (each type resolves
+    // to its own pattern-derived destination). A multi-type folder therefore
+    // auto-splits on confirm — there is no separate "split" command path; the
+    // `split` action just labels a confirm whose classification is `mixed`.
+    plan_files.sort_by(|a, b| {
+        effective_frame_type(a)
+            .unwrap_or("")
+            .cmp(effective_frame_type(b).unwrap_or(""))
+            .then_with(|| a.relative_file_path.cmp(&b.relative_file_path))
+    });
 
     // 8a. Look up the owning source's organization state (spec 041 US4, R-7).
     //
@@ -825,6 +837,199 @@ mod tests {
 
         assert_eq!(resp.items_total, 4);
         assert_eq!(resp.plan_state, "ready_for_review");
+    }
+
+    /// Helper: insert a classified inbox item with explicit per-file frame-type
+    /// evidence, returning nothing (panics on error). `files` is (frame_type,
+    /// filename, imagetyp_raw).
+    async fn setup_typed_item(
+        db: &Database,
+        item_id: &str,
+        sig: &str,
+        result: &str,
+        files: &[(&str, &str, &str)],
+    ) {
+        inbox_repo::insert_inbox_item(
+            db.pool(),
+            &InsertInboxItem {
+                id: item_id,
+                root_id: "root-1",
+                relative_path: "",
+                file_count: i64::try_from(files.len()).unwrap(),
+                content_signature: Some(sig),
+                lane: "fits",
+            },
+        )
+        .await
+        .unwrap();
+
+        inbox_repo::upsert_classification(
+            db.pool(),
+            &UpsertClassification {
+                inbox_item_id: item_id,
+                result,
+                frame_type: None,
+                content_signature: sig,
+                unclassified_file_count: 0,
+            },
+        )
+        .await
+        .unwrap();
+
+        for (ft, fname, raw) in files {
+            let ev_id = format!("ev-{item_id}-{fname}");
+            inbox_repo::insert_evidence(
+                db.pool(),
+                &InsertEvidence {
+                    id: &ev_id,
+                    inbox_item_id: item_id,
+                    relative_file_path: fname,
+                    frame_type: Some(ft),
+                    evidence_source: "imagetyp_header",
+                    raw_value: Some(raw),
+                    unclassified: false,
+                    manual_override: None,
+                    is_master: false,
+                    master_detector: None,
+                },
+            )
+            .await
+            .unwrap();
+        }
+    }
+
+    fn dest_dir(it: &persistence_db::repositories::plans::PlanItemRow) -> String {
+        std::path::Path::new(&it.to_relative_path)
+            .parent()
+            .map(|p| p.to_string_lossy().into_owned())
+            .unwrap_or_default()
+    }
+
+    /// US5 (T036/T037): confirming a multi-type folder auto-produces one
+    /// contiguous action group per frame type, each with its own pattern-resolved
+    /// destination — in a single confirm, no separate split step.
+    #[tokio::test]
+    async fn confirm_mixed_emits_per_type_action_groups() {
+        let tmp = tempfile::tempdir().unwrap();
+        for (fname, imagetyp, date) in [
+            ("light_001.fits", "Light Frame", "2025-10-10T22:00:00"),
+            ("light_002.fits", "Light Frame", "2025-10-10T22:05:00"),
+            ("dark_001.fits", "Dark Frame", "2025-10-10T20:00:00"),
+            ("dark_002.fits", "Dark Frame", "2025-10-10T20:05:00"),
+        ] {
+            let (object, filter) = if imagetyp == "Light Frame" {
+                (Some("NGC7000"), Some("Ha"))
+            } else {
+                (None, None)
+            };
+            write_fits(tmp.path(), fname, imagetyp, object, filter, Some(date));
+        }
+
+        let db = test_db().await;
+        setup_typed_item(
+            &db,
+            "item-pertype",
+            "sig-pertype",
+            "mixed",
+            &[
+                ("light", "light_001.fits", "Light Frame"),
+                ("light", "light_002.fits", "Light Frame"),
+                ("dark", "dark_001.fits", "Dark Frame"),
+                ("dark", "dark_002.fits", "Dark Frame"),
+            ],
+        )
+        .await;
+
+        let resp = confirm(
+            db.pool(),
+            ConfirmRequest {
+                inbox_item_id: "item-pertype".to_owned(),
+                action: "split".to_owned(),
+                content_signature: "sig-pertype".to_owned(),
+                destructive_destination: None,
+                root_absolute_path: tmp.path().to_owned(),
+            },
+        )
+        .await
+        .unwrap();
+
+        let mut items =
+            persistence_db::repositories::plans::list_plan_items(db.pool(), &resp.plan_id)
+                .await
+                .unwrap();
+        assert_eq!(items.len(), 4);
+
+        // One destination group per frame type.
+        let dirs: std::collections::BTreeSet<String> = items.iter().map(dest_dir).collect();
+        assert_eq!(
+            dirs.len(),
+            2,
+            "mixed folder must resolve to one destination group per frame type, got {dirs:?}"
+        );
+
+        // Groups are contiguous (AABB, not ABAB): exactly one dir transition in
+        // item_index order proves confirm emitted grouped per-type actions.
+        items.sort_by_key(|it| it.item_index);
+        let seq: Vec<String> = items.iter().map(dest_dir).collect();
+        let transitions = seq.windows(2).filter(|w| w[0] != w[1]).count();
+        assert_eq!(
+            transitions, 1,
+            "per-type actions must be grouped contiguously, got sequence {seq:?}"
+        );
+    }
+
+    /// US5 (T037): a single-type folder produces exactly one action group.
+    #[tokio::test]
+    async fn confirm_single_type_emits_one_action_group() {
+        let tmp = tempfile::tempdir().unwrap();
+        write_fits(
+            tmp.path(),
+            "light_001.fits",
+            "Light Frame",
+            Some("NGC7000"),
+            Some("Ha"),
+            Some("2025-10-10T22:00:00"),
+        );
+        write_fits(
+            tmp.path(),
+            "light_002.fits",
+            "Light Frame",
+            Some("NGC7000"),
+            Some("Ha"),
+            Some("2025-10-10T22:05:00"),
+        );
+
+        let db = test_db().await;
+        setup_typed_item(
+            &db,
+            "item-single",
+            "sig-single",
+            "single_type",
+            &[
+                ("light", "light_001.fits", "Light Frame"),
+                ("light", "light_002.fits", "Light Frame"),
+            ],
+        )
+        .await;
+
+        let resp = confirm(
+            db.pool(),
+            ConfirmRequest {
+                inbox_item_id: "item-single".to_owned(),
+                action: "confirm".to_owned(),
+                content_signature: "sig-single".to_owned(),
+                destructive_destination: None,
+                root_absolute_path: tmp.path().to_owned(),
+            },
+        )
+        .await
+        .unwrap();
+
+        let items = persistence_db::repositories::plans::list_plan_items(db.pool(), &resp.plan_id)
+            .await
+            .unwrap();
+        let dirs: std::collections::BTreeSet<String> = items.iter().map(dest_dir).collect();
+        assert_eq!(dirs.len(), 1, "single-type folder must yield exactly one action group");
     }
 
     /// Prove that light/dark/flat frames resolve to DISTINCT destination path prefixes
