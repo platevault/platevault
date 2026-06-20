@@ -5,7 +5,8 @@
 # run here (not in the WSL dev sandbox). Caching keeps iteration fast:
 #   - sccache caches ALL crate compilation (incl. workspace) -> test-only edits
 #     are near-instant rebuilds.
-#   - tauri-driver is installed prebuilt via cargo-binstall (no source compile).
+#   - tauri-driver is installed prebuilt via taiki-e/install-action (no source
+#     compile; the action owns binary placement, PATH, and a version cache).
 name: Real-UI E2E
 
 on:
@@ -56,19 +57,14 @@ jobs:
           node-version: 20
           cache: pnpm
 
+      # taiki-e/install-action manages the tauri-driver binary directly: it
+      # handles download, bin placement on PATH, and a version-keyed cache.
+      # A hand-rolled `cargo binstall || cargo install` step skipped reinstall
+      # on a warm rust-cache (metadata said "installed" but the binary was gone)
+      # -> the wdio spike's `spawn("tauri-driver")` failed with ENOENT.
       - uses: taiki-e/install-action@v2
         with:
-          tool: cargo-binstall
-      - name: Install tauri-driver (prebuilt)
-        # Swatinem/rust-cache restores binstall's install metadata (~/.cargo's
-        # .crates2.json) but NOT the cargo bin dir, so on a warm cache binstall
-        # reports "already installed" and skips the download while the actual
-        # ~/.cargo/bin/tauri-driver binary is absent -> the wdio spike's
-        # `spawn("tauri-driver")` fails with ENOENT. Force the install so the
-        # binary is materialized, and ensure the bin dir is on PATH.
-        run: |
-          cargo binstall -y --force tauri-driver || cargo install tauri-driver --locked --force
-          echo "${CARGO_HOME:-$HOME/.cargo}/bin" >> "$GITHUB_PATH"
+          tool: tauri-driver@2.0.6
 
       - name: Install JS deps
         run: pnpm install --frozen-lockfile
