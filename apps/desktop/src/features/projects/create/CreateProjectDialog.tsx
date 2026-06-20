@@ -21,6 +21,8 @@
  */
 
 import { useState, useCallback } from 'react';
+import { useForm, Controller } from 'react-hook-form';
+import { zodResolver } from '@hookform/resolvers/zod';
 import { Dialog } from '@base-ui-components/react/dialog';
 import { Btn, RadioGroup, Pill } from '@/ui';
 import type { RadioOption } from '@/ui';
@@ -29,6 +31,12 @@ import { listProjects008 } from '@/api/commands';
 import type { TargetSuggestion } from '@/api/commands';
 import { TargetSearch } from '@/components';
 import type { ProjectCreateResult } from '@/bindings/index';
+import {
+  createProjectFormSchema,
+  type CreateProjectFormValues,
+  MAX_NAME_LEN,
+  MAX_NOTES_LEN,
+} from '@/features/projects/schemas';
 
 // ── Constants ────────────────────────────────────────────────────────────────
 
@@ -36,9 +44,6 @@ const TOOL_OPTIONS: RadioOption[] = [
   { value: 'PixInsight', label: 'PixInsight', desc: 'WBPP, StarAlignment, integration' },
   { value: 'Siril', label: 'Siril', desc: 'Free open-source stacking' },
 ];
-
-const MAX_NAME_LEN = 120;
-const MAX_NOTES_LEN = 4096;
 
 // ── Props ────────────────────────────────────────────────────────────────────
 
@@ -51,96 +56,68 @@ export interface CreateProjectDialogProps {
 // ── Component ────────────────────────────────────────────────────────────────
 
 export function CreateProjectDialog({ open, onClose, onSuccess }: CreateProjectDialogProps) {
-  const [name, setName] = useState('');
-  const [tool, setTool] = useState('PixInsight');
-  const [path, setPath] = useState('');
-  const [notes, setNotes] = useState('');
   // spec 035 US1: selected canonical target (optional). The current
   // projects.create contract has no target field, so the selection is held in
   // local state for now; persisting the association requires a backend contract
   // field (tracked separately, not part of T013).
   const [target, setTarget] = useState<TargetSuggestion | null>(null);
-  const [submitting, setSubmitting] = useState(false);
-  const [fieldErrors, setFieldErrors] = useState<Record<string, string>>({});
   const [serverError, setServerError] = useState<string | null>(null);
+
+  const {
+    control,
+    register,
+    handleSubmit: rhfHandleSubmit,
+    reset,
+    setError,
+    formState: { errors, isSubmitting },
+  } = useForm<CreateProjectFormValues>({
+    resolver: zodResolver(createProjectFormSchema),
+    defaultValues: { name: '', tool: 'PixInsight', path: '', notes: '' },
+    mode: 'onSubmit',
+  });
 
   // Reset form when dialog opens/closes
   const handleOpenChange = useCallback(
     (isOpen: boolean) => {
       if (!isOpen) {
-        setName('');
-        setTool('PixInsight');
-        setPath('');
-        setNotes('');
+        reset({ name: '', tool: 'PixInsight', path: '', notes: '' });
         setTarget(null);
-        setFieldErrors({});
         setServerError(null);
-        setSubmitting(false);
         onClose();
       }
     },
-    [onClose],
+    [onClose, reset],
   );
 
-  // ── Client-side validation ──────────────────────────────────────────────────
-
-  async function validate(): Promise<boolean> {
-    const errors: Record<string, string> = {};
-
-    const trimmedName = name.trim();
-    if (!trimmedName) {
-      errors.name = 'Project name is required.';
-    } else if (trimmedName.length > MAX_NAME_LEN) {
-      errors.name = `Name must be ${MAX_NAME_LEN} characters or fewer.`;
-    } else {
-      // Live duplicate check: call list and scan names.
-      try {
-        const list = await listProjects008();
-        const dup = list.find((p) => p.name.toLowerCase() === trimmedName.toLowerCase());
-        if (dup) {
-          errors.name = 'A project with this name already exists.';
-        }
-      } catch {
-        // Non-fatal: let the server enforce uniqueness
-      }
-    }
-
-    if (!path.trim()) {
-      errors.path = 'Project folder path is required.';
-    }
-
-    if (!tool) {
-      errors.tool = 'Please select a processing tool.';
-    }
-
-    if (notes.length > MAX_NOTES_LEN) {
-      errors.notes = `Notes must be ${MAX_NOTES_LEN} characters or fewer.`;
-    }
-
-    setFieldErrors(errors);
-    return Object.keys(errors).length === 0;
-  }
-
   // ── Submit ──────────────────────────────────────────────────────────────────
+  // zod (via the resolver) covers the synchronous rules (name/path required,
+  // length caps, tool enum). The live duplicate check stays here because it hits
+  // the network; on a hit we attach the error to the `name` field, matching the
+  // pre-RHF behaviour and message.
 
-  async function handleSubmit(e: React.FormEvent) {
-    e.preventDefault();
-    if (submitting) return;
+  async function onValid(values: CreateProjectFormValues) {
+    const trimmedName = values.name.trim();
+    try {
+      const list = await listProjects008();
+      const dup = list.find((p) => p.name.toLowerCase() === trimmedName.toLowerCase());
+      if (dup) {
+        setError('name', { type: 'duplicate', message: 'A project with this name already exists.' });
+        return;
+      }
+    } catch {
+      // Non-fatal: let the server enforce uniqueness
+    }
 
-    const valid = await validate();
-    if (!valid) return;
-
-    setSubmitting(true);
     setServerError(null);
 
     try {
       const result = await callCreateProject({
         requestId: crypto.randomUUID(),
-        name: name.trim(),
-        tool: tool as 'PixInsight' | 'Siril',
-        path: path.trim(),
+        name: trimmedName,
+        tool: values.tool,
+        path: values.path.trim(),
         initialSources: [],
-        notes: notes.trim() || undefined,
+        notes: values.notes.trim() || undefined,
         canonicalTargetId: target?.targetId ?? null,
       });
       handleOpenChange(false);
@@ -148,8 +125,6 @@ export function CreateProjectDialog({ open, onClose, onSuccess }: CreateProjectD
     } catch (err: unknown) {
       const code = typeof err === 'string' ? err : (err as Error)?.message ?? 'unknown';
       setServerError(mapErrorCode(code));
-    } finally {
-      setSubmitting(false);
     }
   }
 
@@ -162,7 +137,7 @@ export function CreateProjectDialog({ open, onClose, onSuccess }: CreateProjectD
           aria-label="Create project"
           style={{ maxWidth: 520 }}
         >
-          <form onSubmit={handleSubmit} noValidate>
+          <form onSubmit={rhfHandleSubmit(onValid)} noValidate>
             {/* Header */}
             <div className="alm-confirm-overlay__header">
               <Dialog.Title className="alm-confirm-overlay__title">New project</Dialog.Title>
@@ -182,16 +157,15 @@ export function CreateProjectDialog({ open, onClose, onSuccess }: CreateProjectD
                   className="alm-input"
                   type="text"
                   placeholder="e.g. NGC 7000 Narrowband"
-                  value={name}
-                  onChange={(e) => setName(e.target.value)}
                   maxLength={MAX_NAME_LEN + 10}
-                  aria-invalid={Boolean(fieldErrors.name)}
-                  aria-describedby={fieldErrors.name ? 'name-error' : undefined}
+                  aria-invalid={Boolean(errors.name)}
+                  aria-describedby={errors.name ? 'name-error' : undefined}
                   autoFocus
+                  {...register('name')}
                 />
-                {fieldErrors.name && (
+                {errors.name && (
                   <span id="name-error" role="alert" className="alm-field-error">
-                    {fieldErrors.name}
+                    {errors.name.message}
                   </span>
                 )}
               </div>
@@ -223,14 +197,20 @@ export function CreateProjectDialog({ open, onClose, onSuccess }: CreateProjectD
               {/* Tool */}
               <div>
                 <label className="alm-field-label">Processing tool</label>
-                <RadioGroup
-                  options={TOOL_OPTIONS}
-                  value={tool}
-                  onChange={setTool}
-                  aria-label="Processing tool"
+                <Controller
+                  control={control}
+                  name="tool"
+                  render={({ field }) => (
+                    <RadioGroup
+                      options={TOOL_OPTIONS}
+                      value={field.value}
+                      onChange={(v) => field.onChange(v)}
+                      aria-label="Processing tool"
+                    />
+                  )}
                 />
-                {fieldErrors.tool && (
-                  <span role="alert" className="alm-field-error">{fieldErrors.tool}</span>
+                {errors.tool && (
+                  <span role="alert" className="alm-field-error">{errors.tool.message}</span>
                 )}
               </div>
 
@@ -245,14 +225,13 @@ export function CreateProjectDialog({ open, onClose, onSuccess }: CreateProjectD
                   className="alm-input"
                   type="text"
                   placeholder="projects/my-project"
-                  value={path}
-                  onChange={(e) => setPath(e.target.value)}
-                  aria-invalid={Boolean(fieldErrors.path)}
-                  aria-describedby={fieldErrors.path ? 'path-error' : undefined}
+                  aria-invalid={Boolean(errors.path)}
+                  aria-describedby={errors.path ? 'path-error' : undefined}
+                  {...register('path')}
                 />
-                {fieldErrors.path && (
+                {errors.path && (
                   <span id="path-error" role="alert" className="alm-field-error">
-                    {fieldErrors.path}
+                    {errors.path.message}
                   </span>
                 )}
               </div>
@@ -264,10 +243,9 @@ export function CreateProjectDialog({ open, onClose, onSuccess }: CreateProjectD
                   id="cp-notes"
                   className="alm-input"
                   placeholder="Any notes about this project…"
-                  value={notes}
-                  onChange={(e) => setNotes(e.target.value)}
                   rows={3}
                   maxLength={MAX_NOTES_LEN + 10}
+                  {...register('notes')}
                 />
               </div>
 
@@ -279,11 +257,11 @@ export function CreateProjectDialog({ open, onClose, onSuccess }: CreateProjectD
 
             {/* Footer */}
             <div className="alm-confirm-overlay__footer">
-              <Btn type="button" variant="ghost" onClick={() => handleOpenChange(false)} disabled={submitting}>
+              <Btn type="button" variant="ghost" onClick={() => handleOpenChange(false)} disabled={isSubmitting}>
                 Cancel
               </Btn>
-              <Btn type="submit" variant="primary" disabled={submitting || !tool}>
-                {submitting ? 'Creating…' : 'Create project'}
+              <Btn type="submit" variant="primary" disabled={isSubmitting}>
+                {isSubmitting ? 'Creating…' : 'Create project'}
               </Btn>
             </div>
           </form>

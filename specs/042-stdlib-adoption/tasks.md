@@ -134,8 +134,8 @@ Frontend: `cd apps/desktop && npx tsc --noEmit` + `npx vitest run <feature>`. Ru
 
 ## Phase 9 — US5 Forms (react-hook-form + zod) (P2)
 
-- [ ] T170 Introduce RHF + zod resolver; zod schemas aligned to generated contract types.
-- [ ] T171 Migrate create/edit-project + wizard-step forms; backend still validates.
+- [X] T170 Introduce RHF + zod resolver; zod schemas aligned to generated contract types.
+- [X] T171 Migrate create/edit-project + wizard-step forms; backend still validates.
 - [ ] **US5 checkpoint**: commit `feat(042): US5 RHF + zod forms`.
 
 ## Phase 10 — US6 Reinvented frontend utilities (P3)
