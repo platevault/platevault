@@ -10,7 +10,7 @@
     "test": "vitest run",
     "test:watch": "vitest",
     "test:e2e": "playwright test",
-    "test:e2e:wdio": "node e2e/wdio/tauri-spike.mjs",
+    "test:e2e:wdio": "node e2e/wdio/run-all.mjs",
     "typecheck": "tsc --noEmit",
     "lint": "eslint src/ && bash ../../scripts/check-tokens.sh",
     "lint:eslint": "eslint src/",
