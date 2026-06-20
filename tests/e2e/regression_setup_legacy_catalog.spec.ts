@@ -86,7 +86,9 @@ test.describe("Regression · setup legacy catalogSettings", () => {
     await page.goto("/#/setup");
 
     await expect(page.getByText(/Something went wrong/i)).toHaveCount(0);
-    await expect(page.getByText(/catalog/i).first()).toBeVisible({ timeout: 10_000 });
+    // Step index 2 was rebranded "Catalogs" → "Configuration" (#259); the legacy
+    // `{ downloadAll: true }` catalogSettings must still render the step (no crash).
+    await expect(page.getByText(/Configuration/i).first()).toBeVisible({ timeout: 10_000 });
     expect(
       errors.filter((e) => /Cannot read properties of undefined/i.test(e)),
       `page errors: ${errors.join(" | ")}`,
