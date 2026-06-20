@@ -13,13 +13,13 @@
 
 ## Phase 2: Foundational (blocking prerequisites)
 
-- [ ] T002 Create migration `crates/persistence/db/migrations/0045_inbox_plan_surface.sql`: (a) `ALTER TABLE registered_sources ADD COLUMN organization_state TEXT NOT NULL DEFAULT 'unorganized' CHECK (organization_state IN ('organized','unorganized'))`; (b) backfill existing rows (inbox→unorganized, others→organized); (c) `CREATE TABLE inbox_file_metadata (...)` per data-model.md with `UNIQUE(inbox_item_id, relative_file_path)`; (d) add `override_filter`/`override_exposure_s`/`override_binning`/`override_stale` to `inbox_classification_evidence`; (e) extend `plan_items.action` CHECK to include `'catalogue'` (SQLite table-rebuild pattern).
-- [ ] T003 Add a migration test in `crates/persistence/db/` asserting 0045 applies cleanly on a fresh DB and on a 0044-seeded DB (backfill values correct). Validate `cargo test -p persistence_db`.
-- [ ] T004 [P] Extend source contracts in `crates/contracts/core/src/first_run.rs`: add `organization_state` to register (single + batch) request DTOs and to the source summary; add a `SetSourceOrganizationState` request/response. Add validation error code `source.invalid_organization_state`.
-- [ ] T005 [P] Extend inbox contracts in `crates/contracts/core/src/inbox.rs`: add per-file metadata DTO (`InboxFileMetadata`), extend reclassify override DTO with optional `filter`/`exposure_s`/`binning`, add `InboxStats` DTO, add in-context plan DTOs (`InboxPlanView`, plan action with `catalogue`), add `organization_state` + `actions_summary` to confirm response, add `is_master`/`override_stale` to per-file view.
-- [ ] T006 Add planner `Catalogue` action in `crates/fs/planner/src/lib.rs` (no source→dest move; `from_*` == `to_*`; `requires_destructive_confirm=false`) and thread it through plan-item construction.
-- [ ] T007 Add executor catalogue op in `crates/fs/executor/src/ops/catalogue_op.rs` (no filesystem mutation; emits the apply signal for app/core to upsert `file_record` + audit), wire into `run.rs` dispatch. Validate `cargo test -p fs_planner -p fs_executor`.
-- [ ] T008 Regenerate Tauri bindings (`apps/desktop/src/bindings/index.ts`) from the updated contracts; verify the new DTO fields appear in camelCase. `cd apps/desktop && npx tsc --noEmit`.
+- [X] T002 Create migration `crates/persistence/db/migrations/0045_inbox_plan_surface.sql`: (a) `ALTER TABLE registered_sources ADD COLUMN organization_state TEXT NOT NULL DEFAULT 'unorganized' CHECK (organization_state IN ('organized','unorganized'))`; (b) backfill existing rows (inbox→unorganized, others→organized); (c) `CREATE TABLE inbox_file_metadata (...)` per data-model.md with `UNIQUE(inbox_item_id, relative_file_path)`; (d) add `override_filter`/`override_exposure_s`/`override_binning`/`override_stale` to `inbox_classification_evidence`; (e) extend `plan_items.action` CHECK to include `'catalogue'` (SQLite table-rebuild pattern).
+- [X] T003 Add a migration test in `crates/persistence/db/` asserting 0045 applies cleanly on a fresh DB and on a 0044-seeded DB (backfill values correct). Validate `cargo test -p persistence_db`.
+- [X] T004 [P] Extend source contracts in `crates/contracts/core/src/first_run.rs`: add `organization_state` to register (single + batch) request DTOs and to the source summary; add a `SetSourceOrganizationState` request/response. Add validation error code `source.invalid_organization_state`.
+- [X] T005 [P] Extend inbox contracts in `crates/contracts/core/src/inbox.rs`: add per-file metadata DTO (`InboxFileMetadata`), extend reclassify override DTO with optional `filter`/`exposure_s`/`binning`, add `InboxStats` DTO, add in-context plan DTOs (`InboxPlanView`, plan action with `catalogue`), add `organization_state` + `actions_summary` to confirm response, add `is_master`/`override_stale` to per-file view.
+- [X] T006 Add planner `Catalogue` action in `crates/fs/planner/src/lib.rs` (no source→dest move; `from_*` == `to_*`; `requires_destructive_confirm=false`) and thread it through plan-item construction.
+- [X] T007 Add executor catalogue op in `crates/fs/executor/src/ops/catalogue_op.rs` (no filesystem mutation; emits the apply signal for app/core to upsert `file_record` + audit), wire into `run.rs` dispatch. Validate `cargo test -p fs_planner -p fs_executor`.
+- [X] T008 Regenerate Tauri bindings (`apps/desktop/src/bindings/index.ts`) from the updated contracts; verify the new DTO fields appear in camelCase. `cd apps/desktop && npx tsc --noEmit`.
 
 **Checkpoint**: schema + contracts + planner/executor catalogue scaffolding compile; bindings regenerated.
 
@@ -32,7 +32,7 @@
 - [ ] T010 [US1] Add Tauri commands `inbox.plan` (list plan for item via `inbox_plan_links`), `inbox.plan.apply`, `inbox.plan.apply_all`, reusing the existing executor/audit/CAS apply path; map `plans.discard` for cancel. Files: `apps/desktop/src-tauri/src/commands/inbox.rs` (+ app/core use-cases).
 - [ ] T011 [US1] Staleness: surface CAS/`plan.stale` as a refuse-and-prompt-regenerate outcome from apply (FR-007); add app/core handling + error code.
 - [ ] T012 [US1] Regenerate bindings; add `commands.ts` wrappers for the new inbox.plan operations in `apps/desktop/src/api/commands.ts`.
-- [ ] T013 [P] [US1] Frontend: add an in-context plan panel component at the bottom of the inbox central area (`apps/desktop/src/features/inbox/PlanPanel.tsx`) listing actions + destination previews, with Apply / Cancel / Apply-all and a stale state.
+- [X] T013 [P] [US1] Frontend: add an in-context plan panel component at the bottom of the inbox central area (`apps/desktop/src/features/inbox/PlanPanel.tsx`) listing actions + destination previews, with Apply / Cancel / Apply-all and a stale state.
 - [ ] T014 [US1] Frontend: render planned items greyed with a "planned" badge in the list; keep them selectable (`InboxList.tsx`, `InboxPage.tsx`); remove the confirm→`/archive` navigation (`InboxPage.tsx:~106`), replacing it with the in-context panel.
 - [ ] T015 [P] [US1] Tests: app/core confirm-produces-plan + apply/cancel/apply-all + staleness (`-p app_core`); Vitest for PlanPanel + planned-state rendering (`apps/desktop/src/features/inbox/__tests__/`).
 
@@ -47,7 +47,7 @@
 - [ ] T017 [US2] Add `inbox.item.metadata` command + app/core use-case returning per-file effective metadata (override-if-present). Files: app/core inbox + `commands/inbox.rs`.
 - [ ] T018 [US2] Populate `inbox_classification_breakdown.destination_preview` at classify/confirm using `resolve_v1(active_pattern, effective_metadata)` (FR-024) instead of `None`.
 - [ ] T019 [US2] Regenerate bindings; `commands.ts` wrapper for `inbox.item.metadata`.
-- [ ] T020 [P] [US2] Frontend: restructure `InboxList.tsx` to a structured (no-pill) row layout following the standard sidebar layout (verify 1100×720, no overflow).
+- [X] T020 [P] [US2] Frontend: restructure `InboxList.tsx` to a structured (no-pill) row layout following the standard sidebar layout (verify 1100×720, no overflow).
 - [ ] T021 [US2] Frontend: multi-level grouping control + nested collapsible groups over target/frame-type/filter/exposure/date/source in `InboxList.tsx` (+ a small grouping state module); items missing a dimension under a "none" group.
 - [ ] T022 [P] [US2] Frontend: `InboxDetail.tsx` — per-file metadata table (image type, filter, exposure, binning, gain, temperature, object, date) and explicit mixed-folder composition (per-type counts) instead of a bare "mixed".
 - [ ] T023 [P] [US2] Tests: persistence metadata upsert (`-p persistence_db`); Vitest for grouping + metadata table + composition rendering.
