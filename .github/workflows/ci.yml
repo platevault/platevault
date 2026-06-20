@@ -4,8 +4,8 @@ name: CI
 # - integration: Layer-1 real-backend integration + lint + bindings-drift gate,
 #   REQUIRED on Windows, Linux, and macOS (FR-012).
 # - ui-e2e: fast mock-mode Playwright UI regression.
-# Real UI->IPC->backend E2E (WebdriverIO + tauri-driver) lives in e2e.yml; macOS
-# real-UI E2E remains deferred per research D4.
+# Real UI->IPC->backend E2E (thirtyfour + cargo-nextest + tauri-driver) lives in
+# e2e.yml; macOS real-UI E2E remains deferred per research D4.
 
 on:
   pull_request:
