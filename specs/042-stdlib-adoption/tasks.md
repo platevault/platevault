@@ -66,13 +66,19 @@ Frontend: `cd apps/desktop && npx tsc --noEmit` + `npx vitest run <feature>`. Ru
   variants (use the canonical mapper from US11 once available; otherwise enum directly).
 - [X] T115 Finish spec-037 tail: migrate `plans_list`/`plans_approve`/`plans_apply_real`
   (`commands.ts:170/322/328`) to `commands.*`; extend `commands.bindings-guard.test.ts`.
-- [ ] T116 (CB2) Make `packages/contracts` JSON-Schema derived from the same reflection +
-  add an agreement test (specta TS ↔ schema).
-  DEFERRED: the real CB2 target (deriving `packages/contracts` schemas from specta
-  reflection) is blocked by a JSON-Schema draft-version/structure mismatch between the
-  hand-maintained schemas and schemars output. Shipped only a tangential specta↔schema
-  drift-guard (`crates/contracts/core` agreement test + `schema-agreement-test` bin) that
-  does NOT fulfill CB2. Tracked for follow-up.
+- [ ] T116a (CB2 prereq, ITERATION) Upgrade `schemars` 0.8 → 1.x in workspace `Cargo.toml`
+  (resolves the draft-07 → draft-2020-12 dialect gap and the `uuid1` feature mapping); fix the
+  breaking `JsonSchema` derive API across `crates/domain/core`, `crates/audit`,
+  `crates/contracts/core`; keep existing `schema_for!` tests green. Blocks T116.
+  Sequence with US13 (high-risk, last).
+- [ ] T116 (CB2, RE-SCOPED by ITERATION — supersedes the ba13cfd draft-07 stopgap) Make
+  `packages/contracts` + the allowlisted per-spec contracts derive their JSON-Schema
+  (draft-2020-12) from the Rust reflection (schemars 1.x) via a generation step feeding
+  `packages/contracts/scripts/build-schemas.mjs`; annotate contract DTOs with `#[schemars(...)]`
+  to reproduce semantic richness (operation.name dotted-token regex, oneOf envelope, const
+  version pins, examples, descriptions); retire the hand-authored canonical `*.schema.json`
+  inputs; keep `ajv` runtime validation + `tests/contract/contract_schema_parity.rs` green;
+  satisfy the FR-005/SC-004 agreement test. Blocked-by T116a; sequence after US3–US16 with US13.
 - [X] T117 (CB4) Collapse `_Serialize`/`_Deserialize` aliasing into one generated module.
 - [X] T118 (C5) Add zod IPC-seam validation for dynamic/drift-prone payloads.
 - [ ] **US2 checkpoint**: gates green; commit `feat(042): US2 IPC boundary + ErrorCode + errMessage`.

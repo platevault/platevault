@@ -29,6 +29,10 @@ invariants are unchanged; only the enumerated defects are fixed.
   `moka`, `dashmap`; dev-only: `rstest`, `proptest`. `serde_json` already present.
   Several (`camino`, `byteorder`, `globset`, `itertools`) are already in `Cargo.lock`
   transitively.
+- **ITERATION (2026-06-21) — schemars major upgrade**: CB2/T116 full derivation requires
+  upgrading `schemars` **0.8 → 1.x** (emits draft-2020-12 to match the canonical contracts;
+  resolves the pinned-out `uuid1` feature mapping). Prerequisite task **T116a**; sequence with
+  US13 (high-risk, last).
 
 ## Constitution Check
 
@@ -152,6 +156,7 @@ Within each story, implement incrementally and keep the repo green at every comm
 | `camino` broad blast radius (US14) | Sequence late; verify on real Windows incl. long/UNC paths. |
 | Boundary retirement (US2, ~44 files) breaks mock mode | Keep the `commands.bindings-guard` test green; type the mock fixtures (US7 D2) so drift fails to compile. |
 | TanStack Query invalidation gaps (US1) | Port the documented invalidation map 1:1 to query keys; assert refresh in feature vitest. |
+| schemars 0.8→1.x major upgrade (CB2/T116a) is breaking across 3 crates | Land isolated + last (with US13); fix `JsonSchema` derive API per-crate; keep `schema_for!` snapshot tests + `contract_schema_parity` green; verify draft-2020-12 output matches the canonical schemas before retiring hand inputs. |
 
 ## Phase outputs
 
