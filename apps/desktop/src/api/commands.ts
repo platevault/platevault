@@ -109,6 +109,9 @@ import type {
   ManifestRevealRequest,
   ProjectNoteGetRequest,
   ProjectNoteGetResult,
+  // spec 041: per-source organization state (move vs catalogue).
+  OrganizationState,
+  SetSourceOrganizationStateResponse,
 } from '@/bindings/index';
 
 // IPC dispatch + the dev-tools recording override live in the shared switcher
@@ -267,6 +270,23 @@ export async function getSettings(args: { scope: string }): Promise<SettingsData
 
 export async function listRoots(): Promise<LibraryRoot[]> {
   return unwrap(await commands.rootsList()) as unknown as LibraryRoot[];
+}
+
+/**
+ * `sources.set_organization_state` — change a source's organization state
+ * (spec 041 US4). Affects only future confirms. Inbox sources may not be set
+ * to `organized` (the backend returns `source.invalid_organization_state`).
+ *
+ * Field names mirror the generated binding exactly (camelCase `sourceId` /
+ * `organizationState`); the binding wraps them into the invoke payload.
+ */
+export async function setSourceOrganizationState(args: {
+  sourceId: string;
+  organizationState: OrganizationState;
+}): Promise<SetSourceOrganizationStateResponse> {
+  return unwrap(
+    await commands.sourcesSetOrganizationState(args.sourceId, args.organizationState),
+  );
 }
 
 export async function listEquipment(): Promise<Equipment[]> {

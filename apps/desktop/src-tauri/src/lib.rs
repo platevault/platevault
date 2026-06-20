@@ -83,6 +83,7 @@ use crate::commands::protection::{
 use crate::commands::review::review_queue;
 use crate::commands::roots::{
     equipment_list, roots_list, roots_register, roots_remap, roots_remap_apply, scan_start,
+    sources_set_organization_state,
 };
 use crate::commands::search::search_global;
 use crate::commands::sessions::{
@@ -230,6 +231,7 @@ pub fn specta_builder() -> Builder<tauri::Wry> {
         roots_remap_apply,
         scan_start,
         equipment_list,
+        sources_set_organization_state,
         // first-run wizard (spec 003)
         firstrun_state,
         firstrun_complete,
@@ -418,6 +420,7 @@ pub fn specta_builder() -> Builder<tauri::Wry> {
         roots_remap_apply,
         scan_start,
         equipment_list,
+        sources_set_organization_state,
         // first-run wizard (spec 003)
         firstrun_state,
         firstrun_complete,

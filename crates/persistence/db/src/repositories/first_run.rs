@@ -122,7 +122,14 @@ pub async fn register_source(
     let created_at = now_iso();
     let created_via = resolve_created_via(pool).await?;
 
-    let org_state_str = organization_state_to_str(req.organization_state);
+    // Enforce inbox⇒unorganized invariant on write (spec 041, T029). Inbox
+    // sources are always relocated on confirm, never catalogued in place.
+    let effective_org_state = if matches!(req.kind, SourceKind::Inbox) {
+        OrganizationState::Unorganized
+    } else {
+        req.organization_state
+    };
+    let org_state_str = organization_state_to_str(effective_org_state);
     sqlx::query(
         "INSERT INTO registered_sources \
          (id, kind, path, kind_subtype, scan_depth, created_at, created_via, organization_state) \
@@ -144,7 +151,7 @@ pub async fn register_source(
         kind: req.kind,
         path: req.path.clone(),
         created_at,
-        organization_state: req.organization_state,
+        organization_state: effective_org_state,
     })
 }
 
@@ -253,6 +260,69 @@ pub async fn list_sources(pool: &SqlitePool) -> DbResult<Vec<RegisterSourceRespo
             organization_state: str_to_organization_state(&org_state),
         })
         .collect())
+}
+
+/// Read a source's organization state by its source/root id (spec 041, T029).
+///
+/// Returns `None` when no source row matches `source_id`. `inbox`-kind sources
+/// are always stored as `unorganized` (enforced on write), so the value read
+/// back here is authoritative for the per-file move-vs-catalogue decision.
+///
+/// # Errors
+///
+/// Returns [`DbError::Database`] on query failure.
+pub async fn get_source_organization_state(
+    pool: &SqlitePool,
+    source_id: &str,
+) -> DbResult<Option<OrganizationState>> {
+    let row: Option<(String,)> =
+        sqlx::query_as("SELECT organization_state FROM registered_sources WHERE id = ?")
+            .bind(source_id)
+            .fetch_optional(pool)
+            .await?;
+    Ok(row.map(|(s,)| str_to_organization_state(&s)))
+}
+
+/// Set a source's organization state by id (spec 041, T030 persistence half).
+///
+/// Enforces the invariant that `inbox`-kind sources are always `unorganized`:
+/// attempting to set an inbox source to `organized` returns
+/// [`DbError::CasFailed`] with the `source.invalid_organization_state` marker
+/// in the message (the app/core use-case maps this to the contract error code).
+///
+/// # Errors
+///
+/// - [`DbError::NotFound`] when no source row matches `source_id`.
+/// - [`DbError::CasFailed`] when attempting to set an inbox source to organized.
+/// - [`DbError::Database`] on query failure.
+pub async fn set_source_organization_state(
+    pool: &SqlitePool,
+    source_id: &str,
+    state: OrganizationState,
+) -> DbResult<()> {
+    // Load the source kind first so we can enforce inbox⇒unorganized.
+    let kind_row: Option<(String,)> =
+        sqlx::query_as("SELECT kind FROM registered_sources WHERE id = ?")
+            .bind(source_id)
+            .fetch_optional(pool)
+            .await?;
+    let Some((kind,)) = kind_row else {
+        return Err(DbError::NotFound(format!("registered_source not found: {source_id}")));
+    };
+
+    if kind == "inbox" && matches!(state, OrganizationState::Organized) {
+        return Err(DbError::CasFailed(
+            "source.invalid_organization_state: inbox sources must be unorganized".to_owned(),
+        ));
+    }
+
+    let state_str = organization_state_to_str(state);
+    sqlx::query("UPDATE registered_sources SET organization_state = ? WHERE id = ?")
+        .bind(state_str)
+        .bind(source_id)
+        .execute(pool)
+        .await?;
+    Ok(())
 }
 
 /// Remove a registered source by ID.
@@ -720,5 +790,105 @@ mod tests {
                 .await
                 .unwrap();
         assert_eq!(count_after.0, 0, "inbox items must be deleted with the source");
+    }
+
+    // ── spec 041 US4: organization-state read/write ──────────────────────────
+
+    #[tokio::test]
+    async fn inbox_source_always_unorganized_on_write() {
+        let pool = setup_db().await;
+        // Even if the caller requests `organized`, an inbox source is stored as
+        // `unorganized` (T029 invariant).
+        let resp = register_source(
+            &pool,
+            &RegisterSourceRequest {
+                kind: SourceKind::Inbox,
+                path: "/astro/inbox".to_owned(),
+                kind_subtype: None,
+                scan_depth: ScanDepth::Recursive,
+                organization_state: OrganizationState::Organized,
+            },
+        )
+        .await
+        .unwrap();
+        assert!(matches!(resp.organization_state, OrganizationState::Unorganized));
+
+        let read = get_source_organization_state(&pool, &resp.source_id).await.unwrap();
+        assert_eq!(read, Some(OrganizationState::Unorganized));
+    }
+
+    #[tokio::test]
+    async fn set_org_state_rejects_inbox_organized() {
+        let pool = setup_db().await;
+        let resp = register_source(
+            &pool,
+            &RegisterSourceRequest {
+                kind: SourceKind::Inbox,
+                path: "/astro/inbox".to_owned(),
+                kind_subtype: None,
+                scan_depth: ScanDepth::Recursive,
+                organization_state: OrganizationState::Unorganized,
+            },
+        )
+        .await
+        .unwrap();
+
+        let err =
+            set_source_organization_state(&pool, &resp.source_id, OrganizationState::Organized)
+                .await
+                .unwrap_err();
+        match err {
+            DbError::CasFailed(msg) => {
+                assert!(msg.contains("source.invalid_organization_state"), "got: {msg}");
+            }
+            other => panic!("expected CasFailed, got {other:?}"),
+        }
+
+        // State unchanged.
+        let read = get_source_organization_state(&pool, &resp.source_id).await.unwrap();
+        assert_eq!(read, Some(OrganizationState::Unorganized));
+    }
+
+    #[tokio::test]
+    async fn set_org_state_round_trips_for_non_inbox() {
+        let pool = setup_db().await;
+        let resp = register_source(
+            &pool,
+            &RegisterSourceRequest {
+                kind: SourceKind::LightFrames,
+                path: "/astro/lights".to_owned(),
+                kind_subtype: None,
+                scan_depth: ScanDepth::Recursive,
+                organization_state: OrganizationState::Organized,
+            },
+        )
+        .await
+        .unwrap();
+
+        // Flip organized → unorganized and back.
+        set_source_organization_state(&pool, &resp.source_id, OrganizationState::Unorganized)
+            .await
+            .unwrap();
+        assert_eq!(
+            get_source_organization_state(&pool, &resp.source_id).await.unwrap(),
+            Some(OrganizationState::Unorganized)
+        );
+
+        set_source_organization_state(&pool, &resp.source_id, OrganizationState::Organized)
+            .await
+            .unwrap();
+        assert_eq!(
+            get_source_organization_state(&pool, &resp.source_id).await.unwrap(),
+            Some(OrganizationState::Organized)
+        );
+    }
+
+    #[tokio::test]
+    async fn set_org_state_not_found() {
+        let pool = setup_db().await;
+        let err = set_source_organization_state(&pool, "nope", OrganizationState::Organized)
+            .await
+            .unwrap_err();
+        assert!(matches!(err, DbError::NotFound(_)));
     }
 }

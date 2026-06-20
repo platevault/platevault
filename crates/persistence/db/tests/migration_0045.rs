@@ -1,4 +1,5 @@
 //! Migration 0045 integration tests (spec 041, T003).
+#![allow(clippy::doc_markdown)]
 //!
 //! Asserts:
 //!   - Migration applies on a fresh in-memory DB without error.

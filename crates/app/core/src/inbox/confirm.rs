@@ -14,6 +14,7 @@
 
 use std::path::PathBuf;
 
+use contracts_core::first_run::OrganizationState;
 use contracts_core::settings::PatternPart as ContractPatternPart;
 use metadata_core::{v1_normalization_table, MetadataExtractor};
 use metadata_fits::FitsExtractor;
@@ -48,10 +49,17 @@ pub struct ConfirmResponse {
     pub plan_id: String,
     pub plan_state: String,
     pub items_total: usize,
-    /// True when the inbox item was a detected calibration master and was
-    /// registered directly to `calibration_session` + `calibration_fingerprint`
-    /// (Path 1 — no file move).  `plan_id` is empty string in this case.
+    /// Always `false` since spec 041 (US4): masters no longer register at
+    /// confirm time. Registration is relocated to plan-apply completion
+    /// (`plan_listener`), so confirming a master now produces a reviewable plan
+    /// like any other item. The field is retained for DTO compatibility.
     pub registered_as_master: bool,
+    /// Organization state of the source owning this inbox item (spec 041 R-7).
+    pub organization_state: OrganizationState,
+    /// Number of `move` plan items produced (unorganized provenance).
+    pub move_count: usize,
+    /// Number of `catalogue` plan items produced (organized provenance).
+    pub catalogue_count: usize,
 }
 
 // ── confirm ───────────────────────────────────────────────────────────────────
@@ -80,82 +88,17 @@ pub async fn confirm(
         )
     })?;
 
-    // 2. Fast path: detected calibration master (spec 040 US3, Path 1).
-    //
-    // Masters are already at their final path — register them directly to the
-    // calibration tables and resolve the inbox item as `resolved` without
-    // creating a filesystem plan.
-    if item.is_master_item != 0 {
-        // TOCTOU guard: validate signature even for masters.
-        if item.content_signature.as_deref() != Some(&req.content_signature) {
-            return Err(ContractError::new(
-                "classification.stale",
-                "Folder has changed since classification. Re-classify before confirming.",
-                ErrorSeverity::Blocking,
-                false,
-            ));
-        }
+    // Master metadata carry-to-apply (spec 041 US4/T031): the calibration
+    // master fields (`is_master_item`, `master_frame_type`, `master_exposure_s`,
+    // `master_filter`) already live on the `inbox_items` row. We deliberately do
+    // NOT stamp them onto the plan or plan items here. At apply completion the
+    // plan listener reloads the inbox item via the `inbox_plan_links` row and
+    // reads these fields directly to register the master (calibration_session +
+    // calibration_fingerprint). This is the lowest-risk mechanism — no new
+    // columns, no plan-item provenance encoding — and keeps masters on the exact
+    // same move/catalogue plan path as every other item (Constitution §II).
 
-        let frame_type_str = item.master_frame_type.as_deref().unwrap_or("dark");
-        let cal_kind = match frame_type_str {
-            "flat" => "flat",
-            "bias" => "bias",
-            _ => "dark",
-        };
-        let cal_type = match frame_type_str {
-            "flat" => "flat",
-            "bias" => "bias",
-            _ => "dark",
-        };
-
-        let session_id = Uuid::new_v4().to_string();
-        let session_key =
-            format!("{}-{}", cal_kind, item.master_frame_type.as_deref().unwrap_or("unknown"));
-
-        // Insert calibration_session.
-        sqlx::query(
-            "INSERT INTO calibration_session
-                (id, session_key, frame_ids, kind, state, created_at, source_inbox_item_id)
-             VALUES (?, ?, '[]', ?, 'confirmed', datetime('now'), ?)",
-        )
-        .bind(&session_id)
-        .bind(&session_key)
-        .bind(cal_kind)
-        .bind(&req.inbox_item_id)
-        .execute(pool)
-        .await
-        .map_err(|e| {
-            ContractError::new("internal.database", e.to_string(), ErrorSeverity::Fatal, true)
-        })?;
-
-        // Insert calibration_fingerprint (exposure, filter from master metadata).
-        sqlx::query(
-            "INSERT INTO calibration_fingerprint
-                (id, calibration_type, exposure_s, filter_name)
-             VALUES (?, ?, ?, ?)",
-        )
-        .bind(&session_id)
-        .bind(cal_type)
-        .bind(item.master_exposure_s)
-        .bind(item.master_filter.as_deref())
-        .execute(pool)
-        .await
-        .map_err(|e| {
-            ContractError::new("internal.database", e.to_string(), ErrorSeverity::Fatal, true)
-        })?;
-
-        // Mark inbox item as resolved (drops out of the unacknowledged list).
-        inbox_repo::update_inbox_item_state(pool, &req.inbox_item_id, "resolved").await.ok();
-
-        return Ok(ConfirmResponse {
-            plan_id: String::new(),
-            plan_state: String::new(),
-            items_total: 1,
-            registered_as_master: true,
-        });
-    }
-
-    // 3. Dedupe open plan (Ref: E1)
+    // 2. Dedupe open plan (Ref: E1)
     if let Some(link) = inbox_repo::get_plan_link(pool, &req.inbox_item_id).await.unwrap_or(None) {
         return Err(ContractError::new(
             "inbox.has.open.plan",
@@ -226,8 +169,20 @@ pub async fn confirm(
         ));
     }
 
-    // 8. Resolve destination paths for each file via the active pattern.
-    // Collect per-file (source_relative, destination_relative, item_name) triples.
+    // 8a. Look up the owning source's organization state (spec 041 US4, R-7).
+    //
+    // `Organized`   → catalogue-in-place (record where the file already is; no
+    //                 filesystem move; from_path == to_path == current path).
+    // `Unorganized` → move to the pattern-resolved destination.
+    //
+    // An inbox item shares one root, so this is uniform in practice; the loop
+    // below still decides per file so it composes with future mixed-provenance
+    // cases (R-8) without special-casing.
+    let org_state = crate::first_run::get_source_organization_state(pool, &item.root_id).await?;
+
+    // 8b. Resolve destination paths for each file via the active pattern.
+    // Collect per-file (source_relative, destination_relative, item_name, action)
+    // tuples. `action` is "catalogue" for organized provenance, "move" otherwise.
     //
     // `resolve_v1` returns `Ok(ResolveResult)` even when some tokens fall back
     // to their registry defaults (e.g. "unclassified" for target, "nofilter" for
@@ -238,7 +193,8 @@ pub async fn confirm(
     let fits_extractor = FitsExtractor;
     let xisf_extractor = XisfExtractor;
 
-    let mut resolved_items: Vec<(String, String, String)> = Vec::with_capacity(plan_files.len());
+    let mut resolved_items: Vec<(String, String, String, &'static str)> =
+        Vec::with_capacity(plan_files.len());
 
     for ev in &plan_files {
         let ft = effective_frame_type(ev).unwrap_or("unknown");
@@ -247,25 +203,48 @@ pub async fn confirm(
         let bundle =
             build_metadata_bundle(&abs_path, ft, &norm_table, &fits_extractor, &xisf_extractor);
 
-        match resolve_v1(&active_pattern, &bundle) {
-            Ok(result) => {
-                let dest = result.relative_path;
-                let filename =
-                    abs_path.file_name().and_then(|n| n.to_str()).unwrap_or("unknown.fits");
-                let dest_with_file = format!("{dest}/{filename}");
+        // Per-file move-vs-catalogue decision (spec 041 US4). Organized sources
+        // never move; the destination is the file's current location.
+        let file_org_state = org_state; // uniform per root today; per-file hook for R-8.
+
+        match file_org_state {
+            OrganizationState::Organized => {
+                // Catalogue-in-place: dest == source; no pattern resolution needed.
                 let basename =
                     ev.relative_file_path.rsplit('/').next().unwrap_or(&ev.relative_file_path);
                 let item_name = format!("[{}] {basename}", ft.to_uppercase());
-                resolved_items.push((ev.relative_file_path.clone(), dest_with_file, item_name));
-            }
-            Err(e) => {
-                return Err(ContractError::new(
-                    "pattern.unset",
-                    format!("Pattern resolution failed for '{}': {e:?}", ev.relative_file_path),
-                    ErrorSeverity::Blocking,
-                    false,
+                resolved_items.push((
+                    ev.relative_file_path.clone(),
+                    ev.relative_file_path.clone(),
+                    item_name,
+                    "catalogue",
                 ));
             }
+            OrganizationState::Unorganized => match resolve_v1(&active_pattern, &bundle) {
+                Ok(result) => {
+                    let dest = result.relative_path;
+                    let filename =
+                        abs_path.file_name().and_then(|n| n.to_str()).unwrap_or("unknown.fits");
+                    let dest_with_file = format!("{dest}/{filename}");
+                    let basename =
+                        ev.relative_file_path.rsplit('/').next().unwrap_or(&ev.relative_file_path);
+                    let item_name = format!("[{}] {basename}", ft.to_uppercase());
+                    resolved_items.push((
+                        ev.relative_file_path.clone(),
+                        dest_with_file,
+                        item_name,
+                        "move",
+                    ));
+                }
+                Err(e) => {
+                    return Err(ContractError::new(
+                        "pattern.unset",
+                        format!("Pattern resolution failed for '{}': {e:?}", ev.relative_file_path),
+                        ErrorSeverity::Blocking,
+                        false,
+                    ));
+                }
+            },
         }
     }
 
@@ -299,15 +278,22 @@ pub async fn confirm(
 
     // 11. Insert plan items — one per classified file, with resolved destinations.
     let items_total = resolved_items.len();
-    for (idx, (source_rel, dest_rel, item_name)) in resolved_items.iter().enumerate() {
+    let mut move_count = 0usize;
+    let mut catalogue_count = 0usize;
+    for (idx, (source_rel, dest_rel, item_name, action)) in resolved_items.iter().enumerate() {
         let item_id = Uuid::new_v4().to_string();
+
+        match *action {
+            "catalogue" => catalogue_count += 1,
+            _ => move_count += 1,
+        }
 
         let plan_item = plans_repo::InsertPlanItem {
             id: &item_id,
             plan_id: &plan_id,
             item_index: i64::try_from(idx).unwrap_or(i64::MAX),
             name: item_name,
-            action: "move",
+            action,
             from_root_id: Some(&item.root_id),
             from_relative_path: source_rel,
             to_root_id: Some(&item.root_id),
@@ -346,7 +332,12 @@ pub async fn confirm(
         plan_id,
         plan_state: "ready_for_review".to_owned(),
         items_total,
+        // spec 041 US4: masters no longer register at confirm; registration is
+        // relocated to plan-apply completion. Always false now.
         registered_as_master: false,
+        organization_state: org_state,
+        move_count,
+        catalogue_count,
     })
 }
 
@@ -1012,5 +1003,170 @@ mod tests {
         .unwrap_err();
 
         assert_eq!(err.code, "inbox.has.open.plan");
+    }
+
+    // ── spec 041 US4: per-source organization-state (move vs catalogue) ──────
+
+    /// Register a `registered_sources` row with an explicit organization state
+    /// so `get_source_organization_state` returns it for the inbox item's root.
+    async fn register_source_org_state(db: &Database, root_id: &str, kind: &str, org_state: &str) {
+        sqlx::query(
+            "INSERT INTO registered_sources
+                (id, kind, path, kind_subtype, scan_depth, created_at, created_via, organization_state)
+             VALUES (?, ?, '/tmp/src', NULL, 'recursive', '2026-01-01T00:00:00Z', 'first_run', ?)",
+        )
+        .bind(root_id)
+        .bind(kind)
+        .bind(org_state)
+        .execute(db.pool())
+        .await
+        .unwrap();
+    }
+
+    #[tokio::test]
+    async fn organized_source_emits_catalogue_actions() {
+        let tmp = tempfile::tempdir().unwrap();
+        write_fits(
+            tmp.path(),
+            "light_001.fits",
+            "Light Frame",
+            Some("M42"),
+            Some("Ha"),
+            Some("2025-10-10T22:00:00"),
+        );
+
+        let db = test_db().await;
+        register_source_org_state(&db, "root-1", "light_frames", "organized").await;
+        setup_classified_item(
+            &db,
+            "item-org",
+            "single_type",
+            Some("light"),
+            "sig-org",
+            &["light_001.fits"],
+        )
+        .await;
+
+        let resp = confirm(
+            db.pool(),
+            ConfirmRequest {
+                inbox_item_id: "item-org".to_owned(),
+                action: "confirm".to_owned(),
+                content_signature: "sig-org".to_owned(),
+                destructive_destination: None,
+                root_absolute_path: tmp.path().to_owned(),
+            },
+        )
+        .await
+        .unwrap();
+
+        assert_eq!(resp.catalogue_count, 1, "organized source → catalogue");
+        assert_eq!(resp.move_count, 0);
+        assert!(matches!(resp.organization_state, OrganizationState::Organized));
+
+        // Catalogue plan item: action == 'catalogue', from == to (no move).
+        let rows = sqlx::query_as::<_, (String, String, String)>(
+            "SELECT action, from_relative_path, to_relative_path FROM plan_items WHERE plan_id = ?",
+        )
+        .bind(&resp.plan_id)
+        .fetch_all(db.pool())
+        .await
+        .unwrap();
+        assert_eq!(rows.len(), 1);
+        assert_eq!(rows[0].0, "catalogue");
+        assert_eq!(rows[0].1, rows[0].2, "catalogue dest == source (in place)");
+        assert_eq!(rows[0].1, "light_001.fits");
+    }
+
+    #[tokio::test]
+    async fn unorganized_source_emits_move_actions() {
+        let tmp = tempfile::tempdir().unwrap();
+        write_fits(
+            tmp.path(),
+            "light_001.fits",
+            "Light Frame",
+            Some("M42"),
+            Some("Ha"),
+            Some("2025-10-10T22:00:00"),
+        );
+
+        let db = test_db().await;
+        register_source_org_state(&db, "root-1", "inbox", "unorganized").await;
+        setup_classified_item(
+            &db,
+            "item-unorg",
+            "single_type",
+            Some("light"),
+            "sig-unorg",
+            &["light_001.fits"],
+        )
+        .await;
+
+        let resp = confirm(
+            db.pool(),
+            ConfirmRequest {
+                inbox_item_id: "item-unorg".to_owned(),
+                action: "confirm".to_owned(),
+                content_signature: "sig-unorg".to_owned(),
+                destructive_destination: None,
+                root_absolute_path: tmp.path().to_owned(),
+            },
+        )
+        .await
+        .unwrap();
+
+        assert_eq!(resp.move_count, 1, "unorganized source → move");
+        assert_eq!(resp.catalogue_count, 0);
+        assert!(matches!(resp.organization_state, OrganizationState::Unorganized));
+
+        let rows = sqlx::query_as::<_, (String, String, String)>(
+            "SELECT action, from_relative_path, to_relative_path FROM plan_items WHERE plan_id = ?",
+        )
+        .bind(&resp.plan_id)
+        .fetch_all(db.pool())
+        .await
+        .unwrap();
+        assert_eq!(rows.len(), 1);
+        assert_eq!(rows[0].0, "move");
+        assert_ne!(rows[0].1, rows[0].2, "move dest != source (pattern-resolved)");
+    }
+
+    /// Absent source row → default Unorganized (conservative: never catalogue
+    /// in place by accident). Mixed provenance composes because the per-file
+    /// branch keys on the resolved org-state; an inbox item shares one root so
+    /// the result is uniform per confirm today.
+    #[tokio::test]
+    async fn absent_source_defaults_to_move() {
+        let tmp = tempfile::tempdir().unwrap();
+        write_fits(tmp.path(), "frame_000.fits", "Light Frame", None, None, None);
+
+        let db = test_db().await;
+        // No registered_sources row inserted for root-1.
+        setup_classified_item(
+            &db,
+            "item-absent",
+            "single_type",
+            Some("light"),
+            "sig-absent",
+            &["frame_000.fits"],
+        )
+        .await;
+
+        let resp = confirm(
+            db.pool(),
+            ConfirmRequest {
+                inbox_item_id: "item-absent".to_owned(),
+                action: "confirm".to_owned(),
+                content_signature: "sig-absent".to_owned(),
+                destructive_destination: None,
+                root_absolute_path: tmp.path().to_owned(),
+            },
+        )
+        .await
+        .unwrap();
+
+        assert_eq!(resp.move_count, 1);
+        assert_eq!(resp.catalogue_count, 0);
+        assert!(matches!(resp.organization_state, OrganizationState::Unorganized));
     }
 }

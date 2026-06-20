@@ -580,6 +580,16 @@ export const commands = {
 	 */
 	equipmentList: () => typedError<Equipment[], string>(__TAURI_INVOKE("equipment_list")),
 	/**
+	 *  `sources.set_organization_state` — change a source's organization state
+	 *  (spec 041, T030). Affects only future confirms; inbox sources may not be
+	 *  set to `organized`.
+	 * 
+	 *  # Errors
+	 *  Returns `Err(String)` on `source.invalid_organization_state`,
+	 *  `source.not_found`, or DB error.
+	 */
+	sourcesSetOrganizationState: (sourceId: string, organizationState: OrganizationState) => typedError<SetSourceOrganizationStateResponse, string>(__TAURI_INVOKE("sources_set_organization_state", { sourceId, organizationState })),
+	/**
 	 *  `firstrun.state` — get the current first-run wizard state.
 	 * 
 	 *  # Errors
@@ -5187,6 +5197,12 @@ export type SessionsGroupBy = "none" | "target" | "month" | "filter" | "train";
 
 /**  Sessions view mode. */
 export type SessionsView = "list" | "calendar";
+
+/**  Response payload for `sources.set_organization_state`. */
+export type SetSourceOrganizationStateResponse = {
+	sourceId: string,
+	organizationState: OrganizationState,
+};
 
 /**  Request DTO for `settings.source-override.set`. */
 export type SetSourceOverrideRequest = {

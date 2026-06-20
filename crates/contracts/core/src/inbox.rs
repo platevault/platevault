@@ -8,7 +8,7 @@
 //! Extended by spec 041 (inbox plan surface / phase 2):
 //!   - `InboxFileMetadata` / `inbox.item.metadata` (US2/FR-010)
 //!   - `InboxStats` / `inbox.stats` (US6/FR-021)
-//!   - `InboxReclassifyOverride` gains optional filter/exposure_s/binning (R-3)
+//!   - `InboxReclassifyOverride` gains optional `filter` / `exposure_s` / `binning` (R-3)
 //!   - `InboxConfirmResponse` gains `actions_summary` + `organization_state` (US4/US5)
 //!   - `InboxPlanView` / `inbox.plan` (US1/FR-003/FR-004)
 //!   - `InboxListItem` gains `organization_state` (spec 041)

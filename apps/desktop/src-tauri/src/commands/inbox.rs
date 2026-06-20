@@ -96,14 +96,22 @@ pub async fn inbox_confirm(
 
     let resp = confirm(&pool, use_case_req).await.map_err(|e| e.message)?;
 
+    let organization_state = match resp.organization_state {
+        contracts_core::first_run::OrganizationState::Organized => "organized",
+        contracts_core::first_run::OrganizationState::Unorganized => "unorganized",
+    };
+
     Ok(InboxConfirmResponse {
         plan_id: resp.plan_id,
         plan_state: resp.plan_state,
         items_total: u32::try_from(resp.items_total).unwrap_or(u32::MAX),
         registered_as_master: resp.registered_as_master,
-        // spec 041 fields — not yet populated by the use case (phase 3+)
-        actions_summary: None,
-        organization_state: None,
+        // spec 041 US4: per-source move-vs-catalogue breakdown.
+        actions_summary: Some(contracts_core::inbox::InboxConfirmActionsSummary {
+            move_count: u32::try_from(resp.move_count).unwrap_or(u32::MAX),
+            catalogue_count: u32::try_from(resp.catalogue_count).unwrap_or(u32::MAX),
+        }),
+        organization_state: Some(organization_state.to_owned()),
     })
 }
 

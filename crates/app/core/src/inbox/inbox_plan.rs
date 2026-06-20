@@ -2,8 +2,8 @@
 //!
 //! Entry points:
 //! - [`get_inbox_plan`]       — fetch the plan linked to an inbox item as `InboxPlanView`.
-//! - [`apply_inbox_plan`]     — auto-approve then apply the linked plan; on success marks
-//!                              the inbox item `resolved`.
+//! - [`apply_inbox_plan`]     — auto-approve then apply the linked plan; on
+//!   success marks the inbox item `resolved`.
 //! - [`apply_all_inbox_plans`]— apply every `plan_open` item's plan; per-plan results.
 //! - [`cancel_inbox_plan`]    — discard the linked plan; item returns to `classified`.
 //!
@@ -333,7 +333,7 @@ mod tests {
             card("SIMPLE  =                    T / file conforms to FITS standard"),
             card("BITPIX  =                   16 / number of bits per data pixel"),
             card("NAXIS   =                    0 / number of data axes"),
-            card(&format!("IMAGETYP= '{:<8}' / frame type", image_type)),
+            card(&format!("IMAGETYP= '{image_type:<8}' / frame type")),
             card("END"),
         ];
         for c in &cards {
@@ -423,13 +423,13 @@ mod tests {
     }
 
     /// Confirm an item (creates the plan, sets state to plan_open).
-    async fn do_confirm(db: &Database, item_id: &str, root_path: &PathBuf) -> String {
+    async fn do_confirm(db: &Database, item_id: &str, root_path: &std::path::Path) -> String {
         let req = ConfirmRequest {
             inbox_item_id: item_id.to_owned(),
             action: "confirm".to_owned(),
             content_signature: "sig-abc".to_owned(),
             destructive_destination: None,
-            root_absolute_path: root_path.clone(),
+            root_absolute_path: root_path.to_path_buf(),
         };
         let resp = confirm(db.pool(), req).await.unwrap();
         assert!(!resp.plan_id.is_empty(), "confirm must return a plan_id");
