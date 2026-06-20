@@ -3,7 +3,8 @@
  * Spec 008: works with ProjectSummaryDto (real DB shape) instead of fixtures.
  */
 
-import { useState, useMemo } from 'react';
+import { useMemo, useState } from 'react';
+import { Menu } from '@base-ui-components/react/menu';
 import { ListSidebar, ListItem } from '@/components';
 import { Pill } from '@/ui';
 import type { PillVariant } from '@/ui';
@@ -79,7 +80,6 @@ export function ProjectsList({
   loading = false,
 }: ProjectsListProps) {
   const [sortBy, setSortBy] = useState<SortBy>('updated');
-  const [filterOpen, setFilterOpen] = useState(false);
 
   const filtered = useMemo(() => {
     let sorted: typeof projects;
@@ -133,15 +133,15 @@ export function ProjectsList({
             <option value="name">Sort: name</option>
             <option value="sources">Sort: sources</option>
           </select>
-          {/* FR-022 / T055: multiselect lifecycle filter */}
-          <div style={{ position: 'relative' }}>
-            <button
+          {/* FR-022 / T055: multiselect lifecycle filter.
+              base-ui Menu provides click-outside dismiss + Escape-to-close +
+              focus management (replaces the prior hand-rolled dropdown, which
+              had neither). `closeOnClick={false}` keeps the menu open while the
+              user toggles multiple states. */}
+          <Menu.Root>
+            <Menu.Trigger
               className="alm-select"
-              type="button"
               aria-label="Filter lifecycle"
-              aria-expanded={filterOpen}
-              aria-haspopup="listbox"
-              onClick={() => setFilterOpen((o) => !o)}
               style={{ cursor: 'pointer', minWidth: 110, textAlign: 'left' }}
             >
               {lifecycle.length === 0
@@ -149,54 +149,43 @@ export function ProjectsList({
                 : lifecycle.length === 1
                   ? `State: ${LIFECYCLE_STATES.find((s) => s.value === lifecycle[0])?.label ?? lifecycle[0]}`
                   : `State: ${lifecycle.length} selected`}
-            </button>
-            {filterOpen && (
-              <div
-                role="listbox"
-                aria-multiselectable="true"
-                aria-label="Lifecycle states"
-                style={{
-                  position: 'absolute',
-                  top: '100%',
-                  left: 0,
-                  zIndex: 100,
-                  background: 'var(--alm-surface)',
-                  border: '1px solid var(--alm-border)',
-                  borderRadius: 'var(--alm-radius-sm)',
-                  padding: 'var(--alm-sp-1)',
-                  minWidth: 160,
-                  boxShadow: '0 4px 12px rgba(0,0,0,0.15)',
-                }}
-              >
-                <label
-                  style={{ display: 'flex', alignItems: 'center', gap: 6, padding: '3px 6px', cursor: 'pointer', fontSize: 'var(--alm-text-sm)' }}
-                >
-                  <input
-                    type="checkbox"
+            </Menu.Trigger>
+            <Menu.Portal>
+              <Menu.Positioner className="alm-menu__positioner" sideOffset={4} align="start">
+                <Menu.Popup className="alm-menu__popup" aria-label="Lifecycle states">
+                  <Menu.CheckboxItem
+                    className="alm-menu__item"
+                    closeOnClick={false}
                     checked={lifecycle.length === 0}
-                    onChange={(e) => { if (e.target.checked) onLifecycleChange([]); }}
+                    onCheckedChange={(checked) => {
+                      if (checked) onLifecycleChange([]);
+                    }}
                     aria-label="All states"
-                  />
-                  All
-                </label>
-                {LIFECYCLE_STATES.map((opt) => (
-                  <label
-                    key={opt.value}
-                    style={{ display: 'flex', alignItems: 'center', gap: 6, padding: '3px 6px', cursor: 'pointer', fontSize: 'var(--alm-text-sm)' }}
                   >
-                    <input
-                      type="checkbox"
-                      value={opt.value}
+                    <Menu.CheckboxItemIndicator className="alm-menu__indicator">
+                      &#x2713;
+                    </Menu.CheckboxItemIndicator>
+                    <span className="alm-menu__label">All</span>
+                  </Menu.CheckboxItem>
+                  {LIFECYCLE_STATES.map((opt) => (
+                    <Menu.CheckboxItem
+                      key={opt.value}
+                      className="alm-menu__item"
+                      closeOnClick={false}
                       checked={lifecycle.includes(opt.value)}
-                      onChange={(e) => handleLifecycleToggle(opt.value, e.target.checked)}
+                      onCheckedChange={(checked) => handleLifecycleToggle(opt.value, checked)}
                       aria-label={opt.label}
-                    />
-                    {opt.label}
-                  </label>
-                ))}
-              </div>
-            )}
-          </div>
+                    >
+                      <Menu.CheckboxItemIndicator className="alm-menu__indicator">
+                        &#x2713;
+                      </Menu.CheckboxItemIndicator>
+                      <span className="alm-menu__label">{opt.label}</span>
+                    </Menu.CheckboxItem>
+                  ))}
+                </Menu.Popup>
+              </Menu.Positioner>
+            </Menu.Portal>
+          </Menu.Root>
         </div>
       }
       footer={

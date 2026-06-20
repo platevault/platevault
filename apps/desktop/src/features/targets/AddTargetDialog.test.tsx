@@ -110,9 +110,9 @@ describe('AddTargetDialog', () => {
       expect(screen.getByText('M 31')).toBeInTheDocument();
     });
 
-    // Click the suggestion
+    // Click the suggestion (base-ui Combobox selects on click).
     const option = screen.getByRole('option', { name: /M 31/i });
-    fireEvent.mouseDown(option);
+    fireEvent.click(option);
 
     // Confirmation view should show selected target pill
     await waitFor(() => {
@@ -131,7 +131,8 @@ describe('AddTargetDialog', () => {
     });
 
     await waitFor(() => screen.getByRole('option', { name: /M 31/i }));
-    fireEvent.mouseDown(screen.getByRole('option', { name: /M 31/i }));
+    // base-ui Combobox selects an option on click (was a hand-rolled mousedown).
+    fireEvent.click(screen.getByRole('option', { name: /M 31/i }));
 
     await waitFor(() => screen.getByText('Change'));
 
@@ -159,7 +160,8 @@ describe('AddTargetDialog', () => {
       fireEvent.change(input, { target: { value: 'M 31' } });
     });
     await waitFor(() => screen.getByRole('option', { name: /M 31/i }));
-    fireEvent.mouseDown(screen.getByRole('option', { name: /M 31/i }));
+    // base-ui Combobox selects an option on click (was a hand-rolled mousedown).
+    fireEvent.click(screen.getByRole('option', { name: /M 31/i }));
     await waitFor(() => screen.getByText('Change'));
 
     await act(async () => {
@@ -182,7 +184,8 @@ describe('AddTargetDialog', () => {
       fireEvent.change(input, { target: { value: 'M 31' } });
     });
     await waitFor(() => screen.getByRole('option', { name: /M 31/i }));
-    fireEvent.mouseDown(screen.getByRole('option', { name: /M 31/i }));
+    // base-ui Combobox selects an option on click (was a hand-rolled mousedown).
+    fireEvent.click(screen.getByRole('option', { name: /M 31/i }));
     await waitFor(() => screen.getByText('Change'));
 
     await act(async () => {
@@ -206,7 +209,8 @@ describe('AddTargetDialog', () => {
       fireEvent.change(input, { target: { value: 'M 31' } });
     });
     await waitFor(() => screen.getByRole('option', { name: /M 31/i }));
-    fireEvent.mouseDown(screen.getByRole('option', { name: /M 31/i }));
+    // base-ui Combobox selects an option on click (was a hand-rolled mousedown).
+    fireEvent.click(screen.getByRole('option', { name: /M 31/i }));
     await waitFor(() => screen.getByText('Change'));
 
     await act(async () => {
@@ -227,7 +231,8 @@ describe('AddTargetDialog', () => {
       fireEvent.change(input, { target: { value: 'M 31' } });
     });
     await waitFor(() => screen.getByRole('option', { name: /M 31/i }));
-    fireEvent.mouseDown(screen.getByRole('option', { name: /M 31/i }));
+    // base-ui Combobox selects an option on click (was a hand-rolled mousedown).
+    fireEvent.click(screen.getByRole('option', { name: /M 31/i }));
     await waitFor(() => screen.getByText('Change'));
 
     fireEvent.click(screen.getByText('Change'));

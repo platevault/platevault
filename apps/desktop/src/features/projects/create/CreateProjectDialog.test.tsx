@@ -214,7 +214,8 @@ describe('CreateProjectDialog', () => {
     fireEvent.change(targetInput, { target: { value: 'andromeda' } });
     // Wait past the ~300ms debounce, then flush the search promise.
     const option = await screen.findByRole('option', {}, { timeout: 2000 });
-    fireEvent.mouseDown(option);
+    // base-ui Combobox selects an option on click (was a hand-rolled mousedown).
+    fireEvent.click(option);
 
     // Fill the required fields and submit.
     fireEvent.change(screen.getByLabelText(/project name/i), { target: { value: 'M31 Project' } });

@@ -24,11 +24,25 @@
  * Selecting a suggestion (mouse or keyboard) invokes `onSelect(suggestion)`,
  * exposing the canonical `targetId` so the caller can associate it.
  *
- * Accessibility: combobox + listbox/option ARIA, arrow-key navigation, Enter to
- * select, Escape to close.
+ * Accessibility & overlay behaviour (spec 042 / T161): the combobox is built on
+ * `@base-ui-components/react/combobox`. Base UI owns the combobox/listbox/option
+ * ARIA wiring, roving focus + arrow-key navigation, Enter-to-select,
+ * Escape-to-close, and click-outside dismissal — replacing the prior hand-rolled
+ * keydown / mousedown / `aria-activedescendant` glue. We drive it as a fully
+ * controlled, async-filtered combobox (`filter={null}`, controlled `items`,
+ * `open`, and `inputValue`), so the two-phase server pipeline above remains the
+ * single source of truth for the option list.
+ *
+ * Virtualization: Base UI's `virtualized` mode is paired with a
+ * `@tanstack/react-virtual` virtualizer driven off our own `suggestions` array.
+ * Because internal filtering is disabled (`filter={null}`), Base UI's filtered
+ * item list is exactly the array we pass, so the virtualizer and the combobox
+ * stay in lockstep without the (RC-internal) `useFilteredItems` hook. This keeps
+ * long-list performance from US3 while gaining Base UI's accessibility.
  */
 
-import { useCallback, useEffect, useId, useRef, useState } from 'react';
+import { useCallback, useEffect, useId, useMemo, useRef, useState } from 'react';
+import { Combobox } from '@base-ui-components/react/combobox';
 import { useVirtualizer } from '@tanstack/react-virtual';
 import {
   searchTargets,
@@ -142,7 +156,6 @@ export function TargetSearch({
 }: TargetSearchProps) {
   const generatedId = useId();
   const id = inputId ?? `tgt-search-${generatedId}`;
-  const listboxId = `${id}-listbox`;
   const typeFilterId = `${id}-type-filter`;
   const catalogFilterId = `${id}-catalog-filter`;
 
@@ -173,7 +186,6 @@ export function TargetSearch({
   const [loading, setLoading] = useState(false);
   const [resolving, setResolving] = useState(false);
   const [error, setError] = useState<string | null>(null);
-  const [activeIndex, setActiveIndex] = useState(-1);
   const [open, setOpen] = useState(false);
 
   // Cancel-in-flight: a monotonic generation counter. Each query bumps `gen`;
@@ -182,13 +194,14 @@ export function TargetSearch({
   // generation guard — not an AbortController — is the actual cancel mechanism.)
   const genRef = useRef(0);
   const debounceRef = useRef<ReturnType<typeof setTimeout> | null>(null);
-  const listRef = useRef<HTMLUListElement>(null);
+  const scrollRef = useRef<HTMLDivElement>(null);
 
-  // Virtualize the suggestion options. The `<ul role="listbox">` is the scroll
-  // element (height-capped via CSS); only the visible option window mounts.
+  // Virtualize the suggestion options. Because Base UI internal filtering is
+  // disabled (`filter={null}`), the combobox's filtered list equals our own
+  // `suggestions` array, so the virtualizer can be driven directly from it.
   const virtualizer = useVirtualizer({
     count: suggestions.length,
-    getScrollElement: () => listRef.current,
+    getScrollElement: () => scrollRef.current,
     estimateSize: () => OPTION_ESTIMATE,
     overscan: 6,
   });
@@ -224,7 +237,6 @@ export function TargetSearch({
         });
         if (!isCurrent()) return; // superseded — drop stale result
         setSuggestions(res.suggestions);
-        setActiveIndex(res.suggestions.length > 0 ? 0 : -1);
       } catch (err: unknown) {
         if (!isCurrent()) return;
         const code = typeof err === 'string' ? err : (err as Error)?.message ?? 'unknown';
@@ -285,7 +297,8 @@ export function TargetSearch({
   }, [query, runSearch]);
 
   const handleSelect = useCallback(
-    (s: TargetSuggestion) => {
+    (s: TargetSuggestion | null) => {
+      if (!s) return;
       onSelect(s);
       setOpen(false);
     },
@@ -325,217 +338,213 @@ export function TargetSearch({
     [query, onOverride, onSelect],
   );
 
-  function handleKeyDown(e: React.KeyboardEvent<HTMLInputElement>) {
-    if (suggestions.length === 0) return;
-    switch (e.key) {
-      case 'ArrowDown':
-        e.preventDefault();
-        setOpen(true);
-        setActiveIndex((i) => (i + 1) % suggestions.length);
-        break;
-      case 'ArrowUp':
-        e.preventDefault();
-        setActiveIndex((i) => (i <= 0 ? suggestions.length - 1 : i - 1));
-        break;
-      case 'Enter':
-        if (activeIndex >= 0 && activeIndex < suggestions.length) {
-          e.preventDefault();
-          handleSelect(suggestions[activeIndex]);
-        }
-        break;
-      case 'Escape':
-        e.preventDefault();
-        setActiveIndex(-1);
-        setOpen(false);
-        break;
-      default:
-        break;
-    }
-  }
-
   const showList = open && query.trim().length > 0;
-  const activeOptionId =
-    activeIndex >= 0 && activeIndex < suggestions.length ? `${id}-opt-${activeIndex}` : undefined;
 
-  // Keep the active option mounted + visible during keyboard navigation. The
-  // virtualizer only mounts the visible window, so an off-screen active option
-  // (referenced by `aria-activedescendant`) must be scrolled into view.
-  useEffect(() => {
-    if (activeIndex >= 0 && activeIndex < suggestions.length) {
-      virtualizer.scrollToIndex(activeIndex, { align: 'auto' });
-    }
-  }, [activeIndex, suggestions.length, virtualizer]);
+  // Keep the highlighted option mounted + visible during keyboard navigation.
+  // The virtualizer only mounts the visible window, so an off-screen highlighted
+  // option must be scrolled into view as Base UI moves the active index.
+  const handleItemHighlighted = useCallback(
+    (_value: TargetSuggestion | undefined, details: { index: number }) => {
+      if (details.index >= 0 && details.index < suggestions.length) {
+        virtualizer.scrollToIndex(details.index, { align: 'auto' });
+      }
+    },
+    [suggestions.length, virtualizer],
+  );
+
+  const totalSize = virtualizer.getTotalSize();
+  const virtualItems = virtualizer.getVirtualItems();
+
+  // Base UI uses `value` for selection. We keep the input independent of
+  // selection (selecting a target should not stuff its label into the box), so
+  // `value` stays null and we react via `onValueChange`.
+  const itemToStringLabel = useMemo(
+    () => (s: TargetSuggestion) => s.primaryDesignation,
+    [],
+  );
 
   return (
     <div className="alm-target-search">
-      <label
-        className={hideLabel ? 'alm-target-search__label--sr' : 'alm-field-label'}
-        htmlFor={id}
-      >
-        {label}
-      </label>
-      <input
-        id={id}
-        className="alm-input alm-target-search__input"
-        type="text"
-        role="combobox"
-        autoComplete="off"
-        spellCheck={false}
-        aria-expanded={showList}
-        aria-controls={listboxId}
-        aria-autocomplete="list"
-        aria-activedescendant={activeOptionId}
-        aria-describedby={error ? `${id}-error` : undefined}
-        placeholder={placeholder}
-        value={query}
-        autoFocus={autoFocus}
-        onChange={(e) => {
-          setQuery(e.target.value);
-          setOpen(true);
+      <Combobox.Root<TargetSuggestion>
+        items={suggestions}
+        // Selection stays uncontrolled: we react via `onValueChange` and keep
+        // the typed query as the input's source of truth (controlled
+        // `inputValue`), so choosing a target never overwrites what was typed.
+        onValueChange={handleSelect}
+        filter={null}
+        virtualized
+        modal={false}
+        open={showList}
+        onOpenChange={(nextOpen) => setOpen(nextOpen)}
+        inputValue={query}
+        onInputValueChange={(value, details) => {
+          // `item-press` fires when an item is selected; don't treat that as a
+          // user edit (it would otherwise blank/replace the query).
+          if (details.reason === 'item-press') return;
+          setQuery(value);
+          if (value.trim().length > 0) setOpen(true);
         }}
-        onFocus={() => setOpen(true)}
-        onKeyDown={handleKeyDown}
-      />
-
-      {showFilters && (
-        <div className="alm-target-search__filters" role="group" aria-label="Search filters">
-          <label className="alm-target-search__filter-label" htmlFor={typeFilterId}>
-            Type
-            <select
-              id={typeFilterId}
-              className="alm-select alm-target-search__filter-select"
-              value={typeSel}
-              onChange={(e) => setTypeSel(e.target.value as TargetObjectType | '')}
-            >
-              <option value="">All types</option>
-              {OBJECT_TYPES.map((t) => (
-                <option key={t} value={t}>
-                  {objectTypeLabel(t)}
-                </option>
-              ))}
-            </select>
-          </label>
-          <label className="alm-target-search__filter-label" htmlFor={catalogFilterId}>
-            Catalogue
-            <select
-              id={catalogFilterId}
-              className="alm-select alm-target-search__filter-select"
-              value={catalogSel}
-              onChange={(e) => setCatalogSel(e.target.value as TargetCatalogId | '')}
-            >
-              <option value="">All catalogues</option>
-              {CATALOG_IDS.map((c) => (
-                <option key={c} value={c}>
-                  {catalogLabel(c)}
-                </option>
-              ))}
-            </select>
-          </label>
-        </div>
-      )}
-
-      {error && (
-        <span id={`${id}-error`} role="alert" className="alm-field-error">
-          {error}
-        </span>
-      )}
-
-      {showList && (
-        <ul
-          id={listboxId}
-          ref={listRef}
-          role="listbox"
-          aria-label="Target suggestions"
-          className="alm-target-search__list alm-virtual-scroll"
-          data-virtual-scroll="true"
+        itemToStringLabel={itemToStringLabel}
+        onItemHighlighted={handleItemHighlighted}
+      >
+        <label
+          className={hideLabel ? 'alm-target-search__label--sr' : 'alm-field-label'}
+          htmlFor={id}
         >
-          {loading && suggestions.length === 0 && (
-            <li className="alm-target-search__status" aria-live="polite">
-              Searching…
-            </li>
-          )}
-          {!loading && !error && suggestions.length === 0 && !resolving && (
-            <li className="alm-target-search__status" aria-live="polite">
-              No matching targets.
-            </li>
-          )}
-          {suggestions.length > 0 && (
-            <div
-              className="alm-virtual-inner"
-              style={{ height: `${virtualizer.getTotalSize()}px`, position: 'relative' }}
-            >
-              {virtualizer.getVirtualItems().map((virtualRow) => {
-                const i = virtualRow.index;
-                const s = suggestions[i];
-                const secondary = s.commonName ?? s.matchedAlias ?? null;
-                return (
-                  <li
-                    key={s.targetId}
-                    id={`${id}-opt-${i}`}
-                    data-index={i}
-                    ref={virtualizer.measureElement}
-                    role="option"
-                    aria-selected={i === activeIndex}
-                    className={
-                      i === activeIndex
-                        ? 'alm-target-search__option alm-target-search__option--active'
-                        : 'alm-target-search__option'
-                    }
-                    style={{
-                      position: 'absolute',
-                      top: 0,
-                      left: 0,
-                      right: 0,
-                      transform: `translateY(${virtualRow.start}px)`,
-                    }}
-                    onMouseDown={(e) => {
-                      // Prevent the input blur from closing the list before select.
-                      e.preventDefault();
-                      handleSelect(s);
-                    }}
-                    onMouseEnter={() => setActiveIndex(i)}
+          {label}
+        </label>
+        <Combobox.Input
+          id={id}
+          className="alm-input alm-target-search__input"
+          autoComplete="off"
+          spellCheck={false}
+          aria-label={label}
+          aria-describedby={error ? `${id}-error` : undefined}
+          placeholder={placeholder}
+          autoFocus={autoFocus}
+          onFocus={() => {
+            if (query.trim().length > 0) setOpen(true);
+          }}
+        />
+
+        {showFilters && (
+          <div className="alm-target-search__filters" role="group" aria-label="Search filters">
+            <label className="alm-target-search__filter-label" htmlFor={typeFilterId}>
+              Type
+              <select
+                id={typeFilterId}
+                className="alm-select alm-target-search__filter-select"
+                value={typeSel}
+                onChange={(e) => setTypeSel(e.target.value as TargetObjectType | '')}
+              >
+                <option value="">All types</option>
+                {OBJECT_TYPES.map((t) => (
+                  <option key={t} value={t}>
+                    {objectTypeLabel(t)}
+                  </option>
+                ))}
+              </select>
+            </label>
+            <label className="alm-target-search__filter-label" htmlFor={catalogFilterId}>
+              Catalogue
+              <select
+                id={catalogFilterId}
+                className="alm-select alm-target-search__filter-select"
+                value={catalogSel}
+                onChange={(e) => setCatalogSel(e.target.value as TargetCatalogId | '')}
+              >
+                <option value="">All catalogues</option>
+                {CATALOG_IDS.map((c) => (
+                  <option key={c} value={c}>
+                    {catalogLabel(c)}
+                  </option>
+                ))}
+              </select>
+            </label>
+          </div>
+        )}
+
+        {error && (
+          <span id={`${id}-error`} role="alert" className="alm-field-error">
+            {error}
+          </span>
+        )}
+
+        <Combobox.Portal>
+          <Combobox.Positioner
+            className="alm-target-search__positioner"
+            sideOffset={4}
+            align="start"
+          >
+            <Combobox.Popup className="alm-target-search__popup">
+              <Combobox.List
+                ref={scrollRef}
+                className="alm-target-search__list alm-virtual-scroll"
+                data-virtual-scroll="true"
+                aria-label="Target suggestions"
+              >
+                {loading && suggestions.length === 0 && (
+                  <Combobox.Status className="alm-target-search__status">
+                    Searching…
+                  </Combobox.Status>
+                )}
+                {!loading && !error && suggestions.length === 0 && !resolving && (
+                  <Combobox.Status className="alm-target-search__status">
+                    No matching targets.
+                  </Combobox.Status>
+                )}
+                {suggestions.length > 0 && (
+                  <div
+                    className="alm-virtual-inner"
+                    style={{ height: `${totalSize}px`, position: 'relative' }}
                   >
-                    <span className="alm-target-search__primary">{s.primaryDesignation}</span>
-                    {secondary && secondary !== s.primaryDesignation && (
-                      <span className="alm-target-search__secondary">{secondary}</span>
-                    )}
-                    <span className="alm-target-search__badges">
-                      <Pill variant="info">{objectTypeLabel(s.objectType)}</Pill>
-                      <Pill variant={s.source === 'user-override' ? 'accent' : 'ghost'}>
-                        {s.source}
-                      </Pill>
-                      {enableOverride && (
-                        <button
-                          type="button"
-                          className="alm-target-search__override"
-                          aria-label={`Set "${query.trim()}" to ${s.primaryDesignation}`}
-                          disabled={overriding != null || query.trim().length === 0}
-                          onMouseDown={(e) => {
-                            // Don't trigger the row's select-on-mousedown.
-                            e.preventDefault();
-                            e.stopPropagation();
-                            void handleOverride(s);
+                    {virtualItems.map((virtualRow) => {
+                      const i = virtualRow.index;
+                      const s = suggestions[i];
+                      const secondary = s.commonName ?? s.matchedAlias ?? null;
+                      return (
+                        <Combobox.Item
+                          key={s.targetId}
+                          index={i}
+                          value={s}
+                          ref={virtualizer.measureElement}
+                          data-index={i}
+                          className="alm-target-search__option"
+                          style={{
+                            position: 'absolute',
+                            top: 0,
+                            left: 0,
+                            right: 0,
+                            transform: `translateY(${virtualRow.start}px)`,
                           }}
                         >
-                          {overriding === s.targetId ? 'Setting…' : 'Correct…'}
-                        </button>
-                      )}
-                    </span>
-                  </li>
-                );
-              })}
-            </div>
-          )}
-          {resolving && (
-            <li
-              className="alm-target-search__status alm-target-search__status--resolving"
-              aria-live="polite"
-            >
-              Searching SIMBAD…
-            </li>
-          )}
-        </ul>
-      )}
+                          <span className="alm-target-search__primary">
+                            {s.primaryDesignation}
+                          </span>
+                          {secondary && secondary !== s.primaryDesignation && (
+                            <span className="alm-target-search__secondary">{secondary}</span>
+                          )}
+                          <span className="alm-target-search__badges">
+                            <Pill variant="info">{objectTypeLabel(s.objectType)}</Pill>
+                            <Pill variant={s.source === 'user-override' ? 'accent' : 'ghost'}>
+                              {s.source}
+                            </Pill>
+                            {enableOverride && (
+                              <button
+                                type="button"
+                                className="alm-target-search__override"
+                                aria-label={`Set "${query.trim()}" to ${s.primaryDesignation}`}
+                                disabled={overriding != null || query.trim().length === 0}
+                                onPointerDown={(e) => {
+                                  // Don't trigger the row's select-on-press.
+                                  e.preventDefault();
+                                  e.stopPropagation();
+                                }}
+                                onClick={(e) => {
+                                  e.preventDefault();
+                                  e.stopPropagation();
+                                  void handleOverride(s);
+                                }}
+                              >
+                                {overriding === s.targetId ? 'Setting…' : 'Correct…'}
+                              </button>
+                            )}
+                          </span>
+                        </Combobox.Item>
+                      );
+                    })}
+                  </div>
+                )}
+                {resolving && (
+                  <Combobox.Status className="alm-target-search__status alm-target-search__status--resolving">
+                    Searching SIMBAD…
+                  </Combobox.Status>
+                )}
+              </Combobox.List>
+            </Combobox.Popup>
+          </Combobox.Positioner>
+        </Combobox.Portal>
+      </Combobox.Root>
     </div>
   );
 }

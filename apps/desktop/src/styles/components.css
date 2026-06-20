@@ -853,6 +853,40 @@
 }
 .alm-select:focus { border-color: var(--alm-accent); outline: none; }
 
+/* === MENU (base-ui dropdown/menu popup) === */
+.alm-menu__positioner { z-index: 100; }
+.alm-menu__popup {
+  min-width: 160px;
+  padding: var(--alm-sp-1);
+  background: var(--alm-surface-raised);
+  border: 1px solid var(--alm-border);
+  border-radius: var(--alm-radius-md);
+  box-shadow: var(--alm-shadow-sm);
+  outline: none;
+}
+.alm-menu__item {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 3px 6px;
+  border-radius: var(--alm-radius-sm);
+  font-size: var(--alm-text-sm);
+  color: var(--alm-text);
+  cursor: pointer;
+  user-select: none;
+  outline: none;
+}
+.alm-menu__item[data-highlighted] { background: var(--alm-selected-bg); }
+.alm-menu__indicator {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 14px;
+  flex-shrink: 0;
+  color: var(--alm-accent-text, var(--alm-accent));
+}
+.alm-menu__label { flex: 1 1 auto; }
+
 /* === LIFECYCLE FLOWCHART === */
 .alm-lifecycle {
   display: flex; flex-direction: column; gap: 0;
@@ -944,19 +978,26 @@
   white-space: nowrap;
   border: 0;
 }
-.alm-target-search__list {
-  list-style: none;
-  margin: var(--alm-sp-1) 0 0 0;
-  padding: var(--alm-sp-1);
-  position: absolute;
+/* base-ui Combobox.Positioner owns placement; keep it above page chrome and
+   let the popup match the trigger width (T161). */
+.alm-target-search__positioner {
   z-index: 20;
-  left: 0; right: 0;
-  max-height: 320px;
-  overflow-y: auto;
+  width: var(--anchor-width, auto);
+}
+.alm-target-search__popup {
   background: var(--alm-surface-raised);
   border: 1px solid var(--alm-border);
   border-radius: var(--alm-radius-md);
   box-shadow: var(--alm-shadow-sm);
+  outline: none;
+}
+/* The scroll container (Combobox.List) is the virtualizer's scroll element. */
+.alm-target-search__list {
+  list-style: none;
+  margin: 0;
+  padding: var(--alm-sp-1);
+  max-height: 320px;
+  overflow-y: auto;
 }
 .alm-target-search__status {
   padding: var(--alm-sp-2) var(--alm-sp-3);
@@ -978,7 +1019,8 @@
   border-radius: var(--alm-radius-sm);
   cursor: pointer;
 }
-.alm-target-search__option--active { background: var(--alm-selected-bg); }
+/* base-ui marks the keyboard/pointer-highlighted option with data-highlighted. */
+.alm-target-search__option[data-highlighted] { background: var(--alm-selected-bg); }
 .alm-target-search__primary {
   font-size: var(--alm-text-sm);
   font-weight: var(--alm-weight-semibold);

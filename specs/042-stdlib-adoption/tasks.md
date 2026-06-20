@@ -124,9 +124,9 @@ Frontend: `cd apps/desktop && npx tsc --noEmit` + `npx vitest run <feature>`. Ru
 
 ## Phase 8 — US4 base-ui primitives (P2)
 
-- [ ] T160 ProjectsList filter dropdown → base-ui `Select`/`Menu` (fixes click-outside/Escape).
-- [ ] T161 TargetSearch combobox → base-ui Combobox/Popover; delete hand-rolled mousedown/ARIA.
-- [ ] T162 Sweep for any other hand-rolled overlays → base-ui.
+- [X] T160 ProjectsList filter dropdown → base-ui `Select`/`Menu` (fixes click-outside/Escape).
+- [X] T161 TargetSearch combobox → base-ui Combobox/Popover; delete hand-rolled mousedown/ARIA.
+- [X] T162 Sweep for any other hand-rolled overlays → base-ui.
 - [ ] **US4 checkpoint**: commit `feat(042): US4 base-ui overlays`.
 
 ## Phase 9 — US5 Forms (react-hook-form + zod) (P2)
