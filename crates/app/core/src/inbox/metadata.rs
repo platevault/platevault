@@ -75,15 +75,34 @@ pub async fn get_inbox_item_metadata(
             // is_master: a single-file master item OR a per-file detected master.
             let is_master = item_is_master;
 
+            // Non-type overrides: override_filter/exposure/binning take
+            // precedence over the extracted header values when set.
+            let filter = ev.and_then(|e| e.override_filter.clone()).or_else(|| m.filter.clone());
+            let exposure_s = ev.and_then(|e| e.override_exposure_s).or(m.exposure_s);
+            // Parse "NxN" binning string (e.g. "2x2") → (binning_x, binning_y).
+            let (binning_x, binning_y) =
+                ev.and_then(|e| e.override_binning.as_deref()).and_then(parse_binning).map_or_else(
+                    || {
+                        (
+                            m.binning_x.and_then(|v| i32::try_from(v).ok()),
+                            m.binning_y.and_then(|v| i32::try_from(v).ok()),
+                        )
+                    },
+                    |(bx, by)| (Some(bx), Some(by)),
+                );
+
+            // R-4: read the persisted override_stale flag from the evidence row.
+            let override_stale = ev.is_some_and(|e| e.override_stale != 0);
+
             InboxFileMetadata {
                 relative_file_path: m.relative_file_path.clone(),
                 frame_type_effective,
                 image_typ,
-                filter: m.filter.clone(),
-                exposure_s: m.exposure_s,
+                filter,
+                exposure_s,
                 gain: m.gain.clone(),
-                binning_x: m.binning_x.and_then(|v| i32::try_from(v).ok()),
-                binning_y: m.binning_y.and_then(|v| i32::try_from(v).ok()),
+                binning_x,
+                binning_y,
                 temperature_c: m.temperature_c,
                 object: m.object.clone(),
                 date_obs: m.date_obs.clone(),
@@ -93,13 +112,7 @@ pub async fn get_inbox_item_metadata(
                 naxis2: m.naxis2.and_then(|v| i32::try_from(v).ok()),
                 stack_count: m.stack_count.and_then(|v| i32::try_from(v).ok()),
                 is_master,
-                // R-4: override staleness compares the file's CURRENT size/mtime
-                // against the stored identity. This use case has no root path, so
-                // it cannot cheaply stat the file here.
-                // TODO(spec 041 R-4): surface staleness once a root path is
-                // threaded through, or read the persisted evidence.override_stale
-                // flag when reclassify begins writing it.
-                override_stale: false,
+                override_stale,
             }
         })
         .collect();
@@ -109,6 +122,16 @@ pub async fn get_inbox_item_metadata(
 
 fn db_err(e: &persistence_db::DbError) -> ContractError {
     ContractError::new("internal.database", e.to_string(), ErrorSeverity::Fatal, true)
+}
+
+/// Parse an `"NxN"` binning string (e.g. `"2x2"`, `"1x1"`) into `(x, y)`.
+/// Returns `None` for any other format so the caller can fall back to extracted
+/// header values.
+fn parse_binning(s: &str) -> Option<(i32, i32)> {
+    let (lhs, rhs) = s.split_once('x')?;
+    let bx = lhs.trim().parse::<i32>().ok()?;
+    let by = rhs.trim().parse::<i32>().ok()?;
+    Some((bx, by))
 }
 
 // ── Tests ─────────────────────────────────────────────────────────────────────
@@ -265,5 +288,151 @@ mod tests {
         let db = test_db().await;
         let err = get_inbox_item_metadata(db.pool(), "nope").await.unwrap_err();
         assert_eq!(err.code, "inbox.item.not_found");
+    }
+
+    /// Non-type overrides (filter/exposure/binning) on an evidence row surface
+    /// as effective values in the assembled metadata DTO, and override_stale is
+    /// false when the override was freshly set.
+    #[tokio::test]
+    async fn non_type_overrides_surface_as_effective_values() {
+        let db = test_db().await;
+        let item_id = "item-meta-override-1";
+
+        repo::insert_inbox_item(
+            db.pool(),
+            &InsertInboxItem {
+                id: item_id,
+                root_id: "root-1",
+                relative_path: "darks",
+                file_count: 1,
+                content_signature: Some("sig-ov1"),
+                lane: "fits",
+            },
+        )
+        .await
+        .unwrap();
+
+        // Evidence row with extracted values (no overrides yet).
+        repo::insert_evidence(
+            db.pool(),
+            &InsertEvidence {
+                id: "ev-ov-1",
+                inbox_item_id: item_id,
+                relative_file_path: "darks/dark_001.fits",
+                frame_type: Some("dark"),
+                evidence_source: "imagetyp_header",
+                raw_value: Some("Dark Frame"),
+                unclassified: false,
+                manual_override: None,
+                is_master: false,
+                master_detector: None,
+            },
+        )
+        .await
+        .unwrap();
+
+        // Metadata row with extracted header values.
+        repo::upsert_inbox_file_metadata(
+            db.pool(),
+            &UpsertFileMetadata {
+                inbox_item_id: item_id,
+                relative_file_path: "darks/dark_001.fits",
+                filter: Some("L"),
+                exposure_s: Some(60.0),
+                binning_x: Some(1),
+                binning_y: Some(1),
+                ..Default::default()
+            },
+        )
+        .await
+        .unwrap();
+
+        // Apply non-type overrides.
+        repo::set_overrides(
+            db.pool(),
+            item_id,
+            "darks/dark_001.fits",
+            None,        // no frame-type override
+            Some("Ha"),  // override filter
+            Some(120.0), // override exposure
+            Some("2x2"), // override binning
+        )
+        .await
+        .unwrap();
+
+        let files = get_inbox_item_metadata(db.pool(), item_id).await.unwrap();
+        assert_eq!(files.len(), 1);
+        let f = &files[0];
+        // Frame type comes from extracted evidence (no type override applied).
+        assert_eq!(f.frame_type_effective.as_deref(), Some("dark"));
+        // Non-type overrides win over extracted values.
+        assert_eq!(f.filter.as_deref(), Some("Ha"), "override_filter should win");
+        assert_eq!(f.exposure_s, Some(120.0), "override_exposure_s should win");
+        assert_eq!(f.binning_x, Some(2), "parsed binning x from '2x2'");
+        assert_eq!(f.binning_y, Some(2), "parsed binning y from '2x2'");
+        // A freshly-set override is not stale.
+        assert!(!f.override_stale, "freshly-set override must not be stale");
+    }
+
+    /// When mark_override_stale has been called (simulating R-4 detection),
+    /// get_inbox_item_metadata returns override_stale = true.
+    #[tokio::test]
+    async fn stale_override_surfaces_in_metadata() {
+        let db = test_db().await;
+        let item_id = "item-meta-stale-1";
+
+        repo::insert_inbox_item(
+            db.pool(),
+            &InsertInboxItem {
+                id: item_id,
+                root_id: "root-1",
+                relative_path: "lights",
+                file_count: 1,
+                content_signature: Some("sig-stale1"),
+                lane: "fits",
+            },
+        )
+        .await
+        .unwrap();
+
+        repo::insert_evidence(
+            db.pool(),
+            &InsertEvidence {
+                id: "ev-stale-meta-1",
+                inbox_item_id: item_id,
+                relative_file_path: "lights/light_001.fits",
+                frame_type: Some("light"),
+                evidence_source: "imagetyp_header",
+                raw_value: Some("Light Frame"),
+                unclassified: false,
+                manual_override: None,
+                is_master: false,
+                master_detector: None,
+            },
+        )
+        .await
+        .unwrap();
+
+        repo::upsert_inbox_file_metadata(
+            db.pool(),
+            &UpsertFileMetadata {
+                inbox_item_id: item_id,
+                relative_file_path: "lights/light_001.fits",
+                filter: Some("Ha"),
+                exposure_s: Some(300.0),
+                file_size_bytes: Some(4_194_304),
+                file_mtime: Some("2025-10-10T22:00:00Z"),
+                ..Default::default()
+            },
+        )
+        .await
+        .unwrap();
+
+        // Simulate R-4 detection: size/mtime changed → mark stale.
+        repo::mark_override_stale(db.pool(), item_id, "lights/light_001.fits").await.unwrap();
+
+        let files = get_inbox_item_metadata(db.pool(), item_id).await.unwrap();
+        assert_eq!(files.len(), 1);
+        assert!(files[0].override_stale, "override_stale must be true after mark_override_stale");
     }
 }

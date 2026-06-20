@@ -17,10 +17,16 @@ use contracts_core::{ContractError, ErrorSeverity};
 
 // ── Request / Response ────────────────────────────────────────────────────────
 
-#[derive(Clone, Debug)]
+#[derive(Clone, Debug, Default)]
 pub struct ReclassifyOverride {
     pub file_path: String,
+    /// Frame-type override.  Empty string means "no type override" and maps to
+    /// `None` on the evidence row (leave existing `manual_override` unchanged).
     pub frame_type: String,
+    /// Non-type overrides (spec 041 US3 / R-4).  All default to `None`.
+    pub filter: Option<String>,
+    pub exposure_s: Option<f64>,
+    pub binning: Option<String>,
 }
 
 #[derive(Clone, Debug)]
@@ -99,17 +105,23 @@ pub async fn reclassify(
     // 4. Apply overrides
     let mut applied_count = 0usize;
     for o in &req.overrides {
-        let updated =
-            inbox_repo::set_manual_override(pool, &req.inbox_item_id, &o.file_path, &o.frame_type)
-                .await
-                .map_err(|e| {
-                    ContractError::new(
-                        "internal.database",
-                        e.to_string(),
-                        ErrorSeverity::Fatal,
-                        true,
-                    )
-                })?;
+        // Empty frame_type string = "no type override" → pass None so the
+        // existing manual_override column is left unchanged (COALESCE).
+        let frame_type_opt =
+            if o.frame_type.is_empty() { None } else { Some(o.frame_type.as_str()) };
+        let updated = inbox_repo::set_overrides(
+            pool,
+            &req.inbox_item_id,
+            &o.file_path,
+            frame_type_opt,
+            o.filter.as_deref(),
+            o.exposure_s,
+            o.binning.as_deref(),
+        )
+        .await
+        .map_err(|e| {
+            ContractError::new("internal.database", e.to_string(), ErrorSeverity::Fatal, true)
+        })?;
         if updated {
             applied_count += 1;
         }
@@ -298,10 +310,12 @@ mod tests {
                     ReclassifyOverride {
                         file_path: "inbox_folder/mystery_001.fits".to_owned(),
                         frame_type: "dark".to_owned(),
+                        ..Default::default()
                     },
                     ReclassifyOverride {
                         file_path: "inbox_folder/mystery_002.fits".to_owned(),
                         frame_type: "dark".to_owned(),
+                        ..Default::default()
                     },
                 ],
             },
@@ -327,6 +341,7 @@ mod tests {
                 overrides: vec![ReclassifyOverride {
                     file_path: "inbox_folder/mystery_001.fits".to_owned(),
                     frame_type: "light".to_owned(),
+                    ..Default::default()
                 }],
             },
         )
@@ -354,10 +369,12 @@ mod tests {
                     ReclassifyOverride {
                         file_path: "inbox_folder/mystery_001.fits".to_owned(),
                         frame_type: "light".to_owned(),
+                        ..Default::default()
                     },
                     ReclassifyOverride {
                         file_path: "inbox_folder/mystery_002.fits".to_owned(),
                         frame_type: "dark".to_owned(),
+                        ..Default::default()
                     },
                 ],
             },
@@ -380,6 +397,47 @@ mod tests {
         assert_eq!(dark_row.count, 1);
     }
 
+    /// Applying a non-type override (filter/exposure/binning) persists the
+    /// override columns and the effective metadata DTO reflects them.
+    #[tokio::test]
+    async fn non_type_override_persists_filter_exposure_binning() {
+        let db = test_db().await;
+        setup_unclassified_item(&db, "item-recl-nontype").await;
+
+        // Apply a non-type override: only filter/exposure/binning, no frame_type.
+        let resp = reclassify(
+            db.pool(),
+            ReclassifyRequest {
+                inbox_item_id: "item-recl-nontype".to_owned(),
+                overrides: vec![ReclassifyOverride {
+                    file_path: "inbox_folder/mystery_001.fits".to_owned(),
+                    frame_type: String::new(), // no type override
+                    filter: Some("Ha".to_owned()),
+                    exposure_s: Some(300.0),
+                    binning: Some("2x2".to_owned()),
+                }],
+            },
+        )
+        .await
+        .unwrap();
+
+        // Type aggregation: mystery_001 has no frame_type and no manual_override
+        // (frame_type_opt was None), so unclassified count includes it.
+        assert_eq!(resp.applied_count, 1);
+
+        // Verify the evidence row has the override columns written.
+        let evidence = inbox_repo::list_evidence(db.pool(), "item-recl-nontype").await.unwrap();
+        let ev001 = evidence
+            .iter()
+            .find(|e| e.relative_file_path == "inbox_folder/mystery_001.fits")
+            .unwrap();
+        assert_eq!(ev001.override_filter.as_deref(), Some("Ha"));
+        assert_eq!(ev001.override_exposure_s, Some(300.0));
+        assert_eq!(ev001.override_binning.as_deref(), Some("2x2"));
+        assert_eq!(ev001.override_stale, 0, "freshly-set override is not stale");
+        assert_eq!(ev001.evidence_source, "manual_override");
+    }
+
     #[tokio::test]
     async fn missing_file_path_returns_error() {
         let db = test_db().await;
@@ -392,6 +450,7 @@ mod tests {
                 overrides: vec![ReclassifyOverride {
                     file_path: "nonexistent/path.fits".to_owned(),
                     frame_type: "dark".to_owned(),
+                    ..Default::default()
                 }],
             },
         )

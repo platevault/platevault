@@ -128,6 +128,14 @@ pub async fn classify(
     let fits_extractor = FitsExtractor;
     let xisf_extractor = XisfExtractor;
 
+    // spec 041 R-4 / T025: before wiping evidence, snapshot per-path override
+    // values and detect which files have changed identity (size/mtime). After
+    // the fresh evidence re-insert both are re-applied: overrides are
+    // re-written for all paths still present in the scan, and the subset whose
+    // identity changed is additionally marked override_stale = 1.
+    let override_snapshot =
+        snapshot_overrides(pool, &req.inbox_item_id, &file_paths, &req.root_absolute_path).await;
+
     // Delete stale evidence
     repo::delete_evidence_for_item(pool, &req.inbox_item_id).await.ok();
     repo::delete_breakdown_for_item(pool, &req.inbox_item_id).await.ok();
@@ -223,6 +231,27 @@ pub async fn classify(
             unclassified_files.push(rel);
         } else if let Some(ft) = frame_type {
             frame_type_files.entry(ft.as_str().to_owned()).or_default().push(rel);
+        }
+    }
+
+    // spec 041 R-4 / T025: re-apply snapshotted overrides to freshly-inserted
+    // evidence rows, then mark stale the subset whose file identity changed.
+    for entry in &override_snapshot {
+        repo::set_overrides(
+            pool,
+            &req.inbox_item_id,
+            &entry.relative_file_path,
+            entry.manual_override.as_deref(),
+            entry.override_filter.as_deref(),
+            entry.override_exposure_s,
+            entry.override_binning.as_deref(),
+        )
+        .await
+        .ok();
+        if entry.stale {
+            repo::mark_override_stale(pool, &req.inbox_item_id, &entry.relative_file_path)
+                .await
+                .ok();
         }
     }
 
@@ -359,6 +388,108 @@ async fn persist_file_metadata(
     };
 
     repo::upsert_inbox_file_metadata(pool, &m).await.ok();
+}
+
+/// Collect relative file paths that need to be marked as stale after the
+/// rescan evidence/metadata wipe (spec 041 R-4).
+///
+/// A file is stale when ALL of:
+/// - it has at least one override column set (manual_override / filter /
+///   exposure_s / binning), AND
+/// - its current on-disk size or mtime differs from what was stored in
+///   `inbox_file_metadata` at the previous classify.
+///
+/// Called BEFORE `delete_evidence_for_item` / `delete_file_metadata_for_item`
+/// because both tables are wiped in the rescan. The returned paths are then
+/// used to call `mark_override_stale` on the freshly-inserted evidence rows.
+///
+/// Failures are silently ignored — the classify result is unaffected.
+/// Snapshot of a single evidence row's override values, captured before the
+/// evidence table is wiped on a rescan (spec 041 R-4 / T025).
+struct OverrideSnapshot {
+    relative_file_path: String,
+    manual_override: Option<String>,
+    override_filter: Option<String>,
+    override_exposure_s: Option<f64>,
+    override_binning: Option<String>,
+    /// True when the file's current on-disk identity (size/mtime) differs from
+    /// the stored `inbox_file_metadata` row, meaning the file changed since the
+    /// override was recorded.
+    stale: bool,
+}
+
+/// Before the evidence/metadata wipe on a rescan, snapshot all evidence rows
+/// that carry any override, paired with a staleness flag (spec 041 R-4 / T025).
+///
+/// For each such row that also appears in the current scan:
+/// - compare stored file identity (size/mtime in `inbox_file_metadata`) against
+///   the current on-disk stat; set `stale = true` when they differ.
+///
+/// Called BEFORE `delete_evidence_for_item` / `delete_file_metadata_for_item`.
+/// After the fresh evidence re-insert the caller must:
+///   1. call `set_overrides` for every entry (preserves the user's decision), and
+///   2. call `mark_override_stale` for entries where `stale == true`.
+///
+/// Failures are silently ignored — the classify result is unaffected.
+async fn snapshot_overrides(
+    pool: &SqlitePool,
+    inbox_item_id: &str,
+    file_paths: &[PathBuf],
+    root_absolute_path: &Path,
+) -> Vec<OverrideSnapshot> {
+    let mut snapshots = Vec::new();
+
+    let evidence = repo::list_evidence(pool, inbox_item_id).await.unwrap_or_default();
+
+    for ev in evidence {
+        let has_override = ev.manual_override.is_some()
+            || ev.override_filter.is_some()
+            || ev.override_exposure_s.is_some()
+            || ev.override_binning.is_some();
+
+        if !has_override {
+            continue;
+        }
+
+        // Only re-apply for files that appear in the current scan.
+        let in_scan = file_paths.iter().any(|p| {
+            p.strip_prefix(root_absolute_path)
+                .is_ok_and(|r| r.to_string_lossy().replace('\\', "/") == ev.relative_file_path)
+        });
+        if !in_scan {
+            continue;
+        }
+
+        // Compare stored identity against current on-disk stat.
+        let stale = 'stale: {
+            let prior = repo::get_file_metadata(pool, inbox_item_id, &ev.relative_file_path)
+                .await
+                .ok()
+                .flatten();
+            let Some(prior) = prior else { break 'stale false };
+
+            let abs = root_absolute_path.join(&ev.relative_file_path);
+            let Ok(md) = std::fs::metadata(&abs) else { break 'stale false };
+            let new_size = i64::try_from(md.len()).ok();
+            let new_mtime = md
+                .modified()
+                .ok()
+                .and_then(|t| time::OffsetDateTime::from(t).format(&Rfc3339).ok());
+
+            prior.file_size_bytes != new_size || prior.file_mtime.as_deref() != new_mtime.as_deref()
+        };
+
+        snapshots.push(OverrideSnapshot {
+            relative_file_path: ev.relative_file_path,
+            manual_override: ev.manual_override,
+            override_filter: ev.override_filter,
+            override_exposure_s: ev.override_exposure_s,
+            override_binning: ev.override_binning,
+            stale,
+        });
+    }
+
+    snapshots
 }
 
 /// Enumerate FITS/XISF files directly inside a folder (non-recursive).
@@ -761,5 +892,175 @@ mod tests {
         let light = resp.breakdown.iter().find(|b| b.kind == "light").expect("light group");
         let preview = light.destination_preview.as_deref().expect("destination preview resolved");
         assert!(!preview.is_empty(), "preview path is non-empty: {preview}");
+    }
+
+    /// spec 041 R-4: when a file's size changes between two classify runs AND
+    /// it had an override set, the second classify must mark override_stale = 1
+    /// on the freshly-inserted evidence row.
+    #[tokio::test]
+    async fn classify_rescan_marks_override_stale_on_changed_file() {
+        use persistence_db::repositories::inbox as inbox_repo;
+        use std::io::Write;
+
+        let tmp = tempfile::tempdir().unwrap();
+        let file_path = tmp.path().join("light_001.fits");
+
+        // Write initial file content.
+        write_fits_with_imagetyp(tmp.path(), "light_001.fits", "Light Frame");
+
+        let db = test_db().await;
+        let item_id = "item-r4-stale";
+
+        repo::insert_inbox_item(
+            db.pool(),
+            &InsertInboxItem {
+                id: item_id,
+                root_id: "root-1",
+                relative_path: "",
+                file_count: 0,
+                content_signature: None,
+                lane: "fits",
+            },
+        )
+        .await
+        .unwrap();
+
+        // First classify: no overrides yet.
+        classify(
+            db.pool(),
+            ClassifyRequest {
+                inbox_item_id: item_id.to_owned(),
+                root_absolute_path: tmp.path().to_owned(),
+                force_rescan: false,
+            },
+        )
+        .await
+        .unwrap();
+
+        // Apply a non-type override.
+        inbox_repo::set_overrides(
+            db.pool(),
+            item_id,
+            "light_001.fits",
+            None,
+            Some("Ha"),
+            Some(300.0),
+            Some("2x2"),
+        )
+        .await
+        .unwrap();
+
+        // Verify not stale yet.
+        let ev_before = inbox_repo::list_evidence(db.pool(), item_id).await.unwrap();
+        let ev0 = ev_before.iter().find(|e| e.relative_file_path == "light_001.fits").unwrap();
+        assert_eq!(ev0.override_stale, 0, "override freshly set, not yet stale");
+
+        // Mutate the file so its size changes.
+        {
+            let mut f = std::fs::OpenOptions::new().append(true).open(&file_path).unwrap();
+            f.write_all(b"extra bytes that change size").unwrap();
+        }
+
+        // Second classify (force rescan): should detect size change and mark stale.
+        classify(
+            db.pool(),
+            ClassifyRequest {
+                inbox_item_id: item_id.to_owned(),
+                root_absolute_path: tmp.path().to_owned(),
+                force_rescan: true,
+            },
+        )
+        .await
+        .unwrap();
+
+        // After rescan, override_stale should be 1 AND the override VALUE must survive.
+        let ev_after = inbox_repo::list_evidence(db.pool(), item_id).await.unwrap();
+        let ev1 = ev_after.iter().find(|e| e.relative_file_path == "light_001.fits").unwrap();
+        assert_eq!(ev1.override_stale, 1, "override_stale must be 1 after file size changed");
+        // The override values must survive the rescan even when marked stale.
+        assert_eq!(
+            ev1.override_filter.as_deref(),
+            Some("Ha"),
+            "override_filter must survive rescan"
+        );
+        assert_eq!(ev1.override_exposure_s, Some(300.0), "override_exposure_s must survive rescan");
+        assert_eq!(
+            ev1.override_binning.as_deref(),
+            Some("2x2"),
+            "override_binning must survive rescan"
+        );
+    }
+
+    /// R-4 negative guard: a force rescan that observes the SAME size/mtime must
+    /// NOT mark an override stale. Protects against the size/mtime identity being
+    /// stored and compared in mismatched formats (which would make every rescan
+    /// falsely report staleness).
+    #[tokio::test]
+    async fn classify_rescan_keeps_override_fresh_when_file_unchanged() {
+        use persistence_db::repositories::inbox as inbox_repo;
+
+        let tmp = tempfile::tempdir().unwrap();
+        write_fits_with_imagetyp(tmp.path(), "light_001.fits", "Light Frame");
+
+        let db = test_db().await;
+        let item_id = "item-r4-fresh";
+
+        repo::insert_inbox_item(
+            db.pool(),
+            &InsertInboxItem {
+                id: item_id,
+                root_id: "root-1",
+                relative_path: "",
+                file_count: 0,
+                content_signature: None,
+                lane: "fits",
+            },
+        )
+        .await
+        .unwrap();
+
+        classify(
+            db.pool(),
+            ClassifyRequest {
+                inbox_item_id: item_id.to_owned(),
+                root_absolute_path: tmp.path().to_owned(),
+                force_rescan: false,
+            },
+        )
+        .await
+        .unwrap();
+
+        inbox_repo::set_overrides(
+            db.pool(),
+            item_id,
+            "light_001.fits",
+            None,
+            Some("Ha"),
+            Some(300.0),
+            Some("2x2"),
+        )
+        .await
+        .unwrap();
+
+        // Force rescan WITHOUT touching the file.
+        classify(
+            db.pool(),
+            ClassifyRequest {
+                inbox_item_id: item_id.to_owned(),
+                root_absolute_path: tmp.path().to_owned(),
+                force_rescan: true,
+            },
+        )
+        .await
+        .unwrap();
+
+        let ev = inbox_repo::list_evidence(db.pool(), item_id).await.unwrap();
+        let row = ev.iter().find(|e| e.relative_file_path == "light_001.fits").unwrap();
+        assert_eq!(
+            row.override_stale, 0,
+            "unchanged file must not mark the override stale on rescan"
+        );
+        // The override values must also survive the rescan.
+        assert_eq!(row.override_filter.as_deref(), Some("Ha"));
     }
 }

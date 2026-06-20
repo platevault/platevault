@@ -141,6 +141,7 @@ pub async fn inbox_reclassify(
             .map(|o| ReclassifyOverride {
                 file_path: o.file_path,
                 frame_type: o.frame_type.unwrap_or_default(),
+                ..Default::default()
             })
             .collect(),
     };

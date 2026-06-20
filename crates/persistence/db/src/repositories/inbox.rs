@@ -83,6 +83,12 @@ pub struct InboxEvidenceRow {
     pub raw_value: Option<String>,
     pub unclassified: i64,
     pub manual_override: Option<String>,
+    /// Non-type override fields added in migration 0045 (spec 041 R-4).
+    pub override_filter: Option<String>,
+    pub override_exposure_s: Option<f64>,
+    pub override_binning: Option<String>,
+    /// 1 when the override is stale (file size/mtime changed since it was set).
+    pub override_stale: i64,
 }
 
 /// Data to insert an `inbox_classification_evidence` row.
@@ -385,6 +391,94 @@ pub async fn set_manual_override(
     .rows_affected();
 
     Ok(rows > 0)
+}
+
+/// Apply a full set of non-type overrides (filter, exposure, binning) and
+/// optionally a frame-type override in one UPDATE.
+///
+/// Resets `override_stale = 0` — a freshly-recorded override is not stale.
+/// `frame_type` maps to `manual_override`; pass `None` to leave the frame-type
+/// override unchanged (only the non-type columns are written when `None`).
+///
+/// # Errors
+/// Returns [`DbError::Database`] on connection failure.
+pub async fn set_overrides(
+    pool: &SqlitePool,
+    inbox_item_id: &str,
+    relative_file_path: &str,
+    frame_type: Option<&str>,
+    filter: Option<&str>,
+    exposure_s: Option<f64>,
+    binning: Option<&str>,
+) -> DbResult<bool> {
+    let rows = sqlx::query(
+        // Merge semantics: a `None` argument leaves the existing override value
+        // untouched, so a frame-type-only reclassify never wipes a previously
+        // set filter/exposure/binning override (and vice-versa). A freshly
+        // recorded override is never stale, so override_stale resets to 0.
+        "UPDATE inbox_classification_evidence
+         SET manual_override     = COALESCE(?, manual_override),
+             override_filter     = COALESCE(?, override_filter),
+             override_exposure_s = COALESCE(?, override_exposure_s),
+             override_binning    = COALESCE(?, override_binning),
+             override_stale      = 0,
+             evidence_source     = 'manual_override'
+         WHERE inbox_item_id = ? AND relative_file_path = ?",
+    )
+    .bind(frame_type)
+    .bind(filter)
+    .bind(exposure_s)
+    .bind(binning)
+    .bind(inbox_item_id)
+    .bind(relative_file_path)
+    .execute(pool)
+    .await?
+    .rows_affected();
+
+    Ok(rows > 0)
+}
+
+/// Mark the override for a file as stale (file size/mtime changed since the
+/// override was recorded — spec 041 R-4).
+///
+/// # Errors
+/// Returns [`DbError::Database`] on connection failure.
+pub async fn mark_override_stale(
+    pool: &SqlitePool,
+    inbox_item_id: &str,
+    relative_file_path: &str,
+) -> DbResult<()> {
+    sqlx::query(
+        "UPDATE inbox_classification_evidence
+         SET override_stale = 1
+         WHERE inbox_item_id = ? AND relative_file_path = ?",
+    )
+    .bind(inbox_item_id)
+    .bind(relative_file_path)
+    .execute(pool)
+    .await?;
+    Ok(())
+}
+
+/// Fetch a single per-file metadata row for an item+path combination.
+///
+/// Returns `None` when no row has been persisted yet (file not yet classified).
+///
+/// # Errors
+/// Returns [`DbError::Database`] on connection failure.
+pub async fn get_file_metadata(
+    pool: &SqlitePool,
+    inbox_item_id: &str,
+    relative_file_path: &str,
+) -> DbResult<Option<InboxFileMetadataRow>> {
+    Ok(sqlx::query_as::<_, InboxFileMetadataRow>(
+        "SELECT * FROM inbox_file_metadata
+         WHERE inbox_item_id = ? AND relative_file_path = ?",
+    )
+    .bind(inbox_item_id)
+    .bind(relative_file_path)
+    .fetch_optional(pool)
+    .await?)
 }
 
 // ── Breakdown CRUD ────────────────────────────────────────────────────────────
@@ -1374,5 +1468,131 @@ mod tests {
         let pool = db.pool();
         let keys = grouping_keys_for_items(pool, &[]).await.unwrap();
         assert!(keys.is_empty());
+    }
+
+    /// set_overrides writes all four override columns and resets override_stale.
+    #[tokio::test]
+    async fn set_overrides_writes_all_columns_and_resets_stale() {
+        let db = test_db().await;
+        let pool = db.pool();
+
+        // Set up: item + evidence row.
+        insert_inbox_item(pool, &sample_item("item-overrides-1")).await.unwrap();
+        insert_evidence(
+            pool,
+            &InsertEvidence {
+                id: "ev-overrides-1",
+                inbox_item_id: "item-overrides-1",
+                relative_file_path: "folder/file.fits",
+                frame_type: None,
+                evidence_source: "none",
+                raw_value: None,
+                unclassified: true,
+                manual_override: None,
+                is_master: false,
+                master_detector: None,
+            },
+        )
+        .await
+        .unwrap();
+
+        // First manually mark stale so we can verify it is reset.
+        mark_override_stale(pool, "item-overrides-1", "folder/file.fits").await.unwrap();
+
+        // Now apply full overrides.
+        let updated = set_overrides(
+            pool,
+            "item-overrides-1",
+            "folder/file.fits",
+            Some("dark"),
+            Some("Ha"),
+            Some(120.0),
+            Some("2x2"),
+        )
+        .await
+        .unwrap();
+        assert!(updated, "set_overrides must return true (row found)");
+
+        // Read back and verify.
+        let rows = list_evidence(pool, "item-overrides-1").await.unwrap();
+        assert_eq!(rows.len(), 1);
+        let ev = &rows[0];
+        assert_eq!(ev.manual_override.as_deref(), Some("dark"));
+        assert_eq!(ev.override_filter.as_deref(), Some("Ha"));
+        assert_eq!(ev.override_exposure_s, Some(120.0));
+        assert_eq!(ev.override_binning.as_deref(), Some("2x2"));
+        assert_eq!(ev.override_stale, 0, "freshly-set override must not be stale");
+        assert_eq!(ev.evidence_source, "manual_override");
+    }
+
+    /// mark_override_stale sets override_stale=1.
+    #[tokio::test]
+    async fn mark_override_stale_sets_flag() {
+        let db = test_db().await;
+        let pool = db.pool();
+
+        insert_inbox_item(pool, &sample_item("item-stale-1")).await.unwrap();
+        insert_evidence(
+            pool,
+            &InsertEvidence {
+                id: "ev-stale-1",
+                inbox_item_id: "item-stale-1",
+                relative_file_path: "folder/stale.fits",
+                frame_type: None,
+                evidence_source: "none",
+                raw_value: None,
+                unclassified: true,
+                manual_override: None,
+                is_master: false,
+                master_detector: None,
+            },
+        )
+        .await
+        .unwrap();
+
+        // Initially stale=0 (DEFAULT).
+        let rows_before = list_evidence(pool, "item-stale-1").await.unwrap();
+        assert_eq!(rows_before[0].override_stale, 0);
+
+        mark_override_stale(pool, "item-stale-1", "folder/stale.fits").await.unwrap();
+
+        let rows_after = list_evidence(pool, "item-stale-1").await.unwrap();
+        assert_eq!(rows_after[0].override_stale, 1, "override_stale must be 1 after mark");
+    }
+
+    /// get_file_metadata returns None before any classify and Some after upsert.
+    #[tokio::test]
+    async fn get_file_metadata_returns_row_after_upsert() {
+        let db = test_db().await;
+        let pool = db.pool();
+
+        insert_inbox_item(pool, &sample_item("item-getmeta-1")).await.unwrap();
+
+        // Before upsert: None.
+        let before = get_file_metadata(pool, "item-getmeta-1", "folder/light.fits").await.unwrap();
+        assert!(before.is_none());
+
+        // Upsert metadata.
+        upsert_inbox_file_metadata(
+            pool,
+            &UpsertFileMetadata {
+                inbox_item_id: "item-getmeta-1",
+                relative_file_path: "folder/light.fits",
+                filter: Some("Ha"),
+                exposure_s: Some(300.0),
+                file_size_bytes: Some(4_194_304),
+                file_mtime: Some("2025-10-10T22:00:00Z"),
+                ..Default::default()
+            },
+        )
+        .await
+        .unwrap();
+
+        // After upsert: row present.
+        let after =
+            get_file_metadata(pool, "item-getmeta-1", "folder/light.fits").await.unwrap().unwrap();
+        assert_eq!(after.filter.as_deref(), Some("Ha"));
+        assert_eq!(after.exposure_s, Some(300.0));
+        assert_eq!(after.file_size_bytes, Some(4_194_304));
     }
 }
