@@ -129,10 +129,17 @@ jobs:
       - name: Build desktop app (debug)
         run: cargo build -p desktop_shell
 
-      # The harness (e2e/helpers/tauri-app.ts) launches tauri-driver under
-      # xvfb-run on Linux. Real-UI journeys that drive IPC are validated here.
+      # The Playwright config drives the Vite shell with mocks disabled (shell
+      # smoke). Real UI->IPC->backend round-trips run via WebdriverIO below.
       - name: Real-backend E2E (Layer 2)
         run: pnpm --filter @astro-plan/desktop test:e2e:real
+
+      # SPIKE (research D3 revision): prove the real Tauri webview is drivable
+      # via WebdriverIO + tauri-driver (Playwright cannot drive a W3C WebDriver
+      # endpoint). Linux only for now; extend to Windows once green.
+      - name: Real-UI WebdriverIO spike (Linux)
+        if: runner.os == 'Linux'
+        run: xvfb-run -a pnpm --filter @astro-plan/desktop test:e2e:wdio
 
   # Stage C — macOS best-effort (research D4): official tauri-driver has no macOS
   # support; real-UI E2E needs a debug-only plugin. Non-merge-blocking.
