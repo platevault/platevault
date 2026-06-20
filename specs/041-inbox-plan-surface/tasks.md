@@ -59,8 +59,8 @@
 **Goal**: override frame type/filter/exposure/binning per file; multi-select apply-to-all with accurate count; breakdown stays; overrides persist across rescan (size+mtime) and surface stale.
 **Independent test**: multi-select filter override updates all selected, count matches, breakdown stays; persists across rescan; stale on file change.
 
-- [ ] T024 [US3] Extend `crates/app/core/src/inbox/reclassify.rs` to apply non-type overrides (`override_filter`/`override_exposure_s`/`override_binning`) per file, recompute effective values, rebuild breakdown (already rebuilds type breakdown — extend to metadata), and return accurate `applied_count`.
-- [ ] T025 [US3] Override persistence: on classify/rescan, re-apply overrides whose `(path,size,mtime)` is unchanged; mark `override_stale=1` when changed (R-4). Repo + classify logic.
+- [X] T024 [US3] Extend `crates/app/core/src/inbox/reclassify.rs` to apply non-type overrides (`override_filter`/`override_exposure_s`/`override_binning`) per file, recompute effective values, rebuild breakdown (already rebuilds type breakdown — extend to metadata), and return accurate `applied_count`.
+- [X] T025 [US3] Override persistence: on classify/rescan, re-apply overrides whose `(path,size,mtime)` is unchanged; mark `override_stale=1` when changed (R-4). Repo + classify logic.
 - [ ] T026 [US3] Regenerate bindings; extend `commands.ts` reclassify wrapper for the multi-field, multi-file override shape.
 - [ ] T027 [P] [US3] Frontend: multi-select of files (within item + across grouped list) and an "apply override to selection" affordance for type/filter/exposure/binning in `InboxDetail.tsx`/`InboxList.tsx`; accurate "Apply N overrides" count; stale-override indicator.
 - [ ] T028 [P] [US3] Tests: reclassify non-type + multi-file (`-p app_core`); override persistence/stale (`-p persistence_db`); Vitest for multi-select apply-all.
@@ -83,8 +83,8 @@
 **Goal**: confirming a multi-type folder auto-produces one action group per frame type; no separate Split step.
 **Independent test**: confirm a light+dark folder → distinct per-type actions; single-type → one action.
 
-- [ ] T036 [US5] In `confirm.rs`, group the item's files by effective frame type and emit a distinct plan action group per type (each with its own pattern-resolved destination), composing with US4's per-file move/catalogue decision. Ensure no separate "split" command path is required.
-- [ ] T037 [P] [US5] Tests: confirm mixed-type → per-type action groups; single-type → one group (`-p app_core`).
+- [X] T036 [US5] In `confirm.rs`, group the item's files by effective frame type and emit a distinct plan action group per type (each with its own pattern-resolved destination), composing with US4's per-file move/catalogue decision. Ensure no separate "split" command path is required.
+- [X] T037 [P] [US5] Tests: confirm mixed-type → per-type action groups; single-type → one group (`-p app_core`).
 
 ## Phase 8: User Story 6 — Per-type queue stats (P3)
 
