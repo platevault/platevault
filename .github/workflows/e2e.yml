@@ -60,13 +60,14 @@ jobs:
         with:
           tool: cargo-binstall
       - name: Install tauri-driver (prebuilt)
-        # When Swatinem/rust-cache restores a warm ~/.cargo, binstall reports
-        # "already installed" and does not re-add the cargo bin dir to PATH, so
-        # the wdio spike's bare `spawn("tauri-driver")` fails with ENOENT. Put
-        # the cargo bin dir on PATH for later steps regardless of whether the
-        # install ran fresh or hit the cache this time.
+        # Swatinem/rust-cache restores binstall's install metadata (~/.cargo's
+        # .crates2.json) but NOT the cargo bin dir, so on a warm cache binstall
+        # reports "already installed" and skips the download while the actual
+        # ~/.cargo/bin/tauri-driver binary is absent -> the wdio spike's
+        # `spawn("tauri-driver")` fails with ENOENT. Force the install so the
+        # binary is materialized, and ensure the bin dir is on PATH.
         run: |
-          cargo binstall -y tauri-driver || cargo install tauri-driver --locked
+          cargo binstall -y --force tauri-driver || cargo install tauri-driver --locked --force
           echo "${CARGO_HOME:-$HOME/.cargo}/bin" >> "$GITHUB_PATH"
 
       - name: Install JS deps
