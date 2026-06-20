@@ -11,6 +11,9 @@ path = "src/lib.rs"
 serde = { workspace = true }
 serde_json = { workspace = true }
 uuid = { workspace = true }
+# spec 042 (T201): ISO-8601 date parsing + Julian-day arithmetic for
+# observing-night proximity (replaces the hand-rolled YMD parse + JDN math).
+time = { workspace = true }
 
 [lints]
 workspace = true

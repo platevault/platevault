@@ -30,6 +30,11 @@ async-trait.workspace = true
 # spec 035 (resolution cache): RFC-3339 `resolved_at` timestamps, matching the
 # `persistence_db` repositories' time convention.
 time.workspace = true
+# spec 042 (T200): percent-encode the ADQL URL query (reqwest is built with
+# `default-features = false`, so the high-level query builder is unavailable).
+percent-encoding.workspace = true
+# spec 042 (T204): RFC-4180 TSV tokenization of SIMBAD `basic` rows.
+csv.workspace = true
 
 [features]
 # Enables the seeded in-memory test fixture for use in integration tests

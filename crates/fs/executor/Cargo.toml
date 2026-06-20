@@ -17,6 +17,9 @@ tracing.workspace = true
 uuid.workspace = true
 time.workspace = true
 trash.workspace = true
+# spec 042 (T206): purely-lexical `.`/`..` collapse for the path-resolution
+# gate (replaces the hand-rolled component walk; symlink-safety is unchanged).
+path-clean.workspace = true
 
 [dev-dependencies]
 tempfile.workspace = true

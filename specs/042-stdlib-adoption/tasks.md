@@ -160,14 +160,18 @@ Frontend: `cd apps/desktop && npx tsc --noEmit` + `npx vitest run <feature>`. Ru
 
 ## Phase 12 — US10 Reinvented Rust utilities (P3)
 
-- [ ] T200 [P] `percent-encoding` (`simbad.rs` url_encode).
-- [ ] T201 [P] `time::Date::parse`/`to_julian_day` (`calibration/ranking.rs`).
-- [ ] T202 `globset` (`workflow/artifacts/rules.rs`) + pattern×input equivalence matrix.
-- [ ] T203 [P] `itertools` dedup helpers.
-- [ ] T204 `csv` for `parse_basic_row` tokenization (keep RA/Dec validation).
-- [ ] T205 `byteorder` for FITS header parsing (existing FITS tests as guard — equivalence).
-- [ ] T206 [P] `path-clean` (`path_gate.rs` lexical_normalize; keep symlink safety).
-- [ ] T207 [P] `serde_json` (`project/structure` marker).
+- [X] T200 [P] `percent-encoding` (`simbad.rs` url_encode).
+- [X] T201 [P] `time::Date::parse`/`to_julian_day` (`calibration/ranking.rs`).
+- [X] T202 `globset` (`workflow/artifacts/rules.rs`) + pattern×input equivalence matrix.
+  (matrix test added; surfaced + locked a latent trailing-`*` bug; no in-use rule uses Glob.)
+- [X] T203 [P] `itertools` dedup helpers.
+- [X] T204 `csv` for `parse_basic_row` tokenization (keep RA/Dec validation).
+- [X] T205 `byteorder` for FITS header parsing — N/A (RESOLVED): FITS headers are pure ASCII
+  80-byte cards; the extractor parses text only and never touches the binary array (Principle
+  III), so there is NO byte-order decoding to replace. Existing 15 FITS tests remain green as
+  the equivalence guard. No code added (adding byteorder would be dead code).
+- [X] T206 [P] `path-clean` (`path_gate.rs` lexical_normalize; keep symlink safety).
+- [X] T207 [P] `serde_json` (`project/structure` marker).
 - [ ] **US10 checkpoint**: per-crate clippy/tests green; commit `feat(042): US10 Rust utility crates`.
 
 ## Phase 13 — US12 Rust caching/concurrency (P3)

@@ -195,39 +195,23 @@ pub fn flat_selection_reason(
 /// Compute observing-night distance in nights (0 = same night).
 ///
 /// Accepts ISO-8601 date strings (YYYY-MM-DD). Returns `None` on parse failure.
+///
+/// Tokenization + day arithmetic (T201) use `time::Date`: `Date::parse` against
+/// the `[year]-[month]-[day]` description and `Date::to_julian_day`, which
+/// yields the same proleptic-Gregorian Julian Day Number as the prior
+/// hand-rolled algorithm, so the night distance is unchanged.
 #[must_use]
 pub fn night_distance(date_a: &str, date_b: &str) -> Option<f64> {
-    let parse_ymd = |s: &str| -> Option<(i32, u8, u8)> {
-        let parts: Vec<&str> = s.splitn(3, '-').collect();
-        if parts.len() != 3 {
-            return None;
-        }
-        let year = parts[0].parse::<i32>().ok()?;
-        let month = parts[1].parse::<u8>().ok()?;
-        let day = parts[2].parse::<u8>().ok()?;
-        Some((year, month, day))
-    };
+    // Zero-padded `YYYY-MM-DD`, matching the DB-stored observing-night format.
+    let format = time::format_description::parse("[year]-[month]-[day]").ok()?;
+    let parse = |s: &str| -> Option<time::Date> { time::Date::parse(s, &format).ok() };
 
-    let (ay, am, ad) = parse_ymd(date_a)?;
-    let (by, bm, bd) = parse_ymd(date_b)?;
-
-    // Convert to Julian Day Number for day-difference arithmetic.
-    // Algorithm from https://en.wikipedia.org/wiki/Julian_day
-    let jdn = |year: i32, month: u8, day: u8| -> i64 {
-        let mo = i64::from(month);
-        let dy = i64::from(day);
-        let yr = i64::from(year);
-        let adj = (14 - mo) / 12;
-        let yr2 = yr + 4800 - adj;
-        let mo2 = mo + 12 * adj - 3;
-        dy + (153 * mo2 + 2) / 5 + 365 * yr2 + yr2 / 4 - yr2 / 100 + yr2 / 400 - 32045
-    };
-
-    let da = jdn(ay, am, ad);
-    let db = jdn(by, bm, bd);
-    // unsigned_abs returns u64; cast to f64 is safe for day counts < 2^52
+    let da = parse(date_a)?.to_julian_day();
+    let db = parse(date_b)?.to_julian_day();
+    // `to_julian_day` returns an i32 JDN; the absolute day difference is the
+    // observing-night distance. Cast to f64 is exact for the i32 day range.
     #[allow(clippy::cast_precision_loss)]
-    Some((da - db).unsigned_abs() as f64)
+    Some(i64::from((da - db).abs()) as f64)
 }
 
 #[cfg(test)]

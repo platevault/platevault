@@ -12,6 +12,9 @@ serde = { workspace = true }
 serde_json = { workspace = true }
 uuid = { workspace = true }
 time = { workspace = true, features = ["macros"] }
+# spec 042 (T202): glob matching for `MatchKind::Glob` artifact rules
+# (replaces the hand-rolled `*`/`?` byte-recursive matcher).
+globset = { workspace = true }
 
 [lints]
 workspace = true

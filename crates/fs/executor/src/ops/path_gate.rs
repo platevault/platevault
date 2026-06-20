@@ -17,7 +17,7 @@
 //! The caller (executor loop) calls `resolve_and_validate` before performing
 //! any filesystem mutation.
 
-use std::path::{Component, Path, PathBuf};
+use std::path::{Path, PathBuf};
 
 use crate::failure::{FailureCode, PlanItemFailure};
 
@@ -132,33 +132,19 @@ pub fn resolve_and_validate(root: &Path, relative: &Path) -> Result<ResolvedPath
 ///
 /// This is intentionally conservative: it does not strip Windows UNC
 /// prefixes or long-path `\\?\` prefixes.
+///
+/// spec 042 (T206): the lexical collapse is delegated to `path-clean`, whose
+/// `PathClean::clean` implements the same purely-lexical algorithm (drop `.`,
+/// pop the element preceding an inner `..`, drop a leading `..` on a rooted
+/// path, preserve the root/prefix). This is *only* the lexical step — the
+/// symlink/junction safety walk in [`resolve_and_validate`] is unchanged and
+/// still runs `symlink_metadata` per component of the original relative path,
+/// so the no-link-following guard (Product Constraints §II) is preserved. The
+/// `lexical_normalize_*` unit tests are the equivalence guard for the collapse.
 #[must_use]
 pub fn lexical_normalize(path: &Path) -> PathBuf {
-    let mut components: Vec<Component<'_>> = Vec::new();
-    for component in path.components() {
-        match component {
-            Component::CurDir => {
-                // `.` — drop
-            }
-            Component::ParentDir => {
-                // `..` — pop if possible
-                match components.last() {
-                    Some(Component::Normal(_)) => {
-                        components.pop();
-                    }
-                    Some(Component::RootDir | Component::Prefix(_)) | None => {
-                        // At root or empty — ignore `..`
-                    }
-                    Some(Component::CurDir | Component::ParentDir) => {
-                        // Shouldn't happen after our processing, but push to be safe.
-                        components.push(component);
-                    }
-                }
-            }
-            other => components.push(other),
-        }
-    }
-    components.iter().collect()
+    use path_clean::PathClean as _;
+    path.clean()
 }
 
 // ── Tests ──────────────────────────────────────────────────────────────────────

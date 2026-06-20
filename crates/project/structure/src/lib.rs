@@ -123,16 +123,39 @@ pub const MARKER_FILENAME: &str = ".astro-plan-project.json";
 /// Marker format version. Bump when the marker schema changes.
 pub const MARKER_VERSION: &str = "1";
 
+/// On-disk shape of the project marker (spec 042, T207).
+///
+/// `version` and `projectId` are both optional at the deserialize level so a
+/// malformed-but-valid-JSON marker yields a structured `MissingField` error
+/// rather than a serde decode error, preserving the prior parser's error
+/// semantics (version checked before projectId).
+#[derive(serde::Serialize, serde::Deserialize)]
+struct MarkerDoc {
+    #[serde(skip_serializing_if = "Option::is_none")]
+    version: Option<String>,
+    #[serde(rename = "projectId", skip_serializing_if = "Option::is_none")]
+    project_id: Option<String>,
+}
+
 /// Render a project marker as a JSON string to be written into
 /// `<project_root>/<MARKER_FILENAME>`.
 ///
 /// The marker intentionally contains only the project id and format version;
 /// the authoritative metadata lives in the database (Constitution V).
+///
+/// spec 042 (T207): serialized via `serde_json` (pretty-printed, 2-space
+/// indent, trailing newline) instead of a hand-rolled `format!`, keeping the
+/// human-readable on-disk shape and round-trip with [`parse_marker`].
 #[must_use]
 pub fn render_marker(project_id: &str) -> String {
-    // Produce deterministic, human-readable JSON without pulling in serde_json
-    // to keep this crate free of heavy dependencies.
-    format!("{{\n  \"version\": \"{MARKER_VERSION}\",\n  \"projectId\": \"{project_id}\"\n}}\n")
+    let doc = MarkerDoc {
+        version: Some(MARKER_VERSION.to_owned()),
+        project_id: Some(project_id.to_owned()),
+    };
+    // `to_string_pretty` cannot fail for this fixed, finite struct.
+    let mut s = serde_json::to_string_pretty(&doc).unwrap_or_default();
+    s.push('\n');
+    s
 }
 
 /// Parse the `projectId` field from a marker string.
@@ -144,17 +167,17 @@ pub fn render_marker(project_id: &str) -> String {
 ///
 /// Returns `Err(ParseMarkerError::InvalidJson)` on non-JSON input.
 /// Returns `Err(ParseMarkerError::UnknownVersion)` on unrecognised version.
-/// Returns `Err(ParseMarkerError::MissingField)` when `projectId` is absent.
+/// Returns `Err(ParseMarkerError::MissingField)` when `version`/`projectId` is absent.
 pub fn parse_marker(raw: &str) -> Result<ParsedMarker, ParseMarkerError> {
-    // Minimal parser: look for "projectId" and "version" as JSON string fields.
-    // Avoids a serde_json dependency in this leaf crate.
-    let version = extract_json_string_field(raw, "version")
-        .ok_or(ParseMarkerError::MissingField("version"))?;
+    // spec 042 (T207): parse via serde_json instead of the hand-rolled string
+    // scanner. Error ordering is preserved: version absence/mismatch is reported
+    // before a missing projectId.
+    let doc: MarkerDoc = serde_json::from_str(raw).map_err(|_| ParseMarkerError::InvalidJson)?;
+    let version = doc.version.ok_or(ParseMarkerError::MissingField("version"))?;
     if version != MARKER_VERSION {
         return Err(ParseMarkerError::UnknownVersion(version));
     }
-    let project_id = extract_json_string_field(raw, "projectId")
-        .ok_or(ParseMarkerError::MissingField("projectId"))?;
+    let project_id = doc.project_id.ok_or(ParseMarkerError::MissingField("projectId"))?;
     Ok(ParsedMarker { project_id })
 }
 
@@ -167,6 +190,8 @@ pub struct ParsedMarker {
 /// Errors from [`parse_marker`].
 #[derive(Clone, Debug, Eq, PartialEq)]
 pub enum ParseMarkerError {
+    /// The marker is not valid JSON.
+    InvalidJson,
     MissingField(&'static str),
     UnknownVersion(String),
 }
@@ -174,27 +199,11 @@ pub enum ParseMarkerError {
 impl std::fmt::Display for ParseMarkerError {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         match self {
+            Self::InvalidJson => write!(f, "marker is not valid JSON"),
             Self::MissingField(name) => write!(f, "marker missing required field: {name}"),
             Self::UnknownVersion(v) => write!(f, "unrecognised marker version: {v}"),
         }
     }
-}
-
-/// Naive string scanner: find the value of a top-level JSON string field.
-/// Sufficient for the simple single-object markers this crate writes.
-fn extract_json_string_field(json: &str, field: &str) -> Option<String> {
-    let needle = format!("\"{field}\"");
-    let start = json.find(&needle)?;
-    let after_key = &json[start + needle.len()..];
-    // skip whitespace and ':'
-    let colon_pos = after_key.find(':')?;
-    let after_colon = &after_key[colon_pos + 1..].trim_start();
-    if !after_colon.starts_with('"') {
-        return None;
-    }
-    let inner = &after_colon[1..];
-    let end = inner.find('"')?;
-    Some(inner[..end].to_owned())
 }
 
 // ── Working-folder resolution ─────────────────────────────────────────────────

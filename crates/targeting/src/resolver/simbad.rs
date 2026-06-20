@@ -330,16 +330,27 @@ fn classify_reqwest(e: &reqwest::Error, timeout: Duration) -> ResolveError {
 }
 
 /// Parse a `basic`-row TSV line into `(oid, main_id, ra, dec, otype)`.
+///
+/// Tokenization (T204) uses the `csv` crate as a tab-delimited, header-less,
+/// flexible RFC-4180 reader: SIMBAD's double-quoted string columns are unquoted
+/// by the reader (equivalent to the prior per-field [`unquote`]), while numeric
+/// columns pass through untouched. The RA/Dec finiteness + range validation is
+/// preserved exactly (FIX-5c).
 fn parse_basic_row(line: &str) -> Option<(i64, String, f64, f64, String)> {
-    let cols: Vec<&str> = line.split('\t').collect();
-    if cols.len() < 5 {
+    let mut reader = csv::ReaderBuilder::new()
+        .delimiter(b'\t')
+        .has_headers(false)
+        .flexible(true)
+        .from_reader(line.as_bytes());
+    let record = reader.records().next()?.ok()?;
+    if record.len() < 5 {
         return None;
     }
-    let oid: i64 = unquote(cols[0]).parse().ok()?;
-    let main_id = unquote(cols[1]);
-    let ra: f64 = unquote(cols[2]).parse().ok()?;
-    let dec: f64 = unquote(cols[3]).parse().ok()?;
-    let otype = unquote(cols[4]);
+    let oid: i64 = record[0].trim().parse().ok()?;
+    let main_id = record[1].trim().to_owned();
+    let ra: f64 = record[2].trim().parse().ok()?;
+    let dec: f64 = record[3].trim().parse().ok()?;
+    let otype = record[4].trim().to_owned();
     // FIX-5c: range-validate ICRS coords so an out-of-range value degrades to a
     // no-result row (NotFound) instead of hitting the DB CHECK on cache write.
     if !ra.is_finite() || !(0.0..360.0).contains(&ra) {
@@ -359,27 +370,24 @@ fn push_unique(out: &mut Vec<ResolvedAlias>, alias: &str, kind: AliasKind) {
     out.push(ResolvedAlias::new(alias, kind));
 }
 
+/// The set of bytes that must be percent-encoded in an ADQL URL query string.
+///
+/// Equivalent to the prior hand-rolled rule: the RFC 3986 *unreserved* set
+/// (`A–Z a–z 0–9 - _ . ~`) passes through untouched; every other byte is
+/// `%XX`-encoded (uppercase hex). `percent-encoding`'s `NON_ALPHANUMERIC`
+/// encodes everything except `A–Za–z0–9`, so we *remove* the four unreserved
+/// punctuation marks to reproduce the unreserved passthrough exactly.
+const ADQL_QUERY_ENCODE: &percent_encoding::AsciiSet =
+    &percent_encoding::NON_ALPHANUMERIC.remove(b'-').remove(b'_').remove(b'.').remove(b'~');
+
 /// Percent-encode an ADQL query for use in a URL query string.
 ///
 /// The workspace builds `reqwest` with `default-features = false`, so the
-/// high-level query builder is unavailable; encode by hand (RFC 3986 unreserved
-/// set passes through, everything else is `%XX`).
+/// high-level query builder is unavailable; encode via `percent-encoding`
+/// against [`ADQL_QUERY_ENCODE`] (RFC 3986 unreserved set passes through,
+/// everything else is `%XX`).
 fn url_encode(s: &str) -> String {
-    const HEX: &[u8; 16] = b"0123456789ABCDEF";
-    let mut out = String::with_capacity(s.len() * 3);
-    for b in s.bytes() {
-        match b {
-            b'A'..=b'Z' | b'a'..=b'z' | b'0'..=b'9' | b'-' | b'_' | b'.' | b'~' => {
-                out.push(b as char);
-            }
-            _ => {
-                out.push('%');
-                out.push(HEX[(b >> 4) as usize] as char);
-                out.push(HEX[(b & 0x0f) as usize] as char);
-            }
-        }
-    }
-    out
+    percent_encoding::utf8_percent_encode(s, ADQL_QUERY_ENCODE).to_string()
 }
 
 /// Strip SIMBAD's surrounding double quotes (TSV string columns are quoted).
