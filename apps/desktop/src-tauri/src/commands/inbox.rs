@@ -142,7 +142,11 @@ pub async fn inbox_reclassify(
             .map(|o| ReclassifyOverride {
                 file_path: o.file_path,
                 frame_type: o.frame_type.unwrap_or_default(),
-                ..Default::default()
+                // spec 041 US3/T026 (R-3): carry the non-type overrides through to
+                // the use case instead of dropping them.
+                filter: o.filter,
+                exposure_s: o.exposure_s,
+                binning: o.binning,
             })
             .collect(),
     };
