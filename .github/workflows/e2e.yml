@@ -1,0 +1,81 @@
+# Real-UI E2E (Layer 2) via WebdriverIO + tauri-driver.
+#
+# Runs decoupled from ci.yml's Stage A gate: the real-UI journeys are valuable
+# even while the workspace gate is unrelatedly red, and a Tauri webview can only
+# run here (not in the WSL dev sandbox). Caching keeps iteration fast:
+#   - sccache caches ALL crate compilation (incl. workspace) -> test-only edits
+#     are near-instant rebuilds.
+#   - tauri-driver is installed prebuilt via cargo-binstall (no source compile).
+name: Real-UI E2E
+
+on:
+  push:
+    branches: [037-us3-e2e-journeys]
+  pull_request:
+    paths:
+      - "apps/desktop/**"
+      - "crates/**"
+      - "Cargo.toml"
+      - "Cargo.lock"
+      - ".github/workflows/e2e.yml"
+  workflow_dispatch:
+
+concurrency:
+  group: e2e-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  e2e:
+    name: Real-UI E2E (Linux)
+    runs-on: ubuntu-latest
+    env:
+      SCCACHE_GHA_ENABLED: "true"
+      RUSTC_WRAPPER: "sccache"
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install Tauri + E2E system deps
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y \
+            libwebkit2gtk-4.1-dev libgtk-3-dev librsvg2-dev \
+            libayatana-appindicator3-dev webkit2gtk-driver xvfb
+
+      - uses: dtolnay/rust-toolchain@stable
+      - uses: mozilla-actions/sccache-action@v0.0.10
+      # sccache owns compilation caching; Swatinem caches registry/git deps only.
+      - uses: Swatinem/rust-cache@v2
+        with:
+          cache-targets: "false"
+
+      - uses: pnpm/action-setup@v4
+        with:
+          version: 10.33.0
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: pnpm
+
+      - uses: taiki-e/install-action@v2
+        with:
+          tool: cargo-binstall
+      - name: Install tauri-driver (prebuilt)
+        run: cargo binstall -y tauri-driver || cargo install tauri-driver --locked
+
+      - name: Install JS deps
+        run: pnpm install --frozen-lockfile
+
+      # The debug binary loads its frontend from the Tauri devUrl (:5173); the
+      # journeys serve the built dist there, so build the frontend first.
+      - name: Build frontend
+        run: pnpm --filter @astro-plan/desktop build
+
+      - name: Build desktop app (debug)
+        run: cargo build -p desktop_shell
+
+      - name: Real-UI E2E (WebdriverIO + tauri-driver)
+        run: xvfb-run -a pnpm --filter @astro-plan/desktop test:e2e:wdio
+
+      - name: sccache stats
+        if: always()
+        run: ${SCCACHE_PATH:-sccache} --show-stats
