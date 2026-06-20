@@ -1,24 +1,31 @@
-//! Inbox Tauri commands (spec 005).
+//! Inbox Tauri commands (spec 005, spec 041).
 //!
-//! Provides `inbox.classify`, `inbox.confirm`, `inbox.reclassify`, and
-//! `inbox.scan.folder` wired to `app_core` use cases.
+//! Provides `inbox.classify`, `inbox.confirm`, `inbox.reclassify`,
+//! `inbox.scan.folder`, and the spec 041 plan surface commands:
+//! `inbox.plan`, `inbox.plan.apply`, `inbox.plan.apply_all`, `inbox.plan.cancel`.
 //!
 //! Legacy `inbox.scan` is retained for backward compatibility.
 
 use app_core::inbox::classify::{classify, ClassifyRequest};
 use app_core::inbox::confirm::{confirm, ConfirmRequest};
+use app_core::inbox::inbox_plan::{
+    apply_all_inbox_plans, apply_inbox_plan, cancel_inbox_plan, get_inbox_plan,
+};
 use app_core::inbox::reclassify::{reclassify, ReclassifyOverride, ReclassifyRequest};
 use app_core::inbox::scan::{scan_root, ScanOptions, ScannedMasterFile};
 use contracts_core::inbox::{
-    InboxBreakdownEntry, InboxClassifyRequest, InboxClassifyResponse, InboxConfirmRequest,
-    InboxConfirmResponse, InboxFileEntry, InboxItemSummary, InboxListItem, InboxListResponse,
-    InboxReclassifyRequest, InboxReclassifyResponse, InboxScanFolderRequest,
-    InboxScanFolderResponse, InboxScanResult,
+    InboxApplyAllResponse, InboxBreakdownEntry, InboxClassifyRequest, InboxClassifyResponse,
+    InboxConfirmRequest, InboxConfirmResponse, InboxFileEntry, InboxItemSummary, InboxListItem,
+    InboxListResponse, InboxPlanCancelResponse, InboxPlanView, InboxReclassifyRequest,
+    InboxReclassifyResponse, InboxScanFolderRequest, InboxScanFolderResponse, InboxScanResult,
 };
+use contracts_core::plan_apply::PlanApplyResponse;
 use persistence_db::repositories::inbox::list_unacknowledged_across_roots;
 use sqlx::SqlitePool;
 use std::path::PathBuf;
 use uuid::Uuid;
+
+use crate::commands::lifecycle::AppState;
 
 /// Cap on cross-root listing (FR-006 — no unbounded loads).
 const INBOX_LIST_LIMIT: i64 = 500;
@@ -391,4 +398,74 @@ pub async fn inbox_scan(root_id: Option<String>) -> Result<InboxScanResult, Stri
         total_count: 3,
         total_size_bytes: 268_435_456,
     })
+}
+
+// ── spec 041: inbox plan surface ──────────────────────────────────────────────
+
+/// `inbox.plan` — fetch the open plan for an inbox item.
+///
+/// Returns the [`InboxPlanView`] when a plan link exists for this item, or an
+/// error with code `inbox.item.no_plan` when the item has no open plan.
+///
+/// # Errors
+/// - `inbox.item.not_found` — item does not exist.
+/// - `inbox.item.no_plan`   — item exists but has no linked plan.
+/// - `plan.not_found`       — link is present but plan row missing.
+#[tauri::command]
+#[specta::specta]
+pub async fn inbox_plan(
+    inbox_item_id: String,
+    state: tauri::State<'_, AppState>,
+) -> Result<InboxPlanView, String> {
+    get_inbox_plan(state.repo.pool(), &inbox_item_id).await.map_err(|e| e.message)
+}
+
+/// `inbox.plan.apply` — approve + apply the plan for a single inbox item.
+///
+/// The use-case auto-approves the plan (which `inbox.confirm` leaves at
+/// `ready_for_review`) before calling `apply_plan`.  The plan listener
+/// transitions the inbox item state once the executor completes.
+///
+/// # Errors
+/// Returns a string error on failure, including `plan.stale` when per-item
+/// CAS detects a file changed since the plan was created.
+#[tauri::command]
+#[specta::specta]
+pub async fn inbox_plan_apply(
+    inbox_item_id: String,
+    state: tauri::State<'_, AppState>,
+) -> Result<PlanApplyResponse, String> {
+    apply_inbox_plan(state.repo.pool(), &state.bus, &inbox_item_id).await.map_err(|e| e.message)
+}
+
+/// `inbox.plan.apply_all` — apply all plans currently in `plan_open` state.
+///
+/// Iterates items in `plan_open` state and applies each sequentially.
+/// Returns a per-item result list so the UI can report partial failures.
+///
+/// # Errors
+/// Returns a string error only if the list query itself fails; per-plan
+/// errors are captured inside `InboxApplyAllResponse.results`.
+#[tauri::command]
+#[specta::specta]
+pub async fn inbox_plan_apply_all(
+    state: tauri::State<'_, AppState>,
+) -> Result<InboxApplyAllResponse, String> {
+    apply_all_inbox_plans(state.repo.pool(), &state.bus).await.map_err(|e| e.message)
+}
+
+/// `inbox.plan.cancel` — discard the open plan and reset the item to `classified`.
+///
+/// The plan listener handles async cleanup; the use-case also eagerly resets
+/// the inbox item state so the UI can reflect the change immediately.
+///
+/// # Errors
+/// Returns a string error on database failure.
+#[tauri::command]
+#[specta::specta]
+pub async fn inbox_plan_cancel(
+    inbox_item_id: String,
+    state: tauri::State<'_, AppState>,
+) -> Result<InboxPlanCancelResponse, String> {
+    cancel_inbox_plan(state.repo.pool(), &state.bus, &inbox_item_id).await.map_err(|e| e.message)
 }

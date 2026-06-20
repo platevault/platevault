@@ -90,7 +90,8 @@ ALTER TABLE inbox_classification_evidence
 -- SQLite cannot ALTER a CHECK constraint, so we use the table-rebuild pattern.
 -- Preserve ALL columns, constraints, and indexes from migration 0029 +
 -- columns added by migrations 0039 (source_id, category,
--- requires_destructive_confirm, resolved_pattern) and 0015 (item_stale).
+-- requires_destructive_confirm, resolved_pattern), 0015 (item_stale),
+-- and 0041 (destructive_confirmed).
 -- The only change is adding 'catalogue' to the action CHECK list.
 
 PRAGMA foreign_keys = OFF;
@@ -129,7 +130,9 @@ CREATE TABLE plan_items_new_045 (
     source_id                   TEXT,
     category                    TEXT,
     requires_destructive_confirm INTEGER NOT NULL DEFAULT 0,
-    resolved_pattern            TEXT
+    resolved_pattern            TEXT,
+    -- added by migration 0041
+    destructive_confirmed       INTEGER NOT NULL DEFAULT 0
 );
 
 INSERT INTO plan_items_new_045 SELECT
@@ -137,7 +140,8 @@ INSERT INTO plan_items_new_045 SELECT
     from_root_id, from_relative_path, to_root_id, to_relative_path,
     reason, protection, linked_entity, item_state, failure_reason,
     provenance, approved_mtime, approved_size_bytes, archive_path, created_at,
-    item_stale, source_id, category, requires_destructive_confirm, resolved_pattern
+    item_stale, source_id, category, requires_destructive_confirm, resolved_pattern,
+    destructive_confirmed
 FROM plan_items;
 
 DROP TABLE plan_items;

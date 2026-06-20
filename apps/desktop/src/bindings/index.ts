@@ -1034,6 +1034,51 @@ export const commands = {
 	 */
 	inboxList: () => typedError<InboxListResponse_Serialize, string>(__TAURI_INVOKE("inbox_list")),
 	/**
+	 *  `inbox.plan` — fetch the open plan for an inbox item.
+	 * 
+	 *  Returns the [`InboxPlanView`] when a plan link exists for this item, or an
+	 *  error with code `inbox.item.no_plan` when the item has no open plan.
+	 * 
+	 *  # Errors
+	 *  - `inbox.item.not_found` — item does not exist.
+	 *  - `inbox.item.no_plan`   — item exists but has no linked plan.
+	 *  - `plan.not_found`       — link is present but plan row missing.
+	 */
+	inboxPlan: (inboxItemId: string) => typedError<InboxPlanView, string>(__TAURI_INVOKE("inbox_plan", { inboxItemId })),
+	/**
+	 *  `inbox.plan.apply` — approve + apply the plan for a single inbox item.
+	 * 
+	 *  The use-case auto-approves the plan (which `inbox.confirm` leaves at
+	 *  `ready_for_review`) before calling `apply_plan`.  The plan listener
+	 *  transitions the inbox item state once the executor completes.
+	 * 
+	 *  # Errors
+	 *  Returns a string error on failure, including `plan.stale` when per-item
+	 *  CAS detects a file changed since the plan was created.
+	 */
+	inboxPlanApply: (inboxItemId: string) => typedError<PlanApplyResponse, string>(__TAURI_INVOKE("inbox_plan_apply", { inboxItemId })),
+	/**
+	 *  `inbox.plan.apply_all` — apply all plans currently in `plan_open` state.
+	 * 
+	 *  Iterates items in `plan_open` state and applies each sequentially.
+	 *  Returns a per-item result list so the UI can report partial failures.
+	 * 
+	 *  # Errors
+	 *  Returns a string error only if the list query itself fails; per-plan
+	 *  errors are captured inside `InboxApplyAllResponse.results`.
+	 */
+	inboxPlanApplyAll: () => typedError<InboxApplyAllResponse, string>(__TAURI_INVOKE("inbox_plan_apply_all")),
+	/**
+	 *  `inbox.plan.cancel` — discard the open plan and reset the item to `classified`.
+	 * 
+	 *  The plan listener handles async cleanup; the use-case also eagerly resets
+	 *  the inbox item state so the UI can reflect the change immediately.
+	 * 
+	 *  # Errors
+	 *  Returns a string error on database failure.
+	 */
+	inboxPlanCancel: (inboxItemId: string) => typedError<InboxPlanCancelResponse, string>(__TAURI_INVOKE("inbox_plan_cancel", { inboxItemId })),
+	/**
 	 *  `inventory.list` — return the grouped inventory ledger with optional filters.
 	 * 
 	 *  # Errors
@@ -2193,6 +2238,11 @@ export type GuidedStepCompleteResponse = {
 	state: GuidedFlowStateDto,
 };
 
+/**  Response from `inbox.plan.apply_all` (spec 041, FR-003a). */
+export type InboxApplyAllResponse = {
+	results: InboxPlanApplyResult[],
+};
+
 /**  One frame-type breakdown entry in a classify response. */
 export type InboxBreakdownEntry = InboxBreakdownEntry_Serialize | InboxBreakdownEntry_Deserialize;
 
@@ -2531,6 +2581,61 @@ export type InboxListResponse_Serialize = {
 	capped: boolean,
 	/**  Maximum items per response (matches the server-side cap). */
 	limit: number,
+};
+
+/**
+ *  One plan action entry in the in-context plan panel.
+ * 
+ *  `action` is `"move"` | `"catalogue"` | `"archive"` | `"trash"`.
+ */
+export type InboxPlanAction = {
+	/**  1-based ordinal within the plan. */
+	index: number,
+	/**  `"move"` | `"catalogue"` | `"archive"` | `"trash"` */
+	action: string,
+	fromPath: string,
+	toPath: string,
+	/**
+	 *  Human-readable resolved destination preview
+	 *  (equals `from_path` for catalogue actions).
+	 */
+	destinationPreview: string,
+	/**  True when this action requires explicit destructive confirmation before apply. */
+	requiresDestructiveConfirm: boolean,
+};
+
+/**  Per-plan result from `inbox.plan.apply_all` (spec 041, FR-003a). */
+export type InboxPlanApplyResult = {
+	inboxItemId: string,
+	planId: string,
+	state: string,
+	error: string | null,
+};
+
+/**  Response from `inbox.plan.cancel` (spec 041, FR-006). */
+export type InboxPlanCancelResponse = {
+	inboxItemId: string,
+	planId: string,
+	state: string,
+};
+
+/**
+ *  Response from `inbox.plan` — plan(s) linked to an inbox item (spec 041).
+ * 
+ *  Read via `inbox_plan_links` so the inbox surface can show plan detail
+ *  without navigating to the Archive page (FR-004).
+ */
+export type InboxPlanView = {
+	planId: string,
+	state: string,
+	/**
+	 *  True when the executor's CAS detected that one or more source files
+	 *  changed since the plan was created (FR-007 / T011).
+	 *  When `stale` is true the UI should disable Apply and prompt the user
+	 *  to re-classify and re-confirm.
+	 */
+	stale: boolean,
+	actions: InboxPlanAction[],
 };
 
 /**

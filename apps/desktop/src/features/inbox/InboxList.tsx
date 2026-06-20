@@ -125,7 +125,7 @@ export function InboxList({
           <div
             key={item.inboxItemId}
             data-testid={`inbox-item-${item.inboxItemId}`}
-            className={`alm-list-item${selectedIdx === originalIdx ? ' alm-list-item--selected' : ''}`}
+            className={`alm-list-item${selectedIdx === originalIdx ? ' alm-list-item--selected' : ''}${item.state === 'plan_open' ? ' alm-list-item--muted' : ''}`}
             onClick={() => onSelect(originalIdx)}
             role="button"
             tabIndex={0}

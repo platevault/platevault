@@ -406,5 +406,36 @@ pub struct InboxPlanAction {
 pub struct InboxPlanView {
     pub plan_id: String,
     pub state: String,
+    /// True when the executor's CAS detected that one or more source files
+    /// changed since the plan was created (FR-007 / T011).
+    /// When `stale` is true the UI should disable Apply and prompt the user
+    /// to re-classify and re-confirm.
+    pub stale: bool,
     pub actions: Vec<InboxPlanAction>,
+}
+
+/// Per-plan result from `inbox.plan.apply_all` (spec 041, FR-003a).
+#[derive(Clone, Debug, Serialize, Deserialize, Type)]
+#[serde(rename_all = "camelCase")]
+pub struct InboxPlanApplyResult {
+    pub inbox_item_id: String,
+    pub plan_id: String,
+    pub state: String,
+    pub error: Option<String>,
+}
+
+/// Response from `inbox.plan.apply_all` (spec 041, FR-003a).
+#[derive(Clone, Debug, Serialize, Deserialize, Type)]
+#[serde(rename_all = "camelCase")]
+pub struct InboxApplyAllResponse {
+    pub results: Vec<InboxPlanApplyResult>,
+}
+
+/// Response from `inbox.plan.cancel` (spec 041, FR-006).
+#[derive(Clone, Debug, Serialize, Deserialize, Type)]
+#[serde(rename_all = "camelCase")]
+pub struct InboxPlanCancelResponse {
+    pub inbox_item_id: String,
+    pub plan_id: String,
+    pub state: String,
 }

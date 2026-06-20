@@ -551,7 +551,7 @@ pub async fn list_unacknowledged_across_roots(
              i.master_exposure_s
          FROM inbox_items i
          JOIN registered_sources r ON r.id = i.root_id
-         WHERE i.state IN ('pending_classification', 'classified')
+         WHERE i.state IN ('pending_classification', 'classified', 'plan_open')
          ORDER BY r.path, i.relative_path
          LIMIT ?",
     )

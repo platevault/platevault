@@ -24,7 +24,13 @@ import {
   useInboxRescan,
   useInboxClassification,
   useInboxConfirm,
+  useInboxPlan,
+  useInboxPlanApply,
+  useInboxPlanApplyAll,
+  useInboxPlanCancel,
 } from './store';
+import { PlanPanel } from './PlanPanel';
+import type { PlanView, PlanActionKind, DestructiveDestination } from './PlanPanel';
 import type { FrameType, InboxGroup } from '@/lib/route-contract';
 
 export function InboxPage() {
@@ -77,7 +83,34 @@ export function InboxPage() {
 
   const { confirm, loading: confirmLoading } = useInboxConfirm();
   // FR-032: destructive-destination choice, defaults to 'archive' (Constitution §II).
-  const [destructiveDestination, setDestructiveDestination] = useState<'archive' | 'trash'>('archive');
+  const [destructiveDestination, setDestructiveDestination] = useState<DestructiveDestination>('archive');
+
+  // spec 041: plan surface — fetch + hold the open plan for the selected item.
+  const {
+    plan: rawPlan,
+    loading: planLoading,
+    fetchPlan,
+  } = useInboxPlan(selectedItem?.state === 'plan_open' ? (selectedItem?.inboxItemId ?? '') : '');
+  const { apply, loading: applyLoading } = useInboxPlanApply();
+  const { applyAll, loading: applyAllLoading } = useInboxPlanApplyAll();
+  const { cancel, loading: cancelLoading } = useInboxPlanCancel();
+
+  // Map InboxPlanView → PlanView for PlanPanel.
+  const planView: PlanView | null = rawPlan
+    ? {
+        planId: rawPlan.planId,
+        state: rawPlan.state,
+        stale: rawPlan.stale,
+        actions: rawPlan.actions.map((a) => ({
+          index: a.index,
+          action: a.action as PlanActionKind,
+          fromPath: a.fromPath,
+          toPath: a.toPath,
+          destinationPreview: a.destinationPreview,
+          requiresDestructiveConfirm: a.requiresDestructiveConfirm,
+        })),
+      }
+    : null;
 
   const handleConfirm = async () => {
     if (!selectedItem || !classification) return;
@@ -96,19 +129,16 @@ export function InboxPage() {
           message: 'Registered as calibration master.',
           variant: 'info',
         });
+        refreshList();
       } else {
+        // spec 041: fetch the plan inline; item stays visible as `plan_open`.
         addToast({
-          message: `Plan created (${result.itemsTotal} items). Review before applying.`,
+          message: `Plan created (${result.itemsTotal} items). Review below before applying.`,
           variant: 'info',
-          action: {
-            label: 'View plan',
-            onClick: () =>
-              navigate({ to: '/archive', search: { selected: undefined } as never }),
-          },
         });
+        refreshList();
+        await fetchPlan();
       }
-      // Refresh so confirmed item drops out (FR-003).
-      refreshList();
     } catch (e) {
       const msg = String(e);
       if (msg.includes('inbox.has.open.plan')) {
@@ -119,6 +149,37 @@ export function InboxPage() {
         addToast({ message: `Confirm failed: ${msg}`, variant: 'error' });
       }
     }
+  };
+
+  const handlePlanApply = async () => {
+    if (!selectedItem) return;
+    const result = await apply(selectedItem.inboxItemId);
+    if (result) {
+      addToast({ message: 'Plan is being applied. The item will move to Resolved when done.', variant: 'info' });
+      refreshList();
+    } else {
+      addToast({ message: 'Apply failed — check the error above.', variant: 'error' });
+    }
+  };
+
+  const handlePlanApplyAll = async () => {
+    const result = await applyAll();
+    if (result) {
+      const failed = result.results.filter((r) => r.error != null).length;
+      if (failed > 0) {
+        addToast({ message: `${result.results.length - failed} plans applied; ${failed} failed.`, variant: 'warn' });
+      } else {
+        addToast({ message: `All ${result.results.length} plans are being applied.`, variant: 'info' });
+      }
+      refreshList();
+    }
+  };
+
+  const handlePlanCancel = async () => {
+    if (!selectedItem) return;
+    await cancel(selectedItem.inboxItemId);
+    addToast({ message: 'Plan discarded. Item is available for re-confirmation.', variant: 'info' });
+    refreshList();
   };
 
   const hasOpenPlan = selectedItem?.state === 'plan_open';
@@ -167,15 +228,29 @@ export function InboxPage() {
         }
         detail={
           selectedItem ? (
-            <InboxDetail
-              // Remount per item so per-item state (pending type overrides) never
-              // leaks across selections — leaked overrides were being sent to the
-              // wrong item's reclassify and rejected as "not found in evidence".
-              key={selectedItem.inboxItemId}
-              item={selectedItem}
-              rootAbsolutePath={selectedRootPath}
-              classification={classification ?? null}
-            />
+            <>
+              <InboxDetail
+                // Remount per item so per-item state (pending type overrides) never
+                // leaks across selections — leaked overrides were being sent to the
+                // wrong item's reclassify and rejected as "not found in evidence".
+                key={selectedItem.inboxItemId}
+                item={selectedItem}
+                rootAbsolutePath={selectedRootPath}
+                classification={classification ?? null}
+              />
+              {/* spec 041: show plan panel when item is in plan_open state */}
+              {(hasOpenPlan || planLoading) && (
+                <PlanPanel
+                  plan={planView}
+                  destructiveDestination={destructiveDestination}
+                  onDestructiveDestinationChange={setDestructiveDestination}
+                  onApply={() => void handlePlanApply()}
+                  onApplyAll={() => void handlePlanApplyAll()}
+                  onCancel={() => void handlePlanCancel()}
+                  busy={applyLoading || applyAllLoading || cancelLoading || planLoading}
+                />
+              )}
+            </>
           ) : (
             <EmptyState
               title="Select a detection"
@@ -193,9 +268,7 @@ export function InboxPage() {
             destructiveDestination={destructiveDestination}
             onDestructiveDestinationChange={setDestructiveDestination}
             onConfirm={handleConfirm}
-            onOpenExistingPlan={() =>
-              navigate({ to: '/archive', search: { selected: undefined } as never })
-            }
+            onOpenExistingPlan={() => void fetchPlan()}
           />
         }
       />

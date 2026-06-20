@@ -44,7 +44,8 @@ use crate::commands::guided::{
     guided_activate, guided_dismiss, guided_restart, guided_state_get, guided_step_complete,
 };
 use crate::commands::inbox::{
-    inbox_classify, inbox_confirm, inbox_list, inbox_reclassify, inbox_scan, inbox_scan_folder,
+    inbox_classify, inbox_confirm, inbox_list, inbox_plan, inbox_plan_apply, inbox_plan_apply_all,
+    inbox_plan_cancel, inbox_reclassify, inbox_scan, inbox_scan_folder,
 };
 use crate::commands::ingestion::{ingestion_settings_get, ingestion_settings_update};
 use crate::commands::inventory::{inventory_list, inventory_session_review};
@@ -290,13 +291,17 @@ pub fn specta_builder() -> Builder<tauri::Wry> {
         // calibration tolerances (spec 030)
         calibration_tolerances_get,
         calibration_tolerances_update,
-        // inbox (spec 005 + 030 + 039)
+        // inbox (spec 005 + 030 + 039 + 041)
         inbox_scan,
         inbox_scan_folder,
         inbox_classify,
         inbox_confirm,
         inbox_reclassify,
         inbox_list,
+        inbox_plan,
+        inbox_plan_apply,
+        inbox_plan_apply_all,
+        inbox_plan_cancel,
         // inventory (spec 006)
         inventory_list,
         inventory_session_review,
@@ -474,13 +479,17 @@ pub fn specta_builder() -> Builder<tauri::Wry> {
         // calibration tolerances (spec 030)
         calibration_tolerances_get,
         calibration_tolerances_update,
-        // inbox (spec 005 + 030 + 039)
+        // inbox (spec 005 + 030 + 039 + 041)
         inbox_scan,
         inbox_scan_folder,
         inbox_classify,
         inbox_confirm,
         inbox_reclassify,
         inbox_list,
+        inbox_plan,
+        inbox_plan_apply,
+        inbox_plan_apply_all,
+        inbox_plan_cancel,
         // inventory (spec 006)
         inventory_list,
         inventory_session_review,

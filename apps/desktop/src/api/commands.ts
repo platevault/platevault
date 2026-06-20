@@ -34,6 +34,11 @@ import type {
   InboxScanFolderResponse,
   CalibrationMaster_Serialize as CalibrationMaster,
   MasterDetail_Serialize as MasterDetail,
+  InboxApplyAllResponse,
+  InboxPlanApplyResult,
+  InboxPlanCancelResponse,
+  InboxPlanView,
+  PlanApplyResponse,
 } from '@/bindings/index';
 export type {
   InboxClassifyRequest,
@@ -48,6 +53,11 @@ export type {
   InboxReclassifyResponse,
   InboxScanFolderRequest,
   InboxScanFolderResponse,
+  InboxApplyAllResponse,
+  InboxPlanApplyResult,
+  InboxPlanCancelResponse,
+  InboxPlanView,
+  PlanApplyResponse,
 };
 
 import type {
@@ -697,12 +707,47 @@ export async function inboxReclassify(
 
 /**
  * List all unacknowledged inbox items across all registered roots (spec 039).
- * Items in `pending_classification` or `classified` state are returned.
- * Confirmed/plan_open/resolved items are excluded.
+ * Items in `pending_classification`, `classified`, or `plan_open` state are
+ * returned. Resolved items are excluded.
  * Results are capped at 500 (check `capped` flag for truncation).
  */
 export async function inboxList(): Promise<InboxListResponse> {
   return unwrap(await commands.inboxList());
+}
+
+// ── Inbox plan surface (spec 041) ─────────────────────────────────────────────
+
+/**
+ * Fetch the open plan for an inbox item.
+ * Throws with code `inbox.item.no_plan` when the item has no linked plan.
+ */
+export async function inboxPlan(inboxItemId: string): Promise<InboxPlanView> {
+  return unwrap(await commands.inboxPlan(inboxItemId));
+}
+
+/**
+ * Approve + apply the plan for a single inbox item.
+ * The plan listener transitions the item to `resolved` on completion.
+ * Throws with code `plan.stale` when a source file changed since plan creation.
+ */
+export async function inboxPlanApply(inboxItemId: string): Promise<PlanApplyResponse> {
+  return unwrap(await commands.inboxPlanApply(inboxItemId));
+}
+
+/**
+ * Apply all plans currently in `plan_open` state across all roots.
+ * Per-item errors are captured inside the returned `results` array.
+ */
+export async function inboxPlanApplyAll(): Promise<InboxApplyAllResponse> {
+  return unwrap(await commands.inboxPlanApplyAll());
+}
+
+/**
+ * Discard the open plan and reset the item to `classified`.
+ * The item is immediately available for re-confirmation.
+ */
+export async function inboxPlanCancel(inboxItemId: string): Promise<InboxPlanCancelResponse> {
+  return unwrap(await commands.inboxPlanCancel(inboxItemId));
 }
 
 // ── Calibration matching commands (spec 007) ──────────────────────────────────
