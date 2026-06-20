@@ -94,8 +94,6 @@ describe('T039-1: InboxList cross-root rendering (SC-001)', () => {
         onSelect={vi.fn()}
         filterType="all"
         onFilterTypeChange={vi.fn()}
-        groupBy="none"
-        onGroupByChange={vi.fn()}
       />,
     );
     expect(screen.getByText('2025-10-10/NGC7000')).toBeInTheDocument();
@@ -120,8 +118,6 @@ describe('T039-2: confirmed items absent — empty list (FR-003)', () => {
         onSelect={vi.fn()}
         filterType="all"
         onFilterTypeChange={vi.fn()}
-        groupBy="none"
-        onGroupByChange={vi.fn()}
       />,
     );
     expect(screen.queryByTestId(/^inbox-item-/)).not.toBeInTheDocument();

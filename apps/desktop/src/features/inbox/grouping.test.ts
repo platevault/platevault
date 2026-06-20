@@ -199,6 +199,73 @@ describe('groupByDimensions', () => {
   });
 });
 
+describe('groupByDimensions — count aggregation across nested levels', () => {
+  it('inner-node count equals the sum of its leaf-descendant counts (3 levels)', () => {
+    interface Tri {
+      id: string;
+      target: string | null;
+      frameType: string | null;
+      filter: string | null;
+    }
+    const triAccessors = {
+      target: (i: Tri) => i.target,
+      frameType: (i: Tri) => i.frameType,
+      filter: (i: Tri) => i.filter,
+    };
+    const items: Tri[] = [
+      { id: 'a', target: 'M31', frameType: 'light', filter: 'Ha' },
+      { id: 'b', target: 'M31', frameType: 'light', filter: 'OIII' },
+      { id: 'c', target: 'M31', frameType: 'light', filter: 'Ha' },
+      { id: 'd', target: 'M31', frameType: 'dark', filter: null },
+      { id: 'e', target: 'NGC 1', frameType: 'flat', filter: 'L' },
+    ];
+    const result = groupByDimensions(items, ['target', 'frameType', 'filter'], triAccessors);
+
+    const m31 = result.find((n) => n.label === 'M31')!;
+    expect(m31.count).toBe(4); // a,b,c,d
+    expect(m31.items).toHaveLength(0); // inner node carries no items
+
+    const m31Light = m31.children.find((c) => c.label === 'light')!;
+    expect(m31Light.count).toBe(3); // a,b,c
+
+    // Deepest level (filter): Ha=2 (a,c), OIII=1 (b). Sum == parent count.
+    const ha = m31Light.children.find((c) => c.label === 'Ha')!;
+    const oiii = m31Light.children.find((c) => c.label === 'OIII')!;
+    expect(ha.count).toBe(2);
+    expect(ha.items).toHaveLength(2);
+    expect(oiii.count).toBe(1);
+    expect(ha.count + oiii.count).toBe(m31Light.count);
+
+    // The dark sub-frame has a missing filter → NONE bucket at the deepest level.
+    const m31Dark = m31.children.find((c) => c.label === 'dark')!;
+    expect(m31Dark.count).toBe(1);
+    expect(m31Dark.children[m31Dark.children.length - 1].key).toBe(NONE_KEY);
+
+    // Top-level sum equals total item count.
+    const total = result.reduce((acc, n) => acc + n.count, 0);
+    expect(total).toBe(items.length);
+  });
+
+  it('NONE bucket aggregates at an intermediate level too', () => {
+    const items = [
+      makeItem('a', 'M31', 'light'),
+      makeItem('b', null, 'light'),   // missing target → NONE at level 1
+      makeItem('c', null, 'dark'),    // missing target → NONE at level 1
+    ];
+    const result = groupByDimensions(items, ['target', 'frameType'], accessors);
+
+    const none = result[result.length - 1];
+    expect(none.key).toBe(NONE_KEY);
+    expect(none.count).toBe(2); // b, c both nest under the NONE target
+    // ...and split by frameType beneath it.
+    expect(none.children).toHaveLength(2);
+    const noneLight = none.children.find((c) => c.label === 'light')!;
+    const noneDark = none.children.find((c) => c.label === 'dark')!;
+    expect(noneLight.items[0].id).toBe('b');
+    expect(noneDark.items[0].id).toBe('c');
+  });
+});
+
 describe('flattenLeafItems', () => {
   it('(6) returns all leaf items from a single-level tree in order', () => {
     const items = [

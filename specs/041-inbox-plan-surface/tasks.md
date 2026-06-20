@@ -48,9 +48,9 @@
 - [X] T018 [US2] Populate `inbox_classification_breakdown.destination_preview` at classify/confirm using `resolve_v1(active_pattern, effective_metadata)` (FR-024) instead of `None`.
 - [X] T019 [US2] Regenerate bindings; `commands.ts` wrapper for `inbox.item.metadata`.
 - [X] T020 [P] [US2] Frontend: restructure `InboxList.tsx` to a structured (no-pill) row layout following the standard sidebar layout (verify 1100×720, no overflow).
-- [ ] T021 [US2] Frontend: multi-level grouping control + nested collapsible groups over target/frame-type/filter/exposure/date/source in `InboxList.tsx` (+ a small grouping state module); items missing a dimension under a "none" group.
+- [X] T021 [US2] Frontend: multi-level grouping control + nested collapsible groups over target/frame-type/filter/exposure/date/source in `InboxList.tsx` (+ a small grouping state module); items missing a dimension under a "none" group.
 - [X] T022 [P] [US2] Frontend: `InboxDetail.tsx` — per-file metadata table (image type, filter, exposure, binning, gain, temperature, object, date) and explicit mixed-folder composition (per-type counts) instead of a bare "mixed".
-- [ ] T023 [P] [US2] Tests: persistence metadata upsert (`-p persistence_db`); Vitest for grouping + metadata table + composition rendering.
+- [X] T023 [P] [US2] Tests: persistence metadata upsert (`-p persistence_db`); Vitest for grouping + metadata table + composition rendering.
 
 **Checkpoint**: US1 + US2 = usable reviewable inbox (MVP complete).
 

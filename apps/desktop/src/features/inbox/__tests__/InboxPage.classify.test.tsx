@@ -71,7 +71,7 @@ vi.stubEnv('VITE_USE_MOCKS', 'true');
 
 // ── Fixtures ──────────────────────────────────────────────────────────────
 
-import type { InboxClassifyResponse, InboxItemSummary } from '@/api/commands';
+import type { InboxClassifyResponse, InboxItemSummary, InboxListItem } from '@/api/commands';
 
 const mixedClassification: InboxClassifyResponse = {
   inboxItemId: 'item-001',
@@ -200,8 +200,10 @@ describe('InboxDetail', () => {
 // ── Tests: InboxList ──────────────────────────────────────────────────────
 
 describe('InboxList', () => {
-  const fitsItem: InboxItemSummary = {
+  const fitsItem: InboxListItem = {
     inboxItemId: 'item-fits',
+    rootId: 'root-001',
+    rootAbsolutePath: '/astro/inbox',
     relativePath: 'lights/NGC7000',
     fileCount: 18,
     lane: 'fits',
@@ -212,9 +214,12 @@ describe('InboxList', () => {
     masterFrameType: null,
     masterFilter: null,
     masterExposureS: null,
+    organizationState: 'unorganized',
   };
-  const videoItem: InboxItemSummary = {
+  const videoItem: InboxListItem = {
     inboxItemId: 'item-video',
+    rootId: 'root-001',
+    rootAbsolutePath: '/astro/inbox',
     relativePath: 'planetary/Jupiter',
     fileCount: 1,
     lane: 'video',
@@ -225,6 +230,7 @@ describe('InboxList', () => {
     masterFrameType: null,
     masterFilter: null,
     masterExposureS: null,
+    organizationState: 'unorganized',
   };
 
   it('renders items with state pill', () => {
@@ -235,8 +241,6 @@ describe('InboxList', () => {
         onSelect={vi.fn()}
         filterType="all"
         onFilterTypeChange={vi.fn()}
-        groupBy="none"
-        onGroupByChange={vi.fn()}
       />,
     );
     expect(screen.getByTestId('inbox-item-item-fits')).toBeInTheDocument();
@@ -251,8 +255,6 @@ describe('InboxList', () => {
         onSelect={vi.fn()}
         filterType="video"
         onFilterTypeChange={vi.fn()}
-        groupBy="none"
-        onGroupByChange={vi.fn()}
       />,
     );
     expect(screen.queryByTestId('inbox-item-item-fits')).not.toBeInTheDocument();
@@ -268,8 +270,6 @@ describe('InboxList', () => {
         onSelect={onSelect}
         filterType="all"
         onFilterTypeChange={vi.fn()}
-        groupBy="none"
-        onGroupByChange={vi.fn()}
       />,
     );
     fireEvent.click(screen.getByTestId('inbox-item-item-video'));

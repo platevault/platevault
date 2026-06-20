@@ -39,10 +39,10 @@ import {
 } from './store';
 import { PlanPanel } from './PlanPanel';
 import type { DestructiveDestination } from './PlanPanel';
-import type { FrameType, InboxGroup } from '@/lib/route-contract';
+import type { FrameType } from '@/lib/route-contract';
 
 export function InboxPage() {
-  const { selected, type, group } = useSearch({ from: '/shell/inbox' });
+  const { selected, type } = useSearch({ from: '/shell/inbox' });
   const navigate = useNavigate({ from: '/inbox' });
 
   // FR-001 / FR-002: cross-root aggregate list replaces the hardcoded scan.
@@ -249,10 +249,6 @@ export function InboxPage() {
             filterType={type ?? 'all'}
             onFilterTypeChange={(t) =>
               navigate({ search: (prev) => ({ ...prev, type: t as FrameType | undefined }) })
-            }
-            groupBy={group ?? 'none'}
-            onGroupByChange={(g) =>
-              navigate({ search: (prev) => ({ ...prev, group: g as InboxGroup | undefined }) })
             }
           />
         }
