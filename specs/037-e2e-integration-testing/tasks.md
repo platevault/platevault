@@ -21,6 +21,15 @@ harnesses, CI, and docs themselves. Paths are repo-relative.
 > `cargo nextest run -p e2e_tests --profile e2e --no-tests=warn`. WebdriverIO
 > interim (`apps/desktop/e2e/wdio/`) retained on disk but no longer invoked by
 > CI. Wiring (T024–T027, T031) deferred per D9 backend gating.
+>
+> **Status 2026-06-20 (D10)**: **tauri-plugin-webdriver all-OS adopted** —
+> `desktop_shell` gains `e2e` Cargo feature gating `tauri-plugin-webdriver` v0.2
+> (embedded server on :4445; `tauri-webdriver` CLI proxies :4444 → :4445).
+> `apps/desktop/e2e/wdio/` **DELETED**; `webdriverio` devDep + `test:e2e:wdio`
+> script removed from `package.json`. `e2e.yml` rewritten to uniform 3-OS matrix
+> (ubuntu/windows/macos) — no `webkit2gtk-driver`, no `msedgedriver`. Research
+> D10 records the decision superseding D3/D4. T031 preflight TODO updated to
+> reference `tauri-webdriver` instead of `tauri-driver`/`msedgedriver`.
 
 **Legend**: `[P]` = parallelizable (different files, no incomplete-task dep).
 Story labels map to spec user stories US1–US5.
@@ -103,8 +112,8 @@ Story labels map to spec user stories US1–US5.
 - [ ] T025 [P] [US3] Complete the **filesystem plan review → apply** journey asserting the real side effect **and** durable audit record, inside disposable test locations (FR-009, FR-016), in `crates/e2e-tests/tests/journeys.rs`
 - [ ] T026 [P] [US3] Add an **all-top-level-screens-load** smoke spec covering every navigable feature screen without error (FR-007, coverage-matrix #21), in `crates/e2e-tests/tests/smoke.rs` (un-ignore the existing stub)
 - [ ] T027 [P] [US3] Complete remaining journey stubs (subscriber startup, ingestion plumbing, lifecycle integrity) or convert to explicit, documented not-applicable if superseded — in `crates/e2e-tests/tests/journeys.rs`
-- [X] T028 [US3] `e2e.yml` wired with thirtyfour+nextest on Linux (tauri-driver via `taiki-e/install-action@tauri-driver@2.0.6`, nextest via `taiki-e/install-action@nextest`, `vite preview` background step, `xvfb-run -a cargo nextest run -p e2e_tests --profile e2e --no-tests=warn`). Windows Stage B deferred.
-- [X] T029 [US3] macOS E2E best-effort path documented in research D4 (thirtyfour against `tauri-plugin-webdriver`); `tauri-plugin-mcp` noted as dev-only debug path. CI Stage C deferred until plugin proves stable.
+- [X] T028 [US3] `e2e.yml` rewritten to uniform 3-OS matrix (ubuntu/windows/macos) via `tauri-plugin-webdriver` (D10). Drops old `tauri-driver`/msedgedriver/WebKitWebDriver steps. Per OS: install `tauri-webdriver` CLI, build frontend with `VITE_E2E=1`, serve dist on :5173, build `desktop_shell --features e2e`, run nextest (`xvfb-run -a` on Linux). `--no-tests=warn` keeps job green while journeys are stubs. Needs gate from `integration` job (ci.yml Stage A).
+- [X] T029 [US3] macOS E2E now part of the uniform matrix via `tauri-plugin-webdriver` (D10 supersedes D4 best-effort deferral). Plugin compile-gated behind `e2e` feature; release binaries omit it (Constitution V).
 
 **Checkpoint**: Real UI↔backend wiring proven on Linux+Windows; macOS handled per D4.
 
@@ -116,7 +125,7 @@ Story labels map to spec user stories US1–US5.
 **Independent test**: from a clean checkout on each OS, the documented command runs the layer; a missing driver yields a named error.
 
 - [X] T030 [US4] Add `just test-integration` (→ `cargo test --workspace`, integration-tagged) and `just test-e2e` (→ `pnpm --filter @astro-plan/desktop test:e2e:real`) targets to `justfile`, mirroring CI (FR-014)
-- [ ] T031 [P] [US4] Add prerequisite preflight checks (named, actionable failure when `tauri-driver`/`WebKitWebDriver`/`msedgedriver` missing) to the E2E entry path / `tauri-app.ts` (FR-015)
+- [ ] T031 [P] [US4] Add prerequisite preflight checks (named, actionable failure when `tauri-webdriver` CLI is missing, with `cargo install tauri-webdriver --locked` install hint) to the E2E entry path in `crates/e2e-tests/tests/common/mod.rs` `preflight()` (FR-015). Old per-OS driver checks (`WebKitWebDriver`/`msedgedriver`) are no longer needed (D10).
 - [ ] T032 [P] [US4] Add matching `package.json` script(s) if useful and confirm command names are consistent across `justfile`, `package.json`, and docs
 
 **Checkpoint**: Developers run either layer locally with one command on any OS.

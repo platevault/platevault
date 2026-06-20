@@ -4,17 +4,28 @@
 //! `cargo nextest list` but are deferred until backend stubs are de-stubbed
 //! (see research.md D9 for the gating conditions).
 //!
-//! # How the harness works (proven tauri-driver approach)
+//! # How the harness works (tauri-plugin-webdriver + tauri-webdriver CLI)
+//!
+//! Uses `tauri-plugin-webdriver` (Choochmeque) — an embedded W3C WebDriver
+//! server inside the app binary — as the single cross-OS automation path
+//! (Linux, Windows, macOS). Install the proxy CLI once:
+//!   cargo install tauri-webdriver --locked
 //!
 //! 1. Build the frontend with `VITE_E2E=1 pnpm build` → `apps/desktop/dist/`.
-//! 2. Serve `dist` on :5173 with `vite preview --port 5173` (background).
+//! 2. Serve `dist` on :5173 with
+//!    `pnpm --filter @astro-plan/desktop preview --port 5173` (background).
 //!    The built `desktop_shell` binary reads the Tauri `devUrl` (:5173) and
 //!    loads its frontend from there — the frontend is real and uses real IPC.
-//! 3. Build the app binary: `cargo build -p desktop_shell`.
-//! 4. Run `tauri-driver --port 4444` (background).
-//! 5. This harness connects thirtyfour to `http://127.0.0.1:4444`, passing
-//!    `tauri:options.application` = path to the built binary. Do NOT set
-//!    `browserName` — WebKitWebDriver rejects the session when it is set.
+//! 3. Build the app binary WITH the embedded WebDriver plugin:
+//!    `cargo build -p desktop_shell --features e2e`
+//!    (Release builds MUST omit `--features e2e` — Constitution Principle V.)
+//! 4. Run `tauri-webdriver` (background). The CLI proxy listens on :4444 and
+//!    forwards to the plugin's embedded server on :4445; it also manages the
+//!    app binary lifecycle via `tauri:options.application`.
+//! 5. This harness connects thirtyfour to `http://127.0.0.1:4444` (the
+//!    tauri-webdriver CLI), passing `tauri:options.application` = path to
+//!    the binary built in step 3. Do NOT set `browserName` — the plugin
+//!    rejects the session when it is present.
 //! 6. Launching the WebDriver session starts the app; the app loads its own
 //!    frontend from :5173. Do NOT call `driver.goto(...)` — the app navigates
 //!    itself on launch.
@@ -40,7 +51,11 @@ use serde::de::DeserializeOwned;
 use serde_json::{json, Value};
 use thirtyfour::prelude::*;
 
-/// URL where tauri-driver listens for W3C WebDriver sessions.
+/// URL where tauri-webdriver CLI listens for W3C WebDriver sessions.
+///
+/// The tauri-webdriver CLI (cargo install tauri-webdriver --locked) proxies
+/// this port (:4444) to the tauri-plugin-webdriver embedded server (:4445)
+/// inside the app binary built with `--features e2e`.
 pub const TAURI_DRIVER_URL: &str = "http://127.0.0.1:4444";
 
 // ---------------------------------------------------------------------------
@@ -83,25 +98,31 @@ pub struct E2eApp {
 }
 
 impl E2eApp {
-    /// Launch a full E2E session: preflight → reset DB → spawn tauri-driver →
-    /// connect WebDriver.
+    /// Launch a full E2E session: preflight → reset DB → spawn tauri-webdriver
+    /// CLI → connect WebDriver.
+    ///
+    /// Prerequisites:
+    /// - App built with `cargo build -p desktop_shell --features e2e`
+    /// - `pnpm --filter @astro-plan/desktop preview --port 5173` running
+    ///   (in CI it is started as a background step before nextest runs)
+    /// - `tauri-webdriver` on PATH (`cargo install tauri-webdriver --locked`)
     ///
     /// The app loads its own frontend from the Tauri devUrl (:5173); do NOT
     /// call `driver.goto(...)` after this — the webview navigates on its own.
-    /// Ensure `vite preview --port 5173` is already running before calling
-    /// this (in CI it is started as a background step before nextest runs).
     pub async fn launch() -> Result<Self> {
         preflight()?;
         reset_database()?;
 
         let driver_proc =
-            spawn_tauri_driver().context("failed to spawn tauri-driver on port 4444")?;
+            spawn_webdriver_proxy().context("failed to spawn tauri-webdriver on port 4444")?;
 
-        // Build tauri-driver capabilities:
-        // - tauri:options.application  = path to the built desktop_shell binary
-        //   (tauri-driver reads this and hands it to the native WebDriver)
-        // - browserName is intentionally ABSENT — WebKitWebDriver rejects the
-        //   session when browserName is set (proven in the US3 spike, research D3).
+        // Build tauri-webdriver capabilities:
+        // - tauri:options.application  = path to the desktop_shell binary built
+        //   with `--features e2e` (the embedded plugin server listens on :4445;
+        //   tauri-webdriver proxies :4444 → :4445 and manages the lifecycle).
+        // - browserName is intentionally ABSENT — the plugin rejects the session
+        //   when browserName is set (same rule as the old tauri-driver approach,
+        //   proven in the US3 spike, research D3).
         //
         // thirtyfour::Capabilities wraps a serde_json map; insert the custom
         // tauri:options key directly.
@@ -112,7 +133,7 @@ impl E2eApp {
 
         let driver = WebDriver::new(TAURI_DRIVER_URL, caps)
             .await
-            .context("WebDriver::new failed — is tauri-driver running on :4444?")?;
+            .context("WebDriver::new failed — is tauri-webdriver running on :4444?")?;
 
         // Do NOT call driver.goto() here. Launching the session starts the app,
         // which loads its frontend from the Tauri devUrl (:5173 served by
@@ -200,12 +221,11 @@ fn app_binary_path() -> String {
     repo_root.join("target").join("debug").join(exe).to_string_lossy().into_owned()
 }
 
-/// Pre-flight check: verify driver binaries are present and version-matched.
+/// Pre-flight check: verify the tauri-webdriver CLI is present.
 ///
-/// TODO(spec-037 wiring): assert that `tauri-driver` is on `$PATH`; on Linux
-/// also assert `WebKitWebDriver`; on Windows assert `msedgedriver`.  Return a
-/// named actionable error describing what is missing and where to get it
-/// (FR-015).
+/// TODO(spec-037 wiring): assert that `tauri-webdriver` is on `$PATH` and
+/// return a named actionable error if missing, directing the user to
+/// `cargo install tauri-webdriver --locked` (FR-015).
 fn preflight() -> Result<()> {
     Ok(())
 }
@@ -231,17 +251,26 @@ fn reset_database() -> Result<()> {
     Ok(())
 }
 
-/// Spawn `tauri-driver --port 4444` as a background child process.
+/// Spawn `tauri-webdriver` as a background child process.
 ///
-/// tauri-driver manages the native WebDriver (WebKitWebDriver on Linux,
-/// msedgedriver on Windows) itself. On Linux, wrap this process in `xvfb-run`
-/// before calling nextest, or run under an existing Xvfb display.
+/// `tauri-webdriver` is the CLI proxy that:
+/// - listens for W3C WebDriver sessions on 127.0.0.1:4444
+/// - launches the app binary (from `tauri:options.application` capability)
+/// - proxies commands to the embedded `tauri-plugin-webdriver` server on :4445
 ///
-/// TODO(spec-037 wiring): add preflight error when tauri-driver is not on PATH.
-fn spawn_tauri_driver() -> Result<Child> {
-    Command::new("tauri-driver")
-        .arg("--port")
-        .arg("4444")
+/// Install: `cargo install tauri-webdriver --locked`
+///
+/// The app binary MUST be built with `cargo build -p desktop_shell --features
+/// e2e` so the embedded plugin server is present. On Linux, wrap the *nextest*
+/// invocation (not this process) in `xvfb-run -a`.
+///
+/// Works on Linux, Windows, and macOS — no native WebDriver (WebKitWebDriver /
+/// msedgedriver) required.
+///
+/// TODO(spec-037 wiring): add preflight error when tauri-webdriver is not on
+/// PATH, with install instructions.
+fn spawn_webdriver_proxy() -> Result<Child> {
+    Command::new("tauri-webdriver")
         .spawn()
-        .map_err(|e| anyhow!("failed to spawn tauri-driver: {e}"))
+        .map_err(|e| anyhow!("failed to spawn tauri-webdriver: {e}"))
 }

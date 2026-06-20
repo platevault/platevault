@@ -544,6 +544,17 @@ pub fn build_app() -> tauri::App {
         tb = tb.plugin(tauri_plugin_mcp_bridge::init());
     }
 
+    // E2E gate: embed the WebDriver server only when built with --features e2e.
+    // The embedded server listens on 127.0.0.1:4445; connect via the
+    // tauri-webdriver CLI (cargo install tauri-webdriver --locked) on :4444.
+    // Release builds MUST omit the `e2e` feature (Constitution Principle V).
+    // Complements the MCP bridge above: scripted thirtyfour+nextest gate vs.
+    // agent-interactive debugging.
+    #[cfg(feature = "e2e")]
+    {
+        tb = tb.plugin(tauri_plugin_webdriver::init());
+    }
+
     tb.invoke_handler(builder.invoke_handler())
         .setup(move |app| {
             builder.mount_events(app);
