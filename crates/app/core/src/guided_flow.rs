@@ -121,28 +121,21 @@ fn serialize_completed(completed: &[String]) -> String {
 
 // ── Error type ────────────────────────────────────────────────────────────────
 
-#[derive(Debug, Clone, PartialEq)]
+#[derive(Debug, Clone, PartialEq, thiserror::Error)]
 pub enum GuidedFlowError {
     /// The step id is not in the registry.
+    #[error("unknown step id: {0}")]
     UnknownStepId(String),
     /// The flow is dismissed; use restart first.
+    #[error("flow is dismissed")]
     FlowDismissed,
     /// The row was corrupted and has been reset to Idle.  Returned once to the
     /// caller as an informational signal.
+    #[error("guided flow state was corrupted; reset to Idle")]
     StateCorrupted,
     /// A persistence layer failure.
+    #[error("persistence unavailable: {0}")]
     PersistenceUnavailable(String),
-}
-
-impl std::fmt::Display for GuidedFlowError {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        match self {
-            Self::UnknownStepId(id) => write!(f, "unknown step id: {id}"),
-            Self::FlowDismissed => write!(f, "flow is dismissed"),
-            Self::StateCorrupted => write!(f, "guided flow state was corrupted; reset to Idle"),
-            Self::PersistenceUnavailable(msg) => write!(f, "persistence unavailable: {msg}"),
-        }
-    }
 }
 
 #[allow(clippy::needless_pass_by_value)]

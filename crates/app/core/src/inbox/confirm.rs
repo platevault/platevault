@@ -27,6 +27,8 @@ use uuid::Uuid;
 
 use contracts_core::{error_code::ErrorCode, ContractError, ErrorSeverity};
 
+use crate::errors::db_internal_ctx;
+
 // ── Request / Response ────────────────────────────────────────────────────────
 
 #[derive(Clone, Debug)]
@@ -124,14 +126,7 @@ pub async fn confirm(
         .bind(&req.inbox_item_id)
         .execute(pool)
         .await
-        .map_err(|e| {
-            ContractError::new(
-                ErrorCode::InternalDatabase,
-                e.to_string(),
-                ErrorSeverity::Fatal,
-                true,
-            )
-        })?;
+        .map_err(|e| db_internal_ctx(e, "insert calibration_session"))?;
 
         // Insert calibration_fingerprint (exposure, filter from master metadata).
         sqlx::query(
@@ -145,14 +140,7 @@ pub async fn confirm(
         .bind(item.master_filter.as_deref())
         .execute(pool)
         .await
-        .map_err(|e| {
-            ContractError::new(
-                ErrorCode::InternalDatabase,
-                e.to_string(),
-                ErrorSeverity::Fatal,
-                true,
-            )
-        })?;
+        .map_err(|e| db_internal_ctx(e, "insert calibration_fingerprint"))?;
 
         // Mark inbox item as resolved (drops out of the unacknowledged list).
         inbox_repo::update_inbox_item_state(pool, &req.inbox_item_id, "resolved").await.ok();
@@ -219,9 +207,9 @@ pub async fn confirm(
     let active_pattern = load_active_pattern(pool).await?;
 
     // 9. Enumerate files from evidence (Ref: A9) — NOT from file_count
-    let evidence_rows = inbox_repo::list_evidence(pool, &req.inbox_item_id).await.map_err(|e| {
-        ContractError::new(ErrorCode::InternalDatabase, e.to_string(), ErrorSeverity::Fatal, true)
-    })?;
+    let evidence_rows = inbox_repo::list_evidence(pool, &req.inbox_item_id)
+        .await
+        .map_err(|e| db_internal_ctx(e, "list inbox evidence"))?;
 
     // Only include files that have a frame type (classified or manually overridden)
     let plan_files: Vec<&persistence_db::repositories::inbox::InboxEvidenceRow> =
@@ -303,9 +291,9 @@ pub async fn confirm(
         total_bytes_required: 0,
     };
 
-    plans_repo::insert_plan(pool, &insert_plan).await.map_err(|e| {
-        ContractError::new(ErrorCode::InternalDatabase, e.to_string(), ErrorSeverity::Fatal, true)
-    })?;
+    plans_repo::insert_plan(pool, &insert_plan)
+        .await
+        .map_err(|e| db_internal_ctx(e, "insert plan"))?;
 
     // 11. Insert plan items — one per classified file, with resolved destinations.
     let items_total = resolved_items.len();
@@ -331,14 +319,9 @@ pub async fn confirm(
             category: None,
         };
 
-        plans_repo::insert_plan_item(pool, &plan_item).await.map_err(|e| {
-            ContractError::new(
-                ErrorCode::InternalDatabase,
-                e.to_string(),
-                ErrorSeverity::Fatal,
-                true,
-            )
-        })?;
+        plans_repo::insert_plan_item(pool, &plan_item)
+            .await
+            .map_err(|e| db_internal_ctx(e, "insert plan item"))?;
     }
 
     // 12. Transition plan to ready_for_review
@@ -346,19 +329,12 @@ pub async fn confirm(
         .bind(&plan_id)
         .execute(pool)
         .await
-        .map_err(|e| {
-            ContractError::new(
-                ErrorCode::InternalDatabase,
-                e.to_string(),
-                ErrorSeverity::Fatal,
-                true,
-            )
-        })?;
+        .map_err(|e| db_internal_ctx(e, "transition plan to ready_for_review"))?;
 
     // 13. Create plan link and update item state
-    inbox_repo::insert_plan_link(pool, &req.inbox_item_id, &plan_id).await.map_err(|e| {
-        ContractError::new(ErrorCode::InternalDatabase, e.to_string(), ErrorSeverity::Fatal, true)
-    })?;
+    inbox_repo::insert_plan_link(pool, &req.inbox_item_id, &plan_id)
+        .await
+        .map_err(|e| db_internal_ctx(e, "insert plan link"))?;
 
     inbox_repo::update_inbox_item_state(pool, &req.inbox_item_id, "plan_open").await.ok();
 

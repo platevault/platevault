@@ -31,6 +31,8 @@ use contracts_core::targets::{
     TargetResolveStatus, TargetSource,
 };
 use contracts_core::{error_code::ErrorCode, ContractError, ErrorSeverity};
+
+use crate::errors::db_internal_ctx;
 use targeting::normalize::normalize;
 use targeting::resolver::cache::{self, CachedTarget};
 use targeting::resolver::{
@@ -183,9 +185,7 @@ async fn read_settings(pool: &SqlitePool) -> Result<OnlineSettings, ContractErro
     )
     .fetch_optional(pool)
     .await
-    .map_err(|e| {
-        ContractError::new(ErrorCode::InternalDatabase, e.to_string(), ErrorSeverity::Fatal, true)
-    })?;
+    .map_err(|e| db_internal_ctx(e, "read resolver_settings"))?;
 
     Ok(row.map_or(
         OnlineSettings {

@@ -85,10 +85,13 @@ Frontend: `cd apps/desktop && npx tsc --noEmit` + `npx vitest run <feature>`. Ru
 
 ## Phase 4 — US8 Rust error handling & logging (P2)
 
-- [ ] T120 `GuidedFlowError` manual `Display` → `thiserror` derive (`app/core/guided_flow.rs`).
-- [ ] T121 Introduce `anyhow` + `.context()` at the app boundary; convert `.to_string()`
+- [X] T120 `GuidedFlowError` manual `Display` → `thiserror` derive (`app/core/guided_flow.rs`).
+- [X] T121 Introduce `anyhow` + `.context()` at the app boundary; convert `.to_string()`
   context-loss sites (`confirm.rs`, `prepared_views.rs`, `target_resolve.rs`, `simbad.rs`).
-- [ ] T122 Stray production `eprintln!` → `tracing` (`transition_use_case.rs`); add
+  (NOTE: `simbad.rs` is in the `targeting` crate, not `app_core`; the app-boundary SIMBAD
+  path `target_resolve.rs` was converted. The targeting `simbad.rs` context tweak is folded
+  into US10, which edits that file for percent-encoding.)
+- [X] T122 Stray production `eprintln!` → `tracing` (`transition_use_case.rs`); add
   `tracing-subscriber` init in `src-tauri`. (`rustfmt --edition 2021` on src-tauri files.)
 - [ ] **US8 checkpoint**: per-crate clippy/tests green; commit `feat(042): US8 thiserror/anyhow/tracing`.
 

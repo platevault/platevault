@@ -298,11 +298,9 @@ where
 /// response. Best-effort: a persistence failure on the audit row MUST NOT
 /// mask the user-facing refusal (the response is what the caller sees).
 ///
-/// Audit-write failures are surfaced on stderr so an external watchdog can
-/// alert on gap rates — silently dropping them would defeat the
-/// "reviewable mutation" principle (Constitution §II). The repo has no
-/// structured logging facility yet; eprintln is the lowest-friction signal
-/// that doesn't add a dependency.
+/// Audit-write failures are surfaced via `tracing::error!` so an external
+/// watchdog can alert on gap rates — silently dropping them would defeat the
+/// "reviewable mutation" principle (Constitution §II).
 async fn record_refused<R>(
     repo: &R,
     command: &TransitionCommand,
@@ -331,9 +329,12 @@ where
         )
         .await
     {
-        eprintln!(
-            "audit: failed to persist refused row entity_id={} entity_type={} code={} err={}",
-            command.entity_id, command.entity_type, code_str, err
+        tracing::error!(
+            entity_id = %command.entity_id,
+            entity_type = %command.entity_type,
+            code = code_str,
+            error = %err,
+            "audit: failed to persist refused row"
         );
     }
 

@@ -7,6 +7,18 @@ use tauri::Manager;
 
 #[tokio::main]
 async fn main() {
+    // Initialise structured logging before anything else so startup `tracing`
+    // events (seed load, migrations) and downstream `tracing::error!` audit
+    // signals reach stderr. Honours `RUST_LOG`; defaults to `info`.
+    // `try_init` is used so a pre-existing subscriber (e.g. in a test harness)
+    // does not cause a panic.
+    let _ = tracing_subscriber::fmt()
+        .with_env_filter(
+            tracing_subscriber::EnvFilter::try_from_default_env()
+                .unwrap_or_else(|_| tracing_subscriber::EnvFilter::new("info")),
+        )
+        .try_init();
+
     // Build the Tauri app first so we can access the platform path resolver.
     // The event loop is NOT started yet — that happens in `run_app` after the
     // database is ready.

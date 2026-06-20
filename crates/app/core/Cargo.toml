@@ -24,7 +24,10 @@ patterns = { path = "../../patterns" }
 persistence_db = { path = "../../persistence/db" }
 project_structure = { path = "../../project/structure" }
 targeting = { path = "../../targeting" }
+anyhow = { workspace = true }
+dashmap = { workspace = true }
 hex.workspace = true
+moka = { workspace = true }
 serde = { workspace = true }
 serde_json.workspace = true
 sha2.workspace = true

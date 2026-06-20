@@ -34,6 +34,8 @@ use persistence_db::repositories::{
 use sqlx::SqlitePool;
 use uuid::Uuid;
 
+use crate::errors::db_internal_ctx;
+
 // ── Helpers ───────────────────────────────────────────────────────────────────
 
 fn new_id() -> String {
@@ -217,9 +219,7 @@ pub async fn remove_prepared_view(
         },
     )
     .await
-    .map_err(|e| {
-        ContractError::new(ErrorCode::InternalDatabase, e.to_string(), ErrorSeverity::Fatal, true)
-    })?;
+    .map_err(|e| db_internal_ctx(e, "insert prepared view plan"))?;
 
     // 8. One archive action per item, targeting only the view's recorded paths
     //    (T004: actions restricted to view membership — no inventory paths).
@@ -249,20 +249,13 @@ pub async fn remove_prepared_view(
             },
         )
         .await
-        .map_err(|e| {
-            ContractError::new(
-                ErrorCode::InternalDatabase,
-                e.to_string(),
-                ErrorSeverity::Fatal,
-                true,
-            )
-        })?;
+        .map_err(|e| db_internal_ctx(e, "insert prepared view plan item"))?;
     }
 
     // 9. Advance plan to ready_for_review so it appears in the review UI.
-    plans_repo::update_plan_state(pool, &plan_id, "ready_for_review").await.map_err(|e| {
-        ContractError::new(ErrorCode::InternalDatabase, e.to_string(), ErrorSeverity::Fatal, true)
-    })?;
+    plans_repo::update_plan_state(pool, &plan_id, "ready_for_review")
+        .await
+        .map_err(|e| db_internal_ctx(e, "advance prepared view plan to ready_for_review"))?;
 
     Ok(PreparedViewRemoveResponse { plan_id })
 }
@@ -359,9 +352,7 @@ pub async fn regenerate_prepared_view(
         },
     )
     .await
-    .map_err(|e| {
-        ContractError::new(ErrorCode::InternalDatabase, e.to_string(), ErrorSeverity::Fatal, true)
-    })?;
+    .map_err(|e| db_internal_ctx(e, "insert prepared view plan"))?;
 
     // 8. One link action per resolved item.
     for (idx, item) in resolved_items.iter().enumerate() {
@@ -389,20 +380,13 @@ pub async fn regenerate_prepared_view(
             },
         )
         .await
-        .map_err(|e| {
-            ContractError::new(
-                ErrorCode::InternalDatabase,
-                e.to_string(),
-                ErrorSeverity::Fatal,
-                true,
-            )
-        })?;
+        .map_err(|e| db_internal_ctx(e, "insert prepared view plan item"))?;
     }
 
     // 9. Advance to ready_for_review.
-    plans_repo::update_plan_state(pool, &plan_id, "ready_for_review").await.map_err(|e| {
-        ContractError::new(ErrorCode::InternalDatabase, e.to_string(), ErrorSeverity::Fatal, true)
-    })?;
+    plans_repo::update_plan_state(pool, &plan_id, "ready_for_review")
+        .await
+        .map_err(|e| db_internal_ctx(e, "advance prepared view plan to ready_for_review"))?;
 
     Ok(PreparedViewRegenerateResponse { plan_id, unresolved_item_count: unresolved_count })
 }
