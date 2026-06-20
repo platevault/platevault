@@ -365,9 +365,8 @@ pub async fn inbox_list(pool: tauri::State<'_, SqlitePool>) -> Result<InboxListR
     // Per-item grouping aggregates for the multi-level grouping UI (spec 041).
     // Single GROUP BY pass over the items we're about to return — no N+1.
     let item_ids: Vec<String> = rows.iter().map(|r| r.id.clone()).collect();
-    let mut grouping = grouping_keys_for_items(&pool, &item_ids)
-        .await
-        .map_err(|e| e.to_string())?;
+    let mut grouping =
+        grouping_keys_for_items(&pool, &item_ids).await.map_err(|e| e.to_string())?;
 
     let items = rows
         .into_iter()
@@ -387,9 +386,9 @@ pub async fn inbox_list(pool: tauri::State<'_, SqlitePool>) -> Result<InboxListR
                 master_frame_type: r.master_frame_type,
                 master_filter: r.master_filter,
                 master_exposure_s: r.master_exposure_s,
-                // spec 041 — phase 3+ will query this from registered_sources via
-                // the root_id; stub to "unorganized" for now so bindings compile.
-                organization_state: "unorganized".to_owned(),
+                // spec 041 — real org-state from the owning registered source,
+                // joined in list_unacknowledged_across_roots (no N+1).
+                organization_state: r.organization_state,
                 group_target: g.group_target,
                 group_frame_type: g.group_frame_type,
                 group_date: g.group_date,

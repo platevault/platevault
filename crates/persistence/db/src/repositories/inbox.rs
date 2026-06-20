@@ -653,6 +653,9 @@ pub struct InboxListRow {
     pub master_frame_type: Option<String>,
     pub master_filter: Option<String>,
     pub master_exposure_s: Option<f64>,
+    /// Organization state of the owning registered source
+    /// (`"organized"` / `"unorganized"`), joined from `registered_sources`.
+    pub organization_state: String,
 }
 
 /// Return all `inbox_items` whose `state` is **unacknowledged**
@@ -688,7 +691,8 @@ pub async fn list_unacknowledged_across_roots(
              COALESCE(i.is_master_item, 0) AS is_master,
              i.master_frame_type,
              i.master_filter,
-             i.master_exposure_s
+             i.master_exposure_s,
+             COALESCE(r.organization_state, 'unorganized') AS organization_state
          FROM inbox_items i
          JOIN registered_sources r ON r.id = i.root_id
          WHERE i.state IN ('pending_classification', 'classified', 'plan_open')
@@ -1070,6 +1074,87 @@ mod tests {
         );
         assert_eq!(rows[0].id, "cross-root-item-1");
         assert_eq!(rows[0].state, "pending_classification");
+        assert_eq!(
+            rows[0].organization_state, "unorganized",
+            "org-state must be carried from registered_sources (inbox ⇒ unorganized)"
+        );
+    }
+
+    /// Spec 041 regression: the inbox list must carry each item's owning source
+    /// organization_state (not a hardcoded "unorganized"), so the grouping
+    /// "Org. state" dimension is correct for organized library roots too.
+    #[tokio::test]
+    async fn list_unacknowledged_carries_real_organization_state() {
+        use contracts_core::first_run::{
+            OrganizationState, RegisterSourceBatchRequest, RegisterSourceRequest, ScanDepth,
+            SourceKind,
+        };
+
+        let db = test_db().await;
+        let pool = db.pool();
+
+        // Two sources: an unorganized inbox and an organized light-frames library,
+        // each registered via the real batch path the wizard uses.
+        let batch_req = RegisterSourceBatchRequest {
+            sources: vec![
+                RegisterSourceRequest {
+                    kind: SourceKind::Inbox,
+                    path: "/astro/inbox".to_owned(),
+                    kind_subtype: None,
+                    scan_depth: ScanDepth::Recursive,
+                    organization_state: OrganizationState::Unorganized,
+                },
+                RegisterSourceRequest {
+                    kind: SourceKind::LightFrames,
+                    path: "/astro/library".to_owned(),
+                    kind_subtype: None,
+                    scan_depth: ScanDepth::Recursive,
+                    organization_state: OrganizationState::Organized,
+                },
+            ],
+        };
+        let batch_resp =
+            crate::repositories::first_run::register_source_batch(pool, &batch_req).await.unwrap();
+        let inbox_id = batch_resp.items[0].source_id.as_deref().unwrap().to_owned();
+        let library_id = batch_resp.items[1].source_id.as_deref().unwrap().to_owned();
+
+        insert_inbox_item(
+            pool,
+            &InsertInboxItem {
+                id: "org-item-inbox",
+                root_id: &inbox_id,
+                relative_path: "2025-11-01/lights",
+                file_count: 3,
+                content_signature: Some("sig-inbox"),
+                lane: "fits",
+            },
+        )
+        .await
+        .unwrap();
+        insert_inbox_item(
+            pool,
+            &InsertInboxItem {
+                id: "org-item-library",
+                root_id: &library_id,
+                relative_path: "M31/lights",
+                file_count: 7,
+                content_signature: Some("sig-library"),
+                lane: "fits",
+            },
+        )
+        .await
+        .unwrap();
+
+        let rows = list_unacknowledged_across_roots(pool, 100).await.unwrap();
+        let by_id: std::collections::HashMap<&str, &InboxListRow> =
+            rows.iter().map(|r| (r.id.as_str(), r)).collect();
+
+        assert_eq!(by_id.get("org-item-inbox").unwrap().organization_state, "unorganized");
+        assert_eq!(
+            by_id.get("org-item-library").unwrap().organization_state,
+            "organized",
+            "organized library source must surface as 'organized' in the list"
+        );
     }
 
     // ── grouping_keys_for_items (spec 041 multi-level grouping) ───────────────
