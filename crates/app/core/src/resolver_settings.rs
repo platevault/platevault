@@ -16,10 +16,10 @@ use contracts_core::targets::{
     ResolverSettings, ResolverSettingsGetRequest, ResolverSettingsResponse,
     ResolverSettingsUpdateRequest,
 };
-use contracts_core::{ContractError, ErrorSeverity};
+use contracts_core::{error_code::ErrorCode, ContractError, ErrorSeverity};
 
 fn db_err(e: impl std::fmt::Display) -> ContractError {
-    ContractError::new("internal.database", e.to_string(), ErrorSeverity::Fatal, true)
+    ContractError::new(ErrorCode::InternalDatabase, e.to_string(), ErrorSeverity::Fatal, true)
 }
 
 /// In-code defaults, mirroring the migration 0031 column defaults. Used when the
@@ -43,7 +43,7 @@ fn defaults() -> ResolverSettings {
 #[allow(clippy::result_large_err)] // ContractError is the project-wide error DTO
 fn validate_endpoint(endpoint: &str) -> Result<(), ContractError> {
     fn reject(msg: &str) -> ContractError {
-        ContractError::new("resolver.endpoint_invalid", msg, ErrorSeverity::Blocking, false)
+        ContractError::new(ErrorCode::ResolverEndpointInvalid, msg, ErrorSeverity::Blocking, false)
     }
 
     if let Some(rest) = endpoint.strip_prefix("https://") {
@@ -258,7 +258,7 @@ mod tests {
         for bad in ["http://evil.example/tap", "ftp://x/y", "not-a-url", "https://"] {
             let err = update(db.pool(), &upd_with_endpoint(bad)).await;
             assert!(err.is_err(), "endpoint '{bad}' must be rejected");
-            assert_eq!(err.unwrap_err().code, "resolver.endpoint_invalid");
+            assert_eq!(err.unwrap_err().code, ErrorCode::ResolverEndpointInvalid);
         }
     }
 

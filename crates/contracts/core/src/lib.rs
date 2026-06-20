@@ -195,15 +195,15 @@ pub enum OperationEventType {
     Custom,
 }
 
-#[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
+#[derive(Clone, Debug, PartialEq, Serialize, Deserialize, specta::Type)]
 #[serde(rename_all = "camelCase")]
 pub struct ContractError {
-    pub code: String,
+    pub code: error_code::ErrorCode,
     pub message: String,
     pub severity: ErrorSeverity,
     pub retryable: bool,
     #[serde(default)]
-    pub details: Value,
+    pub details: JsonAny,
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
     pub field_errors: Vec<FieldError>,
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
@@ -213,25 +213,31 @@ pub struct ContractError {
 impl ContractError {
     #[must_use]
     pub fn new(
-        code: impl Into<String>,
+        code: error_code::ErrorCode,
         message: impl Into<String>,
         severity: ErrorSeverity,
         retryable: bool,
     ) -> Self {
         Self {
-            code: code.into(),
+            code,
             message: message.into(),
             severity,
             retryable,
-            details: Value::Object(serde_json::Map::new()),
+            details: JsonAny::from(Value::Object(serde_json::Map::new())),
             field_errors: Vec::new(),
             recovery_actions: Vec::new(),
         }
     }
 
+    /// Wrap a legacy plain-string error as an `InternalError` blocking error.
+    #[must_use]
+    pub fn internal(message: impl Into<String>) -> Self {
+        Self::new(error_code::ErrorCode::InternalError, message, ErrorSeverity::Blocking, false)
+    }
+
     #[must_use]
     pub fn with_details(mut self, details: Value) -> Self {
-        self.details = details;
+        self.details = JsonAny::from(details);
         self
     }
 
@@ -248,7 +254,9 @@ impl ContractError {
     }
 }
 
-#[derive(Clone, Copy, Debug, Eq, Hash, Ord, PartialEq, PartialOrd, Serialize, Deserialize)]
+#[derive(
+    Clone, Copy, Debug, Eq, Hash, Ord, PartialEq, PartialOrd, Serialize, Deserialize, specta::Type,
+)]
 #[serde(rename_all = "snake_case")]
 pub enum ErrorSeverity {
     Info,
@@ -257,7 +265,7 @@ pub enum ErrorSeverity {
     Fatal,
 }
 
-#[derive(Clone, Debug, Eq, PartialEq, Serialize, Deserialize)]
+#[derive(Clone, Debug, Eq, PartialEq, Serialize, Deserialize, specta::Type)]
 #[serde(rename_all = "camelCase")]
 pub struct FieldError {
     pub field: String,
@@ -265,7 +273,7 @@ pub struct FieldError {
     pub message: String,
 }
 
-#[derive(Clone, Debug, Eq, PartialEq, Serialize, Deserialize)]
+#[derive(Clone, Debug, Eq, PartialEq, Serialize, Deserialize, specta::Type)]
 #[serde(rename_all = "camelCase")]
 pub struct RecoveryAction {
     pub code: String,
@@ -320,7 +328,7 @@ mod tests {
     #[test]
     fn serializes_error_response_without_payload() {
         let error = ContractError::new(
-            "filesystem.destination_exists",
+            crate::error_code::ErrorCode::FilesystemDestinationExists,
             "Destination already exists.",
             ErrorSeverity::Blocking,
             false,

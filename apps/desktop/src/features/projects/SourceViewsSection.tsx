@@ -29,6 +29,7 @@ import {
   canRegenerateView,
 } from './source-views';
 import type { PreparedViewSummary, PreparedViewItemDetail } from './source-views';
+import { errMessage } from '@/lib/errors';
 
 // ── Props ─────────────────────────────────────────────────────────────────────
 
@@ -59,7 +60,7 @@ export function SourceViewsSection({ projectId, onPlanCreated }: SourceViewsSect
       })
       .catch((err: unknown) => {
         if (!cancelled) {
-          setError(String(err));
+          setError(errMessage(err));
         }
       })
       .finally(() => {

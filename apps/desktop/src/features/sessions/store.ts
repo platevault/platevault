@@ -16,6 +16,7 @@ import type {
   InventorySessionReviewResponse,
   InventoryFrameType,
 } from "@/api/commands";
+import { errMessage } from '@/lib/errors';
 
 export type { InventoryListResponse, InventorySessionReviewResponse };
 export type { InventorySource, InventorySession } from "@/api/commands";
@@ -120,7 +121,7 @@ export function useSessionReview() {
         return {
           ok: false,
           noop: false,
-          error: err instanceof Error ? err.message : String(err),
+          error: errMessage(err),
         };
       } finally {
         setPending(null);

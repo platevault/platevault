@@ -39,9 +39,9 @@ export const reviewItems: ReviewItem[] = [
   {
     id: 'sess-7',
     kind: 'session',
-    session_id: 'sess-7',
+    sessionId: 'sess-7',
     confidence: 'low',
-    blocking_reasons: [
+    blockingReasons: [
       'observer_location needs reviewed provenance before this session can be marked confirmed. Currently inferred from FITS sitelong/sitelat headers.',
     ],
     evidence: {
@@ -57,15 +57,15 @@ export const reviewItems: ReviewItem[] = [
       observer_location: { value: 'Truckee, CA (inferred from SITELAT/SITELONG)', origin: 'inferred', confidence: 'medium' },
       timezone: { value: 'America/Los_Angeles', origin: 'inferred', confidence: 'medium' },
     },
-    suggested_target: 'NGC 7000',
-    suggested_filter: 'SII',
+    suggestedTarget: 'NGC 7000',
+    suggestedFilter: 'SII',
   },
   {
     id: 'sess-12',
     kind: 'session',
-    session_id: 'sess-12',
+    sessionId: 'sess-12',
     confidence: 'low',
-    blocking_reasons: [
+    blockingReasons: [
       'OBJECT keyword missing on all 22 frames',
     ],
     evidence: {
@@ -74,15 +74,15 @@ export const reviewItems: ReviewItem[] = [
       night: { value: '2024-12-08', origin: 'observed', confidence: 'high' },
       frame_count: { value: '22', origin: 'observed', confidence: 'high' },
     },
-    suggested_target: undefined,
-    suggested_filter: undefined,
+    suggestedTarget: undefined,
+    suggestedFilter: undefined,
   },
   {
     id: 'sess-14',
     kind: 'session',
-    session_id: 'sess-14',
+    sessionId: 'sess-14',
     confidence: 'medium',
-    blocking_reasons: [
+    blockingReasons: [
       'new night — confirm equipment train',
     ],
     evidence: {
@@ -90,15 +90,15 @@ export const reviewItems: ReviewItem[] = [
       filter: { value: 'Ha', origin: 'observed', confidence: 'high' },
       night: { value: '2024-12-15', origin: 'observed', confidence: 'high' },
     },
-    suggested_target: 'NGC 7000',
-    suggested_filter: 'Ha',
+    suggestedTarget: 'NGC 7000',
+    suggestedFilter: 'Ha',
   },
   {
     id: 'sess-15',
     kind: 'session',
-    session_id: 'sess-15',
+    sessionId: 'sess-15',
     confidence: 'medium',
-    blocking_reasons: [
+    blockingReasons: [
       'new night — confirm equipment train',
     ],
     evidence: {
@@ -106,30 +106,30 @@ export const reviewItems: ReviewItem[] = [
       filter: { value: 'OIII', origin: 'observed', confidence: 'high' },
       night: { value: '2024-12-15', origin: 'observed', confidence: 'high' },
     },
-    suggested_target: 'NGC 7000',
-    suggested_filter: 'OIII',
+    suggestedTarget: 'NGC 7000',
+    suggestedFilter: 'OIII',
   },
   {
     id: 'cal-22',
     kind: 'session',
-    session_id: 'cal-22',
+    sessionId: 'cal-22',
     confidence: 'medium',
-    blocking_reasons: [
+    blockingReasons: [
       'temperature drift across frames',
     ],
     evidence: {
       target: { value: 'Calibration: Flats Ha', origin: 'observed', confidence: 'high' },
       night: { value: '2024-12-14', origin: 'observed', confidence: 'high' },
     },
-    suggested_target: 'Calibration: Flats Ha',
-    suggested_filter: 'Ha',
+    suggestedTarget: 'Calibration: Flats Ha',
+    suggestedFilter: 'Ha',
   },
   {
     id: 'sess-31',
     kind: 'session',
-    session_id: 'sess-31',
+    sessionId: 'sess-31',
     confidence: 'medium',
-    blocking_reasons: [
+    blockingReasons: [
       'session spans two nights — split?',
     ],
     evidence: {
@@ -137,8 +137,8 @@ export const reviewItems: ReviewItem[] = [
       filter: { value: 'Ha', origin: 'observed', confidence: 'high' },
       night: { value: '2024-12-10', origin: 'observed', confidence: 'high' },
     },
-    suggested_target: 'M42',
-    suggested_filter: 'Ha',
+    suggestedTarget: 'M42',
+    suggestedFilter: 'Ha',
   },
 ];
 

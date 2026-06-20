@@ -218,7 +218,7 @@ describe('MatchCandidatesPanel', () => {
   });
 
   it('13. Confirming assign calls onAssign with masterId and override=false', async () => {
-    const onAssign = vi.fn().mockResolvedValue({ status: 'success' }) as unknown as OnAssignFn;
+    const onAssign: OnAssignFn = vi.fn().mockResolvedValue({ status: 'success' }) as OnAssignFn;
     renderPanel({ response: matchResponse, onAssign });
     fireEvent.click(screen.getByTestId(`assign-btn-${MASTER_ID_1}`));
     fireEvent.click(screen.getByTestId('assign-confirm-btn'));
@@ -228,14 +228,14 @@ describe('MatchCandidatesPanel', () => {
   });
 
   it('14. hard-rule violation → override confirm prompt renders', async () => {
-    const onAssign = vi.fn().mockResolvedValue({
+    const onAssign: OnAssignFn = vi.fn().mockResolvedValue({
       status: 'error',
       error: {
         code: 'incompatible.dimensions',
         message: 'Hard-rule mismatch',
         details: { dimensions: ['gain'] },
       },
-    }) as unknown as OnAssignFn;
+    }) as OnAssignFn;
     renderPanel({ response: matchResponse, onAssign });
     fireEvent.click(screen.getByTestId(`assign-btn-${MASTER_ID_1}`));
     fireEvent.click(screen.getByTestId('assign-confirm-btn'));
@@ -246,12 +246,12 @@ describe('MatchCandidatesPanel', () => {
   });
 
   it('15. Force-assign calls onAssign with override=true', async () => {
-    const onAssign = vi.fn()
+    const onAssign: OnAssignFn = vi.fn()
       .mockResolvedValueOnce({
         status: 'error',
         error: { code: 'incompatible.dimensions', message: 'mismatch', details: { dimensions: ['gain'] } },
       })
-      .mockResolvedValueOnce({ status: 'success' }) as unknown as OnAssignFn;
+      .mockResolvedValueOnce({ status: 'success' }) as OnAssignFn;
     renderPanel({ response: matchResponse, onAssign });
     // First click: Assign
     fireEvent.click(screen.getByTestId(`assign-btn-${MASTER_ID_1}`));

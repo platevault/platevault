@@ -9,7 +9,7 @@ use contracts_core::equipment::{
     FilterCategory, OpticalTrain, Telescope, UpdateCamera, UpdateFilter, UpdateOpticalTrain,
     UpdateTelescope,
 };
-use contracts_core::{ContractError, ErrorSeverity};
+use contracts_core::{error_code::ErrorCode, ContractError, ErrorSeverity};
 use persistence_db::repositories::equipment as repo;
 use sqlx::SqlitePool;
 
@@ -19,11 +19,11 @@ fn db_to_contract(e: persistence_db::DbError) -> ContractError {
     let msg = e.to_string();
     drop(e);
     if msg.contains("not found") {
-        ContractError::new("equipment.not_found", msg, ErrorSeverity::Blocking, false)
+        ContractError::new(ErrorCode::EquipmentNotFound, msg, ErrorSeverity::Blocking, false)
     } else if msg.contains("UNIQUE constraint failed") {
-        ContractError::new("equipment.duplicate", msg, ErrorSeverity::Warning, false)
+        ContractError::new(ErrorCode::EquipmentDuplicate, msg, ErrorSeverity::Warning, false)
     } else {
-        ContractError::new("internal.database", msg, ErrorSeverity::Fatal, true)
+        ContractError::new(ErrorCode::InternalDatabase, msg, ErrorSeverity::Fatal, true)
     }
 }
 
@@ -92,7 +92,12 @@ pub async fn find_or_create_camera_by_alias(
         .execute(pool)
         .await
         .map_err(|e| {
-            ContractError::new("internal.database", e.to_string(), ErrorSeverity::Fatal, true)
+            ContractError::new(
+                ErrorCode::InternalDatabase,
+                e.to_string(),
+                ErrorSeverity::Fatal,
+                true,
+            )
         })?;
 
     Ok(camera)
@@ -168,7 +173,12 @@ pub async fn find_or_create_telescope_by_alias(
         .execute(pool)
         .await
         .map_err(|e| {
-            ContractError::new("internal.database", e.to_string(), ErrorSeverity::Fatal, true)
+            ContractError::new(
+                ErrorCode::InternalDatabase,
+                e.to_string(),
+                ErrorSeverity::Fatal,
+                true,
+            )
         })?;
 
     Ok(scope)
@@ -281,7 +291,12 @@ pub async fn find_or_create_filter_by_name(
         .execute(pool)
         .await
         .map_err(|e| {
-            ContractError::new("internal.database", e.to_string(), ErrorSeverity::Fatal, true)
+            ContractError::new(
+                ErrorCode::InternalDatabase,
+                e.to_string(),
+                ErrorSeverity::Fatal,
+                true,
+            )
         })?;
 
     Ok(filter)

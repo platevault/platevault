@@ -26,8 +26,8 @@ export function StepSources({ data, onChange }: StepSourcesProps) {
   const filtered = useMemo(() => {
     if (!sessions) return [];
     return sessions.filter((s) => {
-      if (filterTarget && !s.session_key.target.toLowerCase().includes(filterTarget.toLowerCase())) return false;
-      if (filterFilter && !s.session_key.filter.toLowerCase().includes(filterFilter.toLowerCase())) return false;
+      if (filterTarget && !s.sessionKey.target.toLowerCase().includes(filterTarget.toLowerCase())) return false;
+      if (filterFilter && !s.sessionKey.filter.toLowerCase().includes(filterFilter.toLowerCase())) return false;
       // Only show confirmed sessions
       return s.state === 'confirmed';
     });
@@ -37,7 +37,7 @@ export function StepSources({ data, onChange }: StepSourcesProps) {
     if (!sessions) return 0;
     return sessions
       .filter((s) => data.selectedSessionIds.includes(s.id))
-      .reduce((acc, s) => acc + s.total_integration_seconds, 0);
+      .reduce((acc, s) => acc + (s.totalIntegrationSeconds ?? 0), 0);
   }, [sessions, data.selectedSessionIds]);
 
   function toggleSession(id: string) {
@@ -151,19 +151,19 @@ export function StepSources({ data, onChange }: StepSourcesProps) {
               className="alm-checkbox"
               checked={data.selectedSessionIds.includes(session.id)}
               onCheckedChange={() => toggleSession(session.id)}
-              aria-label={`Select ${session.session_key.target} session`}
+              aria-label={`Select ${session.sessionKey.target} session`}
             >
               <Checkbox.Indicator className="alm-checkbox__indicator">
                 &#x2713;
               </Checkbox.Indicator>
             </Checkbox.Root>
             <span>
-              {session.session_key.target} / {session.session_key.filter} / {session.session_key.night}
+              {session.sessionKey.target} / {session.sessionKey.filter} / {session.sessionKey.night}
             </span>
-            <span>{session.frame_count}</span>
-            <span>{formatIntegration(session.total_integration_seconds)}</span>
+            <span>{session.frameCount}</span>
+            <span>{formatIntegration(session.totalIntegrationSeconds ?? 0)}</span>
             <span style={{ fontFamily: 'var(--alm-font-mono)', overflow: 'hidden', textOverflow: 'ellipsis' }}>
-              {session.optical_train_id.slice(0, 8)}
+              {session.opticalTrainId.slice(0, 8)}
             </span>
           </label>
         ))}

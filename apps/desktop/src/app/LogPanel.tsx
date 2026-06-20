@@ -25,6 +25,7 @@ import {
 import { startLogSubscription } from '@/data/logSubscription';
 import { logExport } from '@/api/commands';
 import type { LevelFilter } from './LogPanelContext';
+import { errMessage } from '@/lib/errors';
 
 // ── Level chip display helpers ────────────────────────────────────────────────
 
@@ -204,7 +205,7 @@ export function LogPanel() {
         includeDiagnostics: showDiagnostics,
       });
     } catch (err) {
-      setExportError(err instanceof Error ? err.message : String(err));
+      setExportError(errMessage(err));
     }
   }, [showDiagnostics]);
 

@@ -34,7 +34,7 @@ where
             Err(error) => ResponseEnvelope::error(
                 fallback_request_id,
                 ContractError::new(
-                    "validation.request_envelope_invalid",
+                    contracts_core::error_code::ErrorCode::ValidationRequestEnvelopeInvalid,
                     "Request envelope is invalid.",
                     ErrorSeverity::Blocking,
                     false,
@@ -104,6 +104,9 @@ mod tests {
         }));
 
         assert_eq!(response.status, ResponseStatus::Error);
-        assert_eq!(response.error.unwrap().code, "validation.request_envelope_invalid");
+        assert_eq!(
+            response.error.unwrap().code,
+            contracts_core::error_code::ErrorCode::ValidationRequestEnvelopeInvalid
+        );
     }
 }

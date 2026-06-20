@@ -22,6 +22,7 @@ import { Section, Pill, EmptyState } from '@/ui';
 import type { PillVariant } from '@/ui';
 import { calibrationMatchSuggestBatch } from '@/api/commands';
 import type { BatchSessionResultDto, CalibrationMatchType } from '@/api/commands';
+import { errMessage } from '@/lib/errors';
 
 // ── Helpers ───────────────────────────────────────────────────────────────────
 
@@ -86,7 +87,7 @@ export function CalibrationMatchPanel({ sessionIds }: Props) {
       .catch((err: unknown) => {
         if (!cancelled) {
           setLoading(false);
-          setFetchError(String(err));
+          setFetchError(errMessage(err));
         }
       });
 

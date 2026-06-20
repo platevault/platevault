@@ -33,7 +33,7 @@ if (import.meta.env.VITE_DEV_TOOLS === 'true') {
 // out (mirrors the VITE_DEV_TOOLS gate above and the VITE_E2E path override).
 if (import.meta.env.VITE_E2E) {
   void import('./api/ipc').then(({ invoke }) => {
-    (window as unknown as { __ALM_E2E__?: { invoke: typeof invoke } }).__ALM_E2E__ =
+    (window as Window & { __ALM_E2E__?: { invoke: typeof invoke } }).__ALM_E2E__ =
       { invoke };
   });
 }

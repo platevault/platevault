@@ -15,7 +15,7 @@ use contracts_core::dev::{
     ContractMeta, DevCallsListRequest, DevCallsListResponse, DevContractsListRequest,
     DevContractsListResponse,
 };
-use contracts_core::{ContractError, ErrorSeverity};
+use contracts_core::{error_code::ErrorCode, ContractError, ErrorSeverity};
 
 // ── Registry ──────────────────────────────────────────────────────────────────
 
@@ -145,7 +145,7 @@ const REGISTRY: &[RegistryEntry] = &[
 
 fn dev_mode_disabled_err() -> ContractError {
     ContractError::new(
-        "dev_mode.disabled",
+        ErrorCode::DevModeDisabled,
         "Developer mode is disabled. Enable devMode in settings.",
         ErrorSeverity::Blocking,
         false,
@@ -251,7 +251,7 @@ mod tests {
     #[test]
     fn list_contracts_returns_dev_mode_disabled_when_off() {
         let err = list_contracts(false, DevContractsListRequest::default()).unwrap_err();
-        assert_eq!(err.code, "dev_mode.disabled");
+        assert_eq!(err.code, ErrorCode::DevModeDisabled);
     }
 
     #[test]
@@ -290,7 +290,7 @@ mod tests {
     #[test]
     fn list_calls_returns_dev_mode_disabled_when_off() {
         let err = list_calls(false, DevCallsListRequest::default(), vec![]).unwrap_err();
-        assert_eq!(err.code, "dev_mode.disabled");
+        assert_eq!(err.code, ErrorCode::DevModeDisabled);
     }
 
     #[test]

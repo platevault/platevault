@@ -123,6 +123,16 @@ pub enum ErrorCode {
     #[serde(rename = "file.not_found")]
     FileNotFound,
 
+    // ── Notes ────────────────────────────────────────────────────────────────
+    #[serde(rename = "note.content_too_large")]
+    NoteContentTooLarge,
+
+    // ── Session ──────────────────────────────────────────────────────────────
+    #[serde(rename = "session.not_found")]
+    SessionNotFound,
+    #[serde(rename = "session.mixed_state")]
+    SessionMixedState,
+
     // ── Operation ───────────────────────────────────────────────────────────
     #[serde(rename = "operation.handler_duplicate")]
     OperationHandlerDuplicate,
@@ -272,6 +282,35 @@ pub enum ErrorCode {
     LaunchFailed,
     #[serde(rename = "macos.quarantine.detected")]
     MacosQuarantineDetected,
+
+    // ── Native filesystem / picker ───────────────────────────────────────────
+    #[serde(rename = "filters.invalid")]
+    FiltersInvalid,
+    #[serde(rename = "os.command_failed")]
+    OsCommandFailed,
+    #[serde(rename = "picker.unavailable")]
+    PickerUnavailable,
+
+    // ── Log export ───────────────────────────────────────────────────────────
+    #[serde(rename = "format.unsupported")]
+    FormatUnsupported,
+    #[serde(rename = "range.invalid")]
+    RangeInvalid,
+    #[serde(rename = "path.write.denied")]
+    PathWriteDenied,
+    #[serde(rename = "path.parent.missing")]
+    PathParentMissing,
+    #[serde(rename = "database.error")]
+    DatabaseError,
+    #[serde(rename = "serialise.error")]
+    SerialiseError,
+    #[serde(rename = "io.error")]
+    IoError,
+
+    // ── Generic fallback ─────────────────────────────────────────────────────
+    /// Used when a legacy `String` error is wrapped into `ContractError`.
+    #[serde(rename = "internal.error")]
+    InternalError,
 }
 
 #[cfg(test)]

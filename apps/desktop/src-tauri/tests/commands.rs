@@ -39,6 +39,7 @@ use desktop_shell::commands::sessions::{
     sessions_transition,
 };
 
+use contracts_core::error_code::ErrorCode;
 use desktop_shell::commands::targets::{targets_get, targets_list};
 use desktop_shell::commands::tour::tour_complete_step;
 
@@ -195,7 +196,7 @@ async fn projects_get_returns_not_found() {
     let state = make_projects_state().await;
     let res = app_core::project_setup::get(state.repo.pool(), "nonexistent").await;
     assert!(res.is_err());
-    assert_eq!(res.unwrap_err().code, "project.not_found");
+    assert_eq!(res.unwrap_err().code, ErrorCode::ProjectNotFound);
 }
 
 #[tokio::test]
@@ -258,7 +259,7 @@ async fn plans_get_returns_not_found() {
     let state = make_plans_state().await;
     let res = app_core::plans::get_plan(state.repo.pool(), "nonexistent").await;
     assert!(res.is_err());
-    assert_eq!(res.unwrap_err().code, "plan.not_found");
+    assert_eq!(res.unwrap_err().code, ErrorCode::PlanNotFound);
 }
 
 #[tokio::test]
@@ -267,7 +268,7 @@ async fn plans_discard_returns_not_found() {
     // plans_discard is now a real command; call use case directly to avoid State injection.
     let res = app_core::plans::discard_plan(state.repo.pool(), &state.bus, "missing").await;
     assert!(res.is_err());
-    assert_eq!(res.unwrap_err().code, "plan.not_found");
+    assert_eq!(res.unwrap_err().code, ErrorCode::PlanNotFound);
 }
 
 // plans.apply (spec 025) — tested by the compilation smoke test only.
@@ -306,7 +307,7 @@ async fn plans_retry_requires_terminal_parent() {
     )
     .await;
     assert!(res.is_err());
-    assert_eq!(res.unwrap_err().code, "parent.not_terminal");
+    assert_eq!(res.unwrap_err().code, ErrorCode::ParentNotTerminal);
 
     // Also verify the import of plans_retry compiles.
     let _ = plans_retry;

@@ -16,6 +16,7 @@ use tauri_plugin_dialog::DialogExt;
 use tauri_plugin_opener::OpenerExt;
 
 use crate::commands::lifecycle::AppState;
+use contracts_core::ContractError;
 
 /// `native.directory.pick` — open the OS directory picker.
 ///
@@ -27,10 +28,10 @@ pub async fn native_directory_pick(
     app: tauri::AppHandle,
     _state: State<'_, AppState>,
     request: DirectoryPickRequest,
-) -> Result<DirectoryPickResponse, String> {
+) -> Result<DirectoryPickResponse, ContractError> {
     tracing::debug!("native.directory.pick request_id={}", request.request_id);
 
-    native::validate_directory_pick(&request).map_err(|e| e.message)?;
+    native::validate_directory_pick(&request)?;
 
     let mut builder = app.dialog().file();
 
@@ -59,14 +60,14 @@ pub async fn native_file_pick(
     app: tauri::AppHandle,
     _state: State<'_, AppState>,
     request: FilePickRequest,
-) -> Result<FilePickResponse, String> {
+) -> Result<FilePickResponse, ContractError> {
     tracing::debug!(
         "native.file.pick request_id={} filters={}",
         request.request_id,
         request.filters.len()
     );
 
-    native::validate_file_pick(&request).map_err(|e| e.message)?;
+    native::validate_file_pick(&request)?;
 
     let mut builder = app.dialog().file();
 
@@ -107,11 +108,11 @@ pub async fn native_reveal(
     app: tauri::AppHandle,
     state: State<'_, AppState>,
     request: RevealRequest,
-) -> Result<RevealResponse, String> {
+) -> Result<RevealResponse, ContractError> {
     tracing::debug!("native.reveal request_id={} path={}", request.request_id, request.path);
 
     // Check path existence and emit audit event on failure.
-    native::validate_reveal_path(&state.bus, &request).await.map_err(|e| e.message)?;
+    native::validate_reveal_path(&state.bus, &request).await?;
 
     // Attempt the platform reveal.
     match app.opener().reveal_item_in_dir(&request.path) {
@@ -157,7 +158,7 @@ pub async fn native_reveal(
                 )
                 .await;
 
-            Err(format!("Failed to reveal path: {opener_err}"))
+            Err(ContractError::internal(format!("Failed to reveal path: {opener_err}")))
         }
     }
 }

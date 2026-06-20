@@ -12,6 +12,7 @@ use contracts_core::sessions::{
 use contracts_core::targets::{
     CatalogIds, Coordinates, Target, TargetDetail, TargetKind, TargetProjectStub,
 };
+use contracts_core::ContractError;
 use contracts_core::JsonAny;
 
 /// `targets.list` — returns all targets, optionally filtered by search.
@@ -20,7 +21,7 @@ use contracts_core::JsonAny;
 /// Returns `Err(String)` on failure; the stub never fails.
 #[tauri::command]
 #[specta::specta]
-pub async fn targets_list(search: Option<String>) -> Result<Vec<Target>, String> {
+pub async fn targets_list(search: Option<String>) -> Result<Vec<Target>, ContractError> {
     tracing::debug!("stub: targets.list search={search:?}");
     let targets = stub_targets();
     if let Some(q) = search {
@@ -37,10 +38,12 @@ pub async fn targets_list(search: Option<String>) -> Result<Vec<Target>, String>
 /// Returns `Err(String)` on failure; the stub never fails.
 #[tauri::command]
 #[specta::specta]
-pub async fn targets_get(id: String) -> Result<TargetDetail, String> {
+pub async fn targets_get(id: String) -> Result<TargetDetail, ContractError> {
     tracing::debug!("stub: targets.get id={id}");
-    let base =
-        stub_targets().into_iter().next().ok_or_else(|| "no stub target available".to_owned())?;
+    let base = stub_targets()
+        .into_iter()
+        .next()
+        .ok_or_else(|| ContractError::internal("no stub target available"))?;
     Ok(TargetDetail {
         id: id.clone(),
         name: base.name,

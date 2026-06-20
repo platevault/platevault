@@ -25,7 +25,7 @@ use persistence_db::repositories::settings as settings_repo;
 use sqlx::SqlitePool;
 use uuid::Uuid;
 
-use contracts_core::{ContractError, ErrorSeverity};
+use contracts_core::{error_code::ErrorCode, ContractError, ErrorSeverity};
 
 // ── Request / Response ────────────────────────────────────────────────────────
 
@@ -73,7 +73,7 @@ pub async fn confirm(
     // 1. Load item
     let item = inbox_repo::get_inbox_item(pool, &req.inbox_item_id).await.map_err(|_| {
         ContractError::new(
-            "inbox.item.not_found",
+            ErrorCode::InboxItemNotFound,
             format!("InboxItem not found: {}", req.inbox_item_id),
             ErrorSeverity::Blocking,
             false,
@@ -89,7 +89,7 @@ pub async fn confirm(
         // TOCTOU guard: validate signature even for masters.
         if item.content_signature.as_deref() != Some(&req.content_signature) {
             return Err(ContractError::new(
-                "classification.stale",
+                ErrorCode::ClassificationStale,
                 "Folder has changed since classification. Re-classify before confirming.",
                 ErrorSeverity::Blocking,
                 false,
@@ -125,7 +125,12 @@ pub async fn confirm(
         .execute(pool)
         .await
         .map_err(|e| {
-            ContractError::new("internal.database", e.to_string(), ErrorSeverity::Fatal, true)
+            ContractError::new(
+                ErrorCode::InternalDatabase,
+                e.to_string(),
+                ErrorSeverity::Fatal,
+                true,
+            )
         })?;
 
         // Insert calibration_fingerprint (exposure, filter from master metadata).
@@ -141,7 +146,12 @@ pub async fn confirm(
         .execute(pool)
         .await
         .map_err(|e| {
-            ContractError::new("internal.database", e.to_string(), ErrorSeverity::Fatal, true)
+            ContractError::new(
+                ErrorCode::InternalDatabase,
+                e.to_string(),
+                ErrorSeverity::Fatal,
+                true,
+            )
         })?;
 
         // Mark inbox item as resolved (drops out of the unacknowledged list).
@@ -158,7 +168,7 @@ pub async fn confirm(
     // 3. Dedupe open plan (Ref: E1)
     if let Some(link) = inbox_repo::get_plan_link(pool, &req.inbox_item_id).await.unwrap_or(None) {
         return Err(ContractError::new(
-            "inbox.has.open.plan",
+            ErrorCode::InboxHasOpenPlan,
             format!("Inbox item already has an open plan: {}", link.plan_id),
             ErrorSeverity::Blocking,
             false,
@@ -171,7 +181,7 @@ pub async fn confirm(
         .unwrap_or(None)
         .ok_or_else(|| {
             ContractError::new(
-                "inbox.item.not_found",
+                ErrorCode::InboxItemNotFound,
                 "Classification not found — run inbox.classify first",
                 ErrorSeverity::Blocking,
                 false,
@@ -181,7 +191,7 @@ pub async fn confirm(
     // 5. TOCTOU content_signature guard (Ref: A8)
     if item.content_signature.as_deref() != Some(&req.content_signature) {
         return Err(ContractError::new(
-            "classification.stale",
+            ErrorCode::ClassificationStale,
             "Folder has changed since classification. Re-classify before confirming.",
             ErrorSeverity::Blocking,
             false,
@@ -195,7 +205,7 @@ pub async fn confirm(
     );
     if !valid {
         return Err(ContractError::new(
-            "classification.ambiguous",
+            ErrorCode::ClassificationAmbiguous,
             format!(
                 "Action '{}' does not match classification '{}'",
                 req.action, classification.result
@@ -210,7 +220,7 @@ pub async fn confirm(
 
     // 9. Enumerate files from evidence (Ref: A9) — NOT from file_count
     let evidence_rows = inbox_repo::list_evidence(pool, &req.inbox_item_id).await.map_err(|e| {
-        ContractError::new("internal.database", e.to_string(), ErrorSeverity::Fatal, true)
+        ContractError::new(ErrorCode::InternalDatabase, e.to_string(), ErrorSeverity::Fatal, true)
     })?;
 
     // Only include files that have a frame type (classified or manually overridden)
@@ -219,7 +229,7 @@ pub async fn confirm(
 
     if plan_files.is_empty() {
         return Err(ContractError::new(
-            "classification.ambiguous",
+            ErrorCode::ClassificationAmbiguous,
             "No classified files found. Re-classify or reclassify unclassified files.",
             ErrorSeverity::Blocking,
             false,
@@ -260,7 +270,7 @@ pub async fn confirm(
             }
             Err(e) => {
                 return Err(ContractError::new(
-                    "pattern.unset",
+                    ErrorCode::PatternUnset,
                     format!("Pattern resolution failed for '{}': {e:?}", ev.relative_file_path),
                     ErrorSeverity::Blocking,
                     false,
@@ -294,7 +304,7 @@ pub async fn confirm(
     };
 
     plans_repo::insert_plan(pool, &insert_plan).await.map_err(|e| {
-        ContractError::new("internal.database", e.to_string(), ErrorSeverity::Fatal, true)
+        ContractError::new(ErrorCode::InternalDatabase, e.to_string(), ErrorSeverity::Fatal, true)
     })?;
 
     // 11. Insert plan items — one per classified file, with resolved destinations.
@@ -322,7 +332,12 @@ pub async fn confirm(
         };
 
         plans_repo::insert_plan_item(pool, &plan_item).await.map_err(|e| {
-            ContractError::new("internal.database", e.to_string(), ErrorSeverity::Fatal, true)
+            ContractError::new(
+                ErrorCode::InternalDatabase,
+                e.to_string(),
+                ErrorSeverity::Fatal,
+                true,
+            )
         })?;
     }
 
@@ -332,12 +347,17 @@ pub async fn confirm(
         .execute(pool)
         .await
         .map_err(|e| {
-            ContractError::new("internal.database", e.to_string(), ErrorSeverity::Fatal, true)
+            ContractError::new(
+                ErrorCode::InternalDatabase,
+                e.to_string(),
+                ErrorSeverity::Fatal,
+                true,
+            )
         })?;
 
     // 13. Create plan link and update item state
     inbox_repo::insert_plan_link(pool, &req.inbox_item_id, &plan_id).await.map_err(|e| {
-        ContractError::new("internal.database", e.to_string(), ErrorSeverity::Fatal, true)
+        ContractError::new(ErrorCode::InternalDatabase, e.to_string(), ErrorSeverity::Fatal, true)
     })?;
 
     inbox_repo::update_inbox_item_state(pool, &req.inbox_item_id, "plan_open").await.ok();
@@ -379,7 +399,7 @@ async fn load_active_pattern(pool: &SqlitePool) -> Result<Vec<PatternPart>, Cont
             }
             Err(e) => {
                 return Err(ContractError::new(
-                    "pattern.unset",
+                    ErrorCode::PatternUnset,
                     format!("Stored pattern is invalid: {e}"),
                     ErrorSeverity::Blocking,
                     false,
@@ -917,7 +937,7 @@ mod tests {
         .await
         .unwrap_err();
 
-        assert_eq!(err.code, "classification.stale");
+        assert_eq!(err.code, ErrorCode::ClassificationStale);
     }
 
     #[tokio::test]
@@ -949,7 +969,7 @@ mod tests {
         .await
         .unwrap_err();
 
-        assert_eq!(err.code, "classification.ambiguous");
+        assert_eq!(err.code, ErrorCode::ClassificationAmbiguous);
     }
 
     #[tokio::test]
@@ -1011,6 +1031,6 @@ mod tests {
         .await
         .unwrap_err();
 
-        assert_eq!(err.code, "inbox.has.open.plan");
+        assert_eq!(err.code, ErrorCode::InboxHasOpenPlan);
     }
 }

@@ -10,6 +10,7 @@
 
 import { useState, useCallback } from 'react';
 import { commands } from '@/bindings';
+import { errMessage } from '@/lib/errors';
 
 // ---------------------------------------------------------------------------
 // Types
@@ -94,11 +95,11 @@ export async function revealInOs(
   });
 
   if (response.status === 'error') {
-    const message = response.error;
-    if (message.includes('path.not_exists') || message.includes('not found') || message.includes('does not exist')) {
+    const err = response.error;
+    if (err.code === 'path.not_exists' || err.message.includes('not found') || err.message.includes('does not exist')) {
       throw new RevealError_impl('path.not_exists', `Path does not exist: ${path}`, path);
     }
-    throw new RevealError_impl('os.command_failed', message, path);
+    throw new RevealError_impl('os.command_failed', err.message, path);
   }
 
   return response.data;
@@ -151,7 +152,7 @@ export function useRevealInOs(): UseRevealInOsReturn {
           ? err
           : {
               code: 'os.command_failed',
-              message: err instanceof Error ? err.message : String(err),
+              message: errMessage(err),
               path,
             };
         setError(revErr);

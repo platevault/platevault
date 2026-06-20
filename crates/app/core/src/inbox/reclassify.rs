@@ -13,7 +13,7 @@ use persistence_db::repositories::inbox::{self as inbox_repo};
 use sqlx::SqlitePool;
 use uuid::Uuid;
 
-use contracts_core::{ContractError, ErrorSeverity};
+use contracts_core::{error_code::ErrorCode, ContractError, ErrorSeverity};
 
 // ── Request / Response ────────────────────────────────────────────────────────
 
@@ -55,7 +55,7 @@ pub async fn reclassify(
     // 1. Verify item exists
     let item = inbox_repo::get_inbox_item(pool, &req.inbox_item_id).await.map_err(|_| {
         ContractError::new(
-            "inbox.item.not_found",
+            ErrorCode::InboxItemNotFound,
             format!("InboxItem not found: {}", req.inbox_item_id),
             ErrorSeverity::Blocking,
             false,
@@ -65,7 +65,7 @@ pub async fn reclassify(
     // 2. Block if open plan exists (Ref: E1)
     if inbox_repo::get_plan_link(pool, &req.inbox_item_id).await.unwrap_or(None).is_some() {
         return Err(ContractError::new(
-            "inbox.has.open.plan",
+            ErrorCode::InboxHasOpenPlan,
             "Reclassification is not permitted while a plan is open.",
             ErrorSeverity::Blocking,
             false,
@@ -74,7 +74,7 @@ pub async fn reclassify(
 
     // 3. Validate file paths exist in evidence
     let evidence = inbox_repo::list_evidence(pool, &req.inbox_item_id).await.map_err(|e| {
-        ContractError::new("internal.database", e.to_string(), ErrorSeverity::Fatal, true)
+        ContractError::new(ErrorCode::InternalDatabase, e.to_string(), ErrorSeverity::Fatal, true)
     })?;
 
     let known_paths: std::collections::HashSet<&str> =
@@ -89,7 +89,7 @@ pub async fn reclassify(
 
     if !missing.is_empty() {
         return Err(ContractError::new(
-            "file.not_found",
+            ErrorCode::FileNotFound,
             format!("File paths not found in evidence: {missing:?}"),
             ErrorSeverity::Blocking,
             false,
@@ -104,7 +104,7 @@ pub async fn reclassify(
                 .await
                 .map_err(|e| {
                     ContractError::new(
-                        "internal.database",
+                        ErrorCode::InternalDatabase,
                         e.to_string(),
                         ErrorSeverity::Fatal,
                         true,
@@ -118,7 +118,12 @@ pub async fn reclassify(
     // 5. Re-aggregate: re-load all evidence (overrides now set)
     let updated_evidence =
         inbox_repo::list_evidence(pool, &req.inbox_item_id).await.map_err(|e| {
-            ContractError::new("internal.database", e.to_string(), ErrorSeverity::Fatal, true)
+            ContractError::new(
+                ErrorCode::InternalDatabase,
+                e.to_string(),
+                ErrorSeverity::Fatal,
+                true,
+            )
         })?;
 
     let mut frame_types: std::collections::HashSet<String> = std::collections::HashSet::new();
@@ -389,6 +394,6 @@ mod tests {
         .await
         .unwrap_err();
 
-        assert_eq!(err.code, "file.not_found");
+        assert_eq!(err.code, ErrorCode::FileNotFound);
     }
 }

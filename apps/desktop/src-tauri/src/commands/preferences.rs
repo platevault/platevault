@@ -7,6 +7,7 @@ use std::collections::HashMap;
 
 use contracts_core::enums::{Density, ViewMode};
 use contracts_core::preferences::{AppPreferences, SessionsGroupBy, SessionsView, TourCompleted};
+use contracts_core::ContractError;
 use contracts_core::JsonAny;
 
 /// `preferences.get` — returns current application preferences.
@@ -15,7 +16,7 @@ use contracts_core::JsonAny;
 /// Returns `Err(String)` on failure; the stub never fails.
 #[tauri::command]
 #[specta::specta]
-pub async fn preferences_get() -> Result<AppPreferences, String> {
+pub async fn preferences_get() -> Result<AppPreferences, ContractError> {
     tracing::debug!("stub: preferences.get");
     Ok(AppPreferences {
         sidebar_collapsed: false,
@@ -35,7 +36,7 @@ pub async fn preferences_get() -> Result<AppPreferences, String> {
 /// Returns `Err(String)` on failure; the stub never fails.
 #[tauri::command]
 #[specta::specta]
-pub async fn preferences_set(key: String, value: JsonAny) -> Result<(), String> {
+pub async fn preferences_set(key: String, value: JsonAny) -> Result<(), ContractError> {
     tracing::debug!("stub: preferences.set key={key} value={value:?}");
     Ok(())
 }

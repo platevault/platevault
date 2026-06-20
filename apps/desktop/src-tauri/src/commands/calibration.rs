@@ -17,6 +17,7 @@ use contracts_core::calibration_match::{
 use tauri::State;
 
 use crate::AppState;
+use contracts_core::ContractError;
 
 /// `calibration.masters.list` — returns all calibration masters from real DB rows.
 ///
@@ -30,9 +31,9 @@ use crate::AppState;
 #[specta::specta]
 pub async fn calibration_masters_list(
     state: State<'_, AppState>,
-) -> Result<Vec<CalibrationMaster>, String> {
+) -> Result<Vec<CalibrationMaster>, ContractError> {
     tracing::debug!("calibration.masters.list");
-    cal_uc::masters_list(state.repo.pool()).await
+    cal_uc::masters_list(state.repo.pool()).await.map_err(ContractError::internal)
 }
 
 /// `calibration.masters.get` — returns a single calibration master detail.
@@ -44,9 +45,9 @@ pub async fn calibration_masters_list(
 pub async fn calibration_masters_get(
     state: State<'_, AppState>,
     id: String,
-) -> Result<MasterDetail, String> {
+) -> Result<MasterDetail, ContractError> {
     tracing::debug!("calibration.masters.get id={id}");
-    cal_uc::masters_get(state.repo.pool(), &id).await
+    cal_uc::masters_get(state.repo.pool(), &id).await.map_err(ContractError::internal)
 }
 
 /// `calibration.matches` — returns calibration match candidates for a session.
@@ -59,7 +60,7 @@ pub async fn calibration_masters_get(
 /// Returns `Err(String)` on failure; the stub never fails.
 #[tauri::command]
 #[specta::specta]
-pub async fn calibration_matches(session_id: String) -> Result<Vec<MatchCandidate>, String> {
+pub async fn calibration_matches(session_id: String) -> Result<Vec<MatchCandidate>, ContractError> {
     tracing::debug!("calibration.matches session_id={session_id}");
     // This command remains a simple list until the spec-007 scoring pass is
     // integrated here. Use calibration.match.suggest for real ranked candidates.
@@ -80,9 +81,9 @@ pub async fn calibration_matches(session_id: String) -> Result<Vec<MatchCandidat
 pub async fn calibration_match_suggest(
     state: State<'_, AppState>,
     req: CalibrationMatchSuggestRequest,
-) -> Result<CalibrationMatchSuggestResponse, String> {
+) -> Result<CalibrationMatchSuggestResponse, ContractError> {
     tracing::debug!("calibration.match.suggest session_id={}", req.session_id);
-    cal_uc::suggest(state.repo.pool(), req).await
+    cal_uc::suggest(state.repo.pool(), req).await.map_err(ContractError::internal)
 }
 
 /// `calibration.match.assign` — persist a calibration master assignment.
@@ -96,13 +97,13 @@ pub async fn calibration_match_suggest(
 pub async fn calibration_match_assign(
     state: State<'_, AppState>,
     req: CalibrationMatchAssignRequest,
-) -> Result<CalibrationMatchAssignResponse, String> {
+) -> Result<CalibrationMatchAssignResponse, ContractError> {
     tracing::debug!(
         "calibration.match.assign session_id={} master_id={}",
         req.session_id,
         req.master_id
     );
-    cal_uc::assign(state.repo.pool(), &state.bus, req).await
+    cal_uc::assign(state.repo.pool(), &state.bus, req).await.map_err(ContractError::internal)
 }
 
 /// `calibration.match.suggest.batch` — suggest calibration masters for multiple sessions.
@@ -117,7 +118,7 @@ pub async fn calibration_match_assign(
 pub async fn calibration_match_suggest_batch(
     state: State<'_, AppState>,
     req: CalibrationMatchBatchRequest,
-) -> Result<CalibrationMatchBatchResponse, String> {
+) -> Result<CalibrationMatchBatchResponse, ContractError> {
     tracing::debug!("calibration.match.suggest.batch session_count={}", req.session_ids.len());
-    cal_uc::batch_suggest(state.repo.pool(), req).await
+    cal_uc::batch_suggest(state.repo.pool(), req).await.map_err(ContractError::internal)
 }

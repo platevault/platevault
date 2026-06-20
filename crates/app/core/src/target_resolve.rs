@@ -30,7 +30,7 @@ use contracts_core::targets::{
     ResolvedTarget, TargetObjectType, TargetResolveSimbadRequest, TargetResolveSimbadResponse,
     TargetResolveStatus, TargetSource,
 };
-use contracts_core::{ContractError, ErrorSeverity};
+use contracts_core::{error_code::ErrorCode, ContractError, ErrorSeverity};
 use targeting::normalize::normalize;
 use targeting::resolver::cache::{self, CachedTarget};
 use targeting::resolver::{
@@ -86,7 +86,7 @@ async fn write_audit(
 // ── Error mapping ───────────────────────────────────────────────────────────
 
 fn db_err(e: &cache::CacheError) -> ContractError {
-    ContractError::new("internal.database", format!("{e}"), ErrorSeverity::Fatal, true)
+    ContractError::new(ErrorCode::InternalDatabase, format!("{e}"), ErrorSeverity::Fatal, true)
 }
 
 // ── Enum mapping (cache → contract DTO) ─────────────────────────────────────
@@ -184,7 +184,7 @@ async fn read_settings(pool: &SqlitePool) -> Result<OnlineSettings, ContractErro
     .fetch_optional(pool)
     .await
     .map_err(|e| {
-        ContractError::new("internal.database", e.to_string(), ErrorSeverity::Fatal, true)
+        ContractError::new(ErrorCode::InternalDatabase, e.to_string(), ErrorSeverity::Fatal, true)
     })?;
 
     Ok(row.map_or(
@@ -304,7 +304,7 @@ async fn apply_override(
 ) -> Result<TargetResolveSimbadResponse, ContractError> {
     let id = Uuid::parse_str(target_id).map_err(|e| {
         ContractError::new(
-            "target.invalid_id",
+            ErrorCode::TargetInvalidId,
             format!("override target_id '{target_id}' is not a valid UUID: {e}"),
             ErrorSeverity::Blocking,
             false,

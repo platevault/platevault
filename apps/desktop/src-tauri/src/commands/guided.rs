@@ -10,6 +10,7 @@ use contracts_core::guided::{
 use tauri::State;
 
 use crate::commands::lifecycle::AppState;
+use contracts_core::ContractError;
 
 /// `guided.state.get` — read current coach state for UI hydration.
 ///
@@ -23,9 +24,11 @@ use crate::commands::lifecycle::AppState;
 #[specta::specta]
 pub async fn guided_state_get(
     state: State<'_, AppState>,
-) -> Result<GuidedStateGetResponse, String> {
+) -> Result<GuidedStateGetResponse, ContractError> {
     tracing::debug!("guided.state.get");
-    app_core::guided_flow::get_state(state.repo.pool(), &state.bus).await.map_err(|e| e.to_string())
+    app_core::guided_flow::get_state(state.repo.pool(), &state.bus)
+        .await
+        .map_err(ContractError::from)
 }
 
 /// `guided.step.complete` — mark a step complete and advance the coach.
@@ -40,11 +43,11 @@ pub async fn guided_state_get(
 pub async fn guided_step_complete(
     state: State<'_, AppState>,
     request: GuidedStepCompleteRequest,
-) -> Result<GuidedStepCompleteResponse, String> {
+) -> Result<GuidedStepCompleteResponse, ContractError> {
     tracing::debug!("guided.step.complete step_id={}", request.step_id);
     app_core::guided_flow::complete_step(state.repo.pool(), &request)
         .await
-        .map_err(|e| e.to_string())
+        .map_err(ContractError::from)
 }
 
 /// `guided.dismiss` — dismiss the coach, hiding all hints.
@@ -56,9 +59,11 @@ pub async fn guided_step_complete(
 /// Returns `Err(String)` on database failure.
 #[tauri::command]
 #[specta::specta]
-pub async fn guided_dismiss(state: State<'_, AppState>) -> Result<GuidedDismissResponse, String> {
+pub async fn guided_dismiss(
+    state: State<'_, AppState>,
+) -> Result<GuidedDismissResponse, ContractError> {
     tracing::debug!("guided.dismiss");
-    app_core::guided_flow::dismiss(state.repo.pool()).await.map_err(|e| e.to_string())
+    app_core::guided_flow::dismiss(state.repo.pool()).await.map_err(ContractError::from)
 }
 
 /// `guided.restart` — restart the coach from Settings.
@@ -70,9 +75,11 @@ pub async fn guided_dismiss(state: State<'_, AppState>) -> Result<GuidedDismissR
 /// Returns `Err(String)` on database failure.
 #[tauri::command]
 #[specta::specta]
-pub async fn guided_restart(state: State<'_, AppState>) -> Result<GuidedRestartResponse, String> {
+pub async fn guided_restart(
+    state: State<'_, AppState>,
+) -> Result<GuidedRestartResponse, ContractError> {
     tracing::debug!("guided.restart");
-    app_core::guided_flow::restart(state.repo.pool()).await.map_err(|e| e.to_string())
+    app_core::guided_flow::restart(state.repo.pool()).await.map_err(ContractError::from)
 }
 
 /// `guided.activate` — activate the flow after first-run setup completes.
@@ -86,7 +93,9 @@ pub async fn guided_restart(state: State<'_, AppState>) -> Result<GuidedRestartR
 #[specta::specta]
 pub async fn guided_activate(
     state: State<'_, AppState>,
-) -> Result<contracts_core::guided::GuidedFlowStateDto, String> {
+) -> Result<contracts_core::guided::GuidedFlowStateDto, ContractError> {
     tracing::debug!("guided.activate");
-    app_core::guided_flow::activate_after_setup(state.repo.pool()).await.map_err(|e| e.to_string())
+    app_core::guided_flow::activate_after_setup(state.repo.pool())
+        .await
+        .map_err(ContractError::from)
 }

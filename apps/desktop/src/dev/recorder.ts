@@ -17,6 +17,7 @@
  */
 
 import type { ContractCall, ContractMeta } from '@/api/commands';
+import { errMessage } from '@/lib/errors';
 
 /** Maximum entries retained in the ring buffer. */
 export const CALL_BUFFER_SIZE = 100;
@@ -212,7 +213,7 @@ export function wrap(
       const e = err as { code?: string; message?: string };
       error = {
         code: e?.code ?? 'unknown',
-        message: e?.message ?? String(err),
+        message: errMessage(err),
       };
     }
 

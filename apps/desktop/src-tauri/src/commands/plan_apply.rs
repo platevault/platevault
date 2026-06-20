@@ -22,6 +22,7 @@ use contracts_core::plan_apply::{
 use tauri::State;
 
 use crate::commands::lifecycle::AppState;
+use contracts_core::ContractError;
 
 // ── plans.apply ───────────────────────────────────────────────────────────────
 
@@ -44,8 +45,8 @@ pub async fn plans_apply_real(
     state: State<'_, AppState>,
     plan_id: String,
     approval_token: String,
-) -> Result<PlanApplyResponse, String> {
-    apply_plan(state.repo.pool(), &state.bus, &plan_id, &approval_token).await.map_err(|e| e.code)
+) -> Result<PlanApplyResponse, ContractError> {
+    apply_plan(state.repo.pool(), &state.bus, &plan_id, &approval_token).await
 }
 
 // ── plans.cancel ──────────────────────────────────────────────────────────────
@@ -65,8 +66,8 @@ pub async fn plans_apply_real(
 pub async fn plans_cancel(
     state: State<'_, AppState>,
     plan_id: String,
-) -> Result<PlanCancelResponse, String> {
-    cancel_plan(state.repo.pool(), &plan_id).await.map_err(|e| e.code)
+) -> Result<PlanCancelResponse, ContractError> {
+    cancel_plan(state.repo.pool(), &plan_id).await
 }
 
 // ── plans.resume ──────────────────────────────────────────────────────────────
@@ -85,8 +86,8 @@ pub async fn plans_resume(
     state: State<'_, AppState>,
     plan_id: String,
     run_id: String,
-) -> Result<PlanResumeResponse, String> {
-    resume_plan(state.repo.pool(), &state.bus, &plan_id, &run_id).await.map_err(|e| e.code)
+) -> Result<PlanResumeResponse, ContractError> {
+    resume_plan(state.repo.pool(), &state.bus, &plan_id, &run_id).await
 }
 
 // ── plans.item.skip ───────────────────────────────────────────────────────────
@@ -108,8 +109,8 @@ pub async fn plans_item_skip(
     state: State<'_, AppState>,
     plan_id: String,
     item_id: String,
-) -> Result<PlanItemSkipResponse, String> {
-    skip_plan_item(state.repo.pool(), &plan_id, &item_id).await.map_err(|e| e.code)
+) -> Result<PlanItemSkipResponse, ContractError> {
+    skip_plan_item(state.repo.pool(), &plan_id, &item_id).await
 }
 
 // ── plans.item.retry ──────────────────────────────────────────────────────────
@@ -132,8 +133,8 @@ pub async fn plans_item_retry(
     state: State<'_, AppState>,
     plan_id: String,
     item_id: String,
-) -> Result<PlanItemRetryResponse, String> {
-    retry_plan_item(state.repo.pool(), &plan_id, &item_id).await.map_err(|e| e.code)
+) -> Result<PlanItemRetryResponse, ContractError> {
+    retry_plan_item(state.repo.pool(), &plan_id, &item_id).await
 }
 
 // ── plans.apply.status ────────────────────────────────────────────────────────
@@ -148,6 +149,6 @@ pub async fn plans_item_retry(
 pub async fn plans_apply_status(
     state: State<'_, AppState>,
     plan_id: String,
-) -> Result<PlanApplyStatus, String> {
-    get_apply_status(state.repo.pool(), &plan_id).await.map_err(|e| e.code)
+) -> Result<PlanApplyStatus, ContractError> {
+    get_apply_status(state.repo.pool(), &plan_id).await
 }

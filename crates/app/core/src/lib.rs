@@ -6,6 +6,7 @@ pub mod calibration;
 #[cfg(feature = "dev-tools")]
 pub mod dev_contracts;
 pub mod equipment;
+pub mod errors;
 pub mod first_run;
 pub mod guided_flow;
 pub mod inbox;
@@ -38,7 +39,8 @@ pub mod transition_use_case;
 use std::collections::BTreeMap;
 
 use contracts_core::{
-    ContractError, ErrorSeverity, OperationName, RequestEnvelope, RequestId, ResponseEnvelope,
+    error_code::ErrorCode, ContractError, ErrorSeverity, OperationName, RequestEnvelope, RequestId,
+    ResponseEnvelope,
 };
 use serde_json::Value;
 
@@ -118,7 +120,7 @@ impl OperationRegistry {
 
         if self.handlers.contains_key(&operation) {
             return Err(ContractError::new(
-                "operation.handler_duplicate",
+                ErrorCode::OperationHandlerDuplicate,
                 format!("Operation handler already registered for {operation}."),
                 ErrorSeverity::Fatal,
                 false,
@@ -153,7 +155,7 @@ impl OperationDispatcher for OperationRegistry {
 
 fn unknown_operation_error(operation: &OperationName) -> ContractError {
     ContractError::new(
-        "operation.not_found",
+        ErrorCode::OperationNotFound,
         format!("No handler is registered for operation {}.", operation.0),
         ErrorSeverity::Blocking,
         false,
@@ -162,7 +164,9 @@ fn unknown_operation_error(operation: &OperationName) -> ContractError {
 
 #[cfg(test)]
 mod tests {
-    use contracts_core::{OperationName, RequestEnvelope, RequestId, ResponseStatus};
+    use contracts_core::{
+        error_code::ErrorCode, OperationName, RequestEnvelope, RequestId, ResponseStatus,
+    };
     use serde_json::{json, Value};
 
     use super::{
@@ -211,7 +215,7 @@ mod tests {
             _payload: Value,
         ) -> Result<Value, ContractError> {
             Err(ContractError::new(
-                "plan.approval_required",
+                ErrorCode::PlanApprovalRequired,
                 "Plan approval is required.",
                 ErrorSeverity::Blocking,
                 false,
@@ -254,7 +258,7 @@ mod tests {
         ));
 
         assert_eq!(response.status, ResponseStatus::Error);
-        assert_eq!(response.error.unwrap().code, "operation.not_found");
+        assert_eq!(response.error.unwrap().code, ErrorCode::OperationNotFound);
     }
 
     #[test]
@@ -268,7 +272,7 @@ mod tests {
         ));
 
         assert_eq!(response.status, ResponseStatus::Error);
-        assert_eq!(response.error.unwrap().code, "plan.approval_required");
+        assert_eq!(response.error.unwrap().code, ErrorCode::PlanApprovalRequired);
     }
 
     #[test]

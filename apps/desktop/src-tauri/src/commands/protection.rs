@@ -18,6 +18,7 @@ use contracts_core::protection::{
 use tauri::State;
 
 use crate::commands::lifecycle::AppState;
+use contracts_core::ContractError;
 
 // ── source.protection.get ─────────────────────────────────────────────────────
 
@@ -33,10 +34,10 @@ use crate::commands::lifecycle::AppState;
 pub async fn source_protection_get(
     state: State<'_, AppState>,
     source_id: Option<String>,
-) -> Result<SourceProtectionGetResponse, String> {
+) -> Result<SourceProtectionGetResponse, ContractError> {
     tracing::debug!("source.protection.get source_id={source_id:?}");
     let req = SourceProtectionGetRequest { source_id };
-    get_source_protection(state.repo.pool(), &req).await.map_err(|e| e.code)
+    get_source_protection(state.repo.pool(), &req).await
 }
 
 // ── source.protection.set ─────────────────────────────────────────────────────
@@ -52,13 +53,13 @@ pub async fn source_protection_get(
 pub async fn source_protection_set(
     state: State<'_, AppState>,
     request: SourceProtectionSetRequest,
-) -> Result<SourceProtectionSetResponse, String> {
+) -> Result<SourceProtectionSetResponse, ContractError> {
     tracing::debug!(
         "source.protection.set source_id={} level={:?}",
         request.source_id,
         request.level
     );
-    set_source_protection(state.repo.pool(), &state.bus, &request).await.map_err(|e| e.code)
+    set_source_protection(state.repo.pool(), &state.bus, &request).await
 }
 
 // ── plan.protection.check ─────────────────────────────────────────────────────
@@ -76,10 +77,10 @@ pub async fn source_protection_set(
 pub async fn plan_protection_check_cmd(
     state: State<'_, AppState>,
     plan_id: String,
-) -> Result<PlanProtectionCheckResponse, String> {
+) -> Result<PlanProtectionCheckResponse, ContractError> {
     tracing::debug!("plan.protection.check plan_id={plan_id}");
     let req = PlanProtectionCheckRequest { plan_id };
-    plan_protection_check(state.repo.pool(), &req).await.map_err(|e| e.code)
+    plan_protection_check(state.repo.pool(), &req).await
 }
 
 // ── protection.plan.acknowledged ──────────────────────────────────────────────
@@ -101,7 +102,7 @@ pub async fn protection_plan_acknowledged(
     source_id: Option<String>,
     resolved_level: String,
     reason: String,
-) -> Result<String, String> {
+) -> Result<String, ContractError> {
     tracing::debug!("protection.plan.acknowledged plan_id={plan_id} item_id={item_id}");
     acknowledge_protected_item(
         &state.bus,
@@ -112,5 +113,4 @@ pub async fn protection_plan_acknowledged(
         &reason,
     )
     .await
-    .map_err(|e| e.code)
 }

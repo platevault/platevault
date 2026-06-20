@@ -85,14 +85,14 @@ impl CallBuffer {
 pub async fn dev_contracts_list(
     state: State<'_, AppState>,
     request: DevContractsListRequest,
-) -> Result<DevContractsListResponse, String> {
+) -> Result<DevContractsListResponse, ContractError> {
     let pool = state.repo.pool();
     let dev_mode = app_core::settings::resolve_setting(pool, "devMode", None)
         .await
         .map(|v| v.as_bool().unwrap_or(false))
         .unwrap_or(false);
 
-    app_core::dev_contracts::list_contracts(dev_mode, request).map_err(|e| e.message)
+    app_core::dev_contracts::list_contracts(dev_mode, request)
 }
 
 /// `dev.calls.list` — return recent recorded calls (spec 021 US2).
@@ -107,7 +107,7 @@ pub async fn dev_calls_list(
     state: State<'_, AppState>,
     buffer: State<'_, CallBuffer>,
     request: DevCallsListRequest,
-) -> Result<DevCallsListResponse, String> {
+) -> Result<DevCallsListResponse, ContractError> {
     let pool = state.repo.pool();
     let dev_mode = app_core::settings::resolve_setting(pool, "devMode", None)
         .await
@@ -119,7 +119,7 @@ pub async fn dev_calls_list(
 
     let calls = buffer.snapshot(limit);
 
-    app_core::dev_contracts::list_calls(dev_mode, request, calls).map_err(|e| e.message)
+    app_core::dev_contracts::list_calls(dev_mode, request, calls)
 }
 
 /// `dev.export` — dump contract registry + calls to a JSON file (spec 021 US4).
@@ -133,7 +133,7 @@ pub async fn dev_export(
     state: State<'_, AppState>,
     buffer: State<'_, CallBuffer>,
     request: DevExportRequest,
-) -> Result<DevExportResponse, String> {
+) -> Result<DevExportResponse, ContractError> {
     use std::path::Path;
 
     let pool = state.repo.pool();
@@ -148,8 +148,7 @@ pub async fn dev_export(
 
     // Resolve contracts list.
     let contracts_resp =
-        app_core::dev_contracts::list_contracts(dev_mode, DevContractsListRequest::default())
-            .map_err(|e| e.message)?;
+        app_core::dev_contracts::list_contracts(dev_mode, DevContractsListRequest::default())?;
 
     // Snapshot calls.
     let calls = buffer.snapshot(CALL_BUFFER_CAP);
@@ -173,12 +172,13 @@ pub async fn dev_export(
     }
 
     // Write the file.
-    let json_bytes = serde_json::to_vec_pretty(&export)
-        .map_err(|e| format!("path.write.failed: Serialization error: {e}"))?;
+    let json_bytes = serde_json::to_vec_pretty(&export).map_err(|e| {
+        ContractError::internal(format!("path.write.failed: Serialization error: {e}"))
+    })?;
 
     tokio::fs::write(&request.output_path, json_bytes)
         .await
-        .map_err(|e| format!("path.write.failed: {e}"))?;
+        .map_err(|e| ContractError::internal(format!("path.write.failed: {e}")))?;
 
     Ok(DevExportResponse { written_path: request.output_path, call_count, contract_count })
 }
@@ -196,7 +196,7 @@ pub async fn dev_export(
 pub async fn dev_schema_get(
     state: State<'_, AppState>,
     request: DevSchemaGetRequest,
-) -> Result<DevSchemaGetResponse, String> {
+) -> Result<DevSchemaGetResponse, ContractError> {
     let pool = state.repo.pool();
     let dev_mode = app_core::settings::resolve_setting(pool, "devMode", None)
         .await
@@ -231,6 +231,7 @@ mod tests {
     use contracts_core::dev::ContractCall;
 
     use super::{CallBuffer, CALL_BUFFER_CAP};
+    use contracts_core::ContractError;
 
     fn make_call(id: &str) -> ContractCall {
         ContractCall {

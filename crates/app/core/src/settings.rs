@@ -19,7 +19,7 @@ use contracts_core::settings::{
     SetSourceOverrideRequest, SetSourceOverrideResponse, SettingsGetResponse, SettingsState,
     SettingsUpdateRequest, SettingsUpdateResponse, SettingsUpdateStatus,
 };
-use contracts_core::{ContractError, ErrorSeverity};
+use contracts_core::{error_code::ErrorCode, ContractError, ErrorSeverity};
 use persistence_db::repositories::settings as repo;
 use serde_json::Value;
 use sqlx::SqlitePool;
@@ -67,12 +67,12 @@ pub const ALL_V1_KEYS: &[&str] = &[
 
 #[allow(clippy::needless_pass_by_value)]
 fn db_err(e: persistence_db::DbError) -> ContractError {
-    ContractError::new("internal.database", format!("{e}"), ErrorSeverity::Fatal, true)
+    ContractError::new(ErrorCode::InternalDatabase, format!("{e}"), ErrorSeverity::Fatal, true)
 }
 
 #[allow(clippy::needless_pass_by_value)]
 fn bus_err(e: audit::bus::BusError) -> ContractError {
-    ContractError::new("internal.audit", format!("{e}"), ErrorSeverity::Fatal, true)
+    ContractError::new(ErrorCode::InternalAudit, format!("{e}"), ErrorSeverity::Fatal, true)
 }
 
 // ── Key validation ──────────────────────────────────────────────────────────
@@ -186,7 +186,7 @@ fn is_workflow_profile_attribution_window_key(key: &str) -> bool {
 pub fn validate_value(key: &str, value: &Value) -> Result<(), ContractError> {
     let invalid = |msg: &str| {
         ContractError::new(
-            "value.invalid",
+            ErrorCode::ValueInvalid,
             format!("key {key}: {msg}"),
             ErrorSeverity::Warning,
             false,
@@ -255,7 +255,7 @@ pub fn validate_value(key: &str, value: &Value) -> Result<(), ContractError> {
             // In release builds (without dev-tools feature), devMode is always false.
             #[cfg(not(feature = "dev-tools"))]
             return Err(ContractError::new(
-                "value.invalid",
+                ErrorCode::ValueInvalid,
                 "devMode cannot be set in release builds".to_owned(),
                 ErrorSeverity::Warning,
                 false,
@@ -605,7 +605,7 @@ pub async fn update_setting(
     // 1. Validate key.
     if !is_valid_key(key) {
         return Err(ContractError::new(
-            "key.unknown",
+            ErrorCode::KeyUnknown,
             format!("unknown settings key: {key}"),
             ErrorSeverity::Warning,
             false,
@@ -692,7 +692,7 @@ pub async fn restore_defaults(
         for key in &req.keys {
             if !is_valid_key(key) {
                 return Err(ContractError::new(
-                    "key.unknown",
+                    ErrorCode::KeyUnknown,
                     format!("unknown settings key: {key}"),
                     ErrorSeverity::Warning,
                     false,
@@ -766,7 +766,7 @@ pub async fn set_source_override(
 
     if !OVERRIDABLE_KEYS.contains(&key.as_str()) {
         return Err(ContractError::new(
-            "key.unoverridable",
+            ErrorCode::KeyUnoverridable,
             format!("key {key} cannot be overridden per source"),
             ErrorSeverity::Warning,
             false,
@@ -923,7 +923,7 @@ mod tests {
             value: contracts_core::JsonAny::from(serde_json::json!("whatever")),
         };
         let err = update_setting(db.pool(), &bus, &req).await.unwrap_err();
-        assert_eq!(err.code, "key.unknown");
+        assert_eq!(err.code, ErrorCode::KeyUnknown);
     }
 
     #[tokio::test]
@@ -934,7 +934,7 @@ mod tests {
             value: contracts_core::JsonAny::from(serde_json::json!("trace")), // not a valid level
         };
         let err = update_setting(db.pool(), &bus, &req).await.unwrap_err();
-        assert_eq!(err.code, "value.invalid");
+        assert_eq!(err.code, ErrorCode::ValueInvalid);
     }
 
     #[tokio::test]
@@ -1018,7 +1018,7 @@ mod tests {
             value: contracts_core::JsonAny::from(serde_json::json!("debug")),
         };
         let err = set_source_override(db.pool(), &req).await.unwrap_err();
-        assert_eq!(err.code, "key.unoverridable");
+        assert_eq!(err.code, ErrorCode::KeyUnoverridable);
     }
 
     // ── T022: resolution order ─────────────────────────────────────────
@@ -1107,7 +1107,7 @@ mod tests {
         let (db, bus) = setup().await;
         let restore_req = RestoreDefaultsRequest { keys: vec!["notAKey".to_owned()] };
         let err = restore_defaults(db.pool(), &bus, &restore_req).await.unwrap_err();
-        assert_eq!(err.code, "key.unknown");
+        assert_eq!(err.code, ErrorCode::KeyUnknown);
     }
 
     // ── Key validation unit tests ──────────────────────────────────────
@@ -1174,7 +1174,8 @@ mod tests {
         };
         let err = update_setting(db.pool(), &bus, &req).await.unwrap_err();
         assert_eq!(
-            err.code, "key.unknown",
+            err.code,
+            ErrorCode::KeyUnknown,
             "old bogus key 'aging_threshold_days' must be rejected"
         );
     }

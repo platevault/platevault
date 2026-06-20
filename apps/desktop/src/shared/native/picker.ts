@@ -10,6 +10,7 @@
 
 import { useState, useCallback } from 'react';
 import { commands } from '@/bindings';
+import { errMessage } from '@/lib/errors';
 
 // ---------------------------------------------------------------------------
 // Types
@@ -174,7 +175,7 @@ export async function pickDirectory(
   });
 
   if (response.status === 'error') {
-    const message = response.error;
+    const message = response.error.message;
     if (message.includes('cancelled') || message.includes('canceled')) {
       return { path: null, cancelled: true };
     }
@@ -221,7 +222,7 @@ export async function pickFile(
   });
 
   if (response.status === 'error') {
-    const message = response.error;
+    const message = response.error.message;
     if (message.includes('cancelled') || message.includes('canceled')) {
       return { path: null, selectedFilter: null, cancelled: true };
     }
@@ -289,7 +290,7 @@ export function useDirectoryPicker(): UseDirectoryPickerReturn {
       } catch (err: unknown) {
         const pickerErr: PickerError = isPickerError(err)
           ? err
-          : { code: 'picker.unknown', message: err instanceof Error ? err.message : String(err) };
+          : { code: 'picker.unknown', message: errMessage(err) };
         setError(pickerErr);
         return { path: null, cancelled: false };
       } finally {
@@ -337,7 +338,7 @@ export function useFilePicker(): UseFilePickerReturn {
       } catch (err: unknown) {
         const pickerErr: PickerError = isPickerError(err)
           ? err
-          : { code: 'picker.unknown', message: err instanceof Error ? err.message : String(err) };
+          : { code: 'picker.unknown', message: errMessage(err) };
         setError(pickerErr);
         return { path: null, selectedFilter: null, cancelled: false };
       } finally {

@@ -19,7 +19,8 @@ import type {
   CalibrationMatchAssignResponse,
   CalibrationMatchType,
 } from '@/api/commands';
-import type { CalibrationMaster } from '@/bindings/types';
+import type { CalibrationMaster_Serialize as CalibrationMaster } from '@/bindings/index';
+import { errMessage } from '@/lib/errors';
 
 // ── Masters list ─────────────────────────────────────────────────────────────
 
@@ -44,7 +45,7 @@ export function useCalibrationMasters(): UseMastersState {
       })
       .catch((err: unknown) => {
         if (!cancelled)
-          setState({ masters: [], loading: false, error: String(err) });
+          setState({ masters: [], loading: false, error: errMessage(err) });
       });
     return () => { cancelled = true; };
   }, []);
@@ -95,7 +96,7 @@ export function useCalibrationSuggest(
       })
       .catch((err: unknown) => {
         if (!cancelled) {
-          setError(String(err));
+          setError(errMessage(err));
           setLoading(false);
         }
       });

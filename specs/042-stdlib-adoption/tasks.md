@@ -53,16 +53,16 @@ Frontend: `cd apps/desktop && npx tsc --noEmit` + `npx vitest run <feature>`. Ru
 
 ## Phase 3 — US2 Boundary type-safety & string/message (P1)
 
-- [ ] T110 Convert command results to `Result<T, ContractError>` (ContractError.code:
+- [X] T110 Convert command results to `Result<T, ContractError>` (ContractError.code:
   ErrorCode) across `src-tauri` command handlers + app/core; regenerate bindings.
-- [ ] T111 Re-export generated `_Serialize` types from `bindings/types.ts`; delete the
+- [X] T111 Re-export generated `_Serialize` types from `bindings/types.ts`; delete the
   hand-written snake_case structs; migrate field access across the ~44 consumer files;
   remove all `as unknown as` at the boundary.
-- [ ] T112 `apps/desktop/src/lib/errors.ts` (`errMessage`/`asError`); replace the 15+
+- [X] T112 `apps/desktop/src/lib/errors.ts` (`errMessage`/`asError`); replace the 15+
   inline idioms + unsafe `(err as Error)?.message`.
-- [ ] T113 Move `ERROR_MESSAGES` to `apps/desktop/src/lib/error-messages.ts`; key it by
+- [X] T113 Move `ERROR_MESSAGES` to `apps/desktop/src/lib/error-messages.ts`; key it by
   the generated `ErrorCode` union.
-- [ ] T114 Replace duplicated magic-string error codes on the Rust side with `ErrorCode`
+- [X] T114 Replace duplicated magic-string error codes on the Rust side with `ErrorCode`
   variants (use the canonical mapper from US11 once available; otherwise enum directly).
 - [ ] T115 Finish spec-037 tail: migrate `plans_list`/`plans_approve`/`plans_apply_real`
   (`commands.ts:170/322/328`) to `commands.*`; extend `commands.bindings-guard.test.ts`.

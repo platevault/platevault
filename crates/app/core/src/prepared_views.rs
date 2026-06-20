@@ -26,7 +26,7 @@ use contracts_core::prepared_views::{
     PreparedViewItemDetail, PreparedViewListResponse, PreparedViewRegenerateResponse,
     PreparedViewRemoveResponse, PreparedViewSummary,
 };
-use contracts_core::{ContractError, ErrorSeverity};
+use contracts_core::{error_code::ErrorCode, ContractError, ErrorSeverity};
 use domain_core::lifecycle::prepared_source::ALLOWED_PROJECT_STATES_FOR_VIEW_OPS;
 use persistence_db::repositories::{
     plans as plans_repo, prepared_source_views as views_repo, projects as projects_repo,
@@ -43,22 +43,28 @@ fn new_id() -> String {
 fn db_err(e: persistence_db::DbError) -> ContractError {
     match e {
         persistence_db::DbError::NotFound(msg) => {
-            ContractError::new("view.not_found", msg, ErrorSeverity::Blocking, false)
+            ContractError::new(ErrorCode::ViewNotFound, msg, ErrorSeverity::Blocking, false)
         }
-        other => {
-            ContractError::new("internal.database", format!("{other}"), ErrorSeverity::Fatal, true)
-        }
+        other => ContractError::new(
+            ErrorCode::InternalDatabase,
+            format!("{other}"),
+            ErrorSeverity::Fatal,
+            true,
+        ),
     }
 }
 
 fn project_db_err(e: persistence_db::DbError) -> ContractError {
     match e {
         persistence_db::DbError::NotFound(msg) => {
-            ContractError::new("project.not_found", msg, ErrorSeverity::Blocking, false)
+            ContractError::new(ErrorCode::ProjectNotFound, msg, ErrorSeverity::Blocking, false)
         }
-        other => {
-            ContractError::new("internal.database", format!("{other}"), ErrorSeverity::Fatal, true)
-        }
+        other => ContractError::new(
+            ErrorCode::InternalDatabase,
+            format!("{other}"),
+            ErrorSeverity::Fatal,
+            true,
+        ),
     }
 }
 
@@ -71,7 +77,7 @@ async fn check_project_lifecycle(pool: &SqlitePool, project_id: &str) -> Result<
         Ok(())
     } else {
         Err(ContractError::new(
-            "lifecycle.read_only",
+            ErrorCode::LifecycleReadOnly,
             format!(
                 "Project lifecycle '{}' does not permit view operations. \
                  Use the unarchive path (spec 009) to make the project ready first.",
@@ -159,7 +165,7 @@ pub async fn remove_prepared_view(
     // 3. Block kind_diverged — user must resolve via UI first (D-026-H2).
     if view_row.state == "kind_diverged" {
         return Err(ContractError::new(
-            "view.mixed_kind",
+            ErrorCode::ViewMixedKind,
             "The view has a kind_diverged state. Resolve the kind mismatch via the \
              UI before attempting removal.",
             ErrorSeverity::Blocking,
@@ -173,7 +179,7 @@ pub async fn remove_prepared_view(
     // 5. Refuse hardlink (R-026-Strategies).
     if view_row.kind == "hardlink" || items.iter().any(|i| i.materialization == "hardlink") {
         return Err(ContractError::new(
-            "view.unsupported_kind",
+            ErrorCode::ViewUnsupportedKind,
             "The 'hardlink' view strategy is not supported in v1. \
              Hardlink removal is deferred to v1.x.",
             ErrorSeverity::Blocking,
@@ -185,7 +191,7 @@ pub async fn remove_prepared_view(
     let kind_mismatch = items.iter().any(|i| i.materialization != view_row.kind);
     if kind_mismatch {
         return Err(ContractError::new(
-            "view.mixed_kind",
+            ErrorCode::ViewMixedKind,
             "The view contains items whose materialization kind does not match the \
              view's recorded kind. Resolve the mismatch before removing.",
             ErrorSeverity::Blocking,
@@ -212,7 +218,7 @@ pub async fn remove_prepared_view(
     )
     .await
     .map_err(|e| {
-        ContractError::new("internal.database", e.to_string(), ErrorSeverity::Fatal, true)
+        ContractError::new(ErrorCode::InternalDatabase, e.to_string(), ErrorSeverity::Fatal, true)
     })?;
 
     // 8. One archive action per item, targeting only the view's recorded paths
@@ -244,13 +250,18 @@ pub async fn remove_prepared_view(
         )
         .await
         .map_err(|e| {
-            ContractError::new("internal.database", e.to_string(), ErrorSeverity::Fatal, true)
+            ContractError::new(
+                ErrorCode::InternalDatabase,
+                e.to_string(),
+                ErrorSeverity::Fatal,
+                true,
+            )
         })?;
     }
 
     // 9. Advance plan to ready_for_review so it appears in the review UI.
     plans_repo::update_plan_state(pool, &plan_id, "ready_for_review").await.map_err(|e| {
-        ContractError::new("internal.database", e.to_string(), ErrorSeverity::Fatal, true)
+        ContractError::new(ErrorCode::InternalDatabase, e.to_string(), ErrorSeverity::Fatal, true)
     })?;
 
     Ok(PreparedViewRemoveResponse { plan_id })
@@ -289,7 +300,7 @@ pub async fn regenerate_prepared_view(
     // 3. Block kind_diverged.
     if view_row.state == "kind_diverged" {
         return Err(ContractError::new(
-            "view.mixed_kind",
+            ErrorCode::ViewMixedKind,
             "The view has a kind_diverged state. Resolve the kind mismatch before \
              regenerating.",
             ErrorSeverity::Blocking,
@@ -303,7 +314,7 @@ pub async fn regenerate_prepared_view(
     // 5. Refuse hardlink.
     if view_row.kind == "hardlink" || items.iter().any(|i| i.materialization == "hardlink") {
         return Err(ContractError::new(
-            "view.unsupported_kind",
+            ErrorCode::ViewUnsupportedKind,
             "The 'hardlink' view strategy is not supported in v1.",
             ErrorSeverity::Blocking,
             false,
@@ -349,7 +360,7 @@ pub async fn regenerate_prepared_view(
     )
     .await
     .map_err(|e| {
-        ContractError::new("internal.database", e.to_string(), ErrorSeverity::Fatal, true)
+        ContractError::new(ErrorCode::InternalDatabase, e.to_string(), ErrorSeverity::Fatal, true)
     })?;
 
     // 8. One link action per resolved item.
@@ -379,13 +390,18 @@ pub async fn regenerate_prepared_view(
         )
         .await
         .map_err(|e| {
-            ContractError::new("internal.database", e.to_string(), ErrorSeverity::Fatal, true)
+            ContractError::new(
+                ErrorCode::InternalDatabase,
+                e.to_string(),
+                ErrorSeverity::Fatal,
+                true,
+            )
         })?;
     }
 
     // 9. Advance to ready_for_review.
     plans_repo::update_plan_state(pool, &plan_id, "ready_for_review").await.map_err(|e| {
-        ContractError::new("internal.database", e.to_string(), ErrorSeverity::Fatal, true)
+        ContractError::new(ErrorCode::InternalDatabase, e.to_string(), ErrorSeverity::Fatal, true)
     })?;
 
     Ok(PreparedViewRegenerateResponse { plan_id, unresolved_item_count: unresolved_count })
@@ -464,7 +480,7 @@ mod tests {
         insert_view_with_items(&db, "view-a", "p-arch", "symlink").await;
 
         let err = remove_prepared_view(db.pool(), "view-a").await.unwrap_err();
-        assert_eq!(err.code, "lifecycle.read_only");
+        assert_eq!(err.code, ErrorCode::LifecycleReadOnly);
     }
 
     #[tokio::test]
@@ -474,7 +490,7 @@ mod tests {
         insert_view_with_items(&db, "view-hl", "p-hl", "hardlink").await;
 
         let err = remove_prepared_view(db.pool(), "view-hl").await.unwrap_err();
-        assert_eq!(err.code, "view.unsupported_kind");
+        assert_eq!(err.code, ErrorCode::ViewUnsupportedKind);
     }
 
     #[tokio::test]
@@ -494,14 +510,14 @@ mod tests {
         views_repo::update_view_state(db.pool(), "view-kd", "kind_diverged").await.unwrap();
 
         let err = remove_prepared_view(db.pool(), "view-kd").await.unwrap_err();
-        assert_eq!(err.code, "view.mixed_kind");
+        assert_eq!(err.code, ErrorCode::ViewMixedKind);
     }
 
     #[tokio::test]
     async fn remove_view_not_found() {
         let db = setup().await;
         let err = remove_prepared_view(db.pool(), "nonexistent").await.unwrap_err();
-        assert_eq!(err.code, "view.not_found");
+        assert_eq!(err.code, ErrorCode::ViewNotFound);
     }
 
     #[tokio::test]
@@ -574,7 +590,7 @@ mod tests {
         insert_view_with_items(&db, "view-arch2", "p-arch2", "symlink").await;
 
         let err = regenerate_prepared_view(db.pool(), "view-arch2").await.unwrap_err();
-        assert_eq!(err.code, "lifecycle.read_only");
+        assert_eq!(err.code, ErrorCode::LifecycleReadOnly);
     }
 
     #[tokio::test]

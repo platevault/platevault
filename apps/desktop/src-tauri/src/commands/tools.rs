@@ -20,6 +20,7 @@ use tauri::State;
 use workflow_profiles::launch::RealSpawner;
 
 use crate::commands::lifecycle::AppState;
+use contracts_core::ContractError;
 
 // ── tools.launch ──────────────────────────────────────────────────────────────
 
@@ -32,10 +33,12 @@ use crate::commands::lifecycle::AppState;
 pub async fn tools_launch(
     state: State<'_, AppState>,
     request: ToolLaunchRequest,
-) -> Result<ToolLaunchResponse, String> {
+) -> Result<ToolLaunchResponse, ContractError> {
     tracing::debug!("tools.launch project={} tool={}", request.project_id, request.tool_id);
     let spawner = RealSpawner;
-    tool_launch::launch(state.repo.pool(), &state.bus, &spawner, request).await
+    tool_launch::launch(state.repo.pool(), &state.bus, &spawner, request)
+        .await
+        .map_err(ContractError::internal)
 }
 
 // ── tools.list ────────────────────────────────────────────────────────────────
@@ -46,9 +49,11 @@ pub async fn tools_launch(
 /// Returns `Err(String)` on DB failure.
 #[tauri::command]
 #[specta::specta]
-pub async fn tools_list(state: State<'_, AppState>) -> Result<ToolProfileListResponse, String> {
+pub async fn tools_list(
+    state: State<'_, AppState>,
+) -> Result<ToolProfileListResponse, ContractError> {
     tracing::debug!("tools.list");
-    tool_launch::list_profiles(state.repo.pool()).await
+    tool_launch::list_profiles(state.repo.pool()).await.map_err(ContractError::internal)
 }
 
 // ── tools.update ──────────────────────────────────────────────────────────────
@@ -62,9 +67,9 @@ pub async fn tools_list(state: State<'_, AppState>) -> Result<ToolProfileListRes
 pub async fn tools_update(
     state: State<'_, AppState>,
     request: UpdateProcessingTool,
-) -> Result<contracts_core::tools::ToolProfileSummary, String> {
+) -> Result<contracts_core::tools::ToolProfileSummary, ContractError> {
     tracing::debug!("tools.update id={} path={:?}", request.id, request.path);
-    tool_launch::update_tool(state.repo.pool(), request).await
+    tool_launch::update_tool(state.repo.pool(), request).await.map_err(ContractError::internal)
 }
 
 // ── tools.validate_path ───────────────────────────────────────────────────────
@@ -75,7 +80,7 @@ pub async fn tools_update(
 /// Returns `Err(String)` on failure; this command never fails in practice.
 #[tauri::command]
 #[specta::specta]
-pub async fn tools_validate_path(path: String) -> Result<ToolPathValidation, String> {
+pub async fn tools_validate_path(path: String) -> Result<ToolPathValidation, ContractError> {
     tracing::debug!("tools.validate_path path={path}");
     Ok(tool_launch::validate_path(&path))
 }
@@ -90,7 +95,9 @@ pub async fn tools_validate_path(path: String) -> Result<ToolPathValidation, Str
 /// Returns `Err(String)` on unexpected failure.
 #[tauri::command]
 #[specta::specta]
-pub async fn tools_discover(request: ToolDiscoverRequest) -> Result<ToolDiscoverResponse, String> {
+pub async fn tools_discover(
+    request: ToolDiscoverRequest,
+) -> Result<ToolDiscoverResponse, ContractError> {
     tracing::debug!("tools.discover tool_id={:?}", request.tool_id);
-    tool_launch::discover(request.tool_id.as_deref())
+    tool_launch::discover(request.tool_id.as_deref()).map_err(ContractError::internal)
 }

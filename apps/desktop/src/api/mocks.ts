@@ -15,11 +15,11 @@ const delay = (ms: number) => new Promise<void>((r) => setTimeout(r, ms));
 // --- Inline fixtures for modules not yet created by T015 ---
 
 const mockAuditEntries: AuditEntry[] = [
-  { id: 'audit-001', timestamp: '2026-05-20T22:15:00Z', event_type: 'session.confirmed', entity_type: 'session', entity_id: 'ses-001', from_state: 'needs_review', to_state: 'confirmed', actor: 'user', outcome: 'applied', detail: 'User confirmed session' },
-  { id: 'audit-002', timestamp: '2026-05-20T22:10:00Z', event_type: 'plan.approved', entity_type: 'plan', entity_id: 'plan-001', from_state: 'ready_for_review', to_state: 'approved', actor: 'user', outcome: 'applied', detail: 'Plan approved' },
-  { id: 'audit-003', timestamp: '2026-05-20T21:45:00Z', event_type: 'plan.applied', entity_type: 'plan', entity_id: 'plan-001', from_state: 'approved', to_state: 'applied', actor: 'system', outcome: 'applied', detail: 'All 12 items applied' },
-  { id: 'audit-004', timestamp: '2026-05-19T23:30:00Z', event_type: 'scan.completed', entity_type: 'root', entity_id: 'root-001', actor: 'system', outcome: 'ok', detail: 'Discovered 1,247 files in 4.2s' },
-  { id: 'audit-005', timestamp: '2026-05-19T23:25:00Z', event_type: 'scan.started', entity_type: 'root', entity_id: 'root-001', actor: 'user', outcome: 'ok', detail: 'Manual scan triggered' },
+  { id: 'audit-001', timestamp: '2026-05-20T22:15:00Z', eventType: 'session.confirmed', entityType: 'session', entityId: 'ses-001', fromState: 'needs_review', toState: 'confirmed', actor: 'user', outcome: 'applied', detail: 'User confirmed session' },
+  { id: 'audit-002', timestamp: '2026-05-20T22:10:00Z', eventType: 'plan.approved', entityType: 'plan', entityId: 'plan-001', fromState: 'ready_for_review', toState: 'approved', actor: 'user', outcome: 'applied', detail: 'Plan approved' },
+  { id: 'audit-003', timestamp: '2026-05-20T21:45:00Z', eventType: 'plan.applied', entityType: 'plan', entityId: 'plan-001', fromState: 'approved', toState: 'applied', actor: 'system', outcome: 'applied', detail: 'All 12 items applied' },
+  { id: 'audit-004', timestamp: '2026-05-19T23:30:00Z', eventType: 'scan.completed', entityType: 'root', entityId: 'root-001', actor: 'system', outcome: 'ok', detail: 'Discovered 1,247 files in 4.2s' },
+  { id: 'audit-005', timestamp: '2026-05-19T23:25:00Z', eventType: 'scan.started', entityType: 'root', entityId: 'root-001', actor: 'user', outcome: 'ok', detail: 'Manual scan triggered' },
 ];
 
 const mockSettingsData: SettingsData = {
@@ -32,9 +32,9 @@ const mockSettingsData: SettingsData = {
 };
 
 const mockRoots: LibraryRoot[] = [
-  { id: 'root-001', path: '/astro/raw', category: 'raw', online: true, file_count: 1247, last_scanned: '2026-05-19T23:30:00Z' },
-  { id: 'root-002', path: '/astro/calibration', category: 'calibration', online: true, file_count: 342, last_scanned: '2026-05-19T23:30:00Z' },
-  { id: 'root-003', path: '/astro/projects', category: 'project', online: true, file_count: 856, last_scanned: '2026-05-18T20:00:00Z' },
+  { id: 'root-001', path: '/astro/raw', category: 'raw', online: true, fileCount: 1247, lastScanned: '2026-05-19T23:30:00Z' },
+  { id: 'root-002', path: '/astro/calibration', category: 'calibration', online: true, fileCount: 342, lastScanned: '2026-05-19T23:30:00Z' },
+  { id: 'root-003', path: '/astro/projects', category: 'project', online: true, fileCount: 856, lastScanned: '2026-05-18T20:00:00Z' },
 ];
 
 const mockEquipment: Equipment[] = [
@@ -80,21 +80,21 @@ const mockCalendarData: CalendarData = {
 const mockMasterDetail: MasterDetail = {
   id: 'master-001',
   kind: 'dark',
-  fingerprint: { camera: 'ASI2600MM', sensor_mode: 'normal', exposure_s: 300, temp_c: -10, gain: 100, binning: '1x1' },
-  source_session_id: 'cal-ses-001',
-  created_at: '2026-05-15T20:00:00Z',
-  age_days: 9,
-  size_bytes: 52_428_800,
-  used_by_session_ids: ['ses-001', 'ses-003'],
-  used_by_project_ids: ['proj-001'],
-  compatible_sessions: [{ session_id: 'ses-001', score: 0.97, soft_mismatches: [] }],
-  usage_stats: { session_count: 2, project_count: 1 },
+  fingerprint: { camera: 'ASI2600MM', sensorMode: 'normal', exposureS: 300, tempC: -10, gain: 100, binning: '1x1' },
+  sourceSessionId: 'cal-ses-001',
+  createdAt: '2026-05-15T20:00:00Z',
+  ageDays: 9,
+  sizeBytes: 52_428_800,
+  usedBySessionIds: ['ses-001', 'ses-003'],
+  usedByProjectIds: ['proj-001'],
+  compatibleSessions: [{ sessionId: 'ses-001', score: 0.97, softMismatches: [] }],
+  usageStats: { sessionCount: 2, projectCount: 1 },
 };
 
 const mockMatchCandidates: MatchCandidate[] = [
-  { master_id: 'master-001', kind: 'dark', score: 0.97, soft_mismatches: [] },
-  { master_id: 'master-002', kind: 'flat', score: 0.92, filter: 'L', soft_mismatches: ['age > 60 days'] },
-  { master_id: 'master-003', kind: 'bias', score: 0.99, soft_mismatches: [] },
+  { masterId: 'master-001', kind: 'dark', score: 0.97, softMismatches: [] },
+  { masterId: 'master-002', kind: 'flat', score: 0.92, filter: 'L', softMismatches: ['age > 60 days'] },
+  { masterId: 'master-003', kind: 'bias', score: 0.99, softMismatches: [] },
 ];
 
 export async function mockInvoke<T>(
@@ -349,7 +349,7 @@ export async function mockInvoke<T>(
       return plans[0] as T;
     }
     case 'plans_apply_real': {
-      return { operation_id: 'op-mock-001', kind: 'plan_apply' } as T;
+      return { operationId: 'op-mock-001', kind: 'plan_apply' } as T;
     }
     case 'plans_discard': {
       return undefined as T;
@@ -376,7 +376,7 @@ export async function mockInvoke<T>(
       return undefined as T;
     }
     case 'scan_start': {
-      return { operation_id: 'op-scan-001', kind: 'scan' } as T;
+      return { operationId: 'op-scan-001', kind: 'scan' } as T;
     }
     case 'preferences_set': {
       return undefined as T;

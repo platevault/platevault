@@ -13,7 +13,7 @@ use contracts_core::patterns::{
     PatternPartDto, PatternPreviewRequest, PatternPreviewResponse, PatternResolveRequest,
     PatternResolveResponse, PatternValidateRequest, PatternValidateResponse,
 };
-use contracts_core::{ContractError, ErrorSeverity};
+use contracts_core::{error_code::ErrorCode, ContractError, ErrorSeverity};
 use patterns::{
     registry::V1_REGISTRY,
     resolver::{ResolveError, ResolverConfig},
@@ -140,39 +140,42 @@ pub fn preview_pattern(
 
 fn map_resolve_error(e: ResolveError) -> ContractError {
     match e {
-        ResolveError::Empty => {
-            ContractError::new("pattern.empty", "Pattern is empty.", ErrorSeverity::Blocking, false)
-        }
+        ResolveError::Empty => ContractError::new(
+            ErrorCode::PatternEmpty,
+            "Pattern is empty.",
+            ErrorSeverity::Blocking,
+            false,
+        ),
         ResolveError::UnknownToken { token } => ContractError::new(
-            "token.unknown",
+            ErrorCode::TokenUnknown,
             format!("Unknown token: {token}"),
             ErrorSeverity::Blocking,
             false,
         )
         .with_details(serde_json::json!({ "token": token })),
         ResolveError::PathTraversal { segment } => ContractError::new(
-            "path.traversal",
+            ErrorCode::PathTraversal,
             format!("Path traversal attempt: {segment}"),
             ErrorSeverity::Blocking,
             false,
         )
         .with_details(serde_json::json!({ "offendingSegment": segment })),
         ResolveError::ReservedName { segment } => ContractError::new(
-            "path.reserved_name",
+            ErrorCode::PathReservedName,
             format!("Windows reserved device name: {segment}"),
             ErrorSeverity::Blocking,
             false,
         )
         .with_details(serde_json::json!({ "offendingSegment": segment })),
         ResolveError::UnicodeConfusable { token, value } => ContractError::new(
-            "pattern.invalid.unicode",
+            ErrorCode::PatternInvalidUnicode,
             format!("Unicode confusable in token {token}: {value}"),
             ErrorSeverity::Blocking,
             false,
         )
         .with_details(serde_json::json!({ "token": token, "offendingValue": value })),
         ResolveError::PathTooLong { resolved_length, segment_length_bytes } => ContractError::new(
-            "pattern.invalid",
+            ErrorCode::PatternInvalid,
             format!(
                 "Path too long: resolved_length={resolved_length}, \
                  segment_length_bytes={segment_length_bytes}"
@@ -276,7 +279,7 @@ mod tests {
     fn resolve_empty_pattern_returns_contract_error() {
         let req = PatternResolveRequest { pattern: vec![], metadata: MetadataBundleDto::default() };
         let err = resolve_pattern(&req).unwrap_err();
-        assert_eq!(err.code, "pattern.empty");
+        assert_eq!(err.code, ErrorCode::PatternEmpty);
     }
 
     #[test]
@@ -286,7 +289,7 @@ mod tests {
             metadata: MetadataBundleDto::default(),
         };
         let err = resolve_pattern(&req).unwrap_err();
-        assert_eq!(err.code, "token.unknown");
+        assert_eq!(err.code, ErrorCode::TokenUnknown);
     }
 
     // ── preview_pattern ────────────────────────────────────────────────────

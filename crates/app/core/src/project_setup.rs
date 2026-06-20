@@ -37,7 +37,7 @@ use contracts_core::projects_v2::{
     ProjectSourceRemoveResult, ProjectSummaryDto, ProjectTool, ProjectUpdateRequest,
     ProjectUpdateResult,
 };
-use contracts_core::{ContractError, ErrorSeverity};
+use contracts_core::{error_code::ErrorCode, ContractError, ErrorSeverity};
 use domain_core::project::channels::{
     infer_channels, merge_channels, reinfer_channels as domain_reinfer, Channel,
 };
@@ -63,20 +63,37 @@ fn now_iso() -> String {
         .unwrap_or_else(|_| "1970-01-01T00:00:00Z".to_owned())
 }
 
+/// Map a static `&str` validation error code (returned by `domain_core::project::validate`)
+/// to the corresponding `ErrorCode` variant.
+fn str_to_error_code(code: &str) -> ErrorCode {
+    match code {
+        "name.empty" => ErrorCode::NameEmpty,
+        "name.too_long" => ErrorCode::NameTooLong,
+        "tool.unknown" => ErrorCode::ToolUnknown,
+        _ => {
+            tracing::warn!("unknown validation code '{code}', using InternalData");
+            ErrorCode::InternalData
+        }
+    }
+}
+
 fn db_err(e: persistence_db::DbError) -> ContractError {
     match e {
         persistence_db::DbError::NotFound(msg) => {
-            ContractError::new("project.not_found", msg, ErrorSeverity::Blocking, false)
+            ContractError::new(ErrorCode::ProjectNotFound, msg, ErrorSeverity::Blocking, false)
         }
-        other => {
-            ContractError::new("internal.database", format!("{other}"), ErrorSeverity::Fatal, true)
-        }
+        other => ContractError::new(
+            ErrorCode::InternalDatabase,
+            format!("{other}"),
+            ErrorSeverity::Fatal,
+            true,
+        ),
     }
 }
 
 #[allow(clippy::needless_pass_by_value)]
 fn bus_err(e: audit::bus::BusError) -> ContractError {
-    ContractError::new("internal.audit", format!("{e}"), ErrorSeverity::Fatal, true)
+    ContractError::new(ErrorCode::InternalAudit, format!("{e}"), ErrorSeverity::Fatal, true)
 }
 
 /// Convert a slice of DB channel rows to contract DTOs.
@@ -283,7 +300,7 @@ pub async fn create(
     // 1. Validate name.
     validate_name(&req.name).map_err(|code| {
         ContractError::new(
-            code,
+            str_to_error_code(code),
             format!("Project name error: {code}"),
             ErrorSeverity::Blocking,
             false,
@@ -291,7 +308,7 @@ pub async fn create(
     })?;
     validate_tool(req.tool.as_db_str()).map_err(|code| {
         ContractError::new(
-            code,
+            str_to_error_code(code),
             format!("Processing tool error: {code}"),
             ErrorSeverity::Blocking,
             false,
@@ -301,7 +318,7 @@ pub async fn create(
     // 2. Check name uniqueness.
     if let Some(conflict_id) = repo::name_exists(pool, &req.name, None).await.map_err(db_err)? {
         return Err(ContractError::new(
-            "name.duplicate",
+            ErrorCode::NameDuplicate,
             "A project with this name already exists.",
             ErrorSeverity::Blocking,
             false,
@@ -312,7 +329,7 @@ pub async fn create(
     // 3. Validate path non-empty.
     if req.path.trim().is_empty() {
         return Err(ContractError::new(
-            "path.invalid",
+            ErrorCode::PathInvalid,
             "Project path must not be empty.",
             ErrorSeverity::Blocking,
             false,
@@ -322,7 +339,7 @@ pub async fn create(
     // 4. Check path uniqueness.
     if let Some(collide_id) = repo::path_exists(pool, &req.path, None).await.map_err(db_err)? {
         return Err(ContractError::new(
-            "path.collision",
+            ErrorCode::PathCollision,
             "Another project already uses this path.",
             ErrorSeverity::Blocking,
             false,
@@ -344,7 +361,7 @@ pub async fn create(
                 .await
                 .map_err(|e| {
                     ContractError::new(
-                        "internal.database",
+                        ErrorCode::InternalDatabase,
                         format!("{e}"),
                         ErrorSeverity::Fatal,
                         true,
@@ -352,7 +369,7 @@ pub async fn create(
                 })?;
         if exists.is_none() {
             return Err(ContractError::new(
-                "canonical_target.not_found",
+                ErrorCode::CanonicalTargetNotFound,
                 "The selected target was not found.",
                 ErrorSeverity::Blocking,
                 false,
@@ -477,7 +494,7 @@ pub async fn update(
     // Check read-only lifecycle.
     if is_read_only(&row.lifecycle) {
         return Err(ContractError::new(
-            "lifecycle.read_only",
+            ErrorCode::LifecycleReadOnly,
             "This project is archived and cannot be edited.",
             ErrorSeverity::Blocking,
             false,
@@ -488,7 +505,7 @@ pub async fn update(
     // Check tool lock.
     if req.tool.is_some() && is_tool_locked(&row.lifecycle) {
         return Err(ContractError::new(
-            "tool.locked",
+            ErrorCode::ToolLocked,
             "Tool cannot be changed in the current lifecycle state.",
             ErrorSeverity::Blocking,
             false,
@@ -503,7 +520,7 @@ pub async fn update(
 
     if !name_changing && !tool_changing && !notes_changing {
         return Err(ContractError::new(
-            "no_op",
+            ErrorCode::NoOp,
             "No fields were changed.",
             ErrorSeverity::Blocking,
             false,
@@ -513,13 +530,18 @@ pub async fn update(
     // Validate new name if changing.
     if let Some(new_name) = &req.name {
         validate_name(new_name).map_err(|code| {
-            ContractError::new(code, format!("Name error: {code}"), ErrorSeverity::Blocking, false)
+            ContractError::new(
+                str_to_error_code(code),
+                format!("Name error: {code}"),
+                ErrorSeverity::Blocking,
+                false,
+            )
         })?;
         if let Some(conflict_id) =
             repo::name_exists(pool, new_name, Some(&req.project_id)).await.map_err(db_err)?
         {
             return Err(ContractError::new(
-                "name.duplicate",
+                ErrorCode::NameDuplicate,
                 "A project with this name already exists.",
                 ErrorSeverity::Blocking,
                 false,
@@ -601,7 +623,7 @@ pub async fn add_source(
     // Check archived lifecycle.
     if row.lifecycle == "archived" {
         return Err(ContractError::new(
-            "lifecycle.read_only",
+            ErrorCode::LifecycleReadOnly,
             "Sources cannot be added to an archived project.",
             ErrorSeverity::Blocking,
             false,
@@ -616,7 +638,7 @@ pub async fn add_source(
         existing_sources.iter().find(|s| s.inventory_session_id == req.inventory_session_id)
     {
         return Err(ContractError::new(
-            "source.already.linked",
+            ErrorCode::SourceAlreadyLinked,
             "This inventory session is already linked to the project.",
             ErrorSeverity::Blocking,
             false,
@@ -735,7 +757,7 @@ pub async fn remove_source(
     // Check lifecycle lock for source removal.
     if is_source_remove_locked(&row.lifecycle) {
         return Err(ContractError::new(
-            "lifecycle.read_only",
+            ErrorCode::LifecycleReadOnly,
             "Sources cannot be removed in the current lifecycle state.",
             ErrorSeverity::Blocking,
             false,
@@ -747,7 +769,7 @@ pub async fn remove_source(
     let sources = repo::list_project_sources(pool, &req.project_id).await.map_err(db_err)?;
     if !sources.iter().any(|s| s.inventory_session_id == req.project_source_id) {
         return Err(ContractError::new(
-            "source.not_found",
+            ErrorCode::SourceNotFound,
             "Source not found on this project.",
             ErrorSeverity::Blocking,
             false,
@@ -757,7 +779,7 @@ pub async fn remove_source(
     // Last-source confirmation gate.
     if sources.len() == 1 && !req.confirm_last_source {
         return Err(ContractError::new(
-            "lifecycle.last_confirmed_source",
+            ErrorCode::LifecycleLastConfirmedSource,
             "Removing the last source requires explicit confirmation.",
             ErrorSeverity::Blocking,
             false,
@@ -826,7 +848,7 @@ pub async fn reinfer_channels(
 
     if is_read_only(&row.lifecycle) {
         return Err(ContractError::new(
-            "lifecycle.read_only",
+            ErrorCode::LifecycleReadOnly,
             "Channels cannot be changed on an archived project.",
             ErrorSeverity::Blocking,
             false,
@@ -920,8 +942,9 @@ pub async fn list(pool: &SqlitePool) -> Result<Vec<ProjectSummaryDto>, ContractE
     let mut dtos = Vec::with_capacity(rows.len());
     for row in rows {
         let sources = repo::list_project_sources(pool, &row.id).await.map_err(db_err)?;
-        let tool = ProjectTool::from_db_str(&row.tool)
-            .map_err(|e| ContractError::new("internal.data", e, ErrorSeverity::Fatal, false))?;
+        let tool = ProjectTool::from_db_str(&row.tool).map_err(|e| {
+            ContractError::new(ErrorCode::InternalData, e, ErrorSeverity::Fatal, false)
+        })?;
         dtos.push(ProjectSummaryDto {
             id: row.id,
             name: row.name,
@@ -951,7 +974,7 @@ pub async fn get(pool: &SqlitePool, id: &str) -> Result<ProjectDetailDto, Contra
     let channels = repo::list_project_channels(pool, id).await.map_err(db_err)?;
 
     let tool = ProjectTool::from_db_str(&row.tool)
-        .map_err(|e| ContractError::new("internal.data", e, ErrorSeverity::Fatal, false))?;
+        .map_err(|e| ContractError::new(ErrorCode::InternalData, e, ErrorSeverity::Fatal, false))?;
 
     // Spec 035 US1 #2: surface the associated canonical target (LEFT JOIN);
     // `None` when the project has no canonical-target association.
@@ -1033,7 +1056,7 @@ mod tests {
         create(&pool, &bus, &req).await.unwrap();
         let req2 = ProjectCreateRequest { path: "projects/other".to_owned(), ..req };
         let err = create(&pool, &bus, &req2).await.unwrap_err();
-        assert_eq!(err.code, "name.duplicate");
+        assert_eq!(err.code, ErrorCode::NameDuplicate);
     }
 
     #[tokio::test]
@@ -1043,7 +1066,7 @@ mod tests {
         create(&pool, &bus, &req).await.unwrap();
         let req2 = ProjectCreateRequest { name: "Other Name".to_owned(), ..req };
         let err = create(&pool, &bus, &req2).await.unwrap_err();
-        assert_eq!(err.code, "path.collision");
+        assert_eq!(err.code, ErrorCode::PathCollision);
     }
 
     #[tokio::test]
@@ -1051,7 +1074,7 @@ mod tests {
         let (pool, bus) = setup().await;
         let req = make_create_req("", ProjectTool::PixInsight);
         let err = create(&pool, &bus, &req).await.unwrap_err();
-        assert_eq!(err.code, "name.empty");
+        assert_eq!(err.code, ErrorCode::NameEmpty);
     }
 
     #[tokio::test]
@@ -1088,7 +1111,7 @@ mod tests {
             notes: None,
         };
         let err = update(&pool, &bus, &update_req).await.unwrap_err();
-        assert_eq!(err.code, "lifecycle.read_only");
+        assert_eq!(err.code, ErrorCode::LifecycleReadOnly);
     }
 
     #[tokio::test]
@@ -1123,7 +1146,7 @@ mod tests {
             add_source(&pool, &bus, &ProjectSourceAddRequest { request_id: new_id(), ..add_req })
                 .await
                 .unwrap_err();
-        assert_eq!(err.code, "source.already.linked");
+        assert_eq!(err.code, ErrorCode::SourceAlreadyLinked);
     }
 
     #[tokio::test]
@@ -1147,7 +1170,7 @@ mod tests {
             confirm_last_source: false,
         };
         let err = remove_source(&pool, &bus, &rm_req).await.unwrap_err();
-        assert_eq!(err.code, "lifecycle.last_confirmed_source");
+        assert_eq!(err.code, ErrorCode::LifecycleLastConfirmedSource);
     }
 
     #[tokio::test]
@@ -1196,7 +1219,7 @@ mod tests {
             confirm_last_source: true,
         };
         let err = remove_source(&pool, &bus, &rm_req).await.unwrap_err();
-        assert_eq!(err.code, "lifecycle.read_only");
+        assert_eq!(err.code, ErrorCode::LifecycleReadOnly);
     }
 
     #[tokio::test]
@@ -1361,7 +1384,7 @@ mod tests {
         let mut req = make_create_req("Dangling Target", ProjectTool::PixInsight);
         req.canonical_target_id = Some("22222222-2222-5222-8222-222222222222".to_owned());
         let err = create(&pool, &bus, &req).await.unwrap_err();
-        assert_eq!(err.code, "canonical_target.not_found");
+        assert_eq!(err.code, ErrorCode::CanonicalTargetNotFound);
     }
 
     // ── spec 035 US1 #2: canonical target surfaced on the detail READ path ───────

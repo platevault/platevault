@@ -63,7 +63,12 @@ export type {
  */
 export type PlanState = import('./index').PlanState;
 
-// ─── Struct Interfaces (snake_case — matches current frontend convention) ───
+// ─── Struct Interfaces ───────────────────────────────────────────────────────
+//
+// Types with a generated _Serialize equivalent are now simple re-exports so
+// that consumers and the generated bindings share one structural type.
+// The follow-up task (T111) migrated all field accesses in components,
+// fixtures, and mocks from snake_case to camelCase.
 
 export interface MetaValue {
   value: unknown;
@@ -98,26 +103,8 @@ export interface SettingsData {
 
 // ─── Entity Interfaces ──────────────────────────────────────────────────────
 
-export interface AcquisitionSession {
-  id: string;
-  session_key: {
-    target: string;
-    filter: string;
-    binning: string | number;
-    gain: string | number;
-    night: string;
-  };
-  state: import('./index').SessionState;
-  confidence: import('./index').ConfidenceLevel;
-  optical_train_id: string;
-  frame_count: number;
-  total_integration_seconds: number;
-  total_size_bytes: number;
-  metadata: Record<string, MetaValue>;
-  target_ids: string[];
-  project_ids: string[];
-  warnings: string[];
-}
+/** Re-export generated type so callers continue to import from '@/bindings/types'. */
+export type AcquisitionSession = import('./index').AcquisitionSession_Serialize;
 
 export interface CalibrationMaster {
   id: string;
@@ -153,97 +140,26 @@ export interface Target {
   recommended_hours: Record<string, number>;
 }
 
-export interface Project {
-  id: string;
-  name: string;
-  workflow_profile_id: string;
-  root_path: string;
-  state: import('./index').ProjectState;
-  blocked_reason?: string;
-  verification_state: 'unreviewed' | 'has_accepted' | 'all_rejected';
-  cleanup_state: { reclaimable_bytes: number };
-  integration_hours: number;
-  target_ids: string[];
-  source_map: SourceMap;
-  source_view_ids: string[];
-  output_ids: string[];
-  processing_directory: string;
-  output_directory: string;
-  updated_at: string;
-}
+/** Re-export generated summary DTO so callers continue to import from '@/bindings/types'. */
+export type Project = import('./index').ProjectSummaryDto_Serialize;
 
 /**
- * PlanItem — one proposed filesystem operation within a plan.
+ * PlanItem — re-export generated DTO.
  * Matches the Rust `PlanItemDetail` contract DTO (spec 017).
  */
-export interface PlanItem {
-  id: string;
-  index: number;
-  name: string;
-  action: import('./index').PlanItemAction;
-  from: string;
-  to: string;
-  reason: string;
-  protection: import('./index').PlanItemProtection;
-  linked?: string;
-  state: import('./index').PlanItemState;
-  failure_reason?: string;
-  provenance?: Array<{ label: string; value: string }>;
-  approved_mtime?: string;
-  approved_size_bytes?: number;
-  archive_path?: string;
-}
+export type PlanItem = import('./index').PlanItemDetail_Serialize;
 
 /**
- * FilesystemPlan — plan summary row for the list view.
+ * FilesystemPlan — re-export generated summary DTO.
  * Matches the Rust `PlanSummary` contract DTO (spec 017).
  */
-export interface FilesystemPlan {
-  id: string;
-  number: number;
-  title: string;
-  origin: import('./index').PlanOrigin;
-  origin_path?: string;
-  state: PlanState;
-  planType: import('./index').PlanType;
-  destructiveDestination: import('./index').DestructiveDestination;
-  parent_plan_id?: string;
-  items_total: number;
-  items_applied: number;
-  items_failed: number;
-  items_skipped: number;
-  items_cancelled: number;
-  items_pending: number;
-  total_bytes_required: number;
-  created_at: string;
-  approved_at?: string;
-  discarded_at?: string;
-}
+export type FilesystemPlan = import('./index').PlanSummary_Serialize;
 
-export interface AuditEntry {
-  id: string;
-  timestamp: string;
-  event_type: string;
-  entity_type: string;
-  entity_id: string;
-  from_state?: string;
-  to_state?: string;
-  actor: 'user' | 'system';
-  outcome: import('./index').AuditOutcome;
-  detail: string;
-}
+/** Re-export generated type so callers continue to import from '@/bindings/types'. */
+export type AuditEntry = import('./index').AuditEntry_Serialize;
 
-export interface ReviewItem {
-  id: string;
-  kind: import('./index').ReviewItemKind;
-  session_id?: string;
-  file_path?: string;
-  confidence: import('./index').ConfidenceLevel;
-  blocking_reasons: string[];
-  evidence: Record<string, MetaValue>;
-  suggested_target?: string;
-  suggested_filter?: string;
-}
+/** Re-export generated type so callers continue to import from '@/bindings/types'. */
+export type ReviewItem = import('./index').ReviewItem_Serialize;
 
 export interface SearchResult {
   id: string;
@@ -254,51 +170,19 @@ export interface SearchResult {
   score: number;
 }
 
-export interface LibraryRoot {
-  id: string;
-  path: string;
-  category: 'raw' | 'calibration' | 'project' | 'inbox';
-  online: boolean;
-  file_count: number;
-  last_scanned?: string;
-}
+/** Re-export generated type so callers continue to import from '@/bindings/types'. */
+export type LibraryRoot = import('./index').LibraryRoot_Serialize;
 
-export interface Equipment {
-  id: string;
-  name: string;
-  kind: string;
-  aliases: string[];
-}
+/** Re-export generated type so callers continue to import from '@/bindings/types'. */
+export type Equipment = import('./index').Equipment;
 
 // ─── Extended Detail Types ──────────────────────────────────────────────────
 
-export interface SessionDetail extends AcquisitionSession {
-  framesets: Array<{
-    filter: string;
-    count: number;
-    integration_s: number;
-  }>;
-  calibration_matches: Array<{
-    master_id: string;
-    kind: import('./index').CalibrationKind;
-    score: number;
-    soft_mismatches: string[];
-  }>;
-  history: Array<{
-    timestamp: string;
-    event: string;
-    actor: string;
-  }>;
-}
+/** Re-export generated type so callers continue to import from '@/bindings/types'. */
+export type SessionDetail = import('./index').SessionDetail_Serialize;
 
-export interface MasterDetail extends CalibrationMaster {
-  compatible_sessions: Array<{
-    session_id: string;
-    score: number;
-    soft_mismatches: string[];
-  }>;
-  usage_stats: { session_count: number; project_count: number };
-}
+/** Re-export generated type so callers continue to import from '@/bindings/types'. */
+export type MasterDetail = import('./index').MasterDetail_Serialize;
 
 export interface TargetDetail extends Target {
   sessions: AcquisitionSession[];
@@ -346,31 +230,14 @@ export interface ProjectArtifactGroup {
   warning?: string;
 }
 
-export interface ProjectDetail extends Project {
-  targets: string[];
-  sources: ProjectSource[];
-  source_views: ProjectSourceView[];
-  outputs: ProjectOutput[];
-  artifacts: ProjectArtifactGroup[];
-  lifecycle_stage_index: number;
-  audit_count: number;
-  plan_count: number;
-  cleanup_bytes: number;
-  cleanup_label: string;
-  total_integration_label: string;
-  on_disk_label: string;
-  notes_count: number;
-  manifest_count: number;
-}
+/** Re-export generated type so callers continue to import from '@/bindings/types'. */
+export type ProjectDetail = import('./index').ProjectDetailDto_Serialize;
 
 /**
- * PlanDetail — full plan detail with items for the review/detail view.
+ * PlanDetail — re-export generated DTO.
  * Matches the Rust `PlanDetail` contract DTO (spec 017).
  */
-export interface PlanDetail extends FilesystemPlan {
-  approved_at?: string;
-  items: PlanItem[];
-}
+export type PlanDetail = import('./index').PlanDetail_Serialize;
 
 export interface CalendarData {
   months: Array<{
@@ -383,28 +250,15 @@ export interface CalendarData {
   }>;
 }
 
-export interface RemapVerification {
-  root_id: string;
-  original_path: string;
-  new_path: string;
-  samples: Array<{ relative_path: string; found: boolean }>;
-  all_verified: boolean;
-}
+/** Re-export generated type so callers continue to import from '@/bindings/types'. */
+export type RemapVerification = import('./index').RemapVerification;
 
-export interface MatchCandidate {
-  master_id: string;
-  kind: import('./index').CalibrationKind;
-  score: number;
-  filter?: string;
-  soft_mismatches: string[];
-}
+/** Re-export generated type so callers continue to import from '@/bindings/types'. */
+export type MatchCandidate = import('./index').MatchCandidate_Serialize;
 
 // ─── Types NOT in generated bindings (frontend-only) ────────────────────────
 
-export interface OperationHandle {
-  operation_id: string;
-  kind: string;
-}
+export type OperationHandle = import('./index').IpcOperationHandle;
 
 export interface ProgressEvent {
   operation_id: string;

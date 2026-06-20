@@ -11,7 +11,7 @@ use contracts_core::first_run::{
     RegisterSourceBatchRequest, RegisterSourceBatchResponse, RegisterSourceRequest,
     RegisterSourceResponse, SourceKind,
 };
-use contracts_core::{ContractError, ErrorSeverity, JsonAny};
+use contracts_core::{error_code::ErrorCode, ContractError, ErrorSeverity, JsonAny};
 use persistence_db::repositories::first_run as repo;
 use sqlx::SqlitePool;
 
@@ -24,21 +24,21 @@ fn validate_path(path: &str) -> Result<(), Box<ContractError>> {
     let metadata = std::fs::metadata(path).map_err(|e| {
         Box::new(if e.kind() == std::io::ErrorKind::NotFound {
             ContractError::new(
-                "path.not_exists",
+                ErrorCode::PathNotExists,
                 format!("Path does not exist: {path}"),
                 ErrorSeverity::Blocking,
                 false,
             )
         } else if e.kind() == std::io::ErrorKind::PermissionDenied {
             ContractError::new(
-                "path.permission_denied",
+                ErrorCode::PathPermissionDenied,
                 format!("Permission denied: {path}"),
                 ErrorSeverity::Blocking,
                 false,
             )
         } else {
             ContractError::new(
-                "path.not_exists",
+                ErrorCode::PathNotExists,
                 format!("Cannot access path: {path}: {e}"),
                 ErrorSeverity::Blocking,
                 false,
@@ -48,7 +48,7 @@ fn validate_path(path: &str) -> Result<(), Box<ContractError>> {
 
     if !metadata.is_dir() {
         return Err(Box::new(ContractError::new(
-            "path.not_directory",
+            ErrorCode::PathNotDirectory,
             format!("Path is not a directory: {path}"),
             ErrorSeverity::Blocking,
             false,
@@ -61,7 +61,7 @@ fn validate_path(path: &str) -> Result<(), Box<ContractError>> {
         let mode = metadata.permissions().mode();
         if mode & 0o444 == 0 {
             return Err(Box::new(ContractError::new(
-                "path.permission_denied",
+                ErrorCode::PathPermissionDenied,
                 format!("No read permission on: {path}"),
                 ErrorSeverity::Blocking,
                 false,
@@ -84,14 +84,14 @@ async fn check_duplicate(
     if let Some(source) = matches.first() {
         if source.kind == kind {
             return Err(ContractError::new(
-                "path.already_registered",
+                ErrorCode::PathAlreadyRegistered,
                 format!("Path is already registered as {kind:?}: {path}"),
                 ErrorSeverity::Warning,
                 false,
             ));
         }
         return Err(ContractError::new(
-            "path.already_registered.different_kind",
+            ErrorCode::PathAlreadyRegisteredDifferentKind,
             format!(
                 "Path is already registered as {:?} (requested {:?}): {path}",
                 source.kind, kind
@@ -108,9 +108,9 @@ fn db_to_contract(e: persistence_db::DbError) -> ContractError {
     let msg = e.to_string();
     drop(e);
     if msg.contains("UNIQUE constraint failed") {
-        ContractError::new("path.already_registered", msg, ErrorSeverity::Warning, false)
+        ContractError::new(ErrorCode::PathAlreadyRegistered, msg, ErrorSeverity::Warning, false)
     } else {
-        ContractError::new("internal.database", msg, ErrorSeverity::Fatal, true)
+        ContractError::new(ErrorCode::InternalDatabase, msg, ErrorSeverity::Fatal, true)
     }
 }
 
@@ -152,19 +152,23 @@ pub async fn register_source_batch(
 
     for (index, source) in req.sources.iter().enumerate() {
         if let Err(e) = validate_path(&source.path) {
+            let code_str = serde_json::to_string(&e.code)
+                .map_or_else(|_| "internal.error".to_owned(), |s| s.trim_matches('"').to_owned());
             items.push(BatchItem {
                 index,
                 status: ItemStatus::Failure,
                 source_id: None,
-                error: Some(e.code.clone()),
+                error: Some(code_str),
                 error_detail: Some(JsonAny::new(serde_json::json!({ "message": e.message }))),
             });
         } else if let Err(e) = check_duplicate(pool, &source.path, source.kind).await {
+            let code_str = serde_json::to_string(&e.code)
+                .map_or_else(|_| "internal.error".to_owned(), |s| s.trim_matches('"').to_owned());
             items.push(BatchItem {
                 index,
                 status: ItemStatus::Failure,
                 source_id: None,
-                error: Some(e.code.clone()),
+                error: Some(code_str),
                 error_detail: Some(JsonAny::new(serde_json::json!({ "message": e.message }))),
             });
         } else {
@@ -256,7 +260,7 @@ pub async fn complete_first_run(
         let msg = e.to_string();
         if msg.contains("first_run.incomplete") {
             ContractError::new(
-                "firstrun.incomplete",
+                ErrorCode::FirstrunIncomplete,
                 "At least one raw source and one project source must be registered before completing first run.",
                 ErrorSeverity::Blocking,
                 false,
@@ -308,7 +312,7 @@ mod tests {
     fn validate_path_not_exists() {
         let result = validate_path("/nonexistent/path/that/does/not/exist");
         let err = result.unwrap_err();
-        assert_eq!(err.code, "path.not_exists");
+        assert_eq!(err.code, ErrorCode::PathNotExists);
     }
 
     #[test]
@@ -319,7 +323,7 @@ mod tests {
         if std::fs::metadata(path).is_ok() {
             let result = validate_path(path);
             let err = result.unwrap_err();
-            assert_eq!(err.code, "path.not_directory");
+            assert_eq!(err.code, ErrorCode::PathNotDirectory);
         }
     }
 
@@ -347,7 +351,7 @@ mod tests {
         repo::register_source(&pool, &req).await.unwrap();
 
         let err = check_duplicate(&pool, "/tmp", SourceKind::LightFrames).await.unwrap_err();
-        assert_eq!(err.code, "path.already_registered");
+        assert_eq!(err.code, ErrorCode::PathAlreadyRegistered);
     }
 
     #[tokio::test]
@@ -365,7 +369,7 @@ mod tests {
         repo::register_source(&pool, &req).await.unwrap();
 
         let err = check_duplicate(&pool, "/tmp", SourceKind::Project).await.unwrap_err();
-        assert_eq!(err.code, "path.already_registered.different_kind");
+        assert_eq!(err.code, ErrorCode::PathAlreadyRegisteredDifferentKind);
     }
 
     #[tokio::test]
@@ -376,6 +380,6 @@ mod tests {
         let bus = EventBus::with_pool(pool.clone());
 
         let err = complete_first_run(&pool, &bus).await.unwrap_err();
-        assert_eq!(err.code, "firstrun.incomplete");
+        assert_eq!(err.code, ErrorCode::FirstrunIncomplete);
     }
 }

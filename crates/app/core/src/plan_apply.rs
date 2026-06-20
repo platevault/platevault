@@ -28,7 +28,7 @@ use contracts_core::plan_apply::{
     PlanApplyResponse, PlanApplyStatus, PlanCancelResponse, PlanItemRetryResponse,
     PlanItemSkipResponse, PlanResumeResponse,
 };
-use contracts_core::{ContractError, ErrorSeverity};
+use contracts_core::{error_code::ErrorCode, ContractError, ErrorSeverity};
 use fs_executor::ops::cas_check::CasSnapshot;
 use fs_executor::run::{
     execute_plan, ApplyOutcome, CancellationToken, ExecutorCallbacks, ExecutorItem,
@@ -81,20 +81,23 @@ fn new_id() -> String {
 fn db_err(e: persistence_db::DbError) -> ContractError {
     match e {
         DbError::NotFound(msg) => {
-            ContractError::new("plan.not_found", msg, ErrorSeverity::Blocking, false)
+            ContractError::new(ErrorCode::PlanNotFound, msg, ErrorSeverity::Blocking, false)
         }
         DbError::CasFailed(msg) => {
-            ContractError::new("plan.invalid_state", msg, ErrorSeverity::Blocking, false)
+            ContractError::new(ErrorCode::PlanInvalidState, msg, ErrorSeverity::Blocking, false)
         }
-        other => {
-            ContractError::new("internal.database", format!("{other}"), ErrorSeverity::Fatal, true)
-        }
+        other => ContractError::new(
+            ErrorCode::InternalDatabase,
+            format!("{other}"),
+            ErrorSeverity::Fatal,
+            true,
+        ),
     }
 }
 
 #[allow(clippy::needless_pass_by_value)]
 fn bus_err(e: audit::bus::BusError) -> ContractError {
-    ContractError::new("internal.audit", format!("{e}"), ErrorSeverity::Fatal, true)
+    ContractError::new(ErrorCode::InternalAudit, format!("{e}"), ErrorSeverity::Fatal, true)
 }
 
 // ── Overlap check (R-Concur-1) ────────────────────────────────────────────────
@@ -107,7 +110,7 @@ async fn check_no_overlap(plan_id: &str) -> Result<(), ContractError> {
     let runs = registry.lock().await;
     if runs.contains_key(plan_id) {
         return Err(ContractError::new(
-            "plan.invalid_state",
+            ErrorCode::PlanInvalidState,
             format!("plan {plan_id} already has an active apply run"),
             ErrorSeverity::Blocking,
             false,
@@ -135,13 +138,13 @@ fn verify_approval_token(
 ) -> Result<(), ContractError> {
     match stored_token {
         None => Err(ContractError::new(
-            "plan.approval.stale",
+            ErrorCode::PlanApprovalStale,
             "no approval token on record; plan must be approved before apply".to_owned(),
             ErrorSeverity::Blocking,
             false,
         )),
         Some(stored) if stored != supplied_token => Err(ContractError::new(
-            "plan.approval.stale",
+            ErrorCode::PlanApprovalStale,
             "approval token mismatch; plan may have been re-approved or tampered".to_owned(),
             ErrorSeverity::Blocking,
             false,
@@ -373,7 +376,7 @@ pub async fn apply_plan(
     // State check before CAS.
     if plan_row.state != "approved" {
         return Err(ContractError::new(
-            "plan.invalid_state",
+            ErrorCode::PlanInvalidState,
             format!(
                 "plan must be in 'approved' state before apply; current state is '{}'",
                 plan_row.state
@@ -692,7 +695,7 @@ pub async fn cancel_plan(
 
     if !matches!(plan_row.state.as_str(), "applying" | "paused") {
         return Err(ContractError::new(
-            "plan.not_in_apply",
+            ErrorCode::PlanNotInApply,
             format!(
                 "plan {} is not in applying or paused state; current state is '{}'",
                 plan_id, plan_row.state
@@ -743,7 +746,7 @@ pub async fn resume_plan(
 
     if plan_row.state != "paused" {
         return Err(ContractError::new(
-            "run.not_paused",
+            ErrorCode::RunNotPaused,
             format!("plan {} is not paused; current state is '{}'", plan_id, plan_row.state),
             ErrorSeverity::Blocking,
             false,
@@ -754,7 +757,7 @@ pub async fn resume_plan(
     let active_run_row = apply_repo::get_active_run(pool, plan_id).await.map_err(db_err)?;
     let active_run_row = active_run_row.ok_or_else(|| {
         ContractError::new(
-            "run.not_found",
+            ErrorCode::RunNotFound,
             format!("no active run found for plan {plan_id}"),
             ErrorSeverity::Blocking,
             false,
@@ -763,7 +766,7 @@ pub async fn resume_plan(
 
     if active_run_row.id != run_id {
         return Err(ContractError::new(
-            "run.not_found",
+            ErrorCode::RunNotFound,
             format!("run {run_id} is not the active run for plan {plan_id}"),
             ErrorSeverity::Blocking,
             false,
@@ -826,7 +829,7 @@ pub async fn skip_plan_item(
 
     if plan_row.state != "applying" {
         return Err(ContractError::new(
-            "plan.not_in_apply",
+            ErrorCode::PlanNotInApply,
             format!(
                 "plan {} is not in applying state; current state is '{}'",
                 plan_id, plan_row.state
@@ -840,7 +843,7 @@ pub async fn skip_plan_item(
     let items = plans_repo::list_plan_items(pool, plan_id).await.map_err(db_err)?;
     let item = items.iter().find(|i| i.id == item_id).ok_or_else(|| {
         ContractError::new(
-            "item.not_found",
+            ErrorCode::ItemNotFound,
             format!("item {item_id} not found in plan {plan_id}"),
             ErrorSeverity::Blocking,
             false,
@@ -849,7 +852,7 @@ pub async fn skip_plan_item(
 
     if item.item_state != "pending" {
         return Err(ContractError::new(
-            "item.not_pending",
+            ErrorCode::ItemNotPending,
             format!("item {} is not pending; current state is '{}'", item_id, item.item_state),
             ErrorSeverity::Blocking,
             false,
@@ -891,7 +894,7 @@ pub async fn retry_plan_item(
 
     if plan_row.state != "applying" {
         return Err(ContractError::new(
-            "plan.not_in_apply",
+            ErrorCode::PlanNotInApply,
             format!("plan {plan_id} is not in applying state (use plan.retry for terminal plans)"),
             ErrorSeverity::Blocking,
             false,
@@ -901,7 +904,7 @@ pub async fn retry_plan_item(
     let items = plans_repo::list_plan_items(pool, plan_id).await.map_err(db_err)?;
     let item = items.iter().find(|i| i.id == item_id).ok_or_else(|| {
         ContractError::new(
-            "item.not_found",
+            ErrorCode::ItemNotFound,
             format!("item {item_id} not found in plan {plan_id}"),
             ErrorSeverity::Blocking,
             false,
@@ -910,7 +913,7 @@ pub async fn retry_plan_item(
 
     if item.item_state != "failed" {
         return Err(ContractError::new(
-            "item.not_failed",
+            ErrorCode::ItemNotFailed,
             format!(
                 "item {} is not failed; current state is '{}'. \
                  For plan-level retry use plan.retry on a terminal plan.",
@@ -1049,7 +1052,7 @@ mod tests {
         .unwrap();
 
         let err = apply_plan(db.pool(), &bus, "p-draft", "tok").await.unwrap_err();
-        assert_eq!(err.code, "plan.invalid_state");
+        assert_eq!(err.code, ErrorCode::PlanInvalidState);
     }
 
     #[tokio::test]
@@ -1058,7 +1061,7 @@ mod tests {
         insert_approved_plan_with_items(&db, "p1", 1).await;
 
         let err = apply_plan(db.pool(), &bus, "p1", "wrong-token").await.unwrap_err();
-        assert_eq!(err.code, "plan.approval.stale");
+        assert_eq!(err.code, ErrorCode::PlanApprovalStale);
     }
 
     #[tokio::test]
@@ -1099,7 +1102,7 @@ mod tests {
         .unwrap();
 
         let err = cancel_plan(db.pool(), "p2").await.unwrap_err();
-        assert_eq!(err.code, "plan.not_in_apply");
+        assert_eq!(err.code, ErrorCode::PlanNotInApply);
     }
 
     #[tokio::test]
@@ -1108,7 +1111,7 @@ mod tests {
         insert_approved_plan_with_items(&db, "p3", 1).await;
 
         let err = skip_plan_item(db.pool(), "p3", "p3-item-0").await.unwrap_err();
-        assert_eq!(err.code, "plan.not_in_apply");
+        assert_eq!(err.code, ErrorCode::PlanNotInApply);
     }
 
     #[tokio::test]
@@ -1128,7 +1131,7 @@ mod tests {
         let result = verify_approval_token(Some("stored-token"), "different-token");
         assert!(result.is_err());
         let err = result.unwrap_err();
-        assert_eq!(err.code, "plan.approval.stale");
+        assert_eq!(err.code, ErrorCode::PlanApprovalStale);
     }
 
     #[tokio::test]

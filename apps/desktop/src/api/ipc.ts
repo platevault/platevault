@@ -51,7 +51,7 @@ export type IpcResult<T, E = unknown> = { status: 'ok'; data: T } | { status: 'e
  * Translate a generated `Result` into the throw-on-error contract the app's
  * call sites expect: returns `data` on success, throws `error` otherwise.
  */
-export function unwrap<T>(result: IpcResult<T>): T {
+export function unwrap<T, E = unknown>(result: IpcResult<T, E>): T {
   if (result.status === 'ok') {
     return result.data;
   }

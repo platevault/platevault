@@ -12,6 +12,7 @@ use contracts_core::patterns::{
     PatternPreviewRequest, PatternPreviewResponse, PatternResolveRequest, PatternResolveResponse,
     PatternValidateRequest, PatternValidateResponse,
 };
+use contracts_core::ContractError;
 
 /// `pattern.validate` — structural validation without resolving against metadata.
 ///
@@ -27,9 +28,9 @@ use contracts_core::patterns::{
 #[allow(clippy::needless_pass_by_value)] // Tauri deserializes the request by value
 pub fn pattern_validate(
     request: PatternValidateRequest,
-) -> Result<PatternValidateResponse, String> {
+) -> Result<PatternValidateResponse, ContractError> {
     tracing::debug!("pattern.validate parts={}", request.pattern.len());
-    app_core::patterns::validate_pattern(&request).map_err(|e| e.message)
+    app_core::patterns::validate_pattern(&request)
 }
 
 /// `pattern.resolve` — resolve a pattern against a metadata bundle.
@@ -42,9 +43,11 @@ pub fn pattern_validate(
 #[tauri::command]
 #[specta::specta]
 #[allow(clippy::needless_pass_by_value)] // Tauri deserializes the request by value
-pub fn pattern_resolve(request: PatternResolveRequest) -> Result<PatternResolveResponse, String> {
+pub fn pattern_resolve(
+    request: PatternResolveRequest,
+) -> Result<PatternResolveResponse, ContractError> {
     tracing::debug!("pattern.resolve parts={}", request.pattern.len());
-    app_core::patterns::resolve_pattern(&request).map_err(|e| e.message)
+    app_core::patterns::resolve_pattern(&request)
 }
 
 /// `pattern.preview` — resolve a pattern against sample metadata for the UI.
@@ -57,7 +60,9 @@ pub fn pattern_resolve(request: PatternResolveRequest) -> Result<PatternResolveR
 #[tauri::command]
 #[specta::specta]
 #[allow(clippy::needless_pass_by_value)] // Tauri deserializes the request by value
-pub fn pattern_preview(request: PatternPreviewRequest) -> Result<PatternPreviewResponse, String> {
+pub fn pattern_preview(
+    request: PatternPreviewRequest,
+) -> Result<PatternPreviewResponse, ContractError> {
     tracing::debug!("pattern.preview parts={}", request.pattern.len());
-    app_core::patterns::preview_pattern(&request).map_err(|e| e.message)
+    app_core::patterns::preview_pattern(&request)
 }

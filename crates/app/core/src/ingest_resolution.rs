@@ -33,7 +33,7 @@ use audit::{EventBus, Source};
 use sqlx::SqlitePool;
 use uuid::Uuid;
 
-use contracts_core::{ContractError, ErrorSeverity};
+use contracts_core::{error_code::ErrorCode, ContractError, ErrorSeverity};
 use targeting::normalize::normalize;
 use targeting::resolver::cache::{self, CachedTarget};
 use targeting::resolver::{ResolveError, Resolver};
@@ -41,7 +41,7 @@ use targeting::resolver::{ResolveError, Resolver};
 // ── Error ─────────────────────────────────────────────────────────────────────
 
 fn db_err(e: impl std::fmt::Display) -> ContractError {
-    ContractError::new("internal.database", e.to_string(), ErrorSeverity::Fatal, true)
+    ContractError::new(ErrorCode::InternalDatabase, e.to_string(), ErrorSeverity::Fatal, true)
 }
 
 fn now_iso() -> String {

@@ -10,6 +10,7 @@ use contracts_core::first_run::{
 use tauri::State;
 
 use crate::commands::lifecycle::AppState;
+use contracts_core::ContractError;
 
 /// `firstrun.state` — get the current first-run wizard state.
 ///
@@ -17,9 +18,11 @@ use crate::commands::lifecycle::AppState;
 /// Returns `Err(String)` on database failure.
 #[tauri::command]
 #[specta::specta]
-pub async fn firstrun_state(state: State<'_, AppState>) -> Result<FirstRunStateResponse, String> {
+pub async fn firstrun_state(
+    state: State<'_, AppState>,
+) -> Result<FirstRunStateResponse, ContractError> {
     tracing::debug!("firstrun.state");
-    app_core::first_run::get_first_run_state(state.repo.pool()).await.map_err(|e| e.message)
+    app_core::first_run::get_first_run_state(state.repo.pool()).await
 }
 
 /// `firstrun.complete` — mark the first-run wizard as complete.
@@ -32,11 +35,9 @@ pub async fn firstrun_state(state: State<'_, AppState>) -> Result<FirstRunStateR
 #[specta::specta]
 pub async fn firstrun_complete(
     state: State<'_, AppState>,
-) -> Result<FirstRunCompleteResponse, String> {
+) -> Result<FirstRunCompleteResponse, ContractError> {
     tracing::debug!("firstrun.complete");
-    app_core::first_run::complete_first_run(state.repo.pool(), &state.bus)
-        .await
-        .map_err(|e| e.message)
+    app_core::first_run::complete_first_run(state.repo.pool(), &state.bus).await
 }
 
 /// `firstrun.restart` — restart the first-run wizard, returning existing sources.
@@ -50,12 +51,12 @@ pub async fn firstrun_complete(
 pub async fn firstrun_restart(
     state: State<'_, AppState>,
     request: FirstRunRestartRequest,
-) -> Result<FirstRunRestartResponse, String> {
+) -> Result<FirstRunRestartResponse, ContractError> {
     tracing::debug!("firstrun.restart (confirm={})", request.confirm);
     if !request.confirm {
-        return Err("firstrun.restart requires confirm=true".to_owned());
+        return Err(ContractError::internal("firstrun.restart requires confirm=true"));
     }
-    app_core::first_run::restart_first_run(state.repo.pool()).await.map_err(|e| e.message)
+    app_core::first_run::restart_first_run(state.repo.pool()).await
 }
 
 /// `roots.register.batch` — register multiple source directories at once.
@@ -67,9 +68,7 @@ pub async fn firstrun_restart(
 pub async fn roots_register_batch(
     state: State<'_, AppState>,
     request: RegisterSourceBatchRequest,
-) -> Result<RegisterSourceBatchResponse, String> {
+) -> Result<RegisterSourceBatchResponse, ContractError> {
     tracing::debug!("roots.register.batch ({} items)", request.sources.len());
-    app_core::first_run::register_source_batch(state.repo.pool(), &request)
-        .await
-        .map_err(|e| e.message)
+    app_core::first_run::register_source_batch(state.repo.pool(), &request).await
 }

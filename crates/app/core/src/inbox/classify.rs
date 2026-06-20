@@ -21,6 +21,7 @@ use persistence_db::repositories::inbox::{self as repo, InsertEvidence, UpsertCl
 use sqlx::SqlitePool;
 use uuid::Uuid;
 
+use contracts_core::error_code::ErrorCode;
 use contracts_core::ContractError;
 use contracts_core::ErrorSeverity;
 
@@ -73,7 +74,7 @@ pub async fn classify(
     // 1. Fetch the inbox item
     let item = repo::get_inbox_item(pool, &req.inbox_item_id).await.map_err(|_| {
         ContractError::new(
-            "inbox.item.not_found",
+            ErrorCode::InboxItemNotFound,
             format!("InboxItem not found: {}", req.inbox_item_id),
             ErrorSeverity::Blocking,
             false,
@@ -111,7 +112,7 @@ pub async fn classify(
     };
     if file_paths.is_empty() {
         return Err(ContractError::new(
-            "metadata.unreadable",
+            ErrorCode::MetadataUnreadable,
             format!("No FITS/XISF files found for item: {}", folder_abs.display()),
             ErrorSeverity::Blocking,
             false,

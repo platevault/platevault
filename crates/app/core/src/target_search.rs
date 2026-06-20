@@ -18,14 +18,14 @@ use contracts_core::targets::{
     TargetCatalogId, TargetObjectType, TargetSearchRequest, TargetSearchResponse, TargetSource,
     TargetSuggestion,
 };
-use contracts_core::{ContractError, ErrorSeverity};
+use contracts_core::{error_code::ErrorCode, ContractError, ErrorSeverity};
 use targeting::resolver::cache::{search_by_normalized, CachedTarget, SearchHit};
 use targeting::resolver::{AliasKind, ObjectType, TargetSource as CacheSource};
 
 // ── Error mapping ───────────────────────────────────────────────────────────
 
 fn db_err(e: &targeting::resolver::cache::CacheError) -> ContractError {
-    ContractError::new("internal.database", format!("{e}"), ErrorSeverity::Fatal, true)
+    ContractError::new(ErrorCode::InternalDatabase, format!("{e}"), ErrorSeverity::Fatal, true)
 }
 
 // ── Enum mapping (cache → contract DTO) ─────────────────────────────────────

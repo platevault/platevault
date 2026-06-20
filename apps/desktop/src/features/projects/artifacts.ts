@@ -17,6 +17,7 @@ import {
   type ArtifactListResponse,
   type ArtifactClassifyRequest,
 } from '@/api/commands';
+import { errMessage } from '@/lib/errors';
 
 // ── Grouping types ─────────────────────────────────────────────────────────────
 
@@ -123,7 +124,7 @@ export function useArtifacts(projectId: string): ArtifactsState {
       })
       .catch((err: unknown) => {
         if (!cancelled) {
-          setError(String(err));
+          setError(errMessage(err));
           setLoading(false);
         }
       });

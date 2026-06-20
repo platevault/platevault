@@ -14,6 +14,7 @@ use contracts_core::tools::{
 use tauri::State;
 
 use crate::commands::lifecycle::AppState;
+use contracts_core::ContractError;
 
 // ── artifact.list ─────────────────────────────────────────────────────────────
 
@@ -29,10 +30,12 @@ use crate::commands::lifecycle::AppState;
 pub async fn artifact_list(
     state: State<'_, AppState>,
     request: ArtifactListRequest,
-) -> Result<ArtifactListResponse, String> {
+) -> Result<ArtifactListResponse, ContractError> {
     tracing::debug!("artifact.list project={}", request.project_id);
     let states: Vec<&str> = request.include_states.iter().map(String::as_str).collect();
-    let artifacts = artifact::list(state.repo.pool(), &request.project_id, &states).await?;
+    let artifacts = artifact::list(state.repo.pool(), &request.project_id, &states)
+        .await
+        .map_err(ContractError::internal)?;
     Ok(ArtifactListResponse { artifacts })
 }
 
@@ -49,7 +52,7 @@ pub async fn artifact_list(
 pub async fn artifact_classify(
     state: State<'_, AppState>,
     request: ArtifactClassifyRequest,
-) -> Result<ArtifactClassifyResponse, String> {
+) -> Result<ArtifactClassifyResponse, ContractError> {
     tracing::debug!("artifact.classify artifact={} kind={:?}", request.artifact_id, request.kind);
     let summary = artifact::classify_override(
         state.repo.pool(),
@@ -59,7 +62,8 @@ pub async fn artifact_classify(
         request.kind.as_deref(),
         request.reason.as_deref(),
     )
-    .await?;
+    .await
+    .map_err(ContractError::internal)?;
     // Return the flat contract shape (spec 033 T028; drift fix from nested envelope).
     let now = time::OffsetDateTime::now_utc()
         .format(&time::format_description::well_known::Rfc3339)
@@ -83,7 +87,7 @@ pub async fn artifact_classify(
 pub async fn artifact_mark_resolved(
     state: State<'_, AppState>,
     request: ArtifactMarkResolvedRequest,
-) -> Result<(), String> {
+) -> Result<(), ContractError> {
     tracing::debug!("artifact.mark_resolved artifact={}", request.artifact_id);
     artifact::mark_resolved(
         state.repo.pool(),
@@ -92,4 +96,5 @@ pub async fn artifact_mark_resolved(
         &request.artifact_id,
     )
     .await
+    .map_err(ContractError::internal)
 }

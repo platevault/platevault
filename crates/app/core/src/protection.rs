@@ -17,7 +17,7 @@ use contracts_core::protection::{
     ProtectionLevel, SourceProtectionGetRequest, SourceProtectionGetResponse,
     SourceProtectionSetRequest, SourceProtectionSetResponse,
 };
-use contracts_core::{ContractError, ErrorSeverity};
+use contracts_core::{error_code::ErrorCode, ContractError, ErrorSeverity};
 use persistence_db::repositories::plans as plans_repo;
 use persistence_db::repositories::settings as settings_repo;
 use persistence_db::repositories::source_protection as prot_repo;
@@ -29,12 +29,12 @@ use uuid::Uuid;
 
 #[allow(clippy::needless_pass_by_value)]
 fn db_err(e: persistence_db::DbError) -> ContractError {
-    ContractError::new("internal.database", format!("{e}"), ErrorSeverity::Fatal, true)
+    ContractError::new(ErrorCode::InternalDatabase, format!("{e}"), ErrorSeverity::Fatal, true)
 }
 
 #[allow(clippy::needless_pass_by_value)]
 fn bus_err(e: audit::bus::BusError) -> ContractError {
-    ContractError::new("internal.audit", format!("{e}"), ErrorSeverity::Fatal, true)
+    ContractError::new(ErrorCode::InternalAudit, format!("{e}"), ErrorSeverity::Fatal, true)
 }
 
 fn now_iso() -> String {
@@ -269,7 +269,7 @@ pub async fn plan_protection_check(
     // Confirm plan exists.
     let _ = plans_repo::get_plan(pool, &req.plan_id, false).await.map_err(|_| {
         ContractError::new(
-            "plan.not_found",
+            ErrorCode::PlanNotFound,
             format!("plan {} not found", req.plan_id),
             ErrorSeverity::Warning,
             false,
@@ -667,7 +667,7 @@ mod tests {
         let (db, _bus) = setup().await;
         let req = PlanProtectionCheckRequest { plan_id: "nonexistent".to_owned() };
         let err = plan_protection_check(db.pool(), &req).await.unwrap_err();
-        assert_eq!(err.code, "plan.not_found");
+        assert_eq!(err.code, ErrorCode::PlanNotFound);
     }
 
     #[tokio::test]

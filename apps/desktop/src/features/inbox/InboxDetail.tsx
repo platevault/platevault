@@ -16,6 +16,7 @@ import type { InboxItemSummary } from '@/api/commands';
 import type { InboxClassifyResponse } from './store';
 import type { PillVariant } from '@/ui';
 import { useInboxReclassify } from './store';
+import { errMessage } from '@/lib/errors';
 
 // ── Helpers ──────────────────────────────────────────────────────────────────
 
@@ -62,7 +63,7 @@ export function InboxDetail({ item, classification }: InboxDetailProps) {
       await reclassify(overrides);
       setPendingOverrides({});
     } catch (err) {
-      setApplyError(err instanceof Error ? err.message : String(err));
+      setApplyError(errMessage(err));
     }
   };
 

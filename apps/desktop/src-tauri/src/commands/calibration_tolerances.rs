@@ -4,6 +4,7 @@
 //! Real persistence will be wired when the tolerances repository is built.
 
 use contracts_core::calibration_tolerances::{CalibrationTolerances, UpdateCalibrationTolerances};
+use contracts_core::ContractError;
 
 /// `calibration.tolerances.get` — returns current calibration matching tolerances.
 ///
@@ -11,7 +12,7 @@ use contracts_core::calibration_tolerances::{CalibrationTolerances, UpdateCalibr
 /// Returns `Err(String)` on failure; the stub never fails.
 #[tauri::command]
 #[specta::specta]
-pub async fn calibration_tolerances_get() -> Result<CalibrationTolerances, String> {
+pub async fn calibration_tolerances_get() -> Result<CalibrationTolerances, ContractError> {
     tracing::debug!("stub: calibration.tolerances.get");
     Ok(default_tolerances())
 }
@@ -24,7 +25,7 @@ pub async fn calibration_tolerances_get() -> Result<CalibrationTolerances, Strin
 #[specta::specta]
 pub async fn calibration_tolerances_update(
     request: UpdateCalibrationTolerances,
-) -> Result<CalibrationTolerances, String> {
+) -> Result<CalibrationTolerances, ContractError> {
     tracing::debug!(
         "stub: calibration.tolerances.update temp={}C exp={}s",
         request.temperature_tolerance_c,

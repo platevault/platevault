@@ -60,10 +60,10 @@ export function SessionInspector({
         <div className="alm-session-inspector__section-label">Target</div>
         <div className="alm-session-inspector-card">
           <div style={{ fontWeight: 600 }}>
-            {session.session_key.target} &rarr;
+            {session.sessionKey.target} &rarr;
           </div>
           <div style={{ fontSize: 'var(--alm-text-xs)', color: 'var(--alm-text-muted)' }}>
-            {session.target_ids.length} linked target{session.target_ids.length !== 1 ? 's' : ''}
+            {session.targetIds.length} linked target{session.targetIds.length !== 1 ? 's' : ''}
           </div>
         </div>
       </div>
@@ -98,14 +98,14 @@ export function SessionInspector({
       {/* Linked projects */}
       <div className="alm-session-inspector__section">
         <div className="alm-session-inspector__section-label">
-          Projects ({session.project_ids.length})
+          Projects ({session.projectIds.length})
         </div>
-        {session.project_ids.length === 0 ? (
+        {session.projectIds.length === 0 ? (
           <div style={{ fontSize: 'var(--alm-text-xs)', color: 'var(--alm-text-muted)', padding: '4px 0' }}>
             Not linked to any project
           </div>
         ) : (
-          session.project_ids.map((pid) => (
+          session.projectIds.map((pid) => (
             <div key={pid} className="alm-session-inspector-card">
               <div style={{ fontWeight: 500 }}>{pid.slice(0, 16)} &rarr;</div>
             </div>

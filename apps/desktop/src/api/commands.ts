@@ -117,11 +117,11 @@ export async function listSessions(args?: {
   group_by?: string;
 }): Promise<AcquisitionSession[]> {
   void args; // generated fn takes no args; pass-through not needed
-  return unwrap(await commands.sessionsList()) as unknown as AcquisitionSession[];
+  return unwrap(await commands.sessionsList()) as AcquisitionSession[];
 }
 
 export async function getSession(args: { id: string }): Promise<SessionDetail> {
-  return unwrap(await commands.sessionsGet(args.id)) as unknown as SessionDetail;
+  return unwrap(await commands.sessionsGet(args.id)) as SessionDetail;
 }
 
 export async function getSessionsCalendar(args: {
@@ -146,17 +146,17 @@ export async function getCalibrationMaster(args: { id: string }): Promise<Master
 export async function getCalibrationMatches(args: {
   session_id: string;
 }): Promise<MatchCandidate[]> {
-  return unwrap(await commands.calibrationMatches(args.session_id)) as unknown as MatchCandidate[];
+  return unwrap(await commands.calibrationMatches(args.session_id)) as MatchCandidate[];
 }
 
 export async function listProjects(args?: {
   filters?: Record<string, unknown>;
 }): Promise<Project[]> {
-  return unwrap(await commands.projectsList(args?.filters ?? null)) as unknown as Project[];
+  return unwrap(await commands.projectsList(args?.filters ?? null)) as Project[];
 }
 
 export async function getProject(args: { id: string }): Promise<ProjectDetail> {
-  return unwrap(await commands.projectsGet(args.id)) as unknown as ProjectDetail;
+  return unwrap(await commands.projectsGet(args.id)) as ProjectDetail;
 }
 
 export async function listPlans(args?: {
@@ -171,7 +171,7 @@ export async function listPlans(args?: {
 }
 
 export async function getPlan(args: { id: string }): Promise<PlanDetail> {
-  return unwrap(await commands.plansGet(args.id)) as unknown as PlanDetail;
+  return unwrap(await commands.plansGet(args.id)) as PlanDetail;
 }
 
 export async function listAuditEntries(args?: {
@@ -181,7 +181,7 @@ export async function listAuditEntries(args?: {
   const result = unwrap(
     await commands.auditList(args?.filters ?? null, args?.pagination ?? null),
   );
-  return result as unknown as { entries: AuditEntry[]; total: number };
+  return result as { entries: AuditEntry[]; total: number };
 }
 
 export async function exportAudit(args?: {
@@ -256,17 +256,17 @@ export async function getSettings(args: { scope: string }): Promise<SettingsData
 }
 
 export async function listRoots(): Promise<LibraryRoot[]> {
-  return unwrap(await commands.rootsList()) as unknown as LibraryRoot[];
+  return unwrap(await commands.rootsList()) as LibraryRoot[];
 }
 
 export async function listEquipment(): Promise<Equipment[]> {
-  return unwrap(await commands.equipmentList()) as unknown as Equipment[];
+  return unwrap(await commands.equipmentList()) as Equipment[];
 }
 
 export async function getReviewQueue(args?: {
   filter?: string;
 }): Promise<ReviewItem[]> {
-  return unwrap(await commands.reviewQueue(args?.filter ?? null)) as unknown as ReviewItem[];
+  return unwrap(await commands.reviewQueue(args?.filter ?? null)) as ReviewItem[];
 }
 
 export async function getPreferences(): Promise<AppPreferences> {
@@ -286,14 +286,14 @@ export async function transitionSession(args: {
 }): Promise<AcquisitionSession> {
   return unwrap(
     await commands.sessionsTransition(args.id, args.action, args.metadata ?? null),
-  ) as unknown as AcquisitionSession;
+  ) as AcquisitionSession;
 }
 
 export async function splitSession(args: {
   id: string;
   split_at_index: number;
 }): Promise<{ original: AcquisitionSession; new: AcquisitionSession }> {
-  return unwrap(await commands.sessionsSplit(args.id, args.split_at_index)) as unknown as {
+  return unwrap(await commands.sessionsSplit(args.id, args.split_at_index)) as {
     original: AcquisitionSession;
     new: AcquisitionSession;
   };
@@ -302,13 +302,13 @@ export async function splitSession(args: {
 export async function mergeSessions(args: {
   ids: string[];
 }): Promise<AcquisitionSession> {
-  return unwrap(await commands.sessionsMerge(args.ids)) as unknown as AcquisitionSession;
+  return unwrap(await commands.sessionsMerge(args.ids)) as AcquisitionSession;
 }
 
 export async function createProjectPlan(args: {
   wizard_state: Record<string, unknown>;
 }): Promise<FilesystemPlan> {
-  return unwrap(await commands.projectsCreatePlan(args.wizard_state)) as unknown as FilesystemPlan;
+  return unwrap(await commands.projectsCreatePlan(args.wizard_state)) as FilesystemPlan;
 }
 
 export async function approvePlan(args: {
@@ -343,17 +343,17 @@ export async function registerRoot(args: {
   path: string;
   category: string;
   scanSettings: Record<string, unknown>;
-}): Promise<LibraryRoot> {
-  return unwrap(
+}): Promise<void> {
+  await unwrap(
     await commands.rootsRegister(args.path, args.category, args.scanSettings),
-  ) as unknown as LibraryRoot;
+  );
 }
 
 export async function remapRoot(args: {
   root_id: string;
   new_path: string;
 }): Promise<RemapVerification> {
-  return unwrap(await commands.rootsRemap(args.root_id, args.new_path)) as unknown as RemapVerification;
+  return unwrap(await commands.rootsRemap(args.root_id, args.new_path)) as RemapVerification;
 }
 
 export async function applyRootRemap(args: {
@@ -368,7 +368,7 @@ export async function startScan(args?: {
 }): Promise<OperationHandle> {
   // Backend expects camelCase `rootIds`; sending `root_ids` is silently ignored
   // and scans ALL roots instead of the requested subset.
-  return unwrap(await commands.scanStart(args?.root_ids ?? null)) as unknown as OperationHandle;
+  return unwrap(await commands.scanStart(args?.root_ids ?? null)) as OperationHandle;
 }
 
 export async function setPreference(args: {
@@ -451,20 +451,20 @@ export async function registerRootBatch(args: {
   return { results };
 }
 
-export async function completeFirstRun(): Promise<FirstRunCompleteResult> {
-  return unwrap(await commands.firstrunComplete()) as unknown as FirstRunCompleteResult;
+export async function completeFirstRun(): Promise<void> {
+  await unwrap(await commands.firstrunComplete());
 }
 
-export async function restartFirstRun(): Promise<FirstRunRestartResult> {
-  return unwrap(
+export async function restartFirstRun(): Promise<void> {
+  await unwrap(
     await commands.firstrunRestart({ confirm: true } as Parameters<
       typeof commands.firstrunRestart
     >[0]),
-  ) as unknown as FirstRunRestartResult;
+  );
 }
 
-export async function getFirstRunState(): Promise<FirstRunState> {
-  return unwrap(await commands.firstrunState()) as unknown as FirstRunState;
+export async function getFirstRunState(): Promise<void> {
+  await unwrap(await commands.firstrunState());
 }
 
 // ---------- Pattern Commands (spec 015) ----------
@@ -552,42 +552,42 @@ export async function getProject008(args: { id: string }): Promise<ProjectDetail
 export async function createProject(args: ProjectCreateRequest): Promise<ProjectCreateResult> {
   return unwrap(
     await commands.projectsCreate(args as Parameters<typeof commands.projectsCreate>[0]),
-  ) as unknown as ProjectCreateResult;
+  ) as ProjectCreateResult;
 }
 
 /** Update name, tool, or notes on an existing project. */
 export async function updateProject(args: ProjectUpdateRequest): Promise<ProjectUpdateResult> {
   return unwrap(
     await commands.projectsUpdate(args as Parameters<typeof commands.projectsUpdate>[0]),
-  ) as unknown as ProjectUpdateResult;
+  ) as ProjectUpdateResult;
 }
 
 /** Link an Inventory session to a project as a source. */
 export async function addProjectSource(
   args: ProjectSourceAddRequest,
 ): Promise<ProjectSourceAddResult> {
-  return unwrap(await commands.projectsSourceAdd(args)) as unknown as ProjectSourceAddResult;
+  return unwrap(await commands.projectsSourceAdd(args)) as ProjectSourceAddResult;
 }
 
 /** Unlink a source from a project. */
 export async function removeProjectSource(
   args: ProjectSourceRemoveRequest,
 ): Promise<ProjectSourceRemoveResult> {
-  return unwrap(await commands.projectsSourceRemove(args)) as unknown as ProjectSourceRemoveResult;
+  return unwrap(await commands.projectsSourceRemove(args)) as ProjectSourceRemoveResult;
 }
 
 /** Re-infer channels from all linked sources (discards manual overrides). */
 export async function reinferProjectChannels(
   args: ProjectChannelsReinferRequest,
 ): Promise<ProjectChannelsReinferResult> {
-  return unwrap(await commands.projectsChannelsReinfer(args)) as unknown as ProjectChannelsReinferResult;
+  return unwrap(await commands.projectsChannelsReinfer(args)) as ProjectChannelsReinferResult;
 }
 
 /** Dismiss the channel-drift banner without re-inferring. */
 export async function dismissProjectChannelDrift(
   args: ProjectChannelsDismissDriftRequest,
 ): Promise<ProjectChannelsDismissDriftResult> {
-  return unwrap(await commands.projectsChannelsDismissDrift(args)) as unknown as ProjectChannelsDismissDriftResult;
+  return unwrap(await commands.projectsChannelsDismissDrift(args)) as ProjectChannelsDismissDriftResult;
 }
 
 // ── Lifecycle transition commands (spec 009) ──────────────────────────────────

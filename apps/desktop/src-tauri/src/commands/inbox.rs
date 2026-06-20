@@ -15,6 +15,7 @@ use contracts_core::inbox::{
     InboxReclassifyRequest, InboxReclassifyResponse, InboxScanFolderRequest,
     InboxScanFolderResponse, InboxScanResult,
 };
+use contracts_core::ContractError;
 use persistence_db::repositories::inbox::list_unacknowledged_across_roots;
 use sqlx::SqlitePool;
 use std::path::PathBuf;
@@ -36,14 +37,14 @@ const INBOX_LIST_LIMIT: i64 = 500;
 pub async fn inbox_classify(
     req: InboxClassifyRequest,
     pool: tauri::State<'_, SqlitePool>,
-) -> Result<InboxClassifyResponse, String> {
+) -> Result<InboxClassifyResponse, ContractError> {
     let use_case_req = ClassifyRequest {
         inbox_item_id: req.inbox_item_id,
         root_absolute_path: PathBuf::from(&req.root_absolute_path),
         force_rescan: req.force_rescan,
     };
 
-    let resp = classify(&pool, use_case_req).await.map_err(|e| e.message)?;
+    let resp = classify(&pool, use_case_req).await?;
 
     Ok(InboxClassifyResponse {
         inbox_item_id: resp.inbox_item_id,
@@ -78,7 +79,7 @@ pub async fn inbox_classify(
 pub async fn inbox_confirm(
     req: InboxConfirmRequest,
     pool: tauri::State<'_, SqlitePool>,
-) -> Result<InboxConfirmResponse, String> {
+) -> Result<InboxConfirmResponse, ContractError> {
     let use_case_req = ConfirmRequest {
         inbox_item_id: req.inbox_item_id,
         action: req.action,
@@ -87,7 +88,7 @@ pub async fn inbox_confirm(
         root_absolute_path: PathBuf::from(&req.root_absolute_path),
     };
 
-    let resp = confirm(&pool, use_case_req).await.map_err(|e| e.message)?;
+    let resp = confirm(&pool, use_case_req).await?;
 
     Ok(InboxConfirmResponse {
         plan_id: resp.plan_id,
@@ -108,7 +109,7 @@ pub async fn inbox_confirm(
 pub async fn inbox_reclassify(
     req: InboxReclassifyRequest,
     pool: tauri::State<'_, SqlitePool>,
-) -> Result<InboxReclassifyResponse, String> {
+) -> Result<InboxReclassifyResponse, ContractError> {
     let use_case_req = ReclassifyRequest {
         inbox_item_id: req.inbox_item_id,
         overrides: req
@@ -118,7 +119,7 @@ pub async fn inbox_reclassify(
             .collect(),
     };
 
-    let resp = reclassify(&pool, use_case_req).await.map_err(|e| e.message)?;
+    let resp = reclassify(&pool, use_case_req).await?;
 
     Ok(InboxReclassifyResponse {
         inbox_item_id: resp.inbox_item_id,
@@ -141,10 +142,10 @@ pub async fn inbox_reclassify(
 pub async fn inbox_scan_folder(
     req: InboxScanFolderRequest,
     pool: tauri::State<'_, SqlitePool>,
-) -> Result<InboxScanFolderResponse, String> {
+) -> Result<InboxScanFolderResponse, ContractError> {
     let root_path = PathBuf::from(&req.root_absolute_path);
     let opts = ScanOptions { follow_symlinks: req.follow_symlinks };
-    let scanned = scan_root(&root_path, &opts)?;
+    let scanned = scan_root(&root_path, &opts).map_err(ContractError::internal)?;
 
     let mut items: Vec<InboxItemSummary> = Vec::new();
 
@@ -197,7 +198,7 @@ pub async fn inbox_scan_folder(
         .bind(folder_format_str)
         .execute(&*pool)
         .await
-        .map_err(|e| e.to_string())?;
+        .map_err(|e| ContractError::internal(e.to_string()))?;
 
         // Fetch the authoritative row (may have existed before).
         let row: Option<(String, String, i64, String, Option<String>, Option<String>)> =
@@ -209,7 +210,7 @@ pub async fn inbox_scan_folder(
             .bind(&scanned_item.relative_path)
             .fetch_optional(&*pool)
             .await
-            .map_err(|e| e.to_string())?;
+            .map_err(|e| ContractError::internal(e.to_string()))?;
 
         if let Some((id, state, fc, lane, sig, fmt)) = row {
             items.push(InboxItemSummary {
@@ -244,7 +245,7 @@ async fn persist_master_item(
     root_id: &str,
     lane: &str,
     master: &ScannedMasterFile,
-) -> Result<Option<InboxItemSummary>, String> {
+) -> Result<Option<InboxItemSummary>, ContractError> {
     let master_item_id = Uuid::new_v4().to_string();
     let frame_type_str = format!("{:?}", master.detection.frame_type).to_ascii_lowercase();
     let format_str = master.format.as_str();
@@ -267,7 +268,7 @@ async fn persist_master_item(
     .bind(master.exposure_s)
     .execute(pool)
     .await
-    .map_err(|e| e.to_string())?;
+    .map_err(|e| ContractError::internal(e.to_string()))?;
 
     // Fetch authoritative row (may have existed from a prior scan).
     let row: Option<MasterItemRow> = sqlx::query_as(
@@ -279,7 +280,7 @@ async fn persist_master_item(
     .bind(&master.relative_path)
     .fetch_optional(pool)
     .await
-    .map_err(|e| e.to_string())?;
+    .map_err(|e| ContractError::internal(e.to_string()))?;
 
     Ok(row.map(|(id, state, fc, lane, sig, _is_m, mft, mfilt, mexp)| InboxItemSummary {
         inbox_item_id: id,
@@ -308,10 +309,12 @@ async fn persist_master_item(
 /// Returns a string error on database failure.
 #[tauri::command]
 #[specta::specta]
-pub async fn inbox_list(pool: tauri::State<'_, SqlitePool>) -> Result<InboxListResponse, String> {
+pub async fn inbox_list(
+    pool: tauri::State<'_, SqlitePool>,
+) -> Result<InboxListResponse, ContractError> {
     let rows = list_unacknowledged_across_roots(&pool, INBOX_LIST_LIMIT)
         .await
-        .map_err(|e| e.to_string())?;
+        .map_err(|e| ContractError::internal(e.to_string()))?;
 
     let total = rows.len();
     let capped = total >= usize::try_from(INBOX_LIST_LIMIT).unwrap_or(usize::MAX);
@@ -352,7 +355,7 @@ pub async fn inbox_list(pool: tauri::State<'_, SqlitePool>) -> Result<InboxListR
 /// Never fails; always returns `Ok`.
 #[tauri::command]
 #[specta::specta]
-pub async fn inbox_scan(root_id: Option<String>) -> Result<InboxScanResult, String> {
+pub async fn inbox_scan(root_id: Option<String>) -> Result<InboxScanResult, ContractError> {
     let root = root_id.unwrap_or_else(|| "root-inbox-001".to_owned());
     tracing::debug!("stub: inbox.scan root_id={root}");
     Ok(InboxScanResult {

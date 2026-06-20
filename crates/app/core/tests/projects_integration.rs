@@ -18,6 +18,7 @@ mod support;
 use app_core::project_manifests::{self, WriteManifestParams};
 use app_core::project_notes;
 use app_core::project_setup;
+use contracts_core::error_code::ErrorCode;
 use contracts_core::manifests::{ManifestListRequest, ManifestReason, ProjectNoteUpdateRequest};
 use contracts_core::projects_v2::ProjectCreateRequest;
 use contracts_core::projects_v2::ProjectTool;
@@ -104,7 +105,7 @@ async fn create_duplicate_name_is_rejected_at_db_layer() {
     };
     let err =
         project_setup::create(db.pool(), &bus, &req2).await.expect_err("duplicate name must fail");
-    assert_eq!(err.code, "name.duplicate");
+    assert_eq!(err.code, ErrorCode::NameDuplicate);
 }
 
 /// `get` on a non-existent id returns an error (not a panic or empty result).
@@ -114,7 +115,7 @@ async fn get_nonexistent_project_returns_error() {
     let bogus_id = Uuid::new_v4().to_string();
     let err =
         project_setup::get(db.pool(), &bogus_id).await.expect_err("get on missing id must fail");
-    assert_eq!(err.code, "project.not_found");
+    assert_eq!(err.code, ErrorCode::ProjectNotFound);
 }
 
 // ── US8: project notes add → update → read persistence ───────────────────────
