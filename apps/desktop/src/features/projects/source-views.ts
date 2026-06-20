@@ -72,7 +72,8 @@ async function invoke<T>(cmd: string, args?: Record<string, unknown>): Promise<T
   const useMocks = import.meta.env.VITE_USE_MOCKS === 'true';
   if (useMocks) {
     const { mockInvoke } = await import('@/api/mocks');
-    return mockInvoke<T>(cmd, args);
+    // `mockInvoke` returns `Promise<unknown>`; narrow to the caller's `T` here.
+    return mockInvoke(cmd, args) as Promise<T>;
   }
   const { invoke: tauriInvoke } = await import('@tauri-apps/api/core');
   return tauriInvoke<T>(cmd, args);

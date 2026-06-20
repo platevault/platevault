@@ -102,7 +102,9 @@ export async function invoke<T>(cmd: string, args?: Record<string, unknown>): Pr
   }
   if (useMocks) {
     const { mockInvoke } = await import('./mocks');
-    return mockInvoke<T>(cmd, args);
+    // `mockInvoke` returns `Promise<unknown>`; the caller picks the concrete `T`
+    // from the generated bindings, so narrowing happens here at the boundary.
+    return mockInvoke(cmd, args) as Promise<T>;
   }
   const { invoke: tauriInvoke } = await import('@tauri-apps/api/core');
   return tauriInvoke<T>(cmd, args);

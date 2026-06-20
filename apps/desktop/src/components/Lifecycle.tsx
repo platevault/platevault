@@ -11,7 +11,10 @@ export interface LifecycleProps {
  * marker when the project is off-track. Lives in the detail rail (design v4).
  */
 export function Lifecycle({ state }: LifecycleProps) {
-  const currentIdx = projectStateIndex[state] ?? -1;
+  // `state` is an arbitrary string; `projectStateIndex` is now keyed by the
+  // exhaustive `ProjectState` union, so coerce at the lookup and fall back to
+  // -1 (off-track) for any unknown value.
+  const currentIdx = projectStateIndex[state as keyof typeof projectStateIndex] ?? -1;
   const isBlocked = state === 'blocked';
 
   return (

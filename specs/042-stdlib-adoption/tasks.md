@@ -150,10 +150,12 @@ Frontend: `cd apps/desktop && npx tsc --noEmit` + `npx vitest run <feature>`. Ru
 
 ## Phase 11 — US7 Frontend type-safety & dead-code (P3) — needs US2
 
-- [ ] T190 Typed mock fixtures (kill `mockInvoke<T>` `as T`).
-- [ ] T191 `useStatusSummary` generated types; concrete `SettingsData`.
-- [ ] T192 `satisfies` in fixtures; exhaustive state-label fns vs ProjectState/SessionState.
-- [ ] T193 Triage ~30 empty `catch {}`; delete dead `lib/display.ts`.
+- [X] T190 Typed mock fixtures (kill `mockInvoke<T>` `as T`).
+- [X] T191 `useStatusSummary` generated types; concrete `SettingsData`.
+- [X] T192 `satisfies` in fixtures; exhaustive state-label fns vs ProjectState/SessionState.
+  (caught + fixed 4 genuine mock-contract drifts: firstrun_complete/restart/state, roots batch.)
+- [X] T193 Triage ~30 empty `catch {}`; delete dead `lib/display.ts`.
+  (26 found, all already commented intentional ignores; 3 in-scope upgraded; display.ts deleted, 0 importers.)
 - [ ] **US7 checkpoint**: commit `feat(042): US7 type-safety + dead-code cleanup`.
 
 ## Phase 12 — US10 Reinvented Rust utilities (P3)
