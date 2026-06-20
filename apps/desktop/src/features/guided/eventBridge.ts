@@ -73,7 +73,11 @@ export async function startGuidedEventBridge(): Promise<void> {
     const { listen } = await import('@tauri-apps/api/event');
 
     for (const topic of Object.keys(EVENT_TO_STEP)) {
-      const unlisten = await listen<unknown>(topic, (event) => {
+      // Tauri event names only allow alphanumeric, '-', '/', ':', '_'.
+      // Replace dots with ':' to form a valid Tauri event name while keeping
+      // the original dotted topic for downstream handleDomainEvent routing.
+      const eventName = topic.replace(/\./g, ':');
+      const unlisten = await listen<unknown>(eventName, (event) => {
         handleDomainEvent(topic, event.payload);
       });
       unlisteners.push(unlisten);

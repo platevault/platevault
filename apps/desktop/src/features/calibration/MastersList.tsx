@@ -8,7 +8,7 @@
 
 import { ListSidebar, ListItem } from '@/components';
 import { Pill, EmptyState } from '@/ui';
-import type { CalibrationMaster } from '@/bindings/types';
+import type { CalibrationMaster_Serialize as CalibrationMaster } from '@/bindings/index';
 
 type Kind = 'dark' | 'flat' | 'bias';
 
@@ -94,13 +94,13 @@ export function MastersList({ masters, loading, error, selected, onSelect, aging
         <div key={group.kind}>
           <div className="alm-group-header">{GROUP_LABELS[group.kind]}</div>
           {group.items.map((m) => {
-            const isAging = m.age_days > agingThresholdDays;
+            const isAging = m.ageDays > agingThresholdDays;
             // Fingerprint may be absent on real master rows (e.g. metadata not yet
             // extracted); guard every field rather than assuming it is populated.
             const fp = m.fingerprint;
             const gainStr = fp?.gain != null ? `g${fp.gain}` : '';
-            const tempStr = fp?.temp_c != null ? `${fp.temp_c}°C` : '';
-            const expStr = fp?.exposure_s != null ? `${fp.exposure_s}s` : '';
+            const tempStr = fp?.tempC != null ? `${fp.tempC}°C` : '';
+            const expStr = fp?.exposureS != null ? `${fp.exposureS}s` : '';
             const cameraStr = fp?.camera ? fp.camera.replace('ASI', '') : '';
 
             return (
@@ -137,7 +137,7 @@ export function MastersList({ masters, loading, error, selected, onSelect, aging
                     {isAging && (
                       <>
                         <span className="alm-list-item__meta-sep">·</span>
-                        <Pill variant="warn">aging {m.age_days}d</Pill>
+                        <Pill variant="warn">aging {m.ageDays}d</Pill>
                       </>
                     )}
                   </>

@@ -1,6 +1,5 @@
 import type {
   AcquisitionSession,
-  CalibrationMaster,
   Target,
   Project,
   FilesystemPlan,
@@ -10,7 +9,6 @@ import type {
   AppPreferences,
   OperationHandle,
   SessionDetail,
-  MasterDetail,
   TargetDetail,
   ProjectDetail,
   PlanDetail,
@@ -34,6 +32,8 @@ import type {
   InboxReclassifyResponse_Serialize as InboxReclassifyResponse,
   InboxScanFolderRequest,
   InboxScanFolderResponse,
+  CalibrationMaster_Serialize as CalibrationMaster,
+  MasterDetail_Serialize as MasterDetail,
 } from '@/bindings/index';
 export type {
   InboxClassifyRequest,
@@ -136,11 +136,11 @@ export async function listCalibrationMasters(args?: {
   filters?: Record<string, unknown>;
 }): Promise<CalibrationMaster[]> {
   void args; // generated fn takes no args
-  return unwrap(await commands.calibrationMastersList()) as unknown as CalibrationMaster[];
+  return unwrap(await commands.calibrationMastersList()) as CalibrationMaster[];
 }
 
 export async function getCalibrationMaster(args: { id: string }): Promise<MasterDetail> {
-  return unwrap(await commands.calibrationMastersGet(args.id)) as unknown as MasterDetail;
+  return unwrap(await commands.calibrationMastersGet(args.id)) as MasterDetail;
 }
 
 export async function getCalibrationMatches(args: {

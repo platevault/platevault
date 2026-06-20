@@ -92,15 +92,27 @@ pub async fn classify(
         }
     }
 
-    // 3. Build absolute folder path
+    // 3. Build absolute path for this item.  Sub-frame groups are folders; a
+    //    detected calibration master (spec 040) is a single file.
     let folder_abs = req.root_absolute_path.join(&item.relative_path);
 
-    // 4. Enumerate files in the folder
-    let file_paths = enumerate_fits_files(&folder_abs);
+    // 4. Enumerate the FITS/XISF files to classify.  Master items are one file,
+    //    not a directory, so reading them as a folder finds nothing — enumerate
+    //    the file itself instead (this is why masters were stuck "Loading
+    //    classification" forever).
+    let file_paths = if item.is_master_item != 0 {
+        if folder_abs.is_file() {
+            vec![folder_abs.clone()]
+        } else {
+            Vec::new()
+        }
+    } else {
+        enumerate_fits_files(&folder_abs)
+    };
     if file_paths.is_empty() {
         return Err(ContractError::new(
             "metadata.unreadable",
-            format!("No FITS/XISF files found in folder: {}", folder_abs.display()),
+            format!("No FITS/XISF files found for item: {}", folder_abs.display()),
             ErrorSeverity::Blocking,
             false,
         ));

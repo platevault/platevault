@@ -28,7 +28,7 @@
 import { render, screen } from "@testing-library/react";
 import { describe, it, expect, vi } from "vitest";
 import { MastersList } from "./MastersList";
-import type { CalibrationMaster } from "@/bindings/types";
+import type { CalibrationMaster_Serialize as CalibrationMaster } from "@/bindings/index";
 
 // ── Fixtures — null and incomplete fingerprints ────────────────────────────
 
@@ -42,12 +42,12 @@ const masterWithNullFingerprint: CalibrationMaster = {
   id: "reg-r2-null",
   kind: "dark",
   fingerprint: null as unknown as CalibrationMaster["fingerprint"],
-  source_session_id: "ses-001",
-  created_at: "2026-01-01T00:00:00Z",
-  age_days: 45,
-  size_bytes: 64 * 1024 * 1024,
-  used_by_session_ids: [],
-  used_by_project_ids: [],
+  sourceSessionId: "ses-001",
+  createdAt: "2026-01-01T00:00:00Z",
+  ageDays: 45,
+  sizeBytes: 64 * 1024 * 1024,
+  usedBySessionIds: [],
+  usedByProjectIds: [],
 };
 
 /**
@@ -58,12 +58,12 @@ const masterWithUndefinedFingerprint: CalibrationMaster = {
   id: "reg-r2-undef",
   kind: "flat",
   fingerprint: undefined as unknown as CalibrationMaster["fingerprint"],
-  source_session_id: "ses-002",
-  created_at: "2026-02-01T00:00:00Z",
-  age_days: 10,
-  size_bytes: 32 * 1024 * 1024,
-  used_by_session_ids: [],
-  used_by_project_ids: [],
+  sourceSessionId: "ses-002",
+  createdAt: "2026-02-01T00:00:00Z",
+  ageDays: 10,
+  sizeBytes: 32 * 1024 * 1024,
+  usedBySessionIds: [],
+  usedByProjectIds: [],
 };
 
 /**
@@ -75,18 +75,18 @@ const masterWithSparseFingerprint: CalibrationMaster = {
   kind: "bias",
   fingerprint: {
     camera: "ASI2600MM",
-    // gain, temp_c, exposure_s, binning all missing — the original crash site
+    // gain, tempC, exposureS, binning all missing — the original crash site
     gain: undefined as unknown as number,
-    temp_c: undefined as unknown as number,
-    exposure_s: undefined as unknown as number,
+    tempC: undefined as unknown as number,
+    exposureS: undefined as unknown as number,
     binning: undefined as unknown as string,
   },
-  source_session_id: "ses-003",
-  created_at: "2026-03-01T00:00:00Z",
-  age_days: 5,
-  size_bytes: 8 * 1024 * 1024,
-  used_by_session_ids: [],
-  used_by_project_ids: [],
+  sourceSessionId: "ses-003",
+  createdAt: "2026-03-01T00:00:00Z",
+  ageDays: 5,
+  sizeBytes: 8 * 1024 * 1024,
+  usedBySessionIds: [],
+  usedByProjectIds: [],
 };
 
 // ── Tests ──────────────────────────────────────────────────────────────────
@@ -153,16 +153,16 @@ describe("MastersList R-2 regression · null/undefined fingerprints", () => {
       fingerprint: {
         camera: "ASI2600MM",
         gain: 100,
-        temp_c: -10,
-        exposure_s: 300,
+        tempC: -10,
+        exposureS: 300,
         binning: "1x1",
       },
-      source_session_id: "ses-004",
-      created_at: "2026-04-01T00:00:00Z",
-      age_days: 20,
-      size_bytes: 128 * 1024 * 1024,
-      used_by_session_ids: [],
-      used_by_project_ids: [],
+      sourceSessionId: "ses-004",
+      createdAt: "2026-04-01T00:00:00Z",
+      ageDays: 20,
+      sizeBytes: 128 * 1024 * 1024,
+      usedBySessionIds: [],
+      usedByProjectIds: [],
     };
 
     expect(() => {

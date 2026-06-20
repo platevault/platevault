@@ -20,6 +20,7 @@ export function ListSidebar({ placeholder, searchValue, onSearchChange, controls
           placeholder={placeholder || 'Search...'}
           value={searchValue ?? ''}
           onChange={onSearchChange ? (e) => onSearchChange(e.target.value) : undefined}
+          readOnly={!onSearchChange}
           aria-label={placeholder || 'Search'}
         />
       </div>

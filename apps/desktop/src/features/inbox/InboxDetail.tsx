@@ -45,6 +45,7 @@ export function InboxDetail({ item, classification }: InboxDetailProps) {
 
   // Per-file overrides the user has selected but not yet submitted.
   const [pendingOverrides, setPendingOverrides] = useState<Record<string, string>>({});
+  const [applyError, setApplyError] = useState<string | null>(null);
 
   const handleOverrideChange = (filePath: string, frameType: string) => {
     setPendingOverrides((prev) => ({ ...prev, [filePath]: frameType }));
@@ -56,8 +57,13 @@ export function InboxDetail({ item, classification }: InboxDetailProps) {
       frameType,
     }));
     if (overrides.length === 0) return;
-    await reclassify(overrides);
-    setPendingOverrides({});
+    setApplyError(null);
+    try {
+      await reclassify(overrides);
+      setPendingOverrides({});
+    } catch (err) {
+      setApplyError(err instanceof Error ? err.message : String(err));
+    }
   };
 
   const title = item.relativePath || '(root)';
@@ -78,7 +84,7 @@ export function InboxDetail({ item, classification }: InboxDetailProps) {
       destination: entry.destinationPreview ? (
         <code style={{ fontSize: 'var(--alm-text-xs)' }}>{entry.destinationPreview}</code>
       ) : (
-        <span style={{ color: 'var(--alm-text-muted)' }}>—</span>
+        <span style={{ color: 'var(--alm-text-muted)', fontSize: 'var(--alm-text-xs)' }}>computed on confirm</span>
       ),
       samples: (
         <span style={{ color: 'var(--alm-text-muted)', fontSize: 'var(--alm-text-xs)' }}>
@@ -176,6 +182,9 @@ export function InboxDetail({ item, classification }: InboxDetailProps) {
               {reclassifyLoading ? 'Applying…' : `Apply ${Object.keys(pendingOverrides).length} override${Object.keys(pendingOverrides).length !== 1 ? 's' : ''}`}
             </button>
           </div>
+          {applyError && (
+            <Banner variant="danger" style={{ marginTop: 'var(--alm-sp-2)' }}>{applyError}</Banner>
+          )}
         </Section>
       )}
 
