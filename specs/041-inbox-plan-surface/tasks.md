@@ -9,7 +9,7 @@
 
 ## Phase 1: Setup
 
-- [ ] T001 Confirm baseline on branch `041-inbox-plan-surface`: `cargo check -p persistence_db -p app_core -p fs_planner -p fs_executor` green and `cd apps/desktop && npx tsc --noEmit` clean (ignore pre-existing baseUrl deprecation).
+- [X] T001 Confirm baseline on branch `041-inbox-plan-surface`: `cargo check -p persistence_db -p app_core -p fs_planner -p fs_executor` green and `cd apps/desktop && npx tsc --noEmit` clean (ignore pre-existing baseUrl deprecation).
 
 ## Phase 2: Foundational (blocking prerequisites)
 
