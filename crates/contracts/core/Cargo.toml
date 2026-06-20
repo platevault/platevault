@@ -11,6 +11,10 @@ path = "src/lib.rs"
 name = "generate-contracts"
 path = "src/bin/generate-contracts.rs"
 
+[[bin]]
+name = "schema-agreement-test"
+path = "src/bin/schema-agreement-test.rs"
+
 [dependencies]
 calibration_core = { path = "../../calibration/core" }
 domain_core = { path = "../../domain/core" }

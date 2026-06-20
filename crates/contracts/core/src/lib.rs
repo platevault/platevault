@@ -361,4 +361,76 @@ mod tests {
     fn response_status_serializes_as_contract_value() {
         assert_eq!(serde_json::to_value(ResponseStatus::Ok).unwrap(), json!("ok"));
     }
+
+    // ── T116: JSON-Schema snapshot agreement tests ────────────────────────────
+    //
+    // These tests re-generate the JSON Schema from Rust types using schemars
+    // and compare the output byte-for-byte against the committed
+    // `*.generated.json` snapshots in `specs/<NNN>/contracts/`.
+    //
+    // They fail when a Rust type change alters the generated schema without a
+    // corresponding snapshot update.  To update: run
+    //   cargo run -p contracts_core --bin generate-contracts
+    // review the diff, then commit both the type change and the snapshot.
+    //
+    // Note: schemars generates draft-07.  The committed `*.json` (without
+    // `.generated` suffix) are hand-maintained draft-2020-12 files with
+    // richer structure; the agreement tests guard the GENERATED snapshots only.
+    // Full derivation of the hand-maintained files is blocked by the schema-
+    // dialect gap (schemars = draft-07, committed = draft-2020-12) and the
+    // envelope structure difference — see T116 report.
+    mod schema_agreement {
+        use schemars::{schema_for, JsonSchema};
+        use std::path::PathBuf;
+
+        fn workspace_root() -> PathBuf {
+            // CARGO_MANIFEST_DIR = crates/contracts/core
+            let manifest = std::env!("CARGO_MANIFEST_DIR");
+            PathBuf::from(manifest)
+                .ancestors()
+                .nth(3)
+                .expect("workspace root 3 levels up")
+                .to_path_buf()
+        }
+
+        fn assert_schema_matches<T: JsonSchema>(spec_dir: &str, name: &str) {
+            let schema = schema_for!(T);
+            let generated = serde_json::to_string_pretty(&schema)
+                .unwrap_or_else(|e| panic!("failed to serialise schema for {name}: {e}"));
+            let generated = format!("{generated}\n");
+
+            let path = workspace_root().join("specs").join(spec_dir).join("contracts").join(name);
+
+            let committed = std::fs::read_to_string(&path).unwrap_or_else(|e| {
+                panic!(
+                    "Could not read committed snapshot {}: {e}\n\
+                     Run `cargo run -p contracts_core --bin generate-contracts` to create it.",
+                    path.display()
+                )
+            });
+
+            assert_eq!(
+                committed, generated,
+                "Schema snapshot drift detected for {name}.\n\
+                 Run `cargo run -p contracts_core --bin generate-contracts` to regenerate,\n\
+                 then review the diff and commit the updated snapshot alongside the type change."
+            );
+        }
+
+        #[test]
+        fn lifecycle_transition_request_schema_no_drift() {
+            assert_schema_matches::<crate::lifecycle::TransitionRequest>(
+                "002-data-lifecycle-state-model",
+                "lifecycle.transition.generated.json",
+            );
+        }
+
+        #[test]
+        fn provenance_read_request_schema_no_drift() {
+            assert_schema_matches::<crate::provenance::ProvenanceReadRequest>(
+                "002-data-lifecycle-state-model",
+                "provenance.read.generated.json",
+            );
+        }
+    }
 }

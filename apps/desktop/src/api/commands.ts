@@ -21,20 +21,23 @@ import type {
 } from '@/bindings/types';
 import type {
   InboxClassifyRequest,
-  InboxClassifyResponse_Serialize as InboxClassifyResponse,
-  InboxConfirmRequest_Deserialize as InboxConfirmRequest,
   InboxConfirmResponse,
   InboxItemSummary,
   InboxListItem,
   InboxListResponse,
   InboxReclassifyOverride,
   InboxReclassifyRequest,
-  InboxReclassifyResponse_Serialize as InboxReclassifyResponse,
   InboxScanFolderRequest,
   InboxScanFolderResponse,
-  CalibrationMaster_Serialize as CalibrationMaster,
-  MasterDetail_Serialize as MasterDetail,
 } from '@/bindings/index';
+import type {
+  // T117: all _Serialize/_Deserialize → clean-name aliases live in one place
+  InboxClassifyResponse,
+  InboxConfirmRequest,
+  InboxReclassifyResponse,
+  CalibrationMaster,
+  MasterDetail,
+} from '@/bindings/aliases';
 export type {
   InboxClassifyRequest,
   InboxClassifyResponse,
@@ -69,7 +72,6 @@ import type {
 import type {
   // spec 036 gen-3 target management
   TargetGetRequest,
-  TargetDetailV3_Deserialize as TargetDetailV3,
   TargetListItem,
   TargetAliasDto,
   AliasKind as TargetAliasKind,
@@ -79,27 +81,31 @@ import type {
   TargetAliasRemoveResult,
   TargetDisplayAliasSetRequest,
   TargetDisplayAliasClearRequest,
-  TargetOpError_Serialize as TargetOpError,
   // spec 035: SIMBAD target resolution
-  TargetSearchRequest_Serialize as TargetSearchRequest,
-  TargetSearchResponse_Deserialize as TargetSearchResponse,
-  TargetSuggestion_Deserialize as TargetSuggestion,
-  TargetResolveSimbadRequest_Serialize as TargetResolveSimbadRequest,
-  TargetResolveSimbadResponse_Deserialize as TargetResolveSimbadResponse,
-  ResolvedTarget_Deserialize as ResolvedTarget,
   ResolverSettings,
   ResolverSettingsResponse,
-  ManifestListRequest_Deserialize as ManifestListRequest,
-  ManifestListResponse_Serialize as ManifestListResponse,
   ManifestGetRequest,
-  ManifestGetResponse_Serialize as ManifestGetResponse,
   ProjectNoteUpdateRequest,
   ProjectNoteUpdateResult,
-  ManifestOpError_Serialize as ManifestOpError,
   ManifestRevealRequest,
   ProjectNoteGetRequest,
   ProjectNoteGetResult,
 } from '@/bindings/index';
+import type {
+  // T117: all _Serialize/_Deserialize → clean-name aliases live in one place
+  TargetDetailV3,
+  TargetOpError,
+  TargetSearchRequest,
+  TargetSearchResponse,
+  TargetSuggestion,
+  TargetResolveSimbadRequest,
+  TargetResolveSimbadResponse,
+  ResolvedTarget,
+  ManifestListRequest,
+  ManifestListResponse,
+  ManifestGetResponse,
+  ManifestOpError,
+} from '@/bindings/aliases';
 
 // IPC dispatch + the dev-tools recording override live in the shared switcher
 // (spec 037, api/ipc.ts) so these wrappers and the generated bindings use one
@@ -164,10 +170,11 @@ export async function listPlans(args?: {
 }): Promise<FilesystemPlan[]> {
   // Generated plansList has 4 positional filter args (stateFilter, originFilter,
   // createdAfter, limit); the old wrapper only forwarded a generic `filters` bag.
-  // The return type is PlanListResponse_Serialize { plans } vs FilesystemPlan[].
-  // No callers exist in the app — leave on invoke until Phase 3/4 cleanup.
+  // No callers exist in the app; we forward nulls for all filters to keep the
+  // signature stable while using the generated binding (T115).
   void args;
-  return invoke<FilesystemPlan[]>('plans_list', args);
+  const response = unwrap(await commands.plansList(null, null, null, null));
+  return (response as import('@/bindings/index').PlanListResponse_Serialize).plans as FilesystemPlan[];
 }
 
 export async function getPlan(args: { id: string }): Promise<PlanDetail> {
@@ -317,15 +324,24 @@ export async function approvePlan(args: {
 }): Promise<FilesystemPlan> {
   // Generated plansApprove(id) returns PlanApproveResponse (not FilesystemPlan).
   // delete_acknowledged was silently ignored by the old invoke path; no callers
-  // exist. Leave on invoke until Phase 4 teardown reworks the plan workflow.
+  // exist. We use the generated binding (T115); the caller type is kept for
+  // back-compat. Cast via unknown because the return shape differs (approvePlan
+  // callers never existed and the Phase 4 plan workflow will replace this wrapper).
   void args.delete_acknowledged;
-  return invoke<FilesystemPlan>('plans_approve', args);
+  const response = unwrap(await commands.plansApprove(args.id));
+  return response as unknown as FilesystemPlan;
 }
 
-export async function applyPlan(args: { id: string }): Promise<OperationHandle> {
-  // Generated plansApplyReal(planId, approvalToken) requires a token the wrapper
-  // doesn't carry. No callers exist. Leave on invoke (Phase 4 will remove it).
-  return invoke<OperationHandle>('plans_apply_real', args);
+export async function applyPlan(args: {
+  id: string;
+  approvalToken?: string;
+}): Promise<OperationHandle> {
+  // Generated plansApplyReal(planId, approvalToken) requires a token.
+  // No callers exist. We thread the token through the signature (T115);
+  // when absent we default to '' which the backend will reject — the real
+  // Phase 4 plan-apply flow must supply the token from plansApprove.approvalToken.
+  const response = unwrap(await commands.plansApplyReal(args.id, args.approvalToken ?? ''));
+  return response as unknown as OperationHandle;
 }
 
 export async function discardPlan(args: { id: string }): Promise<void> {

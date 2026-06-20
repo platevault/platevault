@@ -106,4 +106,16 @@ describe('commands.ts IPC conformance guard', () => {
       `snake_case keys in inline invoke payloads (use camelCase): ${[...new Set(offenders)].join(', ')}`,
     ).toEqual([]);
   });
+
+  // T115 — assert that the three formerly-raw plan commands now go through
+  // generated bindings (i.e. no raw invoke() call for these command names).
+  it('plans_list / plans_approve / plans_apply_real have no remaining raw invoke() call sites (T115)', () => {
+    const rawForPlanCmds = invokedCommands().filter((n) =>
+      ['plans_list', 'plans_approve', 'plans_apply_real'].includes(n),
+    );
+    expect(
+      rawForPlanCmds,
+      `raw invoke() still present for plan commands: ${rawForPlanCmds.join(', ')} — use generated commands.* bindings`,
+    ).toEqual([]);
+  });
 });

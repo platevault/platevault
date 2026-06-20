@@ -30,3 +30,95 @@ describe('unwrap (FR-003)', () => {
     expect(() => unwrap({ status: 'error', error: new Error('boom') })).toThrow('boom');
   });
 });
+
+// ── T118: zod validation at the IPC seam ─────────────────────────────────────
+import {
+  ContractErrorSchema,
+  IpcPayloadValidationError,
+  validateContractError,
+} from './ipc';
+
+describe('ContractErrorSchema zod validation (T118)', () => {
+  const validError = {
+    code: 'session.not_found',
+    message: 'Session not found',
+    severity: 'error',
+    retryable: false,
+    details: null,
+  };
+
+  it('accepts a well-formed ContractError payload', () => {
+    const result = ContractErrorSchema.safeParse(validError);
+    expect(result.success).toBe(true);
+  });
+
+  it('accepts a ContractError with optional details blob', () => {
+    const result = ContractErrorSchema.safeParse({
+      ...validError,
+      details: { sessionId: 'abc', extra: [1, 2] },
+      fieldErrors: [{ field: 'id', message: 'required' }],
+    });
+    expect(result.success).toBe(true);
+  });
+
+  it('rejects a payload missing the required code field', () => {
+    const bad = { message: 'oops', severity: 'error', retryable: false };
+    const result = ContractErrorSchema.safeParse(bad);
+    expect(result.success).toBe(false);
+  });
+
+  it('rejects a payload with a non-boolean retryable', () => {
+    const bad = { ...validError, retryable: 'yes' };
+    const result = ContractErrorSchema.safeParse(bad);
+    expect(result.success).toBe(false);
+  });
+
+  it('validateContractError returns the validated object for a good payload', () => {
+    const validated = validateContractError(validError);
+    expect(validated.code).toBe('session.not_found');
+  });
+
+  it('validateContractError throws IpcPayloadValidationError for a malformed payload', () => {
+    expect(() => validateContractError({ notAContractError: true })).toThrow(
+      IpcPayloadValidationError,
+    );
+  });
+});
+
+describe('unwrap validates ContractError envelope (T118)', () => {
+  const validContractError = {
+    code: 'plan.not_found',
+    message: 'Plan does not exist',
+    severity: 'error',
+    retryable: false,
+    details: null,
+  };
+
+  it('passes through a valid ContractError (throws the original)', () => {
+    expect(() => unwrap({ status: 'error', error: validContractError })).toThrow();
+    // The original error object is thrown (not wrapped), so catching it works.
+    try {
+      unwrap({ status: 'error', error: validContractError });
+    } catch (e) {
+      expect(e).toBe(validContractError);
+    }
+  });
+
+  it('throws IpcPayloadValidationError for a malformed object error payload', () => {
+    const malformed = { unexpectedKey: true, noCode: 'missing' };
+    expect(() => unwrap({ status: 'error', error: malformed })).toThrow(
+      IpcPayloadValidationError,
+    );
+  });
+
+  it('passes through string errors unchanged (non-ContractError path)', () => {
+    expect(() => unwrap({ status: 'error', error: 'plain string error' })).toThrow(
+      'plain string error',
+    );
+  });
+
+  it('passes through Error instances unchanged', () => {
+    const err = new Error('native error');
+    expect(() => unwrap({ status: 'error', error: err })).toThrow('native error');
+  });
+});

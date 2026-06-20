@@ -64,12 +64,17 @@ Frontend: `cd apps/desktop && npx tsc --noEmit` + `npx vitest run <feature>`. Ru
   the generated `ErrorCode` union.
 - [X] T114 Replace duplicated magic-string error codes on the Rust side with `ErrorCode`
   variants (use the canonical mapper from US11 once available; otherwise enum directly).
-- [ ] T115 Finish spec-037 tail: migrate `plans_list`/`plans_approve`/`plans_apply_real`
+- [X] T115 Finish spec-037 tail: migrate `plans_list`/`plans_approve`/`plans_apply_real`
   (`commands.ts:170/322/328`) to `commands.*`; extend `commands.bindings-guard.test.ts`.
 - [ ] T116 (CB2) Make `packages/contracts` JSON-Schema derived from the same reflection +
   add an agreement test (specta TS ↔ schema).
-- [ ] T117 (CB4) Collapse `_Serialize`/`_Deserialize` aliasing into one generated module.
-- [ ] T118 (C5) Add zod IPC-seam validation for dynamic/drift-prone payloads.
+  DEFERRED: the real CB2 target (deriving `packages/contracts` schemas from specta
+  reflection) is blocked by a JSON-Schema draft-version/structure mismatch between the
+  hand-maintained schemas and schemars output. Shipped only a tangential specta↔schema
+  drift-guard (`crates/contracts/core` agreement test + `schema-agreement-test` bin) that
+  does NOT fulfill CB2. Tracked for follow-up.
+- [X] T117 (CB4) Collapse `_Serialize`/`_Deserialize` aliasing into one generated module.
+- [X] T118 (C5) Add zod IPC-seam validation for dynamic/drift-prone payloads.
 - [ ] **US2 checkpoint**: gates green; commit `feat(042): US2 IPC boundary + ErrorCode + errMessage`.
 
 ## Phase 4 — US8 Rust error handling & logging (P2)
