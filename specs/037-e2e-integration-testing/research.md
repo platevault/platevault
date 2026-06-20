@@ -92,6 +92,21 @@ assumption in the spec. Official `tauri-driver` covers exactly Linux + Windows.
   standardized on Playwright for E2E, and a second runner adds maintenance.
 - *Rebuild from scratch* — rejected; wasteful given working scaffold.
 
+**REVISION (US3 spike, 2026-06-20)**: The "Playwright drives `tauri-driver`"
+premise does not hold — Playwright cannot connect to an external W3C WebDriver
+endpoint (it only drives its own bundled browsers). The Playwright
+`real-backend` config therefore only covers the Vite shell smoke (no real IPC).
+Real UI→IPC→backend journeys use **WebdriverIO `remote()` + `tauri-driver`**
+(the upstream Tauri approach), now proven in CI
+(`apps/desktop/e2e/wdio/tauri-spike.mjs`). Notes for the journeys:
+- Drive a built `desktop_shell` binary via `tauri:options.application`; do **not**
+  set `browserName` (WebKitWebDriver rejects the session otherwise).
+- The binary loads its frontend from the Tauri `devUrl` (:5173) even for release
+  builds, so the runner serves the built `dist` there (`vite preview`); the
+  frontend is real and uses real IPC.
+- Linux (WebKitWebDriver) first; Windows (msedgedriver) once green. macOS stays
+  best-effort per D4.
+
 ---
 
 ## D4 — macOS Layer 2 (the deferred decision)

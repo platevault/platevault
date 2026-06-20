@@ -47,6 +47,7 @@ pub struct ReclassifyResponse {
 /// - `inbox.item.not_found` — item does not exist.
 /// - `inbox.has.open.plan` — reclassification blocked by an open plan.
 /// - `file.not_found` — one or more file paths don't match evidence rows.
+#[allow(clippy::too_many_lines)] // sequential reclassify pipeline reads clearer inline
 pub async fn reclassify(
     pool: &SqlitePool,
     req: ReclassifyRequest,
