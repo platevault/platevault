@@ -1,0 +1,20 @@
+[package]
+name = "e2e_tests"
+version = "0.1.0"
+edition.workspace = true
+license.workspace = true
+publish = false
+
+# Empty library target: all E2E logic lives in `tests/` so the heavy thirtyfour
+# WebDriver stack is a dev-dependency, compiled only for the test binaries and
+# never by `cargo build --workspace` of the shipping crates.
+[lib]
+path = "src/lib.rs"
+
+[dev-dependencies]
+# W3C WebDriver client (spec 037 adopted stack — see rust.tauri steering).
+thirtyfour = "0.37"
+tokio = { workspace = true, features = ["macros", "rt-multi-thread"] }
+anyhow = "1"
+serde = { workspace = true }
+serde_json = { workspace = true }
