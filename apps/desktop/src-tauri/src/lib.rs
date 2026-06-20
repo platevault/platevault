@@ -527,9 +527,16 @@ pub fn specta_builder() -> Builder<tauri::Wry> {
 pub fn build_app() -> tauri::App {
     let builder = specta_builder();
 
-    tauri::Builder::default()
+    let app_builder = tauri::Builder::default()
         .plugin(tauri_plugin_dialog::init())
-        .plugin(tauri_plugin_opener::init())
+        .plugin(tauri_plugin_opener::init());
+    // E2E gate: embed the WebDriver server only when built with --features e2e.
+    // The embedded server listens on 127.0.0.1:4445; connect via the
+    // tauri-webdriver CLI (cargo install tauri-webdriver --locked) on :4444.
+    // Release builds MUST omit the `e2e` feature (Constitution Principle V).
+    #[cfg(feature = "e2e")]
+    let app_builder = app_builder.plugin(tauri_plugin_webdriver::init());
+    app_builder
         .invoke_handler(builder.invoke_handler())
         .setup(move |app| {
             builder.mount_events(app);

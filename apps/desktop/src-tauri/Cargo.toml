@@ -31,6 +31,10 @@ tauri = { workspace = true }
 tauri-plugin-dialog = { workspace = true }
 tauri-plugin-opener = { workspace = true }
 tauri-specta = { workspace = true }
+# E2E automation surface — ONLY compiled when the `e2e` feature is enabled.
+# Release binaries MUST omit this feature so the embedded WebDriver server
+# is never present at runtime (Constitution Principle V, mirrors `dev-tools`).
+tauri-plugin-webdriver = { version = "0.2", optional = true }
 thiserror = { workspace = true }
 time = { workspace = true }
 tracing = { workspace = true }
@@ -46,6 +50,12 @@ tauri = { workspace = true, features = ["test"] }
 # Developer-mode surface (spec 021). Release binaries MUST NOT enable this.
 # Propagates to app_core so the dev_contracts use-case module is compiled in.
 dev-tools = ["app_core/dev-tools"]
+# E2E automation gate (spec 037). Embeds tauri-plugin-webdriver so the app
+# binary accepts W3C WebDriver sessions from the tauri-webdriver CLI proxy.
+# The embedded server listens on 127.0.0.1:4445; the tauri-webdriver CLI
+# (cargo install tauri-webdriver --locked) proxies :4444 → :4445.
+# Release binaries MUST NOT enable this feature (Constitution Principle V).
+e2e = ["dep:tauri-plugin-webdriver"]
 
 [lints]
 workspace = true

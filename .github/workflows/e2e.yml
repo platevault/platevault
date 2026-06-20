@@ -1,23 +1,35 @@
-# Real-UI E2E — thirtyfour + cargo-nextest + tauri-driver
+# Real-UI E2E — thirtyfour + cargo-nextest + tauri-plugin-webdriver (all OS)
 #
-# Drives the built desktop_shell binary through its real webview UI via
-# tauri-driver (W3C WebDriver). thirtyfour (Rust W3C client) replaces the
-# interim WebdriverIO approach — same tauri:options.application capability,
-# same tauri-driver, but the test runner stays in Rust alongside Layer-1.
+# Drives the built desktop_shell binary through its real webview UI using
+# tauri-plugin-webdriver (Choochmeque) — an embedded W3C WebDriver server
+# compiled into the app under the `e2e` feature flag — and the tauri-webdriver
+# CLI proxy. thirtyfour (Rust W3C client) connects to the CLI on :4444.
+#
+# Why plugin-everywhere instead of the old tauri-driver approach:
+# - tauri-driver is Linux+Windows only (no WKWebView WebDriver on macOS).
+# - tauri-plugin-webdriver works on Linux, Windows, AND macOS — one harness,
+#   one CI path, no msedgedriver version matching, no WebKitWebDriver apt dep.
+# - The plugin is compile-gated behind the `e2e` feature on desktop_shell, so
+#   release binaries never include the automation surface (Constitution V).
+# - WebdriverIO has been retired; the Rust thirtyfour+nextest stack is the
+#   sole real-UI runner.
 #
 # Run conditions:
-# - All journeys are #[ignore] stubs today; cargo nextest --no-tests=warn keeps
-#   the job green while they are deferred (research D3/D9 gating conditions).
-#   Remove --no-tests=warn once a journey is un-ignored.
-# - macOS real-UI E2E is unsupported by official tauri-driver (research D4);
-#   this workflow targets Linux only until Windows is added (Stage B, US3).
+# - All journeys are #[ignore] stubs today; --no-tests=warn keeps the job green
+#   while they are deferred (research D9 gating conditions). Remove that flag
+#   once a journey is un-ignored.
+# - The 3-OS matrix proves the runner compiles and the plugin registers on every
+#   platform even while journeys are stubs.
+# - This workflow runs independently of ci.yml (Layer-1 integration). Ordering /
+#   merge-gating is enforced by branch-protection required checks, not a
+#   cross-workflow `needs` (which GitHub only supports for reusable workflows).
 
-name: Real-UI E2E (thirtyfour + nextest)
+name: Real-UI E2E (thirtyfour + nextest + tauri-plugin-webdriver)
 
 on:
-  push:
-    branches: [main, 037-e2e-thirtyfour-nextest]
   pull_request:
+  push:
+    branches: [main]
   workflow_dispatch:
 
 concurrency:
@@ -28,39 +40,41 @@ env:
   CARGO_INCREMENTAL: 0
 
 jobs:
-  e2e-linux:
-    name: Real-UI E2E — Linux
-    runs-on: ubuntu-latest
+  real-ui-e2e:
+    name: Real-UI E2E — ${{ matrix.os }}
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-latest, windows-latest, macos-latest]
+    runs-on: ${{ matrix.os }}
+
     steps:
       - uses: actions/checkout@v4
 
-      # Tauri system deps (webview + xvfb for headless display)
-      - name: Install Tauri / E2E system deps
+      # Tauri needs system webview/GTK libs to build on Linux.
+      # No webkit2gtk-driver — the plugin replaces the external driver.
+      - name: Install Tauri Linux system deps
+        if: runner.os == 'Linux'
         run: |
           sudo apt-get update
           sudo apt-get install -y \
             libwebkit2gtk-4.1-dev libgtk-3-dev librsvg2-dev \
             libayatana-appindicator3-dev \
-            webkit2gtk-driver \
             xvfb
 
       - uses: dtolnay/rust-toolchain@stable
 
-      - uses: mozilla-actions/sccache-action@v0.0.10
-
       - uses: Swatinem/rust-cache@v2
         with:
-          shared-key: "rust-ubuntu-latest"
-          # cache-targets:false keeps the cache small; sccache handles Rust
-          # artifact reuse. cargo-nextest and tauri-driver binaries are small.
-          cache-targets: "false"
+          shared-key: "rust-e2e-${{ matrix.os }}"
           cache-on-failure: true
 
-      - uses: taiki-e/install-action@v2
-        with:
-          # tauri-driver@2.0.6 — matches the proven version from the US3 spike
-          # nextest — cargo-nextest runner for the e2e_tests crate
-          tool: tauri-driver@2.0.6,nextest
+      - uses: taiki-e/install-action@nextest
+
+      # Install the tauri-webdriver CLI proxy.
+      # It bridges W3C client (:4444) → plugin embedded server (:4445).
+      - name: Install tauri-webdriver CLI
+        run: cargo install tauri-webdriver --locked
 
       - uses: pnpm/action-setup@v4
         with:
@@ -74,32 +88,31 @@ jobs:
       - name: Install JS deps
         run: pnpm install --frozen-lockfile
 
-      # Build the frontend with VITE_E2E=1 so typeable path inputs are enabled.
-      # The built dist is served on :5173 by `vite preview` (next step).
-      - name: Build frontend (VITE_E2E=1)
-        run: pnpm --filter @astro-plan/desktop build
+      # Build the frontend with VITE_E2E=1 so CI-only typeable path inputs are
+      # enabled (the native folder picker cannot be driven by WebDriver).
+      - name: Build frontend (VITE_E2E)
         env:
           VITE_E2E: "1"
+        run: pnpm --filter @astro-plan/desktop build
 
-      # Serve the built dist on :5173 in the background.
-      # The desktop_shell binary's Tauri devUrl points here; the webview loads
-      # the real UI from this server, using real IPC to the Rust backend.
-      - name: Serve frontend dist on :5173 (background)
+      # Serve built dist on :5173 in the background. The app binary reads the
+      # Tauri devUrl (:5173) and loads its frontend from there — real IPC.
+      - name: Serve frontend dist on :5173
+        shell: bash
         run: pnpm --filter @astro-plan/desktop preview --port 5173 &
 
-      # Build the desktop app binary (debug, no-default-features for speed).
-      - name: Build desktop app (debug)
-        run: cargo build -p desktop_shell
-        env:
-          RUSTC_WRAPPER: sccache
+      # Build the app binary WITH the embedded plugin so tauri-webdriver can
+      # connect. The `e2e` feature MUST be absent from release builds.
+      - name: Build desktop_shell with e2e feature
+        run: cargo build -p desktop_shell --features e2e
 
-      # Run the E2E suite under xvfb-run (headless display for WebKitWebDriver).
-      # --no-tests=warn keeps the job green while all journeys are #[ignore]
-      # stubs; remove once a journey is un-ignored.
-      # tauri-driver is spawned by the harness (tests/common/mod.rs) per-test.
-      - name: Run E2E suite (thirtyfour + nextest, xvfb)
+      # Run the Layer-2 harness. All journeys are #[ignore] stubs; nextest exits
+      # 0 (0 tests run, 5 skipped) while --no-tests=warn is set.
+      # Linux wraps in xvfb-run for a headless display; Windows/macOS run natively.
+      - name: Run E2E (Linux — xvfb)
+        if: runner.os == 'Linux'
         run: xvfb-run -a cargo nextest run -p e2e_tests --profile e2e --no-tests=warn
 
-      - name: sccache stats
-        run: sccache --show-stats
-        if: always()
+      - name: Run E2E (Windows / macOS)
+        if: runner.os != 'Linux'
+        run: cargo nextest run -p e2e_tests --profile e2e --no-tests=warn

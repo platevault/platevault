@@ -342,6 +342,69 @@ paper over.
 ## Open items carried to tasks
 
 - Confirm exact app-DB paths per OS for the Layer-2 DB reader (`db.ts`).
-- Confirm `msedgedriver` acquisition step on `windows-latest` runners.
+- ~~Confirm `msedgedriver` acquisition step on `windows-latest` runners.~~ **CLOSED** — msedgedriver no longer needed; tauri-plugin-webdriver handles Windows.
 - Decide tagging mechanism to separate network-gated live-SIMBAD test from the
   deterministic default suite.
+
+---
+
+## D10 — Standardize on tauri-plugin-webdriver (all OS) + retire WebdriverIO (2026-06-20)
+
+**Context**: Prior decisions (D3/D4) adopted `tauri-driver` for Linux+Windows
+and deferred macOS real-UI E2E as best-effort via `tauri-plugin-webdriver`. This
+required two distinct CI paths and per-OS native WebDriver binaries
+(`webkit2gtk-driver` on Linux, `msedgedriver` on Windows). After evaluating the
+plugin's cross-platform maturity and confirming it compiles against Tauri 2.11,
+the decision is to **standardize on `tauri-plugin-webdriver` everywhere** and
+retire WebdriverIO.
+
+**Decision**: Adopt `tauri-plugin-webdriver` (Choochmeque) v0.2 as the **sole
+real-UI WebDriver automation path** on Linux, Windows, and macOS:
+
+1. Add `tauri-plugin-webdriver = { version = "0.2", optional = true }` to
+   `desktop_shell` and gate it behind a new `e2e` Cargo feature (mirrors the
+   existing `dev-tools` compile-gate from spec 021). Release builds MUST omit
+   `--features e2e` (Constitution Principle V).
+2. Register the plugin in `build_app()` under `#[cfg(feature = "e2e")]`.
+3. The embedded plugin server listens on `127.0.0.1:4445`. Clients connect via
+   the `tauri-webdriver` CLI proxy (`cargo install tauri-webdriver --locked`)
+   on `:4444`, which manages the app binary lifecycle via the
+   `tauri:options.application` W3C capability (same capability name as before —
+   no harness capability changes required).
+4. **Retire WebdriverIO**: delete `apps/desktop/e2e/wdio/`, remove the
+   `test:e2e:wdio` script and `webdriverio` devDep from `apps/desktop/package.json`.
+5. **e2e.yml**: rewrite to a uniform 3-OS matrix (`ubuntu-latest`,
+   `windows-latest`, `macos-latest`). Drop `webkit2gtk-driver`, `msedgedriver`,
+   and `WebKitWebDriver` install steps. Keep `xvfb` (Linux headless display).
+   Retain `--no-tests=warn` while all journeys are `#[ignore]` stubs.
+
+**Supersedes**: D3 revision ("tauri-driver on Linux/Windows") and D4
+("macOS best-effort only"). D4's rationale for a debug-only compile-gate is
+adopted and extended to all OS.
+
+**Rationale**: One harness, one CI path across all three OS. Eliminates
+msedgedriver version-matching, WebKitWebDriver apt dependency, and the split
+"Linux/Windows required, macOS best-effort" CI topology. The plugin is
+cross-platform, compile-gated so the automation surface is absent from release
+binaries, and uses the same `tauri:options.application` capability the existing
+thirtyfour harness already sends. WebdriverIO is retired because the entire
+real-UI stack now lives in Rust (thirtyfour + cargo-nextest), consistent with
+the `rust.tauri` steering convention.
+
+**Tradeoffs / mitigations**:
+- Newest tooling (v0.2): mitigated by the suite being `#[ignore]` stubs — the
+  CI run proves compilation and plugin registration, not journey assertions.
+  Fallback: if the plugin regresses, re-enable the old `tauri-driver` path
+  (the thirtyfour harness capability shape is identical).
+- macOS promoted from best-effort to required matrix member: acceptable because
+  the journeys are stubs; when real assertions land the matrix can demote macOS
+  to `continue-on-error` if needed.
+
+**Alternatives considered**:
+- *Keep split path (tauri-driver Linux/Windows + plugin macOS-only)* — rejected;
+  two CI paths, two install steps, msedgedriver version-matching burden.
+- *Use plugin on Linux/Windows only, keep macOS deferred* — rejected; if the
+  plugin is good enough to adopt, it should replace the old path on all OS for
+  consistency.
+- *WebdriverIO retention* — rejected; the thirtyfour+nextest Rust stack is the
+  chosen runner, and WebdriverIO adds a Node.js runner dependency with no benefit.
