@@ -170,7 +170,7 @@ export function useInboxReclassify(inboxItemId: string) {
   });
 
   const reclassify = useCallback(
-    async (overrides: Array<{ filePath: string; frameType: string }>) => {
+    async (overrides: Array<{ filePath: string; frameType?: string | null; filter?: string | null; exposureS?: number | null; binning?: string | null }>) => {
       setState({ loading: true, result: null, error: null });
       try {
         const result = await inboxReclassify({ inboxItemId, overrides });

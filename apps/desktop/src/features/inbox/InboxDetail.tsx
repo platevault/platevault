@@ -9,6 +9,8 @@
  *   per-type count line (e.g. "12 light · 4 dark · 1 bias").
  * - "Needs review" section: files with unclassified = true, with an inline
  *   frame-type picker and "Apply override" button (calls inbox.reclassify).
+ *   T027: multi-select checkboxes + bulk-override controls (frame type, filter,
+ *   exposure, binning) applied to all selected files at once.
  * - Per-file metadata table (FR-010): rendered when the optional
  *   `fileMetadata` prop is provided and non-empty. No fetch here — the parent
  *   passes the data once `inbox.item.metadata` is wired (T019/T022).
@@ -95,7 +97,7 @@ function EmptyClassification() {
   );
 }
 
-// ── Props ────────────────────────────────────────────────────────────────────
+// ── Props ─────────────────────────────────────────────────────────────────────
 
 export interface InboxDetailProps {
   item: InboxItemSummary;
@@ -109,19 +111,28 @@ export interface InboxDetailProps {
   fileMetadata?: InboxFileMetadata[];
 }
 
-// ── Component ────────────────────────────────────────────────────────────────
+// ── Component ─────────────────────────────────────────────────────────────────
 
 export function InboxDetail({ item, classification, fileMetadata }: InboxDetailProps) {
   const { reclassify, loading: reclassifyLoading } = useInboxReclassify(item.inboxItemId);
 
-  // Per-file overrides the user has selected but not yet submitted.
+  // Per-file overrides the user has selected but not yet submitted (single-file flow).
   const [pendingOverrides, setPendingOverrides] = useState<Record<string, string>>({});
   const [applyError, setApplyError] = useState<string | null>(null);
+
+  // ── T027: multi-select + bulk override state ──────────────────────────────
+  const [selectedFiles, setSelectedFiles] = useState<Set<string>>(new Set());
+  const [bulkFrameType, setBulkFrameType] = useState('');
+  const [bulkFilter, setBulkFilter] = useState('');
+  const [bulkExposureS, setBulkExposureS] = useState('');
+  const [bulkBinning, setBulkBinning] = useState('');
+  const [bulkError, setBulkError] = useState<string | null>(null);
 
   const handleOverrideChange = (filePath: string, frameType: string) => {
     setPendingOverrides((prev) => ({ ...prev, [filePath]: frameType }));
   };
 
+  // Single-file flow: apply per-file pendingOverrides (frame type only).
   const handleApplyOverrides = async () => {
     const overrides = Object.entries(pendingOverrides).map(([filePath, frameType]) => ({
       filePath,
@@ -137,11 +148,68 @@ export function InboxDetail({ item, classification, fileMetadata }: InboxDetailP
     }
   };
 
+  // ── T027: selection helpers ───────────────────────────────────────────────
+
+  const unclassifiedFiles = classification?.unclassifiedFiles ?? [];
+
+  const handleToggleFile = (filePath: string) => {
+    setSelectedFiles((prev) => {
+      const next = new Set(prev);
+      if (next.has(filePath)) {
+        next.delete(filePath);
+      } else {
+        next.add(filePath);
+      }
+      return next;
+    });
+  };
+
+  const handleSelectAll = () => {
+    if (selectedFiles.size === unclassifiedFiles.length) {
+      setSelectedFiles(new Set());
+    } else {
+      setSelectedFiles(new Set(unclassifiedFiles));
+    }
+  };
+
+  // Build overrides for the bulk apply: only include fields that are non-empty.
+  const handleBulkApply = async () => {
+    if (selectedFiles.size === 0) return;
+    const overrides = Array.from(selectedFiles).map((filePath) => {
+      const override: {
+        filePath: string;
+        frameType?: string | null;
+        filter?: string | null;
+        exposureS?: number | null;
+        binning?: string | null;
+      } = { filePath };
+      if (bulkFrameType !== '') override.frameType = bulkFrameType;
+      if (bulkFilter !== '') override.filter = bulkFilter;
+      if (bulkExposureS !== '') {
+        const n = parseFloat(bulkExposureS);
+        if (!Number.isNaN(n)) override.exposureS = n;
+      }
+      if (bulkBinning !== '') override.binning = bulkBinning;
+      return override;
+    });
+    setBulkError(null);
+    try {
+      await reclassify(overrides);
+      setSelectedFiles(new Set());
+      setBulkFrameType('');
+      setBulkFilter('');
+      setBulkExposureS('');
+      setBulkBinning('');
+    } catch (err) {
+      setBulkError(err instanceof Error ? err.message : String(err));
+    }
+  };
+
   const title = item.relativePath || '(root)';
   const classType = classification?.type ?? 'pending';
   const unclassifiedCount = classification?.unclassifiedFiles?.length ?? 0;
 
-  // ── Breakdown table ───────────────────────────────────────────────────────
+  // ── Breakdown table ────────────────────────────────────────────────────────
 
   const breakdownColumns = [
     { key: 'kind', label: 'Frame type', style: { width: 100 } },
@@ -171,15 +239,28 @@ export function InboxDetail({ item, classification, fileMetadata }: InboxDetailP
       ),
     })) ?? [];
 
-  // ── Unclassified ("Needs review") table ──────────────────────────────────
+  // ── Unclassified ("Needs review") table ────────────────────────────────────
+
+  const allSelected = unclassifiedFiles.length > 0 && selectedFiles.size === unclassifiedFiles.length;
+  const someSelected = selectedFiles.size > 0 && !allSelected;
 
   const unclassifiedColumns = [
+    { key: 'select', label: '', style: { width: 36 } },
     { key: 'file', label: 'File', style: { width: 160 } },
     { key: 'override', label: 'Assign frame type' },
   ];
 
   const unclassifiedRows =
-    classification?.unclassifiedFiles?.map((filePath) => ({
+    unclassifiedFiles.map((filePath, idx) => ({
+      select: (
+        <input
+          type="checkbox"
+          checked={selectedFiles.has(filePath)}
+          onChange={() => handleToggleFile(filePath)}
+          aria-label={`Select ${filePath}`}
+          data-testid={`reclassify-select-${idx}`}
+        />
+      ),
       file: (
         <span
           title={filePath}
@@ -208,7 +289,7 @@ export function InboxDetail({ item, classification, fileMetadata }: InboxDetailP
           ))}
         </select>
       ),
-    })) ?? [];
+    }));
 
   // ── Per-file metadata table (FR-010) ──────────────────────────────────────
 
@@ -325,17 +406,151 @@ export function InboxDetail({ item, classification, fileMetadata }: InboxDetailP
 
       {unclassifiedRows.length > 0 && (
         <Section title={`Needs review (${unclassifiedRows.length})`}>
-          <Table columns={unclassifiedColumns} rows={unclassifiedRows} />
-          <div style={{ marginTop: 'var(--alm-sp-2)', display: 'flex', gap: 8 }}>
-            <button
-              className="alm-btn alm-btn--sm alm-btn--accent"
-              onClick={handleApplyOverrides}
-              disabled={Object.keys(pendingOverrides).length === 0 || reclassifyLoading}
-              aria-label="Apply manual overrides"
-            >
-              {reclassifyLoading ? 'Applying…' : `Apply ${Object.keys(pendingOverrides).length} override${Object.keys(pendingOverrides).length !== 1 ? 's' : ''}`}
-            </button>
+          {/* Select-all affordance row above the table */}
+          <div style={{ marginBottom: 'var(--alm-sp-1)', display: 'flex', alignItems: 'center', gap: 6 }}>
+            <input
+              type="checkbox"
+              checked={allSelected}
+              ref={(el) => { if (el) el.indeterminate = someSelected; }}
+              onChange={handleSelectAll}
+              aria-label="Select all unclassified files"
+              data-testid="reclassify-select-all"
+            />
+            <span style={{ fontSize: 'var(--alm-text-xs)', color: 'var(--alm-text-muted)' }}>
+              {selectedFiles.size === 0 ? 'Select all' : `${selectedFiles.size} selected`}
+            </span>
           </div>
+          <Table columns={unclassifiedColumns} rows={unclassifiedRows} />
+
+          {/* T027: Bulk override controls — visible when >=1 file selected */}
+          {selectedFiles.size > 0 && (
+            <div
+              style={{
+                marginTop: 'var(--alm-sp-3)',
+                padding: 'var(--alm-sp-3)',
+                border: '1px solid var(--alm-border)',
+                borderRadius: 'var(--alm-radius)',
+                display: 'flex',
+                flexWrap: 'wrap',
+                gap: 8,
+                alignItems: 'flex-end',
+              }}
+              aria-label="Bulk override controls"
+            >
+              <div style={{ display: 'flex', flexDirection: 'column', gap: 4 }}>
+                <label
+                  htmlFor="bulk-frame-type"
+                  style={{ fontSize: 'var(--alm-text-xs)', color: 'var(--alm-text-muted)' }}
+                >
+                  Frame type
+                </label>
+                <select
+                  id="bulk-frame-type"
+                  value={bulkFrameType}
+                  onChange={(e) => setBulkFrameType(e.target.value)}
+                  aria-label="Bulk frame type"
+                  data-testid="bulk-frame-type"
+                  className="alm-select alm-select--sm"
+                >
+                  <option value="">— unchanged —</option>
+                  {FRAME_TYPE_OPTIONS.map((t) => (
+                    <option key={t} value={t}>{t}</option>
+                  ))}
+                </select>
+              </div>
+
+              <div style={{ display: 'flex', flexDirection: 'column', gap: 4 }}>
+                <label
+                  htmlFor="bulk-filter"
+                  style={{ fontSize: 'var(--alm-text-xs)', color: 'var(--alm-text-muted)' }}
+                >
+                  Filter
+                </label>
+                <input
+                  id="bulk-filter"
+                  type="text"
+                  value={bulkFilter}
+                  onChange={(e) => setBulkFilter(e.target.value)}
+                  placeholder="e.g. Ha"
+                  aria-label="Bulk filter"
+                  data-testid="bulk-filter"
+                  className="alm-input alm-input--sm"
+                  style={{ width: 80 }}
+                />
+              </div>
+
+              <div style={{ display: 'flex', flexDirection: 'column', gap: 4 }}>
+                <label
+                  htmlFor="bulk-exposure"
+                  style={{ fontSize: 'var(--alm-text-xs)', color: 'var(--alm-text-muted)' }}
+                >
+                  Exposure (s)
+                </label>
+                <input
+                  id="bulk-exposure"
+                  type="number"
+                  value={bulkExposureS}
+                  onChange={(e) => setBulkExposureS(e.target.value)}
+                  placeholder="e.g. 300"
+                  aria-label="Bulk exposure seconds"
+                  data-testid="bulk-exposure-s"
+                  className="alm-input alm-input--sm"
+                  style={{ width: 80 }}
+                  min={0}
+                />
+              </div>
+
+              <div style={{ display: 'flex', flexDirection: 'column', gap: 4 }}>
+                <label
+                  htmlFor="bulk-binning"
+                  style={{ fontSize: 'var(--alm-text-xs)', color: 'var(--alm-text-muted)' }}
+                >
+                  Binning
+                </label>
+                <input
+                  id="bulk-binning"
+                  type="text"
+                  value={bulkBinning}
+                  onChange={(e) => setBulkBinning(e.target.value)}
+                  placeholder="e.g. 2x2"
+                  aria-label="Bulk binning"
+                  data-testid="bulk-binning"
+                  className="alm-input alm-input--sm"
+                  style={{ width: 80 }}
+                />
+              </div>
+
+              <button
+                className="alm-btn alm-btn--sm alm-btn--accent"
+                onClick={handleBulkApply}
+                disabled={reclassifyLoading}
+                aria-label={`Apply bulk override to ${selectedFiles.size} file${selectedFiles.size !== 1 ? 's' : ''}`}
+                data-testid="bulk-apply-btn"
+              >
+                {reclassifyLoading
+                  ? 'Applying…'
+                  : `Apply to selected (${selectedFiles.size})`}
+              </button>
+            </div>
+          )}
+
+          {bulkError && (
+            <Banner variant="danger" style={{ marginTop: 'var(--alm-sp-2)' }}>{bulkError}</Banner>
+          )}
+
+          {/* Single-file apply button: still available when user has per-row selects */}
+          {Object.keys(pendingOverrides).length > 0 && (
+            <div style={{ marginTop: 'var(--alm-sp-2)', display: 'flex', gap: 8 }}>
+              <button
+                className="alm-btn alm-btn--sm alm-btn--accent"
+                onClick={handleApplyOverrides}
+                disabled={Object.keys(pendingOverrides).length === 0 || reclassifyLoading}
+                aria-label="Apply manual overrides"
+              >
+                {reclassifyLoading ? 'Applying…' : `Apply ${Object.keys(pendingOverrides).length} override${Object.keys(pendingOverrides).length !== 1 ? 's' : ''}`}
+              </button>
+            </div>
+          )}
           {applyError && (
             <Banner variant="danger" style={{ marginTop: 'var(--alm-sp-2)' }}>{applyError}</Banner>
           )}
