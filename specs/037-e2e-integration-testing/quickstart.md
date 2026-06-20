@@ -17,26 +17,56 @@ cargo test --workspace
 - Each test gets an isolated, file-backed SQLite DB in a tempdir with real
   migrations.
 
-## Layer 2 — full-stack E2E smoke
+## Layer 2 — full-stack E2E smoke (thirtyfour + cargo-nextest)
 
 ```bash
-just test-e2e                  # → pnpm --filter @astro-plan/desktop test:e2e:real
+# Run all Layer-2 journeys (including ignored stubs):
+cargo nextest run -p e2e_tests --profile e2e --run-ignored all
+
+# Run only the non-ignored subset (currently: 0 journeys un-ignored):
+cargo nextest run -p e2e_tests --profile e2e
 ```
 
-Drives the freshly built app through its real UI via `tauri-driver`.
+Today all journeys are `#[ignore]` stubs — the command above shows 5 skipped, 0
+failed. Remove `#[ignore]` on a journey to make it run.
+
+Drives the freshly built app through its real UI via `tauri-driver` (W3C
+WebDriver). thirtyfour (Rust W3C client) connects to tauri-driver on :4444 and
+sends the `tauri:options.application` capability (no `browserName` — WebKitWebDriver
+rejects the session when it is set). The app loads its own frontend from the Tauri
+devUrl (:5173); do NOT call `driver.goto(...)` in journeys.
+
+### Full prerequisite setup (Linux)
+
+1. **Build the frontend** with `VITE_E2E=1` (enables typeable path inputs):
+   ```bash
+   VITE_E2E=1 pnpm --filter @astro-plan/desktop build
+   ```
+2. **Serve `dist` on :5173** (background):
+   ```bash
+   pnpm --filter @astro-plan/desktop preview --port 5173 &
+   ```
+3. **Build the desktop binary** (debug):
+   ```bash
+   cargo build -p desktop_shell
+   ```
+4. **Run under xvfb** (headless display for WebKitWebDriver):
+   ```bash
+   xvfb-run -a cargo nextest run -p e2e_tests --profile e2e --run-ignored all
+   ```
+
+Set `ALM_E2E_APP_BIN=/path/to/binary` to override the default debug path.
+Set `ALM_DB_URL=sqlite:///path/to/alm.db` to control which DB is reset per-test.
 
 ### Prerequisites by OS
 
 | OS | Driver | Install / notes |
 |---|---|---|
-| **Linux** | `tauri-driver` + `WebKitWebDriver` | `cargo install tauri-driver --locked`; `apt install webkit2gtk-driver xvfb`; runs under `xvfb-run`. |
+| **Linux** | `tauri-driver` + `WebKitWebDriver` | `cargo install tauri-driver --locked`; `apt install webkit2gtk-driver xvfb`; run under `xvfb-run`. |
 | **Windows** | `tauri-driver` + `msedgedriver.exe` | `cargo install tauri-driver --locked`; fetch `msedgedriver` **version-matched to installed Edge** or it hangs on connect. |
-| **macOS** | *best-effort* — `tauri-plugin-webdriver` | Official `tauri-driver` does **not** support macOS. macOS E2E is optional/non-blocking; the embedded plugin path is debug-only. Layer 1 still runs fully on macOS. |
+| **macOS** | *best-effort* — `tauri-plugin-webdriver` | Official `tauri-driver` does **not** support macOS. macOS E2E is optional/non-blocking; the embedded plugin path (thirtyfour connects to it identically) is debug-only. `tauri-plugin-mcp` is an additional dev-only agent-interactive debug path (not a CI gate). Layer 1 still runs fully on macOS. |
 
-If a prerequisite is missing the command fails with a named message telling you
-what to install (FR-015).
-
-### What the smoke suite proves
+### What the smoke suite proves (once journeys are un-ignored)
 
 - Every top-level screen loads in the real app.
 - At least one journey round-trips a value UI → real backend → UI.
@@ -45,9 +75,10 @@ what to install (FR-015).
 
 ## CI
 
-Every change runs both layers automatically (`.github/workflows/ci.yml`):
-Layer 1 on Linux/Windows/macOS (required) → Layer 2 on Linux/Windows (required),
-macOS (optional). See [research.md](./research.md) D5.
+`ci.yml` runs Layer 1 on Linux/Windows/macOS (required, all 3 OS) on every
+change. `e2e.yml` runs Layer 2 (thirtyfour+nextest, Linux required) — green
+today because all journeys are `#[ignore]` stubs (`--no-tests=warn`). See
+[research.md](./research.md) D5.
 
 ## Adding coverage for a new feature
 

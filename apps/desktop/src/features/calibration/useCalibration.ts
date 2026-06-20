@@ -19,7 +19,7 @@ import type {
   CalibrationMatchAssignResponse,
   CalibrationMatchType,
 } from '@/api/commands';
-import type { CalibrationMaster } from '@/bindings/types';
+import type { CalibrationMaster_Serialize as CalibrationMaster } from '@/bindings/index';
 
 // ── Masters list ─────────────────────────────────────────────────────────────
 

@@ -1,89 +1,105 @@
-# Real-UI E2E (Layer 2) via WebdriverIO + tauri-driver.
+# Real-UI E2E — thirtyfour + cargo-nextest + tauri-driver
 #
-# Runs decoupled from ci.yml's Stage A gate: the real-UI journeys are valuable
-# even while the workspace gate is unrelatedly red, and a Tauri webview can only
-# run here (not in the WSL dev sandbox). Caching keeps iteration fast:
-#   - sccache caches ALL crate compilation (incl. workspace) -> test-only edits
-#     are near-instant rebuilds.
-#   - tauri-driver is installed prebuilt via taiki-e/install-action (no source
-#     compile; the action owns binary placement, PATH, and a version cache).
-name: Real-UI E2E
+# Drives the built desktop_shell binary through its real webview UI via
+# tauri-driver (W3C WebDriver). thirtyfour (Rust W3C client) replaces the
+# interim WebdriverIO approach — same tauri:options.application capability,
+# same tauri-driver, but the test runner stays in Rust alongside Layer-1.
+#
+# Run conditions:
+# - All journeys are #[ignore] stubs today; cargo nextest --no-tests=warn keeps
+#   the job green while they are deferred (research D3/D9 gating conditions).
+#   Remove --no-tests=warn once a journey is un-ignored.
+# - macOS real-UI E2E is unsupported by official tauri-driver (research D4);
+#   this workflow targets Linux only until Windows is added (Stage B, US3).
+
+name: Real-UI E2E (thirtyfour + nextest)
 
 on:
   push:
-    branches: [037-us3-e2e-journeys]
+    branches: [main, 037-e2e-thirtyfour-nextest]
   pull_request:
-    paths:
-      - "apps/desktop/**"
-      - "crates/**"
-      - "Cargo.toml"
-      - "Cargo.lock"
-      - ".github/workflows/e2e.yml"
   workflow_dispatch:
 
 concurrency:
-  group: e2e-${{ github.ref }}
+  group: e2e-${{ github.workflow }}-${{ github.ref }}
   cancel-in-progress: true
 
+env:
+  CARGO_INCREMENTAL: 0
+
 jobs:
-  e2e:
-    name: Real-UI E2E (Linux)
+  e2e-linux:
+    name: Real-UI E2E — Linux
     runs-on: ubuntu-latest
-    env:
-      SCCACHE_GHA_ENABLED: "true"
-      RUSTC_WRAPPER: "sccache"
     steps:
       - uses: actions/checkout@v4
 
-      - name: Install Tauri + E2E system deps
+      # Tauri system deps (webview + xvfb for headless display)
+      - name: Install Tauri / E2E system deps
         run: |
           sudo apt-get update
           sudo apt-get install -y \
             libwebkit2gtk-4.1-dev libgtk-3-dev librsvg2-dev \
-            libayatana-appindicator3-dev webkit2gtk-driver xvfb
+            libayatana-appindicator3-dev \
+            webkit2gtk-driver \
+            xvfb
 
       - uses: dtolnay/rust-toolchain@stable
+
       - uses: mozilla-actions/sccache-action@v0.0.10
-      # sccache owns compilation caching; Swatinem caches registry/git deps only.
+
       - uses: Swatinem/rust-cache@v2
         with:
+          shared-key: "rust-ubuntu-latest"
+          # cache-targets:false keeps the cache small; sccache handles Rust
+          # artifact reuse. cargo-nextest and tauri-driver binaries are small.
           cache-targets: "false"
+          cache-on-failure: true
+
+      - uses: taiki-e/install-action@v2
+        with:
+          # tauri-driver@2.0.6 — matches the proven version from the US3 spike
+          # nextest — cargo-nextest runner for the e2e_tests crate
+          tool: tauri-driver@2.0.6,nextest
 
       - uses: pnpm/action-setup@v4
         with:
           version: 10.33.0
+
       - uses: actions/setup-node@v4
         with:
           node-version: 20
           cache: pnpm
 
-      # taiki-e/install-action manages the tauri-driver binary directly: it
-      # handles download, bin placement on PATH, and a version-keyed cache.
-      # A hand-rolled `cargo binstall || cargo install` step skipped reinstall
-      # on a warm rust-cache (metadata said "installed" but the binary was gone)
-      # -> the wdio spike's `spawn("tauri-driver")` failed with ENOENT.
-      - uses: taiki-e/install-action@v2
-        with:
-          tool: tauri-driver@2.0.6
-
       - name: Install JS deps
         run: pnpm install --frozen-lockfile
 
-      # The debug binary loads its frontend from the Tauri devUrl (:5173); the
-      # journeys serve the built dist there, so build the frontend first.
-      # VITE_E2E enables the CI-only typeable path inputs (the native folder
-      # picker can't be driven by WebDriver). Tree-shaken from production builds.
-      - name: Build frontend
+      # Build the frontend with VITE_E2E=1 so typeable path inputs are enabled.
+      # The built dist is served on :5173 by `vite preview` (next step).
+      - name: Build frontend (VITE_E2E=1)
+        run: pnpm --filter @astro-plan/desktop build
         env:
           VITE_E2E: "1"
-        run: pnpm --filter @astro-plan/desktop build
 
+      # Serve the built dist on :5173 in the background.
+      # The desktop_shell binary's Tauri devUrl points here; the webview loads
+      # the real UI from this server, using real IPC to the Rust backend.
+      - name: Serve frontend dist on :5173 (background)
+        run: pnpm --filter @astro-plan/desktop preview --port 5173 &
+
+      # Build the desktop app binary (debug, no-default-features for speed).
       - name: Build desktop app (debug)
         run: cargo build -p desktop_shell
+        env:
+          RUSTC_WRAPPER: sccache
 
-      - name: Real-UI E2E (WebdriverIO + tauri-driver)
-        run: xvfb-run -a pnpm --filter @astro-plan/desktop test:e2e:wdio
+      # Run the E2E suite under xvfb-run (headless display for WebKitWebDriver).
+      # --no-tests=warn keeps the job green while all journeys are #[ignore]
+      # stubs; remove once a journey is un-ignored.
+      # tauri-driver is spawned by the harness (tests/common/mod.rs) per-test.
+      - name: Run E2E suite (thirtyfour + nextest, xvfb)
+        run: xvfb-run -a cargo nextest run -p e2e_tests --profile e2e --no-tests=warn
 
       - name: sccache stats
+        run: sccache --show-stats
         if: always()
-        run: ${SCCACHE_PATH:-sccache} --show-stats
