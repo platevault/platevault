@@ -8,6 +8,7 @@
     "core:webview:allow-create-webview-window",
     "dialog:default",
     "dialog:allow-open",
-    "opener:allow-reveal-item-in-dir"
+    "opener:allow-reveal-item-in-dir",
+    "mcp-bridge:default"
   ]
 }
