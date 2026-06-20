@@ -2005,6 +2005,50 @@ export type Equipment = {
 	aliases: string[],
 };
 
+/**
+ *  Exhaustive set of `ContractError.code` wire strings.
+ * 
+ *  Every variant carries an explicit `#[serde(rename = "exact.wire.string")]`
+ *  so round-trips are byte-exact regardless of derive rename rules.
+ * 
+ *  ## Verification
+ * 
+ *  ```rust
+ *  use contracts_core::error_code::ErrorCode;
+ *  assert_eq!(
+ *      serde_json::to_string(&ErrorCode::InternalDatabase).unwrap(),
+ *      r#""internal.database""#
+ *  );
+ *  assert_eq!(
+ *      serde_json::to_string(&ErrorCode::PlanNotFound).unwrap(),
+ *      r#""plan.not_found""#
+ *  );
+ *  ```
+ */
+export type ErrorCode = "validation.request_envelope_invalid" | "dev_mode.disabled" | "equipment.duplicate" | "equipment.not_found" | "internal.database" | "internal.audit" | "internal.data" | "firstrun.incomplete" | "path.already_registered" | "path.already_registered.different_kind" | "path.not_directory" | "path.not_exists" | "path.permission_denied" | "path.reserved_name" | "path.traversal" | "path.collision" | "path.invalid" | "inbox.item.not_found" | "inbox.has.open.plan" | "metadata.unreadable" | "classification.ambiguous" | "classification.stale" | "pattern.unset" | "pattern.empty" | "pattern.invalid" | "pattern.invalid.unicode" | "token.unknown" | "file.not_found" | "operation.handler_duplicate" | "operation.not_found" | 
+/**  Plan approval is outstanding (sent as `ContractError`, not `TransitionError`). */
+"plan.approval_required" | "plan.approval.stale" | "plan.invalid_state" | "plan.not_found" | "plan.not_in_apply" | "plan.blocked_by_protection" | "plan.in_progress" | "plan.items.empty" | "item.not_failed" | "item.not_found" | "item.not_pending" | "run.not_found" | "run.not_paused" | "archive.empty" | "confirm.text.mismatch" | "no.items.to.retry" | "no_op" | "parent.not_found" | "parent.not_terminal" | "lifecycle.read_only" | "lifecycle.last_confirmed_source" | "project.not_found" | "project.read_only" | "view.mixed_kind" | "view.not_found" | "view.unsupported_kind" | "canonical_target.not_found" | "name.duplicate" | "name.empty" | "name.too_long" | "source.already.linked" | "source.not_found" | "tool.locked" | "tool.unknown" | "resolver.endpoint_invalid" | "key.unknown" | "key.unoverridable" | "value.invalid" | 
+/**  Used in `ContractError` tests in lib.rs; also may appear via plan-apply. */
+"filesystem.destination_exists" | 
+/**
+ *  `transition.refused` appears in `ContractError` payloads in
+ *  `transition_use_case.rs` (passed as a String literal alongside
+ *  `TransitionErrorCode`).  Included here for completeness.
+ */
+"transition.refused" | 
+/**  `plan.required` appears in `ContractError` in `transition_use_case.rs`. */
+"plan.required" | 
+/**
+ *  Appears in `TargetOpError.code: String` (`target_management.rs`).
+ *  Included per task instruction ("include when unsure — superset is safe").
+ */
+"alias.duplicate" | "alias.blank" | "alias.not_found" | "alias.not_removable" | "target.not_found" | "target.invalid_id" | 
+/**
+ *  Appears in `ToolLaunchError.code: String` (`tool_launch.rs`).
+ *  Included per task instruction.
+ */
+"launch.failed" | "macos.quarantine.detected";
+
 /**  A file-type filter row for the OS file picker. */
 export type FileFilter = {
 	/**  Display name for the filter (e.g. "FITS files"). */

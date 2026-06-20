@@ -8,6 +8,7 @@ pub mod cleanup;
 pub mod dev;
 pub mod enums;
 pub mod equipment;
+pub mod error_code;
 pub mod first_run;
 pub mod guided;
 pub mod inbox;

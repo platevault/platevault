@@ -132,6 +132,22 @@ impl Timestamp {
         Self(OffsetDateTime::now_utc())
     }
 
+    /// Return the current UTC time as an RFC 3339 / ISO-8601 string.
+    ///
+    /// This is the canonical single home for "give me a timestamp string right
+    /// now" — later dedup work (US11) will redirect callers here.
+    ///
+    /// # Panics
+    ///
+    /// Panics if the underlying `time` formatter fails, which cannot happen
+    /// for well-formed `OffsetDateTime` values with the `Rfc3339` format.
+    #[must_use]
+    pub fn now_iso() -> String {
+        OffsetDateTime::now_utc()
+            .format(&time::format_description::well_known::Rfc3339)
+            .expect("Rfc3339 format is always valid for OffsetDateTime")
+    }
+
     #[must_use]
     pub const fn from_offset_date_time(value: OffsetDateTime) -> Self {
         Self(value)
@@ -141,6 +157,15 @@ impl Timestamp {
     pub const fn as_offset_date_time(self) -> OffsetDateTime {
         self.0
     }
+}
+
+/// Return a fresh UUIDv4 as a hyphenated lowercase string (36 chars).
+///
+/// This is the canonical single home for "give me a new ID string" —
+/// later dedup work (US11) will redirect callers here.
+#[must_use]
+pub fn new_id() -> String {
+    EntityId::new().to_string()
 }
 
 impl From<OffsetDateTime> for Timestamp {
@@ -167,5 +192,32 @@ impl schemars::JsonSchema for Timestamp {
             ..Default::default()
         }
         .into()
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::{new_id, Timestamp};
+
+    #[test]
+    fn now_iso_parses_as_rfc3339() {
+        let s = Timestamp::now_iso();
+        // Must parse back without error (time Rfc3339 round-trip).
+        time::OffsetDateTime::parse(&s, &time::format_description::well_known::Rfc3339)
+            .unwrap_or_else(|e| panic!("now_iso() produced non-RFC3339 output {s:?}: {e}"));
+    }
+
+    #[test]
+    fn new_id_is_36_char_uuid() {
+        let id = new_id();
+        assert_eq!(id.len(), 36, "UUID string must be 36 chars, got {id:?}");
+        // Standard hyphenated UUID: 8-4-4-4-12
+        let parts: Vec<&str> = id.split('-').collect();
+        assert_eq!(parts.len(), 5, "UUID must have 5 hyphen-separated groups: {id:?}");
+        assert_eq!(parts[0].len(), 8);
+        assert_eq!(parts[1].len(), 4);
+        assert_eq!(parts[2].len(), 4);
+        assert_eq!(parts[3].len(), 4);
+        assert_eq!(parts[4].len(), 12);
     }
 }

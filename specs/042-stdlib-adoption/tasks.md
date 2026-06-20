@@ -27,10 +27,10 @@ Frontend: `cd apps/desktop && npx tsc --noEmit` + `npx vitest run <feature>`. Ru
 
 ## Phase 1 — Foundational (blocking prerequisites)
 
-- [ ] T010 (O2 slice) Promote `domain_core` to base layer: add `now_iso`/timestamp-string
+- [X] T010 (O2 slice) Promote `domain_core` to base layer: add `now_iso`/timestamp-string
   and `new_id`/id-string helpers on `Timestamp`/`EntityId` in `crates/domain/core`. No
   consumer changes yet. Gate: `cargo test -p domain_core`.
-- [ ] T011 (CB1 scaffold) Add `ErrorCode` enum to `crates/contracts/core` (specta `Type`,
+- [X] T011 (CB1 scaffold) Add `ErrorCode` enum to `crates/contracts/core` (specta `Type`,
   serde renames preserving existing dotted wire strings — enumerate from the code audit).
   Regenerate bindings (`cargo test` runs the bindings export test). Gate: bindings diff
   shows the new union; `commands.bindings-guard.test.ts` green.
