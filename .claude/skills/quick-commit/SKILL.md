@@ -15,8 +15,7 @@ the user separately asks for that workflow.
 2. Stop if there are no staged or unstaged local changes to commit.
 3. Identify the intended changeset. Separate unrelated user work from the files
    you plan to commit, including anything already staged.
-4. Decide whether a changeset is required using
-   `references/changeset-policy.md`.
+4. Decide whether a changeset is required; LOAD references/changeset-policy.md.
 5. Stage only the intended files or hunks with explicit paths or patch staging.
 6. Review `git diff --cached` before committing.
 7. Run the smallest relevant verification that matches the risk of the diff,
@@ -52,12 +51,3 @@ the user separately asks for that workflow.
 - If a changeset is required, create it before committing.
 - Stop and ask before committing if the intended scope cannot be separated
   safely.
-
-## Scripts
-
-- `scripts/status.sh`: status, diff stat, and changeset detection.
-
-## References
-
-Read `references/changeset-policy.md` when deciding whether a changeset entry is
-needed.

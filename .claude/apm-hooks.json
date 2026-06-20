@@ -20,10 +20,7 @@
       "hooks": [
         {
           "type": "command",
-          "command": "python3 .claude/hooks/speckit-dag-hooks/scripts/dispatcher.py .claude/hooks/speckit-dag-hooks/scripts/nodes.json",
-          "args": [
-            "pre"
-          ],
+          "command": "python3 .claude/hooks/speckit-dag-hooks/scripts/dispatcher.py .claude/hooks/speckit-dag-hooks/scripts/nodes.json pre",
           "timeout": 5,
           "statusMessage": "Checking SpecKit DAG preconditions..."
         }
@@ -32,6 +29,39 @@
     }
   ],
   "PreToolUse": [
+    {
+      "matcher": "Edit|Write|MultiEdit",
+      "hooks": [
+        {
+          "type": "command",
+          "command": ".claude/hooks/mcp-package-version/scripts/package-file-warn.sh",
+          "if": "Edit(Cargo.toml)|Edit(package.json)|Edit(pyproject.toml)|Edit(go.mod)|Edit(Gemfile)|Edit(composer.json)|Write(Cargo.toml)|Write(package.json)|Write(pyproject.toml)|Write(go.mod)|Write(Gemfile)|Write(composer.json)"
+        }
+      ],
+      "_apm_source": "mcp-package-version"
+    },
+    {
+      "matcher": "Bash",
+      "hooks": [
+        {
+          "type": "command",
+          "command": ".claude/hooks/mcp-package-version/scripts/pkg-version-warn.sh",
+          "if": "Bash(pnpm add*)|Bash(cargo add*)|Bash(uv add*)|Bash(pip install*)"
+        }
+      ],
+      "_apm_source": "mcp-package-version"
+    },
+    {
+      "matcher": "Edit|Write|MultiEdit",
+      "hooks": [
+        {
+          "type": "command",
+          "command": ".claude/hooks/agent-coder/scripts/coder-delegation-reminder.sh",
+          "timeout": 3
+        }
+      ],
+      "_apm_source": "agent-coder"
+    },
     {
       "matcher": "Skill",
       "hooks": [
@@ -68,10 +98,7 @@
       "hooks": [
         {
           "type": "command",
-          "command": "python3 .claude/hooks/speckit-dag-hooks/scripts/dispatcher.py .claude/hooks/speckit-dag-hooks/scripts/nodes.json",
-          "args": [
-            "pre"
-          ],
+          "command": "python3 .claude/hooks/speckit-dag-hooks/scripts/dispatcher.py .claude/hooks/speckit-dag-hooks/scripts/nodes.json pre",
           "timeout": 5,
           "statusMessage": "Checking SpecKit DAG preconditions..."
         }
@@ -80,6 +107,19 @@
     }
   ],
   "PostToolUse": [
+    {
+      "matcher": "Bash",
+      "hooks": [
+        {
+          "type": "command",
+          "command": ".claude/hooks/mcp-repomix/scripts/repomix-refresh-snapshot.sh",
+          "if": "Bash(git switch -c*)|Bash(git switch --create*)|Bash(git checkout -b*)|Bash(git checkout -B*)|Bash(git worktree add*)|Bash(git merge*)|Bash(git pull*)|Bash(git rebase*)",
+          "async": true,
+          "timeout": 30
+        }
+      ],
+      "_apm_source": "mcp-repomix"
+    },
     {
       "matcher": "Bash",
       "hooks": [
@@ -96,10 +136,7 @@
       "hooks": [
         {
           "type": "command",
-          "command": "python3 .claude/hooks/speckit-dag-hooks/scripts/dispatcher.py .claude/hooks/speckit-dag-hooks/scripts/nodes.json",
-          "args": [
-            "post"
-          ],
+          "command": "python3 .claude/hooks/speckit-dag-hooks/scripts/dispatcher.py .claude/hooks/speckit-dag-hooks/scripts/nodes.json post",
           "timeout": 5,
           "statusMessage": "Loading SpecKit next-step context..."
         }

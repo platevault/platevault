@@ -5,6 +5,7 @@ author: Sjors Robroek
 dependencies:
   apm:
   - srobroek/agentic-packages/packages/core#^0.4.1
+  - srobroek/agentic-packages/packages/resume-session#^0.2.1
   - srobroek/agentic-packages/packages/speckit#^0.1.2
   - srobroek/agentic-packages/packages/steering-speckit#^0.2.1
   - srobroek/agentic-packages/packages/speckit-dag-hooks#^0.3.2
@@ -21,6 +22,7 @@ dependencies:
   - srobroek/agentic-packages/packages/mcp-repomix#^0.1.0
   - wshobson/agents/plugins/database-design#cc37bfdd292ce520ba1c44df7a3a70d5f8137236
   - srobroek/agentic-packages/packages/mcp-serena#^0.1.0
+  - srobroek/agentic-packages/packages/mcp-tauri#^1.0.0
 includes: auto
 scripts:
   install-agentic-tools: apm install --target claude,codex,agent-skills --update

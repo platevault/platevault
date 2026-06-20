@@ -168,6 +168,46 @@ def _normalize(cmd):
     return raw.replace(".", "-")
 
 
+def _find_speckit_root(start):
+    """Walk up from `start` to the nearest ancestor that holds a SpecKit root.
+
+    A SpecKit root is the directory that owns `.specify/` (and `specs/`). This
+    handles an agent whose cwd is a subdirectory of the project (e.g. frontend/)
+    by locating the directory where feature.json and specs/ actually live.
+    Returns "" when no ancestor qualifies.
+    """
+    if not start:
+        return ""
+    cur = os.path.abspath(start)
+    while True:
+        if os.path.isdir(os.path.join(cur, ".specify")) or os.path.isdir(
+            os.path.join(cur, "specs")
+        ):
+            return cur
+        parent = os.path.dirname(cur)
+        if parent == cur:
+            return ""
+        cur = parent
+
+
+def _resolve_proj_root(payload):
+    """Resolve the project root from the INVOKING AGENT's working directory.
+
+    Claude/Codex hook payloads carry `cwd` -- the working directory of the
+    session or subagent that triggered the hook. In a git worktree this is the
+    worktree path (and `os.getcwd()` agrees, since Claude runs hooks from there).
+    CLAUDE_PROJECT_DIR, by contrast, is pinned to the directory Claude Code was
+    *launched* in -- typically a sibling checkout on a different feature branch.
+    Preferring `cwd` keeps SpecKit feature resolution from leaking across
+    worktrees; CLAUDE_PROJECT_DIR is only a last-resort fallback. We then walk up
+    to the directory that owns `.specify/`/`specs/` so subdirectory cwds resolve.
+    """
+    cwd = payload.get("cwd") or os.environ.get("CLAUDE_PROJECT_DIR") or os.getcwd()
+    if not isinstance(cwd, str) or not os.path.isdir(cwd):
+        cwd = os.environ.get("CLAUDE_PROJECT_DIR") or os.getcwd()
+    return _find_speckit_root(cwd) or cwd
+
+
 def _resolve_feat(proj_root):
     """SpecKit 3-tier <feat> resolution. Returns "" if none resolve."""
     env_dir = os.environ.get("SPECIFY_FEATURE_DIRECTORY")
@@ -214,18 +254,38 @@ def _subst(tmpl, feat):
     return tmpl.replace("<feat>", feat)
 
 
-def _evaluate_block(node, feat):
+def _resolve_path(tmpl, feat, proj_root):
+    path = _subst(tmpl, feat)
+    if not os.path.isabs(path):
+        path = os.path.join(proj_root, path)
+    return path
+
+
+def _evaluate_block(node, feat, proj_root):
     """Return a block reason string, or "" if nothing blocks."""
     for reason in node.get("hard_deprecated", []):
         # Deprecated always blocks, regardless of feat.
         return reason
     for tmpl in node.get("hard_missing", []):
-        path = _subst(tmpl, feat)
-        if feat and not os.path.exists(path):
+        # A <feat>-scoped precondition with no resolvable feature is the most
+        # out-of-order case of all: block with guidance instead of silently
+        # skipping the check (the old behaviour, which let the command run and
+        # fail confusingly downstream).
+        if "<feat>" in tmpl and not feat:
+            return (
+                "No active SpecKit feature resolved (no"
+                " SPECIFY_FEATURE_DIRECTORY, .specify/feature.json, or"
+                " specs/<branch>/ match) -- run /speckit.specify first or"
+                " switch to the feature branch"
+            )
+        path = _resolve_path(tmpl, feat, proj_root)
+        if not os.path.exists(path):
             return "Required artefact missing: " + path
     for tmpl in node.get("hard_exists", []):
-        path = _subst(tmpl, feat)
-        if feat and os.path.exists(path):
+        if "<feat>" in tmpl and not feat:
+            continue  # cannot conflict when no feature exists yet
+        path = _resolve_path(tmpl, feat, proj_root)
+        if os.path.exists(path):
             return (
                 "Conflicting artefact present: " + path
                 + " -- use /speckit.refine.update to amend instead of"
@@ -272,11 +332,11 @@ def main():
 
     node_body = render_body(phase, node)
 
-    proj_root = os.environ.get("CLAUDE_PROJECT_DIR") or os.getcwd()
+    proj_root = _resolve_proj_root(payload)
     feat = _resolve_feat(proj_root)
 
     if phase == "pre":
-        block_reason = _evaluate_block(node, feat)
+        block_reason = _evaluate_block(node, feat, proj_root)
         if block_reason:
             if event in ("UserPromptExpansion", "UserPromptSubmit"):
                 out = {

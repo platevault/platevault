@@ -25,8 +25,8 @@ commits use `quick-commit`; for direct merge requests use `commit-push-merge`.
 8. Fetch remote state when network access is available.
 9. Inspect upstream and base-branch divergence before pushing.
 10. Push the current branch, setting upstream if needed.
-11. Create or update the PR with a factual title, summary, and test plan. Use
-   `references/pr-template.md` for structure.
+11. Create or update the PR with a factual title, summary, and test plan. For
+   structure, LOAD references/pr-template.md.
 12. Check initial PR status when available and start non-blocking CI monitoring
     if the runtime supports it.
 13. Run `git status --short`.
@@ -66,8 +66,8 @@ commits use `quick-commit`; for direct merge requests use `commit-push-merge`.
 - Do not hide broad or risky staging inside a generic commit message.
 - Do not use broad staging commands such as `git add -A` or `git add .`.
 - Use Conventional Commits format.
-- Do not add AI-branded footers, co-authorship, or attribution unless the user
-  explicitly asks.
+- Do not add AI-branded footers, co-authorship, or attribution to commits or
+  the PR body unless the user explicitly asks.
 - For a single-commit branch, use the commit message as the default PR title.
 - For a multi-commit branch, write a concise Conventional Commit-style PR title
   that summarizes the branch.
@@ -84,10 +84,5 @@ commits use `quick-commit`; for direct merge requests use `commit-push-merge`.
 - Do not block waiting for CI unless the user asks; monitor in the background
   when possible and surface failures if they arrive during the session.
 - Prefer a short, factual PR body over template bloat.
-- Do NOT add AI-branded footers or attribution to the PR body.
 - Follow the active Git hosting steering and available runtime tools for PR
   creation, updates, and status checks.
-
-## References
-
-Read `references/pr-template.md` when structuring the PR body.
