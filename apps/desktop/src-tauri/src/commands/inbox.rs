@@ -9,15 +9,17 @@
 use app_core::inbox::classify::{classify, ClassifyRequest};
 use app_core::inbox::confirm::{confirm, ConfirmRequest};
 use app_core::inbox::inbox_plan::{
-    apply_all_inbox_plans, apply_inbox_plan, cancel_inbox_plan, get_inbox_plan,
+    apply_all_inbox_plans, apply_inbox_plan, apply_selected_inbox_plans, cancel_inbox_plan,
+    get_inbox_plan, list_open_inbox_plans,
 };
 use app_core::inbox::reclassify::{reclassify, ReclassifyOverride, ReclassifyRequest};
 use app_core::inbox::scan::{scan_root, ScanOptions, ScannedMasterFile};
 use contracts_core::inbox::{
-    InboxApplyAllResponse, InboxBreakdownEntry, InboxClassifyRequest, InboxClassifyResponse,
-    InboxConfirmRequest, InboxConfirmResponse, InboxFileEntry, InboxItemSummary, InboxListItem,
-    InboxListResponse, InboxPlanCancelResponse, InboxPlanView, InboxReclassifyRequest,
-    InboxReclassifyResponse, InboxScanFolderRequest, InboxScanFolderResponse, InboxScanResult,
+    InboxApplyAllResponse, InboxApplySelectedRequest, InboxBreakdownEntry, InboxClassifyRequest,
+    InboxClassifyResponse, InboxConfirmRequest, InboxConfirmResponse, InboxFileEntry,
+    InboxItemSummary, InboxListItem, InboxListResponse, InboxOpenPlansResponse,
+    InboxPlanCancelResponse, InboxPlanView, InboxReclassifyRequest, InboxReclassifyResponse,
+    InboxScanFolderRequest, InboxScanFolderResponse, InboxScanResult,
 };
 use contracts_core::plan_apply::PlanApplyResponse;
 use persistence_db::repositories::inbox::list_unacknowledged_across_roots;
@@ -460,6 +462,43 @@ pub async fn inbox_plan_apply_all(
     state: tauri::State<'_, AppState>,
 ) -> Result<InboxApplyAllResponse, String> {
     apply_all_inbox_plans(state.repo.pool(), &state.bus).await.map_err(|e| e.message)
+}
+
+/// `inbox.plan.list_open` — return every open plan across all roots (spec 041, US2).
+///
+/// Aggregate surface so the UI can show every active planned action at once,
+/// each with its actions, without selecting inbox items one at a time.
+///
+/// # Errors
+/// Returns a string error only if the underlying list/plan queries fail.
+#[tauri::command]
+#[specta::specta]
+pub async fn inbox_plan_list_open(
+    state: tauri::State<'_, AppState>,
+) -> Result<InboxOpenPlansResponse, String> {
+    list_open_inbox_plans(state.repo.pool()).await.map_err(|e| e.message)
+}
+
+/// `inbox.plan.apply_selected` — apply a caller-chosen subset of inbox plans
+/// (spec 041, US2).
+///
+/// Selection is plan-level (per inbox item / ingestion group). Returns a
+/// per-item result list so the UI can report partial failures; ids that are not
+/// in `plan_open` state are reported as per-item errors rather than failing the
+/// whole call.
+///
+/// # Errors
+/// Returns a string error only if the membership query itself fails; per-plan
+/// errors are captured inside `InboxApplyAllResponse.results`.
+#[tauri::command]
+#[specta::specta]
+pub async fn inbox_plan_apply_selected(
+    request: InboxApplySelectedRequest,
+    state: tauri::State<'_, AppState>,
+) -> Result<InboxApplyAllResponse, String> {
+    apply_selected_inbox_plans(state.repo.pool(), &state.bus, &request.inbox_item_ids)
+        .await
+        .map_err(|e| e.message)
 }
 
 /// `inbox.plan.cancel` — discard the open plan and reset the item to `classified`.

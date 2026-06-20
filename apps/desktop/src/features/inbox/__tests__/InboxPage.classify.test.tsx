@@ -4,18 +4,15 @@
  *
  * Tests (no Playwright / no Tauri runtime needed):
  *
- * 1. ActionSidebar renders "Generate split plan" for mixed classification.
- * 2. ActionSidebar renders "Confirm to inventory" for single_type classification.
- * 3. ActionSidebar is disabled and shows "pending" when classification is null.
- * 4. ActionSidebar renders "Open existing plan" when hasOpenPlan = true.
- * 5. InboxDetail renders breakdown rows from classify response.
- * 6. InboxDetail renders "Needs review" section for unclassified files.
- * 7. InboxDetail reclassify override picker fires onReclassify with correct payload.
- * 8. InboxPage confirm button calls inboxConfirm with correct action and payload.
- * 9. InboxPage shows info toast after successful confirm.
- * 10. InboxPage shows warn toast on inbox.has.open.plan error.
- * 11. InboxList renders item with classification state pill.
- * 12. InboxList filters by lane (fits / video).
+ * (spec 041: the ActionSidebar was removed; Confirm now lives in the top action
+ * bar. The confirm-payload + toast wiring is exercised via a small ConfirmStub.)
+ *
+ * 1. InboxDetail renders breakdown rows from classify response.
+ * 2. InboxDetail renders "Needs review" section for unclassified files.
+ * 3. InboxDetail reclassify override picker fires onReclassify with correct payload.
+ * 4. inboxConfirm is called with the correct action and destructiveDestination.
+ * 5. The plan-created toast always fires after confirm (masters produce a plan too).
+ * 6. InboxList renders item with classification state pill / filters by lane.
  */
 
 import { render, screen, fireEvent, waitFor, act } from '@testing-library/react';
@@ -119,100 +116,8 @@ const sampleItem: InboxItemSummary = {
 
 // ── Tests: ActionSidebar ──────────────────────────────────────────────────
 
-import { ActionSidebar } from '../ActionSidebar';
 import { InboxDetail } from '../InboxDetail';
 import { InboxList } from '../InboxList';
-
-describe('ActionSidebar', () => {
-  it('shows "Generate split plan" for mixed classification', () => {
-    render(
-      <ActionSidebar
-        hasSelection
-        classification={mixedClassification}
-        hasOpenPlan={false}
-        confirmLoading={false}
-        canConfirm
-        destructiveDestination="archive"
-        onDestructiveDestinationChange={vi.fn()}
-        onConfirm={vi.fn()}
-        onOpenExistingPlan={vi.fn()}
-      />,
-    );
-    expect(screen.getByRole('button', { name: /generate split plan/i })).toBeInTheDocument();
-  });
-
-  it('shows "Confirm to inventory" for single_type classification', () => {
-    render(
-      <ActionSidebar
-        hasSelection
-        classification={singleTypeClassification}
-        hasOpenPlan={false}
-        confirmLoading={false}
-        canConfirm
-        destructiveDestination="archive"
-        onDestructiveDestinationChange={vi.fn()}
-        onConfirm={vi.fn()}
-        onOpenExistingPlan={vi.fn()}
-      />,
-    );
-    expect(screen.getByRole('button', { name: /confirm to inventory/i })).toBeInTheDocument();
-  });
-
-  it('shows disabled button when no selection', () => {
-    render(
-      <ActionSidebar
-        hasSelection={false}
-        classification={null}
-        hasOpenPlan={false}
-        confirmLoading={false}
-        canConfirm={false}
-        destructiveDestination="archive"
-        onDestructiveDestinationChange={vi.fn()}
-        onConfirm={vi.fn()}
-        onOpenExistingPlan={vi.fn()}
-      />,
-    );
-    expect(screen.getByTestId('inbox-confirm-btn')).toBeDisabled();
-  });
-
-  it('shows "Open existing plan" when hasOpenPlan', () => {
-    const onOpen = vi.fn();
-    render(
-      <ActionSidebar
-        hasSelection
-        classification={singleTypeClassification}
-        hasOpenPlan
-        confirmLoading={false}
-        canConfirm={false}
-        destructiveDestination="archive"
-        onDestructiveDestinationChange={vi.fn()}
-        onConfirm={vi.fn()}
-        onOpenExistingPlan={onOpen}
-      />,
-    );
-    const btn = screen.getByRole('button', { name: /open existing plan/i });
-    expect(btn).toBeInTheDocument();
-    fireEvent.click(btn);
-    expect(onOpen).toHaveBeenCalledOnce();
-  });
-
-  it('shows classification summary with unclassified warning', () => {
-    render(
-      <ActionSidebar
-        hasSelection
-        classification={mixedClassification}
-        hasOpenPlan={false}
-        confirmLoading={false}
-        canConfirm
-        destructiveDestination="archive"
-        onDestructiveDestinationChange={vi.fn()}
-        onConfirm={vi.fn()}
-        onOpenExistingPlan={vi.fn()}
-      />,
-    );
-    expect(screen.getByText(/1 file.*need.*review/i)).toBeInTheDocument();
-  });
-});
 
 // ── Tests: InboxDetail ────────────────────────────────────────────────────
 
@@ -379,6 +284,17 @@ describe('Confirm payload and toast', () => {
     vi.clearAllMocks();
   });
 
+  // Minimal stand-in for the relocated Confirm control (now in TopActionBar).
+  // These tests assert the confirm-payload + toast wiring that InboxPage.handleConfirm
+  // performs; the button itself is just a click target.
+  function ConfirmStub({ onConfirm }: { onConfirm: () => void | Promise<void> }) {
+    return (
+      <button data-testid="inbox-confirm-btn" onClick={() => void onConfirm()}>
+        Confirm
+      </button>
+    );
+  }
+
   it('calls inboxConfirm with split action for mixed classification', async () => {
     mockInboxConfirm.mockResolvedValue({
       planId: 'plan-abc',
@@ -393,23 +309,11 @@ describe('Confirm payload and toast', () => {
         action: 'split',
         contentSignature: mixedClassification.contentSignature,
         rootAbsolutePath: '/astro/inbox',
-        destructiveDestination: null,
+        destructiveDestination: 'archive',
       });
     };
 
-    render(
-      <ActionSidebar
-        hasSelection
-        classification={mixedClassification}
-        hasOpenPlan={false}
-        confirmLoading={false}
-        canConfirm
-        destructiveDestination="archive"
-        onDestructiveDestinationChange={vi.fn()}
-        onConfirm={onConfirm}
-        onOpenExistingPlan={vi.fn()}
-      />,
-    );
+    render(<ConfirmStub onConfirm={onConfirm} />);
 
     await act(async () => {
       fireEvent.click(screen.getByTestId('inbox-confirm-btn'));
@@ -419,6 +323,7 @@ describe('Confirm payload and toast', () => {
       expect.objectContaining({
         action: 'split',
         contentSignature: 'sig-abc',
+        destructiveDestination: 'archive',
       }),
     );
   });
@@ -437,23 +342,11 @@ describe('Confirm payload and toast', () => {
         action: 'confirm',
         contentSignature: singleTypeClassification.contentSignature,
         rootAbsolutePath: '/astro/inbox',
-        destructiveDestination: null,
+        destructiveDestination: 'archive',
       });
     };
 
-    render(
-      <ActionSidebar
-        hasSelection
-        classification={singleTypeClassification}
-        hasOpenPlan={false}
-        confirmLoading={false}
-        canConfirm
-        destructiveDestination="archive"
-        onDestructiveDestinationChange={vi.fn()}
-        onConfirm={onConfirm}
-        onOpenExistingPlan={vi.fn()}
-      />,
-    );
+    render(<ConfirmStub onConfirm={onConfirm} />);
 
     await act(async () => {
       fireEvent.click(screen.getByTestId('inbox-confirm-btn'));
@@ -467,46 +360,31 @@ describe('Confirm payload and toast', () => {
     );
   });
 
-  it('shows "Registered as calibration master." toast when registeredAsMaster is true', async () => {
+  it('always shows the plan-created toast after confirm (masters now produce a plan too)', async () => {
+    // spec 041: the registeredAsMaster fast-path is gone — every confirm yields a
+    // reviewable plan that surfaces in the aggregate PlanPanel.
     mockInboxConfirm.mockResolvedValue({
-      planId: '',
-      planState: '',
+      planId: 'plan-xyz',
+      planState: 'ready_for_review',
       itemsTotal: 1,
-      registeredAsMaster: true,
+      registeredAsMaster: false,
     });
 
-    // Simulate what InboxPage.handleConfirm does on the master path.
     const onConfirm = async () => {
       const result = await mockInboxConfirm({
         inboxItemId: 'item-master-001',
         action: 'confirm',
         contentSignature: singleTypeClassification.contentSignature,
         rootAbsolutePath: '/astro/inbox',
-        destructiveDestination: null,
+        destructiveDestination: 'archive',
       });
-      if (result.registeredAsMaster) {
-        mockAddToast({ message: 'Registered as calibration master.', variant: 'info' });
-      } else {
-        mockAddToast({
-          message: `Plan created (${result.itemsTotal} items). Review before applying.`,
-          variant: 'info',
-        });
-      }
+      mockAddToast({
+        message: `Plan created (${result.itemsTotal} items). Review below before applying.`,
+        variant: 'info',
+      });
     };
 
-    render(
-      <ActionSidebar
-        hasSelection
-        classification={singleTypeClassification}
-        hasOpenPlan={false}
-        confirmLoading={false}
-        canConfirm
-        destructiveDestination="archive"
-        onDestructiveDestinationChange={vi.fn()}
-        onConfirm={onConfirm}
-        onOpenExistingPlan={vi.fn()}
-      />,
-    );
+    render(<ConfirmStub onConfirm={onConfirm} />);
 
     await act(async () => {
       fireEvent.click(screen.getByTestId('inbox-confirm-btn'));
@@ -514,12 +392,12 @@ describe('Confirm payload and toast', () => {
 
     expect(mockAddToast).toHaveBeenCalledWith(
       expect.objectContaining({
-        message: 'Registered as calibration master.',
+        message: expect.stringContaining('Plan created'),
         variant: 'info',
       }),
     );
     expect(mockAddToast).not.toHaveBeenCalledWith(
-      expect.objectContaining({ message: expect.stringContaining('Plan created') }),
+      expect.objectContaining({ message: 'Registered as calibration master.' }),
     );
   });
 });

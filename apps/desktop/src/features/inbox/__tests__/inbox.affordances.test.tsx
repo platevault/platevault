@@ -13,26 +13,10 @@
 
 import { render, screen } from '@testing-library/react';
 import { describe, it, expect, vi } from 'vitest';
-import { ActionSidebar } from '../ActionSidebar';
 import { InboxList } from '../InboxList';
 import type { InboxItemSummary } from '@/api/commands';
-import type { InboxClassifyResponse } from '../store';
 
 // ── helpers ───────────────────────────────────────────────────────────────────
-
-const mixedClassification: InboxClassifyResponse = {
-  inboxItemId: 'item-001',
-  type: 'mixed',
-  frameType: null,
-  contentSignature: 'sig-abc',
-  breakdown: [
-    { kind: 'light', count: 10, sampleFiles: [] },
-    { kind: 'dark', count: 5, sampleFiles: [] },
-  ],
-  unclassifiedFiles: ['mystery.fits'],
-  sampleFiles: [],
-  computedAt: '2026-06-01T00:00:00Z',
-};
 
 const sampleItems: InboxItemSummary[] = [
   {
@@ -113,51 +97,6 @@ describe('T074a: InboxList group-by options are user-meaningful', () => {
       />,
     );
     expect(screen.getByRole('option', { name: /group: date/i })).toBeInTheDocument();
-  });
-});
-
-// ── T074a test 3: mixed frame-type derived dynamically ─────────────────────
-
-describe('T074a: mixed frame-type is derived from classification.type', () => {
-  it('ActionSidebar shows "Generate split plan" for type=mixed (dynamic derivation)', () => {
-    render(
-      <ActionSidebar
-        hasSelection
-        classification={mixedClassification}
-        hasOpenPlan={false}
-        confirmLoading={false}
-        canConfirm
-        destructiveDestination="archive"
-        onDestructiveDestinationChange={vi.fn()}
-        onConfirm={vi.fn()}
-        onOpenExistingPlan={vi.fn()}
-      />,
-    );
-    // "Generate split plan" is only shown when classification.type === 'mixed'.
-    // This confirms the label is derived dynamically, not from a fixture string.
-    expect(screen.getByRole('button', { name: /generate split plan/i })).toBeInTheDocument();
-  });
-
-  it('ActionSidebar shows "Confirm to inventory" for type=single_type', () => {
-    const singleType: InboxClassifyResponse = {
-      ...mixedClassification,
-      type: 'single_type',
-      frameType: 'light',
-    };
-    render(
-      <ActionSidebar
-        hasSelection
-        classification={singleType}
-        hasOpenPlan={false}
-        confirmLoading={false}
-        canConfirm
-        destructiveDestination="archive"
-        onDestructiveDestinationChange={vi.fn()}
-        onConfirm={vi.fn()}
-        onOpenExistingPlan={vi.fn()}
-      />,
-    );
-    expect(screen.getByRole('button', { name: /confirm to inventory/i })).toBeInTheDocument();
   });
 });
 

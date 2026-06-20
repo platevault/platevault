@@ -22,7 +22,9 @@ import {
 // The glob runs at compile time, so the paths must be relative to this file.
 const ANCHOR_SOURCES = import.meta.glob(
   [
-    '../../inbox/ActionSidebar.tsx',
+    // spec 041: the inbox Confirm control + its `inbox.confirm-row` anchor moved
+    // from the deleted ActionSidebar into InboxPage's top action bar.
+    '../../inbox/InboxPage.tsx',
     '../../projects/ProjectsPage.tsx',
     '../../projects/ProjectDetail.tsx',
   ],
@@ -70,9 +72,9 @@ describe('T026 — anchor CI gate', () => {
     expect(missing).toHaveLength(0);
   });
 
-  it('inbox.confirm-row anchor is present in ActionSidebar.tsx', () => {
+  it('inbox.confirm-row anchor is present in InboxPage.tsx', () => {
     const source = Object.entries(ANCHOR_SOURCES).find(([k]) =>
-      k.includes('ActionSidebar'),
+      k.includes('InboxPage'),
     )?.[1] ?? '';
     expect(source).toContain(ANCHOR_INBOX_CONFIRM_ROW);
   });

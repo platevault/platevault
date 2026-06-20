@@ -15,8 +15,8 @@
 
 use audit::bus::EventBus;
 use contracts_core::inbox::{
-    InboxApplyAllResponse, InboxPlanAction, InboxPlanApplyResult, InboxPlanCancelResponse,
-    InboxPlanView,
+    InboxApplyAllResponse, InboxOpenPlan, InboxOpenPlansResponse, InboxPlanAction,
+    InboxPlanApplyResult, InboxPlanCancelResponse, InboxPlanView,
 };
 use contracts_core::plan_apply::PlanApplyResponse;
 use contracts_core::{ContractError, ErrorSeverity};
@@ -41,6 +41,31 @@ fn no_plan_err(inbox_item_id: &str) -> ContractError {
         ErrorSeverity::Blocking,
         false,
     )
+}
+
+/// Map persisted plan-item rows to the contract `InboxPlanAction` shape.
+///
+/// Shared by `get_inbox_plan` (single-item view) and `list_open_inbox_plans`
+/// (aggregate surface) so the action projection stays in one place.
+fn map_plan_actions(item_rows: Vec<plans_repo::PlanItemRow>) -> Vec<InboxPlanAction> {
+    item_rows
+        .into_iter()
+        .map(|r| {
+            let dest_preview = if r.to_relative_path.is_empty() {
+                r.from_relative_path.clone()
+            } else {
+                r.to_relative_path.clone()
+            };
+            InboxPlanAction {
+                index: u32::try_from(r.item_index).unwrap_or(0) + 1,
+                action: r.action,
+                from_path: r.from_relative_path,
+                to_path: r.to_relative_path,
+                destination_preview: dest_preview,
+                requires_destructive_confirm: r.requires_destructive_confirm.unwrap_or(0) != 0,
+            }
+        })
+        .collect()
 }
 
 // ── get_inbox_plan ────────────────────────────────────────────────────────────
@@ -90,24 +115,7 @@ pub async fn get_inbox_plan(
     // Load plan items.
     let item_rows = plans_repo::list_plan_items(pool, &plan_id).await.map_err(db_err_internal)?;
 
-    let actions: Vec<InboxPlanAction> = item_rows
-        .into_iter()
-        .map(|r| {
-            let dest_preview = if r.to_relative_path.is_empty() {
-                r.from_relative_path.clone()
-            } else {
-                r.to_relative_path.clone()
-            };
-            InboxPlanAction {
-                index: u32::try_from(r.item_index).unwrap_or(0) + 1,
-                action: r.action,
-                from_path: r.from_relative_path,
-                to_path: r.to_relative_path,
-                destination_preview: dest_preview,
-                requires_destructive_confirm: r.requires_destructive_confirm.unwrap_or(0) != 0,
-            }
-        })
-        .collect();
+    let actions = map_plan_actions(item_rows);
 
     // FR-007: surface staleness so the UI can disable Apply and prompt
     // re-classify/re-confirm.  A plan is stale when its DB state is `stale`
@@ -229,6 +237,123 @@ pub async fn apply_all_inbox_plans(
             }),
             Err(e) => results.push(InboxPlanApplyResult {
                 inbox_item_id: item_id,
+                plan_id: String::new(),
+                state: "error".to_owned(),
+                error: Some(e.code),
+            }),
+        }
+    }
+
+    Ok(InboxApplyAllResponse { results })
+}
+
+// ── list_open_inbox_plans ─────────────────────────────────────────────────────
+
+/// `inbox.plan.list_open` — return every open plan across all roots (spec 041, US2).
+///
+/// Fetches all `plan_open` inbox items, loads each item's linked plan header +
+/// items, and projects them into the aggregate surface shape so the UI can show
+/// every active planned action at once without selecting items one by one.
+///
+/// Items whose plan link is missing are skipped defensively (an item should not
+/// be in `plan_open` without a link, but we never hard-fail the whole surface
+/// over a single inconsistent row).
+///
+/// # Errors
+/// Returns `internal.database` if the list query or a plan load fails.
+pub async fn list_open_inbox_plans(
+    pool: &SqlitePool,
+) -> Result<InboxOpenPlansResponse, ContractError> {
+    let all_items =
+        inbox_repo::list_unacknowledged_across_roots(pool, 500).await.map_err(db_err_internal)?;
+
+    let plan_open_items: Vec<_> =
+        all_items.into_iter().filter(|r| r.state == "plan_open").collect();
+
+    let mut plans = Vec::new();
+    let mut total_actions: u32 = 0;
+
+    for item in plan_open_items {
+        // Resolve the plan link; skip defensively when absent.
+        let Some(link) =
+            inbox_repo::get_plan_link(pool, &item.id).await.map_err(db_err_internal)?
+        else {
+            continue;
+        };
+        let plan_id = link.plan_id;
+
+        // Load the plan header; skip defensively when the row is missing.
+        let plan_row = match plans_repo::get_plan(pool, &plan_id, false).await {
+            Ok(row) => row,
+            Err(persistence_db::DbError::NotFound(_)) => continue,
+            Err(other) => return Err(db_err_internal(other)),
+        };
+
+        let item_rows =
+            plans_repo::list_plan_items(pool, &plan_id).await.map_err(db_err_internal)?;
+        let actions = map_plan_actions(item_rows);
+
+        total_actions = total_actions.saturating_add(u32::try_from(actions.len()).unwrap_or(0));
+
+        plans.push(InboxOpenPlan {
+            inbox_item_id: item.id,
+            item_name: item.relative_path,
+            plan_id,
+            state: plan_row.state.clone(),
+            stale: plan_row.state == "stale",
+            actions,
+        });
+    }
+
+    Ok(InboxOpenPlansResponse { plans, total_actions })
+}
+
+// ── apply_selected_inbox_plans ────────────────────────────────────────────────
+
+/// `inbox.plan.apply_selected` — apply a caller-chosen subset of inbox plans
+/// (spec 041, US2).
+///
+/// Selection is plan-level (per inbox item / ingestion group), not per
+/// individual action. Iterates only the provided ids; ids that are not in
+/// `plan_open` state are reported as a per-item error (`plan.invalid_state`)
+/// rather than hard-failing the whole call, mirroring `apply_all_inbox_plans`'
+/// partial-failure semantics.
+///
+/// # Errors
+/// Returns `internal.database` only if the membership query fails; per-plan
+/// errors are captured inside `InboxApplyAllResponse.results`.
+pub async fn apply_selected_inbox_plans(
+    pool: &SqlitePool,
+    bus: &EventBus,
+    inbox_item_ids: &[String],
+) -> Result<InboxApplyAllResponse, ContractError> {
+    // Build the set of currently-`plan_open` item ids so we can validate each
+    // requested id without a per-id round trip.
+    let all_items =
+        inbox_repo::list_unacknowledged_across_roots(pool, 500).await.map_err(db_err_internal)?;
+    let plan_open_ids: std::collections::HashSet<String> =
+        all_items.into_iter().filter(|r| r.state == "plan_open").map(|r| r.id).collect();
+
+    let mut results = Vec::new();
+    for item_id in inbox_item_ids {
+        if !plan_open_ids.contains(item_id) {
+            results.push(InboxPlanApplyResult {
+                inbox_item_id: item_id.clone(),
+                plan_id: String::new(),
+                state: "error".to_owned(),
+                error: Some("plan.invalid_state".to_owned()),
+            });
+            continue;
+        }
+        match apply_inbox_plan(pool, bus, item_id).await {
+            Ok(resp) => results.push(InboxPlanApplyResult {
+                inbox_item_id: item_id.clone(),
+                plan_id: resp.plan_id,
+                state: resp.new_state,
+                error: None,
+            }),
+            Err(e) => results.push(InboxPlanApplyResult {
+                inbox_item_id: item_id.clone(),
                 plan_id: String::new(),
                 state: "error".to_owned(),
                 error: Some(e.code),
@@ -519,5 +644,166 @@ mod tests {
 
         let err = cancel_inbox_plan(db.pool(), &bus, &item_id).await.unwrap_err();
         assert_eq!(err.code, "inbox.item.no_plan");
+    }
+
+    // ── spec 041 US2: aggregate open-plans surface ──────────────────────────
+
+    /// Parameterized variant of [`setup_classified_item`] that creates a
+    /// distinctly-identified inbox item under its own root, so multiple
+    /// `plan_open` items can coexist in one DB.  `suffix` makes ids/paths unique.
+    async fn setup_classified_item_suffixed(db: &Database, suffix: &str) -> (String, PathBuf) {
+        let dir = tempdir().unwrap();
+        // Leak the tempdir so the on-disk files survive past this fn for the
+        // plan executor (apply path reads real files). Tests are short-lived.
+        let root_path = dir.keep();
+        let item_dir = root_path.join("lights");
+        std::fs::create_dir_all(&item_dir).unwrap();
+        write_fits(&item_dir.join("img001.fits"), "Light Frame");
+
+        let root_id = format!("root-plan-{suffix}");
+        let item_id = format!("item-plan-{suffix}");
+
+        sqlx::query(
+            "INSERT INTO registered_sources (id, kind, path, kind_subtype, scan_depth, created_at, created_via)
+             VALUES (?, 'inbox', ?, NULL, 'recursive', '2025-01-01T00:00:00Z', 'first_run')
+             ON CONFLICT(id) DO NOTHING",
+        )
+        .bind(&root_id)
+        .bind(root_path.to_str().unwrap())
+        .execute(db.pool())
+        .await
+        .unwrap();
+
+        sqlx::query(
+            "INSERT INTO inbox_items
+             (id, root_id, relative_path, file_count, discovered_at, last_scanned_at,
+              content_signature, state, lane)
+             VALUES (?, ?, 'lights', 1, '2025-01-01T00:00:00Z', '2025-01-01T00:00:00Z',
+                     'sig-abc', 'classified', 'fits')",
+        )
+        .bind(&item_id)
+        .bind(&root_id)
+        .execute(db.pool())
+        .await
+        .unwrap();
+
+        sqlx::query(
+            "INSERT INTO inbox_classifications
+             (inbox_item_id, result, frame_type, computed_at, content_signature, unclassified_file_count)
+             VALUES (?, 'single_type', 'light', '2025-01-01T00:00:00Z', 'sig-abc', 0)
+             ON CONFLICT(inbox_item_id) DO UPDATE SET
+                 result = excluded.result, frame_type = excluded.frame_type,
+                 computed_at = excluded.computed_at, content_signature = excluded.content_signature,
+                 unclassified_file_count = excluded.unclassified_file_count",
+        )
+        .bind(&item_id)
+        .execute(db.pool())
+        .await
+        .unwrap();
+
+        sqlx::query(
+            "INSERT INTO inbox_classification_evidence
+             (id, inbox_item_id, relative_file_path, frame_type, evidence_source, raw_value,
+              unclassified, is_master)
+             VALUES (?, ?, 'img001.fits', 'light', 'imagetyp_header', 'Light Frame', 0, 0)",
+        )
+        .bind(format!("ev-{item_id}"))
+        .bind(&item_id)
+        .execute(db.pool())
+        .await
+        .unwrap();
+
+        sqlx::query(
+            "INSERT INTO settings (key, value, updated_at) VALUES ('pattern', ?, '2025-01-01T00:00:00Z') ON CONFLICT(key) DO NOTHING",
+        )
+        .bind("[{\"id\":\"p0\",\"kind\":\"token\",\"value\":\"frame_type\"},{\"id\":\"p1\",\"kind\":\"separator\",\"value\":\"/\"}]")
+        .execute(db.pool())
+        .await
+        .unwrap();
+
+        (item_id, root_path)
+    }
+
+    /// `list_open_inbox_plans` returns every `plan_open` plan with its actions
+    /// and a correct `total_actions` sum.
+    #[tokio::test]
+    async fn list_open_returns_all_plan_open_plans() {
+        let db = test_db().await;
+
+        let (id_a, root_a) = setup_classified_item_suffixed(&db, "a").await;
+        let (id_b, root_b) = setup_classified_item_suffixed(&db, "b").await;
+        do_confirm(&db, &id_a, &root_a).await;
+        do_confirm(&db, &id_b, &root_b).await;
+
+        let resp = list_open_inbox_plans(db.pool()).await.unwrap();
+
+        assert_eq!(resp.plans.len(), 2, "both plan_open items should appear");
+        let mut ids: Vec<&str> = resp.plans.iter().map(|p| p.inbox_item_id.as_str()).collect();
+        ids.sort_unstable();
+        assert_eq!(ids, vec![id_a.as_str(), id_b.as_str()]);
+
+        // Every plan carries its actions, item_name, and a plan_id.
+        let summed: u32 = resp.plans.iter().map(|p| u32::try_from(p.actions.len()).unwrap()).sum();
+        assert_eq!(resp.total_actions, summed, "total_actions == sum of per-plan actions");
+        assert!(resp.total_actions > 0, "confirmed plans should have actions");
+        for p in &resp.plans {
+            assert_eq!(p.item_name, "lights");
+            assert!(!p.plan_id.is_empty());
+            assert!(!p.actions.is_empty());
+        }
+    }
+
+    /// `apply_selected_inbox_plans` applies only the named items and leaves the
+    /// others in `plan_open`.
+    #[tokio::test]
+    async fn apply_selected_applies_only_named_items() {
+        let db = test_db().await;
+        let bus = make_bus(db.pool());
+
+        let (id_a, root_a) = setup_classified_item_suffixed(&db, "a").await;
+        let (id_b, root_b) = setup_classified_item_suffixed(&db, "b").await;
+        do_confirm(&db, &id_a, &root_a).await;
+        do_confirm(&db, &id_b, &root_b).await;
+
+        let resp =
+            apply_selected_inbox_plans(db.pool(), &bus, std::slice::from_ref(&id_a)).await.unwrap();
+
+        assert_eq!(resp.results.len(), 1, "only the selected item is processed");
+        let r = &resp.results[0];
+        assert_eq!(r.inbox_item_id, id_a, "only the named item is in the result set");
+        assert!(r.error.is_none(), "selected apply should succeed: {:?}", r.error);
+
+        // The un-selected item is untouched: it still has its open plan visible
+        // in the aggregate surface (apply_selected never iterated it).  The
+        // inbox item's eventual `resolved` transition for the applied item is
+        // owned by the async plan listener, not by apply_selected, so we assert
+        // only what this use-case deterministically controls.
+        let open = list_open_inbox_plans(db.pool()).await.unwrap();
+        let still_open: Vec<&str> = open.plans.iter().map(|p| p.inbox_item_id.as_str()).collect();
+        assert!(
+            still_open.contains(&id_b.as_str()),
+            "un-selected item b should still be plan_open, got {still_open:?}"
+        );
+    }
+
+    /// `apply_selected_inbox_plans` reports a per-item error (not a hard failure)
+    /// for an id that is not in `plan_open` state.
+    #[tokio::test]
+    async fn apply_selected_reports_per_item_error_for_non_plan_open() {
+        let db = test_db().await;
+        let bus = make_bus(db.pool());
+
+        // A `classified` item (never confirmed) is not `plan_open`.
+        let (item_id, _) = setup_classified_item_suffixed(&db, "x").await;
+
+        let resp = apply_selected_inbox_plans(db.pool(), &bus, std::slice::from_ref(&item_id))
+            .await
+            .unwrap();
+
+        assert_eq!(resp.results.len(), 1);
+        let r = &resp.results[0];
+        assert_eq!(r.inbox_item_id, item_id);
+        assert!(r.error.is_some(), "non-plan_open id should yield a per-item error");
+        assert_eq!(r.error.as_deref(), Some("plan.invalid_state"));
     }
 }

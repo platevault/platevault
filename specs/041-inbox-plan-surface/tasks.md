@@ -70,11 +70,11 @@
 **Goal**: per-source organization state drives move (unorganized) vs catalogue-in-place (organized), per-file for mixed provenance; explicit choice + explainer at source-add.
 **Independent test**: organized source → catalogue (no move); unorganized → move plan; mixed item → both; master follows the same rule; add-source forces the choice.
 
-- [ ] T029 [US4] Persistence: read/write `organization_state` in `crates/persistence/db/src/repositories/first_run.rs`; enforce inbox⇒unorganized.
-- [ ] T030 [US4] App/core: `set_source_organization_state` use-case + Tauri command; include `organization_state` in source register handling and list.
-- [ ] T031 [US4] `confirm.rs`: decide per file by its source's `organization_state` — `Move` (unorganized) vs `Catalogue` (organized); a single confirm may emit both. Remove the master "registered directly" side-channel so masters follow the same rule (master from unorganized → move plan + register; from organized → catalogue + register).
-- [ ] T032 [US4] Catalogue apply in app/core: when an applied plan item is `catalogue`, upsert `file_record` (+ session/target/master links) in place and write audit; no FS move.
-- [ ] T033 [US4] Regenerate bindings; `commands.ts` wrappers for source organization-state set + register changes.
+- [X] T029 [US4] Persistence: read/write `organization_state` in `crates/persistence/db/src/repositories/first_run.rs`; enforce inbox⇒unorganized.
+- [X] T030 [US4] App/core: `set_source_organization_state` use-case + Tauri command; include `organization_state` in source register handling and list.
+- [X] T031 [US4] `confirm.rs`: decide per file by its source's `organization_state` — `Move` (unorganized) vs `Catalogue` (organized); a single confirm may emit both. Remove the master "registered directly" side-channel so masters follow the same rule (master from unorganized → move plan + register; from organized → catalogue + register).
+- [X] T032 [US4] Catalogue apply in app/core: master registration relocated to apply-completion in `plan_listener.rs` (calibration_session + fingerprint, idempotent); no FS move (executor no-ops). NOTE: no `file_record` table exists in the codebase — catalogue matches Move's apply behavior (no file_record upsert on either path).
+- [X] T033 [US4] Regenerate bindings; `commands.ts` wrappers for source organization-state set + register changes.
 - [ ] T034 [P] [US4] Frontend setup: source-add flow requires an explicit organized/unorganized choice for non-inbox sources (inbox auto), with an explainer and a small flow diagram (`apps/desktop/src/features/setup/...`); editable later in source settings.
 - [ ] T035 [P] [US4] Tests: confirm organized→catalogue / unorganized→move / mixed→both / master parity (`-p app_core`); register rejects inbox+organized; Vitest for the add-source choice UX.
 

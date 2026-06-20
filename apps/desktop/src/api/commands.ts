@@ -35,6 +35,10 @@ import type {
   CalibrationMaster_Serialize as CalibrationMaster,
   MasterDetail_Serialize as MasterDetail,
   InboxApplyAllResponse,
+  InboxApplySelectedRequest,
+  InboxOpenPlan,
+  InboxOpenPlansResponse,
+  InboxPlanAction,
   InboxPlanApplyResult,
   InboxPlanCancelResponse,
   InboxPlanView,
@@ -54,6 +58,10 @@ export type {
   InboxScanFolderRequest,
   InboxScanFolderResponse,
   InboxApplyAllResponse,
+  InboxApplySelectedRequest,
+  InboxOpenPlan,
+  InboxOpenPlansResponse,
+  InboxPlanAction,
   InboxPlanApplyResult,
   InboxPlanCancelResponse,
   InboxPlanView,
@@ -764,6 +772,25 @@ export async function inboxPlanApply(inboxItemId: string): Promise<PlanApplyResp
  */
 export async function inboxPlanApplyAll(): Promise<InboxApplyAllResponse> {
   return unwrap(await commands.inboxPlanApplyAll());
+}
+
+/**
+ * List every open plan across all roots in one call (spec 041, US2).
+ * Each plan carries its actions; `totalActions` sums them for the surface header.
+ */
+export async function listOpenInboxPlans(): Promise<InboxOpenPlansResponse> {
+  return unwrap(await commands.inboxPlanListOpen());
+}
+
+/**
+ * Apply a caller-chosen subset of inbox plans (spec 041, US2).
+ * Selection is plan-level (per inbox item / ingestion group), not per action.
+ * Per-item errors are captured inside the returned `results` array.
+ */
+export async function applySelectedInboxPlans(
+  inboxItemIds: InboxApplySelectedRequest['inboxItemIds'],
+): Promise<InboxApplyAllResponse> {
+  return unwrap(await commands.inboxPlanApplySelected({ inboxItemIds }));
 }
 
 /**

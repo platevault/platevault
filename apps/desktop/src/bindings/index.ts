@@ -1082,6 +1082,20 @@ export const commands = {
 	 */
 	inboxPlanApplyAll: () => typedError<InboxApplyAllResponse, string>(__TAURI_INVOKE("inbox_plan_apply_all")),
 	/**
+	 *  `inbox.plan.apply_selected` — apply a caller-chosen subset of inbox plans
+	 *  (spec 041, US2).
+	 * 
+	 *  Selection is plan-level (per inbox item / ingestion group). Returns a
+	 *  per-item result list so the UI can report partial failures; ids that are not
+	 *  in `plan_open` state are reported as per-item errors rather than failing the
+	 *  whole call.
+	 * 
+	 *  # Errors
+	 *  Returns a string error only if the membership query itself fails; per-plan
+	 *  errors are captured inside `InboxApplyAllResponse.results`.
+	 */
+	inboxPlanApplySelected: (request: InboxApplySelectedRequest) => typedError<InboxApplyAllResponse, string>(__TAURI_INVOKE("inbox_plan_apply_selected", { request })),
+	/**
 	 *  `inbox.plan.cancel` — discard the open plan and reset the item to `classified`.
 	 * 
 	 *  The plan listener handles async cleanup; the use-case also eagerly resets
@@ -1091,6 +1105,16 @@ export const commands = {
 	 *  Returns a string error on database failure.
 	 */
 	inboxPlanCancel: (inboxItemId: string) => typedError<InboxPlanCancelResponse, string>(__TAURI_INVOKE("inbox_plan_cancel", { inboxItemId })),
+	/**
+	 *  `inbox.plan.list_open` — return every open plan across all roots (spec 041, US2).
+	 * 
+	 *  Aggregate surface so the UI can show every active planned action at once,
+	 *  each with its actions, without selecting inbox items one at a time.
+	 * 
+	 *  # Errors
+	 *  Returns a string error only if the underlying list/plan queries fail.
+	 */
+	inboxPlanListOpen: () => typedError<InboxOpenPlansResponse, string>(__TAURI_INVOKE("inbox_plan_list_open")),
 	/**
 	 *  `inventory.list` — return the grouped inventory ledger with optional filters.
 	 * 
@@ -2256,6 +2280,11 @@ export type InboxApplyAllResponse = {
 	results: InboxPlanApplyResult[],
 };
 
+/**  Request for `inbox.plan.apply_selected` (spec 041, US2). */
+export type InboxApplySelectedRequest = {
+	inboxItemIds: string[],
+};
+
 /**  One frame-type breakdown entry in a classify response. */
 export type InboxBreakdownEntry = InboxBreakdownEntry_Serialize | InboxBreakdownEntry_Deserialize;
 
@@ -2594,6 +2623,24 @@ export type InboxListResponse_Serialize = {
 	capped: boolean,
 	/**  Maximum items per response (matches the server-side cap). */
 	limit: number,
+};
+
+/**  One open plan in the aggregate inbox plan surface (spec 041, US2). */
+export type InboxOpenPlan = {
+	inboxItemId: string,
+	/**  Display label for the ingestion group (the item's relative path / folder name). */
+	itemName: string,
+	planId: string,
+	state: string,
+	stale: boolean,
+	actions: InboxPlanAction[],
+};
+
+/**  Response from `inbox.plan.list_open` — all open plans across roots (spec 041, US2). */
+export type InboxOpenPlansResponse = {
+	plans: InboxOpenPlan[],
+	/**  Sum of actions across all plans (for the surface header count). */
+	totalActions: number,
 };
 
 /**

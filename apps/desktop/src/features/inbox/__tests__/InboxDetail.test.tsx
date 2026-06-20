@@ -89,6 +89,7 @@ const fileMetadataFixture: InboxFileMetadata[] = [
   {
     relative_file_path: 'light_0001.fits',
     frame_type_effective: 'light',
+    image_typ: 'LIGHT',
     filter: 'Ha',
     exposure_s: 300,
     binning_x: 1,
@@ -108,6 +109,7 @@ const fileMetadataFixture: InboxFileMetadata[] = [
   {
     relative_file_path: 'calib_dark_0001.fits',
     frame_type_effective: 'dark',
+    image_typ: 'DARK',
     filter: null,
     exposure_s: null,
     binning_x: 1,

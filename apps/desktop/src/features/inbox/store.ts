@@ -18,6 +18,8 @@ import {
   inboxPlanApply,
   inboxPlanApplyAll,
   inboxPlanCancel,
+  listOpenInboxPlans,
+  applySelectedInboxPlans,
 } from '@/api/commands';
 import type {
   InboxClassifyResponse,
@@ -29,6 +31,9 @@ import type {
   InboxApplyAllResponse,
   InboxPlanCancelResponse,
   InboxPlanView,
+  InboxOpenPlan,
+  InboxOpenPlansResponse,
+  InboxPlanAction,
   PlanApplyResponse,
 } from '@/api/commands';
 
@@ -42,6 +47,9 @@ export type {
   InboxApplyAllResponse,
   InboxPlanCancelResponse,
   InboxPlanView,
+  InboxOpenPlan,
+  InboxOpenPlansResponse,
+  InboxPlanAction,
   PlanApplyResponse,
 };
 
@@ -360,4 +368,72 @@ export function useInboxPlanCancel() {
   );
 
   return { ...state, cancel };
+}
+
+// ── Aggregate open-plans surface (spec 041, US2) ──────────────────────────────
+
+export interface OpenPlansState {
+  data: InboxOpenPlansResponse | null;
+  loading: boolean;
+  error: string | null;
+}
+
+/**
+ * Load and cache the cross-root aggregate of every open inbox plan.
+ *
+ * Mirrors `useInboxList`: a useState + useEffect + cancelled-flag pattern keyed
+ * by a monotonic `epoch`. Call `refresh()` to re-fetch (e.g. after an
+ * apply/cancel/confirm mutation).
+ */
+export function useOpenInboxPlans() {
+  const [epoch, setEpoch] = useState(0);
+  const [state, setState] = useState<OpenPlansState>({
+    data: null,
+    loading: true,
+    error: null,
+  });
+
+  useEffect(() => {
+    let cancelled = false;
+    setState((s) => ({ ...s, loading: true, error: null }));
+    listOpenInboxPlans()
+      .then((resp) => {
+        if (!cancelled) setState({ data: resp, loading: false, error: null });
+      })
+      .catch((e: unknown) => {
+        if (!cancelled) setState({ data: null, loading: false, error: String(e) });
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [epoch]);
+
+  const refresh = useCallback(() => setEpoch((n) => n + 1), []);
+
+  return { ...state, refresh };
+}
+
+/**
+ * Apply a caller-chosen subset of open inbox plans (selection is per-ingestion
+ * group / plan-level). Mirrors `useInboxPlanApplyAll`.
+ */
+export function useApplySelectedInboxPlans() {
+  const [state, setState] = useState<PlanApplyState>({ loading: false, error: null });
+
+  const applySelected = useCallback(
+    async (inboxItemIds: string[]): Promise<InboxApplyAllResponse | null> => {
+      setState({ loading: true, error: null });
+      try {
+        const result = await applySelectedInboxPlans(inboxItemIds);
+        setState({ loading: false, error: null });
+        return result;
+      } catch (e: unknown) {
+        setState({ loading: false, error: String(e) });
+        return null;
+      }
+    },
+    [],
+  );
+
+  return { ...state, applySelected };
 }

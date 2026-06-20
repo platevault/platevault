@@ -95,7 +95,7 @@ export function loadSources(): SourcesState {
             typeof (e as SourceEntry).kind === 'string' &&
             ALL_SOURCE_KINDS.includes((e as SourceEntry).kind),
         )
-        .map((e) => ({
+        .map((e: Omit<SourceEntry, 'organizationState'> & { organizationState?: OrganizationState }) => ({
           ...e,
           organizationState: e.kind === 'inbox'
             ? 'unorganized' as OrganizationState

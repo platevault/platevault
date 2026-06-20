@@ -439,3 +439,32 @@ pub struct InboxPlanCancelResponse {
     pub plan_id: String,
     pub state: String,
 }
+
+/// One open plan in the aggregate inbox plan surface (spec 041, US2).
+#[derive(Clone, Debug, Serialize, Deserialize, Type)]
+#[serde(rename_all = "camelCase")]
+pub struct InboxOpenPlan {
+    pub inbox_item_id: String,
+    /// Display label for the ingestion group (the item's relative path / folder name).
+    pub item_name: String,
+    pub plan_id: String,
+    pub state: String,
+    pub stale: bool,
+    pub actions: Vec<InboxPlanAction>,
+}
+
+/// Response from `inbox.plan.list_open` — all open plans across roots (spec 041, US2).
+#[derive(Clone, Debug, Serialize, Deserialize, Type)]
+#[serde(rename_all = "camelCase")]
+pub struct InboxOpenPlansResponse {
+    pub plans: Vec<InboxOpenPlan>,
+    /// Sum of actions across all plans (for the surface header count).
+    pub total_actions: u32,
+}
+
+/// Request for `inbox.plan.apply_selected` (spec 041, US2).
+#[derive(Clone, Debug, Serialize, Deserialize, Type)]
+#[serde(rename_all = "camelCase")]
+pub struct InboxApplySelectedRequest {
+    pub inbox_item_ids: Vec<String>,
+}

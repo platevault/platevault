@@ -119,7 +119,9 @@ pub async fn sources_set_organization_state(
     source_id: String,
     organization_state: OrganizationState,
 ) -> Result<SetSourceOrganizationStateResponse, String> {
-    tracing::debug!("sources.set_organization_state source_id={source_id} state={organization_state:?}");
+    tracing::debug!(
+        "sources.set_organization_state source_id={source_id} state={organization_state:?}"
+    );
 
     let req = SetSourceOrganizationStateRequest { source_id, organization_state };
 
