@@ -19,17 +19,20 @@ import { fileURLToPath } from "node:url";
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 // e2e/wdio -> e2e -> desktop -> apps -> repo root
 const repoRoot = path.resolve(__dirname, "..", "..", "..", "..");
+const desktopDir = path.join(repoRoot, "apps", "desktop");
 
 const isWindows = process.platform === "win32";
 const exeName = isWindows ? "desktop_shell.exe" : "desktop_shell";
-// A *debug* Tauri build loads devUrl (the Vite dev server); with no server
-// running the webview is blank. A release build embeds frontendDist, so the app
-// is self-contained — that is what tauri-driver should launch. Override with
-// TAURI_APP_BINARY when driving a `tauri dev` session locally.
+// The binary loads its frontend from the Tauri `devUrl` (Vite at :5173) — even
+// release builds here — so we serve the built `dist` there during the run. The
+// frontend is real and talks to the real Tauri backend over IPC (not a mock).
+// Override with TAURI_APP_BINARY (and FRONTEND_PORT) for local runs.
 const appBinary =
   process.env.TAURI_APP_BINARY ||
-  path.join(repoRoot, "target", "release", exeName);
+  path.join(repoRoot, "target", "debug", exeName);
 
+const FRONTEND_PORT = Number(process.env.FRONTEND_PORT || 5173);
+const FRONTEND_URL = `http://localhost:${FRONTEND_PORT}`;
 const DRIVER_PORT = 4444;
 const DRIVER_URL = `http://127.0.0.1:${DRIVER_PORT}`;
 const STARTUP_TIMEOUT_MS = 30_000;
@@ -39,22 +42,31 @@ function log(msg) {
   console.log(`[wdio-spike] ${msg}`);
 }
 
-async function waitForDriver(timeoutMs) {
+async function waitForUrl(url, label, timeoutMs) {
   const deadline = Date.now() + timeoutMs;
   while (Date.now() < deadline) {
     try {
-      const res = await fetch(`${DRIVER_URL}/status`);
+      const res = await fetch(url);
       if (res.ok) return;
     } catch {
       // not up yet
     }
     await new Promise((r) => setTimeout(r, 300));
   }
-  throw new Error(`tauri-driver did not become ready within ${timeoutMs}ms`);
+  throw new Error(`${label} did not become ready within ${timeoutMs}ms`);
 }
 
 async function main() {
   log(`app binary: ${appBinary}`);
+
+  // Serve the built frontend where the binary's Tauri devUrl points (:5173), so
+  // the webview loads the real UI. `vite preview` serves the production `dist`.
+  const frontend = spawn(
+    "pnpm",
+    ["exec", "vite", "preview", "--port", String(FRONTEND_PORT), "--strictPort"],
+    { cwd: desktopDir, stdio: "inherit" },
+  );
+  frontend.on("error", (e) => log(`failed to spawn frontend server: ${e.message}`));
 
   // tauri-driver speaks W3C WebDriver on DRIVER_PORT and spawns the native
   // driver (WebKitWebDriver) itself. It reads the app path from the
@@ -69,7 +81,9 @@ async function main() {
   let browser;
   let failure;
   try {
-    await waitForDriver(STARTUP_TIMEOUT_MS);
+    await waitForUrl(FRONTEND_URL, "frontend server", STARTUP_TIMEOUT_MS);
+    log(`frontend server ready at ${FRONTEND_URL}`);
+    await waitForUrl(`${DRIVER_URL}/status`, "tauri-driver", STARTUP_TIMEOUT_MS);
     log("tauri-driver ready");
 
     // Imported lazily so a missing dep yields a clear, actionable error.
@@ -127,6 +141,7 @@ async function main() {
       }
     }
     driver.kill("SIGTERM");
+    frontend.kill("SIGTERM");
   }
 
   if (failure) {

@@ -39,14 +39,13 @@ jobs:
       - name: Install JS deps
         run: pnpm install --frozen-lockfile
 
-      # A release build embeds frontendDist (../dist) so the app is
-      # self-contained; the frontend must be built first. (A debug build would
-      # instead load the Vite devUrl and show a blank webview.)
+      # The binary loads its frontend from the Tauri devUrl (:5173); the spike
+      # serves the built `dist` there, so the frontend must be built first.
       - name: Build frontend
         run: pnpm --filter @astro-plan/desktop build
 
-      - name: Build desktop app (release)
-        run: cargo build -p desktop_shell --release
+      - name: Build desktop app (debug)
+        run: cargo build -p desktop_shell
 
       - name: Real-UI WebdriverIO spike
         run: xvfb-run -a pnpm --filter @astro-plan/desktop test:e2e:wdio
