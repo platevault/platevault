@@ -21,12 +21,14 @@ const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const repoRoot = path.resolve(__dirname, "..", "..", "..", "..");
 
 const isWindows = process.platform === "win32";
-const appBinary = path.join(
-  repoRoot,
-  "target",
-  "debug",
-  isWindows ? "desktop_shell.exe" : "desktop_shell",
-);
+const exeName = isWindows ? "desktop_shell.exe" : "desktop_shell";
+// A *debug* Tauri build loads devUrl (the Vite dev server); with no server
+// running the webview is blank. A release build embeds frontendDist, so the app
+// is self-contained — that is what tauri-driver should launch. Override with
+// TAURI_APP_BINARY when driving a `tauri dev` session locally.
+const appBinary =
+  process.env.TAURI_APP_BINARY ||
+  path.join(repoRoot, "target", "release", exeName);
 
 const DRIVER_PORT = 4444;
 const DRIVER_URL = `http://127.0.0.1:${DRIVER_PORT}`;

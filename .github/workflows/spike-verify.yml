@@ -39,13 +39,14 @@ jobs:
       - name: Install JS deps
         run: pnpm install --frozen-lockfile
 
-      # The debug binary embeds frontendDist (../dist), so the frontend must be
-      # built before cargo build — otherwise the webview has nothing to load.
+      # A release build embeds frontendDist (../dist) so the app is
+      # self-contained; the frontend must be built first. (A debug build would
+      # instead load the Vite devUrl and show a blank webview.)
       - name: Build frontend
         run: pnpm --filter @astro-plan/desktop build
 
-      - name: Build desktop app (debug)
-        run: cargo build -p desktop_shell
+      - name: Build desktop app (release)
+        run: cargo build -p desktop_shell --release
 
       - name: Real-UI WebdriverIO spike
         run: xvfb-run -a pnpm --filter @astro-plan/desktop test:e2e:wdio
