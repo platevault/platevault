@@ -1,3 +1,4 @@
+import { useState } from 'react';
 import { Btn } from '@/ui/Btn';
 import { Pill } from '@/ui/Pill';
 import { useDirectoryPicker } from '@/shared/native';
@@ -286,6 +287,7 @@ function AddFolderButton({
   onAdd: (path: string, kind: SourceKind) => void;
 }) {
   const { pick, loading, error } = useDirectoryPicker();
+  const [e2ePath, setE2ePath] = useState('');
 
   const handleChoose = async () => {
     const result = await pick(undefined, KIND_TO_LAST_PATH[kind]);
@@ -305,6 +307,35 @@ function AddFolderButton({
       >
         {loading ? 'Choosing…' : '+ Add folder…'}
       </Btn>
+      {/*
+        CI-only path entry: WebDriver cannot drive the native folder picker, so
+        real-UI E2E journeys add a source by typing its path. Gated on the
+        build-time VITE_E2E flag, so it is tree-shaken out of production builds
+        and reuses the exact same `onAdd` registration path as the picker.
+      */}
+      {import.meta.env.VITE_E2E ? (
+        <span data-testid={`e2e-add-by-path-${kind}`}>
+          <input
+            data-testid={`e2e-path-input-${kind}`}
+            aria-label={`E2E ${SOURCE_KIND_LABELS[kind]} path`}
+            value={e2ePath}
+            onChange={(ev) => setE2ePath(ev.target.value)}
+          />
+          <button
+            type="button"
+            data-testid={`e2e-add-path-btn-${kind}`}
+            onClick={() => {
+              const p = e2ePath.trim();
+              if (p) {
+                onAdd(p, kind);
+                setE2ePath('');
+              }
+            }}
+          >
+            Add by path (E2E)
+          </button>
+        </span>
+      ) : null}
       {error && (
         <span
           className="alm-step-sources__picker-error"

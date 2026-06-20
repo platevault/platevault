@@ -67,7 +67,11 @@ jobs:
 
       # The debug binary loads its frontend from the Tauri devUrl (:5173); the
       # journeys serve the built dist there, so build the frontend first.
+      # VITE_E2E enables the CI-only typeable path inputs (the native folder
+      # picker can't be driven by WebDriver). Tree-shaken from production builds.
       - name: Build frontend
+        env:
+          VITE_E2E: "1"
         run: pnpm --filter @astro-plan/desktop build
 
       - name: Build desktop app (debug)
