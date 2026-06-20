@@ -75,8 +75,8 @@
 - [X] T031 [US4] `confirm.rs`: decide per file by its source's `organization_state` — `Move` (unorganized) vs `Catalogue` (organized); a single confirm may emit both. Remove the master "registered directly" side-channel so masters follow the same rule (master from unorganized → move plan + register; from organized → catalogue + register).
 - [X] T032 [US4] Catalogue apply in app/core: master registration relocated to apply-completion in `plan_listener.rs` (calibration_session + fingerprint, idempotent); no FS move (executor no-ops). NOTE: no `file_record` table exists in the codebase — catalogue matches Move's apply behavior (no file_record upsert on either path).
 - [X] T033 [US4] Regenerate bindings; `commands.ts` wrappers for source organization-state set + register changes.
-- [ ] T034 [P] [US4] Frontend setup: source-add flow requires an explicit organized/unorganized choice for non-inbox sources (inbox auto), with an explainer and a small flow diagram (`apps/desktop/src/features/setup/...`); editable later in source settings.
-- [ ] T035 [P] [US4] Tests: confirm organized→catalogue / unorganized→move / mixed→both / master parity (`-p app_core`); register rejects inbox+organized; Vitest for the add-source choice UX.
+- [X] T034 [P] [US4] Frontend setup: source-add flow requires an explicit organized/unorganized choice for non-inbox sources (inbox auto), with an explainer and a small flow diagram (`apps/desktop/src/features/setup/...`); editable later in source settings.
+- [X] T035 [P] [US4] Tests: confirm organized→catalogue / unorganized→move / mixed→both / master parity (`-p app_core`); register rejects inbox+organized; Vitest for the add-source choice UX.
 
 ## Phase 7: User Story 5 — Confirm auto-splits mixed folders (P3)
 
@@ -92,7 +92,7 @@
 **Independent test**: seeded mix → summary counts match.
 
 - [X] T038 [US6] Add `inbox.stats` aggregate query in `crates/persistence/db/src/repositories/inbox.rs` (folders/masters/images per type from breakdown + `is_master_item`) + app/core use-case + Tauri command.
-- [ ] T039 [US6] Regenerate bindings; `commands.ts` wrapper; frontend queue summary renders the per-type breakdown (`InboxPage.tsx`).
+- [X] T039 [US6] Regenerate bindings; `commands.ts` wrapper; frontend queue summary renders the per-type breakdown (`InboxPage.tsx`).
 - [X] T040 [P] [US6] Tests: stats query against a seeded fixture (`-p persistence_db`); Vitest for the summary.
 
 ## Phase 9: User Story 7 — Archive-vs-Trash destructive control (P3)
@@ -106,7 +106,7 @@
 
 ## Phase 10: Polish & cross-cutting
 
-- [ ] T044 Remove the now-dead right `ActionSidebar` and any `/archive`-navigation remnants from the inbox confirm flow; ensure the inbox follows the page layout convention (no overflow at 1100×720).
+- [X] T044 Remove the now-dead right `ActionSidebar` and any `/archive`-navigation remnants from the inbox confirm flow; ensure the inbox follows the page layout convention (no overflow at 1100×720).
 - [ ] T045 [P] Full gates: `cargo test -p app_core -p persistence_db -p fs_planner -p fs_executor`; `just lint`; `cd apps/desktop && npx tsc --noEmit && npx vitest run src/features/inbox src/features/setup src/features/calibration`.
 - [ ] T046 Windows E2E verification per quickstart.md (US1–US7 acceptance scenarios) on the real app; capture results.
 - [ ] T047 Update calibration "no data" follow-up (task #7 in the working list) if the organization-state/catalogue rework affects master listing; otherwise leave for its own fix.
