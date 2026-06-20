@@ -704,7 +704,9 @@ export async function inboxConfirm(req: InboxConfirmRequest): Promise<InboxConfi
 export async function inboxReclassify(
   req: InboxReclassifyRequest,
 ): Promise<InboxReclassifyResponse> {
-  return unwrap(await commands.inboxReclassify(req)) as InboxReclassifyResponse;
+  return unwrap(
+    await commands.inboxReclassify(req as Parameters<typeof commands.inboxReclassify>[0]),
+  ) as InboxReclassifyResponse;
 }
 
 /**
