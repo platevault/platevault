@@ -28,12 +28,12 @@
 //! - `prepared_source_stale`: requires spec 012 / prepared_source_view table.
 //! - Both are deferred and documented in tasks.md.
 
-use std::collections::HashMap;
 use std::sync::{Arc, Mutex};
-use std::time::{Duration, Instant};
+use std::time::Duration;
 
 use audit::bus::EventBus;
 use audit::event_bus::{LifecycleTransitionApplied, Source, TOPIC_LIFECYCLE_TRANSITION_APPLIED};
+use moka::sync::Cache;
 use persistence_db::repositories::projects as repo;
 use sqlx::SqlitePool;
 
@@ -84,29 +84,33 @@ struct DebounceKey {
     condition_kind: &'static str,
 }
 
-/// In-process debounce table (P7, D5): maps `(entity_id, condition_kind)` → last emission time.
-#[derive(Clone, Debug, Default)]
+/// In-process debounce table (P7, D5): a `moka` TTL cache keyed by
+/// `(entity_id, condition_kind)`. Presence of a (non-expired) entry means the
+/// signal was emitted within the debounce window and must be suppressed.
+///
+/// The cache's `time_to_live` is the debounce window, so entries auto-expire
+/// after the window elapses — reproducing the prior hand-rolled
+/// `Instant`-comparison semantics without manual bookkeeping.
+#[derive(Clone)]
 pub struct DebounceTable {
-    last_emitted: HashMap<DebounceKey, Instant>,
-    window: Duration,
+    last_emitted: Cache<DebounceKey, ()>,
 }
 
 impl DebounceTable {
     #[must_use]
     pub fn new(window: Duration) -> Self {
-        Self { last_emitted: HashMap::new(), window }
+        Self { last_emitted: Cache::builder().time_to_live(window).build() }
     }
 
     /// Returns `true` if the signal should be suppressed (still within the debounce window).
     pub fn should_suppress(&mut self, entity_id: &str, condition_kind: &'static str) -> bool {
         let key = DebounceKey { entity_id: entity_id.to_owned(), condition_kind };
-        let now = Instant::now();
-        if let Some(&last) = self.last_emitted.get(&key) {
-            if now.duration_since(last) < self.window {
-                return true;
-            }
+        // If the key is still present (TTL not elapsed) the signal is debounced.
+        if self.last_emitted.get(&key).is_some() {
+            return true;
         }
-        self.last_emitted.insert(key, now);
+        // Record the emission; the entry expires after the configured TTL.
+        self.last_emitted.insert(key, ());
         false
     }
 
@@ -114,7 +118,7 @@ impl DebounceTable {
     #[cfg(test)]
     pub fn expire(&mut self, entity_id: &str, condition_kind: &'static str) {
         let key = DebounceKey { entity_id: entity_id.to_owned(), condition_kind };
-        self.last_emitted.remove(&key);
+        self.last_emitted.invalidate(&key);
     }
 }
 

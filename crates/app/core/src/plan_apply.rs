@@ -43,18 +43,25 @@ use std::collections::HashMap;
 use std::path::PathBuf;
 use std::sync::Arc;
 use time::OffsetDateTime;
-use tokio::sync::Mutex;
 use uuid::Uuid;
+
+use dashmap::DashMap;
 
 // ── Active runs registry ──────────────────────────────────────────────────────
 
 /// Global registry of in-flight plan apply runs.
 /// Keyed by `plan_id`; each entry holds the shared control objects.
-static ACTIVE_RUNS: std::sync::OnceLock<Arc<Mutex<HashMap<String, ActiveRun>>>> =
+///
+/// Backed by a `DashMap` (concurrent map with internal sharded locking) so the
+/// registry can be accessed from sync contexts without holding a `.await` lock.
+/// Entries are inserted at apply start and removed by the executor's background
+/// task on completion/failure/cancel (see `apply_plan`), guaranteeing no leaked
+/// entries.
+static ACTIVE_RUNS: std::sync::OnceLock<Arc<DashMap<String, ActiveRun>>> =
     std::sync::OnceLock::new();
 
-fn active_runs() -> Arc<Mutex<HashMap<String, ActiveRun>>> {
-    ACTIVE_RUNS.get_or_init(|| Arc::new(Mutex::new(HashMap::new()))).clone()
+fn active_runs() -> Arc<DashMap<String, ActiveRun>> {
+    ACTIVE_RUNS.get_or_init(|| Arc::new(DashMap::new())).clone()
 }
 
 struct ActiveRun {
@@ -105,10 +112,9 @@ fn bus_err(e: audit::bus::BusError) -> ContractError {
 /// Reject if any active run's path set overlaps with the new plan's paths.
 /// v1: simple per-plan mutex (one plan at a time); cross-plan check is a
 /// best-effort check at apply-start time using the active runs registry.
-async fn check_no_overlap(plan_id: &str) -> Result<(), ContractError> {
+fn check_no_overlap(plan_id: &str) -> Result<(), ContractError> {
     let registry = active_runs();
-    let runs = registry.lock().await;
-    if runs.contains_key(plan_id) {
+    if registry.contains_key(plan_id) {
         return Err(ContractError::new(
             ErrorCode::PlanInvalidState,
             format!("plan {plan_id} already has an active apply run"),
@@ -390,7 +396,7 @@ pub async fn apply_plan(
     verify_approval_token(plan_row.approval_token.as_deref(), approval_token)?;
 
     // Overlap check (R-Concur-1).
-    check_no_overlap(plan_id).await?;
+    check_no_overlap(plan_id)?;
 
     let run_id = new_id();
     let items_total = plan_row.items_total;
@@ -435,8 +441,7 @@ pub async fn apply_plan(
     let retry_queue = RetryQueue::new();
     {
         let registry = active_runs();
-        let mut runs = registry.lock().await;
-        runs.insert(
+        registry.insert(
             plan_id.to_owned(),
             ActiveRun {
                 cancel_token: cancel_token.clone(),
@@ -494,10 +499,12 @@ pub async fn apply_plan(
         let outcome =
             execute_plan(executor_items, &callbacks, &cancel_token, &skip_set, &retry_queue).await;
 
-        // Remove from active runs registry.
+        // Remove from active runs registry. This runs unconditionally after
+        // `execute_plan` returns for ANY outcome (Completed / Cancelled /
+        // Paused) — preserving the cleanup guarantee so no entry leaks.
         {
             let registry = active_runs();
-            registry.lock().await.remove(&plan_id_owned);
+            registry.remove(&plan_id_owned);
         }
 
         // Compute terminal state and persist.
@@ -708,10 +715,11 @@ pub async fn cancel_plan(
     // Signal cancellation to the running executor.
     {
         let registry = active_runs();
-        let runs = registry.lock().await;
-        if let Some(run) = runs.get(plan_id) {
+        if let Some(run) = registry.get(plan_id) {
             run.cancel_token.cancel();
+            drop(run);
         }
+        drop(registry);
     }
 
     let cancelled_at = now_iso();
@@ -862,10 +870,11 @@ pub async fn skip_plan_item(
     // Inject into the executor's skip set.
     {
         let registry = active_runs();
-        let runs = registry.lock().await;
-        if let Some(run) = runs.get(plan_id) {
-            run.skip_set.insert(item_id).await;
+        if let Some(run) = registry.get(plan_id) {
+            run.skip_set.insert(item_id);
+            drop(run);
         }
+        drop(registry);
     }
 
     Ok(PlanItemSkipResponse { item_id: item_id.to_owned(), new_state: "skipped".to_owned() })
@@ -930,10 +939,11 @@ pub async fn retry_plan_item(
     // Register in the retry queue so the executor re-executes it.
     {
         let registry = active_runs();
-        let runs = registry.lock().await;
-        if let Some(run) = runs.get(plan_id) {
-            run.retry_queue.push(item_id).await;
+        if let Some(run) = registry.get(plan_id) {
+            run.retry_queue.push(item_id);
+            drop(run);
         }
+        drop(registry);
     }
 
     Ok(PlanItemRetryResponse { item_id: item_id.to_owned(), new_state: "applying".to_owned() })

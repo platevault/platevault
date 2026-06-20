@@ -22,9 +22,9 @@
 
 use std::collections::HashSet;
 use std::path::PathBuf;
-use std::sync::Arc;
+use std::sync::{Arc, Mutex};
 
-use tokio::sync::{watch, Mutex};
+use tokio::sync::watch;
 
 use crate::failure::{FailureCode, PlanItemFailure, RollbackOutcome};
 use crate::ops::archive_op;
@@ -206,6 +206,10 @@ impl Default for CancellationToken {
 ///
 /// The use case injects skip requests between items; the executor checks
 /// before picking up each pending item.
+///
+/// Access is synchronous: each operation takes a `std::sync::Mutex` for a
+/// brief, non-blocking critical section (a `HashSet` insert/remove), so there
+/// is no need for an async lock — the guard is never held across an `.await`.
 #[derive(Clone, Debug, Default)]
 pub struct SkipSet {
     inner: Arc<Mutex<HashSet<String>>>,
@@ -218,17 +222,28 @@ impl SkipSet {
     }
 
     /// Add an item id to the skip set.
-    pub async fn insert(&self, item_id: &str) {
-        self.inner.lock().await.insert(item_id.to_owned());
+    ///
+    /// # Panics
+    /// Panics if the internal mutex is poisoned (only if another thread
+    /// panicked while holding the lock — not reachable in normal operation).
+    pub fn insert(&self, item_id: &str) {
+        self.inner.lock().expect("skip-set mutex poisoned").insert(item_id.to_owned());
     }
 
     /// Remove and return true if the item was in the skip set.
-    pub async fn take(&self, item_id: &str) -> bool {
-        self.inner.lock().await.remove(item_id)
+    ///
+    /// # Panics
+    /// Panics if the internal mutex is poisoned.
+    #[must_use]
+    pub fn take(&self, item_id: &str) -> bool {
+        self.inner.lock().expect("skip-set mutex poisoned").remove(item_id)
     }
 }
 
 /// A shared retry queue: item ids to re-attempt (per-item retry, US4).
+///
+/// Access is synchronous for the same reason as [`SkipSet`]: the critical
+/// section is a single `HashSet` operation, never held across an `.await`.
 #[derive(Clone, Debug, Default)]
 pub struct RetryQueue {
     inner: Arc<Mutex<HashSet<String>>>,
@@ -241,13 +256,20 @@ impl RetryQueue {
     }
 
     /// Enqueue an item for retry.
-    pub async fn push(&self, item_id: &str) {
-        self.inner.lock().await.insert(item_id.to_owned());
+    ///
+    /// # Panics
+    /// Panics if the internal mutex is poisoned.
+    pub fn push(&self, item_id: &str) {
+        self.inner.lock().expect("retry-queue mutex poisoned").insert(item_id.to_owned());
     }
 
     /// Remove and return true if the item is queued for retry.
-    pub async fn take(&self, item_id: &str) -> bool {
-        self.inner.lock().await.remove(item_id)
+    ///
+    /// # Panics
+    /// Panics if the internal mutex is poisoned.
+    #[must_use]
+    pub fn take(&self, item_id: &str) -> bool {
+        self.inner.lock().expect("retry-queue mutex poisoned").remove(item_id)
     }
 }
 
@@ -288,7 +310,7 @@ pub async fn execute_plan<C: ExecutorCallbacks>(
         }
 
         // Check user-requested skip.
-        if skip_set.take(&item.id).await {
+        if skip_set.take(&item.id) {
             tracing::debug!(item_id = %item.id, "user-skipped item");
             callbacks
                 .on_item_progress(ItemProgressEvent {
@@ -437,7 +459,29 @@ pub async fn execute_plan<C: ExecutorCallbacks>(
         }
 
         // Execute the operation.
-        let op_result = execute_item(item);
+        //
+        // T212: the filesystem primitives in `execute_item` are synchronous and
+        // blocking (`std::fs::rename`/`copy`/`remove_file`, trash). Running them
+        // directly on a tokio worker thread would stall the async runtime, so we
+        // hand the work to `spawn_blocking`, which dispatches it onto the
+        // dedicated blocking thread pool and yields the worker thread back to the
+        // runtime until the fs op completes.
+        let item_for_blocking = item.clone();
+        let op_result = tokio::task::spawn_blocking(move || execute_item(&item_for_blocking))
+            .await
+            .unwrap_or_else(|join_err| {
+                // The blocking task panicked. Surface it as an internal failure
+                // rather than propagating the panic through the executor loop.
+                Err((
+                    PlanItemFailure::with_code(
+                        FailureCode::Unknown,
+                        format!("filesystem worker task failed: {join_err}"),
+                    ),
+                    false,
+                    RollbackOutcome::NotApplicable,
+                    None,
+                ))
+            });
 
         match op_result {
             Ok(()) => {
@@ -489,7 +533,7 @@ pub async fn execute_plan<C: ExecutorCallbacks>(
         // the use case; within this loop they would need re-ordering which
         // is deferred to the use case. Here we just clear the queue entry
         // to avoid phantom state.)
-        let _ = retry_queue.take(&item.id).await;
+        let _ = retry_queue.take(&item.id);
     }
 
     if cancelled {
@@ -748,7 +792,7 @@ mod tests {
         let callbacks = FakeCallbacks::default();
         let cancel = CancellationToken::new();
         let skip = SkipSet::new();
-        skip.insert("item-skip").await;
+        skip.insert("item-skip");
         let retry = RetryQueue::new();
 
         let outcome = execute_plan(vec![item], &callbacks, &cancel, &skip, &retry).await;

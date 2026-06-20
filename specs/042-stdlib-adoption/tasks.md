@@ -170,10 +170,10 @@ Frontend: `cd apps/desktop && npx tsc --noEmit` + `npx vitest run <feature>`. Ru
 
 ## Phase 13 — US12 Rust caching/concurrency (P3)
 
-- [ ] T210 `moka` TTL for `project_health` DebounceTable.
-- [ ] T211 `dashmap` + RAII removal for `plan_apply` ACTIVE_RUNS.
-- [ ] T212 `spawn_blocking` for the sync fs executor reached from async (confirm threading).
-- [ ] T213 Sync-ify SkipSet/RetryQueue (`fs/executor/run.rs`).
+- [X] T210 `moka` TTL for `project_health` DebounceTable.
+- [X] T211 `dashmap` + RAII removal for `plan_apply` ACTIVE_RUNS.
+- [X] T212 `spawn_blocking` for the sync fs executor reached from async (confirm threading).
+- [X] T213 Sync-ify SkipSet/RetryQueue (`fs/executor/run.rs`).
 - [ ] **US12 checkpoint**: commit `feat(042): US12 idiomatic caching/concurrency`.
 
 ## Phase 14 — US14 camino (P3)
