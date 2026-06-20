@@ -527,10 +527,24 @@ pub fn specta_builder() -> Builder<tauri::Wry> {
 pub fn build_app() -> tauri::App {
     let builder = specta_builder();
 
-    tauri::Builder::default()
+    #[allow(unused_mut)]
+    let mut tb = tauri::Builder::default()
         .plugin(tauri_plugin_dialog::init())
-        .plugin(tauri_plugin_opener::init())
-        .invoke_handler(builder.invoke_handler())
+        .plugin(tauri_plugin_opener::init());
+
+    // Tauri MCP bridge plugin (@hypothesi tauri-plugin-mcp-bridge) — dev/debug
+    // builds only. Runs a WebSocket server on 0.0.0.0:9223 that the
+    // @hypothesi/tauri-mcp-server MCP server connects to, letting an agent drive
+    // the running app for automated UI testing. Requires `withGlobalTauri`, which
+    // is enabled only via the dev-only `tauri.dev.conf.json` overlay (never in the
+    // shipped config). `debug_assertions` is off in release builds, so this
+    // surface is absent from shipped binaries.
+    #[cfg(debug_assertions)]
+    {
+        tb = tb.plugin(tauri_plugin_mcp_bridge::init());
+    }
+
+    tb.invoke_handler(builder.invoke_handler())
         .setup(move |app| {
             builder.mount_events(app);
             Ok(())
