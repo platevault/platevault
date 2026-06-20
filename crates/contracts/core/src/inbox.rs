@@ -270,6 +270,35 @@ pub struct InboxListItem {
     /// Organization state of the owning source: `"organized"` | `"unorganized"`.
     /// Spec 041 — lets the list surface move-vs-catalogue intent per item.
     pub organization_state: String,
+    // ── Per-item grouping keys (spec 041 — multi-level grouping UI) ─────────────
+    //
+    // Each is an aggregate LABEL computed across the item's persisted per-file
+    // metadata (`inbox_file_metadata`) / classification evidence:
+    //   - 0 distinct non-null values  -> `None`     (frontend buckets as "(none)")
+    //   - exactly 1 distinct value    -> `Some(value)`
+    //   - 2+ distinct values          -> `Some("Mixed")`
+    // Exception: `group_frame_type` is the item's DOMINANT frame type (largest
+    // group), never `"Mixed"`; `None` only when no frame type is known.
+    /// Object / target (FITS `OBJECT`). `Some("Mixed")` if files disagree.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub group_target: Option<String>,
+    /// Dominant effective frame type across the item's files (largest group).
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub group_frame_type: Option<String>,
+    /// Capture date as `YYYY-MM-DD` from the earliest `DATE-OBS`.
+    /// `Some("Mixed")` if files span multiple distinct dates.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub group_date: Option<String>,
+    /// Filter label (FITS `FILTER`). `Some("Mixed")` if files disagree.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub group_filter: Option<String>,
+    /// Exposure formatted like `"300s"` (trailing zeros trimmed).
+    /// `Some("Mixed")` if files have multiple distinct exposures.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub group_exposure: Option<String>,
+    /// Camera / instrument (FITS `INSTRUME`). `Some("Mixed")` if files disagree.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub group_instrument: Option<String>,
 }
 
 /// Response from `inbox.list`.

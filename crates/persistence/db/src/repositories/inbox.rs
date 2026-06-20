@@ -701,6 +701,165 @@ pub async fn list_unacknowledged_across_roots(
     Ok(rows)
 }
 
+// ── Per-item grouping aggregates (spec 041 — multi-level grouping UI) ──────────
+
+/// Per-item aggregate grouping keys for the inbox list, computed across each
+/// item's persisted per-file metadata (`inbox_file_metadata`) and classification
+/// evidence (`inbox_classification_evidence`).
+///
+/// Each field is a presentation LABEL the UI groups by. For the header
+/// dimensions (target, date, filter, exposure, instrument) the value follows
+/// the distinct-count rule applied by [`grouping_keys_for_items`]:
+///   - 0 distinct non-null values  -> `None`
+///   - exactly 1 distinct value    -> `Some(value)`
+///   - 2+ distinct values          -> `Some("Mixed")`
+///
+/// `group_frame_type` is the item's DOMINANT effective frame type (the largest
+/// `COALESCE(manual_override, frame_type)` group), never `"Mixed"`; `None` when
+/// no frame type is known.
+#[derive(Clone, Debug, Default, PartialEq, Eq)]
+pub struct InboxItemGroupingKeys {
+    pub group_target: Option<String>,
+    pub group_frame_type: Option<String>,
+    pub group_date: Option<String>,
+    pub group_filter: Option<String>,
+    pub group_exposure: Option<String>,
+    pub group_instrument: Option<String>,
+}
+
+/// Raw per-dimension aggregate row from the metadata GROUP BY.
+///
+/// `*_distinct` is the number of distinct non-null values; `*_min` is one such
+/// value (used directly when the distinct count is exactly 1).
+#[derive(Clone, Debug, sqlx::FromRow)]
+struct MetadataAggRow {
+    inbox_item_id: String,
+    object_distinct: i64,
+    object_min: Option<String>,
+    date_distinct: i64,
+    date_min: Option<String>,
+    filter_distinct: i64,
+    filter_min: Option<String>,
+    exposure_distinct: i64,
+    exposure_min: Option<f64>,
+    instrume_distinct: i64,
+    instrume_min: Option<String>,
+}
+
+/// Format an exposure in seconds like `"300s"` — trailing zeros trimmed
+/// (`300.0` -> `"300s"`, `1.5` -> `"1.5s"`).
+fn format_exposure_label(secs: f64) -> String {
+    // {} on f64 already drops a trailing `.0` for whole numbers and avoids
+    // fixed-precision padding, so 300.0 -> "300" and 1.5 -> "1.5".
+    format!("{secs}s")
+}
+
+/// Apply the distinct-count rule to one header dimension.
+fn label_from_distinct(distinct: i64, value: Option<String>) -> Option<String> {
+    match distinct {
+        0 => None,
+        1 => value,
+        _ => Some("Mixed".to_owned()),
+    }
+}
+
+/// Compute per-item grouping keys for the given inbox item IDs in a single pass.
+///
+/// Runs two GROUP BY queries (metadata aggregate + dominant frame type) over the
+/// supplied item IDs — no per-item full-table scans. Items with no metadata /
+/// evidence rows are returned with all-`None` keys (or omitted; the caller
+/// defaults missing entries to `None`). The date label is derived from the
+/// `DATE-OBS` value truncated to its first 10 chars (`YYYY-MM-DD`).
+///
+/// # Errors
+/// Returns [`DbError::Database`] on connection failure.
+pub async fn grouping_keys_for_items(
+    pool: &SqlitePool,
+    item_ids: &[String],
+) -> DbResult<std::collections::HashMap<String, InboxItemGroupingKeys>> {
+    use std::collections::HashMap;
+
+    let mut out: HashMap<String, InboxItemGroupingKeys> = HashMap::new();
+    if item_ids.is_empty() {
+        return Ok(out);
+    }
+
+    // Build a single `IN (?, ?, …)` placeholder list shared by both queries.
+    let placeholders = vec!["?"; item_ids.len()].join(",");
+
+    // ── 1. Header dimensions from inbox_file_metadata ─────────────────────────
+    // Date is truncated to YYYY-MM-DD *inside* the aggregate so distinctness is
+    // computed on the date, not the full timestamp.
+    let meta_sql = format!(
+        "SELECT
+             inbox_item_id,
+             COUNT(DISTINCT object)              AS object_distinct,
+             MIN(object)                         AS object_min,
+             COUNT(DISTINCT substr(date_obs, 1, 10)) AS date_distinct,
+             MIN(substr(date_obs, 1, 10))        AS date_min,
+             COUNT(DISTINCT filter)              AS filter_distinct,
+             MIN(filter)                         AS filter_min,
+             COUNT(DISTINCT exposure_s)          AS exposure_distinct,
+             MIN(exposure_s)                     AS exposure_min,
+             COUNT(DISTINCT instrume)            AS instrume_distinct,
+             MIN(instrume)                       AS instrume_min
+         FROM inbox_file_metadata
+         WHERE inbox_item_id IN ({placeholders})
+         GROUP BY inbox_item_id"
+    );
+    // SQL is built only from a fixed `?` placeholder count (no user strings in
+    // the text); all IDs flow through `bind`. AssertSqlSafe is the repo pattern
+    // for dynamic `IN (?, …)` lists (see lifecycle.rs).
+    let mut meta_q = sqlx::query_as::<_, MetadataAggRow>(sqlx::AssertSqlSafe(meta_sql));
+    for id in item_ids {
+        meta_q = meta_q.bind(id);
+    }
+    for row in meta_q.fetch_all(pool).await? {
+        let entry = out.entry(row.inbox_item_id.clone()).or_default();
+        entry.group_target = label_from_distinct(row.object_distinct, row.object_min);
+        entry.group_date = label_from_distinct(row.date_distinct, row.date_min);
+        entry.group_filter = label_from_distinct(row.filter_distinct, row.filter_min);
+        entry.group_exposure = match row.exposure_distinct {
+            0 => None,
+            1 => row.exposure_min.map(format_exposure_label),
+            _ => Some("Mixed".to_owned()),
+        };
+        entry.group_instrument = label_from_distinct(row.instrume_distinct, row.instrume_min);
+    }
+
+    // ── 2. Dominant effective frame type from evidence ────────────────────────
+    // COALESCE(manual_override, frame_type) is the effective frame type. We take
+    // the largest non-null group per item (ties broken by frame type name for
+    // determinism).
+    let ft_sql = format!(
+        "SELECT inbox_item_id, eff_frame_type
+         FROM (
+             SELECT
+                 inbox_item_id,
+                 COALESCE(manual_override, frame_type) AS eff_frame_type,
+                 COUNT(*) AS n,
+                 ROW_NUMBER() OVER (
+                     PARTITION BY inbox_item_id
+                     ORDER BY COUNT(*) DESC, COALESCE(manual_override, frame_type) ASC
+                 ) AS rn
+             FROM inbox_classification_evidence
+             WHERE inbox_item_id IN ({placeholders})
+               AND COALESCE(manual_override, frame_type) IS NOT NULL
+             GROUP BY inbox_item_id, eff_frame_type
+         )
+         WHERE rn = 1"
+    );
+    let mut ft_q = sqlx::query_as::<_, (String, Option<String>)>(sqlx::AssertSqlSafe(ft_sql));
+    for id in item_ids {
+        ft_q = ft_q.bind(id);
+    }
+    for (item_id, eff) in ft_q.fetch_all(pool).await? {
+        out.entry(item_id).or_default().group_frame_type = eff;
+    }
+
+    Ok(out)
+}
+
 // ── Tests ─────────────────────────────────────────────────────────────────────
 
 #[cfg(test)]
@@ -911,5 +1070,224 @@ mod tests {
         );
         assert_eq!(rows[0].id, "cross-root-item-1");
         assert_eq!(rows[0].state, "pending_classification");
+    }
+
+    // ── grouping_keys_for_items (spec 041 multi-level grouping) ───────────────
+
+    /// Helper: upsert one metadata row with the common header fields set.
+    #[allow(clippy::too_many_arguments)]
+    async fn meta_row(
+        pool: &SqlitePool,
+        item: &str,
+        path: &str,
+        object: Option<&str>,
+        date_obs: Option<&str>,
+        filter: Option<&str>,
+        exposure_s: Option<f64>,
+        instrume: Option<&str>,
+    ) {
+        let m = UpsertFileMetadata {
+            inbox_item_id: item,
+            relative_file_path: path,
+            object,
+            date_obs,
+            filter,
+            exposure_s,
+            instrume,
+            ..Default::default()
+        };
+        upsert_inbox_file_metadata(pool, &m).await.unwrap();
+    }
+
+    #[tokio::test]
+    async fn grouping_uniform_metadata_yields_single_values() {
+        let db = test_db().await;
+        let pool = db.pool();
+        insert_inbox_item(pool, &sample_item("g-uniform")).await.unwrap();
+
+        // Two files agree on every dimension; date_obs carries a full timestamp.
+        meta_row(
+            pool,
+            "g-uniform",
+            "a.fits",
+            Some("M31"),
+            Some("2025-10-10T22:01:00"),
+            Some("Ha"),
+            Some(300.0),
+            Some("ASI2600"),
+        )
+        .await;
+        meta_row(
+            pool,
+            "g-uniform",
+            "b.fits",
+            Some("M31"),
+            Some("2025-10-10T23:59:00"),
+            Some("Ha"),
+            Some(300.0),
+            Some("ASI2600"),
+        )
+        .await;
+
+        let keys = grouping_keys_for_items(pool, &["g-uniform".to_owned()]).await.unwrap();
+        let g = keys.get("g-uniform").expect("item present");
+        assert_eq!(g.group_target.as_deref(), Some("M31"));
+        // Same calendar day despite differing timestamps -> single date label.
+        assert_eq!(g.group_date.as_deref(), Some("2025-10-10"));
+        assert_eq!(g.group_filter.as_deref(), Some("Ha"));
+        // 300.0 trims to "300s".
+        assert_eq!(g.group_exposure.as_deref(), Some("300s"));
+        assert_eq!(g.group_instrument.as_deref(), Some("ASI2600"));
+    }
+
+    #[tokio::test]
+    async fn grouping_divergent_metadata_yields_mixed() {
+        let db = test_db().await;
+        let pool = db.pool();
+        insert_inbox_item(pool, &sample_item("g-mixed")).await.unwrap();
+
+        meta_row(
+            pool,
+            "g-mixed",
+            "a.fits",
+            Some("M31"),
+            Some("2025-10-10T22:00:00"),
+            Some("Ha"),
+            Some(300.0),
+            Some("ASI2600"),
+        )
+        .await;
+        meta_row(
+            pool,
+            "g-mixed",
+            "b.fits",
+            Some("NGC7000"),
+            Some("2025-10-11T22:00:00"),
+            Some("OIII"),
+            Some(120.0),
+            Some("ASI1600"),
+        )
+        .await;
+
+        let keys = grouping_keys_for_items(pool, &["g-mixed".to_owned()]).await.unwrap();
+        let g = keys.get("g-mixed").unwrap();
+        assert_eq!(g.group_target.as_deref(), Some("Mixed"));
+        assert_eq!(g.group_date.as_deref(), Some("Mixed"));
+        assert_eq!(g.group_filter.as_deref(), Some("Mixed"));
+        assert_eq!(g.group_exposure.as_deref(), Some("Mixed"));
+        assert_eq!(g.group_instrument.as_deref(), Some("Mixed"));
+    }
+
+    #[tokio::test]
+    async fn grouping_absent_metadata_yields_none() {
+        let db = test_db().await;
+        let pool = db.pool();
+        insert_inbox_item(pool, &sample_item("g-empty")).await.unwrap();
+
+        // No metadata, no evidence rows at all.
+        let keys = grouping_keys_for_items(pool, &["g-empty".to_owned()]).await.unwrap();
+        // Either absent from the map or present with all-None — both default to None.
+        let g = keys.get("g-empty").cloned().unwrap_or_default();
+        assert_eq!(g.group_target, None);
+        assert_eq!(g.group_frame_type, None);
+        assert_eq!(g.group_date, None);
+        assert_eq!(g.group_filter, None);
+        assert_eq!(g.group_exposure, None);
+        assert_eq!(g.group_instrument, None);
+    }
+
+    #[tokio::test]
+    async fn grouping_partial_nulls_count_as_distinct_non_null() {
+        let db = test_db().await;
+        let pool = db.pool();
+        insert_inbox_item(pool, &sample_item("g-partial")).await.unwrap();
+
+        // One file has a filter, the other is null -> 1 distinct non-null value.
+        meta_row(pool, "g-partial", "a.fits", None, None, Some("Lum"), None, None).await;
+        meta_row(pool, "g-partial", "b.fits", None, None, None, None, None).await;
+
+        let keys = grouping_keys_for_items(pool, &["g-partial".to_owned()]).await.unwrap();
+        let g = keys.get("g-partial").unwrap();
+        assert_eq!(g.group_filter.as_deref(), Some("Lum"));
+        assert_eq!(g.group_target, None);
+        assert_eq!(g.group_exposure, None);
+    }
+
+    #[tokio::test]
+    async fn grouping_exposure_fractional_label() {
+        let db = test_db().await;
+        let pool = db.pool();
+        insert_inbox_item(pool, &sample_item("g-frac")).await.unwrap();
+
+        meta_row(pool, "g-frac", "a.fits", None, None, None, Some(1.5), None).await;
+
+        let keys = grouping_keys_for_items(pool, &["g-frac".to_owned()]).await.unwrap();
+        let g = keys.get("g-frac").unwrap();
+        assert_eq!(g.group_exposure.as_deref(), Some("1.5s"));
+    }
+
+    #[tokio::test]
+    async fn grouping_dominant_frame_type_from_evidence() {
+        let db = test_db().await;
+        let pool = db.pool();
+        insert_inbox_item(pool, &sample_item("g-dom")).await.unwrap();
+
+        // 3 darks vs 1 light -> dominant = "dark" (NOT "Mixed").
+        for (i, ft) in [("e1", "dark"), ("e2", "dark"), ("e3", "dark"), ("e4", "light")] {
+            let path = format!("{i}.fits");
+            let ev = InsertEvidence {
+                id: i,
+                inbox_item_id: "g-dom",
+                relative_file_path: &path,
+                frame_type: Some(ft),
+                evidence_source: "imagetyp_header",
+                raw_value: Some(ft),
+                unclassified: false,
+                manual_override: None,
+                is_master: false,
+                master_detector: None,
+            };
+            insert_evidence(pool, &ev).await.unwrap();
+        }
+
+        let keys = grouping_keys_for_items(pool, &["g-dom".to_owned()]).await.unwrap();
+        let g = keys.get("g-dom").unwrap();
+        assert_eq!(g.group_frame_type.as_deref(), Some("dark"));
+    }
+
+    #[tokio::test]
+    async fn grouping_dominant_frame_type_respects_manual_override() {
+        let db = test_db().await;
+        let pool = db.pool();
+        insert_inbox_item(pool, &sample_item("g-ovr")).await.unwrap();
+
+        // Two files extracted as light, but both overridden to flat -> dominant flat.
+        for (i, ft) in [("o1", "light"), ("o2", "light")] {
+            let path = format!("{i}.fits");
+            let ev = InsertEvidence {
+                id: i,
+                inbox_item_id: "g-ovr",
+                relative_file_path: &path,
+                frame_type: Some(ft),
+                evidence_source: "imagetyp_header",
+                raw_value: Some(ft),
+                unclassified: false,
+                manual_override: Some("flat"),
+                is_master: false,
+                master_detector: None,
+            };
+            insert_evidence(pool, &ev).await.unwrap();
+        }
+
+        let keys = grouping_keys_for_items(pool, &["g-ovr".to_owned()]).await.unwrap();
+        assert_eq!(keys.get("g-ovr").unwrap().group_frame_type.as_deref(), Some("flat"));
+    }
+
+    #[tokio::test]
+    async fn grouping_empty_ids_returns_empty_map() {
+        let db = test_db().await;
+        let pool = db.pool();
+        let keys = grouping_keys_for_items(pool, &[]).await.unwrap();
+        assert!(keys.is_empty());
     }
 }

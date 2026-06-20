@@ -24,7 +24,9 @@ use contracts_core::inbox::{
     InboxScanFolderResponse, InboxScanResult,
 };
 use contracts_core::plan_apply::PlanApplyResponse;
-use persistence_db::repositories::inbox::list_unacknowledged_across_roots;
+use persistence_db::repositories::inbox::{
+    grouping_keys_for_items, list_unacknowledged_across_roots,
+};
 use sqlx::SqlitePool;
 use std::path::PathBuf;
 use uuid::Uuid;
@@ -360,25 +362,41 @@ pub async fn inbox_list(pool: tauri::State<'_, SqlitePool>) -> Result<InboxListR
     let total = rows.len();
     let capped = total >= usize::try_from(INBOX_LIST_LIMIT).unwrap_or(usize::MAX);
 
+    // Per-item grouping aggregates for the multi-level grouping UI (spec 041).
+    // Single GROUP BY pass over the items we're about to return — no N+1.
+    let item_ids: Vec<String> = rows.iter().map(|r| r.id.clone()).collect();
+    let mut grouping = grouping_keys_for_items(&pool, &item_ids)
+        .await
+        .map_err(|e| e.to_string())?;
+
     let items = rows
         .into_iter()
-        .map(|r| InboxListItem {
-            inbox_item_id: r.id,
-            root_id: r.root_id,
-            root_absolute_path: r.root_path,
-            relative_path: r.relative_path,
-            file_count: u32::try_from(r.file_count).unwrap_or(u32::MAX),
-            lane: r.lane,
-            format: r.format.unwrap_or_else(|| "fits".to_owned()),
-            state: r.state,
-            content_signature: r.content_signature.unwrap_or_default(),
-            is_master: r.is_master != 0,
-            master_frame_type: r.master_frame_type,
-            master_filter: r.master_filter,
-            master_exposure_s: r.master_exposure_s,
-            // spec 041 — phase 3+ will query this from registered_sources via
-            // the root_id; stub to "unorganized" for now so bindings compile.
-            organization_state: "unorganized".to_owned(),
+        .map(|r| {
+            let g = grouping.remove(&r.id).unwrap_or_default();
+            InboxListItem {
+                inbox_item_id: r.id,
+                root_id: r.root_id,
+                root_absolute_path: r.root_path,
+                relative_path: r.relative_path,
+                file_count: u32::try_from(r.file_count).unwrap_or(u32::MAX),
+                lane: r.lane,
+                format: r.format.unwrap_or_else(|| "fits".to_owned()),
+                state: r.state,
+                content_signature: r.content_signature.unwrap_or_default(),
+                is_master: r.is_master != 0,
+                master_frame_type: r.master_frame_type,
+                master_filter: r.master_filter,
+                master_exposure_s: r.master_exposure_s,
+                // spec 041 — phase 3+ will query this from registered_sources via
+                // the root_id; stub to "unorganized" for now so bindings compile.
+                organization_state: "unorganized".to_owned(),
+                group_target: g.group_target,
+                group_frame_type: g.group_frame_type,
+                group_date: g.group_date,
+                group_filter: g.group_filter,
+                group_exposure: g.group_exposure,
+                group_instrument: g.group_instrument,
+            }
         })
         .collect();
 

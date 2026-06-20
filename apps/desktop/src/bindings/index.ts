@@ -2678,6 +2678,24 @@ export type InboxListItem_Deserialize = {
 	 *  Spec 041 — lets the list surface move-vs-catalogue intent per item.
 	 */
 	organizationState: string,
+	/**  Object / target (FITS `OBJECT`). `Some("Mixed")` if files disagree. */
+	groupTarget: string | null,
+	/**  Dominant effective frame type across the item's files (largest group). */
+	groupFrameType: string | null,
+	/**
+	 *  Capture date as `YYYY-MM-DD` from the earliest `DATE-OBS`.
+	 *  `Some("Mixed")` if files span multiple distinct dates.
+	 */
+	groupDate: string | null,
+	/**  Filter label (FITS `FILTER`). `Some("Mixed")` if files disagree. */
+	groupFilter: string | null,
+	/**
+	 *  Exposure formatted like `"300s"` (trailing zeros trimmed).
+	 *  `Some("Mixed")` if files have multiple distinct exposures.
+	 */
+	groupExposure: string | null,
+	/**  Camera / instrument (FITS `INSTRUME`). `Some("Mixed")` if files disagree. */
+	groupInstrument: string | null,
 };
 
 /**
@@ -2712,6 +2730,24 @@ export type InboxListItem_Serialize = {
 	 *  Spec 041 — lets the list surface move-vs-catalogue intent per item.
 	 */
 	organizationState: string,
+	/**  Object / target (FITS `OBJECT`). `Some("Mixed")` if files disagree. */
+	groupTarget?: string | null,
+	/**  Dominant effective frame type across the item's files (largest group). */
+	groupFrameType?: string | null,
+	/**
+	 *  Capture date as `YYYY-MM-DD` from the earliest `DATE-OBS`.
+	 *  `Some("Mixed")` if files span multiple distinct dates.
+	 */
+	groupDate?: string | null,
+	/**  Filter label (FITS `FILTER`). `Some("Mixed")` if files disagree. */
+	groupFilter?: string | null,
+	/**
+	 *  Exposure formatted like `"300s"` (trailing zeros trimmed).
+	 *  `Some("Mixed")` if files have multiple distinct exposures.
+	 */
+	groupExposure?: string | null,
+	/**  Camera / instrument (FITS `INSTRUME`). `Some("Mixed")` if files disagree. */
+	groupInstrument?: string | null,
 };
 
 /**  Response from `inbox.list`. */
