@@ -89,12 +89,30 @@ async function main() {
       },
     });
 
-    // The real app shell sets this title regardless of backend data, but it
-    // only renders if the real webview booted and the bundle loaded — i.e. the
-    // full UI->runtime path works. Round-trip assertions come in T024–T027.
-    const title = await browser.getTitle();
+    // index.html sets a static <title>, so once the embedded frontend loads the
+    // title is "Astro Library Manager". Poll to allow for webview startup +
+    // navigation latency under xvfb. Round-trip assertions come in T024–T027.
+    let title = "";
+    const deadline = Date.now() + 30_000;
+    while (Date.now() < deadline) {
+      title = await browser.getTitle();
+      if (/Astro Library Manager/i.test(title)) break;
+      await new Promise((r) => setTimeout(r, 1000));
+    }
     log(`document.title = ${JSON.stringify(title)}`);
     if (!/Astro Library Manager/i.test(title)) {
+      // Diagnostics: what did the webview actually load?
+      try {
+        log(`current url = ${await browser.getUrl()}`);
+      } catch (e) {
+        log(`getUrl failed: ${e.message}`);
+      }
+      try {
+        const src = await browser.getPageSource();
+        log(`page source (first 800): ${src.slice(0, 800)}`);
+      } catch (e) {
+        log(`getPageSource failed: ${e.message}`);
+      }
       throw new Error(`unexpected app title: ${JSON.stringify(title)}`);
     }
     log("PASS: real Tauri webview booted and is drivable via WebdriverIO");
