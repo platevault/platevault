@@ -168,6 +168,10 @@ export function InboxPage() {
         detail={
           selectedItem ? (
             <InboxDetail
+              // Remount per item so per-item state (pending type overrides) never
+              // leaks across selections — leaked overrides were being sent to the
+              // wrong item's reclassify and rejected as "not found in evidence".
+              key={selectedItem.inboxItemId}
               item={selectedItem}
               rootAbsolutePath={selectedRootPath}
               classification={classification ?? null}

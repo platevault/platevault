@@ -16,38 +16,38 @@
 import { render, screen, fireEvent } from '@testing-library/react';
 import { describe, it, expect, vi } from 'vitest';
 import { MastersList } from './MastersList';
-import type { CalibrationMaster } from '@/bindings/types';
+import type { CalibrationMaster_Serialize as CalibrationMaster } from '@/bindings/index';
 
 // ── Fixtures ──────────────────────────────────────────────────────────────────
 
 function makeMaster(overrides: Partial<CalibrationMaster> & { id: string }): CalibrationMaster {
-  const { id, kind, age_days, fingerprint, ...rest } = overrides;
+  const { id, kind, ageDays, fingerprint, ...rest } = overrides;
   return {
     id,
     kind: (kind ?? 'dark'),
     fingerprint: {
       camera: 'ASI2600MM',
-      exposure_s: 300,
-      temp_c: -10,
+      exposureS: 300,
+      tempC: -10,
       gain: 100,
       binning: '1x1',
       ...(fingerprint ?? {}),
     },
-    source_session_id: 'cal-ses-001',
-    created_at: '2026-01-01T00:00:00Z',
-    age_days: age_days ?? 30,
-    size_bytes: 128 * 1024 * 1024,
-    used_by_session_ids: [],
-    used_by_project_ids: [],
+    sourceSessionId: 'cal-ses-001',
+    createdAt: '2026-01-01T00:00:00Z',
+    ageDays: ageDays ?? 30,
+    sizeBytes: 128 * 1024 * 1024,
+    usedBySessionIds: [],
+    usedByProjectIds: [],
     ...rest,
   };
 }
 
 const masters: CalibrationMaster[] = [
-  makeMaster({ id: 'dark-1', kind: 'dark', age_days: 30 }),
-  makeMaster({ id: 'dark-2', kind: 'dark', age_days: 95 }), // aging
-  makeMaster({ id: 'flat-1', kind: 'flat', age_days: 10, fingerprint: { camera: 'ASI2600MM', exposure_s: 3, gain: 100, binning: '1x1', filter: 'Ha' } }),
-  makeMaster({ id: 'bias-1', kind: 'bias', age_days: 20 }),
+  makeMaster({ id: 'dark-1', kind: 'dark', ageDays: 30 }),
+  makeMaster({ id: 'dark-2', kind: 'dark', ageDays: 95 }), // aging
+  makeMaster({ id: 'flat-1', kind: 'flat', ageDays: 10, fingerprint: { camera: 'ASI2600MM', exposureS: 3, gain: 100, binning: '1x1', filter: 'Ha' } }),
+  makeMaster({ id: 'bias-1', kind: 'bias', ageDays: 20 }),
 ];
 
 // ── Tests ─────────────────────────────────────────────────────────────────────
@@ -136,7 +136,7 @@ describe('MastersList (spec 007)', () => {
     const darkFlatMaster = makeMaster({
       id: 'df-1',
       kind: 'dark_flat',
-      age_days: 5,
+      ageDays: 5,
     });
     render(
       <MastersList

@@ -7,8 +7,11 @@
 //! Reclassification is NOT permitted while a plan is open (Ref: E1 variant).
 #![allow(clippy::doc_markdown)]
 
+use std::collections::HashMap;
+
 use persistence_db::repositories::inbox::{self as inbox_repo};
 use sqlx::SqlitePool;
+use uuid::Uuid;
 
 use contracts_core::{ContractError, ErrorSeverity};
 
@@ -150,6 +153,38 @@ pub async fn reclassify(
     .await
     .ok();
 
+    // 7. Rebuild breakdown rows so the next classify cache hit returns fresh
+    //    counts and samples (fixes stale/empty breakdown after override apply).
+    //    Group evidence by effective frame type, then upsert one row per type.
+    //    destination_preview is left None — computed on the next force-classify.
+    {
+        let mut groups: HashMap<String, Vec<String>> = HashMap::new();
+        for ev in &updated_evidence {
+            let effective = ev.manual_override.as_deref().or(ev.frame_type.as_deref());
+            if let Some(ft) = effective {
+                groups.entry(ft.to_owned()).or_default().push(ev.relative_file_path.clone());
+            }
+        }
+
+        for (kind, paths) in &groups {
+            let count = i64::try_from(paths.len()).unwrap_or(i64::MAX);
+            let samples: Vec<&str> = paths.iter().take(10).map(String::as_str).collect();
+            let sample_json = serde_json::to_string(&samples).unwrap_or_else(|_| "[]".to_owned());
+            let row_id = Uuid::new_v4().to_string();
+            inbox_repo::upsert_breakdown_row(
+                pool,
+                &row_id,
+                &req.inbox_item_id,
+                kind,
+                count,
+                None,
+                &sample_json,
+            )
+            .await
+            .ok();
+        }
+    }
+
     Ok(ReclassifyResponse {
         inbox_item_id: req.inbox_item_id,
         updated_type,
@@ -290,6 +325,49 @@ mod tests {
 
         assert_eq!(resp.remaining_unclassified, 1);
         assert_eq!(resp.applied_count, 1);
+    }
+
+    /// After applying overrides, `inbox_classification_breakdown` rows must be
+    /// written so that a subsequent `classify` cache-hit returns a non-empty
+    /// breakdown (regression guard for bug 2b).
+    #[tokio::test]
+    async fn reclassify_rebuilds_breakdown_rows() {
+        let db = test_db().await;
+        setup_unclassified_item(&db, "item-recl-bd").await;
+
+        // Apply overrides to both files.
+        reclassify(
+            db.pool(),
+            ReclassifyRequest {
+                inbox_item_id: "item-recl-bd".to_owned(),
+                overrides: vec![
+                    ReclassifyOverride {
+                        file_path: "inbox_folder/mystery_001.fits".to_owned(),
+                        frame_type: "light".to_owned(),
+                    },
+                    ReclassifyOverride {
+                        file_path: "inbox_folder/mystery_002.fits".to_owned(),
+                        frame_type: "dark".to_owned(),
+                    },
+                ],
+            },
+        )
+        .await
+        .unwrap();
+
+        // Breakdown rows must now exist and reflect the overrides.
+        let rows = inbox_repo::list_breakdown(db.pool(), "item-recl-bd").await.unwrap();
+        assert_eq!(rows.len(), 2, "one breakdown row per distinct frame type");
+
+        let mut kinds: Vec<&str> = rows.iter().map(|r| r.kind.as_str()).collect();
+        kinds.sort_unstable();
+        assert_eq!(kinds, ["dark", "light"]);
+
+        let light_row = rows.iter().find(|r| r.kind == "light").unwrap();
+        assert_eq!(light_row.count, 1);
+
+        let dark_row = rows.iter().find(|r| r.kind == "dark").unwrap();
+        assert_eq!(dark_row.count, 1);
     }
 
     #[tokio::test]

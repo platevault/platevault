@@ -45,7 +45,8 @@ vi.mock('../store', () => ({
 // ── Helper: emit a simulated Tauri event ──────────────────────────────────────
 
 function emitEvent(topic: string, payload: unknown): void {
-  const fns = listeners.get(topic) ?? [];
+  // The bridge registers listeners under the Tauri-valid (dot→colon) event name.
+  const fns = listeners.get(topic.replace(/\./g, ':')) ?? [];
   for (const fn of fns) {
     fn({ payload });
   }
