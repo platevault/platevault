@@ -5,11 +5,15 @@
  * state, and a conflict/needs-review indicator.
  */
 
-import { useState, useMemo } from 'react';
+import { useState, useMemo, useRef } from 'react';
+import { useVirtualizer } from '@tanstack/react-virtual';
 import { ListSidebar } from '@/components';
 import { Pill } from '@/ui';
 import type { InboxItemSummary } from '@/api/commands';
 import type { PillVariant } from '@/ui';
+
+/** Estimated row height (px) for the virtualizer's initial measurement. */
+const ROW_ESTIMATE = 56;
 
 // ── Helpers ──────────────────────────────────────────────────────────────────
 
@@ -56,6 +60,17 @@ export function InboxList({
   onGroupByChange,
 }: InboxListProps) {
   const [sortBy, setSortBy] = useState<SortBy>('name');
+  const scrollRef = useRef<HTMLDivElement>(null);
+
+  // O(1) original-index lookup keyed by stable item id. Selection is expressed
+  // as an index into the *unfiltered* `items` array, so each rendered row needs
+  // to map its id back to that original position. Building the map once (O(n))
+  // replaces the previous per-row `items.indexOf(item)` (O(n²)).
+  const originalIndexById = useMemo(() => {
+    const map = new Map<string, number>();
+    items.forEach((item, idx) => map.set(item.inboxItemId, idx));
+    return map;
+  }, [items]);
 
   const filtered = useMemo(() => {
     let result = items;
@@ -71,8 +86,17 @@ export function InboxList({
     return sorted;
   }, [items, filterType, sortBy]);
 
+  const virtualizer = useVirtualizer({
+    count: filtered.length,
+    getScrollElement: () => scrollRef.current,
+    estimateSize: () => ROW_ESTIMATE,
+    overscan: 8,
+  });
+
   return (
     <ListSidebar
+      scrollRef={scrollRef}
+      virtualized
       placeholder="Search inbox…"
       controls={
         <div style={{ display: 'flex', gap: 4, flexWrap: 'wrap', padding: '4px 8px' }}>
@@ -117,50 +141,66 @@ export function InboxList({
         <span className="alm-list-sidebar__count">{filtered.length} folder{filtered.length !== 1 ? 's' : ''}</span>
       }
     >
-      {filtered.map((item, _listIdx) => {
-        // Find original index so selection maps back correctly.
-        const originalIdx = items.indexOf(item);
-        return (
-          <div
-            key={item.inboxItemId}
-            data-testid={`inbox-item-${item.inboxItemId}`}
-            className={`alm-list-item${selectedIdx === originalIdx ? ' alm-list-item--selected' : ''}`}
-            onClick={() => onSelect(originalIdx)}
-            role="button"
-            tabIndex={0}
-            onKeyDown={(e) => e.key === 'Enter' && onSelect(originalIdx)}
-            aria-selected={selectedIdx === originalIdx}
-          >
-            <div className="alm-list-item__title">
-              <strong>{item.relativePath || '(root)'}</strong>
-              <span style={{ marginLeft: 6 }}>
-                <Pill variant={stateVariant(item.state)}>{stateLabel(item.state)}</Pill>
-              </span>
-              {item.isMaster && (
-                <span style={{ marginLeft: 4 }}>
-                  <Pill variant="info">{item.masterFrameType ?? 'master'} master</Pill>
-                </span>
-              )}
-              {!item.isMaster && item.format && item.format !== 'fits' && (
-                <span style={{ marginLeft: 4 }}>
-                  <Pill variant="ghost">{item.format}</Pill>
-                </span>
-              )}
-              {!item.isMaster && !item.format && item.lane === 'video' && (
-                <span style={{ marginLeft: 4 }}>
-                  <Pill variant="ghost">video</Pill>
-                </span>
-              )}
-            </div>
+      <div
+        className="alm-virtual-inner"
+        style={{ height: `${virtualizer.getTotalSize()}px`, position: 'relative' }}
+      >
+        {virtualizer.getVirtualItems().map((virtualRow) => {
+          const item = filtered[virtualRow.index];
+          // O(1) lookup of the original index (falls back to the filtered index
+          // only if the id is somehow absent — should not happen).
+          const originalIdx = originalIndexById.get(item.inboxItemId) ?? virtualRow.index;
+          return (
             <div
-              className="alm-list-item__meta"
-              style={{ display: 'flex', gap: 8, fontSize: 'var(--alm-text-xs)', color: 'var(--alm-text-muted)' }}
+              key={item.inboxItemId}
+              data-index={virtualRow.index}
+              ref={virtualizer.measureElement}
+              data-testid={`inbox-item-${item.inboxItemId}`}
+              className={`alm-list-item${selectedIdx === originalIdx ? ' alm-list-item--selected' : ''}`}
+              onClick={() => onSelect(originalIdx)}
+              role="button"
+              tabIndex={0}
+              onKeyDown={(e) => e.key === 'Enter' && onSelect(originalIdx)}
+              aria-selected={selectedIdx === originalIdx}
+              style={{
+                position: 'absolute',
+                top: 0,
+                left: 0,
+                right: 0,
+                transform: `translateY(${virtualRow.start}px)`,
+              }}
             >
-              <span>{item.fileCount} file{item.fileCount !== 1 ? 's' : ''}</span>
+              <div className="alm-list-item__title">
+                <strong>{item.relativePath || '(root)'}</strong>
+                <span style={{ marginLeft: 6 }}>
+                  <Pill variant={stateVariant(item.state)}>{stateLabel(item.state)}</Pill>
+                </span>
+                {item.isMaster && (
+                  <span style={{ marginLeft: 4 }}>
+                    <Pill variant="info">{item.masterFrameType ?? 'master'} master</Pill>
+                  </span>
+                )}
+                {!item.isMaster && item.format && item.format !== 'fits' && (
+                  <span style={{ marginLeft: 4 }}>
+                    <Pill variant="ghost">{item.format}</Pill>
+                  </span>
+                )}
+                {!item.isMaster && !item.format && item.lane === 'video' && (
+                  <span style={{ marginLeft: 4 }}>
+                    <Pill variant="ghost">video</Pill>
+                  </span>
+                )}
+              </div>
+              <div
+                className="alm-list-item__meta"
+                style={{ display: 'flex', gap: 8, fontSize: 'var(--alm-text-xs)', color: 'var(--alm-text-muted)' }}
+              >
+                <span>{item.fileCount} file{item.fileCount !== 1 ? 's' : ''}</span>
+              </div>
             </div>
-          </div>
-        );
-      })}
+          );
+        })}
+      </div>
     </ListSidebar>
   );
 }

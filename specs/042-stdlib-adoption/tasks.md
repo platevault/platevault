@@ -117,9 +117,9 @@ Frontend: `cd apps/desktop && npx tsc --noEmit` + `npx vitest run <feature>`. Ru
 
 ## Phase 7 — US3 Virtualize long lists (P2)
 
-- [ ] T150 [P] Virtualize `LogPanel.tsx:332` (`useVirtualizer`, preserve follow-tail).
-- [ ] T151 [P] Virtualize `InboxList.tsx:120` + fix O(n²) `indexOf` at `:122`.
-- [ ] T152 [P] Virtualize `TargetList.tsx:38` and `TargetSearch.tsx:438` results.
+- [X] T150 [P] Virtualize `LogPanel.tsx:332` (`useVirtualizer`, preserve follow-tail).
+- [X] T151 [P] Virtualize `InboxList.tsx:120` + fix O(n²) `indexOf` at `:122`.
+- [X] T152 [P] Virtualize `TargetList.tsx:38` and `TargetSearch.tsx:438` results.
 - [ ] **US3 checkpoint**: vitest + tsc; commit `feat(042): US3 virtualize long lists`.
 
 ## Phase 8 — US4 base-ui primitives (P2)

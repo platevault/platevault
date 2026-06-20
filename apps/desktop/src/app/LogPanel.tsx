@@ -12,6 +12,7 @@
  * - Escape key closes the panel.
  */
 import { useEffect, useRef, useCallback, useSyncExternalStore, useState } from 'react';
+import { useVirtualizer } from '@tanstack/react-virtual';
 import { Collapsible } from '@base-ui-components/react/collapsible';
 import { useNavigate } from '@tanstack/react-router';
 import { useLogPanel } from './LogPanelContext';
@@ -114,6 +115,29 @@ export function LogPanel() {
     getLogSnapshot,
   );
 
+  // Filter entries for render (computed before the follow-tail effect /
+  // virtualizer that depend on the rendered list).
+  const visibleEntries = entries.filter((entry) => {
+    if (!passesLevelFilter(entry.level, levelFilter)) return false;
+    if (!passesSourceFilter(entry.source, sourceFilter)) return false;
+    if (entry.source === 'diagnostic' && !showDiagnostics) return false;
+    // Gate diagnostics on logLevel setting (A3).
+    if (entry.source === 'diagnostic' && logLevel !== 'debug') return false;
+    return true;
+  });
+
+  // Idle preview: show the most-recent visible entry message.
+  const previewEntry = visibleEntries[0];
+
+  // Virtualize the (potentially long) log list. The `<ul>` is the scroll
+  // element; entries are newest-first so index 0 (offset 0) is the newest.
+  const virtualizer = useVirtualizer({
+    count: visibleEntries.length,
+    getScrollElement: () => listRef.current,
+    estimateSize: () => 28,
+    overscan: 12,
+  });
+
   // Start subscription on mount.
   useEffect(() => {
     void startLogSubscription();
@@ -136,13 +160,17 @@ export function LogPanel() {
     if (!expanded || !followLogs || scrollPaused) return;
     const list = listRef.current;
     if (!list) return;
-    // Entries are newest-first: scroll to top to see the latest.
+    // Entries are newest-first: scroll to top (offset 0) to see the latest.
+    // Drive the virtualizer to index 0 so its window updates, then pin the
+    // native scrollTop to 0 (covers reduced-motion + non-smooth fallbacks and
+    // jsdom, where `scrollTo` is a no-op).
+    virtualizer.scrollToIndex(0, { align: 'start' });
     if (prefersReducedMotion) {
       list.scrollTop = 0;
     } else {
       list.scrollTo({ top: 0, behavior: 'smooth' });
     }
-  }, [entries, expanded, followLogs, scrollPaused, prefersReducedMotion]);
+  }, [visibleEntries.length, expanded, followLogs, scrollPaused, prefersReducedMotion, virtualizer]);
 
   // Pause follow on manual scroll-up, resume on scroll-to-top.
   const handleScroll = useCallback(() => {
@@ -208,19 +236,6 @@ export function LogPanel() {
       setExportError(errMessage(err));
     }
   }, [showDiagnostics]);
-
-  // Filter entries for render.
-  const visibleEntries = entries.filter((entry) => {
-    if (!passesLevelFilter(entry.level, levelFilter)) return false;
-    if (!passesSourceFilter(entry.source, sourceFilter)) return false;
-    if (entry.source === 'diagnostic' && !showDiagnostics) return false;
-    // Gate diagnostics on logLevel setting (A3).
-    if (entry.source === 'diagnostic' && logLevel !== 'debug') return false;
-    return true;
-  });
-
-  // Idle preview: show the most-recent visible entry message.
-  const previewEntry = visibleEntries[0];
 
   return (
     <Collapsible.Root
@@ -326,18 +341,40 @@ export function LogPanel() {
           </div>
         )}
 
-        <ul className="alm-logpanel__events" ref={listRef} onScroll={handleScroll}>
+        <ul
+          className="alm-logpanel__events alm-virtual-scroll"
+          ref={listRef}
+          onScroll={handleScroll}
+          data-virtual-scroll="true"
+        >
           {visibleEntries.length === 0 ? (
             <li className="alm-logpanel__empty">No log entries</li>
           ) : (
-            visibleEntries.map((entry) => (
-              <LogEntryRow
-                key={entry.id}
-                entry={entry}
-                onNavigateEntity={navigateToEntity}
-                onNavigateAudit={navigateToAudit}
-              />
-            ))
+            <div
+              className="alm-virtual-inner"
+              style={{ height: `${virtualizer.getTotalSize()}px`, position: 'relative' }}
+            >
+              {virtualizer.getVirtualItems().map((virtualRow) => {
+                const entry = visibleEntries[virtualRow.index];
+                return (
+                  <LogEntryRow
+                    key={entry.id}
+                    entry={entry}
+                    index={virtualRow.index}
+                    measureRef={virtualizer.measureElement}
+                    style={{
+                      position: 'absolute',
+                      top: 0,
+                      left: 0,
+                      right: 0,
+                      transform: `translateY(${virtualRow.start}px)`,
+                    }}
+                    onNavigateEntity={navigateToEntity}
+                    onNavigateAudit={navigateToAudit}
+                  />
+                );
+              })}
+            </div>
           )}
         </ul>
       </Collapsible.Panel>
@@ -351,9 +388,22 @@ interface LogEntryRowProps {
   entry: LogEntry;
   onNavigateEntity: EntityNavigateFn;
   onNavigateAudit: AuditNavigateFn;
+  /** Virtual-row positioning style (absolute + translateY). */
+  style?: React.CSSProperties;
+  /** Virtual-row index for the virtualizer's measure cache. */
+  index?: number;
+  /** Virtualizer measure callback ref. */
+  measureRef?: (node: Element | null) => void;
 }
 
-function LogEntryRow({ entry, onNavigateEntity, onNavigateAudit }: LogEntryRowProps) {
+function LogEntryRow({
+  entry,
+  onNavigateEntity,
+  onNavigateAudit,
+  style,
+  index,
+  measureRef,
+}: LogEntryRowProps) {
   const hasEntityLink = entry.entityType != null && entry.entityId != null;
   const hasAuditLink = entry.requestId != null && !hasEntityLink;
 
@@ -369,6 +419,9 @@ function LogEntryRow({ entry, onNavigateEntity, onNavigateAudit }: LogEntryRowPr
 
   return (
     <li
+      ref={measureRef}
+      data-index={index}
+      style={style}
       className={`alm-logpanel__event${isClickable ? ' alm-logpanel__event--link' : ''}`}
       onClick={isClickable ? handleClick : undefined}
       role={isClickable ? 'button' : 'listitem'}

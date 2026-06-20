@@ -218,7 +218,14 @@
   padding: 0 var(--alm-sp-2); font-family: var(--alm-font-sans);
   cursor: pointer;
 }
-.alm-list-sidebar__list { flex: 1; overflow-y: auto; }
+.alm-list-sidebar__list { flex: 1; overflow-y: auto; position: relative; }
+
+/* === VIRTUALIZED LISTS (spec 042 / @tanstack/react-virtual) === */
+/* The scroll container owns overflow + measured height; the inner spacer
+   reserves total scroll height and anchors absolutely-positioned rows. */
+.alm-virtual-scroll { position: relative; }
+.alm-virtual-inner { width: 100%; }
+.alm-virtual-inner > * { width: 100%; box-sizing: border-box; }
 .alm-list-sidebar__footer {
   padding: var(--alm-sp-1) var(--alm-sp-3);
   border-top: 1px solid var(--alm-border-subtle);

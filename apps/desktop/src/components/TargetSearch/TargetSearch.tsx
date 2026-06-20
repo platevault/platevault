@@ -29,6 +29,7 @@
  */
 
 import { useCallback, useEffect, useId, useRef, useState } from 'react';
+import { useVirtualizer } from '@tanstack/react-virtual';
 import {
   searchTargets,
   resolveTarget,
@@ -50,6 +51,8 @@ const DEBOUNCE_MS = 300;
 const DEFAULT_LIMIT = 20;
 /** Minimum query length before the SIMBAD long-tail phase fires (US3, T022). */
 const MIN_RESOLVE_LEN = 3;
+/** Estimated suggestion-row height (px) for the virtualizer. */
+const OPTION_ESTIMATE = 44;
 
 // ── Props ────────────────────────────────────────────────────────────────────
 
@@ -179,6 +182,16 @@ export function TargetSearch({
   // generation guard — not an AbortController — is the actual cancel mechanism.)
   const genRef = useRef(0);
   const debounceRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const listRef = useRef<HTMLUListElement>(null);
+
+  // Virtualize the suggestion options. The `<ul role="listbox">` is the scroll
+  // element (height-capped via CSS); only the visible option window mounts.
+  const virtualizer = useVirtualizer({
+    count: suggestions.length,
+    getScrollElement: () => listRef.current,
+    estimateSize: () => OPTION_ESTIMATE,
+    overscan: 6,
+  });
 
   const runSearch = useCallback(
     async (raw: string) => {
@@ -344,6 +357,15 @@ export function TargetSearch({
   const activeOptionId =
     activeIndex >= 0 && activeIndex < suggestions.length ? `${id}-opt-${activeIndex}` : undefined;
 
+  // Keep the active option mounted + visible during keyboard navigation. The
+  // virtualizer only mounts the visible window, so an off-screen active option
+  // (referenced by `aria-activedescendant`) must be scrolled into view.
+  useEffect(() => {
+    if (activeIndex >= 0 && activeIndex < suggestions.length) {
+      virtualizer.scrollToIndex(activeIndex, { align: 'auto' });
+    }
+  }, [activeIndex, suggestions.length, virtualizer]);
+
   return (
     <div className="alm-target-search">
       <label
@@ -421,9 +443,11 @@ export function TargetSearch({
       {showList && (
         <ul
           id={listboxId}
+          ref={listRef}
           role="listbox"
           aria-label="Target suggestions"
-          className="alm-target-search__list"
+          className="alm-target-search__list alm-virtual-scroll"
+          data-virtual-scroll="true"
         >
           {loading && suggestions.length === 0 && (
             <li className="alm-target-search__status" aria-live="polite">
@@ -435,55 +459,73 @@ export function TargetSearch({
               No matching targets.
             </li>
           )}
-          {suggestions.map((s, i) => {
-            const secondary = s.commonName ?? s.matchedAlias ?? null;
-            return (
-              <li
-                key={s.targetId}
-                id={`${id}-opt-${i}`}
-                role="option"
-                aria-selected={i === activeIndex}
-                className={
-                  i === activeIndex
-                    ? 'alm-target-search__option alm-target-search__option--active'
-                    : 'alm-target-search__option'
-                }
-                onMouseDown={(e) => {
-                  // Prevent the input blur from closing the list before select.
-                  e.preventDefault();
-                  handleSelect(s);
-                }}
-                onMouseEnter={() => setActiveIndex(i)}
-              >
-                <span className="alm-target-search__primary">{s.primaryDesignation}</span>
-                {secondary && secondary !== s.primaryDesignation && (
-                  <span className="alm-target-search__secondary">{secondary}</span>
-                )}
-                <span className="alm-target-search__badges">
-                  <Pill variant="info">{objectTypeLabel(s.objectType)}</Pill>
-                  <Pill variant={s.source === 'user-override' ? 'accent' : 'ghost'}>
-                    {s.source}
-                  </Pill>
-                  {enableOverride && (
-                    <button
-                      type="button"
-                      className="alm-target-search__override"
-                      aria-label={`Set "${query.trim()}" to ${s.primaryDesignation}`}
-                      disabled={overriding != null || query.trim().length === 0}
-                      onMouseDown={(e) => {
-                        // Don't trigger the row's select-on-mousedown.
-                        e.preventDefault();
-                        e.stopPropagation();
-                        void handleOverride(s);
-                      }}
-                    >
-                      {overriding === s.targetId ? 'Setting…' : 'Correct…'}
-                    </button>
-                  )}
-                </span>
-              </li>
-            );
-          })}
+          {suggestions.length > 0 && (
+            <div
+              className="alm-virtual-inner"
+              style={{ height: `${virtualizer.getTotalSize()}px`, position: 'relative' }}
+            >
+              {virtualizer.getVirtualItems().map((virtualRow) => {
+                const i = virtualRow.index;
+                const s = suggestions[i];
+                const secondary = s.commonName ?? s.matchedAlias ?? null;
+                return (
+                  <li
+                    key={s.targetId}
+                    id={`${id}-opt-${i}`}
+                    data-index={i}
+                    ref={virtualizer.measureElement}
+                    role="option"
+                    aria-selected={i === activeIndex}
+                    className={
+                      i === activeIndex
+                        ? 'alm-target-search__option alm-target-search__option--active'
+                        : 'alm-target-search__option'
+                    }
+                    style={{
+                      position: 'absolute',
+                      top: 0,
+                      left: 0,
+                      right: 0,
+                      transform: `translateY(${virtualRow.start}px)`,
+                    }}
+                    onMouseDown={(e) => {
+                      // Prevent the input blur from closing the list before select.
+                      e.preventDefault();
+                      handleSelect(s);
+                    }}
+                    onMouseEnter={() => setActiveIndex(i)}
+                  >
+                    <span className="alm-target-search__primary">{s.primaryDesignation}</span>
+                    {secondary && secondary !== s.primaryDesignation && (
+                      <span className="alm-target-search__secondary">{secondary}</span>
+                    )}
+                    <span className="alm-target-search__badges">
+                      <Pill variant="info">{objectTypeLabel(s.objectType)}</Pill>
+                      <Pill variant={s.source === 'user-override' ? 'accent' : 'ghost'}>
+                        {s.source}
+                      </Pill>
+                      {enableOverride && (
+                        <button
+                          type="button"
+                          className="alm-target-search__override"
+                          aria-label={`Set "${query.trim()}" to ${s.primaryDesignation}`}
+                          disabled={overriding != null || query.trim().length === 0}
+                          onMouseDown={(e) => {
+                            // Don't trigger the row's select-on-mousedown.
+                            e.preventDefault();
+                            e.stopPropagation();
+                            void handleOverride(s);
+                          }}
+                        >
+                          {overriding === s.targetId ? 'Setting…' : 'Correct…'}
+                        </button>
+                      )}
+                    </span>
+                  </li>
+                );
+              })}
+            </div>
+          )}
           {resolving && (
             <li
               className="alm-target-search__status alm-target-search__status--resolving"
