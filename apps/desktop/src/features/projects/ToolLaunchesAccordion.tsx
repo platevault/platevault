@@ -53,28 +53,25 @@ function ArtifactRow({ artifact, projectId, onResolved }: ArtifactRowProps) {
 
   return (
     <div
-      className="artifact-row"
+      className="artifact-row alm-tool-launches__artifact-row"
       data-state={artifact.state}
       data-kind={artifact.kind}
-      style={{ display: 'flex', alignItems: 'center', gap: 8, padding: '4px 0' }}
     >
       {/* Kind badge */}
       <span
-        className={`artifact-kind-badge artifact-kind-${artifact.kind}`}
+        className={`artifact-kind-badge artifact-kind-${artifact.kind} alm-tool-launches__kind-badge`}
         title={`${artifact.kind}${isFallback ? ' (low confidence)' : ''}`}
-        style={{ fontSize: 11, opacity: isFallback ? 0.6 : 1 }}
+        style={{ opacity: isFallback ? 0.6 : 1 }}
       >
         {artifact.kind}
       </span>
 
       {/* File name — strikethrough when missing */}
       <span
-        className="artifact-file-name"
+        className="artifact-file-name alm-tool-launches__file-name"
         style={{
           textDecoration: isMissing ? 'line-through' : 'none',
           opacity: isMissing ? 0.5 : 1,
-          fontFamily: 'monospace',
-          fontSize: 12,
         }}
         title={artifact.path}
       >
@@ -83,18 +80,14 @@ function ArtifactRow({ artifact, projectId, onResolved }: ArtifactRowProps) {
 
       {/* Status badges */}
       {isMissing && (
-        <span
-          className="artifact-badge artifact-badge-missing"
-          style={{ fontSize: 10, color: 'var(--alm-danger)' }}
-        >
+        <span className="artifact-badge artifact-badge-missing alm-tool-launches__badge-missing">
           Missing
         </span>
       )}
 
       {isManualOverride && (
         <span
-          className="artifact-badge artifact-badge-manual"
-          style={{ fontSize: 10, color: 'var(--alm-info)' }}
+          className="artifact-badge artifact-badge-manual alm-tool-launches__badge-manual"
           title="Classification manually overridden"
         >
           (manual)
@@ -105,10 +98,9 @@ function ArtifactRow({ artifact, projectId, onResolved }: ArtifactRowProps) {
       {isMissing && (
         <button
           type="button"
-          className="artifact-mark-resolved-btn"
+          className="artifact-mark-resolved-btn alm-tool-launches__resolve-btn"
           onClick={handleMarkResolved}
           disabled={working}
-          style={{ fontSize: 11, marginLeft: 'auto', cursor: 'pointer' }}
           aria-label={`Mark ${fileName} as resolved`}
         >
           {working ? 'Resolving…' : 'Mark resolved'}
@@ -141,20 +133,11 @@ function ArtifactGroupSection({ group, projectId, onAction }: GroupSectionProps)
     .join(', ');
 
   return (
-    <div className="artifact-group" style={{ marginBottom: 12 }}>
-      <div
-        className="artifact-group-header"
-        style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 4 }}
-      >
-        <span style={{ fontWeight: 600, fontSize: 12 }}>{label}</span>
+    <div className="artifact-group alm-tool-launches__group">
+      <div className="artifact-group-header alm-tool-launches__group-header">
+        <span className="alm-tool-launches__group-label">{label}</span>
         <span
-          className="artifact-count-badge"
-          style={{
-            fontSize: 10,
-            background: 'var(--alm-bg3)',
-            borderRadius: 4,
-            padding: '1px 5px',
-          }}
+          className="artifact-count-badge alm-tool-launches__count-badge"
           title={countBadge}
         >
           {group.artifacts.length}
@@ -181,12 +164,12 @@ export function ToolLaunchesAccordion({ projectId, launchOrder = [] }: Props) {
   const groups = groupArtifactsByLaunch(artifacts, launchOrder);
 
   if (loading) {
-    return <div className="tool-launches-loading" style={{ fontSize: 12 }}>Loading artifacts…</div>;
+    return <div className="tool-launches-loading alm-tool-launches__loading">Loading artifacts…</div>;
   }
 
   if (error) {
     return (
-      <div className="tool-launches-error" style={{ fontSize: 12, color: 'var(--alm-danger)' }}>
+      <div className="tool-launches-error alm-tool-launches__error">
         Failed to load artifacts: {error}
       </div>
     );
@@ -194,7 +177,7 @@ export function ToolLaunchesAccordion({ projectId, launchOrder = [] }: Props) {
 
   if (groups.length === 0) {
     return (
-      <div className="tool-launches-empty" style={{ fontSize: 12, opacity: 0.6 }}>
+      <div className="tool-launches-empty alm-tool-launches__empty">
         No processing artifacts observed yet.
       </div>
     );

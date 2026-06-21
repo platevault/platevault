@@ -77,7 +77,7 @@ export function TargetDetailPaneInline({ target }: TargetDetailPaneInlineProps) 
           <>
             <strong>{target.name}</strong>
             {target.common && (
-              <span style={{ color: 'var(--alm-text-muted)', fontWeight: 400 }}> — {target.common}</span>
+              <span className="alm-target-detail-legacy__common-name"> — {target.common}</span>
             )}
           </>
         }
@@ -107,13 +107,13 @@ export function TargetDetailPaneInline({ target }: TargetDetailPaneInlineProps) 
                     />
                   ))}
                   {coverageWarning && (
-                    <Banner variant="warn" style={{ marginTop: 'var(--alm-sp-2)' }}>
+                    <Banner variant="warn" className="alm-target-detail-legacy__coverage-warn">
                       Some filters are below the recommended integration.
                     </Banner>
                   )}
                 </>
               ) : (
-                <span style={{ fontSize: 'var(--alm-text-xs)', color: 'var(--alm-text-faint)' }}>No coverage data</span>
+                <span className="alm-target-detail-legacy__no-coverage">No coverage data</span>
               )}
             </RailCard>
             <RailCard title="Totals">
@@ -122,14 +122,14 @@ export function TargetDetailPaneInline({ target }: TargetDetailPaneInlineProps) 
               <KV label="Projects" value={String(target.projects)} />
             </RailCard>
             <RailCard title="Observing plans">
-              <div style={{ display: 'flex', flexDirection: 'column', gap: 'var(--alm-sp-2)', fontSize: 'var(--alm-text-xs)' }}>
+              <div className="alm-target-detail-legacy__obs-plans">
                 <div>
                   <div className="alm-mono">NGC7000_SHO_plan.nina</div>
-                  <div style={{ color: 'var(--alm-text-muted)' }}>NINA · linked 2024-11-29</div>
+                  <div className="alm-target-detail-legacy__obs-plan-meta">NINA · linked 2024-11-29</div>
                 </div>
                 <div>
                   <div className="alm-mono">NGC7000_panel_2.nina</div>
-                  <div style={{ color: 'var(--alm-text-muted)' }}>NINA · linked 2024-12-15</div>
+                  <div className="alm-target-detail-legacy__obs-plan-meta">NINA · linked 2024-12-15</div>
                 </div>
               </div>
             </RailCard>
@@ -159,14 +159,14 @@ export function TargetDetailPaneInline({ target }: TargetDetailPaneInlineProps) 
                 state: <Pill variant={sessionStateVariant(s.state)}>{sessionStateLabel(s.state)}</Pill>,
                 projects:
                   s.projectIds.length === 0 ? (
-                    <span style={{ color: 'var(--alm-text-faint)' }}>—</span>
+                    <span className="alm-target-detail-legacy__no-projects-dash">—</span>
                   ) : (
                     <span>{s.projectIds.length} proj</span>
                   ),
               }))}
             />
           ) : (
-            <span style={{ color: 'var(--alm-text-faint)', fontSize: 'var(--alm-text-sm)' }}>
+            <span className="alm-target-detail-legacy__sessions-summary">
               {target.sessions} session{target.sessions !== 1 ? 's' : ''} · {target.hours.toFixed(1)}h total
             </span>
           )}
@@ -187,7 +187,7 @@ export function TargetDetailPaneInline({ target }: TargetDetailPaneInlineProps) 
               }))}
             />
           ) : (
-            <span style={{ color: 'var(--alm-text-faint)', fontSize: 'var(--alm-text-sm)' }}>No projects</span>
+            <span className="alm-target-detail-legacy__projects-empty">No projects</span>
           )}
         </Section>
       </DetailGrid>

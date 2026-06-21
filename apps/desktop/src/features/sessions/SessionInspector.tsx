@@ -59,10 +59,10 @@ export function SessionInspector({
       <div className="alm-session-inspector__section">
         <div className="alm-session-inspector__section-label">Target</div>
         <div className="alm-session-inspector-card">
-          <div style={{ fontWeight: 600 }}>
+          <div className="alm-session-inspector__target-name">
             {session.sessionKey.target} &rarr;
           </div>
-          <div style={{ fontSize: 'var(--alm-text-xs)', color: 'var(--alm-text-muted)' }}>
+          <div className="alm-session-inspector__target-subtitle">
             {session.targetIds.length} linked target{session.targetIds.length !== 1 ? 's' : ''}
           </div>
         </div>
@@ -73,18 +73,15 @@ export function SessionInspector({
         <div className="alm-session-inspector__section-label">Calibration matches</div>
         {CAL_MATCHES.map((c, i) => (
           <div key={i} className="alm-session-inspector-card">
-            <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
-              <span style={{ flex: 1, fontWeight: 500, fontSize: 'var(--alm-text-sm)' }}>
+            <div className="alm-session-inspector__cal-header">
+              <span className="alm-session-inspector__cal-kind">
                 {c.kind} &rarr;
               </span>
-              <span
-                className="alm-mono"
-                style={{ fontSize: 'var(--alm-text-xs)', color: 'var(--alm-text-secondary)' }}
-              >
+              <span className="alm-mono alm-session-inspector__cal-score">
                 {c.score.toFixed(2)}
               </span>
             </div>
-            <div style={{ marginTop: 3, display: 'flex', alignItems: 'center', gap: 6 }}>
+            <div className="alm-session-inspector__cal-decision">
               {c.decision === 'accepted' ? (
                 <Pill variant="ok">accepted</Pill>
               ) : (
@@ -101,13 +98,13 @@ export function SessionInspector({
           Projects ({session.projectIds.length})
         </div>
         {session.projectIds.length === 0 ? (
-          <div style={{ fontSize: 'var(--alm-text-xs)', color: 'var(--alm-text-muted)', padding: '4px 0' }}>
+          <div className="alm-session-inspector__projects-empty">
             Not linked to any project
           </div>
         ) : (
           session.projectIds.map((pid) => (
             <div key={pid} className="alm-session-inspector-card">
-              <div style={{ fontWeight: 500 }}>{pid.slice(0, 16)} &rarr;</div>
+              <div className="alm-session-inspector__project-label">{pid.slice(0, 16)} &rarr;</div>
             </div>
           ))
         )}
@@ -115,10 +112,10 @@ export function SessionInspector({
 
       {/* Immutable note */}
       <div className="alm-session-inspector__immutable">
-        <div style={{ fontWeight: 500, color: 'var(--alm-text-secondary)' }}>
+        <div className="alm-session-inspector__immutable-heading">
           Immutable
         </div>
-        <div style={{ marginTop: 3 }}>
+        <div className="alm-session-inspector__immutable-body">
           Source identity is locked. Re-opening to review creates a new
           reviewed metadata record without rewriting history.
         </div>

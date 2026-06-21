@@ -260,43 +260,19 @@ function InboxRow({
       </div>
 
       {/* ── Secondary line: structured columns ── */}
-      <div
-        className="alm-list-item__meta"
-        style={{
-          display: 'grid',
-          gridTemplateColumns: 'minmax(0,1fr) auto auto',
-          gap: '0 var(--alm-sp-2)',
-          alignItems: 'baseline',
-          fontSize: 'var(--alm-text-xs)',
-          color: 'var(--alm-text-muted)',
-          marginTop: 2,
-        }}
-      >
+      <div className="alm-list-item__meta alm-inbox-list__meta">
         {/* State — left column, truncates if narrow */}
-        <span
-          style={{
-            overflow: 'hidden',
-            textOverflow: 'ellipsis',
-            whiteSpace: 'nowrap',
-            color: 'var(--alm-text-secondary)',
-          }}
-        >
+        <span className="alm-inbox-list__meta-state">
           {stateLabel(item.state)}
         </span>
 
         {/* File count — fixed right */}
-        <span style={{ whiteSpace: 'nowrap' }}>
+        <span className="alm-inbox-list__meta-count">
           {item.fileCount} {item.fileCount !== 1 ? 'files' : 'file'}
         </span>
 
         {/* Format / master indicator — fixed right */}
-        <span
-          style={{
-            whiteSpace: 'nowrap',
-            fontFamily: 'var(--alm-font-mono, monospace)',
-            letterSpacing: '0.02em',
-          }}
-        >
+        <span className="alm-inbox-list__meta-format">
           {item.isMaster
             ? `${item.masterFrameType ?? 'master'} master`
             : formatTag(item)}
@@ -321,34 +297,19 @@ function GroupHeaderRow({
   return (
     <button
       type="button"
-      className="alm-list-group-header"
+      className="alm-list-group-header alm-inbox-list__group-header"
       data-testid={`inbox-group-${node.dimension}-${node.key}`}
       onClick={onToggle}
       aria-expanded={!collapsed}
-      style={{
-        display: 'flex',
-        alignItems: 'center',
-        gap: 6,
-        width: '100%',
-        background: 'none',
-        border: 'none',
-        textAlign: 'left',
-        cursor: 'pointer',
-        padding: '4px 8px',
-        paddingLeft: 8 + headerIndent,
-        font: 'inherit',
-        color: 'var(--alm-text-secondary)',
-        fontSize: 'var(--alm-text-xs)',
-        fontWeight: 600,
-      }}
+      style={{ paddingLeft: 8 + headerIndent }}
     >
-      <span aria-hidden="true" style={{ width: '0.7em', display: 'inline-block' }}>
+      <span aria-hidden="true" className="alm-inbox-list__group-caret">
         {collapsed ? '▸' : '▾'}
       </span>
-      <span style={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+      <span className="alm-inbox-list__group-label">
         {node.label}
       </span>
-      <span style={{ color: 'var(--alm-text-muted)', fontWeight: 400, marginLeft: 'auto' }}>
+      <span className="alm-inbox-list__group-count">
         {node.count}
       </span>
     </button>
@@ -517,9 +478,9 @@ export function InboxList({
     <ListSidebar
       placeholder="Search inbox…"
       controls={
-        <div style={{ display: 'flex', flexDirection: 'column', gap: 4, padding: '4px 8px' }}>
+        <div className="alm-inbox-list__controls">
           {/* Ordered grouping configurator: "Group by X, then by Y, then by Z". */}
-          <div style={{ display: 'flex', gap: 4, flexWrap: 'wrap', alignItems: 'center' }}>
+          <div className="alm-inbox-list__group-row">
             {Array.from({ length: MAX_GROUP_LEVELS }).map((_, slot) => {
               const value = dims[slot] ?? NONE_DIM;
               // A slot is only enabled if all earlier slots have a dimension.
@@ -550,7 +511,7 @@ export function InboxList({
             })}
           </div>
           {/* Sort + filter controls. */}
-          <div style={{ display: 'flex', gap: 4, flexWrap: 'wrap' }}>
+          <div className="alm-inbox-list__sort-row">
             <select
               className="alm-select"
               value={sortBy}
@@ -586,10 +547,9 @@ export function InboxList({
       <div
         ref={sizerRef}
         data-testid="inbox-virtual-sizer"
+        className="alm-inbox-list__sizer"
         onKeyDown={onListKeyDown}
         style={{
-          position: 'relative',
-          width: '100%',
           height: windowed ? rowVirtualizer.getTotalSize() : undefined,
         }}
       >

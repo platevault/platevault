@@ -109,7 +109,7 @@ export function ManifestsAccordion({ projectId }: ManifestsAccordionProps) {
       <Section title="Manifests">
         <div
           data-testid="manifests-loading"
-          style={{ fontSize: 'var(--alm-text-sm)', color: 'var(--alm-text-muted)' }}
+          className="alm-manifests__status"
         >
           Loading…
         </div>
@@ -122,7 +122,7 @@ export function ManifestsAccordion({ projectId }: ManifestsAccordionProps) {
       <Section title="Manifests">
         <div
           data-testid="manifests-error"
-          style={{ fontSize: 'var(--alm-text-sm)', color: 'var(--alm-danger)' }}
+          className="alm-manifests__status--error"
         >
           Could not load manifests.
         </div>
@@ -135,7 +135,7 @@ export function ManifestsAccordion({ projectId }: ManifestsAccordionProps) {
       {manifests.length === 0 ? (
         <div
           data-testid="manifests-empty"
-          style={{ fontSize: 'var(--alm-text-sm)', color: 'var(--alm-text-muted)' }}
+          className="alm-manifests__status"
         >
           No manifests yet. Manifests are generated automatically at lifecycle
           checkpoints.
@@ -145,42 +145,18 @@ export function ManifestsAccordion({ projectId }: ManifestsAccordionProps) {
           {manifests.map((m) => (
             <div
               key={m.id}
-              style={{
-                borderBottom: '1px solid var(--alm-border)',
-                paddingBottom: 'var(--alm-sp-2)',
-                marginBottom: 'var(--alm-sp-2)',
-              }}
+              className="alm-manifests__item"
             >
               {/* Row header */}
-              <div
-                style={{
-                  display: 'flex',
-                  alignItems: 'center',
-                  gap: 'var(--alm-sp-2)',
-                }}
-              >
+              <div className="alm-manifests__row-header">
                 <button
                   data-testid={`manifest-row-${m.id}`}
                   onClick={() => void handleToggle(m.id)}
-                  style={{
-                    flex: 1,
-                    textAlign: 'left',
-                    background: 'none',
-                    border: 'none',
-                    cursor: 'pointer',
-                    padding: 'var(--alm-sp-1) 0',
-                    fontSize: 'var(--alm-text-sm)',
-                  }}
+                  className="alm-manifests__toggle-btn"
                   aria-expanded={expandedId === m.id}
                 >
-                  <span style={{ fontWeight: 500 }}>{manifestReasonLabel(m.reason)}</span>
-                  <span
-                    style={{
-                      marginLeft: 'var(--alm-sp-2)',
-                      color: 'var(--alm-text-muted)',
-                      fontSize: 'var(--alm-text-xs)',
-                    }}
-                  >
+                  <span className="alm-manifests__reason-label">{manifestReasonLabel(m.reason)}</span>
+                  <span className="alm-manifests__timestamp">
                     {formatManifestTimestamp(m.timestamp)}
                   </span>
                 </button>
@@ -200,13 +176,7 @@ export function ManifestsAccordion({ projectId }: ManifestsAccordionProps) {
               {expandedId === m.id && (
                 <div
                   data-testid={`manifest-body-${m.id}`}
-                  style={{
-                    marginTop: 'var(--alm-sp-2)',
-                    padding: 'var(--alm-sp-2)',
-                    background: 'var(--alm-bg3)',
-                    borderRadius: 4,
-                    fontSize: 'var(--alm-text-xs)',
-                  }}
+                  className="alm-manifests__body-panel"
                 >
                   {bodyLoading === m.id ? (
                     <span>Loading body…</span>
@@ -221,20 +191,14 @@ export function ManifestsAccordion({ projectId }: ManifestsAccordionProps) {
                         </div>
                       )}
                       {bodyMap[m.id].notes && (
-                        <div style={{ marginTop: 'var(--alm-sp-1)' }}>
+                        <div className="alm-manifests__notes-block">
                           <strong>Notes snapshot:</strong>
-                          <div style={{ whiteSpace: 'pre-wrap', marginTop: 2 }}>
+                          <div className="alm-manifests__notes-content">
                             {bodyMap[m.id].notes}
                           </div>
                         </div>
                       )}
-                      <div
-                        style={{
-                          marginTop: 'var(--alm-sp-1)',
-                          color: 'var(--alm-text-muted)',
-                          fontFamily: 'var(--alm-font-mono)',
-                        }}
-                      >
+                      <div className="alm-manifests__path">
                         {m.path}
                       </div>
                     </div>

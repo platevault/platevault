@@ -3919,3 +3919,472 @@
   color: var(--alm-text-muted);
   margin-bottom: var(--alm-sp-3);
 }
+
+/* === PLAN PROTECTION GATE === */
+
+/* Status line: loading / error / no protected items */
+.alm-plan-gate__status {
+  font-size: var(--alm-text-sm);
+  color: var(--alm-text-muted);
+}
+
+/* Root layout: vertical stack of summary bar + item cards */
+.alm-plan-gate__root {
+  display: flex;
+  flex-direction: column;
+  gap: var(--alm-sp-3);
+}
+
+/* Summary bar (above the item list) */
+.alm-plan-gate__summary-bar {
+  display: flex;
+  align-items: center;
+  gap: var(--alm-sp-2);
+  padding: var(--alm-sp-2) var(--alm-sp-3);
+  border: 1px solid var(--alm-border);
+  border-radius: var(--alm-radius-md);
+}
+
+/* Text label inside the summary bar */
+.alm-plan-gate__summary-label {
+  font-size: var(--alm-text-sm);
+  color: var(--alm-text-muted);
+}
+
+/* Individual protected-item card */
+.alm-plan-gate__item {
+  border: 1px solid var(--alm-border);
+  border-radius: var(--alm-radius-md);
+  padding: var(--alm-sp-3);
+}
+
+/* Item card header row: level pill + item-id code + ack pill */
+.alm-plan-gate__item-header {
+  display: flex;
+  align-items: flex-start;
+  gap: var(--alm-sp-2);
+  flex-wrap: wrap;
+  margin-bottom: var(--alm-sp-2);
+}
+
+/* Monospace item-id code inside the header */
+.alm-plan-gate__item-id {
+  font-size: var(--alm-text-xs);
+  flex: 1;
+  word-break: break-all;
+}
+
+/* "Action: <label>" line */
+.alm-plan-gate__item-action {
+  font-size: var(--alm-text-sm);
+  margin-bottom: var(--alm-sp-1);
+}
+
+/* Protected-categories line */
+.alm-plan-gate__item-categories {
+  font-size: var(--alm-text-xs);
+  color: var(--alm-text-muted);
+  margin-bottom: var(--alm-sp-1);
+}
+
+/* Reason text */
+.alm-plan-gate__item-reason {
+  font-size: var(--alm-text-xs);
+  color: var(--alm-text-muted);
+  margin-bottom: var(--alm-sp-2);
+}
+
+/* Per-item acknowledge error */
+.alm-plan-gate__item-error {
+  font-size: var(--alm-text-xs);
+  color: var(--alm-danger);
+  margin-bottom: var(--alm-sp-1);
+}
+
+/* Non-blocking footer summary (FR-008) */
+.alm-plan-gate__footer-summary {
+  font-size: var(--alm-text-xs);
+  color: var(--alm-text-muted);
+}
+
+/* === TOOL LAUNCHES ACCORDION === */
+
+/* ── State messages ─────────────────────────────────────────────────────── */
+
+.alm-tool-launches__loading {
+  font-size: var(--alm-text-sm);
+}
+
+.alm-tool-launches__error {
+  font-size: var(--alm-text-sm);
+  color: var(--alm-danger);
+}
+
+.alm-tool-launches__empty {
+  font-size: var(--alm-text-sm);
+  opacity: 0.6;
+}
+
+/* ── Artifact group ──────────────────────────────────────────────────────── */
+
+.alm-tool-launches__group {
+  margin-bottom: var(--alm-sp-3);
+}
+
+.alm-tool-launches__group-header {
+  display: flex;
+  align-items: center;
+  gap: var(--alm-sp-2);
+  margin-bottom: var(--alm-sp-1);
+}
+
+.alm-tool-launches__group-label {
+  font-weight: var(--alm-weight-semibold);
+  font-size: var(--alm-text-sm);
+}
+
+.alm-tool-launches__count-badge {
+  font-size: var(--alm-text-2xs);
+  background: var(--alm-bg3);
+  border-radius: 4px;
+  padding: 1px 5px;
+}
+
+/* ── Artifact row ────────────────────────────────────────────────────────── */
+
+.alm-tool-launches__artifact-row {
+  display: flex;
+  align-items: center;
+  gap: var(--alm-sp-2);
+  padding: var(--alm-sp-1) 0;
+}
+
+.alm-tool-launches__kind-badge {
+  font-size: var(--alm-text-xs);
+}
+
+.alm-tool-launches__file-name {
+  font-family: var(--alm-font-mono);
+  font-size: var(--alm-text-sm);
+}
+
+/* ── Status badges ───────────────────────────────────────────────────────── */
+
+.alm-tool-launches__badge-missing {
+  font-size: var(--alm-text-2xs);
+  color: var(--alm-danger);
+}
+
+.alm-tool-launches__badge-manual {
+  font-size: var(--alm-text-2xs);
+  color: var(--alm-info);
+}
+
+/* ── Mark-resolved button ────────────────────────────────────────────────── */
+
+.alm-tool-launches__resolve-btn {
+  font-size: var(--alm-text-xs);
+  margin-left: auto;
+  cursor: pointer;
+}
+
+/* === MANIFESTS ACCORDION === */
+
+/* Status / feedback text (loading, error, empty) */
+.alm-manifests__status {
+  font-size: var(--alm-text-sm);
+  color: var(--alm-text-muted);
+}
+
+.alm-manifests__status--error {
+  font-size: var(--alm-text-sm);
+  color: var(--alm-danger);
+}
+
+/* Individual manifest item row wrapper */
+.alm-manifests__item {
+  border-bottom: 1px solid var(--alm-border);
+  padding-bottom: var(--alm-sp-2);
+  margin-bottom: var(--alm-sp-2);
+}
+
+/* Row header: label + reveal button side-by-side */
+.alm-manifests__row-header {
+  display: flex;
+  align-items: center;
+  gap: var(--alm-sp-2);
+}
+
+/* Toggle button — resets browser button chrome, acts as a row trigger */
+.alm-manifests__toggle-btn {
+  flex: 1;
+  text-align: left;
+  background: none;
+  border: none;
+  cursor: pointer;
+  padding: var(--alm-sp-1) 0;
+  font-size: var(--alm-text-sm);
+  color: var(--alm-text);
+}
+
+.alm-manifests__toggle-btn:focus {
+  outline: none;
+  box-shadow: var(--alm-focus-ring);
+}
+
+/* Reason label inside the toggle button */
+.alm-manifests__reason-label {
+  font-weight: var(--alm-weight-medium);
+}
+
+/* Timestamp annotation beside the reason label */
+.alm-manifests__timestamp {
+  margin-left: var(--alm-sp-2);
+  color: var(--alm-text-muted);
+  font-size: var(--alm-text-xs);
+}
+
+/* Expanded body panel */
+.alm-manifests__body-panel {
+  margin-top: var(--alm-sp-2);
+  padding: var(--alm-sp-2);
+  background: var(--alm-bg3);
+  border-radius: 4px;
+  font-size: var(--alm-text-xs);
+}
+
+/* Notes snapshot block within the body panel */
+.alm-manifests__notes-block {
+  margin-top: var(--alm-sp-1);
+}
+
+/* Pre-formatted notes content */
+.alm-manifests__notes-content {
+  white-space: pre-wrap;
+  margin-top: var(--alm-sp-0);
+}
+
+/* Manifest file path displayed in monospace */
+.alm-manifests__path {
+  margin-top: var(--alm-sp-1);
+  color: var(--alm-text-muted);
+  font-family: var(--alm-font-mono);
+}
+
+/* === INBOX LIST === */
+
+/* ── Controls bar ─────────────────────────────────────────────────────────── */
+
+.alm-inbox-list__controls {
+  display: flex;
+  flex-direction: column;
+  gap: var(--alm-sp-1);
+  padding: var(--alm-sp-1) var(--alm-sp-2);
+}
+
+.alm-inbox-list__group-row {
+  display: flex;
+  gap: var(--alm-sp-1);
+  flex-wrap: wrap;
+  align-items: center;
+}
+
+.alm-inbox-list__sort-row {
+  display: flex;
+  gap: var(--alm-sp-1);
+  flex-wrap: wrap;
+}
+
+/* ── Virtual sizer (position + width only; height stays inline) ───────────── */
+
+.alm-inbox-list__sizer {
+  position: relative;
+  width: 100%;
+}
+
+/* ── Inbox row meta grid ──────────────────────────────────────────────────── */
+
+.alm-inbox-list__meta {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto auto;
+  gap: 0 var(--alm-sp-2);
+  align-items: baseline;
+  font-size: var(--alm-text-xs);
+  color: var(--alm-text-muted);
+  margin-top: 2px;
+}
+
+.alm-inbox-list__meta-state {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  color: var(--alm-text-secondary);
+}
+
+.alm-inbox-list__meta-count {
+  white-space: nowrap;
+}
+
+.alm-inbox-list__meta-format {
+  white-space: nowrap;
+  font-family: var(--alm-font-mono, monospace);
+  letter-spacing: 0.02em;
+}
+
+/* ── Group header button ──────────────────────────────────────────────────── */
+/*
+ * paddingLeft is NOT set here — it is dynamically computed per depth as
+ * `8 + depth * INDENT_PER_DEPTH` and stays in an inline style on the element.
+ * All other button-reset and typographic styles are captured here.
+ */
+
+.alm-inbox-list__group-header {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  width: 100%;
+  background: none;
+  border: none;
+  text-align: left;
+  cursor: pointer;
+  padding: var(--alm-sp-1) var(--alm-sp-2);
+  font: inherit;
+  color: var(--alm-text-secondary);
+  font-size: var(--alm-text-xs);
+  font-weight: var(--alm-weight-semibold);
+}
+
+.alm-inbox-list__group-header:hover {
+  background: var(--alm-hover-bg);
+}
+
+.alm-inbox-list__group-caret {
+  width: 0.7em;
+  display: inline-block;
+  flex-shrink: 0;
+}
+
+.alm-inbox-list__group-label {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.alm-inbox-list__group-count {
+  color: var(--alm-text-muted);
+  font-weight: var(--alm-weight-normal);
+  margin-left: auto;
+}
+
+/* === SESSION INSPECTOR === */
+
+/* Target link card — name line */
+.alm-session-inspector__target-name {
+  font-weight: var(--alm-weight-semibold);
+}
+
+/* Target link card — subtitle (linked count) */
+.alm-session-inspector__target-subtitle {
+  font-size: var(--alm-text-xs);
+  color: var(--alm-text-muted);
+}
+
+/* Calibration match card — header row (kind + score) */
+.alm-session-inspector__cal-header {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+
+/* Calibration match card — kind label */
+.alm-session-inspector__cal-kind {
+  flex: 1;
+  font-weight: var(--alm-weight-medium);
+  font-size: var(--alm-text-sm);
+}
+
+/* Calibration match card — score badge */
+.alm-session-inspector__cal-score {
+  font-size: var(--alm-text-xs);
+  color: var(--alm-text-secondary);
+}
+
+/* Calibration match card — decision row */
+.alm-session-inspector__cal-decision {
+  margin-top: 3px;
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+
+/* Projects — empty state note */
+.alm-session-inspector__projects-empty {
+  font-size: var(--alm-text-xs);
+  color: var(--alm-text-muted);
+  padding: var(--alm-sp-1) 0;
+}
+
+/* Projects — linked project id label */
+.alm-session-inspector__project-label {
+  font-weight: var(--alm-weight-medium);
+}
+
+/* Immutable note — heading */
+.alm-session-inspector__immutable-heading {
+  font-weight: var(--alm-weight-medium);
+  color: var(--alm-text-secondary);
+}
+
+/* Immutable note — body */
+.alm-session-inspector__immutable-body {
+  margin-top: 3px;
+}
+
+/* === TARGET DETAIL (legacy) === */
+
+/* Common-name span in DetailHeader title */
+.alm-target-detail-legacy__common-name {
+  color: var(--alm-text-muted);
+  font-weight: var(--alm-weight-normal);
+}
+
+/* Coverage warning Banner top margin */
+.alm-target-detail-legacy__coverage-warn {
+  margin-top: var(--alm-sp-2);
+}
+
+/* "No coverage data" faint label */
+.alm-target-detail-legacy__no-coverage {
+  font-size: var(--alm-text-xs);
+  color: var(--alm-text-faint);
+}
+
+/* Observing plans list container */
+.alm-target-detail-legacy__obs-plans {
+  display: flex;
+  flex-direction: column;
+  gap: var(--alm-sp-2);
+  font-size: var(--alm-text-xs);
+}
+
+/* Observing plan metadata line (software · date) */
+.alm-target-detail-legacy__obs-plan-meta {
+  color: var(--alm-text-muted);
+}
+
+/* Em-dash placeholder when a session has no linked projects */
+.alm-target-detail-legacy__no-projects-dash {
+  color: var(--alm-text-faint);
+}
+
+/* Sessions summary text (simplified, non-detail view) */
+.alm-target-detail-legacy__sessions-summary {
+  color: var(--alm-text-faint);
+  font-size: var(--alm-text-sm);
+}
+
+/* Projects empty state text */
+.alm-target-detail-legacy__projects-empty {
+  color: var(--alm-text-faint);
+  font-size: var(--alm-text-sm);
+}
