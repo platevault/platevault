@@ -22,7 +22,7 @@ import {
   RailCard,
   PropertyTable,
 } from '@/components';
-import { Pill, Section, EmptyState, Lock } from '@/ui';
+import { Pill, EmptyState, Lock } from '@/ui';
 import type { PillVariant } from '@/ui';
 import { useCalibrationSuggest, useCalibrationAssign } from './useCalibration';
 import { MatchCandidatesPanel } from './MatchCandidatesPanel';
@@ -103,13 +103,21 @@ export function MasterDetail({ master, prefillSuggestion, agingThresholdDays }: 
   properties.push({ key: 'binning', label: 'Binning', value: fp.binning });
   properties.push({ key: 'size', label: 'Size', value: fmtBytes(master.sizeBytes) });
 
+  // Human-readable fingerprint identity for the header (was an id hash).
+  const kindCap = kindStr.charAt(0).toUpperCase() + kindStr.slice(1);
+  const masterDisc =
+    kindStr === 'dark' ? (fp.exposureS != null ? `${fp.exposureS}s` : '')
+    : kindStr === 'flat' ? (fp.filter ?? '')
+    : '';
+  const masterTitle = masterDisc ? `Master ${kindCap} · ${masterDisc}` : `Master ${kindCap}`;
+
   return (
     <DetailPane fill>
       <DetailHeader
         title={
           <>
             <Lock />
-            <span className="alm-mono">{master.id.slice(0, 12)}…</span>
+            <span>{masterTitle}</span>
           </>
         }
         titleExtra={
@@ -157,10 +165,8 @@ export function MasterDetail({ master, prefillSuggestion, agingThresholdDays }: 
           </Rail>
         }
       >
-        <Section title="Calibration fingerprint" count={properties.length}>
-          <PropertyTable mode="view" properties={properties} />
-        </Section>
-
+        {/* Fingerprint lives once, in the rail. The compatible-sessions match
+            panel is the hero of the main column. */}
         <MatchCandidatesPanel
           sessionId={sessionId ?? ''}
           response={response}
