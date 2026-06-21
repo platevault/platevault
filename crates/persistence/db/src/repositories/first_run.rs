@@ -283,6 +283,26 @@ pub async fn get_source_organization_state(
     Ok(row.map(|(s,)| str_to_organization_state(&s)))
 }
 
+/// Look up the absolute filesystem `path` of a `registered_sources` row by id.
+///
+/// Inbox plans store `from_root_id`/`to_root_id` as `registered_sources` ids
+/// (the gen-3 source model). The plan executor resolves those ids to an
+/// absolute root path so its path gate can anchor the plan's relative
+/// source/destination paths. The legacy `library_root` table is not populated
+/// by first-run registration, so the executor must consult `registered_sources`
+/// to resolve a root that was added through the setup wizard.
+///
+/// # Errors
+///
+/// Returns [`DbError::Database`] on query failure.
+pub async fn get_source_path(pool: &SqlitePool, source_id: &str) -> DbResult<Option<String>> {
+    let row: Option<(String,)> = sqlx::query_as("SELECT path FROM registered_sources WHERE id = ?")
+        .bind(source_id)
+        .fetch_optional(pool)
+        .await?;
+    Ok(row.map(|(p,)| p))
+}
+
 /// Set a source's organization state by id (spec 041, T030 persistence half).
 ///
 /// Enforces the invariant that `inbox`-kind sources are always `unorganized`:
