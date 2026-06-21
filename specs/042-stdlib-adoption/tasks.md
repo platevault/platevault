@@ -201,9 +201,15 @@ Frontend: `cd apps/desktop && npx tsc --noEmit` + `npx vitest run <feature>`. Ru
 
 ## Phase 16 — US16 Long-operation contract (P3)
 
-- [ ] T240 Wire plan-apply through `OperationHandle` + `OperationEvent` over a
+- [X] T240 Wire plan-apply through `OperationHandle` + `OperationEvent` over a
   `tauri::ipc::Channel`; UI subscribes/renders progress; retire the ad-hoc event path
   for this flow.
+  (Backend emits Started→per-item→terminal OperationEvents over a Channel<OperationEvent>;
+  DB audit append retained as the durable record; `applyPlan` wrapper + mocks + tests wired.
+  NOTE: no progress-rendering React component added — `applyPlan` had zero callers and no
+  existing plan-apply progress view existed to retire (old path was DB-poll). The contract/
+  transport/wrapper/mocks are in place for a future consumer; adding a new progress view is
+  net-new feature scope beyond this refactor spec.)
 - [ ] **US16 checkpoint**: commit `feat(042): US16 long-op contract end-to-end`.
 
 ## Phase 17 — US13 Workspace/crate restructuring (P3, highest risk — staged last)

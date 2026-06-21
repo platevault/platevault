@@ -260,6 +260,12 @@ export type MatchCandidate = import('./index').MatchCandidate_Serialize;
 
 export type OperationHandle = import('./index').IpcOperationHandle;
 
+// Long-operation contract event (spec 042 US16, T240). Streamed live over a
+// `Channel<OperationEvent>` from the plan-apply command. Re-exported from the
+// generated bindings so feature code imports it through the friendly facade.
+export type OperationEvent = import('./index').OperationEvent;
+export type OperationEventType = import('./index').OperationEventType;
+
 export interface ProgressEvent {
   operation_id: string;
   discovered: number;

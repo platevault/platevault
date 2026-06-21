@@ -35,6 +35,7 @@ import type {
   RegisterSourceBatchResponse_Serialize,
   RemapVerification,
   IpcOperationHandle,
+  OperationEvent,
   AuditListResponse_Serialize,
 } from '@/bindings/index';
 
@@ -398,6 +399,40 @@ export async function mockInvoke(
       return plans[0];
     }
     case 'plans_apply_real': {
+      // Spec 042 US16 (T240): drive the live long-op channel if a subscriber
+      // passed one. `onEvent` is a real `Channel<OperationEvent>` in mock mode;
+      // pushing through `onmessage` mirrors the backend's Started → per-item →
+      // Completed lifecycle so UI/tests can exercise streaming without a backend.
+      const channel = (_args as { onEvent?: { onmessage?: (e: OperationEvent) => void } })
+        ?.onEvent;
+      if (channel?.onmessage) {
+        const opId = 'op-mock-001';
+        const push = channel.onmessage;
+        const mk = (
+          sequence: number,
+          eventType: OperationEvent['eventType'],
+          payload: unknown,
+        ): OperationEvent => ({
+          contractVersion: '1.0.0',
+          operationId: opId,
+          eventType,
+          sequence,
+          payload,
+        });
+        // Emit asynchronously so callers can attach listeners first.
+        void Promise.resolve().then(() => {
+          push(mk(0, 'item_started', { runId: opId, itemsTotal: 1, at: '1970-01-01T00:00:00Z' }));
+          push(mk(1, 'item_applied', { runId: opId, itemId: 'item-0', newState: 'succeeded' }));
+          push(
+            mk(2, 'completed', {
+              runId: opId,
+              terminalState: 'completed',
+              itemsApplied: 1,
+              itemsFailed: 0,
+            }),
+          );
+        });
+      }
       return { operationId: 'op-mock-001', kind: 'plan_apply' } satisfies IpcOperationHandle;
     }
     case 'plans_discard': {

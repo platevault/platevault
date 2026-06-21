@@ -52,11 +52,15 @@ pub const CONTRACT_VERSION: &str = "1.0.0";
 #[serde(transparent)]
 pub struct RequestId(pub String);
 
-#[derive(Clone, Debug, Eq, Hash, Ord, PartialEq, PartialOrd, Serialize, Deserialize)]
+#[derive(
+    Clone, Debug, Eq, Hash, Ord, PartialEq, PartialOrd, Serialize, Deserialize, specta::Type,
+)]
 #[serde(transparent)]
 pub struct OperationId(pub String);
 
-#[derive(Clone, Debug, Eq, Hash, Ord, PartialEq, PartialOrd, Serialize, Deserialize)]
+#[derive(
+    Clone, Debug, Eq, Hash, Ord, PartialEq, PartialOrd, Serialize, Deserialize, specta::Type,
+)]
 #[serde(transparent)]
 pub struct OperationName(pub String);
 
@@ -119,7 +123,7 @@ pub enum ResponseStatus {
     Error,
 }
 
-#[derive(Clone, Debug, Eq, PartialEq, Serialize, Deserialize)]
+#[derive(Clone, Debug, Eq, PartialEq, Serialize, Deserialize, specta::Type)]
 #[serde(rename_all = "camelCase")]
 pub struct OperationHandle {
     pub operation_id: OperationId,
@@ -138,7 +142,9 @@ impl OperationHandle {
     }
 }
 
-#[derive(Clone, Copy, Debug, Eq, Hash, Ord, PartialEq, PartialOrd, Serialize, Deserialize)]
+#[derive(
+    Clone, Copy, Debug, Eq, Hash, Ord, PartialEq, PartialOrd, Serialize, Deserialize, specta::Type,
+)]
 #[serde(rename_all = "snake_case")]
 pub enum OperationStatus {
     Queued,
@@ -149,14 +155,17 @@ pub enum OperationStatus {
     Failed,
 }
 
-#[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
+#[derive(Clone, Debug, PartialEq, Serialize, Deserialize, specta::Type)]
 #[serde(rename_all = "camelCase")]
 pub struct OperationEvent {
     pub contract_version: String,
     pub operation_id: OperationId,
     pub event_type: OperationEventType,
     pub sequence: u64,
-    pub payload: Value,
+    // `JsonAny` is wire-equivalent to `serde_json::Value` (serde-transparent)
+    // but exports as the opaque TS `unknown`, avoiding specta's infinite
+    // recursive-inline expansion of raw `Value` (spec 042 US16, T240).
+    pub payload: JsonAny,
 }
 
 impl OperationEvent {
@@ -172,12 +181,14 @@ impl OperationEvent {
             operation_id,
             event_type,
             sequence,
-            payload,
+            payload: JsonAny::from(payload),
         }
     }
 }
 
-#[derive(Clone, Copy, Debug, Eq, Hash, Ord, PartialEq, PartialOrd, Serialize, Deserialize)]
+#[derive(
+    Clone, Copy, Debug, Eq, Hash, Ord, PartialEq, PartialOrd, Serialize, Deserialize, specta::Type,
+)]
 #[serde(rename_all = "snake_case")]
 pub enum OperationEventType {
     Progress,

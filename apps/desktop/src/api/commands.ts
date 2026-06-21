@@ -8,6 +8,7 @@ import type {
   ReviewItem,
   AppPreferences,
   OperationHandle,
+  OperationEvent,
   SessionDetail,
   TargetDetail,
   ProjectDetail,
@@ -114,6 +115,7 @@ import { invoke, unwrap, setInvokeOverride } from './ipc';
 export { setInvokeOverride };
 
 import { commands } from '@/bindings';
+import { Channel } from '@tauri-apps/api/core';
 
 // ---------- Query Commands ----------
 
@@ -335,12 +337,32 @@ export async function approvePlan(args: {
 export async function applyPlan(args: {
   id: string;
   approvalToken?: string;
+  /**
+   * Optional live long-operation subscriber (spec 042 US16, T240). When
+   * supplied, the backend streams `OperationEvent`s over a
+   * `tauri::ipc::Channel<OperationEvent>`: a `Started` event carrying the
+   * running handle, per-item `progress`/`item_applied`/`item_failed` events,
+   * then a terminal `completed`/`failed` event carrying a terminal handle.
+   * The durable DB audit trail is unaffected — the channel is the live UI
+   * projection only.
+   */
+  onEvent?: (event: OperationEvent) => void;
 }): Promise<OperationHandle> {
-  // Generated plansApplyReal(planId, approvalToken) requires a token.
-  // No callers exist. We thread the token through the signature (T115);
-  // when absent we default to '' which the backend will reject — the real
-  // Phase 4 plan-apply flow must supply the token from plansApprove.approvalToken.
-  const response = unwrap(await commands.plansApplyReal(args.id, args.approvalToken ?? ''));
+  // Bridge the optional callback onto a Tauri channel. When no subscriber is
+  // supplied we still pass a (no-op) channel because the generated command
+  // signature requires the parameter.
+  const channel = new Channel<OperationEvent>();
+  if (args.onEvent) {
+    const handler = args.onEvent;
+    channel.onmessage = (event) => handler(event);
+  }
+  // Generated plansApplyReal(planId, approvalToken, onEvent) requires a token.
+  // We thread the token through the signature (T115); when absent we default to
+  // '' which the backend will reject — the real plan-apply flow must supply the
+  // token from plansApprove.approvalToken.
+  const response = unwrap(
+    await commands.plansApplyReal(args.id, args.approvalToken ?? '', channel),
+  );
   return response as unknown as OperationHandle;
 }
 

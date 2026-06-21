@@ -53,13 +53,34 @@ fn exports_typescript_bindings() {
     {
         let generated =
             std::fs::read_to_string(&out_path).expect("read generated bindings for redirect");
-        let needle = "import { invoke as __TAURI_INVOKE } from \"@tauri-apps/api/core\";";
-        assert!(
-            generated.contains(needle),
-            "tauri-specta invoke import not found — did specta-typescript change its output?"
-        );
-        let redirected =
-            generated.replace(needle, "import { invoke as __TAURI_INVOKE } from \"../api/ipc\";");
+
+        // tauri-specta now emits `Channel` alongside `invoke` because the
+        // plan-apply command takes a `Channel<OperationEvent>` parameter
+        // (spec 042 US16, T240). `Channel` must keep coming from the real
+        // `@tauri-apps/api/core` (the mock/recorder `../api/ipc` shim only
+        // re-exports `invoke`), so redirect only the `invoke` symbol and leave
+        // `Channel` on its upstream import.
+        let needle_with_channel =
+            "import { invoke as __TAURI_INVOKE, Channel } from \"@tauri-apps/api/core\";";
+        let needle_invoke_only =
+            "import { invoke as __TAURI_INVOKE } from \"@tauri-apps/api/core\";";
+
+        let redirected = if generated.contains(needle_with_channel) {
+            generated.replace(
+                needle_with_channel,
+                "import { invoke as __TAURI_INVOKE } from \"../api/ipc\";\n\
+                 import { Channel } from \"@tauri-apps/api/core\";",
+            )
+        } else {
+            assert!(
+                generated.contains(needle_invoke_only),
+                "tauri-specta invoke import not found — did specta-typescript change its output?"
+            );
+            generated.replace(
+                needle_invoke_only,
+                "import { invoke as __TAURI_INVOKE } from \"../api/ipc\";",
+            )
+        };
         std::fs::write(&out_path, redirected).expect("write redirected bindings");
     }
 

@@ -29,7 +29,10 @@ use contracts_core::plan_apply::{
     PlanApplyResponse, PlanApplyStatus, PlanCancelResponse, PlanItemRetryResponse,
     PlanItemSkipResponse, PlanResumeResponse,
 };
-use contracts_core::{error_code::ErrorCode, ContractError, ErrorSeverity};
+use contracts_core::{
+    error_code::ErrorCode, ContractError, ErrorSeverity, OperationEvent, OperationEventType,
+    OperationHandle, OperationId, OperationName, OperationStatus,
+};
 use fs_executor::ops::cas_check::CasSnapshot;
 use fs_executor::run::{
     execute_plan, ApplyOutcome, CancellationToken, ExecutorCallbacks, ExecutorItem,
@@ -39,13 +42,64 @@ use persistence_db::repositories::inventory as inventory_repo;
 use persistence_db::repositories::plan_apply as apply_repo;
 use persistence_db::repositories::plans as plans_repo;
 use persistence_db::DbError;
+use serde_json::json;
 use sqlx::SqlitePool;
 use std::collections::HashMap;
+use std::sync::atomic::{AtomicU64, Ordering};
 use std::sync::Arc;
 use time::OffsetDateTime;
 use uuid::Uuid;
 
 use dashmap::DashMap;
+
+// ── Long-operation event sink (spec 042 US16, T240) ───────────────────────────
+
+/// Operation name carried by the long-op contract for plan-apply runs.
+pub const OP_NAME_PLAN_APPLY: &str = "plan.apply";
+
+/// Live projection sink for [`OperationEvent`]s emitted by a plan-apply run.
+///
+/// This is the **live UI projection** of progress (spec 042 US16). It is
+/// additive to — and never a replacement for — the durable DB audit trail
+/// (`apply_repo::append_event`, constitution §II). The Tauri command supplies
+/// a sink that forwards events over a `tauri::ipc::Channel<OperationEvent>`;
+/// `app_core` itself stays transport-agnostic (no `tauri` dependency).
+///
+/// Sends are best-effort and infallible from the caller's perspective: if the
+/// webview channel is gone, the closure swallows the error so the run still
+/// completes and the audit record is still written.
+pub type OperationEventSink = Arc<dyn Fn(OperationEvent) + Send + Sync>;
+
+/// Monotonic per-run sequence + sink wrapper so every emitted event carries a
+/// strictly increasing `sequence` (the UI uses it to order/dedupe).
+#[derive(Clone)]
+struct OpEventEmitter {
+    operation_id: OperationId,
+    sink: OperationEventSink,
+    sequence: Arc<AtomicU64>,
+}
+
+impl OpEventEmitter {
+    fn new(operation_id: OperationId, sink: OperationEventSink) -> Self {
+        Self { operation_id, sink, sequence: Arc::new(AtomicU64::new(0)) }
+    }
+
+    /// Build the [`OperationHandle`] for this run at the given status.
+    fn handle(&self, status: OperationStatus) -> OperationHandle {
+        OperationHandle::new(
+            self.operation_id.clone(),
+            OperationName(OP_NAME_PLAN_APPLY.to_owned()),
+            status,
+        )
+    }
+
+    /// Emit one event with the next sequence number.
+    fn emit(&self, event_type: OperationEventType, payload: serde_json::Value) {
+        let sequence = self.sequence.fetch_add(1, Ordering::SeqCst);
+        let event = OperationEvent::new(self.operation_id.clone(), event_type, sequence, payload);
+        (self.sink)(event);
+    }
+}
 
 // ── Active runs registry ──────────────────────────────────────────────────────
 
@@ -246,6 +300,9 @@ struct PlanApplyCallbacks {
     bus: EventBus,
     plan_id: String,
     run_id: String,
+    /// Optional live long-op projection (spec 042 US16). `None` when the caller
+    /// (e.g. a unit test) does not subscribe; the DB audit trail is unaffected.
+    op_emitter: Option<OpEventEmitter>,
 }
 
 impl ExecutorCallbacks for PlanApplyCallbacks {
@@ -271,6 +328,7 @@ impl ExecutorCallbacks for PlanApplyCallbacks {
         let bus = self.bus.clone();
         let plan_id = self.plan_id.clone();
         let run_id = self.run_id.clone();
+        let op_emitter = self.op_emitter.clone();
         Box::pin(async move {
             let item_id = event.item_id.clone();
             let at = event.at.clone();
@@ -350,6 +408,29 @@ impl ExecutorCallbacks for PlanApplyCallbacks {
             {
                 tracing::warn!(%item_id, error=%e, "audit bus publish failed for item progress");
             }
+
+            // Live long-op projection (spec 042 US16, T240). Additive to the
+            // durable audit record above — never a replacement (§II).
+            if let Some(emitter) = op_emitter.as_ref() {
+                let event_type = match event.new_state.as_str() {
+                    "succeeded" => OperationEventType::ItemApplied,
+                    "failed" | "stale" => OperationEventType::ItemFailed,
+                    _ => OperationEventType::Progress,
+                };
+                emitter.emit(
+                    event_type,
+                    json!({
+                        "planId": plan_id,
+                        "runId": run_id,
+                        "itemId": item_id,
+                        "priorState": event.prior_state,
+                        "newState": event.new_state,
+                        "at": at,
+                        "failureCode": event.failure.as_ref().map(|f| f.code.as_str()),
+                        "failureMessage": event.failure.as_ref().map(|f| f.message.clone()),
+                    }),
+                );
+            }
         })
     }
 }
@@ -378,6 +459,7 @@ pub async fn apply_plan(
     bus: &EventBus,
     plan_id: &str,
     approval_token: &str,
+    event_sink: Option<OperationEventSink>,
 ) -> Result<PlanApplyResponse, ContractError> {
     // Load plan.
     let plan_row = plans_repo::get_plan(pool, plan_id, false).await.map_err(db_err)?;
@@ -404,6 +486,11 @@ pub async fn apply_plan(
     let run_id = new_id();
     let items_total = plan_row.items_total;
     let items_pending = plan_row.items_pending;
+
+    // Long-op contract emitter (spec 042 US16). The run id doubles as the
+    // operation id so the live projection and the durable run/audit rows share
+    // one correlation key. `None` when the caller does not subscribe.
+    let op_emitter = event_sink.map(|sink| OpEventEmitter::new(OperationId(run_id.clone()), sink));
 
     // Atomic CAS: approved → applying (R-CAS-1).
     apply_repo::cas_approved_to_applying(
@@ -485,11 +572,28 @@ pub async fn apply_plan(
     )
     .await;
 
+    // Emit the long-op `Started` event carrying the running OperationHandle
+    // (spec 042 US16, T240).
+    if let Some(emitter) = op_emitter.as_ref() {
+        let handle = emitter.handle(OperationStatus::Running);
+        emitter.emit(
+            OperationEventType::ItemStarted,
+            json!({
+                "handle": handle,
+                "planId": plan_id,
+                "runId": run_id,
+                "itemsTotal": items_total,
+                "at": started_at,
+            }),
+        );
+    }
+
     // Spawn executor on a background task.
     let pool_clone = pool.clone();
     let bus_clone = bus.clone();
     let plan_id_owned = plan_id.to_owned();
     let run_id_owned = run_id.clone();
+    let op_emitter_task = op_emitter.clone();
 
     tokio::spawn(async move {
         let callbacks = PlanApplyCallbacks {
@@ -497,6 +601,7 @@ pub async fn apply_plan(
             bus: bus_clone.clone(),
             plan_id: plan_id_owned.clone(),
             run_id: run_id_owned.clone(),
+            op_emitter: op_emitter_task.clone(),
         };
 
         let outcome =
@@ -549,15 +654,42 @@ pub async fn apply_plan(
                         PlanApplyingCompleted {
                             plan_id: plan_id_owned.clone(),
                             run_id: run_id_owned.clone(),
-                            terminal_state: terminal,
+                            terminal_state: terminal.clone(),
                             items_applied: counts.succeeded,
                             items_failed: counts.failed,
                             items_skipped: counts.skipped,
                             items_cancelled: counts.cancelled,
-                            at,
+                            at: at.clone(),
                         },
                     )
                     .await;
+
+                // Long-op terminal event (spec 042 US16). `terminal` is
+                // "completed" unless any item failed, in which case it is
+                // "failed" — map that onto Completed/Failed event + status.
+                if let Some(emitter) = op_emitter_task.as_ref() {
+                    let failed_run = terminal == "failed";
+                    let (event_type, status) = if failed_run {
+                        (OperationEventType::Failed, OperationStatus::Failed)
+                    } else {
+                        (OperationEventType::Completed, OperationStatus::Completed)
+                    };
+                    let handle = emitter.handle(status);
+                    emitter.emit(
+                        event_type,
+                        json!({
+                            "handle": handle,
+                            "planId": plan_id_owned,
+                            "runId": run_id_owned,
+                            "terminalState": terminal,
+                            "itemsApplied": counts.succeeded,
+                            "itemsFailed": counts.failed,
+                            "itemsSkipped": counts.skipped,
+                            "itemsCancelled": counts.cancelled,
+                            "at": at,
+                        }),
+                    );
+                }
             }
 
             ApplyOutcome::Cancelled(counts) => {
@@ -629,10 +761,29 @@ pub async fn apply_plan(
                             items_failed: counts.failed,
                             items_skipped: counts.skipped,
                             items_cancelled: counts.cancelled,
-                            at,
+                            at: at.clone(),
                         },
                     )
                     .await;
+
+                // Long-op terminal event for a cancelled run (spec 042 US16).
+                if let Some(emitter) = op_emitter_task.as_ref() {
+                    let handle = emitter.handle(OperationStatus::Cancelled);
+                    emitter.emit(
+                        OperationEventType::Completed,
+                        json!({
+                            "handle": handle,
+                            "planId": plan_id_owned,
+                            "runId": run_id_owned,
+                            "terminalState": "cancelled",
+                            "itemsApplied": counts.succeeded,
+                            "itemsFailed": counts.failed,
+                            "itemsSkipped": counts.skipped,
+                            "itemsCancelled": counts.cancelled,
+                            "at": at,
+                        }),
+                    );
+                }
             }
 
             ApplyOutcome::Paused { reason, counts } => {
@@ -665,6 +816,24 @@ pub async fn apply_plan(
                     None,
                 )
                 .await;
+
+                // Long-op non-terminal pause projection (spec 042 US16). The
+                // run is not terminal — the UI keeps the handle and waits for a
+                // resume to continue streaming. Status reflects "running" since
+                // the op is still alive (paused), not Completed/Failed.
+                if let Some(emitter) = op_emitter_task.as_ref() {
+                    let handle = emitter.handle(OperationStatus::Running);
+                    emitter.emit(
+                        OperationEventType::Warning,
+                        json!({
+                            "handle": handle,
+                            "planId": plan_id_owned,
+                            "runId": run_id_owned,
+                            "pauseReason": reason,
+                            "at": at,
+                        }),
+                    );
+                }
 
                 let _ = bus_clone
                     .publish(
@@ -1064,7 +1233,7 @@ mod tests {
         .await
         .unwrap();
 
-        let err = apply_plan(db.pool(), &bus, "p-draft", "tok").await.unwrap_err();
+        let err = apply_plan(db.pool(), &bus, "p-draft", "tok", None).await.unwrap_err();
         assert_eq!(err.code, ErrorCode::PlanInvalidState);
     }
 
@@ -1073,7 +1242,7 @@ mod tests {
         let (db, bus) = setup().await;
         insert_approved_plan_with_items(&db, "p1", 1).await;
 
-        let err = apply_plan(db.pool(), &bus, "p1", "wrong-token").await.unwrap_err();
+        let err = apply_plan(db.pool(), &bus, "p1", "wrong-token", None).await.unwrap_err();
         assert_eq!(err.code, ErrorCode::PlanApprovalStale);
     }
 
@@ -1082,7 +1251,7 @@ mod tests {
         let (db, bus) = setup().await;
         insert_approved_plan_with_items(&db, "p1", 1).await;
 
-        let resp = apply_plan(db.pool(), &bus, "p1", "test-token").await.unwrap();
+        let resp = apply_plan(db.pool(), &bus, "p1", "test-token", None).await.unwrap();
         assert_eq!(resp.plan_id, "p1");
         assert_eq!(resp.new_state, "applying");
         assert!(!resp.run_id.is_empty());
@@ -1093,6 +1262,57 @@ mod tests {
 
         // Wait briefly for the background task to complete.
         tokio::time::sleep(tokio::time::Duration::from_millis(50)).await;
+    }
+
+    /// T240 (spec 042 US16): a subscribed sink receives the long-op lifecycle —
+    /// a `Started` (ItemStarted carrying the running handle), per-item events,
+    /// then a terminal `Completed`/`Failed` carrying a terminal handle, with a
+    /// strictly increasing `sequence`. The durable audit rows are still written
+    /// (asserted separately) — the sink is an additive live projection (§II).
+    #[tokio::test]
+    async fn apply_plan_streams_operation_events() {
+        use std::sync::Mutex;
+
+        let (db, bus) = setup().await;
+        insert_approved_plan_with_items(&db, "p-evt", 1).await;
+
+        let captured: Arc<Mutex<Vec<OperationEvent>>> = Arc::new(Mutex::new(Vec::new()));
+        let sink_store = captured.clone();
+        let sink: OperationEventSink = Arc::new(move |event: OperationEvent| {
+            sink_store.lock().unwrap().push(event);
+        });
+
+        let resp = apply_plan(db.pool(), &bus, "p-evt", "test-token", Some(sink)).await.unwrap();
+
+        // Let the background executor run to completion.
+        tokio::time::sleep(tokio::time::Duration::from_millis(100)).await;
+
+        let events = captured.lock().unwrap().clone();
+        assert!(!events.is_empty(), "sink must receive long-op events");
+
+        // First event is the Started projection carrying a Running handle.
+        let first = &events[0];
+        assert_eq!(first.event_type, OperationEventType::ItemStarted);
+        assert_eq!(first.operation_id, OperationId(resp.run_id.clone()));
+        assert_eq!(first.sequence, 0);
+
+        // Sequence is strictly increasing across the run.
+        for window in events.windows(2) {
+            assert!(window[1].sequence > window[0].sequence, "sequence must be monotonic");
+        }
+
+        // The run terminates with a Completed (or Failed) event carrying a
+        // terminal handle.
+        let last = events.last().unwrap();
+        assert!(
+            matches!(last.event_type, OperationEventType::Completed | OperationEventType::Failed),
+            "last event must be a terminal Completed/Failed, got {:?}",
+            last.event_type
+        );
+
+        // Durable audit trail is retained: the DB still holds run events.
+        let plan = repo::get_plan(db.pool(), "p-evt", false).await.unwrap();
+        assert_ne!(plan.state, "approved", "plan must have progressed past approved in the DB");
     }
 
     #[tokio::test]

@@ -12,29 +12,40 @@
 //! All state-machine enforcement lives in `crates/app/core/src/plan_apply.rs`.
 //! These commands are thin adapters: validate inputs, delegate, return DTOs.
 
+use std::sync::Arc;
+
 use app_core::plan_apply::{
     apply_plan, cancel_plan, get_apply_status, resume_plan, retry_plan_item, skip_plan_item,
+    OperationEventSink,
 };
 use contracts_core::plan_apply::{
     PlanApplyResponse, PlanApplyStatus, PlanCancelResponse, PlanItemRetryResponse,
     PlanItemSkipResponse, PlanResumeResponse,
 };
+use tauri::ipc::Channel;
 use tauri::State;
 
 use crate::commands::lifecycle::AppState;
-use contracts_core::ContractError;
+use contracts_core::{ContractError, OperationEvent};
 
 // ── plans.apply ───────────────────────────────────────────────────────────────
 
-/// `plans.apply` — start applying an approved plan (US1, T019).
+/// `plans.apply` — start applying an approved plan (US1, T019; spec 042 US16 T240).
 ///
 /// Returns immediately with the run id and new state (`"applying"`).
-/// Progress is streamed via audit bus events (`plan.item.progress`,
-/// `plan.applying.completed`).
+///
+/// Live progress is streamed over the additive `on_event`
+/// `tauri::ipc::Channel<OperationEvent>` (spec 042 US16): the backend emits a
+/// `Started` event carrying the running `OperationHandle`, per-item
+/// `Progress`/`ItemApplied`/`ItemFailed` events, and a terminal
+/// `Completed`/`Failed` event carrying a terminal handle. The channel is the
+/// **live UI projection** — the durable audit trail (`plan_apply_events`) and
+/// the audit bus topics (`plan.item.progress`, `plan.applying.completed`) are
+/// retained unchanged (constitution §II).
 ///
 /// # Errors
 ///
-/// Returns `Err(String)` with:
+/// Returns `Err(ContractError)` with:
 /// - `"plan.not_found"` — plan not found.
 /// - `"plan.invalid_state"` — plan is not approved or CAS race.
 /// - `"plan.approval.stale"` — approval token mismatch.
@@ -45,8 +56,18 @@ pub async fn plans_apply_real(
     state: State<'_, AppState>,
     plan_id: String,
     approval_token: String,
+    on_event: Channel<OperationEvent>,
 ) -> Result<PlanApplyResponse, ContractError> {
-    apply_plan(state.repo.pool(), &state.bus, &plan_id, &approval_token).await
+    // Bridge the long-op contract to the webview channel. Sends are best-effort:
+    // if the channel is gone (window closed), swallow the error so the run still
+    // completes and the durable audit record is still written.
+    let sink: OperationEventSink = Arc::new(move |event: OperationEvent| {
+        if let Err(error) = on_event.send(event) {
+            tracing::warn!(%error, "plan-apply OperationEvent channel send failed");
+        }
+    });
+
+    apply_plan(state.repo.pool(), &state.bus, &plan_id, &approval_token, Some(sink)).await
 }
 
 // ── plans.cancel ──────────────────────────────────────────────────────────────
