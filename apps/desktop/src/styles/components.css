@@ -758,6 +758,14 @@
   background: var(--alm-chip); color: var(--alm-text-secondary);
   border: 1px solid var(--alm-border);
 }
+/* Literal path-segment chip (per-type destination pattern editor) */
+.alm-literal-chip {
+  display: inline-flex; align-items: center; gap: var(--alm-sp-1);
+  padding: 2px var(--alm-sp-2); border-radius: var(--alm-radius-sm);
+  font-size: var(--alm-text-xs); font-family: var(--alm-font-mono);
+  background: var(--alm-success-bg, var(--alm-surface-raised)); color: var(--alm-text);
+  border: 1px solid var(--alm-border);
+}
 
 /* === WIZARD === */
 .alm-wizard { display: flex; flex-direction: column; flex: 1; min-height: 0; }
