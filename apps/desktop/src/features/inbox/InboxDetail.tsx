@@ -50,7 +50,7 @@ function basename(path: string): string {
 /** Format a nullable value as a muted dash for table cells. */
 function fmtOrDash(value: string | number | null | undefined): React.ReactNode {
   if (value === null || value === undefined || value === '') {
-    return <span style={{ color: 'var(--alm-text-muted)' }}>—</span>;
+    return <span className="alm-inbox-detail__dash">—</span>;
   }
   return String(value);
 }
@@ -58,7 +58,7 @@ function fmtOrDash(value: string | number | null | undefined): React.ReactNode {
 /** Format binning as "XxY" or dash. */
 function fmtBinning(x: number | null | undefined, y: number | null | undefined): React.ReactNode {
   if (x == null && y == null) {
-    return <span style={{ color: 'var(--alm-text-muted)' }}>—</span>;
+    return <span className="alm-inbox-detail__dash">—</span>;
   }
   const xStr = x != null ? String(x) : '?';
   const yStr = y != null ? String(y) : '?';
@@ -67,13 +67,13 @@ function fmtBinning(x: number | null | undefined, y: number | null | undefined):
 
 /** Format exposure in seconds (e.g. "120 s"). */
 function fmtExposure(s: number | null | undefined): React.ReactNode {
-  if (s == null) return <span style={{ color: 'var(--alm-text-muted)' }}>—</span>;
+  if (s == null) return <span className="alm-inbox-detail__dash">—</span>;
   return `${s} s`;
 }
 
 /** Format temperature in °C. */
 function fmtTemp(c: number | null | undefined): React.ReactNode {
-  if (c == null) return <span style={{ color: 'var(--alm-text-muted)' }}>—</span>;
+  if (c == null) return <span className="alm-inbox-detail__dash">—</span>;
   return `${c} °C`;
 }
 
@@ -92,13 +92,7 @@ function buildMixedSummary(breakdown: InboxClassifyResponse['breakdown']): strin
 
 function EmptyClassification() {
   return (
-    <div
-      style={{
-        padding: 'var(--alm-sp-4)',
-        color: 'var(--alm-text-muted)',
-        fontSize: 'var(--alm-text-sm)',
-      }}
-    >
+    <div className="alm-inbox-detail__empty">
       Select an item and click <strong>Classify</strong> to see the breakdown.
     </div>
   );
@@ -236,13 +230,13 @@ export function InboxDetail({ item, classification, fileMetadata }: InboxDetailP
       ),
       count: entry.count,
       destination: entry.destinationPreview ?? (
-        <span style={{ color: 'var(--alm-text-muted)' }}>—</span>
+        <span className="alm-inbox-detail__dash">—</span>
       ),
       samples: (
-        <span style={{ fontSize: 'var(--alm-text-xs)' }}>
+        <span className="alm-inbox-detail__samples">
           {entry.sampleFiles?.slice(0, 3).join(', ')}
           {(entry.sampleFiles?.length ?? 0) > 3 && (
-            <span style={{ color: 'var(--alm-text-muted)' }}>
+            <span className="alm-inbox-detail__samples-more">
               {' '}+{(entry.sampleFiles?.length ?? 0) - 3} more
             </span>
           )}
@@ -275,13 +269,7 @@ export function InboxDetail({ item, classification, fileMetadata }: InboxDetailP
       file: (
         <span
           title={filePath}
-          style={{
-            display: 'block',
-            overflow: 'hidden',
-            textOverflow: 'ellipsis',
-            whiteSpace: 'nowrap',
-            fontSize: 'var(--alm-text-xs)',
-          }}
+          className="alm-inbox-detail__file-cell"
         >
           {filePath}
         </span>
@@ -331,30 +319,14 @@ export function InboxDetail({ item, classification, fileMetadata }: InboxDetailP
       file: (
         <span
           title={f.relativeFilePath}
-          style={{
-            display: 'block',
-            overflow: 'hidden',
-            textOverflow: 'ellipsis',
-            whiteSpace: 'nowrap',
-            fontSize: 'var(--alm-text-xs)',
-          }}
+          className="alm-inbox-detail__file-cell"
         >
           {f.relativeFilePath}
           {missingAttrs.length > 0 && (
             <span
               data-testid={`inbox-missing-attr-${fileName}`}
               title={`Missing required attribute(s): ${missingAttrs.join(', ')}`}
-              style={{
-                display: 'inline-block',
-                marginLeft: 'var(--alm-sp-1)',
-                padding: '0 var(--alm-sp-1)',
-                fontSize: 'var(--alm-text-xs)',
-                fontWeight: 600,
-                color: 'var(--alm-warn)',
-                border: '1px solid currentColor',
-                borderRadius: 'var(--alm-radius-md)',
-                whiteSpace: 'nowrap',
-              }}
+              className="alm-inbox-detail__missing-attr-badge"
             >
               needs {missingAttrs.join(', ')}
             </span>
@@ -402,14 +374,14 @@ export function InboxDetail({ item, classification, fileMetadata }: InboxDetailP
       />
 
       {classType === 'mixed' && (
-        <Banner variant="warn" style={{ marginTop: 'var(--alm-sp-3)' }}>
+        <Banner variant="warn" className="alm-inbox-detail__banner-mt3">
           Mixed folder — multiple frame types detected. Generate a split plan to
           move each type to its canonical location.
         </Banner>
       )}
 
       {classType === 'unclassified' && (
-        <Banner variant="warn" style={{ marginTop: 'var(--alm-sp-3)' }}>
+        <Banner variant="warn" className="alm-inbox-detail__banner-mt3">
           No IMAGETYP headers could be read. Assign frame types below before confirming.
         </Banner>
       )}
@@ -430,11 +402,7 @@ export function InboxDetail({ item, classification, fileMetadata }: InboxDetailP
       {mixedSummary && (
         <div
           aria-label="Mixed composition summary"
-          style={{
-            marginTop: 'var(--alm-sp-2)',
-            fontSize: 'var(--alm-text-sm)',
-            color: 'var(--alm-text-secondary, var(--alm-text-muted))',
-          }}
+          className="alm-inbox-detail__mixed-summary"
         >
           {mixedSummary}
         </div>
@@ -445,7 +413,7 @@ export function InboxDetail({ item, classification, fileMetadata }: InboxDetailP
           <Table
             columns={breakdownColumns}
             rows={breakdownRows}
-            style={{ tableLayout: 'fixed', width: '100%' }}
+            className="alm-inbox-detail__table-fixed"
           />
         </Section>
       )}
@@ -453,7 +421,7 @@ export function InboxDetail({ item, classification, fileMetadata }: InboxDetailP
       {unclassifiedRows.length > 0 && (
         <Section title={`Needs review (${unclassifiedRows.length})`}>
           {/* Select-all affordance row above the table */}
-          <div style={{ marginBottom: 'var(--alm-sp-1)', display: 'flex', alignItems: 'center', gap: 6 }}>
+          <div className="alm-inbox-detail__select-all-row">
             <input
               type="checkbox"
               checked={allSelected}
@@ -462,7 +430,7 @@ export function InboxDetail({ item, classification, fileMetadata }: InboxDetailP
               aria-label="Select all unclassified files"
               data-testid="reclassify-select-all"
             />
-            <span style={{ fontSize: 'var(--alm-text-xs)', color: 'var(--alm-text-muted)' }}>
+            <span className="alm-inbox-detail__select-all-label">
               {selectedFiles.size === 0 ? 'Select all' : `${selectedFiles.size} selected`}
             </span>
           </div>
@@ -471,22 +439,13 @@ export function InboxDetail({ item, classification, fileMetadata }: InboxDetailP
           {/* T027: Bulk override controls — visible when >=1 file selected */}
           {selectedFiles.size > 0 && (
             <div
-              style={{
-                marginTop: 'var(--alm-sp-3)',
-                padding: 'var(--alm-sp-3)',
-                border: '1px solid var(--alm-border)',
-                borderRadius: 'var(--alm-radius-md)',
-                display: 'flex',
-                flexWrap: 'wrap',
-                gap: 8,
-                alignItems: 'flex-end',
-              }}
+              className="alm-inbox-detail__bulk-controls"
               aria-label="Bulk override controls"
             >
-              <div style={{ display: 'flex', flexDirection: 'column', gap: 4 }}>
+              <div className="alm-inbox-detail__bulk-field">
                 <label
                   htmlFor="bulk-frame-type"
-                  style={{ fontSize: 'var(--alm-text-xs)', color: 'var(--alm-text-muted)' }}
+                  className="alm-inbox-detail__bulk-label"
                 >
                   Frame type
                 </label>
@@ -505,10 +464,10 @@ export function InboxDetail({ item, classification, fileMetadata }: InboxDetailP
                 </select>
               </div>
 
-              <div style={{ display: 'flex', flexDirection: 'column', gap: 4 }}>
+              <div className="alm-inbox-detail__bulk-field">
                 <label
                   htmlFor="bulk-filter"
-                  style={{ fontSize: 'var(--alm-text-xs)', color: 'var(--alm-text-muted)' }}
+                  className="alm-inbox-detail__bulk-label"
                 >
                   Filter
                 </label>
@@ -520,15 +479,14 @@ export function InboxDetail({ item, classification, fileMetadata }: InboxDetailP
                   placeholder="e.g. Ha"
                   aria-label="Bulk filter"
                   data-testid="bulk-filter"
-                  className="alm-input alm-input--sm"
-                  style={{ width: 80 }}
+                  className="alm-input alm-input--sm alm-inbox-detail__bulk-input-w80"
                 />
               </div>
 
-              <div style={{ display: 'flex', flexDirection: 'column', gap: 4 }}>
+              <div className="alm-inbox-detail__bulk-field">
                 <label
                   htmlFor="bulk-exposure"
-                  style={{ fontSize: 'var(--alm-text-xs)', color: 'var(--alm-text-muted)' }}
+                  className="alm-inbox-detail__bulk-label"
                 >
                   Exposure (s)
                 </label>
@@ -540,16 +498,15 @@ export function InboxDetail({ item, classification, fileMetadata }: InboxDetailP
                   placeholder="e.g. 300"
                   aria-label="Bulk exposure seconds"
                   data-testid="bulk-exposure-s"
-                  className="alm-input alm-input--sm"
-                  style={{ width: 80 }}
+                  className="alm-input alm-input--sm alm-inbox-detail__bulk-input-w80"
                   min={0}
                 />
               </div>
 
-              <div style={{ display: 'flex', flexDirection: 'column', gap: 4 }}>
+              <div className="alm-inbox-detail__bulk-field">
                 <label
                   htmlFor="bulk-binning"
-                  style={{ fontSize: 'var(--alm-text-xs)', color: 'var(--alm-text-muted)' }}
+                  className="alm-inbox-detail__bulk-label"
                 >
                   Binning
                 </label>
@@ -561,8 +518,7 @@ export function InboxDetail({ item, classification, fileMetadata }: InboxDetailP
                   placeholder="e.g. 2x2"
                   aria-label="Bulk binning"
                   data-testid="bulk-binning"
-                  className="alm-input alm-input--sm"
-                  style={{ width: 80 }}
+                  className="alm-input alm-input--sm alm-inbox-detail__bulk-input-w80"
                 />
               </div>
 
@@ -581,12 +537,12 @@ export function InboxDetail({ item, classification, fileMetadata }: InboxDetailP
           )}
 
           {bulkError && (
-            <Banner variant="danger" style={{ marginTop: 'var(--alm-sp-2)' }}>{bulkError}</Banner>
+            <Banner variant="danger" className="alm-inbox-detail__banner-mt2">{bulkError}</Banner>
           )}
 
           {/* Single-file apply button: still available when user has per-row selects */}
           {Object.keys(pendingOverrides).length > 0 && (
-            <div style={{ marginTop: 'var(--alm-sp-2)', display: 'flex', gap: 8 }}>
+            <div className="alm-inbox-detail__apply-row">
               <button
                 className="alm-btn alm-btn--sm alm-btn--accent"
                 onClick={handleApplyOverrides}
@@ -598,7 +554,7 @@ export function InboxDetail({ item, classification, fileMetadata }: InboxDetailP
             </div>
           )}
           {applyError && (
-            <Banner variant="danger" style={{ marginTop: 'var(--alm-sp-2)' }}>{applyError}</Banner>
+            <Banner variant="danger" className="alm-inbox-detail__banner-mt2">{applyError}</Banner>
           )}
         </Section>
       )}
@@ -608,7 +564,7 @@ export function InboxDetail({ item, classification, fileMetadata }: InboxDetailP
       {filesMissingAttrs.length > 0 && (
         <Banner
           variant="warn"
-          style={{ marginTop: 'var(--alm-sp-3)' }}
+          className="alm-inbox-detail__banner-mt3"
           data-testid="inbox-missing-attr-banner"
         >
           {filesMissingAttrs.length} file{filesMissingAttrs.length !== 1 ? 's' : ''} missing
@@ -620,7 +576,7 @@ export function InboxDetail({ item, classification, fileMetadata }: InboxDetailP
       {/* FR-010: per-file metadata table — shown only when parent provides data */}
       {metadataRows.length > 0 && (
         <Section title={`File metadata (${metadataRows.length})`}>
-          <div style={{ overflowX: 'auto' }}>
+          <div className="alm-inbox-detail__metadata-scroll">
             <Table columns={metadataColumns} rows={metadataRows} />
           </div>
         </Section>

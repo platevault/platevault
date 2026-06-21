@@ -1639,3 +1639,110 @@
   z-index: 10;
   overflow: auto;
 }
+
+/* === INBOX DETAIL === */
+
+/* Muted dash spans produced by fmtOrDash / fmtBinning / fmtExposure / fmtTemp */
+.alm-inbox-detail__dash { color: var(--alm-text-muted); }
+
+/* EmptyClassification placeholder block */
+.alm-inbox-detail__empty {
+  padding: var(--alm-sp-4);
+  color: var(--alm-text-muted);
+  font-size: var(--alm-text-sm);
+}
+
+/* Mixed-composition summary line (FR-011) */
+.alm-inbox-detail__mixed-summary {
+  margin-top: var(--alm-sp-2);
+  font-size: var(--alm-text-sm);
+  color: var(--alm-text-secondary);
+}
+
+/* Breakdown table: fixed layout so columns don't reflow across items */
+.alm-inbox-detail__table-fixed {
+  table-layout: fixed;
+  width: 100%;
+}
+
+/* Sample files cell content */
+.alm-inbox-detail__samples { font-size: var(--alm-text-xs); }
+.alm-inbox-detail__samples-more { color: var(--alm-text-muted); }
+
+/* Truncated file-path cell (unclassified rows + metadata rows) */
+.alm-inbox-detail__file-cell {
+  display: block;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-size: var(--alm-text-xs);
+}
+
+/* Per-file missing-attribute inline badge */
+.alm-inbox-detail__missing-attr-badge {
+  display: inline-block;
+  margin-left: var(--alm-sp-1);
+  padding: 0 var(--alm-sp-1);
+  font-size: var(--alm-text-xs);
+  font-weight: var(--alm-weight-semibold);
+  color: var(--alm-warn);
+  border: 1px solid currentColor;
+  border-radius: var(--alm-radius-md);
+  white-space: nowrap;
+}
+
+/* Top margin for Banner components in this pane */
+.alm-inbox-detail__banner-mt3 { margin-top: var(--alm-sp-3); }
+.alm-inbox-detail__banner-mt2 { margin-top: var(--alm-sp-2); }
+
+/* Select-all affordance row above the unclassified table */
+.alm-inbox-detail__select-all-row {
+  margin-bottom: var(--alm-sp-1);
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+
+/* "Select all / N selected" label beside the select-all checkbox */
+.alm-inbox-detail__select-all-label {
+  font-size: var(--alm-text-xs);
+  color: var(--alm-text-muted);
+}
+
+/* Bulk override controls panel (visible when ≥1 file selected) */
+.alm-inbox-detail__bulk-controls {
+  margin-top: var(--alm-sp-3);
+  padding: var(--alm-sp-3);
+  border: 1px solid var(--alm-border);
+  border-radius: var(--alm-radius-md);
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  align-items: flex-end;
+}
+
+/* Column wrapper for each label+control pair inside bulk controls */
+.alm-inbox-detail__bulk-field {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+/* Label text inside each bulk field */
+.alm-inbox-detail__bulk-label {
+  font-size: var(--alm-text-xs);
+  color: var(--alm-text-muted);
+}
+
+/* Narrow fixed-width inputs in the bulk controls (filter / exposure / binning) */
+.alm-inbox-detail__bulk-input-w80 { width: 80px; }
+
+/* Single-file apply-overrides button row */
+.alm-inbox-detail__apply-row {
+  margin-top: var(--alm-sp-2);
+  display: flex;
+  gap: 8px;
+}
+
+/* Metadata table horizontal scroll wrapper */
+.alm-inbox-detail__metadata-scroll { overflow-x: auto; }
