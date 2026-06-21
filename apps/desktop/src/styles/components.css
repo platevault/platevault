@@ -4643,3 +4643,268 @@
   line-height: var(--alm-leading-normal);
   color: var(--alm-text-secondary);
 }
+
+/* === SETUP STEP CATALOGS === */
+
+/* Root container for the Configuration step */
+.alm-step-catalogs {
+  display: flex;
+  flex-direction: column;
+  gap: var(--alm-sp-5);
+}
+
+/* A single labelled config row (stacks header + description) */
+.alm-setup-catalogs__option {
+  display: flex;
+  flex-direction: column;
+  gap: var(--alm-sp-2);
+}
+
+/* Title + control on one line */
+.alm-setup-catalogs__option-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--alm-sp-3);
+}
+
+/* Row label text */
+.alm-setup-catalogs__option-title {
+  font-weight: var(--alm-weight-semibold);
+  white-space: nowrap;
+}
+
+/* === TOAST CONTAINER === */
+
+/* Fixed viewport anchor — bottom-right, above all other layers */
+.alm-toast__container {
+  position: fixed;
+  bottom: var(--alm-sp-4);
+  right: var(--alm-sp-4);
+  display: flex;
+  flex-direction: column;
+  gap: var(--alm-sp-2);
+  z-index: 9999;
+  pointer-events: none;
+  max-width: 400px;
+}
+
+/* Individual toast item */
+.alm-toast__item {
+  padding: var(--alm-sp-3) var(--alm-sp-4);
+  border-radius: var(--alm-radius-sm);
+  border: 1px solid var(--alm-border);
+  background: var(--alm-surface);
+  color: var(--alm-text);
+  font-size: var(--alm-text-sm);
+  line-height: var(--alm-leading-normal);
+  pointer-events: auto;
+  display: flex;
+  align-items: flex-start;
+  gap: var(--alm-sp-3);
+  box-shadow: 0 4px 12px color-mix(in srgb, var(--alm-ink) 30%, transparent);
+}
+
+/* Variant accent borders */
+.alm-toast__item--info {
+  border-left: 3px solid var(--alm-info);
+}
+
+.alm-toast__item--error {
+  border-left: 3px solid var(--alm-danger);
+}
+
+.alm-toast__item--success {
+  border-left: 3px solid var(--alm-ok);
+}
+
+.alm-toast__item--warn {
+  border-left: 3px solid var(--alm-warn);
+}
+
+/* Message text fills remaining space */
+.alm-toast__message {
+  flex: 1;
+}
+
+/* Right-side controls row (action button + dismiss) */
+.alm-toast__controls {
+  display: flex;
+  align-items: center;
+  gap: var(--alm-sp-2);
+  flex-shrink: 0;
+}
+
+/* Optional action button */
+.alm-toast__action-btn {
+  background: transparent;
+  border: 1px solid var(--alm-border);
+  border-radius: var(--alm-radius-sm);
+  color: var(--alm-text);
+  font-size: var(--alm-text-xs);
+  padding: 2px 8px;
+  cursor: pointer;
+  white-space: nowrap;
+  transition: background var(--alm-transition-fast);
+}
+
+/* Dismiss (×) button */
+.alm-toast__dismiss-btn {
+  background: transparent;
+  border: none;
+  color: var(--alm-text-muted);
+  font-size: 14px;
+  cursor: pointer;
+  line-height: 1;
+  padding: 0;
+  display: inline-flex;
+  transition: color var(--alm-transition-fast);
+}
+
+/* === SETTINGS RESOLVER === */
+
+/* Compact mode: outer column stack */
+.alm-resolver-settings__compact-wrap {
+  display: flex;
+  flex-direction: column;
+  gap: var(--alm-sp-2);
+}
+
+/* Compact mode: label + toggle row */
+.alm-resolver-settings__compact-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--alm-sp-3);
+}
+
+/* Compact mode: label text */
+.alm-resolver-settings__compact-label {
+  font-weight: var(--alm-weight-semibold);
+  white-space: nowrap;
+}
+
+/* Narrow number inputs (debounce ms, timeout s) */
+.alm-resolver-settings__narrow-input {
+  max-width: 120px;
+}
+
+/* === APP ERROR BOUNDARY === */
+
+.alm-error-boundary__overlay {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  height: 100vh;
+  gap: var(--alm-sp-4);
+  padding: var(--alm-sp-6);
+  font-family: var(--alm-font-sans);
+  color: var(--alm-text);
+  background: var(--alm-bg);
+}
+
+.alm-error-boundary__heading {
+  font-size: var(--alm-text-xl);
+  font-weight: var(--alm-weight-semibold);
+  color: var(--alm-danger);
+  margin: 0;
+}
+
+.alm-error-boundary__body {
+  font-size: var(--alm-text-base);
+  color: var(--alm-text-secondary);
+  margin: 0;
+  max-width: 480px;
+  text-align: center;
+}
+
+.alm-error-boundary__detail {
+  font-size: var(--alm-text-xs);
+  color: var(--alm-text-muted);
+  background: var(--alm-surface);
+  border: 1px solid var(--alm-border);
+  border-radius: var(--alm-radius-sm);
+  padding: var(--alm-sp-3);
+  max-width: 480px;
+  overflow: auto;
+  margin: 0;
+}
+
+.alm-error-boundary__reset-btn {
+  padding: var(--alm-sp-2) var(--alm-sp-4);
+  background: var(--alm-accent);
+  color: var(--alm-on-accent);
+  border: 1px solid transparent;
+  border-radius: var(--alm-radius-sm);
+  cursor: pointer;
+  font-size: var(--alm-text-base);
+  font-weight: var(--alm-weight-medium);
+  transition: background var(--alm-transition-fast);
+}
+
+.alm-error-boundary__reset-btn:hover {
+  background: var(--alm-accent-hover);
+}
+
+.alm-error-boundary__reset-btn:focus-visible {
+  outline: none;
+  box-shadow: var(--alm-focus-ring);
+}
+
+/* === SESSION DETAIL === */
+
+/* Action button stack inside the Review state rail card */
+.alm-session-detail__action-stack {
+  margin-top: var(--alm-sp-2);
+  display: flex;
+  flex-direction: column;
+  gap: var(--alm-sp-1);
+}
+
+/* Locked-metadata notice shown when session is linked to a project */
+.alm-session-detail__lock-notice {
+  margin-top: var(--alm-sp-1);
+  font-size: var(--alm-text-xs);
+  color: var(--alm-text-muted);
+}
+
+/* Pill row inside the Linked projects rail card */
+.alm-session-detail__linked-pills {
+  display: flex;
+  gap: var(--alm-sp-2);
+  flex-wrap: wrap;
+}
+
+/* "None" placeholder when no linked projects exist */
+.alm-session-detail__no-linked {
+  font-size: var(--alm-text-xs);
+  color: var(--alm-text-faint);
+}
+
+/* === PROJECT SOURCE VIEWS SECTION === */
+
+/* Expandable inventory-refs disclosure widget */
+.alm-source-views__refs-details {
+  margin-top: 4px;
+}
+
+/* Disclosure summary — pointer cursor, no text selection on click */
+.alm-source-views__refs-summary {
+  cursor: pointer;
+  user-select: none;
+}
+
+/* Inventory-ref path list inside the disclosure */
+.alm-source-views__refs-list {
+  margin-top: 4px;
+  padding-left: 12px;
+  list-style: disc;
+  font-family: var(--alm-font-mono);
+}
+
+/* Individual inventory-ref path item */
+.alm-source-views__refs-item {
+  padding: 1px 0;
+  word-break: break-all;
+}

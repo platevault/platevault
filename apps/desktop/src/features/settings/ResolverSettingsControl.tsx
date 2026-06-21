@@ -80,16 +80,9 @@ export function ResolverSettingsControl({ compact = false }: ResolverSettingsCon
       {compact ? (
         // First-run Configuration step: label + toggle on one line, description
         // below the control (not beside it).
-        <div style={{ display: 'flex', flexDirection: 'column', gap: 'var(--alm-sp-2)' }}>
-          <div
-            style={{
-              display: 'flex',
-              alignItems: 'center',
-              justifyContent: 'space-between',
-              gap: 'var(--alm-sp-3)',
-            }}
-          >
-            <span style={{ fontWeight: 'var(--alm-weight-semibold)', whiteSpace: 'nowrap' }}>
+        <div className="alm-resolver-settings__compact-wrap">
+          <div className="alm-resolver-settings__compact-row">
+            <span className="alm-resolver-settings__compact-label">
               Online SIMBAD resolution
             </span>
             <Toggle
@@ -151,7 +144,7 @@ export function ResolverSettingsControl({ compact = false }: ResolverSettingsCon
             <div className="alm-settings__row-content">
               <input
                 id={debounceId}
-                className="alm-input"
+                className="alm-input alm-resolver-settings__narrow-input"
                 type="number"
                 min={0}
                 step={50}
@@ -161,7 +154,6 @@ export function ResolverSettingsControl({ compact = false }: ResolverSettingsCon
                   setSettings((s) => ({ ...s, debounceMs: Number(e.target.value) }))
                 }
                 onBlur={(e) => void persist({ debounceMs: Number(e.target.value) })}
-                style={{ maxWidth: 120 }}
               />
               <div className="alm-settings__row-desc">
                 How long to wait after typing before querying SIMBAD.
@@ -176,7 +168,7 @@ export function ResolverSettingsControl({ compact = false }: ResolverSettingsCon
             <div className="alm-settings__row-content">
               <input
                 id={timeoutId}
-                className="alm-input"
+                className="alm-input alm-resolver-settings__narrow-input"
                 type="number"
                 min={1}
                 step={1}
@@ -186,7 +178,6 @@ export function ResolverSettingsControl({ compact = false }: ResolverSettingsCon
                   setSettings((s) => ({ ...s, requestTimeoutSecs: Number(e.target.value) }))
                 }
                 onBlur={(e) => void persist({ requestTimeoutSecs: Number(e.target.value) })}
-                style={{ maxWidth: 120 }}
               />
               <div className="alm-settings__row-desc">
                 How long to wait for a SIMBAD response before giving up.

@@ -171,14 +171,7 @@ export function SessionDetail({ session, onConfirm, onReopen, onReject, isPendin
                   ? 'Needs review'
                   : sessionStateLabel(session.state)}
               </Pill>
-              <div
-                style={{
-                  marginTop: 'var(--alm-sp-2)',
-                  display: 'flex',
-                  flexDirection: 'column',
-                  gap: 'var(--alm-sp-1)',
-                }}
-              >
+              <div className="alm-session-detail__action-stack">
                 {confirmVisible && (
                   <button
                     className="alm-btn alm-btn--primary alm-btn--sm"
@@ -210,13 +203,7 @@ export function SessionDetail({ session, onConfirm, onReopen, onReject, isPendin
                   </button>
                 )}
                 {isLinked && (
-                  <div
-                    style={{
-                      marginTop: 'var(--alm-sp-1)',
-                      fontSize: 'var(--alm-text-xs)',
-                      color: 'var(--alm-text-muted)',
-                    }}
-                  >
+                  <div className="alm-session-detail__lock-notice">
                     Linked to a project — metadata locked while in use.
                   </div>
                 )}
@@ -225,7 +212,7 @@ export function SessionDetail({ session, onConfirm, onReopen, onReject, isPendin
 
             <RailCard title="Linked projects">
               {isLinked ? (
-                <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap' }}>
+                <div className="alm-session-detail__linked-pills">
                   {session.linked?.projects?.map((p) => (
                     <Pill key={p.id} variant="info">
                       {p.name}
@@ -233,12 +220,7 @@ export function SessionDetail({ session, onConfirm, onReopen, onReject, isPendin
                   ))}
                 </div>
               ) : (
-                <span
-                  style={{
-                    fontSize: 'var(--alm-text-xs)',
-                    color: 'var(--alm-text-faint)',
-                  }}
-                >
+                <span className="alm-session-detail__no-linked">
                   None
                 </span>
               )}

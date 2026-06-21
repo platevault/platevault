@@ -66,7 +66,6 @@ function DefaultProtectionControl() {
       value={value}
       aria-label="Default source protection"
       onChange={(e) => onChange(e.target.value as DefaultProtection)}
-      style={{ height: 28 }}
     >
       <option value="protected">Protected</option>
       <option value="normal">Normal</option>
@@ -85,7 +84,6 @@ function DensityControl() {
       value={density}
       aria-label="Display density"
       onChange={(e) => setDensity(e.target.value as Density)}
-      style={{ height: 28 }}
     >
       <option value="compact">Compact</option>
       <option value="comfortable">Comfortable</option>
@@ -106,16 +104,9 @@ function ConfigOption({
   control: ReactNode;
 }) {
   return (
-    <div style={{ display: 'flex', flexDirection: 'column', gap: 'var(--alm-sp-2)' }}>
-      <div
-        style={{
-          display: 'flex',
-          alignItems: 'center',
-          justifyContent: 'space-between',
-          gap: 'var(--alm-sp-3)',
-        }}
-      >
-        <span style={{ fontWeight: 'var(--alm-weight-semibold)', whiteSpace: 'nowrap' }}>
+    <div className="alm-setup-catalogs__option">
+      <div className="alm-setup-catalogs__option-header">
+        <span className="alm-setup-catalogs__option-title">
           {title}
         </span>
         {control}
@@ -138,7 +129,6 @@ export function StepCatalogs(_props: StepCatalogsProps) {
   return (
     <div
       className="alm-step-catalogs"
-      style={{ display: 'flex', flexDirection: 'column', gap: 'var(--alm-sp-5)' }}
     >
       {/* Online SIMBAD resolution (label + toggle on one line, desc below). */}
       <ResolverSettingsControl compact />
@@ -163,7 +153,6 @@ export function StepCatalogs(_props: StepCatalogsProps) {
             className="alm-select"
             disabled
             aria-label="Theme (coming soon)"
-            style={{ height: 28 }}
           >
             <option>Light (coming soon)</option>
           </select>
