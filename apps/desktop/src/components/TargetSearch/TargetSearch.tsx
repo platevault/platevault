@@ -373,6 +373,9 @@ export function TargetSearch({
         // `inputValue`), so choosing a target never overwrites what was typed.
         onValueChange={handleSelect}
         filter={null}
+        // F2: auto-highlight the first suggestion as results arrive, matching the
+        // pre-base-ui behavior (Enter selects the top hit without an ArrowDown).
+        autoHighlight
         virtualized
         modal={false}
         open={showList}
