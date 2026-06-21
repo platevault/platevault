@@ -121,7 +121,7 @@ export function ProcessingTools() {
     return (
       <div className="alm-settings__group">
         <div className="alm-settings__group-title">Tool Workflows</div>
-        <p style={{ color: 'var(--alm-text-danger)' }}>Failed to load tools: {loadError}</p>
+        <p className="alm-proc-tools__error">Failed to load tools: {loadError}</p>
       </div>
     );
   }
@@ -132,8 +132,7 @@ export function ProcessingTools() {
         Tool Workflows
         <button
           type="button"
-          className="alm-btn alm-btn--ghost"
-          style={{ marginLeft: '1rem', fontSize: 'var(--alm-text-xs)' }}
+          className="alm-btn alm-btn--ghost alm-proc-tools__auto-detect-btn"
           onClick={handleAutoDetect}
           disabled={detecting}
           aria-label="Re-run auto-detect for all tools"
@@ -143,37 +142,36 @@ export function ProcessingTools() {
       </div>
 
       {tools.length === 0 && !loadError && (
-        <p style={{ color: 'var(--alm-text-muted)', fontSize: 'var(--alm-text-sm)' }}>
+        <p className="alm-proc-tools__loading">
           Loading…
         </p>
       )}
 
       {tools.map((tool) => (
-        <div key={tool.id} className="alm-settings__row" style={{ marginBottom: '1rem' }}>
-          <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', marginBottom: '0.25rem' }}>
+        <div key={tool.id} className="alm-settings__row alm-proc-tools__tool-row">
+          <div className="alm-proc-tools__tool-header">
             <strong>{tool.name}</strong>
             {tool.autoDetected && (
-              <Pill variant="neutral" style={{ fontSize: 'var(--alm-text-2xs)' }}>
+              <Pill variant="neutral" className="alm-proc-tools__pill">
                 Auto-detected
               </Pill>
             )}
             {tool.available && (
-              <Pill variant="ok" style={{ fontSize: 'var(--alm-text-2xs)' }}>
+              <Pill variant="ok" className="alm-proc-tools__pill">
                 Available
               </Pill>
             )}
             {tool.configured && !tool.available && (
-              <Pill variant="warn" style={{ fontSize: 'var(--alm-text-2xs)' }}>
+              <Pill variant="warn" className="alm-proc-tools__pill">
                 Missing
               </Pill>
             )}
           </div>
 
-          <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
+          <div className="alm-proc-tools__tool-controls">
             <input
               type="text"
-              className="alm-input"
-              style={{ flex: 1, fontSize: 'var(--alm-text-xs)', fontFamily: 'monospace' }}
+              className="alm-input alm-proc-tools__path-input"
               value={pathDraft[tool.id] ?? ''}
               placeholder="Executable path…"
               aria-label={`Executable path for ${tool.name}`}
@@ -194,7 +192,7 @@ export function ProcessingTools() {
               }}
             />
             {(saving[tool.id] || validating[tool.id]) && (
-              <span style={{ color: 'var(--alm-text-muted)', fontSize: 'var(--alm-text-xs)' }}>
+              <span className="alm-proc-tools__status">
                 {saving[tool.id] ? 'Saving…' : 'Checking…'}
               </span>
             )}

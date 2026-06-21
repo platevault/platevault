@@ -3509,3 +3509,413 @@
   align-items: center;
   gap: var(--alm-sp-4);
 }
+
+/* === SETTINGS AUDIT LOG === */
+
+/* Filter row */
+.alm-audit-log__filters {
+  display: flex;
+  gap: var(--alm-sp-2);
+  flex-wrap: wrap;
+  margin-bottom: var(--alm-sp-3);
+}
+
+/* Search input (stretches to fill available space) */
+.alm-audit-log__search {
+  flex: 1;
+  min-width: 200px;
+}
+
+/* Date-range labels (From / To) */
+.alm-audit-log__date-label {
+  display: flex;
+  align-items: center;
+  gap: var(--alm-sp-1);
+  font-size: var(--alm-text-sm);
+  color: var(--alm-text-muted);
+}
+
+/* Date inputs */
+.alm-audit-log__date-input {
+  width: 140px;
+  background: var(--alm-surface);
+  color: var(--alm-text);
+  border: 1px solid var(--alm-border);
+  border-radius: var(--alm-radius-md);
+}
+
+.alm-audit-log__date-input:focus {
+  outline: none;
+  border-color: var(--alm-accent);
+}
+
+.alm-audit-log__date-input::placeholder {
+  color: var(--alm-text-faint);
+}
+
+/* Timestamp cell — monospace, extra-small */
+.alm-audit-log__ts {
+  font-size: var(--alm-text-2xs);
+}
+
+/* Event cell — monospace, extra-small */
+.alm-audit-log__event {
+  font-size: var(--alm-text-xs);
+  font-family: var(--alm-font-mono);
+}
+
+/* Entity cell — muted, truncated */
+.alm-audit-log__entity {
+  display: block;
+  font-size: var(--alm-text-xs);
+  color: var(--alm-text-muted);
+  max-width: 200px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+/* Actor cell — muted, extra-small */
+.alm-audit-log__actor {
+  font-size: var(--alm-text-xs);
+  color: var(--alm-text-muted);
+}
+
+/* Empty-state message */
+.alm-audit-log__empty {
+  text-align: center;
+  color: var(--alm-text-muted);
+  font-size: var(--alm-text-sm);
+  padding: var(--alm-sp-4);
+}
+
+/* Pagination bar */
+.alm-audit-log__pagination {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-top: var(--alm-sp-3);
+}
+
+/* Pagination count label */
+.alm-audit-log__page-count {
+  font-size: var(--alm-text-xs);
+  color: var(--alm-text-muted);
+}
+
+/* Pagination button group */
+.alm-audit-log__page-btns {
+  display: flex;
+  gap: var(--alm-sp-1);
+}
+
+/* === SETTINGS SOURCE PROTECTION === */
+
+/* Status spans (loading / error before editing) */
+.alm-source-protect__status {
+  font-size: var(--alm-text-xs);
+  color: var(--alm-text-muted);
+}
+
+/* Root wrapper — column flex */
+.alm-source-protect__root {
+  display: flex;
+  flex-direction: column;
+  gap: var(--alm-sp-1);
+}
+
+/* View-mode row: badge + inherit pill + Override button */
+.alm-source-protect__view-row {
+  display: flex;
+  align-items: center;
+  gap: var(--alm-sp-2);
+  flex-wrap: wrap;
+}
+
+/* Hint text under view/edit row */
+.alm-source-protect__hint {
+  font-size: var(--alm-text-xs);
+  color: var(--alm-text-muted);
+  flex-basis: 100%;
+}
+
+/* Edit-mode outer column */
+.alm-source-protect__edit-col {
+  display: flex;
+  flex-direction: column;
+  gap: var(--alm-sp-2);
+}
+
+/* Edit-mode selector row */
+.alm-source-protect__edit-row {
+  display: flex;
+  align-items: center;
+  gap: var(--alm-sp-2);
+  flex-wrap: wrap;
+}
+
+/* Label for the protection-level select */
+.alm-source-protect__label {
+  font-size: var(--alm-text-sm);
+  color: var(--alm-text);
+}
+
+/* Select height override (component geometry) + dark-mode theming */
+.alm-source-protect__select {
+  height: 28px;
+  background: var(--alm-surface);
+  color: var(--alm-text);
+  border: 1px solid var(--alm-border);
+  border-radius: var(--alm-radius-sm);
+  font-size: var(--alm-text-sm);
+  transition: border-color var(--alm-transition-fast);
+}
+
+.alm-source-protect__select:focus {
+  outline: none;
+  border-color: var(--alm-accent);
+}
+
+/* Inline error message */
+.alm-source-protect__error {
+  font-size: var(--alm-text-xs);
+  color: var(--alm-danger);
+}
+
+/* Save / Cancel action row */
+.alm-source-protect__actions {
+  display: flex;
+  gap: var(--alm-sp-1);
+}
+
+/* === SETTINGS DATA SOURCES === */
+
+/* Add-source form wrapper */
+.alm-data-sources__add-form {
+  margin-bottom: var(--alm-sp-3);
+  display: flex;
+  flex-direction: column;
+  gap: var(--alm-sp-2);
+}
+
+/* Category + action button row */
+.alm-data-sources__add-controls {
+  display: flex;
+  gap: var(--alm-sp-2);
+  flex-wrap: wrap;
+  align-items: center;
+}
+
+/* Inline error message (add form) */
+.alm-data-sources__add-error {
+  font-size: var(--alm-text-xs);
+  color: var(--alm-danger);
+}
+
+/* Loading / empty-state text */
+.alm-data-sources__status {
+  color: var(--alm-text-muted);
+  font-size: var(--alm-text-sm);
+}
+
+/* Load error text */
+.alm-data-sources__load-error {
+  color: var(--alm-danger);
+  font-size: var(--alm-text-xs);
+}
+
+/* Roots list column */
+.alm-data-sources__roots-list {
+  display: flex;
+  flex-direction: column;
+  gap: var(--alm-sp-3);
+}
+
+/* Individual root card */
+.alm-data-sources__root-card {
+  border: 1px solid var(--alm-border);
+  border-radius: var(--alm-radius-md);
+  padding: var(--alm-sp-3);
+}
+
+/* Offline root — dimmed surface */
+.alm-data-sources__root-card--offline {
+  background: var(--alm-bg3);
+}
+
+/* Card header row: path + pills */
+.alm-data-sources__root-header {
+  display: flex;
+  align-items: flex-start;
+  gap: var(--alm-sp-2);
+  flex-wrap: wrap;
+}
+
+/* Path code element */
+.alm-data-sources__root-path {
+  flex: 1;
+  font-size: var(--alm-text-xs);
+  word-break: break-all;
+}
+
+/* Pills group */
+.alm-data-sources__root-pills {
+  display: flex;
+  gap: var(--alm-sp-1);
+  flex-shrink: 0;
+}
+
+/* Last-scan timestamp line */
+.alm-data-sources__root-scan {
+  margin-top: var(--alm-sp-2);
+  font-size: var(--alm-text-xs);
+  color: var(--alm-text-muted);
+}
+
+/* === SETTINGS PROCESSING TOOLS === */
+
+/* Error paragraph shown when tool list fails to load */
+.alm-proc-tools__error {
+  color: var(--alm-danger);
+}
+
+/* Auto-detect button injected into the group title row */
+.alm-proc-tools__auto-detect-btn {
+  margin-left: var(--alm-sp-4);
+  font-size: var(--alm-text-xs);
+}
+
+/* "Loading…" placeholder shown before tool list arrives */
+.alm-proc-tools__loading {
+  color: var(--alm-text-muted);
+  font-size: var(--alm-text-sm);
+}
+
+/* Wrapper for a single tool row */
+.alm-proc-tools__tool-row {
+  margin-bottom: var(--alm-sp-4);
+}
+
+/* Name + pill header line */
+.alm-proc-tools__tool-header {
+  display: flex;
+  align-items: center;
+  gap: var(--alm-sp-2);
+  margin-bottom: var(--alm-sp-1);
+}
+
+/* Status pill labels (auto-detected / available / missing) */
+.alm-proc-tools__pill {
+  font-size: var(--alm-text-2xs);
+}
+
+/* Path input + status span + toggle row */
+.alm-proc-tools__tool-controls {
+  display: flex;
+  align-items: center;
+  gap: var(--alm-sp-2);
+}
+
+/* Executable path text input — expands to fill available space */
+.alm-proc-tools__path-input {
+  flex: 1;
+  font-size: var(--alm-text-xs);
+  font-family: var(--alm-font-mono);
+  background: var(--alm-surface-raised);
+  color: var(--alm-text);
+  border: 1px solid var(--alm-border);
+  border-radius: var(--alm-radius-sm);
+}
+
+.alm-proc-tools__path-input:focus {
+  outline: none;
+  border-color: var(--alm-accent);
+}
+
+.alm-proc-tools__path-input::placeholder {
+  color: var(--alm-text-faint);
+}
+
+/* Inline saving / validating status text */
+.alm-proc-tools__status {
+  color: var(--alm-text-muted);
+  font-size: var(--alm-text-xs);
+}
+
+/* === SETTINGS EQUIPMENT === */
+
+.alm-equipment__section-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: var(--alm-sp-3);
+}
+
+.alm-equipment__section-title {
+  margin-bottom: 0;
+}
+
+.alm-equipment__empty {
+  color: var(--alm-text-muted);
+  font-size: var(--alm-text-sm);
+  margin-top: var(--alm-sp-2);
+}
+
+.alm-equipment__flags {
+  display: flex;
+  gap: var(--alm-sp-1);
+}
+
+/* === SETTINGS ADVANCED === */
+
+/* Database location code — smaller mono text */
+.alm-adv-settings__db-path {
+  font-size: var(--alm-text-xs);
+}
+
+/* Last row in a group — strip the bottom border */
+.alm-adv-settings__row--no-border {
+  border-bottom: none;
+}
+
+/* Export / action button wrapper below the DB rows */
+.alm-adv-settings__db-actions {
+  margin-top: var(--alm-sp-3);
+}
+
+/* Log-level select — fixed height to match other controls */
+.alm-adv-settings__log-select {
+  height: 28px;
+}
+
+/* Guided-flow description paragraph */
+.alm-adv-settings__guided-desc {
+  font-size: var(--alm-text-xs);
+  color: var(--alm-text-muted);
+  margin-bottom: var(--alm-sp-3);
+  margin-top: 0;
+}
+
+/* Danger-zone bordered box */
+.alm-adv-settings__danger-box {
+  border: 1px solid var(--alm-danger);
+  border-radius: var(--alm-radius-md);
+  padding: var(--alm-sp-4);
+}
+
+/* Danger-zone heading row */
+.alm-adv-settings__danger-heading {
+  margin-bottom: var(--alm-sp-2);
+}
+
+/* Danger-zone heading text */
+.alm-adv-settings__danger-heading strong {
+  font-size: var(--alm-text-sm);
+}
+
+/* Danger-zone description paragraph */
+.alm-adv-settings__danger-desc {
+  font-size: var(--alm-text-xs);
+  color: var(--alm-text-muted);
+  margin-bottom: var(--alm-sp-3);
+}

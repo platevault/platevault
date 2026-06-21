@@ -82,14 +82,14 @@ export function DataSources({ save: _save }: DataSourcesProps) {
         </div>
 
         {showAdd && (
-          <div style={{ marginBottom: 'var(--alm-sp-3)', display: 'flex', flexDirection: 'column', gap: 'var(--alm-sp-2)' }}>
+          <div className="alm-data-sources__add-form">
             <DirPicker
               value={addingPath}
               onChange={setAddingPath}
               label="Folder"
               lastPathKind="inbox"
             />
-            <div style={{ display: 'flex', gap: 'var(--alm-sp-2)', flexWrap: 'wrap', alignItems: 'center' }}>
+            <div className="alm-data-sources__add-controls">
               <select
                 className="alm-select"
                 value={addingCategory}
@@ -109,7 +109,7 @@ export function DataSources({ save: _save }: DataSourcesProps) {
               </Btn>
             </div>
             {addError && (
-              <div style={{ fontSize: 'var(--alm-text-xs)', color: 'var(--alm-danger, #dc2626)' }}>
+              <div className="alm-data-sources__add-error">
                 {addError}
               </div>
             )}
@@ -117,39 +117,34 @@ export function DataSources({ save: _save }: DataSourcesProps) {
         )}
 
         {loading && (
-          <div style={{ color: 'var(--alm-text-muted)', fontSize: 'var(--alm-text-sm)' }}>
+          <div className="alm-data-sources__status">
             Loading…
           </div>
         )}
 
         {loadError && (
-          <div style={{ color: 'var(--alm-danger, #dc2626)', fontSize: 'var(--alm-text-xs)' }}>
+          <div className="alm-data-sources__load-error">
             Could not load roots: {loadError}
           </div>
         )}
 
         {!loading && !loadError && roots.length === 0 && (
-          <div style={{ color: 'var(--alm-text-muted)', fontSize: 'var(--alm-text-sm)' }}>
+          <div className="alm-data-sources__status">
             No source folders registered yet. Add one above.
           </div>
         )}
 
-        <div style={{ display: 'flex', flexDirection: 'column', gap: 'var(--alm-sp-3)' }}>
+        <div className="alm-data-sources__roots-list">
           {roots.map((root) => (
             <div
               key={root.id}
-              style={{
-                border: '1px solid var(--alm-border)',
-                borderRadius: 'var(--alm-radius-md)',
-                padding: 'var(--alm-sp-3)',
-                background: root.online ? undefined : 'var(--alm-surface2)',
-              }}
+              className={`alm-data-sources__root-card${root.online ? '' : ' alm-data-sources__root-card--offline'}`}
             >
-              <div style={{ display: 'flex', alignItems: 'flex-start', gap: 'var(--alm-sp-2)', flexWrap: 'wrap' }}>
-                <code className="alm-mono" style={{ flex: 1, fontSize: 'var(--alm-text-xs)', wordBreak: 'break-all' }}>
+              <div className="alm-data-sources__root-header">
+                <code className="alm-mono alm-data-sources__root-path">
                   {root.path}
                 </code>
-                <div style={{ display: 'flex', gap: 'var(--alm-sp-1)', flexShrink: 0 }}>
+                <div className="alm-data-sources__root-pills">
                   <Pill variant={CATEGORY_VARIANT[root.category]}>
                     {CATEGORY_LABEL[root.category]}
                   </Pill>
@@ -159,7 +154,7 @@ export function DataSources({ save: _save }: DataSourcesProps) {
                 </div>
               </div>
               {root.lastScanned && (
-                <div style={{ marginTop: 'var(--alm-sp-2)', fontSize: 'var(--alm-text-xs)', color: 'var(--alm-text-muted)' }}>
+                <div className="alm-data-sources__root-scan">
                   Last scan: {root.lastScanned}
                 </div>
               )}

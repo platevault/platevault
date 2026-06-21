@@ -101,7 +101,7 @@ export function SourceProtectionOverride({ sourceId, onSaved }: SourceProtection
 
   if (loadState === 'loading' || loadState === 'idle') {
     return (
-      <span style={{ fontSize: 'var(--alm-text-xs)', color: 'var(--alm-text-muted)' }}>
+      <span className="alm-source-protect__status">
         Loading…
       </span>
     );
@@ -109,16 +109,16 @@ export function SourceProtectionOverride({ sourceId, onSaved }: SourceProtection
 
   if (loadState === 'error' && !editing) {
     return (
-      <span style={{ fontSize: 'var(--alm-text-xs)', color: 'var(--alm-text-muted)' }}>
+      <span className="alm-source-protect__status">
         {errorMsg || 'Could not load protection'}
       </span>
     );
   }
 
   return (
-    <div style={{ display: 'flex', flexDirection: 'column', gap: 'var(--alm-sp-1)' }}>
+    <div className="alm-source-protect__root">
       {!editing ? (
-        <div style={{ display: 'flex', alignItems: 'center', gap: 'var(--alm-sp-2)', flexWrap: 'wrap' }}>
+        <div className="alm-source-protect__view-row">
           <Pill variant={LEVEL_VARIANT[level]}>{LEVEL_LABEL[level]}</Pill>
           {inheritsDefault && (
             <Pill variant="neutral">Inherits global default</Pill>
@@ -126,41 +126,40 @@ export function SourceProtectionOverride({ sourceId, onSaved }: SourceProtection
           <Btn size="sm" variant="ghost" onClick={() => setEditing(true)}>
             Override
           </Btn>
-          <div style={{ fontSize: 'var(--alm-text-xs)', color: 'var(--alm-text-muted)', flexBasis: '100%' }}>
+          <div className="alm-source-protect__hint">
             {levelHint(level, inheritsDefault)}
           </div>
         </div>
       ) : (
-        <div style={{ display: 'flex', flexDirection: 'column', gap: 'var(--alm-sp-2)' }}>
-          <div style={{ display: 'flex', alignItems: 'center', gap: 'var(--alm-sp-2)', flexWrap: 'wrap' }}>
+        <div className="alm-source-protect__edit-col">
+          <div className="alm-source-protect__edit-row">
             <label
               htmlFor={`protection-level-${sourceId}`}
-              style={{ fontSize: 'var(--alm-text-sm)' }}
+              className="alm-source-protect__label"
             >
               Protection level
             </label>
             <select
               id={`protection-level-${sourceId}`}
-              className="alm-select"
+              className="alm-select alm-source-protect__select"
               value={pendingLevel}
               onChange={(e) => setPendingLevel(e.target.value as ProtectionLevel)}
-              style={{ height: 28 }}
               aria-label="Protection level override"
             >
               <option value="protected">Protected</option>
               <option value="normal">Normal</option>
               <option value="unprotected">Unprotected</option>
             </select>
-            <div style={{ fontSize: 'var(--alm-text-xs)', color: 'var(--alm-text-muted)', flexBasis: '100%' }}>
+            <div className="alm-source-protect__hint">
               {levelHint(pendingLevel, false)}
             </div>
           </div>
           {errorMsg && (
-            <div style={{ fontSize: 'var(--alm-text-xs)', color: 'var(--alm-danger)' }}>
+            <div className="alm-source-protect__error">
               {errorMsg}
             </div>
           )}
-          <div style={{ display: 'flex', gap: 'var(--alm-sp-1)' }}>
+          <div className="alm-source-protect__actions">
             <Btn
               size="sm"
               onClick={handleSave}

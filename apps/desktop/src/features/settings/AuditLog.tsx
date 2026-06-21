@@ -52,32 +52,29 @@ export function AuditLog() {
     <>
       {/* Filters */}
       <div className="alm-settings__group">
-        <div style={{ display: 'flex', gap: 'var(--alm-sp-2)', flexWrap: 'wrap', marginBottom: 'var(--alm-sp-3)' }}>
+        <div className="alm-audit-log__filters">
           <input
             type="text"
-            className="alm-input"
-            style={{ flex: 1, minWidth: 200 }}
+            className="alm-input alm-audit-log__search"
             placeholder="Search events, entities, details…"
             value={search}
             onChange={(e) => { setSearch(e.target.value); setPage(0); }}
             aria-label="Search audit events"
           />
-          <label style={{ display: 'flex', alignItems: 'center', gap: 'var(--alm-sp-1)', fontSize: 'var(--alm-text-sm)', color: 'var(--alm-text-muted)' }}>
+          <label className="alm-audit-log__date-label">
             From
             <input
               type="date"
-              className="alm-input"
-              style={{ width: 140 }}
+              className="alm-input alm-audit-log__date-input"
               value={dateFrom}
               onChange={(e) => { setDateFrom(e.target.value); setPage(0); }}
             />
           </label>
-          <label style={{ display: 'flex', alignItems: 'center', gap: 'var(--alm-sp-1)', fontSize: 'var(--alm-text-sm)', color: 'var(--alm-text-muted)' }}>
+          <label className="alm-audit-log__date-label">
             To
             <input
               type="date"
-              className="alm-input"
-              style={{ width: 140 }}
+              className="alm-input alm-audit-log__date-input"
               value={dateTo}
               onChange={(e) => { setDateTo(e.target.value); setPage(0); }}
             />
@@ -94,23 +91,23 @@ export function AuditLog() {
           ]}
           rows={pageItems.map((e) => ({
             timestamp: (
-              <code className="alm-mono" style={{ fontSize: 'var(--alm-text-2xs)' }}>
+              <code className="alm-mono alm-audit-log__ts">
                 {formatDateTime(e.timestamp)}
               </code>
             ),
             event: (
-              <span style={{ fontSize: 'var(--alm-text-xs)', fontFamily: 'var(--alm-font-mono)' }}>
+              <span className="alm-audit-log__event">
                 {e.event}
               </span>
             ),
             entity: (
-              <span style={{ fontSize: 'var(--alm-text-xs)', color: 'var(--alm-text-muted)', maxWidth: 200, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', display: 'block' }} title={e.entity}>
+              <span className="alm-audit-log__entity" title={e.entity}>
                 {e.entity}
               </span>
             ),
             outcome: <Pill variant={outcomeVariant(e.outcome)}>{e.outcome}</Pill>,
             actor: (
-              <span style={{ fontSize: 'var(--alm-text-xs)', color: 'var(--alm-text-muted)' }}>
+              <span className="alm-audit-log__actor">
                 {e.actor}
               </span>
             ),
@@ -118,17 +115,17 @@ export function AuditLog() {
         />
 
         {pageItems.length === 0 && (
-          <p style={{ textAlign: 'center', color: 'var(--alm-text-muted)', fontSize: 'var(--alm-text-sm)', padding: 'var(--alm-sp-4)' }}>
+          <p className="alm-audit-log__empty">
             No matching audit events.
           </p>
         )}
 
         {/* Pagination */}
-        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginTop: 'var(--alm-sp-3)' }}>
-          <span style={{ fontSize: 'var(--alm-text-xs)', color: 'var(--alm-text-muted)' }}>
+        <div className="alm-audit-log__pagination">
+          <span className="alm-audit-log__page-count">
             {filtered.length} event{filtered.length !== 1 ? 's' : ''} &middot; page {page + 1} of {totalPages}
           </span>
-          <div style={{ display: 'flex', gap: 'var(--alm-sp-1)' }}>
+          <div className="alm-audit-log__page-btns">
             <Btn size="sm" variant="ghost" onClick={() => setPage(Math.max(0, page - 1))} disabled={page === 0}>
               Previous
             </Btn>

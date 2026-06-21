@@ -27,8 +27,8 @@ export function Equipment({ save: _save }: EquipmentProps) {
     <>
       {/* Optical Trains */}
       <div className="alm-settings__group">
-        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 'var(--alm-sp-3)' }}>
-          <div className="alm-settings__group-title" style={{ marginBottom: 0 }}>Optical Trains</div>
+        <div className="alm-equipment__section-header">
+          <div className="alm-settings__group-title alm-equipment__section-title">Optical Trains</div>
           <Btn size="sm" onClick={() => console.log('add train')}>Add train</Btn>
         </div>
         <Table
@@ -54,7 +54,7 @@ export function Equipment({ save: _save }: EquipmentProps) {
           }))}
         />
         {trains.length === 0 && (
-          <p style={{ color: 'var(--alm-text-muted)', fontSize: 'var(--alm-text-sm)', marginTop: 'var(--alm-sp-2)' }}>
+          <p className="alm-equipment__empty">
             No optical trains configured.
           </p>
         )}
@@ -62,8 +62,8 @@ export function Equipment({ save: _save }: EquipmentProps) {
 
       {/* Cameras */}
       <div className="alm-settings__group">
-        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 'var(--alm-sp-3)' }}>
-          <div className="alm-settings__group-title" style={{ marginBottom: 0 }}>Cameras</div>
+        <div className="alm-equipment__section-header">
+          <div className="alm-settings__group-title alm-equipment__section-title">Cameras</div>
           <Btn size="sm" onClick={() => console.log('add camera')}>Add camera</Btn>
         </div>
         <Table
@@ -81,7 +81,7 @@ export function Equipment({ save: _save }: EquipmentProps) {
             pixelSize: <code className="alm-mono">{c.pixelSize}</code>,
             resolution: <code className="alm-mono">{c.resolution}</code>,
             flags: (
-              <span style={{ display: 'flex', gap: 'var(--alm-sp-1)' }}>
+              <span className="alm-equipment__flags">
                 {c.cooled && <Pill variant="info">Cooled</Pill>}
                 {c.color ? <Pill variant="ok">Color</Pill> : <Pill variant="neutral">Mono</Pill>}
               </span>
@@ -94,7 +94,7 @@ export function Equipment({ save: _save }: EquipmentProps) {
           }))}
         />
         {cameras.length === 0 && (
-          <p style={{ color: 'var(--alm-text-muted)', fontSize: 'var(--alm-text-sm)', marginTop: 'var(--alm-sp-2)' }}>
+          <p className="alm-equipment__empty">
             No cameras registered.
           </p>
         )}
@@ -102,8 +102,8 @@ export function Equipment({ save: _save }: EquipmentProps) {
 
       {/* Telescopes */}
       <div className="alm-settings__group">
-        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 'var(--alm-sp-3)' }}>
-          <div className="alm-settings__group-title" style={{ marginBottom: 0 }}>Telescopes</div>
+        <div className="alm-equipment__section-header">
+          <div className="alm-settings__group-title alm-equipment__section-title">Telescopes</div>
           <Btn size="sm" onClick={() => console.log('add telescope')}>Add telescope</Btn>
         </div>
         <Table
@@ -127,7 +127,7 @@ export function Equipment({ save: _save }: EquipmentProps) {
           }))}
         />
         {telescopes.length === 0 && (
-          <p style={{ color: 'var(--alm-text-muted)', fontSize: 'var(--alm-text-sm)', marginTop: 'var(--alm-sp-2)' }}>
+          <p className="alm-equipment__empty">
             No telescopes registered.
           </p>
         )}
