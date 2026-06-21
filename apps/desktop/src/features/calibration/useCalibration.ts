@@ -158,11 +158,11 @@ export function useCalibrationSettings(): {
     getSettings({ scope: 'calibration' })
       .then((data) => {
         const v = data.values as Record<string, unknown>;
-        if (typeof v['calibration.prefill_suggestion'] === 'boolean') {
-          setPrefillSuggestion(v['calibration.prefill_suggestion']);
+        if (typeof v['calibrationPrefillSuggestion'] === 'boolean') {
+          setPrefillSuggestion(v['calibrationPrefillSuggestion']);
         }
-        if (typeof v['calibration.aging_threshold_days'] === 'number') {
-          setAgingThresholdDays(v['calibration.aging_threshold_days'] as number);
+        if (typeof v['calibrationAgingThresholdDays'] === 'number') {
+          setAgingThresholdDays(v['calibrationAgingThresholdDays'] as number);
         }
       })
       .catch(() => {

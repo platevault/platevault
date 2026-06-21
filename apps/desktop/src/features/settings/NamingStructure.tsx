@@ -34,7 +34,7 @@ const SEPARATORS = ['/', '-', '_', ' '] as const;
 
 // ── Per-frame-type destination patterns (spec 041 T051, FR-026b) ──────────────
 //
-// The backend stores these under ONE naming-scope key, `patterns_by_type`: a
+// The backend stores these under ONE naming-scope key, `patternsByType`: a
 // JSON object mapping a frame-type class name to a pattern string. The seven
 // class names below are the exact strings the backend recognises. An absent key
 // (or empty input) means "use the built-in default" — only overridden classes
@@ -340,7 +340,7 @@ function PatternChipsEditor({
 
 // ── PerTypeDestinationPatterns (spec 041 T051, FR-026b) ───────────────────────
 //
-// Self-contained editor for the `patterns_by_type` naming-scope key. It loads
+// Self-contained editor for the `patternsByType` naming-scope key. It loads
 // and saves directly (rather than via the parent `save` debounce) so it can
 // surface the backend `value.invalid` rejection inline — the parent auto-save
 // swallows write errors.
@@ -357,7 +357,7 @@ function PerTypeDestinationPatterns() {
     getSettings({ scope: 'naming' })
       .then((data) => {
         const vals = data.values as Record<string, unknown>;
-        const raw = vals.patterns_by_type;
+        const raw = vals.patternsByType;
         if (raw && typeof raw === 'object') {
           const next: Partial<Record<FrameTypeClass, string>> = {};
           for (const cls of FRAME_TYPE_CLASSES) {
@@ -383,7 +383,7 @@ function PerTypeDestinationPatterns() {
         const v = next[cls];
         if (typeof v === 'string' && v.trim() !== '') payload[cls] = v;
       }
-      void updateSettings({ scope: 'naming', values: { patterns_by_type: payload } }).then(
+      void updateSettings({ scope: 'naming', values: { patternsByType: payload } }).then(
         () => {
           // Clear any stale backend errors on a successful save.
           setBackendErrors({});

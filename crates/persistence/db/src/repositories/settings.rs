@@ -17,7 +17,7 @@ use crate::{DbError, DbResult};
 /// (spec 041 FR-026b). Stored as a JSON object mapping a [`FrameTypeClass`]
 /// name to a pattern string. Only explicit overrides are persisted; missing
 /// entries fall back to [`default_pattern`] on read.
-pub const PATTERNS_BY_TYPE_KEY: &str = "patterns_by_type";
+pub const PATTERNS_BY_TYPE_KEY: &str = "patternsByType";
 
 // ── Helpers ──────────────────────────────────────────────────────────────
 
@@ -173,37 +173,37 @@ fn apply_key_to_state(key: &str, value: Value, state: &mut SettingsState) -> DbR
             state.protected_categories =
                 serde_json::from_value(value).map_err(DbError::Serialise)?;
         }
-        "current_library_id" => {
+        "currentLibraryId" => {
             state.current_library_id = serde_json::from_value(value).map_err(DbError::Serialise)?;
         }
         "devMode" => {
             state.dev_mode = serde_json::from_value(value).map_err(DbError::Serialise)?;
         }
-        "plans.list.default_age_cutoff_days" => {
+        "plansListDefaultAgeCutoffDays" => {
             state.plans_list_default_age_cutoff_days =
                 serde_json::from_value(value).map_err(DbError::Serialise)?;
         }
-        "calibration.dark_temp_tolerance" => {
+        "calibrationDarkTempTolerance" => {
             state.calibration_dark_temp_tolerance =
                 serde_json::from_value(value).map_err(DbError::Serialise)?;
         }
-        "calibration.prefill_suggestion" => {
+        "calibrationPrefillSuggestion" => {
             state.calibration_prefill_suggestion =
                 serde_json::from_value(value).map_err(DbError::Serialise)?;
         }
-        "calibration.dark.override_penalty" => {
+        "calibrationDarkOverridePenalty" => {
             state.calibration_dark_override_penalty =
                 serde_json::from_value(value).map_err(DbError::Serialise)?;
         }
-        "calibration.flat.override_penalty" => {
+        "calibrationFlatOverridePenalty" => {
             state.calibration_flat_override_penalty =
                 serde_json::from_value(value).map_err(DbError::Serialise)?;
         }
-        "calibration.bias.override_penalty" => {
+        "calibrationBiasOverridePenalty" => {
             state.calibration_bias_override_penalty =
                 serde_json::from_value(value).map_err(DbError::Serialise)?;
         }
-        "imagetyp_normalization.user_mappings" => {
+        "imagetypNormalizationUserMappings" => {
             state.imagetyp_normalization_user_mappings =
                 serde_json::from_value(value).map_err(DbError::Serialise)?;
         }
@@ -661,7 +661,7 @@ mod byte_identity_guard {
         set_raw(pool, "hashOnScan", &serde_json::json!("eager")).await.unwrap();
         set_raw(pool, "followSymlinks", &serde_json::json!(true)).await.unwrap();
         set_raw(pool, "logLevel", &serde_json::json!("debug")).await.unwrap();
-        set_raw(pool, "calibration.dark_temp_tolerance", &serde_json::json!(3.5)).await.unwrap();
+        set_raw(pool, "calibrationDarkTempTolerance", &serde_json::json!(3.5)).await.unwrap();
         set_raw(pool, "protectedCategories", &serde_json::json!(["lights", "masters"]))
             .await
             .unwrap();
@@ -679,7 +679,7 @@ mod byte_identity_guard {
         assert_eq!(state.hash_on_scan, "eager");
         assert!(state.follow_symlinks);
         assert_eq!(state.log_level, "debug");
-        assert!((state.calibration_dark_temp_tolerance - 3.5).abs() < f64::EPSILON);
+        assert!((state.calibration_dark_temp_tolerance - 3.5).abs() < f64::EPSILON); // stored as calibrationDarkTempTolerance
         assert_eq!(state.protected_categories, vec!["lights".to_owned(), "masters".to_owned()]);
     }
 }

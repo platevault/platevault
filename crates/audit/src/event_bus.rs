@@ -151,7 +151,7 @@ pub const TOPIC_NATIVE_REVEAL_FAILED: &str = "native.reveal.failed";
 /// Payload for the `settings.changed` topic (spec 018, T005).
 ///
 /// Emitted for non-noisy key writes when the value actually changed.
-/// Noisy keys (pattern, protectedCategories, plans.list.default_age_cutoff_days,
+/// Noisy keys (pattern, protectedCategories, plansListDefaultAgeCutoffDays,
 /// rememberFollowLogs) appear in `settings.snapshot` instead.
 #[derive(Clone, Debug, Serialize, Deserialize, JsonSchema, Type)]
 #[serde(rename_all = "camelCase")]

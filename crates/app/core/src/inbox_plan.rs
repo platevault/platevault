@@ -545,7 +545,7 @@ mod tests {
         // test fixtures without FITS metadata attributes (target/filter/date)
         // can confirm without triggering InboxMissingPathAttributes (spec 041).
         sqlx::query(
-            "INSERT INTO settings (key, value, updated_at) VALUES ('patterns_by_type', ?, '2025-01-01T00:00:00Z') ON CONFLICT(key) DO NOTHING",
+            "INSERT INTO settings (key, value, updated_at) VALUES ('patternsByType', ?, '2025-01-01T00:00:00Z') ON CONFLICT(key) DO NOTHING",
         )
         .bind("{\"light\":\"lights/\"}")
         .execute(db.pool())
@@ -747,7 +747,7 @@ mod tests {
         // Override per-type destination patterns with literal-only pattern so
         // test fixtures without FITS metadata can confirm (spec 041).
         sqlx::query(
-            "INSERT INTO settings (key, value, updated_at) VALUES ('patterns_by_type', ?, '2025-01-01T00:00:00Z') ON CONFLICT(key) DO NOTHING",
+            "INSERT INTO settings (key, value, updated_at) VALUES ('patternsByType', ?, '2025-01-01T00:00:00Z') ON CONFLICT(key) DO NOTHING",
         )
         .bind("{\"light\":\"lights/\"}")
         .execute(db.pool())

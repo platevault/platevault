@@ -36,7 +36,7 @@ async fn test_db() -> Database {
     // test fixtures without FITS header metadata (exposure/target/filter/date)
     // can confirm without triggering InboxMissingPathAttributes (spec 041).
     sqlx::query(
-        "INSERT INTO settings (key, value, updated_at) VALUES ('patterns_by_type', ?, '2026-01-01T00:00:00Z')
+        "INSERT INTO settings (key, value, updated_at) VALUES ('patternsByType', ?, '2026-01-01T00:00:00Z')
           ON CONFLICT(key) DO UPDATE SET value = excluded.value",
     )
     .bind(r#"{"light":"lights/","flat":"flats/","dark":"darks/","bias":"bias/","master_flat":"masters/flats/","master_dark":"masters/darks/","master_bias":"masters/bias/"}"#)

@@ -49,9 +49,9 @@ impl SoftDimConfig {
 
 /// User-configurable tolerances consumed by the matcher.
 ///
-/// Loaded from the settings keys `calibration.dark_temp_tolerance`,
-/// `calibration.dark.override_penalty`, `calibration.flat.override_penalty`,
-/// `calibration.bias.override_penalty`, `calibration.prefill_suggestion`.
+/// Loaded from the settings keys `calibrationDarkTempTolerance`,
+/// `calibrationDarkOverridePenalty`, `calibrationFlatOverridePenalty`,
+/// `calibrationBiasOverridePenalty`, `calibrationPrefillSuggestion`.
 #[derive(Clone, Debug)]
 pub struct MatchingRuleConfig {
     // ── Dark tolerances ──

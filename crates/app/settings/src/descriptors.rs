@@ -169,7 +169,7 @@ pub(crate) const DESCRIPTORS: &[Descriptor] = &[
         validation: ValidationRule::Array,
     },
     Descriptor {
-        key: "current_library_id",
+        key: "currentLibraryId",
         noisy: false,
         overridable: false,
         validation: ValidationRule::NullableString,
@@ -181,25 +181,25 @@ pub(crate) const DESCRIPTORS: &[Descriptor] = &[
         validation: ValidationRule::DevMode,
     },
     Descriptor {
-        key: "plans.list.default_age_cutoff_days",
+        key: "plansListDefaultAgeCutoffDays",
         noisy: true,
         overridable: false,
         validation: ValidationRule::Number,
     },
     Descriptor {
-        key: "calibration.dark_temp_tolerance",
+        key: "calibrationDarkTempTolerance",
         noisy: false,
         overridable: false,
         validation: ValidationRule::NumberMinZero,
     },
     Descriptor {
-        key: "calibration.prefill_suggestion",
+        key: "calibrationPrefillSuggestion",
         noisy: false,
         overridable: false,
         validation: ValidationRule::Bool,
     },
     Descriptor {
-        key: "calibration.dark.override_penalty",
+        key: "calibrationDarkOverridePenalty",
         noisy: false,
         overridable: false,
         validation: ValidationRule::NumberRangeInclusive {
@@ -210,7 +210,7 @@ pub(crate) const DESCRIPTORS: &[Descriptor] = &[
         },
     },
     Descriptor {
-        key: "calibration.flat.override_penalty",
+        key: "calibrationFlatOverridePenalty",
         noisy: false,
         overridable: false,
         validation: ValidationRule::NumberRangeInclusive {
@@ -221,7 +221,7 @@ pub(crate) const DESCRIPTORS: &[Descriptor] = &[
         },
     },
     Descriptor {
-        key: "calibration.bias.override_penalty",
+        key: "calibrationBiasOverridePenalty",
         noisy: false,
         overridable: false,
         validation: ValidationRule::NumberRangeInclusive {
@@ -232,7 +232,7 @@ pub(crate) const DESCRIPTORS: &[Descriptor] = &[
         },
     },
     Descriptor {
-        key: "calibration.aging_threshold_days",
+        key: "calibrationAgingThresholdDays",
         noisy: false,
         overridable: false,
         validation: ValidationRule::NumberRangeInclusive {
@@ -243,13 +243,13 @@ pub(crate) const DESCRIPTORS: &[Descriptor] = &[
         },
     },
     Descriptor {
-        key: "imagetyp_normalization.user_mappings",
+        key: "imagetypNormalizationUserMappings",
         noisy: false,
         overridable: false,
         validation: ValidationRule::Array,
     },
     Descriptor {
-        key: "patterns_by_type",
+        key: "patternsByType",
         noisy: false,
         overridable: false,
         validation: ValidationRule::PatternsByType,

@@ -56,11 +56,11 @@ use calibration_core::ranking::suggest_status;
 
 // ── Settings keys ─────────────────────────────────────────────────────────────
 
-const KEY_DARK_TEMP: &str = "calibration.dark_temp_tolerance";
-const KEY_DARK_OVERRIDE: &str = "calibration.dark.override_penalty";
-const KEY_FLAT_OVERRIDE: &str = "calibration.flat.override_penalty";
-const KEY_BIAS_OVERRIDE: &str = "calibration.bias.override_penalty";
-const KEY_PREFILL: &str = "calibration.prefill_suggestion";
+const KEY_DARK_TEMP: &str = "calibrationDarkTempTolerance";
+const KEY_DARK_OVERRIDE: &str = "calibrationDarkOverridePenalty";
+const KEY_FLAT_OVERRIDE: &str = "calibrationFlatOverridePenalty";
+const KEY_BIAS_OVERRIDE: &str = "calibrationBiasOverridePenalty";
+const KEY_PREFILL: &str = "calibrationPrefillSuggestion";
 
 // ── Suggest (single session) ──────────────────────────────────────────────────
 

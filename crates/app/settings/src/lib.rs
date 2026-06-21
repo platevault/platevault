@@ -62,18 +62,12 @@ pub fn is_valid_key(key: &str) -> bool {
         || is_workflow_profile_attribution_window_key(key)
 }
 
-fn is_calibration_override_penalty_key(key: &str) -> bool {
-    matches!(
-        key,
-        "calibration.dark.override_penalty"
-            | "calibration.flat.override_penalty"
-            | "calibration.bias.override_penalty"
-    ) || {
-        // The regex pattern: ^calibration\.(dark|flat|bias)\.override_penalty$
-        // already covered by the match above; this branch handles the general pattern
-        // for any future frame types validated via regex.
-        false
-    }
+fn is_calibration_override_penalty_key(_key: &str) -> bool {
+    // All calibration override penalty keys are now in the descriptor table as
+    // canonical camelCase keys (calibrationDarkOverridePenalty, etc.).
+    // This function is kept for the structured-path fallback shape but always
+    // returns false — the descriptor table handles these keys.
+    false
 }
 
 fn is_tools_bundle_id_key(key: &str) -> bool {
@@ -350,7 +344,7 @@ fn apply_value_to_state(key: &str, value: Value, state: &mut SettingsState) {
                 state.protected_categories = v;
             }
         }
-        "current_library_id" => {
+        "currentLibraryId" => {
             state.current_library_id = value.as_str().map(str::to_owned);
         }
         "devMode" => {
@@ -358,47 +352,47 @@ fn apply_value_to_state(key: &str, value: Value, state: &mut SettingsState) {
                 state.dev_mode = v;
             }
         }
-        "plans.list.default_age_cutoff_days" => {
+        "plansListDefaultAgeCutoffDays" => {
             if let Some(v) = value.as_f64() {
                 state.plans_list_default_age_cutoff_days = v;
             }
         }
-        "calibration.dark_temp_tolerance" => {
+        "calibrationDarkTempTolerance" => {
             if let Some(v) = value.as_f64() {
                 state.calibration_dark_temp_tolerance = v;
             }
         }
-        "calibration.prefill_suggestion" => {
+        "calibrationPrefillSuggestion" => {
             if let Some(v) = value.as_bool() {
                 state.calibration_prefill_suggestion = v;
             }
         }
-        "calibration.dark.override_penalty" => {
+        "calibrationDarkOverridePenalty" => {
             if let Some(v) = value.as_f64() {
                 state.calibration_dark_override_penalty = v;
             }
         }
-        "calibration.flat.override_penalty" => {
+        "calibrationFlatOverridePenalty" => {
             if let Some(v) = value.as_f64() {
                 state.calibration_flat_override_penalty = v;
             }
         }
-        "calibration.bias.override_penalty" => {
+        "calibrationBiasOverridePenalty" => {
             if let Some(v) = value.as_f64() {
                 state.calibration_bias_override_penalty = v;
             }
         }
-        "calibration.aging_threshold_days" => {
+        "calibrationAgingThresholdDays" => {
             if let Some(v) = value.as_f64() {
                 state.calibration_aging_threshold_days = v;
             }
         }
-        "imagetyp_normalization.user_mappings" => {
+        "imagetypNormalizationUserMappings" => {
             if let Ok(v) = serde_json::from_value(value) {
                 state.imagetyp_normalization_user_mappings = v;
             }
         }
-        "patterns_by_type" => {
+        "patternsByType" => {
             if let Ok(v) = serde_json::from_value(value) {
                 state.patterns_by_type = v;
             }
@@ -431,32 +425,32 @@ fn default_value_for_key(key: &str) -> Value {
             serde_json::to_value(&defaults.protected_categories).unwrap_or(Value::Null)
         }
         "devMode" => Value::Bool(defaults.dev_mode),
-        "plans.list.default_age_cutoff_days" => {
+        "plansListDefaultAgeCutoffDays" => {
             serde_json::json!(defaults.plans_list_default_age_cutoff_days)
         }
-        "calibration.dark_temp_tolerance" => {
+        "calibrationDarkTempTolerance" => {
             serde_json::json!(defaults.calibration_dark_temp_tolerance)
         }
-        "calibration.prefill_suggestion" => Value::Bool(defaults.calibration_prefill_suggestion),
-        "calibration.dark.override_penalty" => {
+        "calibrationPrefillSuggestion" => Value::Bool(defaults.calibration_prefill_suggestion),
+        "calibrationDarkOverridePenalty" => {
             serde_json::json!(defaults.calibration_dark_override_penalty)
         }
-        "calibration.flat.override_penalty" => {
+        "calibrationFlatOverridePenalty" => {
             serde_json::json!(defaults.calibration_flat_override_penalty)
         }
-        "calibration.bias.override_penalty" => {
+        "calibrationBiasOverridePenalty" => {
             serde_json::json!(defaults.calibration_bias_override_penalty)
         }
-        "calibration.aging_threshold_days" => {
+        "calibrationAgingThresholdDays" => {
             serde_json::json!(defaults.calibration_aging_threshold_days)
         }
-        "imagetyp_normalization.user_mappings" => {
+        "imagetypNormalizationUserMappings" => {
             serde_json::to_value(&defaults.imagetyp_normalization_user_mappings)
                 .unwrap_or(Value::Null)
         }
         // Read-side falls back to per-type defaults, so the stored default is an
         // empty object (no explicit overrides).
-        "patterns_by_type" => Value::Object(serde_json::Map::new()),
+        "patternsByType" => Value::Object(serde_json::Map::new()),
         _ => Value::Null,
     }
 }
@@ -752,7 +746,7 @@ mod tests {
     use rstest::rstest;
 
     /// US11 T144 guard: every key in the descriptor table is a valid key, has a
-    /// non-null in-code default (except the nullable `current_library_id`), and
+    /// non-null in-code default (except the nullable `currentLibraryId`), and
     /// is recognised by `is_valid_key`. Locks the descriptor registry against
     /// drift from `default_value_for_key` / `SettingsState`.
     #[test]
@@ -760,11 +754,66 @@ mod tests {
         for key in descriptors::all_keys() {
             assert!(is_valid_key(key), "descriptor key {key} not accepted by is_valid_key");
             let default = default_value_for_key(key);
-            if key == "current_library_id" {
-                assert!(default.is_null(), "current_library_id default should be null");
+            if key == "currentLibraryId" {
+                assert!(default.is_null(), "currentLibraryId default should be null");
             } else {
                 assert!(!default.is_null(), "descriptor key {key} has no in-code default");
             }
+        }
+    }
+
+    /// Canonical key naming guard (tinyspec: settings-key-canonicalization).
+    ///
+    /// Every stable key in the descriptor registry must equal the serde-camelCase
+    /// wire name of its corresponding `SettingsState` field. We derive the wire
+    /// names by serialising a fully-populated `SettingsState` (with the optional
+    /// `currentLibraryId` set to a sentinel so it is not skip-serialised) and
+    /// collecting the top-level field names — serde `rename_all = "camelCase"`
+    /// produces exactly the canonical camelCase wire names.
+    ///
+    /// This test will fail if:
+    /// - A descriptor key uses the old dotted/snake style instead of camelCase.
+    /// - A new `SettingsState` field is added without a matching descriptor entry.
+    /// - A descriptor entry exists for a key not present in `SettingsState`.
+    #[test]
+    fn descriptor_keys_are_canonical_camel_case_wire_names() {
+        use std::collections::BTreeSet;
+
+        // Populate the optional field so `skip_serializing_if = "Option::is_none"`
+        // doesn't hide `currentLibraryId` from the serialised output.
+        let state = SettingsState {
+            current_library_id: Some("__probe__".to_owned()),
+            ..SettingsState::default()
+        };
+
+        // Derive wire field names from the actual serde serialisation — ground truth.
+        let state_json = serde_json::to_value(&state).expect("SettingsState serialises");
+        let wire_fields: BTreeSet<String> = state_json
+            .as_object()
+            .expect("SettingsState is a JSON object")
+            .keys()
+            .cloned()
+            .collect();
+
+        let descriptor_keys: BTreeSet<String> =
+            descriptors::all_keys().map(str::to_owned).collect();
+
+        // Every descriptor key must appear as a wire field name.
+        for key in &descriptor_keys {
+            assert!(
+                wire_fields.contains(key),
+                "descriptor key '{key}' is not a camelCase wire field name of SettingsState; \
+                 known wire fields: {wire_fields:?}"
+            );
+        }
+
+        // Every wire field name must have a descriptor entry.
+        for field in &wire_fields {
+            assert!(
+                descriptor_keys.contains(field),
+                "SettingsState wire field '{field}' has no descriptor entry; \
+                 add it to DESCRIPTORS in descriptors.rs"
+            );
         }
     }
 
@@ -1021,7 +1070,9 @@ mod tests {
     // Valid: stable + structured-path keys.
     #[case("logLevel", true)]
     #[case("pattern", true)]
-    #[case("calibration.dark.override_penalty", true)]
+    #[case("calibrationDarkOverridePenalty", true)]
+    #[case("calibrationFlatOverridePenalty", true)]
+    #[case("calibrationBiasOverridePenalty", true)]
     #[case("tools.pixinsight.bundle_id", true)]
     #[case("tools.pixinsight.executable_path", true)]
     #[case("tools.siril.enabled", true)]
@@ -1032,6 +1083,7 @@ mod tests {
     #[case("notARealKey", false)]
     #[case("tools.UPPERCASE.bundle_id", false)] // tool id must be lowercase
     #[case("tools..bundle_id", false)] // empty tool id
+    #[case("calibration.dark.override_penalty", false)] // old dotted key — no longer valid
     #[case("calibration.video.override_penalty", false)] // video not a valid frame type
     fn is_valid_key_cases(#[case] key: &str, #[case] expected: bool) {
         assert_eq!(is_valid_key(key), expected);
@@ -1063,18 +1115,18 @@ mod tests {
     #[case("defaultProtection", serde_json::json!("protected"))]
     #[case("defaultProtection", serde_json::json!("normal"))]
     #[case("defaultProtection", serde_json::json!("unprotected"))]
-    #[case("calibration.dark_temp_tolerance", serde_json::json!(0.0))]
-    #[case("calibration.dark_temp_tolerance", serde_json::json!(5.5))]
-    #[case("calibration.aging_threshold_days", serde_json::json!(1))]
-    #[case("calibration.aging_threshold_days", serde_json::json!(3650))]
-    #[case("calibration.dark.override_penalty", serde_json::json!(0.0))]
-    #[case("calibration.flat.override_penalty", serde_json::json!(1.0))]
-    #[case("calibration.bias.override_penalty", serde_json::json!(0.5))]
+    #[case("calibrationDarkTempTolerance", serde_json::json!(0.0))]
+    #[case("calibrationDarkTempTolerance", serde_json::json!(5.5))]
+    #[case("calibrationAgingThresholdDays", serde_json::json!(1))]
+    #[case("calibrationAgingThresholdDays", serde_json::json!(3650))]
+    #[case("calibrationDarkOverridePenalty", serde_json::json!(0.0))]
+    #[case("calibrationFlatOverridePenalty", serde_json::json!(1.0))]
+    #[case("calibrationBiasOverridePenalty", serde_json::json!(0.5))]
     #[case("autoApplyPattern", serde_json::json!(true))]
-    #[case("calibration.prefill_suggestion", serde_json::json!(false))]
-    #[case("current_library_id", serde_json::json!(null))]
-    #[case("current_library_id", serde_json::json!("lib-1"))]
-    #[case("plans.list.default_age_cutoff_days", serde_json::json!(30))]
+    #[case("calibrationPrefillSuggestion", serde_json::json!(false))]
+    #[case("currentLibraryId", serde_json::json!(null))]
+    #[case("currentLibraryId", serde_json::json!("lib-1"))]
+    #[case("plansListDefaultAgeCutoffDays", serde_json::json!(30))]
     #[case("pattern", serde_json::json!([]))]
     #[case("protectedCategories", serde_json::json!(["lights"]))]
     #[case("tools.pixinsight.bundle_id", serde_json::json!("com.x"))]
@@ -1094,15 +1146,15 @@ mod tests {
     #[case("logLevel", serde_json::json!("trace"))] // mirrors the old DB test
     #[case("rowDensity", serde_json::json!("sparse"))]
     #[case("defaultProtection", serde_json::json!("locked"))]
-    #[case("calibration.dark_temp_tolerance", serde_json::json!(-1.0))] // must be >= 0
-    #[case("calibration.dark_temp_tolerance", serde_json::json!("x"))] // not a number
-    #[case("calibration.aging_threshold_days", serde_json::json!(0))] // below [1,3650]
-    #[case("calibration.aging_threshold_days", serde_json::json!(3651))] // above range
-    #[case("calibration.dark.override_penalty", serde_json::json!(-0.1))] // below [0,1]
-    #[case("calibration.flat.override_penalty", serde_json::json!(1.1))] // above [0,1]
+    #[case("calibrationDarkTempTolerance", serde_json::json!(-1.0))] // must be >= 0
+    #[case("calibrationDarkTempTolerance", serde_json::json!("x"))] // not a number
+    #[case("calibrationAgingThresholdDays", serde_json::json!(0))] // below [1,3650]
+    #[case("calibrationAgingThresholdDays", serde_json::json!(3651))] // above range
+    #[case("calibrationDarkOverridePenalty", serde_json::json!(-0.1))] // below [0,1]
+    #[case("calibrationFlatOverridePenalty", serde_json::json!(1.1))] // above [0,1]
     #[case("autoApplyPattern", serde_json::json!("true"))] // string, not boolean
-    #[case("current_library_id", serde_json::json!(5))] // not string/null
-    #[case("plans.list.default_age_cutoff_days", serde_json::json!("x"))] // not a number
+    #[case("currentLibraryId", serde_json::json!(5))] // not string/null
+    #[case("plansListDefaultAgeCutoffDays", serde_json::json!("x"))] // not a number
     #[case("pattern", serde_json::json!("notarray"))]
     #[case("protectedCategories", serde_json::json!({}))] // object, not array
     #[case("tools.siril.enabled", serde_json::json!("yes"))] // not a boolean
@@ -1135,7 +1187,7 @@ mod tests {
 
         // Persist a custom value.
         let req = SettingsUpdateRequest {
-            key: "calibration.aging_threshold_days".to_owned(),
+            key: "calibrationAgingThresholdDays".to_owned(),
             value: contracts_core::JsonAny::from(serde_json::json!(180)),
         };
         let resp = update_setting(db.pool(), &bus, &req).await.unwrap();
@@ -1145,25 +1197,25 @@ mod tests {
         let get_resp = get_settings(db.pool(), &bus).await.unwrap();
         assert!(
             (get_resp.settings.calibration_aging_threshold_days - 180.0).abs() < f64::EPSILON,
-            "calibration.aging_threshold_days must round-trip: got {}",
+            "calibrationAgingThresholdDays must round-trip: got {}",
             get_resp.settings.calibration_aging_threshold_days
         );
     }
 
     #[tokio::test]
     async fn aging_threshold_days_rejects_bogus_scope_key() {
-        // The old bug key 'aging_threshold_days' under scope 'calibration_matching'
-        // was not in ALL_V1_KEYS. Verify this key is correctly rejected.
+        // The old dotted key 'calibration.aging_threshold_days' is no longer valid;
+        // the canonical key is 'calibrationAgingThresholdDays'.
         let (db, bus) = setup().await;
         let req = SettingsUpdateRequest {
-            key: "aging_threshold_days".to_owned(), // the old buggy key name
+            key: "calibration.aging_threshold_days".to_owned(), // old dotted key name
             value: contracts_core::JsonAny::from(serde_json::json!(90)),
         };
         let err = update_setting(db.pool(), &bus, &req).await.unwrap_err();
         assert_eq!(
             err.code,
             ErrorCode::KeyUnknown,
-            "old bogus key 'aging_threshold_days' must be rejected"
+            "old dotted key 'calibration.aging_threshold_days' must be rejected"
         );
     }
 
@@ -1173,7 +1225,7 @@ mod tests {
     async fn update_patterns_by_type_round_trips_via_get() {
         let (db, bus) = setup().await;
         let req = SettingsUpdateRequest {
-            key: "patterns_by_type".to_owned(),
+            key: "patternsByType".to_owned(),
             value: contracts_core::JsonAny::from(serde_json::json!({"dark": "custom/{gain}/"})),
         };
         let resp = update_setting(db.pool(), &bus, &req).await.unwrap();
@@ -1191,7 +1243,7 @@ mod tests {
         let (db, bus) = setup().await;
         // {} is the default; sending it back is a no-op, but it must validate.
         let req = SettingsUpdateRequest {
-            key: "patterns_by_type".to_owned(),
+            key: "patternsByType".to_owned(),
             value: contracts_core::JsonAny::from(serde_json::json!({})),
         };
         let resp = update_setting(db.pool(), &bus, &req).await.unwrap();
@@ -1202,7 +1254,7 @@ mod tests {
     async fn update_patterns_by_type_rejects_invalid_pattern() {
         let (db, bus) = setup().await;
         let req = SettingsUpdateRequest {
-            key: "patterns_by_type".to_owned(),
+            key: "patternsByType".to_owned(),
             value: contracts_core::JsonAny::from(serde_json::json!({"dark": "{telescope}/"})),
         };
         let err = update_setting(db.pool(), &bus, &req).await.unwrap_err();
@@ -1213,7 +1265,7 @@ mod tests {
     async fn update_patterns_by_type_rejects_bad_class_name() {
         let (db, bus) = setup().await;
         let req = SettingsUpdateRequest {
-            key: "patterns_by_type".to_owned(),
+            key: "patternsByType".to_owned(),
             value: contracts_core::JsonAny::from(serde_json::json!({"nope": "x/"})),
         };
         let err = update_setting(db.pool(), &bus, &req).await.unwrap_err();
@@ -1224,7 +1276,7 @@ mod tests {
     async fn update_patterns_by_type_rejects_non_object() {
         let (db, bus) = setup().await;
         let req = SettingsUpdateRequest {
-            key: "patterns_by_type".to_owned(),
+            key: "patternsByType".to_owned(),
             value: contracts_core::JsonAny::from(serde_json::json!(["dark"])),
         };
         let err = update_setting(db.pool(), &bus, &req).await.unwrap_err();
@@ -1319,14 +1371,14 @@ mod tests {
             prop_assert_eq!(validate_value("hashOnScan", &v).is_ok(), allowed);
         }
 
-        // aging_threshold_days bounds: a value validates iff it lies in [1, 3650].
+        // calibrationAgingThresholdDays bounds: a value validates iff it lies in [1, 3650].
         #[test]
         fn aging_threshold_bounds(n in -10_000i64..10_000i64) {
             #[allow(clippy::cast_precision_loss)]
             let in_range = (1..=3650).contains(&n);
             let v = serde_json::json!(n);
             prop_assert_eq!(
-                validate_value("calibration.aging_threshold_days", &v).is_ok(),
+                validate_value("calibrationAgingThresholdDays", &v).is_ok(),
                 in_range
             );
         }

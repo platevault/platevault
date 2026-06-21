@@ -13,10 +13,10 @@
 //! - `"advanced"` → `logLevel`, `rememberFollowLogs`, `devMode`
 //! - `"general"`  → `rowDensity`
 //! - `"cleanup"`  → `blockPermanentDelete`, `defaultProtection`, `protectedCategories`
-//! - `"naming"`   → `pattern`, `autoApplyPattern`, `patterns_by_type`
+//! - `"naming"`   → `pattern`, `autoApplyPattern`, `patternsByType`
 //! - `"sources"`  → `followSymlinks`, `hashOnScan`
 //! - `"calibration"` → `darkMatchTolerance`, `flatMatching`, `suggestCalibration`,
-//!   `calibration.dark_temp_tolerance`, `calibration.prefill_suggestion`
+//!   `calibrationDarkTempTolerance`, `calibrationPrefillSuggestion`
 //! - `""` (empty) → reads the full settings bag (all known keys).
 //!
 //! Unknown `values` keys from the frontend that are not valid settings keys are
@@ -52,20 +52,20 @@ fn scope_keys(scope: &str) -> &'static [&'static str] {
         "advanced" => &["logLevel", "rememberFollowLogs", "devMode"],
         "general" => &["rowDensity"],
         "cleanup" => &["blockPermanentDelete", "defaultProtection", "protectedCategories"],
-        "naming" => &["pattern", "autoApplyPattern", "patterns_by_type"],
+        "naming" => &["pattern", "autoApplyPattern", "patternsByType"],
         "sources" => &["followSymlinks", "hashOnScan", "alwaysPreviewBeforePlan"],
         "calibration" => &[
             "darkMatchTolerance",
             "flatMatching",
             "suggestCalibration",
-            "calibration.dark_temp_tolerance",
-            "calibration.prefill_suggestion",
-            "calibration.dark.override_penalty",
-            "calibration.flat.override_penalty",
-            "calibration.bias.override_penalty",
-            "calibration.aging_threshold_days",
+            "calibrationDarkTempTolerance",
+            "calibrationPrefillSuggestion",
+            "calibrationDarkOverridePenalty",
+            "calibrationFlatOverridePenalty",
+            "calibrationBiasOverridePenalty",
+            "calibrationAgingThresholdDays",
         ],
-        "plans" => &["plans.list.default_age_cutoff_days"],
+        "plans" => &["plansListDefaultAgeCutoffDays"],
         // Empty scope or "global" returns every stable key.
         _ => &[
             "logLevel",
@@ -77,21 +77,21 @@ fn scope_keys(scope: &str) -> &'static [&'static str] {
             "protectedCategories",
             "pattern",
             "autoApplyPattern",
-            "patterns_by_type",
+            "patternsByType",
             "followSymlinks",
             "hashOnScan",
             "alwaysPreviewBeforePlan",
             "darkMatchTolerance",
             "flatMatching",
             "suggestCalibration",
-            "calibration.dark_temp_tolerance",
-            "calibration.prefill_suggestion",
-            "calibration.dark.override_penalty",
-            "calibration.flat.override_penalty",
-            "calibration.bias.override_penalty",
-            "calibration.aging_threshold_days",
-            "plans.list.default_age_cutoff_days",
-            "current_library_id",
+            "calibrationDarkTempTolerance",
+            "calibrationPrefillSuggestion",
+            "calibrationDarkOverridePenalty",
+            "calibrationFlatOverridePenalty",
+            "calibrationBiasOverridePenalty",
+            "calibrationAgingThresholdDays",
+            "plansListDefaultAgeCutoffDays",
+            "currentLibraryId",
         ],
     }
 }
