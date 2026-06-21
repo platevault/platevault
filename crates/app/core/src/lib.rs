@@ -48,8 +48,8 @@ pub use projects::{
     prepared_views, project_health, project_manifests, project_notes, project_setup,
 };
 pub use targets::{
-    ingest_resolution, resolver_settings, target_dto, target_management, target_resolve,
-    target_search,
+    ingest_resolution, ingest_sessions, resolver_settings, target_dto, target_management,
+    target_resolve, target_search,
 };
 
 // In-crate modules (file layout under `src/`). These live in `app_core` itself

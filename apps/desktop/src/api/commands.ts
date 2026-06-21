@@ -364,20 +364,6 @@ export async function createProjectPlan(args: {
   return unwrap(await commands.projectsCreatePlan(args.wizard_state));
 }
 
-export async function approvePlan(args: {
-  id: string;
-  delete_acknowledged?: boolean;
-}): Promise<FilesystemPlan> {
-  // Generated plansApprove(id) returns PlanApproveResponse (not FilesystemPlan).
-  // delete_acknowledged was silently ignored by the old invoke path; no callers
-  // exist. We use the generated binding (T115); the caller type is kept for
-  // back-compat. Cast via unknown because the return shape differs (approvePlan
-  // callers never existed and the Phase 4 plan workflow will replace this wrapper).
-  void args.delete_acknowledged;
-  const response = unwrap(await commands.plansApprove(args.id));
-  return response as unknown as FilesystemPlan;
-}
-
 export async function applyPlan(args: {
   id: string;
   approvalToken?: string;

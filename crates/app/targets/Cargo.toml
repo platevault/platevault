@@ -12,7 +12,11 @@ app_core_errors = { path = "../errors" }
 audit = { path = "../../audit" }
 contracts_core = { path = "../../contracts/core" }
 domain_core = { path = "../../domain/core" }
+metadata_core = { path = "../../metadata/core" }
+metadata_fits = { path = "../../metadata/fits" }
+metadata_xisf = { path = "../../metadata/xisf" }
 persistence_db = { path = "../../persistence/db" }
+sessions = { path = "../../sessions" }
 targeting = { path = "../../targeting" }
 targeting_resolver = { path = "../../targeting/resolver" }
 serde_json.workspace = true

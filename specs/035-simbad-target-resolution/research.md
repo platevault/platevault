@@ -96,3 +96,66 @@ retained for the app's notices (FR-012).
 
 **Rationale**: keeps the UI-to-core boundary language-neutral (§V) while removing the superseded
 download surface; reconciliation banners already added to 002/003/013/014/018/033.
+
+---
+
+*Decisions R9–R12 were added by iteration 2026-06-21 (US4 ingest grouping reactivation).*
+
+## R9. `file_record.root_id` FK — ensure `library_root` row for inbox destinations
+
+**Decision**: Before inserting a `file_record` row during plan-apply ingest, the ingest module MUST
+resolve or ensure a `library_root` row exists for the destination root. Inbox move/catalogue
+operations produce applied paths whose destination root may be a `registered_sources` entry (not yet
+a `library_root`). The correct approach is to resolve/mirror the destination as a `library_root`
+before inserting the `file_record`. If the root cannot be resolved or mirrored, the ingest step for
+that frame is skipped and an audit entry is written; the session is still created (without that
+frame) and the skip is retryable.
+
+**Rationale**: `file_record.root_id` is a FK to `library_root`; inserting without a matching row
+causes a constraint violation. This was the root cause of the `source.missing` bug in spec 041
+(see memory: spec-041-apply-rootid-gen3.md). The spec-041 fix resolved root_id correctly; the
+ingest path must apply the same resolution.
+
+**Alternatives**: Use an absolute path (no `root_id` FK) — rejected: breaks the root-remapping
+model (constitution §I). Use a join table — rejected: same complexity, no benefit.
+
+## R10. Id-space mismatch — additive `canonical_target_id`, not legacy `target_id`
+
+**Decision**: `acquisition_session.canonical_target_id` is a new nullable column referencing
+`canonical_target(id)` (spec-035 UUID v5 space). The existing `target_id` column (FK → legacy
+`target` table) is left untouched. This mirrors the decision made in migration 0033 for `projects`:
+an additive nullable column coexisting with the legacy FK, not replacing it.
+
+**Rationale**: The spec-035 `canonical_target` table uses a different id-space from the legacy
+`target` table; writing to `target_id` with a spec-035 id would cause a FK violation or silent
+mis-reference. A join table was evaluated and rejected: it adds a third table, complicates queries,
+and provides no benefit over a single nullable FK column on the same row (which is idempotent to
+insert and standard SQL).
+
+**Alternatives**: Join table `acquisition_session_canonical_target` — rejected (see above). Write
+spec-035 id to `target_id` — rejected (FK violation / id-space mismatch).
+
+## R11. UTC observing-night fallback
+
+**Decision**: When the observer's geographic location is not configured, the observing-night
+boundary used in `session_key` grouping is computed in UTC instead of local solar time. The
+`acquisition_session` records `has_observer_location = 0` to mark the degraded computation.
+Sessions spanning a UTC midnight boundary may be incorrectly split. This is a documented, accepted
+degraded mode for v1; a corrective re-group action can be added later if location is subsequently
+configured.
+
+**Rationale**: Session grouping must not fail silently or block ingest when location is missing.
+UTC is the lowest-friction correct fallback; the flag preserves the information needed to identify
+and correct affected sessions.
+
+## R12. `plan_listener` ingest idempotency
+
+**Decision**: The ingest hook in `plan_listener::handle_plan_completed` is idempotent by
+construction: (a) `file_record` has a UNIQUE constraint on `(root_id, relative_path)` — repeat
+ingest of the same file upserts, not duplicates; (b) `acquisition_session` has a UNIQUE constraint
+on `session_key` — the upsert appends `frame_ids` using set-dedup so a frame id already present is
+not added again; (c) only `move` and `catalogue` plan items with `terminal_state == "applied"` are
+processed — other item types (calibration registrations, etc.) are filtered out.
+
+**Rationale**: Plan-apply completion events may be re-delivered (e.g. crash recovery, retry). The
+ingest path must produce the same result regardless of how many times it is called for the same plan.
