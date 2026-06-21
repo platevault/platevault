@@ -1120,3 +1120,43 @@
 .alm-theme-swatch__accent { background: var(--alm-accent); }
 .alm-theme-swatch__name { font-size: var(--alm-text-sm); font-weight: var(--alm-weight-semibold); color: var(--alm-text); }
 .alm-theme-swatch__mode { font-size: var(--alm-text-2xs); color: var(--alm-text-muted); text-transform: capitalize; }
+
+/* === PROPERTY TABLE (key-value detail; was unstyled → run-on text) ===
+   Grid row: label | value | source | confirm. Used on Session / Calibration /
+   Project / Archive detail. */
+.alm-property-table { display: flex; flex-direction: column; }
+.alm-property-table__header,
+.alm-property-table__row {
+  display: grid;
+  grid-template-columns: minmax(130px, 190px) 1fr auto auto;
+  gap: var(--alm-sp-3);
+  align-items: baseline;
+  padding: 5px 0;
+  border-bottom: 1px solid var(--alm-rule2);
+}
+.alm-property-table__header {
+  border-bottom: 1px solid var(--alm-rule);
+  padding-bottom: 6px; margin-bottom: 2px;
+}
+.alm-property-table__header .alm-property-table__cell {
+  font-size: var(--alm-text-2xs); font-weight: var(--alm-weight-semibold);
+  letter-spacing: 0.04em; text-transform: uppercase; color: var(--alm-text-muted);
+}
+.alm-property-table__row:last-child { border-bottom: none; }
+.alm-property-table__cell--label { color: var(--alm-text-muted); font-size: var(--alm-text-sm); }
+.alm-property-table__cell--value {
+  color: var(--alm-text); font-size: var(--alm-text-sm);
+  font-variant-numeric: tabular-nums; min-width: 0; overflow-wrap: anywhere;
+}
+.alm-property-table__cell--source,
+.alm-property-table__cell--confirm { justify-self: start; }
+.alm-property-table__source-badge {
+  font-size: 9.5px; font-weight: var(--alm-weight-semibold); letter-spacing: 0.03em;
+  text-transform: uppercase; padding: 1px 7px; border-radius: 8px;
+  background: var(--alm-bg3); color: var(--alm-text-muted);
+  border: 1px solid transparent;
+}
+.alm-property-table__source-badge--fits { background: var(--alm-info-bg); color: var(--alm-info); border-color: var(--alm-info-border); }
+.alm-property-table__source-badge--user { background: var(--alm-ok-bg); color: var(--alm-ok); border-color: var(--alm-ok-border); }
+.alm-property-table__source-badge--inferred { background: var(--alm-warn-bg); color: var(--alm-warn); border-color: var(--alm-warn-border); }
+.alm-property-table__source-badge--default { background: var(--alm-bg3); color: var(--alm-text-muted); }
