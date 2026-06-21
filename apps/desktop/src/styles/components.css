@@ -682,7 +682,7 @@
 /* Inline error message for settings save failures */
 .alm-settings__error {
   font-size: var(--alm-text-xs);
-  color: var(--alm-danger, #dc2626);
+  color: var(--alm-danger);
   margin-top: var(--alm-sp-2);
   padding: var(--alm-sp-2) var(--alm-sp-3);
   background: var(--alm-danger-bg, rgba(220,38,38,0.08));

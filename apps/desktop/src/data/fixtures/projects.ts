@@ -2,7 +2,6 @@
 // Matches design V3 mock data.
 
 import type {
-  Project,
   ProjectDetail,
   ProjectSource,
   ProjectSourceView,

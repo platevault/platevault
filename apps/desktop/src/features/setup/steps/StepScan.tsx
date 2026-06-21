@@ -409,7 +409,7 @@ export function StepScan({ sources, flushResult, onAllDoneChange }: StepScanProp
       const idx = i;
       const entry = sourceStates[idx];
 
-      (async () => {
+      void (async () => {
         // Mark as scanning
         setSourceStates((prev) => {
           const next = [...prev];
