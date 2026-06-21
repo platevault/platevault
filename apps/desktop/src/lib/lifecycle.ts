@@ -66,10 +66,12 @@ export function projectStateVariant(state: string): PillVariant {
 
 const SESSION_STATE_VARIANTS: Record<SessionState, PillVariant> = {
   confirmed: 'ok',
+  // discovered / candidate / needs_review all surface as "Needs review" in the
+  // UI — give them one variant so identical labels never render in two colors.
   needs_review: 'warn',
+  discovered: 'warn',
+  candidate: 'warn',
   rejected: 'danger',
-  discovered: 'ghost',
-  candidate: 'neutral',
   ignored: 'neutral',
 };
 
