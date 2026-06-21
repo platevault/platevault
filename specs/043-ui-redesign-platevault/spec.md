@@ -178,10 +178,26 @@ Done & validated (commits on `redesign-ui-platevault`):
 - MetricLine quieted globally (no hero numbers)
 - Inbox undefined-token fixes (--alm-radius-md, --alm-warn-bg)
 
+- Calibration master detail: readable title + deduped fingerprint (rail only)
+- **Sessions target identity (BACKEND)**: `inventory.rs` effective_target() —
+  every session now shows its object (M42 · Ha, NGC 7000 · SII…) instead of
+  "Session — date". Validated live after backend recompile; 12/12 inventory tests.
+- **Projects preparedview command (BACKEND-adjacent)**: invoke underscore
+  command names (was dotted → "command not found" on every project's Source
+  Views). Now a proper empty state.
+- Calibration suggest `session.not_found` humanized (neutral empty state)
+- Calibration Matching settings: dropped out-of-place Notes column
+
 Verification gate (all green): `tsc --noEmit` 0 errors · `check-tokens.sh` pass ·
 `eslint` 0 errors (1 pre-existing PlanPanel warning) · vitest **738/738 pass**
-(77 files) · live MCP validation across all 4 themes + every page. Default theme
-reset to `system`.
+(77 files) · `cargo check -p app_core` + 12/12 inventory tests · live MCP
+validation across all 4 themes + every page. Default theme reset to `system`.
+
+Backend items now DONE (were "other agent's lane" — done with conflict
+acceptance per the owner's directive): Sessions target identity, preparedview
+command name, calibration-suggest error humanization. Still pending/backend:
+FITS OBJECT→target_id linkage (enables My-Targets), toggleable match criteria +
+default changes (offset/365/5), inbox folder-vs-master count.
 
 Pending (largest first): per-page redesigns (Sessions table, Targets planner +
 charts, Projects channels, Inbox toolbar+inspector, Archive single-column),
