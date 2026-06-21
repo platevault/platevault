@@ -226,8 +226,10 @@ Frontend: `cd apps/desktop && npx tsc --noEmit` + `npx vitest run <feature>`. Ru
   `targeting` = uuid + unicode-normalization only; consumers app_core/seed-builder/desktop_shell updated.)
 - [X] T251 (O5) Drop `tokio` from `project/structure` (move the async touch out).
   (notes/manifest IO now std::fs behind the same async trait seam; tokio → dev-dep only.)
-- [ ] T252 (O3a) Group `app/core`'s ~33 flat modules into `targets/ projects/ inbox/
+- [X] T252 (O3a) Group `app/core`'s ~33 flat modules into `targets/ projects/ inbox/
   calibration/ lifecycle/` subdirs (internal, compiles green).
+  (18 git-mv renames into targets/projects/calibration/lifecycle; public surface byte-identical
+  via lib.rs `pub use` re-exports; zero consumer edits; calibration use-case → calibration/matching.rs.)
 - [ ] T253 (O3b) Split `app/core` into per-domain use-case crates incrementally, each
   preserving the public surface `desktop_shell` consumes.
 - [ ] T254 (O6) Fix `persistence/db → contracts/core` inversion: move the ~4 stored type

@@ -1,41 +1,51 @@
 //! Application use-case orchestration boundary.
 #![allow(clippy::doc_markdown)] // spec/domain terminology not appropriate for backticks
 
-pub mod artifact;
+// ── Domain module groups (T252 / spec 042 O3a) ──────────────────────────
+//
+// Internal file layout is grouped into domain subdirectories. Every module
+// that was previously a flat `pub mod` at the crate root is re-exported below
+// under its original name so that `app_core::<module>` paths remain
+// byte-identical for `desktop_shell` and every other consumer. The grouping
+// is a purely internal reorganisation — no external surface changes.
 pub mod calibration;
+pub mod lifecycle;
+pub mod projects;
+pub mod targets;
+
+// Re-export grouped modules under their original crate-root paths.
+// `calibration` itself remains a crate-root module (the group module also
+// flattens the former flat `calibration` use-case via `pub use matching::*`).
+pub use calibration::equipment;
+pub use lifecycle::{
+    artifact, ledger_use_case, lifecycle_use_case, provenance_use_case, transition_use_case,
+};
+pub use projects::{
+    prepared_views, project_health, project_manifests, project_notes, project_setup,
+};
+pub use targets::{
+    ingest_resolution, resolver_settings, target_dto, target_management, target_resolve,
+    target_search,
+};
+
+// Ungrouped crate-root modules.
 #[cfg(feature = "dev-tools")]
 pub mod dev_contracts;
-pub mod equipment;
 pub mod errors;
 pub mod first_run;
 pub mod guided_flow;
 pub mod inbox;
-pub mod ingest_resolution;
 pub mod inventory;
-pub mod ledger_use_case;
-pub mod lifecycle_use_case;
 pub mod log_stream;
 pub mod native;
 pub mod patterns;
 pub mod plan_apply;
 pub mod plans;
-pub mod prepared_views;
-pub mod project_health;
-pub mod project_manifests;
-pub mod project_notes;
-pub mod project_setup;
 pub mod protection;
-pub mod provenance_use_case;
-pub mod resolver_settings;
 pub mod search;
 pub mod sessions;
 pub mod settings;
-pub mod target_dto;
-pub mod target_management;
-pub mod target_resolve;
-pub mod target_search;
 pub mod tool_launch;
-pub mod transition_use_case;
 
 use std::collections::BTreeMap;
 
