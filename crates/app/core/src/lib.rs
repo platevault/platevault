@@ -30,6 +30,7 @@ pub mod resolver_settings;
 pub mod search;
 pub mod sessions;
 pub mod settings;
+pub mod target_dto;
 pub mod target_management;
 pub mod target_resolve;
 pub mod target_search;

@@ -27,10 +27,13 @@ use contracts_core::plans::{
     PlanRetryResponse, PlanSummary, PlanType, RetryItemsFilter,
 };
 use contracts_core::{error_code::ErrorCode, ContractError, ErrorSeverity};
+use domain_core::ids::{new_id, Timestamp};
 use persistence_db::repositories::plans as repo;
 use sqlx::SqlitePool;
 use time::OffsetDateTime;
 use uuid::Uuid;
+
+use crate::errors::bus_err;
 
 // ── State helpers ─────────────────────────────────────────────────────────────
 
@@ -56,36 +59,13 @@ pub const PERMANENT_DELETE_CONFIRM_TEXT: &str = "DELETE";
 
 // ── Error helpers ─────────────────────────────────────────────────────────────
 
-#[allow(clippy::needless_pass_by_value)]
 fn db_err(e: persistence_db::DbError) -> ContractError {
     match e {
         persistence_db::DbError::NotFound(msg) => {
             ContractError::new(ErrorCode::PlanNotFound, msg, ErrorSeverity::Blocking, false)
         }
-        other => ContractError::new(
-            ErrorCode::InternalDatabase,
-            format!("{other}"),
-            ErrorSeverity::Fatal,
-            true,
-        ),
+        other => crate::errors::db_err(other),
     }
-}
-
-#[allow(clippy::needless_pass_by_value)]
-fn bus_err(e: audit::bus::BusError) -> ContractError {
-    ContractError::new(ErrorCode::InternalAudit, format!("{e}"), ErrorSeverity::Fatal, true)
-}
-
-// ── Timestamp helpers ─────────────────────────────────────────────────────────
-
-fn now_iso() -> String {
-    OffsetDateTime::now_utc()
-        .format(&time::format_description::well_known::Rfc3339)
-        .unwrap_or_else(|_| "1970-01-01T00:00:00Z".to_owned())
-}
-
-fn new_id() -> String {
-    Uuid::new_v4().to_string()
 }
 
 // ── Row mapping helpers ───────────────────────────────────────────────────────
@@ -356,7 +336,7 @@ pub async fn approve_plan(
         ));
     }
 
-    let approved_at = now_iso();
+    let approved_at = Timestamp::now_iso();
 
     // Approval token: HMAC placeholder. Spec 025 will consume and verify this.
     // For now: a stable UUID derived from plan_id + approved_at.
@@ -424,11 +404,11 @@ pub async fn discard_plan(
     if state == PlanState::Discarded {
         return Ok(PlanDiscardResponse {
             plan_id: plan_id.to_owned(),
-            discarded_at: row.discarded_at.unwrap_or_else(now_iso),
+            discarded_at: row.discarded_at.unwrap_or_else(Timestamp::now_iso),
         });
     }
 
-    let discarded_at = now_iso();
+    let discarded_at = Timestamp::now_iso();
     repo::soft_delete_plan(pool, plan_id, &discarded_at).await.map_err(db_err)?;
 
     // Emit audit event (A7, A5).
@@ -515,7 +495,7 @@ pub async fn retry_plan(
     }
 
     let new_plan_id = new_id();
-    let at = now_iso();
+    let at = Timestamp::now_iso();
 
     // Create new plan (draft) referencing parent.
     repo::insert_plan(
@@ -624,7 +604,7 @@ pub async fn send_archive_to_trash(
         ));
     }
 
-    let at = now_iso();
+    let at = Timestamp::now_iso();
     let audit_id = new_id();
 
     // Emit audit event (T045).
@@ -698,7 +678,7 @@ pub async fn permanently_delete_archive(
         ));
     }
 
-    let at = now_iso();
+    let at = Timestamp::now_iso();
     let audit_id = new_id();
 
     // Emit audit event (T046).

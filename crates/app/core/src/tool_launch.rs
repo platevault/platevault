@@ -28,12 +28,14 @@ use contracts_core::tools::{
     ToolLaunchResponse, ToolLaunchStatus, ToolPathValidation, ToolProfileListResponse,
     ToolProfileSummary, UpdateProcessingTool,
 };
+use domain_core::ids::{new_id, Timestamp};
 use persistence_db::repositories::{
     inventory as inv_repo, projects as proj_repo, settings as settings_repo,
     tool_launches as tl_repo,
 };
 use project_structure::resolve_working_folder;
 use sqlx::SqlitePool;
+#[cfg(test)]
 use uuid::Uuid;
 use workflow_profiles::{
     args::{render, RenderContext},
@@ -43,16 +45,6 @@ use workflow_profiles::{
 };
 
 // ── Helpers ───────────────────────────────────────────────────────────────────
-
-fn new_id() -> String {
-    Uuid::new_v4().to_string()
-}
-
-fn now_iso() -> String {
-    time::OffsetDateTime::now_utc()
-        .format(&time::format_description::well_known::Rfc3339)
-        .unwrap_or_else(|_| "1970-01-01T00:00:00Z".to_owned())
-}
 
 /// Settings key for `tools.<tool_id>.executable_path`.
 fn key_executable_path(tool_id: &str) -> String {
@@ -275,7 +267,7 @@ pub async fn launch(
 
     let launch_id = new_id();
     let audit_id = new_id();
-    let launched_at = now_iso();
+    let launched_at = Timestamp::now_iso();
 
     let (outcome, pid, error_response) = match spawner.spawn(spawn_req) {
         Ok(result) => ("spawned", result.pid, None),

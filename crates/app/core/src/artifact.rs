@@ -31,9 +31,9 @@ use audit::event_bus::{
     TOPIC_ARTIFACT_RECOVERED, TOPIC_ARTIFACT_UPDATED, TOPIC_ARTIFACT_USER_RESOLVED,
     TOPIC_WORKFLOW_RUN_COMPLETED,
 };
+use domain_core::ids::{new_id, Timestamp};
 use sqlx::SqlitePool;
 use time::OffsetDateTime;
-use uuid::Uuid;
 use workflow_artifacts::{
     attribute, classify, default_artifact_rules, ArtifactKind, LaunchRef,
     DEFAULT_ATTRIBUTION_WINDOW,
@@ -45,16 +45,6 @@ use persistence_db::repositories::tool_launches::{self as tl_repo};
 use contracts_core::tools::ArtifactSummary;
 
 // ── Helpers ───────────────────────────────────────────────────────────────────
-
-fn new_id() -> String {
-    Uuid::new_v4().to_string()
-}
-
-fn now_iso() -> String {
-    OffsetDateTime::now_utc()
-        .format(&time::format_description::well_known::Rfc3339)
-        .unwrap_or_else(|_| "1970-01-01T00:00:00Z".to_owned())
-}
 
 fn parse_dt(s: &str) -> Option<OffsetDateTime> {
     OffsetDateTime::parse(s, &time::format_description::well_known::Rfc3339).ok()
@@ -93,7 +83,7 @@ pub async fn detect(
             .await
             .map_err(|e| format!("DB update failed: {e}"))?;
 
-        let now = now_iso();
+        let now = Timestamp::now_iso();
         let _ = bus
             .publish(
                 TOPIC_ARTIFACT_UPDATED,
@@ -258,7 +248,7 @@ pub async fn classify_override(
         .find(|r| r.id == artifact_id)
         .ok_or_else(|| format!("artifact.not_found: {artifact_id}"))?;
 
-    let now = now_iso();
+    let now = Timestamp::now_iso();
 
     if let Some(new_kind) = kind {
         // Validate kind value.
@@ -347,7 +337,7 @@ pub async fn mark_resolved(
         .await
         .map_err(|e| format!("DB mark resolved failed: {e}"))?;
 
-    let now = now_iso();
+    let now = Timestamp::now_iso();
     let _ = bus
         .publish(
             TOPIC_ARTIFACT_USER_RESOLVED,
@@ -379,7 +369,7 @@ pub async fn mark_missing(
         .await
         .map_err(|e| format!("DB mark missing failed: {e}"))?;
 
-    let now = now_iso();
+    let now = Timestamp::now_iso();
     let _ = bus
         .publish(
             TOPIC_ARTIFACT_MISSING,
@@ -411,7 +401,7 @@ pub async fn mark_recovered(
         .await
         .map_err(|e| format!("DB mark recovered failed: {e}"))?;
 
-    let now = now_iso();
+    let now = Timestamp::now_iso();
     let _ = bus
         .publish(
             TOPIC_ARTIFACT_RECOVERED,
@@ -504,7 +494,7 @@ pub async fn complete_run(
     tool_id: &str,
     tool_launch_id: &str,
 ) -> Result<bool, String> {
-    let completed_at = now_iso();
+    let completed_at = Timestamp::now_iso();
     let updated = repo::complete_tool_launch(pool, tool_launch_id, &completed_at)
         .await
         .map_err(|e| format!("DB complete_run failed: {e}"))?;

@@ -8,19 +8,13 @@ use contracts_core::first_run::{
     FirstRunStateResponse, ItemStatus, RegisterSourceBatchRequest, RegisterSourceBatchResponse,
     RegisterSourceRequest, RegisterSourceResponse, ScanDepth, SourceKind,
 };
+use domain_core::ids::Timestamp;
 use sqlx::SqlitePool;
-use time::OffsetDateTime;
 use uuid::Uuid;
 
 use crate::{DbError, DbResult};
 
 // ── Helpers ─────────────────────────────────────────────────────────────────
-
-fn now_iso() -> String {
-    OffsetDateTime::now_utc()
-        .format(&time::format_description::well_known::Rfc3339)
-        .unwrap_or_else(|_| "1970-01-01T00:00:00Z".to_owned())
-}
 
 fn source_kind_to_str(kind: SourceKind) -> &'static str {
     // `strum::IntoStaticStr` yields the canonical snake_case strings.
@@ -91,7 +85,7 @@ pub async fn register_source(
     let id = Uuid::new_v4().to_string();
     let kind_str = source_kind_to_str(req.kind);
     let scan_depth_str = scan_depth_to_str(req.scan_depth);
-    let created_at = now_iso();
+    let created_at = Timestamp::now_iso();
     let created_via = resolve_created_via(pool).await?;
 
     sqlx::query(
@@ -126,7 +120,7 @@ pub async fn register_source_batch(
     req: &RegisterSourceBatchRequest,
 ) -> DbResult<RegisterSourceBatchResponse> {
     let created_via = resolve_created_via(pool).await?;
-    let created_at = now_iso();
+    let created_at = Timestamp::now_iso();
 
     let mut items: Vec<BatchItem> = Vec::with_capacity(req.sources.len());
     let mut success_count = 0usize;
@@ -283,7 +277,7 @@ pub async fn complete_first_run(pool: &SqlitePool) -> DbResult<FirstRunCompleteR
         ));
     }
 
-    let completed_at = now_iso();
+    let completed_at = Timestamp::now_iso();
 
     // Upsert the singleton row.
     sqlx::query(
@@ -311,7 +305,7 @@ pub async fn complete_first_run(pool: &SqlitePool) -> DbResult<FirstRunCompleteR
 ///
 /// Returns [`DbError::Database`] on query failure.
 pub async fn restart_first_run(pool: &SqlitePool) -> DbResult<FirstRunRestartResponse> {
-    let now = now_iso();
+    let now = Timestamp::now_iso();
 
     // Clear completed_at and reset to welcome step.
     sqlx::query(
@@ -340,7 +334,7 @@ pub async fn restart_first_run(pool: &SqlitePool) -> DbResult<FirstRunRestartRes
 ///
 /// Returns [`DbError::Database`] on query failure.
 pub async fn update_first_run_step(pool: &SqlitePool, step: &str) -> DbResult<()> {
-    let now = now_iso();
+    let now = Timestamp::now_iso();
 
     sqlx::query(
         "INSERT INTO first_run_state (singleton_id, last_step, updated_at) \

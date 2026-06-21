@@ -30,6 +30,7 @@
 
 use audit::event_bus::{TargetResolveBatchCompleted, TargetResolved};
 use audit::{EventBus, Source};
+use domain_core::ids::Timestamp;
 use sqlx::SqlitePool;
 use uuid::Uuid;
 
@@ -42,12 +43,6 @@ use targeting::resolver::{ResolveError, Resolver};
 
 fn db_err(e: impl std::fmt::Display) -> ContractError {
     ContractError::new(ErrorCode::InternalDatabase, e.to_string(), ErrorSeverity::Fatal, true)
-}
-
-fn now_iso() -> String {
-    time::OffsetDateTime::now_utc()
-        .format(&time::format_description::well_known::Rfc3339)
-        .unwrap_or_else(|_| "1970-01-01T00:00:00Z".to_owned())
 }
 
 // ── Row / outcome types ─────────────────────────────────────────────────────
@@ -338,7 +333,7 @@ pub async fn resolve_pending<R: Resolver + ?Sized>(
                     resolved: num_resolved,
                     unresolved: num_unresolved,
                     pending: num_pending,
-                    at: now_iso(),
+                    at: Timestamp::now_iso(),
                 },
             )
             .await;
@@ -391,7 +386,7 @@ async fn emit_resolved(bus: &EventBus, target: &CachedTarget, query: Option<&str
                 primary_designation: target.primary_designation.clone(),
                 source: target.source.as_wire().to_owned(),
                 query: query.map(ToOwned::to_owned),
-                at: now_iso(),
+                at: Timestamp::now_iso(),
             },
         )
         .await;

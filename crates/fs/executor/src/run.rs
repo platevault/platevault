@@ -24,6 +24,7 @@ use std::collections::HashSet;
 use std::sync::{Arc, Mutex};
 
 use camino::{Utf8Path, Utf8PathBuf};
+use domain_core::ids::Timestamp;
 use tokio::sync::watch;
 
 use crate::failure::{FailureCode, PlanItemFailure, RollbackOutcome};
@@ -317,7 +318,7 @@ pub async fn execute_plan<C: ExecutorCallbacks>(
                     item_id: item.id.clone(),
                     prior_state: "pending".to_owned(),
                     new_state: "skipped".to_owned(),
-                    at: now_iso(),
+                    at: Timestamp::now_iso(),
                     failure: None,
                     rollback_attempted: false,
                     rollback_outcome: RollbackOutcome::NotApplicable,
@@ -347,7 +348,7 @@ pub async fn execute_plan<C: ExecutorCallbacks>(
                     item_id: item.id.clone(),
                     prior_state: "pending".to_owned(),
                     new_state: "refused".to_owned(),
-                    at: now_iso(),
+                    at: Timestamp::now_iso(),
                     failure: Some(failure),
                     rollback_attempted: false,
                     rollback_outcome: RollbackOutcome::NotApplicable,
@@ -374,7 +375,7 @@ pub async fn execute_plan<C: ExecutorCallbacks>(
                             item_id: item.id.clone(),
                             prior_state: "applying".to_owned(),
                             new_state: "refused".to_owned(),
-                            at: now_iso(),
+                            at: Timestamp::now_iso(),
                             failure: Some(gate_failure),
                             rollback_attempted: false,
                             rollback_outcome: RollbackOutcome::NotApplicable,
@@ -414,7 +415,7 @@ pub async fn execute_plan<C: ExecutorCallbacks>(
                         item_id: item.id.clone(),
                         prior_state: "applying".to_owned(),
                         new_state: "stale".to_owned(),
-                        at: now_iso(),
+                        at: Timestamp::now_iso(),
                         failure: Some(failure_clone),
                         rollback_attempted: false,
                         rollback_outcome: RollbackOutcome::NotApplicable,
@@ -446,7 +447,7 @@ pub async fn execute_plan<C: ExecutorCallbacks>(
                     item_id: item.id.clone(),
                     prior_state: "applying".to_owned(),
                     new_state: "failed".to_owned(),
-                    at: now_iso(),
+                    at: Timestamp::now_iso(),
                     failure: Some(failure),
                     rollback_attempted: false,
                     rollback_outcome: RollbackOutcome::NotApplicable,
@@ -490,7 +491,7 @@ pub async fn execute_plan<C: ExecutorCallbacks>(
                         item_id: item.id.clone(),
                         prior_state: "applying".to_owned(),
                         new_state: "succeeded".to_owned(),
-                        at: now_iso(),
+                        at: Timestamp::now_iso(),
                         failure: None,
                         rollback_attempted: false,
                         rollback_outcome: RollbackOutcome::NotApplicable,
@@ -509,7 +510,7 @@ pub async fn execute_plan<C: ExecutorCallbacks>(
                         item_id: item.id.clone(),
                         prior_state: "applying".to_owned(),
                         new_state: "failed".to_owned(),
-                        at: now_iso(),
+                        at: Timestamp::now_iso(),
                         failure: Some(failure_clone),
                         rollback_attempted,
                         rollback_outcome,
@@ -620,12 +621,6 @@ fn require_resolved_path<'a>(
             None,
         )
     })
-}
-
-fn now_iso() -> String {
-    time::OffsetDateTime::now_utc()
-        .format(&time::format_description::well_known::Rfc3339)
-        .unwrap_or_else(|_| "1970-01-01T00:00:00Z".to_owned())
 }
 
 // ── Tests ──────────────────────────────────────────────────────────────────────

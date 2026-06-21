@@ -27,8 +27,7 @@
 use sqlx::SqlitePool;
 
 use contracts_core::targets::{
-    ResolvedTarget, TargetObjectType, TargetResolveSimbadRequest, TargetResolveSimbadResponse,
-    TargetResolveStatus, TargetSource,
+    ResolvedTarget, TargetResolveSimbadRequest, TargetResolveSimbadResponse, TargetResolveStatus,
 };
 use contracts_core::{error_code::ErrorCode, ContractError, ErrorSeverity};
 
@@ -36,8 +35,7 @@ use crate::errors::db_internal_ctx;
 use targeting::normalize::normalize;
 use targeting::resolver::cache::{self, CachedTarget};
 use targeting::resolver::{
-    AliasKind, ObjectType, ResolveError, ResolvedAlias, ResolvedIdentity, Resolver,
-    TargetSource as CacheSource,
+    AliasKind, ResolveError, ResolvedAlias, ResolvedIdentity, Resolver, TargetSource as CacheSource,
 };
 use uuid::Uuid;
 
@@ -92,31 +90,9 @@ fn db_err(e: &cache::CacheError) -> ContractError {
 }
 
 // ── Enum mapping (cache → contract DTO) ─────────────────────────────────────
-
-fn map_object_type(o: ObjectType) -> TargetObjectType {
-    match o {
-        ObjectType::Galaxy => TargetObjectType::Galaxy,
-        ObjectType::PlanetaryNebula => TargetObjectType::PlanetaryNebula,
-        ObjectType::EmissionNebula => TargetObjectType::EmissionNebula,
-        ObjectType::ReflectionNebula => TargetObjectType::ReflectionNebula,
-        ObjectType::DarkNebula => TargetObjectType::DarkNebula,
-        ObjectType::OpenCluster => TargetObjectType::OpenCluster,
-        ObjectType::GlobularCluster => TargetObjectType::GlobularCluster,
-        ObjectType::SupernovaRemnant => TargetObjectType::SupernovaRemnant,
-        ObjectType::GalaxyCluster => TargetObjectType::GalaxyCluster,
-        ObjectType::DoubleStar => TargetObjectType::DoubleStar,
-        ObjectType::Asterism => TargetObjectType::Asterism,
-        ObjectType::Other => TargetObjectType::Other,
-    }
-}
-
-fn map_source(s: CacheSource) -> TargetSource {
-    match s {
-        CacheSource::Seed => TargetSource::Seed,
-        CacheSource::Resolved => TargetSource::Resolved,
-        CacheSource::UserOverride => TargetSource::UserOverride,
-    }
-}
+//
+// Shared mappers live in `crate::target_dto` (US11 T143).
+use crate::target_dto::{map_object_type, map_source};
 
 fn common_name(target: &CachedTarget) -> Option<String> {
     target
@@ -361,10 +337,11 @@ async fn apply_override(
 #[cfg(test)]
 mod tests {
     use super::*;
+    use contracts_core::targets::TargetSource;
     use persistence_db::Database;
     use targeting::resolver::cache::upsert_resolved;
     use targeting::resolver::{
-        AliasKind, FakeResolver, ResolvedAlias, ResolvedIdentity, TargetSource as Src,
+        AliasKind, FakeResolver, ObjectType, ResolvedAlias, ResolvedIdentity, TargetSource as Src,
     };
 
     async fn setup() -> Database {

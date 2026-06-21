@@ -2,8 +2,8 @@
 //!
 //! Operates on the `guided_flow_state` singleton table from migration 0030.
 
+use domain_core::ids::Timestamp;
 use sqlx::SqlitePool;
-use time::OffsetDateTime;
 
 use crate::DbResult;
 
@@ -21,12 +21,6 @@ pub struct GuidedFlowRow {
 }
 
 // ── Helpers ──────────────────────────────────────────────────────────────────
-
-fn now_iso() -> String {
-    OffsetDateTime::now_utc()
-        .format(&time::format_description::well_known::Rfc3339)
-        .unwrap_or_else(|_| "1970-01-01T00:00:00Z".to_owned())
-}
 
 // ── Public API ────────────────────────────────────────────────────────────────
 
@@ -69,7 +63,7 @@ pub async fn upsert(
     dismissed: bool,
     dismissed_at: Option<&str>,
 ) -> DbResult<String> {
-    let now = now_iso();
+    let now = Timestamp::now_iso();
     let dismissed_int = i64::from(dismissed);
 
     sqlx::query(

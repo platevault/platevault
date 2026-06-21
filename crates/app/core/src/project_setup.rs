@@ -38,6 +38,7 @@ use contracts_core::projects_v2::{
     ProjectUpdateResult,
 };
 use contracts_core::{error_code::ErrorCode, ContractError, ErrorSeverity};
+use domain_core::ids::{new_id, Timestamp};
 use domain_core::project::channels::{
     infer_channels, merge_channels, reinfer_channels as domain_reinfer, Channel,
 };
@@ -48,20 +49,10 @@ use persistence_db::repositories::plans as plans_repo;
 use persistence_db::repositories::projects as repo;
 use project_structure::{required_folders, ProcessingTool as StructureTool, MARKER_FILENAME};
 use sqlx::SqlitePool;
-use time::OffsetDateTime;
-use uuid::Uuid;
+
+use crate::errors::bus_err;
 
 // ── Helpers ───────────────────────────────────────────────────────────────────
-
-fn new_id() -> String {
-    Uuid::new_v4().to_string()
-}
-
-fn now_iso() -> String {
-    OffsetDateTime::now_utc()
-        .format(&time::format_description::well_known::Rfc3339)
-        .unwrap_or_else(|_| "1970-01-01T00:00:00Z".to_owned())
-}
 
 /// Map a static `&str` validation error code (returned by `domain_core::project::validate`)
 /// to the corresponding `ErrorCode` variant.
@@ -82,18 +73,8 @@ fn db_err(e: persistence_db::DbError) -> ContractError {
         persistence_db::DbError::NotFound(msg) => {
             ContractError::new(ErrorCode::ProjectNotFound, msg, ErrorSeverity::Blocking, false)
         }
-        other => ContractError::new(
-            ErrorCode::InternalDatabase,
-            format!("{other}"),
-            ErrorSeverity::Fatal,
-            true,
-        ),
+        other => crate::errors::db_err(other),
     }
-}
-
-#[allow(clippy::needless_pass_by_value)]
-fn bus_err(e: audit::bus::BusError) -> ContractError {
-    ContractError::new(ErrorCode::InternalAudit, format!("{e}"), ErrorSeverity::Fatal, true)
 }
 
 /// Convert a slice of DB channel rows to contract DTOs.
@@ -348,7 +329,7 @@ pub async fn create(
     }
 
     let project_id = new_id();
-    let now = now_iso();
+    let now = Timestamp::now_iso();
 
     // Validate the optional canonical target exists (cheap point lookup) so a
     // dangling id is rejected rather than silently stored. Spec-035 additive
@@ -650,7 +631,7 @@ pub async fn add_source(
     // TODO: when spec 003 lands, query `acquisition_sessions` WHERE id = req.inventory_session_id
     // and verify `state == "confirmed"`. Return `source.not_confirmed` otherwise.
 
-    let now = now_iso();
+    let now = Timestamp::now_iso();
     let src_id = new_id();
 
     let src_data = repo::InsertProjectSource {
@@ -861,7 +842,7 @@ pub async fn reinfer_channels(
     persist_channels(pool, &req.project_id, &channels).await.map_err(db_err)?;
     repo::set_channel_drift(pool, &req.project_id, false).await.map_err(db_err)?;
 
-    let now = now_iso();
+    let now = Timestamp::now_iso();
     let audit_id = new_id();
     bus.publish(
         "project.channels.recomputed",
@@ -910,7 +891,7 @@ pub async fn dismiss_drift(
 
     repo::set_channel_drift(pool, &req.project_id, false).await.map_err(db_err)?;
 
-    let now = now_iso();
+    let now = Timestamp::now_iso();
     let audit_id = new_id();
     bus.publish(
         "project.channel_drift.dismissed",

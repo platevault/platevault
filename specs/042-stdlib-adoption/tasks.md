@@ -106,16 +106,22 @@ Frontend: `cd apps/desktop && npx tsc --noEmit` + `npx vitest run <feature>`. Ru
 
 ## Phase 6 — US11 Rust duplication → shared homes (P2) — needs T010
 
-- [ ] T140 Replace ~28 `now_iso()` copies with the `domain_core` helper (add the
+- [X] T140 Replace ~28 `now_iso()` copies with the `domain_core` helper (add the
   `domain_core` dep to the ~13 crates that lack it — O2 completion).
-- [ ] T141 Replace ×5 `new_id()` with the `domain_core` helper.
-- [ ] T142 Create `crates/app/core/src/errors.rs`: canonical `db_err`/`bus_err`
+  (byte-identical Rfc3339; repo uses `path =` deps, no [workspace.dependencies] entry.)
+- [X] T141 Replace ×5 `new_id()` with the `domain_core` helper.
+- [X] T142 Create `crates/app/core/src/errors.rs`: canonical `db_err`/`bus_err`
   (`DbError::NotFound` → recoverable, fixing the divergence) + `From<DbError> for
   ContractError`; collapse the 123 `.map_err(db_err)?` sites.
-- [ ] T143 Create `crates/app/core/src/target_dto.rs`: shared `map_object_type`/`map_source`.
-- [ ] T144 Settings descriptor table (`app/core/src/settings/`) consumed by
-  validate/default/hydrate.
-- [ ] T145 Share `parse_basic_row` (`pub` in `targeting`, used by seed-builder).
+  (L2 fixed: blanket settings/protection mappers now map NotFound→recoverable Blocking,
+  non-retryable. `From<DbError> for ContractError` is orphan-rule-impossible in app_core —
+  both types foreign; deferred to after T254 inversion. Canonical `db_err` fn covers it.)
+- [X] T143 Create `crates/app/core/src/target_dto.rs`: shared `map_object_type`/`map_source`.
+- [X] T144 Settings descriptor table (`app/core/src/settings/descriptors.rs`) consumed by
+  validate/default/hydrate (settings.rs → settings/mod.rs).
+- [X] T145 Share `parse_basic_row` (`pub` in `targeting`, used by seed-builder).
+  (NOTE: seed-builder now inherits US10's RA/Dec range validation — drops out-of-range coord
+  rows it previously emitted; aligns with the cache DB CHECK invariant, intended by T145.)
 - [ ] **US11 checkpoint**: commit `feat(042): US11 consolidate duplicated helpers`.
 
 ## Phase 7 — US3 Virtualize long lists (P2)

@@ -33,6 +33,7 @@ use contracts_core::{
     error_code::ErrorCode, ContractError, ErrorSeverity, OperationEvent, OperationEventType,
     OperationHandle, OperationId, OperationName, OperationStatus,
 };
+use domain_core::ids::{new_id, Timestamp};
 use fs_executor::ops::cas_check::CasSnapshot;
 use fs_executor::run::{
     execute_plan, ApplyOutcome, CancellationToken, ExecutorCallbacks, ExecutorItem,
@@ -47,9 +48,8 @@ use sqlx::SqlitePool;
 use std::collections::HashMap;
 use std::sync::atomic::{AtomicU64, Ordering};
 use std::sync::Arc;
-use time::OffsetDateTime;
-use uuid::Uuid;
 
+use crate::errors::bus_err;
 use dashmap::DashMap;
 
 // ── Long-operation event sink (spec 042 US16, T240) ───────────────────────────
@@ -128,18 +128,7 @@ struct ActiveRun {
 
 // ── Helpers ───────────────────────────────────────────────────────────────────
 
-fn now_iso() -> String {
-    OffsetDateTime::now_utc()
-        .format(&time::format_description::well_known::Rfc3339)
-        .unwrap_or_else(|_| "1970-01-01T00:00:00Z".to_owned())
-}
-
-fn new_id() -> String {
-    Uuid::new_v4().to_string()
-}
-
-#[allow(clippy::needless_pass_by_value)]
-fn db_err(e: persistence_db::DbError) -> ContractError {
+fn db_err(e: DbError) -> ContractError {
     match e {
         DbError::NotFound(msg) => {
             ContractError::new(ErrorCode::PlanNotFound, msg, ErrorSeverity::Blocking, false)
@@ -147,18 +136,8 @@ fn db_err(e: persistence_db::DbError) -> ContractError {
         DbError::CasFailed(msg) => {
             ContractError::new(ErrorCode::PlanInvalidState, msg, ErrorSeverity::Blocking, false)
         }
-        other => ContractError::new(
-            ErrorCode::InternalDatabase,
-            format!("{other}"),
-            ErrorSeverity::Fatal,
-            true,
-        ),
+        other => crate::errors::db_err(other),
     }
-}
-
-#[allow(clippy::needless_pass_by_value)]
-fn bus_err(e: audit::bus::BusError) -> ContractError {
-    ContractError::new(ErrorCode::InternalAudit, format!("{e}"), ErrorSeverity::Fatal, true)
 }
 
 // ── Overlap check (R-Concur-1) ────────────────────────────────────────────────
@@ -543,7 +522,7 @@ pub async fn apply_plan(
     }
 
     // Emit started event (A7).
-    let started_at = now_iso();
+    let started_at = Timestamp::now_iso();
     bus.publish(
         TOPIC_PLAN_APPLYING_STARTED,
         Source::User,
@@ -619,7 +598,7 @@ pub async fn apply_plan(
         match outcome {
             ApplyOutcome::Completed(counts) => {
                 let terminal = counts.terminal_state(false).to_owned();
-                let at = now_iso();
+                let at = Timestamp::now_iso();
 
                 let _ = apply_repo::complete_run(
                     &pool_clone,
@@ -693,7 +672,7 @@ pub async fn apply_plan(
             }
 
             ApplyOutcome::Cancelled(counts) => {
-                let at = now_iso();
+                let at = Timestamp::now_iso();
 
                 // Batch-cancel remaining pending items (T021: emit per-item audit row for EACH).
                 match apply_repo::list_pending_items(&pool_clone, &plan_id_owned).await {
@@ -787,7 +766,7 @@ pub async fn apply_plan(
             }
 
             ApplyOutcome::Paused { reason, counts } => {
-                let at = now_iso();
+                let at = Timestamp::now_iso();
 
                 let _ = apply_repo::pause_run(
                     &pool_clone,
@@ -894,7 +873,7 @@ pub async fn cancel_plan(
         drop(registry);
     }
 
-    let cancelled_at = now_iso();
+    let cancelled_at = Timestamp::now_iso();
 
     Ok(PlanCancelResponse {
         plan_id: plan_id.to_owned(),
@@ -955,7 +934,7 @@ pub async fn resume_plan(
 
     apply_repo::resume_run(pool, plan_id, run_id).await.map_err(db_err)?;
 
-    let resumed_at = now_iso();
+    let resumed_at = Timestamp::now_iso();
 
     bus.publish(
         TOPIC_PLAN_APPLYING_RESUMED,

@@ -15,6 +15,7 @@
 //! Typeahead prefix/substring search over `target_alias.normalized` is NOT
 //! implemented here — that is T010 (US1).
 
+use domain_core::ids::Timestamp;
 use sqlx::{SqliteConnection, SqlitePool};
 use uuid::Uuid;
 
@@ -80,14 +81,6 @@ pub struct CachedTarget {
 }
 
 // ── Helpers ───────────────────────────────────────────────────────────────────
-
-/// Current UTC instant as an RFC-3339 string (matches the `persistence_db`
-/// repositories' `now_iso` convention).
-fn now_iso() -> String {
-    time::OffsetDateTime::now_utc()
-        .format(&time::format_description::well_known::Rfc3339)
-        .unwrap_or_else(|_| "1970-01-01T00:00:00Z".to_owned())
-}
 
 /// The deterministic id a brand-new row would get for `designation`.
 #[must_use]
@@ -491,7 +484,7 @@ pub async fn upsert_resolved_conn(
 ) -> CacheResult<(Uuid, UpsertOutcome)> {
     let derived = derived_id(&identity.primary_designation).to_string();
     let existing = find_existing(&mut *conn, identity, &derived).await?;
-    let resolved_at = now_iso();
+    let resolved_at = Timestamp::now_iso();
 
     match existing {
         Some(row) if !identity.source.may_overwrite(row.source) => {

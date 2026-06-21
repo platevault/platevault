@@ -23,64 +23,27 @@ use contracts_core::{error_code::ErrorCode, ContractError, ErrorSeverity};
 use persistence_db::repositories::settings as repo;
 use serde_json::Value;
 use sqlx::SqlitePool;
-use time::OffsetDateTime;
 
-// ── Constants ────────────────────────────────────────────────────────────
-
-/// Keys whose changes are persisted but audited as a snapshot rather than
-/// per-change (data-model.md §Noisy Keys).
-pub const NOISY_KEYS: &[&str] =
-    &["pattern", "protectedCategories", "plans.list.default_age_cutoff_days", "rememberFollowLogs"];
-
-/// Keys that can be overridden per data source root (data-model.md §Overridable Keys).
-pub const OVERRIDABLE_KEYS: &[&str] = &["followSymlinks", "hashOnScan", "defaultProtection"];
-
-/// All stable (non-structured-path) v1 key names.
-pub const ALL_V1_KEYS: &[&str] = &[
-    "pattern",
-    "autoApplyPattern",
-    "alwaysPreviewBeforePlan",
-    "followSymlinks",
-    "hashOnScan",
-    "darkMatchTolerance",
-    "flatMatching",
-    "suggestCalibration",
-    "rowDensity",
-    "logLevel",
-    "rememberFollowLogs",
-    "defaultProtection",
-    "blockPermanentDelete",
-    "protectedCategories",
-    "current_library_id",
-    "devMode",
-    "plans.list.default_age_cutoff_days",
-    "calibration.dark_temp_tolerance",
-    "calibration.prefill_suggestion",
-    "calibration.dark.override_penalty",
-    "calibration.flat.override_penalty",
-    "calibration.bias.override_penalty",
-    "calibration.aging_threshold_days",
-    "imagetyp_normalization.user_mappings",
-];
+// ── Settings descriptor table (US11 T144) ────────────────────────────────
+//
+// The stable key registry + per-key rules now live in one place:
+// `descriptors::DESCRIPTORS`. The key set, noisy/overridable membership, and
+// value validation are all derived from that single table.
+mod descriptors;
 
 // ── Error mapping ──────────────────────────────────────────────────────────
-
-#[allow(clippy::needless_pass_by_value)]
-fn db_err(e: persistence_db::DbError) -> ContractError {
-    ContractError::new(ErrorCode::InternalDatabase, format!("{e}"), ErrorSeverity::Fatal, true)
-}
-
-#[allow(clippy::needless_pass_by_value)]
-fn bus_err(e: audit::bus::BusError) -> ContractError {
-    ContractError::new(ErrorCode::InternalAudit, format!("{e}"), ErrorSeverity::Fatal, true)
-}
+//
+// Canonical mappers live in `crate::errors` (US11 T142). `db_err` now routes
+// `DbError::NotFound` to the recoverable `Blocking`/`retryable=false`
+// classification instead of the previous blanket `Fatal` (L2 divergence fix).
+use crate::errors::{bus_err, db_err};
 
 // ── Key validation ──────────────────────────────────────────────────────────
 
 /// Return `true` if `key` is a valid v1 settings key (stable or structured-path).
 #[must_use]
 pub fn is_valid_key(key: &str) -> bool {
-    if ALL_V1_KEYS.contains(&key) {
+    if descriptors::descriptor_for(key).is_some() {
         return true;
     }
     // Structured-path keys.
@@ -193,105 +156,16 @@ pub fn validate_value(key: &str, value: &Value) -> Result<(), ContractError> {
         )
     };
 
+    // Stable keys: validate via the single descriptor table (US11 T144). The
+    // rules and rendered messages are byte-identical to the prior hand-written
+    // per-key arms.
+    if let Some(descriptor) = descriptors::descriptor_for(key) {
+        return descriptors::check_rule(descriptor.validation, value, &invalid);
+    }
+
+    // Structured-path keys (tools.*, workflow_profile.*) — relax validation to
+    // basic presence. These are not in the descriptor table.
     match key {
-        "hashOnScan" => {
-            let s = value.as_str().ok_or_else(|| invalid("must be a string"))?;
-            if !["lazy", "eager", "off"].contains(&s) {
-                return Err(invalid("must be \"lazy\", \"eager\", or \"off\""));
-            }
-        }
-        "darkMatchTolerance" => {
-            let s = value.as_str().ok_or_else(|| invalid("must be a string"))?;
-            if !["strict", "loose", "any"].contains(&s) {
-                return Err(invalid("must be \"strict\", \"loose\", or \"any\""));
-            }
-        }
-        "flatMatching" => {
-            let s = value.as_str().ok_or_else(|| invalid("must be a string"))?;
-            if !["filter-rot", "filter", "manual"].contains(&s) {
-                return Err(invalid("must be \"filter-rot\", \"filter\", or \"manual\""));
-            }
-        }
-        "logLevel" => {
-            let s = value.as_str().ok_or_else(|| invalid("must be a string"))?;
-            if !["error", "warn", "info", "debug"].contains(&s) {
-                return Err(invalid("must be \"error\", \"warn\", \"info\", or \"debug\""));
-            }
-        }
-        "rowDensity" => {
-            let s = value.as_str().ok_or_else(|| invalid("must be a string"))?;
-            if !["dense", "comfortable"].contains(&s) {
-                return Err(invalid("must be \"dense\" or \"comfortable\""));
-            }
-        }
-        "defaultProtection" => {
-            let s = value.as_str().ok_or_else(|| invalid("must be a string"))?;
-            if !["protected", "normal", "unprotected"].contains(&s) {
-                return Err(invalid("must be \"protected\", \"normal\", or \"unprotected\""));
-            }
-        }
-        "calibration.dark_temp_tolerance" => {
-            let n = value.as_f64().ok_or_else(|| invalid("must be a number"))?;
-            if n < 0.0 {
-                return Err(invalid("must be >= 0"));
-            }
-        }
-        "calibration.aging_threshold_days" => {
-            let n = value.as_f64().ok_or_else(|| invalid("must be a number"))?;
-            if !(1.0..=3650.0).contains(&n) {
-                return Err(invalid("must be in [1, 3650]"));
-            }
-        }
-        k if k == "calibration.dark.override_penalty"
-            || k == "calibration.flat.override_penalty"
-            || k == "calibration.bias.override_penalty" =>
-        {
-            let n = value.as_f64().ok_or_else(|| invalid("must be a number [0,1]"))?;
-            if !(0.0..=1.0).contains(&n) {
-                return Err(invalid("must be in [0, 1]"));
-            }
-        }
-        "devMode" => {
-            // In release builds (without dev-tools feature), devMode is always false.
-            #[cfg(not(feature = "dev-tools"))]
-            return Err(ContractError::new(
-                ErrorCode::ValueInvalid,
-                "devMode cannot be set in release builds".to_owned(),
-                ErrorSeverity::Warning,
-                false,
-            ));
-        }
-        // Boolean keys — just ensure type.
-        "autoApplyPattern"
-        | "alwaysPreviewBeforePlan"
-        | "followSymlinks"
-        | "suggestCalibration"
-        | "rememberFollowLogs"
-        | "blockPermanentDelete"
-        | "calibration.prefill_suggestion" => {
-            if !value.is_boolean() {
-                return Err(invalid("must be a boolean"));
-            }
-        }
-        // String? keys.
-        "current_library_id" => {
-            if !value.is_null() && !value.is_string() {
-                return Err(invalid("must be a string or null"));
-            }
-        }
-        // Number keys.
-        "plans.list.default_age_cutoff_days" => {
-            if value.as_f64().is_none() {
-                return Err(invalid("must be a number"));
-            }
-        }
-        // Array keys — basic type check only.
-        "pattern" | "protectedCategories" | "imagetyp_normalization.user_mappings" => {
-            if !value.is_array() {
-                return Err(invalid("must be an array"));
-            }
-        }
-        // Structured-path keys — relax validation to basic presence.
         _ if is_tools_bundle_id_key(key) => {
             if !value.is_null() && !value.is_string() {
                 return Err(invalid("must be a string or null"));
@@ -341,12 +215,8 @@ pub fn settings_value_eq(a: &Value, b: &Value) -> bool {
 }
 
 // ── ISO timestamp helper ──────────────────────────────────────────────────
-
-fn now_iso() -> String {
-    OffsetDateTime::now_utc()
-        .format(&time::format_description::well_known::Rfc3339)
-        .unwrap_or_else(|_| "1970-01-01T00:00:00Z".to_owned())
-}
+// Canonical helper lives in `domain_core::ids::Timestamp` (US11 T140).
+use domain_core::ids::Timestamp;
 
 // ── get_settings ──────────────────────────────────────────────────────────
 
@@ -372,7 +242,7 @@ pub async fn get_settings(
             repo::delete_key(pool, &key).await.map_err(db_err)?;
 
             let default_value = default_value_for_key(&key);
-            let at = now_iso();
+            let at = Timestamp::now_iso();
             bus.publish(
                 TOPIC_SETTINGS_REPAIR,
                 Source::System,
@@ -635,11 +505,11 @@ pub async fn update_setting(
     repo::set_raw(pool, key, new_value).await.map_err(db_err)?;
 
     // 6. Emit audit event for non-noisy keys.
-    let is_noisy = NOISY_KEYS.contains(&key.as_str());
+    let is_noisy = descriptors::is_noisy(key.as_str());
     let audit_id = if is_noisy {
         None
     } else {
-        let at = now_iso();
+        let at = Timestamp::now_iso();
         let evt_id = uuid::Uuid::new_v4().to_string();
         bus.publish(
             TOPIC_SETTINGS_CHANGED,
@@ -686,7 +556,7 @@ pub async fn restore_defaults(
     req: &RestoreDefaultsRequest,
 ) -> Result<RestoreDefaultsResponse, ContractError> {
     let keys_to_restore: Vec<String> = if req.keys.is_empty() {
-        ALL_V1_KEYS.iter().map(|k| (*k).to_owned()).collect()
+        descriptors::all_keys().map(str::to_owned).collect()
     } else {
         // Validate all requested keys first.
         for key in &req.keys {
@@ -719,7 +589,7 @@ pub async fn restore_defaults(
         repo::set_raw(pool, key, &default_val).await.map_err(db_err)?;
 
         // Emit audit event (even for noisy keys — restore is an explicit action).
-        let at = now_iso();
+        let at = Timestamp::now_iso();
         bus.publish(
             TOPIC_SETTINGS_CHANGED,
             Source::User,
@@ -764,7 +634,7 @@ pub async fn set_source_override(
 ) -> Result<SetSourceOverrideResponse, ContractError> {
     let key = &req.key;
 
-    if !OVERRIDABLE_KEYS.contains(&key.as_str()) {
+    if !descriptors::is_overridable(key.as_str()) {
         return Err(ContractError::new(
             ErrorCode::KeyUnoverridable,
             format!("key {key} cannot be overridden per source"),
@@ -796,7 +666,7 @@ pub async fn resolve_setting(
 ) -> Result<Value, ContractError> {
     // 1. Per-source override (only for overridable keys).
     if let Some(sid) = source_id {
-        if OVERRIDABLE_KEYS.contains(&key) {
+        if descriptors::is_overridable(key) {
             if let Some(v) =
                 persistence_db::repositories::settings::get_source_override_raw(pool, sid, key)
                     .await
@@ -833,15 +703,15 @@ pub async fn emit_snapshot(
 ) -> Result<(), ContractError> {
     // Collect current values of noisy keys.
     let mut noisy_values = serde_json::Map::new();
-    for key in NOISY_KEYS {
+    for key in descriptors::noisy_keys() {
         let val = repo::get_raw(pool, key)
             .await
             .map_err(db_err)?
             .unwrap_or_else(|| default_value_for_key(key));
-        noisy_values.insert((*key).to_owned(), val);
+        noisy_values.insert(key.to_owned(), val);
     }
 
-    let at = now_iso();
+    let at = Timestamp::now_iso();
     bus.publish(
         TOPIC_SETTINGS_SNAPSHOT,
         Source::System,
@@ -866,6 +736,23 @@ mod tests {
     use persistence_db::Database;
     use proptest::prelude::*;
     use rstest::rstest;
+
+    /// US11 T144 guard: every key in the descriptor table is a valid key, has a
+    /// non-null in-code default (except the nullable `current_library_id`), and
+    /// is recognised by `is_valid_key`. Locks the descriptor registry against
+    /// drift from `default_value_for_key` / `SettingsState`.
+    #[test]
+    fn descriptor_keys_match_state_defaults() {
+        for key in descriptors::all_keys() {
+            assert!(is_valid_key(key), "descriptor key {key} not accepted by is_valid_key");
+            let default = default_value_for_key(key);
+            if key == "current_library_id" {
+                assert!(default.is_null(), "current_library_id default should be null");
+            } else {
+                assert!(!default.is_null(), "descriptor key {key} has no in-code default");
+            }
+        }
+    }
 
     async fn setup() -> (Database, EventBus) {
         let db = Database::in_memory().await.expect("in-memory DB");

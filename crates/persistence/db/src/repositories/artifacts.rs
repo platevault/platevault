@@ -13,18 +13,12 @@
 //!   (T022/T022b). `tool_launches.completed_at` is set here when the run completes
 //!   (T022c).
 
+use domain_core::ids::Timestamp;
 use sqlx::SqlitePool;
-use time::OffsetDateTime;
 
 use crate::DbResult;
 
 // ── Helpers ───────────────────────────────────────────────────────────────────
-
-fn now_iso() -> String {
-    OffsetDateTime::now_utc()
-        .format(&time::format_description::well_known::Rfc3339)
-        .unwrap_or_else(|_| "1970-01-01T00:00:00Z".to_owned())
-}
 
 // ── Row types ─────────────────────────────────────────────────────────────────
 
@@ -167,7 +161,7 @@ pub async fn list_artifacts_for_project(
 /// # Errors
 /// Returns [`crate::DbError::Database`] on query failure.
 pub async fn touch_artifact(pool: &SqlitePool, artifact_id: &str) -> DbResult<()> {
-    let now = now_iso();
+    let now = Timestamp::now_iso();
     sqlx::query("UPDATE processing_artifacts SET last_seen_at = ? WHERE id = ?")
         .bind(&now)
         .bind(artifact_id)
@@ -198,7 +192,7 @@ pub async fn mark_artifact_recovered(
     size_bytes: i64,
     content_hash: Option<&str>,
 ) -> DbResult<()> {
-    let now = now_iso();
+    let now = Timestamp::now_iso();
     sqlx::query(
         "\
         UPDATE processing_artifacts
@@ -283,7 +277,7 @@ pub async fn update_artifact_inplace(
     size_bytes: i64,
     content_hash: Option<&str>,
 ) -> DbResult<()> {
-    let now = now_iso();
+    let now = Timestamp::now_iso();
     sqlx::query(
         "\
         UPDATE processing_artifacts
@@ -321,7 +315,7 @@ pub async fn upsert_override(
     kind: &str,
     reason: Option<&str>,
 ) -> DbResult<()> {
-    let now = now_iso();
+    let now = Timestamp::now_iso();
     sqlx::query(
         "\
         INSERT INTO classification_overrides (artifact_id, kind, created_at, reason)

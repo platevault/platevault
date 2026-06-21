@@ -8,19 +8,13 @@
 //! `partially_applied`, `failed`, `cancelled`) are also written here; the
 //! review-side state transitions live in `plans.rs`.
 
+use domain_core::ids::Timestamp;
 use serde::{Deserialize, Serialize};
 use sqlx::SqlitePool;
-use time::OffsetDateTime;
 
 use crate::{DbError, DbResult};
 
 // ── Helpers ───────────────────────────────────────────────────────────────────
-
-fn now_iso() -> String {
-    OffsetDateTime::now_utc()
-        .format(&time::format_description::well_known::Rfc3339)
-        .unwrap_or_else(|_| "1970-01-01T00:00:00Z".to_owned())
-}
 
 // ── Row types ─────────────────────────────────────────────────────────────────
 
@@ -97,7 +91,7 @@ pub async fn cas_approved_to_applying(
     items_total: i64,
     items_pending: i64,
 ) -> DbResult<()> {
-    let now = now_iso();
+    let now = Timestamp::now_iso();
 
     // Use a transaction so the CAS + run row insertion are atomic.
     let mut tx = pool.begin().await?;
@@ -161,7 +155,7 @@ pub async fn complete_run(
     items_skipped: i64,
     items_cancelled: i64,
 ) -> DbResult<()> {
-    let now = now_iso();
+    let now = Timestamp::now_iso();
     let items_pending = 0i64;
 
     let mut tx = pool.begin().await?;

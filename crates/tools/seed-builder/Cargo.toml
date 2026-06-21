@@ -17,6 +17,7 @@ serde = { workspace = true }
 serde_json.workspace = true
 time = { workspace = true }
 targeting = { path = "../../targeting" }
+domain_core = { path = "../../domain/core" }
 
 [lints]
 workspace = true

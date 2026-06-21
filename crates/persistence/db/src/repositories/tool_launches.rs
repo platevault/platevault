@@ -4,18 +4,12 @@
 //! Constitution V: SQLite is the durable record; `completed_at` is reserved
 //! for spec 012 and is always `NULL` in v1 writes.
 
+use domain_core::ids::Timestamp;
 use sqlx::SqlitePool;
-use time::OffsetDateTime;
 
 use crate::DbResult;
 
 // ── Helpers ───────────────────────────────────────────────────────────────────
-
-fn now_iso() -> String {
-    OffsetDateTime::now_utc()
-        .format(&time::format_description::well_known::Rfc3339)
-        .unwrap_or_else(|_| "1970-01-01T00:00:00Z".to_owned())
-}
 
 // ── Row type ──────────────────────────────────────────────────────────────────
 
@@ -59,7 +53,7 @@ pub async fn insert_tool_launch(
     pool: &SqlitePool,
     data: &InsertToolLaunch<'_>,
 ) -> DbResult<String> {
-    let now = now_iso();
+    let now = Timestamp::now_iso();
     sqlx::query(
         "INSERT INTO tool_launches \
          (id, project_id, tool_id, launched_at, pid, working_dir, args_hash, outcome, audit_id) \

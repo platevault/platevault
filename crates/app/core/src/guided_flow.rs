@@ -46,9 +46,9 @@ use contracts_core::guided::{
     GuidedDismissResponse, GuidedFlowStateDto, GuidedRestartResponse, GuidedStateGetResponse,
     GuidedStepCompleteRequest, GuidedStepCompleteResponse,
 };
+use domain_core::ids::Timestamp;
 use persistence_db::repositories::guided_flow as repo;
 use sqlx::SqlitePool;
-use time::OffsetDateTime;
 
 // ── Step registry ─────────────────────────────────────────────────────────────
 
@@ -84,12 +84,6 @@ pub fn all_step_ids() -> Vec<&'static str> {
 /// Find the lowest uncompleted step id given a completed set.
 fn first_uncompleted(completed: &[String]) -> Option<&'static str> {
     STEP_REGISTRY.iter().find(|s| !completed.iter().any(|c| c == s.id)).map(|s| s.id)
-}
-
-fn now_iso() -> String {
-    OffsetDateTime::now_utc()
-        .format(&time::format_description::well_known::Rfc3339)
-        .unwrap_or_else(|_| "1970-01-01T00:00:00Z".to_owned())
 }
 
 fn state_dto(
@@ -163,7 +157,7 @@ pub async fn get_state(
     match repo::load(pool).await.map_err(db_err)? {
         None => {
             // No row yet — return synthetic Idle state.
-            let now = now_iso();
+            let now = Timestamp::now_iso();
             let dto = state_dto(None, vec![], false, None, now);
             Ok(GuidedStateGetResponse { state: dto })
         }
@@ -225,7 +219,7 @@ async fn emit_corruption_event(
             GuidedFlowStateCorrupted {
                 corrupt_raw: corrupt_raw.to_owned(),
                 parse_error: parse_error.to_owned(),
-                at: now_iso(),
+                at: Timestamp::now_iso(),
             },
         )
         .await;
@@ -260,7 +254,7 @@ pub async fn activate_after_setup(
 
     if already_active || dismissed || all_done {
         // Already in a non-idle state — return the current state unchanged.
-        let updated_at = row.as_ref().map_or_else(now_iso, |r| r.updated_at.clone());
+        let updated_at = row.as_ref().map_or_else(Timestamp::now_iso, |r| r.updated_at.clone());
         let current_step = row.as_ref().and_then(|r| r.current_step_id.clone());
         return Ok(state_dto(current_step, completed, dismissed, dismissed_at, updated_at));
     }
@@ -355,11 +349,11 @@ pub async fn dismiss(pool: &SqlitePool) -> Result<GuidedDismissResponse, GuidedF
     };
 
     if already_dismissed {
-        let dismissed_at = existing_dismissed_at.unwrap_or_else(now_iso);
+        let dismissed_at = existing_dismissed_at.unwrap_or_else(Timestamp::now_iso);
         return Ok(GuidedDismissResponse { dismissed_at });
     }
 
-    let dismissed_at = now_iso();
+    let dismissed_at = Timestamp::now_iso();
     repo::upsert(
         pool,
         None, // clear current step on dismiss
@@ -420,7 +414,7 @@ pub async fn restart(pool: &SqlitePool) -> Result<GuidedRestartResponse, GuidedF
     }
 
     // Already active — no-op.
-    let updated_at = row.as_ref().map_or_else(now_iso, |r| r.updated_at.clone());
+    let updated_at = row.as_ref().map_or_else(Timestamp::now_iso, |r| r.updated_at.clone());
     let current_step = row.as_ref().and_then(|r| r.current_step_id.clone());
     let dto = state_dto(current_step, completed, false, None, updated_at);
     Ok(GuidedRestartResponse { state: dto })

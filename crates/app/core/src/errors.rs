@@ -122,14 +122,31 @@ impl From<crate::log_stream::LogError> for ContractError {
     }
 }
 
-/// Convert a generic `DbError` to a `ContractError`.
+/// Canonical generic `DbError` → `ContractError` mapper (US11 T142).
+///
+/// This is the single home every `.map_err(db_err)?` site that does **not**
+/// need a domain-specific not-found code now collapses onto.
 ///
 /// - `NotFound` → `internal.database`, `Blocking`, `retryable=false`
+///   (recoverable: the caller referenced a missing entity and can recover by
+///   referencing an existing one — it is **not** a fatal infrastructure fault).
 /// - all others → `internal.database`, `Fatal`, `retryable=true`
 ///
-/// Use this function (or a domain-specific mapping) instead of ad-hoc closures.
+/// ## L2 divergence fix (US11 T142)
+///
+/// Previously `settings.rs` and `protection.rs` had blanket `db_err` closures
+/// that mapped **every** `DbError`, including `NotFound`, to
+/// `Fatal`/`retryable=true`. That mislabeled a recoverable missing-row outcome
+/// as a fatal database fault. Routing those sites through this canonical mapper
+/// restores the recoverable `Blocking`/`retryable=false` classification for
+/// `NotFound`. The wire `code` string is unchanged (`"internal.database"`);
+/// only `severity`/`retryable` are corrected.
+///
+/// Modules that need a **domain-specific** not-found code (e.g. `plan.not_found`,
+/// `project.not_found`, `view.not_found`) keep their own explicit `NotFound`
+/// arm and delegate only the remaining variants here.
 #[must_use]
-pub fn db_to_contract(e: persistence_db::DbError) -> ContractError {
+pub fn db_err(e: persistence_db::DbError) -> ContractError {
     match e {
         persistence_db::DbError::NotFound(msg) => {
             ContractError::new(ErrorCode::InternalDatabase, msg, ErrorSeverity::Blocking, false)
@@ -142,3 +159,29 @@ pub fn db_to_contract(e: persistence_db::DbError) -> ContractError {
         ),
     }
 }
+
+/// Back-compat alias for the US8 name. Delegates to the canonical [`db_err`].
+#[must_use]
+pub fn db_to_contract(e: persistence_db::DbError) -> ContractError {
+    db_err(e)
+}
+
+/// Canonical `BusError` → `ContractError` mapper (US11 T142).
+///
+/// Every per-module `bus_err` closure was byte-identical
+/// (`internal.audit`, `Fatal`, `retryable=true`); this is the single home.
+/// Takes the error by value to match the `.map_err(bus_err)` call sites (the
+/// per-module copies all carried the same `needless_pass_by_value` allow).
+#[must_use]
+#[allow(clippy::needless_pass_by_value)]
+pub fn bus_err(e: audit::bus::BusError) -> ContractError {
+    ContractError::new(ErrorCode::InternalAudit, format!("{e}"), ErrorSeverity::Fatal, true)
+}
+
+// NOTE (US11 T142): a `From<persistence_db::DbError> for ContractError` impl is
+// **not** possible in `app_core` — both `DbError` and `ContractError` are
+// foreign types here, so the orphan rule (E0117) forbids the impl. It could
+// only live in `contracts_core`, but `contracts_core` must not depend on
+// `persistence_db` (that dependency inversion is tracked separately as T254).
+// The canonical [`db_err`] free function provides the same mapping for every
+// `.map_err(db_err)?` site, which is the achievable form of this task.

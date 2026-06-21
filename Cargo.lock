@@ -1371,6 +1371,7 @@ name = "fs_executor"
 version = "0.1.0"
 dependencies = [
  "camino",
+ "domain_core",
  "fs_planner",
  "path-clean",
  "serde",
@@ -3924,6 +3925,7 @@ dependencies = [
 name = "seed-builder"
 version = "0.1.0"
 dependencies = [
+ "domain_core",
  "reqwest",
  "serde",
  "serde_json",
@@ -4741,6 +4743,7 @@ version = "0.1.0"
 dependencies = [
  "async-trait",
  "csv",
+ "domain_core",
  "percent-encoding",
  "persistence_db",
  "reqwest",

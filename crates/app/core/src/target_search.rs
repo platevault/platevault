@@ -15,12 +15,11 @@
 use sqlx::SqlitePool;
 
 use contracts_core::targets::{
-    TargetCatalogId, TargetObjectType, TargetSearchRequest, TargetSearchResponse, TargetSource,
-    TargetSuggestion,
+    TargetCatalogId, TargetSearchRequest, TargetSearchResponse, TargetSuggestion,
 };
 use contracts_core::{error_code::ErrorCode, ContractError, ErrorSeverity};
 use targeting::resolver::cache::{search_by_normalized, CachedTarget, SearchHit};
-use targeting::resolver::{AliasKind, ObjectType, TargetSource as CacheSource};
+use targeting::resolver::AliasKind;
 
 // ── Error mapping ───────────────────────────────────────────────────────────
 
@@ -29,31 +28,9 @@ fn db_err(e: &targeting::resolver::cache::CacheError) -> ContractError {
 }
 
 // ── Enum mapping (cache → contract DTO) ─────────────────────────────────────
-
-fn map_object_type(o: ObjectType) -> TargetObjectType {
-    match o {
-        ObjectType::Galaxy => TargetObjectType::Galaxy,
-        ObjectType::PlanetaryNebula => TargetObjectType::PlanetaryNebula,
-        ObjectType::EmissionNebula => TargetObjectType::EmissionNebula,
-        ObjectType::ReflectionNebula => TargetObjectType::ReflectionNebula,
-        ObjectType::DarkNebula => TargetObjectType::DarkNebula,
-        ObjectType::OpenCluster => TargetObjectType::OpenCluster,
-        ObjectType::GlobularCluster => TargetObjectType::GlobularCluster,
-        ObjectType::SupernovaRemnant => TargetObjectType::SupernovaRemnant,
-        ObjectType::GalaxyCluster => TargetObjectType::GalaxyCluster,
-        ObjectType::DoubleStar => TargetObjectType::DoubleStar,
-        ObjectType::Asterism => TargetObjectType::Asterism,
-        ObjectType::Other => TargetObjectType::Other,
-    }
-}
-
-fn map_source(s: CacheSource) -> TargetSource {
-    match s {
-        CacheSource::Seed => TargetSource::Seed,
-        CacheSource::Resolved => TargetSource::Resolved,
-        CacheSource::UserOverride => TargetSource::UserOverride,
-    }
-}
+//
+// Shared mappers live in `crate::target_dto` (US11 T143).
+use crate::target_dto::{map_object_type, map_source};
 
 /// Find the common name (a `common_name` alias) for a cached target, if any.
 fn common_name(target: &CachedTarget) -> Option<String> {
@@ -176,9 +153,12 @@ pub async fn search(
 #[cfg(test)]
 mod tests {
     use super::*;
+    use contracts_core::targets::{TargetObjectType, TargetSource};
     use persistence_db::Database;
     use targeting::resolver::cache::upsert_resolved;
-    use targeting::resolver::{AliasKind, ResolvedAlias, ResolvedIdentity};
+    use targeting::resolver::{
+        AliasKind, ObjectType, ResolvedAlias, ResolvedIdentity, TargetSource as CacheSource,
+    };
 
     async fn setup() -> Database {
         let db = Database::in_memory().await.expect("in-memory DB");

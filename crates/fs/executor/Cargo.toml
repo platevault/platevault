@@ -9,6 +9,7 @@ path = "src/lib.rs"
 
 [dependencies]
 fs_planner = { path = "../planner" }
+domain_core = { path = "../../domain/core" }
 camino = { workspace = true }
 serde.workspace = true
 serde_json.workspace = true

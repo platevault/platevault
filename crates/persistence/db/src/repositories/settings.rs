@@ -4,19 +4,13 @@
 //! Each settings key is stored as one row with a JSON-encoded value.
 
 use contracts_core::settings::{SettingsState, SourceOverride};
+use domain_core::ids::Timestamp;
 use serde_json::Value;
 use sqlx::SqlitePool;
-use time::OffsetDateTime;
 
 use crate::{DbError, DbResult};
 
 // ── Helpers ──────────────────────────────────────────────────────────────
-
-fn now_iso() -> String {
-    OffsetDateTime::now_utc()
-        .format(&time::format_description::well_known::Rfc3339)
-        .unwrap_or_else(|_| "1970-01-01T00:00:00Z".to_owned())
-}
 
 // ── Low-level key/value operations ────────────────────────────────────────
 
@@ -48,7 +42,7 @@ pub async fn get_raw(pool: &SqlitePool, key: &str) -> DbResult<Option<Value>> {
 /// Returns [`DbError::Serialise`] if the value cannot be serialised.
 pub async fn set_raw(pool: &SqlitePool, key: &str, value: &Value) -> DbResult<()> {
     let json = serde_json::to_string(value)?;
-    let now = now_iso();
+    let now = Timestamp::now_iso();
 
     sqlx::query(
         "INSERT INTO settings (key, value, updated_at) VALUES (?, ?, ?)
@@ -226,7 +220,7 @@ pub async fn set_source_override(
     value: &Value,
 ) -> DbResult<()> {
     let json = serde_json::to_string(value)?;
-    let now = now_iso();
+    let now = Timestamp::now_iso();
 
     sqlx::query(
         "INSERT INTO source_overrides (source_id, key, value, updated_at) VALUES (?, ?, ?, ?)

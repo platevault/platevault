@@ -8,18 +8,12 @@
 //! Constitution V: SQLite row is the durable record; on-disk markdown file is
 //! the projection written by the notes adapter.
 
+use domain_core::ids::Timestamp;
 use sqlx::SqlitePool;
-use time::OffsetDateTime;
 
 use crate::DbResult;
 
 // ── Helpers ───────────────────────────────────────────────────────────────────
-
-fn now_iso() -> String {
-    OffsetDateTime::now_utc()
-        .format(&time::format_description::well_known::Rfc3339)
-        .unwrap_or_else(|_| "1970-01-01T00:00:00Z".to_owned())
-}
 
 // ── Row types ─────────────────────────────────────────────────────────────────
 
@@ -47,7 +41,7 @@ pub async fn upsert_note(
     project_id: &str,
     content: &str,
 ) -> DbResult<String> {
-    let updated_at = now_iso();
+    let updated_at = Timestamp::now_iso();
     sqlx::query(
         "\
         INSERT INTO project_notes (id, project_id, updated_at, content)

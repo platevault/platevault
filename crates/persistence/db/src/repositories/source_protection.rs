@@ -4,9 +4,9 @@
 //! optional per-source `block_permanent_delete` and category overrides.
 //! Absence of a row means the source inherits global defaults.
 
+use domain_core::ids::Timestamp;
 use serde_json::Value;
 use sqlx::SqlitePool;
-use time::OffsetDateTime;
 
 use crate::{DbError, DbResult};
 
@@ -46,12 +46,6 @@ const DEFAULT_CATEGORIES: &[&str] = &["lights", "masters", "finals"];
 
 // ── Helpers ───────────────────────────────────────────────────────────────
 
-fn now_iso() -> String {
-    OffsetDateTime::now_utc()
-        .format(&time::format_description::well_known::Rfc3339)
-        .unwrap_or_else(|_| "1970-01-01T00:00:00Z".to_owned())
-}
-
 fn parse_categories(json: Option<&str>) -> DbResult<Vec<String>> {
     match json {
         None => Ok(vec![]),
@@ -88,7 +82,7 @@ pub async fn upsert_source_protection(
     categories: Option<&[String]>,
     updated_by: &str,
 ) -> DbResult<()> {
-    let now = now_iso();
+    let now = Timestamp::now_iso();
     let bpd: Option<i64> = block_permanent_delete.map(i64::from);
     let cats_json: Option<String> = match categories {
         None => None,
@@ -258,7 +252,7 @@ pub async fn set_protection_default(
     value: &serde_json::Value,
 ) -> DbResult<()> {
     let json = serde_json::to_string(value).map_err(DbError::Serialise)?;
-    let now = now_iso();
+    let now = Timestamp::now_iso();
 
     sqlx::query(
         "INSERT INTO protection_defaults (scope, key, value, updated_at) VALUES (?, ?, ?, ?)

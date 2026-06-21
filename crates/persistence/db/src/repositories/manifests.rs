@@ -5,18 +5,12 @@
 //! Constitution V: SQLite is the durable record; manifest markdown files are
 //! reproducible projections written to disk by the manifest writer.
 
+use domain_core::ids::Timestamp;
 use sqlx::SqlitePool;
-use time::OffsetDateTime;
 
 use crate::{DbError, DbResult};
 
 // ── Helpers ───────────────────────────────────────────────────────────────────
-
-fn now_iso() -> String {
-    OffsetDateTime::now_utc()
-        .format(&time::format_description::well_known::Rfc3339)
-        .unwrap_or_else(|_| "1970-01-01T00:00:00Z".to_owned())
-}
 
 // ── Row types ─────────────────────────────────────────────────────────────────
 
@@ -50,7 +44,7 @@ pub struct InsertManifest<'a> {
 /// # Errors
 /// Returns [`DbError::Database`] on query failure.
 pub async fn insert_manifest(pool: &SqlitePool, data: InsertManifest<'_>) -> DbResult<String> {
-    let ts = now_iso();
+    let ts = Timestamp::now_iso();
     sqlx::query(
         "\
         INSERT INTO manifests (id, project_id, reason, timestamp, path, version, body_json)

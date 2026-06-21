@@ -27,32 +27,23 @@ use contracts_core::prepared_views::{
     PreparedViewRemoveResponse, PreparedViewSummary,
 };
 use contracts_core::{error_code::ErrorCode, ContractError, ErrorSeverity};
+use domain_core::ids::new_id;
 use domain_core::lifecycle::prepared_source::ALLOWED_PROJECT_STATES_FOR_VIEW_OPS;
 use persistence_db::repositories::{
     plans as plans_repo, prepared_source_views as views_repo, projects as projects_repo,
 };
 use sqlx::SqlitePool;
-use uuid::Uuid;
 
 use crate::errors::db_internal_ctx;
 
 // ── Helpers ───────────────────────────────────────────────────────────────────
-
-fn new_id() -> String {
-    Uuid::new_v4().to_string()
-}
 
 fn db_err(e: persistence_db::DbError) -> ContractError {
     match e {
         persistence_db::DbError::NotFound(msg) => {
             ContractError::new(ErrorCode::ViewNotFound, msg, ErrorSeverity::Blocking, false)
         }
-        other => ContractError::new(
-            ErrorCode::InternalDatabase,
-            format!("{other}"),
-            ErrorSeverity::Fatal,
-            true,
-        ),
+        other => crate::errors::db_err(other),
     }
 }
 

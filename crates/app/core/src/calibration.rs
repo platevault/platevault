@@ -45,6 +45,7 @@ use contracts_core::calibration_match::{
     CalibrationMatchSuggestRequest, CalibrationMatchSuggestResponse, SuggestErrorDto,
     SuggestStatus, ASSIGN_CONTRACT_VERSION, BATCH_CONTRACT_VERSION, SUGGEST_CONTRACT_VERSION,
 };
+use domain_core::ids::Timestamp;
 use persistence_db::repositories::calibration_assignment::{self as assign_repo, UpsertParams};
 use sqlx::SqlitePool;
 use time::format_description::well_known::Rfc3339;
@@ -319,7 +320,7 @@ pub async fn assign(
                 .ok_or_else(|| "dark_flat type cannot be assigned in v1".to_owned())?;
 
             let assignment_id = Uuid::new_v4().to_string();
-            let assigned_at = now_iso();
+            let assigned_at = Timestamp::now_iso();
             let mismatch_names = dimension_names(&decision.mismatched_dimensions);
 
             assign_repo::upsert(
@@ -435,12 +436,6 @@ fn error_assign_response(
             details: dimensions.map(|d| AssignErrorDetails { dimensions: d }),
         }),
     }
-}
-
-// ── Helpers ───────────────────────────────────────────────────────────────────
-
-fn now_iso() -> String {
-    OffsetDateTime::now_utc().format(&Rfc3339).unwrap_or_else(|_| "1970-01-01T00:00:00Z".to_owned())
 }
 
 // ── DB loading helpers ────────────────────────────────────────────────────────

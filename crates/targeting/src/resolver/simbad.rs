@@ -336,7 +336,11 @@ fn classify_reqwest(e: &reqwest::Error, timeout: Duration) -> ResolveError {
 /// by the reader (equivalent to the prior per-field [`unquote`]), while numeric
 /// columns pass through untouched. The RA/Dec finiteness + range validation is
 /// preserved exactly (FIX-5c).
-fn parse_basic_row(line: &str) -> Option<(i64, String, f64, f64, String)> {
+///
+/// Made `pub` in US11 T145 so the seed-builder (`crates/tools/seed-builder`)
+/// consumes this single tokenizer instead of maintaining its own copy.
+#[must_use]
+pub fn parse_basic_row(line: &str) -> Option<(i64, String, f64, f64, String)> {
     let mut reader = csv::ReaderBuilder::new()
         .delimiter(b'\t')
         .has_headers(false)

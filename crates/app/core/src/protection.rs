@@ -22,30 +22,14 @@ use persistence_db::repositories::plans as plans_repo;
 use persistence_db::repositories::settings as settings_repo;
 use persistence_db::repositories::source_protection as prot_repo;
 use sqlx::SqlitePool;
-use time::OffsetDateTime;
-use uuid::Uuid;
 
 // ── Error helpers ─────────────────────────────────────────────────────────
-
-#[allow(clippy::needless_pass_by_value)]
-fn db_err(e: persistence_db::DbError) -> ContractError {
-    ContractError::new(ErrorCode::InternalDatabase, format!("{e}"), ErrorSeverity::Fatal, true)
-}
-
-#[allow(clippy::needless_pass_by_value)]
-fn bus_err(e: audit::bus::BusError) -> ContractError {
-    ContractError::new(ErrorCode::InternalAudit, format!("{e}"), ErrorSeverity::Fatal, true)
-}
-
-fn now_iso() -> String {
-    OffsetDateTime::now_utc()
-        .format(&time::format_description::well_known::Rfc3339)
-        .unwrap_or_else(|_| "1970-01-01T00:00:00Z".to_owned())
-}
-
-fn new_id() -> String {
-    Uuid::new_v4().to_string()
-}
+//
+// Canonical mappers live in `crate::errors` (US11 T142). `db_err` routes
+// `DbError::NotFound` to the recoverable `Blocking`/`retryable=false`
+// classification instead of the previous blanket `Fatal` (L2 divergence fix).
+use crate::errors::{bus_err, db_err};
+use domain_core::ids::{new_id, Timestamp};
 
 // ── Global settings helpers ───────────────────────────────────────────────
 
@@ -200,7 +184,7 @@ pub async fn set_source_protection(
     .map_err(db_err)?;
 
     // Emit audit event (T016).
-    let at = now_iso();
+    let at = Timestamp::now_iso();
     let audit_id = new_id();
     bus.publish(
         TOPIC_PROTECTION_SOURCE_SET,
@@ -373,7 +357,7 @@ pub async fn acknowledge_protected_item(
     resolved_level: &str,
     reason: &str,
 ) -> Result<String, ContractError> {
-    let at = now_iso();
+    let at = Timestamp::now_iso();
     let audit_id = new_id();
     bus.publish(
         TOPIC_PROTECTION_PLAN_ACKNOWLEDGED,
@@ -419,7 +403,7 @@ pub async fn set_global_protection_default(
     prot_repo::set_protection_default(pool, scope, key, &value).await.map_err(db_err)?;
 
     // Emit audit event.
-    let changed_at = now_iso();
+    let changed_at = Timestamp::now_iso();
     bus.publish(
         TOPIC_PROTECTION_DEFAULT_CHANGED,
         Source::User,

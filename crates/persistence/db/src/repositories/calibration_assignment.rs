@@ -7,9 +7,8 @@
 //! Uses dynamic SQL (not `sqlx::query!` compile-time macros) consistent with
 //! other repositories in this crate that do not require a sqlx offline cache.
 
+use domain_core::ids::Timestamp;
 use sqlx::SqlitePool;
-use time::format_description::well_known::Rfc3339;
-use time::OffsetDateTime;
 
 use crate::{DbError, DbResult};
 
@@ -43,10 +42,6 @@ pub struct UpsertParams<'a> {
 }
 
 // ── Helpers ───────────────────────────────────────────────────────────────────
-
-fn now_iso() -> String {
-    OffsetDateTime::now_utc().format(&Rfc3339).unwrap_or_else(|_| "1970-01-01T00:00:00Z".to_owned())
-}
 
 fn row_to_struct(
     (
@@ -84,7 +79,7 @@ fn row_to_struct(
 pub async fn upsert(pool: &SqlitePool, params: UpsertParams<'_>) -> DbResult<()> {
     let mismatch_json =
         serde_json::to_string(params.mismatched_dimensions).map_err(DbError::Serialise)?;
-    let at = params.assigned_at.map_or_else(now_iso, str::to_owned);
+    let at = params.assigned_at.map_or_else(Timestamp::now_iso, str::to_owned);
     let override_int = i64::from(params.was_override);
 
     sqlx::query(
