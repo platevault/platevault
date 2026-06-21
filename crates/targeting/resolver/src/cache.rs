@@ -19,8 +19,8 @@ use domain_core::ids::Timestamp;
 use sqlx::{SqliteConnection, SqlitePool};
 use uuid::Uuid;
 
-use crate::identity::target_id_from_designation;
-use crate::resolver::{AliasKind, ObjectType, ResolvedAlias, ResolvedIdentity, TargetSource};
+use crate::{AliasKind, ObjectType, ResolvedAlias, ResolvedIdentity, TargetSource};
+use targeting::identity::target_id_from_designation;
 
 // ── Error ───────────────────────────────────────────────────────────────────────
 
@@ -191,7 +191,7 @@ pub async fn get_by_simbad_oid(
 
 /// Read a cached target by a normalized alias (the typeahead match surface).
 ///
-/// `normalized` must already be normalized via [`crate::normalize::normalize`].
+/// `normalized` must already be normalized via [`targeting::normalize::normalize`].
 /// This is an exact-alias lookup, NOT a prefix/substring search (that is T010).
 ///
 /// # Errors
@@ -252,7 +252,7 @@ impl Best {
 /// Typeahead search over `target_alias.normalized` (the indexed column),
 /// returning distinct canonical targets ranked best-first.
 ///
-/// The incoming `query` is normalized via [`crate::normalize::normalize`] so it
+/// The incoming `query` is normalized via [`targeting::normalize::normalize`] so it
 /// matches the stored `normalized` values. Matching is:
 /// - exact normalized (`normalized = q`) → rank 0,
 /// - prefix (`normalized LIKE 'q%'`) → rank 1,
@@ -274,7 +274,7 @@ pub async fn search_by_normalized(
     query: &str,
     limit: usize,
 ) -> CacheResult<Vec<SearchHit>> {
-    let q = crate::normalize::normalize(query);
+    let q = targeting::normalize::normalize(query);
     if q.is_empty() || limit == 0 {
         return Ok(Vec::new());
     }
@@ -586,7 +586,7 @@ pub async fn list_all(pool: &SqlitePool) -> CacheResult<Vec<TargetListRow>> {
 /// Insert a user-added alias for `target_id`.
 ///
 /// The alias is stored with `kind = 'user'`. The `normalized` form is computed
-/// here via [`crate::normalize::normalize`]. Rejects a duplicate via the
+/// here via [`targeting::normalize::normalize`]. Rejects a duplicate via the
 /// `UNIQUE(target_id, normalized)` constraint — returns `false` when the alias
 /// already exists (idempotent), `true` when newly inserted.
 ///
@@ -599,7 +599,7 @@ pub async fn insert_user_alias(
     target_id: Uuid,
     alias: &str,
 ) -> CacheResult<Option<(String, String)>> {
-    let normalized = crate::normalize::normalize(alias);
+    let normalized = targeting::normalize::normalize(alias);
     if normalized.is_empty() {
         return Ok(None);
     }
@@ -731,11 +731,11 @@ mod tests {
         let db = setup().await;
         upsert_resolved(db.pool(), &m31(TargetSource::Resolved)).await.unwrap();
 
-        let norm = crate::normalize::normalize("NGC 224");
+        let norm = targeting::normalize::normalize("NGC 224");
         let got = get_by_normalized(db.pool(), &norm).await.unwrap().unwrap();
         assert_eq!(got.primary_designation, "M 31");
 
-        let common = crate::normalize::normalize("Andromeda Galaxy");
+        let common = targeting::normalize::normalize("Andromeda Galaxy");
         let got2 = get_by_normalized(db.pool(), &common).await.unwrap().unwrap();
         assert_eq!(got2.id, got.id);
     }

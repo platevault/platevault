@@ -16,7 +16,9 @@ reqwest = { workspace = true, features = ["blocking"] }
 serde = { workspace = true }
 serde_json.workspace = true
 time = { workspace = true }
-targeting = { path = "../../targeting" }
+# spec 042 (T250): the resolver/seed/caldwell/simbad surface this tool consumes
+# moved from `targeting` into the `targeting_resolver` crate.
+targeting_resolver = { path = "../../targeting/resolver" }
 domain_core = { path = "../../domain/core" }
 
 [lints]

@@ -39,7 +39,7 @@ use std::time::Duration;
 
 use async_trait::async_trait;
 
-use crate::resolver::{
+use crate::{
     map_otype, AliasKind, ResolveError, ResolvedAlias, ResolvedIdentity, Resolver, TargetSource,
 };
 
@@ -244,7 +244,7 @@ impl Resolver for SimbadResolver {
         // resolve THAT, and attach the original `C n` as an alias. C99 (the
         // Coalsack) maps to None → NotFound (no single resolvable designation).
         let (simbad_query, caldwell_alias) = match parse_caldwell_number(query) {
-            Some(n) => match crate::resolver::caldwell::caldwell_to_designation(n) {
+            Some(n) => match crate::caldwell::caldwell_to_designation(n) {
                 Some(desig) => (desig.to_owned(), Some(format!("C {n}"))),
                 None => return Err(ResolveError::NotFound(query.to_owned())),
             },
@@ -303,7 +303,7 @@ impl Resolver for OfflineResolver {
 /// `normalize` expands `C14`→`c 14`, `Caldwell14`→`caldwell 14`). Returns the
 /// Caldwell number when the query is a bare Caldwell designation, else `None`.
 fn parse_caldwell_number(query: &str) -> Option<u16> {
-    let norm = crate::normalize::normalize(query);
+    let norm = targeting::normalize::normalize(query);
     let mut parts = norm.split_whitespace();
     let prefix = parts.next()?;
     if prefix != "c" && prefix != "caldwell" {
@@ -489,8 +489,8 @@ mod tests {
     fn caldwell_translates_to_resolvable_designation() {
         // C 14 → the Double Cluster (NGC 869) per the committed map.
         let n = parse_caldwell_number("C 14").unwrap();
-        assert!(crate::resolver::caldwell::caldwell_to_designation(n).is_some());
+        assert!(crate::caldwell::caldwell_to_designation(n).is_some());
         // C 99 (Coalsack) has no single resolvable designation → None.
-        assert_eq!(crate::resolver::caldwell::caldwell_to_designation(99), None);
+        assert_eq!(crate::caldwell::caldwell_to_designation(99), None);
     }
 }

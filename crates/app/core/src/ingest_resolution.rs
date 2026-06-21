@@ -4,7 +4,7 @@
 //! During ingest, each image that carries a FITS `OBJECT` header value must be
 //! associated with a canonical target. Per FR-013 this MUST NOT block ingest:
 //!
-//! - A cache/seed hit ([`targeting::resolver::cache::get_by_normalized`])
+//! - A cache/seed hit ([`targeting_resolver::cache::get_by_normalized`])
 //!   associates the image inline (`state = resolved`).
 //! - A miss enqueues a `pending` row ([`enqueue`]); a background drain
 //!   ([`resolve_pending`]) later runs the cache-first → SIMBAD resolve flow and
@@ -36,8 +36,8 @@ use uuid::Uuid;
 
 use contracts_core::{error_code::ErrorCode, ContractError, ErrorSeverity};
 use targeting::normalize::normalize;
-use targeting::resolver::cache::{self, CachedTarget};
-use targeting::resolver::{ResolveError, Resolver};
+use targeting_resolver::cache::{self, CachedTarget};
+use targeting_resolver::{ResolveError, Resolver};
 
 // ── Error ─────────────────────────────────────────────────────────────────────
 
@@ -396,8 +396,8 @@ async fn emit_resolved(bus: &EventBus, target: &CachedTarget, query: Option<&str
 mod tests {
     use super::*;
     use persistence_db::Database;
-    use targeting::resolver::cache::upsert_resolved;
-    use targeting::resolver::{
+    use targeting_resolver::cache::upsert_resolved;
+    use targeting_resolver::{
         AliasKind, FakeResolver, ObjectType, ResolvedAlias, ResolvedIdentity, TargetSource as Src,
     };
 

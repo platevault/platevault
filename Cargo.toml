@@ -20,6 +20,7 @@ members = [
   "crates/project/structure",
   "crates/sessions",
   "crates/targeting",
+  "crates/targeting/resolver",
   "crates/tools/seed-builder",
   "crates/workflow/artifacts",
   "crates/workflow/profiles",

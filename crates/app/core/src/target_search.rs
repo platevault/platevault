@@ -1,7 +1,7 @@
 //! `target.search` use case for spec 035 (US1 — project-creation target search).
 //!
 //! As-you-type target search served PURELY from the local seed + cache index
-//! (`targeting::resolver::cache::search_by_normalized`). There is NO network in
+//! (`targeting_resolver::cache::search_by_normalized`). There is NO network in
 //! this path (FR-005): long-tail / SIMBAD enrichment is a separate
 //! `target.resolve` call. Results are ranked best-first (exact → prefix →
 //! substring) and de-duplicated to one canonical target per hit.
@@ -18,12 +18,12 @@ use contracts_core::targets::{
     TargetCatalogId, TargetSearchRequest, TargetSearchResponse, TargetSuggestion,
 };
 use contracts_core::{error_code::ErrorCode, ContractError, ErrorSeverity};
-use targeting::resolver::cache::{search_by_normalized, CachedTarget, SearchHit};
-use targeting::resolver::AliasKind;
+use targeting_resolver::cache::{search_by_normalized, CachedTarget, SearchHit};
+use targeting_resolver::AliasKind;
 
 // ── Error mapping ───────────────────────────────────────────────────────────
 
-fn db_err(e: &targeting::resolver::cache::CacheError) -> ContractError {
+fn db_err(e: &targeting_resolver::cache::CacheError) -> ContractError {
     ContractError::new(ErrorCode::InternalDatabase, format!("{e}"), ErrorSeverity::Fatal, true)
 }
 
@@ -37,7 +37,7 @@ fn common_name(target: &CachedTarget) -> Option<String> {
     target
         .aliases
         .iter()
-        .find(|a| matches!(a.kind, targeting::resolver::AliasKind::CommonName))
+        .find(|a| matches!(a.kind, targeting_resolver::AliasKind::CommonName))
         .map(|a| a.alias.clone())
 }
 
@@ -155,8 +155,8 @@ mod tests {
     use super::*;
     use contracts_core::targets::{TargetObjectType, TargetSource};
     use persistence_db::Database;
-    use targeting::resolver::cache::upsert_resolved;
-    use targeting::resolver::{
+    use targeting_resolver::cache::upsert_resolved;
+    use targeting_resolver::{
         AliasKind, ObjectType, ResolvedAlias, ResolvedIdentity, TargetSource as CacheSource,
     };
 

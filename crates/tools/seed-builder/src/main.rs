@@ -3,14 +3,14 @@
 //! Queries the SIMBAD TAP sync endpoint (CDS) and emits the bundled seed asset
 //! (`assets/seed/seed.json`) that
 //! the app loads into its local cache at first run
-//! (`targeting::resolver::seed`). This binary is NOT part of the shipped app; it
+//! (`targeting_resolver::seed`). This binary is NOT part of the shipped app; it
 //! is run by a maintainer when the seed needs (re)building.
 //!
 //! # What it pulls
 //!
 //! - The full **Messier** catalogue (`M 1` … `M 110`).
 //! - The **Caldwell** objects, via the committed C1–C109 → NGC/IC map
-//!   (`targeting::resolver::caldwell`), since Caldwell is not a SIMBAD
+//!   (`targeting_resolver::caldwell`), since Caldwell is not a SIMBAD
 //!   designation (research.md R2).
 //! - Optionally a slice of **NGC** (`--ngc <N>`), and the full set when run with
 //!   the documented prefix list below.
@@ -58,12 +58,12 @@ use std::collections::BTreeMap;
 use std::time::Duration;
 
 use domain_core::ids::Timestamp;
-use targeting::resolver::caldwell;
-use targeting::resolver::map_otype;
+use targeting_resolver::caldwell;
+use targeting_resolver::map_otype;
 // Shared SIMBAD `basic`-row tokenizer (US11 T145). Replaces the local copy.
-use targeting::resolver::seed::{SeedAlias, SeedAsset, SeedEntry};
-use targeting::resolver::simbad::parse_basic_row;
-use targeting::resolver::{AliasKind, ObjectType};
+use targeting_resolver::seed::{SeedAlias, SeedAsset, SeedEntry};
+use targeting_resolver::simbad::parse_basic_row;
+use targeting_resolver::{AliasKind, ObjectType};
 
 const TAP_ENDPOINT: &str = "https://simbad.cds.unistra.fr/simbad/sim-tap/sync";
 const USER_AGENT: &str = "astro-plan-seed-builder/0.1 (+https://github.com/; spec-035)";

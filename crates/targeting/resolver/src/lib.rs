@@ -23,6 +23,8 @@
 //! `reqwest`-backed `SimbadResolver` (see [`simbad`], T019); the search /
 //! resolve / ingest-queue logic is unit-tested offline with [`FakeResolver`].
 
+#![allow(clippy::doc_markdown)] // spec/domain terminology is not suited for backticks
+
 pub mod cache;
 pub mod caldwell;
 pub mod seed;
@@ -258,7 +260,7 @@ impl ResolvedAlias {
     #[must_use]
     pub fn new(alias: impl Into<String>, kind: AliasKind) -> Self {
         let alias = alias.into();
-        let normalized = crate::normalize::normalize(&alias);
+        let normalized = targeting::normalize::normalize(&alias);
         Self { alias, normalized, kind }
     }
 }
@@ -421,14 +423,14 @@ impl FakeResolver {
     /// Register a canned successful identity, keyed by the normalized `query`.
     #[must_use]
     pub fn with_response(mut self, query: &str, identity: ResolvedIdentity) -> Self {
-        self.responses.insert(crate::normalize::normalize(query), identity);
+        self.responses.insert(targeting::normalize::normalize(query), identity);
         self
     }
 
     /// Register a canned error for `query`, keyed by its normalized form.
     #[must_use]
     pub fn with_error(mut self, query: &str, error: ResolveError) -> Self {
-        self.errors.insert(crate::normalize::normalize(query), error);
+        self.errors.insert(targeting::normalize::normalize(query), error);
         self
     }
 
@@ -471,7 +473,7 @@ impl Clone for FakeResolver {
 impl Resolver for FakeResolver {
     async fn resolve(&self, query: &str) -> Result<ResolvedIdentity, ResolveError> {
         self.call_count.fetch_add(1, std::sync::atomic::Ordering::Relaxed);
-        let key = crate::normalize::normalize(query);
+        let key = targeting::normalize::normalize(query);
         if let Some(err) = self.errors.get(&key) {
             return Err(err.clone());
         }

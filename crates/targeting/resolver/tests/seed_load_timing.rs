@@ -7,7 +7,7 @@
 use std::time::Instant;
 
 use persistence_db::Database;
-use targeting::resolver::seed;
+use targeting_resolver::seed;
 
 #[tokio::test]
 async fn bundled_seed_batched_load_is_fast() {

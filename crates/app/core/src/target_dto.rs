@@ -6,7 +6,7 @@
 //! is pure consolidation with no behavior change.
 
 use contracts_core::targets::{TargetObjectType, TargetSource};
-use targeting::resolver::{ObjectType, TargetSource as CacheSource};
+use targeting_resolver::{ObjectType, TargetSource as CacheSource};
 
 /// Map a resolver-domain [`ObjectType`] to the contract [`TargetObjectType`].
 #[must_use]

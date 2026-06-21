@@ -45,8 +45,8 @@
 use serde::{Deserialize, Serialize};
 use sqlx::SqlitePool;
 
-use crate::resolver::cache::{self, CacheError, UpsertOutcome};
-use crate::resolver::{AliasKind, ObjectType, ResolvedAlias, ResolvedIdentity, TargetSource};
+use crate::cache::{self, CacheError, UpsertOutcome};
+use crate::{AliasKind, ObjectType, ResolvedAlias, ResolvedIdentity, TargetSource};
 
 /// The bundled seed asset shipped at `assets/seed/seed.json` and embedded into
 /// the binary via [`bundled`].
@@ -144,8 +144,11 @@ impl SeedAsset {
 /// Returns [`SeedError::Parse`] if the embedded asset is malformed (a build-time
 /// guarantee in practice, since the asset is committed and tested).
 pub fn bundled() -> Result<SeedAsset, SeedError> {
+    // spec 042 (T250): this crate moved one level deeper (crates/targeting →
+    // crates/targeting/resolver), so the repo-root `assets/seed/seed.json` is
+    // now three `..` hops up instead of two.
     const RAW: &[u8] =
-        include_bytes!(concat!(env!("CARGO_MANIFEST_DIR"), "/../../assets/seed/seed.json"));
+        include_bytes!(concat!(env!("CARGO_MANIFEST_DIR"), "/../../../assets/seed/seed.json"));
     SeedAsset::from_json(RAW)
 }
 
@@ -291,13 +294,13 @@ mod tests {
         assert_eq!(loaded, 2);
 
         // Offline lookup by a non-primary alias resolves to the canonical row.
-        let norm = crate::normalize::normalize("NGC 224");
+        let norm = targeting::normalize::normalize("NGC 224");
         let got = cache::get_by_normalized(db.pool(), &norm).await.unwrap().unwrap();
         assert_eq!(got.primary_designation, "M 31");
         assert_eq!(got.source, TargetSource::Seed);
 
         // Common-name lookup also works.
-        let norm = crate::normalize::normalize("Orion Nebula");
+        let norm = targeting::normalize::normalize("Orion Nebula");
         let got = cache::get_by_normalized(db.pool(), &norm).await.unwrap().unwrap();
         assert_eq!(got.primary_designation, "M 42");
     }
@@ -369,7 +372,7 @@ mod tests {
         assert!(loaded >= 110, "expected >= 110 seeded objects, got {loaded}");
 
         // Offline typeahead for a seeded Messier object works with no network.
-        let norm = crate::normalize::normalize("M 31");
+        let norm = targeting::normalize::normalize("M 31");
         let got = cache::get_by_normalized(db.pool(), &norm).await.unwrap();
         assert!(got.is_some(), "M 31 must be resolvable from the seeded cache");
 
@@ -462,7 +465,7 @@ mod tests {
         );
 
         // Cache must still be queryable — offline guarantee holds.
-        let norm = crate::normalize::normalize("M 31");
+        let norm = targeting::normalize::normalize("M 31");
         let got = cache::get_by_normalized(db.pool(), &norm).await.unwrap();
         assert!(
             got.is_some(),

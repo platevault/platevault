@@ -24,6 +24,7 @@ patterns = { path = "../../patterns" }
 persistence_db = { path = "../../persistence/db" }
 project_structure = { path = "../../project/structure" }
 targeting = { path = "../../targeting" }
+targeting_resolver = { path = "../../targeting/resolver" }
 anyhow = { workspace = true }
 camino = { workspace = true }
 dashmap = { workspace = true }
@@ -43,9 +44,10 @@ uuid = { workspace = true }
 tempfile = { workspace = true }
 rstest = { workspace = true }
 proptest = { workspace = true }
-# spec 035 (T020): the `FakeResolver` test double lives behind targeting's
+# spec 035 (T020): the `FakeResolver` test double lives behind the resolver's
 # `test-fixture` feature; enable it for offline target.resolve use-case tests.
-targeting = { path = "../../targeting", features = ["test-fixture"] }
+# (spec 042 / T250: moved from `targeting` to `targeting_resolver`.)
+targeting_resolver = { path = "../../targeting/resolver", features = ["test-fixture"] }
 
 [features]
 # Developer-mode surface (spec 021). Release binaries must NOT enable this.

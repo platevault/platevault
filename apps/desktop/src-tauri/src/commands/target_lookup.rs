@@ -42,7 +42,7 @@ pub async fn target_resolve(
     state: State<'_, AppState>,
     req: TargetResolveSimbadRequest,
 ) -> Result<TargetResolveSimbadResponse, ContractError> {
-    use targeting::resolver::simbad::{
+    use targeting_resolver::simbad::{
         OfflineResolver, SimbadConfig, SimbadResolver, DEFAULT_TAP_ENDPOINT,
     };
 

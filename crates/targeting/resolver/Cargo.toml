@@ -1,0 +1,61 @@
+[package]
+name = "targeting_resolver"
+version = "0.1.0"
+edition.workspace = true
+license.workspace = true
+
+[lib]
+path = "src/lib.rs"
+
+# spec 042 (T250): the SIMBAD on-demand resolver, the SQLite resolution cache,
+# and the bundled-seed loader were split out of the (now pure) `targeting`
+# crate into this crate so the heavy async/network/db dependency surface
+# (sqlx + reqwest + tokio + async-trait) no longer infects pure catalog
+# consumers. Public function/type names are unchanged — only the crate boundary
+# moved (`targeting::resolver::X` → `targeting_resolver::X`).
+
+[dependencies]
+# Pure catalog primitives (normalization + UUIDv5 identity) live in the base
+# `targeting` crate; the resolver depends on it for `normalize` / `identity`.
+targeting = { path = ".." }
+domain_core = { path = "../../domain/core" }
+serde = { workspace = true }
+serde_json.workspace = true
+sqlx.workspace = true
+thiserror.workspace = true
+tracing = { workspace = true }
+uuid = { version = "1", features = ["serde", "v4", "v5"] }
+# spec 035 (SIMBAD resolver): async HTTP client for SIMBAD TAP/Sesame.
+# reqwest 0.13 uses default-features = false + ["json", "rustls"] (no openssl);
+# the `rustls-tls` feature was renamed to `rustls` in 0.13. tokio provides the
+# async runtime for the client.
+reqwest = { workspace = true }
+tokio = { workspace = true }
+# spec 035 (SIMBAD resolver): async trait seam for the `Resolver` trait,
+# mirroring the retired `download::CatalogFetcher` pattern.
+async-trait.workspace = true
+# spec 035 (resolution cache): RFC-3339 `resolved_at` timestamps, matching the
+# `persistence_db` repositories' time convention.
+time.workspace = true
+# spec 042 (T200): percent-encode the ADQL URL query (reqwest is built with
+# `default-features = false`, so the high-level query builder is unavailable).
+percent-encoding.workspace = true
+# spec 042 (T204): RFC-4180 TSV tokenization of SIMBAD `basic` rows.
+csv.workspace = true
+# Fuzzy matching: token-set similarity + Damerau-Levenshtein (R2).
+strsim = "0.11"
+
+[features]
+# Enables the seeded in-memory test fixture (FakeResolver) for use in
+# integration tests in other crates. Must NOT be enabled in production builds.
+test-fixture = []
+
+[[test]]
+name = "simbad_live"
+path = "tests/simbad_live.rs"
+
+[dev-dependencies]
+persistence_db = { path = "../../persistence/db" }
+
+[lints]
+workspace = true

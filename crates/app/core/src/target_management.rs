@@ -20,8 +20,8 @@ use contracts_core::targets::{
     TargetDisplayAliasClearRequest, TargetDisplayAliasSetRequest, TargetGetRequest, TargetListItem,
     TargetOpError,
 };
-use targeting::resolver::cache::{self, CachedTarget, TargetListRow};
-use targeting::resolver::AliasKind;
+use targeting_resolver::cache::{self, CachedTarget, TargetListRow};
+use targeting_resolver::AliasKind;
 
 // ── Error helpers ────────────────────────────────────────────────────────────
 
@@ -298,9 +298,9 @@ pub async fn display_alias_clear(
 mod tests {
     use super::*;
     use persistence_db::Database;
-    use targeting::resolver::cache::upsert_resolved;
-    use targeting::resolver::ObjectType;
-    use targeting::resolver::{
+    use targeting_resolver::cache::upsert_resolved;
+    use targeting_resolver::ObjectType;
+    use targeting_resolver::{
         AliasKind as CacheKind, ResolvedAlias, ResolvedIdentity, TargetSource,
     };
 

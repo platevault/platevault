@@ -27,7 +27,7 @@ fn db_err(e: impl std::fmt::Display) -> ContractError {
 fn defaults() -> ResolverSettings {
     ResolverSettings {
         online_enabled: true,
-        simbad_endpoint: targeting::resolver::simbad::DEFAULT_TAP_ENDPOINT.to_owned(),
+        simbad_endpoint: targeting_resolver::simbad::DEFAULT_TAP_ENDPOINT.to_owned(),
         debounce_ms: 300,
         request_timeout_secs: 10,
     }

@@ -220,9 +220,12 @@ Frontend: `cd apps/desktop && npx tsc --noEmit` + `npx vitest run <feature>`. Ru
 
 ## Phase 17 — US13 Workspace/crate restructuring (P3, highest risk — staged last)
 
-- [ ] T250 (O1) Split `targeting` → `targeting` (pure) + `targeting-resolver`
+- [X] T250 (O1) Split `targeting` → `targeting` (pure) + `targeting-resolver`
   (sqlx/reqwest/tokio move to the resolver crate); update consumers.
-- [ ] T251 (O5) Drop `tokio` from `project/structure` (move the async touch out).
+  (new crate `targeting_resolver` carries sqlx/reqwest/tokio + simbad/cache/seed; base
+  `targeting` = uuid + unicode-normalization only; consumers app_core/seed-builder/desktop_shell updated.)
+- [X] T251 (O5) Drop `tokio` from `project/structure` (move the async touch out).
+  (notes/manifest IO now std::fs behind the same async trait seam; tokio → dev-dep only.)
 - [ ] T252 (O3a) Group `app/core`'s ~33 flat modules into `targets/ projects/ inbox/
   calibration/ lifecycle/` subdirs (internal, compiles green).
 - [ ] T253 (O3b) Split `app/core` into per-domain use-case crates incrementally, each

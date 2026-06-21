@@ -18,8 +18,8 @@
 //!   NGC 7293 (Helix Nebula) — verifies canonical identity, plausible ICRS
 //!   coordinates, object type, and cross-ID alias set.
 
-use targeting::resolver::simbad::{SimbadConfig, SimbadResolver};
-use targeting::resolver::{AliasKind, ObjectType, ResolveError, ResolvedIdentity, Resolver};
+use targeting_resolver::simbad::{SimbadConfig, SimbadResolver};
+use targeting_resolver::{AliasKind, ObjectType, ResolveError, ResolvedIdentity, Resolver};
 
 // ── helpers ──────────────────────────────────────────────────────────────────
 
@@ -61,7 +61,7 @@ fn assert_deg_approx(label: &str, actual: f64, expected: f64, tolerance: f64) {
 
 /// Return true if the alias list contains a designation or common-name entry
 /// whose display form equals `needle` (case-sensitive, as SIMBAD returns it).
-fn has_alias(aliases: &[targeting::resolver::ResolvedAlias], needle: &str) -> bool {
+fn has_alias(aliases: &[targeting_resolver::ResolvedAlias], needle: &str) -> bool {
     aliases.iter().any(|a| a.alias == needle)
 }
 

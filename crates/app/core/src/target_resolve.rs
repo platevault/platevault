@@ -4,7 +4,7 @@
 //! `OBJECT` value) to a canonical identity:
 //!
 //! 1. Look the (normalized) query up in the local resolution cache + bundled
-//!    seed ([`targeting::resolver::cache`]). A hit returns immediately — a
+//!    seed ([`targeting_resolver::cache`]). A hit returns immediately — a
 //!    cached object is never re-queried (FR-006).
 //! 2. On a miss, when online resolution is enabled (`resolver_settings`,
 //!    FR-015), consult the injected [`Resolver`] (the live `SimbadResolver` in
@@ -33,8 +33,8 @@ use contracts_core::{error_code::ErrorCode, ContractError, ErrorSeverity};
 
 use crate::errors::db_internal_ctx;
 use targeting::normalize::normalize;
-use targeting::resolver::cache::{self, CachedTarget};
-use targeting::resolver::{
+use targeting_resolver::cache::{self, CachedTarget};
+use targeting_resolver::{
     AliasKind, ResolveError, ResolvedAlias, ResolvedIdentity, Resolver, TargetSource as CacheSource,
 };
 use uuid::Uuid;
@@ -98,7 +98,7 @@ fn common_name(target: &CachedTarget) -> Option<String> {
     target
         .aliases
         .iter()
-        .find(|a| matches!(a.kind, targeting::resolver::AliasKind::CommonName))
+        .find(|a| matches!(a.kind, targeting_resolver::AliasKind::CommonName))
         .map(|a| a.alias.clone())
 }
 
@@ -166,7 +166,7 @@ async fn read_settings(pool: &SqlitePool) -> Result<OnlineSettings, ContractErro
     Ok(row.map_or(
         OnlineSettings {
             online_enabled: true,
-            endpoint: targeting::resolver::simbad::DEFAULT_TAP_ENDPOINT.to_owned(),
+            endpoint: targeting_resolver::simbad::DEFAULT_TAP_ENDPOINT.to_owned(),
             request_timeout_secs: 10,
         },
         |(online_enabled, endpoint, request_timeout_secs)| OnlineSettings {
@@ -339,8 +339,8 @@ mod tests {
     use super::*;
     use contracts_core::targets::TargetSource;
     use persistence_db::Database;
-    use targeting::resolver::cache::upsert_resolved;
-    use targeting::resolver::{
+    use targeting_resolver::cache::upsert_resolved;
+    use targeting_resolver::{
         AliasKind, FakeResolver, ObjectType, ResolvedAlias, ResolvedIdentity, TargetSource as Src,
     };
 
