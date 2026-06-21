@@ -232,9 +232,12 @@ Frontend: `cd apps/desktop && npx tsc --noEmit` + `npx vitest run <feature>`. Ru
   via lib.rs `pub use` re-exports; zero consumer edits; calibration use-case → calibration/matching.rs.)
 - [ ] T253 (O3b) Split `app/core` into per-domain use-case crates incrementally, each
   preserving the public surface `desktop_shell` consumes.
-- [ ] T254 (O6) Fix `persistence/db → contracts/core` inversion: move the ~4 stored type
+- [X] T254 (O6) Fix `persistence/db → contracts/core` inversion: move the ~4 stored type
   clusters (equipment/settings/first_run/source-override) to domain; map DTOs at app/core.
   **DB byte-identity check + persistence tests green.** Own commit.
+  (moved equipment/first_run/JsonAny + settings stored types to domain_core, re-exported from
+  contracts_core → bindings byte-identical; persistence_db contracts_core dep removed (tree=0);
+  7 byte-identity guard tests w/ frozen snapshots + real SQL roundtrip.)
 - [ ] **US13 checkpoint**: commit `feat(042): US13 crate restructuring`.
 
 ## Phase 18 — Final verification

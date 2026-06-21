@@ -7,14 +7,11 @@ pub mod calibration_tolerances;
 pub mod cleanup;
 pub mod dev;
 pub mod enums;
-pub mod equipment;
 pub mod error_code;
-pub mod first_run;
 pub mod guided;
 pub mod inbox;
 pub mod ingestion;
 pub mod inventory;
-pub mod json_any;
 pub mod lifecycle;
 pub mod log;
 pub mod manifests;
@@ -37,7 +34,18 @@ pub mod status;
 pub mod targets;
 pub mod tools;
 
-pub use json_any::JsonAny;
+// ── Re-exported domain-owned stored types (spec 042 T254) ─────────────────
+//
+// `equipment`, `first_run`, and the settings stored types now live in
+// `domain_core` so the persistence layer can depend on them without importing
+// this transport crate (fixes the `persistence/db → contracts/core` layering
+// inversion). They are re-exported here verbatim so the IPC command surface,
+// the generated TypeScript bindings, and every existing
+// `contracts_core::{equipment,first_run}::*` import are byte-identical.
+pub use domain_core::equipment;
+pub use domain_core::first_run;
+
+pub use domain_core::JsonAny;
 
 // Re-export shared enums for convenience.
 pub use enums::{Density, ViewMode};

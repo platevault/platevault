@@ -723,7 +723,7 @@ mod tests {
     /// not the absent `library_root` table.
     #[tokio::test]
     async fn list_unacknowledged_joins_registered_sources() {
-        use contracts_core::first_run::{
+        use domain_core::first_run::{
             RegisterSourceBatchRequest, RegisterSourceRequest, ScanDepth, SourceKind,
         };
 

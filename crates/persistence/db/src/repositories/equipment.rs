@@ -4,7 +4,7 @@
 //! Operates on `cameras`, `telescopes`, `optical_trains`, and `filters`
 //! tables (migration 0007).
 
-use contracts_core::equipment::{
+use domain_core::equipment::{
     Camera, CreateCamera, CreateFilter, CreateOpticalTrain, CreateTelescope, Filter,
     FilterCategory, OpticalTrain, Telescope, UpdateCamera, UpdateFilter, UpdateOpticalTrain,
     UpdateTelescope,
@@ -512,7 +512,7 @@ pub async fn delete_filter(pool: &SqlitePool, id: &str) -> DbResult<()> {
 
 #[cfg(test)]
 mod tests {
-    use contracts_core::equipment::{
+    use domain_core::equipment::{
         CreateCamera, CreateFilter, CreateOpticalTrain, CreateTelescope, FilterCategory,
         UpdateCamera, UpdateFilter, UpdateOpticalTrain, UpdateTelescope,
     };

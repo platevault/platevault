@@ -3,7 +3,7 @@
 //! Operates on `registered_sources` and `first_run_state` tables
 //! (migration 0006).
 
-use contracts_core::first_run::{
+use domain_core::first_run::{
     BatchItem, BatchStatus, FirstRunCompleteResponse, FirstRunRestartResponse,
     FirstRunStateResponse, ItemStatus, RegisterSourceBatchRequest, RegisterSourceBatchResponse,
     RegisterSourceRequest, RegisterSourceResponse, ScanDepth, SourceKind,
@@ -354,7 +354,7 @@ pub async fn update_first_run_step(pool: &SqlitePool, step: &str) -> DbResult<()
 
 #[cfg(test)]
 mod tests {
-    use contracts_core::first_run::{
+    use domain_core::first_run::{
         RegisterSourceBatchRequest, RegisterSourceRequest, ScanDepth, SourceKind,
     };
 
@@ -658,5 +658,66 @@ mod tests {
                 .await
                 .unwrap();
         assert_eq!(count_after.0, 0, "inbox items must be deleted with the source");
+    }
+}
+
+// ── DB byte-identity guard (spec 042 T254) ───────────────────────────────
+//
+// `register_source` persists `SourceKind` / `ScanDepth` via their
+// `strum::IntoStaticStr` impls and reads them back via `EnumString`. T254
+// moved these enums from `contracts_core` to `domain_core`; the persisted
+// strings (`light_frames`, `calibration`, `project`, `inbox`, `recursive`,
+// `single`) MUST stay byte-identical (Local-First custody). This freezes the
+// stored-string contract end-to-end through the real `registered_sources`
+// table.
+#[cfg(test)]
+mod byte_identity_guard {
+    use domain_core::first_run::{RegisterSourceRequest, ScanDepth, SourceKind};
+
+    use super::*;
+    use crate::Database;
+
+    #[test]
+    fn source_kind_helper_strings_unchanged() {
+        assert_eq!(source_kind_to_str(SourceKind::LightFrames), "light_frames");
+        assert_eq!(source_kind_to_str(SourceKind::Calibration), "calibration");
+        assert_eq!(source_kind_to_str(SourceKind::Project), "project");
+        assert_eq!(source_kind_to_str(SourceKind::Inbox), "inbox");
+    }
+
+    #[test]
+    fn scan_depth_helper_strings_unchanged() {
+        assert_eq!(scan_depth_to_str(ScanDepth::Recursive), "recursive");
+        assert_eq!(scan_depth_to_str(ScanDepth::Single), "single");
+    }
+
+    /// Register a source and assert the raw persisted `kind` / `scan_depth`
+    /// column strings are the exact canonical values.
+    #[tokio::test]
+    async fn registered_source_columns_persist_canonical_strings() {
+        let db = Database::in_memory().await.unwrap();
+        db.migrate().await.unwrap();
+        let pool = db.pool();
+
+        let resp = register_source(
+            pool,
+            &RegisterSourceRequest {
+                kind: SourceKind::Calibration,
+                path: "/astro/cals".to_owned(),
+                kind_subtype: None,
+                scan_depth: ScanDepth::Single,
+            },
+        )
+        .await
+        .unwrap();
+
+        let row: (String, String) =
+            sqlx::query_as("SELECT kind, scan_depth FROM registered_sources WHERE id = ?")
+                .bind(&resp.source_id)
+                .fetch_one(pool)
+                .await
+                .unwrap();
+        assert_eq!(row.0, "calibration", "stored kind string changed");
+        assert_eq!(row.1, "single", "stored scan_depth string changed");
     }
 }

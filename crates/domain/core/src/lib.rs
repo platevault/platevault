@@ -2,12 +2,17 @@
 #![allow(clippy::doc_markdown)] // spec/domain terminology not appropriate for backticks
 
 pub mod actor;
+pub mod equipment;
+pub mod first_run;
 pub mod ids;
+pub mod json_any;
 pub mod lifecycle;
 pub mod project;
+pub mod settings;
 
 pub use actor::Actor;
 pub use ids::{AuditId, ContentHash, EntityId, Timestamp};
+pub use json_any::JsonAny;
 
 // ── Legacy type aliases kept for crates that import the old flat names ────────
 /// Legacy alias: use `lifecycle::plan::PlanState` in new code.

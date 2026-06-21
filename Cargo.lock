@@ -1073,7 +1073,9 @@ version = "0.1.0"
 dependencies = [
  "schemars 0.8.22",
  "serde",
+ "serde_json",
  "specta",
+ "specta-typescript",
  "strum",
  "thiserror 2.0.18",
  "time",
@@ -3082,7 +3084,6 @@ name = "persistence_db"
 version = "0.1.0"
 dependencies = [
  "audit",
- "contracts_core",
  "domain_core",
  "serde",
  "serde_json",
