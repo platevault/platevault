@@ -133,9 +133,8 @@ export function CreateProjectDialog({ open, onClose, onSuccess }: CreateProjectD
       <Dialog.Portal>
         <Dialog.Backdrop className="alm-confirm-overlay__backdrop" />
         <Dialog.Popup
-          className="alm-confirm-overlay"
+          className="alm-confirm-overlay alm-create-project__popup"
           aria-label="Create project"
-          style={{ maxWidth: 520 }}
         >
           <form onSubmit={rhfHandleSubmit(onValid)} noValidate>
             {/* Header */}
@@ -147,7 +146,7 @@ export function CreateProjectDialog({ open, onClose, onSuccess }: CreateProjectD
             </div>
 
             {/* Body */}
-            <div className="alm-confirm-overlay__body" style={{ display: 'flex', flexDirection: 'column', gap: 'var(--alm-sp-4)' }}>
+            <div className="alm-confirm-overlay__body alm-create-project__body">
 
               {/* Name */}
               <div>
@@ -175,7 +174,7 @@ export function CreateProjectDialog({ open, onClose, onSuccess }: CreateProjectD
                 {target ? (
                   <>
                     <span className="alm-field-label">Target</span>
-                    <div style={{ display: 'flex', alignItems: 'center', gap: 'var(--alm-sp-2)' }}>
+                    <div className="alm-create-project__target-row">
                       <Pill variant="accent">{target.primaryDesignation}</Pill>
                       {target.commonName && (
                         <span className="alm-field-hint">{target.commonName}</span>

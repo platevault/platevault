@@ -150,7 +150,7 @@ export function EditProjectPane({ project, onClose }: EditProjectPaneProps) {
       {project.channelDrift?.hasNewSources && (
         <Banner variant="warn" role="status" aria-live="polite">
           <span>New sources were added since the last channel review.</span>
-          <div style={{ display: 'flex', gap: 'var(--alm-sp-2)', marginTop: 'var(--alm-sp-2)' }}>
+          <div className="alm-edit-project__drift-actions">
             <Btn size="sm" variant="primary" onClick={handleReinfer} disabled={channelWorking}>
               Re-infer channels
             </Btn>
@@ -171,7 +171,7 @@ export function EditProjectPane({ project, onClose }: EditProjectPaneProps) {
       <form
         onSubmit={rhfHandleSubmit(onValid)}
         noValidate
-        style={{ display: 'flex', flexDirection: 'column', gap: 'var(--alm-sp-4)', padding: 'var(--alm-sp-4)' }}
+        className="alm-edit-project__form"
       >
 
         {/* Name */}
@@ -230,7 +230,7 @@ export function EditProjectPane({ project, onClose }: EditProjectPaneProps) {
         {/* Channels preview (US4) */}
         <div>
           <span className="alm-field-label">Channels</span>
-          <div style={{ display: 'flex', flexWrap: 'wrap', gap: 'var(--alm-sp-1)', marginTop: 'var(--alm-sp-1)' }}>
+          <div className="alm-edit-project__channels">
             {channels.length === 0 ? (
               <span className="alm-field-hint">No channels inferred yet.</span>
             ) : (
@@ -257,7 +257,7 @@ export function EditProjectPane({ project, onClose }: EditProjectPaneProps) {
         )}
 
         {/* Actions */}
-        <div style={{ display: 'flex', gap: 'var(--alm-sp-2)', justifyContent: 'flex-end' }}>
+        <div className="alm-edit-project__actions">
           <Btn type="button" variant="ghost" onClick={onClose} disabled={isSubmitting}>
             Cancel
           </Btn>

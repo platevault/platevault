@@ -4908,3 +4908,206 @@
   padding: 1px 0;
   word-break: break-all;
 }
+
+/* === SETTINGS CLEANUP === */
+
+/* Select control height override for the Default Protection dropdown */
+.alm-cleanup__protection-select {
+  height: 28px;
+}
+
+/* Per-type table: action column width */
+.alm-cleanup__action-col {
+  width: 220px;
+}
+
+/* Per-type table cell: type name + Pill badge row */
+.alm-cleanup__type-cell {
+  display: flex;
+  align-items: center;
+  gap: var(--alm-sp-2);
+}
+
+/* Per-type table cell: locked row indicator */
+.alm-cleanup__locked-label {
+  display: flex;
+  align-items: center;
+  gap: var(--alm-sp-1);
+  color: var(--alm-text-muted);
+  font-size: var(--alm-text-xs);
+}
+
+/* === EDIT PROJECT PANE === */
+
+/* Banner action row — drift banner button group */
+.alm-edit-project__drift-actions {
+  display: flex;
+  gap: var(--alm-sp-2);
+  margin-top: var(--alm-sp-2);
+}
+
+/* Form — main layout column */
+.alm-edit-project__form {
+  display: flex;
+  flex-direction: column;
+  gap: var(--alm-sp-4);
+  padding: var(--alm-sp-4);
+}
+
+/* Channels pill row */
+.alm-edit-project__channels {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--alm-sp-1);
+  margin-top: var(--alm-sp-1);
+}
+
+/* Actions row — right-aligned Save / Cancel */
+.alm-edit-project__actions {
+  display: flex;
+  gap: var(--alm-sp-2);
+  justify-content: flex-end;
+}
+
+/* === CREATE PROJECT DIALOG === */
+
+/*
+ * Scoped to the create-project dialog. All values use --alm-* design tokens.
+ * No raw colors, no raw ms durations.
+ */
+
+/* Dialog popup width cap */
+.alm-create-project__popup {
+  max-width: 520px;
+}
+
+/* Body stack: vertical flex with standard field gap */
+.alm-create-project__body {
+  display: flex;
+  flex-direction: column;
+  gap: var(--alm-sp-4);
+}
+
+/* Selected-target pill row: horizontal flex */
+.alm-create-project__target-row {
+  display: flex;
+  align-items: center;
+  gap: var(--alm-sp-2);
+}
+
+/* === ADD TARGET DIALOG === */
+
+/* Constrain dialog popup width */
+.alm-add-target__popup {
+  max-width: 480px;
+}
+
+/* Body: vertical stack with standard gap */
+.alm-add-target__body {
+  display: flex;
+  flex-direction: column;
+  gap: var(--alm-sp-4);
+}
+
+/* Selected-target row: pill + hint + change button inline */
+.alm-add-target__selected-row {
+  display: flex;
+  align-items: center;
+  gap: var(--alm-sp-2);
+}
+
+/* === SESSIONS CALENDAR SCROLL === */
+
+/*
+ * Scoped to the CalendarScroll virtualised timeline.
+ * All values use --alm-* design tokens.
+ * No raw colors, no raw ms durations.
+ * Dynamic values (virtualizer height/transform) remain inline in the component.
+ */
+
+/* Outer scroll container — fills its parent and enables overflow scroll */
+.alm-calendar-scroll {
+  overflow-y: auto;
+  height: 100%;
+}
+
+/* Inner positioning canvas — height is set inline (virtualizer.getTotalSize()) */
+.alm-calendar-scroll__inner {
+  position: relative;
+}
+
+/* Sticky month header row — absolute inside the virtualizer canvas */
+.alm-calendar-scroll__month-header {
+  position: absolute;
+  top: 0;
+  left: 0;
+  right: 0;
+  display: flex;
+  align-items: center;
+  padding: 0 var(--alm-sp-3);
+  font-size: var(--alm-text-xs);
+  font-weight: var(--alm-weight-semibold);
+  color: var(--alm-text-muted);
+  background: var(--alm-surface);
+  border-bottom: 1px solid var(--alm-border-subtle);
+}
+
+/* Night row — absolute inside the virtualizer canvas */
+.alm-calendar-scroll__night {
+  position: absolute;
+  top: 0;
+  left: 0;
+  right: 0;
+  display: flex;
+  align-items: center;
+  gap: var(--alm-sp-2);
+  padding: 0 var(--alm-sp-3);
+  cursor: pointer;
+  border-bottom: 1px solid var(--alm-border-subtle);
+  transition: background var(--alm-transition-fast);
+}
+
+.alm-calendar-scroll__night:hover {
+  background: var(--alm-hover-bg);
+}
+
+.alm-calendar-scroll__night:focus-visible {
+  outline: none;
+  box-shadow: var(--alm-focus-ring);
+}
+
+/* Date label — monospace, fixed-width column */
+.alm-calendar-scroll__date {
+  flex-shrink: 0;
+  font-size: var(--alm-text-sm);
+  color: var(--alm-text);
+}
+
+/* Session badge row — grows to fill remaining space */
+.alm-calendar-scroll__badges {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--alm-sp-1);
+  flex: 1;
+  min-width: 0;
+}
+
+/* Frame count — monospace, right-aligned */
+.alm-calendar-scroll__frame-count {
+  flex-shrink: 0;
+  font-size: var(--alm-text-xs);
+  color: var(--alm-text-muted);
+}
+
+/* === BLOCKED BANNER === */
+
+.alm-blocked-banner__body {
+  display: flex;
+  flex-direction: column;
+  gap: var(--alm-sp-2);
+}
+
+.alm-blocked-banner__actions {
+  display: flex;
+  gap: var(--alm-sp-2);
+}

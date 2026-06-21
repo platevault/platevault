@@ -73,10 +73,7 @@ export function CalendarScroll({ nights, onNightSelect }: CalendarScrollProps) {
     >
       <div
         className="alm-calendar-scroll__inner"
-        style={{
-          height: `${virtualizer.getTotalSize()}px`,
-          position: 'relative',
-        }}
+        style={{ height: `${virtualizer.getTotalSize()}px` }}
       >
         {virtualizer.getVirtualItems().map((virtualRow) => {
           const row = rows[virtualRow.index];
@@ -86,12 +83,8 @@ export function CalendarScroll({ nights, onNightSelect }: CalendarScrollProps) {
                 key={virtualRow.key}
                 className="alm-calendar-scroll__month-header"
                 style={{
-                  position: 'absolute',
-                  top: 0,
                   transform: `translateY(${virtualRow.start}px)`,
                   height: `${virtualRow.size}px`,
-                  left: 0,
-                  right: 0,
                 }}
                 role="heading"
                 aria-level={3}
@@ -107,12 +100,8 @@ export function CalendarScroll({ nights, onNightSelect }: CalendarScrollProps) {
               key={virtualRow.key}
               className="alm-calendar-scroll__night"
               style={{
-                position: 'absolute',
-                top: 0,
                 transform: `translateY(${virtualRow.start}px)`,
                 height: `${virtualRow.size}px`,
-                left: 0,
-                right: 0,
               }}
               role="listitem"
               tabIndex={0}

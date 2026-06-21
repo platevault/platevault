@@ -84,9 +84,8 @@ export function AddTargetDialog({ open, onClose, onAdded }: AddTargetDialogProps
       <Dialog.Portal>
         <Dialog.Backdrop className="alm-confirm-overlay__backdrop" />
         <Dialog.Popup
-          className="alm-confirm-overlay"
+          className="alm-confirm-overlay alm-add-target__popup"
           aria-label="Add target"
-          style={{ maxWidth: 480 }}
         >
           <div className="alm-confirm-overlay__header">
             <Dialog.Title className="alm-confirm-overlay__title">Add target</Dialog.Title>
@@ -96,13 +95,12 @@ export function AddTargetDialog({ open, onClose, onAdded }: AddTargetDialogProps
           </div>
 
           <div
-            className="alm-confirm-overlay__body"
-            style={{ display: 'flex', flexDirection: 'column', gap: 'var(--alm-sp-4)' }}
+            className="alm-confirm-overlay__body alm-add-target__body"
           >
             {pending ? (
               <div>
                 <span className="alm-field-label">Selected target</span>
-                <div style={{ display: 'flex', alignItems: 'center', gap: 'var(--alm-sp-2)' }}>
+                <div className="alm-add-target__selected-row">
                   <Pill variant="accent">{pending.primaryDesignation}</Pill>
                   {pending.commonName && (
                     <span className="alm-field-hint">{pending.commonName}</span>

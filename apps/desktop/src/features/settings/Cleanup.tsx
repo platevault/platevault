@@ -124,14 +124,13 @@ export function Cleanup({ save }: CleanupProps) {
           <div className="alm-settings__row-label">Default protection</div>
           <div className="alm-settings__row-content">
             <select
-              className="alm-select"
+              className="alm-select alm-cleanup__protection-select"
               value={defaultProtection}
               onChange={(e) => {
                 const v = e.target.value as DefaultProtection;
                 setDefaultProtection(v);
                 save('cleanup', { defaultProtection: v });
               }}
-              style={{ height: 28 }}
             >
               <option value="protected">Protected</option>
               <option value="normal">Normal</option>
@@ -154,7 +153,7 @@ export function Cleanup({ save }: CleanupProps) {
           <thead>
             <tr>
               <th>Data type</th>
-              <th style={{ width: 220 }}>Default action</th>
+              <th className="alm-cleanup__action-col">Default action</th>
             </tr>
           </thead>
           <tbody>
@@ -163,7 +162,7 @@ export function Cleanup({ save }: CleanupProps) {
               return (
                 <tr key={row.id}>
                   <td>
-                    <span style={{ display: 'flex', alignItems: 'center', gap: 'var(--alm-sp-2)' }}>
+                    <span className="alm-cleanup__type-cell">
                       {row.type}
                       {row.locked && (
                         <Pill variant="neutral">Protected</Pill>
@@ -172,7 +171,7 @@ export function Cleanup({ save }: CleanupProps) {
                   </td>
                   <td>
                     {row.locked ? (
-                      <span style={{ display: 'flex', alignItems: 'center', gap: 'var(--alm-sp-1)', color: 'var(--alm-text-muted)', fontSize: 'var(--alm-text-xs)' }}>
+                      <span className="alm-cleanup__locked-label">
                         <span>&#128274;</span> Keep (protected)
                       </span>
                     ) : (
