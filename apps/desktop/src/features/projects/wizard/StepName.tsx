@@ -58,12 +58,12 @@ export function StepName({ data, onChange }: StepNameProps) {
   }, [data.name, data.workflowProfile, reset]);
 
   return (
-    <div style={{ display: 'flex', flexDirection: 'column', gap: 'var(--alm-space-5)' }}>
+    <div className="alm-wizard-name">
       {/* Project name */}
-      <div style={{ display: 'flex', flexDirection: 'column', gap: 'var(--alm-space-2)' }}>
+      <div className="alm-wizard-name__field-group">
         <label
           htmlFor="project-name"
-          style={{ fontSize: 'var(--alm-text-sm)', fontWeight: 600 }}
+          className="alm-wizard-name__label"
         >
           Project name
         </label>
@@ -74,20 +74,13 @@ export function StepName({ data, onChange }: StepNameProps) {
           aria-invalid={Boolean(errors.name)}
           aria-describedby={errors.name ? 'project-name-error' : undefined}
           {...register('name')}
-          style={{
-            padding: 'var(--alm-space-2) var(--alm-space-3)',
-            border: '1px solid var(--alm-border)',
-            borderRadius: 4,
-            fontSize: 'var(--alm-text-sm)',
-            background: 'var(--alm-surface)',
-            color: 'var(--alm-text)',
-          }}
+          className="alm-wizard-name__input"
         />
         {errors.name && (
           <span
             id="project-name-error"
             role="alert"
-            style={{ fontSize: 'var(--alm-text-xs)', color: 'var(--alm-danger, #c0392b)' }}
+            className="alm-wizard-name__error"
           >
             {errors.name.message}
           </span>
@@ -95,8 +88,8 @@ export function StepName({ data, onChange }: StepNameProps) {
       </div>
 
       {/* Workflow profile */}
-      <div style={{ display: 'flex', flexDirection: 'column', gap: 'var(--alm-space-3)' }}>
-        <span style={{ fontSize: 'var(--alm-text-sm)', fontWeight: 600 }}>
+      <div className="alm-wizard-name__profile-group">
+        <span className="alm-wizard-name__label">
           Workflow profile
         </span>
         <Controller
@@ -107,21 +100,13 @@ export function StepName({ data, onChange }: StepNameProps) {
               value={field.value}
               onValueChange={(value) => field.onChange(value as StepNameData['workflowProfile'])}
               aria-label="Workflow profile"
-              style={{ display: 'flex', flexDirection: 'column', gap: 'var(--alm-space-2)' }}
+              className="alm-wizard-name__radio-group"
             >
               {PROFILES.map((profile) => (
                 <label
                   key={profile.id}
-                  style={{
-                    display: 'flex',
-                    alignItems: 'flex-start',
-                    gap: 'var(--alm-space-3)',
-                    padding: 'var(--alm-space-3)',
-                    border: `1px solid ${field.value === profile.id ? 'var(--alm-gray-900)' : 'var(--alm-border)'}`,
-                    borderRadius: 6,
-                    cursor: 'pointer',
-                    background: field.value === profile.id ? 'var(--alm-surface)' : 'transparent',
-                  }}
+                  className="alm-wizard-name__profile-option"
+                  data-selected={field.value === profile.id ? 'true' : 'false'}
                 >
                   <Radio.Root
                     value={profile.id}
@@ -131,10 +116,10 @@ export function StepName({ data, onChange }: StepNameProps) {
                     <Radio.Indicator className="alm-radio__indicator" />
                   </Radio.Root>
                   <div>
-                    <div style={{ fontSize: 'var(--alm-text-sm)', fontWeight: 500 }}>
+                    <div className="alm-wizard-name__profile-label">
                       {profile.label}
                     </div>
-                    <div style={{ fontSize: 'var(--alm-text-xs)', color: 'var(--alm-text-muted)' }}>
+                    <div className="alm-wizard-name__profile-description">
                       {profile.description}
                     </div>
                   </div>

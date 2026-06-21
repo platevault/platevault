@@ -41,15 +41,15 @@ export function StepViews({ data, onChange }: StepViewsProps) {
   const conflictPolicy = data.conflictPolicy ?? 'fail';
 
   return (
-    <div style={{ display: 'flex', flexDirection: 'column', gap: 'var(--alm-space-5)' }}>
+    <div className="alm-wizard-views">
       {/* Step description */}
-      <div style={{ fontSize: 'var(--alm-text-sm)', color: 'var(--alm-text-muted)', maxWidth: 640 }}>
+      <div className="alm-wizard-views__desc">
         A source view is a tool-friendly projection of your source map. PixInsight/WBPP will
         read source files through this view. The strategy is preset from{' '}
         <a
           href="#"
           onClick={(e) => e.preventDefault()}
-          style={{ color: 'var(--alm-accent)', textDecoration: 'underline' }}
+          className="alm-wizard-views__link"
         >
           Settings &rarr; Source view strategy
         </a>{' '}
@@ -58,30 +58,30 @@ export function StepViews({ data, onChange }: StepViewsProps) {
 
       {/* ── Strategy (from settings) ── */}
       <Box title="Strategy (from settings)">
-        <div style={{ display: 'flex', justifyContent: 'flex-end', marginBottom: 4 }}>
+        <div className="alm-wizard-views__box-header">
           <a
             href="#"
             onClick={(e) => e.preventDefault()}
-            style={{ fontSize: 'var(--alm-text-xs)', color: 'var(--alm-accent)', textDecoration: 'underline' }}
+            className="alm-wizard-views__box-link"
           >
             Override for this project
           </a>
         </div>
-        <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
+        <div className="alm-wizard-views__strategy-row">
           <Pill variant="ok">NTFS JUNCTION</Pill>
-          <span style={{ fontSize: 'var(--alm-text-sm)' }}>Default for Windows + PixInsight</span>
-          <span style={{ marginLeft: 'auto', fontSize: 'var(--alm-text-xs)', color: 'var(--alm-text-muted)' }}>
+          <span className="alm-wizard-views__strategy-label">Default for Windows + PixInsight</span>
+          <span className="alm-wizard-views__strategy-meta">
             ~12 KB on disk &middot; no admin &middot; cleanup-safe
           </span>
         </div>
-        <div style={{ marginTop: 6, fontSize: 'var(--alm-text-xs)', color: 'var(--alm-text-muted)' }}>
+        <div className="alm-wizard-views__strategy-note">
           If a fallback is needed (e.g. across volumes), the plan will indicate per item.
         </div>
       </Box>
 
       {/* ── Views to generate ── */}
       <Section title="Views to generate">
-        <div style={{ fontSize: 'var(--alm-text-xs)', color: 'var(--alm-text-muted)', marginBottom: 'var(--alm-space-3)' }}>
+        <div className="alm-wizard-views__table-hint">
           for mosaic projects, one view per panel; otherwise a single wbpp_input
         </div>
         <table className="alm-simple-table">
@@ -101,42 +101,34 @@ export function StepViews({ data, onChange }: StepViewsProps) {
                   <input
                     value={viewName}
                     onChange={(e) => setViewName(e.target.value)}
-                    style={{
-                      width: 160,
-                      fontFamily: 'var(--alm-font-mono)',
-                      fontSize: 'var(--alm-text-xs)',
-                      padding: '3px 6px',
-                      border: '1px solid var(--alm-border)',
-                      background: 'var(--alm-bg)',
-                      color: 'var(--alm-text)',
-                    }}
+                    className="alm-wizard-views__name-input"
                     aria-label="View name"
                   />
                 </td>
                 <td><Pill variant="ok">{row.strategy}</Pill></td>
-                <td style={{ fontSize: 'var(--alm-text-xs)' }}>{row.scope}</td>
-                <td className="alm-mono" style={{ fontSize: '11px' }}>{row.items}</td>
-                <td className="alm-mono" style={{ fontSize: '11px' }}>{row.estimatedSize}</td>
+                <td className="alm-wizard-views__td-scope">{row.scope}</td>
+                <td className="alm-mono alm-wizard-views__td-small">{row.items}</td>
+                <td className="alm-mono alm-wizard-views__td-small">{row.estimatedSize}</td>
               </tr>
             ))}
           </tbody>
         </table>
-        <Btn size="sm" style={{ marginTop: 'var(--alm-space-3)' }}>+ Add view (per panel / per filter)</Btn>
+        <Btn size="sm" className="alm-wizard-views__add-btn">+ Add view (per panel / per filter)</Btn>
       </Section>
 
       {/* ── Conflict policy ── */}
       <Box title="Conflict policy">
-        <div style={{ display: 'flex', justifyContent: 'flex-end', marginBottom: 4 }}>
+        <div className="alm-wizard-views__box-header">
           <a
             href="#"
             onClick={(e) => e.preventDefault()}
-            style={{ fontSize: 'var(--alm-text-xs)', color: 'var(--alm-accent)', textDecoration: 'underline' }}
+            className="alm-wizard-views__box-link"
           >
             defaults from settings
           </a>
         </div>
-        <div style={{ display: 'flex', flexDirection: 'column', gap: 0 }}>
-          <label style={{ display: 'block', fontSize: 'var(--alm-text-xs)', padding: '2px 0', cursor: 'pointer' }}>
+        <div className="alm-wizard-views__radio-group">
+          <label className="alm-wizard-views__radio-label">
             <input
               type="radio"
               name="conflict-policy"
@@ -145,7 +137,7 @@ export function StepViews({ data, onChange }: StepViewsProps) {
             />{' '}
             fail if exists (safest)
           </label>
-          <label style={{ display: 'block', fontSize: 'var(--alm-text-xs)', padding: '2px 0', cursor: 'pointer' }}>
+          <label className="alm-wizard-views__radio-label">
             <input
               type="radio"
               name="conflict-policy"
@@ -154,7 +146,7 @@ export function StepViews({ data, onChange }: StepViewsProps) {
             />{' '}
             rename with suffix
           </label>
-          <label style={{ display: 'block', fontSize: 'var(--alm-text-xs)', padding: '2px 0', cursor: 'pointer' }}>
+          <label className="alm-wizard-views__radio-label">
             <input
               type="radio"
               name="conflict-policy"
@@ -163,7 +155,7 @@ export function StepViews({ data, onChange }: StepViewsProps) {
             />{' '}
             skip existing
           </label>
-          <label style={{ display: 'block', fontSize: 'var(--alm-text-xs)', padding: '2px 0', cursor: 'pointer' }}>
+          <label className="alm-wizard-views__radio-label">
             <input
               type="radio"
               name="conflict-policy"

@@ -109,26 +109,14 @@ const SHARED_ROWS: SharedRow[] = [
   },
 ];
 
-// ── Select styling (matches wireframe inline select) ────────────────────────
-
-const selectStyle: React.CSSProperties = {
-  width: '100%',
-  padding: '4px 6px',
-  border: '1px solid var(--alm-border)',
-  fontSize: 'var(--alm-text-xs)',
-  background: 'var(--alm-bg)',
-  fontFamily: 'inherit',
-  color: 'var(--alm-text)',
-};
-
 // ── Component ───────────────────────────────────────────────────────────────
 
 export function StepCalibration({ selectedSessionIds: _selectedSessionIds, data, onChange }: StepCalibrationProps) {
 
   return (
-    <div style={{ display: 'flex', flexDirection: 'column', gap: 'var(--alm-space-5)' }}>
+    <div className="alm-wizard-calib__root">
       {/* Step description */}
-      <div style={{ fontSize: 'var(--alm-text-sm)', color: 'var(--alm-text-muted)', maxWidth: 640 }}>
+      <div className="alm-wizard-calib__desc">
         Map calibration to each light source. Flats are per-filter (Ha flats can only calibrate
         Ha lights). Darks &amp; bias are usually shared across all lights of the same exposure /
         camera / gain.
@@ -136,7 +124,7 @@ export function StepCalibration({ selectedSessionIds: _selectedSessionIds, data,
 
       {/* ── Flats per light source (by filter) ── */}
       <Section title="Flats — per light source">
-        <div style={{ fontSize: 'var(--alm-text-xs)', color: 'var(--alm-text-muted)', marginBottom: 'var(--alm-space-3)' }}>
+        <div className="alm-wizard-calib__flat-subtitle">
           one master flat per filter; light sources are auto-grouped by filter
         </div>
         <table className="alm-simple-table">
@@ -145,7 +133,7 @@ export function StepCalibration({ selectedSessionIds: _selectedSessionIds, data,
               <th>Filter</th>
               <th>Lights covered</th>
               <th>Master flat</th>
-              <th style={{ width: 60 }}>Score</th>
+              <th className="alm-wizard-calib__col-score">Score</th>
               <th>Notes</th>
             </tr>
           </thead>
@@ -155,7 +143,7 @@ export function StepCalibration({ selectedSessionIds: _selectedSessionIds, data,
               return (
                 <tr key={row.filter}>
                   <td><Pill variant="ghost">{row.filter}</Pill></td>
-                  <td style={{ fontSize: 'var(--alm-text-xs)' }}>{row.lightsCovered}</td>
+                  <td className="alm-wizard-calib__cell-lights">{row.lightsCovered}</td>
                   <td>
                     <select
                       value={currentValue}
@@ -165,7 +153,7 @@ export function StepCalibration({ selectedSessionIds: _selectedSessionIds, data,
                           flatMappings: { ...data.flatMappings, [row.filter]: e.target.value },
                         })
                       }
-                      style={selectStyle}
+                      className="alm-wizard-calib__select"
                       aria-label={`Flat master for ${row.filter}`}
                     >
                       {row.options.map((opt) => (
@@ -173,14 +161,14 @@ export function StepCalibration({ selectedSessionIds: _selectedSessionIds, data,
                       ))}
                     </select>
                   </td>
-                  <td className="alm-mono" style={{ fontSize: '11px' }}>{row.score}</td>
-                  <td style={{ fontSize: '11px', color: 'var(--alm-text-muted)' }}>{row.notes}</td>
+                  <td className="alm-mono alm-wizard-calib__cell-score">{row.score}</td>
+                  <td className="alm-wizard-calib__cell-notes">{row.notes}</td>
                 </tr>
               );
             })}
           </tbody>
         </table>
-        <Btn size="sm" style={{ marginTop: 'var(--alm-space-3)' }}>+ Add another flat (for a future filter)</Btn>
+        <Btn size="sm" className="alm-wizard-calib__add-flat-btn">+ Add another flat (for a future filter)</Btn>
       </Section>
 
       {/* ── Shared calibration: darks, bias, dark flats ── */}
@@ -188,9 +176,9 @@ export function StepCalibration({ selectedSessionIds: _selectedSessionIds, data,
         <table className="alm-simple-table">
           <thead>
             <tr>
-              <th style={{ width: 70 }}>Role</th>
+              <th className="alm-wizard-calib__col-role">Role</th>
               <th>Pick</th>
-              <th style={{ width: 60 }}>Score</th>
+              <th className="alm-wizard-calib__col-score">Score</th>
               <th>Notes</th>
             </tr>
           </thead>
@@ -204,7 +192,7 @@ export function StepCalibration({ selectedSessionIds: _selectedSessionIds, data,
                     <select
                       value={currentValue}
                       onChange={(e) => onChange({ ...data, [row.field]: e.target.value })}
-                      style={selectStyle}
+                      className="alm-wizard-calib__select"
                       aria-label={`Pick ${row.role}`}
                     >
                       {row.options.map((opt) => (
@@ -213,17 +201,16 @@ export function StepCalibration({ selectedSessionIds: _selectedSessionIds, data,
                     </select>
                   </td>
                   <td
-                    className="alm-mono"
+                    className="alm-mono alm-wizard-calib__cell-score"
                     style={{
-                      fontSize: '11px',
                       color: row.scoreWarn ? 'var(--alm-warn)' : row.score === '—' ? 'var(--alm-text-faint)' : undefined,
                     }}
                   >
                     {row.score}
                   </td>
                   <td
+                    className="alm-wizard-calib__cell-notes-dyn"
                     style={{
-                      fontSize: '11px',
                       color: row.notesWarn ? 'var(--alm-warn)' : 'var(--alm-text-muted)',
                     }}
                   >
@@ -234,19 +221,10 @@ export function StepCalibration({ selectedSessionIds: _selectedSessionIds, data,
             })}
           </tbody>
         </table>
-        <div
-          style={{
-            padding: 'var(--alm-space-3) 0',
-            fontSize: 'var(--alm-text-xs)',
-            color: 'var(--alm-text-muted)',
-            display: 'flex',
-            alignItems: 'center',
-            gap: 'var(--alm-space-3)',
-          }}
-        >
+        <div className="alm-wizard-calib__footer">
           <Btn size="sm">+ Add calibration session&hellip;</Btn>
           <Btn size="sm">+ Import master&hellip;</Btn>
-          <span style={{ marginLeft: 'auto', color: 'var(--alm-warn)' }}>
+          <span className="alm-wizard-calib__footer-warn">
             &#9888; aging bias master &mdash; soft mismatch in plan
           </span>
         </div>
@@ -254,7 +232,7 @@ export function StepCalibration({ selectedSessionIds: _selectedSessionIds, data,
 
       {/* ── Why these were recommended ── */}
       <Box title="Why these were recommended">
-        <ul style={{ margin: 0, paddingLeft: 16, fontSize: 'var(--alm-text-xs)', color: 'var(--alm-text-secondary)' }}>
+        <ul className="alm-wizard-calib__why-list">
           <li><strong>Flats</strong>: matched per filter; same camera; flats &lt; 30d old preferred</li>
           <li><strong>Dark</strong>: exact match on EXPTIME (300s) &middot; temp &#916; 0.1&deg;C &middot; gain 100</li>
           <li><strong>Bias</strong>: only g100 bias for this camera exists; soft mismatch on age</li>

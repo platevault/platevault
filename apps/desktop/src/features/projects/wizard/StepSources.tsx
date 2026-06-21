@@ -59,64 +59,39 @@ export function StepSources({ data, onChange }: StepSourcesProps) {
   }
 
   if (loading) {
-    return <div style={{ color: 'var(--alm-text-muted)' }}>Loading sessions...</div>;
+    return <div className="alm-wizard-sources__loading">Loading sessions...</div>;
   }
 
   return (
-    <div style={{ display: 'flex', flexDirection: 'column', gap: 'var(--alm-space-4)' }}>
+    <div className="alm-wizard-sources">
       {/* Filter row */}
-      <div style={{ display: 'flex', gap: 'var(--alm-space-2)' }}>
+      <div className="alm-wizard-sources__filter-row">
         <input
           type="text"
           placeholder="Filter by target..."
           value={filterTarget}
           onChange={(e) => setFilterTarget(e.target.value)}
-          style={{
-            padding: 'var(--alm-space-1) var(--alm-space-2)',
-            border: '1px solid var(--alm-border)',
-            borderRadius: 4,
-            fontSize: 'var(--alm-text-xs)',
-            background: 'var(--alm-surface)',
-            color: 'var(--alm-text)',
-          }}
+          className="alm-wizard-sources__filter-input"
         />
         <input
           type="text"
           placeholder="Filter by filter..."
           value={filterFilter}
           onChange={(e) => setFilterFilter(e.target.value)}
-          style={{
-            padding: 'var(--alm-space-1) var(--alm-space-2)',
-            border: '1px solid var(--alm-border)',
-            borderRadius: 4,
-            fontSize: 'var(--alm-text-xs)',
-            background: 'var(--alm-surface)',
-            color: 'var(--alm-text)',
-          }}
+          className="alm-wizard-sources__filter-input"
         />
       </div>
 
       {/* Summary */}
-      <div style={{ fontSize: 'var(--alm-text-xs)', color: 'var(--alm-text-muted)', display: 'flex', gap: 'var(--alm-space-4)' }}>
+      <div className="alm-wizard-sources__summary">
         <span><strong>{data.selectedSessionIds.length}</strong> sessions selected</span>
         <span>Total integration: <strong>{formatIntegration(totalIntegration)}</strong></span>
       </div>
 
       {/* Session list */}
-      <div style={{ display: 'flex', flexDirection: 'column', gap: 0, border: '1px solid var(--alm-border)', borderRadius: 6, overflow: 'hidden' }}>
+      <div className="alm-wizard-sources__list">
         {/* Header */}
-        <div
-          style={{
-            display: 'grid',
-            gridTemplateColumns: '32px 1fr 80px 80px 100px',
-            padding: 'var(--alm-space-2) var(--alm-space-3)',
-            background: 'var(--alm-surface)',
-            borderBottom: '1px solid var(--alm-border)',
-            fontSize: 'var(--alm-text-xs)',
-            fontWeight: 600,
-            color: 'var(--alm-text-muted)',
-          }}
-        >
+        <div className="alm-wizard-sources__list-header">
           <Checkbox.Root
             className="alm-checkbox"
             checked={filtered.length > 0 && data.selectedSessionIds.length === filtered.length}
@@ -137,13 +112,8 @@ export function StepSources({ data, onChange }: StepSourcesProps) {
         {filtered.map((session) => (
           <label
             key={session.id}
+            className="alm-wizard-sources__row"
             style={{
-              display: 'grid',
-              gridTemplateColumns: '32px 1fr 80px 80px 100px',
-              padding: 'var(--alm-space-2) var(--alm-space-3)',
-              borderBottom: '1px solid var(--alm-border)',
-              fontSize: 'var(--alm-text-xs)',
-              cursor: 'pointer',
               background: data.selectedSessionIds.includes(session.id) ? 'var(--alm-surface)' : 'transparent',
             }}
           >
@@ -162,14 +132,14 @@ export function StepSources({ data, onChange }: StepSourcesProps) {
             </span>
             <span>{session.frameCount}</span>
             <span>{formatIntegration(session.totalIntegrationSeconds ?? 0)}</span>
-            <span style={{ fontFamily: 'var(--alm-font-mono)', overflow: 'hidden', textOverflow: 'ellipsis' }}>
+            <span className="alm-wizard-sources__train-id">
               {session.opticalTrainId.slice(0, 8)}
             </span>
           </label>
         ))}
 
         {filtered.length === 0 && (
-          <div style={{ padding: 'var(--alm-space-4)', textAlign: 'center', color: 'var(--alm-text-muted)', fontSize: 'var(--alm-text-xs)' }}>
+          <div className="alm-wizard-sources__empty">
             No confirmed sessions match filters
           </div>
         )}
