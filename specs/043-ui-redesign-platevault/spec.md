@@ -187,6 +187,10 @@ Done & validated (commits on `redesign-ui-platevault`):
   Views). Now a proper empty state.
 - Calibration suggest `session.not_found` humanized (neutral empty state)
 - Calibration Matching settings: dropped out-of-place Notes column
+- Targets: compact single-line rows (52→34px) — long catalog scannable
+- Inbox stats strip: count folders/masters separately (was "N+MM folders") +
+  fixed undefined --alm-text-primary token
+- SessionsList inline styles → classes (+ fixed undefined --alm-surface-subtle)
 
 Verification gate (all green): `tsc --noEmit` 0 errors · `check-tokens.sh` pass ·
 `eslint` 0 errors (1 pre-existing PlanPanel warning) · vitest **738/738 pass**
