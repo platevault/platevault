@@ -1207,3 +1207,125 @@
 .alm-property-table__source-badge--user { background: var(--alm-ok-bg); color: var(--alm-ok); border-color: var(--alm-ok-border); }
 .alm-property-table__source-badge--inferred { background: var(--alm-warn-bg); color: var(--alm-warn); border-color: var(--alm-warn-border); }
 .alm-property-table__source-badge--default { background: var(--alm-bg3); color: var(--alm-text-muted); }
+
+/* === TARGET DETAIL === */
+
+/* Title-extra: object-type pill beside the target heading */
+.alm-target-detail__title-extra {
+  color: var(--alm-text-muted);
+  font-size: var(--alm-text-sm);
+}
+
+/* Identity section: two-column definition list */
+.alm-target-detail__identity-grid {
+  display: grid;
+  grid-template-columns: max-content 1fr;
+  gap: var(--alm-sp-1) var(--alm-sp-3);
+  font-size: var(--alm-text-sm);
+}
+.alm-target-detail__identity-label {
+  color: var(--alm-text-muted);
+}
+
+/* Display-alias section — edit mode row */
+.alm-target-detail__display-alias-edit {
+  display: flex;
+  gap: var(--alm-sp-2);
+  flex-wrap: wrap;
+}
+
+/* Display-alias section — view mode row */
+.alm-target-detail__display-alias-view {
+  display: flex;
+  align-items: center;
+  gap: var(--alm-sp-2);
+}
+.alm-target-detail__display-alias-value {
+  font-size: var(--alm-text-sm);
+}
+.alm-target-detail__display-alias-placeholder {
+  color: var(--alm-text-faint);
+}
+
+/* Inline text inputs (display-alias and add-alias) */
+.alm-target-detail__text-input {
+  flex: 1;
+  padding: var(--alm-sp-1) var(--alm-sp-2);
+  font-size: var(--alm-text-sm);
+  background: var(--alm-surface-raised);
+  color: var(--alm-text);
+  border: 1px solid var(--alm-border);
+  border-radius: var(--alm-radius-sm);
+}
+.alm-target-detail__text-input:focus { outline: none; border-color: var(--alm-accent); }
+.alm-target-detail__text-input::placeholder { color: var(--alm-text-faint); }
+
+/* Small action buttons used in edit row and add-alias row */
+.alm-target-detail__action-btn {
+  padding: var(--alm-sp-1) var(--alm-sp-2);
+  background: var(--alm-surface-raised); color: var(--alm-text-secondary);
+  border: 1px solid var(--alm-border); border-radius: var(--alm-radius-sm);
+  cursor: pointer; font-size: var(--alm-text-xs);
+}
+.alm-target-detail__action-btn:hover { background: var(--alm-hover-bg); color: var(--alm-text); }
+.alm-target-detail__action-btn--muted {
+  color: var(--alm-text-muted);
+}
+
+/* Edit / Set button in display-alias view mode */
+.alm-target-detail__edit-btn {
+  background: none;
+  color: var(--alm-text-secondary);
+  border: 1px solid var(--alm-border);
+  border-radius: var(--alm-radius-sm);
+  cursor: pointer;
+  padding: 2px var(--alm-sp-2);
+  font-size: var(--alm-text-xs);
+}
+.alm-target-detail__edit-btn:hover { background: var(--alm-hover-bg); color: var(--alm-text); }
+
+/* Alias pill list */
+.alm-target-detail__alias-list {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--alm-sp-1);
+}
+.alm-target-detail__alias-kind {
+  font-size: var(--alm-text-xs);
+  color: var(--alm-text-muted);
+  margin-right: var(--alm-sp-1);
+}
+.alm-target-detail__alias-remove {
+  background: none;
+  border: none;
+  cursor: pointer;
+  margin-left: var(--alm-sp-1);
+  padding: 0;
+  color: var(--alm-text-muted);
+  display: inline-flex;
+  vertical-align: middle;
+}
+.alm-target-detail__alias-empty {
+  color: var(--alm-text-faint);
+  font-size: var(--alm-text-sm);
+}
+
+/* Add-alias form row */
+.alm-target-detail__alias-add-row {
+  display: flex;
+  gap: var(--alm-sp-2);
+  margin-top: var(--alm-sp-2);
+}
+
+/* Error/action banners below alias forms */
+.alm-target-detail__banner {
+  margin-top: var(--alm-sp-1);
+}
+
+/* Back navigation button */
+.alm-target-detail__back-btn {
+  margin: var(--alm-sp-3) 0;
+  padding: var(--alm-sp-1) var(--alm-sp-3);
+  font-size: var(--alm-text-sm);
+  cursor: pointer;
+}

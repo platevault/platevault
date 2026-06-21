@@ -204,7 +204,7 @@ export function TargetDetailV2({ targetId }: Props) {
       <DetailHeader
         title={<strong>{detail.effectiveLabel}</strong>}
         titleExtra={
-          <span style={{ color: 'var(--alm-text-muted)', fontSize: 'var(--alm-text-sm)' }}>
+          <span className="alm-target-detail__title-extra">
             <Pill variant="neutral">{detail.objectType.replace('_', ' ')}</Pill>
           </span>
         }
@@ -212,27 +212,20 @@ export function TargetDetailV2({ targetId }: Props) {
 
       {/* Coordinates + metadata */}
       <Section title="Identity">
-        <dl
-          style={{
-            display: 'grid',
-            gridTemplateColumns: 'max-content 1fr',
-            gap: 'var(--alm-sp-1) var(--alm-sp-3)',
-            fontSize: 'var(--alm-text-sm)',
-          }}
-        >
-          <dt style={{ color: 'var(--alm-text-muted)' }}>Designation</dt>
+        <dl className="alm-target-detail__identity-grid">
+          <dt className="alm-target-detail__identity-label">Designation</dt>
           <dd>{detail.primaryDesignation}</dd>
-          <dt style={{ color: 'var(--alm-text-muted)' }}>RA</dt>
+          <dt className="alm-target-detail__identity-label">RA</dt>
           <dd>{detail.raDeg != null ? fmtDeg(detail.raDeg, true) : '—'}</dd>
-          <dt style={{ color: 'var(--alm-text-muted)' }}>Dec</dt>
+          <dt className="alm-target-detail__identity-label">Dec</dt>
           <dd>{detail.decDeg != null ? fmtDeg(detail.decDeg, false) : '—'}</dd>
-          <dt style={{ color: 'var(--alm-text-muted)' }}>Source</dt>
+          <dt className="alm-target-detail__identity-label">Source</dt>
           <dd>
             <Pill variant="ghost">{detail.source}</Pill>
           </dd>
           {detail.simbadOid != null && (
             <>
-              <dt style={{ color: 'var(--alm-text-muted)' }}>SIMBAD OID</dt>
+              <dt className="alm-target-detail__identity-label">SIMBAD OID</dt>
               <dd>{detail.simbadOid}</dd>
             </>
           )}
@@ -242,7 +235,7 @@ export function TargetDetailV2({ targetId }: Props) {
       {/* Display alias (FR-012: user presentation label) */}
       <Section title="Display label">
         {displayAliasEditing ? (
-          <div style={{ display: 'flex', gap: 'var(--alm-sp-2)', flexWrap: 'wrap' }}>
+          <div className="alm-target-detail__display-alias-edit">
             <input
               aria-label="Display label"
               placeholder={detail.primaryDesignation}
@@ -252,55 +245,42 @@ export function TargetDetailV2({ targetId }: Props) {
                 if (e.key === 'Enter') void handleDisplayAliasSet();
                 if (e.key === 'Escape') setDisplayAliasEditing(false);
               }}
-              style={{ flex: 1, padding: 'var(--alm-sp-1)', fontSize: 'var(--alm-text-sm)' }}
+              className="alm-target-detail__text-input"
               autoFocus
             />
             <button
               onClick={handleDisplayAliasSet}
-              style={{ padding: 'var(--alm-sp-1) var(--alm-sp-2)' }}
+              className="alm-target-detail__action-btn"
             >
               Save
             </button>
             {detail.displayAlias != null && (
               <button
                 onClick={handleDisplayAliasClear}
-                style={{
-                  padding: 'var(--alm-sp-1) var(--alm-sp-2)',
-                  color: 'var(--alm-text-muted)',
-                }}
+                className="alm-target-detail__action-btn alm-target-detail__action-btn--muted"
               >
                 Clear
               </button>
             )}
             <button
               onClick={() => setDisplayAliasEditing(false)}
-              style={{
-                padding: 'var(--alm-sp-1) var(--alm-sp-2)',
-                color: 'var(--alm-text-muted)',
-              }}
+              className="alm-target-detail__action-btn alm-target-detail__action-btn--muted"
             >
               Cancel
             </button>
           </div>
         ) : (
-          <div style={{ display: 'flex', alignItems: 'center', gap: 'var(--alm-sp-2)' }}>
-            <span style={{ fontSize: 'var(--alm-text-sm)' }}>
+          <div className="alm-target-detail__display-alias-view">
+            <span className="alm-target-detail__display-alias-value">
               {detail.displayAlias ?? (
-                <em style={{ color: 'var(--alm-text-faint)' }}>
+                <em className="alm-target-detail__display-alias-placeholder">
                   Not set — showing primary designation
                 </em>
               )}
             </span>
             <button
               onClick={() => setDisplayAliasEditing(true)}
-              style={{
-                background: 'none',
-                border: '1px solid var(--alm-border)',
-                borderRadius: 'var(--alm-radius-sm)',
-                cursor: 'pointer',
-                padding: '2px var(--alm-sp-2)',
-                fontSize: 'var(--alm-text-xs)',
-              }}
+              className="alm-target-detail__edit-btn"
             >
               {detail.displayAlias != null ? 'Edit' : 'Set'}
             </button>
@@ -310,17 +290,11 @@ export function TargetDetailV2({ targetId }: Props) {
 
       {/* Aliases */}
       <Section title="Aliases" count={detail.aliases.length}>
-        <div style={{ display: 'flex', flexWrap: 'wrap', gap: 'var(--alm-sp-1)' }}>
+        <div className="alm-target-detail__alias-list">
           {detail.aliases.map((a) => (
             <Pill key={a.id} variant={a.kind === 'user' ? 'accent' : 'ghost'}>
               <span title={`kind: ${a.kind}`}>
-                <span
-                  style={{
-                    fontSize: 'var(--alm-text-xs)',
-                    color: 'var(--alm-text-muted)',
-                    marginRight: 'var(--alm-sp-1)',
-                  }}
-                >
+                <span className="alm-target-detail__alias-kind">
                   [{kindLabel(a.kind)}]
                 </span>
                 {a.alias}
@@ -328,16 +302,7 @@ export function TargetDetailV2({ targetId }: Props) {
               {a.kind === 'user' && (
                 <button
                   aria-label={`Remove alias ${a.alias}`}
-                  style={{
-                    background: 'none',
-                    border: 'none',
-                    cursor: 'pointer',
-                    marginLeft: 'var(--alm-sp-1)',
-                    padding: 0,
-                    color: 'var(--alm-text-muted)',
-                    display: 'inline-flex',
-                    verticalAlign: 'middle',
-                  }}
+                  className="alm-target-detail__alias-remove"
                   onClick={() => handleAliasRemove(a.id)}
                 >
                   <X size={14} aria-hidden="true" />
@@ -346,14 +311,14 @@ export function TargetDetailV2({ targetId }: Props) {
             </Pill>
           ))}
           {detail.aliases.length === 0 && (
-            <span style={{ color: 'var(--alm-text-faint)', fontSize: 'var(--alm-text-sm)' }}>
+            <span className="alm-target-detail__alias-empty">
               No aliases
             </span>
           )}
         </div>
 
         {/* Add user alias form */}
-        <div style={{ display: 'flex', gap: 'var(--alm-sp-2)', marginTop: 'var(--alm-sp-2)' }}>
+        <div className="alm-target-detail__alias-add-row">
           <input
             aria-label="New alias"
             placeholder="Add user alias…"
@@ -362,22 +327,22 @@ export function TargetDetailV2({ targetId }: Props) {
             onKeyDown={(e) => {
               if (e.key === 'Enter') void handleAliasAdd();
             }}
-            style={{ flex: 1, padding: 'var(--alm-sp-1)', fontSize: 'var(--alm-text-sm)' }}
+            className="alm-target-detail__text-input"
           />
           <button
             onClick={handleAliasAdd}
-            style={{ padding: 'var(--alm-sp-1) var(--alm-sp-2)' }}
+            className="alm-target-detail__action-btn"
           >
             Add
           </button>
         </div>
         {aliasError && (
-          <Banner variant="danger" style={{ marginTop: 'var(--alm-sp-1)' }}>
+          <Banner variant="danger" className="alm-target-detail__banner">
             {aliasError}
           </Banner>
         )}
         {actionError && (
-          <Banner variant="danger" style={{ marginTop: 'var(--alm-sp-1)' }}>
+          <Banner variant="danger" className="alm-target-detail__banner">
             {actionError}
           </Banner>
         )}
@@ -401,12 +366,7 @@ export function TargetDetailV2({ targetId }: Props) {
 
       {/* Back button */}
       <button
-        style={{
-          margin: 'var(--alm-sp-3) 0',
-          padding: 'var(--alm-sp-1) var(--alm-sp-3)',
-          fontSize: 'var(--alm-text-sm)',
-          cursor: 'pointer',
-        }}
+        className="alm-target-detail__back-btn"
         onClick={() => navigate({ to: '/targets' })}
       >
         ← All targets
