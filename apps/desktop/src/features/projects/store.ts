@@ -8,6 +8,7 @@
 
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { queryKeys } from "@/data/queryKeys";
+import { queryClient as sharedQueryClient } from "@/data/queryClient";
 import {
   listProjects008,
   getProject008,
@@ -151,36 +152,54 @@ export function useDismissChannelDrift() {
 
 // Legacy async call helpers kept for existing event-handler callers.
 
+// Each helper invalidates the same query keys as its `use*Mutation` hook
+// counterpart, via the shared QueryClient singleton — so event-handler callers
+// that use these helpers (rather than the hooks) still refresh the list/detail
+// after a mutation (regression F1).
+
 export async function callCreateProject(req: ProjectCreateRequest): Promise<ProjectCreateResult> {
-  return createProject(req);
+  const result = await createProject(req);
+  void sharedQueryClient.invalidateQueries({ queryKey: queryKeys.projects.all() });
+  return result;
 }
 
 export async function callUpdateProject(req: ProjectUpdateRequest): Promise<ProjectUpdateResult> {
-  return updateProject(req);
+  const result = await updateProject(req);
+  void sharedQueryClient.invalidateQueries({ queryKey: queryKeys.projects.all() });
+  void sharedQueryClient.invalidateQueries({ queryKey: queryKeys.projects.detail(req.projectId) });
+  return result;
 }
 
 export async function callAddProjectSource(
   req: ProjectSourceAddRequest,
 ): Promise<ProjectSourceAddResult> {
-  return addProjectSource(req);
+  const result = await addProjectSource(req);
+  void sharedQueryClient.invalidateQueries({ queryKey: queryKeys.projects.detail(req.projectId) });
+  return result;
 }
 
 export async function callRemoveProjectSource(
   req: ProjectSourceRemoveRequest,
 ): Promise<ProjectSourceRemoveResult> {
-  return removeProjectSource(req);
+  const result = await removeProjectSource(req);
+  void sharedQueryClient.invalidateQueries({ queryKey: queryKeys.projects.detail(req.projectId) });
+  return result;
 }
 
 export async function callReinferChannels(
   req: ProjectChannelsReinferRequest,
 ): Promise<ProjectChannelsReinferResult> {
-  return reinferProjectChannels(req);
+  const result = await reinferProjectChannels(req);
+  void sharedQueryClient.invalidateQueries({ queryKey: queryKeys.projects.detail(req.projectId) });
+  return result;
 }
 
 export async function callDismissChannelDrift(
   req: ProjectChannelsDismissDriftRequest,
 ): Promise<ProjectChannelsDismissDriftResult> {
-  return dismissProjectChannelDrift(req);
+  const result = await dismissProjectChannelDrift(req);
+  void sharedQueryClient.invalidateQueries({ queryKey: queryKeys.projects.detail(req.projectId) });
+  return result;
 }
 
 /**
@@ -193,7 +212,7 @@ export async function callTransitionLifecycle(
   nextState: ProjectLifecycleState,
   actionLabel?: string,
 ): Promise<LifecycleTransitionResponse> {
-  return applyProjectLifecycleTransition({
+  const result = await applyProjectLifecycleTransition({
     contractVersion: "2.0.0",
     requestId: crypto.randomUUID(),
     entityType: "project",
@@ -203,6 +222,9 @@ export async function callTransitionLifecycle(
     actionLabel,
     actor: "user",
   });
+  void sharedQueryClient.invalidateQueries({ queryKey: queryKeys.projects.all() });
+  void sharedQueryClient.invalidateQueries({ queryKey: queryKeys.projects.detail(projectId) });
+  return result;
 }
 
 export function useTransitionLifecycle() {
