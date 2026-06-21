@@ -11,7 +11,7 @@
 // On mount, loads persisted values from backend via settings.get('calibration').
 // Changes are auto-saved via the save() prop (useAutoSave → settings.update).
 import { useState, useEffect } from 'react';
-import { Table, Toggle } from '@/ui';
+import { Table, Toggle, Pill } from '@/ui';
 import { CALIBRATION_CRITERIA } from '@/data/fixtures/settings';
 import { getSettings } from '@/api/commands';
 
@@ -99,25 +99,19 @@ export function CalibrationMatching({ save }: CalibrationMatchingProps) {
         <Table
           columns={[
             { key: 'field', label: 'Field' },
-            { key: 'required', label: 'Required', style: { width: 90 } },
+            { key: 'required', label: 'Match required', style: { width: 120 } },
             { key: 'tolerance', label: 'Tolerance', style: { width: 120 } },
-            { key: 'notes', label: 'Notes' },
           ]}
           rows={CALIBRATION_CRITERIA.map((c) => ({
             field: c.field,
-            required: c.required
-              ? <span style={{ color: 'var(--alm-ok)', fontWeight: 600 }}>Yes</span>
-              : <span style={{ color: 'var(--alm-text-muted)' }}>No</span>,
-            tolerance: c.tolerance
-              ? <code className="alm-mono">{c.tolerance}</code>
-              : <span style={{ color: 'var(--alm-text-muted)' }}>—</span>,
-            notes: (
-              <span style={{ fontSize: 'var(--alm-text-xs)', color: 'var(--alm-text-muted)' }}>
-                {c.notes}
-              </span>
-            ),
+            required: <Pill variant="neutral">{c.required ? 'required' : 'optional'}</Pill>,
+            tolerance: <code className="alm-mono">{c.tolerance || 'exact'}</code>,
           }))}
         />
+        <p className="alm-settings__group-note">
+          Camera, binning, and gain must match exactly. Temperature and age are soft
+          tolerances that lower match confidence rather than block a match.
+        </p>
       </div>
 
       <div className="alm-settings__group">
