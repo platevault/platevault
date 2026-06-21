@@ -209,6 +209,7 @@ fn clamp_limit(limit: Option<u32>) -> usize {
 ///
 /// # Errors
 /// Returns `dev_mode.disabled` when `dev_mode` is false.
+#[allow(clippy::needless_pass_by_value)] // dev-tools-only (spec 021); signature kept by-value to mirror list_contracts + the dev command boundary
 pub fn list_calls(
     dev_mode: bool,
     request: DevCallsListRequest,
@@ -230,7 +231,7 @@ pub fn list_calls(
 mod tests {
     use contracts_core::dev::{ContractCall, DevCallsListRequest, DevContractsListRequest};
 
-    use super::{clamp_limit, list_calls, list_contracts, CALL_BUFFER_CAPACITY};
+    use super::{clamp_limit, list_calls, list_contracts, ErrorCode, CALL_BUFFER_CAPACITY};
 
     fn make_call(id: &str, contract: &str) -> ContractCall {
         ContractCall {
