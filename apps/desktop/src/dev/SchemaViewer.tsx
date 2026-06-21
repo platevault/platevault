@@ -68,44 +68,17 @@ export function SchemaViewer({
     <div
       role="dialog"
       aria-label={`Schema viewer: ${contractName} v${contractVersion}`}
-      style={{
-        position: 'fixed',
-        inset: 0,
-        background: 'rgba(0,0,0,0.5)',
-        display: 'flex',
-        alignItems: 'center',
-        justifyContent: 'center',
-        zIndex: 1000,
-      }}
+      className="alm-dev-schema__overlay"
     >
-      <div
-        style={{
-          background: 'var(--alm-surface)',
-          border: '1px solid var(--alm-border)',
-          borderRadius: 'var(--alm-radius-md)',
-          width: '80vw',
-          maxWidth: 900,
-          maxHeight: '80vh',
-          display: 'flex',
-          flexDirection: 'column',
-          padding: 'var(--alm-sp-4)',
-          gap: 'var(--alm-sp-3)',
-        }}
-      >
-        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+      <div className="alm-dev-schema__panel">
+        <div className="alm-dev-schema__header">
           <div>
-            <span style={{ fontFamily: 'monospace', fontWeight: 600 }}>{contractName}</span>
-            <span
-              style={{
-                color: 'var(--alm-text-muted)',
-                marginLeft: 'var(--alm-sp-2)',
-                fontSize: 'var(--alm-text-xs)',
-              }}
-            >
+            <span className="alm-dev-schema__name">{contractName}</span>
+            <span className="alm-dev-schema__version">
               v{contractVersion}
             </span>
           </div>
-          <div style={{ display: 'flex', gap: 'var(--alm-sp-2)' }}>
+          <div className="alm-dev-schema__actions">
             <button
               type="button"
               className="alm-btn alm-btn--sm"
@@ -126,43 +99,29 @@ export function SchemaViewer({
           </div>
         </div>
 
-        <div style={{ flex: 1, overflow: 'auto', minHeight: 0 }}>
+        <div className="alm-dev-schema__body">
           {missing ? (
             <div
               role="alert"
               data-testid="schema-missing"
-              style={{
-                color: 'var(--alm-danger)',
-                padding: 'var(--alm-sp-4)',
-                fontSize: 'var(--alm-text-sm)',
-              }}
+              className="alm-dev-schema__missing"
             >
               <strong>schema.missing</strong>
-              <p style={{ marginTop: 'var(--alm-sp-1)' }}>
+              <p className="alm-dev-schema__missing-path">
                 Schema file not found at:{' '}
-                <code style={{ fontFamily: 'monospace', fontSize: '0.8em' }}>
+                <code className="alm-dev-schema__missing-code">
                   {schemaPath || '(no path)'}
                 </code>
               </p>
             </div>
           ) : content === null ? (
-            <div style={{ color: 'var(--alm-text-muted)', padding: 'var(--alm-sp-4)' }}>
+            <div className="alm-dev-schema__loading">
               Loading schema…
             </div>
           ) : (
             <pre
               data-testid="schema-content"
-              style={{
-                margin: 0,
-                padding: 'var(--alm-sp-2)',
-                fontFamily: 'monospace',
-                fontSize: 'var(--alm-text-xs)',
-                lineHeight: 1.5,
-                whiteSpace: 'pre-wrap',
-                wordBreak: 'break-all',
-                background: 'var(--alm-surface-2)',
-                borderRadius: 'var(--alm-radius-sm)',
-              }}
+              className="alm-dev-schema__pre"
             >
               {content}
             </pre>

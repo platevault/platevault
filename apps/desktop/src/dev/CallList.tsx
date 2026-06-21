@@ -30,7 +30,7 @@ function formatStarted(iso: string): string {
 export function CallList({ calls, contracts, onViewSchema }: CallListProps) {
   if (calls.length === 0) {
     return (
-      <p style={{ fontSize: 'var(--alm-text-sm)', color: 'var(--alm-text-muted)' }}>
+      <p className="alm-dev-calls__empty">
         No calls recorded yet. Make some API calls with devMode on.
       </p>
     );
@@ -38,18 +38,18 @@ export function CallList({ calls, contracts, onViewSchema }: CallListProps) {
 
   return (
     <table
-      style={{ width: '100%', borderCollapse: 'collapse', fontSize: 'var(--alm-text-xs)' }}
+      className="alm-dev-calls__table"
       aria-label="Recent contract calls"
     >
       <thead>
-        <tr style={{ borderBottom: '1px solid var(--alm-border)', textAlign: 'left' }}>
-          <th style={{ padding: 'var(--alm-sp-1) var(--alm-sp-2)' }}>ID</th>
-          <th style={{ padding: 'var(--alm-sp-1) var(--alm-sp-2)' }}>Contract</th>
-          <th style={{ padding: 'var(--alm-sp-1) var(--alm-sp-2)' }}>Version</th>
-          <th style={{ padding: 'var(--alm-sp-1) var(--alm-sp-2)' }}>Started</th>
-          <th style={{ padding: 'var(--alm-sp-1) var(--alm-sp-2)' }}>Duration</th>
-          <th style={{ padding: 'var(--alm-sp-1) var(--alm-sp-2)' }}>Outcome</th>
-          <th style={{ padding: 'var(--alm-sp-1) var(--alm-sp-2)' }}>Actions</th>
+        <tr className="alm-dev-calls__thead-row">
+          <th className="alm-dev-calls__th">ID</th>
+          <th className="alm-dev-calls__th">Contract</th>
+          <th className="alm-dev-calls__th">Version</th>
+          <th className="alm-dev-calls__th">Started</th>
+          <th className="alm-dev-calls__th">Duration</th>
+          <th className="alm-dev-calls__th">Outcome</th>
+          <th className="alm-dev-calls__th">Actions</th>
         </tr>
       </thead>
       <tbody>
@@ -61,52 +61,45 @@ export function CallList({ calls, contracts, onViewSchema }: CallListProps) {
           return (
             <tr
               key={call.id}
-              style={{ borderBottom: '1px solid var(--alm-border-subtle)' }}
+              className="alm-dev-calls__row"
               data-testid={`call-row-${call.id}`}
             >
-              <td
-                style={{
-                  padding: 'var(--alm-sp-1) var(--alm-sp-2)',
-                  fontFamily: 'monospace',
-                  color: 'var(--alm-text-muted)',
-                  fontSize: '0.7rem',
-                }}
-              >
+              <td className="alm-dev-calls__td--id">
                 {call.id}
               </td>
-              <td style={{ padding: 'var(--alm-sp-1) var(--alm-sp-2)', fontFamily: 'monospace' }}>
+              <td className="alm-dev-calls__td--contract">
                 {call.contract}
                 {call.payloadTruncated && (
                   <span
                     title="Payload was truncated (exceeded 64 KB)"
-                    style={{ marginLeft: 'var(--alm-sp-1)', color: 'var(--alm-warn)' }}
+                    className="alm-dev-calls__truncated"
                   >
                     ⚠T
                   </span>
                 )}
               </td>
-              <td style={{ padding: 'var(--alm-sp-1) var(--alm-sp-2)' }}>
+              <td className="alm-dev-calls__td">
                 {call.contractVersion}
               </td>
-              <td style={{ padding: 'var(--alm-sp-1) var(--alm-sp-2)', color: 'var(--alm-text-muted)' }}>
+              <td className="alm-dev-calls__td--started">
                 {formatStarted(call.startedAt)}
               </td>
-              <td style={{ padding: 'var(--alm-sp-1) var(--alm-sp-2)' }}>
+              <td className="alm-dev-calls__td">
                 {formatDuration(call.durationMs)}
               </td>
-              <td style={{ padding: 'var(--alm-sp-1) var(--alm-sp-2)' }}>
+              <td className="alm-dev-calls__td">
                 {isError ? (
                   <span
-                    style={{ color: 'var(--alm-danger)', fontFamily: 'monospace' }}
+                    className="alm-dev-calls__outcome--error"
                     title={call.error?.message}
                   >
                     error: {call.error?.code}
                   </span>
                 ) : (
-                  <span style={{ color: 'var(--alm-success)' }}>ok</span>
+                  <span className="alm-dev-calls__outcome--ok">ok</span>
                 )}
               </td>
-              <td style={{ padding: 'var(--alm-sp-1) var(--alm-sp-2)', display: 'flex', gap: 'var(--alm-sp-1)' }}>
+              <td className="alm-dev-calls__td--actions">
                 <button
                   type="button"
                   className="alm-btn alm-btn--xs"

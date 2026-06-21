@@ -39,7 +39,7 @@ export function MastersList({ masters, loading, error, selected, onSelect, aging
     return (
       <ListSidebar footer="Loading…">
         <div
-          style={{ padding: 'var(--alm-sp-2)', fontSize: 'var(--alm-text-sm)', color: 'var(--alm-text-muted)' }}
+          className="alm-masters-list__status"
           data-testid="masters-loading"
         >
           Loading calibration masters…

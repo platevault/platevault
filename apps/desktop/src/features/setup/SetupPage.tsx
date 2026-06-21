@@ -39,7 +39,7 @@ export function SetupPage() {
 
   if (setupCompleted || checking) {
     return (
-      <div className="alm-page" style={{ justifyContent: 'center', alignItems: 'center', color: 'var(--alm-text-muted)' }}>
+      <div className="alm-page alm-setup-page__loading">
         Loading…
       </div>
     );

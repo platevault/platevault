@@ -62,7 +62,7 @@ export function Lifecycle({ state }: LifecycleProps) {
             <div className="alm-lifecycle__line" />
             <div className="alm-lifecycle__dot alm-lifecycle__dot--blocked" />
           </div>
-          <span className="alm-lifecycle__label" style={{ color: 'var(--alm-danger)' }}>
+          <span className="alm-lifecycle__label alm-lifecycle__label--danger">
             blocked
           </span>
         </div>

@@ -120,7 +120,7 @@ export function SettingsPage() {
             right={
               saved && (
                 <span
-                  style={{ fontSize: 'var(--alm-text-xs)', color: 'var(--alm-ok)' }}
+                  className="alm-settings__saved-indicator"
                   aria-live="polite"
                 >
                   Saved &#10003;

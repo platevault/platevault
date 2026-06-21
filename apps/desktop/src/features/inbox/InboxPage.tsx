@@ -342,7 +342,7 @@ export function InboxPage() {
             title="Inbox"
             subtitle={subtitle}
             right={
-              <div style={{ display: 'flex', gap: 'var(--alm-sp-2)', alignItems: 'center' }}>
+              <div className="alm-inbox-page__bar-row">
                 {/* spec 041 T042: Confirm relocated from the deleted ActionSidebar. */}
                 <Btn
                   size="sm"

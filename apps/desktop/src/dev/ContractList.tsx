@@ -15,7 +15,7 @@ interface ContractListProps {
 export function ContractList({ contracts, onViewSchema }: ContractListProps) {
   if (contracts.length === 0) {
     return (
-      <p style={{ fontSize: 'var(--alm-text-sm)', color: 'var(--alm-text-muted)' }}>
+      <p className="alm-dev-contracts-list__empty">
         No contracts loaded.
       </p>
     );
@@ -23,74 +23,66 @@ export function ContractList({ contracts, onViewSchema }: ContractListProps) {
 
   return (
     <table
-      style={{ width: '100%', borderCollapse: 'collapse', fontSize: 'var(--alm-text-xs)' }}
+      className="alm-dev-contracts-list__table"
       aria-label="Contract registry"
     >
       <thead>
-        <tr style={{ borderBottom: '1px solid var(--alm-border)', textAlign: 'left' }}>
-          <th style={{ padding: 'var(--alm-sp-1) var(--alm-sp-2)' }}>Name</th>
-          <th style={{ padding: 'var(--alm-sp-1) var(--alm-sp-2)' }}>Version</th>
-          <th style={{ padding: 'var(--alm-sp-1) var(--alm-sp-2)' }}>Direction</th>
-          <th style={{ padding: 'var(--alm-sp-1) var(--alm-sp-2)' }}>Replay</th>
-          <th style={{ padding: 'var(--alm-sp-1) var(--alm-sp-2)' }}>Schema path</th>
-          <th style={{ padding: 'var(--alm-sp-1) var(--alm-sp-2)' }}>Actions</th>
+        <tr className="alm-dev-contracts-list__thead-row">
+          <th className="alm-dev-contracts-list__th">Name</th>
+          <th className="alm-dev-contracts-list__th">Version</th>
+          <th className="alm-dev-contracts-list__th">Direction</th>
+          <th className="alm-dev-contracts-list__th">Replay</th>
+          <th className="alm-dev-contracts-list__th">Schema path</th>
+          <th className="alm-dev-contracts-list__th">Actions</th>
         </tr>
       </thead>
       <tbody>
         {contracts.map((c) => (
           <tr
             key={c.name}
-            style={{ borderBottom: '1px solid var(--alm-border-subtle)' }}
+            className="alm-dev-contracts-list__row"
             data-testid={`contract-row-${c.name}`}
           >
-            <td style={{ padding: 'var(--alm-sp-1) var(--alm-sp-2)', fontFamily: 'monospace' }}>
+            <td className="alm-dev-contracts-list__td-name">
               {c.mismatch === true && (
                 <span
                   title="Version mismatch between TypeScript and Rust registries"
                   aria-label="Version mismatch warning"
-                  style={{ color: 'var(--alm-warn)', marginRight: 'var(--alm-sp-1)' }}
+                  className="alm-dev-contracts-list__mismatch-icon"
                 >
                   ⚠
                 </span>
               )}
               {c.name}
             </td>
-            <td style={{ padding: 'var(--alm-sp-1) var(--alm-sp-2)' }}>{c.version}</td>
-            <td style={{ padding: 'var(--alm-sp-1) var(--alm-sp-2)', color: 'var(--alm-text-muted)' }}>
+            <td className="alm-dev-contracts-list__td">{c.version}</td>
+            <td className="alm-dev-contracts-list__td-muted">
               {c.direction}
             </td>
-            <td style={{ padding: 'var(--alm-sp-1) var(--alm-sp-2)', textAlign: 'center' }}>
+            <td className="alm-dev-contracts-list__td-center">
               {c.replaySafe ? (
                 <span
                   title="Replay-safe: read-only contract, replay allowed"
-                  style={{ color: 'var(--alm-success)' }}
+                  className="alm-dev-contracts-list__replay-ok"
                 >
                   ✓
                 </span>
               ) : (
                 <span
                   title="Not replay-safe: write contract, replay disabled"
-                  style={{ color: 'var(--alm-text-muted)' }}
+                  className="alm-dev-contracts-list__replay-na"
                 >
                   —
                 </span>
               )}
             </td>
             <td
-              style={{
-                padding: 'var(--alm-sp-1) var(--alm-sp-2)',
-                fontFamily: 'monospace',
-                maxWidth: 280,
-                overflow: 'hidden',
-                textOverflow: 'ellipsis',
-                whiteSpace: 'nowrap',
-                color: 'var(--alm-text-muted)',
-              }}
+              className="alm-dev-contracts-list__td-schema"
               title={c.schemaPath || 'Schema path not available'}
             >
               {c.schemaPath || <em>N/A</em>}
             </td>
-            <td style={{ padding: 'var(--alm-sp-1) var(--alm-sp-2)' }}>
+            <td className="alm-dev-contracts-list__td">
               <button
                 type="button"
                 className="alm-btn alm-btn--xs"

@@ -30,7 +30,7 @@ export const DirPicker = forwardRef<HTMLDivElement, DirPickerProps>(
         {label && <span className="alm-kv-row__label">{label}</span>}
         <span className="alm-kv-row__value">
           <Folder size={14} />
-          <span style={{ fontFamily: 'var(--alm-font-mono)', fontSize: 'var(--alm-text-xs)', flex: 1, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+          <span className="alm-dir-picker__path">
             {value || 'No folder selected'}
           </span>
           <Btn size="sm" onClick={handleChoose} disabled={loading}>
@@ -38,14 +38,7 @@ export const DirPicker = forwardRef<HTMLDivElement, DirPickerProps>(
           </Btn>
         </span>
         {error && (
-          <div
-            style={{
-              marginTop: 'var(--alm-space-1)',
-              fontSize: 'var(--alm-text-xs)',
-              color: 'var(--alm-danger, #dc2626)',
-              lineHeight: 1.4,
-            }}
-          >
+          <div className="alm-dir-picker__error">
             {error.message}
           </div>
         )}
