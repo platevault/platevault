@@ -90,3 +90,41 @@ Grounded in the existing implementation (cited where relevant). Each item: Decis
 - **Windows verify loop**: each backend change requires push→pull→recompile→verify on the Windows app (stale-binary risk).
 - **Workspace test breakage**: validate with `-p <crate>`, not `cargo test --workspace`.
 - **Destination preview** (FR-024) reuses `resolve_v1`; the breakdown's `destination_preview` column can now be populated at classify/confirm time from the active pattern instead of the current `None`.
+
+## Iteration 2026-06-21: Destination model
+
+### Decision — per-type destination patterns (FR-025/FR-026)
+
+Today one light template (`{target}/{filter}/{date}/{frametype}/`) is applied to every frame, producing nonsensical calibration paths like `unclassified/nofilter/undated/dark/`. Decision: a **distinct, user-configurable token pattern per frame-type class**, selected by the file's resolved type (incl. master-vs-raw). Default patterns (configurable in Settings; invalid/empty → default):
+
+| Type | Default pattern (intent) | Notes |
+|------|--------------------------|-------|
+| light | `{target}/{filter}/{date}/light/` | per-night, per-filter, per-target |
+| flat | `flats/{filter}/{date}/` | per-night, per-filter; no target |
+| dark | `darks/{exposure}/` (+ `{gain}`/`{temp}`/`{binning}` as configured) | no filter, no target |
+| bias | `bias/` (+ `{gain}`/`{temp}`/`{binning}` as configured) | no filter, no date, no target |
+| master flat | `masters/flats/{filter}/` | raw counterpart minus date |
+| master dark | `masters/darks/{exposure}/` | raw counterpart minus date |
+| master bias | `masters/bias/` | raw counterpart minus date |
+
+Rationale (Constitution Principle IV): flats are tracked by date+filter; bias/darks ignore filter; masters are integrations so they ignore date. Token names align with the shared `crates/patterns` vocabulary. Light-master / integration routing is deferred.
+
+### Decision — destination root resolution (FR-027–FR-031)
+
+`confirm` currently sets `to_root_id = from_root_id` unconditionally. New rule: default to the source's own root (in place) for non-inbox; **inbox sources must move into a chosen library root** (inbox is never a destination); when >1 registered root is a valid destination for the frame type, require explicit user selection; with exactly one candidate, auto-select. The plan/preview shows the **absolute** path (`registered_sources.path` + relative).
+
+### Path-load-bearing attribute matrix (FR-032/FR-033)
+
+Plan generation is gated on the presence of every attribute the chosen pattern consumes, surfaced via the existing needs-review flow (like missing IMAGETYP):
+
+| Type | Required attributes |
+|------|---------------------|
+| light | image type, target/object, filter, date |
+| flat | image type, filter, date |
+| dark | image type, exposure |
+| bias | image type |
+| master flat | image type, filter |
+| master dark | image type, exposure |
+| master bias | image type |
+
+(Gain/temp/binning are required only when included in the configured pattern for that type.)

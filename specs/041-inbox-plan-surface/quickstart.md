@@ -60,6 +60,16 @@ Manual end-to-end verification on the real desktop app (Windows verify loop: pus
 1. Generate a plan with a destructive action; verify a **clearly labelled Archive-vs-System-Trash** control appears in the plan/review surface, defaulting to **Archive**, with its meaning explained.
 2. Switch to System Trash; apply; verify destructive files go to the system trash (recoverable), audited.
 
+## Iteration 2026-06-21 — Destination model (US8/US9)
+
+1. **Calibration structure**: confirm an unorganized dark/bias/flat and verify the destination uses the per-type pattern (no `unclassified`/`nofilter` target segment) — e.g. darks under `darks/<exposure>/`, flats under `flats/<filter>/<date>/`, masters under `masters/...` with no date.
+2. **Per-type pattern config**: edit a type's pattern in Settings, re-confirm, and verify the destination follows the edited pattern; clear it and verify fallback to the built-in default.
+3. **Inbox root selection**: with >1 light root registered, confirm an inbox light item and verify a destination-root picker appears and Apply is blocked until a root is chosen.
+4. **Single-root auto**: with exactly one calibration root, confirm a calibration item and verify the root is chosen automatically (no prompt).
+5. **In-place default**: confirm a non-inbox unorganized item and verify it defaults to its own root.
+6. **Full path**: verify each plan action shows the full absolute destination (root + relative).
+7. **Missing-attribute gate**: confirm a light frame with no DATE-OBS and verify the plan is blocked and the file is surfaced for input (like missing IMAGETYP); supply the date and verify the gate clears and the destination updates.
+
 ## Regression / gates
 
 - `cargo test -p app_core inbox`, `-p persistence_db`, `-p fs_planner`, `-p fs_executor` green.
