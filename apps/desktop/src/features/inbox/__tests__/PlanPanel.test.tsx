@@ -24,6 +24,7 @@ type DestSpy = ReturnType<typeof vi.fn<(d: DestructiveDestination) => void>>;
 type ApplySelectedSpy = ReturnType<typeof vi.fn<(ids: string[]) => void>>;
 type ApplyAllSpy = ReturnType<typeof vi.fn<() => void>>;
 type CancelSpy = ReturnType<typeof vi.fn<(id: string) => void>>;
+import type { ComponentProps } from 'react';
 import { PlanPanel } from '../PlanPanel';
 import type { DestructiveDestination } from '../PlanPanel';
 import type { InboxOpenPlan, InboxPlanAction } from '../store';
@@ -249,5 +250,64 @@ describe('PlanPanel (aggregate surface)', () => {
     // Pre-select so Apply selected would otherwise be enabled.
     expect((screen.getByTestId('plan-apply-all') as HTMLButtonElement).disabled).toBe(true);
     expect((screen.getByTestId('plan-cancel-a') as HTMLButtonElement).disabled).toBe(true);
+  });
+});
+
+// ── spec 041 US8/FR-029/FR-031: destination-root picker + absolute path ───────
+
+describe('PlanPanel destination-root picker (US8)', () => {
+  const pendingRootPick = {
+    category: 'light_frames',
+    candidates: [
+      { rootId: 'root-a', path: '/lib/A', kind: 'light_frames' },
+      { rootId: 'root-b', path: '/lib/B', kind: 'light_frames' },
+    ],
+  };
+
+  function renderWith(extra: Partial<ComponentProps<typeof PlanPanel>>) {
+    const plans = extra.plans ?? [];
+    const totalActions = plans.reduce((n, p) => n + p.actions.length, 0);
+    return render(
+      <PlanPanel
+        plans={plans}
+        totalActions={totalActions}
+        destructiveDestination="archive"
+        onDestructiveDestinationChange={vi.fn()}
+        onApplySelected={vi.fn()}
+        onApplyAll={vi.fn()}
+        onCancel={vi.fn()}
+        {...extra}
+      />,
+    );
+  }
+
+  it('renders one option per candidate even with zero open plans (FR-029)', () => {
+    renderWith({ plans: [], pendingRootPick, onPickDestinationRoot: vi.fn() });
+    expect(screen.getByTestId('inbox-root-picker')).toBeInTheDocument();
+    expect(screen.getByTestId('inbox-root-option-root-a')).toBeInTheDocument();
+    expect(screen.getByTestId('inbox-root-option-root-b')).toBeInTheDocument();
+  });
+
+  it('fires onPickDestinationRoot with the chosen rootId', () => {
+    const onPick = vi.fn<(rootId: string) => void>();
+    renderWith({ plans: [], pendingRootPick, onPickDestinationRoot: onPick });
+    fireEvent.click(screen.getByTestId('inbox-root-option-root-b'));
+    expect(onPick).toHaveBeenCalledWith('root-b');
+  });
+
+  it('shows the absolute destination path from absoluteByFromPath (FR-031)', () => {
+    const plan = makePlan({
+      actions: [makeAction({ fromPath: '/inbox/img.fits', destinationPreview: 'lights/img.fits' })],
+    });
+    renderWith({ plans: [plan], absoluteByFromPath: { '/inbox/img.fits': '/lib/A/lights/img.fits' } });
+    expect(screen.getByTestId('inbox-dest-absolute-0')).toHaveTextContent('/lib/A/lights/img.fits');
+  });
+
+  it('falls back to the relative preview when no absolute path is captured', () => {
+    const plan = makePlan({
+      actions: [makeAction({ fromPath: '/inbox/img.fits', destinationPreview: 'lights/img.fits' })],
+    });
+    renderWith({ plans: [plan] });
+    expect(screen.getByTestId('inbox-dest-absolute-0')).toHaveTextContent('lights/img.fits');
   });
 });

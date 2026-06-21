@@ -108,3 +108,14 @@ Tasks grouped by user story (independently testable), dependency-ordered: schema
 ## Complexity Tracking
 
 No constitutional violations; no complexity deviations to justify.
+
+## Iteration 2026-06-21: Destination model
+
+Builds on the merged 041 apply path (root_id now resolves via `registered_sources`).
+
+- **Pattern resolver** (`crates/patterns`): add per-type pattern support + a selector keyed on the resolved type (incl. master-vs-raw), with built-in default fallback. (T049)
+- **Settings** (`crates/persistence/db` + settings use-case + `apps/desktop` Settings UI): persist/edit per-type patterns using the shared token vocabulary; validate tokens; reset-to-default. (T050/T051)
+- **`crates/app/core/src/inbox/confirm.rs`**: select pattern by resolved type (no target for calibration); replace unconditional `to_root_id = from_root_id` with destination-root resolution (in-place default / inbox-must-target / candidate enumeration by type / ambiguity → require caller `root_id`); build absolute destination. (T052/T053)
+- **`crates/app/core/src/inbox/classify.rs` (+ contracts/bindings)**: compute per-file `missing_path_attributes`; confirm rejects with a typed error when required attributes are missing or the destination root is ambiguous and unselected; `inbox_confirm` request gains optional `root_id`; classify/plan responses carry candidate roots + absolute destination. (T054/T056)
+- **Frontend** (`InboxDetail`/`PlanPanel`): destination-root picker (ambiguous/inbox only), absolute-path display, and a missing-attribute input gate mirroring the IMAGETYP needs-review flow. (T055/T057)
+- **Tests**: Layer-1 (resolver/root/gate), vitest (picker/path/gate), Windows E2E via tauri MCP + coverage-matrix update. (T058–T060)

@@ -73,3 +73,23 @@ licensing (014), Developer contract diagnostics (021, dev-only), Design/UI specs
 (022, 026–032) — covered implicitly by #21 screen-load smoke; remediation specs
 033/036 fold into the areas above. Any area later found implemented but unmapped
 MUST be added here or reported as a gap (FR-002).
+
+## Spec 041 iteration — destination model (US8/US9) — 2026-06-21
+
+Per-type destination patterns, destination-root selection, full absolute-path
+preview, and the missing-path-attribute gate (FR-025–FR-033). Folds into areas
+#3/#4 (inbox lifecycle).
+
+| Scenario (quickstart Iteration 2026-06-21) | Layer-1 test |
+|---|---|
+| Per-type pattern resolution + calibration structure (no target) | `crates/patterns/src/per_type.rs`, `crates/patterns/src/resolver.rs` (`pattern_str_*`), `confirm.rs::calibration_destinations_omit_target` |
+| Root resolution: in-place / inbox-target / single-auto / multi-require / none | `confirm.rs::{non_inbox_source_moves_in_place, inbox_single_candidate_auto_selects, inbox_multi_candidate_requires_selection, inbox_no_candidate_blocks}` |
+| Missing path-attribute gate (US9) | `confirm.rs::missing_path_attribute_blocks_with_report` |
+| Settings per-type pattern round-trip + validation (FR-026b) | `app_core settings.rs::update_patterns_by_type_*`, `persistence_db settings.rs` |
+| Frontend: root picker, absolute-path preview, missing-attr annotations | `apps/desktop/src/features/inbox/__tests__/{PlanPanel,InboxDetail}.test.tsx`; settings: `NamingStructure` vitest |
+
+**Windows real-app E2E (T060)**: the live tauri-MCP run of the quickstart
+destination-model scenarios (calibration structure, inbox root selection,
+multi-root prompt vs single-root auto, missing-date gate) is the recommended
+post-merge verification loop (see the `tauri-mcp-windows-verify-mechanics`
+memory); Layer-1 + vitest coverage above gates the merge.

@@ -2380,6 +2380,28 @@ export type InboxConfirmActionsSummary = {
 	catalogueCount: number,
 };
 
+/**
+ *  Resolved destination preview for one confirmed plan action (spec 041
+ *  US8/FR-031).
+ * 
+ *  Carries the **absolute** destination (chosen root path + resolved relative
+ *  path) so the UI can show the full on-disk path without re-resolving roots.
+ */
+export type InboxConfirmDestination = {
+	fromPath: string,
+	/**  Resolved relative path under the destination root. */
+	toRelativePath: string,
+	/**
+	 *  Absolute destination = chosen root path + `/` + `to_relative_path`
+	 *  (equals the source location for `catalogue` actions).
+	 */
+	toAbsolutePath: string,
+	/**  Id of the chosen destination root. */
+	toRootId: string,
+	/**  `"move"` | `"catalogue"`. */
+	action: string,
+};
+
 /**  Request for `inbox.confirm`. */
 export type InboxConfirmRequest = InboxConfirmRequest_Serialize | InboxConfirmRequest_Deserialize;
 
@@ -2396,6 +2418,16 @@ export type InboxConfirmRequest_Deserialize = {
 	 *  (Tauri transport detail only).
 	 */
 	rootAbsolutePath: string,
+	/**
+	 *  Caller-selected destination library root (spec 041 US8/FR-029).
+	 * 
+	 *  Only consulted for inbox sources whose frame-type category has more than
+	 *  one candidate library root. When exactly one candidate exists it is
+	 *  auto-selected and this field is ignored; for non-inbox sources the file
+	 *  stays in place. Supplying a root that is not a valid candidate for the
+	 *  item's category is rejected with `inbox.invalid_destination_root`.
+	 */
+	rootId?: string | null,
 };
 
 /**  Request for `inbox.confirm`. */
@@ -2411,6 +2443,16 @@ export type InboxConfirmRequest_Serialize = {
 	 *  (Tauri transport detail only).
 	 */
 	rootAbsolutePath: string,
+	/**
+	 *  Caller-selected destination library root (spec 041 US8/FR-029).
+	 * 
+	 *  Only consulted for inbox sources whose frame-type category has more than
+	 *  one candidate library root. When exactly one candidate exists it is
+	 *  auto-selected and this field is ignored; for non-inbox sources the file
+	 *  stays in place. Supplying a root that is not a valid candidate for the
+	 *  item's category is rejected with `inbox.invalid_destination_root`.
+	 */
+	rootId?: string | null,
 };
 
 /**  Response from `inbox.confirm`. */
@@ -2441,6 +2483,11 @@ export type InboxConfirmResponse_Deserialize = {
 	 *  `"organized"` | `"unorganized"`. `None` when `registered_as_master`.
 	 */
 	organizationState: string | null,
+	/**
+	 *  Per-action absolute destination previews (spec 041 US8/FR-031).
+	 *  Empty for master-registration responses.
+	 */
+	destinations?: InboxConfirmDestination[],
 };
 
 /**  Response from `inbox.confirm`. */
@@ -2468,6 +2515,11 @@ export type InboxConfirmResponse_Serialize = {
 	 *  `"organized"` | `"unorganized"`. `None` when `registered_as_master`.
 	 */
 	organizationState?: string | null,
+	/**
+	 *  Per-action absolute destination previews (spec 041 US8/FR-031).
+	 *  Empty for master-registration responses.
+	 */
+	destinations?: InboxConfirmDestination[],
 };
 
 /**  A file entry discovered during an inbox scan. */
@@ -2522,6 +2574,14 @@ export type InboxFileMetadata_Deserialize = {
 	isMaster: boolean,
 	/**  True when the persisted override no longer matches the file's size/mtime (R-4). */
 	overrideStale: boolean,
+	/**
+	 *  Path-load-bearing attributes the file is missing for its frame type's
+	 *  destination pattern (spec 041 US9/FR-032/FR-033). Empty when the file can
+	 *  resolve a destination. These are the pattern token names that fell back to
+	 *  a registry default (e.g. `["target", "date"]` for a light with no OBJECT /
+	 *  DATE-OBS). Supplying the value via reclassify clears the gate.
+	 */
+	missingPathAttributes?: string[],
 };
 
 /**
@@ -2558,6 +2618,14 @@ export type InboxFileMetadata_Serialize = {
 	isMaster: boolean,
 	/**  True when the persisted override no longer matches the file's size/mtime (R-4). */
 	overrideStale: boolean,
+	/**
+	 *  Path-load-bearing attributes the file is missing for its frame type's
+	 *  destination pattern (spec 041 US9/FR-032/FR-033). Empty when the file can
+	 *  resolve a destination. These are the pattern token names that fell back to
+	 *  a registry default (e.g. `["target", "date"]` for a light with no OBJECT /
+	 *  DATE-OBS). Supplying the value via reclassify clears the gate.
+	 */
+	missingPathAttributes?: string[],
 };
 
 /**  Request for `inbox.item.metadata`. */

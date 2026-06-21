@@ -114,15 +114,59 @@ export function useInboxScan(rootId: string, rootAbsolutePath: string) {
 
 // ── Mutation hooks ────────────────────────────────────────────────────────────
 
+/**
+ * Structured error surfaced from a failed `inbox.confirm`.
+ *
+ * The backend rejects with a `ContractError`-shaped object (`{ code, message,
+ * details, ... }`) — NOT a JS `Error`. Reading `e.message` off it directly
+ * (or stringifying via `String(e)`) yields `"[object Object]"`, so we normalise
+ * the thrown value into `code` / `message` / `details` here (spec 041 US8/US9).
+ */
+export interface ConfirmError {
+  code: string | null;
+  message: string;
+  details: unknown;
+}
+
+/**
+ * Normalise an unknown thrown value (from `inboxConfirm` via `unwrap`) into a
+ * `ConfirmError`. Handles the structured `ContractError` object, a plain JS
+ * `Error`, and anything else.
+ */
+export function normalizeConfirmError(e: unknown): ConfirmError {
+  if (e && typeof e === 'object' && !(e instanceof Error)) {
+    const obj = e as { code?: unknown; message?: unknown; details?: unknown };
+    return {
+      code: typeof obj.code === 'string' ? obj.code : null,
+      message: typeof obj.message === 'string' ? obj.message : String(e),
+      details: obj.details ?? null,
+    };
+  }
+  if (e instanceof Error) {
+    return { code: null, message: e.message, details: null };
+  }
+  return { code: null, message: String(e), details: null };
+}
+
 export interface ConfirmState {
   loading: boolean;
   result: InboxConfirmResponse | null;
   error: string | null;
+  /** Structured error code (e.g. `inbox.destination_root_required`). */
+  errorCode: string | null;
+  /** Structured error details payload (candidate roots, missing-attr files). */
+  errorDetails: unknown;
 }
 
 /** Returns a confirm callback and its loading/result state. */
 export function useInboxConfirm() {
-  const [state, setState] = useState<ConfirmState>({ loading: false, result: null, error: null });
+  const [state, setState] = useState<ConfirmState>({
+    loading: false,
+    result: null,
+    error: null,
+    errorCode: null,
+    errorDetails: null,
+  });
 
   const confirm = useCallback(
     async (args: {
@@ -131,8 +175,10 @@ export function useInboxConfirm() {
       contentSignature: string;
       rootAbsolutePath: string;
       destructiveDestination?: string;
+      /** Caller-selected destination root (spec 041 US8/FR-029). */
+      rootId?: string | null;
     }) => {
-      setState({ loading: true, result: null, error: null });
+      setState({ loading: true, result: null, error: null, errorCode: null, errorDetails: null });
       try {
         const result = await inboxConfirm({
           inboxItemId: args.inboxItemId,
@@ -140,12 +186,19 @@ export function useInboxConfirm() {
           contentSignature: args.contentSignature,
           rootAbsolutePath: args.rootAbsolutePath,
           destructiveDestination: args.destructiveDestination ?? null,
+          rootId: args.rootId ?? null,
         });
-        setState({ loading: false, result, error: null });
+        setState({ loading: false, result, error: null, errorCode: null, errorDetails: null });
         return result;
       } catch (e) {
-        const msg = e instanceof Error ? e.message : String(e);
-        setState({ loading: false, result: null, error: msg });
+        const norm = normalizeConfirmError(e);
+        setState({
+          loading: false,
+          result: null,
+          error: norm.message,
+          errorCode: norm.code,
+          errorDetails: norm.details,
+        });
         throw e;
       }
     },

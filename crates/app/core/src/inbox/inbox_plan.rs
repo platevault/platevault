@@ -453,12 +453,18 @@ mod tests {
             buf[..bytes.len().min(80)].copy_from_slice(&bytes[..bytes.len().min(80)]);
             buf
         };
-        // SIMPLE + BITPIX + NAXIS + IMAGETYP + END (5 cards; pad to 36 to complete a block).
+        // SIMPLE + BITPIX + NAXIS + IMAGETYP + OBJECT/FILTER/DATE-OBS + END.
+        // The light pattern (`{target}/{filter}/{date}/light/`) needs target +
+        // filter + date present, else confirm blocks on the US9 missing-attribute
+        // gate (spec 041) before a plan can be created.
         let cards: Vec<[u8; 80]> = vec![
             card("SIMPLE  =                    T / file conforms to FITS standard"),
             card("BITPIX  =                   16 / number of bits per data pixel"),
             card("NAXIS   =                    0 / number of data axes"),
             card(&format!("IMAGETYP= '{image_type:<8}' / frame type")),
+            card("OBJECT  = 'M42'"),
+            card("FILTER  = 'Ha'"),
+            card("DATE-OBS= '2025-10-10T22:00:00'"),
             card("END"),
         ];
         for c in &cards {
@@ -481,10 +487,13 @@ mod tests {
         let root_id = "root-plan-test";
         let item_id = "item-plan-test";
 
-        // Register source.
+        // Register source as an ORGANIZED light-frames source: confirm then
+        // emits catalogue-in-place actions (no pattern resolution / no
+        // destination-root selection / no US9 gate), which is all these
+        // plan-view/apply/cancel tests need.
         sqlx::query(
-            "INSERT INTO registered_sources (id, kind, path, kind_subtype, scan_depth, created_at, created_via)
-             VALUES (?, 'inbox', ?, NULL, 'recursive', '2025-01-01T00:00:00Z', 'first_run')
+            "INSERT INTO registered_sources (id, kind, path, kind_subtype, scan_depth, created_at, created_via, organization_state)
+             VALUES (?, 'light_frames', ?, NULL, 'recursive', '2025-01-01T00:00:00Z', 'first_run', 'organized')
              ON CONFLICT(id) DO NOTHING",
         )
         .bind(root_id)
@@ -555,6 +564,7 @@ mod tests {
             content_signature: "sig-abc".to_owned(),
             destructive_destination: None,
             root_absolute_path: root_path.to_path_buf(),
+            root_id: None,
         };
         let resp = confirm(db.pool(), req).await.unwrap();
         assert!(!resp.plan_id.is_empty(), "confirm must return a plan_id");
@@ -664,8 +674,8 @@ mod tests {
         let item_id = format!("item-plan-{suffix}");
 
         sqlx::query(
-            "INSERT INTO registered_sources (id, kind, path, kind_subtype, scan_depth, created_at, created_via)
-             VALUES (?, 'inbox', ?, NULL, 'recursive', '2025-01-01T00:00:00Z', 'first_run')
+            "INSERT INTO registered_sources (id, kind, path, kind_subtype, scan_depth, created_at, created_via, organization_state)
+             VALUES (?, 'light_frames', ?, NULL, 'recursive', '2025-01-01T00:00:00Z', 'first_run', 'organized')
              ON CONFLICT(id) DO NOTHING",
         )
         .bind(&root_id)

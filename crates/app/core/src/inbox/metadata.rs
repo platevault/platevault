@@ -17,7 +17,9 @@
 
 use std::collections::HashMap;
 
+use patterns::{resolve_pattern_str, MetadataBundle};
 use persistence_db::repositories::inbox::{self as repo};
+use persistence_db::repositories::settings as settings_repo;
 use sqlx::SqlitePool;
 
 use contracts_core::inbox::InboxFileMetadata;
@@ -59,69 +61,136 @@ pub async fn get_inbox_item_metadata(
     let evidence_by_path: HashMap<&str, &repo::InboxEvidenceRow> =
         evidence_rows.iter().map(|ev| (ev.relative_file_path.as_str(), ev)).collect();
 
-    let files = meta_rows
-        .iter()
-        .map(|m| {
-            let ev = evidence_by_path.get(m.relative_file_path.as_str());
+    let mut files = Vec::with_capacity(meta_rows.len());
+    for m in &meta_rows {
+        let ev = evidence_by_path.get(m.relative_file_path.as_str());
 
-            // frame_type_effective: override (if set) else extracted frame type.
-            let frame_type_effective =
-                ev.and_then(|e| e.manual_override.clone().or_else(|| e.frame_type.clone()));
+        // frame_type_effective: override (if set) else extracted frame type.
+        let frame_type_effective =
+            ev.and_then(|e| e.manual_override.clone().or_else(|| e.frame_type.clone()));
 
-            // image_typ: the raw IMAGETYP header value captured as evidence
-            // raw_value (only header-sourced evidence carries it).
-            let image_typ = ev.and_then(|e| e.raw_value.clone());
+        // image_typ: the raw IMAGETYP header value captured as evidence
+        // raw_value (only header-sourced evidence carries it).
+        let image_typ = ev.and_then(|e| e.raw_value.clone());
 
-            // is_master: a single-file master item OR a per-file detected master.
-            let is_master = item_is_master;
+        // is_master: a single-file master item OR a per-file detected master.
+        let is_master = item_is_master || ev.is_some_and(|e| e.is_master != 0);
 
-            // Non-type overrides: override_filter/exposure/binning take
-            // precedence over the extracted header values when set.
-            let filter = ev.and_then(|e| e.override_filter.clone()).or_else(|| m.filter.clone());
-            let exposure_s = ev.and_then(|e| e.override_exposure_s).or(m.exposure_s);
-            // Parse "NxN" binning string (e.g. "2x2") → (binning_x, binning_y).
-            let (binning_x, binning_y) =
-                ev.and_then(|e| e.override_binning.as_deref()).and_then(parse_binning).map_or_else(
-                    || {
-                        (
-                            m.binning_x.and_then(|v| i32::try_from(v).ok()),
-                            m.binning_y.and_then(|v| i32::try_from(v).ok()),
-                        )
-                    },
-                    |(bx, by)| (Some(bx), Some(by)),
-                );
+        // Non-type overrides: override_filter/exposure/binning take
+        // precedence over the extracted header values when set.
+        let filter = ev.and_then(|e| e.override_filter.clone()).or_else(|| m.filter.clone());
+        let exposure_s = ev.and_then(|e| e.override_exposure_s).or(m.exposure_s);
+        // Parse "NxN" binning string (e.g. "2x2") → (binning_x, binning_y).
+        let (binning_x, binning_y) =
+            ev.and_then(|e| e.override_binning.as_deref()).and_then(parse_binning).map_or_else(
+                || {
+                    (
+                        m.binning_x.and_then(|v| i32::try_from(v).ok()),
+                        m.binning_y.and_then(|v| i32::try_from(v).ok()),
+                    )
+                },
+                |(bx, by)| (Some(bx), Some(by)),
+            );
 
-            // R-4: read the persisted override_stale flag from the evidence row.
-            let override_stale = ev.is_some_and(|e| e.override_stale != 0);
+        // R-4: read the persisted override_stale flag from the evidence row.
+        let override_stale = ev.is_some_and(|e| e.override_stale != 0);
 
-            InboxFileMetadata {
-                relative_file_path: m.relative_file_path.clone(),
-                frame_type_effective,
-                image_typ,
-                filter,
-                exposure_s,
-                gain: m.gain.clone(),
-                binning_x,
-                binning_y,
-                temperature_c: m.temperature_c,
-                object: m.object.clone(),
-                date_obs: m.date_obs.clone(),
-                instrume: m.instrume.clone(),
-                telescop: m.telescop.clone(),
-                naxis1: m.naxis1.and_then(|v| i32::try_from(v).ok()),
-                naxis2: m.naxis2.and_then(|v| i32::try_from(v).ok()),
-                stack_count: m.stack_count.and_then(|v| i32::try_from(v).ok()),
-                is_master,
-                override_stale,
-            }
-        })
-        .collect();
+        let mut entry = InboxFileMetadata {
+            relative_file_path: m.relative_file_path.clone(),
+            frame_type_effective: frame_type_effective.clone(),
+            image_typ,
+            filter: filter.clone(),
+            exposure_s,
+            gain: m.gain.clone(),
+            binning_x,
+            binning_y,
+            temperature_c: m.temperature_c,
+            object: m.object.clone(),
+            date_obs: m.date_obs.clone(),
+            instrume: m.instrume.clone(),
+            telescop: m.telescop.clone(),
+            naxis1: m.naxis1.and_then(|v| i32::try_from(v).ok()),
+            naxis2: m.naxis2.and_then(|v| i32::try_from(v).ok()),
+            stack_count: m.stack_count.and_then(|v| i32::try_from(v).ok()),
+            is_master,
+            override_stale,
+            missing_path_attributes: Vec::new(),
+        };
+
+        // US9 (FR-032/FR-033): surface the path-load-bearing attributes this file
+        // is missing for its frame type's destination pattern, so the UI can
+        // prompt the user before confirm blocks. A pattern's token set defines
+        // its required attributes; tokens that fall back to a default are the
+        // misses. Mirrors the confirm gate but reads persisted metadata (with
+        // overrides applied) instead of re-reading headers.
+        entry.missing_path_attributes =
+            missing_path_attributes(pool, &entry).await.unwrap_or_default();
+
+        files.push(entry);
+    }
 
     Ok(files)
 }
 
 fn db_err(e: &persistence_db::DbError) -> ContractError {
     ContractError::new("internal.database", e.to_string(), ErrorSeverity::Fatal, true)
+}
+
+/// Compute the path-load-bearing attributes a file is missing for its frame
+/// type's destination pattern (spec 041 US9/FR-032/FR-033).
+///
+/// Returns `["image type"]` when the frame type is unknown (no pattern class —
+/// same surfacing as missing IMAGETYP), the pattern's `missing_tokens` when the
+/// chosen pattern references attributes the file lacks, or an empty vec when the
+/// destination resolves. Reads the persisted (override-applied) values on the
+/// DTO, so supplying a value via reclassify clears the gate on the next read.
+async fn missing_path_attributes(
+    pool: &SqlitePool,
+    m: &InboxFileMetadata,
+) -> Result<Vec<String>, ContractError> {
+    let Some(ft) = m.frame_type_effective.as_deref() else {
+        return Ok(vec!["image type".to_owned()]);
+    };
+    let pattern = settings_repo::effective_pattern_for(pool, ft, m.is_master)
+        .await
+        .map_err(|e| db_err(&e))?;
+    let Some(pattern) = pattern else {
+        return Ok(vec!["image type".to_owned()]);
+    };
+
+    let mut bundle = MetadataBundle::new();
+    bundle.insert("frame_type".to_owned(), ft.to_owned());
+    if let Some(v) = m.object.as_deref().filter(|s| !s.trim().is_empty()) {
+        bundle.insert("target".to_owned(), v.trim().to_owned());
+    }
+    if let Some(v) = m.filter.as_deref().filter(|s| !s.trim().is_empty()) {
+        bundle.insert("filter".to_owned(), v.trim().to_owned());
+    }
+    if let Some(v) = m.date_obs.as_deref().filter(|s| !s.trim().is_empty()) {
+        let date_part = v.split('T').next().unwrap_or(v);
+        bundle.insert("date".to_owned(), date_part.to_owned());
+    }
+    if let Some(v) = m.instrume.as_deref().filter(|s| !s.trim().is_empty()) {
+        bundle.insert("camera".to_owned(), v.trim().to_owned());
+    }
+    if let Some(exp) = m.exposure_s {
+        // Only presence matters for the gate; the exact format is irrelevant
+        // (this path computes missing_tokens, not the final destination).
+        bundle.insert("exposure".to_owned(), exp.to_string());
+    }
+    if let Some(v) = m.gain.as_deref().filter(|s| !s.trim().is_empty()) {
+        bundle.insert("gain".to_owned(), v.trim().to_owned());
+    }
+    if let (Some(bx), Some(by)) = (m.binning_x, m.binning_y) {
+        bundle.insert("binning".to_owned(), format!("{bx}x{by}"));
+    }
+
+    match resolve_pattern_str(&pattern, &bundle) {
+        Ok(r) => Ok(r.missing_tokens),
+        // A structural failure is not a missing-attribute case; treat as
+        // "no surfaced misses" here (confirm reports the hard error).
+        Err(_) => Ok(Vec::new()),
+    }
 }
 
 /// Parse an `"NxN"` binning string (e.g. `"2x2"`, `"1x1"`) into `(x, y)`.
@@ -434,5 +503,76 @@ mod tests {
         let files = get_inbox_item_metadata(db.pool(), item_id).await.unwrap();
         assert_eq!(files.len(), 1);
         assert!(files[0].override_stale, "override_stale must be true after mark_override_stale");
+    }
+
+    /// US9/FR-032/FR-033: a light missing its date surfaces `date` in
+    /// `missing_path_attributes` so the UI can prompt before confirm blocks; a
+    /// light with all required attributes surfaces none.
+    #[tokio::test]
+    async fn missing_path_attributes_surface_per_file() {
+        let db = test_db().await;
+        let item_id = "item-missing-attr";
+
+        repo::insert_inbox_item(
+            db.pool(),
+            &InsertInboxItem {
+                id: item_id,
+                root_id: "root-1",
+                relative_path: "lights",
+                file_count: 2,
+                content_signature: Some("sig-ma"),
+                lane: "fits",
+            },
+        )
+        .await
+        .unwrap();
+
+        for (i, (fname, has_date)) in
+            [("light_ok.fits", true), ("light_nodate.fits", false)].iter().enumerate()
+        {
+            repo::insert_evidence(
+                db.pool(),
+                &InsertEvidence {
+                    id: &format!("ev-ma-{i}"),
+                    inbox_item_id: item_id,
+                    relative_file_path: fname,
+                    frame_type: Some("light"),
+                    evidence_source: "imagetyp_header",
+                    raw_value: Some("Light Frame"),
+                    unclassified: false,
+                    manual_override: None,
+                    is_master: false,
+                    master_detector: None,
+                },
+            )
+            .await
+            .unwrap();
+            repo::upsert_inbox_file_metadata(
+                db.pool(),
+                &UpsertFileMetadata {
+                    inbox_item_id: item_id,
+                    relative_file_path: fname,
+                    object: Some("M42"),
+                    filter: Some("Ha"),
+                    date_obs: if *has_date { Some("2025-10-10") } else { None },
+                    ..Default::default()
+                },
+            )
+            .await
+            .unwrap();
+        }
+
+        let files = get_inbox_item_metadata(db.pool(), item_id).await.unwrap();
+        let by_path: std::collections::HashMap<&str, &InboxFileMetadata> =
+            files.iter().map(|f| (f.relative_file_path.as_str(), f)).collect();
+        assert!(
+            by_path["light_ok.fits"].missing_path_attributes.is_empty(),
+            "fully-attributed light surfaces no missing attributes"
+        );
+        assert!(
+            by_path["light_nodate.fits"].missing_path_attributes.contains(&"date".to_owned()),
+            "light without DATE-OBS surfaces 'date' as missing, got {:?}",
+            by_path["light_nodate.fits"].missing_path_attributes
+        );
     }
 }

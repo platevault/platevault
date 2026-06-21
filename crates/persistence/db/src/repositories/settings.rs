@@ -3,12 +3,21 @@
 //! Operates on the `settings` and `source_overrides` tables from migration 0013.
 //! Each settings key is stored as one row with a JSON-encoded value.
 
+use std::collections::BTreeMap;
+
 use contracts_core::settings::{SettingsState, SourceOverride};
+use patterns::{default_pattern, validate_pattern_str, FrameTypeClass};
 use serde_json::Value;
 use sqlx::SqlitePool;
 use time::OffsetDateTime;
 
 use crate::{DbError, DbResult};
+
+/// Settings key holding the per-frame-type destination pattern overrides
+/// (spec 041 FR-026b). Stored as a JSON object mapping a [`FrameTypeClass`]
+/// name to a pattern string. Only explicit overrides are persisted; missing
+/// entries fall back to [`default_pattern`] on read.
+pub const PATTERNS_BY_TYPE_KEY: &str = "patterns_by_type";
 
 // ── Helpers ──────────────────────────────────────────────────────────────
 
@@ -204,12 +213,108 @@ fn apply_key_to_state(key: &str, value: Value, state: &mut SettingsState) -> DbR
             state.imagetyp_normalization_user_mappings =
                 serde_json::from_value(value).map_err(DbError::Serialise)?;
         }
+        PATTERNS_BY_TYPE_KEY => {
+            state.patterns_by_type = serde_json::from_value(value).map_err(DbError::Serialise)?;
+        }
         _ => {
             // Structured-path keys (tools.*, workflow_profile.*) are not in the
             // static SettingsState bag; they are readable via resolve_setting.
         }
     }
     Ok(())
+}
+
+// ── Per-frame-type destination patterns (spec 041 FR-026b) ────────────────
+//
+// Storage choice: set/reset operations **validate via the patterns crate before
+// storing** (no garbage is ever persisted). The getter *also* falls back to the
+// built-in default on read for empty/invalid entries, so a hand-edited or
+// migrated DB with a bad value still resolves to a usable pattern.
+
+/// Read the stored per-type pattern override map (only explicit overrides;
+/// missing classes are absent). Returns an empty map when unset.
+///
+/// # Errors
+///
+/// Returns [`DbError::Database`] on query failure or [`DbError::Serialise`] if
+/// the stored value is not a string→string object.
+pub async fn get_patterns_by_type(pool: &SqlitePool) -> DbResult<BTreeMap<String, String>> {
+    match get_raw(pool, PATTERNS_BY_TYPE_KEY).await? {
+        None => Ok(BTreeMap::new()),
+        Some(v) => serde_json::from_value(v).map_err(DbError::Serialise),
+    }
+}
+
+/// Return the effective destination pattern for a `(frame_type, is_master)`
+/// pair: the stored override when present, non-empty, and valid; otherwise the
+/// built-in [`default_pattern`].
+///
+/// Returns `None` only when `frame_type` does not map to a known
+/// [`FrameTypeClass`] (e.g. an unclassified frame). Callers (spec 041 confirm,
+/// T052) treat `None` as "no destination pattern" and surface it via the
+/// needs-review flow.
+///
+/// # Errors
+///
+/// Returns [`DbError::Database`] on query failure or [`DbError::Serialise`] if
+/// the stored override map is malformed.
+pub async fn effective_pattern_for(
+    pool: &SqlitePool,
+    frame_type: &str,
+    is_master: bool,
+) -> DbResult<Option<String>> {
+    let Some(class) = patterns::classify_frame(frame_type, is_master) else {
+        return Ok(None);
+    };
+    let overrides = get_patterns_by_type(pool).await?;
+    let effective = overrides
+        .get(class.as_str())
+        .map(String::as_str)
+        .filter(|p| validate_pattern_str(p).is_ok())
+        .map_or_else(|| default_pattern(class).to_owned(), ToOwned::to_owned);
+    Ok(Some(effective))
+}
+
+/// Set the destination pattern override for a single frame-type class.
+///
+/// The pattern is validated via [`validate_pattern_str`] before storage; an
+/// invalid (or empty) pattern is rejected with [`DbError::Serialise`] rather
+/// than persisted. To revert a class to its default, use [`reset_pattern_for`].
+///
+/// # Errors
+///
+/// Returns [`DbError::Serialise`] when `pattern` fails validation, or
+/// [`DbError::Database`] on query failure.
+pub async fn set_pattern_for(
+    pool: &SqlitePool,
+    class: FrameTypeClass,
+    pattern: &str,
+) -> DbResult<()> {
+    validate_pattern_str(pattern).map_err(|e| {
+        let err: serde_json::Error =
+            serde::de::Error::custom(format!("invalid pattern for {}: {e}", class.as_str()));
+        DbError::Serialise(err)
+    })?;
+    let mut overrides = get_patterns_by_type(pool).await?;
+    overrides.insert(class.as_str().to_owned(), pattern.to_owned());
+    let value = serde_json::to_value(&overrides).map_err(DbError::Serialise)?;
+    set_raw(pool, PATTERNS_BY_TYPE_KEY, &value).await
+}
+
+/// Reset a single frame-type class to its built-in default by removing its
+/// override entry. Idempotent — no error if no override exists.
+///
+/// # Errors
+///
+/// Returns [`DbError::Database`] on query failure or [`DbError::Serialise`] if
+/// the stored override map is malformed.
+pub async fn reset_pattern_for(pool: &SqlitePool, class: FrameTypeClass) -> DbResult<()> {
+    let mut overrides = get_patterns_by_type(pool).await?;
+    if overrides.remove(class.as_str()).is_none() {
+        return Ok(());
+    }
+    let value = serde_json::to_value(&overrides).map_err(DbError::Serialise)?;
+    set_raw(pool, PATTERNS_BY_TYPE_KEY, &value).await
 }
 
 // ── Per-source overrides ──────────────────────────────────────────────────
@@ -360,6 +465,106 @@ mod tests {
         let state = load_settings(db.pool()).await.unwrap();
         assert_eq!(state.log_level, "debug");
         assert!(state.follow_symlinks);
+    }
+
+    // ── Per-frame-type patterns ───────────────────────────────────────────
+
+    #[tokio::test]
+    async fn patterns_by_type_defaults_when_unset() {
+        let db = setup().await;
+        // No overrides stored → every class resolves to its built-in default,
+        // reached via the raw (frame_type, is_master) inputs confirm.rs passes.
+        for (raw_type, is_master, class) in raw_inputs_per_class() {
+            let got = effective_pattern_for(db.pool(), raw_type, is_master).await.unwrap();
+            assert_eq!(got.as_deref(), Some(default_pattern(class)));
+        }
+        assert!(get_patterns_by_type(db.pool()).await.unwrap().is_empty());
+    }
+
+    #[tokio::test]
+    async fn patterns_by_type_override_read_back() {
+        let db = setup().await;
+        set_pattern_for(db.pool(), FrameTypeClass::Dark, "custom/{gain}/").await.unwrap();
+        let got = effective_pattern_for(db.pool(), "dark", false).await.unwrap();
+        assert_eq!(got.as_deref(), Some("custom/{gain}/"));
+        // Other classes are untouched.
+        let flat = effective_pattern_for(db.pool(), "flat", false).await.unwrap();
+        assert_eq!(flat.as_deref(), Some(default_pattern(FrameTypeClass::Flat)));
+    }
+
+    #[tokio::test]
+    async fn patterns_by_type_master_routing() {
+        let db = setup().await;
+        set_pattern_for(db.pool(), FrameTypeClass::MasterDark, "m/{exposure}/").await.unwrap();
+        // is_master = true selects the master class.
+        let master = effective_pattern_for(db.pool(), "dark", true).await.unwrap();
+        assert_eq!(master.as_deref(), Some("m/{exposure}/"));
+        // raw dark still defaults.
+        let raw = effective_pattern_for(db.pool(), "dark", false).await.unwrap();
+        assert_eq!(raw.as_deref(), Some(default_pattern(FrameTypeClass::Dark)));
+    }
+
+    #[tokio::test]
+    async fn set_pattern_rejects_invalid() {
+        let db = setup().await;
+        assert!(set_pattern_for(db.pool(), FrameTypeClass::Bias, "{telescope}/").await.is_err());
+        assert!(set_pattern_for(db.pool(), FrameTypeClass::Bias, "").await.is_err());
+        // Nothing persisted on rejection → still the default.
+        let got = effective_pattern_for(db.pool(), "bias", false).await.unwrap();
+        assert_eq!(got.as_deref(), Some(default_pattern(FrameTypeClass::Bias)));
+    }
+
+    #[tokio::test]
+    async fn stored_invalid_override_falls_back_on_read() {
+        // Defensive read-side fallback: a malformed value written out-of-band
+        // (e.g. hand-edited DB) must not surface a broken pattern.
+        let db = setup().await;
+        let mut map = BTreeMap::new();
+        map.insert("bias".to_owned(), "{telescope}/".to_owned());
+        set_raw(db.pool(), PATTERNS_BY_TYPE_KEY, &serde_json::to_value(&map).unwrap())
+            .await
+            .unwrap();
+        let got = effective_pattern_for(db.pool(), "bias", false).await.unwrap();
+        assert_eq!(got.as_deref(), Some(default_pattern(FrameTypeClass::Bias)));
+    }
+
+    #[tokio::test]
+    async fn reset_pattern_restores_default() {
+        let db = setup().await;
+        set_pattern_for(db.pool(), FrameTypeClass::Light, "{target}/x/").await.unwrap();
+        reset_pattern_for(db.pool(), FrameTypeClass::Light).await.unwrap();
+        let got = effective_pattern_for(db.pool(), "light", false).await.unwrap();
+        assert_eq!(got.as_deref(), Some(default_pattern(FrameTypeClass::Light)));
+        // reset is idempotent.
+        reset_pattern_for(db.pool(), FrameTypeClass::Light).await.unwrap();
+    }
+
+    #[tokio::test]
+    async fn effective_pattern_for_unknown_type_is_none() {
+        let db = setup().await;
+        assert!(effective_pattern_for(db.pool(), "unclassified", false).await.unwrap().is_none());
+    }
+
+    #[tokio::test]
+    async fn load_settings_applies_patterns_by_type() {
+        let db = setup().await;
+        set_pattern_for(db.pool(), FrameTypeClass::Flat, "f/{filter}/").await.unwrap();
+        let state = load_settings(db.pool()).await.unwrap();
+        assert_eq!(state.patterns_by_type.get("flat").map(String::as_str), Some("f/{filter}/"));
+    }
+
+    /// Raw `(frame_type, is_master)` inputs that map to each class, as
+    /// `classify_frame` expects them (it takes raw header types, not class names).
+    fn raw_inputs_per_class() -> [(&'static str, bool, FrameTypeClass); 7] {
+        [
+            ("light", false, FrameTypeClass::Light),
+            ("flat", false, FrameTypeClass::Flat),
+            ("dark", false, FrameTypeClass::Dark),
+            ("bias", false, FrameTypeClass::Bias),
+            ("flat", true, FrameTypeClass::MasterFlat),
+            ("dark", true, FrameTypeClass::MasterDark),
+            ("bias", true, FrameTypeClass::MasterBias),
+        ]
     }
 
     #[tokio::test]

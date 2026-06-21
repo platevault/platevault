@@ -98,6 +98,29 @@ pub struct InboxConfirmRequest {
     /// headers for destination resolution). Not in the JSON Schema contract
     /// (Tauri transport detail only).
     pub root_absolute_path: String,
+    /// Caller-selected destination library root (spec 041 US8/FR-029).
+    ///
+    /// Only consulted for inbox sources whose frame-type category has more than
+    /// one candidate library root. When exactly one candidate exists it is
+    /// auto-selected and this field is ignored; for non-inbox sources the file
+    /// stays in place. Supplying a root that is not a valid candidate for the
+    /// item's category is rejected with `inbox.invalid_destination_root`.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub root_id: Option<String>,
+}
+
+/// A candidate destination library root for an inbox item's frame-type
+/// category (spec 041 US8/FR-029).
+///
+/// Returned in the `inbox.destination_root_required` error data so the UI can
+/// render a picker, with `kind` for grouping/labelling.
+#[derive(Clone, Debug, Serialize, Deserialize, Type)]
+#[serde(rename_all = "camelCase")]
+pub struct InboxDestinationRoot {
+    pub root_id: String,
+    pub path: String,
+    /// Source kind: `"light_frames"` | `"calibration"` | `"project"` | `"inbox"`.
+    pub kind: String,
 }
 
 /// Summary of plan actions split by type (spec 041 US4/US5/FR-020).
@@ -110,6 +133,26 @@ pub struct InboxConfirmActionsSummary {
     pub move_count: u32,
     /// Number of plan items with `action = "catalogue"`.
     pub catalogue_count: u32,
+}
+
+/// Resolved destination preview for one confirmed plan action (spec 041
+/// US8/FR-031).
+///
+/// Carries the **absolute** destination (chosen root path + resolved relative
+/// path) so the UI can show the full on-disk path without re-resolving roots.
+#[derive(Clone, Debug, Serialize, Deserialize, Type)]
+#[serde(rename_all = "camelCase")]
+pub struct InboxConfirmDestination {
+    pub from_path: String,
+    /// Resolved relative path under the destination root.
+    pub to_relative_path: String,
+    /// Absolute destination = chosen root path + `/` + `to_relative_path`
+    /// (equals the source location for `catalogue` actions).
+    pub to_absolute_path: String,
+    /// Id of the chosen destination root.
+    pub to_root_id: String,
+    /// `"move"` | `"catalogue"`.
+    pub action: String,
 }
 
 /// Response from `inbox.confirm`.
@@ -133,6 +176,10 @@ pub struct InboxConfirmResponse {
     /// `"organized"` | `"unorganized"`. `None` when `registered_as_master`.
     #[serde(skip_serializing_if = "Option::is_none")]
     pub organization_state: Option<String>,
+    /// Per-action absolute destination previews (spec 041 US8/FR-031).
+    /// Empty for master-registration responses.
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub destinations: Vec<InboxConfirmDestination>,
 }
 
 // ── inbox.reclassify ──────────────────────────────────────────────────────────
@@ -361,6 +408,13 @@ pub struct InboxFileMetadata {
     pub is_master: bool,
     /// True when the persisted override no longer matches the file's size/mtime (R-4).
     pub override_stale: bool,
+    /// Path-load-bearing attributes the file is missing for its frame type's
+    /// destination pattern (spec 041 US9/FR-032/FR-033). Empty when the file can
+    /// resolve a destination. These are the pattern token names that fell back to
+    /// a registry default (e.g. `["target", "date"]` for a light with no OBJECT /
+    /// DATE-OBS). Supplying the value via reclassify clears the gate.
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub missing_path_attributes: Vec<String>,
 }
 
 /// Request for `inbox.item.metadata`.

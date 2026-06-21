@@ -14,14 +14,20 @@
 //! `crates/app/core/src/patterns.rs` for Tauri command wiring.
 #![allow(clippy::doc_markdown)] // spec/domain terminology not appropriate for backticks
 
+pub mod per_type;
 pub mod registry;
 pub mod resolver;
 pub mod sanitize;
 pub mod validator;
 
+pub use per_type::{
+    classify_frame, default_pattern, effective_pattern, validate_pattern_str, FrameTypeClass,
+    PatternStrError,
+};
 pub use registry::{TokenDefinition, TokenRegistry, TokenTransform, V1_REGISTRY};
 pub use resolver::{
-    resolve, resolve_v1, MetadataBundle, ResolveError, ResolveResult, ResolverConfig,
+    resolve, resolve_pattern_str, resolve_v1, MetadataBundle, ResolveError, ResolveResult,
+    ResolverConfig,
 };
 pub use validator::{validate, ValidateError, ValidateResult, ValidationWarning};
 

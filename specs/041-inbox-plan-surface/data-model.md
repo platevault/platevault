@@ -107,3 +107,13 @@ Existing states: `pending_classification → classified → plan_open → resolv
 3. `CREATE TABLE inbox_file_metadata (...)` with `UNIQUE(inbox_item_id, relative_file_path)`.
 4. `ALTER TABLE inbox_classification_evidence ADD COLUMN override_filter TEXT; ... override_exposure_s REAL; ... override_binning TEXT; ... override_stale INTEGER NOT NULL DEFAULT 0;`
 5. Extend `plan_items.action` CHECK to include `'catalogue'` (recreate-table migration pattern as SQLite requires for CHECK changes).
+
+## Iteration 2026-06-21: Destination model
+
+New / changed data:
+
+- **Per-type destination pattern settings**: a stored token pattern per type (light, flat, master-flat, bias, master-bias, dark, master-dark) with built-in defaults; lives in the settings table/use-case. Invalid/empty → built-in default. (FR-025/FR-026/FR-026b)
+- **Confirm/plan request — destination root**: `inbox_confirm` request gains an optional destination `root_id`. Resolution: non-inbox default = source's own root (in place); inbox = required chosen root; >1 candidate root for the frame type = required selection; exactly one = auto. (FR-027–FR-030)
+- **Candidate-root resolution**: derive valid destination roots for a frame type from `registered_sources` (by kind/type); optional future per-type "primary/default root" concept for auto-select.
+- **Classification — missing path attributes**: classification surfaces a per-file `missing_path_attributes` set (the path-load-bearing attributes absent for that file's resolved type); plan generation is rejected while non-empty. (FR-032/FR-033)
+- **Plan/preview — absolute destination**: plan actions carry the absolute destination (`registered_sources.path` + relative), not just the relative path. (FR-031)

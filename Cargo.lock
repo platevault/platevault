@@ -3567,6 +3567,7 @@ dependencies = [
  "audit",
  "contracts_core",
  "domain_core",
+ "patterns",
  "serde",
  "serde_json",
  "sqlx",
