@@ -1124,6 +1124,7 @@
 .alm-source-group-header .alm-pill { margin-left: var(--alm-sp-2); }
 .alm-list-empty { padding: var(--alm-sp-4); color: var(--alm-text-faint); font-size: var(--alm-text-sm); }
 .alm-needs-review-icon { color: var(--alm-warn); display: inline; vertical-align: middle; }
+.alm-target-row__desig { color: var(--alm-text-muted); font-size: var(--alm-text-xs); }
 
 /* === APPEARANCE: theme swatch picker ===
    Each swatch preview re-scopes tokens via data-theme, so the bars render that

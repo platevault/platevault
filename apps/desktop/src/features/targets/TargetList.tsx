@@ -4,8 +4,10 @@ import type { TargetListItem } from '@/api/commands';
 import { ListSidebar } from '@/components';
 import { Pill } from '@/ui';
 
-/** Estimated row height (px) for the virtualizer's initial measurement. */
-const ROW_ESTIMATE = 52;
+/** Estimated row height (px) for the virtualizer's initial measurement.
+ * Compact single-line rows (label · designation · type) keep a long catalog
+ * scannable. */
+const ROW_ESTIMATE = 34;
 
 interface Props {
   targets: TargetListItem[];
@@ -76,18 +78,8 @@ export function TargetList({ targets, selected, onSelect }: Props) {
               <div className="alm-list-item__title">
                 <strong>{t.effectiveLabel}</strong>
                 {t.effectiveLabel !== t.primaryDesignation && (
-                  <span
-                    style={{
-                      marginLeft: 'var(--alm-sp-1)',
-                      color: 'var(--alm-text-muted)',
-                      fontSize: 'var(--alm-text-xs)',
-                    }}
-                  >
-                    ({t.primaryDesignation})
-                  </span>
+                  <span className="alm-target-row__desig">({t.primaryDesignation})</span>
                 )}
-              </div>
-              <div className="alm-list-item__meta">
                 <Pill variant="ghost">{t.objectType.replace('_', ' ')}</Pill>
               </div>
             </div>
