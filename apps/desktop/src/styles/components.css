@@ -1126,6 +1126,24 @@
 .alm-needs-review-icon { color: var(--alm-warn); display: inline; vertical-align: middle; }
 .alm-target-row__desig { color: var(--alm-text-muted); font-size: var(--alm-text-xs); }
 
+/* === INBOX stats summary strip (was inline styles + undefined --alm-text-primary) === */
+.alm-inbox-stats {
+  display: flex; flex-wrap: wrap; gap: var(--alm-sp-3); align-items: center;
+  padding: var(--alm-sp-1) var(--alm-sp-3);
+  border-bottom: 1px solid var(--alm-border);
+  font-size: var(--alm-text-xs); color: var(--alm-text-secondary);
+  background: var(--alm-surface-raised);
+}
+.alm-inbox-stats__sep { border-left: 1px solid var(--alm-border); align-self: stretch; }
+.alm-inbox-stats__chip { margin-right: var(--alm-sp-2); white-space: nowrap; }
+.alm-inbox-stats__per-type { white-space: nowrap; }
+.alm-inbox-stats__num { font-weight: var(--alm-weight-semibold); color: var(--alm-text); }
+.alm-inbox-stats__type {
+  display: inline-block; font-weight: var(--alm-weight-semibold); color: var(--alm-text);
+  margin-right: var(--alm-sp-1); text-transform: capitalize;
+}
+.alm-inbox-stats__label { color: var(--alm-text-muted); }
+
 /* === APPEARANCE: theme swatch picker ===
    Each swatch preview re-scopes tokens via data-theme, so the bars render that
    theme's own palette with no element-level color injection. */

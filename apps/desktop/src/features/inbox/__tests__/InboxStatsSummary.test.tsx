@@ -69,10 +69,10 @@ describe('InboxStatsSummary', () => {
     expect(lightRow.textContent).toContain('light');
     expect(lightRow.textContent).toContain('320');
 
-    // Dark row shows master count indicator
+    // Dark row shows master count, counted separately from folders
     const darkRow = screen.getByTestId('inbox-stats-type-dark');
     expect(darkRow.textContent).toContain('dark');
-    expect(darkRow.textContent).toContain('3M');
+    expect(darkRow.textContent).toContain('3 masters');
   });
 
   it('renders no per-type rows when perType is empty', () => {
