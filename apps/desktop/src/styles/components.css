@@ -675,23 +675,28 @@
   font-size: var(--alm-text-xs);
   word-break: break-all;
 }
+/* Grid so help text (__row-desc) always sits BELOW the control in column 2,
+   never beside/overlapping it (was a 3rd flex column → collision on
+   Ingestion/Calibration tolerance rows). */
 .alm-settings__row {
-  display: flex; gap: var(--alm-sp-4); align-items: flex-start;
+  display: grid;
+  grid-template-columns: 160px minmax(0, 1fr);
+  column-gap: var(--alm-sp-4); row-gap: var(--alm-sp-1);
+  align-items: start;
   padding: var(--alm-sp-3) 0;
   border-bottom: 1px solid var(--alm-border-subtle);
-  min-width: 0;
 }
 .alm-settings__row:last-child { border-bottom: none; }
 .alm-settings__row-label {
-  width: 160px; flex-shrink: 0;
+  grid-column: 1; grid-row: 1;
   font-size: var(--alm-text-sm); font-weight: var(--alm-weight-medium);
   color: var(--alm-text-secondary);
-  padding-top: 4px; /* align with input element vertical centre */
+  padding-top: 5px; /* align with control vertical centre */
 }
-.alm-settings__row-content { flex: 1; min-width: 0; }
+.alm-settings__row-content { grid-column: 2; grid-row: 1; min-width: 0; }
 .alm-settings__row-desc {
+  grid-column: 2; grid-row: 2;
   font-size: var(--alm-text-xs); color: var(--alm-text-muted);
-  margin-top: var(--alm-sp-2);
   line-height: 1.5;
 }
 /* Flex header row inside a group: title on left, action button on right */
