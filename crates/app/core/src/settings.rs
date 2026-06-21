@@ -61,6 +61,7 @@ pub const ALL_V1_KEYS: &[&str] = &[
     "calibration.bias.override_penalty",
     "calibration.aging_threshold_days",
     "imagetyp_normalization.user_mappings",
+    "patterns_by_type",
 ];
 
 // ── Error mapping ──────────────────────────────────────────────────────────
@@ -289,6 +290,24 @@ pub fn validate_value(key: &str, value: &Value) -> Result<(), ContractError> {
         "pattern" | "protectedCategories" | "imagetyp_normalization.user_mappings" => {
             if !value.is_array() {
                 return Err(invalid("must be an array"));
+            }
+        }
+        // Per-type destination patterns (spec 041 FR-026b): a JSON object mapping
+        // a frame-type class name to a pattern string. An empty object is valid
+        // (means "all defaults"). Each key must be one of the 7 class names and
+        // each value a string that parses via the patterns validator.
+        "patterns_by_type" => {
+            let obj = value.as_object().ok_or_else(|| invalid("must be an object"))?;
+            for (class_name, pattern_value) in obj {
+                if patterns::FrameTypeClass::from_str_name(class_name).is_none() {
+                    return Err(invalid(&format!("unknown frame-type class: {class_name}")));
+                }
+                let pattern = pattern_value.as_str().ok_or_else(|| {
+                    invalid(&format!("pattern for {class_name} must be a string"))
+                })?;
+                if let Err(e) = patterns::validate_pattern_str(pattern) {
+                    return Err(invalid(&format!("invalid pattern for {class_name}: {e}")));
+                }
             }
         }
         // Structured-path keys — relax validation to basic presence.
@@ -522,6 +541,11 @@ fn apply_value_to_state(key: &str, value: Value, state: &mut SettingsState) {
                 state.imagetyp_normalization_user_mappings = v;
             }
         }
+        "patterns_by_type" => {
+            if let Ok(v) = serde_json::from_value(value) {
+                state.patterns_by_type = v;
+            }
+        }
         _ => {
             // Structured-path keys are not mapped to static SettingsState fields.
             // Use resolve_setting(key, source_id) to read them individually.
@@ -573,6 +597,9 @@ fn default_value_for_key(key: &str) -> Value {
             serde_json::to_value(&defaults.imagetyp_normalization_user_mappings)
                 .unwrap_or(Value::Null)
         }
+        // Read-side falls back to per-type defaults, so the stored default is an
+        // empty object (no explicit overrides).
+        "patterns_by_type" => Value::Object(serde_json::Map::new()),
         _ => Value::Null,
     }
 }
@@ -1177,6 +1204,70 @@ mod tests {
             err.code, "key.unknown",
             "old bogus key 'aging_threshold_days' must be rejected"
         );
+    }
+
+    // ── Spec 041 FR-026b: patterns_by_type round-trip + validation ─────
+
+    #[tokio::test]
+    async fn update_patterns_by_type_round_trips_via_get() {
+        let (db, bus) = setup().await;
+        let req = SettingsUpdateRequest {
+            key: "patterns_by_type".to_owned(),
+            value: contracts_core::JsonAny::from(serde_json::json!({"dark": "custom/{gain}/"})),
+        };
+        let resp = update_setting(db.pool(), &bus, &req).await.unwrap();
+        assert_eq!(resp.status, SettingsUpdateStatus::Success);
+
+        let get_resp = get_settings(db.pool(), &bus).await.unwrap();
+        assert_eq!(
+            get_resp.settings.patterns_by_type.get("dark").map(String::as_str),
+            Some("custom/{gain}/")
+        );
+    }
+
+    #[tokio::test]
+    async fn update_patterns_by_type_accepts_empty_object() {
+        let (db, bus) = setup().await;
+        // {} is the default; sending it back is a no-op, but it must validate.
+        let req = SettingsUpdateRequest {
+            key: "patterns_by_type".to_owned(),
+            value: contracts_core::JsonAny::from(serde_json::json!({})),
+        };
+        let resp = update_setting(db.pool(), &bus, &req).await.unwrap();
+        assert_eq!(resp.status, SettingsUpdateStatus::Noop);
+    }
+
+    #[tokio::test]
+    async fn update_patterns_by_type_rejects_invalid_pattern() {
+        let (db, bus) = setup().await;
+        let req = SettingsUpdateRequest {
+            key: "patterns_by_type".to_owned(),
+            value: contracts_core::JsonAny::from(serde_json::json!({"dark": "{telescope}/"})),
+        };
+        let err = update_setting(db.pool(), &bus, &req).await.unwrap_err();
+        assert_eq!(err.code, "value.invalid");
+    }
+
+    #[tokio::test]
+    async fn update_patterns_by_type_rejects_bad_class_name() {
+        let (db, bus) = setup().await;
+        let req = SettingsUpdateRequest {
+            key: "patterns_by_type".to_owned(),
+            value: contracts_core::JsonAny::from(serde_json::json!({"nope": "x/"})),
+        };
+        let err = update_setting(db.pool(), &bus, &req).await.unwrap_err();
+        assert_eq!(err.code, "value.invalid");
+    }
+
+    #[tokio::test]
+    async fn update_patterns_by_type_rejects_non_object() {
+        let (db, bus) = setup().await;
+        let req = SettingsUpdateRequest {
+            key: "patterns_by_type".to_owned(),
+            value: contracts_core::JsonAny::from(serde_json::json!(["dark"])),
+        };
+        let err = update_setting(db.pool(), &bus, &req).await.unwrap_err();
+        assert_eq!(err.code, "value.invalid");
     }
 
     // ── T057: emit_snapshot fires (FR-024) ────────────────────────────

@@ -20,7 +20,7 @@
       "hooks": [
         {
           "type": "command",
-          "command": "python3 .claude/hooks/speckit-dag-hooks/scripts/dispatcher.py .claude/hooks/speckit-dag-hooks/scripts/nodes.json pre",
+          "command": "python3 ${CLAUDE_PROJECT_DIR}/.claude/hooks/speckit-dag-hooks/scripts/dispatcher.py ${CLAUDE_PROJECT_DIR}/.claude/hooks/speckit-dag-hooks/scripts/nodes.json pre",
           "timeout": 5,
           "statusMessage": "Checking SpecKit DAG preconditions..."
         }
@@ -50,17 +50,6 @@
         }
       ],
       "_apm_source": "mcp-package-version"
-    },
-    {
-      "matcher": "Edit|Write|MultiEdit",
-      "hooks": [
-        {
-          "type": "command",
-          "command": ".claude/hooks/agent-coder/scripts/coder-delegation-reminder.sh",
-          "timeout": 3
-        }
-      ],
-      "_apm_source": "agent-coder"
     },
     {
       "matcher": "Skill",
@@ -98,12 +87,23 @@
       "hooks": [
         {
           "type": "command",
-          "command": "python3 .claude/hooks/speckit-dag-hooks/scripts/dispatcher.py .claude/hooks/speckit-dag-hooks/scripts/nodes.json pre",
+          "command": "python3 ${CLAUDE_PROJECT_DIR}/.claude/hooks/speckit-dag-hooks/scripts/dispatcher.py ${CLAUDE_PROJECT_DIR}/.claude/hooks/speckit-dag-hooks/scripts/nodes.json pre",
           "timeout": 5,
           "statusMessage": "Checking SpecKit DAG preconditions..."
         }
       ],
       "_apm_source": "speckit-dag-hooks"
+    },
+    {
+      "matcher": "Edit|Write|MultiEdit",
+      "hooks": [
+        {
+          "type": "command",
+          "command": ".claude/hooks/agent-coder/scripts/coder-delegation-reminder.sh",
+          "timeout": 3
+        }
+      ],
+      "_apm_source": "agent-coder"
     }
   ],
   "PostToolUse": [
@@ -136,7 +136,7 @@
       "hooks": [
         {
           "type": "command",
-          "command": "python3 .claude/hooks/speckit-dag-hooks/scripts/dispatcher.py .claude/hooks/speckit-dag-hooks/scripts/nodes.json post",
+          "command": "python3 ${CLAUDE_PROJECT_DIR}/.claude/hooks/speckit-dag-hooks/scripts/dispatcher.py ${CLAUDE_PROJECT_DIR}/.claude/hooks/speckit-dag-hooks/scripts/nodes.json post",
           "timeout": 5,
           "statusMessage": "Loading SpecKit next-step context..."
         }

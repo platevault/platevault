@@ -101,8 +101,8 @@ Today one light template (`{target}/{filter}/{date}/{frametype}/`) is applied to
 |------|--------------------------|-------|
 | light | `{target}/{filter}/{date}/light/` | per-night, per-filter, per-target |
 | flat | `flats/{filter}/{date}/` | per-night, per-filter; no target |
-| dark | `darks/{exposure}/` (+ `{gain}`/`{temp}`/`{binning}` as configured) | no filter, no target |
-| bias | `bias/` (+ `{gain}`/`{temp}`/`{binning}` as configured) | no filter, no date, no target |
+| dark | `darks/{exposure}/` (+ `{gain}`/`{set_temp}`/`{binning}` as configured) | no filter, no target |
+| bias | `bias/` (+ `{gain}`/`{set_temp}`/`{binning}` as configured) | no filter, no date, no target |
 | master flat | `masters/flats/{filter}/` | raw counterpart minus date |
 | master dark | `masters/darks/{exposure}/` | raw counterpart minus date |
 | master bias | `masters/bias/` | raw counterpart minus date |
@@ -127,4 +127,4 @@ Plan generation is gated on the presence of every attribute the chosen pattern c
 | master dark | image type, exposure |
 | master bias | image type |
 
-(Gain/temp/binning are required only when included in the configured pattern for that type.)
+(Gain/`set_temp`/binning are required only when included in the configured pattern for that type. Token names align with the `crates/patterns` V1 registry: `target`, `filter`, `date`, `frame_type`, `camera`, `exposure`, `gain`, `binning`, `set_temp`.)

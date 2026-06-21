@@ -1,6 +1,6 @@
 lockfile_version: '1'
-generated_at: '2026-06-20T15:23:41.943010+00:00'
-apm_version: 0.19.0
+generated_at: '2026-06-21T08:31:09.460302+00:00'
+apm_version: 0.21.0
 dependencies:
 - repo_url: Dammyjay93/interface-design
   host: github.com
@@ -128,6 +128,7 @@ dependencies:
     .claude/skills/upload-to-stitch/SKILL.md: sha256:4def3c16e1e33be7518504dc16ea1a1ff8c90e533c1cbdb4ec399889cd54dff6
     .claude/skills/upload-to-stitch/scripts/upload_to_stitch.py: sha256:8a1313edc967b0edf37074184f43252ccccbf9353f02a7f51f9e8950f96a086a
   content_hash: sha256:f9e72b68b4a6e2ecfa636d95a7079b8080ab9ea5d7ccca3d1abf96ddf3d1b90d
+  declared_license: Apache-2.0
 - repo_url: mattpocock/skills
   host: github.com
   resolved_commit: 6eeb81b5fcfeeb5bd531dd47ab2f9f2bbea27461
@@ -566,80 +567,89 @@ dependencies:
   content_hash: sha256:4f0d597f6f13e7e22d15451e8da512e7ad573467919ebd42a2466b6bb527ecce
 - repo_url: srobroek/agentic-packages
   host: github.com
-  resolved_commit: 8ee2a91b3a5a5a7ff07a99eb255339ca859f66b1
-  resolved_ref: core-v0.4.1
+  resolved_commit: 21f6a35ca298c4b132e6934d51d90a3e5557bd14
+  resolved_ref: ^0.4.1
   virtual_path: packages/core
   is_virtual: true
   package_type: apm_package
-  content_hash: sha256:37eae61564bb798ce7be572e89af80bde3a730c4b915b3d937dfaf0e5e5d0bdb
+  content_hash: sha256:4a7021135fc56e62cc72290a62e68d3b0f11f21ad7e69b69ffbfad6d8f8df990
+  declared_license: Apache-2.0
 - repo_url: srobroek/agentic-packages
   host: github.com
-  resolved_commit: 7e47178380d2985b2dda158b3f9226b6926a4ede
-  resolved_ref: docs-architecture-v0.1.0
+  resolved_commit: 21f6a35ca298c4b132e6934d51d90a3e5557bd14
+  resolved_ref: ^0.1.0
   virtual_path: packages/docs-architecture
   is_virtual: true
   package_type: apm_package
   content_hash: sha256:c1db4dc2cd614836e3eaba1af6c1df17e4a5948c579a52a22ef00bb7ad1c2fe1
+  declared_license: MIT
 - repo_url: srobroek/agentic-packages
   host: github.com
-  resolved_commit: e061c81852ba1ae7ef8bb443b56ff22e98bd17de
-  resolved_ref: frontend-v0.1.2
+  resolved_commit: 21f6a35ca298c4b132e6934d51d90a3e5557bd14
+  resolved_ref: ^0.1.2
   virtual_path: packages/frontend
   is_virtual: true
   package_type: apm_package
-  content_hash: sha256:eb6931bae7482f60257ca584a786302f19d2fc5f04bf0d5f15a6736fb46d08d5
+  content_hash: sha256:8ecb6ab51b5960d2eeef6a9c90255ea367a79e97e29ced9d786c353f9fea6aba
+  declared_license: Apache-2.0
 - repo_url: srobroek/agentic-packages
   host: github.com
-  resolved_commit: e061c81852ba1ae7ef8bb443b56ff22e98bd17de
-  resolved_ref: language-rust-v0.1.2
+  resolved_commit: 21f6a35ca298c4b132e6934d51d90a3e5557bd14
+  resolved_ref: ^0.1.2
   virtual_path: packages/language-rust
   is_virtual: true
   package_type: apm_package
-  content_hash: sha256:b2f7b21dba9bcd3c0809701bf3607ea0f147d29fdf68773cbd39fff2629b2cfc
+  content_hash: sha256:f0fa2a1d58630fae5ac56f65aa13c0d1ac9e829b4b2dffde820ab23ede4306d7
+  declared_license: Apache-2.0
 - repo_url: srobroek/agentic-packages
   host: github.com
-  resolved_commit: e061c81852ba1ae7ef8bb443b56ff22e98bd17de
-  resolved_ref: language-typescript-v0.1.2
+  resolved_commit: 21f6a35ca298c4b132e6934d51d90a3e5557bd14
+  resolved_ref: ^0.1.2
   virtual_path: packages/language-typescript
   is_virtual: true
   package_type: apm_package
-  content_hash: sha256:941303f112ea79bbdeabe975bb728d8056a845fc72fcdc672c15bfdb6f30eff8
+  content_hash: sha256:aa840c6569f58b8e30d9dd2505357709b3d57e6e8377db2dcf9a13540d0b2d58
+  declared_license: Apache-2.0
 - repo_url: srobroek/agentic-packages
   host: github.com
-  resolved_commit: 7e47178380d2985b2dda158b3f9226b6926a4ede
-  resolved_ref: mcp-codebase-memory-v0.1.0
+  resolved_commit: 21f6a35ca298c4b132e6934d51d90a3e5557bd14
+  resolved_ref: ^0.1.0
   virtual_path: packages/mcp-codebase-memory
   is_virtual: true
   package_type: apm_package
   content_hash: sha256:542a0dd2a0180a5a143866476e4d39e3cdb5534904fd5a502b54438a2721b283
+  declared_license: Apache-2.0
 - repo_url: srobroek/agentic-packages
   host: github.com
-  resolved_commit: 7e47178380d2985b2dda158b3f9226b6926a4ede
-  resolved_ref: mcp-context7-v0.1.0
+  resolved_commit: 21f6a35ca298c4b132e6934d51d90a3e5557bd14
+  resolved_ref: ^0.1.0
   virtual_path: packages/mcp-context7
   is_virtual: true
   package_type: apm_package
   content_hash: sha256:8f4cce016f6a378fe014badd553c413528c65f3e42f5cbb88ef69712f3393867
+  declared_license: Apache-2.0
 - repo_url: srobroek/agentic-packages
   host: github.com
-  resolved_commit: 86c95af4d2b8dcaf1f5a50db3b5469a34591e13e
-  resolved_ref: mcp-package-version-v0.1.1
+  resolved_commit: 21f6a35ca298c4b132e6934d51d90a3e5557bd14
+  resolved_ref: ^0.1.1
   virtual_path: packages/mcp-package-version
   is_virtual: true
   package_type: apm_package
   content_hash: sha256:a9b48d77277aaf6b83b207ec23c681e41cb3ef0ca635fd5033ea3da4c4afdf79
+  declared_license: Apache-2.0
 - repo_url: srobroek/agentic-packages
   host: github.com
-  resolved_commit: 7e47178380d2985b2dda158b3f9226b6926a4ede
-  resolved_ref: mcp-playwright-v0.1.0
+  resolved_commit: 21f6a35ca298c4b132e6934d51d90a3e5557bd14
+  resolved_ref: ^0.1.0
   virtual_path: packages/mcp-playwright
   is_virtual: true
   package_type: apm_package
   content_hash: sha256:956010c4edba4520b99d8de5fc0c62b7d3cad1474db003afcfd719ccbb8dbfed
+  declared_license: Apache-2.0
 - repo_url: srobroek/agentic-packages
   host: github.com
-  resolved_commit: 7e47178380d2985b2dda158b3f9226b6926a4ede
-  resolved_ref: mcp-repomix-v0.1.0
+  resolved_commit: 21f6a35ca298c4b132e6934d51d90a3e5557bd14
+  resolved_ref: ^0.1.0
   virtual_path: packages/mcp-repomix
   is_virtual: true
   package_type: apm_package
@@ -650,18 +660,20 @@ dependencies:
     .claude/hooks/mcp-repomix/scripts/repomix-refresh-snapshot.sh: sha256:60122f295247bbf2a4722dcbb2a4dd6ff9e06d1ee50286064f39402f7c3d9375
     .codex/hooks/mcp-repomix/scripts/repomix-refresh-snapshot.sh: sha256:60122f295247bbf2a4722dcbb2a4dd6ff9e06d1ee50286064f39402f7c3d9375
   content_hash: sha256:8160affc9479c3f49064f324738f9d0d6e4f34bcd35445556b9c8a6ad97510db
+  declared_license: Apache-2.0
 - repo_url: srobroek/agentic-packages
   host: github.com
-  resolved_commit: 7e47178380d2985b2dda158b3f9226b6926a4ede
-  resolved_ref: mcp-serena-v0.1.0
+  resolved_commit: 21f6a35ca298c4b132e6934d51d90a3e5557bd14
+  resolved_ref: ^0.1.0
   virtual_path: packages/mcp-serena
   is_virtual: true
   package_type: apm_package
   content_hash: sha256:914c36de806169695fa1d3de94ab207c529e0eda10420b658e829446f06c1582
+  declared_license: Apache-2.0
 - repo_url: srobroek/agentic-packages
   host: github.com
-  resolved_commit: 9aefe57d8a943e1266f3edc846a3d0e8abbe715b
-  resolved_ref: mcp-tauri-v1.0.0
+  resolved_commit: 21f6a35ca298c4b132e6934d51d90a3e5557bd14
+  resolved_ref: ^1.0.0
   virtual_path: packages/mcp-tauri
   is_virtual: true
   package_type: apm_package
@@ -670,10 +682,11 @@ dependencies:
   deployed_file_hashes:
     .claude/rules/50-tauri-mcp.md: sha256:4f073b0fe39bbe73b735059deabe080561b0032bccf143818c7fadfd4a106535
   content_hash: sha256:e6b66c2795556dccbcf52c568eaaab25c248869b5ea42591d3ba5863b3687d9b
+  declared_license: Apache-2.0
 - repo_url: srobroek/agentic-packages
   host: github.com
-  resolved_commit: 50bdeac526f071cf8621ed139619aada331bb719
-  resolved_ref: resume-session-v0.2.1
+  resolved_commit: 21f6a35ca298c4b132e6934d51d90a3e5557bd14
+  resolved_ref: ^0.2.1
   virtual_path: packages/resume-session
   is_virtual: true
   package_type: apm_package
@@ -698,10 +711,11 @@ dependencies:
     .claude/skills/resume-session/scripts/list-sessions.py: sha256:dd7cb3e88e0597afeedacb5e552aa2036092caff5f9d35d77dc9666fc0eaac87
     .claude/skills/resume-session/scripts/read-session.py: sha256:ec0b8a0f982e1f97d30430771152c94eada2737ea4b05b5fe76e938b37c64678
   content_hash: sha256:923bd83d188929a70d8f31c1eb63dc1fe6b74a6de32cd371540dacdf6c511e88
+  declared_license: Apache-2.0
 - repo_url: srobroek/agentic-packages
   host: github.com
-  resolved_commit: 86c95af4d2b8dcaf1f5a50db3b5469a34591e13e
-  resolved_ref: rust-quality-v0.1.2
+  resolved_commit: 21f6a35ca298c4b132e6934d51d90a3e5557bd14
+  resolved_ref: ^0.1.2
   virtual_path: packages/rust-quality
   is_virtual: true
   package_type: apm_package
@@ -726,10 +740,11 @@ dependencies:
     .claude/skills/rust-quality/scripts/check.sh: sha256:967680371bff095b0ff28b6d339e58cd3263d988520115710a8ad8432a2de47a
     .claude/skills/rust-quality/scripts/fix.sh: sha256:54fd54cf130284a51175ea535878caeb3bf18b6a6ebb0e80f9e3e5cad23c7166
   content_hash: sha256:16da2a45d5c005c3d562bddd666aa86e1f1f76ff1245ffe3394b3a8da5e9dd17
+  declared_license: Apache-2.0
 - repo_url: srobroek/agentic-packages
   host: github.com
-  resolved_commit: a423f3ed5f25f73aafdc6ed6cbf58219f1a8115e
-  resolved_ref: speckit-v0.1.2
+  resolved_commit: 21f6a35ca298c4b132e6934d51d90a3e5557bd14
+  resolved_ref: ^0.1.2
   virtual_path: packages/speckit
   is_virtual: true
   package_type: apm_package
@@ -782,10 +797,11 @@ dependencies:
     .codex/hooks/speckit/scripts/speckit-task-commit-check.sh: sha256:e71970d892665803d21e84233928b5f82092914709ae19cdef4373acb29c56d8
     .codex/hooks/speckit/scripts/speckit-task-issue-sync.sh: sha256:1d6eee0a4b87a388d8189aa02e4da008ef5328ca2df392951cb78ab72855b41d
   content_hash: sha256:ba0bc591f01f1071acb3c61273cf3ec65193a2944778af85be9598fc656d4275
+  declared_license: Apache-2.0
 - repo_url: srobroek/agentic-packages
   host: github.com
-  resolved_commit: b3b0941954a8219609ebb2d5f3ceb552642517e6
-  resolved_ref: speckit-dag-hooks-v0.3.2
+  resolved_commit: 21f6a35ca298c4b132e6934d51d90a3e5557bd14
+  resolved_ref: ^0.4.1
   virtual_path: packages/speckit-dag-hooks
   is_virtual: true
   package_type: apm_package
@@ -793,13 +809,14 @@ dependencies:
   - .claude/hooks/speckit-dag-hooks/scripts/dispatcher.py
   - .claude/hooks/speckit-dag-hooks/scripts/nodes.json
   deployed_file_hashes:
-    .claude/hooks/speckit-dag-hooks/scripts/dispatcher.py: sha256:81539c20268be5197864a3d78e4e680c06957c0501c4edad87f5782e424d3e04
-    .claude/hooks/speckit-dag-hooks/scripts/nodes.json: sha256:b90b2476f420a52f060330a8a260fe26f2caa11a3ab257c13b0d8782964be757
-  content_hash: sha256:4d930e9e652c8ad9534445ce34d93824c76acea09e663b8edbc99d1fea723bb3
+    .claude/hooks/speckit-dag-hooks/scripts/dispatcher.py: sha256:6a8482e037d79f497b283b69e9acab7ac97e7960f57293198837bb9a64b2966c
+    .claude/hooks/speckit-dag-hooks/scripts/nodes.json: sha256:7786d5194311aaebf9281a9434af592bc365088765a18eced6a6ac641142c7b4
+  content_hash: sha256:3c898a65ed74f4d0ccd4e10d0074b0953bf14f1f93f74051c4c90f2abd73300b
+  declared_license: Apache-2.0
 - repo_url: srobroek/agentic-packages
   host: github.com
-  resolved_commit: 86c95af4d2b8dcaf1f5a50db3b5469a34591e13e
-  resolved_ref: steering-speckit-v0.2.1
+  resolved_commit: 21f6a35ca298c4b132e6934d51d90a3e5557bd14
+  resolved_ref: ^0.2.1
   virtual_path: packages/steering-speckit
   is_virtual: true
   package_type: apm_package
@@ -808,10 +825,11 @@ dependencies:
   deployed_file_hashes:
     .claude/rules/50-speckit-workflow.md: sha256:ec1c5448d36f3b65eb6b23ac88c225bf032daffd5e98152e874aa3e2ba40b968
   content_hash: sha256:f46595f93f7f503ab6369a37e5e47d1042899aaefc3f887a24ccd1cc66bb94f6
+  declared_license: Apache-2.0
 - repo_url: srobroek/agentic-packages
   host: github.com
-  resolved_commit: 86c95af4d2b8dcaf1f5a50db3b5469a34591e13e
-  resolved_ref: typescript-quality-v0.1.2
+  resolved_commit: 21f6a35ca298c4b132e6934d51d90a3e5557bd14
+  resolved_ref: ^0.1.2
   virtual_path: packages/typescript-quality
   is_virtual: true
   package_type: apm_package
@@ -836,6 +854,336 @@ dependencies:
     .claude/skills/typescript-quality/scripts/check.sh: sha256:7a244b3233708ba4399cfd307da6bd9839a37ffa18e3860f52ea98b8c94daf46
     .claude/skills/typescript-quality/scripts/fix.sh: sha256:3bfcf6e35b54d705d040ff71d3c09f3343c6c0f32cc8c39edfdb2f417fd1b241
   content_hash: sha256:99d64e9fc076bba3eb1d713d9d4b3d1c8257fa78fbe4a4170b0d828fde65082b
+  declared_license: Apache-2.0
+- repo_url: srobroek/agentic-packages
+  host: github.com
+  resolved_commit: e2d980e207ed53cd14bc12eeef84e40845b928b7
+  resolved_ref: agent-coder-v0.1.1
+  virtual_path: packages/agent-coder
+  is_virtual: true
+  package_type: apm_package
+  deployed_files:
+  - .claude/agents/coder.md
+  - .claude/hooks/agent-coder/scripts/coder-delegation-reminder.sh
+  deployed_file_hashes:
+    .claude/agents/coder.md: sha256:4f66193124fdfafa12b6566e4cbc767092166c234b9839d863d1a99c22e5c805
+    .claude/hooks/agent-coder/scripts/coder-delegation-reminder.sh: sha256:ab154403adcbe0e00e3eab02b66b98245bed84264abffaeb20aeadfc54b434d6
+  content_hash: sha256:2617bf11952a011e70fbfc4e371b539148a4ef8a1ad1bfb71d33b515dc47b227
+  declared_license: Apache-2.0
+- repo_url: srobroek/agentic-packages
+  host: github.com
+  resolved_commit: e2d980e207ed53cd14bc12eeef84e40845b928b7
+  resolved_ref: agent-pr-reviewer-v0.1.1
+  virtual_path: packages/agent-pr-reviewer
+  is_virtual: true
+  package_type: apm_package
+  deployed_files:
+  - .claude/agents/pr-reviewer.md
+  deployed_file_hashes:
+    .claude/agents/pr-reviewer.md: sha256:ac61c665bfa00c57df81ae880556c18e38a8961803a79a590d86d3c098a7d4c1
+  content_hash: sha256:b302b14de99d0d0a02d0e29900bf16b05de7077bdb4cf77b00b1b741df62f6e9
+  declared_license: Apache-2.0
+- repo_url: srobroek/agentic-packages
+  host: github.com
+  resolved_commit: 86c95af4d2b8dcaf1f5a50db3b5469a34591e13e
+  resolved_ref: audit-steering-v0.1.2
+  virtual_path: packages/audit-steering
+  is_virtual: true
+  package_type: apm_package
+  deployed_files:
+  - .claude/skills/audit-steering
+  - .claude/skills/audit-steering/CHANGELOG.md
+  - .claude/skills/audit-steering/SKILL.md
+  - .claude/skills/audit-steering/references/checklist.md
+  deployed_file_hashes:
+    .claude/skills/audit-steering/CHANGELOG.md: sha256:a4af01c568e8f85588a53458a9ce2eccc376314e94ae1a4c6903f08c5bf9193b
+    .claude/skills/audit-steering/SKILL.md: sha256:aa43c1b417d71fcf63073439061c8ec94a9be05b8604ed9485e511f1dabe4bcf
+    .claude/skills/audit-steering/references/checklist.md: sha256:ccb59c82bb97f663a3d6e9e6554eed0372f95f070d737939cda8372fe3d44255
+  content_hash: sha256:74c830dcdcb997b1b16dd61f9aa0028d15b0e45948bc6bd244cbb1dcbae48537
+  declared_license: Apache-2.0
+- repo_url: srobroek/agentic-packages
+  host: github.com
+  resolved_commit: 50bdeac526f071cf8621ed139619aada331bb719
+  resolved_ref: catchup-v0.1.4
+  virtual_path: packages/catchup
+  is_virtual: true
+  package_type: apm_package
+  content_hash: sha256:e985a1dc19f1d2939e5b8537770de1e92a397a0b15cf24e75cd147a1f03f218d
+  declared_license: Apache-2.0
+- repo_url: srobroek/agentic-packages
+  host: github.com
+  resolved_commit: 86c95af4d2b8dcaf1f5a50db3b5469a34591e13e
+  resolved_ref: codebase-index-v0.1.2
+  virtual_path: packages/codebase-index
+  is_virtual: true
+  package_type: apm_package
+  deployed_files:
+  - .claude/skills/codebase-index
+  - .claude/skills/codebase-index/SKILL.md
+  - .claude/skills/codebase-index/scripts/index.sh
+  deployed_file_hashes:
+    .claude/skills/codebase-index/SKILL.md: sha256:211015bebfc9ea34a50782c43469d901047b93fb3dfc5b91e1610fc9e559b87f
+    .claude/skills/codebase-index/scripts/index.sh: sha256:119f95b4332f3865a4b04ff57a100169e1c9de046ae3ccd3cee4bb42fbe711fa
+  content_hash: sha256:cee45702b7f2e249b5a714aaf82df1b87352f87019275c50bbd9bdcc165dfd64
+  declared_license: Apache-2.0
+- repo_url: srobroek/agentic-packages
+  host: github.com
+  resolved_commit: 86c95af4d2b8dcaf1f5a50db3b5469a34591e13e
+  resolved_ref: codebase-memory-v0.1.2
+  virtual_path: packages/codebase-memory
+  is_virtual: true
+  package_type: apm_package
+  deployed_files:
+  - .claude/skills/codebase-memory
+  - .claude/skills/codebase-memory/SKILL.md
+  - .claude/skills/codebase-memory/references/quality.md
+  - .claude/skills/codebase-memory/references/reference.md
+  - .claude/skills/codebase-memory/references/trace.md
+  - .claude/skills/codebase-memory/scripts/index.sh
+  deployed_file_hashes:
+    .claude/skills/codebase-memory/SKILL.md: sha256:ceb8453a8b7292544c2f8c30e569f766c79293e532ff4d17d04d3df531841935
+    .claude/skills/codebase-memory/references/quality.md: sha256:3a43f7b410c83d877373e3a37e84102c9d9e37a9ea54c9953779dae953c873e3
+    .claude/skills/codebase-memory/references/reference.md: sha256:878a6918f085cbe83837574a6960d6b9b841676d7876ab54ecce234c8cbf38c8
+    .claude/skills/codebase-memory/references/trace.md: sha256:261c7844d36cf21a2e7c2cf2bbcbafc237eb0b61a5f6551f93218eca688730e3
+    .claude/skills/codebase-memory/scripts/index.sh: sha256:119f95b4332f3865a4b04ff57a100169e1c9de046ae3ccd3cee4bb42fbe711fa
+  content_hash: sha256:d4b514eaaa0955994080d5a5087a1d374521325bb8b5aa6be0eea8b8ae8d17cc
+  declared_license: Apache-2.0
+- repo_url: srobroek/agentic-packages
+  host: github.com
+  resolved_commit: 86c95af4d2b8dcaf1f5a50db3b5469a34591e13e
+  resolved_ref: commit-push-merge-v0.1.2
+  virtual_path: packages/commit-push-merge
+  is_virtual: true
+  package_type: apm_package
+  deployed_files:
+  - .claude/skills/commit-push-merge
+  - .claude/skills/commit-push-merge/SKILL.md
+  - .claude/skills/commit-push-merge/references/merge-checklist.md
+  deployed_file_hashes:
+    .claude/skills/commit-push-merge/SKILL.md: sha256:a997fe16617b33e0d203f0adbcfec36513985b7207c2b5f3c6729dff77cc9801
+    .claude/skills/commit-push-merge/references/merge-checklist.md: sha256:e4277538807b26f399fc3755a0ed97685f9264eb1dd238bc66054bed415cda18
+  content_hash: sha256:e4e1d91ee7e113b78237470f0eb798f224e5bb28ea35c5a58e4efc2a958b8500
+  declared_license: Apache-2.0
+- repo_url: srobroek/agentic-packages
+  host: github.com
+  resolved_commit: 86c95af4d2b8dcaf1f5a50db3b5469a34591e13e
+  resolved_ref: commit-push-pr-v0.1.2
+  virtual_path: packages/commit-push-pr
+  is_virtual: true
+  package_type: apm_package
+  deployed_files:
+  - .claude/skills/commit-push-pr
+  - .claude/skills/commit-push-pr/SKILL.md
+  - .claude/skills/commit-push-pr/references/pr-template.md
+  deployed_file_hashes:
+    .claude/skills/commit-push-pr/SKILL.md: sha256:1afc56fa97b8d7936a7cc7ec7f601792069c0f740f9ec30774808555f237b303
+    .claude/skills/commit-push-pr/references/pr-template.md: sha256:26812e250916374a6344f9742a3f86111a38887d8e7ef02afa9cbda5ab9c7767
+  content_hash: sha256:94a57f66ac283c012859e307ff0414d401d58efd51d4abc6941e14243edb31c9
+  declared_license: Apache-2.0
+- repo_url: srobroek/agentic-packages
+  host: github.com
+  resolved_commit: 86c95af4d2b8dcaf1f5a50db3b5469a34591e13e
+  resolved_ref: explore-v0.1.2
+  virtual_path: packages/explore
+  is_virtual: true
+  package_type: apm_package
+  deployed_files:
+  - .claude/skills/explore
+  - .claude/skills/explore/SKILL.md
+  deployed_file_hashes:
+    .claude/skills/explore/SKILL.md: sha256:5a0ca2244e06719e60e9c1ef3e59db7a84bde3ac82b08613b27e88e9582fee2e
+  content_hash: sha256:1a55bb81e211c486418f9817b2ab158f53392e43453cf7f6b505da211c55c23d
+  declared_license: Apache-2.0
+- repo_url: srobroek/agentic-packages
+  host: github.com
+  resolved_commit: 86c95af4d2b8dcaf1f5a50db3b5469a34591e13e
+  resolved_ref: handover-v0.1.2
+  virtual_path: packages/handover
+  is_virtual: true
+  package_type: apm_package
+  deployed_files:
+  - .claude/skills/handover
+  - .claude/skills/handover/SKILL.md
+  - .claude/skills/handover/references/template.md
+  - .claude/skills/handover/scripts/new-handover.py
+  deployed_file_hashes:
+    .claude/skills/handover/SKILL.md: sha256:583088be78047eb30193d0ab46ae0b8006db37488868996a1db890511b5c406e
+    .claude/skills/handover/references/template.md: sha256:631963e1aaabd6c58b63afcc7fa1656c91dea676bb6a6b339bbac8dec5a1575c
+    .claude/skills/handover/scripts/new-handover.py: sha256:724465a9f872e87ce09bf54ba4c9f2306bee87963daff587aa3b2c774a4f5f37
+  content_hash: sha256:0532fbd04a6a9030ec806c987758c2154ff00ddc54a89dd2897368b0d249fc87
+  declared_license: Apache-2.0
+- repo_url: srobroek/agentic-packages
+  host: github.com
+  resolved_commit: 86c95af4d2b8dcaf1f5a50db3b5469a34591e13e
+  resolved_ref: language-steering-rust-v0.1.1
+  virtual_path: packages/language-steering-rust
+  is_virtual: true
+  package_type: apm_package
+  content_hash: sha256:fdc20633b8502e745b9780a495b2e176be1acde155bd54faa1592d299ebe82c4
+  declared_license: Apache-2.0
+- repo_url: srobroek/agentic-packages
+  host: github.com
+  resolved_commit: 86c95af4d2b8dcaf1f5a50db3b5469a34591e13e
+  resolved_ref: language-steering-typescript-v0.1.1
+  virtual_path: packages/language-steering-typescript
+  is_virtual: true
+  package_type: apm_package
+  content_hash: sha256:52c13a6ac2936d676229a5f95b9b6c63f25bbec4e90bc8f5e64a8c3a648e6a86
+  declared_license: Apache-2.0
+- repo_url: srobroek/agentic-packages
+  host: github.com
+  resolved_commit: 86c95af4d2b8dcaf1f5a50db3b5469a34591e13e
+  resolved_ref: optimize-steering-v0.1.2
+  virtual_path: packages/optimize-steering
+  is_virtual: true
+  package_type: apm_package
+  deployed_files:
+  - .claude/skills/optimize-steering
+  - .claude/skills/optimize-steering/SKILL.md
+  - .claude/skills/optimize-steering/references/measurement.md
+  - .claude/skills/optimize-steering/references/rules.md
+  deployed_file_hashes:
+    .claude/skills/optimize-steering/SKILL.md: sha256:de22f53f03b60c4908256dffc65512249a3d42a9971ccf42ce8fa5b22af9f8c8
+    .claude/skills/optimize-steering/references/measurement.md: sha256:ac1a997e148aa3dd6770825b80a2fb756f420574a94e9f0562fbdb7de6988b1e
+    .claude/skills/optimize-steering/references/rules.md: sha256:9c56b23f67963447a6475d6d1d6b52c6b70e17d85f7609c8f72e06d72c2e171b
+  content_hash: sha256:47a77ac95f58bcc2c37116b059412bf4bdb333c644e61c240f9dfce6f78c9144
+  declared_license: Apache-2.0
+- repo_url: srobroek/agentic-packages
+  host: github.com
+  resolved_commit: 86c95af4d2b8dcaf1f5a50db3b5469a34591e13e
+  resolved_ref: playwright-v0.1.2
+  virtual_path: packages/playwright
+  is_virtual: true
+  package_type: apm_package
+  deployed_files:
+  - .claude/skills/playwright
+  - .claude/skills/playwright/SKILL.md
+  deployed_file_hashes:
+    .claude/skills/playwright/SKILL.md: sha256:345fae30eb304961e3b91c7606e4f72232e55769f4b2c072d1f7cb429294ca8c
+  content_hash: sha256:38a68d85f76def241318593855fb1ff04a829f330cd2e8b76eb1b6e9eea5c1e2
+  declared_license: Apache-2.0
+- repo_url: srobroek/agentic-packages
+  host: github.com
+  resolved_commit: 86c95af4d2b8dcaf1f5a50db3b5469a34591e13e
+  resolved_ref: prompt-lookup-v0.1.2
+  virtual_path: packages/prompt-lookup
+  is_virtual: true
+  package_type: apm_package
+  deployed_files:
+  - .claude/skills/prompt-lookup
+  - .claude/skills/prompt-lookup/SKILL.md
+  deployed_file_hashes:
+    .claude/skills/prompt-lookup/SKILL.md: sha256:4409355ed36041f07dc36cbba85ccf8d8be06fef765eaddfd6f9db35f757b1e8
+  content_hash: sha256:0b9e47726b7b5fcc14b75a2e2087011c61b330b89d5551c98bfef8227bcb70ed
+  declared_license: Apache-2.0
+- repo_url: srobroek/agentic-packages
+  host: github.com
+  resolved_commit: 86c95af4d2b8dcaf1f5a50db3b5469a34591e13e
+  resolved_ref: quick-commit-v0.1.2
+  virtual_path: packages/quick-commit
+  is_virtual: true
+  package_type: apm_package
+  deployed_files:
+  - .claude/skills/quick-commit
+  - .claude/skills/quick-commit/SKILL.md
+  - .claude/skills/quick-commit/references/changeset-policy.md
+  - .claude/skills/quick-commit/scripts/status.sh
+  deployed_file_hashes:
+    .claude/skills/quick-commit/SKILL.md: sha256:1a3110e7fa68ea0a3f0528189235d2894493744037e42a67ce4bbd67950710c8
+    .claude/skills/quick-commit/references/changeset-policy.md: sha256:0f5e27b13b05a7d47c1cddf2b9b9df8e1398646cf4efcead7e5826ae01afced7
+    .claude/skills/quick-commit/scripts/status.sh: sha256:3a42c5535c17b582d36637f86a53cdafe65a2115045b7ae4f9622f43d263ff4c
+  content_hash: sha256:e01fdaa6967891902d50635cf7a86efb27d7ce484362c1cbd8c004ae530ef85e
+  declared_license: Apache-2.0
+- repo_url: srobroek/agentic-packages
+  host: github.com
+  resolved_commit: 86c95af4d2b8dcaf1f5a50db3b5469a34591e13e
+  resolved_ref: research-v0.1.2
+  virtual_path: packages/research
+  is_virtual: true
+  package_type: apm_package
+  deployed_files:
+  - .claude/skills/research
+  - .claude/skills/research/SKILL.md
+  - .claude/skills/research/references/report-template.md
+  deployed_file_hashes:
+    .claude/skills/research/SKILL.md: sha256:663d146af7222cc765775f20d561ffdc15ab7ee281098101bbcc5633a4f3eb72
+    .claude/skills/research/references/report-template.md: sha256:f50d76740e30fb9f1c509d1c77a1655a5798f796b6f8035d668b7cf9f875263c
+  content_hash: sha256:f6f20cd0a4a558c400fbf0a75e0a25525a7aaf20fc53431ae8196e92c13b2cb0
+  declared_license: Apache-2.0
+- repo_url: srobroek/agentic-packages
+  host: github.com
+  resolved_commit: 7e47178380d2985b2dda158b3f9226b6926a4ede
+  resolved_ref: steering-frontend-v0.1.0
+  virtual_path: packages/steering-frontend
+  is_virtual: true
+  package_type: apm_package
+  deployed_files:
+  - .claude/rules/30-frontend.md
+  - .claude/rules/31-frontend-ui.md
+  deployed_file_hashes:
+    .claude/rules/30-frontend.md: sha256:3f9348fd54f66d4008f742fdb60ea2e134d433af77a337db847e28a828a07a80
+    .claude/rules/31-frontend-ui.md: sha256:658e4d9f2a801ad8a279326bcc117abaa62ac9a3b7779cce1c69b4817f464d0d
+  content_hash: sha256:58672401144af34707c4318117d772dea9ac247a6e23a9c099b709ec02e44e83
+  declared_license: Apache-2.0
+- repo_url: srobroek/agentic-packages
+  host: github.com
+  resolved_commit: 7e47178380d2985b2dda158b3f9226b6926a4ede
+  resolved_ref: steering-project-structure-v0.1.0
+  virtual_path: packages/steering-project-structure
+  is_virtual: true
+  package_type: apm_package
+  deployed_files:
+  - .claude/rules/20-project-structure.md
+  deployed_file_hashes:
+    .claude/rules/20-project-structure.md: sha256:37ee03778e1ef7077caa1c7ae2f49d3ca668ead78424e48b81d036aae66a8fb1
+  content_hash: sha256:c1781e5c9555a6369991f447f527323ef42f59ea013cd52193e563807cd88314
+  declared_license: Apache-2.0
+- repo_url: srobroek/agentic-packages
+  host: github.com
+  resolved_commit: 86c95af4d2b8dcaf1f5a50db3b5469a34591e13e
+  resolved_ref: verify-v0.1.2
+  virtual_path: packages/verify
+  is_virtual: true
+  package_type: apm_package
+  deployed_files:
+  - .claude/skills/verify
+  - .claude/skills/verify/SKILL.md
+  - .claude/skills/verify/scripts/verify.sh
+  deployed_file_hashes:
+    .claude/skills/verify/SKILL.md: sha256:f7722ee3a2dca39cf7a9b553b5d154dff3a41dbb6bfd78f67cefd4da614a4348
+    .claude/skills/verify/scripts/verify.sh: sha256:66c23d7ef41324f3517562f76b500532ff6ea9d4d677aa4d642ace08c5420420
+  content_hash: sha256:808e1e96e7b64e85612fa39987a15630395de0afb4a86f774e6683445d7dde1e
+  declared_license: Apache-2.0
+- repo_url: srobroek/agentic-packages
+  host: github.com
+  resolved_commit: 86c95af4d2b8dcaf1f5a50db3b5469a34591e13e
+  resolved_ref: web-fetch-v0.1.2
+  virtual_path: packages/web-fetch
+  is_virtual: true
+  package_type: apm_package
+  deployed_files:
+  - .claude/skills/web-fetch
+  - .claude/skills/web-fetch/SKILL.md
+  - .claude/skills/web-fetch/references/tool-selection.md
+  deployed_file_hashes:
+    .claude/skills/web-fetch/SKILL.md: sha256:4b5607fa06ea72d2f3d133d00789bdafee1634de5fff77f9800300ce0d6b2a39
+    .claude/skills/web-fetch/references/tool-selection.md: sha256:886d30d65aebf74fef9ba241f1e48f2b646c194673c7db058dbd4b669f15f965
+  content_hash: sha256:87f02cce1fcd0e025fda052950e924d6cd2ca135c7c1f9831309fbfc96af9482
+  declared_license: Apache-2.0
+- repo_url: srobroek/agentic-packages
+  host: github.com
+  resolved_commit: 86c95af4d2b8dcaf1f5a50db3b5469a34591e13e
+  resolved_ref: write-a-skill-v0.1.2
+  virtual_path: packages/write-a-skill
+  is_virtual: true
+  package_type: apm_package
+  deployed_files:
+  - .claude/skills/write-a-skill
+  - .claude/skills/write-a-skill/SKILL.md
+  deployed_file_hashes:
+    .claude/skills/write-a-skill/SKILL.md: sha256:8c32704d93bfecb2f83cc42d72c6e9d39787bc54d99e97fb01c50cc63e0a22e2
+  content_hash: sha256:da8ec45120ac56f4e0621502f0926b1cb83052ea80774c5b50c99812d92f3b87
+  declared_license: Apache-2.0
 - repo_url: wshobson/agents
   host: github.com
   resolved_commit: cc37bfdd292ce520ba1c44df7a3a70d5f8137236
@@ -854,6 +1202,7 @@ dependencies:
     .claude/agents/sql-pro.md: sha256:6eb2fdb139b7971ae98b604ad7d22f6710f904ca74cf00e8961dbe81159513d7
     .claude/skills/postgresql/SKILL.md: sha256:3170aed913a522ca10e0f94bcfbef61e4284dd7c9e6aabb5ffaed2dbfb3173b4
   content_hash: sha256:d27b048b081427fb1804bedb5eff95a7558d974b031daf5a566035f78e098365
+  declared_license: MIT
 - repo_url: wshobson/agents
   host: github.com
   resolved_commit: cc37bfdd292ce520ba1c44df7a3a70d5f8137236
@@ -882,6 +1231,7 @@ dependencies:
     .claude/skills/wcag-audit-patterns/SKILL.md: sha256:db263a3405deb95a63175f33da4a9d82d8595599fbee4a81979059b35a7cec40
     .claude/skills/wcag-audit-patterns/references/details.md: sha256:0a61237ccb4e1b2cba4291f83e0747ad64ac9ba81b37427ee0e648537c9c78d6
   content_hash: sha256:654dddf849b6bbda02f8a113b57b4c83492058fdd30c0c4ba379c8bd2f955610
+  declared_license: MIT
 - repo_url: wshobson/agents
   host: github.com
   resolved_commit: cc37bfdd292ce520ba1c44df7a3a70d5f8137236
@@ -890,6 +1240,7 @@ dependencies:
   is_virtual: true
   package_type: marketplace_plugin
   content_hash: sha256:b29f57cdd3858bb363820e78515a67adfa93765ca46e37638ef677a169d6d8ce
+  declared_license: MIT
 - repo_url: wshobson/agents
   host: github.com
   resolved_commit: cc37bfdd292ce520ba1c44df7a3a70d5f8137236
@@ -918,6 +1269,7 @@ dependencies:
     .claude/skills/brand-landingpage/references/state-and-pitfalls.md: sha256:06847c20a2227218b1a70782beafb152c0fdcc22624335dcf5bda3d400636e10
     .claude/skills/brand-landingpage/references/stitch-architecture.md: sha256:ce5adc9d142721f5962e8a20d6da32674fe2e97f9cc1252db5e43dd0a6c59dfa
   content_hash: sha256:127d79aae1ce043d4ddfe44fec182d8c10a183496c612973846bcb2783710517
+  declared_license: MIT
 - repo_url: wshobson/agents
   host: github.com
   resolved_commit: cc37bfdd292ce520ba1c44df7a3a70d5f8137236
@@ -934,6 +1286,7 @@ dependencies:
     .claude/agents/c4-component.md: sha256:67c96e066a9db4fe33781bfd647c4748d2a10bf6f28cbd05f745bd1bb8c952fd
     .claude/agents/c4-container.md: sha256:1397485b1767f9fd83b83f3071b3c7d4576304c0c7d8d2439f8e786674bc05c9
   content_hash: sha256:755ff83930892113def4c6c4b70f7c5d85f4cf663db0a464a076e399c4fa6b13
+  declared_license: MIT
 - repo_url: wshobson/agents
   host: github.com
   resolved_commit: cc37bfdd292ce520ba1c44df7a3a70d5f8137236
@@ -942,6 +1295,7 @@ dependencies:
   is_virtual: true
   package_type: marketplace_plugin
   content_hash: sha256:2a9f0d489b2fb11da354c35458ab7cd31517267318eefb139b58e5daba98d598
+  declared_license: MIT
 - repo_url: wshobson/agents
   host: github.com
   resolved_commit: cc37bfdd292ce520ba1c44df7a3a70d5f8137236
@@ -950,6 +1304,7 @@ dependencies:
   is_virtual: true
   package_type: marketplace_plugin
   content_hash: sha256:218d104a947ef7cf5fc2bacf9509472617944b5d32483d580f0f133fdd9a7625
+  declared_license: MIT
 - repo_url: wshobson/agents
   host: github.com
   resolved_commit: cc37bfdd292ce520ba1c44df7a3a70d5f8137236
@@ -994,6 +1349,7 @@ dependencies:
     .claude/skills/openapi-spec-generation/references/code-first-and-tooling.md: sha256:533398d65b933040d13e642414e6b9846adbe7d5c95947223beffdb3ebe1590f
     .claude/skills/openapi-spec-generation/references/details.md: sha256:f653781def324ce13ba73879282ae5ae78c15d57b5f665f2c20b8d6332569e55
   content_hash: sha256:a724cae9708c50211db67adefa60850eba24ef5b2ef5c556ac8340b79995aa02
+  declared_license: MIT
 - repo_url: wshobson/agents
   host: github.com
   resolved_commit: cc37bfdd292ce520ba1c44df7a3a70d5f8137236
@@ -1010,6 +1366,7 @@ dependencies:
     .agents/skills/hads/SKILL.md: sha256:02e8fab07e66768e32eb5c20afccd00c2c1ed52d142ec533fbe608a0037edba1
     .claude/skills/hads/SKILL.md: sha256:02e8fab07e66768e32eb5c20afccd00c2c1ed52d142ec533fbe608a0037edba1
   content_hash: sha256:2045b74df98c0a28637550f4696524561faf742ea7a4ae44b3727d94f98a314d
+  declared_license: MIT
 - repo_url: wshobson/agents
   host: github.com
   resolved_commit: cc37bfdd292ce520ba1c44df7a3a70d5f8137236
@@ -1064,6 +1421,7 @@ dependencies:
     .claude/skills/tailwind-design-system/references/advanced-patterns.md: sha256:40a4a9fa931f4bc95213870ea1fe7c32ce50aacf3531af07954b660c4f51e1a2
     .claude/skills/tailwind-design-system/references/details.md: sha256:22e5e4500edc1f11c32871d6aad013b10e34724f29d486f080faea46a95bd6e7
   content_hash: sha256:4a22acc93bfc9f5d1c995051fc825149e9aeaeeef49f16d334ca9babe4d55d92
+  declared_license: MIT
 - repo_url: wshobson/agents
   host: github.com
   resolved_commit: cc37bfdd292ce520ba1c44df7a3a70d5f8137236
@@ -1126,6 +1484,26 @@ dependencies:
     .claude/skills/typescript-advanced-types/SKILL.md: sha256:c32101c65134d94ef1a3305ef486020b57be6408f97ed952c9c560e3fe04188d
     .claude/skills/typescript-advanced-types/references/details.md: sha256:036a1dd41283384f086ac0eeb4f63c899b042ad68815a8ce00afebf606b55c44
   content_hash: sha256:fab024d739fd02514a9516271de1ffe7899579d69f37541cb15b86ebb4a9de63
+  declared_license: MIT
+- repo_url: wshobson/agents
+  host: github.com
+  resolved_commit: cc37bfdd292ce520ba1c44df7a3a70d5f8137236
+  resolved_ref: main
+  virtual_path: plugins/plugin-eval
+  is_virtual: true
+  package_type: marketplace_plugin
+  deployed_files:
+  - .claude/agents/eval-judge.md
+  - .claude/agents/eval-orchestrator.md
+  - .claude/skills/evaluation-methodology
+  - .claude/skills/evaluation-methodology/SKILL.md
+  - .claude/skills/evaluation-methodology/references/rubrics.md
+  deployed_file_hashes:
+    .claude/agents/eval-judge.md: sha256:44c155e2fe50a1d2946797650839d6d9c4eb83963b9e90af4552134d1c8b6816
+    .claude/agents/eval-orchestrator.md: sha256:3d9ddfbcd3da4d0b3fc8d71e9dd15be31683e5ccb77d59dd1bb8e67f2e2bd75d
+    .claude/skills/evaluation-methodology/SKILL.md: sha256:1fe24ef3053651427ee3c82927e28a12f9fc89209fd54e0f9e487319ac80beb0
+    .claude/skills/evaluation-methodology/references/rubrics.md: sha256:c815591dc2d250620f1cb2818040d572e1fc88f1587b205e3d303176e6abdf36
+  content_hash: sha256:1e8a48d4715119ca611bd9dc871fe99212a552b30b7acb1ee6ff5a04f16c0994
 - repo_url: wshobson/agents
   host: github.com
   resolved_commit: cc37bfdd292ce520ba1c44df7a3a70d5f8137236
@@ -1174,6 +1552,7 @@ dependencies:
     .claude/skills/rust-async-patterns/SKILL.md: sha256:8e9a951c21bb1ee671dd2e7391b193e8e3d362b95ef29c470915837d73bf87df
     .claude/skills/rust-async-patterns/references/details.md: sha256:cd8a987c59cf704b7a2145e0dea6891b10194e7304b894bd14a5692d9fdfa76d
   content_hash: sha256:c02518c8c33a2f04a42ff6953f7302f31d167c08abbeb6cffb141cc95e406d59
+  declared_license: MIT
 - repo_url: wshobson/agents
   host: github.com
   resolved_commit: cc37bfdd292ce520ba1c44df7a3a70d5f8137236
@@ -1372,6 +1751,7 @@ dependencies:
     .claude/skills/web-component-design/references/component-patterns.md: sha256:a258c10793aae4b2628ff291fc7557d5605c73821d4946b98b923d6ef014c787
     .claude/skills/web-component-design/references/css-styling-approaches.md: sha256:fe34ea85c3c3116982783c9148217c5642a15fcb73207458326ed91de05e592e
   content_hash: sha256:98034564b87aa383659d82ab9f7b4fe1e8a5aaf7fe731c95781707baefd3a6f2
+  declared_license: MIT
 mcp_servers:
 - codebase-memory-mcp
 - context7

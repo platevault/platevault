@@ -263,11 +263,12 @@ def _resolve_path(tmpl, feat, proj_root):
 
 
 def _path_present(path):
-    """Existence check that understands glob patterns (e.g. iteration-*.md).
+    """True when `path` exists.
 
-    `os.path.exists` treats `*`/`?`/`[` literally, so a precondition template
-    like `specs/<feat>/iteration-*.md` would never match a real
-    `iteration-1.md`. Expand globs when present; fall back to a plain check.
+    Precondition templates may carry glob metacharacters (e.g. `bug-*.md`,
+    one per numbered artefact). For those, match as a wildcard instead of
+    looking for a file literally named with the asterisk -- os.path.exists on
+    `bug-*.md` can never match a real `bug-1.md`.
     """
     if any(ch in path for ch in "*?["):
         return bool(glob.glob(path))

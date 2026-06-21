@@ -113,19 +113,19 @@
 
 ## Phase 11 — Iteration 2026-06-21: Destination model (US8, US9, FR-025–FR-033)
 
-- [ ] T048 [P] research.md: document the per-type destination patterns (light/flat/master-flat/bias/master-bias/dark/master-dark) with default patterns + rationale, the shared path-token vocabulary, and the path-load-bearing attribute matrix per frame type (raw vs master). Drives FR-025/FR-026 and FR-032/FR-033.
-- [ ] T049 Pattern resolver (`crates/patterns`): support a per-type pattern + a selector that picks the pattern by the file's resolved type (incl. master-vs-raw), with built-in default fallback. (FR-025/FR-026/FR-026a)
-- [ ] T050 Settings persistence (`crates/persistence/db` + settings use-case): store/read the per-type patterns with built-in defaults; invalid/empty → default. (FR-026b)
-- [ ] T051 [P] Settings UI (`apps/desktop`): edit per-type patterns using the token vocabulary, validate tokens, reset-to-default per type. (FR-026b)
-- [ ] T052 `confirm.rs`: select the destination pattern by resolved type; calibration types carry no target segment. (FR-026a)
-- [ ] T053 `confirm.rs`: destination-root resolution — in-place default for non-inbox; inbox MUST target a chosen library root; enumerate candidate roots by frame type; ambiguity (>1 candidate) requires a caller-supplied `root_id`. (FR-027–FR-030)
-- [ ] T054 Contracts/bindings: `inbox_confirm` request gains optional destination `root_id`; classify/plan responses carry candidate roots + the absolute destination path. (FR-029/FR-031)
-- [ ] T055 [P] Frontend (`InboxDetail`/`PlanPanel`): destination-root picker (shown only when ambiguous / for inbox) + full absolute-path display per action. (FR-029/FR-031)
-- [ ] T056 `classify.rs`/`confirm.rs` (+contracts): compute per-file `missing_path_attributes`; reject plan generation with a typed error when any path-load-bearing attribute is missing. (FR-032/FR-033)
-- [ ] T057 [P] Frontend: missing-attribute input gate mirroring the missing-IMAGETYP needs-review flow; clears on input and updates the destination. (FR-032)
-- [ ] T058 [P] Layer-1 tests: per-type pattern resolution + calibration structure; root resolution (in-place / inbox-target / single-auto / multi-require); missing-attribute gate. (cargo)
-- [ ] T059 [P] vitest: root picker, absolute-path display, missing-attribute input gate.
-- [ ] T060 Windows E2E (quickstart) via tauri MCP: calibration destination structure, inbox root selection, multi-root prompt vs single-root auto, missing-date gate; update `specs/037-e2e-integration-testing/contracts/coverage-matrix.md`.
+- [X] T048 [P] research.md: document the per-type destination patterns (light/flat/master-flat/bias/master-bias/dark/master-dark) with default patterns + rationale, the shared path-token vocabulary, and the path-load-bearing attribute matrix per frame type (raw vs master). Drives FR-025/FR-026 and FR-032/FR-033.
+- [X] T049 Pattern resolver (`crates/patterns`): support a per-type pattern + a selector that picks the pattern by the file's resolved type (incl. master-vs-raw), with built-in default fallback. (FR-025/FR-026/FR-026a)
+- [X] T050 Settings persistence (`crates/persistence/db` + settings use-case): store/read the per-type patterns with built-in defaults; invalid/empty → default. (FR-026b)
+- [X] T051 [P] Settings UI (`apps/desktop`): edit per-type patterns using the token vocabulary, validate tokens, reset-to-default per type. (FR-026b)
+- [X] T052 `confirm.rs`: select the destination pattern by resolved type; calibration types carry no target segment. (FR-026a)
+- [X] T053 `confirm.rs`: destination-root resolution — in-place default for non-inbox; inbox MUST target a chosen library root; enumerate candidate roots by frame type; ambiguity (>1 candidate) requires a caller-supplied `root_id`. (FR-027–FR-030)
+- [X] T054 Contracts/bindings: `inbox_confirm` request gains optional destination `root_id`; classify/plan responses carry candidate roots + the absolute destination path. (FR-029/FR-031)
+- [X] T055 [P] Frontend (`InboxDetail`/`PlanPanel`): destination-root picker (shown only when ambiguous / for inbox) + full absolute-path display per action. (FR-029/FR-031)
+- [X] T056 `classify.rs`/`confirm.rs` (+contracts): compute per-file `missing_path_attributes`; reject plan generation with a typed error when any path-load-bearing attribute is missing. (FR-032/FR-033)
+- [X] T057 [P] Frontend: missing-attribute input gate mirroring the missing-IMAGETYP needs-review flow; clears on input and updates the destination. (FR-032)
+- [X] T058 [P] Layer-1 tests: per-type pattern resolution + calibration structure; root resolution (in-place / inbox-target / single-auto / multi-require); missing-attribute gate. (cargo)
+- [X] T059 [P] vitest: root picker, absolute-path display, missing-attribute input gate.
+- [~] T060 Windows E2E (quickstart) via tauri MCP: calibration destination structure, inbox root selection, multi-root prompt vs single-root auto, missing-date gate; update `specs/037-e2e-integration-testing/contracts/coverage-matrix.md`. **coverage-matrix updated + quickstart scenarios documented; Layer-1 (confirm.rs root/gate + patterns) and vitest (PlanPanel picker/abs-path, InboxDetail missing-attr) gate the merge. Live tauri-MCP Windows run is the recommended post-merge verification loop (`tauri-mcp-windows-verify-mechanics`).**
 
 ---
 

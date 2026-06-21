@@ -8,7 +8,7 @@ dependencies:
   - srobroek/agentic-packages/packages/resume-session#^0.2.1
   - srobroek/agentic-packages/packages/speckit#^0.1.2
   - srobroek/agentic-packages/packages/steering-speckit#^0.2.1
-  - srobroek/agentic-packages/packages/speckit-dag-hooks#^0.3.2
+  - srobroek/agentic-packages/packages/speckit-dag-hooks#^0.4.1
   - srobroek/agentic-packages/packages/language-rust#^0.1.2
   - srobroek/agentic-packages/packages/language-typescript#^0.1.2
   - srobroek/agentic-packages/packages/frontend#^0.1.2

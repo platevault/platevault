@@ -6,23 +6,31 @@
 //!
 //! TOCTOU guard: verifies `content_signature` before creating the plan (Ref: A8).
 //!
-//! Destination resolution: the active Naming & Structure pattern is loaded from
-//! the `settings` table (key `"pattern"`). Each evidence file's metadata bundle
-//! is built from extracted `RawFileMetadata` (FITS/XISF headers) and resolved
-//! via `patterns::resolve_v1`. Missing required tokens return `pattern.unset`.
+//! Destination resolution (spec 041 destination model): each file selects a
+//! per-frame-type pattern via `settings::effective_pattern_for(frame_type,
+//! is_master)` and resolves it with `patterns::resolve_pattern_str` over a
+//! metadata bundle built from extracted `RawFileMetadata` (FITS/XISF headers).
+//! A pattern's token set defines that type's path-load-bearing attributes
+//! (FR-033); any token that falls back to its default (`missing_tokens`) blocks
+//! plan generation with `inbox.missing_path_attributes` (US9). Inbox sources
+//! move into a chosen library root (`select_destination_root`, US8); non-inbox
+//! sources stay under their own root. A structural failure returns
+//! `pattern.unset`.
 #![allow(clippy::doc_markdown)]
 
 use std::path::PathBuf;
 
-use contracts_core::first_run::OrganizationState;
+use contracts_core::first_run::{OrganizationState, SourceKind};
 use contracts_core::settings::PatternPart as ContractPatternPart;
 use metadata_core::{v1_normalization_table, MetadataExtractor};
 use metadata_fits::FitsExtractor;
 use metadata_xisf::XisfExtractor;
-use patterns::{resolve_v1, MetadataBundle, PatternPart};
+use patterns::{classify_frame, resolve_pattern_str, FrameTypeClass, MetadataBundle, PatternPart};
+use persistence_db::repositories::first_run as first_run_repo;
 use persistence_db::repositories::inbox::{self as inbox_repo};
 use persistence_db::repositories::plans as plans_repo;
 use persistence_db::repositories::settings as settings_repo;
+use serde_json::json;
 use sqlx::SqlitePool;
 use uuid::Uuid;
 
@@ -42,6 +50,10 @@ pub struct ConfirmRequest {
     /// Absolute path to the inbox root on disk (needed to resolve file paths
     /// to read FITS/XISF headers for the metadata bundle).
     pub root_absolute_path: PathBuf,
+    /// Caller-selected destination library root (spec 041 US8/FR-029). Only
+    /// consulted for inbox sources whose frame-type category has >1 candidate
+    /// root; ignored otherwise.
+    pub root_id: Option<String>,
 }
 
 #[derive(Clone, Debug)]
@@ -60,6 +72,20 @@ pub struct ConfirmResponse {
     pub move_count: usize,
     /// Number of `catalogue` plan items produced (organized provenance).
     pub catalogue_count: usize,
+    /// Per-action absolute destination previews (spec 041 US8/FR-031).
+    pub destinations: Vec<ResolvedDestination>,
+}
+
+/// One resolved per-file destination (spec 041 US8/FR-031). The absolute path
+/// is `root_path + "/" + to_relative_path`, computed for display only — the
+/// plan_items table stores `to_root_id` + `to_relative_path`, not the absolute.
+#[derive(Clone, Debug)]
+pub struct ResolvedDestination {
+    pub from_path: String,
+    pub to_relative_path: String,
+    pub to_absolute_path: String,
+    pub to_root_id: String,
+    pub action: &'static str,
 }
 
 // ── confirm ───────────────────────────────────────────────────────────────────
@@ -148,9 +174,6 @@ pub async fn confirm(
         ));
     }
 
-    // 8. Load the active Naming & Structure pattern from settings.
-    let active_pattern = load_active_pattern(pool).await?;
-
     // 9. Enumerate files from evidence (Ref: A9) — NOT from file_count
     let evidence_rows = inbox_repo::list_evidence(pool, &req.inbox_item_id).await.map_err(|e| {
         ContractError::new("internal.database", e.to_string(), ErrorSeverity::Fatal, true)
@@ -192,75 +215,172 @@ pub async fn confirm(
     // cases (R-8) without special-casing.
     let org_state = crate::first_run::get_source_organization_state(pool, &item.root_id).await?;
 
-    // 8b. Resolve destination paths for each file via the active pattern.
-    // Collect per-file (source_relative, destination_relative, item_name, action)
-    // tuples. `action` is "catalogue" for organized provenance, "move" otherwise.
+    // 8b. Destination-root resolution (spec 041 US8/FR-027–FR-031).
     //
-    // `resolve_v1` returns `Ok(ResolveResult)` even when some tokens fall back
-    // to their registry defaults (e.g. "unclassified" for target, "nofilter" for
-    // filter). That is expected and normal — `ResolveResult.missing_tokens` is
-    // informational only. A hard `Err(ResolveError)` signals a structural failure
-    // such as a traversal attempt or a length violation.
+    // Default: a file stays under its own root (`item.root_id`) — non-inbox
+    // sources catalogue/move in place. An INBOX source is never a destination,
+    // so its files MUST move into a chosen library root. Candidate roots are
+    // enumerated per frame-type category (see `select_destination_root`); with
+    // one candidate the root is auto-selected, with several the caller's
+    // `req.root_id` must pick one (else a blocking error lists the candidates).
+    let source_kind = first_run_repo::list_sources(pool)
+        .await
+        .map_err(|e| {
+            ContractError::new("internal.database", e.to_string(), ErrorSeverity::Fatal, true)
+        })?
+        .into_iter()
+        .find(|s| s.source_id == item.root_id)
+        .map(|s| s.kind);
+    let item_is_inbox_source = source_kind == Some(SourceKind::Inbox);
+
+    // 8c. Resolve destination paths for each file via its per-type pattern
+    // (spec 041 T052/FR-026a). Collect per-file resolution rows. `action` is
+    // "catalogue" for organized provenance, "move" otherwise.
+    //
+    // `resolve_pattern_str` returns `Ok(ResolveResult)` whose `missing_tokens`
+    // lists every token that fell back to a registry default. Because a per-type
+    // pattern's token set defines that type's path-load-bearing attributes
+    // (FR-033), a non-empty `missing_tokens` IS the missing-attribute set — the
+    // US9 gate (T056) is derived from it rather than a separate matrix. A hard
+    // `Err(ResolveError)` signals a structural failure (traversal, length cap).
     let norm_table = v1_normalization_table();
     let fits_extractor = FitsExtractor;
     let xisf_extractor = XisfExtractor;
 
-    let mut resolved_items: Vec<(String, String, String, &'static str)> =
-        Vec::with_capacity(plan_files.len());
+    let mut resolved_items: Vec<ResolvedRow> = Vec::with_capacity(plan_files.len());
+    // Per-file missing path attributes for the US9 gate (FR-032/FR-033).
+    let mut missing_by_file: Vec<(String, Vec<String>)> = Vec::new();
+    // Cache the chosen destination root per category (keyed by the category's
+    // stable string name) so a multi-category item resolves each category once.
+    let mut chosen_root_cache: std::collections::HashMap<&'static str, DestinationRoot> =
+        std::collections::HashMap::new();
 
     for ev in &plan_files {
         let ft = effective_frame_type(ev).unwrap_or("unknown");
+        let is_master = ev.is_master != 0;
         let abs_path = req.root_absolute_path.join(&ev.relative_file_path);
+        let filename = abs_path.file_name().and_then(|n| n.to_str()).unwrap_or("unknown.fits");
+        let basename = ev.relative_file_path.rsplit('/').next().unwrap_or(&ev.relative_file_path);
+        let item_name = format!("[{}] {basename}", ft.to_uppercase());
 
-        let bundle =
-            build_metadata_bundle(&abs_path, ft, &norm_table, &fits_extractor, &xisf_extractor);
-
-        // Per-file move-vs-catalogue decision (spec 041 US4). Organized sources
-        // never move; the destination is the file's current location.
-        let file_org_state = org_state; // uniform per root today; per-file hook for R-8.
-
-        match file_org_state {
+        match org_state {
             OrganizationState::Organized => {
-                // Catalogue-in-place: dest == source; no pattern resolution needed.
-                let basename =
-                    ev.relative_file_path.rsplit('/').next().unwrap_or(&ev.relative_file_path);
-                let item_name = format!("[{}] {basename}", ft.to_uppercase());
-                resolved_items.push((
-                    ev.relative_file_path.clone(),
-                    ev.relative_file_path.clone(),
+                // Catalogue-in-place: dest == source; stays under its own root.
+                resolved_items.push(ResolvedRow {
+                    source_rel: ev.relative_file_path.clone(),
+                    dest_rel: ev.relative_file_path.clone(),
                     item_name,
-                    "catalogue",
-                ));
+                    action: "catalogue",
+                    to_root_id: item.root_id.clone(),
+                });
             }
-            OrganizationState::Unorganized => match resolve_v1(&active_pattern, &bundle) {
-                Ok(result) => {
-                    let dest = result.relative_path;
-                    let filename =
-                        abs_path.file_name().and_then(|n| n.to_str()).unwrap_or("unknown.fits");
-                    // Trim any trailing slash on the resolved directory so the
-                    // joined path is `dir/file`, not `dir//file` (cosmetic in the
-                    // plan preview; the OS normalises it on the actual move).
-                    let dest_with_file = format!("{}/{filename}", dest.trim_end_matches('/'));
-                    let basename =
-                        ev.relative_file_path.rsplit('/').next().unwrap_or(&ev.relative_file_path);
-                    let item_name = format!("[{}] {basename}", ft.to_uppercase());
-                    resolved_items.push((
-                        ev.relative_file_path.clone(),
-                        dest_with_file,
-                        item_name,
-                        "move",
-                    ));
+            OrganizationState::Unorganized => {
+                // Select the per-type pattern. `None` → frame type is not a known
+                // class (missing/garbage IMAGETYP) → needs-review (same flow as
+                // missing IMAGETYP: surfaced as a missing path attribute below).
+                let pattern = settings_repo::effective_pattern_for(pool, ft, is_master)
+                    .await
+                    .map_err(|e| {
+                        ContractError::new(
+                            "internal.database",
+                            e.to_string(),
+                            ErrorSeverity::Fatal,
+                            true,
+                        )
+                    })?;
+                let Some(pattern) = pattern else {
+                    // Unclassified frame: image type is the missing attribute.
+                    missing_by_file
+                        .push((ev.relative_file_path.clone(), vec!["image type".to_owned()]));
+                    continue;
+                };
+
+                let bundle = build_metadata_bundle(
+                    &abs_path,
+                    ft,
+                    &norm_table,
+                    &fits_extractor,
+                    &xisf_extractor,
+                );
+
+                let result = match resolve_pattern_str(&pattern, &bundle) {
+                    Ok(r) => r,
+                    Err(e) => {
+                        return Err(ContractError::new(
+                            "pattern.unset",
+                            format!(
+                                "Pattern resolution failed for '{}': {e:?}",
+                                ev.relative_file_path
+                            ),
+                            ErrorSeverity::Blocking,
+                            false,
+                        ));
+                    }
+                };
+
+                // US9 gate (FR-032/FR-033): any token that fell back to its
+                // default is a path-load-bearing attribute the file lacks. Block
+                // and collect, rather than producing a nonsensical destination.
+                if !result.missing_tokens.is_empty() {
+                    missing_by_file
+                        .push((ev.relative_file_path.clone(), result.missing_tokens.clone()));
+                    continue;
                 }
-                Err(e) => {
-                    return Err(ContractError::new(
-                        "pattern.unset",
-                        format!("Pattern resolution failed for '{}': {e:?}", ev.relative_file_path),
-                        ErrorSeverity::Blocking,
-                        false,
-                    ));
-                }
-            },
+
+                // Destination root: inbox sources move into a chosen library
+                // root; non-inbox sources move within their own root.
+                let dest_root = if item_is_inbox_source {
+                    let class = classify_frame(ft, is_master).ok_or_else(|| {
+                        ContractError::new(
+                            "inbox.no_destination_root",
+                            format!("Cannot route '{ft}': unknown frame-type category"),
+                            ErrorSeverity::Blocking,
+                            false,
+                        )
+                    })?;
+                    if let Some(cached) = chosen_root_cache.get(class.as_str()) {
+                        cached.clone()
+                    } else {
+                        let chosen =
+                            select_destination_root(pool, class, req.root_id.as_deref()).await?;
+                        chosen_root_cache.insert(class.as_str(), chosen.clone());
+                        chosen
+                    }
+                } else {
+                    DestinationRoot { root_id: item.root_id.clone(), path: String::new() }
+                };
+
+                let dest_with_file = format!("{}/{filename}", result.relative_path);
+                resolved_items.push(ResolvedRow {
+                    source_rel: ev.relative_file_path.clone(),
+                    dest_rel: dest_with_file,
+                    item_name,
+                    action: "move",
+                    to_root_id: dest_root.root_id,
+                });
+            }
         }
+    }
+
+    // 8d. US9 gate: if any file is missing a path-load-bearing attribute, block
+    // plan generation and surface the offending files + attributes (FR-032).
+    if !missing_by_file.is_empty() {
+        let files: Vec<serde_json::Value> = missing_by_file
+            .iter()
+            .map(|(path, attrs)| json!({ "filePath": path, "missingPathAttributes": attrs }))
+            .collect();
+        let summary = missing_by_file
+            .iter()
+            .map(|(p, a)| format!("{p}: {}", a.join(", ")))
+            .collect::<Vec<_>>()
+            .join("; ");
+        return Err(ContractError::new(
+            "inbox.missing_path_attributes",
+            format!("Files are missing attributes their destination pattern requires: {summary}"),
+            ErrorSeverity::Blocking,
+            false,
+        )
+        .with_details(json!({ "files": files })));
     }
 
     // 10. Build the plan.
@@ -293,14 +413,28 @@ pub async fn confirm(
         ContractError::new("internal.database", e.to_string(), ErrorSeverity::Fatal, true)
     })?;
 
-    // 11. Insert plan items — one per classified file, with resolved destinations.
+    // Map destination root id → absolute path for the FR-031 absolute preview.
+    // (Catalogue actions and non-inbox moves keep their own root; inbox moves
+    // use the chosen library root resolved above.)
+    let root_paths: std::collections::HashMap<String, String> = first_run_repo::list_sources(pool)
+        .await
+        .map_err(|e| {
+            ContractError::new("internal.database", e.to_string(), ErrorSeverity::Fatal, true)
+        })?
+        .into_iter()
+        .map(|s| (s.source_id, s.path))
+        .collect();
+
+    // 11. Insert plan items — one per classified file, with resolved
+    // destinations and per-item destination root (spec 041 US8/FR-027–FR-031).
     let items_total = resolved_items.len();
     let mut move_count = 0usize;
     let mut catalogue_count = 0usize;
-    for (idx, (source_rel, dest_rel, item_name, action)) in resolved_items.iter().enumerate() {
+    let mut destinations: Vec<ResolvedDestination> = Vec::with_capacity(resolved_items.len());
+    for (idx, row) in resolved_items.iter().enumerate() {
         let item_id = Uuid::new_v4().to_string();
 
-        match *action {
+        match row.action {
             "catalogue" => catalogue_count += 1,
             _ => move_count += 1,
         }
@@ -309,12 +443,12 @@ pub async fn confirm(
             id: &item_id,
             plan_id: &plan_id,
             item_index: i64::try_from(idx).unwrap_or(i64::MAX),
-            name: item_name,
-            action,
+            name: &row.item_name,
+            action: row.action,
             from_root_id: Some(&item.root_id),
-            from_relative_path: source_rel,
-            to_root_id: Some(&item.root_id),
-            to_relative_path: dest_rel,
+            from_relative_path: &row.source_rel,
+            to_root_id: Some(&row.to_root_id),
+            to_relative_path: &row.dest_rel,
             reason: "inbox_split",
             protection: "normal",
             linked_entity: None,
@@ -327,6 +461,20 @@ pub async fn confirm(
         plans_repo::insert_plan_item(pool, &plan_item).await.map_err(|e| {
             ContractError::new("internal.database", e.to_string(), ErrorSeverity::Fatal, true)
         })?;
+
+        // FR-031: absolute destination = root path + "/" + relative path. For
+        // display only; the row itself keeps root_id + relative.
+        let to_absolute_path = root_paths.get(&row.to_root_id).map_or_else(
+            || row.dest_rel.clone(),
+            |root| format!("{}/{}", root.trim_end_matches('/'), row.dest_rel),
+        );
+        destinations.push(ResolvedDestination {
+            from_path: row.source_rel.clone(),
+            to_relative_path: row.dest_rel.clone(),
+            to_absolute_path,
+            to_root_id: row.to_root_id.clone(),
+            action: row.action,
+        });
     }
 
     // 12. Transition plan to ready_for_review
@@ -355,10 +503,113 @@ pub async fn confirm(
         organization_state: org_state,
         move_count,
         catalogue_count,
+        destinations,
     })
 }
 
 // ── Helpers ───────────────────────────────────────────────────────────────────
+
+/// One resolved per-file plan row before insertion. Carries the per-item
+/// destination root (spec 041 US8) so inbox moves can target a chosen library
+/// root while non-inbox files stay under their own root.
+struct ResolvedRow {
+    source_rel: String,
+    dest_rel: String,
+    item_name: String,
+    action: &'static str,
+    to_root_id: String,
+}
+
+/// A chosen destination library root (id + absolute path) for inbox moves.
+#[derive(Clone)]
+struct DestinationRoot {
+    root_id: String,
+    /// Absolute path of the root; empty when the root is the item's own root
+    /// (non-inbox), in which case the absolute preview is filled from the
+    /// `root_paths` map at insert time.
+    #[allow(dead_code)]
+    path: String,
+}
+
+/// Map a frame-type class to the source kind that can host it (spec 041 FR-027).
+/// Lights live under `LightFrames`; every calibration class (raw or master)
+/// lives under `Calibration`.
+fn destination_kind_for(class: FrameTypeClass) -> SourceKind {
+    match class {
+        FrameTypeClass::Light => SourceKind::LightFrames,
+        FrameTypeClass::Flat
+        | FrameTypeClass::Dark
+        | FrameTypeClass::Bias
+        | FrameTypeClass::MasterFlat
+        | FrameTypeClass::MasterDark
+        | FrameTypeClass::MasterBias => SourceKind::Calibration,
+    }
+}
+
+/// Select the destination library root for an inbox item's frame-type category
+/// (spec 041 US8/FR-027–FR-030).
+///
+/// Candidates are registered, non-inbox sources whose kind matches the
+/// category. Resolution:
+/// - 0 candidates → `inbox.no_destination_root`.
+/// - 1 candidate → auto-select (caller `root_id` ignored).
+/// - 2+ candidates → require `selected`; it MUST be one of the candidates, else
+///   `inbox.destination_root_required` (absent) / `inbox.invalid_destination_root`.
+async fn select_destination_root(
+    pool: &SqlitePool,
+    class: FrameTypeClass,
+    selected: Option<&str>,
+) -> Result<DestinationRoot, ContractError> {
+    let want_kind = destination_kind_for(class);
+    let candidates: Vec<DestinationRoot> = first_run_repo::list_sources(pool)
+        .await
+        .map_err(|e| {
+            ContractError::new("internal.database", e.to_string(), ErrorSeverity::Fatal, true)
+        })?
+        .into_iter()
+        .filter(|s| s.kind != SourceKind::Inbox && s.kind == want_kind)
+        .map(|s| DestinationRoot { root_id: s.source_id, path: s.path })
+        .collect();
+
+    match candidates.len() {
+        0 => Err(ContractError::new(
+            "inbox.no_destination_root",
+            format!("No registered library root for frame-type category '{}'", class.as_str()),
+            ErrorSeverity::Blocking,
+            false,
+        )),
+        1 => Ok(candidates.into_iter().next().expect("len == 1")),
+        _ => match selected {
+            None => {
+                let roots: Vec<serde_json::Value> = candidates
+                    .iter()
+                    .map(|c| json!({ "rootId": c.root_id, "path": c.path, "kind": want_kind }))
+                    .collect();
+                Err(ContractError::new(
+                    "inbox.destination_root_required",
+                    format!(
+                        "Multiple library roots can host '{}'; a destination root must be selected",
+                        class.as_str()
+                    ),
+                    ErrorSeverity::Blocking,
+                    false,
+                )
+                .with_details(json!({ "category": class.as_str(), "candidates": roots })))
+            }
+            Some(id) => candidates.into_iter().find(|c| c.root_id == id).ok_or_else(|| {
+                ContractError::new(
+                    "inbox.invalid_destination_root",
+                    format!(
+                        "Selected root '{id}' is not a valid destination for '{}'",
+                        class.as_str()
+                    ),
+                    ErrorSeverity::Blocking,
+                    false,
+                )
+            }),
+        },
+    }
+}
 
 /// Return the effective frame type for a file: `manual_override` if set, else `frame_type`.
 fn effective_frame_type(
@@ -548,6 +799,44 @@ mod tests {
         f.write_all(&block).unwrap();
     }
 
+    /// Like [`write_fits`] but also writes an `EXPTIME` card. Used by calibration
+    /// (dark/flat) tests so their files carry the exposure their per-type
+    /// destination pattern requires (spec 041 US9 gate).
+    #[allow(clippy::too_many_arguments)]
+    fn write_fits_exp(
+        dir: &std::path::Path,
+        name: &str,
+        imagetyp: &str,
+        object: Option<&str>,
+        filter: Option<&str>,
+        date_obs: Option<&str>,
+        exptime: f64,
+    ) {
+        let path = dir.join(name);
+        let mut block = vec![b' '; 2880];
+        let mut idx = 0usize;
+        let write_card = |block: &mut Vec<u8>, idx: &mut usize, card: &str| {
+            let bytes = card.as_bytes();
+            let len = bytes.len().min(80);
+            block[*idx * 80..*idx * 80 + len].copy_from_slice(&bytes[..len]);
+            *idx += 1;
+        };
+        write_card(&mut block, &mut idx, &format!("{:<80}", format!("IMAGETYP= '{imagetyp:<8}'")));
+        if let Some(obj) = object {
+            write_card(&mut block, &mut idx, &format!("{:<80}", format!("OBJECT  = '{obj}'")));
+        }
+        if let Some(f) = filter {
+            write_card(&mut block, &mut idx, &format!("{:<80}", format!("FILTER  = '{f}'")));
+        }
+        if let Some(d) = date_obs {
+            write_card(&mut block, &mut idx, &format!("{:<80}", format!("DATE-OBS= '{d}'")));
+        }
+        write_card(&mut block, &mut idx, &format!("{:<80}", format!("EXPTIME = {exptime}")));
+        block[idx * 80..idx * 80 + 3].copy_from_slice(b"END");
+        let mut f = std::fs::File::create(path).unwrap();
+        f.write_all(&block).unwrap();
+    }
+
     async fn setup_classified_item(
         db: &Database,
         item_id: &str,
@@ -589,6 +878,62 @@ mod tests {
                 db.pool(),
                 &InsertEvidence {
                     id: &ev_id,
+                    inbox_item_id: item_id,
+                    relative_file_path: fname,
+                    frame_type,
+                    evidence_source: "imagetyp_header",
+                    raw_value: Some("Light Frame"),
+                    unclassified: false,
+                    manual_override: None,
+                    is_master: false,
+                    master_detector: None,
+                },
+            )
+            .await
+            .unwrap();
+        }
+    }
+
+    /// Like [`setup_classified_item`] but the item is owned by an explicit
+    /// `root_id` (for the US8 inbox-source routing tests).
+    async fn setup_classified_item_rooted(
+        db: &Database,
+        item_id: &str,
+        root_id: &str,
+        frame_type: Option<&str>,
+        sig: &str,
+        file_names: &[&str],
+    ) {
+        inbox_repo::insert_inbox_item(
+            db.pool(),
+            &InsertInboxItem {
+                id: item_id,
+                root_id,
+                relative_path: "",
+                file_count: i64::try_from(file_names.len()).unwrap_or(i64::MAX),
+                content_signature: Some(sig),
+                lane: "fits",
+            },
+        )
+        .await
+        .unwrap();
+        inbox_repo::upsert_classification(
+            db.pool(),
+            &UpsertClassification {
+                inbox_item_id: item_id,
+                result: "single_type",
+                frame_type,
+                content_signature: sig,
+                unclassified_file_count: 0,
+            },
+        )
+        .await
+        .unwrap();
+        for (i, fname) in file_names.iter().enumerate() {
+            inbox_repo::insert_evidence(
+                db.pool(),
+                &InsertEvidence {
+                    id: &format!("ev-{item_id}-{i}"),
                     inbox_item_id: item_id,
                     relative_file_path: fname,
                     frame_type,
@@ -652,6 +997,7 @@ mod tests {
                 content_signature: "sig-abc".to_owned(),
                 destructive_destination: None,
                 root_absolute_path: tmp.path().to_owned(),
+                root_id: None,
             },
         )
         .await
@@ -713,6 +1059,7 @@ mod tests {
                     content_signature: "sig-dd".to_owned(),
                     destructive_destination: dest.map(str::to_owned),
                     root_absolute_path: tmp.path().to_owned(),
+                    root_id: None,
                 },
             )
             .await
@@ -733,6 +1080,7 @@ mod tests {
     }
 
     #[tokio::test]
+    #[allow(clippy::too_many_lines)]
     async fn confirm_mixed_split_creates_plan() {
         let tmp = tempfile::tempdir().unwrap();
         write_fits(
@@ -751,21 +1099,23 @@ mod tests {
             Some("Ha"),
             Some("2025-10-10T22:05:00"),
         );
-        write_fits(
+        write_fits_exp(
             tmp.path(),
             "dark_001.fits",
             "Dark Frame",
             None,
             None,
             Some("2025-10-10T20:00:00"),
+            300.0,
         );
-        write_fits(
+        write_fits_exp(
             tmp.path(),
             "dark_002.fits",
             "Dark Frame",
             None,
             None,
             Some("2025-10-10T20:05:00"),
+            300.0,
         );
 
         let db = test_db().await;
@@ -833,6 +1183,7 @@ mod tests {
                 content_signature: sig.to_owned(),
                 destructive_destination: None,
                 root_absolute_path: tmp.path().to_owned(),
+                root_id: None,
             },
         )
         .await
@@ -920,12 +1271,12 @@ mod tests {
             ("dark_001.fits", "Dark Frame", "2025-10-10T20:00:00"),
             ("dark_002.fits", "Dark Frame", "2025-10-10T20:05:00"),
         ] {
-            let (object, filter) = if imagetyp == "Light Frame" {
-                (Some("NGC7000"), Some("Ha"))
+            if imagetyp == "Light Frame" {
+                write_fits(tmp.path(), fname, imagetyp, Some("NGC7000"), Some("Ha"), Some(date));
             } else {
-                (None, None)
-            };
-            write_fits(tmp.path(), fname, imagetyp, object, filter, Some(date));
+                // Dark default pattern `darks/{exposure}/` needs an exposure.
+                write_fits_exp(tmp.path(), fname, imagetyp, None, None, Some(date), 300.0);
+            }
         }
 
         let db = test_db().await;
@@ -951,6 +1302,7 @@ mod tests {
                 content_signature: "sig-pertype".to_owned(),
                 destructive_destination: None,
                 root_absolute_path: tmp.path().to_owned(),
+                root_id: None,
             },
         )
         .await
@@ -1023,6 +1375,7 @@ mod tests {
                 content_signature: "sig-single".to_owned(),
                 destructive_destination: None,
                 root_absolute_path: tmp.path().to_owned(),
+                root_id: None,
             },
         )
         .await
@@ -1049,7 +1402,15 @@ mod tests {
             Some("Ha"),
             Some("2025-10-10T22:00:00"),
         );
-        write_fits(tmp.path(), "dark.fits", "Dark Frame", None, None, Some("2025-10-10T20:00:00"));
+        write_fits_exp(
+            tmp.path(),
+            "dark.fits",
+            "Dark Frame",
+            None,
+            None,
+            Some("2025-10-10T20:00:00"),
+            300.0,
+        );
         write_fits(
             tmp.path(),
             "flat.fits",
@@ -1119,6 +1480,7 @@ mod tests {
                 content_signature: sig.to_owned(),
                 destructive_destination: None,
                 root_absolute_path: tmp.path().to_owned(),
+                root_id: None,
             },
         )
         .await
@@ -1186,6 +1548,7 @@ mod tests {
                 content_signature: "sig-OLD".to_owned(),
                 destructive_destination: None,
                 root_absolute_path: tmp.path().to_owned(),
+                root_id: None,
             },
         )
         .await
@@ -1218,6 +1581,7 @@ mod tests {
                 content_signature: "sig-x".to_owned(),
                 destructive_destination: None,
                 root_absolute_path: tmp.path().to_owned(),
+                root_id: None,
             },
         )
         .await
@@ -1266,6 +1630,7 @@ mod tests {
                 content_signature: "sig-dup".to_owned(),
                 destructive_destination: None,
                 root_absolute_path: tmp.path().to_owned(),
+                root_id: None,
             },
         )
         .await
@@ -1280,6 +1645,7 @@ mod tests {
                 content_signature: "sig-dup".to_owned(),
                 destructive_destination: None,
                 root_absolute_path: tmp.path().to_owned(),
+                root_id: None,
             },
         )
         .await
@@ -1338,6 +1704,7 @@ mod tests {
                 content_signature: "sig-org".to_owned(),
                 destructive_destination: None,
                 root_absolute_path: tmp.path().to_owned(),
+                root_id: None,
             },
         )
         .await
@@ -1374,7 +1741,10 @@ mod tests {
         );
 
         let db = test_db().await;
-        register_source_org_state(&db, "root-1", "inbox", "unorganized").await;
+        // Non-inbox unorganized source → in-place move under its own root (no
+        // destination-root selection). Inbox-source routing is covered by the
+        // dedicated US8 tests below.
+        register_source_org_state(&db, "root-1", "light_frames", "unorganized").await;
         setup_classified_item(
             &db,
             "item-unorg",
@@ -1393,6 +1763,7 @@ mod tests {
                 content_signature: "sig-unorg".to_owned(),
                 destructive_destination: None,
                 root_absolute_path: tmp.path().to_owned(),
+                root_id: None,
             },
         )
         .await
@@ -1421,7 +1792,14 @@ mod tests {
     #[tokio::test]
     async fn absent_source_defaults_to_move() {
         let tmp = tempfile::tempdir().unwrap();
-        write_fits(tmp.path(), "frame_000.fits", "Light Frame", None, None, None);
+        write_fits(
+            tmp.path(),
+            "frame_000.fits",
+            "Light Frame",
+            Some("M42"),
+            Some("Ha"),
+            Some("2025-10-10T22:00:00"),
+        );
 
         let db = test_db().await;
         // No registered_sources row inserted for root-1.
@@ -1443,6 +1821,7 @@ mod tests {
                 content_signature: "sig-absent".to_owned(),
                 destructive_destination: None,
                 root_absolute_path: tmp.path().to_owned(),
+                root_id: None,
             },
         )
         .await
@@ -1451,5 +1830,358 @@ mod tests {
         assert_eq!(resp.move_count, 1);
         assert_eq!(resp.catalogue_count, 0);
         assert!(matches!(resp.organization_state, OrganizationState::Unorganized));
+    }
+
+    // ── spec 041 US8/US9: destination-root resolution + missing-attribute gate ──
+
+    /// Register a source with an explicit id/kind/path/organization_state.
+    async fn register_source_full(
+        db: &Database,
+        root_id: &str,
+        kind: &str,
+        path: &str,
+        org_state: &str,
+    ) {
+        sqlx::query(
+            "INSERT INTO registered_sources
+                (id, kind, path, kind_subtype, scan_depth, created_at, created_via, organization_state)
+             VALUES (?, ?, ?, NULL, 'recursive', '2026-01-01T00:00:00Z', 'first_run', ?)",
+        )
+        .bind(root_id)
+        .bind(kind)
+        .bind(path)
+        .bind(org_state)
+        .execute(db.pool())
+        .await
+        .unwrap();
+    }
+
+    /// US8/FR-027: a non-inbox source defaults to an in-place move under its own
+    /// root — no destination-root selection, `to_root_id == from_root_id`.
+    #[tokio::test]
+    async fn non_inbox_source_moves_in_place() {
+        let tmp = tempfile::tempdir().unwrap();
+        write_fits(
+            tmp.path(),
+            "light_001.fits",
+            "Light Frame",
+            Some("M42"),
+            Some("Ha"),
+            Some("2025-10-10T22:00:00"),
+        );
+
+        let db = test_db().await;
+        register_source_full(&db, "root-1", "light_frames", "/lib/lights", "unorganized").await;
+        setup_classified_item(
+            &db,
+            "item-np",
+            "single_type",
+            Some("light"),
+            "sig-np",
+            &["light_001.fits"],
+        )
+        .await;
+
+        let resp = confirm(
+            db.pool(),
+            ConfirmRequest {
+                inbox_item_id: "item-np".to_owned(),
+                action: "confirm".to_owned(),
+                content_signature: "sig-np".to_owned(),
+                destructive_destination: None,
+                root_absolute_path: tmp.path().to_owned(),
+                root_id: None,
+            },
+        )
+        .await
+        .unwrap();
+
+        assert_eq!(resp.move_count, 1);
+        let (to_root,): (String,) =
+            sqlx::query_as("SELECT to_root_id FROM plan_items WHERE plan_id = ?")
+                .bind(&resp.plan_id)
+                .fetch_one(db.pool())
+                .await
+                .unwrap();
+        assert_eq!(to_root, "root-1", "non-inbox source stays under its own root");
+    }
+
+    /// US8/FR-028: an inbox source with exactly one matching destination root
+    /// auto-selects it (no caller `root_id` needed); the plan lands under that
+    /// root and the absolute preview uses the root's path.
+    #[tokio::test]
+    async fn inbox_single_candidate_auto_selects() {
+        let tmp = tempfile::tempdir().unwrap();
+        write_fits(
+            tmp.path(),
+            "light_001.fits",
+            "Light Frame",
+            Some("M42"),
+            Some("Ha"),
+            Some("2025-10-10T22:00:00"),
+        );
+
+        let db = test_db().await;
+        register_source_full(&db, "root-inbox", "inbox", "/inbox", "unorganized").await;
+        register_source_full(&db, "root-lights", "light_frames", "/lib/lights", "unorganized")
+            .await;
+        // The item lives on the inbox root.
+        setup_classified_item_rooted(
+            &db,
+            "item-1cand",
+            "root-inbox",
+            Some("light"),
+            "sig-1c",
+            &["light_001.fits"],
+        )
+        .await;
+
+        let resp = confirm(
+            db.pool(),
+            ConfirmRequest {
+                inbox_item_id: "item-1cand".to_owned(),
+                action: "confirm".to_owned(),
+                content_signature: "sig-1c".to_owned(),
+                destructive_destination: None,
+                root_absolute_path: tmp.path().to_owned(),
+                root_id: None,
+            },
+        )
+        .await
+        .unwrap();
+
+        assert_eq!(resp.move_count, 1);
+        assert_eq!(resp.destinations.len(), 1);
+        let d = &resp.destinations[0];
+        assert_eq!(d.to_root_id, "root-lights");
+        assert!(
+            d.to_absolute_path.starts_with("/lib/lights/"),
+            "absolute preview uses the chosen root's path, got {}",
+            d.to_absolute_path
+        );
+    }
+
+    /// US8/FR-029/FR-030: an inbox source with >1 matching destination root
+    /// requires the caller's `root_id`. Absent → `inbox.destination_root_required`
+    /// listing the candidates; supplied & valid → succeeds under that root;
+    /// supplied & invalid → `inbox.invalid_destination_root`.
+    #[tokio::test]
+    async fn inbox_multi_candidate_requires_selection() {
+        let tmp = tempfile::tempdir().unwrap();
+        write_fits(
+            tmp.path(),
+            "light_001.fits",
+            "Light Frame",
+            Some("M42"),
+            Some("Ha"),
+            Some("2025-10-10T22:00:00"),
+        );
+
+        let db = test_db().await;
+        register_source_full(&db, "root-inbox", "inbox", "/inbox", "unorganized").await;
+        register_source_full(&db, "root-lib-a", "light_frames", "/a", "unorganized").await;
+        register_source_full(&db, "root-lib-b", "light_frames", "/b", "unorganized").await;
+        setup_classified_item_rooted(
+            &db,
+            "item-2cand",
+            "root-inbox",
+            Some("light"),
+            "sig-2c",
+            &["light_001.fits"],
+        )
+        .await;
+
+        let mk = |root_id: Option<String>| ConfirmRequest {
+            inbox_item_id: "item-2cand".to_owned(),
+            action: "confirm".to_owned(),
+            content_signature: "sig-2c".to_owned(),
+            destructive_destination: None,
+            root_absolute_path: tmp.path().to_owned(),
+            root_id,
+        };
+
+        // Absent selection → blocking error listing both candidates.
+        let err = confirm(db.pool(), mk(None)).await.unwrap_err();
+        assert_eq!(err.code, "inbox.destination_root_required");
+        let candidates = err.details.get("candidates").and_then(|c| c.as_array()).unwrap();
+        assert_eq!(candidates.len(), 2, "both library roots offered as candidates");
+
+        // Invalid selection (an id that is not a candidate) → rejected.
+        let err = confirm(db.pool(), mk(Some("root-inbox".to_owned()))).await.unwrap_err();
+        assert_eq!(err.code, "inbox.invalid_destination_root");
+
+        // Valid selection → plan lands under the chosen root.
+        let resp = confirm(db.pool(), mk(Some("root-lib-b".to_owned()))).await.unwrap();
+        assert_eq!(resp.destinations.len(), 1);
+        assert_eq!(resp.destinations[0].to_root_id, "root-lib-b");
+    }
+
+    /// US8/FR-027: an inbox source whose frame-type category has no registered
+    /// library root → `inbox.no_destination_root`.
+    #[tokio::test]
+    async fn inbox_no_candidate_blocks() {
+        let tmp = tempfile::tempdir().unwrap();
+        write_fits(
+            tmp.path(),
+            "light_001.fits",
+            "Light Frame",
+            Some("M42"),
+            Some("Ha"),
+            Some("2025-10-10T22:00:00"),
+        );
+
+        let db = test_db().await;
+        register_source_full(&db, "root-inbox", "inbox", "/inbox", "unorganized").await;
+        // Only a calibration root exists; a light has no light_frames destination.
+        register_source_full(&db, "root-cal", "calibration", "/cal", "unorganized").await;
+        setup_classified_item_rooted(
+            &db,
+            "item-0cand",
+            "root-inbox",
+            Some("light"),
+            "sig-0c",
+            &["light_001.fits"],
+        )
+        .await;
+
+        let err = confirm(
+            db.pool(),
+            ConfirmRequest {
+                inbox_item_id: "item-0cand".to_owned(),
+                action: "confirm".to_owned(),
+                content_signature: "sig-0c".to_owned(),
+                destructive_destination: None,
+                root_absolute_path: tmp.path().to_owned(),
+                root_id: None,
+            },
+        )
+        .await
+        .unwrap_err();
+        assert_eq!(err.code, "inbox.no_destination_root");
+    }
+
+    /// FR-026a: a calibration master lands under its `masters/...` pattern with
+    /// NO target/date segment; a raw dark lands under `darks/{exposure}/`.
+    #[tokio::test]
+    async fn calibration_destinations_omit_target() {
+        let tmp = tempfile::tempdir().unwrap();
+        write_fits_exp(tmp.path(), "dark.fits", "Dark Frame", None, None, None, 300.0);
+        write_fits_exp(tmp.path(), "master_flat.fits", "Flat Frame", None, Some("Ha"), None, 5.0);
+
+        let db = test_db().await;
+        register_source_full(&db, "root-1", "calibration", "/cal", "unorganized").await;
+
+        // Two calibration files: a raw dark and a master flat.
+        inbox_repo::insert_inbox_item(
+            db.pool(),
+            &InsertInboxItem {
+                id: "item-cal",
+                root_id: "root-1",
+                relative_path: "",
+                file_count: 2,
+                content_signature: Some("sig-cal"),
+                lane: "fits",
+            },
+        )
+        .await
+        .unwrap();
+        inbox_repo::upsert_classification(
+            db.pool(),
+            &UpsertClassification {
+                inbox_item_id: "item-cal",
+                result: "mixed",
+                frame_type: None,
+                content_signature: "sig-cal",
+                unclassified_file_count: 0,
+            },
+        )
+        .await
+        .unwrap();
+        for (ft, fname, master) in
+            [("dark", "dark.fits", false), ("flat", "master_flat.fits", true)]
+        {
+            inbox_repo::insert_evidence(
+                db.pool(),
+                &InsertEvidence {
+                    id: &format!("ev-cal-{fname}"),
+                    inbox_item_id: "item-cal",
+                    relative_file_path: fname,
+                    frame_type: Some(ft),
+                    evidence_source: "imagetyp_header",
+                    raw_value: None,
+                    unclassified: false,
+                    manual_override: None,
+                    is_master: master,
+                    master_detector: None,
+                },
+            )
+            .await
+            .unwrap();
+        }
+
+        let resp = confirm(
+            db.pool(),
+            ConfirmRequest {
+                inbox_item_id: "item-cal".to_owned(),
+                action: "split".to_owned(),
+                content_signature: "sig-cal".to_owned(),
+                destructive_destination: None,
+                root_absolute_path: tmp.path().to_owned(),
+                root_id: None,
+            },
+        )
+        .await
+        .unwrap();
+
+        let dests: std::collections::HashMap<String, String> = resp
+            .destinations
+            .iter()
+            .map(|d| (d.from_path.clone(), d.to_relative_path.clone()))
+            .collect();
+        assert_eq!(dests["dark.fits"], "darks/300/dark.fits");
+        assert_eq!(dests["master_flat.fits"], "masters/flats/Ha/master_flat.fits");
+    }
+
+    /// US9/FR-032/FR-033: a light missing its date blocks plan generation with
+    /// `inbox.missing_path_attributes`, reporting the missing attribute.
+    #[tokio::test]
+    async fn missing_path_attribute_blocks_with_report() {
+        let tmp = tempfile::tempdir().unwrap();
+        // Light with target + filter but NO DATE-OBS → date is path-load-bearing.
+        write_fits(tmp.path(), "light_001.fits", "Light Frame", Some("M42"), Some("Ha"), None);
+
+        let db = test_db().await;
+        register_source_full(&db, "root-1", "light_frames", "/lib", "unorganized").await;
+        setup_classified_item(
+            &db,
+            "item-gate",
+            "single_type",
+            Some("light"),
+            "sig-gate",
+            &["light_001.fits"],
+        )
+        .await;
+
+        let err = confirm(
+            db.pool(),
+            ConfirmRequest {
+                inbox_item_id: "item-gate".to_owned(),
+                action: "confirm".to_owned(),
+                content_signature: "sig-gate".to_owned(),
+                destructive_destination: None,
+                root_absolute_path: tmp.path().to_owned(),
+                root_id: None,
+            },
+        )
+        .await
+        .unwrap_err();
+
+        assert_eq!(err.code, "inbox.missing_path_attributes");
+        let files = err.details.get("files").and_then(|f| f.as_array()).unwrap();
+        let attrs = files[0].get("missingPathAttributes").and_then(|a| a.as_array()).unwrap();
+        assert!(
+            attrs.iter().any(|a| a.as_str() == Some("date")),
+            "missing 'date' must be reported, got {attrs:?}"
+        );
     }
 }

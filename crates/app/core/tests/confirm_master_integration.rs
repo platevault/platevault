@@ -38,10 +38,29 @@ async fn test_db() -> Database {
 /// Write a minimal FITS file (single 2880-byte block).
 fn write_fits(dir: &Path, name: &str, imagetyp: &str) {
     let mut block = vec![b' '; 2880];
-    let card = format!("IMAGETYP= '{imagetyp:<8}'");
-    let bytes = card.as_bytes();
-    block[..bytes.len().min(80)].copy_from_slice(&bytes[..bytes.len().min(80)]);
-    block[80..83].copy_from_slice(b"END");
+    let mut idx = 0usize;
+    let mut write_card = |s: &str| {
+        let bytes = s.as_bytes();
+        let len = bytes.len().min(80);
+        block[idx * 80..idx * 80 + len].copy_from_slice(&bytes[..len]);
+        idx += 1;
+    };
+    write_card(&format!("IMAGETYP= '{imagetyp:<8}'"));
+    // Spec 041 destination model: each frame type's pattern consumes specific
+    // path-load-bearing attributes; supply them so confirm doesn't block on the
+    // US9 missing-attribute gate. Lights need target/filter/date; calibration
+    // (dark/flat/bias) need exposure (+ filter for flats).
+    let lower = imagetyp.to_ascii_lowercase();
+    if lower.contains("light") {
+        write_card("OBJECT  = 'M42'");
+        write_card("FILTER  = 'Ha'");
+        write_card("DATE-OBS= '2025-10-10T22:00:00'");
+    } else {
+        write_card("EXPTIME = 300");
+        write_card("FILTER  = 'Ha'");
+        write_card("DATE-OBS= '2025-10-10T22:00:00'");
+    }
+    block[idx * 80..idx * 80 + 3].copy_from_slice(b"END");
     let path = dir.join(name);
     let mut f = std::fs::File::create(path).unwrap();
     f.write_all(&block).unwrap();
@@ -166,8 +185,11 @@ async fn confirm_master_creates_plan_then_registers_at_apply() {
     let item_id = "master-item-001";
     let sig = "sig-master-001";
 
-    // Unorganized inbox source → master produces a MOVE plan.
+    // Unorganized inbox source → master produces a MOVE plan into a registered
+    // calibration library root (spec 041 US8: inbox is never a destination).
     register_source(&db, "root-1", "inbox", tmp.path().to_str().unwrap(), "unorganized").await;
+    register_source(&db, "root-cal", "calibration", tmp.path().to_str().unwrap(), "unorganized")
+        .await;
     insert_master_inbox_item(
         &db,
         item_id,
@@ -188,6 +210,7 @@ async fn confirm_master_creates_plan_then_registers_at_apply() {
             content_signature: sig.to_owned(),
             destructive_destination: None,
             root_absolute_path: tmp.path().to_owned(),
+            root_id: None,
         },
     )
     .await
@@ -260,6 +283,7 @@ async fn organized_master_catalogues_then_registers_at_apply() {
             content_signature: sig.to_owned(),
             destructive_destination: None,
             root_absolute_path: tmp.path().to_owned(),
+            root_id: None,
         },
     )
     .await
@@ -345,6 +369,7 @@ async fn non_master_item_still_creates_plan() {
             content_signature: sig.to_owned(),
             destructive_destination: None,
             root_absolute_path: tmp.path().to_owned(),
+            root_id: None,
         },
     )
     .await

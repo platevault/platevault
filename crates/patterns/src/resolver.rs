@@ -218,6 +218,194 @@ pub fn resolve_v1(
     resolve(pattern, metadata, &V1_REGISTRY, &ResolverConfig::default())
 }
 
+// ── Path-string resolver (spec 041 FR-026a) ───────────────────────────────
+
+/// Resolve a per-type destination pattern expressed as a **path string** with
+/// interleaved `{token}` placeholders and literal directory segments.
+///
+/// Unlike [`resolve`]/[`resolve_v1`] (which operate on the `PatternPart`
+/// token/separator model), this handles the per-type defaults from spec 041
+/// that contain literal segments, e.g. `flats/{filter}/{date}/`,
+/// `masters/darks/{exposure}/`, or the literal `light` in
+/// `{target}/{filter}/{date}/light/`.
+///
+/// Resolution rules:
+/// - The pattern is split on `/` into segments. Each segment is walked
+///   left-to-right; `{token}` placeholders and surrounding literal text are
+///   resolved in place (multi-token / mixed segments are supported).
+/// - A `{token}` resolves exactly as in [`resolve`]: look up the token in
+///   [`V1_REGISTRY`], read its `source_field` from `bundle`, apply the token's
+///   [`TokenTransform`], then [`sanitize_token_value`]. When the value is absent
+///   (or sanitizes to empty), the registry `fallback` is used and the token name
+///   is pushed onto `missing_tokens`.
+/// - Literal text is sanitized for filesystem safety (same pipeline as token
+///   values) and emitted verbatim; literals are **never** added to
+///   `missing_tokens`.
+///
+/// `relative_path` follows the same convention as [`resolve`]: forward-slash
+/// joined, no leading slash, and no empty trailing segment (a trailing `/` in
+/// the pattern is dropped). Empty interior segments (from `//`) are skipped.
+///
+/// `missing_tokens` lists every token that fell back to its default — callers
+/// (spec 041 confirm) gate plan generation on this list.
+///
+/// # Errors
+///
+/// Returns [`ResolveError::Empty`] when the pattern is blank, [`ResolveError::UnknownToken`]
+/// for an unregistered token, [`ResolveError::PathTraversal`]/[`ResolveError::ReservedName`]/[`ResolveError::UnicodeConfusable`]
+/// when a literal or resolved value is unsafe, or [`ResolveError::PathTooLong`]
+/// when length caps are exceeded.
+pub fn resolve_pattern_str(
+    pattern: &str,
+    bundle: &MetadataBundle,
+) -> Result<ResolveResult, ResolveError> {
+    resolve_pattern_str_with(pattern, bundle, &V1_REGISTRY, &ResolverConfig::default())
+}
+
+fn resolve_pattern_str_with(
+    pattern: &str,
+    bundle: &MetadataBundle,
+    registry: &TokenRegistry,
+    config: &ResolverConfig,
+) -> Result<ResolveResult, ResolveError> {
+    if pattern.trim().is_empty() {
+        return Err(ResolveError::Empty);
+    }
+
+    let mut missing_tokens: Vec<String> = Vec::new();
+    let mut segments: Vec<String> = Vec::new();
+
+    for raw_segment in pattern.split('/') {
+        if raw_segment.is_empty() {
+            // Leading/trailing/double slash → empty segment; skip so the
+            // joined path has no empty components (matches resolve()).
+            continue;
+        }
+        let resolved = resolve_segment(raw_segment, bundle, registry, &mut missing_tokens)?;
+        // A segment that sanitizes to empty (e.g. a literal of only dots) is
+        // dropped rather than producing an empty path component.
+        if !resolved.is_empty() {
+            segments.push(resolved);
+        }
+    }
+
+    let relative_path = segments.join("/");
+
+    // Length caps — identical policy to resolve().
+    for segment in relative_path.split('/') {
+        if segment.is_empty() {
+            continue;
+        }
+        let byte_len = segment.len();
+        if byte_len > config.max_segment_bytes() {
+            return Err(ResolveError::PathTooLong {
+                resolved_length: relative_path.chars().count(),
+                segment_length_bytes: byte_len,
+            });
+        }
+    }
+    let total_chars = relative_path.chars().count();
+    if total_chars > config.max_path_chars() {
+        return Err(ResolveError::PathTooLong {
+            resolved_length: total_chars,
+            segment_length_bytes: 0,
+        });
+    }
+
+    Ok(ResolveResult { relative_path, missing_tokens, warnings: Vec::new() })
+}
+
+/// Resolve one `/`-delimited segment that may interleave `{token}` placeholders
+/// with literal text. Tokens append their resolved value; literal runs are
+/// sanitized and appended verbatim. The result is the concatenation of the
+/// pieces (a segment never contains an internal `/`).
+fn resolve_segment(
+    segment: &str,
+    bundle: &MetadataBundle,
+    registry: &TokenRegistry,
+    missing_tokens: &mut Vec<String>,
+) -> Result<String, ResolveError> {
+    let mut out = String::new();
+    let mut rest = segment;
+
+    while !rest.is_empty() {
+        match rest.find('{') {
+            None => {
+                // Trailing literal run.
+                out.push_str(&sanitize_literal(rest)?);
+                break;
+            }
+            Some(open) => {
+                // Literal text before the brace.
+                if open > 0 {
+                    out.push_str(&sanitize_literal(&rest[..open])?);
+                }
+                let after = &rest[open + 1..];
+                match after.find('}') {
+                    None => {
+                        // Unterminated `{` — treat the remainder as a literal
+                        // (including the brace) so nothing is silently dropped.
+                        out.push_str(&sanitize_literal(&rest[open..])?);
+                        break;
+                    }
+                    Some(close) => {
+                        let token_name = &after[..close];
+                        out.push_str(&resolve_one_token(
+                            token_name,
+                            bundle,
+                            registry,
+                            missing_tokens,
+                        )?);
+                        rest = &after[close + 1..];
+                    }
+                }
+            }
+        }
+    }
+
+    Ok(out)
+}
+
+/// Resolve a single `{token}` to its string value, mirroring the token branch
+/// of [`resolve`] (lookup → transform → sanitize → fallback + missing report).
+fn resolve_one_token(
+    token_name: &str,
+    bundle: &MetadataBundle,
+    registry: &TokenRegistry,
+    missing_tokens: &mut Vec<String>,
+) -> Result<String, ResolveError> {
+    let def = registry
+        .get(token_name)
+        .ok_or_else(|| ResolveError::UnknownToken { token: token_name.to_owned() })?;
+
+    let raw_opt = bundle.get(def.source_field).filter(|s| !s.is_empty());
+    let (raw, is_fallback) = match raw_opt {
+        Some(v) => (v.as_str(), false),
+        None => (def.fallback, true),
+    };
+    if is_fallback {
+        missing_tokens.push(token_name.to_owned());
+    }
+
+    let transformed = apply_transform(raw, def.transform);
+    let sanitized = sanitize_token_value(token_name, &transformed).map_err(map_sanitize_error)?;
+
+    if sanitized.is_empty() {
+        if !is_fallback {
+            missing_tokens.push(token_name.to_owned());
+        }
+        Ok(def.fallback.to_owned())
+    } else {
+        Ok(sanitized)
+    }
+}
+
+/// Sanitize a literal pattern run through the same filesystem-safety pipeline
+/// used for token values (traversal/reserved-name/confusable rejection).
+fn sanitize_literal(literal: &str) -> Result<String, ResolveError> {
+    sanitize_token_value("literal", literal).map_err(map_sanitize_error)
+}
+
 // ── Helpers ────────────────────────────────────────────────────────────────
 
 fn apply_transform(value: &str, transform: TokenTransform) -> String {
@@ -464,5 +652,103 @@ mod tests {
         let metadata = meta(&[("set_temp", "-10C")]);
         let result = resolve_v1(&pattern, &metadata).unwrap();
         assert_eq!(result.relative_path, "-10C");
+    }
+
+    // ── resolve_pattern_str (spec 041 FR-026a) ─────────────────────────────
+
+    #[test]
+    fn pattern_str_light_default_full_metadata() {
+        let bundle = meta(&[("target", "M31"), ("filter", "Ha"), ("date", "2026-06-21")]);
+        let r = resolve_pattern_str("{target}/{filter}/{date}/light/", &bundle).unwrap();
+        assert_eq!(r.relative_path, "M31/Ha/2026-06-21/light");
+        assert!(r.missing_tokens.is_empty());
+    }
+
+    #[test]
+    fn pattern_str_master_flat_default() {
+        let bundle = meta(&[("filter", "Ha")]);
+        let r = resolve_pattern_str("masters/flats/{filter}/", &bundle).unwrap();
+        assert_eq!(r.relative_path, "masters/flats/Ha");
+        assert!(r.missing_tokens.is_empty());
+    }
+
+    #[test]
+    fn pattern_str_dark_default() {
+        let bundle = meta(&[("exposure", "300s")]);
+        let r = resolve_pattern_str("darks/{exposure}/", &bundle).unwrap();
+        assert_eq!(r.relative_path, "darks/300s");
+        assert!(r.missing_tokens.is_empty());
+    }
+
+    #[test]
+    fn pattern_str_bias_literal_only() {
+        let bundle = meta(&[]);
+        let r = resolve_pattern_str("bias/", &bundle).unwrap();
+        assert_eq!(r.relative_path, "bias");
+        assert!(r.missing_tokens.is_empty());
+    }
+
+    #[test]
+    fn pattern_str_flat_missing_filter_falls_back_and_reports() {
+        // Flat default `flats/{filter}/{date}/` with no filter in the bundle.
+        let bundle = meta(&[("date", "2026-06-21")]);
+        let r = resolve_pattern_str("flats/{filter}/{date}/", &bundle).unwrap();
+        assert_eq!(r.relative_path, "flats/nofilter/2026-06-21");
+        assert!(r.missing_tokens.contains(&"filter".to_owned()));
+        assert!(!r.missing_tokens.contains(&"date".to_owned()));
+    }
+
+    #[test]
+    fn pattern_str_dark_missing_exposure_falls_back_and_reports() {
+        let bundle = meta(&[]);
+        let r = resolve_pattern_str("darks/{exposure}/", &bundle).unwrap();
+        assert_eq!(r.relative_path, "darks/unknown-exposure");
+        assert!(r.missing_tokens.contains(&"exposure".to_owned()));
+    }
+
+    #[test]
+    fn pattern_str_literal_not_reported_missing() {
+        // Literal `masters`/`bias` segments must never appear in missing_tokens.
+        let bundle = meta(&[]);
+        let r = resolve_pattern_str("masters/bias/", &bundle).unwrap();
+        assert_eq!(r.relative_path, "masters/bias");
+        assert!(r.missing_tokens.is_empty());
+    }
+
+    #[test]
+    fn pattern_str_unknown_token_errors() {
+        let bundle = meta(&[]);
+        let err = resolve_pattern_str("{telescope}/x/", &bundle).unwrap_err();
+        assert!(matches!(err, ResolveError::UnknownToken { token } if token == "telescope"));
+    }
+
+    #[test]
+    fn pattern_str_empty_errors() {
+        assert!(matches!(resolve_pattern_str("", &meta(&[])), Err(ResolveError::Empty)));
+        assert!(matches!(resolve_pattern_str("   ", &meta(&[])), Err(ResolveError::Empty)));
+    }
+
+    #[test]
+    fn pattern_str_mixed_token_and_literal_in_one_segment() {
+        // A segment can interleave literal text and a token.
+        let bundle = meta(&[("exposure", "300s")]);
+        let r = resolve_pattern_str("darks/exp-{exposure}/", &bundle).unwrap();
+        assert_eq!(r.relative_path, "darks/exp-300s");
+        assert!(r.missing_tokens.is_empty());
+    }
+
+    #[test]
+    fn pattern_str_date_iso_transform_applied() {
+        // Token transforms (frame_type lowercasing here) apply just like resolve().
+        let bundle = meta(&[("frame_type", "Light")]);
+        let r = resolve_pattern_str("{frame_type}/", &bundle).unwrap();
+        assert_eq!(r.relative_path, "light");
+    }
+
+    #[test]
+    fn pattern_str_literal_traversal_rejected() {
+        let bundle = meta(&[]);
+        let err = resolve_pattern_str("masters/../x/", &bundle).unwrap_err();
+        assert!(matches!(err, ResolveError::PathTraversal { .. }));
     }
 }
