@@ -172,7 +172,7 @@ export function ProjectsList({
   if (loading && projects.length === 0) {
     return (
       <ListSidebar placeholder="Search projects…">
-        <div style={{ padding: 'var(--alm-sp-4)', color: 'var(--alm-text-muted)' }}>
+        <div className="alm-projects-list__loading">
           Loading projects…
         </div>
       </ListSidebar>
@@ -183,7 +183,7 @@ export function ProjectsList({
     <ListSidebar
       placeholder="Search projects…"
       controls={
-        <div style={{ display: 'flex', gap: 4, flexWrap: 'wrap', padding: '4px 8px' }}>
+        <div className="alm-projects-list__controls">
           <select
             className="alm-select"
             value={sortBy}
@@ -202,9 +202,8 @@ export function ProjectsList({
               user toggles multiple states. */}
           <Menu.Root>
             <Menu.Trigger
-              className="alm-select"
+              className="alm-select alm-projects-list__filter-trigger"
               aria-label="Filter lifecycle"
-              style={{ cursor: 'pointer', minWidth: 110, textAlign: 'left' }}
             >
               {lifecycle.length === 0
                 ? 'State: all'
@@ -251,13 +250,13 @@ export function ProjectsList({
         </div>
       }
       footer={
-        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+        <div className="alm-projects-list__footer">
           <span className="alm-list-sidebar__count">{filtered.length} projects</span>
         </div>
       }
     >
       {filtered.length === 0 && (
-        <div style={{ padding: 'var(--alm-sp-4)', color: 'var(--alm-text-muted)' }}>
+        <div className="alm-projects-list__empty">
           No projects found.
         </div>
       )}
@@ -273,12 +272,7 @@ export function ProjectsList({
                   size={14}
                   role="img"
                   aria-label="Blocked"
-                  style={{
-                    color: 'var(--alm-danger)',
-                    marginRight: 4,
-                    display: 'inline',
-                    verticalAlign: 'middle',
-                  }}
+                  className="alm-projects-list__blocked-icon"
                 />
               )}
               {project.name}
@@ -294,13 +288,7 @@ export function ProjectsList({
               {project.sourceCount > 0 && <>{project.sourceCount} sources</>}
               {project.channelDrift && (
                 <span
-                  style={{
-                    color: 'var(--alm-warn)',
-                    marginLeft: 4,
-                    display: 'inline-flex',
-                    alignItems: 'center',
-                    gap: 2,
-                  }}
+                  className="alm-projects-list__drift-badge"
                   title="Channel drift detected"
                 >
                   <AlertTriangle size={12} aria-hidden="true" /> channels

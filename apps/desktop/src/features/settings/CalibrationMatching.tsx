@@ -120,17 +120,16 @@ export function CalibrationMatching({ save }: CalibrationMatchingProps) {
         <div className="alm-settings__row">
           <div className="alm-settings__row-label">Temperature tolerance (°C)</div>
           <div className="alm-settings__row-content">
-            <div style={{ display: 'flex', alignItems: 'center', gap: 'var(--alm-sp-2)' }}>
+            <div className="alm-calib-matching__input-row">
               <input
                 type="number"
-                className="alm-input"
-                style={{ width: 80 }}
+                className="alm-input alm-calib-matching__num-input"
                 value={darkTempTolerance}
                 min={0}
                 step={0.5}
                 onChange={handleDarkTempChange}
               />
-              <span style={{ fontSize: 'var(--alm-text-sm)', color: 'var(--alm-text-muted)' }}>°C</span>
+              <span className="alm-calib-matching__unit-label">°C</span>
             </div>
           </div>
           <div className="alm-settings__row-desc">
@@ -143,8 +142,7 @@ export function CalibrationMatching({ save }: CalibrationMatchingProps) {
           <div className="alm-settings__row-content">
             <input
               type="number"
-              className="alm-input"
-              style={{ width: 80 }}
+              className="alm-input alm-calib-matching__num-input"
               value={darkOverridePenalty}
               min={0}
               max={1}
@@ -165,8 +163,7 @@ export function CalibrationMatching({ save }: CalibrationMatchingProps) {
           <div className="alm-settings__row-content">
             <input
               type="number"
-              className="alm-input"
-              style={{ width: 80 }}
+              className="alm-input alm-calib-matching__num-input"
               value={flatOverridePenalty}
               min={0}
               max={1}
@@ -187,8 +184,7 @@ export function CalibrationMatching({ save }: CalibrationMatchingProps) {
           <div className="alm-settings__row-content">
             <input
               type="number"
-              className="alm-input"
-              style={{ width: 80 }}
+              className="alm-input alm-calib-matching__num-input"
               value={biasOverridePenalty}
               min={0}
               max={1}
@@ -220,11 +216,10 @@ export function CalibrationMatching({ save }: CalibrationMatchingProps) {
         <div className="alm-settings__row">
           <div className="alm-settings__row-label">Default maximum calibration age</div>
           <div className="alm-settings__row-content">
-            <div style={{ display: 'flex', alignItems: 'center', gap: 'var(--alm-sp-2)' }}>
+            <div className="alm-calib-matching__input-row">
               <input
                 type="number"
-                className="alm-input"
-                style={{ width: 80 }}
+                className="alm-input alm-calib-matching__num-input"
                 value={agingThreshold}
                 min={1}
                 max={3650}
@@ -234,7 +229,7 @@ export function CalibrationMatching({ save }: CalibrationMatchingProps) {
                   save('calibration', { calibrationAgingThresholdDays: v });
                 }}
               />
-              <span style={{ fontSize: 'var(--alm-text-sm)', color: 'var(--alm-text-muted)' }}>days</span>
+              <span className="alm-calib-matching__unit-label">days</span>
             </div>
           </div>
           <div className="alm-settings__row-desc">

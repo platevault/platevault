@@ -349,12 +349,10 @@ export function SetupWizard() {
       ) : (
         <span />
       )}
-      <div style={{ flex: 1 }} />
+      <div className="alm-setup-wizard__footer-spacer" />
       {/* Folder count summary on source step */}
       {step === 0 && totalFolders > 0 && (
-        <span
-          style={{ fontSize: 'var(--alm-text-xs)', color: 'var(--alm-text-muted)' }}
-        >
+        <span className="alm-setup-wizard__folder-count">
           {totalFolders} folder{totalFolders !== 1 ? 's' : ''} selected
         </span>
       )}
@@ -396,40 +394,17 @@ export function SetupWizard() {
     // WizardShell fills the main content area instead of overflowing/mis-placing.
     <div
       className="alm-page alm-setup-wizard"
-      style={{ display: 'flex', flexDirection: 'column', flex: 1, minHeight: 0 }}
     >
-      <WizardShell steps={wizardSteps} currentStep={step} footer={footer} style={{ flex: 1, minHeight: 0 }}>
+      <WizardShell steps={wizardSteps} currentStep={step} footer={footer} className="alm-setup-wizard__shell">
         {/* Step label + heading */}
-        <div
-          style={{
-            fontSize: 'var(--alm-text-2xs)',
-            fontWeight: 'var(--alm-weight-semibold)',
-            textTransform: 'uppercase',
-            letterSpacing: '0.06em',
-            color: 'var(--alm-text-muted)',
-          }}
-        >
+        <div className="alm-setup-wizard__step-label">
           Setup &middot; Step {step + 1} of {STEPS.length}
         </div>
-        <h1
-          style={{
-            margin: 'var(--alm-sp-1) 0 0',
-            fontSize: 'var(--alm-text-2xl)',
-            fontWeight: 'var(--alm-weight-semibold)',
-            color: 'var(--alm-text)',
-          }}
-        >
+        <h1 className="alm-setup-wizard__heading">
           {stepMeta.heading}
         </h1>
         {stepMeta.description && (
-          <p
-            style={{
-              margin: 'var(--alm-sp-2) 0 var(--alm-sp-5)',
-              fontSize: 'var(--alm-text-base)',
-              lineHeight: 'var(--alm-leading-normal)',
-              color: 'var(--alm-text-secondary)',
-            }}
-          >
+          <p className="alm-setup-wizard__description">
             {stepMeta.description}
           </p>
         )}

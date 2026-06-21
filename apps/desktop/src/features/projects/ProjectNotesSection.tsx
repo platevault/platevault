@@ -120,18 +120,18 @@ export function ProjectNotesSection({
 
   if (!editing) {
     return (
-      <div style={{ display: 'flex', flexDirection: 'column', gap: 'var(--alm-sp-2)' }}>
+      <div className="alm-project-notes__root">
         {draft ? (
           <div
             data-testid="notes-body"
-            style={{ whiteSpace: 'pre-wrap', fontSize: 'var(--alm-text-sm)' }}
+            className="alm-project-notes__body"
           >
             {draft}
           </div>
         ) : (
           <span
             data-testid="notes-empty"
-            style={{ color: 'var(--alm-text-muted)', fontSize: 'var(--alm-text-sm)' }}
+            className="alm-project-notes__empty"
           >
             No notes.
           </span>
@@ -146,7 +146,7 @@ export function ProjectNotesSection({
         {lastSaved && (
           <span
             data-testid="notes-saved-indicator"
-            style={{ fontSize: 'var(--alm-text-xs)', color: 'var(--alm-text-muted)' }}
+            className="alm-project-notes__saved"
           >
             Saved
           </span>
@@ -156,26 +156,18 @@ export function ProjectNotesSection({
   }
 
   return (
-    <div style={{ display: 'flex', flexDirection: 'column', gap: 'var(--alm-sp-2)' }}>
+    <div className="alm-project-notes__root">
       <textarea
         data-testid="notes-textarea"
-        className="alm-input"
+        className="alm-input alm-project-notes__textarea"
         value={draft}
         onChange={handleChange}
         rows={6}
         disabled={saving}
         aria-invalid={Boolean(fieldError || overLimit)}
         aria-describedby={fieldError ? 'notes-field-error' : undefined}
-        style={{ resize: 'vertical' }}
       />
-      <div
-        style={{
-          display: 'flex',
-          justifyContent: 'space-between',
-          alignItems: 'center',
-          fontSize: 'var(--alm-text-xs)',
-        }}
-      >
+      <div className="alm-project-notes__toolbar">
         <span
           data-testid="notes-byte-counter"
           style={{
@@ -188,7 +180,7 @@ export function ProjectNotesSection({
         >
           {byteCount.toLocaleString()} / {MAX_NOTE_BYTES.toLocaleString()} bytes
         </span>
-        <div style={{ display: 'flex', gap: 'var(--alm-sp-2)' }}>
+        <div className="alm-project-notes__actions">
           <Btn size="sm" variant="ghost" onClick={handleCancel} disabled={saving}>
             Cancel
           </Btn>

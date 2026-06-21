@@ -102,7 +102,7 @@ export function CalibrationMatchPanel({ sessionIds }: Props) {
     return (
       <Section title="Calibration readiness">
         <div
-          style={{ fontSize: 'var(--alm-text-sm)', color: 'var(--alm-text-muted)', padding: 'var(--alm-sp-1)' }}
+          className="alm-calib-match-panel__loading"
           data-testid="cal-panel-loading"
         >
           Checking calibration suggestions…
@@ -115,7 +115,7 @@ export function CalibrationMatchPanel({ sessionIds }: Props) {
     return (
       <Section title="Calibration readiness">
         <div
-          style={{ fontSize: 'var(--alm-text-xs)', color: 'var(--alm-text-muted)' }}
+          className="alm-calib-match-panel__error"
           data-testid="cal-panel-error"
         >
           {fetchError}
@@ -146,30 +146,23 @@ export function CalibrationMatchPanel({ sessionIds }: Props) {
 
   return (
     <Section title="Calibration readiness" count={sessionIds.length} data-testid="cal-panel">
-      <div style={{ display: 'flex', flexDirection: 'column', gap: 'var(--alm-sp-2)' }}>
+      <div className="alm-calib-match-panel__list">
         {[...bySession.entries()].map(([sid, typeResults]) => (
           <div
             key={sid}
-            style={{
-              display: 'flex',
-              flexDirection: 'column',
-              gap: 'var(--alm-sp-1)',
-              padding: 'var(--alm-sp-2)',
-              background: 'var(--alm-surface-overlay)',
-              borderRadius: 'var(--alm-radius-md)',
-            }}
+            className="alm-calib-match-panel__session"
             data-testid={`cal-session-${sid}`}
           >
-            <div style={{ fontSize: 'var(--alm-text-xs)', color: 'var(--alm-text-faint)', fontFamily: 'var(--alm-font-mono)' }}>
+            <div className="alm-calib-match-panel__session-id">
               {sid.slice(0, 12)}…
             </div>
-            <div style={{ display: 'flex', gap: 'var(--alm-sp-1)', flexWrap: 'wrap' }}>
+            <div className="alm-calib-match-panel__type-row">
               {typeResults.map((r) => {
                 const topConfidence = r.candidates?.[0]?.confidence;
                 return (
                   <div
                     key={r.calibrationType}
-                    style={{ display: 'flex', alignItems: 'center', gap: 4 }}
+                    className="alm-calib-match-panel__type-item"
                     data-testid={`cal-type-${r.calibrationType}-${sid}`}
                   >
                     <Pill variant={r.calibrationType === 'dark' ? 'info' : r.calibrationType === 'flat' ? 'accent' : 'neutral'}>
@@ -180,8 +173,7 @@ export function CalibrationMatchPanel({ sessionIds }: Props) {
                     </Pill>
                     {topConfidence != null && (
                       <span
-                        className="alm-mono"
-                        style={{ fontSize: 'var(--alm-text-xs)', color: 'var(--alm-text-secondary)' }}
+                        className="alm-mono alm-calib-match-panel__confidence"
                         data-testid={`cal-confidence-${r.calibrationType}-${sid}`}
                       >
                         {Math.round(topConfidence * 100)}%
@@ -194,7 +186,7 @@ export function CalibrationMatchPanel({ sessionIds }: Props) {
           </div>
         ))}
       </div>
-      <div style={{ marginTop: 'var(--alm-sp-1)', fontSize: 'var(--alm-text-xs)', color: 'var(--alm-text-faint)' }}>
+      <div className="alm-calib-match-panel__hint">
         To assign calibration masters, open the Calibration page and select the appropriate master.
       </div>
     </Section>

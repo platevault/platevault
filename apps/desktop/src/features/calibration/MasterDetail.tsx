@@ -147,17 +147,17 @@ export function MasterDetail({ master, prefillSuggestion, agingThresholdDays }: 
             </RailCard>
 
             <RailCard title="Reuse">
-              <div style={{ display: 'flex', flexDirection: 'column', gap: 'var(--alm-sp-1)', fontSize: 'var(--alm-text-xs)' }}>
-                <div style={{ color: 'var(--alm-text-secondary)' }}>
-                  <span style={{ color: 'var(--alm-text-faint)' }}>Sessions matched</span>{' '}
+              <div className="alm-master-detail__reuse">
+                <div className="alm-master-detail__reuse-row">
+                  <span className="alm-master-detail__reuse-label">Sessions matched</span>{' '}
                   <strong>{(master.usedBySessionIds ?? []).length}</strong>
                 </div>
-                <div style={{ color: 'var(--alm-text-secondary)' }}>
-                  <span style={{ color: 'var(--alm-text-faint)' }}>Projects linked</span>{' '}
+                <div className="alm-master-detail__reuse-row">
+                  <span className="alm-master-detail__reuse-label">Projects linked</span>{' '}
                   <strong>{(master.usedByProjectIds ?? []).length}</strong>
                 </div>
-                <div style={{ color: 'var(--alm-text-secondary)' }}>
-                  <span style={{ color: 'var(--alm-text-faint)' }}>Created</span>{' '}
+                <div className="alm-master-detail__reuse-row">
+                  <span className="alm-master-detail__reuse-label">Created</span>{' '}
                   {master.createdAt.split('T')[0]}
                 </div>
               </div>

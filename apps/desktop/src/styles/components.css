@@ -4388,3 +4388,258 @@
   color: var(--alm-text-faint);
   font-size: var(--alm-text-sm);
 }
+
+/* === SETTINGS CALIBRATION MATCHING === */
+
+/* Flex row wrapping a number input + unit label */
+.alm-calib-matching__input-row {
+  display: flex;
+  align-items: center;
+  gap: var(--alm-sp-2);
+}
+
+/* Fixed-width number input used for tolerance / penalty / threshold fields */
+.alm-calib-matching__num-input {
+  width: 80px;
+}
+
+/* Unit label ("°C", "days") that follows a number input */
+.alm-calib-matching__unit-label {
+  font-size: var(--alm-text-sm);
+  color: var(--alm-text-muted);
+}
+
+/* === PROJECT CALIBRATION MATCH PANEL === */
+
+/* Loading state */
+.alm-calib-match-panel__loading {
+  font-size: var(--alm-text-sm);
+  color: var(--alm-text-muted);
+  padding: var(--alm-sp-1);
+}
+
+/* Error state */
+.alm-calib-match-panel__error {
+  font-size: var(--alm-text-xs);
+  color: var(--alm-text-muted);
+}
+
+/* Outer column — one entry per session */
+.alm-calib-match-panel__list {
+  display: flex;
+  flex-direction: column;
+  gap: var(--alm-sp-2);
+}
+
+/* Per-session card */
+.alm-calib-match-panel__session {
+  display: flex;
+  flex-direction: column;
+  gap: var(--alm-sp-1);
+  padding: var(--alm-sp-2);
+  background: var(--alm-bg3);
+  border-radius: var(--alm-radius-md);
+}
+
+/* Short session-id label */
+.alm-calib-match-panel__session-id {
+  font-size: var(--alm-text-xs);
+  color: var(--alm-text-faint);
+  font-family: var(--alm-font-mono);
+}
+
+/* Row of calibration-type pills */
+.alm-calib-match-panel__type-row {
+  display: flex;
+  gap: var(--alm-sp-1);
+  flex-wrap: wrap;
+}
+
+/* Individual type+status+confidence cluster */
+.alm-calib-match-panel__type-item {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+}
+
+/* Confidence percentage */
+.alm-calib-match-panel__confidence {
+  font-size: var(--alm-text-xs);
+  color: var(--alm-text-secondary);
+}
+
+/* Footer hint */
+.alm-calib-match-panel__hint {
+  margin-top: var(--alm-sp-1);
+  font-size: var(--alm-text-xs);
+  color: var(--alm-text-faint);
+}
+
+/* === PROJECT NOTES SECTION === */
+
+/* Root layout — shared between view and edit modes */
+.alm-project-notes__root {
+  display: flex;
+  flex-direction: column;
+  gap: var(--alm-sp-2);
+}
+
+/* Notes body (pre-wrap text block) */
+.alm-project-notes__body {
+  white-space: pre-wrap;
+  font-size: var(--alm-text-sm);
+}
+
+/* Empty-state placeholder */
+.alm-project-notes__empty {
+  color: var(--alm-text-muted);
+  font-size: var(--alm-text-sm);
+}
+
+/* "Saved" indicator */
+.alm-project-notes__saved {
+  font-size: var(--alm-text-xs);
+  color: var(--alm-text-muted);
+}
+
+/* Textarea — resize handle only; theming via existing .alm-input */
+.alm-project-notes__textarea {
+  resize: vertical;
+}
+
+/* Toolbar row: byte counter + action buttons */
+.alm-project-notes__toolbar {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  font-size: var(--alm-text-xs);
+}
+
+/* Button group (Cancel / Save) */
+.alm-project-notes__actions {
+  display: flex;
+  gap: var(--alm-sp-2);
+}
+
+/* === PROJECTS LIST === */
+
+/* Loading state placeholder */
+.alm-projects-list__loading {
+  padding: var(--alm-sp-4);
+  color: var(--alm-text-muted);
+}
+
+/* Empty state placeholder (no results) */
+.alm-projects-list__empty {
+  padding: var(--alm-sp-4);
+  color: var(--alm-text-muted);
+}
+
+/* Controls bar wrapping sort-select and lifecycle filter */
+.alm-projects-list__controls {
+  display: flex;
+  gap: var(--alm-sp-1);
+  flex-wrap: wrap;
+  padding: var(--alm-sp-1) var(--alm-sp-2);
+}
+
+/* Lifecycle filter trigger — inherits alm-select base; adds pointer + min-width */
+.alm-projects-list__filter-trigger {
+  cursor: pointer;
+  min-width: 110px;
+  text-align: left;
+}
+
+/* Footer row — count on the left, actions on the right */
+.alm-projects-list__footer {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+}
+
+/* Blocked-state icon inline with project name */
+.alm-projects-list__blocked-icon {
+  color: var(--alm-danger);
+  margin-right: var(--alm-sp-1);
+  display: inline;
+  vertical-align: middle;
+}
+
+/* Channel-drift inline badge */
+.alm-projects-list__drift-badge {
+  color: var(--alm-warn);
+  margin-left: var(--alm-sp-1);
+  display: inline-flex;
+  align-items: center;
+  gap: var(--alm-sp-0);
+}
+
+/* === CALIBRATION MASTER DETAIL === */
+
+/* Reuse section inside the Rail card */
+.alm-master-detail__reuse {
+  display: flex;
+  flex-direction: column;
+  gap: var(--alm-sp-1);
+  font-size: var(--alm-text-xs);
+}
+
+.alm-master-detail__reuse-row {
+  color: var(--alm-text-secondary);
+}
+
+.alm-master-detail__reuse-label {
+  color: var(--alm-text-faint);
+}
+
+/* === SETUP WIZARD === */
+
+/* Outer page wrapper — fills the main content area without overflow */
+.alm-setup-wizard {
+  display: flex;
+  flex-direction: column;
+  flex: 1;
+  min-height: 0;
+}
+
+/* WizardShell root — must flex-fill the page content area */
+.alm-setup-wizard__shell {
+  flex: 1;
+  min-height: 0;
+}
+
+/* Footer spacer — pushes action buttons to the right */
+.alm-setup-wizard__footer-spacer {
+  flex: 1;
+}
+
+/* Folder-count summary shown in the footer on the Source Folders step */
+.alm-setup-wizard__folder-count {
+  font-size: var(--alm-text-xs);
+  color: var(--alm-text-muted);
+}
+
+/* Step eyebrow label — "Setup · Step N of M" */
+.alm-setup-wizard__step-label {
+  font-size: var(--alm-text-2xs);
+  font-weight: var(--alm-weight-semibold);
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+  color: var(--alm-text-muted);
+}
+
+/* Step heading */
+.alm-setup-wizard__heading {
+  margin: var(--alm-sp-1) 0 0;
+  font-size: var(--alm-text-2xl);
+  font-weight: var(--alm-weight-semibold);
+  color: var(--alm-text);
+}
+
+/* Step description paragraph */
+.alm-setup-wizard__description {
+  margin: var(--alm-sp-2) 0 var(--alm-sp-5);
+  font-size: var(--alm-text-base);
+  line-height: var(--alm-leading-normal);
+  color: var(--alm-text-secondary);
+}
