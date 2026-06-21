@@ -124,7 +124,19 @@ impl<T> ResponseEnvelope<T> {
     }
 }
 
-#[derive(Clone, Copy, Debug, Eq, Hash, Ord, PartialEq, PartialOrd, Serialize, Deserialize)]
+#[derive(
+    Clone,
+    Copy,
+    Debug,
+    Eq,
+    Hash,
+    Ord,
+    PartialEq,
+    PartialOrd,
+    Serialize,
+    Deserialize,
+    schemars::JsonSchema,
+)]
 #[serde(rename_all = "snake_case")]
 pub enum ResponseStatus {
     Ok,
@@ -151,7 +163,18 @@ impl OperationHandle {
 }
 
 #[derive(
-    Clone, Copy, Debug, Eq, Hash, Ord, PartialEq, PartialOrd, Serialize, Deserialize, specta::Type,
+    Clone,
+    Copy,
+    Debug,
+    Eq,
+    Hash,
+    Ord,
+    PartialEq,
+    PartialOrd,
+    Serialize,
+    Deserialize,
+    specta::Type,
+    schemars::JsonSchema,
 )]
 #[serde(rename_all = "snake_case")]
 pub enum OperationStatus {
@@ -195,7 +218,18 @@ impl OperationEvent {
 }
 
 #[derive(
-    Clone, Copy, Debug, Eq, Hash, Ord, PartialEq, PartialOrd, Serialize, Deserialize, specta::Type,
+    Clone,
+    Copy,
+    Debug,
+    Eq,
+    Hash,
+    Ord,
+    PartialEq,
+    PartialOrd,
+    Serialize,
+    Deserialize,
+    specta::Type,
+    schemars::JsonSchema,
 )]
 #[serde(rename_all = "snake_case")]
 pub enum OperationEventType {
@@ -274,7 +308,18 @@ impl ContractError {
 }
 
 #[derive(
-    Clone, Copy, Debug, Eq, Hash, Ord, PartialEq, PartialOrd, Serialize, Deserialize, specta::Type,
+    Clone,
+    Copy,
+    Debug,
+    Eq,
+    Hash,
+    Ord,
+    PartialEq,
+    PartialOrd,
+    Serialize,
+    Deserialize,
+    specta::Type,
+    schemars::JsonSchema,
 )]
 #[serde(rename_all = "snake_case")]
 pub enum ErrorSeverity {
@@ -392,12 +437,12 @@ mod tests {
     //   cargo run -p contracts_core --bin generate-contracts
     // review the diff, then commit both the type change and the snapshot.
     //
-    // Note: schemars generates draft-07.  The committed `*.json` (without
-    // `.generated` suffix) are hand-maintained draft-2020-12 files with
-    // richer structure; the agreement tests guard the GENERATED snapshots only.
-    // Full derivation of the hand-maintained files is blocked by the schema-
-    // dialect gap (schemars = draft-07, committed = draft-2020-12) and the
-    // envelope structure difference — see T116 report.
+    // Note: as of spec 042 T116a, schemars 1.x emits JSON-Schema
+    // draft-2020-12 — the same dialect as the canonical contracts — so the
+    // generated snapshots and the hand-maintained `*.json` now share a
+    // dialect.  The `.generated.json` snapshots are the Rust-derived
+    // projection; the FR-005/SC-004 specta↔schemars agreement test lives in
+    // `tests/contract/`.
     mod schema_agreement {
         use schemars::{schema_for, JsonSchema};
         use std::path::PathBuf;

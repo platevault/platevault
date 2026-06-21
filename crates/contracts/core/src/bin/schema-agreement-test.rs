@@ -9,9 +9,13 @@
 //! structural change in the Rust type that affects the JSON-Schema output will
 //! cause this to fail, prompting the developer to regenerate and review.
 //!
-//! This is the T116 drift guard.  The committed `.generated.json` files are the
-//! snapshot; when intentional changes are made, run `generate-contracts` to
-//! update the snapshots, review the diff, and commit both.
+//! This is the JSON-Schema↔Rust snapshot drift guard.  The committed
+//! `.generated.json` files (draft-2020-12 since spec 042 T116a upgraded
+//! schemars to 1.x) are the snapshot; when intentional changes are made, run
+//! `generate-contracts` to update them, review the diff, and commit both.
+//!
+//! The complementary FR-005/SC-004 **specta↔schemars** agreement test (T116)
+//! lives in `tests/contract/envelope_specta_schemars_agreement.rs`.
 
 use std::path::PathBuf;
 use std::process;

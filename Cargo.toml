@@ -46,7 +46,8 @@ unicode-security = "0.1"
 # Ratified stack (spec 002 2026-05-23 — wired with network access):
 #   sqlx 0.9 renamed runtime-tokio-rustls -> runtime-tokio + tls-rustls (two separate features).
 #   specta is on the 2.x rc track; specta-typescript and tauri-specta follow the same rc series.
-#   schemars stays on 0.8 (uuid1 feature maps to uuid crate v1; upgrading to 1.x is a separate task).
+#   schemars 1.x emits JSON-Schema draft-2020-12 (matching the canonical contract dialect);
+#   the uuid1 feature still maps to uuid crate v1 (spec 042 CB2 / T116a).
 sqlx = { version = "0.9", default-features = false, features = ["sqlite", "runtime-tokio", "tls-rustls", "macros", "migrate", "uuid", "time", "json"] }
 specta = { version = "2.0.0-rc.25", features = ["derive", "uuid", "time", "serde_json"] }
 specta-typescript = "0.0.12"
@@ -55,7 +56,7 @@ tauri-build = { version = "2.6", features = [] }
 tauri-plugin-dialog = "2"
 tauri-plugin-opener = "2"
 tauri-specta = { version = "2.0.0-rc.25", features = ["typescript"] }
-schemars = { version = "0.8", features = ["uuid1"] }
+schemars = { version = "1", features = ["uuid1"] }
 serde = { version = "1", features = ["derive"] }
 serde_json = "1"
 thiserror = "2"

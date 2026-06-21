@@ -66,19 +66,31 @@ Frontend: `cd apps/desktop && npx tsc --noEmit` + `npx vitest run <feature>`. Ru
   variants (use the canonical mapper from US11 once available; otherwise enum directly).
 - [X] T115 Finish spec-037 tail: migrate `plans_list`/`plans_approve`/`plans_apply_real`
   (`commands.ts:170/322/328`) to `commands.*`; extend `commands.bindings-guard.test.ts`.
-- [ ] T116a (CB2 prereq, ITERATION) Upgrade `schemars` 0.8 → 1.x in workspace `Cargo.toml`
-  (resolves the draft-07 → draft-2020-12 dialect gap and the `uuid1` feature mapping); fix the
-  breaking `JsonSchema` derive API across `crates/domain/core`, `crates/audit`,
-  `crates/contracts/core`; keep existing `schema_for!` tests green. Blocks T116.
-  Sequence with US13 (high-risk, last).
-- [ ] T116 (CB2, RE-SCOPED by ITERATION — supersedes the ba13cfd draft-07 stopgap) Make
-  `packages/contracts` + the allowlisted per-spec contracts derive their JSON-Schema
-  (draft-2020-12) from the Rust reflection (schemars 1.x) via a generation step feeding
-  `packages/contracts/scripts/build-schemas.mjs`; annotate contract DTOs with `#[schemars(...)]`
-  to reproduce semantic richness (operation.name dotted-token regex, oneOf envelope, const
-  version pins, examples, descriptions); retire the hand-authored canonical `*.schema.json`
-  inputs; keep `ajv` runtime validation + `tests/contract/contract_schema_parity.rs` green;
-  satisfy the FR-005/SC-004 agreement test. Blocked-by T116a; sequence after US3–US16 with US13.
+- [X] T116a (CB2 prereq, ITERATION) Upgraded `schemars` 0.8 → 1.2.1 in workspace `Cargo.toml`
+  (schemars 1.x emits draft-2020-12, closing the dialect gap; `uuid1` feature name unchanged —
+  still maps to uuid crate v1). Fixed the breaking `JsonSchema` derive API: the manual impl on
+  `domain_core::Timestamp` (`schema_name` → `Cow<'static, str>`, `json_schema` →
+  `&mut SchemaGenerator -> schemars::Schema` via the `json_schema!` macro); derive sites in
+  `crates/domain/core`, `crates/audit`, `crates/contracts/core` and the
+  `#[schemars(bound = …)]` attributes compiled unchanged. Regenerated the `.generated.json`
+  snapshots to draft-2020-12 (the `schema_for!` snapshot tests are green). Residual schemars
+  0.8.22 in the lock is transitive via `tauri`/`tauri-build` only (not our contract DTOs).
+- [X] T116 (CB2, RE-SCOPED by ITERATION — supersedes the ba13cfd draft-07 stopgap; partial scope,
+  documented) Added the FR-005/SC-004 **specta↔schemars agreement test**
+  (`tests/contract/envelope_specta_schemars_agreement.rs`): derives the envelope enum schemas
+  from the Rust `contracts_core` types via schemars and FAILS when they disagree with the
+  specta-generated `apps/desktop/src/bindings/index.ts` union (validated by a perturbation —
+  a Rust variant rename makes it red). Scoped to the envelope enums live on BOTH projections
+  (`ErrorSeverity`, `OperationEventType`); `OperationStatus`/`ResponseStatus` are not emitted as
+  named specta types (no live command references them) and are documented as excluded.
+  Added `JsonSchema` derives to the envelope enums so the schemars projection exists.
+  KEPT hand-authored (documented in the T116 report): `packages/contracts/schemas/envelope.schema.json`
+  remains the json2ts/ajv input — its hand-curated `oneOf` of named `OkResponseEnvelope`/
+  `ErrorResponseEnvelope` defs is a shape schemars will not reproduce from the generic
+  `ResponseEnvelope<T>`, and replacing it would change `envelope.d.ts` and break
+  `contract_schema_parity`'s interface-name expectations. The per-spec payload `*.json` contracts
+  in the build-schemas.mjs allowlist likewise stay hand-authored. `ajv` runtime validation +
+  `tests/contract/contract_schema_parity.rs` stay green. Blocked-by T116a (done).
 - [X] T117 (CB4) Collapse `_Serialize`/`_Deserialize` aliasing into one generated module.
 - [X] T118 (C5) Add zod IPC-seam validation for dynamic/drift-prone payloads.
 - [ ] **US2 checkpoint**: gates green; commit `feat(042): US2 IPC boundary + ErrorCode + errMessage`.

@@ -175,23 +175,21 @@ impl From<OffsetDateTime> for Timestamp {
 }
 
 // Manual JsonSchema impl: represent as RFC 3339 date-time string.
+//
+// schemars 1.x: `schema_name` returns `Cow<'static, str>`, `json_schema`
+// takes `&mut SchemaGenerator` and returns `schemars::Schema` (a thin wrapper
+// over `serde_json::Value`). The `json_schema!` macro builds it from JSON.
 impl schemars::JsonSchema for Timestamp {
-    fn schema_name() -> String {
-        "Timestamp".to_owned()
+    fn schema_name() -> std::borrow::Cow<'static, str> {
+        std::borrow::Cow::Borrowed("Timestamp")
     }
 
-    fn json_schema(_gen: &mut schemars::gen::SchemaGenerator) -> schemars::schema::Schema {
-        use schemars::schema::{InstanceType, SchemaObject};
-        SchemaObject {
-            instance_type: Some(InstanceType::String.into()),
-            format: Some("date-time".to_owned()),
-            metadata: Some(Box::new(schemars::schema::Metadata {
-                description: Some("RFC 3339 UTC timestamp.".to_owned()),
-                ..Default::default()
-            })),
-            ..Default::default()
-        }
-        .into()
+    fn json_schema(_generator: &mut schemars::SchemaGenerator) -> schemars::Schema {
+        schemars::json_schema!({
+            "type": "string",
+            "format": "date-time",
+            "description": "RFC 3339 UTC timestamp."
+        })
     }
 }
 

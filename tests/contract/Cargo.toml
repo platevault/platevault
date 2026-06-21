@@ -41,8 +41,13 @@ path = "native_contracts_test.rs"
 name = "target_resolution_parity_test"
 path = "target_resolution_parity_test.rs"
 
+[[test]]
+name = "envelope_specta_schemars_agreement"
+path = "envelope_specta_schemars_agreement.rs"
+
 [dev-dependencies]
 contracts_core = { path = "../../crates/contracts/core" }
+schemars.workspace = true
 serde.workspace = true
 serde_json.workspace = true
 

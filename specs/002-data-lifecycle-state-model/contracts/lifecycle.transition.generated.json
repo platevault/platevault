@@ -1,354 +1,157 @@
 {
-  "$schema": "http://json-schema.org/draft-07/schema#",
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
   "title": "TransitionRequest",
   "description": "Discriminated request — one variant per entity family.",
   "oneOf": [
     {
       "type": "object",
-      "required": [
-        "actor",
-        "contractVersion",
-        "currentState",
-        "entityId",
-        "entityType",
-        "nextState",
-        "requestId"
-      ],
       "properties": {
-        "actionLabel": {
-          "type": [
-            "string",
-            "null"
-          ]
-        },
-        "actor": {
-          "$ref": "#/definitions/TransitionActor"
-        },
-        "contractVersion": {
-          "type": "string"
-        },
-        "currentState": {
-          "$ref": "#/definitions/ProjectState"
-        },
-        "entityId": {
-          "type": "string",
-          "format": "uuid"
-        },
         "entityType": {
-          "type": "string"
-        },
-        "nextState": {
-          "$ref": "#/definitions/ProjectState"
-        },
-        "requestId": {
           "type": "string",
-          "format": "uuid"
+          "const": "project"
         }
-      }
+      },
+      "$ref": "#/$defs/ProjectTransitionRequest",
+      "required": [
+        "entityType"
+      ]
     },
     {
       "type": "object",
-      "required": [
-        "actor",
-        "contractVersion",
-        "currentState",
-        "entityId",
-        "entityType",
-        "nextState",
-        "requestId"
-      ],
       "properties": {
-        "actionLabel": {
-          "type": [
-            "string",
-            "null"
-          ]
-        },
-        "actor": {
-          "$ref": "#/definitions/TransitionActor"
-        },
-        "contractVersion": {
-          "type": "string"
-        },
-        "currentState": {
-          "$ref": "#/definitions/PlanState"
-        },
-        "entityId": {
-          "type": "string",
-          "format": "uuid"
-        },
         "entityType": {
-          "type": "string"
-        },
-        "nextState": {
-          "$ref": "#/definitions/PlanState"
-        },
-        "requestId": {
           "type": "string",
-          "format": "uuid"
+          "const": "plan"
         }
-      }
+      },
+      "$ref": "#/$defs/PlanTransitionRequest",
+      "required": [
+        "entityType"
+      ]
     },
     {
       "type": "object",
-      "required": [
-        "actor",
-        "contractVersion",
-        "currentState",
-        "entityId",
-        "entityType",
-        "nextState",
-        "requestId"
-      ],
       "properties": {
-        "actionLabel": {
-          "type": [
-            "string",
-            "null"
-          ]
-        },
-        "actor": {
-          "$ref": "#/definitions/TransitionActor"
-        },
-        "contractVersion": {
-          "type": "string"
-        },
-        "currentState": {
-          "$ref": "#/definitions/SessionState"
-        },
-        "entityId": {
-          "type": "string",
-          "format": "uuid"
-        },
         "entityType": {
-          "type": "string"
-        },
-        "nextState": {
-          "$ref": "#/definitions/SessionState"
-        },
-        "requestId": {
           "type": "string",
-          "format": "uuid"
+          "const": "inventory_session"
         }
-      }
+      },
+      "$ref": "#/$defs/InventorySessionTransitionRequest",
+      "required": [
+        "entityType"
+      ]
     },
     {
       "type": "object",
-      "required": [
-        "actor",
-        "contractVersion",
-        "currentState",
-        "entityId",
-        "entityType",
-        "nextState",
-        "requestId"
-      ],
       "properties": {
-        "actionLabel": {
-          "type": [
-            "string",
-            "null"
-          ]
-        },
-        "actor": {
-          "$ref": "#/definitions/TransitionActor"
-        },
-        "contractVersion": {
-          "type": "string"
-        },
-        "currentState": {
-          "$ref": "#/definitions/SessionState"
-        },
-        "entityId": {
-          "type": "string",
-          "format": "uuid"
-        },
         "entityType": {
-          "type": "string"
-        },
-        "nextState": {
-          "$ref": "#/definitions/SessionState"
-        },
-        "requestId": {
           "type": "string",
-          "format": "uuid"
+          "const": "calibration_session"
         }
-      }
+      },
+      "$ref": "#/$defs/CalibrationSessionTransitionRequest",
+      "required": [
+        "entityType"
+      ]
     },
     {
       "type": "object",
-      "required": [
-        "actor",
-        "contractVersion",
-        "currentState",
-        "entityId",
-        "entityType",
-        "nextState",
-        "requestId"
-      ],
       "properties": {
-        "actionLabel": {
-          "type": [
-            "string",
-            "null"
-          ]
-        },
-        "actor": {
-          "$ref": "#/definitions/TransitionActor"
-        },
-        "contractVersion": {
-          "type": "string"
-        },
-        "currentState": {
-          "$ref": "#/definitions/DataSourceState"
-        },
-        "entityId": {
-          "type": "string",
-          "format": "uuid"
-        },
         "entityType": {
-          "type": "string"
-        },
-        "nextState": {
-          "$ref": "#/definitions/DataSourceState"
-        },
-        "requestId": {
           "type": "string",
-          "format": "uuid"
+          "const": "data_source"
         }
-      }
+      },
+      "$ref": "#/$defs/DataSourceTransitionRequest",
+      "required": [
+        "entityType"
+      ]
     },
     {
       "type": "object",
-      "required": [
-        "actor",
-        "contractVersion",
-        "currentState",
-        "entityId",
-        "entityType",
-        "nextState",
-        "requestId"
-      ],
       "properties": {
-        "actionLabel": {
-          "type": [
-            "string",
-            "null"
-          ]
-        },
-        "actor": {
-          "$ref": "#/definitions/TransitionActor"
-        },
-        "contractVersion": {
-          "type": "string"
-        },
-        "currentState": {
-          "$ref": "#/definitions/PreparedSourceState"
-        },
-        "entityId": {
-          "type": "string",
-          "format": "uuid"
-        },
         "entityType": {
-          "type": "string"
-        },
-        "nextState": {
-          "$ref": "#/definitions/PreparedSourceState"
-        },
-        "requestId": {
           "type": "string",
-          "format": "uuid"
+          "const": "prepared_source"
         }
-      }
+      },
+      "$ref": "#/$defs/PreparedSourceTransitionRequest",
+      "required": [
+        "entityType"
+      ]
     },
     {
       "type": "object",
-      "required": [
-        "actor",
-        "contractVersion",
-        "currentState",
-        "entityId",
-        "entityType",
-        "nextState",
-        "requestId"
-      ],
       "properties": {
-        "actionLabel": {
-          "type": [
-            "string",
-            "null"
-          ]
-        },
-        "actor": {
-          "$ref": "#/definitions/TransitionActor"
-        },
-        "contractVersion": {
-          "type": "string"
-        },
-        "currentState": {
-          "$ref": "#/definitions/ProjectionState"
-        },
-        "entityId": {
-          "type": "string",
-          "format": "uuid"
-        },
         "entityType": {
-          "type": "string"
-        },
-        "nextState": {
-          "$ref": "#/definitions/ProjectionState"
-        },
-        "requestId": {
           "type": "string",
-          "format": "uuid"
+          "const": "projection"
         }
-      }
+      },
+      "$ref": "#/$defs/ProjectionTransitionRequest",
+      "required": [
+        "entityType"
+      ]
     },
     {
       "type": "object",
-      "required": [
-        "actor",
-        "contractVersion",
-        "currentState",
-        "entityId",
-        "entityType",
-        "nextState",
-        "requestId"
-      ],
       "properties": {
-        "actionLabel": {
-          "type": [
-            "string",
-            "null"
-          ]
-        },
-        "actor": {
-          "$ref": "#/definitions/TransitionActor"
-        },
-        "contractVersion": {
-          "type": "string"
-        },
-        "currentState": {
-          "$ref": "#/definitions/FileRecordState"
-        },
-        "entityId": {
-          "type": "string",
-          "format": "uuid"
-        },
         "entityType": {
-          "type": "string"
-        },
-        "nextState": {
-          "$ref": "#/definitions/FileRecordState"
-        },
-        "requestId": {
           "type": "string",
-          "format": "uuid"
+          "const": "file_record"
         }
-      }
+      },
+      "$ref": "#/$defs/FileRecordTransitionRequest",
+      "required": [
+        "entityType"
+      ]
     }
   ],
-  "definitions": {
+  "$defs": {
+    "CalibrationSessionTransitionRequest": {
+      "type": "object",
+      "properties": {
+        "actionLabel": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "actor": {
+          "$ref": "#/$defs/TransitionActor"
+        },
+        "contractVersion": {
+          "type": "string"
+        },
+        "currentState": {
+          "$ref": "#/$defs/SessionState"
+        },
+        "entityId": {
+          "type": "string",
+          "format": "uuid"
+        },
+        "entityType": {
+          "type": "string"
+        },
+        "nextState": {
+          "$ref": "#/$defs/SessionState"
+        },
+        "requestId": {
+          "type": "string",
+          "format": "uuid"
+        }
+      },
+      "required": [
+        "contractVersion",
+        "requestId",
+        "entityType",
+        "entityId",
+        "currentState",
+        "nextState",
+        "actor"
+      ]
+    },
     "DataSourceState": {
       "type": "string",
       "enum": [
@@ -356,6 +159,49 @@
         "missing",
         "disabled",
         "reconnect_required"
+      ]
+    },
+    "DataSourceTransitionRequest": {
+      "type": "object",
+      "properties": {
+        "actionLabel": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "actor": {
+          "$ref": "#/$defs/TransitionActor"
+        },
+        "contractVersion": {
+          "type": "string"
+        },
+        "currentState": {
+          "$ref": "#/$defs/DataSourceState"
+        },
+        "entityId": {
+          "type": "string",
+          "format": "uuid"
+        },
+        "entityType": {
+          "type": "string"
+        },
+        "nextState": {
+          "$ref": "#/$defs/DataSourceState"
+        },
+        "requestId": {
+          "type": "string",
+          "format": "uuid"
+        }
+      },
+      "required": [
+        "contractVersion",
+        "requestId",
+        "entityType",
+        "entityId",
+        "currentState",
+        "nextState",
+        "actor"
       ]
     },
     "FileRecordState": {
@@ -369,8 +215,94 @@
         "protected"
       ]
     },
+    "FileRecordTransitionRequest": {
+      "type": "object",
+      "properties": {
+        "actionLabel": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "actor": {
+          "$ref": "#/$defs/TransitionActor"
+        },
+        "contractVersion": {
+          "type": "string"
+        },
+        "currentState": {
+          "$ref": "#/$defs/FileRecordState"
+        },
+        "entityId": {
+          "type": "string",
+          "format": "uuid"
+        },
+        "entityType": {
+          "type": "string"
+        },
+        "nextState": {
+          "$ref": "#/$defs/FileRecordState"
+        },
+        "requestId": {
+          "type": "string",
+          "format": "uuid"
+        }
+      },
+      "required": [
+        "contractVersion",
+        "requestId",
+        "entityType",
+        "entityId",
+        "currentState",
+        "nextState",
+        "actor"
+      ]
+    },
+    "InventorySessionTransitionRequest": {
+      "type": "object",
+      "properties": {
+        "actionLabel": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "actor": {
+          "$ref": "#/$defs/TransitionActor"
+        },
+        "contractVersion": {
+          "type": "string"
+        },
+        "currentState": {
+          "$ref": "#/$defs/SessionState"
+        },
+        "entityId": {
+          "type": "string",
+          "format": "uuid"
+        },
+        "entityType": {
+          "type": "string"
+        },
+        "nextState": {
+          "$ref": "#/$defs/SessionState"
+        },
+        "requestId": {
+          "type": "string",
+          "format": "uuid"
+        }
+      },
+      "required": [
+        "contractVersion",
+        "requestId",
+        "entityType",
+        "entityId",
+        "currentState",
+        "nextState",
+        "actor"
+      ]
+    },
     "PlanState": {
-      "description": "Ten-state plan lifecycle (spec 017 data-model.md `PlanState`). `paused` is surfaced here so the list/detail contracts can filter on it (R-Pause-1).",
+      "description": "Ten-state plan lifecycle (spec 017 data-model.md `PlanState`).\n`paused` is surfaced here so the list/detail contracts can filter on it (R-Pause-1).",
       "oneOf": [
         {
           "type": "string",
@@ -389,10 +321,51 @@
         {
           "description": "Mid-apply suspension (R-Pause-1). Written only by spec 025's executor.",
           "type": "string",
-          "enum": [
-            "paused"
-          ]
+          "const": "paused"
         }
+      ]
+    },
+    "PlanTransitionRequest": {
+      "type": "object",
+      "properties": {
+        "actionLabel": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "actor": {
+          "$ref": "#/$defs/TransitionActor"
+        },
+        "contractVersion": {
+          "type": "string"
+        },
+        "currentState": {
+          "$ref": "#/$defs/PlanState"
+        },
+        "entityId": {
+          "type": "string",
+          "format": "uuid"
+        },
+        "entityType": {
+          "type": "string"
+        },
+        "nextState": {
+          "$ref": "#/$defs/PlanState"
+        },
+        "requestId": {
+          "type": "string",
+          "format": "uuid"
+        }
+      },
+      "required": [
+        "contractVersion",
+        "requestId",
+        "entityType",
+        "entityId",
+        "currentState",
+        "nextState",
+        "actor"
       ]
     },
     "PreparedSourceState": {
@@ -403,6 +376,49 @@
         "ready",
         "stale",
         "retired"
+      ]
+    },
+    "PreparedSourceTransitionRequest": {
+      "type": "object",
+      "properties": {
+        "actionLabel": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "actor": {
+          "$ref": "#/$defs/TransitionActor"
+        },
+        "contractVersion": {
+          "type": "string"
+        },
+        "currentState": {
+          "$ref": "#/$defs/PreparedSourceState"
+        },
+        "entityId": {
+          "type": "string",
+          "format": "uuid"
+        },
+        "entityType": {
+          "type": "string"
+        },
+        "nextState": {
+          "$ref": "#/$defs/PreparedSourceState"
+        },
+        "requestId": {
+          "type": "string",
+          "format": "uuid"
+        }
+      },
+      "required": [
+        "contractVersion",
+        "requestId",
+        "entityType",
+        "entityId",
+        "currentState",
+        "nextState",
+        "actor"
       ]
     },
     "ProjectState": {
@@ -417,12 +433,98 @@
         "blocked"
       ]
     },
+    "ProjectTransitionRequest": {
+      "type": "object",
+      "properties": {
+        "actionLabel": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "actor": {
+          "$ref": "#/$defs/TransitionActor"
+        },
+        "contractVersion": {
+          "type": "string"
+        },
+        "currentState": {
+          "$ref": "#/$defs/ProjectState"
+        },
+        "entityId": {
+          "type": "string",
+          "format": "uuid"
+        },
+        "entityType": {
+          "type": "string"
+        },
+        "nextState": {
+          "$ref": "#/$defs/ProjectState"
+        },
+        "requestId": {
+          "type": "string",
+          "format": "uuid"
+        }
+      },
+      "required": [
+        "contractVersion",
+        "requestId",
+        "entityType",
+        "entityId",
+        "currentState",
+        "nextState",
+        "actor"
+      ]
+    },
     "ProjectionState": {
       "type": "string",
       "enum": [
         "current",
         "stale",
         "regenerating"
+      ]
+    },
+    "ProjectionTransitionRequest": {
+      "type": "object",
+      "properties": {
+        "actionLabel": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "actor": {
+          "$ref": "#/$defs/TransitionActor"
+        },
+        "contractVersion": {
+          "type": "string"
+        },
+        "currentState": {
+          "$ref": "#/$defs/ProjectionState"
+        },
+        "entityId": {
+          "type": "string",
+          "format": "uuid"
+        },
+        "entityType": {
+          "type": "string"
+        },
+        "nextState": {
+          "$ref": "#/$defs/ProjectionState"
+        },
+        "requestId": {
+          "type": "string",
+          "format": "uuid"
+        }
+      },
+      "required": [
+        "contractVersion",
+        "requestId",
+        "entityType",
+        "entityId",
+        "currentState",
+        "nextState",
+        "actor"
       ]
     },
     "SessionState": {
