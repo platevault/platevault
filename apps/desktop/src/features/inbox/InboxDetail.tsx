@@ -211,11 +211,15 @@ export function InboxDetail({ item, classification, fileMetadata }: InboxDetailP
 
   // ── Breakdown table ────────────────────────────────────────────────────────
 
+  // Fixed column widths (paired with table-layout: fixed on the <Table> below)
+  // so the columns stay put when switching between items with different content
+  // lengths instead of reflowing. Long paths wrap inside their cell.
+  const wrapCell = { wordBreak: 'break-word' as const };
   const breakdownColumns = [
-    { key: 'kind', label: 'Frame type', style: { width: 100 } },
-    { key: 'count', label: 'Files' },
-    { key: 'destination', label: 'Destination preview' },
-    { key: 'samples', label: 'Sample files' },
+    { key: 'kind', label: 'Frame type', style: { width: '16%' } },
+    { key: 'count', label: 'Files', style: { width: '10%' } },
+    { key: 'destination', label: 'Destination preview', style: { width: '42%' }, cellStyle: wrapCell },
+    { key: 'samples', label: 'Sample files', style: { width: '32%' }, cellStyle: wrapCell },
   ];
 
   const breakdownRows =
@@ -400,7 +404,11 @@ export function InboxDetail({ item, classification, fileMetadata }: InboxDetailP
 
       {breakdownRows.length > 0 && (
         <Section title="Frame type breakdown">
-          <Table columns={breakdownColumns} rows={breakdownRows} />
+          <Table
+            columns={breakdownColumns}
+            rows={breakdownRows}
+            style={{ tableLayout: 'fixed', width: '100%' }}
+          />
         </Section>
       )}
 

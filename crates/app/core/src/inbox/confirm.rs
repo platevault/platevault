@@ -237,7 +237,10 @@ pub async fn confirm(
                     let dest = result.relative_path;
                     let filename =
                         abs_path.file_name().and_then(|n| n.to_str()).unwrap_or("unknown.fits");
-                    let dest_with_file = format!("{dest}/{filename}");
+                    // Trim any trailing slash on the resolved directory so the
+                    // joined path is `dir/file`, not `dir//file` (cosmetic in the
+                    // plan preview; the OS normalises it on the actual move).
+                    let dest_with_file = format!("{}/{filename}", dest.trim_end_matches('/'));
                     let basename =
                         ev.relative_file_path.rsplit('/').next().unwrap_or(&ev.relative_file_path);
                     let item_name = format!("[{}] {basename}", ft.to_uppercase());
