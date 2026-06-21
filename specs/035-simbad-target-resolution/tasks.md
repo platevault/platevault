@@ -77,9 +77,22 @@ description: "Task list for SIMBAD Target Resolution (spec 035)"
 **Independent test**: ingest `M31`/`NGC 224`/`Andromeda` images → all group under one target; unknown `OBJECT` → pending, not mis-assigned.
 
 - [X] T025 [US4] `ingest_resolution` pending-queue + background resolver task (async, retry) in `crates/app/core/src/`
-- [X] T026 [US4] Wire the scan→ingest pipeline to enqueue `OBJECT` resolution and associate image → canonical target (cache hit inline, miss enqueued pending)
+- [ ] T026 [US4] Wire the scan→ingest pipeline to enqueue `OBJECT` resolution and associate image → canonical target (cache hit inline, miss enqueued pending) (re-opened 2026-06-21: was phantom — never implemented; re-scoped to T042)
 - [X] T027 [P] [US4] Register `target.resolved` / `target.resolve_batch.completed` event topics (replace `catalog.download.*`) in `apps/desktop/src/lib/events.ts` + the Rust event bus
-- [X] T028 [P] [US4] Test: alias-variant images group under one target; unknown/offline `OBJECT` → `unresolved`/pending, retryable, never fabricated
+- [ ] T028 [P] [US4] Test: alias-variant images group under one target; unknown/offline `OBJECT` → `unresolved`/pending, retryable, never fabricated (re-opened 2026-06-21: was phantom — never implemented; superseded by T045/T046)
+
+### Phase 6b: US4 — Ingest→Session→Target pipeline (re-opened 2026-06-21)
+
+*T026/T028 were phantom completions. The following tasks implement the actual US4 ingest pipeline.*
+
+- [ ] T040 [US4] Migration 0046: `ALTER TABLE acquisition_session ADD COLUMN canonical_target_id TEXT REFERENCES canonical_target(id)` + `has_observer_location INTEGER NOT NULL DEFAULT 0` + covering index `idx_acq_session_canonical_target` in `crates/persistence/db/migrations/` (additive, nullable; mirrors 0033).
+- [ ] T041 [US4] Ingest module in `crates/app/targets/` (implements FR-016): per applied light frame — upsert `file_record` (UNIQUE `(root_id, relative_path)`; R9 ensure/resolve `library_root` row for destination before insert), call `associate_or_enqueue` for FITS `OBJECT`, derive `session_key` (target/OBJECT, filter, binning, gain, observing-night; UTC fallback when observer location unset, `has_observer_location = 0`), upsert `acquisition_session` by `session_key` appending frame id to `frame_ids` (set-dedup), set `canonical_target_id` inline on cache hit else NULL.
+- [ ] T042 [US4] Wire ingest into `crates/app/inbox/src/plan_listener.rs::handle_plan_completed` as a sibling to `register_master_if_applicable`: `ingest_light_frames_if_applicable` processes `move`/`catalogue` items with `terminal_state == "applied"` (light frames only; calibration frames excluded); idempotent (R12); thread `EventBus` for `target.resolved` events post-drain.
+- [ ] T043 [US4] Spawn background `resolve_pending` drain on an interval in `apps/desktop/src-tauri/src/lib.rs::run_app`; rebuild resolver from `resolver_settings`; after each drain, back-fill `acquisition_session.canonical_target_id` for sessions whose frames just resolved (JOIN `file_record` → `ingest_resolution` → `canonical_target`).
+- [ ] T044 [US4] Surface `canonical_target_id` → `canonical_target.primary_designation` in the Sessions read path (`app_core::sessions::list_sessions` / inventory); JOIN `canonical_target` on `canonical_target_id`; regenerate Specta bindings only if `SessionSummary`/`SessionDetail` DTO gains a new field.
+- [ ] T045 [P] [US4] Layer-1 integration test: ingest two M31 light frames (seeded cache hit in FakeResolver) → one `acquisition_session` created, `frame_ids` length 2, `canonical_target_id` = seeded M31 target id, `list_sessions` returns `frame_count = 2` with target name.
+- [ ] T046 [P] [US4] Layer-1 integration test: ingest a frame with unknown `OBJECT` value → session created, `canonical_target_id` NULL, `ingest_resolution` entry in `pending` state; run `resolve_pending` with `FakeResolver` (returns the target on retry) → `canonical_target_id` back-filled on the session.
+- [ ] T047 [P] [US4] Update `specs/037-e2e-integration-testing/contracts/coverage-matrix.md` to map T045 (M31 cache-hit grouping Layer-1 test) and T046 (unknown-OBJECT pending + back-fill Layer-1 test).
 
 ---
 
@@ -112,7 +125,13 @@ description: "Task list for SIMBAD Target Resolution (spec 035)"
 - **Setup (T001–T003)** → **Foundational (T004–T009)** block everything.
 - **US1 (T010–T014)** and **US2 (T015–T018)** are both P1 and the MVP; US1 is testable with a fixture-seeded cache, US2 delivers the real bundled seed. Recommended: US2 seed before/with US1 for a real demo.
 - **US3 (T019–T024)** depends on Foundational + the `Resolver` trait; independent of US1/US2 UI.
-- **US4 (T025–T028)** depends on `target.resolve` (T020) for the queue's resolve step; otherwise independent.
+- **US4 (T025–T028, T040–T047)** depends on `target.resolve` (T020) for the queue's resolve step; otherwise independent.
+  - T040 (migration 0046) is a prerequisite for T041 and T044.
+  - T041 (ingest module) depends on T040; T042 (plan_listener hook) depends on T041.
+  - T043 (background drain) depends on T041 and T025 (ingest_resolution queue).
+  - T044 (Sessions read path) depends on T040.
+  - T045 and T046 (Layer-1 tests) depend on T042 and T043.
+  - T047 (coverage-matrix update) depends on T045 and T046.
 - **US5 (T029–T033)** depends on `target.search` (US1) for the filter and on settings/cache; override depends on cache (T008).
 - **Polish (T034–T039)** runs after the resolver surface replaces the catalog-download surface. Audit emission (T039) depends on `target.resolve` (T020) and the override action (T032).
 
@@ -121,6 +140,7 @@ description: "Task list for SIMBAD Target Resolution (spec 035)"
 - Foundational: T005, T007, T009 are `[P]` (different files) once T004/T006 exist.
 - US3: T022 (UI) ∥ T023/T024 (tests) after T019–T021.
 - Polish: T035, T036, T037 are `[P]`.
+- US4 Phase 6b: T041 ∥ T044 (both depend only on T040); T045 ∥ T046 (both depend on T042 + T043).
 
 ## Implementation Strategy (MVP first)
 
