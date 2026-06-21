@@ -39,10 +39,15 @@ use tokio::sync::broadcast;
 /// updates the corresponding `InboxItem` state.
 ///
 /// Call this once at application startup, after the `SqlitePool` is available.
+///
+/// The `EventBus` is cloned into the task so the spec-035 light-frame ingest
+/// (`handle_plan_completed` → `ingest_light_frames`) can emit `target.resolved`
+/// events for inline cache hits.
 pub fn start_inbox_plan_listener(pool: SqlitePool, bus: &EventBus) {
     let mut rx = bus.subscribe();
+    let bus = bus.clone();
     tokio::spawn(async move {
-        run_listener_loop(pool, &mut rx).await;
+        run_listener_loop(pool, bus, &mut rx).await;
     });
 }
 
@@ -50,12 +55,13 @@ pub fn start_inbox_plan_listener(pool: SqlitePool, bus: &EventBus) {
 
 async fn run_listener_loop(
     pool: SqlitePool,
+    bus: EventBus,
     rx: &mut broadcast::Receiver<audit::event_bus::EventEnvelope<serde_json::Value>>,
 ) {
     loop {
         match rx.recv().await {
             Ok(envelope) => {
-                if let Err(e) = handle_event(&pool, &envelope).await {
+                if let Err(e) = handle_event(&pool, &bus, &envelope).await {
                     tracing::warn!("inbox plan_listener: error handling event: {e}");
                 }
             }
@@ -79,6 +85,7 @@ async fn run_listener_loop(
 
 async fn handle_event(
     pool: &SqlitePool,
+    bus: &EventBus,
     envelope: &audit::event_bus::EventEnvelope<serde_json::Value>,
 ) -> Result<(), String> {
     match envelope.topic.as_str() {
@@ -86,7 +93,7 @@ async fn handle_event(
             if let Ok(payload) =
                 serde_json::from_value::<PlanApplyingCompleted>(envelope.payload.clone())
             {
-                handle_plan_completed(pool, &payload).await?;
+                handle_plan_completed(pool, bus, &payload).await?;
             }
         }
         TOPIC_PLAN_DISCARDED => {
@@ -102,6 +109,7 @@ async fn handle_event(
 /// Called when a plan reaches a terminal apply state.
 async fn handle_plan_completed(
     pool: &SqlitePool,
+    bus: &EventBus,
     payload: &PlanApplyingCompleted,
 ) -> Result<(), String> {
     let new_state = if payload.terminal_state == "applied" {
@@ -112,6 +120,13 @@ async fn handle_plan_completed(
         // (unorganized source). Registration happens before the resolved
         // transition so a failure leaves the item recoverable.
         register_master_if_applicable(pool, &payload.plan_id).await?;
+        // spec 035 US4/T042: fold the plan's applied light frames into
+        // acquisition sessions grouped by capture identity, linking the resolved
+        // canonical target (FR-016). Calibration frames are excluded (handled by
+        // the master path above). Idempotent (R12); a failure here is logged but
+        // does not block the inbox item's resolved transition — the frames can be
+        // re-ingested by re-applying or a future repair sweep.
+        ingest_light_frames_if_applicable(pool, bus, &payload.plan_id).await;
         "resolved"
     } else {
         // partially_applied, failed, cancelled → allow re-split
@@ -119,6 +134,30 @@ async fn handle_plan_completed(
     };
 
     transition_via_plan_id(pool, &payload.plan_id, new_state).await
+}
+
+/// Ingest the applied light frames of a completed plan into acquisition sessions
+/// (spec 035 US4/T042). A sibling of [`register_master_if_applicable`]: it runs
+/// for every applied plan, but [`app_core_targets::ingest_sessions::
+/// ingest_light_frames`] processes only `move`/`catalogue` items whose FITS
+/// header marks them as light frames, so non-inbox and calibration plans are
+/// no-ops. Errors are logged rather than propagated so a metadata/IO problem on
+/// one frame never blocks the inbox lifecycle transition.
+async fn ingest_light_frames_if_applicable(pool: &SqlitePool, bus: &EventBus, plan_id: &str) {
+    match app_core_targets::ingest_sessions::ingest_light_frames(pool, Some(bus), plan_id).await {
+        Ok(summary) if summary.ingested > 0 || summary.skipped > 0 => {
+            tracing::info!(
+                plan_id,
+                ingested = summary.ingested,
+                skipped = summary.skipped,
+                "inbox plan_listener: ingested light frames into acquisition sessions"
+            );
+        }
+        Ok(_) => {}
+        Err(e) => {
+            tracing::warn!(plan_id, "inbox plan_listener: light-frame ingest failed: {e:?}");
+        }
+    }
 }
 
 /// Register a calibration master at plan-apply completion (spec 041 US4/T032).
