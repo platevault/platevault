@@ -1505,3 +1505,137 @@
   color: var(--alm-text-muted);
   font-style: italic;
 }
+
+/* === PROJECT DETAIL === */
+
+/* Loading placeholder */
+.alm-project-detail__loading {
+  padding: var(--alm-sp-4);
+  color: var(--alm-text-muted);
+}
+
+/* Channel-drift banner: button row below the drift message */
+.alm-project-detail__drift-actions {
+  display: flex;
+  gap: var(--alm-sp-2);
+  margin-top: var(--alm-sp-2);
+}
+
+/* Rail: canonical target info block */
+.alm-project-detail__target-info {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+.alm-project-detail__target-name {
+  font-weight: var(--alm-weight-semibold);
+}
+.alm-project-detail__target-common {
+  font-size: var(--alm-text-xs);
+  color: var(--alm-text-muted);
+}
+
+/* Rail: channel chips */
+.alm-project-detail__channels {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--alm-sp-1);
+}
+.alm-project-detail__channel-chip {
+  padding: 2px 6px;
+  border-radius: var(--alm-radius-sm);
+  font-size: var(--alm-text-xs);
+}
+.alm-project-detail__channel-chip--inferred {
+  background: var(--alm-bg3);
+}
+.alm-project-detail__channel-chip--manual {
+  background: var(--alm-accent-bg);
+}
+/* "Auto" label appended to inferred channel chips */
+.alm-project-detail__channel-auto {
+  margin-left: var(--alm-sp-1);
+  opacity: 0.6;
+  font-size: 0.75em;
+}
+
+/* Sources section: empty state */
+.alm-project-detail__sources-empty {
+  padding: var(--alm-sp-2);
+  color: var(--alm-text-muted);
+}
+
+/* Sources section: individual source row */
+.alm-project-detail__source-row {
+  display: flex;
+  align-items: center;
+  gap: var(--alm-sp-2);
+  padding: var(--alm-sp-1) 0;
+  border-bottom: 1px solid var(--alm-border);
+}
+.alm-project-detail__source-name {
+  flex: 1;
+}
+.alm-project-detail__source-frames {
+  color: var(--alm-text-muted);
+  font-size: var(--alm-text-xs);
+}
+
+/* Shared footer bar: lifecycle actions and tool-launch CTA */
+.alm-project-detail__footer {
+  display: flex;
+  gap: var(--alm-sp-2);
+  padding: var(--alm-sp-3) var(--alm-sp-4);
+  border-top: 1px solid var(--alm-border);
+}
+/* Tool-launch footer also centers items vertically */
+.alm-project-detail__footer--tool {
+  align-items: center;
+}
+
+/* Tool-launch footer: "not configured" hint text */
+.alm-project-detail__tool-hint {
+  font-size: var(--alm-text-xs);
+  color: var(--alm-text-muted);
+}
+.alm-project-detail__tool-link {
+  color: var(--alm-accent);
+}
+
+/* Re-launch confirmation modal overlay (scrim + centering) */
+.alm-project-detail__modal-overlay {
+  position: absolute;
+  inset: 0;
+  /* theme-aware semi-transparent scrim: 50% of the text ink colour */
+  background: color-mix(in srgb, var(--alm-ink) 50%, transparent);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  z-index: 20;
+}
+/* Re-launch modal card */
+.alm-project-detail__modal-card {
+  background: var(--alm-surface);
+  border: 1px solid var(--alm-border);
+  border-radius: var(--alm-radius-lg);
+  padding: var(--alm-sp-6);
+  max-width: 360px;
+  width: 100%;
+}
+.alm-project-detail__modal-body {
+  margin-bottom: var(--alm-sp-4);
+}
+.alm-project-detail__modal-actions {
+  display: flex;
+  gap: var(--alm-sp-2);
+  justify-content: flex-end;
+}
+
+/* Edit-project pane full-pane overlay */
+.alm-project-detail__edit-overlay {
+  position: absolute;
+  inset: 0;
+  background: var(--alm-surface);
+  z-index: 10;
+  overflow: auto;
+}

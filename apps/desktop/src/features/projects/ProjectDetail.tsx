@@ -90,7 +90,7 @@ export function ProjectDetailContent({ projectId }: ProjectDetailContentProps) {
   if (loading && !project) {
     return (
       <DetailPane fill>
-        <div style={{ padding: 'var(--alm-sp-4)', color: 'var(--alm-text-muted)' }}>
+        <div className="alm-project-detail__loading">
           Loading project…
         </div>
       </DetailPane>
@@ -237,7 +237,7 @@ export function ProjectDetailContent({ projectId }: ProjectDetailContentProps) {
       {project.channelDrift?.hasNewSources && (
         <Banner variant="warn" role="status" aria-live="polite">
           <span>New sources added since last channel review.</span>
-          <div style={{ display: 'flex', gap: 'var(--alm-sp-2)', marginTop: 'var(--alm-sp-2)' }}>
+          <div className="alm-project-detail__drift-actions">
             <Btn size="sm" variant="primary" onClick={handleReinfer} disabled={channelWorking}>
               Re-infer channels
             </Btn>
@@ -266,19 +266,14 @@ export function ProjectDetailContent({ projectId }: ProjectDetailContentProps) {
             {project.canonicalTarget && (
               <RailCard title="Target">
                 <div
-                  style={{ display: 'flex', flexDirection: 'column', gap: '2px' }}
+                  className="alm-project-detail__target-info"
                   data-testid="project-canonical-target"
                 >
-                  <span style={{ fontWeight: 600 }}>
+                  <span className="alm-project-detail__target-name">
                     {project.canonicalTarget.primaryDesignation}
                   </span>
                   {project.canonicalTarget.commonName && (
-                    <span
-                      style={{
-                        fontSize: 'var(--alm-text-xs)',
-                        color: 'var(--alm-text-muted)',
-                      }}
-                    >
+                    <span className="alm-project-detail__target-common">
                       {project.canonicalTarget.commonName}
                     </span>
                   )}
@@ -287,23 +282,18 @@ export function ProjectDetailContent({ projectId }: ProjectDetailContentProps) {
             )}
             {project.channels && project.channels.length > 0 && (
               <RailCard title="Channels">
-                <div style={{ display: 'flex', flexWrap: 'wrap', gap: 'var(--alm-sp-1)' }}>
+                <div className="alm-project-detail__channels">
                   {project.channels.map((ch) => (
                     <span
                       key={ch.label}
                       title={ch.source === 'inferred' ? 'Auto-inferred' : 'Manually added'}
-                      style={{
-                        padding: '2px 6px',
-                        borderRadius: 4,
-                        fontSize: 'var(--alm-text-xs)',
-                        background: ch.source === 'inferred'
-                          ? 'var(--alm-bg3)'
-                          : 'var(--alm-accent-bg)',
-                      }}
+                      className={ch.source === 'inferred'
+                        ? 'alm-project-detail__channel-chip alm-project-detail__channel-chip--inferred'
+                        : 'alm-project-detail__channel-chip alm-project-detail__channel-chip--manual'}
                     >
                       {ch.label}
                       {ch.source === 'inferred' && (
-                        <span style={{ marginLeft: 4, opacity: 0.6, fontSize: '0.75em' }}>Auto</span>
+                        <span className="alm-project-detail__channel-auto">Auto</span>
                       )}
                     </span>
                   ))}
@@ -316,27 +306,21 @@ export function ProjectDetailContent({ projectId }: ProjectDetailContentProps) {
         {/* Sources section */}
         <Section title="Sources" count={project.sources.length}>
           {project.sources.length === 0 ? (
-            <div style={{ padding: 'var(--alm-sp-2)', color: 'var(--alm-text-muted)' }}>
+            <div className="alm-project-detail__sources-empty">
               No sources linked yet.
             </div>
           ) : (
             project.sources.map((src) => (
               <div
                 key={src.inventoryId}
-                style={{
-                  display: 'flex',
-                  alignItems: 'center',
-                  gap: 'var(--alm-sp-2)',
-                  padding: 'var(--alm-sp-1) 0',
-                  borderBottom: '1px solid var(--alm-border)',
-                }}
+                className="alm-project-detail__source-row"
               >
                 {src.filter && (
                   <Pill variant={sourceTypeVariant(src.filter)}>{src.filter}</Pill>
                 )}
-                <span style={{ flex: 1 }}>{src.name || src.inventoryId}</span>
+                <span className="alm-project-detail__source-name">{src.name || src.inventoryId}</span>
                 {src.frames > 0 && (
-                  <span style={{ color: 'var(--alm-text-muted)', fontSize: 'var(--alm-text-xs)' }}>
+                  <span className="alm-project-detail__source-frames">
                     {src.frames} frames
                   </span>
                 )}
@@ -369,12 +353,7 @@ export function ProjectDetailContent({ projectId }: ProjectDetailContentProps) {
       {/* Lifecycle footer actions (spec 009 US3-3) */}
       {footerActions.length > 0 && (
         <div
-          style={{
-            display: 'flex',
-            gap: 'var(--alm-sp-2)',
-            padding: 'var(--alm-sp-3) var(--alm-sp-4)',
-            borderTop: '1px solid var(--alm-border)',
-          }}
+          className="alm-project-detail__footer"
           data-testid="lifecycle-footer-actions"
         >
           {footerActions.map((action) => (
@@ -395,13 +374,7 @@ export function ProjectDetailContent({ projectId }: ProjectDetailContentProps) {
       {/* spec 011: Open in {tool} CTA */}
       {toolId && (
         <div
-          style={{
-            display: 'flex',
-            alignItems: 'center',
-            gap: 'var(--alm-sp-2)',
-            padding: 'var(--alm-sp-3) var(--alm-sp-4)',
-            borderTop: '1px solid var(--alm-border)',
-          }}
+          className="alm-project-detail__footer alm-project-detail__footer--tool"
           data-testid="tool-launch-footer"
         >
           <Btn
@@ -420,11 +393,9 @@ export function ProjectDetailContent({ projectId }: ProjectDetailContentProps) {
             {launchState.working ? 'Launching…' : `Open in ${projectToolStr}`}
           </Btn>
           {launchDisabledReason === 'not_configured' && (
-            <span
-              style={{ fontSize: 'var(--alm-text-xs)', color: 'var(--alm-text-muted)' }}
-            >
+            <span className="alm-project-detail__tool-hint">
               Tool path not configured —{' '}
-              <a href="#/settings?pane=tools" style={{ color: 'var(--alm-accent)' }}>
+              <a href="#/settings?pane=tools" className="alm-project-detail__tool-link">
                 Configure
               </a>
             </span>
@@ -438,31 +409,14 @@ export function ProjectDetailContent({ projectId }: ProjectDetailContentProps) {
           role="dialog"
           aria-modal="true"
           aria-label={`${projectToolStr} may already be running`}
-          style={{
-            position: 'absolute',
-            inset: 0,
-            background: 'rgba(0,0,0,0.5)',
-            display: 'flex',
-            alignItems: 'center',
-            justifyContent: 'center',
-            zIndex: 20,
-          }}
+          className="alm-project-detail__modal-overlay"
           data-testid="relaunch-modal"
         >
-          <div
-            style={{
-              background: 'var(--alm-surface)',
-              border: '1px solid var(--alm-border)',
-              borderRadius: '8px',
-              padding: 'var(--alm-sp-6)',
-              maxWidth: '360px',
-              width: '100%',
-            }}
-          >
-            <p style={{ marginBottom: 'var(--alm-sp-4)' }}>
+          <div className="alm-project-detail__modal-card">
+            <p className="alm-project-detail__modal-body">
               {projectToolStr} may already be open for this project. Open another instance?
             </p>
-            <div style={{ display: 'flex', gap: 'var(--alm-sp-2)', justifyContent: 'flex-end' }}>
+            <div className="alm-project-detail__modal-actions">
               <Btn size="sm" variant="ghost" onClick={dismissPriorWarning} data-testid="relaunch-cancel">
                 Cancel
               </Btn>
@@ -481,15 +435,7 @@ export function ProjectDetailContent({ projectId }: ProjectDetailContentProps) {
 
       {/* Edit pane overlay */}
       {editOpen && (
-        <div
-          style={{
-            position: 'absolute',
-            inset: 0,
-            background: 'var(--alm-surface)',
-            zIndex: 10,
-            overflow: 'auto',
-          }}
-        >
+        <div className="alm-project-detail__edit-overlay">
           <EditProjectPane project={project} onClose={() => setEditOpen(false)} />
         </div>
       )}
