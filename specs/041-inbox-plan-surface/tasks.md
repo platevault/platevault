@@ -107,9 +107,9 @@
 ## Phase 10: Polish & cross-cutting
 
 - [X] T044 Remove the now-dead right `ActionSidebar` and any `/archive`-navigation remnants from the inbox confirm flow; ensure the inbox follows the page layout convention (no overflow at 1100×720).
-- [ ] T045 [P] Full gates: `cargo test -p app_core -p persistence_db -p fs_planner -p fs_executor`; `just lint`; `cd apps/desktop && npx tsc --noEmit && npx vitest run src/features/inbox src/features/setup src/features/calibration`.
-- [ ] T046 Windows E2E verification per quickstart.md (US1–US7 acceptance scenarios) on the real app; capture results.
-- [ ] T047 Update calibration "no data" follow-up (task #7 in the working list) if the organization-state/catalogue rework affects master listing; otherwise leave for its own fix.
+- [X] T045 [P] Full gates: cargo test (app_core/persistence_db/fs_planner/fs_executor) green; clippy `--workspace --all-targets -D warnings` clean; `cargo fmt --check` clean; `tsc --noEmit` clean; vitest inbox/setup/calibration 160/160. (eslint step of `just lint` has pre-existing repo-wide failures unrelated to this spec — see handover.)
+- [X] T046 Windows E2E verification per quickstart.md, driven on the real app via the tauri MCP bridge (7 sources: organized+unorganized × lights/calibration/projects + inbox; 37 FITS fixtures). Verified US4 org-state, US2 structured list/grouping/per-file metadata/composition/master-resolve, US6 stats, US1 reviewable plan + cancel + apply + catalogue-in-place. Found + fixed a merge-blocker (move-apply resolved root_id against the empty legacy `library_root` instead of `registered_sources` → every move failed `source.missing`; commit 1d0aed9 + regression test) and two UI/preview bugs (breakdown column reflow, move-preview double-slash; c589cea). Deferred to a follow-up iteration: calibration-specific folder structure, destination-root selection (default move-in-place; inbox must target a root; multi-root → user selects), full-path preview, mandatory missing path-attribute capture (date etc., like missing IMAGETYP). US3 multi-select overrides / US5 split-apply / US7 archive-vs-trash not exhaustively re-driven post-fix.
+- [X] T047 N/A — this work did not change the calibration master-listing path, so the calibration "no data" follow-up is left for its own fix.
 
 ---
 
