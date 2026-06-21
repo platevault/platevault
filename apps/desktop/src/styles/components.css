@@ -2812,3 +2812,700 @@
   padding-left: 18px;
   font-size: var(--alm-text-xs);
 }
+
+/* === SETUP STEP SCAN === */
+
+/* ── StepScan root ───────────────────────────────────────────────────────── */
+
+.alm-setup-scan {
+  display: flex;
+  flex-direction: column;
+  flex: 1;
+  min-height: 0;
+}
+
+.alm-setup-scan__empty-msg {
+  font-size: var(--alm-text-sm);
+  color: var(--alm-text-muted);
+}
+
+.alm-setup-scan__scroll {
+  flex: 1;
+  min-height: 0;
+  overflow-y: auto;
+}
+
+.alm-setup-scan__summary {
+  font-size: var(--alm-text-sm);
+  color: var(--alm-text-secondary);
+  margin: var(--alm-sp-3) 0 0;
+  flex-shrink: 0;
+}
+
+/* ── SourceSummary card ──────────────────────────────────────────────────── */
+
+.alm-setup-scan__card {
+  border: 1px solid var(--alm-border);
+  border-radius: var(--alm-radius-md);
+  margin-bottom: var(--alm-sp-3);
+  background: var(--alm-surface);
+  overflow: hidden;
+}
+
+/* ── Card header row ─────────────────────────────────────────────────────── */
+
+.alm-setup-scan__header {
+  display: flex;
+  align-items: center;
+  gap: var(--alm-sp-3);
+  padding: var(--alm-sp-4);
+  /* cursor is set inline because it depends on runtime isExpandable state */
+  user-select: none;
+}
+
+.alm-setup-scan__chevron {
+  font-size: var(--alm-text-xs);
+  color: var(--alm-text-muted);
+  flex-shrink: 0;
+  line-height: 1;
+}
+
+.alm-setup-scan__path {
+  flex: 1;
+  font-weight: var(--alm-weight-medium);
+  font-size: var(--alm-text-sm);
+  color: var(--alm-text);
+  word-break: break-all;
+}
+
+.alm-setup-scan__kind {
+  font-size: var(--alm-text-xs);
+  color: var(--alm-text-muted);
+  flex-shrink: 0;
+}
+
+.alm-setup-scan__count {
+  font-size: var(--alm-text-xs);
+  color: var(--alm-text-secondary);
+  flex-shrink: 0;
+}
+
+/* ── Transient state paragraphs ──────────────────────────────────────────── */
+
+.alm-setup-scan__msg {
+  font-size: var(--alm-text-sm);
+  margin: 0;
+  padding: 0 var(--alm-sp-4) var(--alm-sp-4);
+}
+
+.alm-setup-scan__msg--error {
+  color: var(--alm-danger);
+}
+
+.alm-setup-scan__msg--scanning {
+  color: var(--alm-text-secondary);
+}
+
+.alm-setup-scan__msg--empty {
+  color: var(--alm-text-muted);
+}
+
+/* ── Collapsible detail panel ────────────────────────────────────────────── */
+
+.alm-setup-scan__detail {
+  padding: 0 var(--alm-sp-4) var(--alm-sp-4);
+}
+
+/* Kind-count chip strip */
+.alm-setup-scan__chips {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--alm-sp-2);
+  margin-bottom: var(--alm-sp-3);
+}
+
+.alm-setup-scan__chip {
+  font-size: var(--alm-text-xs);
+  background: var(--alm-bg3);
+  border: 1px solid var(--alm-border);
+  border-radius: var(--alm-radius-sm);
+  padding: 2px var(--alm-sp-2);
+  color: var(--alm-text-secondary);
+}
+
+/* Scrollable table wrapper */
+.alm-setup-scan__table-wrap {
+  max-height: 280px;
+  overflow-y: auto;
+  border: 1px solid var(--alm-border-subtle);
+  border-radius: var(--alm-radius-sm);
+}
+
+/* Detection table */
+.alm-setup-scan__table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: var(--alm-text-xs);
+  color: var(--alm-text-secondary);
+}
+
+.alm-setup-scan__thead-row {
+  position: sticky;
+  top: 0;
+  background: var(--alm-surface-raised);
+  color: var(--alm-text);
+}
+
+.alm-setup-scan__cell {
+  padding: var(--alm-sp-1) var(--alm-sp-2);
+  text-align: left;
+}
+
+.alm-setup-scan__cell--path {
+  padding: var(--alm-sp-1) var(--alm-sp-2);
+  text-align: left;
+  word-break: break-all;
+}
+
+.alm-setup-scan__tbody-row {
+  border-top: 1px solid var(--alm-border-subtle);
+}
+
+.alm-setup-scan__path-cell-inner {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--alm-sp-2);
+}
+
+/* === SETUP STEP CONFIRM === */
+
+/* Root stack */
+.alm-setup-confirm {
+  display: flex;
+  flex-direction: column;
+  gap: var(--alm-sp-5);
+}
+
+/* Section wrapper */
+.alm-setup-confirm__section {
+  display: flex;
+  flex-direction: column;
+  gap: var(--alm-sp-3);
+}
+
+/* Section title */
+.alm-setup-confirm__section-title {
+  font-weight: var(--alm-weight-semibold);
+  font-size: var(--alm-text-sm);
+  color: var(--alm-text);
+}
+
+/* Kind list (sources grouped by kind) */
+.alm-setup-confirm__kind-list {
+  display: flex;
+  flex-direction: column;
+  gap: var(--alm-sp-4);
+}
+
+/* Per-kind group */
+.alm-setup-confirm__kind-group {
+  display: flex;
+  flex-direction: column;
+  gap: var(--alm-sp-1);
+}
+
+/* Kind category label (e.g. "LIGHTS", "DARKS") */
+.alm-setup-confirm__kind-label {
+  font-size: var(--alm-text-2xs);
+  font-weight: var(--alm-weight-semibold);
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  color: var(--alm-text-muted);
+}
+
+/* A single folder row or tool row */
+.alm-setup-confirm__row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--alm-sp-3);
+}
+
+/* Folder path text — truncates long paths */
+.alm-setup-confirm__path {
+  flex: 1;
+  min-width: 0;
+  font-size: var(--alm-text-sm);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+/* Scan depth label ("Recursive" / "Single level") */
+.alm-setup-confirm__scan-depth {
+  white-space: nowrap;
+  font-size: var(--alm-text-xs);
+  color: var(--alm-text-muted);
+}
+
+/* Empty-state message (no sources / no tools) */
+.alm-setup-confirm__empty {
+  color: var(--alm-text-muted);
+  font-size: var(--alm-text-sm);
+}
+
+/* Tool list */
+.alm-setup-confirm__tool-list {
+  display: flex;
+  flex-direction: column;
+  gap: var(--alm-sp-2);
+}
+
+/* Tool name label */
+.alm-setup-confirm__tool-name {
+  font-weight: var(--alm-weight-semibold);
+}
+
+/* Tool path + pill wrapper */
+.alm-setup-confirm__tool-path-wrap {
+  display: flex;
+  align-items: center;
+  gap: var(--alm-sp-2);
+  min-width: 0;
+}
+
+/* Tool path text — truncates */
+.alm-setup-confirm__tool-path {
+  font-size: var(--alm-text-xs);
+  color: var(--alm-text-muted);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+/* What-happens-next bullet list */
+.alm-setup-confirm__next-list {
+  margin: 0;
+  padding-left: var(--alm-sp-5);
+  display: flex;
+  flex-direction: column;
+  gap: var(--alm-sp-1);
+  font-size: var(--alm-text-sm);
+}
+
+/* Muted note (safety reassurance + submitting message) */
+.alm-setup-confirm__note {
+  font-size: var(--alm-text-sm);
+  color: var(--alm-text-muted);
+}
+
+/* === SETUP STEP SOURCE FOLDERS === */
+
+/*
+ * Token policy: all colors reference --alm-* tokens from tokens.css.
+ * Component-intrinsic 1px borders are raw geometry, not spacing scale.
+ * Dynamic border/background states are driven by data-attributes already
+ * present in the JSX (data-required, data-requirement-met).
+ * Row separators and header separators use :last-child / :has() selectors
+ * to avoid requiring extra data-attributes or JSX changes.
+ */
+
+/* ── Root container ── */
+.alm-step-sources {
+  display: flex;
+  flex-direction: column;
+  gap: var(--alm-sp-3);
+}
+
+/* ── Intro paragraph ── */
+.alm-step-sources__intro {
+  margin: 0;
+  font-size: var(--alm-text-sm);
+  line-height: var(--alm-leading-normal);
+  color: var(--alm-text-secondary);
+}
+
+/* ── Groups wrapper ── */
+.alm-step-sources__groups {
+  display: flex;
+  flex-direction: column;
+  gap: var(--alm-sp-2);
+}
+
+/* ── Group card — neutral (optional or default) ── */
+.alm-step-sources__group {
+  border: 1px solid var(--alm-border);
+  border-radius: var(--alm-radius-sm);
+  background: var(--alm-bg);
+  overflow: hidden;
+}
+
+/* ── Group card — required + met (ok accent) ── */
+.alm-step-sources__group[data-required="true"][data-requirement-met="true"] {
+  border-color: var(--alm-ok-border);
+  background: var(--alm-ok-bg);
+}
+
+/* ── Group card — required + unmet (warn accent) ── */
+.alm-step-sources__group[data-required="true"][data-requirement-met="false"] {
+  border-color: var(--alm-warn-border);
+  background: var(--alm-warn-bg);
+}
+
+/* ── Group header row ── */
+.alm-step-sources__group-header {
+  display: flex;
+  align-items: center;
+  gap: var(--alm-sp-2);
+  padding: var(--alm-sp-1) var(--alm-sp-2);
+  min-height: var(--alm-row-height);
+  /* No bottom border when the group has no folder rows */
+  border-bottom: none;
+}
+
+/* Header separator: shown only when folder rows exist below it */
+.alm-step-sources__group:has(.alm-step-sources__row) .alm-step-sources__group-header {
+  border-bottom: 1px solid var(--alm-border-subtle);
+}
+
+/* Header separator colour matches the card accent when required */
+.alm-step-sources__group[data-required="true"][data-requirement-met="true"]:has(.alm-step-sources__row)
+  .alm-step-sources__group-header {
+  border-bottom-color: var(--alm-ok-border);
+}
+.alm-step-sources__group[data-required="true"][data-requirement-met="false"]:has(.alm-step-sources__row)
+  .alm-step-sources__group-header {
+  border-bottom-color: var(--alm-warn-border);
+}
+
+/* ── Header label (kind name) ── */
+.alm-step-sources__group-header-label {
+  font-size: var(--alm-text-xs);
+  font-weight: var(--alm-weight-semibold);
+  color: var(--alm-text-secondary);
+}
+
+/* ── Header count badge ── */
+.alm-step-sources__group-header-count {
+  font-size: var(--alm-text-2xs);
+  color: var(--alm-text-muted);
+}
+
+/* ── "optional" label ── */
+.alm-step-sources__group-header-optional {
+  font-size: var(--alm-text-2xs);
+  color: var(--alm-text-faint);
+}
+
+/* ── Header spacer (pushes Add button to the right) ── */
+.alm-step-sources__group-header-spacer {
+  flex: 1;
+}
+
+/* ── Source row ── */
+.alm-step-sources__row {
+  padding: var(--alm-sp-1) var(--alm-sp-2);
+  background: var(--alm-surface-raised);
+}
+
+/* Row separator: all rows except the last get a bottom border */
+.alm-step-sources__row:not(:last-child) {
+  border-bottom: 1px solid var(--alm-border-subtle);
+}
+
+/* ── Row main line (path + controls) ── */
+.alm-step-sources__row-main {
+  display: flex;
+  align-items: center;
+  gap: var(--alm-sp-2);
+  min-height: var(--alm-row-height);
+}
+
+/* ── Path text ── */
+.alm-step-sources__row-path {
+  flex: 1;
+  min-width: 0;
+  font-size: var(--alm-text-sm);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+/* ── Selects (org-state + scan-depth) ── */
+.alm-step-sources__org-select,
+.alm-step-sources__depth-select {
+  font-size: var(--alm-text-2xs);
+  background: var(--alm-surface);
+  color: var(--alm-text);
+  border: 1px solid var(--alm-border);
+  border-radius: var(--alm-radius-sm);
+  padding: 1px var(--alm-sp-1);
+  transition: border-color var(--alm-transition-fast);
+}
+
+.alm-step-sources__org-select:focus,
+.alm-step-sources__depth-select:focus {
+  outline: none;
+  border-color: var(--alm-accent);
+}
+
+/* ── Inline validation error ── */
+.alm-step-sources__row-error {
+  margin-top: var(--alm-sp-0);
+  font-size: var(--alm-text-2xs);
+  color: var(--alm-danger);
+}
+
+/* ── Picker error (below Add button) ── */
+.alm-step-sources__picker-error {
+  font-size: var(--alm-text-2xs);
+  color: var(--alm-danger);
+}
+
+/* === SETUP STEP TOOLS === */
+
+/* Root container */
+.alm-step-tools {
+  display: flex;
+  flex-direction: column;
+  gap: var(--alm-sp-3);
+}
+
+/* Intro paragraph */
+.alm-step-tools__intro {
+  margin: 0;
+  font-size: var(--alm-text-sm);
+  line-height: var(--alm-leading-normal);
+  color: var(--alm-text-secondary);
+}
+
+/* Tool list wrapper */
+.alm-step-tools__list {
+  display: flex;
+  flex-direction: column;
+  gap: var(--alm-sp-2);
+}
+
+/* Footer note */
+.alm-step-tools__note {
+  margin: 0;
+  font-size: var(--alm-text-xs);
+  color: var(--alm-text-faint);
+}
+
+/* Individual tool card */
+.alm-step-tools__card {
+  border: 1px solid var(--alm-border);
+  border-radius: var(--alm-radius-sm);
+  background: var(--alm-bg);
+  overflow: hidden;
+}
+
+/* Card header row: name + pill + description + toggle */
+.alm-step-tools__header {
+  display: flex;
+  align-items: center;
+  gap: var(--alm-sp-3);
+  padding: var(--alm-sp-2) var(--alm-sp-3);
+  min-height: var(--alm-row-height);
+}
+
+/* Left info column (name+pill row + description) */
+.alm-step-tools__tool-info {
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  gap: var(--alm-sp-0);
+}
+
+/* Name + detected-pill inline row */
+.alm-step-tools__name-row {
+  display: flex;
+  align-items: center;
+  gap: var(--alm-sp-2);
+}
+
+/* Tool display name */
+.alm-step-tools__tool-name {
+  font-size: var(--alm-text-sm);
+  font-weight: var(--alm-weight-semibold);
+  color: var(--alm-text);
+}
+
+/* Tool description */
+.alm-step-tools__tool-desc {
+  font-size: var(--alm-text-xs);
+  color: var(--alm-text-muted);
+}
+
+/* Right controls column (redetect btn + toggle, stacked) */
+.alm-step-tools__controls {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-end;
+  gap: var(--alm-sp-1);
+}
+
+/* Redetect button + toggle inline row */
+.alm-step-tools__actions {
+  display: flex;
+  align-items: center;
+  gap: var(--alm-sp-2);
+}
+
+/* "No installation found" feedback text */
+.alm-step-tools__not-found {
+  font-size: var(--alm-text-xs);
+  color: var(--alm-text-muted);
+}
+
+/* Executable path picker row (shown when tool is enabled) */
+.alm-step-tools__path-row {
+  display: flex;
+  align-items: center;
+  gap: var(--alm-sp-2);
+  padding: var(--alm-sp-2) var(--alm-sp-3);
+  border-top: 1px solid var(--alm-border-subtle);
+  background: var(--alm-surface-raised);
+}
+
+/* "EXECUTABLE" label */
+.alm-step-tools__path-label {
+  font-size: var(--alm-text-2xs);
+  font-weight: var(--alm-weight-semibold);
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  color: var(--alm-text-muted);
+}
+
+/* Path display span (static layout; color applied inline — dynamic on path presence) */
+.alm-step-tools__path-value {
+  flex: 1;
+  min-width: 0;
+  font-size: var(--alm-text-sm);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+/* === WIZARD SHELL === */
+
+/* Root shell: full-height flex column */
+.alm-wizard {
+  display: flex;
+  flex-direction: column;
+  flex: 1;
+  overflow: hidden;
+}
+
+/* ── Rail progress bar (sidebar layout mode) ── */
+.alm-wizard__rail {
+  display: flex;
+  align-items: center;
+  gap: var(--alm-sp-3);
+  padding: var(--alm-sp-4) var(--alm-sp-5);
+  border-bottom: 1px solid var(--alm-border);
+  flex-shrink: 0;
+}
+
+/* Step row inside the rail */
+.alm-wizard__step {
+  display: flex;
+  align-items: center;
+  gap: var(--alm-sp-2);
+}
+
+/* Numbered badge — base geometry; color/background applied inline (dynamic per step state) */
+.alm-wizard__step-badge {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 20px;
+  height: 20px;
+  border-radius: 50%;
+  font-size: var(--alm-text-xs);
+  font-weight: var(--alm-weight-semibold);
+}
+
+/* Step label — color applied inline (dynamic per step state) */
+.alm-wizard__step-label {
+  font-size: var(--alm-text-xs);
+}
+
+/* Connector line between steps */
+.alm-wizard__step-connector {
+  width: 16px;
+  height: 1px;
+  background: var(--alm-border-subtle);
+  display: inline-block;
+}
+
+/* ── Sidebar layout (project wizard) ── */
+.alm-wizard__body--sidebar {
+  display: flex;
+  flex: 1;
+  min-height: 0;
+  overflow: hidden;
+}
+
+.alm-wizard__content--sidebar {
+  flex: 1;
+  min-width: 0;
+  overflow: auto;
+  padding: var(--alm-sp-5);
+}
+
+.alm-wizard__summary {
+  width: var(--alm-rail-width);
+  border-left: 1px solid var(--alm-border);
+  padding: var(--alm-sp-5);
+  overflow: auto;
+  background: var(--alm-surface);
+}
+
+/* ── Centered layout (setup wizard) ── */
+.alm-wizard__scroll {
+  flex: 1;
+  min-height: 0;
+  overflow: auto;
+  padding: var(--alm-sp-6) var(--alm-sp-5);
+}
+
+.alm-wizard__content--centered {
+  max-width: 720px;
+  margin: 0 auto;
+}
+
+/* Inline step bar rendered inside the centered scroll area */
+.alm-wizard__steps-bar {
+  display: flex;
+  gap: var(--alm-sp-1);
+  margin-bottom: var(--alm-sp-6);
+}
+
+/* Individual step card — geometry only; background/color/fontWeight applied inline (dynamic) */
+.alm-wizard__steps-card {
+  flex: 1;
+  padding: var(--alm-sp-2) var(--alm-sp-3);
+  border: 1px solid var(--alm-border);
+  border-radius: var(--alm-radius-sm);
+  font-size: var(--alm-text-xs);
+  text-align: center;
+}
+
+/* Pinned navigation footer */
+.alm-wizard__footer {
+  border-top: 1px solid var(--alm-border);
+  padding: var(--alm-sp-4) var(--alm-sp-5);
+  flex-shrink: 0;
+  background: var(--alm-surface);
+}
+
+.alm-wizard__footer-inner {
+  max-width: 720px;
+  margin: 0 auto;
+  display: flex;
+  align-items: center;
+  gap: var(--alm-sp-4);
+}

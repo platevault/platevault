@@ -120,7 +120,6 @@ function SourceSummary({ state }: SourceSummaryProps) {
   const sortedItems = [...items].sort(
     (a, b) => a.lane.localeCompare(b.lane) || a.relativePath.localeCompare(b.relativePath),
   );
-  const cell = { padding: 'var(--alm-sp-1) var(--alm-sp-2)', textAlign: 'left' } as const;
 
   // The detail panel (chips + table) is expandable only when scan is done and
   // there are items to show.
@@ -135,13 +134,7 @@ function SourceSummary({ state }: SourceSummaryProps) {
   return (
     <div
       data-testid={`scan-source-${source.path}`}
-      style={{
-        border: '1px solid var(--alm-border)',
-        borderRadius: 'var(--alm-radius-md)',
-        marginBottom: 'var(--alm-sp-3)',
-        background: 'var(--alm-surface)',
-        overflow: 'hidden',
-      }}
+      className="alm-setup-scan__card"
     >
       {/* ── Always-visible header row ─────────────────────────────────────── */}
       <div
@@ -159,63 +152,32 @@ function SourceSummary({ state }: SourceSummaryProps) {
               }
             : undefined
         }
-        style={{
-          display: 'flex',
-          alignItems: 'center',
-          gap: 'var(--alm-sp-3)',
-          padding: 'var(--alm-sp-4)',
-          cursor: isExpandable ? 'pointer' : 'default',
-          userSelect: 'none',
-        }}
+        className="alm-setup-scan__header"
+        style={{ cursor: isExpandable ? 'pointer' : 'default' }}
       >
         {/* Chevron — only shown when expandable */}
         {isExpandable && (
           <span
             aria-hidden="true"
-            style={{
-              fontSize: 'var(--alm-text-xs)',
-              color: 'var(--alm-text-muted)',
-              flexShrink: 0,
-              lineHeight: 1,
-            }}
+            className="alm-setup-scan__chevron"
           >
             {expanded ? '▾' : '▸'}
           </span>
         )}
 
         {/* Source path */}
-        <span
-          style={{
-            flex: 1,
-            fontWeight: 'var(--alm-weight-medium)',
-            fontSize: 'var(--alm-text-sm)',
-            color: 'var(--alm-text)',
-            wordBreak: 'break-all',
-          }}
-        >
+        <span className="alm-setup-scan__path">
           {source.path}
         </span>
 
         {/* Kind label (muted, small) */}
-        <span
-          style={{
-            fontSize: 'var(--alm-text-xs)',
-            color: 'var(--alm-text-muted)',
-            flexShrink: 0,
-          }}
-        >
+        <span className="alm-setup-scan__kind">
           {source.kind.replace('_', ' ')}
         </span>
 
         {/* Compact count summary */}
         {countSummary && (
-          <span
-            style={{
-              fontSize: 'var(--alm-text-xs)',
-              color: 'var(--alm-text-secondary)',
-              flexShrink: 0,
-            }}
-          >
+          <span className="alm-setup-scan__count">
             {countSummary}
           </span>
         )}
@@ -227,27 +189,13 @@ function SourceSummary({ state }: SourceSummaryProps) {
       {/* ── Always-visible transient states (below header, outside collapse) ── */}
       {/* These are small/short and don't benefit from collapse. */}
       {phase === 'error' && error && (
-        <p
-          style={{
-            fontSize: 'var(--alm-text-sm)',
-            color: 'var(--alm-text-error)',
-            margin: 0,
-            padding: '0 var(--alm-sp-4) var(--alm-sp-4)',
-          }}
-        >
+        <p className="alm-setup-scan__msg alm-setup-scan__msg--error">
           {error}
         </p>
       )}
 
       {phase === 'scanning' && (
-        <p
-          style={{
-            fontSize: 'var(--alm-text-sm)',
-            color: 'var(--alm-text-secondary)',
-            margin: 0,
-            padding: '0 var(--alm-sp-4) var(--alm-sp-4)',
-          }}
-        >
+        <p className="alm-setup-scan__msg alm-setup-scan__msg--scanning">
           Scanning…
         </p>
       )}
@@ -255,12 +203,7 @@ function SourceSummary({ state }: SourceSummaryProps) {
       {phase === 'done' && totalItems === 0 && (
         <p
           data-testid="scan-empty"
-          style={{
-            fontSize: 'var(--alm-text-sm)',
-            color: 'var(--alm-text-muted)',
-            margin: 0,
-            padding: '0 var(--alm-sp-4) var(--alm-sp-4)',
-          }}
+          className="alm-setup-scan__msg alm-setup-scan__msg--empty"
         >
           Nothing detected in this folder.
         </p>
@@ -268,28 +211,14 @@ function SourceSummary({ state }: SourceSummaryProps) {
 
       {/* ── Collapsible detail panel (chips + table) ─────────────────────── */}
       {isExpandable && expanded && (
-        <div style={{ padding: '0 var(--alm-sp-4) var(--alm-sp-4)' }}>
+        <div className="alm-setup-scan__detail">
           {/* Kind-count chips */}
           {kindCounts.size > 0 && (
-            <div
-              style={{
-                display: 'flex',
-                flexWrap: 'wrap',
-                gap: 'var(--alm-sp-2)',
-                marginBottom: 'var(--alm-sp-3)',
-              }}
-            >
+            <div className="alm-setup-scan__chips">
               {Array.from(kindCounts.entries()).map(([kind, count]) => (
                 <span
                   key={kind}
-                  style={{
-                    fontSize: 'var(--alm-text-xs)',
-                    background: 'var(--alm-surface-alt)',
-                    border: '1px solid var(--alm-border)',
-                    borderRadius: 'var(--alm-radius-sm)',
-                    padding: '2px var(--alm-sp-2)',
-                    color: 'var(--alm-text-secondary)',
-                  }}
+                  className="alm-setup-scan__chip"
                 >
                   {count} {kind}
                 </span>
@@ -298,35 +227,14 @@ function SourceSummary({ state }: SourceSummaryProps) {
           )}
 
           {/* Scrollable metadata table of detected ingestion groups */}
-          <div
-            style={{
-              maxHeight: 280,
-              overflowY: 'auto',
-              border: '1px solid var(--alm-border-subtle)',
-              borderRadius: 'var(--alm-radius-sm)',
-            }}
-          >
-            <table
-              style={{
-                width: '100%',
-                borderCollapse: 'collapse',
-                fontSize: 'var(--alm-text-xs)',
-                color: 'var(--alm-text-secondary)',
-              }}
-            >
+          <div className="alm-setup-scan__table-wrap">
+            <table className="alm-setup-scan__table">
               <thead>
-                <tr
-                  style={{
-                    position: 'sticky',
-                    top: 0,
-                    background: 'var(--alm-surface-raised)',
-                    color: 'var(--alm-text)',
-                  }}
-                >
-                  <th style={cell}>Folder / File</th>
-                  <th style={cell}>Files</th>
-                  <th style={cell}>Format</th>
-                  <th style={cell}>Detected types</th>
+                <tr className="alm-setup-scan__thead-row">
+                  <th className="alm-setup-scan__cell">Folder / File</th>
+                  <th className="alm-setup-scan__cell">Files</th>
+                  <th className="alm-setup-scan__cell">Format</th>
+                  <th className="alm-setup-scan__cell">Detected types</th>
                 </tr>
               </thead>
               <tbody>
@@ -341,23 +249,17 @@ function SourceSummary({ state }: SourceSummaryProps) {
                     <tr
                       key={item.inboxItemId}
                       data-testid={`scan-item-${item.inboxItemId}`}
-                      style={{ borderTop: '1px solid var(--alm-border-subtle)' }}
+                      className="alm-setup-scan__tbody-row"
                     >
-                      <td style={{ ...cell, wordBreak: 'break-all' }}>
-                        <span
-                          style={{
-                            display: 'inline-flex',
-                            alignItems: 'center',
-                            gap: 'var(--alm-sp-2)',
-                          }}
-                        >
+                      <td className="alm-setup-scan__cell--path">
+                        <span className="alm-setup-scan__path-cell-inner">
                           {item.isMaster && <Pill variant="info">Master</Pill>}
                           {item.relativePath}
                         </span>
                       </td>
-                      <td style={cell}>{item.fileCount}</td>
-                      <td style={cell}>{(item.format ?? item.lane).toUpperCase()}</td>
-                      <td style={cell}>{detectedTypes}</td>
+                      <td className="alm-setup-scan__cell">{item.fileCount}</td>
+                      <td className="alm-setup-scan__cell">{(item.format ?? item.lane).toUpperCase()}</td>
+                      <td className="alm-setup-scan__cell">{detectedTypes}</td>
                     </tr>
                   );
                 })}
@@ -474,30 +376,18 @@ export function StepScan({ sources, flushResult, onAllDoneChange }: StepScanProp
 
   return (
     <div
-      className="alm-step-scan"
+      className="alm-setup-scan"
       data-testid="step-scan"
-      style={{
-        display: 'flex',
-        flexDirection: 'column',
-        flex: 1,
-        minHeight: 0,
-      }}
     >
       {sourceStates.length === 0 ? (
-        <p style={{ fontSize: 'var(--alm-text-sm)', color: 'var(--alm-text-muted)' }}>
+        <p className="alm-setup-scan__empty-msg">
           No sources registered. Go back and add at least one folder.
         </p>
       ) : (
         <>
           {/* Per-source results — scrollable region; expanding accordions scroll here,
               not the whole wizard page. */}
-          <div
-            style={{
-              flex: 1,
-              minHeight: 0,
-              overflowY: 'auto',
-            }}
-          >
+          <div className="alm-setup-scan__scroll">
             {sourceStates.map((s) => (
               <SourceSummary key={s.source.path} state={s} />
             ))}
@@ -507,12 +397,7 @@ export function StepScan({ sources, flushResult, onAllDoneChange }: StepScanProp
           {allDone && (
             <p
               data-testid="scan-summary"
-              style={{
-                fontSize: 'var(--alm-text-sm)',
-                color: 'var(--alm-text-secondary)',
-                margin: 'var(--alm-sp-3) 0 0',
-                flexShrink: 0,
-              }}
+              className="alm-setup-scan__summary"
             >
               {totalDetected > 0
                 ? `${totalDetected} folder${totalDetected !== 1 ? 's' : ''} detected across all sources. Head to the Inbox to review and approve.`

@@ -117,28 +117,14 @@ export function StepTools({ tools, onToolsChange }: StepToolsProps) {
   };
 
   return (
-    <div
-      className="alm-step-tools"
-      style={{ display: 'flex', flexDirection: 'column', gap: 'var(--alm-sp-3)' }}
-    >
-      <p
-        className="alm-step-tools__intro"
-        style={{
-          margin: 0,
-          fontSize: 'var(--alm-text-sm)',
-          lineHeight: 'var(--alm-leading-normal)',
-          color: 'var(--alm-text-secondary)',
-        }}
-      >
+    <div className="alm-step-tools">
+      <p className="alm-step-tools__intro">
         Configure your processing tools so the app can prepare project inputs and suggest
         workflow profiles. Installed tools are detected automatically; you can override or
         set a path manually.
       </p>
 
-      <div
-        className="alm-step-tools__list"
-        style={{ display: 'flex', flexDirection: 'column', gap: 'var(--alm-sp-2)' }}
-      >
+      <div className="alm-step-tools__list">
         {TOOL_DEFS.map((def) => {
           const config = tools[def.key];
           return (
@@ -154,14 +140,7 @@ export function StepTools({ tools, onToolsChange }: StepToolsProps) {
         })}
       </div>
 
-      <p
-        className="alm-step-tools__note"
-        style={{
-          margin: 0,
-          fontSize: 'var(--alm-text-xs)',
-          color: 'var(--alm-text-faint)',
-        }}
-      >
+      <p className="alm-step-tools__note">
         You can skip this step. Tool configuration can be changed later in Settings.
       </p>
     </div>
@@ -198,33 +177,12 @@ function ToolCard({
     <div
       className="alm-step-tools__card"
       data-testid={`tool-card-${def.key}`}
-      style={{
-        border: '1px solid var(--alm-border)',
-        borderRadius: 'var(--alm-radius-sm)',
-        background: 'var(--alm-bg)',
-        overflow: 'hidden',
-      }}
     >
       {/* Header row: name + detected pill + description + enable toggle */}
-      <div
-        className="alm-step-tools__header"
-        style={{
-          display: 'flex',
-          alignItems: 'center',
-          gap: 'var(--alm-sp-3)',
-          padding: 'var(--alm-sp-2) var(--alm-sp-3)',
-          minHeight: 'var(--alm-row-height)',
-        }}
-      >
-        <div style={{ flex: 1, minWidth: 0, display: 'flex', flexDirection: 'column', gap: 'var(--alm-sp-0)' }}>
-          <div style={{ display: 'flex', alignItems: 'center', gap: 'var(--alm-sp-2)' }}>
-            <span
-              style={{
-                fontSize: 'var(--alm-text-sm)',
-                fontWeight: 'var(--alm-weight-semibold)',
-                color: 'var(--alm-text)',
-              }}
-            >
+      <div className="alm-step-tools__header">
+        <div className="alm-step-tools__tool-info">
+          <div className="alm-step-tools__name-row">
+            <span className="alm-step-tools__tool-name">
               {def.name}
             </span>
             {detected ? (
@@ -233,19 +191,12 @@ function ToolCard({
               <Pill variant="neutral">Not detected</Pill>
             )}
           </div>
-          <span style={{ fontSize: 'var(--alm-text-xs)', color: 'var(--alm-text-muted)' }}>
+          <span className="alm-step-tools__tool-desc">
             {def.description}
           </span>
         </div>
-        <div
-          style={{
-            display: 'flex',
-            flexDirection: 'column',
-            alignItems: 'flex-end',
-            gap: 'var(--alm-sp-1)',
-          }}
-        >
-          <div style={{ display: 'flex', alignItems: 'center', gap: 'var(--alm-sp-2)' }}>
+        <div className="alm-step-tools__controls">
+          <div className="alm-step-tools__actions">
             <Btn
               variant="ghost"
               onClick={handleRedetect}
@@ -261,7 +212,7 @@ function ToolCard({
             />
           </div>
           {notFound && (
-            <span style={{ fontSize: 'var(--alm-text-xs)', color: 'var(--alm-text-muted)' }}>
+            <span className="alm-step-tools__not-found">
               No installation found
             </span>
           )}
@@ -270,17 +221,7 @@ function ToolCard({
 
       {/* Executable path picker, only when enabled */}
       {config.enabled && (
-        <div
-          className="alm-step-tools__path-row"
-          style={{
-            display: 'flex',
-            alignItems: 'center',
-            gap: 'var(--alm-sp-2)',
-            padding: 'var(--alm-sp-2) var(--alm-sp-3)',
-            borderTop: '1px solid var(--alm-border-subtle)',
-            background: 'var(--alm-surface-raised)',
-          }}
-        >
+        <div className="alm-step-tools__path-row">
           <ToolPathPicker
             toolName={def.name}
             path={config.path}
@@ -317,29 +258,13 @@ function ToolPathPicker({
 
   return (
     <>
-      <span
-        style={{
-          fontSize: 'var(--alm-text-2xs)',
-          fontWeight: 'var(--alm-weight-semibold)',
-          textTransform: 'uppercase',
-          letterSpacing: '0.04em',
-          color: 'var(--alm-text-muted)',
-        }}
-      >
+      <span className="alm-step-tools__path-label">
         Executable
       </span>
       <span
-        className="alm-mono"
+        className="alm-mono alm-step-tools__path-value"
         title={path ?? undefined}
-        style={{
-          flex: 1,
-          minWidth: 0,
-          fontSize: 'var(--alm-text-sm)',
-          overflow: 'hidden',
-          textOverflow: 'ellipsis',
-          whiteSpace: 'nowrap',
-          color: path ? 'var(--alm-text-secondary)' : 'var(--alm-text-faint)',
-        }}
+        style={{ color: path ? 'var(--alm-text-secondary)' : 'var(--alm-text-faint)' }}
       >
         {path ?? 'No path set'}
       </span>
