@@ -351,3 +351,8 @@ apps/desktop/playwright-report/
 
 # parked: needs workflow-scoped push (content in docs/development/ci/)
 .github/workflows/ci.yml
+
+
+# Headroom live runtime state — never version-controlled
+.headroom/
+/headroom_memory.db

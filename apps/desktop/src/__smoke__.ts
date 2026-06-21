@@ -71,7 +71,6 @@ import { GroupByBar } from '@/features/sessions/GroupByBar';
 import { InboxPage } from '@/features/inbox/InboxPage';
 import { InboxList } from '@/features/inbox/InboxList';
 import { InboxDetail } from '@/features/inbox/InboxDetail';
-import { ActionSidebar } from '@/features/inbox/ActionSidebar';
 
 import { CalibrationPage } from '@/features/calibration/CalibrationPage';
 import { CalibrationDetail } from '@/features/calibration/CalibrationDetail';
@@ -161,7 +160,6 @@ export type SmokeCheck = {
   inboxPage: typeof InboxPage;
   inboxList: typeof InboxList;
   inboxDetail: typeof InboxDetail;
-  actionSidebar: typeof ActionSidebar;
   calibrationPage: typeof CalibrationPage;
   calibrationDetail: typeof CalibrationDetail;
   mastersList: typeof MastersList;

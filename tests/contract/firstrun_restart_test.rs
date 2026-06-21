@@ -1,4 +1,6 @@
-use contracts_core::first_run::{FirstRunRestartResponse, RegisterSourceResponse, SourceKind};
+use contracts_core::first_run::{
+    FirstRunRestartResponse, OrganizationState, RegisterSourceResponse, SourceKind,
+};
 use serde_json::json;
 
 // ── helpers ────────────────────────────────────────────────────────────────
@@ -12,18 +14,21 @@ fn response_with_prefilled() -> FirstRunRestartResponse {
                 kind: SourceKind::LightFrames,
                 path: "/astro/raw".to_owned(),
                 created_at: "2026-05-20T10:00:00Z".to_owned(),
+                organization_state: OrganizationState::Organized,
             },
             RegisterSourceResponse {
                 source_id: "id-project-1".to_owned(),
                 kind: SourceKind::Project,
                 path: "/astro/projects".to_owned(),
                 created_at: "2026-05-20T10:05:00Z".to_owned(),
+                organization_state: OrganizationState::Organized,
             },
             RegisterSourceResponse {
                 source_id: "id-inbox-1".to_owned(),
                 kind: SourceKind::Inbox,
                 path: "/astro/inbox".to_owned(),
                 created_at: "2026-05-21T08:00:00Z".to_owned(),
+                organization_state: OrganizationState::Unorganized,
             },
         ],
     }

@@ -35,6 +35,8 @@ export type {
   SearchResultKind,
   TargetKind,
   RootCategory,
+  // Spec 041: per-source organization state (move vs catalogue).
+  OrganizationState,
   // Spec 008: project source role + selection (canonical in projects_v2.rs)
   SourceRole,
   SourceSelection,

@@ -29,6 +29,7 @@ use tokio::sync::{watch, Mutex};
 use crate::failure::{FailureCode, PlanItemFailure, RollbackOutcome};
 use crate::ops::archive_op;
 use crate::ops::cas_check::{check_cas, CasSnapshot};
+use crate::ops::catalogue_op;
 use crate::ops::delete_op;
 use crate::ops::move_op;
 use crate::ops::path_gate;
@@ -155,6 +156,9 @@ pub enum ExecutorItemAction {
         fallback_archive_destination: Option<PathBuf>,
     },
     Delete,
+    /// Record-in-place: no filesystem mutation. Signals that the file is already
+    /// at its final location and only needs to be catalogued (spec 041, T007).
+    Catalogue,
     /// RecordOnly / Mkdir / Link / Junction — no FS mutation; mark succeeded.
     NoOp,
 }
@@ -414,7 +418,9 @@ pub async fn execute_plan<C: ExecutorCallbacks>(
         }
 
         // Protection check (FR-008).
-        if item.is_protected && !matches!(item.action, ExecutorItemAction::NoOp) {
+        if item.is_protected
+            && !matches!(item.action, ExecutorItemAction::NoOp | ExecutorItemAction::Catalogue)
+        {
             let failure = PlanItemFailure::with_code(
                 FailureCode::ProtectedSource,
                 format!("item {} is protected by source policy", item.id),
@@ -541,6 +547,12 @@ fn execute_item(item: &ExecutorItem) -> Result<(), OpError> {
             // T020: use `destructive_confirmed`, not `is_protected`.
             delete_op::delete_file(src, item.destructive_confirmed)
                 .map_err(|(f, r)| (f, r.rollback_attempted, r.rollback_outcome, None))
+        }
+
+        ExecutorItemAction::Catalogue => {
+            // No filesystem I/O — record-in-place (spec 041, T007).
+            catalogue_op::catalogue_noop()
+                .map_err(|e| (e, false, RollbackOutcome::NotApplicable, None))
         }
     }
 }

@@ -36,6 +36,7 @@ const itemRoot1a: InboxListItem = {
   format: 'fits',
   state: 'classified',
   contentSignature: 'sig-a',
+  organizationState: 'organized',
   isMaster: false,
   masterFrameType: null,
   masterFilter: null,
@@ -52,6 +53,7 @@ const itemRoot1b: InboxListItem = {
   format: 'fits',
   state: 'pending_classification',
   contentSignature: 'sig-b',
+  organizationState: 'organized',
   isMaster: false,
   masterFrameType: null,
   masterFilter: null,
@@ -68,6 +70,7 @@ const itemRoot2a: InboxListItem = {
   format: 'video',
   state: 'pending_classification',
   contentSignature: 'sig-c',
+  organizationState: 'unorganized',
   isMaster: false,
   masterFrameType: null,
   masterFilter: null,
@@ -91,8 +94,6 @@ describe('T039-1: InboxList cross-root rendering (SC-001)', () => {
         onSelect={vi.fn()}
         filterType="all"
         onFilterTypeChange={vi.fn()}
-        groupBy="none"
-        onGroupByChange={vi.fn()}
       />,
     );
     expect(screen.getByText('2025-10-10/NGC7000')).toBeInTheDocument();
@@ -117,8 +118,6 @@ describe('T039-2: confirmed items absent — empty list (FR-003)', () => {
         onSelect={vi.fn()}
         filterType="all"
         onFilterTypeChange={vi.fn()}
-        groupBy="none"
-        onGroupByChange={vi.fn()}
       />,
     );
     expect(screen.queryByTestId(/^inbox-item-/)).not.toBeInTheDocument();

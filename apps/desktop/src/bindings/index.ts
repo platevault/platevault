@@ -544,6 +544,9 @@ export const commands = {
 	/**
 	 *  `roots.register.batch` — register multiple source directories at once.
 	 * 
+	 *  Enforces that `inbox` kind sources are always `unorganized`, overriding
+	 *  any value supplied by the frontend (spec 041 R-7).
+	 * 
 	 *  # Errors
 	 *  Returns `Err(String)` on catastrophic failure; per-item errors are in the response.
 	 */
@@ -576,6 +579,16 @@ export const commands = {
 	 *  Returns `Err(String)` on failure; the stub never fails.
 	 */
 	equipmentList: () => typedError<Equipment[], string>(__TAURI_INVOKE("equipment_list")),
+	/**
+	 *  `sources.set_organization_state` — change a source's organization state
+	 *  (spec 041, T030). Affects only future confirms; inbox sources may not be
+	 *  set to `organized`.
+	 * 
+	 *  # Errors
+	 *  Returns `Err(String)` on `source.invalid_organization_state`,
+	 *  `source.not_found`, or DB error.
+	 */
+	sourcesSetOrganizationState: (sourceId: string, organizationState: OrganizationState) => typedError<SetSourceOrganizationStateResponse, string>(__TAURI_INVOKE("sources_set_organization_state", { sourceId, organizationState })),
 	/**
 	 *  `firstrun.state` — get the current first-run wizard state.
 	 * 
@@ -1014,14 +1027,22 @@ export const commands = {
 	 *  `inbox.item.not_found` | `inbox.has.open.plan` | `classification.ambiguous`
 	 *  | `classification.stale` | `pattern.unset`
 	 */
-	inboxConfirm: (req: InboxConfirmRequest_Deserialize) => typedError<InboxConfirmResponse, string>(__TAURI_INVOKE("inbox_confirm", { req })),
+	inboxConfirm: (req: InboxConfirmRequest_Deserialize) => typedError<InboxConfirmResponse_Serialize, string>(__TAURI_INVOKE("inbox_confirm", { req })),
 	/**
 	 *  `inbox.reclassify` — write manual frame-type overrides and re-aggregate.
 	 * 
 	 *  # Errors
 	 *  Returns `"inbox.item.not_found"`, `"inbox.has.open.plan"`, or `"file.not_found"`.
 	 */
-	inboxReclassify: (req: InboxReclassifyRequest) => typedError<InboxReclassifyResponse_Serialize, string>(__TAURI_INVOKE("inbox_reclassify", { req })),
+	inboxReclassify: (req: InboxReclassifyRequest_Deserialize) => typedError<InboxReclassifyResponse_Serialize, string>(__TAURI_INVOKE("inbox_reclassify", { req })),
+	/**
+	 *  `inbox.item.metadata` — assemble per-file extracted metadata for an inbox
+	 *  item (spec 041 US2/FR-010).
+	 * 
+	 *  # Errors
+	 *  Returns a string error if the item is missing or a query fails.
+	 */
+	inboxItemMetadata: (req: InboxItemMetadataRequest) => typedError<InboxItemMetadataResponse_Serialize, string>(__TAURI_INVOKE("inbox_item_metadata", { req })),
 	/**
 	 *  `inbox.list` — return all unacknowledged inbox items across all registered
 	 *  roots (states `pending_classification` and `classified`).
@@ -1033,6 +1054,87 @@ export const commands = {
 	 *  Returns a string error on database failure.
 	 */
 	inboxList: () => typedError<InboxListResponse_Serialize, string>(__TAURI_INVOKE("inbox_list")),
+	/**
+	 *  `inbox.plan` — fetch the open plan for an inbox item.
+	 * 
+	 *  Returns the [`InboxPlanView`] when a plan link exists for this item, or an
+	 *  error with code `inbox.item.no_plan` when the item has no open plan.
+	 * 
+	 *  # Errors
+	 *  - `inbox.item.not_found` — item does not exist.
+	 *  - `inbox.item.no_plan`   — item exists but has no linked plan.
+	 *  - `plan.not_found`       — link is present but plan row missing.
+	 */
+	inboxPlan: (inboxItemId: string) => typedError<InboxPlanView, string>(__TAURI_INVOKE("inbox_plan", { inboxItemId })),
+	/**
+	 *  `inbox.plan.apply` — approve + apply the plan for a single inbox item.
+	 * 
+	 *  The use-case auto-approves the plan (which `inbox.confirm` leaves at
+	 *  `ready_for_review`) before calling `apply_plan`.  The plan listener
+	 *  transitions the inbox item state once the executor completes.
+	 * 
+	 *  # Errors
+	 *  Returns a string error on failure, including `plan.stale` when per-item
+	 *  CAS detects a file changed since the plan was created.
+	 */
+	inboxPlanApply: (inboxItemId: string) => typedError<PlanApplyResponse, string>(__TAURI_INVOKE("inbox_plan_apply", { inboxItemId })),
+	/**
+	 *  `inbox.plan.apply_all` — apply all plans currently in `plan_open` state.
+	 * 
+	 *  Iterates items in `plan_open` state and applies each sequentially.
+	 *  Returns a per-item result list so the UI can report partial failures.
+	 * 
+	 *  # Errors
+	 *  Returns a string error only if the list query itself fails; per-plan
+	 *  errors are captured inside `InboxApplyAllResponse.results`.
+	 */
+	inboxPlanApplyAll: () => typedError<InboxApplyAllResponse, string>(__TAURI_INVOKE("inbox_plan_apply_all")),
+	/**
+	 *  `inbox.plan.apply_selected` — apply a caller-chosen subset of inbox plans
+	 *  (spec 041, US2).
+	 * 
+	 *  Selection is plan-level (per inbox item / ingestion group). Returns a
+	 *  per-item result list so the UI can report partial failures; ids that are not
+	 *  in `plan_open` state are reported as per-item errors rather than failing the
+	 *  whole call.
+	 * 
+	 *  # Errors
+	 *  Returns a string error only if the membership query itself fails; per-plan
+	 *  errors are captured inside `InboxApplyAllResponse.results`.
+	 */
+	inboxPlanApplySelected: (request: InboxApplySelectedRequest) => typedError<InboxApplyAllResponse, string>(__TAURI_INVOKE("inbox_plan_apply_selected", { request })),
+	/**
+	 *  `inbox.plan.cancel` — discard the open plan and reset the item to `classified`.
+	 * 
+	 *  The plan listener handles async cleanup; the use-case also eagerly resets
+	 *  the inbox item state so the UI can reflect the change immediately.
+	 * 
+	 *  # Errors
+	 *  Returns a string error on database failure.
+	 */
+	inboxPlanCancel: (inboxItemId: string) => typedError<InboxPlanCancelResponse, string>(__TAURI_INVOKE("inbox_plan_cancel", { inboxItemId })),
+	/**
+	 *  `inbox.stats` — aggregate per-type frame counts across all active inbox items
+	 *  (spec 041, US6 T038).
+	 * 
+	 *  Returns counts of folders, masters, and images broken down by effective frame
+	 *  type. The effective type is `manual_override` when set, otherwise
+	 *  `frame_type` from classification evidence.
+	 * 
+	 *  # Errors
+	 *  Returns a string error on database failure.
+	 */
+	inboxStats: () => typedError<InboxStatsResponse, string>(__TAURI_INVOKE("inbox_stats")),
+	/**
+	 *  `inbox.plan.list_open` — return every open plan across all roots (spec 041, US2).
+	 * 
+	 *  Aggregate surface so the UI can show every active planned action at once,
+	 *  each with its actions, without selecting inbox items one at a time.
+	 * 
+	 *  # Errors
+	 *  Returns a string error only if the underlying list/plan queries fail.
+	 */
+	inboxPlanListOpen: () => typedError<InboxOpenPlansResponse, string>(__TAURI_INVOKE("inbox_plan_list_open")),
 	/**
 	 *  `inventory.list` — return the grouped inventory ledger with optional filters.
 	 * 
@@ -2193,6 +2295,16 @@ export type GuidedStepCompleteResponse = {
 	state: GuidedFlowStateDto,
 };
 
+/**  Response from `inbox.plan.apply_all` (spec 041, FR-003a). */
+export type InboxApplyAllResponse = {
+	results: InboxPlanApplyResult[],
+};
+
+/**  Request for `inbox.plan.apply_selected` (spec 041, US2). */
+export type InboxApplySelectedRequest = {
+	inboxItemIds: string[],
+};
+
 /**  One frame-type breakdown entry in a classify response. */
 export type InboxBreakdownEntry = InboxBreakdownEntry_Serialize | InboxBreakdownEntry_Deserialize;
 
@@ -2256,6 +2368,18 @@ export type InboxClassifyResponse_Serialize = {
 	computedAt: string,
 };
 
+/**
+ *  Summary of plan actions split by type (spec 041 US4/US5/FR-020).
+ * 
+ *  Lets the UI show "N move / M catalogue" without iterating plan items.
+ */
+export type InboxConfirmActionsSummary = {
+	/**  Number of plan items with `action = "move"`. */
+	moveCount: number,
+	/**  Number of plan items with `action = "catalogue"`. */
+	catalogueCount: number,
+};
+
 /**  Request for `inbox.confirm`. */
 export type InboxConfirmRequest = InboxConfirmRequest_Serialize | InboxConfirmRequest_Deserialize;
 
@@ -2290,7 +2414,10 @@ export type InboxConfirmRequest_Serialize = {
 };
 
 /**  Response from `inbox.confirm`. */
-export type InboxConfirmResponse = {
+export type InboxConfirmResponse = InboxConfirmResponse_Serialize | InboxConfirmResponse_Deserialize;
+
+/**  Response from `inbox.confirm`. */
+export type InboxConfirmResponse_Deserialize = {
 	planId: string,
 	/**
 	 *  Always `"ready_for_review"` for plans created here; empty string for
@@ -2304,6 +2431,43 @@ export type InboxConfirmResponse = {
 	 *  no file move).  `plan_id` is an empty string in this case.
 	 */
 	registeredAsMaster: boolean,
+	/**
+	 *  Breakdown of plan actions produced (spec 041 US4/FR-020).
+	 *  `None` when `registered_as_master` is true (no plan was created).
+	 */
+	actionsSummary: InboxConfirmActionsSummary | null,
+	/**
+	 *  Organization state of the source owning this item (spec 041 R-7).
+	 *  `"organized"` | `"unorganized"`. `None` when `registered_as_master`.
+	 */
+	organizationState: string | null,
+};
+
+/**  Response from `inbox.confirm`. */
+export type InboxConfirmResponse_Serialize = {
+	planId: string,
+	/**
+	 *  Always `"ready_for_review"` for plans created here; empty string for
+	 *  master-registration responses.
+	 */
+	planState: string,
+	itemsTotal: number,
+	/**
+	 *  True when the item was a detected calibration master that was registered
+	 *  directly to `calibration_session` + `calibration_fingerprint` (Path 1 —
+	 *  no file move).  `plan_id` is an empty string in this case.
+	 */
+	registeredAsMaster: boolean,
+	/**
+	 *  Breakdown of plan actions produced (spec 041 US4/FR-020).
+	 *  `None` when `registered_as_master` is true (no plan was created).
+	 */
+	actionsSummary?: InboxConfirmActionsSummary | null,
+	/**
+	 *  Organization state of the source owning this item (spec 041 R-7).
+	 *  `"organized"` | `"unorganized"`. `None` when `registered_as_master`.
+	 */
+	organizationState?: string | null,
 };
 
 /**  A file entry discovered during an inbox scan. */
@@ -2312,6 +2476,108 @@ export type InboxFileEntry = {
 	fileName: string,
 	sizeBytes: number,
 	extension: string,
+};
+
+/**
+ *  Per-file metadata entry for one file within an inbox item.
+ * 
+ *  All header fields are nullable — not every file type carries all headers.
+ *  `frame_type_effective` reflects override-if-present-else-extracted.
+ *  `override_stale` is true when the file was changed (size/mtime) since the
+ *  override was recorded (R-4); the override is surfaced but flagged.
+ */
+export type InboxFileMetadata = InboxFileMetadata_Serialize | InboxFileMetadata_Deserialize;
+
+/**
+ *  Per-file metadata entry for one file within an inbox item.
+ * 
+ *  All header fields are nullable — not every file type carries all headers.
+ *  `frame_type_effective` reflects override-if-present-else-extracted.
+ *  `override_stale` is true when the file was changed (size/mtime) since the
+ *  override was recorded (R-4); the override is surfaced but flagged.
+ */
+export type InboxFileMetadata_Deserialize = {
+	relativeFilePath: string,
+	/**
+	 *  Effective frame type (override ?? extracted from header).
+	 *  `None` when the file remains unclassified.
+	 */
+	frameTypeEffective: string | null,
+	/**  Raw `IMAGETYP` header value (before normalization), if any. */
+	imageTyp: string | null,
+	filter: string | null,
+	exposureS: number | null,
+	gain: string | null,
+	binningX: number | null,
+	binningY: number | null,
+	temperatureC: number | null,
+	object: string | null,
+	dateObs: string | null,
+	instrume: string | null,
+	telescop: string | null,
+	naxis1: number | null,
+	naxis2: number | null,
+	stackCount: number | null,
+	/**  True when this file has been identified as a stacked calibration master. */
+	isMaster: boolean,
+	/**  True when the persisted override no longer matches the file's size/mtime (R-4). */
+	overrideStale: boolean,
+};
+
+/**
+ *  Per-file metadata entry for one file within an inbox item.
+ * 
+ *  All header fields are nullable — not every file type carries all headers.
+ *  `frame_type_effective` reflects override-if-present-else-extracted.
+ *  `override_stale` is true when the file was changed (size/mtime) since the
+ *  override was recorded (R-4); the override is surfaced but flagged.
+ */
+export type InboxFileMetadata_Serialize = {
+	relativeFilePath: string,
+	/**
+	 *  Effective frame type (override ?? extracted from header).
+	 *  `None` when the file remains unclassified.
+	 */
+	frameTypeEffective?: string | null,
+	/**  Raw `IMAGETYP` header value (before normalization), if any. */
+	imageTyp?: string | null,
+	filter?: string | null,
+	exposureS?: number | null,
+	gain?: string | null,
+	binningX?: number | null,
+	binningY?: number | null,
+	temperatureC?: number | null,
+	object?: string | null,
+	dateObs?: string | null,
+	instrume?: string | null,
+	telescop?: string | null,
+	naxis1?: number | null,
+	naxis2?: number | null,
+	stackCount?: number | null,
+	/**  True when this file has been identified as a stacked calibration master. */
+	isMaster: boolean,
+	/**  True when the persisted override no longer matches the file's size/mtime (R-4). */
+	overrideStale: boolean,
+};
+
+/**  Request for `inbox.item.metadata`. */
+export type InboxItemMetadataRequest = {
+	inboxItemId: string,
+};
+
+/**  Response from `inbox.item.metadata`. */
+export type InboxItemMetadataResponse = InboxItemMetadataResponse_Serialize | InboxItemMetadataResponse_Deserialize;
+
+/**  Response from `inbox.item.metadata`. */
+export type InboxItemMetadataResponse_Deserialize = {
+	inboxItemId: string,
+	files: InboxFileMetadata_Deserialize[],
+};
+
+/**  Response from `inbox.item.metadata`. */
+export type InboxItemMetadataResponse_Serialize = {
+	inboxItemId: string,
+	files: InboxFileMetadata_Serialize[],
 };
 
 /**  A discovered inbox item returned from the scan. */
@@ -2386,6 +2652,9 @@ export type InboxItemSummary_Serialize = {
  * 
  *  Extends `InboxItemSummary` with the root's id and absolute path so the UI
  *  can group/label items by root without a second call.
+ * 
+ *  Spec 041: gains `organization_state` so the list can show
+ *  move-vs-catalogue intent per item without a separate source lookup.
  */
 export type InboxListItem = InboxListItem_Serialize | InboxListItem_Deserialize;
 
@@ -2394,6 +2663,9 @@ export type InboxListItem = InboxListItem_Serialize | InboxListItem_Deserialize;
  * 
  *  Extends `InboxItemSummary` with the root's id and absolute path so the UI
  *  can group/label items by root without a second call.
+ * 
+ *  Spec 041: gains `organization_state` so the list can show
+ *  move-vs-catalogue intent per item without a separate source lookup.
  */
 export type InboxListItem_Deserialize = {
 	inboxItemId: string,
@@ -2413,6 +2685,29 @@ export type InboxListItem_Deserialize = {
 	masterFrameType: string | null,
 	masterFilter: string | null,
 	masterExposureS: number | null,
+	/**
+	 *  Organization state of the owning source: `"organized"` | `"unorganized"`.
+	 *  Spec 041 — lets the list surface move-vs-catalogue intent per item.
+	 */
+	organizationState: string,
+	/**  Object / target (FITS `OBJECT`). `Some("Mixed")` if files disagree. */
+	groupTarget: string | null,
+	/**  Dominant effective frame type across the item's files (largest group). */
+	groupFrameType: string | null,
+	/**
+	 *  Capture date as `YYYY-MM-DD` from the earliest `DATE-OBS`.
+	 *  `Some("Mixed")` if files span multiple distinct dates.
+	 */
+	groupDate: string | null,
+	/**  Filter label (FITS `FILTER`). `Some("Mixed")` if files disagree. */
+	groupFilter: string | null,
+	/**
+	 *  Exposure formatted like `"300s"` (trailing zeros trimmed).
+	 *  `Some("Mixed")` if files have multiple distinct exposures.
+	 */
+	groupExposure: string | null,
+	/**  Camera / instrument (FITS `INSTRUME`). `Some("Mixed")` if files disagree. */
+	groupInstrument: string | null,
 };
 
 /**
@@ -2420,6 +2715,9 @@ export type InboxListItem_Deserialize = {
  * 
  *  Extends `InboxItemSummary` with the root's id and absolute path so the UI
  *  can group/label items by root without a second call.
+ * 
+ *  Spec 041: gains `organization_state` so the list can show
+ *  move-vs-catalogue intent per item without a separate source lookup.
  */
 export type InboxListItem_Serialize = {
 	inboxItemId: string,
@@ -2439,6 +2737,29 @@ export type InboxListItem_Serialize = {
 	masterFrameType?: string | null,
 	masterFilter?: string | null,
 	masterExposureS?: number | null,
+	/**
+	 *  Organization state of the owning source: `"organized"` | `"unorganized"`.
+	 *  Spec 041 — lets the list surface move-vs-catalogue intent per item.
+	 */
+	organizationState: string,
+	/**  Object / target (FITS `OBJECT`). `Some("Mixed")` if files disagree. */
+	groupTarget?: string | null,
+	/**  Dominant effective frame type across the item's files (largest group). */
+	groupFrameType?: string | null,
+	/**
+	 *  Capture date as `YYYY-MM-DD` from the earliest `DATE-OBS`.
+	 *  `Some("Mixed")` if files span multiple distinct dates.
+	 */
+	groupDate?: string | null,
+	/**  Filter label (FITS `FILTER`). `Some("Mixed")` if files disagree. */
+	groupFilter?: string | null,
+	/**
+	 *  Exposure formatted like `"300s"` (trailing zeros trimmed).
+	 *  `Some("Mixed")` if files have multiple distinct exposures.
+	 */
+	groupExposure?: string | null,
+	/**  Camera / instrument (FITS `INSTRUME`). `Some("Mixed")` if files disagree. */
+	groupInstrument?: string | null,
 };
 
 /**  Response from `inbox.list`. */
@@ -2462,16 +2783,139 @@ export type InboxListResponse_Serialize = {
 	limit: number,
 };
 
-/**  A single file override in a reclassify request. */
-export type InboxReclassifyOverride = {
+/**  One open plan in the aggregate inbox plan surface (spec 041, US2). */
+export type InboxOpenPlan = {
+	inboxItemId: string,
+	/**  Display label for the ingestion group (the item's relative path / folder name). */
+	itemName: string,
+	planId: string,
+	state: string,
+	stale: boolean,
+	actions: InboxPlanAction[],
+};
+
+/**  Response from `inbox.plan.list_open` — all open plans across roots (spec 041, US2). */
+export type InboxOpenPlansResponse = {
+	plans: InboxOpenPlan[],
+	/**  Sum of actions across all plans (for the surface header count). */
+	totalActions: number,
+};
+
+/**
+ *  One plan action entry in the in-context plan panel.
+ * 
+ *  `action` is `"move"` | `"catalogue"` | `"archive"` | `"trash"`.
+ */
+export type InboxPlanAction = {
+	/**  1-based ordinal within the plan. */
+	index: number,
+	/**  `"move"` | `"catalogue"` | `"archive"` | `"trash"` */
+	action: string,
+	fromPath: string,
+	toPath: string,
+	/**
+	 *  Human-readable resolved destination preview
+	 *  (equals `from_path` for catalogue actions).
+	 */
+	destinationPreview: string,
+	/**  True when this action requires explicit destructive confirmation before apply. */
+	requiresDestructiveConfirm: boolean,
+};
+
+/**  Per-plan result from `inbox.plan.apply_all` (spec 041, FR-003a). */
+export type InboxPlanApplyResult = {
+	inboxItemId: string,
+	planId: string,
+	state: string,
+	error: string | null,
+};
+
+/**  Response from `inbox.plan.cancel` (spec 041, FR-006). */
+export type InboxPlanCancelResponse = {
+	inboxItemId: string,
+	planId: string,
+	state: string,
+};
+
+/**
+ *  Response from `inbox.plan` — plan(s) linked to an inbox item (spec 041).
+ * 
+ *  Read via `inbox_plan_links` so the inbox surface can show plan detail
+ *  without navigating to the Archive page (FR-004).
+ */
+export type InboxPlanView = {
+	planId: string,
+	state: string,
+	/**
+	 *  True when the executor's CAS detected that one or more source files
+	 *  changed since the plan was created (FR-007 / T011).
+	 *  When `stale` is true the UI should disable Apply and prompt the user
+	 *  to re-classify and re-confirm.
+	 */
+	stale: boolean,
+	actions: InboxPlanAction[],
+};
+
+/**
+ *  A single file override in a reclassify request.
+ * 
+ *  Extended by spec 041 (R-3) to carry optional filter/exposure/binning
+ *  overrides alongside frame type. Any subset of fields may be set per file;
+ *  omitted fields leave the existing persisted override unchanged.
+ */
+export type InboxReclassifyOverride = InboxReclassifyOverride_Serialize | InboxReclassifyOverride_Deserialize;
+
+/**
+ *  A single file override in a reclassify request.
+ * 
+ *  Extended by spec 041 (R-3) to carry optional filter/exposure/binning
+ *  overrides alongside frame type. Any subset of fields may be set per file;
+ *  omitted fields leave the existing persisted override unchanged.
+ */
+export type InboxReclassifyOverride_Deserialize = {
 	filePath: string,
-	frameType: string,
+	/**  Override for the IMAGETYP / frame type.  `None` = leave unchanged. */
+	frameType: string | null,
+	/**  Override for the FILTER header value.  `None` = leave unchanged. */
+	filter: string | null,
+	/**  Override for exposure in seconds (EXPTIME/EXPOSURE).  `None` = leave unchanged. */
+	exposureS: number | null,
+	/**  Override for binning as a human-readable string e.g. `"2x2"`.  `None` = leave unchanged. */
+	binning: string | null,
+};
+
+/**
+ *  A single file override in a reclassify request.
+ * 
+ *  Extended by spec 041 (R-3) to carry optional filter/exposure/binning
+ *  overrides alongside frame type. Any subset of fields may be set per file;
+ *  omitted fields leave the existing persisted override unchanged.
+ */
+export type InboxReclassifyOverride_Serialize = {
+	filePath: string,
+	/**  Override for the IMAGETYP / frame type.  `None` = leave unchanged. */
+	frameType?: string | null,
+	/**  Override for the FILTER header value.  `None` = leave unchanged. */
+	filter?: string | null,
+	/**  Override for exposure in seconds (EXPTIME/EXPOSURE).  `None` = leave unchanged. */
+	exposureS?: number | null,
+	/**  Override for binning as a human-readable string e.g. `"2x2"`.  `None` = leave unchanged. */
+	binning?: string | null,
 };
 
 /**  Request for `inbox.reclassify`. */
-export type InboxReclassifyRequest = {
+export type InboxReclassifyRequest = InboxReclassifyRequest_Serialize | InboxReclassifyRequest_Deserialize;
+
+/**  Request for `inbox.reclassify`. */
+export type InboxReclassifyRequest_Deserialize = {
 	inboxItemId: string,
-	overrides: InboxReclassifyOverride[],
+	overrides: InboxReclassifyOverride_Deserialize[],
+};
+
+/**  Request for `inbox.reclassify`. */
+export type InboxReclassifyRequest_Serialize = {
+	inboxItemId: string,
+	overrides: InboxReclassifyOverride_Serialize[],
 };
 
 /**  Response from `inbox.reclassify`. */
@@ -2484,7 +2928,10 @@ export type InboxReclassifyResponse_Deserialize = {
 	updatedType: string,
 	frameType: string | null,
 	remainingUnclassified: number,
+	/**  Number of files whose overrides were applied (FR-014). */
 	appliedCount: number,
+	/**  Rebuilt breakdown after overrides (FR-015). */
+	breakdown: InboxBreakdownEntry_Deserialize[],
 };
 
 /**  Response from `inbox.reclassify`. */
@@ -2494,7 +2941,10 @@ export type InboxReclassifyResponse_Serialize = {
 	updatedType: string,
 	frameType?: string | null,
 	remainingUnclassified: number,
+	/**  Number of files whose overrides were applied (FR-014). */
 	appliedCount: number,
+	/**  Rebuilt breakdown after overrides (FR-015). */
+	breakdown: InboxBreakdownEntry_Serialize[],
 };
 
 /**  Request to scan a root directory and discover inbox items. */
@@ -2525,6 +2975,30 @@ export type InboxScanResult = {
 	entries: InboxFileEntry[],
 	totalCount: number,
 	totalSizeBytes: number,
+};
+
+/**  Per-frame-type queue stats entry. */
+export type InboxStatsPerType = {
+	frameType: string,
+	/**  Number of folder-grouped inbox items of this type. */
+	folderCount: number,
+	/**  Number of master inbox items of this type. */
+	masterCount: number,
+	/**  Total image (file) count across all items of this type. */
+	imageCount: number,
+};
+
+/**  Response from `inbox.stats`. */
+export type InboxStatsResponse = {
+	perType: InboxStatsPerType[],
+	totals: InboxStatsTotals,
+};
+
+/**  Aggregate totals across all frame types. */
+export type InboxStatsTotals = {
+	folders: number,
+	masters: number,
+	images: number,
 };
 
 export type IngestionSettings = {
@@ -3407,6 +3881,20 @@ export type OpticalTrain = {
 	cameraId: string | null,
 	focalLengthMm: number,
 };
+
+/**
+ *  Organization state of a registered source (spec 041, R-7).
+ * 
+ *  `Organized` — files are already in their final location; confirm produces
+ *  only `catalogue` (record-in-place) plan actions; no file moves.
+ * 
+ *  `Unorganized` — files should be moved to pattern-resolved destinations on
+ *  confirm. `Inbox` sources are always `Unorganized`.
+ * 
+ *  Serializes as `"organized"` / `"unorganized"` (lowercase) to match the
+ *  DB CHECK constraint and the IPC camelCase surface.
+ */
+export type OrganizationState = "organized" | "unorganized";
 
 /**
  *  One element of an ordered token pattern (data-model.md §PatternPart).
@@ -4562,23 +5050,51 @@ export type RegisterSourceBatchResponse_Serialize = {
 	items: BatchItem_Serialize[],
 };
 
-/**  Request payload for `roots.register`. */
+/**
+ *  Request payload for `roots.register`.
+ * 
+ *  `organization_state` is required for non-inbox sources (the UI forces an
+ *  explicit choice). For `inbox` kind the value MUST be `unorganized`;
+ *  supplying `organized` returns `source.invalid_organization_state`.
+ */
 export type RegisterSourceRequest = RegisterSourceRequest_Serialize | RegisterSourceRequest_Deserialize;
 
-/**  Request payload for `roots.register`. */
+/**
+ *  Request payload for `roots.register`.
+ * 
+ *  `organization_state` is required for non-inbox sources (the UI forces an
+ *  explicit choice). For `inbox` kind the value MUST be `unorganized`;
+ *  supplying `organized` returns `source.invalid_organization_state`.
+ */
 export type RegisterSourceRequest_Deserialize = {
 	kind: SourceKind,
 	path: string,
 	kindSubtype: string | null,
 	scanDepth: ScanDepth,
+	/**
+	 *  Organization state for this source (spec 041 R-7).
+	 *  Inbox sources MUST be `unorganized`; non-inbox sources must be explicit.
+	 */
+	organizationState: OrganizationState,
 };
 
-/**  Request payload for `roots.register`. */
+/**
+ *  Request payload for `roots.register`.
+ * 
+ *  `organization_state` is required for non-inbox sources (the UI forces an
+ *  explicit choice). For `inbox` kind the value MUST be `unorganized`;
+ *  supplying `organized` returns `source.invalid_organization_state`.
+ */
 export type RegisterSourceRequest_Serialize = {
 	kind: SourceKind,
 	path: string,
 	kindSubtype?: string | null,
 	scanDepth: ScanDepth,
+	/**
+	 *  Organization state for this source (spec 041 R-7).
+	 *  Inbox sources MUST be `unorganized`; non-inbox sources must be explicit.
+	 */
+	organizationState: OrganizationState,
 };
 
 /**  Response payload for `roots.register`. */
@@ -4587,6 +5103,8 @@ export type RegisterSourceResponse = {
 	kind: SourceKind,
 	path: string,
 	createdAt: string,
+	/**  Organization state persisted for this source (spec 041 R-7). */
+	organizationState: OrganizationState,
 };
 
 /**  A sample path match result within a remap verification. */
@@ -4908,6 +5426,12 @@ export type SessionsGroupBy = "none" | "target" | "month" | "filter" | "train";
 
 /**  Sessions view mode. */
 export type SessionsView = "list" | "calendar";
+
+/**  Response payload for `sources.set_organization_state`. */
+export type SetSourceOrganizationStateResponse = {
+	sourceId: string,
+	organizationState: OrganizationState,
+};
 
 /**  Request DTO for `settings.source-override.set`. */
 export type SetSourceOverrideRequest = {

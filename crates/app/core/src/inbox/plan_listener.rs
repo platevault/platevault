@@ -105,6 +105,13 @@ async fn handle_plan_completed(
     payload: &PlanApplyingCompleted,
 ) -> Result<(), String> {
     let new_state = if payload.terminal_state == "applied" {
+        // spec 041 US4/T032: master registration is relocated here from the old
+        // confirm-time fast path. When the applied plan belongs to a detected
+        // calibration master inbox item, register the master now — this applies
+        // whether the master was catalogued (organized source) or moved
+        // (unorganized source). Registration happens before the resolved
+        // transition so a failure leaves the item recoverable.
+        register_master_if_applicable(pool, &payload.plan_id).await?;
         "resolved"
     } else {
         // partially_applied, failed, cancelled → allow re-split
@@ -112,6 +119,90 @@ async fn handle_plan_completed(
     };
 
     transition_via_plan_id(pool, &payload.plan_id, new_state).await
+}
+
+/// Register a calibration master at plan-apply completion (spec 041 US4/T032).
+///
+/// Looks up the inbox item linked to `plan_id`; if it is a detected master
+/// (`is_master_item != 0`), inserts the `calibration_session` +
+/// `calibration_fingerprint` rows that the deleted confirm-time fast path used
+/// to write (same SQL/semantics). Idempotent on the apply path because a plan
+/// reaches `applied` exactly once and the link is deleted on transition.
+///
+/// Non-master items and plans with no linked inbox item are a no-op.
+async fn register_master_if_applicable(pool: &SqlitePool, plan_id: &str) -> Result<(), String> {
+    let link = inbox_repo::get_plan_link_by_plan_id(pool, plan_id)
+        .await
+        .map_err(|e| format!("get_plan_link_by_plan_id({plan_id}): {e}"))?;
+    let Some(link) = link else {
+        // No inbox item linked — non-inbox plan; nothing to register.
+        return Ok(());
+    };
+
+    let item = inbox_repo::get_inbox_item(pool, &link.inbox_item_id)
+        .await
+        .map_err(|e| format!("get_inbox_item({}): {e}", link.inbox_item_id))?;
+
+    if item.is_master_item == 0 {
+        return Ok(());
+    }
+
+    // Idempotency guard: skip if a session already references this inbox item.
+    let existing: Option<(String,)> =
+        sqlx::query_as("SELECT id FROM calibration_session WHERE source_inbox_item_id = ? LIMIT 1")
+            .bind(&item.id)
+            .fetch_optional(pool)
+            .await
+            .map_err(|e| format!("check existing calibration_session: {e}"))?;
+    if existing.is_some() {
+        return Ok(());
+    }
+
+    let frame_type_str = item.master_frame_type.as_deref().unwrap_or("dark");
+    let cal_kind = match frame_type_str {
+        "flat" => "flat",
+        "bias" => "bias",
+        _ => "dark",
+    };
+
+    let session_id = uuid::Uuid::new_v4().to_string();
+    let session_key =
+        format!("{}-{}", cal_kind, item.master_frame_type.as_deref().unwrap_or("unknown"));
+
+    sqlx::query(
+        "INSERT INTO calibration_session
+            (id, session_key, frame_ids, kind, state, created_at, source_inbox_item_id)
+         VALUES (?, ?, '[]', ?, 'confirmed', datetime('now'), ?)",
+    )
+    .bind(&session_id)
+    .bind(&session_key)
+    .bind(cal_kind)
+    .bind(&item.id)
+    .execute(pool)
+    .await
+    .map_err(|e| format!("insert calibration_session: {e}"))?;
+
+    sqlx::query(
+        "INSERT INTO calibration_fingerprint
+            (id, calibration_type, exposure_s, filter_name)
+         VALUES (?, ?, ?, ?)",
+    )
+    .bind(&session_id)
+    .bind(cal_kind)
+    .bind(item.master_exposure_s)
+    .bind(item.master_filter.as_deref())
+    .execute(pool)
+    .await
+    .map_err(|e| format!("insert calibration_fingerprint: {e}"))?;
+
+    tracing::info!(
+        inbox_item_id = %item.id,
+        plan_id,
+        cal_kind,
+        "inbox plan_listener: registered calibration master at apply completion"
+    );
+
+    Ok(())
 }
 
 /// Called when a plan is discarded (any state → discarded).

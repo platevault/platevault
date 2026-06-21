@@ -13,30 +13,16 @@
 
 import { render, screen } from '@testing-library/react';
 import { describe, it, expect, vi } from 'vitest';
-import { ActionSidebar } from '../ActionSidebar';
 import { InboxList } from '../InboxList';
-import type { InboxItemSummary } from '@/api/commands';
-import type { InboxClassifyResponse } from '../store';
+import type { InboxListItem } from '@/api/commands';
 
 // ── helpers ───────────────────────────────────────────────────────────────────
 
-const mixedClassification: InboxClassifyResponse = {
-  inboxItemId: 'item-001',
-  type: 'mixed',
-  frameType: null,
-  contentSignature: 'sig-abc',
-  breakdown: [
-    { kind: 'light', count: 10, sampleFiles: [] },
-    { kind: 'dark', count: 5, sampleFiles: [] },
-  ],
-  unclassifiedFiles: ['mystery.fits'],
-  sampleFiles: [],
-  computedAt: '2026-06-01T00:00:00Z',
-};
-
-const sampleItems: InboxItemSummary[] = [
+const sampleItems: InboxListItem[] = [
   {
     inboxItemId: 'item-001',
+    rootId: 'root-001',
+    rootAbsolutePath: '/astro/inbox',
     relativePath: 'NGC7000/2026-06-01',
     fileCount: 15,
     lane: 'fits',
@@ -47,9 +33,12 @@ const sampleItems: InboxItemSummary[] = [
     masterFrameType: null,
     masterFilter: null,
     masterExposureS: null,
+    organizationState: 'unorganized',
   },
   {
     inboxItemId: 'item-002',
+    rootId: 'root-001',
+    rootAbsolutePath: '/astro/inbox',
     relativePath: 'Jupiter/2026-06-01',
     fileCount: 3,
     lane: 'video',
@@ -60,6 +49,7 @@ const sampleItems: InboxItemSummary[] = [
     masterFrameType: null,
     masterFilter: null,
     masterExposureS: null,
+    organizationState: 'unorganized',
   },
 ];
 
@@ -83,7 +73,7 @@ describe('T074a: Show ignored items palette entry', () => {
 // ── T074a test 2: InboxList groupBy options ────────────────────────────────────
 
 describe('T074a: InboxList group-by options are user-meaningful', () => {
-  it('renders "Group: image / video" option (not legacy "Group: lane")', () => {
+  it('renders dimension options (Target / Frame type) and no legacy "lane"', () => {
     render(
       <InboxList
         items={sampleItems}
@@ -91,16 +81,16 @@ describe('T074a: InboxList group-by options are user-meaningful', () => {
         onSelect={vi.fn()}
         filterType="all"
         onFilterTypeChange={vi.fn()}
-        groupBy="none"
-        onGroupByChange={vi.fn()}
       />,
     );
-    // The updated InboxList should have "Group: image / video" not "Group: lane"
-    expect(screen.getByRole('option', { name: /group: image \/ video/i })).toBeInTheDocument();
+    // The configurable grouping control offers user-meaningful dimensions,
+    // not the legacy "lane" label.
+    expect(screen.getByRole('option', { name: /group: target/i })).toBeInTheDocument();
+    expect(screen.getByRole('option', { name: /group: frame type/i })).toBeInTheDocument();
     expect(screen.queryByRole('option', { name: /group: lane/i })).not.toBeInTheDocument();
   });
 
-  it('renders "Group: date" option', () => {
+  it('renders "Group: Date" option', () => {
     render(
       <InboxList
         items={sampleItems}
@@ -108,56 +98,9 @@ describe('T074a: InboxList group-by options are user-meaningful', () => {
         onSelect={vi.fn()}
         filterType="all"
         onFilterTypeChange={vi.fn()}
-        groupBy="none"
-        onGroupByChange={vi.fn()}
       />,
     );
     expect(screen.getByRole('option', { name: /group: date/i })).toBeInTheDocument();
-  });
-});
-
-// ── T074a test 3: mixed frame-type derived dynamically ─────────────────────
-
-describe('T074a: mixed frame-type is derived from classification.type', () => {
-  it('ActionSidebar shows "Generate split plan" for type=mixed (dynamic derivation)', () => {
-    render(
-      <ActionSidebar
-        hasSelection
-        classification={mixedClassification}
-        hasOpenPlan={false}
-        confirmLoading={false}
-        canConfirm
-        destructiveDestination="archive"
-        onDestructiveDestinationChange={vi.fn()}
-        onConfirm={vi.fn()}
-        onOpenExistingPlan={vi.fn()}
-      />,
-    );
-    // "Generate split plan" is only shown when classification.type === 'mixed'.
-    // This confirms the label is derived dynamically, not from a fixture string.
-    expect(screen.getByRole('button', { name: /generate split plan/i })).toBeInTheDocument();
-  });
-
-  it('ActionSidebar shows "Confirm to inventory" for type=single_type', () => {
-    const singleType: InboxClassifyResponse = {
-      ...mixedClassification,
-      type: 'single_type',
-      frameType: 'light',
-    };
-    render(
-      <ActionSidebar
-        hasSelection
-        classification={singleType}
-        hasOpenPlan={false}
-        confirmLoading={false}
-        canConfirm
-        destructiveDestination="archive"
-        onDestructiveDestinationChange={vi.fn()}
-        onConfirm={vi.fn()}
-        onOpenExistingPlan={vi.fn()}
-      />,
-    );
-    expect(screen.getByRole('button', { name: /confirm to inventory/i })).toBeInTheDocument();
   });
 });
 

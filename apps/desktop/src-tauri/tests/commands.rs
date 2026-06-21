@@ -368,6 +368,7 @@ async fn roots_register_via_use_case() {
         path: source_path.to_owned(),
         kind_subtype: None,
         scan_depth: contracts_core::first_run::ScanDepth::Recursive,
+        organization_state: contracts_core::first_run::OrganizationState::Organized,
     };
 
     let resp = app_core::first_run::register_source(db.pool(), &req).await;

@@ -35,8 +35,18 @@ import type { StepScanProps } from './StepScan';
 // ── Fixtures ─────────────────────────────────────────────────────────────────
 
 const SOURCES = [
-  { path: '/astro/lights', kind: 'light_frames' as const, scanDepth: 'recursive' as const },
-  { path: '/astro/projects', kind: 'project' as const, scanDepth: 'recursive' as const },
+  {
+    path: '/astro/lights',
+    kind: 'light_frames' as const,
+    scanDepth: 'recursive' as const,
+    organizationState: 'organized' as const,
+  },
+  {
+    path: '/astro/projects',
+    kind: 'project' as const,
+    scanDepth: 'recursive' as const,
+    organizationState: 'organized' as const,
+  },
 ];
 
 const FLUSH_RESULT = {

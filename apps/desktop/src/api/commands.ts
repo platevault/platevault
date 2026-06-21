@@ -30,10 +30,24 @@ import type {
   InboxReclassifyOverride,
   InboxReclassifyRequest,
   InboxReclassifyResponse_Serialize as InboxReclassifyResponse,
+  InboxFileMetadata_Serialize as InboxFileMetadata,
+  InboxItemMetadataRequest,
   InboxScanFolderRequest,
   InboxScanFolderResponse,
   CalibrationMaster_Serialize as CalibrationMaster,
   MasterDetail_Serialize as MasterDetail,
+  InboxApplyAllResponse,
+  InboxApplySelectedRequest,
+  InboxOpenPlan,
+  InboxOpenPlansResponse,
+  InboxPlanAction,
+  InboxPlanApplyResult,
+  InboxPlanCancelResponse,
+  InboxPlanView,
+  PlanApplyResponse,
+  InboxStatsResponse,
+  InboxStatsPerType,
+  InboxStatsTotals,
 } from '@/bindings/index';
 export type {
   InboxClassifyRequest,
@@ -46,8 +60,21 @@ export type {
   InboxReclassifyOverride,
   InboxReclassifyRequest,
   InboxReclassifyResponse,
+  InboxFileMetadata,
   InboxScanFolderRequest,
   InboxScanFolderResponse,
+  InboxApplyAllResponse,
+  InboxApplySelectedRequest,
+  InboxOpenPlan,
+  InboxOpenPlansResponse,
+  InboxPlanAction,
+  InboxPlanApplyResult,
+  InboxPlanCancelResponse,
+  InboxPlanView,
+  PlanApplyResponse,
+  InboxStatsResponse,
+  InboxStatsPerType,
+  InboxStatsTotals,
 };
 
 import type {
@@ -99,6 +126,9 @@ import type {
   ManifestRevealRequest,
   ProjectNoteGetRequest,
   ProjectNoteGetResult,
+  // spec 041: per-source organization state (move vs catalogue).
+  OrganizationState,
+  SetSourceOrganizationStateResponse,
 } from '@/bindings/index';
 
 // IPC dispatch + the dev-tools recording override live in the shared switcher
@@ -259,6 +289,23 @@ export async function listRoots(): Promise<LibraryRoot[]> {
   return unwrap(await commands.rootsList()) as unknown as LibraryRoot[];
 }
 
+/**
+ * `sources.set_organization_state` — change a source's organization state
+ * (spec 041 US4). Affects only future confirms. Inbox sources may not be set
+ * to `organized` (the backend returns `source.invalid_organization_state`).
+ *
+ * Field names mirror the generated binding exactly (camelCase `sourceId` /
+ * `organizationState`); the binding wraps them into the invoke payload.
+ */
+export async function setSourceOrganizationState(args: {
+  sourceId: string;
+  organizationState: OrganizationState;
+}): Promise<SetSourceOrganizationStateResponse> {
+  return unwrap(
+    await commands.sourcesSetOrganizationState(args.sourceId, args.organizationState),
+  );
+}
+
 export async function listEquipment(): Promise<Equipment[]> {
   return unwrap(await commands.equipmentList()) as unknown as Equipment[];
 }
@@ -389,6 +436,8 @@ export interface BatchSourceEntry {
   path: string;
   // Backend RegisterSourceRequest is camelCase — must be `scanDepth`.
   scanDepth: string;
+  /** Required by the backend contract (spec 041 R-7). 'organized' | 'unorganized'. */
+  organizationState: string;
 }
 
 export interface BatchRegisterResult {
@@ -692,17 +741,90 @@ export async function inboxConfirm(req: InboxConfirmRequest): Promise<InboxConfi
 export async function inboxReclassify(
   req: InboxReclassifyRequest,
 ): Promise<InboxReclassifyResponse> {
-  return unwrap(await commands.inboxReclassify(req)) as InboxReclassifyResponse;
+  return unwrap(
+    await commands.inboxReclassify(req as Parameters<typeof commands.inboxReclassify>[0]),
+  ) as InboxReclassifyResponse;
 }
 
 /**
  * List all unacknowledged inbox items across all registered roots (spec 039).
- * Items in `pending_classification` or `classified` state are returned.
- * Confirmed/plan_open/resolved items are excluded.
+ * Items in `pending_classification`, `classified`, or `plan_open` state are
+ * returned. Resolved items are excluded.
  * Results are capped at 500 (check `capped` flag for truncation).
  */
 export async function inboxList(): Promise<InboxListResponse> {
   return unwrap(await commands.inboxList());
+}
+
+/**
+ * Fetch per-file extracted metadata for one inbox item (spec 041 US2/FR-010).
+ * Returns one entry per classified file. The invoke arg mirrors the generated
+ * binding exactly (`{ req: { inboxItemId } }`).
+ */
+export async function inboxItemMetadata(
+  inboxItemId: InboxItemMetadataRequest['inboxItemId'],
+): Promise<InboxFileMetadata[]> {
+  const resp = unwrap(await commands.inboxItemMetadata({ inboxItemId }));
+  return resp.files;
+}
+
+// ── Inbox plan surface (spec 041) ─────────────────────────────────────────────
+
+/**
+ * Fetch the open plan for an inbox item.
+ * Throws with code `inbox.item.no_plan` when the item has no linked plan.
+ */
+export async function inboxPlan(inboxItemId: string): Promise<InboxPlanView> {
+  return unwrap(await commands.inboxPlan(inboxItemId));
+}
+
+/**
+ * Approve + apply the plan for a single inbox item.
+ * The plan listener transitions the item to `resolved` on completion.
+ * Throws with code `plan.stale` when a source file changed since plan creation.
+ */
+export async function inboxPlanApply(inboxItemId: string): Promise<PlanApplyResponse> {
+  return unwrap(await commands.inboxPlanApply(inboxItemId));
+}
+
+/**
+ * Apply all plans currently in `plan_open` state across all roots.
+ * Per-item errors are captured inside the returned `results` array.
+ */
+export async function inboxPlanApplyAll(): Promise<InboxApplyAllResponse> {
+  return unwrap(await commands.inboxPlanApplyAll());
+}
+
+/**
+ * List every open plan across all roots in one call (spec 041, US2).
+ * Each plan carries its actions; `totalActions` sums them for the surface header.
+ */
+export async function listOpenInboxPlans(): Promise<InboxOpenPlansResponse> {
+  return unwrap(await commands.inboxPlanListOpen());
+}
+
+/**
+ * Apply a caller-chosen subset of inbox plans (spec 041, US2).
+ * Selection is plan-level (per inbox item / ingestion group), not per action.
+ * Per-item errors are captured inside the returned `results` array.
+ */
+export async function applySelectedInboxPlans(
+  inboxItemIds: InboxApplySelectedRequest['inboxItemIds'],
+): Promise<InboxApplyAllResponse> {
+  return unwrap(await commands.inboxPlanApplySelected({ inboxItemIds }));
+}
+
+/**
+ * Discard the open plan and reset the item to `classified`.
+ * The item is immediately available for re-confirmation.
+ */
+export async function inboxPlanCancel(inboxItemId: string): Promise<InboxPlanCancelResponse> {
+  return unwrap(await commands.inboxPlanCancel(inboxItemId));
+}
+
+/** inbox.stats — aggregate per-type frame counts across all active inbox items (spec 041, US6). */
+export async function inboxStats(): Promise<InboxStatsResponse> {
+  return unwrap(await commands.inboxStats());
 }
 
 // ── Calibration matching commands (spec 007) ──────────────────────────────────

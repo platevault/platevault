@@ -13,7 +13,15 @@ import {
   inboxClassify,
   inboxConfirm,
   inboxList,
+  inboxItemMetadata,
   inboxReclassify,
+  inboxPlan,
+  inboxPlanApply,
+  inboxPlanApplyAll,
+  inboxPlanCancel,
+  listOpenInboxPlans,
+  applySelectedInboxPlans,
+  inboxStats,
 } from '@/api/commands';
 import type {
   InboxClassifyResponse,
@@ -21,16 +29,38 @@ import type {
   InboxListItem,
   InboxListResponse,
   InboxReclassifyResponse,
+  InboxFileMetadata,
   InboxScanFolderResponse,
+  InboxApplyAllResponse,
+  InboxPlanCancelResponse,
+  InboxPlanView,
+  InboxOpenPlan,
+  InboxOpenPlansResponse,
+  InboxPlanAction,
+  PlanApplyResponse,
+  InboxStatsResponse,
+  InboxStatsPerType,
+  InboxStatsTotals,
 } from '@/api/commands';
 
 export type {
+  InboxFileMetadata,
   InboxClassifyResponse,
   InboxConfirmResponse,
   InboxListItem,
   InboxListResponse,
   InboxReclassifyResponse,
   InboxScanFolderResponse,
+  InboxApplyAllResponse,
+  InboxPlanCancelResponse,
+  InboxPlanView,
+  InboxOpenPlan,
+  InboxOpenPlansResponse,
+  InboxPlanAction,
+  PlanApplyResponse,
+  InboxStatsResponse,
+  InboxStatsPerType,
+  InboxStatsTotals,
 };
 
 // ── Parameterised stores ──────────────────────────────────────────────────────
@@ -140,7 +170,7 @@ export function useInboxReclassify(inboxItemId: string) {
   });
 
   const reclassify = useCallback(
-    async (overrides: Array<{ filePath: string; frameType: string }>) => {
+    async (overrides: Array<{ filePath: string; frameType?: string | null; filter?: string | null; exposureS?: number | null; binning?: string | null }>) => {
       setState({ loading: true, result: null, error: null });
       try {
         const result = await inboxReclassify({ inboxItemId, overrides });
@@ -201,6 +231,48 @@ export function useInboxList() {
   return { ...state, refresh };
 }
 
+export interface InboxItemMetadataState {
+  data: InboxFileMetadata[];
+  loading: boolean;
+  error: string | null;
+}
+
+/**
+ * Load per-file extracted metadata for one inbox item (spec 041 US2/FR-010).
+ *
+ * Mirrors `useInboxList`: a `useState` + `useEffect` + cancelled-flag pattern
+ * (this app does not use React Query). Pass `null` to skip fetching (e.g. when
+ * no item is selected). Re-fetches whenever `itemId` changes.
+ */
+export function useInboxItemMetadata(itemId: string | null) {
+  const [state, setState] = useState<InboxItemMetadataState>({
+    data: [],
+    loading: false,
+    error: null,
+  });
+
+  useEffect(() => {
+    if (!itemId) {
+      setState({ data: [], loading: false, error: null });
+      return;
+    }
+    let cancelled = false;
+    setState((s) => ({ ...s, loading: true, error: null }));
+    inboxItemMetadata(itemId)
+      .then((files) => {
+        if (!cancelled) setState({ data: files, loading: false, error: null });
+      })
+      .catch((e: unknown) => {
+        if (!cancelled) setState({ data: [], loading: false, error: String(e) });
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [itemId]);
+
+  return state;
+}
+
 export interface RescanState {
   loading: boolean;
   error: string | null;
@@ -241,4 +313,220 @@ export function useInboxRescan(
   }, [roots, onComplete]);
 
   return { ...state, rescan };
+}
+
+// ── Inbox plan surface (spec 041) ─────────────────────────────────────────────
+
+interface PlanState {
+  plan: InboxPlanView | null;
+  loading: boolean;
+  error: string | null;
+}
+
+/**
+ * Fetch + hold the open plan for the currently selected inbox item.
+ * Pass an empty string to skip the fetch (no item selected / no plan).
+ */
+export function useInboxPlan(inboxItemId: string) {
+  const [state, setState] = useState<PlanState>({ plan: null, loading: false, error: null });
+
+  const fetchPlan = useCallback(async () => {
+    if (!inboxItemId) {
+      setState({ plan: null, loading: false, error: null });
+      return;
+    }
+    setState((s) => ({ ...s, loading: true, error: null }));
+    try {
+      const plan = await inboxPlan(inboxItemId);
+      setState({ plan, loading: false, error: null });
+    } catch (e: unknown) {
+      const msg = String(e);
+      // 'no_plan' is expected when the item was just confirmed and listener
+      // hasn't fired yet, or when the item is not in plan_open state.
+      if (msg.includes('inbox.item.no_plan') || msg.includes('inbox.item.not_found')) {
+        setState({ plan: null, loading: false, error: null });
+      } else {
+        setState({ plan: null, loading: false, error: msg });
+      }
+    }
+  }, [inboxItemId]);
+
+  return { ...state, fetchPlan };
+}
+
+interface PlanApplyState {
+  loading: boolean;
+  error: string | null;
+}
+
+/** Apply the open plan for a single inbox item. */
+export function useInboxPlanApply() {
+  const [state, setState] = useState<PlanApplyState>({ loading: false, error: null });
+
+  const apply = useCallback(
+    async (inboxItemId: string): Promise<PlanApplyResponse | null> => {
+      setState({ loading: true, error: null });
+      try {
+        const result = await inboxPlanApply(inboxItemId);
+        setState({ loading: false, error: null });
+        return result;
+      } catch (e: unknown) {
+        setState({ loading: false, error: String(e) });
+        return null;
+      }
+    },
+    [],
+  );
+
+  return { ...state, apply };
+}
+
+/** Apply all plans currently in `plan_open` state. */
+export function useInboxPlanApplyAll() {
+  const [state, setState] = useState<PlanApplyState>({ loading: false, error: null });
+
+  const applyAll = useCallback(async (): Promise<InboxApplyAllResponse | null> => {
+    setState({ loading: true, error: null });
+    try {
+      const result = await inboxPlanApplyAll();
+      setState({ loading: false, error: null });
+      return result;
+    } catch (e: unknown) {
+      setState({ loading: false, error: String(e) });
+      return null;
+    }
+  }, []);
+
+  return { ...state, applyAll };
+}
+
+/** Cancel the open plan for a single inbox item, resetting it to `classified`. */
+export function useInboxPlanCancel() {
+  const [state, setState] = useState<PlanApplyState>({ loading: false, error: null });
+
+  const cancel = useCallback(
+    async (inboxItemId: string): Promise<InboxPlanCancelResponse | null> => {
+      setState({ loading: true, error: null });
+      try {
+        const result = await inboxPlanCancel(inboxItemId);
+        setState({ loading: false, error: null });
+        return result;
+      } catch (e: unknown) {
+        setState({ loading: false, error: String(e) });
+        return null;
+      }
+    },
+    [],
+  );
+
+  return { ...state, cancel };
+}
+
+// ── Aggregate open-plans surface (spec 041, US2) ──────────────────────────────
+
+export interface OpenPlansState {
+  data: InboxOpenPlansResponse | null;
+  loading: boolean;
+  error: string | null;
+}
+
+/**
+ * Load and cache the cross-root aggregate of every open inbox plan.
+ *
+ * Mirrors `useInboxList`: a useState + useEffect + cancelled-flag pattern keyed
+ * by a monotonic `epoch`. Call `refresh()` to re-fetch (e.g. after an
+ * apply/cancel/confirm mutation).
+ */
+export function useOpenInboxPlans() {
+  const [epoch, setEpoch] = useState(0);
+  const [state, setState] = useState<OpenPlansState>({
+    data: null,
+    loading: true,
+    error: null,
+  });
+
+  useEffect(() => {
+    let cancelled = false;
+    setState((s) => ({ ...s, loading: true, error: null }));
+    listOpenInboxPlans()
+      .then((resp) => {
+        if (!cancelled) setState({ data: resp, loading: false, error: null });
+      })
+      .catch((e: unknown) => {
+        if (!cancelled) setState({ data: null, loading: false, error: String(e) });
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [epoch]);
+
+  const refresh = useCallback(() => setEpoch((n) => n + 1), []);
+
+  return { ...state, refresh };
+}
+
+/**
+ * Apply a caller-chosen subset of open inbox plans (selection is per-ingestion
+ * group / plan-level). Mirrors `useInboxPlanApplyAll`.
+ */
+export function useApplySelectedInboxPlans() {
+  const [state, setState] = useState<PlanApplyState>({ loading: false, error: null });
+
+  const applySelected = useCallback(
+    async (inboxItemIds: string[]): Promise<InboxApplyAllResponse | null> => {
+      setState({ loading: true, error: null });
+      try {
+        const result = await applySelectedInboxPlans(inboxItemIds);
+        setState({ loading: false, error: null });
+        return result;
+      } catch (e: unknown) {
+        setState({ loading: false, error: String(e) });
+        return null;
+      }
+    },
+    [],
+  );
+
+  return { ...state, applySelected };
+}
+
+// ── Inbox stats hook (spec 041, US6 T039) ────────────────────────────────────
+
+interface InboxStatsState {
+  data: InboxStatsResponse | null;
+  loading: boolean;
+  error: string | null;
+}
+
+/**
+ * Load aggregate per-type frame counts across all active inbox items.
+ * Mirrors `useOpenInboxPlans`: a useState + useEffect + cancelled-flag pattern
+ * keyed by a monotonic `epoch`. Call `refresh()` to re-fetch.
+ */
+export function useInboxStats() {
+  const [epoch, setEpoch] = useState(0);
+  const [state, setState] = useState<InboxStatsState>({
+    data: null,
+    loading: true,
+    error: null,
+  });
+
+  useEffect(() => {
+    let cancelled = false;
+    setState((s) => ({ ...s, loading: true, error: null }));
+    inboxStats()
+      .then((resp) => {
+        if (!cancelled) setState({ data: resp, loading: false, error: null });
+      })
+      .catch((e: unknown) => {
+        if (!cancelled) setState({ data: null, loading: false, error: String(e) });
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [epoch]);
+
+  const refresh = useCallback(() => setEpoch((n) => n + 1), []);
+
+  return { ...state, refresh };
 }

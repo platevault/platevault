@@ -11,7 +11,7 @@
  * `crates/app/core/src/guided_flow.rs`.
  */
 
-/** Anchor on the "Confirm" action control in InboxPage / ActionSidebar. */
+/** Anchor on the "Confirm" action control in InboxPage's top action bar. */
 export const ANCHOR_INBOX_CONFIRM_ROW = 'inbox.confirm-row';
 
 /** Anchor on the "New project" / "Create project" CTA in ProjectsPage. */
