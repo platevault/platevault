@@ -18,6 +18,7 @@ import {
   type ContractCall,
   getSettings,
 } from '@/api/commands';
+import { PageShell } from '@/components';
 import { ContractList } from './ContractList';
 import { CallList } from './CallList';
 import { SchemaViewer } from './SchemaViewer';
@@ -28,7 +29,7 @@ import { pickDirectory } from '@/shared/native/picker';
 function DevModeDisabledStub() {
   return (
     <div
-      className="alm-dev-stub"
+      className="alm-dev-stub alm-page__scroll"
       style={{ padding: 'var(--alm-sp-8)', textAlign: 'center', color: 'var(--alm-text-muted)' }}
       data-testid="dev-disabled-stub"
     >
@@ -142,20 +143,27 @@ export function ContractsPage() {
   // Still loading devMode state.
   if (devMode === null) {
     return (
-      <div style={{ padding: 'var(--alm-sp-8)', color: 'var(--alm-text-muted)' }}>
-        Loading…
-      </div>
+      <PageShell>
+        <div className="alm-page__scroll" style={{ padding: 'var(--alm-sp-8)', color: 'var(--alm-text-muted)' }}>
+          Loading…
+        </div>
+      </PageShell>
     );
   }
 
   // DevMode is off — show stub, do not subscribe to call stream.
   if (!devMode) {
-    return <DevModeDisabledStub />;
+    return (
+      <PageShell>
+        <DevModeDisabledStub />
+      </PageShell>
+    );
   }
 
   return (
+    <PageShell>
     <div
-      className="alm-dev-contracts"
+      className="alm-dev-contracts alm-page__scroll"
       style={{ padding: 'var(--alm-sp-4)', display: 'flex', flexDirection: 'column', gap: 'var(--alm-sp-4)' }}
     >
       <div
@@ -239,5 +247,6 @@ export function ContractsPage() {
         />
       )}
     </div>
+    </PageShell>
   );
 }

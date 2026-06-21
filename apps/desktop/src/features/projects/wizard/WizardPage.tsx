@@ -285,6 +285,7 @@ export function WizardPage() {
     <div className="alm-page" style={{ display: 'flex', flexDirection: 'column', flex: 1, minHeight: 0 }}>
       {/* Wizard toolbar — styled consistently with other page toolbars */}
       <div
+        className="alm-page__bar"
         style={{
           display: 'flex',
           alignItems: 'center',
@@ -292,7 +293,6 @@ export function WizardPage() {
           padding: '0 var(--alm-space-4)',
           height: 'var(--alm-toolbar-height, 44px)',
           borderBottom: '1px solid var(--alm-border)',
-          flexShrink: 0,
         }}
       >
         <span style={{ fontSize: 'var(--alm-text-sm)', fontWeight: 600 }}>
@@ -310,6 +310,7 @@ export function WizardPage() {
 
       {/* Sub-toolbar: workflow profile breadcrumb */}
       <div
+        className="alm-page__bar"
         style={{
           display: 'flex',
           alignItems: 'center',
@@ -318,7 +319,6 @@ export function WizardPage() {
           fontSize: 'var(--alm-text-xs)',
           color: 'var(--alm-text-muted)',
           borderBottom: '1px solid var(--alm-border)',
-          flexShrink: 0,
         }}
       >
         <span>Workflow profile: {profileLabel}</span>

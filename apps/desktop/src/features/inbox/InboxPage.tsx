@@ -379,13 +379,10 @@ export function InboxPage() {
           />
         }
         detail={
-          <div className="alm-inbox-center" style={{ display: 'flex', flexDirection: 'column', height: '100%', minHeight: 0 }}>
+          <div className="alm-inbox-center">
             {/* spec 041 US6: stats summary strip — always visible, never scrolls. */}
             {statsData && <InboxStatsSummary stats={statsData} />}
-            <div
-              className="alm-inbox-center__detail"
-              style={{ flex: '1 1 auto', minHeight: 0, overflowY: 'auto' }}
-            >
+            <div className="alm-inbox-center__detail">
               {selectedItem ? (
                 <InboxDetail
                   // Remount per item so per-item state (pending type overrides) never
@@ -407,10 +404,7 @@ export function InboxPage() {
                 exists OR a destination-root pick is pending (US8/FR-029), the
                 latter possible with zero open plans (no plan was created). */}
             {(openPlans.length > 0 || pendingRootPick) && (
-              <div
-                className="alm-inbox-center__plans"
-                style={{ flexShrink: 0, borderTop: '1px solid var(--alm-border)', paddingTop: 'var(--alm-sp-2)' }}
-              >
+              <div className="alm-inbox-center__plans">
                 <PlanPanel
                   plans={openPlans}
                   totalActions={totalActions}
