@@ -1329,3 +1329,179 @@
   font-size: var(--alm-text-sm);
   cursor: pointer;
 }
+
+/* === NAMING & STRUCTURE === */
+
+/* Chip row — flex container for pattern chips and add-buttons */
+.alm-naming__chip-row {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--alm-sp-1);
+  align-items: center;
+  min-height: 32px;
+}
+
+/* Inline-block wrapper for relative-positioned dropdowns */
+.alm-naming__menu-anchor {
+  position: relative;
+  display: inline-block;
+}
+
+/* Dropdown panel (token menu, sep menu, literal popover) */
+.alm-naming__dropdown {
+  position: absolute;
+  top: 100%;
+  left: 0;
+  z-index: 10;
+  background: var(--alm-surface-raised);
+  border: 1px solid var(--alm-border);
+  border-radius: var(--alm-radius-md);
+  padding: var(--alm-sp-1);
+  box-shadow: var(--alm-shadow-sm);
+}
+
+.alm-naming__dropdown--token { min-width: 160px; }
+.alm-naming__dropdown--sep   { min-width: 100px; }
+
+/* Literal popover is row-direction */
+.alm-naming__dropdown--literal {
+  min-width: 160px;
+  display: flex;
+  gap: var(--alm-sp-1);
+}
+
+/* Menu item buttons inside dropdowns */
+.alm-naming__menu-item {
+  display: block;
+  width: 100%;
+  text-align: left;
+  padding: 4px 8px;
+  background: var(--alm-surface-raised);
+  color: var(--alm-text);
+  border: none;
+  cursor: pointer;
+  font-family: var(--alm-font-mono);
+  font-size: var(--alm-text-xs);
+}
+.alm-naming__menu-item:hover {
+  background: var(--alm-hover-bg);
+}
+.alm-naming__menu-item:focus {
+  outline: none;
+  background: var(--alm-hover-bg);
+}
+
+/* Literal segment text input inside the literal popover */
+.alm-naming__literal-input {
+  font-family: var(--alm-font-mono);
+  font-size: var(--alm-text-xs);
+  width: 100px;
+  padding: 2px 6px;
+  background: var(--alm-surface-raised);
+  color: var(--alm-text);
+  border: 1px solid var(--alm-border);
+  border-radius: var(--alm-radius-md);
+}
+.alm-naming__literal-input::placeholder {
+  color: var(--alm-text-faint);
+}
+.alm-naming__literal-input:focus {
+  outline: none;
+  border-color: var(--alm-accent);
+}
+
+/* "Add" confirm button inside the literal popover */
+.alm-naming__literal-add-btn {
+  padding: 2px 8px;
+  background: var(--alm-accent);
+  color: var(--alm-on-accent);
+  border: none;
+  border-radius: var(--alm-radius-md);
+  cursor: pointer;
+  font-size: var(--alm-text-xs);
+}
+.alm-naming__literal-add-btn:hover {
+  background: var(--alm-accent-hover);
+}
+.alm-naming__literal-add-btn:focus {
+  outline: none;
+  border: 1px solid var(--alm-accent-deep);
+}
+
+/* Placeholder span shown when no chips are present */
+.alm-naming__chip-placeholder {
+  font-family: var(--alm-font-mono);
+  font-size: var(--alm-text-xs);
+  color: var(--alm-text-muted);
+  font-style: italic;
+}
+
+/* Validation error feedback below chip row */
+.alm-naming__error {
+  margin-top: var(--alm-sp-1);
+  font-size: var(--alm-text-xs);
+  color: var(--alm-danger);
+}
+
+/* Validation warning feedback below chip row */
+.alm-naming__warning {
+  margin-top: var(--alm-sp-1);
+  font-size: var(--alm-text-xs);
+  color: var(--alm-text-muted);
+}
+
+/* Per-type section description (marginBottom only) */
+.alm-naming__pertype-desc {
+  margin-bottom: var(--alm-sp-2);
+}
+
+/* Per-type row inner: chip editor + reset button side by side */
+.alm-naming__pertype-row-inner {
+  display: flex;
+  align-items: flex-start;
+  gap: var(--alm-sp-2);
+}
+
+/* The flex-1 wrapper around the PerTypePatternChipsEditor */
+.alm-naming__pertype-editor-wrap {
+  flex: 1;
+}
+
+/* Checkbox label margin */
+.alm-naming__checkbox {
+  margin-right: var(--alm-sp-1);
+}
+
+/* Live Preview section */
+.alm-naming__preview-sample {
+  font-size: var(--alm-text-xs);
+  color: var(--alm-text-muted);
+  margin-bottom: var(--alm-sp-1);
+}
+
+.alm-naming__preview-empty {
+  font-size: var(--alm-text-xs);
+  color: var(--alm-text-muted);
+  font-style: italic;
+}
+
+.alm-naming__preview-error {
+  font-size: var(--alm-text-xs);
+  color: var(--alm-danger);
+}
+
+.alm-naming__preview-path-row {
+  display: flex;
+  gap: var(--alm-sp-3);
+  align-items: baseline;
+}
+
+.alm-naming__preview-code {
+  font-size: var(--alm-text-xs);
+}
+
+.alm-naming__preview-fallback {
+  font-size: var(--alm-text-xs);
+  color: var(--alm-text-muted);
+  font-style: italic;
+}

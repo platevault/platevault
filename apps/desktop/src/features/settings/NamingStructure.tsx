@@ -255,15 +255,7 @@ function PatternChipsEditor({
 	return (
 		<div>
 			{/* Chip row */}
-			<div
-				style={{
-					display: "flex",
-					flexWrap: "wrap",
-					gap: "var(--alm-sp-1)",
-					alignItems: "center",
-					minHeight: 32,
-				}}
-			>
+			<div className="alm-naming__chip-row">
 				{pattern.map((part) => {
 					const isSep = part.kind === "separator";
 					const label = isSep
@@ -294,7 +286,7 @@ function PatternChipsEditor({
 				})}
 
 				{/* Add Token menu */}
-				<div style={{ position: "relative", display: "inline-block" }}>
+				<div className="alm-naming__menu-anchor">
 					<Btn
 						size="sm"
 						onClick={() => {
@@ -305,42 +297,12 @@ function PatternChipsEditor({
 						+ Token
 					</Btn>
 					{showTokenMenu && (
-						<div
-							style={{
-								position: "absolute",
-								top: "100%",
-								left: 0,
-								zIndex: 10,
-								background: "var(--alm-surface)",
-								border: "1px solid var(--alm-border)",
-								borderRadius: "var(--alm-radius-md)",
-								padding: "var(--alm-sp-1)",
-								minWidth: 160,
-								boxShadow: "0 4px 12px rgba(0,0,0,0.12)",
-							}}
-						>
+						<div className="alm-naming__dropdown alm-naming__dropdown--token">
 							{AVAILABLE_TOKENS.map((t) => (
 								<button
 									key={t}
 									type="button"
-									style={{
-										display: "block",
-										width: "100%",
-										textAlign: "left",
-										padding: "4px 8px",
-										background: "none",
-										border: "none",
-										cursor: "pointer",
-										fontFamily: "var(--alm-font-mono)",
-										fontSize: "var(--alm-text-xs)",
-										color: "var(--alm-text)",
-									}}
-									onMouseOver={(e) =>
-										(e.currentTarget.style.background = "var(--alm-hover-bg)")
-									}
-									onMouseOut={(e) =>
-										(e.currentTarget.style.background = "none")
-									}
+									className="alm-naming__menu-item"
 									onClick={() => handleAddToken(t)}
 								>
 									{`{${t}}`}
@@ -351,7 +313,7 @@ function PatternChipsEditor({
 				</div>
 
 				{/* Add Separator menu */}
-				<div style={{ position: "relative", display: "inline-block" }}>
+				<div className="alm-naming__menu-anchor">
 					<Btn
 						size="sm"
 						onClick={() => {
@@ -362,42 +324,12 @@ function PatternChipsEditor({
 						+ Sep
 					</Btn>
 					{showSepMenu && (
-						<div
-							style={{
-								position: "absolute",
-								top: "100%",
-								left: 0,
-								zIndex: 10,
-								background: "var(--alm-surface)",
-								border: "1px solid var(--alm-border)",
-								borderRadius: "var(--alm-radius-md)",
-								padding: "var(--alm-sp-1)",
-								minWidth: 100,
-								boxShadow: "0 4px 12px rgba(0,0,0,0.12)",
-							}}
-						>
+						<div className="alm-naming__dropdown alm-naming__dropdown--sep">
 							{SEPARATORS.map((s) => (
 								<button
 									key={s}
 									type="button"
-									style={{
-										display: "block",
-										width: "100%",
-										textAlign: "left",
-										padding: "4px 8px",
-										background: "none",
-										border: "none",
-										cursor: "pointer",
-										fontFamily: "var(--alm-font-mono)",
-										fontSize: "var(--alm-text-xs)",
-										color: "var(--alm-text)",
-									}}
-									onMouseOver={(e) =>
-										(e.currentTarget.style.background = "var(--alm-hover-bg)")
-									}
-									onMouseOut={(e) =>
-										(e.currentTarget.style.background = "none")
-									}
+									className="alm-naming__menu-item"
 									onClick={() => handleAddSep(s)}
 								>
 									{s === "/"
@@ -414,14 +346,7 @@ function PatternChipsEditor({
 
 			{/* Validation feedback */}
 			{errorCode && (
-				<div
-					style={{
-						marginTop: "var(--alm-sp-1)",
-						fontSize: "var(--alm-text-xs)",
-						color: "var(--alm-danger)",
-					}}
-					role="alert"
-				>
+				<div className="alm-naming__error" role="alert">
 					{errorCode === "pattern.empty" &&
 						"Pattern is empty — add at least one token."}
 					{errorCode === "token.unknown" &&
@@ -432,13 +357,7 @@ function PatternChipsEditor({
 				</div>
 			)}
 			{warnings.length > 0 && (
-				<div
-					style={{
-						marginTop: "var(--alm-sp-1)",
-						fontSize: "var(--alm-text-xs)",
-						color: "var(--alm-text-muted)",
-					}}
-				>
+				<div className="alm-naming__warning">
 					{warnings.includes("no_path_separator") && (
 						<span>
 							No path separator (/) — all tokens resolve to one flat folder.{" "}
@@ -515,24 +434,9 @@ function PerTypePatternChipsEditor({
 	return (
 		<div>
 			{/* Chip row */}
-			<div
-				style={{
-					display: "flex",
-					flexWrap: "wrap",
-					gap: "var(--alm-sp-1)",
-					alignItems: "center",
-					minHeight: 32,
-				}}
-			>
+			<div className="alm-naming__chip-row">
 				{isEmpty && (
-					<span
-						style={{
-							fontFamily: "var(--alm-font-mono)",
-							fontSize: "var(--alm-text-xs)",
-							color: "var(--alm-text-muted)",
-							fontStyle: "italic",
-						}}
-					>
+					<span className="alm-naming__chip-placeholder">
 						{defaultPlaceholder}
 					</span>
 				)}
@@ -570,7 +474,7 @@ function PerTypePatternChipsEditor({
 				})}
 
 				{/* Add Token menu */}
-				<div style={{ position: "relative", display: "inline-block" }}>
+				<div className="alm-naming__menu-anchor">
 					<Btn
 						size="sm"
 						onClick={() => {
@@ -581,42 +485,12 @@ function PerTypePatternChipsEditor({
 						+ Token
 					</Btn>
 					{showTokenMenu && (
-						<div
-							style={{
-								position: "absolute",
-								top: "100%",
-								left: 0,
-								zIndex: 10,
-								background: "var(--alm-surface)",
-								border: "1px solid var(--alm-border)",
-								borderRadius: "var(--alm-radius-md)",
-								padding: "var(--alm-sp-1)",
-								minWidth: 160,
-								boxShadow: "0 4px 12px rgba(0,0,0,0.12)",
-							}}
-						>
+						<div className="alm-naming__dropdown alm-naming__dropdown--token">
 							{AVAILABLE_TOKENS.map((t) => (
 								<button
 									key={t}
 									type="button"
-									style={{
-										display: "block",
-										width: "100%",
-										textAlign: "left",
-										padding: "4px 8px",
-										background: "none",
-										border: "none",
-										cursor: "pointer",
-										fontFamily: "var(--alm-font-mono)",
-										fontSize: "var(--alm-text-xs)",
-										color: "var(--alm-text)",
-									}}
-									onMouseOver={(e) =>
-										(e.currentTarget.style.background = "var(--alm-hover-bg)")
-									}
-									onMouseOut={(e) =>
-										(e.currentTarget.style.background = "none")
-									}
+									className="alm-naming__menu-item"
 									onClick={() => handleAddToken(t)}
 								>
 									{`{${t}}`}
@@ -632,7 +506,7 @@ function PerTypePatternChipsEditor({
 				</Btn>
 
 				{/* Add Literal segment */}
-				<div style={{ position: "relative", display: "inline-block" }}>
+				<div className="alm-naming__menu-anchor">
 					<Btn
 						size="sm"
 						onClick={() => {
@@ -647,32 +521,11 @@ function PerTypePatternChipsEditor({
 						+ Literal
 					</Btn>
 					{showLiteralInput && (
-						<div
-							style={{
-								position: "absolute",
-								top: "100%",
-								left: 0,
-								zIndex: 10,
-								background: "var(--alm-surface)",
-								border: "1px solid var(--alm-border)",
-								borderRadius: "var(--alm-radius-md)",
-								padding: "var(--alm-sp-1)",
-								minWidth: 160,
-								boxShadow: "0 4px 12px rgba(0,0,0,0.12)",
-								display: "flex",
-								gap: "var(--alm-sp-1)",
-							}}
-						>
+						<div className="alm-naming__dropdown alm-naming__dropdown--literal">
 							<input
 								ref={literalInputRef}
 								type="text"
-								className="alm-input"
-								style={{
-									fontFamily: "var(--alm-font-mono)",
-									fontSize: "var(--alm-text-xs)",
-									width: 100,
-									padding: "2px 6px",
-								}}
+								className="alm-naming__literal-input"
 								value={literalInput}
 								placeholder="e.g. flats"
 								spellCheck={false}
@@ -684,15 +537,7 @@ function PerTypePatternChipsEditor({
 							/>
 							<button
 								type="button"
-								style={{
-									padding: "2px 8px",
-									background: "var(--alm-accent)",
-									color: "var(--alm-accent-fg)",
-									border: "none",
-									borderRadius: "var(--alm-radius-md)",
-									cursor: "pointer",
-									fontSize: "var(--alm-text-xs)",
-								}}
+								className="alm-naming__literal-add-btn"
 								onClick={handleAddLiteral}
 							>
 								Add
@@ -707,11 +552,7 @@ function PerTypePatternChipsEditor({
 				<div
 					id={`${rowId}-error`}
 					role="alert"
-					style={{
-						marginTop: "var(--alm-sp-1)",
-						fontSize: "var(--alm-text-xs)",
-						color: "var(--alm-danger)",
-					}}
+					className="alm-naming__error"
 				>
 					{error}
 				</div>
@@ -847,10 +688,7 @@ function PerTypeDestinationPatterns() {
 			<div className="alm-settings__group-title">
 				Per-Type Destination Patterns
 			</div>
-			<div
-				className="alm-settings__row-desc"
-				style={{ marginBottom: "var(--alm-sp-2)" }}
-			>
+			<div className="alm-settings__row-desc alm-naming__pertype-desc">
 				Destination folder pattern per frame type, applied when confirming inbox
 				items. Empty = use the built-in default (shown as placeholder).
 			</div>
@@ -868,15 +706,9 @@ function PerTypeDestinationPatterns() {
 							{FRAME_TYPE_LABELS[cls]}
 						</div>
 						<div className="alm-settings__row-content">
-							<div
-								style={{
-									display: "flex",
-									alignItems: "flex-start",
-									gap: "var(--alm-sp-2)",
-								}}
-							>
+							<div className="alm-naming__pertype-row-inner">
 								<div
-									style={{ flex: 1 }}
+									className="alm-naming__pertype-editor-wrap"
 									role="group"
 									aria-labelledby={`${rowId}-label`}
 									data-testid={rowId}
@@ -1020,9 +852,9 @@ export function NamingStructure({ save }: NamingStructureProps) {
 					<label className="alm-settings__row-label">
 						<input
 							type="checkbox"
+							className="alm-naming__checkbox"
 							checked={autoApplyPattern}
 							onChange={(e) => handleAutoApplyChange(e.target.checked)}
-							style={{ marginRight: "var(--alm-sp-1)" }}
 						/>
 						Auto-apply pattern to new projects without confirmation
 					</label>
@@ -1031,61 +863,29 @@ export function NamingStructure({ save }: NamingStructureProps) {
 
 			<div className="alm-settings__group">
 				<div className="alm-settings__group-title">Live Preview</div>
-				<div
-					style={{
-						fontSize: "var(--alm-text-xs)",
-						color: "var(--alm-text-muted)",
-						marginBottom: "var(--alm-sp-1)",
-					}}
-				>
+				<div className="alm-naming__preview-sample">
 					Sample: NGC7000 / Ha / 2026-04-12 / light
 				</div>
 				{!canSave && (
-					<div
-						style={{
-							fontSize: "var(--alm-text-xs)",
-							color: "var(--alm-text-muted)",
-							fontStyle: "italic",
-						}}
-					>
+					<div className="alm-naming__preview-empty">
 						— (invalid or empty pattern)
 					</div>
 				)}
 				{previewError && (
-					<div
-						style={{
-							fontSize: "var(--alm-text-xs)",
-							color: "var(--alm-danger)",
-						}}
-					>
+					<div className="alm-naming__preview-error">
 						{previewError}
 					</div>
 				)}
 				{preview && canSave && (
-					<div
-						style={{
-							display: "flex",
-							gap: "var(--alm-sp-3)",
-							alignItems: "baseline",
-						}}
-					>
-						<code
-							className="alm-mono"
-							style={{ fontSize: "var(--alm-text-xs)" }}
-						>
+					<div className="alm-naming__preview-path-row">
+						<code className="alm-mono alm-naming__preview-code">
 							{preview.missingTokens.length > 0
 								? // Render path with fallback segments dimmed.
 									preview.resolvedPath
 								: preview.resolvedPath}
 						</code>
 						{preview.missingTokens.length > 0 && (
-							<span
-								style={{
-									fontSize: "var(--alm-text-xs)",
-									color: "var(--alm-text-muted)",
-									fontStyle: "italic",
-								}}
-							>
+							<span className="alm-naming__preview-fallback">
 								(fallback used for: {preview.missingTokens.join(", ")})
 							</span>
 						)}

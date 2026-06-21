@@ -74,8 +74,12 @@ describe("R-4 regression · bare --alm-radius token (spec 028)", () => {
       // Guards against a broken ?raw import returning an empty string,
       // which would make R-4.1/R-4.2 trivially pass even if broken.
       expect(namingStructureSource.length).toBeGreaterThan(100);
-      // Also confirm it contains at least one expected alm-radius-md reference.
-      expect(namingStructureSource).toContain("var(--alm-radius-md)");
+      // Confirm the file contains a known stable identifier from its public API.
+      // (Previously checked for var(--alm-radius-md) inline; that token now lives
+      // in components.css classes so it no longer appears in the TSX source.
+      // The check-tokens.sh guard (check 4) continues to enforce no bare
+      // --alm-radius refs across all TSX/TS files.)
+      expect(namingStructureSource).toContain("NamingStructure");
     });
   });
 
