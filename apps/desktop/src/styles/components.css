@@ -597,10 +597,16 @@
 }
 .alm-settings__nav-item:hover { background: var(--alm-hover-bg); color: var(--alm-text); }
 .alm-settings__nav-item--active {
-  color: var(--alm-text); background: var(--alm-bg);
+  color: var(--alm-accent-text); background: var(--alm-selected-bg);
   font-weight: var(--alm-weight-semibold);
   border-left: 2px solid var(--alm-accent);
   padding-left: calc(var(--alm-sp-4) - 2px);
+}
+.alm-settings__nav-group { margin-bottom: var(--alm-sp-2); }
+.alm-settings__nav-group-label {
+  font-size: 9.5px; font-weight: var(--alm-weight-semibold);
+  letter-spacing: 0.08em; text-transform: uppercase; color: var(--alm-text-faint);
+  padding: var(--alm-sp-3) var(--alm-sp-4) var(--alm-sp-1);
 }
 .alm-settings__content {
   /* Scroll independently within the two-pane detail column */
