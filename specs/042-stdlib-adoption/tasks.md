@@ -260,13 +260,27 @@ Frontend: `cd apps/desktop && npx tsc --noEmit` + `npx vitest run <feature>`. Ru
 
 ## Phase 18 — Final verification
 
-- [ ] T260 Full repo gates: `just lint && just typecheck && just test`; per-crate clippy.
-- [ ] T261 Confirm success criteria SC-001…SC-013 (grep counts: store.ts gone, 0
+- [X] T260 Full repo gates: `just lint && just typecheck && just test`; per-crate clippy.
+  (GREEN: cargo fmt --all, cargo clippy --workspace -D warnings, just typecheck (tsc 0),
+  cargo test --workspace exit 0, frontend vitest 650/650, packages/contracts pnpm build+test.
+  `pre-commit --all-files` still flags pre-existing repo-wide debt — domain-term typo
+  false-positives (`gam`/`desig` not in .typos.toml) + EOF/whitespace on generated files —
+  out of 042 scope, red on main too.)
+- [X] T261 Confirm success criteria SC-001…SC-013 (grep counts: store.ts gone, 0
   `as unknown as`, single `now_iso`/`new_id`/`db_err`, etc.).
+  (store.ts GONE; bindings/types.ts hand-written structs GONE (now a generated re-export
+  barrel); mocks `as T` = 0 (only a comment); lib/display.ts GONE; now_iso/new_id/db_err
+  consolidated (US11); SC-004 agreement test present; schemars 1.x. Residual: 2 `as unknown as`
+  in the dead/deferred plan-approve/apply wrappers (no live approvePlan caller; tied to the
+  out-of-scope Phase-4 plan-workflow teardown — documented in code).)
 - [ ] T262 Real Windows Tauri build verification (push → pull → recompile → click-through
   per the project's Windows verify loop): lists virtualized, overlays close on
   outside-click/Escape, mutations refresh, paths correct, plan-apply progress streams.
-- [ ] T263 Update `research.md` KEEP/DEFER notes if any decision changed during impl.
+  (Phase E — needs the user-driven Windows loop + Tauri MCP; not yet run.)
+- [X] T263 Update `research.md` KEEP/DEFER notes if any decision changed during impl.
+  (CB2 row updated by iteration-1; impl deltas documented inline in tasks.md: T205 byteorder
+  N/A, T116 partial, T253 incremental + blocker, From<DbError> deferred post-T254,
+  T145 seed-builder validation change.)
 
 ---
 
