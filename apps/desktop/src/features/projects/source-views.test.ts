@@ -168,7 +168,7 @@ describe('listPreparedViews', () => {
 
     const result = await listPreparedViews('proj-1');
 
-    expect(mockInvoke).toHaveBeenCalledWith('preparedview.list', { projectId: 'proj-1' });
+    expect(mockInvoke).toHaveBeenCalledWith('preparedview_list', { projectId: 'proj-1' });
     expect(result.views).toHaveLength(1);
     expect(result.views[0].id).toBe('view-1');
   });
@@ -187,7 +187,7 @@ describe('removePreparedView', () => {
 
     const result = await removePreparedView('view-1');
 
-    expect(mockInvoke).toHaveBeenCalledWith('preparedview.remove', { viewId: 'view-1' });
+    expect(mockInvoke).toHaveBeenCalledWith('preparedview_remove', { viewId: 'view-1' });
     expect(result.planId).toBe('plan-abc');
   });
 
@@ -206,7 +206,7 @@ describe('regeneratePreparedView', () => {
 
     const result = await regeneratePreparedView('view-removed');
 
-    expect(mockInvoke).toHaveBeenCalledWith('preparedview.regenerate', {
+    expect(mockInvoke).toHaveBeenCalledWith('preparedview_regenerate', {
       viewId: 'view-removed',
     });
     expect(result.planId).toBe('plan-xyz');
