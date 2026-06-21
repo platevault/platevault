@@ -8,6 +8,11 @@ import { QueryClientProvider } from '@tanstack/react-query';
 import { router } from './app/router';
 import { AppErrorBoundary } from './app/AppErrorBoundary';
 import { queryClient } from './data/queryClient';
+import { initAppearance } from './data/theme';
+
+// Apply the persisted theme + density to <html> before first paint, and wire
+// OS light/dark changes for the `system` choice.
+initAppearance();
 
 // T075 / SC-002: Install the recording proxy at boot in dev-tools builds.
 // VITE_DEV_TOOLS is statically "false" in release builds, so this branch and

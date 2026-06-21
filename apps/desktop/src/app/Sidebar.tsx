@@ -114,8 +114,8 @@ export function Sidebar() {
     >
       {/* Header: brand mark + collapse, single line */}
       <div className="alm-sidebar__header">
-        {!collapsed && <div className="alm-sidebar__mark">A</div>}
-        {!collapsed && <span className="alm-sidebar__brand-name">ALM</span>}
+        {!collapsed && <div className="alm-sidebar__mark">P</div>}
+        {!collapsed && <span className="alm-sidebar__brand-name">PlateVault</span>}
         {!collapsed && <span className="alm-sidebar__version">v0.4</span>}
         <button
           type="button"

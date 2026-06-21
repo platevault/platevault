@@ -19,3 +19,9 @@ body {
 img, picture, video, canvas, svg { display: block; max-width: 100%; }
 input, button, textarea, select { font: inherit; }
 button { cursor: pointer; }
+/* Anchors inherit theme color and are unstyled by default — nav/links opt into
+   their own treatment via component classes. Prevents browser-default blue/
+   purple + underline from leaking (e.g. sidebar nav, status-bar root link). */
+a { color: inherit; text-decoration: none; }
+.alm-link { color: var(--alm-link); }
+.alm-link:hover { text-decoration: underline; }

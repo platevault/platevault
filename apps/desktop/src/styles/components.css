@@ -112,10 +112,10 @@
 }
 .alm-sidebar__item:hover { background: var(--alm-hover-bg); color: var(--alm-text); }
 .alm-sidebar__item--active {
-  background: var(--alm-bg); color: var(--alm-text);
+  background: var(--alm-selected-bg); color: var(--alm-accent-text);
   font-weight: var(--alm-weight-semibold);
-  box-shadow: inset 0 0 0 1px var(--alm-border-subtle);
 }
+.alm-sidebar__item--active .alm-sidebar__item-icon { color: var(--alm-accent); }
 .alm-sidebar__item-icon {
   width: 18px; height: 18px; flex-shrink: 0;
   display: flex; align-items: center; justify-content: center;
@@ -1096,3 +1096,27 @@
 ::-webkit-scrollbar-track { background: transparent; }
 ::-webkit-scrollbar-thumb { background: var(--alm-rule); border-radius: 3px; }
 ::-webkit-scrollbar-thumb:hover { background: var(--alm-ink4); }
+
+/* === APPEARANCE: theme swatch picker ===
+   Each swatch preview re-scopes tokens via data-theme, so the bars render that
+   theme's own palette with no element-level color injection. */
+.alm-theme-swatches { display: flex; flex-wrap: wrap; gap: var(--alm-sp-2); }
+.alm-theme-swatch {
+  border: 1px solid var(--alm-border); border-radius: var(--alm-radius-lg);
+  background: var(--alm-surface-raised); padding: var(--alm-sp-2);
+  cursor: pointer; width: 150px; text-align: left;
+  display: flex; flex-direction: column; gap: 6px;
+  transition: border-color var(--alm-transition-fast), box-shadow var(--alm-transition-fast);
+}
+.alm-theme-swatch:hover { border-color: var(--alm-accent); }
+.alm-theme-swatch--active { border-color: var(--alm-accent); box-shadow: 0 0 0 1px var(--alm-accent); }
+.alm-theme-swatch__prev {
+  display: flex; height: 44px; border-radius: var(--alm-radius-md); overflow: hidden;
+  border: 1px solid var(--alm-border-subtle);
+}
+.alm-theme-swatch__prev i { flex: 1; display: block; }
+.alm-theme-swatch__bg { background: var(--alm-bg); }
+.alm-theme-swatch__surface { background: var(--alm-surface); }
+.alm-theme-swatch__accent { background: var(--alm-accent); }
+.alm-theme-swatch__name { font-size: var(--alm-text-sm); font-weight: var(--alm-weight-semibold); color: var(--alm-text); }
+.alm-theme-swatch__mode { font-size: var(--alm-text-2xs); color: var(--alm-text-muted); text-transform: capitalize; }
