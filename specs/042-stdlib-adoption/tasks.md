@@ -190,7 +190,7 @@ Frontend: `cd apps/desktop && npx tsc --noEmit` + `npx vitest run <feature>`. Ru
 
 ## Phase 15 — US15 Tests (P3)
 
-- [ ] T230 `rstest` table-driven for sanitizer + settings validation; `proptest`
+- [X] T230 `rstest` table-driven for sanitizer + settings validation; `proptest`
   invariants for the sanitizer.
 - [ ] **US15 checkpoint**: commit `feat(042): US15 table-driven/property tests`.
 

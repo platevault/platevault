@@ -181,156 +181,96 @@ pub fn sanitize_token_value(token_name: &str, raw: &str) -> Result<String, Sanit
 #[cfg(test)]
 mod tests {
     use super::*;
+    use proptest::prelude::*;
+    use rstest::rstest;
 
     // ── Step 1: normalize and strip ────────────────────────────────────────
 
+    /// Table-driven step-1 cases. Each row asserts that `input` normalizes to
+    /// `expected` after NFC + disallowed-char stripping.
+    #[rstest]
+    // \x00 (C0 control / NUL) is removed. Note `\x00` consumes exactly two hex
+    // digits, so "M\x0031" is M + NUL + '3' + '1'; stripping NUL yields "M31".
+    #[case("M\x0031", "M31")]
+    // U+202E RIGHT-TO-LEFT OVERRIDE (bidi) is stripped.
+    #[case("normal\u{202E}text", "normaltext")]
+    // U+200B ZERO WIDTH SPACE is stripped.
+    #[case("ha\u{200B}lpha", "halpha")]
+    // Normal ASCII is preserved unchanged.
+    #[case("NGC7000", "NGC7000")]
+    // "é" as decomposed (U+0065 U+0301) is NFC-composed to U+00E9.
+    #[case("e\u{0301}", "\u{00E9}")]
+    fn step1_normalize_and_strip_cases(#[case] input: &str, #[case] expected: &str) {
+        assert_eq!(step1_normalize_and_strip(input), expected);
+    }
+
     #[test]
-    fn step1_strips_c0_controls() {
-        let input = "M\x0031"; // M + NUL + 1
-        let result = step1_normalize_and_strip(input);
-        // \x00 is a C0 control and should be removed.
+    fn step1_strips_c0_controls_contains_check() {
+        // Preserves the original assertion's explicit "no NUL survives" intent.
+        let result = step1_normalize_and_strip("M\x0031");
         assert!(!result.contains('\x00'));
-    }
-
-    #[test]
-    fn step1_strips_bidi_overrides() {
-        // U+202E = RIGHT-TO-LEFT OVERRIDE
-        let input = "normal\u{202E}text";
-        let result = step1_normalize_and_strip(input);
-        assert_eq!(result, "normaltext");
-    }
-
-    #[test]
-    fn step1_strips_zero_width_space() {
-        let input = "ha\u{200B}lpha";
-        let result = step1_normalize_and_strip(input);
-        assert_eq!(result, "halpha");
-    }
-
-    #[test]
-    fn step1_preserves_normal_ascii() {
-        let result = step1_normalize_and_strip("NGC7000");
-        assert_eq!(result, "NGC7000");
-    }
-
-    #[test]
-    fn step1_nfc_normalizes_composed_chars() {
-        // "é" as decomposed (U+0065 U+0301) should become NFC (U+00E9).
-        let decomposed = "e\u{0301}";
-        let result = step1_normalize_and_strip(decomposed);
-        assert_eq!(result, "\u{00E9}");
     }
 
     // ── Step 2: substitute reserved chars ──────────────────────────────────
 
-    #[test]
-    fn step2_replaces_colon() {
-        assert_eq!(step2_substitute_reserved_chars("C:drive"), "C_drive");
-    }
-
-    #[test]
-    fn step2_replaces_backslash() {
-        assert_eq!(step2_substitute_reserved_chars("foo\\bar"), "foo_bar");
-    }
-
-    #[test]
-    fn step2_replaces_question_mark() {
-        assert_eq!(step2_substitute_reserved_chars("what?"), "what_");
-    }
-
-    #[test]
-    fn step2_replaces_asterisk() {
-        assert_eq!(step2_substitute_reserved_chars("glob*"), "glob_");
-    }
-
-    #[test]
-    fn step2_trims_leading_trailing_dots() {
-        assert_eq!(step2_substitute_reserved_chars(".hidden."), "hidden");
-    }
-
-    #[test]
-    fn step2_trims_trailing_space() {
-        assert_eq!(step2_substitute_reserved_chars("trailing "), "trailing");
-    }
-
-    #[test]
-    fn step2_preserves_inner_hyphen_and_underscore() {
-        assert_eq!(step2_substitute_reserved_chars("NGC-7000_Ha"), "NGC-7000_Ha");
+    /// Table-driven step-2 cases covering reserved-char substitution and the
+    /// leading/trailing dot+whitespace trim.
+    #[rstest]
+    #[case("C:drive", "C_drive")] // colon → _
+    #[case("foo\\bar", "foo_bar")] // backslash → _
+    #[case("what?", "what_")] // question mark → _
+    #[case("glob*", "glob_")] // asterisk → _
+    #[case(".hidden.", "hidden")] // leading/trailing dots trimmed
+    #[case("trailing ", "trailing")] // trailing space trimmed
+    #[case("NGC-7000_Ha", "NGC-7000_Ha")] // inner hyphen/underscore preserved
+    fn step2_substitute_reserved_chars_cases(#[case] input: &str, #[case] expected: &str) {
+        assert_eq!(step2_substitute_reserved_chars(input), expected);
     }
 
     // ── Step 3: traversal check ────────────────────────────────────────────
 
-    #[test]
-    fn step3_rejects_dot_dot() {
-        assert!(matches!(step3_traversal_check(".."), Err(SanitizeError::PathTraversal { .. })));
-    }
-
-    #[test]
-    fn step3_rejects_single_dot() {
-        assert!(matches!(step3_traversal_check("."), Err(SanitizeError::PathTraversal { .. })));
-    }
-
-    #[test]
-    fn step3_allows_normal_segment() {
-        assert!(step3_traversal_check("NGC7000").is_ok());
+    /// Table-driven step-3 cases: `.`/`..` are rejected, everything else passes.
+    #[rstest]
+    #[case("..", true)] // rejected
+    #[case(".", true)] // rejected
+    #[case("NGC7000", false)] // allowed
+    fn step3_traversal_check_cases(#[case] segment: &str, #[case] expect_err: bool) {
+        let result = step3_traversal_check(segment);
+        if expect_err {
+            assert!(matches!(result, Err(SanitizeError::PathTraversal { .. })));
+        } else {
+            assert!(result.is_ok());
+        }
     }
 
     // ── Step 4: reserved name check ────────────────────────────────────────
 
-    #[test]
-    fn step4_rejects_con_uppercase() {
-        assert!(matches!(
-            step4_reserved_name_check("CON"),
-            Err(SanitizeError::ReservedName { .. })
-        ));
-    }
-
-    #[test]
-    fn step4_rejects_nul_lowercase() {
-        assert!(matches!(
-            step4_reserved_name_check("nul"),
-            Err(SanitizeError::ReservedName { .. })
-        ));
-    }
-
-    #[test]
-    fn step4_rejects_com9() {
-        assert!(matches!(
-            step4_reserved_name_check("COM9"),
-            Err(SanitizeError::ReservedName { .. })
-        ));
-    }
-
-    #[test]
-    fn step4_rejects_lpt1() {
-        assert!(matches!(
-            step4_reserved_name_check("lpt1"),
-            Err(SanitizeError::ReservedName { .. })
-        ));
-    }
-
-    #[test]
-    fn step4_allows_con_prefix() {
-        // "CONtrast" is not a reserved name.
-        assert!(step4_reserved_name_check("CONtrast").is_ok());
-    }
-
-    #[test]
-    fn step4_allows_normal_name() {
-        assert!(step4_reserved_name_check("NGC7000").is_ok());
+    /// Table-driven step-4 cases: Windows device names are rejected
+    /// case-insensitively; prefixes and normal names pass.
+    #[rstest]
+    #[case("CON", true)] // uppercase reserved
+    #[case("nul", true)] // lowercase reserved
+    #[case("COM9", true)] // numbered device
+    #[case("lpt1", true)] // lowercase numbered device
+    #[case("CONtrast", false)] // CON prefix is not reserved
+    #[case("NGC7000", false)] // normal name
+    fn step4_reserved_name_check_cases(#[case] segment: &str, #[case] expect_err: bool) {
+        let result = step4_reserved_name_check(segment);
+        if expect_err {
+            assert!(matches!(result, Err(SanitizeError::ReservedName { .. })));
+        } else {
+            assert!(result.is_ok());
+        }
     }
 
     // ── Step 5: confusables check ──────────────────────────────────────────
 
-    #[test]
-    fn step5_allows_pure_ascii() {
-        assert!(step5_confusables_check("target", "NGC7000").is_ok());
-    }
-
-    #[test]
-    fn step5_allows_single_script_non_ascii() {
-        // Pure Latin-script accented string should pass single-script check.
-        assert!(step5_confusables_check("target", "Andromède").is_ok());
+    /// Table-driven step-5 cases: pure ASCII and single-script non-ASCII pass.
+    #[rstest]
+    #[case("NGC7000")] // pure ASCII
+    #[case("Andromède")] // single-script Latin (accented)
+    fn step5_confusables_check_allows(#[case] value: &str) {
+        assert!(step5_confusables_check("target", value).is_ok());
     }
 
     // ── Full pipeline ──────────────────────────────────────────────────────
@@ -358,5 +298,76 @@ mod tests {
     fn full_pipeline_reserved_name_rejected() {
         let err = sanitize_token_value("target", "CON").unwrap_err();
         assert!(matches!(err, SanitizeError::ReservedName { .. }));
+    }
+
+    // ── Property tests ─────────────────────────────────────────────────────
+    //
+    // Invariants over arbitrary input that the table-driven cases cannot cover
+    // exhaustively. Cases are deterministic: proptest defaults to a fixed RNG
+    // seed unless `PROPTEST_RNG_SEED` is set, so failures reproduce reliably.
+
+    proptest! {
+        // step1: never panics and never leaves a disallowed code point behind.
+        #[test]
+        fn step1_strips_all_disallowed(s in ".*") {
+            let out = step1_normalize_and_strip(&s);
+            prop_assert!(out.chars().all(|c| !is_disallowed(c)));
+        }
+
+        // step1 is idempotent: applying it twice equals applying it once.
+        // (NFC is idempotent, and the second pass has nothing left to strip.)
+        #[test]
+        fn step1_is_idempotent(s in ".*") {
+            let once = step1_normalize_and_strip(&s);
+            let twice = step1_normalize_and_strip(&once);
+            prop_assert_eq!(once, twice);
+        }
+
+        // step2: never panics; output contains no Windows-reserved chars and is
+        // free of leading/trailing dots or whitespace.
+        #[test]
+        fn step2_removes_reserved_chars_and_trims(s in ".*") {
+            let out = step2_substitute_reserved_chars(&s);
+            prop_assert!(out.chars().all(|c| !is_windows_reserved_char(c)));
+            prop_assert!(!out.starts_with('.') && !out.ends_with('.'));
+            if let Some(first) = out.chars().next() {
+                prop_assert!(!first.is_whitespace());
+            }
+            if let Some(last) = out.chars().last() {
+                prop_assert!(!last.is_whitespace());
+            }
+        }
+
+        // step2 is idempotent: a second pass changes nothing.
+        #[test]
+        fn step2_is_idempotent(s in ".*") {
+            let once = step2_substitute_reserved_chars(&s);
+            let twice = step2_substitute_reserved_chars(&once);
+            prop_assert_eq!(once, twice);
+        }
+
+        // The full pipeline never panics on arbitrary input; on success the
+        // returned value carries no reserved chars and is not a bare `.`/`..`.
+        #[test]
+        fn sanitize_token_value_never_panics(s in ".*") {
+            // `Err(_)` (a hard rejection) is an acceptable, non-panicking
+            // outcome; only the success case carries invariants to check.
+            if let Ok(out) = sanitize_token_value("target", &s) {
+                prop_assert!(out.chars().all(|c| !is_windows_reserved_char(c)));
+                prop_assert!(out != "." && out != "..");
+            }
+        }
+
+        // Pure-ASCII alphanumeric segments that are not reserved names and not
+        // traversal tokens always sanitize successfully and round-trip
+        // unchanged (no reserved char, dot, or whitespace can appear).
+        #[test]
+        fn sanitize_token_value_roundtrips_clean_ascii(
+            s in "[A-Za-z0-9][A-Za-z0-9_-]{0,30}"
+        ) {
+            prop_assume!(step4_reserved_name_check(&s).is_ok());
+            let out = sanitize_token_value("target", &s).expect("clean ASCII must sanitize");
+            prop_assert_eq!(out, s);
+        }
     }
 }

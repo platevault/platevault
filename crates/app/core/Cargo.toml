@@ -40,6 +40,8 @@ uuid = { workspace = true }
 
 [dev-dependencies]
 tempfile = { workspace = true }
+rstest = { workspace = true }
+proptest = { workspace = true }
 # spec 035 (T020): the `FakeResolver` test double lives behind targeting's
 # `test-fixture` feature; enable it for offline target.resolve use-case tests.
 targeting = { path = "../../targeting", features = ["test-fixture"] }

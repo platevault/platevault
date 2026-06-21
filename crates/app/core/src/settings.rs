@@ -864,6 +864,8 @@ mod tests {
     use super::*;
     use audit::EventBus;
     use persistence_db::Database;
+    use proptest::prelude::*;
+    use rstest::rstest;
 
     async fn setup() -> (Database, EventBus) {
         let db = Database::in_memory().await.expect("in-memory DB");
@@ -1112,25 +1114,109 @@ mod tests {
 
     // ── Key validation unit tests ──────────────────────────────────────
 
-    #[test]
-    fn valid_keys_are_recognised() {
-        assert!(is_valid_key("logLevel"));
-        assert!(is_valid_key("pattern"));
-        assert!(is_valid_key("calibration.dark.override_penalty"));
-        assert!(is_valid_key("tools.pixinsight.bundle_id"));
-        assert!(is_valid_key("tools.pixinsight.executable_path"));
-        assert!(is_valid_key("tools.siril.enabled"));
-        assert!(is_valid_key("tools.startools.auto_detected"));
-        assert!(is_valid_key("workflow_profile.my_profile.watch_extensions"));
-        assert!(is_valid_key("workflow_profile.my_profile.launch_attribution_window_hours"));
+    /// Table-driven `is_valid_key` cases. `expected` is whether the key should
+    /// be accepted as a valid v1 (stable or structured-path) settings key.
+    #[rstest]
+    // Valid: stable + structured-path keys.
+    #[case("logLevel", true)]
+    #[case("pattern", true)]
+    #[case("calibration.dark.override_penalty", true)]
+    #[case("tools.pixinsight.bundle_id", true)]
+    #[case("tools.pixinsight.executable_path", true)]
+    #[case("tools.siril.enabled", true)]
+    #[case("tools.startools.auto_detected", true)]
+    #[case("workflow_profile.my_profile.watch_extensions", true)]
+    #[case("workflow_profile.my_profile.launch_attribution_window_hours", true)]
+    // Invalid: unknown + malformed structured-path keys.
+    #[case("notARealKey", false)]
+    #[case("tools.UPPERCASE.bundle_id", false)] // tool id must be lowercase
+    #[case("tools..bundle_id", false)] // empty tool id
+    #[case("calibration.video.override_penalty", false)] // video not a valid frame type
+    fn is_valid_key_cases(#[case] key: &str, #[case] expected: bool) {
+        assert_eq!(is_valid_key(key), expected);
     }
 
-    #[test]
-    fn invalid_keys_are_rejected() {
-        assert!(!is_valid_key("notARealKey"));
-        assert!(!is_valid_key("tools.UPPERCASE.bundle_id"));
-        assert!(!is_valid_key("tools..bundle_id"));
-        assert!(!is_valid_key("calibration.video.override_penalty")); // video not valid frame type
+    // ── Value validation unit tests ─────────────────────────────────────
+    //
+    // These exercise `validate_value` directly. Previously this logic was only
+    // covered indirectly through the async DB update tests (e.g. logLevel
+    // "trace" rejected). Table-driven cases make the per-key contract explicit.
+
+    /// Cases that must PASS validation for the given key.
+    #[rstest]
+    #[case("hashOnScan", serde_json::json!("lazy"))]
+    #[case("hashOnScan", serde_json::json!("eager"))]
+    #[case("hashOnScan", serde_json::json!("off"))]
+    #[case("darkMatchTolerance", serde_json::json!("strict"))]
+    #[case("darkMatchTolerance", serde_json::json!("loose"))]
+    #[case("darkMatchTolerance", serde_json::json!("any"))]
+    #[case("flatMatching", serde_json::json!("filter-rot"))]
+    #[case("flatMatching", serde_json::json!("filter"))]
+    #[case("flatMatching", serde_json::json!("manual"))]
+    #[case("logLevel", serde_json::json!("error"))]
+    #[case("logLevel", serde_json::json!("warn"))]
+    #[case("logLevel", serde_json::json!("info"))]
+    #[case("logLevel", serde_json::json!("debug"))]
+    #[case("rowDensity", serde_json::json!("dense"))]
+    #[case("rowDensity", serde_json::json!("comfortable"))]
+    #[case("defaultProtection", serde_json::json!("protected"))]
+    #[case("defaultProtection", serde_json::json!("normal"))]
+    #[case("defaultProtection", serde_json::json!("unprotected"))]
+    #[case("calibration.dark_temp_tolerance", serde_json::json!(0.0))]
+    #[case("calibration.dark_temp_tolerance", serde_json::json!(5.5))]
+    #[case("calibration.aging_threshold_days", serde_json::json!(1))]
+    #[case("calibration.aging_threshold_days", serde_json::json!(3650))]
+    #[case("calibration.dark.override_penalty", serde_json::json!(0.0))]
+    #[case("calibration.flat.override_penalty", serde_json::json!(1.0))]
+    #[case("calibration.bias.override_penalty", serde_json::json!(0.5))]
+    #[case("autoApplyPattern", serde_json::json!(true))]
+    #[case("calibration.prefill_suggestion", serde_json::json!(false))]
+    #[case("current_library_id", serde_json::json!(null))]
+    #[case("current_library_id", serde_json::json!("lib-1"))]
+    #[case("plans.list.default_age_cutoff_days", serde_json::json!(30))]
+    #[case("pattern", serde_json::json!([]))]
+    #[case("protectedCategories", serde_json::json!(["lights"]))]
+    #[case("tools.pixinsight.bundle_id", serde_json::json!("com.x"))]
+    #[case("tools.siril.enabled", serde_json::json!(true))]
+    #[case("workflow_profile.p.watch_extensions", serde_json::json!([".fits"]))]
+    #[case("workflow_profile.p.launch_attribution_window_hours", serde_json::json!(2))]
+    fn validate_value_accepts(#[case] key: &str, #[case] value: Value) {
+        assert!(validate_value(key, &value).is_ok(), "expected {key}={value} to be accepted");
+    }
+
+    /// Cases that must FAIL validation with `ErrorCode::ValueInvalid`.
+    #[rstest]
+    #[case("hashOnScan", serde_json::json!("nope"))] // not an allowed variant
+    #[case("hashOnScan", serde_json::json!(5))] // not a string
+    #[case("darkMatchTolerance", serde_json::json!("fuzzy"))]
+    #[case("flatMatching", serde_json::json!("auto"))]
+    #[case("logLevel", serde_json::json!("trace"))] // mirrors the old DB test
+    #[case("rowDensity", serde_json::json!("sparse"))]
+    #[case("defaultProtection", serde_json::json!("locked"))]
+    #[case("calibration.dark_temp_tolerance", serde_json::json!(-1.0))] // must be >= 0
+    #[case("calibration.dark_temp_tolerance", serde_json::json!("x"))] // not a number
+    #[case("calibration.aging_threshold_days", serde_json::json!(0))] // below [1,3650]
+    #[case("calibration.aging_threshold_days", serde_json::json!(3651))] // above range
+    #[case("calibration.dark.override_penalty", serde_json::json!(-0.1))] // below [0,1]
+    #[case("calibration.flat.override_penalty", serde_json::json!(1.1))] // above [0,1]
+    #[case("autoApplyPattern", serde_json::json!("true"))] // string, not boolean
+    #[case("current_library_id", serde_json::json!(5))] // not string/null
+    #[case("plans.list.default_age_cutoff_days", serde_json::json!("x"))] // not a number
+    #[case("pattern", serde_json::json!("notarray"))]
+    #[case("protectedCategories", serde_json::json!({}))] // object, not array
+    #[case("tools.siril.enabled", serde_json::json!("yes"))] // not a boolean
+    #[case("workflow_profile.p.watch_extensions", serde_json::json!("x"))] // not an array
+    fn validate_value_rejects(#[case] key: &str, #[case] value: Value) {
+        let err = validate_value(key, &value).expect_err("expected rejection");
+        assert_eq!(err.code, ErrorCode::ValueInvalid, "key {key} value {value}");
+    }
+
+    /// Unknown / unconstrained keys impose no additional value validation.
+    #[rstest]
+    #[case("someUnknownKey", serde_json::json!("anything"))]
+    #[case("anotherUnknown", serde_json::json!(42))]
+    fn validate_value_passes_unconstrained_keys(#[case] key: &str, #[case] value: Value) {
+        assert!(validate_value(key, &value).is_ok());
     }
 
     // ── T056: aging_threshold_days persists + consumer reads it (FR-023) ──
@@ -1196,17 +1282,88 @@ mod tests {
         assert!(msg.is_ok(), "emit_snapshot must publish a settings.snapshot event on the bus");
     }
 
-    #[test]
-    fn settings_value_eq_structural() {
-        assert!(settings_value_eq(&serde_json::json!("info"), &serde_json::json!("info")));
-        assert!(!settings_value_eq(&serde_json::json!("info"), &serde_json::json!("debug")));
-        assert!(settings_value_eq(
-            &serde_json::json!(["lights", "masters"]),
-            &serde_json::json!(["lights", "masters"])
-        ));
-        assert!(!settings_value_eq(
-            &serde_json::json!(["lights", "masters"]),
-            &serde_json::json!(["masters", "lights"]) // order matters
-        ));
+    /// Table-driven structural-equality cases. `expected_eq` is whether the two
+    /// values are considered deep-equal (array order is significant).
+    #[rstest]
+    #[case(serde_json::json!("info"), serde_json::json!("info"), true)]
+    #[case(serde_json::json!("info"), serde_json::json!("debug"), false)]
+    #[case(
+        serde_json::json!(["lights", "masters"]),
+        serde_json::json!(["lights", "masters"]),
+        true
+    )]
+    // Order matters: same elements in different order are not equal.
+    #[case(
+        serde_json::json!(["lights", "masters"]),
+        serde_json::json!(["masters", "lights"]),
+        false
+    )]
+    fn settings_value_eq_cases(#[case] a: Value, #[case] b: Value, #[case] expected_eq: bool) {
+        assert_eq!(settings_value_eq(&a, &b), expected_eq);
+    }
+
+    // ── Property tests ─────────────────────────────────────────────────────
+    //
+    // Invariants over arbitrary input. Proptest uses a deterministic default
+    // RNG seed unless `PROPTEST_RNG_SEED` is set, so failures reproduce.
+
+    proptest! {
+        // is_valid_key never panics on arbitrary input.
+        #[test]
+        fn is_valid_key_never_panics(s in ".*") {
+            let _ = is_valid_key(&s);
+        }
+
+        // validate_value never panics for arbitrary keys paired with a few
+        // representative value shapes.
+        #[test]
+        fn validate_value_never_panics(s in ".*") {
+            for v in [
+                serde_json::json!(null),
+                serde_json::json!(true),
+                serde_json::json!(0),
+                serde_json::json!("x"),
+                serde_json::json!([]),
+                serde_json::json!({}),
+            ] {
+                let _ = validate_value(&s, &v);
+            }
+        }
+
+        // settings_value_eq is reflexive: any value equals itself.
+        #[test]
+        fn settings_value_eq_is_reflexive(s in ".*") {
+            let v = serde_json::json!(s);
+            prop_assert!(settings_value_eq(&v, &v));
+        }
+
+        // settings_value_eq is symmetric for arbitrary string pairs.
+        #[test]
+        fn settings_value_eq_is_symmetric(a in ".*", b in ".*") {
+            let va = serde_json::json!(a);
+            let vb = serde_json::json!(b);
+            prop_assert_eq!(settings_value_eq(&va, &vb), settings_value_eq(&vb, &va));
+        }
+
+        // hashOnScan accepts exactly its three allowed variants and rejects all
+        // other strings — round-trips the enum contract over arbitrary input.
+        #[test]
+        fn hash_on_scan_accepts_only_allowed(s in ".*") {
+            let allowed = ["lazy", "eager", "off"].contains(&s.as_str());
+            let v = serde_json::json!(s);
+            prop_assert_eq!(validate_value("hashOnScan", &v).is_ok(), allowed);
+        }
+
+        // aging_threshold_days bounds: a value validates iff it lies in [1, 3650].
+        #[test]
+        fn aging_threshold_bounds(n in -10_000i64..10_000i64) {
+            #[allow(clippy::cast_precision_loss)]
+            let in_range = (1..=3650).contains(&n);
+            let v = serde_json::json!(n);
+            prop_assert_eq!(
+                validate_value("calibration.aging_threshold_days", &v).is_ok(),
+                in_range
+            );
+        }
     }
 }
