@@ -108,33 +108,18 @@ export function SessionsList({
       footer={loading ? 'Loading…' : `${totalSessions} sessions`}
     >
       {sources.length === 0 && !loading && (
-        <div style={{ padding: 'var(--alm-sp-4)', color: 'var(--alm-text-faint)', fontSize: 'var(--alm-text-sm)' }}>
-          No sessions match the current filters.
-        </div>
+        <div className="alm-list-empty">No sessions match the current filters.</div>
       )}
 
       {sources.map((src) => (
         <div key={src.id}>
           {/* Group header: source path + kind · state (FR-005, T400) */}
-          <div
-            style={{
-              padding: 'var(--alm-sp-1) var(--alm-sp-3)',
-              fontSize: 'var(--alm-text-xs)',
-              color: 'var(--alm-text-muted)',
-              borderBottom: '1px solid var(--alm-border)',
-              background: 'var(--alm-surface-subtle)',
-            }}
-          >
-            <span style={{ fontWeight: 600, color: 'var(--alm-text-secondary)' }}>
-              {src.path}
-            </span>
+          <div className="alm-source-group-header">
+            <span className="alm-source-group-header__path">{src.path}</span>
             {' · '}
             <span>{sourceMetaLine(src)}</span>
             {src.state !== 'active' && (
-              <Pill
-                variant={src.state === 'disabled' ? 'danger' : 'warn'}
-                style={{ marginLeft: 'var(--alm-sp-2)' }}
-              >
+              <Pill variant={src.state === 'disabled' ? 'danger' : 'warn'}>
                 {SOURCE_STATE_LABELS[src.state] ?? src.state}
               </Pill>
             )}
@@ -155,7 +140,7 @@ export function SessionsList({
                       size={12}
                       role="img"
                       aria-label="Needs review"
-                      style={{ color: 'var(--alm-warn)', display: 'inline', verticalAlign: 'middle' }}
+                      className="alm-needs-review-icon"
                     />
                   )}
                 </>

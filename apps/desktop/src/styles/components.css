@@ -1114,6 +1114,17 @@
 ::-webkit-scrollbar-thumb { background: var(--alm-rule); border-radius: 3px; }
 ::-webkit-scrollbar-thumb:hover { background: var(--alm-ink4); }
 
+/* === SESSIONS list: source group header + helpers (was inline styles) === */
+.alm-source-group-header {
+  padding: var(--alm-sp-1) var(--alm-sp-3);
+  font-size: var(--alm-text-xs); color: var(--alm-text-muted);
+  border-bottom: 1px solid var(--alm-border); background: var(--alm-surface);
+}
+.alm-source-group-header__path { font-weight: var(--alm-weight-semibold); color: var(--alm-text-secondary); }
+.alm-source-group-header .alm-pill { margin-left: var(--alm-sp-2); }
+.alm-list-empty { padding: var(--alm-sp-4); color: var(--alm-text-faint); font-size: var(--alm-text-sm); }
+.alm-needs-review-icon { color: var(--alm-warn); display: inline; vertical-align: middle; }
+
 /* === APPEARANCE: theme swatch picker ===
    Each swatch preview re-scopes tokens via data-theme, so the bars render that
    theme's own palette with no element-level color injection. */
