@@ -1,13 +1,5 @@
 import type { ArchiveFixture } from '@/data/fixtures/archive';
-import {
-  DetailPane,
-  DetailHeader,
-  MetricLine,
-  DetailGrid,
-  Rail,
-  RailCard,
-  PropertyTable,
-} from '@/components';
+import { DetailPane, DetailHeader, PropertyTable } from '@/components';
 import { Pill, Section, Table, EmptyState } from '@/ui';
 
 // ─── Entity-type pill variant ────────────────────────────────────────────────
@@ -85,105 +77,34 @@ export function ArchiveDetail({ item }: Props) {
         subtitle={item.originalPath !== '—' ? item.originalPath : 'No original path recorded'}
       />
 
-      <MetricLine
-        metrics={[
-          { value: item.size, label: 'on disk' },
-          { value: item.archivedAt, label: 'archived' },
-          { value: item.entityType, label: 'entity type' },
-          { value: history.length, label: 'audit events' },
-        ]}
-      />
+      {/* Single column — no rail. The old rail (Status/Storage/Audit trail)
+          duplicated the Details table and the Audit history table; dropped it
+          along with the hero MetricLine. */}
+      <Section title="Details">
+        <PropertyTable
+          mode="view"
+          properties={[
+            { key: 'archivedAt', label: 'Archived', value: item.archivedAt },
+            { key: 'reason', label: 'Reason', value: item.reason },
+            { key: 'entityType', label: 'Entity type', value: item.entityType },
+            { key: 'size', label: 'Size on disk', value: item.size },
+            { key: 'originalPath', label: 'Original path', value: item.originalPath },
+          ]}
+        />
+      </Section>
 
-      <DetailGrid
-        rail={
-          <Rail>
-            <RailCard title="Status">
-              <Pill variant="ghost">archived</Pill>
-              <div
-                style={{
-                  marginTop: 'var(--alm-sp-2)',
-                  fontSize: 'var(--alm-text-xs)',
-                  color: 'var(--alm-text-muted)',
-                }}
-              >
-                {item.reason}
-              </div>
-            </RailCard>
-            <RailCard title="Storage">
-              <div
-                style={{
-                  display: 'flex',
-                  flexDirection: 'column',
-                  gap: 'var(--alm-sp-1)',
-                  fontSize: 'var(--alm-text-xs)',
-                }}
-              >
-                <div style={{ color: 'var(--alm-text-secondary)' }}>
-                  <span style={{ color: 'var(--alm-text-faint)' }}>Size</span>
-                  {' · '}
-                  {item.size}
-                </div>
-                <div style={{ color: 'var(--alm-text-secondary)' }}>
-                  <span style={{ color: 'var(--alm-text-faint)' }}>Type</span>
-                  {' · '}
-                  <Pill variant={entityVariant(item.entityType)}>{item.entityType}</Pill>
-                </div>
-              </div>
-            </RailCard>
-            <RailCard title="Audit trail">
-              <div
-                style={{
-                  display: 'flex',
-                  flexDirection: 'column',
-                  gap: 'var(--alm-sp-1)',
-                  fontSize: 'var(--alm-text-xs)',
-                }}
-              >
-                {history.map((h, i) => (
-                  <div key={i} style={{ color: 'var(--alm-text-secondary)' }}>
-                    <span className="alm-mono" style={{ color: 'var(--alm-text-faint)' }}>
-                      {h.ts}
-                    </span>
-                    {' · '}
-                    {h.detail}
-                  </div>
-                ))}
-              </div>
-            </RailCard>
-          </Rail>
-        }
-      >
-        <Section title="Details">
-          <PropertyTable
-            mode="view"
-            properties={[
-              { key: 'name', label: 'Name', value: item.name },
-              { key: 'entityType', label: 'Entity type', value: item.entityType },
-              { key: 'archivedAt', label: 'Archived', value: item.archivedAt },
-              { key: 'reason', label: 'Reason', value: item.reason },
-              { key: 'originalPath', label: 'Original path', value: item.originalPath },
-              { key: 'size', label: 'Size on disk', value: item.size },
-            ]}
-          />
-        </Section>
-
-        <Section title="Audit history" count={history.length}>
-          <Table
-            columns={[
-              { key: 'ts', label: 'Date', style: { width: 120 } },
-              { key: 'detail', label: 'Event' },
-            ]}
-            rows={history.map((h) => ({
-              ts: (
-                <span className="alm-mono" style={{ fontSize: 'var(--alm-text-xs)' }}>
-                  {h.ts}
-                </span>
-              ),
-              detail: h.detail,
-            }))}
-          />
-        </Section>
-      </DetailGrid>
+      <Section title="Audit history" count={history.length}>
+        <Table
+          columns={[
+            { key: 'ts', label: 'Date', style: { width: 120 } },
+            { key: 'detail', label: 'Event' },
+          ]}
+          rows={history.map((h) => ({
+            ts: <span className="alm-mono">{h.ts}</span>,
+            detail: h.detail,
+          }))}
+        />
+      </Section>
     </DetailPane>
   );
 }
