@@ -76,7 +76,10 @@ const SESSION_STATE_VARIANTS: Record<SessionState, PillVariant> = {
 };
 
 export function sessionStateLabel(state: string): string {
-  return state.replace(/_/g, ' ');
+  const s = state.replace(/_/g, ' ');
+  // Title-case the first letter so labels read consistently (e.g. "Needs review",
+  // "Confirmed") regardless of which render path produced them.
+  return s.charAt(0).toUpperCase() + s.slice(1);
 }
 
 export function sessionStateVariant(state: string): PillVariant {
