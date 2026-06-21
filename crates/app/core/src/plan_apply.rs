@@ -24,6 +24,7 @@ use audit::event_bus::{
     PlanItemProgress, Source, TOPIC_PLAN_APPLYING_COMPLETED, TOPIC_PLAN_APPLYING_PAUSED,
     TOPIC_PLAN_APPLYING_RESUMED, TOPIC_PLAN_APPLYING_STARTED, TOPIC_PLAN_ITEM_PROGRESS,
 };
+use camino::Utf8PathBuf;
 use contracts_core::plan_apply::{
     PlanApplyResponse, PlanApplyStatus, PlanCancelResponse, PlanItemRetryResponse,
     PlanItemSkipResponse, PlanResumeResponse,
@@ -40,7 +41,6 @@ use persistence_db::repositories::plans as plans_repo;
 use persistence_db::DbError;
 use sqlx::SqlitePool;
 use std::collections::HashMap;
-use std::path::PathBuf;
 use std::sync::Arc;
 use time::OffsetDateTime;
 use uuid::Uuid;
@@ -171,8 +171,11 @@ fn verify_approval_token(
 /// the gate is skipped (legacy/test mode).
 fn item_row_to_executor_item(
     row: &plans_repo::PlanItemRow,
-    root_map: &HashMap<String, PathBuf>,
+    root_map: &HashMap<String, Utf8PathBuf>,
 ) -> ExecutorItem {
+    // DB path columns are stored as `String` (unchanged DB representation,
+    // Local-First custody §I). Rust strings are already UTF-8, so building a
+    // `Utf8PathBuf` from them is infallible and lossless.
     let action = match row.action.as_str() {
         "move" => ExecutorItemAction::Move,
         "archive" => {
@@ -180,7 +183,7 @@ fn item_row_to_executor_item(
             let archive_dest = row
                 .archive_path
                 .as_deref()
-                .map_or_else(|| PathBuf::from(&row.to_relative_path), PathBuf::from);
+                .map_or_else(|| Utf8PathBuf::from(&row.to_relative_path), Utf8PathBuf::from);
             ExecutorItemAction::Archive { archive_destination: archive_dest }
         }
         // T022: map "trash" action to the Trash variant.
@@ -192,20 +195,20 @@ fn item_row_to_executor_item(
     // T023a: Resolve library_root from the DB root map.
     // When from_root_id is set and the root exists in the map, the path gate
     // (T018: escape/symlink/staleness) will fire on this item.
-    let library_root: Option<PathBuf> =
+    let library_root: Option<Utf8PathBuf> =
         row.from_root_id.as_deref().and_then(|rid| root_map.get(rid)).cloned();
 
     // Paths are stored as relative to the library root.
     let source_path = if row.from_relative_path.is_empty() {
         None
     } else {
-        Some(PathBuf::from(&row.from_relative_path))
+        Some(Utf8PathBuf::from(&row.from_relative_path))
     };
 
     let destination_path = if row.to_relative_path.is_empty() {
         None
     } else {
-        Some(PathBuf::from(&row.to_relative_path))
+        Some(Utf8PathBuf::from(&row.to_relative_path))
     };
 
     let is_protected = row.protection == "protected";
@@ -419,12 +422,12 @@ pub async fn apply_plan(
 
     // T023a: Build a root_id → absolute_path map so the path-gate fires on
     // real items. Collect the unique root_ids referenced by this plan's items.
-    let mut root_map: HashMap<String, PathBuf> = HashMap::new();
+    let mut root_map: HashMap<String, Utf8PathBuf> = HashMap::new();
     for row in &item_rows {
         if let Some(rid) = &row.from_root_id {
             if !root_map.contains_key(rid) {
                 if let Ok(Some(path)) = inventory_repo::get_library_root_path(pool, rid).await {
-                    root_map.insert(rid.clone(), PathBuf::from(path));
+                    root_map.insert(rid.clone(), Utf8PathBuf::from(path));
                 } else {
                     tracing::warn!(root_id = %rid, "plan item references unknown library root; path gate will be inactive for this item");
                 }
@@ -1190,12 +1193,12 @@ mod tests {
         };
 
         let mut root_map = HashMap::new();
-        root_map.insert("root-001".to_owned(), PathBuf::from("/mnt/library"));
+        root_map.insert("root-001".to_owned(), Utf8PathBuf::from("/mnt/library"));
 
         let item = item_row_to_executor_item(&row, &root_map);
         assert_eq!(
             item.library_root,
-            Some(PathBuf::from("/mnt/library")),
+            Some(Utf8PathBuf::from("/mnt/library")),
             "library_root must be populated from the root_map so the path gate fires"
         );
     }
@@ -1230,7 +1233,7 @@ mod tests {
             destructive_confirmed: 0,
         };
 
-        let root_map: HashMap<String, PathBuf> = HashMap::new();
+        let root_map: HashMap<String, Utf8PathBuf> = HashMap::new();
         let item = item_row_to_executor_item(&row, &root_map);
         assert_eq!(item.library_root, None);
     }
@@ -1241,9 +1244,9 @@ mod tests {
     fn t023a_root_escape_gate_fires_when_library_root_is_set() {
         use fs_executor::ops::path_gate;
 
-        let root = PathBuf::from("/mnt/library");
+        let root = Utf8PathBuf::from("/mnt/library");
         // A path that escapes the root via ".." — must be refused.
-        let escaping_relative = PathBuf::from("../../etc/passwd");
+        let escaping_relative = Utf8PathBuf::from("../../etc/passwd");
 
         let result = path_gate::resolve_and_validate(&root, &escaping_relative);
         assert!(result.is_err(), "root-escaping path must be refused when library_root is set");
@@ -1282,7 +1285,7 @@ mod tests {
             destructive_confirmed: 1, // user confirmed
         };
 
-        let root_map: HashMap<String, PathBuf> = HashMap::new();
+        let root_map: HashMap<String, Utf8PathBuf> = HashMap::new();
         let item = item_row_to_executor_item(&row, &root_map);
         assert!(item.destructive_confirmed, "destructive_confirmed=1 in DB must be read as true");
         assert!(

@@ -8,7 +8,7 @@
 //! Constitution §II: destructive ops prefer trash/archive over permanent delete;
 //! trash is never assumed to succeed; failure is logged and recorded distinctly.
 
-use std::path::Path;
+use camino::Utf8Path;
 
 use crate::failure::{FailureCode, PlanItemFailure, RollbackOutcome};
 
@@ -47,8 +47,8 @@ impl Default for TrashResult {
 /// Returns `(PlanItemFailure, TrashResult)` when both trash and the archive
 /// fallback fail (or when no fallback is provided and trash fails).
 pub fn trash_file(
-    path: &Path,
-    fallback_archive_dest: Option<&Path>,
+    path: &Utf8Path,
+    fallback_archive_dest: Option<&Utf8Path>,
 ) -> Result<TrashResult, (PlanItemFailure, TrashResult)> {
     match trash::delete(path) {
         Ok(()) => Ok(TrashResult { destination_used: "trash", ..TrashResult::default() }),
@@ -56,7 +56,7 @@ pub fn trash_file(
             // Classify the trash error.
             let (failure_code, message) = classify_trash_error(&trash_err, path);
             tracing::warn!(
-                path = %path.display(),
+                path = %path,
                 error = %trash_err,
                 "OS trash failed; {}",
                 if fallback_archive_dest.is_some() { "trying archive fallback" } else { "no fallback configured" }
@@ -67,16 +67,15 @@ pub fn trash_file(
                 match crate::ops::archive_op::archive_file(path, archive_dest) {
                     Ok(()) => {
                         tracing::info!(
-                            path = %path.display(),
-                            archive_dest = %archive_dest.display(),
+                            path = %path,
+                            archive_dest = %archive_dest,
                             "archive fallback succeeded after trash failure"
                         );
                         return Ok(TrashResult {
                             rollback_attempted: false,
                             rollback_outcome: RollbackOutcome::NotApplicable,
                             rollback_message: Some(format!(
-                                "trash unavailable ({trash_err}); fell back to archive at {}",
-                                archive_dest.display()
+                                "trash unavailable ({trash_err}); fell back to archive at {archive_dest}"
                             )),
                             destination_used: "archive",
                         });
@@ -106,10 +105,10 @@ pub fn trash_file(
     }
 }
 
-fn classify_trash_error(err: &trash::Error, path: &Path) -> (FailureCode, String) {
+fn classify_trash_error(err: &trash::Error, path: &Utf8Path) -> (FailureCode, String) {
     // The `trash` crate's Error enum includes OS-specific variants.
     // Map to our FailureCode taxonomy.
-    let msg = format!("OS trash failed for '{}': {err}", path.display());
+    let msg = format!("OS trash failed for '{path}': {err}");
     // `trash::Error` doesn't expose a rich enum in all versions; use Display
     // to detect common cases.
     let err_str = err.to_string().to_lowercase();
@@ -127,13 +126,18 @@ fn classify_trash_error(err: &trash::Error, path: &Path) -> (FailureCode, String
 #[cfg(test)]
 mod tests {
     use super::*;
+    use camino::Utf8PathBuf;
+
+    fn utf8(p: &std::path::Path) -> Utf8PathBuf {
+        Utf8PathBuf::from_path_buf(p.to_path_buf()).expect("temp dir path is UTF-8")
+    }
 
     /// T014: trash destination moves to OS bin; archive fallback recorded when
     /// unavailable; replaces the old `trash_returns_unavailable_in_v1` stub test.
     #[test]
     fn trash_moves_file_to_os_bin_or_uses_fallback() {
         let dir = tempfile::tempdir().unwrap();
-        let file = dir.path().join("to_trash.fits");
+        let file = utf8(dir.path()).join("to_trash.fits");
         std::fs::write(&file, b"data").unwrap();
 
         // Attempt trash with no fallback.
@@ -176,9 +180,9 @@ mod tests {
         // the trash or the archive fallback fires.
         let src_dir = tempfile::tempdir().unwrap();
         let archive_dir = tempfile::tempdir().unwrap();
-        let file = src_dir.path().join("important.fits");
+        let file = utf8(src_dir.path()).join("important.fits");
         std::fs::write(&file, b"precious data").unwrap();
-        let archive_dest = archive_dir.path().join("important.fits");
+        let archive_dest = utf8(archive_dir.path()).join("important.fits");
 
         let result = trash_file(&file, Some(&archive_dest));
         match result {

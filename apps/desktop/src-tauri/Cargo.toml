@@ -15,6 +15,7 @@ tauri-build = { workspace = true }
 
 [dependencies]
 app_core = { path = "../../../crates/app/core" }
+camino = { workspace = true }
 workflow_profiles = { path = "../../../crates/workflow/profiles" }
 audit = { path = "../../../crates/audit" }
 targeting = { path = "../../../crates/targeting" }

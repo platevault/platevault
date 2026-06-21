@@ -25,6 +25,7 @@ persistence_db = { path = "../../persistence/db" }
 project_structure = { path = "../../project/structure" }
 targeting = { path = "../../targeting" }
 anyhow = { workspace = true }
+camino = { workspace = true }
 dashmap = { workspace = true }
 hex.workspace = true
 moka = { workspace = true }

@@ -6,7 +6,7 @@
 //! `stop_watcher` shuts the watcher down and the forwarding task exits on the
 //! next loop iteration when the broadcast channel is closed.
 
-use std::path::PathBuf;
+use camino::Utf8PathBuf;
 
 use audit::bus::EventBus;
 use fs_inventory::artifact_watcher::{start_artifact_watcher, ArtifactEventKind};
@@ -23,7 +23,7 @@ use time::OffsetDateTime;
 pub async fn start_watcher(
     app_handle: AppHandle,
     watcher_service: SharedWatcherService,
-    paths: &[PathBuf],
+    paths: &[Utf8PathBuf],
 ) -> Result<(), String> {
     let mut rx = {
         let mut svc = watcher_service.lock().await;
@@ -96,8 +96,13 @@ pub fn spawn_artifact_watcher(pool: SqlitePool, bus: EventBus) {
             }
         };
 
-        let paths: Vec<PathBuf> =
-            roots.iter().map(|r| PathBuf::from(&r.current_path)).filter(|p| p.exists()).collect();
+        // DB `current_path` is a `String` (UTF-8 by construction); building a
+        // `Utf8PathBuf` is lossless. DB representation is unchanged.
+        let paths: Vec<Utf8PathBuf> = roots
+            .iter()
+            .map(|r| Utf8PathBuf::from(&r.current_path))
+            .filter(|p| p.exists())
+            .collect();
 
         if paths.is_empty() {
             tracing::debug!("artifact watcher: no registered library roots found; not watching");
@@ -120,7 +125,8 @@ pub fn spawn_artifact_watcher(pool: SqlitePool, bus: EventBus) {
                 continue;
             }
 
-            let path_str = evt.path.to_string_lossy().into_owned();
+            // `evt.path` is `Utf8PathBuf` — a faithful UTF-8 string, no lossy step.
+            let path_str = evt.path.as_str().to_owned();
 
             // Attempt to find which root this path belongs to (for project_id).
             // For watcher events we derive project_id from the root that owns the

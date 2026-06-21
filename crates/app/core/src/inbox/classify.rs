@@ -14,6 +14,7 @@ use std::collections::HashMap;
 use std::path::{Path, PathBuf};
 
 use calibration_master_detect::{detect_master, DetectInput};
+use camino::Utf8Path;
 use metadata_core::{v1_normalization_table, EvidenceSource, FrameType, MetadataExtractor};
 use metadata_fits::FitsExtractor;
 use metadata_xisf::XisfExtractor;
@@ -136,10 +137,18 @@ pub async fn classify(
     let mut unclassified_files: Vec<String> = Vec::new();
 
     for abs_path in &file_paths {
-        let rel = abs_path.strip_prefix(&req.root_absolute_path).map_or_else(
-            |_| abs_path.display().to_string(),
-            |p| p.to_string_lossy().replace('\\', "/"),
-        );
+        // Lossless path → wire-string conversion (camino). `abs_path` descends
+        // from a UTF-8 root supplied by the contract, so `Utf8Path::from_path`
+        // succeeds; the `to_string_lossy` arms are defensive fallbacks only and
+        // replace the previous always-lossy conversions.
+        let rel = match abs_path.strip_prefix(&req.root_absolute_path) {
+            Ok(p) => Utf8Path::from_path(p).map_or_else(
+                || p.to_string_lossy().replace('\\', "/"),
+                |u| u.as_str().replace('\\', "/"),
+            ),
+            Err(_) => Utf8Path::from_path(abs_path)
+                .map_or_else(|| abs_path.display().to_string(), |u| u.as_str().to_owned()),
+        };
 
         let ext = abs_path.extension().and_then(|e| e.to_str()).unwrap_or("").to_ascii_lowercase();
 

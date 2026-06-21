@@ -7,7 +7,7 @@
 //! Constitution §II: permanent delete is always behind a confirmation gate.
 //! Rollback is not applicable for permanent delete.
 
-use std::path::Path;
+use camino::Utf8Path;
 
 use crate::failure::{FailureCode, PlanItemFailure, RollbackOutcome};
 
@@ -28,7 +28,7 @@ pub struct DeleteResult {
 ///
 /// Returns `(PlanItemFailure, DeleteResult)` on failure.
 pub fn delete_file(
-    path: &Path,
+    path: &Utf8Path,
     confirm_required: bool,
 ) -> Result<(), (PlanItemFailure, DeleteResult)> {
     let no_rollback = DeleteResult {
@@ -40,18 +40,14 @@ pub fn delete_file(
         return Err((
             PlanItemFailure::with_code(
                 FailureCode::ProtectedSource,
-                format!(
-                    "permanent delete requires explicit confirmation; blocked: {}",
-                    path.display()
-                ),
+                format!("permanent delete requires explicit confirmation; blocked: {path}"),
             ),
             no_rollback,
         ));
     }
 
-    std::fs::remove_file(path).map_err(|e| {
-        (PlanItemFailure::from_io(&e, &format!("delete {}", path.display())), no_rollback)
-    })
+    std::fs::remove_file(path)
+        .map_err(|e| (PlanItemFailure::from_io(&e, &format!("delete {path}")), no_rollback))
 }
 
 // ── Tests ──────────────────────────────────────────────────────────────────────
@@ -59,11 +55,16 @@ pub fn delete_file(
 #[cfg(test)]
 mod tests {
     use super::*;
+    use camino::Utf8PathBuf;
+
+    fn utf8(p: &std::path::Path) -> Utf8PathBuf {
+        Utf8PathBuf::from_path_buf(p.to_path_buf()).expect("temp dir path is UTF-8")
+    }
 
     #[test]
     fn delete_fails_without_confirmation() {
         let dir = tempfile::tempdir().unwrap();
-        let file = dir.path().join("important.fits");
+        let file = utf8(dir.path()).join("important.fits");
         std::fs::write(&file, b"precious").unwrap();
 
         let (failure, _) = delete_file(&file, false).unwrap_err();
@@ -75,7 +76,7 @@ mod tests {
     #[test]
     fn delete_with_confirmation_removes_file() {
         let dir = tempfile::tempdir().unwrap();
-        let file = dir.path().join("to_delete.fits");
+        let file = utf8(dir.path()).join("to_delete.fits");
         std::fs::write(&file, b"data").unwrap();
 
         delete_file(&file, true).unwrap();
@@ -84,7 +85,7 @@ mod tests {
 
     #[test]
     fn delete_missing_file_returns_error() {
-        let result = delete_file(std::path::Path::new("/nonexistent/file.fits"), true);
+        let result = delete_file(Utf8Path::new("/nonexistent/file.fits"), true);
         assert!(result.is_err());
     }
 }

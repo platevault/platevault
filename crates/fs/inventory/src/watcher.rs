@@ -7,9 +7,9 @@
 //! Per research R8, only inbox folders are watched — raw/calibration/project
 //! roots are scanned on demand.
 
-use std::path::PathBuf;
 use std::sync::Arc;
 
+use camino::{Utf8Path, Utf8PathBuf};
 use notify::{Event, EventKind, RecommendedWatcher, RecursiveMode, Watcher};
 use serde::{Deserialize, Serialize};
 use tokio::sync::broadcast;
@@ -24,6 +24,37 @@ pub enum InboxFileEvent {
     Removed { path: String },
     /// A file was modified in-place.
     Modified { path: String },
+}
+
+/// Internal selector for which [`InboxFileEvent`] variant to build from a path.
+#[derive(Clone, Copy)]
+enum PathEventKind {
+    Added,
+    Removed,
+    Modified,
+}
+
+impl PathEventKind {
+    fn into_event(self, path: String) -> InboxFileEvent {
+        match self {
+            Self::Added => InboxFileEvent::Added { path },
+            Self::Removed => InboxFileEvent::Removed { path },
+            Self::Modified => InboxFileEvent::Modified { path },
+        }
+    }
+}
+
+/// Diagnostic sink for a non-UTF-8 watcher path that cannot be represented as a
+/// faithful UTF-8 wire string. We deliberately do **not** lossy-convert; the
+/// event is dropped. The lossy `to_string_lossy` rendering is used here only for
+/// the human-readable diagnostic, never for the emitted payload.
+fn tracing_skip_non_utf8(path: &std::path::Path) {
+    // `fs_inventory` has no `tracing` dependency; emit a stderr diagnostic so the
+    // skip is observable without corrupting the wire payload.
+    eprintln!(
+        "fs_inventory::watcher: skipping non-UTF-8 path (cannot emit faithful UTF-8 event): {}",
+        path.to_string_lossy()
+    );
 }
 
 /// Manages a filesystem watcher scoped to inbox directories.
@@ -63,7 +94,7 @@ impl WatcherService {
     ///
     /// Returns an error string if the platform watcher cannot be created or a
     /// path cannot be watched.
-    pub fn start(&mut self, paths: &[PathBuf]) -> Result<(), String> {
+    pub fn start(&mut self, paths: &[Utf8PathBuf]) -> Result<(), String> {
         // Stop existing watcher if running.
         self.watcher = None;
 
@@ -74,22 +105,30 @@ impl WatcherService {
                 return;
             };
 
+            // `notify` yields `std::path::PathBuf`, which can be non-UTF-8 on a
+            // raw disk. We convert each path losslessly via `Utf8Path::from_path`.
+            // A non-UTF-8 path is *skipped* (not lossy-converted): we cannot emit
+            // a faithful UTF-8 wire string for it, so the event is dropped with a
+            // diagnostic rather than corrupting the path. Constitution §I: never
+            // silently mangle a user path.
+            let make = |kind: PathEventKind, paths: &[std::path::PathBuf]| {
+                paths
+                    .iter()
+                    .filter_map(|p| {
+                        if let Some(utf8) = Utf8Path::from_path(p) {
+                            Some(kind.into_event(utf8.as_str().to_owned()))
+                        } else {
+                            tracing_skip_non_utf8(p);
+                            None
+                        }
+                    })
+                    .collect::<Vec<InboxFileEvent>>()
+            };
+
             let events: Vec<InboxFileEvent> = match event.kind {
-                EventKind::Create(_) => event
-                    .paths
-                    .iter()
-                    .map(|p| InboxFileEvent::Added { path: p.display().to_string() })
-                    .collect(),
-                EventKind::Remove(_) => event
-                    .paths
-                    .iter()
-                    .map(|p| InboxFileEvent::Removed { path: p.display().to_string() })
-                    .collect(),
-                EventKind::Modify(_) => event
-                    .paths
-                    .iter()
-                    .map(|p| InboxFileEvent::Modified { path: p.display().to_string() })
-                    .collect(),
+                EventKind::Create(_) => make(PathEventKind::Added, &event.paths),
+                EventKind::Remove(_) => make(PathEventKind::Removed, &event.paths),
+                EventKind::Modify(_) => make(PathEventKind::Modified, &event.paths),
                 _ => Vec::new(),
             };
 
@@ -102,8 +141,8 @@ impl WatcherService {
 
         for path in paths {
             watcher
-                .watch(path, RecursiveMode::Recursive)
-                .map_err(|e| format!("failed to watch {}: {e}", path.display()))?;
+                .watch(path.as_std_path(), RecursiveMode::Recursive)
+                .map_err(|e| format!("failed to watch {path}: {e}"))?;
         }
 
         self.watcher = Some(watcher);
@@ -156,7 +195,7 @@ mod tests {
     #[test]
     fn start_nonexistent_path_returns_error() {
         let mut svc = WatcherService::new();
-        let result = svc.start(&[PathBuf::from("/nonexistent/path/that/should/not/exist")]);
+        let result = svc.start(&[Utf8PathBuf::from("/nonexistent/path/that/should/not/exist")]);
         assert!(result.is_err());
     }
 

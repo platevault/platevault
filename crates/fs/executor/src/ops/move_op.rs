@@ -10,7 +10,7 @@
 //! Constitution §II: never overwrite silently — destination existence is
 //! checked before any mutation.
 
-use std::path::Path;
+use camino::Utf8Path;
 
 use crate::failure::{FailureCode, PlanItemFailure, RollbackOutcome};
 
@@ -32,7 +32,10 @@ pub struct MoveResult {
 ///
 /// Returns `(PlanItemFailure, MoveResult)` on failure so the caller can log
 /// both the failure and any rollback outcome.
-pub fn move_file(source: &Path, destination: &Path) -> Result<(), (PlanItemFailure, MoveResult)> {
+pub fn move_file(
+    source: &Utf8Path,
+    destination: &Utf8Path,
+) -> Result<(), (PlanItemFailure, MoveResult)> {
     let no_rollback = MoveResult {
         rollback_attempted: false,
         rollback_outcome: RollbackOutcome::NotApplicable,
@@ -44,7 +47,7 @@ pub fn move_file(source: &Path, destination: &Path) -> Result<(), (PlanItemFailu
         return Err((
             PlanItemFailure::with_code(
                 FailureCode::ConflictDestinationExists,
-                format!("destination already exists; cannot overwrite: {}", destination.display()),
+                format!("destination already exists; cannot overwrite: {destination}"),
             ),
             no_rollback,
         ));
@@ -55,17 +58,15 @@ pub fn move_file(source: &Path, destination: &Path) -> Result<(), (PlanItemFailu
         if !parent.exists() {
             if let Err(e) = std::fs::create_dir_all(parent) {
                 return Err((
-                    PlanItemFailure::from_io(
-                        &e,
-                        &format!("create destination parent {}", parent.display()),
-                    ),
+                    PlanItemFailure::from_io(&e, &format!("create destination parent {parent}")),
                     no_rollback,
                 ));
             }
         }
     }
 
-    // Try atomic rename first (same-volume).
+    // Try atomic rename first (same-volume). `Utf8Path: AsRef<std::path::Path>`,
+    // so `std::fs` accepts it directly without a lossy conversion.
     match std::fs::rename(source, destination) {
         Ok(()) => return Ok(()),
         Err(rename_err) => {
@@ -77,7 +78,7 @@ pub fn move_file(source: &Path, destination: &Path) -> Result<(), (PlanItemFailu
                 return Err((
                     PlanItemFailure::from_io(
                         &rename_err,
-                        &format!("rename {} to {}", source.display(), destination.display()),
+                        &format!("rename {source} to {destination}"),
                     ),
                     no_rollback,
                 ));
@@ -88,10 +89,7 @@ pub fn move_file(source: &Path, destination: &Path) -> Result<(), (PlanItemFailu
     // Cross-volume: copy-then-delete.
     if let Err(copy_err) = std::fs::copy(source, destination) {
         return Err((
-            PlanItemFailure::from_io(
-                &copy_err,
-                &format!("copy {} to {}", source.display(), destination.display()),
-            ),
+            PlanItemFailure::from_io(&copy_err, &format!("copy {source} to {destination}")),
             no_rollback,
         ));
     }
@@ -104,7 +102,7 @@ pub fn move_file(source: &Path, destination: &Path) -> Result<(), (PlanItemFailu
             Ok(()) => (RollbackOutcome::Succeeded, None, FailureCode::CopySucceededDeleteFailed),
             Err(rb_err) => (
                 RollbackOutcome::Failed,
-                Some(format!("rollback remove {} failed: {rb_err}", destination.display())),
+                Some(format!("rollback remove {destination} failed: {rb_err}")),
                 FailureCode::CopySucceededDeleteFailedRollbackFailed,
             ),
         };
@@ -112,7 +110,7 @@ pub fn move_file(source: &Path, destination: &Path) -> Result<(), (PlanItemFailu
         return Err((
             PlanItemFailure::with_code(
                 final_code,
-                format!("copy succeeded but delete source {} failed: {del_err}", source.display()),
+                format!("copy succeeded but delete source {source} failed: {del_err}"),
             ),
             MoveResult { rollback_attempted: true, rollback_outcome, rollback_message },
         ));
@@ -146,12 +144,18 @@ const fn cross_device_error() -> i32 {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use camino::Utf8PathBuf;
+
+    fn utf8(p: &std::path::Path) -> Utf8PathBuf {
+        Utf8PathBuf::from_path_buf(p.to_path_buf()).expect("temp dir path is UTF-8")
+    }
 
     #[test]
     fn move_same_volume_happy_path() {
         let dir = tempfile::tempdir().unwrap();
-        let src = dir.path().join("source.fits");
-        let dst = dir.path().join("dest.fits");
+        let root = utf8(dir.path());
+        let src = root.join("source.fits");
+        let dst = root.join("dest.fits");
         std::fs::write(&src, b"data").unwrap();
 
         move_file(&src, &dst).unwrap();
@@ -164,8 +168,9 @@ mod tests {
     #[test]
     fn move_fails_when_destination_exists() {
         let dir = tempfile::tempdir().unwrap();
-        let src = dir.path().join("src.fits");
-        let dst = dir.path().join("dst.fits");
+        let root = utf8(dir.path());
+        let src = root.join("src.fits");
+        let dst = root.join("dst.fits");
         std::fs::write(&src, b"source").unwrap();
         std::fs::write(&dst, b"existing").unwrap();
 
@@ -178,8 +183,9 @@ mod tests {
     #[test]
     fn move_creates_destination_parent_dirs() {
         let dir = tempfile::tempdir().unwrap();
-        let src = dir.path().join("src.fits");
-        let dst = dir.path().join("nested/deep/dst.fits");
+        let root = utf8(dir.path());
+        let src = root.join("src.fits");
+        let dst = root.join("nested/deep/dst.fits");
         std::fs::write(&src, b"data").unwrap();
 
         move_file(&src, &dst).unwrap();
@@ -190,8 +196,9 @@ mod tests {
     #[test]
     fn move_fails_when_source_missing() {
         let dir = tempfile::tempdir().unwrap();
-        let src = dir.path().join("nonexistent.fits");
-        let dst = dir.path().join("dst.fits");
+        let root = utf8(dir.path());
+        let src = root.join("nonexistent.fits");
+        let dst = root.join("dst.fits");
 
         let (failure, _) = move_file(&src, &dst).unwrap_err();
         // Could be SourceMissing or Unknown depending on OS rename error.

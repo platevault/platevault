@@ -18,6 +18,7 @@
 use std::path::{Path, PathBuf};
 
 use calibration_master_detect::{detect_master, DetectInput, MasterDetection};
+use camino::Utf8Path;
 use metadata_core::MetadataExtractor;
 use metadata_fits::FitsExtractor;
 use metadata_video::is_video_extension;
@@ -217,6 +218,20 @@ fn try_detect_master(abs_path: &Path, rel_path: &str, ext: &str) -> Option<Scann
     })
 }
 
+/// Compute the root-relative path as a forward-slash UTF-8 string for the wire.
+///
+/// `path` is guaranteed UTF-8 here: every descendant of `root` passed the
+/// non-UTF-8 skip at the `read_dir` boundary, so `Utf8Path::from_path` succeeds.
+/// The previous implementation used `to_string_lossy`, which could silently
+/// mangle a path; camino makes the conversion lossless by construction. The
+/// `unwrap_or_else` fallback is defensive only and cannot fire for scanned
+/// descendants.
+fn relative_utf8(root: &Path, path: &Path) -> String {
+    let rel = path.strip_prefix(root).unwrap_or(path);
+    Utf8Path::from_path(rel)
+        .map_or_else(|| rel.to_string_lossy().replace('\\', "/"), |u| u.as_str().replace('\\', "/"))
+}
+
 // ── scan_root ────────────────────────────────────────────────────────────────
 
 /// Recursively scan `root` and return one `ScannedInboxItem` per leaf folder
@@ -257,6 +272,20 @@ fn scan_dir(
 
     for entry in read_dir.flatten() {
         let path = entry.path();
+
+        // OS scan boundary: `read_dir` yields `std::path::PathBuf`, which can be
+        // non-UTF-8 on a raw disk. We do not lossy-convert (that would corrupt the
+        // path that later crosses the IPC boundary as a wire string). A non-UTF-8
+        // entry is skipped explicitly with a diagnostic so the scan never panics
+        // and never emits a mangled path. Constitution §I (Local-First custody).
+        if Utf8Path::from_path(&path).is_none() {
+            tracing::warn!(
+                path = %path.to_string_lossy(),
+                "inbox scan: skipping non-UTF-8 path (cannot represent as a faithful UTF-8 wire value)"
+            );
+            continue;
+        }
+
         let Ok(file_type) = entry.file_type() else { continue };
 
         if file_type.is_symlink() && !options.follow_symlinks {
@@ -285,10 +314,7 @@ fn scan_dir(
 
     if !all_image_files.is_empty() || !video_files.is_empty() {
         // This is a leaf with content — make it an InboxItem.
-        let relative_path = dir
-            .strip_prefix(root)
-            .map(|p| p.to_string_lossy().replace('\\', "/"))
-            .unwrap_or_default();
+        let relative_path = relative_utf8(root, dir);
 
         let (lane, sig_files) = if all_image_files.is_empty() {
             let sig_refs: Vec<&Path> = video_files.iter().map(PathBuf::as_path).collect();
@@ -312,10 +338,7 @@ fn scan_dir(
                         .and_then(|e| e.to_str())
                         .unwrap_or("")
                         .to_ascii_lowercase();
-                    let rel = abs_path
-                        .strip_prefix(root)
-                        .map(|p| p.to_string_lossy().replace('\\', "/"))
-                        .unwrap_or_default();
+                    let rel = relative_utf8(root, abs_path);
                     try_detect_master(abs_path, &rel, &ext)
                 })
                 .collect()

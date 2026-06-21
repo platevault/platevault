@@ -19,17 +19,17 @@
 //! Events are delivered via a `tokio::sync::mpsc` channel so the caller can
 //! drive the `artifact::detect` use-case.
 
-use std::path::PathBuf;
 use std::sync::Arc;
 
+use camino::{Utf8Path, Utf8PathBuf};
 use notify::{Event, EventKind, RecommendedWatcher, RecursiveMode, Watcher};
 use tokio::sync::mpsc;
 
 /// A filesystem event forwarded to the async consumer.
 #[derive(Clone, Debug)]
 pub struct ArtifactFileEvent {
-    /// Absolute path of the file that changed.
-    pub path: PathBuf,
+    /// Absolute path of the file that changed (guaranteed UTF-8).
+    pub path: Utf8PathBuf,
     /// The underlying event kind (Create / Modify / Remove).
     pub kind: ArtifactEventKind,
 }
@@ -59,7 +59,7 @@ pub struct WatcherGuard {
 /// Returns an error string if the platform watcher cannot be initialised or a
 /// path cannot be watched.
 pub fn start_artifact_watcher(
-    paths: &[PathBuf],
+    paths: &[Utf8PathBuf],
     channel_capacity: usize,
 ) -> Result<(mpsc::Receiver<ArtifactFileEvent>, WatcherGuard), String> {
     let (tx, rx) = mpsc::channel::<ArtifactFileEvent>(channel_capacity);
@@ -77,18 +77,28 @@ pub fn start_artifact_watcher(
         };
 
         for path in event.paths {
-            if path.is_dir() {
+            // `notify` yields `std::path::PathBuf`; convert losslessly. A
+            // non-UTF-8 path is skipped (not lossy-converted) so downstream
+            // detection never receives a corrupted path. Constitution §I.
+            let Some(utf8) = Utf8Path::from_path(&path) else {
+                eprintln!(
+                    "fs_inventory::artifact_watcher: skipping non-UTF-8 path: {}",
+                    path.to_string_lossy()
+                );
+                continue;
+            };
+            if utf8.is_dir() {
                 continue;
             }
-            let _ = handler_tx.try_send(ArtifactFileEvent { path, kind });
+            let _ = handler_tx.try_send(ArtifactFileEvent { path: utf8.to_owned(), kind });
         }
     })
     .map_err(|e| format!("failed to create artifact watcher: {e}"))?;
 
     for path in paths {
         watcher
-            .watch(path, RecursiveMode::Recursive)
-            .map_err(|e| format!("failed to watch {}: {e}", path.display()))?;
+            .watch(path.as_std_path(), RecursiveMode::Recursive)
+            .map_err(|e| format!("failed to watch {path}: {e}"))?;
     }
 
     let guard = WatcherGuard { _watcher: watcher, _tx: tx };
@@ -102,14 +112,15 @@ mod tests {
     #[test]
     fn start_on_nonexistent_path_returns_error() {
         let result =
-            start_artifact_watcher(&[PathBuf::from("/nonexistent/path/for/watcher/test")], 16);
+            start_artifact_watcher(&[Utf8PathBuf::from("/nonexistent/path/for/watcher/test")], 16);
         assert!(result.is_err(), "expected error for nonexistent path");
     }
 
     #[tokio::test]
     async fn start_on_temp_dir_succeeds_and_guard_drops_cleanly() {
         let dir = tempfile::tempdir().unwrap();
-        let (mut rx, guard) = start_artifact_watcher(&[dir.path().to_path_buf()], 16).unwrap();
+        let root = Utf8PathBuf::from_path_buf(dir.path().to_path_buf()).unwrap();
+        let (mut rx, guard) = start_artifact_watcher(&[root], 16).unwrap();
 
         drop(guard);
 
@@ -123,7 +134,7 @@ mod tests {
         let dir = tempfile::tempdir().unwrap();
         // Canonicalize so emitted event paths match `file_path` (macOS reports
         // /private/var/... while tempdir() returns /var/...).
-        let root = dir.path().canonicalize().unwrap();
+        let root = Utf8PathBuf::from_path_buf(dir.path().canonicalize().unwrap()).unwrap();
         let (mut rx, _guard) = start_artifact_watcher(std::slice::from_ref(&root), 64).unwrap();
 
         let file_path = root.join("test_artifact.xisf");

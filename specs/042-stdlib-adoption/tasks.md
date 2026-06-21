@@ -185,8 +185,12 @@ Frontend: `cd apps/desktop && npx tsc --noEmit` + `npx vitest run <feature>`. Ru
 
 ## Phase 14 — US14 camino (P3)
 
-- [ ] T220 `camino::Utf8Path` across fs crates + IPC path serialization; remove lossy
+- [X] T220 `camino::Utf8Path` across fs crates + IPC path serialization; remove lossy
   conversions. Verify on real Windows (long/UNC paths).
+  (Non-UTF-8 OS paths now typed-skip with a diagnostic instead of lossy-convert; contract DTO
+  path fields were already `String` so bindings + wire format are byte-identical; DB unchanged.
+  fs_planner left untyped — it stores only DB-relative Strings. Windows UNC/long-path round-trip
+  deferred to Phase E.)
 - [ ] **US14 checkpoint**: commit `feat(042): US14 UTF-8 path types`.
 
 ## Phase 15 — US15 Tests (P3)

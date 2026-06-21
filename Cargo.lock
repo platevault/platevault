@@ -52,6 +52,7 @@ dependencies = [
  "audit",
  "calibration_core",
  "calibration_master_detect",
+ "camino",
  "contracts_core",
  "dashmap",
  "domain_core",
@@ -937,6 +938,7 @@ version = "0.1.0"
 dependencies = [
  "app_core",
  "audit",
+ "camino",
  "contracts_core",
  "domain_core",
  "fs_inventory",
@@ -1368,6 +1370,7 @@ dependencies = [
 name = "fs_executor"
 version = "0.1.0"
 dependencies = [
+ "camino",
  "fs_planner",
  "path-clean",
  "serde",
@@ -1391,6 +1394,7 @@ checksum = "42703706b716c37f96a77aea830392ad231f44c9e9a67872fa5548707e11b11c"
 name = "fs_inventory"
 version = "0.1.0"
 dependencies = [
+ "camino",
  "notify",
  "serde",
  "serde_json",

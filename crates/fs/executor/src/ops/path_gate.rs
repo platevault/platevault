@@ -17,18 +17,18 @@
 //! The caller (executor loop) calls `resolve_and_validate` before performing
 //! any filesystem mutation.
 
-use std::path::{Path, PathBuf};
+use camino::{Utf8Path, Utf8PathBuf};
 
 use crate::failure::{FailureCode, PlanItemFailure};
 
-/// Resolved, validated absolute path.
+/// Resolved, validated absolute path (guaranteed UTF-8).
 #[derive(Debug, Clone)]
-pub struct ResolvedPath(pub PathBuf);
+pub struct ResolvedPath(pub Utf8PathBuf);
 
 impl ResolvedPath {
     /// Return a reference to the inner path.
     #[must_use]
-    pub fn as_path(&self) -> &Path {
+    pub fn as_path(&self) -> &Utf8Path {
         &self.0
     }
 }
@@ -46,7 +46,10 @@ impl ResolvedPath {
 /// # Errors
 ///
 /// Returns a structured `PlanItemFailure` on any validation failure.
-pub fn resolve_and_validate(root: &Path, relative: &Path) -> Result<ResolvedPath, PlanItemFailure> {
+pub fn resolve_and_validate(
+    root: &Utf8Path,
+    relative: &Utf8Path,
+) -> Result<ResolvedPath, PlanItemFailure> {
     // Step 1: join + lexical normalize.
     let joined = root.join(relative);
     let normalized = lexical_normalize(&joined);
@@ -56,11 +59,8 @@ pub fn resolve_and_validate(root: &Path, relative: &Path) -> Result<ResolvedPath
         return Err(PlanItemFailure::with_code(
             FailureCode::RootEscape,
             format!(
-                "path '{}' escapes library root '{}' after normalization; \
-                 resolved to '{}'",
-                relative.display(),
-                root.display(),
-                normalized.display()
+                "path '{relative}' escapes library root '{root}' after normalization; \
+                 resolved to '{normalized}'"
             ),
         ));
     }
@@ -68,7 +68,7 @@ pub fn resolve_and_validate(root: &Path, relative: &Path) -> Result<ResolvedPath
     // Step 3: per-component lstat for symlinks/junctions.
     // Walk each component of the relative portion only (the root itself may
     // legitimately be a symlink at the mount level — we do not follow further).
-    let relative_components: PathBuf = relative.components().collect();
+    let relative_components: Utf8PathBuf = relative.components().collect();
     let mut current = root.to_path_buf();
     for component in relative_components.components() {
         current.push(component);
@@ -80,9 +80,8 @@ pub fn resolve_and_validate(root: &Path, relative: &Path) -> Result<ResolvedPath
                     return Err(PlanItemFailure::with_code(
                         FailureCode::SymlinkComponent,
                         format!(
-                            "path component '{}' is a symlink; \
-                             refusing to traverse (link-following is disabled for this root)",
-                            current.display()
+                            "path component '{current}' is a symlink; \
+                             refusing to traverse (link-following is disabled for this root)"
                         ),
                     ));
                 }
@@ -97,9 +96,8 @@ pub fn resolve_and_validate(root: &Path, relative: &Path) -> Result<ResolvedPath
                         return Err(PlanItemFailure::with_code(
                             FailureCode::SymlinkComponent,
                             format!(
-                                "path component '{}' is a junction/reparse-point; \
-                                 refusing to traverse",
-                                current.display()
+                                "path component '{current}' is a junction/reparse-point; \
+                                 refusing to traverse"
                             ),
                         ));
                     }
@@ -114,7 +112,7 @@ pub fn resolve_and_validate(root: &Path, relative: &Path) -> Result<ResolvedPath
                 // to avoid silently allowing traversal of unreadable paths.
                 return Err(PlanItemFailure::with_code(
                     FailureCode::PathInvalid,
-                    format!("cannot lstat path component '{}': {e}", current.display()),
+                    format!("cannot lstat path component '{current}': {e}"),
                 ));
             }
         }
@@ -142,9 +140,15 @@ pub fn resolve_and_validate(root: &Path, relative: &Path) -> Result<ResolvedPath
 /// so the no-link-following guard (Product Constraints §II) is preserved. The
 /// `lexical_normalize_*` unit tests are the equivalence guard for the collapse.
 #[must_use]
-pub fn lexical_normalize(path: &Path) -> PathBuf {
+pub fn lexical_normalize(path: &Utf8Path) -> Utf8PathBuf {
     use path_clean::PathClean as _;
-    path.clean()
+    // `path-clean` operates on `std::path`; bridge through it. The input is
+    // already guaranteed UTF-8 and `clean` only drops/pops/reorders existing
+    // components (it never synthesizes new bytes), so the cleaned result is
+    // UTF-8 by construction — the back-conversion cannot lose data.
+    let cleaned = path.as_std_path().clean();
+    Utf8PathBuf::from_path_buf(cleaned)
+        .unwrap_or_else(|p| Utf8PathBuf::from(p.to_string_lossy().into_owned()))
 }
 
 // ── Tests ──────────────────────────────────────────────────────────────────────
@@ -153,33 +157,38 @@ pub fn lexical_normalize(path: &Path) -> PathBuf {
 mod tests {
     use super::*;
 
+    /// Convert a tempdir path to a guaranteed-UTF-8 path for the tests.
+    fn utf8_root(p: &std::path::Path) -> Utf8PathBuf {
+        Utf8PathBuf::from_path_buf(p.to_path_buf()).expect("temp dir path is UTF-8")
+    }
+
     #[test]
     fn lexical_normalize_simple_path() {
-        let p = PathBuf::from("/lib/root/./sub/../file.fits");
+        let p = Utf8PathBuf::from("/lib/root/./sub/../file.fits");
         let n = lexical_normalize(&p);
-        assert_eq!(n, PathBuf::from("/lib/root/file.fits"));
+        assert_eq!(n, Utf8PathBuf::from("/lib/root/file.fits"));
     }
 
     #[test]
     fn lexical_normalize_no_escape_at_root() {
         // `..` at the root should not escape.
-        let p = PathBuf::from("/../../file.fits");
+        let p = Utf8PathBuf::from("/../../file.fits");
         let n = lexical_normalize(&p);
-        assert_eq!(n, PathBuf::from("/file.fits"));
+        assert_eq!(n, Utf8PathBuf::from("/file.fits"));
     }
 
     #[test]
     fn lexical_normalize_deep_traversal() {
-        let p = PathBuf::from("/a/b/c/../../d");
+        let p = Utf8PathBuf::from("/a/b/c/../../d");
         let n = lexical_normalize(&p);
-        assert_eq!(n, PathBuf::from("/a/d"));
+        assert_eq!(n, Utf8PathBuf::from("/a/d"));
     }
 
     #[test]
     fn resolve_and_validate_normal_path_ok() {
         let dir = tempfile::tempdir().unwrap();
-        let root = dir.path().to_path_buf();
-        let rel = std::path::Path::new("subdir/file.fits");
+        let root = utf8_root(dir.path());
+        let rel = Utf8Path::new("subdir/file.fits");
         std::fs::create_dir_all(root.join("subdir")).unwrap();
         std::fs::write(root.join("subdir/file.fits"), b"data").unwrap();
 
@@ -193,8 +202,8 @@ mod tests {
     fn resolve_and_validate_nonexistent_path_ok() {
         // A destination that does not exist yet is fine — no symlink to check.
         let dir = tempfile::tempdir().unwrap();
-        let root = dir.path().to_path_buf();
-        let rel = std::path::Path::new("new_dir/new_file.fits");
+        let root = utf8_root(dir.path());
+        let rel = Utf8Path::new("new_dir/new_file.fits");
 
         let result = resolve_and_validate(&root, rel);
         assert!(result.is_ok());
@@ -203,9 +212,9 @@ mod tests {
     #[test]
     fn resolve_and_validate_root_escape_via_dotdot() {
         let dir = tempfile::tempdir().unwrap();
-        let root = dir.path().to_path_buf();
+        let root = utf8_root(dir.path());
         // Try to escape with `../secret.fits`
-        let rel = std::path::Path::new("../secret.fits");
+        let rel = Utf8Path::new("../secret.fits");
 
         let result = resolve_and_validate(&root, rel);
         assert!(result.is_err());
@@ -217,9 +226,9 @@ mod tests {
     #[test]
     fn resolve_and_validate_root_escape_nested() {
         let dir = tempfile::tempdir().unwrap();
-        let root = dir.path().to_path_buf();
+        let root = utf8_root(dir.path());
         // Nested path that normalizes to an escape.
-        let rel = std::path::Path::new("a/b/../../..");
+        let rel = Utf8Path::new("a/b/../../..");
         let result = resolve_and_validate(&root, rel);
         assert!(result.is_err());
         let err = result.unwrap_err();
@@ -230,13 +239,13 @@ mod tests {
     #[test]
     fn resolve_and_validate_symlink_component_refused() {
         let dir = tempfile::tempdir().unwrap();
-        let root = dir.path().to_path_buf();
-        let target = dir.path().join("actual_dir");
+        let root = utf8_root(dir.path());
+        let target = root.join("actual_dir");
         std::fs::create_dir_all(&target).unwrap();
         let link = root.join("linked");
         std::os::unix::fs::symlink(&target, &link).unwrap();
         // Try to traverse through the symlink.
-        let rel = std::path::Path::new("linked/file.fits");
+        let rel = Utf8Path::new("linked/file.fits");
 
         let result = resolve_and_validate(&root, rel);
         assert!(result.is_err());

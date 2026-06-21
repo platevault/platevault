@@ -21,9 +21,9 @@
 //! Constitution §II: never overwrite silently; per-item audit via callbacks.
 
 use std::collections::HashSet;
-use std::path::PathBuf;
 use std::sync::{Arc, Mutex};
 
+use camino::{Utf8Path, Utf8PathBuf};
 use tokio::sync::watch;
 
 use crate::failure::{FailureCode, PlanItemFailure, RollbackOutcome};
@@ -118,15 +118,15 @@ pub struct ExecutorItem {
     /// **Relative** source path (executor resolves against `library_root` via the path gate).
     ///
     /// Set to `None` for actions that have no source (e.g. `NoOp`, `Mkdir`).
-    pub source_path: Option<PathBuf>,
+    pub source_path: Option<Utf8PathBuf>,
     /// **Relative** destination path (executor resolves against `library_root` via the path gate).
     ///
     /// Set to `None` when the destination is implicit (e.g. `Trash`).
-    pub destination_path: Option<PathBuf>,
+    pub destination_path: Option<Utf8PathBuf>,
     /// Absolute library root — all relative paths are joined against this.
     ///
     /// `None` means "use the path as-is" (legacy / test items with pre-resolved paths).
-    pub library_root: Option<PathBuf>,
+    pub library_root: Option<Utf8PathBuf>,
     /// Approval-time CAS snapshot (R-FS-1).
     pub cas_snapshot: CasSnapshot,
     /// Protection status from spec-016 (FR-008).
@@ -147,12 +147,12 @@ pub struct ExecutorItem {
 pub enum ExecutorItemAction {
     Move,
     Archive {
-        archive_destination: PathBuf,
+        archive_destination: Utf8PathBuf,
     },
     /// Move to OS trash. Falls back to archive at `fallback_archive_destination` if provided.
     Trash {
         /// Absolute path to use as the archive fallback destination when OS trash is unavailable.
-        fallback_archive_destination: Option<PathBuf>,
+        fallback_archive_destination: Option<Utf8PathBuf>,
     },
     Delete,
     /// RecordOnly / Mkdir / Link / Junction — no FS mutation; mark succeeded.
@@ -396,7 +396,7 @@ pub async fn execute_plan<C: ExecutorCallbacks>(
 
         // Per-item FS CAS revalidation (R-FS-1).
         // Use the library-root-resolved path if available; otherwise use the raw path (legacy).
-        let resolved_source_for_cas: Option<PathBuf> =
+        let resolved_source_for_cas: Option<Utf8PathBuf> =
             if let (Some(ref src_rel), Some(ref root)) = (&item.source_path, &item.library_root) {
                 // Already validated above; re-resolve (cheap lexical op).
                 path_gate::resolve_and_validate(root, src_rel).ok().map(|r| r.0)
@@ -551,9 +551,9 @@ fn execute_item(item: &ExecutorItem) -> Result<(), OpError> {
     // Resolve the source and destination paths against the library root (if set).
     // The path gate has already validated them earlier in the loop; this is the
     // absolute-path computation for the actual filesystem operation.
-    let resolved_src: Option<PathBuf> =
+    let resolved_src: Option<Utf8PathBuf> =
         resolve_item_path(item.source_path.as_deref(), item.library_root.as_deref());
-    let resolved_dst: Option<PathBuf> =
+    let resolved_dst: Option<Utf8PathBuf> =
         resolve_item_path(item.destination_path.as_deref(), item.library_root.as_deref());
 
     match &item.action {
@@ -591,10 +591,7 @@ fn execute_item(item: &ExecutorItem) -> Result<(), OpError> {
 
 /// Resolve a relative path against an optional library root.
 /// Returns `None` if either argument is `None`.
-fn resolve_item_path(
-    relative: Option<&std::path::Path>,
-    root: Option<&std::path::Path>,
-) -> Option<PathBuf> {
+fn resolve_item_path(relative: Option<&Utf8Path>, root: Option<&Utf8Path>) -> Option<Utf8PathBuf> {
     match (relative, root) {
         (Some(rel), Some(r)) => {
             // Use the validated lexical normalization (path_gate already checked safety).
@@ -609,9 +606,9 @@ fn resolve_item_path(
 }
 
 fn require_resolved_path<'a>(
-    p: Option<&'a std::path::Path>,
+    p: Option<&'a Utf8Path>,
     label: &str,
-) -> Result<&'a std::path::Path, OpError> {
+) -> Result<&'a Utf8Path, OpError> {
     p.ok_or_else(|| {
         (
             PlanItemFailure::with_code(
@@ -636,9 +633,12 @@ fn now_iso() -> String {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use std::path::Path;
     use std::sync::Arc;
     use tokio::sync::Mutex;
+
+    fn utf8(p: &std::path::Path) -> Utf8PathBuf {
+        Utf8PathBuf::from_path_buf(p.to_path_buf()).expect("temp dir path is UTF-8")
+    }
 
     // ── Fake callbacks ────────────────────────────────────────────────────────
 
@@ -666,7 +666,7 @@ mod tests {
         }
     }
 
-    fn make_move_item(id: &str, src: &Path, dst: &Path) -> ExecutorItem {
+    fn make_move_item(id: &str, src: &Utf8Path, dst: &Utf8Path) -> ExecutorItem {
         ExecutorItem {
             id: id.to_owned(),
             plan_id: "p1".to_owned(),
@@ -686,8 +686,9 @@ mod tests {
     #[tokio::test]
     async fn happy_path_all_succeed() {
         let dir = tempfile::tempdir().unwrap();
-        let src = dir.path().join("file.fits");
-        let dst = dir.path().join("dest.fits");
+        let root = utf8(dir.path());
+        let src = root.join("file.fits");
+        let dst = root.join("dest.fits");
         std::fs::write(&src, b"data").unwrap();
 
         let item = make_move_item("item-1", &src, &dst);
@@ -750,10 +751,11 @@ mod tests {
     #[tokio::test]
     async fn cancellation_halts_before_next_item() {
         let dir = tempfile::tempdir().unwrap();
-        let src1 = dir.path().join("a.fits");
-        let dst1 = dir.path().join("a_dst.fits");
-        let src2 = dir.path().join("b.fits");
-        let dst2 = dir.path().join("b_dst.fits");
+        let root = utf8(dir.path());
+        let src1 = root.join("a.fits");
+        let dst1 = root.join("a_dst.fits");
+        let src2 = root.join("b.fits");
+        let dst2 = root.join("b_dst.fits");
         std::fs::write(&src1, b"a").unwrap();
         std::fs::write(&src2, b"b").unwrap();
 
@@ -784,8 +786,9 @@ mod tests {
     #[tokio::test]
     async fn user_skip_set_prevents_execution() {
         let dir = tempfile::tempdir().unwrap();
-        let src = dir.path().join("skip.fits");
-        let dst = dir.path().join("skip_dst.fits");
+        let root = utf8(dir.path());
+        let src = root.join("skip.fits");
+        let dst = root.join("skip_dst.fits");
         std::fs::write(&src, b"data").unwrap();
 
         let item = make_move_item("item-skip", &src, &dst);
@@ -813,9 +816,10 @@ mod tests {
     #[tokio::test]
     async fn stale_source_triggers_pause() {
         let dir = tempfile::tempdir().unwrap();
-        let src = dir.path().join("stale.fits");
+        let root = utf8(dir.path());
+        let src = root.join("stale.fits");
         std::fs::write(&src, b"data").unwrap();
-        let dst = dir.path().join("dst.fits");
+        let dst = root.join("dst.fits");
 
         let item = ExecutorItem {
             id: "item-stale".to_owned(),
