@@ -9,6 +9,7 @@
  */
 
 import { useState, useCallback } from 'react';
+import { dirname } from 'pathe';
 import { commands } from '@/bindings';
 import { errMessage } from '@/lib/errors';
 
@@ -88,17 +89,19 @@ export function setLastPath(kind: LastPathKind, selectedPath: string): void {
   }
 }
 
-/** Extract the parent directory from a path (cross-platform). */
+/**
+ * Extract the parent directory from a path (cross-platform).
+ *
+ * Uses `pathe.dirname`, which normalizes Windows backslashes to forward slashes
+ * and handles drive letters, UNC paths, and trailing separators. For a path
+ * with no separators (a bare segment) we return it unchanged, preserving the
+ * prior behavior where the last-path persistence stores the input as-is rather
+ * than `pathe`'s "." dirname.
+ */
 function parentDir(filePath: string): string {
-  // Normalise forward slashes for splitting, then restore original separator
-  const sep = filePath.includes('\\') ? '\\' : '/';
-  const parts = filePath.replace(/\\/g, '/').split('/').filter(Boolean);
-  if (parts.length <= 1) return filePath;
-  parts.pop();
-  const parent = parts.join(sep);
-  // Preserve leading slash for Unix paths
-  if (filePath.startsWith('/')) return `/${parent}`;
-  return parent;
+  const parent = dirname(filePath);
+  // `dirname('bare')` returns '.' — keep the prior round-trip behavior.
+  return parent === '.' ? filePath : parent;
 }
 
 // ---------------------------------------------------------------------------

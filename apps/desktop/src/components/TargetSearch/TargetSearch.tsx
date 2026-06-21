@@ -44,6 +44,7 @@
 import { useCallback, useEffect, useId, useMemo, useRef, useState } from 'react';
 import { Combobox } from '@base-ui-components/react/combobox';
 import { useVirtualizer } from '@tanstack/react-virtual';
+import { useDebouncedCallback } from 'use-debounce';
 import {
   searchTargets,
   resolveTarget,
@@ -193,7 +194,6 @@ export function TargetSearch({
   // superseded query is dropped. (Tauri `invoke` has no AbortSignal, so this
   // generation guard — not an AbortController — is the actual cancel mechanism.)
   const genRef = useRef(0);
-  const debounceRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const scrollRef = useRef<HTMLDivElement>(null);
 
   // Virtualize the suggestion options. Because Base UI internal filtering is
@@ -285,16 +285,17 @@ export function TargetSearch({
     [catalogFilterKey, typeFilterKey, limit],
   );
 
-  // Debounce query changes.
+  // Debounce query changes. `useDebouncedCallback` cancels any pending call on
+  // unmount and whenever a new invocation is scheduled, preserving the prior
+  // hand-rolled setTimeout/clearTimeout semantics at the same DEBOUNCE_MS.
+  const debouncedSearch = useDebouncedCallback(
+    (q: string) => void runSearch(q),
+    DEBOUNCE_MS,
+  );
   useEffect(() => {
-    if (debounceRef.current) clearTimeout(debounceRef.current);
-    debounceRef.current = setTimeout(() => {
-      void runSearch(query);
-    }, DEBOUNCE_MS);
-    return () => {
-      if (debounceRef.current) clearTimeout(debounceRef.current);
-    };
-  }, [query, runSearch]);
+    debouncedSearch(query);
+    return () => debouncedSearch.cancel();
+  }, [query, debouncedSearch]);
 
   const handleSelect = useCallback(
     (s: TargetSuggestion | null) => {

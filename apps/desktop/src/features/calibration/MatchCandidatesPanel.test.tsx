@@ -187,10 +187,12 @@ describe('MatchCandidatesPanel', () => {
     expect(screen.getByTestId('mismatch-temperature')).toHaveTextContent('out of tolerance');
   });
 
-  it('8. matched dimensions render with ✓ indicator', () => {
+  it('8. matched dimensions render with a "matched" indicator', () => {
     renderPanel({ response: matchResponse });
-    // gain is in dimensionsMatched for both candidates → multiple ✓ elements
-    const checks = screen.getAllByText('✓');
+    // gain is in dimensionsMatched for both candidates → multiple matched icons.
+    // The check glyph is now a lucide <Check> with aria-label="matched"
+    // (role="img"), so query by accessible name instead of literal text.
+    const checks = screen.getAllByRole('img', { name: 'matched' });
     expect(checks.length).toBeGreaterThan(0);
   });
 

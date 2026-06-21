@@ -11,6 +11,7 @@
  */
 
 import { useCallback } from 'react';
+import { basename } from 'pathe';
 import type { ArtifactSummary } from '@/api/commands';
 import {
   groupArtifactsByLaunch,
@@ -45,7 +46,10 @@ function ArtifactRow({ artifact, projectId, onResolved }: ArtifactRowProps) {
     void markResolved(projectId, artifact.id);
   }, [markResolved, projectId, artifact.id]);
 
-  const fileName = artifact.path.split('/').pop() ?? artifact.path;
+  // `pathe.basename` is cross-platform (handles both `/` and `\` separators),
+  // unlike the prior forward-slash-only split. Falls back to the full path when
+  // basename yields an empty string.
+  const fileName = basename(artifact.path) || artifact.path;
 
   return (
     <div

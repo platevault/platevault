@@ -6,6 +6,7 @@
  * Review state is rendered as plain text (no badge bubbles, FR-004).
  */
 
+import { AlertTriangle } from 'lucide-react';
 import type { InventorySource, InventorySession } from '@/api/commands';
 import { ListSidebar, ListItem } from '@/components';
 import { Pill } from '@/ui';
@@ -150,7 +151,12 @@ export function SessionsList({
                   <strong>{s.target ?? s.name}</strong>
                   {s.filter && <Pill variant="neutral">{s.filter}</Pill>}
                   {(s.state === 'discovered' || s.state === 'candidate') && (
-                    <span style={{ color: 'var(--alm-warn)' }}>&#x26A0;</span>
+                    <AlertTriangle
+                      size={12}
+                      role="img"
+                      aria-label="Needs review"
+                      style={{ color: 'var(--alm-warn)', display: 'inline', verticalAlign: 'middle' }}
+                    />
                   )}
                 </>
               }

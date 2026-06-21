@@ -5,10 +5,21 @@
 
 import { useMemo, useState } from 'react';
 import { Menu } from '@base-ui-components/react/menu';
+import {
+  useReactTable,
+  getCoreRowModel,
+  getSortedRowModel,
+  getFilteredRowModel,
+  createColumnHelper,
+  type SortingState,
+  type ColumnFiltersState,
+} from '@tanstack/react-table';
+import { AlertTriangle } from 'lucide-react';
 import { ListSidebar, ListItem } from '@/components';
 import { Pill } from '@/ui';
 import type { PillVariant } from '@/ui';
 import type { ProjectSummaryDto } from '@/bindings/index';
+import { compareDateDesc } from '@/lib/datetime';
 
 // ─── Helpers ────────────────────────────────────────────────────────────────
 
@@ -47,6 +58,54 @@ function stateLabel(lifecycle: string): string {
 
 type SortBy = 'updated' | 'name' | 'created' | 'sources';
 
+// ─── react-table column model (T182) ─────────────────────────────────────────
+// Headless @tanstack/react-table owns sorting + the lifecycle filter; the rows
+// it yields are still rendered as ListItem cards (no <table> markup change).
+
+const columnHelper = createColumnHelper<ProjectSummaryDto>();
+
+const PROJECT_COLUMNS = [
+  columnHelper.accessor('name', {
+    id: 'name',
+    sortingFn: (a, b) => a.original.name.localeCompare(b.original.name),
+  }),
+  // `created` sorts most-recent-first (descending), matching the prior
+  // `new Date(b) - new Date(a)` comparator via the shared datetime helper.
+  columnHelper.accessor('createdAt', {
+    id: 'created',
+    sortingFn: (a, b) => compareDateDesc(a.original.createdAt, b.original.createdAt),
+  }),
+  columnHelper.accessor('sourceCount', {
+    id: 'sources',
+    // Descending by source count (prior: b.sourceCount - a.sourceCount).
+    sortingFn: (a, b) => b.original.sourceCount - a.original.sourceCount,
+  }),
+  // Lifecycle is not a visible sort key — it backs the multiselect filter.
+  // An empty filter array means "all"; otherwise keep rows whose lifecycle is
+  // in the selected set (prior: `lifecycle.includes(p.lifecycle)`).
+  columnHelper.accessor('lifecycle', {
+    id: 'lifecycle',
+    filterFn: (row, _id, value: string[]) =>
+      value.length === 0 || value.includes(row.original.lifecycle),
+  }),
+];
+
+// Map the sort-select value to a react-table SortingState. 'updated' keeps the
+// backend's updated_at-desc order, so no client sorting is applied.
+function sortingFor(sortBy: SortBy): SortingState {
+  switch (sortBy) {
+    case 'name':
+      return [{ id: 'name', desc: false }];
+    case 'created':
+      // The comparator already encodes desc order; `desc:false` preserves it.
+      return [{ id: 'created', desc: false }];
+    case 'sources':
+      return [{ id: 'sources', desc: false }];
+    default:
+      return [];
+  }
+}
+
 // All selectable lifecycle states (excludes the synthetic 'all' sentinel — empty array means all).
 const LIFECYCLE_STATES: Array<{ value: string; label: string }> = [
   { value: 'processing', label: 'Processing' },
@@ -81,23 +140,26 @@ export function ProjectsList({
 }: ProjectsListProps) {
   const [sortBy, setSortBy] = useState<SortBy>('updated');
 
-  const filtered = useMemo(() => {
-    let sorted: typeof projects;
-    if (sortBy === 'name') {
-      sorted = [...projects].sort((a, b) => a.name.localeCompare(b.name));
-    } else if (sortBy === 'created') {
-      sorted = [...projects].sort(
-        (a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime(),
-      );
-    } else if (sortBy === 'sources') {
-      sorted = [...projects].sort((a, b) => b.sourceCount - a.sourceCount);
-    } else {
-      sorted = projects; // 'updated': already updated_at-desc from the backend
-    }
-    // Apply multiselect lifecycle filter (empty = show all).
-    if (lifecycle.length === 0) return sorted;
-    return sorted.filter((p) => lifecycle.includes(p.lifecycle));
-  }, [projects, sortBy, lifecycle]);
+  const sorting = useMemo(() => sortingFor(sortBy), [sortBy]);
+  const columnFilters = useMemo<ColumnFiltersState>(
+    () => [{ id: 'lifecycle', value: lifecycle }],
+    [lifecycle],
+  );
+
+  const table = useReactTable({
+    data: projects,
+    columns: PROJECT_COLUMNS,
+    state: { sorting, columnFilters },
+    getRowId: (row) => row.id,
+    getCoreRowModel: getCoreRowModel(),
+    getSortedRowModel: getSortedRowModel(),
+    getFilteredRowModel: getFilteredRowModel(),
+  });
+
+  const filtered = useMemo(
+    () => table.getRowModel().rows.map((r) => r.original),
+    [table, sorting, columnFilters, projects],
+  );
 
   const handleLifecycleToggle = (value: string, checked: boolean) => {
     if (checked) {
@@ -207,12 +269,17 @@ export function ProjectsList({
           title={
             <>
               {project.lifecycle === 'blocked' && (
-                <span
-                  style={{ color: 'var(--alm-danger)', marginRight: 4 }}
+                <AlertTriangle
+                  size={14}
+                  role="img"
                   aria-label="Blocked"
-                >
-                  &#x26A0;
-                </span>
+                  style={{
+                    color: 'var(--alm-danger)',
+                    marginRight: 4,
+                    display: 'inline',
+                    verticalAlign: 'middle',
+                  }}
+                />
               )}
               {project.name}
             </>
@@ -227,10 +294,16 @@ export function ProjectsList({
               {project.sourceCount > 0 && <>{project.sourceCount} sources</>}
               {project.channelDrift && (
                 <span
-                  style={{ color: 'var(--alm-warn)', marginLeft: 4 }}
+                  style={{
+                    color: 'var(--alm-warn)',
+                    marginLeft: 4,
+                    display: 'inline-flex',
+                    alignItems: 'center',
+                    gap: 2,
+                  }}
                   title="Channel drift detected"
                 >
-                  ⚠ channels
+                  <AlertTriangle size={12} aria-hidden="true" /> channels
                 </span>
               )}
             </span>

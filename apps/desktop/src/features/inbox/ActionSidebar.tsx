@@ -8,8 +8,10 @@
  * - Keyboard shortcuts: C = confirm/split, O = open plan.
  */
 
-import { useEffect, useCallback } from 'react';
+import { useCallback } from 'react';
+import { AlertTriangle } from 'lucide-react';
 import { Btn } from '@/ui';
+import { useHotkeys } from '@/lib/useHotkeys';
 import type { InboxClassifyResponse } from './store';
 
 export interface ActionSidebarProps {
@@ -42,35 +44,40 @@ export function ActionSidebar({
       ? 'Generate split plan'
       : 'Confirm to inventory';
 
-  const handleConfirmKey = useCallback(
+  // C = confirm/split, O = open plan. Bind by physical key code (`KeyC`/`KeyO`)
+  // — plus the Shift variants — so both lowercase and uppercase presses fire,
+  // matching the prior `e.key.toLowerCase()` check. tinykeys' exact-modifier
+  // matching means Ctrl/Alt/Meta combinations never trigger these (replacing
+  // the explicit modifier guard), and useHotkeys' form-field guard replaces the
+  // input/textarea/select/contentEditable skip.
+  const onConfirmKey = useCallback(
     (e: KeyboardEvent) => {
       if (!hasSelection) return;
-      if (e.metaKey || e.ctrlKey || e.altKey) return;
-      const target = e.target as HTMLElement;
-      const isInput =
-        target.tagName === 'INPUT' ||
-        target.tagName === 'TEXTAREA' ||
-        target.tagName === 'SELECT' ||
-        target.isContentEditable;
-      if (isInput) return;
-
-      if (e.key.toLowerCase() === 'c') {
-        e.preventDefault();
-        if (hasOpenPlan) onOpenExistingPlan();
-        else if (canConfirm) onConfirm();
-      }
-      if (e.key.toLowerCase() === 'o' && hasOpenPlan) {
-        e.preventDefault();
-        onOpenExistingPlan();
-      }
+      e.preventDefault();
+      if (hasOpenPlan) onOpenExistingPlan();
+      else if (canConfirm) onConfirm();
     },
     [hasSelection, hasOpenPlan, canConfirm, onConfirm, onOpenExistingPlan],
   );
+  const onOpenPlanKey = useCallback(
+    (e: KeyboardEvent) => {
+      if (!hasSelection) return;
+      if (!hasOpenPlan) return;
+      e.preventDefault();
+      onOpenExistingPlan();
+    },
+    [hasSelection, hasOpenPlan, onOpenExistingPlan],
+  );
 
-  useEffect(() => {
-    document.addEventListener('keydown', handleConfirmKey);
-    return () => document.removeEventListener('keydown', handleConfirmKey);
-  }, [handleConfirmKey]);
+  useHotkeys(
+    {
+      KeyC: onConfirmKey,
+      'Shift+KeyC': onConfirmKey,
+      KeyO: onOpenPlanKey,
+      'Shift+KeyO': onOpenPlanKey,
+    },
+    [onConfirmKey, onOpenPlanKey],
+  );
 
   const unclassifiedCount = classification?.unclassifiedFiles?.length ?? 0;
   const hasUnclassified = unclassifiedCount > 0;
@@ -197,8 +204,9 @@ export function ActionSidebar({
               : classification.type}
           </div>
           {hasUnclassified && (
-            <div style={{ color: 'var(--alm-warn)', marginTop: 4 }}>
-              ⚠ {unclassifiedCount} file{unclassifiedCount !== 1 ? 's' : ''} need review
+            <div style={{ color: 'var(--alm-warn)', marginTop: 4, display: 'flex', alignItems: 'center', gap: 4 }}>
+              <AlertTriangle size={14} aria-hidden="true" /> {unclassifiedCount} file
+              {unclassifiedCount !== 1 ? 's' : ''} need review
             </div>
           )}
           {isUnclassified && !hasUnclassified && (

@@ -4,6 +4,7 @@ import { Command } from 'cmdk';
 import { useNavigate, useRouterState } from '@tanstack/react-router';
 import { searchGlobal, getSettings } from '@/api/commands';
 import { openInNewWindow } from '@/lib/window';
+import { useHotkeys } from '@/lib/useHotkeys';
 import type { SearchResult } from '@/bindings/types';
 
 const PAGES: Array<{ label: string; route: string }> = [
@@ -62,16 +63,19 @@ export function CommandPalette() {
     };
   }, []);
 
-  useEffect(() => {
-    function handleKeyDown(e: KeyboardEvent) {
-      if ((e.metaKey || e.ctrlKey) && e.key === 'k') {
+  // ⌘/Ctrl+K toggles the palette. `$mod` resolves to Cmd on macOS, Ctrl
+  // elsewhere — matching the prior `metaKey || ctrlKey` check. We opt out of the
+  // form-field guard so the shortcut still fires while focus is in an input.
+  useHotkeys(
+    {
+      '$mod+KeyK': (e) => {
         e.preventDefault();
         setOpen((v) => !v);
-      }
-    }
-    document.addEventListener('keydown', handleKeyDown);
-    return () => document.removeEventListener('keydown', handleKeyDown);
-  }, []);
+      },
+    },
+    [],
+    { ignoreFormFields: false },
+  );
 
   useEffect(() => {
     if (!query.trim()) {

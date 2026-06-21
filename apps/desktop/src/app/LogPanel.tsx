@@ -27,6 +27,8 @@ import { startLogSubscription } from '@/data/logSubscription';
 import { logExport } from '@/api/commands';
 import type { LevelFilter } from './LogPanelContext';
 import { errMessage } from '@/lib/errors';
+import { formatTimeOfDay } from '@/lib/datetime';
+import { useHotkeys } from '@/lib/useHotkeys';
 
 // ── Level chip display helpers ────────────────────────────────────────────────
 
@@ -48,18 +50,6 @@ function passesSourceFilter(entrySource: LogEntrySource, filter: LogEntrySource[
   return filter.includes(entrySource);
 }
 
-function formatTime(isoTime: string): string {
-  try {
-    const d = new Date(isoTime);
-    return d.toLocaleTimeString(undefined, {
-      hour: '2-digit',
-      minute: '2-digit',
-      second: '2-digit',
-    });
-  } catch {
-    return isoTime;
-  }
-}
 
 // ── Entity navigation helpers ─────────────────────────────────────────────────
 
@@ -143,17 +133,20 @@ export function LogPanel() {
     void startLogSubscription();
   }, []);
 
-  // Close panel on Escape.
-  useEffect(() => {
-    function handleKeyDown(e: KeyboardEvent) {
-      if (e.key === 'Escape' && expanded) {
+  // Close panel on Escape (only while expanded). We keep the form-field guard
+  // off so Escape still closes the panel from anywhere, matching the prior
+  // document-level handler.
+  useHotkeys(
+    {
+      Escape: (e) => {
+        if (!expanded) return;
         e.preventDefault();
         toggle();
-      }
-    }
-    document.addEventListener('keydown', handleKeyDown);
-    return () => document.removeEventListener('keydown', handleKeyDown);
-  }, [expanded, toggle]);
+      },
+    },
+    [expanded, toggle],
+    { ignoreFormFields: false },
+  );
 
   // Follow-tail scroll.
   useEffect(() => {
@@ -254,7 +247,7 @@ export function LogPanel() {
             className={`alm-logpanel__preview alm-logpanel__event-level--${previewEntry.level}`}
             aria-label="Latest log entry"
           >
-            {formatTime(previewEntry.time)} {previewEntry.message}
+            {formatTimeOfDay(previewEntry.time)} {previewEntry.message}
           </span>
         )}
 
@@ -442,7 +435,7 @@ function LogEntryRow({
           : undefined
       }
     >
-      <span className="alm-logpanel__event-time">{formatTime(entry.time)}</span>
+      <span className="alm-logpanel__event-time">{formatTimeOfDay(entry.time)}</span>
       <span
         className={`alm-logpanel__event-level alm-logpanel__event-level--${entry.level}`}
         aria-label={entry.level}

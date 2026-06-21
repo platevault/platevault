@@ -1,4 +1,5 @@
 import { useState } from 'react';
+import { X } from 'lucide-react';
 
 interface ActiveFilter {
   key: string;
@@ -30,7 +31,7 @@ export function SessionsFilterBar() {
             onClick={() => removeFilter(f.key)}
             aria-label={`Remove ${f.key} filter`}
           >
-            &times;
+            <X size={12} aria-hidden="true" />
           </button>
         </span>
       ))}

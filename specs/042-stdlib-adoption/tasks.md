@@ -140,12 +140,13 @@ Frontend: `cd apps/desktop && npx tsc --noEmit` + `npx vitest run <feature>`. Ru
 
 ## Phase 10 — US6 Reinvented frontend utilities (P3)
 
-- [ ] T180 [P] `use-debounce` (TargetSearch, ProjectNotes autosave).
-- [ ] T181 [P] `date-fns` one shared formatter; replace the 3 formatters + date sorts.
-- [ ] T182 `@tanstack/react-table` for ProjectsList sort/filter.
-- [ ] T183 [P] `tinykeys` `useHotkeys` hook; consolidate 3 keydown handlers.
-- [ ] T184 [P] `pathe` for path manipulation (`picker.ts`, ToolLaunches).
-- [ ] T185 `lucide-react` sweep (replace inline SVGs).
+- [X] T180 [P] `use-debounce` (TargetSearch, ProjectNotes autosave).
+- [X] T181 [P] `date-fns` one shared formatter (`lib/datetime.ts`); replace the 3 formatters + date sorts.
+  (NOTE: `manifests.ts` UTC formatter left as-is — date-fns core can't reproduce UTC output without date-fns-tz.)
+- [X] T182 `@tanstack/react-table` for ProjectsList sort/filter (headless; base-ui Menu filter from US4 preserved).
+- [X] T183 [P] `tinykeys` `useHotkeys` hook (`lib/useHotkeys.ts`); consolidate 3 keydown handlers.
+- [X] T184 [P] `pathe` for path manipulation (`picker.ts`, ToolLaunches) — display/last-path only, no submitted paths.
+- [X] T185 `lucide-react` sweep (replace inline SVG/entity icons; bespoke/CSS glyphs left).
 - [ ] **US6 checkpoint**: commit `feat(042): US6 frontend utility libraries`.
 
 ## Phase 11 — US7 Frontend type-safety & dead-code (P3) — needs US2

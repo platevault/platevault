@@ -13,6 +13,7 @@
  */
 
 import { useState } from 'react';
+import { Check, AlertTriangle } from 'lucide-react';
 import { Section, Table, Pill, EmptyState, Banner, Btn } from '@/ui';
 import type { PillVariant } from '@/ui';
 import type {
@@ -106,7 +107,12 @@ function DimensionBreakdown({ match }: { match: CalibrationMatchDto }) {
           key={d.dimension}
           style={{ fontSize: 'var(--alm-text-xs)', color: 'var(--alm-text-secondary)' }}
         >
-          <span style={{ color: 'var(--alm-ok)' }}>✓</span>{' '}
+          <Check
+            size={12}
+            role="img"
+            aria-label="matched"
+            style={{ color: 'var(--alm-ok)', display: 'inline', verticalAlign: 'middle' }}
+          />{' '}
           {d.dimension}
           {d.delta != null && d.delta > 0 && (
             <span style={{ color: 'var(--alm-text-faint)' }}> (Δ{d.delta.toFixed(2)})</span>
@@ -120,7 +126,11 @@ function DimensionBreakdown({ match }: { match: CalibrationMatchDto }) {
             style={{ fontSize: 'var(--alm-text-xs)', color: 'var(--alm-warn)' }}
             data-testid={`mismatch-${d.dimension}`}
           >
-            <span>⚠</span>{' '}
+            <AlertTriangle
+              size={12}
+              aria-label="mismatch"
+              style={{ display: 'inline', verticalAlign: 'middle' }}
+            />{' '}
             {d.dimension}: {reasonLabel(d.reason)}
             {d.delta != null && (
               <span style={{ color: 'var(--alm-text-faint)' }}> (Δ{d.delta.toFixed(2)})</span>
