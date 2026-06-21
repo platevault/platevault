@@ -307,6 +307,19 @@ export function MatchCandidatesPanel({
 
   if (response.status === 'error') {
     const code = response.error?.code ?? 'unknown';
+    // A missing anchor session is benign for a master view (a master has no
+    // originating light session to match against) — show a neutral empty state
+    // rather than a raw "Session … not found" error.
+    if (code === 'session.not_found') {
+      return (
+        <Section title="Calibration suggestions">
+          <EmptyState
+            title="No compatible sessions"
+            desc="This master has no matched acquisition sessions yet."
+          />
+        </Section>
+      );
+    }
     const isObserverMissing = code === 'match.observer_location_missing' || response.suggestStatus === 'observer_location_missing';
     return (
       <Section title="Calibration suggestions">
