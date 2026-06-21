@@ -18,6 +18,12 @@
 //! Constitution V: `ToolLaunch` rows are the durable record; the EventBus
 //! carries the live audit signal.
 
+//!
+//! Extracted from `app_core` into its own crate (spec 042 / T253 O3b) as a pure
+//! leaf: it has zero `crate::` references and nothing else in `app_core`
+//! references it. `app_core` re-exports this crate at `app_core::tool_launch` so
+//! the public surface stays byte-identical.
+
 #![allow(clippy::too_many_lines)] // orchestration functions are multi-step by design
 #![allow(clippy::doc_markdown)] // spec/domain terminology
 

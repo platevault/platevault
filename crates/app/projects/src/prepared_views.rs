@@ -34,7 +34,7 @@ use persistence_db::repositories::{
 };
 use sqlx::SqlitePool;
 
-use crate::errors::db_internal_ctx;
+use app_core_errors::db_internal_ctx;
 
 // ── Helpers ───────────────────────────────────────────────────────────────────
 
@@ -43,7 +43,7 @@ fn db_err(e: persistence_db::DbError) -> ContractError {
         persistence_db::DbError::NotFound(msg) => {
             ContractError::new(ErrorCode::ViewNotFound, msg, ErrorSeverity::Blocking, false)
         }
-        other => crate::errors::db_err(other),
+        other => app_core_errors::db_err(other),
     }
 }
 

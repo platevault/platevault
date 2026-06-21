@@ -16,6 +16,13 @@
 //! Constitution V compliance: the `events` table is the durable record.
 //! `LogEntry` is a derived projection; no new schema is introduced.
 
+//!
+//! Extracted from `app_core` into its own crate (spec 042 / T253 O3b) as a pure
+//! leaf: it has zero `crate::` references and nothing else in `app_core`
+//! references it. `app_core` re-exports this crate at `app_core::log_stream` so the
+//! public surface stays byte-identical.
+#![allow(clippy::doc_markdown)] // spec/domain terminology not appropriate for backticks
+
 use contracts_core::log::{LogEntry, LogEntrySource, LogExportErrorCode, LogLevel};
 use contracts_core::{error_code::ErrorCode, ContractError, ErrorSeverity};
 use sqlx::SqlitePool;

@@ -18,6 +18,14 @@
 //! - If the session `type == "mixed"`, the review transition is refused with
 //!   `session.mixed_state` — the user must split via spec 005 first.
 
+//!
+//! Extracted from `app_core` into its own crate (spec 042 / T253 O3b). Its only
+//! cross-module dependency is on the now-extracted `app_core_lifecycle` crate
+//! (`lifecycle_use_case`, `transition_use_case`); nothing else in `app_core`
+//! references it. `app_core` re-exports this crate at `app_core::inventory` so
+//! the public surface stays byte-identical.
+#![allow(clippy::doc_markdown)] // spec/domain terminology not appropriate for backticks
+
 use std::collections::HashMap;
 
 use audit::bus::EventBus;
@@ -42,8 +50,8 @@ use time::format_description::well_known::Rfc3339;
 use time::OffsetDateTime;
 use uuid::Uuid;
 
-use crate::lifecycle_use_case::build_edge_table;
-use crate::transition_use_case::apply_transition;
+use crate::lifecycle::lifecycle_use_case::build_edge_table;
+use crate::lifecycle::transition_use_case::apply_transition;
 
 // ── list ─────────────────────────────────────────────────────────────────────
 

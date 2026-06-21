@@ -40,6 +40,13 @@
 //! Current path: frontend listens to bus events via Tauri emit and calls
 //! `guided.step.complete` — functionally equivalent for v1.
 
+//!
+//! Extracted from `app_core` into its own crate (spec 042 / T253 O3b) as a pure
+//! leaf: it has zero `crate::` references and nothing else in `app_core`
+//! references it. `app_core` re-exports this crate at `app_core::guided_flow` so the
+//! public surface stays byte-identical.
+#![allow(clippy::doc_markdown)] // spec/domain terminology not appropriate for backticks
+
 use audit::bus::EventBus;
 use audit::event_bus::{GuidedFlowStateCorrupted, Source, TOPIC_GUIDED_FLOW_STATE_CORRUPTED};
 use contracts_core::guided::{

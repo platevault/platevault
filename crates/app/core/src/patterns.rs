@@ -9,6 +9,13 @@
 //! `ContractError` codes matching the JSON Schemas in
 //! `specs/015-token-pattern-builder/contracts/`.
 
+//!
+//! Extracted from `app_core` into its own crate (spec 042 / T253 O3b) as a pure
+//! leaf: it has zero `crate::` references and nothing else in `app_core`
+//! references it. `app_core` re-exports this crate at `app_core::patterns` so the
+//! public surface stays byte-identical.
+#![allow(clippy::doc_markdown)] // spec/domain terminology not appropriate for backticks
+
 use contracts_core::patterns::{
     PatternPartDto, PatternPreviewRequest, PatternPreviewResponse, PatternResolveRequest,
     PatternResolveResponse, PatternValidateRequest, PatternValidateResponse,

@@ -1,21 +1,41 @@
 //! Application use-case orchestration boundary.
 #![allow(clippy::doc_markdown)] // spec/domain terminology not appropriate for backticks
 
-// ── Domain module groups (T252 / spec 042 O3a) ──────────────────────────
+// ── Per-domain crate split (spec 042 / T252–T253) ───────────────────────
 //
-// Internal file layout is grouped into domain subdirectories. Every module
-// that was previously a flat `pub mod` at the crate root is re-exported below
-// under its original name so that `app_core::<module>` paths remain
-// byte-identical for `desktop_shell` and every other consumer. The grouping
-// is a purely internal reorganisation — no external surface changes.
-pub mod lifecycle;
-pub mod projects;
-pub mod targets;
+// Six domain crates plus the `errors` leaf kernel were extracted into their own
+// sibling crates under `crates/app/`. They are re-exported below under their
+// original crate-root names so that `app_core::<domain>` paths remain
+// byte-identical for `desktop_shell` and every other consumer. Every other
+// module stays in-crate as a `pub mod` (file layout under `src/`), keeping the
+// crate split per-domain rather than per-module.
 
-// `calibration` was extracted into its own leaf crate (spec 042 / T253 O3b).
-// Re-export it under the original `app_core::calibration` path so consumers
-// (`desktop_shell`, contract tests, specs) keep the byte-identical surface.
+// `calibration` was extracted into its own leaf crate. Re-export it under the
+// original `app_core::calibration` path so consumers keep the byte-identical
+// surface.
 pub use app_core_calibration as calibration;
+// `errors` was extracted into its own leaf crate (zero `crate::` refs). The
+// folded-back in-crate modules reference it as `crate::errors::*`, which resolves
+// through this re-export, so every consumer path stays byte-identical.
+pub use app_core_errors as errors;
+// `inbox` was extracted into its own domain crate. Re-export it under the
+// original `app_core::inbox` path.
+pub use app_core_inbox as inbox;
+// `lifecycle` was extracted into its own domain crate. Re-export it under the
+// original `app_core::lifecycle` path; the per-module re-exports below keep
+// `app_core::<module>` byte-identical.
+pub use app_core_lifecycle as lifecycle;
+// `projects` was extracted into its own domain crate. Re-export it under the
+// original `app_core::projects` path; the per-module re-exports below keep
+// `app_core::<module>` byte-identical.
+pub use app_core_projects as projects;
+// `settings` was extracted into its own domain crate. Re-export it under the
+// original `app_core::settings` path.
+pub use app_core_settings as settings;
+// `targets` was extracted into its own domain crate. Re-export it under the
+// original `app_core::targets` path; the per-module re-exports below keep
+// `app_core::<module>` byte-identical.
+pub use app_core_targets as targets;
 
 // Re-export grouped modules under their original crate-root paths.
 // `equipment` historically resolved to `app_core::equipment`; it now lives in
@@ -32,13 +52,13 @@ pub use targets::{
     target_search,
 };
 
-// Ungrouped crate-root modules.
+// In-crate modules (file layout under `src/`). These live in `app_core` itself
+// and may reference the extracted domain crates as `crate::errors`,
+// `crate::lifecycle`, etc. via the re-exports above.
 #[cfg(feature = "dev-tools")]
 pub mod dev_contracts;
-pub mod errors;
 pub mod first_run;
 pub mod guided_flow;
-pub mod inbox;
 pub mod inventory;
 pub mod log_stream;
 pub mod native;
@@ -48,7 +68,6 @@ pub mod plans;
 pub mod protection;
 pub mod search;
 pub mod sessions;
-pub mod settings;
 pub mod tool_launch;
 
 use std::collections::BTreeMap;

@@ -11,6 +11,13 @@
 //! Constitution §I: read-only; no image files are touched.
 //! Constitution §V: queries the durable SQLite store.
 
+//!
+//! Extracted from `app_core` into its own crate (spec 042 / T253 O3b) as a pure
+//! leaf: it has zero `crate::` references and nothing else in `app_core`
+//! references it. `app_core` re-exports this crate at `app_core::search` so the
+//! public surface stays byte-identical.
+#![allow(clippy::doc_markdown)] // spec/domain terminology not appropriate for backticks
+
 use contracts_core::search::{SearchResult, SearchResultKind};
 use sqlx::SqlitePool;
 

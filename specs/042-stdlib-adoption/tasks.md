@@ -244,12 +244,14 @@ Frontend: `cd apps/desktop && npx tsc --noEmit` + `npx vitest run <feature>`. Ru
   via lib.rs `pub use` re-exports; zero consumer edits; calibration use-case → calibration/matching.rs.)
 - [X] T253 (O3b) Split `app/core` into per-domain use-case crates incrementally, each
   preserving the public surface `desktop_shell` consumes.
-  (Incremental first slice landed: extracted the only zero-cross-dep leaf group `calibration`
-  into new crate `app_core_calibration`, re-exported as `app_core::calibration`/`::equipment`
-  (byte-identical surface, no consumer edits, bindings empty-diff). Further extraction BLOCKED
-  by `errors.rs` coupling upward to guided_flow/log_stream; documented next sequence:
-  extract `lifecycle`, then relocate the two `From` impls so `errors` becomes a leaf kernel,
-  then settings/inbox/targets/projects. Tracked as follow-up.)
+  (COMPLETE at domain granularity: `errors.rs` decoupled into a standalone leaf (From impls
+  moved to guided_flow/log_stream), then `app_core` split into the 6 T252 domains
+  + the `errors` leaf kernel as crates: `app_core_{calibration,targets,projects,inbox,lifecycle,
+  settings,errors}`. Cross-cutting singletons (plan_apply/plans/protection/first_run/guided_flow/
+  log_stream/native/patterns/search/sessions/inventory/tool_launch/dev_contracts) stay as in-crate
+  `pub mod`s — domain boundaries, not one-crate-per-file (Rust-idiomatic). Public surface
+  byte-identical via re-exports, no consumer/desktop_shell edits, bindings empty-diff; app_core
+  Cargo.toml dead deps pruned; acyclic DAG.)
 - [X] T254 (O6) Fix `persistence/db → contracts/core` inversion: move the ~4 stored type
   clusters (equipment/settings/first_run/source-override) to domain; map DTOs at app/core.
   **DB byte-identity check + persistence tests green.** Own commit.

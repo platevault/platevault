@@ -4,6 +4,13 @@
 //! - US3: plan gating — `plan_protection_check` returns protected items.
 //! - US4: category enforcement — category membership elevates level via resolver.
 
+//!
+//! Extracted from `app_core` into its own crate (spec 042 / T253 O3b). Its only
+//! cross-module dependency was on the now-extracted `app_core_errors` leaf and
+//! nothing else in `app_core` references it. `app_core` re-exports this crate at
+//! `app_core::protection` so the public surface stays byte-identical.
+#![allow(clippy::doc_markdown)] // spec/domain terminology not appropriate for backticks
+
 use audit::bus::EventBus;
 use audit::event_bus::{
     ProtectionDefaultChanged, ProtectionPlanAcknowledged, ProtectionSourceSet, Source,
@@ -25,7 +32,7 @@ use sqlx::SqlitePool;
 
 // ── Error helpers ─────────────────────────────────────────────────────────
 //
-// Canonical mappers live in `crate::errors` (US11 T142). `db_err` routes
+// Canonical mappers live in `app_core_errors` (US11 T142). `db_err` routes
 // `DbError::NotFound` to the recoverable `Blocking`/`retryable=false`
 // classification instead of the previous blanket `Fatal` (L2 divergence fix).
 use crate::errors::{bus_err, db_err};

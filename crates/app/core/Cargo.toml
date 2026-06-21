@@ -8,30 +8,28 @@ license.workspace = true
 path = "src/lib.rs"
 
 [dependencies]
+# Per-domain crate split (spec 042 / T252–T253): the six domain crates plus the
+# `errors` leaf kernel are re-exported from `lib.rs` under their original
+# `app_core::<domain>` paths. All other modules live in-crate under `src/`.
 app_core_calibration = { path = "../calibration" }
+app_core_errors = { path = "../errors" }
+app_core_inbox = { path = "../inbox" }
+app_core_lifecycle = { path = "../lifecycle" }
+app_core_projects = { path = "../projects" }
+app_core_settings = { path = "../settings" }
+app_core_targets = { path = "../targets" }
+# Workspace path deps used by the kernel and the in-crate (folded-back) modules.
 audit = { path = "../../audit" }
-calibration_core = { path = "../../calibration/core" }
-calibration_master_detect = { path = "../../calibration/master-detect" }
-workflow_artifacts = { path = "../../workflow/artifacts" }
-workflow_profiles = { path = "../../workflow/profiles" }
 contracts_core = { path = "../../contracts/core" }
 domain_core = { path = "../../domain/core" }
 fs_executor = { path = "../../fs/executor" }
-metadata_core = { path = "../../metadata/core" }
-metadata_fits = { path = "../../metadata/fits" }
-metadata_xisf = { path = "../../metadata/xisf" }
-metadata_video = { path = "../../metadata/video" }
 patterns = { path = "../../patterns" }
 persistence_db = { path = "../../persistence/db" }
 project_structure = { path = "../../project/structure" }
-targeting = { path = "../../targeting" }
-targeting_resolver = { path = "../../targeting/resolver" }
-anyhow = { workspace = true }
+workflow_profiles = { path = "../../workflow/profiles" }
 camino = { workspace = true }
 dashmap = { workspace = true }
 hex.workspace = true
-moka = { workspace = true }
-serde = { workspace = true }
 serde_json.workspace = true
 sha2.workspace = true
 sqlx.workspace = true
@@ -52,7 +50,10 @@ targeting_resolver = { path = "../../targeting/resolver", features = ["test-fixt
 
 [features]
 # Developer-mode surface (spec 021). Release binaries must NOT enable this.
-dev-tools = []
+# Forwards to the extracted `app_core_settings` crate, which owns the `devMode`
+# settings-key gate, and compiles the in-crate `dev_contracts` module (gated by
+# `#[cfg(feature = "dev-tools")]` in `lib.rs`).
+dev-tools = ["app_core_settings/dev-tools"]
 
 [lints]
 workspace = true

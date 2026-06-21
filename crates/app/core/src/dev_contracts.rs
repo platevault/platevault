@@ -11,6 +11,13 @@
 //! This module does NOT import the ring buffer itself; that lives in the
 //! desktop_shell crate and is passed in via the call buffer state.
 
+//!
+//! Extracted from `app_core` into its own crate (spec 042 / T253 O3b). It is a
+//! pure leaf (zero `crate::` references). `app_core` re-exports it at
+//! `app_core::dev_contracts` behind the `dev-tools` feature so the public
+//! surface stays byte-identical for developer-mode builds.
+#![allow(clippy::doc_markdown)] // spec/domain terminology not appropriate for backticks
+
 use contracts_core::dev::{
     ContractMeta, DevCallsListRequest, DevCallsListResponse, DevContractsListRequest,
     DevContractsListResponse,

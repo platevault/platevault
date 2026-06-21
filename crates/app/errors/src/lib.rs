@@ -16,6 +16,12 @@
 //! that need a **domain-specific** not-found code (e.g. `view.not_found`,
 //! `project.not_found`) must keep their own explicit mapping; this helper
 //! is only for generic infrastructure errors.
+//!
+//! Extracted from `app_core` into a standalone leaf crate (spec 042 / T253
+//! O3b): it has zero `crate::` references. `app_core` re-exports this crate at
+//! its original `app_core::errors::*` path so the public surface stays
+//! byte-identical for every consumer.
+#![allow(clippy::doc_markdown)] // spec/domain terminology not appropriate for backticks
 
 use contracts_core::{error_code::ErrorCode, ContractError, ErrorSeverity};
 

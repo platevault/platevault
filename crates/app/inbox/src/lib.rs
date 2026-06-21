@@ -8,6 +8,12 @@
 //!   persist evidence, compute classification result.
 //! - [`confirm`] — `inbox.confirm` use case: TOCTOU guard, plan creation.
 //! - [`reclassify`] — `inbox.reclassify` use case: manual overrides + re-aggregate.
+//!
+//! Extracted from `app_core` into its own crate (spec 042 / T253 O3b). Its only
+//! cross-module dependency was on the now-extracted `app_core_errors` leaf.
+//! `app_core` re-exports this crate at `app_core::inbox` so the public surface
+//! stays byte-identical.
+#![allow(clippy::doc_markdown)] // spec/domain terminology not appropriate for backticks
 
 pub mod classify;
 pub mod confirm;

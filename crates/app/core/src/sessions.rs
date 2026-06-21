@@ -20,6 +20,13 @@
 //! metadata, warnings, framesets) have no column yet; defaulted with
 //! `// TODO(037):` markers until later columns/views are built.
 
+//!
+//! Extracted from `app_core` into its own crate (spec 042 / T253 O3b) as a pure
+//! leaf: it has zero `crate::` references and nothing else in `app_core`
+//! references it. `app_core` re-exports this crate at `app_core::sessions` so the
+//! public surface stays byte-identical.
+#![allow(clippy::doc_markdown)] // spec/domain terminology not appropriate for backticks
+
 use contracts_core::calibration::CalibrationKind;
 use contracts_core::sessions::{
     AcquisitionSession, ConfidenceLevel, Frameset, SessionCalibrationMatch, SessionDetail,

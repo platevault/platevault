@@ -27,7 +27,7 @@ use uuid::Uuid;
 
 use contracts_core::{error_code::ErrorCode, ContractError, ErrorSeverity};
 
-use crate::errors::db_internal_ctx;
+use app_core_errors::db_internal_ctx;
 
 // ── Request / Response ────────────────────────────────────────────────────────
 

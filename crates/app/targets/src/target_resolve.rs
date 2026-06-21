@@ -31,7 +31,7 @@ use contracts_core::targets::{
 };
 use contracts_core::{error_code::ErrorCode, ContractError, ErrorSeverity};
 
-use crate::errors::db_internal_ctx;
+use app_core_errors::db_internal_ctx;
 use targeting::normalize::normalize;
 use targeting_resolver::cache::{self, CachedTarget};
 use targeting_resolver::{

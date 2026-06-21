@@ -50,7 +50,7 @@ use persistence_db::repositories::projects as repo;
 use project_structure::{required_folders, ProcessingTool as StructureTool, MARKER_FILENAME};
 use sqlx::SqlitePool;
 
-use crate::errors::bus_err;
+use app_core_errors::bus_err;
 
 // ── Helpers ───────────────────────────────────────────────────────────────────
 
@@ -73,7 +73,7 @@ fn db_err(e: persistence_db::DbError) -> ContractError {
         persistence_db::DbError::NotFound(msg) => {
             ContractError::new(ErrorCode::ProjectNotFound, msg, ErrorSeverity::Blocking, false)
         }
-        other => crate::errors::db_err(other),
+        other => app_core_errors::db_err(other),
     }
 }
 

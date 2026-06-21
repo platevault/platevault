@@ -1,0 +1,31 @@
+[package]
+name = "app_core_targets"
+version = "0.1.0"
+edition.workspace = true
+license.workspace = true
+
+[lib]
+path = "src/lib.rs"
+
+[dependencies]
+app_core_errors = { path = "../errors" }
+audit = { path = "../../audit" }
+contracts_core = { path = "../../contracts/core" }
+domain_core = { path = "../../domain/core" }
+persistence_db = { path = "../../persistence/db" }
+targeting = { path = "../../targeting" }
+targeting_resolver = { path = "../../targeting/resolver" }
+serde_json.workspace = true
+sqlx.workspace = true
+time = { workspace = true }
+tracing = { workspace = true }
+uuid = { workspace = true }
+
+[dev-dependencies]
+tokio.workspace = true
+# spec 035 (T020): the `FakeResolver` test double lives behind the resolver's
+# `test-fixture` feature; enable it for offline target.resolve use-case tests.
+targeting_resolver = { path = "../../targeting/resolver", features = ["test-fixture"] }
+
+[lints]
+workspace = true

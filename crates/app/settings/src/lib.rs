@@ -8,6 +8,12 @@
 //!   defaults (T027).
 //! - `set_source_override` — set a per-source override for an overridable key (T023).
 //! - `resolve_setting` — resolution order: per-source → global → default (T024).
+//!
+//! Extracted from `app_core` into its own crate (spec 042 / T253 O3b). Its only
+//! cross-module dependency was on the now-extracted `app_core_errors` leaf.
+//! `app_core` re-exports this crate at `app_core::settings` so the public
+//! surface stays byte-identical.
+#![allow(clippy::doc_markdown)] // spec/domain terminology not appropriate for backticks
 
 use audit::bus::EventBus;
 use audit::event_bus::{
@@ -33,10 +39,10 @@ mod descriptors;
 
 // ── Error mapping ──────────────────────────────────────────────────────────
 //
-// Canonical mappers live in `crate::errors` (US11 T142). `db_err` now routes
+// Canonical mappers live in `app_core_errors` (US11 T142). `db_err` now routes
 // `DbError::NotFound` to the recoverable `Blocking`/`retryable=false`
 // classification instead of the previous blanket `Fatal` (L2 divergence fix).
-use crate::errors::{bus_err, db_err};
+use app_core_errors::{bus_err, db_err};
 
 // ── Key validation ──────────────────────────────────────────────────────────
 
