@@ -108,9 +108,10 @@ impl OpEventEmitter {
 ///
 /// Backed by a `DashMap` (concurrent map with internal sharded locking) so the
 /// registry can be accessed from sync contexts without holding a `.await` lock.
-/// Entries are inserted at apply start and removed by the executor's background
-/// task on completion/failure/cancel (see `apply_plan`), guaranteeing no leaked
-/// entries.
+/// Entries are inserted at apply start and removed by an [`ActiveRunGuard`] RAII
+/// guard owned by the executor's background task. Because removal happens in the
+/// guard's `Drop`, it runs on every scope exit — completion, cancel, pause, *or*
+/// an unwind if `execute_plan` panics (FR-017) — guaranteeing no leaked entries.
 static ACTIVE_RUNS: std::sync::OnceLock<Arc<DashMap<String, ActiveRun>>> =
     std::sync::OnceLock::new();
 
@@ -124,6 +125,31 @@ struct ActiveRun {
     retry_queue: RetryQueue,
     #[allow(dead_code)] // retained for future cross-plan overlap checks (R-Concur-1)
     run_id: String,
+}
+
+/// RAII guard that removes a plan's [`ActiveRun`] entry from the registry on
+/// **any** scope exit — normal return, early break, *or* unwind from a panic
+/// inside `execute_plan` (spec 042 US12/FR-017, acceptance scenario 2).
+///
+/// A plain sequential `registry.remove(&plan_id)` after `execute_plan(...)`
+/// returns is skipped if `execute_plan` panics, because the unwind jumps past
+/// it. The leaked entry then defeats the no-double-apply guard
+/// (`check_no_overlap`) for that plan id forever. Holding this guard for the
+/// duration of `execute_plan` makes removal run during the unwind instead.
+///
+/// The guard is constructed at the same point the entry is inserted and owned
+/// by the spawned task scope, so its `Drop` is the single removal site for the
+/// non-panic outcomes too (Completed / Cancelled / Paused) — removal happens
+/// exactly once, regardless of how the task scope exits.
+struct ActiveRunGuard {
+    registry: Arc<DashMap<String, ActiveRun>>,
+    plan_id: String,
+}
+
+impl Drop for ActiveRunGuard {
+    fn drop(&mut self) {
+        self.registry.remove(&self.plan_id);
+    }
 }
 
 // ── Helpers ───────────────────────────────────────────────────────────────────
@@ -508,7 +534,11 @@ pub async fn apply_plan(
     let cancel_token = CancellationToken::new();
     let skip_set = SkipSet::new();
     let retry_queue = RetryQueue::new();
-    {
+    // RAII removal guard (FR-017): inserting the entry and building the guard
+    // are paired here, but the guard is *moved into the spawned task* below so
+    // its `Drop` fires on the task's scope exit — including an unwind if
+    // `execute_plan` panics. This replaces the old explicit `registry.remove`.
+    let run_guard = {
         let registry = active_runs();
         registry.insert(
             plan_id.to_owned(),
@@ -519,7 +549,8 @@ pub async fn apply_plan(
                 run_id: run_id.clone(),
             },
         );
-    }
+        ActiveRunGuard { registry: registry.clone(), plan_id: plan_id.to_owned() }
+    };
 
     // Emit started event (A7).
     let started_at = Timestamp::now_iso();
@@ -575,6 +606,12 @@ pub async fn apply_plan(
     let op_emitter_task = op_emitter.clone();
 
     tokio::spawn(async move {
+        // Own the RAII removal guard for the whole task scope. Its `Drop`
+        // removes the registry entry on ANY exit — normal completion *or* an
+        // unwind if `execute_plan` panics mid-apply (FR-017 scenario 2). This
+        // is the single removal site; there is no explicit `registry.remove`.
+        let _run_guard = run_guard;
+
         let callbacks = PlanApplyCallbacks {
             pool: pool_clone.clone(),
             bus: bus_clone.clone(),
@@ -585,14 +622,6 @@ pub async fn apply_plan(
 
         let outcome =
             execute_plan(executor_items, &callbacks, &cancel_token, &skip_set, &retry_queue).await;
-
-        // Remove from active runs registry. This runs unconditionally after
-        // `execute_plan` returns for ANY outcome (Completed / Cancelled /
-        // Paused) — preserving the cleanup guarantee so no entry leaks.
-        {
-            let registry = active_runs();
-            registry.remove(&plan_id_owned);
-        }
 
         // Compute terminal state and persist.
         match outcome {
@@ -1490,6 +1519,70 @@ mod tests {
         assert!(
             item.requires_destructive_confirm,
             "delete action must require destructive confirm"
+        );
+    }
+
+    // ── FR-017: panic-safe registry removal (US12) ──────────────────────────────
+
+    /// Build an [`ActiveRun`] with no control wiring of consequence — the guard
+    /// test only cares about presence/absence of the entry by key.
+    fn dummy_active_run() -> ActiveRun {
+        ActiveRun {
+            cancel_token: CancellationToken::new(),
+            skip_set: SkipSet::new(),
+            retry_queue: RetryQueue::new(),
+            run_id: "run-guard-test".to_owned(),
+        }
+    }
+
+    /// FR-017: on a *normal* scope exit the guard's `Drop` removes the entry
+    /// exactly once. This is the Completed / Cancelled / Paused path.
+    #[test]
+    fn active_run_guard_removes_entry_on_normal_drop() {
+        let registry: Arc<DashMap<String, ActiveRun>> = Arc::new(DashMap::new());
+        let plan_id = "plan-guard-normal";
+        registry.insert(plan_id.to_owned(), dummy_active_run());
+        assert!(registry.contains_key(plan_id), "entry present after insert");
+
+        {
+            let _guard = ActiveRunGuard { registry: registry.clone(), plan_id: plan_id.to_owned() };
+            // entry still present while the guard is held
+            assert!(registry.contains_key(plan_id), "entry present while guard held");
+        } // guard drops here
+
+        assert!(
+            !registry.contains_key(plan_id),
+            "guard Drop must remove the entry on normal scope exit"
+        );
+    }
+
+    /// FR-017 acceptance scenario 2: a plan run that panics mid-apply must still
+    /// have its registry entry removed. The guard is owned by the same scope
+    /// that runs `execute_plan`; a panic there unwinds that scope, running the
+    /// guard's `Drop`. We model that scope with `catch_unwind` around a panic
+    /// that occurs *after* the guard is constructed and the entry inserted —
+    /// exactly the shape of `tokio::spawn(async move { let _g = guard; execute_plan().await })`
+    /// when `execute_plan` panics.
+    #[test]
+    fn active_run_guard_removes_entry_when_scope_panics() {
+        let registry: Arc<DashMap<String, ActiveRun>> = Arc::new(DashMap::new());
+        let plan_id = "plan-guard-panic";
+        registry.insert(plan_id.to_owned(), dummy_active_run());
+        assert!(registry.contains_key(plan_id), "entry present after insert");
+
+        let registry_for_scope = registry.clone();
+        let plan_id_owned = plan_id.to_owned();
+        let result = std::panic::catch_unwind(std::panic::AssertUnwindSafe(move || {
+            // Guard is owned by this scope, mirroring the spawned task.
+            let _guard = ActiveRunGuard { registry: registry_for_scope, plan_id: plan_id_owned };
+            // Stand-in for `execute_plan(...).await` panicking mid-apply.
+            panic!("execute_plan panicked mid-apply");
+        }));
+
+        assert!(result.is_err(), "the scope must have panicked");
+        assert!(
+            !registry.contains_key(plan_id),
+            "FR-017: guard Drop must remove the registry entry even when the scope unwinds from a panic"
         );
     }
 }
