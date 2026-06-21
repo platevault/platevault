@@ -168,11 +168,20 @@ Done & validated (commits on `redesign-ui-platevault`):
 - 4-theme tokens + runtime + Appearance picker
 - shell rebrand + quiet nav; anchor reset (link leaks)
 - PropertyTable styling (4 detail pages)
-- Calibration fingerprint labels
+- Calibration fingerprint labels (+ test update)
 - Settings IA grouping + Appearance rename + removed ledes
 - primary button → accent (dark-leak + standardization)
 - settings form-row grid (collision fix)
 - branding copy → PlateVault
+- Sessions "needs review" pill unified (color + title-case)
+- Archive single-column detail (dropped redundant rail + hero MetricLine, -10 inline styles)
+- MetricLine quieted globally (no hero numbers)
+- Inbox undefined-token fixes (--alm-radius-md, --alm-warn-bg)
+
+Verification gate (all green): `tsc --noEmit` 0 errors · `check-tokens.sh` pass ·
+`eslint` 0 errors (1 pre-existing PlanPanel warning) · vitest **738/738 pass**
+(77 files) · live MCP validation across all 4 themes + every page. Default theme
+reset to `system`.
 
 Pending (largest first): per-page redesigns (Sessions table, Targets planner +
 charts, Projects channels, Inbox toolbar+inspector, Archive single-column),
