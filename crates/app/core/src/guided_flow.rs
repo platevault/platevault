@@ -46,6 +46,7 @@ use contracts_core::guided::{
     GuidedDismissResponse, GuidedFlowStateDto, GuidedRestartResponse, GuidedStateGetResponse,
     GuidedStepCompleteRequest, GuidedStepCompleteResponse,
 };
+use contracts_core::{error_code::ErrorCode, ContractError, ErrorSeverity};
 use domain_core::ids::Timestamp;
 use persistence_db::repositories::guided_flow as repo;
 use sqlx::SqlitePool;
@@ -130,6 +131,35 @@ pub enum GuidedFlowError {
     /// A persistence layer failure.
     #[error("persistence unavailable: {0}")]
     PersistenceUnavailable(String),
+}
+
+/// Convert a `GuidedFlowError` to a `ContractError`.
+impl From<GuidedFlowError> for ContractError {
+    fn from(e: GuidedFlowError) -> Self {
+        match e {
+            GuidedFlowError::UnknownStepId(id) => ContractError::new(
+                ErrorCode::ValueInvalid,
+                format!("unknown step id: {id}"),
+                ErrorSeverity::Blocking,
+                false,
+            ),
+            GuidedFlowError::FlowDismissed => ContractError::new(
+                ErrorCode::TransitionRefused,
+                "guided flow is dismissed; use restart first",
+                ErrorSeverity::Blocking,
+                false,
+            ),
+            GuidedFlowError::StateCorrupted => ContractError::new(
+                ErrorCode::InternalDatabase,
+                "guided flow state was corrupted and has been reset to Idle",
+                ErrorSeverity::Blocking,
+                false,
+            ),
+            GuidedFlowError::PersistenceUnavailable(msg) => {
+                ContractError::new(ErrorCode::InternalDatabase, msg, ErrorSeverity::Fatal, true)
+            }
+        }
+    }
 }
 
 #[allow(clippy::needless_pass_by_value)]

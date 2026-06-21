@@ -17,6 +17,7 @@
 //! `LogEntry` is a derived projection; no new schema is introduced.
 
 use contracts_core::log::{LogEntry, LogEntrySource, LogExportErrorCode, LogLevel};
+use contracts_core::{error_code::ErrorCode, ContractError, ErrorSeverity};
 use sqlx::SqlitePool;
 
 /// Size of the initial hydration window (matches the UI ring buffer).
@@ -48,6 +49,38 @@ impl LogError {
             Self::Database(_) => "database.error",
             Self::Serialise(_) => "serialise.error",
             Self::Io(_) => "io.error",
+        }
+    }
+}
+
+/// Convert a `LogError` to a `ContractError`.
+impl From<LogError> for ContractError {
+    fn from(e: LogError) -> Self {
+        match e {
+            LogError::Export { code, message } => {
+                let error_code = match code {
+                    LogExportErrorCode::FormatUnsupported => ErrorCode::FormatUnsupported,
+                    LogExportErrorCode::RangeInvalid => ErrorCode::RangeInvalid,
+                    LogExportErrorCode::PathWriteDenied => ErrorCode::PathWriteDenied,
+                    LogExportErrorCode::PathParentMissing => ErrorCode::PathParentMissing,
+                };
+                ContractError::new(error_code, message, ErrorSeverity::Blocking, false)
+            }
+            LogError::Database(db_err) => ContractError::new(
+                ErrorCode::DatabaseError,
+                db_err.to_string(),
+                ErrorSeverity::Fatal,
+                true,
+            ),
+            LogError::Serialise(e) => ContractError::new(
+                ErrorCode::SerialiseError,
+                e.to_string(),
+                ErrorSeverity::Fatal,
+                false,
+            ),
+            LogError::Io(e) => {
+                ContractError::new(ErrorCode::IoError, e.to_string(), ErrorSeverity::Fatal, false)
+            }
         }
     }
 }
