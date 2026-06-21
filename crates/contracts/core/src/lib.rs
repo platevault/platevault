@@ -473,8 +473,19 @@ mod tests {
                 )
             });
 
+            // Compare parsed JSON values, not raw strings: schemars emits `$defs`
+            // in a key order that can differ between isolated (`-p`) and workspace
+            // compilation contexts. `serde_json::Value` equality compares objects
+            // as maps (order-insensitive), so this still catches real schema drift
+            // (added/removed/changed keys or values) without failing on cosmetic
+            // definition-ordering differences.
+            let committed_json: serde_json::Value = serde_json::from_str(&committed)
+                .unwrap_or_else(|e| panic!("committed snapshot {name} is not valid JSON: {e}"));
+            let generated_json: serde_json::Value = serde_json::from_str(&generated)
+                .unwrap_or_else(|e| panic!("generated schema for {name} is not valid JSON: {e}"));
+
             assert_eq!(
-                committed, generated,
+                committed_json, generated_json,
                 "Schema snapshot drift detected for {name}.\n\
                  Run `cargo run -p contracts_core --bin generate-contracts` to regenerate,\n\
                  then review the diff and commit the updated snapshot alongside the type change."
