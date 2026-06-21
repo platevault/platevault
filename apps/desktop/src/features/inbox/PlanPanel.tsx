@@ -198,34 +198,15 @@ export function PlanPanel({
     <div
       className="alm-plan-panel__root-picker"
       data-testid="inbox-root-picker"
-      style={{
-        marginBottom: 'var(--alm-sp-3)',
-        padding: 'var(--alm-sp-3)',
-        border: '1px solid var(--alm-warn, var(--alm-border))',
-        borderRadius: 'var(--alm-radius-md)',
-        background: 'var(--alm-surface-raised, var(--alm-bg3))',
-      }}
     >
-      <div
-        style={{
-          fontSize: 'var(--alm-text-sm)',
-          fontWeight: 600,
-          marginBottom: 'var(--alm-sp-1)',
-        }}
-      >
+      <div className="alm-plan-panel__root-picker-title">
         Choose a destination library root
       </div>
-      <div
-        style={{
-          fontSize: 'var(--alm-text-xs)',
-          color: 'var(--alm-text-muted)',
-          marginBottom: 'var(--alm-sp-2)',
-        }}
-      >
+      <div className="alm-plan-panel__root-picker-desc">
         More than one library root can host <strong>{pendingRootPick.category}</strong> frames.
         Pick where these files should go to generate the plan.
       </div>
-      <div style={{ display: 'flex', flexDirection: 'column', gap: 'var(--alm-sp-2)' }}>
+      <div className="alm-plan-panel__root-picker-options">
         {pendingRootPick.candidates.map((c) => (
           <Btn
             key={c.rootId}
@@ -234,11 +215,11 @@ export function PlanPanel({
             disabled={rootPickBusy}
             data-testid={`inbox-root-option-${c.rootId}`}
             aria-label={`Use ${c.path} as destination root`}
-            style={{ justifyContent: 'flex-start', textAlign: 'left' }}
+            className="alm-plan-panel__root-option"
           >
-            <span style={{ display: 'flex', flexDirection: 'column', alignItems: 'flex-start' }}>
-              <code style={{ fontSize: 'var(--alm-text-xs)' }}>{c.path}</code>
-              <span style={{ fontSize: 'var(--alm-text-xs)', color: 'var(--alm-text-muted)' }}>
+            <span className="alm-plan-panel__root-option-inner">
+              <code className="alm-plan-panel__root-option-path">{c.path}</code>
+              <span className="alm-plan-panel__root-option-kind">
                 {c.kind}
               </span>
             </span>
@@ -273,7 +254,6 @@ export function PlanPanel({
         <div className="alm-plan-panel__bar-left">
           <label
             className="alm-plan-panel__select-all"
-            style={{ display: 'flex', alignItems: 'center', gap: 'var(--alm-sp-2)', cursor: 'pointer' }}
           >
             <input
               type="checkbox"
@@ -285,14 +265,12 @@ export function PlanPanel({
             />
             <span
               className="alm-plan-panel__title"
-              style={{ fontWeight: 600, fontSize: 'var(--alm-text-sm)' }}
             >
               Planned actions
             </span>
           </label>
           <span
             className="alm-plan-panel__count-summary"
-            style={{ color: 'var(--alm-text-muted)', fontSize: 'var(--alm-text-xs)' }}
             data-testid="plan-total-count"
           >
             {plans.length} plan{plans.length !== 1 ? 's' : ''} · {totalActions} action
@@ -301,7 +279,6 @@ export function PlanPanel({
         </div>
         <div
           className="alm-plan-panel__bar-actions"
-          style={{ display: 'flex', gap: 'var(--alm-sp-2)', alignItems: 'center' }}
         >
           <Btn
             variant="primary"
@@ -326,11 +303,6 @@ export function PlanPanel({
 
       <div
         className="alm-plan-panel__hint"
-        style={{
-          fontSize: 'var(--alm-text-xs)',
-          color: 'var(--alm-text-muted)',
-          marginTop: 'var(--alm-sp-1)',
-        }}
       >
         Selection is per ingestion — checking a group applies that whole plan.
       </div>
@@ -344,18 +316,10 @@ export function PlanPanel({
               key={plan.inboxItemId}
               className="alm-plan-panel__group"
               data-testid={`plan-group-${plan.inboxItemId}`}
-              style={{ marginBottom: 'var(--alm-sp-3)' }}
             >
               {/* Group header */}
               <div
                 className="alm-plan-panel__group-header"
-                style={{
-                  display: 'flex',
-                  alignItems: 'center',
-                  gap: 'var(--alm-sp-2)',
-                  paddingBottom: 'var(--alm-sp-1)',
-                  borderBottom: '1px solid var(--alm-border)',
-                }}
               >
                 <input
                   type="checkbox"
@@ -367,36 +331,17 @@ export function PlanPanel({
                 />
                 <span
                   className="alm-plan-panel__group-name"
-                  style={{
-                    fontWeight: 600,
-                    fontSize: 'var(--alm-text-sm)',
-                    color: 'var(--alm-text-primary)',
-                    overflow: 'hidden',
-                    textOverflow: 'ellipsis',
-                    whiteSpace: 'nowrap',
-                    flex: 1,
-                  }}
                   title={plan.itemName}
                 >
                   {plan.itemName}
                 </span>
-                <span
-                  style={{ color: 'var(--alm-text-muted)', fontSize: 'var(--alm-text-xs)' }}
-                >
+                <span className="alm-plan-panel__group-count">
                   {buildCountSummary(plan.actions)}
                 </span>
                 {plan.stale && (
                   <span
                     className="alm-plan-panel__stale-badge"
                     data-testid={`plan-stale-${plan.inboxItemId}`}
-                    style={{
-                      fontSize: 'var(--alm-text-xs)',
-                      fontWeight: 600,
-                      color: 'var(--alm-danger, var(--alm-warn))',
-                      border: '1px solid currentColor',
-                      borderRadius: 'var(--alm-radius-md)',
-                      padding: '0 var(--alm-sp-1)',
-                    }}
                   >
                     Stale
                   </span>
@@ -413,7 +358,7 @@ export function PlanPanel({
               </div>
 
               {plan.stale && (
-                <Banner variant="danger" style={{ marginTop: 'var(--alm-sp-1)' }}>
+                <Banner variant="danger" className="alm-plan-panel__stale-banner">
                   Source files changed — discard and re-confirm to regenerate this plan.
                 </Banner>
               )}
@@ -431,35 +376,14 @@ export function PlanPanel({
                   <div
                     key={a.index}
                     className="alm-plan-panel__row"
-                    style={{
-                      display: 'grid',
-                      gridTemplateColumns: 'auto 1fr 1fr',
-                      gap: 'var(--alm-sp-2)',
-                      padding: 'var(--alm-sp-1) 0',
-                      borderBottom: '1px solid var(--alm-border)',
-                      fontSize: 'var(--alm-text-xs)',
-                      alignItems: 'baseline',
-                    }}
                   >
                     <span
                       className="alm-plan-panel__kind"
-                      style={{
-                        color: 'var(--alm-text-secondary)',
-                        textTransform: 'uppercase',
-                        letterSpacing: '0.04em',
-                        fontWeight: 600,
-                      }}
                     >
                       {actionLabel(a.action)}
                     </span>
                     <span
                       className="alm-plan-panel__filename"
-                      style={{
-                        color: 'var(--alm-text-primary)',
-                        overflow: 'hidden',
-                        textOverflow: 'ellipsis',
-                        whiteSpace: 'nowrap',
-                      }}
                       title={a.fromPath}
                     >
                       {basename(a.fromPath)}
@@ -467,13 +391,6 @@ export function PlanPanel({
                     <code
                       className="alm-plan-panel__dest"
                       data-testid={`inbox-dest-absolute-${rowIdx}`}
-                      style={{
-                        color: 'var(--alm-text-secondary)',
-                        overflow: 'hidden',
-                        textOverflow: 'ellipsis',
-                        whiteSpace: 'nowrap',
-                        direction: 'rtl',
-                      }}
                       title={destText}
                     >
                       {destText}
@@ -491,28 +408,14 @@ export function PlanPanel({
       {hasDestructive && (
         <div
           className="alm-plan-panel__destructive"
-          style={{
-            marginTop: 'var(--alm-sp-3)',
-            padding: 'var(--alm-sp-3)',
-            background: 'var(--alm-surface-raised, var(--alm-bg3))',
-            borderRadius: 'var(--alm-radius-md)',
-          }}
         >
-          <div
-            style={{
-              fontSize: 'var(--alm-text-xs)',
-              fontWeight: 600,
-              marginBottom: 'var(--alm-sp-2)',
-              color: 'var(--alm-text-secondary)',
-            }}
-          >
+          <div className="alm-plan-panel__destructive-title">
             Where should removed source files go?
           </div>
           <div
             className="alm-plan-panel__dest-options"
-            style={{ display: 'flex', flexDirection: 'column', gap: 'var(--alm-sp-2)' }}
           >
-            <label style={{ display: 'flex', alignItems: 'center', gap: 'var(--alm-sp-2)', cursor: 'pointer' }}>
+            <label className="alm-plan-panel__dest-label">
               <input
                 type="radio"
                 name="destructive-destination"
@@ -523,18 +426,12 @@ export function PlanPanel({
               />
               <span>
                 <strong>Archive folder</strong>
-                <span
-                  style={{
-                    display: 'block',
-                    fontSize: 'var(--alm-text-xs)',
-                    color: 'var(--alm-text-muted)',
-                  }}
-                >
+                <span className="alm-plan-panel__dest-label-hint">
                   Archive folder keeps a recoverable copy; System Trash uses the OS trash
                 </span>
               </span>
             </label>
-            <label style={{ display: 'flex', alignItems: 'center', gap: 'var(--alm-sp-2)', cursor: 'pointer' }}>
+            <label className="alm-plan-panel__dest-label">
               <input
                 type="radio"
                 name="destructive-destination"

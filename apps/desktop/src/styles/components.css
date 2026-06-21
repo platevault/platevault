@@ -1746,3 +1746,469 @@
 
 /* Metadata table horizontal scroll wrapper */
 .alm-inbox-detail__metadata-scroll { overflow-x: auto; }
+
+/* === PLAN PANEL === */
+
+/* ── Root picker ────────────────────────────────────────────── */
+
+.alm-plan-panel__root-picker {
+  margin-bottom: var(--alm-sp-3);
+  padding: var(--alm-sp-3);
+  border: 1px solid var(--alm-warn, var(--alm-border));
+  border-radius: var(--alm-radius-md);
+  background: var(--alm-surface-raised, var(--alm-bg3));
+}
+
+.alm-plan-panel__root-picker-title {
+  font-size: var(--alm-text-sm);
+  font-weight: 600;
+  margin-bottom: var(--alm-sp-1);
+}
+
+.alm-plan-panel__root-picker-desc {
+  font-size: var(--alm-text-xs);
+  color: var(--alm-text-muted);
+  margin-bottom: var(--alm-sp-2);
+}
+
+.alm-plan-panel__root-picker-options {
+  display: flex;
+  flex-direction: column;
+  gap: var(--alm-sp-2);
+}
+
+/* The Btn inside the root picker needs left-aligned text */
+.alm-plan-panel__root-option {
+  justify-content: flex-start;
+  text-align: left;
+}
+
+.alm-plan-panel__root-option-inner {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+}
+
+.alm-plan-panel__root-option-path {
+  font-size: var(--alm-text-xs);
+}
+
+.alm-plan-panel__root-option-kind {
+  font-size: var(--alm-text-xs);
+  color: var(--alm-text-muted);
+}
+
+/* ── Bar (pinned header) ────────────────────────────────────── */
+
+.alm-plan-panel__select-all {
+  display: flex;
+  align-items: center;
+  gap: var(--alm-sp-2);
+  cursor: pointer;
+}
+
+.alm-plan-panel__title {
+  font-weight: 600;
+  font-size: var(--alm-text-sm);
+}
+
+.alm-plan-panel__count-summary {
+  color: var(--alm-text-muted);
+  font-size: var(--alm-text-xs);
+}
+
+.alm-plan-panel__bar-actions {
+  display: flex;
+  gap: var(--alm-sp-2);
+  align-items: center;
+}
+
+/* ── Hint line ──────────────────────────────────────────────── */
+
+.alm-plan-panel__hint {
+  font-size: var(--alm-text-xs);
+  color: var(--alm-text-muted);
+  margin-top: var(--alm-sp-1);
+}
+
+/* ── Plan group ─────────────────────────────────────────────── */
+
+.alm-plan-panel__group {
+  margin-bottom: var(--alm-sp-3);
+}
+
+.alm-plan-panel__group-header {
+  display: flex;
+  align-items: center;
+  gap: var(--alm-sp-2);
+  padding-bottom: var(--alm-sp-1);
+  border-bottom: 1px solid var(--alm-border);
+}
+
+.alm-plan-panel__group-name {
+  font-weight: 600;
+  font-size: var(--alm-text-sm);
+  color: var(--alm-text);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  flex: 1;
+}
+
+.alm-plan-panel__group-count {
+  color: var(--alm-text-muted);
+  font-size: var(--alm-text-xs);
+}
+
+.alm-plan-panel__stale-badge {
+  font-size: var(--alm-text-xs);
+  font-weight: 600;
+  color: var(--alm-danger, var(--alm-warn));
+  border: 1px solid currentColor;
+  border-radius: var(--alm-radius-md);
+  padding: 0 var(--alm-sp-1);
+}
+
+.alm-plan-panel__stale-banner {
+  margin-top: var(--alm-sp-1);
+}
+
+/* ── Action rows ────────────────────────────────────────────── */
+
+.alm-plan-panel__row {
+  display: grid;
+  grid-template-columns: auto 1fr 1fr;
+  gap: var(--alm-sp-2);
+  padding: var(--alm-sp-1) 0;
+  border-bottom: 1px solid var(--alm-border);
+  font-size: var(--alm-text-xs);
+  align-items: baseline;
+}
+
+.alm-plan-panel__kind {
+  color: var(--alm-text-secondary);
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  font-weight: 600;
+}
+
+.alm-plan-panel__filename {
+  color: var(--alm-text);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.alm-plan-panel__dest {
+  color: var(--alm-text-secondary);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  direction: rtl;
+}
+
+/* ── Destructive destination control ────────────────────────── */
+
+.alm-plan-panel__destructive {
+  margin-top: var(--alm-sp-3);
+  padding: var(--alm-sp-3);
+  background: var(--alm-surface-raised, var(--alm-bg3));
+  border-radius: var(--alm-radius-md);
+}
+
+.alm-plan-panel__destructive-title {
+  font-size: var(--alm-text-xs);
+  font-weight: 600;
+  margin-bottom: var(--alm-sp-2);
+  color: var(--alm-text-secondary);
+}
+
+.alm-plan-panel__dest-options {
+  display: flex;
+  flex-direction: column;
+  gap: var(--alm-sp-2);
+}
+
+.alm-plan-panel__dest-label {
+  display: flex;
+  align-items: center;
+  gap: var(--alm-sp-2);
+  cursor: pointer;
+}
+
+.alm-plan-panel__dest-label-hint {
+  display: block;
+  font-size: var(--alm-text-xs);
+  color: var(--alm-text-muted);
+}
+
+/* === WIZARD PAGE === */
+
+/* Root page wrapper */
+.alm-wizard-page {
+  display: flex;
+  flex-direction: column;
+  flex: 1;
+  min-height: 0;
+}
+
+/* Primary toolbar */
+.alm-wizard-page__toolbar {
+  display: flex;
+  align-items: center;
+  gap: var(--alm-sp-3);
+  padding: 0 var(--alm-sp-4);
+  height: var(--alm-toolbar-height, 44px);
+  border-bottom: 1px solid var(--alm-border);
+}
+
+/* Toolbar title text */
+.alm-wizard-page__toolbar-title {
+  font-size: var(--alm-text-sm);
+  font-weight: var(--alm-weight-semibold);
+}
+
+/* Toolbar flex spacer */
+.alm-wizard-page__spacer {
+  flex: 1;
+}
+
+/* Sub-toolbar / breadcrumb bar */
+.alm-wizard-page__subbbar {
+  display: flex;
+  align-items: center;
+  gap: var(--alm-sp-2);
+  padding: 4px var(--alm-sp-4);
+  font-size: var(--alm-text-xs);
+  color: var(--alm-text-muted);
+  border-bottom: 1px solid var(--alm-border);
+}
+
+/* Trailing note in sub-toolbar pushed to the right */
+.alm-wizard-page__subbar-note {
+  margin-left: auto;
+  color: var(--alm-text-faint);
+}
+
+/* Step title area */
+.alm-wizard-page__step-header {
+  margin-bottom: var(--alm-sp-5);
+}
+
+/* Step heading */
+.alm-wizard-page__step-title {
+  font-size: 18px;
+  font-weight: var(--alm-weight-semibold);
+  margin: 0;
+}
+
+/* ── Summary panel ── */
+
+/* Summary panel root */
+.alm-wizard-page__summary {
+  display: flex;
+  flex-direction: column;
+  gap: var(--alm-sp-5);
+  font-size: var(--alm-text-xs);
+}
+
+/* Section heading inside the summary (e.g. "PROJECT SUMMARY", "WHAT'S SELECTED") */
+.alm-wizard-page__summary-heading {
+  color: var(--alm-text-muted);
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  font-weight: var(--alm-weight-semibold);
+}
+
+/* Section heading without letter-spacing (e.g. "COMING UP", "WHAT'S SELECTED SO FAR") */
+.alm-wizard-page__summary-section-heading {
+  color: var(--alm-text-muted);
+  text-transform: uppercase;
+  font-weight: var(--alm-weight-semibold);
+}
+
+/* Project name in summary */
+.alm-wizard-page__summary-project-name {
+  font-size: var(--alm-text-sm);
+  font-weight: var(--alm-weight-semibold);
+}
+
+/* Profile label below project name */
+.alm-wizard-page__summary-profile {
+  color: var(--alm-text-muted);
+}
+
+/* Indented list below a section heading */
+.alm-wizard-page__summary-list {
+  margin-top: var(--alm-sp-2);
+}
+
+/* "Coming up" step item — borderBottom is applied inline (conditional per index) */
+.alm-wizard-page__coming-up-item {
+  padding: 3px 0;
+}
+
+/* Footprint estimate box */
+.alm-wizard-page__footprint {
+  padding: var(--alm-sp-3);
+  background: var(--alm-bg);
+  border: 1px solid var(--alm-border);
+}
+
+/* Label inside footprint box */
+.alm-wizard-page__footprint-label {
+  color: var(--alm-text-muted);
+}
+
+/* Large number inside footprint box */
+.alm-wizard-page__footprint-value {
+  font-size: 16px;
+  font-weight: var(--alm-weight-semibold);
+  margin-top: 2px;
+}
+
+/* Fine-print note inside footprint box */
+.alm-wizard-page__footprint-note {
+  font-size: 10.5px;
+  color: var(--alm-text-muted);
+}
+
+/* Navigation button row at the bottom of the summary rail */
+.alm-wizard-page__summary-nav {
+  display: flex;
+  gap: var(--alm-sp-2);
+  margin-top: var(--alm-sp-3);
+}
+
+/* ── SummaryRow ── */
+
+/* Each label/value row in the counts table */
+.alm-wizard-page__summary-row {
+  padding: 3px 0;
+  border-bottom: 1px dotted var(--alm-border);
+  display: flex;
+}
+
+/* Label cell (grows to fill) */
+.alm-wizard-page__summary-row-label {
+  flex: 1;
+}
+
+/* === MATCH CANDIDATES PANEL === */
+
+/* ── ConfidenceBar ──────────────────────────────────────────────────────────── */
+
+.alm-match-candidates__conf-bar {
+  display: flex;
+  align-items: center;
+  gap: var(--alm-sp-1);
+}
+
+.alm-match-candidates__conf-track {
+  width: 60px;
+  height: 6px;
+  background: var(--alm-bg3);
+  border-radius: 3px;
+  overflow: hidden;
+}
+
+.alm-match-candidates__conf-fill {
+  height: 100%;
+  border-radius: 3px;
+  /* width and background are set via inline style (dynamic per confidence value) */
+}
+
+.alm-match-candidates__conf-label {
+  font-size: var(--alm-text-xs);
+  min-width: 32px;
+}
+
+/* ── DimensionBreakdown ─────────────────────────────────────────────────────── */
+
+.alm-match-candidates__dim-list {
+  display: flex;
+  flex-direction: column;
+  gap: var(--alm-sp-0);
+}
+
+.alm-match-candidates__dim-matched {
+  font-size: var(--alm-text-xs);
+  color: var(--alm-text-secondary);
+}
+
+.alm-match-candidates__dim-check {
+  display: inline;
+  vertical-align: middle;
+  color: var(--alm-ok);
+}
+
+.alm-match-candidates__dim-delta {
+  color: var(--alm-text-faint);
+}
+
+.alm-match-candidates__dim-mismatch {
+  font-size: var(--alm-text-xs);
+  color: var(--alm-warn);
+}
+
+.alm-match-candidates__dim-mismatch-icon {
+  display: inline;
+  vertical-align: middle;
+}
+
+/* ── AssignButton ───────────────────────────────────────────────────────────── */
+
+.alm-match-candidates__assign-col {
+  display: flex;
+  flex-direction: column;
+  gap: var(--alm-sp-1);
+}
+
+.alm-match-candidates__assign-row {
+  display: flex;
+  gap: var(--alm-sp-1);
+}
+
+.alm-match-candidates__override-warning {
+  font-size: var(--alm-text-xs);
+  color: var(--alm-warn);
+}
+
+.alm-match-candidates__override-dims {
+  font-size: var(--alm-text-xs);
+  color: var(--alm-text-faint);
+}
+
+/* ── Main panel ─────────────────────────────────────────────────────────────── */
+
+.alm-match-candidates__loading {
+  font-size: var(--alm-text-sm);
+  color: var(--alm-text-muted);
+  padding: var(--alm-sp-2);
+}
+
+.alm-match-candidates__status-row {
+  margin-bottom: var(--alm-sp-1);
+  display: flex;
+  align-items: center;
+  gap: var(--alm-sp-1);
+}
+
+.alm-match-candidates__ambiguous-hint {
+  font-size: var(--alm-text-xs);
+  color: var(--alm-text-muted);
+}
+
+.alm-match-candidates__rank {
+  font-size: var(--alm-text-xs);
+  color: var(--alm-text-faint);
+}
+
+.alm-match-candidates__master-id {
+  font-size: var(--alm-text-xs);
+}
+
+.alm-match-candidates__reason {
+  font-size: var(--alm-text-xs);
+  color: var(--alm-text-secondary);
+}

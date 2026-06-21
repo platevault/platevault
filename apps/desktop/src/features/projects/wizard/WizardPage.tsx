@@ -205,20 +205,20 @@ export function WizardPage() {
 
   // Summary panel (right rail)
   const summary = (
-    <div style={{ display: 'flex', flexDirection: 'column', gap: 'var(--alm-space-5)', fontSize: 'var(--alm-text-xs)' }}>
-      <div style={{ color: 'var(--alm-text-muted)', textTransform: 'uppercase', letterSpacing: '.04em', fontWeight: 600 }}>
+    <div className="alm-wizard-page__summary">
+      <div className="alm-wizard-page__summary-heading">
         Project summary
       </div>
       <div>
-        <div style={{ fontSize: 'var(--alm-text-sm)', fontWeight: 600 }}>{projectLabel}</div>
-        <div style={{ color: 'var(--alm-text-muted)' }}>{profileLabel}</div>
+        <div className="alm-wizard-page__summary-project-name">{projectLabel}</div>
+        <div className="alm-wizard-page__summary-profile">{profileLabel}</div>
       </div>
 
       <div>
-        <div style={{ color: 'var(--alm-text-muted)', textTransform: 'uppercase', fontWeight: 600 }}>
+        <div className="alm-wizard-page__summary-section-heading">
           What&rsquo;s selected so far
         </div>
-        <div style={{ marginTop: 'var(--alm-space-2)' }}>
+        <div className="alm-wizard-page__summary-list">
           <SummaryRow label="Lights" value={`${wizardData.sources.selectedSessionIds.length} sess`} />
           <SummaryRow label="Darks" value={`${darkSelected} master`} />
           <SummaryRow label="Flats" value={`${flatsMapped} masters`} />
@@ -228,12 +228,16 @@ export function WizardPage() {
 
       {currentStep < 5 && (
         <div>
-          <div style={{ color: 'var(--alm-text-muted)', textTransform: 'uppercase', fontWeight: 600 }}>
+          <div className="alm-wizard-page__summary-section-heading">
             Coming up
           </div>
-          <div style={{ marginTop: 'var(--alm-space-2)' }}>
+          <div className="alm-wizard-page__summary-list">
             {STEP_LABELS.slice(currentStep + 1).map((label, i) => (
-              <div key={label} style={{ padding: '3px 0', borderBottom: i < STEP_LABELS.length - currentStep - 2 ? '1px dotted var(--alm-border)' : 'none' }}>
+              <div
+                key={label}
+                className="alm-wizard-page__coming-up-item"
+                style={{ borderBottom: i < STEP_LABELS.length - currentStep - 2 ? '1px dotted var(--alm-border)' : 'none' }}
+              >
                 {currentStep + i + 2}. {label}
               </div>
             ))}
@@ -241,18 +245,18 @@ export function WizardPage() {
         </div>
       )}
 
-      <div style={{ padding: 'var(--alm-space-3)', background: 'var(--alm-bg)', border: '1px solid var(--alm-border)' }}>
-        <div style={{ color: 'var(--alm-text-muted)' }}>Estimated on-disk footprint</div>
-        <div className="alm-mono" style={{ fontSize: '16px', fontWeight: 600, marginTop: 2 }}>
+      <div className="alm-wizard-page__footprint">
+        <div className="alm-wizard-page__footprint-label">Estimated on-disk footprint</div>
+        <div className="alm-mono alm-wizard-page__footprint-value">
           ~12 KB
         </div>
-        <div style={{ fontSize: '10.5px', color: 'var(--alm-text-muted)' }}>
+        <div className="alm-wizard-page__footprint-note">
           plan will create directories + manifest only &middot; no light frames are copied
         </div>
       </div>
 
       {/* Navigation buttons in the summary rail */}
-      <div style={{ display: 'flex', gap: 'var(--alm-space-2)', marginTop: 'var(--alm-space-3)' }}>
+      <div className="alm-wizard-page__summary-nav">
         {currentStep > 0 && (
           <Btn size="sm" onClick={handleBack}>
             {backLabels[currentStep]}
@@ -282,23 +286,13 @@ export function WizardPage() {
   // T078c layout fix: min-height: 0 prevents flex overflow that caused the
   // wizard to render at the bottom of the window instead of filling the main area.
   return (
-    <div className="alm-page" style={{ display: 'flex', flexDirection: 'column', flex: 1, minHeight: 0 }}>
+    <div className="alm-page alm-wizard-page">
       {/* Wizard toolbar — styled consistently with other page toolbars */}
-      <div
-        className="alm-page__bar"
-        style={{
-          display: 'flex',
-          alignItems: 'center',
-          gap: 'var(--alm-space-3)',
-          padding: '0 var(--alm-space-4)',
-          height: 'var(--alm-toolbar-height, 44px)',
-          borderBottom: '1px solid var(--alm-border)',
-        }}
-      >
-        <span style={{ fontSize: 'var(--alm-text-sm)', fontWeight: 600 }}>
+      <div className="alm-page__bar alm-wizard-page__toolbar">
+        <span className="alm-wizard-page__toolbar-title">
           New project &mdash; {projectLabel}
         </span>
-        <span style={{ flex: 1 }} />
+        <span className="alm-wizard-page__spacer" />
         <Btn size="sm" onClick={() => saveDraft(wizardData)}>Save draft</Btn>
         {devSkip && (
           <Btn size="sm" onClick={() => { clearDraft(); setWizardData(INITIAL_DATA); setCurrentStep(0); }}>
@@ -309,24 +303,13 @@ export function WizardPage() {
       </div>
 
       {/* Sub-toolbar: workflow profile breadcrumb */}
-      <div
-        className="alm-page__bar"
-        style={{
-          display: 'flex',
-          alignItems: 'center',
-          gap: 'var(--alm-space-2)',
-          padding: '4px var(--alm-space-4)',
-          fontSize: 'var(--alm-text-xs)',
-          color: 'var(--alm-text-muted)',
-          borderBottom: '1px solid var(--alm-border)',
-        }}
-      >
+      <div className="alm-page__bar alm-wizard-page__subbbar">
         <span>Workflow profile: {profileLabel}</span>
         <span>&middot;</span>
         {wizardData.name.name && (
           <span>From target context: {wizardData.name.name.split(/[\s·—]/)[0]}</span>
         )}
-        <span style={{ marginLeft: 'auto', color: 'var(--alm-text-faint)' }}>
+        <span className="alm-wizard-page__subbar-note">
           Sources are selected here; the filesystem plan is shown at step 6 before anything is created.
         </span>
       </div>
@@ -335,8 +318,8 @@ export function WizardPage() {
       <WizardShell steps={steps} currentStep={currentStep} summary={summary} style={{ flex: 1, minHeight: 0 }}>
         {/* Step title + description */}
         {currentStep < 5 && (
-          <div style={{ marginBottom: 'var(--alm-space-5)' }}>
-            <h2 style={{ fontSize: '18px', fontWeight: 600, margin: 0 }}>
+          <div className="alm-wizard-page__step-header">
+            <h2 className="alm-wizard-page__step-title">
               Step {currentStep + 1} &middot; {STEP_LABELS[currentStep]}
             </h2>
           </div>
@@ -384,8 +367,8 @@ export function WizardPage() {
 
 function SummaryRow({ label, value }: { label: string; value: string }) {
   return (
-    <div style={{ padding: '3px 0', borderBottom: '1px dotted var(--alm-border)', display: 'flex' }}>
-      <span style={{ flex: 1 }}>{label}</span>
+    <div className="alm-wizard-page__summary-row">
+      <span className="alm-wizard-page__summary-row-label">{label}</span>
       <span className="alm-mono">{value}</span>
     </div>
   );

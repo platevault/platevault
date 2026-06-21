@@ -69,27 +69,15 @@ function ConfidenceBar({ value }: { value: number }) {
   const barColor =
     pct >= 90 ? 'var(--alm-ok)' : pct >= 70 ? 'var(--alm-warn)' : 'var(--alm-danger)';
   return (
-    <div style={{ display: 'flex', alignItems: 'center', gap: 'var(--alm-sp-1)' }}>
-      <div
-        style={{
-          width: 60,
-          height: 6,
-          background: 'var(--alm-surface-overlay)',
-          borderRadius: 3,
-          overflow: 'hidden',
-        }}
-      >
+    <div className="alm-match-candidates__conf-bar">
+      <div className="alm-match-candidates__conf-track">
         <div
-          style={{
-            width: `${pct}%`,
-            height: '100%',
-            background: barColor,
-            borderRadius: 3,
-          }}
+          className="alm-match-candidates__conf-fill"
+          style={{ width: `${pct}%`, background: barColor }}
           data-testid="confidence-bar"
         />
       </div>
-      <span className="alm-mono" style={{ fontSize: 'var(--alm-text-xs)', minWidth: 32 }}>
+      <span className="alm-mono alm-match-candidates__conf-label">
         {confidencePct(value)}
       </span>
     </div>
@@ -101,21 +89,21 @@ function ConfidenceBar({ value }: { value: number }) {
 function DimensionBreakdown({ match }: { match: CalibrationMatchDto }) {
   const hasMismatches = match.dimensionsMismatched.length > 0;
   return (
-    <div style={{ display: 'flex', flexDirection: 'column', gap: 2 }}>
+    <div className="alm-match-candidates__dim-list">
       {match.dimensionsMatched.map((d) => (
         <span
           key={d.dimension}
-          style={{ fontSize: 'var(--alm-text-xs)', color: 'var(--alm-text-secondary)' }}
+          className="alm-match-candidates__dim-matched"
         >
           <Check
             size={12}
             role="img"
             aria-label="matched"
-            style={{ color: 'var(--alm-ok)', display: 'inline', verticalAlign: 'middle' }}
+            className="alm-match-candidates__dim-check"
           />{' '}
           {d.dimension}
           {d.delta != null && d.delta > 0 && (
-            <span style={{ color: 'var(--alm-text-faint)' }}> (Δ{d.delta.toFixed(2)})</span>
+            <span className="alm-match-candidates__dim-delta"> (Δ{d.delta.toFixed(2)})</span>
           )}
         </span>
       ))}
@@ -123,17 +111,17 @@ function DimensionBreakdown({ match }: { match: CalibrationMatchDto }) {
         match.dimensionsMismatched.map((d) => (
           <span
             key={d.dimension}
-            style={{ fontSize: 'var(--alm-text-xs)', color: 'var(--alm-warn)' }}
+            className="alm-match-candidates__dim-mismatch"
             data-testid={`mismatch-${d.dimension}`}
           >
             <AlertTriangle
               size={12}
               aria-label="mismatch"
-              style={{ display: 'inline', verticalAlign: 'middle' }}
+              className="alm-match-candidates__dim-mismatch-icon"
             />{' '}
             {d.dimension}: {reasonLabel(d.reason)}
             {d.delta != null && (
-              <span style={{ color: 'var(--alm-text-faint)' }}> (Δ{d.delta.toFixed(2)})</span>
+              <span className="alm-match-candidates__dim-delta"> (Δ{d.delta.toFixed(2)})</span>
             )}
           </span>
         ))}
@@ -192,8 +180,8 @@ function AssignButton({ match, sessionId: _sessionId, onAssign, assigning, prefi
 
   if (pending === 'confirming') {
     return (
-      <div style={{ display: 'flex', flexDirection: 'column', gap: 'var(--alm-sp-1)' }}>
-        <div style={{ display: 'flex', gap: 'var(--alm-sp-1)' }}>
+      <div className="alm-match-candidates__assign-col">
+        <div className="alm-match-candidates__assign-row">
           <Btn
             size="sm"
             variant="primary"
@@ -213,14 +201,14 @@ function AssignButton({ match, sessionId: _sessionId, onAssign, assigning, prefi
 
   if (pending === 'override_confirm') {
     return (
-      <div style={{ display: 'flex', flexDirection: 'column', gap: 'var(--alm-sp-1)' }}>
+      <div className="alm-match-candidates__assign-col">
         <span
-          style={{ fontSize: 'var(--alm-text-xs)', color: 'var(--alm-warn)' }}
+          className="alm-match-candidates__override-warning"
           data-testid="override-warning"
         >
           {errorMsg}
         </span>
-        <div style={{ display: 'flex', gap: 'var(--alm-sp-1)' }}>
+        <div className="alm-match-candidates__assign-row">
           <Btn
             size="sm"
             variant="danger"
@@ -234,7 +222,7 @@ function AssignButton({ match, sessionId: _sessionId, onAssign, assigning, prefi
             Cancel
           </Btn>
         </div>
-        <div style={{ fontSize: 'var(--alm-text-xs)', color: 'var(--alm-text-faint)' }}>
+        <div className="alm-match-candidates__override-dims">
           Violates: {overrideDims.join(', ')}
         </div>
       </div>
@@ -278,7 +266,7 @@ export function MatchCandidatesPanel({
     return (
       <Section title="Calibration suggestions">
         <div
-          style={{ fontSize: 'var(--alm-text-sm)', color: 'var(--alm-text-muted)', padding: 'var(--alm-sp-2)' }}
+          className="alm-match-candidates__loading"
           data-testid="suggest-loading"
         >
           Loading suggestions…
@@ -363,12 +351,12 @@ export function MatchCandidatesPanel({
       title="Calibration suggestions"
       count={matches.length}
     >
-      <div style={{ marginBottom: 'var(--alm-sp-1)', display: 'flex', alignItems: 'center', gap: 'var(--alm-sp-1)' }}>
+      <div className="alm-match-candidates__status-row">
         <Pill variant={statusVariant(suggestStatus)} data-testid="suggest-status-pill">
           {statusLabel(suggestStatus)}
         </Pill>
         {suggestStatus === 'ambiguous' && (
-          <span style={{ fontSize: 'var(--alm-text-xs)', color: 'var(--alm-text-muted)' }}>
+          <span className="alm-match-candidates__ambiguous-hint">
             Multiple candidates at similar confidence — review before assigning.
           </span>
         )}
@@ -385,15 +373,14 @@ export function MatchCandidatesPanel({
         ]}
         rows={matches.map((m, i) => ({
           rank: (
-            <span className="alm-mono" style={{ fontSize: 'var(--alm-text-xs)', color: 'var(--alm-text-faint)' }}>
+            <span className="alm-mono alm-match-candidates__rank">
               {i + 1}
             </span>
           ),
           type: <Pill variant={m.calibrationType === 'dark' ? 'info' : m.calibrationType === 'flat' ? 'accent' : 'neutral'}>{m.calibrationType}</Pill>,
           masterId: (
             <span
-              className="alm-mono"
-              style={{ fontSize: 'var(--alm-text-xs)' }}
+              className="alm-mono alm-match-candidates__master-id"
               data-testid={`candidate-master-${m.masterId}`}
             >
               {m.masterId.slice(0, 8)}…
@@ -401,7 +388,7 @@ export function MatchCandidatesPanel({
           ),
           confidence: <ConfidenceBar value={m.confidence} />,
           reason: (
-            <span style={{ fontSize: 'var(--alm-text-xs)', color: 'var(--alm-text-secondary)' }}>
+            <span className="alm-match-candidates__reason">
               {m.selectionReason.replace(/_/g, ' ')}
             </span>
           ),
