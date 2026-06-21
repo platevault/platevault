@@ -1,5 +1,5 @@
 use contracts_core::first_run::{
-    RegisterSourceRequest, RegisterSourceResponse, ScanDepth, SourceKind,
+    OrganizationState, RegisterSourceRequest, RegisterSourceResponse, ScanDepth, SourceKind,
 };
 use serde_json::json;
 
@@ -11,6 +11,7 @@ fn sample_request() -> RegisterSourceRequest {
         path: "/astro/lights".to_owned(),
         kind_subtype: None,
         scan_depth: ScanDepth::Recursive,
+        organization_state: OrganizationState::Organized,
     }
 }
 
@@ -20,6 +21,7 @@ fn sample_request_with_subtype() -> RegisterSourceRequest {
         path: "/astro/cals".to_owned(),
         kind_subtype: Some("calibration".to_owned()),
         scan_depth: ScanDepth::Single,
+        organization_state: OrganizationState::Organized,
     }
 }
 
@@ -29,6 +31,7 @@ fn sample_response() -> RegisterSourceResponse {
         kind: SourceKind::LightFrames,
         path: "/astro/lights".to_owned(),
         created_at: "2026-05-26T12:00:00Z".to_owned(),
+        organization_state: OrganizationState::Organized,
     }
 }
 
@@ -107,11 +110,13 @@ fn response_serializes_required_fields_as_camel_case() {
     assert!(obj.contains_key("kind"), "response must have kind");
     assert!(obj.contains_key("path"), "response must have path");
     assert!(obj.contains_key("createdAt"), "response must have createdAt");
+    assert!(obj.contains_key("organizationState"), "response must have organizationState");
 
     assert_eq!(obj["sourceId"], json!("a1b2c3d4-e5f6-7890-abcd-ef1234567890"));
     assert_eq!(obj["kind"], json!("light_frames"));
     assert_eq!(obj["path"], json!("/astro/lights"));
     assert_eq!(obj["createdAt"], json!("2026-05-26T12:00:00Z"));
+    assert_eq!(obj["organizationState"], json!("organized"));
 }
 
 #[test]
@@ -130,7 +135,7 @@ fn response_has_no_extra_keys_beyond_contract() {
     let obj = value.as_object().unwrap();
 
     let allowed: std::collections::BTreeSet<&str> =
-        ["sourceId", "kind", "path", "createdAt"].into_iter().collect();
+        ["sourceId", "kind", "path", "createdAt", "organizationState"].into_iter().collect();
 
     for key in obj.keys() {
         assert!(

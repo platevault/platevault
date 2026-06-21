@@ -14,9 +14,10 @@
 use audit::bus::EventBus;
 use audit::event_bus::{FirstRunCompleted, Source, SourceCountByKind, TOPIC_FIRST_RUN_COMPLETED};
 use contracts_core::first_run::{
-    FirstRunCompleteResponse, FirstRunRestartResponse, FirstRunStateResponse,
+    FirstRunCompleteResponse, FirstRunRestartResponse, FirstRunStateResponse, OrganizationState,
     RegisterSourceBatchRequest, RegisterSourceBatchResponse, RegisterSourceRequest,
-    RegisterSourceResponse, SourceKind,
+    RegisterSourceResponse, SetSourceOrganizationStateRequest, SetSourceOrganizationStateResponse,
+    SourceKind, ERR_SOURCE_INVALID_ORGANIZATION_STATE,
 };
 use contracts_core::{error_code::ErrorCode, ContractError, ErrorSeverity, JsonAny};
 use persistence_db::repositories::first_run as repo;
@@ -136,6 +137,65 @@ pub async fn register_source(
     validate_path(&req.path).map_err(|e| *e)?;
     check_duplicate(pool, &req.path, req.kind).await?;
     repo::register_source(pool, req).await.map_err(db_to_contract)
+}
+
+/// Change a source's organization state after registration (spec 041, T030).
+///
+/// Affects only future confirms — it does not move or re-plan already-planned
+/// files. `inbox`-kind sources may not be set to `organized`; doing so returns
+/// [`ERR_SOURCE_INVALID_ORGANIZATION_STATE`] with [`ErrorSeverity::Blocking`].
+///
+/// # Errors
+///
+/// - `source.invalid_organization_state` — inbox source set to organized.
+/// - `source.not_found` — no source with the given id.
+/// - `internal.database` — database failure.
+pub async fn set_source_organization_state(
+    pool: &SqlitePool,
+    req: &SetSourceOrganizationStateRequest,
+) -> Result<SetSourceOrganizationStateResponse, ContractError> {
+    repo::set_source_organization_state(pool, &req.source_id, req.organization_state)
+        .await
+        .map_err(|e| match e {
+            persistence_db::DbError::NotFound(msg) => {
+                ContractError::new(ErrorCode::SourceNotFound, msg, ErrorSeverity::Blocking, false)
+            }
+            persistence_db::DbError::CasFailed(msg)
+                if msg.contains(ERR_SOURCE_INVALID_ORGANIZATION_STATE) =>
+            {
+                ContractError::new(
+                    ErrorCode::SourceInvalidOrganizationState,
+                    "inbox sources must remain unorganized",
+                    ErrorSeverity::Blocking,
+                    false,
+                )
+            }
+            other => db_to_contract(other),
+        })?;
+
+    Ok(SetSourceOrganizationStateResponse {
+        source_id: req.source_id.clone(),
+        organization_state: req.organization_state,
+    })
+}
+
+/// Read a source's organization state by source/root id (spec 041).
+///
+/// Returns `Unorganized` as the conservative default when the source row is
+/// absent — an absent source means we never catalogue in place by accident.
+///
+/// # Errors
+///
+/// Returns `internal.database` on query failure.
+pub async fn get_source_organization_state(
+    pool: &SqlitePool,
+    source_id: &str,
+) -> Result<OrganizationState, ContractError> {
+    let state = repo::get_source_organization_state(pool, source_id)
+        .await
+        .map_err(db_to_contract)?
+        .unwrap_or(OrganizationState::Unorganized);
+    Ok(state)
 }
 
 /// Register multiple sources with per-item path validation.
@@ -314,6 +374,7 @@ pub async fn restart_first_run(
 #[cfg(test)]
 mod tests {
     use super::*;
+    use contracts_core::first_run::OrganizationState;
 
     #[test]
     fn validate_path_not_exists() {
@@ -354,6 +415,7 @@ mod tests {
             path: "/tmp".to_owned(),
             kind_subtype: None,
             scan_depth: contracts_core::first_run::ScanDepth::Recursive,
+            organization_state: OrganizationState::Organized,
         };
         repo::register_source(&pool, &req).await.unwrap();
 
@@ -372,6 +434,7 @@ mod tests {
             path: "/tmp".to_owned(),
             kind_subtype: None,
             scan_depth: contracts_core::first_run::ScanDepth::Recursive,
+            organization_state: OrganizationState::Organized,
         };
         repo::register_source(&pool, &req).await.unwrap();
 

@@ -46,6 +46,7 @@ use fs_executor::run::{
     execute_plan, ApplyOutcome, CancellationToken, ExecutorCallbacks, ExecutorItem,
     ExecutorItemAction, ItemProgressEvent, RetryQueue, SkipSet,
 };
+use persistence_db::repositories::first_run as first_run_repo;
 use persistence_db::repositories::inventory as inventory_repo;
 use persistence_db::repositories::plan_apply as apply_repo;
 use persistence_db::repositories::plans as plans_repo;
@@ -255,6 +256,8 @@ fn item_row_to_executor_item(
         // T022: map "trash" action to the Trash variant.
         "trash" => ExecutorItemAction::Trash { fallback_archive_destination: None },
         "delete" => ExecutorItemAction::Delete,
+        // spec 041: catalogue = record-in-place, no filesystem mutation.
+        "catalogue" => ExecutorItemAction::Catalogue,
         _ => ExecutorItemAction::NoOp,
     };
 
@@ -523,13 +526,26 @@ pub async fn apply_plan(
     // real items. Collect the unique root_ids referenced by this plan's items.
     let mut root_map: HashMap<String, Utf8PathBuf> = HashMap::new();
     for row in &item_rows {
-        if let Some(rid) = &row.from_root_id {
-            if !root_map.contains_key(rid) {
-                if let Ok(Some(path)) = inventory_repo::get_library_root_path(pool, rid).await {
-                    root_map.insert(rid.clone(), Utf8PathBuf::from(path));
-                } else {
-                    tracing::warn!(root_id = %rid, "plan item references unknown library root; path gate will be inactive for this item");
-                }
+        // A plan item may carry distinct source and destination roots; resolve
+        // every referenced root so the executor can anchor both sides.
+        for rid in [row.from_root_id.as_ref(), row.to_root_id.as_ref()].into_iter().flatten() {
+            if root_map.contains_key(rid) {
+                continue;
+            }
+            // Resolve a root id → absolute path. Roots added through the setup
+            // wizard live in `registered_sources` (the gen-3 source model) and
+            // are NOT mirrored into the legacy `library_root` table, so fall
+            // back to `registered_sources` when `library_root` has no row.
+            // Without this, inbox `move` plans resolve to bare relative paths
+            // and every apply fails with `source.missing`.
+            let resolved = match inventory_repo::get_library_root_path(pool, rid).await {
+                Ok(Some(path)) => Some(path),
+                _ => first_run_repo::get_source_path(pool, rid).await.ok().flatten(),
+            };
+            if let Some(path) = resolved {
+                root_map.insert(rid.clone(), Utf8PathBuf::from(path));
+            } else {
+                tracing::warn!(root_id = %rid, "plan item references unknown root (not in library_root or registered_sources); path gate will be inactive for this item");
             }
         }
     }

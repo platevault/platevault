@@ -1,22 +1,27 @@
-//! Integration tests for spec 040 US3 — confirm a detected calibration master
-//! inbox item (Path 1: register directly, no file move).
+//! Integration tests for spec 041 US4 — confirm a detected calibration master
+//! inbox item now routes through a reviewable plan (Constitution §II) instead
+//! of the old confirm-time "register directly" fast path (spec 040 US3).
 //!
 //! Tests that:
-//! 1. Confirming a master inbox item creates a `calibration_session` row and a
-//!    `calibration_fingerprint` row, marks the inbox item `resolved`, and
-//!    returns `registered_as_master = true` with an empty `plan_id`.
-//! 2. The registered master appears via `calibration.masters.list` (read from
-//!    `calibration_master_view`).
-//! 3. The inbox item is `resolved` and no longer appears in the unacknowledged
-//!    list.
-//! 4. A non-master inbox item still goes through the normal plan-creation path
+//! 1. Confirming a master inbox item creates a reviewable PLAN (non-empty
+//!    `plan_id`, `registered_as_master = false`) and does NOT register the
+//!    master at confirm time.
+//! 2. After the plan is applied, the plan listener registers the master
+//!    (`calibration_session` + `calibration_fingerprint`) and it appears via
+//!    `calibration.masters.list`.
+//! 3. A non-master item still goes through the normal plan-creation path
 //!    (regression guard).
+//! 4. A master from an ORGANIZED source produces a `catalogue` plan item (no
+//!    move); from an UNORGANIZED source produces a `move` plan item — both
+//!    register the master at apply completion (master parity).
 
 use std::io::Write;
 use std::path::Path;
 
 use app_core::calibration::masters_list;
 use app_core::inbox::confirm::{confirm, ConfirmRequest};
+use app_core::inbox_plan::apply_inbox_plan;
+use audit::bus::EventBus;
 use persistence_db::repositories::inbox::{
     self as inbox_repo, InsertEvidence, InsertInboxItem, UpsertClassification,
 };
@@ -42,10 +47,39 @@ fn write_fits(dir: &Path, name: &str, imagetyp: &str) {
     f.write_all(&block).unwrap();
 }
 
+/// Register a source row with an explicit organization state, plus the matching
+/// `library_root` row the plan executor uses to resolve absolute paths.
+async fn register_source(db: &Database, root_id: &str, kind: &str, path: &str, org_state: &str) {
+    sqlx::query(
+        "INSERT INTO registered_sources
+            (id, kind, path, kind_subtype, scan_depth, created_at, created_via, organization_state)
+         VALUES (?, ?, ?, NULL, 'recursive', '2026-01-01T00:00:00Z', 'first_run', ?)",
+    )
+    .bind(root_id)
+    .bind(kind)
+    .bind(path)
+    .bind(org_state)
+    .execute(db.pool())
+    .await
+    .unwrap();
+
+    // The executor resolves `from_root_id` → absolute path via `library_root`.
+    sqlx::query(
+        "INSERT INTO library_root (id, label, current_path, kind, state, created_at)
+         VALUES (?, 'test-root', ?, 'local', 'active', '2026-01-01T00:00:00Z')",
+    )
+    .bind(root_id)
+    .bind(path)
+    .execute(db.pool())
+    .await
+    .unwrap();
+}
+
 /// Insert a master inbox item row directly (simulating what scan does).
 async fn insert_master_inbox_item(
     db: &Database,
     item_id: &str,
+    root_id: &str,
     relative_path: &str,
     master_frame_type: &str,
     master_filter: Option<&str>,
@@ -58,10 +92,11 @@ async fn insert_master_inbox_item(
             (id, root_id, relative_path, file_count, discovered_at, last_scanned_at,
              content_signature, state, lane, format, is_master_item,
              master_frame_type, master_filter, master_exposure_s)
-         VALUES (?, 'root-1', ?, 1, ?, ?, ?, 'pending_classification',
+         VALUES (?, ?, ?, 1, ?, ?, ?, 'pending_classification',
                  'fits', 'fits', 1, ?, ?, ?)",
     )
     .bind(item_id)
+    .bind(root_id)
     .bind(relative_path)
     .bind(now)
     .bind(now)
@@ -72,22 +107,78 @@ async fn insert_master_inbox_item(
     .execute(db.pool())
     .await
     .unwrap();
+
+    // A master inbox item must carry a classification + evidence so the normal
+    // confirm path (no more fast-path) can enumerate its single file.
+    inbox_repo::upsert_classification(
+        db.pool(),
+        &UpsertClassification {
+            inbox_item_id: item_id,
+            result: "single_type",
+            frame_type: Some(master_frame_type),
+            content_signature: sig,
+            unclassified_file_count: 0,
+        },
+    )
+    .await
+    .unwrap();
+
+    inbox_repo::insert_evidence(
+        db.pool(),
+        &InsertEvidence {
+            id: &format!("ev-{item_id}"),
+            inbox_item_id: item_id,
+            relative_file_path: relative_path,
+            frame_type: Some(master_frame_type),
+            evidence_source: "imagetyp_header",
+            raw_value: None,
+            unclassified: false,
+            manual_override: None,
+            is_master: true,
+            master_detector: Some("filename"),
+        },
+    )
+    .await
+    .unwrap();
+}
+
+/// Drive apply to completion. The plan listener (started by the caller before
+/// apply) consumes `plan.applying.completed` and registers the master.
+async fn apply_and_register(db: &Database, bus: &EventBus, item_id: &str) {
+    apply_inbox_plan(db.pool(), bus, item_id).await.unwrap();
+    // Let the spawned executor finish + publish, and the listener consume the
+    // plan.applying.completed event (which triggers master registration).
+    tokio::time::sleep(std::time::Duration::from_millis(300)).await;
 }
 
 // ── Tests ─────────────────────────────────────────────────────────────────────
 
-/// T040-US3-1: confirming a master item registers it to calibration tables.
+/// US4: confirming a master item now creates a plan and does NOT register at
+/// confirm time. The master is registered when the plan is applied.
 #[tokio::test]
-async fn confirm_master_registers_to_calibration_and_resolves_inbox_item() {
+async fn confirm_master_creates_plan_then_registers_at_apply() {
     let tmp = tempfile::tempdir().unwrap();
     write_fits(tmp.path(), "masterDark_300s.fits", "DARK");
 
     let db = test_db().await;
+    let bus = EventBus::with_pool(db.pool().clone());
+    app_core::inbox::plan_listener::start_inbox_plan_listener(db.pool().clone(), &bus);
     let item_id = "master-item-001";
     let sig = "sig-master-001";
 
-    insert_master_inbox_item(&db, item_id, "masterDark_300s.fits", "dark", None, Some(300.0), sig)
-        .await;
+    // Unorganized inbox source → master produces a MOVE plan.
+    register_source(&db, "root-1", "inbox", tmp.path().to_str().unwrap(), "unorganized").await;
+    insert_master_inbox_item(
+        &db,
+        item_id,
+        "root-1",
+        "masterDark_300s.fits",
+        "dark",
+        None,
+        Some(300.0),
+        sig,
+    )
+    .await;
 
     let resp = confirm(
         db.pool(),
@@ -102,59 +193,57 @@ async fn confirm_master_registers_to_calibration_and_resolves_inbox_item() {
     .await
     .unwrap();
 
-    // Response must say registered_as_master = true, plan_id empty.
-    assert!(resp.registered_as_master, "expected registered_as_master = true");
-    assert!(resp.plan_id.is_empty(), "plan_id must be empty for master path");
+    // NEW behavior: a real plan, no confirm-time registration.
+    assert!(!resp.registered_as_master, "master must NOT register at confirm time (US4)");
+    assert!(!resp.plan_id.is_empty(), "master confirm must produce a reviewable plan");
     assert_eq!(resp.items_total, 1);
+    assert_eq!(resp.move_count, 1, "unorganized master → move plan item");
+    assert_eq!(resp.catalogue_count, 0);
 
-    // A calibration_session must exist.
+    // No calibration rows yet (registration deferred to apply).
+    let pre: i64 = sqlx::query_scalar("SELECT COUNT(*) FROM calibration_session")
+        .fetch_one(db.pool())
+        .await
+        .unwrap();
+    assert_eq!(pre, 0, "master must NOT be registered before apply");
+
+    // Apply the plan → master registers at completion.
+    apply_and_register(&db, &bus, item_id).await;
+
     let session_count: i64 =
         sqlx::query_scalar("SELECT COUNT(*) FROM calibration_session WHERE kind = 'dark'")
             .fetch_one(db.pool())
             .await
             .unwrap();
-    assert_eq!(session_count, 1, "one calibration_session must be created");
+    assert_eq!(session_count, 1, "master must be registered after apply");
 
-    // A calibration_fingerprint must exist.
-    let fp: Option<(String, Option<f64>)> =
-        sqlx::query_as("SELECT calibration_type, exposure_s FROM calibration_fingerprint LIMIT 1")
-            .fetch_optional(db.pool())
-            .await
-            .unwrap();
-    let (cal_type, exposure_s) = fp.expect("calibration_fingerprint must exist");
-    assert_eq!(cal_type, "dark");
-    assert!((exposure_s.unwrap_or(0.0) - 300.0).abs() < f64::EPSILON);
-
-    // source_inbox_item_id must link back to the inbox item.
     let source_id: Option<String> =
         sqlx::query_scalar("SELECT source_inbox_item_id FROM calibration_session LIMIT 1")
             .fetch_optional(db.pool())
             .await
             .unwrap();
     assert_eq!(source_id.as_deref(), Some(item_id));
-
-    // Inbox item must be resolved.
-    let state: String = sqlx::query_scalar("SELECT state FROM inbox_items WHERE id = ?")
-        .bind(item_id)
-        .fetch_one(db.pool())
-        .await
-        .unwrap();
-    assert_eq!(state, "resolved", "inbox item must be resolved after master confirm");
 }
 
-/// T040-US3-2: `masters_list` returns the registered master.
+/// US4 master parity: a master from an ORGANIZED source produces a `catalogue`
+/// plan item (no move) and still registers at apply.
 #[tokio::test]
-async fn masters_list_returns_confirmed_master() {
+async fn organized_master_catalogues_then_registers_at_apply() {
     let tmp = tempfile::tempdir().unwrap();
     write_fits(tmp.path(), "masterFlat_Ha.fits", "FLAT");
 
     let db = test_db().await;
+    let bus = EventBus::with_pool(db.pool().clone());
+    app_core::inbox::plan_listener::start_inbox_plan_listener(db.pool().clone(), &bus);
     let item_id = "master-item-flat";
     let sig = "sig-master-flat";
 
+    // Organized (non-inbox) source → master produces a CATALOGUE plan item.
+    register_source(&db, "root-1", "calibration", tmp.path().to_str().unwrap(), "organized").await;
     insert_master_inbox_item(
         &db,
         item_id,
+        "root-1",
         "masterFlat_Ha.fits",
         "flat",
         Some("Ha"),
@@ -163,7 +252,7 @@ async fn masters_list_returns_confirmed_master() {
     )
     .await;
 
-    confirm(
+    let resp = confirm(
         db.pool(),
         ConfirmRequest {
             inbox_item_id: item_id.to_owned(),
@@ -176,8 +265,14 @@ async fn masters_list_returns_confirmed_master() {
     .await
     .unwrap();
 
+    assert!(!resp.registered_as_master);
+    assert_eq!(resp.catalogue_count, 1, "organized master → catalogue plan item");
+    assert_eq!(resp.move_count, 0);
+
+    apply_and_register(&db, &bus, item_id).await;
+
     let masters = masters_list(db.pool()).await.unwrap();
-    assert_eq!(masters.len(), 1, "one master must appear in calibration_masters_list");
+    assert_eq!(masters.len(), 1, "organized master must register at apply");
     assert_eq!(
         masters[0].kind,
         contracts_core::calibration::CalibrationKind::Flat,
@@ -187,54 +282,10 @@ async fn masters_list_returns_confirmed_master() {
     assert!((masters[0].fingerprint.exposure_s - 2.0).abs() < f64::EPSILON);
 }
 
-/// T040-US3-3: resolved item disappears from the unacknowledged list.
-#[tokio::test]
-async fn resolved_master_absent_from_unacknowledged_list() {
-    let tmp = tempfile::tempdir().unwrap();
-    write_fits(tmp.path(), "masterBias.fits", "BIAS");
-
-    let db = test_db().await;
-    let item_id = "master-item-bias";
-    let sig = "sig-master-bias";
-
-    // We also need a registered_source for list_unacknowledged_across_roots to work.
-    sqlx::query(
-        "INSERT INTO registered_sources (id, kind, path, kind_subtype, scan_depth, created_at, created_via)
-         VALUES ('root-1', 'inbox', '/astro', NULL, 'recursive', '2026-01-01T00:00:00Z', 'first_run')",
-    )
-    .execute(db.pool())
-    .await
-    .unwrap();
-
-    insert_master_inbox_item(&db, item_id, "masterBias.fits", "bias", None, None, sig).await;
-
-    // Before confirm: item must appear in the unacknowledged list.
-    let before = inbox_repo::list_unacknowledged_across_roots(db.pool(), 100).await.unwrap();
-    assert_eq!(before.len(), 1, "one unacknowledged item before confirm");
-
-    confirm(
-        db.pool(),
-        ConfirmRequest {
-            inbox_item_id: item_id.to_owned(),
-            action: "confirm".to_owned(),
-            content_signature: sig.to_owned(),
-            destructive_destination: None,
-            root_absolute_path: tmp.path().to_owned(),
-        },
-    )
-    .await
-    .unwrap();
-
-    // After confirm: item must be gone from the unacknowledged list.
-    let after = inbox_repo::list_unacknowledged_across_roots(db.pool(), 100).await.unwrap();
-    assert!(after.is_empty(), "resolved master must not appear in unacknowledged list");
-}
-
-/// T040-US3-4: non-master items still go through the plan path (regression guard).
+/// US4 regression guard: non-master items still go through the plan path.
 #[tokio::test]
 async fn non_master_item_still_creates_plan() {
     let tmp = tempfile::tempdir().unwrap();
-    // Write a light frame FITS
     write_fits(tmp.path(), "light_001.fits", "Light Frame");
 
     let db = test_db().await;

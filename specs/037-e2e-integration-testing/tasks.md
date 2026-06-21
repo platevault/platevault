@@ -13,6 +13,23 @@ harnesses, CI, and docs themselves. Paths are repo-relative.
 > T001/T003/T006 `wiremock`+fixtures plan replaced by the existing `FakeResolver`/
 > `FakeSpawner` test doubles (no new deps). Remaining: US2 (CI), US3 (E2E
 > completion + T002/T007/T008), US4/US5 (docs), T036 (regression validation).
+>
+> **Status 2026-06-20**: **Layer-2 scaffold DONE** — `crates/e2e-tests` added
+> with thirtyfour ^0.37 + cargo-nextest; `#[ignore]` journey stubs compile and
+> list (5 skipped, 0 failed); harness in `tests/common/mod.rs` uses proven
+> `tauri:options.application` caps (no `browserName`). `e2e.yml` updated to
+> `cargo nextest run -p e2e_tests --profile e2e --no-tests=warn`. WebdriverIO
+> interim (`apps/desktop/e2e/wdio/`) retained on disk but no longer invoked by
+> CI. Wiring (T024–T027, T031) deferred per D9 backend gating.
+>
+> **Status 2026-06-20 (D10)**: **tauri-plugin-webdriver all-OS adopted** —
+> `desktop_shell` gains `e2e` Cargo feature gating `tauri-plugin-webdriver` v0.2
+> (embedded server on :4445; `tauri-webdriver` CLI proxies :4444 → :4445).
+> `apps/desktop/e2e/wdio/` **DELETED**; `webdriverio` devDep + `test:e2e:wdio`
+> script removed from `package.json`. `e2e.yml` rewritten to uniform 3-OS matrix
+> (ubuntu/windows/macos) — no `webkit2gtk-driver`, no `msedgedriver`. Research
+> D10 records the decision superseding D3/D4. T031 preflight TODO updated to
+> reference `tauri-webdriver` instead of `tauri-driver`/`msedgedriver`.
 
 **Legend**: `[P]` = parallelizable (different files, no incomplete-task dep).
 Story labels map to spec user stories US1–US5.
@@ -22,7 +39,7 @@ Story labels map to spec user stories US1–US5.
 ## Phase 1: Setup
 
 - [ ] T001 Add Rust dev-dependencies for the integration layer (`wiremock`, ensure `tempfile`) to the relevant crates' `[dev-dependencies]` in `crates/app/core/Cargo.toml` and `crates/persistence/db/Cargo.toml`
-- [ ] T002 [P] Add E2E dev-dependency `better-sqlite3` to `apps/desktop/package.json` (devDependencies) for read-only DB assertions
+- [ ] T002 [P] ~~Add E2E dev-dependency `better-sqlite3` to `apps/desktop/package.json`~~ **SUPERSEDED** — the thirtyfour harness (`crates/e2e-tests`) asserts through the real UI via element find/text and the `invoke()` bridge; no JS DB reader is needed. `better-sqlite3` is not added.
 - [ ] T003 [P] Create shared test-fixture dir `tests/fixtures/` with SIMBAD response samples (success/ambiguous/not-found/error) and a couple of representative FITS-header OBJECT samples, per research D2
 - [ ] T004 Decide and document the integration-test tagging mechanism (e.g. a `live`/`network` feature or `#[ignore]` for the one live-SIMBAD test) so the default suite stays deterministic/offline, per research D2 + open items; record in `quickstart.md`
 
@@ -30,8 +47,8 @@ Story labels map to spec user stories US1–US5.
 
 - [X] T005 Create a Layer-1 test harness helper providing an isolated, file-backed SQLite DB in a `tempfile::tempdir()` with `sqlx::migrate!()` applied and a built `AppState`/`SqliteLifecycleRepository`, in `crates/app/core/tests/support/mod.rs` (or a small `crates/testkit` if cleaner) — per research D1, data-model isolation model
 - [ ] T006 [P] Add a `wiremock`-based SIMBAD boundary stub helper (serves the T003 fixtures on localhost) usable by resolver tests, in the test support module — per research D2
-- [ ] T007 Replace the placeholder `apps/desktop/e2e/helpers/db.ts` with a real read-only `better-sqlite3` reader resolving the app DB at the OS-specific app-data path (Linux/Windows/macOS), per research D3 + open items
-- [ ] T008 Add a fresh-DB reset + freshly-built-binary guarantee to `apps/desktop/e2e/helpers/tauri-app.ts` / `playwright.real-backend.config.ts` (`beforeAll` deletes the app DB; build step before tests), satisfying FR-006 — reuse existing 033 scaffold
+- [ ] T007 ~~Replace `apps/desktop/e2e/helpers/db.ts`~~ **SUPERSEDED** — DB assertions use the real UI or the `invoke()` bridge in `crates/e2e-tests/tests/common/mod.rs`; `better-sqlite3` is not adopted. The `db.ts` placeholder remains as a structural reference.
+- [ ] T008 ~~Add fresh-DB reset to `tauri-app.ts`~~ **SUPERSEDED** — fresh-DB reset in the thirtyfour harness is `reset_database()` in `crates/e2e-tests/tests/common/mod.rs` (reads `ALM_DB_URL` env; TODO wiring for OS app-data path). `tauri-app.ts` is now a reference scaffold.
 
 **Checkpoint**: Layer-1 harness + SIMBAD stub + E2E DB reader/reset exist. Story phases can begin.
 
@@ -91,12 +108,12 @@ Story labels map to spec user stories US1–US5.
 > Stage B and on Windows (handover item). Authoring + un-skipping the full journey
 > set against the real backend is the remaining US3 work, to be verified in CI.
 
-- [ ] T024 [P] [US3] Complete the **first-run setup → target resolve → project create** journey (un-skip + flesh out), asserting a UI→real-backend round-trip value (FR-008), in `apps/desktop/e2e/real-backend/us1_*.spec.ts`
-- [ ] T025 [P] [US3] Complete the **filesystem plan review → apply** journey asserting the real side effect **and** durable audit record, inside disposable test locations (FR-009, FR-016), in `apps/desktop/e2e/real-backend/*plan*.spec.ts`
-- [ ] T026 [P] [US3] Add an **all-top-level-screens-load** smoke spec covering every navigable feature screen without error (FR-007, coverage-matrix #21), in `apps/desktop/e2e/real-backend/screens_load.spec.ts`
-- [ ] T027 [P] [US3] Complete remaining 033 journey skeletons (subscriber startup, ingestion plumbing, lifecycle integrity) or convert to explicit, documented not-applicable if superseded — `apps/desktop/e2e/real-backend/us{2,3,5}_*.spec.ts`
-- [X] T028 [US3] Extend `ci.yml` with **Stage B (required, Linux+Windows)**: build app, run Layer-2 (Linux under `xvfb-run` + `WebKitWebDriver`; Windows fetch version-matched `msedgedriver`) — gated after Stage A (FR-010/FR-012); ensure the `better-sqlite3` native binding is installed/rebuilt per-OS runner so the `db.ts` reader loads (addresses F4 native-module risk)
-- [X] T029 [US3] Add **Stage C (macOS, optional/`continue-on-error`)** for best-effort macOS E2E via debug-only `tauri-plugin-webdriver`, OR wire FR-013 explicit not-applicable reporting if the plugin path is deferred — per research D4; ensure the plugin is compile-gated to debug builds (Constitution V)
+- [ ] T024 [P] [US3] Complete the **first-run setup → target resolve → project create** journey (un-ignore + flesh out), asserting a UI→real-backend round-trip value (FR-008), in `crates/e2e-tests/tests/journeys.rs` (thirtyfour `find(By::...)` against real UI + optional `invoke()`)
+- [ ] T025 [P] [US3] Complete the **filesystem plan review → apply** journey asserting the real side effect **and** durable audit record, inside disposable test locations (FR-009, FR-016), in `crates/e2e-tests/tests/journeys.rs`
+- [ ] T026 [P] [US3] Add an **all-top-level-screens-load** smoke spec covering every navigable feature screen without error (FR-007, coverage-matrix #21), in `crates/e2e-tests/tests/smoke.rs` (un-ignore the existing stub)
+- [ ] T027 [P] [US3] Complete remaining journey stubs (subscriber startup, ingestion plumbing, lifecycle integrity) or convert to explicit, documented not-applicable if superseded — in `crates/e2e-tests/tests/journeys.rs`
+- [X] T028 [US3] `e2e.yml` rewritten to uniform 3-OS matrix (ubuntu/windows/macos) via `tauri-plugin-webdriver` (D10). Drops old `tauri-driver`/msedgedriver/WebKitWebDriver steps. Per OS: install `tauri-webdriver` CLI, build frontend with `VITE_E2E=1`, serve dist on :5173, build `desktop_shell --features e2e`, run nextest (`xvfb-run -a` on Linux). `--no-tests=warn` keeps job green while journeys are stubs. Needs gate from `integration` job (ci.yml Stage A).
+- [X] T029 [US3] macOS E2E now part of the uniform matrix via `tauri-plugin-webdriver` (D10 supersedes D4 best-effort deferral). Plugin compile-gated behind `e2e` feature; release binaries omit it (Constitution V).
 
 **Checkpoint**: Real UI↔backend wiring proven on Linux+Windows; macOS handled per D4.
 
@@ -108,7 +125,7 @@ Story labels map to spec user stories US1–US5.
 **Independent test**: from a clean checkout on each OS, the documented command runs the layer; a missing driver yields a named error.
 
 - [X] T030 [US4] Add `just test-integration` (→ `cargo test --workspace`, integration-tagged) and `just test-e2e` (→ `pnpm --filter @astro-plan/desktop test:e2e:real`) targets to `justfile`, mirroring CI (FR-014)
-- [ ] T031 [P] [US4] Add prerequisite preflight checks (named, actionable failure when `tauri-driver`/`WebKitWebDriver`/`msedgedriver` missing) to the E2E entry path / `tauri-app.ts` (FR-015)
+- [ ] T031 [P] [US4] Add prerequisite preflight checks (named, actionable failure when `tauri-webdriver` CLI is missing, with `cargo install tauri-webdriver --locked` install hint) to the E2E entry path in `crates/e2e-tests/tests/common/mod.rs` `preflight()` (FR-015). Old per-OS driver checks (`WebKitWebDriver`/`msedgedriver`) are no longer needed (D10).
 - [ ] T032 [P] [US4] Add matching `package.json` script(s) if useful and confirm command names are consistent across `justfile`, `package.json`, and docs
 
 **Checkpoint**: Developers run either layer locally with one command on any OS.

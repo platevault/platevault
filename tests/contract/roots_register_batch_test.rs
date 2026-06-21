@@ -1,6 +1,6 @@
 use contracts_core::first_run::{
-    BatchItem, BatchStatus, ItemStatus, RegisterSourceBatchRequest, RegisterSourceBatchResponse,
-    RegisterSourceRequest, ScanDepth, SourceKind,
+    BatchItem, BatchStatus, ItemStatus, OrganizationState, RegisterSourceBatchRequest,
+    RegisterSourceBatchResponse, RegisterSourceRequest, ScanDepth, SourceKind,
 };
 use contracts_core::JsonAny;
 use serde_json::json;
@@ -15,18 +15,21 @@ fn sample_batch_request() -> RegisterSourceBatchRequest {
                 path: "/astro/raw".to_owned(),
                 kind_subtype: None,
                 scan_depth: ScanDepth::Recursive,
+                organization_state: OrganizationState::Organized,
             },
             RegisterSourceRequest {
                 kind: SourceKind::Project,
                 path: "/astro/projects".to_owned(),
                 kind_subtype: None,
                 scan_depth: ScanDepth::Recursive,
+                organization_state: OrganizationState::Organized,
             },
             RegisterSourceRequest {
                 kind: SourceKind::Calibration,
                 path: "/astro/cals".to_owned(),
                 kind_subtype: Some("calibration".to_owned()),
                 scan_depth: ScanDepth::Single,
+                organization_state: OrganizationState::Organized,
             },
         ],
     }

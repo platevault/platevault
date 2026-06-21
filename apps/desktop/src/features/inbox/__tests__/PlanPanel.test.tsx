@@ -1,0 +1,253 @@
+/// <reference types="@testing-library/jest-dom" />
+/**
+ * PlanPanel aggregate-surface tests (spec 041, #1/#2 + US7 T041).
+ *
+ * Covers:
+ * - Renders ALL open plans at once, grouped by ingestion, with the total count.
+ * - Per-group selection checkboxes + select-all/none.
+ * - Apply selected passes exactly the checked ingestion ids.
+ * - Apply all + per-group Discard callbacks fire.
+ * - Stale plans show a badge, cannot be selected, and are excluded from select-all.
+ * - Destructive control shown only when an action requires destructive confirm,
+ *   defaults to archive, and reports 'trash' (the backend-accepted value).
+ * - Empty plan list renders nothing.
+ */
+
+import { describe, it, expect, vi, beforeEach } from 'vitest';
+import { render, screen, fireEvent } from '@testing-library/react';
+
+// Per-signature spy types. `vi.fn<Fn>()` yields a callable `Mock<Fn>` that the
+// project's strict types accept as a plain function prop — unlike the bare
+// `vi.fn()` whose `Mock<Procedure | Constructable>` is not callable at the
+// type level here.
+type DestSpy = ReturnType<typeof vi.fn<(d: DestructiveDestination) => void>>;
+type ApplySelectedSpy = ReturnType<typeof vi.fn<(ids: string[]) => void>>;
+type ApplyAllSpy = ReturnType<typeof vi.fn<() => void>>;
+type CancelSpy = ReturnType<typeof vi.fn<(id: string) => void>>;
+import { PlanPanel } from '../PlanPanel';
+import type { DestructiveDestination } from '../PlanPanel';
+import type { InboxOpenPlan, InboxPlanAction } from '../store';
+
+// ── Fixtures ──────────────────────────────────────────────────────────────────
+
+function makeAction(overrides: Partial<InboxPlanAction> = {}): InboxPlanAction {
+  return {
+    index: 0,
+    action: 'move',
+    fromPath: '/root/lights/img001.fits',
+    toPath: '/dest/lights/img001.fits',
+    destinationPreview: '/dest/lights/img001.fits',
+    requiresDestructiveConfirm: false,
+    ...overrides,
+  };
+}
+
+function makePlan(overrides: Partial<InboxOpenPlan> = {}): InboxOpenPlan {
+  return {
+    inboxItemId: 'item-1',
+    itemName: '2026-06-01/NGC7000',
+    planId: 'plan-1',
+    state: 'open',
+    stale: false,
+    actions: [makeAction()],
+    ...overrides,
+  };
+}
+
+// PlanPanel's fn props accept any `Mock` (a Mock is callable), so the test
+// types its callbacks as `Mock` to sidestep the project's strict `vi.fn()`
+// inference (`Mock<Procedure | Constructable>`) that won't narrow to a
+// specific call signature.
+interface RenderOpts {
+  destructiveDestination?: DestructiveDestination;
+  onDestructiveDestinationChange?: DestSpy;
+  onApplySelected?: ApplySelectedSpy;
+  onApplyAll?: ApplyAllSpy;
+  onCancel?: CancelSpy;
+  busy?: boolean;
+}
+
+function renderPanel(
+  plans: InboxOpenPlan[],
+  {
+    destructiveDestination = 'archive',
+    onDestructiveDestinationChange = vi.fn<(d: DestructiveDestination) => void>(),
+    onApplySelected = vi.fn<(ids: string[]) => void>(),
+    onApplyAll = vi.fn<() => void>(),
+    onCancel = vi.fn<(id: string) => void>(),
+    busy = false,
+  }: RenderOpts = {},
+) {
+  const totalActions = plans.reduce((n, p) => n + p.actions.length, 0);
+  return render(
+    <PlanPanel
+      plans={plans}
+      totalActions={totalActions}
+      destructiveDestination={destructiveDestination}
+      onDestructiveDestinationChange={onDestructiveDestinationChange}
+      onApplySelected={onApplySelected}
+      onApplyAll={onApplyAll}
+      onCancel={onCancel}
+      busy={busy}
+    />,
+  );
+}
+
+// ── Tests ─────────────────────────────────────────────────────────────────────
+
+describe('PlanPanel (aggregate surface)', () => {
+  let onApplySelected: ApplySelectedSpy;
+  let onApplyAll: ApplyAllSpy;
+  let onCancel: CancelSpy;
+  let onDestructiveChange: DestSpy;
+
+  beforeEach(() => {
+    onApplySelected = vi.fn<(ids: string[]) => void>();
+    onApplyAll = vi.fn<() => void>();
+    onCancel = vi.fn<(id: string) => void>();
+    onDestructiveChange = vi.fn<(d: DestructiveDestination) => void>();
+  });
+
+  // ── Aggregate rendering ────────────────────────────────────────────────────
+
+  it('renders nothing when there are no open plans', () => {
+    const { container } = renderPanel([]);
+    expect(container.firstChild).toBeNull();
+  });
+
+  it('renders every open plan grouped by ingestion, with the total count', () => {
+    const plans = [
+      makePlan({ inboxItemId: 'a', itemName: 'Night-A', actions: [makeAction({ index: 0 })] }),
+      makePlan({
+        inboxItemId: 'b',
+        itemName: 'Night-B',
+        actions: [makeAction({ index: 0 }), makeAction({ index: 1, action: 'catalogue' })],
+      }),
+    ];
+    renderPanel(plans);
+    expect(screen.getByTestId('plan-group-a')).toBeInTheDocument();
+    expect(screen.getByTestId('plan-group-b')).toBeInTheDocument();
+    expect(screen.getByText('Night-A')).toBeInTheDocument();
+    expect(screen.getByText('Night-B')).toBeInTheDocument();
+    // 2 plans · 3 actions total.
+    expect(screen.getByTestId('plan-total-count')).toHaveTextContent('2 plans');
+    expect(screen.getByTestId('plan-total-count')).toHaveTextContent('3 actions');
+  });
+
+  it('renders the action destination preview and basename per row', () => {
+    const plans = [
+      makePlan({
+        actions: [makeAction({ fromPath: '/deep/path/ngc1234.fits', destinationPreview: '/dest/lights/ngc1234.fits' })],
+      }),
+    ];
+    renderPanel(plans);
+    expect(screen.getByText('ngc1234.fits')).toBeInTheDocument();
+    expect(screen.getByText('/dest/lights/ngc1234.fits')).toBeInTheDocument();
+  });
+
+  // ── Selection ──────────────────────────────────────────────────────────────
+
+  it('toggles a single group selection', () => {
+    const plans = [makePlan({ inboxItemId: 'a' }), makePlan({ inboxItemId: 'b', itemName: 'B' })];
+    renderPanel(plans, { onApplySelected });
+    fireEvent.click(screen.getByTestId('plan-group-check-a'));
+    fireEvent.click(screen.getByTestId('plan-apply-selected'));
+    expect(onApplySelected).toHaveBeenCalledWith(['a']);
+  });
+
+  it('select-all checks every selectable plan and Apply selected receives all ids', () => {
+    const plans = [makePlan({ inboxItemId: 'a' }), makePlan({ inboxItemId: 'b', itemName: 'B' })];
+    renderPanel(plans, { onApplySelected });
+    fireEvent.click(screen.getByTestId('plan-select-all'));
+    fireEvent.click(screen.getByTestId('plan-apply-selected'));
+    expect(onApplySelected).toHaveBeenCalledWith(['a', 'b']);
+  });
+
+  it('select-all toggles off when everything is already selected', () => {
+    const plans = [makePlan({ inboxItemId: 'a' })];
+    renderPanel(plans, { onApplySelected });
+    const selectAll = screen.getByTestId('plan-select-all') as HTMLInputElement;
+    fireEvent.click(selectAll); // select
+    fireEvent.click(selectAll); // deselect
+    const applyBtn = screen.getByTestId('plan-apply-selected') as HTMLButtonElement;
+    expect(applyBtn.disabled).toBe(true);
+  });
+
+  it('Apply selected is disabled when nothing is selected', () => {
+    renderPanel([makePlan()], { onApplySelected });
+    const btn = screen.getByTestId('plan-apply-selected') as HTMLButtonElement;
+    expect(btn.disabled).toBe(true);
+  });
+
+  // ── Apply all + Discard ────────────────────────────────────────────────────
+
+  it('calls onApplyAll when Apply all is clicked', () => {
+    renderPanel([makePlan()], { onApplyAll });
+    fireEvent.click(screen.getByTestId('plan-apply-all'));
+    expect(onApplyAll).toHaveBeenCalledOnce();
+  });
+
+  it('calls onCancel with the group id when Discard is clicked', () => {
+    renderPanel([makePlan({ inboxItemId: 'zz' })], { onCancel });
+    fireEvent.click(screen.getByTestId('plan-cancel-zz'));
+    expect(onCancel).toHaveBeenCalledWith('zz');
+  });
+
+  // ── Stale handling ─────────────────────────────────────────────────────────
+
+  it('shows a stale badge and disables selection for stale plans', () => {
+    const plans = [makePlan({ inboxItemId: 'a', stale: true })];
+    renderPanel(plans);
+    expect(screen.getByTestId('plan-stale-a')).toBeInTheDocument();
+    const check = screen.getByTestId('plan-group-check-a') as HTMLInputElement;
+    expect(check.disabled).toBe(true);
+  });
+
+  it('select-all ignores stale plans (only selectable ids are applied)', () => {
+    const plans = [
+      makePlan({ inboxItemId: 'good' }),
+      makePlan({ inboxItemId: 'stale', stale: true }),
+    ];
+    renderPanel(plans, { onApplySelected });
+    fireEvent.click(screen.getByTestId('plan-select-all'));
+    fireEvent.click(screen.getByTestId('plan-apply-selected'));
+    expect(onApplySelected).toHaveBeenCalledWith(['good']);
+  });
+
+  // ── Destructive control ────────────────────────────────────────────────────
+
+  it('does NOT show the destructive control when no action requires destructive confirm', () => {
+    renderPanel([makePlan({ actions: [makeAction({ requiresDestructiveConfirm: false })] })]);
+    expect(screen.queryByTestId('plan-destructive-archive')).toBeNull();
+  });
+
+  it('shows the destructive control + defaults to archive when destructive confirm is required', () => {
+    renderPanel(
+      [makePlan({ actions: [makeAction({ requiresDestructiveConfirm: true })] })],
+      { destructiveDestination: 'archive' },
+    );
+    const archive = screen.getByTestId('plan-destructive-archive') as HTMLInputElement;
+    const trash = screen.getByTestId('plan-destructive-trash') as HTMLInputElement;
+    expect(archive.checked).toBe(true);
+    expect(trash.checked).toBe(false);
+  });
+
+  it('reports the backend-accepted "trash" value when System Trash is chosen', () => {
+    renderPanel(
+      [makePlan({ actions: [makeAction({ requiresDestructiveConfirm: true })] })],
+      { destructiveDestination: 'archive', onDestructiveDestinationChange: onDestructiveChange },
+    );
+    fireEvent.click(screen.getByTestId('plan-destructive-trash'));
+    expect(onDestructiveChange).toHaveBeenCalledWith('trash');
+  });
+
+  // ── Busy ───────────────────────────────────────────────────────────────────
+
+  it('disables apply controls and Discard when busy', () => {
+    const plans = [makePlan({ inboxItemId: 'a' })];
+    renderPanel(plans, { busy: true });
+    // Pre-select so Apply selected would otherwise be enabled.
+    expect((screen.getByTestId('plan-apply-all') as HTMLButtonElement).disabled).toBe(true);
+    expect((screen.getByTestId('plan-cancel-a') as HTMLButtonElement).disabled).toBe(true);
+  });
+});

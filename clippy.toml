@@ -1,2 +1,7 @@
 too-many-arguments-threshold = 8
 type-complexity-threshold = 350
+# `ContractError` is the pervasive domain error type returned by hundreds of
+# functions; at ~152 bytes it exceeds clippy's 128-byte default for
+# `result_large_err`. Boxing it everywhere would harm ergonomics, so the
+# threshold is raised to accommodate the canonical error type.
+large-error-threshold = 160

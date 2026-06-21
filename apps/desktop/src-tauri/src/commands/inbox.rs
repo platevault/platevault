@@ -1,25 +1,39 @@
-//! Inbox Tauri commands (spec 005).
+//! Inbox Tauri commands (spec 005, spec 041).
 //!
-//! Provides `inbox.classify`, `inbox.confirm`, `inbox.reclassify`, and
-//! `inbox.scan.folder` wired to `app_core` use cases.
+//! Provides `inbox.classify`, `inbox.confirm`, `inbox.reclassify`,
+//! `inbox.scan.folder`, and the spec 041 plan surface commands:
+//! `inbox.plan`, `inbox.plan.apply`, `inbox.plan.apply_all`, `inbox.plan.cancel`.
 //!
 //! Legacy `inbox.scan` is retained for backward compatibility.
 
 use app_core::inbox::classify::{classify, ClassifyRequest};
 use app_core::inbox::confirm::{confirm, ConfirmRequest};
+use app_core::inbox::metadata::get_inbox_item_metadata;
 use app_core::inbox::reclassify::{reclassify, ReclassifyOverride, ReclassifyRequest};
 use app_core::inbox::scan::{scan_root, ScanOptions, ScannedMasterFile};
-use contracts_core::inbox::{
-    InboxBreakdownEntry, InboxClassifyRequest, InboxClassifyResponse, InboxConfirmRequest,
-    InboxConfirmResponse, InboxFileEntry, InboxItemSummary, InboxListItem, InboxListResponse,
-    InboxReclassifyRequest, InboxReclassifyResponse, InboxScanFolderRequest,
-    InboxScanFolderResponse, InboxScanResult,
+use app_core::inbox::stats::inbox_stats as inbox_stats_uc;
+use app_core::inbox_plan::{
+    apply_all_inbox_plans, apply_inbox_plan, apply_selected_inbox_plans, cancel_inbox_plan,
+    get_inbox_plan, list_open_inbox_plans,
 };
+use contracts_core::inbox::{
+    InboxApplyAllResponse, InboxApplySelectedRequest, InboxBreakdownEntry, InboxClassifyRequest,
+    InboxClassifyResponse, InboxConfirmRequest, InboxConfirmResponse, InboxFileEntry,
+    InboxItemMetadataRequest, InboxItemMetadataResponse, InboxItemSummary, InboxListItem,
+    InboxListResponse, InboxOpenPlansResponse, InboxPlanCancelResponse, InboxPlanView,
+    InboxReclassifyRequest, InboxReclassifyResponse, InboxScanFolderRequest,
+    InboxScanFolderResponse, InboxScanResult, InboxStatsResponse,
+};
+use contracts_core::plan_apply::PlanApplyResponse;
 use contracts_core::ContractError;
-use persistence_db::repositories::inbox::list_unacknowledged_across_roots;
+use persistence_db::repositories::inbox::{
+    grouping_keys_for_items, list_unacknowledged_across_roots,
+};
 use sqlx::SqlitePool;
 use std::path::PathBuf;
 use uuid::Uuid;
+
+use crate::commands::lifecycle::AppState;
 
 /// Cap on cross-root listing (FR-006 — no unbounded loads).
 const INBOX_LIST_LIMIT: i64 = 500;
@@ -90,11 +104,22 @@ pub async fn inbox_confirm(
 
     let resp = confirm(&pool, use_case_req).await?;
 
+    let organization_state = match resp.organization_state {
+        contracts_core::first_run::OrganizationState::Organized => "organized",
+        contracts_core::first_run::OrganizationState::Unorganized => "unorganized",
+    };
+
     Ok(InboxConfirmResponse {
         plan_id: resp.plan_id,
         plan_state: resp.plan_state,
         items_total: u32::try_from(resp.items_total).unwrap_or(u32::MAX),
         registered_as_master: resp.registered_as_master,
+        // spec 041 US4: per-source move-vs-catalogue breakdown.
+        actions_summary: Some(contracts_core::inbox::InboxConfirmActionsSummary {
+            move_count: u32::try_from(resp.move_count).unwrap_or(u32::MAX),
+            catalogue_count: u32::try_from(resp.catalogue_count).unwrap_or(u32::MAX),
+        }),
+        organization_state: Some(organization_state.to_owned()),
     })
 }
 
@@ -115,7 +140,15 @@ pub async fn inbox_reclassify(
         overrides: req
             .overrides
             .into_iter()
-            .map(|o| ReclassifyOverride { file_path: o.file_path, frame_type: o.frame_type })
+            .map(|o| ReclassifyOverride {
+                file_path: o.file_path,
+                frame_type: o.frame_type.unwrap_or_default(),
+                // spec 041 US3/T026 (R-3): carry the non-type overrides through to
+                // the use case instead of dropping them.
+                filter: o.filter,
+                exposure_s: o.exposure_s,
+                binning: o.binning,
+            })
             .collect(),
     };
 
@@ -127,7 +160,26 @@ pub async fn inbox_reclassify(
         frame_type: resp.frame_type,
         remaining_unclassified: u32::try_from(resp.remaining_unclassified).unwrap_or(u32::MAX),
         applied_count: u32::try_from(resp.applied_count).unwrap_or(u32::MAX),
+        // spec 041 — breakdown populated in phase 3+ when use case returns it
+        breakdown: vec![],
     })
+}
+
+// ── inbox.item.metadata ───────────────────────────────────────────────────────
+
+/// `inbox.item.metadata` — assemble per-file extracted metadata for an inbox
+/// item (spec 041 US2/FR-010).
+///
+/// # Errors
+/// Returns a string error if the item is missing or a query fails.
+#[tauri::command]
+#[specta::specta]
+pub async fn inbox_item_metadata(
+    req: InboxItemMetadataRequest,
+    pool: tauri::State<'_, SqlitePool>,
+) -> Result<InboxItemMetadataResponse, String> {
+    let files = get_inbox_item_metadata(&pool, &req.inbox_item_id).await.map_err(|e| e.message)?;
+    Ok(InboxItemMetadataResponse { inbox_item_id: req.inbox_item_id, files })
 }
 
 // ── inbox.scan.folder ─────────────────────────────────────────────────────────
@@ -319,22 +371,41 @@ pub async fn inbox_list(
     let total = rows.len();
     let capped = total >= usize::try_from(INBOX_LIST_LIMIT).unwrap_or(usize::MAX);
 
+    // Per-item grouping aggregates for the multi-level grouping UI (spec 041).
+    // Single GROUP BY pass over the items we're about to return — no N+1.
+    let item_ids: Vec<String> = rows.iter().map(|r| r.id.clone()).collect();
+    let mut grouping = grouping_keys_for_items(&pool, &item_ids)
+        .await
+        .map_err(|e| ContractError::internal(e.to_string()))?;
+
     let items = rows
         .into_iter()
-        .map(|r| InboxListItem {
-            inbox_item_id: r.id,
-            root_id: r.root_id,
-            root_absolute_path: r.root_path,
-            relative_path: r.relative_path,
-            file_count: u32::try_from(r.file_count).unwrap_or(u32::MAX),
-            lane: r.lane,
-            format: r.format.unwrap_or_else(|| "fits".to_owned()),
-            state: r.state,
-            content_signature: r.content_signature.unwrap_or_default(),
-            is_master: r.is_master != 0,
-            master_frame_type: r.master_frame_type,
-            master_filter: r.master_filter,
-            master_exposure_s: r.master_exposure_s,
+        .map(|r| {
+            let g = grouping.remove(&r.id).unwrap_or_default();
+            InboxListItem {
+                inbox_item_id: r.id,
+                root_id: r.root_id,
+                root_absolute_path: r.root_path,
+                relative_path: r.relative_path,
+                file_count: u32::try_from(r.file_count).unwrap_or(u32::MAX),
+                lane: r.lane,
+                format: r.format.unwrap_or_else(|| "fits".to_owned()),
+                state: r.state,
+                content_signature: r.content_signature.unwrap_or_default(),
+                is_master: r.is_master != 0,
+                master_frame_type: r.master_frame_type,
+                master_filter: r.master_filter,
+                master_exposure_s: r.master_exposure_s,
+                // spec 041 — real org-state from the owning registered source,
+                // joined in list_unacknowledged_across_roots (no N+1).
+                organization_state: r.organization_state,
+                group_target: g.group_target,
+                group_frame_type: g.group_frame_type,
+                group_date: g.group_date,
+                group_filter: g.group_filter,
+                group_exposure: g.group_exposure,
+                group_instrument: g.group_instrument,
+            }
         })
         .collect();
 
@@ -383,4 +454,126 @@ pub async fn inbox_scan(root_id: Option<String>) -> Result<InboxScanResult, Cont
         total_count: 3,
         total_size_bytes: 268_435_456,
     })
+}
+
+// ── spec 041: inbox plan surface ──────────────────────────────────────────────
+
+/// `inbox.plan` — fetch the open plan for an inbox item.
+///
+/// Returns the [`InboxPlanView`] when a plan link exists for this item, or an
+/// error with code `inbox.item.no_plan` when the item has no open plan.
+///
+/// # Errors
+/// - `inbox.item.not_found` — item does not exist.
+/// - `inbox.item.no_plan`   — item exists but has no linked plan.
+/// - `plan.not_found`       — link is present but plan row missing.
+#[tauri::command]
+#[specta::specta]
+pub async fn inbox_plan(
+    inbox_item_id: String,
+    state: tauri::State<'_, AppState>,
+) -> Result<InboxPlanView, String> {
+    get_inbox_plan(state.repo.pool(), &inbox_item_id).await.map_err(|e| e.message)
+}
+
+/// `inbox.plan.apply` — approve + apply the plan for a single inbox item.
+///
+/// The use-case auto-approves the plan (which `inbox.confirm` leaves at
+/// `ready_for_review`) before calling `apply_plan`.  The plan listener
+/// transitions the inbox item state once the executor completes.
+///
+/// # Errors
+/// Returns a string error on failure, including `plan.stale` when per-item
+/// CAS detects a file changed since the plan was created.
+#[tauri::command]
+#[specta::specta]
+pub async fn inbox_plan_apply(
+    inbox_item_id: String,
+    state: tauri::State<'_, AppState>,
+) -> Result<PlanApplyResponse, String> {
+    apply_inbox_plan(state.repo.pool(), &state.bus, &inbox_item_id).await.map_err(|e| e.message)
+}
+
+/// `inbox.plan.apply_all` — apply all plans currently in `plan_open` state.
+///
+/// Iterates items in `plan_open` state and applies each sequentially.
+/// Returns a per-item result list so the UI can report partial failures.
+///
+/// # Errors
+/// Returns a string error only if the list query itself fails; per-plan
+/// errors are captured inside `InboxApplyAllResponse.results`.
+#[tauri::command]
+#[specta::specta]
+pub async fn inbox_plan_apply_all(
+    state: tauri::State<'_, AppState>,
+) -> Result<InboxApplyAllResponse, String> {
+    apply_all_inbox_plans(state.repo.pool(), &state.bus).await.map_err(|e| e.message)
+}
+
+/// `inbox.plan.list_open` — return every open plan across all roots (spec 041, US2).
+///
+/// Aggregate surface so the UI can show every active planned action at once,
+/// each with its actions, without selecting inbox items one at a time.
+///
+/// # Errors
+/// Returns a string error only if the underlying list/plan queries fail.
+#[tauri::command]
+#[specta::specta]
+pub async fn inbox_plan_list_open(
+    state: tauri::State<'_, AppState>,
+) -> Result<InboxOpenPlansResponse, String> {
+    list_open_inbox_plans(state.repo.pool()).await.map_err(|e| e.message)
+}
+
+/// `inbox.plan.apply_selected` — apply a caller-chosen subset of inbox plans
+/// (spec 041, US2).
+///
+/// Selection is plan-level (per inbox item / ingestion group). Returns a
+/// per-item result list so the UI can report partial failures; ids that are not
+/// in `plan_open` state are reported as per-item errors rather than failing the
+/// whole call.
+///
+/// # Errors
+/// Returns a string error only if the membership query itself fails; per-plan
+/// errors are captured inside `InboxApplyAllResponse.results`.
+#[tauri::command]
+#[specta::specta]
+pub async fn inbox_plan_apply_selected(
+    request: InboxApplySelectedRequest,
+    state: tauri::State<'_, AppState>,
+) -> Result<InboxApplyAllResponse, String> {
+    apply_selected_inbox_plans(state.repo.pool(), &state.bus, &request.inbox_item_ids)
+        .await
+        .map_err(|e| e.message)
+}
+
+/// `inbox.plan.cancel` — discard the open plan and reset the item to `classified`.
+///
+/// The plan listener handles async cleanup; the use-case also eagerly resets
+/// the inbox item state so the UI can reflect the change immediately.
+///
+/// # Errors
+/// Returns a string error on database failure.
+#[tauri::command]
+#[specta::specta]
+pub async fn inbox_plan_cancel(
+    inbox_item_id: String,
+    state: tauri::State<'_, AppState>,
+) -> Result<InboxPlanCancelResponse, String> {
+    cancel_inbox_plan(state.repo.pool(), &state.bus, &inbox_item_id).await.map_err(|e| e.message)
+}
+
+/// `inbox.stats` — aggregate per-type frame counts across all active inbox items
+/// (spec 041, US6 T038).
+///
+/// Returns counts of folders, masters, and images broken down by effective frame
+/// type. The effective type is `manual_override` when set, otherwise
+/// `frame_type` from classification evidence.
+///
+/// # Errors
+/// Returns a string error on database failure.
+#[tauri::command]
+#[specta::specta]
+pub async fn inbox_stats(pool: tauri::State<'_, SqlitePool>) -> Result<InboxStatsResponse, String> {
+    inbox_stats_uc(&pool).await.map_err(|e| e.message)
 }

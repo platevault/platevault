@@ -18,10 +18,7 @@
         "hooks": [
           {
             "type": "command",
-            "command": "python3 .codex/hooks/speckit-dag-hooks/scripts/dispatcher.py .codex/hooks/speckit-dag-hooks/scripts/nodes.json",
-            "args": [
-              "pre"
-            ],
+            "command": "python3 .codex/hooks/speckit-dag-hooks/scripts/dispatcher.py .codex/hooks/speckit-dag-hooks/scripts/nodes.json pre",
             "timeout": 5
           }
         ],
@@ -43,13 +40,20 @@
         "_apm_source": "speckit"
       },
       {
+        "matcher": "apply_patch|Edit|Write|MultiEdit",
         "hooks": [
           {
             "type": "command",
-            "command": "python3 .codex/hooks/speckit-dag-hooks/scripts/dispatcher.py .codex/hooks/speckit-dag-hooks/scripts/nodes.json",
-            "args": [
-              "pre"
-            ],
+            "command": ".codex/hooks/agent-coder/scripts/coder-delegation-reminder.sh"
+          }
+        ],
+        "_apm_source": "agent-coder"
+      },
+      {
+        "hooks": [
+          {
+            "type": "command",
+            "command": "python3 .codex/hooks/speckit-dag-hooks/scripts/dispatcher.py .codex/hooks/speckit-dag-hooks/scripts/nodes.json pre",
             "timeout": 5
           }
         ],
@@ -93,10 +97,7 @@
         "hooks": [
           {
             "type": "command",
-            "command": "python3 .codex/hooks/speckit-dag-hooks/scripts/dispatcher.py .codex/hooks/speckit-dag-hooks/scripts/nodes.json",
-            "args": [
-              "post"
-            ],
+            "command": "python3 .codex/hooks/speckit-dag-hooks/scripts/dispatcher.py .codex/hooks/speckit-dag-hooks/scripts/nodes.json post",
             "timeout": 5
           }
         ],

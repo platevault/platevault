@@ -98,6 +98,8 @@ pub enum ErrorCode {
     InboxItemNotFound,
     #[serde(rename = "inbox.has.open.plan")]
     InboxHasOpenPlan,
+    #[serde(rename = "inbox.item.no_plan")]
+    InboxItemNoPlan,
 
     // ── Metadata / classification ────────────────────────────────────────────
     #[serde(rename = "metadata.unreadable")]
@@ -227,6 +229,8 @@ pub enum ErrorCode {
     SourceAlreadyLinked,
     #[serde(rename = "source.not_found")]
     SourceNotFound,
+    #[serde(rename = "source.invalid_organization_state")]
+    SourceInvalidOrganizationState,
 
     // ── Tool ────────────────────────────────────────────────────────────────
     #[serde(rename = "tool.locked")]

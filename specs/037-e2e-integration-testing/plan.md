@@ -13,27 +13,27 @@ cross-platform CI and local workflows:
   real, file-backed, per-test SQLite DB with real migrations; SIMBAD mocked only
   at the HTTP boundary. Covers every implemented feature area (D7). Runs on all 3
   OS, carries the bulk of assertions.
-- **Layer 2 — full-stack E2E** (Playwright + `tauri-driver`): complete and reuse
-  the skipped spec-033 real-backend scaffold to drive the built app's real UI →
-  real IPC → real backend for a thin set of smoke journeys, asserting a
-  UI↔backend round-trip and a real filesystem mutation + audit record. Required on
-  Linux + Windows; best-effort on macOS via an optional, debug-only WebDriver
-  plugin (D4).
+- **Layer 2 — full-stack E2E** (**thirtyfour + cargo-nextest** +
+  `tauri-plugin-webdriver`): drive the built app's real UI → real IPC → real
+  backend for a thin set of smoke journeys, asserting a UI↔backend round-trip
+  and a real filesystem mutation + audit record. Required on all 3 OS via the
+  embedded WebDriver plugin (D10 supersedes D3/D4). Journeys live in
+  `crates/e2e-tests/` (Rust, `#[ignore]` stubs today — wiring deferred per D9).
 
-CI: a new `.github/workflows/ci.yml` 3-OS matrix runs Layer 1 (required, all OS)
-before Layer 2 (required Linux+Windows, optional macOS). Local: `just` targets
-mirror CI per-layer. Documentation: the two-layer strategy and per-OS run
-instructions go into the `.apm/`-sourced standing instructions and a new
-`docs/development/testing.md`.
+CI: `ci.yml` 3-OS matrix (Layer 1, required all OS) + `e2e.yml` (Layer 2,
+thirtyfour+nextest, all 3 OS via tauri-plugin-webdriver). Local: `just` targets
+mirror CI per-layer.
+Documentation: the two-layer strategy and per-OS run instructions go into the
+`.apm/`-sourced standing instructions and `docs/development/testing.md`.
 
 No product behavior changes; no image-processing tool invocation.
 
 ## Technical Context
 
 **Language/Version**: Rust (workspace, edition per repo) + TypeScript 5 / React 19; Tauri v2.11
-**Primary Dependencies**: sqlx ^0.9 (SQLite), tokio; Playwright ^1.60 + `tauri-driver`; Vitest ^4 (existing). New dev-deps: `wiremock` (Rust, network-boundary mock), `better-sqlite3` (E2E DB assertions), `tempfile` (already present). macOS-optional: `tauri-plugin-webdriver`.
+**Primary Dependencies**: sqlx ^0.9 (SQLite), tokio; **thirtyfour ^0.37** (Rust W3C client) + `tauri-plugin-webdriver` v0.2 (dev, `e2e` feature-gated) + `tauri-webdriver` CLI (`cargo install tauri-webdriver --locked`) + **cargo-nextest** (Layer 2); Vitest ^4 (existing). New dev-deps: `wiremock` (Rust, network-boundary mock), `tempfile` (already present). WebdriverIO retired (research D10).
 **Storage**: SQLite via sqlx; migrations in `crates/persistence/db/migrations/`. Tests use per-test tempdir DBs (Layer 1) and the app's real on-disk DB (Layer 2).
-**Testing**: Layer 1 = `cargo test --workspace` (crate `tests/` dirs). Layer 2 = `pnpm test:e2e:real` (Playwright/WebDriver). Existing unit + mock-UI tests retained.
+**Testing**: Layer 1 = `cargo test --workspace` (crate `tests/` dirs). Layer 2 = `cargo nextest run -p e2e_tests --profile e2e` (thirtyfour/W3C). Existing unit + mock-UI tests retained.
 **Target Platform**: Desktop — Windows, Linux, macOS.
 **Project Type**: Tauri desktop monorepo (Rust crates + React app + language-neutral contracts).
 **Performance Goals**: Layer 1 deterministic and offline-capable (SC-006); fast-fail before Layer 2 (FR-012). No app perf targets (out of scope).
@@ -82,20 +82,31 @@ crates/<feature-crate>/tests/          # Layer 1 lives in the relevant crate's t
 # NOTE: do NOT reuse the existing repo-root `tests/integration/` dir for Layer 1 —
 # it already holds Playwright *mock-UI* specs (TypeScript). Keep Rust Layer-1
 # tests inside crate `tests/` dirs to avoid path/terminology collision.
-apps/desktop/e2e/
-├── helpers/tauri-app.ts               # reuse (033)
-├── helpers/db.ts                      # replace placeholder → better-sqlite3 reader
-├── playwright.real-backend.config.ts  # reuse (033)
-└── real-backend/*.spec.ts             # un-skip + flesh out journeys
-.github/workflows/ci.yml               # NEW — 3-OS matrix
-justfile                               # add test-integration / test-e2e targets
-docs/development/testing.md            # NEW — two-layer strategy + per-OS guide
+crates/e2e-tests/                      # Layer 2 — thirtyfour+nextest harness (ADOPTED)
+├── Cargo.toml                         # dev-dep: thirtyfour ^0.37
+├── tests/common/mod.rs                # harness: tauri-driver caps, invoke() helper
+├── tests/smoke.rs                     # #[ignore] smoke stubs
+└── tests/journeys.rs                  # #[ignore] journey stubs
+.config/nextest.toml                   # [profile.e2e] for cargo nextest
+apps/desktop/e2e/                      # legacy scaffolds
+├── README.md                          # real-backend harness docs (kept)
+├── tsconfig.json                      # Playwright real-backend tsconfig (kept)
+└── real-backend/*.spec.ts             # Playwright real-backend stubs (kept; reference)
+# NOTE: apps/desktop/e2e/wdio/ REMOVED (research D10 — WebdriverIO retired)
+.github/workflows/ci.yml               # 3-OS matrix (Layer 1, required)
+.github/workflows/e2e.yml              # Layer 2 (thirtyfour+nextest, Linux required)
+justfile                               # test-integration / test-e2e targets
+docs/development/testing.md            # two-layer strategy + per-OS guide
 .apm/instructions/ (+ regenerate CLAUDE.md/AGENTS.md), PRODUCT.md   # standing convention
 ```
 
-**Structure Decision**: Reuse the existing monorepo layout and the spec-033 E2E
-scaffold; add Layer-1 tests within existing crate `tests/` dirs to keep crates
-independently testable (per repo standard). No new crates required.
+**Structure Decision**: `crates/e2e-tests` is the adopted Layer-2 home (thirtyfour
++ nextest + tauri-plugin-webdriver). The legacy WebdriverIO scaffold
+(`apps/desktop/e2e/wdio/`) has been **deleted** (research D10). The Playwright
+real-backend stubs and harness docs remain as structural references. The
+`desktop_shell` `e2e` Cargo feature gates the embedded WebDriver plugin so release
+binaries omit it (Constitution V). Layer-1 tests live in existing crate `tests/`
+dirs to keep crates independently testable.
 
 ## Complexity Tracking
 

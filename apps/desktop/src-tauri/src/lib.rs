@@ -44,7 +44,9 @@ use crate::commands::guided::{
     guided_activate, guided_dismiss, guided_restart, guided_state_get, guided_step_complete,
 };
 use crate::commands::inbox::{
-    inbox_classify, inbox_confirm, inbox_list, inbox_reclassify, inbox_scan, inbox_scan_folder,
+    inbox_classify, inbox_confirm, inbox_item_metadata, inbox_list, inbox_plan, inbox_plan_apply,
+    inbox_plan_apply_all, inbox_plan_apply_selected, inbox_plan_cancel, inbox_plan_list_open,
+    inbox_reclassify, inbox_scan, inbox_scan_folder, inbox_stats,
 };
 use crate::commands::ingestion::{ingestion_settings_get, ingestion_settings_update};
 use crate::commands::inventory::{inventory_list, inventory_session_review};
@@ -82,6 +84,7 @@ use crate::commands::protection::{
 use crate::commands::review::review_queue;
 use crate::commands::roots::{
     equipment_list, roots_list, roots_register, roots_remap, roots_remap_apply, scan_start,
+    sources_set_organization_state,
 };
 use crate::commands::search::search_global;
 use crate::commands::sessions::{
@@ -233,6 +236,7 @@ pub fn specta_builder() -> Builder<tauri::Wry> {
         roots_remap_apply,
         scan_start,
         equipment_list,
+        sources_set_organization_state,
         // first-run wizard (spec 003)
         firstrun_state,
         firstrun_complete,
@@ -294,13 +298,21 @@ pub fn specta_builder() -> Builder<tauri::Wry> {
         // calibration tolerances (spec 030)
         calibration_tolerances_get,
         calibration_tolerances_update,
-        // inbox (spec 005 + 030 + 039)
+        // inbox (spec 005 + 030 + 039 + 041)
         inbox_scan,
         inbox_scan_folder,
         inbox_classify,
         inbox_confirm,
         inbox_reclassify,
+        inbox_item_metadata,
         inbox_list,
+        inbox_plan,
+        inbox_plan_apply,
+        inbox_plan_apply_all,
+        inbox_plan_apply_selected,
+        inbox_plan_cancel,
+        inbox_stats,
+        inbox_plan_list_open,
         // inventory (spec 006)
         inventory_list,
         inventory_session_review,
@@ -417,6 +429,7 @@ pub fn specta_builder() -> Builder<tauri::Wry> {
         roots_remap_apply,
         scan_start,
         equipment_list,
+        sources_set_organization_state,
         // first-run wizard (spec 003)
         firstrun_state,
         firstrun_complete,
@@ -478,13 +491,21 @@ pub fn specta_builder() -> Builder<tauri::Wry> {
         // calibration tolerances (spec 030)
         calibration_tolerances_get,
         calibration_tolerances_update,
-        // inbox (spec 005 + 030 + 039)
+        // inbox (spec 005 + 030 + 039 + 041)
         inbox_scan,
         inbox_scan_folder,
         inbox_classify,
         inbox_confirm,
         inbox_reclassify,
+        inbox_item_metadata,
         inbox_list,
+        inbox_plan,
+        inbox_plan_apply,
+        inbox_plan_apply_all,
+        inbox_plan_apply_selected,
+        inbox_plan_cancel,
+        inbox_stats,
+        inbox_plan_list_open,
         // inventory (spec 006)
         inventory_list,
         inventory_session_review,
@@ -531,10 +552,35 @@ pub fn specta_builder() -> Builder<tauri::Wry> {
 pub fn build_app() -> tauri::App {
     let builder = specta_builder();
 
-    tauri::Builder::default()
+    #[allow(unused_mut)]
+    let mut tb = tauri::Builder::default()
         .plugin(tauri_plugin_dialog::init())
-        .plugin(tauri_plugin_opener::init())
-        .invoke_handler(builder.invoke_handler())
+        .plugin(tauri_plugin_opener::init());
+
+    // Tauri MCP bridge plugin (@hypothesi tauri-plugin-mcp-bridge) — dev/debug
+    // builds only. Runs a WebSocket server on 0.0.0.0:9223 that the
+    // @hypothesi/tauri-mcp-server MCP server connects to, letting an agent drive
+    // the running app for automated UI testing. Requires `withGlobalTauri`, which
+    // is enabled only via the dev-only `tauri.dev.conf.json` overlay (never in the
+    // shipped config). `debug_assertions` is off in release builds, so this
+    // surface is absent from shipped binaries.
+    #[cfg(debug_assertions)]
+    {
+        tb = tb.plugin(tauri_plugin_mcp_bridge::init());
+    }
+
+    // E2E gate: embed the WebDriver server only when built with --features e2e.
+    // The embedded server listens on 127.0.0.1:4445; connect via the
+    // tauri-webdriver CLI (cargo install tauri-webdriver --locked) on :4444.
+    // Release builds MUST omit the `e2e` feature (Constitution Principle V).
+    // Complements the MCP bridge above: scripted thirtyfour+nextest gate vs.
+    // agent-interactive debugging.
+    #[cfg(feature = "e2e")]
+    {
+        tb = tb.plugin(tauri_plugin_webdriver::init());
+    }
+
+    tb.invoke_handler(builder.invoke_handler())
         .setup(move |app| {
             builder.mount_events(app);
             Ok(())

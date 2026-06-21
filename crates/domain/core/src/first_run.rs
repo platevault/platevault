@@ -45,6 +45,31 @@ pub enum SourceKind {
     Inbox,
 }
 
+/// Organization state of a registered source (spec 041, R-7).
+///
+/// `Organized` — files are already in their final location; confirm produces
+/// only `catalogue` (record-in-place) plan actions; no file moves.
+///
+/// `Unorganized` — files should be moved to pattern-resolved destinations on
+/// confirm. `Inbox` sources are always `Unorganized`.
+///
+/// Serializes as `"organized"` / `"unorganized"` (lowercase) to match the
+/// DB CHECK constraint and the IPC camelCase surface.
+#[derive(
+    Clone, Copy, Debug, Eq, Hash, Ord, PartialEq, PartialOrd, Serialize, Deserialize, Type,
+)]
+#[serde(rename_all = "lowercase")]
+pub enum OrganizationState {
+    Organized,
+    Unorganized,
+}
+
+// ── Error code constants ────────────────────────────────────────────────────
+
+/// Error code returned when `inbox` kind is registered as `organized`, or an
+/// invalid `organization_state` value is supplied.
+pub const ERR_SOURCE_INVALID_ORGANIZATION_STATE: &str = "source.invalid_organization_state";
+
 /// Scan depth strategy for a registered source.
 ///
 /// `strum` `serialize_all` mirrors the serde `rename_all` (`recursive`,
@@ -95,6 +120,10 @@ pub enum ItemStatus {
 // ── Request/Response types ──────────────────────────────────────────────────
 
 /// Request payload for `roots.register`.
+///
+/// `organization_state` is required for non-inbox sources (the UI forces an
+/// explicit choice). For `inbox` kind the value MUST be `unorganized`;
+/// supplying `organized` returns `source.invalid_organization_state`.
 #[derive(Clone, Debug, Serialize, Deserialize, Type)]
 #[serde(rename_all = "camelCase")]
 pub struct RegisterSourceRequest {
@@ -103,6 +132,9 @@ pub struct RegisterSourceRequest {
     #[serde(skip_serializing_if = "Option::is_none")]
     pub kind_subtype: Option<String>,
     pub scan_depth: ScanDepth,
+    /// Organization state for this source (spec 041 R-7).
+    /// Inbox sources MUST be `unorganized`; non-inbox sources must be explicit.
+    pub organization_state: OrganizationState,
 }
 
 /// Response payload for `roots.register`.
@@ -113,6 +145,8 @@ pub struct RegisterSourceResponse {
     pub kind: SourceKind,
     pub path: String,
     pub created_at: String,
+    /// Organization state persisted for this source (spec 041 R-7).
+    pub organization_state: OrganizationState,
 }
 
 /// Request payload for `roots.register.batch`.
@@ -143,6 +177,53 @@ pub struct BatchItem {
     #[serde(skip_serializing_if = "Option::is_none")]
     pub error_detail: Option<JsonAny>,
 }
+
+// ── sources.set_organization_state (spec 041) ────────────────────────────────
+
+/// Request payload for `sources.set_organization_state`.
+///
+/// Changes a source's organization state after registration. Affects only
+/// future confirms; does not move already-planned files.
+#[derive(Clone, Debug, Serialize, Deserialize, Type)]
+#[serde(rename_all = "camelCase")]
+pub struct SetSourceOrganizationStateRequest {
+    pub source_id: String,
+    pub organization_state: OrganizationState,
+}
+
+/// Response payload for `sources.set_organization_state`.
+#[derive(Clone, Debug, Serialize, Deserialize, Type)]
+#[serde(rename_all = "camelCase")]
+pub struct SetSourceOrganizationStateResponse {
+    pub source_id: String,
+    pub organization_state: OrganizationState,
+}
+
+// ── Source summary (sources.list) ─────────────────────────────────────────────
+
+/// One source entry returned by `sources.list`.
+///
+/// Extends the registration response with `organization_state` so the UI can
+/// show move-vs-catalogue intent per source (spec 041).
+#[derive(Clone, Debug, Serialize, Deserialize, Type)]
+#[serde(rename_all = "camelCase")]
+pub struct SourceSummary {
+    pub source_id: String,
+    pub kind: SourceKind,
+    pub path: String,
+    pub created_at: String,
+    /// Organization state for this source (spec 041 R-7).
+    pub organization_state: OrganizationState,
+}
+
+/// Response payload for `sources.list`.
+#[derive(Clone, Debug, Serialize, Deserialize, Type)]
+#[serde(rename_all = "camelCase")]
+pub struct SourceListResponse {
+    pub sources: Vec<SourceSummary>,
+}
+
+// ── firstrun.complete ─────────────────────────────────────────────────────────
 
 /// Response payload for `firstrun.complete`.
 #[derive(Clone, Debug, Serialize, Deserialize, Type)]
@@ -199,27 +280,58 @@ mod tests {
     }
 
     #[test]
+    fn organization_state_serializes_lowercase() {
+        assert_eq!(serde_json::to_value(OrganizationState::Organized).unwrap(), json!("organized"));
+        assert_eq!(
+            serde_json::to_value(OrganizationState::Unorganized).unwrap(),
+            json!("unorganized")
+        );
+    }
+
+    #[test]
     fn register_source_request_camel_case() {
         let req = RegisterSourceRequest {
             kind: SourceKind::LightFrames,
             path: "/astro/lights".to_owned(),
             kind_subtype: None,
             scan_depth: ScanDepth::Recursive,
+            organization_state: OrganizationState::Organized,
         };
         let value = serde_json::to_value(req).unwrap();
         assert_eq!(value["scanDepth"], json!("recursive"));
         assert_eq!(value["kind"], json!("light_frames"));
+        assert_eq!(value["organizationState"], json!("organized"));
         assert!(value.get("kindSubtype").is_none()); // skip_serializing_if
 
-        // Calibration kind serializes as "calibration"
-        let cal_req = RegisterSourceRequest {
-            kind: SourceKind::Calibration,
-            path: "/astro/cals".to_owned(),
+        // Inbox kind with unorganized
+        let inbox_req = RegisterSourceRequest {
+            kind: SourceKind::Inbox,
+            path: "/astro/inbox".to_owned(),
             kind_subtype: None,
             scan_depth: ScanDepth::Recursive,
+            organization_state: OrganizationState::Unorganized,
         };
-        let cal_value = serde_json::to_value(cal_req).unwrap();
-        assert_eq!(cal_value["kind"], json!("calibration"));
+        let inbox_value = serde_json::to_value(inbox_req).unwrap();
+        assert_eq!(inbox_value["kind"], json!("inbox"));
+        assert_eq!(inbox_value["organizationState"], json!("unorganized"));
+    }
+
+    #[test]
+    fn set_source_organization_state_round_trips() {
+        let req = SetSourceOrganizationStateRequest {
+            source_id: "src-1".to_owned(),
+            organization_state: OrganizationState::Organized,
+        };
+        let value = serde_json::to_value(&req).unwrap();
+        assert_eq!(value["sourceId"], json!("src-1"));
+        assert_eq!(value["organizationState"], json!("organized"));
+
+        let resp = SetSourceOrganizationStateResponse {
+            source_id: "src-1".to_owned(),
+            organization_state: OrganizationState::Organized,
+        };
+        let resp_value = serde_json::to_value(resp).unwrap();
+        assert_eq!(resp_value["organizationState"], json!("organized"));
     }
 
     #[test]

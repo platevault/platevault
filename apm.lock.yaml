@@ -1,264 +1,744 @@
 lockfile_version: '1'
-generated_at: '2026-05-24T10:34:36.006149+00:00'
-apm_version: 0.12.4
+generated_at: '2026-06-20T15:23:41.943010+00:00'
+apm_version: 0.19.0
 dependencies:
 - repo_url: Dammyjay93/interface-design
   host: github.com
-  resolved_commit: 8c407c1c42890010a9eb403a9f419b1eeadcfdad
+  resolved_commit: 2f9be3206855bcb2d1d0af262c8bae25cba6658d
   resolved_ref: main
   virtual_path: .claude/skills/interface-design
   is_virtual: true
   package_type: claude_skill
   deployed_files:
   - .agents/skills/interface-design
+  - .agents/skills/interface-design/SKILL.md
+  - .agents/skills/interface-design/agents/openai.yaml
   - .claude/skills/interface-design
-  content_hash: sha256:772b6a163adc602f526f7abb0ee4e8d9e37fd1ec1821e5ec91d844617b91fc6e
+  - .claude/skills/interface-design/SKILL.md
+  - .claude/skills/interface-design/agents/openai.yaml
+  deployed_file_hashes:
+    .agents/skills/interface-design/SKILL.md: sha256:720b31a31276e899fbe3006a33cbfeaceb77a73ba4c27b80d29afd38c8b7b208
+    .agents/skills/interface-design/agents/openai.yaml: sha256:752d0810d593b5cc88b34ea8e0c101b50d0ec1c4c8091be369544f73f3a2ea2e
+    .claude/skills/interface-design/SKILL.md: sha256:720b31a31276e899fbe3006a33cbfeaceb77a73ba4c27b80d29afd38c8b7b208
+    .claude/skills/interface-design/agents/openai.yaml: sha256:752d0810d593b5cc88b34ea8e0c101b50d0ec1c4c8091be369544f73f3a2ea2e
+  content_hash: sha256:a7d0a55b705de0a7c1a33a23873b6d696619d195c432f8775325cf839398c936
 - repo_url: google-labs-code/stitch-skills
   host: github.com
-  resolved_commit: 21db6cdf511678a5d55d188f8c6b152f57b59f27
+  resolved_commit: fac732417e1b05525686fb78141a517b05f5d57e
   resolved_ref: main
   virtual_path: plugins/stitch-design
   is_virtual: true
   package_type: marketplace_plugin
   deployed_files:
   - .agents/skills/code-to-design
+  - .agents/skills/code-to-design/SKILL.md
   - .agents/skills/extract-design-md
+  - .agents/skills/extract-design-md/SKILL.md
+  - .agents/skills/extract-design-md/examples/DESIGN.md
+  - .agents/skills/extract-design-md/references/angular.md
+  - .agents/skills/extract-design-md/references/plain-css.md
+  - .agents/skills/extract-design-md/references/react-tailwind.md
+  - .agents/skills/extract-design-md/references/svelte.md
+  - .agents/skills/extract-design-md/references/vue.md
   - .agents/skills/extract-static-html
+  - .agents/skills/extract-static-html/SKILL.md
+  - .agents/skills/extract-static-html/scripts/extract_inline_html.ts
+  - .agents/skills/extract-static-html/scripts/post_process.ts
+  - .agents/skills/extract-static-html/scripts/snapshot.ts
   - .agents/skills/generate-design
+  - .agents/skills/generate-design/SKILL.md
+  - .agents/skills/generate-design/examples/enhanced-prompt.md
+  - .agents/skills/generate-design/references/design-mappings.md
+  - .agents/skills/generate-design/references/prompt-keywords.md
   - .agents/skills/manage-design-system
+  - .agents/skills/manage-design-system/SKILL.md
+  - .agents/skills/manage-design-system/examples/metadata.json
+  - .agents/skills/manage-design-system/reference/tool-schema.md
   - .agents/skills/upload-to-stitch
+  - .agents/skills/upload-to-stitch/SKILL.md
+  - .agents/skills/upload-to-stitch/scripts/upload_to_stitch.py
   - .claude/skills/code-to-design
+  - .claude/skills/code-to-design/SKILL.md
   - .claude/skills/extract-design-md
+  - .claude/skills/extract-design-md/SKILL.md
+  - .claude/skills/extract-design-md/examples/DESIGN.md
+  - .claude/skills/extract-design-md/references/angular.md
+  - .claude/skills/extract-design-md/references/plain-css.md
+  - .claude/skills/extract-design-md/references/react-tailwind.md
+  - .claude/skills/extract-design-md/references/svelte.md
+  - .claude/skills/extract-design-md/references/vue.md
   - .claude/skills/extract-static-html
+  - .claude/skills/extract-static-html/SKILL.md
+  - .claude/skills/extract-static-html/scripts/extract_inline_html.ts
+  - .claude/skills/extract-static-html/scripts/post_process.ts
+  - .claude/skills/extract-static-html/scripts/snapshot.ts
   - .claude/skills/generate-design
+  - .claude/skills/generate-design/SKILL.md
+  - .claude/skills/generate-design/examples/enhanced-prompt.md
+  - .claude/skills/generate-design/references/design-mappings.md
+  - .claude/skills/generate-design/references/prompt-keywords.md
   - .claude/skills/manage-design-system
+  - .claude/skills/manage-design-system/SKILL.md
+  - .claude/skills/manage-design-system/examples/metadata.json
+  - .claude/skills/manage-design-system/reference/tool-schema.md
   - .claude/skills/upload-to-stitch
-  content_hash: sha256:0b24f2cd31848b1b0c0e169d0edb5ce43576be7d5472c27831f8fd3b1b4f50a8
+  - .claude/skills/upload-to-stitch/SKILL.md
+  - .claude/skills/upload-to-stitch/scripts/upload_to_stitch.py
+  deployed_file_hashes:
+    .agents/skills/code-to-design/SKILL.md: sha256:6ae42f077eef54870466b1b7ff3065067450a8f833837c35bd9e420f7aa6f5b8
+    .agents/skills/extract-design-md/SKILL.md: sha256:f9c32b30acd9fea3dba7306bf38e3a859f49c1f27bcf44f9cf16d3a60a730276
+    .agents/skills/extract-design-md/examples/DESIGN.md: sha256:9a14478effd073d9fefc1f0e1084aab299078603d248406f1381462cd5a01c26
+    .agents/skills/extract-design-md/references/angular.md: sha256:4611bf5a4592e8b4b2390635b8371ed07c0852e99d9adbafac8878f4d9e019d1
+    .agents/skills/extract-design-md/references/plain-css.md: sha256:a4e7a8efa8d8d7b33a214a4b146263bb029ba4ead478305436e7bb7ebeace80a
+    .agents/skills/extract-design-md/references/react-tailwind.md: sha256:9b48abffd0240e7721edaa1526674699fbaaab5838efb5fac0276b7e5efc8e15
+    .agents/skills/extract-design-md/references/svelte.md: sha256:f17530d1f2274ef5a8764355c979c992fe5c64a88a03270b69f43099fc117b9b
+    .agents/skills/extract-design-md/references/vue.md: sha256:df8f4d1e166e4cca4d01a60f28a1ecf35ce45787669a79008ea0cad1ec709f9f
+    .agents/skills/extract-static-html/SKILL.md: sha256:116a8c1307b291ead1e045c4128a9e0c96e3cef60bd25a9ab80326c5b01dd731
+    .agents/skills/extract-static-html/scripts/extract_inline_html.ts: sha256:491378e7be6a70b0549e8b5bf286cef4107761ad2f5b21e8eccb231073b1e0b0
+    .agents/skills/extract-static-html/scripts/post_process.ts: sha256:e1587e4658fde350d72e57a97d316bc5fe373f718a80dc5afa329752acbafe6e
+    .agents/skills/extract-static-html/scripts/snapshot.ts: sha256:89dd8bb2fec7b1b7cc89d1b312cc8ba66dcb18142692aabd5a191ad31068cad7
+    .agents/skills/generate-design/SKILL.md: sha256:d03d2de3a0cefbde2ca7b8cdc2c96e8164a8b9400fe3a9b97a3aa6ce37ee638d
+    .agents/skills/generate-design/examples/enhanced-prompt.md: sha256:8ca345151e70d6067bd460fc63fcbd455d60cc87f066e7c70160e3f277f857f5
+    .agents/skills/generate-design/references/design-mappings.md: sha256:add62a31b8507d7ce22f345f0104725962f0c62a484d4ff975821cefb28ad10b
+    .agents/skills/generate-design/references/prompt-keywords.md: sha256:8ca5c0cf251a6801d0bdccf5cf59271be172f7c2fd83b298c54d9b3ceb498fdf
+    .agents/skills/manage-design-system/SKILL.md: sha256:5ce0b8adb5261e8a926fc0942d679cda0421ac29e8159a6ee38e5d940bc9658e
+    .agents/skills/manage-design-system/examples/metadata.json: sha256:4d93c7d897caa26a3b0f26e7b0312017555b2d8beb997c4edd1a3f6e478e8c90
+    .agents/skills/manage-design-system/reference/tool-schema.md: sha256:b0d4f0d80127c3f576ddb3412543e7f99dcd08c3e88c9712987c3c7359c613f0
+    .agents/skills/upload-to-stitch/SKILL.md: sha256:4def3c16e1e33be7518504dc16ea1a1ff8c90e533c1cbdb4ec399889cd54dff6
+    .agents/skills/upload-to-stitch/scripts/upload_to_stitch.py: sha256:8a1313edc967b0edf37074184f43252ccccbf9353f02a7f51f9e8950f96a086a
+    .claude/skills/code-to-design/SKILL.md: sha256:6ae42f077eef54870466b1b7ff3065067450a8f833837c35bd9e420f7aa6f5b8
+    .claude/skills/extract-design-md/SKILL.md: sha256:f9c32b30acd9fea3dba7306bf38e3a859f49c1f27bcf44f9cf16d3a60a730276
+    .claude/skills/extract-design-md/examples/DESIGN.md: sha256:9a14478effd073d9fefc1f0e1084aab299078603d248406f1381462cd5a01c26
+    .claude/skills/extract-design-md/references/angular.md: sha256:4611bf5a4592e8b4b2390635b8371ed07c0852e99d9adbafac8878f4d9e019d1
+    .claude/skills/extract-design-md/references/plain-css.md: sha256:a4e7a8efa8d8d7b33a214a4b146263bb029ba4ead478305436e7bb7ebeace80a
+    .claude/skills/extract-design-md/references/react-tailwind.md: sha256:9b48abffd0240e7721edaa1526674699fbaaab5838efb5fac0276b7e5efc8e15
+    .claude/skills/extract-design-md/references/svelte.md: sha256:f17530d1f2274ef5a8764355c979c992fe5c64a88a03270b69f43099fc117b9b
+    .claude/skills/extract-design-md/references/vue.md: sha256:df8f4d1e166e4cca4d01a60f28a1ecf35ce45787669a79008ea0cad1ec709f9f
+    .claude/skills/extract-static-html/SKILL.md: sha256:116a8c1307b291ead1e045c4128a9e0c96e3cef60bd25a9ab80326c5b01dd731
+    .claude/skills/extract-static-html/scripts/extract_inline_html.ts: sha256:491378e7be6a70b0549e8b5bf286cef4107761ad2f5b21e8eccb231073b1e0b0
+    .claude/skills/extract-static-html/scripts/post_process.ts: sha256:e1587e4658fde350d72e57a97d316bc5fe373f718a80dc5afa329752acbafe6e
+    .claude/skills/extract-static-html/scripts/snapshot.ts: sha256:89dd8bb2fec7b1b7cc89d1b312cc8ba66dcb18142692aabd5a191ad31068cad7
+    .claude/skills/generate-design/SKILL.md: sha256:d03d2de3a0cefbde2ca7b8cdc2c96e8164a8b9400fe3a9b97a3aa6ce37ee638d
+    .claude/skills/generate-design/examples/enhanced-prompt.md: sha256:8ca345151e70d6067bd460fc63fcbd455d60cc87f066e7c70160e3f277f857f5
+    .claude/skills/generate-design/references/design-mappings.md: sha256:add62a31b8507d7ce22f345f0104725962f0c62a484d4ff975821cefb28ad10b
+    .claude/skills/generate-design/references/prompt-keywords.md: sha256:8ca5c0cf251a6801d0bdccf5cf59271be172f7c2fd83b298c54d9b3ceb498fdf
+    .claude/skills/manage-design-system/SKILL.md: sha256:5ce0b8adb5261e8a926fc0942d679cda0421ac29e8159a6ee38e5d940bc9658e
+    .claude/skills/manage-design-system/examples/metadata.json: sha256:4d93c7d897caa26a3b0f26e7b0312017555b2d8beb997c4edd1a3f6e478e8c90
+    .claude/skills/manage-design-system/reference/tool-schema.md: sha256:b0d4f0d80127c3f576ddb3412543e7f99dcd08c3e88c9712987c3c7359c613f0
+    .claude/skills/upload-to-stitch/SKILL.md: sha256:4def3c16e1e33be7518504dc16ea1a1ff8c90e533c1cbdb4ec399889cd54dff6
+    .claude/skills/upload-to-stitch/scripts/upload_to_stitch.py: sha256:8a1313edc967b0edf37074184f43252ccccbf9353f02a7f51f9e8950f96a086a
+  content_hash: sha256:f9e72b68b4a6e2ecfa636d95a7079b8080ab9ea5d7ccca3d1abf96ddf3d1b90d
 - repo_url: mattpocock/skills
   host: github.com
-  resolved_commit: b8be62ffacb0118fa3eaa29a0923c87c8c11985c
-  resolved_ref: main
-  virtual_path: skills/engineering/diagnose
-  is_virtual: true
-  package_type: claude_skill
-  deployed_files:
-  - .agents/skills/diagnose
-  - .claude/skills/diagnose
-  content_hash: sha256:eacaa3d6c8bfcf4c051fc1c12cb5c43f3549ccb1d447aa8b263abdc5b1eaceb5
-- repo_url: mattpocock/skills
-  host: github.com
-  resolved_commit: b8be62ffacb0118fa3eaa29a0923c87c8c11985c
+  resolved_commit: 6eeb81b5fcfeeb5bd531dd47ab2f9f2bbea27461
   resolved_ref: main
   virtual_path: skills/engineering/grill-with-docs
   is_virtual: true
   package_type: claude_skill
   deployed_files:
   - .agents/skills/grill-with-docs
+  - .agents/skills/grill-with-docs/SKILL.md
   - .claude/skills/grill-with-docs
-  content_hash: sha256:a5c65e76275008b469962f7bee8b34866f1c9b0709f4886e71c8e731735640e4
+  - .claude/skills/grill-with-docs/SKILL.md
+  deployed_file_hashes:
+    .agents/skills/grill-with-docs/SKILL.md: sha256:610d091047bcfb9db0f75c057d15538481a721111579fc5ec7f83ad9131a2165
+    .claude/skills/grill-with-docs/SKILL.md: sha256:610d091047bcfb9db0f75c057d15538481a721111579fc5ec7f83ad9131a2165
+  content_hash: sha256:e7ef25bbee50cda2eb7b3a8ef541db0a0396dad7d369f7d14fb610671dd1864b
 - repo_url: mattpocock/skills
   host: github.com
-  resolved_commit: b8be62ffacb0118fa3eaa29a0923c87c8c11985c
+  resolved_commit: 6eeb81b5fcfeeb5bd531dd47ab2f9f2bbea27461
   resolved_ref: main
   virtual_path: skills/productivity/grill-me
   is_virtual: true
   package_type: claude_skill
   deployed_files:
   - .agents/skills/grill-me
+  - .agents/skills/grill-me/SKILL.md
   - .claude/skills/grill-me
-  content_hash: sha256:784f0dbb7403b0f00324bce9a112f715342777a0daee7bbb7385f9c6f0a170ea
+  - .claude/skills/grill-me/SKILL.md
+  deployed_file_hashes:
+    .agents/skills/grill-me/SKILL.md: sha256:6189dfceb7304a6e5558f75d87e68fa3bc7fcf7ba120e44f21f8a61fe01eba54
+    .claude/skills/grill-me/SKILL.md: sha256:6189dfceb7304a6e5558f75d87e68fa3bc7fcf7ba120e44f21f8a61fe01eba54
+  content_hash: sha256:f321507f77702a54af1db66549ec1685fc625390d06c57d7949cdcda8eb1b5c7
 - repo_url: pbakaus/impeccable
   host: github.com
-  resolved_commit: 84135db0e6bdd58d22828f7bc8331cae7bde3e7f
+  resolved_commit: 68a15b6be45b8080e0b8eea98069e8555c0b3b25
   resolved_ref: main
   virtual_path: .agents/skills/impeccable
   is_virtual: true
   package_type: claude_skill
   deployed_files:
   - .agents/skills/impeccable
+  - .agents/skills/impeccable/SKILL.md
+  - .agents/skills/impeccable/agents/impeccable_asset_producer.toml
+  - .agents/skills/impeccable/agents/impeccable_manual_edit_applier.toml
+  - .agents/skills/impeccable/agents/openai.yaml
+  - .agents/skills/impeccable/reference/adapt.md
+  - .agents/skills/impeccable/reference/animate.md
+  - .agents/skills/impeccable/reference/audit.md
+  - .agents/skills/impeccable/reference/bolder.md
+  - .agents/skills/impeccable/reference/brand.md
+  - .agents/skills/impeccable/reference/clarify.md
+  - .agents/skills/impeccable/reference/codex.md
+  - .agents/skills/impeccable/reference/colorize.md
+  - .agents/skills/impeccable/reference/craft.md
+  - .agents/skills/impeccable/reference/critique.md
+  - .agents/skills/impeccable/reference/delight.md
+  - .agents/skills/impeccable/reference/distill.md
+  - .agents/skills/impeccable/reference/document.md
+  - .agents/skills/impeccable/reference/extract.md
+  - .agents/skills/impeccable/reference/harden.md
+  - .agents/skills/impeccable/reference/hooks.md
+  - .agents/skills/impeccable/reference/init.md
+  - .agents/skills/impeccable/reference/interaction-design.md
+  - .agents/skills/impeccable/reference/layout.md
+  - .agents/skills/impeccable/reference/live.md
+  - .agents/skills/impeccable/reference/onboard.md
+  - .agents/skills/impeccable/reference/optimize.md
+  - .agents/skills/impeccable/reference/overdrive.md
+  - .agents/skills/impeccable/reference/polish.md
+  - .agents/skills/impeccable/reference/product.md
+  - .agents/skills/impeccable/reference/quieter.md
+  - .agents/skills/impeccable/reference/shape.md
+  - .agents/skills/impeccable/reference/typeset.md
+  - .agents/skills/impeccable/scripts/command-metadata.json
+  - .agents/skills/impeccable/scripts/context-signals.mjs
+  - .agents/skills/impeccable/scripts/context.mjs
+  - .agents/skills/impeccable/scripts/critique-storage.mjs
+  - .agents/skills/impeccable/scripts/detect-csp.mjs
+  - .agents/skills/impeccable/scripts/detect.mjs
+  - .agents/skills/impeccable/scripts/detector/browser/injected/index.mjs
+  - .agents/skills/impeccable/scripts/detector/cli/main.mjs
+  - .agents/skills/impeccable/scripts/detector/design-system.mjs
+  - .agents/skills/impeccable/scripts/detector/detect-antipatterns-browser.js
+  - .agents/skills/impeccable/scripts/detector/detect-antipatterns.mjs
+  - .agents/skills/impeccable/scripts/detector/engines/browser/detect-url.mjs
+  - .agents/skills/impeccable/scripts/detector/engines/regex/detect-text.mjs
+  - .agents/skills/impeccable/scripts/detector/engines/static-html/css-cascade.mjs
+  - .agents/skills/impeccable/scripts/detector/engines/static-html/detect-html.mjs
+  - .agents/skills/impeccable/scripts/detector/engines/visual/screenshot-contrast.mjs
+  - .agents/skills/impeccable/scripts/detector/findings.mjs
+  - .agents/skills/impeccable/scripts/detector/node/file-system.mjs
+  - .agents/skills/impeccable/scripts/detector/profile/profiler.mjs
+  - .agents/skills/impeccable/scripts/detector/registry/antipatterns.mjs
+  - .agents/skills/impeccable/scripts/detector/rules/checks.mjs
+  - .agents/skills/impeccable/scripts/detector/shared/color.mjs
+  - .agents/skills/impeccable/scripts/detector/shared/constants.mjs
+  - .agents/skills/impeccable/scripts/detector/shared/page.mjs
+  - .agents/skills/impeccable/scripts/hook-admin.mjs
+  - .agents/skills/impeccable/scripts/hook-before-edit.mjs
+  - .agents/skills/impeccable/scripts/hook-lib.mjs
+  - .agents/skills/impeccable/scripts/hook.mjs
+  - .agents/skills/impeccable/scripts/lib/design-parser.mjs
+  - .agents/skills/impeccable/scripts/lib/impeccable-config.mjs
+  - .agents/skills/impeccable/scripts/lib/impeccable-paths.mjs
+  - .agents/skills/impeccable/scripts/lib/is-generated.mjs
+  - .agents/skills/impeccable/scripts/lib/target-args.mjs
+  - .agents/skills/impeccable/scripts/live-accept.mjs
+  - .agents/skills/impeccable/scripts/live-browser-dom.js
+  - .agents/skills/impeccable/scripts/live-browser-session.js
+  - .agents/skills/impeccable/scripts/live-browser.js
+  - .agents/skills/impeccable/scripts/live-commit-manual-edits.mjs
+  - .agents/skills/impeccable/scripts/live-complete.mjs
+  - .agents/skills/impeccable/scripts/live-copy-edit-agent.mjs
+  - .agents/skills/impeccable/scripts/live-discard-manual-edits.mjs
+  - .agents/skills/impeccable/scripts/live-inject.mjs
+  - .agents/skills/impeccable/scripts/live-insert.mjs
+  - .agents/skills/impeccable/scripts/live-manual-edit-evidence.mjs
+  - .agents/skills/impeccable/scripts/live-poll.mjs
+  - .agents/skills/impeccable/scripts/live-resume.mjs
+  - .agents/skills/impeccable/scripts/live-server.mjs
+  - .agents/skills/impeccable/scripts/live-status.mjs
+  - .agents/skills/impeccable/scripts/live-target.mjs
+  - .agents/skills/impeccable/scripts/live-wrap.mjs
+  - .agents/skills/impeccable/scripts/live.mjs
+  - .agents/skills/impeccable/scripts/live/browser-script-parts.mjs
+  - .agents/skills/impeccable/scripts/live/completion.mjs
+  - .agents/skills/impeccable/scripts/live/event-validation.mjs
+  - .agents/skills/impeccable/scripts/live/insert-ui.mjs
+  - .agents/skills/impeccable/scripts/live/manual-apply.mjs
+  - .agents/skills/impeccable/scripts/live/manual-edit-routes.mjs
+  - .agents/skills/impeccable/scripts/live/manual-edits-buffer.mjs
+  - .agents/skills/impeccable/scripts/live/session-store.mjs
+  - .agents/skills/impeccable/scripts/live/svelte-component.mjs
+  - .agents/skills/impeccable/scripts/live/sveltekit-adapter.mjs
+  - .agents/skills/impeccable/scripts/live/ui-core.mjs
+  - .agents/skills/impeccable/scripts/live/vocabulary.mjs
+  - .agents/skills/impeccable/scripts/modern-screenshot.umd.js
+  - .agents/skills/impeccable/scripts/palette.mjs
+  - .agents/skills/impeccable/scripts/pin.mjs
   - .claude/skills/impeccable
-  content_hash: sha256:376459dca7ed65ed3dbfe77eedff4aa64883776f8446b4c097044c74269147c3
+  - .claude/skills/impeccable/SKILL.md
+  - .claude/skills/impeccable/agents/impeccable_asset_producer.toml
+  - .claude/skills/impeccable/agents/impeccable_manual_edit_applier.toml
+  - .claude/skills/impeccable/agents/openai.yaml
+  - .claude/skills/impeccable/reference/adapt.md
+  - .claude/skills/impeccable/reference/animate.md
+  - .claude/skills/impeccable/reference/audit.md
+  - .claude/skills/impeccable/reference/bolder.md
+  - .claude/skills/impeccable/reference/brand.md
+  - .claude/skills/impeccable/reference/clarify.md
+  - .claude/skills/impeccable/reference/codex.md
+  - .claude/skills/impeccable/reference/colorize.md
+  - .claude/skills/impeccable/reference/craft.md
+  - .claude/skills/impeccable/reference/critique.md
+  - .claude/skills/impeccable/reference/delight.md
+  - .claude/skills/impeccable/reference/distill.md
+  - .claude/skills/impeccable/reference/document.md
+  - .claude/skills/impeccable/reference/extract.md
+  - .claude/skills/impeccable/reference/harden.md
+  - .claude/skills/impeccable/reference/hooks.md
+  - .claude/skills/impeccable/reference/init.md
+  - .claude/skills/impeccable/reference/interaction-design.md
+  - .claude/skills/impeccable/reference/layout.md
+  - .claude/skills/impeccable/reference/live.md
+  - .claude/skills/impeccable/reference/onboard.md
+  - .claude/skills/impeccable/reference/optimize.md
+  - .claude/skills/impeccable/reference/overdrive.md
+  - .claude/skills/impeccable/reference/polish.md
+  - .claude/skills/impeccable/reference/product.md
+  - .claude/skills/impeccable/reference/quieter.md
+  - .claude/skills/impeccable/reference/shape.md
+  - .claude/skills/impeccable/reference/typeset.md
+  - .claude/skills/impeccable/scripts/command-metadata.json
+  - .claude/skills/impeccable/scripts/context-signals.mjs
+  - .claude/skills/impeccable/scripts/context.mjs
+  - .claude/skills/impeccable/scripts/critique-storage.mjs
+  - .claude/skills/impeccable/scripts/detect-csp.mjs
+  - .claude/skills/impeccable/scripts/detect.mjs
+  - .claude/skills/impeccable/scripts/detector/browser/injected/index.mjs
+  - .claude/skills/impeccable/scripts/detector/cli/main.mjs
+  - .claude/skills/impeccable/scripts/detector/design-system.mjs
+  - .claude/skills/impeccable/scripts/detector/detect-antipatterns-browser.js
+  - .claude/skills/impeccable/scripts/detector/detect-antipatterns.mjs
+  - .claude/skills/impeccable/scripts/detector/engines/browser/detect-url.mjs
+  - .claude/skills/impeccable/scripts/detector/engines/regex/detect-text.mjs
+  - .claude/skills/impeccable/scripts/detector/engines/static-html/css-cascade.mjs
+  - .claude/skills/impeccable/scripts/detector/engines/static-html/detect-html.mjs
+  - .claude/skills/impeccable/scripts/detector/engines/visual/screenshot-contrast.mjs
+  - .claude/skills/impeccable/scripts/detector/findings.mjs
+  - .claude/skills/impeccable/scripts/detector/node/file-system.mjs
+  - .claude/skills/impeccable/scripts/detector/profile/profiler.mjs
+  - .claude/skills/impeccable/scripts/detector/registry/antipatterns.mjs
+  - .claude/skills/impeccable/scripts/detector/rules/checks.mjs
+  - .claude/skills/impeccable/scripts/detector/shared/color.mjs
+  - .claude/skills/impeccable/scripts/detector/shared/constants.mjs
+  - .claude/skills/impeccable/scripts/detector/shared/page.mjs
+  - .claude/skills/impeccable/scripts/hook-admin.mjs
+  - .claude/skills/impeccable/scripts/hook-before-edit.mjs
+  - .claude/skills/impeccable/scripts/hook-lib.mjs
+  - .claude/skills/impeccable/scripts/hook.mjs
+  - .claude/skills/impeccable/scripts/lib/design-parser.mjs
+  - .claude/skills/impeccable/scripts/lib/impeccable-config.mjs
+  - .claude/skills/impeccable/scripts/lib/impeccable-paths.mjs
+  - .claude/skills/impeccable/scripts/lib/is-generated.mjs
+  - .claude/skills/impeccable/scripts/lib/target-args.mjs
+  - .claude/skills/impeccable/scripts/live-accept.mjs
+  - .claude/skills/impeccable/scripts/live-browser-dom.js
+  - .claude/skills/impeccable/scripts/live-browser-session.js
+  - .claude/skills/impeccable/scripts/live-browser.js
+  - .claude/skills/impeccable/scripts/live-commit-manual-edits.mjs
+  - .claude/skills/impeccable/scripts/live-complete.mjs
+  - .claude/skills/impeccable/scripts/live-copy-edit-agent.mjs
+  - .claude/skills/impeccable/scripts/live-discard-manual-edits.mjs
+  - .claude/skills/impeccable/scripts/live-inject.mjs
+  - .claude/skills/impeccable/scripts/live-insert.mjs
+  - .claude/skills/impeccable/scripts/live-manual-edit-evidence.mjs
+  - .claude/skills/impeccable/scripts/live-poll.mjs
+  - .claude/skills/impeccable/scripts/live-resume.mjs
+  - .claude/skills/impeccable/scripts/live-server.mjs
+  - .claude/skills/impeccable/scripts/live-status.mjs
+  - .claude/skills/impeccable/scripts/live-target.mjs
+  - .claude/skills/impeccable/scripts/live-wrap.mjs
+  - .claude/skills/impeccable/scripts/live.mjs
+  - .claude/skills/impeccable/scripts/live/browser-script-parts.mjs
+  - .claude/skills/impeccable/scripts/live/completion.mjs
+  - .claude/skills/impeccable/scripts/live/event-validation.mjs
+  - .claude/skills/impeccable/scripts/live/insert-ui.mjs
+  - .claude/skills/impeccable/scripts/live/manual-apply.mjs
+  - .claude/skills/impeccable/scripts/live/manual-edit-routes.mjs
+  - .claude/skills/impeccable/scripts/live/manual-edits-buffer.mjs
+  - .claude/skills/impeccable/scripts/live/session-store.mjs
+  - .claude/skills/impeccable/scripts/live/svelte-component.mjs
+  - .claude/skills/impeccable/scripts/live/sveltekit-adapter.mjs
+  - .claude/skills/impeccable/scripts/live/ui-core.mjs
+  - .claude/skills/impeccable/scripts/live/vocabulary.mjs
+  - .claude/skills/impeccable/scripts/modern-screenshot.umd.js
+  - .claude/skills/impeccable/scripts/palette.mjs
+  - .claude/skills/impeccable/scripts/pin.mjs
+  deployed_file_hashes:
+    .agents/skills/impeccable/SKILL.md: sha256:9e68a3ee325aa9617f8b99cbfb0b614302d2322e5e5065400cf72c1dc5fe1bbc
+    .agents/skills/impeccable/agents/impeccable_asset_producer.toml: sha256:8f6749b5cf72920cd52718c72a399c0672539e9d48da95c799d7f270c634261b
+    .agents/skills/impeccable/agents/impeccable_manual_edit_applier.toml: sha256:b7ca38e2f7822a6a13f32fd735011aefaccc5eeaf4f993850f0076ff30128657
+    .agents/skills/impeccable/agents/openai.yaml: sha256:cbd8bd68fa00935dd0f179adb169252629cf7ee443ea9dc7db77e7ef2cf77446
+    .agents/skills/impeccable/reference/adapt.md: sha256:0f4294e7a937375ac04d3adeb179357717a33d309ca04e5c1bfce1074df201b1
+    .agents/skills/impeccable/reference/animate.md: sha256:06f57663c8851b290ed00421045d79ad9b9bb8fe12f84b9f4611965cc4012d83
+    .agents/skills/impeccable/reference/audit.md: sha256:aa22eebebe7e1c7ac8f34594151f77d486c700c1a877e9e0e99b754e66460175
+    .agents/skills/impeccable/reference/bolder.md: sha256:439a27ed355cd53827f4cca61eb6ce8341dcd0e3bb41e5472a1745d819d4f68c
+    .agents/skills/impeccable/reference/brand.md: sha256:d39208029aa2b519d27907edb6dfa8bc94be2f058d6faa79e6032704b0b8a662
+    .agents/skills/impeccable/reference/clarify.md: sha256:691e30b3b00cd415a80d60ade8eb6d624e816abfad0fdb6dc6a43c62303c0461
+    .agents/skills/impeccable/reference/codex.md: sha256:915d6c88b84d81acd2cc467ce5aff5f4c93a45078d0b7d752f9f154d494b7c84
+    .agents/skills/impeccable/reference/colorize.md: sha256:9212cb8f1d72a9742133a48771c1c20215b5d24e442f563f2a744c38668f135e
+    .agents/skills/impeccable/reference/craft.md: sha256:76a1956dd1dd402048fce715103be1ddeebc4634d8d31de5ba4ba19fd7759b6a
+    .agents/skills/impeccable/reference/critique.md: sha256:9af4fc615c7d0c16cb983cf6fa822e7b2230231aa255bd817efe873dafef3ac3
+    .agents/skills/impeccable/reference/delight.md: sha256:9136195aa64ef934dda9c57d858368768139c51bc6901911e900529a4883a9a4
+    .agents/skills/impeccable/reference/distill.md: sha256:14e45d26cc64a8c6794de0cb2c2e23fcad4850cbd0ef075d848184f101fb6c52
+    .agents/skills/impeccable/reference/document.md: sha256:7e00b2883ab1f5b6e902bf0acc8fc2ec96c66ada426b64b7d6d01fff24190b9d
+    .agents/skills/impeccable/reference/extract.md: sha256:527fad000a1ac24a81e9da4b28f29ee055a442425f001301b8c3e9c161c43bea
+    .agents/skills/impeccable/reference/harden.md: sha256:ab2ad8ab75c4755ce4a31b2c830a67fb81a01d6bb7b7075d0aa45338f88b5b40
+    .agents/skills/impeccable/reference/hooks.md: sha256:0028cd58b314780554cf8e0a829234dc8ccc581470d03415ac0e8e4c5e9fa850
+    .agents/skills/impeccable/reference/init.md: sha256:11d8fb70c525e02eda6333c5e55ee855e898c4992722c4cc4f066f7e1b3b25ef
+    .agents/skills/impeccable/reference/interaction-design.md: sha256:ca0b4a91bd380095b6a53c66f524f53efe741e536938af65f9cc184075e83ed3
+    .agents/skills/impeccable/reference/layout.md: sha256:488cd4c41f139a7d82a43c128b1c5b8f4d912baacce18d2644de3544def3c426
+    .agents/skills/impeccable/reference/live.md: sha256:6e2afff57357a92b205573a6ae7d7917320ec4bbedaf204f4d337b4614d017b1
+    .agents/skills/impeccable/reference/onboard.md: sha256:ef2dde00030580ed2765cbf7be9b2ea4a6f64cb915b804fd6f6abcf38051c7b9
+    .agents/skills/impeccable/reference/optimize.md: sha256:9f7f2c5ef63d06b5d6597e88f98cbdf1de841c7b2027763bf5725523860ab3b7
+    .agents/skills/impeccable/reference/overdrive.md: sha256:7ae6fef3e53dd3b4564d730a0fd243d45903ca1944945cb1a4e8f08b9353fb67
+    .agents/skills/impeccable/reference/polish.md: sha256:727673406646bb97ad7904d67ed63a18e155f2c0b7bb665ba6a5b093913508f6
+    .agents/skills/impeccable/reference/product.md: sha256:9ea8cc99ec208f4c1addc66369980ec6ee2a0ae7732aa8f14672aeed3418b6aa
+    .agents/skills/impeccable/reference/quieter.md: sha256:89be275103e671e788789d029587ded0f4987a15addfcc8d5bffd8f5db2b1226
+    .agents/skills/impeccable/reference/shape.md: sha256:7d1f0183d5dab72f8d52499ccb557209de0f57b46b509345edd76adb2a3fcd99
+    .agents/skills/impeccable/reference/typeset.md: sha256:992b99c3b32ac0083a8441ee3852995b4e05d4d77eb62f538270c2447e81a96b
+    .agents/skills/impeccable/scripts/command-metadata.json: sha256:759cc4028134797401d8050aa97c111bfc5ece9db1caba92df24e01ff7ba743d
+    .agents/skills/impeccable/scripts/context-signals.mjs: sha256:7846ab9d3f71171b041bd9090b34136686589d53ff87bdc91313f3cee1702ff9
+    .agents/skills/impeccable/scripts/context.mjs: sha256:d3a9254e5375e09b2ee12724dd9d5738d9b311b638ad2bce01563737d7eadcba
+    .agents/skills/impeccable/scripts/critique-storage.mjs: sha256:0ae2c767ee8e5d7820c3a2a5bc96aeb3721d25fafda54b72e419af9e1775444a
+    .agents/skills/impeccable/scripts/detect-csp.mjs: sha256:2d80520bef13cb93107699714bc0d2be5a2787a9aa079ecec91b94508a8125a4
+    .agents/skills/impeccable/scripts/detect.mjs: sha256:f5dfd05ca1e314acd8ed79c6301a20a1b844f2eb6691bd63e04116a8e7efb187
+    .agents/skills/impeccable/scripts/detector/browser/injected/index.mjs: sha256:4c0fb5155e1eeef365e0c526b9c80ab250392f9fb68156b3acaaba5b1e974a19
+    .agents/skills/impeccable/scripts/detector/cli/main.mjs: sha256:51c215ef29d3115a6344698c6bcef116f5c51286280368ad2247b5cda7e93a4f
+    .agents/skills/impeccable/scripts/detector/design-system.mjs: sha256:6339cb3e13c7d203badc051af5e4deb820f8aaabde82636fc0140521e5534193
+    .agents/skills/impeccable/scripts/detector/detect-antipatterns-browser.js: sha256:3249824c3202202b4f7b40852d7550c1f81b1c758106e2b706148019a4f3df2c
+    .agents/skills/impeccable/scripts/detector/detect-antipatterns.mjs: sha256:f5240e4162b270efafd099b81d315309a6f25a83a887aedf02bf9bcf3ed5c724
+    .agents/skills/impeccable/scripts/detector/engines/browser/detect-url.mjs: sha256:7ef2274debad8467e9dec97261b1ad2581f221b308c1b4b3fcc501a551080088
+    .agents/skills/impeccable/scripts/detector/engines/regex/detect-text.mjs: sha256:ac01440626516273700660854bf81ce821f38db39805605a060ea002ef0452ca
+    .agents/skills/impeccable/scripts/detector/engines/static-html/css-cascade.mjs: sha256:919a55f7f73771e8911ae842f729d700b82c3bd8c991f45900bab5a245b0525f
+    .agents/skills/impeccable/scripts/detector/engines/static-html/detect-html.mjs: sha256:9300374fd28abbef34c9d5acafdfe886eba12546d0ec24462cd391b1f7500fe2
+    .agents/skills/impeccable/scripts/detector/engines/visual/screenshot-contrast.mjs: sha256:b4520b3f001079bd175bf20d46c5197b1b8ec5fb98fdf72c50a24c0b6598ee99
+    .agents/skills/impeccable/scripts/detector/findings.mjs: sha256:555330225cda4da2221e000c2d06abcbbd03c2c0246a5b066b5c81f8057ccce6
+    .agents/skills/impeccable/scripts/detector/node/file-system.mjs: sha256:4004ac034bd6c09419558608b1185271e4ceb741e8edb3b06082af122ac14697
+    .agents/skills/impeccable/scripts/detector/profile/profiler.mjs: sha256:5e201f3557360bd368a3977fecf925f376fd95f8a4dd6c4cc63fbd62848cda43
+    .agents/skills/impeccable/scripts/detector/registry/antipatterns.mjs: sha256:414a9b31f49f92068a4a2e82b596cad2771451bf8c6f77c01568839bdfc9a746
+    .agents/skills/impeccable/scripts/detector/rules/checks.mjs: sha256:e6a60371f4b0d2bebb83602293662cf32827d9476e159df9ab51014a04066c1b
+    .agents/skills/impeccable/scripts/detector/shared/color.mjs: sha256:01a68231413473f2c1183e12663ccf8aca26a87d067de75fbf3c21e73b751a83
+    .agents/skills/impeccable/scripts/detector/shared/constants.mjs: sha256:2e61e0815e7216fe74ce89eccfff2761bb72268964d804ee89987119130e4edd
+    .agents/skills/impeccable/scripts/detector/shared/page.mjs: sha256:b4cef5548d84fa90d15e6b42b20be9ef74ed05e4e6e46076ec5acc61b343315c
+    .agents/skills/impeccable/scripts/hook-admin.mjs: sha256:3e785f72aaf013abca377668e503f6c8af73a4ad07f1a2e44c6115045b759cdc
+    .agents/skills/impeccable/scripts/hook-before-edit.mjs: sha256:c68a4931638586b87de5ab8528d52821628cba38dcd7d4f0f988dcdf56a9a86b
+    .agents/skills/impeccable/scripts/hook-lib.mjs: sha256:e38411accece0ebdbb98fafcb228241087c9108dc4cbde3dacb20bbf5fd90288
+    .agents/skills/impeccable/scripts/hook.mjs: sha256:6ffed896c9c1e3a8ec9ca0e102f858e34d93f15d6442e35e6eae90908892577c
+    .agents/skills/impeccable/scripts/lib/design-parser.mjs: sha256:096747b1225f0b78f6fe155477324c592f4fc38021b7007177e70b2dc55df588
+    .agents/skills/impeccable/scripts/lib/impeccable-config.mjs: sha256:b8da16081a158d2aa6e86ff4fa74028977ee73e6559eda13e6a068b60123c7cb
+    .agents/skills/impeccable/scripts/lib/impeccable-paths.mjs: sha256:e8a8fb45408e92e08bdc6cbc5e94c53b42166f7dd468ffeab98b1808dfa09362
+    .agents/skills/impeccable/scripts/lib/is-generated.mjs: sha256:ed5b0b00e99ed385db541c7a068cb85f72456a4b6aa7a5460037d24b58bd90cd
+    .agents/skills/impeccable/scripts/lib/target-args.mjs: sha256:8f8b902d9ec7dbad0431226bb8aea935cd67d68878d19d95a605be0585056f31
+    .agents/skills/impeccable/scripts/live-accept.mjs: sha256:37045f83f8f2efa7e4d2bb240ac1d50dbf9003a2be0fb0d35801db95ab75eead
+    .agents/skills/impeccable/scripts/live-browser-dom.js: sha256:bcfa4022e741f8034b841aed76b9ea3f6a64a8e08e4dfa43ba99f8be65a73393
+    .agents/skills/impeccable/scripts/live-browser-session.js: sha256:dddcb8b941f7460aa6a134f7d456b1820747172c12e01de36dab3265b1065cff
+    .agents/skills/impeccable/scripts/live-browser.js: sha256:5e1472c0bb51013536d8ec90ab6df2787ff7ada693942baac5df833fef799c49
+    .agents/skills/impeccable/scripts/live-commit-manual-edits.mjs: sha256:042a016d610edca5293696d40799e7469aa6e968f09dd44cff33ce6d15532642
+    .agents/skills/impeccable/scripts/live-complete.mjs: sha256:76e5053c7d912d9368b858a9132e6796546871ec8a25bc3dcce5718018026877
+    .agents/skills/impeccable/scripts/live-copy-edit-agent.mjs: sha256:d8ec18a339675d252edf878cdfdb96cffb35ece471ec9008a792a302eb529db3
+    .agents/skills/impeccable/scripts/live-discard-manual-edits.mjs: sha256:fa967fe27e442dd6c9b467713dd4a05c5d2189af03ad76b98bae9f6642cda545
+    .agents/skills/impeccable/scripts/live-inject.mjs: sha256:1e083a34a80afac9c26b4c33003b8947d2f383352fd688547cb1a2cccfd56046
+    .agents/skills/impeccable/scripts/live-insert.mjs: sha256:f18fd72ac73c56634c317b783487193d7578ff848d42c9eb428a0aa6dd2c81c6
+    .agents/skills/impeccable/scripts/live-manual-edit-evidence.mjs: sha256:3a5959277f0bd86c9c166d08cab5c0eb4bcb40d306cb9dc3e54dc693a2eb6d82
+    .agents/skills/impeccable/scripts/live-poll.mjs: sha256:836f88f1a8b25f32ac9559e5fc65dfefa045f78d696351e4335634318b1f8960
+    .agents/skills/impeccable/scripts/live-resume.mjs: sha256:5f7f88fb6cbcdd5dcf210ace22225dbbe43afee4cf9c7c0e1d8b5b3a1f4b79a2
+    .agents/skills/impeccable/scripts/live-server.mjs: sha256:c6afe0db2009e5da2251d3f94e1ed995ac446404a597ea95b714d73b9b1e478e
+    .agents/skills/impeccable/scripts/live-status.mjs: sha256:d9186410a2c9671f59396bd315d2f7434f5c35379917c39763a6eb28d76261a8
+    .agents/skills/impeccable/scripts/live-target.mjs: sha256:7f18323b89167804c2d9005d4766b159c81268c9f21daab9fdec24f513f25eb0
+    .agents/skills/impeccable/scripts/live-wrap.mjs: sha256:48dd1ff1700aa373b48ab287c5dab6de0a482f4a8c6626edd23700ca44ca2589
+    .agents/skills/impeccable/scripts/live.mjs: sha256:243c8213e097e6ee2f32cf02a90cf33a5338d9800244bcdbbdc7134e8767e046
+    .agents/skills/impeccable/scripts/live/browser-script-parts.mjs: sha256:10c31c3ed0f53c73efdd5fcd8a6203e1d85d244cef0b9f4dcf0f3c5df5c3d677
+    .agents/skills/impeccable/scripts/live/completion.mjs: sha256:471b99f7904deb068ceb915906d628ed1bd6b86fb92e2151142ab321ea545117
+    .agents/skills/impeccable/scripts/live/event-validation.mjs: sha256:c0ee57b8306f8b1f31b00961017c849b7f352887bd8c889981805e14b8d2e63c
+    .agents/skills/impeccable/scripts/live/insert-ui.mjs: sha256:c86839fc9be98eadc0ff6afaa6ab010a7539e9af77e8deeba898cb93f7f311f4
+    .agents/skills/impeccable/scripts/live/manual-apply.mjs: sha256:c0e7fc5c3d4a7d6e1d6a8e6f85cbe005e5dc01d77b16fd0735605f287c4c8b66
+    .agents/skills/impeccable/scripts/live/manual-edit-routes.mjs: sha256:5517c40db7c91a5b24b134f79cb0f87c90e307b2f7831b1de670d60e529557c0
+    .agents/skills/impeccable/scripts/live/manual-edits-buffer.mjs: sha256:bbd1aba1b9bc891cba771ee8b891d344542119967ae4666e7147da59de5485fd
+    .agents/skills/impeccable/scripts/live/session-store.mjs: sha256:ad775959c72a04826db970d413943bc9d48ff3d5a21a5cd98e5602ea05ba6dc2
+    .agents/skills/impeccable/scripts/live/svelte-component.mjs: sha256:f3bbda2a05790c82e511e9c316b758b5449dba1e7d34d6a6b29707c7c9da1de2
+    .agents/skills/impeccable/scripts/live/sveltekit-adapter.mjs: sha256:67fa80a699b0aebce62afb682f90ea8b6725d39e4e2f8a244ebe35bc14d76558
+    .agents/skills/impeccable/scripts/live/ui-core.mjs: sha256:e8e56f72c17556ee5e20d89818563a868b54bb933341bb0d4ff56db2aadef28b
+    .agents/skills/impeccable/scripts/live/vocabulary.mjs: sha256:0a2c5278382906b3b459f268ed40f7b04bc607f88df9133f6d681e94929d2858
+    .agents/skills/impeccable/scripts/modern-screenshot.umd.js: sha256:bb36665889124a0b6e15f16045265737449c3bdcf2712cdb08af3cfa01563e2b
+    .agents/skills/impeccable/scripts/palette.mjs: sha256:6e43ef19ede979019ebf86175fed0d6876473ddc1cf6c40c8b310e7ac4c5f45a
+    .agents/skills/impeccable/scripts/pin.mjs: sha256:c3b92fee8ed03e54978fd97da43125dc3b2cb89db92ad6ae82ff7dcb6ba20914
+    .claude/skills/impeccable/SKILL.md: sha256:9e68a3ee325aa9617f8b99cbfb0b614302d2322e5e5065400cf72c1dc5fe1bbc
+    .claude/skills/impeccable/agents/impeccable_asset_producer.toml: sha256:8f6749b5cf72920cd52718c72a399c0672539e9d48da95c799d7f270c634261b
+    .claude/skills/impeccable/agents/impeccable_manual_edit_applier.toml: sha256:b7ca38e2f7822a6a13f32fd735011aefaccc5eeaf4f993850f0076ff30128657
+    .claude/skills/impeccable/agents/openai.yaml: sha256:cbd8bd68fa00935dd0f179adb169252629cf7ee443ea9dc7db77e7ef2cf77446
+    .claude/skills/impeccable/reference/adapt.md: sha256:0f4294e7a937375ac04d3adeb179357717a33d309ca04e5c1bfce1074df201b1
+    .claude/skills/impeccable/reference/animate.md: sha256:06f57663c8851b290ed00421045d79ad9b9bb8fe12f84b9f4611965cc4012d83
+    .claude/skills/impeccable/reference/audit.md: sha256:aa22eebebe7e1c7ac8f34594151f77d486c700c1a877e9e0e99b754e66460175
+    .claude/skills/impeccable/reference/bolder.md: sha256:439a27ed355cd53827f4cca61eb6ce8341dcd0e3bb41e5472a1745d819d4f68c
+    .claude/skills/impeccable/reference/brand.md: sha256:d39208029aa2b519d27907edb6dfa8bc94be2f058d6faa79e6032704b0b8a662
+    .claude/skills/impeccable/reference/clarify.md: sha256:691e30b3b00cd415a80d60ade8eb6d624e816abfad0fdb6dc6a43c62303c0461
+    .claude/skills/impeccable/reference/codex.md: sha256:915d6c88b84d81acd2cc467ce5aff5f4c93a45078d0b7d752f9f154d494b7c84
+    .claude/skills/impeccable/reference/colorize.md: sha256:9212cb8f1d72a9742133a48771c1c20215b5d24e442f563f2a744c38668f135e
+    .claude/skills/impeccable/reference/craft.md: sha256:76a1956dd1dd402048fce715103be1ddeebc4634d8d31de5ba4ba19fd7759b6a
+    .claude/skills/impeccable/reference/critique.md: sha256:9af4fc615c7d0c16cb983cf6fa822e7b2230231aa255bd817efe873dafef3ac3
+    .claude/skills/impeccable/reference/delight.md: sha256:9136195aa64ef934dda9c57d858368768139c51bc6901911e900529a4883a9a4
+    .claude/skills/impeccable/reference/distill.md: sha256:14e45d26cc64a8c6794de0cb2c2e23fcad4850cbd0ef075d848184f101fb6c52
+    .claude/skills/impeccable/reference/document.md: sha256:7e00b2883ab1f5b6e902bf0acc8fc2ec96c66ada426b64b7d6d01fff24190b9d
+    .claude/skills/impeccable/reference/extract.md: sha256:527fad000a1ac24a81e9da4b28f29ee055a442425f001301b8c3e9c161c43bea
+    .claude/skills/impeccable/reference/harden.md: sha256:ab2ad8ab75c4755ce4a31b2c830a67fb81a01d6bb7b7075d0aa45338f88b5b40
+    .claude/skills/impeccable/reference/hooks.md: sha256:0028cd58b314780554cf8e0a829234dc8ccc581470d03415ac0e8e4c5e9fa850
+    .claude/skills/impeccable/reference/init.md: sha256:11d8fb70c525e02eda6333c5e55ee855e898c4992722c4cc4f066f7e1b3b25ef
+    .claude/skills/impeccable/reference/interaction-design.md: sha256:ca0b4a91bd380095b6a53c66f524f53efe741e536938af65f9cc184075e83ed3
+    .claude/skills/impeccable/reference/layout.md: sha256:488cd4c41f139a7d82a43c128b1c5b8f4d912baacce18d2644de3544def3c426
+    .claude/skills/impeccable/reference/live.md: sha256:6e2afff57357a92b205573a6ae7d7917320ec4bbedaf204f4d337b4614d017b1
+    .claude/skills/impeccable/reference/onboard.md: sha256:ef2dde00030580ed2765cbf7be9b2ea4a6f64cb915b804fd6f6abcf38051c7b9
+    .claude/skills/impeccable/reference/optimize.md: sha256:9f7f2c5ef63d06b5d6597e88f98cbdf1de841c7b2027763bf5725523860ab3b7
+    .claude/skills/impeccable/reference/overdrive.md: sha256:7ae6fef3e53dd3b4564d730a0fd243d45903ca1944945cb1a4e8f08b9353fb67
+    .claude/skills/impeccable/reference/polish.md: sha256:727673406646bb97ad7904d67ed63a18e155f2c0b7bb665ba6a5b093913508f6
+    .claude/skills/impeccable/reference/product.md: sha256:9ea8cc99ec208f4c1addc66369980ec6ee2a0ae7732aa8f14672aeed3418b6aa
+    .claude/skills/impeccable/reference/quieter.md: sha256:89be275103e671e788789d029587ded0f4987a15addfcc8d5bffd8f5db2b1226
+    .claude/skills/impeccable/reference/shape.md: sha256:7d1f0183d5dab72f8d52499ccb557209de0f57b46b509345edd76adb2a3fcd99
+    .claude/skills/impeccable/reference/typeset.md: sha256:992b99c3b32ac0083a8441ee3852995b4e05d4d77eb62f538270c2447e81a96b
+    .claude/skills/impeccable/scripts/command-metadata.json: sha256:759cc4028134797401d8050aa97c111bfc5ece9db1caba92df24e01ff7ba743d
+    .claude/skills/impeccable/scripts/context-signals.mjs: sha256:7846ab9d3f71171b041bd9090b34136686589d53ff87bdc91313f3cee1702ff9
+    .claude/skills/impeccable/scripts/context.mjs: sha256:d3a9254e5375e09b2ee12724dd9d5738d9b311b638ad2bce01563737d7eadcba
+    .claude/skills/impeccable/scripts/critique-storage.mjs: sha256:0ae2c767ee8e5d7820c3a2a5bc96aeb3721d25fafda54b72e419af9e1775444a
+    .claude/skills/impeccable/scripts/detect-csp.mjs: sha256:2d80520bef13cb93107699714bc0d2be5a2787a9aa079ecec91b94508a8125a4
+    .claude/skills/impeccable/scripts/detect.mjs: sha256:f5dfd05ca1e314acd8ed79c6301a20a1b844f2eb6691bd63e04116a8e7efb187
+    .claude/skills/impeccable/scripts/detector/browser/injected/index.mjs: sha256:4c0fb5155e1eeef365e0c526b9c80ab250392f9fb68156b3acaaba5b1e974a19
+    .claude/skills/impeccable/scripts/detector/cli/main.mjs: sha256:51c215ef29d3115a6344698c6bcef116f5c51286280368ad2247b5cda7e93a4f
+    .claude/skills/impeccable/scripts/detector/design-system.mjs: sha256:6339cb3e13c7d203badc051af5e4deb820f8aaabde82636fc0140521e5534193
+    .claude/skills/impeccable/scripts/detector/detect-antipatterns-browser.js: sha256:3249824c3202202b4f7b40852d7550c1f81b1c758106e2b706148019a4f3df2c
+    .claude/skills/impeccable/scripts/detector/detect-antipatterns.mjs: sha256:f5240e4162b270efafd099b81d315309a6f25a83a887aedf02bf9bcf3ed5c724
+    .claude/skills/impeccable/scripts/detector/engines/browser/detect-url.mjs: sha256:7ef2274debad8467e9dec97261b1ad2581f221b308c1b4b3fcc501a551080088
+    .claude/skills/impeccable/scripts/detector/engines/regex/detect-text.mjs: sha256:ac01440626516273700660854bf81ce821f38db39805605a060ea002ef0452ca
+    .claude/skills/impeccable/scripts/detector/engines/static-html/css-cascade.mjs: sha256:919a55f7f73771e8911ae842f729d700b82c3bd8c991f45900bab5a245b0525f
+    .claude/skills/impeccable/scripts/detector/engines/static-html/detect-html.mjs: sha256:9300374fd28abbef34c9d5acafdfe886eba12546d0ec24462cd391b1f7500fe2
+    .claude/skills/impeccable/scripts/detector/engines/visual/screenshot-contrast.mjs: sha256:b4520b3f001079bd175bf20d46c5197b1b8ec5fb98fdf72c50a24c0b6598ee99
+    .claude/skills/impeccable/scripts/detector/findings.mjs: sha256:555330225cda4da2221e000c2d06abcbbd03c2c0246a5b066b5c81f8057ccce6
+    .claude/skills/impeccable/scripts/detector/node/file-system.mjs: sha256:4004ac034bd6c09419558608b1185271e4ceb741e8edb3b06082af122ac14697
+    .claude/skills/impeccable/scripts/detector/profile/profiler.mjs: sha256:5e201f3557360bd368a3977fecf925f376fd95f8a4dd6c4cc63fbd62848cda43
+    .claude/skills/impeccable/scripts/detector/registry/antipatterns.mjs: sha256:414a9b31f49f92068a4a2e82b596cad2771451bf8c6f77c01568839bdfc9a746
+    .claude/skills/impeccable/scripts/detector/rules/checks.mjs: sha256:e6a60371f4b0d2bebb83602293662cf32827d9476e159df9ab51014a04066c1b
+    .claude/skills/impeccable/scripts/detector/shared/color.mjs: sha256:01a68231413473f2c1183e12663ccf8aca26a87d067de75fbf3c21e73b751a83
+    .claude/skills/impeccable/scripts/detector/shared/constants.mjs: sha256:2e61e0815e7216fe74ce89eccfff2761bb72268964d804ee89987119130e4edd
+    .claude/skills/impeccable/scripts/detector/shared/page.mjs: sha256:b4cef5548d84fa90d15e6b42b20be9ef74ed05e4e6e46076ec5acc61b343315c
+    .claude/skills/impeccable/scripts/hook-admin.mjs: sha256:3e785f72aaf013abca377668e503f6c8af73a4ad07f1a2e44c6115045b759cdc
+    .claude/skills/impeccable/scripts/hook-before-edit.mjs: sha256:c68a4931638586b87de5ab8528d52821628cba38dcd7d4f0f988dcdf56a9a86b
+    .claude/skills/impeccable/scripts/hook-lib.mjs: sha256:e38411accece0ebdbb98fafcb228241087c9108dc4cbde3dacb20bbf5fd90288
+    .claude/skills/impeccable/scripts/hook.mjs: sha256:6ffed896c9c1e3a8ec9ca0e102f858e34d93f15d6442e35e6eae90908892577c
+    .claude/skills/impeccable/scripts/lib/design-parser.mjs: sha256:096747b1225f0b78f6fe155477324c592f4fc38021b7007177e70b2dc55df588
+    .claude/skills/impeccable/scripts/lib/impeccable-config.mjs: sha256:b8da16081a158d2aa6e86ff4fa74028977ee73e6559eda13e6a068b60123c7cb
+    .claude/skills/impeccable/scripts/lib/impeccable-paths.mjs: sha256:e8a8fb45408e92e08bdc6cbc5e94c53b42166f7dd468ffeab98b1808dfa09362
+    .claude/skills/impeccable/scripts/lib/is-generated.mjs: sha256:ed5b0b00e99ed385db541c7a068cb85f72456a4b6aa7a5460037d24b58bd90cd
+    .claude/skills/impeccable/scripts/lib/target-args.mjs: sha256:8f8b902d9ec7dbad0431226bb8aea935cd67d68878d19d95a605be0585056f31
+    .claude/skills/impeccable/scripts/live-accept.mjs: sha256:37045f83f8f2efa7e4d2bb240ac1d50dbf9003a2be0fb0d35801db95ab75eead
+    .claude/skills/impeccable/scripts/live-browser-dom.js: sha256:bcfa4022e741f8034b841aed76b9ea3f6a64a8e08e4dfa43ba99f8be65a73393
+    .claude/skills/impeccable/scripts/live-browser-session.js: sha256:dddcb8b941f7460aa6a134f7d456b1820747172c12e01de36dab3265b1065cff
+    .claude/skills/impeccable/scripts/live-browser.js: sha256:5e1472c0bb51013536d8ec90ab6df2787ff7ada693942baac5df833fef799c49
+    .claude/skills/impeccable/scripts/live-commit-manual-edits.mjs: sha256:042a016d610edca5293696d40799e7469aa6e968f09dd44cff33ce6d15532642
+    .claude/skills/impeccable/scripts/live-complete.mjs: sha256:76e5053c7d912d9368b858a9132e6796546871ec8a25bc3dcce5718018026877
+    .claude/skills/impeccable/scripts/live-copy-edit-agent.mjs: sha256:d8ec18a339675d252edf878cdfdb96cffb35ece471ec9008a792a302eb529db3
+    .claude/skills/impeccable/scripts/live-discard-manual-edits.mjs: sha256:fa967fe27e442dd6c9b467713dd4a05c5d2189af03ad76b98bae9f6642cda545
+    .claude/skills/impeccable/scripts/live-inject.mjs: sha256:1e083a34a80afac9c26b4c33003b8947d2f383352fd688547cb1a2cccfd56046
+    .claude/skills/impeccable/scripts/live-insert.mjs: sha256:f18fd72ac73c56634c317b783487193d7578ff848d42c9eb428a0aa6dd2c81c6
+    .claude/skills/impeccable/scripts/live-manual-edit-evidence.mjs: sha256:3a5959277f0bd86c9c166d08cab5c0eb4bcb40d306cb9dc3e54dc693a2eb6d82
+    .claude/skills/impeccable/scripts/live-poll.mjs: sha256:836f88f1a8b25f32ac9559e5fc65dfefa045f78d696351e4335634318b1f8960
+    .claude/skills/impeccable/scripts/live-resume.mjs: sha256:5f7f88fb6cbcdd5dcf210ace22225dbbe43afee4cf9c7c0e1d8b5b3a1f4b79a2
+    .claude/skills/impeccable/scripts/live-server.mjs: sha256:c6afe0db2009e5da2251d3f94e1ed995ac446404a597ea95b714d73b9b1e478e
+    .claude/skills/impeccable/scripts/live-status.mjs: sha256:d9186410a2c9671f59396bd315d2f7434f5c35379917c39763a6eb28d76261a8
+    .claude/skills/impeccable/scripts/live-target.mjs: sha256:7f18323b89167804c2d9005d4766b159c81268c9f21daab9fdec24f513f25eb0
+    .claude/skills/impeccable/scripts/live-wrap.mjs: sha256:48dd1ff1700aa373b48ab287c5dab6de0a482f4a8c6626edd23700ca44ca2589
+    .claude/skills/impeccable/scripts/live.mjs: sha256:243c8213e097e6ee2f32cf02a90cf33a5338d9800244bcdbbdc7134e8767e046
+    .claude/skills/impeccable/scripts/live/browser-script-parts.mjs: sha256:10c31c3ed0f53c73efdd5fcd8a6203e1d85d244cef0b9f4dcf0f3c5df5c3d677
+    .claude/skills/impeccable/scripts/live/completion.mjs: sha256:471b99f7904deb068ceb915906d628ed1bd6b86fb92e2151142ab321ea545117
+    .claude/skills/impeccable/scripts/live/event-validation.mjs: sha256:c0ee57b8306f8b1f31b00961017c849b7f352887bd8c889981805e14b8d2e63c
+    .claude/skills/impeccable/scripts/live/insert-ui.mjs: sha256:c86839fc9be98eadc0ff6afaa6ab010a7539e9af77e8deeba898cb93f7f311f4
+    .claude/skills/impeccable/scripts/live/manual-apply.mjs: sha256:c0e7fc5c3d4a7d6e1d6a8e6f85cbe005e5dc01d77b16fd0735605f287c4c8b66
+    .claude/skills/impeccable/scripts/live/manual-edit-routes.mjs: sha256:5517c40db7c91a5b24b134f79cb0f87c90e307b2f7831b1de670d60e529557c0
+    .claude/skills/impeccable/scripts/live/manual-edits-buffer.mjs: sha256:bbd1aba1b9bc891cba771ee8b891d344542119967ae4666e7147da59de5485fd
+    .claude/skills/impeccable/scripts/live/session-store.mjs: sha256:ad775959c72a04826db970d413943bc9d48ff3d5a21a5cd98e5602ea05ba6dc2
+    .claude/skills/impeccable/scripts/live/svelte-component.mjs: sha256:f3bbda2a05790c82e511e9c316b758b5449dba1e7d34d6a6b29707c7c9da1de2
+    .claude/skills/impeccable/scripts/live/sveltekit-adapter.mjs: sha256:67fa80a699b0aebce62afb682f90ea8b6725d39e4e2f8a244ebe35bc14d76558
+    .claude/skills/impeccable/scripts/live/ui-core.mjs: sha256:e8e56f72c17556ee5e20d89818563a868b54bb933341bb0d4ff56db2aadef28b
+    .claude/skills/impeccable/scripts/live/vocabulary.mjs: sha256:0a2c5278382906b3b459f268ed40f7b04bc607f88df9133f6d681e94929d2858
+    .claude/skills/impeccable/scripts/modern-screenshot.umd.js: sha256:bb36665889124a0b6e15f16045265737449c3bdcf2712cdb08af3cfa01563e2b
+    .claude/skills/impeccable/scripts/palette.mjs: sha256:6e43ef19ede979019ebf86175fed0d6876473ddc1cf6c40c8b310e7ac4c5f45a
+    .claude/skills/impeccable/scripts/pin.mjs: sha256:c3b92fee8ed03e54978fd97da43125dc3b2cb89db92ad6ae82ff7dcb6ba20914
+  content_hash: sha256:4f0d597f6f13e7e22d15451e8da512e7ad573467919ebd42a2466b6bb527ecce
 - repo_url: srobroek/agentic-packages
   host: github.com
-  resolved_commit: 4a5dc403f75cebd036b87f2e48dfce802ebebe7a
-  resolved_ref: main
+  resolved_commit: 8ee2a91b3a5a5a7ff07a99eb255339ca859f66b1
+  resolved_ref: core-v0.4.1
   virtual_path: packages/core
   is_virtual: true
   package_type: apm_package
-  deployed_files:
-  - .agents/skills/catchup
-  - .agents/skills/code-review
-  - .agents/skills/codebase-index
-  - .agents/skills/codebase-memory
-  - .agents/skills/commit-push-merge
-  - .agents/skills/commit-push-pr
-  - .agents/skills/explore
-  - .agents/skills/handover
-  - .agents/skills/optimize-steering
-  - .agents/skills/prompt-lookup
-  - .agents/skills/quick-commit
-  - .agents/skills/research
-  - .agents/skills/steering-audit
-  - .agents/skills/unstuck
-  - .agents/skills/verify
-  - .agents/skills/web-fetch
-  - .agents/skills/write-a-skill
-  - .claude/rules/30-frontend.md
-  - .claude/rules/31-frontend-ui.md
-  - .claude/skills/catchup
-  - .claude/skills/code-review
-  - .claude/skills/codebase-index
-  - .claude/skills/codebase-memory
-  - .claude/skills/commit-push-merge
-  - .claude/skills/commit-push-pr
-  - .claude/skills/explore
-  - .claude/skills/handover
-  - .claude/skills/optimize-steering
-  - .claude/skills/prompt-lookup
-  - .claude/skills/quick-commit
-  - .claude/skills/research
-  - .claude/skills/steering-audit
-  - .claude/skills/unstuck
-  - .claude/skills/verify
-  - .claude/skills/web-fetch
-  - .claude/skills/write-a-skill
-  deployed_file_hashes:
-    .claude/rules/30-frontend.md: sha256:981835e4754efe71ded7679666a5b8f6d158c077beed703eb28e0b2b3a113b7d
-    .claude/rules/31-frontend-ui.md: sha256:798dffe66f9d28307767a1d33e92677f1bcd58d0e621dac731421c444f3c6ea6
-  content_hash: sha256:b0a6e32e6f835eca0e4a748d0cf7b4ed7daaed014140f3e59452800064363bec
+  content_hash: sha256:37eae61564bb798ce7be572e89af80bde3a730c4b915b3d937dfaf0e5e5d0bdb
 - repo_url: srobroek/agentic-packages
   host: github.com
-  resolved_commit: 4a5dc403f75cebd036b87f2e48dfce802ebebe7a
-  resolved_ref: main
+  resolved_commit: 7e47178380d2985b2dda158b3f9226b6926a4ede
+  resolved_ref: docs-architecture-v0.1.0
   virtual_path: packages/docs-architecture
   is_virtual: true
   package_type: apm_package
-  content_hash: sha256:13e5953e972fb8c283b5b1382d8e6aa1355613e2bf12a22327a358c662a0063e
+  content_hash: sha256:c1db4dc2cd614836e3eaba1af6c1df17e4a5948c579a52a22ef00bb7ad1c2fe1
 - repo_url: srobroek/agentic-packages
   host: github.com
-  resolved_commit: 4a5dc403f75cebd036b87f2e48dfce802ebebe7a
-  resolved_ref: main
+  resolved_commit: e061c81852ba1ae7ef8bb443b56ff22e98bd17de
+  resolved_ref: frontend-v0.1.2
   virtual_path: packages/frontend
   is_virtual: true
   package_type: apm_package
-  deployed_files:
-  - .agents/skills/playwright
-  - .claude/rules/25-frontend-tools.md
-  - .claude/rules/30-frontend.md
-  - .claude/rules/31-frontend-ui.md
-  - .claude/skills/playwright
-  deployed_file_hashes:
-    .claude/rules/25-frontend-tools.md: sha256:5a3a00c63a48f4b508c8b360d6144b3c47f4a7291e0df5cac1a54bc5a5d399a9
-    .claude/rules/30-frontend.md: sha256:981835e4754efe71ded7679666a5b8f6d158c077beed703eb28e0b2b3a113b7d
-    .claude/rules/31-frontend-ui.md: sha256:798dffe66f9d28307767a1d33e92677f1bcd58d0e621dac731421c444f3c6ea6
-  content_hash: sha256:70d29f79aee16f8bfbc67583e56c51fc992bf9ab22ec973b1f1bf82390ff2e52
+  content_hash: sha256:eb6931bae7482f60257ca584a786302f19d2fc5f04bf0d5f15a6736fb46d08d5
 - repo_url: srobroek/agentic-packages
   host: github.com
-  resolved_commit: 4a5dc403f75cebd036b87f2e48dfce802ebebe7a
-  resolved_ref: main
+  resolved_commit: e061c81852ba1ae7ef8bb443b56ff22e98bd17de
+  resolved_ref: language-rust-v0.1.2
   virtual_path: packages/language-rust
   is_virtual: true
   package_type: apm_package
-  deployed_files:
-  - .agents/skills/rust-quality
-  - .claude/rules/73-language-rust.md
-  - .claude/skills/rust-quality
-  deployed_file_hashes:
-    .claude/rules/73-language-rust.md: sha256:2391642b54bccd989140c651c1fd574969e81c47262118e62262f801e0a1f27a
-  content_hash: sha256:5d363d5876a23becdf272e7d424aebb3617ff3147e8ab4f6c7f8d8ea7c0b8959
+  content_hash: sha256:b2f7b21dba9bcd3c0809701bf3607ea0f147d29fdf68773cbd39fff2629b2cfc
 - repo_url: srobroek/agentic-packages
   host: github.com
-  resolved_commit: 4a5dc403f75cebd036b87f2e48dfce802ebebe7a
-  resolved_ref: main
+  resolved_commit: e061c81852ba1ae7ef8bb443b56ff22e98bd17de
+  resolved_ref: language-typescript-v0.1.2
   virtual_path: packages/language-typescript
   is_virtual: true
   package_type: apm_package
-  deployed_files:
-  - .agents/skills/typescript-quality
-  - .claude/rules/70-language-typescript.md
-  - .claude/skills/typescript-quality
-  deployed_file_hashes:
-    .claude/rules/70-language-typescript.md: sha256:2c36ff653ae2fff4a485080a019943cf1718bbe5e65c68ede7fc23ce1e3c162b
-  content_hash: sha256:20b7c6b89f9facf431d72fffa251e91b31b873bb63460f6c0b2491b964a0d269
+  content_hash: sha256:941303f112ea79bbdeabe975bb728d8056a845fc72fcdc672c15bfdb6f30eff8
 - repo_url: srobroek/agentic-packages
   host: github.com
-  resolved_commit: 4a5dc403f75cebd036b87f2e48dfce802ebebe7a
-  resolved_ref: main
+  resolved_commit: 7e47178380d2985b2dda158b3f9226b6926a4ede
+  resolved_ref: mcp-codebase-memory-v0.1.0
   virtual_path: packages/mcp-codebase-memory
   is_virtual: true
   package_type: apm_package
-  content_hash: sha256:6153a77200581b0b41be1fdf87c5102d29fb3631a03d8f9476047edc9d37e208
+  content_hash: sha256:542a0dd2a0180a5a143866476e4d39e3cdb5534904fd5a502b54438a2721b283
 - repo_url: srobroek/agentic-packages
   host: github.com
-  resolved_commit: 4a5dc403f75cebd036b87f2e48dfce802ebebe7a
-  resolved_ref: main
+  resolved_commit: 7e47178380d2985b2dda158b3f9226b6926a4ede
+  resolved_ref: mcp-context7-v0.1.0
   virtual_path: packages/mcp-context7
   is_virtual: true
   package_type: apm_package
-  content_hash: sha256:5bc0ca3244b15353602186dc19294abdd6a134301633f7311b36b3e87e515f79
+  content_hash: sha256:8f4cce016f6a378fe014badd553c413528c65f3e42f5cbb88ef69712f3393867
 - repo_url: srobroek/agentic-packages
   host: github.com
-  resolved_commit: 4a5dc403f75cebd036b87f2e48dfce802ebebe7a
-  resolved_ref: main
+  resolved_commit: 86c95af4d2b8dcaf1f5a50db3b5469a34591e13e
+  resolved_ref: mcp-package-version-v0.1.1
   virtual_path: packages/mcp-package-version
   is_virtual: true
   package_type: apm_package
-  content_hash: sha256:8db3a72e2d936a5d920f0fd8620fa5ecc3b07f23686e068859d31a8216555b4c
+  content_hash: sha256:a9b48d77277aaf6b83b207ec23c681e41cb3ef0ca635fd5033ea3da4c4afdf79
 - repo_url: srobroek/agentic-packages
   host: github.com
-  resolved_commit: 4a5dc403f75cebd036b87f2e48dfce802ebebe7a
-  resolved_ref: main
+  resolved_commit: 7e47178380d2985b2dda158b3f9226b6926a4ede
+  resolved_ref: mcp-playwright-v0.1.0
   virtual_path: packages/mcp-playwright
   is_virtual: true
   package_type: apm_package
-  content_hash: sha256:7f40d7fb48f4c36e5e15152a2e43e2f6ec6d256e890a93d2692cf9bb6c5d4da7
+  content_hash: sha256:956010c4edba4520b99d8de5fc0c62b7d3cad1474db003afcfd719ccbb8dbfed
 - repo_url: srobroek/agentic-packages
   host: github.com
-  resolved_commit: 4a5dc403f75cebd036b87f2e48dfce802ebebe7a
-  resolved_ref: main
+  resolved_commit: 7e47178380d2985b2dda158b3f9226b6926a4ede
+  resolved_ref: mcp-repomix-v0.1.0
   virtual_path: packages/mcp-repomix
   is_virtual: true
   package_type: apm_package
-  content_hash: sha256:4f24924caf5afe4c45915cb8d1ea59be3a881200d5190b5a492b82996a190ec0
+  deployed_files:
+  - .claude/hooks/mcp-repomix/scripts/repomix-refresh-snapshot.sh
+  - .codex/hooks/mcp-repomix/scripts/repomix-refresh-snapshot.sh
+  deployed_file_hashes:
+    .claude/hooks/mcp-repomix/scripts/repomix-refresh-snapshot.sh: sha256:60122f295247bbf2a4722dcbb2a4dd6ff9e06d1ee50286064f39402f7c3d9375
+    .codex/hooks/mcp-repomix/scripts/repomix-refresh-snapshot.sh: sha256:60122f295247bbf2a4722dcbb2a4dd6ff9e06d1ee50286064f39402f7c3d9375
+  content_hash: sha256:8160affc9479c3f49064f324738f9d0d6e4f34bcd35445556b9c8a6ad97510db
 - repo_url: srobroek/agentic-packages
   host: github.com
-  resolved_commit: 4a5dc403f75cebd036b87f2e48dfce802ebebe7a
-  resolved_ref: main
+  resolved_commit: 7e47178380d2985b2dda158b3f9226b6926a4ede
+  resolved_ref: mcp-serena-v0.1.0
   virtual_path: packages/mcp-serena
   is_virtual: true
   package_type: apm_package
-  content_hash: sha256:942f21ed032de7bd0d000932342eb3a6456bb50156e7c85b07bb8dc43fb6a629
+  content_hash: sha256:914c36de806169695fa1d3de94ab207c529e0eda10420b658e829446f06c1582
 - repo_url: srobroek/agentic-packages
   host: github.com
-  resolved_commit: 4a5dc403f75cebd036b87f2e48dfce802ebebe7a
-  resolved_ref: main
-  virtual_path: packages/quality
+  resolved_commit: 9aefe57d8a943e1266f3edc846a3d0e8abbe715b
+  resolved_ref: mcp-tauri-v1.0.0
+  virtual_path: packages/mcp-tauri
   is_virtual: true
   package_type: apm_package
   deployed_files:
-  - .agents/skills/code-review
-  - .agents/skills/go-quality
-  - .agents/skills/python-quality
-  - .agents/skills/rust-quality
-  - .agents/skills/typescript-quality
-  - .agents/skills/verify
-  - .claude/skills/code-review
-  - .claude/skills/go-quality
-  - .claude/skills/python-quality
-  - .claude/skills/rust-quality
-  - .claude/skills/typescript-quality
-  - .claude/skills/verify
-  content_hash: sha256:b70bbd9978de5c81e2cbf30a82253d59afb9617a9a4e37f17c40098b3305d7f0
+  - .claude/rules/50-tauri-mcp.md
+  deployed_file_hashes:
+    .claude/rules/50-tauri-mcp.md: sha256:4f073b0fe39bbe73b735059deabe080561b0032bccf143818c7fadfd4a106535
+  content_hash: sha256:e6b66c2795556dccbcf52c568eaaab25c248869b5ea42591d3ba5863b3687d9b
 - repo_url: srobroek/agentic-packages
   host: github.com
-  resolved_commit: ce58db369cc6b5239dcd89911acf18e5245ca263
-  resolved_ref: main
+  resolved_commit: 50bdeac526f071cf8621ed139619aada331bb719
+  resolved_ref: resume-session-v0.2.1
+  virtual_path: packages/resume-session
+  is_virtual: true
+  package_type: apm_package
+  deployed_files:
+  - .agents/skills/resume-session
+  - .agents/skills/resume-session/SKILL.md
+  - .agents/skills/resume-session/references/transcript-format.md
+  - .agents/skills/resume-session/scripts/list-sessions.py
+  - .agents/skills/resume-session/scripts/read-session.py
+  - .claude/skills/resume-session
+  - .claude/skills/resume-session/SKILL.md
+  - .claude/skills/resume-session/references/transcript-format.md
+  - .claude/skills/resume-session/scripts/list-sessions.py
+  - .claude/skills/resume-session/scripts/read-session.py
+  deployed_file_hashes:
+    .agents/skills/resume-session/SKILL.md: sha256:6eb315a34bdcaaeb082ddefd10392aff03857d9f9b07fdb334d34c0e0280ab1a
+    .agents/skills/resume-session/references/transcript-format.md: sha256:86262d6b50a5a235e83a72ff5b5491faecb2d0cfc85bd0899b6cfef851a95d3f
+    .agents/skills/resume-session/scripts/list-sessions.py: sha256:dd7cb3e88e0597afeedacb5e552aa2036092caff5f9d35d77dc9666fc0eaac87
+    .agents/skills/resume-session/scripts/read-session.py: sha256:ec0b8a0f982e1f97d30430771152c94eada2737ea4b05b5fe76e938b37c64678
+    .claude/skills/resume-session/SKILL.md: sha256:6eb315a34bdcaaeb082ddefd10392aff03857d9f9b07fdb334d34c0e0280ab1a
+    .claude/skills/resume-session/references/transcript-format.md: sha256:86262d6b50a5a235e83a72ff5b5491faecb2d0cfc85bd0899b6cfef851a95d3f
+    .claude/skills/resume-session/scripts/list-sessions.py: sha256:dd7cb3e88e0597afeedacb5e552aa2036092caff5f9d35d77dc9666fc0eaac87
+    .claude/skills/resume-session/scripts/read-session.py: sha256:ec0b8a0f982e1f97d30430771152c94eada2737ea4b05b5fe76e938b37c64678
+  content_hash: sha256:923bd83d188929a70d8f31c1eb63dc1fe6b74a6de32cd371540dacdf6c511e88
+- repo_url: srobroek/agentic-packages
+  host: github.com
+  resolved_commit: 86c95af4d2b8dcaf1f5a50db3b5469a34591e13e
+  resolved_ref: rust-quality-v0.1.2
+  virtual_path: packages/rust-quality
+  is_virtual: true
+  package_type: apm_package
+  deployed_files:
+  - .agents/skills/rust-quality
+  - .agents/skills/rust-quality/SKILL.md
+  - .agents/skills/rust-quality/references/idioms.md
+  - .agents/skills/rust-quality/scripts/check.sh
+  - .agents/skills/rust-quality/scripts/fix.sh
+  - .claude/skills/rust-quality
+  - .claude/skills/rust-quality/SKILL.md
+  - .claude/skills/rust-quality/references/idioms.md
+  - .claude/skills/rust-quality/scripts/check.sh
+  - .claude/skills/rust-quality/scripts/fix.sh
+  deployed_file_hashes:
+    .agents/skills/rust-quality/SKILL.md: sha256:238edca2369550180e6f99589aaa62f6ff9d71680665e66533ebdb3f4b22e990
+    .agents/skills/rust-quality/references/idioms.md: sha256:423e65cb737a42360bc15ea84b96f09ef7c86fc2c12d4e08538fdcd3eb726ae7
+    .agents/skills/rust-quality/scripts/check.sh: sha256:967680371bff095b0ff28b6d339e58cd3263d988520115710a8ad8432a2de47a
+    .agents/skills/rust-quality/scripts/fix.sh: sha256:54fd54cf130284a51175ea535878caeb3bf18b6a6ebb0e80f9e3e5cad23c7166
+    .claude/skills/rust-quality/SKILL.md: sha256:238edca2369550180e6f99589aaa62f6ff9d71680665e66533ebdb3f4b22e990
+    .claude/skills/rust-quality/references/idioms.md: sha256:423e65cb737a42360bc15ea84b96f09ef7c86fc2c12d4e08538fdcd3eb726ae7
+    .claude/skills/rust-quality/scripts/check.sh: sha256:967680371bff095b0ff28b6d339e58cd3263d988520115710a8ad8432a2de47a
+    .claude/skills/rust-quality/scripts/fix.sh: sha256:54fd54cf130284a51175ea535878caeb3bf18b6a6ebb0e80f9e3e5cad23c7166
+  content_hash: sha256:16da2a45d5c005c3d562bddd666aa86e1f1f76ff1245ffe3394b3a8da5e9dd17
+- repo_url: srobroek/agentic-packages
+  host: github.com
+  resolved_commit: a423f3ed5f25f73aafdc6ed6cbf58219f1a8115e
+  resolved_ref: speckit-v0.1.2
   virtual_path: packages/speckit
   is_virtual: true
   package_type: apm_package
   deployed_files:
   - .agents/skills/speckit-bugfix
-  - .agents/skills/speckit-dag
+  - .agents/skills/speckit-bugfix/SKILL.md
+  - .agents/skills/speckit-setup
+  - .agents/skills/speckit-setup/SKILL.md
+  - .agents/skills/speckit-setup/scripts/setup-speckit.sh
   - .claude/agents/speckit-implement-task.md
   - .claude/agents/speckit-research.md
   - .claude/agents/speckit-sync-conflicts.md
@@ -277,28 +757,35 @@ dependencies:
   - .claude/skills/speckit-setup
   - .claude/skills/speckit-setup/SKILL.md
   - .claude/skills/speckit-setup/scripts/setup-speckit.sh
+  - .codex/hooks/speckit/scripts/speckit-task-commit-check.sh
+  - .codex/hooks/speckit/scripts/speckit-task-issue-sync.sh
   deployed_file_hashes:
+    .agents/skills/speckit-bugfix/SKILL.md: sha256:f38e4621680b4d79f5b4362c72819c6c3008ee035b3af1af3ed4612bf19ff75b
+    .agents/skills/speckit-setup/SKILL.md: sha256:171e878842bc5ab1883bbbffebd7adcdedefe1206d062a4828bf3335f0942a14
+    .agents/skills/speckit-setup/scripts/setup-speckit.sh: sha256:926bf8a1bd6aecbdfdbbb96eedb3d87d2ec67ef9240f70f5ffecfb732bb1f06f
     .claude/agents/speckit-implement-task.md: sha256:c7682647bd3bb447208d770b0cd2b2c7e27cd4e5fc895503a3d980df169f3038
     .claude/agents/speckit-research.md: sha256:359a3bb4fd22008848dba111f6dfb740602cf371763d7c1624c4c5dbf852e031
-    .claude/agents/speckit-sync-conflicts.md: sha256:880f2f81f09c8291e80653d4d119e82b00a8c47779b353681aaeca0992785c75
-    .claude/agents/speckit-sync.md: sha256:bfd447528b2a186de295d2c5b1700f7be21eab152f11bbae109fdf277802df15
+    .claude/agents/speckit-sync-conflicts.md: sha256:349db3761cf93d019d6ce36fa1e304dfb7eedafe7c4103101ddbeef32aa07e95
+    .claude/agents/speckit-sync.md: sha256:506448ec20016075db2acce727f979793a1897398ac581e5aacb6c64b2caa1c0
     .claude/agents/speckit-verify-tasks.md: sha256:81b641804a81c1ec38e5567e4537656fb593d959573d8a1642c55fffc2fe7bc5
     .claude/agents/speckit-verify.md: sha256:a0c88e1dedc56d8c5d5d2e637c55fd42987ab3898a0a7baa5324be8204bb70cc
     .claude/hooks/speckit/scripts/speckit-context7-reminder.sh: sha256:a290d9a15b7bbcaa8609cbf07842f3354bf6601bb9cf7247d8e3b7a54152a4c8
     .claude/hooks/speckit/scripts/speckit-deferred-issues.sh: sha256:84ae87584b66e548a86b2219558751dc9aacfbc45138be3d7b185341ce396414
     .claude/hooks/speckit/scripts/speckit-issue-close-guard.sh: sha256:49448952989f014d7c6a8bb4ed95acca1b739dd840e9bf2d2ce5d821136767e1
-    .claude/hooks/speckit/scripts/speckit-issue-label-guard.sh: sha256:2d674701adbb6d89ac415eef439bf35956b3edaeb240b85f980b6c9e74e960b9
+    .claude/hooks/speckit/scripts/speckit-issue-label-guard.sh: sha256:1d8a136a808ab32d55c86ad77664f2ec0fc7436e28616e7e685cbb91466720a5
     .claude/hooks/speckit/scripts/speckit-pr-issue-refs.sh: sha256:0326e8397f2cc6887f2eb2c98422ab57d34ca9227c977a068536b673c96ddda2
-    .claude/hooks/speckit/scripts/speckit-stop-gate.sh: sha256:762a4f8cafabd626410242ccb57be4c4ff27cca5768e13f895ea1f8677af320c
+    .claude/hooks/speckit/scripts/speckit-stop-gate.sh: sha256:fe8ed1b34d40aa8e94535023b20b2c6a051a53fae996bad22089d2ef1a6820c9
     .claude/hooks/speckit/scripts/speckit-task-commit-check.sh: sha256:e71970d892665803d21e84233928b5f82092914709ae19cdef4373acb29c56d8
     .claude/skills/speckit-bugfix/SKILL.md: sha256:f38e4621680b4d79f5b4362c72819c6c3008ee035b3af1af3ed4612bf19ff75b
-    .claude/skills/speckit-setup/SKILL.md: sha256:c3cd8c25be5fe489fcb437ca455ab50259cdc2396251b8ac5a2c197de5e12ba0
-    .claude/skills/speckit-setup/scripts/setup-speckit.sh: sha256:146b7725d2bad896e388938715f5f4941a50d4a0df1bc99e05048a57f52177f9
-  content_hash: sha256:f1ee45663e35a2921f6ac2a79abb0054fdaac2fa4ae172b3ea9d9306b65138bc
+    .claude/skills/speckit-setup/SKILL.md: sha256:171e878842bc5ab1883bbbffebd7adcdedefe1206d062a4828bf3335f0942a14
+    .claude/skills/speckit-setup/scripts/setup-speckit.sh: sha256:926bf8a1bd6aecbdfdbbb96eedb3d87d2ec67ef9240f70f5ffecfb732bb1f06f
+    .codex/hooks/speckit/scripts/speckit-task-commit-check.sh: sha256:e71970d892665803d21e84233928b5f82092914709ae19cdef4373acb29c56d8
+    .codex/hooks/speckit/scripts/speckit-task-issue-sync.sh: sha256:1d6eee0a4b87a388d8189aa02e4da008ef5328ca2df392951cb78ab72855b41d
+  content_hash: sha256:ba0bc591f01f1071acb3c61273cf3ec65193a2944778af85be9598fc656d4275
 - repo_url: srobroek/agentic-packages
   host: github.com
-  resolved_commit: ce58db369cc6b5239dcd89911acf18e5245ca263
-  resolved_ref: main
+  resolved_commit: b3b0941954a8219609ebb2d5f3ceb552642517e6
+  resolved_ref: speckit-dag-hooks-v0.3.2
   virtual_path: packages/speckit-dag-hooks
   is_virtual: true
   package_type: apm_package
@@ -306,223 +793,585 @@ dependencies:
   - .claude/hooks/speckit-dag-hooks/scripts/dispatcher.py
   - .claude/hooks/speckit-dag-hooks/scripts/nodes.json
   deployed_file_hashes:
-    .claude/hooks/speckit-dag-hooks/scripts/dispatcher.py: sha256:e724cb55715b632158506b9a5c67f21f19442196041f2072aadcee102f067962
-    .claude/hooks/speckit-dag-hooks/scripts/nodes.json: sha256:1f9e5b9ce1b7e7923855c5383642fc53d5838dd34c393e5f25015fa03ac83521
-  content_hash: sha256:bee702fd0d4010fc57bf389053245efb72e4d7dd6f9643b42fc4fb6e81194b80
-  discovered_via: srobroek-agentic
-  marketplace_plugin_name: speckit-dag-hooks
+    .claude/hooks/speckit-dag-hooks/scripts/dispatcher.py: sha256:81539c20268be5197864a3d78e4e680c06957c0501c4edad87f5782e424d3e04
+    .claude/hooks/speckit-dag-hooks/scripts/nodes.json: sha256:b90b2476f420a52f060330a8a260fe26f2caa11a3ab257c13b0d8782964be757
+  content_hash: sha256:4d930e9e652c8ad9534445ce34d93824c76acea09e663b8edbc99d1fea723bb3
 - repo_url: srobroek/agentic-packages
   host: github.com
-  resolved_commit: ce58db369cc6b5239dcd89911acf18e5245ca263
-  resolved_ref: main
+  resolved_commit: 86c95af4d2b8dcaf1f5a50db3b5469a34591e13e
+  resolved_ref: steering-speckit-v0.2.1
   virtual_path: packages/steering-speckit
   is_virtual: true
   package_type: apm_package
   deployed_files:
   - .claude/rules/50-speckit-workflow.md
-  content_hash: sha256:66fe6ea95cb6ea0bffb186b72d29a16ed16453486aff2fe8f1de2258613e40a0
-  discovered_via: srobroek-agentic
-  marketplace_plugin_name: steering-speckit
+  deployed_file_hashes:
+    .claude/rules/50-speckit-workflow.md: sha256:ec1c5448d36f3b65eb6b23ac88c225bf032daffd5e98152e874aa3e2ba40b968
+  content_hash: sha256:f46595f93f7f503ab6369a37e5e47d1042899aaefc3f887a24ccd1cc66bb94f6
+- repo_url: srobroek/agentic-packages
+  host: github.com
+  resolved_commit: 86c95af4d2b8dcaf1f5a50db3b5469a34591e13e
+  resolved_ref: typescript-quality-v0.1.2
+  virtual_path: packages/typescript-quality
+  is_virtual: true
+  package_type: apm_package
+  deployed_files:
+  - .agents/skills/typescript-quality
+  - .agents/skills/typescript-quality/SKILL.md
+  - .agents/skills/typescript-quality/references/idioms.md
+  - .agents/skills/typescript-quality/scripts/check.sh
+  - .agents/skills/typescript-quality/scripts/fix.sh
+  - .claude/skills/typescript-quality
+  - .claude/skills/typescript-quality/SKILL.md
+  - .claude/skills/typescript-quality/references/idioms.md
+  - .claude/skills/typescript-quality/scripts/check.sh
+  - .claude/skills/typescript-quality/scripts/fix.sh
+  deployed_file_hashes:
+    .agents/skills/typescript-quality/SKILL.md: sha256:266827b19db1c7807c4938604dc3165dfa7165b7957fc5f9f8c17a8cafc36187
+    .agents/skills/typescript-quality/references/idioms.md: sha256:d1e7522191679972c2ae2348553ec0b84fd9419b2b23158865d71fa9009c60ec
+    .agents/skills/typescript-quality/scripts/check.sh: sha256:7a244b3233708ba4399cfd307da6bd9839a37ffa18e3860f52ea98b8c94daf46
+    .agents/skills/typescript-quality/scripts/fix.sh: sha256:3bfcf6e35b54d705d040ff71d3c09f3343c6c0f32cc8c39edfdb2f417fd1b241
+    .claude/skills/typescript-quality/SKILL.md: sha256:266827b19db1c7807c4938604dc3165dfa7165b7957fc5f9f8c17a8cafc36187
+    .claude/skills/typescript-quality/references/idioms.md: sha256:d1e7522191679972c2ae2348553ec0b84fd9419b2b23158865d71fa9009c60ec
+    .claude/skills/typescript-quality/scripts/check.sh: sha256:7a244b3233708ba4399cfd307da6bd9839a37ffa18e3860f52ea98b8c94daf46
+    .claude/skills/typescript-quality/scripts/fix.sh: sha256:3bfcf6e35b54d705d040ff71d3c09f3343c6c0f32cc8c39edfdb2f417fd1b241
+  content_hash: sha256:99d64e9fc076bba3eb1d713d9d4b3d1c8257fa78fbe4a4170b0d828fde65082b
 - repo_url: wshobson/agents
   host: github.com
-  resolved_commit: cbcde3f1f4309f023095181d3e591f983ec7c95d
+  resolved_commit: cc37bfdd292ce520ba1c44df7a3a70d5f8137236
+  resolved_ref: cc37bfdd292ce520ba1c44df7a3a70d5f8137236
   virtual_path: plugins/database-design
   is_virtual: true
   package_type: marketplace_plugin
   deployed_files:
   - .agents/skills/postgresql
+  - .agents/skills/postgresql/SKILL.md
+  - .claude/agents/sql-pro.md
   - .claude/skills/postgresql
-  content_hash: sha256:1c903eb0ba0cf46149a542c1f1fac350b544f2044baaaf175c51d483ba324dc3
+  - .claude/skills/postgresql/SKILL.md
+  deployed_file_hashes:
+    .agents/skills/postgresql/SKILL.md: sha256:3170aed913a522ca10e0f94bcfbef61e4284dd7c9e6aabb5ffaed2dbfb3173b4
+    .claude/agents/sql-pro.md: sha256:6eb2fdb139b7971ae98b604ad7d22f6710f904ca74cf00e8961dbe81159513d7
+    .claude/skills/postgresql/SKILL.md: sha256:3170aed913a522ca10e0f94bcfbef61e4284dd7c9e6aabb5ffaed2dbfb3173b4
+  content_hash: sha256:d27b048b081427fb1804bedb5eff95a7558d974b031daf5a566035f78e098365
 - repo_url: wshobson/agents
   host: github.com
-  resolved_commit: cbcde3f1f4309f023095181d3e591f983ec7c95d
+  resolved_commit: cc37bfdd292ce520ba1c44df7a3a70d5f8137236
   resolved_ref: main
   virtual_path: plugins/accessibility-compliance
   is_virtual: true
   package_type: marketplace_plugin
   deployed_files:
   - .agents/skills/screen-reader-testing
+  - .agents/skills/screen-reader-testing/SKILL.md
   - .agents/skills/wcag-audit-patterns
+  - .agents/skills/wcag-audit-patterns/SKILL.md
+  - .agents/skills/wcag-audit-patterns/references/details.md
+  - .claude/agents/ui-visual-validator.md
   - .claude/skills/screen-reader-testing
+  - .claude/skills/screen-reader-testing/SKILL.md
   - .claude/skills/wcag-audit-patterns
-  content_hash: sha256:6d0d513d99ec377f1353b2e8694145b580bff1a911523cf6f1bfc7777339442e
+  - .claude/skills/wcag-audit-patterns/SKILL.md
+  - .claude/skills/wcag-audit-patterns/references/details.md
+  deployed_file_hashes:
+    .agents/skills/screen-reader-testing/SKILL.md: sha256:591c7ff80f40ed866071920f723c1d22a6ceb096c0794aeec1cf9562865119d8
+    .agents/skills/wcag-audit-patterns/SKILL.md: sha256:db263a3405deb95a63175f33da4a9d82d8595599fbee4a81979059b35a7cec40
+    .agents/skills/wcag-audit-patterns/references/details.md: sha256:0a61237ccb4e1b2cba4291f83e0747ad64ac9ba81b37427ee0e648537c9c78d6
+    .claude/agents/ui-visual-validator.md: sha256:bc89cd0279980a61301304ab97753d92a39a2b0bf9633d60b040efb7deab5bc4
+    .claude/skills/screen-reader-testing/SKILL.md: sha256:591c7ff80f40ed866071920f723c1d22a6ceb096c0794aeec1cf9562865119d8
+    .claude/skills/wcag-audit-patterns/SKILL.md: sha256:db263a3405deb95a63175f33da4a9d82d8595599fbee4a81979059b35a7cec40
+    .claude/skills/wcag-audit-patterns/references/details.md: sha256:0a61237ccb4e1b2cba4291f83e0747ad64ac9ba81b37427ee0e648537c9c78d6
+  content_hash: sha256:654dddf849b6bbda02f8a113b57b4c83492058fdd30c0c4ba379c8bd2f955610
 - repo_url: wshobson/agents
   host: github.com
-  resolved_commit: cbcde3f1f4309f023095181d3e591f983ec7c95d
+  resolved_commit: cc37bfdd292ce520ba1c44df7a3a70d5f8137236
   resolved_ref: main
   virtual_path: plugins/agent-orchestration
   is_virtual: true
   package_type: marketplace_plugin
-  content_hash: sha256:5bda65961eedc73792e41a2ab78fc7b9169b57dd781cbb369b01724bf1ad918e
+  content_hash: sha256:b29f57cdd3858bb363820e78515a67adfa93765ca46e37638ef677a169d6d8ce
 - repo_url: wshobson/agents
   host: github.com
-  resolved_commit: cbcde3f1f4309f023095181d3e591f983ec7c95d
+  resolved_commit: cc37bfdd292ce520ba1c44df7a3a70d5f8137236
   resolved_ref: main
   virtual_path: plugins/brand-landingpage
   is_virtual: true
   package_type: marketplace_plugin
   deployed_files:
   - .agents/skills/brand-landingpage
+  - .agents/skills/brand-landingpage/SKILL.md
+  - .agents/skills/brand-landingpage/references/interview-framework.md
+  - .agents/skills/brand-landingpage/references/state-and-pitfalls.md
+  - .agents/skills/brand-landingpage/references/stitch-architecture.md
   - .claude/skills/brand-landingpage
-  content_hash: sha256:0144edc99fc2bbe51c1f131358db786b320bfe6d6d3efd3ed05c1ddf7c7d07a2
+  - .claude/skills/brand-landingpage/SKILL.md
+  - .claude/skills/brand-landingpage/references/interview-framework.md
+  - .claude/skills/brand-landingpage/references/state-and-pitfalls.md
+  - .claude/skills/brand-landingpage/references/stitch-architecture.md
+  deployed_file_hashes:
+    .agents/skills/brand-landingpage/SKILL.md: sha256:ba8245d80e76189d1ed0dfa1d8bab00c47854eb5b55a34ee97bd0319b46cbe3a
+    .agents/skills/brand-landingpage/references/interview-framework.md: sha256:3b8399e5e0f64f8558549150377d85eb2d097ea340da4c095fa4aa2aade61ba4
+    .agents/skills/brand-landingpage/references/state-and-pitfalls.md: sha256:06847c20a2227218b1a70782beafb152c0fdcc22624335dcf5bda3d400636e10
+    .agents/skills/brand-landingpage/references/stitch-architecture.md: sha256:ce5adc9d142721f5962e8a20d6da32674fe2e97f9cc1252db5e43dd0a6c59dfa
+    .claude/skills/brand-landingpage/SKILL.md: sha256:ba8245d80e76189d1ed0dfa1d8bab00c47854eb5b55a34ee97bd0319b46cbe3a
+    .claude/skills/brand-landingpage/references/interview-framework.md: sha256:3b8399e5e0f64f8558549150377d85eb2d097ea340da4c095fa4aa2aade61ba4
+    .claude/skills/brand-landingpage/references/state-and-pitfalls.md: sha256:06847c20a2227218b1a70782beafb152c0fdcc22624335dcf5bda3d400636e10
+    .claude/skills/brand-landingpage/references/stitch-architecture.md: sha256:ce5adc9d142721f5962e8a20d6da32674fe2e97f9cc1252db5e43dd0a6c59dfa
+  content_hash: sha256:127d79aae1ce043d4ddfe44fec182d8c10a183496c612973846bcb2783710517
 - repo_url: wshobson/agents
   host: github.com
-  resolved_commit: cbcde3f1f4309f023095181d3e591f983ec7c95d
+  resolved_commit: cc37bfdd292ce520ba1c44df7a3a70d5f8137236
   resolved_ref: main
   virtual_path: plugins/c4-architecture
   is_virtual: true
   package_type: marketplace_plugin
-  content_hash: sha256:3cae0b3cb79e7c5e7464b6595bf301cdf2d8830542cbf10ee23f7f8a150a5db1
+  deployed_files:
+  - .claude/agents/c4-code.md
+  - .claude/agents/c4-component.md
+  - .claude/agents/c4-container.md
+  deployed_file_hashes:
+    .claude/agents/c4-code.md: sha256:48ed5c662861adec687742af5be47fb3796adb24ddecfdc270f2ebf48bcc77f9
+    .claude/agents/c4-component.md: sha256:67c96e066a9db4fe33781bfd647c4748d2a10bf6f28cbd05f745bd1bb8c952fd
+    .claude/agents/c4-container.md: sha256:1397485b1767f9fd83b83f3071b3c7d4576304c0c7d8d2439f8e786674bc05c9
+  content_hash: sha256:755ff83930892113def4c6c4b70f7c5d85f4cf663db0a464a076e399c4fa6b13
 - repo_url: wshobson/agents
   host: github.com
-  resolved_commit: cbcde3f1f4309f023095181d3e591f983ec7c95d
+  resolved_commit: cc37bfdd292ce520ba1c44df7a3a70d5f8137236
   resolved_ref: main
   virtual_path: plugins/code-documentation
   is_virtual: true
   package_type: marketplace_plugin
-  content_hash: sha256:aabcd93ef34e2895dddcd69bd167c9cc118b5bcf46fe7070d417528504c8f110
+  content_hash: sha256:2a9f0d489b2fb11da354c35458ab7cd31517267318eefb139b58e5daba98d598
 - repo_url: wshobson/agents
   host: github.com
-  resolved_commit: cbcde3f1f4309f023095181d3e591f983ec7c95d
-  resolved_ref: main
-  virtual_path: plugins/comprehensive-review
-  is_virtual: true
-  package_type: marketplace_plugin
-  content_hash: sha256:530dc4504b21af7fb1b0523eb836ac37dec0caf1e99330e3f5b65c1965958feb
-- repo_url: wshobson/agents
-  host: github.com
-  resolved_commit: cbcde3f1f4309f023095181d3e591f983ec7c95d
+  resolved_commit: cc37bfdd292ce520ba1c44df7a3a70d5f8137236
   resolved_ref: main
   virtual_path: plugins/context-management
   is_virtual: true
   package_type: marketplace_plugin
-  content_hash: sha256:f92dac9d7e44c325efcbd2f24b880fcfcbecdacdbc5683dd1d31347bd2020d2c
+  content_hash: sha256:218d104a947ef7cf5fc2bacf9509472617944b5d32483d580f0f133fdd9a7625
 - repo_url: wshobson/agents
   host: github.com
-  resolved_commit: cbcde3f1f4309f023095181d3e591f983ec7c95d
+  resolved_commit: cc37bfdd292ce520ba1c44df7a3a70d5f8137236
   resolved_ref: main
   virtual_path: plugins/documentation-generation
   is_virtual: true
   package_type: marketplace_plugin
   deployed_files:
   - .agents/skills/architecture-decision-records
+  - .agents/skills/architecture-decision-records/SKILL.md
   - .agents/skills/changelog-automation
+  - .agents/skills/changelog-automation/SKILL.md
+  - .agents/skills/changelog-automation/references/details.md
   - .agents/skills/openapi-spec-generation
+  - .agents/skills/openapi-spec-generation/SKILL.md
+  - .agents/skills/openapi-spec-generation/references/code-first-and-tooling.md
+  - .agents/skills/openapi-spec-generation/references/details.md
+  - .claude/agents/mermaid-expert.md
+  - .claude/agents/reference-builder.md
   - .claude/skills/architecture-decision-records
+  - .claude/skills/architecture-decision-records/SKILL.md
   - .claude/skills/changelog-automation
+  - .claude/skills/changelog-automation/SKILL.md
+  - .claude/skills/changelog-automation/references/details.md
   - .claude/skills/openapi-spec-generation
-  content_hash: sha256:579c222b7147ebc1b56d93100bf0073211f545f09fce8ebbfb081a149f8bb32b
+  - .claude/skills/openapi-spec-generation/SKILL.md
+  - .claude/skills/openapi-spec-generation/references/code-first-and-tooling.md
+  - .claude/skills/openapi-spec-generation/references/details.md
+  deployed_file_hashes:
+    .agents/skills/architecture-decision-records/SKILL.md: sha256:f8928e30d37eb7654e18adc93c752b43e7272f88054fba5a7813b434779c50e6
+    .agents/skills/changelog-automation/SKILL.md: sha256:b9748be2063023ba754d47ab9e727bcfa053041fd6f83c524eb8ae4a257cb6a1
+    .agents/skills/changelog-automation/references/details.md: sha256:bb85b108b101f76ec02cd678e34e83181148a2bb49e240f23131c51288c76c32
+    .agents/skills/openapi-spec-generation/SKILL.md: sha256:8071736973f8a99cbe8644e21f638493ac062c77d650d8fabc4a469285485d7e
+    .agents/skills/openapi-spec-generation/references/code-first-and-tooling.md: sha256:533398d65b933040d13e642414e6b9846adbe7d5c95947223beffdb3ebe1590f
+    .agents/skills/openapi-spec-generation/references/details.md: sha256:f653781def324ce13ba73879282ae5ae78c15d57b5f665f2c20b8d6332569e55
+    .claude/agents/mermaid-expert.md: sha256:13efaddbe882b125326855ebc616a6896723ec3d7f988f90132da99ce29fcea0
+    .claude/agents/reference-builder.md: sha256:666031b1453bfca265c39191f96d25911ebde0b9170659d67215e315ca81965e
+    .claude/skills/architecture-decision-records/SKILL.md: sha256:f8928e30d37eb7654e18adc93c752b43e7272f88054fba5a7813b434779c50e6
+    .claude/skills/changelog-automation/SKILL.md: sha256:b9748be2063023ba754d47ab9e727bcfa053041fd6f83c524eb8ae4a257cb6a1
+    .claude/skills/changelog-automation/references/details.md: sha256:bb85b108b101f76ec02cd678e34e83181148a2bb49e240f23131c51288c76c32
+    .claude/skills/openapi-spec-generation/SKILL.md: sha256:8071736973f8a99cbe8644e21f638493ac062c77d650d8fabc4a469285485d7e
+    .claude/skills/openapi-spec-generation/references/code-first-and-tooling.md: sha256:533398d65b933040d13e642414e6b9846adbe7d5c95947223beffdb3ebe1590f
+    .claude/skills/openapi-spec-generation/references/details.md: sha256:f653781def324ce13ba73879282ae5ae78c15d57b5f665f2c20b8d6332569e55
+  content_hash: sha256:a724cae9708c50211db67adefa60850eba24ef5b2ef5c556ac8340b79995aa02
 - repo_url: wshobson/agents
   host: github.com
-  resolved_commit: cbcde3f1f4309f023095181d3e591f983ec7c95d
+  resolved_commit: cc37bfdd292ce520ba1c44df7a3a70d5f8137236
   resolved_ref: main
   virtual_path: plugins/documentation-standards
   is_virtual: true
   package_type: marketplace_plugin
   deployed_files:
   - .agents/skills/hads
+  - .agents/skills/hads/SKILL.md
   - .claude/skills/hads
-  content_hash: sha256:8ae284e980ba136da76140008d1d4c706ef0a3f4d010f8286c1a11999217d1af
+  - .claude/skills/hads/SKILL.md
+  deployed_file_hashes:
+    .agents/skills/hads/SKILL.md: sha256:02e8fab07e66768e32eb5c20afccd00c2c1ed52d142ec533fbe608a0037edba1
+    .claude/skills/hads/SKILL.md: sha256:02e8fab07e66768e32eb5c20afccd00c2c1ed52d142ec533fbe608a0037edba1
+  content_hash: sha256:2045b74df98c0a28637550f4696524561faf742ea7a4ae44b3727d94f98a314d
 - repo_url: wshobson/agents
   host: github.com
-  resolved_commit: cbcde3f1f4309f023095181d3e591f983ec7c95d
+  resolved_commit: cc37bfdd292ce520ba1c44df7a3a70d5f8137236
   resolved_ref: main
   virtual_path: plugins/frontend-mobile-development
   is_virtual: true
   package_type: marketplace_plugin
   deployed_files:
   - .agents/skills/nextjs-app-router-patterns
+  - .agents/skills/nextjs-app-router-patterns/SKILL.md
+  - .agents/skills/nextjs-app-router-patterns/references/details.md
   - .agents/skills/react-native-architecture
+  - .agents/skills/react-native-architecture/SKILL.md
+  - .agents/skills/react-native-architecture/references/details.md
   - .agents/skills/react-state-management
+  - .agents/skills/react-state-management/SKILL.md
+  - .agents/skills/react-state-management/references/details.md
   - .agents/skills/tailwind-design-system
+  - .agents/skills/tailwind-design-system/SKILL.md
+  - .agents/skills/tailwind-design-system/references/advanced-patterns.md
+  - .agents/skills/tailwind-design-system/references/details.md
   - .claude/skills/nextjs-app-router-patterns
+  - .claude/skills/nextjs-app-router-patterns/SKILL.md
+  - .claude/skills/nextjs-app-router-patterns/references/details.md
   - .claude/skills/react-native-architecture
+  - .claude/skills/react-native-architecture/SKILL.md
+  - .claude/skills/react-native-architecture/references/details.md
   - .claude/skills/react-state-management
+  - .claude/skills/react-state-management/SKILL.md
+  - .claude/skills/react-state-management/references/details.md
   - .claude/skills/tailwind-design-system
-  content_hash: sha256:9f659b638411e48bbb7e3f0d755233b6e341a49fdf21b0847cab20ba678d8773
+  - .claude/skills/tailwind-design-system/SKILL.md
+  - .claude/skills/tailwind-design-system/references/advanced-patterns.md
+  - .claude/skills/tailwind-design-system/references/details.md
+  deployed_file_hashes:
+    .agents/skills/nextjs-app-router-patterns/SKILL.md: sha256:8de4ab196350d6bb2d191260e13d1645822b7ec1bae205a2018a24cdc3f9b26c
+    .agents/skills/nextjs-app-router-patterns/references/details.md: sha256:ce694daee93b0bba3373ae77bc3dbe66583807fee394088a24b33b8adae1d96e
+    .agents/skills/react-native-architecture/SKILL.md: sha256:84895e8207c68928f30896a0b4da38c6e0d3abd2d9ac39227bf279bb08c2a79e
+    .agents/skills/react-native-architecture/references/details.md: sha256:72b69297e14daa2f3d16be629e986ebd07d6146b646a4449cf96516d2e291de5
+    .agents/skills/react-state-management/SKILL.md: sha256:71abf349b19fe5cef64f4e4f2dd4a89011a5e947d8ce278d53a489292f508032
+    .agents/skills/react-state-management/references/details.md: sha256:30bc6c3a9a05ab3649d6fbbbccf3f9806e97688c76b64af85e369353ccd37404
+    .agents/skills/tailwind-design-system/SKILL.md: sha256:b6577edb7b7f71a6954f68b80c7eea1748ccdf31862759f864bce558fb2bcf83
+    .agents/skills/tailwind-design-system/references/advanced-patterns.md: sha256:40a4a9fa931f4bc95213870ea1fe7c32ce50aacf3531af07954b660c4f51e1a2
+    .agents/skills/tailwind-design-system/references/details.md: sha256:22e5e4500edc1f11c32871d6aad013b10e34724f29d486f080faea46a95bd6e7
+    .claude/skills/nextjs-app-router-patterns/SKILL.md: sha256:8de4ab196350d6bb2d191260e13d1645822b7ec1bae205a2018a24cdc3f9b26c
+    .claude/skills/nextjs-app-router-patterns/references/details.md: sha256:ce694daee93b0bba3373ae77bc3dbe66583807fee394088a24b33b8adae1d96e
+    .claude/skills/react-native-architecture/SKILL.md: sha256:84895e8207c68928f30896a0b4da38c6e0d3abd2d9ac39227bf279bb08c2a79e
+    .claude/skills/react-native-architecture/references/details.md: sha256:72b69297e14daa2f3d16be629e986ebd07d6146b646a4449cf96516d2e291de5
+    .claude/skills/react-state-management/SKILL.md: sha256:71abf349b19fe5cef64f4e4f2dd4a89011a5e947d8ce278d53a489292f508032
+    .claude/skills/react-state-management/references/details.md: sha256:30bc6c3a9a05ab3649d6fbbbccf3f9806e97688c76b64af85e369353ccd37404
+    .claude/skills/tailwind-design-system/SKILL.md: sha256:b6577edb7b7f71a6954f68b80c7eea1748ccdf31862759f864bce558fb2bcf83
+    .claude/skills/tailwind-design-system/references/advanced-patterns.md: sha256:40a4a9fa931f4bc95213870ea1fe7c32ce50aacf3531af07954b660c4f51e1a2
+    .claude/skills/tailwind-design-system/references/details.md: sha256:22e5e4500edc1f11c32871d6aad013b10e34724f29d486f080faea46a95bd6e7
+  content_hash: sha256:4a22acc93bfc9f5d1c995051fc825149e9aeaeeef49f16d334ca9babe4d55d92
 - repo_url: wshobson/agents
   host: github.com
-  resolved_commit: cbcde3f1f4309f023095181d3e591f983ec7c95d
+  resolved_commit: cc37bfdd292ce520ba1c44df7a3a70d5f8137236
   resolved_ref: main
   virtual_path: plugins/javascript-typescript
   is_virtual: true
   package_type: marketplace_plugin
   deployed_files:
   - .agents/skills/javascript-testing-patterns
+  - .agents/skills/javascript-testing-patterns/SKILL.md
+  - .agents/skills/javascript-testing-patterns/references/advanced-testing-patterns.md
   - .agents/skills/modern-javascript-patterns
+  - .agents/skills/modern-javascript-patterns/SKILL.md
+  - .agents/skills/modern-javascript-patterns/references/advanced-patterns.md
+  - .agents/skills/modern-javascript-patterns/references/details.md
   - .agents/skills/nodejs-backend-patterns
+  - .agents/skills/nodejs-backend-patterns/SKILL.md
+  - .agents/skills/nodejs-backend-patterns/references/advanced-patterns.md
+  - .agents/skills/nodejs-backend-patterns/references/details.md
   - .agents/skills/typescript-advanced-types
+  - .agents/skills/typescript-advanced-types/SKILL.md
+  - .agents/skills/typescript-advanced-types/references/details.md
+  - .claude/agents/javascript-pro.md
+  - .claude/agents/typescript-pro.md
   - .claude/skills/javascript-testing-patterns
+  - .claude/skills/javascript-testing-patterns/SKILL.md
+  - .claude/skills/javascript-testing-patterns/references/advanced-testing-patterns.md
   - .claude/skills/modern-javascript-patterns
+  - .claude/skills/modern-javascript-patterns/SKILL.md
+  - .claude/skills/modern-javascript-patterns/references/advanced-patterns.md
+  - .claude/skills/modern-javascript-patterns/references/details.md
   - .claude/skills/nodejs-backend-patterns
+  - .claude/skills/nodejs-backend-patterns/SKILL.md
+  - .claude/skills/nodejs-backend-patterns/references/advanced-patterns.md
+  - .claude/skills/nodejs-backend-patterns/references/details.md
   - .claude/skills/typescript-advanced-types
-  content_hash: sha256:caffe50c2a0d041c84ba9c465d4a420300e737d4ba7493fb5f93050103ad2848
+  - .claude/skills/typescript-advanced-types/SKILL.md
+  - .claude/skills/typescript-advanced-types/references/details.md
+  deployed_file_hashes:
+    .agents/skills/javascript-testing-patterns/SKILL.md: sha256:d99e1d7344ca7b87395c7e49f6c635ea67fe16d57f4698d72c78d405020f5782
+    .agents/skills/javascript-testing-patterns/references/advanced-testing-patterns.md: sha256:c7aece88f868bb54b57cc7ea2ca87d3df0868ab32f974c22af247bb047ea353f
+    .agents/skills/modern-javascript-patterns/SKILL.md: sha256:32e203b8d944115102986dcb3cf4c48918edc5dbf6942668875970121809c064
+    .agents/skills/modern-javascript-patterns/references/advanced-patterns.md: sha256:bd44770188cfa14d453b1c3026289cfaf7beff78f0eedbe47a9c6b9f24dfe3af
+    .agents/skills/modern-javascript-patterns/references/details.md: sha256:c0f9ef7a4a7efaaf827ea269f6dc3c8f58aaa78d7dec0d5419fac49cfa8fe23e
+    .agents/skills/nodejs-backend-patterns/SKILL.md: sha256:d52e1150accdc27e916f0962c9ba0872fcbe8a7d849d905dcc795c0f9d05aeae
+    .agents/skills/nodejs-backend-patterns/references/advanced-patterns.md: sha256:f5f0036b4990badcd241263298b4f9ef3d358d94e3db5d08307d5b80369ed584
+    .agents/skills/nodejs-backend-patterns/references/details.md: sha256:5f05a3d5f6ded227f5d5987b0d9f2c0c11fcc0879353860bdbaa97e2eafe1838
+    .agents/skills/typescript-advanced-types/SKILL.md: sha256:c32101c65134d94ef1a3305ef486020b57be6408f97ed952c9c560e3fe04188d
+    .agents/skills/typescript-advanced-types/references/details.md: sha256:036a1dd41283384f086ac0eeb4f63c899b042ad68815a8ce00afebf606b55c44
+    .claude/agents/javascript-pro.md: sha256:9d68e8ec541cb142ca5c0b786d6bfbe5663b7c69b6761e4bc4a1f31beb7a3785
+    .claude/agents/typescript-pro.md: sha256:d7dd97fbc3fed73c8feb63ca5071b561660d150d94ecb2c1fa009c7cfba2d404
+    .claude/skills/javascript-testing-patterns/SKILL.md: sha256:d99e1d7344ca7b87395c7e49f6c635ea67fe16d57f4698d72c78d405020f5782
+    .claude/skills/javascript-testing-patterns/references/advanced-testing-patterns.md: sha256:c7aece88f868bb54b57cc7ea2ca87d3df0868ab32f974c22af247bb047ea353f
+    .claude/skills/modern-javascript-patterns/SKILL.md: sha256:32e203b8d944115102986dcb3cf4c48918edc5dbf6942668875970121809c064
+    .claude/skills/modern-javascript-patterns/references/advanced-patterns.md: sha256:bd44770188cfa14d453b1c3026289cfaf7beff78f0eedbe47a9c6b9f24dfe3af
+    .claude/skills/modern-javascript-patterns/references/details.md: sha256:c0f9ef7a4a7efaaf827ea269f6dc3c8f58aaa78d7dec0d5419fac49cfa8fe23e
+    .claude/skills/nodejs-backend-patterns/SKILL.md: sha256:d52e1150accdc27e916f0962c9ba0872fcbe8a7d849d905dcc795c0f9d05aeae
+    .claude/skills/nodejs-backend-patterns/references/advanced-patterns.md: sha256:f5f0036b4990badcd241263298b4f9ef3d358d94e3db5d08307d5b80369ed584
+    .claude/skills/nodejs-backend-patterns/references/details.md: sha256:5f05a3d5f6ded227f5d5987b0d9f2c0c11fcc0879353860bdbaa97e2eafe1838
+    .claude/skills/typescript-advanced-types/SKILL.md: sha256:c32101c65134d94ef1a3305ef486020b57be6408f97ed952c9c560e3fe04188d
+    .claude/skills/typescript-advanced-types/references/details.md: sha256:036a1dd41283384f086ac0eeb4f63c899b042ad68815a8ce00afebf606b55c44
+  content_hash: sha256:fab024d739fd02514a9516271de1ffe7899579d69f37541cb15b86ebb4a9de63
 - repo_url: wshobson/agents
   host: github.com
-  resolved_commit: cbcde3f1f4309f023095181d3e591f983ec7c95d
-  resolved_ref: main
-  virtual_path: plugins/performance-testing-review
-  is_virtual: true
-  package_type: marketplace_plugin
-  content_hash: sha256:2d70aa4f52bfb664d97b1ccd41d55184da60cb05d87a29240da54af0574b1821
-- repo_url: wshobson/agents
-  host: github.com
-  resolved_commit: cbcde3f1f4309f023095181d3e591f983ec7c95d
+  resolved_commit: cc37bfdd292ce520ba1c44df7a3a70d5f8137236
   resolved_ref: main
   virtual_path: plugins/systems-programming
   is_virtual: true
   package_type: marketplace_plugin
   deployed_files:
   - .agents/skills/go-concurrency-patterns
+  - .agents/skills/go-concurrency-patterns/SKILL.md
+  - .agents/skills/go-concurrency-patterns/references/details.md
   - .agents/skills/memory-safety-patterns
+  - .agents/skills/memory-safety-patterns/SKILL.md
+  - .agents/skills/memory-safety-patterns/references/details.md
   - .agents/skills/rust-async-patterns
+  - .agents/skills/rust-async-patterns/SKILL.md
+  - .agents/skills/rust-async-patterns/references/details.md
+  - .claude/agents/c-pro.md
+  - .claude/agents/cpp-pro.md
+  - .claude/agents/golang-pro.md
+  - .claude/agents/rust-pro.md
   - .claude/skills/go-concurrency-patterns
+  - .claude/skills/go-concurrency-patterns/SKILL.md
+  - .claude/skills/go-concurrency-patterns/references/details.md
   - .claude/skills/memory-safety-patterns
+  - .claude/skills/memory-safety-patterns/SKILL.md
+  - .claude/skills/memory-safety-patterns/references/details.md
   - .claude/skills/rust-async-patterns
-  content_hash: sha256:e06cfefc014e1ab45fcbb57d017d5fee9f6c08d629191d86a642041f6feeadc3
+  - .claude/skills/rust-async-patterns/SKILL.md
+  - .claude/skills/rust-async-patterns/references/details.md
+  deployed_file_hashes:
+    .agents/skills/go-concurrency-patterns/SKILL.md: sha256:a66d04f2c616aecc3dd53c23d08cb06903f30a2c190c99e6ba82b3e5315b36b2
+    .agents/skills/go-concurrency-patterns/references/details.md: sha256:a593801def35a090dea472b8265beefa848c1de7dee1dcf4c42e7c5ff0fd0e31
+    .agents/skills/memory-safety-patterns/SKILL.md: sha256:e23ee740f583c16e7633be4ee76ff028b8c9c486c6417fdfb69e0beb886327ca
+    .agents/skills/memory-safety-patterns/references/details.md: sha256:c07b8a66b6fd7afc6e957e3443cdbfa17787370d41e2ef16372eb7dd2b551a44
+    .agents/skills/rust-async-patterns/SKILL.md: sha256:8e9a951c21bb1ee671dd2e7391b193e8e3d362b95ef29c470915837d73bf87df
+    .agents/skills/rust-async-patterns/references/details.md: sha256:cd8a987c59cf704b7a2145e0dea6891b10194e7304b894bd14a5692d9fdfa76d
+    .claude/agents/c-pro.md: sha256:1ac8473f5321a0c285729b355bd7daf73e63e7a167fe87ab1f4a7b570f72f3c1
+    .claude/agents/cpp-pro.md: sha256:0fe221390dce11b69caa128475d305f0dbff8854bcfaaaa19bcca5fa74c29b10
+    .claude/agents/golang-pro.md: sha256:8e4dc761fb38caab96a1d898596ffee3b55fbf369b36ed9729290f48f13d8cf8
+    .claude/agents/rust-pro.md: sha256:a327490f71278df0276b4e7dcc3991d45ace4a09cc068cf1632f5ec6fec11b52
+    .claude/skills/go-concurrency-patterns/SKILL.md: sha256:a66d04f2c616aecc3dd53c23d08cb06903f30a2c190c99e6ba82b3e5315b36b2
+    .claude/skills/go-concurrency-patterns/references/details.md: sha256:a593801def35a090dea472b8265beefa848c1de7dee1dcf4c42e7c5ff0fd0e31
+    .claude/skills/memory-safety-patterns/SKILL.md: sha256:e23ee740f583c16e7633be4ee76ff028b8c9c486c6417fdfb69e0beb886327ca
+    .claude/skills/memory-safety-patterns/references/details.md: sha256:c07b8a66b6fd7afc6e957e3443cdbfa17787370d41e2ef16372eb7dd2b551a44
+    .claude/skills/rust-async-patterns/SKILL.md: sha256:8e9a951c21bb1ee671dd2e7391b193e8e3d362b95ef29c470915837d73bf87df
+    .claude/skills/rust-async-patterns/references/details.md: sha256:cd8a987c59cf704b7a2145e0dea6891b10194e7304b894bd14a5692d9fdfa76d
+  content_hash: sha256:c02518c8c33a2f04a42ff6953f7302f31d167c08abbeb6cffb141cc95e406d59
 - repo_url: wshobson/agents
   host: github.com
-  resolved_commit: cbcde3f1f4309f023095181d3e591f983ec7c95d
-  resolved_ref: main
-  virtual_path: plugins/tdd-workflows
-  is_virtual: true
-  package_type: marketplace_plugin
-  content_hash: sha256:ea5621c746f86b94bec5b7159cc63e6343887303154ad58dba6ae93385505fed
-- repo_url: wshobson/agents
-  host: github.com
-  resolved_commit: cbcde3f1f4309f023095181d3e591f983ec7c95d
+  resolved_commit: cc37bfdd292ce520ba1c44df7a3a70d5f8137236
   resolved_ref: main
   virtual_path: plugins/ui-design
   is_virtual: true
   package_type: marketplace_plugin
   deployed_files:
   - .agents/skills/accessibility-compliance
+  - .agents/skills/accessibility-compliance/SKILL.md
+  - .agents/skills/accessibility-compliance/references/aria-patterns.md
+  - .agents/skills/accessibility-compliance/references/details.md
+  - .agents/skills/accessibility-compliance/references/mobile-accessibility.md
+  - .agents/skills/accessibility-compliance/references/wcag-guidelines.md
   - .agents/skills/design-system-patterns
+  - .agents/skills/design-system-patterns/SKILL.md
+  - .agents/skills/design-system-patterns/references/component-architecture.md
+  - .agents/skills/design-system-patterns/references/design-tokens.md
+  - .agents/skills/design-system-patterns/references/details.md
+  - .agents/skills/design-system-patterns/references/theming-architecture.md
   - .agents/skills/interaction-design
+  - .agents/skills/interaction-design/SKILL.md
+  - .agents/skills/interaction-design/references/animation-libraries.md
+  - .agents/skills/interaction-design/references/microinteraction-patterns.md
+  - .agents/skills/interaction-design/references/scroll-animations.md
   - .agents/skills/mobile-android-design
+  - .agents/skills/mobile-android-design/SKILL.md
+  - .agents/skills/mobile-android-design/references/android-navigation.md
+  - .agents/skills/mobile-android-design/references/compose-components.md
+  - .agents/skills/mobile-android-design/references/details.md
+  - .agents/skills/mobile-android-design/references/material3-theming.md
   - .agents/skills/mobile-ios-design
+  - .agents/skills/mobile-ios-design/SKILL.md
+  - .agents/skills/mobile-ios-design/references/hig-patterns.md
+  - .agents/skills/mobile-ios-design/references/ios-navigation.md
+  - .agents/skills/mobile-ios-design/references/swiftui-components.md
   - .agents/skills/react-native-design
+  - .agents/skills/react-native-design/SKILL.md
+  - .agents/skills/react-native-design/references/details.md
+  - .agents/skills/react-native-design/references/navigation-patterns.md
+  - .agents/skills/react-native-design/references/reanimated-patterns.md
+  - .agents/skills/react-native-design/references/styling-patterns.md
   - .agents/skills/responsive-design
+  - .agents/skills/responsive-design/SKILL.md
+  - .agents/skills/responsive-design/references/breakpoint-strategies.md
+  - .agents/skills/responsive-design/references/container-queries.md
+  - .agents/skills/responsive-design/references/details.md
+  - .agents/skills/responsive-design/references/fluid-layouts.md
   - .agents/skills/visual-design-foundations
+  - .agents/skills/visual-design-foundations/SKILL.md
+  - .agents/skills/visual-design-foundations/references/color-systems.md
+  - .agents/skills/visual-design-foundations/references/spacing-iconography.md
+  - .agents/skills/visual-design-foundations/references/typography-systems.md
   - .agents/skills/web-component-design
+  - .agents/skills/web-component-design/SKILL.md
+  - .agents/skills/web-component-design/references/accessibility-patterns.md
+  - .agents/skills/web-component-design/references/component-patterns.md
+  - .agents/skills/web-component-design/references/css-styling-approaches.md
+  - .claude/agents/accessibility-expert.md
+  - .claude/agents/design-system-architect.md
+  - .claude/agents/ui-designer.md
   - .claude/skills/accessibility-compliance
+  - .claude/skills/accessibility-compliance/SKILL.md
+  - .claude/skills/accessibility-compliance/references/aria-patterns.md
+  - .claude/skills/accessibility-compliance/references/details.md
+  - .claude/skills/accessibility-compliance/references/mobile-accessibility.md
+  - .claude/skills/accessibility-compliance/references/wcag-guidelines.md
   - .claude/skills/design-system-patterns
+  - .claude/skills/design-system-patterns/SKILL.md
+  - .claude/skills/design-system-patterns/references/component-architecture.md
+  - .claude/skills/design-system-patterns/references/design-tokens.md
+  - .claude/skills/design-system-patterns/references/details.md
+  - .claude/skills/design-system-patterns/references/theming-architecture.md
   - .claude/skills/interaction-design
+  - .claude/skills/interaction-design/SKILL.md
+  - .claude/skills/interaction-design/references/animation-libraries.md
+  - .claude/skills/interaction-design/references/microinteraction-patterns.md
+  - .claude/skills/interaction-design/references/scroll-animations.md
   - .claude/skills/mobile-android-design
+  - .claude/skills/mobile-android-design/SKILL.md
+  - .claude/skills/mobile-android-design/references/android-navigation.md
+  - .claude/skills/mobile-android-design/references/compose-components.md
+  - .claude/skills/mobile-android-design/references/details.md
+  - .claude/skills/mobile-android-design/references/material3-theming.md
   - .claude/skills/mobile-ios-design
+  - .claude/skills/mobile-ios-design/SKILL.md
+  - .claude/skills/mobile-ios-design/references/hig-patterns.md
+  - .claude/skills/mobile-ios-design/references/ios-navigation.md
+  - .claude/skills/mobile-ios-design/references/swiftui-components.md
   - .claude/skills/react-native-design
+  - .claude/skills/react-native-design/SKILL.md
+  - .claude/skills/react-native-design/references/details.md
+  - .claude/skills/react-native-design/references/navigation-patterns.md
+  - .claude/skills/react-native-design/references/reanimated-patterns.md
+  - .claude/skills/react-native-design/references/styling-patterns.md
   - .claude/skills/responsive-design
+  - .claude/skills/responsive-design/SKILL.md
+  - .claude/skills/responsive-design/references/breakpoint-strategies.md
+  - .claude/skills/responsive-design/references/container-queries.md
+  - .claude/skills/responsive-design/references/details.md
+  - .claude/skills/responsive-design/references/fluid-layouts.md
   - .claude/skills/visual-design-foundations
+  - .claude/skills/visual-design-foundations/SKILL.md
+  - .claude/skills/visual-design-foundations/references/color-systems.md
+  - .claude/skills/visual-design-foundations/references/spacing-iconography.md
+  - .claude/skills/visual-design-foundations/references/typography-systems.md
   - .claude/skills/web-component-design
-  content_hash: sha256:12453959b4b400971a4d17738bf6535261a5e9d26f498ab349997b4f47ac9da0
-- repo_url: wshobson/agents
-  host: github.com
-  resolved_commit: cbcde3f1f4309f023095181d3e591f983ec7c95d
-  resolved_ref: main
-  virtual_path: plugins/unit-testing
-  is_virtual: true
-  package_type: marketplace_plugin
-  content_hash: sha256:0dd5de3d44f89f1e0cd17880f69eb9db5388543caaa5616d07a0c94fe7837f53
+  - .claude/skills/web-component-design/SKILL.md
+  - .claude/skills/web-component-design/references/accessibility-patterns.md
+  - .claude/skills/web-component-design/references/component-patterns.md
+  - .claude/skills/web-component-design/references/css-styling-approaches.md
+  deployed_file_hashes:
+    .agents/skills/accessibility-compliance/SKILL.md: sha256:3ad0fbcb0a69b69e70652641a8eeb59f168cceb4bc9d9b9c8b47154072b9e1a2
+    .agents/skills/accessibility-compliance/references/aria-patterns.md: sha256:72e2f2cb2d168bb5d82260b703be863a6371284ba3cf4ac22da28a309728c14a
+    .agents/skills/accessibility-compliance/references/details.md: sha256:1789504a4268186e62126059da48d8deb95d36631fac6263b368e715df2ca2fb
+    .agents/skills/accessibility-compliance/references/mobile-accessibility.md: sha256:b293d6c2b0a44c7f6ebb4848f7fe09d33713e91bbb1b97d88a561e7360b90201
+    .agents/skills/accessibility-compliance/references/wcag-guidelines.md: sha256:09bf683d0e15c7100bd9d1bc4a5e7bf019c580fd447bceccdd0ee30d4ccc01ce
+    .agents/skills/design-system-patterns/SKILL.md: sha256:618355f0e6c6ba8ca5d231035c9da18302fe6894aedce565743e9181b6c928ee
+    .agents/skills/design-system-patterns/references/component-architecture.md: sha256:84dc16ed581c1ad72e34b93ba84bcfa9223d30f9c42eb7e36654bbbe8daefc61
+    .agents/skills/design-system-patterns/references/design-tokens.md: sha256:44bd27e26f072a3facd6cd841140d403805106c9c5d5e39fc33bf6ffccf8af64
+    .agents/skills/design-system-patterns/references/details.md: sha256:1f1792e8b20c24c2be2acd46e7da85928578d108006594f3ae35d93f9108ff6d
+    .agents/skills/design-system-patterns/references/theming-architecture.md: sha256:24c9efec7c809a4d6797e6a11bc66ce08c5d708211caac14266ce5754c83cc75
+    .agents/skills/interaction-design/SKILL.md: sha256:87f2765ed1deeef3f1c06f9e4338ff103c391c6c4adcdffc885f3516b7c34ff2
+    .agents/skills/interaction-design/references/animation-libraries.md: sha256:92da251d881a6a0647f09b83c9cf8cbdfb5d408d54e1098097bb0eda336e6d0f
+    .agents/skills/interaction-design/references/microinteraction-patterns.md: sha256:c276b03468bacacf7a7d8d95c70114d9724854ac2e084ad63f0b6e1ef00a948a
+    .agents/skills/interaction-design/references/scroll-animations.md: sha256:34f32ef74c4f44bf57a721f95cd523b63dd1d02711f16ccb8472d1d7a4f78a35
+    .agents/skills/mobile-android-design/SKILL.md: sha256:0a209a1c45585ce0056548cc2f0fd352b7fde5980a3b5dd397a9daf5dff19fe7
+    .agents/skills/mobile-android-design/references/android-navigation.md: sha256:6a28f9a113c4af16f9f8581d9d494ed7b278de8c6258cef58e3ecb822707d190
+    .agents/skills/mobile-android-design/references/compose-components.md: sha256:22d9a47cc8ec4c4bbec36f15cb7a5eea33d5a0b5b6c3ba29378fc37197a8a8a0
+    .agents/skills/mobile-android-design/references/details.md: sha256:854f692ebe2b6adbf42f1406d0e7e1f7bc895ee34baa4ceff1ef1afc9f2dd962
+    .agents/skills/mobile-android-design/references/material3-theming.md: sha256:72ba4c1ef77fba5740b039b3f8b3676902967495141e3f40e0b800df3e85da7c
+    .agents/skills/mobile-ios-design/SKILL.md: sha256:2b3b2405aee645a345d137ce93bd86bac65d33da4ad40c4b6f007bf4a51b6c96
+    .agents/skills/mobile-ios-design/references/hig-patterns.md: sha256:1d893427552da55887ed14a344532f40f736d5cc6d153ce385b9cc8c73c55302
+    .agents/skills/mobile-ios-design/references/ios-navigation.md: sha256:8d6ab13ad2f6bf13b6555b2137f8861d4af374322f85fa3b06f10a6c0b70ef82
+    .agents/skills/mobile-ios-design/references/swiftui-components.md: sha256:3eb82e50121d529ee664685da10f42f59aa8dee4cc14acaca4c5d377d8cd8700
+    .agents/skills/react-native-design/SKILL.md: sha256:71eacfb8d4a62142e135e8b1934ffb540b0d2703d6b6b273d4c0f255bb1aa68d
+    .agents/skills/react-native-design/references/details.md: sha256:46c4f302d86c5493d6b7ebc9d72750124b925851c3b48f3d2d9717fe0567a171
+    .agents/skills/react-native-design/references/navigation-patterns.md: sha256:fef43e6a8f768b34f6c7e54989872c6fcc03e0883b4ace27258ec480440f3e45
+    .agents/skills/react-native-design/references/reanimated-patterns.md: sha256:861706a5ea0fd6d908eaf7159f156d1bbb6600d406b8e0d892624f059b341a35
+    .agents/skills/react-native-design/references/styling-patterns.md: sha256:3fddb0ebf1c12b5b077906a72a388d447797c1e1cdf9f51a4d71fc24e3b88c32
+    .agents/skills/responsive-design/SKILL.md: sha256:c8bd56f8fc0f122c4ff392b02617f0e6bb4a353b2d0189235c6ee77cdcfe8690
+    .agents/skills/responsive-design/references/breakpoint-strategies.md: sha256:d086c14641856aacdd38fd8aebf2988fb0055b7ed1b8773feb3104e69c7d1506
+    .agents/skills/responsive-design/references/container-queries.md: sha256:67b1697186a531751ec2aa364506919b9ae44680744603613c511d5132eb5a24
+    .agents/skills/responsive-design/references/details.md: sha256:6b8d84250249319719fc5d4a545628267edd16b8763c107536cf7341d37740b4
+    .agents/skills/responsive-design/references/fluid-layouts.md: sha256:d67ad19e57b015101da5d4c4a9208015909f60b89db5b7922d0bf9ca17673860
+    .agents/skills/visual-design-foundations/SKILL.md: sha256:0c6970d14f5d5df55c63d1be995205d140489e2d0c39896657fabee6f6a5df84
+    .agents/skills/visual-design-foundations/references/color-systems.md: sha256:9ba288fbead974f0b6424ca04acee68e6ede07be62c5121142084e6afa82f871
+    .agents/skills/visual-design-foundations/references/spacing-iconography.md: sha256:04835fad7ba356d9d10b46a9f6911a6b535095964a238f39f100b0dd1c4d90b5
+    .agents/skills/visual-design-foundations/references/typography-systems.md: sha256:93be8eeb9c2a5e26205f657ea13a34bb832ba686c0458ee3db2877e6b4b066fc
+    .agents/skills/web-component-design/SKILL.md: sha256:a7978f5e9e3fa7129cf3eb8d607cedece4e207011321893d9a3c5dd92cf32603
+    .agents/skills/web-component-design/references/accessibility-patterns.md: sha256:cecf82569bb7cbe89c96bd1d00ac0bee91d121515f19908a26e15634d13d3e3b
+    .agents/skills/web-component-design/references/component-patterns.md: sha256:a258c10793aae4b2628ff291fc7557d5605c73821d4946b98b923d6ef014c787
+    .agents/skills/web-component-design/references/css-styling-approaches.md: sha256:fe34ea85c3c3116982783c9148217c5642a15fcb73207458326ed91de05e592e
+    .claude/agents/accessibility-expert.md: sha256:b3aa7a39667be536a9624108635d0f04858cf069b932dfdcf7c7719f42514267
+    .claude/agents/design-system-architect.md: sha256:7bcf449dc55d13abe70461eb39b3765311af45760dc07967ca198edadcb0e612
+    .claude/agents/ui-designer.md: sha256:4cc5e5f7ac82324cfc2b7f4099528ad7f80ba5d8d29750b34eea3e6e3db49a9c
+    .claude/skills/accessibility-compliance/SKILL.md: sha256:3ad0fbcb0a69b69e70652641a8eeb59f168cceb4bc9d9b9c8b47154072b9e1a2
+    .claude/skills/accessibility-compliance/references/aria-patterns.md: sha256:72e2f2cb2d168bb5d82260b703be863a6371284ba3cf4ac22da28a309728c14a
+    .claude/skills/accessibility-compliance/references/details.md: sha256:1789504a4268186e62126059da48d8deb95d36631fac6263b368e715df2ca2fb
+    .claude/skills/accessibility-compliance/references/mobile-accessibility.md: sha256:b293d6c2b0a44c7f6ebb4848f7fe09d33713e91bbb1b97d88a561e7360b90201
+    .claude/skills/accessibility-compliance/references/wcag-guidelines.md: sha256:09bf683d0e15c7100bd9d1bc4a5e7bf019c580fd447bceccdd0ee30d4ccc01ce
+    .claude/skills/design-system-patterns/SKILL.md: sha256:618355f0e6c6ba8ca5d231035c9da18302fe6894aedce565743e9181b6c928ee
+    .claude/skills/design-system-patterns/references/component-architecture.md: sha256:84dc16ed581c1ad72e34b93ba84bcfa9223d30f9c42eb7e36654bbbe8daefc61
+    .claude/skills/design-system-patterns/references/design-tokens.md: sha256:44bd27e26f072a3facd6cd841140d403805106c9c5d5e39fc33bf6ffccf8af64
+    .claude/skills/design-system-patterns/references/details.md: sha256:1f1792e8b20c24c2be2acd46e7da85928578d108006594f3ae35d93f9108ff6d
+    .claude/skills/design-system-patterns/references/theming-architecture.md: sha256:24c9efec7c809a4d6797e6a11bc66ce08c5d708211caac14266ce5754c83cc75
+    .claude/skills/interaction-design/SKILL.md: sha256:87f2765ed1deeef3f1c06f9e4338ff103c391c6c4adcdffc885f3516b7c34ff2
+    .claude/skills/interaction-design/references/animation-libraries.md: sha256:92da251d881a6a0647f09b83c9cf8cbdfb5d408d54e1098097bb0eda336e6d0f
+    .claude/skills/interaction-design/references/microinteraction-patterns.md: sha256:c276b03468bacacf7a7d8d95c70114d9724854ac2e084ad63f0b6e1ef00a948a
+    .claude/skills/interaction-design/references/scroll-animations.md: sha256:34f32ef74c4f44bf57a721f95cd523b63dd1d02711f16ccb8472d1d7a4f78a35
+    .claude/skills/mobile-android-design/SKILL.md: sha256:0a209a1c45585ce0056548cc2f0fd352b7fde5980a3b5dd397a9daf5dff19fe7
+    .claude/skills/mobile-android-design/references/android-navigation.md: sha256:6a28f9a113c4af16f9f8581d9d494ed7b278de8c6258cef58e3ecb822707d190
+    .claude/skills/mobile-android-design/references/compose-components.md: sha256:22d9a47cc8ec4c4bbec36f15cb7a5eea33d5a0b5b6c3ba29378fc37197a8a8a0
+    .claude/skills/mobile-android-design/references/details.md: sha256:854f692ebe2b6adbf42f1406d0e7e1f7bc895ee34baa4ceff1ef1afc9f2dd962
+    .claude/skills/mobile-android-design/references/material3-theming.md: sha256:72ba4c1ef77fba5740b039b3f8b3676902967495141e3f40e0b800df3e85da7c
+    .claude/skills/mobile-ios-design/SKILL.md: sha256:2b3b2405aee645a345d137ce93bd86bac65d33da4ad40c4b6f007bf4a51b6c96
+    .claude/skills/mobile-ios-design/references/hig-patterns.md: sha256:1d893427552da55887ed14a344532f40f736d5cc6d153ce385b9cc8c73c55302
+    .claude/skills/mobile-ios-design/references/ios-navigation.md: sha256:8d6ab13ad2f6bf13b6555b2137f8861d4af374322f85fa3b06f10a6c0b70ef82
+    .claude/skills/mobile-ios-design/references/swiftui-components.md: sha256:3eb82e50121d529ee664685da10f42f59aa8dee4cc14acaca4c5d377d8cd8700
+    .claude/skills/react-native-design/SKILL.md: sha256:71eacfb8d4a62142e135e8b1934ffb540b0d2703d6b6b273d4c0f255bb1aa68d
+    .claude/skills/react-native-design/references/details.md: sha256:46c4f302d86c5493d6b7ebc9d72750124b925851c3b48f3d2d9717fe0567a171
+    .claude/skills/react-native-design/references/navigation-patterns.md: sha256:fef43e6a8f768b34f6c7e54989872c6fcc03e0883b4ace27258ec480440f3e45
+    .claude/skills/react-native-design/references/reanimated-patterns.md: sha256:861706a5ea0fd6d908eaf7159f156d1bbb6600d406b8e0d892624f059b341a35
+    .claude/skills/react-native-design/references/styling-patterns.md: sha256:3fddb0ebf1c12b5b077906a72a388d447797c1e1cdf9f51a4d71fc24e3b88c32
+    .claude/skills/responsive-design/SKILL.md: sha256:c8bd56f8fc0f122c4ff392b02617f0e6bb4a353b2d0189235c6ee77cdcfe8690
+    .claude/skills/responsive-design/references/breakpoint-strategies.md: sha256:d086c14641856aacdd38fd8aebf2988fb0055b7ed1b8773feb3104e69c7d1506
+    .claude/skills/responsive-design/references/container-queries.md: sha256:67b1697186a531751ec2aa364506919b9ae44680744603613c511d5132eb5a24
+    .claude/skills/responsive-design/references/details.md: sha256:6b8d84250249319719fc5d4a545628267edd16b8763c107536cf7341d37740b4
+    .claude/skills/responsive-design/references/fluid-layouts.md: sha256:d67ad19e57b015101da5d4c4a9208015909f60b89db5b7922d0bf9ca17673860
+    .claude/skills/visual-design-foundations/SKILL.md: sha256:0c6970d14f5d5df55c63d1be995205d140489e2d0c39896657fabee6f6a5df84
+    .claude/skills/visual-design-foundations/references/color-systems.md: sha256:9ba288fbead974f0b6424ca04acee68e6ede07be62c5121142084e6afa82f871
+    .claude/skills/visual-design-foundations/references/spacing-iconography.md: sha256:04835fad7ba356d9d10b46a9f6911a6b535095964a238f39f100b0dd1c4d90b5
+    .claude/skills/visual-design-foundations/references/typography-systems.md: sha256:93be8eeb9c2a5e26205f657ea13a34bb832ba686c0458ee3db2877e6b4b066fc
+    .claude/skills/web-component-design/SKILL.md: sha256:a7978f5e9e3fa7129cf3eb8d607cedece4e207011321893d9a3c5dd92cf32603
+    .claude/skills/web-component-design/references/accessibility-patterns.md: sha256:cecf82569bb7cbe89c96bd1d00ac0bee91d121515f19908a26e15634d13d3e3b
+    .claude/skills/web-component-design/references/component-patterns.md: sha256:a258c10793aae4b2628ff291fc7557d5605c73821d4946b98b923d6ef014c787
+    .claude/skills/web-component-design/references/css-styling-approaches.md: sha256:fe34ea85c3c3116982783c9148217c5642a15fcb73207458326ed91de05e592e
+  content_hash: sha256:98034564b87aa383659d82ab9f7b4fe1e8a5aaf7fe731c95781707baefd3a6f2
 mcp_servers:
 - codebase-memory-mcp
 - context7
@@ -530,6 +1379,7 @@ mcp_servers:
 - playwright
 - repomix
 - serena
+- tauri
 mcp_configs:
   codebase-memory-mcp:
     name: codebase-memory-mcp
@@ -580,6 +1430,14 @@ mcp_configs:
       serena start-mcp-server --context "$ctx" --project-from-cwd
     registry: false
     command: bash
+  tauri:
+    name: tauri
+    transport: stdio
+    args:
+    - -y
+    - '@hypothesi/tauri-mcp-server'
+    registry: false
+    command: npx
 local_deployed_files:
 - .claude/rules/05-astro-library-manager.md
 - .claude/rules/21-astro-monorepo.md
@@ -589,6 +1447,6 @@ local_deployed_files:
 local_deployed_file_hashes:
   .claude/rules/05-astro-library-manager.md: sha256:8390273d1ce1de32a57ff7b1a2d9b39de2a4ca6ddda8b820686211227a2fa159
   .claude/rules/21-astro-monorepo.md: sha256:c5d02f746f1ed8400d1fe04e8ed4c783c37f7566da6320785f719acb217cbbe3
-  .claude/rules/22-astro-build-run.md: sha256:908363ea9d4cb3e4d3f2f99e0bfe06bdee3e950507c638eed0286db9dec5383d
+  .claude/rules/22-astro-build-run.md: sha256:8ce43198828f9fa6a713eebf2693100eda5d4449fe405cb90e2495e55d302ff5
   .claude/rules/76-astro-specs.md: sha256:22ec5f0bb93489b7a5042c11b02e732db3dce94abdd16921e277929405525c7b
   .claude/rules/91-astro-agentic-ownership.md: sha256:d19bcb45235bf9a4991120b5f992716611cff3c8b02570707407ce66b342a70a

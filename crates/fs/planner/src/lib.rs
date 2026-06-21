@@ -150,6 +150,9 @@ pub enum PlanItemAction {
     Delete,
     RemoveGeneratedLink,
     RecordOnly,
+    /// Record-in-place: no filesystem mutation; marks the item as catalogued.
+    /// spec 041 (inbox plan surface).
+    Catalogue,
 }
 
 #[derive(Clone, Debug, Eq, PartialEq, Serialize, Deserialize)]

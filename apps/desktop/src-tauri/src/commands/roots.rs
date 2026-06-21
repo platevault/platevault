@@ -4,7 +4,8 @@
 //! Remaining commands are stubs until the real persistence layer is wired.
 
 use contracts_core::first_run::{
-    RegisterSourceRequest, RegisterSourceResponse, ScanDepth, SourceKind,
+    OrganizationState, RegisterSourceRequest, RegisterSourceResponse, ScanDepth,
+    SetSourceOrganizationStateRequest, SetSourceOrganizationStateResponse, SourceKind,
 };
 use contracts_core::roots::{
     Equipment, IpcOperationHandle, LibraryRoot, RemapSample, RemapVerification, RootCategory,
@@ -92,9 +93,42 @@ pub async fn roots_register(
         },
     );
 
-    let req = RegisterSourceRequest { kind, path, kind_subtype: None, scan_depth };
+    // Inbox sources are always unorganized; all other sources default to organized.
+    let organization_state = if kind == SourceKind::Inbox {
+        contracts_core::first_run::OrganizationState::Unorganized
+    } else {
+        contracts_core::first_run::OrganizationState::Organized
+    };
+
+    let req =
+        RegisterSourceRequest { kind, path, kind_subtype: None, scan_depth, organization_state };
 
     app_core::first_run::register_source(state.repo.pool(), &req).await
+}
+
+/// `sources.set_organization_state` — change a source's organization state
+/// (spec 041, T030). Affects only future confirms; inbox sources may not be
+/// set to `organized`.
+///
+/// # Errors
+/// Returns `Err(String)` on `source.invalid_organization_state`,
+/// `source.not_found`, or DB error.
+#[tauri::command]
+#[specta::specta]
+pub async fn sources_set_organization_state(
+    state: State<'_, AppState>,
+    source_id: String,
+    organization_state: OrganizationState,
+) -> Result<SetSourceOrganizationStateResponse, String> {
+    tracing::debug!(
+        "sources.set_organization_state source_id={source_id} state={organization_state:?}"
+    );
+
+    let req = SetSourceOrganizationStateRequest { source_id, organization_state };
+
+    app_core::first_run::set_source_organization_state(state.repo.pool(), &req)
+        .await
+        .map_err(|e| e.message)
 }
 
 /// `roots.remap` — preview a root path remap.

@@ -59,6 +59,9 @@ pub use targets::{
 pub mod dev_contracts;
 pub mod first_run;
 pub mod guided_flow;
+/// Inbox plan use-cases (spec 041). Lives in `app_core` (not `app_core_inbox`)
+/// because it orchestrates `plans` + `plan_apply`, which are `app_core` modules.
+pub mod inbox_plan;
 pub mod inventory;
 pub mod log_stream;
 pub mod native;

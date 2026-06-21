@@ -5,7 +5,8 @@
 
 use contracts_core::first_run::{
     FirstRunCompleteResponse, FirstRunRestartRequest, FirstRunRestartResponse,
-    FirstRunStateResponse, RegisterSourceBatchRequest, RegisterSourceBatchResponse,
+    FirstRunStateResponse, OrganizationState, RegisterSourceBatchRequest,
+    RegisterSourceBatchResponse, RegisterSourceRequest, SourceKind,
 };
 use tauri::State;
 
@@ -61,6 +62,9 @@ pub async fn firstrun_restart(
 
 /// `roots.register.batch` — register multiple source directories at once.
 ///
+/// Enforces that `inbox` kind sources are always `unorganized`, overriding
+/// any value supplied by the frontend (spec 041 R-7).
+///
 /// # Errors
 /// Returns `Err(String)` on catastrophic failure; per-item errors are in the response.
 #[tauri::command]
@@ -70,5 +74,18 @@ pub async fn roots_register_batch(
     request: RegisterSourceBatchRequest,
 ) -> Result<RegisterSourceBatchResponse, ContractError> {
     tracing::debug!("roots.register.batch ({} items)", request.sources.len());
-    app_core::first_run::register_source_batch(state.repo.pool(), &request).await
+    // Enforce inbox=unorganized regardless of what the frontend sent.
+    let enforced_sources: Vec<RegisterSourceRequest> = request
+        .sources
+        .into_iter()
+        .map(|mut src| {
+            if src.kind == SourceKind::Inbox {
+                src.organization_state = OrganizationState::Unorganized;
+            }
+            src
+        })
+        .collect();
+    let enforced_request = RegisterSourceBatchRequest { sources: enforced_sources };
+
+    app_core::first_run::register_source_batch(state.repo.pool(), &enforced_request).await
 }

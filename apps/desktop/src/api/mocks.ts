@@ -505,6 +505,7 @@ export async function mockInvoke(
           kind: 'light_frames',
           path: r.path,
           createdAt: new Date().toISOString(),
+          organizationState: 'unorganized',
         })),
       } satisfies FirstRunRestartResponse;
     }
@@ -529,6 +530,7 @@ export async function mockInvoke(
             format: 'fits',
             state: 'classified',
             contentSignature: 'sig-abc',
+            organizationState: 'unorganized',
             isMaster: false,
           },
           {
@@ -541,6 +543,7 @@ export async function mockInvoke(
             format: 'fits',
             state: 'pending_classification',
             contentSignature: 'sig-def',
+            organizationState: 'unorganized',
             isMaster: false,
           },
           {
@@ -554,6 +557,7 @@ export async function mockInvoke(
             format: 'xisf',
             state: 'pending_classification',
             contentSignature: '',
+            organizationState: 'unorganized',
             isMaster: true,
             masterFrameType: 'dark',
             masterFilter: 'Ha',
@@ -569,6 +573,7 @@ export async function mockInvoke(
             format: 'video',
             state: 'pending_classification',
             contentSignature: 'sig-ghi',
+            organizationState: 'unorganized',
             isMaster: false,
           },
         ],
@@ -653,6 +658,7 @@ export async function mockInvoke(
         frameType: 'light',
         remainingUnclassified: 0,
         appliedCount: 1,
+        breakdown: [],
       } satisfies InboxReclassifyResponse_Serialize;
     }
 

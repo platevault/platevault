@@ -14,6 +14,7 @@ members = [
   "crates/calibration/core",
   "crates/calibration/master-detect",
   "crates/contracts/core",
+  "crates/e2e-tests",
   "crates/domain/core",
   "crates/fs/executor",
   "crates/fs/inventory",
@@ -61,6 +62,11 @@ tauri = { version = "2.11", default-features = false, features = ["wry"] }
 tauri-build = { version = "2.6", features = [] }
 tauri-plugin-dialog = "2"
 tauri-plugin-opener = "2"
+# Tauri MCP bridge plugin (@hypothesi). Dev/debug-only surface, registered behind
+# `#[cfg(debug_assertions)]`; runs a WebSocket server on 0.0.0.0:9223 for the
+# @hypothesi/tauri-mcp-server MCP server. Requires the dev-only tauri.dev.conf.json
+# overlay (withGlobalTauri).
+tauri-plugin-mcp-bridge = "0.11"
 tauri-specta = { version = "2.0.0-rc.25", features = ["typescript"] }
 schemars = { version = "1", features = ["uuid1"] }
 serde = { version = "1", features = ["derive"] }

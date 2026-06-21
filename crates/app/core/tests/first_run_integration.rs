@@ -14,7 +14,7 @@ mod support;
 use app_core::first_run;
 use app_core::protection;
 use contracts_core::error_code::ErrorCode;
-use contracts_core::first_run::{RegisterSourceRequest, ScanDepth, SourceKind};
+use contracts_core::first_run::{OrganizationState, RegisterSourceRequest, ScanDepth, SourceKind};
 use contracts_core::protection::SourceProtectionGetRequest;
 use tempfile::tempdir;
 
@@ -32,6 +32,7 @@ async fn register_source_persists_and_reads_back() {
         path: path.clone(),
         kind_subtype: None,
         scan_depth: ScanDepth::Recursive,
+        organization_state: OrganizationState::Organized,
     };
 
     let resp = first_run::register_source(db.pool(), &req)
@@ -65,6 +66,7 @@ async fn register_source_rejects_duplicate_same_kind() {
         path: path.clone(),
         kind_subtype: None,
         scan_depth: ScanDepth::Single,
+        organization_state: OrganizationState::Organized,
     };
 
     // First registration must succeed.
@@ -97,6 +99,7 @@ async fn register_source_rejects_nonexistent_path() {
         path: "/tmp/__astro_plan_037_nonexistent_source_path_xyzzy__".to_owned(),
         kind_subtype: None,
         scan_depth: ScanDepth::Recursive,
+        organization_state: OrganizationState::Organized,
     };
 
     let err = first_run::register_source(db.pool(), &req)
@@ -125,6 +128,7 @@ async fn seed_source_protection_sets_protected_for_non_inbox() {
         path,
         kind_subtype: None,
         scan_depth: ScanDepth::Recursive,
+        organization_state: OrganizationState::Organized,
     };
     let resp = first_run::register_source(db.pool(), &req).await.expect("register should succeed");
 

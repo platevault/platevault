@@ -4,8 +4,10 @@ name: CI
 # - integration: Layer-1 real-backend integration + lint + bindings-drift gate,
 #   REQUIRED on Windows, Linux, and macOS (FR-012).
 # - ui-e2e: fast mock-mode Playwright UI regression.
-# Real UI->IPC->backend E2E (WebdriverIO + tauri-driver) lives in e2e.yml; macOS
-# real-UI E2E remains deferred per research D4.
+# Real UI->IPC->backend E2E (thirtyfour + cargo-nextest) lives in e2e.yml and
+# runs on ALL three OS via tauri-plugin-webdriver (Choochmeque) embedded in
+# desktop_shell under the `e2e` feature flag — no external per-OS WebDriver
+# binary required. WebdriverIO has been retired.
 
 on:
   pull_request:

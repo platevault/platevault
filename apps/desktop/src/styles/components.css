@@ -241,6 +241,8 @@
 }
 .alm-list-item:hover { background: var(--alm-hover-bg); }
 .alm-list-item--selected { background: var(--alm-selected-bg); }
+/* spec 041: items awaiting plan apply are dimmed to signal they are in-flight */
+.alm-list-item--muted { opacity: 0.55; }
 .alm-list-item__title {
   display: flex; align-items: center; gap: var(--alm-sp-1);
   font-size: var(--alm-text-sm); font-weight: var(--alm-weight-medium);

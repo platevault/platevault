@@ -14,7 +14,7 @@ import {
   DEFAULT_TOOLS_STATE,
 } from './steps';
 import type { CatalogSettings, ToolsState } from './steps';
-import type { SourcesState, SourceKind, ScanDepth } from './sources-store';
+import type { SourcesState, SourceKind, ScanDepth, OrganizationState } from './sources-store';
 import type { FlushResult } from './sources-store';
 import {
   loadSources,
@@ -242,6 +242,22 @@ export function SetupWizard() {
     [],
   );
 
+  const handleOrganizationStateChange = useCallback(
+    (index: number, orgState: OrganizationState) => {
+      setState((prev) => {
+        const next = [...prev.sources];
+        const entry = next[index];
+        // Inbox sources are always unorganized — the UI hides the control for them,
+        // but guard here too so the state stays consistent.
+        if (entry && entry.kind !== 'inbox') {
+          next[index] = { ...entry, organizationState: orgState };
+        }
+        return { ...prev, sources: next };
+      });
+    },
+    [],
+  );
+
   // Derived folder count for footer
   const totalFolders = state.sources.length;
 
@@ -427,6 +443,7 @@ export function SetupWizard() {
               onRemove={handleRemoveSource}
               onKindChange={handleKindChange}
               onScanDepthChange={handleScanDepthChange}
+              onOrganizationStateChange={handleOrganizationStateChange}
             />
           )}
           {step === 1 && (

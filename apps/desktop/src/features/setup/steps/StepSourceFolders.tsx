@@ -3,7 +3,7 @@ import { Btn } from '@/ui/Btn';
 import { Pill } from '@/ui/Pill';
 import { useDirectoryPicker } from '@/shared/native';
 import type { LastPathKind } from '@/shared/native';
-import type { SourceEntry, SourceKind, ScanDepth } from '../sources-store';
+import type { SourceEntry, SourceKind, ScanDepth, OrganizationState } from '../sources-store';
 import {
   ALL_SOURCE_KINDS,
   SOURCE_KIND_LABELS,
@@ -16,6 +16,7 @@ export interface StepSourceFoldersProps {
   onRemove: (index: number) => void;
   onKindChange: (index: number, kind: SourceKind) => void;
   onScanDepthChange: (index: number, depth: ScanDepth) => void;
+  onOrganizationStateChange: (index: number, state: OrganizationState) => void;
   errors: Record<number, string>;
 }
 
@@ -42,6 +43,7 @@ export function StepSourceFolders({
   onAdd,
   onRemove,
   onScanDepthChange,
+  onOrganizationStateChange,
   errors,
 }: StepSourceFoldersProps) {
   // Stable index lookup so per-row remove/advanced map back to the flat array.
@@ -80,6 +82,7 @@ export function StepSourceFolders({
               onAdd={onAdd}
               onRemove={onRemove}
               onScanDepthChange={onScanDepthChange}
+              onOrganizationStateChange={onOrganizationStateChange}
             />
           );
         })}
@@ -96,6 +99,7 @@ function SourceGroup({
   onAdd,
   onRemove,
   onScanDepthChange,
+  onOrganizationStateChange,
 }: {
   kind: SourceKind;
   rows: { entry: SourceEntry; index: number }[];
@@ -103,6 +107,7 @@ function SourceGroup({
   onAdd: (path: string, kind: SourceKind) => void;
   onRemove: (index: number) => void;
   onScanDepthChange: (index: number, depth: ScanDepth) => void;
+  onOrganizationStateChange: (index: number, state: OrganizationState) => void;
 }) {
   const isRequired = REQUIRED_KINDS.includes(kind);
   const isMet = rows.length > 0;
@@ -195,6 +200,7 @@ function SourceGroup({
               isLast={i === rows.length - 1}
               onRemove={() => onRemove(index)}
               onScanDepthChange={(depth) => onScanDepthChange(index, depth)}
+              onOrganizationStateChange={(state) => onOrganizationStateChange(index, state)}
             />
           ))}
         </div>
@@ -203,20 +209,23 @@ function SourceGroup({
   );
 }
 
-/** A single, single-line source row: path + scan-depth selector + remove. */
+/** A single, single-line source row: path + scan-depth selector + org-state toggle + remove. */
 function SourceRow({
   entry,
   error,
   isLast,
   onRemove,
   onScanDepthChange,
+  onOrganizationStateChange,
 }: {
   entry: SourceEntry;
   error?: string;
   isLast: boolean;
   onRemove: () => void;
   onScanDepthChange: (depth: ScanDepth) => void;
+  onOrganizationStateChange: (state: OrganizationState) => void;
 }) {
+  const isInbox = entry.kind === 'inbox';
   return (
     <div
       className="alm-step-sources__row"
@@ -244,6 +253,19 @@ function SourceRow({
         >
           {entry.path}
         </span>
+        {!isInbox && (
+          <select
+            className="alm-step-sources__org-select"
+            value={entry.organizationState}
+            onChange={(e) => onOrganizationStateChange(e.target.value as OrganizationState)}
+            aria-label="Organization state"
+            title="Already organized = files stay in place (catalogue only). Needs organizing = files will be moved to a library structure on confirm."
+            style={{ fontSize: 'var(--alm-text-2xs)' }}
+          >
+            <option value="organized">Already organized</option>
+            <option value="unorganized">Needs organizing</option>
+          </select>
+        )}
         <select
           className="alm-step-sources__depth-select"
           value={entry.scanDepth}

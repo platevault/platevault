@@ -251,6 +251,102 @@ async fn apply_plan_refuses_to_overwrite_existing_destination() {
     assert_eq!(plan_row.state, "failed", "plan should reach 'failed' when the only item conflicts");
 }
 
+// ── Test 3b: root_id resolved via registered_sources (gen-3) ─────────────────
+
+/// Regression for the inbox apply path: plan items reference a root by
+/// `from_root_id`/`to_root_id` and carry **relative** source/destination paths.
+/// The executor must resolve that root id to an absolute path so the relative
+/// paths anchor correctly. Roots added through the setup wizard live in
+/// `registered_sources` (the gen-3 source model) and are NOT mirrored into the
+/// legacy `library_root` table; before the fix, the resolver only consulted
+/// `library_root`, returned `None`, fell back to bare relative paths, and every
+/// move failed with `source.missing (os error 2)` — so no files ever moved.
+#[tokio::test]
+async fn apply_resolves_root_id_from_registered_sources() {
+    let (db, _repo, bus) = support::setup().await;
+    let plan_id = Uuid::new_v4().to_string();
+    let root_id = "reg-src-move-1";
+
+    // Real source root (as a wizard-added source would be) with a file inside.
+    let dir = tempfile::tempdir().expect("tempdir");
+    let root = dir.path();
+    std::fs::write(root.join("capture.fits"), b"raw-light-frame").expect("write src");
+
+    // Register the root ONLY in registered_sources (library_root stays empty),
+    // exactly as first-run registration does.
+    sqlx::query(
+        "INSERT INTO registered_sources \
+         (id, kind, path, scan_depth, created_at, created_via, organization_state) \
+         VALUES (?, 'light_frames', ?, 'recursive', '2026-06-20T00:00:00Z', 'first_run', 'unorganized')",
+    )
+    .bind(root_id)
+    .bind(root.to_str().expect("utf-8 root"))
+    .execute(db.pool())
+    .await
+    .expect("insert registered_sources");
+
+    // Plan move item: root_id set, paths RELATIVE to the root.
+    plans_repo::insert_plan(
+        db.pool(),
+        &plans_repo::InsertPlan {
+            id: &plan_id,
+            title: "Inbox move (registered_sources root)",
+            origin: "inbox",
+            origin_path: None,
+            plan_type: "split",
+            destructive_destination: "archive",
+            parent_plan_id: None,
+            total_bytes_required: 0,
+        },
+    )
+    .await
+    .expect("insert_plan");
+    plans_repo::insert_plan_item(
+        db.pool(),
+        &plans_repo::InsertPlanItem {
+            id: &format!("{plan_id}-item-0"),
+            plan_id: &plan_id,
+            item_index: 1,
+            name: "capture.fits",
+            action: "move",
+            from_root_id: Some(root_id),
+            from_relative_path: "capture.fits",
+            to_root_id: Some(root_id),
+            to_relative_path: "M45/L/2026-01-20/light/capture.fits",
+            reason: "regression test",
+            protection: "normal",
+            linked_entity: None,
+            provenance_json: None,
+            archive_path: None,
+            source_id: None,
+            category: None,
+        },
+    )
+    .await
+    .expect("insert_plan_item");
+    plans_repo::update_plan_state(db.pool(), &plan_id, "ready_for_review")
+        .await
+        .expect("ready_for_review");
+    plans_repo::set_approved(db.pool(), &plan_id, "2026-06-20T00:00:00Z", "tok-test-fixed")
+        .await
+        .expect("set_approved");
+
+    app_core::plan_apply::apply_plan(db.pool(), &bus, &plan_id, "tok-test-fixed", None)
+        .await
+        .expect("apply_plan");
+    tokio::time::sleep(tokio::time::Duration::from_millis(200)).await;
+
+    // The file must have moved to the root-anchored destination.
+    assert!(!root.join("capture.fits").exists(), "source should be moved away");
+    assert!(
+        root.join("M45/L/2026-01-20/light/capture.fits").exists(),
+        "destination (anchored to the registered_sources root) should exist"
+    );
+
+    let plan_row = plans_repo::get_plan(db.pool(), &plan_id, false).await.expect("get_plan row");
+    assert_eq!(plan_row.state, "applied", "plan should reach 'applied' after the move succeeds");
+}
+
 // ── Test 4: approve + apply round-trip via use-case layer ────────────────────
 
 /// Verifies the full review pipeline via public use-case functions:
