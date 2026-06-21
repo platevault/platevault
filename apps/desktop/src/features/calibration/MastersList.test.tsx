@@ -110,10 +110,10 @@ describe('MastersList (spec 007)', () => {
         agingThresholdDays={90}
       />,
     );
-    // Find any clickable list items within the DARKS section.
-    // The master ID `dark-1` is 6 chars — slice(0,8) gives the whole id.
-    // We match on the text starting with 'dark-1' (the mono span content).
-    const item = screen.getByText((text) => text.startsWith('dark-1'));
+    // Rows now show a readable fingerprint title ("Master Dark · …") instead of
+    // an id-hash. The function matcher hits the title + its ancestors, so take
+    // the first match and walk up to the clickable row.
+    const item = screen.getAllByText((text) => text.startsWith('Master Dark'))[0];
     // Walk up to the nearest clickable ancestor.
     const clickable = item.closest('li') ?? item.closest('div') ?? item;
     fireEvent.click(clickable);
