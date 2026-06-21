@@ -403,18 +403,21 @@
 .alm-section__right { margin-left: auto; }
 
 /* === DETAIL v4: METRIC LINE + DASHBOARD GRID + UNIFIED RAIL === */
+/* Quiet summary-stat row (not hero numbers): value and label share the same
+   size; value is medium-weight ink, label is muted. One consistent treatment
+   across every detail header. */
 .alm-metricline {
   display: flex;
   flex-wrap: wrap;
-  gap: var(--alm-sp-5);
+  gap: var(--alm-sp-1) var(--alm-sp-4);
   align-items: baseline;
   padding: var(--alm-sp-3) 0;
   border-bottom: 1px solid var(--alm-border-subtle);
+  font-size: var(--alm-text-sm);
 }
-.alm-metricline__m { font-size: var(--alm-text-xs); color: var(--alm-text-muted); }
+.alm-metricline__m { font-size: var(--alm-text-sm); color: var(--alm-text-muted); }
 .alm-metricline__m b {
-  font-size: var(--alm-text-lg);
-  font-weight: var(--alm-weight-semibold);
+  font-weight: var(--alm-weight-medium);
   color: var(--alm-text);
   margin-right: var(--alm-sp-1);
 }
