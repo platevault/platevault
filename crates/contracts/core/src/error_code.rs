@@ -100,6 +100,15 @@ pub enum ErrorCode {
     InboxHasOpenPlan,
     #[serde(rename = "inbox.item.no_plan")]
     InboxItemNoPlan,
+    // Destination model (spec 041 destination iteration: US8/US9, FR-025–FR-033).
+    #[serde(rename = "inbox.no_destination_root")]
+    InboxNoDestinationRoot,
+    #[serde(rename = "inbox.destination_root_required")]
+    InboxDestinationRootRequired,
+    #[serde(rename = "inbox.invalid_destination_root")]
+    InboxInvalidDestinationRoot,
+    #[serde(rename = "inbox.missing_path_attributes")]
+    InboxMissingPathAttributes,
 
     // ── Metadata / classification ────────────────────────────────────────────
     #[serde(rename = "metadata.unreadable")]

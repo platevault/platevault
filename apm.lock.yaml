@@ -1,10 +1,10 @@
 lockfile_version: '1'
-generated_at: '2026-06-20T15:23:41.943010+00:00'
+generated_at: '2026-06-20T09:02:18.124735+00:00'
 apm_version: 0.19.0
 dependencies:
 - repo_url: Dammyjay93/interface-design
   host: github.com
-  resolved_commit: 2f9be3206855bcb2d1d0af262c8bae25cba6658d
+  resolved_commit: 5c4744e023c78f80b181f8be06bd26bd0a568544
   resolved_ref: main
   virtual_path: .claude/skills/interface-design
   is_virtual: true
@@ -13,15 +13,35 @@ dependencies:
   - .agents/skills/interface-design
   - .agents/skills/interface-design/SKILL.md
   - .agents/skills/interface-design/agents/openai.yaml
+  - .agents/skills/interface-design/references/critique.md
+  - .agents/skills/interface-design/references/example.md
+  - .agents/skills/interface-design/references/imagegen.md
+  - .agents/skills/interface-design/references/principles.md
+  - .agents/skills/interface-design/references/validation.md
   - .claude/skills/interface-design
   - .claude/skills/interface-design/SKILL.md
   - .claude/skills/interface-design/agents/openai.yaml
+  - .claude/skills/interface-design/references/critique.md
+  - .claude/skills/interface-design/references/example.md
+  - .claude/skills/interface-design/references/imagegen.md
+  - .claude/skills/interface-design/references/principles.md
+  - .claude/skills/interface-design/references/validation.md
   deployed_file_hashes:
-    .agents/skills/interface-design/SKILL.md: sha256:720b31a31276e899fbe3006a33cbfeaceb77a73ba4c27b80d29afd38c8b7b208
+    .agents/skills/interface-design/SKILL.md: sha256:3bf34291021ae72628ce5cd5f006f09143cb163b27f5004429586833b8197a31
     .agents/skills/interface-design/agents/openai.yaml: sha256:752d0810d593b5cc88b34ea8e0c101b50d0ec1c4c8091be369544f73f3a2ea2e
-    .claude/skills/interface-design/SKILL.md: sha256:720b31a31276e899fbe3006a33cbfeaceb77a73ba4c27b80d29afd38c8b7b208
+    .agents/skills/interface-design/references/critique.md: sha256:48903ec19affbb4bf544f51beedd31aef03469730c8802711c0f6637465c8142
+    .agents/skills/interface-design/references/example.md: sha256:6914c93b92bea70792db7dd062a8677eccd67e83cb55da493611f8ea5bdff5bf
+    .agents/skills/interface-design/references/imagegen.md: sha256:99b668a163e400d015b9be3837e6f071d1c23ce2aad25c2dc9f20418da203001
+    .agents/skills/interface-design/references/principles.md: sha256:1ee5305f8a2c94831303a4b77128e2319c67e14cc194245606b0143e261ac410
+    .agents/skills/interface-design/references/validation.md: sha256:2fa4730b8d82f3cc227c1e807fd2b31ed464445ffcd09c145dd2cc7d3e90f150
+    .claude/skills/interface-design/SKILL.md: sha256:3bf34291021ae72628ce5cd5f006f09143cb163b27f5004429586833b8197a31
     .claude/skills/interface-design/agents/openai.yaml: sha256:752d0810d593b5cc88b34ea8e0c101b50d0ec1c4c8091be369544f73f3a2ea2e
-  content_hash: sha256:a7d0a55b705de0a7c1a33a23873b6d696619d195c432f8775325cf839398c936
+    .claude/skills/interface-design/references/critique.md: sha256:48903ec19affbb4bf544f51beedd31aef03469730c8802711c0f6637465c8142
+    .claude/skills/interface-design/references/example.md: sha256:6914c93b92bea70792db7dd062a8677eccd67e83cb55da493611f8ea5bdff5bf
+    .claude/skills/interface-design/references/imagegen.md: sha256:99b668a163e400d015b9be3837e6f071d1c23ce2aad25c2dc9f20418da203001
+    .claude/skills/interface-design/references/principles.md: sha256:1ee5305f8a2c94831303a4b77128e2319c67e14cc194245606b0143e261ac410
+    .claude/skills/interface-design/references/validation.md: sha256:2fa4730b8d82f3cc227c1e807fd2b31ed464445ffcd09c145dd2cc7d3e90f150
+  content_hash: sha256:75cfa5c5b886dc3f47ebe8014c25c8f3b542e3874db8cef065bb5dc8e04016bc
 - repo_url: google-labs-code/stitch-skills
   host: github.com
   resolved_commit: fac732417e1b05525686fb78141a517b05f5d57e
@@ -162,7 +182,7 @@ dependencies:
   content_hash: sha256:f321507f77702a54af1db66549ec1685fc625390d06c57d7949cdcda8eb1b5c7
 - repo_url: pbakaus/impeccable
   host: github.com
-  resolved_commit: 68a15b6be45b8080e0b8eea98069e8555c0b3b25
+  resolved_commit: 793feda5a0f3b315e9c789f9917635622455e486
   resolved_ref: main
   virtual_path: .agents/skills/impeccable
   is_virtual: true
@@ -233,7 +253,6 @@ dependencies:
   - .agents/skills/impeccable/scripts/lib/impeccable-config.mjs
   - .agents/skills/impeccable/scripts/lib/impeccable-paths.mjs
   - .agents/skills/impeccable/scripts/lib/is-generated.mjs
-  - .agents/skills/impeccable/scripts/lib/target-args.mjs
   - .agents/skills/impeccable/scripts/live-accept.mjs
   - .agents/skills/impeccable/scripts/live-browser-dom.js
   - .agents/skills/impeccable/scripts/live-browser-session.js
@@ -249,7 +268,6 @@ dependencies:
   - .agents/skills/impeccable/scripts/live-resume.mjs
   - .agents/skills/impeccable/scripts/live-server.mjs
   - .agents/skills/impeccable/scripts/live-status.mjs
-  - .agents/skills/impeccable/scripts/live-target.mjs
   - .agents/skills/impeccable/scripts/live-wrap.mjs
   - .agents/skills/impeccable/scripts/live.mjs
   - .agents/skills/impeccable/scripts/live/browser-script-parts.mjs
@@ -332,7 +350,6 @@ dependencies:
   - .claude/skills/impeccable/scripts/lib/impeccable-config.mjs
   - .claude/skills/impeccable/scripts/lib/impeccable-paths.mjs
   - .claude/skills/impeccable/scripts/lib/is-generated.mjs
-  - .claude/skills/impeccable/scripts/lib/target-args.mjs
   - .claude/skills/impeccable/scripts/live-accept.mjs
   - .claude/skills/impeccable/scripts/live-browser-dom.js
   - .claude/skills/impeccable/scripts/live-browser-session.js
@@ -348,7 +365,6 @@ dependencies:
   - .claude/skills/impeccable/scripts/live-resume.mjs
   - .claude/skills/impeccable/scripts/live-server.mjs
   - .claude/skills/impeccable/scripts/live-status.mjs
-  - .claude/skills/impeccable/scripts/live-target.mjs
   - .claude/skills/impeccable/scripts/live-wrap.mjs
   - .claude/skills/impeccable/scripts/live.mjs
   - .claude/skills/impeccable/scripts/live/browser-script-parts.mjs
@@ -367,7 +383,7 @@ dependencies:
   - .claude/skills/impeccable/scripts/palette.mjs
   - .claude/skills/impeccable/scripts/pin.mjs
   deployed_file_hashes:
-    .agents/skills/impeccable/SKILL.md: sha256:9e68a3ee325aa9617f8b99cbfb0b614302d2322e5e5065400cf72c1dc5fe1bbc
+    .agents/skills/impeccable/SKILL.md: sha256:4bd93654e50381c9b2533444bbe476c9f60792e7a58a99c3e05782b1949332f9
     .agents/skills/impeccable/agents/impeccable_asset_producer.toml: sha256:8f6749b5cf72920cd52718c72a399c0672539e9d48da95c799d7f270c634261b
     .agents/skills/impeccable/agents/impeccable_manual_edit_applier.toml: sha256:b7ca38e2f7822a6a13f32fd735011aefaccc5eeaf4f993850f0076ff30128657
     .agents/skills/impeccable/agents/openai.yaml: sha256:cbd8bd68fa00935dd0f179adb169252629cf7ee443ea9dc7db77e7ef2cf77446
@@ -386,11 +402,11 @@ dependencies:
     .agents/skills/impeccable/reference/document.md: sha256:7e00b2883ab1f5b6e902bf0acc8fc2ec96c66ada426b64b7d6d01fff24190b9d
     .agents/skills/impeccable/reference/extract.md: sha256:527fad000a1ac24a81e9da4b28f29ee055a442425f001301b8c3e9c161c43bea
     .agents/skills/impeccable/reference/harden.md: sha256:ab2ad8ab75c4755ce4a31b2c830a67fb81a01d6bb7b7075d0aa45338f88b5b40
-    .agents/skills/impeccable/reference/hooks.md: sha256:0028cd58b314780554cf8e0a829234dc8ccc581470d03415ac0e8e4c5e9fa850
+    .agents/skills/impeccable/reference/hooks.md: sha256:ce0ccc92e978e6ea22eea0f47625594df3d9ce1a56a0193b2d3c78618e478741
     .agents/skills/impeccable/reference/init.md: sha256:11d8fb70c525e02eda6333c5e55ee855e898c4992722c4cc4f066f7e1b3b25ef
     .agents/skills/impeccable/reference/interaction-design.md: sha256:ca0b4a91bd380095b6a53c66f524f53efe741e536938af65f9cc184075e83ed3
     .agents/skills/impeccable/reference/layout.md: sha256:488cd4c41f139a7d82a43c128b1c5b8f4d912baacce18d2644de3544def3c426
-    .agents/skills/impeccable/reference/live.md: sha256:6e2afff57357a92b205573a6ae7d7917320ec4bbedaf204f4d337b4614d017b1
+    .agents/skills/impeccable/reference/live.md: sha256:5c74a81ec261a7c3cf483f436579569325dbf13ecdce8a131a3c78c79e0b914d
     .agents/skills/impeccable/reference/onboard.md: sha256:ef2dde00030580ed2765cbf7be9b2ea4a6f64cb915b804fd6f6abcf38051c7b9
     .agents/skills/impeccable/reference/optimize.md: sha256:9f7f2c5ef63d06b5d6597e88f98cbdf1de841c7b2027763bf5725523860ab3b7
     .agents/skills/impeccable/reference/overdrive.md: sha256:7ae6fef3e53dd3b4564d730a0fd243d45903ca1944945cb1a4e8f08b9353fb67
@@ -401,7 +417,7 @@ dependencies:
     .agents/skills/impeccable/reference/typeset.md: sha256:992b99c3b32ac0083a8441ee3852995b4e05d4d77eb62f538270c2447e81a96b
     .agents/skills/impeccable/scripts/command-metadata.json: sha256:759cc4028134797401d8050aa97c111bfc5ece9db1caba92df24e01ff7ba743d
     .agents/skills/impeccable/scripts/context-signals.mjs: sha256:7846ab9d3f71171b041bd9090b34136686589d53ff87bdc91313f3cee1702ff9
-    .agents/skills/impeccable/scripts/context.mjs: sha256:d3a9254e5375e09b2ee12724dd9d5738d9b311b638ad2bce01563737d7eadcba
+    .agents/skills/impeccable/scripts/context.mjs: sha256:e11689ebf7f14289cc3dc1ac052a0862c43a0eeea3df712212ed19b7215f96de
     .agents/skills/impeccable/scripts/critique-storage.mjs: sha256:0ae2c767ee8e5d7820c3a2a5bc96aeb3721d25fafda54b72e419af9e1775444a
     .agents/skills/impeccable/scripts/detect-csp.mjs: sha256:2d80520bef13cb93107699714bc0d2be5a2787a9aa079ecec91b94508a8125a4
     .agents/skills/impeccable/scripts/detect.mjs: sha256:f5dfd05ca1e314acd8ed79c6301a20a1b844f2eb6691bd63e04116a8e7efb187
@@ -423,15 +439,14 @@ dependencies:
     .agents/skills/impeccable/scripts/detector/shared/color.mjs: sha256:01a68231413473f2c1183e12663ccf8aca26a87d067de75fbf3c21e73b751a83
     .agents/skills/impeccable/scripts/detector/shared/constants.mjs: sha256:2e61e0815e7216fe74ce89eccfff2761bb72268964d804ee89987119130e4edd
     .agents/skills/impeccable/scripts/detector/shared/page.mjs: sha256:b4cef5548d84fa90d15e6b42b20be9ef74ed05e4e6e46076ec5acc61b343315c
-    .agents/skills/impeccable/scripts/hook-admin.mjs: sha256:3e785f72aaf013abca377668e503f6c8af73a4ad07f1a2e44c6115045b759cdc
+    .agents/skills/impeccable/scripts/hook-admin.mjs: sha256:6a7b534a137d4339da7bc2d404e8af6212717e38a4e8f3a9cc8933e371571069
     .agents/skills/impeccable/scripts/hook-before-edit.mjs: sha256:c68a4931638586b87de5ab8528d52821628cba38dcd7d4f0f988dcdf56a9a86b
-    .agents/skills/impeccable/scripts/hook-lib.mjs: sha256:e38411accece0ebdbb98fafcb228241087c9108dc4cbde3dacb20bbf5fd90288
+    .agents/skills/impeccable/scripts/hook-lib.mjs: sha256:77db496c2b432de548e369bbe6a7d1b95efca7dc8ed5834f57a591b2acb20037
     .agents/skills/impeccable/scripts/hook.mjs: sha256:6ffed896c9c1e3a8ec9ca0e102f858e34d93f15d6442e35e6eae90908892577c
     .agents/skills/impeccable/scripts/lib/design-parser.mjs: sha256:096747b1225f0b78f6fe155477324c592f4fc38021b7007177e70b2dc55df588
     .agents/skills/impeccable/scripts/lib/impeccable-config.mjs: sha256:b8da16081a158d2aa6e86ff4fa74028977ee73e6559eda13e6a068b60123c7cb
-    .agents/skills/impeccable/scripts/lib/impeccable-paths.mjs: sha256:e8a8fb45408e92e08bdc6cbc5e94c53b42166f7dd468ffeab98b1808dfa09362
+    .agents/skills/impeccable/scripts/lib/impeccable-paths.mjs: sha256:9cb0ae315ee9f7a24ea5f19591197132823a17bee7dba6dcc1e03fb98a5a3acc
     .agents/skills/impeccable/scripts/lib/is-generated.mjs: sha256:ed5b0b00e99ed385db541c7a068cb85f72456a4b6aa7a5460037d24b58bd90cd
-    .agents/skills/impeccable/scripts/lib/target-args.mjs: sha256:8f8b902d9ec7dbad0431226bb8aea935cd67d68878d19d95a605be0585056f31
     .agents/skills/impeccable/scripts/live-accept.mjs: sha256:37045f83f8f2efa7e4d2bb240ac1d50dbf9003a2be0fb0d35801db95ab75eead
     .agents/skills/impeccable/scripts/live-browser-dom.js: sha256:bcfa4022e741f8034b841aed76b9ea3f6a64a8e08e4dfa43ba99f8be65a73393
     .agents/skills/impeccable/scripts/live-browser-session.js: sha256:dddcb8b941f7460aa6a134f7d456b1820747172c12e01de36dab3265b1065cff
@@ -445,11 +460,10 @@ dependencies:
     .agents/skills/impeccable/scripts/live-manual-edit-evidence.mjs: sha256:3a5959277f0bd86c9c166d08cab5c0eb4bcb40d306cb9dc3e54dc693a2eb6d82
     .agents/skills/impeccable/scripts/live-poll.mjs: sha256:836f88f1a8b25f32ac9559e5fc65dfefa045f78d696351e4335634318b1f8960
     .agents/skills/impeccable/scripts/live-resume.mjs: sha256:5f7f88fb6cbcdd5dcf210ace22225dbbe43afee4cf9c7c0e1d8b5b3a1f4b79a2
-    .agents/skills/impeccable/scripts/live-server.mjs: sha256:c6afe0db2009e5da2251d3f94e1ed995ac446404a597ea95b714d73b9b1e478e
+    .agents/skills/impeccable/scripts/live-server.mjs: sha256:085c6574156069e6c0e0d3b70bb97ddfbe80a39e5de4ede2dfc50b92ed258bec
     .agents/skills/impeccable/scripts/live-status.mjs: sha256:d9186410a2c9671f59396bd315d2f7434f5c35379917c39763a6eb28d76261a8
-    .agents/skills/impeccable/scripts/live-target.mjs: sha256:7f18323b89167804c2d9005d4766b159c81268c9f21daab9fdec24f513f25eb0
     .agents/skills/impeccable/scripts/live-wrap.mjs: sha256:48dd1ff1700aa373b48ab287c5dab6de0a482f4a8c6626edd23700ca44ca2589
-    .agents/skills/impeccable/scripts/live.mjs: sha256:243c8213e097e6ee2f32cf02a90cf33a5338d9800244bcdbbdc7134e8767e046
+    .agents/skills/impeccable/scripts/live.mjs: sha256:719144797cca8dc231d4a3a895290121cc57c2ac75cc339e171abd4c365f1621
     .agents/skills/impeccable/scripts/live/browser-script-parts.mjs: sha256:10c31c3ed0f53c73efdd5fcd8a6203e1d85d244cef0b9f4dcf0f3c5df5c3d677
     .agents/skills/impeccable/scripts/live/completion.mjs: sha256:471b99f7904deb068ceb915906d628ed1bd6b86fb92e2151142ab321ea545117
     .agents/skills/impeccable/scripts/live/event-validation.mjs: sha256:c0ee57b8306f8b1f31b00961017c849b7f352887bd8c889981805e14b8d2e63c
@@ -465,7 +479,7 @@ dependencies:
     .agents/skills/impeccable/scripts/modern-screenshot.umd.js: sha256:bb36665889124a0b6e15f16045265737449c3bdcf2712cdb08af3cfa01563e2b
     .agents/skills/impeccable/scripts/palette.mjs: sha256:6e43ef19ede979019ebf86175fed0d6876473ddc1cf6c40c8b310e7ac4c5f45a
     .agents/skills/impeccable/scripts/pin.mjs: sha256:c3b92fee8ed03e54978fd97da43125dc3b2cb89db92ad6ae82ff7dcb6ba20914
-    .claude/skills/impeccable/SKILL.md: sha256:9e68a3ee325aa9617f8b99cbfb0b614302d2322e5e5065400cf72c1dc5fe1bbc
+    .claude/skills/impeccable/SKILL.md: sha256:4bd93654e50381c9b2533444bbe476c9f60792e7a58a99c3e05782b1949332f9
     .claude/skills/impeccable/agents/impeccable_asset_producer.toml: sha256:8f6749b5cf72920cd52718c72a399c0672539e9d48da95c799d7f270c634261b
     .claude/skills/impeccable/agents/impeccable_manual_edit_applier.toml: sha256:b7ca38e2f7822a6a13f32fd735011aefaccc5eeaf4f993850f0076ff30128657
     .claude/skills/impeccable/agents/openai.yaml: sha256:cbd8bd68fa00935dd0f179adb169252629cf7ee443ea9dc7db77e7ef2cf77446
@@ -484,11 +498,11 @@ dependencies:
     .claude/skills/impeccable/reference/document.md: sha256:7e00b2883ab1f5b6e902bf0acc8fc2ec96c66ada426b64b7d6d01fff24190b9d
     .claude/skills/impeccable/reference/extract.md: sha256:527fad000a1ac24a81e9da4b28f29ee055a442425f001301b8c3e9c161c43bea
     .claude/skills/impeccable/reference/harden.md: sha256:ab2ad8ab75c4755ce4a31b2c830a67fb81a01d6bb7b7075d0aa45338f88b5b40
-    .claude/skills/impeccable/reference/hooks.md: sha256:0028cd58b314780554cf8e0a829234dc8ccc581470d03415ac0e8e4c5e9fa850
+    .claude/skills/impeccable/reference/hooks.md: sha256:ce0ccc92e978e6ea22eea0f47625594df3d9ce1a56a0193b2d3c78618e478741
     .claude/skills/impeccable/reference/init.md: sha256:11d8fb70c525e02eda6333c5e55ee855e898c4992722c4cc4f066f7e1b3b25ef
     .claude/skills/impeccable/reference/interaction-design.md: sha256:ca0b4a91bd380095b6a53c66f524f53efe741e536938af65f9cc184075e83ed3
     .claude/skills/impeccable/reference/layout.md: sha256:488cd4c41f139a7d82a43c128b1c5b8f4d912baacce18d2644de3544def3c426
-    .claude/skills/impeccable/reference/live.md: sha256:6e2afff57357a92b205573a6ae7d7917320ec4bbedaf204f4d337b4614d017b1
+    .claude/skills/impeccable/reference/live.md: sha256:5c74a81ec261a7c3cf483f436579569325dbf13ecdce8a131a3c78c79e0b914d
     .claude/skills/impeccable/reference/onboard.md: sha256:ef2dde00030580ed2765cbf7be9b2ea4a6f64cb915b804fd6f6abcf38051c7b9
     .claude/skills/impeccable/reference/optimize.md: sha256:9f7f2c5ef63d06b5d6597e88f98cbdf1de841c7b2027763bf5725523860ab3b7
     .claude/skills/impeccable/reference/overdrive.md: sha256:7ae6fef3e53dd3b4564d730a0fd243d45903ca1944945cb1a4e8f08b9353fb67
@@ -499,7 +513,7 @@ dependencies:
     .claude/skills/impeccable/reference/typeset.md: sha256:992b99c3b32ac0083a8441ee3852995b4e05d4d77eb62f538270c2447e81a96b
     .claude/skills/impeccable/scripts/command-metadata.json: sha256:759cc4028134797401d8050aa97c111bfc5ece9db1caba92df24e01ff7ba743d
     .claude/skills/impeccable/scripts/context-signals.mjs: sha256:7846ab9d3f71171b041bd9090b34136686589d53ff87bdc91313f3cee1702ff9
-    .claude/skills/impeccable/scripts/context.mjs: sha256:d3a9254e5375e09b2ee12724dd9d5738d9b311b638ad2bce01563737d7eadcba
+    .claude/skills/impeccable/scripts/context.mjs: sha256:e11689ebf7f14289cc3dc1ac052a0862c43a0eeea3df712212ed19b7215f96de
     .claude/skills/impeccable/scripts/critique-storage.mjs: sha256:0ae2c767ee8e5d7820c3a2a5bc96aeb3721d25fafda54b72e419af9e1775444a
     .claude/skills/impeccable/scripts/detect-csp.mjs: sha256:2d80520bef13cb93107699714bc0d2be5a2787a9aa079ecec91b94508a8125a4
     .claude/skills/impeccable/scripts/detect.mjs: sha256:f5dfd05ca1e314acd8ed79c6301a20a1b844f2eb6691bd63e04116a8e7efb187
@@ -521,15 +535,14 @@ dependencies:
     .claude/skills/impeccable/scripts/detector/shared/color.mjs: sha256:01a68231413473f2c1183e12663ccf8aca26a87d067de75fbf3c21e73b751a83
     .claude/skills/impeccable/scripts/detector/shared/constants.mjs: sha256:2e61e0815e7216fe74ce89eccfff2761bb72268964d804ee89987119130e4edd
     .claude/skills/impeccable/scripts/detector/shared/page.mjs: sha256:b4cef5548d84fa90d15e6b42b20be9ef74ed05e4e6e46076ec5acc61b343315c
-    .claude/skills/impeccable/scripts/hook-admin.mjs: sha256:3e785f72aaf013abca377668e503f6c8af73a4ad07f1a2e44c6115045b759cdc
+    .claude/skills/impeccable/scripts/hook-admin.mjs: sha256:6a7b534a137d4339da7bc2d404e8af6212717e38a4e8f3a9cc8933e371571069
     .claude/skills/impeccable/scripts/hook-before-edit.mjs: sha256:c68a4931638586b87de5ab8528d52821628cba38dcd7d4f0f988dcdf56a9a86b
-    .claude/skills/impeccable/scripts/hook-lib.mjs: sha256:e38411accece0ebdbb98fafcb228241087c9108dc4cbde3dacb20bbf5fd90288
+    .claude/skills/impeccable/scripts/hook-lib.mjs: sha256:77db496c2b432de548e369bbe6a7d1b95efca7dc8ed5834f57a591b2acb20037
     .claude/skills/impeccable/scripts/hook.mjs: sha256:6ffed896c9c1e3a8ec9ca0e102f858e34d93f15d6442e35e6eae90908892577c
     .claude/skills/impeccable/scripts/lib/design-parser.mjs: sha256:096747b1225f0b78f6fe155477324c592f4fc38021b7007177e70b2dc55df588
     .claude/skills/impeccable/scripts/lib/impeccable-config.mjs: sha256:b8da16081a158d2aa6e86ff4fa74028977ee73e6559eda13e6a068b60123c7cb
-    .claude/skills/impeccable/scripts/lib/impeccable-paths.mjs: sha256:e8a8fb45408e92e08bdc6cbc5e94c53b42166f7dd468ffeab98b1808dfa09362
+    .claude/skills/impeccable/scripts/lib/impeccable-paths.mjs: sha256:9cb0ae315ee9f7a24ea5f19591197132823a17bee7dba6dcc1e03fb98a5a3acc
     .claude/skills/impeccable/scripts/lib/is-generated.mjs: sha256:ed5b0b00e99ed385db541c7a068cb85f72456a4b6aa7a5460037d24b58bd90cd
-    .claude/skills/impeccable/scripts/lib/target-args.mjs: sha256:8f8b902d9ec7dbad0431226bb8aea935cd67d68878d19d95a605be0585056f31
     .claude/skills/impeccable/scripts/live-accept.mjs: sha256:37045f83f8f2efa7e4d2bb240ac1d50dbf9003a2be0fb0d35801db95ab75eead
     .claude/skills/impeccable/scripts/live-browser-dom.js: sha256:bcfa4022e741f8034b841aed76b9ea3f6a64a8e08e4dfa43ba99f8be65a73393
     .claude/skills/impeccable/scripts/live-browser-session.js: sha256:dddcb8b941f7460aa6a134f7d456b1820747172c12e01de36dab3265b1065cff
@@ -543,11 +556,10 @@ dependencies:
     .claude/skills/impeccable/scripts/live-manual-edit-evidence.mjs: sha256:3a5959277f0bd86c9c166d08cab5c0eb4bcb40d306cb9dc3e54dc693a2eb6d82
     .claude/skills/impeccable/scripts/live-poll.mjs: sha256:836f88f1a8b25f32ac9559e5fc65dfefa045f78d696351e4335634318b1f8960
     .claude/skills/impeccable/scripts/live-resume.mjs: sha256:5f7f88fb6cbcdd5dcf210ace22225dbbe43afee4cf9c7c0e1d8b5b3a1f4b79a2
-    .claude/skills/impeccable/scripts/live-server.mjs: sha256:c6afe0db2009e5da2251d3f94e1ed995ac446404a597ea95b714d73b9b1e478e
+    .claude/skills/impeccable/scripts/live-server.mjs: sha256:085c6574156069e6c0e0d3b70bb97ddfbe80a39e5de4ede2dfc50b92ed258bec
     .claude/skills/impeccable/scripts/live-status.mjs: sha256:d9186410a2c9671f59396bd315d2f7434f5c35379917c39763a6eb28d76261a8
-    .claude/skills/impeccable/scripts/live-target.mjs: sha256:7f18323b89167804c2d9005d4766b159c81268c9f21daab9fdec24f513f25eb0
     .claude/skills/impeccable/scripts/live-wrap.mjs: sha256:48dd1ff1700aa373b48ab287c5dab6de0a482f4a8c6626edd23700ca44ca2589
-    .claude/skills/impeccable/scripts/live.mjs: sha256:243c8213e097e6ee2f32cf02a90cf33a5338d9800244bcdbbdc7134e8767e046
+    .claude/skills/impeccable/scripts/live.mjs: sha256:719144797cca8dc231d4a3a895290121cc57c2ac75cc339e171abd4c365f1621
     .claude/skills/impeccable/scripts/live/browser-script-parts.mjs: sha256:10c31c3ed0f53c73efdd5fcd8a6203e1d85d244cef0b9f4dcf0f3c5df5c3d677
     .claude/skills/impeccable/scripts/live/completion.mjs: sha256:471b99f7904deb068ceb915906d628ed1bd6b86fb92e2151142ab321ea545117
     .claude/skills/impeccable/scripts/live/event-validation.mjs: sha256:c0ee57b8306f8b1f31b00961017c849b7f352887bd8c889981805e14b8d2e63c
@@ -563,83 +575,101 @@ dependencies:
     .claude/skills/impeccable/scripts/modern-screenshot.umd.js: sha256:bb36665889124a0b6e15f16045265737449c3bdcf2712cdb08af3cfa01563e2b
     .claude/skills/impeccable/scripts/palette.mjs: sha256:6e43ef19ede979019ebf86175fed0d6876473ddc1cf6c40c8b310e7ac4c5f45a
     .claude/skills/impeccable/scripts/pin.mjs: sha256:c3b92fee8ed03e54978fd97da43125dc3b2cb89db92ad6ae82ff7dcb6ba20914
-  content_hash: sha256:4f0d597f6f13e7e22d15451e8da512e7ad573467919ebd42a2466b6bb527ecce
+  content_hash: sha256:344739b848993a8d36fb5a65f5717357a3026f3430625d23c0d0f4f00de6e220
 - repo_url: srobroek/agentic-packages
   host: github.com
-  resolved_commit: 8ee2a91b3a5a5a7ff07a99eb255339ca859f66b1
-  resolved_ref: core-v0.4.1
+  resolved_commit: 86b7965903a8c0c354ed54df3b0ba554e5d0a478
+  resolved_ref: main
   virtual_path: packages/core
   is_virtual: true
   package_type: apm_package
-  content_hash: sha256:37eae61564bb798ce7be572e89af80bde3a730c4b915b3d937dfaf0e5e5d0bdb
+  content_hash: sha256:c801ab4c0ade91f3c7b107e6a555da1fbb51f454db9b0c315fd6e226f2d4dd14
 - repo_url: srobroek/agentic-packages
   host: github.com
-  resolved_commit: 7e47178380d2985b2dda158b3f9226b6926a4ede
-  resolved_ref: docs-architecture-v0.1.0
+  resolved_commit: 86b7965903a8c0c354ed54df3b0ba554e5d0a478
+  resolved_ref: main
   virtual_path: packages/docs-architecture
   is_virtual: true
   package_type: apm_package
   content_hash: sha256:c1db4dc2cd614836e3eaba1af6c1df17e4a5948c579a52a22ef00bb7ad1c2fe1
 - repo_url: srobroek/agentic-packages
   host: github.com
-  resolved_commit: e061c81852ba1ae7ef8bb443b56ff22e98bd17de
-  resolved_ref: frontend-v0.1.2
+  resolved_commit: 86b7965903a8c0c354ed54df3b0ba554e5d0a478
+  resolved_ref: main
   virtual_path: packages/frontend
   is_virtual: true
   package_type: apm_package
   content_hash: sha256:eb6931bae7482f60257ca584a786302f19d2fc5f04bf0d5f15a6736fb46d08d5
 - repo_url: srobroek/agentic-packages
   host: github.com
-  resolved_commit: e061c81852ba1ae7ef8bb443b56ff22e98bd17de
-  resolved_ref: language-rust-v0.1.2
+  resolved_commit: 86b7965903a8c0c354ed54df3b0ba554e5d0a478
+  resolved_ref: main
+  virtual_path: packages/hooks-quality
+  is_virtual: true
+  package_type: apm_package
+  deployed_files:
+  - .claude/hooks/hooks-quality/scripts/quality-before-commit.sh
+  - .claude/hooks/hooks-quality/scripts/quality-edit-advisory.sh
+  - .codex/hooks/hooks-quality/scripts/quality-before-commit.sh
+  - .codex/hooks/hooks-quality/scripts/quality-edit-advisory.sh
+  deployed_file_hashes:
+    .claude/hooks/hooks-quality/scripts/quality-before-commit.sh: sha256:870de7eaa7406c13e850cbce9632d94677122a1817f34c682f12ccafd9c81802
+    .claude/hooks/hooks-quality/scripts/quality-edit-advisory.sh: sha256:7d5e2a49c8dd5b6c52df0df64c0f277f448904edd749564da8e07b4560a70c1a
+    .codex/hooks/hooks-quality/scripts/quality-before-commit.sh: sha256:870de7eaa7406c13e850cbce9632d94677122a1817f34c682f12ccafd9c81802
+    .codex/hooks/hooks-quality/scripts/quality-edit-advisory.sh: sha256:7d5e2a49c8dd5b6c52df0df64c0f277f448904edd749564da8e07b4560a70c1a
+  content_hash: sha256:587f0f5c3efaec0a7fd9c324ce0794dab850e6d9440833406339b418c16a84ce
+- repo_url: srobroek/agentic-packages
+  host: github.com
+  resolved_commit: 86b7965903a8c0c354ed54df3b0ba554e5d0a478
+  resolved_ref: main
   virtual_path: packages/language-rust
   is_virtual: true
   package_type: apm_package
   content_hash: sha256:b2f7b21dba9bcd3c0809701bf3607ea0f147d29fdf68773cbd39fff2629b2cfc
 - repo_url: srobroek/agentic-packages
   host: github.com
-  resolved_commit: e061c81852ba1ae7ef8bb443b56ff22e98bd17de
-  resolved_ref: language-typescript-v0.1.2
+  resolved_commit: 86b7965903a8c0c354ed54df3b0ba554e5d0a478
+  resolved_ref: main
   virtual_path: packages/language-typescript
   is_virtual: true
   package_type: apm_package
   content_hash: sha256:941303f112ea79bbdeabe975bb728d8056a845fc72fcdc672c15bfdb6f30eff8
 - repo_url: srobroek/agentic-packages
   host: github.com
-  resolved_commit: 7e47178380d2985b2dda158b3f9226b6926a4ede
-  resolved_ref: mcp-codebase-memory-v0.1.0
+  resolved_commit: 86b7965903a8c0c354ed54df3b0ba554e5d0a478
+  resolved_ref: main
   virtual_path: packages/mcp-codebase-memory
   is_virtual: true
   package_type: apm_package
   content_hash: sha256:542a0dd2a0180a5a143866476e4d39e3cdb5534904fd5a502b54438a2721b283
 - repo_url: srobroek/agentic-packages
   host: github.com
-  resolved_commit: 7e47178380d2985b2dda158b3f9226b6926a4ede
-  resolved_ref: mcp-context7-v0.1.0
+  resolved_commit: 86b7965903a8c0c354ed54df3b0ba554e5d0a478
+  resolved_ref: main
   virtual_path: packages/mcp-context7
   is_virtual: true
   package_type: apm_package
   content_hash: sha256:8f4cce016f6a378fe014badd553c413528c65f3e42f5cbb88ef69712f3393867
 - repo_url: srobroek/agentic-packages
   host: github.com
-  resolved_commit: 86c95af4d2b8dcaf1f5a50db3b5469a34591e13e
-  resolved_ref: mcp-package-version-v0.1.1
+  resolved_commit: 86b7965903a8c0c354ed54df3b0ba554e5d0a478
+  resolved_ref: main
   virtual_path: packages/mcp-package-version
   is_virtual: true
   package_type: apm_package
   content_hash: sha256:a9b48d77277aaf6b83b207ec23c681e41cb3ef0ca635fd5033ea3da4c4afdf79
 - repo_url: srobroek/agentic-packages
   host: github.com
-  resolved_commit: 7e47178380d2985b2dda158b3f9226b6926a4ede
-  resolved_ref: mcp-playwright-v0.1.0
+  resolved_commit: 86b7965903a8c0c354ed54df3b0ba554e5d0a478
+  resolved_ref: main
   virtual_path: packages/mcp-playwright
   is_virtual: true
   package_type: apm_package
   content_hash: sha256:956010c4edba4520b99d8de5fc0c62b7d3cad1474db003afcfd719ccbb8dbfed
 - repo_url: srobroek/agentic-packages
   host: github.com
-  resolved_commit: 7e47178380d2985b2dda158b3f9226b6926a4ede
-  resolved_ref: mcp-repomix-v0.1.0
+  resolved_commit: 86b7965903a8c0c354ed54df3b0ba554e5d0a478
+  resolved_ref: main
   virtual_path: packages/mcp-repomix
   is_virtual: true
   package_type: apm_package
@@ -652,16 +682,16 @@ dependencies:
   content_hash: sha256:8160affc9479c3f49064f324738f9d0d6e4f34bcd35445556b9c8a6ad97510db
 - repo_url: srobroek/agentic-packages
   host: github.com
-  resolved_commit: 7e47178380d2985b2dda158b3f9226b6926a4ede
-  resolved_ref: mcp-serena-v0.1.0
+  resolved_commit: 86b7965903a8c0c354ed54df3b0ba554e5d0a478
+  resolved_ref: main
   virtual_path: packages/mcp-serena
   is_virtual: true
   package_type: apm_package
   content_hash: sha256:914c36de806169695fa1d3de94ab207c529e0eda10420b658e829446f06c1582
 - repo_url: srobroek/agentic-packages
   host: github.com
-  resolved_commit: 9aefe57d8a943e1266f3edc846a3d0e8abbe715b
-  resolved_ref: mcp-tauri-v1.0.0
+  resolved_commit: 86b7965903a8c0c354ed54df3b0ba554e5d0a478
+  resolved_ref: main
   virtual_path: packages/mcp-tauri
   is_virtual: true
   package_type: apm_package
@@ -669,39 +699,11 @@ dependencies:
   - .claude/rules/50-tauri-mcp.md
   deployed_file_hashes:
     .claude/rules/50-tauri-mcp.md: sha256:4f073b0fe39bbe73b735059deabe080561b0032bccf143818c7fadfd4a106535
-  content_hash: sha256:e6b66c2795556dccbcf52c568eaaab25c248869b5ea42591d3ba5863b3687d9b
+  content_hash: sha256:e4fbc4c430aa1aae223e86406625a612484904c7df8da41f504b1b8916e05130
 - repo_url: srobroek/agentic-packages
   host: github.com
-  resolved_commit: 50bdeac526f071cf8621ed139619aada331bb719
-  resolved_ref: resume-session-v0.2.1
-  virtual_path: packages/resume-session
-  is_virtual: true
-  package_type: apm_package
-  deployed_files:
-  - .agents/skills/resume-session
-  - .agents/skills/resume-session/SKILL.md
-  - .agents/skills/resume-session/references/transcript-format.md
-  - .agents/skills/resume-session/scripts/list-sessions.py
-  - .agents/skills/resume-session/scripts/read-session.py
-  - .claude/skills/resume-session
-  - .claude/skills/resume-session/SKILL.md
-  - .claude/skills/resume-session/references/transcript-format.md
-  - .claude/skills/resume-session/scripts/list-sessions.py
-  - .claude/skills/resume-session/scripts/read-session.py
-  deployed_file_hashes:
-    .agents/skills/resume-session/SKILL.md: sha256:6eb315a34bdcaaeb082ddefd10392aff03857d9f9b07fdb334d34c0e0280ab1a
-    .agents/skills/resume-session/references/transcript-format.md: sha256:86262d6b50a5a235e83a72ff5b5491faecb2d0cfc85bd0899b6cfef851a95d3f
-    .agents/skills/resume-session/scripts/list-sessions.py: sha256:dd7cb3e88e0597afeedacb5e552aa2036092caff5f9d35d77dc9666fc0eaac87
-    .agents/skills/resume-session/scripts/read-session.py: sha256:ec0b8a0f982e1f97d30430771152c94eada2737ea4b05b5fe76e938b37c64678
-    .claude/skills/resume-session/SKILL.md: sha256:6eb315a34bdcaaeb082ddefd10392aff03857d9f9b07fdb334d34c0e0280ab1a
-    .claude/skills/resume-session/references/transcript-format.md: sha256:86262d6b50a5a235e83a72ff5b5491faecb2d0cfc85bd0899b6cfef851a95d3f
-    .claude/skills/resume-session/scripts/list-sessions.py: sha256:dd7cb3e88e0597afeedacb5e552aa2036092caff5f9d35d77dc9666fc0eaac87
-    .claude/skills/resume-session/scripts/read-session.py: sha256:ec0b8a0f982e1f97d30430771152c94eada2737ea4b05b5fe76e938b37c64678
-  content_hash: sha256:923bd83d188929a70d8f31c1eb63dc1fe6b74a6de32cd371540dacdf6c511e88
-- repo_url: srobroek/agentic-packages
-  host: github.com
-  resolved_commit: 86c95af4d2b8dcaf1f5a50db3b5469a34591e13e
-  resolved_ref: rust-quality-v0.1.2
+  resolved_commit: 86b7965903a8c0c354ed54df3b0ba554e5d0a478
+  resolved_ref: main
   virtual_path: packages/rust-quality
   is_virtual: true
   package_type: apm_package
@@ -728,8 +730,8 @@ dependencies:
   content_hash: sha256:16da2a45d5c005c3d562bddd666aa86e1f1f76ff1245ffe3394b3a8da5e9dd17
 - repo_url: srobroek/agentic-packages
   host: github.com
-  resolved_commit: a423f3ed5f25f73aafdc6ed6cbf58219f1a8115e
-  resolved_ref: speckit-v0.1.2
+  resolved_commit: 86b7965903a8c0c354ed54df3b0ba554e5d0a478
+  resolved_ref: main
   virtual_path: packages/speckit
   is_virtual: true
   package_type: apm_package
@@ -784,8 +786,8 @@ dependencies:
   content_hash: sha256:ba0bc591f01f1071acb3c61273cf3ec65193a2944778af85be9598fc656d4275
 - repo_url: srobroek/agentic-packages
   host: github.com
-  resolved_commit: b3b0941954a8219609ebb2d5f3ceb552642517e6
-  resolved_ref: speckit-dag-hooks-v0.3.2
+  resolved_commit: 86b7965903a8c0c354ed54df3b0ba554e5d0a478
+  resolved_ref: main
   virtual_path: packages/speckit-dag-hooks
   is_virtual: true
   package_type: apm_package
@@ -793,13 +795,13 @@ dependencies:
   - .claude/hooks/speckit-dag-hooks/scripts/dispatcher.py
   - .claude/hooks/speckit-dag-hooks/scripts/nodes.json
   deployed_file_hashes:
-    .claude/hooks/speckit-dag-hooks/scripts/dispatcher.py: sha256:81539c20268be5197864a3d78e4e680c06957c0501c4edad87f5782e424d3e04
+    .claude/hooks/speckit-dag-hooks/scripts/dispatcher.py: sha256:e26bc68d668be95b6de858d12823a0f7a272be3f18bd241f9b367ee3db2362f0
     .claude/hooks/speckit-dag-hooks/scripts/nodes.json: sha256:b90b2476f420a52f060330a8a260fe26f2caa11a3ab257c13b0d8782964be757
-  content_hash: sha256:4d930e9e652c8ad9534445ce34d93824c76acea09e663b8edbc99d1fea723bb3
+  content_hash: sha256:33f74fa8dadee2dcc36208964983b64e877f0bc58c2db4ba933cb8ff4bbe225b
 - repo_url: srobroek/agentic-packages
   host: github.com
-  resolved_commit: 86c95af4d2b8dcaf1f5a50db3b5469a34591e13e
-  resolved_ref: steering-speckit-v0.2.1
+  resolved_commit: 86b7965903a8c0c354ed54df3b0ba554e5d0a478
+  resolved_ref: main
   virtual_path: packages/steering-speckit
   is_virtual: true
   package_type: apm_package
@@ -810,8 +812,8 @@ dependencies:
   content_hash: sha256:f46595f93f7f503ab6369a37e5e47d1042899aaefc3f887a24ccd1cc66bb94f6
 - repo_url: srobroek/agentic-packages
   host: github.com
-  resolved_commit: 86c95af4d2b8dcaf1f5a50db3b5469a34591e13e
-  resolved_ref: typescript-quality-v0.1.2
+  resolved_commit: 86b7965903a8c0c354ed54df3b0ba554e5d0a478
+  resolved_ref: main
   virtual_path: packages/typescript-quality
   is_virtual: true
   package_type: apm_package
@@ -836,10 +838,431 @@ dependencies:
     .claude/skills/typescript-quality/scripts/check.sh: sha256:7a244b3233708ba4399cfd307da6bd9839a37ffa18e3860f52ea98b8c94daf46
     .claude/skills/typescript-quality/scripts/fix.sh: sha256:3bfcf6e35b54d705d040ff71d3c09f3343c6c0f32cc8c39edfdb2f417fd1b241
   content_hash: sha256:99d64e9fc076bba3eb1d713d9d4b3d1c8257fa78fbe4a4170b0d828fde65082b
+- repo_url: srobroek/agentic-packages
+  host: github.com
+  resolved_commit: e2d980e207ed53cd14bc12eeef84e40845b928b7
+  resolved_ref: agent-coder-v0.1.1
+  virtual_path: packages/agent-coder
+  is_virtual: true
+  package_type: apm_package
+  deployed_files:
+  - .claude/agents/coder.md
+  - .claude/hooks/agent-coder/scripts/coder-delegation-reminder.sh
+  - .codex/hooks/agent-coder/scripts/coder-delegation-reminder.sh
+  deployed_file_hashes:
+    .claude/agents/coder.md: sha256:4f66193124fdfafa12b6566e4cbc767092166c234b9839d863d1a99c22e5c805
+    .claude/hooks/agent-coder/scripts/coder-delegation-reminder.sh: sha256:ab154403adcbe0e00e3eab02b66b98245bed84264abffaeb20aeadfc54b434d6
+    .codex/hooks/agent-coder/scripts/coder-delegation-reminder.sh: sha256:ab154403adcbe0e00e3eab02b66b98245bed84264abffaeb20aeadfc54b434d6
+  content_hash: sha256:2617bf11952a011e70fbfc4e371b539148a4ef8a1ad1bfb71d33b515dc47b227
+- repo_url: srobroek/agentic-packages
+  host: github.com
+  resolved_commit: e2d980e207ed53cd14bc12eeef84e40845b928b7
+  resolved_ref: agent-pr-reviewer-v0.1.1
+  virtual_path: packages/agent-pr-reviewer
+  is_virtual: true
+  package_type: apm_package
+  deployed_files:
+  - .claude/agents/pr-reviewer.md
+  deployed_file_hashes:
+    .claude/agents/pr-reviewer.md: sha256:ac61c665bfa00c57df81ae880556c18e38a8961803a79a590d86d3c098a7d4c1
+  content_hash: sha256:b302b14de99d0d0a02d0e29900bf16b05de7077bdb4cf77b00b1b741df62f6e9
+- repo_url: srobroek/agentic-packages
+  host: github.com
+  resolved_commit: 86c95af4d2b8dcaf1f5a50db3b5469a34591e13e
+  resolved_ref: audit-steering-v0.1.2
+  virtual_path: packages/audit-steering
+  is_virtual: true
+  package_type: apm_package
+  deployed_files:
+  - .agents/skills/audit-steering
+  - .agents/skills/audit-steering/CHANGELOG.md
+  - .agents/skills/audit-steering/SKILL.md
+  - .agents/skills/audit-steering/references/checklist.md
+  - .claude/skills/audit-steering
+  - .claude/skills/audit-steering/CHANGELOG.md
+  - .claude/skills/audit-steering/SKILL.md
+  - .claude/skills/audit-steering/references/checklist.md
+  deployed_file_hashes:
+    .agents/skills/audit-steering/CHANGELOG.md: sha256:a4af01c568e8f85588a53458a9ce2eccc376314e94ae1a4c6903f08c5bf9193b
+    .agents/skills/audit-steering/SKILL.md: sha256:aa43c1b417d71fcf63073439061c8ec94a9be05b8604ed9485e511f1dabe4bcf
+    .agents/skills/audit-steering/references/checklist.md: sha256:ccb59c82bb97f663a3d6e9e6554eed0372f95f070d737939cda8372fe3d44255
+    .claude/skills/audit-steering/CHANGELOG.md: sha256:a4af01c568e8f85588a53458a9ce2eccc376314e94ae1a4c6903f08c5bf9193b
+    .claude/skills/audit-steering/SKILL.md: sha256:aa43c1b417d71fcf63073439061c8ec94a9be05b8604ed9485e511f1dabe4bcf
+    .claude/skills/audit-steering/references/checklist.md: sha256:ccb59c82bb97f663a3d6e9e6554eed0372f95f070d737939cda8372fe3d44255
+  content_hash: sha256:74c830dcdcb997b1b16dd61f9aa0028d15b0e45948bc6bd244cbb1dcbae48537
+- repo_url: srobroek/agentic-packages
+  host: github.com
+  resolved_commit: 86c95af4d2b8dcaf1f5a50db3b5469a34591e13e
+  resolved_ref: catchup-v0.1.3
+  virtual_path: packages/catchup
+  is_virtual: true
+  package_type: apm_package
+  deployed_files:
+  - .agents/skills/catchup
+  - .agents/skills/catchup/SKILL.md
+  - .agents/skills/catchup/references/selection.md
+  - .claude/skills/catchup
+  - .claude/skills/catchup/SKILL.md
+  - .claude/skills/catchup/references/selection.md
+  deployed_file_hashes:
+    .agents/skills/catchup/SKILL.md: sha256:d4975ae68e4acc4f8f8330ea3eb907248ba950320b1e775b45e82e18d787bc15
+    .agents/skills/catchup/references/selection.md: sha256:2955e406f43ba71115a7bcaec1a97e33452fd2ba72cb33d643b44f455ae60ffa
+    .claude/skills/catchup/SKILL.md: sha256:d4975ae68e4acc4f8f8330ea3eb907248ba950320b1e775b45e82e18d787bc15
+    .claude/skills/catchup/references/selection.md: sha256:2955e406f43ba71115a7bcaec1a97e33452fd2ba72cb33d643b44f455ae60ffa
+  content_hash: sha256:7a6bc0144fe1763ab548785ea4a5e291e030c137a58dc910ecf1a3fe44692b2e
+- repo_url: srobroek/agentic-packages
+  host: github.com
+  resolved_commit: 86c95af4d2b8dcaf1f5a50db3b5469a34591e13e
+  resolved_ref: codebase-index-v0.1.2
+  virtual_path: packages/codebase-index
+  is_virtual: true
+  package_type: apm_package
+  deployed_files:
+  - .agents/skills/codebase-index
+  - .agents/skills/codebase-index/SKILL.md
+  - .agents/skills/codebase-index/scripts/index.sh
+  - .claude/skills/codebase-index
+  - .claude/skills/codebase-index/SKILL.md
+  - .claude/skills/codebase-index/scripts/index.sh
+  deployed_file_hashes:
+    .agents/skills/codebase-index/SKILL.md: sha256:211015bebfc9ea34a50782c43469d901047b93fb3dfc5b91e1610fc9e559b87f
+    .agents/skills/codebase-index/scripts/index.sh: sha256:119f95b4332f3865a4b04ff57a100169e1c9de046ae3ccd3cee4bb42fbe711fa
+    .claude/skills/codebase-index/SKILL.md: sha256:211015bebfc9ea34a50782c43469d901047b93fb3dfc5b91e1610fc9e559b87f
+    .claude/skills/codebase-index/scripts/index.sh: sha256:119f95b4332f3865a4b04ff57a100169e1c9de046ae3ccd3cee4bb42fbe711fa
+  content_hash: sha256:cee45702b7f2e249b5a714aaf82df1b87352f87019275c50bbd9bdcc165dfd64
+- repo_url: srobroek/agentic-packages
+  host: github.com
+  resolved_commit: 86c95af4d2b8dcaf1f5a50db3b5469a34591e13e
+  resolved_ref: codebase-memory-v0.1.2
+  virtual_path: packages/codebase-memory
+  is_virtual: true
+  package_type: apm_package
+  deployed_files:
+  - .agents/skills/codebase-memory
+  - .agents/skills/codebase-memory/SKILL.md
+  - .agents/skills/codebase-memory/references/quality.md
+  - .agents/skills/codebase-memory/references/reference.md
+  - .agents/skills/codebase-memory/references/trace.md
+  - .agents/skills/codebase-memory/scripts/index.sh
+  - .claude/skills/codebase-memory
+  - .claude/skills/codebase-memory/SKILL.md
+  - .claude/skills/codebase-memory/references/quality.md
+  - .claude/skills/codebase-memory/references/reference.md
+  - .claude/skills/codebase-memory/references/trace.md
+  - .claude/skills/codebase-memory/scripts/index.sh
+  deployed_file_hashes:
+    .agents/skills/codebase-memory/SKILL.md: sha256:ceb8453a8b7292544c2f8c30e569f766c79293e532ff4d17d04d3df531841935
+    .agents/skills/codebase-memory/references/quality.md: sha256:3a43f7b410c83d877373e3a37e84102c9d9e37a9ea54c9953779dae953c873e3
+    .agents/skills/codebase-memory/references/reference.md: sha256:878a6918f085cbe83837574a6960d6b9b841676d7876ab54ecce234c8cbf38c8
+    .agents/skills/codebase-memory/references/trace.md: sha256:261c7844d36cf21a2e7c2cf2bbcbafc237eb0b61a5f6551f93218eca688730e3
+    .agents/skills/codebase-memory/scripts/index.sh: sha256:119f95b4332f3865a4b04ff57a100169e1c9de046ae3ccd3cee4bb42fbe711fa
+    .claude/skills/codebase-memory/SKILL.md: sha256:ceb8453a8b7292544c2f8c30e569f766c79293e532ff4d17d04d3df531841935
+    .claude/skills/codebase-memory/references/quality.md: sha256:3a43f7b410c83d877373e3a37e84102c9d9e37a9ea54c9953779dae953c873e3
+    .claude/skills/codebase-memory/references/reference.md: sha256:878a6918f085cbe83837574a6960d6b9b841676d7876ab54ecce234c8cbf38c8
+    .claude/skills/codebase-memory/references/trace.md: sha256:261c7844d36cf21a2e7c2cf2bbcbafc237eb0b61a5f6551f93218eca688730e3
+    .claude/skills/codebase-memory/scripts/index.sh: sha256:119f95b4332f3865a4b04ff57a100169e1c9de046ae3ccd3cee4bb42fbe711fa
+  content_hash: sha256:d4b514eaaa0955994080d5a5087a1d374521325bb8b5aa6be0eea8b8ae8d17cc
+- repo_url: srobroek/agentic-packages
+  host: github.com
+  resolved_commit: 86c95af4d2b8dcaf1f5a50db3b5469a34591e13e
+  resolved_ref: commit-push-merge-v0.1.2
+  virtual_path: packages/commit-push-merge
+  is_virtual: true
+  package_type: apm_package
+  deployed_files:
+  - .agents/skills/commit-push-merge
+  - .agents/skills/commit-push-merge/SKILL.md
+  - .agents/skills/commit-push-merge/references/merge-checklist.md
+  - .claude/skills/commit-push-merge
+  - .claude/skills/commit-push-merge/SKILL.md
+  - .claude/skills/commit-push-merge/references/merge-checklist.md
+  deployed_file_hashes:
+    .agents/skills/commit-push-merge/SKILL.md: sha256:a997fe16617b33e0d203f0adbcfec36513985b7207c2b5f3c6729dff77cc9801
+    .agents/skills/commit-push-merge/references/merge-checklist.md: sha256:e4277538807b26f399fc3755a0ed97685f9264eb1dd238bc66054bed415cda18
+    .claude/skills/commit-push-merge/SKILL.md: sha256:a997fe16617b33e0d203f0adbcfec36513985b7207c2b5f3c6729dff77cc9801
+    .claude/skills/commit-push-merge/references/merge-checklist.md: sha256:e4277538807b26f399fc3755a0ed97685f9264eb1dd238bc66054bed415cda18
+  content_hash: sha256:e4e1d91ee7e113b78237470f0eb798f224e5bb28ea35c5a58e4efc2a958b8500
+- repo_url: srobroek/agentic-packages
+  host: github.com
+  resolved_commit: 86c95af4d2b8dcaf1f5a50db3b5469a34591e13e
+  resolved_ref: commit-push-pr-v0.1.2
+  virtual_path: packages/commit-push-pr
+  is_virtual: true
+  package_type: apm_package
+  deployed_files:
+  - .agents/skills/commit-push-pr
+  - .agents/skills/commit-push-pr/SKILL.md
+  - .agents/skills/commit-push-pr/references/pr-template.md
+  - .claude/skills/commit-push-pr
+  - .claude/skills/commit-push-pr/SKILL.md
+  - .claude/skills/commit-push-pr/references/pr-template.md
+  deployed_file_hashes:
+    .agents/skills/commit-push-pr/SKILL.md: sha256:1afc56fa97b8d7936a7cc7ec7f601792069c0f740f9ec30774808555f237b303
+    .agents/skills/commit-push-pr/references/pr-template.md: sha256:26812e250916374a6344f9742a3f86111a38887d8e7ef02afa9cbda5ab9c7767
+    .claude/skills/commit-push-pr/SKILL.md: sha256:1afc56fa97b8d7936a7cc7ec7f601792069c0f740f9ec30774808555f237b303
+    .claude/skills/commit-push-pr/references/pr-template.md: sha256:26812e250916374a6344f9742a3f86111a38887d8e7ef02afa9cbda5ab9c7767
+  content_hash: sha256:94a57f66ac283c012859e307ff0414d401d58efd51d4abc6941e14243edb31c9
+- repo_url: srobroek/agentic-packages
+  host: github.com
+  resolved_commit: 86c95af4d2b8dcaf1f5a50db3b5469a34591e13e
+  resolved_ref: explore-v0.1.2
+  virtual_path: packages/explore
+  is_virtual: true
+  package_type: apm_package
+  deployed_files:
+  - .agents/skills/explore
+  - .agents/skills/explore/SKILL.md
+  - .claude/skills/explore
+  - .claude/skills/explore/SKILL.md
+  deployed_file_hashes:
+    .agents/skills/explore/SKILL.md: sha256:5a0ca2244e06719e60e9c1ef3e59db7a84bde3ac82b08613b27e88e9582fee2e
+    .claude/skills/explore/SKILL.md: sha256:5a0ca2244e06719e60e9c1ef3e59db7a84bde3ac82b08613b27e88e9582fee2e
+  content_hash: sha256:1a55bb81e211c486418f9817b2ab158f53392e43453cf7f6b505da211c55c23d
+- repo_url: srobroek/agentic-packages
+  host: github.com
+  resolved_commit: 86c95af4d2b8dcaf1f5a50db3b5469a34591e13e
+  resolved_ref: handover-v0.1.2
+  virtual_path: packages/handover
+  is_virtual: true
+  package_type: apm_package
+  deployed_files:
+  - .agents/skills/handover
+  - .agents/skills/handover/SKILL.md
+  - .agents/skills/handover/references/template.md
+  - .agents/skills/handover/scripts/new-handover.py
+  - .claude/skills/handover
+  - .claude/skills/handover/SKILL.md
+  - .claude/skills/handover/references/template.md
+  - .claude/skills/handover/scripts/new-handover.py
+  deployed_file_hashes:
+    .agents/skills/handover/SKILL.md: sha256:583088be78047eb30193d0ab46ae0b8006db37488868996a1db890511b5c406e
+    .agents/skills/handover/references/template.md: sha256:631963e1aaabd6c58b63afcc7fa1656c91dea676bb6a6b339bbac8dec5a1575c
+    .agents/skills/handover/scripts/new-handover.py: sha256:724465a9f872e87ce09bf54ba4c9f2306bee87963daff587aa3b2c774a4f5f37
+    .claude/skills/handover/SKILL.md: sha256:583088be78047eb30193d0ab46ae0b8006db37488868996a1db890511b5c406e
+    .claude/skills/handover/references/template.md: sha256:631963e1aaabd6c58b63afcc7fa1656c91dea676bb6a6b339bbac8dec5a1575c
+    .claude/skills/handover/scripts/new-handover.py: sha256:724465a9f872e87ce09bf54ba4c9f2306bee87963daff587aa3b2c774a4f5f37
+  content_hash: sha256:0532fbd04a6a9030ec806c987758c2154ff00ddc54a89dd2897368b0d249fc87
+- repo_url: srobroek/agentic-packages
+  host: github.com
+  resolved_commit: a423f3ed5f25f73aafdc6ed6cbf58219f1a8115e
+  resolved_ref: headroom-v0.1.0
+  virtual_path: packages/headroom
+  is_virtual: true
+  package_type: apm_package
+  deployed_files:
+  - .agents/skills/headroom
+  - .agents/skills/headroom/SKILL.md
+  - .agents/skills/headroom/references/commands.md
+  - .claude/skills/headroom
+  - .claude/skills/headroom/SKILL.md
+  - .claude/skills/headroom/references/commands.md
+  deployed_file_hashes:
+    .agents/skills/headroom/SKILL.md: sha256:4f8fada33a8eab5498de5e9fea17fd266711b9bbbe7880e27177129a1d9a625f
+    .agents/skills/headroom/references/commands.md: sha256:24c77bc93b48c51f9b89b6896780ea2206b1e4fe389cca86d3cc48e38dc6194e
+    .claude/skills/headroom/SKILL.md: sha256:4f8fada33a8eab5498de5e9fea17fd266711b9bbbe7880e27177129a1d9a625f
+    .claude/skills/headroom/references/commands.md: sha256:24c77bc93b48c51f9b89b6896780ea2206b1e4fe389cca86d3cc48e38dc6194e
+  content_hash: sha256:57561dd7a48f8bfac2fc115e57e818f1ed8b1c015b195ff3db8ba44fad7dfc82
+- repo_url: srobroek/agentic-packages
+  host: github.com
+  resolved_commit: 86c95af4d2b8dcaf1f5a50db3b5469a34591e13e
+  resolved_ref: language-steering-rust-v0.1.1
+  virtual_path: packages/language-steering-rust
+  is_virtual: true
+  package_type: apm_package
+  content_hash: sha256:fdc20633b8502e745b9780a495b2e176be1acde155bd54faa1592d299ebe82c4
+- repo_url: srobroek/agentic-packages
+  host: github.com
+  resolved_commit: 86c95af4d2b8dcaf1f5a50db3b5469a34591e13e
+  resolved_ref: language-steering-typescript-v0.1.1
+  virtual_path: packages/language-steering-typescript
+  is_virtual: true
+  package_type: apm_package
+  content_hash: sha256:52c13a6ac2936d676229a5f95b9b6c63f25bbec4e90bc8f5e64a8c3a648e6a86
+- repo_url: srobroek/agentic-packages
+  host: github.com
+  resolved_commit: 86c95af4d2b8dcaf1f5a50db3b5469a34591e13e
+  resolved_ref: optimize-steering-v0.1.2
+  virtual_path: packages/optimize-steering
+  is_virtual: true
+  package_type: apm_package
+  deployed_files:
+  - .agents/skills/optimize-steering
+  - .agents/skills/optimize-steering/SKILL.md
+  - .agents/skills/optimize-steering/references/measurement.md
+  - .agents/skills/optimize-steering/references/rules.md
+  - .claude/skills/optimize-steering
+  - .claude/skills/optimize-steering/SKILL.md
+  - .claude/skills/optimize-steering/references/measurement.md
+  - .claude/skills/optimize-steering/references/rules.md
+  deployed_file_hashes:
+    .agents/skills/optimize-steering/SKILL.md: sha256:de22f53f03b60c4908256dffc65512249a3d42a9971ccf42ce8fa5b22af9f8c8
+    .agents/skills/optimize-steering/references/measurement.md: sha256:ac1a997e148aa3dd6770825b80a2fb756f420574a94e9f0562fbdb7de6988b1e
+    .agents/skills/optimize-steering/references/rules.md: sha256:9c56b23f67963447a6475d6d1d6b52c6b70e17d85f7609c8f72e06d72c2e171b
+    .claude/skills/optimize-steering/SKILL.md: sha256:de22f53f03b60c4908256dffc65512249a3d42a9971ccf42ce8fa5b22af9f8c8
+    .claude/skills/optimize-steering/references/measurement.md: sha256:ac1a997e148aa3dd6770825b80a2fb756f420574a94e9f0562fbdb7de6988b1e
+    .claude/skills/optimize-steering/references/rules.md: sha256:9c56b23f67963447a6475d6d1d6b52c6b70e17d85f7609c8f72e06d72c2e171b
+  content_hash: sha256:47a77ac95f58bcc2c37116b059412bf4bdb333c644e61c240f9dfce6f78c9144
+- repo_url: srobroek/agentic-packages
+  host: github.com
+  resolved_commit: 86c95af4d2b8dcaf1f5a50db3b5469a34591e13e
+  resolved_ref: playwright-v0.1.2
+  virtual_path: packages/playwright
+  is_virtual: true
+  package_type: apm_package
+  deployed_files:
+  - .agents/skills/playwright
+  - .agents/skills/playwright/SKILL.md
+  - .claude/skills/playwright
+  - .claude/skills/playwright/SKILL.md
+  deployed_file_hashes:
+    .agents/skills/playwright/SKILL.md: sha256:345fae30eb304961e3b91c7606e4f72232e55769f4b2c072d1f7cb429294ca8c
+    .claude/skills/playwright/SKILL.md: sha256:345fae30eb304961e3b91c7606e4f72232e55769f4b2c072d1f7cb429294ca8c
+  content_hash: sha256:38a68d85f76def241318593855fb1ff04a829f330cd2e8b76eb1b6e9eea5c1e2
+- repo_url: srobroek/agentic-packages
+  host: github.com
+  resolved_commit: 86c95af4d2b8dcaf1f5a50db3b5469a34591e13e
+  resolved_ref: prompt-lookup-v0.1.2
+  virtual_path: packages/prompt-lookup
+  is_virtual: true
+  package_type: apm_package
+  deployed_files:
+  - .agents/skills/prompt-lookup
+  - .agents/skills/prompt-lookup/SKILL.md
+  - .claude/skills/prompt-lookup
+  - .claude/skills/prompt-lookup/SKILL.md
+  deployed_file_hashes:
+    .agents/skills/prompt-lookup/SKILL.md: sha256:4409355ed36041f07dc36cbba85ccf8d8be06fef765eaddfd6f9db35f757b1e8
+    .claude/skills/prompt-lookup/SKILL.md: sha256:4409355ed36041f07dc36cbba85ccf8d8be06fef765eaddfd6f9db35f757b1e8
+  content_hash: sha256:0b9e47726b7b5fcc14b75a2e2087011c61b330b89d5551c98bfef8227bcb70ed
+- repo_url: srobroek/agentic-packages
+  host: github.com
+  resolved_commit: 86c95af4d2b8dcaf1f5a50db3b5469a34591e13e
+  resolved_ref: quick-commit-v0.1.2
+  virtual_path: packages/quick-commit
+  is_virtual: true
+  package_type: apm_package
+  deployed_files:
+  - .agents/skills/quick-commit
+  - .agents/skills/quick-commit/SKILL.md
+  - .agents/skills/quick-commit/references/changeset-policy.md
+  - .agents/skills/quick-commit/scripts/status.sh
+  - .claude/skills/quick-commit
+  - .claude/skills/quick-commit/SKILL.md
+  - .claude/skills/quick-commit/references/changeset-policy.md
+  - .claude/skills/quick-commit/scripts/status.sh
+  deployed_file_hashes:
+    .agents/skills/quick-commit/SKILL.md: sha256:1a3110e7fa68ea0a3f0528189235d2894493744037e42a67ce4bbd67950710c8
+    .agents/skills/quick-commit/references/changeset-policy.md: sha256:0f5e27b13b05a7d47c1cddf2b9b9df8e1398646cf4efcead7e5826ae01afced7
+    .agents/skills/quick-commit/scripts/status.sh: sha256:3a42c5535c17b582d36637f86a53cdafe65a2115045b7ae4f9622f43d263ff4c
+    .claude/skills/quick-commit/SKILL.md: sha256:1a3110e7fa68ea0a3f0528189235d2894493744037e42a67ce4bbd67950710c8
+    .claude/skills/quick-commit/references/changeset-policy.md: sha256:0f5e27b13b05a7d47c1cddf2b9b9df8e1398646cf4efcead7e5826ae01afced7
+    .claude/skills/quick-commit/scripts/status.sh: sha256:3a42c5535c17b582d36637f86a53cdafe65a2115045b7ae4f9622f43d263ff4c
+  content_hash: sha256:e01fdaa6967891902d50635cf7a86efb27d7ce484362c1cbd8c004ae530ef85e
+- repo_url: srobroek/agentic-packages
+  host: github.com
+  resolved_commit: 86c95af4d2b8dcaf1f5a50db3b5469a34591e13e
+  resolved_ref: research-v0.1.2
+  virtual_path: packages/research
+  is_virtual: true
+  package_type: apm_package
+  deployed_files:
+  - .agents/skills/research
+  - .agents/skills/research/SKILL.md
+  - .agents/skills/research/references/report-template.md
+  - .claude/skills/research
+  - .claude/skills/research/SKILL.md
+  - .claude/skills/research/references/report-template.md
+  deployed_file_hashes:
+    .agents/skills/research/SKILL.md: sha256:663d146af7222cc765775f20d561ffdc15ab7ee281098101bbcc5633a4f3eb72
+    .agents/skills/research/references/report-template.md: sha256:f50d76740e30fb9f1c509d1c77a1655a5798f796b6f8035d668b7cf9f875263c
+    .claude/skills/research/SKILL.md: sha256:663d146af7222cc765775f20d561ffdc15ab7ee281098101bbcc5633a4f3eb72
+    .claude/skills/research/references/report-template.md: sha256:f50d76740e30fb9f1c509d1c77a1655a5798f796b6f8035d668b7cf9f875263c
+  content_hash: sha256:f6f20cd0a4a558c400fbf0a75e0a25525a7aaf20fc53431ae8196e92c13b2cb0
+- repo_url: srobroek/agentic-packages
+  host: github.com
+  resolved_commit: 7e47178380d2985b2dda158b3f9226b6926a4ede
+  resolved_ref: steering-frontend-v0.1.0
+  virtual_path: packages/steering-frontend
+  is_virtual: true
+  package_type: apm_package
+  deployed_files:
+  - .claude/rules/30-frontend.md
+  - .claude/rules/31-frontend-ui.md
+  deployed_file_hashes:
+    .claude/rules/30-frontend.md: sha256:3f9348fd54f66d4008f742fdb60ea2e134d433af77a337db847e28a828a07a80
+    .claude/rules/31-frontend-ui.md: sha256:658e4d9f2a801ad8a279326bcc117abaa62ac9a3b7779cce1c69b4817f464d0d
+  content_hash: sha256:58672401144af34707c4318117d772dea9ac247a6e23a9c099b709ec02e44e83
+- repo_url: srobroek/agentic-packages
+  host: github.com
+  resolved_commit: 7e47178380d2985b2dda158b3f9226b6926a4ede
+  resolved_ref: steering-project-structure-v0.1.0
+  virtual_path: packages/steering-project-structure
+  is_virtual: true
+  package_type: apm_package
+  deployed_files:
+  - .claude/rules/20-project-structure.md
+  deployed_file_hashes:
+    .claude/rules/20-project-structure.md: sha256:37ee03778e1ef7077caa1c7ae2f49d3ca668ead78424e48b81d036aae66a8fb1
+  content_hash: sha256:c1781e5c9555a6369991f447f527323ef42f59ea013cd52193e563807cd88314
+- repo_url: srobroek/agentic-packages
+  host: github.com
+  resolved_commit: 86c95af4d2b8dcaf1f5a50db3b5469a34591e13e
+  resolved_ref: verify-v0.1.2
+  virtual_path: packages/verify
+  is_virtual: true
+  package_type: apm_package
+  deployed_files:
+  - .agents/skills/verify
+  - .agents/skills/verify/SKILL.md
+  - .agents/skills/verify/scripts/verify.sh
+  - .claude/skills/verify
+  - .claude/skills/verify/SKILL.md
+  - .claude/skills/verify/scripts/verify.sh
+  deployed_file_hashes:
+    .agents/skills/verify/SKILL.md: sha256:f7722ee3a2dca39cf7a9b553b5d154dff3a41dbb6bfd78f67cefd4da614a4348
+    .agents/skills/verify/scripts/verify.sh: sha256:66c23d7ef41324f3517562f76b500532ff6ea9d4d677aa4d642ace08c5420420
+    .claude/skills/verify/SKILL.md: sha256:f7722ee3a2dca39cf7a9b553b5d154dff3a41dbb6bfd78f67cefd4da614a4348
+    .claude/skills/verify/scripts/verify.sh: sha256:66c23d7ef41324f3517562f76b500532ff6ea9d4d677aa4d642ace08c5420420
+  content_hash: sha256:808e1e96e7b64e85612fa39987a15630395de0afb4a86f774e6683445d7dde1e
+- repo_url: srobroek/agentic-packages
+  host: github.com
+  resolved_commit: 86c95af4d2b8dcaf1f5a50db3b5469a34591e13e
+  resolved_ref: web-fetch-v0.1.2
+  virtual_path: packages/web-fetch
+  is_virtual: true
+  package_type: apm_package
+  deployed_files:
+  - .agents/skills/web-fetch
+  - .agents/skills/web-fetch/SKILL.md
+  - .agents/skills/web-fetch/references/tool-selection.md
+  - .claude/skills/web-fetch
+  - .claude/skills/web-fetch/SKILL.md
+  - .claude/skills/web-fetch/references/tool-selection.md
+  deployed_file_hashes:
+    .agents/skills/web-fetch/SKILL.md: sha256:4b5607fa06ea72d2f3d133d00789bdafee1634de5fff77f9800300ce0d6b2a39
+    .agents/skills/web-fetch/references/tool-selection.md: sha256:886d30d65aebf74fef9ba241f1e48f2b646c194673c7db058dbd4b669f15f965
+    .claude/skills/web-fetch/SKILL.md: sha256:4b5607fa06ea72d2f3d133d00789bdafee1634de5fff77f9800300ce0d6b2a39
+    .claude/skills/web-fetch/references/tool-selection.md: sha256:886d30d65aebf74fef9ba241f1e48f2b646c194673c7db058dbd4b669f15f965
+  content_hash: sha256:87f02cce1fcd0e025fda052950e924d6cd2ca135c7c1f9831309fbfc96af9482
+- repo_url: srobroek/agentic-packages
+  host: github.com
+  resolved_commit: 86c95af4d2b8dcaf1f5a50db3b5469a34591e13e
+  resolved_ref: write-a-skill-v0.1.2
+  virtual_path: packages/write-a-skill
+  is_virtual: true
+  package_type: apm_package
+  deployed_files:
+  - .agents/skills/write-a-skill
+  - .agents/skills/write-a-skill/SKILL.md
+  - .claude/skills/write-a-skill
+  - .claude/skills/write-a-skill/SKILL.md
+  deployed_file_hashes:
+    .agents/skills/write-a-skill/SKILL.md: sha256:8c32704d93bfecb2f83cc42d72c6e9d39787bc54d99e97fb01c50cc63e0a22e2
+    .claude/skills/write-a-skill/SKILL.md: sha256:8c32704d93bfecb2f83cc42d72c6e9d39787bc54d99e97fb01c50cc63e0a22e2
+  content_hash: sha256:da8ec45120ac56f4e0621502f0926b1cb83052ea80774c5b50c99812d92f3b87
 - repo_url: wshobson/agents
   host: github.com
   resolved_commit: cc37bfdd292ce520ba1c44df7a3a70d5f8137236
-  resolved_ref: cc37bfdd292ce520ba1c44df7a3a70d5f8137236
   virtual_path: plugins/database-design
   is_virtual: true
   package_type: marketplace_plugin
@@ -1126,6 +1549,30 @@ dependencies:
     .claude/skills/typescript-advanced-types/SKILL.md: sha256:c32101c65134d94ef1a3305ef486020b57be6408f97ed952c9c560e3fe04188d
     .claude/skills/typescript-advanced-types/references/details.md: sha256:036a1dd41283384f086ac0eeb4f63c899b042ad68815a8ce00afebf606b55c44
   content_hash: sha256:fab024d739fd02514a9516271de1ffe7899579d69f37541cb15b86ebb4a9de63
+- repo_url: wshobson/agents
+  host: github.com
+  resolved_commit: cc37bfdd292ce520ba1c44df7a3a70d5f8137236
+  resolved_ref: main
+  virtual_path: plugins/plugin-eval
+  is_virtual: true
+  package_type: marketplace_plugin
+  deployed_files:
+  - .agents/skills/evaluation-methodology
+  - .agents/skills/evaluation-methodology/SKILL.md
+  - .agents/skills/evaluation-methodology/references/rubrics.md
+  - .claude/agents/eval-judge.md
+  - .claude/agents/eval-orchestrator.md
+  - .claude/skills/evaluation-methodology
+  - .claude/skills/evaluation-methodology/SKILL.md
+  - .claude/skills/evaluation-methodology/references/rubrics.md
+  deployed_file_hashes:
+    .agents/skills/evaluation-methodology/SKILL.md: sha256:1fe24ef3053651427ee3c82927e28a12f9fc89209fd54e0f9e487319ac80beb0
+    .agents/skills/evaluation-methodology/references/rubrics.md: sha256:c815591dc2d250620f1cb2818040d572e1fc88f1587b205e3d303176e6abdf36
+    .claude/agents/eval-judge.md: sha256:44c155e2fe50a1d2946797650839d6d9c4eb83963b9e90af4552134d1c8b6816
+    .claude/agents/eval-orchestrator.md: sha256:3d9ddfbcd3da4d0b3fc8d71e9dd15be31683e5ccb77d59dd1bb8e67f2e2bd75d
+    .claude/skills/evaluation-methodology/SKILL.md: sha256:1fe24ef3053651427ee3c82927e28a12f9fc89209fd54e0f9e487319ac80beb0
+    .claude/skills/evaluation-methodology/references/rubrics.md: sha256:c815591dc2d250620f1cb2818040d572e1fc88f1587b205e3d303176e6abdf36
+  content_hash: sha256:1e8a48d4715119ca611bd9dc871fe99212a552b30b7acb1ee6ff5a04f16c0994
 - repo_url: wshobson/agents
   host: github.com
   resolved_commit: cc37bfdd292ce520ba1c44df7a3a70d5f8137236

@@ -2157,7 +2157,7 @@ export type Equipment = {
  *  );
  *  ```
  */
-export type ErrorCode = "validation.request_envelope_invalid" | "dev_mode.disabled" | "equipment.duplicate" | "equipment.not_found" | "internal.database" | "internal.audit" | "internal.data" | "firstrun.incomplete" | "path.already_registered" | "path.already_registered.different_kind" | "path.not_directory" | "path.not_exists" | "path.permission_denied" | "path.reserved_name" | "path.traversal" | "path.collision" | "path.invalid" | "inbox.item.not_found" | "inbox.has.open.plan" | "inbox.item.no_plan" | "metadata.unreadable" | "classification.ambiguous" | "classification.stale" | "pattern.unset" | "pattern.empty" | "pattern.invalid" | "pattern.invalid.unicode" | "token.unknown" | "file.not_found" | "note.content_too_large" | "session.not_found" | "session.mixed_state" | "operation.handler_duplicate" | "operation.not_found" | 
+export type ErrorCode = "validation.request_envelope_invalid" | "dev_mode.disabled" | "equipment.duplicate" | "equipment.not_found" | "internal.database" | "internal.audit" | "internal.data" | "firstrun.incomplete" | "path.already_registered" | "path.already_registered.different_kind" | "path.not_directory" | "path.not_exists" | "path.permission_denied" | "path.reserved_name" | "path.traversal" | "path.collision" | "path.invalid" | "inbox.item.not_found" | "inbox.has.open.plan" | "inbox.item.no_plan" | "inbox.no_destination_root" | "inbox.destination_root_required" | "inbox.invalid_destination_root" | "inbox.missing_path_attributes" | "metadata.unreadable" | "classification.ambiguous" | "classification.stale" | "pattern.unset" | "pattern.empty" | "pattern.invalid" | "pattern.invalid.unicode" | "token.unknown" | "file.not_found" | "note.content_too_large" | "session.not_found" | "session.mixed_state" | "operation.handler_duplicate" | "operation.not_found" | 
 /**  Plan approval is outstanding (sent as `ContractError`, not `TransitionError`). */
 "plan.approval_required" | "plan.approval.stale" | "plan.invalid_state" | "plan.not_found" | "plan.not_in_apply" | "plan.blocked_by_protection" | "plan.in_progress" | "plan.items.empty" | "item.not_failed" | "item.not_found" | "item.not_pending" | "run.not_found" | "run.not_paused" | "archive.empty" | "confirm.text.mismatch" | "no.items.to.retry" | "no_op" | "parent.not_found" | "parent.not_terminal" | "lifecycle.read_only" | "lifecycle.last_confirmed_source" | "project.not_found" | "project.read_only" | "view.mixed_kind" | "view.not_found" | "view.unsupported_kind" | "canonical_target.not_found" | "name.duplicate" | "name.empty" | "name.too_long" | "source.already.linked" | "source.not_found" | "source.invalid_organization_state" | "tool.locked" | "tool.unknown" | "resolver.endpoint_invalid" | "key.unknown" | "key.unoverridable" | "value.invalid" | 
 /**  Used in `ContractError` tests in lib.rs; also may appear via plan-apply. */
@@ -2464,6 +2464,28 @@ export type InboxConfirmActionsSummary = {
 	catalogueCount: number,
 };
 
+/**
+ *  Resolved destination preview for one confirmed plan action (spec 041
+ *  US8/FR-031).
+ * 
+ *  Carries the **absolute** destination (chosen root path + resolved relative
+ *  path) so the UI can show the full on-disk path without re-resolving roots.
+ */
+export type InboxConfirmDestination = {
+	fromPath: string,
+	/**  Resolved relative path under the destination root. */
+	toRelativePath: string,
+	/**
+	 *  Absolute destination = chosen root path + `/` + `to_relative_path`
+	 *  (equals the source location for `catalogue` actions).
+	 */
+	toAbsolutePath: string,
+	/**  Id of the chosen destination root. */
+	toRootId: string,
+	/**  `"move"` | `"catalogue"`. */
+	action: string,
+};
+
 /**  Request for `inbox.confirm`. */
 export type InboxConfirmRequest = InboxConfirmRequest_Serialize | InboxConfirmRequest_Deserialize;
 
@@ -2480,6 +2502,16 @@ export type InboxConfirmRequest_Deserialize = {
 	 *  (Tauri transport detail only).
 	 */
 	rootAbsolutePath: string,
+	/**
+	 *  Caller-selected destination library root (spec 041 US8/FR-029).
+	 * 
+	 *  Only consulted for inbox sources whose frame-type category has more than
+	 *  one candidate library root. When exactly one candidate exists it is
+	 *  auto-selected and this field is ignored; for non-inbox sources the file
+	 *  stays in place. Supplying a root that is not a valid candidate for the
+	 *  item's category is rejected with `inbox.invalid_destination_root`.
+	 */
+	rootId?: string | null,
 };
 
 /**  Request for `inbox.confirm`. */
@@ -2495,6 +2527,16 @@ export type InboxConfirmRequest_Serialize = {
 	 *  (Tauri transport detail only).
 	 */
 	rootAbsolutePath: string,
+	/**
+	 *  Caller-selected destination library root (spec 041 US8/FR-029).
+	 * 
+	 *  Only consulted for inbox sources whose frame-type category has more than
+	 *  one candidate library root. When exactly one candidate exists it is
+	 *  auto-selected and this field is ignored; for non-inbox sources the file
+	 *  stays in place. Supplying a root that is not a valid candidate for the
+	 *  item's category is rejected with `inbox.invalid_destination_root`.
+	 */
+	rootId?: string | null,
 };
 
 /**  Response from `inbox.confirm`. */
@@ -2525,6 +2567,11 @@ export type InboxConfirmResponse_Deserialize = {
 	 *  `"organized"` | `"unorganized"`. `None` when `registered_as_master`.
 	 */
 	organizationState: string | null,
+	/**
+	 *  Per-action absolute destination previews (spec 041 US8/FR-031).
+	 *  Empty for master-registration responses.
+	 */
+	destinations?: InboxConfirmDestination[],
 };
 
 /**  Response from `inbox.confirm`. */
@@ -2552,6 +2599,11 @@ export type InboxConfirmResponse_Serialize = {
 	 *  `"organized"` | `"unorganized"`. `None` when `registered_as_master`.
 	 */
 	organizationState?: string | null,
+	/**
+	 *  Per-action absolute destination previews (spec 041 US8/FR-031).
+	 *  Empty for master-registration responses.
+	 */
+	destinations?: InboxConfirmDestination[],
 };
 
 /**  A file entry discovered during an inbox scan. */
@@ -2606,6 +2658,14 @@ export type InboxFileMetadata_Deserialize = {
 	isMaster: boolean,
 	/**  True when the persisted override no longer matches the file's size/mtime (R-4). */
 	overrideStale: boolean,
+	/**
+	 *  Path-load-bearing attributes the file is missing for its frame type's
+	 *  destination pattern (spec 041 US9/FR-032/FR-033). Empty when the file can
+	 *  resolve a destination. These are the pattern token names that fell back to
+	 *  a registry default (e.g. `["target", "date"]` for a light with no OBJECT /
+	 *  DATE-OBS). Supplying the value via reclassify clears the gate.
+	 */
+	missingPathAttributes?: string[],
 };
 
 /**
@@ -2642,6 +2702,14 @@ export type InboxFileMetadata_Serialize = {
 	isMaster: boolean,
 	/**  True when the persisted override no longer matches the file's size/mtime (R-4). */
 	overrideStale: boolean,
+	/**
+	 *  Path-load-bearing attributes the file is missing for its frame type's
+	 *  destination pattern (spec 041 US9/FR-032/FR-033). Empty when the file can
+	 *  resolve a destination. These are the pattern token names that fell back to
+	 *  a registry default (e.g. `["target", "date"]` for a light with no OBJECT /
+	 *  DATE-OBS). Supplying the value via reclassify clears the gate.
+	 */
+	missingPathAttributes?: string[],
 };
 
 /**  Request for `inbox.item.metadata`. */

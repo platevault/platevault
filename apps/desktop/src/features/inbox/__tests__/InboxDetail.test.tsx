@@ -269,3 +269,55 @@ describe('InboxDetail — FR-010: per-file metadata table', () => {
     expect(screen.getByText('File metadata (2)')).toBeInTheDocument();
   });
 });
+
+// ── FR-032 (US9): missing path-load-bearing attribute gate ───────────────────
+
+describe('InboxDetail — FR-032: missing-attribute annotations', () => {
+  const withMissing: InboxFileMetadata[] = [
+    { ...fileMetadataFixture[0], relativeFilePath: 'light_ok.fits', missingPathAttributes: [] },
+    {
+      ...fileMetadataFixture[0],
+      relativeFilePath: 'light_nodate.fits',
+      dateObs: null,
+      missingPathAttributes: ['date'],
+    },
+  ];
+
+  it('annotates only files that are missing a path-load-bearing attribute', () => {
+    render(
+      <InboxDetail
+        item={sampleItem as unknown as Parameters<typeof InboxDetail>[0]['item']}
+        rootAbsolutePath="/astro/inbox"
+        classification={singleTypeClassification as unknown as Parameters<typeof InboxDetail>[0]['classification']}
+        fileMetadata={withMissing}
+      />
+    );
+    const badge = screen.getByTestId('inbox-missing-attr-light_nodate.fits');
+    expect(badge).toHaveTextContent('needs date');
+    expect(screen.queryByTestId('inbox-missing-attr-light_ok.fits')).not.toBeInTheDocument();
+  });
+
+  it('shows a summary banner counting the blocked files', () => {
+    render(
+      <InboxDetail
+        item={sampleItem as unknown as Parameters<typeof InboxDetail>[0]['item']}
+        rootAbsolutePath="/astro/inbox"
+        classification={singleTypeClassification as unknown as Parameters<typeof InboxDetail>[0]['classification']}
+        fileMetadata={withMissing}
+      />
+    );
+    expect(screen.getByTestId('inbox-missing-attr-banner')).toHaveTextContent('1 file');
+  });
+
+  it('renders no banner when no file is missing attributes', () => {
+    render(
+      <InboxDetail
+        item={sampleItem as unknown as Parameters<typeof InboxDetail>[0]['item']}
+        rootAbsolutePath="/astro/inbox"
+        classification={singleTypeClassification as unknown as Parameters<typeof InboxDetail>[0]['classification']}
+        fileMetadata={fileMetadataFixture}
+      />
+    );
+    expect(screen.queryByTestId('inbox-missing-attr-banner')).not.toBeInTheDocument();
+  });
+});

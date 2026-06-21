@@ -27,6 +27,27 @@ import type { InboxOpenPlan, InboxPlanAction } from './store';
  */
 export type DestructiveDestination = 'archive' | 'trash';
 
+/**
+ * One candidate destination root surfaced when a confirm fails with
+ * `inbox.destination_root_required` (spec 041 US8/FR-029). Mirrors the
+ * structured-error `details.candidates[]` shape emitted by the backend.
+ */
+export interface DestinationRootCandidate {
+  rootId: string;
+  path: string;
+  kind: string;
+}
+
+/**
+ * Pending destination-root selection: the user must pick one of `candidates`
+ * before the plan for this item can be generated (FR-029). `category` is the
+ * frame-type category the roots host (e.g. `light_frames`).
+ */
+export interface PendingRootPick {
+  category: string;
+  candidates: DestinationRootCandidate[];
+}
+
 export interface PlanPanelProps {
   /** Every open plan across all roots (already fetched by the parent). */
   plans: InboxOpenPlan[];
@@ -41,6 +62,22 @@ export interface PlanPanelProps {
   /** Discard a single ingestion group's plan. */
   onCancel: (inboxItemId: string) => void;
   busy?: boolean;
+  /**
+   * Destination-root prompt (spec 041 US8/FR-029). Non-null when the last
+   * confirm needs the user to choose among multiple candidate roots. The plan
+   * cannot be generated/applied until a root is chosen.
+   */
+  pendingRootPick?: PendingRootPick | null;
+  /** Re-invoke confirm with the chosen destination root. */
+  onPickDestinationRoot?: (rootId: string) => void;
+  /** Busy flag specific to the (re-)confirm triggered by a root pick. */
+  rootPickBusy?: boolean;
+  /**
+   * Absolute destination paths keyed by source `fromPath`, populated from the
+   * latest `inbox.confirm` response's `destinations[]` (spec 041 US8/FR-031).
+   * Action rows show the absolute path when present, else the relative preview.
+   */
+  absoluteByFromPath?: Record<string, string>;
 }
 
 // ── Helpers ─────────────────────────────────────────────────────────────────
@@ -84,6 +121,10 @@ export function PlanPanel({
   onApplyAll,
   onCancel,
   busy = false,
+  pendingRootPick = null,
+  onPickDestinationRoot,
+  rootPickBusy = false,
+  absoluteByFromPath,
 }: PlanPanelProps) {
   // Plan-level selection set, keyed by inboxItemId. Stale plans cannot be
   // selected (and are pruned from the set if they become stale).
@@ -137,9 +178,85 @@ export function PlanPanel({
     );
   };
 
+  // Starting global action index per plan, so each absolute-path cell gets a
+  // stable, unique `inbox-dest-absolute-<idx>` testid (computed during render
+  // instead of mutating a counter, which the immutability lint forbids).
+  const planRowOffsets = useMemo(() => {
+    const offsets: number[] = [];
+    let running = 0;
+    for (const p of plans) {
+      offsets.push(running);
+      running += p.actions.length;
+    }
+    return offsets;
+  }, [plans]);
+
+  // ── Destination-root picker (spec 041 US8/FR-029) ──
+  // Surfaced whenever the last confirm needs a root choice. Block apply until
+  // chosen: the plan isn't generated until confirm succeeds with a rootId.
+  const rootPicker = pendingRootPick ? (
+    <div
+      className="alm-plan-panel__root-picker"
+      data-testid="inbox-root-picker"
+      style={{
+        marginBottom: 'var(--alm-sp-3)',
+        padding: 'var(--alm-sp-3)',
+        border: '1px solid var(--alm-warn, var(--alm-border))',
+        borderRadius: 'var(--alm-radius)',
+        background: 'var(--alm-surface-raised, var(--alm-bg3))',
+      }}
+    >
+      <div
+        style={{
+          fontSize: 'var(--alm-text-sm)',
+          fontWeight: 600,
+          marginBottom: 'var(--alm-sp-1)',
+        }}
+      >
+        Choose a destination library root
+      </div>
+      <div
+        style={{
+          fontSize: 'var(--alm-text-xs)',
+          color: 'var(--alm-text-muted)',
+          marginBottom: 'var(--alm-sp-2)',
+        }}
+      >
+        More than one library root can host <strong>{pendingRootPick.category}</strong> frames.
+        Pick where these files should go to generate the plan.
+      </div>
+      <div style={{ display: 'flex', flexDirection: 'column', gap: 'var(--alm-sp-2)' }}>
+        {pendingRootPick.candidates.map((c) => (
+          <Btn
+            key={c.rootId}
+            variant="ghost"
+            onClick={() => onPickDestinationRoot?.(c.rootId)}
+            disabled={rootPickBusy}
+            data-testid={`inbox-root-option-${c.rootId}`}
+            aria-label={`Use ${c.path} as destination root`}
+            style={{ justifyContent: 'flex-start', textAlign: 'left' }}
+          >
+            <span style={{ display: 'flex', flexDirection: 'column', alignItems: 'flex-start' }}>
+              <code style={{ fontSize: 'var(--alm-text-xs)' }}>{c.path}</code>
+              <span style={{ fontSize: 'var(--alm-text-xs)', color: 'var(--alm-text-muted)' }}>
+                {c.kind}
+              </span>
+            </span>
+          </Btn>
+        ))}
+      </div>
+    </div>
+  ) : null;
+
   // ── Empty state ──
+  // Nothing to show unless there is at least one open plan OR a pending root
+  // pick (the latter can occur with zero open plans — the plan wasn't created).
   if (plans.length === 0) {
-    return null;
+    return rootPicker ? (
+      <div className="alm-plan-panel" data-testid="plan-panel">
+        {rootPicker}
+      </div>
+    ) : null;
   }
 
   const applySelectedDisabled =
@@ -148,6 +265,9 @@ export function PlanPanel({
 
   return (
     <div className="alm-plan-panel" data-testid="plan-panel">
+      {/* ── Destination-root picker (FR-029): blocks apply until chosen ── */}
+      {rootPicker}
+
       {/* ── Pinned header: counts + select-all + apply controls ── */}
       <div className="alm-plan-panel__bar" data-testid="plan-panel-bar">
         <div className="alm-plan-panel__bar-left">
@@ -217,7 +337,7 @@ export function PlanPanel({
 
       {/* ── Scrollable group list ── */}
       <div className="alm-plan-panel__scroll" data-testid="plan-panel-scroll">
-        {plans.map((plan) => {
+        {plans.map((plan, planIdx) => {
           const checked = selected.has(plan.inboxItemId);
           return (
             <section
@@ -300,7 +420,14 @@ export function PlanPanel({
 
               {/* Action rows */}
               <div className="alm-plan-panel__rows">
-                {plan.actions.map((a) => (
+                {plan.actions.map((a, actionPos) => {
+                  const rowIdx = planRowOffsets[planIdx] + actionPos;
+                  // FR-031: prefer the absolute destination path from the last
+                  // confirm response (keyed by source path); fall back to the
+                  // root-relative preview for plans without a captured absolute.
+                  const absolute = absoluteByFromPath?.[a.fromPath];
+                  const destText = absolute ?? a.destinationPreview;
+                  return (
                   <div
                     key={a.index}
                     className="alm-plan-panel__row"
@@ -339,18 +466,21 @@ export function PlanPanel({
                     </span>
                     <code
                       className="alm-plan-panel__dest"
+                      data-testid={`inbox-dest-absolute-${rowIdx}`}
                       style={{
                         color: 'var(--alm-text-secondary)',
                         overflow: 'hidden',
                         textOverflow: 'ellipsis',
                         whiteSpace: 'nowrap',
+                        direction: 'rtl',
                       }}
-                      title={a.destinationPreview}
+                      title={destText}
                     >
-                      {a.destinationPreview}
+                      {destText}
                     </code>
                   </div>
-                ))}
+                  );
+                })}
               </div>
             </section>
           );

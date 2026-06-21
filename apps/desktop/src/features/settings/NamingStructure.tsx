@@ -1,11 +1,13 @@
 // spec 015 — Token Pattern Builder: backend-wired resolver, validator, preview.
 // spec 018 — pattern + autoApplyPattern keys persisted via settings transport.
-import { useState, useEffect, useCallback } from 'react';
+// spec 041 (T051, FR-026b) — per-frame-type destination patterns.
+import { useState, useEffect, useCallback, useRef } from 'react';
 import { Btn } from '@/ui';
 import {
   getSettings,
   patternValidate,
   patternPreview,
+  updateSettings,
   type PatternPart,
   type PatternPreviewResponse,
 } from '@/api/commands';
@@ -29,6 +31,73 @@ const AVAILABLE_TOKENS = [
 ] as const;
 
 const SEPARATORS = ['/', '-', '_', ' '] as const;
+
+// ── Per-frame-type destination patterns (spec 041 T051, FR-026b) ──────────────
+//
+// The backend stores these under ONE naming-scope key, `patterns_by_type`: a
+// JSON object mapping a frame-type class name to a pattern string. The seven
+// class names below are the exact strings the backend recognises. An absent key
+// (or empty input) means "use the built-in default" — only overridden classes
+// are persisted.
+
+const FRAME_TYPE_CLASSES = [
+  'light',
+  'flat',
+  'dark',
+  'bias',
+  'master_flat',
+  'master_dark',
+  'master_bias',
+] as const;
+type FrameTypeClass = (typeof FRAME_TYPE_CLASSES)[number];
+
+const FRAME_TYPE_LABELS: Record<FrameTypeClass, string> = {
+  light: 'Light',
+  flat: 'Flat',
+  dark: 'Dark',
+  bias: 'Bias',
+  master_flat: 'Master Flat',
+  master_dark: 'Master Dark',
+  master_bias: 'Master Bias',
+};
+
+// Built-in defaults shown as the placeholder / reset target per type.
+const FRAME_TYPE_DEFAULT_PATTERNS: Record<FrameTypeClass, string> = {
+  light: '{target}/{filter}/{date}/light/',
+  flat: 'flats/{filter}/{date}/',
+  dark: 'darks/{exposure}/',
+  bias: 'bias/',
+  master_flat: 'masters/flats/{filter}/',
+  master_dark: 'masters/darks/{exposure}/',
+  master_bias: 'masters/bias/',
+};
+
+// Valid `{token}` names (mirrors the backend token vocabulary). Literal path
+// segments are allowed; only `{...}` tokens are validated.
+const VALID_PATTERN_TOKENS = new Set(AVAILABLE_TOKENS);
+
+/**
+ * Client-side mirror of the backend token rule. Returns an error message when
+ * the pattern references an unknown `{token}`, else `null`. An empty string is
+ * NOT an error here — it means "use the built-in default". The backend
+ * `value.invalid` result remains the source of truth on save.
+ */
+function validatePatternString(value: string): string | null {
+  if (value.trim() === '') return null; // empty = use default
+  const unknown: string[] = [];
+  const re = /\{([^}]*)\}/g;
+  let m: RegExpExecArray | null;
+  while ((m = re.exec(value)) !== null) {
+    const token = m[1];
+    if (!VALID_PATTERN_TOKENS.has(token as (typeof AVAILABLE_TOKENS)[number])) {
+      unknown.push(token);
+    }
+  }
+  if (unknown.length > 0) {
+    return `Unknown token${unknown.length > 1 ? 's' : ''}: ${unknown.map((t) => `{${t}}`).join(', ')}`;
+  }
+  return null;
+}
 
 // ── Sample metadata for live preview (R-Preview) ─────────────────────────────
 
@@ -269,6 +338,177 @@ function PatternChipsEditor({
   );
 }
 
+// ── PerTypeDestinationPatterns (spec 041 T051, FR-026b) ───────────────────────
+//
+// Self-contained editor for the `patterns_by_type` naming-scope key. It loads
+// and saves directly (rather than via the parent `save` debounce) so it can
+// surface the backend `value.invalid` rejection inline — the parent auto-save
+// swallows write errors.
+
+function PerTypeDestinationPatterns() {
+  // Override map: class → pattern string. Absent class = built-in default.
+  const [overrides, setOverrides] = useState<Partial<Record<FrameTypeClass, string>>>({});
+  const [backendErrors, setBackendErrors] = useState<Partial<Record<FrameTypeClass, string>>>({});
+  const [loaded, setLoaded] = useState(false);
+  const saveTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
+
+  // ── Load saved overrides on mount ────────────────────────────────────────
+  useEffect(() => {
+    getSettings({ scope: 'naming' })
+      .then((data) => {
+        const vals = data.values as Record<string, unknown>;
+        const raw = vals.patterns_by_type;
+        if (raw && typeof raw === 'object') {
+          const next: Partial<Record<FrameTypeClass, string>> = {};
+          for (const cls of FRAME_TYPE_CLASSES) {
+            const v = (raw as Record<string, unknown>)[cls];
+            if (typeof v === 'string') next[cls] = v;
+          }
+          setOverrides(next);
+        }
+      })
+      .catch(() => {
+        // Use defaults on load failure (e.g. in test/mock environment).
+      })
+      .finally(() => setLoaded(true));
+  }, []);
+
+  // ── Persist the full override map (debounced, captures backend errors) ────
+  const persist = useCallback((next: Partial<Record<FrameTypeClass, string>>) => {
+    if (saveTimer.current) clearTimeout(saveTimer.current);
+    saveTimer.current = setTimeout(() => {
+      // Send only non-empty overrides; an empty/absent class means "default".
+      const payload: Record<string, string> = {};
+      for (const cls of FRAME_TYPE_CLASSES) {
+        const v = next[cls];
+        if (typeof v === 'string' && v.trim() !== '') payload[cls] = v;
+      }
+      void updateSettings({ scope: 'naming', values: { patterns_by_type: payload } }).then(
+        () => {
+          // Clear any stale backend errors on a successful save.
+          setBackendErrors({});
+        },
+        (err: unknown) => {
+          // Backend rejected at least one pattern (error code value.invalid).
+          // We cannot tell which class from a single string; flag all classes
+          // that currently fail client-side validation, falling back to a
+          // generic banner keyed on the first overridden class.
+          const message = typeof err === 'string' ? err : 'Invalid pattern';
+          const errs: Partial<Record<FrameTypeClass, string>> = {};
+          let attributed = false;
+          for (const cls of FRAME_TYPE_CLASSES) {
+            const v = next[cls];
+            if (typeof v === 'string' && v.trim() !== '' && validatePatternString(v) !== null) {
+              errs[cls] = message;
+              attributed = true;
+            }
+          }
+          if (!attributed) {
+            const firstOverride = FRAME_TYPE_CLASSES.find(
+              (cls) => typeof next[cls] === 'string' && next[cls]!.trim() !== '',
+            );
+            if (firstOverride) errs[firstOverride] = message;
+          }
+          setBackendErrors(errs);
+        },
+      );
+    }, 300);
+  }, []);
+
+  const handleChange = (cls: FrameTypeClass, value: string) => {
+    const next = { ...overrides };
+    if (value.trim() === '') {
+      delete next[cls];
+    } else {
+      next[cls] = value;
+    }
+    setOverrides(next);
+    // Clear this class's backend error optimistically; re-validated on save.
+    setBackendErrors((prev) => {
+      if (!(cls in prev)) return prev;
+      const { [cls]: _removed, ...rest } = prev;
+      return rest;
+    });
+    persist(next);
+  };
+
+  const handleReset = (cls: FrameTypeClass) => {
+    const next = { ...overrides };
+    delete next[cls];
+    setOverrides(next);
+    setBackendErrors((prev) => {
+      if (!(cls in prev)) return prev;
+      const { [cls]: _removed, ...rest } = prev;
+      return rest;
+    });
+    persist(next);
+  };
+
+  return (
+    <div className="alm-settings__group">
+      <div className="alm-settings__group-title">Per-Type Destination Patterns</div>
+      <div className="alm-settings__row-desc" style={{ marginBottom: 'var(--alm-sp-2)' }}>
+        Destination folder pattern per frame type, applied when confirming inbox
+        items. Leave blank to use the built-in default.
+      </div>
+      {FRAME_TYPE_CLASSES.map((cls) => {
+        const value = overrides[cls] ?? '';
+        const clientError = loaded ? validatePatternString(value) : null;
+        const error = backendErrors[cls] ?? clientError ?? undefined;
+        const isOverridden = value.trim() !== '';
+        const inputId = `naming-pattern-${cls}`;
+        return (
+          <div className="alm-settings__row" key={cls}>
+            <label className="alm-settings__row-label" htmlFor={inputId}>
+              {FRAME_TYPE_LABELS[cls]}
+            </label>
+            <div className="alm-settings__row-content">
+              <div style={{ display: 'flex', alignItems: 'center', gap: 'var(--alm-sp-2)' }}>
+                <input
+                  id={inputId}
+                  type="text"
+                  className="alm-input"
+                  style={{ flex: 1, minWidth: 220, fontFamily: 'var(--alm-font-mono)' }}
+                  value={value}
+                  placeholder={FRAME_TYPE_DEFAULT_PATTERNS[cls]}
+                  spellCheck={false}
+                  autoCorrect="off"
+                  autoCapitalize="off"
+                  aria-invalid={error ? true : undefined}
+                  aria-describedby={error ? `${inputId}-error` : undefined}
+                  data-testid={inputId}
+                  onChange={(e) => handleChange(cls, e.target.value)}
+                />
+                <Btn
+                  size="sm"
+                  disabled={!isOverridden}
+                  data-testid={`naming-pattern-reset-${cls}`}
+                  onClick={() => handleReset(cls)}
+                >
+                  Reset to default
+                </Btn>
+              </div>
+              {error && (
+                <div
+                  id={`${inputId}-error`}
+                  role="alert"
+                  style={{
+                    marginTop: 'var(--alm-sp-1)',
+                    fontSize: 'var(--alm-text-xs)',
+                    color: 'var(--alm-danger)',
+                  }}
+                >
+                  {error}
+                </div>
+              )}
+            </div>
+          </div>
+        );
+      })}
+    </div>
+  );
+}
+
 // ── NamingStructure ───────────────────────────────────────────────────────────
 
 export function NamingStructure({ save }: NamingStructureProps) {
@@ -371,6 +611,8 @@ export function NamingStructure({ save }: NamingStructureProps) {
           </div>
         </div>
       </div>
+
+      <PerTypeDestinationPatterns />
 
       <div className="alm-settings__group">
         <div className="alm-settings__row">

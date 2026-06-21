@@ -41,6 +41,12 @@ function classificationVariant(type: string): PillVariant {
 
 const FRAME_TYPE_OPTIONS = ['light', 'dark', 'bias', 'flat', 'dark_flat'] as const;
 
+/** Last path segment of a relative file path (forward- or back-slash separated). */
+function basename(path: string): string {
+  const parts = path.replace(/\\/g, '/').split('/');
+  return parts[parts.length - 1] || path;
+}
+
 /** Format a nullable value as a muted dash for table cells. */
 function fmtOrDash(value: string | number | null | undefined): React.ReactNode {
   if (value === null || value === undefined || value === '') {
@@ -310,8 +316,18 @@ export function InboxDetail({ item, classification, fileMetadata }: InboxDetailP
     { key: 'date',     label: 'Date',     style: { width: 110 } },
   ];
 
+  // FR-032 (US9): files missing a path-load-bearing attribute block plan
+  // generation. Surface a per-file "needs <attr>" indicator (consistent with
+  // the missing-IMAGETYP needs-review affordance) and a summary banner.
+  const filesMissingAttrs = (fileMetadata ?? []).filter(
+    (f) => (f.missingPathAttributes?.length ?? 0) > 0,
+  );
+
   const metadataRows =
-    (fileMetadata ?? []).map((f) => ({
+    (fileMetadata ?? []).map((f) => {
+      const missingAttrs = f.missingPathAttributes ?? [];
+      const fileName = basename(f.relativeFilePath);
+      return {
       file: (
         <span
           title={f.relativeFilePath}
@@ -324,6 +340,25 @@ export function InboxDetail({ item, classification, fileMetadata }: InboxDetailP
           }}
         >
           {f.relativeFilePath}
+          {missingAttrs.length > 0 && (
+            <span
+              data-testid={`inbox-missing-attr-${fileName}`}
+              title={`Missing required attribute(s): ${missingAttrs.join(', ')}`}
+              style={{
+                display: 'inline-block',
+                marginLeft: 'var(--alm-sp-1)',
+                padding: '0 var(--alm-sp-1)',
+                fontSize: 'var(--alm-text-xs)',
+                fontWeight: 600,
+                color: 'var(--alm-warn)',
+                border: '1px solid currentColor',
+                borderRadius: 'var(--alm-radius)',
+                whiteSpace: 'nowrap',
+              }}
+            >
+              needs {missingAttrs.join(', ')}
+            </span>
+          )}
         </span>
       ),
       type:     fmtOrDash(f.frameTypeEffective),
@@ -334,10 +369,12 @@ export function InboxDetail({ item, classification, fileMetadata }: InboxDetailP
       temp:     fmtTemp(f.temperatureC),
       object:   fmtOrDash(f.object),
       date:     fmtOrDash(f.dateObs),
-      _rowStyle: f.overrideStale
-        ? { background: 'var(--alm-color-warn-subtle, rgba(255,200,0,0.08))' }
-        : undefined,
-    }));
+      _rowStyle:
+        f.overrideStale || missingAttrs.length > 0
+          ? { background: 'var(--alm-color-warn-subtle, rgba(255,200,0,0.08))' }
+          : undefined,
+      };
+    });
 
   // ── Mixed composition summary (FR-011) ────────────────────────────────────
 
@@ -564,6 +601,20 @@ export function InboxDetail({ item, classification, fileMetadata }: InboxDetailP
             <Banner variant="danger" style={{ marginTop: 'var(--alm-sp-2)' }}>{applyError}</Banner>
           )}
         </Section>
+      )}
+
+      {/* FR-032 (US9): plan generation is blocked while any file lacks a
+          path-load-bearing attribute. Direct the user to the override flow. */}
+      {filesMissingAttrs.length > 0 && (
+        <Banner
+          variant="warn"
+          style={{ marginTop: 'var(--alm-sp-3)' }}
+          data-testid="inbox-missing-attr-banner"
+        >
+          {filesMissingAttrs.length} file{filesMissingAttrs.length !== 1 ? 's' : ''} missing
+          required attribute(s) for their destination. Assign the missing value(s) in “Needs
+          review” above before confirming.
+        </Banner>
       )}
 
       {/* FR-010: per-file metadata table — shown only when parent provides data */}

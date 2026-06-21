@@ -10,9 +10,25 @@
  * Y, then by Z") via a row of ordered dropdowns in the always-visible controls
  * bar. The chosen order is persisted to localStorage and the list renders as a
  * nested, collapsible tree using the shared `groupByDimensions` engine.
+ *
+ * Rendering is VIRTUALIZED: the grouped tree (or the flat list) is flattened
+ * into a single array of visual rows (`flattenVisibleTree`) — headers plus the
+ * leaf rows of expanded groups — and windowed with `@tanstack/react-virtual`
+ * so a large inbox mounts only the rows in view. When the scroll viewport has
+ * no measured height (e.g. jsdom under test, or the first paint before layout),
+ * the virtualizer yields an empty window; in that case we fall back to
+ * rendering every visual row so behavior and tests stay correct off-screen.
  */
 
-import { useState, useMemo, useCallback, useEffect, Fragment } from 'react';
+import {
+  useState,
+  useMemo,
+  useCallback,
+  useEffect,
+  Fragment,
+  type KeyboardEvent as ReactKeyboardEvent,
+} from 'react';
+import { useVirtualizer } from '@tanstack/react-virtual';
 import { ListSidebar } from '@/components';
 import type { InboxListItem } from '@/api/commands';
 import {
@@ -138,19 +154,95 @@ export interface InboxListProps {
   onFilterTypeChange: (type: string | undefined) => void;
 }
 
-// ── Row renderer (reused for every leaf item) ───────────────────────────────────
+// ── Flattened visual-row model (drives virtualization) ───────────────────────────
 
-interface RowProps {
+const INDENT_PER_DEPTH = 12;
+
+/** A collapsible group header row. */
+export interface HeaderVisualRow {
+  kind: 'header';
+  /** Stable per-node collapse key (matches the GroupTree path scheme). */
+  path: string;
+  node: GroupNode<InboxListItem>;
+  depth: number;
+  collapsed: boolean;
+}
+
+/** A leaf item row. */
+export interface ItemVisualRow {
+  kind: 'item';
   item: InboxListItem;
   /** Original index in the unfiltered `items` array, for selection mapping. */
   originalIdx: number;
-  selected: boolean;
-  onSelect: (idx: number) => void;
   /** Left indent (px) so nested leaves align under their group header. */
   indent: number;
 }
 
-function InboxRow({ item, originalIdx, selected, onSelect, indent }: RowProps) {
+export type VisualRow = HeaderVisualRow | ItemVisualRow;
+
+/** Stable virtualization/react key for a visual row. */
+function rowKey(row: VisualRow): string {
+  return row.kind === 'header' ? `h:${row.path}` : `i:${row.item.inboxItemId}`;
+}
+
+/**
+ * Walk the grouped tree in render order and produce the flat list of VISIBLE
+ * visual rows: every group header, plus the leaf rows of groups that are not
+ * collapsed. A collapsed group contributes only its header (descendants are
+ * omitted). Leaf rows resolve their selection index via the O(1)
+ * `originalIndexById` map. Mirrors the indent/path math of the old GroupTree.
+ */
+export function flattenVisibleTree(
+  nodes: readonly GroupNode<InboxListItem>[],
+  collapsed: ReadonlySet<string>,
+  originalIndexById: ReadonlyMap<string, number>,
+): VisualRow[] {
+  const rows: VisualRow[] = [];
+  const walk = (ns: readonly GroupNode<InboxListItem>[], depth: number, pathPrefix: string) => {
+    for (const node of ns) {
+      const path = `${pathPrefix}/${node.dimension}:${node.key}`;
+      const isCollapsed = collapsed.has(path);
+      rows.push({ kind: 'header', path, node, depth, collapsed: isCollapsed });
+      if (isCollapsed) continue;
+      if (node.children.length > 0) {
+        walk(node.children, depth + 1, path);
+      } else {
+        const indent = 8 + (depth + 1) * INDENT_PER_DEPTH;
+        for (const item of node.items) {
+          rows.push({
+            kind: 'item',
+            item,
+            originalIdx: originalIndexById.get(item.inboxItemId) ?? -1,
+            indent,
+          });
+        }
+      }
+    }
+  };
+  walk(nodes, 0, 'root');
+  return rows;
+}
+
+// Estimated row heights for the virtualizer (real heights are measured on mount
+// via measureElement; these only seed the initial window + total size).
+const HEADER_SIZE_EST = 28;
+const ITEM_SIZE_EST = 52;
+
+// ── Row renderers ────────────────────────────────────────────────────────────────
+
+function InboxRow({
+  item,
+  originalIdx,
+  selected,
+  onSelect,
+  indent,
+}: {
+  item: InboxListItem;
+  originalIdx: number;
+  selected: boolean;
+  onSelect: (idx: number) => void;
+  indent: number;
+}) {
   return (
     <div
       data-testid={`inbox-item-${item.inboxItemId}`}
@@ -214,109 +306,52 @@ function InboxRow({ item, originalIdx, selected, onSelect, indent }: RowProps) {
   );
 }
 
-// ── Collapsible group header + recursive tree ───────────────────────────────────
-
-const INDENT_PER_DEPTH = 12;
-
-interface TreeProps {
-  nodes: GroupNode<InboxListItem>[];
-  depth: number;
-  /** Original-index lookup by item identity (stable across nesting). */
-  indexOf: (item: InboxListItem) => number;
-  selectedIdx: number | null;
-  onSelect: (idx: number) => void;
-  collapsed: Set<string>;
-  toggle: (path: string) => void;
-  /** Group path prefix used to build a stable per-node collapse key. */
-  pathPrefix: string;
-}
-
-function GroupTree({
-  nodes,
+function GroupHeaderRow({
+  node,
   depth,
-  indexOf,
-  selectedIdx,
-  onSelect,
   collapsed,
-  toggle,
-  pathPrefix,
-}: TreeProps) {
+  onToggle,
+}: {
+  node: GroupNode<InboxListItem>;
+  depth: number;
+  collapsed: boolean;
+  onToggle: () => void;
+}) {
+  const headerIndent = depth * INDENT_PER_DEPTH;
   return (
-    <>
-      {nodes.map((node) => {
-        const path = `${pathPrefix}/${node.dimension}:${node.key}`;
-        const isCollapsed = collapsed.has(path);
-        const headerIndent = depth * INDENT_PER_DEPTH;
-        const childLeafIndent = (depth + 1) * INDENT_PER_DEPTH;
-
-        return (
-          <Fragment key={path}>
-            <button
-              type="button"
-              className="alm-list-group-header"
-              data-testid={`inbox-group-${node.dimension}-${node.key}`}
-              onClick={() => toggle(path)}
-              aria-expanded={!isCollapsed}
-              style={{
-                display: 'flex',
-                alignItems: 'center',
-                gap: 6,
-                width: '100%',
-                background: 'none',
-                border: 'none',
-                textAlign: 'left',
-                cursor: 'pointer',
-                padding: '4px 8px',
-                paddingLeft: 8 + headerIndent,
-                font: 'inherit',
-                color: 'var(--alm-text-secondary)',
-                fontSize: 'var(--alm-text-xs)',
-                fontWeight: 600,
-              }}
-            >
-              <span aria-hidden="true" style={{ width: '0.7em', display: 'inline-block' }}>
-                {isCollapsed ? '▸' : '▾'}
-              </span>
-              <span style={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
-                {node.label}
-              </span>
-              <span style={{ color: 'var(--alm-text-muted)', fontWeight: 400, marginLeft: 'auto' }}>
-                {node.count}
-              </span>
-            </button>
-
-            {!isCollapsed && (
-              node.children.length > 0 ? (
-                <GroupTree
-                  nodes={node.children}
-                  depth={depth + 1}
-                  indexOf={indexOf}
-                  selectedIdx={selectedIdx}
-                  onSelect={onSelect}
-                  collapsed={collapsed}
-                  toggle={toggle}
-                  pathPrefix={path}
-                />
-              ) : (
-                node.items.map((item) => {
-                  const originalIdx = indexOf(item);
-                  return (
-                    <InboxRow
-                      key={item.inboxItemId}
-                      item={item}
-                      originalIdx={originalIdx}
-                      selected={selectedIdx === originalIdx}
-                      onSelect={onSelect}
-                      indent={8 + childLeafIndent}
-                    />
-                  );
-                })
-              )
-            )}
-          </Fragment>
-        );
-      })}
-    </>
+    <button
+      type="button"
+      className="alm-list-group-header"
+      data-testid={`inbox-group-${node.dimension}-${node.key}`}
+      onClick={onToggle}
+      aria-expanded={!collapsed}
+      style={{
+        display: 'flex',
+        alignItems: 'center',
+        gap: 6,
+        width: '100%',
+        background: 'none',
+        border: 'none',
+        textAlign: 'left',
+        cursor: 'pointer',
+        padding: '4px 8px',
+        paddingLeft: 8 + headerIndent,
+        font: 'inherit',
+        color: 'var(--alm-text-secondary)',
+        fontSize: 'var(--alm-text-xs)',
+        fontWeight: 600,
+      }}
+    >
+      <span aria-hidden="true" style={{ width: '0.7em', display: 'inline-block' }}>
+        {collapsed ? '▸' : '▾'}
+      </span>
+      <span style={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+        {node.label}
+      </span>
+      <span style={{ color: 'var(--alm-text-muted)', fontWeight: 400, marginLeft: 'auto' }}>
+        {node.count}
+      </span>
+    </button>
   );
 }
 
@@ -332,6 +367,9 @@ export function InboxList({
   const [sortBy, setSortBy] = useState<SortBy>('name');
   const [dims, setDims] = useState<string[]>(() => loadDims());
   const [collapsed, setCollapsed] = useState<Set<string>>(() => new Set());
+  // The scroll viewport the virtualizer measures against — captured from the
+  // sizer's parent (ListSidebar's `.alm-list-sidebar__list`, which scrolls).
+  const [scrollEl, setScrollEl] = useState<HTMLDivElement | null>(null);
 
   // Persist the chosen ordered dimensions whenever they change.
   useEffect(() => {
@@ -362,10 +400,12 @@ export function InboxList({
   // the tree so the footer matches what is actually rendered).
   const visibleCount = useMemo(() => flattenLeafItems(tree).length, [tree]);
 
-  // Map an item back to its index in the unfiltered `items` array. Identity-based
-  // (the same object flows through filter/sort/group), so selection stays correct
-  // through arbitrary nesting.
-  const indexOf = useCallback((item: InboxListItem) => items.indexOf(item), [items]);
+  // O(1) original-index lookup by item id (stable across filter/sort/group).
+  const originalIndexById = useMemo(() => {
+    const m = new Map<string, number>();
+    items.forEach((it, i) => m.set(it.inboxItemId, i));
+    return m;
+  }, [items]);
 
   const toggle = useCallback((path: string) => {
     setCollapsed((prev) => {
@@ -375,6 +415,63 @@ export function InboxList({
       return next;
     });
   }, []);
+
+  // Whether grouping is active at all (drives header rows vs a plain flat list).
+  const grouped = dims.length > 0;
+
+  // Flatten to the visible visual rows the virtualizer windows. When grouped we
+  // walk the tree (headers + expanded leaves); otherwise it's a flat item list.
+  const visualRows = useMemo<VisualRow[]>(() => {
+    if (grouped) return flattenVisibleTree(tree, collapsed, originalIndexById);
+    return filtered.map((item) => ({
+      kind: 'item' as const,
+      item,
+      originalIdx: originalIndexById.get(item.inboxItemId) ?? -1,
+      indent: 0,
+    }));
+  }, [grouped, tree, collapsed, originalIndexById, filtered]);
+
+  const rowVirtualizer = useVirtualizer({
+    count: visualRows.length,
+    getScrollElement: () => scrollEl,
+    estimateSize: (i) => (visualRows[i].kind === 'header' ? HEADER_SIZE_EST : ITEM_SIZE_EST),
+    getItemKey: (i) => rowKey(visualRows[i]),
+    overscan: 8,
+  });
+
+  const virtualItems = rowVirtualizer.getVirtualItems();
+  // Window only when the virtualizer has a measured viewport; otherwise (no
+  // size yet / jsdom) render every row so nothing is hidden off-screen.
+  const windowed = virtualItems.length > 0;
+
+  // Capture the scrolling ancestor once the sizer mounts.
+  const sizerRef = useCallback((node: HTMLDivElement | null) => {
+    setScrollEl((node?.parentElement as HTMLDivElement | null) ?? null);
+  }, []);
+
+  // ↑/↓ move the selection across visible leaf rows (skipping headers), keeping
+  // the moved-to row scrolled into view in the virtualized window.
+  const onListKeyDown = useCallback(
+    (e: ReactKeyboardEvent<HTMLDivElement>) => {
+      if (e.key !== 'ArrowDown' && e.key !== 'ArrowUp') return;
+      const itemPositions: number[] = [];
+      visualRows.forEach((r, i) => {
+        if (r.kind === 'item') itemPositions.push(i);
+      });
+      if (itemPositions.length === 0) return;
+      e.preventDefault();
+      const dir = e.key === 'ArrowDown' ? 1 : -1;
+      let cur = itemPositions.findIndex(
+        (i) => (visualRows[i] as ItemVisualRow).originalIdx === selectedIdx,
+      );
+      if (cur === -1) cur = dir === 1 ? -1 : itemPositions.length;
+      const nextPos = Math.min(Math.max(cur + dir, 0), itemPositions.length - 1);
+      const targetRowIndex = itemPositions[nextPos];
+      onSelect((visualRows[targetRowIndex] as ItemVisualRow).originalIdx);
+      rowVirtualizer.scrollToIndex(targetRowIndex);
+    },
+    [visualRows, selectedIdx, onSelect, rowVirtualizer],
+  );
 
   /**
    * Update the dimension at `slot`. Selecting "(none)" clears this slot and all
@@ -395,8 +492,26 @@ export function InboxList({
     });
   }, []);
 
-  // Whether grouping is active at all (drives the flat-vs-tree render path).
-  const grouped = dims.length > 0;
+  const renderVisualRow = useCallback(
+    (row: VisualRow) =>
+      row.kind === 'header' ? (
+        <GroupHeaderRow
+          node={row.node}
+          depth={row.depth}
+          collapsed={row.collapsed}
+          onToggle={() => toggle(row.path)}
+        />
+      ) : (
+        <InboxRow
+          item={row.item}
+          originalIdx={row.originalIdx}
+          selected={selectedIdx === row.originalIdx}
+          onSelect={onSelect}
+          indent={row.indent}
+        />
+      ),
+    [toggle, selectedIdx, onSelect],
+  );
 
   return (
     <ListSidebar
@@ -468,33 +583,40 @@ export function InboxList({
         </span>
       }
     >
-      {grouped ? (
-        <GroupTree
-          nodes={tree}
-          depth={0}
-          indexOf={indexOf}
-          selectedIdx={selectedIdx}
-          onSelect={onSelect}
-          collapsed={collapsed}
-          toggle={toggle}
-          pathPrefix="root"
-        />
-      ) : (
-        // Flat list (current behavior) when no grouping dimensions are chosen.
-        filtered.map((item) => {
-          const originalIdx = items.indexOf(item);
-          return (
-            <InboxRow
-              key={item.inboxItemId}
-              item={item}
-              originalIdx={originalIdx}
-              selected={selectedIdx === originalIdx}
-              onSelect={onSelect}
-              indent={0}
-            />
-          );
-        })
-      )}
+      <div
+        ref={sizerRef}
+        data-testid="inbox-virtual-sizer"
+        onKeyDown={onListKeyDown}
+        style={{
+          position: 'relative',
+          width: '100%',
+          height: windowed ? rowVirtualizer.getTotalSize() : undefined,
+        }}
+      >
+        {windowed
+          ? virtualItems.map((vi) => {
+              const row = visualRows[vi.index];
+              return (
+                <div
+                  key={vi.key}
+                  data-index={vi.index}
+                  ref={rowVirtualizer.measureElement}
+                  style={{
+                    position: 'absolute',
+                    top: 0,
+                    left: 0,
+                    width: '100%',
+                    transform: `translateY(${vi.start}px)`,
+                  }}
+                >
+                  {renderVisualRow(row)}
+                </div>
+              );
+            })
+          : visualRows.map((row) => (
+              <Fragment key={rowKey(row)}>{renderVisualRow(row)}</Fragment>
+            ))}
+      </div>
     </ListSidebar>
   );
 }

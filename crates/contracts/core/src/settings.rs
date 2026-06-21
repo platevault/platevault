@@ -28,7 +28,6 @@ use crate::JsonAny;
 // TypeScript bindings and every `contracts_core::settings::*` consumer are
 // byte-identical.
 pub use domain_core::settings::{ImageTypMapping, PatternPart, SettingsState, SourceOverride};
-
 // ── settings.get response ────────────────────────────────────────────────
 
 /// Response DTO for `settings.get` (contracts/settings.get.json).

@@ -100,14 +100,33 @@ pub async fn inbox_confirm(
         content_signature: req.content_signature,
         destructive_destination: req.destructive_destination,
         root_absolute_path: PathBuf::from(&req.root_absolute_path),
+        // Spec 041 US8/US9: caller-selected destination root (optional).
+        root_id: req.root_id,
     };
 
+    // Spec 041 US8/US9: confirm can block on a destination-root choice
+    // (`inbox.destination_root_required` / `inbox.no_destination_root` /
+    // `inbox.invalid_destination_root`) or a missing path attribute
+    // (`inbox.missing_path_attributes`). The ContractError carries code +
+    // details so the UI can branch on the error code.
     let resp = confirm(&pool, use_case_req).await?;
 
     let organization_state = match resp.organization_state {
         contracts_core::first_run::OrganizationState::Organized => "organized",
         contracts_core::first_run::OrganizationState::Unorganized => "unorganized",
     };
+
+    let destinations = resp
+        .destinations
+        .into_iter()
+        .map(|d| contracts_core::inbox::InboxConfirmDestination {
+            from_path: d.from_path,
+            to_relative_path: d.to_relative_path,
+            to_absolute_path: d.to_absolute_path,
+            to_root_id: d.to_root_id,
+            action: d.action.to_owned(),
+        })
+        .collect();
 
     Ok(InboxConfirmResponse {
         plan_id: resp.plan_id,
@@ -120,6 +139,7 @@ pub async fn inbox_confirm(
             catalogue_count: u32::try_from(resp.catalogue_count).unwrap_or(u32::MAX),
         }),
         organization_state: Some(organization_state.to_owned()),
+        destinations,
     })
 }
 

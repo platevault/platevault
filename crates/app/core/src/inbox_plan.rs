@@ -541,6 +541,31 @@ mod tests {
         .await
         .unwrap();
 
+        // Override per-type destination patterns with a literal-only pattern so
+        // test fixtures without FITS metadata attributes (target/filter/date)
+        // can confirm without triggering InboxMissingPathAttributes (spec 041).
+        sqlx::query(
+            "INSERT INTO settings (key, value, updated_at) VALUES ('patterns_by_type', ?, '2025-01-01T00:00:00Z') ON CONFLICT(key) DO NOTHING",
+        )
+        .bind("{\"light\":\"lights/\"}")
+        .execute(db.pool())
+        .await
+        .unwrap();
+
+        // Register a light_frames library root so spec-041 destination-root
+        // selection succeeds (select_destination_root requires a non-inbox
+        // registered_sources row with matching kind).
+        let dest_root_id = "dest-root-plan-test";
+        sqlx::query(
+            "INSERT INTO registered_sources (id, kind, path, kind_subtype, scan_depth, created_at, created_via)
+             VALUES (?, 'light_frames', ?, NULL, 'recursive', '2025-01-01T00:00:00Z', 'first_run')
+             ON CONFLICT(id) DO NOTHING",
+        )
+        .bind(dest_root_id)
+        .bind(root_path.to_str().unwrap())
+        .execute(db.pool())
+        .await
+        .unwrap();
         (item_id.to_owned(), root_path)
     }
 
@@ -552,6 +577,7 @@ mod tests {
             content_signature: "sig-abc".to_owned(),
             destructive_destination: None,
             root_absolute_path: root_path.to_path_buf(),
+            root_id: None,
         };
         let resp = confirm(db.pool(), req).await.unwrap();
         assert!(!resp.plan_id.is_empty(), "confirm must return a plan_id");
@@ -714,6 +740,28 @@ mod tests {
             "INSERT INTO settings (key, value, updated_at) VALUES ('pattern', ?, '2025-01-01T00:00:00Z') ON CONFLICT(key) DO NOTHING",
         )
         .bind("[{\"id\":\"p0\",\"kind\":\"token\",\"value\":\"frame_type\"},{\"id\":\"p1\",\"kind\":\"separator\",\"value\":\"/\"}]")
+        .execute(db.pool())
+        .await
+        .unwrap();
+
+        // Override per-type destination patterns with literal-only pattern so
+        // test fixtures without FITS metadata can confirm (spec 041).
+        sqlx::query(
+            "INSERT INTO settings (key, value, updated_at) VALUES ('patterns_by_type', ?, '2025-01-01T00:00:00Z') ON CONFLICT(key) DO NOTHING",
+        )
+        .bind("{\"light\":\"lights/\"}")
+        .execute(db.pool())
+        .await
+        .unwrap();
+
+        // Register a single shared light_frames destination root for inbox → library routing.
+        // All suffixed setups share one dest root so there is exactly one candidate
+        // and confirm auto-selects it (no InboxDestinationRootRequired).
+        sqlx::query(
+            "INSERT INTO registered_sources (id, kind, path, kind_subtype, scan_depth, created_at, created_via)
+             VALUES ('dest-root-shared', 'light_frames', '/tmp/dest-shared', NULL, 'recursive', '2025-01-01T00:00:00Z', 'first_run')
+             ON CONFLICT(id) DO NOTHING",
+        )
         .execute(db.pool())
         .await
         .unwrap();

@@ -10,6 +10,7 @@ path = "src/lib.rs"
 [dependencies]
 audit = { path = "../../audit" }
 domain_core = { path = "../../domain/core" }
+patterns = { path = "../../patterns" }
 serde.workspace = true
 serde_json.workspace = true
 sqlx.workspace = true

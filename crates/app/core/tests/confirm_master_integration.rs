@@ -32,6 +32,31 @@ use persistence_db::Database;
 async fn test_db() -> Database {
     let db = Database::in_memory().await.unwrap();
     db.migrate().await.unwrap();
+    // Override all per-type destination patterns with literal-only patterns so
+    // test fixtures without FITS header metadata (exposure/target/filter/date)
+    // can confirm without triggering InboxMissingPathAttributes (spec 041).
+    sqlx::query(
+        "INSERT INTO settings (key, value, updated_at) VALUES ('patterns_by_type', ?, '2026-01-01T00:00:00Z')
+          ON CONFLICT(key) DO UPDATE SET value = excluded.value",
+    )
+    .bind(r#"{"light":"lights/","flat":"flats/","dark":"darks/","bias":"bias/","master_flat":"masters/flats/","master_dark":"masters/darks/","master_bias":"masters/bias/"}"#)
+    .execute(db.pool())
+    .await
+    .unwrap();
+    // Register destination library roots so inbox → library routing succeeds.
+    // Using /tmp/dest-* as stable paths (tests do not actually write there).
+    for (id, kind) in &[("dest-light", "light_frames"), ("dest-calib", "calibration")] {
+        sqlx::query(
+            "INSERT INTO registered_sources (id, kind, path, kind_subtype, scan_depth, created_at, created_via)
+             VALUES (?, ?, '/tmp/dest-shared', NULL, 'recursive', '2026-01-01T00:00:00Z', 'first_run')
+             ON CONFLICT(id) DO NOTHING",
+        )
+        .bind(id)
+        .bind(kind)
+        .execute(db.pool())
+        .await
+        .unwrap();
+    }
     db
 }
 
@@ -188,6 +213,7 @@ async fn confirm_master_creates_plan_then_registers_at_apply() {
             content_signature: sig.to_owned(),
             destructive_destination: None,
             root_absolute_path: tmp.path().to_owned(),
+            root_id: None,
         },
     )
     .await
@@ -260,6 +286,7 @@ async fn organized_master_catalogues_then_registers_at_apply() {
             content_signature: sig.to_owned(),
             destructive_destination: None,
             root_absolute_path: tmp.path().to_owned(),
+            root_id: None,
         },
     )
     .await
@@ -345,6 +372,7 @@ async fn non_master_item_still_creates_plan() {
             content_signature: sig.to_owned(),
             destructive_destination: None,
             root_absolute_path: tmp.path().to_owned(),
+            root_id: None,
         },
     )
     .await

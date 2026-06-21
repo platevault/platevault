@@ -21,6 +21,7 @@ import type {
 import type {
   InboxClassifyRequest,
   InboxConfirmResponse,
+  InboxConfirmDestination,
   InboxItemSummary,
   InboxListItem,
   InboxListResponse,
@@ -56,6 +57,7 @@ export type {
   InboxClassifyResponse,
   InboxConfirmRequest,
   InboxConfirmResponse,
+  InboxConfirmDestination,
   InboxItemSummary,
   InboxListItem,
   InboxListResponse,

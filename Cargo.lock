@@ -197,6 +197,7 @@ dependencies = [
  "audit",
  "contracts_core",
  "domain_core",
+ "patterns",
  "persistence_db",
  "proptest",
  "rstest",
@@ -3848,6 +3849,7 @@ version = "0.1.0"
 dependencies = [
  "audit",
  "domain_core",
+ "patterns",
  "serde",
  "serde_json",
  "sqlx",

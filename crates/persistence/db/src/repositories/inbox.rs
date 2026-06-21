@@ -77,6 +77,10 @@ pub struct InboxEvidenceRow {
     pub raw_value: Option<String>,
     pub unclassified: i64,
     pub manual_override: Option<String>,
+    /// 1 when this file was detected as a calibration master (spec 040). Needed
+    /// by the confirm path (spec 041 T052) to select the master destination
+    /// pattern variant per file.
+    pub is_master: i64,
     /// Non-type override fields added in migration 0045 (spec 041 R-4).
     pub override_filter: Option<String>,
     pub override_exposure_s: Option<f64>,

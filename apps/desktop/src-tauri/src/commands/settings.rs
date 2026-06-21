@@ -13,7 +13,7 @@
 //! - `"advanced"` → `logLevel`, `rememberFollowLogs`, `devMode`
 //! - `"general"`  → `rowDensity`
 //! - `"cleanup"`  → `blockPermanentDelete`, `defaultProtection`, `protectedCategories`
-//! - `"naming"`   → `pattern`, `autoApplyPattern`
+//! - `"naming"`   → `pattern`, `autoApplyPattern`, `patterns_by_type`
 //! - `"sources"`  → `followSymlinks`, `hashOnScan`
 //! - `"calibration"` → `darkMatchTolerance`, `flatMatching`, `suggestCalibration`,
 //!   `calibration.dark_temp_tolerance`, `calibration.prefill_suggestion`
@@ -52,7 +52,7 @@ fn scope_keys(scope: &str) -> &'static [&'static str] {
         "advanced" => &["logLevel", "rememberFollowLogs", "devMode"],
         "general" => &["rowDensity"],
         "cleanup" => &["blockPermanentDelete", "defaultProtection", "protectedCategories"],
-        "naming" => &["pattern", "autoApplyPattern"],
+        "naming" => &["pattern", "autoApplyPattern", "patterns_by_type"],
         "sources" => &["followSymlinks", "hashOnScan", "alwaysPreviewBeforePlan"],
         "calibration" => &[
             "darkMatchTolerance",
@@ -77,6 +77,7 @@ fn scope_keys(scope: &str) -> &'static [&'static str] {
             "protectedCategories",
             "pattern",
             "autoApplyPattern",
+            "patterns_by_type",
             "followSymlinks",
             "hashOnScan",
             "alwaysPreviewBeforePlan",

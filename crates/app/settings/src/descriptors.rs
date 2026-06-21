@@ -46,6 +46,9 @@ pub(crate) enum ValidationRule {
     NullableString,
     /// Must be an array (`"must be an array"`).
     Array,
+    /// Per-frame-type destination patterns: JSON object mapping `FrameTypeClass`
+    /// names to pattern strings (spec 041 FR-026b).
+    PatternsByType,
     /// `devMode`: rejected entirely unless the `dev-tools` feature is enabled.
     DevMode,
 }
@@ -245,6 +248,12 @@ pub(crate) const DESCRIPTORS: &[Descriptor] = &[
         overridable: false,
         validation: ValidationRule::Array,
     },
+    Descriptor {
+        key: "patterns_by_type",
+        noisy: false,
+        overridable: false,
+        validation: ValidationRule::PatternsByType,
+    },
 ];
 
 /// Look up the descriptor for a stable key, if any.
@@ -325,6 +334,20 @@ pub(crate) fn check_rule(
         ValidationRule::Array => {
             if !value.is_array() {
                 return Err(invalid("must be an array"));
+            }
+        }
+        ValidationRule::PatternsByType => {
+            let obj = value.as_object().ok_or_else(|| invalid("must be an object"))?;
+            for (class_name, pattern_value) in obj {
+                if patterns::FrameTypeClass::from_str_name(class_name).is_none() {
+                    return Err(invalid(&format!("unknown frame-type class: {class_name}")));
+                }
+                let pattern = pattern_value.as_str().ok_or_else(|| {
+                    invalid(&format!("pattern for {class_name} must be a string"))
+                })?;
+                if let Err(e) = patterns::validate_pattern_str(pattern) {
+                    return Err(invalid(&format!("invalid pattern for {class_name}: {e}")));
+                }
             }
         }
         ValidationRule::DevMode => {

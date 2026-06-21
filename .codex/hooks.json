@@ -40,14 +40,15 @@
         "_apm_source": "speckit"
       },
       {
-        "matcher": "apply_patch|Edit|Write|MultiEdit",
+        "matcher": "Bash",
         "hooks": [
           {
             "type": "command",
-            "command": ".codex/hooks/agent-coder/scripts/coder-delegation-reminder.sh"
+            "command": ".codex/hooks/hooks-quality/scripts/quality-before-commit.sh",
+            "if": "Bash(git commit*)"
           }
         ],
-        "_apm_source": "agent-coder"
+        "_apm_source": "hooks-quality"
       },
       {
         "hooks": [
@@ -58,9 +59,39 @@
           }
         ],
         "_apm_source": "speckit-dag-hooks"
+      },
+      {
+        "matcher": "apply_patch|Edit|Write|MultiEdit",
+        "hooks": [
+          {
+            "type": "command",
+            "command": ".codex/hooks/agent-coder/scripts/coder-delegation-reminder.sh"
+          }
+        ],
+        "_apm_source": "agent-coder"
       }
     ],
     "PostToolUse": [
+      {
+        "matcher": "Edit|Write|MultiEdit",
+        "hooks": [
+          {
+            "type": "command",
+            "command": ".codex/hooks/hooks-quality/scripts/quality-edit-advisory.sh"
+          }
+        ],
+        "_apm_source": "hooks-quality"
+      },
+      {
+        "matcher": "apply_patch",
+        "hooks": [
+          {
+            "type": "command",
+            "command": ".codex/hooks/hooks-quality/scripts/quality-edit-advisory.sh"
+          }
+        ],
+        "_apm_source": "hooks-quality"
+      },
       {
         "matcher": "Bash",
         "hooks": [

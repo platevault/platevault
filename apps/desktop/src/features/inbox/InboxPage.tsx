@@ -18,7 +18,7 @@
  * Top bar    : Confirm / Split (inbox.confirm) + Rescan.
  */
 
-import { useCallback, useMemo, useState } from 'react';
+import { useCallback, useEffect, useMemo, useState } from 'react';
 import { useNavigate, useSearch } from '@tanstack/react-router';
 import { PageShell, ListDetailLayout, TopActionBar } from '@/components';
 import { Btn, EmptyState } from '@/ui';
@@ -40,8 +40,24 @@ import {
 } from './store';
 import { InboxStatsSummary } from './InboxStatsSummary';
 import { PlanPanel } from './PlanPanel';
-import type { DestructiveDestination } from './PlanPanel';
+import type { DestructiveDestination, PendingRootPick } from './PlanPanel';
+import { normalizeConfirmError } from './store';
+import type { InboxConfirmDestination } from '@/api/commands';
 import type { FrameType } from '@/lib/route-contract';
+
+/** Shape of `inbox.destination_root_required` error details (spec 041 US8/FR-029). */
+interface DestinationRootRequiredDetails {
+  category: string;
+  candidates: Array<{ rootId: string; path: string; kind: string }>;
+}
+
+/** Type-guard for the destination-root-required details payload. */
+function asRootRequiredDetails(d: unknown): DestinationRootRequiredDetails | null {
+  if (d && typeof d === 'object' && 'candidates' in d && Array.isArray((d as { candidates: unknown }).candidates)) {
+    return d as DestinationRootRequiredDetails;
+  }
+  return null;
+}
 
 export function InboxPage() {
   const { selected, type } = useSearch({ from: '/shell/inbox' });
@@ -120,38 +136,143 @@ export function InboxPage() {
   const [destructiveDestination, setDestructiveDestination] =
     useState<DestructiveDestination>('archive');
 
+  // spec 041 US8/FR-029: when a confirm needs the user to pick among multiple
+  // candidate library roots, hold the prompt + the item it belongs to so the
+  // PlanPanel can render the picker and we can re-confirm with the chosen root.
+  const [pendingRootPick, setPendingRootPick] = useState<PendingRootPick | null>(null);
+  const [rootPickItemId, setRootPickItemId] = useState<string | null>(null);
+
+  // spec 041 US8/FR-031: absolute destination paths keyed by source path,
+  // accumulated from each successful confirm's `destinations[]`. Lets the plan
+  // panel show the full absolute destination per action.
+  const [absoluteByFromPath, setAbsoluteByFromPath] = useState<Record<string, string>>({});
+
+  // Drop a pending root pick when the user navigates away from its item, so a
+  // stale picker never lingers under a different selection.
+  const selectedItemId = selectedItem?.inboxItemId ?? null;
+  useEffect(() => {
+    if (rootPickItemId && rootPickItemId !== selectedItemId) {
+      setPendingRootPick(null);
+      setRootPickItemId(null);
+    }
+  }, [rootPickItemId, selectedItemId]);
+
+  const mergeDestinations = useCallback((destinations?: InboxConfirmDestination[] | null) => {
+    if (!destinations || destinations.length === 0) return;
+    setAbsoluteByFromPath((prev) => {
+      const next = { ...prev };
+      for (const d of destinations) {
+        next[d.fromPath] = d.toAbsolutePath;
+      }
+      return next;
+    });
+  }, []);
+
   const { applyAll, loading: applyAllLoading } = useInboxPlanApplyAll();
   const { applySelected, loading: applySelectedLoading } = useApplySelectedInboxPlans();
   const { cancel, loading: cancelLoading } = useInboxPlanCancel();
 
+  /**
+   * Confirm `item` (optionally targeting a caller-chosen destination `rootId`).
+   * Centralises the success path and the structured-error handling so the
+   * initial confirm and a re-confirm after a root pick share one code path.
+   */
+  const runConfirm = useCallback(
+    async (
+      item: { inboxItemId: string; rootAbsolutePath: string },
+      contentSignature: string,
+      action: string,
+      rootId?: string,
+    ) => {
+      try {
+        const result = await confirm({
+          inboxItemId: item.inboxItemId,
+          action,
+          contentSignature,
+          rootAbsolutePath: item.rootAbsolutePath,
+          destructiveDestination,
+          rootId: rootId ?? null,
+        });
+        // Success: clear any pending root pick and capture absolute destinations.
+        setPendingRootPick(null);
+        setRootPickItemId(null);
+        mergeDestinations(result.destinations);
+        // spec 041: masters now always return a plan too — every confirm produces
+        // a reviewable plan that appears in the aggregate surface below.
+        addToast({
+          message: `Plan created (${result.itemsTotal} items). Review below before applying.`,
+          variant: 'info',
+        });
+        refreshAll();
+      } catch (e) {
+        const { code, message, details } = normalizeConfirmError(e);
+        if (code === 'inbox.destination_root_required') {
+          // FR-029: multiple candidate roots — prompt the user to choose one.
+          const parsed = asRootRequiredDetails(details);
+          if (parsed) {
+            setPendingRootPick({ category: parsed.category, candidates: parsed.candidates });
+            setRootPickItemId(item.inboxItemId);
+            addToast({
+              message: 'Choose a destination library root to generate the plan.',
+              variant: 'warn',
+            });
+            return;
+          }
+        }
+        if (code === 'inbox.invalid_destination_root') {
+          addToast({ message: message || 'That destination root is not valid.', variant: 'error' });
+          return;
+        }
+        if (code === 'inbox.no_destination_root') {
+          addToast({
+            message: message || 'No library root is registered for this frame type.',
+            variant: 'error',
+          });
+          return;
+        }
+        if (code === 'inbox.missing_path_attributes') {
+          // FR-032 (US9): files lack a path-load-bearing attribute. The detail
+          // panel already annotates each blocked file; point the user there.
+          addToast({
+            message:
+              'Some files are missing required attributes. Assign the missing values in the file list, then confirm again.',
+            variant: 'warn',
+          });
+          return;
+        }
+        if (message.includes('inbox.has.open.plan')) {
+          addToast({ message: 'An open plan already exists for this item.', variant: 'warn' });
+        } else if (message.includes('classification.stale')) {
+          addToast({ message: 'Folder changed since classification — rescan to refresh.', variant: 'warn' });
+        } else {
+          addToast({ message: `Confirm failed: ${message}`, variant: 'error' });
+        }
+      }
+    },
+    [confirm, destructiveDestination, mergeDestinations, refreshAll],
+  );
+
   const handleConfirm = async () => {
     if (!selectedItem || !classification) return;
     const action = classification.type === 'mixed' ? 'split' : 'confirm';
-    try {
-      const result = await confirm({
-        inboxItemId: selectedItem.inboxItemId,
-        action,
-        contentSignature: classification.contentSignature,
-        rootAbsolutePath: selectedRootPath,
-        destructiveDestination,
-      });
-      // spec 041: masters now always return a plan too — every confirm produces
-      // a reviewable plan that appears in the aggregate surface below.
-      addToast({
-        message: `Plan created (${result.itemsTotal} items). Review below before applying.`,
-        variant: 'info',
-      });
-      refreshAll();
-    } catch (e) {
-      const msg = String(e);
-      if (msg.includes('inbox.has.open.plan')) {
-        addToast({ message: 'An open plan already exists for this item.', variant: 'warn' });
-      } else if (msg.includes('classification.stale')) {
-        addToast({ message: 'Folder changed since classification — rescan to refresh.', variant: 'warn' });
-      } else {
-        addToast({ message: `Confirm failed: ${msg}`, variant: 'error' });
-      }
-    }
+    await runConfirm(
+      { inboxItemId: selectedItem.inboxItemId, rootAbsolutePath: selectedRootPath },
+      classification.contentSignature,
+      action,
+    );
+  };
+
+  /** FR-029: re-confirm the pending item with the chosen destination root. */
+  const handlePickDestinationRoot = async (rootId: string) => {
+    if (!rootPickItemId || !selectedItem || !classification) return;
+    if (selectedItem.inboxItemId !== rootPickItemId) return;
+    const action = classification.type === 'mixed' ? 'split' : 'confirm';
+    await runConfirm(
+      { inboxItemId: selectedItem.inboxItemId, rootAbsolutePath: selectedRootPath },
+      classification.contentSignature,
+      action,
+      rootId,
+    );
   };
 
   const handleApplySelected = async (inboxItemIds: string[]) => {
@@ -283,8 +404,9 @@ export function InboxPage() {
               )}
             </div>
             {/* spec 041: aggregate plan surface — visible whenever ≥1 open plan
-                exists, regardless of which list item is selected. */}
-            {openPlans.length > 0 && (
+                exists OR a destination-root pick is pending (US8/FR-029), the
+                latter possible with zero open plans (no plan was created). */}
+            {(openPlans.length > 0 || pendingRootPick) && (
               <div
                 className="alm-inbox-center__plans"
                 style={{ flexShrink: 0, borderTop: '1px solid var(--alm-border)', paddingTop: 'var(--alm-sp-2)' }}
@@ -298,6 +420,10 @@ export function InboxPage() {
                   onApplyAll={() => void handleApplyAll()}
                   onCancel={(id) => void handleCancel(id)}
                   busy={planBusy}
+                  pendingRootPick={pendingRootPick}
+                  onPickDestinationRoot={(rootId) => void handlePickDestinationRoot(rootId)}
+                  rootPickBusy={confirmLoading}
+                  absoluteByFromPath={absoluteByFromPath}
                 />
               </div>
             )}

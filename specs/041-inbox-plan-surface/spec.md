@@ -47,6 +47,16 @@ Several defects encountered during this review were already repaired (PR #298): 
 - Q: Do manual metadata overrides persist across a rescan? → A: Yes — overrides **persist keyed to the file's content** and re-apply automatically across rescans; they are invalidated only when the file's content changes.
 - Q: Can the user apply more than one plan at once? → A: Yes — the user can apply a single item's plan **or batch-apply all pending planned items** in one action; each action is still individually audited.
 
+## Iterations
+
+### Iteration 2026-06-21: Inbox destination model
+
+**Change**: Per-type configurable destination patterns (light/flat/master-flat/bias/master-bias/dark/master-dark with sensible defaults), explicit destination-root selection (in-place default; inbox must target a root; multi-root requires user choice), full absolute-path preview, and a mandatory gate on missing path-load-bearing attributes.
+**Scope**: Feature-wide (additive requirements + behavioral change to the merged move-destination computation).
+**Artifacts updated**: spec.md (US8, US9, FR-025–FR-033), data-model.md, plan.md, tasks.md, research.md, quickstart.md.
+**Tasks added**: T048–T060.
+**Context**: Follows the merged spec 041 (apply executor now resolves root_id via registered_sources; breakdown layout stable; move-preview double-slash fixed). Found during Windows real-app E2E (T046).
+
 ## User Scenarios & Testing *(mandatory)*
 
 ### User Story 1 - Reviewable, visible plan on confirm (Priority: P1)
@@ -173,6 +183,33 @@ When a plan includes a **destructive action** (e.g. archiving or trashing reject
 - Multi-level grouping where some items lack a grouping dimension (e.g. no target) → such items are gathered under a clear "unknown/none" group rather than dropped.
 - A multi-select override spans files across different source designations (inbox vs in-place) → the override applies to metadata uniformly, but the move-vs-catalogue decision still follows each item's source (US4).
 
+### User Story 8 - Destination-root selection for moves (Priority: P2)
+
+When a move plan is generated, the destination **root** is resolved explicitly. For a non-inbox source the default is to reorganize **in place** within the source's own root. Inbox sources are never a destination, so an inbox item **must** be moved into a chosen library root. When more than one registered root is a valid destination for the item's frame type, the user is **required to pick** the destination root during plan review; when exactly one valid root exists, it is selected automatically with no prompt.
+
+**Why this priority**: Makes consolidation predictable and prevents inbox items from having no home; required for libraries with multiple roots of the same type.
+
+**Independent Test**: With two light roots registered, confirm an inbox light item and verify a root-selection prompt appears and apply is blocked until a root is chosen; with a single calibration root, confirm a calibration item and verify the destination root is chosen automatically (no prompt); confirm a non-inbox unorganized item and verify it defaults to in-place.
+
+#### Acceptance Scenarios
+
+1. **Given** an inbox item and >1 valid destination root for its type, **When** confirming, **Then** the user must select the destination root before the plan can be applied.
+2. **Given** exactly one valid destination root for the type, **When** confirming, **Then** the root is selected automatically with no prompt.
+3. **Given** a non-inbox unorganized source, **When** confirming, **Then** the default destination is the source's own root (in place).
+
+### User Story 9 - Mandatory capture of missing path attributes (Priority: P2)
+
+A plan cannot be generated or applied while any attribute used to build a file's destination path is missing. Such a file routes through the same needs-review/unclassified gate as a missing image type, and the user must supply the value before the plan proceeds.
+
+**Why this priority**: Prevents files landing in placeholder paths like "undated"/"nofilter"; ensures every moved file has a meaningful, complete destination.
+
+**Independent Test**: Confirm a light frame missing its observation date and verify the plan is blocked and the file is surfaced for input; supply the date and verify the gate clears and the destination updates.
+
+#### Acceptance Scenarios
+
+1. **Given** a file missing a path-load-bearing attribute (e.g. a light with no date), **When** the user attempts to confirm, **Then** plan generation is blocked and the file is surfaced in the needs-review flow.
+2. **Given** that file, **When** the user supplies the missing value, **Then** the gate clears and the resolved destination updates accordingly.
+
 ## Requirements *(mandatory)*
 
 ### Functional Requirements
@@ -228,6 +265,26 @@ When a plan includes a **destructive action** (e.g. archiving or trashing reject
 **Destination preview (cross-cutting)**
 
 - **FR-024**: During review (before applying), the system MUST show the resolved destination for each file/group based on the active naming pattern, and MUST degrade gracefully (a clear message, not a blank field) when no pattern is configured.
+
+**Per-type destination patterns (iteration 2026-06-21)**
+
+- **FR-025**: The destination path structure MUST be configurable per frame-type class, with a distinct token-based pattern for at least: light, flat, master flat, bias, master bias, dark, master dark. Patterns use the shared path-token vocabulary and are editable in Settings.
+- **FR-026**: Each per-type pattern MUST have a sensible built-in default reflecting the attributes meaningful for that type; calibration types MUST NOT include a target segment. Default intent — light: target/filter/date; flat: filter/date; dark: exposure (+gain/temp/binning as configured); bias: gain/temp/binning; master flat/bias/dark: as their raw counterpart minus date (masters are not per-night).
+- **FR-026a**: The resolver MUST select the pattern by the file's resolved type including master-vs-raw (a master dark uses the master-dark pattern, etc.).
+- **FR-026b**: Per-type patterns MUST be persisted in settings and user-overridable; an invalid/empty pattern falls back to that type's built-in default. (Light-master / integration routing is out of scope for this iteration — TBD.)
+
+**Destination root selection (iteration 2026-06-21)**
+
+- **FR-027**: For a move from a non-inbox source, the default destination root is the source's own root (reorganize in place).
+- **FR-028**: Inbox-kind sources MUST move into a chosen library root (never catalogued/left in place); a destination root is always required for inbox items.
+- **FR-029**: When more than one registered root is a valid destination for the item's frame type, the user MUST explicitly select the destination root before the plan can be applied.
+- **FR-030**: When exactly one valid destination root exists for the frame type, it MUST be selected automatically with no prompt.
+- **FR-031**: The plan/review surface MUST display the full absolute destination path (selected root path + relative path) for each action, not just the root-relative path.
+
+**Mandatory path-attribute capture (iteration 2026-06-21)**
+
+- **FR-032**: Plan generation MUST be gated on the presence of every path-load-bearing attribute for each file; a missing value MUST block the plan and surface the file in the needs-review flow, consistent with how missing IMAGETYP is handled.
+- **FR-033**: The set of path-load-bearing attributes MUST be defined per frame type (enumerated in research.md) and MUST drive both the gate (FR-032) and the per-type destination structure (FR-025/FR-026).
 
 ### Key Entities *(include if feature involves data)*
 

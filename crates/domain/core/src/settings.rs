@@ -127,6 +127,15 @@ pub struct SettingsState {
 
     /// User-extensible IMAGETYP normalization entries (spec 005 R-IMAGETYP-Norm).
     pub imagetyp_normalization_user_mappings: Vec<ImageTypMapping>,
+
+    /// Per-frame-type destination pattern overrides (spec 041 FR-026/FR-026b).
+    ///
+    /// Maps a frame-type class name (`light`, `flat`, `dark`, `bias`,
+    /// `master_flat`, `master_dark`, `master_bias`) to a destination pattern
+    /// string. Missing/empty/invalid entries fall back to the built-in default
+    /// from `crates/patterns::default_pattern` at read time; this map carries
+    /// only the user's explicit overrides. Empty by default.
+    pub patterns_by_type: std::collections::BTreeMap<String, String>,
 }
 
 impl Default for SettingsState {
@@ -160,6 +169,7 @@ impl Default for SettingsState {
             calibration_bias_override_penalty: 0.3,
             calibration_aging_threshold_days: 90.0,
             imagetyp_normalization_user_mappings: vec![],
+            patterns_by_type: std::collections::BTreeMap::new(),
         }
     }
 }
