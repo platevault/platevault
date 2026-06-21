@@ -33,7 +33,7 @@ export function Attribution() {
     <div className="alm-settings__group">
       <div className="alm-settings__group-title">Data Sources &amp; Attribution</div>
       <p className="alm-settings__group-note">
-        Astro Library Manager identifies targets using the following astronomical
+        PlateVault identifies targets using the following astronomical
         data sources. We gratefully acknowledge their work.
       </p>
       <ul className="alm-attribution__list">
