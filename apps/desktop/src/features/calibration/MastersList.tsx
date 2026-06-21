@@ -97,46 +97,32 @@ export function MastersList({ masters, loading, error, selected, onSelect, aging
             const isAging = m.ageDays > agingThresholdDays;
             // Fingerprint may be absent on real master rows (e.g. metadata not yet
             // extracted); guard every field rather than assuming it is populated.
+            // Human-readable fingerprint identity (was an opaque id hash).
             const fp = m.fingerprint;
-            const gainStr = fp?.gain != null ? `g${fp.gain}` : '';
-            const tempStr = fp?.tempC != null ? `${fp.tempC}°C` : '';
+            const kindCap = group.kind.charAt(0).toUpperCase() + group.kind.slice(1);
             const expStr = fp?.exposureS != null ? `${fp.exposureS}s` : '';
-            const cameraStr = fp?.camera ? fp.camera.replace('ASI', '') : '';
+            const filterStr = fp?.filter ?? '';
+            const discriminator = group.kind === 'dark' ? expStr : group.kind === 'flat' ? filterStr : '';
+            const titleText = discriminator ? `Master ${kindCap} · ${discriminator}` : `Master ${kindCap}`;
+            const metaParts = [
+              fp?.tempC != null ? `${fp.tempC}°C` : '',
+              fp?.gain != null ? `g${fp.gain}` : '',
+              fp?.binning ? fp.binning.replace('x', '×') : '',
+              fp?.camera ? fp.camera.replace('ASI', '') : '',
+            ].filter(Boolean);
 
             return (
               <ListItem
                 key={m.id}
                 selected={selected === m.id}
                 onClick={() => onSelect(m.id)}
-                title={
-                  <span className="alm-mono" style={{ fontSize: 11 }}>
-                    {m.id.slice(0, 8)}…
-                  </span>
-                }
+                title={titleText}
                 meta={
                   <>
-                    {m.kind !== 'bias' && expStr && (
-                      <>
-                        {expStr}
-                        <span className="alm-list-item__meta-sep">·</span>
-                      </>
-                    )}
-                    {tempStr && (
-                      <>
-                        {tempStr}
-                        <span className="alm-list-item__meta-sep">·</span>
-                      </>
-                    )}
-                    {gainStr && (
-                      <>
-                        {gainStr}
-                        {cameraStr && <span className="alm-list-item__meta-sep">·</span>}
-                      </>
-                    )}
-                    {cameraStr}
+                    {metaParts.join(' · ')}
                     {isAging && (
                       <>
-                        <span className="alm-list-item__meta-sep">·</span>
+                        {metaParts.length > 0 && <span className="alm-list-item__meta-sep">·</span>}
                         <Pill variant="warn">aging {m.ageDays}d</Pill>
                       </>
                     )}
