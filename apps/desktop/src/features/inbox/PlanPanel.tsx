@@ -202,7 +202,7 @@ export function PlanPanel({
         marginBottom: 'var(--alm-sp-3)',
         padding: 'var(--alm-sp-3)',
         border: '1px solid var(--alm-warn, var(--alm-border))',
-        borderRadius: 'var(--alm-radius)',
+        borderRadius: 'var(--alm-radius-md)',
         background: 'var(--alm-surface-raised, var(--alm-bg3))',
       }}
     >
@@ -394,7 +394,7 @@ export function PlanPanel({
                       fontWeight: 600,
                       color: 'var(--alm-danger, var(--alm-warn))',
                       border: '1px solid currentColor',
-                      borderRadius: 'var(--alm-radius)',
+                      borderRadius: 'var(--alm-radius-md)',
                       padding: '0 var(--alm-sp-1)',
                     }}
                   >
@@ -495,7 +495,7 @@ export function PlanPanel({
             marginTop: 'var(--alm-sp-3)',
             padding: 'var(--alm-sp-3)',
             background: 'var(--alm-surface-raised, var(--alm-bg3))',
-            borderRadius: 'var(--alm-radius)',
+            borderRadius: 'var(--alm-radius-md)',
           }}
         >
           <div

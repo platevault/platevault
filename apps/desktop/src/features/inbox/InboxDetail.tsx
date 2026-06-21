@@ -352,7 +352,7 @@ export function InboxDetail({ item, classification, fileMetadata }: InboxDetailP
                 fontWeight: 600,
                 color: 'var(--alm-warn)',
                 border: '1px solid currentColor',
-                borderRadius: 'var(--alm-radius)',
+                borderRadius: 'var(--alm-radius-md)',
                 whiteSpace: 'nowrap',
               }}
             >
@@ -371,7 +371,7 @@ export function InboxDetail({ item, classification, fileMetadata }: InboxDetailP
       date:     fmtOrDash(f.dateObs),
       _rowStyle:
         f.overrideStale || missingAttrs.length > 0
-          ? { background: 'var(--alm-color-warn-subtle, rgba(255,200,0,0.08))' }
+          ? { background: 'var(--alm-warn-bg)' }
           : undefined,
       };
     });
@@ -475,7 +475,7 @@ export function InboxDetail({ item, classification, fileMetadata }: InboxDetailP
                 marginTop: 'var(--alm-sp-3)',
                 padding: 'var(--alm-sp-3)',
                 border: '1px solid var(--alm-border)',
-                borderRadius: 'var(--alm-radius)',
+                borderRadius: 'var(--alm-radius-md)',
                 display: 'flex',
                 flexWrap: 'wrap',
                 gap: 8,
