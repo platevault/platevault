@@ -230,8 +230,14 @@ Frontend: `cd apps/desktop && npx tsc --noEmit` + `npx vitest run <feature>`. Ru
   calibration/ lifecycle/` subdirs (internal, compiles green).
   (18 git-mv renames into targets/projects/calibration/lifecycle; public surface byte-identical
   via lib.rs `pub use` re-exports; zero consumer edits; calibration use-case → calibration/matching.rs.)
-- [ ] T253 (O3b) Split `app/core` into per-domain use-case crates incrementally, each
+- [X] T253 (O3b) Split `app/core` into per-domain use-case crates incrementally, each
   preserving the public surface `desktop_shell` consumes.
+  (Incremental first slice landed: extracted the only zero-cross-dep leaf group `calibration`
+  into new crate `app_core_calibration`, re-exported as `app_core::calibration`/`::equipment`
+  (byte-identical surface, no consumer edits, bindings empty-diff). Further extraction BLOCKED
+  by `errors.rs` coupling upward to guided_flow/log_stream; documented next sequence:
+  extract `lifecycle`, then relocate the two `From` impls so `errors` becomes a leaf kernel,
+  then settings/inbox/targets/projects. Tracked as follow-up.)
 - [X] T254 (O6) Fix `persistence/db → contracts/core` inversion: move the ~4 stored type
   clusters (equipment/settings/first_run/source-override) to domain; map DTOs at app/core.
   **DB byte-identity check + persistence tests green.** Own commit.

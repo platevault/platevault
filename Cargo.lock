@@ -49,6 +49,7 @@ name = "app_core"
 version = "0.1.0"
 dependencies = [
  "anyhow",
+ "app_core_calibration",
  "audit",
  "calibration_core",
  "calibration_master_detect",
@@ -82,6 +83,22 @@ dependencies = [
  "uuid",
  "workflow_artifacts",
  "workflow_profiles",
+]
+
+[[package]]
+name = "app_core_calibration"
+version = "0.1.0"
+dependencies = [
+ "audit",
+ "calibration_core",
+ "contracts_core",
+ "domain_core",
+ "persistence_db",
+ "serde_json",
+ "sqlx",
+ "time",
+ "tokio",
+ "uuid",
 ]
 
 [[package]]

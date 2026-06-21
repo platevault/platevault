@@ -8,14 +8,18 @@
 // under its original name so that `app_core::<module>` paths remain
 // byte-identical for `desktop_shell` and every other consumer. The grouping
 // is a purely internal reorganisation — no external surface changes.
-pub mod calibration;
 pub mod lifecycle;
 pub mod projects;
 pub mod targets;
 
+// `calibration` was extracted into its own leaf crate (spec 042 / T253 O3b).
+// Re-export it under the original `app_core::calibration` path so consumers
+// (`desktop_shell`, contract tests, specs) keep the byte-identical surface.
+pub use app_core_calibration as calibration;
+
 // Re-export grouped modules under their original crate-root paths.
-// `calibration` itself remains a crate-root module (the group module also
-// flattens the former flat `calibration` use-case via `pub use matching::*`).
+// `equipment` historically resolved to `app_core::equipment`; it now lives in
+// the extracted `app_core_calibration` crate and is re-exported here.
 pub use calibration::equipment;
 pub use lifecycle::{
     artifact, ledger_use_case, lifecycle_use_case, provenance_use_case, transition_use_case,

@@ -8,6 +8,7 @@ license.workspace = true
 path = "src/lib.rs"
 
 [dependencies]
+app_core_calibration = { path = "../calibration" }
 audit = { path = "../../audit" }
 calibration_core = { path = "../../calibration/core" }
 calibration_master_detect = { path = "../../calibration/master-detect" }
