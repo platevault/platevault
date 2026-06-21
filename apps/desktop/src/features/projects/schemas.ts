@@ -1,0 +1,101 @@
+/**
+ * Client-side form schemas for project create / edit forms — spec 042 US5 (T170).
+ *
+ * These zod schemas drive react-hook-form validation in:
+ *   - features/projects/create/CreateProjectDialog.tsx
+ *   - features/projects/edit/EditProjectPane.tsx
+ *   - features/projects/wizard/StepName.tsx (+ WizardPage orchestration)
+ *
+ * IMPORTANT: these are *UX* schemas, not the source of truth. The backend
+ * (`projects.create` / `projects.update`) remains the authority and re-validates
+ * every request. The shapes here MIRROR the generated contract request types in
+ * `@/bindings/index` (`ProjectCreateRequest`, `ProjectUpdateRequest`) so the
+ * client never invents fields the backend doesn't accept. The submitted payload
+ * is assembled from these validated values plus the non-user-editable fields
+ * (`requestId`, `initialSources`, `canonicalTargetId`, `projectId`) at the call
+ * site, byte-identical to the pre-RHF behaviour.
+ */
+
+import { z } from 'zod';
+import type { ProjectTool } from '@/bindings/index';
+
+// ── Shared limits (kept in sync with the prior manual validation) ─────────────
+
+export const MAX_NAME_LEN = 120;
+export const MAX_NOTES_LEN = 4096;
+
+/**
+ * Processing-tool values the create/edit forms expose. The generated
+ * `ProjectTool` enum is `"PixInsight" | "Siril" | "Planetary Suite"`; the forms
+ * only offer PixInsight / Siril, so the schema constrains to those two while
+ * remaining assignable to `ProjectTool`.
+ */
+export const PROJECT_TOOL_VALUES = ['PixInsight', 'Siril'] as const satisfies readonly ProjectTool[];
+
+export const projectToolSchema = z.enum(PROJECT_TOOL_VALUES);
+
+// ── Create project (CreateProjectDialog) ──────────────────────────────────────
+
+/**
+ * Fields the user edits in CreateProjectDialog. The non-editable contract fields
+ * (requestId, initialSources, notes-coalescing, canonicalTargetId) are added at
+ * submit time, so this schema deliberately covers only the user-facing inputs.
+ *
+ * Validation rules mirror the original manual `validate()`:
+ *   - name: required (after trim), ≤ MAX_NAME_LEN
+ *   - tool: required, one of the offered tools
+ *   - path: required (after trim)
+ *   - notes: optional, ≤ MAX_NOTES_LEN
+ */
+export const createProjectFormSchema = z.object({
+  name: z
+    .string()
+    .trim()
+    .min(1, 'Project name is required.')
+    .max(MAX_NAME_LEN, `Name must be ${MAX_NAME_LEN} characters or fewer.`),
+  tool: projectToolSchema.refine((v) => Boolean(v), {
+    message: 'Please select a processing tool.',
+  }),
+  path: z.string().trim().min(1, 'Project folder path is required.'),
+  notes: z
+    .string()
+    .max(MAX_NOTES_LEN, `Notes must be ${MAX_NOTES_LEN} characters or fewer.`),
+});
+
+export type CreateProjectFormValues = z.infer<typeof createProjectFormSchema>;
+
+// ── Edit project (EditProjectPane) ────────────────────────────────────────────
+
+/**
+ * Fields the user edits in EditProjectPane. The original manual validation only
+ * enforced the name rule (required, ≤120); tool and notes had no inline error.
+ * We preserve that exactly — tool/notes are present in the schema (so RHF tracks
+ * them) but carry no failing constraint beyond the contract enum / notes length
+ * that the prior form also implicitly allowed.
+ */
+export const editProjectFormSchema = z.object({
+  name: z
+    .string()
+    .trim()
+    .min(1, 'Name is required.')
+    .max(MAX_NAME_LEN, `Name must be ${MAX_NAME_LEN} characters or fewer.`),
+  tool: projectToolSchema,
+  notes: z.string().max(MAX_NOTES_LEN, `Notes must be ${MAX_NOTES_LEN} characters or fewer.`),
+});
+
+export type EditProjectFormValues = z.infer<typeof editProjectFormSchema>;
+
+// ── Wizard step: name & workflow profile (StepName) ───────────────────────────
+
+/**
+ * The wizard's name step. `workflowProfile` is a wizard-only concept that
+ * WizardPage maps onto the contract `tool` enum at create time, so the schema
+ * keeps the profile union as-is and only enforces the same "name required" gate
+ * that `canAdvance()` enforced (length > 0 after trim).
+ */
+export const wizardNameSchema = z.object({
+  name: z.string().trim().min(1, 'Project name is required.'),
+  workflowProfile: z.enum(['pixinsight', 'siril', 'planetary']),
+});
+
+export type WizardNameValues = z.infer<typeof wizardNameSchema>;

@@ -9,17 +9,51 @@ import type {
   MasterDetail,
   MatchCandidate,
 } from '@/bindings/types';
+import type {
+  InboxListResponse_Serialize,
+  InboxScanFolderResponse_Serialize,
+  InboxClassifyResponse_Serialize,
+  InboxConfirmResponse,
+  InboxReclassifyResponse_Serialize,
+  TargetListItem,
+  TargetDetailV3_Serialize,
+  TargetSearchResponse_Serialize,
+  TargetResolveSimbadResponse_Serialize,
+  ProjectCreateResult_Serialize,
+  ProjectUpdateResult,
+  ProjectSourceAddResult_Serialize,
+  ProjectSourceRemoveResult_Serialize,
+  ProjectChannelsReinferResult_Serialize,
+  ProjectChannelsDismissDriftResult,
+  TransitionResponse_Serialize,
+  InventorySessionReviewResponse_Serialize,
+  LogRecentResponse_Serialize,
+  LogExportResponse_Serialize,
+  FirstRunRestartResponse,
+  FirstRunStateResponse_Serialize,
+  FirstRunCompleteResponse,
+  RegisterSourceBatchResponse_Serialize,
+  RemapVerification,
+  IpcOperationHandle,
+  OperationEvent,
+  AuditListResponse_Serialize,
+} from '@/bindings/index';
 
 const delay = (ms: number) => new Promise<void>((r) => setTimeout(r, ms));
 
 // --- Inline fixtures for modules not yet created by T015 ---
+//
+// Each fixture is pinned to its generated binding type (either via a typed
+// `const` annotation or a `satisfies` clause).  This makes any drift between a
+// mock fixture and the generated `@/bindings` contract a *compile* error rather
+// than a silent mock-mode lie (spec 042 US7 T190/T192).
 
 const mockAuditEntries: AuditEntry[] = [
-  { id: 'audit-001', timestamp: '2026-05-20T22:15:00Z', event_type: 'session.confirmed', entity_type: 'session', entity_id: 'ses-001', from_state: 'needs_review', to_state: 'confirmed', actor: 'user', outcome: 'applied', detail: 'User confirmed session' },
-  { id: 'audit-002', timestamp: '2026-05-20T22:10:00Z', event_type: 'plan.approved', entity_type: 'plan', entity_id: 'plan-001', from_state: 'ready_for_review', to_state: 'approved', actor: 'user', outcome: 'applied', detail: 'Plan approved' },
-  { id: 'audit-003', timestamp: '2026-05-20T21:45:00Z', event_type: 'plan.applied', entity_type: 'plan', entity_id: 'plan-001', from_state: 'approved', to_state: 'applied', actor: 'system', outcome: 'applied', detail: 'All 12 items applied' },
-  { id: 'audit-004', timestamp: '2026-05-19T23:30:00Z', event_type: 'scan.completed', entity_type: 'root', entity_id: 'root-001', actor: 'system', outcome: 'ok', detail: 'Discovered 1,247 files in 4.2s' },
-  { id: 'audit-005', timestamp: '2026-05-19T23:25:00Z', event_type: 'scan.started', entity_type: 'root', entity_id: 'root-001', actor: 'user', outcome: 'ok', detail: 'Manual scan triggered' },
+  { id: 'audit-001', timestamp: '2026-05-20T22:15:00Z', eventType: 'session.confirmed', entityType: 'session', entityId: 'ses-001', fromState: 'needs_review', toState: 'confirmed', actor: 'user', outcome: 'applied', detail: 'User confirmed session' },
+  { id: 'audit-002', timestamp: '2026-05-20T22:10:00Z', eventType: 'plan.approved', entityType: 'plan', entityId: 'plan-001', fromState: 'ready_for_review', toState: 'approved', actor: 'user', outcome: 'applied', detail: 'Plan approved' },
+  { id: 'audit-003', timestamp: '2026-05-20T21:45:00Z', eventType: 'plan.applied', entityType: 'plan', entityId: 'plan-001', fromState: 'approved', toState: 'applied', actor: 'system', outcome: 'applied', detail: 'All 12 items applied' },
+  { id: 'audit-004', timestamp: '2026-05-19T23:30:00Z', eventType: 'scan.completed', entityType: 'root', entityId: 'root-001', actor: 'system', outcome: 'ok', detail: 'Discovered 1,247 files in 4.2s' },
+  { id: 'audit-005', timestamp: '2026-05-19T23:25:00Z', eventType: 'scan.started', entityType: 'root', entityId: 'root-001', actor: 'user', outcome: 'ok', detail: 'Manual scan triggered' },
 ];
 
 const mockSettingsData: SettingsData = {
@@ -32,9 +66,9 @@ const mockSettingsData: SettingsData = {
 };
 
 const mockRoots: LibraryRoot[] = [
-  { id: 'root-001', path: '/astro/raw', category: 'raw', online: true, file_count: 1247, last_scanned: '2026-05-19T23:30:00Z' },
-  { id: 'root-002', path: '/astro/calibration', category: 'calibration', online: true, file_count: 342, last_scanned: '2026-05-19T23:30:00Z' },
-  { id: 'root-003', path: '/astro/projects', category: 'project', online: true, file_count: 856, last_scanned: '2026-05-18T20:00:00Z' },
+  { id: 'root-001', path: '/astro/raw', category: 'raw', online: true, fileCount: 1247, lastScanned: '2026-05-19T23:30:00Z' },
+  { id: 'root-002', path: '/astro/calibration', category: 'calibration', online: true, fileCount: 342, lastScanned: '2026-05-19T23:30:00Z' },
+  { id: 'root-003', path: '/astro/projects', category: 'project', online: true, fileCount: 856, lastScanned: '2026-05-18T20:00:00Z' },
 ];
 
 const mockEquipment: Equipment[] = [
@@ -80,27 +114,36 @@ const mockCalendarData: CalendarData = {
 const mockMasterDetail: MasterDetail = {
   id: 'master-001',
   kind: 'dark',
-  fingerprint: { camera: 'ASI2600MM', sensor_mode: 'normal', exposure_s: 300, temp_c: -10, gain: 100, binning: '1x1' },
-  source_session_id: 'cal-ses-001',
-  created_at: '2026-05-15T20:00:00Z',
-  age_days: 9,
-  size_bytes: 52_428_800,
-  used_by_session_ids: ['ses-001', 'ses-003'],
-  used_by_project_ids: ['proj-001'],
-  compatible_sessions: [{ session_id: 'ses-001', score: 0.97, soft_mismatches: [] }],
-  usage_stats: { session_count: 2, project_count: 1 },
+  fingerprint: { camera: 'ASI2600MM', sensorMode: 'normal', exposureS: 300, tempC: -10, gain: 100, binning: '1x1' },
+  sourceSessionId: 'cal-ses-001',
+  createdAt: '2026-05-15T20:00:00Z',
+  ageDays: 9,
+  sizeBytes: 52_428_800,
+  usedBySessionIds: ['ses-001', 'ses-003'],
+  usedByProjectIds: ['proj-001'],
+  compatibleSessions: [{ sessionId: 'ses-001', score: 0.97, softMismatches: [] }],
+  usageStats: { sessionCount: 2, projectCount: 1 },
 };
 
 const mockMatchCandidates: MatchCandidate[] = [
-  { master_id: 'master-001', kind: 'dark', score: 0.97, soft_mismatches: [] },
-  { master_id: 'master-002', kind: 'flat', score: 0.92, filter: 'L', soft_mismatches: ['age > 60 days'] },
-  { master_id: 'master-003', kind: 'bias', score: 0.99, soft_mismatches: [] },
+  { masterId: 'master-001', kind: 'dark', score: 0.97, softMismatches: [] },
+  { masterId: 'master-002', kind: 'flat', score: 0.92, filter: 'L', softMismatches: ['age > 60 days'] },
+  { masterId: 'master-003', kind: 'bias', score: 0.99, softMismatches: [] },
 ];
 
-export async function mockInvoke<T>(
+/**
+ * Dispatch a mock IPC response for `cmd`.
+ *
+ * Returns `Promise<unknown>`: the caller (`invoke<T>` in `ipc.ts` /
+ * `source-views.ts`) supplies the concrete `T` from the generated bindings and
+ * narrows at its own boundary.  Internally there are no blind `as T` casts —
+ * every returned fixture is checked against its generated binding type, so a
+ * contract change that the mock fails to mirror is a compile error.
+ */
+export async function mockInvoke(
   cmd: string,
   _args?: Record<string, unknown>,
-): Promise<T> {
+): Promise<unknown> {
   // Simulate realistic network/IPC latency
   await delay(50 + Math.random() * 100);
 
@@ -109,32 +152,32 @@ export async function mockInvoke<T>(
 
     case 'sessions_list': {
       const { sessions } = await import('@/data/fixtures/sessions');
-      return sessions as T;
+      return sessions;
     }
     case 'sessions_get': {
       const { sessionDetail } = await import('@/data/fixtures/sessions');
-      return sessionDetail as T;
+      return sessionDetail;
     }
     case 'sessions_calendar': {
-      return mockCalendarData as T;
+      return mockCalendarData;
     }
     case 'calibration_masters_list': {
       const { masters } = await import('@/data/fixtures/calibration');
-      return masters as T;
+      return masters;
     }
     case 'calibration_masters_get': {
-      return mockMasterDetail as T;
+      return mockMasterDetail;
     }
     case 'calibration_matches': {
-      return mockMatchCandidates as T;
+      return mockMatchCandidates;
     }
     case 'targets_list': {
       const { targets } = await import('@/data/fixtures/targets');
-      return targets as T;
+      return targets;
     }
     case 'targets_get': {
       const { targetDetail } = await import('@/data/fixtures/targets');
-      return targetDetail as T;
+      return targetDetail;
     }
 
     // ── gen-3 target commands (spec 036) ──────────────────────────────────────
@@ -142,7 +185,7 @@ export async function mockInvoke<T>(
       return [
         { id: 'tgt-m31', effectiveLabel: 'M 31', primaryDesignation: 'M 31', objectType: 'galaxy' },
         { id: 'tgt-ngc7000', effectiveLabel: 'NGC 7000', primaryDesignation: 'NGC 7000', objectType: 'emission_nebula' },
-      ] as T;
+      ] satisfies TargetListItem[];
     }
     case 'target_get': {
       const req = (_args as { req?: { targetId?: string } } | undefined)?.req;
@@ -157,7 +200,7 @@ export async function mockInvoke<T>(
         simbadOid: 1_234_567,
         source: 'resolved',
         aliases: [],
-      } as T;
+      } satisfies TargetDetailV3_Serialize;
     }
     case 'target_search': {
       const req = (_args as { req?: { query?: string } } | undefined)?.req;
@@ -165,7 +208,7 @@ export async function mockInvoke<T>(
       const allSuggestions = [
         { targetId: 'tgt-m31', primaryDesignation: 'M 31', commonName: 'Andromeda Galaxy', objectType: 'galaxy', matchedAlias: 'Andromeda', source: 'seed' },
         { targetId: 'tgt-ngc7000', primaryDesignation: 'NGC 7000', commonName: null, objectType: 'emission_nebula', matchedAlias: 'North America Nebula', source: 'seed' },
-      ];
+      ] satisfies TargetSearchResponse_Serialize['suggestions'];
       const suggestions = q
         ? allSuggestions.filter(
             (s) =>
@@ -174,7 +217,7 @@ export async function mockInvoke<T>(
               (s.matchedAlias?.toLowerCase().includes(q) ?? false),
           )
         : allSuggestions;
-      return { contractVersion: '1.0', requestId: crypto.randomUUID(), suggestions } as T;
+      return { contractVersion: '1.0', requestId: crypto.randomUUID(), suggestions } satisfies TargetSearchResponse_Serialize;
     }
     case 'target_resolve': {
       const req = (_args as { req?: { query?: string } } | undefined)?.req;
@@ -192,21 +235,22 @@ export async function mockInvoke<T>(
           raDeg: 0,
           decDeg: 0,
           simbadOid: null,
+          aliases: [],
         },
         unresolvedReason: null,
         error: null,
-      } as T;
+      } satisfies TargetResolveSimbadResponse_Serialize;
     }
 
     case 'projects_list': {
       // spec 008 real shape: ProjectSummaryDto[]
       const { mockProjectSummaries } = await import('@/data/fixtures/projects');
-      return mockProjectSummaries as T;
+      return mockProjectSummaries;
     }
     case 'projects_get': {
       // spec 008 real shape: ProjectDetailDto
       const { mockProjectDetail008 } = await import('@/data/fixtures/projects');
-      return mockProjectDetail008 as T;
+      return mockProjectDetail008;
     }
     case 'projects_create': {
       // Return a minimal success result; tests override this via vi.mock.
@@ -217,60 +261,65 @@ export async function mockInvoke<T>(
         channels: [],
         auditId: 'mock-audit-id',
         createdAt: new Date().toISOString(),
-      } as T;
+      } satisfies ProjectCreateResult_Serialize;
     }
     case 'projects_update': {
+      const req = (_args as { req?: { projectId?: string } } | undefined)?.req;
       return {
-        projectId: (_args as Record<string, Record<string, string>>)?.req?.projectId ?? 'mock-id',
+        projectId: req?.projectId ?? 'mock-id',
         fieldsUpdated: [],
         auditId: 'mock-audit-id',
         updatedAt: new Date().toISOString(),
-      } as T;
+      } satisfies ProjectUpdateResult;
     }
     case 'projects_source_add': {
+      const req = (_args as { req?: { projectId?: string } } | undefined)?.req;
       return {
-        projectId: (_args as Record<string, Record<string, string>>)?.req?.projectId ?? 'mock-id',
+        projectId: req?.projectId ?? 'mock-id',
         sourceAdded: { inventoryId: 'mock-inv', name: '', frames: 0, filter: '', exposure: '', linkedAt: new Date().toISOString() },
         channels: [],
         auditId: 'mock-audit-id',
         linkedAt: new Date().toISOString(),
-      } as T;
+      } satisfies ProjectSourceAddResult_Serialize;
     }
     case 'projects_source_remove': {
+      const req = (_args as { req?: { projectId?: string; projectSourceId?: string } } | undefined)?.req;
       return {
-        projectId: (_args as Record<string, Record<string, string>>)?.req?.projectId ?? 'mock-id',
-        removedSourceId: (_args as Record<string, Record<string, string>>)?.req?.projectSourceId ?? 'mock-src',
+        projectId: req?.projectId ?? 'mock-id',
+        removedSourceId: req?.projectSourceId ?? 'mock-src',
         auditId: 'mock-audit-id',
-      } as T;
+      } satisfies ProjectSourceRemoveResult_Serialize;
     }
     case 'projects_channels_reinfer': {
+      const req = (_args as { req?: { projectId?: string } } | undefined)?.req;
       return {
-        projectId: (_args as Record<string, Record<string, string>>)?.req?.projectId ?? 'mock-id',
+        projectId: req?.projectId ?? 'mock-id',
         channels: [],
         auditId: 'mock-audit-id',
         updatedAt: new Date().toISOString(),
-      } as T;
+      } satisfies ProjectChannelsReinferResult_Serialize;
     }
     case 'projects_channels_dismiss_drift': {
+      const req = (_args as { req?: { projectId?: string } } | undefined)?.req;
       return {
-        projectId: (_args as Record<string, Record<string, string>>)?.req?.projectId ?? 'mock-id',
+        projectId: req?.projectId ?? 'mock-id',
         auditId: 'mock-audit-id',
         dismissedAt: new Date().toISOString(),
-      } as T;
+      } satisfies ProjectChannelsDismissDriftResult;
     }
     case 'plans_list': {
       const { plans } = await import('@/data/fixtures/plans');
-      return plans as T;
+      return plans;
     }
     case 'plans_get': {
       const { planDetail } = await import('@/data/fixtures/plans');
-      return planDetail as T;
+      return planDetail;
     }
     case 'audit_list': {
-      return { entries: mockAuditEntries, total: mockAuditEntries.length } as T;
+      return { entries: mockAuditEntries, total: mockAuditEntries.length } satisfies AuditListResponse_Serialize;
     }
     case 'audit_export': {
-      return mockAuditEntries.map((e) => JSON.stringify(e)).join('\n') as T;
+      return mockAuditEntries.map((e) => JSON.stringify(e)).join('\n');
     }
     case 'log_recent': {
       const { MOCK_LOG_ENTRIES } = await import('@/data/mockLogEntries');
@@ -278,36 +327,37 @@ export async function mockInvoke<T>(
         contractVersion: '1',
         entries: MOCK_LOG_ENTRIES,
         truncated: false,
-      } as T;
+      } satisfies LogRecentResponse_Serialize;
     }
     case 'log_export': {
+      const args = _args as { requestId?: string; filePath?: string } | undefined;
       return {
         contractVersion: '1',
-        requestId: (_args as Record<string, string>)?.requestId ?? 'mock-req',
+        requestId: args?.requestId ?? 'mock-req',
         status: 'success',
-        filePath: (_args as Record<string, string>)?.filePath ?? '/tmp/log-export.json',
+        filePath: args?.filePath ?? '/tmp/log-export.json',
         count: 8,
         bytes: 1024,
-      } as T;
+      } satisfies LogExportResponse_Serialize;
     }
     case 'settings_get': {
-      return mockSettingsData as T;
+      return mockSettingsData;
     }
     case 'roots_list': {
-      return mockRoots as T;
+      return mockRoots;
     }
     case 'equipment_list': {
-      return mockEquipment as T;
+      return mockEquipment;
     }
     case 'review_queue': {
       const { reviewItems } = await import('@/data/fixtures/review');
-      return reviewItems as T;
+      return reviewItems;
     }
     case 'preferences_get': {
-      return mockPreferences as T;
+      return mockPreferences;
     }
     case 'search_global': {
-      return mockSearchResults as T;
+      return mockSearchResults;
     }
 
     // ---------- Mutation Commands ----------
@@ -325,92 +375,143 @@ export async function mockInvoke<T>(
         priorState: req?.currentState ?? 'processing',
         newState: req?.nextState ?? 'completed',
         auditId: 'mock-audit-transition',
-      } as T;
+      } satisfies TransitionResponse_Serialize;
     }
 
     case 'sessions_transition': {
       const { sessions } = await import('@/data/fixtures/sessions');
-      return sessions[0] as T;
+      return sessions[0];
     }
     case 'sessions_split': {
       const { sessions } = await import('@/data/fixtures/sessions');
-      return { original: sessions[0], new: sessions[1] } as T;
+      return { original: sessions[0], new: sessions[1] };
     }
     case 'sessions_merge': {
       const { sessions } = await import('@/data/fixtures/sessions');
-      return sessions[0] as T;
+      return sessions[0];
     }
     case 'projects_create_plan': {
       const { plans } = await import('@/data/fixtures/plans');
-      return plans[0] as T;
+      return plans[0];
     }
     case 'plans_approve': {
       const { plans } = await import('@/data/fixtures/plans');
-      return plans[0] as T;
+      return plans[0];
     }
     case 'plans_apply_real': {
-      return { operation_id: 'op-mock-001', kind: 'plan_apply' } as T;
+      // Spec 042 US16 (T240): drive the live long-op channel if a subscriber
+      // passed one. `onEvent` is a real `Channel<OperationEvent>` in mock mode;
+      // pushing through `onmessage` mirrors the backend's Started → per-item →
+      // Completed lifecycle so UI/tests can exercise streaming without a backend.
+      const channel = (_args as { onEvent?: { onmessage?: (e: OperationEvent) => void } })
+        ?.onEvent;
+      if (channel?.onmessage) {
+        const opId = 'op-mock-001';
+        const push = channel.onmessage;
+        const mk = (
+          sequence: number,
+          eventType: OperationEvent['eventType'],
+          payload: unknown,
+        ): OperationEvent => ({
+          contractVersion: '1.0.0',
+          operationId: opId,
+          eventType,
+          sequence,
+          payload,
+        });
+        // Emit asynchronously so callers can attach listeners first.
+        void Promise.resolve().then(() => {
+          push(mk(0, 'item_started', { runId: opId, itemsTotal: 1, at: '1970-01-01T00:00:00Z' }));
+          push(mk(1, 'item_applied', { runId: opId, itemId: 'item-0', newState: 'succeeded' }));
+          push(
+            mk(2, 'completed', {
+              runId: opId,
+              terminalState: 'completed',
+              itemsApplied: 1,
+              itemsFailed: 0,
+            }),
+          );
+        });
+      }
+      return { operationId: 'op-mock-001', kind: 'plan_apply' } satisfies IpcOperationHandle;
     }
     case 'plans_discard': {
-      return undefined as T;
+      return null;
     }
     case 'settings_update': {
-      return undefined as T;
+      return null;
     }
     case 'roots_register': {
-      return mockRoots[0] as T;
+      return mockRoots[0];
     }
     case 'roots_remap': {
+      // Generated `RemapVerification` is camelCase; mirror the real contract so
+      // the verification UI (which reads `samples`/`allVerified`) works in mock
+      // mode exactly as it does against the backend.
       return {
-        root_id: (_args?.root_id as string) ?? 'root-1',
-        original_path: '/old/path',
-        new_path: (_args?.new_path as string) ?? '/new/path',
+        rootId: (_args?.root_id as string) ?? 'root-1',
+        originalPath: '/old/path',
+        newPath: (_args?.new_path as string) ?? '/new/path',
         samples: [
-          { relative_path: 'M31/light_001.fits', found: true },
-          { relative_path: 'M31/light_002.fits', found: true },
+          { relativePath: 'M31/light_001.fits', found: true },
+          { relativePath: 'M31/light_002.fits', found: true },
         ],
-        all_verified: true,
-      } as T;
+        allVerified: true,
+      } satisfies RemapVerification;
     }
     case 'roots_remap_apply': {
-      return undefined as T;
+      return null;
     }
     case 'scan_start': {
-      return { operation_id: 'op-scan-001', kind: 'scan' } as T;
+      return { operationId: 'op-scan-001', kind: 'scan' } satisfies IpcOperationHandle;
     }
     case 'preferences_set': {
-      return undefined as T;
+      return null;
     }
     case 'tour_complete_step': {
-      return undefined as T;
+      return null;
     }
 
     // ---------- First-Run / Batch Commands ----------
 
     case 'roots_register_batch': {
-      // Payload is { request: { sources } }; tolerate a legacy top-level shape too.
+      // Generated `RegisterSourceBatchResponse` shape is `{ status, items: [{
+      // index, status, sourceId, error }] }`.  An earlier mock invented a
+      // `{ results: [{ root }] }` shape that `registerRootBatch` could not read,
+      // so mock mode produced zero registered roots.  Mirror the real contract.
       const req = (_args?.request as { sources?: Array<{ kind: string; path: string }> }) ?? _args;
       const sources = (req?.sources as Array<{ kind: string; path: string }>) ?? [];
       return {
-        results: sources.map((s, i) => ({
-          kind: s.kind,
-          path: s.path,
-          success: true,
-          root: { ...mockRoots[i % mockRoots.length], path: s.path, category: s.kind },
+        status: 'success',
+        items: sources.map((_s, i) => ({
+          index: i,
+          status: 'success',
+          sourceId: `src-${i}`,
+          error: null,
         })),
-      } as T;
+      } satisfies RegisterSourceBatchResponse_Serialize;
     }
     case 'firstrun_complete': {
-      return { success: true } as T;
+      return { completedAt: new Date().toISOString(), registeredSourceCount: 0 } satisfies FirstRunCompleteResponse;
     }
     case 'firstrun_restart': {
+      // Generated `FirstRunRestartResponse` is `{ restartedAt, prefilledSources:
+      // RegisterSourceResponse[] }` — mirror it instead of the legacy
+      // `{ success, prefilled_sources }` shape.
       return {
-        success: true,
-        prefilled_sources: mockRoots.map((r) => ({ kind: r.category, path: r.path })),
-      } as T;
+        restartedAt: new Date().toISOString(),
+        prefilledSources: mockRoots.map((r, i) => ({
+          sourceId: `src-${i}`,
+          kind: 'light_frames',
+          path: r.path,
+          createdAt: new Date().toISOString(),
+          organizationState: 'unorganized',
+        })),
+      } satisfies FirstRunRestartResponse;
     }
     case 'firstrun_state': {
-      return { completed: false } as T;
+      // Generated `FirstRunStateResponse` is `{ completedAt?, lastStep }`.
+      return { completedAt: null, lastStep: 'welcome' } satisfies FirstRunStateResponse_Serialize;
     }
 
     // ── Inbox commands (spec 005 + 039) ───────────────────────────────────────
@@ -429,6 +530,7 @@ export async function mockInvoke<T>(
             format: 'fits',
             state: 'classified',
             contentSignature: 'sig-abc',
+            organizationState: 'unorganized',
             isMaster: false,
           },
           {
@@ -441,6 +543,7 @@ export async function mockInvoke<T>(
             format: 'fits',
             state: 'pending_classification',
             contentSignature: 'sig-def',
+            organizationState: 'unorganized',
             isMaster: false,
           },
           {
@@ -454,6 +557,7 @@ export async function mockInvoke<T>(
             format: 'xisf',
             state: 'pending_classification',
             contentSignature: '',
+            organizationState: 'unorganized',
             isMaster: true,
             masterFrameType: 'dark',
             masterFilter: 'Ha',
@@ -469,12 +573,13 @@ export async function mockInvoke<T>(
             format: 'video',
             state: 'pending_classification',
             contentSignature: 'sig-ghi',
+            organizationState: 'unorganized',
             isMaster: false,
           },
         ],
         capped: false,
         limit: 500,
-      } as T;
+      } satisfies InboxListResponse_Serialize;
     }
     case 'inbox_scan_folder': {
       return {
@@ -515,7 +620,7 @@ export async function mockInvoke<T>(
             masterExposureS: 300,
           },
         ],
-      } as T;
+      } satisfies InboxScanFolderResponse_Serialize;
     }
     case 'inbox_classify': {
       const args = _args as { req: { inboxItemId: string } } | undefined;
@@ -535,7 +640,7 @@ export async function mockInvoke<T>(
         unclassifiedFiles: isMixed ? ['NGC7000_Ha_mixed.fits'] : [],
         sampleFiles: ['NGC7000_Ha_001.fits'],
         computedAt: new Date().toISOString(),
-      } as T;
+      } satisfies InboxClassifyResponse_Serialize;
     }
     case 'inbox_confirm': {
       return {
@@ -543,7 +648,7 @@ export async function mockInvoke<T>(
         planState: 'ready_for_review',
         itemsTotal: 18,
         registeredAsMaster: false,
-      } as T;
+      } satisfies InboxConfirmResponse;
     }
     case 'inbox_reclassify': {
       const args = _args as { req: { inboxItemId: string } } | undefined;
@@ -553,7 +658,8 @@ export async function mockInvoke<T>(
         frameType: 'light',
         remainingUnclassified: 0,
         appliedCount: 1,
-      } as T;
+        breakdown: [],
+      } satisfies InboxReclassifyResponse_Serialize;
     }
 
     // ── Inventory commands (spec 006) ─────────────────────────────────────────
@@ -576,7 +682,7 @@ export async function mockInvoke<T>(
         ...INVENTORY_LIST_RESPONSE,
         sources,
         requestId: req?.filters ? INVENTORY_LIST_RESPONSE.requestId : INVENTORY_LIST_RESPONSE.requestId,
-      } as T;
+      };
     }
 
     case 'inventory_session_review': {
@@ -592,12 +698,17 @@ export async function mockInvoke<T>(
         appliedAt: new Date().toISOString(),
         entityType: 'acquisition_session',
         priorState: 'needs_review',
-        newState: req?.nextState ?? 'confirmed',
+        newState: (req?.nextState as 'confirmed') ?? 'confirmed',
         auditId: `audit-${Date.now()}`,
-      } as T;
+      } satisfies InventorySessionReviewResponse_Serialize;
     }
 
     // ── Developer diagnostics (spec 021) ─────────────────────────────────────
+    //
+    // The `dev_*` commands are compile-time gated behind the Rust `dev-tools`
+    // feature, so they are absent from the generated `@/bindings` surface in
+    // release builds.  These fixtures therefore have no generated type to pin
+    // against; the dev UI defines its own local response interfaces.
 
     case 'dev_contracts_list': {
       return {
@@ -619,11 +730,11 @@ export async function mockInvoke<T>(
             sensitiveFields: [],
           },
         ],
-      } as T;
+      };
     }
 
     case 'dev_calls_list': {
-      return { calls: [] } as T;
+      return { calls: [] };
     }
 
     case 'dev_export': {
@@ -631,32 +742,32 @@ export async function mockInvoke<T>(
         writtenPath: '/tmp/dev-export.json',
         callCount: 0,
         contractCount: 2,
-      } as T;
+      };
     }
 
     case 'dev_schema_get': {
       const req = (_args as { request?: { schemaPath?: string } } | undefined)?.request;
       const path = req?.schemaPath ?? '';
       if (!path) {
-        return { found: false } as T;
+        return { found: false };
       }
       // Return a minimal stub schema for any non-empty path.
       return {
         found: true,
         content: JSON.stringify({ '$schema': 'https://json-schema.org/draft/2020-12/schema', title: 'mock-schema', description: `Mock schema for ${path}` }, null, 2),
-      } as T;
+      };
     }
 
     case 'preparedview_list': {
-      return { views: [] } as T;
+      return { views: [] };
     }
 
     case 'preparedview_remove': {
-      return { planId: 'mock-plan-remove-001' } as T;
+      return { planId: 'mock-plan-remove-001' };
     }
 
     case 'preparedview_regenerate': {
-      return { planId: 'mock-plan-regen-001', unresolvedItemCount: 0 } as T;
+      return { planId: 'mock-plan-regen-001', unresolvedItemCount: 0 };
     }
 
     default:

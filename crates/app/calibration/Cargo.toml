@@ -1,0 +1,25 @@
+[package]
+name = "app_core_calibration"
+version = "0.1.0"
+edition.workspace = true
+license.workspace = true
+
+[lib]
+path = "src/lib.rs"
+
+[dependencies]
+audit = { path = "../../audit" }
+calibration_core = { path = "../../calibration/core" }
+contracts_core = { path = "../../contracts/core" }
+domain_core = { path = "../../domain/core" }
+persistence_db = { path = "../../persistence/db" }
+serde_json.workspace = true
+sqlx.workspace = true
+time = { workspace = true }
+uuid = { workspace = true }
+
+[dev-dependencies]
+tokio.workspace = true
+
+[lints]
+workspace = true

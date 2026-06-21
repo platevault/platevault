@@ -227,14 +227,14 @@ export const plans: FilesystemPlan[] = [
     state: 'ready_for_review',
     planType: 'source_map',
     destructiveDestination: 'archive',
-    items_total: plan1Items.length,
-    items_applied: 0,
-    items_failed: 0,
-    items_skipped: 0,
-    items_cancelled: 0,
-    items_pending: plan1Items.length,
-    total_bytes_required: 0,
-    created_at: '2026-04-19T10:00:00Z',
+    itemsTotal: plan1Items.length,
+    itemsApplied: 0,
+    itemsFailed: 0,
+    itemsSkipped: 0,
+    itemsCancelled: 0,
+    itemsPending: plan1Items.length,
+    totalBytesRequired: 0,
+    createdAt: '2026-04-19T10:00:00Z',
   },
 
   // Plan 2: Cleanup plan — matches wireframe (plan-#23)
@@ -246,14 +246,14 @@ export const plans: FilesystemPlan[] = [
     state: 'ready_for_review',
     planType: 'cleanup',
     destructiveDestination: 'archive',
-    items_total: cleanupItems.length,
-    items_applied: 0,
-    items_failed: 0,
-    items_skipped: 0,
-    items_cancelled: 0,
-    items_pending: cleanupItems.length,
-    total_bytes_required: 2_202_009_600, // 2.1 GB
-    created_at: new Date(Date.now() - 12 * 60_000).toISOString(),
+    itemsTotal: cleanupItems.length,
+    itemsApplied: 0,
+    itemsFailed: 0,
+    itemsSkipped: 0,
+    itemsCancelled: 0,
+    itemsPending: cleanupItems.length,
+    totalBytesRequired: 2_202_009_600, // 2.1 GB
+    createdAt: new Date(Date.now() - 12 * 60_000).toISOString(),
   },
 
   // Plan 3: Already applied source view plan
@@ -265,15 +265,14 @@ export const plans: FilesystemPlan[] = [
     state: 'applied',
     planType: 'source_map',
     destructiveDestination: 'archive',
-    items_total: plan4Items.length,
-    items_applied: plan4Items.length,
-    items_failed: 0,
-    items_skipped: 0,
-    items_cancelled: 0,
-    items_pending: 0,
-    total_bytes_required: 0,
-    created_at: '2026-04-16T08:00:00Z',
-    approved_at: '2026-04-16T08:05:00Z',
+    itemsTotal: plan4Items.length,
+    itemsApplied: plan4Items.length,
+    itemsFailed: 0,
+    itemsSkipped: 0,
+    itemsCancelled: 0,
+    itemsPending: 0,
+    totalBytesRequired: 0,
+    createdAt: '2026-04-16T08:00:00Z',
   },
 ];
 
@@ -283,6 +282,5 @@ export const plans: FilesystemPlan[] = [
 
 export const planDetail: PlanDetail = {
   ...plans[1],
-  approved_at: undefined,
   items: cleanupItems,
 };

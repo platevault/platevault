@@ -10,7 +10,8 @@
  * - `project.read_only` error surfaced as a toast (archived project).
  */
 
-import { useState, useRef, useCallback, useEffect } from 'react';
+import { useState, useEffect } from 'react';
+import { useDebouncedCallback } from 'use-debounce';
 import { Btn } from '@/ui';
 import { addToast } from '@/shared/toast';
 import { saveNote, noteByteLength, MAX_NOTE_BYTES, NOTE_DEBOUNCE_MS } from './manifests';
@@ -37,7 +38,6 @@ export function ProjectNotesSection({
   const [saving, setSaving] = useState(false);
   const [fieldError, setFieldError] = useState<string | null>(null);
   const [lastSaved, setLastSaved] = useState<string | null>(null);
-  const debounceRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   // Sync draft with upstream changes (e.g. after a reload).
   useEffect(() => {
@@ -52,10 +52,14 @@ export function ProjectNotesSection({
 
   // ── Debounced autosave ────────────────────────────────────────────────────
 
-  const triggerSave = useCallback(
+  // Debounced autosave. `useDebouncedCallback` cancels the pending save on
+  // unmount and replaces it on each keystroke, preserving the prior
+  // setTimeout/clearTimeout semantics at the same NOTE_DEBOUNCE_MS interval.
+  const triggerSave = useDebouncedCallback(
     (content: string) => {
-      if (debounceRef.current) clearTimeout(debounceRef.current);
-      debounceRef.current = setTimeout(async () => {
+      // Keep the debounced callback void-returning (matching the prior
+      // `setTimeout(async …)`); the async work runs in a fire-and-forget IIFE.
+      void (async () => {
         if (noteByteLength(content) > MAX_NOTE_BYTES) return;
         setSaving(true);
         const { updatedAt, error } = await saveNote(projectId, content);
@@ -70,9 +74,9 @@ export function ProjectNotesSection({
           setLastSaved(updatedAt);
           setFieldError(null);
         }
-      }, NOTE_DEBOUNCE_MS);
+      })();
     },
-    [projectId],
+    NOTE_DEBOUNCE_MS,
   );
 
   const handleChange = (e: React.ChangeEvent<HTMLTextAreaElement>) => {
@@ -87,7 +91,7 @@ export function ProjectNotesSection({
       setFieldError(`Note exceeds the ${MAX_NOTE_BYTES.toLocaleString()}-byte limit.`);
       return;
     }
-    if (debounceRef.current) clearTimeout(debounceRef.current);
+    triggerSave.cancel();
     setSaving(true);
     const { updatedAt, error } = await saveNote(projectId, draft);
     setSaving(false);
@@ -106,7 +110,7 @@ export function ProjectNotesSection({
   };
 
   const handleCancel = () => {
-    if (debounceRef.current) clearTimeout(debounceRef.current);
+    triggerSave.cancel();
     setDraft(initialContent ?? '');
     setFieldError(null);
     setEditing(false);

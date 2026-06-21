@@ -373,8 +373,10 @@ fn discover_from_path(names: &[(&'static str, &str)]) -> Vec<DiscoveryResult> {
 
 #[cfg(any(target_os = "linux", target_os = "windows", target_os = "macos"))]
 fn dedup_by_tool(items: Vec<DiscoveryResult>) -> Vec<DiscoveryResult> {
-    let mut seen = std::collections::HashSet::new();
-    items.into_iter().filter(|r| seen.insert(r.tool_id.clone())).collect()
+    // spec 042 (T203): `unique_by` keeps the first occurrence of each key, which
+    // is identical to the prior `HashSet`-insert filter (first match wins).
+    use itertools::Itertools as _;
+    items.into_iter().unique_by(|r| r.tool_id.clone()).collect()
 }
 
 // ── Tests ─────────────────────────────────────────────────────────────────────

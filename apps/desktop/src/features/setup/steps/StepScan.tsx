@@ -11,6 +11,7 @@ import { inboxScanFolder, inboxClassify } from '@/api/commands';
 import type { InboxItemSummary, InboxClassifyResponse } from '@/api/commands';
 import type { SourceEntry } from '../sources-store';
 import type { FlushResult } from '../sources-store';
+import { errMessage } from '@/lib/errors';
 
 // ── Types ─────────────────────────────────────────────────────────────────────
 
@@ -408,7 +409,7 @@ export function StepScan({ sources, flushResult, onAllDoneChange }: StepScanProp
       const idx = i;
       const entry = sourceStates[idx];
 
-      (async () => {
+      void (async () => {
         // Mark as scanning
         setSourceStates((prev) => {
           const next = [...prev];
@@ -452,7 +453,7 @@ export function StepScan({ sources, flushResult, onAllDoneChange }: StepScanProp
             next[idx] = {
               ...next[idx],
               phase: 'error',
-              error: err instanceof Error ? err.message : String(err),
+              error: errMessage(err),
             };
             return next;
           });

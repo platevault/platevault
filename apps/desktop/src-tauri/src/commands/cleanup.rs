@@ -6,6 +6,7 @@
 use contracts_core::cleanup::{
     CleanupAction, CleanupPolicy, CleanupPolicyEntry, CleanupScanResult, UpdateCleanupPolicy,
 };
+use contracts_core::ContractError;
 
 /// `cleanup.policy.get` — returns the current cleanup policy.
 ///
@@ -13,7 +14,7 @@ use contracts_core::cleanup::{
 /// Returns `Err(String)` on failure; the stub never fails.
 #[tauri::command]
 #[specta::specta]
-pub async fn cleanup_policy_get() -> Result<CleanupPolicy, String> {
+pub async fn cleanup_policy_get() -> Result<CleanupPolicy, ContractError> {
     tracing::debug!("stub: cleanup.policy.get");
     Ok(default_cleanup_policy())
 }
@@ -24,7 +25,9 @@ pub async fn cleanup_policy_get() -> Result<CleanupPolicy, String> {
 /// Returns `Err(String)` on failure; the stub never fails.
 #[tauri::command]
 #[specta::specta]
-pub async fn cleanup_policy_update(request: UpdateCleanupPolicy) -> Result<CleanupPolicy, String> {
+pub async fn cleanup_policy_update(
+    request: UpdateCleanupPolicy,
+) -> Result<CleanupPolicy, ContractError> {
     tracing::debug!(
         "stub: cleanup.policy.update ({} entries, auto={})",
         request.entries.len(),
@@ -44,7 +47,7 @@ pub async fn cleanup_policy_update(request: UpdateCleanupPolicy) -> Result<Clean
 /// Returns `Err(String)` on failure; the stub never fails.
 #[tauri::command]
 #[specta::specta]
-pub async fn cleanup_scan(project_id: String) -> Result<CleanupScanResult, String> {
+pub async fn cleanup_scan(project_id: String) -> Result<CleanupScanResult, ContractError> {
     tracing::debug!("stub: cleanup.scan project_id={project_id}");
     Ok(CleanupScanResult { project_id, candidates: vec![], total_reclaimable_bytes: 0 })
 }

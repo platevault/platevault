@@ -1,4 +1,5 @@
 import { useState, useEffect } from 'react';
+import type { StatusSummary as StatusSummaryDto } from '@/bindings/index';
 
 export interface StatusSummary {
   inboxCount: number;
@@ -34,30 +35,38 @@ export function useStatusSummary(): StatusSummary {
         const result = await commands.statusSummary();
         if (cancelled) return;
         if (result.status === 'ok') {
-          const d = result.data;
+          // `result.data` is the generated `StatusSummary` DTO: `library`,
+          // `volumes`, and `roots` are concretely typed and always present, so
+          // no loose `Record<string, unknown>` coercion or `?? 0` fallbacks are
+          // needed (spec 042 US7 T191).
+          const d: StatusSummaryDto = result.data;
           setSummary({
-            inboxCount: d.inboxCount ?? 0,
-            sessionCount: d.library?.sessions ?? 0,
-            calibrationCount: d.library?.calibrationSets ?? 0,
-            targetCount: d.library?.targets ?? 0,
-            projectCount: d.library?.projects ?? 0,
-            cleanupReclaimableBytes: d.cleanupReclaimableBytes ?? 0,
-            volumes: (d.volumes ?? []).map((v: Record<string, unknown>) => ({
-              path: String(v.path ?? ''),
-              freeBytes: Number(v.freeBytes ?? 0),
-              totalBytes: Number(v.totalBytes ?? 0),
-              warning: Boolean(v.warning),
+            inboxCount: d.inboxCount,
+            sessionCount: d.library.sessions,
+            calibrationCount: d.library.calibrationSets,
+            targetCount: d.library.targets,
+            projectCount: d.library.projects,
+            cleanupReclaimableBytes: d.cleanupReclaimableBytes,
+            volumes: d.volumes.map((v) => ({
+              path: v.path,
+              freeBytes: v.freeBytes,
+              totalBytes: v.totalBytes,
+              warning: v.warning,
             })),
-            roots: (d.roots ?? []).map((r: Record<string, unknown>) => ({
-              id: String(r.id ?? ''),
-              path: String(r.path ?? ''),
-              kind: String(r.kind ?? ''),
-              online: Boolean(r.online),
+            roots: d.roots.map((r) => ({
+              id: r.id,
+              path: r.path,
+              kind: r.kind,
+              online: r.online,
             })),
           });
         }
-      } catch {
-        // Backend unavailable — keep defaults
+      } catch (err) {
+        // Backend unavailable (e.g. mock mode, or status_summary not yet wired
+        // on this platform) — keep the default zeroed summary. Intentionally
+        // swallowed: this poller runs every 30s and a transient failure must not
+        // surface as an error to the user.
+        void err;
       }
     }
 

@@ -152,16 +152,16 @@ export function TargetDetailPaneInline({ target }: TargetDetailPaneInlineProps) 
                 { key: 'projects', label: 'Projects' },
               ]}
               rows={detail.sessions.map((s) => ({
-                night: <span className="alm-mono">{s.session_key.night}</span>,
-                filter: <Pill variant="ghost">{s.session_key.filter}</Pill>,
-                frames: <span className="alm-mono">{s.frame_count}</span>,
-                integ: <span className="alm-mono">{(s.total_integration_seconds / 3600).toFixed(1)}h</span>,
+                night: <span className="alm-mono">{s.sessionKey.night}</span>,
+                filter: <Pill variant="ghost">{s.sessionKey.filter}</Pill>,
+                frames: <span className="alm-mono">{s.frameCount}</span>,
+                integ: <span className="alm-mono">{((s.totalIntegrationSeconds ?? 0) / 3600).toFixed(1)}h</span>,
                 state: <Pill variant={sessionStateVariant(s.state)}>{sessionStateLabel(s.state)}</Pill>,
                 projects:
-                  s.project_ids.length === 0 ? (
+                  s.projectIds.length === 0 ? (
                     <span style={{ color: 'var(--alm-text-faint)' }}>—</span>
                   ) : (
-                    <span>{s.project_ids.length} proj</span>
+                    <span>{s.projectIds.length} proj</span>
                   ),
               }))}
             />

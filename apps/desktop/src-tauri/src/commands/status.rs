@@ -8,6 +8,7 @@ use contracts_core::status::{LibraryStats, RootHealth, StatusSummary};
 use tauri::State;
 
 use crate::commands::lifecycle::AppState;
+use contracts_core::ContractError;
 
 /// `status.summary` — returns current library status overview.
 ///
@@ -20,14 +21,14 @@ use crate::commands::lifecycle::AppState;
 /// Returns `Err(String)` on database failure.
 #[tauri::command]
 #[specta::specta]
-pub async fn status_summary(state: State<'_, AppState>) -> Result<StatusSummary, String> {
+pub async fn status_summary(state: State<'_, AppState>) -> Result<StatusSummary, ContractError> {
     tracing::debug!("status.summary");
 
     let pool = state.repo.pool();
 
     let sources = persistence_db::repositories::first_run::list_sources(pool)
         .await
-        .map_err(|e| e.to_string())?;
+        .map_err(|e| ContractError::internal(e.to_string()))?;
 
     let roots: Vec<RootHealth> = sources
         .into_iter()
@@ -51,7 +52,7 @@ pub async fn status_summary(state: State<'_, AppState>) -> Result<StatusSummary,
     .fetch_one(pool)
     .await
     .map(|n| u32::try_from(n.max(0)).unwrap_or(u32::MAX))
-    .map_err(|e| e.to_string())?;
+    .map_err(|e| ContractError::internal(e.to_string()))?;
 
     Ok(StatusSummary {
         inbox_count,

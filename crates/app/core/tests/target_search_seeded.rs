@@ -18,7 +18,7 @@
 use app_core::target_search;
 use contracts_core::targets::{TargetObjectType, TargetSearchRequest};
 use persistence_db::Database;
-use targeting::resolver::seed;
+use targeting_resolver::seed;
 
 // ── Helpers ──────────────────────────────────────────────────────────────────
 

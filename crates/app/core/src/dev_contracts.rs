@@ -11,11 +11,18 @@
 //! This module does NOT import the ring buffer itself; that lives in the
 //! desktop_shell crate and is passed in via the call buffer state.
 
+//!
+//! Extracted from `app_core` into its own crate (spec 042 / T253 O3b). It is a
+//! pure leaf (zero `crate::` references). `app_core` re-exports it at
+//! `app_core::dev_contracts` behind the `dev-tools` feature so the public
+//! surface stays byte-identical for developer-mode builds.
+#![allow(clippy::doc_markdown)] // spec/domain terminology not appropriate for backticks
+
 use contracts_core::dev::{
     ContractMeta, DevCallsListRequest, DevCallsListResponse, DevContractsListRequest,
     DevContractsListResponse,
 };
-use contracts_core::{ContractError, ErrorSeverity};
+use contracts_core::{error_code::ErrorCode, ContractError, ErrorSeverity};
 
 // ── Registry ──────────────────────────────────────────────────────────────────
 
@@ -145,7 +152,7 @@ const REGISTRY: &[RegistryEntry] = &[
 
 fn dev_mode_disabled_err() -> ContractError {
     ContractError::new(
-        "dev_mode.disabled",
+        ErrorCode::DevModeDisabled,
         "Developer mode is disabled. Enable devMode in settings.",
         ErrorSeverity::Blocking,
         false,
@@ -209,6 +216,7 @@ fn clamp_limit(limit: Option<u32>) -> usize {
 ///
 /// # Errors
 /// Returns `dev_mode.disabled` when `dev_mode` is false.
+#[allow(clippy::needless_pass_by_value)] // dev-tools-only (spec 021); signature kept by-value to mirror list_contracts + the dev command boundary
 pub fn list_calls(
     dev_mode: bool,
     request: DevCallsListRequest,
@@ -230,7 +238,7 @@ pub fn list_calls(
 mod tests {
     use contracts_core::dev::{ContractCall, DevCallsListRequest, DevContractsListRequest};
 
-    use super::{clamp_limit, list_calls, list_contracts, CALL_BUFFER_CAPACITY};
+    use super::{clamp_limit, list_calls, list_contracts, ErrorCode, CALL_BUFFER_CAPACITY};
 
     fn make_call(id: &str, contract: &str) -> ContractCall {
         ContractCall {
@@ -251,7 +259,7 @@ mod tests {
     #[test]
     fn list_contracts_returns_dev_mode_disabled_when_off() {
         let err = list_contracts(false, DevContractsListRequest::default()).unwrap_err();
-        assert_eq!(err.code, "dev_mode.disabled");
+        assert_eq!(err.code, ErrorCode::DevModeDisabled);
     }
 
     #[test]
@@ -290,7 +298,7 @@ mod tests {
     #[test]
     fn list_calls_returns_dev_mode_disabled_when_off() {
         let err = list_calls(false, DevCallsListRequest::default(), vec![]).unwrap_err();
-        assert_eq!(err.code, "dev_mode.disabled");
+        assert_eq!(err.code, ErrorCode::DevModeDisabled);
     }
 
     #[test]

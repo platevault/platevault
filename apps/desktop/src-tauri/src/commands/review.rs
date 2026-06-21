@@ -7,6 +7,7 @@ use std::collections::HashMap;
 
 use contracts_core::review::{ReviewItem, ReviewItemKind};
 use contracts_core::sessions::{ConfidenceLevel, MetaValue, ProvenanceOrigin};
+use contracts_core::ContractError;
 use contracts_core::JsonAny;
 
 /// `review.queue` — returns items awaiting user review.
@@ -15,7 +16,7 @@ use contracts_core::JsonAny;
 /// Returns `Err(String)` on failure; the stub never fails.
 #[tauri::command]
 #[specta::specta]
-pub async fn review_queue(filter: Option<String>) -> Result<Vec<ReviewItem>, String> {
+pub async fn review_queue(filter: Option<String>) -> Result<Vec<ReviewItem>, ContractError> {
     tracing::debug!("stub: review.queue filter={filter:?}");
     Ok(vec![
         ReviewItem {

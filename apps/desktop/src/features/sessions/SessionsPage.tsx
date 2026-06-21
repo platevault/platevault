@@ -17,7 +17,7 @@
  */
 
 import { useNavigate, useSearch } from '@tanstack/react-router';
-import { useEffect, useCallback } from 'react';
+import { useCallback } from 'react';
 import { PageShell, ListDetailLayout, TopActionBar } from '@/components';
 import { Btn } from '@/ui';
 import { useStaleSelectionCleanup } from '@/lib/use-stale-selection';
@@ -25,7 +25,6 @@ import { SessionsList } from './SessionsList';
 import { SessionDetail } from './SessionDetail';
 import {
   useInventorySources,
-  setInventoryFilters,
   useSessionReview,
   type InventoryFilters,
 } from './store';
@@ -38,16 +37,13 @@ export function SessionsPage() {
   });
   const navigate = useNavigate({ from: '/sessions' });
 
-  // Sync URL filter params → store filters on every param change.
-  useEffect(() => {
-    const filters: InventoryFilters = {};
-    if (sourceFilter && sourceFilter !== 'all') filters.sourceFilter = sourceFilter;
-    if (frameFilter) filters.frameFilter = frameFilter;
-    if (reviewFilter && reviewFilter !== 'all') filters.reviewFilter = reviewFilter;
-    setInventoryFilters(filters);
-  }, [sourceFilter, frameFilter, reviewFilter]);
+  // Build filters from URL params and pass directly to useInventorySources.
+  const filters: InventoryFilters = {};
+  if (sourceFilter && sourceFilter !== 'all') filters.sourceFilter = sourceFilter;
+  if (frameFilter) filters.frameFilter = frameFilter;
+  if (reviewFilter && reviewFilter !== 'all') filters.reviewFilter = reviewFilter;
 
-  const { data: response, loading, error } = useInventorySources();
+  const { data: response, loading, error } = useInventorySources(filters);
   const { review, pending } = useSessionReview();
 
   // Flatten all sessions across sources to find the selected one.

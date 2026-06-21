@@ -15,6 +15,7 @@ use contracts_core::targets::{
     TargetResolveSimbadRequest, TargetResolveSimbadResponse, TargetSearchRequest,
     TargetSearchResponse,
 };
+use contracts_core::ContractError;
 use tauri::State;
 
 use crate::commands::lifecycle::AppState;
@@ -40,8 +41,8 @@ use crate::commands::lifecycle::AppState;
 pub async fn target_resolve(
     state: State<'_, AppState>,
     req: TargetResolveSimbadRequest,
-) -> Result<TargetResolveSimbadResponse, String> {
-    use targeting::resolver::simbad::{
+) -> Result<TargetResolveSimbadResponse, ContractError> {
+    use targeting_resolver::simbad::{
         OfflineResolver, SimbadConfig, SimbadResolver, DEFAULT_TAP_ENDPOINT,
     };
 
@@ -54,7 +55,7 @@ pub async fn target_resolve(
     )
     .fetch_optional(pool)
     .await
-    .map_err(|e| e.to_string())?;
+    .map_err(|e| ContractError::internal(e.to_string()))?;
     let (online_enabled, endpoint, timeout_secs) = settings
         .map_or_else(|| (true, DEFAULT_TAP_ENDPOINT.to_owned(), 10), |(o, e, t)| (o != 0, e, t));
 
@@ -63,16 +64,15 @@ pub async fn target_resolve(
     // error). The use case is still cache-first; the offline resolver only ever
     // reports `Disabled`, which the use case maps to `unresolved("offline")`.
     if !online_enabled {
-        return app_core::target_resolve::resolve(pool, &OfflineResolver, &req)
-            .await
-            .map_err(|e| e.message);
+        return app_core::target_resolve::resolve(pool, &OfflineResolver, &req).await;
     }
 
     let config =
         SimbadConfig::from_settings(endpoint, u64::try_from(timeout_secs.max(1)).unwrap_or(10));
-    let resolver = SimbadResolver::new(&config).map_err(|e| e.to_string())?;
+    let resolver =
+        SimbadResolver::new(&config).map_err(|e| ContractError::internal(e.to_string()))?;
 
-    app_core::target_resolve::resolve(pool, &resolver, &req).await.map_err(|e| e.message)
+    app_core::target_resolve::resolve(pool, &resolver, &req).await
 }
 
 // ── target.search (spec 035, US1) ───────────────────────────────────────────────
@@ -92,9 +92,9 @@ pub async fn target_resolve(
 pub async fn target_search(
     state: State<'_, AppState>,
     req: TargetSearchRequest,
-) -> Result<TargetSearchResponse, String> {
+) -> Result<TargetSearchResponse, ContractError> {
     tracing::debug!("target.search query={:?} limit={}", req.query, req.limit);
-    app_core::target_search::search(state.repo.pool(), &req).await.map_err(|e| e.message)
+    app_core::target_search::search(state.repo.pool(), &req).await
 }
 
 // ── target.resolution.settings (spec 035, US5 — FR-015) ─────────────────────────
@@ -109,9 +109,9 @@ pub async fn target_search(
 pub async fn target_resolution_settings(
     state: State<'_, AppState>,
     req: ResolverSettingsGetRequest,
-) -> Result<ResolverSettingsResponse, String> {
+) -> Result<ResolverSettingsResponse, ContractError> {
     tracing::debug!("target.resolution.settings (get)");
-    app_core::resolver_settings::get(state.repo.pool(), &req).await.map_err(|e| e.message)
+    app_core::resolver_settings::get(state.repo.pool(), &req).await
 }
 
 /// `target.resolution.settings.update` — persist new resolver settings.
@@ -124,10 +124,10 @@ pub async fn target_resolution_settings(
 pub async fn target_resolution_settings_update(
     state: State<'_, AppState>,
     req: ResolverSettingsUpdateRequest,
-) -> Result<ResolverSettingsResponse, String> {
+) -> Result<ResolverSettingsResponse, ContractError> {
     tracing::debug!(
         "target.resolution.settings.update online_enabled={}",
         req.settings.online_enabled
     );
-    app_core::resolver_settings::update(state.repo.pool(), &req).await.map_err(|e| e.message)
+    app_core::resolver_settings::update(state.repo.pool(), &req).await
 }

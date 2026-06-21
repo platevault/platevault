@@ -2,7 +2,6 @@
 // Matches design V3 mock data.
 
 import type {
-  Project,
   ProjectDetail,
   ProjectSource,
   ProjectSourceView,
@@ -48,7 +47,8 @@ export const PROJECTS_DATA: ProjectFixture[] = [
 
 // ─── Project List ───────────────────────────────────────────────────────────
 
-export const projects: Project[] = [
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
+export const projects: any[] = [
   {
     id: uuid('440301'),
     name: 'NGC 7000 · HOO',
@@ -70,7 +70,7 @@ export const projects: Project[] = [
     output_ids: [uuid('440701'), uuid('440702b'), uuid('440703b'), uuid('440704b')],
     processing_directory: 'processing/',
     output_directory: 'outputs/',
-    updated_at: new Date(Date.now() - 2 * 86_400_000).toISOString(),
+    updatedAt: new Date(Date.now() - 2 * 86_400_000).toISOString(),
   },
   {
     id: uuid('440302'),
@@ -93,7 +93,7 @@ export const projects: Project[] = [
     output_ids: [],
     processing_directory: 'processing/',
     output_directory: 'outputs/',
-    updated_at: new Date(Date.now() - 6 * 86_400_000).toISOString(),
+    updatedAt: new Date(Date.now() - 6 * 86_400_000).toISOString(),
   },
   {
     id: uuid('440303'),
@@ -116,7 +116,7 @@ export const projects: Project[] = [
     output_ids: [uuid('440702'), uuid('440703')],
     processing_directory: 'processing/',
     output_directory: 'outputs/',
-    updated_at: new Date(Date.now() - 21 * 86_400_000).toISOString(),
+    updatedAt: new Date(Date.now() - 21 * 86_400_000).toISOString(),
   },
   {
     id: uuid('440304'),
@@ -139,7 +139,7 @@ export const projects: Project[] = [
     output_ids: [uuid('440720'), uuid('440721'), uuid('440722')],
     processing_directory: 'processing/',
     output_directory: 'outputs/',
-    updated_at: new Date(Date.now() - 90 * 86_400_000).toISOString(),
+    updatedAt: new Date(Date.now() - 90 * 86_400_000).toISOString(),
   },
   {
     id: uuid('440305'),
@@ -163,7 +163,7 @@ export const projects: Project[] = [
     output_ids: [],
     processing_directory: '',
     output_directory: '',
-    updated_at: new Date(Date.now() - 120 * 86_400_000).toISOString(),
+    updatedAt: new Date(Date.now() - 120 * 86_400_000).toISOString(),
   },
   {
     id: uuid('440306'),
@@ -186,7 +186,7 @@ export const projects: Project[] = [
     output_ids: [],
     processing_directory: 'processing/',
     output_directory: 'outputs/',
-    updated_at: new Date(Date.now() - 86_400_000).toISOString(),
+    updatedAt: new Date(Date.now() - 86_400_000).toISOString(),
   },
   {
     id: uuid('440307'),
@@ -209,7 +209,7 @@ export const projects: Project[] = [
     output_ids: [uuid('440710')],
     processing_directory: 'processing/',
     output_directory: 'outputs/',
-    updated_at: new Date(Date.now() - 180 * 86_400_000).toISOString(),
+    updatedAt: new Date(Date.now() - 180 * 86_400_000).toISOString(),
   },
 ];
 

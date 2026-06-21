@@ -35,18 +35,19 @@
                   "defaultProtection",
                   "blockPermanentDelete",
                   "protectedCategories",
-                  "current_library_id",
+                  "currentLibraryId",
                   "devMode",
-                  "plans.list.default_age_cutoff_days",
+                  "plansListDefaultAgeCutoffDays",
                   "target_lookup.active_catalogs",
-                  "calibration.dark_temp_tolerance",
-                  "calibration.prefill_suggestion",
-                  "imagetyp_normalization.user_mappings"
+                  "calibrationDarkTempTolerance",
+                  "calibrationPrefillSuggestion",
+                  "calibrationDarkOverridePenalty",
+                  "calibrationFlatOverridePenalty",
+                  "calibrationBiasOverridePenalty",
+                  "calibrationAgingThresholdDays",
+                  "imagetypNormalizationUserMappings",
+                  "patternsByType"
                 ]
-              },
-              {
-                "type": "string",
-                "pattern": "^calibration\\.(dark|flat|bias)\\.override_penalty$"
               },
               {
                 "type": "string",

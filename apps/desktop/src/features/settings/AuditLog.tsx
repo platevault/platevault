@@ -1,6 +1,7 @@
 import { useState, useMemo } from 'react';
 import { Btn, Pill, Table } from '@/ui';
 import { AUDIT_EVENTS, type AuditEventFixture } from '@/data/fixtures/settings';
+import { formatDateTime, compareDateDesc, toEpochMs } from '@/lib/datetime';
 
 type AuditOutcome = AuditEventFixture['outcome'];
 
@@ -13,12 +14,6 @@ function outcomeVariant(outcome: AuditOutcome): 'ok' | 'danger' | 'warn' | 'neut
     case 'error': return 'danger';
     default: return 'neutral';
   }
-}
-
-function formatTimestamp(iso: string): string {
-  const d = new Date(iso);
-  const pad = (n: number) => String(n).padStart(2, '0');
-  return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())} ${pad(d.getHours())}:${pad(d.getMinutes())}`;
 }
 
 export function AuditLog() {
@@ -40,16 +35,14 @@ export function AuditLog() {
       );
     }
     if (dateFrom) {
-      const from = new Date(dateFrom).getTime();
-      result = result.filter((e) => new Date(e.timestamp).getTime() >= from);
+      const from = toEpochMs(dateFrom);
+      result = result.filter((e) => toEpochMs(e.timestamp) >= from);
     }
     if (dateTo) {
-      const to = new Date(dateTo).getTime() + 86400000;
-      result = result.filter((e) => new Date(e.timestamp).getTime() < to);
+      const to = toEpochMs(dateTo) + 86400000;
+      result = result.filter((e) => toEpochMs(e.timestamp) < to);
     }
-    return [...result].sort(
-      (a, b) => new Date(b.timestamp).getTime() - new Date(a.timestamp).getTime(),
-    );
+    return [...result].sort((a, b) => compareDateDesc(a.timestamp, b.timestamp));
   }, [search, dateFrom, dateTo]);
 
   const totalPages = Math.max(1, Math.ceil(filtered.length / ITEMS_PER_PAGE));
@@ -102,7 +95,7 @@ export function AuditLog() {
           rows={pageItems.map((e) => ({
             timestamp: (
               <code className="alm-mono" style={{ fontSize: 'var(--alm-text-2xs)' }}>
-                {formatTimestamp(e.timestamp)}
+                {formatDateTime(e.timestamp)}
               </code>
             ),
             event: (

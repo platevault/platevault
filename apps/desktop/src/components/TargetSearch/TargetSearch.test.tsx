@@ -190,7 +190,13 @@ describe('TargetSearch', () => {
     await typeAndFlush(screen.getByRole('combobox'), 'm');
 
     const options = screen.getAllByRole('option');
-    fireEvent.mouseDown(options[1]);
+    // Base UI Combobox selects an option on click (it manages the
+    // mousedown→select sequencing internally; the prior hand-rolled list
+    // used a raw mousedown).
+    await act(async () => {
+      fireEvent.click(options[1]);
+      await Promise.resolve();
+    });
     expect(onSelect).toHaveBeenCalledWith(NGC7000);
     const selected = onSelect.mock.calls[0][0] as TargetSuggestion;
     expect(selected.targetId).toBe('tgt-ngc7000');
@@ -208,8 +214,16 @@ describe('TargetSearch', () => {
     await typeAndFlush(input, 'm');
 
     screen.getAllByRole('option');
-    fireEvent.keyDown(input, { key: 'ArrowDown' }); // active 0 -> 1
-    fireEvent.keyDown(input, { key: 'Enter' });
+    // Base UI starts with no option highlighted; the first ArrowDown highlights
+    // index 0 (M31), the second highlights index 1 (NGC7000). Enter selects the
+    // highlighted option. (The prior hand-rolled list pre-highlighted index 0,
+    // so it only needed a single ArrowDown — same nav BEHAVIOR, different start.)
+    await act(async () => {
+      fireEvent.keyDown(input, { key: 'ArrowDown' }); // highlight 0 (M31)
+      fireEvent.keyDown(input, { key: 'ArrowDown' }); // highlight 1 (NGC7000)
+      fireEvent.keyDown(input, { key: 'Enter' });
+      await Promise.resolve();
+    });
     expect(onSelect).toHaveBeenCalledWith(NGC7000);
   });
 
@@ -433,8 +447,10 @@ describe('TargetSearch', () => {
     await typeAndFlush(screen.getByRole('combobox'), 'andromeda');
 
     const overrideBtn = screen.getByRole('button', { name: /set "andromeda" to M 31/i });
+    // The override button fires its action on click (pointerDown is suppressed
+    // so it never triggers the row's select-on-press).
     await act(async () => {
-      fireEvent.mouseDown(overrideBtn);
+      fireEvent.click(overrideBtn);
       for (let i = 0; i < 8; i++) await Promise.resolve();
     });
 

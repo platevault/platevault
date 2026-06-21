@@ -10,6 +10,7 @@ use contracts_core::equipment::{
 use tauri::State;
 
 use crate::commands::lifecycle::AppState;
+use contracts_core::ContractError;
 
 // ── Camera commands ─────────────────────────────────────────────────────────
 
@@ -19,9 +20,11 @@ use crate::commands::lifecycle::AppState;
 /// Returns `Err(String)` on database failure.
 #[tauri::command]
 #[specta::specta]
-pub async fn equipment_cameras_list(state: State<'_, AppState>) -> Result<Vec<Camera>, String> {
+pub async fn equipment_cameras_list(
+    state: State<'_, AppState>,
+) -> Result<Vec<Camera>, ContractError> {
     tracing::debug!("equipment.cameras.list");
-    app_core::equipment::list_cameras(state.repo.pool()).await.map_err(|e| e.message)
+    app_core::equipment::list_cameras(state.repo.pool()).await
 }
 
 /// `equipment.cameras.create` — create a new camera.
@@ -33,9 +36,9 @@ pub async fn equipment_cameras_list(state: State<'_, AppState>) -> Result<Vec<Ca
 pub async fn equipment_cameras_create(
     state: State<'_, AppState>,
     request: CreateCamera,
-) -> Result<Camera, String> {
+) -> Result<Camera, ContractError> {
     tracing::debug!("equipment.cameras.create name={}", request.name);
-    app_core::equipment::create_camera(state.repo.pool(), &request).await.map_err(|e| e.message)
+    app_core::equipment::create_camera(state.repo.pool(), &request).await
 }
 
 /// `equipment.cameras.update` — update an existing camera.
@@ -47,9 +50,9 @@ pub async fn equipment_cameras_create(
 pub async fn equipment_cameras_update(
     state: State<'_, AppState>,
     request: UpdateCamera,
-) -> Result<Camera, String> {
+) -> Result<Camera, ContractError> {
     tracing::debug!("equipment.cameras.update id={}", request.id);
-    app_core::equipment::update_camera(state.repo.pool(), &request).await.map_err(|e| e.message)
+    app_core::equipment::update_camera(state.repo.pool(), &request).await
 }
 
 /// `equipment.cameras.delete` — delete a camera by ID.
@@ -61,9 +64,9 @@ pub async fn equipment_cameras_update(
 pub async fn equipment_cameras_delete(
     state: State<'_, AppState>,
     id: String,
-) -> Result<(), String> {
+) -> Result<(), ContractError> {
     tracing::debug!("equipment.cameras.delete id={id}");
-    app_core::equipment::delete_camera(state.repo.pool(), &id).await.map_err(|e| e.message)
+    app_core::equipment::delete_camera(state.repo.pool(), &id).await
 }
 
 // ── Telescope commands ──────────────────────────────────────────────────────
@@ -76,9 +79,9 @@ pub async fn equipment_cameras_delete(
 #[specta::specta]
 pub async fn equipment_telescopes_list(
     state: State<'_, AppState>,
-) -> Result<Vec<Telescope>, String> {
+) -> Result<Vec<Telescope>, ContractError> {
     tracing::debug!("equipment.telescopes.list");
-    app_core::equipment::list_telescopes(state.repo.pool()).await.map_err(|e| e.message)
+    app_core::equipment::list_telescopes(state.repo.pool()).await
 }
 
 /// `equipment.telescopes.create` — create a new telescope.
@@ -90,9 +93,9 @@ pub async fn equipment_telescopes_list(
 pub async fn equipment_telescopes_create(
     state: State<'_, AppState>,
     request: CreateTelescope,
-) -> Result<Telescope, String> {
+) -> Result<Telescope, ContractError> {
     tracing::debug!("equipment.telescopes.create name={}", request.name);
-    app_core::equipment::create_telescope(state.repo.pool(), &request).await.map_err(|e| e.message)
+    app_core::equipment::create_telescope(state.repo.pool(), &request).await
 }
 
 /// `equipment.telescopes.update` — update an existing telescope.
@@ -104,9 +107,9 @@ pub async fn equipment_telescopes_create(
 pub async fn equipment_telescopes_update(
     state: State<'_, AppState>,
     request: UpdateTelescope,
-) -> Result<Telescope, String> {
+) -> Result<Telescope, ContractError> {
     tracing::debug!("equipment.telescopes.update id={}", request.id);
-    app_core::equipment::update_telescope(state.repo.pool(), &request).await.map_err(|e| e.message)
+    app_core::equipment::update_telescope(state.repo.pool(), &request).await
 }
 
 /// `equipment.telescopes.delete` — delete a telescope by ID.
@@ -118,9 +121,9 @@ pub async fn equipment_telescopes_update(
 pub async fn equipment_telescopes_delete(
     state: State<'_, AppState>,
     id: String,
-) -> Result<(), String> {
+) -> Result<(), ContractError> {
     tracing::debug!("equipment.telescopes.delete id={id}");
-    app_core::equipment::delete_telescope(state.repo.pool(), &id).await.map_err(|e| e.message)
+    app_core::equipment::delete_telescope(state.repo.pool(), &id).await
 }
 
 // ── Optical Train commands ──────────────────────────────────────────────────
@@ -133,9 +136,9 @@ pub async fn equipment_telescopes_delete(
 #[specta::specta]
 pub async fn equipment_trains_list(
     state: State<'_, AppState>,
-) -> Result<Vec<OpticalTrain>, String> {
+) -> Result<Vec<OpticalTrain>, ContractError> {
     tracing::debug!("equipment.trains.list");
-    app_core::equipment::list_optical_trains(state.repo.pool()).await.map_err(|e| e.message)
+    app_core::equipment::list_optical_trains(state.repo.pool()).await
 }
 
 /// `equipment.trains.create` — create a new optical train.
@@ -147,11 +150,9 @@ pub async fn equipment_trains_list(
 pub async fn equipment_trains_create(
     state: State<'_, AppState>,
     request: CreateOpticalTrain,
-) -> Result<OpticalTrain, String> {
+) -> Result<OpticalTrain, ContractError> {
     tracing::debug!("equipment.trains.create name={}", request.name);
-    app_core::equipment::create_optical_train(state.repo.pool(), &request)
-        .await
-        .map_err(|e| e.message)
+    app_core::equipment::create_optical_train(state.repo.pool(), &request).await
 }
 
 /// `equipment.trains.update` — update an existing optical train.
@@ -163,11 +164,9 @@ pub async fn equipment_trains_create(
 pub async fn equipment_trains_update(
     state: State<'_, AppState>,
     request: UpdateOpticalTrain,
-) -> Result<OpticalTrain, String> {
+) -> Result<OpticalTrain, ContractError> {
     tracing::debug!("equipment.trains.update id={}", request.id);
-    app_core::equipment::update_optical_train(state.repo.pool(), &request)
-        .await
-        .map_err(|e| e.message)
+    app_core::equipment::update_optical_train(state.repo.pool(), &request).await
 }
 
 /// `equipment.trains.delete` — delete an optical train by ID.
@@ -176,9 +175,12 @@ pub async fn equipment_trains_update(
 /// Returns `Err(String)` if the optical train is not found.
 #[tauri::command]
 #[specta::specta]
-pub async fn equipment_trains_delete(state: State<'_, AppState>, id: String) -> Result<(), String> {
+pub async fn equipment_trains_delete(
+    state: State<'_, AppState>,
+    id: String,
+) -> Result<(), ContractError> {
     tracing::debug!("equipment.trains.delete id={id}");
-    app_core::equipment::delete_optical_train(state.repo.pool(), &id).await.map_err(|e| e.message)
+    app_core::equipment::delete_optical_train(state.repo.pool(), &id).await
 }
 
 // ── Filter commands ─────────────────────────────────────────────────────────
@@ -189,9 +191,11 @@ pub async fn equipment_trains_delete(state: State<'_, AppState>, id: String) -> 
 /// Returns `Err(String)` on database failure.
 #[tauri::command]
 #[specta::specta]
-pub async fn equipment_filters_list(state: State<'_, AppState>) -> Result<Vec<Filter>, String> {
+pub async fn equipment_filters_list(
+    state: State<'_, AppState>,
+) -> Result<Vec<Filter>, ContractError> {
     tracing::debug!("equipment.filters.list");
-    app_core::equipment::list_filters(state.repo.pool()).await.map_err(|e| e.message)
+    app_core::equipment::list_filters(state.repo.pool()).await
 }
 
 /// `equipment.filters.create` — create a new filter.
@@ -203,9 +207,9 @@ pub async fn equipment_filters_list(state: State<'_, AppState>) -> Result<Vec<Fi
 pub async fn equipment_filters_create(
     state: State<'_, AppState>,
     request: CreateFilter,
-) -> Result<Filter, String> {
+) -> Result<Filter, ContractError> {
     tracing::debug!("equipment.filters.create name={}", request.name);
-    app_core::equipment::create_filter(state.repo.pool(), &request).await.map_err(|e| e.message)
+    app_core::equipment::create_filter(state.repo.pool(), &request).await
 }
 
 /// `equipment.filters.update` — update an existing filter.
@@ -217,9 +221,9 @@ pub async fn equipment_filters_create(
 pub async fn equipment_filters_update(
     state: State<'_, AppState>,
     request: UpdateFilter,
-) -> Result<Filter, String> {
+) -> Result<Filter, ContractError> {
     tracing::debug!("equipment.filters.update id={}", request.id);
-    app_core::equipment::update_filter(state.repo.pool(), &request).await.map_err(|e| e.message)
+    app_core::equipment::update_filter(state.repo.pool(), &request).await
 }
 
 /// `equipment.filters.delete` — delete a filter by ID.
@@ -231,7 +235,7 @@ pub async fn equipment_filters_update(
 pub async fn equipment_filters_delete(
     state: State<'_, AppState>,
     id: String,
-) -> Result<(), String> {
+) -> Result<(), ContractError> {
     tracing::debug!("equipment.filters.delete id={id}");
-    app_core::equipment::delete_filter(state.repo.pool(), &id).await.map_err(|e| e.message)
+    app_core::equipment::delete_filter(state.repo.pool(), &id).await
 }

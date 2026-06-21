@@ -7,6 +7,18 @@ use tauri::Manager;
 
 #[tokio::main]
 async fn main() {
+    // Initialise structured logging before anything else so startup `tracing`
+    // events (seed load, migrations) and downstream `tracing::error!` audit
+    // signals reach stderr. Honours `RUST_LOG`; defaults to `info`.
+    // `try_init` is used so a pre-existing subscriber (e.g. in a test harness)
+    // does not cause a panic.
+    let _ = tracing_subscriber::fmt()
+        .with_env_filter(
+            tracing_subscriber::EnvFilter::try_from_default_env()
+                .unwrap_or_else(|_| tracing_subscriber::EnvFilter::new("info")),
+        )
+        .try_init();
+
     // Build the Tauri app first so we can access the platform path resolver.
     // The event loop is NOT started yet — that happens in `run_app` after the
     // database is ready.
@@ -37,7 +49,7 @@ async fn main() {
     // first run (after migrations, before the UI starts). First-run-guarded and
     // fast (~487 rows), so a synchronous call here is fine. Seeding failure must
     // NOT block startup — the resolver degrades to online/empty cache.
-    match targeting::resolver::seed::load_bundled_on_first_run(db.pool()).await {
+    match targeting_resolver::seed::load_bundled_on_first_run(db.pool()).await {
         Ok(Some(count)) => tracing::info!("loaded {count} bundled target seed entries"),
         Ok(None) => tracing::debug!("target seed already present; skipping first-run load"),
         Err(e) => tracing::warn!("failed to load bundled target seed: {e}"),

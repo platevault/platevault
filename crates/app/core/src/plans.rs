@@ -13,6 +13,13 @@
 //! `failed`, `cancelled`) are exclusively owned by spec 025's executor; this module
 //! guards against overwriting those states.
 
+//!
+//! Extracted from `app_core` into its own crate (spec 042 / T253 O3b). Its only
+//! cross-module dependency was on the now-extracted `app_core_errors` leaf and
+//! nothing else in `app_core` references it. `app_core` re-exports this crate at
+//! `app_core::plans` so the public surface stays byte-identical.
+#![allow(clippy::doc_markdown)] // spec/domain terminology not appropriate for backticks
+
 use audit::bus::EventBus;
 use audit::event_bus::{
     ArchivePermanentlyDeleted, ArchiveSentToTrash, PlanApproved, PlanDiscarded, PlanRetryCreated,
@@ -26,11 +33,14 @@ use contracts_core::plans::{
     PlanItemProtection, PlanItemState, PlanListRequest, PlanListResponse, PlanOrigin,
     PlanRetryResponse, PlanSummary, PlanType, RetryItemsFilter,
 };
-use contracts_core::{ContractError, ErrorSeverity};
+use contracts_core::{error_code::ErrorCode, ContractError, ErrorSeverity};
+use domain_core::ids::{new_id, Timestamp};
 use persistence_db::repositories::plans as repo;
 use sqlx::SqlitePool;
 use time::OffsetDateTime;
 use uuid::Uuid;
+
+use crate::errors::bus_err;
 
 // ── State helpers ─────────────────────────────────────────────────────────────
 
@@ -56,33 +66,13 @@ pub const PERMANENT_DELETE_CONFIRM_TEXT: &str = "DELETE";
 
 // ── Error helpers ─────────────────────────────────────────────────────────────
 
-#[allow(clippy::needless_pass_by_value)]
 fn db_err(e: persistence_db::DbError) -> ContractError {
     match e {
         persistence_db::DbError::NotFound(msg) => {
-            ContractError::new("plan.not_found", msg, ErrorSeverity::Blocking, false)
+            ContractError::new(ErrorCode::PlanNotFound, msg, ErrorSeverity::Blocking, false)
         }
-        other => {
-            ContractError::new("internal.database", format!("{other}"), ErrorSeverity::Fatal, true)
-        }
+        other => crate::errors::db_err(other),
     }
-}
-
-#[allow(clippy::needless_pass_by_value)]
-fn bus_err(e: audit::bus::BusError) -> ContractError {
-    ContractError::new("internal.audit", format!("{e}"), ErrorSeverity::Fatal, true)
-}
-
-// ── Timestamp helpers ─────────────────────────────────────────────────────────
-
-fn now_iso() -> String {
-    OffsetDateTime::now_utc()
-        .format(&time::format_description::well_known::Rfc3339)
-        .unwrap_or_else(|_| "1970-01-01T00:00:00Z".to_owned())
-}
-
-fn new_id() -> String {
-    Uuid::new_v4().to_string()
 }
 
 // ── Row mapping helpers ───────────────────────────────────────────────────────
@@ -333,7 +323,7 @@ pub async fn approve_plan(
     let state = parse_plan_state(&row.state);
     if state != PlanState::ReadyForReview {
         return Err(ContractError::new(
-            "plan.invalid_state",
+            ErrorCode::PlanInvalidState,
             format!(
                 "plan must be ready_for_review before approval; current state is {:?}",
                 row.state
@@ -346,14 +336,14 @@ pub async fn approve_plan(
     // Non-empty items invariant.
     if row.items_total == 0 {
         return Err(ContractError::new(
-            "plan.items.empty",
+            ErrorCode::PlanItemsEmpty,
             "cannot approve a plan with no items".to_owned(),
             ErrorSeverity::Blocking,
             false,
         ));
     }
 
-    let approved_at = now_iso();
+    let approved_at = Timestamp::now_iso();
 
     // Approval token: HMAC placeholder. Spec 025 will consume and verify this.
     // For now: a stable UUID derived from plan_id + approved_at.
@@ -410,7 +400,7 @@ pub async fn discard_plan(
     // Guard: cannot discard while applying or paused.
     if matches!(state, PlanState::Applying | PlanState::Paused) {
         return Err(ContractError::new(
-            "plan.in_progress",
+            ErrorCode::PlanInProgress,
             format!("cannot discard a plan in state {:?}", row.state),
             ErrorSeverity::Blocking,
             false,
@@ -421,11 +411,11 @@ pub async fn discard_plan(
     if state == PlanState::Discarded {
         return Ok(PlanDiscardResponse {
             plan_id: plan_id.to_owned(),
-            discarded_at: row.discarded_at.unwrap_or_else(now_iso),
+            discarded_at: row.discarded_at.unwrap_or_else(Timestamp::now_iso),
         });
     }
 
-    let discarded_at = now_iso();
+    let discarded_at = Timestamp::now_iso();
     repo::soft_delete_plan(pool, plan_id, &discarded_at).await.map_err(db_err)?;
 
     // Emit audit event (A7, A5).
@@ -470,7 +460,7 @@ pub async fn retry_plan(
     // Load parent (including discarded — discarded plans can have retry children).
     let parent = repo::get_plan(pool, parent_plan_id, true).await.map_err(|_| {
         ContractError::new(
-            "parent.not_found",
+            ErrorCode::ParentNotFound,
             format!("parent plan {parent_plan_id} not found"),
             ErrorSeverity::Blocking,
             false,
@@ -482,7 +472,7 @@ pub async fn retry_plan(
     // Must be terminal.
     if !is_terminal(parent_state) {
         return Err(ContractError::new(
-            "parent.not_terminal",
+            ErrorCode::ParentNotTerminal,
             format!("parent plan state {:?} is not terminal", parent.state),
             ErrorSeverity::Blocking,
             false,
@@ -504,7 +494,7 @@ pub async fn retry_plan(
 
     if items_to_retry.is_empty() {
         return Err(ContractError::new(
-            "no.items.to.retry",
+            ErrorCode::NoItemsToRetry,
             "no items match the specified filter".to_owned(),
             ErrorSeverity::Blocking,
             false,
@@ -512,7 +502,7 @@ pub async fn retry_plan(
     }
 
     let new_plan_id = new_id();
-    let at = now_iso();
+    let at = Timestamp::now_iso();
 
     // Create new plan (draft) referencing parent.
     repo::insert_plan(
@@ -614,14 +604,14 @@ pub async fn send_archive_to_trash(
 
     if archive_count == 0 {
         return Err(ContractError::new(
-            "archive.empty",
+            ErrorCode::ArchiveEmpty,
             format!("plan {} has no archived items", row.id),
             ErrorSeverity::Blocking,
             false,
         ));
     }
 
-    let at = now_iso();
+    let at = Timestamp::now_iso();
     let audit_id = new_id();
 
     // Emit audit event (T045).
@@ -662,7 +652,7 @@ pub async fn permanently_delete_archive(
     // Confirm text guard.
     if confirm_text != PERMANENT_DELETE_CONFIRM_TEXT {
         return Err(ContractError::new(
-            "confirm.text.mismatch",
+            ErrorCode::ConfirmTextMismatch,
             "confirm text must be exactly \"DELETE\"".to_owned(),
             ErrorSeverity::Blocking,
             false,
@@ -672,7 +662,7 @@ pub async fn permanently_delete_archive(
     // Spec-016 protection guard.
     if block_permanent_delete {
         return Err(ContractError::new(
-            "plan.blocked_by_protection",
+            ErrorCode::PlanBlockedByProtection,
             "permanent delete is disabled by the blockPermanentDelete setting (spec 016)"
                 .to_owned(),
             ErrorSeverity::Blocking,
@@ -688,14 +678,14 @@ pub async fn permanently_delete_archive(
 
     if archive_count == 0 {
         return Err(ContractError::new(
-            "archive.empty",
+            ErrorCode::ArchiveEmpty,
             format!("plan {} has no archived items", row.id),
             ErrorSeverity::Blocking,
             false,
         ));
     }
 
-    let at = now_iso();
+    let at = Timestamp::now_iso();
     let audit_id = new_id();
 
     // Emit audit event (T046).
@@ -821,7 +811,7 @@ mod tests {
     async fn get_plan_returns_not_found_for_missing() {
         let (db, _bus) = setup().await;
         let err = get_plan(db.pool(), "does-not-exist").await.unwrap_err();
-        assert_eq!(err.code, "plan.not_found");
+        assert_eq!(err.code, ErrorCode::PlanNotFound);
     }
 
     #[tokio::test]
@@ -845,7 +835,7 @@ mod tests {
         add_item(&db, "p1", "item-1", "move").await;
 
         let err = approve_plan(db.pool(), &bus, "p1", "tester").await.unwrap_err();
-        assert_eq!(err.code, "plan.invalid_state");
+        assert_eq!(err.code, ErrorCode::PlanInvalidState);
     }
 
     #[tokio::test]
@@ -855,7 +845,7 @@ mod tests {
         repo::update_plan_state(db.pool(), "p1", "ready_for_review").await.unwrap();
 
         let err = approve_plan(db.pool(), &bus, "p1", "tester").await.unwrap_err();
-        assert_eq!(err.code, "plan.items.empty");
+        assert_eq!(err.code, ErrorCode::PlanItemsEmpty);
     }
 
     #[tokio::test]
@@ -886,7 +876,7 @@ mod tests {
         assert!(!resp.discarded_at.is_empty());
 
         let err = get_plan(db.pool(), "p1").await.unwrap_err();
-        assert_eq!(err.code, "plan.not_found");
+        assert_eq!(err.code, ErrorCode::PlanNotFound);
     }
 
     #[tokio::test]
@@ -896,7 +886,7 @@ mod tests {
         repo::update_plan_state(db.pool(), "p1", "applying").await.unwrap();
 
         let err = discard_plan(db.pool(), &bus, "p1").await.unwrap_err();
-        assert_eq!(err.code, "plan.in_progress");
+        assert_eq!(err.code, ErrorCode::PlanInProgress);
     }
 
     #[tokio::test]
@@ -919,7 +909,7 @@ mod tests {
 
         let err =
             retry_plan(db.pool(), &bus, "parent", RetryItemsFilter::Failed).await.unwrap_err();
-        assert_eq!(err.code, "parent.not_terminal");
+        assert_eq!(err.code, ErrorCode::ParentNotTerminal);
     }
 
     #[tokio::test]
@@ -932,7 +922,7 @@ mod tests {
 
         let err =
             retry_plan(db.pool(), &bus, "parent", RetryItemsFilter::Failed).await.unwrap_err();
-        assert_eq!(err.code, "no.items.to.retry");
+        assert_eq!(err.code, ErrorCode::NoItemsToRetry);
     }
 
     #[tokio::test]
@@ -966,7 +956,7 @@ mod tests {
 
         let err =
             permanently_delete_archive(db.pool(), &bus, "p1", "wrong", false).await.unwrap_err();
-        assert_eq!(err.code, "confirm.text.mismatch");
+        assert_eq!(err.code, ErrorCode::ConfirmTextMismatch);
     }
 
     #[tokio::test]
@@ -977,6 +967,6 @@ mod tests {
 
         let err =
             permanently_delete_archive(db.pool(), &bus, "p1", "DELETE", true).await.unwrap_err();
-        assert_eq!(err.code, "plan.blocked_by_protection");
+        assert_eq!(err.code, ErrorCode::PlanBlockedByProtection);
     }
 }

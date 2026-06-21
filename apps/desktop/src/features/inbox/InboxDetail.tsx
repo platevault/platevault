@@ -23,6 +23,7 @@ import type { InboxItemSummary, InboxFileMetadata } from '@/api/commands';
 import type { InboxClassifyResponse } from './store';
 import type { PillVariant } from '@/ui';
 import { useInboxReclassify } from './store';
+import { errMessage } from '@/lib/errors';
 
 // `InboxFileMetadata` is the generated Specta type (camelCase) re-exported from
 // '@/api/commands' (spec 041 US2/FR-010 — T019 wired the real binding).
@@ -150,7 +151,7 @@ export function InboxDetail({ item, classification, fileMetadata }: InboxDetailP
       await reclassify(overrides);
       setPendingOverrides({});
     } catch (err) {
-      setApplyError(err instanceof Error ? err.message : String(err));
+      setApplyError(errMessage(err));
     }
   };
 

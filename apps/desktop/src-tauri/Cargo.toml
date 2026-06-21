@@ -15,9 +15,12 @@ tauri-build = { workspace = true }
 
 [dependencies]
 app_core = { path = "../../../crates/app/core" }
+camino = { workspace = true }
 workflow_profiles = { path = "../../../crates/workflow/profiles" }
 audit = { path = "../../../crates/audit" }
-targeting = { path = "../../../crates/targeting" }
+# spec 042 (T250): the SIMBAD resolver/seed surface this shell consumes moved
+# from `targeting` into the `targeting_resolver` crate.
+targeting_resolver = { path = "../../../crates/targeting/resolver" }
 contracts_core = { path = "../../../crates/contracts/core" }
 domain_core = { path = "../../../crates/domain/core" }
 fs_inventory = { path = "../../../crates/fs/inventory" }
@@ -39,6 +42,7 @@ tauri-plugin-webdriver = { version = "0.2", optional = true }
 thiserror = { workspace = true }
 time = { workspace = true }
 tracing = { workspace = true }
+tracing-subscriber = { workspace = true }
 tokio = { workspace = true }
 uuid = { workspace = true }
 

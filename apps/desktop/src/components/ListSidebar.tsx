@@ -1,4 +1,4 @@
-import type { ReactNode } from 'react';
+import type { ReactNode, Ref } from 'react';
 
 export interface ListSidebarProps {
   placeholder?: string;
@@ -9,9 +9,26 @@ export interface ListSidebarProps {
   controls?: ReactNode;
   footer?: ReactNode;
   children: ReactNode;
+  /**
+   * Forward a ref to the scrolling list container so callers can virtualize
+   * its contents (the container owns `overflow-y: auto`). When set, the
+   * container is tagged `data-virtual-scroll` so a virtualizer can target it.
+   */
+  scrollRef?: Ref<HTMLDivElement>;
+  /** Tag the list container as a virtual-scroll viewport (test/measure hook). */
+  virtualized?: boolean;
 }
 
-export function ListSidebar({ placeholder, searchValue, onSearchChange, controls, footer, children }: ListSidebarProps) {
+export function ListSidebar({
+  placeholder,
+  searchValue,
+  onSearchChange,
+  controls,
+  footer,
+  children,
+  scrollRef,
+  virtualized = false,
+}: ListSidebarProps) {
   return (
     <div className="alm-list-sidebar">
       <div className="alm-list-sidebar__search">
@@ -25,7 +42,13 @@ export function ListSidebar({ placeholder, searchValue, onSearchChange, controls
         />
       </div>
       {controls && <div className="alm-list-sidebar__controls">{controls}</div>}
-      <div className="alm-list-sidebar__list">{children}</div>
+      <div
+        className={`alm-list-sidebar__list${virtualized ? ' alm-virtual-scroll' : ''}`}
+        ref={scrollRef}
+        data-virtual-scroll={virtualized ? 'true' : undefined}
+      >
+        {children}
+      </div>
       {footer && <div className="alm-list-sidebar__footer">{footer}</div>}
     </div>
   );

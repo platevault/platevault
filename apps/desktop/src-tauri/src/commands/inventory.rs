@@ -9,6 +9,7 @@ use contracts_core::inventory::{
     InventoryListRequest, InventoryListResponse, InventorySessionReviewRequest,
     InventorySessionReviewResponse,
 };
+use contracts_core::ContractError;
 // Re-exported for tests only.
 #[cfg(test)]
 use contracts_core::inventory::InventorySessionState;
@@ -30,10 +31,10 @@ use crate::commands::lifecycle::AppState;
 pub async fn inventory_list(
     req: InventoryListRequest,
     pool: State<'_, SqlitePool>,
-) -> Result<InventoryListResponse, String> {
+) -> Result<InventoryListResponse, ContractError> {
     tracing::debug!("inventory.list request_id={}", req.request_id);
 
-    let sources = list(&pool, req.filters).await?;
+    let sources = list(&pool, req.filters).await.map_err(ContractError::internal)?;
 
     let generated_at = OffsetDateTime::now_utc()
         .format(&Rfc3339)
@@ -63,7 +64,7 @@ pub async fn inventory_session_review(
     req: InventorySessionReviewRequest,
     pool: State<'_, SqlitePool>,
     app_state: State<'_, AppState>,
-) -> Result<InventorySessionReviewResponse, String> {
+) -> Result<InventorySessionReviewResponse, ContractError> {
     tracing::debug!(
         "inventory.session.review session_id={} next_state={:?}",
         req.session_id,

@@ -8,7 +8,7 @@
 //! **Note on spec-036 API change**: The gen-2 `target_identity` / `target_lookup`
 //! modules were retired by spec-036. These tests have been updated to use the
 //! gen-3 surface (`app_core::target_management`, `app_core::target_resolve`,
-//! `app_core::target_search`) and the `targeting::resolver::cache` seed helper.
+//! `app_core::target_search`) and the `targeting_resolver::cache` seed helper.
 
 mod support;
 
@@ -18,7 +18,7 @@ use contracts_core::targets::{
     TargetAliasAddRequest, TargetAliasRemoveRequest, TargetGetRequest, TargetResolveSimbadRequest,
     TargetResolveStatus,
 };
-use targeting::resolver::{
+use targeting_resolver::{
     cache, AliasKind, FakeResolver, ObjectType, ResolvedAlias, ResolvedIdentity, TargetSource,
 };
 use uuid::Uuid;
@@ -30,7 +30,7 @@ use uuid::Uuid;
 async fn seed_target(
     pool: &sqlx::SqlitePool,
     primary_designation: &str,
-    extra_aliases: &[(&str, targeting::resolver::AliasKind)],
+    extra_aliases: &[(&str, targeting_resolver::AliasKind)],
 ) -> String {
     let mut aliases = vec![ResolvedAlias::new(primary_designation, AliasKind::Designation)];
     for (alias, kind) in extra_aliases {

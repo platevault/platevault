@@ -1,12 +1,12 @@
 // spec 007 — Calibration Matching settings pane.
 //
 // Owned settings keys (calibration scope):
-//   - calibration.dark_temp_tolerance (number, °C) — dark temperature soft tolerance
-//   - calibration.prefill_suggestion (boolean) — pre-fill assign dialog with top candidate
-//   - calibration.dark.override_penalty (number, 0-1)
-//   - calibration.flat.override_penalty (number, 0-1)
-//   - calibration.bias.override_penalty (number, 0-1)
-//   - calibration.aging_threshold_days (number, days) — aging warning threshold (FR-023)
+//   - calibrationDarkTempTolerance (number, °C) — dark temperature soft tolerance
+//   - calibrationPrefillSuggestion (boolean) — pre-fill assign dialog with top candidate
+//   - calibrationDarkOverridePenalty (number, 0-1)
+//   - calibrationFlatOverridePenalty (number, 0-1)
+//   - calibrationBiasOverridePenalty (number, 0-1)
+//   - calibrationAgingThresholdDays (number, days) — aging warning threshold (FR-023)
 //
 // On mount, loads persisted values from backend via settings.get('calibration').
 // Changes are auto-saved via the save() prop (useAutoSave → settings.update).
@@ -42,20 +42,20 @@ export function CalibrationMatching({ save }: CalibrationMatchingProps) {
     getSettings({ scope: 'calibration' })
       .then((data) => {
         const v = data.values as Record<string, unknown>;
-        if (typeof v['calibration.dark_temp_tolerance'] === 'number') {
-          setDarkTempTolerance(v['calibration.dark_temp_tolerance']);
+        if (typeof v['calibrationDarkTempTolerance'] === 'number') {
+          setDarkTempTolerance(v['calibrationDarkTempTolerance']);
         }
-        if (typeof v['calibration.prefill_suggestion'] === 'boolean') {
-          setPrefillSuggestion(v['calibration.prefill_suggestion']);
+        if (typeof v['calibrationPrefillSuggestion'] === 'boolean') {
+          setPrefillSuggestion(v['calibrationPrefillSuggestion']);
         }
-        if (typeof v['calibration.dark.override_penalty'] === 'number') {
-          setDarkOverridePenalty(v['calibration.dark.override_penalty']);
+        if (typeof v['calibrationDarkOverridePenalty'] === 'number') {
+          setDarkOverridePenalty(v['calibrationDarkOverridePenalty']);
         }
-        if (typeof v['calibration.flat.override_penalty'] === 'number') {
-          setFlatOverridePenalty(v['calibration.flat.override_penalty']);
+        if (typeof v['calibrationFlatOverridePenalty'] === 'number') {
+          setFlatOverridePenalty(v['calibrationFlatOverridePenalty']);
         }
-        if (typeof v['calibration.bias.override_penalty'] === 'number') {
-          setBiasOverridePenalty(v['calibration.bias.override_penalty']);
+        if (typeof v['calibrationBiasOverridePenalty'] === 'number') {
+          setBiasOverridePenalty(v['calibrationBiasOverridePenalty']);
         }
       })
       .catch(() => {
@@ -67,12 +67,12 @@ export function CalibrationMatching({ save }: CalibrationMatchingProps) {
     const n = parseFloat(e.target.value);
     if (!Number.isFinite(n) || n < 0) return;
     setDarkTempTolerance(n);
-    save('calibration', { 'calibration.dark_temp_tolerance': n });
+    save('calibration', { calibrationDarkTempTolerance: n });
   };
 
   const handlePrefillChange = (val: boolean) => {
     setPrefillSuggestion(val);
-    save('calibration', { 'calibration.prefill_suggestion': val });
+    save('calibration', { calibrationPrefillSuggestion: val });
   };
 
   const handleOverridePenaltyChange = (
@@ -81,11 +81,15 @@ export function CalibrationMatching({ save }: CalibrationMatchingProps) {
   ) => {
     const n = parseFloat(e.target.value);
     if (!Number.isFinite(n) || n < 0 || n > 1) return;
-    const key = `calibration.${kind}.override_penalty`;
+    const keyMap = {
+      dark: 'calibrationDarkOverridePenalty',
+      flat: 'calibrationFlatOverridePenalty',
+      bias: 'calibrationBiasOverridePenalty',
+    } as const;
     if (kind === 'dark') setDarkOverridePenalty(n);
     else if (kind === 'flat') setFlatOverridePenalty(n);
     else setBiasOverridePenalty(n);
-    save('calibration', { [key]: n });
+    save('calibration', { [keyMap[kind]]: n });
   };
 
   return (
@@ -233,7 +237,7 @@ export function CalibrationMatching({ save }: CalibrationMatchingProps) {
                 onChange={(e) => {
                   const v = Number(e.target.value);
                   setAgingThreshold(v);
-                  save('calibration', { 'calibration.aging_threshold_days': v });
+                  save('calibration', { calibrationAgingThresholdDays: v });
                 }}
               />
               <span style={{ fontSize: 'var(--alm-text-sm)', color: 'var(--alm-text-muted)' }}>days</span>

@@ -6,8 +6,9 @@
 //!
 //! Constitution §II: no silent overwrite; freshness verified per item.
 
-use std::path::Path;
 use std::time::SystemTime;
+
+use camino::Utf8Path;
 
 use crate::failure::{FailureCode, PlanItemFailure};
 
@@ -36,7 +37,7 @@ pub struct CasSnapshot {
 /// # Errors
 ///
 /// Returns `Err(PlanItemFailure)` on mismatch or filesystem access error.
-pub fn check_cas(path: &Path, snapshot: &CasSnapshot) -> Result<(), PlanItemFailure> {
+pub fn check_cas(path: &Utf8Path, snapshot: &CasSnapshot) -> Result<(), PlanItemFailure> {
     // Both absent → skip check (no snapshot was recorded at approval).
     if snapshot.approved_mtime.is_none() && snapshot.approved_size_bytes.is_none() {
         return Ok(());
@@ -47,11 +48,11 @@ pub fn check_cas(path: &Path, snapshot: &CasSnapshot) -> Result<(), PlanItemFail
         Err(e) if e.kind() == std::io::ErrorKind::NotFound => {
             return Err(PlanItemFailure::with_code(
                 FailureCode::SourceMissing,
-                format!("source path no longer exists: {}", path.display()),
+                format!("source path no longer exists: {path}"),
             ));
         }
         Err(e) => {
-            return Err(PlanItemFailure::from_io(&e, &format!("stat {}", path.display())));
+            return Err(PlanItemFailure::from_io(&e, &format!("stat {path}")));
         }
     };
 
@@ -63,8 +64,7 @@ pub fn check_cas(path: &Path, snapshot: &CasSnapshot) -> Result<(), PlanItemFail
                 FailureCode::ItemStale,
                 format!(
                     "source size changed since approval: was {approved_size} bytes, \
-                     now {current_size} bytes ({})",
-                    path.display()
+                     now {current_size} bytes ({path})"
                 ),
             ));
         }
@@ -83,8 +83,7 @@ pub fn check_cas(path: &Path, snapshot: &CasSnapshot) -> Result<(), PlanItemFail
                         FailureCode::ItemStale,
                         format!(
                             "source mtime changed since approval: was {approved_mtime_str}, \
-                             now {current_secs} unix secs ({})",
-                            path.display()
+                             now {current_secs} unix secs ({path})"
                         ),
                     ));
                 }
@@ -117,18 +116,22 @@ mod tests {
     use super::*;
     use std::io::Write as _;
 
+    fn utf8(p: &std::path::Path) -> camino::Utf8PathBuf {
+        camino::Utf8PathBuf::from_path_buf(p.to_path_buf()).expect("temp dir path is UTF-8")
+    }
+
     #[test]
     fn skips_check_when_no_snapshot() {
         let snapshot = CasSnapshot { approved_mtime: None, approved_size_bytes: None };
         // Path does not need to exist when snapshot is absent.
-        let result = check_cas(std::path::Path::new("/nonexistent"), &snapshot);
+        let result = check_cas(Utf8Path::new("/nonexistent"), &snapshot);
         assert!(result.is_ok());
     }
 
     #[test]
     fn detects_size_mismatch() {
         let dir = tempfile::tempdir().unwrap();
-        let file = dir.path().join("test.fits");
+        let file = utf8(dir.path()).join("test.fits");
         std::fs::write(&file, b"hello").unwrap();
 
         let snapshot = CasSnapshot {
@@ -143,7 +146,7 @@ mod tests {
     #[test]
     fn passes_when_size_matches() {
         let dir = tempfile::tempdir().unwrap();
-        let file = dir.path().join("test.fits");
+        let file = utf8(dir.path()).join("test.fits");
         std::fs::write(&file, b"hello").unwrap(); // 5 bytes
 
         let snapshot = CasSnapshot { approved_mtime: None, approved_size_bytes: Some(5) };
@@ -153,16 +156,15 @@ mod tests {
     #[test]
     fn returns_source_missing_for_absent_file() {
         let snapshot = CasSnapshot { approved_mtime: None, approved_size_bytes: Some(10) };
-        let err =
-            check_cas(std::path::Path::new("/absolutely/does/not/exist/file.fits"), &snapshot)
-                .unwrap_err();
+        let err = check_cas(Utf8Path::new("/absolutely/does/not/exist/file.fits"), &snapshot)
+            .unwrap_err();
         assert_eq!(err.code, FailureCode::SourceMissing);
     }
 
     #[test]
     fn detects_mtime_mismatch() {
         let dir = tempfile::tempdir().unwrap();
-        let file = dir.path().join("test.fits");
+        let file = utf8(dir.path()).join("test.fits");
         {
             let mut f = std::fs::File::create(&file).unwrap();
             f.write_all(b"data").unwrap();

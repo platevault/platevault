@@ -1,4 +1,5 @@
 import type { PillVariant } from '@/ui';
+import type { ProjectState, SessionState } from '@/bindings/index';
 
 /**
  * Centralized project lifecycle model — the single source of truth for the
@@ -17,8 +18,13 @@ export const PROJECT_LIFECYCLE = [
 
 export type ProjectLifecycleStep = (typeof PROJECT_LIFECYCLE)[number];
 
+// The state→display maps below are keyed by the generated `ProjectState` /
+// `SessionState` unions (not `string`), so they are *exhaustive*: adding or
+// removing a variant in the Rust contract makes these objects a compile error
+// until the new state is given an index / label / variant (spec 042 US7 T192).
+
 /** Maps a stored project state to its index in the linear lifecycle (-1 = off-track, e.g. blocked). */
-export const projectStateIndex: Record<string, number> = {
+export const projectStateIndex: Record<ProjectState, number> = {
   setup_incomplete: 0,
   ready: 1,
   prepared: 2,
@@ -28,7 +34,7 @@ export const projectStateIndex: Record<string, number> = {
   blocked: -1,
 };
 
-const PROJECT_STATE_LABELS: Record<string, string> = {
+const PROJECT_STATE_LABELS: Record<ProjectState, string> = {
   setup_incomplete: 'Setup',
   ready: 'Ready',
   prepared: 'Prepared',
@@ -38,7 +44,7 @@ const PROJECT_STATE_LABELS: Record<string, string> = {
   blocked: 'Blocked',
 };
 
-const PROJECT_STATE_VARIANTS: Record<string, PillVariant> = {
+const PROJECT_STATE_VARIANTS: Record<ProjectState, PillVariant> = {
   completed: 'ok',
   archived: 'ok',
   processing: 'info',
@@ -49,16 +55,16 @@ const PROJECT_STATE_VARIANTS: Record<string, PillVariant> = {
 };
 
 export function projectStateLabel(state: string): string {
-  return PROJECT_STATE_LABELS[state] ?? state;
+  return PROJECT_STATE_LABELS[state as ProjectState] ?? state;
 }
 
 export function projectStateVariant(state: string): PillVariant {
-  return PROJECT_STATE_VARIANTS[state] ?? 'neutral';
+  return PROJECT_STATE_VARIANTS[state as ProjectState] ?? 'neutral';
 }
 
 // ─── Acquisition session states ──────────────────────────────────────────────
 
-const SESSION_STATE_VARIANTS: Record<string, PillVariant> = {
+const SESSION_STATE_VARIANTS: Record<SessionState, PillVariant> = {
   confirmed: 'ok',
   needs_review: 'warn',
   rejected: 'danger',
@@ -72,5 +78,5 @@ export function sessionStateLabel(state: string): string {
 }
 
 export function sessionStateVariant(state: string): PillVariant {
-  return SESSION_STATE_VARIANTS[state] ?? 'neutral';
+  return SESSION_STATE_VARIANTS[state as SessionState] ?? 'neutral';
 }

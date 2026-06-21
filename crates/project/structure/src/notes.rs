@@ -44,9 +44,56 @@ pub trait NotesFileAdapter: Send + Sync {
 /// Canonical file name for the notes file inside the project's `notes/` folder.
 pub const NOTES_FILENAME: &str = "project-notes.md";
 
-/// Real (non-mock) implementation backed by `tokio::fs`.
+/// Real (non-mock) implementation backed by `std::fs`.
+///
+/// spec 042 (T251): the notes I/O is synchronous `std::fs` (atomic tmp +
+/// rename, directory creation), wrapped in an immediately-ready future so the
+/// async [`NotesFileAdapter`] seam — and the exact behaviour consumers rely on
+/// — is preserved without pulling `tokio` into this pure project-envelope
+/// crate. The async runtime now lives entirely in the consumer.
 #[derive(Clone, Copy, Debug, Default)]
 pub struct RealNotesAdapter;
+
+impl RealNotesAdapter {
+    /// Synchronous notes write (atomic tmp + rename; empty content removes the
+    /// file). Shared by the async trait impl.
+    fn write_sync(project_root: &Path, content: &str) -> Result<(), String> {
+        let notes_dir = project_root.join("notes");
+        std::fs::create_dir_all(&notes_dir)
+            .map_err(|e| format!("create notes dir {}: {e}", notes_dir.display()))?;
+
+        let target = notes_dir.join(NOTES_FILENAME);
+
+        if content.is_empty() {
+            // Empty content → remove the file (best-effort; not-found is ok).
+            match std::fs::remove_file(&target) {
+                Ok(()) | Err(_) => {}
+            }
+            return Ok(());
+        }
+
+        // Atomic write: write to temp file, then rename.
+        let tmp_path = notes_dir.join(".project-notes.md.tmp");
+        std::fs::write(&tmp_path, content.as_bytes())
+            .map_err(|e| format!("write tmp notes {}: {e}", tmp_path.display()))?;
+
+        std::fs::rename(&tmp_path, &target).map_err(|e| {
+            format!("rename notes {} -> {}: {e}", tmp_path.display(), target.display())
+        })?;
+
+        Ok(())
+    }
+
+    /// Synchronous notes read; `Ok(None)` when the file does not exist.
+    fn read_sync(project_root: &Path) -> Result<Option<String>, String> {
+        let target = project_root.join("notes").join(NOTES_FILENAME);
+        match std::fs::read_to_string(&target) {
+            Ok(content) => Ok(Some(content)),
+            Err(e) if e.kind() == std::io::ErrorKind::NotFound => Ok(None),
+            Err(e) => Err(format!("read notes {}: {e}", target.display())),
+        }
+    }
+}
 
 impl NotesFileAdapter for RealNotesAdapter {
     fn write<'a>(
@@ -54,34 +101,7 @@ impl NotesFileAdapter for RealNotesAdapter {
         project_root: &'a Path,
         content: &'a str,
     ) -> std::pin::Pin<Box<dyn std::future::Future<Output = Result<(), String>> + Send + 'a>> {
-        Box::pin(async move {
-            let notes_dir = project_root.join("notes");
-            tokio::fs::create_dir_all(&notes_dir)
-                .await
-                .map_err(|e| format!("create notes dir {}: {e}", notes_dir.display()))?;
-
-            let target = notes_dir.join(NOTES_FILENAME);
-
-            if content.is_empty() {
-                // Empty content → remove the file (best-effort; not-found is ok).
-                match tokio::fs::remove_file(&target).await {
-                    Ok(()) | Err(_) => {}
-                }
-                return Ok(());
-            }
-
-            // Atomic write: write to temp file, then rename.
-            let tmp_path = notes_dir.join(".project-notes.md.tmp");
-            tokio::fs::write(&tmp_path, content.as_bytes())
-                .await
-                .map_err(|e| format!("write tmp notes {}: {e}", tmp_path.display()))?;
-
-            tokio::fs::rename(&tmp_path, &target).await.map_err(|e| {
-                format!("rename notes {} -> {}: {e}", tmp_path.display(), target.display())
-            })?;
-
-            Ok(())
-        })
+        Box::pin(async move { Self::write_sync(project_root, content) })
     }
 
     fn read<'a>(
@@ -90,14 +110,7 @@ impl NotesFileAdapter for RealNotesAdapter {
     ) -> std::pin::Pin<
         Box<dyn std::future::Future<Output = Result<Option<String>, String>> + Send + 'a>,
     > {
-        Box::pin(async move {
-            let target = project_root.join("notes").join(NOTES_FILENAME);
-            match tokio::fs::read_to_string(&target).await {
-                Ok(content) => Ok(Some(content)),
-                Err(e) if e.kind() == std::io::ErrorKind::NotFound => Ok(None),
-                Err(e) => Err(format!("read notes {}: {e}", target.display())),
-            }
-        })
+        Box::pin(async move { Self::read_sync(project_root) })
     }
 }
 
@@ -112,8 +125,7 @@ mod tests {
         let dir = tempfile::tempdir().unwrap();
         let adapter = RealNotesAdapter;
         adapter.write(dir.path(), "Hello notes").await.unwrap();
-        let content =
-            tokio::fs::read_to_string(dir.path().join("notes/project-notes.md")).await.unwrap();
+        let content = std::fs::read_to_string(dir.path().join("notes/project-notes.md")).unwrap();
         assert_eq!(content, "Hello notes");
     }
 

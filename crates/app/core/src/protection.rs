@@ -4,6 +4,13 @@
 //! - US3: plan gating — `plan_protection_check` returns protected items.
 //! - US4: category enforcement — category membership elevates level via resolver.
 
+//!
+//! Extracted from `app_core` into its own crate (spec 042 / T253 O3b). Its only
+//! cross-module dependency was on the now-extracted `app_core_errors` leaf and
+//! nothing else in `app_core` references it. `app_core` re-exports this crate at
+//! `app_core::protection` so the public surface stays byte-identical.
+#![allow(clippy::doc_markdown)] // spec/domain terminology not appropriate for backticks
+
 use audit::bus::EventBus;
 use audit::event_bus::{
     ProtectionDefaultChanged, ProtectionPlanAcknowledged, ProtectionSourceSet, Source,
@@ -17,35 +24,19 @@ use contracts_core::protection::{
     ProtectionLevel, SourceProtectionGetRequest, SourceProtectionGetResponse,
     SourceProtectionSetRequest, SourceProtectionSetResponse,
 };
-use contracts_core::{ContractError, ErrorSeverity};
+use contracts_core::{error_code::ErrorCode, ContractError, ErrorSeverity};
 use persistence_db::repositories::plans as plans_repo;
 use persistence_db::repositories::settings as settings_repo;
 use persistence_db::repositories::source_protection as prot_repo;
 use sqlx::SqlitePool;
-use time::OffsetDateTime;
-use uuid::Uuid;
 
 // ── Error helpers ─────────────────────────────────────────────────────────
-
-#[allow(clippy::needless_pass_by_value)]
-fn db_err(e: persistence_db::DbError) -> ContractError {
-    ContractError::new("internal.database", format!("{e}"), ErrorSeverity::Fatal, true)
-}
-
-#[allow(clippy::needless_pass_by_value)]
-fn bus_err(e: audit::bus::BusError) -> ContractError {
-    ContractError::new("internal.audit", format!("{e}"), ErrorSeverity::Fatal, true)
-}
-
-fn now_iso() -> String {
-    OffsetDateTime::now_utc()
-        .format(&time::format_description::well_known::Rfc3339)
-        .unwrap_or_else(|_| "1970-01-01T00:00:00Z".to_owned())
-}
-
-fn new_id() -> String {
-    Uuid::new_v4().to_string()
-}
+//
+// Canonical mappers live in `app_core_errors` (US11 T142). `db_err` routes
+// `DbError::NotFound` to the recoverable `Blocking`/`retryable=false`
+// classification instead of the previous blanket `Fatal` (L2 divergence fix).
+use crate::errors::{bus_err, db_err};
+use domain_core::ids::{new_id, Timestamp};
 
 // ── Global settings helpers ───────────────────────────────────────────────
 
@@ -200,7 +191,7 @@ pub async fn set_source_protection(
     .map_err(db_err)?;
 
     // Emit audit event (T016).
-    let at = now_iso();
+    let at = Timestamp::now_iso();
     let audit_id = new_id();
     bus.publish(
         TOPIC_PROTECTION_SOURCE_SET,
@@ -269,7 +260,7 @@ pub async fn plan_protection_check(
     // Confirm plan exists.
     let _ = plans_repo::get_plan(pool, &req.plan_id, false).await.map_err(|_| {
         ContractError::new(
-            "plan.not_found",
+            ErrorCode::PlanNotFound,
             format!("plan {} not found", req.plan_id),
             ErrorSeverity::Warning,
             false,
@@ -373,7 +364,7 @@ pub async fn acknowledge_protected_item(
     resolved_level: &str,
     reason: &str,
 ) -> Result<String, ContractError> {
-    let at = now_iso();
+    let at = Timestamp::now_iso();
     let audit_id = new_id();
     bus.publish(
         TOPIC_PROTECTION_PLAN_ACKNOWLEDGED,
@@ -419,7 +410,7 @@ pub async fn set_global_protection_default(
     prot_repo::set_protection_default(pool, scope, key, &value).await.map_err(db_err)?;
 
     // Emit audit event.
-    let changed_at = now_iso();
+    let changed_at = Timestamp::now_iso();
     bus.publish(
         TOPIC_PROTECTION_DEFAULT_CHANGED,
         Source::User,
@@ -667,7 +658,7 @@ mod tests {
         let (db, _bus) = setup().await;
         let req = PlanProtectionCheckRequest { plan_id: "nonexistent".to_owned() };
         let err = plan_protection_check(db.pool(), &req).await.unwrap_err();
-        assert_eq!(err.code, "plan.not_found");
+        assert_eq!(err.code, ErrorCode::PlanNotFound);
     }
 
     #[tokio::test]

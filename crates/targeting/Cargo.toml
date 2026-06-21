@@ -7,41 +7,15 @@ license.workspace = true
 [lib]
 path = "src/lib.rs"
 
+# spec 042 (T250): this is now the PURE catalog crate — query normalization
+# (`normalize`) and deterministic UUIDv5 identity (`identity`). The SIMBAD
+# on-demand resolver, SQLite resolution cache, and bundled-seed loader (the
+# sqlx + reqwest + tokio + async-trait surface) were split into the
+# `targeting_resolver` crate so pure consumers no longer pull that weight.
+
 [dependencies]
-serde = { workspace = true }
-serde_json.workspace = true
-sqlx.workspace = true
-thiserror.workspace = true
-tracing = { workspace = true }
 uuid = { version = "1", features = ["serde", "v4", "v5"] }
 unicode-normalization.workspace = true
-# strsim is already in the lockfile (pulled by other workspace members).
-# Fuzzy matching: token-set similarity + Damerau-Levenshtein (R2).
-strsim = "0.11"
-# spec 035 (SIMBAD resolver): async HTTP client for SIMBAD TAP/Sesame.
-# reqwest 0.13 uses default-features = false + ["json", "rustls"] (no openssl);
-# the `rustls-tls` feature was renamed to `rustls` in 0.13. Consumed only by
-# the `resolver` module. tokio provides the async runtime for the client.
-reqwest = { workspace = true }
-tokio = { workspace = true }
-# spec 035 (SIMBAD resolver): async trait seam for the `Resolver` trait,
-# mirroring the retired `download::CatalogFetcher` pattern.
-async-trait.workspace = true
-# spec 035 (resolution cache): RFC-3339 `resolved_at` timestamps, matching the
-# `persistence_db` repositories' time convention.
-time.workspace = true
-
-[features]
-# Enables the seeded in-memory test fixture for use in integration tests
-# in other crates. Must NOT be enabled in production builds.
-test-fixture = []
-
-[[test]]
-name = "simbad_live"
-path = "tests/simbad_live.rs"
-
-[dev-dependencies]
-persistence_db = { path = "../persistence/db" }
 
 [lints]
 workspace = true

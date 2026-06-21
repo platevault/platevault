@@ -1,44 +1,83 @@
 //! Application use-case orchestration boundary.
 #![allow(clippy::doc_markdown)] // spec/domain terminology not appropriate for backticks
 
-pub mod artifact;
-pub mod calibration;
+// ── Per-domain crate split (spec 042 / T252–T253) ───────────────────────
+//
+// Six domain crates plus the `errors` leaf kernel were extracted into their own
+// sibling crates under `crates/app/`. They are re-exported below under their
+// original crate-root names so that `app_core::<domain>` paths remain
+// byte-identical for `desktop_shell` and every other consumer. Every other
+// module stays in-crate as a `pub mod` (file layout under `src/`), keeping the
+// crate split per-domain rather than per-module.
+
+// `calibration` was extracted into its own leaf crate. Re-export it under the
+// original `app_core::calibration` path so consumers keep the byte-identical
+// surface.
+pub use app_core_calibration as calibration;
+// `errors` was extracted into its own leaf crate (zero `crate::` refs). The
+// folded-back in-crate modules reference it as `crate::errors::*`, which resolves
+// through this re-export, so every consumer path stays byte-identical.
+pub use app_core_errors as errors;
+// `inbox` was extracted into its own domain crate. Re-export it under the
+// original `app_core::inbox` path.
+pub use app_core_inbox as inbox;
+// `lifecycle` was extracted into its own domain crate. Re-export it under the
+// original `app_core::lifecycle` path; the per-module re-exports below keep
+// `app_core::<module>` byte-identical.
+pub use app_core_lifecycle as lifecycle;
+// `projects` was extracted into its own domain crate. Re-export it under the
+// original `app_core::projects` path; the per-module re-exports below keep
+// `app_core::<module>` byte-identical.
+pub use app_core_projects as projects;
+// `settings` was extracted into its own domain crate. Re-export it under the
+// original `app_core::settings` path.
+pub use app_core_settings as settings;
+// `targets` was extracted into its own domain crate. Re-export it under the
+// original `app_core::targets` path; the per-module re-exports below keep
+// `app_core::<module>` byte-identical.
+pub use app_core_targets as targets;
+
+// Re-export grouped modules under their original crate-root paths.
+// `equipment` historically resolved to `app_core::equipment`; it now lives in
+// the extracted `app_core_calibration` crate and is re-exported here.
+pub use calibration::equipment;
+pub use lifecycle::{
+    artifact, ledger_use_case, lifecycle_use_case, provenance_use_case, transition_use_case,
+};
+pub use projects::{
+    prepared_views, project_health, project_manifests, project_notes, project_setup,
+};
+pub use targets::{
+    ingest_resolution, resolver_settings, target_dto, target_management, target_resolve,
+    target_search,
+};
+
+// In-crate modules (file layout under `src/`). These live in `app_core` itself
+// and may reference the extracted domain crates as `crate::errors`,
+// `crate::lifecycle`, etc. via the re-exports above.
 #[cfg(feature = "dev-tools")]
 pub mod dev_contracts;
-pub mod equipment;
 pub mod first_run;
 pub mod guided_flow;
-pub mod inbox;
-pub mod ingest_resolution;
+/// Inbox plan use-cases (spec 041). Lives in `app_core` (not `app_core_inbox`)
+/// because it orchestrates `plans` + `plan_apply`, which are `app_core` modules.
+pub mod inbox_plan;
 pub mod inventory;
-pub mod ledger_use_case;
-pub mod lifecycle_use_case;
 pub mod log_stream;
 pub mod native;
 pub mod patterns;
 pub mod plan_apply;
 pub mod plans;
-pub mod prepared_views;
-pub mod project_health;
-pub mod project_manifests;
-pub mod project_notes;
-pub mod project_setup;
 pub mod protection;
-pub mod provenance_use_case;
-pub mod resolver_settings;
 pub mod search;
 pub mod sessions;
-pub mod settings;
-pub mod target_management;
-pub mod target_resolve;
-pub mod target_search;
 pub mod tool_launch;
-pub mod transition_use_case;
 
 use std::collections::BTreeMap;
 
 use contracts_core::{
-    ContractError, ErrorSeverity, OperationName, RequestEnvelope, RequestId, ResponseEnvelope,
+    error_code::ErrorCode, ContractError, ErrorSeverity, OperationName, RequestEnvelope, RequestId,
+    ResponseEnvelope,
 };
 use serde_json::Value;
 
@@ -118,7 +157,7 @@ impl OperationRegistry {
 
         if self.handlers.contains_key(&operation) {
             return Err(ContractError::new(
-                "operation.handler_duplicate",
+                ErrorCode::OperationHandlerDuplicate,
                 format!("Operation handler already registered for {operation}."),
                 ErrorSeverity::Fatal,
                 false,
@@ -153,7 +192,7 @@ impl OperationDispatcher for OperationRegistry {
 
 fn unknown_operation_error(operation: &OperationName) -> ContractError {
     ContractError::new(
-        "operation.not_found",
+        ErrorCode::OperationNotFound,
         format!("No handler is registered for operation {}.", operation.0),
         ErrorSeverity::Blocking,
         false,
@@ -162,7 +201,9 @@ fn unknown_operation_error(operation: &OperationName) -> ContractError {
 
 #[cfg(test)]
 mod tests {
-    use contracts_core::{OperationName, RequestEnvelope, RequestId, ResponseStatus};
+    use contracts_core::{
+        error_code::ErrorCode, OperationName, RequestEnvelope, RequestId, ResponseStatus,
+    };
     use serde_json::{json, Value};
 
     use super::{
@@ -211,7 +252,7 @@ mod tests {
             _payload: Value,
         ) -> Result<Value, ContractError> {
             Err(ContractError::new(
-                "plan.approval_required",
+                ErrorCode::PlanApprovalRequired,
                 "Plan approval is required.",
                 ErrorSeverity::Blocking,
                 false,
@@ -254,7 +295,7 @@ mod tests {
         ));
 
         assert_eq!(response.status, ResponseStatus::Error);
-        assert_eq!(response.error.unwrap().code, "operation.not_found");
+        assert_eq!(response.error.unwrap().code, ErrorCode::OperationNotFound);
     }
 
     #[test]
@@ -268,7 +309,7 @@ mod tests {
         ));
 
         assert_eq!(response.status, ResponseStatus::Error);
-        assert_eq!(response.error.unwrap().code, "plan.approval_required");
+        assert_eq!(response.error.unwrap().code, ErrorCode::PlanApprovalRequired);
     }
 
     #[test]

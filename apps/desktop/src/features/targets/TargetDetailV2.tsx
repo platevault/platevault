@@ -14,6 +14,7 @@
  */
 
 import { useState, useEffect, useCallback } from 'react';
+import { X } from 'lucide-react';
 import { useNavigate } from '@tanstack/react-router';
 import {
   getTargetDetail,
@@ -334,10 +335,12 @@ export function TargetDetailV2({ targetId }: Props) {
                     marginLeft: 'var(--alm-sp-1)',
                     padding: 0,
                     color: 'var(--alm-text-muted)',
+                    display: 'inline-flex',
+                    verticalAlign: 'middle',
                   }}
                   onClick={() => handleAliasRemove(a.id)}
                 >
-                  ×
+                  <X size={14} aria-hidden="true" />
                 </button>
               )}
             </Pill>

@@ -92,6 +92,64 @@ pub enum SessionState {
     Ignored,
 }
 
+impl SessionState {
+    /// Canonical persisted/serialized string for this state.
+    ///
+    /// These values MUST stay byte-identical to the `#[serde(rename_all =
+    /// "snake_case")]` output and the stored DB / IPC strings.
+    #[must_use]
+    pub fn as_str(self) -> &'static str {
+        match self {
+            SessionState::Discovered => "discovered",
+            SessionState::Candidate => "candidate",
+            SessionState::NeedsReview => "needs_review",
+            SessionState::Confirmed => "confirmed",
+            SessionState::Rejected => "rejected",
+            SessionState::Ignored => "ignored",
+        }
+    }
+}
+
+/// Error returned when a string cannot be parsed into a [`SessionState`].
+#[derive(Clone, Debug, Eq, PartialEq)]
+pub struct ParseSessionStateError(pub String);
+
+impl std::fmt::Display for ParseSessionStateError {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        write!(f, "unknown session state: {}", self.0)
+    }
+}
+
+impl std::error::Error for ParseSessionStateError {}
+
+/// Single canonical, strict parser for [`SessionState`].
+///
+/// Unknown values are rejected (no silent fallback); callers apply any
+/// fallback explicitly (e.g. `.unwrap_or(SessionState::Discovered)`).
+impl std::str::FromStr for SessionState {
+    type Err = ParseSessionStateError;
+
+    fn from_str(s: &str) -> Result<Self, Self::Err> {
+        match s {
+            "discovered" => Ok(SessionState::Discovered),
+            "candidate" => Ok(SessionState::Candidate),
+            "needs_review" => Ok(SessionState::NeedsReview),
+            "confirmed" => Ok(SessionState::Confirmed),
+            "rejected" => Ok(SessionState::Rejected),
+            "ignored" => Ok(SessionState::Ignored),
+            other => Err(ParseSessionStateError(other.to_owned())),
+        }
+    }
+}
+
+impl TryFrom<&str> for SessionState {
+    type Error = ParseSessionStateError;
+
+    fn try_from(s: &str) -> Result<Self, Self::Error> {
+        s.parse()
+    }
+}
+
 #[derive(
     Clone,
     Copy,

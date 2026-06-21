@@ -23,6 +23,7 @@ use contracts_core::plans::{
 use tauri::State;
 
 use crate::commands::lifecycle::AppState;
+use contracts_core::ContractError;
 
 // ── plans.list ────────────────────────────────────────────────────────────────
 
@@ -39,9 +40,9 @@ pub async fn plans_list(
     origin_filter: Option<Vec<String>>,
     created_after: Option<String>,
     limit: Option<i64>,
-) -> Result<PlanListResponse, String> {
+) -> Result<PlanListResponse, ContractError> {
     let req = PlanListRequest { state_filter, origin_filter, created_after, limit };
-    list_plans(state.repo.pool(), &req).await.map_err(|e| e.code)
+    list_plans(state.repo.pool(), &req).await
 }
 
 // ── plans.get ─────────────────────────────────────────────────────────────────
@@ -53,8 +54,11 @@ pub async fn plans_list(
 /// Returns `Err(String)` with `"plan.not_found"` if the plan does not exist.
 #[tauri::command]
 #[specta::specta]
-pub async fn plans_get(state: State<'_, AppState>, id: String) -> Result<PlanDetail, String> {
-    get_plan(state.repo.pool(), &id).await.map_err(|e| e.code)
+pub async fn plans_get(
+    state: State<'_, AppState>,
+    id: String,
+) -> Result<PlanDetail, ContractError> {
+    get_plan(state.repo.pool(), &id).await
 }
 
 // ── plans.approve ─────────────────────────────────────────────────────────────
@@ -70,8 +74,8 @@ pub async fn plans_get(state: State<'_, AppState>, id: String) -> Result<PlanDet
 pub async fn plans_approve(
     state: State<'_, AppState>,
     id: String,
-) -> Result<PlanApproveResponse, String> {
-    approve_plan(state.repo.pool(), &state.bus, &id, "user").await.map_err(|e| e.code)
+) -> Result<PlanApproveResponse, ContractError> {
+    approve_plan(state.repo.pool(), &state.bus, &id, "user").await
 }
 
 // ── plans.apply (superseded by spec 025) ─────────────────────────────────────
@@ -91,8 +95,8 @@ pub async fn plans_approve(
 pub async fn plans_discard(
     state: State<'_, AppState>,
     id: String,
-) -> Result<PlanDiscardResponse, String> {
-    discard_plan(state.repo.pool(), &state.bus, &id).await.map_err(|e| e.code)
+) -> Result<PlanDiscardResponse, ContractError> {
+    discard_plan(state.repo.pool(), &state.bus, &id).await
 }
 
 // ── plans.retry ───────────────────────────────────────────────────────────────
@@ -112,15 +116,22 @@ pub async fn plans_retry(
     state: State<'_, AppState>,
     parent_plan_id: String,
     items_filter: String,
-) -> Result<PlanRetryResponse, String> {
+) -> Result<PlanRetryResponse, ContractError> {
     let filter = match items_filter.as_str() {
         "failed" => RetryItemsFilter::Failed,
         "cancelled" => RetryItemsFilter::Cancelled,
         "all" => RetryItemsFilter::All,
-        other => return Err(format!("value.invalid: unknown items_filter '{other}'")),
+        other => {
+            return Err(ContractError::new(
+                contracts_core::error_code::ErrorCode::ValueInvalid,
+                format!("unknown items_filter: '{other}'"),
+                contracts_core::ErrorSeverity::Blocking,
+                false,
+            ))
+        }
     };
 
-    retry_plan(state.repo.pool(), &state.bus, &parent_plan_id, filter).await.map_err(|e| e.code)
+    retry_plan(state.repo.pool(), &state.bus, &parent_plan_id, filter).await
 }
 
 // ── archive.send_to_trash ─────────────────────────────────────────────────────
@@ -135,8 +146,8 @@ pub async fn plans_retry(
 pub async fn archive_send_to_trash(
     state: State<'_, AppState>,
     plan_id: String,
-) -> Result<ArchiveSendToTrashResponse, String> {
-    send_archive_to_trash(state.repo.pool(), &state.bus, &plan_id).await.map_err(|e| e.code)
+) -> Result<ArchiveSendToTrashResponse, ContractError> {
+    send_archive_to_trash(state.repo.pool(), &state.bus, &plan_id).await
 }
 
 // ── archive.permanently_delete ────────────────────────────────────────────────
@@ -155,7 +166,7 @@ pub async fn archive_permanently_delete(
     state: State<'_, AppState>,
     plan_id: String,
     confirm_text: String,
-) -> Result<ArchivePermanentlyDeleteResponse, String> {
+) -> Result<ArchivePermanentlyDeleteResponse, ContractError> {
     // Read blockPermanentDelete from settings (spec 016 protection gate).
     // We load the setting directly from the settings store rather than caching in AppState.
     let pool = state.repo.pool();
@@ -166,7 +177,5 @@ pub async fn archive_permanently_delete(
         .and_then(|v| v.as_bool())
         .unwrap_or(false);
 
-    permanently_delete_archive(pool, &state.bus, &plan_id, &confirm_text, block)
-        .await
-        .map_err(|e| e.code)
+    permanently_delete_archive(pool, &state.bus, &plan_id, &confirm_text, block).await
 }

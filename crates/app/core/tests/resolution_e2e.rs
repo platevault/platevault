@@ -24,8 +24,8 @@ use contracts_core::targets::{
     TargetResolveOverride, TargetResolveSimbadRequest, TargetResolveStatus, TargetSource,
 };
 use persistence_db::Database;
-use targeting::resolver::seed;
-use targeting::resolver::{
+use targeting_resolver::seed;
+use targeting_resolver::{
     AliasKind, FakeResolver, ObjectType, ResolveError, ResolvedAlias, ResolvedIdentity,
     TargetSource as CacheSrc,
 };

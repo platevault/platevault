@@ -128,6 +128,10 @@ fn base_builder() -> Builder<tauri::Wry> {
         // emits it once instead of inlining its self-referential shape, which
         // would otherwise fail with "infinitely recursive inline reference".
         .typ::<serde_json::Value>()
+        // Spec 042 T011 — ErrorCode enum scaffold. Registered here so the
+        // TypeScript union is emitted immediately without waiting for the
+        // ContractError.code type change (US2).
+        .typ::<contracts_core::error_code::ErrorCode>()
         // Spec 035 — SIMBAD target resolution DTOs (T007). These are pure
         // contract types whose commands land in later tasks (US1–5); register
         // them explicitly so the TypeScript surface exists ahead of the

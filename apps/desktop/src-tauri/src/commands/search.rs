@@ -9,6 +9,7 @@ use contracts_core::search::SearchResult;
 use tauri::State;
 
 use crate::AppState;
+use contracts_core::ContractError;
 
 /// `search.global` — performs a global search across all entity types.
 ///
@@ -22,7 +23,7 @@ use crate::AppState;
 pub async fn search_global(
     state: State<'_, AppState>,
     query: String,
-) -> Result<Vec<SearchResult>, String> {
+) -> Result<Vec<SearchResult>, ContractError> {
     tracing::debug!("search.global query={query}");
-    search_global_uc(state.repo.pool(), &query).await
+    search_global_uc(state.repo.pool(), &query).await.map_err(ContractError::internal)
 }

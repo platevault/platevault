@@ -10,6 +10,7 @@ use contracts_core::first_run::{
 use contracts_core::roots::{
     Equipment, IpcOperationHandle, LibraryRoot, RemapSample, RemapVerification, RootCategory,
 };
+use contracts_core::ContractError;
 use contracts_core::JsonAny;
 use tauri::State;
 
@@ -23,12 +24,12 @@ use crate::commands::lifecycle::AppState;
 /// Returns `Err(String)` on database failure.
 #[tauri::command]
 #[specta::specta]
-pub async fn roots_list(state: State<'_, AppState>) -> Result<Vec<LibraryRoot>, String> {
+pub async fn roots_list(state: State<'_, AppState>) -> Result<Vec<LibraryRoot>, ContractError> {
     tracing::debug!("roots.list");
 
     let sources = persistence_db::repositories::first_run::list_sources(state.repo.pool())
         .await
-        .map_err(|e| e.to_string())?;
+        .map_err(|e| ContractError::internal(e.to_string()))?;
 
     let roots = sources
         .into_iter()
@@ -70,7 +71,7 @@ pub async fn roots_register(
     path: String,
     category: String,
     scan_settings: JsonAny,
-) -> Result<RegisterSourceResponse, String> {
+) -> Result<RegisterSourceResponse, ContractError> {
     tracing::debug!(
         "roots.register path={path} category={category} scan_settings={scan_settings:?}"
     );
@@ -102,7 +103,7 @@ pub async fn roots_register(
     let req =
         RegisterSourceRequest { kind, path, kind_subtype: None, scan_depth, organization_state };
 
-    app_core::first_run::register_source(state.repo.pool(), &req).await.map_err(|e| e.message)
+    app_core::first_run::register_source(state.repo.pool(), &req).await
 }
 
 /// `sources.set_organization_state` — change a source's organization state
@@ -136,7 +137,10 @@ pub async fn sources_set_organization_state(
 /// Returns `Err(String)` on failure; the stub never fails.
 #[tauri::command]
 #[specta::specta]
-pub async fn roots_remap(root_id: String, new_path: String) -> Result<RemapVerification, String> {
+pub async fn roots_remap(
+    root_id: String,
+    new_path: String,
+) -> Result<RemapVerification, ContractError> {
     tracing::debug!("stub: roots.remap root_id={root_id} new_path={new_path}");
     Ok(RemapVerification {
         root_id,
@@ -157,7 +161,7 @@ pub async fn roots_remap(root_id: String, new_path: String) -> Result<RemapVerif
 /// Returns `Err(String)` on failure; the stub never fails.
 #[tauri::command]
 #[specta::specta]
-pub async fn roots_remap_apply(root_id: String, verified: bool) -> Result<(), String> {
+pub async fn roots_remap_apply(root_id: String, verified: bool) -> Result<(), ContractError> {
     tracing::debug!("stub: roots.remap.apply root_id={root_id} verified={verified}");
     Ok(())
 }
@@ -168,7 +172,9 @@ pub async fn roots_remap_apply(root_id: String, verified: bool) -> Result<(), St
 /// Returns `Err(String)` on failure; the stub never fails.
 #[tauri::command]
 #[specta::specta]
-pub async fn scan_start(root_ids: Option<Vec<String>>) -> Result<IpcOperationHandle, String> {
+pub async fn scan_start(
+    root_ids: Option<Vec<String>>,
+) -> Result<IpcOperationHandle, ContractError> {
     tracing::debug!("stub: scan.start root_ids={root_ids:?}");
     Ok(IpcOperationHandle { operation_id: "op-scan-001".to_owned(), kind: "scan".to_owned() })
 }
@@ -179,7 +185,7 @@ pub async fn scan_start(root_ids: Option<Vec<String>>) -> Result<IpcOperationHan
 /// Returns `Err(String)` on failure; the stub never fails.
 #[tauri::command]
 #[specta::specta]
-pub async fn equipment_list() -> Result<Vec<Equipment>, String> {
+pub async fn equipment_list() -> Result<Vec<Equipment>, ContractError> {
     tracing::debug!("stub: equipment.list");
     Ok(vec![
         Equipment {

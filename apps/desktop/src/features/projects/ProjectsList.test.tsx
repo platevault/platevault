@@ -13,7 +13,7 @@
  * 8. (T055) "All" checkbox clears the filter.
  */
 
-import { render, screen, fireEvent } from '@testing-library/react';
+import { render, screen, fireEvent, waitFor } from '@testing-library/react';
 import { describe, it, expect, vi } from 'vitest';
 import { ProjectsList } from './ProjectsList';
 import type { ProjectSummaryDto } from '@/bindings/index';
@@ -262,5 +262,56 @@ describe('T055: ProjectsList lifecycle multiselect filter (FR-022)', () => {
       />,
     );
     expect(screen.getByLabelText('Filter lifecycle')).toHaveTextContent('State: 2 selected');
+  });
+
+  // T160: the base-ui Menu migration fixes the prior dropdown's missing
+  // click-outside + Escape-to-close behavior. These assert the BEHAVIOR
+  // (popup open ⇒ dismissed), not the markup.
+
+  it('closes the filter dropdown when Escape is pressed', async () => {
+    render(
+      <ProjectsList
+        projects={multiProjects}
+        selectedId={undefined}
+        onSelect={vi.fn()}
+        lifecycle={[]}
+        onLifecycleChange={vi.fn()}
+      />,
+    );
+    fireEvent.click(screen.getByLabelText('Filter lifecycle'));
+    // Popup is open: a state option is reachable.
+    expect(await screen.findByLabelText('Processing')).toBeInTheDocument();
+
+    fireEvent.keyDown(screen.getByLabelText('Processing'), { key: 'Escape' });
+
+    await waitFor(() => {
+      expect(screen.queryByLabelText('Processing')).not.toBeInTheDocument();
+    });
+  });
+
+  it('closes the filter dropdown on an outside pointer press (click-outside)', async () => {
+    render(
+      <>
+        <button type="button">outside</button>
+        <ProjectsList
+          projects={multiProjects}
+          selectedId={undefined}
+          onSelect={vi.fn()}
+          lifecycle={[]}
+          onLifecycleChange={vi.fn()}
+        />
+      </>,
+    );
+    fireEvent.click(screen.getByLabelText('Filter lifecycle'));
+    expect(await screen.findByLabelText('Processing')).toBeInTheDocument();
+
+    // Press outside the popup — base-ui dismisses on outside pointerdown.
+    const outside = screen.getByRole('button', { name: 'outside' });
+    fireEvent.pointerDown(outside);
+    fireEvent.click(outside);
+
+    await waitFor(() => {
+      expect(screen.queryByLabelText('Processing')).not.toBeInTheDocument();
+    });
   });
 });

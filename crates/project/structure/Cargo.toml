@@ -11,10 +11,13 @@ path = "src/lib.rs"
 serde = { workspace = true }
 serde_json = { workspace = true }
 time = { workspace = true }
-tokio = { workspace = true }
 
 [dev-dependencies]
 tempfile = { workspace = true }
+# spec 042 (T251): tokio is dev-only now — used solely by `#[tokio::test]` to
+# drive the async `NotesFileAdapter`/`write_manifest_file` seams in unit tests.
+# Production notes/manifest I/O is synchronous `std::fs`.
+tokio = { workspace = true }
 
 [lints]
 workspace = true

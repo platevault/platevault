@@ -4,6 +4,7 @@
 use schemars::JsonSchema;
 use serde::{Deserialize, Serialize};
 use specta::Type;
+use strum::{EnumString, IntoStaticStr};
 
 use crate::ids::EntityId;
 
@@ -64,6 +65,9 @@ pub struct PreparedSourceView {
 /// The strategy used to materialise a view item on disk.
 /// `Hardlink` is reserved for v1.x; v1 only implements symlink/junction/copy
 /// (R-026-Strategies, GRILL 2026-05-22).
+/// `strum` `serialize_all` mirrors the serde `rename_all`, so the derived
+/// `FromStr` / `Into<&'static str>` produce byte-identical persisted strings
+/// (`symlink`, `junction`, `copy`, `hardlink`).
 #[derive(
     Clone,
     Copy,
@@ -77,8 +81,11 @@ pub struct PreparedSourceView {
     Deserialize,
     JsonSchema,
     Type,
+    EnumString,
+    IntoStaticStr,
 )]
 #[serde(rename_all = "snake_case")]
+#[strum(serialize_all = "snake_case")]
 pub enum ViewKind {
     Symlink,
     Junction,
@@ -90,23 +97,14 @@ pub enum ViewKind {
 impl ViewKind {
     #[must_use]
     pub fn as_str(self) -> &'static str {
-        match self {
-            ViewKind::Symlink => "symlink",
-            ViewKind::Junction => "junction",
-            ViewKind::Copy => "copy",
-            ViewKind::Hardlink => "hardlink",
-        }
+        // `strum::IntoStaticStr` yields the canonical snake_case strings.
+        self.into()
     }
 
     #[must_use]
     pub fn parse_str(s: &str) -> Option<Self> {
-        match s {
-            "symlink" => Some(ViewKind::Symlink),
-            "junction" => Some(ViewKind::Junction),
-            "copy" => Some(ViewKind::Copy),
-            "hardlink" => Some(ViewKind::Hardlink),
-            _ => None,
-        }
+        // `strum::EnumString` parses the canonical strings; unknown -> None.
+        s.parse().ok()
     }
 
     /// Returns true for the three v1-supported kinds (not hardlink).
@@ -117,6 +115,10 @@ impl ViewKind {
 }
 
 /// Lifecycle state of a `PreparedSourceView026` record (spec 026 data-model).
+///
+/// `strum` `serialize_all` mirrors the serde `rename_all`, so the derived
+/// `FromStr` / `Into<&'static str>` produce byte-identical persisted strings
+/// (`current`, `stale`, `missing`, `removed`, `failed`, `kind_diverged`).
 #[derive(
     Clone,
     Copy,
@@ -130,8 +132,11 @@ impl ViewKind {
     Deserialize,
     JsonSchema,
     Type,
+    EnumString,
+    IntoStaticStr,
 )]
 #[serde(rename_all = "snake_case")]
+#[strum(serialize_all = "snake_case")]
 pub enum ViewState {
     /// The view exists on disk and all items are present.
     Current,
@@ -152,27 +157,14 @@ pub enum ViewState {
 impl ViewState {
     #[must_use]
     pub fn as_str(self) -> &'static str {
-        match self {
-            ViewState::Current => "current",
-            ViewState::Stale => "stale",
-            ViewState::Missing => "missing",
-            ViewState::Removed => "removed",
-            ViewState::Failed => "failed",
-            ViewState::KindDiverged => "kind_diverged",
-        }
+        // `strum::IntoStaticStr` yields the canonical snake_case strings.
+        self.into()
     }
 
     #[must_use]
     pub fn parse_str(s: &str) -> Option<Self> {
-        match s {
-            "current" => Some(ViewState::Current),
-            "stale" => Some(ViewState::Stale),
-            "missing" => Some(ViewState::Missing),
-            "removed" => Some(ViewState::Removed),
-            "failed" => Some(ViewState::Failed),
-            "kind_diverged" => Some(ViewState::KindDiverged),
-            _ => None,
-        }
+        // `strum::EnumString` parses the canonical strings; unknown -> None.
+        s.parse().ok()
     }
 
     /// Returns true when view operations (remove / regenerate) are allowed

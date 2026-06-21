@@ -7,6 +7,7 @@
 
 import { forwardRef } from 'react';
 import type { HTMLAttributes } from 'react';
+import { X } from 'lucide-react';
 import { useToasts, type Toast as ToastType } from '@/shared/toast';
 
 const CONTAINER_STYLE: React.CSSProperties = {
@@ -96,9 +97,10 @@ function ToastItem({
             cursor: 'pointer',
             lineHeight: 1,
             padding: 0,
+            display: 'inline-flex',
           }}
         >
-          &times;
+          <X size={14} aria-hidden="true" />
         </button>
       </div>
     </div>

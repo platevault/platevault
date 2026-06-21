@@ -13,10 +13,10 @@
 //! - `"advanced"` → `logLevel`, `rememberFollowLogs`, `devMode`
 //! - `"general"`  → `rowDensity`
 //! - `"cleanup"`  → `blockPermanentDelete`, `defaultProtection`, `protectedCategories`
-//! - `"naming"`   → `pattern`, `autoApplyPattern`, `patterns_by_type`
+//! - `"naming"`   → `pattern`, `autoApplyPattern`, `patternsByType`
 //! - `"sources"`  → `followSymlinks`, `hashOnScan`
 //! - `"calibration"` → `darkMatchTolerance`, `flatMatching`, `suggestCalibration`,
-//!   `calibration.dark_temp_tolerance`, `calibration.prefill_suggestion`
+//!   `calibrationDarkTempTolerance`, `calibrationPrefillSuggestion`
 //! - `""` (empty) → reads the full settings bag (all known keys).
 //!
 //! Unknown `values` keys from the frontend that are not valid settings keys are
@@ -40,6 +40,7 @@ use serde_json::Value;
 use tauri::State;
 
 use crate::commands::lifecycle::AppState;
+use contracts_core::ContractError;
 
 // ── Scope → key mapping ───────────────────────────────────────────────────────
 
@@ -51,20 +52,20 @@ fn scope_keys(scope: &str) -> &'static [&'static str] {
         "advanced" => &["logLevel", "rememberFollowLogs", "devMode"],
         "general" => &["rowDensity"],
         "cleanup" => &["blockPermanentDelete", "defaultProtection", "protectedCategories"],
-        "naming" => &["pattern", "autoApplyPattern", "patterns_by_type"],
+        "naming" => &["pattern", "autoApplyPattern", "patternsByType"],
         "sources" => &["followSymlinks", "hashOnScan", "alwaysPreviewBeforePlan"],
         "calibration" => &[
             "darkMatchTolerance",
             "flatMatching",
             "suggestCalibration",
-            "calibration.dark_temp_tolerance",
-            "calibration.prefill_suggestion",
-            "calibration.dark.override_penalty",
-            "calibration.flat.override_penalty",
-            "calibration.bias.override_penalty",
-            "calibration.aging_threshold_days",
+            "calibrationDarkTempTolerance",
+            "calibrationPrefillSuggestion",
+            "calibrationDarkOverridePenalty",
+            "calibrationFlatOverridePenalty",
+            "calibrationBiasOverridePenalty",
+            "calibrationAgingThresholdDays",
         ],
-        "plans" => &["plans.list.default_age_cutoff_days"],
+        "plans" => &["plansListDefaultAgeCutoffDays"],
         // Empty scope or "global" returns every stable key.
         _ => &[
             "logLevel",
@@ -76,21 +77,21 @@ fn scope_keys(scope: &str) -> &'static [&'static str] {
             "protectedCategories",
             "pattern",
             "autoApplyPattern",
-            "patterns_by_type",
+            "patternsByType",
             "followSymlinks",
             "hashOnScan",
             "alwaysPreviewBeforePlan",
             "darkMatchTolerance",
             "flatMatching",
             "suggestCalibration",
-            "calibration.dark_temp_tolerance",
-            "calibration.prefill_suggestion",
-            "calibration.dark.override_penalty",
-            "calibration.flat.override_penalty",
-            "calibration.bias.override_penalty",
-            "calibration.aging_threshold_days",
-            "plans.list.default_age_cutoff_days",
-            "current_library_id",
+            "calibrationDarkTempTolerance",
+            "calibrationPrefillSuggestion",
+            "calibrationDarkOverridePenalty",
+            "calibrationFlatOverridePenalty",
+            "calibrationBiasOverridePenalty",
+            "calibrationAgingThresholdDays",
+            "plansListDefaultAgeCutoffDays",
+            "currentLibraryId",
         ],
     }
 }
@@ -110,15 +111,14 @@ fn scope_keys(scope: &str) -> &'static [&'static str] {
 pub async fn settings_get(
     state: State<'_, AppState>,
     scope: String,
-) -> Result<SettingsData, String> {
+) -> Result<SettingsData, ContractError> {
     tracing::debug!("settings.get scope={scope}");
     let pool = state.repo.pool();
     let keys = scope_keys(&scope);
 
     let mut values: HashMap<String, Value> = HashMap::with_capacity(keys.len());
     for key in keys {
-        let val =
-            app_core::settings::resolve_setting(pool, key, None).await.map_err(|e| e.message)?;
+        let val = app_core::settings::resolve_setting(pool, key, None).await?;
         values.insert((*key).to_owned(), val);
     }
 
@@ -143,7 +143,7 @@ pub async fn settings_update(
     state: State<'_, AppState>,
     scope: String,
     values: contracts_core::JsonAny,
-) -> Result<(), String> {
+) -> Result<(), ContractError> {
     tracing::debug!("settings.update scope={scope}");
     let pool = state.repo.pool();
     let bus = &state.bus;
@@ -164,10 +164,10 @@ pub async fn settings_update(
         // Swallow noop and value.invalid for forward-compat; log errors.
         match app_core::settings::update_setting(pool, bus, &req).await {
             Ok(_) => {}
-            Err(e) if e.code == "value.invalid" => {
+            Err(e) if e.code == contracts_core::error_code::ErrorCode::ValueInvalid => {
                 tracing::warn!("settings.update: value.invalid for key {key}: {}", e.message);
             }
-            Err(e) => return Err(e.message),
+            Err(e) => return Err(e),
         }
     }
 
@@ -185,11 +185,9 @@ pub async fn settings_update(
 pub async fn settings_restore_defaults(
     state: State<'_, AppState>,
     request: RestoreDefaultsRequest,
-) -> Result<RestoreDefaultsResponse, String> {
+) -> Result<RestoreDefaultsResponse, ContractError> {
     tracing::debug!("settings.restore-defaults keys={:?}", request.keys);
-    app_core::settings::restore_defaults(state.repo.pool(), &state.bus, &request)
-        .await
-        .map_err(|e| e.message)
+    app_core::settings::restore_defaults(state.repo.pool(), &state.bus, &request).await
 }
 
 /// `settings.source-override.set` — set a per-source override for an overridable key.
@@ -201,13 +199,11 @@ pub async fn settings_restore_defaults(
 pub async fn settings_source_override_set(
     state: State<'_, AppState>,
     request: SetSourceOverrideRequest,
-) -> Result<SetSourceOverrideResponse, String> {
+) -> Result<SetSourceOverrideResponse, ContractError> {
     tracing::debug!(
         "settings.source-override.set source_id={} key={}",
         request.source_id,
         request.key
     );
-    app_core::settings::set_source_override(state.repo.pool(), &request)
-        .await
-        .map_err(|e| e.message)
+    app_core::settings::set_source_override(state.repo.pool(), &request).await
 }

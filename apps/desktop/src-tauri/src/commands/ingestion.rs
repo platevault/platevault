@@ -5,6 +5,7 @@
 //! is built.
 
 use contracts_core::ingestion::{IngestionSettings, UpdateIngestionSettings};
+use contracts_core::ContractError;
 
 /// `ingestion.settings.get` — returns current ingestion/scan settings.
 ///
@@ -12,7 +13,7 @@ use contracts_core::ingestion::{IngestionSettings, UpdateIngestionSettings};
 /// Returns `Err(String)` on failure; the stub never fails.
 #[tauri::command]
 #[specta::specta]
-pub async fn ingestion_settings_get() -> Result<IngestionSettings, String> {
+pub async fn ingestion_settings_get() -> Result<IngestionSettings, ContractError> {
     tracing::debug!("stub: ingestion.settings.get");
     Ok(default_ingestion_settings())
 }
@@ -25,7 +26,7 @@ pub async fn ingestion_settings_get() -> Result<IngestionSettings, String> {
 #[specta::specta]
 pub async fn ingestion_settings_update(
     request: UpdateIngestionSettings,
-) -> Result<IngestionSettings, String> {
+) -> Result<IngestionSettings, ContractError> {
     tracing::debug!(
         "stub: ingestion.settings.update watcher={} scan_on_startup={}",
         request.watcher_enabled,

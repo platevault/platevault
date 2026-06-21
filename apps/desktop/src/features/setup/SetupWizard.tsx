@@ -112,7 +112,9 @@ function clearWizardState(): void {
   try {
     localStorage.removeItem(STORAGE_KEY);
   } catch {
-    // ignore
+    // Intentional ignore: clearing persisted wizard state is best-effort;
+    // localStorage may be unavailable (private mode / quota) and a failure here
+    // does not affect the in-progress setup flow.
   }
 }
 

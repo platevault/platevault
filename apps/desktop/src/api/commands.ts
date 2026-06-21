@@ -1,6 +1,5 @@
 import type {
   AcquisitionSession,
-  Target,
   Project,
   FilesystemPlan,
   AuditEntry,
@@ -8,8 +7,8 @@ import type {
   ReviewItem,
   AppPreferences,
   OperationHandle,
+  OperationEvent,
   SessionDetail,
-  TargetDetail,
   ProjectDetail,
   PlanDetail,
   CalendarData,
@@ -21,8 +20,6 @@ import type {
 } from '@/bindings/types';
 import type {
   InboxClassifyRequest,
-  InboxClassifyResponse_Serialize as InboxClassifyResponse,
-  InboxConfirmRequest_Deserialize as InboxConfirmRequest,
   InboxConfirmResponse,
   InboxConfirmDestination,
   InboxItemSummary,
@@ -30,13 +27,10 @@ import type {
   InboxListResponse,
   InboxReclassifyOverride,
   InboxReclassifyRequest,
-  InboxReclassifyResponse_Serialize as InboxReclassifyResponse,
   InboxFileMetadata_Serialize as InboxFileMetadata,
   InboxItemMetadataRequest,
   InboxScanFolderRequest,
   InboxScanFolderResponse,
-  CalibrationMaster_Serialize as CalibrationMaster,
-  MasterDetail_Serialize as MasterDetail,
   InboxApplyAllResponse,
   InboxApplySelectedRequest,
   InboxOpenPlan,
@@ -50,6 +44,14 @@ import type {
   InboxStatsPerType,
   InboxStatsTotals,
 } from '@/bindings/index';
+import type {
+  // T117: all _Serialize/_Deserialize → clean-name aliases live in one place
+  InboxClassifyResponse,
+  InboxConfirmRequest,
+  InboxReclassifyResponse,
+  CalibrationMaster,
+  MasterDetail,
+} from '@/bindings/aliases';
 export type {
   InboxClassifyRequest,
   InboxClassifyResponse,
@@ -98,7 +100,6 @@ import type {
 import type {
   // spec 036 gen-3 target management
   TargetGetRequest,
-  TargetDetailV3_Deserialize as TargetDetailV3,
   TargetListItem,
   TargetAliasDto,
   AliasKind as TargetAliasKind,
@@ -108,23 +109,12 @@ import type {
   TargetAliasRemoveResult,
   TargetDisplayAliasSetRequest,
   TargetDisplayAliasClearRequest,
-  TargetOpError_Serialize as TargetOpError,
   // spec 035: SIMBAD target resolution
-  TargetSearchRequest_Serialize as TargetSearchRequest,
-  TargetSearchResponse_Deserialize as TargetSearchResponse,
-  TargetSuggestion_Deserialize as TargetSuggestion,
-  TargetResolveSimbadRequest_Serialize as TargetResolveSimbadRequest,
-  TargetResolveSimbadResponse_Deserialize as TargetResolveSimbadResponse,
-  ResolvedTarget_Deserialize as ResolvedTarget,
   ResolverSettings,
   ResolverSettingsResponse,
-  ManifestListRequest_Deserialize as ManifestListRequest,
-  ManifestListResponse_Serialize as ManifestListResponse,
   ManifestGetRequest,
-  ManifestGetResponse_Serialize as ManifestGetResponse,
   ProjectNoteUpdateRequest,
   ProjectNoteUpdateResult,
-  ManifestOpError_Serialize as ManifestOpError,
   ManifestRevealRequest,
   ProjectNoteGetRequest,
   ProjectNoteGetResult,
@@ -132,6 +122,21 @@ import type {
   OrganizationState,
   SetSourceOrganizationStateResponse,
 } from '@/bindings/index';
+import type {
+  // T117: all _Serialize/_Deserialize → clean-name aliases live in one place
+  TargetDetailV3,
+  TargetOpError,
+  TargetSearchRequest,
+  TargetSearchResponse,
+  TargetSuggestion,
+  TargetResolveSimbadRequest,
+  TargetResolveSimbadResponse,
+  ResolvedTarget,
+  ManifestListRequest,
+  ManifestListResponse,
+  ManifestGetResponse,
+  ManifestOpError,
+} from '@/bindings/aliases';
 
 // IPC dispatch + the dev-tools recording override live in the shared switcher
 // (spec 037, api/ipc.ts) so these wrappers and the generated bindings use one
@@ -140,6 +145,7 @@ import { invoke, unwrap, setInvokeOverride } from './ipc';
 export { setInvokeOverride };
 
 import { commands } from '@/bindings';
+import { Channel } from '@tauri-apps/api/core';
 
 // ---------- Query Commands ----------
 
@@ -149,11 +155,11 @@ export async function listSessions(args?: {
   group_by?: string;
 }): Promise<AcquisitionSession[]> {
   void args; // generated fn takes no args; pass-through not needed
-  return unwrap(await commands.sessionsList()) as unknown as AcquisitionSession[];
+  return unwrap(await commands.sessionsList());
 }
 
 export async function getSession(args: { id: string }): Promise<SessionDetail> {
-  return unwrap(await commands.sessionsGet(args.id)) as unknown as SessionDetail;
+  return unwrap(await commands.sessionsGet(args.id));
 }
 
 export async function getSessionsCalendar(args: {
@@ -168,27 +174,27 @@ export async function listCalibrationMasters(args?: {
   filters?: Record<string, unknown>;
 }): Promise<CalibrationMaster[]> {
   void args; // generated fn takes no args
-  return unwrap(await commands.calibrationMastersList()) as CalibrationMaster[];
+  return unwrap(await commands.calibrationMastersList());
 }
 
 export async function getCalibrationMaster(args: { id: string }): Promise<MasterDetail> {
-  return unwrap(await commands.calibrationMastersGet(args.id)) as MasterDetail;
+  return unwrap(await commands.calibrationMastersGet(args.id));
 }
 
 export async function getCalibrationMatches(args: {
   session_id: string;
 }): Promise<MatchCandidate[]> {
-  return unwrap(await commands.calibrationMatches(args.session_id)) as unknown as MatchCandidate[];
+  return unwrap(await commands.calibrationMatches(args.session_id));
 }
 
 export async function listProjects(args?: {
   filters?: Record<string, unknown>;
 }): Promise<Project[]> {
-  return unwrap(await commands.projectsList(args?.filters ?? null)) as unknown as Project[];
+  return unwrap(await commands.projectsList(args?.filters ?? null));
 }
 
 export async function getProject(args: { id: string }): Promise<ProjectDetail> {
-  return unwrap(await commands.projectsGet(args.id)) as unknown as ProjectDetail;
+  return unwrap(await commands.projectsGet(args.id));
 }
 
 export async function listPlans(args?: {
@@ -196,14 +202,15 @@ export async function listPlans(args?: {
 }): Promise<FilesystemPlan[]> {
   // Generated plansList has 4 positional filter args (stateFilter, originFilter,
   // createdAfter, limit); the old wrapper only forwarded a generic `filters` bag.
-  // The return type is PlanListResponse_Serialize { plans } vs FilesystemPlan[].
-  // No callers exist in the app — leave on invoke until Phase 3/4 cleanup.
+  // No callers exist in the app; we forward nulls for all filters to keep the
+  // signature stable while using the generated binding (T115).
   void args;
-  return invoke<FilesystemPlan[]>('plans_list', args);
+  const response = unwrap(await commands.plansList(null, null, null, null));
+  return (response).plans;
 }
 
 export async function getPlan(args: { id: string }): Promise<PlanDetail> {
-  return unwrap(await commands.plansGet(args.id)) as unknown as PlanDetail;
+  return unwrap(await commands.plansGet(args.id));
 }
 
 export async function listAuditEntries(args?: {
@@ -213,7 +220,7 @@ export async function listAuditEntries(args?: {
   const result = unwrap(
     await commands.auditList(args?.filters ?? null, args?.pagination ?? null),
   );
-  return result as unknown as { entries: AuditEntry[]; total: number };
+  return result;
 }
 
 export async function exportAudit(args?: {
@@ -284,11 +291,11 @@ export async function logExport(args: {
 }
 
 export async function getSettings(args: { scope: string }): Promise<SettingsData> {
-  return unwrap(await commands.settingsGet(args.scope)) as SettingsData;
+  return unwrap(await commands.settingsGet(args.scope));
 }
 
 export async function listRoots(): Promise<LibraryRoot[]> {
-  return unwrap(await commands.rootsList()) as unknown as LibraryRoot[];
+  return unwrap(await commands.rootsList());
 }
 
 /**
@@ -309,17 +316,17 @@ export async function setSourceOrganizationState(args: {
 }
 
 export async function listEquipment(): Promise<Equipment[]> {
-  return unwrap(await commands.equipmentList()) as unknown as Equipment[];
+  return unwrap(await commands.equipmentList());
 }
 
 export async function getReviewQueue(args?: {
   filter?: string;
 }): Promise<ReviewItem[]> {
-  return unwrap(await commands.reviewQueue(args?.filter ?? null)) as unknown as ReviewItem[];
+  return unwrap(await commands.reviewQueue(args?.filter ?? null));
 }
 
 export async function getPreferences(): Promise<AppPreferences> {
-  return unwrap(await commands.preferencesGet()) as AppPreferences;
+  return unwrap(await commands.preferencesGet());
 }
 
 export async function searchGlobal(args: { query: string }): Promise<SearchResult[]> {
@@ -335,29 +342,26 @@ export async function transitionSession(args: {
 }): Promise<AcquisitionSession> {
   return unwrap(
     await commands.sessionsTransition(args.id, args.action, args.metadata ?? null),
-  ) as unknown as AcquisitionSession;
+  );
 }
 
 export async function splitSession(args: {
   id: string;
   split_at_index: number;
 }): Promise<{ original: AcquisitionSession; new: AcquisitionSession }> {
-  return unwrap(await commands.sessionsSplit(args.id, args.split_at_index)) as unknown as {
-    original: AcquisitionSession;
-    new: AcquisitionSession;
-  };
+  return unwrap(await commands.sessionsSplit(args.id, args.split_at_index));
 }
 
 export async function mergeSessions(args: {
   ids: string[];
 }): Promise<AcquisitionSession> {
-  return unwrap(await commands.sessionsMerge(args.ids)) as unknown as AcquisitionSession;
+  return unwrap(await commands.sessionsMerge(args.ids));
 }
 
 export async function createProjectPlan(args: {
   wizard_state: Record<string, unknown>;
 }): Promise<FilesystemPlan> {
-  return unwrap(await commands.projectsCreatePlan(args.wizard_state)) as unknown as FilesystemPlan;
+  return unwrap(await commands.projectsCreatePlan(args.wizard_state));
 }
 
 export async function approvePlan(args: {
@@ -366,50 +370,79 @@ export async function approvePlan(args: {
 }): Promise<FilesystemPlan> {
   // Generated plansApprove(id) returns PlanApproveResponse (not FilesystemPlan).
   // delete_acknowledged was silently ignored by the old invoke path; no callers
-  // exist. Leave on invoke until Phase 4 teardown reworks the plan workflow.
+  // exist. We use the generated binding (T115); the caller type is kept for
+  // back-compat. Cast via unknown because the return shape differs (approvePlan
+  // callers never existed and the Phase 4 plan workflow will replace this wrapper).
   void args.delete_acknowledged;
-  return invoke<FilesystemPlan>('plans_approve', args);
+  const response = unwrap(await commands.plansApprove(args.id));
+  return response as unknown as FilesystemPlan;
 }
 
-export async function applyPlan(args: { id: string }): Promise<OperationHandle> {
-  // Generated plansApplyReal(planId, approvalToken) requires a token the wrapper
-  // doesn't carry. No callers exist. Leave on invoke (Phase 4 will remove it).
-  return invoke<OperationHandle>('plans_apply_real', args);
+export async function applyPlan(args: {
+  id: string;
+  approvalToken?: string;
+  /**
+   * Optional live long-operation subscriber (spec 042 US16, T240). When
+   * supplied, the backend streams `OperationEvent`s over a
+   * `tauri::ipc::Channel<OperationEvent>`: a `Started` event carrying the
+   * running handle, per-item `progress`/`item_applied`/`item_failed` events,
+   * then a terminal `completed`/`failed` event carrying a terminal handle.
+   * The durable DB audit trail is unaffected — the channel is the live UI
+   * projection only.
+   */
+  onEvent?: (event: OperationEvent) => void;
+}): Promise<OperationHandle> {
+  // Bridge the optional callback onto a Tauri channel. When no subscriber is
+  // supplied we still pass a (no-op) channel because the generated command
+  // signature requires the parameter.
+  const channel = new Channel<OperationEvent>();
+  if (args.onEvent) {
+    const handler = args.onEvent;
+    channel.onmessage = (event) => handler(event);
+  }
+  // Generated plansApplyReal(planId, approvalToken, onEvent) requires a token.
+  // We thread the token through the signature (T115); when absent we default to
+  // '' which the backend will reject — the real plan-apply flow must supply the
+  // token from plansApprove.approvalToken.
+  const response = unwrap(
+    await commands.plansApplyReal(args.id, args.approvalToken ?? '', channel),
+  );
+  return response as unknown as OperationHandle;
 }
 
 export async function discardPlan(args: { id: string }): Promise<void> {
-  await unwrap(await commands.plansDiscard(args.id));
+  unwrap(await commands.plansDiscard(args.id));
 }
 
 export async function updateSettings(args: {
   scope: string;
   values: Record<string, unknown>;
 }): Promise<void> {
-  await unwrap(await commands.settingsUpdate(args.scope, args.values));
+  unwrap(await commands.settingsUpdate(args.scope, args.values));
 }
 
 export async function registerRoot(args: {
   path: string;
   category: string;
   scanSettings: Record<string, unknown>;
-}): Promise<LibraryRoot> {
-  return unwrap(
+}): Promise<void> {
+  unwrap(
     await commands.rootsRegister(args.path, args.category, args.scanSettings),
-  ) as unknown as LibraryRoot;
+  );
 }
 
 export async function remapRoot(args: {
   root_id: string;
   new_path: string;
 }): Promise<RemapVerification> {
-  return unwrap(await commands.rootsRemap(args.root_id, args.new_path)) as unknown as RemapVerification;
+  return unwrap(await commands.rootsRemap(args.root_id, args.new_path));
 }
 
 export async function applyRootRemap(args: {
   root_id: string;
   verified: boolean;
 }): Promise<void> {
-  await unwrap(await commands.rootsRemapApply(args.root_id, args.verified));
+  unwrap(await commands.rootsRemapApply(args.root_id, args.verified));
 }
 
 export async function startScan(args?: {
@@ -417,18 +450,18 @@ export async function startScan(args?: {
 }): Promise<OperationHandle> {
   // Backend expects camelCase `rootIds`; sending `root_ids` is silently ignored
   // and scans ALL roots instead of the requested subset.
-  return unwrap(await commands.scanStart(args?.root_ids ?? null)) as unknown as OperationHandle;
+  return unwrap(await commands.scanStart(args?.root_ids ?? null));
 }
 
 export async function setPreference(args: {
   key: string;
   value: unknown;
 }): Promise<void> {
-  await unwrap(await commands.preferencesSet(args.key, args.value));
+  unwrap(await commands.preferencesSet(args.key, args.value));
 }
 
 export async function completeTourStep(args: { step: string }): Promise<void> {
-  await unwrap(await commands.tourCompleteStep(args.step));
+  unwrap(await commands.tourCompleteStep(args.step));
 }
 
 // ---------- First-Run / Batch Commands ----------
@@ -502,20 +535,18 @@ export async function registerRootBatch(args: {
   return { results };
 }
 
-export async function completeFirstRun(): Promise<FirstRunCompleteResult> {
-  return unwrap(await commands.firstrunComplete()) as unknown as FirstRunCompleteResult;
+export async function completeFirstRun(): Promise<void> {
+  unwrap(await commands.firstrunComplete());
 }
 
-export async function restartFirstRun(): Promise<FirstRunRestartResult> {
-  return unwrap(
-    await commands.firstrunRestart({ confirm: true } as Parameters<
-      typeof commands.firstrunRestart
-    >[0]),
-  ) as unknown as FirstRunRestartResult;
+export async function restartFirstRun(): Promise<void> {
+  unwrap(
+    await commands.firstrunRestart({ confirm: true }),
+  );
 }
 
-export async function getFirstRunState(): Promise<FirstRunState> {
-  return unwrap(await commands.firstrunState()) as unknown as FirstRunState;
+export async function getFirstRunState(): Promise<void> {
+  unwrap(await commands.firstrunState());
 }
 
 // ---------- Pattern Commands (spec 015) ----------
@@ -566,7 +597,7 @@ export interface PatternPreviewResponse {
  */
 export async function patternValidate(pattern: PatternPart[]): Promise<PatternValidateResponse> {
   return unwrap(
-    await commands.patternValidate({ pattern } as Parameters<typeof commands.patternValidate>[0]),
+    await commands.patternValidate({ pattern }),
   ) as PatternValidateResponse;
 }
 
@@ -582,7 +613,7 @@ export async function patternPreview(
     await commands.patternPreview(
       { pattern, sampleMetadata } as Parameters<typeof commands.patternPreview>[0],
     ),
-  ) as PatternPreviewResponse;
+  );
 }
 
 // ── Project commands (spec 008) ───────────────────────────────────────────────
@@ -591,54 +622,54 @@ export async function patternPreview(
 export async function listProjects008(args?: {
   filters?: unknown;
 }): Promise<ProjectSummaryDto[]> {
-  return unwrap(await commands.projectsList(args?.filters ?? null)) as ProjectSummaryDto[];
+  return unwrap(await commands.projectsList(args?.filters ?? null));
 }
 
 /** Get a single project with sources and channels. */
 export async function getProject008(args: { id: string }): Promise<ProjectDetailDto> {
-  return unwrap(await commands.projectsGet(args.id)) as ProjectDetailDto;
+  return unwrap(await commands.projectsGet(args.id));
 }
 
 /** Create a new project (validates, persists, generates folder plan). */
 export async function createProject(args: ProjectCreateRequest): Promise<ProjectCreateResult> {
   return unwrap(
     await commands.projectsCreate(args as Parameters<typeof commands.projectsCreate>[0]),
-  ) as unknown as ProjectCreateResult;
+  );
 }
 
 /** Update name, tool, or notes on an existing project. */
 export async function updateProject(args: ProjectUpdateRequest): Promise<ProjectUpdateResult> {
   return unwrap(
     await commands.projectsUpdate(args as Parameters<typeof commands.projectsUpdate>[0]),
-  ) as unknown as ProjectUpdateResult;
+  );
 }
 
 /** Link an Inventory session to a project as a source. */
 export async function addProjectSource(
   args: ProjectSourceAddRequest,
 ): Promise<ProjectSourceAddResult> {
-  return unwrap(await commands.projectsSourceAdd(args)) as unknown as ProjectSourceAddResult;
+  return unwrap(await commands.projectsSourceAdd(args));
 }
 
 /** Unlink a source from a project. */
 export async function removeProjectSource(
   args: ProjectSourceRemoveRequest,
 ): Promise<ProjectSourceRemoveResult> {
-  return unwrap(await commands.projectsSourceRemove(args)) as unknown as ProjectSourceRemoveResult;
+  return unwrap(await commands.projectsSourceRemove(args));
 }
 
 /** Re-infer channels from all linked sources (discards manual overrides). */
 export async function reinferProjectChannels(
   args: ProjectChannelsReinferRequest,
 ): Promise<ProjectChannelsReinferResult> {
-  return unwrap(await commands.projectsChannelsReinfer(args)) as unknown as ProjectChannelsReinferResult;
+  return unwrap(await commands.projectsChannelsReinfer(args));
 }
 
 /** Dismiss the channel-drift banner without re-inferring. */
 export async function dismissProjectChannelDrift(
   args: ProjectChannelsDismissDriftRequest,
 ): Promise<ProjectChannelsDismissDriftResult> {
-  return unwrap(await commands.projectsChannelsDismissDrift(args)) as unknown as ProjectChannelsDismissDriftResult;
+  return unwrap(await commands.projectsChannelsDismissDrift(args));
 }
 
 // ── Lifecycle transition commands (spec 009) ──────────────────────────────────
@@ -726,7 +757,7 @@ export async function inboxScanFolder(
  * Idempotent unless `forceRescan` is true.
  */
 export async function inboxClassify(req: InboxClassifyRequest): Promise<InboxClassifyResponse> {
-  return unwrap(await commands.inboxClassify(req)) as InboxClassifyResponse;
+  return unwrap(await commands.inboxClassify(req));
 }
 
 /**
@@ -735,7 +766,7 @@ export async function inboxClassify(req: InboxClassifyRequest): Promise<InboxCla
  */
 export async function inboxConfirm(req: InboxConfirmRequest): Promise<InboxConfirmResponse> {
   return unwrap(
-    await commands.inboxConfirm(req as Parameters<typeof commands.inboxConfirm>[0]),
+    await commands.inboxConfirm(req),
   );
 }
 
@@ -931,9 +962,7 @@ export async function calibrationMatchSuggest(args: {
       contractVersion: '2.0.0',
       requestId: args.requestId,
       sessionId: args.sessionId,
-      calibrationTypes: (args.calibrationTypes ?? null) as Parameters<
-        typeof commands.calibrationMatchSuggest
-      >[0]['calibrationTypes'],
+      calibrationTypes: (args.calibrationTypes ?? null),
     }),
   ) as CalibrationMatchSuggestResponse;
 }
@@ -973,9 +1002,7 @@ export async function calibrationMatchSuggestBatch(args: {
       contractVersion: '1.0',
       requestId: args.requestId,
       sessionIds: args.sessionIds,
-      calibrationTypes: (args.calibrationTypes ?? null) as Parameters<
-        typeof commands.calibrationMatchSuggestBatch
-      >[0]['calibrationTypes'],
+      calibrationTypes: (args.calibrationTypes ?? null),
     }),
   ) as CalibrationMatchBatchResponse;
 }
@@ -1054,7 +1081,7 @@ export type {
 
 /** List all seeded tool profiles joined with settings state. */
 export async function toolProfileList(): Promise<ToolProfileListResponse> {
-  return unwrap(await commands.toolsList()) as ToolProfileListResponse;
+  return unwrap(await commands.toolsList());
 }
 
 /** Launch a processing tool for a project. */
@@ -1064,7 +1091,7 @@ export async function toolLaunch(request: ToolLaunchRequest): Promise<ToolLaunch
 
 /** Save `executable_path` / enabled for a tool. */
 export async function toolUpdate(request: UpdateProcessingTool): Promise<ToolProfileSummary> {
-  return unwrap(await commands.toolsUpdate(request)) as ToolProfileSummary;
+  return unwrap(await commands.toolsUpdate(request));
 }
 
 /** Validate an executable path. */
@@ -1121,7 +1148,7 @@ export async function artifactClassify(
  * `artifact.mark_resolved` — mark a `missing` artifact as user-resolved.
  */
 export async function artifactMarkResolved(request: ArtifactMarkResolvedRequest): Promise<void> {
-  await unwrap(await commands.artifactMarkResolved(request));
+  unwrap(await commands.artifactMarkResolved(request));
 }
 
 // ── Spec 016: Source Protection (US2–US4) ─────────────────────────────────────
@@ -1221,7 +1248,7 @@ export async function getTargetDetail(req: TargetGetRequest): Promise<TargetDeta
  * `target.list` — list all canonical targets ordered by primaryDesignation (spec 036 gen-3).
  */
 export async function listTargets(): Promise<TargetListItem[]> {
-  return unwrap(await commands.targetList()) as TargetListItem[];
+  return unwrap(await commands.targetList());
 }
 
 /**
@@ -1376,15 +1403,15 @@ export async function listManifests(
   request: ManifestListRequest,
 ): Promise<ManifestListResponse> {
   return unwrap(
-    await commands.manifestList(request as Parameters<typeof commands.manifestList>[0]),
-  ) as ManifestListResponse;
+    await commands.manifestList(request),
+  );
 }
 
 /**
  * `project.manifest.get` — fetch one manifest with its full structured body (spec 024).
  */
 export async function getManifest(request: ManifestGetRequest): Promise<ManifestGetResponse> {
-  return unwrap(await commands.manifestGet(request)) as ManifestGetResponse;
+  return unwrap(await commands.manifestGet(request));
 }
 
 /**
@@ -1412,7 +1439,7 @@ export async function getProjectNote(req: ProjectNoteGetRequest): Promise<Projec
  * `project.manifest.reveal_in_os` — open the manifest file in the OS file manager (spec 024).
  */
 export async function revealManifestInOs(request: ManifestRevealRequest): Promise<void> {
-  await unwrap(await commands.manifestRevealInOs(request));
+  unwrap(await commands.manifestRevealInOs(request));
 }
 
 // Re-export manifest types for callers.

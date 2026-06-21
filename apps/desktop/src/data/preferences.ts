@@ -79,7 +79,8 @@ export function resetPreferences(): void {
   try {
     localStorage.removeItem(STORAGE_KEY);
   } catch {
-    // ignore
+    // Intentional ignore: localStorage may be unavailable (private mode / quota);
+    // the in-memory cache was already cleared above, so this is best-effort.
   }
   notify();
 }

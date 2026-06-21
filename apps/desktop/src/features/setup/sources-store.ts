@@ -1,4 +1,6 @@
 import { registerRootBatch } from '@/api/commands';
+import { ERROR_MESSAGES } from '@/lib/error-messages';
+import { errMessage } from '@/lib/errors';
 
 const STORAGE_KEY = 'alm-setup-wizard-state';
 
@@ -68,14 +70,6 @@ export interface ValidationError {
   message: string;
 }
 
-/** Error code to user-facing message map for roots.register contract errors. */
-const ERROR_MESSAGES: Record<string, string> = {
-  'path.not_exists': 'This directory does not exist',
-  'path.not_directory': 'This path is not a directory',
-  'path.permission_denied': 'Cannot read this directory — check permissions',
-  'path.already_registered': 'This directory is already registered',
-  'path.already_registered.different_kind': 'This directory is registered under a different category',
-};
 
 /** Load sources state from localStorage. */
 export function loadSources(): SourcesState {
@@ -199,12 +193,12 @@ export function validatePath(
 
   const dedup = checkDeduplication(sources, kind, path);
   if (dedup.sameKindDuplicate) {
-    return { code: 'path.already_registered', message: ERROR_MESSAGES['path.already_registered'] };
+    return { code: 'path.already_registered', message: ERROR_MESSAGES['path.already_registered'] ?? 'This directory is already registered' };
   }
   if (dedup.crossKindConflict) {
     return {
       code: 'path.already_registered.different_kind',
-      message: `${ERROR_MESSAGES['path.already_registered.different_kind']} (${dedup.crossKindConflict})`,
+      message: `${ERROR_MESSAGES['path.already_registered.different_kind'] ?? 'This directory is registered under a different category'} (${dedup.crossKindConflict})`,
     };
   }
 
@@ -257,7 +251,7 @@ export async function flushToDB(sources: SourcesState): Promise<FlushResult> {
         };
       }
       const errorCode = item.error ?? 'unknown';
-      const message = ERROR_MESSAGES[errorCode] ?? `Registration failed: ${errorCode}`;
+      const message = ERROR_MESSAGES[errorCode as import('@/bindings/index').ErrorCode] ?? `Registration failed: ${errorCode}`;
       return { kind: item.kind as SourceKind, path: item.path, success: false, error: message };
     });
 
@@ -268,7 +262,7 @@ export async function flushToDB(sources: SourcesState): Promise<FlushResult> {
         kind: s.kind,
         path: s.path,
         success: false,
-        error: `Batch registration failed: ${String(err)}`,
+        error: `Batch registration failed: ${errMessage(err)}`,
       })),
       allSucceeded: false,
     };

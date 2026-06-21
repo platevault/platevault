@@ -1,13 +1,18 @@
 /**
- * Inbox store — reactive hooks for classify, confirm, and reclassify.
+ * Inbox store — TanStack Query hooks for classify, confirm, and reclassify.
  *
- * Uses `createParameterizedStore` keyed by string IDs. Classification results
- * are keyed by `${rootAbsolutePath}|${inboxItemId}`. Scan results are keyed
- * by `${rootId}|${rootAbsolutePath}`.
+ * Key structure (queryKeys factory):
+ *   queryKeys.inbox.list('all') = ['inbox', 'all'] — cross-root aggregate list.
+ *   classify/confirm/reclassify mutations invalidate ['inbox'] prefix so the
+ *   aggregate list and any future per-root keys are all refreshed.
+ *
+ * NOTE: US3 (O(n^2) indexOf / virtualisation) is out of scope here — this
+ * file only migrates the store layer to TanStack Query.
  */
 
-import { useCallback, useEffect, useState } from 'react';
-import { createParameterizedStore, useParameterizedQuery } from '@/data/store';
+import { useCallback, useEffect, useState } from "react";
+import { useQuery, useQueryClient } from "@tanstack/react-query";
+import { queryKeys } from "@/data/queryKeys";
 import {
   inboxScanFolder,
   inboxClassify,
@@ -63,35 +68,6 @@ export type {
   InboxStatsTotals,
 };
 
-// ── Parameterised stores ──────────────────────────────────────────────────────
-
-/**
- * Store for inbox.classify results.
- * Key format: `${rootAbsolutePath}|${inboxItemId}[|force]`
- */
-export const classifyStore = createParameterizedStore<string, InboxClassifyResponse>(
-  (key) => {
-    const [rootAbsolutePath, inboxItemId, forceStr] = key.split('|');
-    return inboxClassify({
-      inboxItemId,
-      rootAbsolutePath,
-      forceRescan: forceStr === 'force',
-    });
-  },
-);
-
-/**
- * Store for inbox.scan.folder results.
- * Key format: `${rootId}|${rootAbsolutePath}`
- */
-export const scanFolderStore = createParameterizedStore<string, InboxScanFolderResponse>(
-  (key) => {
-    const [rootId, ...rest] = key.split('|');
-    const rootAbsolutePath = rest.join('|');
-    return inboxScanFolder({ rootId, rootAbsolutePath, followSymlinks: false });
-  },
-);
-
 // ── Query hooks ───────────────────────────────────────────────────────────────
 
 /** Load and cache an inbox classification for the given item. */
@@ -103,13 +79,54 @@ export function useInboxClassification(
   const key = forceRescan
     ? `${rootAbsolutePath}|${inboxItemId}|force`
     : `${rootAbsolutePath}|${inboxItemId}`;
-  return useParameterizedQuery(classifyStore, key);
+  const { data, isFetching, error } = useQuery<InboxClassifyResponse>({
+    queryKey: [queryKeys.inbox.list('all')[0], "classify", key],
+    queryFn: () => {
+      const [rootPath, itemId, forceStr] = key.split("|");
+      return inboxClassify({
+        inboxItemId: itemId,
+        rootAbsolutePath: rootPath,
+        forceRescan: forceStr === "force",
+      });
+    },
+    enabled: !!inboxItemId && !!rootAbsolutePath,
+  });
+  return { data, loading: isFetching, error: error ?? undefined };
 }
 
 /** Load and cache an inbox scan for a root folder. */
 export function useInboxScan(rootId: string, rootAbsolutePath: string) {
-  const key = `${rootId}|${rootAbsolutePath}`;
-  return useParameterizedQuery(scanFolderStore, key);
+  const { data, isFetching, error } = useQuery<InboxScanFolderResponse>({
+    queryKey: [queryKeys.inbox.list('all')[0], "scan", rootId, rootAbsolutePath],
+    queryFn: () => inboxScanFolder({ rootId, rootAbsolutePath, followSymlinks: false }),
+    enabled: !!rootId && !!rootAbsolutePath,
+  });
+  return { data, loading: isFetching, error: error ?? undefined };
+}
+
+/**
+ * Load and cache the cross-root unacknowledged inbox list.
+ *
+ * Key: queryKeys.inbox.list('all') = ['inbox', 'all'].
+ * Returns refresh() to manually re-fetch (e.g. after a rescan).
+ */
+export function useInboxList() {
+  const queryClient = useQueryClient();
+  // 'all' is the sentinel rootId for the cross-root aggregate.
+  const listKey = queryKeys.inbox.list('all');
+  const { data, isFetching, error } = useQuery<InboxListResponse>({
+    queryKey: listKey,
+    queryFn: () => inboxList(),
+  });
+  const refresh = useCallback(() => {
+    void queryClient.invalidateQueries({ queryKey: listKey });
+  }, [queryClient, listKey]);
+  return {
+    data: data ?? null,
+    loading: isFetching,
+    error: error ? String(error) : null,
+    refresh,
+  };
 }
 
 // ── Mutation hooks ────────────────────────────────────────────────────────────
@@ -160,6 +177,7 @@ export interface ConfirmState {
 
 /** Returns a confirm callback and its loading/result state. */
 export function useInboxConfirm() {
+  const queryClient = useQueryClient();
   const [state, setState] = useState<ConfirmState>({
     loading: false,
     result: null,
@@ -189,6 +207,10 @@ export function useInboxConfirm() {
           rootId: args.rootId ?? null,
         });
         setState({ loading: false, result, error: null, errorCode: null, errorDetails: null });
+        // Invalidate the inbox list so it refreshes after confirmation.
+        // Use queryKeys.inbox.list(rootId) prefix — ['inbox'] covers both the
+        // aggregate list and any future per-root keys without going broader.
+        void queryClient.invalidateQueries({ queryKey: queryKeys.inbox.list('all') });
         return result;
       } catch (e) {
         const norm = normalizeConfirmError(e);
@@ -202,7 +224,7 @@ export function useInboxConfirm() {
         throw e;
       }
     },
-    [],
+    [queryClient],
   );
 
   return { ...state, confirm };
@@ -216,6 +238,7 @@ export interface ReclassifyState {
 
 /** Returns a reclassify callback and its loading/result state. */
 export function useInboxReclassify(inboxItemId: string) {
+  const queryClient = useQueryClient();
   const [state, setState] = useState<ReclassifyState>({
     loading: false,
     result: null,
@@ -229,7 +252,9 @@ export function useInboxReclassify(inboxItemId: string) {
         const result = await inboxReclassify({ inboxItemId, overrides });
         setState({ loading: false, result, error: null });
         // Invalidate all classification cache entries so the UI refreshes.
-        classifyStore.invalidateAll();
+        void queryClient.invalidateQueries({
+          queryKey: [queryKeys.inbox.list('all')[0], "classify"],
+        });
         return result;
       } catch (e) {
         const msg = e instanceof Error ? e.message : String(e);
@@ -237,51 +262,10 @@ export function useInboxReclassify(inboxItemId: string) {
         throw e;
       }
     },
-    [inboxItemId],
+    [inboxItemId, queryClient],
   );
 
   return { ...state, reclassify };
-}
-
-// ── Cross-root list hooks (spec 039) ─────────────────────────────────────────
-
-export interface InboxListState {
-  data: InboxListResponse | null;
-  loading: boolean;
-  error: string | null;
-}
-
-/**
- * Load and cache the cross-root unacknowledged inbox list.
- * Call `refresh()` to re-fetch (e.g. after a rescan).
- */
-export function useInboxList() {
-  const [epoch, setEpoch] = useState(0);
-  const [state, setState] = useState<InboxListState>({
-    data: null,
-    loading: true,
-    error: null,
-  });
-
-  useEffect(() => {
-    let cancelled = false;
-    setState((s) => ({ ...s, loading: true, error: null }));
-    inboxList()
-      .then((resp) => {
-        if (!cancelled) setState({ data: resp, loading: false, error: null });
-      })
-      .catch((e: unknown) => {
-        if (!cancelled)
-          setState({ data: null, loading: false, error: String(e) });
-      });
-    return () => {
-      cancelled = true;
-    };
-  }, [epoch]);
-
-  const refresh = useCallback(() => setEpoch((n) => n + 1), []);
-
-  return { ...state, refresh };
 }
 
 export interface InboxItemMetadataState {
@@ -293,37 +277,22 @@ export interface InboxItemMetadataState {
 /**
  * Load per-file extracted metadata for one inbox item (spec 041 US2/FR-010).
  *
- * Mirrors `useInboxList`: a `useState` + `useEffect` + cancelled-flag pattern
- * (this app does not use React Query). Pass `null` to skip fetching (e.g. when
- * no item is selected). Re-fetches whenever `itemId` changes.
+ * Backed by TanStack Query (matching the rest of this store). Pass `null` to
+ * skip fetching (e.g. when no item is selected); the query stays disabled and
+ * returns an empty list. Re-fetches whenever `itemId` changes.
  */
-export function useInboxItemMetadata(itemId: string | null) {
-  const [state, setState] = useState<InboxItemMetadataState>({
-    data: [],
-    loading: false,
-    error: null,
+export function useInboxItemMetadata(itemId: string | null): InboxItemMetadataState {
+  const { data, isFetching, error } = useQuery<InboxFileMetadata[]>({
+    queryKey: queryKeys.inbox.metadata(itemId ?? '__none__'),
+    queryFn: () => inboxItemMetadata(itemId as string),
+    enabled: itemId != null,
   });
 
-  useEffect(() => {
-    if (!itemId) {
-      setState({ data: [], loading: false, error: null });
-      return;
-    }
-    let cancelled = false;
-    setState((s) => ({ ...s, loading: true, error: null }));
-    inboxItemMetadata(itemId)
-      .then((files) => {
-        if (!cancelled) setState({ data: files, loading: false, error: null });
-      })
-      .catch((e: unknown) => {
-        if (!cancelled) setState({ data: [], loading: false, error: String(e) });
-      });
-    return () => {
-      cancelled = true;
-    };
-  }, [itemId]);
-
-  return state;
+  return {
+    data: data ?? [],
+    loading: itemId != null && isFetching,
+    error: error ? String(error) : null,
+  };
 }
 
 export interface RescanState {
@@ -333,10 +302,7 @@ export interface RescanState {
 
 /**
  * Trigger a rescan of all registered roots (FR-005).
- * Each root with a known `rootId` and `rootAbsolutePath` is re-scanned via
- * `inboxScanFolder`; confirmed items are not resurrected (the scan only
- * INSERT OR IGNOREs — existing resolved rows keep their state).
- * On completion, `onComplete` is called so the caller can refresh the list.
+ * On completion, calls onComplete so the caller can refresh the list.
  */
 export function useInboxRescan(
   roots: Array<{ rootId: string; rootAbsolutePath: string }>,

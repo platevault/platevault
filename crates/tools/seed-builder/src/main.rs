@@ -3,14 +3,14 @@
 //! Queries the SIMBAD TAP sync endpoint (CDS) and emits the bundled seed asset
 //! (`assets/seed/seed.json`) that
 //! the app loads into its local cache at first run
-//! (`targeting::resolver::seed`). This binary is NOT part of the shipped app; it
+//! (`targeting_resolver::seed`). This binary is NOT part of the shipped app; it
 //! is run by a maintainer when the seed needs (re)building.
 //!
 //! # What it pulls
 //!
 //! - The full **Messier** catalogue (`M 1` … `M 110`).
 //! - The **Caldwell** objects, via the committed C1–C109 → NGC/IC map
-//!   (`targeting::resolver::caldwell`), since Caldwell is not a SIMBAD
+//!   (`targeting_resolver::caldwell`), since Caldwell is not a SIMBAD
 //!   designation (research.md R2).
 //! - Optionally a slice of **NGC** (`--ngc <N>`), and the full set when run with
 //!   the documented prefix list below.
@@ -57,10 +57,13 @@
 use std::collections::BTreeMap;
 use std::time::Duration;
 
-use targeting::resolver::caldwell;
-use targeting::resolver::map_otype;
-use targeting::resolver::seed::{SeedAlias, SeedAsset, SeedEntry};
-use targeting::resolver::{AliasKind, ObjectType};
+use domain_core::ids::Timestamp;
+use targeting_resolver::caldwell;
+use targeting_resolver::map_otype;
+// Shared SIMBAD `basic`-row tokenizer (US11 T145). Replaces the local copy.
+use targeting_resolver::seed::{SeedAlias, SeedAsset, SeedEntry};
+use targeting_resolver::simbad::parse_basic_row;
+use targeting_resolver::{AliasKind, ObjectType};
 
 const TAP_ENDPOINT: &str = "https://simbad.cds.unistra.fr/simbad/sim-tap/sync";
 const USER_AGENT: &str = "astro-plan-seed-builder/0.1 (+https://github.com/; spec-035)";
@@ -230,7 +233,7 @@ fn run(out: &str, ngc_slice: u32, mode: Mode) -> Result<(), Box<dyn std::error::
 
     let asset = SeedAsset {
         version: 1,
-        generated_at: now_iso(),
+        generated_at: Timestamp::now_iso(),
         source: "SIMBAD TAP (CDS, https://simbad.cds.unistra.fr) — spec 035 seed-builder"
             .to_owned(),
         entries,
@@ -384,20 +387,6 @@ fn tap_query(
     Ok(lines.into_iter().filter(|l| !l.trim().is_empty()).collect())
 }
 
-/// Parse a `basic`-row TSV line into `(oid, main_id, ra, dec, otype)`.
-fn parse_basic_row(line: &str) -> Option<(i64, String, f64, f64, String)> {
-    let cols = split_tsv(line);
-    if cols.len() < 5 {
-        return None;
-    }
-    let oid: i64 = unquote(&cols[0]).parse().ok()?;
-    let main_id = unquote(&cols[1]);
-    let ra: f64 = unquote(&cols[2]).parse().ok()?;
-    let dec: f64 = unquote(&cols[3]).parse().ok()?;
-    let otype = unquote(&cols[4]);
-    Some((oid, main_id, ra, dec, otype))
-}
-
 /// Percent-encode an ADQL query for use in a URL query string.
 fn url_encode(s: &str) -> String {
     const HEX: &[u8; 16] = b"0123456789ABCDEF";
@@ -430,10 +419,4 @@ fn unquote(s: &str) -> String {
 /// (e.g. SIMBAD `"M   1"` → `"M 1"`, `"NGC  1952"` → `"NGC 1952"`).
 fn collapse_spaces(s: &str) -> String {
     s.split_whitespace().collect::<Vec<_>>().join(" ")
-}
-
-fn now_iso() -> String {
-    time::OffsetDateTime::now_utc()
-        .format(&time::format_description::well_known::Rfc3339)
-        .unwrap_or_else(|_| "1970-01-01T00:00:00Z".to_owned())
 }

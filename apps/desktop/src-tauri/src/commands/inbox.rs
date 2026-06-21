@@ -8,14 +8,14 @@
 
 use app_core::inbox::classify::{classify, ClassifyRequest};
 use app_core::inbox::confirm::{confirm, ConfirmRequest};
-use app_core::inbox::inbox_plan::{
-    apply_all_inbox_plans, apply_inbox_plan, apply_selected_inbox_plans, cancel_inbox_plan,
-    get_inbox_plan, list_open_inbox_plans,
-};
 use app_core::inbox::metadata::get_inbox_item_metadata;
 use app_core::inbox::reclassify::{reclassify, ReclassifyOverride, ReclassifyRequest};
 use app_core::inbox::scan::{scan_root, ScanOptions, ScannedMasterFile};
 use app_core::inbox::stats::inbox_stats as inbox_stats_uc;
+use app_core::inbox_plan::{
+    apply_all_inbox_plans, apply_inbox_plan, apply_selected_inbox_plans, cancel_inbox_plan,
+    get_inbox_plan, list_open_inbox_plans,
+};
 use contracts_core::inbox::{
     InboxApplyAllResponse, InboxApplySelectedRequest, InboxBreakdownEntry, InboxClassifyRequest,
     InboxClassifyResponse, InboxConfirmRequest, InboxConfirmResponse, InboxFileEntry,
@@ -25,6 +25,7 @@ use contracts_core::inbox::{
     InboxScanFolderResponse, InboxScanResult, InboxStatsResponse,
 };
 use contracts_core::plan_apply::PlanApplyResponse;
+use contracts_core::ContractError;
 use persistence_db::repositories::inbox::{
     grouping_keys_for_items, list_unacknowledged_across_roots,
 };
@@ -50,14 +51,14 @@ const INBOX_LIST_LIMIT: i64 = 500;
 pub async fn inbox_classify(
     req: InboxClassifyRequest,
     pool: tauri::State<'_, SqlitePool>,
-) -> Result<InboxClassifyResponse, String> {
+) -> Result<InboxClassifyResponse, ContractError> {
     let use_case_req = ClassifyRequest {
         inbox_item_id: req.inbox_item_id,
         root_absolute_path: PathBuf::from(&req.root_absolute_path),
         force_rescan: req.force_rescan,
     };
 
-    let resp = classify(&pool, use_case_req).await.map_err(|e| e.message)?;
+    let resp = classify(&pool, use_case_req).await?;
 
     Ok(InboxClassifyResponse {
         inbox_item_id: resp.inbox_item_id,
@@ -92,23 +93,23 @@ pub async fn inbox_classify(
 pub async fn inbox_confirm(
     req: InboxConfirmRequest,
     pool: tauri::State<'_, SqlitePool>,
-) -> Result<InboxConfirmResponse, String> {
+) -> Result<InboxConfirmResponse, ContractError> {
     let use_case_req = ConfirmRequest {
         inbox_item_id: req.inbox_item_id,
         action: req.action,
         content_signature: req.content_signature,
         destructive_destination: req.destructive_destination,
         root_absolute_path: PathBuf::from(&req.root_absolute_path),
+        // Spec 041 US8/US9: caller-selected destination root (optional).
         root_id: req.root_id,
     };
 
     // Spec 041 US8/US9: confirm can block on a destination-root choice
     // (`inbox.destination_root_required` / `inbox.no_destination_root` /
     // `inbox.invalid_destination_root`) or a missing path attribute
-    // (`inbox.missing_path_attributes`). The error message carries the code so
-    // the UI can branch; the candidate roots / offending files travel in the
-    // error `details`, returned over IPC via the standard error envelope.
-    let resp = confirm(&pool, use_case_req).await.map_err(|e| e.message)?;
+    // (`inbox.missing_path_attributes`). The ContractError carries code +
+    // details so the UI can branch on the error code.
+    let resp = confirm(&pool, use_case_req).await?;
 
     let organization_state = match resp.organization_state {
         contracts_core::first_run::OrganizationState::Organized => "organized",
@@ -153,7 +154,7 @@ pub async fn inbox_confirm(
 pub async fn inbox_reclassify(
     req: InboxReclassifyRequest,
     pool: tauri::State<'_, SqlitePool>,
-) -> Result<InboxReclassifyResponse, String> {
+) -> Result<InboxReclassifyResponse, ContractError> {
     let use_case_req = ReclassifyRequest {
         inbox_item_id: req.inbox_item_id,
         overrides: req
@@ -171,7 +172,7 @@ pub async fn inbox_reclassify(
             .collect(),
     };
 
-    let resp = reclassify(&pool, use_case_req).await.map_err(|e| e.message)?;
+    let resp = reclassify(&pool, use_case_req).await?;
 
     Ok(InboxReclassifyResponse {
         inbox_item_id: resp.inbox_item_id,
@@ -213,10 +214,10 @@ pub async fn inbox_item_metadata(
 pub async fn inbox_scan_folder(
     req: InboxScanFolderRequest,
     pool: tauri::State<'_, SqlitePool>,
-) -> Result<InboxScanFolderResponse, String> {
+) -> Result<InboxScanFolderResponse, ContractError> {
     let root_path = PathBuf::from(&req.root_absolute_path);
     let opts = ScanOptions { follow_symlinks: req.follow_symlinks };
-    let scanned = scan_root(&root_path, &opts)?;
+    let scanned = scan_root(&root_path, &opts).map_err(ContractError::internal)?;
 
     let mut items: Vec<InboxItemSummary> = Vec::new();
 
@@ -269,7 +270,7 @@ pub async fn inbox_scan_folder(
         .bind(folder_format_str)
         .execute(&*pool)
         .await
-        .map_err(|e| e.to_string())?;
+        .map_err(|e| ContractError::internal(e.to_string()))?;
 
         // Fetch the authoritative row (may have existed before).
         let row: Option<(String, String, i64, String, Option<String>, Option<String>)> =
@@ -281,7 +282,7 @@ pub async fn inbox_scan_folder(
             .bind(&scanned_item.relative_path)
             .fetch_optional(&*pool)
             .await
-            .map_err(|e| e.to_string())?;
+            .map_err(|e| ContractError::internal(e.to_string()))?;
 
         if let Some((id, state, fc, lane, sig, fmt)) = row {
             items.push(InboxItemSummary {
@@ -316,7 +317,7 @@ async fn persist_master_item(
     root_id: &str,
     lane: &str,
     master: &ScannedMasterFile,
-) -> Result<Option<InboxItemSummary>, String> {
+) -> Result<Option<InboxItemSummary>, ContractError> {
     let master_item_id = Uuid::new_v4().to_string();
     let frame_type_str = format!("{:?}", master.detection.frame_type).to_ascii_lowercase();
     let format_str = master.format.as_str();
@@ -339,7 +340,7 @@ async fn persist_master_item(
     .bind(master.exposure_s)
     .execute(pool)
     .await
-    .map_err(|e| e.to_string())?;
+    .map_err(|e| ContractError::internal(e.to_string()))?;
 
     // Fetch authoritative row (may have existed from a prior scan).
     let row: Option<MasterItemRow> = sqlx::query_as(
@@ -351,7 +352,7 @@ async fn persist_master_item(
     .bind(&master.relative_path)
     .fetch_optional(pool)
     .await
-    .map_err(|e| e.to_string())?;
+    .map_err(|e| ContractError::internal(e.to_string()))?;
 
     Ok(row.map(|(id, state, fc, lane, sig, _is_m, mft, mfilt, mexp)| InboxItemSummary {
         inbox_item_id: id,
@@ -380,10 +381,12 @@ async fn persist_master_item(
 /// Returns a string error on database failure.
 #[tauri::command]
 #[specta::specta]
-pub async fn inbox_list(pool: tauri::State<'_, SqlitePool>) -> Result<InboxListResponse, String> {
+pub async fn inbox_list(
+    pool: tauri::State<'_, SqlitePool>,
+) -> Result<InboxListResponse, ContractError> {
     let rows = list_unacknowledged_across_roots(&pool, INBOX_LIST_LIMIT)
         .await
-        .map_err(|e| e.to_string())?;
+        .map_err(|e| ContractError::internal(e.to_string()))?;
 
     let total = rows.len();
     let capped = total >= usize::try_from(INBOX_LIST_LIMIT).unwrap_or(usize::MAX);
@@ -391,8 +394,9 @@ pub async fn inbox_list(pool: tauri::State<'_, SqlitePool>) -> Result<InboxListR
     // Per-item grouping aggregates for the multi-level grouping UI (spec 041).
     // Single GROUP BY pass over the items we're about to return — no N+1.
     let item_ids: Vec<String> = rows.iter().map(|r| r.id.clone()).collect();
-    let mut grouping =
-        grouping_keys_for_items(&pool, &item_ids).await.map_err(|e| e.to_string())?;
+    let mut grouping = grouping_keys_for_items(&pool, &item_ids)
+        .await
+        .map_err(|e| ContractError::internal(e.to_string()))?;
 
     let items = rows
         .into_iter()
@@ -442,7 +446,7 @@ pub async fn inbox_list(pool: tauri::State<'_, SqlitePool>) -> Result<InboxListR
 /// Never fails; always returns `Ok`.
 #[tauri::command]
 #[specta::specta]
-pub async fn inbox_scan(root_id: Option<String>) -> Result<InboxScanResult, String> {
+pub async fn inbox_scan(root_id: Option<String>) -> Result<InboxScanResult, ContractError> {
     let root = root_id.unwrap_or_else(|| "root-inbox-001".to_owned());
     tracing::debug!("stub: inbox.scan root_id={root}");
     Ok(InboxScanResult {

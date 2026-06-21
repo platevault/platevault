@@ -4,24 +4,18 @@
 //! Operates on `cameras`, `telescopes`, `optical_trains`, and `filters`
 //! tables (migration 0007).
 
-use contracts_core::equipment::{
+use domain_core::equipment::{
     Camera, CreateCamera, CreateFilter, CreateOpticalTrain, CreateTelescope, Filter,
     FilterCategory, OpticalTrain, Telescope, UpdateCamera, UpdateFilter, UpdateOpticalTrain,
     UpdateTelescope,
 };
+use domain_core::ids::Timestamp;
 use sqlx::SqlitePool;
-use time::OffsetDateTime;
 use uuid::Uuid;
 
 use crate::{DbError, DbResult};
 
 // ── Helpers ─────────────────────────────────────────────────────────────────
-
-fn now_iso() -> String {
-    OffsetDateTime::now_utc()
-        .format(&time::format_description::well_known::Rfc3339)
-        .unwrap_or_else(|_| "1970-01-01T00:00:00Z".to_owned())
-}
 
 fn category_to_str(cat: FilterCategory) -> &'static str {
     match cat {
@@ -84,7 +78,7 @@ pub async fn list_cameras(pool: &SqlitePool) -> DbResult<Vec<Camera>> {
 pub async fn create_camera(pool: &SqlitePool, req: &CreateCamera) -> DbResult<Camera> {
     let id = Uuid::new_v4().to_string();
     let aliases_json = encode_aliases(&req.aliases);
-    let created_at = now_iso();
+    let created_at = Timestamp::now_iso();
 
     sqlx::query(
         "INSERT INTO cameras (id, name, aliases, auto_detected, created_at) VALUES (?, ?, ?, 0, ?)",
@@ -207,7 +201,7 @@ pub async fn list_telescopes(pool: &SqlitePool) -> DbResult<Vec<Telescope>> {
 pub async fn create_telescope(pool: &SqlitePool, req: &CreateTelescope) -> DbResult<Telescope> {
     let id = Uuid::new_v4().to_string();
     let aliases_json = encode_aliases(&req.aliases);
-    let created_at = now_iso();
+    let created_at = Timestamp::now_iso();
 
     sqlx::query(
         "INSERT INTO telescopes (id, name, aliases, focal_length_mm, auto_detected, created_at) \
@@ -346,7 +340,7 @@ pub async fn create_optical_train(
     req: &CreateOpticalTrain,
 ) -> DbResult<OpticalTrain> {
     let id = Uuid::new_v4().to_string();
-    let created_at = now_iso();
+    let created_at = Timestamp::now_iso();
 
     sqlx::query(
         "INSERT INTO optical_trains (id, name, telescope_id, camera_id, focal_length_mm, created_at) \
@@ -452,7 +446,7 @@ pub async fn list_filters(pool: &SqlitePool) -> DbResult<Vec<Filter>> {
 pub async fn create_filter(pool: &SqlitePool, req: &CreateFilter) -> DbResult<Filter> {
     let id = Uuid::new_v4().to_string();
     let category_str = category_to_str(req.category);
-    let created_at = now_iso();
+    let created_at = Timestamp::now_iso();
 
     sqlx::query(
         "INSERT INTO filters (id, name, category, auto_detected, created_at) VALUES (?, ?, ?, 0, ?)",
@@ -518,7 +512,7 @@ pub async fn delete_filter(pool: &SqlitePool, id: &str) -> DbResult<()> {
 
 #[cfg(test)]
 mod tests {
-    use contracts_core::equipment::{
+    use domain_core::equipment::{
         CreateCamera, CreateFilter, CreateOpticalTrain, CreateTelescope, FilterCategory,
         UpdateCamera, UpdateFilter, UpdateOpticalTrain, UpdateTelescope,
     };

@@ -15,7 +15,7 @@ mod support;
 
 use app_core::target_resolve::resolve;
 use contracts_core::targets::{TargetResolveSimbadRequest, TargetResolveStatus};
-use targeting::resolver::{
+use targeting_resolver::{
     AliasKind, FakeResolver, ObjectType, ResolvedAlias, ResolvedIdentity, TargetSource,
 };
 use uuid::Uuid;

@@ -206,13 +206,18 @@ pub fn render_manifest_markdown(
 ///
 /// # Errors
 /// Returns a descriptive string on I/O failure.
+///
+/// spec 042 (T251): the I/O is synchronous `std::fs`; the function stays
+/// `async` so the caller's `.await` and the public signature are unchanged
+/// while `project_structure` no longer depends on `tokio`. Behaviour (dir
+/// creation, never-overwrite idempotency, written bytes) is identical.
+#[allow(clippy::unused_async)]
 pub async fn write_manifest_file(
     notes_dir: &Path,
     filename: &str,
     markdown: &str,
 ) -> Result<PathBuf, String> {
-    tokio::fs::create_dir_all(notes_dir)
-        .await
+    std::fs::create_dir_all(notes_dir)
         .map_err(|e| format!("create notes dir {}: {e}", notes_dir.display()))?;
 
     let target = notes_dir.join(filename);
@@ -223,8 +228,7 @@ pub async fn write_manifest_file(
         return Ok(target);
     }
 
-    tokio::fs::write(&target, markdown.as_bytes())
-        .await
+    std::fs::write(&target, markdown.as_bytes())
         .map_err(|e| format!("write manifest {}: {e}", target.display()))?;
 
     Ok(target)
@@ -315,7 +319,7 @@ mod tests {
         let filename = "manifest-2026-01-01-000000-created.md";
         let result = write_manifest_file(&notes_dir, filename, markdown).await.unwrap();
         assert!(result.exists());
-        let content = tokio::fs::read_to_string(&result).await.unwrap();
+        let content = std::fs::read_to_string(&result).unwrap();
         assert_eq!(content, markdown);
     }
 
@@ -328,7 +332,7 @@ mod tests {
         write_manifest_file(&notes_dir, filename, md).await.unwrap();
         // Second write with different content — should NOT overwrite.
         write_manifest_file(&notes_dir, filename, "second").await.unwrap();
-        let content = tokio::fs::read_to_string(notes_dir.join(filename)).await.unwrap();
+        let content = std::fs::read_to_string(notes_dir.join(filename)).unwrap();
         assert_eq!(content, "first");
     }
 }

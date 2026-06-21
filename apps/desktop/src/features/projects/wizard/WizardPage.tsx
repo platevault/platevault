@@ -10,6 +10,7 @@ import { StepLayout, type StepLayoutData } from './StepLayout';
 import { StepReview } from './StepReview';
 import { callCreateProject } from '@/features/projects/store';
 import { addToast } from '@/shared/toast';
+import { errMessage } from '@/lib/errors';
 
 const STORAGE_KEY = 'alm-project-wizard-draft';
 
@@ -168,7 +169,7 @@ export function WizardPage() {
       // Navigate back to projects list; the list re-fetches automatically.
       void navigate({ to: '/projects' });
     } catch (err: unknown) {
-      const msg = err instanceof Error ? err.message : String(err);
+      const msg = errMessage(err);
       addToast({ message: `Could not create project: ${msg}`, variant: 'error' });
     } finally {
       setCreating(false);

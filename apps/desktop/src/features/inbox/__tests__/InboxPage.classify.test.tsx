@@ -15,8 +15,17 @@
  * 6. InboxList renders item with classification state pill / filters by lane.
  */
 
-import { render, screen, fireEvent, waitFor, act } from '@testing-library/react';
+import { render as rtlRender, screen, fireEvent, waitFor, act } from '@testing-library/react';
 import { describe, it, expect, vi, beforeEach } from 'vitest';
+import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
+import type { ReactElement } from 'react';
+
+// InboxDetail uses the TanStack-Query-backed `useInboxReclassify` hook (spec 042),
+// so every render must be wrapped in a QueryClientProvider.
+function render(ui: ReactElement) {
+  const queryClient = new QueryClient({ defaultOptions: { queries: { retry: false } } });
+  return rtlRender(<QueryClientProvider client={queryClient}>{ui}</QueryClientProvider>);
+}
 
 // ── Hoist mocks ────────────────────────────────────────────────────────────
 

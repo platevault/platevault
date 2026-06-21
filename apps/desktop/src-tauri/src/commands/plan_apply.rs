@@ -12,28 +12,40 @@
 //! All state-machine enforcement lives in `crates/app/core/src/plan_apply.rs`.
 //! These commands are thin adapters: validate inputs, delegate, return DTOs.
 
+use std::sync::Arc;
+
 use app_core::plan_apply::{
     apply_plan, cancel_plan, get_apply_status, resume_plan, retry_plan_item, skip_plan_item,
+    OperationEventSink,
 };
 use contracts_core::plan_apply::{
     PlanApplyResponse, PlanApplyStatus, PlanCancelResponse, PlanItemRetryResponse,
     PlanItemSkipResponse, PlanResumeResponse,
 };
+use tauri::ipc::Channel;
 use tauri::State;
 
 use crate::commands::lifecycle::AppState;
+use contracts_core::{ContractError, OperationEvent};
 
 // ── plans.apply ───────────────────────────────────────────────────────────────
 
-/// `plans.apply` — start applying an approved plan (US1, T019).
+/// `plans.apply` — start applying an approved plan (US1, T019; spec 042 US16 T240).
 ///
 /// Returns immediately with the run id and new state (`"applying"`).
-/// Progress is streamed via audit bus events (`plan.item.progress`,
-/// `plan.applying.completed`).
+///
+/// Live progress is streamed over the additive `on_event`
+/// `tauri::ipc::Channel<OperationEvent>` (spec 042 US16): the backend emits a
+/// `Started` event carrying the running `OperationHandle`, per-item
+/// `Progress`/`ItemApplied`/`ItemFailed` events, and a terminal
+/// `Completed`/`Failed` event carrying a terminal handle. The channel is the
+/// **live UI projection** — the durable audit trail (`plan_apply_events`) and
+/// the audit bus topics (`plan.item.progress`, `plan.applying.completed`) are
+/// retained unchanged (constitution §II).
 ///
 /// # Errors
 ///
-/// Returns `Err(String)` with:
+/// Returns `Err(ContractError)` with:
 /// - `"plan.not_found"` — plan not found.
 /// - `"plan.invalid_state"` — plan is not approved or CAS race.
 /// - `"plan.approval.stale"` — approval token mismatch.
@@ -44,8 +56,18 @@ pub async fn plans_apply_real(
     state: State<'_, AppState>,
     plan_id: String,
     approval_token: String,
-) -> Result<PlanApplyResponse, String> {
-    apply_plan(state.repo.pool(), &state.bus, &plan_id, &approval_token).await.map_err(|e| e.code)
+    on_event: Channel<OperationEvent>,
+) -> Result<PlanApplyResponse, ContractError> {
+    // Bridge the long-op contract to the webview channel. Sends are best-effort:
+    // if the channel is gone (window closed), swallow the error so the run still
+    // completes and the durable audit record is still written.
+    let sink: OperationEventSink = Arc::new(move |event: OperationEvent| {
+        if let Err(error) = on_event.send(event) {
+            tracing::warn!(%error, "plan-apply OperationEvent channel send failed");
+        }
+    });
+
+    apply_plan(state.repo.pool(), &state.bus, &plan_id, &approval_token, Some(sink)).await
 }
 
 // ── plans.cancel ──────────────────────────────────────────────────────────────
@@ -65,8 +87,8 @@ pub async fn plans_apply_real(
 pub async fn plans_cancel(
     state: State<'_, AppState>,
     plan_id: String,
-) -> Result<PlanCancelResponse, String> {
-    cancel_plan(state.repo.pool(), &plan_id).await.map_err(|e| e.code)
+) -> Result<PlanCancelResponse, ContractError> {
+    cancel_plan(state.repo.pool(), &plan_id).await
 }
 
 // ── plans.resume ──────────────────────────────────────────────────────────────
@@ -85,8 +107,8 @@ pub async fn plans_resume(
     state: State<'_, AppState>,
     plan_id: String,
     run_id: String,
-) -> Result<PlanResumeResponse, String> {
-    resume_plan(state.repo.pool(), &state.bus, &plan_id, &run_id).await.map_err(|e| e.code)
+) -> Result<PlanResumeResponse, ContractError> {
+    resume_plan(state.repo.pool(), &state.bus, &plan_id, &run_id).await
 }
 
 // ── plans.item.skip ───────────────────────────────────────────────────────────
@@ -108,8 +130,8 @@ pub async fn plans_item_skip(
     state: State<'_, AppState>,
     plan_id: String,
     item_id: String,
-) -> Result<PlanItemSkipResponse, String> {
-    skip_plan_item(state.repo.pool(), &plan_id, &item_id).await.map_err(|e| e.code)
+) -> Result<PlanItemSkipResponse, ContractError> {
+    skip_plan_item(state.repo.pool(), &plan_id, &item_id).await
 }
 
 // ── plans.item.retry ──────────────────────────────────────────────────────────
@@ -132,8 +154,8 @@ pub async fn plans_item_retry(
     state: State<'_, AppState>,
     plan_id: String,
     item_id: String,
-) -> Result<PlanItemRetryResponse, String> {
-    retry_plan_item(state.repo.pool(), &plan_id, &item_id).await.map_err(|e| e.code)
+) -> Result<PlanItemRetryResponse, ContractError> {
+    retry_plan_item(state.repo.pool(), &plan_id, &item_id).await
 }
 
 // ── plans.apply.status ────────────────────────────────────────────────────────
@@ -148,6 +170,6 @@ pub async fn plans_item_retry(
 pub async fn plans_apply_status(
     state: State<'_, AppState>,
     plan_id: String,
-) -> Result<PlanApplyStatus, String> {
-    get_apply_status(state.repo.pool(), &plan_id).await.map_err(|e| e.code)
+) -> Result<PlanApplyStatus, ContractError> {
+    get_apply_status(state.repo.pool(), &plan_id).await
 }

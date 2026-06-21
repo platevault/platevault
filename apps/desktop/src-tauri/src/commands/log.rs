@@ -26,6 +26,7 @@ use contracts_core::log::{
 use tauri::State;
 
 use crate::commands::lifecycle::AppState;
+use contracts_core::ContractError;
 
 // ── log.recent ────────────────────────────────────────────────────────────────
 
@@ -45,7 +46,7 @@ pub async fn log_recent(
     include_diagnostics: Option<bool>,
     source_filter: Option<Vec<LogEntrySource>>,
     window_size: Option<usize>,
-) -> Result<LogRecentResponse, String> {
+) -> Result<LogRecentResponse, ContractError> {
     let pool = state.repo.pool();
 
     // Parse the cursor into an event_id.
@@ -66,7 +67,7 @@ pub async fn log_recent(
         since_event_id,
     };
 
-    let entries = log_stream::recent_entries(pool, options).await.map_err(|e| e.to_string())?;
+    let entries = log_stream::recent_entries(pool, options).await.map_err(ContractError::from)?;
 
     Ok(LogRecentResponse {
         contract_version: LOG_ENTRY_CONTRACT_VERSION.to_owned(),
@@ -94,18 +95,28 @@ pub async fn log_export(
     since: Option<String>,
     until: Option<String>,
     include_diagnostics: Option<bool>,
-) -> Result<LogExportResponse, String> {
+) -> Result<LogExportResponse, ContractError> {
     // Validate format field (fixed to "json" in v1).
     if let Some(ref fmt) = format {
         if fmt != "json" {
-            return Err("format.unsupported".to_owned());
+            return Err(ContractError::new(
+                contracts_core::error_code::ErrorCode::FormatUnsupported,
+                "only \"json\" format is supported",
+                contracts_core::ErrorSeverity::Blocking,
+                false,
+            ));
         }
     }
 
     // Validate time range when both bounds are provided.
     if let (Some(ref s), Some(ref u)) = (&since, &until) {
         if s >= u {
-            return Err("range.invalid".to_owned());
+            return Err(ContractError::new(
+                contracts_core::error_code::ErrorCode::RangeInvalid,
+                "since must be before until",
+                contracts_core::ErrorSeverity::Blocking,
+                false,
+            ));
         }
     }
 
@@ -119,7 +130,7 @@ pub async fn log_export(
     };
 
     let (out_path, count, bytes) =
-        log_stream::export_entries(pool, options).await.map_err(|e| e.code_str().to_owned())?;
+        log_stream::export_entries(pool, options).await.map_err(ContractError::from)?;
 
     Ok(LogExportResponse {
         status: "success".to_owned(),

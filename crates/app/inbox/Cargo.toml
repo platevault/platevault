@@ -1,0 +1,36 @@
+[package]
+name = "app_core_inbox"
+version = "0.1.0"
+edition.workspace = true
+license.workspace = true
+
+[lib]
+path = "src/lib.rs"
+
+[dependencies]
+app_core_errors = { path = "../errors" }
+audit = { path = "../../audit" }
+calibration_master_detect = { path = "../../calibration/master-detect" }
+contracts_core = { path = "../../contracts/core" }
+metadata_core = { path = "../../metadata/core" }
+metadata_fits = { path = "../../metadata/fits" }
+metadata_video = { path = "../../metadata/video" }
+metadata_xisf = { path = "../../metadata/xisf" }
+patterns = { path = "../../patterns" }
+persistence_db = { path = "../../persistence/db" }
+camino = { workspace = true }
+hex.workspace = true
+serde = { workspace = true }
+serde_json.workspace = true
+sha2.workspace = true
+sqlx.workspace = true
+time = { workspace = true }
+tokio.workspace = true
+tracing = { workspace = true }
+uuid = { workspace = true }
+
+[dev-dependencies]
+tempfile = { workspace = true }
+
+[lints]
+workspace = true

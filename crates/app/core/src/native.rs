@@ -4,14 +4,20 @@
 //! contract error codes, and audit event emission for the three native
 //! filesystem operations: directory pick, file pick, and reveal.
 
+//!
+//! Extracted from `app_core` into its own crate (spec 042 / T253 O3b) as a pure
+//! leaf: it has zero `crate::` references and nothing else in `app_core`
+//! references it. `app_core` re-exports this crate at `app_core::native` so the
+//! public surface stays byte-identical.
+#![allow(clippy::doc_markdown)] // spec/domain terminology not appropriate for backticks
+
 use audit::bus::EventBus;
 use audit::event_bus::{NativeRevealFailed, Source, TOPIC_NATIVE_REVEAL_FAILED};
-use contracts_core::native::error_codes;
 use contracts_core::native::{
     DirectoryPickRequest, DirectoryPickResponse, FilePickRequest, FilePickResponse, RevealRequest,
     RevealResponse, RevealSelection,
 };
-use contracts_core::{ContractError, ErrorSeverity};
+use contracts_core::{error_code::ErrorCode, ContractError, ErrorSeverity};
 
 // ── Directory picker ────────────────────────────────────────────────────────
 
@@ -61,7 +67,7 @@ pub fn validate_file_pick(req: &FilePickRequest) -> Result<(), ContractError> {
         let has_wildcard = filter.extensions.iter().any(|ext| ext.contains('*'));
         if has_wildcard && filter.name != "All files" {
             return Err(ContractError::new(
-                error_codes::FILTERS_INVALID,
+                ErrorCode::FiltersInvalid,
                 format!(
                     "Wildcard '*' extension is only valid in a filter named \"All files\", \
                      but found in filter \"{}\"",
@@ -106,10 +112,13 @@ pub async fn validate_reveal_path(
         Ok(_) => Ok(()),
         Err(e) => {
             let error_code = if e.kind() == std::io::ErrorKind::NotFound {
-                error_codes::PATH_NOT_EXISTS
+                ErrorCode::PathNotExists
             } else {
-                error_codes::OS_COMMAND_FAILED
+                ErrorCode::OsCommandFailed
             };
+            // Serialise the code to a dotted string for the audit event.
+            let error_code_str = serde_json::to_string(&error_code)
+                .map_or_else(|_| "internal.error".to_owned(), |s| s.trim_matches('"').to_owned());
 
             // Emit audit event (best-effort).
             let _ = bus
@@ -117,7 +126,7 @@ pub async fn validate_reveal_path(
                     TOPIC_NATIVE_REVEAL_FAILED,
                     Source::System,
                     NativeRevealFailed {
-                        error_code: error_code.to_owned(),
+                        error_code: error_code_str,
                         entity_kind: req.entity_kind.map(|k| {
                             serde_json::to_value(k)
                                 .ok()
@@ -173,7 +182,7 @@ mod tests {
             default_path: None,
         };
         let err = validate_file_pick(&req).unwrap_err();
-        assert_eq!(err.code, "filters.invalid");
+        assert_eq!(err.code, ErrorCode::FiltersInvalid);
     }
 
     #[test]
@@ -216,7 +225,7 @@ mod tests {
             default_path: None,
         };
         let err = validate_file_pick(&req).unwrap_err();
-        assert_eq!(err.code, "filters.invalid");
+        assert_eq!(err.code, ErrorCode::FiltersInvalid);
     }
 
     // ── validate_reveal_path ────────────────────────────────────────────────
@@ -246,7 +255,7 @@ mod tests {
         };
 
         let err = validate_reveal_path(&bus, &req).await.unwrap_err();
-        assert_eq!(err.code, "path.not_exists");
+        assert_eq!(err.code, ErrorCode::PathNotExists);
     }
 
     #[tokio::test]

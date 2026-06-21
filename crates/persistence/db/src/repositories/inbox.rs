@@ -3,19 +3,13 @@
 //!
 //! All state-machine enforcement lives in `crates/app/core/src/inbox/`.
 
+use domain_core::ids::Timestamp;
 use serde::{Deserialize, Serialize};
 use sqlx::SqlitePool;
-use time::OffsetDateTime;
 
 use crate::{DbError, DbResult};
 
 // ── Helpers ───────────────────────────────────────────────────────────────────
-
-fn now_iso() -> String {
-    OffsetDateTime::now_utc()
-        .format(&time::format_description::well_known::Rfc3339)
-        .unwrap_or_else(|_| "1970-01-01T00:00:00Z".to_owned())
-}
 
 // ── Row types ─────────────────────────────────────────────────────────────────
 
@@ -189,7 +183,7 @@ pub struct InboxPlanLinkRow {
 /// # Errors
 /// Returns [`DbError::Database`] on constraint or connection failure.
 pub async fn insert_inbox_item(pool: &SqlitePool, item: &InsertInboxItem<'_>) -> DbResult<()> {
-    let now = now_iso();
+    let now = Timestamp::now_iso();
     sqlx::query(
         "INSERT INTO inbox_items
             (id, root_id, relative_path, file_count, discovered_at, last_scanned_at,
@@ -226,7 +220,7 @@ pub async fn get_inbox_item(pool: &SqlitePool, id: &str) -> DbResult<InboxItemRo
 /// # Errors
 /// Returns [`DbError::NotFound`] if no row was updated, or [`DbError::Database`].
 pub async fn update_inbox_item_state(pool: &SqlitePool, id: &str, state: &str) -> DbResult<()> {
-    let now = now_iso();
+    let now = Timestamp::now_iso();
     let rows = sqlx::query("UPDATE inbox_items SET state = ?, last_scanned_at = ? WHERE id = ?")
         .bind(state)
         .bind(&now)
@@ -251,7 +245,7 @@ pub async fn update_inbox_item_scan(
     content_signature: &str,
     file_count: i64,
 ) -> DbResult<()> {
-    let now = now_iso();
+    let now = Timestamp::now_iso();
     sqlx::query(
         "UPDATE inbox_items
          SET content_signature = ?, file_count = ?, last_scanned_at = ?
@@ -276,7 +270,7 @@ pub async fn upsert_classification(
     pool: &SqlitePool,
     c: &UpsertClassification<'_>,
 ) -> DbResult<()> {
-    let now = now_iso();
+    let now = Timestamp::now_iso();
     sqlx::query(
         "INSERT INTO inbox_classifications
             (inbox_item_id, result, frame_type, computed_at, content_signature,
@@ -743,7 +737,7 @@ pub async fn insert_plan_link(
     inbox_item_id: &str,
     plan_id: &str,
 ) -> DbResult<()> {
-    let now = now_iso();
+    let now = Timestamp::now_iso();
     sqlx::query(
         "INSERT INTO inbox_plan_links (inbox_item_id, plan_id, linked_at)
          VALUES (?, ?, ?)",
@@ -1225,7 +1219,7 @@ mod tests {
     /// not the absent `library_root` table.
     #[tokio::test]
     async fn list_unacknowledged_joins_registered_sources() {
-        use contracts_core::first_run::{
+        use domain_core::first_run::{
             OrganizationState, RegisterSourceBatchRequest, RegisterSourceRequest, ScanDepth,
             SourceKind,
         };
@@ -1278,7 +1272,7 @@ mod tests {
     /// "Org. state" dimension is correct for organized library roots too.
     #[tokio::test]
     async fn list_unacknowledged_carries_real_organization_state() {
-        use contracts_core::first_run::{
+        use domain_core::first_run::{
             OrganizationState, RegisterSourceBatchRequest, RegisterSourceRequest, ScanDepth,
             SourceKind,
         };

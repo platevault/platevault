@@ -13,6 +13,7 @@ mod support;
 
 use app_core::first_run;
 use app_core::protection;
+use contracts_core::error_code::ErrorCode;
 use contracts_core::first_run::{OrganizationState, RegisterSourceRequest, ScanDepth, SourceKind};
 use contracts_core::protection::SourceProtectionGetRequest;
 use tempfile::tempdir;
@@ -77,8 +78,11 @@ async fn register_source_rejects_duplicate_same_kind() {
         .expect_err("duplicate registration must be rejected");
 
     assert!(
-        err.code.contains("duplicate") || err.code.contains("path"),
-        "error code should indicate a duplicate/path conflict, got: {}",
+        matches!(
+            err.code,
+            ErrorCode::PathAlreadyRegistered | ErrorCode::PathAlreadyRegisteredDifferentKind
+        ),
+        "error code should indicate a duplicate/path conflict, got: {:?}",
         err.code,
     );
 }
@@ -103,8 +107,8 @@ async fn register_source_rejects_nonexistent_path() {
         .expect_err("register with non-existent path must fail");
 
     assert!(
-        err.code.contains("not_exists") || err.code.contains("path"),
-        "error code should indicate path-not-found, got: {}",
+        matches!(err.code, ErrorCode::PathNotExists | ErrorCode::PathPermissionDenied),
+        "error code should indicate path-not-found, got: {:?}",
         err.code,
     );
 }

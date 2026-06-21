@@ -29,6 +29,7 @@ use contracts_core::projects_v2::{
     ProjectSourceRemoveRequest, ProjectSourceRemoveResult, ProjectSummaryDto, ProjectUpdateRequest,
     ProjectUpdateResult,
 };
+use contracts_core::ContractError;
 use contracts_core::JsonAny;
 use tauri::State;
 
@@ -46,8 +47,8 @@ use crate::commands::lifecycle::AppState;
 pub async fn projects_list(
     state: State<'_, AppState>,
     _filters: Option<JsonAny>,
-) -> Result<Vec<ProjectSummaryDto>, String> {
-    project_setup::list(state.repo.pool()).await.map_err(|e| e.code)
+) -> Result<Vec<ProjectSummaryDto>, ContractError> {
+    project_setup::list(state.repo.pool()).await
 }
 
 // ── projects.get ──────────────────────────────────────────────────────────────
@@ -63,8 +64,8 @@ pub async fn projects_list(
 pub async fn projects_get(
     state: State<'_, AppState>,
     id: String,
-) -> Result<ProjectDetailDto, String> {
-    project_setup::get(state.repo.pool(), &id).await.map_err(|e| e.code)
+) -> Result<ProjectDetailDto, ContractError> {
+    project_setup::get(state.repo.pool(), &id).await
 }
 
 // ── projects.create ───────────────────────────────────────────────────────────
@@ -79,8 +80,8 @@ pub async fn projects_get(
 pub async fn projects_create(
     state: State<'_, AppState>,
     req: ProjectCreateRequest,
-) -> Result<ProjectCreateResult, String> {
-    project_setup::create(state.repo.pool(), &state.bus, &req).await.map_err(|e| e.code)
+) -> Result<ProjectCreateResult, ContractError> {
+    project_setup::create(state.repo.pool(), &state.bus, &req).await
 }
 
 // ── projects.update ───────────────────────────────────────────────────────────
@@ -95,8 +96,8 @@ pub async fn projects_create(
 pub async fn projects_update(
     state: State<'_, AppState>,
     req: ProjectUpdateRequest,
-) -> Result<ProjectUpdateResult, String> {
-    project_setup::update(state.repo.pool(), &state.bus, &req).await.map_err(|e| e.code)
+) -> Result<ProjectUpdateResult, ContractError> {
+    project_setup::update(state.repo.pool(), &state.bus, &req).await
 }
 
 // ── projects.source.add ───────────────────────────────────────────────────────
@@ -111,8 +112,8 @@ pub async fn projects_update(
 pub async fn projects_source_add(
     state: State<'_, AppState>,
     req: ProjectSourceAddRequest,
-) -> Result<ProjectSourceAddResult, String> {
-    project_setup::add_source(state.repo.pool(), &state.bus, &req).await.map_err(|e| e.code)
+) -> Result<ProjectSourceAddResult, ContractError> {
+    project_setup::add_source(state.repo.pool(), &state.bus, &req).await
 }
 
 // ── projects.source.remove ────────────────────────────────────────────────────
@@ -127,8 +128,8 @@ pub async fn projects_source_add(
 pub async fn projects_source_remove(
     state: State<'_, AppState>,
     req: ProjectSourceRemoveRequest,
-) -> Result<ProjectSourceRemoveResult, String> {
-    project_setup::remove_source(state.repo.pool(), &state.bus, &req).await.map_err(|e| e.code)
+) -> Result<ProjectSourceRemoveResult, ContractError> {
+    project_setup::remove_source(state.repo.pool(), &state.bus, &req).await
 }
 
 // ── projects.channels.reinfer ─────────────────────────────────────────────────
@@ -143,8 +144,8 @@ pub async fn projects_source_remove(
 pub async fn projects_channels_reinfer(
     state: State<'_, AppState>,
     req: ProjectChannelsReinferRequest,
-) -> Result<ProjectChannelsReinferResult, String> {
-    project_setup::reinfer_channels(state.repo.pool(), &state.bus, &req).await.map_err(|e| e.code)
+) -> Result<ProjectChannelsReinferResult, ContractError> {
+    project_setup::reinfer_channels(state.repo.pool(), &state.bus, &req).await
 }
 
 // ── projects.channels.dismiss_drift ──────────────────────────────────────────
@@ -159,8 +160,8 @@ pub async fn projects_channels_reinfer(
 pub async fn projects_channels_dismiss_drift(
     state: State<'_, AppState>,
     req: ProjectChannelsDismissDriftRequest,
-) -> Result<ProjectChannelsDismissDriftResult, String> {
-    project_setup::dismiss_drift(state.repo.pool(), &state.bus, &req).await.map_err(|e| e.code)
+) -> Result<ProjectChannelsDismissDriftResult, ContractError> {
+    project_setup::dismiss_drift(state.repo.pool(), &state.bus, &req).await
 }
 
 // ── projects.create_plan (stub retained for spec 025 compatibility) ───────────
@@ -176,7 +177,7 @@ pub async fn projects_channels_dismiss_drift(
 /// Returns `Err(String)` on failure; the stub never fails.
 #[tauri::command]
 #[specta::specta]
-pub async fn projects_create_plan(wizard_state: JsonAny) -> Result<PlanDetail, String> {
+pub async fn projects_create_plan(wizard_state: JsonAny) -> Result<PlanDetail, ContractError> {
     tracing::debug!("stub: projects.create_plan wizard_state={wizard_state:?}");
     Ok(PlanDetail {
         id: "plan-new-001".to_owned(),

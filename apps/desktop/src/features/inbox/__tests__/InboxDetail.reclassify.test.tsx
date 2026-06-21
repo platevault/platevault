@@ -19,8 +19,16 @@
  *   (avoids OOM from the full page tree).
  */
 import React from 'react';
-import { render, screen, fireEvent, waitFor } from '@testing-library/react';
+import { render as rtlRender, screen, fireEvent, waitFor } from '@testing-library/react';
 import { describe, it, expect, vi, beforeEach } from 'vitest';
+import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
+
+// InboxDetail uses the TanStack-Query-backed `useInboxReclassify` hook (spec 042),
+// so every render must be wrapped in a QueryClientProvider.
+function render(ui: React.ReactElement) {
+  const queryClient = new QueryClient({ defaultOptions: { queries: { retry: false } } });
+  return rtlRender(<QueryClientProvider client={queryClient}>{ui}</QueryClientProvider>);
+}
 
 import type {
   InboxItemSummary_Serialize as InboxItemSummary,

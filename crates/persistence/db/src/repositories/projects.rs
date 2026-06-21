@@ -7,18 +7,12 @@
 //! Constitution V: SQLite is the durable record; snapshot fields on
 //! `project_sources` denormalize Inventory data at link time.
 
+use domain_core::ids::Timestamp;
 use sqlx::SqlitePool;
-use time::OffsetDateTime;
 
 use crate::{DbError, DbResult};
 
 // ── Helpers ───────────────────────────────────────────────────────────────────
-
-fn now_iso() -> String {
-    OffsetDateTime::now_utc()
-        .format(&time::format_description::well_known::Rfc3339)
-        .unwrap_or_else(|_| "1970-01-01T00:00:00Z".to_owned())
-}
 
 // ── Row types ─────────────────────────────────────────────────────────────────
 
@@ -119,7 +113,7 @@ type ProjectRowTuple = (
 ///
 /// Returns [`DbError::Database`] on constraint violation or query failure.
 pub async fn insert_project(pool: &SqlitePool, data: &InsertProject<'_>) -> DbResult<String> {
-    let now = now_iso();
+    let now = Timestamp::now_iso();
     sqlx::query(
         "INSERT INTO projects (id, name, tool, lifecycle, path, notes, canonical_target_id, channel_drift, created_at, updated_at)
          VALUES (?, ?, ?, ?, ?, ?, ?, 0, ?, ?)",
@@ -366,7 +360,7 @@ pub async fn update_project_fields(
     notes: Option<&str>,
 ) -> DbResult<String> {
     // Build a dynamic update; at least one field must be supplied (enforced by caller).
-    let now = now_iso();
+    let now = Timestamp::now_iso();
     // Fetch the current row so we can patch only what changed.
     let current = get_project(pool, id).await?;
     let new_name = name.unwrap_or(&current.name);
@@ -395,7 +389,7 @@ pub async fn update_project_lifecycle(
     id: &str,
     lifecycle: &str,
 ) -> DbResult<String> {
-    let now = now_iso();
+    let now = Timestamp::now_iso();
     sqlx::query("UPDATE projects SET lifecycle = ?, updated_at = ? WHERE id = ?")
         .bind(lifecycle)
         .bind(&now)
@@ -419,7 +413,7 @@ pub async fn update_project_lifecycle_blocked(
     reason_kind: &str,
     reason_note: Option<&str>,
 ) -> DbResult<String> {
-    let now = now_iso();
+    let now = Timestamp::now_iso();
     sqlx::query(
         "UPDATE projects SET lifecycle = 'blocked', \
          blocked_reason_kind = ?, blocked_reason_note = ?, updated_at = ? \
@@ -447,7 +441,7 @@ pub async fn update_project_lifecycle_unblock(
     id: &str,
     lifecycle: &str,
 ) -> DbResult<String> {
-    let now = now_iso();
+    let now = Timestamp::now_iso();
     sqlx::query(
         "UPDATE projects SET lifecycle = ?, \
          blocked_reason_kind = NULL, blocked_reason_note = NULL, updated_at = ? \
@@ -467,7 +461,7 @@ pub async fn update_project_lifecycle_unblock(
 ///
 /// Returns [`DbError::Database`] on query failure.
 pub async fn set_channel_drift(pool: &SqlitePool, id: &str, has_drift: bool) -> DbResult<()> {
-    let now = now_iso();
+    let now = Timestamp::now_iso();
     sqlx::query("UPDATE projects SET channel_drift = ?, updated_at = ? WHERE id = ?")
         .bind(i64::from(has_drift))
         .bind(now)
@@ -636,7 +630,7 @@ pub async fn replace_project_channels(
     project_id: &str,
     channels: &[(&str, &str)], // (label, source)
 ) -> DbResult<()> {
-    let now = now_iso();
+    let now = Timestamp::now_iso();
     let mut tx = pool.begin().await?;
 
     sqlx::query("DELETE FROM project_channels WHERE project_id = ?")

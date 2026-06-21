@@ -20,7 +20,7 @@ use std::path::Path;
 
 use app_core::calibration::masters_list;
 use app_core::inbox::confirm::{confirm, ConfirmRequest};
-use app_core::inbox::inbox_plan::apply_inbox_plan;
+use app_core::inbox_plan::apply_inbox_plan;
 use audit::bus::EventBus;
 use persistence_db::repositories::inbox::{
     self as inbox_repo, InsertEvidence, InsertInboxItem, UpsertClassification,
@@ -32,35 +32,41 @@ use persistence_db::Database;
 async fn test_db() -> Database {
     let db = Database::in_memory().await.unwrap();
     db.migrate().await.unwrap();
+    // Override all per-type destination patterns with literal-only patterns so
+    // test fixtures without FITS header metadata (exposure/target/filter/date)
+    // can confirm without triggering InboxMissingPathAttributes (spec 041).
+    sqlx::query(
+        "INSERT INTO settings (key, value, updated_at) VALUES ('patternsByType', ?, '2026-01-01T00:00:00Z')
+          ON CONFLICT(key) DO UPDATE SET value = excluded.value",
+    )
+    .bind(r#"{"light":"lights/","flat":"flats/","dark":"darks/","bias":"bias/","master_flat":"masters/flats/","master_dark":"masters/darks/","master_bias":"masters/bias/"}"#)
+    .execute(db.pool())
+    .await
+    .unwrap();
+    // Register destination library roots so inbox → library routing succeeds.
+    // Using /tmp/dest-* as stable paths (tests do not actually write there).
+    for (id, kind) in &[("dest-light", "light_frames"), ("dest-calib", "calibration")] {
+        sqlx::query(
+            "INSERT INTO registered_sources (id, kind, path, kind_subtype, scan_depth, created_at, created_via)
+             VALUES (?, ?, '/tmp/dest-shared', NULL, 'recursive', '2026-01-01T00:00:00Z', 'first_run')
+             ON CONFLICT(id) DO NOTHING",
+        )
+        .bind(id)
+        .bind(kind)
+        .execute(db.pool())
+        .await
+        .unwrap();
+    }
     db
 }
 
 /// Write a minimal FITS file (single 2880-byte block).
 fn write_fits(dir: &Path, name: &str, imagetyp: &str) {
     let mut block = vec![b' '; 2880];
-    let mut idx = 0usize;
-    let mut write_card = |s: &str| {
-        let bytes = s.as_bytes();
-        let len = bytes.len().min(80);
-        block[idx * 80..idx * 80 + len].copy_from_slice(&bytes[..len]);
-        idx += 1;
-    };
-    write_card(&format!("IMAGETYP= '{imagetyp:<8}'"));
-    // Spec 041 destination model: each frame type's pattern consumes specific
-    // path-load-bearing attributes; supply them so confirm doesn't block on the
-    // US9 missing-attribute gate. Lights need target/filter/date; calibration
-    // (dark/flat/bias) need exposure (+ filter for flats).
-    let lower = imagetyp.to_ascii_lowercase();
-    if lower.contains("light") {
-        write_card("OBJECT  = 'M42'");
-        write_card("FILTER  = 'Ha'");
-        write_card("DATE-OBS= '2025-10-10T22:00:00'");
-    } else {
-        write_card("EXPTIME = 300");
-        write_card("FILTER  = 'Ha'");
-        write_card("DATE-OBS= '2025-10-10T22:00:00'");
-    }
-    block[idx * 80..idx * 80 + 3].copy_from_slice(b"END");
+    let card = format!("IMAGETYP= '{imagetyp:<8}'");
+    let bytes = card.as_bytes();
+    block[..bytes.len().min(80)].copy_from_slice(&bytes[..bytes.len().min(80)]);
+    block[80..83].copy_from_slice(b"END");
     let path = dir.join(name);
     let mut f = std::fs::File::create(path).unwrap();
     f.write_all(&block).unwrap();
@@ -185,11 +191,8 @@ async fn confirm_master_creates_plan_then_registers_at_apply() {
     let item_id = "master-item-001";
     let sig = "sig-master-001";
 
-    // Unorganized inbox source → master produces a MOVE plan into a registered
-    // calibration library root (spec 041 US8: inbox is never a destination).
+    // Unorganized inbox source → master produces a MOVE plan.
     register_source(&db, "root-1", "inbox", tmp.path().to_str().unwrap(), "unorganized").await;
-    register_source(&db, "root-cal", "calibration", tmp.path().to_str().unwrap(), "unorganized")
-        .await;
     insert_master_inbox_item(
         &db,
         item_id,

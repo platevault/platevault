@@ -3,50 +3,34 @@
 //! Operates on `registered_sources` and `first_run_state` tables
 //! (migration 0006).
 
-use contracts_core::first_run::{
+use domain_core::first_run::{
     BatchItem, BatchStatus, FirstRunCompleteResponse, FirstRunRestartResponse,
     FirstRunStateResponse, ItemStatus, OrganizationState, RegisterSourceBatchRequest,
     RegisterSourceBatchResponse, RegisterSourceRequest, RegisterSourceResponse, ScanDepth,
     SourceKind,
 };
+use domain_core::ids::Timestamp;
 use sqlx::SqlitePool;
-use time::OffsetDateTime;
 use uuid::Uuid;
 
 use crate::{DbError, DbResult};
 
 // ── Helpers ─────────────────────────────────────────────────────────────────
 
-fn now_iso() -> String {
-    OffsetDateTime::now_utc()
-        .format(&time::format_description::well_known::Rfc3339)
-        .unwrap_or_else(|_| "1970-01-01T00:00:00Z".to_owned())
-}
-
 fn source_kind_to_str(kind: SourceKind) -> &'static str {
-    match kind {
-        SourceKind::LightFrames => "light_frames",
-        SourceKind::Calibration => "calibration",
-        SourceKind::Project => "project",
-        SourceKind::Inbox => "inbox",
-    }
+    // `strum::IntoStaticStr` yields the canonical snake_case strings.
+    kind.into()
 }
 
 fn str_to_source_kind(s: &str) -> SourceKind {
-    match s {
-        "calibration" => SourceKind::Calibration,
-        "project" => SourceKind::Project,
-        "inbox" => SourceKind::Inbox,
-        // "light_frames" and any unknown value default to LightFrames.
-        _ => SourceKind::LightFrames,
-    }
+    // `strum::EnumString` parses the canonical strings; "light_frames" and any
+    // unknown value default to LightFrames (preserving prior behavior).
+    s.parse().unwrap_or(SourceKind::LightFrames)
 }
 
 fn scan_depth_to_str(depth: ScanDepth) -> &'static str {
-    match depth {
-        ScanDepth::Recursive => "recursive",
-        ScanDepth::Single => "single",
-    }
+    // `strum::IntoStaticStr` yields the canonical lowercase strings.
+    depth.into()
 }
 
 fn organization_state_to_str(state: OrganizationState) -> &'static str {
@@ -119,7 +103,7 @@ pub async fn register_source(
     let id = Uuid::new_v4().to_string();
     let kind_str = source_kind_to_str(req.kind);
     let scan_depth_str = scan_depth_to_str(req.scan_depth);
-    let created_at = now_iso();
+    let created_at = Timestamp::now_iso();
     let created_via = resolve_created_via(pool).await?;
 
     // Enforce inbox⇒unorganized invariant on write (spec 041, T029). Inbox
@@ -170,7 +154,7 @@ pub async fn register_source_batch(
     req: &RegisterSourceBatchRequest,
 ) -> DbResult<RegisterSourceBatchResponse> {
     let created_via = resolve_created_via(pool).await?;
-    let created_at = now_iso();
+    let created_at = Timestamp::now_iso();
 
     let mut items: Vec<BatchItem> = Vec::with_capacity(req.sources.len());
     let mut success_count = 0usize;
@@ -415,7 +399,7 @@ pub async fn complete_first_run(pool: &SqlitePool) -> DbResult<FirstRunCompleteR
         ));
     }
 
-    let completed_at = now_iso();
+    let completed_at = Timestamp::now_iso();
 
     // Upsert the singleton row.
     sqlx::query(
@@ -443,7 +427,7 @@ pub async fn complete_first_run(pool: &SqlitePool) -> DbResult<FirstRunCompleteR
 ///
 /// Returns [`DbError::Database`] on query failure.
 pub async fn restart_first_run(pool: &SqlitePool) -> DbResult<FirstRunRestartResponse> {
-    let now = now_iso();
+    let now = Timestamp::now_iso();
 
     // Clear completed_at and reset to welcome step.
     sqlx::query(
@@ -472,7 +456,7 @@ pub async fn restart_first_run(pool: &SqlitePool) -> DbResult<FirstRunRestartRes
 ///
 /// Returns [`DbError::Database`] on query failure.
 pub async fn update_first_run_step(pool: &SqlitePool, step: &str) -> DbResult<()> {
-    let now = now_iso();
+    let now = Timestamp::now_iso();
 
     sqlx::query(
         "INSERT INTO first_run_state (singleton_id, last_step, updated_at) \
@@ -492,7 +476,7 @@ pub async fn update_first_run_step(pool: &SqlitePool, step: &str) -> DbResult<()
 
 #[cfg(test)]
 mod tests {
-    use contracts_core::first_run::{
+    use domain_core::first_run::{
         RegisterSourceBatchRequest, RegisterSourceRequest, ScanDepth, SourceKind,
     };
 
@@ -910,5 +894,67 @@ mod tests {
             .await
             .unwrap_err();
         assert!(matches!(err, DbError::NotFound(_)));
+    }
+}
+
+// ── DB byte-identity guard (spec 042 T254) ───────────────────────────────
+//
+// `register_source` persists `SourceKind` / `ScanDepth` via their
+// `strum::IntoStaticStr` impls and reads them back via `EnumString`. T254
+// moved these enums from `contracts_core` to `domain_core`; the persisted
+// strings (`light_frames`, `calibration`, `project`, `inbox`, `recursive`,
+// `single`) MUST stay byte-identical (Local-First custody). This freezes the
+// stored-string contract end-to-end through the real `registered_sources`
+// table.
+#[cfg(test)]
+mod byte_identity_guard {
+    use domain_core::first_run::{RegisterSourceRequest, ScanDepth, SourceKind};
+
+    use super::*;
+    use crate::Database;
+
+    #[test]
+    fn source_kind_helper_strings_unchanged() {
+        assert_eq!(source_kind_to_str(SourceKind::LightFrames), "light_frames");
+        assert_eq!(source_kind_to_str(SourceKind::Calibration), "calibration");
+        assert_eq!(source_kind_to_str(SourceKind::Project), "project");
+        assert_eq!(source_kind_to_str(SourceKind::Inbox), "inbox");
+    }
+
+    #[test]
+    fn scan_depth_helper_strings_unchanged() {
+        assert_eq!(scan_depth_to_str(ScanDepth::Recursive), "recursive");
+        assert_eq!(scan_depth_to_str(ScanDepth::Single), "single");
+    }
+
+    /// Register a source and assert the raw persisted `kind` / `scan_depth`
+    /// column strings are the exact canonical values.
+    #[tokio::test]
+    async fn registered_source_columns_persist_canonical_strings() {
+        let db = Database::in_memory().await.unwrap();
+        db.migrate().await.unwrap();
+        let pool = db.pool();
+
+        let resp = register_source(
+            pool,
+            &RegisterSourceRequest {
+                kind: SourceKind::Calibration,
+                path: "/astro/cals".to_owned(),
+                kind_subtype: None,
+                scan_depth: ScanDepth::Single,
+                organization_state: OrganizationState::Unorganized,
+            },
+        )
+        .await
+        .unwrap();
+
+        let row: (String, String) =
+            sqlx::query_as("SELECT kind, scan_depth FROM registered_sources WHERE id = ?")
+                .bind(&resp.source_id)
+                .fetch_one(pool)
+                .await
+                .unwrap();
+        assert_eq!(row.0, "calibration", "stored kind string changed");
+        assert_eq!(row.1, "single", "stored scan_depth string changed");
     }
 }

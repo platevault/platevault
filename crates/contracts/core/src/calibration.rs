@@ -3,6 +3,8 @@
 //! These types mirror the hand-written TypeScript `CalibrationMaster`,
 //! `MasterDetail`, and `MatchCandidate` in `apps/desktop/src/api/types.ts`.
 
+use std::str::FromStr;
+
 use serde::{Deserialize, Serialize};
 use specta::Type;
 
@@ -19,6 +21,64 @@ pub enum CalibrationKind {
     Bias,
     DarkFlat,
     BadPixelMap,
+}
+
+impl CalibrationKind {
+    /// Canonical persisted/serialized string for this kind.
+    ///
+    /// These values MUST stay byte-identical to the `#[serde(rename_all =
+    /// "snake_case")]` output and the stored DB / IPC strings.
+    #[must_use]
+    pub fn as_str(self) -> &'static str {
+        match self {
+            CalibrationKind::Dark => "dark",
+            CalibrationKind::Flat => "flat",
+            CalibrationKind::Bias => "bias",
+            CalibrationKind::DarkFlat => "dark_flat",
+            CalibrationKind::BadPixelMap => "bad_pixel_map",
+        }
+    }
+}
+
+/// Error returned when a string cannot be parsed into a [`CalibrationKind`].
+#[derive(Clone, Debug, Eq, PartialEq)]
+pub struct ParseCalibrationKindError(pub String);
+
+impl std::fmt::Display for ParseCalibrationKindError {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        write!(f, "unknown calibration kind: {}", self.0)
+    }
+}
+
+impl std::error::Error for ParseCalibrationKindError {}
+
+/// Single canonical, strict parser for [`CalibrationKind`].
+///
+/// Accepts the canonical serde strings plus the legacy `flat_dark` alias for
+/// `DarkFlat`. Unknown values are rejected (no silent fallback); callers that
+/// need a fallback apply it explicitly (e.g. `.unwrap_or(CalibrationKind::Dark)`
+/// or `.ok()`), which keeps the fallback policy visible at each call site.
+impl FromStr for CalibrationKind {
+    type Err = ParseCalibrationKindError;
+
+    fn from_str(s: &str) -> Result<Self, Self::Err> {
+        match s {
+            "dark" => Ok(CalibrationKind::Dark),
+            "flat" => Ok(CalibrationKind::Flat),
+            "bias" => Ok(CalibrationKind::Bias),
+            "dark_flat" | "flat_dark" => Ok(CalibrationKind::DarkFlat),
+            "bad_pixel_map" => Ok(CalibrationKind::BadPixelMap),
+            other => Err(ParseCalibrationKindError(other.to_owned())),
+        }
+    }
+}
+
+impl TryFrom<&str> for CalibrationKind {
+    type Error = ParseCalibrationKindError;
+
+    fn try_from(s: &str) -> Result<Self, Self::Error> {
+        s.parse()
+    }
 }
 
 // ── Structs ─────────────────────────────────────────────────────────────────

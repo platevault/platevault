@@ -18,6 +18,14 @@
 //! - If the session `type == "mixed"`, the review transition is refused with
 //!   `session.mixed_state` — the user must split via spec 005 first.
 
+//!
+//! Extracted from `app_core` into its own crate (spec 042 / T253 O3b). Its only
+//! cross-module dependency is on the now-extracted `app_core_lifecycle` crate
+//! (`lifecycle_use_case`, `transition_use_case`); nothing else in `app_core`
+//! references it. `app_core` re-exports this crate at `app_core::inventory` so
+//! the public surface stays byte-identical.
+#![allow(clippy::doc_markdown)] // spec/domain terminology not appropriate for backticks
+
 use std::collections::HashMap;
 
 use audit::bus::EventBus;
@@ -42,8 +50,8 @@ use time::format_description::well_known::Rfc3339;
 use time::OffsetDateTime;
 use uuid::Uuid;
 
-use crate::lifecycle_use_case::build_edge_table;
-use crate::transition_use_case::apply_transition;
+use crate::lifecycle::lifecycle_use_case::build_edge_table;
+use crate::lifecycle::transition_use_case::apply_transition;
 
 // ── list ─────────────────────────────────────────────────────────────────────
 
@@ -329,14 +337,9 @@ fn map_frame_type(db_kind: &str) -> InventoryFrameType {
 }
 
 fn str_to_contract_state(s: &str) -> ContractSessionState {
-    match s {
-        "candidate" => ContractSessionState::Candidate,
-        "needs_review" => ContractSessionState::NeedsReview,
-        "confirmed" => ContractSessionState::Confirmed,
-        "rejected" => ContractSessionState::Rejected,
-        "ignored" => ContractSessionState::Ignored,
-        _ => ContractSessionState::Discovered,
-    }
+    // Canonical strict parser; unknown values fall back to Discovered,
+    // preserving prior behavior.
+    s.parse().unwrap_or(ContractSessionState::Discovered)
 }
 
 fn inventory_state_to_contract(s: InventorySessionState) -> ContractSessionState {

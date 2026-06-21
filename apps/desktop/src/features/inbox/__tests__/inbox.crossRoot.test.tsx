@@ -11,6 +11,16 @@
 import { render, screen, waitFor, act } from '@testing-library/react';
 import { renderHook } from '@testing-library/react';
 import { describe, it, expect, vi, beforeEach } from 'vitest';
+import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
+import type { ReactNode } from 'react';
+
+function makeWrapper() {
+  const queryClient = new QueryClient({ defaultOptions: { queries: { retry: false } } });
+  const wrapper = ({ children }: { children: ReactNode }) => (
+    <QueryClientProvider client={queryClient}>{children}</QueryClientProvider>
+  );
+  return { queryClient, wrapper };
+}
 import { InboxList } from '../InboxList';
 import type { InboxListItem, InboxListResponse } from '@/api/commands';
 
@@ -136,7 +146,8 @@ describe('T039-3: useInboxList hook (FR-001)', () => {
     (inboxList as ReturnType<typeof vi.fn>).mockResolvedValue(multiRootResponse);
 
     const { useInboxList } = await import('../store');
-    const { result } = renderHook(() => useInboxList());
+    const { wrapper } = makeWrapper();
+    const { result } = renderHook(() => useInboxList(), { wrapper });
 
     await waitFor(() => expect(result.current.loading).toBe(false));
 
@@ -150,7 +161,8 @@ describe('T039-3: useInboxList hook (FR-001)', () => {
     mockFn.mockResolvedValue(multiRootResponse);
 
     const { useInboxList } = await import('../store');
-    const { result } = renderHook(() => useInboxList());
+    const { wrapper } = makeWrapper();
+    const { result } = renderHook(() => useInboxList(), { wrapper });
 
     await waitFor(() => expect(result.current.loading).toBe(false));
 

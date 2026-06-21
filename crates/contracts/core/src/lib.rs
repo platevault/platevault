@@ -7,13 +7,11 @@ pub mod calibration_tolerances;
 pub mod cleanup;
 pub mod dev;
 pub mod enums;
-pub mod equipment;
-pub mod first_run;
+pub mod error_code;
 pub mod guided;
 pub mod inbox;
 pub mod ingestion;
 pub mod inventory;
-pub mod json_any;
 pub mod lifecycle;
 pub mod log;
 pub mod manifests;
@@ -36,7 +34,18 @@ pub mod status;
 pub mod targets;
 pub mod tools;
 
-pub use json_any::JsonAny;
+// ── Re-exported domain-owned stored types (spec 042 T254) ─────────────────
+//
+// `equipment`, `first_run`, and the settings stored types now live in
+// `domain_core` so the persistence layer can depend on them without importing
+// this transport crate (fixes the `persistence/db → contracts/core` layering
+// inversion). They are re-exported here verbatim so the IPC command surface,
+// the generated TypeScript bindings, and every existing
+// `contracts_core::{equipment,first_run}::*` import are byte-identical.
+pub use domain_core::equipment;
+pub use domain_core::first_run;
+
+pub use domain_core::JsonAny;
 
 // Re-export shared enums for convenience.
 pub use enums::{Density, ViewMode};
@@ -51,11 +60,15 @@ pub const CONTRACT_VERSION: &str = "1.0.0";
 #[serde(transparent)]
 pub struct RequestId(pub String);
 
-#[derive(Clone, Debug, Eq, Hash, Ord, PartialEq, PartialOrd, Serialize, Deserialize)]
+#[derive(
+    Clone, Debug, Eq, Hash, Ord, PartialEq, PartialOrd, Serialize, Deserialize, specta::Type,
+)]
 #[serde(transparent)]
 pub struct OperationId(pub String);
 
-#[derive(Clone, Debug, Eq, Hash, Ord, PartialEq, PartialOrd, Serialize, Deserialize)]
+#[derive(
+    Clone, Debug, Eq, Hash, Ord, PartialEq, PartialOrd, Serialize, Deserialize, specta::Type,
+)]
 #[serde(transparent)]
 pub struct OperationName(pub String);
 
@@ -111,14 +124,26 @@ impl<T> ResponseEnvelope<T> {
     }
 }
 
-#[derive(Clone, Copy, Debug, Eq, Hash, Ord, PartialEq, PartialOrd, Serialize, Deserialize)]
+#[derive(
+    Clone,
+    Copy,
+    Debug,
+    Eq,
+    Hash,
+    Ord,
+    PartialEq,
+    PartialOrd,
+    Serialize,
+    Deserialize,
+    schemars::JsonSchema,
+)]
 #[serde(rename_all = "snake_case")]
 pub enum ResponseStatus {
     Ok,
     Error,
 }
 
-#[derive(Clone, Debug, Eq, PartialEq, Serialize, Deserialize)]
+#[derive(Clone, Debug, Eq, PartialEq, Serialize, Deserialize, specta::Type)]
 #[serde(rename_all = "camelCase")]
 pub struct OperationHandle {
     pub operation_id: OperationId,
@@ -137,7 +162,20 @@ impl OperationHandle {
     }
 }
 
-#[derive(Clone, Copy, Debug, Eq, Hash, Ord, PartialEq, PartialOrd, Serialize, Deserialize)]
+#[derive(
+    Clone,
+    Copy,
+    Debug,
+    Eq,
+    Hash,
+    Ord,
+    PartialEq,
+    PartialOrd,
+    Serialize,
+    Deserialize,
+    specta::Type,
+    schemars::JsonSchema,
+)]
 #[serde(rename_all = "snake_case")]
 pub enum OperationStatus {
     Queued,
@@ -148,14 +186,17 @@ pub enum OperationStatus {
     Failed,
 }
 
-#[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
+#[derive(Clone, Debug, PartialEq, Serialize, Deserialize, specta::Type)]
 #[serde(rename_all = "camelCase")]
 pub struct OperationEvent {
     pub contract_version: String,
     pub operation_id: OperationId,
     pub event_type: OperationEventType,
     pub sequence: u64,
-    pub payload: Value,
+    // `JsonAny` is wire-equivalent to `serde_json::Value` (serde-transparent)
+    // but exports as the opaque TS `unknown`, avoiding specta's infinite
+    // recursive-inline expansion of raw `Value` (spec 042 US16, T240).
+    pub payload: JsonAny,
 }
 
 impl OperationEvent {
@@ -171,12 +212,25 @@ impl OperationEvent {
             operation_id,
             event_type,
             sequence,
-            payload,
+            payload: JsonAny::from(payload),
         }
     }
 }
 
-#[derive(Clone, Copy, Debug, Eq, Hash, Ord, PartialEq, PartialOrd, Serialize, Deserialize)]
+#[derive(
+    Clone,
+    Copy,
+    Debug,
+    Eq,
+    Hash,
+    Ord,
+    PartialEq,
+    PartialOrd,
+    Serialize,
+    Deserialize,
+    specta::Type,
+    schemars::JsonSchema,
+)]
 #[serde(rename_all = "snake_case")]
 pub enum OperationEventType {
     Progress,
@@ -194,15 +248,15 @@ pub enum OperationEventType {
     Custom,
 }
 
-#[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
+#[derive(Clone, Debug, PartialEq, Serialize, Deserialize, specta::Type)]
 #[serde(rename_all = "camelCase")]
 pub struct ContractError {
-    pub code: String,
+    pub code: error_code::ErrorCode,
     pub message: String,
     pub severity: ErrorSeverity,
     pub retryable: bool,
     #[serde(default)]
-    pub details: Value,
+    pub details: JsonAny,
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
     pub field_errors: Vec<FieldError>,
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
@@ -212,25 +266,31 @@ pub struct ContractError {
 impl ContractError {
     #[must_use]
     pub fn new(
-        code: impl Into<String>,
+        code: error_code::ErrorCode,
         message: impl Into<String>,
         severity: ErrorSeverity,
         retryable: bool,
     ) -> Self {
         Self {
-            code: code.into(),
+            code,
             message: message.into(),
             severity,
             retryable,
-            details: Value::Object(serde_json::Map::new()),
+            details: JsonAny::from(Value::Object(serde_json::Map::new())),
             field_errors: Vec::new(),
             recovery_actions: Vec::new(),
         }
     }
 
+    /// Wrap a legacy plain-string error as an `InternalError` blocking error.
+    #[must_use]
+    pub fn internal(message: impl Into<String>) -> Self {
+        Self::new(error_code::ErrorCode::InternalError, message, ErrorSeverity::Blocking, false)
+    }
+
     #[must_use]
     pub fn with_details(mut self, details: Value) -> Self {
-        self.details = details;
+        self.details = JsonAny::from(details);
         self
     }
 
@@ -247,7 +307,20 @@ impl ContractError {
     }
 }
 
-#[derive(Clone, Copy, Debug, Eq, Hash, Ord, PartialEq, PartialOrd, Serialize, Deserialize)]
+#[derive(
+    Clone,
+    Copy,
+    Debug,
+    Eq,
+    Hash,
+    Ord,
+    PartialEq,
+    PartialOrd,
+    Serialize,
+    Deserialize,
+    specta::Type,
+    schemars::JsonSchema,
+)]
 #[serde(rename_all = "snake_case")]
 pub enum ErrorSeverity {
     Info,
@@ -256,7 +329,7 @@ pub enum ErrorSeverity {
     Fatal,
 }
 
-#[derive(Clone, Debug, Eq, PartialEq, Serialize, Deserialize)]
+#[derive(Clone, Debug, Eq, PartialEq, Serialize, Deserialize, specta::Type)]
 #[serde(rename_all = "camelCase")]
 pub struct FieldError {
     pub field: String,
@@ -264,7 +337,7 @@ pub struct FieldError {
     pub message: String,
 }
 
-#[derive(Clone, Debug, Eq, PartialEq, Serialize, Deserialize)]
+#[derive(Clone, Debug, Eq, PartialEq, Serialize, Deserialize, specta::Type)]
 #[serde(rename_all = "camelCase")]
 pub struct RecoveryAction {
     pub code: String,
@@ -319,7 +392,7 @@ mod tests {
     #[test]
     fn serializes_error_response_without_payload() {
         let error = ContractError::new(
-            "filesystem.destination_exists",
+            crate::error_code::ErrorCode::FilesystemDestinationExists,
             "Destination already exists.",
             ErrorSeverity::Blocking,
             false,
@@ -351,5 +424,77 @@ mod tests {
     #[test]
     fn response_status_serializes_as_contract_value() {
         assert_eq!(serde_json::to_value(ResponseStatus::Ok).unwrap(), json!("ok"));
+    }
+
+    // ── T116: JSON-Schema snapshot agreement tests ────────────────────────────
+    //
+    // These tests re-generate the JSON Schema from Rust types using schemars
+    // and compare the output byte-for-byte against the committed
+    // `*.generated.json` snapshots in `specs/<NNN>/contracts/`.
+    //
+    // They fail when a Rust type change alters the generated schema without a
+    // corresponding snapshot update.  To update: run
+    //   cargo run -p contracts_core --bin generate-contracts
+    // review the diff, then commit both the type change and the snapshot.
+    //
+    // Note: as of spec 042 T116a, schemars 1.x emits JSON-Schema
+    // draft-2020-12 — the same dialect as the canonical contracts — so the
+    // generated snapshots and the hand-maintained `*.json` now share a
+    // dialect.  The `.generated.json` snapshots are the Rust-derived
+    // projection; the FR-005/SC-004 specta↔schemars agreement test lives in
+    // `tests/contract/`.
+    mod schema_agreement {
+        use schemars::{schema_for, JsonSchema};
+        use std::path::PathBuf;
+
+        fn workspace_root() -> PathBuf {
+            // CARGO_MANIFEST_DIR = crates/contracts/core
+            let manifest = std::env!("CARGO_MANIFEST_DIR");
+            PathBuf::from(manifest)
+                .ancestors()
+                .nth(3)
+                .expect("workspace root 3 levels up")
+                .to_path_buf()
+        }
+
+        fn assert_schema_matches<T: JsonSchema>(spec_dir: &str, name: &str) {
+            let schema = schema_for!(T);
+            let generated = serde_json::to_string_pretty(&schema)
+                .unwrap_or_else(|e| panic!("failed to serialise schema for {name}: {e}"));
+            let generated = format!("{generated}\n");
+
+            let path = workspace_root().join("specs").join(spec_dir).join("contracts").join(name);
+
+            let committed = std::fs::read_to_string(&path).unwrap_or_else(|e| {
+                panic!(
+                    "Could not read committed snapshot {}: {e}\n\
+                     Run `cargo run -p contracts_core --bin generate-contracts` to create it.",
+                    path.display()
+                )
+            });
+
+            assert_eq!(
+                committed, generated,
+                "Schema snapshot drift detected for {name}.\n\
+                 Run `cargo run -p contracts_core --bin generate-contracts` to regenerate,\n\
+                 then review the diff and commit the updated snapshot alongside the type change."
+            );
+        }
+
+        #[test]
+        fn lifecycle_transition_request_schema_no_drift() {
+            assert_schema_matches::<crate::lifecycle::TransitionRequest>(
+                "002-data-lifecycle-state-model",
+                "lifecycle.transition.generated.json",
+            );
+        }
+
+        #[test]
+        fn provenance_read_request_schema_no_drift() {
+            assert_schema_matches::<crate::provenance::ProvenanceReadRequest>(
+                "002-data-lifecycle-state-model",
+                "provenance.read.generated.json",
+            );
+        }
     }
 }

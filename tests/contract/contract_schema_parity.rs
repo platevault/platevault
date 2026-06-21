@@ -1,8 +1,9 @@
 use std::{collections::BTreeSet, fs, path::PathBuf};
 
 use contracts_core::{
-    ContractError, ErrorSeverity, OperationEvent, OperationEventType, OperationHandle, OperationId,
-    OperationName, OperationStatus, RequestEnvelope, RequestId, ResponseEnvelope, ResponseStatus,
+    error_code::ErrorCode, ContractError, ErrorSeverity, OperationEvent, OperationEventType,
+    OperationHandle, OperationId, OperationName, OperationStatus, RequestEnvelope, RequestId,
+    ResponseEnvelope, ResponseStatus,
 };
 use serde_json::{json, Value};
 
@@ -158,7 +159,7 @@ fn rust_envelope_shapes_match_json_schema_properties() {
     let error_response: ResponseEnvelope<Value> = ResponseEnvelope::error(
         RequestId("req-1".to_owned()),
         ContractError::new(
-            "filesystem.destination_exists",
+            ErrorCode::FilesystemDestinationExists,
             "Destination already exists.",
             ErrorSeverity::Blocking,
             false,

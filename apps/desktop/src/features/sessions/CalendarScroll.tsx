@@ -6,6 +6,7 @@
 import { useRef, useMemo } from 'react';
 import { useVirtualizer } from '@tanstack/react-virtual';
 import { Pill } from '@/ui';
+import { formatMonthYear } from '@/lib/datetime';
 
 export interface CalendarNight {
   date: string;
@@ -36,10 +37,9 @@ function groupNightsByMonth(nights: CalendarNight[]): CalendarRow[] {
     const month = night.date.slice(0, 7); // YYYY-MM
     if (month !== currentMonth) {
       currentMonth = month;
-      const d = new Date(night.date);
       rows.push({
         type: 'header',
-        label: d.toLocaleDateString(undefined, { year: 'numeric', month: 'long' }),
+        label: formatMonthYear(night.date),
       });
     }
     rows.push({

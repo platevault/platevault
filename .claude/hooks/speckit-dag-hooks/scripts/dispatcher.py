@@ -32,7 +32,6 @@ bodies.
 
 from __future__ import annotations
 
-import glob
 import json
 import os
 import re
@@ -169,46 +168,6 @@ def _normalize(cmd):
     return raw.replace(".", "-")
 
 
-def _find_speckit_root(start):
-    """Walk up from `start` to the nearest ancestor that holds a SpecKit root.
-
-    A SpecKit root is the directory that owns `.specify/` (and `specs/`). This
-    handles an agent whose cwd is a subdirectory of the project (e.g. frontend/)
-    by locating the directory where feature.json and specs/ actually live.
-    Returns "" when no ancestor qualifies.
-    """
-    if not start:
-        return ""
-    cur = os.path.abspath(start)
-    while True:
-        if os.path.isdir(os.path.join(cur, ".specify")) or os.path.isdir(
-            os.path.join(cur, "specs")
-        ):
-            return cur
-        parent = os.path.dirname(cur)
-        if parent == cur:
-            return ""
-        cur = parent
-
-
-def _resolve_proj_root(payload):
-    """Resolve the project root from the INVOKING AGENT's working directory.
-
-    Claude/Codex hook payloads carry `cwd` -- the working directory of the
-    session or subagent that triggered the hook. In a git worktree this is the
-    worktree path (and `os.getcwd()` agrees, since Claude runs hooks from there).
-    CLAUDE_PROJECT_DIR, by contrast, is pinned to the directory Claude Code was
-    *launched* in -- typically a sibling checkout on a different feature branch.
-    Preferring `cwd` keeps SpecKit feature resolution from leaking across
-    worktrees; CLAUDE_PROJECT_DIR is only a last-resort fallback. We then walk up
-    to the directory that owns `.specify/`/`specs/` so subdirectory cwds resolve.
-    """
-    cwd = payload.get("cwd") or os.environ.get("CLAUDE_PROJECT_DIR") or os.getcwd()
-    if not isinstance(cwd, str) or not os.path.isdir(cwd):
-        cwd = os.environ.get("CLAUDE_PROJECT_DIR") or os.getcwd()
-    return _find_speckit_root(cwd) or cwd
-
-
 def _resolve_feat(proj_root):
     """SpecKit 3-tier <feat> resolution. Returns "" if none resolve."""
     env_dir = os.environ.get("SPECIFY_FEATURE_DIRECTORY")
@@ -262,19 +221,6 @@ def _resolve_path(tmpl, feat, proj_root):
     return path
 
 
-def _path_present(path):
-    """True when `path` exists.
-
-    Precondition templates may carry glob metacharacters (e.g. `bug-*.md`,
-    one per numbered artefact). For those, match as a wildcard instead of
-    looking for a file literally named with the asterisk -- os.path.exists on
-    `bug-*.md` can never match a real `bug-1.md`.
-    """
-    if any(ch in path for ch in "*?["):
-        return bool(glob.glob(path))
-    return os.path.exists(path)
-
-
 def _evaluate_block(node, feat, proj_root):
     """Return a block reason string, or "" if nothing blocks."""
     for reason in node.get("hard_deprecated", []):
@@ -293,13 +239,13 @@ def _evaluate_block(node, feat, proj_root):
                 " switch to the feature branch"
             )
         path = _resolve_path(tmpl, feat, proj_root)
-        if not _path_present(path):
+        if not os.path.exists(path):
             return "Required artefact missing: " + path
     for tmpl in node.get("hard_exists", []):
         if "<feat>" in tmpl and not feat:
             continue  # cannot conflict when no feature exists yet
         path = _resolve_path(tmpl, feat, proj_root)
-        if _path_present(path):
+        if os.path.exists(path):
             return (
                 "Conflicting artefact present: " + path
                 + " -- use /speckit.refine.update to amend instead of"
@@ -346,7 +292,7 @@ def main():
 
     node_body = render_body(phase, node)
 
-    proj_root = _resolve_proj_root(payload)
+    proj_root = os.environ.get("CLAUDE_PROJECT_DIR") or os.getcwd()
     feat = _resolve_feat(proj_root)
 
     if phase == "pre":

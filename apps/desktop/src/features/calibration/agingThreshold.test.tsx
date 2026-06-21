@@ -5,8 +5,8 @@
  * 1. MastersList uses agingThresholdDays prop, not hardcoded 90.
  * 2. A master at age=91 with threshold=90 shows the aging pill.
  * 3. A master at age=91 with threshold=120 does NOT show the aging pill.
- * 4. The settings key 'calibration.aging_threshold_days' is the correct key
- *    (not the old bogus 'calibration_matching'/'aging_threshold_days').
+ * 4. The settings key 'calibrationAgingThresholdDays' is the correct key
+ *    (not the old dotted 'calibration.aging_threshold_days').
  *    Verified by checking that MastersList derives aging from prop, not hardcode.
  */
 

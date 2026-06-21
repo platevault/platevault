@@ -13,9 +13,12 @@
  */
 
 import { useState, useEffect, useCallback } from 'react';
+import { useForm } from 'react-hook-form';
+import { zodResolver } from '@hookform/resolvers/zod';
 import { Btn, Banner } from '@/ui';
 import { callUpdateProject, callReinferChannels, callDismissChannelDrift } from '@/features/projects/store';
 import type { ProjectDetailDto, ProjectChannelDto } from '@/bindings/index';
+import { editProjectFormSchema, type EditProjectFormValues } from '@/features/projects/schemas';
 
 // ── Tool-lock and read-only helpers ──────────────────────────────────────────
 
@@ -43,59 +46,69 @@ export function EditProjectPane({ project, onClose }: EditProjectPaneProps) {
   const readOnly = isReadOnly(project.lifecycle);
   const toolLocked = isToolLocked(project.lifecycle);
 
-  const [name, setName] = useState(project.name);
   type ToolValue = 'PixInsight' | 'Siril';
   const toToolValue = (t: string | undefined): ToolValue =>
     t === 'Siril' ? 'Siril' : 'PixInsight';
-  const [tool, setTool] = useState<ToolValue>(toToolValue(project.tool));
-  const [notes, setNotes] = useState(project.notes ?? '');
-  const [saving, setSaving] = useState(false);
-  const [fieldErrors, setFieldErrors] = useState<Record<string, string>>({});
   const [serverError, setServerError] = useState<string | null>(null);
   const [channelWorking, setChannelWorking] = useState(false);
   const [channels, setChannels] = useState<ProjectChannelDto[]>(project.channels ?? []);
 
+  const {
+    register,
+    handleSubmit: rhfHandleSubmit,
+    reset,
+    formState: { errors, isSubmitting },
+  } = useForm<EditProjectFormValues>({
+    resolver: zodResolver(editProjectFormSchema),
+    defaultValues: {
+      name: project.name,
+      tool: toToolValue(project.tool),
+      notes: project.notes ?? '',
+    },
+    mode: 'onSubmit',
+  });
+
   // Sync if parent project changes (e.g. detail re-fetched)
   useEffect(() => {
-    setName(project.name);
-    setTool(toToolValue(project.tool));
-    setNotes(project.notes ?? '');
+    reset({
+      name: project.name,
+      tool: toToolValue(project.tool),
+      notes: project.notes ?? '',
+    });
     setChannels(project.channels ?? []);
-  }, [project]);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [project, reset]);
 
   // ── Save ──────────────────────────────────────────────────────────────────
+  // The submit payload is delta-based: only fields whose validated value differs
+  // from the original `project` are sent (others stay `undefined`). This matches
+  // the pre-RHF behaviour byte-for-byte; zod only gates the name rules.
 
-  const handleSave = useCallback(async () => {
-    if (saving || readOnly) return;
+  const onValid = useCallback(
+    async (values: EditProjectFormValues) => {
+      if (readOnly) return;
+      const trimmed = values.name.trim();
 
-    const errors: Record<string, string> = {};
-    const trimmed = name.trim();
-    if (!trimmed) errors.name = 'Name is required.';
-    else if (trimmed.length > 120) errors.name = 'Name must be 120 characters or fewer.';
-
-    setFieldErrors(errors);
-    if (Object.keys(errors).length > 0) return;
-
-    setSaving(true);
-    setServerError(null);
-    try {
-      await callUpdateProject({
-        requestId: crypto.randomUUID(),
-        projectId: project.id,
-        name: trimmed !== project.name ? trimmed : undefined,
-        tool: tool !== (typeof project.tool === 'string' ? project.tool : 'PixInsight')
-          ? (tool)
-          : undefined,
-        notes: notes !== (project.notes ?? '') ? notes : undefined,
-      });
-      onClose();
-    } catch (err: unknown) {
-      const code = typeof err === 'string' ? err : (err as Error)?.message ?? 'unknown';
-      setServerError(mapUpdateError(code));
-    } finally {
-      setSaving(false);
-    }
-  }, [saving, readOnly, name, tool, notes, project, onClose]);
+      setServerError(null);
+      try {
+        await callUpdateProject({
+          requestId: crypto.randomUUID(),
+          projectId: project.id,
+          name: trimmed !== project.name ? trimmed : undefined,
+          tool:
+            values.tool !== (typeof project.tool === 'string' ? project.tool : 'PixInsight')
+              ? values.tool
+              : undefined,
+          notes: values.notes !== (project.notes ?? '') ? values.notes : undefined,
+        });
+        onClose();
+      } catch (err: unknown) {
+        const code = typeof err === 'string' ? err : (err as Error)?.message ?? 'unknown';
+        setServerError(mapUpdateError(code));
+      }
+    },
+    [readOnly, project, onClose],
+  );
 
   // ── Channel actions ───────────────────────────────────────────────────────
 
@@ -155,7 +168,11 @@ export function EditProjectPane({ project, onClose }: EditProjectPaneProps) {
         </Banner>
       )}
 
-      <div style={{ display: 'flex', flexDirection: 'column', gap: 'var(--alm-sp-4)', padding: 'var(--alm-sp-4)' }}>
+      <form
+        onSubmit={rhfHandleSubmit(onValid)}
+        noValidate
+        style={{ display: 'flex', flexDirection: 'column', gap: 'var(--alm-sp-4)', padding: 'var(--alm-sp-4)' }}
+      >
 
         {/* Name */}
         <div>
@@ -164,16 +181,15 @@ export function EditProjectPane({ project, onClose }: EditProjectPaneProps) {
             id="ep-name"
             className="alm-input"
             type="text"
-            value={name}
-            onChange={(e) => setName(e.target.value)}
             maxLength={130}
             disabled={readOnly}
-            aria-invalid={Boolean(fieldErrors.name)}
-            aria-describedby={fieldErrors.name ? 'ep-name-error' : undefined}
+            aria-invalid={Boolean(errors.name)}
+            aria-describedby={errors.name ? 'ep-name-error' : undefined}
+            {...register('name')}
           />
-          {fieldErrors.name && (
+          {errors.name && (
             <span id="ep-name-error" role="alert" className="alm-field-error">
-              {fieldErrors.name}
+              {errors.name.message}
             </span>
           )}
         </div>
@@ -184,10 +200,9 @@ export function EditProjectPane({ project, onClose }: EditProjectPaneProps) {
           <select
             id="ep-tool"
             className="alm-input"
-            value={tool}
-            onChange={(e) => setTool(e.target.value as ToolValue)}
             disabled={readOnly || toolLocked}
             aria-describedby={toolLocked ? 'ep-tool-lock' : undefined}
+            {...register('tool')}
           >
             <option value="PixInsight">PixInsight</option>
             <option value="Siril">Siril</option>
@@ -205,11 +220,10 @@ export function EditProjectPane({ project, onClose }: EditProjectPaneProps) {
           <textarea
             id="ep-notes"
             className="alm-input"
-            value={notes}
-            onChange={(e) => setNotes(e.target.value)}
             rows={4}
             maxLength={4106}
             disabled={readOnly}
+            {...register('notes')}
           />
         </div>
 
@@ -244,16 +258,16 @@ export function EditProjectPane({ project, onClose }: EditProjectPaneProps) {
 
         {/* Actions */}
         <div style={{ display: 'flex', gap: 'var(--alm-sp-2)', justifyContent: 'flex-end' }}>
-          <Btn variant="ghost" onClick={onClose} disabled={saving}>
+          <Btn type="button" variant="ghost" onClick={onClose} disabled={isSubmitting}>
             Cancel
           </Btn>
           {!readOnly && (
-            <Btn variant="primary" onClick={handleSave} disabled={saving}>
-              {saving ? 'Saving…' : 'Save changes'}
+            <Btn type="submit" variant="primary" disabled={isSubmitting}>
+              {isSubmitting ? 'Saving…' : 'Save changes'}
             </Btn>
           )}
         </div>
-      </div>
+      </form>
     </div>
   );
 }

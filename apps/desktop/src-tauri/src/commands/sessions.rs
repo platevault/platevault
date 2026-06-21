@@ -12,6 +12,7 @@ use contracts_core::sessions::{
     AcquisitionSession, CalendarData, CalendarDay, CalendarMonth, CalendarSessionStub,
     ConfidenceLevel, MetaValue, ProvenanceOrigin, SessionDetail, SessionKey, SessionState,
 };
+use contracts_core::ContractError;
 use contracts_core::JsonAny;
 use serde::{Deserialize, Serialize};
 use specta::Type;
@@ -37,9 +38,11 @@ pub struct SessionSplitResult {
 /// Returns `Err(String)` on database failure.
 #[tauri::command]
 #[specta::specta]
-pub async fn sessions_list(state: State<'_, AppState>) -> Result<Vec<AcquisitionSession>, String> {
+pub async fn sessions_list(
+    state: State<'_, AppState>,
+) -> Result<Vec<AcquisitionSession>, ContractError> {
     tracing::debug!("sessions.list");
-    sessions_uc::list_sessions(state.repo.pool()).await
+    sessions_uc::list_sessions(state.repo.pool()).await.map_err(ContractError::internal)
 }
 
 /// `sessions.get` -- returns a single session detail from real DB rows.
@@ -50,9 +53,12 @@ pub async fn sessions_list(state: State<'_, AppState>) -> Result<Vec<Acquisition
 /// Returns `Err(String)` on database failure or when the session is absent.
 #[tauri::command]
 #[specta::specta]
-pub async fn sessions_get(state: State<'_, AppState>, id: String) -> Result<SessionDetail, String> {
+pub async fn sessions_get(
+    state: State<'_, AppState>,
+    id: String,
+) -> Result<SessionDetail, ContractError> {
     tracing::debug!("sessions.get id={id}");
-    sessions_uc::get_session(state.repo.pool(), &id).await
+    sessions_uc::get_session(state.repo.pool(), &id).await.map_err(ContractError::internal)
 }
 
 /// `sessions.calendar` — returns calendar data for a month range.
@@ -64,7 +70,7 @@ pub async fn sessions_get(state: State<'_, AppState>, id: String) -> Result<Sess
 pub async fn sessions_calendar(
     start_month: String,
     end_month: String,
-) -> Result<CalendarData, String> {
+) -> Result<CalendarData, ContractError> {
     tracing::debug!("stub: sessions.calendar start={start_month} end={end_month}");
     Ok(CalendarData {
         months: vec![CalendarMonth {
@@ -117,10 +123,12 @@ pub async fn sessions_transition(
     id: String,
     action: String,
     metadata: Option<JsonAny>,
-) -> Result<AcquisitionSession, String> {
+) -> Result<AcquisitionSession, ContractError> {
     tracing::debug!("stub: sessions.transition id={id} action={action} metadata={metadata:?}");
-    let mut session =
-        stub_sessions().into_iter().next().ok_or_else(|| "no stub session available".to_owned())?;
+    let mut session = stub_sessions()
+        .into_iter()
+        .next()
+        .ok_or_else(|| ContractError::internal("no stub session available"))?;
     session.id = id;
     session.state = SessionState::Confirmed;
     session.confidence = ConfidenceLevel::Confirmed;
@@ -133,7 +141,10 @@ pub async fn sessions_transition(
 /// Returns `Err(String)` on failure; the stub never fails.
 #[tauri::command]
 #[specta::specta]
-pub async fn sessions_split(id: String, split_at_index: u32) -> Result<SessionSplitResult, String> {
+pub async fn sessions_split(
+    id: String,
+    split_at_index: u32,
+) -> Result<SessionSplitResult, ContractError> {
     tracing::debug!("stub: sessions.split id={id} split_at_index={split_at_index}");
     let sessions = stub_sessions();
     let mut original = sessions[0].clone();
@@ -153,10 +164,12 @@ pub async fn sessions_split(id: String, split_at_index: u32) -> Result<SessionSp
 /// Returns `Err(String)` on failure; the stub never fails.
 #[tauri::command]
 #[specta::specta]
-pub async fn sessions_merge(ids: Vec<String>) -> Result<AcquisitionSession, String> {
+pub async fn sessions_merge(ids: Vec<String>) -> Result<AcquisitionSession, ContractError> {
     tracing::debug!("stub: sessions.merge ids={ids:?}");
-    let mut merged =
-        stub_sessions().into_iter().next().ok_or_else(|| "no stub session available".to_owned())?;
+    let mut merged = stub_sessions()
+        .into_iter()
+        .next()
+        .ok_or_else(|| ContractError::internal("no stub session available"))?;
     merged.id = ids.into_iter().next().unwrap_or_default();
     merged.frame_count = 30;
     merged.total_integration_seconds = 18000.0;

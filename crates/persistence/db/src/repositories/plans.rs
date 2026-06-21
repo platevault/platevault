@@ -5,19 +5,13 @@
 //! absolute paths for display. This module owns only raw DB operations;
 //! state-machine enforcement lives in `crates/app/core/src/plans.rs`.
 
+use domain_core::ids::Timestamp;
 use serde::{Deserialize, Serialize};
 use sqlx::SqlitePool;
-use time::OffsetDateTime;
 
 use crate::{DbError, DbResult};
 
 // ── Helpers ───────────────────────────────────────────────────────────────────
-
-fn now_iso() -> String {
-    OffsetDateTime::now_utc()
-        .format(&time::format_description::well_known::Rfc3339)
-        .unwrap_or_else(|_| "1970-01-01T00:00:00Z".to_owned())
-}
 
 // ── Row types ─────────────────────────────────────────────────────────────────
 
@@ -126,7 +120,7 @@ pub struct InsertPlanItem<'a> {
 ///
 /// Returns [`DbError::Database`] on constraint or connection failure.
 pub async fn insert_plan(pool: &SqlitePool, plan: &InsertPlan<'_>) -> DbResult<i64> {
-    let now = now_iso();
+    let now = Timestamp::now_iso();
     let number: i64 = sqlx::query_scalar("SELECT COALESCE(MAX(number), 0) + 1 FROM plans")
         .fetch_one(pool)
         .await?;
@@ -161,7 +155,7 @@ pub async fn insert_plan(pool: &SqlitePool, plan: &InsertPlan<'_>) -> DbResult<i
 ///
 /// Returns [`DbError::Database`] on constraint or connection failure.
 pub async fn insert_plan_item(pool: &SqlitePool, item: &InsertPlanItem<'_>) -> DbResult<()> {
-    let now = now_iso();
+    let now = Timestamp::now_iso();
     sqlx::query(
         "INSERT INTO plan_items (
             id, plan_id, item_index, name, action,

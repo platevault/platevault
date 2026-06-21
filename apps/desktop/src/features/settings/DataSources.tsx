@@ -4,6 +4,7 @@ import { Btn, Pill } from '@/ui';
 import { DirPicker } from '@/ui/DirPicker';
 import { listRoots, registerRoot } from '@/api/commands';
 import type { LibraryRoot } from '@/bindings/types';
+import { errMessage } from '@/lib/errors';
 
 interface DataSourcesProps {
   save: (scope: string, values: Record<string, unknown>) => void;
@@ -41,7 +42,7 @@ export function DataSources({ save: _save }: DataSourcesProps) {
     setLoadError(null);
     listRoots()
       .then((data) => setRoots(data))
-      .catch((err: unknown) => setLoadError(String(err)))
+      .catch((err: unknown) => setLoadError(errMessage(err)))
       .finally(() => setLoading(false));
   }, []);
 
@@ -64,7 +65,7 @@ export function DataSources({ save: _save }: DataSourcesProps) {
       setShowAdd(false);
       loadRoots();
     } catch (err: unknown) {
-      setAddError(String(err));
+      setAddError(errMessage(err));
     } finally {
       setAdding(false);
     }
@@ -157,9 +158,9 @@ export function DataSources({ save: _save }: DataSourcesProps) {
                   </Pill>
                 </div>
               </div>
-              {root.last_scanned && (
+              {root.lastScanned && (
                 <div style={{ marginTop: 'var(--alm-sp-2)', fontSize: 'var(--alm-text-xs)', color: 'var(--alm-text-muted)' }}>
-                  Last scan: {root.last_scanned}
+                  Last scan: {root.lastScanned}
                 </div>
               )}
             </div>

@@ -21,10 +21,11 @@
 //! Constitution §II: never overwrite silently; per-item audit via callbacks.
 
 use std::collections::HashSet;
-use std::path::PathBuf;
-use std::sync::Arc;
+use std::sync::{Arc, Mutex};
 
-use tokio::sync::{watch, Mutex};
+use camino::{Utf8Path, Utf8PathBuf};
+use domain_core::ids::Timestamp;
+use tokio::sync::watch;
 
 use crate::failure::{FailureCode, PlanItemFailure, RollbackOutcome};
 use crate::ops::archive_op;
@@ -119,15 +120,15 @@ pub struct ExecutorItem {
     /// **Relative** source path (executor resolves against `library_root` via the path gate).
     ///
     /// Set to `None` for actions that have no source (e.g. `NoOp`, `Mkdir`).
-    pub source_path: Option<PathBuf>,
+    pub source_path: Option<Utf8PathBuf>,
     /// **Relative** destination path (executor resolves against `library_root` via the path gate).
     ///
     /// Set to `None` when the destination is implicit (e.g. `Trash`).
-    pub destination_path: Option<PathBuf>,
+    pub destination_path: Option<Utf8PathBuf>,
     /// Absolute library root — all relative paths are joined against this.
     ///
     /// `None` means "use the path as-is" (legacy / test items with pre-resolved paths).
-    pub library_root: Option<PathBuf>,
+    pub library_root: Option<Utf8PathBuf>,
     /// Approval-time CAS snapshot (R-FS-1).
     pub cas_snapshot: CasSnapshot,
     /// Protection status from spec-016 (FR-008).
@@ -148,12 +149,12 @@ pub struct ExecutorItem {
 pub enum ExecutorItemAction {
     Move,
     Archive {
-        archive_destination: PathBuf,
+        archive_destination: Utf8PathBuf,
     },
     /// Move to OS trash. Falls back to archive at `fallback_archive_destination` if provided.
     Trash {
         /// Absolute path to use as the archive fallback destination when OS trash is unavailable.
-        fallback_archive_destination: Option<PathBuf>,
+        fallback_archive_destination: Option<Utf8PathBuf>,
     },
     Delete,
     /// Record-in-place: no filesystem mutation. Signals that the file is already
@@ -210,6 +211,10 @@ impl Default for CancellationToken {
 ///
 /// The use case injects skip requests between items; the executor checks
 /// before picking up each pending item.
+///
+/// Access is synchronous: each operation takes a `std::sync::Mutex` for a
+/// brief, non-blocking critical section (a `HashSet` insert/remove), so there
+/// is no need for an async lock — the guard is never held across an `.await`.
 #[derive(Clone, Debug, Default)]
 pub struct SkipSet {
     inner: Arc<Mutex<HashSet<String>>>,
@@ -222,17 +227,28 @@ impl SkipSet {
     }
 
     /// Add an item id to the skip set.
-    pub async fn insert(&self, item_id: &str) {
-        self.inner.lock().await.insert(item_id.to_owned());
+    ///
+    /// # Panics
+    /// Panics if the internal mutex is poisoned (only if another thread
+    /// panicked while holding the lock — not reachable in normal operation).
+    pub fn insert(&self, item_id: &str) {
+        self.inner.lock().expect("skip-set mutex poisoned").insert(item_id.to_owned());
     }
 
     /// Remove and return true if the item was in the skip set.
-    pub async fn take(&self, item_id: &str) -> bool {
-        self.inner.lock().await.remove(item_id)
+    ///
+    /// # Panics
+    /// Panics if the internal mutex is poisoned.
+    #[must_use]
+    pub fn take(&self, item_id: &str) -> bool {
+        self.inner.lock().expect("skip-set mutex poisoned").remove(item_id)
     }
 }
 
 /// A shared retry queue: item ids to re-attempt (per-item retry, US4).
+///
+/// Access is synchronous for the same reason as [`SkipSet`]: the critical
+/// section is a single `HashSet` operation, never held across an `.await`.
 #[derive(Clone, Debug, Default)]
 pub struct RetryQueue {
     inner: Arc<Mutex<HashSet<String>>>,
@@ -245,13 +261,20 @@ impl RetryQueue {
     }
 
     /// Enqueue an item for retry.
-    pub async fn push(&self, item_id: &str) {
-        self.inner.lock().await.insert(item_id.to_owned());
+    ///
+    /// # Panics
+    /// Panics if the internal mutex is poisoned.
+    pub fn push(&self, item_id: &str) {
+        self.inner.lock().expect("retry-queue mutex poisoned").insert(item_id.to_owned());
     }
 
     /// Remove and return true if the item is queued for retry.
-    pub async fn take(&self, item_id: &str) -> bool {
-        self.inner.lock().await.remove(item_id)
+    ///
+    /// # Panics
+    /// Panics if the internal mutex is poisoned.
+    #[must_use]
+    pub fn take(&self, item_id: &str) -> bool {
+        self.inner.lock().expect("retry-queue mutex poisoned").remove(item_id)
     }
 }
 
@@ -292,14 +315,14 @@ pub async fn execute_plan<C: ExecutorCallbacks>(
         }
 
         // Check user-requested skip.
-        if skip_set.take(&item.id).await {
+        if skip_set.take(&item.id) {
             tracing::debug!(item_id = %item.id, "user-skipped item");
             callbacks
                 .on_item_progress(ItemProgressEvent {
                     item_id: item.id.clone(),
                     prior_state: "pending".to_owned(),
                     new_state: "skipped".to_owned(),
-                    at: now_iso(),
+                    at: Timestamp::now_iso(),
                     failure: None,
                     rollback_attempted: false,
                     rollback_outcome: RollbackOutcome::NotApplicable,
@@ -329,7 +352,7 @@ pub async fn execute_plan<C: ExecutorCallbacks>(
                     item_id: item.id.clone(),
                     prior_state: "pending".to_owned(),
                     new_state: "refused".to_owned(),
-                    at: now_iso(),
+                    at: Timestamp::now_iso(),
                     failure: Some(failure),
                     rollback_attempted: false,
                     rollback_outcome: RollbackOutcome::NotApplicable,
@@ -356,7 +379,7 @@ pub async fn execute_plan<C: ExecutorCallbacks>(
                             item_id: item.id.clone(),
                             prior_state: "applying".to_owned(),
                             new_state: "refused".to_owned(),
-                            at: now_iso(),
+                            at: Timestamp::now_iso(),
                             failure: Some(gate_failure),
                             rollback_attempted: false,
                             rollback_outcome: RollbackOutcome::NotApplicable,
@@ -378,7 +401,7 @@ pub async fn execute_plan<C: ExecutorCallbacks>(
 
         // Per-item FS CAS revalidation (R-FS-1).
         // Use the library-root-resolved path if available; otherwise use the raw path (legacy).
-        let resolved_source_for_cas: Option<PathBuf> =
+        let resolved_source_for_cas: Option<Utf8PathBuf> =
             if let (Some(ref src_rel), Some(ref root)) = (&item.source_path, &item.library_root) {
                 // Already validated above; re-resolve (cheap lexical op).
                 path_gate::resolve_and_validate(root, src_rel).ok().map(|r| r.0)
@@ -396,7 +419,7 @@ pub async fn execute_plan<C: ExecutorCallbacks>(
                         item_id: item.id.clone(),
                         prior_state: "applying".to_owned(),
                         new_state: "stale".to_owned(),
-                        at: now_iso(),
+                        at: Timestamp::now_iso(),
                         failure: Some(failure_clone),
                         rollback_attempted: false,
                         rollback_outcome: RollbackOutcome::NotApplicable,
@@ -430,7 +453,7 @@ pub async fn execute_plan<C: ExecutorCallbacks>(
                     item_id: item.id.clone(),
                     prior_state: "applying".to_owned(),
                     new_state: "failed".to_owned(),
-                    at: now_iso(),
+                    at: Timestamp::now_iso(),
                     failure: Some(failure),
                     rollback_attempted: false,
                     rollback_outcome: RollbackOutcome::NotApplicable,
@@ -443,7 +466,29 @@ pub async fn execute_plan<C: ExecutorCallbacks>(
         }
 
         // Execute the operation.
-        let op_result = execute_item(item);
+        //
+        // T212: the filesystem primitives in `execute_item` are synchronous and
+        // blocking (`std::fs::rename`/`copy`/`remove_file`, trash). Running them
+        // directly on a tokio worker thread would stall the async runtime, so we
+        // hand the work to `spawn_blocking`, which dispatches it onto the
+        // dedicated blocking thread pool and yields the worker thread back to the
+        // runtime until the fs op completes.
+        let item_for_blocking = item.clone();
+        let op_result = tokio::task::spawn_blocking(move || execute_item(&item_for_blocking))
+            .await
+            .unwrap_or_else(|join_err| {
+                // The blocking task panicked. Surface it as an internal failure
+                // rather than propagating the panic through the executor loop.
+                Err((
+                    PlanItemFailure::with_code(
+                        FailureCode::Unknown,
+                        format!("filesystem worker task failed: {join_err}"),
+                    ),
+                    false,
+                    RollbackOutcome::NotApplicable,
+                    None,
+                ))
+            });
 
         match op_result {
             Ok(()) => {
@@ -452,7 +497,7 @@ pub async fn execute_plan<C: ExecutorCallbacks>(
                         item_id: item.id.clone(),
                         prior_state: "applying".to_owned(),
                         new_state: "succeeded".to_owned(),
-                        at: now_iso(),
+                        at: Timestamp::now_iso(),
                         failure: None,
                         rollback_attempted: false,
                         rollback_outcome: RollbackOutcome::NotApplicable,
@@ -471,7 +516,7 @@ pub async fn execute_plan<C: ExecutorCallbacks>(
                         item_id: item.id.clone(),
                         prior_state: "applying".to_owned(),
                         new_state: "failed".to_owned(),
-                        at: now_iso(),
+                        at: Timestamp::now_iso(),
                         failure: Some(failure_clone),
                         rollback_attempted,
                         rollback_outcome,
@@ -495,7 +540,7 @@ pub async fn execute_plan<C: ExecutorCallbacks>(
         // the use case; within this loop they would need re-ordering which
         // is deferred to the use case. Here we just clear the queue entry
         // to avoid phantom state.)
-        let _ = retry_queue.take(&item.id).await;
+        let _ = retry_queue.take(&item.id);
     }
 
     if cancelled {
@@ -513,9 +558,9 @@ fn execute_item(item: &ExecutorItem) -> Result<(), OpError> {
     // Resolve the source and destination paths against the library root (if set).
     // The path gate has already validated them earlier in the loop; this is the
     // absolute-path computation for the actual filesystem operation.
-    let resolved_src: Option<PathBuf> =
+    let resolved_src: Option<Utf8PathBuf> =
         resolve_item_path(item.source_path.as_deref(), item.library_root.as_deref());
-    let resolved_dst: Option<PathBuf> =
+    let resolved_dst: Option<Utf8PathBuf> =
         resolve_item_path(item.destination_path.as_deref(), item.library_root.as_deref());
 
     match &item.action {
@@ -559,10 +604,7 @@ fn execute_item(item: &ExecutorItem) -> Result<(), OpError> {
 
 /// Resolve a relative path against an optional library root.
 /// Returns `None` if either argument is `None`.
-fn resolve_item_path(
-    relative: Option<&std::path::Path>,
-    root: Option<&std::path::Path>,
-) -> Option<PathBuf> {
+fn resolve_item_path(relative: Option<&Utf8Path>, root: Option<&Utf8Path>) -> Option<Utf8PathBuf> {
     match (relative, root) {
         (Some(rel), Some(r)) => {
             // Use the validated lexical normalization (path_gate already checked safety).
@@ -577,9 +619,9 @@ fn resolve_item_path(
 }
 
 fn require_resolved_path<'a>(
-    p: Option<&'a std::path::Path>,
+    p: Option<&'a Utf8Path>,
     label: &str,
-) -> Result<&'a std::path::Path, OpError> {
+) -> Result<&'a Utf8Path, OpError> {
     p.ok_or_else(|| {
         (
             PlanItemFailure::with_code(
@@ -593,20 +635,17 @@ fn require_resolved_path<'a>(
     })
 }
 
-fn now_iso() -> String {
-    time::OffsetDateTime::now_utc()
-        .format(&time::format_description::well_known::Rfc3339)
-        .unwrap_or_else(|_| "1970-01-01T00:00:00Z".to_owned())
-}
-
 // ── Tests ──────────────────────────────────────────────────────────────────────
 
 #[cfg(test)]
 mod tests {
     use super::*;
-    use std::path::Path;
     use std::sync::Arc;
     use tokio::sync::Mutex;
+
+    fn utf8(p: &std::path::Path) -> Utf8PathBuf {
+        Utf8PathBuf::from_path_buf(p.to_path_buf()).expect("temp dir path is UTF-8")
+    }
 
     // ── Fake callbacks ────────────────────────────────────────────────────────
 
@@ -634,7 +673,7 @@ mod tests {
         }
     }
 
-    fn make_move_item(id: &str, src: &Path, dst: &Path) -> ExecutorItem {
+    fn make_move_item(id: &str, src: &Utf8Path, dst: &Utf8Path) -> ExecutorItem {
         ExecutorItem {
             id: id.to_owned(),
             plan_id: "p1".to_owned(),
@@ -654,8 +693,9 @@ mod tests {
     #[tokio::test]
     async fn happy_path_all_succeed() {
         let dir = tempfile::tempdir().unwrap();
-        let src = dir.path().join("file.fits");
-        let dst = dir.path().join("dest.fits");
+        let root = utf8(dir.path());
+        let src = root.join("file.fits");
+        let dst = root.join("dest.fits");
         std::fs::write(&src, b"data").unwrap();
 
         let item = make_move_item("item-1", &src, &dst);
@@ -718,10 +758,11 @@ mod tests {
     #[tokio::test]
     async fn cancellation_halts_before_next_item() {
         let dir = tempfile::tempdir().unwrap();
-        let src1 = dir.path().join("a.fits");
-        let dst1 = dir.path().join("a_dst.fits");
-        let src2 = dir.path().join("b.fits");
-        let dst2 = dir.path().join("b_dst.fits");
+        let root = utf8(dir.path());
+        let src1 = root.join("a.fits");
+        let dst1 = root.join("a_dst.fits");
+        let src2 = root.join("b.fits");
+        let dst2 = root.join("b_dst.fits");
         std::fs::write(&src1, b"a").unwrap();
         std::fs::write(&src2, b"b").unwrap();
 
@@ -752,15 +793,16 @@ mod tests {
     #[tokio::test]
     async fn user_skip_set_prevents_execution() {
         let dir = tempfile::tempdir().unwrap();
-        let src = dir.path().join("skip.fits");
-        let dst = dir.path().join("skip_dst.fits");
+        let root = utf8(dir.path());
+        let src = root.join("skip.fits");
+        let dst = root.join("skip_dst.fits");
         std::fs::write(&src, b"data").unwrap();
 
         let item = make_move_item("item-skip", &src, &dst);
         let callbacks = FakeCallbacks::default();
         let cancel = CancellationToken::new();
         let skip = SkipSet::new();
-        skip.insert("item-skip").await;
+        skip.insert("item-skip");
         let retry = RetryQueue::new();
 
         let outcome = execute_plan(vec![item], &callbacks, &cancel, &skip, &retry).await;
@@ -781,9 +823,10 @@ mod tests {
     #[tokio::test]
     async fn stale_source_triggers_pause() {
         let dir = tempfile::tempdir().unwrap();
-        let src = dir.path().join("stale.fits");
+        let root = utf8(dir.path());
+        let src = root.join("stale.fits");
         std::fs::write(&src, b"data").unwrap();
-        let dst = dir.path().join("dst.fits");
+        let dst = root.join("dst.fits");
 
         let item = ExecutorItem {
             id: "item-stale".to_owned(),

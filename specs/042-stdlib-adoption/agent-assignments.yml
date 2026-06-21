@@ -1,0 +1,230 @@
+# Agent Assignments
+# Feature: 042-stdlib-adoption
+# Generated: 2026-06-20T22:26:28Z
+# Command: /speckit.agent-assign.assign
+# Note: US1, US2 (T100-T118) and phases 0-1 are already implemented & committed.
+#       Only still-incomplete coding tasks (US3-US16) are assigned here.
+#       T116 is DEFERRED (blocked CB2) and intentionally left unassigned.
+#       Phase 18 (T260-T263) verification is owned by the downstream speckit
+#       process + user-driven Windows build, assigned `default`.
+
+agents_scanned:
+  - name: "rust-pro"
+    source: "project"
+    description: "Rust 1.75+ systems programming, async, type system, crates"
+  - name: "frontend-developer"
+    source: "project"
+    description: "React 19 / TypeScript UI components, state, accessibility"
+  - name: "typescript-pro"
+    source: "project"
+    description: "Advanced TypeScript types, generics, strict type-safety"
+  - name: "test-automator"
+    source: "project"
+    description: "Test automation and quality engineering"
+  - name: "code-reviewer"
+    source: "project"
+    description: "Code review, security, quality"
+  - name: "speckit-implement-task"
+    source: "project"
+    description: "Implements tightly-scoped SpecKit tasks"
+  - name: "coder"
+    source: "project"
+    description: "Bounded code changes, tests, refactors, migrations"
+
+assignments:
+  # --- Phase 3 US2 leftover (DEFERRED) ---
+  T116:
+    agent: "deferred"
+    reason: "CB2 blocked: deriving packages/contracts JSON-Schema from specta reflection hits a draft-version/structure mismatch with the hand-maintained schemas. Not assigned; tracked in tasks.md for follow-up."
+
+  # --- Phase 4 US8: Rust error handling & logging ---
+  T120:
+    agent: "rust-pro"
+    reason: "thiserror derive for GuidedFlowError in app/core/guided_flow.rs"
+  T121:
+    agent: "rust-pro"
+    reason: "anyhow + .context() at app boundary; convert .to_string() error plumbing"
+  T122:
+    agent: "rust-pro"
+    reason: "Migrate stray eprintln! to tracing in transition_use_case.rs"
+
+  # --- Phase 5 US9: Rust string/enum typing ---
+  T130:
+    agent: "rust-pro"
+    reason: "CalibrationKind TryFrom/FromStr single fallback (calibration domain enum)"
+  T131:
+    agent: "rust-pro"
+    reason: "Inventory state TryFrom/From in inventory.rs"
+  T132:
+    agent: "rust-pro"
+    reason: "strum for first_run + prepared_source enum<->string converters"
+
+  # --- Phase 6 US11: Rust duplication -> shared homes (needs T010, done) ---
+  T140:
+    agent: "rust-pro"
+    reason: "Replace ~28 now_iso() copies with domain_core helper"
+  T141:
+    agent: "rust-pro"
+    reason: "Replace x5 new_id() with domain_core helper"
+  T142:
+    agent: "rust-pro"
+    reason: "Create app/core/src/errors.rs canonical db_err/bus_err"
+  T143:
+    agent: "rust-pro"
+    reason: "Create app/core/src/target_dto.rs shared map_object_type/map_source"
+  T144:
+    agent: "rust-pro"
+    reason: "Settings descriptor table in app/core/src/settings/"
+  T145:
+    agent: "rust-pro"
+    reason: "Share parse_basic_row (pub in targeting, used by seed-builder)"
+
+  # --- Phase 7 US3: Virtualize long lists (React) ---
+  T150:
+    agent: "frontend-developer"
+    reason: "Virtualize LogPanel.tsx with useVirtualizer, preserve follow-tail"
+  T151:
+    agent: "frontend-developer"
+    reason: "Virtualize InboxList.tsx + fix O(n^2) indexOf"
+  T152:
+    agent: "frontend-developer"
+    reason: "Virtualize TargetList.tsx and TargetSearch.tsx results"
+
+  # --- Phase 8 US4: base-ui primitives ---
+  T160:
+    agent: "frontend-developer"
+    reason: "ProjectsList filter dropdown -> base-ui Select/Menu (click-outside/Escape fix)"
+  T161:
+    agent: "frontend-developer"
+    reason: "TargetSearch combobox -> base-ui Combobox/Popover; remove hand-rolled ARIA"
+  T162:
+    agent: "frontend-developer"
+    reason: "Sweep remaining hand-rolled overlays -> base-ui"
+
+  # --- Phase 9 US5: Forms (react-hook-form + zod) ---
+  T170:
+    agent: "frontend-developer"
+    reason: "Introduce RHF + zod resolver aligned to generated contract types"
+  T171:
+    agent: "frontend-developer"
+    reason: "Migrate create/edit-project + wizard-step forms (backend still validates)"
+
+  # --- Phase 10 US6: reinvented frontend utilities ---
+  T180:
+    agent: "frontend-developer"
+    reason: "use-debounce in TargetSearch + ProjectNotes autosave"
+  T181:
+    agent: "frontend-developer"
+    reason: "date-fns shared formatter; replace 3 formatters + date sorts"
+  T182:
+    agent: "frontend-developer"
+    reason: "@tanstack/react-table for ProjectsList sort/filter"
+  T183:
+    agent: "frontend-developer"
+    reason: "tinykeys useHotkeys hook; consolidate 3 keydown handlers"
+  T184:
+    agent: "frontend-developer"
+    reason: "pathe for path manipulation (picker.ts, ToolLaunches)"
+  T185:
+    agent: "frontend-developer"
+    reason: "lucide-react sweep (replace inline SVGs)"
+
+  # --- Phase 11 US7: frontend type-safety & dead-code (needs US2, done) ---
+  T190:
+    agent: "typescript-pro"
+    reason: "Typed mock fixtures, kill mockInvoke<T> as T casts"
+  T191:
+    agent: "typescript-pro"
+    reason: "useStatusSummary generated types; concrete SettingsData"
+  T192:
+    agent: "typescript-pro"
+    reason: "satisfies in fixtures; exhaustive state-label fns vs ProjectState/SessionState"
+  T193:
+    agent: "typescript-pro"
+    reason: "Triage ~30 empty catch {}; delete dead lib/display.ts"
+
+  # --- Phase 12 US10: reinvented Rust utilities ---
+  T200:
+    agent: "rust-pro"
+    reason: "percent-encoding in simbad.rs url_encode"
+  T201:
+    agent: "rust-pro"
+    reason: "time::Date parse/to_julian_day in calibration/ranking.rs"
+  T202:
+    agent: "rust-pro"
+    reason: "globset in workflow/artifacts/rules.rs + equivalence matrix"
+  T203:
+    agent: "rust-pro"
+    reason: "itertools dedup helpers"
+  T204:
+    agent: "rust-pro"
+    reason: "csv for parse_basic_row tokenization (keep RA/Dec validation)"
+  T205:
+    agent: "rust-pro"
+    reason: "byteorder for FITS header parsing (existing FITS tests as equivalence guard)"
+  T206:
+    agent: "rust-pro"
+    reason: "path-clean for path_gate.rs lexical_normalize (keep symlink safety)"
+  T207:
+    agent: "rust-pro"
+    reason: "serde_json for project/structure marker"
+
+  # --- Phase 13 US12: Rust caching/concurrency ---
+  T210:
+    agent: "rust-pro"
+    reason: "moka TTL for project_health DebounceTable"
+  T211:
+    agent: "rust-pro"
+    reason: "dashmap + RAII removal for plan_apply ACTIVE_RUNS"
+  T212:
+    agent: "rust-pro"
+    reason: "spawn_blocking for sync fs executor reached from async"
+  T213:
+    agent: "rust-pro"
+    reason: "Sync-ify SkipSet/RetryQueue in fs/executor/run.rs"
+
+  # --- Phase 14 US14: camino ---
+  T220:
+    agent: "rust-pro"
+    reason: "camino::Utf8Path across fs crates + IPC path serialization"
+
+  # --- Phase 15 US15: tests ---
+  T230:
+    agent: "rust-pro"
+    reason: "rstest table-driven sanitizer/settings validation; proptest"
+
+  # --- Phase 16 US16: long-operation contract ---
+  T240:
+    agent: "rust-pro"
+    reason: "Wire plan-apply through OperationHandle + OperationEvent"
+
+  # --- Phase 17 US13: workspace/crate restructuring (highest risk, staged last) ---
+  T250:
+    agent: "rust-pro"
+    reason: "O1: split targeting -> targeting (pure) + targeting-resolver"
+  T251:
+    agent: "rust-pro"
+    reason: "O5: drop tokio from project/structure"
+  T252:
+    agent: "rust-pro"
+    reason: "O3a: group app/core flat modules into targets/projects/inbox/... (before T253)"
+  T253:
+    agent: "rust-pro"
+    reason: "O3b: split app/core into per-domain use-case crates incrementally"
+  T254:
+    agent: "rust-pro"
+    reason: "O6: fix persistence/db -> contracts/core inversion; own commit + DB byte-identity check"
+
+  # --- Phase 18: final verification (orchestrator + user driven) ---
+  T260:
+    agent: "default"
+    reason: "Full repo gates just lint && just typecheck && just test; covered by downstream /speckit.verify"
+  T261:
+    agent: "default"
+    reason: "Confirm SC-001..SC-013; covered by downstream /speckit.verify"
+  T262:
+    agent: "default"
+    reason: "Real Windows Tauri build verification - user-driven (push -> pull -> recompile -> click-through)"
+  T263:
+    agent: "default"
+    reason: "Update research.md KEEP/DEFER notes if any decision changed during impl"

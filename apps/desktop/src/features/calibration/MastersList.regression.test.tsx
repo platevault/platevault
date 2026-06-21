@@ -29,6 +29,10 @@ import { render, screen } from "@testing-library/react";
 import { describe, it, expect, vi } from "vitest";
 import { MastersList } from "./MastersList";
 import type { CalibrationMaster_Serialize as CalibrationMaster } from "@/bindings/index";
+/** Coerce a test value into a type the TypeScript type does not normally accept.
+ *  Used to simulate backend data that violates TypeScript's non-nullable assumptions. */
+function forceCast<T>(v: unknown): T { return v as T; }
+
 
 // ── Fixtures — null and incomplete fingerprints ────────────────────────────
 
@@ -41,7 +45,7 @@ import type { CalibrationMaster_Serialize as CalibrationMaster } from "@/binding
 const masterWithNullFingerprint: CalibrationMaster = {
   id: "reg-r2-null",
   kind: "dark",
-  fingerprint: null as unknown as CalibrationMaster["fingerprint"],
+  fingerprint: forceCast<CalibrationMaster["fingerprint"]>(null),
   sourceSessionId: "ses-001",
   createdAt: "2026-01-01T00:00:00Z",
   ageDays: 45,
@@ -57,7 +61,7 @@ const masterWithNullFingerprint: CalibrationMaster = {
 const masterWithUndefinedFingerprint: CalibrationMaster = {
   id: "reg-r2-undef",
   kind: "flat",
-  fingerprint: undefined as unknown as CalibrationMaster["fingerprint"],
+  fingerprint: forceCast<CalibrationMaster["fingerprint"]>(undefined),
   sourceSessionId: "ses-002",
   createdAt: "2026-02-01T00:00:00Z",
   ageDays: 10,
@@ -76,10 +80,10 @@ const masterWithSparseFingerprint: CalibrationMaster = {
   fingerprint: {
     camera: "ASI2600MM",
     // gain, tempC, exposureS, binning all missing — the original crash site
-    gain: undefined as unknown as number,
-    tempC: undefined as unknown as number,
-    exposureS: undefined as unknown as number,
-    binning: undefined as unknown as string,
+    gain: forceCast<number>(undefined),
+    tempC: forceCast<number>(undefined),
+    exposureS: forceCast<number>(undefined),
+    binning: forceCast<string>(undefined),
   },
   sourceSessionId: "ses-003",
   createdAt: "2026-03-01T00:00:00Z",

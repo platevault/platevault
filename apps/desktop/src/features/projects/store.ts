@@ -1,18 +1,14 @@
 /**
- * Spec 008 project store — reactive query + mutation hooks.
+ * Spec 008 project store — TanStack Query hooks.
  *
- * Replaces PROJECTS_DATA fixture reads with real commands from
- * `@/api/commands`. The query stores are module-level singletons so all
- * components share the same cache and invalidation signal.
+ * All server state is managed via useQuery / useMutation. The QueryClient
+ * (mounted at the app root) handles caching, deduplication, and bounded
+ * eviction — replacing the old module-level singleton + unbounded Map.
  */
 
-import {
-  createQueryStore,
-  createParameterizedStore,
-  useQuery,
-  useParameterizedQuery,
-  invalidateStores,
-} from '@/data/store';
+import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
+import { queryKeys } from "@/data/queryKeys";
+import { queryClient as sharedQueryClient } from "@/data/queryClient";
 import {
   listProjects008,
   getProject008,
@@ -23,12 +19,12 @@ import {
   reinferProjectChannels,
   dismissProjectChannelDrift,
   applyProjectLifecycleTransition,
-} from '@/api/commands';
+} from "@/api/commands";
 import type {
   ProjectLifecycleState,
   LifecycleTransitionResponse,
-} from '@/api/commands';
-import type { ProjectSummaryDto, ProjectDetailDto } from '@/bindings/index';
+} from "@/api/commands";
+import type { ProjectSummaryDto, ProjectDetailDto } from "@/bindings/index";
 import type {
   ProjectCreateRequest,
   ProjectCreateResult,
@@ -42,119 +38,173 @@ import type {
   ProjectChannelsReinferResult,
   ProjectChannelsDismissDriftRequest,
   ProjectChannelsDismissDriftResult,
-} from '@/bindings/index';
+} from "@/bindings/index";
 
-// ── Query stores ──────────────────────────────────────────────────────────────
+// Query state shape (matches old QueryState<T> surface for backward compat)
 
-/** Module-level singleton for the project list. */
-export const projectListStore = createQueryStore<ProjectSummaryDto[]>(() =>
-  listProjects008(),
-);
-
-/** Per-id parameterised store for project detail. */
-export const projectDetailStore = createParameterizedStore<string, ProjectDetailDto>(
-  (id) => getProject008({ id }),
-);
-
-// ── Query hooks ───────────────────────────────────────────────────────────────
-
-/** Subscribe to the project list. Triggers a fetch on first mount. */
-export function useProjects() {
-  return useQuery(projectListStore);
+export interface QueryState<T> {
+  data: T | undefined;
+  loading: boolean;
+  error: Error | undefined;
 }
 
-/** Subscribe to a single project's detail. */
-export function useProjectDetail(id: string) {
-  return useParameterizedQuery(projectDetailStore, id);
+// Query hooks
+
+/** Subscribe to the project list. */
+export function useProjects(): QueryState<ProjectSummaryDto[]> {
+  const { data, isFetching, error } = useQuery({
+    queryKey: queryKeys.projects.all(),
+    queryFn: () => listProjects008(),
+  });
+  return {
+    data,
+    loading: isFetching,
+    error: error ?? undefined,
+  };
 }
 
-// ── Mutation helpers ──────────────────────────────────────────────────────────
-
-/** Invalidate list + optionally a specific detail cache. */
-function invalidateProject(id?: string) {
-  invalidateStores(projectListStore);
-  if (id) projectDetailStore.invalidate(id);
+/** Subscribe to a single project detail. */
+export function useProjectDetail(id: string): QueryState<ProjectDetailDto> {
+  const { data, isFetching, error } = useQuery({
+    queryKey: queryKeys.projects.detail(id),
+    queryFn: () => getProject008({ id }),
+    enabled: !!id,
+  });
+  return {
+    data,
+    loading: isFetching,
+    error: error ?? undefined,
+  };
 }
 
-/**
- * Create a project. Invalidates the project list on success.
- *
- * Returns the full result including `planId` for the folder-structure plan.
- *
- * Note: named `callCreateProject` (not `useCreateProject`) because this is an
- * async command, not a React hook — it is safe to call inside event handlers.
- */
-export async function callCreateProject(
-  req: ProjectCreateRequest,
-): Promise<ProjectCreateResult> {
+// Mutation hooks
+
+export function useCreateProject() {
+  const queryClient = useQueryClient();
+  return useMutation<ProjectCreateResult, Error, ProjectCreateRequest>({
+    mutationFn: createProject,
+    onSuccess: () => {
+      void queryClient.invalidateQueries({ queryKey: queryKeys.projects.all() });
+    },
+  });
+}
+
+export function useUpdateProject() {
+  const queryClient = useQueryClient();
+  return useMutation<ProjectUpdateResult, Error, ProjectUpdateRequest>({
+    mutationFn: updateProject,
+    onSuccess: (_data, variables) => {
+      void queryClient.invalidateQueries({ queryKey: queryKeys.projects.all() });
+      void queryClient.invalidateQueries({
+        queryKey: queryKeys.projects.detail(variables.projectId),
+      });
+    },
+  });
+}
+
+export function useAddProjectSource() {
+  const queryClient = useQueryClient();
+  return useMutation<ProjectSourceAddResult, Error, ProjectSourceAddRequest>({
+    mutationFn: addProjectSource,
+    onSuccess: (_data, variables) => {
+      void queryClient.invalidateQueries({
+        queryKey: queryKeys.projects.detail(variables.projectId),
+      });
+    },
+  });
+}
+
+export function useRemoveProjectSource() {
+  const queryClient = useQueryClient();
+  return useMutation<ProjectSourceRemoveResult, Error, ProjectSourceRemoveRequest>({
+    mutationFn: removeProjectSource,
+    onSuccess: (_data, variables) => {
+      void queryClient.invalidateQueries({
+        queryKey: queryKeys.projects.detail(variables.projectId),
+      });
+    },
+  });
+}
+
+export function useReinferChannels() {
+  const queryClient = useQueryClient();
+  return useMutation<ProjectChannelsReinferResult, Error, ProjectChannelsReinferRequest>({
+    mutationFn: reinferProjectChannels,
+    onSuccess: (_data, variables) => {
+      void queryClient.invalidateQueries({
+        queryKey: queryKeys.projects.detail(variables.projectId),
+      });
+    },
+  });
+}
+
+export function useDismissChannelDrift() {
+  const queryClient = useQueryClient();
+  return useMutation<ProjectChannelsDismissDriftResult, Error, ProjectChannelsDismissDriftRequest>({
+    mutationFn: dismissProjectChannelDrift,
+    onSuccess: (_data, variables) => {
+      void queryClient.invalidateQueries({
+        queryKey: queryKeys.projects.detail(variables.projectId),
+      });
+    },
+  });
+}
+
+// Legacy async call helpers kept for existing event-handler callers.
+
+// Each helper invalidates the same query keys as its `use*Mutation` hook
+// counterpart, via the shared QueryClient singleton — so event-handler callers
+// that use these helpers (rather than the hooks) still refresh the list/detail
+// after a mutation (regression F1).
+
+export async function callCreateProject(req: ProjectCreateRequest): Promise<ProjectCreateResult> {
   const result = await createProject(req);
-  invalidateProject();
+  void sharedQueryClient.invalidateQueries({ queryKey: queryKeys.projects.all() });
   return result;
 }
 
-/**
- * Update project name/tool/notes. Invalidates list + detail.
- */
-export async function callUpdateProject(
-  req: ProjectUpdateRequest,
-): Promise<ProjectUpdateResult> {
+export async function callUpdateProject(req: ProjectUpdateRequest): Promise<ProjectUpdateResult> {
   const result = await updateProject(req);
-  invalidateProject(req.projectId);
+  void sharedQueryClient.invalidateQueries({ queryKey: queryKeys.projects.all() });
+  void sharedQueryClient.invalidateQueries({ queryKey: queryKeys.projects.detail(req.projectId) });
   return result;
 }
 
-/**
- * Add a source link to a project.
- */
 export async function callAddProjectSource(
   req: ProjectSourceAddRequest,
 ): Promise<ProjectSourceAddResult> {
   const result = await addProjectSource(req);
-  invalidateProject(req.projectId);
+  void sharedQueryClient.invalidateQueries({ queryKey: queryKeys.projects.detail(req.projectId) });
   return result;
 }
 
-/**
- * Remove a source link from a project.
- */
 export async function callRemoveProjectSource(
   req: ProjectSourceRemoveRequest,
 ): Promise<ProjectSourceRemoveResult> {
   const result = await removeProjectSource(req);
-  invalidateProject(req.projectId);
+  void sharedQueryClient.invalidateQueries({ queryKey: queryKeys.projects.detail(req.projectId) });
   return result;
 }
 
-/**
- * Re-infer channels from all linked sources, discarding manual overrides.
- */
 export async function callReinferChannels(
   req: ProjectChannelsReinferRequest,
 ): Promise<ProjectChannelsReinferResult> {
   const result = await reinferProjectChannels(req);
-  invalidateProject(req.projectId);
+  void sharedQueryClient.invalidateQueries({ queryKey: queryKeys.projects.detail(req.projectId) });
   return result;
 }
 
-/**
- * Dismiss the channel-drift banner without re-inferring.
- */
 export async function callDismissChannelDrift(
   req: ProjectChannelsDismissDriftRequest,
 ): Promise<ProjectChannelsDismissDriftResult> {
   const result = await dismissProjectChannelDrift(req);
-  invalidateProject(req.projectId);
+  void sharedQueryClient.invalidateQueries({ queryKey: queryKeys.projects.detail(req.projectId) });
   return result;
 }
 
 /**
- * Apply a lifecycle transition to a project.
- *
- * - Invalidates the project list + detail on success.
- * - When the response has status='error' with code='plan.required', the caller
- *   is responsible for surfacing the plan-create flow (US3-4 / US3-5).
- * - When the response has status='error' with any other code, the caller
- *   should surface an inline error toast.
+ * Apply a lifecycle transition (standalone async form).
+ * Prefer useTransitionLifecycle() for components needing reactive invalidation.
  */
 export async function callTransitionLifecycle(
   projectId: string,
@@ -163,19 +213,43 @@ export async function callTransitionLifecycle(
   actionLabel?: string,
 ): Promise<LifecycleTransitionResponse> {
   const result = await applyProjectLifecycleTransition({
-    contractVersion: '2.0.0',
+    contractVersion: "2.0.0",
     requestId: crypto.randomUUID(),
-    entityType: 'project',
+    entityType: "project",
     entityId: projectId,
     currentState,
     nextState,
     actionLabel,
-    actor: 'user',
+    actor: "user",
   });
-  if (result.status === 'success') {
-    invalidateProject(projectId);
-  }
+  void sharedQueryClient.invalidateQueries({ queryKey: queryKeys.projects.all() });
+  void sharedQueryClient.invalidateQueries({ queryKey: queryKeys.projects.detail(projectId) });
   return result;
+}
+
+export function useTransitionLifecycle() {
+  const queryClient = useQueryClient();
+  return useMutation<
+    LifecycleTransitionResponse,
+    Error,
+    {
+      projectId: string;
+      currentState: ProjectLifecycleState;
+      nextState: ProjectLifecycleState;
+      actionLabel?: string;
+    }
+  >({
+    mutationFn: ({ projectId, currentState, nextState, actionLabel }) =>
+      callTransitionLifecycle(projectId, currentState, nextState, actionLabel),
+    onSuccess: (result, variables) => {
+      if (result.status === "success") {
+        void queryClient.invalidateQueries({ queryKey: queryKeys.projects.all() });
+        void queryClient.invalidateQueries({
+          queryKey: queryKeys.projects.detail(variables.projectId),
+        });
+      }
+    },
+  });
 }
 
 // Re-export types needed by consumers

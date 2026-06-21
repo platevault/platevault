@@ -18,7 +18,7 @@
 //! escape/symlink/stale/collision, audits every item (incl. bulk cancel), trashes
 //! via the OS bin.
 
-use std::path::{Path, PathBuf};
+use camino::{Utf8Path, Utf8PathBuf};
 use std::sync::Arc;
 
 use tokio::sync::Mutex;
@@ -33,6 +33,11 @@ use fs_executor::run::{
 };
 
 // ── Shared test helpers ────────────────────────────────────────────────────────
+
+/// Convert a tempdir path to a guaranteed-UTF-8 path for the tests.
+fn utf8(p: &std::path::Path) -> Utf8PathBuf {
+    Utf8PathBuf::from_path_buf(p.to_path_buf()).expect("temp dir path is UTF-8")
+}
 
 #[derive(Default, Clone)]
 struct RecordingCallbacks {
@@ -61,9 +66,9 @@ impl ExecutorCallbacks for RecordingCallbacks {
 fn make_item(
     id: &str,
     action: ExecutorItemAction,
-    source_path: Option<PathBuf>,
-    destination_path: Option<PathBuf>,
-    library_root: Option<PathBuf>,
+    source_path: Option<Utf8PathBuf>,
+    destination_path: Option<Utf8PathBuf>,
+    library_root: Option<Utf8PathBuf>,
 ) -> ExecutorItem {
     let requires_destructive_confirm =
         matches!(action, ExecutorItemAction::Delete | ExecutorItemAction::Trash { .. });
@@ -90,7 +95,7 @@ fn make_item(
 #[tokio::test]
 async fn t008_root_escape_refused_pre_mutation() {
     let dir = tempfile::tempdir().unwrap();
-    let root = dir.path().to_path_buf();
+    let root = utf8(dir.path());
 
     // Create a decoy file at the root level so the source would be "valid" if
     // the check were skipped — proving the refusal is path-based, not file-missing.
@@ -101,8 +106,8 @@ async fn t008_root_escape_refused_pre_mutation() {
     let item = make_item(
         "escape-item",
         ExecutorItemAction::Move,
-        Some(PathBuf::from("../secret.fits")), // escapes root
-        Some(PathBuf::from("dest/secret.fits")),
+        Some(Utf8PathBuf::from("../secret.fits")), // escapes root
+        Some(Utf8PathBuf::from("dest/secret.fits")),
         Some(root.clone()),
     );
 
@@ -150,8 +155,8 @@ async fn t008_root_escape_refused_pre_mutation() {
 #[test]
 fn t008_path_gate_unit_root_escape_via_dotdot() {
     let dir = tempfile::tempdir().unwrap();
-    let root = dir.path().to_path_buf();
-    let rel = Path::new("../escape.fits");
+    let root = utf8(dir.path());
+    let rel = Utf8Path::new("../escape.fits");
     let result = path_gate::resolve_and_validate(&root, rel);
     assert!(result.is_err());
     let err = result.unwrap_err();
@@ -162,8 +167,8 @@ fn t008_path_gate_unit_root_escape_via_dotdot() {
 #[test]
 fn t008_path_gate_unit_nested_escape() {
     let dir = tempfile::tempdir().unwrap();
-    let root = dir.path().to_path_buf();
-    let rel = Path::new("a/b/../../..");
+    let root = utf8(dir.path());
+    let rel = Utf8Path::new("a/b/../../..");
     let result = path_gate::resolve_and_validate(&root, rel);
     assert!(result.is_err());
     let err = result.unwrap_err();
@@ -174,10 +179,10 @@ fn t008_path_gate_unit_nested_escape() {
 #[test]
 fn t008_path_gate_unit_safe_subpath() {
     let dir = tempfile::tempdir().unwrap();
-    let root = dir.path().to_path_buf();
+    let root = utf8(dir.path());
     std::fs::create_dir_all(root.join("subdir")).unwrap();
     std::fs::write(root.join("subdir/file.fits"), b"data").unwrap();
-    let rel = Path::new("subdir/file.fits");
+    let rel = Utf8Path::new("subdir/file.fits");
     let result = path_gate::resolve_and_validate(&root, rel);
     assert!(result.is_ok());
 }
@@ -190,7 +195,7 @@ fn t008_path_gate_unit_safe_subpath() {
 #[tokio::test]
 async fn t009_symlink_component_refused() {
     let dir = tempfile::tempdir().unwrap();
-    let root = dir.path().to_path_buf();
+    let root = utf8(dir.path());
 
     // Create a real directory and a symlink pointing to it inside the root.
     let real_dir = root.join("real_dir");
@@ -203,8 +208,8 @@ async fn t009_symlink_component_refused() {
     let item = make_item(
         "symlink-item",
         ExecutorItemAction::Move,
-        Some(PathBuf::from("linked/file.fits")), // traverses symlink
-        Some(PathBuf::from("dest/file.fits")),
+        Some(Utf8PathBuf::from("linked/file.fits")), // traverses symlink
+        Some(Utf8PathBuf::from("dest/file.fits")),
         Some(root.clone()),
     );
 
@@ -240,13 +245,13 @@ async fn t009_symlink_component_refused() {
 #[test]
 fn t009_path_gate_unit_symlink_refused() {
     let dir = tempfile::tempdir().unwrap();
-    let root = dir.path().to_path_buf();
+    let root = utf8(dir.path());
     let target = root.join("actual");
     std::fs::create_dir_all(&target).unwrap();
     let link = root.join("linked");
     std::os::unix::fs::symlink(&target, &link).unwrap();
 
-    let rel = Path::new("linked/file.fits");
+    let rel = Utf8Path::new("linked/file.fits");
     let result = path_gate::resolve_and_validate(&root, rel);
     assert!(result.is_err());
     let err = result.unwrap_err();
@@ -262,7 +267,7 @@ fn t009_path_gate_unit_symlink_refused() {
 #[tokio::test]
 async fn t010_destructive_unconfirmed_blocked_independent_of_protection() {
     let dir = tempfile::tempdir().unwrap();
-    let file = dir.path().join("precious.fits");
+    let file = utf8(dir.path()).join("precious.fits");
     std::fs::write(&file, b"precious").unwrap();
 
     // Non-protected delete — `requires_destructive_confirm` should be true for
@@ -312,7 +317,7 @@ async fn t010_destructive_unconfirmed_blocked_independent_of_protection() {
 #[tokio::test]
 async fn t010_destructive_confirmed_delete_proceeds() {
     let dir = tempfile::tempdir().unwrap();
-    let file = dir.path().join("to_delete.fits");
+    let file = utf8(dir.path()).join("to_delete.fits");
     std::fs::write(&file, b"data").unwrap();
 
     let item = ExecutorItem {
@@ -352,7 +357,7 @@ async fn t010_destructive_confirmed_delete_proceeds() {
 #[tokio::test]
 async fn t010_trash_requires_destructive_confirm() {
     let dir = tempfile::tempdir().unwrap();
-    let file = dir.path().join("to_trash.fits");
+    let file = utf8(dir.path()).join("to_trash.fits");
     std::fs::write(&file, b"data").unwrap();
 
     let item = ExecutorItem {
@@ -388,8 +393,8 @@ async fn t010_trash_requires_destructive_confirm() {
 #[tokio::test]
 async fn t011_existing_destination_refused_no_overwrite() {
     let dir = tempfile::tempdir().unwrap();
-    let src = dir.path().join("source.fits");
-    let dst = dir.path().join("dest.fits");
+    let src = utf8(dir.path()).join("source.fits");
+    let dst = utf8(dir.path()).join("dest.fits");
     std::fs::write(&src, b"source data").unwrap();
     std::fs::write(&dst, b"existing data").unwrap(); // destination already exists
 
@@ -456,8 +461,8 @@ async fn t012_batch_cancel_list_pending_items_returns_correct_ids() {
     // executor correctly returns which items were pending (via counts).
 
     let dir = tempfile::tempdir().unwrap();
-    let src1 = dir.path().join("a.fits");
-    let src2 = dir.path().join("b.fits");
+    let src1 = utf8(dir.path()).join("a.fits");
+    let src2 = utf8(dir.path()).join("b.fits");
     std::fs::write(&src1, b"a").unwrap();
     std::fs::write(&src2, b"b").unwrap();
 
@@ -513,10 +518,10 @@ async fn t012_executor_emits_no_events_for_untouched_cancelled_items() {
 #[tokio::test]
 async fn t013_stale_item_refused_and_run_pauses() {
     let dir = tempfile::tempdir().unwrap();
-    let src = dir.path().join("stale.fits");
+    let src = utf8(dir.path()).join("stale.fits");
     std::fs::write(&src, b"four").unwrap(); // 4 bytes on disk
 
-    let dst = dir.path().join("dst.fits");
+    let dst = utf8(dir.path()).join("dst.fits");
 
     // Approved snapshot says 100 bytes — mismatch → stale.
     let item = ExecutorItem {
@@ -571,11 +576,11 @@ async fn t013_stale_item_refused_and_run_pauses() {
 #[tokio::test]
 async fn t013_stale_mtime_mismatch_refused() {
     let dir = tempfile::tempdir().unwrap();
-    let src = dir.path().join("mtime_stale.fits");
+    let src = utf8(dir.path()).join("mtime_stale.fits");
     std::fs::write(&src, b"data").unwrap();
     let meta = std::fs::metadata(&src).unwrap();
     let size = i64::try_from(meta.len()).unwrap();
-    let dst = dir.path().join("mtime_dst.fits");
+    let dst = utf8(dir.path()).join("mtime_dst.fits");
 
     let item = ExecutorItem {
         id: "mtime-stale".to_owned(),
@@ -623,8 +628,8 @@ async fn t013_stale_mtime_mismatch_refused() {
 #[tokio::test]
 async fn t013a_move_never_silently_loses_file() {
     let dir = tempfile::tempdir().unwrap();
-    let src = dir.path().join("important.fits");
-    let dst = dir.path().join("moved.fits");
+    let src = utf8(dir.path()).join("important.fits");
+    let dst = utf8(dir.path()).join("moved.fits");
     std::fs::write(&src, b"important data").unwrap();
 
     let item = make_item(
@@ -686,9 +691,9 @@ async fn t013a_move_never_silently_loses_file() {
 fn t014_trash_or_fallback_no_silent_loss() {
     let src_dir = tempfile::tempdir().unwrap();
     let archive_dir = tempfile::tempdir().unwrap();
-    let file = src_dir.path().join("to_trash.fits");
+    let file = utf8(src_dir.path()).join("to_trash.fits");
     std::fs::write(&file, b"data").unwrap();
-    let archive_dest = archive_dir.path().join("to_trash.fits");
+    let archive_dest = utf8(archive_dir.path()).join("to_trash.fits");
 
     // Call trash_op with an archive fallback.
     let result = trash_op::trash_file(&file, Some(&archive_dest));
@@ -729,7 +734,7 @@ fn t014_trash_or_fallback_no_silent_loss() {
 #[test]
 fn t014_trash_failure_without_fallback_file_survives() {
     let dir = tempfile::tempdir().unwrap();
-    let file = dir.path().join("no_fallback.fits");
+    let file = utf8(dir.path()).join("no_fallback.fits");
     std::fs::write(&file, b"data").unwrap();
 
     // No fallback — trash either succeeds or fails cleanly.
@@ -761,9 +766,9 @@ fn t014_trash_failure_without_fallback_file_survives() {
 async fn t014_trash_via_executor_with_archive_fallback() {
     let src_dir = tempfile::tempdir().unwrap();
     let archive_dir = tempfile::tempdir().unwrap();
-    let file = src_dir.path().join("trash_via_executor.fits");
+    let file = utf8(src_dir.path()).join("trash_via_executor.fits");
     std::fs::write(&file, b"precious").unwrap();
-    let fallback_dest = archive_dir.path().join("trash_via_executor.fits");
+    let fallback_dest = utf8(archive_dir.path()).join("trash_via_executor.fits");
 
     let item = ExecutorItem {
         id: "trash-confirmed".to_owned(),

@@ -130,7 +130,7 @@ async fn apply_plan_moves_file_and_writes_audit_events() {
     seed_approved_plan_with_real_files(db.pool(), &plan_id, &src, &dst).await;
 
     // Apply the plan.
-    let resp = app_core::plan_apply::apply_plan(db.pool(), &bus, &plan_id, "tok-test-fixed")
+    let resp = app_core::plan_apply::apply_plan(db.pool(), &bus, &plan_id, "tok-test-fixed", None)
         .await
         .expect("apply_plan should succeed");
     assert_eq!(resp.plan_id, plan_id);
@@ -215,7 +215,7 @@ async fn apply_plan_refuses_to_overwrite_existing_destination() {
 
     seed_approved_plan_with_real_files(db.pool(), &plan_id, &src, &dst).await;
 
-    let resp = app_core::plan_apply::apply_plan(db.pool(), &bus, &plan_id, "tok-test-fixed")
+    let resp = app_core::plan_apply::apply_plan(db.pool(), &bus, &plan_id, "tok-test-fixed", None)
         .await
         .expect("apply_plan should succeed (apply start, not item execution)");
     assert_eq!(resp.new_state, "applying");
@@ -331,7 +331,7 @@ async fn apply_resolves_root_id_from_registered_sources() {
         .await
         .expect("set_approved");
 
-    app_core::plan_apply::apply_plan(db.pool(), &bus, &plan_id, "tok-test-fixed")
+    app_core::plan_apply::apply_plan(db.pool(), &bus, &plan_id, "tok-test-fixed", None)
         .await
         .expect("apply_plan");
     tokio::time::sleep(tokio::time::Duration::from_millis(200)).await;
@@ -418,10 +418,15 @@ async fn full_review_to_apply_audit_round_trip() {
     assert!(!approve_resp.approval_token.is_empty());
 
     // 4. Apply via use-case layer.
-    let apply_resp =
-        app_core::plan_apply::apply_plan(db.pool(), &bus, &plan_id, &approve_resp.approval_token)
-            .await
-            .expect("apply_plan");
+    let apply_resp = app_core::plan_apply::apply_plan(
+        db.pool(),
+        &bus,
+        &plan_id,
+        &approve_resp.approval_token,
+        None,
+    )
+    .await
+    .expect("apply_plan");
     assert_eq!(apply_resp.new_state, "applying");
 
     // Wait for background executor task.

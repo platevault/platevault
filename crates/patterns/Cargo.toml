@@ -16,6 +16,8 @@ unicode-security.workspace = true
 
 [dev-dependencies]
 serde_json.workspace = true
+rstest.workspace = true
+proptest.workspace = true
 
 [lints]
 workspace = true

@@ -19,10 +19,7 @@ use contracts_core::prepared_views::{
 use tauri::State;
 
 use crate::commands::lifecycle::AppState;
-
-fn contract_err(e: contracts_core::ContractError) -> String {
-    serde_json::to_string(&e).unwrap_or(e.code)
-}
+use contracts_core::ContractError;
 
 // ── preparedview.list ─────────────────────────────────────────────────────────
 
@@ -38,8 +35,8 @@ fn contract_err(e: contracts_core::ContractError) -> String {
 pub async fn preparedview_list(
     state: State<'_, AppState>,
     project_id: String,
-) -> Result<PreparedViewListResponse, String> {
-    prepared_views::list_views(state.repo.pool(), &project_id).await.map_err(contract_err)
+) -> Result<PreparedViewListResponse, ContractError> {
+    prepared_views::list_views(state.repo.pool(), &project_id).await
 }
 
 // ── preparedview.remove ───────────────────────────────────────────────────────
@@ -65,8 +62,8 @@ pub async fn preparedview_list(
 pub async fn preparedview_remove(
     state: State<'_, AppState>,
     view_id: String,
-) -> Result<PreparedViewRemoveResponse, String> {
-    prepared_views::remove_prepared_view(state.repo.pool(), &view_id).await.map_err(contract_err)
+) -> Result<PreparedViewRemoveResponse, ContractError> {
+    prepared_views::remove_prepared_view(state.repo.pool(), &view_id).await
 }
 
 // ── preparedview.regenerate ───────────────────────────────────────────────────
@@ -88,8 +85,6 @@ pub async fn preparedview_remove(
 pub async fn preparedview_regenerate(
     state: State<'_, AppState>,
     view_id: String,
-) -> Result<PreparedViewRegenerateResponse, String> {
-    prepared_views::regenerate_prepared_view(state.repo.pool(), &view_id)
-        .await
-        .map_err(contract_err)
+) -> Result<PreparedViewRegenerateResponse, ContractError> {
+    prepared_views::regenerate_prepared_view(state.repo.pool(), &view_id).await
 }

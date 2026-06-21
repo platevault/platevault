@@ -18,6 +18,12 @@
 //! Constitution V: `ToolLaunch` rows are the durable record; the EventBus
 //! carries the live audit signal.
 
+//!
+//! Extracted from `app_core` into its own crate (spec 042 / T253 O3b) as a pure
+//! leaf: it has zero `crate::` references and nothing else in `app_core`
+//! references it. `app_core` re-exports this crate at `app_core::tool_launch` so
+//! the public surface stays byte-identical.
+
 #![allow(clippy::too_many_lines)] // orchestration functions are multi-step by design
 #![allow(clippy::doc_markdown)] // spec/domain terminology
 
@@ -28,12 +34,14 @@ use contracts_core::tools::{
     ToolLaunchResponse, ToolLaunchStatus, ToolPathValidation, ToolProfileListResponse,
     ToolProfileSummary, UpdateProcessingTool,
 };
+use domain_core::ids::{new_id, Timestamp};
 use persistence_db::repositories::{
     inventory as inv_repo, projects as proj_repo, settings as settings_repo,
     tool_launches as tl_repo,
 };
 use project_structure::resolve_working_folder;
 use sqlx::SqlitePool;
+#[cfg(test)]
 use uuid::Uuid;
 use workflow_profiles::{
     args::{render, RenderContext},
@@ -43,16 +51,6 @@ use workflow_profiles::{
 };
 
 // ── Helpers ───────────────────────────────────────────────────────────────────
-
-fn new_id() -> String {
-    Uuid::new_v4().to_string()
-}
-
-fn now_iso() -> String {
-    time::OffsetDateTime::now_utc()
-        .format(&time::format_description::well_known::Rfc3339)
-        .unwrap_or_else(|_| "1970-01-01T00:00:00Z".to_owned())
-}
 
 /// Settings key for `tools.<tool_id>.executable_path`.
 fn key_executable_path(tool_id: &str) -> String {
@@ -275,7 +273,7 @@ pub async fn launch(
 
     let launch_id = new_id();
     let audit_id = new_id();
-    let launched_at = now_iso();
+    let launched_at = Timestamp::now_iso();
 
     let (outcome, pid, error_response) = match spawner.spawn(spawn_req) {
         Ok(result) => ("spawned", result.pid, None),

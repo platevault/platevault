@@ -7,18 +7,12 @@
 //! State `removed` is a terminal state that preserves full item membership
 //! so that regeneration remains available indefinitely.
 
+use domain_core::ids::Timestamp;
 use sqlx::SqlitePool;
-use time::OffsetDateTime;
 
 use crate::{DbError, DbResult};
 
 // ── Helpers ───────────────────────────────────────────────────────────────────
-
-fn now_iso() -> String {
-    OffsetDateTime::now_utc()
-        .format(&time::format_description::well_known::Rfc3339)
-        .unwrap_or_else(|_| "1970-01-01T00:00:00Z".to_owned())
-}
 
 // ── Row types ─────────────────────────────────────────────────────────────────
 
@@ -72,7 +66,7 @@ pub struct InsertPreparedSourceViewItem<'a> {
 ///
 /// Returns [`DbError::Database`] on constraint or connection failure.
 pub async fn insert_view(pool: &SqlitePool, data: &InsertPreparedSourceView<'_>) -> DbResult<()> {
-    let now = now_iso();
+    let now = Timestamp::now_iso();
     sqlx::query(
         "INSERT INTO prepared_source_views
              (id, project_id, kind, state, created_at)
@@ -196,7 +190,7 @@ pub async fn update_view_state(pool: &SqlitePool, view_id: &str, new_state: &str
 ///
 /// Returns [`DbError::Database`] on query failure.
 pub async fn mark_view_removed(pool: &SqlitePool, view_id: &str) -> DbResult<()> {
-    let now = now_iso();
+    let now = Timestamp::now_iso();
     sqlx::query(
         "UPDATE prepared_source_views
          SET state = 'removed', removed_at = ?
