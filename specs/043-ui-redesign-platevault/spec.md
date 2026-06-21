@@ -203,6 +203,26 @@ command name, calibration-suggest error humanization. Still pending/backend:
 FITS OBJECT→target_id linkage (enables My-Targets), toggleable match criteria +
 default changes (offset/365/5), inbox folder-vs-master count.
 
+DONE — inline-`style={{}}` sweep (the hard rule "No CSS at the element level"):
+every static element-level inline style across the app converted to shared
+`alm-` classes in `components.css` (token-only). ~40 files in batches via
+delegate-then-validate (InboxDetail, PlanPanel, WizardPage, MatchCandidatesPanel,
+all 6 project-wizard steps + WizardShell, all 4 setup steps + SetupWizard +
+StepCatalogs, 6 settings panes, project accordions/notes/lists, sessions
+detail/inspector/calendar, calibration master/match, targets detail, dialogs,
+toast, error boundary, dir picker, all 4 dev-tools surfaces, misc). Real leaks
+fixed along the way: raw-hex/rgba in ToastContainer + AppErrorBoundary + SchemaViewer
+scrim, `--alm-success`→`--alm-ok` (dev lists), `--alm-space-N`→`--alm-sp-N`,
+`--alm-surface2`→`--alm-bg3`, `#dc2626` fallback in DirPicker, undefined-token
+leaks in TargetDetailV2/NamingStructure. Only genuinely-dynamic inline styles
+remain (virtualizer transforms, computed progress widths, conditional colors) —
+all resolve to `--alm-*` tokens; **zero raw hex/rgb/ms remain in any inline
+style**. Verified: `tsc` 0 · `check-tokens` pass · `biome` 0 · vitest **738/738** ·
+live MCP walk of inbox detail+plan, full 6-step project wizard, sessions
+detail+inspector, calibration master, settings (data sources + advanced),
+projects list+detail. Setup wizard is mechanically verified only (its `/setup`
+route guard-redirects when roots exist; shell + patterns validated elsewhere).
+
 Pending (largest first): per-page redesigns (Sessions table, Targets planner +
 charts, Projects channels, Inbox toolbar+inspector, Archive single-column),
 info-tooltip component, pill-system unification, the Settings per-pane content
