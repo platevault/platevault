@@ -5043,6 +5043,57 @@
   margin-bottom: var(--alm-sp-3);
 }
 
+/* === SOURCE PROTECTION OVERRIDE (spec 016 — per-root protection control) === */
+
+.alm-source-protect__root {
+  margin-top: var(--alm-sp-2);
+}
+
+.alm-source-protect__status {
+  color: var(--alm-text-muted);
+  font-size: var(--alm-text-xs);
+}
+
+.alm-source-protect__view-row,
+.alm-source-protect__edit-row {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--alm-sp-2);
+}
+
+.alm-source-protect__edit-col {
+  display: flex;
+  flex-direction: column;
+  gap: var(--alm-sp-2);
+}
+
+.alm-source-protect__label {
+  color: var(--alm-text-muted);
+  font-size: var(--alm-text-xs);
+}
+
+.alm-source-protect__select {
+  width: auto;
+  height: 28px;
+}
+
+.alm-source-protect__hint {
+  flex-basis: 100%;
+  color: var(--alm-text-muted);
+  font-size: var(--alm-text-xs);
+}
+
+.alm-source-protect__error {
+  color: var(--alm-danger);
+  font-size: var(--alm-text-xs);
+}
+
+.alm-source-protect__actions {
+  display: flex;
+  gap: var(--alm-sp-2);
+}
+
 /* === EDIT PROJECT PANE === */
 
 /* Banner action row — drift banner button group */
@@ -5675,6 +5726,14 @@
   font-family: var(--alm-font-mono);
 }
 
+/* Per-project action cluster in the detail action bar. */
+.alm-project-detail__bar-actions {
+  display: flex;
+  align-items: center;
+  gap: var(--alm-sp-1);
+  flex-wrap: wrap;
+}
+
 /* ── Sources table ────────────────────────────────────────────────────────── */
 /* Replaces the old flex source-row layout with the shared alm-table.         */
 .alm-project-detail__role-cell {
@@ -6246,159 +6305,35 @@
 
 /* ── Controls bar ─────────────────────────────────────────────────────────── */
 
-.alm-sessions-table__controls {
+.alm-sessions-list__controls {
   display: flex;
   flex-direction: column;
   gap: var(--alm-sp-1);
 }
 
-.alm-sessions-table__filter-row {
+.alm-sessions-list__filter-row {
   display: flex;
   gap: var(--alm-sp-1);
   flex-wrap: wrap;
 }
 
-.alm-sessions-table__sort-row {
-  display: flex;
-  gap: var(--alm-sp-1);
-  align-items: center;
-}
+/* ── Source group spacing ─────────────────────────────────────────────────── */
 
-/* ── Source group header ──────────────────────────────────────────────────── */
-
-.alm-sessions-table__group {
+.alm-sessions-list__group {
   margin-bottom: var(--alm-sp-0);
 }
 
-/* ── Sortable table ───────────────────────────────────────────────────────── */
+/* ── Session list row (shared alm-list-item pattern) ──────────────────────── */
 
-.alm-sessions-table {
-  width: 100%;
-  border-collapse: collapse;
-  table-layout: fixed;
-}
-
-/* Column widths — optimised for ~280 px list pane */
-.alm-sessions-table__col-target    { width: 28%; }
-.alm-sessions-table__col-filter    { width: 14%; }
-.alm-sessions-table__col-night     { width: 20%; }
-.alm-sessions-table__col-frames    { width: 12%; }
-.alm-sessions-table__col-exposure  { width: 14%; }
-.alm-sessions-table__col-state     { width: 12%; }
-
-/* Sortable header cells */
-.alm-sessions-table th {
-  text-align: left;
-  font-size: var(--alm-text-2xs);
-  font-weight: var(--alm-weight-medium);
-  color: var(--alm-text-muted);
-  text-transform: uppercase;
-  letter-spacing: 0.04em;
-  padding: var(--alm-sp-1) var(--alm-sp-2);
-  border-bottom: 1px solid var(--alm-border);
-  background: var(--alm-surface);
-  white-space: nowrap;
-  user-select: none;
-  overflow: hidden;
-  text-overflow: ellipsis;
-}
-
-.alm-sessions-table__th-btn {
-  display: inline-flex;
-  align-items: center;
-  gap: 2px;
-  background: none;
-  border: none;
-  padding: 0;
-  font: inherit;
-  color: inherit;
-  letter-spacing: inherit;
-  text-transform: inherit;
-  cursor: pointer;
-  white-space: nowrap;
-}
-
-.alm-sessions-table__th-btn:hover {
-  color: var(--alm-text-secondary);
-}
-
-.alm-sessions-table__th-btn:focus-visible {
-  outline: 2px solid var(--alm-accent);
-  outline-offset: 1px;
-  border-radius: var(--alm-radius-sm);
-}
-
-.alm-sessions-table__sort-caret {
-  font-size: var(--alm-text-2xs);
-  color: var(--alm-accent);
-  flex-shrink: 0;
-}
-
-/* Data rows */
-.alm-sessions-table td {
-  padding: var(--alm-sp-1) var(--alm-sp-2);
-  border-bottom: 1px solid var(--alm-border-subtle);
-  font-size: var(--alm-text-sm);
-  vertical-align: middle;
+/* Target label: ellipsis when the narrow sidebar can't fit it. */
+.alm-session-row__target {
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
 }
 
-.alm-sessions-table__row {
-  cursor: pointer;
-}
-
-.alm-sessions-table__row:hover td {
-  background: var(--alm-hover-bg);
-}
-
-.alm-sessions-table__row--selected td {
-  background: var(--alm-selected-bg);
-}
-
-.alm-sessions-table__row:focus-visible {
-  outline: 2px solid var(--alm-accent);
-  outline-offset: -1px;
-}
-
-/* Target cell: truncate with ellipsis */
-.alm-sessions-table__td-target {
-  font-weight: var(--alm-weight-medium);
-  color: var(--alm-text);
-}
-
-/* Filter cell */
-.alm-sessions-table__td-filter {
-  color: var(--alm-text-secondary);
-}
-
-/* Numeric cells */
-.alm-sessions-table__td-frames,
-.alm-sessions-table__td-exposure {
-  font-variant-numeric: tabular-nums;
-  color: var(--alm-text-secondary);
-}
-
-/* State cell: contains Pill, constrain it */
-.alm-sessions-table__td-state .alm-pill {
-  font-size: var(--alm-text-2xs);
-  padding: 1px 4px;
-}
-
-/* Needs-review icon aligned in target cell */
-.alm-sessions-table__needs-review-icon {
-  display: inline-block;
-  vertical-align: middle;
-  margin-left: var(--alm-sp-1);
+/* Needs-review icon next to the target label. */
+.alm-session-row__needs-review-icon {
   color: var(--alm-warn);
   flex-shrink: 0;
-}
-
-/* Empty state */
-.alm-sessions-table__empty {
-  padding: var(--alm-sp-3) var(--alm-sp-3);
-  font-size: var(--alm-text-sm);
-  color: var(--alm-text-muted);
-  text-align: center;
 }

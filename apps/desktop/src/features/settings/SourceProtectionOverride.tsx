@@ -5,9 +5,9 @@
 // allows the user to change the level. When no per-source override exists the
 // component shows "Inherits global default" as an inheritance badge.
 //
-// This component is used wherever a source UUID is available (e.g. the
-// project detail source rows). DataSources.tsx uses fixture IDs (not UUIDs)
-// so it cannot be wired yet — see TODO comment there.
+// Used wherever a source UUID is available — wired into the DataSources
+// settings pane (one control per registered root, keyed by root.id) and
+// available for project detail source rows.
 
 import { useEffect, useState, useCallback } from 'react';
 import { Pill, Btn } from '@/ui';

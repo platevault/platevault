@@ -36,9 +36,9 @@ import {
   useInboxPlanCancel,
   useOpenInboxPlans,
   useApplySelectedInboxPlans,
-  useInboxStats,
 } from './store';
 import { InboxStatsSummary } from './InboxStatsSummary';
+import { deriveInboxStats } from './inboxStatsFromItems';
 import { PlanPanel } from './PlanPanel';
 import type { DestructiveDestination, PendingRootPick } from './PlanPanel';
 import { normalizeConfirmError } from './store';
@@ -73,8 +73,6 @@ export function InboxPage() {
     refresh: refreshOpenPlans,
   } = useOpenInboxPlans();
 
-  // spec 041 US6: aggregate inbox queue stats summary.
-  const { data: statsData } = useInboxStats();
   const openPlans = openPlansData?.plans ?? [];
   const totalActions = openPlansData?.totalActions ?? 0;
 
@@ -333,6 +331,11 @@ export function InboxPage() {
   const folderCount = items.filter((it) => !it.isMaster).length;
   const masterCount = items.filter((it) => it.isMaster).length;
 
+  // spec 041 US6: aggregate inbox queue stats. Derived from the SAME item list
+  // the header/footer count from (distinct-folder counting) so the stats strip,
+  // header, and footer always reconcile — a mixed folder counts once overall.
+  const derivedStats = useMemo(() => deriveInboxStats(items), [items]);
+
   function buildSubtitle(folders: number, masters: number, capped: boolean, limit: number): string {
     if (listLoading) return 'Loading…';
     const parts: string[] = [];
@@ -391,7 +394,7 @@ export function InboxPage() {
         detail={
           <div className="alm-inbox-center">
             {/* spec 041 US6: stats summary strip — always visible, never scrolls. */}
-            {statsData && <InboxStatsSummary stats={statsData} />}
+            {!listLoading && <InboxStatsSummary stats={derivedStats} />}
             <div className="alm-inbox-center__detail">
               {selectedItem ? (
                 <InboxDetail

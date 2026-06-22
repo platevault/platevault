@@ -16,43 +16,11 @@ import { useCallback } from 'react';
 import { useNavigate, useSearch } from '@tanstack/react-router';
 import { PageShell, ListDetailLayout, TopActionBar } from '@/components';
 import { Btn, EmptyState } from '@/ui';
-import type { BtnVariant } from '@/ui';
 import { useStaleSelectionCleanup } from '@/lib/use-stale-selection';
 import { ProjectsList } from './ProjectsList';
 import { ProjectDetailContent } from './ProjectDetail';
 import { useProjects } from './store';
 import type { ProjectSummaryDto } from '@/bindings/index';
-
-// ── Contextual actions per lifecycle state ────────────────────────────────────
-
-interface ContextualAction {
-  label: string;
-  variant?: BtnVariant;
-}
-
-function projectActions(lifecycle: string): ContextualAction[] {
-  switch (lifecycle) {
-    case 'setup_incomplete':
-      return [{ label: 'Continue setup', variant: 'primary' }];
-    case 'ready':
-      return [{ label: 'Generate source view', variant: 'primary' }, { label: 'Add sessions' }];
-    case 'prepared':
-      return [{ label: 'Reveal source views', variant: 'primary' }];
-    case 'processing':
-      return [{ label: 'Mark complete', variant: 'primary' }];
-    case 'completed':
-      return [
-        { label: 'Generate cleanup plan', variant: 'primary' },
-        { label: 'Archive project' },
-      ];
-    case 'archived':
-      return [{ label: 'Unarchive' }];
-    case 'blocked':
-      return [{ label: 'Resolve block', variant: 'danger' }];
-    default:
-      return [];
-  }
-}
 
 // ── Component ────────────────────────────────────────────────────────────────
 
@@ -100,26 +68,16 @@ export function ProjectsPage() {
             title="Projects"
             subtitle={loading ? 'Loading…' : `${filteredProjects.length} projects`}
             right={
-              <>
-                {project && (
-                  <>
-                    {projectActions(project.lifecycle).map((a) => (
-                      <Btn key={a.label} size="sm" variant={a.variant}>
-                        {a.label}
-                      </Btn>
-                    ))}
-                    <Btn size="sm">Reveal in Explorer</Btn>
-                  </>
-                )}
-                <Btn
-                  size="sm"
-                  variant="primary"
-                  onClick={handleNewProject}
-                  data-guide-anchor="projects.create-cta"
-                >
-                  + New project
-                </Btn>
-              </>
+              /* Header bar carries ONLY the global "New project" CTA; all
+                 per-project actions live in the detail action bar. */
+              <Btn
+                size="sm"
+                variant="primary"
+                onClick={handleNewProject}
+                data-guide-anchor="projects.create-cta"
+              >
+                + New project
+              </Btn>
             }
           />
         }

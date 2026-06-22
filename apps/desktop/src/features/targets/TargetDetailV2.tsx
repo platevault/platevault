@@ -192,10 +192,9 @@ function AltitudeGraph({ raDeg, decDeg }: AltitudeGraphProps) {
     points[0],
   );
   const transitX = hourToX(peak.tHour);
-  const transitLocalHour = 18 + peak.tHour;
-  const transitH = Math.floor(transitLocalHour % 24);
-  const transitM = Math.round((transitLocalHour % 1) * 60);
-  const transitLabel = `${String(transitH).padStart(2, '0')}:${String(transitM).padStart(2, '0')}`;
+  // The curve is an approximate placeholder (see caption), so the marker is
+  // labelled "transit" without a precise time to avoid contradicting the
+  // identity table (which shows transit as "—" pending the ephemeris backend).
 
   // X-axis tick labels (every 2 h from 18 to 06)
   const xTicks: Array<{ tHour: number; label: string }> = [];
@@ -263,7 +262,7 @@ function AltitudeGraph({ raDeg, decDeg }: AltitudeGraphProps) {
           y={PAD_T + 9}
           className="alm-planner__graph-label-text"
         >
-          transit {transitLabel}
+          transit
         </text>
 
         {/* Y-axis */}
@@ -738,14 +737,9 @@ export function TargetDetailV2({ targetId }: Props) {
         )}
       </Section>
 
-      {/* ── Sessions (empty-state stub) ──────────────────────────────────── */}
-      <Section title="Sessions">
-        {/* STUB: target↔session linkage backend pending */}
-        <EmptyState
-          title="No sessions linked"
-          desc="Sessions appear here once the ingestion pipeline populates target_id from FITS OBJECT data."
-        />
-      </Section>
+      {/* Sessions surface lives in the mid-page SESSIONS/PROJECTS link row
+          above (single source of truth) — the duplicate bottom Sessions
+          section was removed to avoid two Sessions surfaces. */}
 
       {/* ── Projects (empty-state stub) ──────────────────────────────────── */}
       <Section title="Projects">

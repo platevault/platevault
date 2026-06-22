@@ -1,28 +1,23 @@
 /**
- * SessionsList — spec 006, dense sortable table grouped by InventorySource.
+ * SessionsList — spec 006 inventory ledger, grouped by InventorySource.
  *
- * Renders the inventory ledger as a sortable table with columns:
- *   Target | Filter | Night | Frames | Exposure | State
+ * Rendered inside the narrow `alm-list-sidebar` of the two-pane layout, so it
+ * uses the SAME list-row pattern as the other master-detail pages (Inbox,
+ * Calibration, Archive): a shared `ListItem` with a primary label (target) and
+ * a compact secondary meta line (filter · night · frames), plus a full-label
+ * state `Pill` (Confirmed / Needs review). This replaces the previous 6-column
+ * sortable table, whose columns truncated badly at ~279px. Full session detail
+ * lives in the detail pane on selection.
  *
- * Column headers are clickable to toggle asc/desc sort for that column.
- * An active-sort caret (▲/▼) is shown on the sorted column header.
- * Default sort: by night (capturedOn) descending.
- *
- * Grouping is by InventorySource (library root path) — source group headers
- * are preserved so each drive/root is visually separated and test-observable.
- *
- * // STUB: full-width table + bottom inspector (inbox parity) — future agent
- * // The deferred IA consolidation (full-width layout replacing the list pane,
- * // bottom inspector replacing the detail pane, inbox-style multi-level
- * // grouping configurator) is intentionally NOT done here. The existing
- * // master-detail layout (ListDetailLayout + detail pane + rail) is kept
- * // working. Only the left-list rendering changes from card rows → table rows.
+ * Sort is preserved via a single sort dropdown in the controls area (was the
+ * clickable table column headers). Search and the frame/review filters are
+ * unchanged. Confirm/Reject behaviour lives in the detail/top bar, not here.
  */
 
 import { useState, useMemo, useCallback } from 'react';
 import { AlertTriangle } from 'lucide-react';
 import type { InventorySource, InventorySession } from '@/api/commands';
-import { ListSidebar } from '@/components';
+import { ListSidebar, ListItem } from '@/components';
 import { Pill } from '@/ui';
 import { sessionStateLabel, sessionStateVariant } from '@/lib/lifecycle';
 import type { InventoryFrameFilter, ReviewFilter } from '@/lib/route-contract';
@@ -71,6 +66,19 @@ interface SortState {
 
 const DEFAULT_SORT: SortState = { col: 'night', dir: 'desc' };
 
+/** Sort options exposed in the single sort dropdown (value = `${col}:${dir}`). */
+const SORT_OPTIONS: Array<{ value: string; label: string }> = [
+  { value: 'night:desc', label: 'Night (newest)' },
+  { value: 'night:asc', label: 'Night (oldest)' },
+  { value: 'target:asc', label: 'Target (A–Z)' },
+  { value: 'target:desc', label: 'Target (Z–A)' },
+  { value: 'filter:asc', label: 'Filter (A–Z)' },
+  { value: 'frames:desc', label: 'Frames (most)' },
+  { value: 'frames:asc', label: 'Frames (fewest)' },
+  { value: 'exposure:asc', label: 'Exposure (A–Z)' },
+  { value: 'state:asc', label: 'State (A–Z)' },
+];
+
 function compareStr(a: string | null | undefined, b: string | null | undefined): number {
   const av = a ?? '';
   const bv = b ?? '';
@@ -109,39 +117,7 @@ function sortSessions(sessions: InventorySession[], sort: SortState): InventoryS
   return sorted;
 }
 
-// ── Column header button ──────────────────────────────────────────────────────
-
-function ThBtn({
-  col,
-  label,
-  sort,
-  onSort,
-}: {
-  col: SortCol;
-  label: string;
-  sort: SortState;
-  onSort: (col: SortCol) => void;
-}) {
-  const active = sort.col === col;
-  const caret = active ? (sort.dir === 'asc' ? '▲' : '▼') : null;
-  return (
-    <button
-      type="button"
-      className="alm-sessions-table__th-btn"
-      onClick={() => onSort(col)}
-      aria-sort={active ? (sort.dir === 'asc' ? 'ascending' : 'descending') : 'none'}
-    >
-      {label}
-      {caret && (
-        <span className="alm-sessions-table__sort-caret" aria-hidden="true">
-          {caret}
-        </span>
-      )}
-    </button>
-  );
-}
-
-// ── Session table row ─────────────────────────────────────────────────────────
+// ── Session list row ───────────────────────────────────────────────────────────
 
 function SessionRow({
   session,
@@ -153,71 +129,39 @@ function SessionRow({
   onSelect: (id: string) => void;
 }) {
   const needsReview = session.state === 'discovered' || session.state === 'candidate';
-  const stateLabel =
-    needsReview ? 'Needs review' : sessionStateLabel(session.state);
+  const stateLabel = needsReview ? 'Needs review' : sessionStateLabel(session.state);
 
-  const handleKeyDown = useCallback(
-    (e: React.KeyboardEvent) => {
-      if (e.key === 'Enter' || e.key === ' ') {
-        e.preventDefault();
-        onSelect(session.id);
-      }
-    },
-    [session.id, onSelect],
-  );
+  // Compact secondary meta line: filter · night · frames (em-dash for absent).
+  const metaParts = [
+    session.filter ?? '—',
+    session.capturedOn ?? '—',
+    `${session.frames} frames`,
+  ];
 
   return (
-    <tr
-      className={`alm-sessions-table__row${selected ? ' alm-sessions-table__row--selected' : ''}`}
+    <ListItem
+      selected={selected}
       onClick={() => onSelect(session.id)}
-      onKeyDown={handleKeyDown}
-      tabIndex={0}
-      role="row"
-      aria-selected={selected}
-      data-session-id={session.id}
-    >
-      {/* Target */}
-      <td className="alm-sessions-table__td-target">
-        <span title={session.target ?? session.name}>
-          {session.target ?? session.name}
-        </span>
-        {needsReview && (
-          <AlertTriangle
-            size={10}
-            role="img"
-            aria-label="Needs review"
-            className="alm-sessions-table__needs-review-icon"
-          />
-        )}
-      </td>
-
-      {/* Filter */}
-      <td className="alm-sessions-table__td-filter">
-        {session.filter ?? '—'}
-      </td>
-
-      {/* Night (capturedOn) */}
-      <td className="alm-sessions-table__td-night">
-        {session.capturedOn ?? '—'}
-      </td>
-
-      {/* Frames */}
-      <td className="alm-sessions-table__td-frames">
-        {session.frames}
-      </td>
-
-      {/* Exposure */}
-      <td className="alm-sessions-table__td-exposure">
-        {session.exposure ?? '—'}
-      </td>
-
-      {/* State */}
-      <td className="alm-sessions-table__td-state">
-        <Pill variant={sessionStateVariant(session.state)}>
-          {stateLabel}
-        </Pill>
-      </td>
-    </tr>
+      title={
+        <>
+          <span className="alm-session-row__target">
+            {session.target ?? session.name}
+          </span>
+          {needsReview && (
+            <AlertTriangle
+              size={10}
+              role="img"
+              aria-label="Needs review"
+              className="alm-session-row__needs-review-icon"
+            />
+          )}
+        </>
+      }
+      pills={
+        <Pill variant={sessionStateVariant(session.state)}>{stateLabel}</Pill>
+      }
+      meta={metaParts.join(' · ')}
+    />
   );
 }
 
@@ -248,12 +192,9 @@ export function SessionsList({
 
   const totalSessions = sources.reduce((acc, src) => acc + src.sessions.length, 0);
 
-  const handleSort = useCallback((col: SortCol) => {
-    setSort((prev) =>
-      prev.col === col
-        ? { col, dir: prev.dir === 'asc' ? 'desc' : 'asc' }
-        : { col, dir: col === 'night' ? 'desc' : 'asc' },
-    );
+  const handleSortChange = useCallback((value: string) => {
+    const [col, dir] = value.split(':') as [SortCol, SortDir];
+    setSort({ col, dir });
   }, []);
 
   // Pre-sort sessions for each source (memoised; re-runs only when sort changes).
@@ -266,8 +207,8 @@ export function SessionsList({
     <ListSidebar
       placeholder="Search target, filter, source…"
       controls={
-        <div className="alm-sessions-table__controls">
-          <div className="alm-sessions-table__filter-row">
+        <div className="alm-sessions-list__controls">
+          <div className="alm-sessions-list__filter-row">
             {/* Frame type filter */}
             <select
               value={frameFilter ?? ''}
@@ -295,6 +236,19 @@ export function SessionsList({
                 </option>
               ))}
             </select>
+
+            {/* Sort control (was the clickable table column headers). */}
+            <select
+              value={`${sort.col}:${sort.dir}`}
+              onChange={(e) => handleSortChange(e.target.value)}
+              aria-label="Sort sessions"
+            >
+              {SORT_OPTIONS.map((o) => (
+                <option key={o.value} value={o.value}>
+                  Sort: {o.label}
+                </option>
+              ))}
+            </select>
           </div>
         </div>
       }
@@ -305,7 +259,7 @@ export function SessionsList({
       )}
 
       {sortedSources.map(({ src, sessions }) => (
-        <div key={src.id} className="alm-sessions-table__group">
+        <div key={src.id} className="alm-sessions-list__group">
           {/* Group header: source path + kind · state (FR-005, T400) */}
           <div className="alm-source-group-header">
             <span className="alm-source-group-header__path">{src.path}</span>
@@ -318,56 +272,17 @@ export function SessionsList({
             )}
           </div>
 
-          {/* Dense sortable table */}
-          <table className="alm-sessions-table" role="grid">
-            <colgroup>
-              <col className="alm-sessions-table__col-target" />
-              <col className="alm-sessions-table__col-filter" />
-              <col className="alm-sessions-table__col-night" />
-              <col className="alm-sessions-table__col-frames" />
-              <col className="alm-sessions-table__col-exposure" />
-              <col className="alm-sessions-table__col-state" />
-            </colgroup>
-            <thead>
-              <tr>
-                <th scope="col">
-                  <ThBtn col="target" label="Target" sort={sort} onSort={handleSort} />
-                </th>
-                <th scope="col">
-                  <ThBtn col="filter" label="Filter" sort={sort} onSort={handleSort} />
-                </th>
-                <th scope="col">
-                  <ThBtn col="night" label="Night" sort={sort} onSort={handleSort} />
-                </th>
-                <th scope="col">
-                  <ThBtn col="frames" label="Frames" sort={sort} onSort={handleSort} />
-                </th>
-                <th scope="col">
-                  <ThBtn col="exposure" label="Exp." sort={sort} onSort={handleSort} />
-                </th>
-                <th scope="col">
-                  <ThBtn col="state" label="State" sort={sort} onSort={handleSort} />
-                </th>
-              </tr>
-            </thead>
-            <tbody>
-              {sessions.map((s) => (
-                <SessionRow
-                  key={s.id}
-                  session={s}
-                  selected={selected === s.id}
-                  onSelect={onSelect}
-                />
-              ))}
-              {sessions.length === 0 && (
-                <tr>
-                  <td colSpan={6} className="alm-sessions-table__empty">
-                    No sessions in this source.
-                  </td>
-                </tr>
-              )}
-            </tbody>
-          </table>
+          {sessions.map((s) => (
+            <SessionRow
+              key={s.id}
+              session={s}
+              selected={selected === s.id}
+              onSelect={onSelect}
+            />
+          ))}
+          {sessions.length === 0 && (
+            <div className="alm-list-empty">No sessions in this source.</div>
+          )}
         </div>
       ))}
     </ListSidebar>

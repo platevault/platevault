@@ -8,6 +8,7 @@ import type { LibraryRoot } from '@/bindings/types';
 import type { RootCategory } from '@/bindings/index';
 import { errMessage } from '@/lib/errors';
 import { SettingsSection } from './SettingsKit';
+import { SourceProtectionOverride } from './SourceProtectionOverride';
 
 interface DataSourcesProps {
   save: (scope: string, values: Record<string, unknown>) => void;
@@ -209,6 +210,7 @@ function RootCard({ root, onRescan }: RootCardProps) {
         {meta && (
           <div className="alm-data-sources__root-meta">{meta}</div>
         )}
+        <SourceProtectionOverride sourceId={root.id} />
       </div>
 
       {/* Right: action buttons */}

@@ -3,17 +3,17 @@
  *
  * Layout:
  *   DetailHeader  (title + state pill + Edit action)
- *   TopActionBar  (tool · path breadcrumb · Reveal · Open in {tool} · primary lifecycle action)
+ *   TopActionBar  (tool · path breadcrumb · Reveal in Explorer · Open in {tool} · lifecycle actions)
  *   MetricLine    (integration · sources · channels · tool)
  *   DetailGrid
  *     primary: Sources table · Channels palette · Source views (clickable) ·
  *              Notes · Manifests · Generated source views · Calibration panel
  *     rail:    Lifecycle · Target · Next · History
  *
- * Lifecycle footer (data-testid="lifecycle-footer-actions") is preserved for
- * ALL footer action buttons — tests rely on transition-btn-* testids existing
- * in that container. The primary action is duplicated into the TopActionBar
- * without a testid so tests keep working against the footer.
+ * Per-project actions (Reveal in Explorer · Open in {tool} · lifecycle
+ * transitions) live ONLY in the detail action bar (data-testid="lifecycle-actions").
+ * The transition buttons carry the data-testid="transition-btn-*" hooks. The
+ * previous duplicate bottom footer was removed to de-duplicate these actions.
  *
  * Channels palette: STUB — derives one row per unique filter from project
  * sources because ProjectChannelDto only carries label/source/addedAt.
@@ -286,9 +286,6 @@ export function ProjectDetailContent({ projectId }: ProjectDetailContentProps) {
     derivedChannels.length > 0 && derivedChannels.every((c) => c.inSync);
   const maxFrames = Math.max(...derivedChannels.map((c) => c.totalFrames), 1);
 
-  // Primary action for the top bar (visual only — no testid; footer has testids)
-  const primaryAction = footerActions[0] ?? null;
-
   // ── Sources table ────────────────────────────────────────────────────────
 
   const sourceColumns = [
@@ -349,10 +346,18 @@ export function ProjectDetailContent({ projectId }: ProjectDetailContentProps) {
       <TopActionBar
         title=""
         right={
-          <>
-            {/* Reveal */}
+          /* Per-project actions live ONLY here (the detail action bar):
+             Reveal in Explorer · Open in {tool} · lifecycle transitions.
+             The transition buttons carry the data-testid="transition-btn-*"
+             hooks (previously on a separate bottom footer that has been
+             removed to de-duplicate the per-project actions). */
+          <div
+            className="alm-project-detail__bar-actions"
+            data-testid="lifecycle-actions"
+          >
+            {/* Reveal in Explorer */}
             <Btn size="sm" variant="ghost" data-testid="action-reveal">
-              Reveal
+              Reveal in Explorer
             </Btn>
 
             {/* Open in processing tool */}
@@ -374,18 +379,20 @@ export function ProjectDetailContent({ projectId }: ProjectDetailContentProps) {
               </Btn>
             )}
 
-            {/* Primary lifecycle CTA — visual shortcut, footer keeps testids */}
-            {primaryAction && (
+            {/* Lifecycle transitions — single source of truth for these actions. */}
+            {footerActions.map((action) => (
               <Btn
+                key={action.nextState}
                 size="sm"
-                variant={primaryAction.variant}
+                variant={action.variant}
                 disabled={transitionWorking}
-                onClick={() => void handleTransition(primaryAction.nextState, primaryAction.label)}
+                onClick={() => void handleTransition(action.nextState, action.label)}
+                data-testid={`transition-btn-${action.nextState}`}
               >
-                {primaryAction.label}
+                {action.label}
               </Btn>
-            )}
-          </>
+            ))}
+          </div>
         }
       >
         <span className="alm-project-detail__bar-tool">{toolLabel}</span>
@@ -582,28 +589,8 @@ export function ProjectDetailContent({ projectId }: ProjectDetailContentProps) {
         />
       </DetailGrid>
 
-      {/* ── Lifecycle footer (spec 009 US3-3) ────────────────────────────── */}
-      {/* All transition buttons live here so data-testid="transition-btn-*"  */}
-      {/* targets are always findable by tests regardless of bar layout.       */}
-      {footerActions.length > 0 && (
-        <div
-          className="alm-project-detail__footer"
-          data-testid="lifecycle-footer-actions"
-        >
-          {footerActions.map((action) => (
-            <Btn
-              key={action.nextState}
-              size="sm"
-              variant={action.variant}
-              disabled={transitionWorking}
-              onClick={() => void handleTransition(action.nextState, action.label)}
-              data-testid={`transition-btn-${action.nextState}`}
-            >
-              {action.label}
-            </Btn>
-          ))}
-        </div>
-      )}
+      {/* Lifecycle transition buttons now live in the detail action bar above
+          (single source of truth) — the duplicate bottom footer was removed. */}
 
       {/* ── Tool-launch not-configured hint ─────────────────────────────── */}
       {launchDisabledReason === 'not_configured' && (

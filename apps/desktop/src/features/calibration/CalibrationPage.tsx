@@ -56,11 +56,14 @@ export function CalibrationPage() {
   const bias = masters.filter((m) => m.kind === 'bias').length;
   const aging = masters.filter((m) => m.ageDays > agingThresholdDays).length;
 
+  // Pluralize counted nouns by count ("1 dark" / "2 darks"); "bias" and "masters"
+  // are invariant in this vocabulary.
+  const plural = (n: number, word: string) => `${n} ${word}${n === 1 ? '' : 's'}`;
   const subtitle = loading
     ? 'Loading…'
     : error
       ? 'Failed to load masters'
-      : `${masters.length} masters · ${darks} darks · ${flats} flats · ${bias} bias${aging > 0 ? ` · ${aging} aging` : ''}`;
+      : `${masters.length} masters · ${plural(darks, 'dark')} · ${plural(flats, 'flat')} · ${bias} bias${aging > 0 ? ` · ${aging} aging` : ''}`;
 
   return (
     <PageShell>
