@@ -27,7 +27,8 @@ export function InfoTip({ tip, label = 'More information', className }: InfoTipP
       aria-label={text ? `${label}: ${text}` : label}
       data-tip={text}
     >
-      i
+      {/* decorative info glyph (expression literal — not catalog-managed prose) */}
+      {'i'}
     </span>
   );
 }

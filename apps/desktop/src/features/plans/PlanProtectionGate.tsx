@@ -9,6 +9,7 @@
 
 import { useEffect, useState, useCallback } from 'react';
 import { Pill, Btn } from '@/ui';
+import { m } from '@/lib/i18n';
 import { planProtectionCheck, protectionPlanAcknowledged } from '@/api/commands';
 import type { ProtectedPlanItem, PlanProtectionCheckResponse } from '@/api/commands';
 
@@ -83,7 +84,7 @@ export function PlanProtectionGate({ planId, onAcknowledgedChange }: PlanProtect
   if (loadState === 'loading' || loadState === 'idle') {
     return (
       <div className="alm-plan-gate__status">
-        Checking plan protection…
+        {m.plans_gate_checking()}
       </div>
     );
   }
@@ -91,7 +92,7 @@ export function PlanProtectionGate({ planId, onAcknowledgedChange }: PlanProtect
   if (loadState === 'error') {
     return (
       <div className="alm-plan-gate__status">
-        Protection check failed to load.
+        {m.plans_gate_load_error()}
       </div>
     );
   }
@@ -103,7 +104,7 @@ export function PlanProtectionGate({ planId, onAcknowledgedChange }: PlanProtect
     };
     return (
       <div className="alm-plan-gate__status">
-        No protected items.
+        {m.plans_gate_no_protected()}
         {normalCount > 0 && ` ${normalCount} normal item(s).`}
         {unprotectedCount > 0 && ` ${unprotectedCount} unprotected item(s).`}
       </div>
@@ -148,16 +149,16 @@ export function PlanProtectionGate({ planId, onAcknowledgedChange }: PlanProtect
               <code className="alm-mono alm-plan-gate__item-id">
                 {item.itemId}
               </code>
-              {isDone && <Pill variant="ok">Acknowledged</Pill>}
+              {isDone && <Pill variant="ok">{m.plans_gate_acknowledged()}</Pill>}
             </div>
 
             <div className="alm-plan-gate__item-action">
-              Action: <strong>{actionLabel(item)}</strong>
+              {m.plans_gate_action_label()} <strong>{actionLabel(item)}</strong>
             </div>
 
             {item.matchedCategories.length > 0 && (
               <div className="alm-plan-gate__item-categories">
-                Protected categories: {item.matchedCategories.join(', ')}
+                {m.plans_gate_categories_label()} {item.matchedCategories.join(', ')}
               </div>
             )}
 
@@ -173,7 +174,7 @@ export function PlanProtectionGate({ planId, onAcknowledgedChange }: PlanProtect
 
             {!isDone && (
               <Btn size="sm" onClick={() => handleAcknowledge(item)}>
-                Acknowledge
+                {m.plans_gate_acknowledge_btn()}
               </Btn>
             )}
           </div>
@@ -184,7 +185,7 @@ export function PlanProtectionGate({ planId, onAcknowledgedChange }: PlanProtect
       {(checkResult.nonBlockingSummary.normalCount > 0 ||
         checkResult.nonBlockingSummary.unprotectedCount > 0) && (
         <div className="alm-plan-gate__footer-summary">
-          Also in plan:{' '}
+          {m.plans_gate_also_in_plan()}{' '}
           {checkResult.nonBlockingSummary.normalCount > 0 &&
             `${checkResult.nonBlockingSummary.normalCount} normal item(s)`}
           {checkResult.nonBlockingSummary.normalCount > 0 &&

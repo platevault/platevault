@@ -51,6 +51,7 @@
 
 import { type ReactNode } from 'react';
 import { PageTopBar, type PageTopBarProps } from './PageTopBar';
+import { m } from '@/lib/i18n';
 
 export interface ListPageLayoutProps {
   /** A ready top-bar node. Mutually exclusive with `topBarProps`. */
@@ -142,7 +143,7 @@ export function ListPageLayout({
                       type="button"
                       className="alm-listpage__panel-close"
                       onClick={onCloseBottomDetail}
-                      aria-label="Close session details"
+                      aria-label={m.cmp_listpage_close_session_details_aria()}
                     >
                       ✕
                     </button>
@@ -166,7 +167,7 @@ export function ListPageLayout({
                     type="button"
                     className="alm-listpage__panel-close"
                     onClick={onCloseDetail}
-                    aria-label="Close details"
+                    aria-label={m.inbox_close_details_aria()}
                   >
                     ✕
                   </button>
@@ -204,7 +205,7 @@ export function ListPageLayout({
                   type="button"
                   className="alm-listpage__detail-close"
                   onClick={onCloseDetail}
-                  aria-label="Close details"
+                  aria-label={m.inbox_close_details_aria()}
                 >
                   ✕
                 </button>

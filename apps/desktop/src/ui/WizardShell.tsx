@@ -1,4 +1,5 @@
 import { forwardRef } from 'react';
+import { m } from '@/lib/i18n';
 import type { ReactNode, HTMLAttributes } from 'react';
 
 export interface WizardStep {
@@ -44,7 +45,7 @@ export const WizardShell = forwardRef<HTMLDivElement, WizardShellProps>(
         ) : (
           <nav
             className="alm-wizard__rail"
-            aria-label="Wizard progress"
+            aria-label={m.ui_wizard_progress_aria()}
           >
             {steps.map((step, i) => (
               <div
@@ -99,7 +100,7 @@ export const WizardShell = forwardRef<HTMLDivElement, WizardShellProps>(
                 {/* Inline step bar for centered mode */}
                 <nav
                   className="alm-wizard__steps-bar"
-                  aria-label="Setup progress"
+                  aria-label={m.ui_wizard_setup_progress_aria()}
                 >
                   {steps.map((step, i) => {
                     const isActive = i === currentStep;

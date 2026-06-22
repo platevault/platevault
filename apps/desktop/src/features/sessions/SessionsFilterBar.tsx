@@ -1,5 +1,6 @@
 import { useState } from 'react';
 import { X } from 'lucide-react';
+import { m } from '@/lib/i18n';
 
 interface ActiveFilter {
   key: string;
@@ -21,7 +22,7 @@ export function SessionsFilterBar() {
 
   return (
     <div className="alm-sessions-filter">
-      <span className="alm-sessions-filter__label">Filter:</span>
+      <span className="alm-sessions-filter__label">{m.sessions_filterbar_label()}</span>
       {filters.map((f) => (
         <span key={f.key} className="alm-sessions-filter__chip">
           {f.key}: <span className="alm-sessions-filter__chip-value">{f.value}</span>
@@ -36,7 +37,7 @@ export function SessionsFilterBar() {
         </span>
       ))}
       <button type="button" className="alm-sessions-filter__add">
-        + add
+        {m.sessions_filterbar_add()}
       </button>
     </div>
   );

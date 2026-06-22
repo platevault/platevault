@@ -53,6 +53,7 @@ import {
 import type { TargetSuggestion, ResolvedTarget } from '@/api/commands';
 import type { TargetCatalogId, TargetObjectType } from '@/bindings/index';
 import { Pill } from '@/ui';
+import { m } from '@/lib/i18n';
 import {
   objectTypeLabel,
   catalogLabel,
@@ -237,10 +238,9 @@ export function TargetSearch({
         });
         if (!isCurrent()) return; // superseded — drop stale result
         setSuggestions(res.suggestions);
-      } catch (err: unknown) {
+      } catch {
         if (!isCurrent()) return;
-        const code = typeof err === 'string' ? err : (err as Error)?.message ?? 'unknown';
-        setError(`Target search failed.`);
+        setError(m.targetsearch_search_failed());
         setSuggestions([]);
         setLoading(false);
         return;
@@ -329,9 +329,8 @@ export function TargetSearch({
             : { ...s, source: 'user-override' };
         (onOverride ?? onSelect)(result);
         setOpen(false);
-      } catch (err: unknown) {
-        const code = typeof err === 'string' ? err : (err as Error)?.message ?? 'unknown';
-        setError(`Could not set target.`);
+      } catch {
+        setError(m.targetsearch_set_failed());
       } finally {
         setOverriding(null);
       }
@@ -412,16 +411,16 @@ export function TargetSearch({
         />
 
         {showFilters && (
-          <div className="alm-target-search__filters" role="group" aria-label="Search filters">
+          <div className="alm-target-search__filters" role="group" aria-label={m.cmp_target_search_filters_aria()}>
             <label className="alm-target-search__filter-label" htmlFor={typeFilterId}>
-              Type
+              {m.cmp_target_search_type_label()}
               <select
                 id={typeFilterId}
                 className="alm-select alm-target-search__filter-select"
                 value={typeSel}
                 onChange={(e) => setTypeSel(e.target.value as TargetObjectType | '')}
               >
-                <option value="">All types</option>
+                <option value="">{m.cmp_target_search_all_types()}</option>
                 {OBJECT_TYPES.map((t) => (
                   <option key={t} value={t}>
                     {objectTypeLabel(t)}
@@ -430,14 +429,14 @@ export function TargetSearch({
               </select>
             </label>
             <label className="alm-target-search__filter-label" htmlFor={catalogFilterId}>
-              Catalogue
+              {m.cmp_target_search_catalogue_label()}
               <select
                 id={catalogFilterId}
                 className="alm-select alm-target-search__filter-select"
                 value={catalogSel}
                 onChange={(e) => setCatalogSel(e.target.value as TargetCatalogId | '')}
               >
-                <option value="">All catalogues</option>
+                <option value="">{m.cmp_target_search_all_catalogues()}</option>
                 {CATALOG_IDS.map((c) => (
                   <option key={c} value={c}>
                     {catalogLabel(c)}
@@ -465,16 +464,16 @@ export function TargetSearch({
                 ref={scrollRef}
                 className="alm-target-search__list alm-virtual-scroll"
                 data-virtual-scroll="true"
-                aria-label="Target suggestions"
+                aria-label={m.cmp_target_search_suggestions_aria()}
               >
                 {loading && suggestions.length === 0 && (
                   <Combobox.Status className="alm-target-search__status">
-                    Searching…
+                    {m.cmp_target_search_searching()}
                   </Combobox.Status>
                 )}
                 {!loading && !error && suggestions.length === 0 && !resolving && (
                   <Combobox.Status className="alm-target-search__status">
-                    No matching targets.
+                    {m.cmp_target_search_no_results()}
                   </Combobox.Status>
                 )}
                 {suggestions.length > 0 && (
@@ -543,7 +542,7 @@ export function TargetSearch({
                 )}
                 {resolving && (
                   <Combobox.Status className="alm-target-search__status alm-target-search__status--resolving">
-                    Searching SIMBAD…
+                    {m.cmp_target_search_searching_simbad()}
                   </Combobox.Status>
                 )}
               </Combobox.List>

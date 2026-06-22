@@ -9,6 +9,7 @@
 import { Checkbox } from '@base-ui-components/react/checkbox';
 import { Select } from '@base-ui-components/react/select';
 import { clsx } from 'clsx';
+import { m } from '@/lib/i18n';
 
 export interface PropertyDef {
   key: string;
@@ -104,23 +105,23 @@ export function PropertyTable({
   showConfirm = false,
 }: PropertyTableProps) {
   return (
-    <div className="alm-property-table" role="table" aria-label="Properties">
+    <div className="alm-property-table" role="table" aria-label={m.cmp_property_table_aria()}>
       {/* Header row */}
       <div className="alm-property-table__header" role="row">
         <span className="alm-property-table__cell alm-property-table__cell--label" role="columnheader">
-          Property
+          {m.cmp_property_table_col_property()}
         </span>
         <span className="alm-property-table__cell alm-property-table__cell--value" role="columnheader">
-          Value
+          {m.cmp_property_table_col_value()}
         </span>
         {showSource && (
           <span className="alm-property-table__cell alm-property-table__cell--source" role="columnheader">
-            Source
+            {m.projects_wizard_col_source()}
           </span>
         )}
         {showConfirm && (
           <span className="alm-property-table__cell alm-property-table__cell--confirm" role="columnheader">
-            Confirmed
+            {m.cmp_property_table_col_confirmed()}
           </span>
         )}
       </div>
