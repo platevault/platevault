@@ -14,12 +14,15 @@
  * - Per-file metadata table (FR-010): rendered when the optional
  *   `fileMetadata` prop is provided and non-empty. No fetch here — the parent
  *   passes the data once `inbox.item.metadata` is wired (T019/T022).
- * - Bottom inspector dock: shows full metadata for the selected table row(s).
+ *
+ * Layout (task D): two-column when file metadata exists.
+ *   LEFT  = frame breakdown (compact, fixed width)
+ *   RIGHT = per-file metadata table, independently scrollable
  */
 
 import { useState } from 'react';
 import { DetailHeader, DetailPane, MetricLine } from '@/components';
-import { Pill, Banner, Btn, Section, Table, KV } from '@/ui';
+import { Pill, Banner, Btn, Section, Table } from '@/ui';
 import type { InboxItemSummary, InboxFileMetadata } from '@/api/commands';
 import type { InboxClassifyResponse } from './store';
 import type { PillVariant } from '@/ui';
@@ -89,143 +92,6 @@ function buildMixedSummary(breakdown: InboxClassifyResponse['breakdown']): strin
     .join(' · ');
 }
 
-/** Format image size as "WxH" or dash. */
-function fmtImageSize(w: number | null | undefined, h: number | null | undefined): React.ReactNode {
-  if (w == null && h == null) return <span className="alm-inbox-detail__dash">—</span>;
-  return `${w ?? '?'} × ${h ?? '?'}`;
-}
-
-/** Format gain/offset string value. */
-function fmtGain(g: string | null | undefined): React.ReactNode {
-  if (!g) return <span className="alm-inbox-detail__dash">—</span>;
-  return g;
-}
-
-/**
- * Compute the inspector display value for a numeric field across selected files.
- * Returns a single formatted value when all agree, or a "min→max (N files)" range string.
- */
-function numericRange(
-  values: (number | null | undefined)[],
-  fmt: (v: number) => string,
-): React.ReactNode {
-  const defined = values.filter((v): v is number => v != null);
-  if (defined.length === 0) return <span className="alm-inbox-detail__dash">—</span>;
-  const min = Math.min(...defined);
-  const max = Math.max(...defined);
-  if (min === max) return fmt(min);
-  return (
-    <>
-      <span className="alm-inbox-inspector__range">{fmt(min)} → {fmt(max)}</span>
-      {' '}
-      <span className="alm-inbox-inspector__range">({defined.length} files)</span>
-    </>
-  );
-}
-
-/** Shared string value across selected files: single value or "mixed" placeholder. */
-function sharedString(values: (string | null | undefined)[]): React.ReactNode {
-  const defined = values.filter((v): v is string => v != null && v !== '');
-  if (defined.length === 0) return <span className="alm-inbox-detail__dash">—</span>;
-  const unique = Array.from(new Set(defined));
-  if (unique.length === 1) return unique[0];
-  return <span className="alm-inbox-inspector__range">({unique.length} values)</span>;
-}
-
-// ── InboxInspector ────────────────────────────────────────────────────────────
-
-interface InboxInspectorProps {
-  fileMetadata: InboxFileMetadata[];
-  selectedPaths: Set<string>;
-}
-
-function InboxInspector({ fileMetadata, selectedPaths }: InboxInspectorProps) {
-  const selected = fileMetadata.filter((f) => selectedPaths.has(f.relativeFilePath));
-  const count = selected.length;
-
-  // Empty state
-  if (count === 0) {
-    return (
-      <div className="alm-inbox-inspector" aria-label="File inspector">
-        <div className="alm-inbox-inspector__header">
-          <span className="alm-inbox-inspector__label">Inspector</span>
-        </div>
-        <div className="alm-inbox-inspector__empty">
-          Select a file to inspect.
-        </div>
-      </div>
-    );
-  }
-
-  // Single file: show full detail
-  if (count === 1) {
-    const f = selected[0];
-    const name = basename(f.relativeFilePath);
-    const frameTypePillVariant: PillVariant =
-      f.frameTypeEffective === 'dark'  ? 'neutral' :
-      f.frameTypeEffective === 'light' ? 'info'    :
-      f.frameTypeEffective === 'flat'  ? 'ghost'   :
-      f.frameTypeEffective === 'bias'  ? 'ghost'   : 'neutral';
-
-    return (
-      <div className="alm-inbox-inspector" aria-label="File inspector">
-        <div className="alm-inbox-inspector__header">
-          <span className="alm-inbox-inspector__label">Inspector</span>
-          <span className="alm-inbox-inspector__filename">{name}</span>
-          {f.frameTypeEffective && (
-            <Pill variant={frameTypePillVariant}>{f.frameTypeEffective}</Pill>
-          )}
-          <span className="alm-inbox-inspector__path" title={f.relativeFilePath}>
-            {f.relativeFilePath}
-          </span>
-        </div>
-        <div className="alm-inbox-inspector__grid">
-          <KV label="Camera"      value={fmtOrDash(f.instrume)} />
-          <KV label="Telescope"   value={fmtOrDash(f.telescop)} />
-          <KV label="Filter"      value={fmtOrDash(f.filter)} />
-          <KV label="Exposure"    value={fmtExposure(f.exposureS)} />
-          <KV label="Binning"     value={fmtBinning(f.binningX, f.binningY)} />
-          <KV label="Gain/Offset" value={fmtGain(f.gain)} />
-          <KV label="Sensor temp" value={fmtTemp(f.temperatureC)} />
-          <KV label="Date-Obs"    value={fmtOrDash(f.dateObs)} />
-          {/* STUB: bitDepth not present on InboxFileMetadata */}
-          <KV label="Image size"  value={fmtImageSize(f.naxis1, f.naxis2)} />
-          <KV label="Frame type"  value={fmtOrDash(f.frameTypeEffective)} />
-          <KV label="Object"      value={fmtOrDash(f.object)} />
-        </div>
-      </div>
-    );
-  }
-
-  // Multi-select: show shared values + ranges
-  const exposureValues = selected.map((f) => f.exposureS);
-  const tempValues     = selected.map((f) => f.temperatureC);
-
-  return (
-    <div className="alm-inbox-inspector" aria-label="File inspector">
-      <div className="alm-inbox-inspector__header">
-        <span className="alm-inbox-inspector__label">Inspector</span>
-        <span className="alm-inbox-inspector__filename">{count} files selected</span>
-      </div>
-      <div className="alm-inbox-inspector__grid">
-        <KV label="Camera"      value={sharedString(selected.map((f) => f.instrume))} />
-        <KV label="Telescope"   value={sharedString(selected.map((f) => f.telescop))} />
-        <KV label="Filter"      value={sharedString(selected.map((f) => f.filter))} />
-        <KV label="Exposure"    value={numericRange(exposureValues, (v) => `${v} s`)} />
-        <KV label="Binning"     value={sharedString(selected.map((f) => fmtBinning(f.binningX, f.binningY) as string))} />
-        <KV label="Gain/Offset" value={sharedString(selected.map((f) => f.gain))} />
-        <KV label="Sensor temp" value={numericRange(tempValues, (v) => `${v} °C`)} />
-        <KV label="Date-Obs"    value={sharedString(selected.map((f) => f.dateObs))} />
-        <KV label="Frame type"  value={sharedString(selected.map((f) => f.frameTypeEffective))} />
-        <KV label="Object"      value={sharedString(selected.map((f) => f.object))} />
-      </div>
-      <div className="alm-inbox-inspector__footer">
-        Multi-select — inspector shows shared values + ranges for numeric fields.
-      </div>
-    </div>
-  );
-}
-
 // ── EmptyClassification ───────────────────────────────────────────────────────
 
 function EmptyClassification() {
@@ -281,35 +147,6 @@ export function InboxDetail({
   const [bulkExposureS, setBulkExposureS] = useState('');
   const [bulkBinning, setBulkBinning] = useState('');
   const [bulkError, setBulkError] = useState<string | null>(null);
-
-  // ── Inspector: selected row(s) in the per-file metadata table ────────────
-  // Separate from the bulk-override selectedFiles set above (which is for the
-  // unclassified "Needs review" table). These track which metadata table rows
-  // the user clicked to inspect.
-  const [inspectorPaths, setInspectorPaths] = useState<Set<string>>(new Set());
-
-  const handleMetaRowClick = (filePath: string, evt: React.MouseEvent) => {
-    setInspectorPaths((prev) => {
-      const next = new Set(prev);
-      if (evt.ctrlKey || evt.metaKey) {
-        // Ctrl/Cmd-click: toggle the clicked row, keep others
-        if (next.has(filePath)) {
-          next.delete(filePath);
-        } else {
-          next.add(filePath);
-        }
-      } else {
-        // Plain click: single-select (or deselect if already the only selected)
-        if (next.size === 1 && next.has(filePath)) {
-          next.clear();
-        } else {
-          next.clear();
-          next.add(filePath);
-        }
-      }
-      return next;
-    });
-  };
 
   const handleOverrideChange = (filePath: string, frameType: string) => {
     setPendingOverrides((prev) => ({ ...prev, [filePath]: frameType }));
@@ -399,10 +236,10 @@ export function InboxDetail({
   // lengths instead of reflowing. Long paths wrap inside their cell.
   const wrapCell = { wordBreak: 'break-word' as const };
   const breakdownColumns = [
-    { key: 'kind', label: 'Frame type', style: { width: '16%' } },
-    { key: 'count', label: 'Files', style: { width: '10%' } },
-    { key: 'destination', label: 'Destination preview', style: { width: '42%' }, cellStyle: wrapCell },
-    { key: 'samples', label: 'Sample files', style: { width: '32%' }, cellStyle: wrapCell },
+    { key: 'kind', label: 'Frame type', style: { width: '20%' } },
+    { key: 'count', label: 'Files', style: { width: '12%' } },
+    { key: 'destination', label: 'Destination', style: { width: '44%' }, cellStyle: wrapCell },
+    { key: 'samples', label: 'Samples', style: { width: '24%' }, cellStyle: wrapCell },
   ];
 
   const breakdownRows =
@@ -497,43 +334,38 @@ export function InboxDetail({
     (fileMetadata ?? []).map((f) => {
       const missingAttrs = f.missingPathAttributes ?? [];
       const fileName = basename(f.relativeFilePath);
-      const isInspected = inspectorPaths.has(f.relativeFilePath);
       const needsAttention = f.overrideStale || missingAttrs.length > 0;
       const rowClasses = [
         'alm-inbox-meta-row',
-        isInspected ? 'alm-inbox-meta-row--selected' : '',
-        // #83: state-modifier class replaces the forbidden inline warn-bg style.
         needsAttention ? 'alm-inbox-meta-row--warn' : '',
       ].filter(Boolean).join(' ');
       return {
-      file: (
-        <span
-          title={f.relativeFilePath}
-          className="alm-inbox-detail__file-cell"
-        >
-          {f.relativeFilePath}
-          {missingAttrs.length > 0 && (
-            <span
-              data-testid={`inbox-missing-attr-${fileName}`}
-              title={`Missing required attribute(s): ${missingAttrs.join(', ')}`}
-              className="alm-inbox-detail__missing-attr-badge"
-            >
-              needs {missingAttrs.join(', ')}
-            </span>
-          )}
-        </span>
-      ),
-      type:     fmtOrDash(f.frameTypeEffective),
-      filter:   fmtOrDash(f.filter),
-      exposure: fmtExposure(f.exposureS),
-      binning:  fmtBinning(f.binningX, f.binningY),
-      gain:     fmtOrDash(f.gain),
-      temp:     fmtTemp(f.temperatureC),
-      object:   fmtOrDash(f.object),
-      date:     fmtOrDash(f.dateObs),
-      // Row-level interactivity for the inspector
-      _rowClassName: rowClasses,
-      _onClick: (evt: React.MouseEvent) => handleMetaRowClick(f.relativeFilePath, evt),
+        file: (
+          <span
+            title={f.relativeFilePath}
+            className="alm-inbox-detail__file-cell"
+          >
+            {f.relativeFilePath}
+            {missingAttrs.length > 0 && (
+              <span
+                data-testid={`inbox-missing-attr-${fileName}`}
+                title={`Missing required attribute(s): ${missingAttrs.join(', ')}`}
+                className="alm-inbox-detail__missing-attr-badge"
+              >
+                needs {missingAttrs.join(', ')}
+              </span>
+            )}
+          </span>
+        ),
+        type:     fmtOrDash(f.frameTypeEffective),
+        filter:   fmtOrDash(f.filter),
+        exposure: fmtExposure(f.exposureS),
+        binning:  fmtBinning(f.binningX, f.binningY),
+        gain:     fmtOrDash(f.gain),
+        temp:     fmtTemp(f.temperatureC),
+        object:   fmtOrDash(f.object),
+        date:     fmtOrDash(f.dateObs),
+        _rowClassName: rowClasses,
       };
     });
 
@@ -546,43 +378,20 @@ export function InboxDetail({
 
   // ── Render ────────────────────────────────────────────────────────────────
 
-  // #59 bottom-panel side-by-side: the inspector is lifted into its own RIGHT
-  // column so the wide bottom panel's horizontal room is used and the inspector
-  // is visible without scrolling under the metadata table. Rendered once the
-  // per-file metadata exists (the table that the inspector reflects).
+  // task D: two-column layout when per-file metadata exists.
+  //   LEFT  = breakdown column (compact, fixed width): classification alerts +
+  //           metric line + mixed summary + frame-type breakdown table +
+  //           "Needs review" overrides + missing-attr banner.
+  //   RIGHT = files column (flex 1, independently scrollable): the per-file
+  //           metadata table with its own overflow scroll so a long file list
+  //           scrolls inside the column without growing the panel.
   const hasMetadata = metadataRows.length > 0;
 
-  return (
-    <DetailPane>
-      <DetailHeader
-        title={title}
-        titleExtra={
-          <>
-            <Pill variant={classificationVariant(classType)}>
-              {classType === 'single_type'
-                ? classification?.frameType ?? 'single'
-                : classType}
-            </Pill>
-            {item.lane === 'video' && <Pill variant="ghost">video</Pill>}
-          </>
-        }
-      />
-
-      {/* #59: side-by-side bottom panel — primary detail (classification +
-          breakdown + per-file metadata table) on the LEFT, the file-metadata
-          inspector on the RIGHT. The columns collapse to a single stack when
-          there is no metadata to inspect. */}
-      <div
-        className={
-          hasMetadata
-            ? 'alm-inbox-detail__cols alm-inbox-detail__cols--split'
-            : 'alm-inbox-detail__cols'
-        }
-      >
-        <div className="alm-inbox-detail__main">
-      {/* Mixed folder: an advisory (NOT blocking) alert with an inline action.
-          Confirming a mixed folder is allowed — it generates a split plan, which
-          is exactly what the inline button triggers. */}
+  // Breakdown + classification section — rendered in the LEFT column (or as the
+  // sole column when there is no metadata).
+  const classificationSection = (
+    <>
+      {/* Mixed folder: advisory (NOT blocking) alert with an inline action. */}
       {classType === 'mixed' && (
         <Banner
           variant="warn"
@@ -614,9 +423,7 @@ export function InboxDetail({
         </Banner>
       )}
 
-      {/* Unclassified: BLOCKING alert. No readable frame types means confirm is
-          disabled (in the parent's top bar); the user must assign frame types in
-          the "Needs review" table below first. */}
+      {/* Unclassified: BLOCKING alert. */}
       {classType === 'unclassified' && (
         <Banner
           variant="danger"
@@ -627,7 +434,7 @@ export function InboxDetail({
             <span className="alm-inbox-alert__title">Frame types required</span>
             <span className="alm-inbox-alert__body">
               No IMAGETYP headers could be read, so confirm is disabled. Assign
-              frame types in “Needs review” below, then confirm.
+              frame types in "Needs review" below, then confirm.
             </span>
           </div>
         </Banner>
@@ -806,10 +613,7 @@ export function InboxDetail({
         </Section>
       )}
 
-      {/* FR-032 (US9): BLOCKING alert. Plan generation is blocked while any
-          file lacks a path-load-bearing (required) attribute. Confirm is
-          disabled in the parent's top bar; direct the user to the override
-          flow. Rendered as a danger alert because it blocks the action. */}
+      {/* FR-032 (US9): BLOCKING alert when files lack required path attributes. */}
       {filesMissingAttrs.length > 0 && (
         <Banner
           variant="danger"
@@ -821,38 +625,64 @@ export function InboxDetail({
             <span className="alm-inbox-alert__body">
               {filesMissingAttrs.length} file{filesMissingAttrs.length !== 1 ? 's' : ''} missing
               required attribute(s) for their destination, so confirm is disabled. Assign the
-              missing value(s) in “Needs review” above, then confirm.
+              missing value(s) in "Needs review" above, then confirm.
             </span>
           </div>
         </Banner>
       )}
 
-      {/* FR-010: per-file metadata table. The inspector that reflects the
-          selected row(s) now lives in the RIGHT column (below) — #59. */}
-      {hasMetadata && (
-        <Section title={`File metadata (${metadataRows.length})`}>
-          <div className="alm-inbox-meta-wrap">
-            <div className="alm-inbox-detail__metadata-scroll">
-              <Table columns={metadataColumns} rows={metadataRows} />
-            </div>
-          </div>
-        </Section>
-      )}
-
       {!classification && (
         <EmptyClassification />
       )}
+    </>
+  );
+
+  return (
+    <DetailPane>
+      <DetailHeader
+        title={title}
+        titleExtra={
+          <>
+            <Pill variant={classificationVariant(classType)}>
+              {classType === 'single_type'
+                ? classification?.frameType ?? 'single'
+                : classType}
+            </Pill>
+            {item.lane === 'video' && <Pill variant="ghost">video</Pill>}
+          </>
+        }
+      />
+
+      {/* task D: two-column layout when per-file metadata is present.
+          LEFT  = breakdown column (compact, fixed width): classification
+                  alerts + metric line + mixed summary + frame-type breakdown
+                  table + "Needs review" overrides + missing-attr banner.
+          RIGHT = files column (flex 1, independently scrollable): the per-file
+                  metadata table scrolls within its own column. */}
+      <div
+        className={
+          hasMetadata
+            ? 'alm-inbox-detail__cols alm-inbox-detail__cols--split'
+            : 'alm-inbox-detail__cols'
+        }
+      >
+        {/* LEFT: breakdown + classification */}
+        <div className="alm-inbox-detail__main">
+          {classificationSection}
         </div>
 
-        {/* RIGHT column: file-metadata inspector. Shown alongside the metadata
-            table so it is always visible without scrolling under the table. */}
+        {/* RIGHT: file metadata table, independently scrollable */}
         {hasMetadata && (
-          <aside className="alm-inbox-detail__aside" aria-label="File inspector column">
-            <InboxInspector
-              fileMetadata={fileMetadata ?? []}
-              selectedPaths={inspectorPaths}
-            />
-          </aside>
+          <div
+            className="alm-inbox-detail__aside alm-inbox-detail__files"
+            aria-label="File metadata column"
+          >
+            <Section title={`File metadata (${metadataRows.length})`}>
+              <div className="alm-inbox-detail__files-scroll">
+                <Table columns={metadataColumns} rows={metadataRows} />
+              </div>
+            </Section>
+          </div>
         )}
       </div>
     </DetailPane>

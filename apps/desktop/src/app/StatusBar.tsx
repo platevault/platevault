@@ -1,6 +1,7 @@
 import { clsx } from 'clsx';
 import { useLogPanel } from './LogPanelContext';
 import { useOperationStatus } from './OperationStatusContext';
+import { usePageStatus } from './PageStatusContext';
 import { useStatusSummary } from './useStatusSummary';
 
 function formatBytes(bytes: number): string {
@@ -29,6 +30,7 @@ export function StatusBar() {
   const { toggle } = useLogPanel();
   const { statusLabel } = useOperationStatus();
   const status = useStatusSummary();
+  const pageStatus = usePageStatus();
   const isActive = statusLabel !== 'Idle';
 
   return (
@@ -44,6 +46,15 @@ export function StatusBar() {
           <span className="alm-statusbar__idle">Ready</span>
         )}
       </div>
+
+      {/* PAGE-CONTEXTUAL — shown only when the active page populates the slot
+          (currently: Inbox folder/master count + per-frame-type breakdown).
+          Sits left-of-center and is cleared automatically on route change. */}
+      {pageStatus != null && (
+        <div className="alm-statusbar__page" data-testid="statusbar-page-status">
+          {pageStatus}
+        </div>
+      )}
 
       {/* CENTER — GLOBAL library inventory (stable across routes, task #87).
           Sessions / projects / calibration masters / targets are real totals

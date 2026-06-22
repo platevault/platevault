@@ -36,6 +36,7 @@ import { useCallback, useEffect, useMemo, useState } from 'react';
 import { useNavigate, useSearch } from '@tanstack/react-router';
 import { PageTopBar, FilterToolbar } from '@/components';
 import { Btn } from '@/ui';
+import { useSetPageStatus } from '@/app/PageStatusContext';
 import { useStaleSelectionCleanup } from '@/lib/use-stale-selection';
 import { addToast } from '@/shared/toast';
 import { InboxList } from './InboxList';
@@ -489,19 +490,21 @@ export function InboxPage() {
     return isCapped ? `${base} (first ${listData?.limit ?? 500})` : base;
   }, [listLoading, folderCount, masterCount, isCapped, listData?.limit]);
 
-  // ── Top bar: NO page title (top-bar convention). The summary slot carries the
-  // folder/master count + ONE compact per-frame-type breakdown (the only stats
-  // surface — no separate pinned strip, no list-pane duplicate). The single
-  // search + group/sort/filter live in the FilterToolbar; Confirm + Rescan are
-  // the right-aligned actions. ──
+  // ── Status bar: push the inbox-specific folder/master count + per-frame-type
+  // breakdown into the global status bar's page-contextual slot. The top bar
+  // reverts to filters + actions only (matching all other pages). The slot is
+  // automatically cleared when this page unmounts (route change). ──
+  useSetPageStatus(
+    <span className="alm-inbox-summary" data-testid="statusbar-inbox-summary">
+      <span className="alm-inbox-summary__count">{summary}</span>
+      {!listLoading && <InboxStatsSummary stats={derivedStats} />}
+    </span>,
+  );
+
+  // ── Top bar: NO page title, NO summary (top-bar convention matches other pages).
+  // Search + group/sort/filter in FilterToolbar; Confirm + Rescan on the right. ──
   const topBar = (
     <PageTopBar
-      summary={
-        <span className="alm-inbox-summary">
-          <span className="alm-inbox-summary__count">{summary}</span>
-          {!listLoading && <InboxStatsSummary stats={derivedStats} />}
-        </span>
-      }
       filters={
         <FilterToolbar
           search={{

@@ -7604,6 +7604,22 @@
   min-width: 0;
 }
 
+/* === statusbar page-contextual slot (task B — inbox metrics in status bar) ===
+ * Shown left-of-center when the active page populates PageStatusContext.
+ * Inbox uses it for folder/master count + per-frame-type breakdown chips.
+ * Inherits the same muted secondary style as the global lib totals. */
+.alm-statusbar__page {
+  display: flex;
+  align-items: center;
+  gap: var(--alm-sp-2);
+  color: var(--alm-text-secondary);
+  white-space: nowrap;
+  overflow: hidden;
+  min-width: 0;
+  padding-right: var(--alm-sp-3);
+  border-right: 1px solid var(--alm-border-subtle);
+}
+
 /* === merged from .cssblocks/inbox-redesign.css (refine wave 2, spec-043) === */
 /* ============================================================================
  * Inbox redesign (spec 043 #83 / #75 / #76 / #61 / #31)
@@ -8064,6 +8080,9 @@
 .alm-inbox-side--plan .alm-inbox-side__body {
   display: flex;
   flex-direction: column;
+  /* Reserve gutter space so a scrollbar appearing on group-expand never
+   * narrows the content width and shifts right-aligned items (Discard btn). */
+  scrollbar-gutter: stable;
 }
 
 /* The side-panel plan header mirrors the old plandock head (title + count
@@ -8812,4 +8831,180 @@
 .alm-targets-page .alm-targets-table__wrap {
   position: absolute;
   inset: 0;
+}
+
+/* === targets-table: fixed layout, narrow columns, Opposition (103a task C) ===
+ *
+ * 1. table-layout: fixed — column widths are stable across windowed pages.
+ *    Without this, `table-layout: auto` recomputes widths per rendered slice
+ *    as pill text varies ("galaxy" vs "open cluster"), causing the column-shift
+ *    bug visible while scrolling. The <colgroup> in TargetsTable.tsx pins each
+ *    column; Designation gets no explicit width so it takes all remaining space.
+ *
+ * 2. Narrow fixed columns — TYPE, MAX ALT, VISIBLE, OPPOSITION, SESSIONS are
+ *    reduced so DESIGNATION gets the most room. Token-only (no raw px on
+ *    spacing/color; column widths in ch/px are layout geometry, not spacing
+ *    tokens, so raw px is acceptable here per the inline-style exception pattern
+ *    already used for virtualizer spacers).
+ *
+ * 3. Opposition column — placeholder for the next midnight-transit peak date.
+ *    Backed on backend ephemeris (#58); renders '—' until that lands.
+ * ========================================================================= */
+
+/* Switch to fixed layout so <colgroup> widths are authoritative. */
+.alm-targets-table {
+  table-layout: fixed;
+  width: 100%;
+}
+
+/* Designation: auto (fills all remaining width after fixed cols are subtracted). */
+.alm-targets-col--designation { width: auto; }
+
+/* Type pill: "open cluster" is the longest label at ~10ch; header is "Type". */
+.alm-targets-col--type { width: 96px; }
+
+/* Max alt: "Max alt" header + "90°" value — short numeric. */
+.alm-targets-col--maxalt { width: 64px; }
+
+/* Sparkline: fixed narrow column (SVG is 64px wide, cell adds padding). */
+.alm-targets-col--spark { width: 76px; }
+
+/* Visible: "●tonight" / "○low" indicator. */
+.alm-targets-col--visible { width: 72px; }
+
+/* Opposition: date stub "—" for now; leave room for "Jan 2026" once live. */
+.alm-targets-col--opposition { width: 88px; }
+
+/* Sessions: numeric stub "—". */
+.alm-targets-col--sessions { width: 72px; }
+
+/* Opposition cell: right-aligned tabular numeric (mirrors max-alt style). */
+.alm-targets-cell--opposition {
+  font-variant-numeric: tabular-nums;
+  text-align: right;
+  color: var(--alm-text-muted);
+}
+
+/* === spec 044: Lunar dist, Filters, Imaging time columns + filter badges === */
+
+/* Column widths (task 044) — fixed layout prevents per-page shift. */
+.alm-targets-col--lunardist { width: 68px; }
+.alm-targets-col--filters   { width: 124px; }
+.alm-targets-col--imagingtime { width: 80px; }
+
+/* Lunar dist cell: tabular numeric, muted (mock value). */
+.alm-targets-cell--lunardist {
+  font-variant-numeric: tabular-nums;
+  color: var(--alm-text-muted);
+}
+
+/* Filters cell: allow wrapping so badges don't overflow narrow column. */
+.alm-targets-cell--filters {
+  white-space: normal;
+}
+
+/* Filter badge strip: inline row of small pill badges. */
+.alm-filter-badges {
+  display: inline-flex;
+  flex-wrap: wrap;
+  gap: var(--alm-space-1);
+  align-items: center;
+}
+
+/* Individual filter badge — shared base. */
+.alm-filter-badge {
+  display: inline-block;
+  padding: 0 var(--alm-space-1);
+  border-radius: var(--alm-radius-sm);
+  font-size: var(--alm-text-xs);
+  font-weight: var(--alm-font-medium);
+  line-height: var(--alm-leading-tight);
+  letter-spacing: 0.03em;
+  border: 1px solid transparent;
+  white-space: nowrap;
+}
+
+/* Broadband (LRGB): subtle warm tint. */
+.alm-filter-badge--broadband {
+  background: color-mix(in srgb, var(--alm-accent) 12%, transparent);
+  color: var(--alm-accent);
+  border-color: color-mix(in srgb, var(--alm-accent) 30%, transparent);
+}
+
+/* Narrowband (Ha/OIII/SII): subtle cool tint. */
+.alm-filter-badge--narrowband {
+  background: color-mix(in srgb, var(--alm-accent-alt, var(--alm-text-muted)) 12%, transparent);
+  color: var(--alm-text-secondary, var(--alm-text-muted));
+  border-color: color-mix(in srgb, var(--alm-text-muted) 30%, transparent);
+}
+
+/* Settings pane: narrow number input + unit label. */
+.alm-settings__num-input {
+  width: 72px;
+  text-align: right;
+}
+
+.alm-settings__unit-label {
+  margin-left: var(--alm-space-2);
+  color: var(--alm-text-muted);
+  font-size: var(--alm-text-sm);
+}
+
+/* === merged from .cssblocks/inbox-detail.css (task D — inbox detail restructure) === */
+/* === inbox-detail.css — task D: breakdown-left / files-right layout =========
+ *
+ * Overrides the old inspector-column rules (which will be pruned from
+ * components.css at merge). The old .alm-inbox-detail__aside was the
+ * inspector column; it is now the scrollable files column.
+ *
+ * Token-only (--alm-* spacing/surface/border/radius/text). No raw hex/rgb/ms.
+ * No #NNN in comments (hex-color check). Appended to components.css on merge.
+ * ============================================================================ */
+
+/* ── Two-column split: breakdown LEFT + files RIGHT ─────────────────────────
+ *
+ * .alm-inbox-detail__cols           — default: single column (no metadata)
+ * .alm-inbox-detail__cols--split    — two-column row when metadata exists
+ * .alm-inbox-detail__main           — LEFT: breakdown, compact fixed width
+ * .alm-inbox-detail__aside          — RIGHT (was inspector, now files column)
+ * .alm-inbox-detail__files          — modifier; marks the files variant
+ * .alm-inbox-detail__files-scroll   — inner scroll container for the table
+ */
+
+/* Override the old inspector-width fixed column. The files column is wider
+ * (flex 1) because the metadata table has more columns than the inspector KV
+ * grid. The breakdown column takes a compact fixed share. */
+.alm-inbox-detail__cols--split .alm-inbox-detail__aside {
+  /* task D: files column flexes to fill remaining width */
+  flex: 1 1 auto;
+  width: auto;
+  min-width: 0;
+  /* Not sticky — the files list scrolls independently, not the column itself */
+  position: static;
+  align-self: stretch;
+}
+
+/* The breakdown LEFT column is now the compact fixed-width side. */
+.alm-inbox-detail__cols--split .alm-inbox-detail__main {
+  flex: 0 0 var(--alm-inbox-breakdown-width, 340px);
+  min-width: 0;
+}
+
+/* Separator between breakdown and files columns */
+.alm-inbox-detail__files {
+  border-left: 1px solid var(--alm-border-subtle);
+  padding-left: var(--alm-sp-3);
+}
+
+/* The files scroll container: caps height so a long list scrolls within the
+ * column rather than growing the panel. Uses the bottom-dock cap (~40vh) as
+ * the reference; the inner scroll lets all files be reached without resizing
+ * the panel. overflow-x: auto handles wide tables gracefully. */
+.alm-inbox-detail__files-scroll {
+  overflow-y: auto;
+  overflow-x: auto;
+  /* Reserve gutter so a scrollbar never narrows the table and shifts columns */
+  scrollbar-gutter: stable;
+  max-height: 32vh;
+  min-height: 0;
 }

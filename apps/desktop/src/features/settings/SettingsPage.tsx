@@ -9,6 +9,7 @@ import { NamingStructure } from './NamingStructure';
 import { ProcessingTools } from './ProcessingTools';
 import { CalibrationMatching } from './CalibrationMatching';
 import { ResolverSettings } from './ResolverSettings';
+import { PlannerSettings } from './PlannerSettings';
 import { Cleanup } from './Cleanup';
 import { General } from './General';
 import { Advanced } from './Advanced';
@@ -22,6 +23,7 @@ const PANES = [
   { id: 'tools', label: 'Processing Tools' },
   { id: 'cal', label: 'Calibration Matching' },
   { id: 'catalogs', label: 'Target Resolution' },
+  { id: 'planner', label: 'Target Planner' },
   { id: 'cleanup', label: 'Cleanup' },
   { id: 'general', label: 'Appearance' },
   { id: 'advanced', label: 'Advanced' },
@@ -32,7 +34,7 @@ type PaneId = (typeof PANES)[number]['id'];
 
 // Grouped sub-nav (Library / Processing / Application).
 const NAV_GROUPS: { label: string; panes: PaneId[] }[] = [
-  { label: 'Library', panes: ['sources', 'equipment', 'ingestion', 'naming', 'catalogs'] },
+  { label: 'Library', panes: ['sources', 'equipment', 'ingestion', 'naming', 'catalogs', 'planner'] },
   { label: 'Processing', panes: ['tools', 'cal', 'cleanup'] },
   { label: 'Application', panes: ['general', 'advanced', 'audit'] },
 ];
@@ -66,6 +68,10 @@ const PANE_META: Record<PaneId, { title: string; desc: string }> = {
     title: 'Target Resolution',
     desc: 'How object names in your files are resolved to canonical targets — online SIMBAD resolution plus the bundled seed and local cache.',
   },
+  planner: {
+    title: 'Target Planner',
+    desc: 'Observation planning preferences — altitude threshold and filter visibility settings for the Planner table.',
+  },
   cleanup: {
     title: 'Cleanup',
     desc: 'Default actions for each data type when a cleanup plan is generated after processing.',
@@ -96,6 +102,7 @@ function renderPane(
     case 'tools':     return <ProcessingTools />;
     case 'cal':       return <CalibrationMatching save={save} />;
     case 'catalogs':  return <ResolverSettings save={save} />;
+    case 'planner':   return <PlannerSettings />;
     case 'cleanup':   return <Cleanup save={save} />;
     case 'general':   return <General />;
     case 'advanced':  return <Advanced save={save} />;

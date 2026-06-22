@@ -1,13 +1,13 @@
 /**
  * TargetsTable — spec 043 shared list-page adoption (task #73), refined #82,
- * VIRTUALIZED + planning columns (#84/#85).
+ * VIRTUALIZED + planning columns (#84/#85), spec 044 mock columns.
  *
  * A DENSE, FULL-WIDTH sortable table (shared `Table` look) that is the primary
  * content of the Targets page's `ListPageLayout`; TargetDetailV2 lives in the
  * detail pane.
  *
- * Columns: Designation · Type · Max altitude · (sparkline) · Visible tonight ·
- * Sessions.
+ * Columns (spec 044): Designation · Type · Max alt · (sparkline) · Visible
+ * tonight · Opposition · Lunar dist · Filters · Imaging time · Sessions.
  *
  * Task #84 — VIRTUALIZATION (padding-spacer pattern):
  *   The Planner catalogue is large; rendering every row synchronously blocks the
@@ -39,9 +39,16 @@
  *   The low-value Constellation/Magnitude columns are replaced with
  *   planning-relevant ones driven by the STUB altitude model (planner-altitude.ts):
  *   max altitude tonight, a tiny inline opposition/altitude SPARKLINE per row, and
- *   a visible-tonight indicator. // STUB — real values arrive with ephemeris +
+ *   a visible-tonight indicator. STUB — real values arrive with ephemeris +
  *   observer location (#58); the list endpoint has no coordinates (#57), so these
  *   are derived deterministically from the designation, not from the sky.
+ *
+ * Spec 044 mock columns (NOT astronomy, per spec 044 §3):
+ *   - Lunar dist: mock 0–180° separation from Moon, keyed off designation hash.
+ *   - Filters: simple bracketing (bright+close → NB only; else broadband+NB).
+ *   - Imaging time: hours above the user-configured altitude threshold tonight.
+ *   - Opposition: date stub (renders '—' until backend ephemeris #58 lands).
+ *   All are SORTABLE; the usable-altitude threshold is configurable via Settings.
  *
  * Task #82:
  *   Row density follows the GLOBAL density setting (`density-*` on <html>).
@@ -60,11 +67,30 @@ import { Pill } from '@/ui';
 import { catalogueOf, catalogueLabel } from './planner-catalog';
 import { rowAltitudeFor, USABLE_ALT_DEG, type RowAltitude } from './planner-altitude';
 import { AltitudeSparkline } from './AltitudeSparkline';
+import { FilterBadges } from './FilterBadges';
 
 // ── Sort model ────────────────────────────────────────────────────────────────
 
-/** Columns the table can sort by. Only fields present on TargetListItem. */
-export type TargetSortCol = 'designation' | 'type';
+/**
+ * Columns the table can sort by.
+ *
+ * Spec 044 additions (mock values, sortable):
+ *   - maxAlt: sorts by peak altitude tonight (deterministic mock)
+ *   - visible: sorts by visibleTonight flag then hoursAboveUsable
+ *   - opposition: stub — all values '—'; sort is a no-op (order preserved)
+ *   - lunarDist: sorts by mock lunar distance
+ *   - imagingTime: sorts by hoursAboveUsable
+ *   - sessions: stub — all values 0; sort is a no-op
+ */
+export type TargetSortCol =
+  | 'designation'
+  | 'type'
+  | 'maxAlt'
+  | 'visible'
+  | 'opposition'
+  | 'lunarDist'
+  | 'imagingTime'
+  | 'sessions';
 export type SortDir = 'asc' | 'desc';
 
 export interface TargetSort {
@@ -98,7 +124,18 @@ function compareStr(a: string, b: string): number {
   return a.localeCompare(b);
 }
 
-function compareTargets(a: TargetListItem, b: TargetListItem, sort: TargetSort): number {
+/**
+ * Compare two target+altitude pairs for sorting. Altitude-derived columns
+ * require the pre-computed `RowAltitude` values (which encode the user's
+ * threshold), so the comparator receives them alongside the list items.
+ */
+function compareTargetRows(
+  a: TargetListItem,
+  altA: RowAltitude,
+  b: TargetListItem,
+  altB: RowAltitude,
+  sort: TargetSort,
+): number {
   let cmp = 0;
   switch (sort.col) {
     case 'designation':
@@ -107,39 +144,76 @@ function compareTargets(a: TargetListItem, b: TargetListItem, sort: TargetSort):
     case 'type':
       cmp = compareStr(a.objectType, b.objectType);
       break;
+    case 'maxAlt':
+      cmp = altA.maxAltDeg - altB.maxAltDeg;
+      break;
+    case 'visible':
+      // Primary: visible flag (true > false). Secondary: hours above threshold.
+      cmp =
+        Number(altA.visibleTonight) - Number(altB.visibleTonight) ||
+        altA.hoursAboveUsable - altB.hoursAboveUsable;
+      break;
+    case 'opposition':
+      // All values are '—' until backend ephemeris lands; preserve input order.
+      cmp = 0;
+      break;
+    case 'lunarDist':
+      cmp = altA.lunarDistanceDeg - altB.lunarDistanceDeg;
+      break;
+    case 'imagingTime':
+      cmp = altA.hoursAboveUsable - altB.hoursAboveUsable;
+      break;
+    case 'sessions':
+      // All values are 0 until backend #57 lands; preserve input order.
+      cmp = 0;
+      break;
   }
   return sort.dir === 'asc' ? cmp : -cmp;
 }
 
 interface TargetGroup {
   label: string;
-  targets: TargetListItem[];
+  /** Each entry holds the item and its pre-computed altitude row. */
+  rows: Array<{ target: TargetListItem; alt: RowAltitude }>;
 }
 
 /**
- * Group targets by the selected key, sort targets within each group, then order
- * the groups by their first (sorted) row — mirroring SessionsTable.
+ * Group targets by the selected key, compute altitude for each, sort within
+ * groups, then order groups by their first (sorted) row.
  */
 function groupTargets(
   targets: TargetListItem[],
   sort: TargetSort,
   groupBy: TargetGroupBy,
+  usableAltDeg: number,
 ): TargetGroup[] {
-  const byKey = new Map<string, TargetListItem[]>();
+  const byKey = new Map<string, Array<{ target: TargetListItem; alt: RowAltitude }>>();
   for (const t of targets) {
     const key = groupHeadlineOf(t, groupBy);
+    const alt = rowAltitudeFor(t, usableAltDeg);
     const bucket = byKey.get(key);
-    if (bucket) bucket.push(t);
-    else byKey.set(key, [t]);
+    if (bucket) bucket.push({ target: t, alt });
+    else byKey.set(key, [{ target: t, alt }]);
   }
 
   const groups: TargetGroup[] = [];
-  for (const [label, list] of byKey) {
-    groups.push({ label, targets: [...list].sort((a, b) => compareTargets(a, b, sort)) });
+  for (const [label, rows] of byKey) {
+    groups.push({
+      label,
+      rows: [...rows].sort((ra, rb) =>
+        compareTargetRows(ra.target, ra.alt, rb.target, rb.alt, sort),
+      ),
+    });
   }
 
   groups.sort((ga, gb) => {
-    const cmp = compareTargets(ga.targets[0], gb.targets[0], sort);
+    const cmp = compareTargetRows(
+      ga.rows[0].target,
+      ga.rows[0].alt,
+      gb.rows[0].target,
+      gb.rows[0].alt,
+      sort,
+    );
     return cmp !== 0 ? cmp : compareStr(ga.label, gb.label);
   });
   return groups;
@@ -162,33 +236,42 @@ function flattenGroups(groups: TargetGroup[]): FlatRow[] {
       kind: 'group',
       key: `g:${group.label}`,
       label: group.label,
-      count: group.targets.length,
+      count: group.rows.length,
     });
-    for (const t of group.targets) {
-      rows.push({ kind: 'target', key: t.id, target: t, alt: rowAltitudeFor(t) });
+    for (const { target, alt } of group.rows) {
+      rows.push({ kind: 'target', key: target.id, target, alt });
     }
   }
   return rows;
 }
 
-// ── Column model (#85) ──────────────────────────────────────────────────────────
+// ── Column model (#85 + spec 044) ──────────────────────────────────────────────
 //
 // Designation + Type + Sessions are kept. Constellation/Magnitude are replaced
-// by the planning columns: Max altitude, an altitude sparkline (no header text),
-// and a Visible-tonight indicator. Sessions remains a backend-absent STUB (#57).
+// by planning columns. Spec 044 adds Lunar dist, Filters possible, Imaging time.
+//
+// Opposition: the next midnight-transit peak date. planner-altitude.ts has no
+// date; blocked on backend ephemeris (#58). Renders '—' until that lands.
+// Sessions: linked-session count not on TargetListItem yet (#57). Renders '—'.
+// All non-text columns are sortable on their mock value.
 
 const COLUMNS: Array<{
   key: string;
   label: string;
   sort?: TargetSortCol;
   className?: string;
+  title?: string;
 }> = [
   { key: 'designation', label: 'Designation', sort: 'designation' },
   { key: 'type', label: 'Type', sort: 'type' },
-  { key: 'maxAlt', label: 'Max alt', className: 'alm-targets-cell--num' },
+  { key: 'maxAlt', label: 'Max alt', sort: 'maxAlt', className: 'alm-targets-cell--num', title: 'Peak altitude tonight (MOCK — pending ephemeris)' },
   { key: 'spark', label: 'Tonight', className: 'alm-targets-cell--spark' },
-  { key: 'visible', label: 'Visible', className: 'alm-targets-cell--center' },
-  { key: 'sessions', label: 'Sessions', className: 'alm-targets-cell--num' },
+  { key: 'visible', label: 'Visible', sort: 'visible', className: 'alm-targets-cell--center', title: 'Visible tonight above usable altitude threshold' },
+  { key: 'opposition', label: 'Opposition', sort: 'opposition', className: 'alm-targets-cell--opposition', title: 'Next opposition date (pending ephemeris)' },
+  { key: 'lunarDist', label: 'Lunar dist', sort: 'lunarDist', className: 'alm-targets-cell--num', title: 'Angular separation from Moon tonight (MOCK — not astronomy)' },
+  { key: 'filters', label: 'Filters', className: 'alm-targets-cell--filters', title: 'Recommended filter set given mock Moon conditions (MOCK)' },
+  { key: 'imagingTime', label: 'Imaging time', sort: 'imagingTime', className: 'alm-targets-cell--num', title: 'Hours above usable altitude tonight (MOCK — pending ephemeris)' },
+  { key: 'sessions', label: 'Sessions', sort: 'sessions', className: 'alm-targets-cell--num', title: 'Linked sessions (pending backend #57)' },
 ];
 
 const COL_COUNT = COLUMNS.length;
@@ -209,6 +292,12 @@ interface Props {
   groupBy?: TargetGroupBy;
   /** Message shown when the list is empty (tab-specific). */
   emptyMessage?: string;
+  /**
+   * User-configured usable-altitude threshold in degrees (default USABLE_ALT_DEG).
+   * Drives hoursAboveUsable, visibleTonight, and the Imaging time column.
+   * Pass `useAltitudeThreshold()` from the host page.
+   */
+  usableAltDeg?: number;
 }
 
 export function TargetsTable({
@@ -220,16 +309,18 @@ export function TargetsTable({
   onSort,
   groupBy = DEFAULT_TARGET_GROUP_BY,
   emptyMessage = 'No targets match the current filters.',
+  usableAltDeg = USABLE_ALT_DEG,
 }: Props) {
   const scrollRef = useRef<HTMLDivElement>(null);
 
-  // Grouping + sorting + per-row altitude STUB are all derived here so a filter
+  // Grouping + sorting + per-row altitude MOCK are all derived here so a filter
   // or sort change does one O(n) pass off the render hot path, not per-row work
-  // inside the virtualized render loop.
+  // inside the virtualized render loop. usableAltDeg is included in the dep
+  // array so that changing the altitude threshold re-derives all rows.
   const flatRows = useMemo(() => {
-    const groups = groupTargets(targets, sort, groupBy);
+    const groups = groupTargets(targets, sort, groupBy, usableAltDeg);
     return flattenGroups(groups);
-  }, [targets, sort, groupBy]);
+  }, [targets, sort, groupBy, usableAltDeg]);
 
   const virtualizer = useVirtualizer({
     count: flatRows.length,
@@ -265,6 +356,7 @@ export function TargetsTable({
   const columns = COLUMNS.map((c) => ({
     key: c.key,
     className: c.className,
+    title: c.title,
     header: c.sort ? (
       <button
         type="button"
@@ -273,6 +365,7 @@ export function TargetsTable({
         }
         onClick={() => onSort(c.sort as TargetSortCol)}
         aria-label={`Sort by ${c.label}`}
+        title={c.title}
       >
         {c.label}
         {sort.col === c.sort && (
@@ -296,10 +389,27 @@ export function TargetsTable({
     <div className="alm-targets-table__wrap">
       <div ref={scrollRef} className="alm-targets-table__scroll">
         <table className="alm-table alm-targets-table">
+          {/* Fixed-layout colgroup: column widths are pinned so the table
+              does NOT recompute widths per windowed page as pill text varies
+              (e.g. "galaxy" vs "open cluster" would shift all columns).
+              Designation is auto (fills remaining width); fixed widths on
+              the right prevent the per-page column-shift bug. */}
+          <colgroup>
+            <col className="alm-targets-col--designation" />
+            <col className="alm-targets-col--type" />
+            <col className="alm-targets-col--maxalt" />
+            <col className="alm-targets-col--spark" />
+            <col className="alm-targets-col--visible" />
+            <col className="alm-targets-col--opposition" />
+            <col className="alm-targets-col--lunardist" />
+            <col className="alm-targets-col--filters" />
+            <col className="alm-targets-col--imagingtime" />
+            <col className="alm-targets-col--sessions" />
+          </colgroup>
           <thead>
             <tr>
               {columns.map((c) => (
-                <th key={c.key} className={c.className}>
+                <th key={c.key} className={c.className} title={c.title}>
                   {c.header}
                 </th>
               ))}
@@ -371,25 +481,52 @@ export function TargetsTable({
                   <td className="alm-targets-cell--spark">
                     <AltitudeSparkline alt={alt} label={`Altitude tonight for ${t.effectiveLabel}`} />
                   </td>
-                  {/* STUB (#58): visible-tonight indicator (peaks above usable alt). */}
+                  {/* MOCK (#58): visible-tonight indicator (peaks above usable alt). */}
                   <td className="alm-targets-cell--center">
                     {alt.visibleTonight ? (
                       <span
                         className="alm-targets-vis alm-targets-vis--yes"
-                        title={`Reaches ${Math.round(alt.maxAltDeg)}° · ~${alt.hoursAboveUsable.toFixed(1)} h above ${USABLE_ALT_DEG}° (STUB)`}
+                        title={`Reaches ${Math.round(alt.maxAltDeg)}° · ~${alt.hoursAboveUsable.toFixed(1)} h above ${usableAltDeg}° (MOCK)`}
                       >
                         ●<span className="alm-targets-vis__label">tonight</span>
                       </span>
                     ) : (
                       <span
                         className="alm-targets-vis alm-targets-vis--no"
-                        title={`Peaks at ${Math.round(alt.maxAltDeg)}° — below usable altitude tonight (STUB)`}
+                        title={`Peaks at ${Math.round(alt.maxAltDeg)}° — below ${usableAltDeg}° tonight (MOCK)`}
                       >
                         ○<span className="alm-targets-vis__label">low</span>
                       </span>
                     )}
                   </td>
-                  {/* STUB (#57): linked-session count not on TargetListItem yet. */}
+                  {/* MOCK (#58): opposition date — next midnight-transit peak.
+                      planner-altitude.ts hash model has no date; blocked on
+                      backend ephemeris (#58). Renders '—' until that lands. */}
+                  <td className="alm-targets-cell--opposition">
+                    <span className="alm-targets-cell--muted" title="Opposition date pending ephemeris (#58)">—</span>
+                  </td>
+                  {/* MOCK (spec 044): lunar angular separation. NOT astronomy. */}
+                  <td className="alm-targets-cell--num">
+                    <span
+                      className="alm-targets-cell--lunardist"
+                      title={`Mock lunar distance: ${Math.round(alt.lunarDistanceDeg)}° (NOT astronomy — spec 044 §3)`}
+                    >
+                      {Math.round(alt.lunarDistanceDeg)}°
+                    </span>
+                  </td>
+                  {/* MOCK (spec 044): filter recommendation from moon phase + separation. */}
+                  <td className="alm-targets-cell--filters">
+                    <FilterBadges recommendation={alt.filters} />
+                  </td>
+                  {/* MOCK (spec 044): hours above the usable-altitude threshold. */}
+                  <td className="alm-targets-cell--num">
+                    <span
+                      title={`~${alt.hoursAboveUsable.toFixed(1)} h above ${usableAltDeg}° tonight (MOCK)`}
+                    >
+                      {alt.hoursAboveUsable > 0 ? `${alt.hoursAboveUsable.toFixed(1)} h` : '—'}
+                    </span>
+                  </td>
+                  {/* MOCK (#57): linked-session count not on TargetListItem yet. */}
                   <td className="alm-targets-cell--num">
                     <span className="alm-targets-cell--muted">—</span>
                   </td>

@@ -379,105 +379,10 @@ describe('InboxDetail — task #34: mixed-folder alert with inline action', () =
   });
 });
 
-// ── Inspector dock ────────────────────────────────────────────────────────────
+// ── task D: breakdown-left / files-right two-column layout ───────────────────
 
-describe('InboxDetail — inspector dock', () => {
-  it('renders the inspector with empty-state hint when no row is selected', () => {
-    render(
-      <InboxDetail
-        item={sampleItem as unknown as Parameters<typeof InboxDetail>[0]['item']}
-        rootAbsolutePath="/astro/inbox"
-        classification={singleTypeClassification as unknown as Parameters<typeof InboxDetail>[0]['classification']}
-        fileMetadata={fileMetadataFixture}
-      />
-    );
-    const inspector = screen.getByLabelText('File inspector');
-    expect(inspector).toBeInTheDocument();
-    expect(inspector).toHaveTextContent('Select a file to inspect');
-  });
-
-  it('shows single-file detail after clicking a metadata row', () => {
-    render(
-      <InboxDetail
-        item={sampleItem as unknown as Parameters<typeof InboxDetail>[0]['item']}
-        rootAbsolutePath="/astro/inbox"
-        classification={singleTypeClassification as unknown as Parameters<typeof InboxDetail>[0]['classification']}
-        fileMetadata={fileMetadataFixture}
-      />
-    );
-
-    // Click the row containing 'light_0001.fits' (title attribute on the span)
-    const fileCell = screen.getByTitle('light_0001.fits');
-    fireEvent.click(fileCell);
-
-    const inspector = screen.getByLabelText('File inspector');
-    // Filename heading appears in inspector header
-    expect(inspector).toHaveTextContent('light_0001.fits');
-    // Fields from the fixture: camera=ASI2600MM, filter=Ha, object=NGC7000
-    expect(inspector).toHaveTextContent('ASI2600MM');
-    expect(inspector).toHaveTextContent('Ha');
-    expect(inspector).toHaveTextContent('NGC7000');
-    // Exposure 300 s
-    expect(inspector).toHaveTextContent('300 s');
-  });
-
-  it('deselects a row when clicked again (single click on already-selected row)', () => {
-    render(
-      <InboxDetail
-        item={sampleItem as unknown as Parameters<typeof InboxDetail>[0]['item']}
-        rootAbsolutePath="/astro/inbox"
-        classification={singleTypeClassification as unknown as Parameters<typeof InboxDetail>[0]['classification']}
-        fileMetadata={fileMetadataFixture}
-      />
-    );
-
-    const fileCell = screen.getByTitle('light_0001.fits');
-    fireEvent.click(fileCell);
-    // Now selected — inspector shows the filename
-    expect(screen.getByLabelText('File inspector')).toHaveTextContent('light_0001.fits');
-
-    // Click again to deselect
-    fireEvent.click(fileCell);
-    expect(screen.getByLabelText('File inspector')).toHaveTextContent('Select a file to inspect');
-  });
-
-  it('shows multi-select summary when two rows are ctrl-clicked', () => {
-    render(
-      <InboxDetail
-        item={sampleItem as unknown as Parameters<typeof InboxDetail>[0]['item']}
-        rootAbsolutePath="/astro/inbox"
-        classification={singleTypeClassification as unknown as Parameters<typeof InboxDetail>[0]['classification']}
-        fileMetadata={fileMetadataFixture}
-      />
-    );
-
-    const cell1 = screen.getByTitle('light_0001.fits');
-    const cell2 = screen.getByTitle('calib_dark_0001.fits');
-
-    fireEvent.click(cell1);
-    // Ctrl+click second row
-    fireEvent.click(cell2, { ctrlKey: true });
-
-    const inspector = screen.getByLabelText('File inspector');
-    expect(inspector).toHaveTextContent('2 files selected');
-    // Multi-select footer note
-    expect(inspector).toHaveTextContent('Multi-select');
-  });
-
-  it('does not render the inspector when fileMetadata is absent', () => {
-    render(
-      <InboxDetail
-        item={sampleItem as unknown as Parameters<typeof InboxDetail>[0]['item']}
-        rootAbsolutePath="/astro/inbox"
-        classification={singleTypeClassification as unknown as Parameters<typeof InboxDetail>[0]['classification']}
-      />
-    );
-    expect(screen.queryByLabelText('File inspector')).not.toBeInTheDocument();
-  });
-
-  // ── #59: side-by-side bottom panel — inspector in the RIGHT column ──────────
-
-  it('lays the inspector in the RIGHT column (split layout) when metadata exists', () => {
+describe('InboxDetail — task D: breakdown-left / files-right layout', () => {
+  it('uses the split layout and places breakdown LEFT and file metadata RIGHT when metadata exists', () => {
     const { container } = render(
       <InboxDetail
         item={sampleItem as unknown as Parameters<typeof InboxDetail>[0]['item']}
@@ -486,20 +391,24 @@ describe('InboxDetail — inspector dock', () => {
         fileMetadata={fileMetadataFixture}
       />
     );
-    // The detail body is laid out as split columns…
+    // Split modifier applied
     const cols = container.querySelector('.alm-inbox-detail__cols--split');
     expect(cols).not.toBeNull();
-    // …and the inspector lives in the RIGHT aside column, NOT under the
-    // metadata table (which stays in the left __main column).
+
+    // LEFT column contains the breakdown section
+    const main = container.querySelector('.alm-inbox-detail__main');
+    expect(main).not.toBeNull();
+    expect(main?.textContent).toContain('Frame type breakdown');
+
+    // RIGHT column is the files column with the metadata table
     const aside = container.querySelector('.alm-inbox-detail__aside');
     expect(aside).not.toBeNull();
-    expect(aside).toContainElement(screen.getByLabelText('File inspector'));
-    // The metadata table's wrap no longer contains the inspector.
-    const metaWrap = container.querySelector('.alm-inbox-meta-wrap');
-    expect(metaWrap?.querySelector('.alm-inbox-inspector')).toBeNull();
+    expect(aside).toHaveAttribute('aria-label', 'File metadata column');
+    expect(aside?.textContent).toContain('File metadata (2)');
+    expect(aside?.textContent).toContain('File');
   });
 
-  it('does not use the split layout when there is no metadata to inspect', () => {
+  it('does not use the split layout when fileMetadata is absent', () => {
     const { container } = render(
       <InboxDetail
         item={sampleItem as unknown as Parameters<typeof InboxDetail>[0]['item']}
@@ -509,5 +418,33 @@ describe('InboxDetail — inspector dock', () => {
     );
     expect(container.querySelector('.alm-inbox-detail__cols--split')).toBeNull();
     expect(container.querySelector('.alm-inbox-detail__aside')).toBeNull();
+  });
+
+  it('does not render the inspector (removed in task D)', () => {
+    render(
+      <InboxDetail
+        item={sampleItem as unknown as Parameters<typeof InboxDetail>[0]['item']}
+        rootAbsolutePath="/astro/inbox"
+        classification={singleTypeClassification as unknown as Parameters<typeof InboxDetail>[0]['classification']}
+        fileMetadata={fileMetadataFixture}
+      />
+    );
+    // InboxInspector is gone — the aria-label it used must not appear
+    expect(screen.queryByLabelText('File inspector')).not.toBeInTheDocument();
+  });
+
+  it('files column contains an independent scroll container', () => {
+    const { container } = render(
+      <InboxDetail
+        item={sampleItem as unknown as Parameters<typeof InboxDetail>[0]['item']}
+        rootAbsolutePath="/astro/inbox"
+        classification={singleTypeClassification as unknown as Parameters<typeof InboxDetail>[0]['classification']}
+        fileMetadata={fileMetadataFixture}
+      />
+    );
+    const scroll = container.querySelector('.alm-inbox-detail__files-scroll');
+    expect(scroll).not.toBeNull();
+    // Table is inside the scroll container
+    expect(scroll?.querySelector('table')).not.toBeNull();
   });
 });

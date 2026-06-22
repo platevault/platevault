@@ -13,6 +13,7 @@ import { LogPanel } from './LogPanel';
 import { CommandPalette } from './CommandPalette';
 import { LogPanelProvider, useLogPanel } from './LogPanelContext';
 import { OperationStatusProvider } from './OperationStatusContext';
+import { PageStatusProvider } from './PageStatusContext';
 import { ToastContainer } from '@/ui/ToastContainer';
 import { GuidedOverlay } from '@/features/guided/GuidedOverlay';
 import { useGuidedFlow } from '@/features/guided/useGuidedFlow';
@@ -64,9 +65,11 @@ function ShellInner() {
 export function Shell() {
   return (
     <OperationStatusProvider>
-      <LogPanelProvider>
-        <ShellInner />
-      </LogPanelProvider>
+      <PageStatusProvider>
+        <LogPanelProvider>
+          <ShellInner />
+        </LogPanelProvider>
+      </PageStatusProvider>
     </OperationStatusProvider>
   );
 }

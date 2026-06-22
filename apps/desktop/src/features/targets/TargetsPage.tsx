@@ -1,5 +1,6 @@
 /**
- * TargetsPage — spec 043 shared list-page adoption (task #73).
+ * TargetsPage — spec 043 shared list-page adoption (task #73), spec 044 mock
+ * columns + filter-by-filter + altitude threshold setting.
  *
  * Standardized on the Sessions layout system: a pinned `PageTopBar` (title +
  * summary counts + `FilterToolbar` + right-aligned actions) over a
@@ -20,15 +21,24 @@
  * `?selected=<uuid>` and the detail pane loads the full gen-3 detail from
  * SQLite.
  *
- * #103a: The page root carries `.alm-targets-page` so targets-fixes.css can
- * scope the layout fix that ensures the virtualizer scroll container always
- * gets a definite measured height in Tauri/Windows WebView.
+ * #103a: The page root carries `.alm-targets-page` so the layout fix scoped
+ * to it ensures the virtualizer scroll container always gets a definite measured
+ * height in Tauri/Windows WebView.
  *
  * #103b: Text search is whitespace/case-insensitive across the designation and
  * label — "M31", "M 31", and "m31" all resolve to the same target (the
  * normalizer collapses internal whitespace). Full alias resolution (e.g.
  * "Andromeda" → M31) needs the list endpoint to carry aliases and is blocked on
  * backend enrichment (#57/#93); the live `TargetListItem` has no aliases field.
+ *
+ * Spec 044:
+ *   - Filter-by-filter: a "Filters" multi-select in the top bar lets the user
+ *     narrow to targets whose mock-recommended filter set includes specific bands
+ *     (e.g. show only targets where "Ha" is recommended tonight). MOCK — the
+ *     filter recommendation is NOT astronomy (spec 044 §3).
+ *   - Usable altitude threshold: loaded from localStorage via `useAltitudeThreshold`
+ *     and passed to TargetsTable so imaging-time and visible-tonight react to the
+ *     user's Settings → Target Planner preference without a page reload.
  */
 
 import { useState, useEffect, useCallback, useMemo } from 'react';
@@ -55,6 +65,8 @@ import {
   DEFAULT_TARGET_GROUP_BY,
 } from './TargetsTable';
 import type { TargetSort, TargetSortCol, TargetGroupBy } from './TargetsTable';
+import { rowAltitudeFor, type FilterBand } from './planner-altitude';
+import { useAltitudeThreshold } from './altitude-settings';
 
 type ListState =
   | { status: 'loading' }
@@ -132,6 +144,25 @@ const MY_TARGETS_FILTER_OPTIONS: FilterOption[] = [
   { value: MY_TARGETS_VALUE, label: 'My Targets' },
 ];
 
+/**
+ * Filter-by-filter options (spec 044, MOCK): all individual bands the user can
+ * filter on. Broadband (LRGB) first, then narrowband (Ha/OIII/SII).
+ *
+ * Selecting one or more bands keeps only rows whose mock `filtersFor`
+ * recommendation includes ALL selected bands. Example: selecting "Ha" + "OIII"
+ * shows only rows where both are recommended — which in the simple mock means
+ * any narrowband-possible target. MOCK — not astronomy.
+ */
+const FILTER_BAND_OPTIONS: FilterOption[] = [
+  { value: 'L', label: 'L (Lum)' },
+  { value: 'R', label: 'R' },
+  { value: 'G', label: 'G' },
+  { value: 'B', label: 'B' },
+  { value: 'Ha', label: 'Ha' },
+  { value: 'OIII', label: 'OIII' },
+  { value: 'SII', label: 'SII' },
+];
+
 export function TargetsPage() {
   const { selected } = useSearch({ from: '/shell/targets' });
   const navigate = useNavigate({ from: '/targets' });
@@ -148,6 +179,18 @@ export function TargetsPage() {
   const [enabledCatalogues, setEnabledCatalogues] = useState<CatalogueId[]>(
     () => [...DEFAULT_ENABLED_CATALOGUES],
   );
+  /**
+   * Filter-by-filter (spec 044, MOCK): selected bands. Empty = no band filter.
+   * When non-empty, only targets whose mock filter recommendation includes ALL
+   * selected bands are shown. NOT astronomy — mock per spec 044 §3.
+   */
+  const [filterBands, setFilterBands] = useState<FilterBand[]>([]);
+  /**
+   * User-configured usable-altitude threshold from Settings → Target Planner.
+   * Subscribes to localStorage so updates in the Settings pane immediately
+   * re-derive imaging-time and visible-tonight for every row.
+   */
+  const usableAltDeg = useAltitudeThreshold();
 
   useEffect(() => {
     let cancelled = false;
@@ -212,8 +255,21 @@ export function TargetsPage() {
 
   const visibleTargets = useMemo(() => {
     const q = search.trim();
-    return q ? tabTargets.filter((t) => matchesSearch(t, q)) : tabTargets;
-  }, [tabTargets, search]);
+    let result = q ? tabTargets.filter((t) => matchesSearch(t, q)) : tabTargets;
+
+    // Filter-by-filter (spec 044, MOCK): keep only targets whose mock filter
+    // recommendation includes ALL selected bands. Each band check calls
+    // rowAltitudeFor which is O(1) per target (no side effects, no fetch).
+    // usableAltDeg is included in deps so threshold changes re-filter too.
+    if (filterBands.length > 0) {
+      result = result.filter((t) => {
+        const { filters } = rowAltitudeFor(t, usableAltDeg);
+        return filterBands.every((band) => filters.bands.includes(band));
+      });
+    }
+
+    return result;
+  }, [tabTargets, search, filterBands, usableAltDeg]);
 
   // Per the top-bar convention (task #80/#91): no title/summary in the bar —
   // the left nav names the page and per-page counts move to the status bar.
@@ -244,10 +300,10 @@ export function TargetsPage() {
               allLabel: 'All targets',
             },
           ]}
-          // Catalogue multi-select and group-by stay visible on both views
-          // (#91: consistent filter bar). On My Targets the stub list is empty
-          // so the catalogue filter has no effect yet, but the control remains
-          // so the bar doesn't shift layout on tab switch.
+          // Catalogue multi-select, filter-by-filter, and group-by stay visible
+          // on both views (#91: consistent filter bar). On My Targets the stub
+          // list is empty so these filters have no effect yet, but the controls
+          // remain so the bar doesn't shift layout on tab switch.
           multiFields={[
             {
               key: 'catalogues',
@@ -255,6 +311,16 @@ export function TargetsPage() {
               value: enabledCatalogues,
               options: CATALOGUE_OPTIONS,
               onChange: (v) => setEnabledCatalogues(v as CatalogueId[]),
+            },
+            {
+              // Filter-by-filter (spec 044, MOCK): narrow to targets whose
+              // mock-recommended filter set includes ALL selected bands.
+              // NOT astronomy — see planner-altitude.ts for the mock rule.
+              key: 'filterBands',
+              label: 'Filters',
+              value: filterBands,
+              options: FILTER_BAND_OPTIONS,
+              onChange: (v) => setFilterBands(v as FilterBand[]),
             },
           ]}
           groupBy={{
@@ -297,6 +363,7 @@ export function TargetsPage() {
             sort={sort}
             onSort={handleSort}
             groupBy={groupBy}
+            usableAltDeg={usableAltDeg}
             emptyMessage={
               isMyTargets
                 ? "No targets with sessions yet. Targets appear here once your captured frames are linked to a catalog object — that linkage isn't wired up yet. Switch to 'All targets' to find an object and start a project."
