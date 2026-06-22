@@ -27,6 +27,8 @@ function item(primaryDesignation: string, objectType = 'other'): TargetListItem 
     effectiveLabel: primaryDesignation,
     primaryDesignation,
     objectType,
+    raDeg: 0,
+    decDeg: 0,
   };
 }
 

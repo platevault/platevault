@@ -19,6 +19,8 @@ function item(
     effectiveLabel: effectiveLabel ?? primaryDesignation,
     primaryDesignation,
     objectType,
+    raDeg: 0,
+    decDeg: 0,
   };
 }
 

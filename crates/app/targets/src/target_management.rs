@@ -119,6 +119,10 @@ fn list_row_to_item(row: TargetListRow) -> TargetListItem {
         effective_label,
         primary_designation: row.primary_designation,
         object_type: row.object_type,
+        ra_deg: row.ra_deg,
+        dec_deg: row.dec_deg,
+        constellation: row.constellation,
+        magnitude: row.magnitude,
     }
 }
 
@@ -383,6 +387,75 @@ mod tests {
         let db = setup().await;
         let items = list(db.pool()).await.unwrap();
         assert!(items.is_empty());
+    }
+
+    /// `target.list` must carry `ra_deg` and `dec_deg` sourced from
+    /// `canonical_target` — these are always non-null per the schema constraint.
+    #[tokio::test]
+    async fn list_item_carries_ra_dec() {
+        let db = setup().await;
+        seed_m31(&db).await;
+        let items = list(db.pool()).await.unwrap();
+        assert_eq!(items.len(), 1);
+        // M31 fixture values from m31() above (ra=10.684708, dec=41.26875).
+        assert!(
+            (items[0].ra_deg - 10.684_708).abs() < 1e-6,
+            "ra_deg mismatch: {}",
+            items[0].ra_deg
+        );
+        assert!(
+            (items[0].dec_deg - 41.268_75).abs() < 1e-6,
+            "dec_deg mismatch: {}",
+            items[0].dec_deg
+        );
+    }
+
+    /// `constellation` and `magnitude` are `None` for entries that pre-date
+    /// migration 0046 (the columns were added as nullable).  Seeding via
+    /// `upsert_resolved` does not populate them yet, so they must be `None`.
+    #[tokio::test]
+    async fn list_item_constellation_and_magnitude_none_when_not_stored() {
+        let db = setup().await;
+        seed_m31(&db).await;
+        let items = list(db.pool()).await.unwrap();
+        assert_eq!(items.len(), 1);
+        assert!(
+            items[0].constellation.is_none(),
+            "constellation must be None when not stored, got {:?}",
+            items[0].constellation
+        );
+        assert!(
+            items[0].magnitude.is_none(),
+            "magnitude must be None when not stored, got {:?}",
+            items[0].magnitude
+        );
+    }
+
+    /// When `constellation` and `magnitude` are written directly to the DB they
+    /// are returned by `target.list`.
+    #[tokio::test]
+    async fn list_item_returns_stored_constellation_and_magnitude() {
+        let db = setup().await;
+        let id = seed_m31(&db).await;
+
+        // Write constellation + magnitude directly (simulates a future resolver
+        // or seed that populates these fields).
+        sqlx::query("UPDATE canonical_target SET constellation = ?, magnitude = ? WHERE id = ?")
+            .bind("And")
+            .bind(3.44_f64)
+            .bind(id.to_string())
+            .execute(db.pool())
+            .await
+            .expect("direct constellation/magnitude update failed");
+
+        let items = list(db.pool()).await.unwrap();
+        assert_eq!(items.len(), 1);
+        assert_eq!(items[0].constellation.as_deref(), Some("And"), "constellation mismatch");
+        assert!(
+            items[0].magnitude.map_or(false, |m| (m - 3.44).abs() < 1e-6),
+            "magnitude mismatch: {:?}",
+            items[0].magnitude
+        );
     }
 
     // ── target.alias.add ──────────────────────────────────────────────────────

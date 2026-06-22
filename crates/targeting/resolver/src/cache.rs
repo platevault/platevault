@@ -48,6 +48,13 @@ pub type CacheResult<T> = Result<T, CacheError>;
 type CanonicalTargetRow =
     (String, Option<i64>, String, Option<String>, String, f64, f64, String, String);
 
+/// Raw row tuple for the `target.list` SELECT (8 columns).
+///
+/// Order: id, primary_designation, display_alias, object_type,
+///        ra_deg, dec_deg, constellation, magnitude.
+type TargetListQueryRow =
+    (String, String, Option<String>, String, f64, f64, Option<String>, Option<f64>);
+
 // ── Read model ────────────────────────────────────────────────────────────────
 
 /// A cached canonical target plus its aliases, as read back from the cache.
@@ -557,17 +564,31 @@ pub struct TargetListRow {
     /// User-set label; `None` when not set. `effectiveLabel = display_alias ?? primary_designation`.
     pub display_alias: Option<String>,
     pub object_type: String,
+    /// ICRS J2000 right ascension in decimal degrees.
+    pub ra_deg: f64,
+    /// ICRS J2000 declination in decimal degrees.
+    pub dec_deg: f64,
+    /// IAU constellation abbreviation; `None` when the column is absent or
+    /// not yet populated (schema before migration 0046).
+    pub constellation: Option<String>,
+    /// Visual magnitude; `None` when not stored or not applicable.
+    pub magnitude: Option<f64>,
 }
 
 /// List all canonical targets ordered by `primary_designation` (gen-3).
+///
+/// Reads `ra_deg`, `dec_deg`, `constellation`, and `magnitude` from the row;
+/// `constellation`/`magnitude` are `NULL`-tolerant — they were added in
+/// migration 0046 and may be absent for earlier entries.
 ///
 /// # Errors
 ///
 /// Returns [`CacheError::Database`] on query failure, or [`CacheError::InvalidUuid`]
 /// on a corrupt stored id.
 pub async fn list_all(pool: &SqlitePool) -> CacheResult<Vec<TargetListRow>> {
-    let rows: Vec<(String, String, Option<String>, String)> = sqlx::query_as(
-        "SELECT id, primary_designation, display_alias, object_type
+    let rows: Vec<TargetListQueryRow> = sqlx::query_as(
+        "SELECT id, primary_designation, display_alias, object_type,
+                ra_deg, dec_deg, constellation, magnitude
          FROM canonical_target
          ORDER BY primary_designation ASC",
     )
@@ -575,11 +596,31 @@ pub async fn list_all(pool: &SqlitePool) -> CacheResult<Vec<TargetListRow>> {
     .await?;
 
     rows.into_iter()
-        .map(|(id_str, primary_designation, display_alias, object_type)| {
-            let id =
-                Uuid::parse_str(&id_str).map_err(|e| CacheError::InvalidUuid(id_str.clone(), e))?;
-            Ok(TargetListRow { id, primary_designation, display_alias, object_type })
-        })
+        .map(
+            |(
+                id_str,
+                primary_designation,
+                display_alias,
+                object_type,
+                ra_deg,
+                dec_deg,
+                constellation,
+                magnitude,
+            )| {
+                let id = Uuid::parse_str(&id_str)
+                    .map_err(|e| CacheError::InvalidUuid(id_str.clone(), e))?;
+                Ok(TargetListRow {
+                    id,
+                    primary_designation,
+                    display_alias,
+                    object_type,
+                    ra_deg,
+                    dec_deg,
+                    constellation,
+                    magnitude,
+                })
+            },
+        )
         .collect()
 }
 

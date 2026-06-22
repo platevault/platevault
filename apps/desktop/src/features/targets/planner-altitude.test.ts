@@ -29,6 +29,8 @@ function item(primaryDesignation: string, overrides: Partial<TargetListItem> = {
     effectiveLabel: primaryDesignation,
     primaryDesignation,
     objectType: 'other',
+    raDeg: 0,
+    decDeg: 0,
     ...overrides,
   };
 }
