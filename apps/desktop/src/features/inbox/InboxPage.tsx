@@ -1,30 +1,36 @@
 /**
- * InboxPage — two-pane classify / confirm workflow with an aggregate plan
- * surface in the bottom of the centre column.
+ * InboxPage — classify / confirm workflow on the shared list-page layout.
+ *
+ * spec 043 (tasks #73/#75/#76/#61): the Inbox adopts the same shared layout
+ * system as Sessions — a pinned `PageTopBar` (search + group-by + sort +
+ * frame-type filter via `FilterToolbar`, plus Confirm / Rescan page actions)
+ * over a `ListPageLayout` body. The detections list (`InboxList`) is the
+ * primary content; the per-detection detail (classification / frame-type
+ * breakdown / file metadata) lives in the right-hand detail pane.
+ *
+ *   - #61: the stats strip (Folders / Masters / Images + per-type) is pinned in
+ *     the always-visible top region (a second `.alm-page__bar` below the top
+ *     bar) — it never scrolls out of view with the content.
+ *   - #76: the planned-actions surface moves OUT of the old full-width docked
+ *     bottom panel and INTO the detail pane: when an open plan exists (or a
+ *     destination-root pick is pending) the `PlanPanel` renders below the
+ *     per-detection detail in the pane, not as a full-width bottom strip.
+ *   - #75: the plan summary collapses per-file rows by default and shows an
+ *     aggregate per group derived from FRAME TYPE — see `PlanPanel` +
+ *     `frameTypeByItemId` below.
  *
  * spec 039: the left list is a cross-root aggregate of all unacknowledged
  * items (inbox.list), grouped/labelled by their registered root.
- *
- * spec 041 (#1/#2/#3):
- *   - The right ActionSidebar is removed; Confirm lives in the top action bar
- *     and the destructive-destination control lives in the PlanPanel.
- *   - The bottom of the centre column shows EVERY open plan (inbox.plan.list.open)
- *     at once, grouped by ingestion, with per-group selection + Apply selected /
- *     Apply all / per-group Discard.
- *
- * Left list  : unacknowledged items from all registered roots (inbox.list).
- * Centre pane: per-item classification breakdown (inbox.classify) above the
- *              aggregate plan surface (inbox.plan.list.open).
- * Top bar    : Confirm / Split (inbox.confirm) + Rescan.
  */
 
 import { useCallback, useEffect, useMemo, useState } from 'react';
 import { useNavigate, useSearch } from '@tanstack/react-router';
-import { PageShell, ListDetailLayout, TopActionBar } from '@/components';
+import { ListPageLayout, PageTopBar, FilterToolbar } from '@/components';
 import { Btn, EmptyState } from '@/ui';
 import { useStaleSelectionCleanup } from '@/lib/use-stale-selection';
 import { addToast } from '@/shared/toast';
 import { InboxList } from './InboxList';
+import { InboxControls, useInboxControls } from './InboxControls';
 import { InboxDetail } from './InboxDetail';
 import {
   useInboxList,
@@ -67,6 +73,12 @@ export function InboxPage() {
   const { data: listData, loading: listLoading, refresh: refreshList } = useInboxList();
   const items = listData?.items ?? [];
 
+  // Search + grouping / sort / frame-type controls now live in the top bar
+  // (spec 043 #73/#31). `useInboxControls` owns the persisted ordered grouping
+  // dimensions + sort; the frame-type filter stays URL-backed (`type`).
+  const [search, setSearch] = useState('');
+  const { dims, sortBy, setSortBy, setSlot } = useInboxControls();
+
   // spec 041: aggregate open-plan surface (all ingestions at once).
   const {
     data: openPlansData,
@@ -104,8 +116,20 @@ export function InboxPage() {
   // when the cap is hit.
   const isCapped = listData?.capped ?? false;
 
-  // URL-backed selection is by list index so it stays stable across re-fetches.
-  const selectedItem = selected !== undefined ? items[selected] : undefined;
+  // Client-side text search across the relative path (the list's primary key).
+  const filteredItems = useMemo(() => {
+    const q = search.trim().toLowerCase();
+    if (!q) return items;
+    return items.filter(
+      (it) =>
+        it.relativePath.toLowerCase().includes(q) ||
+        (it.groupTarget ?? '').toLowerCase().includes(q),
+    );
+  }, [items, search]);
+
+  // URL-backed selection is by index into the FILTERED list so it stays stable
+  // across re-fetches and tracks what the user actually sees.
+  const selectedItem = selected !== undefined ? filteredItems[selected] : undefined;
 
   useStaleSelectionCleanup(selected, selectedItem !== undefined, () =>
     navigate({ search: (prev) => ({ ...prev, selected: undefined }), replace: true }),
@@ -113,6 +137,11 @@ export function InboxPage() {
 
   const onSelect = (idx: number) =>
     navigate({ search: (prev) => ({ ...prev, selected: idx }) });
+
+  const clearSelection = useCallback(
+    () => navigate({ search: (prev) => ({ ...prev, selected: undefined }), replace: true }),
+    [navigate],
+  );
 
   // Each item carries its own root path — use it for classify / confirm calls.
   const selectedRootPath = selectedItem?.rootAbsolutePath ?? '';
@@ -341,123 +370,167 @@ export function InboxPage() {
   const confirmLabel =
     classification?.type === 'mixed' ? 'Generate split plan' : 'Confirm to inventory';
 
-  // Split the item list into folders (non-master detections) and masters so the
-  // header subtitle uses the same vocabulary as InboxStatsSummary ("Folders · Masters").
-  const folderCount = items.filter((it) => !it.isMaster).length;
-  const masterCount = items.filter((it) => it.isMaster).length;
-
   // spec 041 US6: aggregate inbox queue stats. Derived from the SAME item list
   // the header/footer count from (distinct-folder counting) so the stats strip,
   // header, and footer always reconcile — a mixed folder counts once overall.
   const derivedStats = useMemo(() => deriveInboxStats(items), [items]);
 
-  function buildSubtitle(folders: number, masters: number, capped: boolean, limit: number): string {
+  // #75: frame-type hint per ingestion, derived from the inbox item's
+  // classification/breakdown (here: the dominant `groupFrameType`, or the
+  // master's `masterFrameType`). PlanPanel uses this to label each collapsed
+  // group bucket by frame type (bias/dark/flat/light/master) instead of
+  // degenerating to one line per catalogue action.
+  const frameTypeByItemId = useMemo(() => {
+    const m: Record<string, string> = {};
+    for (const it of items) {
+      const ft = it.isMaster ? (it.masterFrameType ?? 'master') : it.groupFrameType;
+      if (ft) m[it.inboxItemId] = ft;
+    }
+    return m;
+  }, [items]);
+
+  // Summary count (no page title — top-bar convention): folders / masters.
+  const folderCount = items.filter((it) => !it.isMaster).length;
+  const masterCount = items.filter((it) => it.isMaster).length;
+  const summary = useMemo(() => {
     if (listLoading) return 'Loading…';
     const parts: string[] = [];
-    if (folders > 0) parts.push(`${folders} folder${folders !== 1 ? 's' : ''}`);
-    if (masters > 0) parts.push(`${masters} master${masters !== 1 ? 's' : ''}`);
-    const summary = parts.length > 0 ? parts.join(' · ') : '0 detections';
-    return capped ? `${summary} to review (showing first ${limit})` : `${summary} to review`;
-  }
+    if (folderCount > 0) parts.push(`${folderCount} folder${folderCount !== 1 ? 's' : ''}`);
+    if (masterCount > 0) parts.push(`${masterCount} master${masterCount !== 1 ? 's' : ''}`);
+    const base = parts.length > 0 ? parts.join(' · ') : '0 detections';
+    return isCapped ? `${base} (first ${listData?.limit ?? 500})` : base;
+  }, [listLoading, folderCount, masterCount, isCapped, listData?.limit]);
 
-  const subtitle = buildSubtitle(folderCount, masterCount, isCapped, listData?.limit ?? 500);
-
-  return (
-    <PageShell>
-      <ListDetailLayout
-        topBar={
-          <TopActionBar
-            title="Inbox"
-            subtitle={subtitle}
-            right={
-              <div className="alm-inbox-page__bar-row">
-                {/* spec 041 T042: Confirm relocated from the deleted ActionSidebar. */}
-                <Btn
-                  size="sm"
-                  variant="accent"
-                  disabled={confirmLoading || !canConfirm}
-                  onClick={() => void handleConfirm()}
-                  aria-label={confirmLabel}
-                  data-testid="inbox-confirm-btn"
-                  data-guide-anchor="inbox.confirm-row"
-                >
-                  {confirmLoading ? 'Working…' : confirmLabel}
-                </Btn>
-                <Btn
-                  size="sm"
-                  disabled={rescanLoading}
-                  onClick={() => void rescan()}
-                  aria-label="Rescan all roots"
-                >
-                  {rescanLoading ? 'Rescanning…' : 'Rescan'}
-                </Btn>
-              </div>
+  // ── Top bar: NO page title (top-bar convention); search + group/sort/filter
+  // controls in the FilterToolbar; Confirm + Rescan as right-aligned actions. ──
+  const topBar = (
+    <>
+      <PageTopBar
+        summary={<span>{summary}</span>}
+        filters={
+          <FilterToolbar
+            search={{
+              value: search,
+              onChange: setSearch,
+              placeholder: 'Search detections…',
+              ariaLabel: 'Search inbox',
+            }}
+            actions={
+              <InboxControls
+                dims={dims}
+                setSlot={setSlot}
+                sortBy={sortBy}
+                onSortByChange={setSortBy}
+                filterType={type ?? 'all'}
+                onFilterTypeChange={(t) =>
+                  navigate({ search: (prev) => ({ ...prev, type: t as FrameType | undefined }) })
+                }
+              />
             }
           />
         }
-        list={
-          <InboxList
-            items={items}
-            selectedIdx={selected ?? null}
-            onSelect={onSelect}
-            filterType={type ?? 'all'}
-            onFilterTypeChange={(t) =>
-              navigate({ search: (prev) => ({ ...prev, type: t as FrameType | undefined }) })
-            }
-          />
-        }
-        detail={
-          <div className="alm-inbox-center">
-            {/* spec 041 US6: stats summary strip — always visible, never scrolls. */}
-            {!listLoading && <InboxStatsSummary stats={derivedStats} />}
-            <div className="alm-inbox-center__detail">
-              {selectedItem ? (
-                <InboxDetail
-                  // Remount per item so per-item state (pending type overrides) never
-                  // leaks across selections.
-                  key={selectedItem.inboxItemId}
-                  item={selectedItem}
-                  rootAbsolutePath={selectedRootPath}
-                  classification={classification ?? null}
-                  fileMetadata={fileMetadata}
-                  // task #34: inline "Generate split plan" action inside the
-                  // mixed-folder alert reuses the same confirm/split flow the
-                  // top-bar Confirm button runs (handleConfirm picks 'split'
-                  // when classification.type === 'mixed').
-                  onGenerateSplitPlan={() => void handleConfirm()}
-                  splitPlanBusy={confirmLoading}
-                />
-              ) : (
-                <EmptyState
-                  title="Select a detection"
-                  description="Pick an item from the list to review its classification before confirming."
-                />
-              )}
-            </div>
-            {/* spec 041: aggregate plan surface — visible whenever ≥1 open plan
-                exists OR a destination-root pick is pending (US8/FR-029), the
-                latter possible with zero open plans (no plan was created). */}
-            {(openPlans.length > 0 || pendingRootPick) && (
-              <div className="alm-inbox-center__plans">
-                <PlanPanel
-                  plans={openPlans}
-                  totalActions={totalActions}
-                  destructiveDestination={destructiveDestination}
-                  onDestructiveDestinationChange={setDestructiveDestination}
-                  onApplySelected={(ids) => void handleApplySelected(ids)}
-                  onApplyAll={() => void handleApplyAll()}
-                  onCancel={(id) => void handleCancel(id)}
-                  busy={planBusy}
-                  pendingRootPick={pendingRootPick}
-                  onPickDestinationRoot={(rootId) => void handlePickDestinationRoot(rootId)}
-                  rootPickBusy={confirmLoading}
-                  absoluteByFromPath={absoluteByFromPath}
-                />
-              </div>
-            )}
-          </div>
+        actions={
+          <>
+            <Btn
+              size="sm"
+              variant="accent"
+              disabled={confirmLoading || !canConfirm}
+              onClick={() => void handleConfirm()}
+              aria-label={confirmLabel}
+              data-testid="inbox-confirm-btn"
+              data-guide-anchor="inbox.confirm-row"
+            >
+              {confirmLoading ? 'Working…' : confirmLabel}
+            </Btn>
+            <Btn
+              size="sm"
+              disabled={rescanLoading}
+              onClick={() => void rescan()}
+              aria-label="Rescan all roots"
+            >
+              {rescanLoading ? 'Rescanning…' : 'Rescan'}
+            </Btn>
+          </>
         }
       />
-    </PageShell>
+      {/* #61: stats strip pinned in the always-visible top region — a second
+          `.alm-page__bar` so it never scrolls out of view with the content. */}
+      {!listLoading && (
+        <div className="alm-page__bar alm-inbox-statsbar">
+          <InboxStatsSummary stats={derivedStats} />
+        </div>
+      )}
+    </>
+  );
+
+  // ── Detail pane: per-detection detail + (when present) the plan surface. ──
+  const showPlans = openPlans.length > 0 || pendingRootPick != null;
+  const detail =
+    selectedItem != null || showPlans ? (
+      <div className="alm-inbox-detail-pane">
+        {selectedItem != null ? (
+          <InboxDetail
+            // Remount per item so per-item state (pending type overrides) never
+            // leaks across selections.
+            key={selectedItem.inboxItemId}
+            item={selectedItem}
+            rootAbsolutePath={selectedRootPath}
+            classification={classification ?? null}
+            fileMetadata={fileMetadata}
+            // task #34: inline "Generate split plan" action inside the
+            // mixed-folder alert reuses the same confirm/split flow the top-bar
+            // Confirm button runs (handleConfirm picks 'split' when mixed).
+            onGenerateSplitPlan={() => void handleConfirm()}
+            splitPlanBusy={confirmLoading}
+          />
+        ) : (
+          <EmptyState
+            title="Open plans"
+            description="Review the planned actions below before applying."
+          />
+        )}
+        {/* #76: planned-actions live in the detail pane (not a full-width bottom
+            strip). Shown whenever ≥1 open plan exists OR a destination-root pick
+            is pending (the latter possible with zero open plans). */}
+        {showPlans && (
+          <div
+            className={`alm-inbox-detail-plans${selectedItem == null ? ' alm-inbox-detail-plans--solo' : ''}`}
+          >
+            <PlanPanel
+              plans={openPlans}
+              totalActions={totalActions}
+              destructiveDestination={destructiveDestination}
+              onDestructiveDestinationChange={setDestructiveDestination}
+              onApplySelected={(ids) => void handleApplySelected(ids)}
+              onApplyAll={() => void handleApplyAll()}
+              onCancel={(id) => void handleCancel(id)}
+              busy={planBusy}
+              pendingRootPick={pendingRootPick}
+              onPickDestinationRoot={(rootId) => void handlePickDestinationRoot(rootId)}
+              rootPickBusy={confirmLoading}
+              absoluteByFromPath={absoluteByFromPath}
+              frameTypeByItemId={frameTypeByItemId}
+            />
+          </div>
+        )}
+      </div>
+    ) : undefined;
+
+  return (
+    <ListPageLayout
+      topBar={topBar}
+      detail={detail}
+      onCloseDetail={selectedItem != null ? clearSelection : undefined}
+      detailLabel="Detection details"
+    >
+      <InboxList
+        items={filteredItems}
+        selectedIdx={selected ?? null}
+        onSelect={onSelect}
+        filterType={type ?? 'all'}
+        dims={dims}
+        sortBy={sortBy}
+      />
+    </ListPageLayout>
   );
 }

@@ -78,6 +78,15 @@ export interface PlanPanelProps {
    * Action rows show the absolute path when present, else the relative preview.
    */
   absoluteByFromPath?: Record<string, string>;
+  /**
+   * Frame-type hint per ingestion (`inboxItemId` → "bias" | "dark" | "flat" |
+   * "light" | "master" | …), derived by the parent from the inbox item's
+   * classification / breakdown (spec 043 #75). Used to label each collapsed
+   * group bucket by frame type so catalogue actions (whose destination path
+   * carries no frame keyword) aggregate to "N <frametype>" instead of
+   * degenerating into one line per file.
+   */
+  frameTypeByItemId?: Record<string, string>;
 }
 
 // ── Helpers ─────────────────────────────────────────────────────────────────
@@ -121,14 +130,39 @@ function buildCountSummary(actions: InboxPlanAction[]): string {
 const FRAME_TYPE_KEYWORDS: Array<[token: string, singular: string]> = [
   ['lights', 'light'],
   ['light', 'light'],
+  ['darkflats', 'dark flat'],
+  ['dark_flats', 'dark flat'],
   ['darks', 'dark'],
   ['dark', 'dark'],
   ['flats', 'flat'],
   ['flat', 'flat'],
   ['biases', 'bias'],
   ['bias', 'bias'],
-  ['darkflats', 'dark flat'],
+  ['masters', 'master'],
+  ['master', 'master'],
 ];
+
+/**
+ * Normalise a raw frame-type hint (from the inbox item's classification /
+ * breakdown — e.g. `groupFrameType` / `masterFrameType`) into the singular
+ * label vocabulary used on the summary lines. Unknown values pass through
+ * lower-cased so they still aggregate sensibly.
+ */
+function normalizeFrameTypeHint(raw: string): string {
+  const v = raw.trim().toLowerCase();
+  switch (v) {
+    case 'lights':    return 'light';
+    case 'darks':     return 'dark';
+    case 'flats':     return 'flat';
+    case 'biases':    return 'bias';
+    case 'dark_flat':
+    case 'darkflat':
+    case 'dark_flats':
+    case 'darkflats': return 'dark flat';
+    case 'masters':   return 'master';
+    default:          return v;
+  }
+}
 
 /** Normalise a path's separators and split into lowercase segments. */
 function pathSegments(path: string): string[] {
@@ -158,14 +192,28 @@ function shortDestination(path: string): string {
 }
 
 /**
- * Infer the frame-type label for one action from its destination path. Falls
- * back to the action kind (e.g. "catalogue") when no frame keyword is present.
+ * Resolve the frame-type label for one action (spec 043 #75). Priority:
+ *   1. a frame keyword present in the destination OR source path (handles split
+ *      plans where each type lands in its own typed folder), then
+ *   2. the per-ingestion hint from the inbox item's classification/breakdown
+ *      (`itemFrameType` — e.g. a single-type catalogue folder of darks whose
+ *      in-place destination carries no frame keyword), then
+ *   3. the action kind (e.g. "catalogue") as a last resort.
+ *
+ * Putting the path keyword first lets a MIXED/split plan still distinguish
+ * per-type buckets, while the item hint rescues single-type catalogue plans
+ * from degenerating to one line per file.
  */
-function frameTypeLabel(action: InboxPlanAction, destination: string): string {
-  const segments = pathSegments(destination);
+function frameTypeLabel(
+  action: InboxPlanAction,
+  destination: string,
+  itemFrameType?: string,
+): string {
+  const segments = [...pathSegments(destination), ...pathSegments(action.fromPath)];
   for (const [token, singular] of FRAME_TYPE_KEYWORDS) {
     if (segments.includes(token)) return singular;
   }
+  if (itemFrameType) return normalizeFrameTypeHint(itemFrameType);
   return actionLabel(action.action).toLowerCase();
 }
 
@@ -197,6 +245,7 @@ export interface PlanGroupSummaryLine {
 function buildGroupSummary(
   actions: InboxPlanAction[],
   absoluteByFromPath?: Record<string, string>,
+  itemFrameType?: string,
 ): PlanGroupSummaryLine[] {
   const buckets = new Map<
     string,
@@ -204,7 +253,7 @@ function buildGroupSummary(
   >();
   for (const a of actions) {
     const dest = absoluteByFromPath?.[a.fromPath] ?? a.destinationPreview;
-    const frameType = frameTypeLabel(a, dest);
+    const frameType = frameTypeLabel(a, dest, itemFrameType);
     const destDir = destinationDir(dest);
     const key = `${frameType} ${destDir}`;
     const existing = buckets.get(key);
@@ -237,6 +286,7 @@ export function PlanPanel({
   onPickDestinationRoot,
   rootPickBusy = false,
   absoluteByFromPath,
+  frameTypeByItemId,
 }: PlanPanelProps) {
   // Plan-level selection set, keyed by inboxItemId. Stale plans cannot be
   // selected (and are pruned from the set if they become stale).
@@ -438,7 +488,13 @@ export function PlanPanel({
           const checked = selected.has(plan.inboxItemId);
           const isExpanded = expanded.has(plan.inboxItemId);
           // Collapsed-by-default summary: one line per (frame type → destination).
-          const summaryLines = buildGroupSummary(plan.actions, absoluteByFromPath);
+          // The per-ingestion frame-type hint (#75) rescues single-type catalogue
+          // plans whose in-place destinations carry no frame keyword.
+          const summaryLines = buildGroupSummary(
+            plan.actions,
+            absoluteByFromPath,
+            frameTypeByItemId?.[plan.inboxItemId],
+          );
           const rowsId = `plan-group-rows-${plan.inboxItemId}`;
           return (
             <section

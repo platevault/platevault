@@ -7,7 +7,8 @@
  * `FilterToolbar` + right-aligned review actions) over a `ListPageLayout` body
  * — a dense full-width sortable table (SessionsTable) on the left and the
  * existing SessionDetail in a right-side detail pane that mounts on selection.
- * Confirm / Re-open / Reject remain action-bound in the top bar (FR-006).
+ * Confirm / Re-open / Reject are contextual (they act on the selected session)
+ * and live in the SessionDetail header, not the global top bar (task #79).
  *
  * Toolbar (spec 043 §4): search + review-state filter + a Group-by control
  * (Target default / Camera / Filter / Month). The legacy frame-type filter was
@@ -22,7 +23,6 @@
 
 import { useNavigate, useSearch } from '@tanstack/react-router';
 import { useCallback, useMemo, useState } from 'react';
-import { Btn } from '@/ui';
 import { PageTopBar, FilterToolbar, ListPageLayout } from '@/components';
 import type { FilterOption } from '@/components';
 import { useStaleSelectionCleanup } from '@/lib/use-stale-selection';
@@ -241,42 +241,26 @@ export function SessionsPage() {
           }}
         />
       }
-      actions={
-        <>
-          {confirmVisible && (
-            <Btn
-              size="sm"
-              variant="primary"
-              onClick={() => void handleConfirm()}
-              disabled={isPending}
-            >
-              Confirm
-            </Btn>
-          )}
-          {reopenVisible && (
-            <Btn size="sm" onClick={() => void handleReopen()} disabled={isPending}>
-              Re-open review
-            </Btn>
-          )}
-          {rejectVisible && (
-            <Btn
-              size="sm"
-              variant="danger"
-              onClick={() => void handleReject()}
-              disabled={isPending}
-            >
-              Reject
-            </Btn>
-          )}
-        </>
-      }
     />
   );
 
   return (
     <ListPageLayout
       topBar={topBar}
-      detail={selectedSession != null ? <SessionDetail session={selectedSession} /> : undefined}
+      detail={
+        selectedSession != null ? (
+          <SessionDetail
+            session={selectedSession}
+            onConfirm={() => void handleConfirm()}
+            onReopen={() => void handleReopen()}
+            onReject={() => void handleReject()}
+            confirmVisible={confirmVisible}
+            reopenVisible={reopenVisible}
+            rejectVisible={rejectVisible}
+            pending={isPending}
+          />
+        ) : undefined
+      }
       onCloseDetail={selectedSession != null ? clearSelection : undefined}
       detailLabel="Session details"
     >

@@ -342,8 +342,13 @@ export function ProjectDetailContent({ projectId }: ProjectDetailContentProps) {
         }
       />
 
-      {/* ── Top action bar: tool · path · Reveal · Open in tool · CTA ─── */}
-      <TopActionBar
+      {/* ── Top action bar: tool · path · Reveal · Open in tool · CTA ───
+          Wrapped in a project-detail scope so the breadcrumb (tool + path)
+          and the action cluster lay out on their OWN rows and never overlap
+          the MetricLine below (task #81). The shared bar's single fixed-height
+          flex row is relaxed to auto-height + wrap only within this scope. */}
+      <div className="alm-project-detail__action-bar">
+        <TopActionBar
         title=""
         right={
           /* Per-project actions live ONLY here (the detail action bar):
@@ -399,7 +404,8 @@ export function ProjectDetailContent({ projectId }: ProjectDetailContentProps) {
         {project.path && (
           <span className="alm-project-detail__bar-path">{project.path}</span>
         )}
-      </TopActionBar>
+        </TopActionBar>
+      </div>
 
       {/* ── Blocked banner (spec 009 US4-2) — above all content ──────────── */}
       {lifecycle === 'blocked' && blockedReason && (

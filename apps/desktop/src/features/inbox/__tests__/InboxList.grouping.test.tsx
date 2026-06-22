@@ -1,22 +1,59 @@
 /// <reference types="@testing-library/jest-dom" />
 /**
- * Spec 041 (T021) — user-configurable multi-level grouping in InboxList.
+ * Spec 041 (T021) — user-configurable multi-level grouping. Spec 043: the
+ * grouping CONTROLS moved out of InboxList into the top-bar `InboxControls`
+ * (driven by `useInboxControls`); InboxList is now a controlled list that
+ * receives the active `dims`. These tests mount both via a small harness that
+ * mirrors the page wiring.
  *
  * Tests:
  * 1. Picking a grouping dimension renders nested, collapsible group headers
  *    with per-group item counts.
  * 2. Picking a SECOND dimension nests groups under the first ("then by").
  * 3. Selecting a row inside a group still calls onSelect with the row's
- *    ORIGINAL index in the unfiltered items array (selection stays correct
- *    through nesting).
+ *    ORIGINAL index in the unfiltered items array.
  * 4. The chosen ordered dimensions are persisted to localStorage and restored
  *    on a fresh mount.
  */
 
 import { render, screen, fireEvent, within, cleanup } from '@testing-library/react';
 import { describe, it, expect, vi, beforeEach } from 'vitest';
-import { InboxList, GROUPING_STORAGE_KEY } from '../InboxList';
+import { InboxList } from '../InboxList';
+import { InboxControls, useInboxControls, GROUPING_STORAGE_KEY } from '../InboxControls';
 import type { InboxListItem } from '@/api/commands';
+
+// ── Harness ───────────────────────────────────────────────────────────────────
+// Mirrors InboxPage's wiring: useInboxControls owns the grouping/sort state,
+// rendered via InboxControls (top bar) + passed down to InboxList.
+function Harness({
+  items,
+  onSelect = vi.fn(),
+}: {
+  items: InboxListItem[];
+  onSelect?: (idx: number) => void;
+}) {
+  const { dims, sortBy, setSortBy, setSlot } = useInboxControls();
+  return (
+    <>
+      <InboxControls
+        dims={dims}
+        setSlot={setSlot}
+        sortBy={sortBy}
+        onSortByChange={setSortBy}
+        filterType="all"
+        onFilterTypeChange={vi.fn()}
+      />
+      <InboxList
+        items={items}
+        selectedIdx={null}
+        onSelect={onSelect}
+        filterType="all"
+        dims={dims}
+        sortBy={sortBy}
+      />
+    </>
+  );
+}
 
 // ── Fixtures ────────────────────────────────────────────────────────────────────
 
@@ -59,9 +96,7 @@ beforeEach(() => {
 
 describe('InboxList — configurable grouping', () => {
   it('(1) selecting a dimension renders group headers with counts', () => {
-    render(
-      <InboxList items={items} selectedIdx={null} onSelect={vi.fn()} filterType="all" onFilterTypeChange={vi.fn()} />,
-    );
+    render(<Harness items={items} />);
 
     // Default (no grouping): flat rows, no group headers.
     expect(screen.queryByTestId(/^inbox-group-/)).not.toBeInTheDocument();
@@ -82,52 +117,38 @@ describe('InboxList — configurable grouping', () => {
   });
 
   it('(2) adding a second dimension nests groups under the first', () => {
-    render(
-      <InboxList items={items} selectedIdx={null} onSelect={vi.fn()} filterType="all" onFilterTypeChange={vi.fn()} />,
-    );
+    render(<Harness items={items} />);
 
     fireEvent.change(screen.getByLabelText('Group by'), { target: { value: 'target' } });
     fireEvent.change(screen.getByLabelText('Then group by (level 2)'), { target: { value: 'frameType' } });
 
-    // Top-level target group exists; its frameType subgroups (light, dark) nest
-    // beneath it. The M31 subtree is queried via the leaf rows it contains, since
-    // the same frameType testid can legitimately recur under other targets.
     expect(screen.getByTestId('inbox-group-target-M31')).toBeInTheDocument();
 
-    // Two distinct frameType subgroups appear under M31 (light + dark) and one
-    // under NGC 7000 (light) → three frameType headers total.
     const frameTypeHeaders = screen.getAllByTestId(/^inbox-group-frameType-/);
     expect(frameTypeHeaders).toHaveLength(3);
     const labels = frameTypeHeaders.map((h) => h.getAttribute('data-testid'));
     expect(labels.filter((l) => l === 'inbox-group-frameType-light')).toHaveLength(2);
     expect(labels.filter((l) => l === 'inbox-group-frameType-dark')).toHaveLength(1);
 
-    // The M31 leaf rows (a, b) both render under the nested structure.
     expect(screen.getByTestId('inbox-item-a')).toBeInTheDocument();
     expect(screen.getByTestId('inbox-item-b')).toBeInTheDocument();
   });
 
   it('(3) selecting a row inside a group reports the original item index', () => {
     const onSelect = vi.fn();
-    render(
-      <InboxList items={items} selectedIdx={null} onSelect={onSelect} filterType="all" onFilterTypeChange={vi.fn()} />,
-    );
+    render(<Harness items={items} onSelect={onSelect} />);
 
-    // Group by target so NGC 7000 (original index 2) sits in its own group.
     fireEvent.change(screen.getByLabelText('Group by'), { target: { value: 'target' } });
 
     fireEvent.click(screen.getByTestId('inbox-item-c'));
     expect(onSelect).toHaveBeenCalledWith(2);
 
-    // And the first M31 row (original index 0) still maps to 0.
     fireEvent.click(screen.getByTestId('inbox-item-a'));
     expect(onSelect).toHaveBeenLastCalledWith(0);
   });
 
   it('(3b) collapsing a group hides its leaf rows', () => {
-    render(
-      <InboxList items={items} selectedIdx={null} onSelect={vi.fn()} filterType="all" onFilterTypeChange={vi.fn()} />,
-    );
+    render(<Harness items={items} />);
     fireEvent.change(screen.getByLabelText('Group by'), { target: { value: 'target' } });
 
     expect(screen.getByTestId('inbox-item-c')).toBeInTheDocument();
@@ -139,28 +160,16 @@ describe('InboxList — configurable grouping', () => {
 
   it('(5) footer shows "N folders · M masters" using isMaster split', () => {
     const masterItem = makeItem({ inboxItemId: 'master-1', isMaster: true });
-    render(
-      <InboxList
-        items={[...items, masterItem]}
-        selectedIdx={null}
-        onSelect={vi.fn()}
-        filterType="all"
-        onFilterTypeChange={vi.fn()}
-      />,
-    );
+    render(<Harness items={[...items, masterItem]} />);
 
-    // 3 folders + 1 master → "3 folders · 1 master"
     const footer = document.querySelector('.alm-list-sidebar__count');
     expect(footer?.textContent).toContain('3 folders');
     expect(footer?.textContent).toContain('1 master');
-    // Must NOT call masters "folders"
     expect(footer?.textContent).not.toMatch(/4 folders/);
   });
 
   it('(5b) footer shows only "N folders" when there are no masters', () => {
-    render(
-      <InboxList items={items} selectedIdx={null} onSelect={vi.fn()} filterType="all" onFilterTypeChange={vi.fn()} />,
-    );
+    render(<Harness items={items} />);
 
     const footer = document.querySelector('.alm-list-sidebar__count');
     expect(footer?.textContent).toContain('3 folders');
@@ -172,15 +181,7 @@ describe('InboxList — configurable grouping', () => {
       makeItem({ inboxItemId: 'm1', isMaster: true }),
       makeItem({ inboxItemId: 'm2', isMaster: true }),
     ];
-    render(
-      <InboxList
-        items={masterItems}
-        selectedIdx={null}
-        onSelect={vi.fn()}
-        filterType="all"
-        onFilterTypeChange={vi.fn()}
-      />,
-    );
+    render(<Harness items={masterItems} />);
 
     const footer = document.querySelector('.alm-list-sidebar__count');
     expect(footer?.textContent).toContain('2 masters');
@@ -188,25 +189,19 @@ describe('InboxList — configurable grouping', () => {
   });
 
   it('(4) persists the ordered dimensions to localStorage and restores them', () => {
-    const { unmount } = render(
-      <InboxList items={items} selectedIdx={null} onSelect={vi.fn()} filterType="all" onFilterTypeChange={vi.fn()} />,
-    );
+    const { unmount } = render(<Harness items={items} />);
 
     fireEvent.change(screen.getByLabelText('Group by'), { target: { value: 'target' } });
     fireEvent.change(screen.getByLabelText('Then group by (level 2)'), { target: { value: 'frameType' } });
 
     expect(JSON.parse(localStorage.getItem(GROUPING_STORAGE_KEY)!)).toEqual(['target', 'frameType']);
 
-    // Tear down the first render's DOM before remounting so testid lookups are
-    // unambiguous (localStorage persists across the cleanup).
     unmount();
     cleanup();
 
     // Fresh mount restores the persisted grouping → nested headers render
     // without re-selecting dimensions.
-    render(
-      <InboxList items={items} selectedIdx={null} onSelect={vi.fn()} filterType="all" onFilterTypeChange={vi.fn()} />,
-    );
+    render(<Harness items={items} />);
     expect(screen.getByTestId('inbox-group-target-M31')).toBeInTheDocument();
     expect(screen.getAllByTestId(/^inbox-group-frameType-/).length).toBeGreaterThan(0);
     expect((screen.getByLabelText('Group by') as HTMLSelectElement).value).toBe('target');

@@ -170,6 +170,43 @@ describe('PlanPanel (aggregate surface)', () => {
     expect(summary).toHaveTextContent('masters/darks');
   });
 
+  // ── #75: frame-type-hint aggregation for catalogue actions ───────────────────
+
+  it('aggregates catalogue actions by FRAME TYPE using frameTypeByItemId (no per-file degeneration)', () => {
+    // Catalogue actions keep files in place, so the destination path carries no
+    // frame keyword. Without the item hint these collapse to "N catalogue"; with
+    // it they aggregate to the real frame type from the item's classification.
+    const plans = [
+      makePlan({
+        inboxItemId: 'cat',
+        itemName: '(root)',
+        actions: [
+          makeAction({ index: 0, action: 'catalogue', fromPath: '/lib/cam/a.fits', destinationPreview: '/lib/cam/a.fits' }),
+          makeAction({ index: 1, action: 'catalogue', fromPath: '/lib/cam/b.fits', destinationPreview: '/lib/cam/b.fits' }),
+          makeAction({ index: 2, action: 'catalogue', fromPath: '/lib/cam/c.fits', destinationPreview: '/lib/cam/c.fits' }),
+        ],
+      }),
+    ];
+    render(
+      <PlanPanel
+        plans={plans}
+        totalActions={3}
+        destructiveDestination="archive"
+        onDestructiveDestinationChange={vi.fn()}
+        onApplySelected={vi.fn()}
+        onApplyAll={vi.fn()}
+        onCancel={vi.fn()}
+        frameTypeByItemId={{ cat: 'bias' }}
+      />,
+    );
+    const summary = screen.getByTestId('plan-group-summary-cat');
+    // Single aggregated frame-type line — "3 bias", NOT three "catalogue" rows.
+    expect(summary).toHaveTextContent('3 bias');
+    expect(summary).not.toHaveTextContent('catalogue');
+    // Still collapsed: no per-file rows visible.
+    expect(screen.queryByText('a.fits')).toBeNull();
+  });
+
   // ── Selection ──────────────────────────────────────────────────────────────
 
   it('toggles a single group selection', () => {

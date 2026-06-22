@@ -260,22 +260,22 @@ describe('SessionDetail — empty state', () => {
   });
 });
 
-// Actions (Confirm / Re-open / Reject) live in the TopActionBar on SessionsPage,
-// not in SessionDetail. The rail's "Review state" card shows a read-only Pill only
-// (consistent with MasterDetail and ProjectDetail rail patterns).
+// The rail's "Review state" card shows a read-only Pill (consistent with
+// MasterDetail and ProjectDetail rail patterns). Contextual review actions
+// (Confirm / Re-open / Reject) live in the SessionDetail HEADER and are gated by
+// visibility props the page supplies (task #79). With no visibility props set
+// (the default), no action buttons render anywhere in the detail.
 describe('SessionDetail — review state rail (read-only Pill, spec 006 FR-004)', () => {
-  it('8. shows "Needs review" Pill for needs_review state; no action buttons in rail', () => {
+  it('8. shows "Needs review" Pill for needs_review state; no buttons without visibility props', () => {
     const { queryAllByRole } = renderDetail(makeSession({ state: 'needs_review' }));
-    // Pill text visible
     expect(screen.getAllByText('Needs review').length).toBeGreaterThan(0);
-    // Rail is read-only: no Confirm / Reject / Re-open buttons may appear in SessionDetail.
-    // (Actions live exclusively in the TopActionBar on SessionsPage — FR-006.)
+    // No visibility props passed → no action buttons render.
     expect(
       queryAllByRole('button', { name: /confirm|reject|re.?open/i }),
     ).toHaveLength(0);
   });
 
-  it('9. shows "Confirmed" Pill for confirmed state; no action buttons in rail', () => {
+  it('9. shows "Confirmed" Pill for confirmed state; no buttons without visibility props', () => {
     const { queryAllByRole } = renderDetail(makeSession({ state: 'confirmed' }));
     expect(screen.getAllByText('Confirmed').length).toBeGreaterThan(0);
     expect(
@@ -283,7 +283,7 @@ describe('SessionDetail — review state rail (read-only Pill, spec 006 FR-004)'
     ).toHaveLength(0);
   });
 
-  it('10. shows "Needs review" Pill for needs_review; Reject absent from rail', () => {
+  it('10. shows "Needs review" Pill for needs_review; Reject absent without visibility props', () => {
     const { queryAllByRole } = renderDetail(makeSession({ state: 'needs_review' }));
     expect(screen.getAllByText('Needs review').length).toBeGreaterThan(0);
     expect(
@@ -291,7 +291,7 @@ describe('SessionDetail — review state rail (read-only Pill, spec 006 FR-004)'
     ).toHaveLength(0);
   });
 
-  it('11. shows "Rejected" Pill for rejected state; no action buttons in rail', () => {
+  it('11. shows "Rejected" Pill for rejected state; no buttons without visibility props', () => {
     const { queryAllByRole } = renderDetail(makeSession({ state: 'rejected' }));
     expect(screen.getAllByText('Rejected').length).toBeGreaterThan(0);
     expect(
@@ -299,7 +299,7 @@ describe('SessionDetail — review state rail (read-only Pill, spec 006 FR-004)'
     ).toHaveLength(0);
   });
 
-  it('11b. discovered state shows "Needs review" Pill; no action buttons in rail', () => {
+  it('11b. discovered state shows "Needs review" Pill; no buttons without visibility props', () => {
     const { queryAllByRole } = renderDetail(makeSession({ state: 'discovered' }));
     expect(screen.getAllByText('Needs review').length).toBeGreaterThan(0);
     expect(
@@ -308,11 +308,52 @@ describe('SessionDetail — review state rail (read-only Pill, spec 006 FR-004)'
   });
 });
 
-describe('SessionDetail — Facts and Provenance sections (spec 006 FR-005)', () => {
+// Task #79: review actions are CONTEXTUAL and render in the SessionDetail
+// header (not the global PageTopBar). Visibility is driven by props the page
+// computes from the session's canonical state; clicking dispatches the handler.
+describe('SessionDetail — contextual header actions (task #79)', () => {
+  it('11c. renders Confirm/Reject in the header when their visibility props are set', () => {
+    renderDetail(makeSession({ state: 'needs_review' }), {
+      confirmVisible: true,
+      rejectVisible: true,
+      onConfirm: noop,
+      onReject: noop,
+    });
+    expect(screen.getByRole('button', { name: /confirm/i })).toBeDefined();
+    expect(screen.getByRole('button', { name: /reject/i })).toBeDefined();
+    expect(screen.queryByRole('button', { name: /re.?open/i })).toBeNull();
+  });
+
+  it('11d. renders Re-open when reopenVisible; clicking dispatches onReopen', () => {
+    const onReopen = vi.fn();
+    renderDetail(makeSession({ state: 'confirmed' }), {
+      reopenVisible: true,
+      onReopen,
+    });
+    fireEvent.click(screen.getByRole('button', { name: /re.?open/i }));
+    expect(onReopen).toHaveBeenCalledTimes(1);
+  });
+
+  it('11e. clicking Confirm dispatches onConfirm; pending disables the button', () => {
+    const onConfirm = vi.fn();
+    renderDetail(makeSession({ state: 'needs_review' }), {
+      confirmVisible: true,
+      onConfirm,
+      pending: true,
+    });
+    const btn = screen.getByRole('button', { name: /confirm/i });
+    expect(btn).toBeDisabled();
+    fireEvent.click(btn);
+    // Disabled button does not fire its handler.
+    expect(onConfirm).not.toHaveBeenCalled();
+  });
+});
+
+describe('SessionDetail — Facts section (spec 006 FR-005; task #79 provenance merge)', () => {
   it('12. renders em-dash for missing fact values', () => {
     const session = makeSession({
-      filter: undefined,
-      exposure: undefined,
+      filter: null,
+      exposure: null,
       camera: undefined,
     });
     renderDetail(session);
@@ -320,18 +361,28 @@ describe('SessionDetail — Facts and Provenance sections (spec 006 FR-005)', ()
     expect(dashes.length).toBeGreaterThan(0);
   });
 
-  it('13. renders Provenance section when provenance is present', () => {
+  // Task #79: the standalone Provenance section was removed. Inference is now
+  // conveyed by the Facts table's SOURCE column — an inferred target/filter
+  // reports "Inferred" instead of "FITS" on its fact row.
+  it('13. no standalone Provenance section; inferred values show Inferred source badge', () => {
     const session = makeSession({
+      target: 'NGC 7000',
+      filter: 'Ha',
       provenance: { target: 'NGC 7000', filter: 'Ha', confirmedBy: 'user' },
     });
     renderDetail(session);
-    expect(screen.getByText('Provenance')).toBeDefined();
+    expect(screen.queryByText('Provenance')).toBeNull();
+    // The SOURCE column carries inferred-vs-explicit: inferred target/filter
+    // surface an "Inferred" badge, and the confirmer surfaces a "User" badge.
+    expect(screen.getAllByText('Inferred').length).toBeGreaterThan(0);
+    expect(screen.getAllByText('User').length).toBeGreaterThan(0);
   });
 
-  it('14. omits Provenance section when provenance is absent', () => {
+  it('14. FITS-extracted (non-inferred) values show a FITS source badge, never Provenance', () => {
     const session = makeSession({ provenance: undefined });
     renderDetail(session);
     expect(screen.queryByText('Provenance')).toBeNull();
+    expect(screen.getAllByText('FITS').length).toBeGreaterThan(0);
   });
 
   it('15. renders linked project names as visible elements', () => {

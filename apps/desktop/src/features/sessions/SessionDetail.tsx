@@ -1,12 +1,20 @@
 /**
- * SessionDetail — spec 006 wired.
+ * SessionDetail — spec 006 wired; spec 043 §4 redesign (task #79).
  *
- * Detail drawer for an InventorySession. Shows Lifecycle, Facts, Provenance,
- * and Linked sections per spec 006 research.md §5.
+ * Detail panel for an InventorySession. The header spans the full panel width:
+ * the target is the heading and a single concise acquisition line summarizes
+ * the session (filter · frames · integration · night). The duplicate header
+ * pills ("N frames", "Needs review") were removed — frames is a table column
+ * and review state lives in the table and the REVIEW STATE rail card.
  *
- * Review actions (Confirm / Re-open / Reject) live exclusively in the
- * TopActionBar on SessionsPage (FR-006 action-bound pattern). This rail is
- * read-only: Review state shows a Pill; Linked projects shows linked names.
+ * Review actions (Confirm / Re-open / Reject) are CONTEXTUAL — they act on the
+ * selected session — so they live in this header's actions slot, not the global
+ * PageTopBar (task #79; supersedes the earlier FR-006 top-bar placement). The
+ * SessionsPage passes the handlers, visibility flags, and pending state.
+ *
+ * Provenance is no longer a separate section: the Facts table's SOURCE column
+ * already distinguishes FITS-extracted from inferred values, so target/filter
+ * inference is surfaced inline (source: 'inferred') on the relevant fact rows.
  *
  * SC-004: no column is named Tags or Handling.
  * FR-004: state renders as plain structured data, not a decorative bubble.
@@ -22,14 +30,43 @@ import {
   RailCard,
   PropertyTable,
 } from '@/components';
-import { Pill, Section, EmptyState, Lock } from '@/ui';
+import { Pill, Section, EmptyState, Lock, Btn } from '@/ui';
 import { sessionStateLabel, sessionStateVariant } from '@/lib/lifecycle';
 
 interface Props {
   session: InventorySession | null;
+  /** Contextual review-action handlers (act on this session). */
+  onConfirm?: () => void;
+  onReopen?: () => void;
+  onReject?: () => void;
+  /** Action visibility — driven by the session's canonical state on the page. */
+  confirmVisible?: boolean;
+  reopenVisible?: boolean;
+  rejectVisible?: boolean;
+  /** A review mutation is in flight for this session. */
+  pending?: boolean;
 }
 
-export function SessionDetail({ session }: Props) {
+/** One-line acquisition summary: filter · frames · integration · night. */
+function acquisitionSummary(session: InventorySession): string {
+  const parts: string[] = [];
+  if (session.filter) parts.push(session.filter);
+  parts.push(`${session.frames} ${session.frames === 1 ? 'frame' : 'frames'}`);
+  if (session.exposure) parts.push(session.exposure);
+  if (session.capturedOn) parts.push(session.capturedOn);
+  return parts.join(' · ');
+}
+
+export function SessionDetail({
+  session,
+  onConfirm,
+  onReopen,
+  onReject,
+  confirmVisible = false,
+  reopenVisible = false,
+  rejectVisible = false,
+  pending = false,
+}: Props) {
   if (!session) {
     return (
       <DetailPane>
@@ -43,11 +80,16 @@ export function SessionDetail({ session }: Props) {
 
   const isLinked = (session.linked?.projects?.length ?? 0) > 0;
 
-  const displayPath = session.name;
+  // Provenance is merged into the Facts SOURCE column: if a value's identity was
+  // inferred (provenance carries a value for it), the fact row reports
+  // source='inferred' instead of 'fits'. Everything else is FITS-extracted.
+  const prov = session.provenance;
+  const targetSource = prov?.target ? ('inferred' as const) : ('fits' as const);
+  const filterSource = prov?.filter ? ('inferred' as const) : ('fits' as const);
 
-  const facts = [
-    { key: 'target', label: 'Target', value: session.target ?? '—', source: 'fits' as const },
-    { key: 'filter', label: 'Filter', value: session.filter ?? '—', source: 'fits' as const },
+  const facts: Array<{ key: string; label: string; value: string; source: 'fits' | 'user' | 'inferred' }> = [
+    { key: 'target', label: 'Target', value: session.target ?? '—', source: targetSource },
+    { key: 'filter', label: 'Filter', value: session.filter ?? '—', source: filterSource },
     {
       key: 'exposure',
       label: 'Exposure',
@@ -76,72 +118,51 @@ export function SessionDetail({ session }: Props) {
     },
   ];
 
-  // Provenance summary rows — confidence/evidence detail NOT shown (spec 002 FR-006).
-  const provenanceFacts = session.provenance
-    ? ([
-        session.provenance.target
-          ? {
-              key: 'prov-target',
-              label: 'Target provenance',
-              value: session.provenance.target,
-              source: 'inferred' as const,
-            }
-          : null,
-        session.provenance.filter
-          ? {
-              key: 'prov-filter',
-              label: 'Filter provenance',
-              value: session.provenance.filter,
-              source: 'inferred' as const,
-            }
-          : null,
-        session.provenance.inferred
-          ? {
-              key: 'prov-inferred',
-              label: 'Inferred',
-              value: session.provenance.inferred,
-              source: 'inferred' as const,
-            }
-          : null,
-        session.provenance.confirmedBy
-          ? {
-              key: 'prov-confirmed',
-              label: 'Confirmed by',
-              value: session.provenance.confirmedBy,
-              source: 'user' as const,
-            }
-          : null,
-      ].filter(Boolean) as Array<{
-        key: string;
-        label: string;
-        value: string;
-        source: 'fits' | 'user' | 'inferred';
-      }>)
-    : [];
+  // Confirmed-by stays in the Facts table as an explicit 'user'-sourced row when
+  // present — it records who confirmed identity, not an inferred value.
+  if (prov?.confirmedBy) {
+    facts.push({
+      key: 'confirmedBy',
+      label: 'Confirmed by',
+      value: prov.confirmedBy,
+      source: 'user' as const,
+    });
+  }
 
   return (
     <DetailPane fill>
       <DetailHeader
         title={
-          <>
+          <span className="alm-session-detail__heading">
             {isLinked && <Lock />}
             <strong>{session.target ?? session.name}</strong>
-            {session.filter ? ` · ${session.filter}` : null}
-            {session.capturedOn ? ` · ${session.capturedOn}` : null}
-          </>
+          </span>
         }
-        titleExtra={
+        subtitle={acquisitionSummary(session)}
+        actions={
           <>
-            <Pill variant="neutral">{session.frames} frames</Pill>
-            {/* FR-004: state as plain structured data, not a decorative bubble */}
-            <Pill variant={sessionStateVariant(session.state)}>
-              {session.state === 'discovered' || session.state === 'candidate'
-                ? 'Needs review'
-                : sessionStateLabel(session.state)}
-            </Pill>
+            {confirmVisible && (
+              <Btn
+                size="sm"
+                variant="primary"
+                onClick={onConfirm}
+                disabled={pending}
+              >
+                Confirm
+              </Btn>
+            )}
+            {reopenVisible && (
+              <Btn size="sm" onClick={onReopen} disabled={pending}>
+                Re-open review
+              </Btn>
+            )}
+            {rejectVisible && (
+              <Btn size="sm" variant="danger" onClick={onReject} disabled={pending}>
+                Reject
+              </Btn>
+            )}
           </>
         }
-        subtitle={displayPath}
       />
 
       <MetricLine
@@ -155,7 +176,7 @@ export function SessionDetail({ session }: Props) {
       <DetailGrid
         rail={
           <Rail>
-            {/* FR-004: state as read-only structured data; actions are in the TopActionBar */}
+            {/* FR-004: state as read-only structured data; actions live in the header */}
             <RailCard title="Review state">
               <Pill variant={sessionStateVariant(session.state)}>
                 {session.state === 'discovered' || session.state === 'candidate'
@@ -190,12 +211,6 @@ export function SessionDetail({ session }: Props) {
         <Section title="Facts">
           <PropertyTable mode="view" showSource properties={facts} />
         </Section>
-
-        {provenanceFacts.length > 0 && (
-          <Section title="Provenance">
-            <PropertyTable mode="view" showSource properties={provenanceFacts} />
-          </Section>
-        )}
 
         {(session.linked?.calibration != null || session.linked?.session != null) && (
           <Section title="Linked">

@@ -13,45 +13,23 @@
 
 import { render, screen } from '@testing-library/react';
 import { describe, it, expect, vi } from 'vitest';
-import { InboxList } from '../InboxList';
-import type { InboxListItem } from '@/api/commands';
+import { InboxControls } from '../InboxControls';
 
-// ── helpers ───────────────────────────────────────────────────────────────────
-
-const sampleItems: InboxListItem[] = [
-  {
-    inboxItemId: 'item-001',
-    rootId: 'root-001',
-    rootAbsolutePath: '/astro/inbox',
-    relativePath: 'NGC7000/2026-06-01',
-    fileCount: 15,
-    lane: 'fits',
-    format: 'fits',
-    state: 'pending_classification',
-    contentSignature: 'sig-abc',
-    isMaster: false,
-    masterFrameType: null,
-    masterFilter: null,
-    masterExposureS: null,
-    organizationState: 'unorganized',
-  },
-  {
-    inboxItemId: 'item-002',
-    rootId: 'root-001',
-    rootAbsolutePath: '/astro/inbox',
-    relativePath: 'Jupiter/2026-06-01',
-    fileCount: 3,
-    lane: 'video',
-    format: 'video',
-    state: 'classified',
-    contentSignature: 'sig-def',
-    isMaster: false,
-    masterFrameType: null,
-    masterFilter: null,
-    masterExposureS: null,
-    organizationState: 'unorganized',
-  },
-];
+// The grouping / sort / frame-type controls moved out of InboxList into the
+// shared top-bar `InboxControls` (spec 043 #73/#31). These option assertions
+// now target that control directly.
+function renderControls(dims: string[] = []) {
+  return render(
+    <InboxControls
+      dims={dims}
+      setSlot={vi.fn()}
+      sortBy="name"
+      onSortByChange={vi.fn()}
+      filterType="all"
+      onFilterTypeChange={vi.fn()}
+    />,
+  );
+}
 
 // ── T074a test 1: Show ignored items in Cmd+K ────────────────────────────────
 
@@ -74,15 +52,7 @@ describe('T074a: Show ignored items palette entry', () => {
 
 describe('T074a: InboxList group-by options are user-meaningful', () => {
   it('renders dimension options (Target / Frame type) and no legacy "lane"', () => {
-    render(
-      <InboxList
-        items={sampleItems}
-        selectedIdx={null}
-        onSelect={vi.fn()}
-        filterType="all"
-        onFilterTypeChange={vi.fn()}
-      />,
-    );
+    renderControls();
     // The configurable grouping control offers user-meaningful dimensions,
     // not the legacy "lane" label.
     expect(screen.getByRole('option', { name: /group: target/i })).toBeInTheDocument();
@@ -91,15 +61,7 @@ describe('T074a: InboxList group-by options are user-meaningful', () => {
   });
 
   it('renders "Group: Date" option', () => {
-    render(
-      <InboxList
-        items={sampleItems}
-        selectedIdx={null}
-        onSelect={vi.fn()}
-        filterType="all"
-        onFilterTypeChange={vi.fn()}
-      />,
-    );
+    renderControls();
     expect(screen.getByRole('option', { name: /group: date/i })).toBeInTheDocument();
   });
 });

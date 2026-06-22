@@ -7371,3 +7371,158 @@
   color: var(--alm-text-muted);
   border-top: 1px solid var(--alm-border-subtle);
 }
+
+/* === merged from .cssblocks/sessions-detail.css (refine wave, spec-043) === */
+/*
+ * sessions-detail.css — task #79 (Sessions detail header refinement).
+ *
+ * NOT imported. New token-only classes staged here for the components.css
+ * split (task #60). Append/merge into src/styles/components.css when wiring.
+ *
+ * Context: the SessionDetail header now uses the full panel width — the target
+ * is the heading and a single acquisition line replaces the cramped repeated
+ * pills. Review actions sit in the header's actions slot (shared
+ * .alm-detail__actions, already defined). The acquisition summary is plain
+ * prose, not a filesystem path, so it overrides the mono/break-all path styling
+ * the default .alm-detail__subtitle uses.
+ */
+
+/* Heading: target name (+ optional lock) as the full-width identity line. */
+.alm-session-detail__heading {
+  display: flex;
+  align-items: center;
+  gap: var(--alm-sp-2);
+  min-width: 0;
+}
+
+/* Acquisition summary line — prose, not a path. Override the default
+ * mono/break-all subtitle treatment with readable body text that truncates. */
+.alm-session-detail__summary.alm-detail__subtitle {
+  font-family: var(--alm-font-sans);
+  font-size: var(--alm-text-sm);
+  word-break: normal;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+/* === merged from .cssblocks/projects-detail-fix.css (refine wave, spec-043) === */
+/* ── Projects detail header overlap fix (task #81) ────────────────────────── */
+/* Symptom (1100×720): the contextual action cluster (Reveal in Explorer ·    */
+/* Open in {tool} · Mark as Completed) was forced into the shared action       */
+/* bar's single fixed-height (--alm-toolbar-height) non-wrapping flex row.     */
+/* When the tool + path breadcrumb is wide, the buttons overflowed the 40px    */
+/* box and rendered ON TOP of the MetricLine and the path line below.          */
+/*                                                                             */
+/* Fix: scope a relaxed layout to the project detail only. The shared          */
+/* TopActionBar is untouched for every other consumer. Within this scope the   */
+/* bar grows to fit its content, the breadcrumb sits on the first row, and a   */
+/* full-width spacer forces the action cluster onto its OWN row beneath it —   */
+/* so actions can never overlap the breadcrumb or the MetricLine.              */
+/* Token-only; merged into components.css by the parent — not imported.        */
+
+.alm-project-detail__action-bar .alm-action-bar {
+  /* Relax the fixed single-row height: let the bar grow for a second row. */
+  height: auto;
+  min-height: var(--alm-toolbar-height);
+  flex-wrap: wrap;
+  align-items: center;
+  row-gap: var(--alm-sp-2);
+  padding-top: var(--alm-sp-2);
+  padding-bottom: var(--alm-sp-2);
+}
+
+/* Force the action cluster onto its own row: a full-width flex spacer wraps,  */
+/* pushing everything after it (the actions) to the next line.                 */
+.alm-project-detail__action-bar .alm-action-bar__spacer {
+  flex-basis: 100%;
+}
+
+/* Action cluster owns its row; right-align to match the bar convention. */
+.alm-project-detail__action-bar .alm-action-bar__actions {
+  flex: 1 1 100%;
+  justify-content: flex-end;
+  flex-wrap: wrap;
+  row-gap: var(--alm-sp-1);
+}
+
+/* === merged from .cssblocks/inbox-layout.css (refine wave, spec-043) === */
+/* === merged from .cssblocks/inbox-layout.css (spec-043, tasks #73/#75/#76/#61) ===
+ * ===========================================================================
+ * Inbox — shared list-page layout adoption.
+ *
+ * SCRATCH FILE: not imported anywhere. The parent merges this into
+ * components.css and runs check-tokens. Token-only (existing --alm-* tokens);
+ * no raw hex/rgb/ms.
+ *
+ * The Inbox now uses the shared ListPageLayout + PageTopBar + FilterToolbar
+ * primitives (same system Sessions adopts). The page header region pins TWO
+ * bars that never scroll: the PageTopBar (search + group-by + sort + frame-type
+ * filter + Confirm/Rescan actions) and, directly below it, the inbox stats
+ * strip (#61 — Folders/Masters/Images + per-type, always-on-top). The body is
+ * the shared list + detail PANE split: the detections list is the primary
+ * content, and the detail pane holds the per-detection classification AND, when
+ * a plan exists, the planned-actions surface (#76 — moved out of the old
+ * full-width docked bottom strip).
+ * ======================================================================== */
+
+/* The stats strip is a SECOND pinned bar in the page header zone (#61). It
+ * carries `.alm-page__bar` (flex-shrink:0) so it sits above `.alm-listpage__body`
+ * and never scrolls out of view. A subtle top rule separates it from the
+ * PageTopBar above it. */
+.alm-inbox-statsbar {
+  flex-shrink: 0;
+}
+
+/* In the top bar the grouping/sort/filter controls lay out INLINE (a single
+ * row that wraps) rather than stacked, and drop the sidebar padding since the
+ * FilterToolbar already supplies the row gap. */
+.alm-inbox-list__controls--toolbar {
+  flex-direction: row;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--alm-sp-2);
+  padding: 0;
+}
+
+/* The detail-pane content stack: per-detection detail, then (when present) the
+ * plan surface. It owns no scroll of its own — the shared
+ * `.alm-listpage__detail-body` is the single scroll region for the pane. */
+.alm-inbox-detail-pane {
+  display: flex;
+  flex-direction: column;
+}
+
+/* Inside the detail pane the plan surface sits below the per-detection detail.
+ * It must not be a full-width bottom strip — it now flows inside the right-hand
+ * detail pane's scroll region (#76). A top rule separates it from the detail
+ * above it. */
+.alm-inbox-detail-plans {
+  border-top: 1px solid var(--alm-border);
+  margin-top: var(--alm-sp-3);
+  padding-top: var(--alm-sp-2);
+}
+
+/* When no detection is selected but plans exist, the plan surface owns the
+ * detail pane on its own — drop the separating rule so it does not read as a
+ * detached fragment. */
+.alm-inbox-detail-plans--solo {
+  border-top: none;
+  margin-top: 0;
+  padding-top: 0;
+}
+
+/* Within the (narrower) detail pane the plan-panel group rows wrap rather than
+ * clip, and the per-file destination paths break instead of forcing horizontal
+ * overflow. */
+.alm-listpage__detail-body .alm-plan-panel__bar {
+  flex-wrap: wrap;
+  gap: var(--alm-sp-2);
+}
+.alm-listpage__detail-body .alm-plan-panel__bar-actions {
+  flex-wrap: wrap;
+}
+.alm-listpage__detail-body .alm-plan-panel__summary-dest,
+.alm-listpage__detail-body .alm-plan-panel__dest {
+  word-break: break-all;
+}
