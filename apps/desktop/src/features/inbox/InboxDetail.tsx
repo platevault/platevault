@@ -429,7 +429,7 @@ export function InboxDetail({
         isInspected ? 'alm-inbox-meta-row--inspected' : '',
         'alm-inbox-meta-row',
       ].filter(Boolean).join(' '),
-      _onRowClick: () => setInspectedIdx(isInspected ? null : rowIdx),
+      _onClick: () => setInspectedIdx(isInspected ? null : rowIdx),
     };
   });
 
