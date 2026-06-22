@@ -348,7 +348,7 @@ export function MatchCandidatesPanel({
       <Section title="Compatible sessions">
         <EmptyState
           title="No compatible sessions"
-          desc="No acquisition sessions matched this master's fingerprint. Adjust matching tolerances in Settings → Calibration, or this master may simply not apply to any captured session yet."
+          desc="No acquisition sessions matched this master's fingerprint. Adjust tolerances in Settings → Calibration."
         />
       </Section>
     );

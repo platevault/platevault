@@ -216,7 +216,7 @@ export function WizardPage() {
 
       <div>
         <div className="alm-wizard-page__summary-section-heading">
-          What&rsquo;s selected so far
+          Selected
         </div>
         <div className="alm-wizard-page__summary-list">
           <SummaryRow label="Lights" value={`${wizardData.sources.selectedSessionIds.length} sess`} />

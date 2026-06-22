@@ -142,7 +142,7 @@ export function CommandPalette() {
           <Command shouldFilter={false}>
             <Command.Input
               className="alm-palette__input"
-              placeholder="Search sessions, targets, projects..."
+              placeholder="Search sessions, targets, projects…"
               value={query}
               onValueChange={setQuery}
               autoFocus

@@ -148,11 +148,8 @@ export function Cleanup({ save }: CleanupProps) {
       <SettingsSection title="Per-Type Default Actions">
         {warnedTypes.length > 0 && (
           <Banner variant="danger" className="alm-cleanup__warning">
-            <strong>Heads up</strong> — you&rsquo;ve set protected, high-value
-            categories to a non-Keep action: {warnedTypes.join(', ')}. Raw
-            lights, calibration masters and accepted outputs are irreplaceable
-            or expensive to reacquire; cleanup plans will archive or delete them.
-            Make sure this is intentional.
+            Protected categories are set to a destructive action: {warnedTypes.join(', ')}.
+            These are costly to reacquire — confirm this is intentional.
           </Banner>
         )}
         <table className="alm-table">

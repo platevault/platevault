@@ -66,7 +66,7 @@ export function ArchivePage() {
         }
         list={
           <ListSidebar
-            placeholder="Search archive..."
+            placeholder="Search archive…"
             footer={`${ARCHIVE_DATA.length} items`}
           >
             {ARCHIVE_DATA.map((a) => (

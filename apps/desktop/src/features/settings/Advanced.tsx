@@ -114,7 +114,7 @@ export function Advanced({ save }: AdvancedProps) {
         <SettingsSection title="Guided Tour">
           <SettingsRow
             label="First project flow"
-            info="The guided flow walks you through setting up your first project. You can restart it at any time from here."
+            info="Walks you through setting up your first project."
           >
             <div className="alm-adv-settings__guided-col">
               <p className="alm-adv-settings__guided-desc">

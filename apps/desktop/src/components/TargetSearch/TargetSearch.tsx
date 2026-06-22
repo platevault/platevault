@@ -240,7 +240,7 @@ export function TargetSearch({
       } catch (err: unknown) {
         if (!isCurrent()) return;
         const code = typeof err === 'string' ? err : (err as Error)?.message ?? 'unknown';
-        setError(`Could not search targets (${code}).`);
+        setError(`Target search failed.`);
         setSuggestions([]);
         setLoading(false);
         return;
@@ -331,7 +331,7 @@ export function TargetSearch({
         setOpen(false);
       } catch (err: unknown) {
         const code = typeof err === 'string' ? err : (err as Error)?.message ?? 'unknown';
-        setError(`Could not set target (${code}).`);
+        setError(`Could not set target.`);
       } finally {
         setOverriding(null);
       }

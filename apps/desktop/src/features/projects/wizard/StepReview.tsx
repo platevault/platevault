@@ -134,7 +134,7 @@ export function StepReview({ wizardState: _wizardState }: StepReviewProps) {
                 Open <span className="alm-mono">NGC7000_HOO/sources/views/wbpp_input</span> in
                 PixInsight/WBPP
               </li>
-              <li>Process there. The app will observe artifacts on refresh.</li>
+              <li>Process there; outputs are observed on refresh.</li>
               <li>Record final outputs back here when done.</li>
             </ol>
           </Box>

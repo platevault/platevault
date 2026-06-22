@@ -81,7 +81,7 @@ export function SessionDetail({
       <DetailPane>
         <EmptyState
           title="Select a session"
-          desc="Choose a session from the list to view its details."
+          desc="Select a session to view its details."
         />
       </DetailPane>
     );

@@ -70,9 +70,6 @@ export function StatusBar() {
         <span title="Total calibration masters">
           {formatCount(status.calibrationCount)} masters
         </span>
-        <span className="alm-statusbar__sep">·</span>
-        {/* STUB: no library-wide image/file count in the contract yet. */}
-        <span title="Total images (placeholder — pending metadata pipeline)">— images</span>
       </div>
 
       {/* RIGHT — persistent storage / cleanup health + log */}

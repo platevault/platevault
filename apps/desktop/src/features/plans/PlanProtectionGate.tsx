@@ -91,7 +91,7 @@ export function PlanProtectionGate({ planId, onAcknowledgedChange }: PlanProtect
   if (loadState === 'error') {
     return (
       <div className="alm-plan-gate__status">
-        Could not load protection check. Plan may still proceed.
+        Protection check failed to load.
       </div>
     );
   }

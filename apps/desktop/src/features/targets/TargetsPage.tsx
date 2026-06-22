@@ -409,7 +409,7 @@ export function TargetsPage() {
               isMyTargets
                 ? favouriteIds.size === 0
                   // No stars yet — nudge the user to star something.
-                  ? 'No favourites yet. Star a target in the Planner (☆) to add it to My Targets. (Stored locally — backend linkage lands in task #54.)'
+                  ? 'No favourites yet. Star a target (☆) to add it here.'
                   // Stars exist but filters excluded them all.
                   : 'No favourites match the current filters.'
                 : 'No catalog targets match the current filters.'

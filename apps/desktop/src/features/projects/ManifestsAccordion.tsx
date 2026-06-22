@@ -139,8 +139,7 @@ export function ManifestsAccordion({ projectId, defaultOpen = true }: ManifestsA
           data-testid="manifests-empty"
           className="alm-manifests__status"
         >
-          No manifests yet. Manifests are generated automatically at lifecycle
-          checkpoints.
+          No manifests yet.
         </div>
       ) : (
         <div data-testid="manifests-list">

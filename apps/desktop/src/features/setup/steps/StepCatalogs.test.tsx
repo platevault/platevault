@@ -65,9 +65,9 @@ describe('StepCatalogs (Configuration)', () => {
     expect(screen.getByLabelText('Display density')).toBeInTheDocument();
   });
 
-  it('shows a disabled theme control marked coming soon', () => {
+  it('shows a disabled theme control', () => {
     renderStep();
-    const theme = screen.getByLabelText('Theme (coming soon)') as HTMLSelectElement;
+    const theme = screen.getByLabelText('Theme') as HTMLSelectElement;
     expect(theme).toBeDisabled();
   });
 

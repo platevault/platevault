@@ -812,7 +812,7 @@ export function PlanPanel({
               <span>
                 <strong>Archive folder</strong>
                 <span className="alm-plan-panel__dest-label-hint">
-                  Archive folder keeps a recoverable copy; System Trash uses the OS trash
+                  Archive keeps a recoverable copy; Trash is unrecoverable.
                 </span>
               </span>
             </label>

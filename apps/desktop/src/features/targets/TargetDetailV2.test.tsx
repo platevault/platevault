@@ -253,7 +253,7 @@ describe('TargetDetailV2', () => {
     render(<TargetDetailV2 targetId={TARGET_ID} />);
     await waitFor(() =>
       expect(
-        screen.getByText(/Sessions appear here once the ingest pipeline/i),
+        screen.getByText(/No linked sessions yet/i),
       ).toBeInTheDocument(),
     );
     // The duplicate bottom "No sessions linked" section has been removed.

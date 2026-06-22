@@ -34,7 +34,7 @@ export function ListSidebar({
       <div className="alm-list-sidebar__search">
         <input
           type="text"
-          placeholder={placeholder || 'Search...'}
+          placeholder={placeholder || 'Search…'}
           value={searchValue ?? ''}
           onChange={onSearchChange ? (e) => onSearchChange(e.target.value) : undefined}
           readOnly={!onSearchChange}

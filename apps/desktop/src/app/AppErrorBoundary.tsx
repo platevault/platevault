@@ -62,8 +62,7 @@ export class AppErrorBoundary extends Component<Props, State> {
             Something went wrong
           </h1>
           <p className="alm-error-boundary__body">
-            An unexpected error occurred in the application. You can try reloading the view or
-            restarting the app if the problem persists.
+            Something failed to render. Reload the view, or restart the app if it keeps happening.
           </p>
           {error.message && (
             <pre className="alm-error-boundary__detail">

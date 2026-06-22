@@ -147,14 +147,14 @@ export function StepCatalogs(_props: StepCatalogsProps) {
 
       <ConfigOption
         title="Appearance / theme"
-        description="Light / dark theme is coming soon — the app currently uses a single light theme."
+        description="Choose the app's color theme."
         control={
           <select
             className="alm-select"
             disabled
-            aria-label="Theme (coming soon)"
+            aria-label="Theme"
           >
-            <option>Light (coming soon)</option>
+            <option>Light</option>
           </select>
         }
       />

@@ -264,19 +264,19 @@ const COLUMNS: Array<{
   title?: string;
 }> = [
   // task #18: star column (no label — icon-only header)
-  { key: 'star', label: '★', className: 'alm-targets-cell--center', title: 'Favourite (stored locally until task #54 backend lands)' },
+  { key: 'star', label: '★', className: 'alm-targets-cell--center', title: 'Favourite' },
   { key: 'designation', label: 'Designation', sort: 'designation' },
   { key: 'type', label: 'Type', sort: 'type' },
-  { key: 'maxAlt', label: 'Max alt', sort: 'maxAlt', className: 'alm-targets-cell--num', title: 'Peak altitude tonight (MOCK — pending ephemeris)' },
+  { key: 'maxAlt', label: 'Max alt', sort: 'maxAlt', className: 'alm-targets-cell--num', title: 'Peak altitude tonight (approximate)' },
   { key: 'spark', label: 'Tonight', className: 'alm-targets-cell--spark' },
   { key: 'visible', label: 'Visible', sort: 'visible', className: 'alm-targets-cell--center', title: 'Visible tonight above usable altitude threshold' },
-  { key: 'opposition', label: 'Opposition', sort: 'opposition', className: 'alm-targets-cell--opposition', title: 'Next opposition date (pending ephemeris)' },
+  { key: 'opposition', label: 'Opposition', sort: 'opposition', className: 'alm-targets-cell--opposition', title: 'Next opposition date' },
   // task #5: abbreviated header "Lunar" fits the widened 80px column without clipping
-  { key: 'lunarDist', label: 'Lunar', sort: 'lunarDist', className: 'alm-targets-cell--num', title: 'Lunar dist — angular separation from Moon tonight (MOCK — not astronomy)' },
-  { key: 'filters', label: 'Filters', className: 'alm-targets-cell--filters', title: 'Recommended filter set given mock Moon conditions (MOCK)' },
+  { key: 'lunarDist', label: 'Lunar', sort: 'lunarDist', className: 'alm-targets-cell--num', title: 'Angular separation from the Moon tonight' },
+  { key: 'filters', label: 'Filters', className: 'alm-targets-cell--filters', title: 'Recommended filter set for tonight' },
   // task #5: abbreviated header "Img time" fits the widened 100px column without clipping
-  { key: 'imagingTime', label: 'Img time', sort: 'imagingTime', className: 'alm-targets-cell--num', title: 'Imaging time — hours above usable altitude tonight (MOCK — pending ephemeris)' },
-  { key: 'sessions', label: 'Sessions', sort: 'sessions', className: 'alm-targets-cell--num', title: 'Linked sessions (pending backend #57)' },
+  { key: 'imagingTime', label: 'Img time', sort: 'imagingTime', className: 'alm-targets-cell--num', title: 'Hours above usable altitude tonight' },
+  { key: 'sessions', label: 'Sessions', sort: 'sessions', className: 'alm-targets-cell--num', title: 'Linked sessions' },
 ];
 
 // COL_COUNT is derived from COLUMNS so adding/removing a column stays in sync.
@@ -504,7 +504,7 @@ export function TargetsTable({
                       }
                       aria-label={isFav ? `Unfavourite ${t.effectiveLabel}` : `Favourite ${t.effectiveLabel}`}
                       aria-pressed={isFav}
-                      title={isFav ? 'Remove from My Targets (local stub — task #54)' : 'Add to My Targets (local stub — task #54)'}
+                      title={isFav ? 'Remove from My Targets' : 'Add to My Targets'}
                       onClick={(e) => {
                         e.stopPropagation();
                         resolvedToggle(t.id);
@@ -526,7 +526,7 @@ export function TargetsTable({
                   </td>
                   {/* STUB (#58): max altitude tonight from the approximate model. */}
                   <td className="alm-targets-cell--num">
-                    <span title="Approximate max altitude tonight (STUB — pending ephemeris)">
+                    <span title="Approximate max altitude tonight">
                       {Math.round(alt.maxAltDeg)}°
                     </span>
                   </td>
@@ -539,14 +539,14 @@ export function TargetsTable({
                     {alt.visibleTonight ? (
                       <span
                         className="alm-targets-vis alm-targets-vis--yes"
-                        title={`Reaches ${Math.round(alt.maxAltDeg)}° · ~${alt.hoursAboveUsable.toFixed(1)} h above ${usableAltDeg}° (MOCK)`}
+                        title={`Reaches ${Math.round(alt.maxAltDeg)}° · ~${alt.hoursAboveUsable.toFixed(1)} h above ${usableAltDeg}°`}
                       >
                         ●<span className="alm-targets-vis__label">tonight</span>
                       </span>
                     ) : (
                       <span
                         className="alm-targets-vis alm-targets-vis--no"
-                        title={`Peaks at ${Math.round(alt.maxAltDeg)}° — below ${usableAltDeg}° tonight (MOCK)`}
+                        title={`Peaks at ${Math.round(alt.maxAltDeg)}° — below ${usableAltDeg}° tonight`}
                       >
                         ○<span className="alm-targets-vis__label">low</span>
                       </span>
@@ -556,13 +556,13 @@ export function TargetsTable({
                       planner-altitude.ts hash model has no date; blocked on
                       backend ephemeris (#58). Renders '—' until that lands. */}
                   <td className="alm-targets-cell--opposition">
-                    <span className="alm-targets-cell--muted" title="Opposition date pending ephemeris (#58)">—</span>
+                    <span className="alm-targets-cell--muted" title="Next opposition date">—</span>
                   </td>
                   {/* MOCK (spec 044): lunar angular separation. NOT astronomy. */}
                   <td className="alm-targets-cell--num">
                     <span
                       className="alm-targets-cell--lunardist"
-                      title={`Mock lunar distance: ${Math.round(alt.lunarDistanceDeg)}° (NOT astronomy — spec 044 §3)`}
+                      title={`Lunar distance: ${Math.round(alt.lunarDistanceDeg)}°`}
                     >
                       {Math.round(alt.lunarDistanceDeg)}°
                     </span>
@@ -574,7 +574,7 @@ export function TargetsTable({
                   {/* MOCK (spec 044): hours above the usable-altitude threshold. */}
                   <td className="alm-targets-cell--num">
                     <span
-                      title={`~${alt.hoursAboveUsable.toFixed(1)} h above ${usableAltDeg}° tonight (MOCK)`}
+                      title={`~${alt.hoursAboveUsable.toFixed(1)} h above ${usableAltDeg}° tonight`}
                     >
                       {alt.hoursAboveUsable > 0 ? `${alt.hoursAboveUsable.toFixed(1)} h` : '—'}
                     </span>

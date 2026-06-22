@@ -78,7 +78,7 @@ export function OutputsSection({ outputs = [], defaultOpen = true }: OutputsSect
         // STUB: no accepted-output backend model yet — teaching empty state.
         <EmptyState
           title="No accepted outputs yet"
-          desc="Accepted processing outputs and their verification status will appear here once recorded. Record an accepted output from your processing tool to track it."
+          desc="No accepted outputs yet. Record one from your processing tool to track it."
         />
       ) : (
         <div className="alm-project-detail__outputs">
@@ -138,9 +138,7 @@ export function CleanupPreviewSection({ preview, defaultOpen = true }: CleanupPr
             </span>
           ) : (
             <span className="alm-project-detail__cleanup-note">
-              No cleanup preview available yet. After the project is verified,
-              this will show what a cleanup plan would archive or trash —
-              reviewable before anything is removed.
+              No cleanup preview yet — available after the project is verified.
             </span>
           )}
         </div>

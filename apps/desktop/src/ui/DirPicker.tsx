@@ -34,12 +34,12 @@ export const DirPicker = forwardRef<HTMLDivElement, DirPickerProps>(
             {value || 'No folder selected'}
           </span>
           <Btn size="sm" onClick={handleChoose} disabled={loading}>
-            {loading ? 'Choosing...' : 'Choose folder…'}
+            {loading ? 'Choosing…' : 'Choose folder…'}
           </Btn>
         </span>
         {error && (
-          <div className="alm-dir-picker__error">
-            {error.message}
+          <div className="alm-dir-picker__error" title={error.message}>
+            Couldn&apos;t open the folder picker.
           </div>
         )}
       </div>

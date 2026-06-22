@@ -131,7 +131,7 @@ export function CalibrationMatchPanel({ sessionIds, defaultOpen = true }: Props)
       <Section title="Calibration readiness" defaultOpen={defaultOpen}>
         <EmptyState
           title="No calibration data"
-          desc="Calibration fingerprints are not yet available for this project's sources. Run a metadata scan to populate them."
+          desc="No calibration data. Run a metadata scan."
           data-testid="cal-panel-empty"
         />
       </Section>

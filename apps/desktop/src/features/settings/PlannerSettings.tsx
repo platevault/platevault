@@ -46,8 +46,7 @@ export function PlannerSettings() {
         info={
           `Minimum elevation above the horizon (in degrees) considered acceptable ` +
           `for imaging. Drives the "Visible tonight" and "Imaging time" columns in ` +
-          `the Planner table. Default: ${USABLE_ALT_DEG}°. ` +
-          `Note: table values are MOCK placeholders until real ephemeris lands (#58).`
+          `the Planner table. Default: ${USABLE_ALT_DEG}°.`
         }
       >
         <input

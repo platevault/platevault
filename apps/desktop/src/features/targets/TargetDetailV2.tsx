@@ -508,7 +508,7 @@ export function TargetDetailV2({ targetId, item = null, usableAltDeg = USABLE_AL
         </div>
         <div className="alm-planner__actions">
           {/* STUB: "Add to plan" — observing-plan feature not yet implemented */}
-          <Btn size="sm" variant="ghost" disabled title="Add to plan (coming soon)">
+          <Btn size="sm" variant="ghost" disabled>
             Add to plan
           </Btn>
           {/* "+ New project here" — opens CreateProjectDialog; pre-wiring
@@ -546,7 +546,7 @@ export function TargetDetailV2({ targetId, item = null, usableAltDeg = USABLE_AL
         {/* Tonight column: a small transit graph + the planner stats. */}
         <div className="alm-planner__tonight">
           <div className="alm-planner__graph-title">
-            Tonight · ~{STUB_OBSERVER_LAT_DEG}°N (approx)
+            Tonight · ~{Math.round(STUB_OBSERVER_LAT_DEG)}°N
           </div>
           <AltitudeGraph points={tonightPoints} />
           {rowAlt && (
@@ -568,9 +568,7 @@ export function TargetDetailV2({ targetId, item = null, usableAltDeg = USABLE_AL
         <p className="alm-planner__section-title">Coverage</p>
         <div className="alm-planner__coverage-list">
           <span className="alm-planner__coverage-stub">
-            {/* STUB: target coverage — backend pending (coverage per filter not in gen-3 target.get) */}
-            No coverage data — filter integration hours will appear here once the
-            target↔session linkage backend is wired.
+            No coverage data yet.
           </span>
         </div>
       </div>
@@ -580,16 +578,14 @@ export function TargetDetailV2({ targetId, item = null, usableAltDeg = USABLE_AL
       <div className="alm-planner__links">
         <div>
           <p className="alm-planner__link-col-title">Sessions</p>
-          {/* STUB: target↔session linkage backend pending */}
           <span className="alm-planner__link-empty">
-            Sessions appear here once the ingest pipeline populates target_id from FITS OBJECT data.
+            No linked sessions yet.
           </span>
         </div>
         <div>
           <p className="alm-planner__link-col-title">Projects</p>
-          {/* STUB: target↔project linkage backend pending */}
           <span className="alm-planner__link-empty">
-            Projects appear here once they are created with a target reference.
+            No projects linked.
           </span>
         </div>
       </div>
@@ -719,7 +715,7 @@ export function TargetDetailV2({ targetId, item = null, usableAltDeg = USABLE_AL
         {/* STUB: target↔project linkage backend pending */}
         <EmptyState
           title="No projects linked"
-          desc="Projects appear here once they are created with a target reference."
+          desc="No projects linked."
         />
       </Section>
 

@@ -91,7 +91,7 @@ export function MasterDetail({ master, prefillSuggestion, agingThresholdDays }: 
       <DetailPane>
         <EmptyState
           title="Select a master"
-          desc="Choose a calibration master from the list to view its details and suggestions."
+          desc="Select a master to view its details."
         />
       </DetailPane>
     );

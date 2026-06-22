@@ -40,7 +40,7 @@ export function FilterBadges({ recommendation }: Props) {
   const ordered = [...BROADBAND_BANDS, ...NARROWBAND_BANDS].filter((b) => bands.includes(b));
 
   return (
-    <span className="alm-filter-badges" title={`${label} (MOCK — not astronomy)`}>
+    <span className="alm-filter-badges" title={label}>
       {ordered.map((band) => (
         <span
           key={band}
