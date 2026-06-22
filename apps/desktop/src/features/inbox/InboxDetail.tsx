@@ -546,6 +546,12 @@ export function InboxDetail({
 
   // ── Render ────────────────────────────────────────────────────────────────
 
+  // #59 bottom-panel side-by-side: the inspector is lifted into its own RIGHT
+  // column so the wide bottom panel's horizontal room is used and the inspector
+  // is visible without scrolling under the metadata table. Rendered once the
+  // per-file metadata exists (the table that the inspector reflects).
+  const hasMetadata = metadataRows.length > 0;
+
   return (
     <DetailPane>
       <DetailHeader
@@ -562,6 +568,18 @@ export function InboxDetail({
         }
       />
 
+      {/* #59: side-by-side bottom panel — primary detail (classification +
+          breakdown + per-file metadata table) on the LEFT, the file-metadata
+          inspector on the RIGHT. The columns collapse to a single stack when
+          there is no metadata to inspect. */}
+      <div
+        className={
+          hasMetadata
+            ? 'alm-inbox-detail__cols alm-inbox-detail__cols--split'
+            : 'alm-inbox-detail__cols'
+        }
+      >
+        <div className="alm-inbox-detail__main">
       {/* Mixed folder: an advisory (NOT blocking) alert with an inline action.
           Confirming a mixed folder is allowed — it generates a split plan, which
           is exactly what the inline button triggers. */}
@@ -809,17 +827,14 @@ export function InboxDetail({
         </Banner>
       )}
 
-      {/* FR-010: per-file metadata table + bottom inspector dock */}
-      {metadataRows.length > 0 && (
+      {/* FR-010: per-file metadata table. The inspector that reflects the
+          selected row(s) now lives in the RIGHT column (below) — #59. */}
+      {hasMetadata && (
         <Section title={`File metadata (${metadataRows.length})`}>
           <div className="alm-inbox-meta-wrap">
             <div className="alm-inbox-detail__metadata-scroll">
               <Table columns={metadataColumns} rows={metadataRows} />
             </div>
-            <InboxInspector
-              fileMetadata={fileMetadata ?? []}
-              selectedPaths={inspectorPaths}
-            />
           </div>
         </Section>
       )}
@@ -827,6 +842,19 @@ export function InboxDetail({
       {!classification && (
         <EmptyClassification />
       )}
+        </div>
+
+        {/* RIGHT column: file-metadata inspector. Shown alongside the metadata
+            table so it is always visible without scrolling under the table. */}
+        {hasMetadata && (
+          <aside className="alm-inbox-detail__aside" aria-label="File inspector column">
+            <InboxInspector
+              fileMetadata={fileMetadata ?? []}
+              selectedPaths={inspectorPaths}
+            />
+          </aside>
+        )}
+      </div>
     </DetailPane>
   );
 }

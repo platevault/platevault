@@ -51,7 +51,9 @@ import {
   useInboxPlanCancel,
   useOpenInboxPlans,
   useApplySelectedInboxPlans,
+  useInboxPlanBreakdowns,
 } from './store';
+import type { InboxBreakdownTarget } from './store';
 import { InboxStatsSummary } from './InboxStatsSummary';
 import { deriveInboxStats } from './inboxStatsFromItems';
 import { PlanPanel, buildBreakdownFromActions } from './PlanPanel';
@@ -398,25 +400,60 @@ export function InboxPage() {
     return m;
   }, [items]);
 
-  // #75: per-ingestion frame-type BREAKDOWN for the collapsed plan summary —
+  // #98: PRELOAD the authoritative per-type breakdown for EVERY item that has
+  // an open plan — not just the selected one. Each open plan is mapped to its
+  // item's registered root path (from the inbox list) so the classify query can
+  // run. The hook shares `useInboxClassification`'s cache key, so the selected
+  // item's classification is reused rather than re-fetched. The result is a
+  // `inboxItemId → breakdown[]` map covering all unselected mixed folders, which
+  // previously degraded to a dominant-type guess (e.g. "41 darks").
+  const rootPathByItemId = useMemo(() => {
+    const m: Record<string, string> = {};
+    for (const it of items) m[it.inboxItemId] = it.rootAbsolutePath;
+    return m;
+  }, [items]);
+
+  const breakdownTargets = useMemo<InboxBreakdownTarget[]>(() => {
+    const seen = new Set<string>();
+    const out: InboxBreakdownTarget[] = [];
+    for (const plan of openPlans) {
+      const rootAbsolutePath = rootPathByItemId[plan.inboxItemId];
+      if (!rootAbsolutePath || seen.has(plan.inboxItemId)) continue;
+      seen.add(plan.inboxItemId);
+      out.push({ inboxItemId: plan.inboxItemId, rootAbsolutePath });
+    }
+    return out;
+  }, [openPlans, rootPathByItemId]);
+
+  const preloadedBreakdowns = useInboxPlanBreakdowns(breakdownTargets);
+
+  // #75/#98: per-ingestion frame-type BREAKDOWN for the collapsed plan summary —
   // the per-type bias/dark/flat/light/master counts (same shape the classify
-  // breakdown / InboxStatsSummary use). Sourced two ways, merged per item:
+  // breakdown / InboxStatsSummary use). Sourced + merged per item, preferring
+  // the most authoritative source available:
   //   1. From each open plan's ACTIONS, classified by destination-path keyword
-  //      + the per-item hint (`buildBreakdownFromActions`). A MOVE/SPLIT plan
-  //      whose files land in typed folders yields a TRUE multi-type tally.
-  //   2. For the SELECTED item, the real classification `breakdown[]` (which
-  //      resolves a MIXED in-place catalogue that the action paths cannot) is
-  //      preferred — it carries the authoritative per-type counts.
+  //      + the per-item hint (`buildBreakdownFromActions`) — the always-present
+  //      fallback. A MOVE/SPLIT plan whose files land in typed folders yields a
+  //      TRUE multi-type tally even before classify resolves.
+  //   2. The PRELOADED real classification `breakdown[]` for the plan's item
+  //      (#98) — resolves a MIXED in-place catalogue the action paths cannot,
+  //      for EVERY open plan regardless of selection.
+  //   3. The SELECTED item's freshly-loaded classification breakdown — same
+  //      data as (2) but guaranteed current for the active selection.
   // The result keys each plan to its tally so PlanPanel renders one summary
   // line ("10 bias · 21 dark · 12 light → (root)") instead of per-file rows.
   const breakdownByItemId = useMemo(() => {
-    const m: Record<string, Array<{ kind: string; count: number }>> = {};
+    const m: Record<string, ReadonlyArray<{ kind: string; count: number }>> = {};
     for (const plan of openPlans) {
       m[plan.inboxItemId] = buildBreakdownFromActions(
         plan.actions,
         frameTypeByItemId[plan.inboxItemId],
         absoluteByFromPath,
       );
+    }
+    // Overlay the preloaded authoritative breakdown for every open plan item.
+    for (const [id, breakdown] of Object.entries(preloadedBreakdowns)) {
+      if (breakdown.length > 0 && m[id] != null) m[id] = breakdown;
     }
     // Prefer the selected item's authoritative classification breakdown.
     if (
@@ -431,7 +468,14 @@ export function InboxPage() {
       }));
     }
     return m;
-  }, [openPlans, frameTypeByItemId, absoluteByFromPath, selectedItem, classification]);
+  }, [
+    openPlans,
+    frameTypeByItemId,
+    absoluteByFromPath,
+    preloadedBreakdowns,
+    selectedItem,
+    classification,
+  ]);
 
   // Summary count (no page title — top-bar convention): folders / masters.
   const folderCount = items.filter((it) => !it.isMaster).length;

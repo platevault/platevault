@@ -10,8 +10,8 @@
  * file only migrates the store layer to TanStack Query.
  */
 
-import { useCallback, useEffect, useState } from "react";
-import { useQuery, useQueryClient } from "@tanstack/react-query";
+import { useCallback, useEffect, useMemo, useState } from "react";
+import { useQuery, useQueries, useQueryClient } from "@tanstack/react-query";
 import { queryKeys } from "@/data/queryKeys";
 import {
   inboxScanFolder,
@@ -92,6 +92,80 @@ export function useInboxClassification(
     enabled: !!inboxItemId && !!rootAbsolutePath,
   });
   return { data, loading: isFetching, error: error ?? undefined };
+}
+
+/** One item whose authoritative per-type breakdown should be preloaded. */
+export interface InboxBreakdownTarget {
+  inboxItemId: string;
+  rootAbsolutePath: string;
+}
+
+/**
+ * Preload the AUTHORITATIVE per-type frame breakdown for a set of items
+ * (typically every ingestion that has an open plan), regardless of which item
+ * is currently selected (#98).
+ *
+ * The collapsed plan summary needs the real per-type tally (bias/dark/flat/
+ * light/master) for each open plan. Previously that tally was only correct for
+ * the SELECTED item — its `classification.breakdown` was loaded by
+ * `useInboxClassification`. An UNSELECTED mixed folder fell back to a per-action
+ * keyword/hint guess that degenerates to one dominant type (e.g. "41 darks").
+ *
+ * This hook runs one cached `inbox.classify` query per target via `useQueries`
+ * (sharing the SAME query key as `useInboxClassification`, so the selected
+ * item's already-fetched classification is reused, not re-fetched), and returns
+ * a `inboxItemId → breakdown[]` map. The breakdown is exactly the shape
+ * `InboxStatsSummary` / the detail breakdown table consume.
+ *
+ * Stable identity: the returned map is memoised on the resolved classification
+ * data so consumers' `useMemo` deps don't thrash every render.
+ */
+export function useInboxPlanBreakdowns(
+  targets: InboxBreakdownTarget[],
+): Record<string, ReadonlyArray<{ kind: string; count: number }>> {
+  const results = useQueries({
+    queries: targets.map((t) => {
+      const key = `${t.rootAbsolutePath}|${t.inboxItemId}`;
+      return {
+        queryKey: [queryKeys.inbox.list("all")[0], "classify", key],
+        queryFn: () =>
+          inboxClassify({
+            inboxItemId: t.inboxItemId,
+            rootAbsolutePath: t.rootAbsolutePath,
+            forceRescan: false,
+          }),
+        enabled: !!t.inboxItemId && !!t.rootAbsolutePath,
+        // Breakdown is stable for an unchanged folder — avoid re-fetch churn.
+        staleTime: 30_000,
+      };
+    }),
+  });
+
+  // Stable dependency signatures: recompute only when the set of target ids
+  // changes OR when a classification result lands/changes. Computed as named
+  // values so the dep array stays a list of simple expressions (the React
+  // Compiler lint rule forbids inline `.map().join()` in the deps).
+  const targetSignature = targets.map((t) => t.inboxItemId).join("|");
+  const resultsSignature = results.map((r) => (r.data ? "1" : "0")).join("");
+
+  // Build a stable map keyed by item id. `useQueries` returns results in the
+  // same order as `targets`, so we can zip them together.
+  return useMemo(() => {
+    const map: Record<string, ReadonlyArray<{ kind: string; count: number }>> = {};
+    targets.forEach((t, i) => {
+      const data = results[i]?.data as InboxClassifyResponse | undefined;
+      if (data?.breakdown && data.breakdown.length > 0) {
+        map[t.inboxItemId] = data.breakdown.map((b) => ({
+          kind: b.kind,
+          count: b.count,
+        }));
+      }
+    });
+    return map;
+    // Depend on the resolved data refs (per result) + the target ids, not the
+    // array identity, so the memo only recomputes when a classification lands.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [targetSignature, resultsSignature]);
 }
 
 /** Load and cache an inbox scan for a root folder. */

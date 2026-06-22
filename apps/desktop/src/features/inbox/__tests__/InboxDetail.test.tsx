@@ -474,4 +474,40 @@ describe('InboxDetail — inspector dock', () => {
     );
     expect(screen.queryByLabelText('File inspector')).not.toBeInTheDocument();
   });
+
+  // ── #59: side-by-side bottom panel — inspector in the RIGHT column ──────────
+
+  it('lays the inspector in the RIGHT column (split layout) when metadata exists', () => {
+    const { container } = render(
+      <InboxDetail
+        item={sampleItem as unknown as Parameters<typeof InboxDetail>[0]['item']}
+        rootAbsolutePath="/astro/inbox"
+        classification={singleTypeClassification as unknown as Parameters<typeof InboxDetail>[0]['classification']}
+        fileMetadata={fileMetadataFixture}
+      />
+    );
+    // The detail body is laid out as split columns…
+    const cols = container.querySelector('.alm-inbox-detail__cols--split');
+    expect(cols).not.toBeNull();
+    // …and the inspector lives in the RIGHT aside column, NOT under the
+    // metadata table (which stays in the left __main column).
+    const aside = container.querySelector('.alm-inbox-detail__aside');
+    expect(aside).not.toBeNull();
+    expect(aside).toContainElement(screen.getByLabelText('File inspector'));
+    // The metadata table's wrap no longer contains the inspector.
+    const metaWrap = container.querySelector('.alm-inbox-meta-wrap');
+    expect(metaWrap?.querySelector('.alm-inbox-inspector')).toBeNull();
+  });
+
+  it('does not use the split layout when there is no metadata to inspect', () => {
+    const { container } = render(
+      <InboxDetail
+        item={sampleItem as unknown as Parameters<typeof InboxDetail>[0]['item']}
+        rootAbsolutePath="/astro/inbox"
+        classification={singleTypeClassification as unknown as Parameters<typeof InboxDetail>[0]['classification']}
+      />
+    );
+    expect(container.querySelector('.alm-inbox-detail__cols--split')).toBeNull();
+    expect(container.querySelector('.alm-inbox-detail__aside')).toBeNull();
+  });
 });

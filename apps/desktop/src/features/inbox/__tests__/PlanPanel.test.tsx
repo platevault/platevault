@@ -263,6 +263,64 @@ describe('PlanPanel (aggregate surface)', () => {
     expect(screen.getByText('bias_001.fits')).toBeInTheDocument();
   });
 
+  // ── #98: PRELOADED breakdown makes the collapsed summary accurate for an
+  // UNSELECTED mixed folder (no dominant-type degeneration) ───────────────────
+
+  it('renders the accurate per-type breakdown for an UNSELECTED item when its breakdown is preloaded (#98)', () => {
+    // A mixed in-place catalogue folder. The plan actions carry NO per-file
+    // frame type and NO frame keyword in their (in-place) destinations, so the
+    // action-only fallback would degenerate to one dominant guess (e.g.
+    // "41 catalogue"/"41 darks"). PlanPanel receives no `frameTypeByItemId` for
+    // this id (it is not the selected item) — only the PRELOADED breakdown,
+    // which the parent now fetches for every open plan regardless of selection.
+    const plans = [
+      makePlan({
+        inboxItemId: 'unsel',
+        itemName: '(root)',
+        actions: Array.from({ length: 41 }, (_, i) =>
+          makeAction({
+            index: i,
+            action: 'catalogue',
+            fromPath: `/lib/cam/frame_${i}.fits`,
+            destinationPreview: `/lib/cam/frame_${i}.fits`,
+          }),
+        ),
+      }),
+    ];
+    render(
+      <PlanPanel
+        plans={plans}
+        totalActions={41}
+        destructiveDestination="archive"
+        onDestructiveDestinationChange={vi.fn()}
+        onApplySelected={vi.fn()}
+        onApplyAll={vi.fn()}
+        onCancel={vi.fn()}
+        // No frameTypeByItemId — item is NOT selected. Only the preloaded
+        // authoritative breakdown is supplied (the #98 fix).
+        breakdownByItemId={{
+          unsel: [
+            { kind: 'bias', count: 10 },
+            { kind: 'dark', count: 16 },
+            { kind: 'flat', count: 15 },
+          ],
+        }}
+      />,
+    );
+    const summary = screen.getByTestId('plan-group-summary-unsel');
+    // Accurate per-type tally — NOT "41 darks" or "41 catalogue".
+    expect(summary).toHaveTextContent('10');
+    expect(summary).toHaveTextContent('bias');
+    expect(summary).toHaveTextContent('16');
+    expect(summary).toHaveTextContent('dark');
+    expect(summary).toHaveTextContent('15');
+    expect(summary).toHaveTextContent('flat');
+    expect(summary).not.toHaveTextContent('41');
+    expect(summary).not.toHaveTextContent('catalogue');
+    // It is a SINGLE collapsed summary line.
+    expect(summary.querySelectorAll('.alm-plan-panel__summary-line')).toHaveLength(1);
+  });
+
   // ── Selection ──────────────────────────────────────────────────────────────
 
   it('toggles a single group selection', () => {

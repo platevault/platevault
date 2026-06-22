@@ -8217,3 +8217,133 @@
   overflow-wrap: anywhere;
   word-break: break-all;
 }
+
+/* === merged from .cssblocks/inbox-refine2.css (inbox refine 2, spec-043) === */
+/* ============================================================================
+ * Inbox refine wave 2 (spec 043 — tasks #59 / #75 / #98)
+ * ----------------------------------------------------------------------------
+ * Token-only block (no raw hex/rgb/ms). NOT imported directly — the parent
+ * merges these rules into src/styles/components.css after review.
+ *
+ * Three refinements to the Inbox 3-zone layout:
+ *   1. PLAN SIDE PANEL padding — the PlanPanel was rendered flush against the
+ *      borders of the right side panel (`.alm-inbox-side--plan`). Give it real
+ *      internal padding and tidy the header / summary / action spacing.
+ *   2. BOTTOM FILE-DETAILS PANEL side-by-side — the per-file inspector was
+ *      stacked BELOW the metadata table and scrolled out of view. Lay the
+ *      detail body out as two columns: primary detail (classification +
+ *      breakdown + metadata table) on the LEFT, the inspector on the RIGHT.
+ *   (Task #98's collapsed-summary accuracy is a data-flow fix in InboxPage /
+ *    store; no CSS needed — the existing `.alm-plan-panel__summary*` rules
+ *    already render the per-type breakdown line.)
+ * ==========================================================================*/
+
+/* ── CHANGE 1 — PLAN side-panel internal padding ──────────────────────────────
+ * PlanPanel owns no outer padding of its own, so inside the side panel its bar,
+ * summary, and destructive control press against the panel borders. Pad the
+ * PlanPanel root within the plan side panel and tidy the internal rhythm. */
+.alm-inbox-side--plan .alm-plan-panel {
+  display: flex;
+  flex-direction: column;
+  gap: var(--alm-sp-2);
+  padding: var(--alm-sp-3);
+  min-width: 0;
+}
+
+/* The pinned header (select-all + counts + apply buttons) wraps gracefully in
+ * the narrow column and keeps a little breathing room below itself. */
+.alm-inbox-side--plan .alm-plan-panel__bar {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--alm-sp-2);
+  padding-bottom: var(--alm-sp-2);
+  border-bottom: 1px solid var(--alm-border-subtle);
+}
+.alm-inbox-side--plan .alm-plan-panel__bar-left {
+  display: flex;
+  align-items: center;
+  gap: var(--alm-sp-2);
+  flex-wrap: wrap;
+  min-width: 0;
+}
+.alm-inbox-side--plan .alm-plan-panel__bar-actions {
+  flex-wrap: wrap;
+  gap: var(--alm-sp-2);
+}
+
+/* Hint line + the group list sit clear of the panel edge; long destinations
+ * break instead of forcing horizontal overflow in the narrow column. */
+.alm-inbox-side--plan .alm-plan-panel__hint {
+  margin-top: 0;
+}
+.alm-inbox-side--plan .alm-plan-panel__summary-dest,
+.alm-inbox-side--plan .alm-plan-panel__dest {
+  word-break: break-all;
+}
+
+/* The destructive-destination control gets its own padded card that no longer
+ * hugs the panel edge. */
+.alm-inbox-side--plan .alm-plan-panel__destructive {
+  margin-top: var(--alm-sp-2);
+}
+
+/* ── CHANGE 2 — bottom detail panel side-by-side layout ───────────────────────
+ * Lay the detail body out as two columns: the primary detail (classification,
+ * breakdown, per-file metadata table) on the LEFT and the inspector on the
+ * RIGHT. Collapses to a single column when there is no metadata to inspect. */
+.alm-inbox-detail__cols {
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+}
+.alm-inbox-detail__cols--split {
+  flex-direction: row;
+  align-items: flex-start;
+  gap: var(--alm-sp-4);
+}
+
+/* LEFT column: primary detail. Takes the remaining width and owns the long
+ * tables; never shrinks below a usable minimum. */
+.alm-inbox-detail__main {
+  flex: 1 1 auto;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+}
+
+/* RIGHT column: the inspector. Fixed, readable width using the wide bottom
+ * panel's horizontal room so it is visible without scrolling under the table.
+ * Sticks to the top of the column as the left content scrolls. */
+.alm-inbox-detail__cols--split .alm-inbox-detail__aside {
+  flex: 0 0 var(--alm-inbox-inspector-width, 320px);
+  width: var(--alm-inbox-inspector-width, 320px);
+  min-width: 0;
+  position: sticky;
+  top: 0;
+  align-self: stretch;
+}
+
+/* The inspector card fills its right column and reads as a distinct panel
+ * (left border + raised surface) instead of a full-width bottom strip. */
+.alm-inbox-detail__cols--split .alm-inbox-detail__aside .alm-inbox-inspector {
+  border-top: none;
+  border-left: 1px solid var(--alm-border-subtle);
+  border-radius: var(--alm-radius-md);
+  background: var(--alm-surface-raised);
+  overflow: hidden;
+}
+
+/* In the two-column layout the metadata wrap no longer needs to host the
+ * inspector below the table — it is just the (scrollable) table now. */
+.alm-inbox-detail__cols--split .alm-inbox-meta-wrap {
+  min-height: 0;
+}
+
+/* The inspector's KV grid is too wide for the narrow right column: collapse it
+ * from three columns to two so the labels/values stay readable. */
+.alm-inbox-detail__cols--split .alm-inbox-inspector__grid {
+  grid-template-columns: repeat(2, 1fr);
+  gap: var(--alm-sp-0) var(--alm-sp-3);
+}
