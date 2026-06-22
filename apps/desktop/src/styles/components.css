@@ -9702,6 +9702,46 @@
 }
 .alm-session-detail2__link:hover { text-decoration: underline; }
 
+/* === Calibration detail — left-packed: [fingerprint][confirmed sessions] ===
+   Mirrors the Sessions detail2 layout: flex row, left-justified, no grey cards.
+   MatchCandidatesPanel renders full-width below the row. */
+.alm-calib-detail2 {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: flex-start;
+  justify-content: flex-start;
+  gap: var(--alm-sp-6);
+  padding: var(--alm-sp-4);
+}
+.alm-calib-detail2__col {
+  flex: 0 1 360px;
+  min-width: 300px;
+}
+.alm-calib-detail2__confirmed {
+  flex: 0 0 auto;
+  min-width: 220px;
+}
+.alm-calib-detail2__head {
+  font-size: var(--alm-text-xs);
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  font-weight: var(--alm-weight-semibold);
+  color: var(--alm-text-muted);
+  margin-bottom: var(--alm-sp-2);
+}
+.alm-calib-detail2__confirmed-list {
+  display: flex;
+  flex-direction: column;
+  gap: var(--alm-sp-2);
+}
+.alm-calib-detail2__confirmed-name {
+  font-size: var(--alm-text-sm);
+}
+.alm-calib-detail2__muted { color: var(--alm-text-muted); }
+.alm-calib-detail2__match-wrap {
+  padding: 0 var(--alm-sp-4) var(--alm-sp-4);
+}
+
 /* === Targets planner detail — left-packed: [facts A][facts B][tonight] ===
    Mirrors the Sessions detail: a flex row, left-justified, so growing the
    panel adds trailing whitespace rather than spreading the data apart. The
