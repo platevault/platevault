@@ -25,6 +25,7 @@ import {
 } from '@/components';
 import { Pill, EmptyState, KV, Btn } from '@/ui';
 import type { PillVariant } from '@/ui';
+import { m } from '@/lib/i18n';
 import { useCalibrationSuggest, useCalibrationAssign } from './useCalibration';
 import { MatchCandidatesPanel } from './MatchCandidatesPanel';
 
@@ -90,8 +91,8 @@ export function MasterDetail({ master, prefillSuggestion, agingThresholdDays }: 
     return (
       <DetailPane>
         <EmptyState
-          title="Select a master"
-          desc="Select a master to view its details."
+          title={m.calibration_select_master_title()}
+          desc={m.calibration_select_master_desc()}
         />
       </DetailPane>
     );
@@ -114,19 +115,19 @@ export function MasterDetail({ master, prefillSuggestion, agingThresholdDays }: 
   // Facts column (left): fingerprint KV — compact, does not scroll.
   const facts = (
     <div className="alm-rail__panel">
-      <RailCard title="Master fingerprint">
+      <RailCard title={m.calibration_rail_fingerprint()}>
         {/* 2-column KV grid: keeps the fingerprint compact so the whole
             detail fits the wide-short bottom panel without inner scroll. */}
         <div className="alm-calib-kvgrid">
-          <KV label="Kind" value={kindStr} />
-          <KV label="Camera" value={fp.camera} />
-          <KV label="Gain" value={String(fp.gain)} />
-          <KV label="Exposure" value={`${fp.exposureS}s`} />
-          {fp.tempC != null && <KV label="Temperature" value={`${fp.tempC}°C`} />}
-          {fp.filter && <KV label="Filter" value={fp.filter} />}
-          {fp.sensorMode && <KV label="Sensor mode" value={fp.sensorMode} />}
-          <KV label="Binning" value={fp.binning} />
-          <KV label="Size" value={fmtBytes(master.sizeBytes)} />
+          <KV label={m.calibration_fp_kind()} value={kindStr} />
+          <KV label={m.settings_calmatch_camera()} value={fp.camera} />
+          <KV label={m.settings_calmatch_gain()} value={String(fp.gain)} />
+          <KV label={m.calibration_fp_exposure()} value={`${fp.exposureS}s`} />
+          {fp.tempC != null && <KV label={m.calibration_fp_temperature()} value={`${fp.tempC}°C`} />}
+          {fp.filter && <KV label={m.common_filter()} value={fp.filter} />}
+          {fp.sensorMode && <KV label={m.calibration_fp_sensor_mode()} value={fp.sensorMode} />}
+          <KV label={m.settings_calmatch_binning()} value={fp.binning} />
+          <KV label={m.settings_advanced_db_size()} value={fmtBytes(master.sizeBytes)} />
         </div>
       </RailCard>
     </div>
@@ -135,15 +136,15 @@ export function MasterDetail({ master, prefillSuggestion, agingThresholdDays }: 
   // Aux column (right): reuse policy + usage stats.
   const auxColumn = (
     <div className="alm-rail__panel">
-      <RailCard title="Reuse policy">
+      <RailCard title={m.calibration_rail_reuse()}>
         <div className="alm-calib-kvgrid">
-          <KV label="Sessions matched" value={String((master.usedBySessionIds ?? []).length)} />
-          <KV label="Projects linked" value={String((master.usedByProjectIds ?? []).length)} />
-          <KV label="Created" value={master.createdAt.split('T')[0]} />
-          <KV label="Age" value={`${master.ageDays}d`} />
+          <KV label={m.calibration_reuse_sessions_matched()} value={String((master.usedBySessionIds ?? []).length)} />
+          <KV label={m.calibration_reuse_projects_linked()} value={String((master.usedByProjectIds ?? []).length)} />
+          <KV label={m.projects_stepper_created()} value={master.createdAt.split('T')[0]} />
+          <KV label={m.calibration_fp_age()} value={`${master.ageDays}d`} />
         </div>
       </RailCard>
-      <RailCard title="Usage stats">
+      <RailCard title={m.calibration_rail_usage()}>
         <MetricLine
           metrics={[
             { value: fmtBytes(master.sizeBytes), label: 'on disk' },
@@ -166,8 +167,8 @@ export function MasterDetail({ master, prefillSuggestion, agingThresholdDays }: 
       titleExtra={
         <>
           <Pill variant={kindVariant(kindStr)}>{kindStr.toUpperCase()}</Pill>
-          {isAging1Year && <Pill variant="danger">aging &gt; 1 year</Pill>}
-          {isAgingWarn && <Pill variant="warn">aging {master.ageDays}d</Pill>}
+          {isAging1Year && <Pill variant="danger">{m.calibration_aging_over_1yr()}</Pill>}
+          {isAgingWarn && <Pill variant="warn">{m.calibration_aging_days({ days: master.ageDays })}</Pill>}
         </>
       }
       subtitle={`${kindStr} · ${fmtBytes(master.sizeBytes)}`}

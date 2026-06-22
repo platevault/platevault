@@ -25,6 +25,7 @@ import { useMemo } from 'react';
 import { Pill, Table, EmptyState } from '@/ui';
 import type { PillVariant, TableColumn, TableRow } from '@/ui';
 import type { CalibrationMaster_Serialize as CalibrationMaster } from '@/bindings/index';
+import { m } from '@/lib/i18n';
 
 // ── Kind grouping model ────────────────────────────────────────────────────────
 
@@ -244,7 +245,7 @@ export function MastersTable({
   if (loading) {
     return (
       <div className="alm-calib-table__status" data-testid="masters-loading">
-        Loading calibration masters…
+        {m.calibration_loading()}
       </div>
     );
   }
@@ -252,7 +253,7 @@ export function MastersTable({
   if (error) {
     return (
       <div className="alm-calib-table__status">
-        <EmptyState title="Failed to load" desc={error} data-testid="masters-error" />
+        <EmptyState title={m.calibration_load_error_title()} desc={error} data-testid="masters-error" />
       </div>
     );
   }
@@ -261,8 +262,8 @@ export function MastersTable({
     return (
       <div className="alm-calib-table__status">
         <EmptyState
-          title="No calibration masters"
-          desc="Run a scan to import calibration frames."
+          title={m.calibration_empty_title()}
+          desc={m.calibration_empty_desc()}
           data-testid="masters-empty"
         />
       </div>
@@ -313,28 +314,28 @@ export function MastersTable({
       created: '',
     });
 
-    for (const m of group.masters) {
-      const isAging = m.ageDays > agingThresholdDays;
-      const kindStr = m.kind.toLowerCase();
+    for (const master of group.masters) {
+      const isAging = master.ageDays > agingThresholdDays;
+      const kindStr = master.kind.toLowerCase();
       rows.push({
         _rowClassName:
-          'alm-calib-table__row' + (selected === m.id ? ' alm-calib-table__row--selected' : ''),
-        _onClick: () => onSelect(m.id),
+          'alm-calib-table__row' + (selected === master.id ? ' alm-calib-table__row--selected' : ''),
+        _onClick: () => onSelect(master.id),
         master: (
           <span className="alm-calib-cell__master">
             <Pill variant={kindVariant(kindStr)}>{kindStr.toUpperCase()}</Pill>
-            <span className="alm-calib-cell__master-label">{masterLabel(m)}</span>
-            {isAging && <Pill variant="warn">aging {m.ageDays}d</Pill>}
+            <span className="alm-calib-cell__master-label">{masterLabel(master)}</span>
+            {isAging && <Pill variant="warn">{m.calibration_aging_days({ days: master.ageDays })}</Pill>}
           </span>
         ),
-        camera: cameraCell(m),
-        filter: filterCell(m),
-        gain: gainCell(m),
-        exposure: exposureCell(m),
-        temp: tempCell(m),
-        binning: binningCell(m),
-        usage: <span data-testid={`master-usage-${m.id}`}>{usageSummary(m)}</span>,
-        created: createdDate(m),
+        camera: cameraCell(master),
+        filter: filterCell(master),
+        gain: gainCell(master),
+        exposure: exposureCell(master),
+        temp: tempCell(master),
+        binning: binningCell(master),
+        usage: <span data-testid={`master-usage-${master.id}`}>{usageSummary(master)}</span>,
+        created: createdDate(master),
       });
     }
   }
