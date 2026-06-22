@@ -54,9 +54,35 @@ pub async fn status_summary(state: State<'_, AppState>) -> Result<StatusSummary,
     .map(|n| u32::try_from(n.max(0)).unwrap_or(u32::MAX))
     .map_err(|e| ContractError::internal(e.to_string()))?;
 
+    // Count real library totals from their authoritative tables.
+    let sessions: u32 = sqlx::query_scalar::<_, i64>("SELECT COUNT(*) FROM acquisition_session")
+        .fetch_one(pool)
+        .await
+        .map(|n| u32::try_from(n.max(0)).unwrap_or(u32::MAX))
+        .map_err(|e| ContractError::internal(e.to_string()))?;
+
+    let calibration_sets: u32 =
+        sqlx::query_scalar::<_, i64>("SELECT COUNT(*) FROM calibration_master_view")
+            .fetch_one(pool)
+            .await
+            .map(|n| u32::try_from(n.max(0)).unwrap_or(u32::MAX))
+            .map_err(|e| ContractError::internal(e.to_string()))?;
+
+    let targets: u32 = sqlx::query_scalar::<_, i64>("SELECT COUNT(*) FROM canonical_target")
+        .fetch_one(pool)
+        .await
+        .map(|n| u32::try_from(n.max(0)).unwrap_or(u32::MAX))
+        .map_err(|e| ContractError::internal(e.to_string()))?;
+
+    let projects: u32 = sqlx::query_scalar::<_, i64>("SELECT COUNT(*) FROM projects")
+        .fetch_one(pool)
+        .await
+        .map(|n| u32::try_from(n.max(0)).unwrap_or(u32::MAX))
+        .map_err(|e| ContractError::internal(e.to_string()))?;
+
     Ok(StatusSummary {
         inbox_count,
-        library: LibraryStats { sessions: 0, calibration_sets: 0, targets: 0, projects: 0 },
+        library: LibraryStats { sessions, calibration_sets, targets, projects },
         cleanup_reclaimable_bytes: 0,
         volumes: vec![],
         roots,
