@@ -205,7 +205,19 @@ English into catalog entries (FR-014). Where the audit finds synonyms for one
 concept (destructive verbs `archive`/`trash`, the "My Targets"/favourites view,
 section titles, ellipsis `…` vs `...`), collapse to a single canonical key (US3)
 as an **explicit, isolated** change with the wording recorded in the catalog —
-never silently during a mechanical lift. The catalog becomes the review gate that
+never silently during a mechanical lift.
+
+**No duplicated information in the catalog.** Two keys MUST NOT carry the same
+English value, and a sentence MUST NOT be split into fragment keys that, joined,
+duplicate a meaning — prefer one interpolated message with a `{param}`. Each
+migration wave runs a duplicate-value audit and collapses any same-value keys to
+one canonical key (this is the operational form of FR-013/SC-006):
+
+```bash
+python3 -c "import json;d={k:v for k,v in json.load(open('apps/desktop/messages/en.json')).items() if k!='\$schema'};\
+from collections import Counter;c=Counter(d.values());\
+print('DUP VALUES:',{v:[k for k in d if d[k]==v] for v,n in c.items() if n>1})"
+``` The catalog becomes the review gate that
 also enforces FR-012 (no STUB/MOCK/"coming soon" leakage), since the copy-cleanup
 already landed (ef364df) and new leakage would appear as a reviewed catalog diff.
 

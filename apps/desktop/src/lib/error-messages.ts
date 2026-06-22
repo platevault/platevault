@@ -79,7 +79,9 @@ export const ERROR_MESSAGES: Record<ErrorCode, () => string> = {
   "view.mixed_kind": m.err_view_mixed_kind,
   "view.not_found": m.err_view_not_found,
   "view.unsupported_kind": m.err_view_unsupported_kind,
-  "canonical_target.not_found": m.err_canonical_target_not_found,
+  // Same user-facing meaning as target.not_found — share one catalog key (no
+  // duplicated catalog values; spec 046 FR-013).
+  "canonical_target.not_found": m.err_target_not_found,
   "name.duplicate": m.err_name_duplicate,
   "name.empty": m.err_name_empty,
   "name.too_long": m.err_name_too_long,
@@ -113,7 +115,9 @@ export const ERROR_MESSAGES: Record<ErrorCode, () => string> = {
   "database.error": m.err_database_error,
   "serialise.error": m.err_serialise_error,
   "io.error": m.err_io_error,
-  "internal.error": m.err_internal_error,
+  // The generic wrap code maps to the shared generic fallback message (no
+  // duplicated catalog values; spec 046 FR-013).
+  "internal.error": m.err_generic_fallback,
 };
 
 /** Safe generic fallback shown when a code has no mapping (FR-011, SC-005). */

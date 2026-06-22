@@ -1,4 +1,5 @@
 import { useState, useEffect, useCallback } from 'react';
+import { m } from '@/lib/i18n';
 import { Dialog } from '@base-ui-components/react/dialog';
 import { Command } from 'cmdk';
 import { useNavigate, useRouterState } from '@tanstack/react-router';
@@ -138,11 +139,11 @@ export function CommandPalette() {
     <Dialog.Root open={open} onOpenChange={setOpen}>
       <Dialog.Portal>
         <Dialog.Backdrop className="alm-palette-backdrop" />
-        <Dialog.Popup className="alm-palette" aria-label="Command palette">
+        <Dialog.Popup className="alm-palette" aria-label={m.cmdk_aria_label()}>
           <Command shouldFilter={false}>
             <Command.Input
               className="alm-palette__input"
-              placeholder="Search sessions, targets, projects…"
+              placeholder={m.cmdk_placeholder()}
               value={query}
               onValueChange={setQuery}
               autoFocus
@@ -150,7 +151,7 @@ export function CommandPalette() {
             <Command.List className="alm-palette__list">
               {query.trim() && results.length === 0 && (
                 <Command.Empty className="alm-palette__empty">
-                  No results for &ldquo;{query.trim()}&rdquo;. Try a different search term.
+                  {m.cmdk_no_results({ query: query.trim() })}
                 </Command.Empty>
               )}
               {results.length > 0 && (
@@ -199,7 +200,7 @@ export function CommandPalette() {
                     void openInNewWindow(currentHref);
                   }}
                 >
-                  <span className="alm-palette__item-label">Open view in new window</span>
+                  <span className="alm-palette__item-label">{m.cmdk_open_new_window()}</span>
                 </Command.Item>
               </Command.Group>
             </Command.List>

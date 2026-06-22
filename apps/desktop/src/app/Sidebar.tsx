@@ -1,4 +1,5 @@
 import { Link, useRouterState } from '@tanstack/react-router';
+import { m } from '@/lib/i18n';
 import {
   Inbox,
   Camera,
@@ -110,13 +111,14 @@ export function Sidebar() {
   return (
     <nav
       className={clsx('alm-sidebar', collapsed && 'alm-sidebar--collapsed')}
-      aria-label="Main navigation"
+      aria-label={m.nav_aria_label()}
     >
       {/* Header: brand mark + collapse, single line */}
       <div className="alm-sidebar__header">
+        {/* eslint-disable-next-line alm/no-user-string -- decorative brand glyph, not translatable content */}
         {!collapsed && <div className="alm-sidebar__mark">P</div>}
-        {!collapsed && <span className="alm-sidebar__brand-name">PlateVault</span>}
-        {!collapsed && <span className="alm-sidebar__version">v0.4</span>}
+        {!collapsed && <span className="alm-sidebar__brand-name">{m.shell_brand_name()}</span>}
+        {!collapsed && <span className="alm-sidebar__version">{m.shell_version()}</span>}
         <button
           type="button"
           className="alm-sidebar__collapse"
@@ -156,11 +158,11 @@ export function Sidebar() {
                   : 'alm-sidebar__root-dot--ok',
               )}
             />
-            {status.roots.length} roots &middot; {onlineRoots.length} online
+            {m.nav_roots_summary({ total: status.roots.length, online: onlineRoots.length })}
           </Link>
           {offlineRoots.length > 0 && (
             <div className="alm-sidebar__offline-warn">
-              {offlineRoots.map((r) => r.path.split(/[\\/]/).pop()).join(', ')} offline
+              {offlineRoots.map((r) => r.path.split(/[\\/]/).pop()).join(', ')} {m.nav_roots_offline_suffix()}
             </div>
           )}
         </div>

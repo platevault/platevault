@@ -12,6 +12,7 @@ const I18N_MIGRATED = [
   'src/lib/i18n.ts',
   'src/lib/errors.ts',
   'src/lib/error-messages.ts',
+  'src/app/**/*.{ts,tsx}',
 ];
 
 export default tseslint.config(
@@ -38,6 +39,16 @@ export default tseslint.config(
   },
   {
     files: I18N_MIGRATED,
+    // Tests, fixtures, mocks, and the dev-tools surface are out of SC-001 scope
+    // (research R4): assertion literals are legitimate, and the dev surface is
+    // compiled out of release builds.
+    ignores: [
+      '**/*.test.{ts,tsx}',
+      '**/*.spec.{ts,tsx}',
+      '**/__fixtures__/**',
+      'src/api/mocks.ts',
+      'src/dev/**',
+    ],
     rules: {
       'alm/no-user-string': 'error',
     },

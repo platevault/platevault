@@ -12,6 +12,7 @@
  * - Escape key closes the panel.
  */
 import { useEffect, useRef, useCallback, useSyncExternalStore, useState } from 'react';
+import { m } from '@/lib/i18n';
 import { useVirtualizer } from '@tanstack/react-virtual';
 import { Collapsible } from '@base-ui-components/react/collapsible';
 import { useNavigate } from '@tanstack/react-router';
@@ -236,16 +237,16 @@ export function LogPanel() {
       onOpenChange={toggle}
       className="alm-logpanel"
       role="log"
-      aria-label="Operation log"
+      aria-label={m.logpanel_aria_label()}
     >
       <div className="alm-logpanel__header">
-        <span className="alm-logpanel__title">Activity</span>
+        <span className="alm-logpanel__title">{m.logpanel_title()}</span>
 
         {/* Idle preview line (collapsed state) */}
         {!expanded && previewEntry && (
           <span
             className={`alm-logpanel__preview alm-logpanel__event-level--${previewEntry.level}`}
-            aria-label="Latest log entry"
+            aria-label={m.logpanel_preview_aria()}
           >
             {formatTimeOfDay(previewEntry.time)} {previewEntry.message}
           </span>
@@ -253,7 +254,7 @@ export function LogPanel() {
 
         {/* Level filter chips (expanded state) */}
         {expanded && (
-          <div className="alm-logpanel__filters" role="group" aria-label="Level filter">
+          <div className="alm-logpanel__filters" role="group" aria-label={m.logpanel_level_filter_aria()}>
             {LEVEL_CHIPS.map((chip) => (
               <button
                 key={chip.value}
@@ -278,7 +279,7 @@ export function LogPanel() {
                 onClick={() => setShowDiagnostics((v) => !v)}
                 aria-pressed={showDiagnostics}
               >
-                Diagnostics
+                {m.logpanel_diagnostics()}
               </button>
             )}
           </div>
@@ -304,9 +305,9 @@ export function LogPanel() {
             type="button"
             className="alm-btn alm-btn--ghost alm-btn--xs"
             onClick={() => void handleExport()}
-            aria-label="Export log to JSON file"
+            aria-label={m.logpanel_export_aria()}
           >
-            Export
+            {m.logpanel_export()}
           </button>
         )}
 
@@ -320,7 +321,7 @@ export function LogPanel() {
 
       {exportError && (
         <div className="alm-logpanel__export-error" role="alert">
-          Export failed: {exportError}
+          {m.logpanel_export_failed({ error: exportError ?? '' })}
         </div>
       )}
 
@@ -341,7 +342,7 @@ export function LogPanel() {
           data-virtual-scroll="true"
         >
           {visibleEntries.length === 0 ? (
-            <li className="alm-logpanel__empty">No log entries</li>
+            <li className="alm-logpanel__empty">{m.logpanel_empty()}</li>
           ) : (
             <div
               className="alm-virtual-inner"
