@@ -409,14 +409,10 @@ fn derive_session_name(row: &SessionProjectionRow) -> String {
     let key = serde_json::from_str::<serde_json::Value>(&row.session_key).ok();
     match effective_target(row) {
         Some(target) => {
-            let filter = key
-                .as_ref()
-                .and_then(|k| k.get("filter").and_then(|v| v.as_str()))
-                .unwrap_or("?");
-            let night = key
-                .as_ref()
-                .and_then(|k| k.get("night").and_then(|v| v.as_str()))
-                .unwrap_or(date);
+            let filter =
+                key.as_ref().and_then(|k| k.get("filter").and_then(|v| v.as_str())).unwrap_or("?");
+            let night =
+                key.as_ref().and_then(|k| k.get("night").and_then(|v| v.as_str())).unwrap_or(date);
             format!("{target} · {filter} — {night}")
         }
         None => format!("Session — {date}"),
