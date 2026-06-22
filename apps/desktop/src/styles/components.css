@@ -9190,25 +9190,25 @@
 }
 
 /* Designation: auto (fills all remaining width after fixed cols are subtracted). */
-.alm-targets-col--designation { width: auto; }
+.alm-targets-col--designation { width: 50%; }
 
 /* Type pill: "open cluster" is the longest label at ~10ch; header is "Type". */
-.alm-targets-col--type { width: 96px; }
+.alm-targets-col--type { width: 6%; }
 
 /* Max alt: "Max alt" header + "90°" value — short numeric. */
-.alm-targets-col--maxalt { width: 64px; }
+.alm-targets-col--maxalt { width: 4%; }
 
 /* Sparkline: fixed narrow column (SVG is 64px wide, cell adds padding). */
-.alm-targets-col--spark { width: 76px; }
+.alm-targets-col--spark { width: 5%; }
 
 /* Visible: "●tonight" / "○low" indicator. */
-.alm-targets-col--visible { width: 72px; }
+.alm-targets-col--visible { width: 4.5%; }
 
 /* Opposition: date stub "—" for now; leave room for "Jan 2026" once live. */
-.alm-targets-col--opposition { width: 88px; }
+.alm-targets-col--opposition { width: 5.5%; }
 
 /* Sessions: numeric stub "—". */
-.alm-targets-col--sessions { width: 72px; }
+.alm-targets-col--sessions { width: 4.5%; }
 
 /* Opposition cell: right-aligned tabular numeric (mirrors max-alt style). */
 .alm-targets-cell--opposition {
@@ -9220,9 +9220,9 @@
 /* === spec 044: Lunar dist, Filters, Imaging time columns + filter badges === */
 
 /* Column widths (task 044) — fixed layout prevents per-page shift. */
-.alm-targets-col--lunardist { width: 68px; }
-.alm-targets-col--filters   { width: 124px; }
-.alm-targets-col--imagingtime { width: 80px; }
+.alm-targets-col--lunardist { width: 5%; }
+.alm-targets-col--filters   { width: 7.5%; }
+.alm-targets-col--imagingtime { width: 6%; }
 
 /* Lunar dist cell: tabular numeric, muted (mock value). */
 .alm-targets-cell--lunardist {
@@ -9563,8 +9563,8 @@
  * Filter badges run together — increase gap from sp-1 to sp-2.
  * These override the values set in the spec 044 block in components.css. */
 
-.alm-targets-col--lunardist  { width: 80px; }
-.alm-targets-col--imagingtime { width: 100px; }
+.alm-targets-col--lunardist  { width: 5%; }
+.alm-targets-col--imagingtime { width: 6%; }
 
 /* task 5: add readable spacing between filter badges (was alm-sp-1 = 4px). */
 .alm-filter-badges { gap: var(--alm-sp-2); }
@@ -9609,7 +9609,7 @@
  * client-side in localStorage only. See useFavourites.ts. */
 
 /* Extra column for the star (sits leftmost, before Designation). */
-.alm-targets-col--star { width: 28px; }
+.alm-targets-col--star { width: 2%; }
 
 /* Star toggle button: tiny, borderless, centred in its cell. */
 .alm-targets-star {
