@@ -332,15 +332,6 @@ function AltitudeGraph({ points }: AltitudeGraphProps) {
           </g>
         ))}
       </svg>
-
-      <p className="alm-planner__graph-legend">
-        Shaded = usable altitude (≥30°)
-      </p>
-      <p className="alm-planner__graph-stub-note">
-        {/* STUB: altitude ephemeris — sinusoidal approximation at {STUB_OBSERVER_LAT_DEG}°N.
-            Replace with real ephemeris calc when location/backend lands. */}
-        Approximate curve · {STUB_OBSERVER_LAT_DEG}°N placeholder location
-      </p>
     </div>
   );
 }
