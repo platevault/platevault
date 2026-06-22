@@ -7993,3 +7993,125 @@
 .alm-targets-vis--yes { color: var(--alm-ok); }
 .alm-targets-vis--no { color: var(--alm-text-muted); }
 .alm-targets-vis__label { font-weight: var(--alm-weight-medium); }
+
+/* === merged from .cssblocks/inbox-swap.css (inbox swap+fold, spec-043) === */
+/* ==========================================================================
+ * Inbox panel SWAP (task #59 / #75 / #83) — token-only CSS block.
+ *
+ * NOT imported directly. The parent merges this block into
+ * `apps/desktop/src/styles/components.css` next to the existing `.alm-inbox-*`
+ * rules. Token-only: no literals beyond layout primitives already used by the
+ * surrounding inbox block.
+ *
+ * Swap summary (CHANGE 1):
+ *   - The RIGHT side panel (`.alm-inbox-side`) now hosts the PLAN
+ *     (`PlanPanel`) — a compact, fixed-width column shown only when an open
+ *     plan / pending root pick exists.
+ *   - The BOTTOM dock (`.alm-inbox-plandock`) now hosts the file DETAILS
+ *     (`InboxDetail`) — docked full width, auto-sized to its content, capped at
+ *     ~40vh with its own scroll, shown only when a detection is selected.
+ *
+ * The base `.alm-inbox-side` / `.alm-inbox-plandock` rules already provide the
+ * column/dock scaffolding; these modifiers tune them for the swapped content:
+ *   - `--plan`    : the side panel now carries the plan (compact width, no
+ *                   forced inner padding so PlanPanel owns its own chrome).
+ *   - `--details` : the bottom dock now carries the inspector (auto-height up
+ *                   to 40vh, own scroll, never taller than its content).
+ * ========================================================================== */
+
+/* CHANGE 1 — RIGHT side panel now holds the PLAN.
+ * Compact, content-driven width so it never takes more room than the plan
+ * needs while staying readable. PlanPanel renders its own header/scroll, so the
+ * side body is a plain flex column with no extra padding. */
+.alm-inbox-side--plan {
+  flex: 0 0 var(--alm-inbox-plan-width, 360px);
+  width: var(--alm-inbox-plan-width, 360px);
+}
+.alm-inbox-side--plan .alm-inbox-side__body {
+  display: flex;
+  flex-direction: column;
+}
+
+/* The side-panel plan header mirrors the old plandock head (title + count
+ * badge) so the swapped plan column still announces itself. */
+.alm-inbox-side__head {
+  flex-shrink: 0;
+  display: flex;
+  align-items: center;
+  gap: var(--alm-sp-2);
+  padding: var(--alm-sp-2) var(--alm-sp-3);
+  border-bottom: 1px solid var(--alm-border-subtle);
+}
+.alm-inbox-side__title {
+  font-size: var(--alm-text-sm);
+  font-weight: var(--alm-weight-semibold);
+  color: var(--alm-text);
+}
+.alm-inbox-side__badge {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-width: 18px;
+  height: 18px;
+  padding: 0 5px;
+  border-radius: var(--alm-radius-pill, var(--alm-radius-sm));
+  background: var(--alm-accent-soft, var(--alm-surface));
+  color: var(--alm-accent);
+  font-size: var(--alm-text-2xs);
+  font-weight: var(--alm-weight-semibold);
+}
+
+/* CHANGE 1 — BOTTOM dock now holds the file DETAILS (inspector).
+ * Auto-size to content: the dock is only as tall as the inspector needs, up to
+ * a 40vh cap, then its body scrolls. Never steals the list/plan columns. */
+.alm-inbox-plandock--details {
+  max-height: 40vh;
+}
+.alm-inbox-plandock--details .alm-inbox-plandock__scroll {
+  padding: 0 var(--alm-sp-3) var(--alm-sp-2);
+}
+/* Close button in the details-dock head, right-aligned. */
+.alm-inbox-plandock__spacer {
+  flex: 1;
+}
+.alm-inbox-plandock__close {
+  appearance: none;
+  background: none;
+  border: none;
+  cursor: pointer;
+  color: var(--alm-text-muted);
+  font-size: var(--alm-text-sm);
+  line-height: 1;
+  padding: 2px var(--alm-sp-1);
+  border-radius: var(--alm-radius-sm);
+}
+.alm-inbox-plandock__close:hover {
+  color: var(--alm-text);
+  background: var(--alm-hover-bg);
+}
+
+/* CHANGE 2 — per-type breakdown summary line.
+ * The collapsed group summary may now render a SINGLE line listing each frame
+ * type with its count (e.g. "10 bias · 21 dark · 12 light → (root)") sourced
+ * from the ingestion's frame-type breakdown, instead of one line per file. The
+ * type tokens read as inline, dot-separated counts. */
+.alm-plan-panel__summary-breakdown {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  gap: 4px var(--alm-sp-2);
+  min-width: 0;
+}
+.alm-plan-panel__summary-type {
+  white-space: nowrap;
+}
+.alm-plan-panel__summary-type-count {
+  font-weight: var(--alm-weight-semibold);
+  color: var(--alm-text);
+}
+.alm-plan-panel__summary-type-name {
+  color: var(--alm-text-secondary);
+}
+.alm-plan-panel__summary-sep {
+  color: var(--alm-text-muted);
+}

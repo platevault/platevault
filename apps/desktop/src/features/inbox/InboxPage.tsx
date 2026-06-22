@@ -35,7 +35,7 @@
 import { useCallback, useEffect, useMemo, useState } from 'react';
 import { useNavigate, useSearch } from '@tanstack/react-router';
 import { PageTopBar, FilterToolbar } from '@/components';
-import { Btn, EmptyState } from '@/ui';
+import { Btn } from '@/ui';
 import { useStaleSelectionCleanup } from '@/lib/use-stale-selection';
 import { addToast } from '@/shared/toast';
 import { InboxList } from './InboxList';
@@ -54,7 +54,7 @@ import {
 } from './store';
 import { InboxStatsSummary } from './InboxStatsSummary';
 import { deriveInboxStats } from './inboxStatsFromItems';
-import { PlanPanel } from './PlanPanel';
+import { PlanPanel, buildBreakdownFromActions } from './PlanPanel';
 import type { DestructiveDestination, PendingRootPick } from './PlanPanel';
 import { normalizeConfirmError } from './store';
 import type { InboxConfirmDestination } from '@/api/commands';
@@ -398,6 +398,41 @@ export function InboxPage() {
     return m;
   }, [items]);
 
+  // #75: per-ingestion frame-type BREAKDOWN for the collapsed plan summary —
+  // the per-type bias/dark/flat/light/master counts (same shape the classify
+  // breakdown / InboxStatsSummary use). Sourced two ways, merged per item:
+  //   1. From each open plan's ACTIONS, classified by destination-path keyword
+  //      + the per-item hint (`buildBreakdownFromActions`). A MOVE/SPLIT plan
+  //      whose files land in typed folders yields a TRUE multi-type tally.
+  //   2. For the SELECTED item, the real classification `breakdown[]` (which
+  //      resolves a MIXED in-place catalogue that the action paths cannot) is
+  //      preferred — it carries the authoritative per-type counts.
+  // The result keys each plan to its tally so PlanPanel renders one summary
+  // line ("10 bias · 21 dark · 12 light → (root)") instead of per-file rows.
+  const breakdownByItemId = useMemo(() => {
+    const m: Record<string, Array<{ kind: string; count: number }>> = {};
+    for (const plan of openPlans) {
+      m[plan.inboxItemId] = buildBreakdownFromActions(
+        plan.actions,
+        frameTypeByItemId[plan.inboxItemId],
+        absoluteByFromPath,
+      );
+    }
+    // Prefer the selected item's authoritative classification breakdown.
+    if (
+      selectedItem &&
+      classification?.breakdown &&
+      classification.breakdown.length > 0 &&
+      m[selectedItem.inboxItemId] != null
+    ) {
+      m[selectedItem.inboxItemId] = classification.breakdown.map((b) => ({
+        kind: b.kind,
+        count: b.count,
+      }));
+    }
+    return m;
+  }, [openPlans, frameTypeByItemId, absoluteByFromPath, selectedItem, classification]);
+
   // Summary count (no page title — top-bar convention): folders / masters.
   const folderCount = items.filter((it) => !it.isMaster).length;
   const masterCount = items.filter((it) => it.isMaster).length;
@@ -471,21 +506,23 @@ export function InboxPage() {
     />
   );
 
-  // Bottom planned-actions panel shows when ≥1 open plan exists OR a
-  // destination-root pick is pending (the latter possible with zero open plans).
+  // The PLAN now lives in the right SIDE panel — shown when ≥1 open plan exists
+  // OR a destination-root pick is pending (the latter possible with zero open
+  // plans). The file DETAILS now live in the BOTTOM dock — shown when a
+  // detection is selected (#83 panel swap).
   const showPlans = openPlans.length > 0 || pendingRootPick != null;
   const planCount = openPlans.length;
 
-  // ── 3-zone body ──
-  //   row 1: detection LIST (primary) + file-details SIDE panel (right)
-  //   row 2: planned-actions BOTTOM panel (full width, docked, own scroll)
+  // ── 3-zone body (SWAPPED per #83) ──
+  //   row 1: detection LIST (primary) + PLAN in the right SIDE panel
+  //   row 2: file DETAILS in the docked BOTTOM panel (auto-size, own scroll)
   // Composed directly (not ListPageLayout) — the Inbox is a special page.
   return (
     <div className="alm-page alm-inbox-page">
       {topBar}
 
       <div className="alm-inbox-body">
-        {/* Row 1: list + side detail panel */}
+        {/* Row 1: list + PLAN side panel */}
         <div className="alm-inbox-upper">
           <div className="alm-inbox-upper__list">
             <InboxList
@@ -498,82 +535,78 @@ export function InboxPage() {
             />
           </div>
 
-          {/* SIDE panel: the selected detection's detail. Fixed, readable width;
-              an empty state when nothing is selected so the column never reads
-              as a broken void. */}
-          <aside
-            className="alm-inbox-side"
+          {/* SIDE panel (swapped): the aggregate PLAN. Compact, fixed width;
+              shown only when an open plan / pending root pick exists so the
+              column never reads as a broken void. */}
+          {showPlans && (
+            <aside
+              className="alm-inbox-side alm-inbox-side--plan"
+              aria-label="Planned actions"
+              data-testid="inbox-plan-dock"
+            >
+              <div className="alm-inbox-side__head">
+                <span className="alm-inbox-side__title">Planned actions</span>
+                {planCount > 0 && (
+                  <span className="alm-inbox-side__badge">{planCount}</span>
+                )}
+              </div>
+              <div className="alm-inbox-side__body">
+                <PlanPanel
+                  plans={openPlans}
+                  totalActions={totalActions}
+                  destructiveDestination={destructiveDestination}
+                  onDestructiveDestinationChange={setDestructiveDestination}
+                  onApplySelected={(ids) => void handleApplySelected(ids)}
+                  onApplyAll={() => void handleApplyAll()}
+                  onCancel={(id) => void handleCancel(id)}
+                  busy={planBusy}
+                  pendingRootPick={pendingRootPick}
+                  onPickDestinationRoot={(rootId) => void handlePickDestinationRoot(rootId)}
+                  rootPickBusy={confirmLoading}
+                  absoluteByFromPath={absoluteByFromPath}
+                  frameTypeByItemId={frameTypeByItemId}
+                  breakdownByItemId={breakdownByItemId}
+                />
+              </div>
+            </aside>
+          )}
+        </div>
+
+        {/* Row 2 (swapped): file DETAILS — docked full width, auto-sized to
+            content (capped ~40vh) with its own scroll. Shown only when a
+            detection is selected. */}
+        {selectedItem != null && (
+          <section
+            className="alm-inbox-plandock alm-inbox-plandock--details"
             aria-label="Detection details"
             data-testid="inbox-side-panel"
           >
-            {selectedItem != null ? (
-              <>
-                <div className="alm-inbox-side__bar">
-                  <button
-                    type="button"
-                    className="alm-inbox-side__close"
-                    onClick={clearSelection}
-                    aria-label="Close details"
-                  >
-                    ✕
-                  </button>
-                </div>
-                <div className="alm-inbox-side__body">
-                  <InboxDetail
-                    // Remount per item so per-item state (pending type
-                    // overrides) never leaks across selections.
-                    key={selectedItem.inboxItemId}
-                    item={selectedItem}
-                    rootAbsolutePath={selectedRootPath}
-                    classification={classification ?? null}
-                    fileMetadata={fileMetadata}
-                    // task #34: inline "Generate split plan" inside the
-                    // mixed-folder alert reuses the same confirm/split flow the
-                    // top-bar Confirm button runs (handleConfirm picks 'split').
-                    onGenerateSplitPlan={() => void handleConfirm()}
-                    splitPlanBusy={confirmLoading}
-                  />
-                </div>
-              </>
-            ) : (
-              <div className="alm-inbox-side__empty">
-                <EmptyState
-                  title="No detection selected"
-                  description="Select a detection in the list to see its classification, frame-type breakdown, and file metadata."
-                />
-              </div>
-            )}
-          </aside>
-        </div>
-
-        {/* Row 2: planned-actions BOTTOM panel — full width, docked, own scroll. */}
-        {showPlans && (
-          <section
-            className="alm-inbox-plandock"
-            aria-label="Planned actions"
-            data-testid="inbox-plan-dock"
-          >
             <div className="alm-inbox-plandock__head">
-              <span className="alm-inbox-plandock__title">Planned actions</span>
-              {planCount > 0 && (
-                <span className="alm-inbox-plandock__badge">{planCount}</span>
-              )}
+              <span className="alm-inbox-plandock__title">Detection details</span>
+              <span className="alm-inbox-plandock__spacer" />
+              <button
+                type="button"
+                className="alm-inbox-plandock__close"
+                onClick={clearSelection}
+                aria-label="Close details"
+              >
+                ✕
+              </button>
             </div>
             <div className="alm-inbox-plandock__scroll">
-              <PlanPanel
-                plans={openPlans}
-                totalActions={totalActions}
-                destructiveDestination={destructiveDestination}
-                onDestructiveDestinationChange={setDestructiveDestination}
-                onApplySelected={(ids) => void handleApplySelected(ids)}
-                onApplyAll={() => void handleApplyAll()}
-                onCancel={(id) => void handleCancel(id)}
-                busy={planBusy}
-                pendingRootPick={pendingRootPick}
-                onPickDestinationRoot={(rootId) => void handlePickDestinationRoot(rootId)}
-                rootPickBusy={confirmLoading}
-                absoluteByFromPath={absoluteByFromPath}
-                frameTypeByItemId={frameTypeByItemId}
+              <InboxDetail
+                // Remount per item so per-item state (pending type
+                // overrides) never leaks across selections.
+                key={selectedItem.inboxItemId}
+                item={selectedItem}
+                rootAbsolutePath={selectedRootPath}
+                classification={classification ?? null}
+                fileMetadata={fileMetadata}
+                // task #34: inline "Generate split plan" inside the
+                // mixed-folder alert reuses the same confirm/split flow the
+                // top-bar Confirm button runs (handleConfirm picks 'split').
+                onGenerateSplitPlan={() => void handleConfirm()}
+                splitPlanBusy={confirmLoading}
               />
             </div>
           </section>

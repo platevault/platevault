@@ -87,6 +87,21 @@ export interface PlanPanelProps {
    * degenerating into one line per file.
    */
   frameTypeByItemId?: Record<string, string>;
+  /**
+   * Per-ingestion frame-type BREAKDOWN (`inboxItemId` → [{kind, count}, …]),
+   * derived by the parent from the SAME data `InboxStatsSummary` computes from
+   * the inbox item (the per-type bias/dark/flat/light/master tallies — see
+   * `buildBreakdownByItemId` in InboxPage).
+   *
+   * spec 043 #75: this is the authoritative fix for the degenerate summary. The
+   * plan ACTIONS carry no per-file frame type, and the single `frameTypeHint`
+   * collapses a MIXED ingestion to one wrong label. When a breakdown is present
+   * the collapsed summary renders ONE line listing every type with its count —
+   * `"10 bias · 21 dark · 12 light → (root)"` — instead of per-file rows or a
+   * single mislabelled type. Absent (no breakdown for the id) the panel falls
+   * back to the per-action keyword/hint aggregation.
+   */
+  breakdownByItemId?: Record<string, ReadonlyArray<{ kind: string; count: number }>>;
 }
 
 // ── Helpers ─────────────────────────────────────────────────────────────────
@@ -271,6 +286,91 @@ function buildGroupSummary(
     }));
 }
 
+/**
+ * Derive a per-type frame breakdown from a plan's ACTIONS, by classifying each
+ * action with {@link frameTypeLabel} (frame keyword in the destination/source
+ * path, then the per-ingestion `itemFrameType` hint). Returns `[{ kind, count }]`
+ * buckets — the same shape the inbox item's classification breakdown carries —
+ * so a MOVE/SPLIT plan whose files land in typed folders yields a true
+ * multi-type tally (e.g. `light` + `dark`). A single-type catalogue ingestion
+ * folds onto its hint; a mixed in-place catalogue (no keyword, no per-file
+ * type) can only report the hint, which is the irreducible backend-data limit.
+ *
+ * InboxPage merges this with the selected item's real classification breakdown
+ * (which DOES resolve a mixed catalogue) when building `breakdownByItemId`.
+ */
+export function buildBreakdownFromActions(
+  actions: InboxPlanAction[],
+  itemFrameType?: string,
+  absoluteByFromPath?: Record<string, string>,
+): Array<{ kind: string; count: number }> {
+  const buckets = new Map<string, number>();
+  for (const a of actions) {
+    const dest = absoluteByFromPath?.[a.fromPath] ?? a.destinationPreview;
+    const frameType = frameTypeLabel(a, dest, itemFrameType);
+    buckets.set(frameType, (buckets.get(frameType) ?? 0) + 1);
+  }
+  return [...buckets.entries()].map(([kind, count]) => ({ kind, count }));
+}
+
+/** One aggregated frame-type entry for the per-type breakdown summary line. */
+export interface PlanGroupBreakdownEntry {
+  /** Stable key for the entry. */
+  key: string;
+  count: number;
+  /** Singular frame-type label (e.g. "bias", "dark", "light", "master"). */
+  frameType: string;
+}
+
+/**
+ * Build the per-type breakdown for one group from the ingestion's frame-type
+ * tally (the SAME shape `InboxStatsSummary` derives from the inbox item — see
+ * `buildBreakdownByItemId` in InboxPage). Each `{ kind, count }` becomes one
+ * aggregated entry, normalised to the singular label vocabulary and merged so a
+ * folder reporting e.g. both `lights` and `light` collapses to one bucket.
+ * Sorted by frame type for a stable, readable order. Returns `[]` when there is
+ * no usable breakdown, signalling the caller to fall back to the per-action
+ * keyword/hint summary.
+ */
+function buildGroupBreakdown(
+  breakdown: ReadonlyArray<{ kind: string; count: number }> | undefined,
+): PlanGroupBreakdownEntry[] {
+  if (!breakdown || breakdown.length === 0) return [];
+  const buckets = new Map<string, number>();
+  for (const { kind, count } of breakdown) {
+    if (!kind || count <= 0) continue;
+    const frameType = normalizeFrameTypeHint(kind);
+    buckets.set(frameType, (buckets.get(frameType) ?? 0) + count);
+  }
+  return [...buckets.entries()]
+    .sort(([a], [b]) => a.localeCompare(b))
+    .map(([frameType, count]) => ({ key: frameType, count, frameType }));
+}
+
+/**
+ * Resolve the single destination shown after the breakdown summary's arrow.
+ * For an in-place catalogue ingestion this is the ingestion folder (`(root)`
+ * when empty); otherwise the common destination directory tail of the actions.
+ */
+function breakdownDestination(
+  actions: InboxPlanAction[],
+  itemName: string,
+  absoluteByFromPath?: Record<string, string>,
+): { short: string; full: string } {
+  const dirs = new Set<string>();
+  for (const a of actions) {
+    const dest = absoluteByFromPath?.[a.fromPath] ?? a.destinationPreview;
+    dirs.add(destinationDir(dest));
+  }
+  if (dirs.size === 1) {
+    const full = [...dirs][0] || itemName || '(root)';
+    return { short: shortDestination(full), full };
+  }
+  // Files land in several typed folders — name the ingestion instead.
+  const full = itemName || '(root)';
+  return { short: full, full };
+}
+
 // ── Component ─────────────────────────────────────────────────────────────────
 
 export function PlanPanel({
@@ -287,6 +387,7 @@ export function PlanPanel({
   rootPickBusy = false,
   absoluteByFromPath,
   frameTypeByItemId,
+  breakdownByItemId,
 }: PlanPanelProps) {
   // Plan-level selection set, keyed by inboxItemId. Stale plans cannot be
   // selected (and are pruned from the set if they become stale).
@@ -487,14 +588,28 @@ export function PlanPanel({
         {plans.map((plan, planIdx) => {
           const checked = selected.has(plan.inboxItemId);
           const isExpanded = expanded.has(plan.inboxItemId);
-          // Collapsed-by-default summary: one line per (frame type → destination).
-          // The per-ingestion frame-type hint (#75) rescues single-type catalogue
-          // plans whose in-place destinations carry no frame keyword.
-          const summaryLines = buildGroupSummary(
-            plan.actions,
-            absoluteByFromPath,
-            frameTypeByItemId?.[plan.inboxItemId],
+          // Collapsed-by-default summary. PREFERRED: the ingestion's frame-type
+          // BREAKDOWN (the per-type bias/dark/flat/light/master tally derived
+          // from the inbox item) → ONE line "10 bias · 21 dark · 12 light →
+          // <dest>". This is the #75 fix — plan actions carry no per-file frame
+          // type and a single hint mislabels a MIXED folder. FALLBACK (no
+          // breakdown): one line per (frame type → destination) inferred from
+          // each action's path keyword + the per-ingestion hint.
+          const breakdownEntries = buildGroupBreakdown(
+            breakdownByItemId?.[plan.inboxItemId],
           );
+          const summaryLines =
+            breakdownEntries.length > 0
+              ? []
+              : buildGroupSummary(
+                  plan.actions,
+                  absoluteByFromPath,
+                  frameTypeByItemId?.[plan.inboxItemId],
+                );
+          const breakdownDest =
+            breakdownEntries.length > 0
+              ? breakdownDestination(plan.actions, plan.itemName, absoluteByFromPath)
+              : null;
           const rowsId = `plan-group-rows-${plan.inboxItemId}`;
           return (
             <section
@@ -574,27 +689,61 @@ export function PlanPanel({
                 </Banner>
               )}
 
-              {/* Collapsed summary: "N <frametype> → <destination>" per bucket. */}
+              {/* Collapsed summary. When the ingestion's frame-type breakdown
+                  is available, render ONE line listing each type with its count
+                  ("10 bias · 21 dark · 12 light → <dest>"). Otherwise fall back
+                  to one line per (frame type → destination) bucket. */}
               <ul
                 className="alm-plan-panel__summary"
                 data-testid={`plan-group-summary-${plan.inboxItemId}`}
               >
-                {summaryLines.map((line) => (
-                  <li key={line.key} className="alm-plan-panel__summary-line">
-                    <span className="alm-plan-panel__summary-count">
-                      {line.count} {pluralLabel(line.frameType, line.count)}
+                {breakdownEntries.length > 0 && breakdownDest ? (
+                  <li className="alm-plan-panel__summary-line">
+                    <span className="alm-plan-panel__summary-breakdown">
+                      {breakdownEntries.map((entry, i) => (
+                        <span key={entry.key} className="alm-plan-panel__summary-type">
+                          {i > 0 && (
+                            <span className="alm-plan-panel__summary-sep" aria-hidden="true">
+                              ·{' '}
+                            </span>
+                          )}
+                          <span className="alm-plan-panel__summary-type-count">
+                            {entry.count}
+                          </span>{' '}
+                          <span className="alm-plan-panel__summary-type-name">
+                            {pluralLabel(entry.frameType, entry.count)}
+                          </span>
+                        </span>
+                      ))}
                     </span>
                     <span className="alm-plan-panel__summary-arrow" aria-hidden="true">
                       →
                     </span>
                     <code
                       className="alm-plan-panel__summary-dest"
-                      title={line.destinationFull}
+                      title={breakdownDest.full}
                     >
-                      {line.destinationShort}
+                      {breakdownDest.short}
                     </code>
                   </li>
-                ))}
+                ) : (
+                  summaryLines.map((line) => (
+                    <li key={line.key} className="alm-plan-panel__summary-line">
+                      <span className="alm-plan-panel__summary-count">
+                        {line.count} {pluralLabel(line.frameType, line.count)}
+                      </span>
+                      <span className="alm-plan-panel__summary-arrow" aria-hidden="true">
+                        →
+                      </span>
+                      <code
+                        className="alm-plan-panel__summary-dest"
+                        title={line.destinationFull}
+                      >
+                        {line.destinationShort}
+                      </code>
+                    </li>
+                  ))
+                )}
               </ul>
 
               {/* Action rows — hidden until the group is expanded. */}

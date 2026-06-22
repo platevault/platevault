@@ -207,6 +207,62 @@ describe('PlanPanel (aggregate surface)', () => {
     expect(screen.queryByText('a.fits')).toBeNull();
   });
 
+  // ── #75: per-type BREAKDOWN summary (collapsed by default, not per-file) ─────
+
+  it('is COLLAPSED by default and renders the per-type breakdown (not per-file rows)', () => {
+    // A MIXED ingestion: the plan actions carry no per-file frame type, so the
+    // single hint would mislabel every file. The breakdown supplies the true
+    // per-type tally, rendered as ONE summary line.
+    const plans = [
+      makePlan({
+        inboxItemId: 'mix',
+        itemName: '(root)',
+        actions: [
+          makeAction({ index: 0, action: 'catalogue', fromPath: '/lib/cam/bias_001.fits', destinationPreview: '/lib/cam/bias_001.fits' }),
+          makeAction({ index: 1, action: 'catalogue', fromPath: '/lib/cam/dark_001.fits', destinationPreview: '/lib/cam/dark_001.fits' }),
+          makeAction({ index: 2, action: 'catalogue', fromPath: '/lib/cam/light_001.fits', destinationPreview: '/lib/cam/light_001.fits' }),
+        ],
+      }),
+    ];
+    render(
+      <PlanPanel
+        plans={plans}
+        totalActions={3}
+        destructiveDestination="archive"
+        onDestructiveDestinationChange={vi.fn()}
+        onApplySelected={vi.fn()}
+        onApplyAll={vi.fn()}
+        onCancel={vi.fn()}
+        breakdownByItemId={{
+          mix: [
+            { kind: 'bias', count: 10 },
+            { kind: 'dark', count: 21 },
+            { kind: 'light', count: 12 },
+          ],
+        }}
+      />,
+    );
+    // COLLAPSED by default: no per-file rows are rendered.
+    expect(screen.queryByText('bias_001.fits')).toBeNull();
+    expect(screen.queryByText('dark_001.fits')).toBeNull();
+    // The summary shows the per-type breakdown — each type with its REAL count
+    // (10 bias · 21 dark · 12 light), NOT one mislabelled per-file line and NOT
+    // everything collapsed to a single wrong type.
+    const summary = screen.getByTestId('plan-group-summary-mix');
+    expect(summary).toHaveTextContent('10');
+    expect(summary).toHaveTextContent('bias');
+    expect(summary).toHaveTextContent('21');
+    expect(summary).toHaveTextContent('dark');
+    expect(summary).toHaveTextContent('12');
+    expect(summary).toHaveTextContent('light');
+    // It is a SINGLE summary line (one <li>), not three per-type/per-file lines.
+    expect(summary.querySelectorAll('.alm-plan-panel__summary-line')).toHaveLength(1);
+
+    // The ▸ toggle expands the per-file rows on demand.
+    fireEvent.click(screen.getByTestId('plan-group-toggle-mix'));
+    expect(screen.getByText('bias_001.fits')).toBeInTheDocument();
+  });
+
   // ── Selection ──────────────────────────────────────────────────────────────
 
   it('toggles a single group selection', () => {
