@@ -13,7 +13,7 @@
  *   naxis1, naxis2, stackCount, isMaster, overrideStale
  */
 import React from 'react';
-import { render as rtlRender, screen } from '@testing-library/react';
+import { render as rtlRender, screen, fireEvent } from '@testing-library/react';
 import { describe, it, expect, vi } from 'vitest';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 
@@ -319,5 +319,102 @@ describe('InboxDetail — FR-032: missing-attribute annotations', () => {
       />
     );
     expect(screen.queryByTestId('inbox-missing-attr-banner')).not.toBeInTheDocument();
+  });
+});
+
+// ── Inspector dock ────────────────────────────────────────────────────────────
+
+describe('InboxDetail — inspector dock', () => {
+  it('renders the inspector with empty-state hint when no row is selected', () => {
+    render(
+      <InboxDetail
+        item={sampleItem as unknown as Parameters<typeof InboxDetail>[0]['item']}
+        rootAbsolutePath="/astro/inbox"
+        classification={singleTypeClassification as unknown as Parameters<typeof InboxDetail>[0]['classification']}
+        fileMetadata={fileMetadataFixture}
+      />
+    );
+    const inspector = screen.getByLabelText('File inspector');
+    expect(inspector).toBeInTheDocument();
+    expect(inspector).toHaveTextContent('Select a file to inspect');
+  });
+
+  it('shows single-file detail after clicking a metadata row', () => {
+    render(
+      <InboxDetail
+        item={sampleItem as unknown as Parameters<typeof InboxDetail>[0]['item']}
+        rootAbsolutePath="/astro/inbox"
+        classification={singleTypeClassification as unknown as Parameters<typeof InboxDetail>[0]['classification']}
+        fileMetadata={fileMetadataFixture}
+      />
+    );
+
+    // Click the row containing 'light_0001.fits' (title attribute on the span)
+    const fileCell = screen.getByTitle('light_0001.fits');
+    fireEvent.click(fileCell);
+
+    const inspector = screen.getByLabelText('File inspector');
+    // Filename heading appears in inspector header
+    expect(inspector).toHaveTextContent('light_0001.fits');
+    // Fields from the fixture: camera=ASI2600MM, filter=Ha, object=NGC7000
+    expect(inspector).toHaveTextContent('ASI2600MM');
+    expect(inspector).toHaveTextContent('Ha');
+    expect(inspector).toHaveTextContent('NGC7000');
+    // Exposure 300 s
+    expect(inspector).toHaveTextContent('300 s');
+  });
+
+  it('deselects a row when clicked again (single click on already-selected row)', () => {
+    render(
+      <InboxDetail
+        item={sampleItem as unknown as Parameters<typeof InboxDetail>[0]['item']}
+        rootAbsolutePath="/astro/inbox"
+        classification={singleTypeClassification as unknown as Parameters<typeof InboxDetail>[0]['classification']}
+        fileMetadata={fileMetadataFixture}
+      />
+    );
+
+    const fileCell = screen.getByTitle('light_0001.fits');
+    fireEvent.click(fileCell);
+    // Now selected — inspector shows the filename
+    expect(screen.getByLabelText('File inspector')).toHaveTextContent('light_0001.fits');
+
+    // Click again to deselect
+    fireEvent.click(fileCell);
+    expect(screen.getByLabelText('File inspector')).toHaveTextContent('Select a file to inspect');
+  });
+
+  it('shows multi-select summary when two rows are ctrl-clicked', () => {
+    render(
+      <InboxDetail
+        item={sampleItem as unknown as Parameters<typeof InboxDetail>[0]['item']}
+        rootAbsolutePath="/astro/inbox"
+        classification={singleTypeClassification as unknown as Parameters<typeof InboxDetail>[0]['classification']}
+        fileMetadata={fileMetadataFixture}
+      />
+    );
+
+    const cell1 = screen.getByTitle('light_0001.fits');
+    const cell2 = screen.getByTitle('calib_dark_0001.fits');
+
+    fireEvent.click(cell1);
+    // Ctrl+click second row
+    fireEvent.click(cell2, { ctrlKey: true });
+
+    const inspector = screen.getByLabelText('File inspector');
+    expect(inspector).toHaveTextContent('2 files selected');
+    // Multi-select footer note
+    expect(inspector).toHaveTextContent('Multi-select');
+  });
+
+  it('does not render the inspector when fileMetadata is absent', () => {
+    render(
+      <InboxDetail
+        item={sampleItem as unknown as Parameters<typeof InboxDetail>[0]['item']}
+        rootAbsolutePath="/astro/inbox"
+        classification={singleTypeClassification as unknown as Parameters<typeof InboxDetail>[0]['classification']}
+      />
+    );
+    expect(screen.queryByLabelText('File inspector')).not.toBeInTheDocument();
   });
 });

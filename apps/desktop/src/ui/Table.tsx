@@ -1,5 +1,5 @@
 import { forwardRef } from 'react';
-import type { ReactNode, CSSProperties, TableHTMLAttributes } from 'react';
+import type { ReactNode, CSSProperties, TableHTMLAttributes, MouseEvent } from 'react';
 
 export interface TableColumn {
   key: string;
@@ -10,11 +10,13 @@ export interface TableColumn {
 }
 
 export type TableRow = {
-  [key: string]: ReactNode | CSSProperties | undefined;
+  [key: string]: ReactNode | CSSProperties | ((evt: MouseEvent) => void) | undefined;
   /** Optional per-row CSS applied to the <tr> element. Not rendered as a cell. */
   _rowStyle?: CSSProperties;
   /** Optional per-row className applied to the <tr> element. Not rendered as a cell. */
   _rowClassName?: string;
+  /** Optional click handler applied to the <tr> element. Not rendered as a cell. */
+  _onClick?: (evt: MouseEvent) => void;
 };
 
 export interface TableProps extends TableHTMLAttributes<HTMLTableElement> {
@@ -32,7 +34,12 @@ export const Table = forwardRef<HTMLTableElement, TableProps>(
         </thead>
         <tbody>
           {rows.map((row, ri) => (
-            <tr key={ri} style={row._rowStyle} className={row._rowClassName}>
+            <tr
+              key={ri}
+              style={row._rowStyle}
+              className={row._rowClassName}
+              onClick={row._onClick as ((evt: MouseEvent) => void) | undefined}
+            >
               {columns.map((c, ci) => (
                 <td key={ci} className={c.className} style={c.cellStyle}>{row[c.key] as ReactNode}</td>
               ))}

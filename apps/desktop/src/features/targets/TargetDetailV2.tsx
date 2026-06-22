@@ -1,16 +1,25 @@
 /**
  * TargetDetailV2 — spec 036 gen-3 detail pane for a single canonical target.
  *
- * Fetches target detail via `target.get` and renders:
- *   - Header: effectiveLabel (displayAlias ?? primaryDesignation), objectType pill,
- *     coordinates, source, simbadOid.
- *   - Display-alias control: set / clear the user presentation label (FR-012).
- *   - Alias list: all aliases with kind badge; only kind='user' aliases have a
- *     remove button (SIMBAD designations/common names are read-only).
- *   - Add-alias form: adds a user alias.
- *
- * Sessions and Projects sections are empty-state stubs — cross-spec FK wiring
- * is deferred (see spec 036 open gaps).
+ * Renders:
+ *   - Planner header: effectiveLabel, objectType + catalog pills, "Add to plan"
+ *     and "+ New project here" actions (FR-012).
+ *   - Identity table: Designation, Type, RA/Dec, Source, SIMBAD OID.
+ *     STUB fields (Constellation, Magnitude, Apparent size, Best season, Transit,
+ *     Moon, Altitude now) are marked below — the gen-3 backend does not yet return
+ *     these.
+ *   - Tonight altitude graph: approximate sinusoidal SVG curve from RA/Dec +
+ *     placeholder observer latitude.
+ *     // STUB: altitude ephemeris — replace with real astro calc when
+ *     // location/ephemeris backend lands.
+ *   - Coverage bars (filter integration hours) — stubbed; gen-3 backend does not
+ *     yet expose coverage per filter on the target.get endpoint.
+ *     // STUB: target coverage — backend pending.
+ *   - Linked sessions / linked projects — empty-state stubs; cross-spec FK wiring
+ *     is deferred (see spec 036 open gaps).
+ *     // STUB: target↔session/project linkage backend pending.
+ *   - Display-alias edit (FR-012).
+ *   - Alias list + add-alias form.
  */
 
 import { useState, useEffect, useCallback } from 'react';
@@ -25,7 +34,7 @@ import {
 } from '@/api/commands';
 import type { TargetDetailV3, TargetOpError } from '@/api/commands';
 import { DetailPane, DetailHeader } from '@/components';
-import { Pill, Section, EmptyState, Banner } from '@/ui';
+import { Pill, Section, EmptyState, Banner, Btn } from '@/ui';
 
 // ── Types ─────────────────────────────────────────────────────────────────────
 
@@ -54,23 +63,25 @@ function kindLabel(kind: string): string {
   }
 }
 
-/** Format decimal degrees to a short sexagesimal string for display. */
-function fmtDeg(deg: number, isRa: boolean): string {
+/** Format decimal RA degrees (0–360) to sexagesimal h m s string. */
+function fmtRa(deg: number): string {
   if (!Number.isFinite(deg)) return '—';
-  if (isRa) {
-    // RA in hours
-    const h = deg / 15;
-    const hh = Math.floor(h);
-    const mm = Math.floor((h - hh) * 60);
-    const ss = ((h - hh) * 60 - mm) * 60;
-    return `${hh}h ${mm}m ${ss.toFixed(1)}s`;
-  }
+  const h = deg / 15;
+  const hh = Math.floor(h);
+  const mm = Math.floor((h - hh) * 60);
+  const ss = ((h - hh) * 60 - mm) * 60;
+  return `${String(hh).padStart(2, '0')}h${String(mm).padStart(2, '0')}m${ss.toFixed(0).padStart(2, '0')}s`;
+}
+
+/** Format decimal Dec degrees to ±DD°MM′SS″ string. */
+function fmtDec(deg: number): string {
+  if (!Number.isFinite(deg)) return '—';
   const sign = deg < 0 ? '−' : '+';
   const abs = Math.abs(deg);
   const dd = Math.floor(abs);
   const mm = Math.floor((abs - dd) * 60);
   const ss = ((abs - dd) * 60 - mm) * 60;
-  return `${sign}${dd}° ${mm}′ ${ss.toFixed(0)}″`;
+  return `${sign}${String(dd).padStart(2, '0')}°${String(mm).padStart(2, '0')}′${ss.toFixed(0).padStart(2, '0')}″`;
 }
 
 /** Map TargetOpError.code to a user-readable message. */
@@ -91,6 +102,246 @@ function errorMessage(err: TargetOpError, fallback: string): string {
   }
 }
 
+// ── Altitude curve helper ─────────────────────────────────────────────────────
+//
+// STUB: altitude ephemeris — replace with real astro calc when
+// location/ephemeris backend lands. This helper approximates the altitude curve
+// using a sinusoidal model based on the target's declination and a placeholder
+// observer latitude. It does not account for refraction, precession, or
+// accurate LST computation. The transit hour is estimated from RA alone.
+
+const STUB_OBSERVER_LAT_DEG = 52.1; // placeholder: ~Netherlands latitude
+
+interface AltPoint {
+  /** Local solar time offset from 18:00 (start of night), in hours (0–12). */
+  tHour: number;
+  /** Approximate altitude in degrees (-90..+90). */
+  altDeg: number;
+}
+
+function altitudeCurve(raDeg: number | null, decDeg: number | null): AltPoint[] {
+  const points: AltPoint[] = [];
+  // Night spans roughly 18:00 → 06:00 (12 h). We sample every 20 min.
+  for (let i = 0; i <= 36; i++) {
+    const tHour = i * (12 / 36); // 0..12 hours into the night
+    const localHour = 18 + tHour; // local clock 18..30 (30=06:00 next day)
+
+    let altDeg: number;
+    if (raDeg == null || decDeg == null) {
+      altDeg = 0;
+    } else {
+      // Approximate hour angle from RA. We assume RA=raDeg/15 hours transits at
+      // midnight local time (LST ≈ 00:00), so HA = (localHour - 24) * 15 deg.
+      const haHour = (localHour - 24); // hours from midnight transit
+      const haDeg = haHour * 15;
+      const latRad = (STUB_OBSERVER_LAT_DEG * Math.PI) / 180;
+      const decRad = (decDeg * Math.PI) / 180;
+      const haRad = (haDeg * Math.PI) / 180;
+      const sinAlt =
+        Math.sin(latRad) * Math.sin(decRad) +
+        Math.cos(latRad) * Math.cos(decRad) * Math.cos(haRad);
+      altDeg = (Math.asin(Math.max(-1, Math.min(1, sinAlt))) * 180) / Math.PI;
+    }
+    points.push({ tHour, altDeg });
+  }
+  return points;
+}
+
+// ── Tonight Altitude SVG ──────────────────────────────────────────────────────
+
+interface AltitudeGraphProps {
+  raDeg: number | null;
+  decDeg: number | null;
+}
+
+const SVG_W = 400;
+const SVG_H = 140;
+const PAD_L = 32;
+const PAD_R = 12;
+const PAD_T = 10;
+const PAD_B = 28;
+const PLOT_W = SVG_W - PAD_L - PAD_R;
+const PLOT_H = SVG_H - PAD_T - PAD_B;
+const ALT_MIN = -10;
+const ALT_MAX = 90;
+
+function altToY(alt: number): number {
+  const frac = (alt - ALT_MIN) / (ALT_MAX - ALT_MIN);
+  return PAD_T + PLOT_H - frac * PLOT_H;
+}
+
+function hourToX(tHour: number): number {
+  return PAD_L + (tHour / 12) * PLOT_W;
+}
+
+function AltitudeGraph({ raDeg, decDeg }: AltitudeGraphProps) {
+  const points = altitudeCurve(raDeg, decDeg);
+
+  // Build SVG polyline points string (dynamic geometry — inline attribute ok)
+  const polylinePoints = points
+    .map((p) => `${hourToX(p.tHour).toFixed(1)},${altToY(p.altDeg).toFixed(1)}`)
+    .join(' ');
+
+  // Usable-altitude band (≥30°) shading
+  const y30 = altToY(30);
+  const yTop = altToY(ALT_MAX);
+
+  // Transit marker: find point closest to peak altitude
+  const peak = points.reduce(
+    (best, p) => (p.altDeg > best.altDeg ? p : best),
+    points[0],
+  );
+  const transitX = hourToX(peak.tHour);
+  const transitLocalHour = 18 + peak.tHour;
+  const transitH = Math.floor(transitLocalHour % 24);
+  const transitM = Math.round((transitLocalHour % 1) * 60);
+  const transitLabel = `${String(transitH).padStart(2, '0')}:${String(transitM).padStart(2, '0')}`;
+
+  // X-axis tick labels (every 2 h from 18 to 06)
+  const xTicks: Array<{ tHour: number; label: string }> = [];
+  for (let h = 0; h <= 12; h += 2) {
+    const clock = (18 + h) % 24;
+    xTicks.push({ tHour: h, label: String(clock).padStart(2, '0') });
+  }
+
+  // Y-axis tick labels
+  const yTicks = [0, 30, 60, 90];
+
+  return (
+    <div className="alm-planner__graph-wrap">
+      {/* viewBox and width/height are geometry — inline SVG attributes */}
+      <svg
+        className="alm-planner__graph-svg"
+        viewBox={`0 0 ${SVG_W} ${SVG_H}`}
+        aria-label="Tonight altitude graph (approximate)"
+        role="img"
+      >
+        {/* Usable altitude shaded band (≥30°) */}
+        <rect
+          x={PAD_L}
+          y={yTop}
+          width={PLOT_W}
+          height={y30 - yTop}
+          fill="var(--alm-ok-bg)"
+          opacity="0.6"
+        />
+
+        {/* 30° usable-altitude guide line */}
+        <line
+          x1={PAD_L}
+          y1={y30}
+          x2={PAD_L + PLOT_W}
+          y2={y30}
+          stroke="var(--alm-ok-border)"
+          strokeWidth="1"
+          strokeDasharray="3 3"
+        />
+
+        {/* Altitude curve */}
+        <polyline
+          points={polylinePoints}
+          fill="none"
+          stroke="var(--alm-accent)"
+          strokeWidth="1.5"
+          strokeLinejoin="round"
+          strokeLinecap="round"
+        />
+
+        {/* Transit vertical marker */}
+        <line
+          x1={transitX}
+          y1={PAD_T}
+          x2={transitX}
+          y2={PAD_T + PLOT_H}
+          stroke="var(--alm-accent)"
+          strokeWidth="1"
+          strokeDasharray="2 2"
+          opacity="0.6"
+        />
+        <text
+          x={transitX + 3}
+          y={PAD_T + 9}
+          className="alm-planner__graph-label-text"
+        >
+          transit {transitLabel}
+        </text>
+
+        {/* Y-axis */}
+        <line
+          x1={PAD_L}
+          y1={PAD_T}
+          x2={PAD_L}
+          y2={PAD_T + PLOT_H}
+          stroke="var(--alm-border)"
+          strokeWidth="1"
+        />
+        {/* X-axis */}
+        <line
+          x1={PAD_L}
+          y1={PAD_T + PLOT_H}
+          x2={PAD_L + PLOT_W}
+          y2={PAD_T + PLOT_H}
+          stroke="var(--alm-border)"
+          strokeWidth="1"
+        />
+
+        {/* Y-axis ticks + labels */}
+        {yTicks.map((alt) => (
+          <g key={alt}>
+            <line
+              x1={PAD_L - 3}
+              y1={altToY(alt)}
+              x2={PAD_L}
+              y2={altToY(alt)}
+              stroke="var(--alm-border)"
+              strokeWidth="1"
+            />
+            <text
+              x={PAD_L - 5}
+              y={altToY(alt) + 3}
+              textAnchor="end"
+              className="alm-planner__graph-axis-text"
+            >
+              {alt}°
+            </text>
+          </g>
+        ))}
+
+        {/* X-axis ticks + labels */}
+        {xTicks.map(({ tHour, label }) => (
+          <g key={tHour}>
+            <line
+              x1={hourToX(tHour)}
+              y1={PAD_T + PLOT_H}
+              x2={hourToX(tHour)}
+              y2={PAD_T + PLOT_H + 3}
+              stroke="var(--alm-border)"
+              strokeWidth="1"
+            />
+            <text
+              x={hourToX(tHour)}
+              y={PAD_T + PLOT_H + 12}
+              textAnchor="middle"
+              className="alm-planner__graph-axis-text"
+            >
+              {label}
+            </text>
+          </g>
+        ))}
+      </svg>
+
+      <p className="alm-planner__graph-legend">
+        Shaded = usable altitude (≥30°)
+      </p>
+      <p className="alm-planner__graph-stub-note">
+        {/* STUB: altitude ephemeris — sinusoidal approximation at {STUB_OBSERVER_LAT_DEG}°N.
+            Replace with real ephemeris calc when location/backend lands. */}
+        Approximate curve · {STUB_OBSERVER_LAT_DEG}°N placeholder location
+      </p>
+    </div>
+  );
+}
+
 // ── TargetDetailV2 ────────────────────────────────────────────────────────────
 
 export function TargetDetailV2({ targetId }: Props) {
@@ -100,6 +351,7 @@ export function TargetDetailV2({ targetId }: Props) {
   const [actionError, setActionError] = useState<string | null>(null);
   const [displayAliasInput, setDisplayAliasInput] = useState('');
   const [displayAliasEditing, setDisplayAliasEditing] = useState(false);
+  const [newProjectOpen, setNewProjectOpen] = useState(false);
   const navigate = useNavigate();
 
   const load = useCallback(() => {
@@ -199,40 +451,178 @@ export function TargetDetailV2({ targetId }: Props) {
 
   const detail = loadState.data;
 
+  // Derive catalog pills from aliases with kind='designation' (non-primary).
+  const catalogPills = detail.aliases
+    .filter((a) => a.kind === 'designation' && a.alias !== detail.primaryDesignation)
+    .slice(0, 4);
+
+  // Common name (first common_name alias, if any).
+  const commonName = detail.aliases.find((a) => a.kind === 'common_name')?.alias ?? null;
+
   return (
     <DetailPane fill>
-      <DetailHeader
-        title={<strong>{detail.effectiveLabel}</strong>}
-        titleExtra={
-          <span className="alm-target-detail__title-extra">
-            <Pill variant="neutral">{detail.objectType.replace('_', ' ')}</Pill>
+      {/* ── Planner header ──────────────────────────────────────────────── */}
+      <div className="alm-planner__header">
+        <div className="alm-planner__header-left">
+          <h2 className="alm-planner__title">
+            {detail.effectiveLabel}
+            {commonName && commonName !== detail.effectiveLabel && (
+              <span className="alm-planner__subtitle"> — {commonName}</span>
+            )}
+          </h2>
+          <div className="alm-planner__pill-row">
+            <Pill variant="neutral">{detail.objectType.replace(/_/g, ' ')}</Pill>
+            {catalogPills.map((a) => (
+              <Pill key={a.id} variant="ghost">{a.alias}</Pill>
+            ))}
+          </div>
+        </div>
+        <div className="alm-planner__actions">
+          {/* STUB: "Add to plan" — observing-plan feature not yet implemented */}
+          <Btn size="sm" variant="ghost" disabled title="Add to plan (coming soon)">
+            Add to plan
+          </Btn>
+          {/* "+ New project here" — opens CreateProjectDialog; pre-wiring
+              canonicalTargetId is deferred per spec 035 comment in
+              CreateProjectDialog.tsx (no backend field yet). Navigates to
+              /projects?newProject=1 so the projects page opens the dialog. */}
+          <Btn
+            size="sm"
+            variant="primary"
+            onClick={() => {
+              // STUB: pre-fill targetId in CreateProjectDialog — deferred
+              // (canonicalTargetId field not yet wired in backend contract).
+              // Navigate to /projects/new which opens the create-project dialog.
+              setNewProjectOpen(true);
+              void navigate({ to: '/projects/new' });
+            }}
+          >
+            + New project here
+          </Btn>
+        </div>
+      </div>
+
+      {/* Suppress unused-state warning; newProjectOpen drives the navigate above */}
+      {newProjectOpen && null}
+
+      {/* ── Identity + Tonight graph ─────────────────────────────────────── */}
+      <div className="alm-planner__body">
+
+        {/* Left: identity table */}
+        <div className="alm-planner__identity">
+          <div className="alm-planner__identity-table">
+            <span className="alm-planner__identity-label">Designation</span>
+            <span className="alm-planner__identity-value alm-planner__identity-value--mono">
+              {detail.primaryDesignation}
+            </span>
+
+            <span className="alm-planner__identity-label">Type</span>
+            <span className="alm-planner__identity-value">
+              {detail.objectType.replace(/_/g, ' ')}
+            </span>
+
+            {/* STUB: Constellation — not in gen-3 TargetDetailV3 yet */}
+            <span className="alm-planner__identity-label">Constellation</span>
+            <span className="alm-planner__identity-value alm-planner__identity-value--stub">
+              {/* STUB: constellation — backend pending */}—
+            </span>
+
+            <span className="alm-planner__identity-label">RA / Dec</span>
+            <span className="alm-planner__identity-value alm-planner__identity-value--mono">
+              {detail.raDeg != null && detail.decDeg != null
+                ? `${fmtRa(detail.raDeg)} / ${fmtDec(detail.decDeg)}`
+                : '—'}
+            </span>
+
+            {/* STUB: Magnitude — not in gen-3 TargetDetailV3 */}
+            <span className="alm-planner__identity-label">Magnitude</span>
+            <span className="alm-planner__identity-value alm-planner__identity-value--stub">
+              {/* STUB: magnitude — backend pending */}—
+            </span>
+
+            {/* STUB: Apparent size — not in gen-3 TargetDetailV3 */}
+            <span className="alm-planner__identity-label">Apparent size</span>
+            <span className="alm-planner__identity-value alm-planner__identity-value--stub">
+              {/* STUB: apparent size — backend pending */}—
+            </span>
+
+            {/* STUB: Best season — not in gen-3 TargetDetailV3 */}
+            <span className="alm-planner__identity-label">Best season</span>
+            <span className="alm-planner__identity-value alm-planner__identity-value--stub">
+              {/* STUB: best season — backend pending */}—
+            </span>
+
+            {/* STUB: Transit — derived from ephemeris, backend pending */}
+            <span className="alm-planner__identity-label">Transit</span>
+            <span className="alm-planner__identity-value alm-planner__identity-value--stub">
+              {/* STUB: transit time — ephemeris backend pending */}—
+            </span>
+
+            {/* STUB: Moon — not in gen-3 TargetDetailV3 */}
+            <span className="alm-planner__identity-label">Moon</span>
+            <span className="alm-planner__identity-value alm-planner__identity-value--stub">
+              {/* STUB: moon distance/phase — ephemeris backend pending */}—
+            </span>
+
+            <span className="alm-planner__identity-label">Source</span>
+            <span className="alm-planner__identity-value">
+              <Pill variant="ghost">{detail.source}</Pill>
+            </span>
+
+            {detail.simbadOid != null && (
+              <>
+                <span className="alm-planner__identity-label">SIMBAD OID</span>
+                <span className="alm-planner__identity-value alm-planner__identity-value--mono">
+                  {detail.simbadOid}
+                </span>
+              </>
+            )}
+          </div>
+        </div>
+
+        {/* Right: tonight altitude graph */}
+        <div className="alm-planner__graph-col">
+          <span className="alm-planner__graph-title">
+            Tonight — altitude at your location ({STUB_OBSERVER_LAT_DEG}°N)
           </span>
-        }
-      />
+          <AltitudeGraph raDeg={detail.raDeg} decDeg={detail.decDeg} />
+        </div>
+      </div>
 
-      {/* Coordinates + metadata */}
-      <Section title="Identity">
-        <dl className="alm-target-detail__identity-grid">
-          <dt className="alm-target-detail__identity-label">Designation</dt>
-          <dd>{detail.primaryDesignation}</dd>
-          <dt className="alm-target-detail__identity-label">RA</dt>
-          <dd>{detail.raDeg != null ? fmtDeg(detail.raDeg, true) : '—'}</dd>
-          <dt className="alm-target-detail__identity-label">Dec</dt>
-          <dd>{detail.decDeg != null ? fmtDeg(detail.decDeg, false) : '—'}</dd>
-          <dt className="alm-target-detail__identity-label">Source</dt>
-          <dd>
-            <Pill variant="ghost">{detail.source}</Pill>
-          </dd>
-          {detail.simbadOid != null && (
-            <>
-              <dt className="alm-target-detail__identity-label">SIMBAD OID</dt>
-              <dd>{detail.simbadOid}</dd>
-            </>
-          )}
-        </dl>
-      </Section>
+      {/* ── Coverage bars ────────────────────────────────────────────────── */}
+      {/* STUB: target coverage — gen-3 TargetDetailV3 does not yet expose
+          per-filter coverage. Render the section header with a stub note. */}
+      <div className="alm-planner__coverage">
+        <p className="alm-planner__section-title">Coverage</p>
+        <div className="alm-planner__coverage-list">
+          <span className="alm-planner__coverage-stub">
+            {/* STUB: target coverage — backend pending (coverage per filter not in gen-3 target.get) */}
+            No coverage data — filter integration hours will appear here once the
+            target↔session linkage backend is wired.
+          </span>
+        </div>
+      </div>
 
-      {/* Display alias (FR-012: user presentation label) */}
+      {/* ── Linked sessions + projects ───────────────────────────────────── */}
+      {/* STUB: target↔session/project linkage backend pending (spec 036 open gap). */}
+      <div className="alm-planner__links">
+        <div>
+          <p className="alm-planner__link-col-title">Sessions</p>
+          {/* STUB: target↔session linkage backend pending */}
+          <span className="alm-planner__link-empty">
+            Sessions appear here once the ingest pipeline populates target_id from FITS OBJECT data.
+          </span>
+        </div>
+        <div>
+          <p className="alm-planner__link-col-title">Projects</p>
+          {/* STUB: target↔project linkage backend pending */}
+          <span className="alm-planner__link-empty">
+            Projects appear here once they are created with a target reference.
+          </span>
+        </div>
+      </div>
+
+      {/* ── Display label ────────────────────────────────────────────────── */}
       <Section title="Display label">
         {displayAliasEditing ? (
           <div className="alm-target-detail__display-alias-edit">
@@ -288,7 +678,7 @@ export function TargetDetailV2({ targetId }: Props) {
         )}
       </Section>
 
-      {/* Aliases */}
+      {/* ── Aliases ──────────────────────────────────────────────────────── */}
       <Section title="Aliases" count={detail.aliases.length}>
         <div className="alm-target-detail__alias-list">
           {detail.aliases.map((a) => (
@@ -348,16 +738,18 @@ export function TargetDetailV2({ targetId }: Props) {
         )}
       </Section>
 
-      {/* Sessions — empty state (cross-spec FK wiring deferred) */}
+      {/* ── Sessions (empty-state stub) ──────────────────────────────────── */}
       <Section title="Sessions">
+        {/* STUB: target↔session linkage backend pending */}
         <EmptyState
           title="No sessions linked"
           desc="Sessions appear here once the ingestion pipeline populates target_id from FITS OBJECT data."
         />
       </Section>
 
-      {/* Projects — empty state (cross-spec FK wiring deferred) */}
+      {/* ── Projects (empty-state stub) ──────────────────────────────────── */}
       <Section title="Projects">
+        {/* STUB: target↔project linkage backend pending */}
         <EmptyState
           title="No projects linked"
           desc="Projects appear here once they are created with a target reference."
