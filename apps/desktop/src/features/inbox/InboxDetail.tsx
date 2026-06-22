@@ -1,28 +1,28 @@
 /**
  * InboxDetail — bottom pane for the Inbox classify/confirm workflow.
  *
- * Uses the canonical DetailPanel with the `facts` prop so layout is
- * consistent with Sessions and Calibration:
+ * Follows the SessionDetail shape (spec 043 §4 redesign):
  *
- *   HEADER  — item path (title) + classification pill (titleExtra), pinned.
- *   BODY    — two columns via DetailPanel facts/children contract:
- *     facts  (LEFT)  = alerts + breakdown table; non-scrolling, compact.
- *     content (RIGHT) = file-metadata table (scrolls internally) + inspector
- *                       (per-row extra fields: instrume, telescop, naxis1/2,
- *                        stackCount, imageTyp — NOT columned in the table).
+ *   HEADER — item path (title, bold) + titleExtra: classification pill +
+ *             inline action buttons (left-packed, alm-session-detail2__actions).
+ *             "Generate split plan" for mixed folders lives HERE, not in the body.
+ *   BODY   — left-packed .alm-session-detail2 flex row:
+ *     col A (PropertyTable, left)    — classification + file-count + FITS metadata
+ *     breakdown block (after cols)   — frame-type breakdown table; retains full
+ *                                      interactivity (filter rows, type-override
+ *                                      selects, bulk-apply).
+ *     file-metadata block (after BD) — per-file metadata table (FR-010).
+ *     file-inspector block           — per-file FileInspector (updated on row click).
+ *   The mixed-folder Banner sits above the .alm-session-detail2 row as an
+ *   informational summary; the primary ACTION ("Generate split plan") is in
+ *   the header titleExtra.
  *
- * Owner-specified changes applied here:
- *   1. MetricLine ("N files · single_type classification") removed — noise.
- *   2. Breakdown is always-visible, never collapsible (Section wrapper removed).
- *   3. Samples column removed from breakdown table.
- *   4. Breakdown (left/facts) and file-metadata (right/content) at same level.
- *   5. Outer panel does NOT scroll; only the file-metadata column scrolls.
- *   6. Inspector: additive per-file fields not in the table — instrume,
- *      telescop, naxis1×naxis2, stackCount, imageTyp. Updates on row click.
+ * No facts/aux props passed to DetailPanel — body is fully self-contained.
  */
 
 import { useState } from 'react';
-import { DetailPanel } from '@/components';
+import { DetailPanel, PropertyTable } from '@/components';
+import type { PropertyDef } from '@/components';
 import { Pill, Banner, Btn, Section, Table } from '@/ui';
 import type { InboxItemSummary, InboxFileMetadata } from '@/api/commands';
 import type { InboxClassifyResponse } from './store';
@@ -440,15 +440,90 @@ export function InboxDetail({
       ? buildMixedSummary(classification.breakdown)
       : null;
 
+  // ── Detection property table (left col A) ────────────────────────────────
+  // Classification type, file count, and the first file's FITS metadata fields
+  // as a flat PropertyTable — mirrors SessionDetail's factProps pattern.
+  // The "first file" is a best-effort representative sample for the detection.
+
+  const repFile = fileMetadata?.[0] ?? null;
+
+  const detectionProps: PropertyDef[] = [
+    {
+      key: 'classification',
+      label: 'Classification',
+      value:
+        classType === 'single_type'
+          ? (classification?.frameType ?? 'single_type')
+          : classType,
+    },
+    { key: 'files', label: 'Files', value: classification ? String(classification.breakdown?.reduce((s, e) => s + e.count, 0) || item.fileCount) : String(item.fileCount) },
+    ...(repFile?.object != null
+      ? [{ key: 'target', label: 'Target', value: repFile.object, source: 'fits' } as PropertyDef]
+      : []),
+    ...(repFile?.filter != null
+      ? [{ key: 'filter', label: 'Filter', value: repFile.filter, source: 'fits' } as PropertyDef]
+      : []),
+    ...(repFile?.exposureS != null
+      ? [{ key: 'exposure', label: 'Exposure', value: fmtExposure(repFile.exposureS), source: 'fits' } as PropertyDef]
+      : []),
+    ...(repFile?.binningX != null || repFile?.binningY != null
+      ? [{ key: 'binning', label: 'Binning', value: fmtBinning(repFile?.binningX, repFile?.binningY), source: 'fits' } as PropertyDef]
+      : []),
+    ...(repFile?.gain != null
+      ? [{ key: 'gain', label: 'Gain', value: repFile.gain, source: 'fits' } as PropertyDef]
+      : []),
+    ...(repFile?.temperatureC != null
+      ? [{ key: 'temp', label: 'Sensor temp', value: fmtTemp(repFile.temperatureC), source: 'fits' } as PropertyDef]
+      : []),
+    ...(repFile?.instrume != null
+      ? [{ key: 'instrume', label: 'Instrument', value: repFile.instrume, source: 'fits' } as PropertyDef]
+      : []),
+    ...(repFile != null && (repFile.naxis1 != null || repFile.naxis2 != null)
+      ? [{ key: 'dims', label: 'Dimensions', value: fmtDimensions(repFile.naxis1, repFile.naxis2), source: 'fits' } as PropertyDef]
+      : []),
+    ...(repFile?.dateObs != null
+      ? [{ key: 'date', label: 'Night', value: repFile.dateObs, source: 'fits' } as PropertyDef]
+      : []),
+  ];
+
+  // ── Inline header actions ─────────────────────────────────────────────────
+  // Classification pill + lane pill + "Generate split plan" for mixed.
+  // Left-packed via alm-session-detail2__actions so growing the panel adds
+  // trailing whitespace rather than spreading title and buttons apart.
+  const titleActions = (
+    <span className="alm-session-detail2__actions">
+      <Pill variant={classificationVariant(classType)}>
+        {classType === 'single_type'
+          ? classification?.frameType ?? 'single'
+          : classType}
+      </Pill>
+      {item.lane === 'video' && <Pill variant="ghost">video</Pill>}
+      {classType === 'mixed' && onGenerateSplitPlan && (
+        <Btn
+          size="sm"
+          variant="accent"
+          onClick={onGenerateSplitPlan}
+          disabled={splitPlanBusy}
+          aria-label="Generate split plan"
+          data-testid="inbox-mixed-split-btn"
+        >
+          {splitPlanBusy ? 'Working…' : 'Generate split plan'}
+        </Btn>
+      )}
+    </span>
+  );
+
   // ── Render ────────────────────────────────────────────────────────────────
 
   const hasMetadata = metadataRows.length > 0;
 
-  // FACTS column (left): frame-type breakdown — always visible, no collapse,
-  // no samples column. Also holds alerts and "Needs review" reclassify flow.
-  const factsColumn = (
-    <div className="alm-inbox-detail__facts-col">
-      {/* Mixed: advisory alert + inline split action */}
+  return (
+    <DetailPanel
+      variant="inbox"
+      title={<strong>{title}</strong>}
+      titleExtra={titleActions}
+    >
+      {/* Mixed: advisory banner above the content row */}
       {classType === 'mixed' && (
         <Banner
           variant="warn"
@@ -461,24 +536,10 @@ export function InboxDetail({
               Multiple frame types detected. Confirm to produce a reviewable split plan.
             </span>
           </div>
-          {onGenerateSplitPlan && (
-            <div className="alm-inbox-alert__action">
-              <Btn
-                size="sm"
-                variant="accent"
-                onClick={onGenerateSplitPlan}
-                disabled={splitPlanBusy}
-                aria-label="Generate split plan"
-                data-testid="inbox-mixed-split-btn"
-              >
-                {splitPlanBusy ? 'Working…' : 'Generate split plan'}
-              </Btn>
-            </div>
-          )}
         </Banner>
       )}
 
-      {/* Unclassified: blocking alert */}
+      {/* Unclassified: blocking banner */}
       {classType === 'unclassified' && (
         <Banner
           variant="danger"
@@ -504,229 +565,219 @@ export function InboxDetail({
         </div>
       )}
 
-      {/* Breakdown always visible, no Section wrapper, no samples column */}
-      {breakdownRows.length > 0 && (
-        <div className="alm-inbox-detail__breakdown-block">
-          <div className="alm-inbox-detail__breakdown-head">
-            Frame type breakdown
-            {/* task 33: active filter indicator + clear link */}
-            {activeBreakdownFilter && onBreakdownFilterChange && (
-              <span className="alm-breakdown-filter-label" data-testid="breakdown-filter-active">
-                — {activeBreakdownFilter}
-                <button
-                  type="button"
-                  className="alm-breakdown-filter-clear"
-                  onClick={() => onBreakdownFilterChange(null)}
-                  aria-label="Clear frame type filter"
-                  data-testid="breakdown-filter-clear"
-                >
-                  clear
-                </button>
-              </span>
-            )}
-          </div>
-          <Table
-            columns={breakdownColumns}
-            rows={breakdownRows}
-            className="alm-inbox-detail__table-fixed"
-          />
-        </div>
-      )}
-
-      {/* Needs review */}
-      {unclassifiedRows.length > 0 && (
-        <Section title={`Needs review (${unclassifiedRows.length})`}>
-          <div className="alm-inbox-detail__select-all-row">
-            <input
-              type="checkbox"
-              checked={allSelected}
-              ref={(el) => { if (el) el.indeterminate = someSelected; }}
-              onChange={handleSelectAll}
-              aria-label="Select all unclassified files"
-              data-testid="reclassify-select-all"
-            />
-            <span className="alm-inbox-detail__select-all-label">
-              {selectedFiles.size === 0 ? 'Select all' : `${selectedFiles.size} selected`}
-            </span>
-          </div>
-          <Table columns={unclassifiedColumns} rows={unclassifiedRows} />
-
-          {selectedFiles.size > 0 && (
-            <div className="alm-inbox-detail__bulk-controls" aria-label="Bulk override controls">
-              <div className="alm-inbox-detail__bulk-field">
-                <label htmlFor="bulk-frame-type" className="alm-inbox-detail__bulk-label">
-                  Frame type
-                </label>
-                <select
-                  id="bulk-frame-type"
-                  value={bulkFrameType}
-                  onChange={(e) => setBulkFrameType(e.target.value)}
-                  aria-label="Bulk frame type"
-                  data-testid="bulk-frame-type"
-                  className="alm-select alm-select--sm"
-                >
-                  <option value="">— unchanged —</option>
-                  {FRAME_TYPE_OPTIONS.map((t) => (
-                    <option key={t} value={t}>{t}</option>
-                  ))}
-                </select>
-              </div>
-
-              <div className="alm-inbox-detail__bulk-field">
-                <label htmlFor="bulk-filter" className="alm-inbox-detail__bulk-label">
-                  Filter
-                </label>
-                <input
-                  id="bulk-filter"
-                  type="text"
-                  value={bulkFilter}
-                  onChange={(e) => setBulkFilter(e.target.value)}
-                  placeholder="e.g. Ha"
-                  aria-label="Bulk filter"
-                  data-testid="bulk-filter"
-                  className="alm-input alm-input--sm alm-inbox-detail__bulk-input-w80"
-                />
-              </div>
-
-              <div className="alm-inbox-detail__bulk-field">
-                <label htmlFor="bulk-exposure" className="alm-inbox-detail__bulk-label">
-                  Exposure (s)
-                </label>
-                <input
-                  id="bulk-exposure"
-                  type="number"
-                  value={bulkExposureS}
-                  onChange={(e) => setBulkExposureS(e.target.value)}
-                  placeholder="e.g. 300"
-                  aria-label="Bulk exposure seconds"
-                  data-testid="bulk-exposure-s"
-                  className="alm-input alm-input--sm alm-inbox-detail__bulk-input-w80"
-                  min={0}
-                />
-              </div>
-
-              <div className="alm-inbox-detail__bulk-field">
-                <label htmlFor="bulk-binning" className="alm-inbox-detail__bulk-label">
-                  Binning
-                </label>
-                <input
-                  id="bulk-binning"
-                  type="text"
-                  value={bulkBinning}
-                  onChange={(e) => setBulkBinning(e.target.value)}
-                  placeholder="e.g. 2x2"
-                  aria-label="Bulk binning"
-                  data-testid="bulk-binning"
-                  className="alm-input alm-input--sm alm-inbox-detail__bulk-input-w80"
-                />
-              </div>
-
-              <button
-                className="alm-btn alm-btn--sm alm-btn--accent"
-                onClick={handleBulkApply}
-                disabled={reclassifyLoading}
-                aria-label={`Apply bulk override to ${selectedFiles.size} file${selectedFiles.size !== 1 ? 's' : ''}`}
-                data-testid="bulk-apply-btn"
-              >
-                {reclassifyLoading
-                  ? 'Applying…'
-                  : `Apply to selected (${selectedFiles.size})`}
-              </button>
-            </div>
-          )}
-
-          {bulkError && (
-            <Banner variant="danger" className="alm-inbox-detail__banner-mt2">{bulkError}</Banner>
-          )}
-
-          {Object.keys(pendingOverrides).length > 0 && (
-            <div className="alm-inbox-detail__apply-row">
-              <button
-                className="alm-btn alm-btn--sm alm-btn--accent"
-                onClick={handleApplyOverrides}
-                disabled={Object.keys(pendingOverrides).length === 0 || reclassifyLoading}
-                aria-label="Apply manual overrides"
-              >
-                {reclassifyLoading
-                  ? 'Applying…'
-                  : `Apply ${Object.keys(pendingOverrides).length} override${Object.keys(pendingOverrides).length !== 1 ? 's' : ''}`}
-              </button>
-            </div>
-          )}
-
-          {applyError && (
-            <Banner variant="danger" className="alm-inbox-detail__banner-mt2">{applyError}</Banner>
-          )}
-        </Section>
-      )}
-
-      {/* FR-032 (US9): blocking banner for missing path attributes */}
-      {filesMissingAttrs.length > 0 && (
-        <Banner
-          variant="danger"
-          className="alm-inbox-detail__banner-mt3 alm-inbox-alert"
-          data-testid="inbox-missing-attr-banner"
-        >
-          <div className="alm-inbox-alert__msg">
-            <span className="alm-inbox-alert__title">Required metadata missing</span>
-            <span className="alm-inbox-alert__body">
-              {filesMissingAttrs.length} file{filesMissingAttrs.length !== 1 ? 's' : ''} missing
-              required attribute(s) for their destination — confirm disabled. Assign the
-              missing value(s) in "Needs review" above, then confirm.
-            </span>
-          </div>
-        </Banner>
-      )}
-
       {!classification && (
         <div className="alm-inbox-detail__empty">
           Select an item to see the classification breakdown.
         </div>
       )}
-    </div>
-  );
 
-  // CONTENT column (center, scrolls): file-metadata table.
-  // Row onClick → setInspectedIdx → FileInspector in the aux rail.
-  const contentColumn = hasMetadata ? (
-    <div className="alm-inbox-detail__meta-col" aria-label="File metadata">
-      <div className="alm-inbox-detail__meta-head">
-        File metadata ({metadataRows.length})
+      {/* Left-packed .alm-session-detail2 row: [property col] [breakdown] [metadata] [inspector] */}
+      <div className="alm-session-detail2">
+        {/* Col A: detection properties (classification, files, FITS attrs) */}
+        <div className="alm-session-detail2__col">
+          <div className="alm-session-detail2__head">Detection</div>
+          <PropertyTable mode="view" showSource properties={detectionProps} />
+        </div>
+
+        {/* Breakdown table: always visible when there are breakdown entries */}
+        {breakdownRows.length > 0 && (
+          <div className="alm-session-detail2__col">
+            <div className="alm-session-detail2__head">
+              Frame type breakdown
+              {activeBreakdownFilter && onBreakdownFilterChange && (
+                <span className="alm-breakdown-filter-label" data-testid="breakdown-filter-active">
+                  {' '}— {activeBreakdownFilter}
+                  <button
+                    type="button"
+                    className="alm-breakdown-filter-clear"
+                    onClick={() => onBreakdownFilterChange(null)}
+                    aria-label="Clear frame type filter"
+                    data-testid="breakdown-filter-clear"
+                  >
+                    clear
+                  </button>
+                </span>
+              )}
+            </div>
+            <Table
+              columns={breakdownColumns}
+              rows={breakdownRows}
+              className="alm-inbox-detail__table-fixed"
+            />
+          </div>
+        )}
+
+        {/* Needs review — always rendered when unclassified files exist */}
+        {unclassifiedRows.length > 0 && (
+          <div className="alm-session-detail2__col">
+            <Section title={`Needs review (${unclassifiedRows.length})`}>
+              <div className="alm-inbox-detail__select-all-row">
+                <input
+                  type="checkbox"
+                  checked={allSelected}
+                  ref={(el) => { if (el) el.indeterminate = someSelected; }}
+                  onChange={handleSelectAll}
+                  aria-label="Select all unclassified files"
+                  data-testid="reclassify-select-all"
+                />
+                <span className="alm-inbox-detail__select-all-label">
+                  {selectedFiles.size === 0 ? 'Select all' : `${selectedFiles.size} selected`}
+                </span>
+              </div>
+              <Table columns={unclassifiedColumns} rows={unclassifiedRows} />
+
+              {selectedFiles.size > 0 && (
+                <div className="alm-inbox-detail__bulk-controls" aria-label="Bulk override controls">
+                  <div className="alm-inbox-detail__bulk-field">
+                    <label htmlFor="bulk-frame-type" className="alm-inbox-detail__bulk-label">
+                      Frame type
+                    </label>
+                    <select
+                      id="bulk-frame-type"
+                      value={bulkFrameType}
+                      onChange={(e) => setBulkFrameType(e.target.value)}
+                      aria-label="Bulk frame type"
+                      data-testid="bulk-frame-type"
+                      className="alm-select alm-select--sm"
+                    >
+                      <option value="">— unchanged —</option>
+                      {FRAME_TYPE_OPTIONS.map((t) => (
+                        <option key={t} value={t}>{t}</option>
+                      ))}
+                    </select>
+                  </div>
+
+                  <div className="alm-inbox-detail__bulk-field">
+                    <label htmlFor="bulk-filter" className="alm-inbox-detail__bulk-label">
+                      Filter
+                    </label>
+                    <input
+                      id="bulk-filter"
+                      type="text"
+                      value={bulkFilter}
+                      onChange={(e) => setBulkFilter(e.target.value)}
+                      placeholder="e.g. Ha"
+                      aria-label="Bulk filter"
+                      data-testid="bulk-filter"
+                      className="alm-input alm-input--sm alm-inbox-detail__bulk-input-w80"
+                    />
+                  </div>
+
+                  <div className="alm-inbox-detail__bulk-field">
+                    <label htmlFor="bulk-exposure" className="alm-inbox-detail__bulk-label">
+                      Exposure (s)
+                    </label>
+                    <input
+                      id="bulk-exposure"
+                      type="number"
+                      value={bulkExposureS}
+                      onChange={(e) => setBulkExposureS(e.target.value)}
+                      placeholder="e.g. 300"
+                      aria-label="Bulk exposure seconds"
+                      data-testid="bulk-exposure-s"
+                      className="alm-input alm-input--sm alm-inbox-detail__bulk-input-w80"
+                      min={0}
+                    />
+                  </div>
+
+                  <div className="alm-inbox-detail__bulk-field">
+                    <label htmlFor="bulk-binning" className="alm-inbox-detail__bulk-label">
+                      Binning
+                    </label>
+                    <input
+                      id="bulk-binning"
+                      type="text"
+                      value={bulkBinning}
+                      onChange={(e) => setBulkBinning(e.target.value)}
+                      placeholder="e.g. 2x2"
+                      aria-label="Bulk binning"
+                      data-testid="bulk-binning"
+                      className="alm-input alm-input--sm alm-inbox-detail__bulk-input-w80"
+                    />
+                  </div>
+
+                  <button
+                    className="alm-btn alm-btn--sm alm-btn--accent"
+                    onClick={handleBulkApply}
+                    disabled={reclassifyLoading}
+                    aria-label={`Apply bulk override to ${selectedFiles.size} file${selectedFiles.size !== 1 ? 's' : ''}`}
+                    data-testid="bulk-apply-btn"
+                  >
+                    {reclassifyLoading
+                      ? 'Applying…'
+                      : `Apply to selected (${selectedFiles.size})`}
+                  </button>
+                </div>
+              )}
+
+              {bulkError && (
+                <Banner variant="danger" className="alm-inbox-detail__banner-mt2">{bulkError}</Banner>
+              )}
+
+              {Object.keys(pendingOverrides).length > 0 && (
+                <div className="alm-inbox-detail__apply-row">
+                  <button
+                    className="alm-btn alm-btn--sm alm-btn--accent"
+                    onClick={handleApplyOverrides}
+                    disabled={Object.keys(pendingOverrides).length === 0 || reclassifyLoading}
+                    aria-label="Apply manual overrides"
+                  >
+                    {reclassifyLoading
+                      ? 'Applying…'
+                      : `Apply ${Object.keys(pendingOverrides).length} override${Object.keys(pendingOverrides).length !== 1 ? 's' : ''}`}
+                  </button>
+                </div>
+              )}
+
+              {applyError && (
+                <Banner variant="danger" className="alm-inbox-detail__banner-mt2">{applyError}</Banner>
+              )}
+            </Section>
+          </div>
+        )}
+
+        {/* FR-032 (US9): blocking banner for missing path attributes — outside
+            the "Needs review" block so it renders even when unclassifiedFiles
+            is empty (classified files with missing path-load-bearing attrs). */}
+        {filesMissingAttrs.length > 0 && (
+          <div className="alm-session-detail2__col">
+            <Banner
+              variant="danger"
+              className="alm-inbox-detail__banner-mt3 alm-inbox-alert"
+              data-testid="inbox-missing-attr-banner"
+            >
+              <div className="alm-inbox-alert__msg">
+                <span className="alm-inbox-alert__title">Required metadata missing</span>
+                <span className="alm-inbox-alert__body">
+                  {filesMissingAttrs.length} file{filesMissingAttrs.length !== 1 ? 's' : ''} missing
+                  required attribute(s) for their destination — confirm disabled. Assign the
+                  missing value(s) in "Needs review" above, then confirm.
+                </span>
+              </div>
+            </Banner>
+          </div>
+        )}
+
+        {/* Per-file metadata table (FR-010) */}
+        {hasMetadata && (
+          <div className="alm-session-detail2__col alm-inbox-detail__meta-col" aria-label="File metadata">
+            <div className="alm-session-detail2__head">
+              File metadata ({metadataRows.length})
+            </div>
+            <Table
+              columns={metadataColumns}
+              rows={metadataRows}
+            />
+          </div>
+        )}
+
+        {/* Per-file inspector — shown when metadata is present */}
+        {hasMetadata && (
+          <FileInspector
+            file={inspectedIdx != null ? (fileMetadata?.[inspectedIdx] ?? null) : null}
+          />
+        )}
       </div>
-      <Table
-        columns={metadataColumns}
-        rows={metadataRows}
-      />
-    </div>
-  ) : null;
-
-  // AUX column (right): per-file FileInspector.
-  // Always rendered when there is file metadata so the column appears even
-  // before a row is clicked (inspector shows empty state).
-  const auxColumn = hasMetadata ? (
-    <FileInspector
-      file={inspectedIdx != null ? (fileMetadata?.[inspectedIdx] ?? null) : null}
-    />
-  ) : null;
-
-  return (
-    <DetailPanel
-      variant="inbox"
-      title={title}
-      titleExtra={
-        <>
-          <Pill variant={classificationVariant(classType)}>
-            {classType === 'single_type'
-              ? classification?.frameType ?? 'single'
-              : classType}
-          </Pill>
-          {item.lane === 'video' && <Pill variant="ghost">video</Pill>}
-        </>
-      }
-      facts={factsColumn}
-      aux={auxColumn}
-    >
-      {contentColumn}
     </DetailPanel>
   );
 }

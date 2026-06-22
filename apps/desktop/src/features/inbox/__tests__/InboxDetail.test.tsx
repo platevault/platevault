@@ -196,9 +196,10 @@ describe('InboxDetail — FR-010: per-file metadata table', () => {
       />
     );
     expect(screen.getByText('File metadata (2)')).toBeInTheDocument();
-    // Column headers
+    // Column headers — some labels now also appear in the PropertyTable (e.g. "Filter"),
+    // so use getAllByText and check at least one match exists per label.
     for (const col of ['File', 'Type', 'Filter', 'Exposure', 'Binning', 'Gain', 'Temp', 'Object', 'Date']) {
-      expect(screen.getByText(col)).toBeInTheDocument();
+      expect(screen.getAllByText(col).length).toBeGreaterThan(0);
     }
   });
 
@@ -214,9 +215,10 @@ describe('InboxDetail — FR-010: per-file metadata table', () => {
     // File cell titles contain the relative path
     expect(screen.getByTitle('light_0001.fits')).toBeInTheDocument();
     expect(screen.getByTitle('calib_dark_0001.fits')).toBeInTheDocument();
-    // Populated field values from row 1
-    expect(screen.getByText('Ha')).toBeInTheDocument();       // filter
-    expect(screen.getByText('NGC7000')).toBeInTheDocument();  // object
+    // Populated field values from row 1 — "Ha" appears in both PropertyTable (filter)
+    // and the metadata table; "NGC7000" appears in both (object). Use getAllByText.
+    expect(screen.getAllByText('Ha').length).toBeGreaterThan(0);       // filter
+    expect(screen.getAllByText('NGC7000').length).toBeGreaterThan(0);  // object
   });
 
   it('renders muted "—" placeholder for null fields', () => {
@@ -322,10 +324,14 @@ describe('InboxDetail — FR-032: missing-attribute annotations', () => {
   });
 });
 
-// ── task #34: warnings = alert with inline action ────────────────────────────
+// ── task #34: mixed-folder — banner in body, action in header ────────────────
+//
+// Redesign: "Generate split plan" moved from the banner body to the header
+// titleExtra (inline-left, alm-session-detail2__actions). The banner stays as
+// an informational summary; the button is NOT inside it.
 
-describe('InboxDetail — task #34: mixed-folder alert with inline action', () => {
-  it('renders the mixed alert with an inline "Generate split plan" button that fires the callback', () => {
+describe('InboxDetail — task #34: mixed-folder banner + header action button', () => {
+  it('renders the mixed banner AND the "Generate split plan" button in the header', () => {
     const onGenerateSplitPlan = vi.fn();
     render(
       <InboxDetail
@@ -335,13 +341,18 @@ describe('InboxDetail — task #34: mixed-folder alert with inline action', () =
         onGenerateSplitPlan={onGenerateSplitPlan}
       />
     );
+    // Banner (body) — informational summary only, no action child.
     expect(screen.getByTestId('inbox-mixed-alert')).toBeInTheDocument();
+    // Button in header titleExtra — fires the callback.
     const btn = screen.getByTestId('inbox-mixed-split-btn');
     fireEvent.click(btn);
     expect(onGenerateSplitPlan).toHaveBeenCalledTimes(1);
+    // Button is NOT inside the banner.
+    const banner = screen.getByTestId('inbox-mixed-alert');
+    expect(banner.querySelector('[data-testid="inbox-mixed-split-btn"]')).toBeNull();
   });
 
-  it('disables the inline split action while busy', () => {
+  it('disables the header split button while busy', () => {
     render(
       <InboxDetail
         item={sampleItem as unknown as Parameters<typeof InboxDetail>[0]['item']}
@@ -354,7 +365,7 @@ describe('InboxDetail — task #34: mixed-folder alert with inline action', () =
     expect(screen.getByTestId('inbox-mixed-split-btn')).toBeDisabled();
   });
 
-  it('renders the mixed alert without an action button when no callback is supplied', () => {
+  it('does not render the header split button when no callback is supplied', () => {
     render(
       <InboxDetail
         item={sampleItem as unknown as Parameters<typeof InboxDetail>[0]['item']}
@@ -366,7 +377,7 @@ describe('InboxDetail — task #34: mixed-folder alert with inline action', () =
     expect(screen.queryByTestId('inbox-mixed-split-btn')).not.toBeInTheDocument();
   });
 
-  it('does NOT render the mixed alert for single-type folders', () => {
+  it('does NOT render the mixed banner for single-type folders', () => {
     render(
       <InboxDetail
         item={sampleItem as unknown as Parameters<typeof InboxDetail>[0]['item']}
@@ -376,18 +387,23 @@ describe('InboxDetail — task #34: mixed-folder alert with inline action', () =
       />
     );
     expect(screen.queryByTestId('inbox-mixed-alert')).not.toBeInTheDocument();
+    // No split button for non-mixed items.
+    expect(screen.queryByTestId('inbox-mixed-split-btn')).not.toBeInTheDocument();
   });
 });
 
-// ── detail rework: 3-zone layout (facts | content | aux) ─────────────────────
+// ── layout rework: SessionDetail-style left-packed columns ───────────────────
 //
-// Updated to the redesign-ui-platevault 3-zone skeleton:
-//   facts = breakdown column (.alm-inbox-detail__facts-col)
-//   content = file metadata table (.alm-inbox-detail__meta-col, aria-label="File metadata")
-//   aux = FileInspector in DetailPanel aux rail (.alm-detailpanel__aux)
+// spec 043 §4 redesign — InboxDetail now follows SessionDetail:
+//   - No facts/aux props; body is a .alm-session-detail2 flex row.
+//   - Col A: PropertyTable with detection facts.
+//   - Breakdown block: inside its own .alm-session-detail2__col.
+//   - File metadata: .alm-inbox-detail__meta-col inside .alm-session-detail2.
+//   - FileInspector: .alm-inbox-inspector inside .alm-session-detail2.
+//   - "Generate split plan" button is in the header titleExtra, not the banner.
 
-describe('InboxDetail — 3-zone: breakdown-facts / file-content / inspector-aux', () => {
-  it('uses the 3-zone cols wrapper and places breakdown in facts, metadata in content', () => {
+describe('InboxDetail — SessionDetail-style layout: left-packed columns', () => {
+  it('renders the alm-session-detail2 row wrapper in the body', () => {
     const { container } = render(
       <InboxDetail
         item={sampleItem as unknown as Parameters<typeof InboxDetail>[0]['item']}
@@ -396,24 +412,45 @@ describe('InboxDetail — 3-zone: breakdown-facts / file-content / inspector-aux
         fileMetadata={fileMetadataFixture}
       />
     );
-    // Cols wrapper rendered by DetailPanel (facts + aux both provided → 3-zone).
-    const cols = container.querySelector('.alm-detailpanel__cols');
-    expect(cols).not.toBeNull();
+    // New layout: session-detail2 row (not detailpanel__cols / facts / aux).
+    const row = container.querySelector('.alm-session-detail2');
+    expect(row).not.toBeNull();
 
-    // Facts column (left): contains breakdown.
-    const factsAside = container.querySelector('.alm-detailpanel__facts');
-    expect(factsAside).not.toBeNull();
-    expect(factsAside?.textContent).toContain('Frame type breakdown');
+    // No old 3-zone wrappers.
+    expect(container.querySelector('.alm-detailpanel__facts')).toBeNull();
+    expect(container.querySelector('.alm-detailpanel__aux')).toBeNull();
+  });
 
-    // Content column (center): file metadata table.
+  it('places the breakdown table inside the alm-session-detail2 row', () => {
+    const { container } = render(
+      <InboxDetail
+        item={sampleItem as unknown as Parameters<typeof InboxDetail>[0]['item']}
+        rootAbsolutePath="/astro/inbox"
+        classification={singleTypeClassification as unknown as Parameters<typeof InboxDetail>[0]['classification']}
+        fileMetadata={fileMetadataFixture}
+      />
+    );
+    const row = container.querySelector('.alm-session-detail2');
+    expect(row).not.toBeNull();
+    expect(row?.textContent).toContain('Frame type breakdown');
+  });
+
+  it('renders the file metadata block inside alm-session-detail2 when fileMetadata provided', () => {
+    const { container } = render(
+      <InboxDetail
+        item={sampleItem as unknown as Parameters<typeof InboxDetail>[0]['item']}
+        rootAbsolutePath="/astro/inbox"
+        classification={singleTypeClassification as unknown as Parameters<typeof InboxDetail>[0]['classification']}
+        fileMetadata={fileMetadataFixture}
+      />
+    );
     const metaCol = container.querySelector('.alm-inbox-detail__meta-col');
     expect(metaCol).not.toBeNull();
     expect(metaCol).toHaveAttribute('aria-label', 'File metadata');
     expect(metaCol?.textContent).toContain('File metadata (2)');
-    expect(metaCol?.textContent).toContain('File');
   });
 
-  it('does not render the content or aux columns when fileMetadata is absent', () => {
+  it('does not render the metadata col when fileMetadata is absent', () => {
     const { container } = render(
       <InboxDetail
         item={sampleItem as unknown as Parameters<typeof InboxDetail>[0]['item']}
@@ -421,14 +458,10 @@ describe('InboxDetail — 3-zone: breakdown-facts / file-content / inspector-aux
         classification={singleTypeClassification as unknown as Parameters<typeof InboxDetail>[0]['classification']}
       />
     );
-    // facts col present (breakdown always shown); content + aux absent when no metadata.
-    const cols = container.querySelector('.alm-detailpanel__cols');
-    expect(cols).not.toBeNull();
     expect(container.querySelector('.alm-inbox-detail__meta-col')).toBeNull();
-    expect(container.querySelector('.alm-detailpanel__aux')).toBeNull();
   });
 
-  it('renders the file inspector in the aux rail when metadata exists', () => {
+  it('renders the FileInspector inside alm-session-detail2 when metadata exists', () => {
     const { container } = render(
       <InboxDetail
         item={sampleItem as unknown as Parameters<typeof InboxDetail>[0]['item']}
@@ -437,30 +470,22 @@ describe('InboxDetail — 3-zone: breakdown-facts / file-content / inspector-aux
         fileMetadata={fileMetadataFixture}
       />
     );
-    // Inspector is in the aux aside (empty state: no row clicked yet).
-    const auxAside = container.querySelector('.alm-detailpanel__aux');
-    expect(auxAside).not.toBeNull();
-    expect(auxAside?.querySelector('[data-testid="file-inspector"]')).not.toBeNull();
+    const row = container.querySelector('.alm-session-detail2');
+    expect(row?.querySelector('[data-testid="file-inspector"]')).not.toBeNull();
   });
 
-  it('file metadata table is inside the content column', () => {
+  it('renders a PropertyTable col with detection classification', () => {
     const { container } = render(
       <InboxDetail
         item={sampleItem as unknown as Parameters<typeof InboxDetail>[0]['item']}
         rootAbsolutePath="/astro/inbox"
         classification={singleTypeClassification as unknown as Parameters<typeof InboxDetail>[0]['classification']}
-        fileMetadata={fileMetadataFixture}
       />
     );
-    // Table is inside the content column, NOT in the facts or aux aside.
-    const contentDiv = container.querySelector('.alm-detailpanel__content');
-    expect(contentDiv).not.toBeNull();
-    expect(contentDiv?.querySelector('table')).not.toBeNull();
-
-    const factsAside = container.querySelector('.alm-detailpanel__facts');
-    const auxAside = container.querySelector('.alm-detailpanel__aux');
-    expect(factsAside?.querySelector('table')).toBeDefined();
-    // aux should contain the inspector, NOT a metadata table
-    expect(auxAside?.querySelector('.alm-inbox-detail__meta-col')).toBeNull();
+    // Detection col head
+    expect(container.querySelector('.alm-session-detail2__head')).not.toBeNull();
+    expect(screen.getByText('Detection')).toBeInTheDocument();
+    // Classification value from singleTypeClassification.frameType = 'light'
+    expect(screen.getAllByText(/light/).length).toBeGreaterThan(0);
   });
 });

@@ -724,7 +724,6 @@ export function InboxPage() {
             data-testid="inbox-side-panel"
           >
             <div className="alm-inbox-plandock__head">
-              <span className="alm-inbox-plandock__title">Detection details</span>
               <span className="alm-inbox-plandock__spacer" />
               <button
                 type="button"
