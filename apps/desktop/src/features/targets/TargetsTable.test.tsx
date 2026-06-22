@@ -29,6 +29,7 @@ function item(primaryDesignation: string, objectType = 'other'): TargetListItem 
     objectType,
     raDeg: 0,
     decDeg: 0,
+    aliases: [],
   };
 }
 
@@ -70,9 +71,10 @@ describe('TargetsTable (#84/#85)', () => {
 
   it('renders the spec 044 mock columns: Lunar dist, Filters, Imaging time', () => {
     renderTable();
-    expect(screen.getByText('Lunar dist')).toBeInTheDocument();
+    // task #5: headers abbreviated to fit widened columns ("Lunar" and "Img time").
+    expect(screen.getByText('Lunar')).toBeInTheDocument();
     expect(screen.getByText('Filters')).toBeInTheDocument();
-    expect(screen.getByText('Imaging time')).toBeInTheDocument();
+    expect(screen.getByText('Img time')).toBeInTheDocument();
   });
 
   it('renders rows inside a real <table> with group headers', () => {
@@ -117,11 +119,12 @@ describe('TargetsTable (#84/#85)', () => {
 
   it('fires onSort for all spec 044 sortable columns', () => {
     const { onSort } = renderTable();
+    // task #5: aria-labels use the abbreviated header text.
     const sortCases: [string, string][] = [
       ['Sort by Max alt', 'maxAlt'],
       ['Sort by Visible', 'visible'],
-      ['Sort by Lunar dist', 'lunarDist'],
-      ['Sort by Imaging time', 'imagingTime'],
+      ['Sort by Lunar', 'lunarDist'],
+      ['Sort by Img time', 'imagingTime'],
     ];
     for (const [label, col] of sortCases) {
       onSort.mockClear();

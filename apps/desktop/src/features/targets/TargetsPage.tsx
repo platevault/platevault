@@ -67,6 +67,7 @@ import {
 import type { TargetSort, TargetSortCol, TargetGroupBy } from './TargetsTable';
 import { rowAltitudeFor, type FilterBand } from './planner-altitude';
 import { useAltitudeThreshold } from './altitude-settings';
+import { useFavourites } from './useFavourites';
 
 type ListState =
   | { status: 'loading' }
@@ -85,12 +86,15 @@ type ListState =
 const MY_TARGETS_VALUE = 'my';
 
 /**
- * STUB: "My Targets" needs the FITS OBJECT → target_id linkage (task #54) to
- * know which targets actually have sessions/projects. That linkage does not
- * exist yet, so this is empty rather than fabricating coverage. Module-level
- * constant so the empty list keeps a stable identity across renders.
+ * STUB: "My Targets" uses client-side localStorage favourites (useFavourites)
+ * until the FITS OBJECT → target_id linkage (task #54) is wired in the
+ * backend.  When #54 lands, replace this with a backend query for targets
+ * that have linked sessions or projects.
+ *
+ * The constant below is kept as the fallback for the empty-favourite case
+ * (no items starred) so the empty-state renders correctly.
  */
-const MY_TARGETS_STUB: TargetListItem[] = [];
+const MY_TARGETS_EMPTY: TargetListItem[] = [];
 
 /** Group-by options for the Planner top bar (mirrors the other list pages). */
 const GROUP_BY_OPTIONS: FilterOption[] = [
@@ -117,25 +121,34 @@ export function normalizeDesig(s: string): string {
 }
 
 /**
- * Alias-aware search (#103b): tests whether a target row matches a query.
+ * Alias-aware search (#103b, #29): tests whether a target row matches a query.
  *
  * Matching strategy:
  *  1. Normalized exact/prefix/substring match on the collapsed designation and
  *     label (so "M31" matches "M 31" and vice versa).
- *  2. Unnormalized substring on effectiveLabel for free-text names
+ *  2. Unnormalized substring on effectiveLabel for proper names
  *     ("Andromeda" substring of "Andromeda Galaxy").
- *
- * `TargetListItem` carries no aliases field (aliases live on the detail
- * endpoint only). Backend alias search is tracked in task #93.
+ *  3. Normalized and unnormalized substring over each alias in `t.aliases`
+ *     so a proper-name query ("Andromeda") resolves to M31 even when
+ *     effectiveLabel is the bare designation. Backend now carries aliases
+ *     on the list payload (backend task #29 / spec-043 alias enrichment).
  */
 export function matchesSearch(t: TargetListItem, query: string): boolean {
   const qNorm = normalizeDesig(query);
+  const qLower = query.toLowerCase();
   if (normalizeDesig(t.primaryDesignation).includes(qNorm)) return true;
   if (normalizeDesig(t.effectiveLabel).includes(qNorm)) return true;
-  // Also allow a plain lowercase substring on effectiveLabel for proper names
+  // Plain lowercase substring on effectiveLabel for proper names
   // ("andromeda" in "Andromeda Galaxy") without whitespace collapsing, since
   // proper names don't have the spaced-vs-compact ambiguity.
-  if (t.effectiveLabel.toLowerCase().includes(query.toLowerCase())) return true;
+  if (t.effectiveLabel.toLowerCase().includes(qLower)) return true;
+  // Search over all aliases carried on the list item (backend-enriched since #29).
+  // Covers the "Andromeda" → M31 case where effectiveLabel is just "M 31".
+  const aliases = t.aliases ?? [];
+  for (const alias of aliases) {
+    if (normalizeDesig(alias).includes(qNorm)) return true;
+    if (alias.toLowerCase().includes(qLower)) return true;
+  }
   return false;
 }
 
@@ -191,6 +204,13 @@ export function TargetsPage() {
    * re-derive imaging-time and visible-tonight for every row.
    */
   const usableAltDeg = useAltitudeThreshold();
+
+  /**
+   * task #18: client-side favourite set.
+   * STUB: stored in localStorage only until task #54 (backend linkage) lands.
+   * See useFavourites.ts for the replacement contract.
+   */
+  const { favouriteIds, toggle: toggleFavourite } = useFavourites();
 
   useEffect(() => {
     let cancelled = false;
@@ -250,8 +270,17 @@ export function TargetsPage() {
     [listState, enabledCatalogues],
   );
 
-  /** When the My Targets filter is active show the stub; otherwise the Planner catalog. */
-  const tabTargets = myTargetsFilter === MY_TARGETS_VALUE ? MY_TARGETS_STUB : plannerTargets;
+  /**
+   * task #18: when "My Targets" is active, filter the Planner catalog to only
+   * the targets the user has starred (stored client-side via useFavourites).
+   * STUB: favouriteIds comes from localStorage only until task #54 lands and
+   * provides real backend "has linked sessions/projects" data.
+   */
+  const tabTargets = useMemo(() => {
+    if (myTargetsFilter !== MY_TARGETS_VALUE) return plannerTargets;
+    if (favouriteIds.size === 0) return MY_TARGETS_EMPTY;
+    return plannerTargets.filter((t) => favouriteIds.has(t.id));
+  }, [myTargetsFilter, plannerTargets, favouriteIds]);
 
   const visibleTargets = useMemo(() => {
     const q = search.trim();
@@ -364,9 +393,17 @@ export function TargetsPage() {
             onSort={handleSort}
             groupBy={groupBy}
             usableAltDeg={usableAltDeg}
+            // task #18: pass the local favourite set down so the star column renders correctly.
+            // STUB: localStorage only until task #54 backend linkage lands.
+            favouriteIds={favouriteIds}
+            onToggleFavourite={toggleFavourite}
             emptyMessage={
               isMyTargets
-                ? "No targets with sessions yet. Targets appear here once your captured frames are linked to a catalog object — that linkage isn't wired up yet. Switch to 'All targets' to find an object and start a project."
+                ? favouriteIds.size === 0
+                  // No stars yet — nudge the user to star something.
+                  ? 'No favourites yet. Star a target in the Planner (☆) to add it to My Targets. (Stored locally — backend linkage lands in task #54.)'
+                  // Stars exist but filters excluded them all.
+                  : 'No favourites match the current filters.'
                 : 'No catalog targets match the current filters.'
             }
           />

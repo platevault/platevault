@@ -183,8 +183,8 @@ export async function mockInvoke(
     // ── gen-3 target commands (spec 036) ──────────────────────────────────────
     case 'target_list': {
       return [
-        { id: 'tgt-m31', effectiveLabel: 'M 31', primaryDesignation: 'M 31', objectType: 'galaxy', raDeg: 10.6847, decDeg: 41.269, constellation: 'Andromeda', magnitude: 3.44 },
-        { id: 'tgt-ngc7000', effectiveLabel: 'NGC 7000', primaryDesignation: 'NGC 7000', objectType: 'emission_nebula', raDeg: 314.75, decDeg: 44.52, constellation: 'Cygnus', magnitude: 4.0 },
+        { id: 'tgt-m31', effectiveLabel: 'M 31', primaryDesignation: 'M 31', objectType: 'galaxy', raDeg: 10.6847, decDeg: 41.269, constellation: 'Andromeda', magnitude: 3.44, aliases: ['M 31', 'NGC 224', 'Andromeda Galaxy'] },
+        { id: 'tgt-ngc7000', effectiveLabel: 'NGC 7000', primaryDesignation: 'NGC 7000', objectType: 'emission_nebula', raDeg: 314.75, decDeg: 44.52, constellation: 'Cygnus', magnitude: 4.0, aliases: ['NGC 7000', 'North America Nebula'] },
       ] satisfies TargetListItem[];
     }
     case 'target_get': {

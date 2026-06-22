@@ -206,7 +206,8 @@ describe('TargetsPage', () => {
     const showSelect = screen.getByRole('combobox', { name: 'Show' });
     fireEvent.change(showSelect, { target: { value: 'my' } });
 
-    expect(screen.getByText(/No targets with sessions yet/i)).toBeInTheDocument();
+    // task #18: new empty message when no favourites are starred
+    expect(screen.getByText(/No favourites yet/i)).toBeInTheDocument();
     // Planner-only catalog items are gone from the list
     expect(screen.queryByText('NGC 7000')).not.toBeInTheDocument();
   });
@@ -281,10 +282,10 @@ describe('TargetsPage', () => {
     // Default: "All targets" (empty value) — catalog rows visible.
     expect(screen.getByText('NGC 7000')).toBeInTheDocument();
 
-    // Switch to My Targets — stub empty state.
+    // Switch to My Targets — stub empty state (task #18: favourites not yet starred).
     fireEvent.change(showSelect, { target: { value: 'my' } });
     expect(screen.queryByText('NGC 7000')).not.toBeInTheDocument();
-    expect(screen.getByText(/No targets with sessions yet/i)).toBeInTheDocument();
+    expect(screen.getByText(/No favourites yet/i)).toBeInTheDocument();
 
     // Switch back to All — catalog rows return.
     fireEvent.change(showSelect, { target: { value: '' } });

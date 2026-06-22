@@ -19,6 +19,7 @@ function item(primaryDesignation: string, objectType = 'other'): TargetListItem 
     objectType,
     raDeg: 0,
     decDeg: 0,
+    aliases: [],
   };
 }
 

@@ -91,6 +91,12 @@ export function InboxPage() {
   const [search, setSearch] = useState('');
   const { dims, sortBy, setSortBy, setSlot } = useInboxControls();
 
+  // task 33: breakdown-row filter. Clicking a frame-type row in InboxDetail
+  // sets this to that frame type; the list is further filtered to items whose
+  // groupFrameType matches. Cleared when the user clicks the active row again
+  // or uses the "clear" link in the detail panel.
+  const [breakdownFilter, setBreakdownFilter] = useState<string | null>(null);
+
   // spec 041: aggregate open-plan surface (all ingestions at once).
   const {
     data: openPlansData,
@@ -129,15 +135,26 @@ export function InboxPage() {
   const isCapped = listData?.capped ?? false;
 
   // Client-side text search across the relative path (the list's primary key).
+  // task 33: also apply the breakdown-row frame-type filter when active.
   const filteredItems = useMemo(() => {
+    let result = items;
     const q = search.trim().toLowerCase();
-    if (!q) return items;
-    return items.filter(
-      (it) =>
-        it.relativePath.toLowerCase().includes(q) ||
-        (it.groupTarget ?? '').toLowerCase().includes(q),
-    );
-  }, [items, search]);
+    if (q) {
+      result = result.filter(
+        (it) =>
+          it.relativePath.toLowerCase().includes(q) ||
+          (it.groupTarget ?? '').toLowerCase().includes(q),
+      );
+    }
+    if (breakdownFilter) {
+      result = result.filter(
+        (it) =>
+          (it.groupFrameType ?? '').toLowerCase() === breakdownFilter.toLowerCase() ||
+          (it.masterFrameType ?? '').toLowerCase() === breakdownFilter.toLowerCase(),
+      );
+    }
+    return result;
+  }, [items, search, breakdownFilter]);
 
   // URL-backed selection is by index into the FILTERED list so it stays stable
   // across re-fetches and tracks what the user actually sees.
@@ -299,6 +316,69 @@ export function InboxPage() {
       classification.contentSignature,
       action,
     );
+  };
+
+  // task 35: bulk-confirm all cleanly-classified detections in sequence.
+  // "Cleanly classified" = state is 'classified', no open plan, and
+  // classification.type is 'single_type' (not mixed / unclassified). We use
+  // the item's contentSignature from the list (same value InboxPage uses for
+  // the single-item confirm) and always pass action='confirm' (never 'split').
+  // Items that fail individually are reported; the rest proceed.
+  const [bulkConfirmLoading, setBulkConfirmLoading] = useState(false);
+
+  // Eligible items: classified state, no plan open, not a mixed type.
+  // We only know classification type per-item when it is loaded; the list item
+  // carries `state` and `contentSignature`, so we filter on those. The backend
+  // will reject anything that turns out to be unclassified or missing attrs, and
+  // each failure produces a toast. This matches the pattern for rescan.
+  const bulkEligibleItems = useMemo(
+    () =>
+      items.filter(
+        (it) => it.state === 'classified',
+      ),
+    [items],
+  );
+
+  const canBulkConfirm = bulkEligibleItems.length > 0 && !bulkConfirmLoading;
+
+  const handleBulkConfirm = async () => {
+    if (bulkEligibleItems.length === 0) return;
+    setBulkConfirmLoading(true);
+    let successCount = 0;
+    let failCount = 0;
+    for (const it of bulkEligibleItems) {
+      try {
+        await confirm({
+          inboxItemId: it.inboxItemId,
+          action: 'confirm',
+          contentSignature: it.contentSignature,
+          rootAbsolutePath: it.rootAbsolutePath,
+          destructiveDestination,
+          rootId: null,
+        });
+        successCount += 1;
+      } catch {
+        failCount += 1;
+      }
+    }
+    setBulkConfirmLoading(false);
+    if (failCount > 0 && successCount > 0) {
+      addToast({
+        message: `${successCount} confirmed; ${failCount} skipped (mixed, missing metadata, or needs root pick).`,
+        variant: 'warn',
+      });
+    } else if (failCount > 0 && successCount === 0) {
+      addToast({
+        message: 'Bulk confirm: all items need review (mixed folders or missing metadata).',
+        variant: 'warn',
+      });
+    } else {
+      addToast({
+        message: `${successCount} item${successCount !== 1 ? 's' : ''} confirmed — review plans below.`,
+        variant: 'info',
+      });
+    }
+    refreshAll();
   };
 
   /** FR-029: re-confirm the pending item with the chosen destination root. */
@@ -529,6 +609,21 @@ export function InboxPage() {
       }
       actions={
         <>
+          {/* task 35: bulk-confirm all cleanly-classified items in one action */}
+          {bulkEligibleItems.length > 0 && (
+            <Btn
+              size="sm"
+              variant="ghost"
+              disabled={!canBulkConfirm}
+              onClick={() => void handleBulkConfirm()}
+              aria-label={`Confirm all ${bulkEligibleItems.length} classified item${bulkEligibleItems.length !== 1 ? 's' : ''}`}
+              data-testid="inbox-bulk-confirm-btn"
+            >
+              {bulkConfirmLoading
+                ? 'Confirming…'
+                : `Confirm all (${bulkEligibleItems.length})`}
+            </Btn>
+          )}
           <Btn
             size="sm"
             variant="accent"
@@ -654,6 +749,10 @@ export function InboxPage() {
                 // top-bar Confirm button runs (handleConfirm picks 'split').
                 onGenerateSplitPlan={() => void handleConfirm()}
                 splitPlanBusy={confirmLoading}
+                // task 33: thread the breakdown-row filter so clicking a
+                // frame-type row further filters the detection list.
+                activeBreakdownFilter={breakdownFilter}
+                onBreakdownFilterChange={setBreakdownFilter}
               />
             </div>
           </section>

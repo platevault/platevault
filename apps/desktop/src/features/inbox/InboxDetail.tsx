@@ -123,6 +123,18 @@ export interface InboxDetailProps {
   onGenerateSplitPlan?: () => void;
   /** True while a confirm/split is in flight — disables the inline action. */
   splitPlanBusy?: boolean;
+  /**
+   * task 33: the active frame-type filter driven by clicking a breakdown row.
+   * When set, the parent list is filtered to items whose groupFrameType matches.
+   * Optional — InboxDetail renders standalone in tests without it.
+   */
+  activeBreakdownFilter?: string | null;
+  /**
+   * task 33: callback to set or clear the breakdown row filter. The parent
+   * (InboxPage) threads this down so a click on a breakdown row filters the
+   * InboxList to that frame type. Clicking the active row again clears it.
+   */
+  onBreakdownFilterChange?: (frameType: string | null) => void;
 }
 
 // ── Component ─────────────────────────────────────────────────────────────────
@@ -133,6 +145,8 @@ export function InboxDetail({
   fileMetadata,
   onGenerateSplitPlan,
   splitPlanBusy = false,
+  activeBreakdownFilter = null,
+  onBreakdownFilterChange,
 }: InboxDetailProps) {
   const { reclassify, loading: reclassifyLoading } = useInboxReclassify(item.inboxItemId);
 
@@ -233,35 +247,74 @@ export function InboxDetail({
 
   // Fixed column widths (paired with table-layout: fixed on the <Table> below)
   // so the columns stay put when switching between items with different content
-  // lengths instead of reflowing. Long paths wrap inside their cell.
-  const wrapCell = { wordBreak: 'break-word' as const };
+  // lengths instead of reflowing.
+  // task 6: destination uses ellipsis (alm-inbox-detail__dest-cell) — no wrap.
   const breakdownColumns = [
     { key: 'kind', label: 'Frame type', style: { width: '20%' } },
     { key: 'count', label: 'Files', style: { width: '12%' } },
-    { key: 'destination', label: 'Destination', style: { width: '44%' }, cellStyle: wrapCell },
-    { key: 'samples', label: 'Samples', style: { width: '24%' }, cellStyle: wrapCell },
+    { key: 'destination', label: 'Destination', style: { width: '44%' } },
+    { key: 'samples', label: 'Samples', style: { width: '24%' } },
   ];
 
+  // task 33: clicking a breakdown row sets/clears the active frame-type filter.
+  // The filter drives the InboxList via the parent (InboxPage). Clicking the
+  // already-active row clears it back to 'all'.
+  const handleBreakdownRowClick = (frameType: string) => {
+    if (!onBreakdownFilterChange) return;
+    onBreakdownFilterChange(activeBreakdownFilter === frameType ? null : frameType);
+  };
+
   const breakdownRows =
-    classification?.breakdown?.map((entry) => ({
-      kind: (
-        <Pill variant={classificationVariant('single_type')}>{entry.kind}</Pill>
-      ),
-      count: entry.count,
-      destination: entry.destinationPreview ?? (
-        <span className="alm-inbox-detail__dash">—</span>
-      ),
-      samples: (
-        <span className="alm-inbox-detail__samples">
-          {entry.sampleFiles?.slice(0, 3).join(', ')}
-          {(entry.sampleFiles?.length ?? 0) > 3 && (
-            <span className="alm-inbox-detail__samples-more">
-              {' '}+{(entry.sampleFiles?.length ?? 0) - 3} more
-            </span>
-          )}
-        </span>
-      ),
-    })) ?? [];
+    classification?.breakdown?.map((entry) => {
+      const isActive = activeBreakdownFilter === entry.kind;
+      const hasFilter = onBreakdownFilterChange != null;
+      return {
+        kind: (
+          <button
+            type="button"
+            className={[
+              'alm-breakdown-filter-btn',
+              isActive ? 'alm-breakdown-filter-btn--active' : '',
+            ].filter(Boolean).join(' ')}
+            onClick={hasFilter ? () => handleBreakdownRowClick(entry.kind) : undefined}
+            aria-pressed={hasFilter ? isActive : undefined}
+            aria-label={hasFilter
+              ? (isActive
+                  ? `Clear filter: ${entry.kind}`
+                  : `Filter list to ${entry.kind}`)
+              : undefined}
+            data-testid={`breakdown-filter-${entry.kind}`}
+            // eslint-disable-next-line no-restricted-syntax -- dynamic: cursor:default when no filter handler
+            style={hasFilter ? undefined : { cursor: 'default' }}
+          >
+            <Pill variant={classificationVariant('single_type')}>{entry.kind}</Pill>
+          </button>
+        ),
+        count: entry.count,
+        // task 6: single-line + ellipsis so destination never wraps in the 340px column
+        destination: entry.destinationPreview ? (
+          <span
+            className="alm-inbox-detail__dest-cell"
+            title={entry.destinationPreview}
+          >
+            {entry.destinationPreview}
+          </span>
+        ) : (
+          <span className="alm-inbox-detail__dash">—</span>
+        ),
+        samples: (
+          <span className="alm-inbox-detail__samples">
+            {entry.sampleFiles?.slice(0, 3).join(', ')}
+            {(entry.sampleFiles?.length ?? 0) > 3 && (
+              <span className="alm-inbox-detail__samples-more">
+                {' '}+{(entry.sampleFiles?.length ?? 0) - 3} more
+              </span>
+            )}
+          </span>
+        ),
+        _rowClassName: isActive ? 'alm-breakdown-filter-row--active' : undefined,
+      };
+    }) ?? [];
 
   // ── Unclassified ("Needs review") table ────────────────────────────────────
 
@@ -464,6 +517,21 @@ export function InboxDetail({
 
       {breakdownRows.length > 0 && (
         <Section title="Frame type breakdown">
+          {/* task 33: active filter indicator + clear affordance, inline above the table */}
+          {activeBreakdownFilter && onBreakdownFilterChange && (
+            <div className="alm-breakdown-filter-label" data-testid="breakdown-filter-active">
+              Filtering list: {activeBreakdownFilter}
+              <button
+                type="button"
+                className="alm-breakdown-filter-clear"
+                onClick={() => onBreakdownFilterChange(null)}
+                aria-label="Clear frame type filter"
+                data-testid="breakdown-filter-clear"
+              >
+                clear
+              </button>
+            </div>
+          )}
           <Table
             columns={breakdownColumns}
             rows={breakdownRows}

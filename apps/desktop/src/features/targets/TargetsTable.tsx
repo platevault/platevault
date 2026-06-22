@@ -68,6 +68,7 @@ import { catalogueOf, catalogueLabel } from './planner-catalog';
 import { rowAltitudeFor, USABLE_ALT_DEG, type RowAltitude } from './planner-altitude';
 import { AltitudeSparkline } from './AltitudeSparkline';
 import { FilterBadges } from './FilterBadges';
+import { useFavourites } from './useFavourites';
 
 // ── Sort model ────────────────────────────────────────────────────────────────
 
@@ -262,18 +263,23 @@ const COLUMNS: Array<{
   className?: string;
   title?: string;
 }> = [
+  // task #18: star column (no label — icon-only header)
+  { key: 'star', label: '★', className: 'alm-targets-cell--center', title: 'Favourite (stored locally until task #54 backend lands)' },
   { key: 'designation', label: 'Designation', sort: 'designation' },
   { key: 'type', label: 'Type', sort: 'type' },
   { key: 'maxAlt', label: 'Max alt', sort: 'maxAlt', className: 'alm-targets-cell--num', title: 'Peak altitude tonight (MOCK — pending ephemeris)' },
   { key: 'spark', label: 'Tonight', className: 'alm-targets-cell--spark' },
   { key: 'visible', label: 'Visible', sort: 'visible', className: 'alm-targets-cell--center', title: 'Visible tonight above usable altitude threshold' },
   { key: 'opposition', label: 'Opposition', sort: 'opposition', className: 'alm-targets-cell--opposition', title: 'Next opposition date (pending ephemeris)' },
-  { key: 'lunarDist', label: 'Lunar dist', sort: 'lunarDist', className: 'alm-targets-cell--num', title: 'Angular separation from Moon tonight (MOCK — not astronomy)' },
+  // task #5: abbreviated header "Lunar" fits the widened 80px column without clipping
+  { key: 'lunarDist', label: 'Lunar', sort: 'lunarDist', className: 'alm-targets-cell--num', title: 'Lunar dist — angular separation from Moon tonight (MOCK — not astronomy)' },
   { key: 'filters', label: 'Filters', className: 'alm-targets-cell--filters', title: 'Recommended filter set given mock Moon conditions (MOCK)' },
-  { key: 'imagingTime', label: 'Imaging time', sort: 'imagingTime', className: 'alm-targets-cell--num', title: 'Hours above usable altitude tonight (MOCK — pending ephemeris)' },
+  // task #5: abbreviated header "Img time" fits the widened 100px column without clipping
+  { key: 'imagingTime', label: 'Img time', sort: 'imagingTime', className: 'alm-targets-cell--num', title: 'Imaging time — hours above usable altitude tonight (MOCK — pending ephemeris)' },
   { key: 'sessions', label: 'Sessions', sort: 'sessions', className: 'alm-targets-cell--num', title: 'Linked sessions (pending backend #57)' },
 ];
 
+// COL_COUNT is derived from COLUMNS so adding/removing a column stays in sync.
 const COL_COUNT = COLUMNS.length;
 
 /** Estimated row height (px) for the virtualizer's first measurement pass. */
@@ -298,6 +304,17 @@ interface Props {
    * Pass `useAltitudeThreshold()` from the host page.
    */
   usableAltDeg?: number;
+  /**
+   * Set of currently-favourited target ids (task #18).
+   * When provided the star column renders filled for matched ids.
+   * STUB: sourced from localStorage via useFavourites until task #54 lands.
+   */
+  favouriteIds?: ReadonlySet<string>;
+  /**
+   * Called when the user clicks the star button in a row (task #18).
+   * STUB: see useFavourites.ts.
+   */
+  onToggleFavourite?: (targetId: string) => void;
 }
 
 export function TargetsTable({
@@ -310,7 +327,16 @@ export function TargetsTable({
   groupBy = DEFAULT_TARGET_GROUP_BY,
   emptyMessage = 'No targets match the current filters.',
   usableAltDeg = USABLE_ALT_DEG,
+  favouriteIds,
+  onToggleFavourite,
 }: Props) {
+  // task #18: subscribe to the local favourites store.  The host page (TargetsPage)
+  // passes its own useFavourites result down; if it doesn't (e.g. tests that don't
+  // need favourites), we fall back to an internal subscription.  This keeps the
+  // table self-contained when used standalone.
+  const internalFavourites = useFavourites();
+  const resolvedFavouriteIds = favouriteIds ?? internalFavourites.favouriteIds;
+  const resolvedToggle = onToggleFavourite ?? internalFavourites.toggle;
   const scrollRef = useRef<HTMLDivElement>(null);
 
   // Grouping + sorting + per-row altitude MOCK are all derived here so a filter
@@ -393,16 +419,20 @@ export function TargetsTable({
               does NOT recompute widths per windowed page as pill text varies
               (e.g. "galaxy" vs "open cluster" would shift all columns).
               Designation is auto (fills remaining width); fixed widths on
-              the right prevent the per-page column-shift bug. */}
+              the right prevent the per-page column-shift bug.
+              task #18: star col added first (28 px, wave2 CSS block). */}
           <colgroup>
+            <col className="alm-targets-col--star" />
             <col className="alm-targets-col--designation" />
             <col className="alm-targets-col--type" />
             <col className="alm-targets-col--maxalt" />
             <col className="alm-targets-col--spark" />
             <col className="alm-targets-col--visible" />
             <col className="alm-targets-col--opposition" />
+            {/* task #5: lunardist widened to 80px (wave2 CSS block). */}
             <col className="alm-targets-col--lunardist" />
             <col className="alm-targets-col--filters" />
+            {/* task #5: imagingtime widened to 100px (wave2 CSS block). */}
             <col className="alm-targets-col--imagingtime" />
             <col className="alm-targets-col--sessions" />
           </colgroup>
@@ -450,6 +480,8 @@ export function TargetsTable({
               const showAltDesig = t.effectiveLabel !== t.primaryDesignation;
               const isSelected = selected === t.id;
 
+              const isFav = resolvedFavouriteIds.has(t.id);
+
               return (
                 <tr
                   key={row.key}
@@ -460,6 +492,27 @@ export function TargetsTable({
                   }
                   onClick={() => onSelect(t.id)}
                 >
+                  {/* task #18: favourite star toggle.
+                      STUB: stored in localStorage only until task #54 (backend linkage) lands.
+                      stopPropagation prevents the row-select click from firing. */}
+                  <td className="alm-targets-cell--center">
+                    <button
+                      type="button"
+                      className={
+                        'alm-targets-star' +
+                        (isFav ? ' alm-targets-star--active' : '')
+                      }
+                      aria-label={isFav ? `Unfavourite ${t.effectiveLabel}` : `Favourite ${t.effectiveLabel}`}
+                      aria-pressed={isFav}
+                      title={isFav ? 'Remove from My Targets (local stub — task #54)' : 'Add to My Targets (local stub — task #54)'}
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        resolvedToggle(t.id);
+                      }}
+                    >
+                      {isFav ? '★' : '☆'}
+                    </button>
+                  </td>
                   <td>
                     <span className="alm-targets-cell__desig">
                       <span className="alm-targets-cell__label">{t.effectiveLabel}</span>

@@ -5952,6 +5952,9 @@ export type TargetKind = "deep_sky" | "planetary" | "lunar" | "solar" | "landsca
  *  `constellation` and `magnitude` are optional because those columns were not
  *  in the original schema; they are populated from `canonical_target.constellation`
  *  and `canonical_target.magnitude` when present (migration 0046).
+ *  `aliases` carries all alias display forms (designations, common names, and
+ *  user-added) so client-side alias search (e.g. "Andromeda" → M31) works
+ *  without a separate round-trip. Empty when no aliases are stored.
  */
 export type TargetListItem = TargetListItem_Serialize | TargetListItem_Deserialize;
 
@@ -5962,6 +5965,9 @@ export type TargetListItem = TargetListItem_Serialize | TargetListItem_Deseriali
  *  `constellation` and `magnitude` are optional because those columns were not
  *  in the original schema; they are populated from `canonical_target.constellation`
  *  and `canonical_target.magnitude` when present (migration 0046).
+ *  `aliases` carries all alias display forms (designations, common names, and
+ *  user-added) so client-side alias search (e.g. "Andromeda" → M31) works
+ *  without a separate round-trip. Empty when no aliases are stored.
  */
 export type TargetListItem_Deserialize = {
 	id: string,
@@ -5979,6 +5985,12 @@ export type TargetListItem_Deserialize = {
 	constellation: string | null,
 	/**  Visual magnitude; `null` when not stored or not applicable. */
 	magnitude: number | null,
+	/**
+	 *  All alias display forms for this target (designations, common names,
+	 *  user-added). Empty when none are stored. Additive field — older clients
+	 *  that ignore unknown keys are unaffected.
+	 */
+	aliases?: string[],
 };
 
 /**
@@ -5988,6 +6000,9 @@ export type TargetListItem_Deserialize = {
  *  `constellation` and `magnitude` are optional because those columns were not
  *  in the original schema; they are populated from `canonical_target.constellation`
  *  and `canonical_target.magnitude` when present (migration 0046).
+ *  `aliases` carries all alias display forms (designations, common names, and
+ *  user-added) so client-side alias search (e.g. "Andromeda" → M31) works
+ *  without a separate round-trip. Empty when no aliases are stored.
  */
 export type TargetListItem_Serialize = {
 	id: string,
@@ -6005,6 +6020,12 @@ export type TargetListItem_Serialize = {
 	constellation?: string | null,
 	/**  Visual magnitude; `null` when not stored or not applicable. */
 	magnitude?: number | null,
+	/**
+	 *  All alias display forms for this target (designations, common names,
+	 *  user-added). Empty when none are stored. Additive field — older clients
+	 *  that ignore unknown keys are unaffected.
+	 */
+	aliases: string[],
 };
 
 /**

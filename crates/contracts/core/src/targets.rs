@@ -181,6 +181,9 @@ pub struct TargetDetailV3 {
 /// `constellation` and `magnitude` are optional because those columns were not
 /// in the original schema; they are populated from `canonical_target.constellation`
 /// and `canonical_target.magnitude` when present (migration 0046).
+/// `aliases` carries all alias display forms (designations, common names, and
+/// user-added) so client-side alias search (e.g. "Andromeda" → M31) works
+/// without a separate round-trip. Empty when no aliases are stored.
 #[derive(Clone, Debug, Serialize, Deserialize, Type)]
 #[serde(rename_all = "camelCase")]
 pub struct TargetListItem {
@@ -199,6 +202,11 @@ pub struct TargetListItem {
     /// Visual magnitude; `null` when not stored or not applicable.
     #[serde(skip_serializing_if = "Option::is_none")]
     pub magnitude: Option<f64>,
+    /// All alias display forms for this target (designations, common names,
+    /// user-added). Empty when none are stored. Additive field — older clients
+    /// that ignore unknown keys are unaffected.
+    #[serde(default)]
+    pub aliases: Vec<String>,
 }
 
 // ── Gen-3 request / response types ────────────────────────────────────────────

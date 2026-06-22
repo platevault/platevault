@@ -9008,3 +9008,543 @@
   max-height: 32vh;
   min-height: 0;
 }
+
+/* === merged from .cssblocks/sessions-detail.css (spec-043 wave 3) === */
+/* ============================================================================
+ * Sessions detail CSS block (spec 043 — tasks 38 / 37)
+ * ----------------------------------------------------------------------------
+ * Token-only block (no raw hex/rgb/ms, no raw color literals).
+ * NOT imported directly — the parent merges these rules into
+ * src/styles/components.css after review.
+ *
+ * Adds layout for:
+ *   1. (task 38) MetricLine strip + three-column body grid:
+ *      facts column | optics column | main area (frames table + history).
+ *   2. (task 37) Expandable per-frame rows inside the frames table.
+ * ============================================================================ */
+
+/* ── task 38: three-column body grid ────────────────────────────────────────
+ * The body of the session detail now has THREE columns:
+ *   Left  — facts (existing, kept as-is)
+ *   Mid   — optics + calibration rail cards (new)
+ *   Right — frames table + acquisition history (new, flex:1)
+ *
+ * On narrow panels (<=900px) the mid and right columns stack under the facts.
+ * The existing two-column grid (.alm-session-detail) is replaced by a wider
+ * three-column variant; the existing two-column class is kept for backward
+ * compat with old callers but scoped to override only in the enriched layout. */
+
+.alm-session-detail--rich {
+  display: grid;
+  grid-template-columns: var(--alm-rail-width) var(--alm-rail-width) minmax(0, 1fr);
+  gap: var(--alm-sp-5);
+  align-items: start;
+  padding: var(--alm-sp-3) var(--alm-sp-4);
+}
+
+/* Existing facts column — unchanged styles, just scoped to the rich variant */
+.alm-session-detail--rich .alm-session-detail__facts {
+  min-width: 0;
+}
+.alm-session-detail--rich .alm-session-detail__facts .alm-rail__panel {
+  max-height: none;
+  overflow: visible;
+}
+
+/* Mid column: optics + calibration + state + linked rail cards stacked. */
+.alm-session-detail__mid {
+  min-width: 0;
+}
+.alm-session-detail__mid .alm-rail__panel {
+  max-height: none;
+  overflow: visible;
+}
+
+/* Right column: frames table + acquisition history.
+   Takes remaining width; the table scrolls inside its own container. */
+.alm-session-detail__main {
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  gap: var(--alm-sp-3);
+}
+
+/* ── task 38: frames table ───────────────────────────────────────────────────
+ * The frames table sits inside alm-session-detail__main. It caps its height
+ * so it never dominates the panel; rows scroll internally. */
+
+.alm-session-frames {
+  /* Scroll container for the per-frame table. */
+  max-height: 180px;
+  overflow-y: auto;
+  border: 1px solid var(--alm-border-subtle);
+  border-radius: var(--alm-radius-md);
+}
+
+/* Override alm-table styles to sit flush inside the scroll container. */
+.alm-session-frames .alm-table {
+  border: none;
+  border-radius: 0;
+  font-size: var(--alm-text-xs);
+}
+
+.alm-session-frames .alm-table th {
+  position: sticky;
+  top: 0;
+  background: var(--alm-surface);
+  z-index: 1;
+  font-size: var(--alm-text-xs);
+  padding: var(--alm-sp-1) var(--alm-sp-2);
+  font-weight: var(--alm-weight-semibold);
+  border-bottom: 1px solid var(--alm-border);
+}
+
+.alm-session-frames .alm-table td {
+  padding: var(--alm-sp-1) var(--alm-sp-2);
+  vertical-align: top;
+}
+
+/* ── task 37: expandable frame row ──────────────────────────────────────────
+ * Rows are clickable to expand an inline detail row. The expanded row uses a
+ * full-width td with a mono path + metadata block. No separate inspector panel
+ * is used — the per-frame DTO only carries frame-count-level data (not
+ * individual file paths / quality), so a side inspector would be hollow.
+ * Expandable rows are the honest choice: they reveal the extra metadata
+ * already available without duplicating the table summary columns. */
+
+.alm-session-frames__row {
+  cursor: pointer;
+}
+.alm-session-frames__row:hover {
+  background: var(--alm-hover-bg);
+}
+.alm-session-frames__row--expanded {
+  background: var(--alm-selected-bg);
+}
+
+/* Fixed-width column for the expand toggle header. */
+.alm-session-frames__th-toggle {
+  width: 20px;
+}
+
+/* The expand toggle: a small chevron/indicator in its own cell. */
+.alm-session-frames__toggle {
+  color: var(--alm-text-faint);
+  font-size: var(--alm-text-xs);
+  width: 16px;
+  text-align: center;
+  user-select: none;
+}
+
+/* Expanded detail row — full-width td spanning all columns. */
+.alm-session-frames__expanded-row td {
+  padding: var(--alm-sp-2) var(--alm-sp-3);
+  background: var(--alm-surface);
+  border-top: 1px solid var(--alm-border-subtle);
+}
+
+.alm-session-frames__expanded-body {
+  display: flex;
+  flex-direction: column;
+  gap: var(--alm-sp-1);
+}
+
+/* Mono path placeholder shown when individual frame paths are not yet loaded. */
+.alm-session-frames__path-placeholder {
+  font-family: var(--alm-font-mono);
+  font-size: var(--alm-text-xs);
+  color: var(--alm-text-muted);
+  word-break: break-all;
+}
+
+/* Additional KV pairs inside the expanded detail row. */
+.alm-session-frames__expanded-kvrow {
+  display: flex;
+  gap: var(--alm-sp-4);
+  flex-wrap: wrap;
+}
+
+.alm-session-frames__expanded-kv {
+  display: flex;
+  gap: var(--alm-sp-1);
+  font-size: var(--alm-text-xs);
+}
+
+.alm-session-frames__expanded-kv dt {
+  color: var(--alm-text-faint);
+  font-weight: var(--alm-weight-medium);
+}
+
+.alm-session-frames__expanded-kv dd {
+  color: var(--alm-text);
+  margin: 0;
+}
+
+/* ── task 38: acquisition history section ────────────────────────────────────
+ * A thin row below the frames table showing the session name, source path,
+ * and capture date as acquisition context. Scoped inside __main. */
+
+.alm-session-history {
+  padding: var(--alm-sp-2) var(--alm-sp-3);
+  background: var(--alm-surface);
+  border: 1px solid var(--alm-border-subtle);
+  border-radius: var(--alm-radius-md);
+}
+
+.alm-session-history__title {
+  font-size: var(--alm-text-xs);
+  font-weight: var(--alm-weight-semibold);
+  color: var(--alm-text-muted);
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  margin-bottom: var(--alm-sp-1);
+}
+
+.alm-session-history__row {
+  display: flex;
+  gap: var(--alm-sp-4);
+  flex-wrap: wrap;
+  font-size: var(--alm-text-xs);
+}
+
+.alm-session-history__item {
+  display: flex;
+  flex-direction: column;
+  gap: var(--alm-sp-0);
+}
+
+.alm-session-history__item-label {
+  color: var(--alm-text-faint);
+  font-weight: var(--alm-weight-medium);
+}
+
+.alm-session-history__item-value {
+  color: var(--alm-text-secondary);
+  font-family: var(--alm-font-mono);
+  word-break: break-all;
+}
+
+/* ── Narrow fallback: stack columns vertically (task 38) ─────────────────── */
+@media (max-width: 900px) {
+  .alm-session-detail--rich {
+    grid-template-columns: minmax(0, 1fr);
+  }
+}
+
+/* === merged from .cssblocks/inbox-wave3.css (spec-043 wave 3) === */
+/*
+ * inbox-wave3.css — Inbox UI wave 3 improvements.
+ *
+ * Tasks covered:
+ *   task 32 — classification-forward aligned grid rows in InboxList
+ *   task 33 — breakdown rows as clickable frame-type filters (active state)
+ *   task 35 — bulk-confirm button (top-bar / page-level)
+ *   task 6  — ellipsis on breakdown destination column (left panel 340px)
+ *
+ * Conventions:
+ *   - Token-only: --alm-* variables exclusively. No raw hex/rgb/ms values.
+ *   - No raw colour literals in comments (use "task NN" references).
+ *   - No element-level inline styles; all layout via class.
+ */
+
+/* ── task 32: inbox list grid rows ─────────────────────────────────────────────
+ *
+ * Each row is a CSS grid with four named columns so values align vertically
+ * across all rows regardless of content length:
+ *
+ *   [classification]  [path]           [count]   [format]
+ *   classified        lights/NGC7000   18 files  FITS
+ *   plan open         masters/dark     1 file    dark master
+ *
+ * The classification pill is the primary visual anchor (leftmost, fixed width).
+ * The path grows to fill remaining space. Count and format are fixed-right.
+ */
+
+.alm-inbox-row {
+  display: grid;
+  grid-template-columns:
+    [classification] 7.5rem
+    [path] 1fr
+    [count] 5rem
+    [format] 6rem;
+  align-items: center;
+  column-gap: var(--alm-space-2, 0.5rem);
+  padding: var(--alm-space-2, 0.5rem) var(--alm-space-3, 0.75rem);
+  cursor: pointer;
+  border-bottom: 1px solid var(--alm-rule2);
+  min-height: 2.5rem;
+  background: var(--alm-bg);
+  transition: background var(--alm-transition-fast);
+}
+
+.alm-inbox-row:hover,
+.alm-inbox-row:focus-visible {
+  background: var(--alm-surface);
+  outline: none;
+}
+
+.alm-inbox-row--selected {
+  background: var(--alm-info-bg);
+}
+
+.alm-inbox-row--muted {
+  opacity: 0.6;
+}
+
+/* Classification cell: the frame-type / state pill (leftmost, fixed). */
+.alm-inbox-row__classification {
+  grid-column: classification;
+  font-size: var(--alm-text-xs, 0.75rem);
+  font-weight: 600;
+  color: var(--alm-info);
+  letter-spacing: 0.02em;
+  text-transform: uppercase;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+/* State variant colours (task 32). */
+.alm-inbox-row__classification--pending  { color: var(--alm-ink3); }
+.alm-inbox-row__classification--classified { color: var(--alm-info); }
+.alm-inbox-row__classification--plan_open { color: var(--alm-ok); }
+.alm-inbox-row__classification--resolved  { color: var(--alm-ink4); }
+
+/* Path cell: grows, truncates with ellipsis on very narrow viewports. */
+.alm-inbox-row__path {
+  grid-column: path;
+  font-size: var(--alm-text-sm, 0.8125rem);
+  font-weight: 500;
+  color: var(--alm-ink);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  min-width: 0;
+}
+
+/* File count: right-aligned, muted, fixed column. */
+.alm-inbox-row__count {
+  grid-column: count;
+  font-size: var(--alm-text-xs, 0.75rem);
+  color: var(--alm-ink3);
+  text-align: right;
+  white-space: nowrap;
+}
+
+/* Format / master badge: right-aligned, fixed column. */
+.alm-inbox-row__format {
+  grid-column: format;
+  font-size: var(--alm-text-xs, 0.75rem);
+  color: var(--alm-ink3);
+  text-align: right;
+  white-space: nowrap;
+}
+
+/* ── task 33: breakdown rows as frame-type filters ──────────────────────────────
+ *
+ * Each breakdown row in InboxDetail is now a pressable button. When it is the
+ * active filter it gets a filled background; when no filter is active all rows
+ * look neutral. Clicking a row that is already active clears the filter.
+ */
+
+.alm-breakdown-filter-row {
+  display: contents; /* table layout is owner; this class is the interaction host */
+}
+
+/* Wrapper <button> that wraps the entire breakdown table row cell contents.
+ * We make the <tr> a button via role=button + tabIndex to keep table semantics. */
+.alm-breakdown-filter-btn {
+  all: unset;
+  display: flex;
+  align-items: center;
+  gap: var(--alm-space-2, 0.5rem);
+  width: 100%;
+  cursor: pointer;
+  border-radius: var(--alm-radius-sm, 3px);
+  padding: var(--alm-space-1, 0.25rem) var(--alm-space-2, 0.5rem);
+  transition: background var(--alm-transition-fast);
+}
+
+.alm-breakdown-filter-btn:hover {
+  background: var(--alm-surface);
+}
+
+.alm-breakdown-filter-btn:focus-visible {
+  outline: 2px solid var(--alm-info);
+  outline-offset: -2px;
+}
+
+/* Active: the selected frame-type filter row */
+.alm-breakdown-filter-btn--active {
+  background: var(--alm-info-bg);
+  color: var(--alm-info);
+}
+
+.alm-breakdown-filter-btn--active:hover {
+  background: var(--alm-info-bg);
+}
+
+/* Filter-active indicator label for the breakdown section header */
+.alm-breakdown-filter-label {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--alm-space-1, 0.25rem);
+  font-size: var(--alm-text-xs, 0.75rem);
+  color: var(--alm-info);
+  margin-left: var(--alm-space-2, 0.5rem);
+}
+
+.alm-breakdown-filter-clear {
+  all: unset;
+  cursor: pointer;
+  font-size: var(--alm-text-xs, 0.75rem);
+  color: var(--alm-info);
+  text-decoration: underline;
+}
+
+.alm-breakdown-filter-clear:hover {
+  color: var(--alm-ink);
+}
+
+/* ── task 35: bulk-confirm button ───────────────────────────────────────────────
+ *
+ * A secondary action in the top bar next to the primary Confirm button.
+ * Only shown when there are cleanly-classified items (state === 'classified' and
+ * classification.type !== 'unclassified'). The button is deliberately less
+ * prominent (ghost style) so users do not mistake it for a destructive action.
+ */
+
+/* The bulk-confirm button uses the standard Btn component (ghost size sm); no
+ * extra wrapper styles needed. The top-bar actions gap handles spacing.
+ * This rule documents the semantic intent for the data-testid. */
+[data-testid="inbox-bulk-confirm-btn"] {
+  /* intentionally empty — layout comes from alm-btn + PageTopBar actions gap */
+}
+
+/* ── task 6: breakdown destination ellipsis ─────────────────────────────────────
+ *
+ * The LEFT breakdown column in InboxDetail is 340px wide. The Destination cell
+ * wraps on long paths. Force single-line + ellipsis tail instead.
+ */
+
+.alm-inbox-detail__dest-cell {
+  display: block;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  max-width: 100%;
+}
+
+/* === merged from .cssblocks/targets-wave2.css (spec-043 wave 3) === */
+/* targets-wave2.css — task 5, task 19, task 18
+ *
+ * Token-only (--alm-* everywhere; no raw hex/rgb/ms).
+ * No #NNN colour values in comments — refer tasks by number.
+ * Merged into components.css by the team lead; do NOT edit components.css directly.
+ *
+ * task 5:  widen lunardist + imagingtime columns; tighten filter-badge gap
+ * task 19: smaller sparkline, bottom time-axis ticks, hover-capable SVG
+ * task 18: favourite-star button in Planner rows
+ * ========================================================================= */
+
+/* ── task 5: column-width corrections ──────────────────────────────────────
+ * "LUNAR DIST" clipped at 68 px — widen to 80 px (fits "Lunar" header + "180°").
+ * "IMAGING TIME" clipped at 80 px — widen to 100 px (fits "Img time" + "12.0 h").
+ * Filter badges run together — increase gap from sp-1 to sp-2.
+ * These override the values set in the spec 044 block in components.css. */
+
+.alm-targets-col--lunardist  { width: 80px; }
+.alm-targets-col--imagingtime { width: 100px; }
+
+/* task 5: add readable spacing between filter badges (was alm-sp-1 = 4px). */
+.alm-filter-badges { gap: var(--alm-sp-2); }
+
+/* ── task 19: sparkline size + time-axis ───────────────────────────────────
+ * Make the sparkline shorter vertically (from 18 px → 14 px) and a touch
+ * wider (from 64 px → 72 px) so the bottom time-axis ticks have headroom.
+ * The SVG viewBox is updated in AltitudeSparkline.tsx to match. */
+
+.alm-targets-spark {
+  width: 72px;
+  height: 22px; /* taller than before to fit axis ticks below the curve */
+}
+
+/* task 19: axis tick lines (bottom of sparkline viewBox). */
+.alm-targets-spark__axis-tick {
+  stroke: var(--alm-border);
+  stroke-width: 1;
+  vector-effect: non-scaling-stroke;
+}
+
+/* task 19: axis tick labels (hour marks below the curve). */
+.alm-targets-spark__axis-label {
+  font-size: var(--alm-text-2xs);
+  fill: var(--alm-text-faint);
+  font-family: var(--alm-font-sans);
+}
+
+/* task 19: hover tooltip title — pointer-events on the SVG so browser shows
+ * the native <title> tooltip. The SVG itself was pointer-events:none before;
+ * we enable it here so hovering works without JS. */
+.alm-targets-spark {
+  pointer-events: auto;
+  cursor: default;
+}
+
+/* ── task 18: favourite star button in Planner rows ───────────────────────
+ * A 16×16 toggle button that appears in each Planner row.
+ * Renders ☆ (unfavourited) / ★ (favourited); colour-coded.
+ *
+ * STUB until task #54 (FITS OBJECT → target_id linkage) lands — stored
+ * client-side in localStorage only. See useFavourites.ts. */
+
+/* Extra column for the star (sits leftmost, before Designation). */
+.alm-targets-col--star { width: 28px; }
+
+/* Star toggle button: tiny, borderless, centred in its cell. */
+.alm-targets-star {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 20px;
+  height: 20px;
+  padding: 0;
+  background: none;
+  border: none;
+  border-radius: var(--alm-radius-sm);
+  cursor: pointer;
+  font-size: var(--alm-text-base);
+  line-height: 1;
+  color: var(--alm-text-faint);
+  transition: color var(--alm-transition-fast);
+}
+
+.alm-targets-star:hover,
+.alm-targets-star:focus-visible {
+  color: var(--alm-accent);
+  outline: none;
+  background: color-mix(in srgb, var(--alm-accent) 12%, transparent);
+}
+
+/* Favourited state: filled star in accent colour. */
+.alm-targets-star--active {
+  color: var(--alm-accent);
+}
+
+/* task 18: "My Targets" empty-state nudge when no favourites are starred. */
+.alm-targets-my-empty {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: var(--alm-sp-2);
+  padding: var(--alm-sp-5) var(--alm-sp-4);
+  color: var(--alm-text-muted);
+  font-size: var(--alm-text-sm);
+  text-align: center;
+}
+
+.alm-targets-my-empty__icon {
+  font-size: var(--alm-text-2xl);
+  color: var(--alm-text-faint);
+}

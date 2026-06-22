@@ -123,6 +123,7 @@ fn list_row_to_item(row: TargetListRow) -> TargetListItem {
         dec_deg: row.dec_deg,
         constellation: row.constellation,
         magnitude: row.magnitude,
+        aliases: row.aliases,
     }
 }
 
@@ -428,6 +429,56 @@ mod tests {
             items[0].magnitude.is_none(),
             "magnitude must be None when not stored, got {:?}",
             items[0].magnitude
+        );
+    }
+
+    /// `target.list` must carry all alias display forms so clients can perform
+    /// alias search (e.g. "Andromeda" → M31) without a separate round-trip.
+    #[tokio::test]
+    async fn list_item_carries_aliases() {
+        let db = setup().await;
+        seed_m31(&db).await;
+        let items = list(db.pool()).await.unwrap();
+        assert_eq!(items.len(), 1);
+        // M31 fixture aliases: "M 31", "NGC 224", "Andromeda Galaxy".
+        assert_eq!(
+            items[0].aliases.len(),
+            3,
+            "expected 3 aliases in list item, got {:?}",
+            items[0].aliases
+        );
+        assert!(
+            items[0].aliases.contains(&"Andromeda Galaxy".to_owned()),
+            "alias search pivot 'Andromeda Galaxy' missing from list item"
+        );
+        assert!(
+            items[0].aliases.contains(&"NGC 224".to_owned()),
+            "alias 'NGC 224' missing from list item"
+        );
+    }
+
+    /// `aliases` must be empty (not absent/null) for targets with no alias rows.
+    #[tokio::test]
+    async fn list_item_aliases_empty_when_no_aliases_stored() {
+        let db = setup().await;
+        // Insert a bare canonical_target with no aliases.
+        let id = uuid::Uuid::new_v4().to_string();
+        sqlx::query(
+            "INSERT INTO canonical_target
+             (id, simbad_oid, primary_designation, object_type, ra_deg, dec_deg, source, resolved_at)
+             VALUES (?, NULL, 'Bare Target', 'galaxy', 0.0, 0.0, 'seed', '2026-01-01T00:00:00Z')",
+        )
+        .bind(&id)
+        .execute(db.pool())
+        .await
+        .expect("direct insert failed");
+
+        let items = list(db.pool()).await.unwrap();
+        assert_eq!(items.len(), 1);
+        assert!(
+            items[0].aliases.is_empty(),
+            "aliases must be empty vec, got {:?}",
+            items[0].aliases
         );
     }
 

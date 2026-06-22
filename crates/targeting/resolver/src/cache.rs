@@ -573,6 +573,9 @@ pub struct TargetListRow {
     pub constellation: Option<String>,
     /// Visual magnitude; `None` when not stored or not applicable.
     pub magnitude: Option<f64>,
+    /// All alias display forms (designations, common names, user-added).
+    /// Empty when none are stored.
+    pub aliases: Vec<String>,
 }
 
 /// List all canonical targets ordered by `primary_designation` (gen-3).
@@ -580,6 +583,8 @@ pub struct TargetListRow {
 /// Reads `ra_deg`, `dec_deg`, `constellation`, and `magnitude` from the row;
 /// `constellation`/`magnitude` are `NULL`-tolerant — they were added in
 /// migration 0046 and may be absent for earlier entries.
+/// `aliases` is collected from `target_alias` in a second pass (one batch
+/// query per list call, not N+1).
 ///
 /// # Errors
 ///
@@ -595,6 +600,27 @@ pub async fn list_all(pool: &SqlitePool) -> CacheResult<Vec<TargetListRow>> {
     .fetch_all(pool)
     .await?;
 
+    if rows.is_empty() {
+        return Ok(Vec::new());
+    }
+
+    // Batch-load aliases for all returned targets (avoids N+1 queries).
+    // Returns (target_id, alias) ordered by target_id, then alias.
+    let alias_rows: Vec<(String, String)> = sqlx::query_as(
+        "SELECT target_id, alias
+         FROM target_alias
+         ORDER BY target_id ASC, alias ASC",
+    )
+    .fetch_all(pool)
+    .await?;
+
+    // Group aliases by target_id into a lookup map.
+    let mut aliases_by_id: std::collections::HashMap<String, Vec<String>> =
+        std::collections::HashMap::new();
+    for (target_id, alias) in alias_rows {
+        aliases_by_id.entry(target_id).or_default().push(alias);
+    }
+
     rows.into_iter()
         .map(
             |(
@@ -609,6 +635,7 @@ pub async fn list_all(pool: &SqlitePool) -> CacheResult<Vec<TargetListRow>> {
             )| {
                 let id = Uuid::parse_str(&id_str)
                     .map_err(|e| CacheError::InvalidUuid(id_str.clone(), e))?;
+                let aliases = aliases_by_id.remove(&id_str).unwrap_or_default();
                 Ok(TargetListRow {
                     id,
                     primary_designation,
@@ -618,6 +645,7 @@ pub async fn list_all(pool: &SqlitePool) -> CacheResult<Vec<TargetListRow>> {
                     dec_deg,
                     constellation,
                     magnitude,
+                    aliases,
                 })
             },
         )
@@ -983,5 +1011,73 @@ mod tests {
         // "%" must not act as a wildcard — no alias literally contains it.
         let hits = search_by_normalized(db.pool(), "%", 20).await.unwrap();
         assert!(hits.is_empty());
+    }
+
+    // ── list_all alias population ─────────────────────────────────────────────
+
+    #[tokio::test]
+    async fn list_all_carries_aliases_for_resolved_target() {
+        let db = setup().await;
+        // M31 fixture has three aliases: "M 31" (designation), "NGC 224"
+        // (designation), "Andromeda Galaxy" (common_name).
+        upsert_resolved(db.pool(), &m31(TargetSource::Resolved)).await.unwrap();
+
+        let rows = list_all(db.pool()).await.unwrap();
+        assert_eq!(rows.len(), 1);
+        let row = &rows[0];
+        assert_eq!(row.primary_designation, "M 31");
+        assert_eq!(row.aliases.len(), 3, "expected 3 aliases, got {:?}", row.aliases);
+        // Aliases are ordered alphabetically by the SQL ORDER BY alias ASC.
+        assert!(row.aliases.contains(&"M 31".to_owned()), "M 31 alias missing");
+        assert!(row.aliases.contains(&"NGC 224".to_owned()), "NGC 224 alias missing");
+        assert!(
+            row.aliases.contains(&"Andromeda Galaxy".to_owned()),
+            "Andromeda Galaxy alias missing"
+        );
+    }
+
+    #[tokio::test]
+    async fn list_all_aliases_empty_when_no_alias_rows() {
+        let db = setup().await;
+        // Insert a canonical_target directly without any aliases.
+        let id = Uuid::new_v4().to_string();
+        sqlx::query(
+            "INSERT INTO canonical_target
+             (id, simbad_oid, primary_designation, object_type, ra_deg, dec_deg, source, resolved_at)
+             VALUES (?, NULL, 'Bare Target', 'galaxy', 1.0, 2.0, 'seed', '2026-01-01T00:00:00Z')",
+        )
+        .bind(&id)
+        .execute(db.pool())
+        .await
+        .unwrap();
+
+        let rows = list_all(db.pool()).await.unwrap();
+        assert_eq!(rows.len(), 1);
+        assert!(rows[0].aliases.is_empty(), "aliases must be empty when no alias rows exist");
+    }
+
+    #[tokio::test]
+    async fn list_all_aliases_for_multiple_targets_do_not_cross_contaminate() {
+        let db = setup().await;
+        seeded(&db).await; // seeds M31 (3 aliases) and M101 (3 aliases)
+
+        let rows = list_all(db.pool()).await.unwrap();
+        assert_eq!(rows.len(), 2);
+
+        let m31_row = rows.iter().find(|r| r.primary_designation == "M 31").unwrap();
+        let m101_row = rows.iter().find(|r| r.primary_designation == "M 101").unwrap();
+
+        assert_eq!(m31_row.aliases.len(), 3, "M31 aliases: {:?}", m31_row.aliases);
+        assert_eq!(m101_row.aliases.len(), 3, "M101 aliases: {:?}", m101_row.aliases);
+
+        // Aliases must not bleed across targets.
+        assert!(
+            !m31_row.aliases.contains(&"NGC 5457".to_owned()),
+            "NGC 5457 must not appear on M31"
+        );
+        assert!(
+            !m101_row.aliases.contains(&"NGC 224".to_owned()),
+            "NGC 224 must not appear on M101"
+        );
     }
 }

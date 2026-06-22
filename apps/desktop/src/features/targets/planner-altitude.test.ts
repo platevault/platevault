@@ -31,6 +31,7 @@ function item(primaryDesignation: string, overrides: Partial<TargetListItem> = {
     objectType: 'other',
     raDeg: 0,
     decDeg: 0,
+    aliases: [],
     ...overrides,
   };
 }

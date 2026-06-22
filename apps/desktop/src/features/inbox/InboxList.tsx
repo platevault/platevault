@@ -49,13 +49,34 @@ import { ACCESSORS, DIM_LABELS, type InboxSortBy } from './InboxControls';
 
 // ── Helpers ───────────────────────────────────────────────────────────────────
 
-function stateLabel(state: string): string {
-  switch (state) {
+/**
+ * Classification label shown in the primary (leftmost) grid column.
+ * For classified / plan-open items we show the dominant frame type when
+ * available so the column is frame-type-forward rather than state-forward.
+ */
+function classificationLabel(item: InboxListItem): string {
+  if (item.isMaster) return item.masterFrameType ?? 'master';
+  if (item.groupFrameType) return item.groupFrameType;
+  switch (item.state) {
     case 'pending_classification': return 'pending';
     case 'classified':             return 'classified';
     case 'plan_open':              return 'plan open';
     case 'resolved':               return 'resolved';
-    default:                       return state;
+    default:                       return item.state;
+  }
+}
+
+/**
+ * CSS modifier for the classification cell so pending / classified / open / resolved
+ * each get a distinct colour via the token-only classes in inbox-wave3.css.
+ */
+function classificationMod(state: string): string {
+  switch (state) {
+    case 'pending_classification': return 'pending';
+    case 'classified':             return 'classified';
+    case 'plan_open':              return 'plan_open';
+    case 'resolved':               return 'resolved';
+    default:                       return 'classified';
   }
 }
 
@@ -184,10 +205,20 @@ function InboxRow({
   onSelect: (idx: number) => void;
   indent: number;
 }) {
+  // task 32: classification-forward grid. The classification column (leftmost)
+  // shows the dominant frame type when known, falling back to the lifecycle state.
+  const classLabel = classificationLabel(item);
+  const classMod = classificationMod(item.state);
+  const classCell = `alm-inbox-row__classification alm-inbox-row__classification--${classMod}`;
+
   return (
     <div
       data-testid={`inbox-item-${item.inboxItemId}`}
-      className={`alm-list-item${selected ? ' alm-list-item--selected' : ''}${item.state === 'plan_open' ? ' alm-list-item--muted' : ''}`}
+      className={[
+        'alm-inbox-row',
+        selected ? 'alm-inbox-row--selected' : '',
+        item.state === 'plan_open' ? 'alm-inbox-row--muted' : '',
+      ].filter(Boolean).join(' ')}
       onClick={() => onSelect(originalIdx)}
       role="button"
       tabIndex={0}
@@ -196,30 +227,27 @@ function InboxRow({
       // eslint-disable-next-line no-restricted-syntax -- dynamic: depth-based indent padding for grouped inbox rows
       style={indent ? { paddingLeft: indent } : undefined}
     >
-      {/* ── Primary line: path ── */}
-      <div className="alm-list-item__title">
-        <strong>{item.relativePath || '(root)'}</strong>
-      </div>
+      {/* ── Col 1: classification / frame type (task 32) ── */}
+      <span className={classCell} title={classLabel}>
+        {classLabel}
+      </span>
 
-      {/* ── Secondary line: structured columns ── */}
-      <div className="alm-list-item__meta alm-inbox-list__meta">
-        {/* State — left column, truncates if narrow */}
-        <span className="alm-inbox-list__meta-state">
-          {stateLabel(item.state)}
-        </span>
+      {/* ── Col 2: relative path (grows) ── */}
+      <span className="alm-inbox-row__path" title={item.relativePath || '(root)'}>
+        {item.relativePath || '(root)'}
+      </span>
 
-        {/* File count — fixed right */}
-        <span className="alm-inbox-list__meta-count">
-          {item.fileCount} {item.fileCount !== 1 ? 'files' : 'file'}
-        </span>
+      {/* ── Col 3: file count (fixed right) ── */}
+      <span className="alm-inbox-row__count">
+        {item.fileCount} {item.fileCount !== 1 ? 'files' : 'file'}
+      </span>
 
-        {/* Format / master indicator — fixed right */}
-        <span className="alm-inbox-list__meta-format">
-          {item.isMaster
-            ? `${item.masterFrameType ?? 'master'} master`
-            : formatTag(item)}
-        </span>
-      </div>
+      {/* ── Col 4: format / master tag (fixed right) ── */}
+      <span className="alm-inbox-row__format">
+        {item.isMaster
+          ? `${item.masterFrameType ?? 'master'} master`
+          : formatTag(item)}
+      </span>
     </div>
   );
 }
