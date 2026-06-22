@@ -16,7 +16,6 @@ export type { ContractError };
  * the precise code available internally so a missing translation is noticeable.
  */
 function logUnmappedCode(code: string): void {
-  // eslint-disable-next-line no-console
   console.error(`[errMessage] unmapped error code: ${code}`);
 }
 

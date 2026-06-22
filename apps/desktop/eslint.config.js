@@ -2,6 +2,17 @@
 import js from '@eslint/js';
 import tseslint from 'typescript-eslint';
 import reactHooks from 'eslint-plugin-react-hooks';
+import alm from './eslint-rules/no-user-string.js';
+
+// Areas where the i18n catalog migration is complete and the
+// `alm/no-user-string` gate is enforced (spec 046, FR-001 / SC-001). Grows one
+// feature area per migration wave; `just lint` stays green between waves because
+// only migrated globs are gated. SC-001 is met when this covers all of src/**.
+const I18N_MIGRATED = [
+  'src/lib/i18n.ts',
+  'src/lib/errors.ts',
+  'src/lib/error-messages.ts',
+];
 
 export default tseslint.config(
   // Base JS recommended rules
@@ -16,6 +27,19 @@ export default tseslint.config(
         projectService: true,
         tsconfigRootDir: import.meta.dirname,
       },
+    },
+  },
+
+  // i18n catalog gate (spec 046). Plugin is registered globally but only
+  // ENFORCED on migrated areas (I18N_MIGRATED), so it can be rolled out wave by
+  // wave without turning the whole tree red at once.
+  {
+    plugins: { alm },
+  },
+  {
+    files: I18N_MIGRATED,
+    rules: {
+      'alm/no-user-string': 'error',
     },
   },
 
@@ -103,6 +127,7 @@ export default tseslint.config(
       'dist/**',
       'src-tauri/**',
       'src/bindings/**',
+      'src/paraglide/**',
       'src-archived-2026-05-24/**',
       'playwright.config.ts',
       'vite.config.ts',
