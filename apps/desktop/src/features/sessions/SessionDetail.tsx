@@ -1,45 +1,16 @@
 /**
- * SessionDetail — spec 006 wired; spec 043 §4 redesign (task #79/#99/#100).
+ * SessionDetail — clean tabular session detail (spec 043 §4 redesign).
  *
- * Uses the canonical DetailPanel with the `facts` prop so the FITS facts KV
- * sits in the pinned left column (non-scrolling) and the frames table + review
- * state + linked projects sit in the scrolling right content column — matching
- * the unified two-column contract shared with MasterDetail.
+ * The session's attributes render as a flat PropertyTable (Property | Value |
+ * Source) spread across two columns inside the canonical DetailPanel. Linked
+ * projects sit below with a clickable link per project. Review/Confirm actions
+ * live in the header.
  *
- * Density + de-duplication (#99):
- *   The table row already shows: Target, Filter, Frames, Integration (exposure),
- *   Night, Camera, State, Projects. The detail panel MUST NOT repeat those
- *   fields in the title bar or as the primary hero.
- *
- *   - Title: target identity (always the identity anchor; appropriate to repeat
- *     as the selected-item label in the panel header).
- *   - Subtitle: camera · gain · sensor temp — equipment context NOT in the row.
- *   - MetricLine: total integration (derived frames×exposure) — compact, non-
- *     duplicative since the raw per-frame exposure is in the row but the total
- *     is not.
- *   - facts: compact 2-col KV grid (left, fixed width, no scroll).
- *   - children: frames table + review state + linked projects (right, scrolls).
- *     Optics and calibration matches are suppressed while entirely "—" to avoid
- *     large empty cards.
- *
- * Task #37 — per-frame expandable rows:
- *   Rows are EXPANDABLE inline — clicking reveals camera/gain/binning/temp
- *   which are NOT columns in SessionsTable. When the contract adds per-frame
- *   records the expanded row is the right place to surface them without
- *   structural change.
- *
- * Review actions (Confirm / Re-open / Reject) are CONTEXTUAL — they act on the
- * selected session — so they live in the detail header's actions slot, not the
- * global PageTopBar (task #79).
- *
- * Provenance is surfaced inline via the Facts KV provenance label (inferred vs
- * FITS-extracted). A separate Provenance section is not needed.
- *
- * SC-004: no column is named Tags or Handling.
- * FR-004: state renders as plain structured data, not a decorative bubble.
+ * The per-frame frames table + review-state pill were removed: a session is a
+ * single frame-type group, so the frames table only duplicated the row data;
+ * the freed space lets the attribute table use both columns.
  */
 
-import { useState } from 'react';
 import type { InventorySession } from '@/api/commands';
 import {
   DetailPane,
@@ -47,8 +18,7 @@ import {
   PropertyTable,
   type PropertyDef,
 } from '@/components';
-import { Pill, EmptyState, Btn } from '@/ui';
-import { sessionStateLabel, sessionStateVariant } from '@/lib/lifecycle';
+import { EmptyState, Btn } from '@/ui';
 
 interface Props {
   session: InventorySession | null;
@@ -62,15 +32,11 @@ interface Props {
   rejectVisible?: boolean;
   /** A review mutation is in flight for this session. */
   pending?: boolean;
+  /** Open a linked project — wired by the page to navigation. */
+  onOpenProject?: (projectId: string) => void;
 }
 
-/**
- * Equipment context subtitle: camera · gain · sensor temp.
- * Shows fields NOT already visible in the table row (which shows Target,
- * Filter, Frames, Integration, Night, Camera, State, Projects). We include
- * Camera here too as the subtitle anchor — it provides identity context when
- * the panel is open, even though the row shows it.
- */
+/** Equipment context subtitle: camera · gain · sensor temp · binning. */
 function equipmentSubtitle(session: InventorySession): string {
   const parts: string[] = [];
   if (session.camera) parts.push(session.camera);
@@ -80,13 +46,9 @@ function equipmentSubtitle(session: InventorySession): string {
   return parts.join(' · ');
 }
 
-/**
- * Derive total integration seconds from frames × per-frame exposure.
- * Returns null when exposure is missing or unparseable.
- */
+/** Derive total integration seconds from frames × per-frame exposure. */
 function integrationSeconds(session: InventorySession): number | null {
   if (!session.exposure) return null;
-  // Exposure strings are like "300s", "300.5s", "195s" — strip the trailing 's'.
   const raw = session.exposure.replace(/s$/i, '');
   const secs = parseFloat(raw);
   if (!Number.isFinite(secs) || secs <= 0) return null;
@@ -101,92 +63,6 @@ function fmtSeconds(totalSec: number): string {
   return `${h}h ${m}m`;
 }
 
-// ── Per-frame expandable table (task #37) ─────────────────────────────────────
-//
-// Bespoke native <table> so the expanded row can use colSpan. The shared
-// <Table> component iterates columns 1-to-1 and cannot produce a colspan row.
-//
-// The InventorySession DTO has one logical group per session (not individual
-// frame records), so we render one summary row. The expanded body surfaces
-// camera/gain/binning/temp — NOT shown in SessionsTable columns.
-
-function FrameExpandedBody({ session }: { session: InventorySession }) {
-  return (
-    <div className="alm-session-frames__expanded-body">
-      {/* Session name is the file-group identifier. Individual file paths are
-          not yet in the InventorySession DTO; replace with per-frame paths
-          when the contract adds them. */}
-      <span className="alm-session-frames__path-placeholder">{session.name}</span>
-      <div className="alm-session-frames__expanded-kvrow">
-        <dl className="alm-session-frames__expanded-kv">
-          <dt>Camera</dt>
-          <dd>{session.camera ?? '—'}</dd>
-        </dl>
-        <dl className="alm-session-frames__expanded-kv">
-          <dt>Gain</dt>
-          <dd>{session.gain ?? '—'}</dd>
-        </dl>
-        <dl className="alm-session-frames__expanded-kv">
-          <dt>Binning</dt>
-          <dd>{session.binning ?? '—'}</dd>
-        </dl>
-        <dl className="alm-session-frames__expanded-kv">
-          <dt>Sensor temp</dt>
-          <dd>{session.setTemp ?? '—'}</dd>
-        </dl>
-      </div>
-    </div>
-  );
-}
-
-function SessionFramesTable({ session }: { session: InventorySession }) {
-  const [expanded, setExpanded] = useState(false);
-
-  return (
-    <table className="alm-table alm-session-frames__table" aria-label="Frame group">
-      <thead>
-        <tr>
-          <th className="alm-session-frames__th-toggle" />
-          <th>Type</th>
-          <th>Frames</th>
-          <th>Exp.</th>
-          <th>Filter</th>
-          <th>Night</th>
-        </tr>
-      </thead>
-      <tbody>
-        <tr
-          className={[
-            'alm-session-frames__row',
-            expanded ? 'alm-session-frames__row--expanded' : '',
-          ]
-            .filter(Boolean)
-            .join(' ')}
-          onClick={() => setExpanded((v) => !v)}
-        >
-          <td>
-            <span className="alm-session-frames__toggle" aria-hidden="true">
-              {expanded ? '▾' : '▸'}
-            </span>
-          </td>
-          <td>{session.type ?? '—'}</td>
-          <td>{String(session.frames)}</td>
-          <td>{session.exposure ?? '—'}</td>
-          <td>{session.filter ?? '—'}</td>
-          <td>{session.capturedOn ?? '—'}</td>
-        </tr>
-        {expanded && (
-          <tr className="alm-session-frames__expanded-row">
-            <td colSpan={6}>
-              <FrameExpandedBody session={session} />
-            </td>
-          </tr>
-        )}
-      </tbody>
-    </table>
-  );
-}
-
 // ── Component ─────────────────────────────────────────────────────────────────
 
 export function SessionDetail({
@@ -198,6 +74,7 @@ export function SessionDetail({
   reopenVisible = false,
   rejectVisible = false,
   pending = false,
+  onOpenProject,
 }: Props) {
   if (!session) {
     return (
@@ -211,16 +88,11 @@ export function SessionDetail({
   }
 
   const isLinked = (session.linked?.projects?.length ?? 0) > 0;
-
-  // Provenance: if a value was inferred, surface it via the KV provenance label.
   const prov = session.provenance;
-
-  // Total integration is derived (frames×exposure) — NOT a raw row-column repeat.
   const totalSec = integrationSeconds(session);
   const integrationLabel = totalSec != null ? fmtSeconds(totalSec) : null;
 
-  // Session facts as a clean tabular PropertyTable (Property | Value | Source).
-  // Flat — no grey rail cards, no wrapping 2-col KV.
+  // Session facts as a clean tabular PropertyTable, spread across two columns.
   const factProps: PropertyDef[] = [
     { key: 'target', label: 'Target', value: session.target ?? null, source: prov?.target ? 'inferred' : 'fits' },
     { key: 'filter', label: 'Filter', value: session.filter ?? null, source: prov?.filter ? 'inferred' : 'fits' },
@@ -241,10 +113,9 @@ export function SessionDetail({
       : []),
   ];
 
-  const reviewLabel =
-    session.state === 'discovered' || session.state === 'candidate'
-      ? 'Needs review'
-      : sessionStateLabel(session.state);
+  const mid = Math.ceil(factProps.length / 2);
+  const colA = factProps.slice(0, mid);
+  const colB = factProps.slice(mid);
 
   return (
     <DetailPanel
@@ -272,38 +143,32 @@ export function SessionDetail({
       }
     >
       <div className="alm-session-detail2">
-        {/* Left: session attributes as a clean tabular PropertyTable. */}
-        <section className="alm-session-detail2__props" aria-label="Session properties">
-          <PropertyTable mode="view" showSource properties={factProps} />
-        </section>
+        {/* Session attributes spread across two tabular columns. */}
+        <div className="alm-session-detail2__cols">
+          <PropertyTable mode="view" showSource properties={colA} />
+          <PropertyTable mode="view" showSource properties={colB} />
+        </div>
 
-        {/* Right: frames table + review state + linked projects — flat, tabular. */}
-        <section className="alm-session-detail2__side">
-          <div className="alm-session-detail2__block">
-            <div className="alm-session-detail2__head">Frames</div>
-            <SessionFramesTable session={session} />
-          </div>
-
-          <div className="alm-session-detail2__block">
-            <div className="alm-session-detail2__head">Review state</div>
-            <Pill variant={sessionStateVariant(session.state)}>{reviewLabel}</Pill>
-          </div>
-
-          <div className="alm-session-detail2__block">
-            <div className="alm-session-detail2__head">Linked projects</div>
-            {isLinked ? (
-              <div className="alm-session-detail2__linked">
-                {session.linked?.projects?.map((p) => (
-                  <Pill key={p.id} variant="info">
-                    {p.name}
-                  </Pill>
-                ))}
-              </div>
-            ) : (
-              <span className="alm-session-detail2__muted">None</span>
-            )}
-          </div>
-        </section>
+        {/* Linked projects — below the table, with a clickable link per project. */}
+        <div className="alm-session-detail2__linked-block">
+          <div className="alm-session-detail2__head">Linked projects</div>
+          {isLinked ? (
+            <div className="alm-session-detail2__linked">
+              {session.linked?.projects?.map((p) => (
+                <button
+                  key={p.id}
+                  type="button"
+                  className="alm-session-detail2__link"
+                  onClick={() => onOpenProject?.(p.id)}
+                >
+                  {p.name}
+                </button>
+              ))}
+            </div>
+          ) : (
+            <span className="alm-session-detail2__muted">None</span>
+          )}
+        </div>
       </div>
     </DetailPanel>
   );

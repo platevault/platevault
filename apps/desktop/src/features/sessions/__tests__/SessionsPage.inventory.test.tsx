@@ -251,49 +251,6 @@ describe('SessionDetail — empty state', () => {
 // (Confirm / Re-open / Reject) live in the SessionDetail HEADER and are gated by
 // visibility props the page supplies (task #79). With no visibility props set
 // (the default), no action buttons render anywhere in the detail.
-describe('SessionDetail — review state rail (read-only Pill, spec 006 FR-004)', () => {
-  it('8. shows "Needs review" Pill for needs_review state; no buttons without visibility props', () => {
-    const { queryAllByRole } = renderDetail(makeSession({ state: 'needs_review' }));
-    expect(screen.getAllByText('Needs review').length).toBeGreaterThan(0);
-    // No visibility props passed → no action buttons render.
-    expect(
-      queryAllByRole('button', { name: /confirm|reject|re.?open/i }),
-    ).toHaveLength(0);
-  });
-
-  it('9. shows "Confirmed" Pill for confirmed state; no buttons without visibility props', () => {
-    const { queryAllByRole } = renderDetail(makeSession({ state: 'confirmed' }));
-    expect(screen.getAllByText('Confirmed').length).toBeGreaterThan(0);
-    expect(
-      queryAllByRole('button', { name: /confirm|reject|re.?open/i }),
-    ).toHaveLength(0);
-  });
-
-  it('10. shows "Needs review" Pill for needs_review; Reject absent without visibility props', () => {
-    const { queryAllByRole } = renderDetail(makeSession({ state: 'needs_review' }));
-    expect(screen.getAllByText('Needs review').length).toBeGreaterThan(0);
-    expect(
-      queryAllByRole('button', { name: /reject/i }),
-    ).toHaveLength(0);
-  });
-
-  it('11. shows "Rejected" Pill for rejected state; no buttons without visibility props', () => {
-    const { queryAllByRole } = renderDetail(makeSession({ state: 'rejected' }));
-    expect(screen.getAllByText('Rejected').length).toBeGreaterThan(0);
-    expect(
-      queryAllByRole('button', { name: /confirm|reject|re.?open/i }),
-    ).toHaveLength(0);
-  });
-
-  it('11b. discovered state shows "Needs review" Pill; no buttons without visibility props', () => {
-    const { queryAllByRole } = renderDetail(makeSession({ state: 'discovered' }));
-    expect(screen.getAllByText('Needs review').length).toBeGreaterThan(0);
-    expect(
-      queryAllByRole('button', { name: /confirm|reject|re.?open/i }),
-    ).toHaveLength(0);
-  });
-});
-
 // Task #79: review actions are CONTEXTUAL and render in the SessionDetail
 // header (not the global PageTopBar). Visibility is driven by props the page
 // computes from the session's canonical state; clicking dispatches the handler.

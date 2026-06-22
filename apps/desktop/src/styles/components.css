@@ -9680,3 +9680,34 @@
 @media (max-width: 820px) {
   .alm-session-detail2 { grid-template-columns: minmax(0, 1fr); }
 }
+
+/* === Sessions detail v2 — two-column property tables + linked-below === */
+.alm-session-detail2 {
+  display: flex;
+  flex-direction: column;
+  gap: var(--alm-sp-4);
+  padding: var(--alm-sp-4);
+}
+.alm-session-detail2__cols {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: var(--alm-sp-5);
+  align-items: start;
+}
+.alm-session-detail2__link {
+  color: var(--alm-accent);
+  text-decoration: none;
+}
+.alm-session-detail2__link:hover { text-decoration: underline; }
+@media (max-width: 820px) {
+  .alm-session-detail2__cols { grid-template-columns: 1fr; }
+}
+
+/* Linked-project link rendered as a button — reset native button chrome. */
+.alm-session-detail2__link {
+  background: none;
+  border: none;
+  padding: 0;
+  font: inherit;
+  cursor: pointer;
+}
