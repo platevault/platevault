@@ -9666,8 +9666,8 @@
   padding: var(--alm-sp-4);
 }
 .alm-session-detail2__col {
-  flex: 0 1 320px;
-  min-width: 260px;
+  flex: 0 1 400px;
+  min-width: 340px;
 }
 .alm-session-detail2__linked {
   flex: 0 0 auto;
