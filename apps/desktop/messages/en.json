@@ -1,0 +1,11 @@
+{
+  "$schema": "https://inlang.com/schema/inlang-message-format",
+  "common_save": "Save",
+  "common_cancel": "Cancel",
+  "common_close": "Close",
+  "common_ellipsis": "…",
+  "verb_archive": "Archive",
+  "verb_trash": "Trash",
+  "nav_my_targets": "My Targets",
+  "err_generic_fallback": "Something went wrong. Please try again."
+}

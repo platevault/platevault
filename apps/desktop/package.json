@@ -10,16 +10,18 @@
     "test": "vitest run",
     "test:watch": "vitest",
     "test:e2e": "playwright test",
-
     "typecheck": "tsc --noEmit",
     "lint": "eslint src/ && bash ../../scripts/check-tokens.sh",
     "lint:eslint": "eslint src/",
-    "check:tokens": "bash ../../scripts/check-tokens.sh"
+    "check:tokens": "bash ../../scripts/check-tokens.sh",
+    "i18n:compile": "paraglide-js compile --project ./project.inlang --outdir ./src/paraglide --strategy baseLocale --emit-ts-declarations",
+    "pretypecheck": "pnpm i18n:compile"
   },
   "dependencies": {
     "@astro-plan/contracts": "workspace:*",
     "@base-ui-components/react": "1.0.0-rc.0",
     "@hookform/resolvers": "5.4.0",
+    "@inlang/paraglide-js": "^2.20.1",
     "@tanstack/react-query": "5.101.0",
     "@tanstack/react-router": "1.169.2",
     "@tanstack/react-table": "8.21.3",

@@ -1,5 +1,6 @@
 import { defineConfig, loadEnv } from "vite";
 import react from "@vitejs/plugin-react";
+import { paraglideVitePlugin } from "@inlang/paraglide-js";
 import { resolve } from "path";
 
 export default defineConfig(({ mode, command }) => {
@@ -21,7 +22,22 @@ export default defineConfig(({ mode, command }) => {
   }
 
   return {
-    plugins: [react()],
+    plugins: [
+      // Compile the message catalog (messages/*.json → src/paraglide/) on dev
+      // start + build, with HMR when a message changes. English is hard-pinned
+      // via the baseLocale strategy: no locale detection, no switcher (spec 046
+      // FR-004). The generated src/paraglide/ output is git-ignored.
+      paraglideVitePlugin({
+        project: "./project.inlang",
+        outdir: "./src/paraglide",
+        strategy: ["baseLocale"],
+        // Emit .d.ts alongside the compiled .js so a bare `tsc --noEmit` (which
+        // does not run Vite) always finds declarations for `@/paraglide/*` —
+        // keeps every compile path (dev, build, vitest, typecheck) consistent.
+        emitTsDeclarations: true,
+      }),
+      react(),
+    ],
     clearScreen: false,
     server: {
       port: 5173,
