@@ -5028,13 +5028,19 @@
   gap: var(--alm-sp-2);
 }
 
-/* Per-type table cell: locked row indicator */
-.alm-cleanup__locked-label {
-  display: flex;
-  align-items: center;
-  gap: var(--alm-sp-1);
+/* Per-type table: process-stage group subheader row */
+.alm-cleanup__group-row td {
+  padding-top: var(--alm-sp-3);
   color: var(--alm-text-muted);
   font-size: var(--alm-text-xs);
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+}
+
+/* Impact warning banner above the per-type table */
+.alm-cleanup__warning {
+  margin-bottom: var(--alm-sp-3);
 }
 
 /* === EDIT PROJECT PANE === */
