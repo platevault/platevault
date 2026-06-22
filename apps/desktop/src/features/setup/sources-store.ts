@@ -1,5 +1,5 @@
 import { registerRootBatch } from '@/api/commands';
-import { ERROR_MESSAGES } from '@/lib/error-messages';
+import { m } from '@/lib/i18n';
 import { errMessage } from '@/lib/errors';
 
 const STORAGE_KEY = 'alm-setup-wizard-state';
@@ -193,12 +193,12 @@ export function validatePath(
 
   const dedup = checkDeduplication(sources, kind, path);
   if (dedup.sameKindDuplicate) {
-    return { code: 'path.already_registered', message: ERROR_MESSAGES['path.already_registered'] ?? 'This directory is already registered' };
+    return { code: 'path.already_registered', message: m.err_path_already_registered() };
   }
   if (dedup.crossKindConflict) {
     return {
       code: 'path.already_registered.different_kind',
-      message: `${ERROR_MESSAGES['path.already_registered.different_kind'] ?? 'This directory is registered under a different category'} (${dedup.crossKindConflict})`,
+      message: `${m.err_path_already_registered_different_kind()} (${dedup.crossKindConflict})`,
     };
   }
 
@@ -250,8 +250,9 @@ export async function flushToDB(sources: SourcesState): Promise<FlushResult> {
           rootId: item.rootId,
         };
       }
-      const errorCode = item.error ?? 'unknown';
-      const message = ERROR_MESSAGES[errorCode as import('@/bindings/index').ErrorCode] ?? `Registration failed: ${errorCode}`;
+      // Resolve through the single translation point so the user sees a friendly
+      // catalog message, never the raw backend code (spec 046 FR-008/FR-009).
+      const message = errMessage({ code: item.error ?? 'unknown', message: '' });
       return { kind: item.kind as SourceKind, path: item.path, success: false, error: message };
     });
 
