@@ -35,6 +35,7 @@ import {
 import type { TargetDetailV3, TargetOpError, TargetListItem } from '@/api/commands';
 import { DetailPane, PropertyTable, type PropertyDef } from '@/components';
 import { Pill, Section, EmptyState, Banner, Btn } from '@/ui';
+import { m } from '@/lib/i18n';
 import { rowAltitudeFor, USABLE_ALT_DEG } from './planner-altitude';
 import { FilterBadges } from './FilterBadges';
 
@@ -216,7 +217,7 @@ function AltitudeGraph({ points }: AltitudeGraphProps) {
       <svg
         className="alm-planner__graph-svg"
         viewBox={`0 0 ${SVG_W} ${SVG_H}`}
-        aria-label="Tonight altitude graph (approximate)"
+        aria-label={m.targets_detail_alt_graph_aria()}
         role="img"
       >
         {/* Usable altitude shaded band (≥30°) */}
@@ -266,7 +267,7 @@ function AltitudeGraph({ points }: AltitudeGraphProps) {
           y={PAD_T + 9}
           className="alm-planner__graph-label-text"
         >
-          transit
+          {m.targets_detail_transit()}
         </text>
 
         {/* Y-axis */}
@@ -430,7 +431,7 @@ export function TargetDetailV2({ targetId, item = null, usableAltDeg = USABLE_AL
   if (loadState.status === 'loading') {
     return (
       <DetailPane>
-        <EmptyState title="Loading…" desc="" />
+        <EmptyState title={m.common_loading()} desc="" />
       </DetailPane>
     );
   }
@@ -438,7 +439,7 @@ export function TargetDetailV2({ targetId, item = null, usableAltDeg = USABLE_AL
   if (loadState.status === 'error') {
     return (
       <DetailPane>
-        <EmptyState title="Error" desc={loadState.message} />
+        <EmptyState title={m.settings_advanced_log_error()} desc={loadState.message} />
       </DetailPane>
     );
   }
@@ -509,7 +510,7 @@ export function TargetDetailV2({ targetId, item = null, usableAltDeg = USABLE_AL
         <div className="alm-planner__actions">
           {/* STUB: "Add to plan" — observing-plan feature not yet implemented */}
           <Btn size="sm" variant="ghost" disabled>
-            Add to plan
+            {m.targets_detail_add_to_plan()}
           </Btn>
           {/* "+ New project here" — opens CreateProjectDialog; pre-wiring
               canonicalTargetId is deferred per spec 035 comment in
@@ -526,7 +527,7 @@ export function TargetDetailV2({ targetId, item = null, usableAltDeg = USABLE_AL
               void navigate({ to: '/projects/new' });
             }}
           >
-            + New project here
+            {m.targets_detail_new_project()}
           </Btn>
         </div>
       </div>
@@ -546,14 +547,14 @@ export function TargetDetailV2({ targetId, item = null, usableAltDeg = USABLE_AL
         {/* Tonight column: a small transit graph + the planner stats. */}
         <div className="alm-planner__tonight">
           <div className="alm-planner__graph-title">
-            Tonight · ~{Math.round(STUB_OBSERVER_LAT_DEG)}°N
+            {m.targets_detail_tonight_title({ lat: Math.round(STUB_OBSERVER_LAT_DEG) })}
           </div>
           <AltitudeGraph points={tonightPoints} />
           {rowAlt && (
             <>
               <PropertyTable mode="view" properties={tonightStats} />
               <div className="alm-planner__tonight-filters">
-                <span className="alm-planner__tonight-filters-label">Filters</span>
+                <span className="alm-planner__tonight-filters-label">{m.common_filters()}</span>
                 <FilterBadges recommendation={rowAlt.filters} />
               </div>
             </>
@@ -565,10 +566,10 @@ export function TargetDetailV2({ targetId, item = null, usableAltDeg = USABLE_AL
       {/* STUB: target coverage — gen-3 TargetDetailV3 does not yet expose
           per-filter coverage. Render the section header with a stub note. */}
       <div className="alm-planner__coverage">
-        <p className="alm-planner__section-title">Coverage</p>
+        <p className="alm-planner__section-title">{m.common_coverage()}</p>
         <div className="alm-planner__coverage-list">
           <span className="alm-planner__coverage-stub">
-            No coverage data yet.
+            {m.targets_detail_no_coverage()}
           </span>
         </div>
       </div>
@@ -577,25 +578,25 @@ export function TargetDetailV2({ targetId, item = null, usableAltDeg = USABLE_AL
       {/* STUB: target↔session/project linkage backend pending (spec 036 open gap). */}
       <div className="alm-planner__links">
         <div>
-          <p className="alm-planner__link-col-title">Sessions</p>
+          <p className="alm-planner__link-col-title">{m.common_sessions()}</p>
           <span className="alm-planner__link-empty">
-            No linked sessions yet.
+            {m.targets_detail_no_sessions()}
           </span>
         </div>
         <div>
-          <p className="alm-planner__link-col-title">Projects</p>
+          <p className="alm-planner__link-col-title">{m.common_projects()}</p>
           <span className="alm-planner__link-empty">
-            No projects linked.
+            {m.targets_detail_no_projects_linked()}
           </span>
         </div>
       </div>
 
       {/* ── Display label ────────────────────────────────────────────────── */}
-      <Section title="Display label">
+      <Section title={m.targets_detail_display_label_title()}>
         {displayAliasEditing ? (
           <div className="alm-target-detail__display-alias-edit">
             <input
-              aria-label="Display label"
+              aria-label={m.targets_detail_display_label_title()}
               placeholder={detail.primaryDesignation}
               value={displayAliasInput}
               onChange={(e) => setDisplayAliasInput(e.target.value)}
@@ -610,21 +611,21 @@ export function TargetDetailV2({ targetId, item = null, usableAltDeg = USABLE_AL
               onClick={handleDisplayAliasSet}
               className="alm-target-detail__action-btn"
             >
-              Save
+              {m.common_save()}
             </button>
             {detail.displayAlias != null && (
               <button
                 onClick={handleDisplayAliasClear}
                 className="alm-target-detail__action-btn alm-target-detail__action-btn--muted"
               >
-                Clear
+                {m.common_clear()}
               </button>
             )}
             <button
               onClick={() => setDisplayAliasEditing(false)}
               className="alm-target-detail__action-btn alm-target-detail__action-btn--muted"
             >
-              Cancel
+              {m.common_cancel()}
             </button>
           </div>
         ) : (
@@ -632,7 +633,7 @@ export function TargetDetailV2({ targetId, item = null, usableAltDeg = USABLE_AL
             <span className="alm-target-detail__display-alias-value">
               {detail.displayAlias ?? (
                 <em className="alm-target-detail__display-alias-placeholder">
-                  Not set — showing primary designation
+                  {m.targets_detail_display_label_unset()}
                 </em>
               )}
             </span>
@@ -647,7 +648,7 @@ export function TargetDetailV2({ targetId, item = null, usableAltDeg = USABLE_AL
       </Section>
 
       {/* ── Aliases ──────────────────────────────────────────────────────── */}
-      <Section title="Aliases" count={detail.aliases.length}>
+      <Section title={m.common_aliases()} count={detail.aliases.length}>
         <div className="alm-target-detail__alias-list">
           {detail.aliases.map((a) => (
             <Pill key={a.id} variant={a.kind === 'user' ? 'accent' : 'ghost'}>
@@ -670,7 +671,7 @@ export function TargetDetailV2({ targetId, item = null, usableAltDeg = USABLE_AL
           ))}
           {detail.aliases.length === 0 && (
             <span className="alm-target-detail__alias-empty">
-              No aliases
+              {m.targets_detail_no_aliases()}
             </span>
           )}
         </div>
@@ -678,8 +679,8 @@ export function TargetDetailV2({ targetId, item = null, usableAltDeg = USABLE_AL
         {/* Add user alias form */}
         <div className="alm-target-detail__alias-add-row">
           <input
-            aria-label="New alias"
-            placeholder="Add user alias…"
+            aria-label={m.targets_detail_alias_input_aria()}
+            placeholder={m.targets_detail_alias_placeholder()}
             value={aliasInput}
             onChange={(e) => setAliasInput(e.target.value)}
             onKeyDown={(e) => {
@@ -691,7 +692,7 @@ export function TargetDetailV2({ targetId, item = null, usableAltDeg = USABLE_AL
             onClick={handleAliasAdd}
             className="alm-target-detail__action-btn"
           >
-            Add
+            {m.common_add()}
           </button>
         </div>
         {aliasError && (
@@ -711,11 +712,11 @@ export function TargetDetailV2({ targetId, item = null, usableAltDeg = USABLE_AL
           section was removed to avoid two Sessions surfaces. */}
 
       {/* ── Projects (empty-state stub) ──────────────────────────────────── */}
-      <Section title="Projects">
+      <Section title={m.common_projects()}>
         {/* STUB: target↔project linkage backend pending */}
         <EmptyState
-          title="No projects linked"
-          desc="No projects linked."
+          title={m.targets_detail_no_projects_linked_title()}
+          desc={m.targets_detail_no_projects_linked()}
         />
       </Section>
 
@@ -724,7 +725,7 @@ export function TargetDetailV2({ targetId, item = null, usableAltDeg = USABLE_AL
         className="alm-target-detail__back-btn"
         onClick={() => navigate({ to: '/targets' })}
       >
-        ← All targets
+        {m.targets_detail_back()}
       </button>
     </DetailPane>
   );

@@ -181,7 +181,7 @@ export function CreateProjectDialog({ open, onClose, onSuccess }: CreateProjectD
                         <span className="alm-field-hint">{target.commonName}</span>
                       )}
                       <Btn type="button" variant="ghost" onClick={() => setTarget(null)}>
-                        {m.projects_create_target_change_btn()}
+                        {m.common_change()}
                       </Btn>
                     </div>
                   </>

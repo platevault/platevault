@@ -47,6 +47,7 @@ import { listTargets } from '@/api/commands';
 import type { TargetListItem } from '@/api/commands';
 import { PageTopBar, FilterToolbar, ListPageLayout } from '@/components';
 import type { FilterOption } from '@/components';
+import { m } from '@/lib/i18n';
 import { Btn, EmptyState } from '@/ui';
 import { AddTargetDialog } from './AddTargetDialog';
 import { TargetDetailV2 } from './TargetDetailV2';
@@ -230,7 +231,7 @@ export function TargetsPage() {
     setListState({ status: 'loading' });
     listTargets()
       .then((items) => setListState({ status: 'loaded', items }))
-      .catch(() => setListState({ status: 'error', message: 'Failed to load targets.' }));
+      .catch(() => setListState({ status: 'error', message: m.targets_page_error_load() }));
   }, []);
 
   useEffect(() => {
@@ -314,8 +315,8 @@ export function TargetsPage() {
           search={{
             value: search,
             onChange: setSearch,
-            placeholder: 'Search targets...',
-            ariaLabel: 'Search targets',
+            placeholder: m.targets_page_search_placeholder(),
+            ariaLabel: m.targets_page_search_aria(),
           }}
           // My Targets filter (#91): single-select with implicit "All targets"
           // leading option that shows the full Planner catalog when selected.
@@ -363,7 +364,7 @@ export function TargetsPage() {
         // "Add target" is a page-level action (creates a new catalog object).
         // Per-item actions ("+ New project here") live in TargetDetailV2's
         // detail body, not the top bar.
-        <Btn size="sm" onClick={() => setAddOpen(true)}>Add target</Btn>
+        <Btn size="sm" onClick={() => setAddOpen(true)}>{m.targets_add_target()}</Btn>
       }
     />
   );
@@ -390,7 +391,7 @@ export function TargetsPage() {
         detailLabel="Target details"
       >
         {listState.status === 'error' ? (
-          <EmptyState title="Error" desc={listState.message} />
+          <EmptyState title={m.settings_advanced_log_error()} desc={listState.message} />
         ) : (
           <TargetsTable
             targets={visibleTargets}
@@ -409,10 +410,10 @@ export function TargetsPage() {
               isMyTargets
                 ? favouriteIds.size === 0
                   // No stars yet — nudge the user to star something.
-                  ? 'No favourites yet. Star a target (☆) to add it here.'
+                  ? m.targets_page_my_targets_no_favs()
                   // Stars exist but filters excluded them all.
-                  : 'No favourites match the current filters.'
-                : 'No catalog targets match the current filters.'
+                  : m.targets_page_my_targets_no_match()
+                : m.targets_page_no_match()
             }
           />
         )}

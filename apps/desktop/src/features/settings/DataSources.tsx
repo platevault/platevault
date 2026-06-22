@@ -120,7 +120,7 @@ export function DataSources({ save: _save }: DataSourcesProps) {
               <option value="inbox">{m.settings_datasources_category_inbox()}</option>
             </select>
             <Btn size="sm" onClick={handleAdd} disabled={!addingPath.trim() || adding}>
-              {adding ? m.settings_datasources_adding() : m.common_add()}
+              {adding ? m.common_adding() : m.common_add()}
             </Btn>
             <Btn size="sm" variant="ghost" onClick={() => { setShowAdd(false); setAddError(null); setAddingPath(''); }}>
               {m.common_cancel()}

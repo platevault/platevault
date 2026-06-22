@@ -68,6 +68,7 @@ import { catalogueOf, catalogueLabel } from './planner-catalog';
 import { rowAltitudeFor, USABLE_ALT_DEG, type RowAltitude } from './planner-altitude';
 import { AltitudeSparkline } from './AltitudeSparkline';
 import { FilterBadges } from './FilterBadges';
+import { m } from '@/lib/i18n';
 import { useFavourites } from './useFavourites';
 
 // ── Sort model ────────────────────────────────────────────────────────────────
@@ -325,7 +326,7 @@ export function TargetsTable({
   sort,
   onSort,
   groupBy = DEFAULT_TARGET_GROUP_BY,
-  emptyMessage = 'No targets match the current filters.',
+  emptyMessage = m.targets_table_no_match(),
   usableAltDeg = USABLE_ALT_DEG,
   favouriteIds,
   onToggleFavourite,
@@ -468,7 +469,7 @@ export function TargetsTable({
                     <td colSpan={COL_COUNT}>
                       {row.label}
                       <span className="alm-targets-table__group-count">
-                        {row.count} {row.count === 1 ? 'target' : 'targets'}
+                        {m.targets_table_target_count({ count: row.count })}
                       </span>
                     </td>
                   </tr>
@@ -526,7 +527,7 @@ export function TargetsTable({
                   </td>
                   {/* STUB (#58): max altitude tonight from the approximate model. */}
                   <td className="alm-targets-cell--num">
-                    <span title="Approximate max altitude tonight">
+                    <span title={m.targets_table_approx_max_alt()}>
                       {Math.round(alt.maxAltDeg)}°
                     </span>
                   </td>
@@ -541,14 +542,14 @@ export function TargetsTable({
                         className="alm-targets-vis alm-targets-vis--yes"
                         title={`Reaches ${Math.round(alt.maxAltDeg)}° · ~${alt.hoursAboveUsable.toFixed(1)} h above ${usableAltDeg}°`}
                       >
-                        ●<span className="alm-targets-vis__label">tonight</span>
+                        ●<span className="alm-targets-vis__label">{m.targets_table_visible_tonight()}</span>
                       </span>
                     ) : (
                       <span
                         className="alm-targets-vis alm-targets-vis--no"
                         title={`Peaks at ${Math.round(alt.maxAltDeg)}° — below ${usableAltDeg}° tonight`}
                       >
-                        ○<span className="alm-targets-vis__label">low</span>
+                        ○<span className="alm-targets-vis__label">{m.targets_table_visible_low()}</span>
                       </span>
                     )}
                   </td>
@@ -556,7 +557,7 @@ export function TargetsTable({
                       planner-altitude.ts hash model has no date; blocked on
                       backend ephemeris (#58). Renders '—' until that lands. */}
                   <td className="alm-targets-cell--opposition">
-                    <span className="alm-targets-cell--muted" title="Next opposition date">—</span>
+                    <span className="alm-targets-cell--muted" title={m.targets_table_next_opposition()}>—</span>
                   </td>
                   {/* MOCK (spec 044): lunar angular separation. NOT astronomy. */}
                   <td className="alm-targets-cell--num">
@@ -599,7 +600,7 @@ export function TargetsTable({
         </table>
       </div>
       <div className="alm-targets-table__footer">
-        {loading ? 'Loading…' : `${count} ${count === 1 ? 'target' : 'targets'}`}
+        {loading ? m.common_loading() : m.targets_table_target_count({ count })}
       </div>
     </div>
   );

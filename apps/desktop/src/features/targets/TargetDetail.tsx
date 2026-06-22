@@ -11,6 +11,7 @@ import {
 } from '@/components';
 import { Pill, KV, Section, Table, CoverageBar, Banner, EmptyState } from '@/ui';
 import type { PropertyDef } from '@/components';
+import { m } from '@/lib/i18n';
 import {
   sessionStateLabel,
   sessionStateVariant,
@@ -26,7 +27,7 @@ export function TargetDetailPaneInline({ target }: TargetDetailPaneInlineProps) 
   if (!target) {
     return (
       <DetailPane>
-        <EmptyState title="Select a target" desc="Choose a target from the list to view its details." />
+        <EmptyState title={m.targets_legacy_select_title()} desc={m.targets_legacy_select_desc()} />
       </DetailPane>
     );
   }
@@ -95,7 +96,7 @@ export function TargetDetailPaneInline({ target }: TargetDetailPaneInlineProps) 
       <DetailGrid
         rail={
           <Rail>
-            <RailCard title="Coverage">
+            <RailCard title={m.common_coverage()}>
               {detail && coverageFilters.length > 0 ? (
                 <>
                   {coverageFilters.map((f) => (
@@ -108,27 +109,31 @@ export function TargetDetailPaneInline({ target }: TargetDetailPaneInlineProps) 
                   ))}
                   {coverageWarning && (
                     <Banner variant="warn" className="alm-target-detail-legacy__coverage-warn">
-                      Some filters are below the recommended integration.
+                      {m.targets_legacy_no_coverage()}
                     </Banner>
                   )}
                 </>
               ) : (
-                <span className="alm-target-detail-legacy__no-coverage">No coverage data</span>
+                <span className="alm-target-detail-legacy__no-coverage">{m.targets_legacy_no_coverage()}</span>
               )}
             </RailCard>
-            <RailCard title="Totals">
-              <KV label="Integration" value={`${target.hours.toFixed(1)}h`} />
-              <KV label="Sessions" value={String(target.sessions)} />
-              <KV label="Projects" value={String(target.projects)} />
+            <RailCard title={m.targets_legacy_totals()}>
+              <KV label={m.projects_wizard_col_integration()} value={`${target.hours.toFixed(1)}h`} />
+              <KV label={m.common_sessions()} value={String(target.sessions)} />
+              <KV label={m.common_projects()} value={String(target.projects)} />
             </RailCard>
-            <RailCard title="Observing plans">
+            <RailCard title={m.targets_legacy_obs_plans()}>
               <div className="alm-target-detail-legacy__obs-plans">
                 <div>
+                  {/* eslint-disable-next-line alm/no-user-string -- fixture placeholder filename, not real UI */}
                   <div className="alm-mono">NGC7000_SHO_plan.nina</div>
+                  {/* eslint-disable-next-line alm/no-user-string -- fixture placeholder metadata */}
                   <div className="alm-target-detail-legacy__obs-plan-meta">NINA · linked 2024-11-29</div>
                 </div>
                 <div>
+                  {/* eslint-disable-next-line alm/no-user-string -- fixture placeholder filename, not real UI */}
                   <div className="alm-mono">NGC7000_panel_2.nina</div>
+                  {/* eslint-disable-next-line alm/no-user-string -- fixture placeholder metadata */}
                   <div className="alm-target-detail-legacy__obs-plan-meta">NINA · linked 2024-12-15</div>
                 </div>
               </div>
@@ -136,11 +141,11 @@ export function TargetDetailPaneInline({ target }: TargetDetailPaneInlineProps) 
           </Rail>
         }
       >
-        <Section title="Identity & aliases">
+        <Section title={m.targets_legacy_identity_aliases()}>
           <PropertyTable mode="view" properties={identityProps} />
         </Section>
 
-        <Section title="Sessions" count={target.sessions}>
+        <Section title={m.common_sessions()} count={target.sessions}>
           {detail ? (
             <Table
               columns={[
@@ -155,24 +160,26 @@ export function TargetDetailPaneInline({ target }: TargetDetailPaneInlineProps) 
                 night: <span className="alm-mono">{s.sessionKey.night}</span>,
                 filter: <Pill variant="ghost">{s.sessionKey.filter}</Pill>,
                 frames: <span className="alm-mono">{s.frameCount}</span>,
+                // eslint-disable-next-line alm/no-user-string -- unit abbreviation "h" is a universal scientific symbol
                 integ: <span className="alm-mono">{((s.totalIntegrationSeconds ?? 0) / 3600).toFixed(1)}h</span>,
                 state: <Pill variant={sessionStateVariant(s.state)}>{sessionStateLabel(s.state)}</Pill>,
                 projects:
                   s.projectIds.length === 0 ? (
                     <span className="alm-target-detail-legacy__no-projects-dash">—</span>
                   ) : (
+                    // eslint-disable-next-line alm/no-user-string -- abbreviated fixture stub
                     <span>{s.projectIds.length} proj</span>
                   ),
               }))}
             />
           ) : (
             <span className="alm-target-detail-legacy__sessions-summary">
-              {target.sessions} session{target.sessions !== 1 ? 's' : ''} · {target.hours.toFixed(1)}h total
+              {m.targets_legacy_sessions_summary({ sessions: target.sessions, hours: target.hours.toFixed(1) })}
             </span>
           )}
         </Section>
 
-        <Section title="Projects" count={target.projects}>
+        <Section title={m.common_projects()} count={target.projects}>
           {detail && detail.projects.length > 0 ? (
             <Table
               columns={[
@@ -187,7 +194,7 @@ export function TargetDetailPaneInline({ target }: TargetDetailPaneInlineProps) 
               }))}
             />
           ) : (
-            <span className="alm-target-detail-legacy__projects-empty">No projects</span>
+            <span className="alm-target-detail-legacy__projects-empty">{m.targets_legacy_no_projects()}</span>
           )}
         </Section>
       </DetailGrid>
