@@ -18,6 +18,7 @@ const I18N_MIGRATED = [
   'src/features/targets/**/*.{ts,tsx}',
   'src/features/inbox/**/*.{ts,tsx}',
   'src/features/calibration/**/*.{ts,tsx}',
+  'src/features/setup/**/*.{ts,tsx}',
 ];
 
 export default tseslint.config(

@@ -1,6 +1,7 @@
 import { usePreference } from '@/data/preferences';
 import { useNavigate } from '@tanstack/react-router';
 import { useEffect, useState } from 'react';
+import { m } from '@/lib/i18n';
 import { SetupWizard } from './SetupWizard';
 
 export function SetupPage() {
@@ -40,7 +41,7 @@ export function SetupPage() {
   if (setupCompleted || checking) {
     return (
       <div className="alm-page alm-setup-page__loading">
-        Loading…
+        {m.common_loading()}
       </div>
     );
   }

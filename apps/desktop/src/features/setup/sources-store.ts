@@ -20,10 +20,10 @@ export const ALL_SOURCE_KINDS: SourceKind[] = [
 ];
 
 export const SOURCE_KIND_LABELS: Record<SourceKind, string> = {
-  light_frames: 'Light frames',
-  calibration: 'Calibration frames',
-  project: 'Projects',
-  inbox: 'Inbox',
+  light_frames: m.setup_kind_light_frames(),
+  calibration: m.setup_kind_calibration(),
+  project: m.common_projects(),
+  inbox: m.settings_datasources_category_inbox(),
 };
 
 // spec 039: inbox is now optional — users do not need a dedicated drop folder
@@ -188,7 +188,7 @@ export function validatePath(
   kind: SourceKind,
 ): ValidationError | null {
   if (!path || !path.trim()) {
-    return { code: 'path.empty', message: 'Path cannot be empty' };
+    return { code: 'path.empty', message: m.setup_validate_path_empty() };
   }
 
   const dedup = checkDeduplication(sources, kind, path);

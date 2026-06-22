@@ -2,6 +2,7 @@ import { useEffect, useState } from 'react';
 import { Btn } from '@/ui/Btn';
 import { Pill } from '@/ui/Pill';
 import { Toggle } from '@/ui/Toggle';
+import { m } from '@/lib/i18n';
 import { useFilePicker } from '@/shared/native/picker';
 
 export interface ToolConfig {
@@ -33,13 +34,13 @@ interface ToolDef {
 const TOOL_DEFS: ToolDef[] = [
   {
     key: 'pixinsight',
-    name: 'PixInsight',
-    description: 'Advanced image processing and analysis platform',
+    name: m.setup_tools_pixinsight_name(),
+    description: m.setup_tools_pixinsight_desc(),
   },
   {
     key: 'siril',
-    name: 'Siril',
-    description: 'Free astronomical image processing tool',
+    name: m.setup_tools_siril_name(),
+    description: m.setup_tools_siril_desc(),
   },
 ];
 
@@ -119,9 +120,7 @@ export function StepTools({ tools, onToolsChange }: StepToolsProps) {
   return (
     <div className="alm-step-tools">
       <p className="alm-step-tools__intro">
-        Configure your processing tools so the app can prepare project inputs and suggest
-        workflow profiles. Installed tools are detected automatically; you can override or
-        set a path manually.
+        {m.setup_tools_intro()}
       </p>
 
       <div className="alm-step-tools__list">
@@ -141,7 +140,7 @@ export function StepTools({ tools, onToolsChange }: StepToolsProps) {
       </div>
 
       <p className="alm-step-tools__note">
-        You can skip this step. Tool configuration can be changed later in Settings.
+        {m.setup_tools_skip_note()}
       </p>
     </div>
   );
@@ -186,9 +185,9 @@ function ToolCard({
               {def.name}
             </span>
             {detected ? (
-              <Pill variant="ok">Detected</Pill>
+              <Pill variant="ok">{m.setup_tools_detected()}</Pill>
             ) : (
-              <Pill variant="neutral">Not detected</Pill>
+              <Pill variant="neutral">{m.setup_tools_not_detected()}</Pill>
             )}
           </div>
           <span className="alm-step-tools__tool-desc">
@@ -203,7 +202,7 @@ function ToolCard({
               disabled={redetecting}
               aria-label={`Redetect ${def.name} binary`}
             >
-              {redetecting ? 'Detecting…' : 'Redetect'}
+              {redetecting ? m.common_detecting() : m.setup_tools_redetect()}
             </Btn>
             <Toggle
               checked={config.enabled}
@@ -213,7 +212,7 @@ function ToolCard({
           </div>
           {notFound && (
             <span className="alm-step-tools__not-found">
-              No installation found
+              {m.setup_tools_no_installation()}
             </span>
           )}
         </div>
@@ -248,8 +247,8 @@ function ToolPathPicker({
     // The processing tool's executable is a file (e.g. PixInsight.exe /
     // pixinsight / Siril), not a directory — pick the binary, not a folder.
     const result = await pick([
-      { name: 'Executable', extensions: ['exe', 'app', 'bin'] },
-      { name: 'All files', extensions: ['*'] },
+      { name: m.setup_tools_executable_label(), extensions: ['exe', 'app', 'bin'] },
+      { name: m.setup_tools_filter_all_files(), extensions: ['*'] },
     ]);
     if (result.path) {
       onPathChange(result.path);
@@ -259,7 +258,7 @@ function ToolPathPicker({
   return (
     <>
       <span className="alm-step-tools__path-label">
-        Executable
+        {m.setup_tools_executable_label()}
       </span>
       <span
         className="alm-mono alm-step-tools__path-value"
@@ -267,16 +266,16 @@ function ToolPathPicker({
         // eslint-disable-next-line no-restricted-syntax -- dynamic: conditional token color for path set vs unset
         style={{ color: path ? 'var(--alm-text-secondary)' : 'var(--alm-text-faint)' }}
       >
-        {path ?? 'No path set'}
+        {path ?? m.setup_tools_no_path()}
       </span>
-      {path && <Pill variant="ok">OK</Pill>}
+      {path && <Pill variant="ok">{m.setup_tools_ok()}</Pill>}
       <Btn
         size="sm"
         onClick={handleChoose}
         disabled={loading}
         aria-label={`Select ${toolName} binary`}
       >
-        {loading ? 'Choosing…' : 'Select binary…'}
+        {loading ? m.setup_tools_choosing() : m.setup_tools_select_binary()}
       </Btn>
     </>
   );

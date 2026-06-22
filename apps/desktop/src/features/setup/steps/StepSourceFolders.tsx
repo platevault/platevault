@@ -1,6 +1,7 @@
 import { useState } from 'react';
 import { Btn } from '@/ui/Btn';
 import { Pill } from '@/ui/Pill';
+import { m } from '@/lib/i18n';
 import { useDirectoryPicker } from '@/shared/native';
 import type { LastPathKind } from '@/shared/native';
 import type { SourceEntry, SourceKind, ScanDepth, OrganizationState } from '../sources-store';
@@ -52,8 +53,7 @@ export function StepSourceFolders({
   return (
     <div className="alm-step-sources">
       <p className="alm-step-sources__intro">
-        Add the folders where your data lives. At least one folder is required for each
-        required type below; raw files are never moved or copied.
+        {m.setup_sources_intro()}
       </p>
 
       <div className="alm-step-sources__groups">
@@ -124,11 +124,11 @@ function SourceGroup({
             variant={isMet ? 'ok' : 'warn'}
             data-testid={`requirement-status-${kind}`}
           >
-            {isMet ? 'required ✓' : 'required'}
+            {isMet ? `${m.setup_sources_required()} ✓` : m.setup_sources_required()}
           </Pill>
         ) : (
           <span className="alm-step-sources__group-header-optional">
-            optional
+            {m.setup_sources_optional()}
           </span>
         )}
         <span className="alm-step-sources__group-header-spacer" />
@@ -186,24 +186,24 @@ function SourceRow({
             className="alm-step-sources__org-select"
             value={entry.organizationState}
             onChange={(e) => onOrganizationStateChange(e.target.value as OrganizationState)}
-            aria-label="Organization state"
-            title="Already organized = files stay in place (catalogue only). Needs organizing = files will be moved to a library structure on confirm."
+            aria-label={m.setup_sources_org_state_aria()}
+            title={m.setup_sources_org_state_title()}
           >
-            <option value="organized">Already organized</option>
-            <option value="unorganized">Needs organizing</option>
+            <option value="organized">{m.setup_sources_org_organized()}</option>
+            <option value="unorganized">{m.setup_sources_org_unorganized()}</option>
           </select>
         )}
         <select
           className="alm-step-sources__depth-select"
           value={entry.scanDepth}
           onChange={(e) => onScanDepthChange(e.target.value as ScanDepth)}
-          aria-label="Scan depth"
+          aria-label={m.setup_sources_scan_depth_aria()}
         >
-          <option value="recursive">Recursive</option>
-          <option value="single">Single level</option>
+          <option value="recursive">{m.setup_sources_scan_recursive()}</option>
+          <option value="single">{m.setup_sources_scan_single()}</option>
         </select>
         <Btn size="sm" variant="ghost" onClick={onRemove}>
-          Remove
+          {m.common_remove()}
         </Btn>
       </div>
 
@@ -273,7 +273,7 @@ function AddFolderButton({
               }
             }}
           >
-            Add by path (E2E)
+            {m.setup_sources_add_e2e()}
           </button>
         </span>
       ) : null}

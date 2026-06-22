@@ -1,5 +1,6 @@
 import type { ReactNode } from 'react';
 import { Pill } from '@/ui/Pill';
+import { m } from '@/lib/i18n';
 import type { SourcesState } from '../sources-store';
 import { SOURCE_KIND_LABELS, getMissingRequiredKinds, getSourcesByKind, ALL_SOURCE_KINDS } from '../sources-store';
 import type { CatalogSettings } from './StepCatalogs';
@@ -14,8 +15,8 @@ export interface StepConfirmProps {
 }
 
 const TOOL_LABELS: Record<keyof ToolsState, string> = {
-  pixinsight: 'PixInsight',
-  siril: 'Siril',
+  pixinsight: m.setup_tools_pixinsight_name(),
+  siril: m.setup_tools_siril_name(),
 };
 
 // A titled section, matching the Configuration step's layout (no card chrome).
@@ -88,7 +89,7 @@ export function StepConfirm({
           </div>
         ) : (
           <div className="alm-setup-confirm__empty">
-            No folders configured (you can add them later in Settings).
+            {m.setup_confirm_no_folders()}
           </div>
         )}
       </Section>
@@ -107,44 +108,41 @@ export function StepConfirm({
                     <span className="alm-mono alm-setup-confirm__tool-path">
                       {tools[key].path}
                     </span>
-                    <Pill variant="ok">OK</Pill>
+                    <Pill variant="ok">{m.setup_tools_ok()}</Pill>
                   </span>
                 ) : (
-                  <Pill variant="warn">No path set</Pill>
+                  <Pill variant="warn">{m.setup_tools_no_path()}</Pill>
                 )}
               </div>
             ))}
           </div>
         ) : (
           <div className="alm-setup-confirm__empty">
-            No tools enabled.
+            {m.setup_confirm_no_tools()}
           </div>
         )}
       </Section>
 
-      <Section title="What happens next">
+      <Section title={m.setup_confirm_what_next_title()}>
         <ul className="alm-setup-confirm__next-list">
-          <li>Your selected folders are registered as library roots.</li>
-          <li>An initial scan runs after setup, reading file headers to build the index.</li>
-          <li>Light frames are grouped into acquisition sessions.</li>
+          <li>{m.setup_confirm_next_roots()}</li>
+          <li>{m.setup_confirm_next_scan()}</li>
+          <li>{m.setup_confirm_next_sessions()}</li>
         </ul>
         <div className="alm-setup-confirm__note">
-          <strong>Nothing is moved or modified.</strong> The scan only reads file headers and
-          builds an index — your files stay exactly where they are.
+          <strong>{m.setup_confirm_safe_bold()}</strong> {m.setup_confirm_safe_body()}
         </div>
       </Section>
 
       {missingKinds.length > 0 && (
         <div className="alm-step-confirm__blocked" role="alert">
-          Cannot complete setup: missing required folder types —{' '}
-          {missingKinds.map((k) => SOURCE_KIND_LABELS[k]).join(', ')}. Go back to Step 1 to add
-          them.
+          {m.setup_confirm_blocked({ kinds: missingKinds.map((k) => SOURCE_KIND_LABELS[k]).join(', ') })}
         </div>
       )}
 
       {isSubmitting && (
         <div className="alm-setup-confirm__note">
-          Registering roots and starting scan…
+          {m.setup_confirm_registering()}
         </div>
       )}
     </div>
