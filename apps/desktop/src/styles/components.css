@@ -8795,6 +8795,14 @@
  *   so the scroll container always gets the full available height.
  * ========================================================================= */
 
+/* The wrapper exists only to scope the fix below — it must NOT participate in
+ * layout, or it collapses to the top-bar height and starves .alm-listpage__main
+ * to height 0 (the bug this block fixes). `display: contents` makes it a pure
+ * cascade hook so the flex height chain reaches .alm-listpage__main unchanged. */
+.alm-targets-page {
+  display: contents;
+}
+
 /* Scope the fix to the targets page so other list pages are unaffected. */
 .alm-targets-page .alm-listpage__main {
   overflow: hidden;
