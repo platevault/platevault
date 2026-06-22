@@ -223,8 +223,60 @@ detail+inspector, calibration master, settings (data sources + advanced),
 projects list+detail. Setup wizard is mechanically verified only (its `/setup`
 route guard-redirects when roots exist; shell + patterns validated elsewhere).
 
-Pending (largest first): per-page redesigns (Sessions table, Targets planner +
-charts, Projects channels, Inbox toolbar+inspector, Archive single-column),
+## 5b. Redesign round 2 — per-page consistency + features (DONE, verified)
+
+Every item below was implemented and INDEPENDENTLY verified by a fresh
+code-reviewer subagent (read vs mock + gates) before being marked done.
+Gate after the round: `tsc` 0 · `check-tokens` pass · `eslint` 0 errors ·
+`biome` 0 · vitest **747/747**. Commits b7d90c9, ffb7748, 125550e.
+
+- **Shared kit**: new `InfoTip` (ⓘ hover/focus tooltip, token-only) + `SettingsKit`
+  (`SettingsSection` uppercase title + right action + rule; `SettingsRow` 200px
+  label + ⓘ info + control). Settings mock = authoritative.
+- **Settings — Data Sources**: roots grouped by kind (Raw/Calibration/Project/
+  Inbox), header "+ Add source folder" primary (wired to real registerRoot),
+  per-root Rescan (real startScan) + Disable/Remap/Delete (clearly `// STUB:`,
+  no fake IPC).
+- **Settings — Ingestion**: standard form-rows; RadioGroup→select; help→ⓘ.
+- **Settings — every pane**: SettingsSection/SettingsRow + ⓘ tooltips replace
+  always-on help prose (Naming/Tools/Resolver/Cleanup/Advanced/Equipment/Audit).
+- **Settings — Calibration Matching**: toggleable criteria table (Camera/Binning/
+  Gain/Offset required + Temp/Age tolerances) wired to real
+  `calibrationTolerancesGet/Update`; Offset toggle is local `STUB-OFFSET-REQUIRED`
+  (needs a Rust `requireSameOffset` field).
+- **Calibration rail**: master-fingerprint now uses shared `RailCard` + `KV`
+  (was bespoke PropertyTable box) — matches TargetDetail; bespoke classes deleted.
+- **Sessions review-state**: Confirm/Reject live only in the top action bar;
+  rail shows a read-only state Pill; dead `SessionInspector.tsx` removed.
+- **Inbox counts**: header/footer/stats all split folders vs masters via
+  `isMaster` (no more "6 folders" when 3 are masters).
+- **Projects detail**: consolidated `MetricLine` (no hero-number blocks), Sources
+  `Table`, RailCard rail; **Channels palette** (derived from source filters,
+  `// STUB:` dedicated channel model); source-views = clickable source links, no
+  junction label (user override).
+- **Targets**: dense/rich row density toggle (list endpoint lacks coords/mag/
+  coverage → omitted + marked); **planner detail** = identity KV table + linked
+  projects/sessions + per-filter coverage + a **Tonight altitude SVG graph**
+  driven by a marked `altitudeCurve()` stub (placeholder 52.1°N) + Add-to-plan/
+  +New-project actions.
+- **Inbox bottom inspector**: click metadata rows → docked inspector with the
+  file's full fields; multi-select shows shared values + min→max ranges.
+- **Sessions sortable table**: dense table, clickable sortable headers (caret +
+  aria-sort), grouped by source, selection/detail preserved; full-width+inspector
+  inbox-parity left as a marked stub.
+- **Inline-style lint rule**: `eslint no-restricted-syntax` forbids every JSX
+  `style={…}` prop; ~41 genuinely-dynamic sites carry per-line
+  `eslint-disable … -- dynamic: <reason>`; wired into `just lint`; proven to
+  fail on a planted static style and pass on the clean tree.
+
+STUBS left for future agents (all clearly `// STUB:`-marked in code): Rust
+`requireSameOffset` field; dedicated channel-mapping model + per-channel integ;
+Targets list-endpoint enrichment (constellation/coords/mag/coverage); altitude
+ephemeris + observer location; target↔project/session linkage; observing-plan
+("Add to plan"); project Outputs/Cleanup-preview sections (orphaned CSS present).
+
+Pending (largest first): Archive single-column redesign, full Sessions inbox-
+parity (full-width + bottom inspector), pill-system unification,
 info-tooltip component, pill-system unification, the Settings per-pane content
 changes, the inline-`style={{}}` sweep across ~30 files, resizable splitters.
 
