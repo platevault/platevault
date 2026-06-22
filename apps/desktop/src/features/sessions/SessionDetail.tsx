@@ -1,11 +1,10 @@
 /**
  * SessionDetail — spec 006 wired; spec 043 §4 redesign (task #79/#99/#100).
- * Enriched in task #38: integration stats MetricLine, Optics + Calibration
- * rail cards, per-frame table (task #38), expandable frame rows (task #37),
- * and acquisition history. Layout extended to a three-column grid.
  *
- * Detail panel for an InventorySession. Uses the shared DetailPanel wrapper
- * (task #100) so Sessions and Calibration share one header construct.
+ * Uses the canonical DetailPanel with the `facts` prop so the FITS facts KV
+ * sits in the pinned left column (non-scrolling) and the frames table + review
+ * state + linked projects sit in the scrolling right content column — matching
+ * the unified two-column contract shared with MasterDetail.
  *
  * Density + de-duplication (#99):
  *   The table row already shows: Target, Filter, Frames, Integration (exposure),
@@ -15,27 +14,23 @@
  *   - Title: target identity (always the identity anchor; appropriate to repeat
  *     as the selected-item label in the panel header).
  *   - Subtitle: camera · gain · sensor temp — equipment context NOT in the row.
- *   - MetricLine: integration stats (frames / total exposure / integration time)
- *     that summarise the session at a glance and don't duplicate the row columns
- *     because they present derived/formatted values.
- *   - Layout: three-column (facts | optics+state | frames+history):
- *       Left  (~300px) — compact 2-column KV grid of FITS facts.
- *       Mid   (~300px) — optics + calibration + state + linked rail cards.
- *       Right (flex: 1) — per-frame table + acquisition history.
- *     This fits the wide-short ListPageLayout bottom panel.
+ *   - MetricLine: total integration (derived frames×exposure) — compact, non-
+ *     duplicative since the raw per-frame exposure is in the row but the total
+ *     is not.
+ *   - facts: compact 2-col KV grid (left, fixed width, no scroll).
+ *   - children: frames table + review state + linked projects (right, scrolls).
+ *     Optics and calibration matches are suppressed while entirely "—" to avoid
+ *     large empty cards.
  *
- * Task #37 — per-frame inspector design decision:
- *   A separate side inspector was REJECTED. Reason: the per-frame DTO carries
- *   only session-level data (not individual file paths/quality/FITS headers),
- *   so a side panel would either fabricate content or repeat the table. Instead
- *   rows are EXPANDABLE — clicking a row reveals session-level acquisition
- *   context for that frame group (type, exposure, capture night, source path
- *   placeholder). When per-frame data is added to the contract, the expanded
- *   row is the correct place to surface it without a second panel.
+ * Task #37 — per-frame expandable rows:
+ *   Rows are EXPANDABLE inline — clicking reveals camera/gain/binning/temp
+ *   which are NOT columns in SessionsTable. When the contract adds per-frame
+ *   records the expanded row is the right place to surface them without
+ *   structural change.
  *
  * Review actions (Confirm / Re-open / Reject) are CONTEXTUAL — they act on the
  * selected session — so they live in the detail header's actions slot, not the
- * global PageTopBar (task #79). The SessionsPage passes handlers + visibility.
+ * global PageTopBar (task #79).
  *
  * Provenance is surfaced inline via the Facts KV provenance label (inferred vs
  * FITS-extracted). A separate Provenance section is not needed.
@@ -106,18 +101,22 @@ function fmtSeconds(totalSec: number): string {
   return `${h}h ${m}m`;
 }
 
-// ── Per-frame table ───────────────────────────────────────────────────────────
+// ── Per-frame expandable table (task #37) ─────────────────────────────────────
+//
+// Bespoke native <table> so the expanded row can use colSpan. The shared
+// <Table> component iterates columns 1-to-1 and cannot produce a colspan row.
+//
+// The InventorySession DTO has one logical group per session (not individual
+// frame records), so we render one summary row. The expanded body surfaces
+// camera/gain/binning/temp — NOT shown in SessionsTable columns.
 
-/** Expanded detail row body — shown when a frame group row is expanded. */
 function FrameExpandedBody({ session }: { session: InventorySession }) {
   return (
     <div className="alm-session-frames__expanded-body">
-      {/* Path placeholder: individual frame paths are not yet part of the
-          InventorySession DTO. When the contract adds per-frame paths, replace
-          this placeholder with the actual frame path list. */}
-      <span className="alm-session-frames__path-placeholder">
-        {session.name} — {session.frames} frame{session.frames !== 1 ? 's' : ''}
-      </span>
+      {/* Session name is the file-group identifier. Individual file paths are
+          not yet in the InventorySession DTO; replace with per-frame paths
+          when the contract adds them. */}
+      <span className="alm-session-frames__path-placeholder">{session.name}</span>
       <div className="alm-session-frames__expanded-kvrow">
         <dl className="alm-session-frames__expanded-kv">
           <dt>Camera</dt>
@@ -132,7 +131,7 @@ function FrameExpandedBody({ session }: { session: InventorySession }) {
           <dd>{session.binning ?? '—'}</dd>
         </dl>
         <dl className="alm-session-frames__expanded-kv">
-          <dt>Set temp</dt>
+          <dt>Sensor temp</dt>
           <dd>{session.setTemp ?? '—'}</dd>
         </dl>
       </div>
@@ -140,29 +139,11 @@ function FrameExpandedBody({ session }: { session: InventorySession }) {
   );
 }
 
-/**
- * Per-frame table rendered as a native <table> so that the expanded row can
- * span all columns via colSpan. The shared <Table> component iterates columns
- * one-to-one and cannot produce a colspan row — this bespoke table is the
- * correct choice here.
- *
- * The InventorySession DTO represents one acquisition session as a single
- * logical group (not individual frame records). We therefore produce one summary
- * row per session. When per-frame records are added to the contract, each record
- * becomes one row. The toggle column drives the expandable-row pattern (task #37).
- */
-function SessionFramesTable({
-  session,
-  expandedRows,
-  onToggle,
-}: {
-  session: InventorySession;
-  expandedRows: Set<string>;
-  onToggle: (key: string) => void;
-}) {
-  const isExpanded = expandedRows.has(session.id);
+function SessionFramesTable({ session }: { session: InventorySession }) {
+  const [expanded, setExpanded] = useState(false);
+
   return (
-    <table className="alm-table" aria-label="Session frames">
+    <table className="alm-table alm-session-frames__table" aria-label="Frame group">
       <thead>
         <tr>
           <th className="alm-session-frames__th-toggle" />
@@ -177,15 +158,15 @@ function SessionFramesTable({
         <tr
           className={[
             'alm-session-frames__row',
-            isExpanded ? 'alm-session-frames__row--expanded' : '',
+            expanded ? 'alm-session-frames__row--expanded' : '',
           ]
             .filter(Boolean)
             .join(' ')}
-          onClick={() => onToggle(session.id)}
+          onClick={() => setExpanded((v) => !v)}
         >
           <td>
             <span className="alm-session-frames__toggle" aria-hidden="true">
-              {isExpanded ? '▾' : '▸'}
+              {expanded ? '▾' : '▸'}
             </span>
           </td>
           <td>{session.type ?? '—'}</td>
@@ -194,7 +175,7 @@ function SessionFramesTable({
           <td>{session.filter ?? '—'}</td>
           <td>{session.capturedOn ?? '—'}</td>
         </tr>
-        {isExpanded && (
+        {expanded && (
           <tr className="alm-session-frames__expanded-row">
             <td colSpan={6}>
               <FrameExpandedBody session={session} />
@@ -218,20 +199,6 @@ export function SessionDetail({
   rejectVisible = false,
   pending = false,
 }: Props) {
-  const [expandedRows, setExpandedRows] = useState<Set<string>>(new Set());
-
-  const toggleRow = (key: string) => {
-    setExpandedRows((prev) => {
-      const next = new Set(prev);
-      if (next.has(key)) {
-        next.delete(key);
-      } else {
-        next.add(key);
-      }
-      return next;
-    });
-  };
-
   if (!session) {
     return (
       <DetailPane>
@@ -250,9 +217,32 @@ export function SessionDetail({
   const targetProv = prov?.target ? 'Inferred' : 'FITS';
   const filterProv = prov?.filter ? 'Inferred' : 'FITS';
 
-  // Integration stats for the MetricLine — derived, not a raw DTO repeat.
+  // Total integration is derived (frames×exposure) — NOT a raw row-column repeat.
   const totalSec = integrationSeconds(session);
-  const integrationLabel = totalSec != null ? fmtSeconds(totalSec) : '—';
+  const integrationLabel = totalSec != null ? fmtSeconds(totalSec) : null;
+
+  // Facts column: compact 2-col KV grid (left, pinned, no scroll).
+  // Uses the existing alm-session-detail__kvgrid density rules.
+  const facts = (
+    <div className="alm-rail__panel">
+      <RailCard title="Facts">
+        <div className="alm-session-detail__kvgrid">
+          <KV label="Target" value={session.target ?? '—'} provenance={targetProv} />
+          <KV label="Filter" value={session.filter ?? '—'} provenance={filterProv} />
+          <KV label="Frames" value={String(session.frames)} />
+          <KV label="Exposure" value={session.exposure ?? '—'} />
+          <KV label="Night" value={session.capturedOn ?? '—'} />
+          <KV label="Camera" value={session.camera ?? '—'} />
+          <KV label="Gain" value={session.gain ?? '—'} />
+          <KV label="Binning" value={session.binning ?? '—'} />
+          {session.setTemp && <KV label="Sensor temp" value={session.setTemp} />}
+          {prov?.confirmedBy && (
+            <KV label="Confirmed by" value={prov.confirmedBy} provenance="User" />
+          )}
+        </div>
+      </RailCard>
+    </div>
+  );
 
   return (
     <DetailPanel
@@ -285,151 +275,68 @@ export function SessionDetail({
           )}
         </>
       }
+      facts={facts}
     >
-      {/* Integration stats MetricLine — derived values, not row-column repeats.
-          "Total integration" is frames×exposure which isn't shown in the row. */}
-      <MetricLine
-        metrics={[
-          { value: String(session.frames), label: 'frames' },
-          { value: session.exposure ?? '—', label: 'per frame' },
-          { value: integrationLabel, label: 'total integration' },
-        ]}
-      />
+      {/* Total integration only — compact single derived stat. Omitted when
+          exposure is missing so we don't surface a lone "—". */}
+      {integrationLabel != null && (
+        <MetricLine
+          metrics={[
+            { value: String(session.frames), label: 'frames' },
+            { value: session.exposure ?? '—', label: 'per frame' },
+            { value: integrationLabel, label: 'total integration' },
+          ]}
+        />
+      )}
 
-      {/* Three-column body grid (task #38).
-          See .cssblocks/sessions-detail.css for layout rules. */}
-      <div className="alm-session-detail alm-session-detail--rich">
+      {/* Content column (right, scrolls): frames table + review state +
+          linked projects. Uses alm-session-detail__state rules for the
+          rail panel spacing. */}
+      <div className="alm-session-detail__state alm-session-detail__content">
+        <div className="alm-rail__panel">
 
-        {/* ── Facts column ── */}
-        <aside className="alm-session-detail__facts">
-          <div className="alm-rail__panel">
-            <RailCard title="Facts">
-              <div className="alm-session-detail__kvgrid">
-                <KV label="Target" value={session.target ?? '—'} provenance={targetProv} />
-                <KV label="Filter" value={session.filter ?? '—'} provenance={filterProv} />
-                <KV label="Frames" value={String(session.frames)} />
-                <KV label="Exposure" value={session.exposure ?? '—'} />
-                <KV label="Night" value={session.capturedOn ?? '—'} />
-                <KV label="Camera" value={session.camera ?? '—'} />
-                <KV label="Gain" value={session.gain ?? '—'} />
-                <KV label="Binning" value={session.binning ?? '—'} />
-                {session.setTemp && <KV label="Sensor temp" value={session.setTemp} />}
-                {prov?.confirmedBy && (
-                  <KV label="Confirmed by" value={prov.confirmedBy} provenance="User" />
-                )}
+          {/* Per-frame table (task #37/#38). One summary row; click to expand
+              camera/gain/binning/temp — fields not in the SessionsTable columns.
+              See .cssblocks/sessions-detail2.css for table density overrides. */}
+          <RailCard title="Frames">
+            <SessionFramesTable session={session} />
+          </RailCard>
+
+          {/* FR-004: state as read-only structured data; actions live in header */}
+          <RailCard title="Review state">
+            <Pill variant={sessionStateVariant(session.state)}>
+              {session.state === 'discovered' || session.state === 'candidate'
+                ? 'Needs review'
+                : sessionStateLabel(session.state)}
+            </Pill>
+          </RailCard>
+
+          <RailCard title="Linked projects">
+            {isLinked ? (
+              <div className="alm-session-detail__linked-pills">
+                {session.linked?.projects?.map((p) => (
+                  <Pill key={p.id} variant="info">
+                    {p.name}
+                  </Pill>
+                ))}
               </div>
-            </RailCard>
-          </div>
-        </aside>
-
-        {/* ── Mid column: optics + calibration + state + linked ── */}
-        <div className="alm-session-detail__mid">
-          <div className="alm-rail__panel">
-            {/* Optics — telescope/focal length/pixel scale.
-                These fields are not yet part of the InventorySession DTO.
-                Shown as placeholders to set the layout; values will be wired
-                when the backend contract adds optics metadata. */}
-            <RailCard title="Optics">
-              <div className="alm-session-detail__kvgrid">
-                <KV label="Telescope" value="—" />
-                <KV label="Focal length" value="—" />
-                <KV label="Pixel scale" value="—" />
-              </div>
-            </RailCard>
-
-            {/* Calibration matches — not yet in the InventorySession DTO.
-                Placeholder shown; will be wired when calibration.match.suggest
-                is anchored to session IDs in the sessions surface. */}
-            <RailCard title="Calibration matches">
-              <div className="alm-session-detail__kvgrid">
-                <KV label="Darks" value="—" />
-                <KV label="Flats" value="—" />
-                <KV label="Bias" value="—" />
-              </div>
-            </RailCard>
-
-            {/* FR-004: state as read-only structured data; actions live in the header */}
-            <RailCard title="Review state">
-              <Pill variant={sessionStateVariant(session.state)}>
-                {session.state === 'discovered' || session.state === 'candidate'
-                  ? 'Needs review'
-                  : sessionStateLabel(session.state)}
-              </Pill>
-            </RailCard>
-
-            <RailCard title="Linked projects">
-              {isLinked ? (
-                <div className="alm-session-detail__linked-pills">
-                  {session.linked?.projects?.map((p) => (
-                    <Pill key={p.id} variant="info">
-                      {p.name}
-                    </Pill>
-                  ))}
-                </div>
-              ) : (
-                <span className="alm-session-detail__no-linked">None</span>
-              )}
-            </RailCard>
-
-            {(session.linked?.calibration != null || session.linked?.session != null) && (
-              <RailCard title="Linked">
-                {session.linked?.session && (
-                  <KV label="Session" value={session.linked.session} />
-                )}
-                {session.linked?.calibration && (
-                  <KV label="Calibration" value={session.linked.calibration} />
-                )}
-              </RailCard>
+            ) : (
+              <span className="alm-session-detail__no-linked">None</span>
             )}
-          </div>
-        </div>
+          </RailCard>
 
-        {/* ── Main column: per-frame table + acquisition history ── */}
-        <div className="alm-session-detail__main">
-          {/* Per-frame table (task #38 / #37).
-              Each row represents one acquisition group (session-level granularity
-              until the contract adds per-frame records). Rows are expandable
-              (task #37) to reveal additional session acquisition context.
-              A separate inspector panel was rejected — see file header comment. */}
-          <div className="alm-session-frames">
-            <SessionFramesTable
-              session={session}
-              expandedRows={expandedRows}
-              onToggle={toggleRow}
-            />
-          </div>
-
-          {/* Acquisition history — session name, source, and capture context.
-              Shows the provenance chain for this session's raw data. */}
-          <div className="alm-session-history">
-            <div className="alm-session-history__title">Acquisition history</div>
-            <div className="alm-session-history__row">
-              <div className="alm-session-history__item">
-                <span className="alm-session-history__item-label">Session</span>
-                <span className="alm-session-history__item-value">{session.name}</span>
-              </div>
-              <div className="alm-session-history__item">
-                <span className="alm-session-history__item-label">Captured</span>
-                <span className="alm-session-history__item-value">
-                  {session.capturedOn ?? '—'}
-                </span>
-              </div>
-              <div className="alm-session-history__item">
-                <span className="alm-session-history__item-label">Type</span>
-                <span className="alm-session-history__item-value">
-                  {session.type ?? '—'}
-                </span>
-              </div>
-              {prov?.inferred && (
-                <div className="alm-session-history__item">
-                  <span className="alm-session-history__item-label">Note</span>
-                  <span className="alm-session-history__item-value">{prov.inferred}</span>
-                </div>
+          {(session.linked?.calibration != null || session.linked?.session != null) && (
+            <RailCard title="Linked">
+              {session.linked?.session && (
+                <KV label="Session" value={session.linked.session} />
               )}
-            </div>
-          </div>
-        </div>
+              {session.linked?.calibration && (
+                <KV label="Calibration" value={session.linked.calibration} />
+              )}
+            </RailCard>
+          )}
 
+        </div>
       </div>
     </DetailPanel>
   );

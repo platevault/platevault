@@ -2,22 +2,18 @@
  * MasterDetail — spec 007 wired · spec 043 §4 (calibration detail hero) ·
  * tasks #100/#101.
  *
- * Refactored to use the shared DetailPanel wrapper (task #100). The Lock icon
- * that previously appeared in the title has been removed (task #101): it had
- * no associated behavior, no tooltip reason, and no visual explanation — users
- * found it unexplained. The "protected" concept for calibration masters is not
- * relevant at this UI level (masters are not user-locked; they are referenced
- * by sessions/projects, which is already shown in the Reuse rail card).
+ * Uses the canonical DetailPanel with the `facts` prop so the fingerprint +
+ * reuse KV sits in the pinned left column and the compatible-sessions match
+ * table sits in the scrolling right content column — matching the two-column
+ * contract from the unified DetailPanel design.
  *
- * The hero of the master detail is the COMPATIBLE-SESSIONS MATCH TABLE
- * (`MatchCandidatesPanel`): which acquisition sessions this master can
- * calibrate, ranked by confidence. The master's fingerprint + reuse facts live
- * once in the shared RailCard + KV rail.
+ * The Lock icon was removed (task #101): it had no associated behavior, no
+ * tooltip reason, and no visual explanation. Masters are not user-locked; reuse
+ * is shown in the Reuse rail card.
  *
  * The calibration.match.suggest contract targets *light* sessions, not master
  * sessions, so we anchor it on the master's sourceSessionId to surface the
- * sessions sharing this master's fingerprint. For the project-level accordion
- * (T034) see ProjectDetail.
+ * sessions sharing this master's fingerprint.
  */
 
 import type { CalibrationMaster_Serialize as CalibrationMaster } from '@/bindings/index';
@@ -101,7 +97,6 @@ export function MasterDetail({ master, prefillSuggestion, agingThresholdDays }: 
     );
   }
 
-
   const isAging1Year = master.ageDays >= 365;
   const isAgingWarn = master.ageDays > agingThresholdDays && !isAging1Year;
   const kindStr = master.kind.toString().toLowerCase().replace('_', ' ');
@@ -115,6 +110,37 @@ export function MasterDetail({ master, prefillSuggestion, agingThresholdDays }: 
     : kindStr === 'flat' ? (fp.filter ?? '')
     : '';
   const masterTitle = masterDisc ? `Master ${kindCap} · ${masterDisc}` : `Master ${kindCap}`;
+
+  // Facts column: fingerprint + reuse KV (compact, left; does not scroll).
+  // Uses the existing alm-calib-kvgrid 2-col density inside RailCards.
+  const facts = (
+    <div className="alm-rail__panel">
+      <RailCard title="Master fingerprint">
+        {/* 2-column KV grid: keeps the fingerprint compact so the whole
+            detail fits the wide-short bottom panel without inner scroll.
+            See .cssblocks/calib-compact.css for the alm-calib-kvgrid rules. */}
+        <div className="alm-calib-kvgrid">
+          <KV label="Kind" value={kindStr} />
+          <KV label="Camera" value={fp.camera} />
+          <KV label="Gain" value={String(fp.gain)} />
+          <KV label="Exposure" value={`${fp.exposureS}s`} />
+          {fp.tempC != null && <KV label="Temperature" value={`${fp.tempC}°C`} />}
+          {fp.filter && <KV label="Filter" value={fp.filter} />}
+          {fp.sensorMode && <KV label="Sensor mode" value={fp.sensorMode} />}
+          <KV label="Binning" value={fp.binning} />
+          <KV label="Size" value={fmtBytes(master.sizeBytes)} />
+        </div>
+      </RailCard>
+
+      <RailCard title="Reuse">
+        <div className="alm-calib-kvgrid">
+          <KV label="Sessions matched" value={String((master.usedBySessionIds ?? []).length)} />
+          <KV label="Projects linked" value={String((master.usedByProjectIds ?? []).length)} />
+          <KV label="Created" value={master.createdAt.split('T')[0]} />
+        </div>
+      </RailCard>
+    </div>
+  );
 
   return (
     <DetailPanel
@@ -136,8 +162,9 @@ export function MasterDetail({ master, prefillSuggestion, agingThresholdDays }: 
           {a.label}
         </Btn>
       ))}
+      facts={facts}
     >
-
+      {/* MetricLine stays above the two-column split — full-width summary. */}
       <MetricLine
         metrics={[
           { value: fmtBytes(master.sizeBytes), label: 'on disk' },
@@ -147,55 +174,17 @@ export function MasterDetail({ master, prefillSuggestion, agingThresholdDays }: 
         ]}
       />
 
-      {/* Wide-but-short bottom panel: the fingerprint/reuse facts sit compact on
-          one side (sizing to their content — no inner scroll), and the
-          compatible-sessions match table sits beside them as the hero. The match
-          table caps its own height and scrolls internally so it never dominates
-          or pushes the panel tall. See .cssblocks/calibration-detail.css. */}
-      <div className="alm-calib-detail">
-        <aside className="alm-calib-detail__facts">
-          <div className="alm-rail__panel">
-            <RailCard title="Master fingerprint">
-              {/* 2-column KV grid: keeps the fingerprint compact so the whole
-                  detail fits the wide-short bottom panel without inner scroll.
-                  See .cssblocks/calib-compact.css. */}
-              <div className="alm-calib-kvgrid">
-                <KV label="Kind" value={kindStr} />
-                <KV label="Camera" value={fp.camera} />
-                <KV label="Gain" value={String(fp.gain)} />
-                <KV label="Exposure" value={`${fp.exposureS}s`} />
-                {fp.tempC != null && <KV label="Temperature" value={`${fp.tempC}°C`} />}
-                {fp.filter && <KV label="Filter" value={fp.filter} />}
-                {fp.sensorMode && <KV label="Sensor mode" value={fp.sensorMode} />}
-                <KV label="Binning" value={fp.binning} />
-                <KV label="Size" value={fmtBytes(master.sizeBytes)} />
-              </div>
-            </RailCard>
-
-            <RailCard title="Reuse">
-              <div className="alm-calib-kvgrid">
-                <KV label="Sessions matched" value={String((master.usedBySessionIds ?? []).length)} />
-                <KV label="Projects linked" value={String((master.usedByProjectIds ?? []).length)} />
-                <KV label="Created" value={master.createdAt.split('T')[0]} />
-              </div>
-            </RailCard>
-          </div>
-        </aside>
-
-        {/* Fingerprint lives once, in the facts column. The compatible-sessions
-            match panel is the hero of the main column. */}
-        <div className="alm-calib-detail__matches">
-          <MatchCandidatesPanel
-            sessionId={sessionId ?? ''}
-            response={response}
-            loading={suggestLoading}
-            error={suggestError}
-            onAssign={handleAssign}
-            assigning={assigning}
-            prefillSuggestion={prefillSuggestion}
-          />
-        </div>
-      </div>
+      {/* Content column (right, scrolls): compatible-sessions match table is
+          the hero of the master detail. */}
+      <MatchCandidatesPanel
+        sessionId={sessionId ?? ''}
+        response={response}
+        loading={suggestLoading}
+        error={suggestError}
+        onAssign={handleAssign}
+        assigning={assigning}
+        prefillSuggestion={prefillSuggestion}
+      />
     </DetailPanel>
   );
 }

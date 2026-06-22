@@ -11,12 +11,19 @@
  * 6. Empty-state: renders without title/subtitle/actions (graceful empty).
  * 7. Row-data contract: actions slot is structurally separate from title slot
  *    (title and actions render in distinct DOM regions, not collapsed together).
- * 8. variant prop does not throw or break rendering.
+ * 8. variant="sessions" renders without error.
+ * 9. variant="calibration" renders without error.
+ * 10. facts prop: renders facts content in a distinct left column.
+ * 11. facts prop: facts column and children column are structurally separate.
+ * 12. facts prop: when omitted, children render without two-column wrapper.
+ * 13. variant="inbox" renders without error.
+ * 14. FactsKV: renders label and value.
+ * 15. FactsKV: renders optional provenance label.
  */
 
 import { render, screen } from '@testing-library/react';
 import { describe, it, expect } from 'vitest';
-import { DetailPanel } from './DetailPanel';
+import { DetailPanel, FactsKV } from './DetailPanel';
 
 describe('DetailPanel — tasks #100/#99/#101', () => {
   it('1. renders provided title text', () => {
@@ -110,5 +117,74 @@ describe('DetailPanel — tasks #100/#99/#101', () => {
         </DetailPanel>,
       ),
     ).not.toThrow();
+  });
+
+  it('10. facts prop: renders facts content', () => {
+    render(
+      <DetailPanel
+        title="NGC 7000"
+        facts={<span data-testid="facts-content">Facts KV here</span>}
+      >
+        <span data-testid="content-body">Content here</span>
+      </DetailPanel>,
+    );
+    expect(screen.getByTestId('facts-content')).toBeDefined();
+    expect(screen.getByTestId('content-body')).toBeDefined();
+  });
+
+  it('11. facts prop: facts column and children column are in separate DOM regions', () => {
+    const { container } = render(
+      <DetailPanel
+        title="NGC 7000"
+        facts={<span data-testid="facts-node">Facts</span>}
+      >
+        <span data-testid="content-node">Content</span>
+      </DetailPanel>,
+    );
+    const factsEl = container.querySelector('[data-testid="facts-node"]');
+    const contentEl = container.querySelector('[data-testid="content-node"]');
+    expect(factsEl).not.toBeNull();
+    expect(contentEl).not.toBeNull();
+    // The two-column wrapper must be present.
+    const cols = container.querySelector('.alm-detailpanel__cols');
+    expect(cols).not.toBeNull();
+    // Facts must be inside the facts aside; content must NOT be inside it.
+    const factsAside = container.querySelector('.alm-detailpanel__facts');
+    expect(factsAside).not.toBeNull();
+    expect(factsAside?.contains(factsEl)).toBe(true);
+    expect(factsAside?.contains(contentEl)).toBe(false);
+  });
+
+  it('12. without facts prop, no two-column wrapper is rendered', () => {
+    const { container } = render(
+      <DetailPanel title="NGC 7000">
+        <span>just children</span>
+      </DetailPanel>,
+    );
+    expect(container.querySelector('.alm-detailpanel__cols')).toBeNull();
+    expect(screen.getByText('just children')).toBeDefined();
+  });
+
+  it('13. variant="inbox" renders without error', () => {
+    expect(() =>
+      render(
+        <DetailPanel title="2025-10-10/NGC7000" variant="inbox">
+          body
+        </DetailPanel>,
+      ),
+    ).not.toThrow();
+  });
+});
+
+describe('FactsKV', () => {
+  it('14. renders label and value', () => {
+    render(<dl><FactsKV label="Target" value="NGC 7000" /></dl>);
+    expect(screen.getByText('Target')).toBeDefined();
+    expect(screen.getByText('NGC 7000')).toBeDefined();
+  });
+
+  it('15. renders optional provenance label', () => {
+    render(<dl><FactsKV label="Filter" value="Ha" provenance="Inferred" /></dl>);
+    expect(screen.getByText('Inferred')).toBeDefined();
   });
 });

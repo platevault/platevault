@@ -8478,6 +8478,85 @@
   padding-top: var(--alm-sp-2);
 }
 
+/* === Canonical DetailPanel two-column body (unified, task 32) ===
+ *
+ * When the `facts` prop is provided DetailPanel renders a two-column body:
+ *   LEFT  (.alm-detailpanel__facts)   — fixed var(--alm-rail-width), no scroll.
+ *   RIGHT (.alm-detailpanel__content) — flex:1, THE ONLY scroll region.
+ *
+ * The outer panel (alm-listpage__detail) caps height at 45vh; the
+ * alm-listpage__detail-body owns overflow-y:auto. Inside the two-column
+ * split only the content column scrolls additionally when its content
+ * overflows — giving exactly ONE logical scroll region per panel variant.
+ *
+ * Token-only — no raw hex/rgb/ms.
+ * ============================================================================*/
+
+/* Two-column wrapper: facts left, content right. */
+.alm-detailpanel__cols {
+  display: grid;
+  grid-template-columns: var(--alm-rail-width) minmax(0, 1fr);
+  gap: var(--alm-sp-5);
+  align-items: start;
+  padding: var(--alm-sp-3) var(--alm-sp-4);
+  min-height: 0;
+}
+
+/* Facts column: sizes to content, never scrolls on its own. */
+.alm-detailpanel__facts {
+  min-width: 0;
+}
+.alm-detailpanel__facts .alm-rail__panel {
+  /* Override any fill-mode rail scroll so facts stay compact. */
+  max-height: none;
+  overflow: visible;
+}
+
+/* Content column: the sole scroll region inside the two-column split. */
+.alm-detailpanel__content {
+  min-width: 0;
+  overflow-y: auto;
+  scrollbar-gutter: stable;
+}
+
+/* Inbox variant: wider facts column to fit the breakdown table comfortably. */
+.alm-detailpanel__cols.alm-detailpanel--inbox {
+  grid-template-columns: minmax(var(--alm-rail-width), 0.85fr) minmax(0, 1.15fr);
+}
+
+/* FactsKV helper: a compact label/value row for use inside the facts column. */
+.alm-detailpanel__kv {
+  display: contents;
+}
+.alm-detailpanel__kv-label {
+  font-size: var(--alm-text-xs);
+  color: var(--alm-text-faint);
+  font-weight: var(--alm-weight-medium);
+  display: flex;
+  flex-direction: column;
+  gap: var(--alm-sp-0);
+}
+.alm-detailpanel__kv-prov {
+  font-size: var(--alm-text-2xs);
+  color: var(--alm-text-faint);
+  font-style: italic;
+  font-weight: var(--alm-weight-normal);
+}
+.alm-detailpanel__kv-value {
+  font-size: var(--alm-text-xs);
+  color: var(--alm-text);
+  min-width: 0;
+  overflow-wrap: anywhere;
+  margin: 0;
+}
+
+/* Single-column fallback for very narrow panels. */
+@media (max-width: 820px) {
+  .alm-detailpanel__cols {
+    grid-template-columns: minmax(0, 1fr);
+  }
+}
+
 /* === merged from .cssblocks/detail-density.css (spec-043 parallel coder) === */
 /* === detail-density.css — task #99, spec-043 §4 ===
  *
@@ -8550,11 +8629,115 @@
   overflow: visible;
 }
 
+/* Content column (right): carries both __state and __content class names.
+ * No inner scroll — the alm-detailpanel__content wrapper owns the scroll
+ * region. Rail panels inside must not cap their own height. */
+.alm-session-detail__content {
+  min-width: 0;
+}
+.alm-session-detail__content .alm-rail__panel {
+  max-height: none;
+  overflow: visible;
+}
+
 /* Narrow fallback: stack columns vertically on very narrow panels. */
 @media (max-width: 820px) {
   .alm-session-detail {
     grid-template-columns: minmax(0, 1fr);
   }
+}
+
+/* === Session frames expandable table (tasks #37/#38) ===
+ *
+ * Per-frame expandable table inside the Sessions detail content column.
+ * Rows are clickable to expand an inline detail row. Token-only.
+ * ============================================================================*/
+
+/* Table shell: full width of the Frames RailCard, dense font. */
+.alm-session-frames__table {
+  width: 100%;
+  font-size: var(--alm-text-xs);
+}
+.alm-session-frames__table th {
+  font-size: var(--alm-text-xs);
+  font-weight: var(--alm-weight-semibold);
+  padding: var(--alm-sp-1) var(--alm-sp-2);
+  color: var(--alm-text-muted);
+  text-align: left;
+  border-bottom: 1px solid var(--alm-border-subtle);
+  white-space: nowrap;
+}
+.alm-session-frames__table td {
+  padding: var(--alm-sp-1) var(--alm-sp-2);
+  vertical-align: top;
+}
+
+.alm-session-frames__row {
+  cursor: pointer;
+}
+.alm-session-frames__row:hover {
+  background: var(--alm-hover-bg);
+}
+.alm-session-frames__row--expanded {
+  background: var(--alm-selected-bg);
+}
+
+/* Fixed-width column for the expand toggle. */
+.alm-session-frames__th-toggle {
+  width: 20px;
+}
+
+/* The expand toggle: a small chevron in its own cell. */
+.alm-session-frames__toggle {
+  color: var(--alm-text-faint);
+  font-size: var(--alm-text-xs);
+  width: 16px;
+  text-align: center;
+  user-select: none;
+}
+
+/* Expanded detail row — full-width td spanning all columns. */
+.alm-session-frames__expanded-row td {
+  padding: var(--alm-sp-2) var(--alm-sp-3);
+  background: var(--alm-surface);
+  border-top: 1px solid var(--alm-border-subtle);
+}
+
+.alm-session-frames__expanded-body {
+  display: flex;
+  flex-direction: column;
+  gap: var(--alm-sp-1);
+}
+
+/* Mono path placeholder when individual frame paths are not yet loaded. */
+.alm-session-frames__path-placeholder {
+  font-family: var(--alm-font-mono);
+  font-size: var(--alm-text-xs);
+  color: var(--alm-text-muted);
+  word-break: break-all;
+}
+
+/* Additional KV pairs inside the expanded detail row. */
+.alm-session-frames__expanded-kvrow {
+  display: flex;
+  gap: var(--alm-sp-4);
+  flex-wrap: wrap;
+}
+
+.alm-session-frames__expanded-kv {
+  display: flex;
+  gap: var(--alm-sp-1);
+  font-size: var(--alm-text-xs);
+}
+
+.alm-session-frames__expanded-kv dt {
+  color: var(--alm-text-faint);
+  font-weight: var(--alm-weight-medium);
+}
+
+.alm-session-frames__expanded-kv dd {
+  color: var(--alm-text);
+  margin: 0;
 }
 
 /* === merged from .cssblocks/projects-redesign.css (spec-043 parallel coder) === */
@@ -9007,228 +9190,6 @@
   scrollbar-gutter: stable;
   max-height: 32vh;
   min-height: 0;
-}
-
-/* === merged from .cssblocks/sessions-detail.css (spec-043 wave 3) === */
-/* ============================================================================
- * Sessions detail CSS block (spec 043 — tasks 38 / 37)
- * ----------------------------------------------------------------------------
- * Token-only block (no raw hex/rgb/ms, no raw color literals).
- * NOT imported directly — the parent merges these rules into
- * src/styles/components.css after review.
- *
- * Adds layout for:
- *   1. (task 38) MetricLine strip + three-column body grid:
- *      facts column | optics column | main area (frames table + history).
- *   2. (task 37) Expandable per-frame rows inside the frames table.
- * ============================================================================ */
-
-/* ── task 38: three-column body grid ────────────────────────────────────────
- * The body of the session detail now has THREE columns:
- *   Left  — facts (existing, kept as-is)
- *   Mid   — optics + calibration rail cards (new)
- *   Right — frames table + acquisition history (new, flex:1)
- *
- * On narrow panels (<=900px) the mid and right columns stack under the facts.
- * The existing two-column grid (.alm-session-detail) is replaced by a wider
- * three-column variant; the existing two-column class is kept for backward
- * compat with old callers but scoped to override only in the enriched layout. */
-
-.alm-session-detail--rich {
-  display: grid;
-  grid-template-columns: var(--alm-rail-width) var(--alm-rail-width) minmax(0, 1fr);
-  gap: var(--alm-sp-5);
-  align-items: start;
-  padding: var(--alm-sp-3) var(--alm-sp-4);
-}
-
-/* Existing facts column — unchanged styles, just scoped to the rich variant */
-.alm-session-detail--rich .alm-session-detail__facts {
-  min-width: 0;
-}
-.alm-session-detail--rich .alm-session-detail__facts .alm-rail__panel {
-  max-height: none;
-  overflow: visible;
-}
-
-/* Mid column: optics + calibration + state + linked rail cards stacked. */
-.alm-session-detail__mid {
-  min-width: 0;
-}
-.alm-session-detail__mid .alm-rail__panel {
-  max-height: none;
-  overflow: visible;
-}
-
-/* Right column: frames table + acquisition history.
-   Takes remaining width; the table scrolls inside its own container. */
-.alm-session-detail__main {
-  min-width: 0;
-  display: flex;
-  flex-direction: column;
-  gap: var(--alm-sp-3);
-}
-
-/* ── task 38: frames table ───────────────────────────────────────────────────
- * The frames table sits inside alm-session-detail__main. It caps its height
- * so it never dominates the panel; rows scroll internally. */
-
-.alm-session-frames {
-  /* Scroll container for the per-frame table. */
-  max-height: 180px;
-  overflow-y: auto;
-  border: 1px solid var(--alm-border-subtle);
-  border-radius: var(--alm-radius-md);
-}
-
-/* Override alm-table styles to sit flush inside the scroll container. */
-.alm-session-frames .alm-table {
-  border: none;
-  border-radius: 0;
-  font-size: var(--alm-text-xs);
-}
-
-.alm-session-frames .alm-table th {
-  position: sticky;
-  top: 0;
-  background: var(--alm-surface);
-  z-index: 1;
-  font-size: var(--alm-text-xs);
-  padding: var(--alm-sp-1) var(--alm-sp-2);
-  font-weight: var(--alm-weight-semibold);
-  border-bottom: 1px solid var(--alm-border);
-}
-
-.alm-session-frames .alm-table td {
-  padding: var(--alm-sp-1) var(--alm-sp-2);
-  vertical-align: top;
-}
-
-/* ── task 37: expandable frame row ──────────────────────────────────────────
- * Rows are clickable to expand an inline detail row. The expanded row uses a
- * full-width td with a mono path + metadata block. No separate inspector panel
- * is used — the per-frame DTO only carries frame-count-level data (not
- * individual file paths / quality), so a side inspector would be hollow.
- * Expandable rows are the honest choice: they reveal the extra metadata
- * already available without duplicating the table summary columns. */
-
-.alm-session-frames__row {
-  cursor: pointer;
-}
-.alm-session-frames__row:hover {
-  background: var(--alm-hover-bg);
-}
-.alm-session-frames__row--expanded {
-  background: var(--alm-selected-bg);
-}
-
-/* Fixed-width column for the expand toggle header. */
-.alm-session-frames__th-toggle {
-  width: 20px;
-}
-
-/* The expand toggle: a small chevron/indicator in its own cell. */
-.alm-session-frames__toggle {
-  color: var(--alm-text-faint);
-  font-size: var(--alm-text-xs);
-  width: 16px;
-  text-align: center;
-  user-select: none;
-}
-
-/* Expanded detail row — full-width td spanning all columns. */
-.alm-session-frames__expanded-row td {
-  padding: var(--alm-sp-2) var(--alm-sp-3);
-  background: var(--alm-surface);
-  border-top: 1px solid var(--alm-border-subtle);
-}
-
-.alm-session-frames__expanded-body {
-  display: flex;
-  flex-direction: column;
-  gap: var(--alm-sp-1);
-}
-
-/* Mono path placeholder shown when individual frame paths are not yet loaded. */
-.alm-session-frames__path-placeholder {
-  font-family: var(--alm-font-mono);
-  font-size: var(--alm-text-xs);
-  color: var(--alm-text-muted);
-  word-break: break-all;
-}
-
-/* Additional KV pairs inside the expanded detail row. */
-.alm-session-frames__expanded-kvrow {
-  display: flex;
-  gap: var(--alm-sp-4);
-  flex-wrap: wrap;
-}
-
-.alm-session-frames__expanded-kv {
-  display: flex;
-  gap: var(--alm-sp-1);
-  font-size: var(--alm-text-xs);
-}
-
-.alm-session-frames__expanded-kv dt {
-  color: var(--alm-text-faint);
-  font-weight: var(--alm-weight-medium);
-}
-
-.alm-session-frames__expanded-kv dd {
-  color: var(--alm-text);
-  margin: 0;
-}
-
-/* ── task 38: acquisition history section ────────────────────────────────────
- * A thin row below the frames table showing the session name, source path,
- * and capture date as acquisition context. Scoped inside __main. */
-
-.alm-session-history {
-  padding: var(--alm-sp-2) var(--alm-sp-3);
-  background: var(--alm-surface);
-  border: 1px solid var(--alm-border-subtle);
-  border-radius: var(--alm-radius-md);
-}
-
-.alm-session-history__title {
-  font-size: var(--alm-text-xs);
-  font-weight: var(--alm-weight-semibold);
-  color: var(--alm-text-muted);
-  text-transform: uppercase;
-  letter-spacing: 0.05em;
-  margin-bottom: var(--alm-sp-1);
-}
-
-.alm-session-history__row {
-  display: flex;
-  gap: var(--alm-sp-4);
-  flex-wrap: wrap;
-  font-size: var(--alm-text-xs);
-}
-
-.alm-session-history__item {
-  display: flex;
-  flex-direction: column;
-  gap: var(--alm-sp-0);
-}
-
-.alm-session-history__item-label {
-  color: var(--alm-text-faint);
-  font-weight: var(--alm-weight-medium);
-}
-
-.alm-session-history__item-value {
-  color: var(--alm-text-secondary);
-  font-family: var(--alm-font-mono);
-  word-break: break-all;
-}
-
-/* ── Narrow fallback: stack columns vertically (task 38) ─────────────────── */
-@media (max-width: 900px) {
-  .alm-session-detail--rich {
-    grid-template-columns: minmax(0, 1fr);
-  }
 }
 
 /* === merged from .cssblocks/inbox-wave3.css (spec-043 wave 3) === */
