@@ -1,6 +1,6 @@
 /// <reference types="@testing-library/jest-dom" />
 /**
- * ProjectsTable tests — spec 043 (tasks #73/#43).
+ * ProjectsTable tests — spec 043 (tasks #73/#43/#105).
  *
  * The full-width dense sortable table that replaced the narrow ProjectsList
  * sidebar. Covers the same row behaviors the old list test asserted, adapted to
@@ -10,9 +10,10 @@
  *   3. Loading state.
  *   4. onSelect fires with the project id on row click.
  *   5. Channel-drift badge renders for drifting projects.
- *   6. Rich columns: Tool, State pill, Sources, Updated.
+ *   6. Rich columns: Tool, State (now a dot+text tag, not a pill), Sources, Updated.
  *   7. Selected row carries the selected CSS class.
  *   8. Clicking a sortable header calls onSort with the column.
+ *   9. (#105) State column renders a ProjectStatusTag (dot + label, no pill).
  */
 
 import { render, screen, fireEvent } from '@testing-library/react';
@@ -88,17 +89,30 @@ describe('ProjectsTable', () => {
     expect(screen.getByTitle('Channel drift detected')).toBeInTheDocument();
   });
 
-  it('renders rich columns: tool, state pill, sources and updated date', () => {
+  it('renders rich columns: tool, state tag, sources and updated date', () => {
     renderTable();
     // Tool column present on every row.
     expect(screen.getAllByText('PixInsight').length).toBe(2);
-    // State pills.
+    // State tags (dot + label — task #105, replaces filled pill).
     expect(screen.getByText('Processing')).toBeInTheDocument();
     expect(screen.getByText('Ready')).toBeInTheDocument();
     // Source count.
     expect(screen.getByText('3')).toBeInTheDocument();
     // Updated date formatted as "yyyy-MM-dd HH:mm" (local).
     expect(screen.getAllByText(/2026-06-1[09] \d{2}:\d{2}/).length).toBeGreaterThan(0);
+  });
+
+  it('(#105) state column uses ProjectStatusTag: dot+text, not a filled pill', () => {
+    const { container } = renderTable();
+    // alm-status-tag class present in the state column — no alm-pill class.
+    const tags = container.querySelectorAll('.alm-status-tag');
+    expect(tags.length).toBeGreaterThan(0);
+    // Each tag contains a dot span and the label text.
+    tags.forEach((tag) => {
+      expect(tag.querySelector('.alm-status-tag__dot')).toBeInTheDocument();
+    });
+    // No filled-background pill class from the old implementation.
+    expect(container.querySelector('.alm-pill')).toBeNull();
   });
 
   it('marks the selected row with the selected CSS class', () => {

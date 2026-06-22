@@ -1,0 +1,105 @@
+/**
+ * ProjectBottomDetail — spec 043 task #104.
+ *
+ * The bottom panel in the dual side+bottom Projects layout. Renders the
+ * secondary/operational project sections that benefit from the full-width
+ * horizontal room the bottom strip offers — sections that were previously
+ * collapsed by default in the narrow 420px side column.
+ *
+ * Sections rendered here (all open by default, horizontal grid):
+ *   Notes          — project notes (editable unless archived)
+ *   Manifests      — manifest files accordion
+ *   Calibration    — calibration match panel for project sources
+ *   Source views   — generated source view removal / regenerate (spec 026)
+ *   Outputs        — accepted outputs verification (stub; spec 043 §4)
+ *   Cleanup        — cleanup preview (stub; spec 043 §4)
+ *
+ * These were previously in ProjectDetail (the side panel) but are collapsed
+ * there by default because the 420px column doesn't have room to show them
+ * usefully. The bottom panel has ample horizontal space and gives each section
+ * room to breathe.
+ *
+ * Calls useProjectDetail itself — avoids prop-drilling sourceIds / lifecycle
+ * through ProjectsPage, which only has the lightweight ProjectSummaryDto.
+ */
+
+import { Banner } from '@/ui';
+import { useProjectDetail } from './store';
+import { ProjectNotesSection } from './ProjectNotesSection';
+import { ManifestsAccordion } from './ManifestsAccordion';
+import { CalibrationMatchPanel } from './CalibrationMatchPanel';
+import { SourceViewsSection } from './SourceViewsSection';
+import { OutputsSection, CleanupPreviewSection } from './OutputsCleanupSections';
+
+// ── Props ─────────────────────────────────────────────────────────────────────
+
+export interface ProjectBottomDetailProps {
+  projectId: string;
+}
+
+// ── Component ──────────────────────────────────────────────────────────────────
+
+export function ProjectBottomDetail({ projectId }: ProjectBottomDetailProps) {
+  const { data: project, loading, error } = useProjectDetail(projectId);
+
+  if (loading && !project) {
+    return (
+      <div className="alm-project-bottom__loading">
+        Loading…
+      </div>
+    );
+  }
+
+  if (error || !project) {
+    return (
+      <div className="alm-project-bottom__error">
+        <Banner variant="danger">Could not load project sections.</Banner>
+      </div>
+    );
+  }
+
+  const lifecycle =
+    typeof project.lifecycle === 'string' ? project.lifecycle : 'setup_incomplete';
+  const sourceIds = project.sources.map((s) => s.inventoryId);
+
+  return (
+    <div className="alm-project-bottom">
+      <div className="alm-project-bottom__grid">
+        {/* ── Notes — widest: spans two columns on wider displays ───────── */}
+        <div className="alm-project-bottom__cell alm-project-bottom__cell--notes">
+          <ProjectNotesSection
+            projectId={projectId}
+            readOnly={lifecycle === 'archived'}
+          />
+        </div>
+
+        {/* ── Calibration match panel ───────────────────────────────────── */}
+        {sourceIds.length > 0 && (
+          <div className="alm-project-bottom__cell">
+            <CalibrationMatchPanel sessionIds={sourceIds} defaultOpen={true} />
+          </div>
+        )}
+
+        {/* ── Manifests accordion ───────────────────────────────────────── */}
+        <div className="alm-project-bottom__cell">
+          <ManifestsAccordion projectId={projectId} defaultOpen={true} />
+        </div>
+
+        {/* ── Generated source views (spec 026) ────────────────────────── */}
+        <div className="alm-project-bottom__cell">
+          <SourceViewsSection projectId={projectId} defaultOpen={true} />
+        </div>
+
+        {/* ── Outputs — stub; no backend data yet ──────────────────────── */}
+        <div className="alm-project-bottom__cell">
+          <OutputsSection defaultOpen={true} />
+        </div>
+
+        {/* ── Cleanup preview — stub; no per-project projection yet ────── */}
+        <div className="alm-project-bottom__cell">
+          <CleanupPreviewSection defaultOpen={true} />
+        </div>
+      </div>
+    </div>
+  );
+}

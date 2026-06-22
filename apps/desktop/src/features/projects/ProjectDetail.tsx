@@ -2,14 +2,18 @@
  * ProjectDetail — spec 008 wired, redesigned per PlateVault mock (2026-06-22).
  *
  * Layout (spec 043 task #74 — compact stepper replaces the vertical rail):
- *   DetailHeader            (title + state pill + Edit action)
+ *   DetailHeader            (title + state tag + Edit action)
  *   TopActionBar            (tool · path breadcrumb · Reveal · Open in {tool} · lifecycle actions)
  *   MetricLine              (integration · sources · channels · tool)
  *   ProjectLifecycleStepper (horizontal stage chips + next-action + History collapsible)
  *   Target block            (canonical target, when resolved)
- *   Sections (single column): Sources table · Channels palette · Source views ·
- *              Outputs · Notes · Manifests · Cleanup preview · Generated source
- *              views · Calibration panel
+ *   Sections (side column): Sources table · Channels palette
+ *
+ * Secondary/operational sections (Notes · Manifests · Calibration · Source
+ * views · Outputs · Cleanup) live in ProjectBottomDetail, which renders in
+ * the full-width bottom panel of the dual side+bottom layout (task #104).
+ * They benefit from the horizontal room the bottom strip provides and were
+ * collapsed by default in the narrow 420px side column.
  *
  * Per-project actions (Reveal in Explorer · Open in {tool} · lifecycle
  * transitions) live ONLY in the detail action bar (data-testid="lifecycle-actions").
@@ -33,6 +37,7 @@ import { ProjectLifecycleStepper } from './ProjectLifecycleStepper';
 import { Pill, Btn, Section, Banner, CoverageBar, Table } from '@/ui';
 import type { PillVariant } from '@/ui';
 import { projectStateLabel, projectStateVariant } from '@/lib/lifecycle';
+import { ProjectStatusTag } from './ProjectStatusTag';
 import {
   useProjectDetail,
   callDismissChannelDrift,
@@ -42,8 +47,6 @@ import {
 import type { ProjectLifecycleState } from './store';
 import { EditProjectPane } from './edit/EditProjectPane';
 import { addToast } from '@/shared/toast';
-// spec 007 T034: calibration match panel (batch suggest per project source).
-import { CalibrationMatchPanel } from './CalibrationMatchPanel';
 import { BlockedBanner } from './BlockedBanner';
 import type { BlockedReason, RecoveryEdge } from './BlockedBanner';
 import { lifecycleFooterActions, isPlanRequiredError } from './lifecycle-actions';
@@ -55,14 +58,9 @@ import {
   useToolProfiles,
   useToolLaunch,
 } from './tool-launch';
-// spec 024: project notes + manifests
-import { ProjectNotesSection } from './ProjectNotesSection';
-import { ManifestsAccordion } from './ManifestsAccordion';
-// spec 026: generated source view removal
-import { SourceViewsSection } from './SourceViewsSection';
-// spec 043 §4 (task #44): Outputs (verification pills) + Cleanup preview
-import { OutputsSection, CleanupPreviewSection } from './OutputsCleanupSections';
 import type { ProjectSourceDto_Deserialize } from '@/bindings/index';
+// Secondary sections (Notes, Manifests, Calibration, Source views, Outputs,
+// Cleanup) have moved to ProjectBottomDetail (task #104 — bottom panel).
 
 // ── Helpers ──────────────────────────────────────────────────────────────────
 
@@ -328,9 +326,9 @@ export function ProjectDetailContent({ projectId }: ProjectDetailContentProps) {
       <DetailHeader
         title={project.name}
         titleExtra={
-          <Pill variant={projectStateVariant(lifecycle)}>
+          <ProjectStatusTag variant={projectStateVariant(lifecycle)}>
             {projectStateLabel(lifecycle)}
-          </Pill>
+          </ProjectStatusTag>
         }
         subtitle={undefined}
         actions={
@@ -520,77 +518,10 @@ export function ProjectDetailContent({ projectId }: ProjectDetailContentProps) {
           </Section>
         )}
 
-        {/* ── Source views — project sources as clickable entries ──────────── */}
-        {/*
-         * Per user override: show project sources as clickable links to the
-         * actual source (inventory session). Do NOT show junction/link-type
-         * labels. Uses a simple tokenised list — no generated-view structure.
-         *
-         * Collapsed by default (task #94): in the narrow side column this is
-         * secondary to the Sources table above (it links the same sources), so
-         * it should not occupy the panel until the user expands it.
-         */}
-        {project.sources.length > 0 && (
-          <Section title="Source views" defaultOpen={false}>
-            <div className="alm-project-detail__sv-list">
-              {project.sources.map((src) => (
-                <div key={src.inventoryId} className="alm-project-detail__sv-row">
-                  {src.role && (
-                    <span className="alm-project-detail__sv-role">{src.role}</span>
-                  )}
-                  <a
-                    href={`#/sessions/${src.inventoryId}`}
-                    className="alm-project-detail__sv-name"
-                    title={`Open source: ${src.name || src.inventoryId}`}
-                  >
-                    {src.name || src.inventoryId}
-                  </a>
-                  {src.filter && (
-                    <Pill variant={sourceTypeVariant(src.filter)}>{src.filter}</Pill>
-                  )}
-                </div>
-              ))}
-            </div>
-          </Section>
-        )}
-
-        {/* ── Outputs section — spec 043 §4 (task #44) ───────────────────── */}
-        {/* STUB: ProjectDetailDto carries no accepted-output model yet, so this
-            renders a teaching empty state — never fabricated rows. Pass real
-            project.outputs[] here once the backend exposes them.
-            Collapsed by default (task #94): secondary in the narrow side column. */}
-        <OutputsSection defaultOpen={false} />
-
-        {/* ── Notes section — spec 024 T4.2 ──────────────────────────────── */}
-        {/* project.notes is the creation-time inline field (legacy); the
-            canonical per-project note is stored in project_notes and loaded
-            via project.note.get / project.note.update. */}
-        <ProjectNotesSection
-          projectId={projectId}
-          readOnly={lifecycle === 'archived'}
-        />
-
-        {/* ── Manifests accordion — spec 024 T1.7 / T3.4 ─────────────────── */}
-        {/* Collapsed by default (task #94): secondary in the narrow side column. */}
-        <ManifestsAccordion projectId={projectId} defaultOpen={false} />
-
-        {/* ── Cleanup preview — spec 043 §4 (task #44) ───────────────────── */}
-        {/* STUB: no per-project cleanup-preview projection on the read path yet
-            (cleanup.scan is a separate on-demand command). Renders a themed
-            Banner alert + LOCKED protected categories — no invented byte counts. */}
-        {/* Collapsed by default (task #94): secondary in the narrow side column. */}
-        <CleanupPreviewSection defaultOpen={false} />
-
-        {/* ── Generated source views — spec 026 (remove/regenerate) ──────── */}
-        {/* Collapsed by default (task #94): secondary in the narrow side column. */}
-        <SourceViewsSection projectId={projectId} defaultOpen={false} />
-
-        {/* ── spec 007 T034: calibration match panel ──────────────────────── */}
-        {/* Collapsed by default (task #94): secondary in the narrow side column. */}
-        <CalibrationMatchPanel
-          sessionIds={project.sources.map((s) => s.inventoryId)}
-          defaultOpen={false}
-        />
+        {/* Secondary sections (Notes · Manifests · Calibration · Source views ·
+            Outputs · Cleanup) have moved to the bottom panel (ProjectBottomDetail,
+            task #104). They benefit from the full-width horizontal room there and
+            were collapsed by default in this narrow 420px column anyway. */}
       </div>
 
       {/* Lifecycle transition buttons now live in the detail action bar above

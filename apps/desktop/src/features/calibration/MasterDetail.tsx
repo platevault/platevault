@@ -1,5 +1,13 @@
 /**
- * MasterDetail — spec 007 wired · spec 043 §4 (calibration detail hero).
+ * MasterDetail — spec 007 wired · spec 043 §4 (calibration detail hero) ·
+ * tasks #100/#101.
+ *
+ * Refactored to use the shared DetailPanel wrapper (task #100). The Lock icon
+ * that previously appeared in the title has been removed (task #101): it had
+ * no associated behavior, no tooltip reason, and no visual explanation — users
+ * found it unexplained. The "protected" concept for calibration masters is not
+ * relevant at this UI level (masters are not user-locked; they are referenced
+ * by sessions/projects, which is already shown in the Reuse rail card).
  *
  * The hero of the master detail is the COMPATIBLE-SESSIONS MATCH TABLE
  * (`MatchCandidatesPanel`): which acquisition sessions this master can
@@ -15,11 +23,11 @@
 import type { CalibrationMaster_Serialize as CalibrationMaster } from '@/bindings/index';
 import {
   DetailPane,
-  DetailHeader,
+  DetailPanel,
   MetricLine,
   RailCard,
 } from '@/components';
-import { Pill, EmptyState, Lock, KV, Btn } from '@/ui';
+import { Pill, EmptyState, KV, Btn } from '@/ui';
 import type { PillVariant } from '@/ui';
 import { useCalibrationSuggest, useCalibrationAssign } from './useCalibration';
 import { MatchCandidatesPanel } from './MatchCandidatesPanel';
@@ -93,6 +101,7 @@ export function MasterDetail({ master, prefillSuggestion, agingThresholdDays }: 
     );
   }
 
+
   const isAging1Year = master.ageDays >= 365;
   const isAgingWarn = master.ageDays > agingThresholdDays && !isAging1Year;
   const kindStr = master.kind.toString().toLowerCase().replace('_', ' ');
@@ -108,28 +117,26 @@ export function MasterDetail({ master, prefillSuggestion, agingThresholdDays }: 
   const masterTitle = masterDisc ? `Master ${kindCap} · ${masterDisc}` : `Master ${kindCap}`;
 
   return (
-    <DetailPane>
-      <DetailHeader
-        title={
-          <>
-            <Lock />
-            <span>{masterTitle}</span>
-          </>
-        }
-        titleExtra={
-          <>
-            <Pill variant={kindVariant(kindStr)}>{kindStr.toUpperCase()}</Pill>
-            {isAging1Year && <Pill variant="danger">aging &gt; 1 year</Pill>}
-            {isAgingWarn && <Pill variant="warn">aging {master.ageDays}d</Pill>}
-          </>
-        }
-        subtitle={`${kindStr} · ${fmtBytes(master.sizeBytes)}`}
-        actions={masterActions(master, agingThresholdDays).map((a) => (
-          <Btn key={a.label} size="sm" variant={a.variant}>
-            {a.label}
-          </Btn>
-        ))}
-      />
+    <DetailPanel
+      variant="calibration"
+      // Title: master identity (kind + discriminator). The Lock icon was removed
+      // (task #101): it had no behavior, no tooltip reason, and no explanation.
+      // Masters are not user-locked; reuse is shown in the Reuse rail card.
+      title={<span>{masterTitle}</span>}
+      titleExtra={
+        <>
+          <Pill variant={kindVariant(kindStr)}>{kindStr.toUpperCase()}</Pill>
+          {isAging1Year && <Pill variant="danger">aging &gt; 1 year</Pill>}
+          {isAgingWarn && <Pill variant="warn">aging {master.ageDays}d</Pill>}
+        </>
+      }
+      subtitle={`${kindStr} · ${fmtBytes(master.sizeBytes)}`}
+      actions={masterActions(master, agingThresholdDays).map((a) => (
+        <Btn key={a.label} size="sm" variant={a.variant}>
+          {a.label}
+        </Btn>
+      ))}
+    >
 
       <MetricLine
         metrics={[
@@ -189,6 +196,6 @@ export function MasterDetail({ master, prefillSuggestion, agingThresholdDays }: 
           />
         </div>
       </div>
-    </DetailPane>
+    </DetailPanel>
   );
 }

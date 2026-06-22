@@ -1,5 +1,5 @@
 /**
- * ProjectsPage — spec 008 wired; spec 043 shared-layout adoption (tasks #73/#74).
+ * ProjectsPage — spec 008 wired; spec 043 shared-layout adoption (tasks #73/#74/#104).
  *
  * Adopts the shared list-page system (the Sessions reference): a pinned
  * `PageTopBar` over a `ListPageLayout` body — a DENSE FULL-WIDTH projects
@@ -17,6 +17,14 @@
  * Completed) live in the detail pane's action bar, which only mounts when a
  * project is selected — so they are, by construction, shown only on selection
  * and carry the canonical `transition-btn-*` / `lifecycle-actions` testids.
+ *
+ * Dual-panel layout (task #104): the Projects page uses `detailPlacement=
+ * "side-and-bottom"`. The SIDE panel (ProjectDetailContent) shows the primary
+ * project identity — header, actions, metrics, stepper, target, Sources table,
+ * and Channels palette. The BOTTOM panel (ProjectBottomDetail) shows the
+ * secondary/operational sections that benefit from full-width horizontal room:
+ * Notes, Manifests, Calibration, Source views, Outputs, and Cleanup preview.
+ * Both panels mount when a project is selected and close together.
  *
  * URL state (unchanged router contract):
  *   - `selected`: numeric index into the (unfiltered) list.
@@ -37,6 +45,7 @@ import {
   type ProjectSortCol,
 } from './ProjectsTable';
 import { ProjectDetailContent } from './ProjectDetail';
+import { ProjectBottomDetail } from './ProjectBottomDetail';
 import { useProjects } from './store';
 import type { ProjectSummaryDto } from '@/bindings/index';
 
@@ -170,7 +179,9 @@ export function ProjectsPage() {
       detail={project ? <ProjectDetailContent projectId={project.id} /> : undefined}
       onCloseDetail={project ? clearSelection : undefined}
       detailLabel="Project details"
-      detailPlacement="side"
+      detailPlacement="side-and-bottom"
+      bottomDetail={project ? <ProjectBottomDetail projectId={project.id} /> : undefined}
+      bottomDetailLabel="Project sections"
     >
       <ProjectsTable
         projects={filtered}

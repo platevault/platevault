@@ -19,9 +19,10 @@
 
 import { useMemo } from 'react';
 import { AlertTriangle } from 'lucide-react';
-import { Table, Pill } from '@/ui';
+import { Table } from '@/ui';
 import type { TableColumn, TableRow } from '@/ui';
 import { projectStateLabel, projectStateVariant } from '@/lib/lifecycle';
+import { ProjectStatusTag } from './ProjectStatusTag';
 import { compareDateDesc, formatDateTime } from '@/lib/datetime';
 import type { ProjectSummaryDto } from '@/bindings/index';
 
@@ -154,9 +155,9 @@ export function ProjectsTable({
     // STUB: target — omitted until FITS OBJECT → target_id linkage lands (#54).
     target: <span className="alm-projects-table__dash">—</span>,
     state: (
-      <Pill variant={projectStateVariant(project.lifecycle)}>
+      <ProjectStatusTag variant={projectStateVariant(project.lifecycle)}>
         {projectStateLabel(project.lifecycle)}
-      </Pill>
+      </ProjectStatusTag>
     ),
     sources: (
       <span className="alm-projects-table__cell--num">

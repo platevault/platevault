@@ -8347,3 +8347,461 @@
   grid-template-columns: repeat(2, 1fr);
   gap: var(--alm-sp-0) var(--alm-sp-3);
 }
+
+/* === merged from .cssblocks/detail-panel.css (spec-043 parallel coder) === */
+/* === detail-panel.css — tasks 100/#99/101, spec-043 §4 ===
+ *
+ * Shared DetailPanel component styles + density improvements for the Sessions
+ * and Calibration detail panels.
+ *
+ * SCRATCH FILE: not imported anywhere. The parent merges this into
+ * components.css. Token-only (existing --alm-* tokens); no raw hex/rgb/ms.
+ *
+ * Covers:
+ *   - .alm-detail-panel          — wraps DetailPane + DetailHeader in one unit
+ *   - .alm-detail-panel__title   — title + optional titleExtra inline
+ *   - .alm-detail-panel__sub     — subtitle row (prose, not mono path)
+ *   - .alm-detail-panel__actions — per-item action button cluster in header
+ *   - #99 density — tighter spacing for the Sessions detail header
+ *   - 101 lock removal — no new lock classes needed (class removed at source)
+ */
+
+/* === DETAIL PANEL (shared wrapper) === */
+
+/* The outer container simply inherits the existing .alm-detail foundation.
+ * We add only what the shared component needs: a unified flex row for the
+ * header so title, subtitle, and actions align correctly regardless of which
+ * feature uses it. */
+
+.alm-detail-panel {
+  /* Full height inside the bottom panel (auto-sizes with ListPageLayout). */
+  display: flex;
+  flex-direction: column;
+  min-height: 0;
+}
+
+/* Header bar: spans full width, keeps title on the left and actions on the right. */
+.alm-detail-panel__header {
+  display: flex;
+  align-items: flex-start;
+  gap: var(--alm-sp-3);
+  padding: var(--alm-sp-3) var(--alm-sp-4);
+  border-bottom: 1px solid var(--alm-border-subtle);
+  flex-wrap: wrap;
+}
+
+/* Title block: identity heading + optional title-extra pills beside it. */
+.alm-detail-panel__title-block {
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  gap: var(--alm-sp-0);
+}
+
+.alm-detail-panel__title {
+  display: flex;
+  align-items: center;
+  gap: var(--alm-sp-2);
+  font-size: var(--alm-text-md);
+  font-weight: var(--alm-weight-semibold);
+  line-height: var(--alm-leading-tight);
+  color: var(--alm-text);
+  min-width: 0;
+}
+
+/* Extra pills / badges sitting beside the title. */
+.alm-detail-panel__title-extra {
+  display: flex;
+  align-items: center;
+  gap: var(--alm-sp-1);
+  flex-wrap: wrap;
+  margin-top: var(--alm-sp-0);
+}
+
+/* Subtitle: prose acquisition summary; NOT mono/break-all like a file path. */
+.alm-detail-panel__subtitle {
+  font-size: var(--alm-text-sm);
+  color: var(--alm-text-muted);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  margin-top: var(--alm-sp-0);
+}
+
+/* Per-item action buttons — live in the header, right-aligned. */
+.alm-detail-panel__actions {
+  display: flex;
+  align-items: center;
+  gap: var(--alm-sp-2);
+  flex-shrink: 0;
+  flex-wrap: wrap;
+}
+
+/* Body: children fill remaining height; internal scroll on tall content. */
+.alm-detail-panel__body {
+  flex: 1;
+  min-height: 0;
+  overflow-y: auto;
+  padding: var(--alm-sp-3) var(--alm-sp-4);
+}
+
+/* === #99 Sessions detail density — tighter header in the bottom panel === */
+
+/* Override the default .alm-detail padding: the bottom panel is already short,
+ * so the default var(--alm-sp-4) top/bottom padding wastes vertical room. */
+.alm-detail-panel--sessions .alm-detail-panel__header {
+  padding-top: var(--alm-sp-2);
+  padding-bottom: var(--alm-sp-2);
+}
+
+.alm-detail-panel--sessions .alm-detail-panel__body {
+  padding-top: var(--alm-sp-2);
+}
+
+/* === merged from .cssblocks/detail-density.css (spec-043 parallel coder) === */
+/* === detail-density.css — task #99, spec-043 §4 ===
+ *
+ * Sessions detail density improvements for the wide-short bottom panel.
+ * Mirrors the calibration detail (alm-calib-detail) two-column layout:
+ * a compact KV facts column on the left, a state+linked column on the right.
+ *
+ * SCRATCH FILE: not imported. Token-only (--alm-*). No raw hex/rgb/ms.
+ * The parent merges this into components.css when wiring.
+ *
+ * Context: the session detail now lives in the ListPageLayout BOTTOM panel
+ * (wide-short, max ~50vh, non-resizable). The old DetailGrid + Rail dashboard
+ * was designed for a tall narrow right side-panel and wastes height in the
+ * bottom panel. The side-by-side layout uses the horizontal room instead.
+ *
+ *   ┌─────────────────────┬──────────────────────────────────┐
+ *   │  Facts KV (compact) │  State · Linked projects · Notes │
+ *   │  ~280px             │  flex: 1                         │
+ *   └─────────────────────┴──────────────────────────────────┘
+ */
+
+/* === SESSION DETAIL — side-by-side layout (task #99) === */
+
+.alm-session-detail {
+  display: grid;
+  /* Compact facts column + flexible state/linked column. */
+  grid-template-columns: var(--alm-rail-width) minmax(0, 1fr);
+  gap: var(--alm-sp-5);
+  align-items: start;
+  padding: var(--alm-sp-3) var(--alm-sp-4);
+}
+
+/* Facts column: rail panel with 2-column KV grid for density. */
+.alm-session-detail__facts {
+  min-width: 0;
+}
+.alm-session-detail__facts .alm-rail__panel {
+  /* Size to content; no inner scroll in the short panel. */
+  max-height: none;
+  overflow: visible;
+}
+
+/* 2-column KV grid inside the facts rail card — mirrors alm-calib-kvgrid. */
+.alm-session-detail__kvgrid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  column-gap: var(--alm-sp-4);
+  row-gap: 0;
+  align-items: start;
+}
+.alm-session-detail__kvgrid .alm-kv {
+  min-width: 0;
+  gap: var(--alm-sp-2);
+}
+.alm-session-detail__kvgrid .alm-kv__label {
+  width: auto;
+  max-width: 6rem;
+}
+.alm-session-detail__kvgrid .alm-kv__value {
+  min-width: 0;
+  overflow-wrap: anywhere;
+}
+
+/* State + linked column: stacked rail cards. */
+.alm-session-detail__state {
+  min-width: 0;
+}
+.alm-session-detail__state .alm-rail__panel {
+  max-height: none;
+  overflow: visible;
+}
+
+/* Narrow fallback: stack columns vertically on very narrow panels. */
+@media (max-width: 820px) {
+  .alm-session-detail {
+    grid-template-columns: minmax(0, 1fr);
+  }
+}
+
+/* === merged from .cssblocks/projects-redesign.css (spec-043 parallel coder) === */
+/* ============================================================================
+ * Projects redesign CSS block (spec 043 — tasks 105 / 104)
+ * ----------------------------------------------------------------------------
+ * Token-only block (no raw hex/rgb/ms). NOT imported directly — the parent
+ * merges these rules into src/styles/components.css after review.
+ *
+ * Two changes:
+ *   1. (105) ProjectStatusTag — replaces status Pill badges with a compact
+ *      dot + plain-text label. Color used sparingly as a 6px dot accent only.
+ *   2. (104) ListPageLayout dual side+bottom variant — new
+ *      `detailPlacement="side-and-bottom"` mode renders a side panel AND a
+ *      bottom panel simultaneously. Adds three new modifier classes:
+ *      .alm-listpage__body--dual, .alm-listpage__side, .alm-listpage__bottom.
+ * ============================================================================ */
+
+/* ── 105 ProjectStatusTag ───────────────────────────────────────────────────
+ * Replaces the filled-background Pill badge in the status column and detail
+ * header. Layout: a small colored dot + plain text label, all inline.
+ * The dot communicates semantic state without a full colored badge background. */
+
+.alm-status-tag {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--alm-sp-1);
+  /* No background, no border — just the dot + text */
+  font-size: var(--alm-text-sm);
+  color: var(--alm-text-secondary);
+  white-space: nowrap;
+}
+
+/* The status dot — a 6px circle colored by variant. */
+.alm-status-tag__dot {
+  display: inline-block;
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  flex-shrink: 0;
+  /* Default (neutral/ghost): muted border-color dot */
+  background: var(--alm-text-faint);
+}
+
+/* Per-variant dot colors — map to semantic tokens. */
+.alm-status-tag--ok .alm-status-tag__dot     { background: var(--alm-ok); }
+.alm-status-tag--warn .alm-status-tag__dot   { background: var(--alm-warn); }
+.alm-status-tag--danger .alm-status-tag__dot { background: var(--alm-danger); }
+.alm-status-tag--info .alm-status-tag__dot   { background: var(--alm-info); }
+.alm-status-tag--accent .alm-status-tag__dot { background: var(--alm-accent); }
+.alm-status-tag--neutral .alm-status-tag__dot { background: var(--alm-text-muted); }
+/* ghost: keep the faint default — intentionally low-contrast for inactive states */
+
+/* In the detail header titleExtra slot, bump up the font slightly so it sits
+ * well next to the project name title. */
+.alm-detail__header .alm-status-tag {
+  font-size: var(--alm-text-sm);
+  color: var(--alm-text-muted);
+}
+
+/* In the blocked state the label itself picks up a danger tint for emphasis. */
+.alm-status-tag--danger {
+  color: var(--alm-danger);
+}
+
+/* ── 104 ListPageLayout dual side+bottom variant ────────────────────────────
+ * When `detailPlacement="side-and-bottom"` is chosen:
+ *
+ *   ┌─────────────────────────────────────────────┐
+ *   │ PageTopBar (pinned)                          │
+ *   ├──────────────────────────────────────────────┤
+ *   │ .alm-listpage__main  │ .alm-listpage__side   │
+ *   │ (full-height,        │ (fixed 420px,         │
+ *   │  scrolls)            │  own scroll)          │
+ *   ├──────────────────────┴───────────────────────┤
+ *   │ .alm-listpage__bottom (full-width, non-      │
+ *   │  resizable, fit-content, max-height cap)     │
+ *   └──────────────────────────────────────────────┘
+ *
+ * The side panel and bottom panel can each be independently present or absent:
+ * if only sideDetail is provided the body shows with only the side column; if
+ * only bottomDetail is provided the body shows as a column (like bottom dock);
+ * if both are present the dual layout activates.
+ *
+ * The existing `detail` + `detailPlacement='side'` path is unchanged — the new
+ * props (sideDetail / bottomDetail) are additive. */
+
+/* Dual body: row for main+side, then the bottom strip below. */
+.alm-listpage__body--dual {
+  flex-direction: column;
+}
+
+/* Inner row: main content + side detail side-by-side. */
+.alm-listpage__dual-row {
+  display: flex;
+  flex-direction: row;
+  flex: 1;
+  min-height: 0;
+  overflow: hidden;
+}
+
+/* Side detail panel inside the dual layout — same width token as the existing
+ * side-only variant to stay visually consistent. */
+.alm-listpage__side {
+  flex: 0 0 var(--alm-side-detail-w, 420px);
+  width: var(--alm-side-detail-w, 420px);
+  height: auto;
+  max-height: none;
+  align-self: stretch;
+  border-left: 1px solid var(--alm-border);
+  background: var(--alm-surface-raised);
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+}
+
+/* Bottom detail strip — same sizing strategy as the existing bottom dock. */
+.alm-listpage__bottom {
+  flex: 0 0 auto;
+  height: fit-content;
+  max-height: 40vh;
+  display: flex;
+  flex-direction: column;
+  min-height: 0;
+  overflow: hidden;
+  border-top: 1px solid var(--alm-border);
+  background: var(--alm-surface-raised);
+}
+
+/* Close bar and close button for both new panels — reuse the same structure
+ * as the existing .alm-listpage__detail-bar / __detail-close. */
+.alm-listpage__panel-bar {
+  flex-shrink: 0;
+  display: flex;
+  justify-content: flex-end;
+  padding: var(--alm-sp-1) var(--alm-sp-2);
+  border-bottom: 1px solid var(--alm-border-subtle);
+}
+
+.alm-listpage__panel-close {
+  background: none;
+  border: none;
+  cursor: pointer;
+  color: var(--alm-text-muted);
+  font-size: var(--alm-text-sm);
+  line-height: 1;
+  padding: var(--alm-sp-1);
+  border-radius: var(--alm-radius-sm);
+}
+.alm-listpage__panel-close:hover { color: var(--alm-text); }
+
+.alm-listpage__panel-body {
+  flex: 1;
+  min-height: 0;
+  overflow-y: auto;
+}
+
+/* Apply same project-detail structural tweaks used in the side-only variant
+ * to the new dual side panel too. */
+.alm-listpage__side .alm-project-detail__sections {
+  display: flex;
+  flex-direction: column;
+  gap: var(--alm-sp-2);
+}
+
+.alm-listpage__side .alm-stepper {
+  padding-top: var(--alm-sp-1);
+  padding-bottom: var(--alm-sp-1);
+}
+
+.alm-listpage__side .alm-metricline {
+  margin-bottom: var(--alm-sp-1);
+}
+
+.alm-listpage__side .alm-project-detail__bar-actions {
+  flex-wrap: wrap;
+  gap: var(--alm-sp-1);
+}
+
+.alm-listpage__side .alm-project-detail__bar-path {
+  overflow-wrap: anywhere;
+  word-break: break-all;
+}
+
+/* ── ProjectBottomDetail — horizontal section grid ───────────────────────────
+ * Renders the secondary/operational sections (Notes, Manifests, Calibration,
+ * Source views, Outputs, Cleanup) in a multi-column grid that uses the
+ * full width of the bottom strip. Each cell is a self-contained section.
+ *
+ * Grid: auto-fill columns, min 280px each, so the layout adapts from 2 columns
+ * at ~1100px total width (after the 420px side panel) to 3+ columns on wider
+ * displays. The notes cell spans 2 columns to give editable prose room. */
+
+.alm-project-bottom {
+  padding: var(--alm-sp-3);
+}
+
+.alm-project-bottom__grid {
+  display: grid;
+  /* Each column is at least 280px; fills the available width. */
+  grid-template-columns: repeat(auto-fill, minmax(280px, 1fr));
+  gap: var(--alm-sp-3);
+  align-items: start;
+}
+
+/* Notes get extra width — prose benefits from room to breathe. */
+.alm-project-bottom__cell--notes {
+  grid-column: span 2;
+}
+
+/* Each cell is a self-contained block; sections handle their own borders/bg. */
+.alm-project-bottom__cell {
+  min-width: 0;
+}
+
+/* Loading / error states in the bottom panel. */
+.alm-project-bottom__loading {
+  padding: var(--alm-sp-4);
+  color: var(--alm-text-muted);
+  font-size: var(--alm-text-sm);
+}
+
+.alm-project-bottom__error {
+  padding: var(--alm-sp-3);
+}
+
+/* On narrow viewports (e.g. if the app window is squeezed) collapse notes to
+ * a single column so it doesn't overflow its container. */
+@media (max-width: 700px) {
+  .alm-project-bottom__cell--notes {
+    grid-column: span 1;
+  }
+}
+
+/* === merged from .cssblocks/targets-fixes.css (spec-043 parallel coder) === */
+/* === targets-fixes.css — tasks 103a / 103b / #91, spec-043 ===
+ *
+ * SCRATCH FILE: not imported from main.css. Imported directly from
+ * TargetsPage.tsx so it applies without a manual merge. The parent may merge
+ * this into components.css in a future pass.
+ *
+ * Token-only (--alm-* only). No raw hex/rgb/px spacing/ms.
+ *
+ * 103a — virtualizer height fix
+ *   The flex height chain from .alm-page → .alm-listpage__body →
+ *   .alm-listpage__main is normally fine, but .alm-listpage__main uses
+ *   overflow:auto which means its height is content-determined in some
+ *   WebViews (Tauri/Windows). When the scroll container inside
+ *   .alm-targets-table__wrap has zero measured height the virtualizer
+ *   returns zero virtual items. Even with the non-windowed fallback the
+ *   table renders inside a zero-height .alm-targets-table__scroll, so rows
+ *   are invisible.
+ *
+ *   Fix: inside the .alm-targets-page wrapper, switch .alm-listpage__main
+ *   to overflow:hidden (height stays flex-bounded) and make
+ *   .alm-targets-table__wrap fill it absolutely (position:absolute;inset:0)
+ *   so the scroll container always gets the full available height.
+ * ========================================================================= */
+
+/* Scope the fix to the targets page so other list pages are unaffected. */
+.alm-targets-page .alm-listpage__main {
+  overflow: hidden;
+  position: relative;
+}
+
+.alm-targets-page .alm-targets-table__wrap {
+  position: absolute;
+  inset: 0;
+}

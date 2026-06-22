@@ -29,6 +29,9 @@ export { DetailHeader } from './DetailHeader';
 export type { DetailHeaderProps } from './DetailHeader';
 export { DetailPane } from './DetailPane';
 export type { DetailPaneProps } from './DetailPane';
+// spec 043 §4 — tasks #100/#99/#101: shared detail panel.
+export { DetailPanel } from './DetailPanel';
+export type { DetailPanelProps, DetailPanelVariant } from './DetailPanel';
 
 // Design v4 detail standard: identity header → metric line → dashboard grid
 // (primary column + unified rail panel), plus the centralized lifecycle.

@@ -2,10 +2,10 @@
 /**
  * TargetsPage tests — spec 043 shared list-page adoption (task #73).
  *
- * The page now uses the shared layout system: a pinned PageTopBar (My Targets /
- * Planner tabs + FilterToolbar search + density) over a ListPageLayout whose
- * primary content is the full-width TargetsTable, with TargetDetailV2 in the
- * detail pane that mounts only on selection.
+ * The page now uses the shared layout system: a pinned PageTopBar (FilterToolbar
+ * with My Targets filter + search + catalogues + group-by) over a ListPageLayout
+ * whose primary content is the full-width TargetsTable, with TargetDetailV2 in
+ * the detail pane that mounts only on selection.
  *
  * Tests:
  *  1. Shows a loading footer while listTargets is in flight.
@@ -16,9 +16,12 @@
  *  6. effectiveLabel from backend renders in the detail pane.
  *  7. Shows error state when listTargets rejects.
  *  8. Target count appears in the table footer.
- *  P1. Planner is the default tab and filters to allowed catalogs.
- *  P2. Switching to My Targets shows a STUB empty state (no backend linkage).
+ *  P1. "All targets" (default) filters to allowed planner catalogs.
+ *  P2. Selecting "My Targets" shows a STUB empty state (no backend linkage).
  *  H1/H2/H3. Toolbar search filters the table by designation / label.
+ *  H4. Search "M31" matches "M 31" (alias-aware whitespace normalization). (#103b)
+ *  H5. Search "m31" matches "M 31" (case + whitespace insensitive). (#103b)
+ *  MT1. My Targets filter toggle activates and deactivates via the select. (#91)
  *  G1. "Add target" button opens the add dialog.
  *  S1. Clicking a column header sorts the table.
  */
@@ -176,9 +179,9 @@ describe('TargetsPage', () => {
     await waitFor(() => expect(screen.getByText('2 targets')).toBeInTheDocument());
   });
 
-  // ── P: My Targets vs Planner split (task #40) ────────────────────────────────
+  // ── P: My Targets vs Planner filter (task #40, task #91) ────────────────────
 
-  it('P1. Planner is the default tab and filters to allowed catalogs', async () => {
+  it('P1. "All targets" (default) filters to allowed planner catalogs', async () => {
     mockListTargets.mockResolvedValue([
       ...listItems,
       // double-star dump entries that must NOT show in the Planner
@@ -195,11 +198,13 @@ describe('TargetsPage', () => {
     expect(screen.getByText('2 targets')).toBeInTheDocument();
   });
 
-  it('P2. switching to My Targets shows a STUB empty state (no backend linkage)', async () => {
+  it('P2. selecting "My Targets" shows a STUB empty state (no backend linkage)', async () => {
     render(<TargetsPage />);
     await waitFor(() => screen.getByText('NGC 7000'));
 
-    fireEvent.click(screen.getByRole('button', { name: 'My Targets' }));
+    // The "Show" select is the My Targets filter; select the 'my' option.
+    const showSelect = screen.getByRole('combobox', { name: 'Show' });
+    fireEvent.change(showSelect, { target: { value: 'my' } });
 
     expect(screen.getByText(/No targets with sessions yet/i)).toBeInTheDocument();
     // Planner-only catalog items are gone from the list
@@ -241,6 +246,49 @@ describe('TargetsPage', () => {
     fireEvent.change(searchInput, { target: { value: '' } });
     expect(screen.getByText('NGC 7000')).toBeInTheDocument();
     expect(screen.getByText('M 31')).toBeInTheDocument();
+  });
+
+  it('H4. search "M31" matches "M 31" (alias-aware whitespace normalization)', async () => {
+    render(<TargetsPage />);
+    await waitFor(() => screen.getByText('M 31'));
+
+    const searchInput = screen.getByPlaceholderText('Search targets...');
+    fireEvent.change(searchInput, { target: { value: 'M31' } });
+
+    expect(screen.getByText('M 31')).toBeInTheDocument();
+    expect(screen.queryByText('NGC 7000')).not.toBeInTheDocument();
+  });
+
+  it('H5. search "m31" matches "M 31" (case + whitespace insensitive)', async () => {
+    render(<TargetsPage />);
+    await waitFor(() => screen.getByText('M 31'));
+
+    const searchInput = screen.getByPlaceholderText('Search targets...');
+    fireEvent.change(searchInput, { target: { value: 'm31' } });
+
+    expect(screen.getByText('M 31')).toBeInTheDocument();
+    expect(screen.queryByText('NGC 7000')).not.toBeInTheDocument();
+  });
+
+  // ── MT: My Targets filter (#91) ──────────────────────────────────────────────
+
+  it('MT1. My Targets filter toggles between full catalog and stub empty state', async () => {
+    render(<TargetsPage />);
+    await waitFor(() => screen.getByText('NGC 7000'));
+
+    const showSelect = screen.getByRole('combobox', { name: 'Show' });
+
+    // Default: "All targets" (empty value) — catalog rows visible.
+    expect(screen.getByText('NGC 7000')).toBeInTheDocument();
+
+    // Switch to My Targets — stub empty state.
+    fireEvent.change(showSelect, { target: { value: 'my' } });
+    expect(screen.queryByText('NGC 7000')).not.toBeInTheDocument();
+    expect(screen.getByText(/No targets with sessions yet/i)).toBeInTheDocument();
+
+    // Switch back to All — catalog rows return.
+    fireEvent.change(showSelect, { target: { value: '' } });
+    await waitFor(() => expect(screen.getByText('NGC 7000')).toBeInTheDocument());
   });
 
   // ── G: Add target button ───────────────────────────────────────────────────

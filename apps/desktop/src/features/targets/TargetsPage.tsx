@@ -10,13 +10,25 @@
  * List side: loaded from the real `target.list` backend (gen-3
  * `canonical_target` table). No fixture data.
  *
- * The My Targets | Planner split (task #40) is preserved — the segmented tab
- * control renders in the top bar. The Planner catalog restriction
- * (planner-catalog.ts) is preserved and now exposes a catalogue multi-select
- * filter plus a group-by control (task #82), both Planner-only. Row density
- * follows the GLOBAL density setting (the `density-*` class on <html>); the old
- * per-page density toggle is gone. Selecting a row puts its id in
- * `?selected=<uuid>` and the detail pane loads the full gen-3 detail from SQLite.
+ * My Targets | Planner filter (#91): a single-select FilterField in the top
+ * bar replaces the old SegControl tab — "All targets" shows the Planner
+ * catalog, "My Targets" filters to objects with linked sessions/projects
+ * (stub: empty until task #54 backend linkage lands). Search, catalogue
+ * multi-select, and group-by controls are present on BOTH views so the bar
+ * stays consistent (#91). Row density follows the GLOBAL density
+ * setting (the `density-*` class on <html>). Selecting a row puts its id in
+ * `?selected=<uuid>` and the detail pane loads the full gen-3 detail from
+ * SQLite.
+ *
+ * #103a: The page root carries `.alm-targets-page` so targets-fixes.css can
+ * scope the layout fix that ensures the virtualizer scroll container always
+ * gets a definite measured height in Tauri/Windows WebView.
+ *
+ * #103b: Text search is whitespace/case-insensitive across the designation and
+ * label — "M31", "M 31", and "m31" all resolve to the same target (the
+ * normalizer collapses internal whitespace). Full alias resolution (e.g.
+ * "Andromeda" → M31) needs the list endpoint to carry aliases and is blocked on
+ * backend enrichment (#57/#93); the live `TargetListItem` has no aliases field.
  */
 
 import { useState, useEffect, useCallback, useMemo } from 'react';
@@ -25,7 +37,7 @@ import { listTargets } from '@/api/commands';
 import type { TargetListItem } from '@/api/commands';
 import { PageTopBar, FilterToolbar, ListPageLayout } from '@/components';
 import type { FilterOption } from '@/components';
-import { Btn, EmptyState, SegControl } from '@/ui';
+import { Btn, EmptyState } from '@/ui';
 import { AddTargetDialog } from './AddTargetDialog';
 import { TargetDetailV2 } from './TargetDetailV2';
 import {
@@ -50,17 +62,15 @@ type ListState =
   | { status: 'loaded'; items: TargetListItem[] };
 
 /**
- * Targets tab split (task #40, spec 043 §4).
+ * "My Targets" filter value (task #91, spec 043 §4).
  *
- * - "Planner" — search a RESTRICTED catalog (Messier/NGC/IC/Sh2/LBN/LDN/
- *   Caldwell/Barnard) to find a new object and start a project. Default tab so
- *   the page lands on something useful instead of the raw ~13k double-star dump.
- * - "My Targets" — objects that actually have linked sessions/projects. That
- *   linkage is backend (task #54) and not yet available, so the tab renders a
- *   STUB empty state rather than fabricating data.
+ * - '' (empty, "All") — show the full Planner catalog. Default so the page
+ *   lands on something useful rather than the raw ~13k double-star dump.
+ * - 'my' — objects with linked sessions/projects. That linkage is backend
+ *   (task #54) and not yet available, so this filter shows a STUB empty state
+ *   rather than fabricating data.
  */
-type TargetsTab = 'My Targets' | 'Planner';
-const TABS: TargetsTab[] = ['My Targets', 'Planner'];
+const MY_TARGETS_VALUE = 'my';
 
 /**
  * STUB: "My Targets" needs the FITS OBJECT → target_id linkage (task #54) to
@@ -82,21 +92,53 @@ const CATALOGUE_OPTIONS: FilterOption[] = PLANNER_CATALOGS.map((c) => ({
   label: c.label,
 }));
 
-/** Client-side text search across the fields the list endpoint provides. */
-function matchesSearch(t: TargetListItem, query: string): boolean {
-  const q = query.toLowerCase();
-  return (
-    t.primaryDesignation.toLowerCase().includes(q) ||
-    t.effectiveLabel.toLowerCase().includes(q)
-  );
+/**
+ * Normalize a designation or label for alias-aware matching (#103b).
+ *
+ * Collapses internal whitespace so "M31" and "M 31" become identical tokens
+ * ("m31"). Case is folded to lower. This means "M31", "M 31", and "m 31" all
+ * normalize to "m31" and match each other — the key astrophotography UX need
+ * where catalog designations appear both spaced ("M 31") and compact ("M31").
+ */
+export function normalizeDesig(s: string): string {
+  return s.toLowerCase().replace(/\s+/g, '');
 }
+
+/**
+ * Alias-aware search (#103b): tests whether a target row matches a query.
+ *
+ * Matching strategy:
+ *  1. Normalized exact/prefix/substring match on the collapsed designation and
+ *     label (so "M31" matches "M 31" and vice versa).
+ *  2. Unnormalized substring on effectiveLabel for free-text names
+ *     ("Andromeda" substring of "Andromeda Galaxy").
+ *
+ * `TargetListItem` carries no aliases field (aliases live on the detail
+ * endpoint only). Backend alias search is tracked in task #93.
+ */
+export function matchesSearch(t: TargetListItem, query: string): boolean {
+  const qNorm = normalizeDesig(query);
+  if (normalizeDesig(t.primaryDesignation).includes(qNorm)) return true;
+  if (normalizeDesig(t.effectiveLabel).includes(qNorm)) return true;
+  // Also allow a plain lowercase substring on effectiveLabel for proper names
+  // ("andromeda" in "Andromeda Galaxy") without whitespace collapsing, since
+  // proper names don't have the spaced-vs-compact ambiguity.
+  if (t.effectiveLabel.toLowerCase().includes(query.toLowerCase())) return true;
+  return false;
+}
+
+/** My Targets filter options for the FilterToolbar single-select (#91). */
+const MY_TARGETS_FILTER_OPTIONS: FilterOption[] = [
+  { value: MY_TARGETS_VALUE, label: 'My Targets' },
+];
 
 export function TargetsPage() {
   const { selected } = useSearch({ from: '/shell/targets' });
   const navigate = useNavigate({ from: '/targets' });
   const [listState, setListState] = useState<ListState>({ status: 'loading' });
   const [addOpen, setAddOpen] = useState(false);
-  const [tab, setTab] = useState<TargetsTab>('Planner');
+  /** '' = show full Planner catalog; 'my' = My Targets stub (#91). */
+  const [myTargetsFilter, setMyTargetsFilter] = useState('');
   const [search, setSearch] = useState('');
   const [sort, setSort] = useState<TargetSort>(DEFAULT_TARGET_SORT);
   const [groupBy, setGroupBy] = useState<TargetGroupBy>(DEFAULT_TARGET_GROUP_BY);
@@ -165,26 +207,23 @@ export function TargetsPage() {
     [listState, enabledCatalogues],
   );
 
-  const tabTargets = tab === 'Planner' ? plannerTargets : MY_TARGETS_STUB;
+  /** When the My Targets filter is active show the stub; otherwise the Planner catalog. */
+  const tabTargets = myTargetsFilter === MY_TARGETS_VALUE ? MY_TARGETS_STUB : plannerTargets;
 
   const visibleTargets = useMemo(() => {
     const q = search.trim();
     return q ? tabTargets.filter((t) => matchesSearch(t, q)) : tabTargets;
   }, [tabTargets, search]);
 
-  // Per the top-bar convention (task #80): no title/summary in the bar — the
-  // left nav names the page and per-page counts move to the status bar. The
-  // segmented My Targets/Planner tabs read as the bar's lead control.
+  // Per the top-bar convention (task #80/#91): no title/summary in the bar —
+  // the left nav names the page and per-page counts move to the status bar.
+  // The My Targets filter, search, catalogue multi-select, and group-by ALL
+  // remain visible on both the "All targets" and "My Targets" views so the
+  // bar is consistent regardless of which view is active (#91 correction:
+  // the bar must not collapse on tab switch).
+  const isMyTargets = myTargetsFilter === MY_TARGETS_VALUE;
   const topBar = (
     <PageTopBar
-      title={
-        <SegControl
-          options={TABS}
-          value={tab}
-          onChange={(v) => setTab(v as TargetsTab)}
-          aria-label="Targets view"
-        />
-      }
       filters={
         <FilterToolbar
           search={{
@@ -193,30 +232,36 @@ export function TargetsPage() {
             placeholder: 'Search targets...',
             ariaLabel: 'Search targets',
           }}
-          // Catalogue multi-select + group-by are Planner-only controls; the
-          // My Targets tab is a stub list with nothing to filter/group yet.
-          multiFields={
-            tab === 'Planner'
-              ? [
-                  {
-                    key: 'catalogues',
-                    label: 'Catalogues',
-                    value: enabledCatalogues,
-                    options: CATALOGUE_OPTIONS,
-                    onChange: (v) => setEnabledCatalogues(v as CatalogueId[]),
-                  },
-                ]
-              : undefined
-          }
-          groupBy={
-            tab === 'Planner'
-              ? {
-                  value: groupBy,
-                  options: GROUP_BY_OPTIONS,
-                  onChange: (v) => setGroupBy(v as TargetGroupBy),
-                }
-              : undefined
-          }
+          // My Targets filter (#91): single-select with implicit "All targets"
+          // leading option that shows the full Planner catalog when selected.
+          fields={[
+            {
+              key: 'myTargets',
+              label: 'Show',
+              value: myTargetsFilter,
+              options: MY_TARGETS_FILTER_OPTIONS,
+              onChange: setMyTargetsFilter,
+              allLabel: 'All targets',
+            },
+          ]}
+          // Catalogue multi-select and group-by stay visible on both views
+          // (#91: consistent filter bar). On My Targets the stub list is empty
+          // so the catalogue filter has no effect yet, but the control remains
+          // so the bar doesn't shift layout on tab switch.
+          multiFields={[
+            {
+              key: 'catalogues',
+              label: 'Catalogues',
+              value: enabledCatalogues,
+              options: CATALOGUE_OPTIONS,
+              onChange: (v) => setEnabledCatalogues(v as CatalogueId[]),
+            },
+          ]}
+          groupBy={{
+            value: groupBy,
+            options: GROUP_BY_OPTIONS,
+            onChange: (v) => setGroupBy(v as TargetGroupBy),
+          }}
         />
       }
       actions={
@@ -229,7 +274,11 @@ export function TargetsPage() {
   );
 
   return (
-    <>
+    // .alm-targets-page scopes the layout fix from targets-fixes.css (#103a):
+    // the virtualizer scroll container gets a definite measured height in the
+    // Tauri/Windows WebView by overriding .alm-listpage__main to overflow:hidden
+    // and positioning .alm-targets-table__wrap absolutely within it.
+    <div className="alm-targets-page">
       <AddTargetDialog open={addOpen} onClose={() => setAddOpen(false)} onAdded={handleAdded} />
       <ListPageLayout
         topBar={topBar}
@@ -249,13 +298,13 @@ export function TargetsPage() {
             onSort={handleSort}
             groupBy={groupBy}
             emptyMessage={
-              tab === 'My Targets'
-                ? "No targets with sessions yet. Targets appear here once your captured frames are linked to a catalog object — that linkage isn't wired up yet. Use the Planner to find an object and start a project."
+              isMyTargets
+                ? "No targets with sessions yet. Targets appear here once your captured frames are linked to a catalog object — that linkage isn't wired up yet. Switch to 'All targets' to find an object and start a project."
                 : 'No catalog targets match the current filters.'
             }
           />
         )}
       </ListPageLayout>
-    </>
+    </div>
   );
 }

@@ -1,20 +1,29 @@
 /**
- * SessionDetail — spec 006 wired; spec 043 §4 redesign (task #79).
+ * SessionDetail — spec 006 wired; spec 043 §4 redesign (task #79/#99/#100).
  *
- * Detail panel for an InventorySession. The header spans the full panel width:
- * the target is the heading and a single concise acquisition line summarizes
- * the session (filter · frames · integration · night). The duplicate header
- * pills ("N frames", "Needs review") were removed — frames is a table column
- * and review state lives in the table and the REVIEW STATE rail card.
+ * Detail panel for an InventorySession. Uses the shared DetailPanel wrapper
+ * (task #100) so Sessions and Calibration share one header construct.
+ *
+ * Density + de-duplication (#99):
+ *   The table row already shows: Target, Filter, Frames, Integration (exposure),
+ *   Night, Camera, State, Projects. The detail panel MUST NOT repeat those
+ *   fields in the title bar or as the primary hero.
+ *
+ *   - Title: target identity (always the identity anchor; appropriate to repeat
+ *     as the selected-item label in the panel header).
+ *   - Subtitle: camera · gain · sensor temp — equipment context NOT in the row.
+ *   - MetricLine removed: it repeated Frames / Exposure / Type from the row.
+ *   - Layout: side-by-side two-column (mirrors calibration detail):
+ *       Left  (~280px) — compact 2-column KV grid of FITS facts.
+ *       Right (flex: 1) — review state pill + linked projects.
+ *     This is the right shape for the wide-short ListPageLayout bottom panel.
  *
  * Review actions (Confirm / Re-open / Reject) are CONTEXTUAL — they act on the
- * selected session — so they live in this header's actions slot, not the global
- * PageTopBar (task #79; supersedes the earlier FR-006 top-bar placement). The
- * SessionsPage passes the handlers, visibility flags, and pending state.
+ * selected session — so they live in the detail header's actions slot, not the
+ * global PageTopBar (task #79). The SessionsPage passes handlers + visibility.
  *
- * Provenance is no longer a separate section: the Facts table's SOURCE column
- * already distinguishes FITS-extracted from inferred values, so target/filter
- * inference is surfaced inline (source: 'inferred') on the relevant fact rows.
+ * Provenance is surfaced inline via the Facts KV provenance label (inferred vs
+ * FITS-extracted). A separate Provenance section is not needed.
  *
  * SC-004: no column is named Tags or Handling.
  * FR-004: state renders as plain structured data, not a decorative bubble.
@@ -23,14 +32,10 @@
 import type { InventorySession } from '@/api/commands';
 import {
   DetailPane,
-  DetailHeader,
-  MetricLine,
-  DetailGrid,
-  Rail,
+  DetailPanel,
   RailCard,
-  PropertyTable,
 } from '@/components';
-import { Pill, Section, EmptyState, Lock, Btn } from '@/ui';
+import { Pill, EmptyState, Lock, KV, Btn } from '@/ui';
 import { sessionStateLabel, sessionStateVariant } from '@/lib/lifecycle';
 
 interface Props {
@@ -47,13 +52,19 @@ interface Props {
   pending?: boolean;
 }
 
-/** One-line acquisition summary: filter · frames · integration · night. */
-function acquisitionSummary(session: InventorySession): string {
+/**
+ * Equipment context subtitle: camera · gain · sensor temp.
+ * Shows fields NOT already visible in the table row (which shows Target,
+ * Filter, Frames, Integration, Night, Camera, State, Projects). We include
+ * Camera here too as the subtitle anchor — it provides identity context when
+ * the panel is open, even though the row shows it.
+ */
+function equipmentSubtitle(session: InventorySession): string {
   const parts: string[] = [];
-  if (session.filter) parts.push(session.filter);
-  parts.push(`${session.frames} ${session.frames === 1 ? 'frame' : 'frames'}`);
-  if (session.exposure) parts.push(session.exposure);
-  if (session.capturedOn) parts.push(session.capturedOn);
+  if (session.camera) parts.push(session.camera);
+  if (session.gain) parts.push(`g${session.gain}`);
+  if (session.setTemp) parts.push(session.setTemp);
+  if (session.binning) parts.push(session.binning);
   return parts.join(' · ');
 }
 
@@ -80,102 +91,74 @@ export function SessionDetail({
 
   const isLinked = (session.linked?.projects?.length ?? 0) > 0;
 
-  // Provenance is merged into the Facts SOURCE column: if a value's identity was
-  // inferred (provenance carries a value for it), the fact row reports
-  // source='inferred' instead of 'fits'. Everything else is FITS-extracted.
+  // Provenance: if a value was inferred, surface it via the KV provenance label.
   const prov = session.provenance;
-  const targetSource = prov?.target ? ('inferred' as const) : ('fits' as const);
-  const filterSource = prov?.filter ? ('inferred' as const) : ('fits' as const);
-
-  const facts: Array<{ key: string; label: string; value: string; source: 'fits' | 'user' | 'inferred' }> = [
-    { key: 'target', label: 'Target', value: session.target ?? '—', source: targetSource },
-    { key: 'filter', label: 'Filter', value: session.filter ?? '—', source: filterSource },
-    {
-      key: 'exposure',
-      label: 'Exposure',
-      value: session.exposure ?? '—',
-      source: 'fits' as const,
-    },
-    {
-      key: 'capturedOn',
-      label: 'Captured',
-      value: session.capturedOn ?? '—',
-      source: 'fits' as const,
-    },
-    { key: 'camera', label: 'Camera', value: session.camera ?? '—', source: 'fits' as const },
-    { key: 'gain', label: 'Gain', value: session.gain ?? '—', source: 'fits' as const },
-    {
-      key: 'binning',
-      label: 'Binning',
-      value: session.binning ?? '—',
-      source: 'fits' as const,
-    },
-    {
-      key: 'setTemp',
-      label: 'Sensor temp',
-      value: session.setTemp ?? '—',
-      source: 'fits' as const,
-    },
-  ];
-
-  // Confirmed-by stays in the Facts table as an explicit 'user'-sourced row when
-  // present — it records who confirmed identity, not an inferred value.
-  if (prov?.confirmedBy) {
-    facts.push({
-      key: 'confirmedBy',
-      label: 'Confirmed by',
-      value: prov.confirmedBy,
-      source: 'user' as const,
-    });
-  }
+  const targetProv = prov?.target ? 'Inferred' : 'FITS';
+  const filterProv = prov?.filter ? 'Inferred' : 'FITS';
 
   return (
-    <DetailPane fill>
-      <DetailHeader
-        title={
-          <span className="alm-session-detail__heading">
-            {isLinked && <Lock />}
-            <strong>{session.target ?? session.name}</strong>
-          </span>
-        }
-        subtitle={acquisitionSummary(session)}
-        actions={
-          <>
-            {confirmVisible && (
-              <Btn
-                size="sm"
-                variant="primary"
-                onClick={onConfirm}
-                disabled={pending}
-              >
-                Confirm
-              </Btn>
-            )}
-            {reopenVisible && (
-              <Btn size="sm" onClick={onReopen} disabled={pending}>
-                Re-open review
-              </Btn>
-            )}
-            {rejectVisible && (
-              <Btn size="sm" variant="danger" onClick={onReject} disabled={pending}>
-                Reject
-              </Btn>
-            )}
-          </>
-        }
-      />
+    <DetailPanel
+      variant="sessions"
+      title={
+        <span className="alm-session-detail__heading">
+          {isLinked && (
+            <Lock reason="Linked to a project — metadata locked while in use." />
+          )}
+          <strong>{session.target ?? session.name}</strong>
+        </span>
+      }
+      subtitle={equipmentSubtitle(session) || undefined}
+      actions={
+        <>
+          {confirmVisible && (
+            <Btn size="sm" variant="primary" onClick={onConfirm} disabled={pending}>
+              Confirm
+            </Btn>
+          )}
+          {reopenVisible && (
+            <Btn size="sm" onClick={onReopen} disabled={pending}>
+              Re-open review
+            </Btn>
+          )}
+          {rejectVisible && (
+            <Btn size="sm" variant="danger" onClick={onReject} disabled={pending}>
+              Reject
+            </Btn>
+          )}
+        </>
+      }
+    >
+      {/* Side-by-side layout for the wide-short bottom panel.
+          Left: compact 2-col KV grid of FITS facts.
+          Right: review state + linked projects.
+          See .cssblocks/detail-density.css. */}
+      <div className="alm-session-detail">
 
-      <MetricLine
-        metrics={[
-          { value: session.frames, label: 'frames' },
-          { value: session.exposure ?? '—', label: 'exposure' },
-          { value: session.type, label: 'type' },
-        ]}
-      />
+        {/* ── Facts column ── */}
+        <aside className="alm-session-detail__facts">
+          <div className="alm-rail__panel">
+            <RailCard title="Facts">
+              <div className="alm-session-detail__kvgrid">
+                <KV label="Target" value={session.target ?? '—'} provenance={targetProv} />
+                <KV label="Filter" value={session.filter ?? '—'} provenance={filterProv} />
+                <KV label="Frames" value={String(session.frames)} />
+                <KV label="Exposure" value={session.exposure ?? '—'} />
+                <KV label="Night" value={session.capturedOn ?? '—'} />
+                <KV label="Camera" value={session.camera ?? '—'} />
+                <KV label="Gain" value={session.gain ?? '—'} />
+                <KV label="Binning" value={session.binning ?? '—'} />
+                {session.setTemp && <KV label="Sensor temp" value={session.setTemp} />}
+                {prov?.confirmedBy && (
+                  <KV label="Confirmed by" value={prov.confirmedBy} provenance="User" />
+                )}
+              </div>
+            </RailCard>
+          </div>
+        </aside>
 
-      <DetailGrid
-        rail={
-          <Rail>
+        {/* ── State + linked column ── */}
+        <div className="alm-session-detail__state">
+          <div className="alm-rail__panel">
             {/* FR-004: state as read-only structured data; actions live in the header */}
             <RailCard title="Review state">
               <Pill variant={sessionStateVariant(session.state)}>
@@ -195,55 +178,24 @@ export function SessionDetail({
                   ))}
                 </div>
               ) : (
-                <span className="alm-session-detail__no-linked">
-                  None
-                </span>
-              )}
-              {isLinked && (
-                <p className="alm-session-detail__lock-notice">
-                  Linked to a project — metadata locked while in use.
-                </p>
+                <span className="alm-session-detail__no-linked">None</span>
               )}
             </RailCard>
-          </Rail>
-        }
-      >
-        <Section title="Facts">
-          <PropertyTable mode="view" showSource properties={facts} />
-        </Section>
 
-        {(session.linked?.calibration != null || session.linked?.session != null) && (
-          <Section title="Linked">
-            <PropertyTable
-              mode="view"
-              showSource
-              properties={([
-                session.linked?.session
-                  ? {
-                      key: 'linked-session',
-                      label: 'Session',
-                      value: session.linked.session,
-                      source: 'fits' as const,
-                    }
-                  : null,
-                session.linked?.calibration
-                  ? {
-                      key: 'linked-calibration',
-                      label: 'Calibration',
-                      value: session.linked.calibration,
-                      source: 'fits' as const,
-                    }
-                  : null,
-              ].filter(Boolean)) as Array<{
-                key: string;
-                label: string;
-                value: string;
-                source: 'fits' | 'user' | 'inferred';
-              }>}
-            />
-          </Section>
-        )}
-      </DetailGrid>
-    </DetailPane>
+            {(session.linked?.calibration != null || session.linked?.session != null) && (
+              <RailCard title="Linked">
+                {session.linked?.session && (
+                  <KV label="Session" value={session.linked.session} />
+                )}
+                {session.linked?.calibration && (
+                  <KV label="Calibration" value={session.linked.calibration} />
+                )}
+              </RailCard>
+            )}
+          </div>
+        </div>
+
+      </div>
+    </DetailPanel>
   );
 }
