@@ -1,25 +1,38 @@
 /**
- * TargetsPage — spec 036 gen-3 list+detail layout.
+ * TargetsPage — spec 043 shared list-page adoption (task #73).
+ *
+ * Standardized on the Sessions layout system: a pinned `PageTopBar` (title +
+ * summary counts + `FilterToolbar` + right-aligned actions) over a
+ * `ListPageLayout` body — a dense FULL-WIDTH sortable `TargetsTable` as primary
+ * content and the existing planner detail (`TargetDetailV2`) in the right-side
+ * detail pane that mounts on selection.
  *
  * List side: loaded from the real `target.list` backend (gen-3
- * `canonical_target` table). No fixture data — the legacy `TARGETS_DATA`
- * fixture and the `targets.list` stub command are retired by spec 036.
+ * `canonical_target` table). No fixture data.
  *
- * Detail side: wired to `target.get` (gen-3) via TargetDetailV2.
- * Selecting any list item puts its id in `?selected=<uuid>` and the detail
- * pane loads the full gen-3 TargetDetailV3 from SQLite.
+ * The My Targets | Planner split (task #40) is preserved — the segmented tab
+ * control renders in the top bar. The Planner catalog restriction
+ * (planner-catalog.ts) and the density toggle are preserved; density now lives
+ * in the FilterToolbar. Selecting a row puts its id in `?selected=<uuid>` and
+ * the detail pane loads the full gen-3 detail from SQLite.
  */
 
 import { useState, useEffect, useCallback, useMemo } from 'react';
 import { useNavigate, useSearch } from '@tanstack/react-router';
 import { listTargets } from '@/api/commands';
 import type { TargetListItem } from '@/api/commands';
-import { PageShell, ListDetailLayout, TopActionBar } from '@/components';
+import { PageTopBar, FilterToolbar, ListPageLayout } from '@/components';
+import type { FilterOption } from '@/components';
 import { Btn, EmptyState, SegControl } from '@/ui';
-import { TargetList } from './TargetList';
-import { TargetDetailV2 } from './TargetDetailV2';
 import { AddTargetDialog } from './AddTargetDialog';
+import { TargetDetailV2 } from './TargetDetailV2';
 import { filterPlannerCatalog } from './planner-catalog';
+import {
+  TargetsTable,
+  DEFAULT_TARGET_SORT,
+  DEFAULT_TARGET_DENSITY,
+} from './TargetsTable';
+import type { TargetSort, TargetSortCol, TargetDensity } from './TargetsTable';
 
 type ListState =
   | { status: 'loading' }
@@ -34,7 +47,7 @@ type ListState =
  *   the page lands on something useful instead of the raw ~13k double-star dump.
  * - "My Targets" — objects that actually have linked sessions/projects. That
  *   linkage is backend (task #54) and not yet available, so the tab renders a
- *   STUB teaching/empty state rather than fabricating data.
+ *   STUB empty state rather than fabricating data.
  */
 type TargetsTab = 'My Targets' | 'Planner';
 const TABS: TargetsTab[] = ['My Targets', 'Planner'];
@@ -47,12 +60,29 @@ const TABS: TargetsTab[] = ['My Targets', 'Planner'];
  */
 const MY_TARGETS_STUB: TargetListItem[] = [];
 
+const DENSITY_OPTIONS: FilterOption[] = [
+  { value: 'Dense', label: 'Dense' },
+  { value: 'Rich', label: 'Rich' },
+];
+
+/** Client-side text search across the fields the list endpoint provides. */
+function matchesSearch(t: TargetListItem, query: string): boolean {
+  const q = query.toLowerCase();
+  return (
+    t.primaryDesignation.toLowerCase().includes(q) ||
+    t.effectiveLabel.toLowerCase().includes(q)
+  );
+}
+
 export function TargetsPage() {
   const { selected } = useSearch({ from: '/shell/targets' });
   const navigate = useNavigate({ from: '/targets' });
   const [listState, setListState] = useState<ListState>({ status: 'loading' });
   const [addOpen, setAddOpen] = useState(false);
   const [tab, setTab] = useState<TargetsTab>('Planner');
+  const [search, setSearch] = useState('');
+  const [sort, setSort] = useState<TargetSort>(DEFAULT_TARGET_SORT);
+  const [density, setDensity] = useState<TargetDensity>(DEFAULT_TARGET_DENSITY);
 
   const load = useCallback(() => {
     setListState({ status: 'loading' });
@@ -68,6 +98,11 @@ export function TargetsPage() {
   const onSelect = (id: string) =>
     navigate({ search: (prev) => ({ ...prev, selected: id }) });
 
+  const clearSelection = useCallback(
+    () => navigate({ search: (prev) => ({ ...prev, selected: undefined }), replace: true }),
+    [navigate],
+  );
+
   const handleAdded = useCallback(
     (targetId: string) => {
       load();
@@ -76,6 +111,12 @@ export function TargetsPage() {
     [load, navigate],
   );
 
+  const handleSort = useCallback((col: TargetSortCol) => {
+    setSort((prev) =>
+      prev.col === col ? { col, dir: prev.dir === 'asc' ? 'desc' : 'asc' } : { col, dir: 'asc' },
+    );
+  }, []);
+
   // STUB: client-side catalog filter. Replace with a backend catalog filter on
   // the list endpoint (task #57) once `target.list` can filter server-side.
   const plannerTargets = useMemo(
@@ -83,69 +124,90 @@ export function TargetsPage() {
     [listState],
   );
 
-  const visibleTargets = tab === 'Planner' ? plannerTargets : MY_TARGETS_STUB;
-  const count = listState.status === 'loaded' ? visibleTargets.length : '…';
-  const countLabel = tab === 'Planner' ? 'catalog targets' : 'with sessions';
+  const tabTargets = tab === 'Planner' ? plannerTargets : MY_TARGETS_STUB;
+
+  const visibleTargets = useMemo(() => {
+    const q = search.trim();
+    return q ? tabTargets.filter((t) => matchesSearch(t, q)) : tabTargets;
+  }, [tabTargets, search]);
+
+  // Per the top-bar convention (task #80): no title/summary in the bar — the
+  // left nav names the page and per-page counts move to the status bar. The
+  // segmented My Targets/Planner tabs read as the bar's lead control.
+  const topBar = (
+    <PageTopBar
+      title={
+        <SegControl
+          options={TABS}
+          value={tab}
+          onChange={(v) => setTab(v as TargetsTab)}
+          aria-label="Targets view"
+        />
+      }
+      filters={
+        <FilterToolbar
+          search={{
+            value: search,
+            onChange: setSearch,
+            placeholder: 'Search targets...',
+            ariaLabel: 'Search targets',
+          }}
+          actions={
+            <label className="alm-targets-density">
+              <span className="alm-targets-density__label">Density</span>
+              <select
+                className="alm-filterbar__select"
+                value={density}
+                onChange={(e) => setDensity(e.target.value as TargetDensity)}
+                aria-label="Row density"
+              >
+                {DENSITY_OPTIONS.map((o) => (
+                  <option key={o.value} value={o.value}>
+                    {o.label}
+                  </option>
+                ))}
+              </select>
+            </label>
+          }
+        />
+      }
+      actions={
+        // "Add target" is a page-level action (creates a new catalog object).
+        // Per-item actions ("+ New project here") live in TargetDetailV2's
+        // detail body, not the top bar.
+        <Btn size="sm" onClick={() => setAddOpen(true)}>Add target</Btn>
+      }
+    />
+  );
 
   return (
-    <PageShell>
-      <AddTargetDialog
-        open={addOpen}
-        onClose={() => setAddOpen(false)}
-        onAdded={handleAdded}
-      />
-      <ListDetailLayout
-        topBar={
-          <TopActionBar
-            title="Targets"
-            subtitle={`${count} ${countLabel}`}
-            right={
-              selected ? (
-                <Btn size="sm" variant="primary">New project</Btn>
-              ) : (
-                <Btn size="sm" onClick={() => setAddOpen(true)}>Add target</Btn>
-              )
+    <>
+      <AddTargetDialog open={addOpen} onClose={() => setAddOpen(false)} onAdded={handleAdded} />
+      <ListPageLayout
+        topBar={topBar}
+        detail={selected ? <TargetDetailV2 targetId={selected} /> : undefined}
+        onCloseDetail={selected ? clearSelection : undefined}
+        detailLabel="Target details"
+      >
+        {listState.status === 'error' ? (
+          <EmptyState title="Error" desc={listState.message} />
+        ) : (
+          <TargetsTable
+            targets={visibleTargets}
+            selected={selected ?? null}
+            onSelect={onSelect}
+            loading={listState.status === 'loading'}
+            sort={sort}
+            onSort={handleSort}
+            density={density}
+            emptyMessage={
+              tab === 'My Targets'
+                ? "No targets with sessions yet. Targets appear here once your captured frames are linked to a catalog object — that linkage isn't wired up yet. Use the Planner to find an object and start a project."
+                : 'No catalog targets match the current filters.'
             }
           />
-        }
-        list={
-          <div className="alm-targets-list">
-            <div className="alm-targets-list__tabs">
-              <SegControl
-                options={TABS}
-                value={tab}
-                onChange={(v) => setTab(v as TargetsTab)}
-                aria-label="Targets view"
-              />
-            </div>
-            {listState.status === 'error' ? (
-              <EmptyState title="Error" desc={listState.message} />
-            ) : tab === 'My Targets' && visibleTargets.length === 0 ? (
-              /* STUB: no FITS OBJECT → target_id linkage yet (task #54). */
-              <EmptyState
-                title="No targets with sessions yet"
-                desc="Targets appear here once your captured frames are linked to a catalog object. That linkage isn't wired up yet — use the Planner to find an object and start a project."
-              />
-            ) : (
-              <TargetList
-                targets={visibleTargets}
-                selected={selected ?? null}
-                onSelect={onSelect}
-              />
-            )}
-          </div>
-        }
-        detail={
-          selected ? (
-            <TargetDetailV2 targetId={selected} />
-          ) : (
-            <EmptyState
-              title="Select a target"
-              desc="Choose a target from the list to view its identity, aliases, and coordinates."
-            />
-          )
-        }
-      />
-    </PageShell>
+        )}
+      </ListPageLayout>
+    </>
   );
 }

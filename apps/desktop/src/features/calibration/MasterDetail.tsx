@@ -21,7 +21,7 @@ import {
   Rail,
   RailCard,
 } from '@/components';
-import { Pill, EmptyState, Lock, KV } from '@/ui';
+import { Pill, EmptyState, Lock, KV, Btn } from '@/ui';
 import type { PillVariant } from '@/ui';
 import { useCalibrationSuggest, useCalibrationAssign } from './useCalibration';
 import { MatchCandidatesPanel } from './MatchCandidatesPanel';
@@ -31,6 +31,22 @@ import { MatchCandidatesPanel } from './MatchCandidatesPanel';
 function kindVariant(kind: string): PillVariant {
   const map: Record<string, PillVariant> = { dark: 'info', flat: 'accent', bias: 'neutral' };
   return map[kind.toLowerCase()] ?? 'neutral';
+}
+
+// Per-master contextual actions. These act on the selected master and therefore
+// live in the DETAIL panel header (not the global page top bar): the top bar
+// holds only page-level search / filters / group-by.
+interface ContextualAction {
+  label: string;
+  variant?: 'primary' | 'danger' | 'ghost';
+}
+
+function masterActions(master: CalibrationMaster, agingThresholdDays: number): ContextualAction[] {
+  const isAging = master.ageDays > agingThresholdDays;
+  const actions: ContextualAction[] = [{ label: 'Use in project', variant: 'primary' }];
+  if (isAging) actions.push({ label: 'Replace master', variant: 'danger' });
+  actions.push({ label: 'Reveal in Explorer' });
+  return actions;
 }
 
 function fmtBytes(bytes: number): string {
@@ -110,6 +126,11 @@ export function MasterDetail({ master, prefillSuggestion, agingThresholdDays }: 
           </>
         }
         subtitle={`${kindStr} · ${fmtBytes(master.sizeBytes)}`}
+        actions={masterActions(master, agingThresholdDays).map((a) => (
+          <Btn key={a.label} size="sm" variant={a.variant}>
+            {a.label}
+          </Btn>
+        ))}
       />
 
       <MetricLine

@@ -6955,3 +6955,419 @@
 	display: flex;
 	gap: var(--alm-sp-2);
 }
+
+/* === merged from .cssblocks/calibration-layout.css (adoption wave, spec-043) === */
+/*
+ * calibration-layout.css — spec 043 §4 Calibration shared-layout adoption (#73).
+ *
+ * Token-only (--alm-*) styling for the full-width MastersTable that replaced the
+ * narrow MastersList sidebar. Mirrors the SessionsTable surface conventions so
+ * Calibration reads identically to Sessions. DO NOT @import — the parent build
+ * merges these blocks into the shared stylesheet.
+ */
+
+/* === MASTERS TABLE (full-width, grouped by kind) === */
+.alm-calib-table {
+  /* Inherits .alm-table base; tighten cell padding for density. */
+  table-layout: auto;
+}
+.alm-calib-table th {
+  user-select: none;
+}
+.alm-calib-table td,
+.alm-calib-table th {
+  padding: var(--alm-sp-1) var(--alm-sp-3);
+}
+
+/* Sortable column header (button-in-th) — matches .alm-sessions-sorth. */
+.alm-calib-sorth {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--alm-sp-1);
+  background: none;
+  border: none;
+  padding: 0;
+  margin: 0;
+  font: inherit;
+  color: inherit;
+  text-transform: inherit;
+  letter-spacing: inherit;
+  cursor: pointer;
+}
+.alm-calib-sorth:hover {
+  color: var(--alm-text);
+}
+.alm-calib-sorth--active {
+  color: var(--alm-text);
+}
+.alm-calib-sorth__arrow {
+  font-size: var(--alm-text-2xs);
+  color: var(--alm-text-muted);
+}
+
+/* Kind group header row — spans the table, headlines the kind. */
+.alm-calib-table__group td {
+  background: var(--alm-surface);
+  font-weight: var(--alm-weight-semibold);
+  font-size: var(--alm-text-2xs);
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  color: var(--alm-text-muted);
+  border-bottom: 1px solid var(--alm-border-subtle);
+  padding: var(--alm-sp-2) var(--alm-sp-3);
+}
+.alm-calib-table__group-count {
+  margin-left: var(--alm-sp-2);
+  font-weight: var(--alm-weight-normal);
+  letter-spacing: normal;
+  text-transform: none;
+  color: var(--alm-text-muted);
+  font-size: var(--alm-text-xs);
+}
+
+/* Selectable master rows. */
+.alm-calib-table__row {
+  cursor: pointer;
+}
+.alm-calib-table__row:hover td {
+  background: var(--alm-surface);
+}
+.alm-calib-table__row--selected td {
+  background: var(--alm-accent-bg);
+}
+
+/* Master cell: kind pill + readable label + optional aging pill. */
+.alm-calib-cell__master {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--alm-sp-2);
+  flex-wrap: wrap;
+}
+.alm-calib-cell__master-label {
+  font-weight: var(--alm-weight-medium);
+  color: var(--alm-text);
+}
+
+/* Cell helpers (token-only). */
+.alm-calib-cell--num {
+  font-variant-numeric: tabular-nums;
+  text-align: right;
+}
+.alm-calib-cell--mono {
+  font-family: var(--alm-font-mono);
+  font-size: var(--alm-text-xs);
+  color: var(--alm-text-secondary);
+}
+.alm-calib-cell--muted {
+  color: var(--alm-text-muted);
+}
+
+/* Status surfaces (loading / error / empty) shown in place of the table. */
+.alm-calib-table__status {
+  padding: var(--alm-sp-5);
+  text-align: center;
+  color: var(--alm-text-muted);
+}
+
+/* === merged from .cssblocks/projects-layout.css (adoption wave, spec-043) === */
+/* === merged from .cssblocks/projects-layout.css (spec-043, tasks #73/#74) === */
+/* ===========================================================================
+ * Projects — shared list-page layout adoption (#73) + compact lifecycle
+ * stepper (#74).
+ *
+ * SCRATCH FILE: not imported anywhere. The parent merges this into
+ * components.css and runs check-tokens. Token-only (existing --alm-* tokens);
+ * no raw hex/rgb/ms. No JSX inline styles — every selector here backs a
+ * className used by ProjectsTable.tsx / ProjectLifecycleStepper.tsx /
+ * ProjectDetail.tsx.
+ *
+ * Reuses the already-merged shared list-page primitives (.alm-topbar*,
+ * .alm-filterbar*, .alm-listpage__*) — those are NOT redefined here. Also
+ * reuses .alm-project-detail__target-info / __target-name / __target-common
+ * (owned by components.css) for the inline target block; only the NEW
+ * __target-label child is added below.
+ * ======================================================================== */
+
+/* --- Projects dense sortable table (mirrors .alm-sessions-table) ---------- */
+.alm-projects-table {
+  table-layout: auto;
+}
+.alm-projects-table th { user-select: none; }
+.alm-projects-table td,
+.alm-projects-table th {
+  padding: var(--alm-sp-1) var(--alm-sp-3);
+}
+
+/* Selectable project rows. */
+.alm-projects-table__row { cursor: pointer; }
+.alm-projects-table__row:hover td { background: var(--alm-surface); }
+.alm-projects-table__row--selected td {
+  background: var(--alm-accent-bg);
+}
+
+/* Name cell: primary identity + optional blocked icon + drift badge. */
+.alm-projects-table__name {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--alm-sp-1);
+  font-weight: var(--alm-weight-medium);
+  color: var(--alm-text);
+}
+.alm-projects-table__blocked-icon {
+  color: var(--alm-danger);
+  flex-shrink: 0;
+}
+.alm-projects-table__drift-badge {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--alm-sp-0);
+  margin-left: var(--alm-sp-1);
+  font-size: var(--alm-text-2xs);
+  font-weight: var(--alm-weight-normal);
+  color: var(--alm-warn);
+}
+
+/* Cell helpers (token-only). */
+.alm-projects-table__cell--muted { color: var(--alm-text-muted); }
+.alm-projects-table__cell--num {
+  font-variant-numeric: tabular-nums;
+  text-align: right;
+}
+.alm-projects-table__cell--mono {
+  font-family: var(--alm-font-mono);
+  font-size: var(--alm-text-xs);
+  color: var(--alm-text-secondary);
+}
+.alm-projects-table__dash { color: var(--alm-text-muted); }
+
+/* Sortable column header (button-in-th). */
+.alm-projects-sorth {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--alm-sp-1);
+  background: none;
+  border: none;
+  padding: 0;
+  margin: 0;
+  font: inherit;
+  color: inherit;
+  text-transform: inherit;
+  letter-spacing: inherit;
+  cursor: pointer;
+}
+.alm-projects-sorth:hover { color: var(--alm-text); }
+.alm-projects-sorth--active { color: var(--alm-text); }
+.alm-projects-sorth__arrow {
+  font-size: var(--alm-text-2xs);
+  color: var(--alm-text-muted);
+}
+
+/* Empty + footer states. */
+.alm-projects-table__empty {
+  padding: var(--alm-sp-5);
+  text-align: center;
+  color: var(--alm-text-muted);
+  font-size: var(--alm-text-sm);
+}
+.alm-projects-table__footer {
+  padding: var(--alm-sp-2) var(--alm-sp-3);
+  font-size: var(--alm-text-xs);
+  color: var(--alm-text-muted);
+  border-top: 1px solid var(--alm-border-subtle);
+}
+
+/* --- Compact horizontal lifecycle stepper (#74) --------------------------- */
+/* Replaces the vertical .alm-lifecycle rail inside the Projects detail. Stage
+ * chips flow horizontally (wrapping on narrow panes); the current chip is
+ * highlighted, prior chips read as done, and an off-track project gets a
+ * trailing danger chip. A single next-action line sits beneath. */
+.alm-stepper {
+  display: flex;
+  flex-direction: column;
+  gap: var(--alm-sp-2);
+  padding: var(--alm-sp-3);
+  border-bottom: 1px solid var(--alm-border-subtle);
+}
+.alm-stepper__track {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--alm-sp-1);
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+.alm-stepper__chip {
+  display: inline-flex;
+  align-items: center;
+  padding: var(--alm-sp-0) var(--alm-sp-2);
+  font-size: var(--alm-text-xs);
+  text-transform: capitalize;
+  color: var(--alm-text-muted);
+  background: var(--alm-surface);
+  border: 1px solid var(--alm-border-subtle);
+  border-radius: var(--alm-radius-lg);
+  white-space: nowrap;
+}
+.alm-stepper__chip--done {
+  color: var(--alm-text-secondary);
+  border-color: var(--alm-border);
+}
+.alm-stepper__chip--active {
+  color: var(--alm-accent-text);
+  background: var(--alm-accent-bg);
+  border-color: var(--alm-accent);
+  font-weight: var(--alm-weight-semibold);
+}
+.alm-stepper__chip--blocked {
+  color: var(--alm-danger);
+  background: var(--alm-danger-bg);
+  border-color: var(--alm-danger);
+  font-weight: var(--alm-weight-semibold);
+}
+.alm-stepper__next {
+  margin: 0;
+  font-size: var(--alm-text-xs);
+  color: var(--alm-text-muted);
+}
+.alm-stepper__history {
+  display: flex;
+  flex-direction: column;
+  gap: var(--alm-sp-0);
+}
+.alm-stepper__history-row {
+  font-size: var(--alm-text-xs);
+  color: var(--alm-text-muted);
+}
+
+/* --- Detail single-column sections wrapper -------------------------------- */
+/* The detail pane no longer uses the two-column dashboard grid; sections stack
+ * in one column beneath the stepper + target block. */
+.alm-project-detail__sections {
+  display: flex;
+  flex-direction: column;
+}
+
+/* Inline target block (under the stepper) — reuses __target-info layout; only
+ * the leading uppercase label is new. */
+.alm-project-detail__target-info {
+  padding: 0 var(--alm-sp-3) var(--alm-sp-2);
+}
+.alm-project-detail__target-label {
+  font-size: var(--alm-text-2xs);
+  font-weight: var(--alm-weight-medium);
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  color: var(--alm-text-muted);
+}
+
+/* === merged from .cssblocks/targets-layout.css (adoption wave, spec-043) === */
+/* ===========================================================================
+ * Targets — shared list-page layout adoption (task #73, spec 043).
+ *
+ * SCRATCH FILE: not imported anywhere. The parent merges this into
+ * components.css and runs check-tokens. Token-only (existing --alm-* tokens);
+ * no raw hex/rgb/ms.
+ *
+ * Targets adopts the Sessions surface pattern: the pinned PageTopBar (title +
+ * summary + FilterToolbar + actions) lives in .alm-page__bar, and the body is
+ * the shared .alm-listpage__body split — a dense FULL-WIDTH sortable
+ * .alm-targets-table on the left, with TargetDetailV2 in the detail pane that
+ * mounts on selection. The old `.alm-targets-list*` sidebar rules are now dead
+ * (parent removes them on merge).
+ * ======================================================================== */
+
+/* --- Density control in the top-bar actions slot -------------------------- */
+.alm-targets-density {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--alm-sp-1);
+}
+.alm-targets-density__label {
+  font-size: var(--alm-text-xs);
+  color: var(--alm-text-muted);
+}
+
+/* --- Dense sortable table ------------------------------------------------- */
+.alm-targets-table {
+  /* Inherits .alm-table base; tighten cell padding for density. */
+  table-layout: auto;
+}
+.alm-targets-table th { user-select: none; }
+.alm-targets-table td,
+.alm-targets-table th {
+  padding: var(--alm-sp-1) var(--alm-sp-3);
+}
+
+/* Sortable column header (button-in-th). */
+.alm-targets-sorth {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--alm-sp-1);
+  background: none;
+  border: none;
+  padding: 0;
+  margin: 0;
+  font: inherit;
+  color: inherit;
+  text-transform: inherit;
+  letter-spacing: inherit;
+  cursor: pointer;
+}
+.alm-targets-sorth:hover { color: var(--alm-text); }
+.alm-targets-sorth--active { color: var(--alm-text); }
+.alm-targets-sorth__arrow {
+  font-size: var(--alm-text-2xs);
+  color: var(--alm-text-muted);
+}
+
+/* Selectable target rows. */
+.alm-targets-table__row { cursor: pointer; }
+.alm-targets-table__row:hover td { background: var(--alm-surface); }
+.alm-targets-table__row--selected td {
+  background: var(--alm-accent-bg);
+}
+/* Rich density — taller rows + room for the secondary designation line. */
+.alm-targets-table__row--rich td {
+  padding-top: var(--alm-sp-2);
+  padding-bottom: var(--alm-sp-2);
+}
+.alm-targets-table__row--rich .alm-targets-cell__desig {
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 0;
+}
+
+/* Designation cell — primary label + optional secondary designation. */
+.alm-targets-cell__desig {
+  display: inline-flex;
+  align-items: baseline;
+  gap: var(--alm-sp-2);
+  min-width: 0;
+}
+.alm-targets-cell__label {
+  font-weight: var(--alm-weight-medium);
+  color: var(--alm-text);
+}
+.alm-targets-cell__alt {
+  font-size: var(--alm-text-xs);
+  color: var(--alm-text-muted);
+}
+
+/* Cell helpers (token-only). */
+.alm-targets-cell--num { font-variant-numeric: tabular-nums; text-align: right; }
+.alm-targets-cell--muted { color: var(--alm-text-muted); }
+
+/* Empty + footer states. */
+.alm-targets-table__empty {
+  padding: var(--alm-sp-5);
+  text-align: center;
+  color: var(--alm-text-muted);
+  font-size: var(--alm-text-sm);
+}
+.alm-targets-table__footer {
+  padding: var(--alm-sp-2) var(--alm-sp-3);
+  font-size: var(--alm-text-xs);
+  color: var(--alm-text-muted);
+  border-top: 1px solid var(--alm-border-subtle);
+}

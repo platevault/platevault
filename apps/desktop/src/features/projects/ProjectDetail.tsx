@@ -1,14 +1,15 @@
 /**
  * ProjectDetail — spec 008 wired, redesigned per PlateVault mock (2026-06-22).
  *
- * Layout:
- *   DetailHeader  (title + state pill + Edit action)
- *   TopActionBar  (tool · path breadcrumb · Reveal in Explorer · Open in {tool} · lifecycle actions)
- *   MetricLine    (integration · sources · channels · tool)
- *   DetailGrid
- *     primary: Sources table · Channels palette · Source views (clickable) ·
- *              Notes · Manifests · Generated source views · Calibration panel
- *     rail:    Lifecycle · Target · Next · History
+ * Layout (spec 043 task #74 — compact stepper replaces the vertical rail):
+ *   DetailHeader            (title + state pill + Edit action)
+ *   TopActionBar            (tool · path breadcrumb · Reveal · Open in {tool} · lifecycle actions)
+ *   MetricLine              (integration · sources · channels · tool)
+ *   ProjectLifecycleStepper (horizontal stage chips + next-action + History collapsible)
+ *   Target block            (canonical target, when resolved)
+ *   Sections (single column): Sources table · Channels palette · Source views ·
+ *              Outputs · Notes · Manifests · Cleanup preview · Generated source
+ *              views · Calibration panel
  *
  * Per-project actions (Reveal in Explorer · Open in {tool} · lifecycle
  * transitions) live ONLY in the detail action bar (data-testid="lifecycle-actions").
@@ -26,12 +27,9 @@ import {
   DetailHeader,
   DetailPane,
   MetricLine,
-  DetailGrid,
-  Rail,
-  RailCard,
-  Lifecycle,
   TopActionBar,
 } from '@/components';
+import { ProjectLifecycleStepper } from './ProjectLifecycleStepper';
 import { Pill, Btn, Section, Banner, CoverageBar, Table } from '@/ui';
 import type { PillVariant } from '@/ui';
 import { projectStateLabel, projectStateVariant } from '@/lib/lifecycle';
@@ -442,58 +440,34 @@ export function ProjectDetailContent({ projectId }: ProjectDetailContentProps) {
         ]}
       />
 
-      <DetailGrid
-        rail={
-          <Rail>
-            {/* Lifecycle stepper */}
-            <RailCard title="Lifecycle">
-              <Lifecycle state={lifecycle} />
-            </RailCard>
+      {/* ── Compact lifecycle stepper (task #74) — replaces the vertical rail.
+          Horizontal stage chips + next-action line + History collapsible. ── */}
+      <ProjectLifecycleStepper
+        state={lifecycle}
+        createdAt={project.createdAt}
+        updatedAt={project.updatedAt}
+      />
 
-            {/* spec 035 US1 #2: associated canonical target (resolved on read path) */}
-            {project.canonicalTarget && (
-              <RailCard title="Target">
-                <div
-                  className="alm-project-detail__target-info"
-                  data-testid="project-canonical-target"
-                >
-                  <span className="alm-project-detail__target-name">
-                    {project.canonicalTarget.primaryDesignation}
-                  </span>
-                  {project.canonicalTarget.commonName && (
-                    <span className="alm-project-detail__target-common">
-                      {project.canonicalTarget.commonName}
-                    </span>
-                  )}
-                </div>
-              </RailCard>
-            )}
+      {/* spec 035 US1 #2: associated canonical target (resolved on read path).
+          No longer a rail card — a compact inline block under the stepper. */}
+      {project.canonicalTarget && (
+        <div
+          className="alm-project-detail__target-info"
+          data-testid="project-canonical-target"
+        >
+          <span className="alm-project-detail__target-label">Target</span>
+          <span className="alm-project-detail__target-name">
+            {project.canonicalTarget.primaryDesignation}
+          </span>
+          {project.canonicalTarget.commonName && (
+            <span className="alm-project-detail__target-common">
+              {project.canonicalTarget.commonName}
+            </span>
+          )}
+        </div>
+      )}
 
-            {/* Next action guide */}
-            <RailCard title="Next">
-              <p className="alm-project-detail__next-note">
-                {lifecycle === 'ready' && 'Prepare sources and calibration masters before processing.'}
-                {lifecycle === 'prepared' && 'Open in processing tool to begin integration.'}
-                {lifecycle === 'processing' && 'Record an accepted output to complete the project.'}
-                {lifecycle === 'completed' && 'Review cleanup candidates to reclaim disk space.'}
-                {lifecycle === 'archived' && 'Project is archived. Unarchive to resume work.'}
-                {(lifecycle === 'setup_incomplete' || lifecycle === 'blocked') &&
-                  'Resolve any issues before proceeding.'}
-              </p>
-            </RailCard>
-
-            {/* History */}
-            <RailCard title="History">
-              <div className="alm-project-detail__history-row">
-                Created {new Date(project.createdAt).toLocaleDateString()}
-              </div>
-              <div className="alm-project-detail__history-row">
-                Updated {new Date(project.updatedAt).toLocaleDateString()}
-              </div>
-            </RailCard>
-          </Rail>
-        }
-      >
+      <div className="alm-project-detail__sections">
         {/* ── Sources section ────────────────────────────────────────────── */}
         <Section title="Sources" count={project.sources.length}>
           {project.sources.length === 0 ? (
@@ -601,7 +575,7 @@ export function ProjectDetailContent({ projectId }: ProjectDetailContentProps) {
         <CalibrationMatchPanel
           sessionIds={project.sources.map((s) => s.inventoryId)}
         />
-      </DetailGrid>
+      </div>
 
       {/* Lifecycle transition buttons now live in the detail action bar above
           (single source of truth) — the duplicate bottom footer was removed. */}
