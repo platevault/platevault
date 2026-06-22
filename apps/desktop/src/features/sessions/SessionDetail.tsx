@@ -117,60 +117,62 @@ export function SessionDetail({
   const colA = factProps.slice(0, mid);
   const colB = factProps.slice(mid);
 
-  // Linked projects occupy the panel's third column (the aux slot).
-  const linkedAux = (
-    <div className="alm-session-detail2__aux">
-      <div className="alm-session-detail2__head">Linked projects</div>
-      {isLinked ? (
-        <div className="alm-session-detail2__linked">
-          {session.linked?.projects?.map((p) => (
-            <button
-              key={p.id}
-              type="button"
-              className="alm-session-detail2__link"
-              onClick={() => onOpenProject?.(p.id)}
-            >
-              {p.name}
-            </button>
-          ))}
-        </div>
-      ) : (
-        <span className="alm-session-detail2__muted">None</span>
+  // Review actions sit inline with the title (left-grouped) so growing the
+  // panel only adds trailing whitespace — it never spreads the title and
+  // buttons apart.
+  const actionButtons = (
+    <span className="alm-session-detail2__actions">
+      {confirmVisible && (
+        <Btn size="sm" variant="primary" onClick={onConfirm} disabled={pending}>
+          Confirm
+        </Btn>
       )}
-    </div>
+      {reopenVisible && (
+        <Btn size="sm" onClick={onReopen} disabled={pending}>
+          Re-open review
+        </Btn>
+      )}
+      {rejectVisible && (
+        <Btn size="sm" variant="danger" onClick={onReject} disabled={pending}>
+          Reject
+        </Btn>
+      )}
+    </span>
   );
 
   return (
     <DetailPanel
       variant="sessions"
       title={<strong>{session.target ?? session.name}</strong>}
+      titleExtra={actionButtons}
       subtitle={equipmentSubtitle(session) || undefined}
-      actions={
-        <>
-          {confirmVisible && (
-            <Btn size="sm" variant="primary" onClick={onConfirm} disabled={pending}>
-              Confirm
-            </Btn>
-          )}
-          {reopenVisible && (
-            <Btn size="sm" onClick={onReopen} disabled={pending}>
-              Re-open review
-            </Btn>
-          )}
-          {rejectVisible && (
-            <Btn size="sm" variant="danger" onClick={onReject} disabled={pending}>
-              Reject
-            </Btn>
-          )}
-        </>
-      }
-      aux={linkedAux}
     >
+      {/* Left-packed columns: [props A] [props B] [linked projects]. */}
       <div className="alm-session-detail2">
-        {/* Session attributes spread across two tabular columns. */}
-        <div className="alm-session-detail2__cols">
+        <div className="alm-session-detail2__col">
           <PropertyTable mode="view" showSource properties={colA} />
+        </div>
+        <div className="alm-session-detail2__col">
           <PropertyTable mode="view" showSource properties={colB} />
+        </div>
+        <div className="alm-session-detail2__linked">
+          <div className="alm-session-detail2__head">Linked projects</div>
+          {isLinked ? (
+            <div className="alm-session-detail2__linked-list">
+              {session.linked?.projects?.map((p) => (
+                <button
+                  key={p.id}
+                  type="button"
+                  className="alm-session-detail2__link"
+                  onClick={() => onOpenProject?.(p.id)}
+                >
+                  {p.name}
+                </button>
+              ))}
+            </div>
+          ) : (
+            <span className="alm-session-detail2__muted">None</span>
+          )}
         </div>
       </div>
     </DetailPanel>

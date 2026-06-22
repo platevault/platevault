@@ -9652,20 +9652,26 @@
   color: var(--alm-text-faint);
 }
 
-/* === Sessions detail — flat tabular layout (PropertyTable + frames table) === */
+/* === Sessions detail — left-packed columns: [props A][props B][linked] ===
+   A flex row, left-justified, so growing the panel adds TRAILING whitespace
+   on the right rather than spreading gaps between the data columns. Each
+   column is content-bounded (not 1fr) so the tables and linked-projects stay
+   grouped together at the left edge. */
 .alm-session-detail2 {
-  display: grid;
-  grid-template-columns: minmax(0, 1.1fr) minmax(280px, 0.9fr);
-  gap: var(--alm-sp-5);
-  padding: var(--alm-sp-4);
-  align-items: start;
-}
-.alm-session-detail2__props { min-width: 0; }
-.alm-session-detail2__side {
   display: flex;
-  flex-direction: column;
-  gap: var(--alm-sp-4);
-  min-width: 0;
+  flex-wrap: wrap;
+  align-items: flex-start;
+  justify-content: flex-start;
+  gap: var(--alm-sp-6);
+  padding: var(--alm-sp-4);
+}
+.alm-session-detail2__col {
+  flex: 0 1 320px;
+  min-width: 260px;
+}
+.alm-session-detail2__linked {
+  flex: 0 0 auto;
+  min-width: 160px;
 }
 .alm-session-detail2__head {
   font-size: var(--alm-text-xs);
@@ -9675,51 +9681,23 @@
   color: var(--alm-text-muted);
   margin-bottom: var(--alm-sp-2);
 }
-.alm-session-detail2__linked { display: flex; flex-wrap: wrap; gap: var(--alm-sp-2); }
+.alm-session-detail2__linked-list { display: flex; flex-direction: column; gap: var(--alm-sp-2); }
 .alm-session-detail2__muted { color: var(--alm-text-muted); }
-@media (max-width: 820px) {
-  .alm-session-detail2 { grid-template-columns: minmax(0, 1fr); }
+/* Review actions inline with the title (left-grouped). */
+.alm-session-detail2__actions {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--alm-sp-2);
+  margin-left: var(--alm-sp-3);
 }
-
-/* === Sessions detail v2 — two-column property tables + linked-below === */
-.alm-session-detail2 {
-  display: flex;
-  flex-direction: column;
-  gap: var(--alm-sp-4);
-  padding: var(--alm-sp-4);
-}
-.alm-session-detail2__cols {
-  display: grid;
-  grid-template-columns: 1fr 1fr;
-  gap: var(--alm-sp-5);
-  align-items: start;
-}
-.alm-session-detail2__link {
-  color: var(--alm-accent);
-  text-decoration: none;
-}
-.alm-session-detail2__link:hover { text-decoration: underline; }
-@media (max-width: 820px) {
-  .alm-session-detail2__cols { grid-template-columns: 1fr; }
-}
-
 /* Linked-project link rendered as a button — reset native button chrome. */
 .alm-session-detail2__link {
   background: none;
   border: none;
   padding: 0;
   font: inherit;
+  text-align: left;
   cursor: pointer;
+  color: var(--alm-accent);
 }
-
-/* Sessions detail aux column — linked projects stacked vertically. */
-.alm-session-detail2__aux {
-  display: flex;
-  flex-direction: column;
-  gap: var(--alm-sp-2);
-  padding: var(--alm-sp-4);
-}
-.alm-session-detail2__aux .alm-session-detail2__linked {
-  flex-direction: column;
-  align-items: flex-start;
-}
+.alm-session-detail2__link:hover { text-decoration: underline; }
