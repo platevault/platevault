@@ -14,6 +14,7 @@ const I18N_MIGRATED = [
   'src/lib/error-messages.ts',
   'src/app/**/*.{ts,tsx}',
   'src/features/settings/**/*.{ts,tsx}',
+  'src/features/projects/**/*.{ts,tsx}',
 ];
 
 export default tseslint.config(

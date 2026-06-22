@@ -19,6 +19,7 @@
 
 import { useMemo } from 'react';
 import { AlertTriangle } from 'lucide-react';
+import { m } from '@/lib/i18n';
 import { Table } from '@/ui';
 import type { TableColumn, TableRow } from '@/ui';
 import { projectStateLabel, projectStateVariant } from '@/lib/lifecycle';
@@ -139,14 +140,14 @@ export function ProjectsTable({
           <AlertTriangle
             size={13}
             role="img"
-            aria-label="Blocked"
+            aria-label={m.projects_table_blocked_aria()}
             className="alm-projects-table__blocked-icon"
           />
         )}
         {project.name}
         {project.channelDrift && (
-          <span className="alm-projects-table__drift-badge" title="Channel drift detected">
-            <AlertTriangle size={11} aria-hidden="true" /> channels
+          <span className="alm-projects-table__drift-badge" title={m.projects_table_channel_drift_title()}>
+            <AlertTriangle size={11} aria-hidden="true" /> {m.projects_table_channel_drift_label()}
           </span>
         )}
       </span>
@@ -170,11 +171,11 @@ export function ProjectsTable({
   }));
 
   if (loading && projects.length === 0) {
-    return <div className="alm-projects-table__empty">Loading projects…</div>;
+    return <div className="alm-projects-table__empty">{m.projects_table_loading()}</div>;
   }
 
   if (projects.length === 0) {
-    return <div className="alm-projects-table__empty">No projects found.</div>;
+    return <div className="alm-projects-table__empty">{m.projects_table_empty()}</div>;
   }
 
   // The project count moved to the bottom status bar (top-bar convention,

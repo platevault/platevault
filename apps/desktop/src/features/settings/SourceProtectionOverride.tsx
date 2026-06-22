@@ -166,7 +166,7 @@ export function SourceProtectionOverride({ sourceId, onSaved }: SourceProtection
               onClick={handleSave}
               disabled={loadState === 'saving'}
             >
-              {loadState === 'saving' ? m.settings_source_protect_saving() : m.settings_source_protect_save_btn()}
+              {loadState === 'saving' ? m.common_saving() : m.settings_source_protect_save_btn()}
             </Btn>
             <Btn size="sm" variant="ghost" onClick={handleCancel}>
               {m.common_cancel()}

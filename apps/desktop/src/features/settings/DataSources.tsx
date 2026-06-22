@@ -88,7 +88,7 @@ export function DataSources({ save: _save }: DataSourcesProps) {
 
   return (
     <SettingsSection
-      title={m.settings_datasources_title()}
+      title={m.common_sources()}
       action={
         <Btn
           variant="primary"

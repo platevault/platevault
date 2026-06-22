@@ -1,3 +1,4 @@
+import { m } from '@/lib/i18n';
 import { Pill, Box, Btn, Section } from '@/ui';
 
 export interface CalibrationMapping {
@@ -117,24 +118,22 @@ export function StepCalibration({ selectedSessionIds: _selectedSessionIds, data,
     <div className="alm-wizard-calib__root">
       {/* Step description */}
       <div className="alm-wizard-calib__desc">
-        Map calibration to each light source. Flats are per-filter (Ha flats can only calibrate
-        Ha lights). Darks &amp; bias are usually shared across all lights of the same exposure /
-        camera / gain.
+        {m.projects_wizard_calib_desc()}
       </div>
 
       {/* ── Flats per light source (by filter) ── */}
-      <Section title="Flats — per light source">
+      <Section title={m.projects_wizard_flats_title()}>
         <div className="alm-wizard-calib__flat-subtitle">
-          one master flat per filter; light sources are auto-grouped by filter
+          {m.projects_wizard_flats_subtitle()}
         </div>
         <table className="alm-simple-table">
           <thead>
             <tr>
-              <th>Filter</th>
-              <th>Lights covered</th>
-              <th>Master flat</th>
-              <th className="alm-wizard-calib__col-score">Score</th>
-              <th>Notes</th>
+              <th>{m.projects_wizard_col_filter()}</th>
+              <th>{m.projects_wizard_col_lights()}</th>
+              <th>{m.projects_wizard_col_master_flat()}</th>
+              <th className="alm-wizard-calib__col-score">{m.projects_wizard_col_score()}</th>
+              <th>{m.projects_notes_label()}</th>
             </tr>
           </thead>
           <tbody>
@@ -168,18 +167,18 @@ export function StepCalibration({ selectedSessionIds: _selectedSessionIds, data,
             })}
           </tbody>
         </table>
-        <Btn size="sm" className="alm-wizard-calib__add-flat-btn">+ Add another flat (for a future filter)</Btn>
+        <Btn size="sm" className="alm-wizard-calib__add-flat-btn">{m.projects_wizard_add_flat_btn()}</Btn>
       </Section>
 
       {/* ── Shared calibration: darks, bias, dark flats ── */}
-      <Section title="Shared calibration — applies to all lights matching the fingerprint">
+      <Section title={m.projects_wizard_shared_calib_title()}>
         <table className="alm-simple-table">
           <thead>
             <tr>
-              <th className="alm-wizard-calib__col-role">Role</th>
-              <th>Pick</th>
-              <th className="alm-wizard-calib__col-score">Score</th>
-              <th>Notes</th>
+              <th className="alm-wizard-calib__col-role">{m.projects_wizard_col_role()}</th>
+              <th>{m.projects_wizard_col_pick()}</th>
+              <th className="alm-wizard-calib__col-score">{m.projects_wizard_col_score()}</th>
+              <th>{m.projects_notes_label()}</th>
             </tr>
           </thead>
           <tbody>
@@ -224,20 +223,20 @@ export function StepCalibration({ selectedSessionIds: _selectedSessionIds, data,
           </tbody>
         </table>
         <div className="alm-wizard-calib__footer">
-          <Btn size="sm">+ Add calibration session&hellip;</Btn>
-          <Btn size="sm">+ Import master&hellip;</Btn>
+          <Btn size="sm">{m.projects_wizard_add_calib_btn()}</Btn>
+          <Btn size="sm">{m.projects_wizard_import_master_btn()}</Btn>
           <span className="alm-wizard-calib__footer-warn">
-            &#9888; aging bias master &mdash; soft mismatch in plan
+            {m.projects_wizard_aging_bias_warn()}
           </span>
         </div>
       </Section>
 
       {/* ── Why these were recommended ── */}
-      <Box title="Why these were recommended">
+      <Box title={m.projects_wizard_why_title()}>
         <ul className="alm-wizard-calib__why-list">
-          <li><strong>Flats</strong>: matched per filter; same camera; flats &lt; 30d old preferred</li>
-          <li><strong>Dark</strong>: exact match on EXPTIME (300s) &middot; temp &#916; 0.1&deg;C &middot; gain 100</li>
-          <li><strong>Bias</strong>: only g100 bias for this camera exists; soft mismatch on age</li>
+          <li><strong>{m.projects_wizard_flats_label()}</strong>{m.projects_wizard_why_flats_val()}</li>
+          <li><strong>{m.projects_wizard_why_dark_key()}</strong>{m.projects_wizard_why_dark_val()}</li>
+          <li><strong>{m.projects_wizard_bias_label()}</strong>{m.projects_wizard_why_bias_val()}</li>
         </ul>
       </Box>
     </div>

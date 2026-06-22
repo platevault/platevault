@@ -1,3 +1,4 @@
+import { m } from '@/lib/i18n';
 import { Pill, Box } from '@/ui';
 
 export interface StepReviewProps {
@@ -59,8 +60,7 @@ export function StepReview({ wizardState: _wizardState }: StepReviewProps) {
         <div className="alm-wizard-review__banner-row">
           <span className="alm-wizard-review__banner-icon">&#10003;</span>
           <div className="alm-wizard-review__banner-text">
-            <strong>No destructive items.</strong> This plan only creates directories, junctions,
-            and the project manifest. No source frames are moved, copied, or modified.
+            <strong>{m.projects_wizard_review_no_destructive()}</strong> {m.projects_wizard_review_safe_desc()}
           </div>
         </div>
       </div>
@@ -68,13 +68,13 @@ export function StepReview({ wizardState: _wizardState }: StepReviewProps) {
       {/* ── 2-column grid: plan items (2fr) + disk tree / after creating (1fr) ── */}
       <div className="alm-wizard-review__grid">
         {/* Left: Plan items */}
-        <Box title="Plan items (132)">
+        <Box title={m.projects_wizard_plan_items_title()}>
           <table className="alm-simple-table">
             <thead>
               <tr>
-                <th className="alm-wizard-review__col-action">Action</th>
-                <th>Destination</th>
-                <th>Source</th>
+                <th className="alm-wizard-review__col-action">{m.projects_wizard_col_action()}</th>
+                <th>{m.projects_wizard_col_destination()}</th>
+                <th>{m.projects_wizard_col_source()}</th>
               </tr>
             </thead>
             <tbody>
@@ -116,26 +116,25 @@ export function StepReview({ wizardState: _wizardState }: StepReviewProps) {
         {/* Right column */}
         <div className="alm-wizard-review__right">
           {/* Disk tree */}
-          <Box title="What will exist on disk">
+          <Box title={m.projects_wizard_disk_title()}>
             <pre className="alm-mono alm-wizard-review__disk-tree">
               {DISK_TREE}
             </pre>
           </Box>
 
           {/* After creating */}
-          <Box title="After creating">
+          <Box title={m.projects_wizard_after_title()}>
             <ol className="alm-wizard-review__after-list">
               <li>
-                Project lifecycle:{' '}
-                <span className="alm-mono">setup</span> &rarr;{' '}
-                <span className="alm-mono">prepared</span>
+                {m.projects_wizard_lifecycle_label()}{' '}
+                <span className="alm-mono">{m.projects_wizard_lifecycle_setup()}</span> &rarr;{' '}
+                <span className="alm-mono">{m.projects_wizard_lifecycle_prepared()}</span>
               </li>
               <li>
-                Open <span className="alm-mono">NGC7000_HOO/sources/views/wbpp_input</span> in
-                PixInsight/WBPP
+                {m.projects_wizard_open_in_wbpp()} <span className="alm-mono">{m.projects_wizard_open_in_wbpp_target()}</span> {m.projects_wizard_open_in_wbpp_app()}
               </li>
-              <li>Process there; outputs are observed on refresh.</li>
-              <li>Record final outputs back here when done.</li>
+              <li>{m.projects_wizard_after_process()}</li>
+              <li>{m.projects_wizard_after_record()}</li>
             </ol>
           </Box>
         </div>

@@ -1,4 +1,5 @@
 import { useState, useMemo } from 'react';
+import { m } from '@/lib/i18n';
 import { Checkbox } from '@base-ui-components/react/checkbox';
 import { useQuery } from '@tanstack/react-query';
 import { queryKeys } from '@/data/queryKeys';
@@ -59,7 +60,7 @@ export function StepSources({ data, onChange }: StepSourcesProps) {
   }
 
   if (loading) {
-    return <div className="alm-wizard-sources__loading">Loading sessions...</div>;
+    return <div className="alm-wizard-sources__loading">{m.projects_wizard_sources_loading()}</div>;
   }
 
   return (
@@ -68,14 +69,14 @@ export function StepSources({ data, onChange }: StepSourcesProps) {
       <div className="alm-wizard-sources__filter-row">
         <input
           type="text"
-          placeholder="Filter by target..."
+          placeholder={m.projects_wizard_filter_target_placeholder()}
           value={filterTarget}
           onChange={(e) => setFilterTarget(e.target.value)}
           className="alm-wizard-sources__filter-input"
         />
         <input
           type="text"
-          placeholder="Filter by filter..."
+          placeholder={m.projects_wizard_filter_filter_placeholder()}
           value={filterFilter}
           onChange={(e) => setFilterFilter(e.target.value)}
           className="alm-wizard-sources__filter-input"
@@ -84,8 +85,8 @@ export function StepSources({ data, onChange }: StepSourcesProps) {
 
       {/* Summary */}
       <div className="alm-wizard-sources__summary">
-        <span><strong>{data.selectedSessionIds.length}</strong> sessions selected</span>
-        <span>Total integration: <strong>{formatIntegration(totalIntegration)}</strong></span>
+        <span><strong>{data.selectedSessionIds.length}</strong> {m.projects_wizard_sessions_selected()}</span>
+        <span>{m.projects_wizard_total_integration()} <strong>{formatIntegration(totalIntegration)}</strong></span>
       </div>
 
       {/* Session list */}
@@ -96,16 +97,16 @@ export function StepSources({ data, onChange }: StepSourcesProps) {
             className="alm-checkbox"
             checked={filtered.length > 0 && data.selectedSessionIds.length === filtered.length}
             onCheckedChange={toggleAll}
-            aria-label="Select all sessions"
+            aria-label={m.projects_wizard_select_all_aria()}
           >
             <Checkbox.Indicator className="alm-checkbox__indicator">
               &#x2713;
             </Checkbox.Indicator>
           </Checkbox.Root>
-          <span>Target / Filter / Night</span>
-          <span>Frames</span>
-          <span>Integration</span>
-          <span>Train</span>
+          <span>{m.projects_wizard_col_target_filter_night()}</span>
+          <span>{m.projects_wizard_col_frames()}</span>
+          <span>{m.projects_wizard_col_integration()}</span>
+          <span>{m.projects_wizard_col_train()}</span>
         </div>
 
         {/* Rows */}
@@ -141,7 +142,7 @@ export function StepSources({ data, onChange }: StepSourcesProps) {
 
         {filtered.length === 0 && (
           <div className="alm-wizard-sources__empty">
-            No confirmed sessions match filters
+            {m.projects_wizard_sessions_empty()}
           </div>
         )}
       </div>

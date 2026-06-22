@@ -25,6 +25,7 @@
 
 import { Section, Pill, Banner, Table, EmptyState, KV, Lock } from '@/ui';
 import type { PillVariant } from '@/ui';
+import { m } from '@/lib/i18n';
 
 // ── Outputs ───────────────────────────────────────────────────────────────────
 
@@ -73,12 +74,11 @@ export function OutputsSection({ outputs = [], defaultOpen = true }: OutputsSect
   }));
 
   return (
-    <Section title="Outputs" count={outputs.length || undefined} defaultOpen={defaultOpen} data-testid="project-outputs">
+    <Section title={m.projects_outputs_title()} count={outputs.length || undefined} defaultOpen={defaultOpen} data-testid="project-outputs">
       {outputs.length === 0 ? (
         // STUB: no accepted-output backend model yet — teaching empty state.
         <EmptyState
-          title="No accepted outputs yet"
-          desc="No accepted outputs yet. Record one from your processing tool to track it."
+          title={m.projects_outputs_empty_title()}
         />
       ) : (
         <div className="alm-project-detail__outputs">
@@ -124,21 +124,17 @@ export interface CleanupPreviewSectionProps {
 
 export function CleanupPreviewSection({ preview, defaultOpen = true }: CleanupPreviewSectionProps) {
   return (
-    <Section title="Cleanup preview" defaultOpen={defaultOpen} data-testid="project-cleanup-preview">
+    <Section title={m.projects_cleanup_title()} defaultOpen={defaultOpen} data-testid="project-cleanup-preview">
       {/* Themed alert: cleanup is reviewable + reversible, never silent. */}
       <Banner variant="warn" role="status" aria-live="polite">
         <div className="alm-project-detail__cleanup-preview">
           {preview ? (
             // STUB: this branch is currently unreachable (preview is always
             // undefined). Kept so wiring is trivial once the backend lands.
-            <span className="alm-project-detail__cleanup-note">
-              Cleanup would review {preview.candidateCount} candidate
-              {preview.candidateCount === 1 ? '' : 's'} for archive or trash.
-              Nothing is removed without explicit plan approval.
-            </span>
+            <span className="alm-project-detail__cleanup-note">{`Cleanup would review ${preview.candidateCount} candidate${preview.candidateCount === 1 ? '' : 's'} for archive or trash. Nothing is removed without explicit plan approval.`}</span>
           ) : (
             <span className="alm-project-detail__cleanup-note">
-              No cleanup preview yet — available after the project is verified.
+              {m.projects_cleanup_no_preview()}
             </span>
           )}
         </div>
@@ -147,7 +143,7 @@ export function CleanupPreviewSection({ preview, defaultOpen = true }: CleanupPr
       {/* Protected categories — always shown LOCKED (never proposed for cleanup). */}
       <div className="alm-project-detail__cleanup-protected" data-testid="cleanup-protected">
         <div className="alm-project-detail__cleanup-protected-head">
-          Protected — never proposed for cleanup
+          {m.projects_cleanup_protected_label()}
         </div>
         <div className="alm-project-detail__cleanup-protected-list">
           {PROTECTED_CATEGORIES.map((cat) => (

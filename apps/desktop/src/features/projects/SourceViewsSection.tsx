@@ -18,6 +18,7 @@
 
 import { useState, useEffect } from 'react';
 import { Pill, Btn, Section, Banner } from '@/ui';
+import { m } from '@/lib/i18n';
 import { addToast } from '@/shared/toast';
 import {
   listPreparedViews,
@@ -133,30 +134,30 @@ export function SourceViewsSection({ projectId, onPlanCreated, defaultOpen = tru
 
   if (loading) {
     return (
-      <Section title="Source Views" defaultOpen={defaultOpen}>
-        <p className="text-muted text-sm">Loading…</p>
+      <Section title={m.projects_source_views_title()} defaultOpen={defaultOpen}>
+        <p className="text-muted text-sm">{m.common_loading()}</p>
       </Section>
     );
   }
 
   if (error) {
     return (
-      <Section title="Source Views" defaultOpen={defaultOpen}>
-        <Banner variant="danger">Failed to load source views: {error}</Banner>
+      <Section title={m.projects_source_views_title()} defaultOpen={defaultOpen}>
+        <Banner variant="danger">{m.projects_source_views_load_error({ error })}</Banner>
       </Section>
     );
   }
 
   if (views.length === 0) {
     return (
-      <Section title="Source Views" defaultOpen={defaultOpen}>
-        <p className="text-muted text-sm">No generated source views for this project.</p>
+      <Section title={m.projects_source_views_title()} defaultOpen={defaultOpen}>
+        <p className="text-muted text-sm">{m.projects_source_views_empty()}</p>
       </Section>
     );
   }
 
   return (
-    <Section title="Source Views" defaultOpen={defaultOpen}>
+    <Section title={m.projects_source_views_title()} defaultOpen={defaultOpen}>
       <ul className="flex flex-col gap-3">
         {views.map((view) => (
           <li
@@ -173,14 +174,14 @@ export function SourceViewsSection({ projectId, onPlanCreated, defaultOpen = tru
                   {viewStateLabel(view.state)}
                 </Pill>
                 <span className="text-xs text-muted">{view.kind}</span>
-                <span className="text-xs text-muted">{view.itemCount} items</span>
+                <span className="text-xs text-muted">{view.itemCount} {m.projects_source_views_items_unit()}</span>
               </div>
 
               {/* FR-033 / T078: per-item inventory refs */}
               {view.items.length > 0 && (
                 <details className="text-xs text-muted alm-source-views__refs-details">
                   <summary className="alm-source-views__refs-summary">
-                    {view.items.length} inventory ref{view.items.length !== 1 ? 's' : ''}
+                    {view.items.length} {m.projects_source_views_inventory_ref()}{view.items.length !== 1 ? 's' : ''}
                   </summary>
                   <ul
                     className="alm-source-views__refs-list"
@@ -202,8 +203,7 @@ export function SourceViewsSection({ projectId, onPlanCreated, defaultOpen = tru
               {/* kind_diverged resolution affordance (D-026-H2) */}
               {view.state === 'kind_diverged' && (
                 <Banner variant="warn">
-                  Kind mismatch detected. Resolve this manually before removing or
-                  regenerating.
+                  {m.projects_source_views_kind_mismatch()}
                 </Banner>
               )}
             </div>

@@ -36,6 +36,7 @@ import { useNavigate, useSearch } from '@tanstack/react-router';
 import { PageTopBar, FilterToolbar, ListPageLayout } from '@/components';
 import type { FilterOption } from '@/components';
 import { Btn } from '@/ui';
+import { m } from '@/lib/i18n';
 import { useStaleSelectionCleanup } from '@/lib/use-stale-selection';
 import { projectStateLabel } from '@/lib/lifecycle';
 import {
@@ -167,7 +168,7 @@ export function ProjectsPage() {
           onClick={handleNewProject}
           data-guide-anchor="projects.create-cta"
         >
-          + New project
+          {m.projects_new_btn()}
         </Btn>
       }
     />

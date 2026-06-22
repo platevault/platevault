@@ -17,6 +17,7 @@
 
 import { Section } from '@/ui';
 import { PROJECT_LIFECYCLE, projectStateIndex } from '@/lib/lifecycle';
+import { m } from '@/lib/i18n';
 
 export interface ProjectLifecycleStepperProps {
   /** Stored project state (e.g. "processing", "setup_incomplete", "blocked"). */
@@ -57,7 +58,7 @@ export function ProjectLifecycleStepper({
 
   return (
     <div className="alm-stepper" data-testid="project-lifecycle-stepper">
-      <ol className="alm-stepper__track" aria-label="Project lifecycle">
+      <ol className="alm-stepper__track" aria-label={m.projects_stepper_aria()}>
         {PROJECT_LIFECYCLE.map((step, i) => {
           const isDone = !isBlocked && i < currentIdx;
           const isCurrent = !isBlocked && i === currentIdx;
@@ -80,20 +81,20 @@ export function ProjectLifecycleStepper({
         })}
         {isBlocked && (
           <li className="alm-stepper__chip alm-stepper__chip--blocked" aria-current="step">
-            blocked
+            {m.projects_stepper_blocked_chip()}
           </li>
         )}
       </ol>
 
       <p className="alm-stepper__next">{nextActionText(state)}</p>
 
-      <Section title="History" defaultOpen={false}>
+      <Section title={m.projects_stepper_history_title()} defaultOpen={false}>
         <div className="alm-stepper__history">
           <div className="alm-stepper__history-row">
-            Created {new Date(createdAt).toLocaleDateString()}
+            {m.projects_stepper_created()} {new Date(createdAt).toLocaleDateString()}
           </div>
           <div className="alm-stepper__history-row">
-            Updated {new Date(updatedAt).toLocaleDateString()}
+            {m.projects_stepper_updated()} {new Date(updatedAt).toLocaleDateString()}
           </div>
         </div>
       </Section>

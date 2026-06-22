@@ -24,6 +24,7 @@ import {
 } from './manifests';
 import type { ManifestSummaryDto } from './manifests';
 import type { ManifestBodyDto_Serialize as ManifestBodyDto } from '@/bindings/index';
+import { m } from '@/lib/i18n';
 
 // ── Props ─────────────────────────────────────────────────────────────────────
 
@@ -108,12 +109,12 @@ export function ManifestsAccordion({ projectId, defaultOpen = true }: ManifestsA
 
   if (loading) {
     return (
-      <Section title="Manifests" defaultOpen={defaultOpen}>
+      <Section title={m.projects_manifests_title()} defaultOpen={defaultOpen}>
         <div
           data-testid="manifests-loading"
           className="alm-manifests__status"
         >
-          Loading…
+          {m.common_loading()}
         </div>
       </Section>
     );
@@ -121,86 +122,86 @@ export function ManifestsAccordion({ projectId, defaultOpen = true }: ManifestsA
 
   if (fetchError) {
     return (
-      <Section title="Manifests" defaultOpen={defaultOpen}>
+      <Section title={m.projects_manifests_title()} defaultOpen={defaultOpen}>
         <div
           data-testid="manifests-error"
           className="alm-manifests__status--error"
         >
-          Could not load manifests.
+          {m.projects_manifests_load_error()}
         </div>
       </Section>
     );
   }
 
   return (
-    <Section title="Manifests" count={manifests.length} defaultOpen={defaultOpen}>
+    <Section title={m.projects_manifests_title()} count={manifests.length} defaultOpen={defaultOpen}>
       {manifests.length === 0 ? (
         <div
           data-testid="manifests-empty"
           className="alm-manifests__status"
         >
-          No manifests yet.
+          {m.projects_manifests_empty()}
         </div>
       ) : (
         <div data-testid="manifests-list">
-          {manifests.map((m) => (
+          {manifests.map((manifest) => (
             <div
-              key={m.id}
+              key={manifest.id}
               className="alm-manifests__item"
             >
               {/* Row header */}
               <div className="alm-manifests__row-header">
                 <button
-                  data-testid={`manifest-row-${m.id}`}
-                  onClick={() => void handleToggle(m.id)}
+                  data-testid={`manifest-row-${manifest.id}`}
+                  onClick={() => void handleToggle(manifest.id)}
                   className="alm-manifests__toggle-btn"
-                  aria-expanded={expandedId === m.id}
+                  aria-expanded={expandedId === manifest.id}
                 >
-                  <span className="alm-manifests__reason-label">{manifestReasonLabel(m.reason)}</span>
+                  <span className="alm-manifests__reason-label">{manifestReasonLabel(manifest.reason)}</span>
                   <span className="alm-manifests__timestamp">
-                    {formatManifestTimestamp(m.timestamp)}
+                    {formatManifestTimestamp(manifest.timestamp)}
                   </span>
                 </button>
                 <Btn
                   size="sm"
                   variant="ghost"
-                  disabled={revealWorking === m.id}
-                  onClick={() => void handleReveal(m)}
-                  data-testid={`manifest-reveal-${m.id}`}
-                  title="Reveal in file manager"
+                  disabled={revealWorking === manifest.id}
+                  onClick={() => void handleReveal(manifest)}
+                  data-testid={`manifest-reveal-${manifest.id}`}
+                  title={m.projects_manifests_reveal_title()}
                 >
-                  Reveal
+                  {m.projects_manifests_reveal_btn()}
                 </Btn>
               </div>
 
               {/* Expanded body */}
-              {expandedId === m.id && (
+              {expandedId === manifest.id && (
                 <div
-                  data-testid={`manifest-body-${m.id}`}
+                  data-testid={`manifest-body-${manifest.id}`}
                   className="alm-manifests__body-panel"
                 >
-                  {bodyLoading === m.id ? (
-                    <span>Loading body…</span>
-                  ) : bodyMap[m.id] ? (
+                  {bodyLoading === manifest.id ? (
+                    <span>{m.projects_manifests_body_loading()}</span>
+                  ) : bodyMap[manifest.id] ? (
                     <div>
                       <div>
-                        <strong>Lifecycle:</strong> {bodyMap[m.id].lifecycleState}
+                        <strong>{m.projects_manifests_lifecycle_label()}</strong> {bodyMap[manifest.id].lifecycleState}
                       </div>
-                      {bodyMap[m.id].workflowProfile && (
+                      {bodyMap[manifest.id].workflowProfile && (
                         <div>
-                          <strong>Workflow:</strong> {bodyMap[m.id].workflowProfile}
+                          <strong>{m.projects_manifests_workflow_label()}</strong> {bodyMap[manifest.id].workflowProfile}
                         </div>
                       )}
-                      {bodyMap[m.id].notes && (
+                      {bodyMap[manifest.id].notes && (
                         <div className="alm-manifests__notes-block">
-                          <strong>Notes snapshot:</strong>
+                          <strong>{m.projects_manifests_notes_label()}</strong>
                           <div className="alm-manifests__notes-content">
-                            {bodyMap[m.id].notes}
+                            {bodyMap[manifest.id].notes}
                           </div>
                         </div>
                       )}
                       <div className="alm-manifests__path">
-                        {m.path}
+                        {manifest.path}
                       </div>
                     </div>
                   ) : null}

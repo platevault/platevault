@@ -12,6 +12,7 @@
 
 import { useCallback } from 'react';
 import { basename } from 'pathe';
+import { m } from '@/lib/i18n';
 import type { ArtifactSummary } from '@/api/commands';
 import {
   groupArtifactsByLaunch,
@@ -83,16 +84,16 @@ function ArtifactRow({ artifact, projectId, onResolved }: ArtifactRowProps) {
       {/* Status badges */}
       {isMissing && (
         <span className="artifact-badge artifact-badge-missing alm-tool-launches__badge-missing">
-          Missing
+          {m.settings_tools_missing()}
         </span>
       )}
 
       {isManualOverride && (
         <span
           className="artifact-badge artifact-badge-manual alm-tool-launches__badge-manual"
-          title="Classification manually overridden"
+          title={m.projects_artifacts_manual_override_title()}
         >
-          (manual)
+          {m.projects_artifacts_manual_badge()}
         </span>
       )}
 
@@ -166,13 +167,13 @@ export function ToolLaunchesAccordion({ projectId, launchOrder = [] }: Props) {
   const groups = groupArtifactsByLaunch(artifacts, launchOrder);
 
   if (loading) {
-    return <div className="tool-launches-loading alm-tool-launches__loading">Loading artifacts…</div>;
+    return <div className="tool-launches-loading alm-tool-launches__loading">{m.projects_artifacts_loading()}</div>;
   }
 
   if (error) {
     return (
       <div className="tool-launches-error alm-tool-launches__error">
-        Failed to load artifacts: {error}
+        {m.projects_artifacts_load_error({ error })}
       </div>
     );
   }
@@ -180,7 +181,7 @@ export function ToolLaunchesAccordion({ projectId, launchOrder = [] }: Props) {
   if (groups.length === 0) {
     return (
       <div className="tool-launches-empty alm-tool-launches__empty">
-        No processing artifacts observed yet.
+        {m.projects_artifacts_empty()}
       </div>
     );
   }

@@ -1,4 +1,5 @@
 import { useMemo } from 'react';
+import { m } from '@/lib/i18n';
 import type { StepNameData } from './StepName';
 import type { SourceViewStrategy } from './StepViews';
 
@@ -70,7 +71,7 @@ export function StepLayout({ data, nameData, strategy, onChange }: StepLayoutPro
           htmlFor="naming-pattern"
           className="alm-wizard-layout__label"
         >
-          Naming pattern
+          {m.projects_wizard_naming_pattern_label()}
         </label>
         <input
           id="naming-pattern"
@@ -96,7 +97,7 @@ export function StepLayout({ data, nameData, strategy, onChange }: StepLayoutPro
       {/* Directory structure preview */}
       <div className="alm-wizard-layout__section">
         <h3 className="alm-wizard-layout__label">
-          Directory structure preview
+          {m.projects_wizard_dir_preview_title()}
         </h3>
         <div className="alm-wizard-layout__preview">
           {examplePaths.structure.map((path, i) => {
