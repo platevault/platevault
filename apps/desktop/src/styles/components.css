@@ -9701,3 +9701,41 @@
   color: var(--alm-accent);
 }
 .alm-session-detail2__link:hover { text-decoration: underline; }
+
+/* === Targets planner detail — left-packed: [facts A][facts B][tonight] ===
+   Mirrors the Sessions detail: a flex row, left-justified, so growing the
+   panel adds trailing whitespace rather than spreading the data apart. The
+   tonight column holds a small transit graph + the planner stats. */
+.alm-planner__cols {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: flex-start;
+  justify-content: flex-start;
+  gap: var(--alm-sp-6);
+  padding: var(--alm-sp-4);
+}
+.alm-planner__col {
+  flex: 0 1 360px;
+  min-width: 300px;
+}
+.alm-planner__tonight {
+  flex: 0 0 320px;
+  min-width: 280px;
+  display: flex;
+  flex-direction: column;
+  gap: var(--alm-sp-3);
+}
+/* Keep the transit graph compact in the third column. */
+.alm-planner__tonight .alm-planner__graph-wrap { max-width: 300px; }
+.alm-planner__tonight-filters {
+  display: flex;
+  align-items: center;
+  gap: var(--alm-sp-2);
+}
+.alm-planner__tonight-filters-label {
+  font-size: var(--alm-text-xs);
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  font-weight: var(--alm-weight-semibold);
+  color: var(--alm-text-muted);
+}

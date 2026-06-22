@@ -377,7 +377,15 @@ export function TargetsPage() {
       <AddTargetDialog open={addOpen} onClose={() => setAddOpen(false)} onAdded={handleAdded} />
       <ListPageLayout
         topBar={topBar}
-        detail={selected ? <TargetDetailV2 targetId={selected} /> : undefined}
+        detail={
+          selected ? (
+            <TargetDetailV2
+              targetId={selected}
+              item={plannerTargets.find((t) => t.id === selected) ?? null}
+              usableAltDeg={usableAltDeg}
+            />
+          ) : undefined
+        }
         onCloseDetail={selected ? clearSelection : undefined}
         detailLabel="Target details"
       >

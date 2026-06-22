@@ -32,14 +32,20 @@ import {
   setDisplayAlias,
   clearDisplayAlias,
 } from '@/api/commands';
-import type { TargetDetailV3, TargetOpError } from '@/api/commands';
-import { DetailPane } from '@/components';
+import type { TargetDetailV3, TargetOpError, TargetListItem } from '@/api/commands';
+import { DetailPane, PropertyTable, type PropertyDef } from '@/components';
 import { Pill, Section, EmptyState, Banner, Btn } from '@/ui';
+import { rowAltitudeFor, USABLE_ALT_DEG } from './planner-altitude';
+import { FilterBadges } from './FilterBadges';
 
 // ── Types ─────────────────────────────────────────────────────────────────────
 
 interface Props {
   targetId: string;
+  /** The selected list row — supplies constellation/magnitude + tonight stats. */
+  item?: TargetListItem | null;
+  /** Usable-altitude threshold (from Settings) for img-time / visible-tonight. */
+  usableAltDeg?: number;
 }
 
 type LoadState =
@@ -150,8 +156,8 @@ function altitudeCurve(raDeg: number | null, decDeg: number | null): AltPoint[] 
 // ── Tonight Altitude SVG ──────────────────────────────────────────────────────
 
 interface AltitudeGraphProps {
-  raDeg: number | null;
-  decDeg: number | null;
+  /** Pre-sampled altitude curve (shared with the list's max-alt computation). */
+  points: AltPoint[];
 }
 
 const SVG_W = 400;
@@ -174,9 +180,7 @@ function hourToX(tHour: number): number {
   return PAD_L + (tHour / 12) * PLOT_W;
 }
 
-function AltitudeGraph({ raDeg, decDeg }: AltitudeGraphProps) {
-  const points = altitudeCurve(raDeg, decDeg);
-
+function AltitudeGraph({ points }: AltitudeGraphProps) {
   // Build SVG polyline points string (dynamic geometry — inline attribute ok)
   const polylinePoints = points
     .map((p) => `${hourToX(p.tHour).toFixed(1)},${altToY(p.altDeg).toFixed(1)}`)
@@ -343,7 +347,7 @@ function AltitudeGraph({ raDeg, decDeg }: AltitudeGraphProps) {
 
 // ── TargetDetailV2 ────────────────────────────────────────────────────────────
 
-export function TargetDetailV2({ targetId }: Props) {
+export function TargetDetailV2({ targetId, item = null, usableAltDeg = USABLE_ALT_DEG }: Props) {
   const [loadState, setLoadState] = useState<LoadState>({ status: 'loading' });
   const [aliasInput, setAliasInput] = useState('');
   const [aliasError, setAliasError] = useState<string | null>(null);
@@ -458,6 +462,41 @@ export function TargetDetailV2({ targetId }: Props) {
   // Common name (first common_name alias, if any).
   const commonName = detail.aliases.find((a) => a.kind === 'common_name')?.alias ?? null;
 
+  // Tonight planner data — shared with the list row (same rowAltitudeFor source
+  // so the graph peak and the "Max alt" stat agree). Falls back to an RA/Dec
+  // curve when the list item isn't available.
+  const rowAlt = item ? rowAltitudeFor(item, usableAltDeg) : null;
+  const tonightPoints: AltPoint[] = rowAlt?.points ?? altitudeCurve(detail.raDeg, detail.decDeg);
+
+  const raDecStr =
+    detail.raDeg != null && detail.decDeg != null
+      ? `${fmtRa(detail.raDeg)} / ${fmtDec(detail.decDeg)}`
+      : null;
+
+  // Identity facts split across two tabular columns (left-packed).
+  const identityA: PropertyDef[] = [
+    { key: 'desig', label: 'Designation', value: detail.primaryDesignation },
+    { key: 'type', label: 'Type', value: detail.objectType.replace(/_/g, ' ') },
+    { key: 'constellation', label: 'Constellation', value: item?.constellation ?? null },
+    { key: 'radec', label: 'RA / Dec', value: raDecStr },
+  ];
+  const identityB: PropertyDef[] = [
+    { key: 'magnitude', label: 'Magnitude', value: item?.magnitude ?? null },
+    { key: 'source', label: 'Source', value: detail.source },
+    ...(detail.simbadOid != null
+      ? [{ key: 'simbad', label: 'SIMBAD OID', value: detail.simbadOid } as PropertyDef]
+      : []),
+  ];
+
+  // Tonight stats (numeric) — Filters render separately (a component, not a value).
+  const tonightStats: PropertyDef[] = rowAlt
+    ? [
+        { key: 'maxalt', label: 'Max alt', value: `${Math.round(rowAlt.maxAltDeg)}°` },
+        { key: 'imgtime', label: 'Img time', value: `${rowAlt.hoursAboveUsable.toFixed(1)} h` },
+        { key: 'lunar', label: 'Lunar', value: `${Math.round(rowAlt.lunarDistanceDeg)}°` },
+      ]
+    : [];
+
   return (
     <DetailPane fill>
       {/* ── Planner header ──────────────────────────────────────────────── */}
@@ -504,87 +543,30 @@ export function TargetDetailV2({ targetId }: Props) {
       {/* Suppress unused-state warning; newProjectOpen drives the navigate above */}
       {newProjectOpen && null}
 
-      {/* ── Identity + Tonight graph ─────────────────────────────────────── */}
-      <div className="alm-planner__body">
-
-        {/* Left: identity table */}
-        <div className="alm-planner__identity">
-          <div className="alm-planner__identity-table">
-            <span className="alm-planner__identity-label">Designation</span>
-            <span className="alm-planner__identity-value alm-planner__identity-value--mono">
-              {detail.primaryDesignation}
-            </span>
-
-            <span className="alm-planner__identity-label">Type</span>
-            <span className="alm-planner__identity-value">
-              {detail.objectType.replace(/_/g, ' ')}
-            </span>
-
-            {/* STUB: Constellation — not in gen-3 TargetDetailV3 yet */}
-            <span className="alm-planner__identity-label">Constellation</span>
-            <span className="alm-planner__identity-value alm-planner__identity-value--stub">
-              {/* STUB: constellation — backend pending */}—
-            </span>
-
-            <span className="alm-planner__identity-label">RA / Dec</span>
-            <span className="alm-planner__identity-value alm-planner__identity-value--mono">
-              {detail.raDeg != null && detail.decDeg != null
-                ? `${fmtRa(detail.raDeg)} / ${fmtDec(detail.decDeg)}`
-                : '—'}
-            </span>
-
-            {/* STUB: Magnitude — not in gen-3 TargetDetailV3 */}
-            <span className="alm-planner__identity-label">Magnitude</span>
-            <span className="alm-planner__identity-value alm-planner__identity-value--stub">
-              {/* STUB: magnitude — backend pending */}—
-            </span>
-
-            {/* STUB: Apparent size — not in gen-3 TargetDetailV3 */}
-            <span className="alm-planner__identity-label">Apparent size</span>
-            <span className="alm-planner__identity-value alm-planner__identity-value--stub">
-              {/* STUB: apparent size — backend pending */}—
-            </span>
-
-            {/* STUB: Best season — not in gen-3 TargetDetailV3 */}
-            <span className="alm-planner__identity-label">Best season</span>
-            <span className="alm-planner__identity-value alm-planner__identity-value--stub">
-              {/* STUB: best season — backend pending */}—
-            </span>
-
-            {/* STUB: Transit — derived from ephemeris, backend pending */}
-            <span className="alm-planner__identity-label">Transit</span>
-            <span className="alm-planner__identity-value alm-planner__identity-value--stub">
-              {/* STUB: transit time — ephemeris backend pending */}—
-            </span>
-
-            {/* STUB: Moon — not in gen-3 TargetDetailV3 */}
-            <span className="alm-planner__identity-label">Moon</span>
-            <span className="alm-planner__identity-value alm-planner__identity-value--stub">
-              {/* STUB: moon distance/phase — ephemeris backend pending */}—
-            </span>
-
-            <span className="alm-planner__identity-label">Source</span>
-            <span className="alm-planner__identity-value">
-              <Pill variant="ghost">{detail.source}</Pill>
-            </span>
-
-            {detail.simbadOid != null && (
-              <>
-                <span className="alm-planner__identity-label">SIMBAD OID</span>
-                <span className="alm-planner__identity-value alm-planner__identity-value--mono">
-                  {detail.simbadOid}
-                </span>
-              </>
-            )}
-          </div>
+      {/* ── Identity + Tonight — left-packed: [facts A][facts B][tonight] ── */}
+      <div className="alm-planner__cols">
+        <div className="alm-planner__col">
+          <PropertyTable mode="view" properties={identityA} />
+        </div>
+        <div className="alm-planner__col">
+          <PropertyTable mode="view" properties={identityB} />
         </div>
 
-        {/* Right: tonight altitude graph */}
-        <div className="alm-planner__graph-col">
-          <span className="alm-planner__graph-title">
-            Tonight — altitude at your location ({STUB_OBSERVER_LAT_DEG}°N)
-          </span>
-          <AltitudeGraph raDeg={detail.raDeg} decDeg={detail.decDeg} />
+        {/* Tonight column: a small transit graph + the planner stats. */}
+        <div className="alm-planner__tonight">
+          <div className="alm-planner__graph-title">
+            Tonight · ~{STUB_OBSERVER_LAT_DEG}°N (approx)
+          </div>
+          <AltitudeGraph points={tonightPoints} />
+          {rowAlt && (
+            <>
+              <PropertyTable mode="view" properties={tonightStats} />
+              <div className="alm-planner__tonight-filters">
+                <span className="alm-planner__tonight-filters-label">Filters</span>
+                <FilterBadges recommendation={rowAlt.filters} />
+              </div>
+            </>
+          )}
         </div>
       </div>
 
