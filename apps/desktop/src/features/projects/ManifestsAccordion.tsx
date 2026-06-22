@@ -29,11 +29,13 @@ import type { ManifestBodyDto_Serialize as ManifestBodyDto } from '@/bindings/in
 
 export interface ManifestsAccordionProps {
   projectId: string;
+  /** Whether the collapsible section starts open. Default true. */
+  defaultOpen?: boolean;
 }
 
 // ── Component ─────────────────────────────────────────────────────────────────
 
-export function ManifestsAccordion({ projectId }: ManifestsAccordionProps) {
+export function ManifestsAccordion({ projectId, defaultOpen = true }: ManifestsAccordionProps) {
   const [manifests, setManifests] = useState<ManifestSummaryDto[]>([]);
   const [loading, setLoading] = useState(true);
   const [fetchError, setFetchError] = useState<string | null>(null);
@@ -106,7 +108,7 @@ export function ManifestsAccordion({ projectId }: ManifestsAccordionProps) {
 
   if (loading) {
     return (
-      <Section title="Manifests">
+      <Section title="Manifests" defaultOpen={defaultOpen}>
         <div
           data-testid="manifests-loading"
           className="alm-manifests__status"
@@ -119,7 +121,7 @@ export function ManifestsAccordion({ projectId }: ManifestsAccordionProps) {
 
   if (fetchError) {
     return (
-      <Section title="Manifests">
+      <Section title="Manifests" defaultOpen={defaultOpen}>
         <div
           data-testid="manifests-error"
           className="alm-manifests__status--error"
@@ -131,7 +133,7 @@ export function ManifestsAccordion({ projectId }: ManifestsAccordionProps) {
   }
 
   return (
-    <Section title="Manifests" count={manifests.length}>
+    <Section title="Manifests" count={manifests.length} defaultOpen={defaultOpen}>
       {manifests.length === 0 ? (
         <div
           data-testid="manifests-empty"

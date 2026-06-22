@@ -7884,6 +7884,40 @@
   }
 }
 
+/* === merged from .cssblocks/calib-compact.css (spec-043, task #97) ===
+ * Compact the master fingerprint: flow the fingerprint + reuse KV pairs into a
+ * 2-column grid and widen the facts column so the whole calibration detail fits
+ * the wide-short bottom panel without inner scroll. Must follow the
+ * calibration-detail.css block above so the .alm-calib-detail column override
+ * wins on source order. */
+.alm-calib-detail {
+  grid-template-columns: minmax(0, 0.9fr) minmax(0, 1.1fr);
+}
+.alm-calib-kvgrid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  column-gap: var(--alm-sp-5);
+  row-gap: 0;
+  align-items: start;
+}
+.alm-calib-kvgrid .alm-kv {
+  min-width: 0;
+  gap: var(--alm-sp-2);
+}
+.alm-calib-kvgrid .alm-kv__label {
+  width: auto;
+  max-width: 6.5rem;
+}
+.alm-calib-kvgrid .alm-kv__value {
+  min-width: 0;
+  overflow-wrap: anywhere;
+}
+@media (max-width: 880px) {
+  .alm-calib-kvgrid {
+    grid-template-columns: minmax(0, 1fr);
+  }
+}
+
 /* === merged from .cssblocks/targets-planner.css (refine wave 2, spec-043) === */
 /*
  * targets-planner.css — Planner table virtualization + planning columns
@@ -8114,4 +8148,72 @@
 }
 .alm-plan-panel__summary-sep {
   color: var(--alm-text-muted);
+}
+
+/* === merged from .cssblocks/projects-side.css (spec-043 task #94) === */
+/* ── ListPageLayout side-panel variant ───────────────────────────────────────
+ * Switch the body from a vertical column (bottom dock) to a horizontal row so
+ * the detail sits to the RIGHT of the full-width primary content as a fixed,
+ * full-height column with its own scroll. */
+.alm-listpage__body--side {
+  flex-direction: row;
+}
+
+.alm-listpage__detail--side {
+  /* Fixed-width, full-height right column (own scroll lives on the body). */
+  flex: 0 0 var(--alm-side-detail-w);
+  width: var(--alm-side-detail-w);
+  height: auto;
+  max-height: none;
+  align-self: stretch;
+  border-top: none;
+  border-left: 1px solid var(--alm-border);
+}
+
+/* Fixed side-panel width token (kept local to this block). */
+.alm-listpage__body--side {
+  --alm-side-detail-w: 420px;
+}
+
+/* ── Projects-detail structure for the side column ───────────────────────────
+ * The detail was "too much info, unstructured, falling off the panel". In the
+ * narrow side column we tighten section spacing, pin the close bar, and make
+ * each region a compact, scannable block. */
+
+/* Tighter vertical rhythm between sections in the narrow column. */
+.alm-listpage__detail--side .alm-project-detail__sections {
+  display: flex;
+  flex-direction: column;
+  gap: var(--alm-sp-2);
+}
+
+/* Compact the lifecycle stepper so it doesn't dominate the top of the column. */
+.alm-listpage__detail--side .alm-stepper {
+  padding-top: var(--alm-sp-1);
+  padding-bottom: var(--alm-sp-1);
+}
+
+/* Sections read as tidy bordered cards with clear headers and no dead space. */
+.alm-project-detail-side__section {
+  border: 1px solid var(--alm-border-subtle);
+  border-radius: var(--alm-radius-md);
+  background: var(--alm-surface);
+  padding: var(--alm-sp-2);
+}
+
+/* Reduce the gap the metric line leaves above the stepper in the column. */
+.alm-listpage__detail--side .alm-metricline {
+  margin-bottom: var(--alm-sp-1);
+}
+
+/* Keep the action-bar cluster wrapping cleanly inside the narrow column. */
+.alm-listpage__detail--side .alm-project-detail__bar-actions {
+  flex-wrap: wrap;
+  gap: var(--alm-sp-1);
+}
+
+/* The path breadcrumb must wrap, not push the panel wider. */
+.alm-listpage__detail--side .alm-project-detail__bar-path {
+  overflow-wrap: anywhere;
+  word-break: break-all;
 }

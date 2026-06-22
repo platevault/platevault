@@ -170,6 +170,7 @@ export function ProjectsPage() {
       detail={project ? <ProjectDetailContent projectId={project.id} /> : undefined}
       onCloseDetail={project ? clearSelection : undefined}
       detailLabel="Project details"
+      detailPlacement="side"
     >
       <ProjectsTable
         projects={filtered}

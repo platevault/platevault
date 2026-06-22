@@ -54,9 +54,11 @@ const CAL_TYPES: CalibrationMatchType[] = ['dark', 'flat', 'bias'];
 
 interface Props {
   sessionIds: string[];
+  /** Whether the collapsible section starts open. Default true. */
+  defaultOpen?: boolean;
 }
 
-export function CalibrationMatchPanel({ sessionIds }: Props) {
+export function CalibrationMatchPanel({ sessionIds, defaultOpen = true }: Props) {
   const [results, setResults] = useState<BatchSessionResultDto[]>([]);
   const [loading, setLoading] = useState(false);
   const [fetchError, setFetchError] = useState<string | undefined>(undefined);
@@ -100,7 +102,7 @@ export function CalibrationMatchPanel({ sessionIds }: Props) {
 
   if (loading) {
     return (
-      <Section title="Calibration readiness">
+      <Section title="Calibration readiness" defaultOpen={defaultOpen}>
         <div
           className="alm-calib-match-panel__loading"
           data-testid="cal-panel-loading"
@@ -113,7 +115,7 @@ export function CalibrationMatchPanel({ sessionIds }: Props) {
 
   if (fetchError) {
     return (
-      <Section title="Calibration readiness">
+      <Section title="Calibration readiness" defaultOpen={defaultOpen}>
         <div
           className="alm-calib-match-panel__error"
           data-testid="cal-panel-error"
@@ -126,7 +128,7 @@ export function CalibrationMatchPanel({ sessionIds }: Props) {
 
   if (results.length === 0) {
     return (
-      <Section title="Calibration readiness">
+      <Section title="Calibration readiness" defaultOpen={defaultOpen}>
         <EmptyState
           title="No calibration data"
           desc="Calibration fingerprints are not yet available for this project's sources. Run a metadata scan to populate them."
@@ -145,7 +147,7 @@ export function CalibrationMatchPanel({ sessionIds }: Props) {
   }
 
   return (
-    <Section title="Calibration readiness" count={sessionIds.length} data-testid="cal-panel">
+    <Section title="Calibration readiness" count={sessionIds.length} defaultOpen={defaultOpen} data-testid="cal-panel">
       <div className="alm-calib-match-panel__list">
         {[...bySession.entries()].map(([sid, typeResults]) => (
           <div

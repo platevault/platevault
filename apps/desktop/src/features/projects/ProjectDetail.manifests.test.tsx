@@ -127,6 +127,17 @@ function renderDetail(projectId = 'proj-m1') {
   return render(<ProjectDetailContent projectId={projectId} />);
 }
 
+/**
+ * Expand a collapsible ui/Section by its header title. In the Projects detail
+ * side panel (spec 043 task #94) the Manifests section is collapsed by default
+ * to keep the narrow column scannable, so tests must open it before asserting
+ * on its content.
+ */
+function expandSection(title: string) {
+  const header = screen.getByText(title).closest('.alm-section__header');
+  if (header) fireEvent.click(header);
+}
+
 // ── Tests ─────────────────────────────────────────────────────────────────────
 
 describe('ProjectDetail — manifests accordion (spec 024)', () => {
@@ -148,6 +159,7 @@ describe('ProjectDetail — manifests accordion (spec 024)', () => {
   it('1. shows manifests-empty state when project has no manifests', async () => {
     mockListManifests.mockResolvedValue({ manifests: [], nextCursor: null });
     renderDetail();
+    expandSection('Manifests');
     await waitFor(() => {
       expect(screen.getByTestId('manifests-empty')).toBeInTheDocument();
     });
@@ -159,6 +171,7 @@ describe('ProjectDetail — manifests accordion (spec 024)', () => {
       nextCursor: null,
     });
     renderDetail();
+    expandSection('Manifests');
     await waitFor(() => {
       expect(screen.getByTestId('manifests-list')).toBeInTheDocument();
     });
@@ -183,6 +196,7 @@ describe('ProjectDetail — manifests accordion (spec 024)', () => {
       },
     });
     renderDetail();
+    expandSection('Manifests');
     await waitFor(() => {
       expect(screen.getByTestId(`manifest-row-${MANIFEST_SUMMARY.id}`)).toBeInTheDocument();
     });
@@ -203,6 +217,7 @@ describe('ProjectDetail — manifests accordion (spec 024)', () => {
       nextCursor: null,
     });
     renderDetail();
+    expandSection('Manifests');
     await waitFor(() => {
       expect(screen.getByTestId(`manifest-reveal-${MANIFEST_SUMMARY.id}`)).toBeInTheDocument();
     });
@@ -223,6 +238,7 @@ describe('ProjectDetail — manifests accordion (spec 024)', () => {
     });
     mockRevealManifestInOs.mockRejectedValue('manifest file not found: /some/path');
     renderDetail();
+    expandSection('Manifests');
     await waitFor(() => {
       expect(screen.getByTestId(`manifest-reveal-${MANIFEST_SUMMARY.id}`)).toBeInTheDocument();
     });
@@ -239,6 +255,7 @@ describe('ProjectDetail — manifests accordion (spec 024)', () => {
   it('6. manifests-error state shown on fetch failure', async () => {
     mockListManifests.mockRejectedValue(new Error('DB failure'));
     renderDetail();
+    expandSection('Manifests');
     await waitFor(() => {
       expect(screen.getByTestId('manifests-error')).toBeInTheDocument();
     });

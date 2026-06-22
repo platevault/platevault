@@ -37,11 +37,13 @@ export interface SourceViewsSectionProps {
   projectId: string;
   /** Called with planId after a plan is created so the parent can navigate. */
   onPlanCreated?: (planId: string) => void;
+  /** Whether the collapsible section starts open. Default true. */
+  defaultOpen?: boolean;
 }
 
 // ── Component ─────────────────────────────────────────────────────────────────
 
-export function SourceViewsSection({ projectId, onPlanCreated }: SourceViewsSectionProps) {
+export function SourceViewsSection({ projectId, onPlanCreated, defaultOpen = true }: SourceViewsSectionProps) {
   const [views, setViews] = useState<PreparedViewSummary[]>([]);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -131,7 +133,7 @@ export function SourceViewsSection({ projectId, onPlanCreated }: SourceViewsSect
 
   if (loading) {
     return (
-      <Section title="Source Views">
+      <Section title="Source Views" defaultOpen={defaultOpen}>
         <p className="text-muted text-sm">Loading…</p>
       </Section>
     );
@@ -139,7 +141,7 @@ export function SourceViewsSection({ projectId, onPlanCreated }: SourceViewsSect
 
   if (error) {
     return (
-      <Section title="Source Views">
+      <Section title="Source Views" defaultOpen={defaultOpen}>
         <Banner variant="danger">Failed to load source views: {error}</Banner>
       </Section>
     );
@@ -147,14 +149,14 @@ export function SourceViewsSection({ projectId, onPlanCreated }: SourceViewsSect
 
   if (views.length === 0) {
     return (
-      <Section title="Source Views">
+      <Section title="Source Views" defaultOpen={defaultOpen}>
         <p className="text-muted text-sm">No generated source views for this project.</p>
       </Section>
     );
   }
 
   return (
-    <Section title="Source Views">
+    <Section title="Source Views" defaultOpen={defaultOpen}>
       <ul className="flex flex-col gap-3">
         {views.map((view) => (
           <li

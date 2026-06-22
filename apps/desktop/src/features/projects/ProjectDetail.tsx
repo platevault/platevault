@@ -525,9 +525,13 @@ export function ProjectDetailContent({ projectId }: ProjectDetailContentProps) {
          * Per user override: show project sources as clickable links to the
          * actual source (inventory session). Do NOT show junction/link-type
          * labels. Uses a simple tokenised list — no generated-view structure.
+         *
+         * Collapsed by default (task #94): in the narrow side column this is
+         * secondary to the Sources table above (it links the same sources), so
+         * it should not occupy the panel until the user expands it.
          */}
         {project.sources.length > 0 && (
-          <Section title="Source views">
+          <Section title="Source views" defaultOpen={false}>
             <div className="alm-project-detail__sv-list">
               {project.sources.map((src) => (
                 <div key={src.inventoryId} className="alm-project-detail__sv-row">
@@ -553,8 +557,9 @@ export function ProjectDetailContent({ projectId }: ProjectDetailContentProps) {
         {/* ── Outputs section — spec 043 §4 (task #44) ───────────────────── */}
         {/* STUB: ProjectDetailDto carries no accepted-output model yet, so this
             renders a teaching empty state — never fabricated rows. Pass real
-            project.outputs[] here once the backend exposes them. */}
-        <OutputsSection />
+            project.outputs[] here once the backend exposes them.
+            Collapsed by default (task #94): secondary in the narrow side column. */}
+        <OutputsSection defaultOpen={false} />
 
         {/* ── Notes section — spec 024 T4.2 ──────────────────────────────── */}
         {/* project.notes is the creation-time inline field (legacy); the
@@ -566,20 +571,25 @@ export function ProjectDetailContent({ projectId }: ProjectDetailContentProps) {
         />
 
         {/* ── Manifests accordion — spec 024 T1.7 / T3.4 ─────────────────── */}
-        <ManifestsAccordion projectId={projectId} />
+        {/* Collapsed by default (task #94): secondary in the narrow side column. */}
+        <ManifestsAccordion projectId={projectId} defaultOpen={false} />
 
         {/* ── Cleanup preview — spec 043 §4 (task #44) ───────────────────── */}
         {/* STUB: no per-project cleanup-preview projection on the read path yet
             (cleanup.scan is a separate on-demand command). Renders a themed
             Banner alert + LOCKED protected categories — no invented byte counts. */}
-        <CleanupPreviewSection />
+        {/* Collapsed by default (task #94): secondary in the narrow side column. */}
+        <CleanupPreviewSection defaultOpen={false} />
 
         {/* ── Generated source views — spec 026 (remove/regenerate) ──────── */}
-        <SourceViewsSection projectId={projectId} />
+        {/* Collapsed by default (task #94): secondary in the narrow side column. */}
+        <SourceViewsSection projectId={projectId} defaultOpen={false} />
 
         {/* ── spec 007 T034: calibration match panel ──────────────────────── */}
+        {/* Collapsed by default (task #94): secondary in the narrow side column. */}
         <CalibrationMatchPanel
           sessionIds={project.sources.map((s) => s.inventoryId)}
+          defaultOpen={false}
         />
       </div>
 

@@ -51,9 +51,11 @@ function verifiedPillVariant(verified: boolean): PillVariant {
 export interface OutputsSectionProps {
   /** STUB: always [] until ProjectDetailDto exposes accepted outputs. */
   outputs?: ProjectOutputView[];
+  /** Whether the collapsible section starts open. Default true. */
+  defaultOpen?: boolean;
 }
 
-export function OutputsSection({ outputs = [] }: OutputsSectionProps) {
+export function OutputsSection({ outputs = [], defaultOpen = true }: OutputsSectionProps) {
   const columns = [
     { key: 'name', label: 'OUTPUT' },
     { key: 'format', label: 'FORMAT' },
@@ -71,7 +73,7 @@ export function OutputsSection({ outputs = [] }: OutputsSectionProps) {
   }));
 
   return (
-    <Section title="Outputs" count={outputs.length || undefined} data-testid="project-outputs">
+    <Section title="Outputs" count={outputs.length || undefined} defaultOpen={defaultOpen} data-testid="project-outputs">
       {outputs.length === 0 ? (
         // STUB: no accepted-output backend model yet — teaching empty state.
         <EmptyState
@@ -116,11 +118,13 @@ export interface CleanupPreviewView {
 export interface CleanupPreviewSectionProps {
   /** STUB: undefined until cleanup-preview data lands on the read path. */
   preview?: CleanupPreviewView;
+  /** Whether the collapsible section starts open. Default true. */
+  defaultOpen?: boolean;
 }
 
-export function CleanupPreviewSection({ preview }: CleanupPreviewSectionProps) {
+export function CleanupPreviewSection({ preview, defaultOpen = true }: CleanupPreviewSectionProps) {
   return (
-    <Section title="Cleanup preview" data-testid="project-cleanup-preview">
+    <Section title="Cleanup preview" defaultOpen={defaultOpen} data-testid="project-cleanup-preview">
       {/* Themed alert: cleanup is reviewable + reversible, never silent. */}
       <Banner variant="warn" role="status" aria-live="polite">
         <div className="alm-project-detail__cleanup-preview">

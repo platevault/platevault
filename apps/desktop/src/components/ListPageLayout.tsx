@@ -29,6 +29,14 @@
  * detail and returns the table to full height. The panel mounts only when
  * `detail` is non-null (so we never show an empty centered dashboard).
  *
+ * `detailPlacement` (DEFAULT `'bottom'`) chooses the dock. `'bottom'` is the
+ * Sessions/Calibration/Targets reference above. `'side'` instead docks the
+ * detail as a full-height RIGHT side panel (fixed ~420px width, own scroll,
+ * keeps the close ✕) BESIDE the full-width primary content — suited to detail
+ * that reads as a tall narrow column (Projects). The side variant simply
+ * switches `.alm-listpage__body` from a column to a row and pins the detail
+ * width; the primary content stays full-width to the left of it.
+ *
  * Pass the top bar either as a ready `topBar` node (e.g. `<PageTopBar .../>`)
  * or via the convenience `topBarProps` slots, which this component forwards to
  * an internal `PageTopBar`. ListPageLayout is itself the `.alm-page` root, so
@@ -51,6 +59,14 @@ export interface ListPageLayoutProps {
   onCloseDetail?: () => void;
   /** Accessible label for the detail panel region. Default "Details". */
   detailLabel?: string;
+  /**
+   * Where the detail panel docks. DEFAULT `'bottom'` (the Sessions/Calibration/
+   * Targets reference: a horizontal split BELOW the full-width primary content;
+   * see the module header). `'side'` docks the detail as a full-height RIGHT
+   * side panel (fixed width, own scroll) BESIDE the full-width primary content
+   * instead — suited to detail that reads as a tall narrow column (Projects).
+   */
+  detailPlacement?: 'bottom' | 'side';
 }
 
 export function ListPageLayout({
@@ -60,18 +76,26 @@ export function ListPageLayout({
   detail,
   onCloseDetail,
   detailLabel = 'Details',
+  detailPlacement = 'bottom',
 }: ListPageLayoutProps) {
   const hasDetail = detail != null;
+  const isSide = detailPlacement === 'side';
+  const bodyClass = isSide
+    ? 'alm-listpage__body alm-listpage__body--side'
+    : 'alm-listpage__body';
+  const detailClass = isSide
+    ? 'alm-listpage__detail alm-listpage__detail--side'
+    : 'alm-listpage__detail';
 
   return (
     <div className="alm-page">
       {topBar ?? (topBarProps && <PageTopBar {...topBarProps} />)}
 
-      <div className="alm-listpage__body">
+      <div className={bodyClass}>
         <div className="alm-listpage__main">{children}</div>
 
         {hasDetail && (
-          <section className="alm-listpage__detail" role="complementary" aria-label={detailLabel}>
+          <section className={detailClass} role="complementary" aria-label={detailLabel}>
             {onCloseDetail && (
               <div className="alm-listpage__detail-bar">
                 <button

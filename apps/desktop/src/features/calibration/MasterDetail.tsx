@@ -149,21 +149,28 @@ export function MasterDetail({ master, prefillSuggestion, agingThresholdDays }: 
         <aside className="alm-calib-detail__facts">
           <div className="alm-rail__panel">
             <RailCard title="Master fingerprint">
-              <KV label="Kind" value={kindStr} />
-              <KV label="Camera" value={fp.camera} />
-              <KV label="Gain" value={String(fp.gain)} />
-              <KV label="Exposure" value={`${fp.exposureS}s`} />
-              {fp.tempC != null && <KV label="Temperature" value={`${fp.tempC}°C`} />}
-              {fp.filter && <KV label="Filter" value={fp.filter} />}
-              {fp.sensorMode && <KV label="Sensor mode" value={fp.sensorMode} />}
-              <KV label="Binning" value={fp.binning} />
-              <KV label="Size" value={fmtBytes(master.sizeBytes)} />
+              {/* 2-column KV grid: keeps the fingerprint compact so the whole
+                  detail fits the wide-short bottom panel without inner scroll.
+                  See .cssblocks/calib-compact.css. */}
+              <div className="alm-calib-kvgrid">
+                <KV label="Kind" value={kindStr} />
+                <KV label="Camera" value={fp.camera} />
+                <KV label="Gain" value={String(fp.gain)} />
+                <KV label="Exposure" value={`${fp.exposureS}s`} />
+                {fp.tempC != null && <KV label="Temperature" value={`${fp.tempC}°C`} />}
+                {fp.filter && <KV label="Filter" value={fp.filter} />}
+                {fp.sensorMode && <KV label="Sensor mode" value={fp.sensorMode} />}
+                <KV label="Binning" value={fp.binning} />
+                <KV label="Size" value={fmtBytes(master.sizeBytes)} />
+              </div>
             </RailCard>
 
             <RailCard title="Reuse">
-              <KV label="Sessions matched" value={String((master.usedBySessionIds ?? []).length)} />
-              <KV label="Projects linked" value={String((master.usedByProjectIds ?? []).length)} />
-              <KV label="Created" value={master.createdAt.split('T')[0]} />
+              <div className="alm-calib-kvgrid">
+                <KV label="Sessions matched" value={String((master.usedBySessionIds ?? []).length)} />
+                <KV label="Projects linked" value={String((master.usedByProjectIds ?? []).length)} />
+                <KV label="Created" value={master.createdAt.split('T')[0]} />
+              </div>
             </RailCard>
           </div>
         </aside>
