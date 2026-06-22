@@ -1,19 +1,19 @@
 /**
- * MasterDetail — spec 007 wired · spec 043 §4 (calibration detail redesign) ·
- * tasks #100/#101.
+ * MasterDetail — spec 007 wired · spec 043 §4 (calibration detail redesign).
  *
- * Left-packed flat tabular layout matching SessionDetail and TargetDetailV2:
- *   Row 1 — [fingerprint PropertyTable] [confirmed sessions column]
- *   Row 2 — MatchCandidatesPanel (full-width, the hero content)
+ * Left-packed flat tabular layout matching SessionDetail exactly:
+ *   [props A] [props B] [confirmed sessions] [compatible sessions]
  *
- * Grey RailCard / KV / MetricLine boxes removed. No facts/aux props passed
- * to DetailPanel — the children carry all content.
+ * Actions (Use in project / Replace master / Reveal in Explorer) are inline-left
+ * in the title via titleExtra, wrapped in alm-session-detail2__actions — same
+ * pattern as SessionDetail's actionButtons. No `actions` prop passed to
+ * DetailPanel.
  *
- * Data wiring for confirmed sessions:
+ * Data wiring:
  *   - master.usedBySessionIds from the list endpoint is always empty.
- *   - We fetch calibrationMastersGet(master.id) → MasterDetail_Serialize whose
- *     usedBySessionIds is populated, then cross-reference sessionsList() to
- *     build "{target} · {filter} · {night}" labels.
+ *   - We fetch getCalibrationMaster(master.id) → MasterDetail_Serialize whose
+ *     usedBySessionIds and compatibleSessions are populated, then cross-reference
+ *     listSessions() to build "{target} · {filter} · {night}" labels for both.
  */
 
 import { useEffect, useState } from "react";
@@ -25,39 +25,9 @@ import {
 	type PropertyDef,
 	PropertyTable,
 } from "@/components";
-import type { PillVariant } from "@/ui";
-import { Btn, EmptyState, Pill } from "@/ui";
-import { MatchCandidatesPanel } from "./MatchCandidatesPanel";
-import { useCalibrationAssign, useCalibrationSuggest } from "./useCalibration";
+import { Btn, EmptyState } from "@/ui";
 
 // ── Helpers ───────────────────────────────────────────────────────────────────
-
-function kindVariant(kind: string): PillVariant {
-	const map: Record<string, PillVariant> = {
-		dark: "info",
-		flat: "accent",
-		bias: "neutral",
-	};
-	return map[kind.toLowerCase()] ?? "neutral";
-}
-
-interface ContextualAction {
-	label: string;
-	variant?: "primary" | "danger" | "ghost";
-}
-
-function masterActions(
-	master: CalibrationMaster,
-	agingThresholdDays: number,
-): ContextualAction[] {
-	const isAging = master.ageDays > agingThresholdDays;
-	const actions: ContextualAction[] = [
-		{ label: "Use in project", variant: "primary" },
-	];
-	if (isAging) actions.push({ label: "Replace master", variant: "danger" });
-	actions.push({ label: "Reveal in Explorer" });
-	return actions;
-}
 
 function fmtBytes(bytes: number): string {
 	if (bytes >= 1_073_741_824) return `${(bytes / 1_073_741_824).toFixed(1)} GB`;
@@ -74,86 +44,61 @@ interface Props {
 	agingThresholdDays: number;
 }
 
-// ── Confirmed sessions state ──────────────────────────────────────────────────
+// ── Detail state (confirmed + compatible sessions resolved to names) ──────────
 
-interface ConfirmedState {
-	names: string[];
+interface DetailState {
+	confirmedNames: string[];
+	compatibleNames: string[];
 	loading: boolean;
 }
 
 // ── Component ─────────────────────────────────────────────────────────────────
 
-export function MasterDetail({
-	master,
-	prefillSuggestion,
-	agingThresholdDays,
-}: Props) {
-	const sessionId = master?.sourceSessionId ?? undefined;
-
-	const {
-		response,
-		loading: suggestLoading,
-		error: suggestError,
-		refresh,
-	} = useCalibrationSuggest(sessionId);
-	const { assigning, assign } = useCalibrationAssign();
-
-	// Confirmed sessions — fetch detail + sessions list, keyed on master.id.
-	const [confirmed, setConfirmed] = useState<ConfirmedState>({
-		names: [],
+export function MasterDetail({ master, agingThresholdDays }: Props) {
+	const [detail, setDetail] = useState<DetailState>({
+		confirmedNames: [],
+		compatibleNames: [],
 		loading: false,
 	});
 
 	useEffect(() => {
 		if (!master) {
-			setConfirmed({ names: [], loading: false });
+			setDetail({ confirmedNames: [], compatibleNames: [], loading: false });
 			return;
 		}
 		const masterId = master.id;
 		let cancelled = false;
-		setConfirmed({ names: [], loading: true });
+		setDetail({ confirmedNames: [], compatibleNames: [], loading: true });
 
 		Promise.all([getCalibrationMaster({ id: masterId }), listSessions()])
-			.then(([detail, sessions]) => {
+			.then(([masterDetail, sessions]) => {
 				if (cancelled) return;
 				const idToName = new Map<string, string>();
 				for (const s of sessions) {
 					const k = s.sessionKey;
 					idToName.set(s.id, `${k.target} · ${k.filter} · ${k.night}`);
 				}
-				const names = detail.usedBySessionIds
+				const confirmedNames = masterDetail.usedBySessionIds
 					.map((id) => idToName.get(id) ?? id)
 					.filter(Boolean);
-				setConfirmed({ names, loading: false });
+				const compatibleNames = masterDetail.compatibleSessions
+					.map((e) => idToName.get(e.sessionId) ?? e.sessionId)
+					.filter(Boolean);
+				setDetail({ confirmedNames, compatibleNames, loading: false });
 			})
 			.catch(() => {
-				if (!cancelled) setConfirmed({ names: [], loading: false });
+				if (!cancelled)
+					setDetail({
+						confirmedNames: [],
+						compatibleNames: [],
+						loading: false,
+					});
 			});
 
 		return () => {
 			cancelled = true;
 		};
 	}, [master]);
-
-	const handleAssign = async (masterId: string, override: boolean) => {
-		if (!sessionId)
-			return {
-				status: "error" as const,
-				error: { code: "session.not_found", message: "No session" },
-			};
-		const res = await assign(sessionId, masterId, override);
-		if (res.status === "success") {
-			refresh();
-		}
-		return res as {
-			status: string;
-			error?: {
-				code: string;
-				message: string;
-				details?: { dimensions: string[] };
-			};
-		};
-	};
 
 	if (!master) {
 		return (
@@ -169,7 +114,6 @@ export function MasterDetail({
 	const isAging1Year = master.ageDays >= 365;
 	const isAgingWarn = master.ageDays > agingThresholdDays && !isAging1Year;
 	const kindStr = master.kind.toString().toLowerCase().replace("_", " ");
-
 	const fp = master.fingerprint;
 
 	const kindCap = kindStr.charAt(0).toUpperCase() + kindStr.slice(1);
@@ -185,7 +129,8 @@ export function MasterDetail({
 		? `Master ${kindCap} · ${masterDisc}`
 		: `Master ${kindCap}`;
 
-	// Fingerprint as flat PropertyTable rows.
+	// Fingerprint as flat PropertyTable rows — split across two columns like
+	// SessionDetail's factProps.
 	const fingerprintProps: PropertyDef[] = [
 		{ key: "kind", label: "Kind", value: kindStr },
 		{ key: "camera", label: "Camera", value: fp.camera },
@@ -216,58 +161,72 @@ export function MasterDetail({
 		{ key: "size", label: "Size", value: fmtBytes(master.sizeBytes) },
 	];
 
+	const mid = Math.ceil(fingerprintProps.length / 2);
+	const colA = fingerprintProps.slice(0, mid);
+	const colB = fingerprintProps.slice(mid);
+
+	// Actions inline-left in the title, same pattern as SessionDetail's actionButtons.
+	const actionButtons = (
+		<span className="alm-session-detail2__actions">
+			<Btn size="sm" variant="primary">
+				Use in project
+			</Btn>
+			{(isAging1Year || isAgingWarn) && (
+				<Btn size="sm" variant="danger">
+					Replace master
+				</Btn>
+			)}
+			<Btn size="sm">Reveal in Explorer</Btn>
+		</span>
+	);
+
 	return (
 		<DetailPanel
 			variant="calibration"
-			title={<span>{masterTitle}</span>}
-			titleExtra={
-				<>
-					<Pill variant={kindVariant(kindStr)}>{kindStr.toUpperCase()}</Pill>
-					{isAging1Year && <Pill variant="danger">aging &gt; 1 year</Pill>}
-					{isAgingWarn && <Pill variant="warn">aging {master.ageDays}d</Pill>}
-				</>
-			}
+			title={<strong>{masterTitle}</strong>}
+			titleExtra={actionButtons}
 			subtitle={`${kindStr} · ${fmtBytes(master.sizeBytes)}`}
-			actions={masterActions(master, agingThresholdDays).map((a) => (
-				<Btn key={a.label} size="sm" variant={a.variant}>
-					{a.label}
-				</Btn>
-			))}
 		>
-			{/* Left-packed row: [fingerprint] [confirmed sessions] */}
-			<div className="alm-calib-detail2">
-				<div className="alm-calib-detail2__col">
-					<PropertyTable mode="view" properties={fingerprintProps} />
+			{/* Left-packed columns: [props A] [props B] [confirmed sessions] [compatible sessions]. */}
+			<div className="alm-session-detail2">
+				<div className="alm-session-detail2__col">
+					<PropertyTable mode="view" properties={colA} />
 				</div>
-				<div className="alm-calib-detail2__confirmed">
-					<div className="alm-calib-detail2__head">Confirmed sessions</div>
-					{confirmed.loading ? (
-						<span className="alm-calib-detail2__muted">Loading…</span>
-					) : confirmed.names.length > 0 ? (
-						<div className="alm-calib-detail2__confirmed-list">
-							{confirmed.names.map((name) => (
-								<span key={name} className="alm-calib-detail2__confirmed-name">
-									{name}
-								</span>
+				<div className="alm-session-detail2__col">
+					<PropertyTable mode="view" properties={colB} />
+				</div>
+
+				{/* Confirmed sessions — resolved from usedBySessionIds via master detail fetch. */}
+				<div className="alm-session-detail2__linked">
+					<div className="alm-session-detail2__head">Confirmed sessions</div>
+					{detail.loading ? (
+						<span className="alm-session-detail2__muted">Loading…</span>
+					) : detail.confirmedNames.length > 0 ? (
+						<div className="alm-session-detail2__linked-list">
+							{detail.confirmedNames.map((name) => (
+								<span key={name}>{name}</span>
 							))}
 						</div>
 					) : (
-						<span className="alm-calib-detail2__muted">None</span>
+						<span className="alm-session-detail2__muted">None</span>
 					)}
 				</div>
-			</div>
 
-			{/* Compatible-sessions match table — hero content, full-width below the row. */}
-			<div className="alm-calib-detail2__match-wrap">
-				<MatchCandidatesPanel
-					sessionId={sessionId ?? ""}
-					response={response}
-					loading={suggestLoading}
-					error={suggestError}
-					onAssign={handleAssign}
-					assigning={assigning}
-					prefillSuggestion={prefillSuggestion}
-				/>
+				{/* Compatible sessions — resolved from compatibleSessions via the same fetch. */}
+				<div className="alm-session-detail2__linked">
+					<div className="alm-session-detail2__head">Compatible sessions</div>
+					{detail.loading ? (
+						<span className="alm-session-detail2__muted">Loading…</span>
+					) : detail.compatibleNames.length > 0 ? (
+						<div className="alm-session-detail2__linked-list">
+							{detail.compatibleNames.map((name) => (
+								<span key={name}>{name}</span>
+							))}
+						</div>
+					) : (
+						<span className="alm-session-detail2__muted">None</span>
+					)}
+				</div>
 			</div>
 		</DetailPanel>
 	);
