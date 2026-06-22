@@ -29,6 +29,7 @@ import type { InboxClassifyResponse } from './store';
 import type { PillVariant } from '@/ui';
 import { useInboxReclassify } from './store';
 import { errMessage } from '@/lib/errors';
+import { m } from '@/lib/i18n';
 
 // ── Helpers ───────────────────────────────────────────────────────────────────
 
@@ -369,7 +370,7 @@ export function InboxDetail({
         data-testid={`override-select-${filePath}`}
         className="alm-select alm-select--sm"
       >
-        <option value="">— pick type —</option>
+        <option value="">{m.inbox_pick_type_placeholder()}</option>
         {FRAME_TYPE_OPTIONS.map((t) => (
           <option key={t} value={t}>{t}</option>
         ))}
@@ -411,7 +412,7 @@ export function InboxDetail({
               title={`Missing required attribute(s): ${missingAttrs.join(', ')}`}
               className="alm-inbox-detail__missing-attr-badge"
             >
-              needs {missingAttrs.join(', ')}
+              {`needs ${missingAttrs.join(', ')}`}
             </span>
           )}
         </span>
@@ -456,9 +457,9 @@ export function InboxDetail({
           data-testid="inbox-mixed-alert"
         >
           <div className="alm-inbox-alert__msg">
-            <span className="alm-inbox-alert__title">Mixed folder</span>
+            <span className="alm-inbox-alert__title">{m.inbox_mixed_folder_title()}</span>
             <span className="alm-inbox-alert__body">
-              Multiple frame types detected. Confirm to produce a reviewable split plan.
+              {m.inbox_mixed_folder_body()}
             </span>
           </div>
           {onGenerateSplitPlan && (
@@ -468,10 +469,10 @@ export function InboxDetail({
                 variant="accent"
                 onClick={onGenerateSplitPlan}
                 disabled={splitPlanBusy}
-                aria-label="Generate split plan"
+                aria-label={m.inbox_generate_split_plan()}
                 data-testid="inbox-mixed-split-btn"
               >
-                {splitPlanBusy ? 'Working…' : 'Generate split plan'}
+                {splitPlanBusy ? 'Working…' : m.inbox_generate_split_plan()}
               </Btn>
             </div>
           )}
@@ -486,9 +487,9 @@ export function InboxDetail({
           data-testid="inbox-unclassified-alert"
         >
           <div className="alm-inbox-alert__msg">
-            <span className="alm-inbox-alert__title">Frame types required</span>
+            <span className="alm-inbox-alert__title">{m.inbox_frame_types_required_title()}</span>
             <span className="alm-inbox-alert__body">
-              No IMAGETYP headers could be read. Assign frame types below, then confirm.
+              {m.inbox_frame_types_required_body()}
             </span>
           </div>
         </Banner>
@@ -497,7 +498,7 @@ export function InboxDetail({
       {/* FR-011: explicit per-type composition for mixed folders */}
       {mixedSummary && (
         <div
-          aria-label="Mixed composition summary"
+          aria-label={m.inbox_mixed_composition_summary_aria()}
           className="alm-inbox-detail__mixed-summary"
         >
           {mixedSummary}
@@ -508,7 +509,7 @@ export function InboxDetail({
       {breakdownRows.length > 0 && (
         <div className="alm-inbox-detail__breakdown-block">
           <div className="alm-inbox-detail__breakdown-head">
-            Frame type breakdown
+            {m.inbox_frame_type_breakdown()}
             {/* task 33: active filter indicator + clear link */}
             {activeBreakdownFilter && onBreakdownFilterChange && (
               <span className="alm-breakdown-filter-label" data-testid="breakdown-filter-active">
@@ -517,10 +518,10 @@ export function InboxDetail({
                   type="button"
                   className="alm-breakdown-filter-clear"
                   onClick={() => onBreakdownFilterChange(null)}
-                  aria-label="Clear frame type filter"
+                  aria-label={m.inbox_clear_frame_type_filter_aria()}
                   data-testid="breakdown-filter-clear"
                 >
-                  clear
+                  {m.common_clear()}
                 </button>
               </span>
             )}
@@ -542,7 +543,7 @@ export function InboxDetail({
               checked={allSelected}
               ref={(el) => { if (el) el.indeterminate = someSelected; }}
               onChange={handleSelectAll}
-              aria-label="Select all unclassified files"
+              aria-label={m.inbox_select_all_unclassified_aria()}
               data-testid="reclassify-select-all"
             />
             <span className="alm-inbox-detail__select-all-label">
@@ -552,20 +553,20 @@ export function InboxDetail({
           <Table columns={unclassifiedColumns} rows={unclassifiedRows} />
 
           {selectedFiles.size > 0 && (
-            <div className="alm-inbox-detail__bulk-controls" aria-label="Bulk override controls">
+            <div className="alm-inbox-detail__bulk-controls" aria-label={m.inbox_bulk_override_controls_aria()}>
               <div className="alm-inbox-detail__bulk-field">
                 <label htmlFor="bulk-frame-type" className="alm-inbox-detail__bulk-label">
-                  Frame type
+                  {m.inbox_frame_type_label()}
                 </label>
                 <select
                   id="bulk-frame-type"
                   value={bulkFrameType}
                   onChange={(e) => setBulkFrameType(e.target.value)}
-                  aria-label="Bulk frame type"
+                  aria-label={m.inbox_bulk_frame_type_aria()}
                   data-testid="bulk-frame-type"
                   className="alm-select alm-select--sm"
                 >
-                  <option value="">— unchanged —</option>
+                  <option value="">{m.inbox_unchanged_placeholder()}</option>
                   {FRAME_TYPE_OPTIONS.map((t) => (
                     <option key={t} value={t}>{t}</option>
                   ))}
@@ -574,15 +575,15 @@ export function InboxDetail({
 
               <div className="alm-inbox-detail__bulk-field">
                 <label htmlFor="bulk-filter" className="alm-inbox-detail__bulk-label">
-                  Filter
+                  {m.common_filter()}
                 </label>
                 <input
                   id="bulk-filter"
                   type="text"
                   value={bulkFilter}
                   onChange={(e) => setBulkFilter(e.target.value)}
-                  placeholder="e.g. Ha"
-                  aria-label="Bulk filter"
+                  placeholder={m.inbox_filter_placeholder()}
+                  aria-label={m.inbox_bulk_filter_aria()}
                   data-testid="bulk-filter"
                   className="alm-input alm-input--sm alm-inbox-detail__bulk-input-w80"
                 />
@@ -590,15 +591,15 @@ export function InboxDetail({
 
               <div className="alm-inbox-detail__bulk-field">
                 <label htmlFor="bulk-exposure" className="alm-inbox-detail__bulk-label">
-                  Exposure (s)
+                  {m.inbox_exposure_label()}
                 </label>
                 <input
                   id="bulk-exposure"
                   type="number"
                   value={bulkExposureS}
                   onChange={(e) => setBulkExposureS(e.target.value)}
-                  placeholder="e.g. 300"
-                  aria-label="Bulk exposure seconds"
+                  placeholder={m.inbox_exposure_placeholder()}
+                  aria-label={m.inbox_bulk_exposure_aria()}
                   data-testid="bulk-exposure-s"
                   className="alm-input alm-input--sm alm-inbox-detail__bulk-input-w80"
                   min={0}
@@ -607,15 +608,15 @@ export function InboxDetail({
 
               <div className="alm-inbox-detail__bulk-field">
                 <label htmlFor="bulk-binning" className="alm-inbox-detail__bulk-label">
-                  Binning
+                  {m.settings_calmatch_binning()}
                 </label>
                 <input
                   id="bulk-binning"
                   type="text"
                   value={bulkBinning}
                   onChange={(e) => setBulkBinning(e.target.value)}
-                  placeholder="e.g. 2x2"
-                  aria-label="Bulk binning"
+                  placeholder={m.inbox_binning_placeholder()}
+                  aria-label={m.inbox_bulk_binning_aria()}
                   data-testid="bulk-binning"
                   className="alm-input alm-input--sm alm-inbox-detail__bulk-input-w80"
                 />
@@ -645,7 +646,7 @@ export function InboxDetail({
                 className="alm-btn alm-btn--sm alm-btn--accent"
                 onClick={handleApplyOverrides}
                 disabled={Object.keys(pendingOverrides).length === 0 || reclassifyLoading}
-                aria-label="Apply manual overrides"
+                aria-label={m.inbox_apply_manual_overrides_aria()}
               >
                 {reclassifyLoading
                   ? 'Applying…'
@@ -668,11 +669,9 @@ export function InboxDetail({
           data-testid="inbox-missing-attr-banner"
         >
           <div className="alm-inbox-alert__msg">
-            <span className="alm-inbox-alert__title">Required metadata missing</span>
+            <span className="alm-inbox-alert__title">{m.inbox_required_metadata_missing_title()}</span>
             <span className="alm-inbox-alert__body">
-              {filesMissingAttrs.length} file{filesMissingAttrs.length !== 1 ? 's' : ''} missing
-              required attribute(s) for their destination — confirm disabled. Assign the
-              missing value(s) in "Needs review" above, then confirm.
+              {m.inbox_required_metadata_body({ count: filesMissingAttrs.length })}
             </span>
           </div>
         </Banner>
@@ -680,7 +679,7 @@ export function InboxDetail({
 
       {!classification && (
         <div className="alm-inbox-detail__empty">
-          Select an item to see the classification breakdown.
+          {m.inbox_select_item_prompt()}
         </div>
       )}
     </div>
@@ -689,9 +688,9 @@ export function InboxDetail({
   // CONTENT column (center, scrolls): file-metadata table.
   // Row onClick → setInspectedIdx → FileInspector in the aux rail.
   const contentColumn = hasMetadata ? (
-    <div className="alm-inbox-detail__meta-col" aria-label="File metadata">
+    <div className="alm-inbox-detail__meta-col" aria-label={m.inbox_file_metadata_aria()}>
       <div className="alm-inbox-detail__meta-head">
-        File metadata ({metadataRows.length})
+        {m.inbox_file_metadata_count({ count: metadataRows.length })}
       </div>
       <Table
         columns={metadataColumns}
@@ -720,6 +719,7 @@ export function InboxDetail({
               ? classification?.frameType ?? 'single'
               : classType}
           </Pill>
+          {/* eslint-disable-next-line alm/no-user-string -- "video" is a format-lane code, not a translatable word */}
           {item.lane === 'video' && <Pill variant="ghost">video</Pill>}
         </>
       }

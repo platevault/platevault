@@ -36,6 +36,7 @@ import { useCallback, useEffect, useMemo, useState } from 'react';
 import { useNavigate, useSearch } from '@tanstack/react-router';
 import { PageTopBar, FilterToolbar } from '@/components';
 import { Btn } from '@/ui';
+import { m } from '@/lib/i18n';
 import { useSetPageStatus } from '@/app/PageStatusContext';
 import { useStaleSelectionCleanup } from '@/lib/use-stale-selection';
 import { addToast } from '@/shared/toast';
@@ -639,7 +640,7 @@ export function InboxPage() {
             size="sm"
             disabled={rescanLoading}
             onClick={() => void rescan()}
-            aria-label="Rescan all roots"
+            aria-label={m.inbox_rescan_all_roots_aria()}
           >
             {rescanLoading ? 'Rescanning…' : 'Rescan'}
           </Btn>
@@ -683,11 +684,11 @@ export function InboxPage() {
           {showPlans && (
             <aside
               className="alm-inbox-side alm-inbox-side--plan"
-              aria-label="Planned actions"
+              aria-label={m.inbox_planned_actions()}
               data-testid="inbox-plan-dock"
             >
               <div className="alm-inbox-side__head">
-                <span className="alm-inbox-side__title">Planned actions</span>
+                <span className="alm-inbox-side__title">{m.inbox_planned_actions()}</span>
                 {planCount > 0 && (
                   <span className="alm-inbox-side__badge">{planCount}</span>
                 )}
@@ -720,17 +721,17 @@ export function InboxPage() {
         {selectedItem != null && (
           <section
             className="alm-inbox-plandock alm-inbox-plandock--details"
-            aria-label="Detection details"
+            aria-label={m.inbox_detection_details()}
             data-testid="inbox-side-panel"
           >
             <div className="alm-inbox-plandock__head">
-              <span className="alm-inbox-plandock__title">Detection details</span>
+              <span className="alm-inbox-plandock__title">{m.inbox_detection_details()}</span>
               <span className="alm-inbox-plandock__spacer" />
               <button
                 type="button"
                 className="alm-inbox-plandock__close"
                 onClick={clearSelection}
-                aria-label="Close details"
+                aria-label={m.inbox_close_details_aria()}
               >
                 ✕
               </button>

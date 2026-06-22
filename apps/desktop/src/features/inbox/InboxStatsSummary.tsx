@@ -54,6 +54,7 @@ function PerTypeChip({ row }: { row: InboxStatsPerType }) {
       <span className="alm-inbox-stats__type">{row.frameType}</span>
       <span className="alm-inbox-stats__num">{count}</span>
       {row.masterCount > 0 && row.folderCount > 0 && (
+        // eslint-disable-next-line alm/no-user-string -- "m" is a unit abbreviation for "masters", not a translatable word
         <span className="alm-inbox-stats__label">+{row.masterCount}m</span>
       )}
     </span>

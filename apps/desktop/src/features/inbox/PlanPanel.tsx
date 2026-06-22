@@ -16,6 +16,7 @@
 import { useCallback, useEffect, useMemo, useState } from 'react';
 import { Banner, Btn } from '@/ui';
 import type { InboxOpenPlan, InboxPlanAction } from './store';
+import { m } from '@/lib/i18n';
 
 // ── Types ─────────────────────────────────────────────────────────────────────
 
@@ -476,11 +477,10 @@ export function PlanPanel({
       data-testid="inbox-root-picker"
     >
       <div className="alm-plan-panel__root-picker-title">
-        Choose a destination library root
+        {m.inbox_choose_dest_root_title()}
       </div>
       <div className="alm-plan-panel__root-picker-desc">
-        More than one library root can host <strong>{pendingRootPick.category}</strong> frames.
-        Pick where these files should go to generate the plan.
+        {m.inbox_choose_dest_root_body({ category: pendingRootPick.category })}
       </div>
       <div className="alm-plan-panel__root-picker-options">
         {pendingRootPick.candidates.map((c) => (
@@ -536,19 +536,20 @@ export function PlanPanel({
               checked={allSelectableSelected}
               onChange={toggleAll}
               disabled={selectableIds.length === 0}
-              aria-label="Select all plans"
+              aria-label={m.inbox_select_all_plans_aria()}
               data-testid="plan-select-all"
             />
             <span
               className="alm-plan-panel__title"
             >
-              Planned actions
+              {m.inbox_planned_actions()}
             </span>
           </label>
           <span
             className="alm-plan-panel__count-summary"
             data-testid="plan-total-count"
           >
+            {/* eslint-disable-next-line alm/no-user-string -- plural suffix fragments; ICU plurals not supported by the message-format plugin */}
             {plans.length} plan{plans.length !== 1 ? 's' : ''} · {totalActions} action
             {totalActions !== 1 ? 's' : ''}
           </span>
@@ -561,7 +562,7 @@ export function PlanPanel({
             onClick={() => onApplySelected(selectedArray)}
             disabled={applySelectedDisabled}
             data-testid="plan-apply-selected"
-            aria-label="Apply selected plans"
+            aria-label={m.inbox_apply_selected_plans_aria()}
           >
             {busy ? 'Applying…' : `Apply selected (${selectedArray.length})`}
           </Btn>
@@ -570,9 +571,9 @@ export function PlanPanel({
             onClick={onApplyAll}
             disabled={applyAllDisabled}
             data-testid="plan-apply-all"
-            aria-label="Apply all plans"
+            aria-label={m.inbox_apply_all_plans_aria()}
           >
-            Apply all
+            {m.inbox_apply_all()}
           </Btn>
         </div>
       </div>
@@ -580,7 +581,7 @@ export function PlanPanel({
       <div
         className="alm-plan-panel__hint"
       >
-        Selection is per ingestion — checking a group applies that whole plan.
+        {m.inbox_plan_selection_hint()}
       </div>
 
       {/* ── Scrollable group list ── */}
@@ -669,7 +670,7 @@ export function PlanPanel({
                     className="alm-plan-panel__stale-badge"
                     data-testid={`plan-stale-${plan.inboxItemId}`}
                   >
-                    Stale
+                    {m.inbox_stale()}
                   </span>
                 )}
                 <Btn
@@ -679,13 +680,13 @@ export function PlanPanel({
                   data-testid={`plan-cancel-${plan.inboxItemId}`}
                   aria-label={`Discard plan for ${plan.itemName}`}
                 >
-                  Discard
+                  {m.inbox_discard()}
                 </Btn>
               </div>
 
               {plan.stale && (
                 <Banner variant="danger" className="alm-plan-panel__stale-banner">
-                  Source files changed — discard and re-confirm to regenerate this plan.
+                  {m.inbox_stale_plan_warning()}
                 </Banner>
               )}
 
@@ -795,7 +796,7 @@ export function PlanPanel({
           className="alm-plan-panel__destructive"
         >
           <div className="alm-plan-panel__destructive-title">
-            Where should removed source files go?
+            {m.inbox_where_source_files_go()}
           </div>
           <div
             className="alm-plan-panel__dest-options"
@@ -810,9 +811,9 @@ export function PlanPanel({
                 data-testid="plan-destructive-archive"
               />
               <span>
-                <strong>Archive folder</strong>
+                <strong>{m.inbox_archive_folder()}</strong>
                 <span className="alm-plan-panel__dest-label-hint">
-                  Archive keeps a recoverable copy; Trash is unrecoverable.
+                  {m.inbox_archive_hint()}
                 </span>
               </span>
             </label>
@@ -825,7 +826,7 @@ export function PlanPanel({
                 onChange={() => onDestructiveDestinationChange('trash')}
                 data-testid="plan-destructive-trash"
               />
-              <span>System Trash</span>
+              <span>{m.inbox_system_trash()}</span>
             </label>
           </div>
         </div>

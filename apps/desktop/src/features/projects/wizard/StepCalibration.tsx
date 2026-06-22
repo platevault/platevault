@@ -129,7 +129,7 @@ export function StepCalibration({ selectedSessionIds: _selectedSessionIds, data,
         <table className="alm-simple-table">
           <thead>
             <tr>
-              <th>{m.projects_wizard_col_filter()}</th>
+              <th>{m.common_filter()}</th>
               <th>{m.projects_wizard_col_lights()}</th>
               <th>{m.projects_wizard_col_master_flat()}</th>
               <th className="alm-wizard-calib__col-score">{m.projects_wizard_col_score()}</th>

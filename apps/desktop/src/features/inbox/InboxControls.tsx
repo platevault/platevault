@@ -19,6 +19,7 @@
 import { useCallback, useEffect, useState } from 'react';
 import type { DimensionAccessor } from './grouping';
 import type { InboxListItem } from '@/api/commands';
+import { m } from '@/lib/i18n';
 
 // ── Grouping dimension registry ─────────────────────────────────────────────────
 
@@ -198,10 +199,10 @@ export function InboxControls({
           className="alm-select"
           value={sortBy}
           onChange={(e) => onSortByChange(e.target.value as InboxSortBy)}
-          aria-label="Sort by"
+          aria-label={m.inbox_sort_by_aria()}
         >
-          <option value="name">Sort: name</option>
-          <option value="state">Sort: state</option>
+          <option value="name">{m.targets_legacy_sort_name()}</option>
+          <option value="state">{m.inbox_sort_state()}</option>
         </select>
         <select
           className="alm-select"
@@ -210,11 +211,11 @@ export function InboxControls({
             const v = e.target.value as FilterType;
             onFilterTypeChange(v === 'all' ? undefined : v);
           }}
-          aria-label="Filter file type"
+          aria-label={m.inbox_filter_file_type_aria()}
         >
-          <option value="all">All file types</option>
-          <option value="fits">FITS</option>
-          <option value="video">Video</option>
+          <option value="all">{m.inbox_filter_all_file_types()}</option>
+          <option value="fits">{m.inbox_filter_fits()}</option>
+          <option value="video">{m.inbox_filter_video()}</option>
         </select>
       </div>
     </div>
