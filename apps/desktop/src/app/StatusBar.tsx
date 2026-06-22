@@ -2,7 +2,6 @@ import { clsx } from 'clsx';
 import { useLogPanel } from './LogPanelContext';
 import { useOperationStatus } from './OperationStatusContext';
 import { useStatusSummary } from './useStatusSummary';
-import { usePageSummaryValue } from './usePageSummary';
 
 function formatBytes(bytes: number): string {
   if (bytes < 1024) return `${bytes} B`;
@@ -11,16 +10,25 @@ function formatBytes(bytes: number): string {
   return `${(bytes / (1024 * 1024 * 1024)).toFixed(1)} GB`;
 }
 
+function formatCount(n: number): string {
+  return n.toLocaleString();
+}
+
 /**
  * Status bar (design v4): three zones. LEFT = the current operation (transient),
- * RIGHT = persistent storage/cleanup health, far right = log toggle. Library
- * inventory counts were removed — those live in the nav badges and on the pages.
+ * CENTER = GLOBAL library inventory totals (task #87 — stable across routes,
+ * NOT per-page counts), RIGHT = persistent storage/cleanup health + log toggle.
+ *
+ * The global totals come from `useStatusSummary()` → `commands.statusSummary()`
+ * (the real `LibraryStats` DTO: sessions / projects / calibration sets /
+ * targets). There is no library-wide image/file count in the contract yet (the
+ * Advanced settings "Records" line is hardcoded), so the image total is a STUB
+ * placeholder until the metadata-ingest pipeline exposes one.
  */
 export function StatusBar() {
   const { toggle } = useLogPanel();
   const { statusLabel } = useOperationStatus();
   const status = useStatusSummary();
-  const pageSummary = usePageSummaryValue();
   const isActive = statusLabel !== 'Idle';
 
   return (
@@ -37,13 +45,24 @@ export function StatusBar() {
         )}
       </div>
 
-      {/* LEFT (secondary) — per-page count/metadata published by the active
-          page (task #80). Empty when no page has set one. */}
-      {pageSummary != null && (
-        <div className="alm-statusbar__page" data-testid="statusbar-page-summary">
-          {pageSummary}
-        </div>
-      )}
+      {/* CENTER — GLOBAL library inventory (stable across routes, task #87).
+          Sessions / projects / calibration masters / targets are real totals
+          from the status_summary contract. Images is a STUB until a library-wide
+          file count lands in the metadata pipeline. */}
+      <div className="alm-statusbar__lib" data-testid="statusbar-library-stats">
+        <span title="Total acquisition sessions">
+          {formatCount(status.sessionCount)} sessions
+        </span>
+        <span className="alm-statusbar__sep">·</span>
+        <span title="Total projects">{formatCount(status.projectCount)} projects</span>
+        <span className="alm-statusbar__sep">·</span>
+        <span title="Total calibration masters">
+          {formatCount(status.calibrationCount)} masters
+        </span>
+        <span className="alm-statusbar__sep">·</span>
+        {/* STUB: no library-wide image/file count in the contract yet. */}
+        <span title="Total images (placeholder — pending metadata pipeline)">— images</span>
+      </div>
 
       {/* RIGHT — persistent storage / cleanup health + log */}
       <div className="alm-statusbar__right">

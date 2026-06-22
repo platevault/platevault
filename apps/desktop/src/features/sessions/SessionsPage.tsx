@@ -23,7 +23,6 @@
 
 import { useNavigate, useSearch } from '@tanstack/react-router';
 import { useCallback, useMemo, useState } from 'react';
-import { usePageSummary } from '@/app/usePageSummary';
 import { PageTopBar, FilterToolbar, ListPageLayout } from '@/components';
 import type { FilterOption } from '@/components';
 import { useStaleSelectionCleanup } from '@/lib/use-stale-selection';
@@ -108,31 +107,9 @@ export function SessionsPage() {
     [response?.sources, search],
   );
 
-  const total = useMemo(
-    () => (response?.sources ?? []).reduce((acc, src) => acc + src.sessions.length, 0),
-    [response?.sources],
-  );
-
-  // Per-page count/metadata for the BOTTOM status bar (top-bar convention,
-  // task #80): "N sessions · N confirmed · N needs review". Counts span all
-  // sources (unfiltered), mirroring the previous top-bar summary.
-  const { confirmedCount, needsReviewCount } = useMemo(() => {
-    let confirmed = 0;
-    let needsReview = 0;
-    for (const src of response?.sources ?? []) {
-      for (const s of src.sessions) {
-        if (s.state === 'confirmed') confirmed += 1;
-        else if (['discovered', 'candidate', 'needs_review'].includes(s.state)) needsReview += 1;
-      }
-    }
-    return { confirmedCount: confirmed, needsReviewCount: needsReview };
-  }, [response?.sources]);
-
-  usePageSummary(
-    loading
-      ? null
-      : `${total} ${total === 1 ? 'session' : 'sessions'} · ${confirmedCount} confirmed · ${needsReviewCount} needs review`,
-  );
+  // (task #87) The per-page status-bar summary (session/confirmed/needs-review
+  // counts) was removed: the status bar now shows GLOBAL library totals via
+  // useStatusSummary, not per-route counts.
 
   // Flatten all sessions across sources to find the selected one.
   const allSessions = response?.sources.flatMap((src) => src.sessions) ?? [];

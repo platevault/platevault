@@ -6571,28 +6571,61 @@
   cursor: pointer;
 }
 
-/* --- ListPageLayout body: full-width primary content + detail pane -------- */
+/* === merged from .cssblocks/layout-bottompanel.css (spec-043, task #86) ===
+ * ListPageLayout detail as a resizable BOTTOM split (was a right-side pane).
+ * The body is a vertical column: full-width table on top (columns stay stable),
+ * detail panel docked below, separated by a draggable horizontal splitter. The
+ * panel height comes from the `--alm-listpage-detail-h` custom property the
+ * component sets from its (localStorage-persisted) drag state. */
 .alm-listpage__body {
   display: flex;
+  flex-direction: column;
   flex: 1;
   min-height: 0;
   overflow: hidden;
 }
+.alm-listpage__body[data-dragging='true'] {
+  cursor: row-resize;
+  user-select: none;
+}
 .alm-listpage__main {
-  flex: 1;
+  flex: 1 1 auto;
   min-width: 0;
+  min-height: 0;
   overflow: auto;
 }
-/* The detail pane keeps a real, generous width so its inner rail/cards are
- * fully readable and never squeezed into vertical slivers. */
+.alm-listpage__splitter {
+  flex: 0 0 auto;
+  height: 6px;
+  cursor: row-resize;
+  background: var(--alm-border);
+  border-top: 1px solid var(--alm-border);
+  border-bottom: 1px solid var(--alm-border);
+  position: relative;
+}
+.alm-listpage__splitter::after {
+  content: '';
+  position: absolute;
+  left: 50%;
+  top: 50%;
+  width: 36px;
+  height: 2px;
+  transform: translate(-50%, -50%);
+  border-radius: var(--alm-radius-sm);
+  background: var(--alm-text-faint);
+}
+.alm-listpage__splitter:hover,
+.alm-listpage__body[data-dragging='true'] .alm-listpage__splitter {
+  background: var(--alm-accent-muted, var(--alm-accent));
+}
 .alm-listpage__detail {
-  flex: 0 0 clamp(360px, 36%, 460px);
-  min-width: 360px;
+  flex: 0 0 var(--alm-listpage-detail-h, 360px);
+  height: var(--alm-listpage-detail-h, 360px);
   display: flex;
   flex-direction: column;
   min-height: 0;
   overflow: hidden;
-  border-left: 1px solid var(--alm-border);
+  border-top: 1px solid var(--alm-border);
   background: var(--alm-surface-raised);
 }
 .alm-listpage__detail-bar {
@@ -6618,13 +6651,9 @@
   min-height: 0;
   overflow-y: auto;
 }
-/* Inside the detail pane the dashboard grid collapses to a single column so
- * the rail flows beneath the primary content as a normal section instead of a
- * crushed side-rail. This guards EVERY adopting page's detail (Sessions /
- * Calibration fingerprint rail / Projects rail) against sliver compression. */
-.alm-listpage__detail-body .alm-dash {
-  grid-template-columns: minmax(0, 1fr);
-}
+/* The bottom panel has ample horizontal room, so its dashboard grid keeps its
+ * natural multi-column rail layout (the old single-column collapse the narrow
+ * right-side pane needed is relaxed). */
 .alm-listpage__detail-body .alm-detail--fill > .alm-dash {
   grid-template-rows: auto;
 }
@@ -7586,8 +7615,14 @@
   word-break: break-all;
 }
 
-/* === merged from .cssblocks/statusbar-summary.css (spec-043, task #80) === */
-.alm-statusbar__page {
+/* === merged from .cssblocks/layout-bottompanel.css (spec-043, task #87) ===
+ * GLOBAL library inventory totals in the status bar (replaces the per-page
+ * summary of task #80). Stable across routes; sits between the operation zone
+ * and the right-aligned storage/log zone. */
+.alm-statusbar__lib {
+  display: flex;
+  align-items: center;
+  gap: var(--alm-sp-2);
   color: var(--alm-text-secondary);
   white-space: nowrap;
   overflow: hidden;
