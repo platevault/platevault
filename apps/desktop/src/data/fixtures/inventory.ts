@@ -168,9 +168,14 @@ const LOCAL_SESSIONS: InventorySession[] = [
     type: 'light',
     target: 'IC 1396',
     filter: 'SII',
+    // 360 s exposure; GAIN=125 (narrowband mode), OFFSET=20, BIN=1×1, SET-TEMP=0°C
+    // from real Poseidon-C PRO / NINA 3.1.2 header (IMAGETYP=LIGHT, XBINNING=1)
     exposure: '360s',
     state: 'discovered',
-    camera: 'ASI2600MM Pro',
+    camera: 'Poseidon-C PRO',
+    gain: '125',
+    binning: '1×1',
+    setTemp: '0°C',
     capturedOn: '2026-04-14',
     provenance: { target: 'IC 1396', inferred: 'from FITS OBJECT' },
     linked: undefined,
@@ -183,8 +188,14 @@ const LOCAL_SESSIONS: InventorySession[] = [
     type: 'light',
     target: 'M31',
     filter: 'L',
+    // 195 s exposure; GAIN=0 (low-noise LUM mode), OFFSET=20, BIN=1×1, SET-TEMP=0°C
+    // from real Poseidon-C PRO / NINA 3.1.2 header (IMAGETYP=LIGHT, XBINNING=1)
     exposure: '195s',
     state: 'needs_review',
+    camera: 'Poseidon-C PRO',
+    gain: '0',
+    binning: '1×1',
+    setTemp: '0°C',
     capturedOn: '2026-03-28',
     provenance: { target: 'M31', filter: 'L', inferred: 'filter origin inferred' },
     linked: undefined,
@@ -197,8 +208,14 @@ const LOCAL_SESSIONS: InventorySession[] = [
     type: 'light',
     target: 'M31',
     filter: 'B',
+    // 100 s exposure; GAIN=0, OFFSET=20, BIN=1×1, SET-TEMP=0°C
+    // from real Poseidon-C PRO / NINA 3.1.2 header (IMAGETYP=LIGHT, XBINNING=1)
     exposure: '100s',
     state: 'ignored',
+    camera: 'Poseidon-C PRO',
+    gain: '0',
+    binning: '1×1',
+    setTemp: '0°C',
     capturedOn: '2026-03-10',
     linked: undefined,
   },
@@ -210,8 +227,14 @@ const LOCAL_SESSIONS: InventorySession[] = [
     type: 'light',
     target: 'M42',
     filter: 'OIII',
+    // 171 s exposure; GAIN=125 (narrowband mode), OFFSET=20, BIN=1×1, SET-TEMP=0°C
+    // from real Poseidon-C PRO / NINA 3.1.2 header (IMAGETYP=LIGHT, XBINNING=1)
     exposure: '171s',
     state: 'rejected',
+    camera: 'Poseidon-C PRO',
+    gain: '125',
+    binning: '1×1',
+    setTemp: '0°C',
     capturedOn: '2026-02-11',
     linked: undefined,
   },
@@ -223,8 +246,14 @@ const LOCAL_SESSIONS: InventorySession[] = [
     type: 'light',
     target: 'M42',
     filter: 'Ha',
+    // 300 s exposure; GAIN=125 (narrowband mode), OFFSET=20, BIN=1×1, SET-TEMP=0°C
+    // from real Poseidon-C PRO / NINA 3.1.2 header (IMAGETYP=LIGHT, XBINNING=1)
     exposure: '300s',
     state: 'needs_review',
+    camera: 'Poseidon-C PRO',
+    gain: '125',
+    binning: '1×1',
+    setTemp: '0°C',
     capturedOn: '2026-02-10',
     linked: undefined,
   },
@@ -239,9 +268,14 @@ const EXTERNAL_SESSIONS: InventorySession[] = [
     type: 'light',
     target: 'M31',
     filter: 'R',
+    // 101 s exposure; GAIN=0, OFFSET=20, BIN=1×1, SET-TEMP=0°C
+    // from real Poseidon-C PRO / NINA 3.1.2 header (IMAGETYP=LIGHT, XBINNING=1)
     exposure: '101s',
     state: 'confirmed',
-    camera: 'ASI533MC Pro',
+    camera: 'Poseidon-C PRO',
+    gain: '0',
+    binning: '1×1',
+    setTemp: '0°C',
     capturedOn: '2026-03-30',
     provenance: { target: 'M31', filter: 'R', confirmedBy: 'user' },
     linked: { projects: [{ id: PROJECT_M31_LRGB, name: 'M31 · LRGB' }] },
@@ -254,8 +288,14 @@ const EXTERNAL_SESSIONS: InventorySession[] = [
     type: 'light',
     target: 'NGC 2244',
     filter: 'Ha',
+    // 300 s exposure; GAIN=0, OFFSET=50, BIN=1×1, SET-TEMP=0°C
+    // from real ZWO ASI2600MM Pro / NINA 3.2.0 header (IMAGETYP=LIGHT, XBINNING=1, FILTER=OIII)
     exposure: '300s',
     state: 'confirmed',
+    camera: 'ZWO ASI2600MM Pro',
+    gain: '0',
+    binning: '1×1',
+    setTemp: '0°C',
     capturedOn: '2026-01-20',
     linked: undefined,
   },
@@ -268,8 +308,14 @@ const EXTERNAL_SESSIONS: InventorySession[] = [
     type: 'dark',
     target: null,
     filter: null,
+    // 300 s exposure; GAIN=60, BIN=1×1 — from real DWARFIII master dark filename
+    // dark_exp_300.000000_gain_60_bin_1_44C_stack_10.fits
     exposure: '300s',
     state: 'confirmed',
+    camera: 'DWARFIII',
+    gain: '60',
+    binning: '1×1',
+    setTemp: '−44°C',
     capturedOn: '2026-04-01',
     linked: undefined,
   },
