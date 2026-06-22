@@ -6097,6 +6097,13 @@
   flex: 1;
   min-width: 0;
 }
+/* Title + actions inline-left (matches Sessions); growth = trailing whitespace. */
+.alm-planner__titlebar {
+  display: flex;
+  align-items: center;
+  gap: var(--alm-sp-3);
+  flex-wrap: wrap;
+}
 .alm-planner__title {
   font-size: var(--alm-text-lg);
   font-weight: var(--alm-weight-semibold);

@@ -493,41 +493,37 @@ export function TargetDetailV2({ targetId, item = null, usableAltDeg = USABLE_AL
       {/* ── Planner header ──────────────────────────────────────────────── */}
       <div className="alm-planner__header">
         <div className="alm-planner__header-left">
-          <h2 className="alm-planner__title">
-            {detail.effectiveLabel}
-            {commonName && commonName !== detail.effectiveLabel && (
-              <span className="alm-planner__subtitle"> — {commonName}</span>
-            )}
-          </h2>
+          {/* Title + actions inline-left (matches Sessions); pills below. */}
+          <div className="alm-planner__titlebar">
+            <h2 className="alm-planner__title">
+              {detail.effectiveLabel}
+              {commonName && commonName !== detail.effectiveLabel && (
+                <span className="alm-planner__subtitle"> — {commonName}</span>
+              )}
+            </h2>
+            <div className="alm-planner__actions">
+              <Btn size="sm" variant="ghost" disabled>
+                Add to plan
+              </Btn>
+              {/* "+ New project here" — opens CreateProjectDialog on the projects route. */}
+              <Btn
+                size="sm"
+                variant="primary"
+                onClick={() => {
+                  setNewProjectOpen(true);
+                  void navigate({ to: '/projects/new' });
+                }}
+              >
+                + New project here
+              </Btn>
+            </div>
+          </div>
           <div className="alm-planner__pill-row">
             <Pill variant="neutral">{detail.objectType.replace(/_/g, ' ')}</Pill>
             {catalogPills.map((a) => (
               <Pill key={a.id} variant="ghost">{a.alias}</Pill>
             ))}
           </div>
-        </div>
-        <div className="alm-planner__actions">
-          {/* STUB: "Add to plan" — observing-plan feature not yet implemented */}
-          <Btn size="sm" variant="ghost" disabled>
-            Add to plan
-          </Btn>
-          {/* "+ New project here" — opens CreateProjectDialog; pre-wiring
-              canonicalTargetId is deferred per spec 035 comment in
-              CreateProjectDialog.tsx (no backend field yet). Navigates to
-              /projects?newProject=1 so the projects page opens the dialog. */}
-          <Btn
-            size="sm"
-            variant="primary"
-            onClick={() => {
-              // STUB: pre-fill targetId in CreateProjectDialog — deferred
-              // (canonicalTargetId field not yet wired in backend contract).
-              // Navigate to /projects/new which opens the create-project dialog.
-              setNewProjectOpen(true);
-              void navigate({ to: '/projects/new' });
-            }}
-          >
-            + New project here
-          </Btn>
         </div>
       </div>
 
