@@ -4,10 +4,10 @@
  * spec 006 + spec 043 §4 (task #36 redesign + #62/#63 shared layout adoption).
  *
  * The Sessions surface is now a dense full-width table (SessionsTable) grouped
- * by a configurable key, with search + a review filter + a Group-by control in
- * the shared top bar (PageTopBar + FilterToolbar). The legacy frame-type filter
- * was removed (sessions are light frames). These tests target the new
- * components.
+ * by target (fixed — Group-by was removed: sessions contain 1–few frame types
+ * by definition), with search + a review filter in the shared top bar
+ * (PageTopBar + FilterToolbar). The legacy frame-type filter was removed
+ * (sessions are light frames). These tests target the new components.
  *
  * Tests (jsdom, mock @/api/commands and @/features/sessions/store):
  *
@@ -15,7 +15,7 @@
  * 2. SessionsTable renders session rows with target/filter content.
  * 3. SessionsTable discovered/candidate rows map to "Needs review" state label.
  * 4. SessionsTable renders empty-state when sources is empty.
- * 5b-6d. FilterToolbar (Sessions toolbar): review filter, group-by, search.
+ * 5b-6b+6d. FilterToolbar (Sessions toolbar): review filter, search.
  * 7. SessionDetail renders empty-state when session is null.
  * 8-11b. SessionDetail review-state rail (read-only Pills, no action buttons).
  * 12-15. SessionDetail Facts / Provenance / Linked sections.
@@ -108,14 +108,13 @@ function renderList(props: Partial<React.ComponentProps<typeof SessionsTable>> =
 }
 
 // Mirror the FilterToolbar configuration SessionsPage builds: a search box, a
-// "Review" labeled-select field, and a "Group by" control. Spies are supplied
+// "Review" labeled-select field. Spies are supplied
 // per-test so we can assert the change handlers fire with typed values.
 function renderToolbar(opts: {
   search?: string;
   reviewValue?: string;
   onSearch?: (v: string) => void;
   onReview?: (v: string) => void;
-  onGroupBy?: (v: string) => void;
 } = {}) {
   return render(
     <FilterToolbar
@@ -138,16 +137,6 @@ function renderToolbar(opts: {
           onChange: opts.onReview ?? noop,
         },
       ]}
-      groupBy={{
-        value: 'target',
-        options: [
-          { value: 'target', label: 'Target' },
-          { value: 'camera', label: 'Camera' },
-          { value: 'filter', label: 'Filter' },
-          { value: 'month', label: 'Month' },
-        ],
-        onChange: opts.onGroupBy ?? noop,
-      }}
     />,
   );
 }
@@ -212,7 +201,7 @@ describe('SessionsTable — target group headers and rows', () => {
   });
 });
 
-describe('FilterToolbar (Sessions toolbar) — search, review filter, group-by', () => {
+describe('FilterToolbar (Sessions toolbar) — search, review filter', () => {
   it('5b. review-filter select calls onChange with the selected value', () => {
     const onReview = vi.fn();
     renderToolbar({ onReview });
@@ -229,14 +218,6 @@ describe('FilterToolbar (Sessions toolbar) — search, review filter, group-by',
     expect(onReview).toHaveBeenCalledWith('');
   });
 
-  it('6c. group-by select calls onChange with the selected key', () => {
-    const onGroupBy = vi.fn();
-    renderToolbar({ onGroupBy });
-    const select = screen.getByRole('combobox', { name: /Group by/ });
-    fireEvent.change(select, { target: { value: 'camera' } });
-    expect(onGroupBy).toHaveBeenCalledWith('camera');
-  });
-
   it('6d. typing in search calls onChange', () => {
     const onSearch = vi.fn();
     renderToolbar({ onSearch });
@@ -248,6 +229,11 @@ describe('FilterToolbar (Sessions toolbar) — search, review filter, group-by',
   it('6e. there is no frame-type filter in the Sessions toolbar', () => {
     renderToolbar();
     expect(screen.queryByRole('combobox', { name: /Frame/i })).toBeNull();
+  });
+
+  it('6f. there is no group-by control in the Sessions toolbar', () => {
+    renderToolbar();
+    expect(screen.queryByRole('combobox', { name: /Group by/i })).toBeNull();
   });
 });
 

@@ -6,19 +6,21 @@
  * shared list-page system: a pinned `PageTopBar` (title + summary counts +
  * `FilterToolbar` + right-aligned review actions) over a `ListPageLayout` body
  * — a dense full-width sortable table (SessionsTable) on the left and the
- * existing SessionDetail in a right-side detail pane that mounts on selection.
+ * existing SessionDetail in a bottom detail pane that mounts on selection.
  * Confirm / Re-open / Reject are contextual (they act on the selected session)
  * and live in the SessionDetail header, not the global top bar (task #79).
  *
- * Toolbar (spec 043 §4): search + review-state filter + a Group-by control
- * (Target default / Camera / Filter / Month). The legacy frame-type filter was
- * removed — sessions are by definition light frames, so it was meaningless.
+ * Toolbar (spec 043 §4): search + review-state filter.
+ * The Group-by control (Target / Camera / Filter / Month) has been removed:
+ * a session already represents a single target/night/equipment group, so
+ * grouping by frame type adds no value — sessions contain 1–few frame types
+ * by definition. The table always groups by target (DEFAULT_SESSION_GROUP_BY).
+ * The legacy frame-type filter was also removed — sessions are light frames.
  *
  * URL state (extends spec 020):
  *   selected     — string session UUID
  *   sourceFilter — optional LibraryRoot UUID or 'all'
  *   reviewFilter — optional review-state filter including 'all' and 'ignored'
- * (group-by is UI-only local state; it does not change the data query.)
  */
 
 import { useNavigate, useSearch } from '@tanstack/react-router';
@@ -29,9 +31,8 @@ import { useStaleSelectionCleanup } from '@/lib/use-stale-selection';
 import {
   SessionsTable,
   DEFAULT_SESSION_SORT,
-  DEFAULT_SESSION_GROUP_BY,
 } from './SessionsTable';
-import type { SessionSort, SessionSortCol, SessionGroupBy } from './SessionsTable';
+import type { SessionSort, SessionSortCol } from './SessionsTable';
 import { SessionDetail } from './SessionDetail';
 import {
   useInventorySources,
@@ -77,13 +78,6 @@ const REVIEW_OPTIONS: FilterOption[] = REVIEW_FILTERS.map((rf) => ({
   label: reviewFilterLabel(rf),
 }));
 
-const GROUP_BY_OPTIONS: FilterOption[] = [
-  { value: 'target', label: 'Target' },
-  { value: 'camera', label: 'Camera' },
-  { value: 'filter', label: 'Filter' },
-  { value: 'month', label: 'Month' },
-];
-
 export function SessionsPage() {
   const { selected, sourceFilter, reviewFilter } = useSearch({
     from: '/shell/sessions',
@@ -92,7 +86,6 @@ export function SessionsPage() {
 
   const [search, setSearch] = useState('');
   const [sort, setSort] = useState<SessionSort>(DEFAULT_SESSION_SORT);
-  const [groupBy, setGroupBy] = useState<SessionGroupBy>(DEFAULT_SESSION_GROUP_BY);
 
   // Build filters from URL params and pass directly to useInventorySources.
   const filters: InventoryFilters = {};
@@ -181,7 +174,9 @@ export function SessionsPage() {
   // Top-bar convention (task #80): NO title + NO summary (the left nav names
   // the page; the count/metadata lives in the bottom status bar) and NO sort
   // control (sorting is driven by the clickable SessionsTable column headers).
-  // The bar carries only search + the Review filter + the Group-by control.
+  // The bar carries only search + the Review state filter.
+  // Group-by was removed: sessions contain 1–few frame types by definition,
+  // making grouping options redundant. The table always groups by target.
   const topBar = (
     <PageTopBar
       filters={
@@ -205,11 +200,6 @@ export function SessionsPage() {
                 }),
             },
           ]}
-          groupBy={{
-            value: groupBy,
-            options: GROUP_BY_OPTIONS,
-            onChange: (v) => setGroupBy(v as SessionGroupBy),
-          }}
         />
       }
     />
@@ -245,7 +235,6 @@ export function SessionsPage() {
           loading={loading}
           sort={sort}
           onSort={handleSort}
-          groupBy={groupBy}
         />
       )}
     </ListPageLayout>

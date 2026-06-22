@@ -44,10 +44,10 @@ import type { InventorySession } from '@/api/commands';
 import {
   DetailPane,
   DetailPanel,
-  MetricLine,
-  RailCard,
+  PropertyTable,
+  type PropertyDef,
 } from '@/components';
-import { Pill, EmptyState, Lock, KV, Btn } from '@/ui';
+import { Pill, EmptyState, Btn } from '@/ui';
 import { sessionStateLabel, sessionStateVariant } from '@/lib/lifecycle';
 
 interface Props {
@@ -214,86 +214,42 @@ export function SessionDetail({
 
   // Provenance: if a value was inferred, surface it via the KV provenance label.
   const prov = session.provenance;
-  const targetProv = prov?.target ? 'Inferred' : 'FITS';
-  const filterProv = prov?.filter ? 'Inferred' : 'FITS';
 
   // Total integration is derived (frames×exposure) — NOT a raw row-column repeat.
   const totalSec = integrationSeconds(session);
   const integrationLabel = totalSec != null ? fmtSeconds(totalSec) : null;
 
-  // Facts column: compact 2-col KV grid (left, pinned, no scroll).
-  // Uses the existing alm-session-detail__kvgrid density rules.
-  const facts = (
-    <div className="alm-rail__panel">
-      <RailCard title="Facts">
-        <div className="alm-session-detail__kvgrid">
-          <KV label="Target" value={session.target ?? '—'} provenance={targetProv} />
-          <KV label="Filter" value={session.filter ?? '—'} provenance={filterProv} />
-          <KV label="Frames" value={String(session.frames)} />
-          <KV label="Exposure" value={session.exposure ?? '—'} />
-          <KV label="Night" value={session.capturedOn ?? '—'} />
-          <KV label="Camera" value={session.camera ?? '—'} />
-          <KV label="Gain" value={session.gain ?? '—'} />
-          <KV label="Binning" value={session.binning ?? '—'} />
-          {session.setTemp && <KV label="Sensor temp" value={session.setTemp} />}
-          {prov?.confirmedBy && (
-            <KV label="Confirmed by" value={prov.confirmedBy} provenance="User" />
-          )}
-        </div>
-      </RailCard>
-    </div>
-  );
+  // Session facts as a clean tabular PropertyTable (Property | Value | Source).
+  // Flat — no grey rail cards, no wrapping 2-col KV.
+  const factProps: PropertyDef[] = [
+    { key: 'target', label: 'Target', value: session.target ?? null, source: prov?.target ? 'inferred' : 'fits' },
+    { key: 'filter', label: 'Filter', value: session.filter ?? null, source: prov?.filter ? 'inferred' : 'fits' },
+    { key: 'frames', label: 'Frames', value: session.frames },
+    { key: 'exposure', label: 'Exposure', value: session.exposure ?? null, source: 'fits' },
+    ...(integrationLabel != null
+      ? [{ key: 'integration', label: 'Total integration', value: integrationLabel } as PropertyDef]
+      : []),
+    { key: 'night', label: 'Night', value: session.capturedOn ?? null, source: 'fits' },
+    { key: 'camera', label: 'Camera', value: session.camera ?? null, source: 'fits' },
+    { key: 'gain', label: 'Gain', value: session.gain ?? null, source: 'fits' },
+    { key: 'binning', label: 'Binning', value: session.binning ?? null, source: 'fits' },
+    ...(session.setTemp
+      ? [{ key: 'temp', label: 'Sensor temp', value: session.setTemp, source: 'fits' } as PropertyDef]
+      : []),
+    ...(prov?.confirmedBy
+      ? [{ key: 'confirmedby', label: 'Confirmed by', value: prov.confirmedBy, source: 'user' } as PropertyDef]
+      : []),
+  ];
 
-  // Aux column (right): review state + linked projects + calibration links.
-  const auxColumn = (
-    <div className="alm-rail__panel">
-      {/* FR-004: state as read-only structured data; actions live in header */}
-      <RailCard title="Review state">
-        <Pill variant={sessionStateVariant(session.state)}>
-          {session.state === 'discovered' || session.state === 'candidate'
-            ? 'Needs review'
-            : sessionStateLabel(session.state)}
-        </Pill>
-      </RailCard>
-
-      <RailCard title="Linked projects">
-        {isLinked ? (
-          <div className="alm-session-detail__linked-pills">
-            {session.linked?.projects?.map((p) => (
-              <Pill key={p.id} variant="info">
-                {p.name}
-              </Pill>
-            ))}
-          </div>
-        ) : (
-          <span className="alm-session-detail__no-linked">None</span>
-        )}
-      </RailCard>
-
-      {(session.linked?.calibration != null || session.linked?.session != null) && (
-        <RailCard title="Linked">
-          {session.linked?.session && (
-            <KV label="Session" value={session.linked.session} />
-          )}
-          {session.linked?.calibration && (
-            <KV label="Calibration" value={session.linked.calibration} />
-          )}
-        </RailCard>
-      )}
-    </div>
-  );
+  const reviewLabel =
+    session.state === 'discovered' || session.state === 'candidate'
+      ? 'Needs review'
+      : sessionStateLabel(session.state);
 
   return (
     <DetailPanel
       variant="sessions"
-      title={
-        <span className="alm-session-detail__heading">
-          {isLinked && (
-            <Lock reason="Linked to a project — metadata locked while in use." />
-          )}
-          <strong>{session.target ?? session.name}</strong>
-        </span>
-      }
+      title={<strong>{session.target ?? session.name}</strong>}
       subtitle={equipmentSubtitle(session) || undefined}
       actions={
         <>
@@ -314,27 +270,40 @@ export function SessionDetail({
           )}
         </>
       }
-      facts={facts}
-      aux={auxColumn}
     >
-      {/* Content column (center, scrolls): frames table.
-          Total integration shown as a compact MetricLine above the table. */}
-      <div className="alm-session-detail__content alm-rail__panel">
-        {integrationLabel != null && (
-          <MetricLine
-            metrics={[
-              { value: String(session.frames), label: 'frames' },
-              { value: session.exposure ?? '—', label: 'per frame' },
-              { value: integrationLabel, label: 'total integration' },
-            ]}
-          />
-        )}
+      <div className="alm-session-detail2">
+        {/* Left: session attributes as a clean tabular PropertyTable. */}
+        <section className="alm-session-detail2__props" aria-label="Session properties">
+          <PropertyTable mode="view" showSource properties={factProps} />
+        </section>
 
-        {/* Per-frame table (task #37/#38). One summary row; click to expand
-            camera/gain/binning/temp — fields not in the SessionsTable columns. */}
-        <RailCard title="Frames">
-          <SessionFramesTable session={session} />
-        </RailCard>
+        {/* Right: frames table + review state + linked projects — flat, tabular. */}
+        <section className="alm-session-detail2__side">
+          <div className="alm-session-detail2__block">
+            <div className="alm-session-detail2__head">Frames</div>
+            <SessionFramesTable session={session} />
+          </div>
+
+          <div className="alm-session-detail2__block">
+            <div className="alm-session-detail2__head">Review state</div>
+            <Pill variant={sessionStateVariant(session.state)}>{reviewLabel}</Pill>
+          </div>
+
+          <div className="alm-session-detail2__block">
+            <div className="alm-session-detail2__head">Linked projects</div>
+            {isLinked ? (
+              <div className="alm-session-detail2__linked">
+                {session.linked?.projects?.map((p) => (
+                  <Pill key={p.id} variant="info">
+                    {p.name}
+                  </Pill>
+                ))}
+              </div>
+            ) : (
+              <span className="alm-session-detail2__muted">None</span>
+            )}
+          </div>
+        </section>
       </div>
     </DetailPanel>
   );
