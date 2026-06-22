@@ -531,7 +531,9 @@ export function TargetSearch({
                                   void handleOverride(s);
                                 }}
                               >
-                                {overriding === s.targetId ? 'Setting…' : 'Correct…'}
+                                {overriding === s.targetId
+                                  ? m.targetsearch_setting()
+                                  : m.targetsearch_correct()}
                               </button>
                             )}
                           </span>

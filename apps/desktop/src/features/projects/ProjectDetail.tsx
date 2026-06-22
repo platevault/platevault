@@ -189,7 +189,7 @@ export function ProjectDetailContent({ projectId }: ProjectDetailContentProps) {
     try {
       await callReinferChannels({ requestId: crypto.randomUUID(), projectId });
     } catch {
-      addToast({ message: 'Re-infer failed.', variant: 'error' });
+      addToast({ message: m.projects_toast_reinfer_failed(), variant: 'error' });
     } finally {
       setChannelWorking(false);
     }
@@ -201,7 +201,7 @@ export function ProjectDetailContent({ projectId }: ProjectDetailContentProps) {
     try {
       await callDismissChannelDrift({ requestId: crypto.randomUUID(), projectId });
     } catch {
-      addToast({ message: 'Dismiss failed.', variant: 'error' });
+      addToast({ message: m.projects_toast_dismiss_failed(), variant: 'error' });
     } finally {
       setChannelWorking(false);
     }
@@ -225,10 +225,10 @@ export function ProjectDetailContent({ projectId }: ProjectDetailContentProps) {
         actionLabel,
       );
       if (resp.status === 'success') {
-        addToast({ message: `Project ${resp.newState ?? nextState}.`, variant: 'success' });
+        addToast({ message: m.projects_toast_transitioned({ state: resp.newState ?? nextState }), variant: 'success' });
       } else if (resp.status === 'error' && isPlanRequiredError(resp.error?.code)) {
         addToast({
-          message: 'A filesystem plan is required before this transition. Create or approve a plan first.',
+          message: m.projects_toast_plan_required(),
           variant: 'info',
         });
       } else if (resp.status === 'error') {
@@ -238,7 +238,7 @@ export function ProjectDetailContent({ projectId }: ProjectDetailContentProps) {
         });
       }
     } catch {
-      addToast({ message: 'Transition failed.', variant: 'error' });
+      addToast({ message: m.projects_toast_transition_failed(), variant: 'error' });
     } finally {
       setTransitionWorking(false);
     }
@@ -379,7 +379,7 @@ export function ProjectDetailContent({ projectId }: ProjectDetailContentProps) {
                 data-testid="tool-launch-btn"
                 data-guide-anchor="project.open-in-tool"
               >
-                {launchState.working ? 'Launching…' : `Open in ${projectToolStr}`}
+                {launchState.working ? m.projects_launching() : `Open in ${projectToolStr}`}
               </Btn>
             )}
 
@@ -510,7 +510,7 @@ export function ProjectDetailContent({ projectId }: ProjectDetailContentProps) {
                   </span>
                   <div className="alm-project-detail__ch-status">
                     <Pill variant={ch.inSync ? 'ghost' : 'warn'}>
-                      {ch.inSync ? 'in sync' : 'pending'}
+                      {ch.inSync ? m.projects_channels_in_sync() : m.common_pending()}
                     </Pill>
                   </div>
                 </div>

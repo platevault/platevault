@@ -83,7 +83,7 @@ export function ManifestsAccordion({ projectId, defaultOpen = true }: ManifestsA
         setBodyMap((prev) => ({ ...prev, [id]: resp.manifest.body }));
       } catch (err: unknown) {
         const msg = typeof err === 'string' ? err : (err as Error)?.message ?? 'unknown';
-        addToast({ message: `Failed to load manifest: ${msg}`, variant: 'error' });
+        addToast({ message: m.projects_manifests_load_body_failed({ error: msg }), variant: 'error' });
       } finally {
         setBodyLoading(null);
       }

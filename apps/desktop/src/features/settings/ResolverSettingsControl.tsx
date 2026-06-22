@@ -95,8 +95,8 @@ export function ResolverSettingsControl({ compact = false }: ResolverSettingsCon
           </div>
           <div className="alm-settings__row-desc">
             {settings.onlineEnabled
-              ? 'Targets not in the bundled seed or local cache are resolved on demand from SIMBAD, then cached.'
-              : 'Online resolution is off — only the bundled seed and local cache are used. Unknown objects are marked unresolved.'}
+              ? m.settings_resolver_online_desc()
+              : m.settings_resolver_offline_desc()}
           </div>
         </div>
       ) : (

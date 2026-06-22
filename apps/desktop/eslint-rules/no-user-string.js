@@ -35,13 +35,27 @@ const USER_ATTRS = new Set([
   "label",
 ]);
 
-// toast/notify-style call targets whose first string arg is shown to the user.
+// toast/notify/dialog-style call targets whose first arg is shown to the user.
+// The first arg may be a bare string OR an object carrying user-facing fields.
 const TOAST_NAMES = new Set([
   "toast",
   "notify",
   "showToast",
   "addToast",
   "pushToast",
+  "confirm",
+]);
+
+// Object properties that carry user-facing text when passed to a toast/dialog
+// call (e.g. addToast({ message }), confirm({ title, body })).
+const USER_OBJECT_PROPS = new Set([
+  "message",
+  "title",
+  "body",
+  "description",
+  "label",
+  "confirmLabel",
+  "cancelLabel",
 ]);
 
 const hasLetter = (s) => /\p{L}/u.test(s);
@@ -100,6 +114,61 @@ const rule = {
         }
       },
 
+      // String literals rendered as a JSX CHILD via an expression container,
+      // e.g. `{busy ? 'Working…' : 'Remove'}` or `{ok && 'Done'}`. These reach
+      // the screen but aren't JSXText, so they need a separate check. We only
+      // flag a literal whose nearest enclosing JSX context is a child
+      // expression container (NOT an attribute, and NOT a call argument — those
+      // are handled by JSXAttribute / the toast handler).
+      Literal(node) {
+        if (typeof node.value !== "string" || !hasLetter(node.value)) return;
+        // Skip comparison operands and switch-case tests: these are machine
+        // discriminants (`x === 'recursive'`, `case 'done':`), not rendered text.
+        const p0 = node.parent;
+        if (
+          p0 &&
+          ((p0.type === "BinaryExpression" &&
+            ["===", "!==", "==", "!="].includes(p0.operator)) ||
+            p0.type === "SwitchCase")
+        ) {
+          return;
+        }
+        let n = node;
+        let parent = n.parent;
+        while (parent) {
+          // Stop if we're inside a call (toast/other) or an attribute — handled
+          // elsewhere or intentionally ignored (machine strings).
+          if (parent.type === "JSXAttribute" || parent.type === "CallExpression") {
+            return;
+          }
+          if (parent.type === "JSXExpressionContainer") {
+            // Rendered as a child only when the container's parent is an element
+            // or fragment (not an attribute).
+            const gp = parent.parent;
+            if (gp && (gp.type === "JSXElement" || gp.type === "JSXFragment")) {
+              context.report({
+                node,
+                messageId: "jsxText",
+                data: { text: quote(node.value) },
+              });
+            }
+            return;
+          }
+          // Don't cross function boundaries — a literal inside a nested arrow/
+          // function passed as a child isn't simply "rendered text".
+          if (
+            parent.type === "ArrowFunctionExpression" ||
+            parent.type === "FunctionExpression" ||
+            parent.type === "JSXElement" ||
+            parent.type === "JSXFragment"
+          ) {
+            return;
+          }
+          n = parent;
+          parent = n.parent;
+        }
+      },
+
       JSXAttribute(node) {
         const name =
           node.name && node.name.type === "JSXIdentifier"
@@ -128,6 +197,7 @@ const rule = {
         }
         if (!calleeName || !TOAST_NAMES.has(calleeName)) return;
         const arg = node.arguments[0];
+        // Bare-string form: toast('Saved')
         const val = stringLiteralValue(arg);
         if (val !== null && hasLetter(val)) {
           context.report({
@@ -135,6 +205,27 @@ const rule = {
             messageId: "toast",
             data: { text: quote(val) },
           });
+          return;
+        }
+        // Object form: addToast({ message: 'Saved' }) / confirm({ title, body })
+        if (arg && arg.type === "ObjectExpression") {
+          for (const prop of arg.properties) {
+            if (
+              prop.type !== "Property" ||
+              prop.key.type !== "Identifier" ||
+              !USER_OBJECT_PROPS.has(prop.key.name)
+            ) {
+              continue;
+            }
+            const pv = stringLiteralValue(prop.value);
+            if (pv !== null && hasLetter(pv)) {
+              context.report({
+                node: prop.value,
+                messageId: "toast",
+                data: { text: quote(pv) },
+              });
+            }
+          }
         }
       },
     };

@@ -231,7 +231,7 @@ export function SessionsTable({
         <span>
           {group.label}
           <span className="alm-sessions-table__group-count">
-            {group.sessions.length} {group.sessions.length === 1 ? 'session' : 'sessions'}
+            {group.sessions.length} {group.sessions.length === 1 ? m.sessions_singular() : m.status_sessions_label()}
           </span>
         </span>
       ),

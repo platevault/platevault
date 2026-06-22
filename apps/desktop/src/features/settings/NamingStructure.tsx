@@ -391,8 +391,10 @@ function PatternChipsEditor({
 			{/* Validation feedback */}
 			{errorCode && (
 				<div className="alm-naming__error" role="alert">
+					{ }
 					{errorCode === "pattern.empty" &&
 						m.settings_naming_invalid_pattern()}
+					{ }
 					{errorCode === "token.unknown" &&
 						m.settings_naming_invalid_pattern()}
 					{errorCode &&

@@ -180,7 +180,7 @@ export function InboxControls({
               aria-label={slot === 0 ? 'Group by' : `Then group by (level ${slot + 1})`}
             >
               <option value={NONE_DIM}>
-                {slot === 0 ? 'Group: none' : 'then: —'}
+                {slot === 0 ? m.inbox_controls_group_none() : m.inbox_controls_then_none()}
               </option>
               {GROUPING_DIMENSIONS.filter(
                 (d) => d.id === value || !usedEarlier.has(d.id),

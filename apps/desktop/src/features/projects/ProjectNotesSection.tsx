@@ -68,9 +68,9 @@ export function ProjectNotesSection({
         if (error === 'note.content_too_large') {
           setFieldError(`Note exceeds the ${MAX_NOTE_BYTES.toLocaleString()}-byte limit.`);
         } else if (error === 'project.read_only') {
-          addToast({ message: 'This project is archived. Notes cannot be edited.', variant: 'error' });
+          addToast({ message: m.projects_toast_archived_readonly(), variant: 'error' });
         } else if (error) {
-          addToast({ message: `Failed to save notes: ${error}`, variant: 'error' });
+          addToast({ message: m.projects_toast_save_notes_failed({ error: String(error) }), variant: 'error' });
         } else if (updatedAt) {
           setLastSaved(updatedAt);
           setFieldError(null);
@@ -99,10 +99,10 @@ export function ProjectNotesSection({
     if (error === 'note.content_too_large') {
       setFieldError(`Note exceeds the ${MAX_NOTE_BYTES.toLocaleString()}-byte limit.`);
     } else if (error === 'project.read_only') {
-      addToast({ message: 'This project is archived. Notes cannot be edited.', variant: 'error' });
+      addToast({ message: m.projects_toast_archived_readonly(), variant: 'error' });
       setEditing(false);
     } else if (error) {
-      addToast({ message: `Failed to save notes: ${error}`, variant: 'error' });
+      addToast({ message: m.projects_toast_save_notes_failed({ error: String(error) }), variant: 'error' });
     } else if (updatedAt) {
       setLastSaved(updatedAt);
       setFieldError(null);

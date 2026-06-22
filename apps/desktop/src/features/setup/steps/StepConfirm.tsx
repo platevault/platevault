@@ -80,7 +80,9 @@ export function StepConfirm({
                       {entry.path}
                     </span>
                     <span className="alm-setup-confirm__scan-depth">
-                      {entry.scanDepth === 'recursive' ? 'Recursive' : 'Single level'}
+                      {entry.scanDepth === 'recursive'
+                        ? m.setup_scan_recursive()
+                        : m.setup_scan_single_level()}
                     </span>
                   </div>
                 ))}

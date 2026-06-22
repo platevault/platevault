@@ -102,7 +102,7 @@ export function CreateProjectDialog({ open, onClose, onSuccess }: CreateProjectD
       const list = await listProjects008();
       const dup = list.find((p) => p.name.toLowerCase() === trimmedName.toLowerCase());
       if (dup) {
-        setError('name', { type: 'duplicate', message: 'A project with this name already exists.' });
+        setError('name', { type: 'duplicate', message: m.projects_create_name_duplicate() });
         return;
       }
     } catch {

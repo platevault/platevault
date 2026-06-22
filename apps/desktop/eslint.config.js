@@ -24,6 +24,9 @@ const I18N_MIGRATED = [
   'src/features/archive/**/*.{ts,tsx}',
   'src/components/**/*.{ts,tsx}',
   'src/ui/**/*.{ts,tsx}',
+  'src/features/guided/**/*.{ts,tsx}',
+  'src/shared/**/*.{ts,tsx}',
+  'src/hooks/**/*.{ts,tsx}',
 ];
 
 export default tseslint.config(

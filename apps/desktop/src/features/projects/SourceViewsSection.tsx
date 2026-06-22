@@ -83,8 +83,8 @@ export function SourceViewsSection({ projectId, onPlanCreated, defaultOpen = tru
       const planId = resp.planId;
       addToast({
         variant: 'info',
-        message: `Removal plan created. Review and apply plan to complete removal.`,
-        action: { label: 'View Plan', onClick: () => onPlanCreated?.(planId) },
+        message: m.projects_source_views_removal_toast(),
+        action: { label: m.projects_source_views_view_plan_btn(), onClick: () => onPlanCreated?.(planId) },
       });
       onPlanCreated?.(planId);
     } catch (err: unknown) {
@@ -94,7 +94,7 @@ export function SourceViewsSection({ projectId, onPlanCreated, defaultOpen = tru
           : 'internal';
       addToast({
         variant: 'warn',
-        message: `Could not create removal plan: ${code}`,
+        message: m.projects_source_views_removal_failed({ code }),
       });
     } finally {
       setBusyViewId(null);
@@ -108,12 +108,12 @@ export function SourceViewsSection({ projectId, onPlanCreated, defaultOpen = tru
       const planId = resp.planId;
       const warning =
         resp.unresolvedItemCount > 0
-          ? ` (${resp.unresolvedItemCount} unresolved references — review plan before applying)`
+          ? m.projects_source_views_regen_unresolved({ count: String(resp.unresolvedItemCount) })
           : '';
       addToast({
         variant: 'info',
-        message: `Regeneration plan created${warning}. Review and apply to rebuild the view.`,
-        action: { label: 'View Plan', onClick: () => onPlanCreated?.(planId) },
+        message: m.projects_source_views_regen_toast({ warning }),
+        action: { label: m.projects_source_views_view_plan_btn(), onClick: () => onPlanCreated?.(planId) },
       });
       onPlanCreated?.(planId);
     } catch (err: unknown) {
@@ -123,7 +123,7 @@ export function SourceViewsSection({ projectId, onPlanCreated, defaultOpen = tru
           : 'internal';
       addToast({
         variant: 'warn',
-        message: `Could not create regeneration plan: ${code}`,
+        message: m.projects_source_views_regen_failed({ code }),
       });
     } finally {
       setBusyViewId(null);
@@ -181,7 +181,9 @@ export function SourceViewsSection({ projectId, onPlanCreated, defaultOpen = tru
               {view.items.length > 0 && (
                 <details className="text-xs text-muted alm-source-views__refs-details">
                   <summary className="alm-source-views__refs-summary">
-                    {view.items.length} {m.projects_source_views_inventory_ref()}{view.items.length !== 1 ? 's' : ''}
+                    {view.items.length} {m.projects_source_views_inventory_ref()}
+                    {/* eslint-disable-next-line alm/no-user-string -- lone plural suffix */}
+                    {view.items.length !== 1 ? 's' : ''}
                   </summary>
                   <ul
                     className="alm-source-views__refs-list"
@@ -217,7 +219,7 @@ export function SourceViewsSection({ projectId, onPlanCreated, defaultOpen = tru
                   onClick={() => handleRemove(view.id)}
                   data-testid={`remove-view-${view.id}`}
                 >
-                  {busyViewId === view.id ? 'Working…' : 'Remove'}
+                  {busyViewId === view.id ? m.common_working() : m.common_remove()}
                 </Btn>
               )}
 
@@ -229,7 +231,7 @@ export function SourceViewsSection({ projectId, onPlanCreated, defaultOpen = tru
                   onClick={() => handleRegenerate(view.id)}
                   data-testid={`regenerate-view-${view.id}`}
                 >
-                  {busyViewId === view.id ? 'Working…' : 'Regenerate'}
+                  {busyViewId === view.id ? m.common_working() : m.common_regenerate()}
                 </Btn>
               )}
             </div>

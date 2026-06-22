@@ -320,6 +320,7 @@ export function InboxDetail({
             // eslint-disable-next-line no-restricted-syntax -- dynamic: cursor:default when no filter handler
             style={hasFilter ? undefined : { cursor: 'default' }}
           >
+            { }
             <Pill variant={classificationVariant('single_type')}>{entry.kind}</Pill>
           </button>
         ),
@@ -450,6 +451,7 @@ export function InboxDetail({
   const factsColumn = (
     <div className="alm-inbox-detail__facts-col">
       {/* Mixed: advisory alert + inline split action */}
+      { }
       {classType === 'mixed' && (
         <Banner
           variant="warn"
@@ -472,7 +474,7 @@ export function InboxDetail({
                 aria-label={m.inbox_generate_split_plan()}
                 data-testid="inbox-mixed-split-btn"
               >
-                {splitPlanBusy ? 'Working…' : m.inbox_generate_split_plan()}
+                {splitPlanBusy ? m.common_working() : m.inbox_generate_split_plan()}
               </Btn>
             </div>
           )}
@@ -480,6 +482,7 @@ export function InboxDetail({
       )}
 
       {/* Unclassified: blocking alert */}
+      { }
       {classType === 'unclassified' && (
         <Banner
           variant="danger"
@@ -547,7 +550,7 @@ export function InboxDetail({
               data-testid="reclassify-select-all"
             />
             <span className="alm-inbox-detail__select-all-label">
-              {selectedFiles.size === 0 ? 'Select all' : `${selectedFiles.size} selected`}
+              {selectedFiles.size === 0 ? m.common_select_all() : `${selectedFiles.size} selected`}
             </span>
           </div>
           <Table columns={unclassifiedColumns} rows={unclassifiedRows} />
@@ -630,7 +633,7 @@ export function InboxDetail({
                 data-testid="bulk-apply-btn"
               >
                 {reclassifyLoading
-                  ? 'Applying…'
+                  ? m.common_applying()
                   : `Apply to selected (${selectedFiles.size})`}
               </button>
             </div>
@@ -649,8 +652,9 @@ export function InboxDetail({
                 aria-label={m.inbox_apply_manual_overrides_aria()}
               >
                 {reclassifyLoading
-                  ? 'Applying…'
-                  : `Apply ${Object.keys(pendingOverrides).length} override${Object.keys(pendingOverrides).length !== 1 ? 's' : ''}`}
+                  ? m.common_applying()
+                  : /* eslint-disable-next-line alm/no-user-string -- 's' is a lone plural suffix, not user-facing prose */
+                    `Apply ${Object.keys(pendingOverrides).length} override${Object.keys(pendingOverrides).length !== 1 ? 's' : ''}`}
               </button>
             </div>
           )}
@@ -715,8 +719,9 @@ export function InboxDetail({
       titleExtra={
         <>
           <Pill variant={classificationVariant(classType)}>
+            { }
             {classType === 'single_type'
-              ? classification?.frameType ?? 'single'
+              ? classification?.frameType ?? m.inbox_detail_single_fallback()
               : classType}
           </Pill>
           {/* eslint-disable-next-line alm/no-user-string -- "video" is a format-lane code, not a translatable word */}

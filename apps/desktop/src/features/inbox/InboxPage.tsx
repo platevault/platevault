@@ -257,7 +257,7 @@ export function InboxPage() {
         // spec 041: masters now always return a plan too — every confirm produces
         // a reviewable plan that appears in the aggregate surface below.
         addToast({
-          message: `Plan created (${result.itemsTotal} items). Review below before applying.`,
+          message: m.inbox_toast_plan_created({ count: String(result.itemsTotal) }),
           variant: 'info',
         });
         refreshAll();
@@ -270,7 +270,7 @@ export function InboxPage() {
             setPendingRootPick({ category: parsed.category, candidates: parsed.candidates });
             setRootPickItemId(item.inboxItemId);
             addToast({
-              message: 'Choose a destination library root to generate the plan.',
+              message: m.inbox_toast_choose_dest_root(),
               variant: 'warn',
             });
             return;
@@ -291,18 +291,17 @@ export function InboxPage() {
           // FR-032 (US9): files lack a path-load-bearing attribute. The detail
           // panel already annotates each blocked file; point the user there.
           addToast({
-            message:
-              'Some files are missing required attributes. Assign the missing values in the file list, then confirm again.',
+            message: m.inbox_toast_missing_path_attrs(),
             variant: 'warn',
           });
           return;
         }
         if (message.includes('inbox.has.open.plan')) {
-          addToast({ message: 'An open plan already exists for this item.', variant: 'warn' });
+          addToast({ message: m.inbox_toast_has_open_plan(), variant: 'warn' });
         } else if (message.includes('classification.stale')) {
-          addToast({ message: 'Folder changed since classification — rescan to refresh.', variant: 'warn' });
+          addToast({ message: m.inbox_toast_stale_classification(), variant: 'warn' });
         } else {
-          addToast({ message: `Confirm failed: ${message}`, variant: 'error' });
+          addToast({ message: m.inbox_toast_confirm_failed({ message }), variant: 'error' });
         }
       }
     },
@@ -365,17 +364,17 @@ export function InboxPage() {
     setBulkConfirmLoading(false);
     if (failCount > 0 && successCount > 0) {
       addToast({
-        message: `${successCount} confirmed; ${failCount} skipped (mixed, missing metadata, or needs root pick).`,
+        message: m.inbox_toast_bulk_partial({ success: String(successCount), fail: String(failCount) }),
         variant: 'warn',
       });
     } else if (failCount > 0 && successCount === 0) {
       addToast({
-        message: 'Bulk confirm: all items need review (mixed folders or missing metadata).',
+        message: m.inbox_toast_bulk_all_need_review(),
         variant: 'warn',
       });
     } else {
       addToast({
-        message: `${successCount} item${successCount !== 1 ? 's' : ''} confirmed — review plans below.`,
+        message: m.inbox_toast_bulk_confirmed({ success: String(successCount), suffix: successCount !== 1 ? 's' : '' }),
         variant: 'info',
       });
     }
@@ -402,18 +401,18 @@ export function InboxPage() {
       const failed = result.results.filter((r) => r.error != null).length;
       if (failed > 0) {
         addToast({
-          message: `${result.results.length - failed} plan(s) applied; ${failed} failed.`,
+          message: m.inbox_toast_plans_partial({ applied: String(result.results.length - failed), failed: String(failed) }),
           variant: 'warn',
         });
       } else {
         addToast({
-          message: `${result.results.length} plan(s) are being applied.`,
+          message: m.inbox_toast_plans_applying({ count: String(result.results.length) }),
           variant: 'info',
         });
       }
       refreshAll();
     } else {
-      addToast({ message: 'Apply failed — please try again.', variant: 'error' });
+      addToast({ message: m.inbox_toast_apply_failed(), variant: 'error' });
     }
   };
 
@@ -423,11 +422,11 @@ export function InboxPage() {
       const failed = result.results.filter((r) => r.error != null).length;
       if (failed > 0) {
         addToast({
-          message: `${result.results.length - failed} plans applied; ${failed} failed.`,
+          message: m.inbox_toast_all_plans_partial({ applied: String(result.results.length - failed), failed: String(failed) }),
           variant: 'warn',
         });
       } else {
-        addToast({ message: `All ${result.results.length} plans are being applied.`, variant: 'info' });
+        addToast({ message: m.inbox_toast_all_plans_applying({ count: String(result.results.length) }), variant: 'info' });
       }
       refreshAll();
     }
@@ -435,7 +434,7 @@ export function InboxPage() {
 
   const handleCancel = async (inboxItemId: string) => {
     await cancel(inboxItemId);
-    addToast({ message: 'Plan discarded. Item is available for re-confirmation.', variant: 'info' });
+    addToast({ message: m.inbox_toast_plan_discarded(), variant: 'info' });
     refreshAll();
   };
 
@@ -621,7 +620,7 @@ export function InboxPage() {
               data-testid="inbox-bulk-confirm-btn"
             >
               {bulkConfirmLoading
-                ? 'Confirming…'
+                ? m.common_confirming()
                 : `Confirm all (${bulkEligibleItems.length})`}
             </Btn>
           )}
@@ -634,7 +633,7 @@ export function InboxPage() {
             data-testid="inbox-confirm-btn"
             data-guide-anchor="inbox.confirm-row"
           >
-            {confirmLoading ? 'Working…' : confirmLabel}
+            {confirmLoading ? m.common_working() : confirmLabel}
           </Btn>
           <Btn
             size="sm"
@@ -642,7 +641,7 @@ export function InboxPage() {
             onClick={() => void rescan()}
             aria-label={m.inbox_rescan_all_roots_aria()}
           >
-            {rescanLoading ? 'Rescanning…' : 'Rescan'}
+            {rescanLoading ? m.common_rescanning() : m.common_rescan()}
           </Btn>
         </>
       }

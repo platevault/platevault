@@ -32,10 +32,10 @@ export const DirPicker = forwardRef<HTMLDivElement, DirPickerProps>(
         <span className="alm-kv-row__value">
           <Folder size={14} />
           <span className="alm-dir-picker__path">
-            {value || 'No folder selected'}
+            {value || m.ui_dir_picker_no_folder()}
           </span>
           <Btn size="sm" onClick={handleChoose} disabled={loading}>
-            {loading ? m.setup_tools_choosing() : m.ui_dir_picker_choose()}
+            {loading ? m.setup_choosing() : m.ui_dir_picker_choose()}
           </Btn>
         </span>
         {error && (

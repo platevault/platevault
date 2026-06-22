@@ -275,7 +275,7 @@ function ToolPathPicker({
         disabled={loading}
         aria-label={`Select ${toolName} binary`}
       >
-        {loading ? m.setup_tools_choosing() : m.setup_tools_select_binary()}
+        {loading ? m.setup_choosing() : m.setup_tools_select_binary()}
       </Btn>
     </>
   );

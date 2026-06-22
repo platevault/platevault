@@ -199,8 +199,8 @@ function SourceRow({
           onChange={(e) => onScanDepthChange(e.target.value as ScanDepth)}
           aria-label={m.setup_sources_scan_depth_aria()}
         >
-          <option value="recursive">{m.setup_sources_scan_recursive()}</option>
-          <option value="single">{m.setup_sources_scan_single()}</option>
+          <option value="recursive">{m.setup_scan_recursive()}</option>
+          <option value="single">{m.setup_scan_single_level()}</option>
         </select>
         <Btn size="sm" variant="ghost" onClick={onRemove}>
           {m.common_remove()}
@@ -246,7 +246,7 @@ function AddFolderButton({
         disabled={loading}
         aria-label={`Add ${SOURCE_KIND_LABELS[kind]} folder`}
       >
-        {loading ? 'Choosing…' : '+ Add folder…'}
+        {loading ? m.setup_choosing() : m.setup_add_folder()}
       </Btn>
       {/*
         CI-only path entry: WebDriver cannot drive the native folder picker, so

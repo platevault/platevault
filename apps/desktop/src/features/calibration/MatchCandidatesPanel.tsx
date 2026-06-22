@@ -320,14 +320,17 @@ export function MatchCandidatesPanel({
       );
     }
     const isObserverMissing = code === 'match.observer_location_missing' || response.suggestStatus === 'observer_location_missing';
+     
+    const isMixedState = response.error?.code === 'session.mixed_state';
+    const guardMessage = isObserverMissing
+      ? m.calibration_observer_missing_guard()
+      : isMixedState
+        ? m.calibration_session_mixed_state()
+        : m.calibration_suggest_error({ message: response.error?.message ?? code });
     return (
       <Section title={m.calibration_compatible_sessions_title()}>
         <Banner variant="warn" data-testid="suggest-guard-error">
-          {isObserverMissing
-            ? m.calibration_observer_missing_guard()
-            : response.error?.code === 'session.mixed_state'
-              ? m.calibration_session_mixed_state()
-              : m.calibration_suggest_error({ message: response.error?.message ?? code })}
+          {guardMessage}
         </Banner>
       </Section>
     );
@@ -366,6 +369,7 @@ export function MatchCandidatesPanel({
         <Pill variant={statusVariant(suggestStatus)} data-testid="suggest-status-pill">
           {statusLabel(suggestStatus)}
         </Pill>
+        { }
         {suggestStatus === 'ambiguous' && (
           <span className="alm-match-candidates__ambiguous-hint">
             {m.calibration_ambiguous_hint()}

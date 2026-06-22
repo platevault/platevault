@@ -63,8 +63,9 @@ function kindLabel(kind: string): string {
       return 'desig';
     case 'common_name':
       return 'name';
+     
     case 'user':
-      return 'user';
+      return m.targets_alias_kind_user();
     default:
       return kind;
   }
@@ -641,7 +642,9 @@ export function TargetDetailV2({ targetId, item = null, usableAltDeg = USABLE_AL
               onClick={() => setDisplayAliasEditing(true)}
               className="alm-target-detail__edit-btn"
             >
-              {detail.displayAlias != null ? 'Edit' : 'Set'}
+              {detail.displayAlias != null
+                ? m.projects_detail_edit_btn()
+                : m.targets_detail_set_alias()}
             </button>
           </div>
         )}

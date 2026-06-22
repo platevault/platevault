@@ -106,7 +106,7 @@ function ArtifactRow({ artifact, projectId, onResolved }: ArtifactRowProps) {
           disabled={working}
           aria-label={`Mark ${fileName} as resolved`}
         >
-          {working ? 'Resolving…' : 'Mark resolved'}
+          {working ? m.common_resolving() : m.projects_mark_resolved()}
         </button>
       )}
     </div>

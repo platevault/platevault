@@ -123,12 +123,12 @@ export function PlanProtectionGate({ planId, onAcknowledgedChange }: PlanProtect
         style={{ background: allDone ? 'var(--alm-surface)' : 'var(--alm-bg3)' }}
       >
         <Pill variant={allDone ? 'ok' : 'warn'}>
-          {allDone ? 'All acknowledged' : `${total - doneCount} of ${total} require acknowledgement`}
+          {allDone ? m.plans_all_acknowledged() : `${total - doneCount} of ${total} require acknowledgement`}
         </Pill>
         <span className="alm-plan-gate__summary-label">
           {allDone
-            ? 'You may proceed with plan execution.'
-            : 'Review and acknowledge each protected item below before running the plan.'}
+            ? m.plans_may_proceed()
+            : m.plans_review_acknowledge()}
         </span>
       </div>
 
@@ -193,7 +193,7 @@ export function PlanProtectionGate({ planId, onAcknowledgedChange }: PlanProtect
             ', '}
           {checkResult.nonBlockingSummary.unprotectedCount > 0 &&
             `${checkResult.nonBlockingSummary.unprotectedCount} unprotected item(s)`}
-          {' — no acknowledgement required.'}
+          {' '}{m.plans_no_ack_required()}
         </div>
       )}
     </div>

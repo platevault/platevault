@@ -284,6 +284,7 @@ export function MastersTable({
         {c.label}
         {sort.col === c.sort && (
           <span className="alm-calib-sorth__arrow" aria-hidden="true">
+            { }
             {sort.dir === 'asc' ? '▲' : '▼'}
           </span>
         )}
@@ -300,7 +301,7 @@ export function MastersTable({
         <span>
           {group.label}
           <span className="alm-calib-table__group-count">
-            {group.masters.length} {group.masters.length === 1 ? 'master' : 'masters'}
+            {group.masters.length} {group.masters.length === 1 ? m.calibration_master_singular() : m.status_masters_label()}
           </span>
         </span>
       ),

@@ -46,6 +46,7 @@ import {
   type GroupNode,
 } from './grouping';
 import { ACCESSORS, DIM_LABELS, type InboxSortBy } from './InboxControls';
+import { m } from '@/lib/i18n';
 
 // ── Helpers ───────────────────────────────────────────────────────────────────
 
@@ -233,19 +234,19 @@ function InboxRow({
       </span>
 
       {/* ── Col 2: relative path (grows) ── */}
-      <span className="alm-inbox-row__path" title={item.relativePath || '(root)'}>
-        {item.relativePath || '(root)'}
+      <span className="alm-inbox-row__path" title={item.relativePath || m.inbox_list_root_label()}>
+        {item.relativePath || m.inbox_list_root_label()}
       </span>
 
       {/* ── Col 3: file count (fixed right) ── */}
       <span className="alm-inbox-row__count">
-        {item.fileCount} {item.fileCount !== 1 ? 'files' : 'file'}
+        {item.fileCount} {item.fileCount !== 1 ? m.inbox_list_file_plural() : m.inbox_list_file_singular()}
       </span>
 
       {/* ── Col 4: format / master tag (fixed right) ── */}
       <span className="alm-inbox-row__format">
         {item.isMaster
-          ? `${item.masterFrameType ?? 'master'} master`
+          ? `${item.masterFrameType ?? m.calibration_master_singular()} ${m.calibration_master_singular()}`
           : formatTag(item)}
       </span>
     </div>

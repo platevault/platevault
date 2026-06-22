@@ -156,22 +156,22 @@ export function WizardPage() {
 
       if (result.planId) {
         addToast({
-          message: `Project "${wizardData.name.name}" created. Review the folder plan before applying.`,
+          message: m.projects_wizard_toast_created_plan({ name: wizardData.name.name }),
           variant: 'info',
           action: {
-            label: 'View plan',
+            label: m.projects_wizard_view_plan_btn(),
             onClick: () => void navigate({ to: '/archive', search: { selected: undefined } as never }),
           },
         });
       } else {
-        addToast({ message: `Project "${wizardData.name.name}" created.`, variant: 'success' });
+        addToast({ message: m.projects_wizard_toast_created({ name: wizardData.name.name }), variant: 'success' });
       }
 
       // Navigate back to projects list; the list re-fetches automatically.
       void navigate({ to: '/projects' });
     } catch (err: unknown) {
       const msg = errMessage(err);
-      addToast({ message: `Could not create project: ${msg}`, variant: 'error' });
+      addToast({ message: m.projects_wizard_toast_failed({ msg }), variant: 'error' });
     } finally {
       setCreating(false);
     }

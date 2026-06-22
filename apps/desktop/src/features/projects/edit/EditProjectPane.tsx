@@ -241,7 +241,12 @@ export function EditProjectPane({ project, onClose }: EditProjectPaneProps) {
                 <span
                   key={ch.label}
                   className={`alm-channel-chip alm-channel-chip--${ch.source}`}
-                  title={ch.source === 'inferred' ? 'Auto-inferred from sources' : 'Manually added'}
+                  title={
+                     
+                    ch.source === 'inferred'
+                      ? m.projects_edit_inferred_title()
+                      : m.projects_edit_manual_title()
+                  }
                   aria-label={`${ch.label} (${ch.source})`}
                 >
                   {ch.label}

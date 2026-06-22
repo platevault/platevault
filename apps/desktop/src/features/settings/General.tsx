@@ -46,6 +46,7 @@ export function General() {
                 </span>
                 <span className="alm-theme-swatch__name">{t.label}</span>
                 <span className="alm-theme-swatch__mode">
+                  {/* eslint-disable-next-line alm/no-user-string -- theme discriminants compared, not displayed */}
                   {t.id === 'system' ? `auto · ${resolved.includes('dark') ? 'dark' : 'light'}` : t.mode}
                 </span>
               </button>

@@ -206,7 +206,7 @@ export function LogPanel() {
       try {
         const { save: showSaveDialog } = await import('@tauri-apps/plugin-dialog');
         filePath = await showSaveDialog({
-          title: 'Export Audit Log',
+          title: m.logpanel_save_dialog_title(),
           defaultPath: `astro-log-export-${Date.now()}.json`,
           filters: [{ name: 'JSON', extensions: ['json'] }],
         });
@@ -270,6 +270,7 @@ export function LogPanel() {
             ))}
 
             {/* Diagnostics toggle (only when logLevel === "debug") */}
+            { }
             {logLevel === 'debug' && (
               <button
                 type="button"
@@ -295,7 +296,7 @@ export function LogPanel() {
             aria-label={followLogs ? 'Follow tail on (click to pause)' : 'Follow tail off (click to enable)'}
             title={scrollPaused && followLogs ? 'Paused (scroll to bottom to resume)' : undefined}
           >
-            {followLogs ? (scrollPaused ? '⏸ Follow' : '↓ Follow') : '— Follow'}
+            {followLogs ? (scrollPaused ? m.logpanel_follow_paused() : m.logpanel_follow_active()) : m.logpanel_follow_off()}
           </button>
         )}
 
@@ -330,8 +331,8 @@ export function LogPanel() {
         {truncated && (
           <div className="alm-logpanel__truncation-marker" role="note">
             {truncatedCount != null
-              ? `History gap — ${truncatedCount} entries older than this point are no longer retained.`
-              : 'History gap — some entries older than this point are no longer retained.'}
+              ? m.logpanel_history_gap_count({ count: String(truncatedCount) })
+              : m.logpanel_history_gap()}
           </div>
         )}
 

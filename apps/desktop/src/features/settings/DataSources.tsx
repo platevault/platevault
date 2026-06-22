@@ -218,7 +218,7 @@ function RootCard({ root, onRescan }: RootCardProps) {
       <div className="alm-data-sources__root-actions">
         {!isOffline && (
           <Btn size="sm" onClick={() => onRescan(root)}>
-            {m.settings_datasources_rescan()}
+            {m.common_rescan()}
           </Btn>
         )}
         {!isOffline && (

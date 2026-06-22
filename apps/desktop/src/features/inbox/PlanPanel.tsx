@@ -551,6 +551,7 @@ export function PlanPanel({
           >
             {/* eslint-disable-next-line alm/no-user-string -- plural suffix fragments; ICU plurals not supported by the message-format plugin */}
             {plans.length} plan{plans.length !== 1 ? 's' : ''} · {totalActions} action
+            {/* eslint-disable-next-line alm/no-user-string -- plural suffix fragment; ICU plurals unsupported by the message-format plugin */}
             {totalActions !== 1 ? 's' : ''}
           </span>
         </div>
@@ -564,7 +565,7 @@ export function PlanPanel({
             data-testid="plan-apply-selected"
             aria-label={m.inbox_apply_selected_plans_aria()}
           >
-            {busy ? 'Applying…' : `Apply selected (${selectedArray.length})`}
+            {busy ? m.common_applying() : `Apply selected (${selectedArray.length})`}
           </Btn>
           <Btn
             variant="accent"

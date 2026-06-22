@@ -121,10 +121,10 @@ export function Advanced({ save }: AdvancedProps) {
             <div className="alm-adv-settings__guided-col">
               <p className="alm-adv-settings__guided-desc">
                 {guidedCompleted
-                  ? 'The guided flow has been completed. Restart to replay it from the beginning.'
+                  ? m.settings_advanced_guided_completed()
                   : guidedState.dismissed
-                    ? 'The guided flow is currently dismissed. Restart to resume from your last position.'
-                    : 'The guided flow is active.'}
+                    ? m.settings_advanced_guided_dismissed()
+                    : m.settings_advanced_guided_active()}
               </p>
               <Btn
                 size="sm"
@@ -132,7 +132,7 @@ export function Advanced({ save }: AdvancedProps) {
                 disabled={guidedRestarting}
                 data-testid="guided-restart-btn"
               >
-                {guidedRestarting ? 'Restarting…' : 'Restart guided flow'}
+                {guidedRestarting ? m.common_restarting() : m.settings_advanced_restart_guided()}
               </Btn>
             </div>
           </SettingsRow>

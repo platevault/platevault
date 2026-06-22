@@ -17,6 +17,7 @@ import {
   type ToolLaunchResponse,
 } from '@/api/commands';
 import { addToast } from '@/shared/toast';
+import { m } from '@/lib/i18n';
 
 // ── tool_id derivation ────────────────────────────────────────────────────────
 
@@ -123,7 +124,7 @@ export function useToolLaunch(
         }
 
         if (resp.status === 'success') {
-          addToast({ message: `Launched ${toolName}`, variant: 'success' });
+          addToast({ message: m.projects_tool_launched({ tool: toolName }), variant: 'success' });
           setState((s) => ({ ...s, priorInstanceAlive: false }));
           return;
         }
@@ -133,7 +134,7 @@ export function useToolLaunch(
         const isNotConfigured =
           code === 'tool.not_configured' || code === 'tool.executable.not_found';
         addToast({
-          message: resp.error?.message ?? `Failed to launch ${toolName}`,
+          message: resp.error?.message ?? m.projects_tool_launch_failed({ tool: toolName, error: '' }),
           variant: 'error',
           action: isNotConfigured
             ? {
@@ -147,7 +148,7 @@ export function useToolLaunch(
         });
       } catch (e: unknown) {
         addToast({
-          message: `Failed to launch ${toolName}: ${String(e)}`,
+          message: m.projects_tool_launch_failed({ tool: toolName, error: String(e) }),
           variant: 'error',
         });
       } finally {

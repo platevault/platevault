@@ -135,7 +135,7 @@ export function ProcessingTools() {
       disabled={detecting}
       aria-label={m.settings_tools_redetect_aria()}
     >
-      {detecting ? m.common_detecting() : 'Re-detect'}
+      {detecting ? m.common_detecting() : m.settings_tools_redetect()}
     </button>
   );
 
@@ -196,7 +196,7 @@ export function ProcessingTools() {
               />
               {(saving[tool.id] || validating[tool.id]) && (
                 <span className="alm-proc-tools__status">
-                  {saving[tool.id] ? 'Saving…' : 'Checking…'}
+                  {saving[tool.id] ? m.common_saving() : m.settings_tools_checking()}
                 </span>
               )}
               <Toggle

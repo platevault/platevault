@@ -111,7 +111,7 @@ export function SourceProtectionOverride({ sourceId, onSaved }: SourceProtection
   if (loadState === 'error' && !editing) {
     return (
       <span className="alm-source-protect__status">
-        {errorMsg || 'Could not load protection'}
+        {errorMsg || m.settings_protection_load_error()}
       </span>
     );
   }
