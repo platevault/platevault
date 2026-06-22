@@ -62,6 +62,8 @@ import { ProjectNotesSection } from './ProjectNotesSection';
 import { ManifestsAccordion } from './ManifestsAccordion';
 // spec 026: generated source view removal
 import { SourceViewsSection } from './SourceViewsSection';
+// spec 043 §4 (task #44): Outputs (verification pills) + Cleanup preview
+import { OutputsSection, CleanupPreviewSection } from './OutputsCleanupSections';
 import type { ProjectSourceDto_Deserialize } from '@/bindings/index';
 
 // ── Helpers ──────────────────────────────────────────────────────────────────
@@ -568,6 +570,12 @@ export function ProjectDetailContent({ projectId }: ProjectDetailContentProps) {
           </Section>
         )}
 
+        {/* ── Outputs section — spec 043 §4 (task #44) ───────────────────── */}
+        {/* STUB: ProjectDetailDto carries no accepted-output model yet, so this
+            renders a teaching empty state — never fabricated rows. Pass real
+            project.outputs[] here once the backend exposes them. */}
+        <OutputsSection />
+
         {/* ── Notes section — spec 024 T4.2 ──────────────────────────────── */}
         {/* project.notes is the creation-time inline field (legacy); the
             canonical per-project note is stored in project_notes and loaded
@@ -579,6 +587,12 @@ export function ProjectDetailContent({ projectId }: ProjectDetailContentProps) {
 
         {/* ── Manifests accordion — spec 024 T1.7 / T3.4 ─────────────────── */}
         <ManifestsAccordion projectId={projectId} />
+
+        {/* ── Cleanup preview — spec 043 §4 (task #44) ───────────────────── */}
+        {/* STUB: no per-project cleanup-preview projection on the read path yet
+            (cleanup.scan is a separate on-demand command). Renders a themed
+            Banner alert + LOCKED protected categories — no invented byte counts. */}
+        <CleanupPreviewSection />
 
         {/* ── Generated source views — spec 026 (remove/regenerate) ──────── */}
         <SourceViewsSection projectId={projectId} />

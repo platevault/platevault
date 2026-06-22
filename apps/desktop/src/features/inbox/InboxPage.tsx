@@ -318,8 +318,23 @@ export function InboxPage() {
   };
 
   const hasOpenPlan = selectedItem?.state === 'plan_open';
+
+  // Confirm gating (spec 043 §4 / task #34): MISSING REQUIRED metadata blocks
+  // confirm — any file lacking a path-load-bearing attribute cannot be routed
+  // to a destination, so the backend rejects it (inbox.missing_path_attributes).
+  // Disable confirm up-front and let the detail pane's danger alert explain why.
+  // A MIXED folder is NOT blocked here: confirming it generates a split plan.
+  const hasMissingRequiredMeta = useMemo(
+    () => (fileMetadata ?? []).some((f) => (f.missingPathAttributes?.length ?? 0) > 0),
+    [fileMetadata],
+  );
+
   const canConfirm =
-    !!selectedItem && !!classification && classification.type !== 'unclassified' && !hasOpenPlan;
+    !!selectedItem &&
+    !!classification &&
+    classification.type !== 'unclassified' &&
+    !hasMissingRequiredMeta &&
+    !hasOpenPlan;
 
   const planBusy = applyAllLoading || applySelectedLoading || cancelLoading;
 
@@ -405,6 +420,12 @@ export function InboxPage() {
                   rootAbsolutePath={selectedRootPath}
                   classification={classification ?? null}
                   fileMetadata={fileMetadata}
+                  // task #34: inline "Generate split plan" action inside the
+                  // mixed-folder alert reuses the same confirm/split flow the
+                  // top-bar Confirm button runs (handleConfirm picks 'split'
+                  // when classification.type === 'mixed').
+                  onGenerateSplitPlan={() => void handleConfirm()}
+                  splitPlanBusy={confirmLoading}
                 />
               ) : (
                 <EmptyState

@@ -204,6 +204,48 @@ const SAMPLE_METADATA = {
 	set_temp: "-10C",
 };
 
+// ── Per-type live preview (client-side token substitution) ────────────────────
+//
+// STUB: The canonical resolver lives in the Rust `patterns` crate
+// (`crates/patterns/src/per_type.rs`), but the only Tauri command exposed today
+// (`pattern.preview`) accepts the token/separator `PatternPart[]` model, which
+// cannot represent the literal path segments (e.g. `flats`, `masters`) that
+// per-type destination patterns rely on. Until a path-string preview command is
+// exposed, we resolve the preview client-side by substituting `{token}`
+// placeholders with representative sample values. Literal segments and `/`
+// separators are passed through verbatim. Replace this with the canonical
+// resolver once a path-string `pattern.preview` (or equivalent) command exists.
+
+const PER_TYPE_SAMPLE_TOKENS: Record<
+	(typeof AVAILABLE_TOKENS)[number],
+	string
+> = {
+	target: "IC1396",
+	filter: "Ha",
+	date: "2024-10-20",
+	frame_type: "light",
+	camera: "ASI2600MM",
+	exposure: "300s",
+	gain: "100",
+	binning: "1x1",
+	set_temp: "-10C",
+};
+
+/**
+ * Resolve a per-type destination pattern string into a sample path by replacing
+ * each `{token}` with a representative sample value. Unknown tokens are left as
+ * a bracketed placeholder so the preview makes the problem visible rather than
+ * silently dropping the segment.
+ */
+function resolvePerTypePreview(pattern: string): string {
+	if (pattern.trim() === "") return "";
+	return pattern.replace(/\{([^}]*)\}/g, (_match, token: string) => {
+		const sample =
+			PER_TYPE_SAMPLE_TOKENS[token as (typeof AVAILABLE_TOKENS)[number]];
+		return sample ?? `{${token}}`;
+	});
+}
+
 // ── Default pattern {target}/{filter}/{date}/{frame_type}/ ────────────────────
 
 const DEFAULT_PATTERN: PatternPart[] = [
@@ -694,13 +736,22 @@ function PerTypeDestinationPatterns() {
 					loaded && isOverridden ? validatePatternString(patternStr) : null;
 				const error = backendErrors[cls] ?? clientError ?? undefined;
 				const rowId = `naming-pattern-${cls}`;
+				// Live preview: resolve the effective pattern (override or
+				// built-in default) against representative sample values. Only
+				// shown when the pattern is free of validation errors.
+				const effectivePattern = isOverridden
+					? patternStr
+					: FRAME_TYPE_DEFAULT_PATTERNS[cls];
+				const previewPath =
+					error == null ? resolvePerTypePreview(effectivePattern) : "";
 				return (
 					<SettingsRow
 						key={cls}
 						label={<span id={`${rowId}-label`}>{FRAME_TYPE_LABELS[cls]}</span>}
 						info="Destination folder pattern for this frame type, applied when confirming inbox items. Empty = use the built-in default (shown as placeholder)."
 					>
-						<div className="alm-naming__pertype-row-inner">
+						{/* Editor and its buttons live on separate lines (spec 043 §4). */}
+						<div className="alm-naming__pertype-stack">
 							<div
 								className="alm-naming__pertype-editor-wrap"
 								role="group"
@@ -715,14 +766,38 @@ function PerTypeDestinationPatterns() {
 									rowId={rowId}
 								/>
 							</div>
-							<Btn
-								size="sm"
-								disabled={!isOverridden}
-								data-testid={`naming-pattern-reset-${cls}`}
-								onClick={() => handleReset(cls)}
-							>
-								Reset to default
-							</Btn>
+
+							{/* Working live preview of the resolved sample path. */}
+							{previewPath !== "" && (
+								<div
+									className="alm-naming__pertype-preview"
+									data-testid={`${rowId}-preview`}
+								>
+									<span className="alm-naming__pertype-preview-label">
+										Preview:
+									</span>{" "}
+									<code className="alm-mono alm-naming__pertype-preview-code">
+										{previewPath}
+									</code>
+									{!isOverridden && (
+										<span className="alm-naming__pertype-preview-default">
+											(default)
+										</span>
+									)}
+								</div>
+							)}
+
+							{/* Buttons on their own line. */}
+							<div className="alm-naming__pertype-actions">
+								<Btn
+									size="sm"
+									disabled={!isOverridden}
+									data-testid={`naming-pattern-reset-${cls}`}
+									onClick={() => handleReset(cls)}
+								>
+									Reset
+								</Btn>
+							</div>
 						</div>
 					</SettingsRow>
 				);

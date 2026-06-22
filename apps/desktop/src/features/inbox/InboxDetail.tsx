@@ -19,7 +19,7 @@
 
 import { useState } from 'react';
 import { DetailHeader, DetailPane, MetricLine } from '@/components';
-import { Pill, Banner, Section, Table, KV } from '@/ui';
+import { Pill, Banner, Btn, Section, Table, KV } from '@/ui';
 import type { InboxItemSummary, InboxFileMetadata } from '@/api/commands';
 import type { InboxClassifyResponse } from './store';
 import type { PillVariant } from '@/ui';
@@ -248,11 +248,26 @@ export interface InboxDetailProps {
    * once the backend command exists (T017/T019/T022).
    */
   fileMetadata?: InboxFileMetadata[];
+  /**
+   * Inline action for the mixed-folder alert: generate a split plan for this
+   * item. Wired by the parent (InboxPage) to the same confirm/split flow the
+   * top-bar Confirm uses. Optional so InboxDetail still renders standalone in
+   * tests; when absent the alert shows the explanation without the button.
+   */
+  onGenerateSplitPlan?: () => void;
+  /** True while a confirm/split is in flight — disables the inline action. */
+  splitPlanBusy?: boolean;
 }
 
 // ── Component ─────────────────────────────────────────────────────────────────
 
-export function InboxDetail({ item, classification, fileMetadata }: InboxDetailProps) {
+export function InboxDetail({
+  item,
+  classification,
+  fileMetadata,
+  onGenerateSplitPlan,
+  splitPlanBusy = false,
+}: InboxDetailProps) {
   const { reclassify, loading: reclassifyLoading } = useInboxReclassify(item.inboxItemId);
 
   // Per-file overrides the user has selected but not yet submitted (single-file flow).
@@ -548,16 +563,56 @@ export function InboxDetail({ item, classification, fileMetadata }: InboxDetailP
         }
       />
 
+      {/* Mixed folder: an advisory (NOT blocking) alert with an inline action.
+          Confirming a mixed folder is allowed — it generates a split plan, which
+          is exactly what the inline button triggers. */}
       {classType === 'mixed' && (
-        <Banner variant="warn" className="alm-inbox-detail__banner-mt3">
-          Mixed folder — multiple frame types detected. Generate a split plan to
-          move each type to its canonical location.
+        <Banner
+          variant="warn"
+          className="alm-inbox-detail__banner-mt3 alm-inbox-alert"
+          data-testid="inbox-mixed-alert"
+        >
+          <div className="alm-inbox-alert__msg">
+            <span className="alm-inbox-alert__title">Mixed folder</span>
+            <span className="alm-inbox-alert__body">
+              Multiple frame types detected. Generate a split plan to move each
+              type to its canonical location. You can still confirm — it will
+              produce a reviewable split plan.
+            </span>
+          </div>
+          {onGenerateSplitPlan && (
+            <div className="alm-inbox-alert__action">
+              <Btn
+                size="sm"
+                variant="accent"
+                onClick={onGenerateSplitPlan}
+                disabled={splitPlanBusy}
+                aria-label="Generate split plan"
+                data-testid="inbox-mixed-split-btn"
+              >
+                {splitPlanBusy ? 'Working…' : 'Generate split plan'}
+              </Btn>
+            </div>
+          )}
         </Banner>
       )}
 
+      {/* Unclassified: BLOCKING alert. No readable frame types means confirm is
+          disabled (in the parent's top bar); the user must assign frame types in
+          the "Needs review" table below first. */}
       {classType === 'unclassified' && (
-        <Banner variant="warn" className="alm-inbox-detail__banner-mt3">
-          No IMAGETYP headers could be read. Assign frame types below before confirming.
+        <Banner
+          variant="danger"
+          className="alm-inbox-detail__banner-mt3 alm-inbox-alert"
+          data-testid="inbox-unclassified-alert"
+        >
+          <div className="alm-inbox-alert__msg">
+            <span className="alm-inbox-alert__title">Frame types required</span>
+            <span className="alm-inbox-alert__body">
+              No IMAGETYP headers could be read, so confirm is disabled. Assign
+              frame types in “Needs review” below, then confirm.
+            </span>
+          </div>
         </Banner>
       )}
 
@@ -734,17 +789,24 @@ export function InboxDetail({ item, classification, fileMetadata }: InboxDetailP
         </Section>
       )}
 
-      {/* FR-032 (US9): plan generation is blocked while any file lacks a
-          path-load-bearing attribute. Direct the user to the override flow. */}
+      {/* FR-032 (US9): BLOCKING alert. Plan generation is blocked while any
+          file lacks a path-load-bearing (required) attribute. Confirm is
+          disabled in the parent's top bar; direct the user to the override
+          flow. Rendered as a danger alert because it blocks the action. */}
       {filesMissingAttrs.length > 0 && (
         <Banner
-          variant="warn"
-          className="alm-inbox-detail__banner-mt3"
+          variant="danger"
+          className="alm-inbox-detail__banner-mt3 alm-inbox-alert"
           data-testid="inbox-missing-attr-banner"
         >
-          {filesMissingAttrs.length} file{filesMissingAttrs.length !== 1 ? 's' : ''} missing
-          required attribute(s) for their destination. Assign the missing value(s) in “Needs
-          review” above before confirming.
+          <div className="alm-inbox-alert__msg">
+            <span className="alm-inbox-alert__title">Required metadata missing</span>
+            <span className="alm-inbox-alert__body">
+              {filesMissingAttrs.length} file{filesMissingAttrs.length !== 1 ? 's' : ''} missing
+              required attribute(s) for their destination, so confirm is disabled. Assign the
+              missing value(s) in “Needs review” above, then confirm.
+            </span>
+          </div>
         </Banner>
       )}
 

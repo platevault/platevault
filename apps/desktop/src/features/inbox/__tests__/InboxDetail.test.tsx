@@ -322,6 +322,63 @@ describe('InboxDetail — FR-032: missing-attribute annotations', () => {
   });
 });
 
+// ── task #34: warnings = alert with inline action ────────────────────────────
+
+describe('InboxDetail — task #34: mixed-folder alert with inline action', () => {
+  it('renders the mixed alert with an inline "Generate split plan" button that fires the callback', () => {
+    const onGenerateSplitPlan = vi.fn();
+    render(
+      <InboxDetail
+        item={sampleItem as unknown as Parameters<typeof InboxDetail>[0]['item']}
+        rootAbsolutePath="/astro/inbox"
+        classification={mixedClassification as unknown as Parameters<typeof InboxDetail>[0]['classification']}
+        onGenerateSplitPlan={onGenerateSplitPlan}
+      />
+    );
+    expect(screen.getByTestId('inbox-mixed-alert')).toBeInTheDocument();
+    const btn = screen.getByTestId('inbox-mixed-split-btn');
+    fireEvent.click(btn);
+    expect(onGenerateSplitPlan).toHaveBeenCalledTimes(1);
+  });
+
+  it('disables the inline split action while busy', () => {
+    render(
+      <InboxDetail
+        item={sampleItem as unknown as Parameters<typeof InboxDetail>[0]['item']}
+        rootAbsolutePath="/astro/inbox"
+        classification={mixedClassification as unknown as Parameters<typeof InboxDetail>[0]['classification']}
+        onGenerateSplitPlan={vi.fn()}
+        splitPlanBusy
+      />
+    );
+    expect(screen.getByTestId('inbox-mixed-split-btn')).toBeDisabled();
+  });
+
+  it('renders the mixed alert without an action button when no callback is supplied', () => {
+    render(
+      <InboxDetail
+        item={sampleItem as unknown as Parameters<typeof InboxDetail>[0]['item']}
+        rootAbsolutePath="/astro/inbox"
+        classification={mixedClassification as unknown as Parameters<typeof InboxDetail>[0]['classification']}
+      />
+    );
+    expect(screen.getByTestId('inbox-mixed-alert')).toBeInTheDocument();
+    expect(screen.queryByTestId('inbox-mixed-split-btn')).not.toBeInTheDocument();
+  });
+
+  it('does NOT render the mixed alert for single-type folders', () => {
+    render(
+      <InboxDetail
+        item={sampleItem as unknown as Parameters<typeof InboxDetail>[0]['item']}
+        rootAbsolutePath="/astro/inbox"
+        classification={singleTypeClassification as unknown as Parameters<typeof InboxDetail>[0]['classification']}
+        onGenerateSplitPlan={vi.fn()}
+      />
+    );
+    expect(screen.queryByTestId('inbox-mixed-alert')).not.toBeInTheDocument();
+  });
+});
+
 // ── Inspector dock ────────────────────────────────────────────────────────────
 
 describe('InboxDetail — inspector dock', () => {

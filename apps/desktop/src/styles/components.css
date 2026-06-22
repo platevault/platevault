@@ -6711,3 +6711,158 @@
   color: var(--alm-text-muted);
   font-weight: var(--alm-weight-medium);
 }
+
+/* === merged from .cssblocks/inbox-warn.css (wave 2, spec-043) === */
+/* === merged from .cssblocks/inbox-warn.css (parallel coder, spec-043) === */
+/* ===========================================================================
+ * Inbox — warnings rendered as alerts with an inline action (task #34, spec
+ * 043 §4 Inbox).
+ *
+ * SCRATCH FILE: not imported anywhere. The parent merges this into
+ * components.css and runs check-tokens. Token-only (existing --alm-* tokens);
+ * no raw hex/rgb/ms.
+ *
+ * The shared `.alm-banner` / `.alm-banner--warn|danger` rules already live in
+ * components.css and supply the alert chrome (bg, color, border, padding,
+ * radius). These NEW selectors layer the alert's internal structure on top:
+ * a message column and an inline-action region so the call-to-action lives
+ * INSIDE the alert instead of as a separate row.
+ * ======================================================================== */
+
+/* The alert becomes a flex row: message takes the available width, the inline
+ * action sits at the trailing edge and never shrinks. Wraps to a new line on
+ * narrow panes so the button is never clipped. `.alm-banner` already sets
+ * display:flex + gap; we only override alignment/wrapping here. */
+.alm-inbox-alert {
+  align-items: flex-start;
+  flex-wrap: wrap;
+  justify-content: space-between;
+}
+
+/* Message column: stacked title + body text. Flex-grows so the action is
+ * pushed to the trailing edge; min-width:0 lets long text wrap rather than
+ * overflow the alert. */
+.alm-inbox-alert__msg {
+  display: flex;
+  flex-direction: column;
+  gap: var(--alm-sp-1);
+  flex: 1 1 16rem;
+  min-width: 0;
+}
+
+/* Alert title — slightly stronger than the body so the alert reads as a
+ * heading + explanation pair. Inherits the variant color from `.alm-banner`. */
+.alm-inbox-alert__title {
+  font-weight: var(--alm-weight-semibold);
+}
+
+/* Alert body — the explanation / why-blocked sentence. Quieter than the title
+ * but still inherits the variant color for contrast within the tinted alert. */
+.alm-inbox-alert__body {
+  font-size: var(--alm-text-xs);
+  line-height: var(--alm-leading-normal);
+}
+
+/* Inline-action region: holds the call-to-action button(s) inside the alert.
+ * Does not shrink, so the action stays a stable hit target as the message
+ * column flexes. */
+.alm-inbox-alert__action {
+  flex: 0 0 auto;
+  display: flex;
+  align-items: center;
+  gap: var(--alm-sp-2);
+}
+
+/* === merged from .cssblocks/projects-detail.css (wave 2, spec-043) === */
+/**
+ * projects-detail.css — spec 043 §4 (task #44)
+ *
+ * CSS block for the Projects detail Outputs + Cleanup-preview sections.
+ * Token-only (--alm-*). NOT imported here — the parent build merges
+ * apps/desktop/.cssblocks/* into the stylesheet. Do not add raw hex/rgb/ms.
+ *
+ * Classes already owned by src/styles/components.css and reused as-is (NOT
+ * redefined here): .alm-project-detail__outputs, .alm-project-detail__cleanup-preview,
+ * .alm-project-detail__cleanup-note, .alm-project-detail__cleanup-protected.
+ * Only the NEW classes introduced by OutputsCleanupSections.tsx live below.
+ */
+
+/* ── Outputs table cells ──────────────────────────────────────────────────── */
+.alm-project-detail__output-name {
+  font-weight: var(--alm-weight-medium);
+  color: var(--alm-text);
+}
+
+.alm-project-detail__output-format {
+  font-family: var(--alm-font-mono);
+  font-size: var(--alm-text-xs);
+  color: var(--alm-text-muted);
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+}
+
+/* ── Cleanup: protected-category block ────────────────────────────────────── */
+.alm-project-detail__cleanup-protected-head {
+  font-size: var(--alm-text-xs);
+  font-weight: var(--alm-weight-medium);
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  color: var(--alm-text-muted);
+  padding: var(--alm-sp-2) 0 var(--alm-sp-1);
+}
+
+.alm-project-detail__cleanup-protected-list {
+  display: flex;
+  flex-direction: column;
+  gap: var(--alm-sp-1);
+}
+
+/* === merged from .cssblocks/naming.css (wave 2, spec-043) === */
+/*
+ * Settings → Naming & Structure — per-type destination pattern editor.
+ * Spec 043 §4: pattern editor + buttons on SEPARATE lines, plus a working
+ * live preview row per frame type.
+ *
+ * Token-only (--alm-*). Do NOT import — the parent merges .cssblocks/*.css
+ * into the compiled stylesheet. These classes supersede the side-by-side
+ * `.alm-naming__pertype-row-inner` layout in src/styles/components.css.
+ */
+
+/* Stack the chip editor, live preview, and actions vertically. */
+.alm-naming__pertype-stack {
+	display: flex;
+	flex-direction: column;
+	gap: var(--alm-sp-2);
+	align-items: stretch;
+}
+
+/* Live preview row: resolved sample path for this frame type. */
+.alm-naming__pertype-preview {
+	font-size: var(--alm-text-xs);
+	color: var(--alm-text-muted);
+	padding: var(--alm-sp-1) var(--alm-sp-2);
+	background: var(--alm-surface-raised);
+	border: 1px solid var(--alm-border-subtle);
+	border-radius: var(--alm-radius-sm);
+}
+
+.alm-naming__pertype-preview-label {
+	color: var(--alm-text-faint);
+}
+
+.alm-naming__pertype-preview-code {
+	font-size: var(--alm-text-xs);
+	color: var(--alm-text-secondary);
+}
+
+.alm-naming__pertype-preview-default {
+	margin-left: var(--alm-sp-1);
+	color: var(--alm-text-faint);
+	font-style: italic;
+}
+
+/* Buttons line — sits below the editor + preview. */
+.alm-naming__pertype-actions {
+	display: flex;
+	gap: var(--alm-sp-2);
+}
