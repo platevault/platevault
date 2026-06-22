@@ -1,5 +1,5 @@
 /**
- * TargetsTable — spec 043 shared list-page adoption (task #73).
+ * TargetsTable — spec 043 shared list-page adoption (task #73), refined #82.
  *
  * Replaces the narrow `alm-targets-list` sidebar with a DENSE, FULL-WIDTH
  * sortable table — the same surface pattern as SessionsTable (shared `Table`
@@ -14,15 +14,24 @@
  * yet, so those columns are OMITTED rather than fabricated. They are added back
  * here once `target.list` returns the enrichment.
  *
- * Search + density live in the page top bar (PageTopBar + FilterToolbar); this
- * surface owns no toolbar state. Selecting a row opens TargetDetailV2 in the
- * page detail pane (selection is driven by the host page via `?selected`).
+ * Task #82:
+ *  - Row DENSITY now follows the GLOBAL density setting (the `density-*` class
+ *    on <html>, see data/theme.ts → applyDensity). There is no per-page density
+ *    prop any more; cell padding is keyed off `--alm-row-height` in CSS.
+ *  - GROUP-BY: rows render under spanning group-header rows, grouped by
+ *    Catalogue (default) or Object type, mirroring SessionsTable/MastersTable.
+ *
+ * Search + the catalogue / group-by controls live in the page top bar
+ * (PageTopBar + FilterToolbar); this surface owns no toolbar state. Selecting a
+ * row opens TargetDetailV2 in the page detail pane (selection is driven by the
+ * host page via `?selected`).
  */
 
 import { useMemo } from 'react';
 import type { TargetListItem } from '@/api/commands';
 import { Table, Pill } from '@/ui';
 import type { TableColumn, TableRow } from '@/ui';
+import { catalogueOf, catalogueLabel } from './planner-catalog';
 
 // ── Sort model ────────────────────────────────────────────────────────────────
 
@@ -37,13 +46,24 @@ export interface TargetSort {
 
 export const DEFAULT_TARGET_SORT: TargetSort = { col: 'designation', dir: 'asc' };
 
-/** Row density (mirrors the legacy TargetList density toggle). */
-export type TargetDensity = 'Dense' | 'Rich';
-export const DEFAULT_TARGET_DENSITY: TargetDensity = 'Dense';
+// ── Grouping model (task #82) ───────────────────────────────────────────────────
+
+/** What the table groups rows by (Planner top-bar Group-by control). */
+export type TargetGroupBy = 'catalogue' | 'type';
+export const DEFAULT_TARGET_GROUP_BY: TargetGroupBy = 'catalogue';
 
 /** Formats the objectType string into a readable label. */
 export function formatType(objectType: string): string {
   return objectType.replace(/_/g, ' ');
+}
+
+/** Resolve the group key + display headline for a target under `groupBy`. */
+function groupHeadlineOf(t: TargetListItem, groupBy: TargetGroupBy): string {
+  if (groupBy === 'type') {
+    return t.objectType ? formatType(t.objectType) : 'Unknown type';
+  }
+  const cat = catalogueOf(t);
+  return cat ? catalogueLabel(cat) : 'Other';
 }
 
 function compareStr(a: string, b: string): number {
@@ -61,6 +81,42 @@ function compareTargets(a: TargetListItem, b: TargetListItem, sort: TargetSort):
       break;
   }
   return sort.dir === 'asc' ? cmp : -cmp;
+}
+
+interface TargetGroup {
+  label: string;
+  targets: TargetListItem[];
+}
+
+/**
+ * Group targets by the selected key, sort targets within each group, then order
+ * the groups by their first (sorted) row — mirroring SessionsTable.
+ */
+function groupTargets(
+  targets: TargetListItem[],
+  sort: TargetSort,
+  groupBy: TargetGroupBy,
+): TargetGroup[] {
+  const byKey = new Map<string, TargetListItem[]>();
+  for (const t of targets) {
+    const key = groupHeadlineOf(t, groupBy);
+    const bucket = byKey.get(key);
+    if (bucket) bucket.push(t);
+    else byKey.set(key, [t]);
+  }
+
+  const groups: TargetGroup[] = [];
+  for (const [label, list] of byKey) {
+    groups.push({ label, targets: [...list].sort((a, b) => compareTargets(a, b, sort)) });
+  }
+
+  // Order groups by their first row under the active sort, breaking ties by the
+  // group label so ordering stays stable and reads naturally.
+  groups.sort((ga, gb) => {
+    const cmp = compareTargets(ga.targets[0], gb.targets[0], sort);
+    return cmp !== 0 ? cmp : compareStr(ga.label, gb.label);
+  });
+  return groups;
 }
 
 // ── Column model ────────────────────────────────────────────────────────────────
@@ -89,7 +145,8 @@ interface Props {
   loading?: boolean;
   sort: TargetSort;
   onSort: (col: TargetSortCol) => void;
-  density?: TargetDensity;
+  /** Group rows under spanning header rows by this key. Default 'catalogue'. */
+  groupBy?: TargetGroupBy;
   /** Message shown when the list is empty (tab-specific). */
   emptyMessage?: string;
 }
@@ -101,12 +158,12 @@ export function TargetsTable({
   loading,
   sort,
   onSort,
-  density = DEFAULT_TARGET_DENSITY,
+  groupBy = DEFAULT_TARGET_GROUP_BY,
   emptyMessage = 'No targets match the current filters.',
 }: Props) {
-  const sorted = useMemo(
-    () => [...targets].sort((a, b) => compareTargets(a, b, sort)),
-    [targets, sort],
+  const groups = useMemo(
+    () => groupTargets(targets, sort, groupBy),
+    [targets, sort, groupBy],
   );
 
   // Build sortable header labels as button elements (column header passthrough).
@@ -134,31 +191,52 @@ export function TargetsTable({
     ),
   }));
 
-  const rows: TableRow[] = sorted.map((t) => {
-    const showAltDesig = t.effectiveLabel !== t.primaryDesignation;
-    return {
-      _rowClassName:
-        'alm-targets-table__row' +
-        (density === 'Rich' ? ' alm-targets-table__row--rich' : '') +
-        (selected === t.id ? ' alm-targets-table__row--selected' : ''),
-      _onClick: () => onSelect(t.id),
+  // Flatten groups into rows: a spanning group-header row, then target rows.
+  const rows: TableRow[] = [];
+  for (const group of groups) {
+    rows.push({
+      _rowClassName: 'alm-targets-table__group',
       designation: (
-        <span className="alm-targets-cell__desig">
-          <span className="alm-targets-cell__label">{t.effectiveLabel}</span>
-          {showAltDesig && (
-            <span className="alm-targets-cell__alt">{t.primaryDesignation}</span>
-          )}
+        <span>
+          {group.label}
+          <span className="alm-targets-table__group-count">
+            {group.targets.length} {group.targets.length === 1 ? 'target' : 'targets'}
+          </span>
         </span>
       ),
-      type: <Pill variant="ghost">{formatType(t.objectType)}</Pill>,
-      // STUB (task #57): not on TargetListItem — em-dash placeholder.
-      constellation: <span className="alm-targets-cell--muted">—</span>,
-      magnitude: <span className="alm-targets-cell--muted">—</span>,
-      sessions: <span className="alm-targets-cell--muted">—</span>,
-    };
-  });
+      type: '',
+      constellation: '',
+      magnitude: '',
+      sessions: '',
+    });
 
-  if (sorted.length === 0 && !loading) {
+    for (const t of group.targets) {
+      const showAltDesig = t.effectiveLabel !== t.primaryDesignation;
+      rows.push({
+        _rowClassName:
+          'alm-targets-table__row' +
+          (selected === t.id ? ' alm-targets-table__row--selected' : ''),
+        _onClick: () => onSelect(t.id),
+        designation: (
+          <span className="alm-targets-cell__desig">
+            <span className="alm-targets-cell__label">{t.effectiveLabel}</span>
+            {showAltDesig && (
+              <span className="alm-targets-cell__alt">{t.primaryDesignation}</span>
+            )}
+          </span>
+        ),
+        type: <Pill variant="ghost">{formatType(t.objectType)}</Pill>,
+        // STUB (task #57): not on TargetListItem — em-dash placeholder.
+        constellation: <span className="alm-targets-cell--muted">—</span>,
+        magnitude: <span className="alm-targets-cell--muted">—</span>,
+        sessions: <span className="alm-targets-cell--muted">—</span>,
+      });
+    }
+  }
+
+  const count = targets.length;
+
+  if (count === 0 && !loading) {
     return <div className="alm-targets-table__empty">{emptyMessage}</div>;
   }
 
@@ -166,9 +244,7 @@ export function TargetsTable({
     <div>
       <Table className="alm-targets-table" columns={columns} rows={rows} />
       <div className="alm-targets-table__footer">
-        {loading
-          ? 'Loading…'
-          : `${sorted.length} ${sorted.length === 1 ? 'target' : 'targets'}`}
+        {loading ? 'Loading…' : `${count} ${count === 1 ? 'target' : 'targets'}`}
       </div>
     </div>
   );

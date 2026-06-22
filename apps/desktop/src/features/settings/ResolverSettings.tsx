@@ -9,6 +9,7 @@
 // debounce_ms, request_timeout_secs (FR-015).
 
 import { ResolverSettingsControl } from './ResolverSettingsControl';
+import { CatalogueSettingsControl } from './CatalogueSettingsControl';
 import { Attribution } from './Attribution';
 import { SettingsSection } from './SettingsKit';
 
@@ -22,6 +23,10 @@ export function ResolverSettings(_props: ResolverSettingsPaneProps) {
     <>
       <SettingsSection title="ONLINE RESOLUTION">
         <ResolverSettingsControl />
+      </SettingsSection>
+
+      <SettingsSection title="DEFAULT CATALOGUES">
+        <CatalogueSettingsControl />
       </SettingsSection>
 
       <Attribution />

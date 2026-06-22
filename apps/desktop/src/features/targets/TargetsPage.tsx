@@ -12,9 +12,11 @@
  *
  * The My Targets | Planner split (task #40) is preserved — the segmented tab
  * control renders in the top bar. The Planner catalog restriction
- * (planner-catalog.ts) and the density toggle are preserved; density now lives
- * in the FilterToolbar. Selecting a row puts its id in `?selected=<uuid>` and
- * the detail pane loads the full gen-3 detail from SQLite.
+ * (planner-catalog.ts) is preserved and now exposes a catalogue multi-select
+ * filter plus a group-by control (task #82), both Planner-only. Row density
+ * follows the GLOBAL density setting (the `density-*` class on <html>); the old
+ * per-page density toggle is gone. Selecting a row puts its id in
+ * `?selected=<uuid>` and the detail pane loads the full gen-3 detail from SQLite.
  */
 
 import { useState, useEffect, useCallback, useMemo } from 'react';
@@ -26,13 +28,21 @@ import type { FilterOption } from '@/components';
 import { Btn, EmptyState, SegControl } from '@/ui';
 import { AddTargetDialog } from './AddTargetDialog';
 import { TargetDetailV2 } from './TargetDetailV2';
-import { filterPlannerCatalog } from './planner-catalog';
+import {
+  filterByCatalogues,
+  PLANNER_CATALOGS,
+  type CatalogueId,
+} from './planner-catalog';
+import {
+  DEFAULT_ENABLED_CATALOGUES,
+  loadDefaultCatalogues,
+} from './catalogue-settings';
 import {
   TargetsTable,
   DEFAULT_TARGET_SORT,
-  DEFAULT_TARGET_DENSITY,
+  DEFAULT_TARGET_GROUP_BY,
 } from './TargetsTable';
-import type { TargetSort, TargetSortCol, TargetDensity } from './TargetsTable';
+import type { TargetSort, TargetSortCol, TargetGroupBy } from './TargetsTable';
 
 type ListState =
   | { status: 'loading' }
@@ -60,10 +70,17 @@ const TABS: TargetsTab[] = ['My Targets', 'Planner'];
  */
 const MY_TARGETS_STUB: TargetListItem[] = [];
 
-const DENSITY_OPTIONS: FilterOption[] = [
-  { value: 'Dense', label: 'Dense' },
-  { value: 'Rich', label: 'Rich' },
+/** Group-by options for the Planner top bar (mirrors the other list pages). */
+const GROUP_BY_OPTIONS: FilterOption[] = [
+  { value: 'catalogue', label: 'Catalogue' },
+  { value: 'type', label: 'Object type' },
 ];
+
+/** Catalogue multi-select options, in canonical display order. */
+const CATALOGUE_OPTIONS: FilterOption[] = PLANNER_CATALOGS.map((c) => ({
+  value: c.id,
+  label: c.label,
+}));
 
 /** Client-side text search across the fields the list endpoint provides. */
 function matchesSearch(t: TargetListItem, query: string): boolean {
@@ -82,7 +99,27 @@ export function TargetsPage() {
   const [tab, setTab] = useState<TargetsTab>('Planner');
   const [search, setSearch] = useState('');
   const [sort, setSort] = useState<TargetSort>(DEFAULT_TARGET_SORT);
-  const [density, setDensity] = useState<TargetDensity>(DEFAULT_TARGET_DENSITY);
+  const [groupBy, setGroupBy] = useState<TargetGroupBy>(DEFAULT_TARGET_GROUP_BY);
+  // Catalogue multi-select: initialized from the persisted default-enabled
+  // catalogues (Settings → Target Resolution), falling back to the in-code
+  // default subset until that load resolves.
+  const [enabledCatalogues, setEnabledCatalogues] = useState<CatalogueId[]>(
+    () => [...DEFAULT_ENABLED_CATALOGUES],
+  );
+
+  useEffect(() => {
+    let cancelled = false;
+    loadDefaultCatalogues()
+      .then((ids) => {
+        if (!cancelled) setEnabledCatalogues(ids);
+      })
+      .catch(() => {
+        // Keep the in-code default subset.
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, []);
 
   const load = useCallback(() => {
     setListState({ status: 'loading' });
@@ -118,10 +155,14 @@ export function TargetsPage() {
   }, []);
 
   // STUB: client-side catalog filter. Replace with a backend catalog filter on
-  // the list endpoint (task #57) once `target.list` can filter server-side.
+  // the list endpoint (task #57) once `target.list` can filter server-side. The
+  // catalogue multi-select (task #82) restricts to the user-selected subset.
   const plannerTargets = useMemo(
-    () => (listState.status === 'loaded' ? filterPlannerCatalog(listState.items) : []),
-    [listState],
+    () =>
+      listState.status === 'loaded'
+        ? filterByCatalogues(listState.items, new Set(enabledCatalogues))
+        : [],
+    [listState, enabledCatalogues],
   );
 
   const tabTargets = tab === 'Planner' ? plannerTargets : MY_TARGETS_STUB;
@@ -152,22 +193,29 @@ export function TargetsPage() {
             placeholder: 'Search targets...',
             ariaLabel: 'Search targets',
           }}
-          actions={
-            <label className="alm-targets-density">
-              <span className="alm-targets-density__label">Density</span>
-              <select
-                className="alm-filterbar__select"
-                value={density}
-                onChange={(e) => setDensity(e.target.value as TargetDensity)}
-                aria-label="Row density"
-              >
-                {DENSITY_OPTIONS.map((o) => (
-                  <option key={o.value} value={o.value}>
-                    {o.label}
-                  </option>
-                ))}
-              </select>
-            </label>
+          // Catalogue multi-select + group-by are Planner-only controls; the
+          // My Targets tab is a stub list with nothing to filter/group yet.
+          multiFields={
+            tab === 'Planner'
+              ? [
+                  {
+                    key: 'catalogues',
+                    label: 'Catalogues',
+                    value: enabledCatalogues,
+                    options: CATALOGUE_OPTIONS,
+                    onChange: (v) => setEnabledCatalogues(v as CatalogueId[]),
+                  },
+                ]
+              : undefined
+          }
+          groupBy={
+            tab === 'Planner'
+              ? {
+                  value: groupBy,
+                  options: GROUP_BY_OPTIONS,
+                  onChange: (v) => setGroupBy(v as TargetGroupBy),
+                }
+              : undefined
           }
         />
       }
@@ -199,7 +247,7 @@ export function TargetsPage() {
             loading={listState.status === 'loading'}
             sort={sort}
             onSort={handleSort}
-            density={density}
+            groupBy={groupBy}
             emptyMessage={
               tab === 'My Targets'
                 ? "No targets with sessions yet. Targets appear here once your captured frames are linked to a catalog object — that linkage isn't wired up yet. Use the Planner to find an object and start a project."

@@ -11,6 +11,7 @@ export { FilterToolbar } from './FilterToolbar';
 export type {
   FilterToolbarProps,
   FilterField,
+  MultiFilterField,
   FilterOption,
   GroupByControl,
   SortControl,

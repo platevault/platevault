@@ -6512,6 +6512,65 @@
   align-items: center;
 }
 
+/* Multi-select popover field (task #82) — native <details> disclosure with a
+ * checkbox menu. See .cssblocks/targets-refine.css for the staged copy. */
+.alm-filterbar__multi {
+  position: relative;
+  display: inline-block;
+}
+.alm-filterbar__multi-summary {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--alm-sp-1);
+  padding: var(--alm-sp-1) var(--alm-sp-2);
+  font-size: var(--alm-text-sm);
+  color: var(--alm-text);
+  background: var(--alm-surface-raised);
+  border: 1px solid var(--alm-border);
+  border-radius: var(--alm-radius-sm);
+  cursor: pointer;
+  list-style: none;
+  user-select: none;
+}
+.alm-filterbar__multi-summary::-webkit-details-marker { display: none; }
+.alm-filterbar__multi-summary::marker { content: ''; }
+.alm-filterbar__multi-summary::after {
+  content: '\25BE';
+  font-size: var(--alm-text-2xs);
+  color: var(--alm-text-muted);
+}
+.alm-filterbar__multi[open] > .alm-filterbar__multi-summary {
+  border-color: var(--alm-accent);
+}
+.alm-filterbar__multi-menu {
+  position: absolute;
+  z-index: var(--alm-z-popover, 50);
+  top: calc(100% + var(--alm-sp-1));
+  left: 0;
+  min-width: 11rem;
+  display: flex;
+  flex-direction: column;
+  gap: var(--alm-sp-1);
+  padding: var(--alm-sp-2);
+  background: var(--alm-surface-raised);
+  border: 1px solid var(--alm-border);
+  border-radius: var(--alm-radius-sm);
+  box-shadow: var(--alm-shadow-sm);
+}
+.alm-filterbar__multi-option {
+  display: flex;
+  align-items: center;
+  gap: var(--alm-sp-2);
+  font-size: var(--alm-text-sm);
+  color: var(--alm-text);
+  cursor: pointer;
+  white-space: nowrap;
+}
+.alm-filterbar__multi-check {
+  accent-color: var(--alm-accent);
+  cursor: pointer;
+}
+
 /* --- ListPageLayout body: full-width primary content + detail pane -------- */
 .alm-listpage__body {
   display: flex;
@@ -7277,18 +7336,10 @@
  * (parent removes them on merge).
  * ======================================================================== */
 
-/* --- Density control in the top-bar actions slot -------------------------- */
-.alm-targets-density {
-  display: inline-flex;
-  align-items: center;
-  gap: var(--alm-sp-1);
-}
-.alm-targets-density__label {
-  font-size: var(--alm-text-xs);
-  color: var(--alm-text-muted);
-}
-
 /* --- Dense sortable table ------------------------------------------------- */
+/* Row density follows the GLOBAL density setting (task #82): row vertical
+ * rhythm is keyed off `--alm-row-height` (set by the `.density-*` class on
+ * <html> in tokens.css), so there is no per-page density toggle. */
 .alm-targets-table {
   /* Inherits .alm-table base; tighten cell padding for density. */
   table-layout: auto;
@@ -7298,6 +7349,7 @@
 .alm-targets-table th {
   padding: var(--alm-sp-1) var(--alm-sp-3);
 }
+.alm-targets-table tbody td { height: var(--alm-row-height); }
 
 /* Sortable column header (button-in-th). */
 .alm-targets-sorth {
@@ -7327,15 +7379,22 @@
 .alm-targets-table__row--selected td {
   background: var(--alm-accent-bg);
 }
-/* Rich density — taller rows + room for the secondary designation line. */
-.alm-targets-table__row--rich td {
-  padding-top: var(--alm-sp-2);
-  padding-bottom: var(--alm-sp-2);
+/* Spanning group-header rows (task #82) — mirror .alm-sessions-table__group:
+ * a quiet banded row that labels each catalogue/type group with a count. */
+.alm-targets-table__group td {
+  background: var(--alm-surface);
+  font-weight: var(--alm-weight-medium);
+  color: var(--alm-text);
+  font-size: var(--alm-text-xs);
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
 }
-.alm-targets-table__row--rich .alm-targets-cell__desig {
-  flex-direction: column;
-  align-items: flex-start;
-  gap: 0;
+.alm-targets-table__group-count {
+  margin-left: var(--alm-sp-2);
+  font-weight: var(--alm-weight-regular);
+  text-transform: none;
+  letter-spacing: normal;
+  color: var(--alm-text-muted);
 }
 
 /* Designation cell — primary label + optional secondary designation. */
@@ -7525,4 +7584,13 @@
 .alm-listpage__detail-body .alm-plan-panel__summary-dest,
 .alm-listpage__detail-body .alm-plan-panel__dest {
   word-break: break-all;
+}
+
+/* === merged from .cssblocks/statusbar-summary.css (spec-043, task #80) === */
+.alm-statusbar__page {
+  color: var(--alm-text-secondary);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  min-width: 0;
 }

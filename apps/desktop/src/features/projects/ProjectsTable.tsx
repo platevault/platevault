@@ -176,12 +176,7 @@ export function ProjectsTable({
     return <div className="alm-projects-table__empty">No projects found.</div>;
   }
 
-  return (
-    <div>
-      <Table className="alm-projects-table" columns={columns} rows={rows} />
-      <div className="alm-projects-table__footer">
-        {loading ? 'Loading…' : `${projects.length} ${projects.length === 1 ? 'project' : 'projects'}`}
-      </div>
-    </div>
-  );
+  // The project count moved to the bottom status bar (top-bar convention,
+  // task #80) — no in-table footer count line.
+  return <Table className="alm-projects-table" columns={columns} rows={rows} />;
 }

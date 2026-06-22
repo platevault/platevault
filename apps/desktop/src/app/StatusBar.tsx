@@ -2,6 +2,7 @@ import { clsx } from 'clsx';
 import { useLogPanel } from './LogPanelContext';
 import { useOperationStatus } from './OperationStatusContext';
 import { useStatusSummary } from './useStatusSummary';
+import { usePageSummaryValue } from './usePageSummary';
 
 function formatBytes(bytes: number): string {
   if (bytes < 1024) return `${bytes} B`;
@@ -19,6 +20,7 @@ export function StatusBar() {
   const { toggle } = useLogPanel();
   const { statusLabel } = useOperationStatus();
   const status = useStatusSummary();
+  const pageSummary = usePageSummaryValue();
   const isActive = statusLabel !== 'Idle';
 
   return (
@@ -34,6 +36,14 @@ export function StatusBar() {
           <span className="alm-statusbar__idle">Ready</span>
         )}
       </div>
+
+      {/* LEFT (secondary) — per-page count/metadata published by the active
+          page (task #80). Empty when no page has set one. */}
+      {pageSummary != null && (
+        <div className="alm-statusbar__page" data-testid="statusbar-page-summary">
+          {pageSummary}
+        </div>
+      )}
 
       {/* RIGHT — persistent storage / cleanup health + log */}
       <div className="alm-statusbar__right">

@@ -195,10 +195,6 @@ export function SessionsTable({
     () => groupSessions(sources, sort, groupBy),
     [sources, sort, groupBy],
   );
-  const total = useMemo(
-    () => sources.reduce((acc, src) => acc + src.sessions.length, 0),
-    [sources],
-  );
 
   // Build sortable header labels as button elements (column header passthrough).
   const columns: TableColumn[] = COLUMNS.map((c) => ({
@@ -301,12 +297,7 @@ export function SessionsTable({
     );
   }
 
-  return (
-    <div>
-      <Table className="alm-sessions-table" columns={columns} rows={rows} />
-      <div className="alm-sessions-table__footer">
-        {loading ? 'Loading…' : `${total} ${total === 1 ? 'session' : 'sessions'}`}
-      </div>
-    </div>
-  );
+  // The total count moved to the bottom status bar (top-bar convention,
+  // task #80) — no in-table footer count line.
+  return <Table className="alm-sessions-table" columns={columns} rows={rows} />;
 }

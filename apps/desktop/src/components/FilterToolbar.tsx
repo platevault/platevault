@@ -34,6 +34,24 @@ export interface FilterField {
   allLabel?: string;
 }
 
+/**
+ * A multi-select filter field (task #82): a labeled control whose value is a
+ * SET of selected option values, rendered as a compact popover of checkboxes.
+ * Distinct from `FilterField` (single-select). Selecting zero options means
+ * "none" — the host decides what an empty selection shows.
+ */
+export interface MultiFilterField {
+  /** Stable key (used for React key + ids). */
+  key: string;
+  /** Visible label rendered before the control. */
+  label: string;
+  /** Currently selected option values. */
+  value: string[];
+  /** Selectable options. */
+  options: FilterOption[];
+  onChange: (value: string[]) => void;
+}
+
 export interface GroupByControl {
   value: string;
   options: FilterOption[];
@@ -63,6 +81,8 @@ export interface SearchControl {
 export interface FilterToolbarProps {
   search?: SearchControl;
   fields?: FilterField[];
+  /** Multi-select fields (set-valued), rendered after the single-select fields. */
+  multiFields?: MultiFilterField[];
   groupBy?: GroupByControl;
   sort?: SortControl;
   /** Trailing node rendered at the row's end (e.g. a secondary control). */
@@ -105,7 +125,74 @@ function LabeledSelect({
   );
 }
 
-export function FilterToolbar({ search, fields, groupBy, sort, actions }: FilterToolbarProps) {
+/**
+ * Multi-select filter control: a `<details>` popover whose summary shows the
+ * selection count and whose body is a list of option checkboxes. Native
+ * `<details>` keeps it dependency-free, keyboard-accessible, and click-to-toggle
+ * without any open-state wiring in the host. Token-only `.alm-filterbar__multi*`
+ * styling; no inline styles.
+ */
+function MultiSelect({
+  id,
+  label,
+  value,
+  options,
+  onChange,
+}: {
+  id: string;
+  label: string;
+  value: string[];
+  options: FilterOption[];
+  onChange: (value: string[]) => void;
+}) {
+  const selected = new Set(value);
+  const toggle = (v: string): void => {
+    const next = new Set(selected);
+    if (next.has(v)) next.delete(v);
+    else next.add(v);
+    // Preserve option order in the emitted array for stable downstream behavior.
+    onChange(options.map((o) => o.value).filter((ov) => next.has(ov)));
+  };
+  const summary =
+    selected.size === 0
+      ? 'None'
+      : selected.size === options.length
+        ? 'All'
+        : `${selected.size} selected`;
+
+  return (
+    <label className="alm-filterbar__field">
+      <span className="alm-filterbar__field-label">{label}</span>
+      <details className="alm-filterbar__multi" id={id}>
+        <summary className="alm-filterbar__multi-summary" aria-label={`${label}: ${summary}`}>
+          {summary}
+        </summary>
+        <div className="alm-filterbar__multi-menu" role="group" aria-label={label}>
+          {options.map((o) => (
+            <label key={o.value} className="alm-filterbar__multi-option">
+              <input
+                type="checkbox"
+                className="alm-filterbar__multi-check"
+                checked={selected.has(o.value)}
+                onChange={() => toggle(o.value)}
+              />
+              <span>{o.label}</span>
+            </label>
+          ))}
+        </div>
+      </details>
+    </label>
+  );
+}
+
+export function FilterToolbar({
+  search,
+  fields,
+  multiFields,
+  groupBy,
+  sort,
+  actions,
+}: FilterToolbarProps) {
   return (
     <div className="alm-filterbar">
       {search && (
@@ -128,6 +215,17 @@ export function FilterToolbar({ search, fields, groupBy, sort, actions }: Filter
           options={f.options}
           onChange={f.onChange}
           leadingOption={f.allLabel ?? 'All'}
+        />
+      ))}
+
+      {multiFields?.map((f) => (
+        <MultiSelect
+          key={f.key}
+          id={`filterbar-${f.key}`}
+          label={f.label}
+          value={f.value}
+          options={f.options}
+          onChange={f.onChange}
         />
       ))}
 

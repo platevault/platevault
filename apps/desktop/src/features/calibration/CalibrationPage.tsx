@@ -19,7 +19,8 @@
  */
 
 import { useNavigate, useSearch } from '@tanstack/react-router';
-import { useCallback, useState } from 'react';
+import { useCallback, useMemo, useState } from 'react';
+import { usePageSummary } from '@/app/usePageSummary';
 import { PageTopBar, FilterToolbar, ListPageLayout } from '@/components';
 import type { FilterOption } from '@/components';
 import { useStaleSelectionCleanup } from '@/lib/use-stale-selection';
@@ -51,6 +52,28 @@ export function CalibrationPage() {
   const [groupBy, setGroupBy] = useState<MasterGroupBy>(DEFAULT_MASTER_GROUP_BY);
 
   const master = masters.find((m) => m.id === selected) ?? null;
+
+  // Per-page count/metadata for the BOTTOM status bar (top-bar convention,
+  // task #80): "N masters · N dark · N flat · N bias". Counts span all masters
+  // (unfiltered by search), matching the table's kind grouping.
+  const kindCounts = useMemo(() => {
+    let dark = 0;
+    let flat = 0;
+    let bias = 0;
+    for (const m of masters) {
+      const k = m.kind.toLowerCase();
+      if (k === 'dark') dark += 1;
+      else if (k === 'flat') flat += 1;
+      else if (k === 'bias') bias += 1;
+    }
+    return { dark, flat, bias };
+  }, [masters]);
+
+  usePageSummary(
+    loading
+      ? null
+      : `${masters.length} ${masters.length === 1 ? 'master' : 'masters'} · ${kindCounts.dark} dark · ${kindCounts.flat} flat · ${kindCounts.bias} bias`,
+  );
 
   const clearSelection = useCallback(
     () => navigate({ search: (prev) => ({ ...prev, selected: undefined }), replace: true }),

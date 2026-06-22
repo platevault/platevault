@@ -25,6 +25,7 @@
 
 import { useCallback, useMemo, useState } from 'react';
 import { useNavigate, useSearch } from '@tanstack/react-router';
+import { usePageSummary } from '@/app/usePageSummary';
 import { PageTopBar, FilterToolbar, ListPageLayout } from '@/components';
 import type { FilterOption } from '@/components';
 import { Btn } from '@/ui';
@@ -67,6 +68,12 @@ export function ProjectsPage() {
   const navigate = useNavigate({ from: '/projects' });
 
   const { data: projects = [], loading } = useProjects();
+
+  // Per-page count/metadata for the BOTTOM status bar (top-bar convention,
+  // task #80): "N projects" (the full, unfiltered project count).
+  usePageSummary(
+    loading ? null : `${projects.length} ${projects.length === 1 ? 'project' : 'projects'}`,
+  );
 
   const [search, setSearch] = useState('');
   const [sort, setSort] = useState<ProjectSort>(DEFAULT_PROJECT_SORT);

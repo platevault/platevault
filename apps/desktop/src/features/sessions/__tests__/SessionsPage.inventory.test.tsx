@@ -493,10 +493,15 @@ describe('SessionsTable — live inventory fixture data (T106)', () => {
     void session;
   });
 
-  it('24. loading state shows loading text in footer', () => {
-    // Non-empty sources so the table (and its footer) renders during load.
-    renderList({ sources: INVENTORY_LIST_RESPONSE.sources, loading: true });
-    expect(screen.getByText('Loading…')).toBeDefined();
+  it('24. no in-table footer count line (count moved to the bottom status bar, task #80)', () => {
+    // The total count moved to the bottom status bar; the table no longer
+    // renders a footer count line, even during load.
+    const { container } = renderList({
+      sources: INVENTORY_LIST_RESPONSE.sources,
+      loading: true,
+    });
+    expect(container.querySelector('.alm-sessions-table__footer')).toBeNull();
+    expect(screen.queryByText('Loading…')).toBeNull();
   });
 
   it('25. groupBy="camera" headlines groups by camera instead of target', () => {

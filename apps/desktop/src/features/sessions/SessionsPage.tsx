@@ -23,6 +23,7 @@
 
 import { useNavigate, useSearch } from '@tanstack/react-router';
 import { useCallback, useMemo, useState } from 'react';
+import { usePageSummary } from '@/app/usePageSummary';
 import { PageTopBar, FilterToolbar, ListPageLayout } from '@/components';
 import type { FilterOption } from '@/components';
 import { useStaleSelectionCleanup } from '@/lib/use-stale-selection';
@@ -112,6 +113,27 @@ export function SessionsPage() {
     [response?.sources],
   );
 
+  // Per-page count/metadata for the BOTTOM status bar (top-bar convention,
+  // task #80): "N sessions · N confirmed · N needs review". Counts span all
+  // sources (unfiltered), mirroring the previous top-bar summary.
+  const { confirmedCount, needsReviewCount } = useMemo(() => {
+    let confirmed = 0;
+    let needsReview = 0;
+    for (const src of response?.sources ?? []) {
+      for (const s of src.sessions) {
+        if (s.state === 'confirmed') confirmed += 1;
+        else if (['discovered', 'candidate', 'needs_review'].includes(s.state)) needsReview += 1;
+      }
+    }
+    return { confirmedCount: confirmed, needsReviewCount: needsReview };
+  }, [response?.sources]);
+
+  usePageSummary(
+    loading
+      ? null
+      : `${total} ${total === 1 ? 'session' : 'sessions'} · ${confirmedCount} confirmed · ${needsReviewCount} needs review`,
+  );
+
   // Flatten all sessions across sources to find the selected one.
   const allSessions = response?.sources.flatMap((src) => src.sessions) ?? [];
   const selectedSession = selected != null ? allSessions.find((s) => s.id === selected) : undefined;
@@ -131,14 +153,6 @@ export function SessionsPage() {
     setSort((prev) =>
       prev.col === col ? { col, dir: prev.dir === 'asc' ? 'desc' : 'asc' } : { col, dir: 'asc' },
     );
-  }, []);
-
-  const handleSortColChange = useCallback((value: string) => {
-    setSort((prev) => ({ col: value as SessionSortCol, dir: prev.dir }));
-  }, []);
-
-  const handleSortDirToggle = useCallback(() => {
-    setSort((prev) => ({ col: prev.col, dir: prev.dir === 'asc' ? 'desc' : 'asc' }));
   }, []);
 
   // Review action handlers — dispatch to store and surface feedback.
@@ -187,25 +201,12 @@ export function SessionsPage() {
   const rejectVisible =
     selectedSession != null && selectedSession.state !== 'rejected';
 
-  // Sort column vocab mirrors the table's sortable columns.
-  const sortOptions: FilterOption[] = [
-    { value: 'target', label: 'Target' },
-    { value: 'filter', label: 'Filter' },
-    { value: 'frames', label: 'Frames' },
-    { value: 'exposure', label: 'Integration' },
-    { value: 'night', label: 'Night' },
-    { value: 'camera', label: 'Camera' },
-    { value: 'state', label: 'State' },
-  ];
-
+  // Top-bar convention (task #80): NO title + NO summary (the left nav names
+  // the page; the count/metadata lives in the bottom status bar) and NO sort
+  // control (sorting is driven by the clickable SessionsTable column headers).
+  // The bar carries only search + the Review filter + the Group-by control.
   const topBar = (
     <PageTopBar
-      title={<h1 className="alm-topbar__heading">Sessions</h1>}
-      summary={
-        <span>
-          {loading ? 'Loading…' : `${total} ${total === 1 ? 'session' : 'sessions'}`}
-        </span>
-      }
       filters={
         <FilterToolbar
           search={{
@@ -231,13 +232,6 @@ export function SessionsPage() {
             value: groupBy,
             options: GROUP_BY_OPTIONS,
             onChange: (v) => setGroupBy(v as SessionGroupBy),
-          }}
-          sort={{
-            value: sort.col,
-            options: sortOptions,
-            onChange: handleSortColChange,
-            dir: sort.dir,
-            onDirToggle: handleSortDirToggle,
           }}
         />
       }
