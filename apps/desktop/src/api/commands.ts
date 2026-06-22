@@ -377,7 +377,7 @@ export async function applyPlan(args: {
    * projection only.
    */
   onEvent?: (event: OperationEvent) => void;
-}): Promise<OperationHandle> {
+}): Promise<PlanApplyResponse> {
   // Bridge the optional callback onto a Tauri channel. When no subscriber is
   // supplied we still pass a (no-op) channel because the generated command
   // signature requires the parameter.
@@ -390,10 +390,13 @@ export async function applyPlan(args: {
   // We thread the token through the signature (T115); when absent we default to
   // '' which the backend will reject — the real plan-apply flow must supply the
   // token from plansApprove.approvalToken.
-  const response = unwrap(
+  // `plansApplyReal` resolves with the real `PlanApplyResponse` ({ planId,
+  // runId, newState }) once the run is registered; per-item progress arrives
+  // live over the channel above. No cast — the generated return type is the
+  // source of truth (spec 042 T270).
+  return unwrap(
     await commands.plansApplyReal(args.id, args.approvalToken ?? '', channel),
   );
-  return response as unknown as OperationHandle;
 }
 
 export async function discardPlan(args: { id: string }): Promise<void> {

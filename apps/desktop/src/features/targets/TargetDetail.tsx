@@ -35,11 +35,11 @@ export function TargetDetailPaneInline({ target }: TargetDetailPaneInlineProps) 
   const detail = target.name === 'NGC 7000' ? targetDetail : null;
 
   const coverageWarning = detail
-    ? Object.entries(detail.recommended_hours).some(([f, rec]) => (detail.coverage[f] ?? 0) < rec)
+    ? Object.entries(detail.recommendedHours).some(([f, rec]) => (detail.coverage[f] ?? 0) < (rec ?? 0))
     : false;
 
   const coverageFilters = detail
-    ? Array.from(new Set([...Object.keys(detail.coverage), ...Object.keys(detail.recommended_hours)]))
+    ? Array.from(new Set([...Object.keys(detail.coverage), ...Object.keys(detail.recommendedHours)]))
     : [];
 
   const identityProps: PropertyDef[] = [
@@ -52,7 +52,7 @@ export function TargetDetailPaneInline({ target }: TargetDetailPaneInlineProps) 
             key: 'catalog',
             label: 'Catalog IDs',
             value:
-              Object.entries(detail.catalog_ids)
+              Object.entries(detail.catalogIds)
                 .filter(([, v]) => v)
                 .map(([cat, val]) => `${cat.toUpperCase()} ${val}`)
                 .join(' · ') || '—',
@@ -103,7 +103,7 @@ export function TargetDetailPaneInline({ target }: TargetDetailPaneInlineProps) 
                       key={f}
                       label={f}
                       value={detail.coverage[f] ?? 0}
-                      max={Math.max(detail.recommended_hours[f] ?? 0, detail.coverage[f] ?? 0, 1)}
+                      max={Math.max(detail.recommendedHours[f] ?? 0, detail.coverage[f] ?? 0, 1)}
                     />
                   ))}
                   {coverageWarning && (
