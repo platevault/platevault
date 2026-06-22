@@ -379,12 +379,15 @@ describe('InboxDetail — task #34: mixed-folder alert with inline action', () =
   });
 });
 
-// ── detail rework: breakdown-left / files-right two-column layout ────────────
+// ── detail rework: 3-zone layout (facts | content | aux) ─────────────────────
 //
-// Updated from task D class names to the reworked alm-inbox-detail2__ classes.
+// Updated to the redesign-ui-platevault 3-zone skeleton:
+//   facts = breakdown column (.alm-inbox-detail__facts-col)
+//   content = file metadata table (.alm-inbox-detail__meta-col, aria-label="File metadata")
+//   aux = FileInspector in DetailPanel aux rail (.alm-detailpanel__aux)
 
-describe('InboxDetail — rework: breakdown-left / files-right layout', () => {
-  it('uses the split body and places breakdown LEFT and file metadata RIGHT when metadata exists', () => {
+describe('InboxDetail — 3-zone: breakdown-facts / file-content / inspector-aux', () => {
+  it('uses the 3-zone cols wrapper and places breakdown in facts, metadata in content', () => {
     const { container } = render(
       <InboxDetail
         item={sampleItem as unknown as Parameters<typeof InboxDetail>[0]['item']}
@@ -393,24 +396,24 @@ describe('InboxDetail — rework: breakdown-left / files-right layout', () => {
         fileMetadata={fileMetadataFixture}
       />
     );
-    // Two-column wrapper rendered by DetailPanel when facts prop is provided.
+    // Cols wrapper rendered by DetailPanel (facts + aux both provided → 3-zone).
     const cols = container.querySelector('.alm-detailpanel__cols');
     expect(cols).not.toBeNull();
 
-    // LEFT column contains the breakdown section
-    const left = container.querySelector('.alm-inbox-detail2__left');
-    expect(left).not.toBeNull();
-    expect(left?.textContent).toContain('Frame type breakdown');
+    // Facts column (left): contains breakdown.
+    const factsAside = container.querySelector('.alm-detailpanel__facts');
+    expect(factsAside).not.toBeNull();
+    expect(factsAside?.textContent).toContain('Frame type breakdown');
 
-    // RIGHT column is the files column with the metadata table
-    const right = container.querySelector('.alm-inbox-detail2__right');
-    expect(right).not.toBeNull();
-    expect(right).toHaveAttribute('aria-label', 'File metadata column');
-    expect(right?.textContent).toContain('File metadata (2)');
-    expect(right?.textContent).toContain('File');
+    // Content column (center): file metadata table.
+    const metaCol = container.querySelector('.alm-inbox-detail__meta-col');
+    expect(metaCol).not.toBeNull();
+    expect(metaCol).toHaveAttribute('aria-label', 'File metadata');
+    expect(metaCol?.textContent).toContain('File metadata (2)');
+    expect(metaCol?.textContent).toContain('File');
   });
 
-  it('does not use the split layout when fileMetadata is absent', () => {
+  it('does not render the content or aux columns when fileMetadata is absent', () => {
     const { container } = render(
       <InboxDetail
         item={sampleItem as unknown as Parameters<typeof InboxDetail>[0]['item']}
@@ -418,25 +421,14 @@ describe('InboxDetail — rework: breakdown-left / files-right layout', () => {
         classification={singleTypeClassification as unknown as Parameters<typeof InboxDetail>[0]['classification']}
       />
     );
-    // facts column always present (breakdown); right/content column absent when no metadata.
-    expect(container.querySelector('.alm-detailpanel__cols')).not.toBeNull();
-    expect(container.querySelector('.alm-inbox-detail2__right')).toBeNull();
+    // facts col present (breakdown always shown); content + aux absent when no metadata.
+    const cols = container.querySelector('.alm-detailpanel__cols');
+    expect(cols).not.toBeNull();
+    expect(container.querySelector('.alm-inbox-detail__meta-col')).toBeNull();
+    expect(container.querySelector('.alm-detailpanel__aux')).toBeNull();
   });
 
-  it('renders the file inspector when metadata exists', () => {
-    const { container } = render(
-      <InboxDetail
-        item={sampleItem as unknown as Parameters<typeof InboxDetail>[0]['item']}
-        rootAbsolutePath="/astro/inbox"
-        classification={singleTypeClassification as unknown as Parameters<typeof InboxDetail>[0]['classification']}
-        fileMetadata={fileMetadataFixture}
-      />
-    );
-    // Inspector renders with its placeholder state (no row selected yet)
-    expect(container.querySelector('[data-testid="file-inspector"]')).not.toBeNull();
-  });
-
-  it('files column contains an independent scroll container', () => {
+  it('renders the file inspector in the aux rail when metadata exists', () => {
     const { container } = render(
       <InboxDetail
         item={sampleItem as unknown as Parameters<typeof InboxDetail>[0]['item']}
@@ -445,9 +437,30 @@ describe('InboxDetail — rework: breakdown-left / files-right layout', () => {
         fileMetadata={fileMetadataFixture}
       />
     );
-    const scroll = container.querySelector('.alm-inbox-detail2__table-scroll');
-    expect(scroll).not.toBeNull();
-    // Table is inside the scroll container
-    expect(scroll?.querySelector('table')).not.toBeNull();
+    // Inspector is in the aux aside (empty state: no row clicked yet).
+    const auxAside = container.querySelector('.alm-detailpanel__aux');
+    expect(auxAside).not.toBeNull();
+    expect(auxAside?.querySelector('[data-testid="file-inspector"]')).not.toBeNull();
+  });
+
+  it('file metadata table is inside the content column', () => {
+    const { container } = render(
+      <InboxDetail
+        item={sampleItem as unknown as Parameters<typeof InboxDetail>[0]['item']}
+        rootAbsolutePath="/astro/inbox"
+        classification={singleTypeClassification as unknown as Parameters<typeof InboxDetail>[0]['classification']}
+        fileMetadata={fileMetadataFixture}
+      />
+    );
+    // Table is inside the content column, NOT in the facts or aux aside.
+    const contentDiv = container.querySelector('.alm-detailpanel__content');
+    expect(contentDiv).not.toBeNull();
+    expect(contentDiv?.querySelector('table')).not.toBeNull();
+
+    const factsAside = container.querySelector('.alm-detailpanel__facts');
+    const auxAside = container.querySelector('.alm-detailpanel__aux');
+    expect(factsAside?.querySelector('table')).toBeDefined();
+    // aux should contain the inspector, NOT a metadata table
+    expect(auxAside?.querySelector('.alm-inbox-detail__meta-col')).toBeNull();
   });
 });

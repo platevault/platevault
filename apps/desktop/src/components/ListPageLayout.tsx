@@ -108,59 +108,71 @@ export function ListPageLayout({
   const hasBottom = bottomDetail != null;
 
   // ── Dual side-and-bottom layout (task #104) ──────────────────────────────
+  //
+  // Structure: the bottom strip sits ONLY under the main content column, NOT
+  // under the side panel. A wrapper column (.alm-listpage__main-col) groups
+  // main + bottom so the side panel is flush to full height on the right.
+  //
+  //   .alm-listpage__body--dual (row)
+  //     .alm-listpage__main-col (column, flex:1)
+  //       .alm-listpage__main   (flex:1, scrolls)
+  //       .alm-listpage__bottom (fit-content, max-height cap)
+  //     .alm-listpage__side     (fixed 420px, own scroll)
+  //
   if (detailPlacement === 'side-and-bottom') {
     return (
       <div className="alm-page">
         {topBar ?? (topBarProps && <PageTopBar {...topBarProps} />)}
 
         <div className="alm-listpage__body alm-listpage__body--dual">
-          {/* Row: main + side panel */}
-          <div className="alm-listpage__dual-row">
+          {/* Left column: main table + bottom strip stacked */}
+          <div className="alm-listpage__main-col">
             <div className="alm-listpage__main">{children}</div>
 
-            {hasDetail && (
+            {/* Bottom strip constrained to the content column */}
+            {hasBottom && (
               <section
-                className="alm-listpage__side"
+                className="alm-listpage__bottom"
                 role="complementary"
-                aria-label={detailLabel}
+                aria-label={bottomDetailLabel}
               >
-                {onCloseDetail && (
+                {onCloseBottomDetail && (
                   <div className="alm-listpage__panel-bar">
                     <button
                       type="button"
                       className="alm-listpage__panel-close"
-                      onClick={onCloseDetail}
-                      aria-label="Close details"
+                      onClick={onCloseBottomDetail}
+                      aria-label="Close session details"
                     >
                       ✕
                     </button>
                   </div>
                 )}
-                <div className="alm-listpage__panel-body">{detail}</div>
+                <div className="alm-listpage__panel-body">{bottomDetail}</div>
               </section>
             )}
           </div>
 
-          {/* Bottom strip */}
-          {hasBottom && (
+          {/* Right: side detail panel, full height of the body */}
+          {hasDetail && (
             <section
-              className="alm-listpage__bottom"
+              className="alm-listpage__side"
               role="complementary"
-              aria-label={bottomDetailLabel}
+              aria-label={detailLabel}
             >
-              {onCloseBottomDetail && (
+              {onCloseDetail && (
                 <div className="alm-listpage__panel-bar">
                   <button
                     type="button"
                     className="alm-listpage__panel-close"
-                    onClick={onCloseBottomDetail}
-                    aria-label="Close session details"
+                    onClick={onCloseDetail}
+                    aria-label="Close details"
                   >
                     ✕
                   </button>
                 </div>
               )}
-              <div className="alm-listpage__panel-body">{bottomDetail}</div>
+              <div className="alm-listpage__panel-body">{detail}</div>
             </section>
           )}
         </div>

@@ -19,6 +19,10 @@
  * 13. variant="inbox" renders without error.
  * 14. FactsKV: renders label and value.
  * 15. FactsKV: renders optional provenance label.
+ * 16. aux prop: renders aux content in a distinct right column.
+ * 17. aux prop: aux column is structurally separate from facts and content.
+ * 18. aux prop only (no facts): renders two-column wrapper with content + aux.
+ * 19. 3-zone (facts + children + aux): all three are structurally separate.
  */
 
 import { render, screen } from '@testing-library/react';
@@ -145,7 +149,7 @@ describe('DetailPanel — tasks #100/#99/#101', () => {
     const contentEl = container.querySelector('[data-testid="content-node"]');
     expect(factsEl).not.toBeNull();
     expect(contentEl).not.toBeNull();
-    // The two-column wrapper must be present.
+    // The cols wrapper must be present.
     const cols = container.querySelector('.alm-detailpanel__cols');
     expect(cols).not.toBeNull();
     // Facts must be inside the facts aside; content must NOT be inside it.
@@ -155,7 +159,7 @@ describe('DetailPanel — tasks #100/#99/#101', () => {
     expect(factsAside?.contains(contentEl)).toBe(false);
   });
 
-  it('12. without facts prop, no two-column wrapper is rendered', () => {
+  it('12. without facts or aux prop, no cols wrapper is rendered', () => {
     const { container } = render(
       <DetailPanel title="NGC 7000">
         <span>just children</span>
@@ -173,6 +177,101 @@ describe('DetailPanel — tasks #100/#99/#101', () => {
         </DetailPanel>,
       ),
     ).not.toThrow();
+  });
+
+  it('16. aux prop: renders aux content', () => {
+    render(
+      <DetailPanel
+        title="NGC 7000"
+        aux={<span data-testid="aux-content">Aux here</span>}
+      >
+        <span data-testid="content-body">Content here</span>
+      </DetailPanel>,
+    );
+    expect(screen.getByTestId('aux-content')).toBeDefined();
+    expect(screen.getByTestId('content-body')).toBeDefined();
+  });
+
+  it('17. aux prop: aux column is structurally separate from content', () => {
+    const { container } = render(
+      <DetailPanel
+        title="NGC 7000"
+        aux={<span data-testid="aux-node">Aux</span>}
+      >
+        <span data-testid="content-node">Content</span>
+      </DetailPanel>,
+    );
+    const auxEl = container.querySelector('[data-testid="aux-node"]');
+    const contentEl = container.querySelector('[data-testid="content-node"]');
+    expect(auxEl).not.toBeNull();
+    expect(contentEl).not.toBeNull();
+    // The cols wrapper and aux aside must be present.
+    const cols = container.querySelector('.alm-detailpanel__cols');
+    expect(cols).not.toBeNull();
+    const auxAside = container.querySelector('.alm-detailpanel__aux');
+    expect(auxAside).not.toBeNull();
+    expect(auxAside?.contains(auxEl)).toBe(true);
+    // Content must NOT be inside the aux aside.
+    expect(auxAside?.contains(contentEl)).toBe(false);
+  });
+
+  it('18. aux only (no facts): renders cols wrapper with has-aux modifier', () => {
+    const { container } = render(
+      <DetailPanel
+        title="NGC 7000"
+        aux={<span data-testid="aux-node">Aux</span>}
+      >
+        <span data-testid="content-node">Content</span>
+      </DetailPanel>,
+    );
+    const cols = container.querySelector('.alm-detailpanel__cols');
+    expect(cols).not.toBeNull();
+    expect(cols?.classList.contains('alm-detailpanel--has-aux')).toBe(true);
+    expect(cols?.classList.contains('alm-detailpanel--has-facts')).toBe(false);
+  });
+
+  it('19. 3-zone: facts + children + aux are all in separate DOM regions', () => {
+    const { container } = render(
+      <DetailPanel
+        title="NGC 7000"
+        facts={<span data-testid="facts-node">Facts</span>}
+        aux={<span data-testid="aux-node">Aux</span>}
+      >
+        <span data-testid="content-node">Content</span>
+      </DetailPanel>,
+    );
+    const factsEl = container.querySelector('[data-testid="facts-node"]');
+    const contentEl = container.querySelector('[data-testid="content-node"]');
+    const auxEl = container.querySelector('[data-testid="aux-node"]');
+    expect(factsEl).not.toBeNull();
+    expect(contentEl).not.toBeNull();
+    expect(auxEl).not.toBeNull();
+
+    const factsAside = container.querySelector('.alm-detailpanel__facts');
+    const contentDiv = container.querySelector('.alm-detailpanel__content');
+    const auxAside = container.querySelector('.alm-detailpanel__aux');
+
+    expect(factsAside).not.toBeNull();
+    expect(contentDiv).not.toBeNull();
+    expect(auxAside).not.toBeNull();
+
+    // Each node is in exactly its own region.
+    expect(factsAside?.contains(factsEl)).toBe(true);
+    expect(factsAside?.contains(contentEl)).toBe(false);
+    expect(factsAside?.contains(auxEl)).toBe(false);
+
+    expect(contentDiv?.contains(contentEl)).toBe(true);
+    expect(contentDiv?.contains(factsEl)).toBe(false);
+    expect(contentDiv?.contains(auxEl)).toBe(false);
+
+    expect(auxAside?.contains(auxEl)).toBe(true);
+    expect(auxAside?.contains(factsEl)).toBe(false);
+    expect(auxAside?.contains(contentEl)).toBe(false);
+
+    // Both modifiers present.
+    const cols = container.querySelector('.alm-detailpanel__cols');
+    expect(cols?.classList.contains('alm-detailpanel--has-facts')).toBe(true);
+    expect(cols?.classList.contains('alm-detailpanel--has-aux')).toBe(true);
   });
 });
 

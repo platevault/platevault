@@ -2,22 +2,31 @@
  * DetailPanel — tasks #100/#99/#101, spec 043 §4.
  *
  * Shared detail-panel container used by all list-page details (Sessions,
- * Calibration, Inbox). Enforces the bottom-panel layout contract:
+ * Calibration, Inbox, Projects). Enforces the bottom-panel layout contract:
  *
  *   HEADER (pinned, never scrolls):
  *     left  — title (item identity) + optional titleExtra (pills) +
  *              optional subtitle (one prose context line)
  *     right — actions (per-item buttons)
- *   BODY (two-column when `facts` is provided):
- *     FACTS column (left, fixed var(--alm-rail-width) ≈ 280px):
- *       dense identity KV block; does NOT scroll.
- *       Omit to let CONTENT span full width.
- *     CONTENT column (right, flex:1):
- *       the page-specific rich content.
- *       This is THE ONLY scroll region: overflow-y:auto; scrollbar-gutter:stable.
+ *   BODY — up to 3 balanced zones when slots are provided:
+ *     FACTS (left rail, BOUNDED): col `minmax(220px, 0.26fr)`.
+ *       Dense identity KV. Does NOT scroll on its own.
+ *       Omit to collapse to 2-zone or content-only.
+ *     CONTENT (center, always present): `minmax(0, 1fr)`.
+ *       The page's PRIMARY table/list. This is THE ONLY scroll region.
+ *     AUX (right rail, BOUNDED, only when `aux` provided): col `minmax(240px, 0.30fr)`.
+ *       Secondary blocks (review state, linked projects, usage stats).
  *
- * The panel as a whole has a fixed max-height (set on the ListPageLayout
- * dock) and never scrolls itself — only CONTENT scrolls.
+ * Grid template per slot combination:
+ *   facts + children + aux  → 3-zone: [0.26fr]  [1fr]  [0.30fr]
+ *   facts + children        → 2-zone: [0.26fr]  [1fr]
+ *   children + aux          → 2-zone: [1fr]  [0.30fr]
+ *   children only           → 1-zone: [1fr]   (no wrapper)
+ *
+ * Auto-expand behavior: the dock (.alm-listpage__detail) is height:fit-content
+ * capped at clamp(220px, 40vh, 52vh). The dock DOES NOT scroll — only the
+ * CONTENT column scrolls (overflow-y:auto, scrollbar-gutter:stable). Remove
+ * any overflow on the outer detail-body to avoid double scrollbars.
  *
  * The close ✕ lives in ListPageLayout (onCloseDetail), NOT here.
  * Per-item contextual actions (Review / Assign / …) go in the `actions` slot.
@@ -27,7 +36,7 @@
  *   the `title` or `subtitle`. The title is the item IDENTITY; the subtitle is
  *   a concise acquisition/context summary that adds meaning beyond the row.
  *
- * CSS: see apps/desktop/.cssblocks/detail-panel.css (merged into components.css).
+ * CSS: components.css — search for "=== Canonical DetailPanel 3-zone".
  */
 
 import type { ReactNode } from 'react';
@@ -80,14 +89,22 @@ export interface DetailPanelProps {
   /** Per-item contextual action buttons (act on THIS item, not the page). */
   actions?: ReactNode;
   /**
-   * Left-column facts content. When provided the body renders two columns:
-   *   facts (fixed var(--alm-rail-width), no scroll) | children (flex:1, scrolls).
-   * When omitted, children span the full body width.
+   * Left rail — identity KV. When provided the body renders with a bounded
+   * left column (minmax(220px, 0.26fr)). When omitted, content spans from left.
    * Typically a <dl> of <FactsKV> rows, or a RailCard wrapping them.
    */
   facts?: ReactNode;
-  /** Detail body (right column, or full width when `facts` is omitted). */
+  /**
+   * Center column — the page's PRIMARY table/list. Always present when any
+   * slot is provided. This is THE ONLY scroll region inside the panel body.
+   */
   children?: ReactNode;
+  /**
+   * Right rail — secondary blocks (review state, linked projects, usage stats,
+   * FileInspector). When provided the body gains a bounded right column
+   * (minmax(240px, 0.30fr)). When omitted, content spans to the right edge.
+   */
+  aux?: ReactNode;
   /**
    * Modifier applied to the outer element. Used to scope density overrides
    * per feature (e.g. 'sessions', 'calibration', 'inbox').
@@ -109,10 +126,26 @@ export function DetailPanel({
   actions,
   facts,
   children,
+  aux,
   variant,
   fill,
 }: DetailPanelProps) {
-  const variantClass = variant ? ` alm-detailpanel--${variant}` : '';
+  const hasFacts = facts != null;
+  const hasAux = aux != null;
+  // Only render the grid wrapper when at least one rail slot is provided.
+  // content-only → no wrapper (children render directly, as before).
+  const hasSlots = hasFacts || hasAux;
+
+  // Build modifier classes for CSS grid-template selection.
+  const modifiers = [
+    variant ? `alm-detailpanel--${variant}` : '',
+    hasFacts ? 'alm-detailpanel--has-facts' : '',
+    hasAux ? 'alm-detailpanel--has-aux' : '',
+  ].filter(Boolean).join(' ');
+
+  const colsClass = modifiers
+    ? `alm-detailpanel__cols ${modifiers}`
+    : 'alm-detailpanel__cols';
 
   return (
     <DetailPane fill={fill}>
@@ -122,10 +155,15 @@ export function DetailPanel({
         subtitle={subtitle}
         actions={actions}
       />
-      {facts != null ? (
-        <div className={`alm-detailpanel__cols${variantClass}`}>
-          <aside className="alm-detailpanel__facts">{facts}</aside>
+      {hasSlots ? (
+        <div className={colsClass}>
+          {hasFacts && (
+            <aside className="alm-detailpanel__facts">{facts}</aside>
+          )}
           <div className="alm-detailpanel__content">{children}</div>
+          {hasAux && (
+            <aside className="alm-detailpanel__aux">{aux}</aside>
+          )}
         </div>
       ) : (
         children

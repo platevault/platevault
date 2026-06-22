@@ -111,14 +111,12 @@ export function MasterDetail({ master, prefillSuggestion, agingThresholdDays }: 
     : '';
   const masterTitle = masterDisc ? `Master ${kindCap} · ${masterDisc}` : `Master ${kindCap}`;
 
-  // Facts column: fingerprint + reuse KV (compact, left; does not scroll).
-  // Uses the existing alm-calib-kvgrid 2-col density inside RailCards.
+  // Facts column (left): fingerprint KV — compact, does not scroll.
   const facts = (
     <div className="alm-rail__panel">
       <RailCard title="Master fingerprint">
         {/* 2-column KV grid: keeps the fingerprint compact so the whole
-            detail fits the wide-short bottom panel without inner scroll.
-            See .cssblocks/calib-compact.css for the alm-calib-kvgrid rules. */}
+            detail fits the wide-short bottom panel without inner scroll. */}
         <div className="alm-calib-kvgrid">
           <KV label="Kind" value={kindStr} />
           <KV label="Camera" value={fp.camera} />
@@ -131,13 +129,29 @@ export function MasterDetail({ master, prefillSuggestion, agingThresholdDays }: 
           <KV label="Size" value={fmtBytes(master.sizeBytes)} />
         </div>
       </RailCard>
+    </div>
+  );
 
-      <RailCard title="Reuse">
+  // Aux column (right): reuse policy + usage stats.
+  const auxColumn = (
+    <div className="alm-rail__panel">
+      <RailCard title="Reuse policy">
         <div className="alm-calib-kvgrid">
           <KV label="Sessions matched" value={String((master.usedBySessionIds ?? []).length)} />
           <KV label="Projects linked" value={String((master.usedByProjectIds ?? []).length)} />
           <KV label="Created" value={master.createdAt.split('T')[0]} />
+          <KV label="Age" value={`${master.ageDays}d`} />
         </div>
+      </RailCard>
+      <RailCard title="Usage stats">
+        <MetricLine
+          metrics={[
+            { value: fmtBytes(master.sizeBytes), label: 'on disk' },
+            { value: `${master.ageDays}d`, label: 'age' },
+            { value: (master.usedBySessionIds ?? []).length, label: 'sessions' },
+            { value: (master.usedByProjectIds ?? []).length, label: 'projects' },
+          ]}
+        />
       </RailCard>
     </div>
   );
@@ -163,18 +177,9 @@ export function MasterDetail({ master, prefillSuggestion, agingThresholdDays }: 
         </Btn>
       ))}
       facts={facts}
+      aux={auxColumn}
     >
-      {/* MetricLine stays above the two-column split — full-width summary. */}
-      <MetricLine
-        metrics={[
-          { value: fmtBytes(master.sizeBytes), label: 'on disk' },
-          { value: `${master.ageDays}d`, label: 'age' },
-          { value: (master.usedBySessionIds ?? []).length, label: 'sessions' },
-          { value: (master.usedByProjectIds ?? []).length, label: 'projects' },
-        ]}
-      />
-
-      {/* Content column (right, scrolls): compatible-sessions match table is
+      {/* Content column (center, scrolls): compatible-sessions match table is
           the hero of the master detail. */}
       <MatchCandidatesPanel
         sessionId={sessionId ?? ''}

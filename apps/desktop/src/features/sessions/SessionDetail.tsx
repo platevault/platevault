@@ -244,6 +244,45 @@ export function SessionDetail({
     </div>
   );
 
+  // Aux column (right): review state + linked projects + calibration links.
+  const auxColumn = (
+    <div className="alm-rail__panel">
+      {/* FR-004: state as read-only structured data; actions live in header */}
+      <RailCard title="Review state">
+        <Pill variant={sessionStateVariant(session.state)}>
+          {session.state === 'discovered' || session.state === 'candidate'
+            ? 'Needs review'
+            : sessionStateLabel(session.state)}
+        </Pill>
+      </RailCard>
+
+      <RailCard title="Linked projects">
+        {isLinked ? (
+          <div className="alm-session-detail__linked-pills">
+            {session.linked?.projects?.map((p) => (
+              <Pill key={p.id} variant="info">
+                {p.name}
+              </Pill>
+            ))}
+          </div>
+        ) : (
+          <span className="alm-session-detail__no-linked">None</span>
+        )}
+      </RailCard>
+
+      {(session.linked?.calibration != null || session.linked?.session != null) && (
+        <RailCard title="Linked">
+          {session.linked?.session && (
+            <KV label="Session" value={session.linked.session} />
+          )}
+          {session.linked?.calibration && (
+            <KV label="Calibration" value={session.linked.calibration} />
+          )}
+        </RailCard>
+      )}
+    </div>
+  );
+
   return (
     <DetailPanel
       variant="sessions"
@@ -276,67 +315,26 @@ export function SessionDetail({
         </>
       }
       facts={facts}
+      aux={auxColumn}
     >
-      {/* Total integration only — compact single derived stat. Omitted when
-          exposure is missing so we don't surface a lone "—". */}
-      {integrationLabel != null && (
-        <MetricLine
-          metrics={[
-            { value: String(session.frames), label: 'frames' },
-            { value: session.exposure ?? '—', label: 'per frame' },
-            { value: integrationLabel, label: 'total integration' },
-          ]}
-        />
-      )}
+      {/* Content column (center, scrolls): frames table.
+          Total integration shown as a compact MetricLine above the table. */}
+      <div className="alm-session-detail__content alm-rail__panel">
+        {integrationLabel != null && (
+          <MetricLine
+            metrics={[
+              { value: String(session.frames), label: 'frames' },
+              { value: session.exposure ?? '—', label: 'per frame' },
+              { value: integrationLabel, label: 'total integration' },
+            ]}
+          />
+        )}
 
-      {/* Content column (right, scrolls): frames table + review state +
-          linked projects. Uses alm-session-detail__state rules for the
-          rail panel spacing. */}
-      <div className="alm-session-detail__state alm-session-detail__content">
-        <div className="alm-rail__panel">
-
-          {/* Per-frame table (task #37/#38). One summary row; click to expand
-              camera/gain/binning/temp — fields not in the SessionsTable columns.
-              See .cssblocks/sessions-detail2.css for table density overrides. */}
-          <RailCard title="Frames">
-            <SessionFramesTable session={session} />
-          </RailCard>
-
-          {/* FR-004: state as read-only structured data; actions live in header */}
-          <RailCard title="Review state">
-            <Pill variant={sessionStateVariant(session.state)}>
-              {session.state === 'discovered' || session.state === 'candidate'
-                ? 'Needs review'
-                : sessionStateLabel(session.state)}
-            </Pill>
-          </RailCard>
-
-          <RailCard title="Linked projects">
-            {isLinked ? (
-              <div className="alm-session-detail__linked-pills">
-                {session.linked?.projects?.map((p) => (
-                  <Pill key={p.id} variant="info">
-                    {p.name}
-                  </Pill>
-                ))}
-              </div>
-            ) : (
-              <span className="alm-session-detail__no-linked">None</span>
-            )}
-          </RailCard>
-
-          {(session.linked?.calibration != null || session.linked?.session != null) && (
-            <RailCard title="Linked">
-              {session.linked?.session && (
-                <KV label="Session" value={session.linked.session} />
-              )}
-              {session.linked?.calibration && (
-                <KV label="Calibration" value={session.linked.calibration} />
-              )}
-            </RailCard>
-          )}
-
-        </div>
+        {/* Per-frame table (task #37/#38). One summary row; click to expand
+            camera/gain/binning/temp — fields not in the SessionsTable columns. */}
+        <RailCard title="Frames">
+          <SessionFramesTable session={session} />
+        </RailCard>
       </div>
     </DetailPanel>
   );

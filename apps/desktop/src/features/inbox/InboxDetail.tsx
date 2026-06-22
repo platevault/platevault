@@ -124,15 +124,14 @@ export interface InboxDetailProps {
  * Compact inspector for per-file fields NOT already shown in the metadata table:
  *   instrume, telescop, naxis1×naxis2, stackCount, imageTyp.
  *
- * Updates when the user clicks a row in the file-metadata table. Shows a
- * placeholder when no row is selected.
+ * Renders in the aux (right rail) slot. When no file is selected it renders
+ * an empty-state without placeholder text (the visual shape conveys the purpose).
+ * Clicking any row in the file-metadata table populates this inspector.
  */
 function FileInspector({ file }: { file: InboxFileMetadata | null }) {
   if (!file) {
     return (
-      <div className="alm-inbox-inspector alm-inbox-inspector--empty" data-testid="file-inspector">
-        <span className="alm-inbox-inspector__hint">Click a file row to inspect</span>
-      </div>
+      <div className="alm-inbox-inspector alm-inbox-inspector--empty" data-testid="file-inspector" />
     );
   }
 
@@ -445,11 +444,10 @@ export function InboxDetail({
 
   const hasMetadata = metadataRows.length > 0;
 
-  // FACTS column (left, via DetailPanel `facts` prop): alerts + breakdown.
-  // Does NOT scroll — the DetailPanel contract pins it.
-  // MetricLine removed (noise). Breakdown always visible (no collapsible).
+  // FACTS column (left): frame-type breakdown — always visible, no collapse,
+  // no samples column. Also holds alerts and "Needs review" reclassify flow.
   const factsColumn = (
-    <div className="alm-inbox-detail2__left">
+    <div className="alm-inbox-detail__facts-col">
       {/* Mixed: advisory alert + inline split action */}
       {classType === 'mixed' && (
         <Banner
@@ -508,8 +506,8 @@ export function InboxDetail({
 
       {/* Breakdown always visible, no Section wrapper, no samples column */}
       {breakdownRows.length > 0 && (
-        <div className="alm-inbox-detail2__breakdown">
-          <div className="alm-inbox-detail2__breakdown-head">
+        <div className="alm-inbox-detail__breakdown-block">
+          <div className="alm-inbox-detail__breakdown-head">
             Frame type breakdown
             {/* task 33: active filter indicator + clear link */}
             {activeBreakdownFilter && onBreakdownFilterChange && (
@@ -688,25 +686,27 @@ export function InboxDetail({
     </div>
   );
 
-  // CONTENT column (right, via DetailPanel children): file-metadata table +
-  // inspector. Only this column scrolls — the DetailPanel contract pins the
-  // facts column and makes children the sole scroll region.
+  // CONTENT column (center, scrolls): file-metadata table.
+  // Row onClick → setInspectedIdx → FileInspector in the aux rail.
   const contentColumn = hasMetadata ? (
-    <div className="alm-inbox-detail2__right" aria-label="File metadata column">
-      <div className="alm-inbox-detail2__right-head">
+    <div className="alm-inbox-detail__meta-col" aria-label="File metadata">
+      <div className="alm-inbox-detail__meta-head">
         File metadata ({metadataRows.length})
       </div>
-      {/* Table scrolls internally; inspector is below + fixed */}
-      <div className="alm-inbox-detail2__table-scroll">
-        <Table
-          columns={metadataColumns}
-          rows={metadataRows}
-        />
-      </div>
-      <FileInspector
-        file={inspectedIdx != null ? (fileMetadata?.[inspectedIdx] ?? null) : null}
+      <Table
+        columns={metadataColumns}
+        rows={metadataRows}
       />
     </div>
+  ) : null;
+
+  // AUX column (right): per-file FileInspector.
+  // Always rendered when there is file metadata so the column appears even
+  // before a row is clicked (inspector shows empty state).
+  const auxColumn = hasMetadata ? (
+    <FileInspector
+      file={inspectedIdx != null ? (fileMetadata?.[inspectedIdx] ?? null) : null}
+    />
   ) : null;
 
   return (
@@ -724,6 +724,7 @@ export function InboxDetail({
         </>
       }
       facts={factsColumn}
+      aux={auxColumn}
     >
       {contentColumn}
     </DetailPanel>
