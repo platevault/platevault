@@ -648,6 +648,12 @@ export function InboxPage() {
 		</span>,
 	);
 
+	// Shown when ≥1 open plan exists OR a destination-root pick is pending (the
+	// latter can occur with zero open plans — the plan wasn't generated yet).
+	// Declared BEFORE topBar: the topBar JSX evaluates these eagerly at createElement.
+	const showPlans = openPlans.length > 0 || pendingRootPick != null;
+	const planCount = openPlans.length;
+
 	// ── Top bar: NO page title, NO summary (top-bar convention matches other pages).
 	// Search + group/sort/filter in FilterToolbar; Confirm + Rescan on the right. ──
 	const topBar = (
@@ -736,10 +742,6 @@ export function InboxPage() {
 	);
 
 	// Stage B: "show plans" gating for the trigger button (plan overlay).
-	// Shown when ≥1 open plan exists OR a destination-root pick is pending (the
-	// latter can occur with zero open plans — the plan wasn't generated yet).
-	const showPlans = openPlans.length > 0 || pendingRootPick != null;
-	const planCount = openPlans.length;
 
 	// ── 2-zone body (Stage B — side panel REMOVED) ──
 	//   row 1: detection LIST — full width (no side panel column)
