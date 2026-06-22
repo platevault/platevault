@@ -358,8 +358,15 @@ export function InboxList({
   );
 
   // Total leaf count across the whole tree (== filtered length, but derived from
-  // the tree so the footer matches what is actually rendered).
-  const visibleCount = useMemo(() => flattenLeafItems(tree).length, [tree]);
+  // the tree so the footer matches what is actually rendered). Also split into
+  // folders vs masters using the same isMaster flag that InboxStatsSummary uses.
+  const { visibleFolders, visibleMasters } = useMemo(() => {
+    const leaves = flattenLeafItems(tree);
+    return {
+      visibleFolders: leaves.filter((it) => !it.isMaster).length,
+      visibleMasters: leaves.filter((it) => it.isMaster).length,
+    };
+  }, [tree]);
 
   // O(1) original-index lookup by item id (stable across filter/sort/group).
   const originalIndexById = useMemo(() => {
@@ -539,8 +546,13 @@ export function InboxList({
       }
       footer={
         <span className="alm-list-sidebar__count">
-          {visibleCount} folder{visibleCount !== 1 ? 's' : ''}
-          {grouped ? ` · grouped by ${dims.map((d) => DIM_LABELS[d]).join(' › ')}` : ''}
+          {(() => {
+            const parts: string[] = [];
+            if (visibleFolders > 0) parts.push(`${visibleFolders} folder${visibleFolders !== 1 ? 's' : ''}`);
+            if (visibleMasters > 0) parts.push(`${visibleMasters} master${visibleMasters !== 1 ? 's' : ''}`);
+            const summary = parts.length > 0 ? parts.join(' · ') : '0 detections';
+            return grouped ? `${summary} · grouped by ${dims.map((d) => DIM_LABELS[d]).join(' › ')}` : summary;
+          })()}
         </span>
       }
     >

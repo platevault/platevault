@@ -284,6 +284,41 @@ describe('InboxList', () => {
     fireEvent.click(screen.getByTestId('inbox-item-item-video'));
     expect(onSelect).toHaveBeenCalledWith(1);
   });
+
+  it('footer shows "N folders · M masters" — masters are not counted as folders', () => {
+    const masterItem: InboxListItem = {
+      inboxItemId: 'item-master',
+      rootId: 'root-001',
+      rootAbsolutePath: '/astro/inbox',
+      relativePath: 'masters/dark_master.fits',
+      fileCount: 1,
+      lane: 'fits',
+      format: 'fits',
+      state: 'pending_classification',
+      contentSignature: 'sig-m',
+      isMaster: true,
+      masterFrameType: 'dark',
+      masterFilter: null,
+      masterExposureS: null,
+      organizationState: 'unorganized',
+    };
+
+    render(
+      <InboxList
+        items={[fitsItem, masterItem]}
+        selectedIdx={null}
+        onSelect={vi.fn()}
+        filterType="all"
+        onFilterTypeChange={vi.fn()}
+      />,
+    );
+
+    const footer = document.querySelector('.alm-list-sidebar__count');
+    // The master must NOT inflate the folder count
+    expect(footer?.textContent).toContain('1 folder');
+    expect(footer?.textContent).toContain('1 master');
+    expect(footer?.textContent).not.toMatch(/2 folders/);
+  });
 });
 
 // ── Tests: confirm call payload ───────────────────────────────────────────

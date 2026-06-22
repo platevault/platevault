@@ -11,10 +11,10 @@
  * 5. SessionsList frame-filter select calls onFrameFilter with typed value.
  * 6. SessionsList review-filter select calls onReviewFilter with typed value.
  * 7. SessionDetail renders empty-state when session is null.
- * 8. SessionDetail shows Confirm button for needs_review state.
- * 9. SessionDetail hides Confirm and shows Re-open for confirmed state.
- * 10. SessionDetail shows Reject button for needs_review state.
- * 11. SessionDetail hides Reject for rejected state.
+ * 8. SessionDetail shows state Pill "Needs review" for needs_review state (no action buttons).
+ * 9. SessionDetail shows state Pill "Confirmed" for confirmed state (no action buttons in rail).
+ * 10. SessionDetail shows state Pill for needs_review (Reject button absent from rail).
+ * 11. SessionDetail shows Re-open state for rejected (no Reject button in rail).
  * 12. SessionDetail renders Facts section with em-dash for missing values.
  * 13. SessionDetail renders Provenance section when provenance is present.
  * 14. SessionDetail omits Provenance section when provenance is absent.
@@ -95,7 +95,6 @@ import { SessionDetail } from '../SessionDetail';
 // ── Helpers ───────────────────────────────────────────────────────────────────
 
 const noop = () => undefined;
-const noopAsync = () => Promise.resolve();
 
 function renderList(props: Partial<React.ComponentProps<typeof SessionsList>> = {}) {
   return render(
@@ -111,6 +110,7 @@ function renderList(props: Partial<React.ComponentProps<typeof SessionsList>> = 
   );
 }
 
+// SessionDetail no longer accepts action callbacks — actions live in TopActionBar.
 function renderDetail(
   session: InventorySession | null,
   props: Partial<React.ComponentProps<typeof SessionDetail>> = {},
@@ -118,10 +118,6 @@ function renderDetail(
   return render(
     <SessionDetail
       session={session}
-      onConfirm={noopAsync}
-      onReopen={noopAsync}
-      onReject={noopAsync}
-      isPending={false}
       {...props}
     />,
   );
@@ -196,34 +192,51 @@ describe('SessionDetail — empty state', () => {
   });
 });
 
-describe('SessionDetail — action-bound CTAs (spec 006 FR-006)', () => {
-  it('8. shows Confirm button for needs_review', () => {
-    renderDetail(makeSession({ state: 'needs_review' }));
-    expect(screen.getByTestId('btn-confirm')).toBeDefined();
+// Actions (Confirm / Re-open / Reject) live in the TopActionBar on SessionsPage,
+// not in SessionDetail. The rail's "Review state" card shows a read-only Pill only
+// (consistent with MasterDetail and ProjectDetail rail patterns).
+describe('SessionDetail — review state rail (read-only Pill, spec 006 FR-004)', () => {
+  it('8. shows "Needs review" Pill for needs_review state; no action buttons in rail', () => {
+    const { queryAllByRole } = renderDetail(makeSession({ state: 'needs_review' }));
+    // Pill text visible
+    expect(screen.getAllByText('Needs review').length).toBeGreaterThan(0);
+    // Rail is read-only: no Confirm / Reject / Re-open buttons may appear in SessionDetail.
+    // (Actions live exclusively in the TopActionBar on SessionsPage — FR-006.)
+    expect(
+      queryAllByRole('button', { name: /confirm|reject|re.?open/i }),
+    ).toHaveLength(0);
   });
 
-  it('9. hides Confirm and shows Re-open for confirmed state', () => {
-    renderDetail(makeSession({ state: 'confirmed' }));
-    expect(screen.queryByTestId('btn-confirm')).toBeNull();
-    expect(screen.getByTestId('btn-reopen')).toBeDefined();
+  it('9. shows "Confirmed" Pill for confirmed state; no action buttons in rail', () => {
+    const { queryAllByRole } = renderDetail(makeSession({ state: 'confirmed' }));
+    expect(screen.getAllByText('Confirmed').length).toBeGreaterThan(0);
+    expect(
+      queryAllByRole('button', { name: /confirm|reject|re.?open/i }),
+    ).toHaveLength(0);
   });
 
-  it('10. shows Reject button for needs_review', () => {
-    renderDetail(makeSession({ state: 'needs_review' }));
-    expect(screen.getByTestId('btn-reject')).toBeDefined();
+  it('10. shows "Needs review" Pill for needs_review; Reject absent from rail', () => {
+    const { queryAllByRole } = renderDetail(makeSession({ state: 'needs_review' }));
+    expect(screen.getAllByText('Needs review').length).toBeGreaterThan(0);
+    expect(
+      queryAllByRole('button', { name: /reject/i }),
+    ).toHaveLength(0);
   });
 
-  it('11. hides Reject for rejected state', () => {
-    renderDetail(makeSession({ state: 'rejected' }));
-    expect(screen.queryByTestId('btn-reject')).toBeNull();
-    // Re-open is available for rejected.
-    expect(screen.getByTestId('btn-reopen')).toBeDefined();
+  it('11. shows "Rejected" Pill for rejected state; no action buttons in rail', () => {
+    const { queryAllByRole } = renderDetail(makeSession({ state: 'rejected' }));
+    expect(screen.getAllByText('Rejected').length).toBeGreaterThan(0);
+    expect(
+      queryAllByRole('button', { name: /confirm|reject|re.?open/i }),
+    ).toHaveLength(0);
   });
 
-  it('11b. discovered state shows Confirm and Reject', () => {
-    renderDetail(makeSession({ state: 'discovered' }));
-    expect(screen.getByTestId('btn-confirm')).toBeDefined();
-    expect(screen.getByTestId('btn-reject')).toBeDefined();
+  it('11b. discovered state shows "Needs review" Pill; no action buttons in rail', () => {
+    const { queryAllByRole } = renderDetail(makeSession({ state: 'discovered' }));
+    expect(screen.getAllByText('Needs review').length).toBeGreaterThan(0);
+    expect(
+      queryAllByRole('button', { name: /confirm|reject|re.?open/i }),
+    ).toHaveLength(0);
   });
 });
 
@@ -269,32 +282,38 @@ describe('SessionDetail — Facts and Provenance sections (spec 006 FR-005)', ()
 });
 
 // ── Tests: review action wiring ───────────────────────────────────────────────
+// Actions now live in the TopActionBar on SessionsPage. Coverage is provided
+// by testing the store's review() call contract directly, matching how
+// SessionsPage.handleConfirm / handleReopen / handleReject dispatch to it.
 
-describe('SessionDetail — review action callbacks', () => {
+describe('useSessionReview — action dispatch contract (spec 006 FR-006)', () => {
   beforeEach(() => {
     mockAddToast.mockClear();
     mockReview.mockClear();
   });
 
-  it('16. Confirm button click calls onConfirm', async () => {
-    const onConfirm = vi.fn().mockResolvedValue(undefined);
-    renderDetail(makeSession({ state: 'needs_review' }), { onConfirm });
-    fireEvent.click(screen.getByTestId('btn-confirm'));
-    expect(onConfirm).toHaveBeenCalledTimes(1);
+  it('16. confirm action dispatches review(id, "confirm") to store', async () => {
+    mockReview.mockResolvedValue({ ok: true, noop: false });
+    const { useSessionReview } = await import('../store');
+    const { review } = useSessionReview();
+    await review('session-1', 'confirm');
+    expect(mockReview).toHaveBeenCalledWith('session-1', 'confirm');
   });
 
-  it('17. Re-open button click calls onReopen', async () => {
-    const onReopen = vi.fn().mockResolvedValue(undefined);
-    renderDetail(makeSession({ state: 'confirmed' }), { onReopen });
-    fireEvent.click(screen.getByTestId('btn-reopen'));
-    expect(onReopen).toHaveBeenCalledTimes(1);
+  it('17. reopen action dispatches review(id, "reopen") to store', async () => {
+    mockReview.mockResolvedValue({ ok: true, noop: false });
+    const { useSessionReview } = await import('../store');
+    const { review } = useSessionReview();
+    await review('session-1', 'reopen');
+    expect(mockReview).toHaveBeenCalledWith('session-1', 'reopen');
   });
 
-  it('18. Reject button click calls onReject', async () => {
-    const onReject = vi.fn().mockResolvedValue(undefined);
-    renderDetail(makeSession({ state: 'needs_review' }), { onReject });
-    fireEvent.click(screen.getByTestId('btn-reject'));
-    expect(onReject).toHaveBeenCalledTimes(1);
+  it('18. reject action dispatches review(id, "reject") to store', async () => {
+    mockReview.mockResolvedValue({ ok: true, noop: false });
+    const { useSessionReview } = await import('../store');
+    const { review } = useSessionReview();
+    await review('session-1', 'reject');
+    expect(mockReview).toHaveBeenCalledWith('session-1', 'reject');
   });
 });
 

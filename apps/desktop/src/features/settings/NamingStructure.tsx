@@ -17,6 +17,7 @@ import {
 	updateSettings,
 } from "@/api/commands";
 import { Btn } from "@/ui";
+import { SettingsSection, SettingsRow } from "./SettingsKit";
 
 interface NamingStructureProps {
 	save: (scope: string, values: Record<string, unknown>) => void;
@@ -684,14 +685,7 @@ function PerTypeDestinationPatterns() {
 	};
 
 	return (
-		<div className="alm-settings__group">
-			<div className="alm-settings__group-title">
-				Per-Type Destination Patterns
-			</div>
-			<div className="alm-settings__row-desc alm-naming__pertype-desc">
-				Destination folder pattern per frame type, applied when confirming inbox
-				items. Empty = use the built-in default (shown as placeholder).
-			</div>
+		<SettingsSection title="PER-TYPE DESTINATION PATTERNS">
 			{FRAME_TYPE_CLASSES.map((cls) => {
 				const chips = chipsByClass[cls];
 				const isOverridden = !chipsAreEmpty(chips);
@@ -701,40 +695,39 @@ function PerTypeDestinationPatterns() {
 				const error = backendErrors[cls] ?? clientError ?? undefined;
 				const rowId = `naming-pattern-${cls}`;
 				return (
-					<div className="alm-settings__row" key={cls}>
-						<div className="alm-settings__row-label" id={`${rowId}-label`}>
-							{FRAME_TYPE_LABELS[cls]}
-						</div>
-						<div className="alm-settings__row-content">
-							<div className="alm-naming__pertype-row-inner">
-								<div
-									className="alm-naming__pertype-editor-wrap"
-									role="group"
-									aria-labelledby={`${rowId}-label`}
-									data-testid={rowId}
-								>
-									<PerTypePatternChipsEditor
-										chips={chips}
-										onChange={(c) => handleChipsChange(cls, c)}
-										error={error}
-										defaultPlaceholder={FRAME_TYPE_DEFAULT_PATTERNS[cls]}
-										rowId={rowId}
-									/>
-								</div>
-								<Btn
-									size="sm"
-									disabled={!isOverridden}
-									data-testid={`naming-pattern-reset-${cls}`}
-									onClick={() => handleReset(cls)}
-								>
-									Reset to default
-								</Btn>
+					<SettingsRow
+						key={cls}
+						label={<span id={`${rowId}-label`}>{FRAME_TYPE_LABELS[cls]}</span>}
+						info="Destination folder pattern for this frame type, applied when confirming inbox items. Empty = use the built-in default (shown as placeholder)."
+					>
+						<div className="alm-naming__pertype-row-inner">
+							<div
+								className="alm-naming__pertype-editor-wrap"
+								role="group"
+								aria-labelledby={`${rowId}-label`}
+								data-testid={rowId}
+							>
+								<PerTypePatternChipsEditor
+									chips={chips}
+									onChange={(c) => handleChipsChange(cls, c)}
+									error={error}
+									defaultPlaceholder={FRAME_TYPE_DEFAULT_PATTERNS[cls]}
+									rowId={rowId}
+								/>
 							</div>
+							<Btn
+								size="sm"
+								disabled={!isOverridden}
+								data-testid={`naming-pattern-reset-${cls}`}
+								onClick={() => handleReset(cls)}
+							>
+								Reset to default
+							</Btn>
 						</div>
-					</div>
+					</SettingsRow>
 				);
 			})}
-		</div>
+		</SettingsSection>
 	);
 }
 
@@ -827,8 +820,7 @@ export function NamingStructure({ save }: NamingStructureProps) {
 
 	return (
 		<>
-			<div className="alm-settings__group">
-				<div className="alm-settings__group-title">Project Folder Pattern</div>
+			<SettingsSection title="PROJECT FOLDER PATTERN">
 				<div className="alm-settings__row">
 					<div className="alm-settings__row-content">
 						<PatternChipsEditor
@@ -843,7 +835,7 @@ export function NamingStructure({ save }: NamingStructureProps) {
 						/>
 					</div>
 				</div>
-			</div>
+			</SettingsSection>
 
 			<PerTypeDestinationPatterns />
 
@@ -861,8 +853,7 @@ export function NamingStructure({ save }: NamingStructureProps) {
 				</div>
 			</div>
 
-			<div className="alm-settings__group">
-				<div className="alm-settings__group-title">Live Preview</div>
+			<SettingsSection title="LIVE PREVIEW">
 				<div className="alm-naming__preview-sample">
 					Sample: NGC7000 / Ha / 2026-04-12 / light
 				</div>
@@ -891,7 +882,7 @@ export function NamingStructure({ save }: NamingStructureProps) {
 						)}
 					</div>
 				)}
-			</div>
+			</SettingsSection>
 		</>
 	);
 }

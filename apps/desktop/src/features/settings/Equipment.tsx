@@ -9,6 +9,7 @@ import {
   type CameraFixture,
   type TelescopeFixture,
 } from '@/data/fixtures/settings';
+import { SettingsSection } from './SettingsKit';
 
 interface EquipmentProps {
   save: (scope: string, values: Record<string, unknown>) => void;
@@ -26,11 +27,10 @@ export function Equipment({ save: _save }: EquipmentProps) {
   return (
     <>
       {/* Optical Trains */}
-      <div className="alm-settings__group">
-        <div className="alm-equipment__section-header">
-          <div className="alm-settings__group-title alm-equipment__section-title">Optical Trains</div>
-          <Btn size="sm" onClick={() => console.log('add train')}>Add train</Btn>
-        </div>
+      <SettingsSection
+        title="Optical Trains"
+        action={<Btn size="sm" onClick={() => console.log('add train')}>+ Compose train</Btn>}
+      >
         <Table
           columns={[
             { key: 'name', label: 'Name' },
@@ -58,14 +58,13 @@ export function Equipment({ save: _save }: EquipmentProps) {
             No optical trains configured.
           </p>
         )}
-      </div>
+      </SettingsSection>
 
       {/* Cameras */}
-      <div className="alm-settings__group">
-        <div className="alm-equipment__section-header">
-          <div className="alm-settings__group-title alm-equipment__section-title">Cameras</div>
-          <Btn size="sm" onClick={() => console.log('add camera')}>Add camera</Btn>
-        </div>
+      <SettingsSection
+        title="Cameras"
+        action={<Btn size="sm" onClick={() => console.log('add camera')}>+ Add camera</Btn>}
+      >
         <Table
           columns={[
             { key: 'model', label: 'Model' },
@@ -98,14 +97,13 @@ export function Equipment({ save: _save }: EquipmentProps) {
             No cameras registered.
           </p>
         )}
-      </div>
+      </SettingsSection>
 
       {/* Telescopes */}
-      <div className="alm-settings__group">
-        <div className="alm-equipment__section-header">
-          <div className="alm-settings__group-title alm-equipment__section-title">Telescopes</div>
-          <Btn size="sm" onClick={() => console.log('add telescope')}>Add telescope</Btn>
-        </div>
+      <SettingsSection
+        title="Telescopes"
+        action={<Btn size="sm" onClick={() => console.log('add telescope')}>+ Add telescope</Btn>}
+      >
         <Table
           columns={[
             { key: 'model', label: 'Model' },
@@ -131,7 +129,7 @@ export function Equipment({ save: _save }: EquipmentProps) {
             No telescopes registered.
           </p>
         )}
-      </div>
+      </SettingsSection>
     </>
   );
 }

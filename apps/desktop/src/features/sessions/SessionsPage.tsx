@@ -179,10 +179,6 @@ export function SessionsPage() {
         detail={
           <SessionDetail
             session={selectedSession ?? null}
-            onConfirm={() => void handleConfirm()}
-            onReopen={() => void handleReopen()}
-            onReject={() => void handleReject()}
-            isPending={isPending}
           />
         }
       />

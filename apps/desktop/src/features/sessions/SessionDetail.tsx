@@ -2,9 +2,11 @@
  * SessionDetail — spec 006 wired.
  *
  * Detail drawer for an InventorySession. Shows Lifecycle, Facts, Provenance,
- * and Linked sections per spec 006 research.md §5. Review actions are
- * action-bound (FR-006): Confirm only appears when eligible, Re-open only
- * when already confirmed/rejected, Reject as danger.
+ * and Linked sections per spec 006 research.md §5.
+ *
+ * Review actions (Confirm / Re-open / Reject) live exclusively in the
+ * TopActionBar on SessionsPage (FR-006 action-bound pattern). This rail is
+ * read-only: Review state shows a Pill; Linked projects shows linked names.
  *
  * SC-004: no column is named Tags or Handling.
  * FR-004: state renders as plain structured data, not a decorative bubble.
@@ -25,13 +27,9 @@ import { sessionStateLabel, sessionStateVariant } from '@/lib/lifecycle';
 
 interface Props {
   session: InventorySession | null;
-  onConfirm: () => void;
-  onReopen: () => void;
-  onReject: () => void;
-  isPending?: boolean;
 }
 
-export function SessionDetail({ session, onConfirm, onReopen, onReject, isPending }: Props) {
+export function SessionDetail({ session }: Props) {
   if (!session) {
     return (
       <DetailPane>
@@ -44,14 +42,6 @@ export function SessionDetail({ session, onConfirm, onReopen, onReject, isPendin
   }
 
   const isLinked = (session.linked?.projects?.length ?? 0) > 0;
-
-  // Action-bound CTA visibility (spec 006 FR-006):
-  // Confirm only when in discovered / candidate / needs_review.
-  // Re-open only when confirmed or rejected.
-  // Reject always except when already rejected.
-  const confirmVisible = ['discovered', 'candidate', 'needs_review'].includes(session.state);
-  const reopenVisible = ['confirmed', 'rejected'].includes(session.state);
-  const rejectVisible = session.state !== 'rejected';
 
   const displayPath = session.name;
 
@@ -165,49 +155,13 @@ export function SessionDetail({ session, onConfirm, onReopen, onReject, isPendin
       <DetailGrid
         rail={
           <Rail>
+            {/* FR-004: state as read-only structured data; actions are in the TopActionBar */}
             <RailCard title="Review state">
               <Pill variant={sessionStateVariant(session.state)}>
                 {session.state === 'discovered' || session.state === 'candidate'
                   ? 'Needs review'
                   : sessionStateLabel(session.state)}
               </Pill>
-              <div className="alm-session-detail__action-stack">
-                {confirmVisible && (
-                  <button
-                    className="alm-btn alm-btn--primary alm-btn--sm"
-                    onClick={onConfirm}
-                    disabled={isPending}
-                    data-testid="btn-confirm"
-                  >
-                    Confirm
-                  </button>
-                )}
-                {reopenVisible && (
-                  <button
-                    className="alm-btn alm-btn--sm"
-                    onClick={onReopen}
-                    disabled={isPending}
-                    data-testid="btn-reopen"
-                  >
-                    Re-open review
-                  </button>
-                )}
-                {rejectVisible && (
-                  <button
-                    className="alm-btn alm-btn--danger alm-btn--sm"
-                    onClick={onReject}
-                    disabled={isPending}
-                    data-testid="btn-reject"
-                  >
-                    Reject session
-                  </button>
-                )}
-                {isLinked && (
-                  <div className="alm-session-detail__lock-notice">
-                    Linked to a project — metadata locked while in use.
-                  </div>
-                )}
-              </div>
             </RailCard>
 
             <RailCard title="Linked projects">
@@ -223,6 +177,11 @@ export function SessionDetail({ session, onConfirm, onReopen, onReject, isPendin
                 <span className="alm-session-detail__no-linked">
                   None
                 </span>
+              )}
+              {isLinked && (
+                <p className="alm-session-detail__lock-notice">
+                  Linked to a project — metadata locked while in use.
+                </p>
               )}
             </RailCard>
           </Rail>

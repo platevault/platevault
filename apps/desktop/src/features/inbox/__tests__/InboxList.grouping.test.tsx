@@ -137,6 +137,56 @@ describe('InboxList — configurable grouping', () => {
     expect(screen.getByTestId('inbox-item-a')).toBeInTheDocument();
   });
 
+  it('(5) footer shows "N folders · M masters" using isMaster split', () => {
+    const masterItem = makeItem({ inboxItemId: 'master-1', isMaster: true });
+    render(
+      <InboxList
+        items={[...items, masterItem]}
+        selectedIdx={null}
+        onSelect={vi.fn()}
+        filterType="all"
+        onFilterTypeChange={vi.fn()}
+      />,
+    );
+
+    // 3 folders + 1 master → "3 folders · 1 master"
+    const footer = document.querySelector('.alm-list-sidebar__count');
+    expect(footer?.textContent).toContain('3 folders');
+    expect(footer?.textContent).toContain('1 master');
+    // Must NOT call masters "folders"
+    expect(footer?.textContent).not.toMatch(/4 folders/);
+  });
+
+  it('(5b) footer shows only "N folders" when there are no masters', () => {
+    render(
+      <InboxList items={items} selectedIdx={null} onSelect={vi.fn()} filterType="all" onFilterTypeChange={vi.fn()} />,
+    );
+
+    const footer = document.querySelector('.alm-list-sidebar__count');
+    expect(footer?.textContent).toContain('3 folders');
+    expect(footer?.textContent).not.toContain('master');
+  });
+
+  it('(5c) footer shows only "N masters" when all items are masters', () => {
+    const masterItems = [
+      makeItem({ inboxItemId: 'm1', isMaster: true }),
+      makeItem({ inboxItemId: 'm2', isMaster: true }),
+    ];
+    render(
+      <InboxList
+        items={masterItems}
+        selectedIdx={null}
+        onSelect={vi.fn()}
+        filterType="all"
+        onFilterTypeChange={vi.fn()}
+      />,
+    );
+
+    const footer = document.querySelector('.alm-list-sidebar__count');
+    expect(footer?.textContent).toContain('2 masters');
+    expect(footer?.textContent).not.toContain('folder');
+  });
+
   it('(4) persists the ordered dimensions to localStorage and restores them', () => {
     const { unmount } = render(
       <InboxList items={items} selectedIdx={null} onSelect={vi.fn()} filterType="all" onFilterTypeChange={vi.fn()} />,

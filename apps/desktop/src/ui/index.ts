@@ -29,3 +29,5 @@ export type { DirPickerProps } from './DirPicker';
 export { WizardShell } from './WizardShell';
 export type { WizardShellProps, WizardStep } from './WizardShell';
 export { ToastContainer } from './ToastContainer';
+export { InfoTip } from './InfoTip';
+export type { InfoTipProps } from './InfoTip';

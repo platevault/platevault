@@ -683,7 +683,7 @@
    Ingestion/Calibration tolerance rows). */
 .alm-settings__row {
   display: grid;
-  grid-template-columns: 160px minmax(0, 1fr);
+  grid-template-columns: 200px minmax(0, 1fr);
   column-gap: var(--alm-sp-4); row-gap: var(--alm-sp-1);
   align-items: start;
   padding: var(--alm-sp-3) 0;
@@ -692,6 +692,7 @@
 .alm-settings__row:last-child { border-bottom: none; }
 .alm-settings__row-label {
   grid-column: 1; grid-row: 1;
+  display: flex; align-items: center; gap: var(--alm-sp-1);
   font-size: var(--alm-text-sm); font-weight: var(--alm-weight-medium);
   color: var(--alm-text-secondary);
   padding-top: 5px; /* align with control vertical centre */
@@ -708,6 +709,11 @@
   margin-bottom: var(--alm-sp-3);
 }
 .alm-settings__group-header .alm-settings__group-title { margin-bottom: 0; border-bottom: none; padding-bottom: 0; }
+/* Ruled header: keeps the hairline under the whole title+action row (mock .sec__t + .sec__r). */
+.alm-settings__group-header--ruled {
+  padding-bottom: var(--alm-sp-2);
+  border-bottom: 1px solid var(--alm-border-subtle);
+}
 /* Inline error message for settings save failures */
 .alm-settings__error {
   font-size: var(--alm-text-xs);
@@ -3772,6 +3778,82 @@
   color: var(--alm-text-muted);
 }
 
+/* === SETTINGS DATA SOURCES (redesign) === */
+
+/* Category group wrapper — spacing between groups */
+.alm-data-sources__group {
+  margin-bottom: var(--alm-sp-4);
+}
+
+/* Uppercase group label (Raw / Calibration / Project / Inbox) */
+.alm-data-sources__group-label {
+  font-size: var(--alm-text-2xs);
+  font-weight: var(--alm-weight-semibold);
+  letter-spacing: 0.05em;
+  text-transform: uppercase;
+  color: var(--alm-text-muted);
+  margin: 0 0 var(--alm-sp-2) 0;
+}
+
+/* Root card — two-column grid: info (1fr) | actions (auto) */
+.alm-data-sources__root-card {
+  display: grid;
+  grid-template-columns: 1fr auto;
+  gap: var(--alm-sp-2);
+  align-items: center;
+  border: 1px solid var(--alm-border);
+  border-radius: var(--alm-radius-md);
+  padding: var(--alm-sp-3) var(--alm-sp-4);
+  background: var(--alm-surface-raised);
+  margin-bottom: var(--alm-sp-2);
+}
+
+/* Offline root — muted surface to signal unavailability */
+.alm-data-sources__root-card--offline {
+  background: var(--alm-bg3);
+  border-color: var(--alm-border-subtle);
+}
+
+/* Left column: path row + meta line */
+.alm-data-sources__root-info {
+  min-width: 0;
+}
+
+/* Path + optional offline pill on one line */
+.alm-data-sources__root-path-row {
+  display: flex;
+  align-items: center;
+  gap: var(--alm-sp-2);
+  flex-wrap: wrap;
+}
+
+/* Monospace path text */
+.alm-data-sources__root-path {
+  font-family: var(--alm-font-mono);
+  font-size: var(--alm-text-xs);
+  color: var(--alm-text);
+  word-break: break-all;
+}
+
+/* Offline warn pill — aligned inline with path */
+.alm-data-sources__offline-pill {
+  flex-shrink: 0;
+}
+
+/* Meta line: file count · last scan · recursive */
+.alm-data-sources__root-meta {
+  margin-top: var(--alm-sp-1);
+  font-size: var(--alm-text-xs);
+  color: var(--alm-text-muted);
+}
+
+/* Right column: action button cluster */
+.alm-data-sources__root-actions {
+  display: flex;
+  gap: var(--alm-sp-1);
+  flex-shrink: 0;
+}
+
 /* === SETTINGS PROCESSING TOOLS === */
 
 /* Error paragraph shown when tool list fails to load */
@@ -4389,21 +4471,57 @@
   font-size: var(--alm-text-sm);
 }
 
-/* === SETTINGS CALIBRATION MATCHING === */
+/* === SETTINGS CALIBRATION MATCHING (criteria table) === */
 
-/* Flex row wrapping a number input + unit label */
+/* Criteria table: inherit alm-table base; pin column widths to match mock */
+.alm-calmatch__table {
+  margin-block: var(--alm-sp-3) var(--alm-sp-2);
+}
+
+.alm-calmatch__col-required {
+  width: 140px;
+}
+
+.alm-calmatch__col-tolerance {
+  width: 160px;
+}
+
+/* Inline flex span that wraps a number input + unit label inside a td */
+.alm-calmatch__tol-input-row {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--alm-sp-2);
+}
+
+/* Fixed-width number input for tolerance fields */
+.alm-calmatch__num-input {
+  width: 72px;
+}
+
+/* Unit label ("°C", "d") that follows a tolerance input */
+.alm-calmatch__unit {
+  font-size: var(--alm-text-sm);
+  color: var(--alm-text-muted);
+}
+
+/* Footer help line below the criteria table */
+.alm-calmatch__help {
+  font-size: var(--alm-text-sm);
+  color: var(--alm-text-muted);
+  margin-block-start: var(--alm-sp-2);
+}
+
+/* Legacy aliases — kept so old .alm-calib-matching__* refs compile if any remain */
 .alm-calib-matching__input-row {
   display: flex;
   align-items: center;
   gap: var(--alm-sp-2);
 }
 
-/* Fixed-width number input used for tolerance / penalty / threshold fields */
 .alm-calib-matching__num-input {
   width: 80px;
 }
 
-/* Unit label ("°C", "days") that follows a number input */
 .alm-calib-matching__unit-label {
   font-size: var(--alm-text-sm);
   color: var(--alm-text-muted);
@@ -4574,23 +4692,8 @@
   gap: var(--alm-sp-0);
 }
 
-/* === CALIBRATION MASTER DETAIL === */
-
-/* Reuse section inside the Rail card */
-.alm-master-detail__reuse {
-  display: flex;
-  flex-direction: column;
-  gap: var(--alm-sp-1);
-  font-size: var(--alm-text-xs);
-}
-
-.alm-master-detail__reuse-row {
-  color: var(--alm-text-secondary);
-}
-
-.alm-master-detail__reuse-label {
-  color: var(--alm-text-faint);
-}
+/* === CALIBRATION MASTER RAIL (consistency) === */
+/* Rail uses shared .alm-kv / .alm-rail__card-h primitives — no bespoke classes needed. */
 
 /* === SETUP WIZARD === */
 
@@ -4854,21 +4957,6 @@
 
 /* === SESSION DETAIL === */
 
-/* Action button stack inside the Review state rail card */
-.alm-session-detail__action-stack {
-  margin-top: var(--alm-sp-2);
-  display: flex;
-  flex-direction: column;
-  gap: var(--alm-sp-1);
-}
-
-/* Locked-metadata notice shown when session is linked to a project */
-.alm-session-detail__lock-notice {
-  margin-top: var(--alm-sp-1);
-  font-size: var(--alm-text-xs);
-  color: var(--alm-text-muted);
-}
-
 /* Pill row inside the Linked projects rail card */
 .alm-session-detail__linked-pills {
   display: flex;
@@ -4880,6 +4968,18 @@
 .alm-session-detail__no-linked {
   font-size: var(--alm-text-xs);
   color: var(--alm-text-faint);
+}
+
+/* === SESSIONS REVIEW STATE (consistency) === */
+/* Locked-metadata notice shown inside the Linked projects rail card
+   when the session is linked to a project. Actions (Confirm / Re-open /
+   Reject) live exclusively in the TopActionBar on SessionsPage; the
+   Review state rail card is read-only (Pill only), matching the pattern
+   used by Calibration (MasterDetail) and Projects (ProjectDetail). */
+.alm-session-detail__lock-notice {
+  margin-top: var(--alm-sp-2);
+  font-size: var(--alm-text-xs);
+  color: var(--alm-text-muted);
 }
 
 /* === PROJECT SOURCE VIEWS SECTION === */
@@ -5489,3 +5589,63 @@
   font-weight: var(--alm-weight-semibold);
   margin-bottom: var(--alm-sp-2);
 }
+
+/* === INFO TIP (settings ⓘ — replaces always-on help prose) === */
+.alm-info-tip {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 14px;
+  height: 14px;
+  border-radius: 50%;
+  border: 1px solid var(--alm-text-faint);
+  color: var(--alm-text-muted);
+  font-size: var(--alm-text-2xs);
+  font-weight: var(--alm-weight-semibold);
+  font-style: normal;
+  line-height: 1;
+  cursor: help;
+  position: relative;
+  flex: none;
+  user-select: none;
+}
+.alm-info-tip:hover,
+.alm-info-tip:focus-visible {
+  border-color: var(--alm-accent);
+  color: var(--alm-accent);
+  outline: none;
+}
+.alm-info-tip:hover::after,
+.alm-info-tip:focus-visible::after {
+  content: attr(data-tip);
+  position: absolute;
+  left: 0;
+  top: calc(100% + 7px);
+  background: var(--alm-ink);
+  color: var(--alm-bg);
+  font-size: var(--alm-text-xs);
+  font-weight: var(--alm-weight-normal);
+  line-height: 1.45;
+  padding: var(--alm-sp-2) var(--alm-sp-3);
+  border-radius: var(--alm-radius-md);
+  width: max-content;
+  max-width: 280px;
+  z-index: 60;
+  box-shadow: var(--alm-shadow-sm);
+  white-space: normal;
+  text-align: left;
+  font-style: normal;
+}
+.alm-info-tip:hover::before,
+.alm-info-tip:focus-visible::before {
+  content: "";
+  position: absolute;
+  left: 5px;
+  top: calc(100% + 2px);
+  border: 5px solid transparent;
+  border-bottom-color: var(--alm-ink);
+  z-index: 60;
+}
+
+/* === ADVANCED guided-tour col (flex column for desc + restart button) === */
+.alm-adv-settings__guided-col { display: flex; flex-direction: column; gap: var(--alm-sp-2); align-items: flex-start; }

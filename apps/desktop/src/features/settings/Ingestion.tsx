@@ -1,6 +1,7 @@
 // TODO(spec 030 (ingestion settings)): wire to backend when owning spec implements its command.
 import { useState } from 'react';
-import { Toggle, RadioGroup } from '@/ui';
+import { Toggle } from '@/ui';
+import { SettingsSection, SettingsRow } from './SettingsKit';
 
 interface IngestionProps {
   save: (scope: string, values: Record<string, unknown>) => void;
@@ -26,66 +27,58 @@ export function Ingestion({ save }: IngestionProps) {
 
   return (
     <>
-      <div className="alm-settings__group">
-        <div className="alm-settings__group-title">Scan Defaults</div>
+      <SettingsSection title="Scan defaults">
+        <SettingsRow
+          label="Scan on startup"
+          info="Scan all roots each time the application opens."
+        >
+          <Toggle
+            checked={scanOnStartup}
+            onChange={(v) => { setScanOnStartup(v); persist({ scan_on_startup: v }); }}
+          />
+        </SettingsRow>
 
-        <div className="alm-settings__row">
-          <div className="alm-settings__row-label">Scan on startup</div>
-          <div className="alm-settings__row-content">
-            <Toggle
-              checked={scanOnStartup}
-              onChange={(v) => { setScanOnStartup(v); persist({ scan_on_startup: v }); }}
-            />
-          </div>
-          <div className="alm-settings__row-desc">Scan all roots each time the application opens.</div>
-        </div>
+        <SettingsRow
+          label="Follow symbolic links"
+          info="Follow symlinks during filesystem scans. Disabled by default to prevent scan loops."
+        >
+          <Toggle
+            checked={followSymlinks}
+            onChange={(v) => { setFollowSymlinks(v); persist({ follow_symlinks: v }); }}
+          />
+        </SettingsRow>
 
-        <div className="alm-settings__row">
-          <div className="alm-settings__row-label">Follow symbolic links</div>
-          <div className="alm-settings__row-content">
-            <Toggle
-              checked={followSymlinks}
-              onChange={(v) => { setFollowSymlinks(v); persist({ follow_symlinks: v }); }}
-            />
-          </div>
-          <div className="alm-settings__row-desc">
-            Follow symlinks during filesystem scans. Disabled by default to prevent loops.
-          </div>
-        </div>
+        <SettingsRow
+          label="Follow NTFS junctions"
+          info="Follow NTFS directory junctions on Windows. Enable if your library uses junctions for external drives."
+        >
+          <Toggle
+            checked={followJunctions}
+            onChange={(v) => { setFollowJunctions(v); persist({ follow_junctions: v }); }}
+          />
+        </SettingsRow>
+      </SettingsSection>
 
-        <div className="alm-settings__row">
-          <div className="alm-settings__row-label">Follow NTFS junctions</div>
-          <div className="alm-settings__row-content">
-            <Toggle
-              checked={followJunctions}
-              onChange={(v) => { setFollowJunctions(v); persist({ follow_junctions: v }); }}
-            />
-          </div>
-          <div className="alm-settings__row-desc">
-            Follow NTFS directory junctions on Windows. Enable if your library uses junctions for external drives.
-          </div>
-        </div>
-      </div>
-
-      <div className="alm-settings__group">
-        <div className="alm-settings__group-title">File Hashing</div>
-        <div className="alm-settings__row">
-          <div className="alm-settings__row-content">
-            <RadioGroup
-              options={[
-                { value: 'lazy', label: 'Lazy', desc: 'Hash only when needed (e.g. duplicate detection)' },
-                { value: 'eager', label: 'Eager', desc: 'Hash every file on first scan — slower but complete' },
-                { value: 'off', label: 'Off', desc: 'Never hash — fastest, no duplicate detection' },
-              ]}
-              value={hashingMode}
-              onChange={(v) => { setHashingMode(v as HashingMode); persist({ hashing_mode: v }); }}
-            />
-          </div>
-          <div className="alm-settings__row-desc">
-            Large-file hashing is optional. Lazy hashing defers work until a feature requires it.
-          </div>
-        </div>
-      </div>
+      <SettingsSection title="File hashing">
+        <SettingsRow
+          label="Hashing mode"
+          info="Lazy defers hashing until a feature needs it (e.g. duplicate detection). Eager hashes every file on first scan. Off disables hashing entirely."
+        >
+          <select
+            className="alm-select"
+            value={hashingMode}
+            onChange={(e) => {
+              const v = e.target.value as HashingMode;
+              setHashingMode(v);
+              persist({ hashing_mode: v });
+            }}
+          >
+            <option value="lazy">Lazy — hash only when needed</option>
+            <option value="eager">Eager — hash every file on first scan</option>
+            <option value="off">Off — never hash</option>
+          </select>
+        </SettingsRow>
+      </SettingsSection>
     </>
   );
 }

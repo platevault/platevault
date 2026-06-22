@@ -20,9 +20,8 @@ import {
   DetailGrid,
   Rail,
   RailCard,
-  PropertyTable,
 } from '@/components';
-import { Pill, EmptyState, Lock } from '@/ui';
+import { Pill, EmptyState, Lock, KV } from '@/ui';
 import type { PillVariant } from '@/ui';
 import { useCalibrationSuggest, useCalibrationAssign } from './useCalibration';
 import { MatchCandidatesPanel } from './MatchCandidatesPanel';
@@ -85,23 +84,6 @@ export function MasterDetail({ master, prefillSuggestion, agingThresholdDays }: 
   const kindStr = master.kind.toString().toLowerCase().replace('_', ' ');
 
   const fp = master.fingerprint;
-  const properties: Array<{ key: string; label: string; value: string }> = [
-    { key: 'kind', label: 'Kind', value: kindStr },
-    { key: 'camera', label: 'Camera', value: fp.camera },
-    { key: 'gain', label: 'Gain', value: String(fp.gain) },
-    { key: 'exposure', label: 'Exposure', value: `${fp.exposureS}s` },
-  ];
-  if (fp.tempC != null) {
-    properties.push({ key: 'temp', label: 'Temperature', value: `${fp.tempC}°C` });
-  }
-  if (fp.filter) {
-    properties.push({ key: 'filter', label: 'Filter', value: fp.filter });
-  }
-  if (fp.sensorMode) {
-    properties.push({ key: 'sensor_mode', label: 'Sensor mode', value: fp.sensorMode });
-  }
-  properties.push({ key: 'binning', label: 'Binning', value: fp.binning });
-  properties.push({ key: 'size', label: 'Size', value: fmtBytes(master.sizeBytes) });
 
   // Human-readable fingerprint identity for the header (was an id hash).
   const kindCap = kindStr.charAt(0).toUpperCase() + kindStr.slice(1);
@@ -143,24 +125,21 @@ export function MasterDetail({ master, prefillSuggestion, agingThresholdDays }: 
         rail={
           <Rail>
             <RailCard title="Master fingerprint">
-              <PropertyTable mode="view" properties={properties} />
+              <KV label="Kind" value={kindStr} />
+              <KV label="Camera" value={fp.camera} />
+              <KV label="Gain" value={String(fp.gain)} />
+              <KV label="Exposure" value={`${fp.exposureS}s`} />
+              {fp.tempC != null && <KV label="Temperature" value={`${fp.tempC}°C`} />}
+              {fp.filter && <KV label="Filter" value={fp.filter} />}
+              {fp.sensorMode && <KV label="Sensor mode" value={fp.sensorMode} />}
+              <KV label="Binning" value={fp.binning} />
+              <KV label="Size" value={fmtBytes(master.sizeBytes)} />
             </RailCard>
 
             <RailCard title="Reuse">
-              <div className="alm-master-detail__reuse">
-                <div className="alm-master-detail__reuse-row">
-                  <span className="alm-master-detail__reuse-label">Sessions matched</span>{' '}
-                  <strong>{(master.usedBySessionIds ?? []).length}</strong>
-                </div>
-                <div className="alm-master-detail__reuse-row">
-                  <span className="alm-master-detail__reuse-label">Projects linked</span>{' '}
-                  <strong>{(master.usedByProjectIds ?? []).length}</strong>
-                </div>
-                <div className="alm-master-detail__reuse-row">
-                  <span className="alm-master-detail__reuse-label">Created</span>{' '}
-                  {master.createdAt.split('T')[0]}
-                </div>
-              </div>
+              <KV label="Sessions matched" value={String((master.usedBySessionIds ?? []).length)} />
+              <KV label="Projects linked" value={String((master.usedByProjectIds ?? []).length)} />
+              <KV label="Created" value={master.createdAt.split('T')[0]} />
             </RailCard>
           </Rail>
         }

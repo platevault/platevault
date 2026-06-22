@@ -7,6 +7,7 @@ import { Btn } from '@/ui';
 import { getSettings } from '@/api/commands';
 import { getGuidedState, restartGuidedFlow, type GuidedFlowStateDto } from '@/features/guided/store';
 import { STEP_ORDER } from '@/features/guided/store';
+import { SettingsSection, SettingsRow } from './SettingsKit';
 
 interface AdvancedProps {
   save: (scope: string, values: Record<string, unknown>) => void;
@@ -72,72 +73,50 @@ export function Advanced({ save }: AdvancedProps) {
   return (
     <>
       {/* Database info */}
-      <div className="alm-settings__group">
-        <div className="alm-settings__group-title">Database</div>
-        <div className="alm-settings__row">
-          <div className="alm-settings__row-label">Location</div>
-          <div className="alm-settings__row-content">
-            <code className="alm-mono alm-adv-settings__db-path">~/.alm/astro-library.db</code>
-          </div>
-        </div>
-        <div className="alm-settings__row">
-          <div className="alm-settings__row-label">Engine</div>
-          <div className="alm-settings__row-content">SQLite</div>
-        </div>
-        <div className="alm-settings__row">
-          <div className="alm-settings__row-label">Size</div>
-          <div className="alm-settings__row-content">24.8 MB</div>
-        </div>
-        <div className="alm-settings__row">
-          <div className="alm-settings__row-label">Schema version</div>
-          <div className="alm-settings__row-content">v1.0</div>
-        </div>
-        <div className="alm-settings__row alm-adv-settings__row--no-border">
-          <div className="alm-settings__row-label">Records</div>
-          <div className="alm-settings__row-content">142,318 files · 22 sessions · 3 projects</div>
-        </div>
-        <div className="alm-adv-settings__db-actions">
-          <Btn size="sm" onClick={handleExport}>Export database</Btn>
-        </div>
-      </div>
+      <SettingsSection
+        title="Database"
+        action={<Btn size="sm" onClick={handleExport}>Export database</Btn>}
+      >
+        <SettingsRow label="Location">
+          <code className="alm-mono alm-adv-settings__db-path">~/.alm/astro-library.db</code>
+        </SettingsRow>
+        <SettingsRow label="Engine">SQLite</SettingsRow>
+        <SettingsRow label="Size">24.8 MB</SettingsRow>
+        <SettingsRow label="Schema version">v1.0</SettingsRow>
+        <SettingsRow label="Records">142,318 files · 22 sessions · 3 projects</SettingsRow>
+      </SettingsSection>
 
       {/* Log level — persisted via spec 018 settings backend */}
-      <div className="alm-settings__group">
-        <div className="alm-settings__group-title">Log Level</div>
-        <div className="alm-settings__row">
-          <div className="alm-settings__row-label">Log Level</div>
-          <div className="alm-settings__row-content">
-            <select
-              className="alm-select alm-adv-settings__log-select"
-              value={logLevel}
-              onChange={(e) => {
-                const v = e.target.value as LogLevel;
-                setLogLevel(v);
-                save('advanced', { logLevel: v });
-              }}
-            >
-              <option value="debug">Debug</option>
-              <option value="info">Info</option>
-              <option value="warn">Warn</option>
-              <option value="error">Error</option>
-            </select>
-            <div className="alm-settings__row-desc">
-              {logLevel === 'debug' && 'Diagnostic detail useful during development'}
-              {logLevel === 'info' && 'Normal operational messages (default)'}
-              {logLevel === 'warn' && 'Warnings only'}
-              {logLevel === 'error' && 'Errors only — quietest'}
-            </div>
-          </div>
-        </div>
-      </div>
+      <SettingsSection title="Logging">
+        <SettingsRow
+          label="Log level"
+          info="Controls application log verbosity. Debug emits diagnostic detail; Info is the default; Warn and Error progressively quieter."
+        >
+          <select
+            className="alm-select alm-adv-settings__log-select"
+            value={logLevel}
+            onChange={(e) => {
+              const v = e.target.value as LogLevel;
+              setLogLevel(v);
+              save('advanced', { logLevel: v });
+            }}
+          >
+            <option value="debug">Debug</option>
+            <option value="info">Info</option>
+            <option value="warn">Warn</option>
+            <option value="error">Error</option>
+          </select>
+        </SettingsRow>
+      </SettingsSection>
 
       {/* Guided first-project-flow restart (spec 010, T042) */}
       {guidedState !== null && (
-        <div className="alm-settings__group">
-          <div className="alm-settings__group-title">Guided Tour</div>
-          <div className="alm-settings__row alm-adv-settings__row--no-border">
-            <div className="alm-settings__row-label">First project flow</div>
-            <div className="alm-settings__row-content">
+        <SettingsSection title="Guided Tour">
+          <SettingsRow
+            label="First project flow"
+            info="The guided flow walks you through setting up your first project. You can restart it at any time from here."
+          >
+            <div className="alm-adv-settings__guided-col">
               <p className="alm-adv-settings__guided-desc">
                 {guidedCompleted
                   ? 'The guided flow has been completed. Restart to replay it from the beginning.'
@@ -154,13 +133,12 @@ export function Advanced({ save }: AdvancedProps) {
                 {guidedRestarting ? 'Restarting…' : 'Restart guided flow'}
               </Btn>
             </div>
-          </div>
-        </div>
+          </SettingsRow>
+        </SettingsSection>
       )}
 
       {/* Danger zone */}
-      <div className="alm-settings__group">
-        <div className="alm-settings__group-title">Danger Zone</div>
+      <SettingsSection title="Danger Zone">
         <div className="alm-adv-settings__danger-box">
           <div className="alm-adv-settings__danger-heading">
             <strong>Reset preferences</strong>
@@ -173,7 +151,7 @@ export function Advanced({ save }: AdvancedProps) {
             Reset preferences
           </Btn>
         </div>
-      </div>
+      </SettingsSection>
     </>
   );
 }

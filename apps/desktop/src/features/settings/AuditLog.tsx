@@ -2,6 +2,7 @@ import { useState, useMemo } from 'react';
 import { Btn, Pill, Table } from '@/ui';
 import { AUDIT_EVENTS, type AuditEventFixture } from '@/data/fixtures/settings';
 import { formatDateTime, compareDateDesc, toEpochMs } from '@/lib/datetime';
+import { SettingsSection } from './SettingsKit';
 
 type AuditOutcome = AuditEventFixture['outcome'];
 
@@ -50,8 +51,7 @@ export function AuditLog() {
 
   return (
     <>
-      {/* Filters */}
-      <div className="alm-settings__group">
+      <SettingsSection title="Audit Events">
         <div className="alm-audit-log__filters">
           <input
             type="text"
@@ -134,7 +134,7 @@ export function AuditLog() {
             </Btn>
           </div>
         </div>
-      </div>
+      </SettingsSection>
     </>
   );
 }

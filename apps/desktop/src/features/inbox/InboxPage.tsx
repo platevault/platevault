@@ -328,11 +328,21 @@ export function InboxPage() {
   const confirmLabel =
     classification?.type === 'mixed' ? 'Generate split plan' : 'Confirm to inventory';
 
-  const subtitle = listLoading
-    ? 'Loading…'
-    : isCapped
-      ? `${items.length}+ folders to review (showing first ${listData?.limit ?? 500})`
-      : `${items.length} folder${items.length !== 1 ? 's' : ''} to review`;
+  // Split the item list into folders (non-master detections) and masters so the
+  // header subtitle uses the same vocabulary as InboxStatsSummary ("Folders · Masters").
+  const folderCount = items.filter((it) => !it.isMaster).length;
+  const masterCount = items.filter((it) => it.isMaster).length;
+
+  function buildSubtitle(folders: number, masters: number, capped: boolean, limit: number): string {
+    if (listLoading) return 'Loading…';
+    const parts: string[] = [];
+    if (folders > 0) parts.push(`${folders} folder${folders !== 1 ? 's' : ''}`);
+    if (masters > 0) parts.push(`${masters} master${masters !== 1 ? 's' : ''}`);
+    const summary = parts.length > 0 ? parts.join(' · ') : '0 detections';
+    return capped ? `${summary} to review (showing first ${limit})` : `${summary} to review`;
+  }
+
+  const subtitle = buildSubtitle(folderCount, masterCount, isCapped, listData?.limit ?? 500);
 
   return (
     <PageShell>

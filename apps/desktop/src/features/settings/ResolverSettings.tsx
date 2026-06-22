@@ -10,6 +10,7 @@
 
 import { ResolverSettingsControl } from './ResolverSettingsControl';
 import { Attribution } from './Attribution';
+import { SettingsSection } from './SettingsKit';
 
 interface ResolverSettingsPaneProps {
   /** Retained for compatibility with the Settings page save mechanism. */
@@ -19,15 +20,9 @@ interface ResolverSettingsPaneProps {
 export function ResolverSettings(_props: ResolverSettingsPaneProps) {
   return (
     <>
-      <div className="alm-settings__group">
-        <div className="alm-settings__group-title">Online Resolution</div>
-        <p className="alm-settings__group-note">
-          Targets are resolved on demand from SIMBAD (CDS, Université de
-          Strasbourg). A bundled seed of popular catalogues and a growing local
-          cache mean common objects resolve instantly with no network call.
-        </p>
+      <SettingsSection title="ONLINE RESOLUTION">
         <ResolverSettingsControl />
-      </div>
+      </SettingsSection>
 
       <Attribution />
     </>

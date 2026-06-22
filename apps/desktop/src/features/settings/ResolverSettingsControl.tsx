@@ -19,6 +19,7 @@ import {
   updateResolverSettings,
   type ResolverSettings,
 } from '@/api/commands';
+import { SettingsRow } from './SettingsKit';
 
 const DEFAULT_SETTINGS: ResolverSettings = {
   onlineEnabled: true,
@@ -98,92 +99,76 @@ export function ResolverSettingsControl({ compact = false }: ResolverSettingsCon
           </div>
         </div>
       ) : (
-        <div className="alm-settings__row">
-          <div className="alm-settings__row-label">Online SIMBAD resolution</div>
-          <div className="alm-settings__row-content">
-            <Toggle
-              checked={settings.onlineEnabled}
-              aria-label="Enable online SIMBAD resolution"
-              onChange={(v) => void persist({ onlineEnabled: v })}
-            />
-            <div className="alm-settings__row-desc">
-              {settings.onlineEnabled
-                ? 'Targets not in the bundled seed or local cache are resolved on demand from SIMBAD, then cached.'
-                : 'Online resolution is off — only the bundled seed and local cache are used. Unknown objects are marked unresolved.'}
-            </div>
-          </div>
-        </div>
+        <SettingsRow
+          label="Online SIMBAD resolution"
+          info={
+            settings.onlineEnabled
+              ? 'Targets not in the bundled seed or local cache are resolved on demand from SIMBAD, then cached.'
+              : 'Online resolution is off — only the bundled seed and local cache are used. Unknown objects are marked unresolved.'
+          }
+        >
+          <Toggle
+            checked={settings.onlineEnabled}
+            aria-label="Enable online SIMBAD resolution"
+            onChange={(v) => void persist({ onlineEnabled: v })}
+          />
+        </SettingsRow>
       )}
 
       {!compact && (
         <>
-          <div className="alm-settings__row">
-            <label className="alm-settings__row-label" htmlFor={endpointId}>
-              SIMBAD endpoint
-            </label>
-            <div className="alm-settings__row-content">
-              <input
-                id={endpointId}
-                className="alm-input"
-                type="text"
-                value={settings.simbadEndpoint}
-                disabled={!loaded || !settings.onlineEnabled}
-                onChange={(e) => setSettings((s) => ({ ...s, simbadEndpoint: e.target.value }))}
-                onBlur={(e) => void persist({ simbadEndpoint: e.target.value.trim() })}
-              />
-              <div className="alm-settings__row-desc">
-                The CDS TAP service URL queried for long-tail resolution.
-              </div>
-            </div>
-          </div>
+          <SettingsRow
+            label={<label htmlFor={endpointId}>SIMBAD endpoint</label>}
+            info="The CDS TAP service URL queried for long-tail resolution."
+          >
+            <input
+              id={endpointId}
+              className="alm-input"
+              type="text"
+              value={settings.simbadEndpoint}
+              disabled={!loaded || !settings.onlineEnabled}
+              onChange={(e) => setSettings((s) => ({ ...s, simbadEndpoint: e.target.value }))}
+              onBlur={(e) => void persist({ simbadEndpoint: e.target.value.trim() })}
+            />
+          </SettingsRow>
 
-          <div className="alm-settings__row">
-            <label className="alm-settings__row-label" htmlFor={debounceId}>
-              Typeahead debounce (ms)
-            </label>
-            <div className="alm-settings__row-content">
-              <input
-                id={debounceId}
-                className="alm-input alm-resolver-settings__narrow-input"
-                type="number"
-                min={0}
-                step={50}
-                value={settings.debounceMs}
-                disabled={!loaded}
-                onChange={(e) =>
-                  setSettings((s) => ({ ...s, debounceMs: Number(e.target.value) }))
-                }
-                onBlur={(e) => void persist({ debounceMs: Number(e.target.value) })}
-              />
-              <div className="alm-settings__row-desc">
-                How long to wait after typing before querying SIMBAD.
-              </div>
-            </div>
-          </div>
+          <SettingsRow
+            label={<label htmlFor={debounceId}>Typeahead debounce (ms)</label>}
+            info="How long to wait after typing before querying SIMBAD."
+          >
+            <input
+              id={debounceId}
+              className="alm-input alm-resolver-settings__narrow-input"
+              type="number"
+              min={0}
+              step={50}
+              value={settings.debounceMs}
+              disabled={!loaded}
+              onChange={(e) =>
+                setSettings((s) => ({ ...s, debounceMs: Number(e.target.value) }))
+              }
+              onBlur={(e) => void persist({ debounceMs: Number(e.target.value) })}
+            />
+          </SettingsRow>
 
-          <div className="alm-settings__row">
-            <label className="alm-settings__row-label" htmlFor={timeoutId}>
-              Request timeout (s)
-            </label>
-            <div className="alm-settings__row-content">
-              <input
-                id={timeoutId}
-                className="alm-input alm-resolver-settings__narrow-input"
-                type="number"
-                min={1}
-                step={1}
-                value={settings.requestTimeoutSecs}
-                disabled={!loaded || !settings.onlineEnabled}
-                onChange={(e) =>
-                  setSettings((s) => ({ ...s, requestTimeoutSecs: Number(e.target.value) }))
-                }
-                onBlur={(e) => void persist({ requestTimeoutSecs: Number(e.target.value) })}
-              />
-              <div className="alm-settings__row-desc">
-                How long to wait for a SIMBAD response before giving up.
-              </div>
-            </div>
-          </div>
+          <SettingsRow
+            label={<label htmlFor={timeoutId}>Request timeout (s)</label>}
+            info="How long to wait for a SIMBAD response before giving up."
+          >
+            <input
+              id={timeoutId}
+              className="alm-input alm-resolver-settings__narrow-input"
+              type="number"
+              min={1}
+              step={1}
+              value={settings.requestTimeoutSecs}
+              disabled={!loaded || !settings.onlineEnabled}
+              onChange={(e) =>
+                setSettings((s) => ({ ...s, requestTimeoutSecs: Number(e.target.value) }))
+              }
+              onBlur={(e) => void persist({ requestTimeoutSecs: Number(e.target.value) })}
+            />
+          </SettingsRow>
         </>
       )}
 

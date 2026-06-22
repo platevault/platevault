@@ -1,242 +1,219 @@
 // spec 007 — Calibration Matching settings pane.
 //
-// Owned settings keys (calibration scope):
-//   - calibrationDarkTempTolerance (number, °C) — dark temperature soft tolerance
-//   - calibrationPrefillSuggestion (boolean) — pre-fill assign dialog with top candidate
-//   - calibrationDarkOverridePenalty (number, 0-1)
-//   - calibrationFlatOverridePenalty (number, 0-1)
-//   - calibrationBiasOverridePenalty (number, 0-1)
-//   - calibrationAgingThresholdDays (number, days) — aging warning threshold (FR-023)
+// Authoritative design: platevault-settings-menu.html § [data-pane="calmatch"]
 //
-// On mount, loads persisted values from backend via settings.get('calibration').
-// Changes are auto-saved via the save() prop (useAutoSave → settings.update).
+// Owned backend keys (CalibrationTolerances / UpdateCalibrationTolerances):
+//   - requireSameCamera   (boolean) — Camera "Match required" toggle
+//   - requireSameBinning  (boolean) — Binning "Match required" toggle
+//   - requireSameGain     (boolean) — Gain "Match required" toggle
+//   - temperatureToleranceC (number | null) — Sensor temp tolerance in °C
+//   - agingLimitDays      (number) — Dark / bias age tolerance in days
+//
+// STUB: backend CalibrationTolerances has no requireSameOffset field yet.
+//   The Offset "Match required" toggle is local state only and does NOT persist
+//   to the backend.  Wire it when the backend adds the field.
+//   Comment tag: STUB-OFFSET-REQUIRED
 import { useState, useEffect } from 'react';
-import { Table, Toggle, Pill } from '@/ui';
-import { CALIBRATION_CRITERIA } from '@/data/fixtures/settings';
-import { getSettings } from '@/api/commands';
+import { Toggle, Pill } from '@/ui';
+import { SettingsSection } from './SettingsKit';
+import {
+  calibrationTolerancesGet,
+  calibrationTolerancesUpdate,
+} from '@/api/commands';
+import type { UpdateCalibrationTolerances } from '@/api/commands';
 
 interface CalibrationMatchingProps {
+  /** Unused in this pane — tolerances use their own IPC commands. Kept for
+   *  prop-shape consistency with sibling settings panes. */
   save: (scope: string, values: Record<string, unknown>) => void;
 }
 
-// Default values matching MatchingRuleConfig::default() on the Rust side.
+// Defaults per authoritative mock (platevault-settings-menu.html § calmatch).
 const DEFAULTS = {
-  darkTempTolerance: 2.0,
-  prefillSuggestion: true,
-  darkOverridePenalty: 0.3,
-  flatOverridePenalty: 0.3,
-  biasOverridePenalty: 0.3,
-  agingThreshold: 90,
+  requireSameCamera: true,
+  requireSameBinning: true,
+  requireSameGain: true,
+  requireSameOffset: true, // STUB-OFFSET-REQUIRED: local only
+  temperatureToleranceC: 5,
+  agingLimitDays: 365,
 };
 
-export function CalibrationMatching({ save }: CalibrationMatchingProps) {
-  const [darkTempTolerance, setDarkTempTolerance] = useState(DEFAULTS.darkTempTolerance);
-  const [prefillSuggestion, setPrefillSuggestion] = useState(DEFAULTS.prefillSuggestion);
-  const [darkOverridePenalty, setDarkOverridePenalty] = useState(DEFAULTS.darkOverridePenalty);
-  const [flatOverridePenalty, setFlatOverridePenalty] = useState(DEFAULTS.flatOverridePenalty);
-  const [biasOverridePenalty, setBiasOverridePenalty] = useState(DEFAULTS.biasOverridePenalty);
-  const [agingThreshold, setAgingThreshold] = useState(DEFAULTS.agingThreshold);
+export function CalibrationMatching(_props: CalibrationMatchingProps) {
+  // ── Hard-required field toggles ────────────────────────────────────────────
+  const [requireCamera, setRequireCamera] = useState(DEFAULTS.requireSameCamera);
+  const [requireBinning, setRequireBinning] = useState(DEFAULTS.requireSameBinning);
+  const [requireGain, setRequireGain] = useState(DEFAULTS.requireSameGain);
+  // STUB-OFFSET-REQUIRED: no backend field — persists locally only
+  const [requireOffset, setRequireOffset] = useState(DEFAULTS.requireSameOffset);
 
-  // Load persisted values from backend on mount (spec 007 T031).
+  // ── Soft-tolerance inputs ──────────────────────────────────────────────────
+  const [tempTolerance, setTempTolerance] = useState<number>(DEFAULTS.temperatureToleranceC);
+  const [agingLimit, setAgingLimit] = useState<number>(DEFAULTS.agingLimitDays);
+
+  // ── Load persisted values from backend on mount ────────────────────────────
   useEffect(() => {
-    getSettings({ scope: 'calibration' })
-      .then((data) => {
-        const v = data.values as Record<string, unknown>;
-        if (typeof v['calibrationDarkTempTolerance'] === 'number') {
-          setDarkTempTolerance(v['calibrationDarkTempTolerance']);
+    calibrationTolerancesGet()
+      .then((tol) => {
+        setRequireCamera(tol.requireSameCamera);
+        setRequireBinning(tol.requireSameBinning);
+        setRequireGain(tol.requireSameGain);
+        if (tol.temperatureToleranceC !== null) {
+          setTempTolerance(tol.temperatureToleranceC);
         }
-        if (typeof v['calibrationPrefillSuggestion'] === 'boolean') {
-          setPrefillSuggestion(v['calibrationPrefillSuggestion']);
-        }
-        if (typeof v['calibrationDarkOverridePenalty'] === 'number') {
-          setDarkOverridePenalty(v['calibrationDarkOverridePenalty']);
-        }
-        if (typeof v['calibrationFlatOverridePenalty'] === 'number') {
-          setFlatOverridePenalty(v['calibrationFlatOverridePenalty']);
-        }
-        if (typeof v['calibrationBiasOverridePenalty'] === 'number') {
-          setBiasOverridePenalty(v['calibrationBiasOverridePenalty']);
-        }
+        setAgingLimit(tol.agingLimitDays);
       })
       .catch(() => {
-        // Backend unavailable — stay with in-code defaults.
+        // Backend unavailable in mock / dev mode — stay with in-code defaults.
       });
   }, []);
 
-  const handleDarkTempChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+  // ── Persist a partial update; callers pass only the changed field ──────────
+  function persist(patch: Partial<UpdateCalibrationTolerances>) {
+    const req: UpdateCalibrationTolerances = {
+      requireSameCamera: requireCamera,
+      requireSameBinning: requireBinning,
+      requireSameGain: requireGain,
+      temperatureToleranceC: tempTolerance,
+      agingLimitDays: agingLimit,
+      exposureToleranceS: null, // not surfaced in this pane
+      ...patch,
+    };
+    calibrationTolerancesUpdate(req).catch(() => {
+      // Best-effort persist; UI already reflects the change.
+    });
+  }
+
+  // ── Toggle handlers ────────────────────────────────────────────────────────
+  function handleCameraToggle(val: boolean) {
+    setRequireCamera(val);
+    persist({ requireSameCamera: val });
+  }
+  function handleBinningToggle(val: boolean) {
+    setRequireBinning(val);
+    persist({ requireSameBinning: val });
+  }
+  function handleGainToggle(val: boolean) {
+    setRequireGain(val);
+    persist({ requireSameGain: val });
+  }
+  // STUB-OFFSET-REQUIRED: local only — no persist call
+  function handleOffsetToggle(val: boolean) {
+    setRequireOffset(val);
+  }
+
+  // ── Tolerance input handlers ───────────────────────────────────────────────
+  function handleTempChange(e: React.ChangeEvent<HTMLInputElement>) {
     const n = parseFloat(e.target.value);
     if (!Number.isFinite(n) || n < 0) return;
-    setDarkTempTolerance(n);
-    save('calibration', { calibrationDarkTempTolerance: n });
-  };
-
-  const handlePrefillChange = (val: boolean) => {
-    setPrefillSuggestion(val);
-    save('calibration', { calibrationPrefillSuggestion: val });
-  };
-
-  const handleOverridePenaltyChange = (
-    kind: 'dark' | 'flat' | 'bias',
-    e: React.ChangeEvent<HTMLInputElement>,
-  ) => {
-    const n = parseFloat(e.target.value);
-    if (!Number.isFinite(n) || n < 0 || n > 1) return;
-    const keyMap = {
-      dark: 'calibrationDarkOverridePenalty',
-      flat: 'calibrationFlatOverridePenalty',
-      bias: 'calibrationBiasOverridePenalty',
-    } as const;
-    if (kind === 'dark') setDarkOverridePenalty(n);
-    else if (kind === 'flat') setFlatOverridePenalty(n);
-    else setBiasOverridePenalty(n);
-    save('calibration', { [keyMap[kind]]: n });
-  };
+    setTempTolerance(n);
+    persist({ temperatureToleranceC: n });
+  }
+  function handleAgingChange(e: React.ChangeEvent<HTMLInputElement>) {
+    const n = parseInt(e.target.value, 10);
+    if (!Number.isFinite(n) || n < 1) return;
+    setAgingLimit(n);
+    persist({ agingLimitDays: n });
+  }
 
   return (
-    <>
-      <div className="alm-settings__group">
-        <div className="alm-settings__group-title">Matching Criteria</div>
-        <Table
-          columns={[
-            { key: 'field', label: 'Field' },
-            { key: 'required', label: 'Match required', style: { width: 120 } },
-            { key: 'tolerance', label: 'Tolerance', style: { width: 120 } },
-          ]}
-          rows={CALIBRATION_CRITERIA.map((c) => ({
-            field: c.field,
-            required: <Pill variant="neutral">{c.required ? 'required' : 'optional'}</Pill>,
-            tolerance: <code className="alm-mono">{c.tolerance || 'exact'}</code>,
-          }))}
-        />
-        <p className="alm-settings__group-note">
-          Camera, binning, and gain must match exactly. Temperature and age are soft
-          tolerances that lower match confidence rather than block a match.
-        </p>
-      </div>
+    <SettingsSection title="Matching criteria">
+      <table className="alm-table alm-calmatch__table">
+        <thead>
+          <tr>
+            <th>Field</th>
+            <th className="alm-calmatch__col-required">Match required</th>
+            <th className="alm-calmatch__col-tolerance">Tolerance</th>
+          </tr>
+        </thead>
+        <tbody>
+          {/* Camera — hard toggle, persists to requireSameCamera */}
+          <tr>
+            <td>Camera</td>
+            <td>
+              <Toggle checked={requireCamera} onChange={handleCameraToggle} />
+            </td>
+            <td className="mono">exact</td>
+          </tr>
 
-      <div className="alm-settings__group">
-        <div className="alm-settings__group-title">Dark Matching Tolerances</div>
+          {/* Binning — hard toggle, persists to requireSameBinning */}
+          <tr>
+            <td>Binning</td>
+            <td>
+              <Toggle checked={requireBinning} onChange={handleBinningToggle} />
+            </td>
+            <td className="mono">exact</td>
+          </tr>
 
-        <div className="alm-settings__row">
-          <div className="alm-settings__row-label">Temperature tolerance (°C)</div>
-          <div className="alm-settings__row-content">
-            <div className="alm-calib-matching__input-row">
-              <input
-                type="number"
-                className="alm-input alm-calib-matching__num-input"
-                value={darkTempTolerance}
-                min={0}
-                step={0.5}
-                onChange={handleDarkTempChange}
-              />
-              <span className="alm-calib-matching__unit-label">°C</span>
-            </div>
-          </div>
-          <div className="alm-settings__row-desc">
-            Darks within this temperature delta are treated as soft matches; beyond it reduces confidence.
-          </div>
-        </div>
+          {/* Gain — hard toggle, persists to requireSameGain */}
+          <tr>
+            <td>Gain</td>
+            <td>
+              <Toggle checked={requireGain} onChange={handleGainToggle} />
+            </td>
+            <td className="mono">exact</td>
+          </tr>
 
-        <div className="alm-settings__row">
-          <div className="alm-settings__row-label">Override penalty</div>
-          <div className="alm-settings__row-content">
-            <input
-              type="number"
-              className="alm-input alm-calib-matching__num-input"
-              value={darkOverridePenalty}
-              min={0}
-              max={1}
-              step={0.05}
-              onChange={(e) => handleOverridePenaltyChange('dark', e)}
-            />
-          </div>
-          <div className="alm-settings__row-desc">
-            Confidence penalty (0–1) applied when a dark is assigned with override=true.
-          </div>
-        </div>
-      </div>
+          {/* Offset — STUB-OFFSET-REQUIRED: local state only, no backend key */}
+          <tr>
+            <td>Offset</td>
+            <td>
+              {/* STUB: backend MatchingRuleConfig per-field required flags pending
+                  (requireSameOffset) — persists locally only */}
+              <Toggle checked={requireOffset} onChange={handleOffsetToggle} />
+            </td>
+            <td className="mono">exact</td>
+          </tr>
 
-      <div className="alm-settings__group">
-        <div className="alm-settings__group-title">Flat Matching Tolerances</div>
-        <div className="alm-settings__row">
-          <div className="alm-settings__row-label">Override penalty</div>
-          <div className="alm-settings__row-content">
-            <input
-              type="number"
-              className="alm-input alm-calib-matching__num-input"
-              value={flatOverridePenalty}
-              min={0}
-              max={1}
-              step={0.05}
-              onChange={(e) => handleOverridePenaltyChange('flat', e)}
-            />
-          </div>
-          <div className="alm-settings__row-desc">
-            Confidence penalty applied when a flat is assigned with override=true.
-          </div>
-        </div>
-      </div>
+          {/* Sensor temp — soft field: pill label + number input */}
+          <tr>
+            <td>Sensor temp</td>
+            <td>
+              <Pill variant="neutral">soft</Pill>
+            </td>
+            <td>
+              <span className="alm-calmatch__tol-input-row">
+                <input
+                  type="number"
+                  className="alm-input alm-calmatch__num-input"
+                  value={tempTolerance}
+                  min={0}
+                  step={0.5}
+                  onChange={handleTempChange}
+                  aria-label="Sensor temperature tolerance in degrees Celsius"
+                />
+                <span className="alm-calmatch__unit">°C</span>
+              </span>
+            </td>
+          </tr>
 
-      <div className="alm-settings__group">
-        <div className="alm-settings__group-title">Bias Matching Tolerances</div>
-        <div className="alm-settings__row">
-          <div className="alm-settings__row-label">Override penalty</div>
-          <div className="alm-settings__row-content">
-            <input
-              type="number"
-              className="alm-input alm-calib-matching__num-input"
-              value={biasOverridePenalty}
-              min={0}
-              max={1}
-              step={0.05}
-              onChange={(e) => handleOverridePenaltyChange('bias', e)}
-            />
-          </div>
-          <div className="alm-settings__row-desc">
-            Confidence penalty applied when a bias is assigned with override=true.
-          </div>
-        </div>
-      </div>
+          {/* Dark / bias age — warn-level soft field */}
+          <tr>
+            <td>Dark / bias age</td>
+            <td>
+              <Pill variant="warn">warn</Pill>
+            </td>
+            <td>
+              <span className="alm-calmatch__tol-input-row">
+                <input
+                  type="number"
+                  className="alm-input alm-calmatch__num-input"
+                  value={agingLimit}
+                  min={1}
+                  max={3650}
+                  onChange={handleAgingChange}
+                  aria-label="Dark and bias age limit in days"
+                />
+                <span className="alm-calmatch__unit">d</span>
+              </span>
+            </td>
+          </tr>
+        </tbody>
+      </table>
 
-      <div className="alm-settings__group">
-        <div className="alm-settings__group-title">Assignment Behaviour</div>
-        <div className="alm-settings__row">
-          <Toggle checked={prefillSuggestion} onChange={handlePrefillChange}>
-            Pre-fill assign dialog with top candidate
-          </Toggle>
-          <div className="alm-settings__row-desc">
-            When enabled, the assign dialog opens pre-filled with the top-ranked suggestion.
-            Confirmation is always required before the assignment is recorded (R-Prefill).
-          </div>
-        </div>
-      </div>
-
-      <div className="alm-settings__group">
-        <div className="alm-settings__group-title">Aging Threshold</div>
-        <div className="alm-settings__row">
-          <div className="alm-settings__row-label">Default maximum calibration age</div>
-          <div className="alm-settings__row-content">
-            <div className="alm-calib-matching__input-row">
-              <input
-                type="number"
-                className="alm-input alm-calib-matching__num-input"
-                value={agingThreshold}
-                min={1}
-                max={3650}
-                onChange={(e) => {
-                  const v = Number(e.target.value);
-                  setAgingThreshold(v);
-                  save('calibration', { calibrationAgingThresholdDays: v });
-                }}
-              />
-              <span className="alm-calib-matching__unit-label">days</span>
-            </div>
-          </div>
-          <div className="alm-settings__row-desc">
-            Calibration frames older than this threshold generate a warning when matched against light frames.
-          </div>
-        </div>
-      </div>
-    </>
+      <p className="alm-calmatch__help">
+        Toggle a field off to exclude it from matching (e.g. ignore gain).
+        Soft/warn fields never block a match — they only lower confidence.
+      </p>
+    </SettingsSection>
   );
 }
