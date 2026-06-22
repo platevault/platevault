@@ -2,12 +2,12 @@
  * MasterDetail — spec 007 wired · spec 043 §4 (calibration detail redesign).
  *
  * Left-packed flat tabular layout matching SessionDetail exactly:
- *   [props A] [props B] [confirmed sessions] [compatible sessions]
+ *   [props A] [props B] [sessions column: "Used by" + "Compatible" stacked]
  *
  * Actions (Use in project / Replace master / Reveal in Explorer) are inline-left
  * in the title via titleExtra, wrapped in alm-session-detail2__actions — same
  * pattern as SessionDetail's actionButtons. No `actions` prop passed to
- * DetailPanel.
+ * DetailPanel. No subtitle (kind is already in the title, size is redundant).
  *
  * Data wiring:
  *   - master.usedBySessionIds from the list endpoint is always empty.
@@ -26,6 +26,7 @@ import {
 	PropertyTable,
 } from "@/components";
 import { Btn, EmptyState } from "@/ui";
+import { SessionListPopover } from "./SessionListPopover";
 
 // ── Helpers ───────────────────────────────────────────────────────────────────
 
@@ -185,9 +186,8 @@ export function MasterDetail({ master, agingThresholdDays }: Props) {
 			variant="calibration"
 			title={<strong>{masterTitle}</strong>}
 			titleExtra={actionButtons}
-			subtitle={`${kindStr} · ${fmtBytes(master.sizeBytes)}`}
 		>
-			{/* Left-packed columns: [props A] [props B] [confirmed sessions] [compatible sessions]. */}
+			{/* Left-packed columns: [props A] [props B] [sessions: Used by + Compatible stacked]. */}
 			<div className="alm-session-detail2">
 				<div className="alm-session-detail2__col">
 					<PropertyTable mode="view" properties={colA} />
@@ -196,36 +196,16 @@ export function MasterDetail({ master, agingThresholdDays }: Props) {
 					<PropertyTable mode="view" properties={colB} />
 				</div>
 
-				{/* Confirmed sessions — resolved from usedBySessionIds via master detail fetch. */}
-				<div className="alm-session-detail2__linked">
-					<div className="alm-session-detail2__head">Confirmed sessions</div>
-					{detail.loading ? (
-						<span className="alm-session-detail2__muted">Loading…</span>
-					) : detail.confirmedNames.length > 0 ? (
-						<div className="alm-session-detail2__linked-list">
-							{detail.confirmedNames.map((name) => (
-								<span key={name}>{name}</span>
-							))}
-						</div>
-					) : (
-						<span className="alm-session-detail2__muted">None</span>
-					)}
-				</div>
-
-				{/* Compatible sessions — resolved from compatibleSessions via the same fetch. */}
-				<div className="alm-session-detail2__linked">
-					<div className="alm-session-detail2__head">Compatible sessions</div>
-					{detail.loading ? (
-						<span className="alm-session-detail2__muted">Loading…</span>
-					) : detail.compatibleNames.length > 0 ? (
-						<div className="alm-session-detail2__linked-list">
-							{detail.compatibleNames.map((name) => (
-								<span key={name}>{name}</span>
-							))}
-						</div>
-					) : (
-						<span className="alm-session-detail2__muted">None</span>
-					)}
+				{/* Single column with both session popovers stacked vertically. */}
+				<div className="alm-session-detail2__linked alm-session-detail2__linked--stack">
+					<SessionListPopover
+						label="Used by"
+						names={detail.loading ? [] : detail.confirmedNames}
+					/>
+					<SessionListPopover
+						label="Compatible"
+						names={detail.loading ? [] : detail.compatibleNames}
+					/>
 				</div>
 			</div>
 		</DetailPanel>

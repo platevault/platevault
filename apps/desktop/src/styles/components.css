@@ -9701,6 +9701,99 @@
   color: var(--alm-accent);
 }
 .alm-session-detail2__link:hover { text-decoration: underline; }
+/* Stacked variant: two SessionListPopover blocks in one column. */
+.alm-session-detail2__linked--stack {
+  display: flex;
+  flex-direction: column;
+  gap: var(--alm-sp-4);
+}
+
+/* === Session list popover — anchored, portaled, searchable ===
+   Reuses menu tokens (surface-raised, shadow-sm, border, radius-md).
+   No grey cards, no side-stripe borders, radius ≤ 12px. */
+.alm-session-popover__trigger {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--alm-sp-1);
+  padding: 1px var(--alm-sp-2);
+  font-size: var(--alm-text-sm);
+  font-family: inherit;
+  color: var(--alm-text);
+  background: none;
+  border: 1px solid var(--alm-border);
+  border-radius: var(--alm-radius-sm);
+  cursor: pointer;
+  line-height: 1.5;
+}
+.alm-session-popover__trigger:hover {
+  background: var(--alm-hover-bg);
+}
+.alm-session-popover__trigger:focus-visible {
+  outline: 2px solid var(--alm-focus-ring);
+  outline-offset: 1px;
+}
+.alm-session-popover__popup {
+  min-width: 260px;
+  max-width: 360px;
+  background: var(--alm-surface-raised);
+  border: 1px solid var(--alm-border);
+  border-radius: var(--alm-radius-md);
+  box-shadow: var(--alm-shadow-sm);
+  outline: none;
+  z-index: 200;
+  display: flex;
+  flex-direction: column;
+  gap: 0;
+}
+.alm-session-popover__search {
+  display: block;
+  width: 100%;
+  box-sizing: border-box;
+  padding: var(--alm-sp-2) var(--alm-sp-3);
+  font-size: var(--alm-text-sm);
+  font-family: inherit;
+  color: var(--alm-text);
+  background: transparent;
+  border: none;
+  border-bottom: 1px solid var(--alm-border-subtle);
+  outline: none;
+}
+.alm-session-popover__search:focus {
+  border-bottom-color: var(--alm-accent);
+}
+.alm-session-popover__list {
+  overflow-y: auto;
+  max-height: 240px;
+  padding: var(--alm-sp-1);
+  margin: 0;
+  list-style: none;
+}
+.alm-session-popover__item {
+  padding: 3px var(--alm-sp-2);
+  font-size: var(--alm-text-sm);
+  border-radius: var(--alm-radius-sm);
+  color: var(--alm-text);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.alm-session-popover__empty {
+  padding: var(--alm-sp-2);
+  font-size: var(--alm-text-sm);
+  color: var(--alm-text-muted);
+}
+/* Visually-hidden utility for the label element. */
+.alm-visually-hidden {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  padding: 0;
+  margin: -1px;
+  overflow: hidden;
+  clip: rect(0, 0, 0, 0);
+  white-space: nowrap;
+  border: 0;
+}
 
 /* === Targets planner detail — left-packed: [facts A][facts B][tonight] ===
    Mirrors the Sessions detail: a flex row, left-justified, so growing the
