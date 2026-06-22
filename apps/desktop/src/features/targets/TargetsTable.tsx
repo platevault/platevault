@@ -9,15 +9,31 @@
  * Columns: Designation · Type · Max altitude · (sparkline) · Visible tonight ·
  * Sessions.
  *
- * Task #84 — VIRTUALIZATION:
- *   The Planner catalogue can be large; rendering every row synchronously blocks
- *   the main thread on filter/sort. Rows (group-header rows AND target rows) are
- *   flattened into one list and windowed with `@tanstack/react-virtual`
- *   (mirroring the old TargetList.tsx). Only the visible slice mounts; the rest
- *   is reserved with spacer rows so the native `<table>` (and `<tr>` semantics
- *   the page/tests rely on) is preserved. In a non-layout environment (jsdom)
- *   the scroll element measures 0px, so we fall back to rendering ALL rows — the
- *   windowing is a runtime perf optimization, not a behavior change.
+ * Task #84 — VIRTUALIZATION (padding-spacer pattern):
+ *   The Planner catalogue is large; rendering every row synchronously blocks the
+ *   main thread. Rows (group-header rows AND target rows) are flattened into one
+ *   list and windowed with `@tanstack/react-virtual`.
+ *
+ *   IMPORTANT — mixing a real CSS `<table>` with TanStack Virtual requires the
+ *   PADDING-SPACER pattern, NOT the tbody-height + transform pattern:
+ *
+ *   Problem: setting `height: totalSize` on `<tbody>` and leaving rows in normal
+ *   table flow (display:table-row) causes the browser to distribute the total
+ *   height across the rendered rows — each row stretches to totalSize/rowCount
+ *   (~1.7 M px with 13 rows rendered from 11 k). If `measureElement` is also
+ *   attached it reads the stretched height and re-inflates totalSize → runaway
+ *   feedback loop → effectively invisible table.
+ *
+ *   Fix: keep `<tbody>` height unstyled (natural). Render two sentinel spacer
+ *   `<tr>` rows — one before the windowed slice (height = start of first virtual
+ *   row) and one after (height = totalSize − end of last virtual row). Real data
+ *   rows render between them in normal table flow at their natural ~36 px height.
+ *   No transforms, no absolutepositioning, no tbody height, no measureElement.
+ *   Row heights are uniform so fixed `estimateSize` is exact.
+ *
+ *   jsdom fallback: when the scroll element has no measurable height the
+ *   virtualizer yields zero virtual items. In that case all rows render with no
+ *   spacers — windowing is a runtime perf optimization, not a behavior change.
  *
  * Task #85 — PLANNING COLUMNS:
  *   The low-value Constellation/Magnitude columns are replaced with
@@ -227,17 +243,24 @@ export function TargetsTable({
 
   // Windowing fallback: in a non-layout environment (jsdom under vitest) the
   // scroll element has no measurable height, so the virtualizer yields zero
-  // items. Render every row in that case — the page/tests rely on all rows being
-  // present, and windowing is purely a runtime perf optimization.
+  // items. Render every row without spacers in that case — tests rely on all
+  // rows being present; windowing is purely a runtime perf optimization.
   const useWindowing = virtualItems.length > 0;
-  const renderRows: Array<{ index: number; start: number }> = useWindowing
-    ? virtualItems.map((vi) => ({ index: vi.index, start: vi.start }))
-    : flatRows.map((_, index) => ({ index, start: 0 }));
 
-  // Top spacer reserves the height of the rows scrolled above the window so the
-  // scrollbar + absolute row offsets line up. Bottom is handled by the inner
-  // container height (totalSize) when windowing.
-  const paddingTop = useWindowing && virtualItems.length > 0 ? virtualItems[0].start : 0;
+  // Indices of the visible slice. In non-windowed mode we render everything.
+  const renderIndices: number[] = useWindowing
+    ? virtualItems.map((vi) => vi.index)
+    : flatRows.map((_, i) => i);
+
+  // Padding-spacer pattern for real CSS <table> (see module header):
+  // two sentinel spacer rows bracket the visible slice. Their combined height
+  // equals totalSize so the scrollbar reflects the full virtual list length,
+  // but the rendered data rows are in normal table flow at their natural height.
+  const paddingBefore = useWindowing && virtualItems.length > 0 ? virtualItems[0].start : 0;
+  const paddingAfter =
+    useWindowing && virtualItems.length > 0
+      ? totalSize - (virtualItems[virtualItems.length - 1]?.end ?? 0)
+      : 0;
 
   const columns = COLUMNS.map((c) => ({
     key: c.key,
@@ -282,21 +305,17 @@ export function TargetsTable({
               ))}
             </tr>
           </thead>
-          <tbody
-            className="alm-targets-table__body"
-            // eslint-disable-next-line no-restricted-syntax -- dynamic: virtualizer total scroll height (getTotalSize) so the scrollbar reflects all rows
-            style={useWindowing ? { height: `${totalSize}px` } : undefined}
-          >
-            {/* Top spacer: reserve the height of rows above the window so the
-                first rendered row sits at the correct scroll offset. */}
-            {useWindowing && paddingTop > 0 && (
+          <tbody className="alm-targets-table__body">
+            {/* Before-spacer: reserve height for virtual rows above the window.
+                Height is dynamic (virtualizer offset), allowed by convention. */}
+            {paddingBefore > 0 && (
               <tr aria-hidden="true" className="alm-targets-table__spacer">
-                {/* eslint-disable-next-line no-restricted-syntax -- dynamic: virtualizer top spacer height (offset of first windowed row) */}
-                <td colSpan={COL_COUNT} style={{ height: `${paddingTop}px` }} />
+                {/* eslint-disable-next-line no-restricted-syntax -- dynamic: virtualizer before-spacer height (start of first windowed row) */}
+                <td colSpan={COL_COUNT} style={{ height: `${paddingBefore}px` }} />
               </tr>
             )}
 
-            {renderRows.map(({ index }) => {
+            {renderIndices.map((index) => {
               const row = flatRows[index];
 
               if (row.kind === 'group') {
@@ -304,7 +323,6 @@ export function TargetsTable({
                   <tr
                     key={row.key}
                     data-index={index}
-                    ref={useWindowing ? virtualizer.measureElement : undefined}
                     className="alm-targets-table__group"
                   >
                     <td colSpan={COL_COUNT}>
@@ -326,7 +344,6 @@ export function TargetsTable({
                 <tr
                   key={row.key}
                   data-index={index}
-                  ref={useWindowing ? virtualizer.measureElement : undefined}
                   className={
                     'alm-targets-table__row' +
                     (isSelected ? ' alm-targets-table__row--selected' : '')
@@ -379,6 +396,15 @@ export function TargetsTable({
                 </tr>
               );
             })}
+
+            {/* After-spacer: reserve height for virtual rows below the window.
+                Height is dynamic (virtualizer remainder), allowed by convention. */}
+            {paddingAfter > 0 && (
+              <tr aria-hidden="true" className="alm-targets-table__spacer">
+                {/* eslint-disable-next-line no-restricted-syntax -- dynamic: virtualizer after-spacer height (totalSize minus end of last windowed row) */}
+                <td colSpan={COL_COUNT} style={{ height: `${paddingAfter}px` }} />
+              </tr>
+            )}
           </tbody>
         </table>
       </div>
