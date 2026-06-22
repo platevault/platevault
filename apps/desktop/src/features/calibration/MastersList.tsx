@@ -24,6 +24,23 @@ function kindLabel(kind: string): Kind | null {
   return null;
 }
 
+/**
+ * How many sessions / projects reference this master.
+ *
+ * Real usage figures: `usedBySessionIds` / `usedByProjectIds` are populated by
+ * the `calibration.masters.list` backend response (the master's reuse links).
+ * No STUB needed — these are real fields. Renders "3 sessions · 1 project",
+ * collapsing to the non-zero parts, or "unused" when nothing references it.
+ */
+function usageSummary(m: CalibrationMaster): string {
+  const sessions = (m.usedBySessionIds ?? []).length;
+  const projects = (m.usedByProjectIds ?? []).length;
+  const parts: string[] = [];
+  if (sessions > 0) parts.push(`${sessions} session${sessions === 1 ? '' : 's'}`);
+  if (projects > 0) parts.push(`${projects} project${projects === 1 ? '' : 's'}`);
+  return parts.length > 0 ? parts.join(' · ') : 'unused';
+}
+
 interface Props {
   masters: CalibrationMaster[];
   loading: boolean;
@@ -120,9 +137,13 @@ export function MastersList({ masters, loading, error, selected, onSelect, aging
                 meta={
                   <>
                     {metaParts.join(' · ')}
+                    <span className="alm-masters-list__usage" data-testid={`master-usage-${m.id}`}>
+                      {metaParts.length > 0 && <span className="alm-list-item__meta-sep">·</span>}
+                      {usageSummary(m)}
+                    </span>
                     {isAging && (
                       <>
-                        {metaParts.length > 0 && <span className="alm-list-item__meta-sep">·</span>}
+                        <span className="alm-list-item__meta-sep">·</span>
                         <Pill variant="warn">aging {m.ageDays}d</Pill>
                       </>
                     )}

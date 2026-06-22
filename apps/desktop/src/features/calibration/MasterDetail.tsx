@@ -1,15 +1,15 @@
 /**
- * MasterDetail — spec 007 wired.
+ * MasterDetail — spec 007 wired · spec 043 §4 (calibration detail hero).
  *
- * Shows master fingerprint facts (from the real CalibrationMaster DTO) and
- * the ranked match candidates panel (from calibration.match.suggest using the
- * master's sourceSessionId as the anchor session).
+ * The hero of the master detail is the COMPATIBLE-SESSIONS MATCH TABLE
+ * (`MatchCandidatesPanel`): which acquisition sessions this master can
+ * calibrate, ranked by confidence. The master's fingerprint + reuse facts live
+ * once in the shared RailCard + KV rail.
  *
  * The calibration.match.suggest contract targets *light* sessions, not master
- * sessions. The MatchCandidatesPanel below is surfaced here so that when a user
- * selects a master they can see which sessions it would match (from that master's
- * originating session perspective). For the project-level accordion (T034) see
- * ProjectDetail.
+ * sessions, so we anchor it on the master's sourceSessionId to surface the
+ * sessions sharing this master's fingerprint. For the project-level accordion
+ * (T034) see ProjectDetail.
  */
 
 import type { CalibrationMaster_Serialize as CalibrationMaster } from '@/bindings/index';

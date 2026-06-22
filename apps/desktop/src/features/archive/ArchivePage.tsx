@@ -37,9 +37,9 @@ export function ArchivePage() {
   const navigate = useNavigate({ from: '/archive' });
   const item: ArchiveFixture | null = ARCHIVE_DATA.find((a) => a.id === selected) ?? null;
 
-  useStaleSelectionCleanup(selected, item !== null, () =>
-    navigate({ search: (prev) => ({ ...prev, selected: undefined }), replace: true }),
-  );
+  useStaleSelectionCleanup(selected, item !== null, () => {
+    void navigate({ search: (prev) => ({ ...prev, selected: undefined }), replace: true });
+  });
 
   const onSelect = (id: number) => navigate({ search: (prev) => ({ ...prev, selected: id }) });
 

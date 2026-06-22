@@ -114,6 +114,24 @@ describe('ProjectsList', () => {
     expect(screen.getByTitle('Channel drift detected')).toBeInTheDocument();
   });
 
+  it('renders rich meta: tool, source count, and formatted updated date', () => {
+    render(
+      <ProjectsList
+        projects={mockProjects}
+        selectedId={undefined}
+        onSelect={vi.fn()}
+        lifecycle={[]}
+        onLifecycleChange={vi.fn()}
+      />,
+    );
+    // tool segment is present on every row
+    expect(screen.getAllByText('PixInsight').length).toBeGreaterThan(0);
+    // source count segment (NGC 7000 has 3 sources)
+    expect(screen.getByText('3 sources')).toBeInTheDocument();
+    // updated date is formatted as "yyyy-MM-dd HH:mm" (local); assert the date part
+    expect(screen.getAllByText(/2026-06-1[09] \d{2}:\d{2}/).length).toBeGreaterThan(0);
+  });
+
   it('marks the selected project with the selected CSS class', () => {
     const { container } = render(
       <ProjectsList

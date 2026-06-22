@@ -132,6 +132,24 @@ describe('MastersList (spec 007)', () => {
     expect(screen.getByText('FLATS')).toBeInTheDocument();
   });
 
+  it('9. usage count renders on rows (real usedBy* fields)', () => {
+    const used = makeMaster({
+      id: 'dark-used',
+      kind: 'dark',
+      ageDays: 10,
+      usedBySessionIds: ['s1', 's2', 's3'],
+      usedByProjectIds: ['p1'],
+    });
+    const unused = makeMaster({ id: 'dark-unused', kind: 'dark', ageDays: 10 });
+    render(
+      <MastersList masters={[used, unused]} loading={false} error={undefined} selected={null} onSelect={vi.fn()}
+        agingThresholdDays={90}
+      />,
+    );
+    expect(screen.getByTestId('master-usage-dark-used')).toHaveTextContent('3 sessions · 1 project');
+    expect(screen.getByTestId('master-usage-dark-unused')).toHaveTextContent('unused');
+  });
+
   it('8. dark_flat kind is not shown in the grouped list (FR-001)', () => {
     const darkFlatMaster = makeMaster({
       id: 'df-1',

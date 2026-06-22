@@ -1,30 +1,25 @@
 /// <reference types="@testing-library/jest-dom" />
 /**
- * SessionsPage + SessionsList + SessionDetail inventory wiring tests — spec 006.
+ * SessionsTable + SessionsToolbar + SessionDetail inventory wiring tests —
+ * spec 006 + spec 043 §4 (task #36 redesign).
+ *
+ * The Sessions surface is now a dense full-width table grouped by target
+ * (SessionsTable), with search + frame/review filters in a top toolbar
+ * (SessionsToolbar). These tests target the new components.
  *
  * Tests (jsdom, mock @/api/commands and @/features/sessions/store):
  *
- * 1. SessionsList renders group headers from InventorySource data.
- * 2. SessionsList renders session rows with correct state labels.
- * 3. SessionsList discovered/candidate rows map to "Needs review" display label.
- * 4. SessionsList renders empty-state when sources is empty.
- * 5. SessionsList frame-filter select calls onFrameFilter with typed value.
- * 6. SessionsList review-filter select calls onReviewFilter with typed value.
+ * 1. SessionsTable renders a target group header for each distinct target.
+ * 2. SessionsTable renders session rows with target/filter content.
+ * 3. SessionsTable discovered/candidate rows map to "Needs review" state label.
+ * 4. SessionsTable renders empty-state when sources is empty.
+ * 5. SessionsToolbar frame-filter select calls onFrameFilter with typed value.
+ * 6. SessionsToolbar review-filter select calls onReviewFilter with typed value.
  * 7. SessionDetail renders empty-state when session is null.
- * 8. SessionDetail shows state Pill "Needs review" for needs_review state (no action buttons).
- * 9. SessionDetail shows state Pill "Confirmed" for confirmed state (no action buttons in rail).
- * 10. SessionDetail shows state Pill for needs_review (Reject button absent from rail).
- * 11. SessionDetail shows Re-open state for rejected (no Reject button in rail).
- * 12. SessionDetail renders Facts section with em-dash for missing values.
- * 13. SessionDetail renders Provenance section when provenance is present.
- * 14. SessionDetail omits Provenance section when provenance is absent.
- * 15. SessionDetail renders linked projects as Pill elements.
- * 16. Confirm action calls review('confirm') and shows success toast.
- * 17. Re-open action calls review('reopen') and shows info toast.
- * 18. Reject action calls review('reject') and shows warn toast.
- * 19. Noop response from review suppresses toast.
- * 20. Error response from review shows error toast.
- * 21. SessionsPage loads from inventoryList and renders source groups.
+ * 8-11b. SessionDetail review-state rail (read-only Pills, no action buttons).
+ * 12-15. SessionDetail Facts / Provenance / Linked sections.
+ * 16-20. Review action dispatch + toast contract.
+ * 21-24. SessionsTable live fixture data + sort headers + footer.
  */
 
 import { render, screen, fireEvent } from '@testing-library/react';
@@ -89,20 +84,33 @@ const ROOT_ID = INVENTORY_SOURCES[0].id;
 
 // ── Import components after mocks are in place ────────────────────────────────
 
-import { SessionsList } from '../SessionsList';
+import { SessionsTable, DEFAULT_SESSION_SORT } from '../SessionsTable';
+import { SessionsToolbar } from '../SessionsToolbar';
 import { SessionDetail } from '../SessionDetail';
 
 // ── Helpers ───────────────────────────────────────────────────────────────────
 
 const noop = () => undefined;
 
-function renderList(props: Partial<React.ComponentProps<typeof SessionsList>> = {}) {
+function renderList(props: Partial<React.ComponentProps<typeof SessionsTable>> = {}) {
   return render(
-    <SessionsList
+    <SessionsTable
       sources={INVENTORY_LIST_RESPONSE.sources}
       selected={null}
       onSelect={noop}
       loading={false}
+      sort={DEFAULT_SESSION_SORT}
+      onSort={noop}
+      {...props}
+    />,
+  );
+}
+
+function renderToolbar(props: Partial<React.ComponentProps<typeof SessionsToolbar>> = {}) {
+  return render(
+    <SessionsToolbar
+      search=""
+      onSearch={noop}
       onFrameFilter={noop}
       onReviewFilter={noop}
       {...props}
@@ -125,20 +133,19 @@ function renderDetail(
 
 // ── Tests: SessionsList ───────────────────────────────────────────────────────
 
-describe('SessionsList — group headers and rows', () => {
-  it('1. renders a group header for each InventorySource', () => {
+describe('SessionsTable — target group headers and rows', () => {
+  it('1. renders a target group header for each distinct target', () => {
     renderList();
-    // Each source path appears as a group header.
-    for (const src of INVENTORY_LIST_RESPONSE.sources) {
-      expect(screen.getByText(src.path)).toBeDefined();
+    // Sessions are grouped by target identity; each distinct target heads a group.
+    for (const target of ['NGC 7000', 'IC 1396', 'M31', 'M42']) {
+      expect(screen.getAllByText(new RegExp(target)).length).toBeGreaterThan(0);
     }
   });
 
-  it('2. renders session rows with target and filter', () => {
+  it('2. renders session rows with filter and state content', () => {
     renderList();
-    // At least one session with target NGC 7000 is visible.
-    const matches = screen.getAllByText(/NGC 7000/);
-    expect(matches.length).toBeGreaterThan(0);
+    // A confirmed state Pill is present for at least one row.
+    expect(screen.getAllByText('Confirmed').length).toBeGreaterThan(0);
   });
 
   it('3. discovered/candidate state maps to "Needs review" label', () => {
@@ -149,7 +156,6 @@ describe('SessionsList — group headers and rows', () => {
       sessions: [discoveredSession],
     };
     renderList({ sources: [src] });
-    // getAllByText tolerates multiple matches (e.g. row + detail pill).
     expect(screen.getAllByText('Needs review').length).toBeGreaterThan(0);
   });
 
@@ -158,28 +164,51 @@ describe('SessionsList — group headers and rows', () => {
     expect(screen.getByText(/No sessions match/)).toBeDefined();
   });
 
-  it('5. frame-filter select calls onFrameFilter with the selected value', () => {
+  it('5. sortable column headers are rendered as buttons', () => {
+    renderList();
+    expect(screen.getByRole('button', { name: /Sort by Target/ })).toBeDefined();
+    expect(screen.getByRole('button', { name: /Sort by Night/ })).toBeDefined();
+  });
+
+  it('6. clicking a column header calls onSort with that column', () => {
+    const onSort = vi.fn();
+    renderList({ onSort });
+    fireEvent.click(screen.getByRole('button', { name: /Sort by Frames/ }));
+    expect(onSort).toHaveBeenCalledWith('frames');
+  });
+});
+
+describe('SessionsToolbar — search and filters', () => {
+  it('5b. frame-filter select calls onFrameFilter with the selected value', () => {
     const onFrameFilter = vi.fn();
-    renderList({ onFrameFilter });
+    renderToolbar({ onFrameFilter });
     const select = screen.getByRole('combobox', { name: /Frame type filter/ });
     fireEvent.change(select, { target: { value: 'dark' } });
     expect(onFrameFilter).toHaveBeenCalledWith('dark');
   });
 
-  it('6. review-filter select calls onReviewFilter with the selected value', () => {
+  it('6b. review-filter select calls onReviewFilter with the selected value', () => {
     const onReviewFilter = vi.fn();
-    renderList({ onReviewFilter });
+    renderToolbar({ onReviewFilter });
     const select = screen.getByRole('combobox', { name: /Review state filter/ });
     fireEvent.change(select, { target: { value: 'confirmed' } });
     expect(onReviewFilter).toHaveBeenCalledWith('confirmed');
   });
 
-  it('6b. clearing frame filter calls onFrameFilter with null', () => {
+  it('6c. clearing frame filter calls onFrameFilter with null', () => {
     const onFrameFilter = vi.fn();
-    renderList({ onFrameFilter, frameFilter: 'dark' });
+    renderToolbar({ onFrameFilter, frameFilter: 'dark' });
     const select = screen.getByRole('combobox', { name: /Frame type filter/ });
     fireEvent.change(select, { target: { value: '' } });
     expect(onFrameFilter).toHaveBeenCalledWith(null);
+  });
+
+  it('6d. typing in search calls onSearch', () => {
+    const onSearch = vi.fn();
+    renderToolbar({ onSearch });
+    const input = screen.getByRole('searchbox', { name: /Search sessions/ });
+    fireEvent.change(input, { target: { value: 'M31' } });
+    expect(onSearch).toHaveBeenCalledWith('M31');
   });
 });
 
@@ -345,41 +374,38 @@ describe('useSessionReview — toast feedback (via store mock)', () => {
   });
 });
 
-// ── Tests: SessionsList with live InventorySource data ────────────────────────
+// ── Tests: SessionsTable with live InventorySource data ───────────────────────
 
-describe('SessionsList — live inventory fixture data (T106)', () => {
-  it('21. renders all non-ignored sources from INVENTORY_LIST_RESPONSE', () => {
+describe('SessionsTable — live inventory fixture data (T106)', () => {
+  it('21. renders sessions from every fixture target', () => {
     renderList({ sources: INVENTORY_LIST_RESPONSE.sources });
-    // All source paths visible.
-    for (const src of INVENTORY_LIST_RESPONSE.sources) {
-      expect(screen.getByText(src.path)).toBeDefined();
+    // Distinct targets from the fixture all appear as group headers.
+    for (const target of ['NGC 7000', 'M31', 'M42']) {
+      expect(screen.getAllByText(new RegExp(target)).length).toBeGreaterThan(0);
     }
   });
 
   it('22. selected session row has selected styling marker', () => {
     const session = INVENTORY_LIST_RESPONSE.sources[0].sessions[0];
     const { container } = renderList({ selected: session.id });
-    // ListItem with selected prop should render with a selected class/attr.
-    const selectedItem = container.querySelector('[class*="selected"], [data-selected]');
-    // The ListItem may render differently — just confirm the render didn't throw.
-    expect(session.id).toBeTruthy();
-    void selectedItem; // structural check; exact class depends on ListItem impl
+    const selectedRow = container.querySelector('.alm-sessions-table__row--selected');
+    expect(selectedRow).not.toBeNull();
   });
 
-  it('23. source state=missing shows warn pill in group header', () => {
-    const missingSrc: InventorySource = {
-      ...INVENTORY_SOURCES[0],
-      id: 'missing-root',
-      state: 'missing',
-      path: '/media/MissingDrive',
-    };
-    renderList({ sources: [missingSrc] });
-    expect(screen.getByText('/media/MissingDrive')).toBeDefined();
-    expect(screen.getByText('missing')).toBeDefined();
+  it('23. clicking a session row calls onSelect with its id', () => {
+    const onSelect = vi.fn();
+    const session = INVENTORY_LIST_RESPONSE.sources[0].sessions[0];
+    const { container } = renderList({ onSelect });
+    const row = container.querySelector('.alm-sessions-table__row');
+    expect(row).not.toBeNull();
+    fireEvent.click(row as Element);
+    expect(onSelect).toHaveBeenCalled();
+    void session;
   });
 
   it('24. loading state shows loading text in footer', () => {
-    renderList({ sources: [], loading: true });
+    // Non-empty sources so the table (and its footer) renders during load.
+    renderList({ sources: INVENTORY_LIST_RESPONSE.sources, loading: true });
     expect(screen.getByText('Loading…')).toBeDefined();
   });
 });

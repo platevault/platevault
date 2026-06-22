@@ -105,8 +105,8 @@ describe('TargetsPage', () => {
   it('1. shows loading state while listTargets is in flight', () => {
     mockListTargets.mockReturnValue(new Promise(() => {}));
     render(<TargetsPage />);
-    // List is in "..." subtitle state
-    expect(screen.getByText('… targets')).toBeInTheDocument();
+    // List is in "..." subtitle state (default tab is Planner)
+    expect(screen.getByText('… catalog targets')).toBeInTheDocument();
   });
 
   it('2. renders target list items from backend response', async () => {
@@ -161,9 +161,41 @@ describe('TargetsPage', () => {
 
   it('8. target count appears in the subtitle', async () => {
     render(<TargetsPage />);
+    // Default tab is Planner; both NGC 7000 and M 31 are allowed catalogs.
     await waitFor(() =>
-      expect(screen.getByText('2 targets')).toBeInTheDocument(),
+      expect(screen.getByText('2 catalog targets')).toBeInTheDocument(),
     );
+  });
+
+  // ── P: My Targets vs Planner split (task #40) ────────────────────────────────
+
+  it('P1. Planner is the default tab and filters to allowed catalogs', async () => {
+    mockListTargets.mockResolvedValue([
+      ...listItems,
+      // double-star dump entries that must NOT show in the Planner
+      { id: 'hd1', effectiveLabel: 'HD 1', primaryDesignation: 'HD 1', objectType: 'double_star' },
+      { id: 'wds1', effectiveLabel: 'WDS J1', primaryDesignation: 'WDS J00057+4549', objectType: 'double_star' },
+    ]);
+    render(<TargetsPage />);
+    await waitFor(() => expect(screen.getByText('NGC 7000')).toBeInTheDocument());
+
+    expect(screen.getByText('M 31')).toBeInTheDocument();
+    expect(screen.queryByText('HD 1')).not.toBeInTheDocument();
+    expect(screen.queryByText('WDS J1')).not.toBeInTheDocument();
+    // subtitle counts only the catalog targets
+    expect(screen.getByText('2 catalog targets')).toBeInTheDocument();
+  });
+
+  it('P2. switching to My Targets shows a STUB empty state (no backend linkage)', async () => {
+    render(<TargetsPage />);
+    await waitFor(() => screen.getByText('NGC 7000'));
+
+    fireEvent.click(screen.getByRole('button', { name: 'My Targets' }));
+
+    expect(screen.getByText('No targets with sessions yet')).toBeInTheDocument();
+    // Planner-only catalog items are gone from the list
+    expect(screen.queryByText('NGC 7000')).not.toBeInTheDocument();
+    expect(screen.getByText('0 with sessions')).toBeInTheDocument();
   });
 
   // ── H: Search filters ──────────────────────────────────────────────────────

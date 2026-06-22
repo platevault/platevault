@@ -1,13 +1,20 @@
 /**
- * MatchCandidatesPanel — spec 007 US1-US4.
+ * MatchCandidatesPanel — spec 007 US1-US4 · spec 043 §4 (calibration hero).
  *
- * Renders the ranked calibration-match candidates for a given session,
- * returned by `calibration.match.suggest`. Shows:
+ * The DETAIL hero for a calibration master: a COMPATIBLE-SESSIONS MATCH TABLE —
+ * which acquisition sessions this master can calibrate, ranked by match
+ * confidence. Data comes from `calibration.match.suggest`; each row is one
+ * candidate session (`CalibrationMatchDto`). Shows:
  *   - Per-type suggest status badge (match / ambiguous / no_match / observer_location_missing)
- *   - Ranked candidates with confidence bar + dimension breakdown
+ *   - Session-oriented columns: Target · Filter · Night · Frames · Confidence
  *   - Dimension-mismatch warnings (reason + delta)
  *   - Assign button (calls calibration.match.assign; handles hard-violation errors)
  *   - Respects `prefillSuggestion` to auto-open confirm prompt on top candidate
+ *   - Humanized empty state when no sessions match.
+ *
+ * Target / Filter / Night / Frames are NOT carried on the suggest DTO
+ * (`CalibrationMatchDto` only has sessionId + confidence + dimension breakdown);
+ * those cells are marked `// STUB:` until the backend enriches the contract.
  *
  * No Playwright/visual smoke tests — jsdom unit-tested in MatchCandidatesPanel.test.tsx.
  */
@@ -265,12 +272,12 @@ export function MatchCandidatesPanel({
 }: MatchCandidatesPanelProps) {
   if (loading) {
     return (
-      <Section title="Calibration suggestions">
+      <Section title="Compatible sessions">
         <div
           className="alm-match-candidates__loading"
           data-testid="suggest-loading"
         >
-          Loading suggestions…
+          Finding compatible sessions…
         </div>
       </Section>
     );
@@ -278,9 +285,9 @@ export function MatchCandidatesPanel({
 
   if (error) {
     return (
-      <Section title="Calibration suggestions">
+      <Section title="Compatible sessions">
         <Banner variant="danger" data-testid="suggest-error">
-          Failed to load suggestions: {error}
+          Failed to load compatible sessions: {error}
         </Banner>
       </Section>
     );
@@ -288,8 +295,8 @@ export function MatchCandidatesPanel({
 
   if (!response) {
     return (
-      <Section title="Calibration suggestions">
-        <EmptyState title="No session selected" desc="Select a session to view suggestions." />
+      <Section title="Compatible sessions">
+        <EmptyState title="No session selected" desc="Select a master to see which sessions it can calibrate." />
       </Section>
     );
   }
@@ -301,7 +308,7 @@ export function MatchCandidatesPanel({
     // rather than a raw "Session … not found" error.
     if (code === 'session.not_found') {
       return (
-        <Section title="Calibration suggestions">
+        <Section title="Compatible sessions">
           <EmptyState
             title="No compatible sessions"
             desc="This master has no matched acquisition sessions yet."
@@ -311,7 +318,7 @@ export function MatchCandidatesPanel({
     }
     const isObserverMissing = code === 'match.observer_location_missing' || response.suggestStatus === 'observer_location_missing';
     return (
-      <Section title="Calibration suggestions">
+      <Section title="Compatible sessions">
         <Banner variant="warn" data-testid="suggest-guard-error">
           {isObserverMissing
             ? 'Observer location or acquisition time is missing — cannot suggest calibration masters.'
@@ -328,9 +335,9 @@ export function MatchCandidatesPanel({
 
   if (suggestStatus === 'observer_location_missing') {
     return (
-      <Section title="Calibration suggestions">
+      <Section title="Compatible sessions">
         <Banner variant="warn" data-testid="suggest-observer-missing">
-          Observer location or acquisition time is missing — cannot suggest calibration masters.
+          Observer location or acquisition time is missing — cannot match this master to sessions.
         </Banner>
       </Section>
     );
@@ -338,10 +345,10 @@ export function MatchCandidatesPanel({
 
   if (suggestStatus === 'no_match' || matches.length === 0) {
     return (
-      <Section title="Calibration suggestions">
+      <Section title="Compatible sessions">
         <EmptyState
-          title="No compatible masters"
-          desc="No calibration masters matched this session's fingerprint. Add masters or adjust matching tolerances in Settings → Calibration."
+          title="No compatible sessions"
+          desc="No acquisition sessions matched this master's fingerprint. Adjust matching tolerances in Settings → Calibration, or this master may simply not apply to any captured session yet."
         />
       </Section>
     );
@@ -349,7 +356,7 @@ export function MatchCandidatesPanel({
 
   return (
     <Section
-      title="Calibration suggestions"
+      title="Compatible sessions"
       count={matches.length}
     >
       <div className="alm-match-candidates__status-row">
@@ -358,41 +365,41 @@ export function MatchCandidatesPanel({
         </Pill>
         {suggestStatus === 'ambiguous' && (
           <span className="alm-match-candidates__ambiguous-hint">
-            Multiple candidates at similar confidence — review before assigning.
+            Multiple sessions at similar confidence — review before assigning.
           </span>
         )}
       </div>
       <Table
         columns={[
-          { key: 'rank', label: '#', style: { width: 28 } },
-          { key: 'type', label: 'Type', style: { width: 56 } },
-          { key: 'masterId', label: 'Master', style: { width: 160 } },
-          { key: 'confidence', label: 'Confidence', style: { width: 120 } },
-          { key: 'reason', label: 'Selection', style: { width: 110 } },
+          { key: 'session', label: 'Session', style: { width: 150 } },
+          { key: 'target', label: 'Target', style: { width: 130 } },
+          { key: 'filter', label: 'Filter', style: { width: 64 } },
+          { key: 'night', label: 'Night', style: { width: 100 } },
+          { key: 'frames', label: 'Frames', style: { width: 64 } },
+          { key: 'confidence', label: 'Match', style: { width: 120 } },
           { key: 'dimensions', label: 'Dimensions' },
           { key: 'assign', label: '', style: { width: 120 } },
         ]}
-        rows={matches.map((m, i) => ({
-          rank: (
-            <span className="alm-mono alm-match-candidates__rank">
-              {i + 1}
-            </span>
-          ),
-          type: <Pill variant={m.calibrationType === 'dark' ? 'info' : m.calibrationType === 'flat' ? 'accent' : 'neutral'}>{m.calibrationType}</Pill>,
-          masterId: (
+        rows={matches.map((m) => ({
+          session: (
             <span
-              className="alm-mono alm-match-candidates__master-id"
-              data-testid={`candidate-master-${m.masterId}`}
+              className="alm-mono alm-match-candidates__session-id"
+              data-testid={`candidate-session-${m.sessionId}`}
             >
-              {m.masterId.slice(0, 8)}…
+              {m.sessionId.slice(0, 12)}
+              {m.sessionId.length > 12 ? '…' : ''}
             </span>
           ),
+          // STUB: target name not on CalibrationMatchDto (suggest contract).
+          // Backend enrichment needed to resolve sessionId → target.
+          target: <span className="alm-match-candidates__stub-cell">—</span>,
+          // STUB: filter not on CalibrationMatchDto. Backend enrichment needed.
+          filter: <span className="alm-match-candidates__stub-cell">—</span>,
+          // STUB: acquisition night not on CalibrationMatchDto. Backend enrichment needed.
+          night: <span className="alm-match-candidates__stub-cell">—</span>,
+          // STUB: frame count not on CalibrationMatchDto. Backend enrichment needed.
+          frames: <span className="alm-match-candidates__stub-cell">—</span>,
           confidence: <ConfidenceBar value={m.confidence} />,
-          reason: (
-            <span className="alm-match-candidates__reason">
-              {m.selectionReason.replace(/_/g, ' ')}
-            </span>
-          ),
           dimensions: <DimensionBreakdown match={m} />,
           assign: (
             <AssignButton

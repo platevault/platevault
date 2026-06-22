@@ -135,15 +135,39 @@ describe('PlanPanel (aggregate surface)', () => {
     expect(screen.getByTestId('plan-total-count')).toHaveTextContent('3 actions');
   });
 
-  it('renders the action destination preview and basename per row', () => {
+  it('renders the action destination preview and basename per row when expanded', () => {
     const plans = [
       makePlan({
+        inboxItemId: 'item-1',
         actions: [makeAction({ fromPath: '/deep/path/ngc1234.fits', destinationPreview: '/dest/lights/ngc1234.fits' })],
       }),
     ];
     renderPanel(plans);
+    // Rows are collapsed by default — file basename + dest only appear once the
+    // group is expanded.
+    expect(screen.queryByText('ngc1234.fits')).toBeNull();
+    fireEvent.click(screen.getByTestId('plan-group-toggle-item-1'));
     expect(screen.getByText('ngc1234.fits')).toBeInTheDocument();
     expect(screen.getByText('/dest/lights/ngc1234.fits')).toBeInTheDocument();
+  });
+
+  it('collapses file rows by default and shows a per-group summary line', () => {
+    const plans = [
+      makePlan({
+        inboxItemId: 'g1',
+        actions: [
+          makeAction({ index: 0, fromPath: '/in/d1.fits', destinationPreview: '/lib/masters/darks/d1.fits' }),
+          makeAction({ index: 1, fromPath: '/in/d2.fits', destinationPreview: '/lib/masters/darks/d2.fits' }),
+        ],
+      }),
+    ];
+    renderPanel(plans);
+    // No per-file rows by default.
+    expect(screen.queryByText('d1.fits')).toBeNull();
+    // Summary present: "2 darks → …/masters/darks".
+    const summary = screen.getByTestId('plan-group-summary-g1');
+    expect(summary).toHaveTextContent('2 darks');
+    expect(summary).toHaveTextContent('masters/darks');
   });
 
   // ── Selection ──────────────────────────────────────────────────────────────
@@ -297,17 +321,22 @@ describe('PlanPanel destination-root picker (US8)', () => {
 
   it('shows the absolute destination path from absoluteByFromPath (FR-031)', () => {
     const plan = makePlan({
+      inboxItemId: 'item-1',
       actions: [makeAction({ fromPath: '/inbox/img.fits', destinationPreview: 'lights/img.fits' })],
     });
     renderWith({ plans: [plan], absoluteByFromPath: { '/inbox/img.fits': '/lib/A/lights/img.fits' } });
+    // Per-file rows (and their absolute-dest cell) are collapsed until expanded.
+    fireEvent.click(screen.getByTestId('plan-group-toggle-item-1'));
     expect(screen.getByTestId('inbox-dest-absolute-0')).toHaveTextContent('/lib/A/lights/img.fits');
   });
 
   it('falls back to the relative preview when no absolute path is captured', () => {
     const plan = makePlan({
+      inboxItemId: 'item-1',
       actions: [makeAction({ fromPath: '/inbox/img.fits', destinationPreview: 'lights/img.fits' })],
     });
     renderWith({ plans: [plan] });
+    fireEvent.click(screen.getByTestId('plan-group-toggle-item-1'));
     expect(screen.getByTestId('inbox-dest-absolute-0')).toHaveTextContent('lights/img.fits');
   });
 });

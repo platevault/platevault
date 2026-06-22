@@ -17,7 +17,10 @@ function entityVariant(type: EntityType) {
   return map[type] ?? 'neutral';
 }
 
-// ─── Mock audit history (static per entity type for now) ────────────────────
+// ─── Audit history ───────────────────────────────────────────────────────────
+// STUB: no backend audit-history endpoint yet. These rows are static per entity
+// type so the single-column layout can be designed; replace with the real audit
+// log once `archive.history` (or equivalent) ships.
 
 const AUDIT_ROWS: Record<EntityType, { ts: string; detail: string }[]> = {
   project: [

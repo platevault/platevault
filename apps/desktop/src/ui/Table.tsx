@@ -3,7 +3,8 @@ import type { ReactNode, CSSProperties, TableHTMLAttributes, MouseEvent } from '
 
 export interface TableColumn {
   key: string;
-  label: string;
+  /** Header content. Accepts a plain string or rich nodes (e.g. sortable header buttons). */
+  label: ReactNode;
   className?: string;
   style?: CSSProperties;
   cellStyle?: CSSProperties;
@@ -40,7 +41,7 @@ export const Table = forwardRef<HTMLTableElement, TableProps>(
               // eslint-disable-next-line no-restricted-syntax -- dynamic: Table row style passthrough from caller (_rowStyle)
               style={row._rowStyle}
               className={row._rowClassName}
-              onClick={row._onClick as ((evt: MouseEvent) => void) | undefined}
+              onClick={row._onClick}
             >
               {columns.map((c, ci) => (
                 // eslint-disable-next-line no-restricted-syntax -- dynamic: Table cell style passthrough from caller (cellStyle)

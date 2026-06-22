@@ -13,7 +13,7 @@
  * fetching + mutations are owned by the parent (InboxPage).
  */
 
-import { useEffect, useMemo, useState } from 'react';
+import { useCallback, useEffect, useMemo, useState } from 'react';
 import { Banner, Btn } from '@/ui';
 import type { InboxOpenPlan, InboxPlanAction } from './store';
 
@@ -110,6 +110,118 @@ function buildCountSummary(actions: InboxPlanAction[]): string {
     .join(' · ');
 }
 
+/**
+ * Frame-type keywords we look for in a destination path to label a summary
+ * line. `InboxPlanAction` carries no frame type, so we infer it from the path
+ * the file is headed to (e.g. `masters/darks/…`, `IC1396/Ha/…` → no frame
+ * keyword, falls back to the action kind). Keys are matched case-insensitively
+ * against each path segment; the value is the singular label used for a count
+ * of one (pluralised with a trailing "s").
+ */
+const FRAME_TYPE_KEYWORDS: Array<[token: string, singular: string]> = [
+  ['lights', 'light'],
+  ['light', 'light'],
+  ['darks', 'dark'],
+  ['dark', 'dark'],
+  ['flats', 'flat'],
+  ['flat', 'flat'],
+  ['biases', 'bias'],
+  ['bias', 'bias'],
+  ['darkflats', 'dark flat'],
+];
+
+/** Normalise a path's separators and split into lowercase segments. */
+function pathSegments(path: string): string[] {
+  return path
+    .replace(/\\/g, '/')
+    .split('/')
+    .filter(Boolean)
+    .map((s) => s.toLowerCase());
+}
+
+/** Directory portion of a destination (drops the trailing file name). */
+function destinationDir(path: string): string {
+  const norm = path.replace(/\\/g, '/');
+  const idx = norm.lastIndexOf('/');
+  return idx > 0 ? norm.slice(0, idx) : norm;
+}
+
+/**
+ * Shorten a long destination to a readable tail — keep the last two path
+ * segments so the summary shows where files land without overflowing the row.
+ */
+function shortDestination(path: string): string {
+  const norm = path.replace(/\\/g, '/');
+  const parts = norm.split('/').filter(Boolean);
+  if (parts.length <= 2) return norm;
+  return `…/${parts.slice(-2).join('/')}`;
+}
+
+/**
+ * Infer the frame-type label for one action from its destination path. Falls
+ * back to the action kind (e.g. "catalogue") when no frame keyword is present.
+ */
+function frameTypeLabel(action: InboxPlanAction, destination: string): string {
+  const segments = pathSegments(destination);
+  for (const [token, singular] of FRAME_TYPE_KEYWORDS) {
+    if (segments.includes(token)) return singular;
+  }
+  return actionLabel(action.action).toLowerCase();
+}
+
+/** Pluralise a singular frame/action label for a count. */
+function pluralLabel(singular: string, count: number): string {
+  if (count === 1) return singular;
+  return singular.endsWith('s') ? singular : `${singular}s`;
+}
+
+/** One collapsed summary line: "N <frametype> → <destination tail>". */
+export interface PlanGroupSummaryLine {
+  /** Stable key for the row. */
+  key: string;
+  count: number;
+  /** Singular frame/action label (e.g. "light", "dark", "catalogue"). */
+  frameType: string;
+  /** Shortened destination directory shown after the arrow. */
+  destinationShort: string;
+  /** Full destination directory for the title/tooltip. */
+  destinationFull: string;
+}
+
+/**
+ * Group a plan's actions by (frame type → destination directory) and produce
+ * one summary line per bucket, sorted by frame type then destination. The
+ * destination comes from the captured absolute path when present, else the
+ * action's relative preview (mirrors the per-row fallback).
+ */
+function buildGroupSummary(
+  actions: InboxPlanAction[],
+  absoluteByFromPath?: Record<string, string>,
+): PlanGroupSummaryLine[] {
+  const buckets = new Map<
+    string,
+    { count: number; frameType: string; destinationFull: string }
+  >();
+  for (const a of actions) {
+    const dest = absoluteByFromPath?.[a.fromPath] ?? a.destinationPreview;
+    const frameType = frameTypeLabel(a, dest);
+    const destDir = destinationDir(dest);
+    const key = `${frameType} ${destDir}`;
+    const existing = buckets.get(key);
+    if (existing) existing.count += 1;
+    else buckets.set(key, { count: 1, frameType, destinationFull: destDir });
+  }
+  return [...buckets.entries()]
+    .sort(([ka], [kb]) => ka.localeCompare(kb))
+    .map(([key, b]) => ({
+      key,
+      count: b.count,
+      frameType: pluralLabel(b.frameType, b.count),
+      destinationShort: shortDestination(b.destinationFull),
+      destinationFull: b.destinationFull,
+    }));
+}
+
 // ── Component ─────────────────────────────────────────────────────────────────
 
 export function PlanPanel({
@@ -129,6 +241,19 @@ export function PlanPanel({
   // Plan-level selection set, keyed by inboxItemId. Stale plans cannot be
   // selected (and are pruned from the set if they become stale).
   const [selected, setSelected] = useState<Set<string>>(new Set());
+
+  // Per-group file-row visibility, keyed by inboxItemId. Groups are COLLAPSED
+  // by default — only the summary lines show until a group is expanded.
+  const [expanded, setExpanded] = useState<Set<string>>(new Set());
+
+  const toggleExpanded = useCallback((inboxItemId: string) => {
+    setExpanded((prev) => {
+      const next = new Set(prev);
+      if (next.has(inboxItemId)) next.delete(inboxItemId);
+      else next.add(inboxItemId);
+      return next;
+    });
+  }, []);
 
   // Selectable = not stale. Keep the selection set in sync as the open-plans
   // list changes (e.g. after an apply removes a plan, or a plan goes stale).
@@ -311,6 +436,10 @@ export function PlanPanel({
       <div className="alm-plan-panel__scroll" data-testid="plan-panel-scroll">
         {plans.map((plan, planIdx) => {
           const checked = selected.has(plan.inboxItemId);
+          const isExpanded = expanded.has(plan.inboxItemId);
+          // Collapsed-by-default summary: one line per (frame type → destination).
+          const summaryLines = buildGroupSummary(plan.actions, absoluteByFromPath);
+          const rowsId = `plan-group-rows-${plan.inboxItemId}`;
           return (
             <section
               key={plan.inboxItemId}
@@ -329,6 +458,32 @@ export function PlanPanel({
                   aria-label={`Select plan for ${plan.itemName}`}
                   data-testid={`plan-group-check-${plan.inboxItemId}`}
                 />
+                {/* Expand/collapse the per-file rows (collapsed by default). */}
+                <Btn
+                  variant="ghost"
+                  size="sm"
+                  onClick={() => toggleExpanded(plan.inboxItemId)}
+                  aria-expanded={isExpanded}
+                  aria-controls={rowsId}
+                  aria-label={
+                    isExpanded
+                      ? `Hide files for ${plan.itemName}`
+                      : `Show files for ${plan.itemName}`
+                  }
+                  data-testid={`plan-group-toggle-${plan.inboxItemId}`}
+                  className="alm-plan-panel__expand"
+                >
+                  <span
+                    className={
+                      isExpanded
+                        ? 'alm-plan-panel__chevron alm-plan-panel__chevron--open'
+                        : 'alm-plan-panel__chevron'
+                    }
+                    aria-hidden="true"
+                  >
+                    ▸
+                  </span>
+                </Btn>
                 <span
                   className="alm-plan-panel__group-name"
                   title={plan.itemName}
@@ -363,42 +518,67 @@ export function PlanPanel({
                 </Banner>
               )}
 
-              {/* Action rows */}
-              <div className="alm-plan-panel__rows">
-                {plan.actions.map((a, actionPos) => {
-                  const rowIdx = planRowOffsets[planIdx] + actionPos;
-                  // FR-031: prefer the absolute destination path from the last
-                  // confirm response (keyed by source path); fall back to the
-                  // root-relative preview for plans without a captured absolute.
-                  const absolute = absoluteByFromPath?.[a.fromPath];
-                  const destText = absolute ?? a.destinationPreview;
-                  return (
-                  <div
-                    key={a.index}
-                    className="alm-plan-panel__row"
-                  >
-                    <span
-                      className="alm-plan-panel__kind"
-                    >
-                      {actionLabel(a.action)}
+              {/* Collapsed summary: "N <frametype> → <destination>" per bucket. */}
+              <ul
+                className="alm-plan-panel__summary"
+                data-testid={`plan-group-summary-${plan.inboxItemId}`}
+              >
+                {summaryLines.map((line) => (
+                  <li key={line.key} className="alm-plan-panel__summary-line">
+                    <span className="alm-plan-panel__summary-count">
+                      {line.count} {pluralLabel(line.frameType, line.count)}
                     </span>
-                    <span
-                      className="alm-plan-panel__filename"
-                      title={a.fromPath}
-                    >
-                      {basename(a.fromPath)}
+                    <span className="alm-plan-panel__summary-arrow" aria-hidden="true">
+                      →
                     </span>
                     <code
-                      className="alm-plan-panel__dest"
-                      data-testid={`inbox-dest-absolute-${rowIdx}`}
-                      title={destText}
+                      className="alm-plan-panel__summary-dest"
+                      title={line.destinationFull}
                     >
-                      {destText}
+                      {line.destinationShort}
                     </code>
-                  </div>
-                  );
-                })}
-              </div>
+                  </li>
+                ))}
+              </ul>
+
+              {/* Action rows — hidden until the group is expanded. */}
+              {isExpanded && (
+                <div className="alm-plan-panel__rows" id={rowsId}>
+                  {plan.actions.map((a, actionPos) => {
+                    const rowIdx = planRowOffsets[planIdx] + actionPos;
+                    // FR-031: prefer the absolute destination path from the last
+                    // confirm response (keyed by source path); fall back to the
+                    // root-relative preview for plans without a captured absolute.
+                    const absolute = absoluteByFromPath?.[a.fromPath];
+                    const destText = absolute ?? a.destinationPreview;
+                    return (
+                      <div
+                        key={a.index}
+                        className="alm-plan-panel__row"
+                      >
+                        <span
+                          className="alm-plan-panel__kind"
+                        >
+                          {actionLabel(a.action)}
+                        </span>
+                        <span
+                          className="alm-plan-panel__filename"
+                          title={a.fromPath}
+                        >
+                          {basename(a.fromPath)}
+                        </span>
+                        <code
+                          className="alm-plan-panel__dest"
+                          data-testid={`inbox-dest-absolute-${rowIdx}`}
+                          title={destText}
+                        >
+                          {destText}
+                        </code>
+                      </div>
+                    );
+                  })}
+                </div>
+              )}
             </section>
           );
         })}

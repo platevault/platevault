@@ -3,7 +3,7 @@
  * Spec 008: works with ProjectSummaryDto (real DB shape) instead of fixtures.
  */
 
-import { useMemo, useState } from 'react';
+import { useMemo, useState, type ReactNode } from 'react';
 import { Menu } from '@base-ui-components/react/menu';
 import {
   useReactTable,
@@ -19,7 +19,7 @@ import { ListSidebar, ListItem } from '@/components';
 import { Pill } from '@/ui';
 import type { PillVariant } from '@/ui';
 import type { ProjectSummaryDto } from '@/bindings/index';
-import { compareDateDesc } from '@/lib/datetime';
+import { compareDateDesc, formatDateTime } from '@/lib/datetime';
 
 // ─── Helpers ────────────────────────────────────────────────────────────────
 
@@ -54,6 +54,64 @@ function stateLabel(lifecycle: string): string {
     case 'blocked':          return 'Blocked';
     default:                 return lifecycle;
   }
+}
+
+// ─── Rich list-row meta (spec 043 §4 / task #43) ──────────────────────────────
+// The Projects mock asks each LIST row to read
+//   tool · target · integration · size · cleanup · updated
+// alongside the state pill. Only the fields present on ProjectSummaryDto are
+// rendered; the rest are backend-gated and omitted cleanly (see STUBs below).
+//
+// Present on the list DTO:  tool, sourceCount, updatedAt, channelDrift.
+// STUB (NOT on ProjectSummaryDto — backend-gated, omitted, no fabricated values):
+//   - target       — needs FITS OBJECT → target_id linkage (spec task #54).
+//   - integration  — needs per-channel integration aggregation (spec task #56).
+//   - size         — needs on-disk source size aggregation (no list field).
+//   - cleanup      — needs cleanup-candidate summary (no list field).
+
+function ProjectRowMeta({ project }: { project: ProjectSummaryDto }) {
+  // Build the ordered set of meta segments from fields that actually exist on
+  // the list DTO. Each entry is keyed so the `·`-separated render is stable.
+  const segments: Array<{ key: string; node: ReactNode }> = [];
+
+  // tool — always present on the summary DTO; reads as the row's secondary id.
+  segments.push({
+    key: 'tool',
+    node: <span className="alm-projects-list__meta-tool">{project.tool}</span>,
+  });
+
+  // STUB: target — omitted until FITS OBJECT → target_id linkage lands (#54).
+  // STUB: integration — omitted until per-channel integration aggregation (#56).
+  // STUB: size — omitted; no source-size field on the list DTO.
+  // STUB: cleanup — omitted; no cleanup-summary field on the list DTO.
+
+  // sources — present; only meaningful when there is at least one.
+  if (project.sourceCount > 0) {
+    segments.push({ key: 'sources', node: <>{project.sourceCount} sources</> });
+  }
+
+  // updated — present; the backend default sort key, surfaced on every row.
+  segments.push({ key: 'updated', node: <>{formatDateTime(project.updatedAt)}</> });
+
+  return (
+    <span className="alm-projects-list__meta">
+      {segments.map((seg, i) => (
+        <span key={seg.key} className="alm-projects-list__meta-field">
+          {i > 0 && (
+            <span className="alm-list-item__meta-sep" aria-hidden="true">
+              ·
+            </span>
+          )}
+          {seg.node}
+        </span>
+      ))}
+      {project.channelDrift && (
+        <span className="alm-projects-list__drift-badge" title="Channel drift detected">
+          <AlertTriangle size={12} aria-hidden="true" /> channels
+        </span>
+      )}
+    </span>
+  );
 }
 
 type SortBy = 'updated' | 'name' | 'created' | 'sources';
@@ -283,19 +341,7 @@ export function ProjectsList({
               {stateLabel(project.lifecycle)}
             </Pill>
           }
-          meta={
-            <span>
-              {project.sourceCount > 0 && <>{project.sourceCount} sources</>}
-              {project.channelDrift && (
-                <span
-                  className="alm-projects-list__drift-badge"
-                  title="Channel drift detected"
-                >
-                  <AlertTriangle size={12} aria-hidden="true" /> channels
-                </span>
-              )}
-            </span>
-          }
+          meta={<ProjectRowMeta project={project} />}
         />
       ))}
     </ListSidebar>

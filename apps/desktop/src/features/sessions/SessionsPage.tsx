@@ -1,13 +1,17 @@
 /**
- * SessionsPage — spec 006 wired.
+ * SessionsPage — spec 006 wired; spec 043 §4 redesign (task #36).
  *
- * Displays the inventory ledger: acquisition and calibration sessions grouped
- * by library root (InventorySource). Reads from `inventory.list` via the
- * sessions store instead of SESSIONS_DATA fixtures.
+ * The Sessions page is the inventory ledger. Per the design redesign it is now
+ * a DENSE FULL-WIDTH sortable TABLE grouped by target (SessionsTable) rather
+ * than a narrow master-detail sidebar list. Filters + search live in a
+ * persistent top toolbar (SessionsToolbar) inside the always-visible page bar;
+ * the table is the primary full-width surface; selecting a row opens the
+ * existing SessionDetail in a right-side drawer. Confirm / Re-open / Reject
+ * remain action-bound and live in the top bar (FR-006).
  *
- * Design decision (spec 006 §v4 reconciliation): design-v4 has no dedicated
- * `features/inventory/` directory; the Sessions page IS the inventory surface
- * because sessions are the primary unit of the stable working library.
+ * Design decision (spec 006 §v4 reconciliation): the Sessions page IS the
+ * inventory surface because sessions are the primary unit of the stable
+ * working library.
  *
  * URL state (extends spec 020):
  *   selected     — string session UUID
@@ -17,11 +21,13 @@
  */
 
 import { useNavigate, useSearch } from '@tanstack/react-router';
-import { useCallback } from 'react';
-import { PageShell, ListDetailLayout, TopActionBar } from '@/components';
+import { useCallback, useMemo, useState } from 'react';
+import { PageShell } from '@/components';
 import { Btn } from '@/ui';
 import { useStaleSelectionCleanup } from '@/lib/use-stale-selection';
-import { SessionsList } from './SessionsList';
+import { SessionsTable, DEFAULT_SESSION_SORT } from './SessionsTable';
+import type { SessionSort, SessionSortCol } from './SessionsTable';
+import { SessionsToolbar } from './SessionsToolbar';
 import { SessionDetail } from './SessionDetail';
 import {
   useInventorySources,
@@ -29,13 +35,36 @@ import {
   type InventoryFilters,
 } from './store';
 import { addToast } from '@/shared/toast';
+import type { InventorySource } from '@/api/commands';
 import type { InventoryFrameFilter, ReviewFilter } from '@/lib/route-contract';
+
+/** Client-side text search across the visible session fields. */
+function filterSourcesBySearch(sources: InventorySource[], query: string): InventorySource[] {
+  const q = query.trim().toLowerCase();
+  if (!q) return sources;
+  const matches = (v: string | null | undefined) => (v ?? '').toLowerCase().includes(q);
+  return sources
+    .map((src) => ({
+      ...src,
+      sessions: src.sessions.filter(
+        (s) =>
+          matches(s.target) ||
+          matches(s.name) ||
+          matches(s.filter) ||
+          matches(s.camera),
+      ),
+    }))
+    .filter((src) => src.sessions.length > 0);
+}
 
 export function SessionsPage() {
   const { selected, sourceFilter, frameFilter, reviewFilter } = useSearch({
     from: '/shell/sessions',
   });
   const navigate = useNavigate({ from: '/sessions' });
+
+  const [search, setSearch] = useState('');
+  const [sort, setSort] = useState<SessionSort>(DEFAULT_SESSION_SORT);
 
   // Build filters from URL params and pass directly to useInventorySources.
   const filters: InventoryFilters = {};
@@ -45,6 +74,11 @@ export function SessionsPage() {
 
   const { data: response, loading, error } = useInventorySources(filters);
   const { review, pending } = useSessionReview();
+
+  const sources = useMemo(
+    () => filterSourcesBySearch(response?.sources ?? [], search),
+    [response?.sources, search],
+  );
 
   // Flatten all sessions across sources to find the selected one.
   const allSessions = response?.sources.flatMap((src) => src.sessions) ?? [];
@@ -61,16 +95,11 @@ export function SessionsPage() {
   const onSelect = (id: string) =>
     navigate({ search: (prev) => ({ ...prev, selected: id }) });
 
-  const totalSessions = allSessions.length;
-  const confirmedCount = allSessions.filter((s) => s.state === 'confirmed').length;
-  const needsReviewCount = allSessions.filter(
-    (s) => s.state === 'needs_review' || s.state === 'discovered' || s.state === 'candidate',
-  ).length;
-  const subtitle = loading
-    ? 'Loading…'
-    : error != null
-      ? 'Failed to load sessions'
-      : `${totalSessions} sessions · ${confirmedCount} confirmed · ${needsReviewCount} needs review`;
+  const handleSort = useCallback((col: SessionSortCol) => {
+    setSort((prev) =>
+      prev.col === col ? { col, dir: prev.dir === 'asc' ? 'desc' : 'asc' } : { col, dir: 'asc' },
+    );
+  }, []);
 
   // Review action handlers — dispatch to store and surface feedback.
   const handleConfirm = useCallback(async () => {
@@ -120,68 +149,72 @@ export function SessionsPage() {
 
   return (
     <PageShell>
-      <ListDetailLayout
-        topBar={
-          <TopActionBar
-            title="Sessions"
-            subtitle={subtitle}
-            right={
-              <>
-                {confirmVisible && (
-                  <Btn
-                    size="sm"
-                    variant="primary"
-                    onClick={() => void handleConfirm()}
-                    disabled={isPending}
-                  >
-                    Confirm
-                  </Btn>
-                )}
-                {reopenVisible && (
-                  <Btn size="sm" onClick={() => void handleReopen()} disabled={isPending}>
-                    Re-open review
-                  </Btn>
-                )}
-                {rejectVisible && (
-                  <Btn
-                    size="sm"
-                    variant="danger"
-                    onClick={() => void handleReject()}
-                    disabled={isPending}
-                  >
-                    Reject
-                  </Btn>
-                )}
-              </>
-            }
-          />
-        }
-        list={
-          <SessionsList
-            sources={response?.sources ?? []}
-            selected={selected ?? null}
-            onSelect={onSelect}
-            loading={loading}
-            frameFilter={frameFilter}
-            reviewFilter={reviewFilter}
-            onFrameFilter={(v: InventoryFrameFilter | null) =>
-              navigate({
-                search: (prev) => ({ ...prev, frameFilter: v ?? undefined }),
-              })
-            }
-            onReviewFilter={(v: ReviewFilter | null) =>
-              navigate({
-                search: (prev) => ({ ...prev, reviewFilter: v ?? undefined }),
-              })
-            }
-          />
-        }
-        detail={
-          <SessionDetail
-            session={selectedSession ?? null}
-          />
-        }
-      />
+      <div className="alm-page__bar">
+        <SessionsToolbar
+          search={search}
+          onSearch={setSearch}
+          frameFilter={frameFilter}
+          reviewFilter={reviewFilter}
+          onFrameFilter={(v: InventoryFrameFilter | null) =>
+            navigate({ search: (prev) => ({ ...prev, frameFilter: v ?? undefined }) })
+          }
+          onReviewFilter={(v: ReviewFilter | null) =>
+            navigate({ search: (prev) => ({ ...prev, reviewFilter: v ?? undefined }) })
+          }
+          actions={
+            <>
+              {confirmVisible && (
+                <Btn
+                  size="sm"
+                  variant="primary"
+                  onClick={() => void handleConfirm()}
+                  disabled={isPending}
+                >
+                  Confirm
+                </Btn>
+              )}
+              {reopenVisible && (
+                <Btn size="sm" onClick={() => void handleReopen()} disabled={isPending}>
+                  Re-open review
+                </Btn>
+              )}
+              {rejectVisible && (
+                <Btn
+                  size="sm"
+                  variant="danger"
+                  onClick={() => void handleReject()}
+                  disabled={isPending}
+                >
+                  Reject
+                </Btn>
+              )}
+            </>
+          }
+        />
+      </div>
+
+      <div className="alm-sessions-body">
+        <div className="alm-sessions-body__table">
+          {error != null ? (
+            <div className="alm-sessions-table__empty">Failed to load sessions.</div>
+          ) : (
+            <SessionsTable
+              sources={sources}
+              selected={selected ?? null}
+              onSelect={onSelect}
+              loading={loading}
+              sort={sort}
+              onSort={handleSort}
+            />
+          )}
+        </div>
+
+        {selectedSession != null && (
+          <aside className="alm-sessions-body__drawer">
+            <SessionDetail session={selectedSession} />
+          </aside>
+        )}
+      </div>
     </PageShell>
   );
 }
