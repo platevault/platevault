@@ -1,5 +1,6 @@
 import { useState } from 'react';
 import { Select } from '@base-ui-components/react/select';
+import { m } from '@/lib/i18n';
 
 interface SourceViewStrategyProps {
   save: (scope: string, values: Record<string, unknown>) => void;
@@ -53,10 +54,10 @@ export function SourceViewStrategy({ save }: SourceViewStrategyProps) {
     <div className="alm-svs">
       <div className="alm-svs__field">
         <label className="alm-svs__label" htmlFor="svs-strategy">
-          Default strategy
+          {m.settings_sourceview_default_strategy()}
         </label>
         <Select.Root value={selected} onValueChange={handleChange}>
-          <Select.Trigger className="alm-select" aria-label="Source view strategy">
+          <Select.Trigger className="alm-select" aria-label={m.settings_sourceview_strategy_aria()}>
             <Select.Value />
             <Select.Icon className="alm-select__icon" />
           </Select.Trigger>

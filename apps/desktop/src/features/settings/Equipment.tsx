@@ -1,6 +1,7 @@
 // TODO(spec 007 (equipment)): wire to backend when owning spec implements its command.
 import { useState } from 'react';
 import { Btn, Table, Pill } from '@/ui';
+import { m } from '@/lib/i18n';
 import {
   OPTICAL_TRAINS,
   CAMERAS,
@@ -28,8 +29,8 @@ export function Equipment({ save: _save }: EquipmentProps) {
     <>
       {/* Optical Trains */}
       <SettingsSection
-        title="Optical Trains"
-        action={<Btn size="sm" onClick={() => console.log('add train')}>+ Compose train</Btn>}
+        title={m.settings_equipment_trains_title()}
+        action={<Btn size="sm" onClick={() => console.log('add train')}>{m.settings_equipment_trains_add()}</Btn>}
       >
         <Table
           columns={[
@@ -48,22 +49,22 @@ export function Equipment({ save: _save }: EquipmentProps) {
             pixelScale: <code className="alm-mono">{t.pixelScale}</code>,
             actions: (
               <Btn size="sm" variant="ghost" onClick={() => handleRemoveTrain(t.id)}>
-                Remove
+                {m.common_remove()}
               </Btn>
             ),
           }))}
         />
         {trains.length === 0 && (
           <p className="alm-equipment__empty">
-            No optical trains configured.
+            {m.settings_equipment_trains_empty()}
           </p>
         )}
       </SettingsSection>
 
       {/* Cameras */}
       <SettingsSection
-        title="Cameras"
-        action={<Btn size="sm" onClick={() => console.log('add camera')}>+ Add camera</Btn>}
+        title={m.settings_equipment_cameras_title()}
+        action={<Btn size="sm" onClick={() => console.log('add camera')}>{m.settings_equipment_cameras_add()}</Btn>}
       >
         <Table
           columns={[
@@ -81,28 +82,28 @@ export function Equipment({ save: _save }: EquipmentProps) {
             resolution: <code className="alm-mono">{c.resolution}</code>,
             flags: (
               <span className="alm-equipment__flags">
-                {c.cooled && <Pill variant="info">Cooled</Pill>}
-                {c.color ? <Pill variant="ok">Color</Pill> : <Pill variant="neutral">Mono</Pill>}
+                {c.cooled && <Pill variant="info">{m.settings_equipment_cameras_cooled()}</Pill>}
+                {c.color ? <Pill variant="ok">{m.settings_equipment_cameras_color()}</Pill> : <Pill variant="neutral">{m.settings_equipment_cameras_mono()}</Pill>}
               </span>
             ),
             actions: (
               <Btn size="sm" variant="ghost" onClick={() => handleRemoveCamera(c.id)}>
-                Remove
+                {m.common_remove()}
               </Btn>
             ),
           }))}
         />
         {cameras.length === 0 && (
           <p className="alm-equipment__empty">
-            No cameras registered.
+            {m.settings_equipment_cameras_empty()}
           </p>
         )}
       </SettingsSection>
 
       {/* Telescopes */}
       <SettingsSection
-        title="Telescopes"
-        action={<Btn size="sm" onClick={() => console.log('add telescope')}>+ Add telescope</Btn>}
+        title={m.settings_equipment_telescopes_title()}
+        action={<Btn size="sm" onClick={() => console.log('add telescope')}>{m.settings_equipment_telescopes_add()}</Btn>}
       >
         <Table
           columns={[
@@ -119,14 +120,14 @@ export function Equipment({ save: _save }: EquipmentProps) {
             fRatio: <code className="alm-mono">{t.fRatio}</code>,
             actions: (
               <Btn size="sm" variant="ghost" onClick={() => handleRemoveTelescope(t.id)}>
-                Remove
+                {m.common_remove()}
               </Btn>
             ),
           }))}
         />
         {telescopes.length === 0 && (
           <p className="alm-equipment__empty">
-            No telescopes registered.
+            {m.settings_equipment_telescopes_empty()}
           </p>
         )}
       </SettingsSection>

@@ -2,6 +2,7 @@ import { useState, useMemo } from 'react';
 import { Btn, Pill, Table } from '@/ui';
 import { AUDIT_EVENTS, type AuditEventFixture } from '@/data/fixtures/settings';
 import { formatDateTime, compareDateDesc, toEpochMs } from '@/lib/datetime';
+import { m } from '@/lib/i18n';
 import { SettingsSection } from './SettingsKit';
 
 type AuditOutcome = AuditEventFixture['outcome'];
@@ -51,18 +52,18 @@ export function AuditLog() {
 
   return (
     <>
-      <SettingsSection title="Audit Events">
+      <SettingsSection title={m.settings_auditlog_title()}>
         <div className="alm-audit-log__filters">
           <input
             type="text"
             className="alm-input alm-audit-log__search"
-            placeholder="Search events, entities, details…"
+            placeholder={m.settings_auditlog_search_placeholder()}
             value={search}
             onChange={(e) => { setSearch(e.target.value); setPage(0); }}
-            aria-label="Search audit events"
+            aria-label={m.settings_auditlog_search_aria()}
           />
           <label className="alm-audit-log__date-label">
-            From
+            {m.settings_auditlog_date_from()}
             <input
               type="date"
               className="alm-input alm-audit-log__date-input"
@@ -71,7 +72,7 @@ export function AuditLog() {
             />
           </label>
           <label className="alm-audit-log__date-label">
-            To
+            {m.settings_auditlog_date_to()}
             <input
               type="date"
               className="alm-input alm-audit-log__date-input"
@@ -116,21 +117,22 @@ export function AuditLog() {
 
         {pageItems.length === 0 && (
           <p className="alm-audit-log__empty">
-            No matching audit events.
+            {m.settings_auditlog_empty()}
           </p>
         )}
 
         {/* Pagination */}
         <div className="alm-audit-log__pagination">
           <span className="alm-audit-log__page-count">
+            {/* eslint-disable-next-line alm/no-user-string -- plural composite: count + page + total JS expressions cannot be split into a single catalog key without ICU plural support */}
             {filtered.length} event{filtered.length !== 1 ? 's' : ''} &middot; page {page + 1} of {totalPages}
           </span>
           <div className="alm-audit-log__page-btns">
             <Btn size="sm" variant="ghost" onClick={() => setPage(Math.max(0, page - 1))} disabled={page === 0}>
-              Previous
+              {m.settings_auditlog_previous()}
             </Btn>
             <Btn size="sm" variant="ghost" onClick={() => setPage(Math.min(totalPages - 1, page + 1))} disabled={page >= totalPages - 1}>
-              Next
+              {m.settings_auditlog_next()}
             </Btn>
           </div>
         </div>

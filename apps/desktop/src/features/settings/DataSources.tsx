@@ -7,6 +7,7 @@ import { listRoots, registerRoot, startScan } from '@/api/commands';
 import type { LibraryRoot } from '@/bindings/types';
 import type { RootCategory } from '@/bindings/index';
 import { errMessage } from '@/lib/errors';
+import { m } from '@/lib/i18n';
 import { SettingsSection } from './SettingsKit';
 import { SourceProtectionOverride } from './SourceProtectionOverride';
 
@@ -87,14 +88,14 @@ export function DataSources({ save: _save }: DataSourcesProps) {
 
   return (
     <SettingsSection
-      title="Sources"
+      title={m.settings_datasources_title()}
       action={
         <Btn
           variant="primary"
           size="sm"
           onClick={() => { setShowAdd(true); setAddError(null); }}
         >
-          + Add source folder
+          {m.settings_datasources_add_btn()}
         </Btn>
       }
     >
@@ -103,7 +104,7 @@ export function DataSources({ save: _save }: DataSourcesProps) {
           <DirPicker
             value={addingPath}
             onChange={setAddingPath}
-            label="Folder"
+            label={m.settings_datasources_folder_label()}
             lastPathKind="inbox"
           />
           <div className="alm-data-sources__add-controls">
@@ -111,18 +112,18 @@ export function DataSources({ save: _save }: DataSourcesProps) {
               className="alm-select"
               value={addingCategory}
               onChange={(e) => setAddingCategory(e.target.value as RootCategory)}
-              aria-label="Source category"
+              aria-label={m.settings_datasources_category_aria()}
             >
-              <option value="raw">Raw</option>
-              <option value="calibration">Calibration</option>
-              <option value="project">Project</option>
-              <option value="inbox">Inbox</option>
+              <option value="raw">{m.settings_datasources_category_raw()}</option>
+              <option value="calibration">{m.settings_datasources_category_calibration()}</option>
+              <option value="project">{m.settings_datasources_category_project()}</option>
+              <option value="inbox">{m.settings_datasources_category_inbox()}</option>
             </select>
             <Btn size="sm" onClick={handleAdd} disabled={!addingPath.trim() || adding}>
-              {adding ? 'Adding…' : 'Add'}
+              {adding ? m.settings_datasources_adding() : m.common_add()}
             </Btn>
             <Btn size="sm" variant="ghost" onClick={() => { setShowAdd(false); setAddError(null); setAddingPath(''); }}>
-              Cancel
+              {m.common_cancel()}
             </Btn>
           </div>
           {addError && (
@@ -135,19 +136,19 @@ export function DataSources({ save: _save }: DataSourcesProps) {
 
       {loading && (
         <div className="alm-data-sources__status">
-          Loading…
+          {m.common_loading()}
         </div>
       )}
 
       {loadError && (
         <div className="alm-data-sources__load-error">
-          Could not load roots: {loadError}
+          {m.settings_datasources_load_error({ error: loadError })}
         </div>
       )}
 
       {!loading && !loadError && roots.length === 0 && (
         <div className="alm-data-sources__status">
-          No source folders registered yet. Add one above.
+          {m.settings_datasources_empty()}
         </div>
       )}
 
@@ -203,7 +204,7 @@ function RootCard({ root, onRescan }: RootCardProps) {
           </code>
           {isOffline && (
             <Pill variant="warn" className="alm-data-sources__offline-pill">
-              offline
+              {m.nav_roots_offline_suffix()}
             </Pill>
           )}
         </div>
@@ -217,7 +218,7 @@ function RootCard({ root, onRescan }: RootCardProps) {
       <div className="alm-data-sources__root-actions">
         {!isOffline && (
           <Btn size="sm" onClick={() => onRescan(root)}>
-            Rescan
+            {m.settings_datasources_rescan()}
           </Btn>
         )}
         {!isOffline && (
@@ -228,7 +229,7 @@ function RootCard({ root, onRescan }: RootCardProps) {
               console.log('STUB: disable backend command pending', root.id);
             }}
           >
-            Disable
+            {m.settings_datasources_disable()}
           </Btn>
         )}
         <Btn
@@ -238,7 +239,7 @@ function RootCard({ root, onRescan }: RootCardProps) {
             console.log('STUB: remap backend command pending', root.id);
           }}
         >
-          Remap…
+          {m.settings_datasources_remap()}
         </Btn>
         {isOffline && (
           <Btn
@@ -249,7 +250,7 @@ function RootCard({ root, onRescan }: RootCardProps) {
               console.log('STUB: delete-root backend command pending', root.id);
             }}
           >
-            Delete
+            {m.settings_datasources_delete()}
           </Btn>
         )}
       </div>

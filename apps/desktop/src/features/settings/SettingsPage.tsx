@@ -1,6 +1,7 @@
 import { useState } from 'react';
 import { useParams } from '@tanstack/react-router';
 import { PageShell, ListDetailLayout, TopActionBar } from '@/components';
+import { m } from '@/lib/i18n';
 import { useAutoSave } from './useAutoSave';
 import { DataSources } from './DataSources';
 import { Equipment } from './Equipment';
@@ -122,7 +123,7 @@ export function SettingsPage() {
       <ListDetailLayout
         topBar={
           <TopActionBar
-            title="Settings"
+            title={m.settings_page_title()}
             subtitle={meta.title}
             right={
               saved && (
@@ -130,14 +131,14 @@ export function SettingsPage() {
                   className="alm-settings__saved-indicator"
                   aria-live="polite"
                 >
-                  Saved &#10003;
+                  {m.settings_page_saved()}
                 </span>
               )
             }
           />
         }
         list={
-          <nav className="alm-settings__nav" aria-label="Settings categories">
+          <nav className="alm-settings__nav" aria-label={m.settings_page_nav_aria()}>
             {NAV_GROUPS.map((group) => (
               <div key={group.label} className="alm-settings__nav-group">
                 <div className="alm-settings__nav-group-label">{group.label}</div>

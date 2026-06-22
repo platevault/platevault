@@ -16,6 +16,7 @@ import {
   loadDefaultCatalogues,
   saveDefaultCatalogues,
 } from '@/features/targets/catalogue-settings';
+import { m } from '@/lib/i18n';
 import { SettingsRow } from './SettingsKit';
 
 export function CatalogueSettingsControl() {
@@ -75,7 +76,7 @@ export function CatalogueSettingsControl() {
 
       {saveError && (
         <div className="alm-settings__error" role="alert">
-          Could not save catalogue defaults: {saveError}
+          {m.settings_catalogue_save_error({ error: saveError })}
         </div>
       )}
     </>

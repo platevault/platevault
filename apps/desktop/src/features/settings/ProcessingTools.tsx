@@ -21,6 +21,7 @@ import {
   toolDiscover,
   type ToolProfileSummary,
 } from '@/api/commands';
+import { m } from '@/lib/i18n';
 import { SettingsSection, SettingsRow } from './SettingsKit';
 
 export function ProcessingTools() {
@@ -120,8 +121,8 @@ export function ProcessingTools() {
 
   if (loadError) {
     return (
-      <SettingsSection title="TOOL WORKFLOWS">
-        <p className="alm-proc-tools__error">Failed to load tools: {loadError}</p>
+      <SettingsSection title={m.settings_tools_title()}>
+        <p className="alm-proc-tools__error">{m.settings_tools_load_error({ error: loadError })}</p>
       </SettingsSection>
     );
   }
@@ -132,17 +133,17 @@ export function ProcessingTools() {
       className="alm-btn alm-btn--ghost alm-proc-tools__auto-detect-btn"
       onClick={handleAutoDetect}
       disabled={detecting}
-      aria-label="Re-run auto-detect for all tools"
+      aria-label={m.settings_tools_redetect_aria()}
     >
-      {detecting ? 'Detecting…' : 'Re-detect'}
+      {detecting ? m.common_detecting() : 'Re-detect'}
     </button>
   );
 
   return (
-    <SettingsSection title="TOOL WORKFLOWS" action={reDetectBtn}>
+    <SettingsSection title={m.settings_tools_title()} action={reDetectBtn}>
       {tools.length === 0 && !loadError && (
         <p className="alm-proc-tools__loading">
-          Loading…
+          {m.common_loading()}
         </p>
       )}
 
@@ -152,17 +153,17 @@ export function ProcessingTools() {
             <strong>{tool.name}</strong>
             {tool.autoDetected && (
               <Pill variant="neutral" className="alm-proc-tools__pill">
-                Auto-detected
+                {m.settings_tools_auto_detected()}
               </Pill>
             )}
             {tool.available && (
               <Pill variant="ok" className="alm-proc-tools__pill">
-                Available
+                {m.settings_tools_available()}
               </Pill>
             )}
             {tool.configured && !tool.available && (
               <Pill variant="warn" className="alm-proc-tools__pill">
-                Missing
+                {m.settings_tools_missing()}
               </Pill>
             )}
           </span>
@@ -175,7 +176,7 @@ export function ProcessingTools() {
                 type="text"
                 className="alm-input alm-proc-tools__path-input"
                 value={pathDraft[tool.id] ?? ''}
-                placeholder="Executable path…"
+                placeholder={m.settings_tools_path_placeholder()}
                 aria-label={`Executable path for ${tool.name}`}
                 onChange={(e) =>
                   setPathDraft((prev) => ({ ...prev, [tool.id]: e.target.value }))
