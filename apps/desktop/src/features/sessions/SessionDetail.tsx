@@ -117,6 +117,29 @@ export function SessionDetail({
   const colA = factProps.slice(0, mid);
   const colB = factProps.slice(mid);
 
+  // Linked projects occupy the panel's third column (the aux slot).
+  const linkedAux = (
+    <div className="alm-session-detail2__aux">
+      <div className="alm-session-detail2__head">Linked projects</div>
+      {isLinked ? (
+        <div className="alm-session-detail2__linked">
+          {session.linked?.projects?.map((p) => (
+            <button
+              key={p.id}
+              type="button"
+              className="alm-session-detail2__link"
+              onClick={() => onOpenProject?.(p.id)}
+            >
+              {p.name}
+            </button>
+          ))}
+        </div>
+      ) : (
+        <span className="alm-session-detail2__muted">None</span>
+      )}
+    </div>
+  );
+
   return (
     <DetailPanel
       variant="sessions"
@@ -141,33 +164,13 @@ export function SessionDetail({
           )}
         </>
       }
+      aux={linkedAux}
     >
       <div className="alm-session-detail2">
         {/* Session attributes spread across two tabular columns. */}
         <div className="alm-session-detail2__cols">
           <PropertyTable mode="view" showSource properties={colA} />
           <PropertyTable mode="view" showSource properties={colB} />
-        </div>
-
-        {/* Linked projects — below the table, with a clickable link per project. */}
-        <div className="alm-session-detail2__linked-block">
-          <div className="alm-session-detail2__head">Linked projects</div>
-          {isLinked ? (
-            <div className="alm-session-detail2__linked">
-              {session.linked?.projects?.map((p) => (
-                <button
-                  key={p.id}
-                  type="button"
-                  className="alm-session-detail2__link"
-                  onClick={() => onOpenProject?.(p.id)}
-                >
-                  {p.name}
-                </button>
-              ))}
-            </div>
-          ) : (
-            <span className="alm-session-detail2__muted">None</span>
-          )}
         </div>
       </div>
     </DetailPanel>

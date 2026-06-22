@@ -9711,3 +9711,15 @@
   font: inherit;
   cursor: pointer;
 }
+
+/* Sessions detail aux column — linked projects stacked vertically. */
+.alm-session-detail2__aux {
+  display: flex;
+  flex-direction: column;
+  gap: var(--alm-sp-2);
+  padding: var(--alm-sp-4);
+}
+.alm-session-detail2__aux .alm-session-detail2__linked {
+  flex-direction: column;
+  align-items: flex-start;
+}

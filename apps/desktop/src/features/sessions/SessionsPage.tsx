@@ -219,9 +219,7 @@ export function SessionsPage() {
             reopenVisible={reopenVisible}
             rejectVisible={rejectVisible}
             pending={isPending}
-            onOpenProject={(id) =>
-              navigate({ to: '/projects', search: { selected: id } })
-            }
+            onOpenProject={() => navigate({ to: '/projects' })}
           />
         ) : undefined
       }
