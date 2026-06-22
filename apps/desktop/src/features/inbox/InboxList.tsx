@@ -5,12 +5,19 @@
  * indicator using aligned text columns (FR-008) — no Pill components in the
  * per-row layout so nothing overflows horizontally at 1100×720.
  *
- * spec 043 (tasks #73/#31/#63): the grouping / sort / frame-type CONTROLS that
- * used to sit stacked in this list's header have moved UP into the shared
- * PageTopBar's FilterToolbar (see `InboxControls`). This component is now a
- * CONTROLLED presentational list — it receives the active ordered grouping
- * dimensions (`dims`), `sortBy`, and `filterType` as props and renders only the
- * (virtualized) list + a footer count.
+ * spec 043 (tasks #73/#31/#63 + #83 inbox redesign): the grouping / sort /
+ * frame-type CONTROLS that used to sit stacked in this list's header have moved
+ * UP into the shared PageTopBar's FilterToolbar (see `InboxControls`). This
+ * component is now a CONTROLLED presentational list — it receives the active
+ * ordered grouping dimensions (`dims`), `sortBy`, and `filterType` as props.
+ *
+ * #83: the list no longer wraps its rows in `ListSidebar`. ListSidebar carried
+ * its OWN search box (a SECOND "Search inbox…" duplicating the top-bar search)
+ * and its own footer count (a THIRD copy of the folder/master totals already in
+ * the top bar + status bar). Both are dropped: the list is now just a single
+ * self-scrolling viewport (`.alm-page__scroll`) of (virtualized) rows. The
+ * "grouped by …" hint, when grouping is active, is the ONLY footer affordance —
+ * it conveys grouping state, not a duplicate count.
  *
  * The user-configurable multi-level grouping (spec 041 T021) is preserved: the
  * chosen ordered dimensions render a nested, collapsible tree using the shared
@@ -33,11 +40,9 @@ import {
   type KeyboardEvent as ReactKeyboardEvent,
 } from 'react';
 import { useVirtualizer } from '@tanstack/react-virtual';
-import { ListSidebar } from '@/components';
 import type { InboxListItem } from '@/api/commands';
 import {
   groupByDimensions,
-  flattenLeafItems,
   type GroupNode,
 } from './grouping';
 import { ACCESSORS, DIM_LABELS, type InboxSortBy } from './InboxControls';
@@ -265,8 +270,8 @@ export function InboxList({
   sortBy = 'name',
 }: InboxListProps) {
   const [collapsed, setCollapsed] = useState<Set<string>>(() => new Set());
-  // The scroll viewport the virtualizer measures against — captured from the
-  // sizer's parent (ListSidebar's `.alm-list-sidebar__list`, which scrolls).
+  // The scroll viewport the virtualizer measures against — the
+  // `.alm-inbox-list__scroll` container (captured via `scrollRef` below).
   const [scrollEl, setScrollEl] = useState<HTMLDivElement | null>(null);
 
   const filtered = useMemo(() => {
@@ -289,23 +294,19 @@ export function InboxList({
     [filtered, dims],
   );
 
-  // Total leaf count across the whole tree (== filtered length, but derived from
-  // the tree so the footer matches what is actually rendered). Also split into
-  // folders vs masters using the same isMaster flag that InboxStatsSummary uses.
-  const { visibleFolders, visibleMasters } = useMemo(() => {
-    const leaves = flattenLeafItems(tree);
-    return {
-      visibleFolders: leaves.filter((it) => !it.isMaster).length,
-      visibleMasters: leaves.filter((it) => it.isMaster).length,
-    };
-  }, [tree]);
-
   // O(1) original-index lookup by item id (stable across filter/sort/group).
   const originalIndexById = useMemo(() => {
     const m = new Map<string, number>();
     items.forEach((it, i) => m.set(it.inboxItemId, i));
     return m;
   }, [items]);
+
+  // The scrolling viewport is captured via a ref (the `.alm-inbox-list`
+  // container owns `overflow-y: auto`) so the virtualizer measures the right
+  // element now that ListSidebar (and its parent scroll div) is gone.
+  const scrollRef = useCallback((node: HTMLDivElement | null) => {
+    setScrollEl(node);
+  }, []);
 
   const toggle = useCallback((path: string) => {
     setCollapsed((prev) => {
@@ -343,11 +344,6 @@ export function InboxList({
   // Window only when the virtualizer has a measured viewport; otherwise (no
   // size yet / jsdom) render every row so nothing is hidden off-screen.
   const windowed = virtualItems.length > 0;
-
-  // Capture the scrolling ancestor once the sizer mounts.
-  const sizerRef = useCallback((node: HTMLDivElement | null) => {
-    setScrollEl((node?.parentElement as HTMLDivElement | null) ?? null);
-  }, []);
 
   // ↑/↓ move the selection across visible leaf rows (skipping headers), keeping
   // the moved-to row scrolled into view in the virtualized window.
@@ -394,56 +390,59 @@ export function InboxList({
     [toggle, selectedIdx, onSelect],
   );
 
+  // #83: only a grouping-state hint as a footer — NOT a duplicate count (the
+  // folder/master totals live in the top bar summary + global status bar).
+  const groupingHint = grouped
+    ? `Grouped by ${dims.map((d) => DIM_LABELS[d]).join(' › ')}`
+    : null;
+
   return (
-    <ListSidebar
-      placeholder="Search inbox…"
-      footer={
-        <span className="alm-list-sidebar__count">
-          {(() => {
-            const parts: string[] = [];
-            if (visibleFolders > 0) parts.push(`${visibleFolders} folder${visibleFolders !== 1 ? 's' : ''}`);
-            if (visibleMasters > 0) parts.push(`${visibleMasters} master${visibleMasters !== 1 ? 's' : ''}`);
-            const summary = parts.length > 0 ? parts.join(' · ') : '0 detections';
-            return grouped ? `${summary} · grouped by ${dims.map((d) => DIM_LABELS[d]).join(' › ')}` : summary;
-          })()}
-        </span>
-      }
-    >
+    <div className="alm-inbox-list" data-testid="inbox-list">
       <div
-        ref={sizerRef}
-        data-testid="inbox-virtual-sizer"
-        className="alm-inbox-list__sizer"
-        onKeyDown={onListKeyDown}
-        // eslint-disable-next-line no-restricted-syntax -- dynamic: virtualizer total height for windowed mode
-        style={{
-          height: windowed ? rowVirtualizer.getTotalSize() : undefined,
-        }}
+        ref={scrollRef}
+        className="alm-inbox-list__scroll alm-page__scroll alm-virtual-scroll"
+        data-virtual-scroll="true"
       >
-        {windowed
-          ? virtualItems.map((vi) => {
-              const row = visualRows[vi.index];
-              return (
-                <div
-                  key={vi.key}
-                  data-index={vi.index}
-                  ref={rowVirtualizer.measureElement}
-                  // eslint-disable-next-line no-restricted-syntax -- dynamic: virtualizer translateY offset per inbox row
-                  style={{
-                    position: 'absolute',
-                    top: 0,
-                    left: 0,
-                    width: '100%',
-                    transform: `translateY(${vi.start}px)`,
-                  }}
-                >
-                  {renderVisualRow(row)}
-                </div>
-              );
-            })
-          : visualRows.map((row) => (
-              <Fragment key={rowKey(row)}>{renderVisualRow(row)}</Fragment>
-            ))}
+        <div
+          data-testid="inbox-virtual-sizer"
+          className="alm-inbox-list__sizer"
+          onKeyDown={onListKeyDown}
+          // eslint-disable-next-line no-restricted-syntax -- dynamic: virtualizer total height for windowed mode
+          style={{
+            height: windowed ? rowVirtualizer.getTotalSize() : undefined,
+          }}
+        >
+          {windowed
+            ? virtualItems.map((vi) => {
+                const row = visualRows[vi.index];
+                return (
+                  <div
+                    key={vi.key}
+                    data-index={vi.index}
+                    ref={rowVirtualizer.measureElement}
+                    // eslint-disable-next-line no-restricted-syntax -- dynamic: virtualizer translateY offset per inbox row
+                    style={{
+                      position: 'absolute',
+                      top: 0,
+                      left: 0,
+                      width: '100%',
+                      transform: `translateY(${vi.start}px)`,
+                    }}
+                  >
+                    {renderVisualRow(row)}
+                  </div>
+                );
+              })
+            : visualRows.map((row) => (
+                <Fragment key={rowKey(row)}>{renderVisualRow(row)}</Fragment>
+              ))}
+        </div>
       </div>
-    </ListSidebar>
+      {groupingHint && (
+        <div className="alm-inbox-list__footer" data-testid="inbox-grouping-hint">
+          {groupingHint}
+        </div>
+      )}
+    </div>
   );
 }

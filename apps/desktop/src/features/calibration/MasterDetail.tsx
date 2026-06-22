@@ -17,8 +17,6 @@ import {
   DetailPane,
   DetailHeader,
   MetricLine,
-  DetailGrid,
-  Rail,
   RailCard,
 } from '@/components';
 import { Pill, EmptyState, Lock, KV, Btn } from '@/ui';
@@ -110,7 +108,7 @@ export function MasterDetail({ master, prefillSuggestion, agingThresholdDays }: 
   const masterTitle = masterDisc ? `Master ${kindCap} · ${masterDisc}` : `Master ${kindCap}`;
 
   return (
-    <DetailPane fill>
+    <DetailPane>
       <DetailHeader
         title={
           <>
@@ -142,9 +140,14 @@ export function MasterDetail({ master, prefillSuggestion, agingThresholdDays }: 
         ]}
       />
 
-      <DetailGrid
-        rail={
-          <Rail>
+      {/* Wide-but-short bottom panel: the fingerprint/reuse facts sit compact on
+          one side (sizing to their content — no inner scroll), and the
+          compatible-sessions match table sits beside them as the hero. The match
+          table caps its own height and scrolls internally so it never dominates
+          or pushes the panel tall. See .cssblocks/calibration-detail.css. */}
+      <div className="alm-calib-detail">
+        <aside className="alm-calib-detail__facts">
+          <div className="alm-rail__panel">
             <RailCard title="Master fingerprint">
               <KV label="Kind" value={kindStr} />
               <KV label="Camera" value={fp.camera} />
@@ -162,21 +165,23 @@ export function MasterDetail({ master, prefillSuggestion, agingThresholdDays }: 
               <KV label="Projects linked" value={String((master.usedByProjectIds ?? []).length)} />
               <KV label="Created" value={master.createdAt.split('T')[0]} />
             </RailCard>
-          </Rail>
-        }
-      >
-        {/* Fingerprint lives once, in the rail. The compatible-sessions match
-            panel is the hero of the main column. */}
-        <MatchCandidatesPanel
-          sessionId={sessionId ?? ''}
-          response={response}
-          loading={suggestLoading}
-          error={suggestError}
-          onAssign={handleAssign}
-          assigning={assigning}
-          prefillSuggestion={prefillSuggestion}
-        />
-      </DetailGrid>
+          </div>
+        </aside>
+
+        {/* Fingerprint lives once, in the facts column. The compatible-sessions
+            match panel is the hero of the main column. */}
+        <div className="alm-calib-detail__matches">
+          <MatchCandidatesPanel
+            sessionId={sessionId ?? ''}
+            response={response}
+            loading={suggestLoading}
+            error={suggestError}
+            onAssign={handleAssign}
+            assigning={assigning}
+            prefillSuggestion={prefillSuggestion}
+          />
+        </div>
+      </div>
     </DetailPane>
   );
 }

@@ -285,7 +285,7 @@ describe('InboxList', () => {
     expect(onSelect).toHaveBeenCalledWith(1);
   });
 
-  it('footer shows "N folders · M masters" — masters are not counted as folders', () => {
+  it('renders folder + master rows without a duplicate search box or footer count (#83)', () => {
     const masterItem: InboxListItem = {
       inboxItemId: 'item-master',
       rootId: 'root-001',
@@ -313,11 +313,17 @@ describe('InboxList', () => {
       />,
     );
 
-    const footer = document.querySelector('.alm-list-sidebar__count');
-    // The master must NOT inflate the folder count
-    expect(footer?.textContent).toContain('1 folder');
-    expect(footer?.textContent).toContain('1 master');
-    expect(footer?.textContent).not.toMatch(/2 folders/);
+    // Both detections render as rows.
+    expect(screen.getByTestId('inbox-item-item-fits')).toBeInTheDocument();
+    expect(screen.getByTestId('inbox-item-item-master')).toBeInTheDocument();
+
+    // #83: the list no longer carries ListSidebar's own search box or footer
+    // count — the single search lives in the top bar and the folder/master
+    // counts live in the top-bar summary + status bar (computed by
+    // deriveInboxStats, covered by inboxStatsFromItems.test.ts), not here.
+    expect(document.querySelector('.alm-list-sidebar__count')).toBeNull();
+    expect(document.querySelector('.alm-list-sidebar__search')).toBeNull();
+    expect(screen.queryByPlaceholderText(/search inbox/i)).toBeNull();
   });
 });
 

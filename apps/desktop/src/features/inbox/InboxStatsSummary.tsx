@@ -1,9 +1,18 @@
 /**
- * InboxStatsSummary — compact totals + per-frame-type breakdown strip.
+ * InboxStatsSummary — ONE compact per-frame-type breakdown chip row.
  *
- * spec 041 US6 / T039: surfaces aggregate inbox queue stats (folders / masters /
- * images) with a per-frame-type breakdown. Fetched once on mount; caller
- * refreshes by unmount/remount or via the `refresh` prop.
+ * spec 043 #83 inbox redesign: the old version was a full stats STRIP that
+ * triplicated the folder/master/image totals already shown in the top-bar
+ * summary and the global status bar. Those totals are removed here — the global
+ * library totals are the status bar's job (#87). What remains is the ONE useful
+ * thing this surface adds: a compact per-frame-type breakdown (bias · dark ·
+ * flat · light) that the totals alone don't convey. It renders inline as a
+ * single element (in the top-bar summary slot), not as a separate pinned strip.
+ *
+ * Each chip shows the frame type and its folder count (+ master count when the
+ * type has masters), e.g. `light 3` / `dark 2 · 1 master`. Counts are derived
+ * by {@link deriveInboxStats} from the SAME item list the header counts from, so
+ * everything reconciles.
  */
 
 import type { InboxStatsResponse, InboxStatsPerType } from './store';
@@ -12,69 +21,41 @@ export interface InboxStatsSummaryProps {
   stats: InboxStatsResponse;
 }
 
-function plural(n: number, word: string): string {
-  return `${n} ${word}${n === 1 ? '' : 's'}`;
-}
-
 /**
- * Render aggregate inbox stats as a compact horizontal summary strip.
- * Displayed just below the top action bar in InboxPage.
+ * Render the per-frame-type breakdown as a compact inline chip row. Returns
+ * `null` when there is nothing to break down (no per-type rows).
  */
 export function InboxStatsSummary({ stats }: InboxStatsSummaryProps) {
-  const { totals, perType } = stats;
+  const { perType } = stats;
+
+  if (perType.length === 0) return null;
 
   return (
-    <div className="alm-inbox-stats" data-testid="inbox-stats-summary">
-      {/* Aggregate totals */}
-      <span className="alm-inbox-stats__totals" data-testid="inbox-stats-totals">
-        <StatChip label="Folders" value={totals.folders} testId="inbox-stats-total-folders" />
-        <StatChip label="Masters" value={totals.masters} testId="inbox-stats-total-masters" />
-        <StatChip label="Images" value={totals.images} testId="inbox-stats-total-images" />
-      </span>
-
-      {/* Separator */}
-      {perType.length > 0 && <span aria-hidden className="alm-inbox-stats__sep" />}
-
-      {/* Per-frame-type breakdown */}
+    <span className="alm-inbox-stats" data-testid="inbox-stats-summary">
       {perType.map((row: InboxStatsPerType) => (
-        <PerTypeRow key={row.frameType} row={row} />
+        <PerTypeChip key={row.frameType} row={row} />
       ))}
-    </div>
-  );
-}
-
-function StatChip({
-  label,
-  value,
-  testId,
-}: {
-  label: string;
-  value: number;
-  testId: string;
-}) {
-  return (
-    <span data-testid={testId} className="alm-inbox-stats__chip">
-      <span className="alm-inbox-stats__num">{value}</span>{' '}
-      <span className="alm-inbox-stats__label">{label}</span>
     </span>
   );
 }
 
-function PerTypeRow({ row }: { row: InboxStatsPerType }) {
+function PerTypeChip({ row }: { row: InboxStatsPerType }) {
+  // Folders are the primary count; masters are individual files, surfaced only
+  // when present so a calibration-master type still reads correctly.
+  const count = row.folderCount > 0 ? row.folderCount : row.masterCount;
   return (
     <span
       className="alm-inbox-stats__per-type"
       data-testid={`inbox-stats-type-${row.frameType}`}
+      title={`${row.folderCount} folder${row.folderCount === 1 ? '' : 's'}${
+        row.masterCount > 0 ? ` · ${row.masterCount} master${row.masterCount === 1 ? '' : 's'}` : ''
+      } · ${row.imageCount} files`}
     >
       <span className="alm-inbox-stats__type">{row.frameType}</span>
-      <span className="alm-inbox-stats__label">
-        {/* Folders and masters counted separately (masters are individual files,
-            not folders) — was the cryptic "N+MM folders". */}
-        {plural(row.folderCount, 'folder')}
-        {row.masterCount > 0 ? ` · ${plural(row.masterCount, 'master')}` : ''}
-        {' · '}
-        {row.imageCount} files
-      </span>
+      <span className="alm-inbox-stats__num">{count}</span>
+      {row.masterCount > 0 && row.folderCount > 0 && (
+        <span className="alm-inbox-stats__label">+{row.masterCount}m</span>
+      )}
     </span>
   );
 }

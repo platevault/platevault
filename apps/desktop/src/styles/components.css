@@ -6571,12 +6571,13 @@
   cursor: pointer;
 }
 
-/* === merged from .cssblocks/layout-bottompanel.css (spec-043, task #86) ===
- * ListPageLayout detail as a resizable BOTTOM split (was a right-side pane).
- * The body is a vertical column: full-width table on top (columns stay stable),
- * detail panel docked below, separated by a draggable horizontal splitter. The
- * panel height comes from the `--alm-listpage-detail-h` custom property the
- * component sets from its (localStorage-persisted) drag state. */
+/* === ListPageLayout bottom detail panel (spec-043, task #86 → #89) ===
+ * The detail opens as a horizontal BOTTOM split below the primary content (not a
+ * right-side pane), so the full-width table keeps stable columns. The panel is
+ * NON-resizable (task #89): it AUTO-SIZES to its content via `height: fit-content`
+ * with a `max-height` cap, and scrolls WITHIN itself when its content is tall —
+ * it never grows unbounded or pushes the table off-screen. No splitter, no drag,
+ * no persisted height. */
 .alm-listpage__body {
   display: flex;
   flex-direction: column;
@@ -6584,43 +6585,16 @@
   min-height: 0;
   overflow: hidden;
 }
-.alm-listpage__body[data-dragging='true'] {
-  cursor: row-resize;
-  user-select: none;
-}
 .alm-listpage__main {
   flex: 1 1 auto;
   min-width: 0;
   min-height: 0;
   overflow: auto;
 }
-.alm-listpage__splitter {
-  flex: 0 0 auto;
-  height: 6px;
-  cursor: row-resize;
-  background: var(--alm-border);
-  border-top: 1px solid var(--alm-border);
-  border-bottom: 1px solid var(--alm-border);
-  position: relative;
-}
-.alm-listpage__splitter::after {
-  content: '';
-  position: absolute;
-  left: 50%;
-  top: 50%;
-  width: 36px;
-  height: 2px;
-  transform: translate(-50%, -50%);
-  border-radius: var(--alm-radius-sm);
-  background: var(--alm-text-faint);
-}
-.alm-listpage__splitter:hover,
-.alm-listpage__body[data-dragging='true'] .alm-listpage__splitter {
-  background: var(--alm-accent-muted, var(--alm-accent));
-}
 .alm-listpage__detail {
-  flex: 0 0 var(--alm-listpage-detail-h, 360px);
-  height: var(--alm-listpage-detail-h, 360px);
+  flex: 0 0 auto;
+  height: fit-content;
+  max-height: 50vh;
   display: flex;
   flex-direction: column;
   min-height: 0;
@@ -7629,3 +7603,393 @@
   text-overflow: ellipsis;
   min-width: 0;
 }
+
+/* === merged from .cssblocks/inbox-redesign.css (refine wave 2, spec-043) === */
+/* ============================================================================
+ * Inbox redesign (spec 043 #83 / #75 / #76 / #61 / #31)
+ * ----------------------------------------------------------------------------
+ * Token-only block (no raw hex/rgb/ms). NOT imported directly — the parent
+ * merges these rules into src/styles/components.css. Rules here either ADD new
+ * classes for the redesign or OVERRIDE prior inbox rules that the redesign
+ * supersedes (the stale ones in components.css should be replaced on merge —
+ * notably the old `.alm-inbox-stats` strip, `.alm-inbox-statsbar`,
+ * `.alm-inbox-detail-pane`, `.alm-inbox-detail-plans*`).
+ *
+ * The Inbox is a SPECIAL page (NOT the shared ListPageLayout bottom-split). Its
+ * body is 3 zones:
+ *   - `.alm-inbox-upper`  row 1: detection LIST (primary) + file-details SIDE
+ *                          panel (right, fixed readable width).
+ *   - `.alm-inbox-plandock` row 2: planned-actions BOTTOM panel, full width,
+ *                          docked, capped height with its OWN scroll — never
+ *                          steals the list or side panel.
+ *
+ * Other groups:
+ *   - `.alm-inbox-summary*`     top-bar summary: count + ONE per-type breakdown.
+ *   - `.alm-inbox-stats*`       per-type breakdown as inline chips (no strip).
+ *   - `.alm-inbox-list*`        self-scrolling list viewport (no ListSidebar
+ *                               search box, no duplicate footer count).
+ *   - `.alm-inbox-meta-row--warn` state-modifier replacing an inline warn-bg.
+ * ==========================================================================*/
+
+/* ── 3-zone body ──────────────────────────────────────────────────────────── */
+.alm-inbox-body {
+  flex: 1;
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
+}
+/* Row 1: list (fills) + side detail panel (fixed width). Fills remaining space
+ * above the (optional) bottom plan dock. */
+.alm-inbox-upper {
+  flex: 1;
+  min-height: 0;
+  display: flex;
+  min-width: 0;
+}
+.alm-inbox-upper__list {
+  flex: 1;
+  min-width: 0;
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
+}
+/* SIDE panel: fixed, readable width so the inspector content is never crushed. */
+.alm-inbox-side {
+  flex: 0 0 var(--alm-inbox-side-width, 420px);
+  width: var(--alm-inbox-side-width, 420px);
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
+  border-left: 1px solid var(--alm-border);
+  background: var(--alm-surface-raised);
+}
+.alm-inbox-side__bar {
+  flex-shrink: 0;
+  display: flex;
+  justify-content: flex-end;
+  padding: var(--alm-sp-1) var(--alm-sp-2);
+  border-bottom: 1px solid var(--alm-border-subtle);
+}
+.alm-inbox-side__close {
+  appearance: none;
+  background: none;
+  border: none;
+  cursor: pointer;
+  color: var(--alm-text-muted);
+  font-size: var(--alm-text-sm);
+  line-height: 1;
+  padding: 2px var(--alm-sp-1);
+  border-radius: var(--alm-radius-sm);
+}
+.alm-inbox-side__close:hover {
+  color: var(--alm-text);
+  background: var(--alm-hover-bg);
+}
+/* The side panel body is the single scroll region for the inspector. */
+.alm-inbox-side__body {
+  flex: 1;
+  min-height: 0;
+  overflow-y: auto;
+}
+.alm-inbox-side__empty {
+  flex: 1;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: var(--alm-sp-4);
+}
+
+/* Row 2: planned-actions BOTTOM dock — full width, capped height, own scroll. */
+.alm-inbox-plandock {
+  flex-shrink: 0;
+  display: flex;
+  flex-direction: column;
+  max-height: 42vh;
+  min-height: 0;
+  border-top: 1px solid var(--alm-border);
+  background: var(--alm-surface-raised);
+}
+.alm-inbox-plandock__head {
+  flex-shrink: 0;
+  display: flex;
+  align-items: center;
+  gap: var(--alm-sp-2);
+  padding: var(--alm-sp-2) var(--alm-sp-3);
+  border-bottom: 1px solid var(--alm-border-subtle);
+}
+.alm-inbox-plandock__title {
+  font-size: var(--alm-text-sm);
+  font-weight: var(--alm-weight-semibold);
+  color: var(--alm-text);
+}
+.alm-inbox-plandock__badge {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-width: 18px;
+  height: 18px;
+  padding: 0 5px;
+  border-radius: var(--alm-radius-pill, var(--alm-radius-sm));
+  background: var(--alm-accent-soft, var(--alm-surface));
+  color: var(--alm-accent);
+  font-size: var(--alm-text-2xs);
+  font-weight: var(--alm-weight-semibold);
+}
+/* The dock's scroll region — the PlanPanel scrolls here, independent of the
+ * list and side panel. */
+.alm-inbox-plandock__scroll {
+  flex: 1;
+  min-height: 0;
+  overflow-y: auto;
+}
+
+/* ── Top-bar summary: count text + inline per-type chips ──────────────────── */
+.alm-inbox-summary {
+  display: inline-flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: var(--alm-sp-2) var(--alm-sp-3);
+  min-width: 0;
+}
+.alm-inbox-summary__count {
+  white-space: nowrap;
+  color: var(--alm-text-secondary);
+}
+
+/* ── Per-frame-type breakdown: ONE compact inline chip row (no strip) ──────
+ * Overrides the old `.alm-inbox-stats` full-width bordered strip. */
+.alm-inbox-stats {
+  display: inline-flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--alm-sp-2);
+  padding: 0;
+  border: none;
+  background: none;
+  font-size: var(--alm-text-xs);
+  color: var(--alm-text-secondary);
+}
+.alm-inbox-stats__per-type {
+  display: inline-flex;
+  align-items: baseline;
+  gap: 4px;
+  white-space: nowrap;
+  padding: 1px var(--alm-sp-2);
+  border: 1px solid var(--alm-border-subtle);
+  border-radius: var(--alm-radius-pill, var(--alm-radius-sm));
+  background: var(--alm-surface-raised);
+}
+.alm-inbox-stats__type {
+  font-weight: var(--alm-weight-semibold);
+  color: var(--alm-text);
+  text-transform: capitalize;
+}
+.alm-inbox-stats__num {
+  font-weight: var(--alm-weight-semibold);
+  color: var(--alm-text);
+}
+.alm-inbox-stats__label {
+  color: var(--alm-text-muted);
+  font-size: var(--alm-text-2xs);
+}
+
+/* ── List viewport (replaces the ListSidebar wrapper) ─────────────────────── */
+.alm-inbox-list {
+  display: flex;
+  flex-direction: column;
+  flex: 1;
+  min-height: 0;
+  height: 100%;
+}
+.alm-inbox-list__scroll {
+  flex: 1;
+  min-height: 0;
+  overflow-y: auto;
+}
+/* Grouping-state hint footer — NOT a duplicate count. */
+.alm-inbox-list__footer {
+  flex-shrink: 0;
+  padding: var(--alm-sp-1) var(--alm-sp-3);
+  border-top: 1px solid var(--alm-border);
+  font-size: var(--alm-text-2xs);
+  color: var(--alm-text-muted);
+}
+
+/* ── Metadata row needs-attention state (replaces inline warn-bg style) ───── */
+.alm-inbox-meta-row--warn {
+  background: var(--alm-warn-bg);
+}
+
+/* === merged from .cssblocks/calibration-detail.css (refine wave 2, spec-043) === */
+/* ============================================================================
+ * Calibration master detail — bottom-panel layout (spec 043 #90, revises #39/#86)
+ * ----------------------------------------------------------------------------
+ * Token-only block (no raw hex/rgb/ms). NOT imported directly — the parent
+ * merges these rules into src/styles/components.css.
+ *
+ * Context: the master detail (MasterDetail.tsx) now renders inside the shared
+ * ListPageLayout BOTTOM panel, which is WIDE but SHORT and auto-sizes to content
+ * (task #89, capped at ~50vh with internal scroll). The previous design used the
+ * tall right-rail dashboard (`DetailGrid` + `alm-detail--fill`), which (1) made
+ * the fingerprint rail independently scrollable and (2) let the matches table
+ * grow unbounded and dominate the panel.
+ *
+ * This block lays the calibration detail out as a SIDE-BY-SIDE split for the
+ * wide-short panel:
+ *   - `.alm-calib-detail__facts`  — fingerprint + reuse KV, COMPACT on the left,
+ *      sizing to its content (NO inner scroll / maxHeight).
+ *   - `.alm-calib-detail__matches` — the compatible-sessions match table beside
+ *      it as the hero; it CAPS its own height and scrolls internally so it never
+ *      dominates the panel or pushes it tall.
+ * ==========================================================================*/
+
+.alm-calib-detail {
+  display: grid;
+  /* Facts compact (fixed-ish), matches take the rest. */
+  grid-template-columns: var(--alm-rail-width) minmax(0, 1fr);
+  gap: var(--alm-sp-5);
+  align-items: start;
+  margin-top: var(--alm-sp-3);
+}
+
+/* Facts column: sizes to content, never scrolls on its own. */
+.alm-calib-detail__facts {
+  min-width: 0;
+}
+.alm-calib-detail__facts .alm-rail__panel {
+  /* Override the fill-mode rail scroll: the fingerprint sizes to its content. */
+  max-height: none;
+  overflow: visible;
+}
+
+/* Matches column: the hero, but height-capped with internal scroll so it stays
+ * compact in the short panel and the facts column reads beside it rather than
+ * being dwarfed. We cap the COLUMN (not the raw <table>, which would break
+ * table-layout) — the "Compatible sessions" header scrolls with its rows, which
+ * is fine in a short panel. The table keeps its normal column widths. */
+.alm-calib-detail__matches {
+  min-width: 0;
+  max-height: 40vh;
+  overflow-y: auto;
+}
+.alm-calib-detail__matches > .alm-section {
+  margin-bottom: 0;
+}
+
+/* Single-column fallback for very narrow panels (defensive — the 1280px min
+ * window makes this rare, but the panel can be narrowed by deep nav). */
+@media (max-width: 880px) {
+  .alm-calib-detail {
+    grid-template-columns: minmax(0, 1fr);
+  }
+}
+
+/* === merged from .cssblocks/targets-planner.css (refine wave 2, spec-043) === */
+/*
+ * targets-planner.css — Planner table virtualization + planning columns
+ * (tasks #84 / #85, spec-043 redesign).
+ *
+ * NOT imported. Token-only (--alm-*) classes staged here for the components.css
+ * split (task #60); the parent merges this block into
+ * src/styles/components.css when wiring. Do not add raw hex/rgb/ms values.
+ *
+ * Context:
+ *  - #84: the Planner TargetsTable is now VIRTUALIZED. The table lives inside a
+ *    scroll container; the <thead> is sticky so it stays visible while the
+ *    windowed <tbody> scrolls. A spacer <tr> reserves the height of rows above
+ *    the window so absolute scroll offsets line up.
+ *  - #85: low-value Constellation/Magnitude columns are replaced with Max alt,
+ *    an inline altitude SPARKLINE, and a visible-tonight indicator. All STUB,
+ *    pending ephemeris + observer location (#58).
+ * ======================================================================== */
+
+/* --- Virtualized scroll container (#84) ----------------------------------- */
+/* The page mounts this as the primary content of ListPageLayout, which gives it
+ * a bounded height; the table scrolls inside it while the header stays pinned. */
+.alm-targets-table__wrap {
+  display: flex;
+  flex-direction: column;
+  min-height: 0;
+  height: 100%;
+}
+.alm-targets-table__scroll {
+  flex: 1 1 auto;
+  min-height: 0;
+  overflow-y: auto;
+  overflow-x: hidden;
+}
+
+/* Sticky header so column labels/sort controls stay visible while scrolling. */
+.alm-targets-table__scroll .alm-targets-table thead th {
+  position: sticky;
+  top: 0;
+  z-index: 1;
+}
+
+/* The windowed body's height is set inline (getTotalSize) so the scrollbar
+ * reflects the full row count; rows position via the spacer + document flow. */
+.alm-targets-table__body {
+  position: relative;
+}
+
+/* Spacer row reserving the height of rows scrolled above the visible window. */
+.alm-targets-table__spacer td {
+  padding: 0;
+  border: none;
+}
+
+/* --- Planning columns (#85) ----------------------------------------------- */
+.alm-targets-cell--center { text-align: center; }
+
+/* Sparkline column: fixed-ish narrow column, vertically centered. */
+.alm-targets-cell--spark {
+  width: 76px;
+  padding-top: var(--alm-sp-1);
+  padding-bottom: var(--alm-sp-1);
+}
+
+/* Inline altitude sparkline. Size is fixed here; geometry is data-driven in the
+ * SVG (the allowed dynamic case). preserveAspectRatio=none lets it stretch to
+ * this box without distorting the unitless viewBox math. */
+.alm-targets-spark {
+  display: block;
+  width: 64px;
+  height: 18px;
+  overflow: visible;
+}
+.alm-targets-spark__guide {
+  stroke: var(--alm-border);
+  stroke-width: 1;
+  stroke-dasharray: 2 2;
+  vector-effect: non-scaling-stroke;
+}
+.alm-targets-spark__curve {
+  fill: none;
+  stroke: var(--alm-text-muted);
+  stroke-width: 1.5;
+  stroke-linejoin: round;
+  stroke-linecap: round;
+  vector-effect: non-scaling-stroke;
+}
+/* Usable tonight → accent stroke; low → stays muted. */
+.alm-targets-spark--usable .alm-targets-spark__curve {
+  stroke: var(--alm-accent);
+}
+.alm-targets-spark--low .alm-targets-spark__curve {
+  stroke: var(--alm-text-muted);
+  opacity: 0.7;
+}
+
+/* Visible-tonight indicator: a dot + small label, colour-coded by usability. */
+.alm-targets-vis {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--alm-sp-1);
+  font-size: var(--alm-text-2xs);
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  white-space: nowrap;
+}
+.alm-targets-vis--yes { color: var(--alm-ok); }
+.alm-targets-vis--no { color: var(--alm-text-muted); }
+.alm-targets-vis__label { font-weight: var(--alm-weight-medium); }

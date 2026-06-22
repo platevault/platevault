@@ -498,9 +498,12 @@ export function InboxDetail({
       const missingAttrs = f.missingPathAttributes ?? [];
       const fileName = basename(f.relativeFilePath);
       const isInspected = inspectorPaths.has(f.relativeFilePath);
+      const needsAttention = f.overrideStale || missingAttrs.length > 0;
       const rowClasses = [
         'alm-inbox-meta-row',
         isInspected ? 'alm-inbox-meta-row--selected' : '',
+        // #83: state-modifier class replaces the forbidden inline warn-bg style.
+        needsAttention ? 'alm-inbox-meta-row--warn' : '',
       ].filter(Boolean).join(' ');
       return {
       file: (
@@ -530,10 +533,6 @@ export function InboxDetail({
       date:     fmtOrDash(f.dateObs),
       // Row-level interactivity for the inspector
       _rowClassName: rowClasses,
-      _rowStyle:
-        f.overrideStale || missingAttrs.length > 0
-          ? { background: 'var(--alm-warn-bg)' }
-          : undefined,
       _onClick: (evt: React.MouseEvent) => handleMetaRowClick(f.relativeFilePath, evt),
       };
     });

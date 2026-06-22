@@ -158,34 +158,29 @@ describe('InboxList — configurable grouping', () => {
     expect(screen.getByTestId('inbox-item-a')).toBeInTheDocument();
   });
 
-  it('(5) footer shows "N folders · M masters" using isMaster split', () => {
-    const masterItem = makeItem({ inboxItemId: 'master-1', isMaster: true });
-    render(<Harness items={[...items, masterItem]} />);
-
-    const footer = document.querySelector('.alm-list-sidebar__count');
-    expect(footer?.textContent).toContain('3 folders');
-    expect(footer?.textContent).toContain('1 master');
-    expect(footer?.textContent).not.toMatch(/4 folders/);
-  });
-
-  it('(5b) footer shows only "N folders" when there are no masters', () => {
+  // #83: the list no longer renders ListSidebar's folder/master COUNT footer
+  // (that count moved to the top-bar summary + status bar). The only footer
+  // affordance now is a grouping-state hint, shown only when grouping is active.
+  it('(5) shows a grouping-state hint footer only when grouping is active', () => {
     render(<Harness items={items} />);
 
-    const footer = document.querySelector('.alm-list-sidebar__count');
-    expect(footer?.textContent).toContain('3 folders');
-    expect(footer?.textContent).not.toContain('master');
+    // No grouping yet → no hint footer, and no legacy sidebar count.
+    expect(screen.queryByTestId('inbox-grouping-hint')).toBeNull();
+    expect(document.querySelector('.alm-list-sidebar__count')).toBeNull();
+
+    fireEvent.change(screen.getByLabelText('Group by'), { target: { value: 'target' } });
+
+    const hint = screen.getByTestId('inbox-grouping-hint');
+    expect(hint.textContent).toContain('Grouped by');
+    expect(hint.textContent).toContain('Target');
   });
 
-  it('(5c) footer shows only "N masters" when all items are masters', () => {
-    const masterItems = [
-      makeItem({ inboxItemId: 'm1', isMaster: true }),
-      makeItem({ inboxItemId: 'm2', isMaster: true }),
-    ];
-    render(<Harness items={masterItems} />);
+  it('(5b) renders no duplicate search box or count footer (single search lives in the top bar)', () => {
+    render(<Harness items={items} />);
 
-    const footer = document.querySelector('.alm-list-sidebar__count');
-    expect(footer?.textContent).toContain('2 masters');
-    expect(footer?.textContent).not.toContain('folder');
+    expect(document.querySelector('.alm-list-sidebar__search')).toBeNull();
+    expect(document.querySelector('.alm-list-sidebar__count')).toBeNull();
+    expect(screen.queryByPlaceholderText(/search inbox/i)).toBeNull();
   });
 
   it('(4) persists the ordered dimensions to localStorage and restores them', () => {
