@@ -561,6 +561,31 @@ them.
   are all green; the end state is verified by click-through in the real Windows Tauri
   build.
 
+## Iterations
+
+### Iteration 2026-06-21: SC-002/FR-021 reconcile
+
+**Triggered by**: post-merge phantom-completion audit.
+
+**Summary**: Tasks T190–T193 (US7, SC-002 type-safety surface) and T240 (US16,
+FR-021 long-op contract) were marked `[X]` on main but their success criteria
+were unmet:
+
+- **SC-002**: `bindings/types.ts` still contained 14 hand-written `export
+  interface` structs across ~19 importer files, and one `as unknown as
+  OperationHandle` cast remained at `commands.ts:396`.
+- **FR-021**: `applyPlan` cast `PlanApplyResponse` to `OperationHandle` instead
+  of returning the generated type; no real plan-apply progress consumer existed
+  in the UI.
+
+**Actions**:
+- T190, T191, T192, T193, T240 re-opened (phantom — SC/FR unmet).
+- T268–T272 added to complete SC-002 and FR-021 end-to-end.
+- US13 crate restructuring (T250–T254) confirmed genuinely complete; T272 added
+  as a verify-only checkpoint.
+- No FR/SC requirement text changed (SC-002 and FR-021 were already correctly
+  specified; they were simply unmet).
+
 ## Assumptions
 
 - **Library selection is a decided input.** The specific libraries named here
