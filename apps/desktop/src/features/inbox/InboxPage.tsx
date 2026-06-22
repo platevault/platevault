@@ -46,8 +46,9 @@ import { InboxDetail } from "./InboxDetail";
 import { InboxList } from "./InboxList";
 import { InboxStatsSummary } from "./InboxStatsSummary";
 import { deriveInboxStats } from "./inboxStatsFromItems";
+import { PlanApprovalOverlay } from "./PlanApprovalOverlay";
 import type { DestructiveDestination, PendingRootPick } from "./PlanPanel";
-import { buildBreakdownFromActions, PlanPanel } from "./PlanPanel";
+import { buildBreakdownFromActions } from "./PlanPanel";
 import type { InboxBreakdownTarget } from "./store";
 import {
 	normalizeConfirmError,
@@ -506,6 +507,16 @@ export function InboxPage() {
 
 	const planBusy = applyAllLoading || applySelectedLoading || cancelLoading;
 
+	// Stage B: plan review overlay open/close state.
+	const [planOverlayOpen, setPlanOverlayOpen] = useState(false);
+
+	// Auto-close the overlay once all plans have been applied/cancelled.
+	useEffect(() => {
+		if (planOverlayOpen && openPlans.length === 0 && pendingRootPick == null) {
+			setPlanOverlayOpen(false);
+		}
+	}, [planOverlayOpen, openPlans.length, pendingRootPick]);
+
 	const confirmLabel =
 		classification?.type === "mixed"
 			? "Generate split plan"
@@ -670,6 +681,21 @@ export function InboxPage() {
 			}
 			actions={
 				<>
+					{/* Stage B: trigger to open the plan-approval overlay. Shown
+						    whenever open plans OR a pending root pick exist. */}
+					{showPlans && (
+						<Btn
+							size="sm"
+							variant="ghost"
+							onClick={() => setPlanOverlayOpen(true)}
+							aria-label={`Review plans (${planCount})`}
+							data-testid="inbox-review-plans-btn"
+						>
+							{planCount > 0
+								? `Review plans (${planCount})`
+								: "Review plans"}
+						</Btn>
+					)}
 					{/* task 35: bulk-confirm all cleanly-classified items in one action */}
 					{bulkEligibleItems.length > 0 && (
 						<Btn
@@ -709,23 +735,23 @@ export function InboxPage() {
 		/>
 	);
 
-	// The PLAN now lives in the right SIDE panel — shown when ≥1 open plan exists
-	// OR a destination-root pick is pending (the latter possible with zero open
-	// plans). The file DETAILS now live in the BOTTOM dock — shown when a
-	// detection is selected (#83 panel swap).
+	// Stage B: "show plans" gating for the trigger button (plan overlay).
+	// Shown when ≥1 open plan exists OR a destination-root pick is pending (the
+	// latter can occur with zero open plans — the plan wasn't generated yet).
 	const showPlans = openPlans.length > 0 || pendingRootPick != null;
 	const planCount = openPlans.length;
 
-	// ── 3-zone body (SWAPPED per #83) ──
-	//   row 1: detection LIST (primary) + PLAN in the right SIDE panel
+	// ── 2-zone body (Stage B — side panel REMOVED) ──
+	//   row 1: detection LIST — full width (no side panel column)
 	//   row 2: file DETAILS in the docked BOTTOM panel (auto-size, own scroll)
+	// Plan review moves to the full-screen PlanApprovalOverlay.
 	// Composed directly (not ListPageLayout) — the Inbox is a special page.
 	return (
 		<div className="alm-page alm-inbox-page">
 			{topBar}
 
 			<div className="alm-inbox-body">
-				{/* Row 1: list + PLAN side panel */}
+				{/* Row 1: list — full width, no plan side panel */}
 				<div className="alm-inbox-upper">
 					<div className="alm-inbox-upper__list">
 						<InboxList
@@ -737,47 +763,9 @@ export function InboxPage() {
 							sortBy={sortBy}
 						/>
 					</div>
-
-					{/* SIDE panel (swapped): the aggregate PLAN. Compact, fixed width;
-              shown only when an open plan / pending root pick exists so the
-              column never reads as a broken void. */}
-					{showPlans && (
-						<aside
-							className="alm-inbox-side alm-inbox-side--plan"
-							aria-label="Planned actions"
-							data-testid="inbox-plan-dock"
-						>
-							<div className="alm-inbox-side__head">
-								<span className="alm-inbox-side__title">Planned actions</span>
-								{planCount > 0 && (
-									<span className="alm-inbox-side__badge">{planCount}</span>
-								)}
-							</div>
-							<div className="alm-inbox-side__body">
-								<PlanPanel
-									plans={openPlans}
-									totalActions={totalActions}
-									destructiveDestination={destructiveDestination}
-									onDestructiveDestinationChange={setDestructiveDestination}
-									onApplySelected={(ids) => void handleApplySelected(ids)}
-									onApplyAll={() => void handleApplyAll()}
-									onCancel={(id) => void handleCancel(id)}
-									busy={planBusy}
-									pendingRootPick={pendingRootPick}
-									onPickDestinationRoot={(rootId) =>
-										void handlePickDestinationRoot(rootId)
-									}
-									rootPickBusy={confirmLoading}
-									absoluteByFromPath={absoluteByFromPath}
-									frameTypeByItemId={frameTypeByItemId}
-									breakdownByItemId={breakdownByItemId}
-								/>
-							</div>
-						</aside>
-					)}
 				</div>
 
-				{/* Row 2 (swapped): file DETAILS — docked full width, auto-sized to
+				{/* Row 2: file DETAILS — docked full width, auto-sized to
             content (capped ~40vh) with its own scroll. Shown only when a
             detection is selected. */}
 				{selectedItem != null && (
@@ -816,6 +804,30 @@ export function InboxPage() {
 					</section>
 				)}
 			</div>
+
+			{/* Plan-approval overlay — opens via top-bar trigger.
+			    Wraps the existing PlanPanel; all apply/cancel/root-pick
+			    handlers are passed through unchanged. */}
+			<PlanApprovalOverlay
+				open={planOverlayOpen}
+				onClose={() => setPlanOverlayOpen(false)}
+				plans={openPlans}
+				totalActions={totalActions}
+				destructiveDestination={destructiveDestination}
+				onDestructiveDestinationChange={setDestructiveDestination}
+				onApplySelected={(ids) => void handleApplySelected(ids)}
+				onApplyAll={() => void handleApplyAll()}
+				onCancel={(id) => void handleCancel(id)}
+				busy={planBusy}
+				pendingRootPick={pendingRootPick}
+				onPickDestinationRoot={(rootId) =>
+					void handlePickDestinationRoot(rootId)
+				}
+				rootPickBusy={confirmLoading}
+				absoluteByFromPath={absoluteByFromPath}
+				frameTypeByItemId={frameTypeByItemId}
+				breakdownByItemId={breakdownByItemId}
+			/>
 		</div>
 	);
 }
