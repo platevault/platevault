@@ -6416,17 +6416,60 @@
  * right that appears only when a row is selected.
  * ======================================================================== */
 
-/* --- Top toolbar (lives inside .alm-page__bar, never scrolls) ------------- */
-.alm-sessions-toolbar {
+/* === Shared list-page layout system (spec 043, tasks #62/#63/#73) ==========
+ * Sessions is the reference adoption; Calibration / Projects / Targets / Inbox
+ * adopt the same primitives. The body keeps the list + detail PANE shape (the
+ * detail pane is preserved, NOT collapsed to a hidden drawer); the pane is
+ * given real width so its rail content is fully visible and never compresses
+ * to single-character columns.
+ * ======================================================================== */
+
+/* --- PageTopBar: pinned top band (carries .alm-page__bar; never scrolls) -- */
+.alm-topbar {
   display: flex;
   align-items: center;
-  gap: var(--alm-sp-2);
+  gap: var(--alm-sp-3);
   flex-wrap: wrap;
   padding: var(--alm-sp-2) var(--alm-sp-3);
   border-bottom: 1px solid var(--alm-border);
   background: var(--alm-surface);
 }
-.alm-sessions-toolbar__search {
+.alm-topbar__lead {
+  display: flex;
+  align-items: baseline;
+  gap: var(--alm-sp-2);
+  flex-shrink: 0;
+}
+.alm-topbar__title { display: flex; align-items: baseline; }
+.alm-topbar__heading {
+  margin: 0;
+  font-size: var(--alm-text-lg);
+  font-weight: var(--alm-weight-semibold);
+  color: var(--alm-text);
+}
+.alm-topbar__summary {
+  font-size: var(--alm-text-xs);
+  color: var(--alm-text-muted);
+}
+.alm-topbar__filters {
+  flex: 1 1 auto;
+  min-width: 0;
+}
+.alm-topbar__actions {
+  display: flex;
+  gap: var(--alm-sp-2);
+  align-items: center;
+  flex-shrink: 0;
+}
+
+/* --- FilterToolbar: search + labeled selects + group-by + sort + actions -- */
+.alm-filterbar {
+  display: flex;
+  align-items: center;
+  gap: var(--alm-sp-2);
+  flex-wrap: wrap;
+}
+.alm-filterbar__search {
   flex: 1 1 200px;
   min-width: 160px;
   max-width: 320px;
@@ -6437,18 +6480,19 @@
   border: 1px solid var(--alm-border);
   border-radius: var(--alm-radius-sm);
 }
-.alm-sessions-toolbar__search:focus {
+.alm-filterbar__search:focus {
   outline: none;
   border-color: var(--alm-accent);
 }
-.alm-sessions-toolbar__field {
+.alm-filterbar__field {
   display: flex;
   align-items: center;
   gap: var(--alm-sp-1);
   font-size: var(--alm-text-xs);
   color: var(--alm-text-muted);
 }
-.alm-sessions-toolbar__field select {
+.alm-filterbar__field-label { white-space: nowrap; }
+.alm-filterbar__select {
   padding: var(--alm-sp-1) var(--alm-sp-2);
   font-size: var(--alm-text-sm);
   color: var(--alm-text);
@@ -6456,32 +6500,77 @@
   border: 1px solid var(--alm-border);
   border-radius: var(--alm-radius-sm);
 }
-.alm-sessions-toolbar__spacer { flex: 1 1 auto; }
-.alm-sessions-toolbar__actions {
+.alm-filterbar__sort {
+  display: flex;
+  align-items: center;
+  gap: var(--alm-sp-1);
+}
+.alm-filterbar__sort-dir { line-height: 1; }
+.alm-filterbar__actions {
   display: flex;
   gap: var(--alm-sp-2);
   align-items: center;
 }
 
-/* --- Body split: full-width table + optional detail drawer ---------------- */
-.alm-sessions-body {
+/* --- ListPageLayout body: full-width primary content + detail pane -------- */
+.alm-listpage__body {
   display: flex;
   flex: 1;
   min-height: 0;
   overflow: hidden;
 }
-.alm-sessions-body__table {
+.alm-listpage__main {
   flex: 1;
   min-width: 0;
   overflow: auto;
 }
-.alm-sessions-body__drawer {
-  flex: 0 0 360px;
-  width: 360px;
-  min-width: 0;
-  overflow-y: auto;
+/* The detail pane keeps a real, generous width so its inner rail/cards are
+ * fully readable and never squeezed into vertical slivers. */
+.alm-listpage__detail {
+  flex: 0 0 clamp(360px, 36%, 460px);
+  min-width: 360px;
+  display: flex;
+  flex-direction: column;
+  min-height: 0;
+  overflow: hidden;
   border-left: 1px solid var(--alm-border);
   background: var(--alm-surface-raised);
+}
+.alm-listpage__detail-bar {
+  flex-shrink: 0;
+  display: flex;
+  justify-content: flex-end;
+  padding: var(--alm-sp-1) var(--alm-sp-2);
+  border-bottom: 1px solid var(--alm-border-subtle);
+}
+.alm-listpage__detail-close {
+  background: none;
+  border: none;
+  cursor: pointer;
+  color: var(--alm-text-muted);
+  font-size: var(--alm-text-sm);
+  line-height: 1;
+  padding: var(--alm-sp-1);
+  border-radius: var(--alm-radius-sm);
+}
+.alm-listpage__detail-close:hover { color: var(--alm-text); }
+.alm-listpage__detail-body {
+  flex: 1;
+  min-height: 0;
+  overflow-y: auto;
+}
+/* Inside the detail pane the dashboard grid collapses to a single column so
+ * the rail flows beneath the primary content as a normal section instead of a
+ * crushed side-rail. This guards EVERY adopting page's detail (Sessions /
+ * Calibration fingerprint rail / Projects rail) against sliver compression. */
+.alm-listpage__detail-body .alm-dash {
+  grid-template-columns: minmax(0, 1fr);
+}
+.alm-listpage__detail-body .alm-detail--fill > .alm-dash {
+  grid-template-rows: auto;
+}
+.alm-listpage__detail-body .alm-detail--fill .alm-dash__primary {
+  overflow-y: visible;
 }
 
 /* --- Dense sortable table ------------------------------------------------- */

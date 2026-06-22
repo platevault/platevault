@@ -1,11 +1,13 @@
 /// <reference types="@testing-library/jest-dom" />
 /**
- * SessionsTable + SessionsToolbar + SessionDetail inventory wiring tests —
- * spec 006 + spec 043 §4 (task #36 redesign).
+ * SessionsTable + FilterToolbar + SessionDetail inventory wiring tests —
+ * spec 006 + spec 043 §4 (task #36 redesign + #62/#63 shared layout adoption).
  *
- * The Sessions surface is now a dense full-width table grouped by target
- * (SessionsTable), with search + frame/review filters in a top toolbar
- * (SessionsToolbar). These tests target the new components.
+ * The Sessions surface is now a dense full-width table (SessionsTable) grouped
+ * by a configurable key, with search + a review filter + a Group-by control in
+ * the shared top bar (PageTopBar + FilterToolbar). The legacy frame-type filter
+ * was removed (sessions are light frames). These tests target the new
+ * components.
  *
  * Tests (jsdom, mock @/api/commands and @/features/sessions/store):
  *
@@ -13,8 +15,7 @@
  * 2. SessionsTable renders session rows with target/filter content.
  * 3. SessionsTable discovered/candidate rows map to "Needs review" state label.
  * 4. SessionsTable renders empty-state when sources is empty.
- * 5. SessionsToolbar frame-filter select calls onFrameFilter with typed value.
- * 6. SessionsToolbar review-filter select calls onReviewFilter with typed value.
+ * 5b-6d. FilterToolbar (Sessions toolbar): review filter, group-by, search.
  * 7. SessionDetail renders empty-state when session is null.
  * 8-11b. SessionDetail review-state rail (read-only Pills, no action buttons).
  * 12-15. SessionDetail Facts / Provenance / Linked sections.
@@ -85,7 +86,7 @@ const ROOT_ID = INVENTORY_SOURCES[0].id;
 // ── Import components after mocks are in place ────────────────────────────────
 
 import { SessionsTable, DEFAULT_SESSION_SORT } from '../SessionsTable';
-import { SessionsToolbar } from '../SessionsToolbar';
+import { FilterToolbar } from '@/components';
 import { SessionDetail } from '../SessionDetail';
 
 // ── Helpers ───────────────────────────────────────────────────────────────────
@@ -106,14 +107,47 @@ function renderList(props: Partial<React.ComponentProps<typeof SessionsTable>> =
   );
 }
 
-function renderToolbar(props: Partial<React.ComponentProps<typeof SessionsToolbar>> = {}) {
+// Mirror the FilterToolbar configuration SessionsPage builds: a search box, a
+// "Review" labeled-select field, and a "Group by" control. Spies are supplied
+// per-test so we can assert the change handlers fire with typed values.
+function renderToolbar(opts: {
+  search?: string;
+  reviewValue?: string;
+  onSearch?: (v: string) => void;
+  onReview?: (v: string) => void;
+  onGroupBy?: (v: string) => void;
+} = {}) {
   return render(
-    <SessionsToolbar
-      search=""
-      onSearch={noop}
-      onFrameFilter={noop}
-      onReviewFilter={noop}
-      {...props}
+    <FilterToolbar
+      search={{
+        value: opts.search ?? '',
+        onChange: opts.onSearch ?? noop,
+        ariaLabel: 'Search sessions',
+        placeholder: 'Search target, filter, camera…',
+      }}
+      fields={[
+        {
+          key: 'review',
+          label: 'Review',
+          value: opts.reviewValue ?? '',
+          allLabel: 'Default',
+          options: [
+            { value: 'confirmed', label: 'Confirmed' },
+            { value: 'rejected', label: 'Rejected' },
+          ],
+          onChange: opts.onReview ?? noop,
+        },
+      ]}
+      groupBy={{
+        value: 'target',
+        options: [
+          { value: 'target', label: 'Target' },
+          { value: 'camera', label: 'Camera' },
+          { value: 'filter', label: 'Filter' },
+          { value: 'month', label: 'Month' },
+        ],
+        onChange: opts.onGroupBy ?? noop,
+      }}
     />,
   );
 }
@@ -178,37 +212,42 @@ describe('SessionsTable — target group headers and rows', () => {
   });
 });
 
-describe('SessionsToolbar — search and filters', () => {
-  it('5b. frame-filter select calls onFrameFilter with the selected value', () => {
-    const onFrameFilter = vi.fn();
-    renderToolbar({ onFrameFilter });
-    const select = screen.getByRole('combobox', { name: /Frame type filter/ });
-    fireEvent.change(select, { target: { value: 'dark' } });
-    expect(onFrameFilter).toHaveBeenCalledWith('dark');
-  });
-
-  it('6b. review-filter select calls onReviewFilter with the selected value', () => {
-    const onReviewFilter = vi.fn();
-    renderToolbar({ onReviewFilter });
-    const select = screen.getByRole('combobox', { name: /Review state filter/ });
+describe('FilterToolbar (Sessions toolbar) — search, review filter, group-by', () => {
+  it('5b. review-filter select calls onChange with the selected value', () => {
+    const onReview = vi.fn();
+    renderToolbar({ onReview });
+    const select = screen.getByRole('combobox', { name: /Review/ });
     fireEvent.change(select, { target: { value: 'confirmed' } });
-    expect(onReviewFilter).toHaveBeenCalledWith('confirmed');
+    expect(onReview).toHaveBeenCalledWith('confirmed');
   });
 
-  it('6c. clearing frame filter calls onFrameFilter with null', () => {
-    const onFrameFilter = vi.fn();
-    renderToolbar({ onFrameFilter, frameFilter: 'dark' });
-    const select = screen.getByRole('combobox', { name: /Frame type filter/ });
+  it('6b. clearing the review filter calls onChange with empty string (Default)', () => {
+    const onReview = vi.fn();
+    renderToolbar({ onReview, reviewValue: 'confirmed' });
+    const select = screen.getByRole('combobox', { name: /Review/ });
     fireEvent.change(select, { target: { value: '' } });
-    expect(onFrameFilter).toHaveBeenCalledWith(null);
+    expect(onReview).toHaveBeenCalledWith('');
   });
 
-  it('6d. typing in search calls onSearch', () => {
+  it('6c. group-by select calls onChange with the selected key', () => {
+    const onGroupBy = vi.fn();
+    renderToolbar({ onGroupBy });
+    const select = screen.getByRole('combobox', { name: /Group by/ });
+    fireEvent.change(select, { target: { value: 'camera' } });
+    expect(onGroupBy).toHaveBeenCalledWith('camera');
+  });
+
+  it('6d. typing in search calls onChange', () => {
     const onSearch = vi.fn();
     renderToolbar({ onSearch });
     const input = screen.getByRole('searchbox', { name: /Search sessions/ });
     fireEvent.change(input, { target: { value: 'M31' } });
     expect(onSearch).toHaveBeenCalledWith('M31');
+  });
+
+  it('6e. there is no frame-type filter in the Sessions toolbar', () => {
+    renderToolbar();
+    expect(screen.queryByRole('combobox', { name: /Frame/i })).toBeNull();
   });
 });
 
@@ -407,5 +446,13 @@ describe('SessionsTable — live inventory fixture data (T106)', () => {
     // Non-empty sources so the table (and its footer) renders during load.
     renderList({ sources: INVENTORY_LIST_RESPONSE.sources, loading: true });
     expect(screen.getByText('Loading…')).toBeDefined();
+  });
+
+  it('25. groupBy="camera" headlines groups by camera instead of target', () => {
+    const camera = INVENTORY_LIST_RESPONSE.sources[0].sessions.find((s) => s.camera)?.camera;
+    expect(camera).toBeTruthy();
+    renderList({ sources: INVENTORY_LIST_RESPONSE.sources, groupBy: 'camera' });
+    // The camera value heads a group row.
+    expect(screen.getAllByText(new RegExp(camera as string)).length).toBeGreaterThan(0);
   });
 });

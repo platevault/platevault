@@ -19,8 +19,10 @@
  * Selecting a row opens the existing SessionDetail in a right-side drawer on
  * SessionsPage. Confirm/Reject live in the page top action bar (unchanged).
  *
- * Search + frame-type/review filters now live in the persistent top toolbar
- * (SessionsToolbar, rendered in `.alm-page__bar`), not inside this surface.
+ * Search + the review filter + the Group-by control now live in the persistent
+ * top bar (shared PageTopBar + FilterToolbar), not inside this surface. The
+ * group key is configurable via the `groupBy` prop (Target / Camera / Filter /
+ * Month); the legacy frame-type filter was removed (sessions are light frames).
  */
 
 import { useMemo } from 'react';
@@ -29,6 +31,28 @@ import type { InventorySource, InventorySession } from '@/api/commands';
 import { Table, Pill } from '@/ui';
 import type { TableColumn, TableRow } from '@/ui';
 import { sessionStateLabel, sessionStateVariant } from '@/lib/lifecycle';
+
+// ── Grouping model ────────────────────────────────────────────────────────────
+
+/** What the table groups rows by (spec 043 §4 toolbar Group-by control). */
+export type SessionGroupBy = 'target' | 'camera' | 'filter' | 'month';
+export const DEFAULT_SESSION_GROUP_BY: SessionGroupBy = 'target';
+
+/** Resolve the group key + display headline for a session under `groupBy`. */
+function groupKeyOf(s: InventorySession, groupBy: SessionGroupBy): string {
+  switch (groupBy) {
+    case 'camera':
+      return s.camera ?? 'Unknown camera';
+    case 'filter':
+      return s.filter ?? 'No filter';
+    case 'month':
+      // capturedOn is an ISO date (e.g. "2026-04-12"); group by year-month.
+      return s.capturedOn ? s.capturedOn.slice(0, 7) : 'Unknown date';
+    case 'target':
+    default:
+      return s.target ?? s.name ?? 'Untitled';
+  }
+}
 
 // ── Sort model ────────────────────────────────────────────────────────────────
 
@@ -81,39 +105,43 @@ function compareSessions(a: InventorySession, b: InventorySession, sort: Session
   return sort.dir === 'asc' ? cmp : -cmp;
 }
 
-// ── Target grouping ─────────────────────────────────────────────────────────────
+// ── Grouping ──────────────────────────────────────────────────────────────────
 
-interface TargetGroup {
-  target: string;
+interface SessionGroup {
+  /** Display headline for the spanning group-header row. */
+  label: string;
   sessions: InventorySession[];
 }
 
 /**
- * Flatten all sessions across sources, group by target identity, sort sessions
+ * Flatten all sessions across sources, group by the selected key, sort sessions
  * within each group, then order the groups by their first (sorted) row.
  */
-function groupByTarget(sources: InventorySource[], sort: SessionSort): TargetGroup[] {
-  const byTarget = new Map<string, InventorySession[]>();
+function groupSessions(
+  sources: InventorySource[],
+  sort: SessionSort,
+  groupBy: SessionGroupBy,
+): SessionGroup[] {
+  const byKey = new Map<string, InventorySession[]>();
   for (const src of sources) {
     for (const s of src.sessions) {
-      const key = s.target ?? s.name ?? 'Untitled';
-      const list = byTarget.get(key);
+      const key = groupKeyOf(s, groupBy);
+      const list = byKey.get(key);
       if (list) list.push(s);
-      else byTarget.set(key, [s]);
+      else byKey.set(key, [s]);
     }
   }
 
-  const groups: TargetGroup[] = [];
-  for (const [target, sessions] of byTarget) {
-    groups.push({ target, sessions: [...sessions].sort((a, b) => compareSessions(a, b, sort)) });
+  const groups: SessionGroup[] = [];
+  for (const [label, sessions] of byKey) {
+    groups.push({ label, sessions: [...sessions].sort((a, b) => compareSessions(a, b, sort)) });
   }
 
-  // Order groups by their first row under the active sort (target-name sort
-  // collapses to alphabetical group order, which reads naturally).
+  // Order groups by their first row under the active sort, breaking ties by the
+  // group label so ordering stays stable and reads naturally.
   groups.sort((ga, gb) => {
-    if (sort.col === 'target') return compareSessions(ga.sessions[0], gb.sessions[0], sort);
     const c = compareSessions(ga.sessions[0], gb.sessions[0], sort);
-    return c !== 0 ? c : ga.target.localeCompare(gb.target);
+    return c !== 0 ? c : ga.label.localeCompare(gb.label);
   });
   return groups;
 }
@@ -150,10 +178,23 @@ interface Props {
   loading?: boolean;
   sort: SessionSort;
   onSort: (col: SessionSortCol) => void;
+  /** Key the spanning group-header rows are built from. Default 'target'. */
+  groupBy?: SessionGroupBy;
 }
 
-export function SessionsTable({ sources, selected, onSelect, loading, sort, onSort }: Props) {
-  const groups = useMemo(() => groupByTarget(sources, sort), [sources, sort]);
+export function SessionsTable({
+  sources,
+  selected,
+  onSelect,
+  loading,
+  sort,
+  onSort,
+  groupBy = DEFAULT_SESSION_GROUP_BY,
+}: Props) {
+  const groups = useMemo(
+    () => groupSessions(sources, sort, groupBy),
+    [sources, sort, groupBy],
+  );
   const total = useMemo(
     () => sources.reduce((acc, src) => acc + src.sessions.length, 0),
     [sources],
@@ -191,7 +232,7 @@ export function SessionsTable({ sources, selected, onSelect, loading, sort, onSo
       _rowClassName: 'alm-sessions-table__group',
       target: (
         <span>
-          {group.target}
+          {group.label}
           <span className="alm-sessions-table__group-count">
             {group.sessions.length} {group.sessions.length === 1 ? 'session' : 'sessions'}
           </span>
@@ -215,9 +256,9 @@ export function SessionsTable({ sources, selected, onSelect, loading, sort, onSo
           'alm-sessions-table__row' +
           (selected === s.id ? ' alm-sessions-table__row--selected' : ''),
         _onClick: () => onSelect(s.id),
-        // Target is the group headline; per-session rows carry only the
-        // needs-review marker here so the column stays aligned without
-        // repeating the target name on every row.
+        // The group headline lives on the spanning header row; per-session
+        // rows carry only the needs-review marker in the first column so it
+        // stays aligned without repeating the group label on every row.
         target: needsReview ? (
           <span className="alm-sessions-cell--muted">
             <AlertTriangle

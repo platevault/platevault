@@ -2,6 +2,22 @@ export { ListDetailLayout } from './ListDetailLayout';
 export type { ListDetailLayoutProps } from './ListDetailLayout';
 export { PageShell } from './PageShell';
 export type { PageShellProps } from './PageShell';
+
+// spec 043 shared layout system (tasks #62/#63/#73): the Sessions page pattern
+// generalized — pinned top bar + prop-driven filter row + list/detail scaffold.
+export { PageTopBar } from './PageTopBar';
+export type { PageTopBarProps } from './PageTopBar';
+export { FilterToolbar } from './FilterToolbar';
+export type {
+  FilterToolbarProps,
+  FilterField,
+  FilterOption,
+  GroupByControl,
+  SortControl,
+  SearchControl,
+} from './FilterToolbar';
+export { ListPageLayout } from './ListPageLayout';
+export type { ListPageLayoutProps } from './ListPageLayout';
 export { ListSidebar } from './ListSidebar';
 export type { ListSidebarProps } from './ListSidebar';
 export { ListItem } from './ListItem';
