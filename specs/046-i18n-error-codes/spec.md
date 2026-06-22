@@ -4,7 +4,7 @@
 
 **Created**: 2026-06-22
 
-**Status**: Draft
+**Status**: Implemented
 
 **Input**: User description: "Internationalization (i18n) infrastructure and unified error-code translation — a type-safe message catalog (multilingual-ready, not user-exposed) plus precise internal error codes shared Rust↔TS that translate to friendly user messages."
 
