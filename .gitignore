@@ -356,3 +356,6 @@ apps/desktop/playwright-report/
 # Headroom live runtime state — never version-controlled
 .headroom/
 /headroom_memory.db
+
+# Local-only tauri MCP bridge host (gateway IP differs per machine)
+.mcp.tauri.env
