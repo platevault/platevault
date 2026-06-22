@@ -169,13 +169,13 @@ Frontend: `cd apps/desktop && npx tsc --noEmit` + `npx vitest run <feature>`. Ru
 
 ## Phase 11 — US7 Frontend type-safety & dead-code (P3) — needs US2
 
-- [ ] T190 Typed mock fixtures (kill `mockInvoke<T>` `as T`). (re-opened 2026-06-21: phantom — SC/FR unmet)
-- [ ] T191 `useStatusSummary` generated types; concrete `SettingsData`. (re-opened 2026-06-21: phantom — SC/FR unmet)
-- [ ] T192 `satisfies` in fixtures; exhaustive state-label fns vs ProjectState/SessionState.
+- [x] T190 Typed mock fixtures (kill `mockInvoke<T>` `as T`). (re-opened 2026-06-21: phantom — SC/FR unmet)
+- [x] T191 `useStatusSummary` generated types; concrete `SettingsData`. (re-opened 2026-06-21: phantom — SC/FR unmet)
+- [x] T192 `satisfies` in fixtures; exhaustive state-label fns vs ProjectState/SessionState.
   (caught + fixed 4 genuine mock-contract drifts: firstrun_complete/restart/state, roots batch.) (re-opened 2026-06-21: phantom — SC/FR unmet)
-- [ ] T193 Triage ~30 empty `catch {}`; delete dead `lib/display.ts`.
+- [x] T193 Triage ~30 empty `catch {}`; delete dead `lib/display.ts`.
   (26 found, all already commented intentional ignores; 3 in-scope upgraded; display.ts deleted, 0 importers.) (re-opened 2026-06-21: phantom — SC/FR unmet)
-- [ ] T268 [US7] Remove the hand-written struct universe from
+- [x] T268 [US7] Remove the hand-written struct universe from
   `apps/desktop/src/bindings/types.ts`: re-export each of the 14 interfaces
   (MetaValue, AppPreferences, SourceMap, SettingsData, CalibrationMaster, Target,
   SearchResult, TargetDetail, ProjectSource, ProjectSourceView, ProjectOutput,
@@ -183,7 +183,7 @@ Frontend: `cd apps/desktop && npx tsc --noEmit` + `npx vitest run <feature>`. Ru
   types where a backend DTO exists; move genuinely frontend-only types to a labelled
   frontend-types module. End state: no hand-written `export interface` structs remain
   in `bindings/types.ts`.
-- [ ] T269 [US7] Migrate all field accesses in the ~19 importer files
+- [x] T269 [US7] Migrate all field accesses in the ~19 importer files
   snake_case→camelCase, incrementally by feature area, each batch verified with
   `tsc --noEmit` + `vitest run <area>`; update fixtures/mocks to camelCase.
   (Depends on T268.)
@@ -231,7 +231,7 @@ Frontend: `cd apps/desktop && npx tsc --noEmit` + `npx vitest run <feature>`. Ru
 
 ## Phase 16 — US16 Long-operation contract (P3)
 
-- [ ] T240 Wire plan-apply through `OperationHandle` + `OperationEvent` over a
+- [x] T240 Wire plan-apply through `OperationHandle` + `OperationEvent` over a
   `tauri::ipc::Channel`; UI subscribes/renders progress; retire the ad-hoc event path
   for this flow.
   (Backend emits Started→per-item→terminal OperationEvents over a Channel<OperationEvent>;
@@ -240,11 +240,11 @@ Frontend: `cd apps/desktop && npx tsc --noEmit` + `npx vitest run <feature>`. Ru
   existing plan-apply progress view existed to retire (old path was DB-poll). The contract/
   transport/wrapper/mocks are in place for a future consumer; adding a new progress view is
   net-new feature scope beyond this refactor spec.) (re-opened 2026-06-21: phantom — SC/FR unmet)
-- [ ] T270 [US16] Reconcile the `applyPlan` wrapper return type to the generated
+- [x] T270 [US16] Reconcile the `applyPlan` wrapper return type to the generated
   `PlanApplyResponse`; remove the `as unknown as OperationHandle` cast at
   `commands.ts:396`; update `commands.applyPlanChannel.test.ts` + any caller.
   End state: zero `as unknown as` in `commands.ts`.
-- [ ] T271 [US16] Wire a real plan-apply progress consumer in the UI over the
+- [x] T271 [US16] Wire a real plan-apply progress consumer in the UI over the
   `OperationEvent` channel (live per-item progress), exercising the long-op contract
   end-to-end (FR-021); add/extend a vitest for the consumer.
   (May depend on T270's corrected return type.)
@@ -278,7 +278,7 @@ Frontend: `cd apps/desktop && npx tsc --noEmit` + `npx vitest run <feature>`. Ru
   (moved equipment/first_run/JsonAny + settings stored types to domain_core, re-exported from
   contracts_core → bindings byte-identical; persistence_db contracts_core dep removed (tree=0);
   7 byte-identity guard tests w/ frozen snapshots + real SQL roundtrip.)
-- [ ] T272 [US13] Verify crate restructuring (T250–T254) complete: split crates compile
+- [x] T272 [US13] Verify crate restructuring (T250–T254) complete: split crates compile
   independently, no `app/core` god-crate regression; record verification (no code change
   expected). (Independent of T268–T271.)
 - [ ] **US13 checkpoint**: commit `feat(042): US13 crate restructuring`.

@@ -39,6 +39,7 @@ import {
   useInboxStats,
 } from './store';
 import { InboxStatsSummary } from './InboxStatsSummary';
+import { usePlanApplyProgress } from '@/features/plans/usePlanApplyProgress';
 import { PlanPanel } from './PlanPanel';
 import type { DestructiveDestination, PendingRootPick } from './PlanPanel';
 import { normalizeConfirmError } from './store';
@@ -171,6 +172,10 @@ export function InboxPage() {
   const { applyAll, loading: applyAllLoading } = useInboxPlanApplyAll();
   const { applySelected, loading: applySelectedLoading } = useApplySelectedInboxPlans();
   const { cancel, loading: cancelLoading } = useInboxPlanCancel();
+  // Live long-op progress consumer (spec 042 US16 / FR-021): streams per-item
+  // OperationEvents over the channel when applying a single ingestion plan.
+  const { progress: applyProgress, run: runPlanApply } = usePlanApplyProgress();
+  const [progressPlanId, setProgressPlanId] = useState<string | null>(null);
 
   /**
    * Confirm `item` (optionally targeting a caller-chosen destination `rootId`).
@@ -313,6 +318,20 @@ export function InboxPage() {
     }
   };
 
+  // Apply a single ingestion plan with live per-item progress streamed over
+  // the long-operation OperationEvent channel (spec 042 US16 / FR-021). This is
+  // the end-to-end consumer of the channel contract on the inbox plan surface.
+  const handleApplyOne = async (planId: string) => {
+    setProgressPlanId(planId);
+    const response = await runPlanApply({ id: planId });
+    if (response) {
+      addToast({ message: 'Plan applied.', variant: 'info' });
+      refreshAll();
+    } else {
+      addToast({ message: 'Apply failed — please try again.', variant: 'error' });
+    }
+  };
+
   const handleCancel = async (inboxItemId: string) => {
     await cancel(inboxItemId);
     addToast({ message: 'Plan discarded. Item is available for re-confirmation.', variant: 'info' });
@@ -412,8 +431,11 @@ export function InboxPage() {
                   onDestructiveDestinationChange={setDestructiveDestination}
                   onApplySelected={(ids) => void handleApplySelected(ids)}
                   onApplyAll={() => void handleApplyAll()}
+                  onApplyOne={(planId) => void handleApplyOne(planId)}
+                  progress={applyProgress}
+                  progressPlanId={progressPlanId}
                   onCancel={(id) => void handleCancel(id)}
-                  busy={planBusy}
+                  busy={planBusy || applyProgress.running}
                   pendingRootPick={pendingRootPick}
                   onPickDestinationRoot={(rootId) => void handlePickDestinationRoot(rootId)}
                   rootPickBusy={confirmLoading}
