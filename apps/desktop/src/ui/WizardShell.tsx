@@ -54,6 +54,7 @@ export const WizardShell = forwardRef<HTMLDivElement, WizardShellProps>(
               >
                 <span
                   className="alm-wizard__step-badge"
+                  // eslint-disable-next-line no-restricted-syntax -- dynamic: step-badge conditional token colors (active/completed/pending)
                   style={
                     i === currentStep
                       ? { background: 'var(--alm-ink)', color: 'var(--alm-on-accent)' }
@@ -66,6 +67,7 @@ export const WizardShell = forwardRef<HTMLDivElement, WizardShellProps>(
                 </span>
                 <span
                   className="alm-wizard__step-label"
+                  // eslint-disable-next-line no-restricted-syntax -- dynamic: step-label conditional token color (active vs muted)
                   style={{ color: i === currentStep ? 'var(--alm-text)' : 'var(--alm-text-muted)' }}
                 >
                   {step.label}
@@ -107,6 +109,7 @@ export const WizardShell = forwardRef<HTMLDivElement, WizardShellProps>(
                         key={step.label}
                         className="alm-wizard__steps-card"
                         aria-current={isActive ? 'step' : undefined}
+                        // eslint-disable-next-line no-restricted-syntax -- dynamic: steps-card conditional token colors + weight (active/past/future)
                         style={{
                           background: isPast || isActive ? 'var(--alm-surface)' : 'var(--alm-bg)',
                           color: isActive ? 'var(--alm-text)' : 'var(--alm-text-muted)',

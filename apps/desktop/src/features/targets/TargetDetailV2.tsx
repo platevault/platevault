@@ -33,7 +33,7 @@ import {
   clearDisplayAlias,
 } from '@/api/commands';
 import type { TargetDetailV3, TargetOpError } from '@/api/commands';
-import { DetailPane, DetailHeader } from '@/components';
+import { DetailPane } from '@/components';
 import { Pill, Section, EmptyState, Banner, Btn } from '@/ui';
 
 // ── Types ─────────────────────────────────────────────────────────────────────

@@ -83,6 +83,7 @@ export function TargetList({ targets, selected, onSelect }: Props) {
     >
       <div
         className="alm-virtual-inner"
+        // eslint-disable-next-line no-restricted-syntax -- dynamic: virtualizer total height (getTotalSize)
         style={{ height: `${virtualizer.getTotalSize()}px`, position: 'relative' }}
       >
         {virtualizer.getVirtualItems().map((virtualRow) => {
@@ -98,6 +99,7 @@ export function TargetList({ targets, selected, onSelect }: Props) {
               ref={virtualizer.measureElement}
               className={`alm-list-item${isSelected ? ' alm-list-item--selected' : ''}`}
               onClick={() => onSelect(t.id)}
+              // eslint-disable-next-line no-restricted-syntax -- dynamic: virtualizer translateY offset per target row
               style={{
                 position: 'absolute',
                 top: 0,

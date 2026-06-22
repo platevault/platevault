@@ -118,6 +118,7 @@ export function PlanProtectionGate({ planId, onAcknowledgedChange }: PlanProtect
     <div className="alm-plan-gate__root">
       <div
         className="alm-plan-gate__summary-bar"
+        // eslint-disable-next-line no-restricted-syntax -- dynamic: conditional token background (all-done vs pending state)
         style={{ background: allDone ? 'var(--alm-surface)' : 'var(--alm-bg3)' }}
       >
         <Pill variant={allDone ? 'ok' : 'warn'}>
@@ -136,6 +137,7 @@ export function PlanProtectionGate({ planId, onAcknowledgedChange }: PlanProtect
           <div
             key={item.itemId}
             className="alm-plan-gate__item"
+            // eslint-disable-next-line no-restricted-syntax -- dynamic: conditional token background + opacity for acknowledged item state
             style={{
               background: isDone ? 'var(--alm-surface)' : undefined,
               opacity: isDone ? 0.7 : 1,

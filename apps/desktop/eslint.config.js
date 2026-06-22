@@ -37,6 +37,22 @@ export default tseslint.config(
   // Project-wide rule overrides — keep pragmatic
   {
     rules: {
+      // No element-level inline styling. Every visual style must be a shared
+      // `alm-` class in styles/components.css (token-only), never an inline
+      // `style={{…}}` block on an element. This keeps theming centralized and
+      // prevents un-themed colors leaking past the 4-theme token system.
+      //
+      // The selector forbids ANY `style={…}` JSX prop. The few genuinely-dynamic
+      // exceptions (virtualizer transforms/heights computed per row, progress-bar
+      // widths, conditional token-based colors, SVG point geometry, and the
+      // Table/WizardShell `style` API passthroughs) must opt out explicitly with:
+      //   // eslint-disable-next-line no-restricted-syntax -- dynamic: <reason>
+      // so each one is justified and new static inline styles are rejected.
+      'no-restricted-syntax': ['error', {
+        selector: 'JSXAttribute[name.name="style"]',
+        message:
+          'Inline style props are forbidden. Use a shared `alm-` class in styles/components.css (token-only). For a genuinely-dynamic value, add `// eslint-disable-next-line no-restricted-syntax -- dynamic: <reason>`.',
+      }],
       // TypeScript: allow explicit `any` in generated bindings and adapter layers
       '@typescript-eslint/no-explicit-any': 'warn',
       // Allow unused vars prefixed with _ (convention for intentionally unused)

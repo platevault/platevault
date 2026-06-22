@@ -18,6 +18,7 @@ export const CoverageBar = forwardRef<HTMLDivElement, CoverageBarProps>(
         <div className="alm-coverage__bar">
           <div
             className={`alm-coverage__fill${cls ? ` alm-coverage__fill${cls}` : ''}`}
+            // eslint-disable-next-line no-restricted-syntax -- dynamic: coverage bar fill width %
             style={{ width: `${pct}%` }}
           />
         </div>

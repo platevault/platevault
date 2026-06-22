@@ -73,6 +73,7 @@ function ConfidenceBar({ value }: { value: number }) {
       <div className="alm-match-candidates__conf-track">
         <div
           className="alm-match-candidates__conf-fill"
+          // eslint-disable-next-line no-restricted-syntax -- dynamic: confidence bar width % and conditional token color
           style={{ width: `${pct}%`, background: barColor }}
           data-testid="confidence-bar"
         />

@@ -73,6 +73,7 @@ export function CalendarScroll({ nights, onNightSelect }: CalendarScrollProps) {
     >
       <div
         className="alm-calendar-scroll__inner"
+        // eslint-disable-next-line no-restricted-syntax -- dynamic: virtualizer total height (getTotalSize)
         style={{ height: `${virtualizer.getTotalSize()}px` }}
       >
         {virtualizer.getVirtualItems().map((virtualRow) => {
@@ -82,6 +83,7 @@ export function CalendarScroll({ nights, onNightSelect }: CalendarScrollProps) {
               <div
                 key={virtualRow.key}
                 className="alm-calendar-scroll__month-header"
+                // eslint-disable-next-line no-restricted-syntax -- dynamic: virtualizer translateY + height for month header row
                 style={{
                   transform: `translateY(${virtualRow.start}px)`,
                   height: `${virtualRow.size}px`,
@@ -99,6 +101,7 @@ export function CalendarScroll({ nights, onNightSelect }: CalendarScrollProps) {
             <div
               key={virtualRow.key}
               className="alm-calendar-scroll__night"
+              // eslint-disable-next-line no-restricted-syntax -- dynamic: virtualizer translateY + height for night row
               style={{
                 transform: `translateY(${virtualRow.start}px)`,
                 height: `${virtualRow.size}px`,

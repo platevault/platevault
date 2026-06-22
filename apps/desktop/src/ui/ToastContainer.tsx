@@ -62,6 +62,7 @@ export const ToastContainer = forwardRef<HTMLDivElement, ToastContainerProps>(
     const cls = ['alm-toast__container', className].filter(Boolean).join(' ');
 
     return (
+      // eslint-disable-next-line no-restricted-syntax -- dynamic: ToastContainer style prop passthrough from caller
       <div ref={ref} style={style} className={cls} aria-live="polite" {...rest}>
         {toasts.map((toast) => (
           <ToastItem key={toast.id} toast={toast} onDismiss={dismiss} />

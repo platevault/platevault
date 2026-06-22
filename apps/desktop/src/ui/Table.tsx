@@ -30,17 +30,20 @@ export const Table = forwardRef<HTMLTableElement, TableProps>(
     return (
       <table ref={ref} className={cls} {...rest}>
         <thead>
+          {/* eslint-disable-next-line no-restricted-syntax -- dynamic: Table column header style passthrough from caller */}
           <tr>{columns.map((c, i) => <th key={i} style={c.style}>{c.label}</th>)}</tr>
         </thead>
         <tbody>
           {rows.map((row, ri) => (
             <tr
               key={ri}
+              // eslint-disable-next-line no-restricted-syntax -- dynamic: Table row style passthrough from caller (_rowStyle)
               style={row._rowStyle}
               className={row._rowClassName}
               onClick={row._onClick as ((evt: MouseEvent) => void) | undefined}
             >
               {columns.map((c, ci) => (
+                // eslint-disable-next-line no-restricted-syntax -- dynamic: Table cell style passthrough from caller (cellStyle)
                 <td key={ci} className={c.className} style={c.cellStyle}>{row[c.key] as ReactNode}</td>
               ))}
             </tr>

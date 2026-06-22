@@ -170,6 +170,7 @@ export function ProjectNotesSection({
       <div className="alm-project-notes__toolbar">
         <span
           data-testid="notes-byte-counter"
+          // eslint-disable-next-line no-restricted-syntax -- dynamic: conditional token color (over-limit / near-limit / normal)
           style={{
             color: overLimit
               ? 'var(--alm-danger)'

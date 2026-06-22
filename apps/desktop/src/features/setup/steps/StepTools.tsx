@@ -264,6 +264,7 @@ function ToolPathPicker({
       <span
         className="alm-mono alm-step-tools__path-value"
         title={path ?? undefined}
+        // eslint-disable-next-line no-restricted-syntax -- dynamic: conditional token color for path set vs unset
         style={{ color: path ? 'var(--alm-text-secondary)' : 'var(--alm-text-faint)' }}
       >
         {path ?? 'No path set'}

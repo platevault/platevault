@@ -153,6 +153,7 @@ function SourceSummary({ state }: SourceSummaryProps) {
             : undefined
         }
         className="alm-setup-scan__header"
+        // eslint-disable-next-line no-restricted-syntax -- dynamic: conditional cursor based on expandable state
         style={{ cursor: isExpandable ? 'pointer' : 'default' }}
       >
         {/* Chevron — only shown when expandable */}

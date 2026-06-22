@@ -480,6 +480,7 @@ export function TargetSearch({
                 {suggestions.length > 0 && (
                   <div
                     className="alm-virtual-inner"
+                    // eslint-disable-next-line no-restricted-syntax -- dynamic: virtualizer total height (totalSize)
                     style={{ height: `${totalSize}px`, position: 'relative' }}
                   >
                     {virtualItems.map((virtualRow) => {
@@ -494,6 +495,7 @@ export function TargetSearch({
                           ref={virtualizer.measureElement}
                           data-index={i}
                           className="alm-target-search__option"
+                          // eslint-disable-next-line no-restricted-syntax -- dynamic: virtualizer translateY offset per suggestion row
                           style={{
                             position: 'absolute',
                             top: 0,

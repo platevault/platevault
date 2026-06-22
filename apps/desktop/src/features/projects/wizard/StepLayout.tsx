@@ -107,6 +107,7 @@ export function StepLayout({ data, nameData, strategy, onChange }: StepLayoutPro
                 key={i}
                 className="alm-wizard-layout__path-row"
                 data-dir={isDir ? 'true' : undefined}
+                // eslint-disable-next-line no-restricted-syntax -- dynamic: depth-based indent padding for layout tree rows
                 style={{ paddingLeft: `${Math.max(0, depth) * 12}px` }}
               >
                 {isDir ? '\u{1F4C1} ' : '\u{1F4C4} '}

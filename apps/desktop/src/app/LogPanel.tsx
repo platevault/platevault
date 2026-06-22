@@ -345,6 +345,7 @@ export function LogPanel() {
           ) : (
             <div
               className="alm-virtual-inner"
+              // eslint-disable-next-line no-restricted-syntax -- dynamic: virtualizer total height (getTotalSize)
               style={{ height: `${virtualizer.getTotalSize()}px`, position: 'relative' }}
             >
               {virtualizer.getVirtualItems().map((virtualRow) => {
@@ -355,6 +356,7 @@ export function LogPanel() {
                     entry={entry}
                     index={virtualRow.index}
                     measureRef={virtualizer.measureElement}
+                    // eslint-disable-next-line no-restricted-syntax -- dynamic: virtualizer translateY offset per row
                     style={{
                       position: 'absolute',
                       top: 0,
@@ -414,6 +416,7 @@ function LogEntryRow({
     <li
       ref={measureRef}
       data-index={index}
+      // eslint-disable-next-line no-restricted-syntax -- dynamic: virtualizer row style passthrough (absolute + translateY)
       style={style}
       className={`alm-logpanel__event${isClickable ? ' alm-logpanel__event--link' : ''}`}
       onClick={isClickable ? handleClick : undefined}

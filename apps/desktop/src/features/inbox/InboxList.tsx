@@ -252,6 +252,7 @@ function InboxRow({
       tabIndex={0}
       onKeyDown={(e) => e.key === 'Enter' && onSelect(originalIdx)}
       aria-selected={selected}
+      // eslint-disable-next-line no-restricted-syntax -- dynamic: depth-based indent padding for grouped inbox rows
       style={indent ? { paddingLeft: indent } : undefined}
     >
       {/* ── Primary line: path ── */}
@@ -301,6 +302,7 @@ function GroupHeaderRow({
       data-testid={`inbox-group-${node.dimension}-${node.key}`}
       onClick={onToggle}
       aria-expanded={!collapsed}
+      // eslint-disable-next-line no-restricted-syntax -- dynamic: depth-based indent padding for group header
       style={{ paddingLeft: 8 + headerIndent }}
     >
       <span aria-hidden="true" className="alm-inbox-list__group-caret">
@@ -561,6 +563,7 @@ export function InboxList({
         data-testid="inbox-virtual-sizer"
         className="alm-inbox-list__sizer"
         onKeyDown={onListKeyDown}
+        // eslint-disable-next-line no-restricted-syntax -- dynamic: virtualizer total height for windowed mode
         style={{
           height: windowed ? rowVirtualizer.getTotalSize() : undefined,
         }}
@@ -573,6 +576,7 @@ export function InboxList({
                   key={vi.key}
                   data-index={vi.index}
                   ref={rowVirtualizer.measureElement}
+                  // eslint-disable-next-line no-restricted-syntax -- dynamic: virtualizer translateY offset per inbox row
                   style={{
                     position: 'absolute',
                     top: 0,

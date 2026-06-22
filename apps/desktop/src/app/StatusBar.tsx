@@ -52,6 +52,7 @@ export function StatusBar() {
             >
               <span>{label}</span>
               <span className="alm-statusbar__meter">
+                {/* eslint-disable-next-line no-restricted-syntax -- dynamic: disk usage meter width % */}
                 <i style={{ width: `${usedPct}%` }} />
               </span>
               <span>{usedPct}%</span>

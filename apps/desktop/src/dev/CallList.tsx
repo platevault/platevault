@@ -123,6 +123,7 @@ export function CallList({ calls, contracts, onViewSchema }: CallListProps) {
                       : `Replay disabled for write contract ${call.contract}`
                   }
                   aria-disabled={!isReplaySafe}
+                  // eslint-disable-next-line no-restricted-syntax -- dynamic: conditional opacity + cursor based on replay-safe state
                   style={{ opacity: isReplaySafe ? 1 : 0.4, cursor: isReplaySafe ? 'pointer' : 'not-allowed' }}
                 >
                   Replay
