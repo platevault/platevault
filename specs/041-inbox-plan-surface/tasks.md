@@ -83,8 +83,8 @@
 **Goal**: confirming a multi-type folder auto-produces one action group per frame type; no separate Split step.
 **Independent test**: confirm a light+dark folder → distinct per-type actions; single-type → one action.
 
-- [X] T036 [US5] In `confirm.rs`, group the item's files by effective frame type and emit a distinct plan action group per type (each with its own pattern-resolved destination), composing with US4's per-file move/catalogue decision. Ensure no separate "split" command path is required.
-- [X] T037 [P] [US5] Tests: confirm mixed-type → per-type action groups; single-type → one group (`-p app_core`).
+- [x] ~~T036~~ (RETIRED in iteration 2026-06-23 — US5 auto-split obsolete; superseded by single-type sub-items at ingest, US10/Phase 12. Original: [US5] In `confirm.rs`, group the item's files by effective frame type and emit a distinct plan action group per type (each with its own pattern-resolved destination), composing with US4's per-file move/catalogue decision. Ensure no separate "split" command path is required.)
+- [x] ~~T037~~ (RETIRED in iteration 2026-06-23 — US5 auto-split obsolete; the `confirm_mixed_emits_per_type_action_groups` test is deleted under single-type sub-items, US10/Phase 12. Original: [P] [US5] Tests: confirm mixed-type → per-type action groups; single-type → one group (`-p app_core`).)
 
 ## Phase 8: User Story 6 — Per-type queue stats (P3)
 
@@ -127,6 +127,43 @@
 - [X] T059 [P] vitest: root picker, absolute-path display, missing-attribute input gate.
 - [~] T060 Windows E2E (quickstart) via tauri MCP: calibration destination structure, inbox root selection, multi-root prompt vs single-root auto, missing-date gate; update `specs/037-e2e-integration-testing/contracts/coverage-matrix.md`. **coverage-matrix updated + quickstart scenarios documented; Layer-1 (confirm.rs root/gate + patterns) and vitest (PlanPanel picker/abs-path, InboxDetail missing-attr) gate the merge. Live tauri-MCP Windows run is the recommended post-merge verification loop (`tauri-mcp-windows-verify-mechanics`).**
 
+## Phase 12 — Single-type ingest & extended extraction (Iteration 2026-06-23)
+
+**Goal**: change the inbox unit of work from one-item-per-leaf-folder to single-type sub-items materialized at classify time (item↔plan 1:1); add extended header extraction; make the reclassifier field-agnostic over a typed property registry; generalize the missing-mandatory gate with a needs-review bucket and a split-before-confirm loop; expose source-group provenance.
+
+**Foundational**: T061 (migration 0046) + T062 (extended extraction) block T063–T073. T072 (contracts/binding regen) precedes the frontend portions of T073.
+
+- [ ] T061 [P] [US10] Migration 0046: `inbox_source_groups`; `inbox_items` +source_group_id/group_key/group_label/frame_type + composite UNIQUE; `inbox_file_overrides`; collapse `inbox_classifications.result` to classified|unclassified; data re-derivation (FR-034/FR-042/FR-046/FR-054).
+- [ ] T062 [P] [US16] Extend FITS+XISF extraction (FR-053): offset/temps/pointing/rotation/readout/focal/observer/local-time + XISF unit conversions.
+- [ ] T063 [US11] Property registry module + `inbox.property_registry` contract (FR-044).
+- [ ] T064 [US10] Grouping engine: per-type recipe + bucketing + tolerances (pointing/rotation/temp) + per-dimension config (FR-035/FR-036/FR-037/FR-038/FR-039/FR-040).
+- [ ] T065 [US10] scan.rs: emit source-group rows, stay lazy (FR-041).
+- [ ] T066 [US10] classify.rs: materialize single-type sub-items (classify-then-split) + per-sub-group signature (FR-041/FR-042).
+- [ ] T067 [P] [US10] Composite identity + signature stability tests (FR-042).
+- [ ] T068 [US11] reclassify.rs: field-agnostic property map + bulk; fill-missing-only; index-only; source-group-scoped; re-split (FR-044/FR-045/FR-049).
+- [ ] T069 [US11] Override persistence (`inbox_file_overrides`) + staleness; migrate old override_* columns (FR-046).
+- [ ] T070 [US12] Generalized missing-mandatory gate + needs-review bucket + split-before-confirm enforcement (FR-047/FR-048/FR-049).
+- [ ] T071 [US10] confirm.rs: delete split/mixed branch; one rootId/item; retire per-type grouping (FR-050).
+- [ ] T072 [US13] Contracts + binding regen: inbox.list (groupId/groupKey/groupLabel/frameType/sourceGroup/missingMandatory), inbox.confirm (drop action), inbox.reclassify (property map+bulk), metadata DTO new fields (FR-043/FR-044/FR-050).
+- [ ] T073 [P] [US10] Layer-1 + vitest tests for Phase 12.
+
+**Checkpoint**: mixed folders materialize as N single-type items; reclassify is field-agnostic; needs-review bucket gates plan creation; provenance + extended metadata surface.
+
+## Phase 13 — Target resolution, lifecycle drop, cross-spec (Iteration 2026-06-23)
+
+**Goal**: coordinate-based target resolution at light ingestion with project propagation; drop the session review lifecycle (sessions become derived, already-confirmed inventory); migrate legacy plan_open items; reconcile cross-spec impact.
+
+**Depends on Phase 12** (single-type items + extended pointing/focal extraction). T078 (`sync.conflicts`) runs after the spec/data-model/contract artifacts land.
+
+- [ ] T074 [US15] Coordinate target resolution (FOV-aware NN) + `inbox.target_recommendations` op; OBJECT naming-only (FR-052).
+- [ ] T075 [US15] Target propagation to projects (FR-052).
+- [ ] T076 [US14] Drop session review lifecycle (states + Confirm/Re-open/Reject); sessions derived; editable metadata view (FR-051).
+- [ ] T077 [US14] Migration handling for plan_open legacy items (FR-054).
+- [ ] T078 [US14] `/speckit.sync.conflicts` vs 045/006/035; mark spec 045 superseded.
+- [ ] T079 [US15] quickstart scenarios + Windows E2E (tauri MCP) verification.
+
+**Checkpoint**: light ingestion resolves targets by coordinates; sessions expose no review action; cross-spec conflicts (045/006/035) reconciled.
+
 ---
 
 ## Dependencies & order
@@ -137,11 +174,16 @@
 - **US4 (P2)** depends on Phase 2 (organization_state + catalogue) and composes with **US5 (P3)** in `confirm.rs` (do US4 before/with US5).
 - **US6, US7 (P3)** depend on US1's plan surface / list.
 - **Polish** last.
+- **Phase 12 (Iteration 2026-06-23, foundational)**: T061 (migration 0046) + T062 (extended extraction) are foundational and block T063–T073. T072 (contracts/binding regen) precedes the frontend portions of T073. Phase 12 supersedes the retired US5 auto-split (T036/T037).
+- **Phase 13 (Iteration 2026-06-23)**: depends on Phase 12 (single-type items + pointing/focal extraction). T078 (`sync.conflicts` vs 045/006/035) runs after the spec/data-model/contract artifacts land.
 
 ## Parallel opportunities
 
 - T004/T005 (contracts) parallel; T013/T020/T022 (independent frontend files) parallel; test tasks marked [P] parallel within their story.
+- Phase 12: T061/T062 (migration + extraction, distinct files) parallel; T067/T073 (tests) [P]. T063–T066/T068–T071 follow the two foundational tasks; T072 precedes Phase-12 frontend tests.
 
 ## Implementation strategy
 
 MVP = Phase 2 + US1 + US2 (a structured, metadata-rich inbox with in-context reviewable move plans). Then US3 (overrides), US4+US5 (organization-state + auto-split — the custody model), then US6/US7 (stats, destructive control), then polish + Windows E2E.
+
+**Iteration 2026-06-23**: Phase 12 first lands the foundational migration (T061) + extended extraction (T062), then the grouping/classify/reclassify/confirm rework (T063–T071) and contracts (T072), gated by Phase-12 tests (T073). Phase 13 follows: coordinate target resolution + project propagation (T074/T075), session lifecycle drop + legacy migration (T076/T077), cross-spec reconciliation (T078), and quickstart/Windows E2E (T079). US5 auto-split is retired (T036/T037) — single-type sub-items make it obsolete.

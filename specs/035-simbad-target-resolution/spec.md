@@ -7,6 +7,14 @@
 > retains and reuses the **target-identity model** from spec 013 (canonical target, catalog
 > references, aliases, dedup). Online name resolution — previously deferred in spec 013 R4 — becomes
 > the primary mechanism. Design rationale: `docs/development/catalog-data-pipeline-plan.md`.
+>
+> **Extended (2026-06-23) by [Spec 041 — Inbox Plan Surface](../041-inbox-plan-surface/spec.md), iteration "single-type inbox sub-items".**
+> 041 adds **coordinate-based** target resolution at light ingestion (FOV-aware nearest-neighbour of
+> the image `RA`/`DEC` against this spec's target DB) and auto-propagation of the chosen target to
+> linked projects (041 FR-052, R-17; tasks T074/T075). The two **compose**: 041's coordinate-NN is
+> the ingest path and reuses this spec's target-identity model + resolver; this spec's **name**
+> resolution remains the manual/typed-search path. Per 041, the FITS `OBJECT` header is used only as
+> an initial display name, not as a search key.
 
 **Feature Branch**: `035-simbad-target-resolution`
 

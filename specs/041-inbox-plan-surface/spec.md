@@ -57,6 +57,13 @@ Several defects encountered during this review were already repaired (PR #298): 
 **Tasks added**: T048–T060.
 **Context**: Follows the merged spec 041 (apply executor now resolves root_id via registered_sources; breakdown layout stable; move-preview double-slash fixed). Found during Windows real-app E2E (T046).
 
+### Iteration 2026-06-23: Single-type inbox sub-items + field-agnostic metadata + lifecycle drop
+
+**Change**: Make the inbox unit of work a single-type sub-item materialized at classify (mixed folder → N homogeneous items; item↔plan 1:1), reclassify field-agnostic over a typed property registry, generalize the missing-metadata gate, add source-group provenance, resolve light targets by coordinates, extend header extraction, and drop the session review lifecycle in favour of derived, already-confirmed sessions with persisted editable metadata.
+**Scope**: Pivot (changes the core inbox granularity invariant; folds in the lifecycle drop; cross-spec impact on 045/006/035).
+**Artifacts updated**: spec.md, research.md, data-model.md, plan.md, contracts/operations.md, tasks.md, quickstart.md.
+**Tasks added**: T061–T079. **Tasks retired**: T036, T037.
+
 ## User Scenarios & Testing *(mandatory)*
 
 ### User Story 1 - Reviewable, visible plan on confirm (Priority: P1)
@@ -133,6 +140,8 @@ Whether confirming an item generates a **move plan** or **catalogues the files i
 
 ### User Story 5 - Confirm auto-splits mixed folders (Priority: P3)
 
+RETIRED (superseded by US10 single-type items): with single-type sub-items materialized at ingest, a mixed folder yields N homogeneous items directly, so there is nothing left to auto-split at confirm — see US10. The original story is preserved below for history.
+
 When the user confirms a folder containing more than one frame type, the app **automatically** separates it into per-category plan actions (each type routed to its correct destination). There is **no separate manual "Split" step** — splitting is implicit in confirm.
 
 **Why this priority**: Removes a confusing extra step (folds spec 005). Valuable but secondary to the core plan surface and override flow.
@@ -182,6 +191,11 @@ When a plan includes a **destructive action** (e.g. archiving or trashing reject
 - The active naming pattern is unset/incomplete on a fresh setup → destination preview must degrade gracefully (clear "destination unavailable until a pattern is configured" rather than a blank field).
 - Multi-level grouping where some items lack a grouping dimension (e.g. no target) → such items are gathered under a clear "unknown/none" group rather than dropped.
 - A multi-select override spans files across different source designations (inbox vs in-place) → the override applies to metadata uniformly, but the move-vs-catalogue decision still follows each item's source (US4).
+- A continuous dimension (exposure, temperature, pointing, rotation) varies slightly across files of one acquisition run → values are bucketed/within-tolerance so near-identical frames stay in one item rather than forking into many (US10, US16).
+- Files lack a mandatory grouping or path attribute (or an unreadable frame type) → they collect in a per-source-group "needs-review" bucket that blocks plan creation until resolved, then re-split into proper single-type items (US12).
+- An item carries an open plan when the single-type migration runs → it is kept as a single legacy sub-item until its plan resolves/discards, and re-derivation into sub-items happens on the next classify (US10, FR-054).
+- A user override changes a file's grouping value → the file re-partitions between sub-items (its old and new sub-group signatures change); this is correct churn surfaced as override-stale (US11).
+- A manual rotator does not report drift (`ROTATANG` stays static; only `OBJCTROT` moves) → intra-session rotator drift is not detectable, so only the flat-group-vs-light-group `ROTATANG` deviation is determinable and is warned on (US15/US16).
 
 ### User Story 8 - Destination-root selection for moves (Priority: P2)
 
@@ -209,6 +223,113 @@ A plan cannot be generated or applied while any attribute used to build a file's
 
 1. **Given** a file missing a path-load-bearing attribute (e.g. a light with no date), **When** the user attempts to confirm, **Then** plan generation is blocked and the file is surfaced in the needs-review flow.
 2. **Given** that file, **When** the user supplies the missing value, **Then** the gate clears and the resolved destination updates accordingly.
+
+### User Story 10 - Single-type sub-items at ingest (Priority: P1)
+
+As a user ingesting a leaf folder that mixes frame types (or mixes exposures, filters, or targets within a type), I want each homogeneous group to become its own inbox item so that every item maps cleanly to one destination and one reviewable plan, with no "mixed" branch to reason about.
+
+**Why this priority**: This is the structural pivot the rest of the iteration builds on. Without single-type items the 1:1 item↔plan invariant cannot hold, the destination-root choice stays ambiguous per item, and the "mixed" affordances persist. Highest-value slice.
+
+**Independent Test**: Classify a leaf folder containing light frames at two exposures plus dark frames; verify the inbox shows one homogeneous item per group (e.g. `(root) · light · Ha · 300s`, `(root) · light · Ha · 120s`, `(root) · dark · -10°C · 300s`), zero items labelled "mixed", each item exposes exactly one destination root, and each item produces exactly one plan on confirm.
+
+**Acceptance Scenarios**:
+
+1. **Given** a leaf folder mixing more than one frame type, **When** it is classified, **Then** the inbox materializes one single-type item per homogeneous group and no item is labelled "mixed".
+2. **Given** a single-type item, **When** the user confirms it, **Then** it produces exactly one plan (item↔plan is 1:1) with a single chosen destination root.
+3. **Given** an unchanged folder, **When** it is rescanned, **Then** the same group keys and the same items are produced (no item churn).
+
+---
+
+### User Story 11 - Field-agnostic reclassify over a typed property registry (Priority: P1)
+
+As a user correcting incomplete headers, I want to fill any missing metadata property (temperature, gain, target, offset, or any future field) through a generic editor and apply a value across many files at once, so that the app is not limited to a fixed set of overridable fields and never rewrites my files.
+
+**Why this priority**: Real libraries have missing or non-standard headers across many fields; a fixed override list (filter/exposure/binning) cannot keep pace. A typed, future-proof property map with bulk apply is required for the gate (US12) and grouping (US10) to be usable. Highest-value slice.
+
+**Independent Test**: Open a source group whose files lack temperature and gain; via the generic metadata table set temperature and gain for the whole selection ("set all"); verify each file receives the values, header-present fields remain read-only, the file bytes on disk are unchanged, and the items re-partition to reflect the new values.
+
+**Acceptance Scenarios**:
+
+1. **Given** any property defined in the registry (including temperature, gain, target), **When** the user supplies a value for one or more files, **Then** the value is recorded and reflected in classification, grouping, and destination — with no code change required to support that property.
+2. **Given** a value already present in the header, **When** the editor renders it, **Then** it is shown read-only (gap-filling, not rewriting), and the only exception is the explicit "correct classification" frame-type action.
+3. **Given** a user supplies a value via "set all", **When** the override is applied, **Then** every targeted file receives it and the user's files on disk are never modified (index-only).
+
+---
+
+### User Story 12 - Generalized missing-mandatory gate with a needs-review bucket (Priority: P1)
+
+As a user, I want files missing any mandatory grouping or path attribute to be collected into a clear "needs-review" bucket that blocks plan creation until I resolve it, so that no item is confirmed into a plan with incomplete metadata.
+
+**Why this priority**: Generalizes the existing missing-path-attribute gate to all mandatory grouping attributes (including an unclassifiable frame type). Without it, single-type items could form on incomplete metadata and route files to placeholder paths. Highest-value slice.
+
+**Independent Test**: Classify a folder where some lights lack a date and some files lack a readable frame type; verify those files land in a per-source-group "needs-review" item that cannot be confirmed; supply the missing values via the generic editor; verify the system re-runs classification and re-splits the needs-review bucket into proper single-type items, which then become confirmable.
+
+**Acceptance Scenarios**:
+
+1. **Given** files missing a mandatory grouping or path attribute (or an unclassifiable frame type), **When** classification runs, **Then** they are collected into a per-source-group needs-review item that blocks plan creation.
+2. **Given** a needs-review item, **When** the user supplies the missing values, **Then** the system re-runs classification + grouping and re-splits the bucket into fully-resolved single-type items (splitting happens before confirm, never inside plan creation).
+3. **Given** an item still carrying a missing mandatory attribute, **When** the user attempts to confirm it, **Then** confirm is rejected until the attribute is supplied.
+
+---
+
+### User Story 13 - Source-group provenance (Priority: P2)
+
+As a user, I want each single-type item to show the leaf folder it came from and its sibling items, so that I can see what was "ingested together" and trust where files originated.
+
+**Why this priority**: Single-type items fragment a folder into several rows; without provenance the user loses the sense of which items share an origin. Improves trust and review ergonomics; secondary to forming the items themselves.
+
+**Independent Test**: Classify a mixed folder; verify each resulting item carries a source-group id and a display label of the form `(root) · <type> · <discriminating dims>`, and the UI groups the children under their shared parent leaf folder with a sibling count.
+
+**Acceptance Scenarios**:
+
+1. **Given** a classified leaf folder, **When** its items are listed, **Then** each item exposes a source-group id and a human-readable label, and the children are presented under their shared parent folder.
+2. **Given** a source group with several children, **When** the user views it, **Then** the sibling count and the "ingested together" relationship are visible.
+
+---
+
+### User Story 14 - Sessions as derived, already-confirmed inventory (Priority: P2)
+
+As a user, I want acquisition and calibration sessions to be derived directly from confirmed per-file metadata (with no separate review lifecycle), and their metadata to remain editable after the fact, so that I am not asked to re-review what the inbox already confirmed.
+
+**Why this priority**: Once per-file metadata is fixed at inbox confirm, the session key is deterministic and there is nothing left to review; the review lifecycle adds friction and duplicates the inbox gate. Folds in the universal-gate decision.
+
+**Independent Test**: Confirm inbox items that form a session; verify the session appears as derived, already-confirmed inventory with no Confirm/Re-open/Reject affordances; edit a session's metadata and verify it re-opens the same editable per-file metadata table without any lifecycle state transition.
+
+**Acceptance Scenarios**:
+
+1. **Given** confirmed inbox items, **When** sessions are derived, **Then** they appear as already-confirmed inventory with no review states (discovered/candidate/needs_review/confirmed/rejected) and no Confirm/Re-open/Reject controls.
+2. **Given** a derived session, **When** the user edits its metadata, **Then** the same persisted, editable per-file metadata is updated with no lifecycle gate.
+
+---
+
+### User Story 15 - Coordinate-based target resolution at light ingestion (Priority: P2)
+
+As a user ingesting light frames, I want the app to resolve the target by sky coordinates (nearest within a FOV-aware radius) rather than by the `OBJECT` string, and to propagate the chosen target to any project that consumes those lights, so that target identity is robust to inconsistent naming.
+
+**Why this priority**: `OBJECT` is free-text and user-set in capture software; coordinate nearest-neighbour over the existing target/SIMBAD database is robust and enables automatic project linkage. Builds on US10 (light groups carry a pointing).
+
+**Independent Test**: Classify a light sub-group with a plate-solved pointing; verify a ranked list of recommended targets within the FOV-aware radius is offered (plus free-text search and manual set), the chosen `target_id` drives the group's canonical label, and it auto-propagates to a linked project.
+
+**Acceptance Scenarios**:
+
+1. **Given** a light sub-group with a pointing (decimal `RA`/`DEC`, or converted `OBJCTRA`/`OBJCTDEC`), **When** target resolution runs, **Then** the app ranks candidate targets by angular separation within a FOV-aware radius and uses `OBJECT` only as an initial display name, never for matching.
+2. **Given** a resolved or user-chosen `target_id`, **When** it is set, **Then** it becomes the sub-group's canonical target (driving the label and unifying the group key) and propagates to any project consuming those lights.
+3. **Given** no pointing and no user-set target, **When** classification runs, **Then** the light sub-group falls into the needs-review bucket (target is mandatory for lights).
+
+---
+
+### User Story 16 - Extended header extraction (Priority: P1)
+
+As a user, I want the app to extract the additional header fields the new grouping recipes rely on (offset, temperatures, pointing, rotation, readout mode, focal length, observer location, and local time), so that single-type grouping, target resolution, and flat↔light matching have the inputs they need.
+
+**Why this priority**: None of the new grouping inputs are extracted today (only 13 core fields are read); without them every new grouping dimension behaves as "(unknown)". Foundational to US10/US12/US15.
+
+**Independent Test**: Extract metadata from real FITS and XISF files and verify the new fields are populated with correct units and fallbacks (e.g. decimal `RA`/`DEC` preferred over converted `OBJCTRA`/`OBJCTDEC`; `SET-TEMP`/`CCD-TEMP`/`DET-TEMP`; `ROTATANG`; `FOCALLEN`; observer `SITE*`→`OBSGEO-*`→`(LAT/LONG/ALT)-OBS`; `DATE-LOC`), and that filename-encoded metadata is not used as a source.
+
+**Acceptance Scenarios**:
+
+1. **Given** a FITS or XISF file, **When** metadata is extracted, **Then** the extended fields (offset, set/ccd/det temperature, decimal pointing, rotation, readout mode, focal length, observer location, local time) are populated using the documented keyword and fallback chains, with XISF unit conversions applied.
+2. **Given** a field is absent in a file, **When** grouping uses it, **Then** the file falls into an explicit "(unknown)" bucket with a warning rather than blocking, and filename-encoded metadata is never used as an extraction source.
 
 ## Requirements *(mandatory)*
 
@@ -286,6 +407,45 @@ A plan cannot be generated or applied while any attribute used to build a file's
 - **FR-032**: Plan generation MUST be gated on the presence of every path-load-bearing attribute for each file; a missing value MUST block the plan and surface the file in the needs-review flow, consistent with how missing IMAGETYP is handled.
 - **FR-033**: The set of path-load-bearing attributes MUST be defined per frame type (enumerated in research.md) and MUST drive both the gate (FR-032) and the per-type destination structure (FR-025/FR-026).
 
+**Single-type ingest (iteration 2026-06-23, US10/US13/US16)**
+
+- **FR-034**: The inbox unit of work MUST be one single-type sub-item per homogeneous group within a leaf folder, replacing the folder-level item (supersedes the one-item-per-leaf-folder invariant).
+- **FR-035**: A group key per frame type MUST be `frame_type` plus a configurable set of identity dimensions (per the default recipes in research.md R-9); every dimension MUST be individually toggleable in settings per frame type.
+- **FR-036**: Continuous dimensions MUST be bucketed (exposure normalized to canonical seconds; set-temperature bucketed, default 2 °C tolerance) and discrete dimensions normalized then matched exactly.
+- **FR-037**: Temperature grouping MUST use `SET-TEMP` by default with a toggle to use `CCD-TEMP`; a `CCD-TEMP`-vs-`SET-TEMP` deviation beyond a configurable threshold (default 2 °C) MUST surface a metadata-quality warning but MUST NOT split the group; light frames MUST NOT group by temperature.
+- **FR-038**: Pointing grouping MUST use decimal `RA`/`DEC` (falling back to converted `OBJCTRA`/`OBJCTDEC`) within a configurable `pointing_tolerance_deg`.
+- **FR-039**: The optical-train key MUST be a composite of `TELESCOP`, `INSTRUME`, and `FOCALLEN`; light and flat frames MUST group/match on the full optical train (so `FOCALLEN` captures focal reducers implicitly).
+- **FR-040**: Flat↔light rotation matching MUST compare the flat group's `ROTATANG` against the light group's `ROTATANG` (near-exact) and MUST warn on any deviation; because manual-rotator drift does not update `ROTATANG`, only the flat-vs-light group deviation is determinable; when `ROTATANG` is absent, a configurable `flat_rotation_required` (default off) decides exclusion, and light grouping uses a separate loose `light_rotation_tolerance_deg` for cross-setup variance.
+- **FR-041**: The pipeline MUST be classify-then-split: scan stays lazy (no eager header reads or hashing) and single-type sub-items are materialized only at classify time.
+- **FR-042**: Item identity MUST be the composite `(root_id, relative_path, group_key)` with a per-sub-group content signature; group keys MUST be deterministic so rescans of unchanged content produce identical items.
+- **FR-043**: Source-group provenance MUST be exposed on each item (source-group id and a display label, parent leaf folder → child single-type items).
+- **FR-053**: Metadata extraction MUST be extended to the fields the new recipes rely on: `OFFSET`; `SET-TEMP`/`CCD-TEMP`/`DET-TEMP`; `RA`/`DEC` with `OBJCTRA`/`OBJCTDEC`→decimal fallback; `ROTATANG` (= `ROTATOR`)/`ROTNAME`/`OBJCTROT`; `READOUTM` (optional, default off); `FOCALLEN`; observer location via `SITE*`→`OBSGEO-*`→`(LAT/LONG/ALT)-OBS`; and time via `DATE-LOC`/`DATE-END`/`MJD-AVG`/`MJD-OBS`; filename-encoded metadata MUST NOT be used as a trusted source.
+
+**Field-agnostic reclassify (iteration 2026-06-23, US11)**
+
+- **FR-044**: Reclassify MUST be field-agnostic over a typed property registry, accepting an arbitrary per-file property map plus a bulk "set all" form; a new `inbox.property_registry` operation MUST expose the registry so the UI renders a generic editor.
+- **FR-045**: The metadata editor MUST fill only MISSING properties (header-present values shown read-only); all overrides MUST be index-only and MUST NEVER be written back to FITS/XISF files; the one explicit exception is the "correct classification" frame-type action.
+- **FR-046**: Overrides MUST be persisted keyed to `(source_group, relative_file_path, property_key)` so they survive re-partitioning of items, with staleness keyed to file size + mtime.
+
+**Generalized gate (iteration 2026-06-23, US12)**
+
+- **FR-047**: The missing-mandatory gate MUST generalize to the union of mandatory grouping properties and destination-pattern tokens; the per-frame mandatory set MUST be derived from the active pattern ∪ enabled grouping dimensions ∪ hard calibration/session keys (not hardcoded).
+- **FR-048**: Files missing a mandatory attribute or with an unclassifiable frame type MUST be collected into a per-source-group "needs-review" sub-item that blocks plan creation until resolved.
+- **FR-049**: The system MUST follow a split-before-confirm loop: when the user supplies missing values it re-runs classification + grouping and re-splits the sub-items; only a fully-resolved single-type sub-item is confirmable, and confirm MUST reject any item still carrying missing mandatory attributes.
+
+**Confirm simplification & lifecycle drop (iteration 2026-06-23, US10/US14)**
+
+- **FR-050**: Confirm MUST be simplified: the action is always "confirm" (the "split"/"mixed" path is removed); each item carries one chosen destination `rootId`; the `destination_root_required` candidate-roots flow is retained; and the 1:1 plan link is preserved.
+- **FR-051**: Acquisition and calibration sessions MUST be derived, already-confirmed inventory: the review lifecycle (discovered/candidate/needs_review/confirmed/rejected) and the Confirm/Re-open/Reject affordances MUST be removed, while session metadata remains editable post-hoc.
+
+**Coordinate target resolution (iteration 2026-06-23, US15)**
+
+- **FR-052**: Light targets MUST be resolved by coordinate-based, FOV-aware nearest-neighbour over the target database at light ingestion; `OBJECT` MUST be used only as an initial display name and never for search/matching; the chosen target MUST propagate to any linked project.
+
+**Migration (iteration 2026-06-23, US10/US14)**
+
+- **FR-054**: A migration MUST re-derive existing folder-level items into source-groups plus single-type sub-items, filesystem-free from already-persisted metadata; items with an open plan MUST be kept as a single legacy sub-item until their plan resolves or is discarded.
+
 ### Key Entities *(include if feature involves data)*
 
 - **Inbox item**: A unit awaiting review (a sub-frame folder or a single master file) with a source, classification state (unclassified / classified / planned / applied), and a per-type composition.
@@ -295,6 +455,11 @@ A plan cannot be generated or applied while any attribute used to build a file's
 - **Grouping**: An ordered list of dimensions (e.g. target, then frame type, then filter) used to nest the review list.
 - **Plan**: A reviewable, named set of filesystem actions (move / catalogue / archive / trash) generated on confirm, with a state (open / applied / cancelled / stale) and an audit trail.
 - **Plan action**: A single intended filesystem operation (source → destination, catalogue-in-place, or destructive) with a resolved destination preview.
+- **Source group** (iteration 2026-06-23): A leaf folder discovered at scan, modelling provenance ("ingested together") — its files are partitioned into single-type sub-items at classify. Carries id, root, relative path, content signature, format, lane, and child count.
+- **Single-type sub-item** (iteration 2026-06-23): One homogeneous inbox item within a source group, identified by `(root_id, relative_path, group_key)` with an authoritative frame type, a group label, and a per-sub-group content signature; replaces the folder-level inbox item and maps 1:1 to a plan.
+- **Property registry** (iteration 2026-06-23): The typed catalogue of metadata properties (key, kind, unit, source header(s), overridability, applicable frame types, validation) that drives the field-agnostic editor, grouping recipes, and the mandatory-attribute gate.
+- **Override** (iteration 2026-06-23): A user-supplied value for a missing property, persisted keyed to `(source_group, relative_file_path, property_key)`; index-only and **never written to FITS/XISF** files; re-drives classification, grouping, path resolution, and the gate.
+- **Derived session** (iteration 2026-06-23): An acquisition or calibration session computed from confirmed per-file metadata, with no review lifecycle; its identity is deterministic from the inbox-confirmed metadata, which remains editable post-hoc.
 
 ## Success Criteria *(mandatory)*
 
@@ -311,6 +476,14 @@ A plan cannot be generated or applied while any attribute used to build a file's
 - **SC-009**: The Calibration page and the inbox detail panel render without runtime errors for freshly-confirmed masters (zero crash reports for the master/detail views).
 - **SC-010**: The inbox summary's per-type counts match the actual queue contents exactly.
 - **SC-011**: No status pills overflow the sidebar; the review list and detail panel follow the standard pinned-bar/scrolling-content layout at the supported window sizes.
+- **SC-012**: A mixed folder produces N single-type items and zero "mixed" items.
+- **SC-013**: Every inbox item has at most one open plan.
+- **SC-014**: Reclassify accepts any registry property (including temperature, gain, target) with no code change.
+- **SC-015**: No item with missing mandatory attributes can create a plan.
+- **SC-016**: Overrides never modify source files (file bytes are unchanged after an override).
+- **SC-017**: A light sub-group resolves a canonical target by coordinates within the FOV radius (or prompts the user); the chosen target appears on the linked project.
+- **SC-018**: No session exposes a Confirm/Re-open/Reject review action.
+- **SC-019**: A rescan of unchanged content yields identical group keys (no item churn).
 
 ## Out of Scope / Non-Goals
 
@@ -319,6 +492,10 @@ A plan cannot be generated or applied while any attribute used to build a file's
 - Designing a new naming-pattern editor; this feature consumes the existing active pattern for destination resolution.
 - A general cross-page "Plans/Archive" management redesign beyond surfacing the inbox-generated plan in-context.
 - Automatic application of plans without explicit user Apply.
+
+**In scope (iteration 2026-06-23)**: the single-type sub-item model (homogeneous items materialized at classify, item↔plan 1:1), the typed property registry and field-agnostic reclassify, the generalized missing-mandatory gate, source-group provenance, coordinate-based light target resolution, extended header extraction, and dropping the session review lifecycle in favour of derived sessions.
+
+**Out of scope (iteration 2026-06-23)**: any image processing remains out (the PixInsight boundary is unchanged — no calibration, stacking, registration, or header rewriting from overrides); overrides stay index-only.
 
 ## Assumptions
 
