@@ -534,6 +534,25 @@ pub async fn reclassify_v2(
     // (root_id, relative_path, group_key) is stable regardless of the sig, and
     // the sig is refreshed on the next full classify (when files are accessible).
 
+    // Load ALL generic overrides for the group once and index them by
+    // (relative_file_path, property_key) → value. This covers every property
+    // written via set_file_override (frameType, exposureS, gain, filter,
+    // binning, temperatureC, offset, etc.) so they reach the grouping engine
+    // even when no inbox_file_metadata row exists for a file.
+    let all_overrides = inbox_repo::list_file_overrides_for_group(pool, &source_group_id)
+        .await
+        .map_err(|e| db_internal_ctx(e, "list file overrides for re-split"))?;
+
+    // Index: (relative_file_path, property_key) → value string.
+    // Values are stored as bare strings (numbers unquoted, strings unquoted)
+    // because set_file_override / the reclassify_v2 pipeline strips JSON
+    // quoting before writing: serde_json::Value::String(s) → s.clone(),
+    // other → other.to_string() (so numbers like 300.0 and 100 are bare).
+    let overrides_index: HashMap<(&str, &str), &str> = all_overrides
+        .iter()
+        .map(|o| ((o.relative_file_path.as_str(), o.property_key.as_str()), o.value.as_str()))
+        .collect();
+
     // Collect all evidence (with overrides) across all sub-items in this group.
     // We need: (relative_file_path, effective_frame_type, raw_meta_opt)
     let mut file_records: Vec<(
@@ -556,50 +575,109 @@ pub async fn reclassify_v2(
             metadata_rows.iter().map(|m| (m.relative_file_path.as_str(), m)).collect();
 
         for ev in &evidence {
-            // Effective frame type: manual_override > frame_type header.
-            let eff_ft_str = ev.manual_override.as_deref().or(ev.frame_type.as_deref());
+            let fp = ev.relative_file_path.as_str();
+
+            // Effective frame type:
+            //   priority 1 — manual_override on the evidence row (set by set_overrides)
+            //   priority 2 — generic override table (property_key = 'frameType')
+            //   priority 3 — frame_type extracted from the file header
+            let eff_ft_str = ev
+                .manual_override
+                .as_deref()
+                .or_else(|| overrides_index.get(&(fp, "frameType")).copied())
+                .or(ev.frame_type.as_deref());
             let eff_ft = eff_ft_str.and_then(metadata_core::FrameType::from_str_ci);
 
-            // Build a minimal RawFileMetadata from persisted inbox_file_metadata,
-            // with overrides from inbox_file_overrides layered on top.
-            let raw_meta = meta_map.get(ev.relative_file_path.as_str()).map(|m| {
-                // Apply any non-type overrides from inbox_file_overrides that are
-                // already reflected in ev.override_filter / override_exposure_s /
-                // override_binning (joined in list_evidence). Those three are the
-                // only ones currently surfaced in the evidence row; the generic
-                // overrides (temperatureC, gain, etc.) written via set_file_override
-                // are not yet reflected in InboxEvidenceRow but do drive future
-                // classify runs. This is correct for re-split: we use the best
-                // currently-known data.
-                let effective_filter = ev.override_filter.clone().or_else(|| m.filter.clone());
-                let effective_exposure = ev
-                    .override_exposure_s
-                    .map(|e| e.to_string())
-                    .or_else(|| m.exposure_s.map(|e| e.to_string()));
-                let effective_binning_x =
-                    ev.override_binning.as_deref().and_then(parse_binning_x).or(m.binning_x);
-                let effective_binning_y =
-                    ev.override_binning.as_deref().and_then(parse_binning_y).or(m.binning_y);
+            // Build RawFileMetadata for EVERY file, even those with no
+            // inbox_file_metadata row. Start from the metadata row when present
+            // (gives us header-extracted values), otherwise start from Default.
+            // Then layer ALL persisted overrides on top so that mandatory
+            // attributes (exposureS, gain, filter, …) that were set via
+            // reclassify_v2 reach the grouping engine and T070 mandatory gate.
+            //
+            // Precedence per field:
+            //   generic override table > evidence-JOIN override columns > metadata row
+            //
+            // The evidence-JOIN columns (override_filter, override_exposure_s,
+            // override_binning) are sourced from inbox_file_overrides via a
+            // LEFT JOIN in list_evidence — they are consistent with the overrides
+            // index for those three keys, so using either path is equivalent.
+            // We use the overrides_index uniformly for all keys to keep the
+            // logic simple.
 
-                metadata_core::RawFileMetadata {
-                    image_typ: ev.manual_override.clone().or_else(|| ev.frame_type.clone()),
-                    filter: effective_filter,
-                    exposure: effective_exposure,
-                    gain: m.gain.clone(),
-                    x_binning: effective_binning_x.map(|v| v.to_string()),
-                    y_binning: effective_binning_y.map(|v| v.to_string()),
-                    object: m.object.clone(),
-                    date_obs: m.date_obs.clone(),
-                    instrume: m.instrume.clone(),
-                    telescop: m.telescop.clone(),
-                    naxis1: m.naxis1.map(|v| v.to_string()),
-                    naxis2: m.naxis2.map(|v| v.to_string()),
-                    stack_count: m.stack_count.and_then(|v| u32::try_from(v).ok()),
-                    ..Default::default()
-                }
-            });
+            // Base values from the metadata row (may be None if row absent).
+            let base_filter: Option<String> = meta_map.get(fp).and_then(|m| m.filter.clone());
+            let base_exposure: Option<String> =
+                meta_map.get(fp).and_then(|m| m.exposure_s.map(|v| v.to_string()));
+            let base_gain: Option<String> = meta_map.get(fp).and_then(|m| m.gain.clone());
+            let base_binning_x: Option<i64> = meta_map.get(fp).and_then(|m| m.binning_x);
+            let base_binning_y: Option<i64> = meta_map.get(fp).and_then(|m| m.binning_y);
+            let base_object: Option<String> = meta_map.get(fp).and_then(|m| m.object.clone());
+            let base_date_obs: Option<String> = meta_map.get(fp).and_then(|m| m.date_obs.clone());
+            let base_instrume: Option<String> = meta_map.get(fp).and_then(|m| m.instrume.clone());
+            let base_telescop: Option<String> = meta_map.get(fp).and_then(|m| m.telescop.clone());
+            let base_naxis1: Option<String> =
+                meta_map.get(fp).and_then(|m| m.naxis1.map(|v| v.to_string()));
+            let base_naxis2: Option<String> =
+                meta_map.get(fp).and_then(|m| m.naxis2.map(|v| v.to_string()));
+            let base_stack_count: Option<u32> =
+                meta_map.get(fp).and_then(|m| m.stack_count.and_then(|v| u32::try_from(v).ok()));
 
-            file_records.push((ev.relative_file_path.clone(), eff_ft, raw_meta));
+            // Apply overrides on top: generic override table wins.
+            // image_typ: manual_override > 'frameType' override > header frame_type.
+            let effective_image_typ = ev
+                .manual_override
+                .clone()
+                .or_else(|| overrides_index.get(&(fp, "frameType")).copied().map(str::to_owned))
+                .or_else(|| ev.frame_type.clone());
+            // filter: 'filter' override > metadata row
+            let effective_filter =
+                overrides_index.get(&(fp, "filter")).copied().map(str::to_owned).or(base_filter);
+            // exposure: 'exposureS' override (bare f64 string) > metadata row
+            let effective_exposure = overrides_index
+                .get(&(fp, "exposureS"))
+                .copied()
+                .map(str::to_owned)
+                .or(base_exposure);
+            // gain: 'gain' override > metadata row
+            let effective_gain =
+                overrides_index.get(&(fp, "gain")).copied().map(str::to_owned).or(base_gain);
+            // binning: 'binning' override (e.g. "2x2") > metadata row
+            let effective_binning_x = overrides_index
+                .get(&(fp, "binning"))
+                .copied()
+                .and_then(parse_binning_x)
+                .or(base_binning_x);
+            let effective_binning_y = overrides_index
+                .get(&(fp, "binning"))
+                .copied()
+                .and_then(parse_binning_y)
+                .or(base_binning_y);
+            // object (target): 'target' override > metadata row
+            let effective_object =
+                overrides_index.get(&(fp, "target")).copied().map(str::to_owned).or(base_object);
+
+            let raw_meta = metadata_core::RawFileMetadata {
+                image_typ: effective_image_typ,
+                filter: effective_filter,
+                exposure: effective_exposure,
+                gain: effective_gain,
+                x_binning: effective_binning_x.map(|v| v.to_string()),
+                y_binning: effective_binning_y.map(|v| v.to_string()),
+                object: effective_object,
+                date_obs: base_date_obs,
+                instrume: base_instrume,
+                telescop: base_telescop,
+                naxis1: base_naxis1,
+                naxis2: base_naxis2,
+                stack_count: base_stack_count,
+                ..Default::default()
+            };
+
+            // Always pass Some(raw_meta) — even when the metadata row is absent
+            // the struct carries the user's overrides and the mandatory-attr gate
+            // can evaluate them correctly.
+            file_records.push((ev.relative_file_path.clone(), eff_ft, Some(raw_meta)));
         }
     }
 
@@ -1089,6 +1167,10 @@ mod tests {
                         properties: {
                             let mut m = std::collections::HashMap::new();
                             m.insert("frameType".to_owned(), serde_json::json!("dark"));
+                            // darks need exposure + gain to clear the R-14 mandatory gate
+                            // (T070) — without them the file routes to needs-review.
+                            m.insert("exposureS".to_owned(), serde_json::json!(300.0));
+                            m.insert("gain".to_owned(), serde_json::json!(100));
                             m
                         },
                     },
@@ -1097,6 +1179,10 @@ mod tests {
                         properties: {
                             let mut m = std::collections::HashMap::new();
                             m.insert("frameType".to_owned(), serde_json::json!("dark"));
+                            // darks need exposure + gain to clear the R-14 mandatory gate
+                            // (T070) — without them the file routes to needs-review.
+                            m.insert("exposureS".to_owned(), serde_json::json!(300.0));
+                            m.insert("gain".to_owned(), serde_json::json!(100));
                             m
                         },
                     },
@@ -1184,6 +1270,10 @@ mod tests {
                         properties: {
                             let mut m = std::collections::HashMap::new();
                             m.insert("frameType".to_owned(), serde_json::json!("dark"));
+                            // darks need exposure + gain to clear the R-14 mandatory gate
+                            // (T070) — without them the file routes to needs-review.
+                            m.insert("exposureS".to_owned(), serde_json::json!(300.0));
+                            m.insert("gain".to_owned(), serde_json::json!(100));
                             m
                         },
                     },
@@ -1192,6 +1282,10 @@ mod tests {
                         properties: {
                             let mut m = std::collections::HashMap::new();
                             m.insert("frameType".to_owned(), serde_json::json!("dark"));
+                            // darks need exposure + gain to clear the R-14 mandatory gate
+                            // (T070) — without them the file routes to needs-review.
+                            m.insert("exposureS".to_owned(), serde_json::json!(300.0));
+                            m.insert("gain".to_owned(), serde_json::json!(100));
                             m
                         },
                     },

@@ -810,6 +810,20 @@ pub(crate) async fn materialize_sub_items(
         repo::upsert_inbox_sub_item(pool, &sub_item).await.ok();
     }
 
+    // Purge sub-item rows for groups that no longer exist: when a file's metadata
+    // changes it moves to a different group, leaving its old group empty. The
+    // upsert loop above never touches those orphaned rows, so delete them here
+    // (preserving any plan-linked item). Without this, a rescan after a metadata
+    // change leaves a stale sub-item (spec 041 R-11/FR-042; T067 regression).
+    let current_keys: std::collections::HashSet<&str> = groups.keys().map(String::as_str).collect();
+    if let Ok(existing) = repo::list_inbox_sub_items(pool, source_group_id).await {
+        for row in existing {
+            if !current_keys.contains(row.group_key.as_str()) {
+                repo::delete_sub_item_if_unlinked(pool, &row.id).await.ok();
+            }
+        }
+    }
+
     repo::update_source_group_child_count(pool, source_group_id, child_count).await.ok();
 }
 

@@ -462,6 +462,26 @@ pub async fn update_source_group_child_count(
     Ok(())
 }
 
+/// Delete a sub-item row by id, but ONLY when it is not linked to a plan.
+///
+/// Used by classify re-materialization to purge stale single-type groups that no
+/// longer have any files (a file moved groups), without disturbing plan-open
+/// items (spec 041 R-11/FR-042; T067 churn regression).
+///
+/// # Errors
+/// Returns [`DbError::Database`] on connection failure.
+pub async fn delete_sub_item_if_unlinked(pool: &SqlitePool, id: &str) -> DbResult<()> {
+    sqlx::query(
+        "DELETE FROM inbox_items
+         WHERE id = ?
+           AND id NOT IN (SELECT inbox_item_id FROM inbox_plan_links)",
+    )
+    .bind(id)
+    .execute(pool)
+    .await?;
+    Ok(())
+}
+
 /// List all single-type sub-items belonging to a source group, ordered by
 /// `group_key` for deterministic display (spec 041 T066).
 ///
