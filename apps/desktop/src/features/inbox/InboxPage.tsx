@@ -34,6 +34,7 @@
 
 import { useNavigate, useSearch } from "@tanstack/react-router";
 import { useCallback, useEffect, useMemo, useState } from "react";
+import { listRoots } from "@/api/commands";
 import type { InboxConfirmDestination } from "@/api/commands";
 import { useSetPageStatus } from "@/app/PageStatusContext";
 import { FilterToolbar, ListPageLayout, PageTopBar } from "@/components";
@@ -197,6 +198,32 @@ export function InboxPage() {
 		selectedItem?.inboxItemId ?? null,
 	);
 
+	// Destination library roots (non-inbox) for the per-detection "Source" picker.
+	// When more than one exists, the user can choose where files land instead of
+	// relying on backend auto-selection. "" = auto.
+	const [destRoots, setDestRoots] = useState<
+		Array<{ id: string; path: string; category: string }>
+	>([]);
+	const [selectedDestRootId, setSelectedDestRootId] = useState("");
+	useEffect(() => {
+		let alive = true;
+		listRoots()
+			.then((rs) => {
+				if (!alive) return;
+				setDestRoots(
+					rs
+						.filter((r) => r.category !== "inbox")
+						.map((r) => ({ id: r.id, path: r.path, category: r.category })),
+				);
+			})
+			.catch(() => {
+				/* roots are optional UI sugar — ignore fetch failures */
+			});
+		return () => {
+			alive = false;
+		};
+	}, []);
+
 	const { confirm, loading: confirmLoading } = useInboxConfirm();
 	// FR-032: destructive-destination choice, defaults to 'archive' (Constitution §II).
 	// The literal 'archive' | 'trash' values are exactly what inbox.confirm accepts.
@@ -350,6 +377,8 @@ export function InboxPage() {
 			},
 			classification.contentSignature,
 			action,
+			// "" = auto-select (let the backend choose); otherwise the picked root.
+			selectedDestRootId || undefined,
 		);
 	};
 
@@ -759,6 +788,9 @@ export function InboxPage() {
 							confirmLabel={confirmLabel}
 							confirmDisabled={!canConfirm}
 							confirmBusy={confirmLoading}
+							destinationRoots={destRoots}
+							selectedRootId={selectedDestRootId}
+							onSelectRoot={setSelectedDestRootId}
 						/>
 					) : undefined
 				}

@@ -1657,6 +1657,17 @@
 /* Muted dash spans produced by fmtOrDash / fmtBinning / fmtExposure / fmtTemp */
 .alm-inbox-detail__dash { color: var(--alm-text-muted); }
 
+/* Per-detection "Source" destination-root picker (inline in the confirm header). */
+.alm-inbox-detail__dest-root {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--alm-sp-1);
+}
+.alm-inbox-detail__dest-root-label {
+  font-size: var(--alm-text-xs);
+  color: var(--alm-text-muted);
+}
+
 /* EmptyClassification placeholder block */
 .alm-inbox-detail__empty {
   padding: var(--alm-sp-4);
@@ -1846,22 +1857,68 @@
 /* Aligned plan grid: the list head and every group header share ONE column
    template so each plan's columns (name · composition · destination · count)
    line up vertically across all plans. */
-.alm-plan-panel__list-head,
-.alm-plan-panel__group-header {
-  display: grid;
-  /* FIXED widths on the lead/count/discard columns (not `auto`): each row is an
-     independent grid, so `auto`/`fr` would resolve to different widths per row
-     (e.g. "41 files" vs "1 file") and the destination column would not line up.
-     Fixed side columns make the flexible middle columns resolve identically. */
-  grid-template-columns:
+/* ONE shared column template (a custom property) drives the list head, every
+   plan row, AND the expanded per-file rows, so all columns line up. FIXED
+   side columns (not `auto`/`fr`) are required: each row is an independent grid,
+   so auto widths would resolve differently per row and break alignment. */
+.alm-plan-panel {
+  --alm-plan-cols:
     60px                  /* select + expand */
-    minmax(120px, 1.4fr)  /* plan name */
-    minmax(150px, 1.6fr)  /* composition */
+    minmax(120px, 1.4fr)  /* plan name / file name */
+    minmax(150px, 1.6fr)  /* composition / action */
     minmax(120px, 1.3fr)  /* destination */
     72px                  /* file count */
     92px;                 /* discard */
+}
+
+.alm-plan-panel__list-head,
+.alm-plan-panel__group-header,
+.alm-plan-panel__file-row {
+  display: grid;
+  grid-template-columns: var(--alm-plan-cols);
   align-items: center;
   column-gap: var(--alm-sp-3);
+}
+
+/* ── Expanded per-file rows (aligned under the parent plan columns) ── */
+.alm-plan-panel__file-rows {
+  padding: var(--alm-sp-1) 0 var(--alm-sp-2);
+}
+.alm-plan-panel__file-row {
+  padding: 1px 0;
+  font-size: var(--alm-text-xs);
+}
+.alm-plan-panel__file-name {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  color: var(--alm-text-secondary);
+  font-family: var(--alm-font-mono);
+}
+.alm-plan-panel__file-action {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--alm-sp-1);
+  color: var(--alm-text-muted);
+}
+.alm-plan-panel__file-dest {
+  display: inline-flex;
+  align-items: baseline;
+  gap: 2px;
+  min-width: 0;
+}
+.alm-plan-panel__inplace {
+  color: var(--alm-text-muted);
+  font-style: italic;
+}
+.alm-plan-panel__file-flag {
+  font-size: var(--alm-text-2xs);
+  text-transform: uppercase;
+  letter-spacing: 0.03em;
+  color: var(--alm-danger, var(--alm-warn));
+  border: 1px solid currentColor;
+  border-radius: var(--alm-radius-sm);
+  padding: 0 4px;
 }
 
 .alm-plan-panel__list-head {

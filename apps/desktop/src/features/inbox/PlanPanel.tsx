@@ -14,7 +14,7 @@
  */
 
 import { useCallback, useEffect, useMemo, useState } from 'react';
-import { Banner, Btn, Table } from '@/ui';
+import { Banner, Btn } from '@/ui';
 import type { InboxOpenPlan, InboxPlanAction } from './store';
 
 // ── Types ─────────────────────────────────────────────────────────────────────
@@ -597,6 +597,16 @@ export function PlanPanel({
             breakdownEntries.length > 0
               ? breakdownDestination(plan.actions, plan.itemName, absoluteByFromPath)
               : null;
+          // A plan is "catalogued in place" when no file moves — every action is a
+          // catalogue (destination equals source). We surface that explicitly
+          // instead of an arrow-to-folder, which reads as a move.
+          const allInPlace =
+            plan.actions.length > 0 &&
+            plan.actions.every((a) => a.action === 'catalogue');
+          // Count of files that actually move (for the at-a-glance plan summary).
+          const moveCount = plan.actions.filter(
+            (a) => a.action === 'move',
+          ).length;
           const rowsId = `plan-group-rows-${plan.inboxItemId}`;
           return (
             <section
@@ -678,21 +688,43 @@ export function PlanPanel({
                   ))}
                 </span>
 
-                {/* Col 4: destination (aligned across all plans). */}
+                {/* Col 4: destination (aligned across all plans). In-place
+                    catalogues read "In place · <folder>"; moves read "→ <dest>". */}
                 <span className="alm-plan-panel__group-dest">
-                  <span className="alm-plan-panel__summary-arrow" aria-hidden="true">
-                    →
-                  </span>
-                  <code
-                    className="alm-plan-panel__summary-dest"
-                    title={breakdownDest?.full ?? summaryLines[0]?.destinationFull ?? ''}
-                  >
-                    {breakdownDest?.short ?? summaryLines[0]?.destinationShort ?? '—'}
-                  </code>
+                  {allInPlace ? (
+                    <>
+                      <span className="alm-plan-panel__inplace">In place</span>
+                      <code
+                        className="alm-plan-panel__summary-dest"
+                        title={breakdownDest?.full ?? plan.itemName}
+                      >
+                        {breakdownDest?.short ?? plan.itemName}
+                      </code>
+                    </>
+                  ) : (
+                    <>
+                      <span className="alm-plan-panel__summary-arrow" aria-hidden="true">
+                        →
+                      </span>
+                      <code
+                        className="alm-plan-panel__summary-dest"
+                        title={breakdownDest?.full ?? summaryLines[0]?.destinationFull ?? ''}
+                      >
+                        {breakdownDest?.short ?? summaryLines[0]?.destinationShort ?? '—'}
+                      </code>
+                    </>
+                  )}
                 </span>
 
-                {/* Col 5: action / file count */}
-                <span className="alm-plan-panel__group-count">
+                {/* Col 5: file count (+ move/in-place split in the tooltip). */}
+                <span
+                  className="alm-plan-panel__group-count"
+                  title={
+                    moveCount > 0
+                      ? `${moveCount} moved · ${plan.actions.length - moveCount} catalogued in place`
+                      : `${plan.actions.length} catalogued in place`
+                  }
+                >
                   {plan.actions.length} file{plan.actions.length !== 1 ? 's' : ''}
                 </span>
 
@@ -725,50 +757,65 @@ export function PlanPanel({
                 </Banner>
               )}
 
-              {/* Per-file action detail — standard Table, hidden until the
-                  group is expanded. Columns: Action · File · Destination. */}
+              {/* Per-file detail — grid rows that share the PARENT column
+                  template, so File aligns under "Plan", action under
+                  "Composition", and the destination under "Destination". Hidden
+                  until expanded. */}
               {isExpanded && (
-                <div className="alm-plan-panel__rows" id={rowsId}>
-                  <Table
-                    className="alm-plan-panel__table"
-                    columns={[
-                      { key: 'action', label: 'Action', style: { width: 96 } },
-                      { key: 'file', label: 'File', style: { width: 220 } },
-                      { key: 'dest', label: 'Destination' },
-                    ]}
-                    rows={plan.actions.map((a, actionPos) => {
-                      const rowIdx = planRowOffsets[planIdx] + actionPos;
-                      // FR-031: prefer the absolute destination path from the last
-                      // confirm response (keyed by source path); fall back to the
-                      // root-relative preview for plans without a captured absolute.
-                      const absolute = absoluteByFromPath?.[a.fromPath];
-                      const destText = absolute ?? a.destinationPreview;
-                      return {
-                        action: (
-                          <span className="alm-plan-panel__kind">
-                            {actionLabel(a.action)}
-                          </span>
-                        ),
-                        file: (
-                          <span
-                            className="alm-plan-panel__filename"
-                            title={a.fromPath}
-                          >
-                            {basename(a.fromPath)}
-                          </span>
-                        ),
-                        dest: (
-                          <code
-                            className="alm-plan-panel__dest"
-                            data-testid={`inbox-dest-absolute-${rowIdx}`}
-                            title={destText}
-                          >
-                            {destText}
-                          </code>
-                        ),
-                      };
-                    })}
-                  />
+                <div className="alm-plan-panel__file-rows" id={rowsId}>
+                  {plan.actions.map((a, actionPos) => {
+                    const rowIdx = planRowOffsets[planIdx] + actionPos;
+                    // FR-031: prefer the absolute destination path from the last
+                    // confirm response (keyed by source path); fall back to the
+                    // root-relative preview for plans without a captured absolute.
+                    const absolute = absoluteByFromPath?.[a.fromPath];
+                    const destText = absolute ?? a.destinationPreview;
+                    const inPlace =
+                      a.action === 'catalogue' ||
+                      a.destinationPreview === a.fromPath;
+                    return (
+                      <div key={a.index} className="alm-plan-panel__file-row">
+                        <span aria-hidden="true" />
+                        <span
+                          className="alm-plan-panel__file-name"
+                          title={a.fromPath}
+                        >
+                          {basename(a.fromPath)}
+                        </span>
+                        <span className="alm-plan-panel__file-action">
+                          {actionLabel(a.action)}
+                          {a.requiresDestructiveConfirm && (
+                            <span className="alm-plan-panel__file-flag">
+                              destructive
+                            </span>
+                          )}
+                        </span>
+                        <span className="alm-plan-panel__file-dest">
+                          {inPlace ? (
+                            <span className="alm-plan-panel__inplace">In place</span>
+                          ) : (
+                            <>
+                              <span
+                                className="alm-plan-panel__summary-arrow"
+                                aria-hidden="true"
+                              >
+                                →{' '}
+                              </span>
+                              <code
+                                className="alm-plan-panel__dest"
+                                data-testid={`inbox-dest-absolute-${rowIdx}`}
+                                title={destText}
+                              >
+                                {destText}
+                              </code>
+                            </>
+                          )}
+                        </span>
+                        <span />
+                        <span />
+                      </div>
+                    );
+                  })}
                 </div>
               )}
             </section>

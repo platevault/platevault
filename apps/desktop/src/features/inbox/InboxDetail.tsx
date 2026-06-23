@@ -202,6 +202,16 @@ export interface InboxDetailProps {
 	confirmDisabled?: boolean;
 	/** True while a confirm/split is in flight — shows "Working…" + disables. */
 	confirmBusy?: boolean;
+	/**
+	 * Candidate destination library roots (non-inbox). When more than one
+	 * exists, a "Source" picker is shown next to Confirm so the user chooses
+	 * WHERE files are placed instead of relying on auto-selection.
+	 */
+	destinationRoots?: Array<{ id: string; path: string; category: string }>;
+	/** Currently chosen destination root id; "" / null means auto-select. */
+	selectedRootId?: string | null;
+	/** Called when the user picks a destination root ("" = auto). */
+	onSelectRoot?: (rootId: string) => void;
 }
 
 // ── Component ─────────────────────────────────────────────────────────────────
@@ -214,6 +224,9 @@ export function InboxDetail({
 	confirmLabel = "Confirm to inventory",
 	confirmDisabled = false,
 	confirmBusy = false,
+	destinationRoots,
+	selectedRootId,
+	onSelectRoot,
 }: InboxDetailProps) {
 	const { reclassify, loading: reclassifyLoading } = useInboxReclassify(
 		item.inboxItemId,
@@ -557,6 +570,27 @@ export function InboxDetail({
 					: classType}
 			</Pill>
 			{item.lane === "video" && <Pill variant="ghost">video</Pill>}
+			{onConfirm &&
+				destinationRoots &&
+				destinationRoots.length > 1 && (
+					<label className="alm-inbox-detail__dest-root">
+						<span className="alm-inbox-detail__dest-root-label">Source</span>
+						<select
+							className="alm-select alm-select--sm"
+							value={selectedRootId ?? ""}
+							onChange={(e) => onSelectRoot?.(e.target.value)}
+							aria-label="Destination library source"
+							data-testid="inbox-dest-root-select"
+						>
+							<option value="">Auto</option>
+							{destinationRoots.map((r) => (
+								<option key={r.id} value={r.id}>
+									{basename(r.path)} · {r.category}
+								</option>
+							))}
+						</select>
+					</label>
+				)}
 			{onConfirm && (
 				<Btn
 					size="sm"
