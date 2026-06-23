@@ -698,7 +698,7 @@ export function TargetDetailV2({ targetId, item = null, usableAltDeg = USABLE_AL
                 <li key={p.id} className="alm-planner__link-item">
                   <button
                     className="alm-planner__link-btn"
-                    onClick={() => void navigate({ to: '/projects' })}
+                    onClick={() => void navigate({ to: '/projects', search: { selected: p.id } })}
                   >
                     <span className="alm-planner__link-name">{p.name}</span>
                     <span className="alm-planner__link-state">{p.lifecycle}</span>
@@ -846,7 +846,9 @@ export function TargetDetailV2({ targetId, item = null, usableAltDeg = USABLE_AL
               <li key={p.id} className="alm-target-detail__project-item">
                 <button
                   className="alm-target-detail__project-btn"
-                  onClick={() => void navigate({ to: '/projects' })}
+                  onClick={() =>
+                    void navigate({ to: '/projects', search: { selected: p.id } })
+                  }
                 >
                   <span className="alm-target-detail__project-name">{p.name}</span>
                   <span className="alm-target-detail__project-lifecycle">{p.lifecycle}</span>

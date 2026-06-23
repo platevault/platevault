@@ -25,7 +25,7 @@
  * 20. (US2) Linked sessions list renders date, frameCount, state.
  * 21. (US2) Clicking session row navigates to /sessions with selected=id.
  * 22. (US3) Linked projects list renders name and lifecycle.
- * 23. (US3) Clicking project row navigates to /projects.
+ * 23. (US3) Clicking project row navigates to /projects with search: { selected: id }.
  * 24. (US4) Observing notes: empty state renders placeholder.
  * 25. (US4) Observing notes: existing notes body renders.
  * 26. (US4) Edit → save calls updateTargetNote and reflects result.
@@ -459,7 +459,7 @@ describe('TargetDetailV2', () => {
     expect(screen.getAllByText('ready').length).toBeGreaterThanOrEqual(1);
   });
 
-  it('25. (US3) clicking project row navigates to /projects', async () => {
+  it('25. (US3) clicking project row navigates to /projects with selected=id (mid-page link row)', async () => {
     mockListTargetProjects.mockResolvedValue([
       { id: 'proj-1', name: 'Horsehead 2026', lifecycle: 'ready' },
     ]);
@@ -472,7 +472,31 @@ describe('TargetDetailV2', () => {
     fireEvent.click(screen.getAllByText('Horsehead 2026')[0].closest('button')!);
 
     await waitFor(() =>
-      expect(mockNavigate).toHaveBeenCalledWith({ to: '/projects' }),
+      expect(mockNavigate).toHaveBeenCalledWith({
+        to: '/projects',
+        search: { selected: 'proj-1' },
+      }),
+    );
+  });
+
+  it('25b. (US3) clicking project row in bottom section navigates to /projects with selected=id', async () => {
+    mockListTargetProjects.mockResolvedValue([
+      { id: 'proj-1', name: 'Horsehead 2026', lifecycle: 'ready' },
+    ]);
+    render(<TargetDetailV2 targetId={TARGET_ID} />);
+    await waitFor(() =>
+      expect(screen.getAllByText('Horsehead 2026').length).toBeGreaterThanOrEqual(1),
+    );
+
+    // Click the last project button (bottom Projects section)
+    const btns = screen.getAllByText('Horsehead 2026').map((el) => el.closest('button')!);
+    fireEvent.click(btns[btns.length - 1]);
+
+    await waitFor(() =>
+      expect(mockNavigate).toHaveBeenCalledWith({
+        to: '/projects',
+        search: { selected: 'proj-1' },
+      }),
     );
   });
 
