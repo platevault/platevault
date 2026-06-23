@@ -613,13 +613,11 @@ pub async fn set_overrides(
                 .execute(pool)
                 .await?;
 
-                sqlx::query(
-                    "UPDATE inbox_items SET source_group_id = ? WHERE id = ?",
-                )
-                .bind(&new_sg_id)
-                .bind(inbox_item_id)
-                .execute(pool)
-                .await?;
+                sqlx::query("UPDATE inbox_items SET source_group_id = ? WHERE id = ?")
+                    .bind(&new_sg_id)
+                    .bind(inbox_item_id)
+                    .execute(pool)
+                    .await?;
 
                 new_sg_id
             }
@@ -872,6 +870,70 @@ pub async fn list_inbox_file_metadata(
     .bind(inbox_item_id)
     .fetch_all(pool)
     .await?)
+}
+
+// ── Pointing / optics for target resolution (spec 041 R-17, T074) ─────────────
+
+/// Per-file pointing + optics, read for coordinate-based target resolution.
+///
+/// Sourced from `inbox_file_metadata` (the T062 extended columns added in
+/// migration 0048). All fields are nullable — best-effort extraction. The
+/// caller derives a sub-group pointing (e.g. the first file carrying RA/Dec)
+/// and a FOV-aware radius from `focal_length_mm`/`pixel_size_um`/`naxis1/2`.
+#[derive(Clone, Debug, Default, sqlx::FromRow)]
+pub struct InboxPointingRow {
+    pub relative_file_path: String,
+    pub ra_deg: Option<f64>,
+    pub dec_deg: Option<f64>,
+    pub focal_length_mm: Option<f64>,
+    pub pixel_size_um: Option<f64>,
+    pub naxis1: Option<i64>,
+    pub naxis2: Option<i64>,
+    /// Raw `OBJECT` header value — display hint only, NEVER a matching key (R-17).
+    pub object: Option<String>,
+}
+
+/// Read per-file pointing + optics rows for an inbox item (R-17 / T074).
+///
+/// Returns one row per file with a persisted `inbox_file_metadata` row, ordered
+/// by relative path. Rows without RA/Dec are still returned (the caller filters);
+/// `object` is carried as a display hint only.
+///
+/// # Errors
+/// Returns [`DbError::Database`] on connection failure.
+pub async fn list_inbox_pointing(
+    pool: &SqlitePool,
+    inbox_item_id: &str,
+) -> DbResult<Vec<InboxPointingRow>> {
+    Ok(sqlx::query_as::<_, InboxPointingRow>(
+        "SELECT relative_file_path, ra_deg, dec_deg, focal_length_mm,
+                pixel_size_um, naxis1, naxis2, object
+         FROM inbox_file_metadata
+         WHERE inbox_item_id = ?
+         ORDER BY relative_file_path",
+    )
+    .bind(inbox_item_id)
+    .fetch_all(pool)
+    .await?)
+}
+
+/// Find the inbox items belonging to a source group, ordered by id (R-12).
+///
+/// Used by `inbox.target_recommendations` when the caller passes a
+/// `sourceGroupId` instead of an `inboxItemId`.
+///
+/// # Errors
+/// Returns [`DbError::Database`] on connection failure.
+pub async fn list_item_ids_for_source_group(
+    pool: &SqlitePool,
+    source_group_id: &str,
+) -> DbResult<Vec<String>> {
+    let rows: Vec<(String,)> =
+        sqlx::query_as("SELECT id FROM inbox_items WHERE source_group_id = ? ORDER BY id")
+            .bind(source_group_id)
+            .fetch_all(pool)
+            .await?;
+    Ok(rows.into_iter().map(|(id,)| id).collect())
 }
 
 // ── Stats aggregates (spec 041 US6) ──────────────────────────────────────────

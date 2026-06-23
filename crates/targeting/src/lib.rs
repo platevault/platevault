@@ -4,6 +4,8 @@
 //!
 //! - [`normalize`]: query normalization pipeline (casefold, NFKC, prefix expansion).
 //! - [`identity`]: deterministic UUIDv5 generation for `canonical_target.id`.
+//! - [`coords`]: coordinate-based nearest-neighbour target resolution
+//!   (haversine separation + FOV-aware radius + ranking; spec 041 R-17/R-18).
 //!
 //! The on-demand SIMBAD resolver, the SQLite resolution cache, and the
 //! bundled-seed loader (spec 035) live in the sibling `targeting_resolver`
@@ -15,6 +17,7 @@
 
 #![allow(clippy::doc_markdown)] // spec/domain terminology is not suited for backticks
 
+pub mod coords;
 pub mod identity;
 pub mod normalize;
 
