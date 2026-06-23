@@ -299,7 +299,10 @@
   flex: 1 1 auto;
   min-height: 0;
   overflow-y: auto;
-  overflow-x: hidden;
+  /* Scroll horizontally instead of clipping the rightmost column: the table
+     carries a min-width floor (see .alm-targets-table) so columns never shrink
+     below their content; below that floor the table scrolls. */
+  overflow-x: auto;
 }
 
 /* Sticky header so column labels/sort controls stay visible while scrolling. */

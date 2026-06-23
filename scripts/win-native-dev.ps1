@@ -55,4 +55,8 @@ Write-Host "Watch:       $(if ($NoPolling) { 'native notifications' } else { 'po
 Write-Host "Starting tauri dev... (first build compiles the Rust workspace; later builds are incremental)"
 
 Set-Location $desktop
-pnpm tauri dev
+# Merge the dev-only overlay (src-tauri/tauri.dev.conf.json) which enables
+# withGlobalTauri for the MCP Bridge plugin's webview channel. withGlobalTauri
+# MUST stay out of the base tauri.conf.json (production security surface); it is
+# applied here in dev only — mirrors the `just dev` invocation.
+pnpm tauri dev --config src-tauri/tauri.dev.conf.json
