@@ -99,7 +99,16 @@ export function TargetList({ targets, selected, onSelect }: Props) {
               data-index={virtualRow.index}
               ref={virtualizer.measureElement}
               className={`alm-list-item${isSelected ? ' alm-list-item--selected' : ''}`}
+              role="button"
+              tabIndex={0}
+              aria-label={m.targets_list_view_aria({ label: t.effectiveLabel })}
               onClick={() => onSelect(t.id)}
+              onKeyDown={(e) => {
+                if (e.key === 'Enter' || e.key === ' ') {
+                  e.preventDefault();
+                  onSelect(t.id);
+                }
+              }}
               // eslint-disable-next-line no-restricted-syntax -- dynamic: virtualizer translateY offset per target row
               style={{
                 position: 'absolute',

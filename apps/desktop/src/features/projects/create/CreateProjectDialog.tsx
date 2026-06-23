@@ -151,6 +151,7 @@ export function CreateProjectDialog({ open, onClose, onSuccess }: CreateProjectD
 
               {/* Name */}
               <div>
+                { }
                 <label className="alm-field-label" htmlFor="cp-name">{m.projects_name_label()}</label>
                 <input
                   id="cp-name"
@@ -160,6 +161,7 @@ export function CreateProjectDialog({ open, onClose, onSuccess }: CreateProjectD
                   maxLength={MAX_NAME_LEN + 10}
                   aria-invalid={Boolean(errors.name)}
                   aria-describedby={errors.name ? 'name-error' : undefined}
+                  // eslint-disable-next-line jsx-a11y/no-autofocus -- focus management: moves focus to the first field when the Create Project modal opens (expected modal behaviour)
                   autoFocus
                   {...register('name')}
                 />
@@ -196,6 +198,7 @@ export function CreateProjectDialog({ open, onClose, onSuccess }: CreateProjectD
 
               {/* Tool */}
               <div>
+                { }
                 <label className="alm-field-label">{m.projects_tool_label()}</label>
                 <Controller
                   control={control}
@@ -216,6 +219,7 @@ export function CreateProjectDialog({ open, onClose, onSuccess }: CreateProjectD
 
               {/* Path */}
               <div>
+                { }
                 <label className="alm-field-label" htmlFor="cp-path">
                   {m.projects_create_path_label()}
                   <span className="alm-field-hint"> {m.projects_create_path_hint()}</span>
@@ -238,6 +242,7 @@ export function CreateProjectDialog({ open, onClose, onSuccess }: CreateProjectD
 
               {/* Notes */}
               <div>
+                { }
                 <label className="alm-field-label" htmlFor="cp-notes">{m.projects_create_notes_label()}</label>
                 <textarea
                   id="cp-notes"

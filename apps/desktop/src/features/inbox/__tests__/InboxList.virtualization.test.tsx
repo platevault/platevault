@@ -87,7 +87,7 @@ function rect(height: number): DOMRect {
     x: 0, y: 0, top: 0, left: 0, right: 300, bottom: height,
     width: 300, height,
     toJSON: () => ({}),
-  } as DOMRect;
+  };
 }
 
 beforeEach(() => {

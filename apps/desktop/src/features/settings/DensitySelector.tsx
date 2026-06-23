@@ -23,6 +23,7 @@ export function DensitySelector() {
         aria-label={m.settings_density_legend()}
       >
         {DENSITY_OPTIONS.map((opt) => (
+          // eslint-disable-next-line jsx-a11y/label-has-associated-control -- wraps a Base UI <Radio.Root> (not a native input the rule recognises); the label text + nested radio form the accessible option
           <label key={opt.value} className="alm-density-selector__option">
             <Radio.Root value={opt.value} className="alm-density-selector__radio">
               <Radio.Indicator className="alm-density-selector__indicator" />

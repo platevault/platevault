@@ -161,6 +161,7 @@ export function ProjectNotesSection({
       <textarea
         data-testid="notes-textarea"
         className="alm-input alm-project-notes__textarea"
+        aria-label={m.projects_notes_label()}
         value={draft}
         onChange={handleChange}
         rows={6}

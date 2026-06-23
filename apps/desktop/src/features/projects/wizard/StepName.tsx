@@ -46,7 +46,7 @@ export function StepName({ data, onChange }: StepNameProps) {
     const sub = watch((value) => {
       onChange({
         name: value.name ?? '',
-        workflowProfile: (value.workflowProfile ?? 'pixinsight') as StepNameData['workflowProfile'],
+        workflowProfile: (value.workflowProfile ?? 'pixinsight'),
       });
     });
     return () => sub.unsubscribe();
@@ -62,6 +62,7 @@ export function StepName({ data, onChange }: StepNameProps) {
     <div className="alm-wizard-name">
       {/* Project name */}
       <div className="alm-wizard-name__field-group">
+        { }
         <label
           htmlFor="project-name"
           className="alm-wizard-name__label"
@@ -99,11 +100,12 @@ export function StepName({ data, onChange }: StepNameProps) {
           render={({ field }) => (
             <RadioGroup
               value={field.value}
-              onValueChange={(value) => field.onChange(value as StepNameData['workflowProfile'])}
+              onValueChange={(value) => field.onChange(value)}
               aria-label={m.projects_wizard_workflow_label()}
               className="alm-wizard-name__radio-group"
             >
               {PROFILES.map((profile) => (
+                // eslint-disable-next-line jsx-a11y/label-has-associated-control -- wraps a Base UI <Radio.Root> (not a native input the rule recognises); the label text + nested radio form the accessible option
                 <label
                   key={profile.id}
                   className="alm-wizard-name__profile-option"

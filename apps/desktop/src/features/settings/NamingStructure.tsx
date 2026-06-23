@@ -919,8 +919,10 @@ export function NamingStructure({ save }: NamingStructureProps) {
 
 			<div className="alm-settings__group">
 				<div className="alm-settings__row">
-					<label className="alm-settings__row-label">
+					<label className="alm-settings__row-label" htmlFor="naming-auto-apply">
+						{/* eslint-disable-next-line jsx-a11y/control-has-associated-label -- labelled by the wrapping <label> (htmlFor + id + visible text); rule misses the wrapping-label association */}
 						<input
+							id="naming-auto-apply"
 							type="checkbox"
 							className="alm-naming__checkbox"
 							checked={autoApplyPattern}

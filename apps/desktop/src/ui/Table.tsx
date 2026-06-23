@@ -143,14 +143,14 @@ export const Table = forwardRef<HTMLTableElement, TableProps>(
               <>
                 {paddingBefore > 0 && (
                   <tr aria-hidden="true" className="alm-table__spacer">
-                    {/* eslint-disable-next-line no-restricted-syntax -- dynamic: virtualizer before-spacer height */}
+                    {/* eslint-disable-next-line no-restricted-syntax, jsx-a11y/control-has-associated-label -- dynamic: virtualizer before-spacer height; decorative spacer in aria-hidden row, no label needed */}
                     <td colSpan={colCount} style={{ height: `${paddingBefore}px` }} />
                   </tr>
                 )}
                 {virtualItems.map((vi) => renderRow(rows[vi.index], vi.index))}
                 {paddingAfter > 0 && (
                   <tr aria-hidden="true" className="alm-table__spacer">
-                    {/* eslint-disable-next-line no-restricted-syntax -- dynamic: virtualizer after-spacer height */}
+                    {/* eslint-disable-next-line no-restricted-syntax, jsx-a11y/control-has-associated-label -- dynamic: virtualizer after-spacer height; decorative spacer in aria-hidden row, no label needed */}
                     <td colSpan={colCount} style={{ height: `${paddingAfter}px` }} />
                   </tr>
                 )}

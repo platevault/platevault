@@ -81,7 +81,7 @@ function asRootRequiredDetails(
 		d &&
 		typeof d === "object" &&
 		"candidates" in d &&
-		Array.isArray((d as { candidates: unknown }).candidates)
+		Array.isArray((d).candidates)
 	) {
 		return d as DestinationRootRequiredDetails;
 	}

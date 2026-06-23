@@ -162,7 +162,7 @@ export function useCalibrationSettings(): {
           setPrefillSuggestion(v['calibrationPrefillSuggestion']);
         }
         if (typeof v['calibrationAgingThresholdDays'] === 'number') {
-          setAgingThresholdDays(v['calibrationAgingThresholdDays'] as number);
+          setAgingThresholdDays(v['calibrationAgingThresholdDays']);
         }
       })
       .catch(() => {

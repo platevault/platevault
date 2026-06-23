@@ -23,6 +23,7 @@ export function InfoTip({ tip, label = 'More information', className }: InfoTipP
     <span
       className={cls}
       role="note"
+      // eslint-disable-next-line jsx-a11y/no-noninteractive-tabindex -- intentionally focusable so keyboard users can reveal the CSS :focus tooltip
       tabIndex={0}
       aria-label={text ? `${label}: ${text}` : label}
       data-tip={text}

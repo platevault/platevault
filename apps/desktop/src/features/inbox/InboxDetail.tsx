@@ -793,6 +793,7 @@ export function InboxDetail({
 										{m.inbox_bulk_override_controls_aria()}
 									</legend>
 									<div className="alm-inbox-detail__bulk-field">
+										{ }
 										<label
 											htmlFor="bulk-frame-type"
 											className="alm-inbox-detail__bulk-label"
@@ -817,6 +818,7 @@ export function InboxDetail({
 									</div>
 
 									<div className="alm-inbox-detail__bulk-field">
+										{ }
 										<label
 											htmlFor="bulk-filter"
 											className="alm-inbox-detail__bulk-label"
@@ -836,6 +838,7 @@ export function InboxDetail({
 									</div>
 
 									<div className="alm-inbox-detail__bulk-field">
+										{ }
 										<label
 											htmlFor="bulk-exposure"
 											className="alm-inbox-detail__bulk-label"
@@ -856,6 +859,7 @@ export function InboxDetail({
 									</div>
 
 									<div className="alm-inbox-detail__bulk-field">
+										{ }
 										<label
 											htmlFor="bulk-binning"
 											className="alm-inbox-detail__bulk-label"

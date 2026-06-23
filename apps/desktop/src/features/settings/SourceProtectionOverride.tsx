@@ -134,6 +134,7 @@ export function SourceProtectionOverride({ sourceId, onSaved }: SourceProtection
       ) : (
         <div className="alm-source-protect__edit-col">
           <div className="alm-source-protect__edit-row">
+            { }
             <label
               htmlFor={`protection-level-${sourceId}`}
               className="alm-source-protect__label"

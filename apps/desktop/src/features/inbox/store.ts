@@ -153,7 +153,7 @@ export function useInboxPlanBreakdowns(
   return useMemo(() => {
     const map: Record<string, ReadonlyArray<{ kind: string; count: number }>> = {};
     targets.forEach((t, i) => {
-      const data = results[i]?.data as InboxClassifyResponse | undefined;
+      const data = results[i]?.data;
       if (data?.breakdown && data.breakdown.length > 0) {
         map[t.inboxItemId] = data.breakdown.map((b) => ({
           kind: b.kind,
