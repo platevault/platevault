@@ -688,3 +688,101 @@ pub type InboxPropertyRegistryResponse = Vec<PropertyRegistryEntry>;
 pub struct InboxApplySelectedRequest {
     pub inbox_item_ids: Vec<String>,
 }
+
+// ── inbox.reclassify v2 — field-agnostic + bulk (spec 041 T068 / R-13) ────────
+
+/// One per-file property override entry in the field-agnostic reclassify request
+/// (T068).
+///
+/// `properties` is an open map of registry-validated property keys (camelCase,
+/// as in `inbox.property_registry`) to their JSON values. Unknown or
+/// non-overridable keys are rejected by the use case. Only MISSING / unreadable
+/// header values may be filled; the frame-type correction (`frameType`) is the
+/// one exception (it is always accepted regardless of header presence — R-13).
+#[derive(Clone, Debug, Serialize, Deserialize, Type)]
+#[serde(rename_all = "camelCase")]
+pub struct InboxReclassifyFileOverride {
+    /// Relative file path within the source group (must match an evidence row).
+    pub file_path: String,
+    /// Property map: `{ "exposureS": 300.0, "filter": "Ha", … }`. Values are
+    /// JSON scalars; the use case validates them against the registry `kind`.
+    pub properties: std::collections::HashMap<String, serde_json::Value>,
+}
+
+/// One bulk "set all" entry: apply one value to many files at once.
+///
+/// `file_paths` is optional: when absent the value is applied to **all** files
+/// in the source group (the "set all" affordance). When present only the listed
+/// paths are updated.
+#[derive(Clone, Debug, Serialize, Deserialize, Type)]
+#[serde(rename_all = "camelCase")]
+pub struct InboxReclassifyBulk {
+    /// Registry property key (camelCase) to set uniformly.
+    pub property: String,
+    /// Value to apply (JSON scalar; validated against registry `kind`).
+    pub value: serde_json::Value,
+    /// Subset of file paths to apply to; `None` / absent = all files in the
+    /// source group.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub file_paths: Option<Vec<String>>,
+}
+
+/// Request for `inbox.reclassify` — field-agnostic + bulk form (spec 041 T068).
+///
+/// Scope is the **source group** (R-13): a reclassify may re-partition files
+/// across sub-items, so operating at sub-item scope is unsafe. Identify the
+/// group by either `sourceGroupId` or `inboxItemId` (the use case looks up the
+/// owning source group from the item).
+#[derive(Clone, Debug, Serialize, Deserialize, Type)]
+#[serde(rename_all = "camelCase")]
+pub struct InboxReclassifyV2Request {
+    /// Identify the source group directly.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub source_group_id: Option<String>,
+    /// Alternatively, identify the group by one of its sub-item IDs.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub inbox_item_id: Option<String>,
+    /// Per-file property overrides. Each entry targets one file; multiple
+    /// entries may target the same file (last-writer-wins per `property_key`).
+    #[serde(default)]
+    pub overrides: Vec<InboxReclassifyFileOverride>,
+    /// Bulk operations applied after per-file overrides. Processed in order.
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub bulk: Vec<InboxReclassifyBulk>,
+}
+
+/// Summary of one re-materialized sub-item returned after reclassify (T068).
+#[derive(Clone, Debug, Serialize, Deserialize, Type)]
+#[serde(rename_all = "camelCase")]
+pub struct InboxSubItemSummary {
+    /// The stable `inbox_items.id` for this sub-item (new UUID if it was
+    /// just created, or the existing one if it matched the upsert key).
+    pub inbox_item_id: String,
+    /// Deterministic canonical group key (R-11).
+    pub group_key: String,
+    /// Human-readable label `"(root) · <type> · <dims>"`.
+    pub group_label: String,
+    /// Authoritative frame type; `None` for the needs-review sentinel bucket.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub frame_type: Option<String>,
+    /// Number of files belonging to this sub-item after re-split.
+    pub file_count: u32,
+    /// Missing mandatory attributes across the sub-item's files (T070 gate).
+    /// Empty when the sub-item can proceed to confirm.
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub missing_mandatory: Vec<String>,
+}
+
+/// Response from `inbox.reclassify` v2 — field-agnostic + bulk (T068).
+#[derive(Clone, Debug, Serialize, Deserialize, Type)]
+#[serde(rename_all = "camelCase")]
+pub struct InboxReclassifyV2Response {
+    /// Source group that was operated on.
+    pub source_group_id: String,
+    /// Re-materialized single-type sub-items after applying overrides +
+    /// re-running classification + grouping (R-14 re-split loop).
+    pub sub_items: Vec<InboxSubItemSummary>,
+    /// Number of sub-items (or files) that still land in the needs-review
+    /// sentinel bucket (= still have missing mandatory attributes).
+    pub needs_review_count: u32,
+}

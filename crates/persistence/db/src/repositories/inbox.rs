@@ -801,6 +801,118 @@ pub async fn set_overrides(
     Ok(rows > 0)
 }
 
+/// Write (upsert) a single arbitrary property override for one file in a source
+/// group (spec 041 T068 / R-13 generic override write).
+///
+/// Keyed on `(source_group_id, relative_file_path, property_key)` — the same
+/// UNIQUE constraint already present on `inbox_file_overrides`. Subsequent calls
+/// for the same key overwrite the previous value and reset `override_stale = 0`.
+///
+/// `file_size_bytes` and `file_mtime` are the cheap per-file identity used for
+/// override staleness detection (R-4). Both may be `None` when the caller cannot
+/// stat the file (e.g. pure-index metadata corrections where no path is
+/// available).
+///
+/// This is the generic successor to the fixed-field
+/// `filter`/`exposureS`/`binning` path in [`set_overrides`] and accepts any
+/// registry-validated property key including those not yet backed by dedicated
+/// evidence columns.
+///
+/// # Errors
+/// Returns [`DbError::Database`] on connection failure.
+pub async fn set_file_override(
+    pool: &SqlitePool,
+    source_group_id: &str,
+    relative_file_path: &str,
+    property_key: &str,
+    value: &str,
+    file_size_bytes: Option<i64>,
+    file_mtime: Option<&str>,
+) -> DbResult<()> {
+    use uuid::Uuid;
+    let id = Uuid::new_v4().to_string();
+    let now = time::OffsetDateTime::now_utc()
+        .format(&time::format_description::well_known::Rfc3339)
+        .unwrap_or_else(|_| "1970-01-01T00:00:00Z".to_owned());
+    sqlx::query(
+        "INSERT INTO inbox_file_overrides
+             (id, source_group_id, relative_file_path, property_key, value,
+              file_size_bytes, file_mtime, override_stale, set_at)
+         VALUES (?, ?, ?, ?, ?, ?, ?, 0, ?)
+         ON CONFLICT(source_group_id, relative_file_path, property_key)
+         DO UPDATE SET
+             value             = excluded.value,
+             file_size_bytes   = COALESCE(excluded.file_size_bytes, file_size_bytes),
+             file_mtime        = COALESCE(excluded.file_mtime,        file_mtime),
+             override_stale    = 0,
+             set_at            = excluded.set_at",
+    )
+    .bind(&id)
+    .bind(source_group_id)
+    .bind(relative_file_path)
+    .bind(property_key)
+    .bind(value)
+    .bind(file_size_bytes)
+    .bind(file_mtime)
+    .bind(&now)
+    .execute(pool)
+    .await?;
+    Ok(())
+}
+
+/// One row from `inbox_file_overrides` for a source group — used by the
+/// field-agnostic reclassifier (T068) to read back all overrides for a group
+/// after applying them, so it can feed them into the re-split grouping engine.
+#[derive(Clone, Debug, sqlx::FromRow)]
+pub struct FileOverrideRow {
+    pub relative_file_path: String,
+    pub property_key: String,
+    pub value: String,
+    pub override_stale: i64,
+}
+
+/// Fetch all non-stale property overrides for every file in a source group.
+///
+/// Returns one row per `(relative_file_path, property_key)` — the full override
+/// map the re-split grouping engine needs to compute updated group keys after a
+/// reclassify call (T068 R-13 re-split).
+///
+/// # Errors
+/// Returns [`DbError::Database`] on connection failure.
+pub async fn list_file_overrides_for_group(
+    pool: &SqlitePool,
+    source_group_id: &str,
+) -> DbResult<Vec<FileOverrideRow>> {
+    Ok(sqlx::query_as::<_, FileOverrideRow>(
+        "SELECT relative_file_path, property_key, value, override_stale
+         FROM inbox_file_overrides
+         WHERE source_group_id = ?
+         ORDER BY relative_file_path, property_key",
+    )
+    .bind(source_group_id)
+    .fetch_all(pool)
+    .await?)
+}
+
+/// Fetch the `source_group_id` for a given `inbox_item_id`.
+///
+/// Returns `None` when the item does not exist or has no source group (legacy
+/// pre-T065 items).
+///
+/// # Errors
+/// Returns [`DbError::Database`] on connection failure.
+pub async fn get_source_group_id_for_item(
+    pool: &SqlitePool,
+    inbox_item_id: &str,
+) -> DbResult<Option<String>> {
+    let row: Option<(Option<String>,)> =
+        sqlx::query_as("SELECT source_group_id FROM inbox_items WHERE id = ?")
+            .bind(inbox_item_id)
+            .fetch_optional(pool)
+            .await?;
+    Ok(row.and_then(|(sg,)| sg))
+}
+
 /// Mark the override for a file as stale (file size/mtime changed since the
 /// override was recorded — spec 041 R-4).
 ///
