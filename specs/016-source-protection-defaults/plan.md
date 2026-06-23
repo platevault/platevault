@@ -86,11 +86,11 @@ allowed to proceed.
 
 ## Cross-Spec Notes (ratified 2026-05-22)
 
-- **R-OSTrash-Allowed (E-016-1)**: `os_trash` is treated as reversible.
+- **R-OSTrash-Allowed (E-016-1)**: `trash` is treated as reversible.
   The `block_permanent_delete` flag applies ONLY to `permanent_delete` actions.
-  Spec 017's `destructiveDestination = os_trash` is always allowed even when
+  Spec 017's `destructiveDestination = trash` is always allowed even when
   `block_permanent_delete = true`. Only spec 017's `permanent_delete` action
-  (separate from `archive`/`os_trash`) is blocked and rewritten to `archive`.
+  (separate from `archive`/`trash`) is blocked and rewritten to `archive`.
 - **E-016-2 (spec 025 pre-flight)**: Protection re-resolution happens during
   spec 025's per-item FS revalidation. The plan item's `resolved_level` and
   `block_permanent_delete` are re-evaluated against the current source state

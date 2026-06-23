@@ -136,9 +136,9 @@ INFRA / CROSS-CUTTING (mostly independent)
 
 ## Known repo-health issues (2026-06-23)
 
-- **Pre-existing CI red on `main`:** `Clippy (workspace, deny warnings)` fails at
-  `crates/app/targets/src/target_management.rs:506` — `clippy::unnecessary_map_or`
-  (newer clippy lint on existing target code). One-line fix; unrelated to recent PRs.
+- **Fixed 2026-06-23 (PR #346):** the `Clippy (workspace, deny warnings)` CI red —
+  `crates/app/targets/src/target_management.rs:506` `clippy::unnecessary_map_or`
+  (`map_or(false, …)` → `is_some_and(…)`). Workspace `cargo clippy --all-targets -- -D warnings` now green.
 - **Fixed 2026-06-23 (PR #317):** duplicate migration version `0046`
   (`session_canonical_target` + `target_constellation_magnitude`) broke fresh-install
   startup and every real-backend integration test. The later file was renumbered to `0047`.
@@ -166,19 +166,23 @@ Per-spec review of plan/research/data-model/contracts/tasks vs shipped code.
 - **035** `plan.md` migration filename corrected (#344).
 - **040** artifact-completeness deviation recorded in spec.md (#344).
 - **0047** migration's stale internal `Migration 0046:` comment fixed (#341).
+- **Clippy CI red** fixed (#346) — see repo-health above.
+- **008 contract drift** closed (#346): `project.create.json` gained optional `canonicalTargetId`;
+  `project.source.add.json` gained optional `role` (`light|dark|flat|bias`) + `selection`
+  (`selected|candidate`), matching `SourceRole`/`SourceSelection` (`crates/contracts/core/src/projects_v2.rs`).
+- **006 `noop` enum + 007 `mismatchedDimensions`** — re-verified **already correct**; the audit over-flagged
+  them (no change needed).
+- **Prose `os_trash`** destination-value mentions in 016 (spec/plan/research) + 025 (research) → `trash` (#346).
+- **002** session-lifecycle-historical note added to spec.md near the supersession notice (#346).
+- **024** uncontracted commands (`project.note.get`, `project.manifest.reveal_in_os`) recorded as deferred
+  tasks TX.11/TX.12 (#346).
 
 ### ⬜ Still open
-**Contracts lagging Rust DTOs (regenerate from bindings, don't hand-edit):**
-- 008 `project.create.json` missing `canonicalTargetId`; `project.source.add.json` missing `role`/`selection`.
-- 002/007 minor: `confidence`/`mismatchedDimensions` placement, `canonicalTargetId` on session DTO.
-- 006 `inventory.session.review.json` enum missing `"noop"`.
-
-**Prose `os_trash` mentions (low priority, not transport-truth):** 016/025 spec/plan/research still use the
-pre-0040 word in prose; 041 `contracts/operations.md:60` (left to the active single-type agent).
-
-**Other:**
-- 002 — session-lifecycle redesign (sessions = derived inventory) not propagated to FRs.
-- 023 — re-scope onto gen-3 + 035 (banner added; full rewrite pending).
-- 024 — commands `project.note.get` and `project.manifest.reveal_in_os` shipped without contracts (minor).
+- 002/007 minor: `confidence` placement / `canonicalTargetId` on the session DTO contract (cosmetic; verify
+  on next contract regen).
+- 023 — full re-scope onto gen-3 + 035 (banner added; rewrite pending — needs product input on scope).
+- 024 — author the two deferred JSON contracts (low priority).
+- 041 `contracts/operations.md:60` `os_trash` prose — left to the active single-type agent.
+- The live confirm path is `crates/app/inbox`; an earlier duplicate in `app_core` was removed — watch for
 - The live confirm path is `crates/app/inbox`; an earlier duplicate in `app_core` was removed — watch for
   other dead pre-042-split copies if similar drift appears.
