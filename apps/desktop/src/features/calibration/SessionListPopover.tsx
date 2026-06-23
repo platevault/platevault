@@ -8,6 +8,7 @@
 
 import { Popover } from "@base-ui-components/react/popover";
 import { useId, useRef, useState } from "react";
+import { m } from "@/lib/i18n";
 
 interface Props {
 	label: string;
@@ -27,7 +28,7 @@ export function SessionListPopover({ label, names }: Props) {
 		<div>
 			<div className="alm-session-detail2__head">{label}</div>
 			{names.length === 0 ? (
-				<span className="alm-session-detail2__muted">None</span>
+				<span className="alm-session-detail2__muted">{m.common_none()}</span>
 			) : (
 				<Popover.Root
 					onOpenChange={(open) => {
@@ -45,20 +46,20 @@ export function SessionListPopover({ label, names }: Props) {
 						<Popover.Positioner side="bottom" align="start" sideOffset={4}>
 							<Popover.Popup className="alm-session-popover__popup">
 								<label htmlFor={inputId} className="alm-visually-hidden">
-									Filter sessions
+									{m.calibration_session_popover_filter_label()}
 								</label>
 								<input
 									ref={inputRef}
 									id={inputId}
 									className="alm-session-popover__search"
-									placeholder="Filter…"
-									aria-label="Filter sessions"
+									placeholder={m.calibration_session_popover_filter_placeholder()}
+									aria-label={m.calibration_session_popover_filter_label()}
 									value={query}
 									onChange={(e) => setQuery(e.target.value)}
 								/>
 								<ul className="alm-session-popover__list">
 									{filtered.length === 0 ? (
-										<li className="alm-session-popover__empty">No matches</li>
+										<li className="alm-session-popover__empty">{m.calibration_session_popover_no_matches()}</li>
 									) : (
 										filtered.map((name) => (
 											<li key={name} className="alm-session-popover__item">

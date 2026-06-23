@@ -721,7 +721,7 @@ export function InboxPage() {
 					search={{
 						value: search,
 						onChange: setSearch,
-						placeholder: "Search detections…",
+						placeholder: m.inbox_search_placeholder(),
 						ariaLabel: "Search inbox",
 					}}
 					actions={
@@ -752,12 +752,12 @@ export function InboxPage() {
 							size="sm"
 							variant="accent"
 							onClick={() => setPlanOverlayOpen(true)}
-							aria-label={`Review plans (${planCount})`}
+							aria-label={m.inbox_review_plans_with_count({ count: planCount })}
 							data-testid="inbox-review-plans-btn"
 						>
 							{planCount > 0
-								? `Review plans (${planCount})`
-								: "Review plans"}
+								? m.inbox_review_plans_with_count({ count: planCount })
+								: m.inbox_review_plans()}
 						</Btn>
 					)}
 					{/* task 35: bulk-confirm all cleanly-classified items in one action */}
@@ -767,8 +767,12 @@ export function InboxPage() {
 							variant="accent"
 							disabled={!canBulkConfirm}
 							onClick={() => void handleBulkConfirm()}
-							aria-label={`Confirm all ${bulkEligibleItems.length} classified item${bulkEligibleItems.length !== 1 ? "s" : ""}`}
+							aria-label={m.inbox_confirm_all_classified_aria({ count: bulkEligibleItems.length })}
 							data-testid="inbox-bulk-confirm-btn"
+							// Guided-tour target (spec 010/041). The redesign moved the
+							// page-level confirm to this bulk-confirm action; keep the
+							// `inbox.confirm-row` anchor on it so the tour still resolves.
+							data-guide-anchor="inbox.confirm-row"
 						>
 							{bulkConfirmLoading
 								? m.common_confirming()
@@ -782,9 +786,9 @@ export function InboxPage() {
 						size="sm"
 						disabled={rescanLoading}
 						onClick={() => void rescan()}
-						aria-label="Rescan all roots"
+						aria-label={m.inbox_rescan_all_roots_aria()}
 					>
-						{rescanLoading ? "Rescanning…" : "Rescan"}
+						{rescanLoading ? m.common_rescanning() : m.common_rescan()}
 					</Btn>
 				</>
 			}

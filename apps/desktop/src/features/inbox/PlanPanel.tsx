@@ -592,10 +592,10 @@ export function PlanPanel({
         {/* Column header — aligns with each plan's group-header grid. */}
         <div className="alm-plan-panel__list-head" aria-hidden="true">
           <span className="alm-plan-panel__group-lead" />
-          <span>Plan</span>
-          <span>Composition</span>
-          <span>Destination</span>
-          <span>Files</span>
+          <span>{m.inbox_plan_col_plan()}</span>
+          <span>{m.inbox_plan_col_composition()}</span>
+          <span>{m.inbox_col_destination()}</span>
+          <span>{m.inbox_col_files()}</span>
           <span />
         </div>
         {plans.map((plan, planIdx) => {
@@ -683,9 +683,9 @@ export function PlanPanel({
                 {/* Col 2: plan / source folder ("(root)" for the library root) */}
                 <span
                   className="alm-plan-panel__group-name"
-                  title={plan.itemName || '(root)'}
+                  title={plan.itemName || m.inbox_list_root_label()}
                 >
-                  {plan.itemName || '(root)'}
+                  {plan.itemName || m.inbox_list_root_label()}
                 </span>
 
                 {/* Col 3: composition breakdown (aligned). */}
@@ -722,7 +722,7 @@ export function PlanPanel({
                 <span className="alm-plan-panel__group-dest">
                   {allInPlace ? (
                     <>
-                      <span className="alm-plan-panel__inplace">In place</span>
+                      <span className="alm-plan-panel__inplace">{m.inbox_inplace_label()}</span>
                       <code
                         className="alm-plan-panel__summary-dest"
                         title={breakdownDest?.full ?? plan.itemName}
@@ -750,11 +750,11 @@ export function PlanPanel({
                   className="alm-plan-panel__group-count"
                   title={
                     moveCount > 0
-                      ? `${moveCount} moved · ${plan.actions.length - moveCount} catalogued in place`
-                      : `${plan.actions.length} catalogued in place`
+                      ? m.inbox_plan_file_count_tooltip_mixed({ moved: moveCount, inPlace: plan.actions.length - moveCount })
+                      : m.inbox_plan_file_count_tooltip_inplace({ count: plan.actions.length })
                   }
                 >
-                  {plan.actions.length} file{plan.actions.length !== 1 ? 's' : ''}
+                  {plan.actions.length}{' '}{plan.actions.length !== 1 ? m.inbox_list_file_plural() : m.inbox_list_file_singular()}
                 </span>
 
                 {/* Col 6: stale badge + per-group apply (live progress) + discard */}
@@ -881,13 +881,13 @@ export function PlanPanel({
                           )}
                           {a.requiresDestructiveConfirm && (
                             <span className="alm-plan-panel__file-flag">
-                              destructive
+                              {m.inbox_destructive_flag()}
                             </span>
                           )}
                         </span>
                         <span className="alm-plan-panel__file-dest">
                           {inPlace ? (
-                            <span className="alm-plan-panel__inplace">In place</span>
+                            <span className="alm-plan-panel__inplace">{m.inbox_inplace_label()}</span>
                           ) : (
                             <>
                               <span

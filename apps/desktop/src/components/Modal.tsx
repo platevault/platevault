@@ -26,6 +26,7 @@
 
 import { type ReactNode } from 'react';
 import { Dialog } from '@base-ui-components/react/dialog';
+import { m } from '@/lib/i18n';
 
 export type ModalSize = 'sm' | 'md' | 'lg' | 'xl' | 'auto';
 
@@ -110,7 +111,7 @@ export function Modal({
               <span className="alm-modal__subtitle">{subtitle}</span>
             )}
             {!hideClose && (
-              <Dialog.Close className="alm-modal__close" aria-label="Close">
+              <Dialog.Close className="alm-modal__close" aria-label={m.common_close()}>
                 ✕
               </Dialog.Close>
             )}

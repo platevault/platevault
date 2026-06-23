@@ -1227,5 +1227,56 @@
   "plans_gate_normal_items": "{count} normal item(s)",
   "plans_gate_unprotected_items": "{count} unprotected item(s)",
   "projects_open_in": "Open in {tool}",
-  "targets_hours_above": "{hours} h"
+  "targets_hours_above": "{hours} h",
+  "inbox_prop_classification": "Classification",
+  "inbox_lane_video": "video",
+  "inbox_dest_root_label": "Library:",
+  "inbox_dest_root_aria": "Destination library",
+  "inbox_no_file_metadata": "No file metadata",
+  "inbox_col_detection": "Detection",
+  "inbox_no_detections": "No detections.",
+  "inbox_review_plans_title": "Review plans",
+  "inbox_plan_col_plan": "Plan",
+  "inbox_plan_col_composition": "Composition",
+  "inbox_inplace_label": "In place",
+  "inbox_plan_file_count_tooltip_mixed": "{moved} moved · {inPlace} catalogued in place",
+  "inbox_plan_file_count_tooltip_inplace": "{count} catalogued in place",
+  "inbox_destructive_flag": "destructive",
+  "inbox_review_plans_with_count": "Review plans ({count})",
+  "inbox_review_plans": "Review plans",
+  "calibration_session_popover_filter_label": "Filter sessions",
+  "calibration_session_popover_filter_placeholder": "Filter…",
+  "calibration_session_popover_no_matches": "No matches",
+  "calibration_used_by_label": "Used by",
+  "calibration_compatible_label": "Compatible",
+  "inbox_apply_n_overrides": [
+    {
+      "declarations": [
+        "input count",
+        "local p = count: plural"
+      ],
+      "selectors": [
+        "p"
+      ],
+      "match": {
+        "p=one": "Apply 1 override",
+        "p=other": "Apply {count} overrides"
+      }
+    }
+  ],
+  "inbox_confirm_all_classified_aria": [
+    {
+      "declarations": [
+        "input count",
+        "local p = count: plural"
+      ],
+      "selectors": [
+        "p"
+      ],
+      "match": {
+        "p=one": "Confirm all {count} classified item",
+        "p=other": "Confirm all {count} classified items"
+      }
+    }
+  ]
 }

@@ -100,9 +100,9 @@ export const Table = forwardRef<HTMLTableElement, TableProps>(
 
     const head = (
       <thead>
-        {/* eslint-disable-next-line no-restricted-syntax -- dynamic: Table column header style passthrough from caller */}
         <tr>
           {columns.map((c, i) => (
+            // eslint-disable-next-line no-restricted-syntax -- dynamic: caller-provided column header style passthrough
             <th key={i} className={c.className} style={c.style}>
               {c.label}
             </th>
