@@ -11,6 +11,8 @@
 //! - §III Metadata/identity only — no image processing.
 //! - §V SQLite (resolution cache / canonical_target) is the durable record.
 
+use audit::bus::EventBus;
+use audit::event_bus::{Source, TargetNoteUpdated, TOPIC_TARGET_NOTE_UPDATED};
 use sqlx::SqlitePool;
 use uuid::Uuid;
 
@@ -22,6 +24,7 @@ use contracts_core::targets::{
     TargetOpError, TargetProjectItem, TargetProjectsListRequest, TargetSessionItem,
     TargetSessionsListRequest,
 };
+use domain_core::ids::Timestamp;
 use targeting_resolver::cache::{self, CachedTarget, TargetListRow};
 use targeting_resolver::AliasKind;
 
@@ -433,12 +436,16 @@ pub async fn note_get(
 /// Empty or whitespace-only `notes` clears the field (stores NULL).
 /// Returns the stored value after the update.
 ///
+/// Emits a `target.note.updated` audit event after a successful DB write.
+/// Bus publish failures are logged at `warn` but do NOT fail the operation.
+///
 /// # Errors
 ///
 /// Returns [`TargetOpError`] with code `target.not_found`, `target.invalid_id`,
 /// or `internal.database`.
 pub async fn note_update(
     pool: &SqlitePool,
+    bus: &EventBus,
     req: &TargetNoteUpdateRequest,
 ) -> Result<TargetNoteUpdateResult, TargetOpError> {
     let _uuid = Uuid::parse_str(&req.target_id).map_err(|_| invalid_id(&req.target_id))?;
@@ -469,12 +476,30 @@ pub async fn note_update(
         // Should not happen (we verified existence above), but be defensive.
         return Err(not_found(&req.target_id));
     }
+
+    // Emit audit event — bus failure is non-fatal.
+    if let Err(e) = bus
+        .publish(
+            TOPIC_TARGET_NOTE_UPDATED,
+            Source::User,
+            TargetNoteUpdated {
+                target_id: req.target_id.clone(),
+                has_notes: stored.is_some(),
+                at: Timestamp::now_iso(),
+            },
+        )
+        .await
+    {
+        tracing::warn!(target_id = %req.target_id, error = %e, "audit bus publish failed for target.note.updated");
+    }
+
     Ok(TargetNoteUpdateResult { notes: stored.map(str::to_owned) })
 }
 
 #[cfg(test)]
 mod tests {
     use super::*;
+    use audit::bus::EventBus;
     use persistence_db::Database;
     use targeting_resolver::cache::upsert_resolved;
     use targeting_resolver::ObjectType;
@@ -486,6 +511,10 @@ mod tests {
         let db = Database::in_memory().await.expect("in-memory DB");
         db.migrate().await.expect("migrations");
         db
+    }
+
+    fn make_bus(db: &Database) -> EventBus {
+        EventBus::with_pool(db.pool().clone())
     }
 
     fn m31() -> ResolvedIdentity {
@@ -955,12 +984,13 @@ mod tests {
     async fn note_update_and_get_roundtrip() {
         let db = setup().await;
         let id = seed_m31(&db).await;
+        let bus = make_bus(&db);
 
         let upd_req = TargetNoteUpdateRequest {
             target_id: id.to_string(),
             notes: "Great seeing.".to_owned(),
         };
-        let upd_result = note_update(db.pool(), &upd_req).await.unwrap();
+        let upd_result = note_update(db.pool(), &bus, &upd_req).await.unwrap();
         assert_eq!(upd_result.notes.as_deref(), Some("Great seeing."));
 
         let get_req = TargetNoteGetRequest { target_id: id.to_string() };
@@ -972,10 +1002,12 @@ mod tests {
     async fn note_update_whitespace_clears_note() {
         let db = setup().await;
         let id = seed_m31(&db).await;
+        let bus = make_bus(&db);
 
         // Set a note first.
         note_update(
             db.pool(),
+            &bus,
             &TargetNoteUpdateRequest { target_id: id.to_string(), notes: "Initial.".to_owned() },
         )
         .await
@@ -984,6 +1016,7 @@ mod tests {
         // Whitespace-only update should clear.
         let clear_result = note_update(
             db.pool(),
+            &bus,
             &TargetNoteUpdateRequest { target_id: id.to_string(), notes: "   ".to_owned() },
         )
         .await
@@ -1006,11 +1039,12 @@ mod tests {
     #[tokio::test]
     async fn note_update_not_found_returns_error() {
         let db = setup().await;
+        let bus = make_bus(&db);
         let req = TargetNoteUpdateRequest {
             target_id: Uuid::new_v4().to_string(),
             notes: "x".to_owned(),
         };
-        let err = note_update(db.pool(), &req).await.unwrap_err();
+        let err = note_update(db.pool(), &bus, &req).await.unwrap_err();
         assert_eq!(err.code, "target.not_found");
     }
 }

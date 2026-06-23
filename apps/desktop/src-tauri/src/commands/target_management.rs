@@ -226,5 +226,5 @@ pub async fn target_note_update(
     req: TargetNoteUpdateRequest,
 ) -> Result<TargetNoteUpdateResult, TargetOpError> {
     tracing::debug!("target.note.update target_id={} notes_len={}", req.target_id, req.notes.len());
-    app_core::target_management::note_update(state.repo.pool(), &req).await
+    app_core::target_management::note_update(state.repo.pool(), &state.bus, &req).await
 }

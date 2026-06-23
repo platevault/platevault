@@ -23,12 +23,6 @@ import {
   REVIEW_FILTERS,
 } from '@/lib/route-contract';
 
-/** Parse a path-param id to a number; NaN-safe `selected` search for redirects. */
-function selectedSearch(rawId: string): { selected?: number } {
-  const id = Number(rawId);
-  return Number.isFinite(id) ? { selected: id } : {};
-}
-
 /** String `selected` redirect for routes where IDs are UUIDs (e.g. sessions). */
 function selectedSearchString(rawId: string): { selected?: string } {
   return rawId && rawId.trim() !== '' ? { selected: rawId.trim() } : {};
@@ -144,7 +138,9 @@ const projectsRoute = createRoute({
   getParentRoute: () => shellRoute,
   path: '/projects',
   validateSearch: makeValidateSearch({
-    selected: parseNumber,
+    // spec 023: project IDs are UUIDs (strings). Switched from legacy numeric
+    // index so linked-project deep-links from TargetDetailV2 work correctly.
+    selected: parseString,
     lifecycle: parseCsvEnum(PROJECT_STATES),
   }),
   component: lazyRouteComponent(
@@ -157,7 +153,7 @@ const projectDetailRoute = createRoute({
   getParentRoute: () => shellRoute,
   path: '/projects/$id',
   beforeLoad: ({ params }) => {
-    throw redirect({ to: '/projects', search: selectedSearch(params.id) });
+    throw redirect({ to: '/projects', search: selectedSearchString(params.id) });
   },
 });
 
