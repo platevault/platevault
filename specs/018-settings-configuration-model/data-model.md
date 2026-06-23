@@ -1,10 +1,20 @@
 # Data Model: Settings Configuration Model
 
+*(Reconciled 2026-06-23 against as-built code on `main`.)*
+
+## IPC Transport
+
+The IPC surface uses a **scope/values** model. `settings.get { scope }` returns
+a flat JSON bag; `settings.update { scope, values }` persists every key in
+`values`. Empty scope = full bag. See `spec.md` Implementation Status for the
+scope → key map.
+
 ## SettingsState v1
 
-The canonical bag of v1 settings. Stored under storage key `alm.settings.v1`
-in localStorage today, and intended to migrate to a SQLite `settings` table
-in which each field below maps to one row keyed by field name.
+The canonical bag of v1 settings. Defined in
+`crates/domain/core/src/settings.rs` and persisted in a SQLite `settings`
+table (migration `0013_settings.sql`) in which each field maps to one row
+keyed by field name. The localStorage path (`alm.settings.v1`) is superseded.
 
 ### Field Table
 
@@ -44,30 +54,36 @@ in which each field below maps to one row keyed by field name.
 | `blockPermanentDelete`    | `true`                                                                                                   |
 | `protectedCategories`     | `["lights", "masters", "finals"]`                                                                        |
 
-### Absorbed Keys (2026-05-22 ripple absorption)
+### Absorbed Keys (2026-05-22 ripple absorption; reconciled 2026-06-23)
 
-Keys absorbed from cross-spec ratification passes. Structured-path keys use
-dot notation; `<tool_id>` and `<profile_id>` are runtime-defined slugs
-matching `[a-z0-9_]+`.
+All absorbed keys are **flat typed fields** on `SettingsState` except
+`tools.<tool_id>.bundle_id`, which remains a per-tool structured key.
+`target_lookup.active_catalogs` and the `workflow_profile.*` structured-path
+keys are dropped (see notes).
 
-| Key | Type | Default | Overridable per source? | Description | Noisy? |
-|-----|------|---------|------------------------|-------------|--------|
-| `current_library_id` | `string?` (uuid) | `null` | No | Currently-open library id; drives `?lib=` URL injection (spec 020 R-Lib-V1). | No |
-| `devMode` | `boolean` | `false` | No | Runtime developer-mode toggle. Only meaningful in `dev-tools` builds; read-only/hidden in release. | No |
-| `plans.list.default_age_cutoff_days` | `number` | `90` | No | UI hides terminal plans older than this; `0` = show all (spec 017 R-Ret-1). | Yes |
-| `rememberFollowLogs` | `boolean` | `false` | No | Persists log viewer "follow tail" state across restarts (spec 019 E-019-3). | Yes |
-| `target_lookup.active_catalogs` | `string[]` | all 13 v1 catalog ids | No | Active catalog set for `target.lookup`; user may disable specific catalogs (spec 013 R-2.2). | No |
-| `calibration.dark_temp_tolerance` | `number` (°C) | `2.0` | No | Dark frame temperature matching tolerance (spec 007 A5). | No |
-| `calibration.dark.override_penalty` | `number` [0,1] | `0.3` | No | Confidence penalty when user overrides dark calibration suggestion (spec 007 R-OverridePenalty). | No |
-| `calibration.flat.override_penalty` | `number` [0,1] | `0.3` | No | Confidence penalty when user overrides flat calibration suggestion (spec 007 R-OverridePenalty). | No |
-| `calibration.bias.override_penalty` | `number` [0,1] | `0.3` | No | Confidence penalty when user overrides bias calibration suggestion (spec 007 R-OverridePenalty). | No |
-| `calibration.prefill_suggestion` | `boolean` | `true` | No | Open assign dialog pre-filled with top candidate; user must confirm (spec 007 R-Prefill). | No |
-| `tools.<tool_id>.bundle_id` | `string?` | `null` (seeded for known tools) | No | Per-tool macOS bundle id for `open -b` launching; user-editable (spec 011 R-BundleId). | No |
-| `workflow_profile.<profile_id>.watch_extensions` | `string[]` | see below | No | Per-profile file extension allow-list for the artifact watcher (spec 012 R-ExtAllow). | No |
-| `workflow_profile.<profile_id>.launch_attribution_window_hours` | `number` | `6` | No | Per-profile attribution window for matching artifacts to tool launches (spec 012 C3). | No |
-| `imagetyp_normalization.user_mappings` | `Array<{imagetyp_string: string, frame_type: FrameType}>` | `[]` | No | User-extensible IMAGETYP normalization entries for niche capture software (spec 005 R-IMAGETYP-Norm). | No |
+| Key (field name on SettingsState) | Type | Default | Overridable per source? | Description | Noisy? |
+|---|---|---|---|---|---|
+| `current_library_id` | `String?` (uuid) | `null` | No | Currently-open library id; drives `?lib=` URL injection (spec 020 R-Lib-V1). | No |
+| `devMode` | `bool` | `false` | No | Runtime developer-mode toggle. Only meaningful in `dev-tools` builds; release gating NOT YET enforced (T036). | No |
+| `plans_list_default_age_cutoff_days` | `f64` | `90` | No | UI hides terminal plans older than this; `0` = show all (spec 017 R-Ret-1). | Yes |
+| `rememberFollowLogs` | `bool` | `false` | No | Persists log viewer "follow tail" state across restarts (spec 019 E-019-3). | Yes |
+| ~~`target_lookup.active_catalogs`~~ | — | — | — | **DROPPED** — spec 014 catalog manifest superseded by spec 035 (SIMBAD). | — |
+| `calibration_dark_temp_tolerance` | `f64` (°C) | `2.0` | No | Dark frame temperature matching tolerance (spec 007 A5). | No |
+| `calibration_dark_override_penalty` | `f64` [0,1] | `0.3` | No | Confidence penalty when user overrides dark calibration suggestion (spec 007 R-OverridePenalty). **Flat field.** | No |
+| `calibration_flat_override_penalty` | `f64` [0,1] | `0.3` | No | Confidence penalty when user overrides flat calibration suggestion (spec 007 R-OverridePenalty). **Flat field.** | No |
+| `calibration_bias_override_penalty` | `f64` [0,1] | `0.3` | No | Confidence penalty when user overrides bias calibration suggestion (spec 007 R-OverridePenalty). **Flat field.** | No |
+| `calibration_prefill_suggestion` | `bool` | `true` | No | Open assign dialog pre-filled with top candidate; user must confirm (spec 007 R-Prefill). | No |
+| `calibration_aging_threshold_days` | `f64` | `90.0` | No | Threshold beyond which a calibration frame is considered aged; scoring input (spec 007/018 FR-023). | No |
+| `tools.<tool_id>.bundle_id` | `String?` | `null` (seeded for known tools) | No | Per-tool macOS bundle id for `open -b` launching; user-editable (spec 011 R-BundleId). Validated against ToolProfile rows (T042, open). | No |
+| ~~`workflow_profile.<profile_id>.watch_extensions`~~ | — | — | — | **DROPPED** — replaced by flat `tool_watch_extensions`. | — |
+| ~~`workflow_profile.<profile_id>.launch_attribution_window_hours`~~ | — | — | — | **DROPPED** — replaced by flat `tool_attribution_window_hours`. | — |
+| `tool_watch_extensions` | `Vec<String>` | see below | No | Global allow-list of extensions monitored by the artifact-observation watcher (spec 012 R-ExtAllow, T043). | No |
+| `tool_attribution_window_hours` | `f64` | `6` | No | Global attribution window for matching artifacts to tool launches (spec 012 C3, T043). | No |
+| `patterns_by_type` | `BTreeMap<String, String>` | `{}` | No | Per-frame-type destination pattern overrides (spec 041 FR-026/FR-026b). | No |
+| `always_preview_before_plan` | `bool` | `false` | No | Forces a preview step before any filesystem plan is generated (also in main field table). | No |
+| `imagetyp_normalization_user_mappings` | `Vec<ImageTypMapping>` | `[]` | No | User-extensible IMAGETYP normalization entries for niche capture software (spec 005 R-IMAGETYP-Norm). | No |
 
-**Default for `workflow_profile.<profile_id>.watch_extensions`**: `[".xisf", ".fits", ".fit", ".tif", ".tiff", ".png", ".jpg", ".ser", ".avi"]`
+**Default for `tool_watch_extensions`**: `[".xisf", ".fits", ".fit", ".tif", ".tiff", ".png", ".jpg", ".ser", ".avi"]`
 
 **Seed values for `tools.<tool_id>.bundle_id`** (stored only when tool is registered):
 - `tools.pixinsight.bundle_id`: `"com.pixinsight.PixInsight"`
