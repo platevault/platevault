@@ -1849,13 +1849,17 @@
 .alm-plan-panel__list-head,
 .alm-plan-panel__group-header {
   display: grid;
+  /* FIXED widths on the lead/count/discard columns (not `auto`): each row is an
+     independent grid, so `auto`/`fr` would resolve to different widths per row
+     (e.g. "41 files" vs "1 file") and the destination column would not line up.
+     Fixed side columns make the flexible middle columns resolve identically. */
   grid-template-columns:
-    auto                  /* select + expand */
+    60px                  /* select + expand */
     minmax(120px, 1.4fr)  /* plan name */
     minmax(150px, 1.6fr)  /* composition */
     minmax(120px, 1.3fr)  /* destination */
-    auto                  /* file count */
-    auto;                 /* discard */
+    72px                  /* file count */
+    92px;                 /* discard */
   align-items: center;
   column-gap: var(--alm-sp-3);
 }
