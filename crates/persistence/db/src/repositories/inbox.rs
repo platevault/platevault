@@ -19,6 +19,14 @@ pub struct InboxItemRow {
     pub id: String,
     pub root_id: String,
     pub relative_path: String,
+    /// FK to `inbox_source_groups`; NULL for legacy `plan_open` rows (migration 0048).
+    pub source_group_id: Option<String>,
+    /// Deterministic canonical group key (R-11). Empty string for legacy rows.
+    pub group_key: String,
+    /// Human-readable display label `"(root) · <type> · <dims>"` (R-12).
+    pub group_label: Option<String>,
+    /// Authoritative frame type for this sub-item; NULL until classified (migration 0048).
+    pub frame_type: Option<String>,
     pub file_count: i64,
     pub discovered_at: String,
     pub last_scanned_at: String,
@@ -364,6 +372,122 @@ pub async fn update_inbox_item_scan(
     Ok(())
 }
 
+// ── Sub-item CRUD (spec 041 T066) ─────────────────────────────────────────────
+
+/// Data required to upsert one single-type `inbox_items` sub-item row.
+///
+/// Identity = `(root_id, relative_path, group_key)` — the UNIQUE constraint
+/// from migration 0048. On conflict the mutable fields are updated so rescans
+/// of unchanged content converge to the same row (FR-042 determinism).
+#[derive(Clone, Debug)]
+pub struct UpsertInboxSubItem<'a> {
+    pub id: &'a str,
+    pub root_id: &'a str,
+    /// Relative path of the *source folder* (same as the source group's path).
+    pub relative_path: &'a str,
+    pub source_group_id: &'a str,
+    /// Deterministic canonical group key (R-11).
+    pub group_key: &'a str,
+    /// Human-readable label `"(root) · <type> · <dims>"` (R-12).
+    pub group_label: &'a str,
+    /// Authoritative frame type for this group (CHECK constraint values only).
+    pub frame_type: Option<&'a str>,
+    /// Per-sub-group content signature (R-11): folder_signature over the sorted
+    /// per-file signatures of only the files belonging to this group.
+    pub content_signature: &'a str,
+    /// Number of files in this group.
+    pub file_count: i64,
+    pub lane: &'a str,
+}
+
+/// Upsert one single-type `inbox_items` sub-item row (spec 041 T066, R-9/R-11).
+///
+/// The identity `(root_id, relative_path, group_key)` is stable across rescans
+/// when file content is unchanged (FR-042). On conflict the signature, label,
+/// file_count, and state are refreshed.
+///
+/// # Errors
+/// Returns [`DbError::Database`] on constraint or connection failure.
+pub async fn upsert_inbox_sub_item(
+    pool: &SqlitePool,
+    item: &UpsertInboxSubItem<'_>,
+) -> DbResult<()> {
+    let now = Timestamp::now_iso();
+    sqlx::query(
+        "INSERT INTO inbox_items
+            (id, root_id, relative_path, source_group_id, group_key, group_label,
+             frame_type, file_count, discovered_at, last_scanned_at,
+             content_signature, state, lane)
+         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'classified', ?)
+         ON CONFLICT(root_id, relative_path, group_key) DO UPDATE SET
+             group_label        = excluded.group_label,
+             frame_type         = excluded.frame_type,
+             file_count         = excluded.file_count,
+             last_scanned_at    = excluded.last_scanned_at,
+             content_signature  = excluded.content_signature,
+             state              = 'classified'",
+    )
+    .bind(item.id)
+    .bind(item.root_id)
+    .bind(item.relative_path)
+    .bind(item.source_group_id)
+    .bind(item.group_key)
+    .bind(item.group_label)
+    .bind(item.frame_type)
+    .bind(item.file_count)
+    .bind(&now)
+    .bind(&now)
+    .bind(item.content_signature)
+    .bind(item.lane)
+    .execute(pool)
+    .await?;
+    Ok(())
+}
+
+/// Update `child_count` on a source group to reflect how many single-type
+/// sub-items were materialised during classify (spec 041 T066, R-12).
+///
+/// # Errors
+/// Returns [`DbError::Database`] on connection failure.
+pub async fn update_source_group_child_count(
+    pool: &SqlitePool,
+    source_group_id: &str,
+    child_count: i64,
+) -> DbResult<()> {
+    sqlx::query("UPDATE inbox_source_groups SET child_count = ? WHERE id = ?")
+        .bind(child_count)
+        .bind(source_group_id)
+        .execute(pool)
+        .await?;
+    Ok(())
+}
+
+/// List all single-type sub-items belonging to a source group, ordered by
+/// `group_key` for deterministic display (spec 041 T066).
+///
+/// Excludes placeholder rows (`group_key = ''`) — the transient
+/// `pending_classification` placeholder is replaced by the real sub-items once
+/// classify runs. Plan-open items retain a non-empty `group_key` so they are
+/// included correctly.
+///
+/// # Errors
+/// Returns [`DbError::Database`] on connection failure.
+pub async fn list_inbox_sub_items(
+    pool: &SqlitePool,
+    source_group_id: &str,
+) -> DbResult<Vec<InboxItemRow>> {
+    let rows = sqlx::query_as::<_, InboxItemRow>(
+        "SELECT * FROM inbox_items
+         WHERE source_group_id = ?
+           AND group_key != ''
+         ORDER BY group_key",
+    )
+    .bind(source_group_id)
+    .fetch_all(pool)
+    .await?;
+    Ok(rows)
+}
+
 // ── Classification CRUD ───────────────────────────────────────────────────────
 
 /// Upsert the `inbox_classifications` row for an item.
@@ -613,13 +737,11 @@ pub async fn set_overrides(
                 .execute(pool)
                 .await?;
 
-                sqlx::query(
-                    "UPDATE inbox_items SET source_group_id = ? WHERE id = ?",
-                )
-                .bind(&new_sg_id)
-                .bind(inbox_item_id)
-                .execute(pool)
-                .await?;
+                sqlx::query("UPDATE inbox_items SET source_group_id = ? WHERE id = ?")
+                    .bind(&new_sg_id)
+                    .bind(inbox_item_id)
+                    .execute(pool)
+                    .await?;
 
                 new_sg_id
             }
