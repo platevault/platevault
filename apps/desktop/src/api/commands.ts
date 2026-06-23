@@ -1316,6 +1316,52 @@ export async function clearDisplayAlias(
   return unwrap(await commands.targetDisplayAliasClear(req)) as TargetDetailV3;
 }
 
+/**
+ * `target.sessions.list` — list acquisition sessions linked to a target (spec 023 US2).
+ *
+ * Returns sessions ordered by created_at descending. Empty list when none are linked.
+ */
+export async function listTargetSessions(
+  req: import('@/bindings').TargetSessionsListRequest,
+): Promise<import('@/bindings').TargetSessionItem[]> {
+  return unwrap(await commands.targetSessionsList(req));
+}
+
+/**
+ * `target.projects.list` — list projects linked to a target (spec 023 US3).
+ *
+ * Returns projects ordered alphabetically by name. Empty list when none are linked.
+ */
+export async function listTargetProjects(
+  req: import('@/bindings').TargetProjectsListRequest,
+): Promise<import('@/bindings').TargetProjectItem[]> {
+  return unwrap(await commands.targetProjectsList(req));
+}
+
+/**
+ * `target.note.get` — read observing notes for a target (spec 023 US4).
+ *
+ * Returns `{ notes: null }` when no notes are stored.
+ */
+export async function getTargetNote(
+  req: import('@/bindings').TargetNoteGetRequest,
+): Promise<{ notes: string | null }> {
+  const result = unwrap(await commands.targetNoteGet(req));
+  return { notes: result.notes ?? null };
+}
+
+/**
+ * `target.note.update` — write observing notes for a target (spec 023 US4).
+ *
+ * Empty/whitespace-only `notes` clears the field. Returns updated notes value.
+ */
+export async function updateTargetNote(
+  req: import('@/bindings').TargetNoteUpdateRequest,
+): Promise<{ notes: string | null }> {
+  const result = unwrap(await commands.targetNoteUpdate(req));
+  return { notes: result.notes ?? null };
+}
+
 // Re-export gen-3 target types for callers.
 export type {
   TargetGetRequest,

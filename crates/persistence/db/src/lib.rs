@@ -3,6 +3,7 @@
 //!
 //! Production backend: sqlx 0.9 + SQLite (ratified stack, wired T003).
 //! All migrations live in `./migrations/` and are consumed via `sqlx::migrate!()`.
+//! Migration 0048 added `canonical_target.notes` (spec 023 US4).
 
 use sqlx::sqlite::{SqlitePool, SqlitePoolOptions};
 

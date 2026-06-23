@@ -3,10 +3,23 @@
 **Spec**: 023-target-identity-history-notes | **Plan**: [plan.md](./plan.md)
 
 Tasks are grouped by user story so each story can be developed and tested
-independently. The full feature is **NOT IMPLEMENTED**; all tasks below are
-deferred until each story passes review.
+independently.
 
-## Foundations
+> **Implementation status (2026-06-23): IMPLEMENTED on gen-3.** The task list below was authored against
+> the retired gen-2 model; it has been delivered on the spec-035/036 gen-3 `canonical_target` model instead:
+> - **US1 (identity + aliases)** — `target.get`, `target.alias.add/remove` shipped on gen-3.
+> - **US2 (linked sessions)** — `target.sessions.list` (filters `acquisition_session.canonical_target_id`)
+>   + `TargetDetailV2` sessions section.
+> - **US3 (linked projects)** — `target.projects.list` (filters `projects.canonical_target_id`)
+>   + `TargetDetailV2` projects section. *Known gap: rows deep-link to `/projects` without selecting a
+>   specific project (route keys `selected` on a numeric index, not the UUID) — follow-up.*
+> - **US4 (observing notes)** — migration `0048_target_notes` (`canonical_target.notes`) +
+>   `target.note.get/update` + a notes editor in `TargetDetailV2`.
+> - **`target.primary.rename` DROPPED** (out of scope; contract orphaned).
+> - **Foundations (T001–T005) are OBSOLETE** — they target the gen-2 `target_alias`/`target_id`-FK model
+>   that spec 036 deleted. Do not implement as written.
+
+## Foundations *(OBSOLETE — gen-2 model retired by spec 036; see status note above)*
 
 - T001. [DONE] Create `crates/targeting/` with the `Target`, `CatalogRef`, and
   alias-normalization types defined in `data-model.md`. Unit-test

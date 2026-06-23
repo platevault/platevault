@@ -219,6 +219,52 @@ export const commands = {
 	 */
 	targetDisplayAliasClear: (req: TargetDisplayAliasClearRequest) => typedError<TargetDetailV3_Serialize, TargetOpError_Serialize>(__TAURI_INVOKE("target_display_alias_clear", { req })),
 	/**
+	 *  `target.sessions.list` — list acquisition sessions linked to a canonical target.
+	 * 
+	 *  Returns sessions ordered newest first (by `created_at`).  Returns an empty
+	 *  list when the target exists but has no linked sessions.
+	 * 
+	 *  # Errors
+	 * 
+	 *  Returns `Err(TargetOpError)` with code `target.not_found`,
+	 *  `target.invalid_id`, or `internal.database`.
+	 */
+	targetSessionsList: (req: TargetSessionsListRequest) => typedError<TargetSessionItem[], TargetOpError_Serialize>(__TAURI_INVOKE("target_sessions_list", { req })),
+	/**
+	 *  `target.projects.list` — list projects linked to a canonical target.
+	 * 
+	 *  Returns projects ordered alphabetically by name.  Returns an empty list
+	 *  when the target exists but has no linked projects.
+	 * 
+	 *  # Errors
+	 * 
+	 *  Returns `Err(TargetOpError)` with code `target.not_found`,
+	 *  `target.invalid_id`, or `internal.database`.
+	 */
+	targetProjectsList: (req: TargetProjectsListRequest) => typedError<TargetProjectItem[], TargetOpError_Serialize>(__TAURI_INVOKE("target_projects_list", { req })),
+	/**
+	 *  `target.note.get` — read observing notes for a canonical target.
+	 * 
+	 *  Returns `notes: null` when no notes are stored.
+	 * 
+	 *  # Errors
+	 * 
+	 *  Returns `Err(TargetOpError)` with code `target.not_found`,
+	 *  `target.invalid_id`, or `internal.database`.
+	 */
+	targetNoteGet: (req: TargetNoteGetRequest) => typedError<TargetNoteGetResult_Serialize, TargetOpError_Serialize>(__TAURI_INVOKE("target_note_get", { req })),
+	/**
+	 *  `target.note.update` — write observing notes for a canonical target.
+	 * 
+	 *  Empty or whitespace-only `notes` clears the field (stores NULL).
+	 * 
+	 *  # Errors
+	 * 
+	 *  Returns `Err(TargetOpError)` with code `target.not_found`,
+	 *  `target.invalid_id`, or `internal.database`.
+	 */
+	targetNoteUpdate: (req: TargetNoteUpdateRequest) => typedError<TargetNoteUpdateResult_Serialize, TargetOpError_Serialize>(__TAURI_INVOKE("target_note_update", { req })),
+	/**
 	 *  `target.resolve` — cache-first resolution of a designation / common name (or
 	 *  FITS OBJECT value) against the local cache + bundled seed, falling back to
 	 *  SIMBAD on a miss when online resolution is enabled (spec 035).
@@ -6028,6 +6074,48 @@ export type TargetListItem_Serialize = {
 	aliases: string[],
 };
 
+/**  Request for `target.note.get` (spec 023 US4). */
+export type TargetNoteGetRequest = {
+	targetId: string,
+};
+
+/**  Response for `target.note.get` (spec 023 US4). */
+export type TargetNoteGetResult = TargetNoteGetResult_Serialize | TargetNoteGetResult_Deserialize;
+
+/**  Response for `target.note.get` (spec 023 US4). */
+export type TargetNoteGetResult_Deserialize = {
+	/**  Current notes, or `null` when none are stored. */
+	notes: string | null,
+};
+
+/**  Response for `target.note.get` (spec 023 US4). */
+export type TargetNoteGetResult_Serialize = {
+	/**  Current notes, or `null` when none are stored. */
+	notes?: string | null,
+};
+
+/**  Request for `target.note.update` (spec 023 US4). */
+export type TargetNoteUpdateRequest = {
+	targetId: string,
+	/**  New notes text. Empty/whitespace-only clears (stores NULL). */
+	notes: string,
+};
+
+/**  Response for `target.note.update` (spec 023 US4). */
+export type TargetNoteUpdateResult = TargetNoteUpdateResult_Serialize | TargetNoteUpdateResult_Deserialize;
+
+/**  Response for `target.note.update` (spec 023 US4). */
+export type TargetNoteUpdateResult_Deserialize = {
+	/**  Notes after the update, or `null` when cleared. */
+	notes: string | null,
+};
+
+/**  Response for `target.note.update` (spec 023 US4). */
+export type TargetNoteUpdateResult_Serialize = {
+	/**  Notes after the update, or `null` when cleared. */
+	notes?: string | null,
+};
+
 /**
  *  Closed astronomical object classification (spec 035 `ObjectType`).
  * 
@@ -6054,11 +6142,31 @@ export type TargetOpError_Serialize = {
 	details?: unknown | null,
 };
 
+/**
+ *  A linked project returned by `target.projects.list` (spec 023 US3).
+ * 
+ *  Columns sourced from the `projects` table:
+ *  - `id` — row UUID.
+ *  - `name` — human-visible project name.
+ *  - `lifecycle` — lifecycle state string (e.g. `"ready"`, `"processing"`, `"done"`).
+ */
+export type TargetProjectItem = {
+	id: string,
+	name: string,
+	/**  Lifecycle state string (e.g. `"ready"`, `"processing"`, `"done"`). */
+	lifecycle: string,
+};
+
 /**  A project stub within the target detail view (spec 029 stub). */
 export type TargetProjectStub = {
 	id: string,
 	name: string,
 	state: ProjectState,
+};
+
+/**  Request for `target.projects.list` (spec 023 US3). */
+export type TargetProjectsListRequest = {
+	targetId: string,
 };
 
 /**  Error envelope for `target.resolve` (`target.resolve.json` §`ErrorEnvelope`). */
@@ -6218,6 +6326,35 @@ export type TargetSearchResponse_Serialize = {
 	contractVersion: string,
 	requestId: string,
 	suggestions: TargetSuggestion_Serialize[],
+};
+
+/**
+ *  A linked acquisition session returned by `target.sessions.list` (spec 023 US2).
+ * 
+ *  Only columns reliably present in `acquisition_session` are surfaced:
+ *  - `id` — row UUID.
+ *  - `session_key` — raw JSON string (matches the `session_key` column, which
+ *    stores the composite key as a JSON object — caller can parse it if needed).
+ *  - `created_at` — RFC 3339 UTC timestamp the row was created.
+ *  - `frame_count` — length of the `frame_ids` JSON array (computed via
+ *    `json_array_length`; 0 for legacy rows with the default `'[]'`).
+ *  - `state` — session lifecycle state string (e.g. `"confirmed"`, `"candidate"`).
+ */
+export type TargetSessionItem = {
+	id: string,
+	/**  Raw JSON object stored in `acquisition_session.session_key`. */
+	sessionKey: string,
+	/**  RFC 3339 UTC creation timestamp. */
+	createdAt: string,
+	/**  Number of frames in `frame_ids` JSON array. */
+	frameCount: number,
+	/**  Lifecycle state (e.g. `"confirmed"`, `"candidate"`, `"needs_review"`). */
+	state: string,
+};
+
+/**  Request for `target.sessions.list` (spec 023 US2). */
+export type TargetSessionsListRequest = {
+	targetId: string,
 };
 
 /**
