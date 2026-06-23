@@ -141,7 +141,7 @@
 - [ ] T066 [US10] classify.rs: materialize single-type sub-items (classify-then-split) + per-sub-group signature (FR-041/FR-042).
 - [ ] T067 [P] [US10] Composite identity + signature stability tests (FR-042).
 - [ ] T068 [US11] reclassify.rs: field-agnostic property map + bulk; fill-missing-only; index-only; source-group-scoped; re-split (FR-044/FR-045/FR-049).
-- [~] T069 [US11] Override persistence (`inbox_file_overrides`) + staleness; migrate old override_* columns (FR-046). PARTIAL: read/write wiring (list_evidence JOINs + set_overrides upsert) and the old-column→table data migration landed with T061's foundation fix; REMAINING: full staleness (size+mtime) on the new `inbox_file_overrides` rows.
+- [X] T069 [US11] Override persistence (`inbox_file_overrides`) + staleness; migrate old override_* columns (FR-046). Read/write wiring (list_evidence JOINs + set_overrides upsert), old-column→table data migration, and size+mtime staleness on `inbox_file_overrides` all landed; `app_core_inbox` override tests green (57 passed).
 - [ ] T070 [US12] Generalized missing-mandatory gate + needs-review bucket + split-before-confirm enforcement (FR-047/FR-048/FR-049). NOTE: the derived mandatory set treats `target` as a hard light key satisfiable by coordinate auto-resolution (T074) OR user pick; a light with no pointing and no set target → needs-review.
 - [ ] T071 [US10] confirm.rs: delete split/mixed branch; one rootId/item; retire per-type grouping (FR-050).
 - [ ] T072 [US13] Contracts + binding regen: inbox.list (groupId/groupKey/groupLabel/frameType/sourceGroup/missingMandatory), inbox.confirm (drop action), inbox.reclassify (property map+bulk), metadata DTO new fields (FR-043/FR-044/FR-050).

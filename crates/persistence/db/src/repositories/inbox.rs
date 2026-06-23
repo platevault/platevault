@@ -483,17 +483,60 @@ pub async fn set_overrides(
     .rows_affected();
 
     // Step 2: look up source_group_id from inbox_items.
-    let source_group_id: Option<String> = sqlx::query_as::<_, (Option<String>,)>(
-        "SELECT source_group_id FROM inbox_items WHERE id = ?",
-    )
-    .bind(inbox_item_id)
-    .fetch_optional(pool)
-    .await?
-    .and_then(|(sg,)| sg);
+    // If the item has no source_group_id yet (e.g. freshly-inserted items that
+    // predate migration 0048, or items created by tests without an explicit
+    // source group), create a minimal source group on-the-fly and link the item
+    // to it. This ensures non-type overrides can always be persisted.
+    let source_group_id: String = {
+        // Read item row: source_group_id, root_id, relative_path, discovered_at.
+        let row: Option<(Option<String>, String, String, String)> = sqlx::query_as(
+            "SELECT source_group_id, root_id, relative_path, discovered_at \
+             FROM inbox_items WHERE id = ?",
+        )
+        .bind(inbox_item_id)
+        .fetch_optional(pool)
+        .await?;
+
+        match row {
+            Some((Some(sg_id), _, _, _)) => sg_id,
+            Some((None, root_id, relative_path, discovered_at)) => {
+                // Auto-create a source group for this item and link it.
+                let new_sg_id = format!("sg-auto-{inbox_item_id}");
+                let now = time::OffsetDateTime::now_utc()
+                    .format(&time::format_description::well_known::Rfc3339)
+                    .unwrap_or_else(|_| "1970-01-01T00:00:00Z".to_owned());
+                sqlx::query(
+                    "INSERT OR IGNORE INTO inbox_source_groups \
+                     (id, root_id, relative_path, discovered_at, last_scanned_at, child_count) \
+                     VALUES (?, ?, ?, ?, ?, 1)",
+                )
+                .bind(&new_sg_id)
+                .bind(&root_id)
+                .bind(&relative_path)
+                .bind(&discovered_at)
+                .bind(&now)
+                .execute(pool)
+                .await?;
+
+                sqlx::query(
+                    "UPDATE inbox_items SET source_group_id = ? WHERE id = ?",
+                )
+                .bind(&new_sg_id)
+                .bind(inbox_item_id)
+                .execute(pool)
+                .await?;
+
+                new_sg_id
+            }
+            // Item not found — rows_affected will be 0; return a placeholder that
+            // won't match any source group so the overrides are silently skipped.
+            None => return Ok(rows > 0),
+        }
+    };
 
     // Step 3: upsert non-type overrides into inbox_file_overrides.
-    // Skip when source_group_id is NULL (legacy plan_open migration path).
-    if let Some(ref sg_id) = source_group_id {
+    if true {
+        let sg_id = &source_group_id;
         let now = time::OffsetDateTime::now_utc()
             .format(&time::format_description::well_known::Rfc3339)
             .unwrap_or_else(|_| "1970-01-01T00:00:00Z".to_owned());
