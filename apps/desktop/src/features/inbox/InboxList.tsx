@@ -21,6 +21,7 @@
 import { useState, useMemo, useCallback } from 'react';
 import type { InboxListItem } from '@/api/commands';
 import { Table, type TableColumn, type TableRow } from '@/ui';
+import { SortHeader } from '@/components';
 import { groupByDimensions, type GroupNode } from './grouping';
 import { ACCESSORS, DIM_LABELS } from './InboxControls';
 import { m } from '@/lib/i18n';
@@ -249,26 +250,15 @@ export function InboxList({
   }, [grouped, tree, collapsed, originalIndexById, filtered]);
 
   // ── Sortable column headers (SessionsTable convention) ──────────────────────
-  const makeSortHeader = (col: InboxSortCol, label: string, ariaLabel: string) => {
-    const active = sort.col === col;
-    return (
-      <button
-        type="button"
-        className={
-          'alm-inbox-sorth' + (active ? ' alm-inbox-sorth--active' : '')
-        }
-        onClick={() => onSort?.(col)}
-        aria-label={ariaLabel}
-      >
-        {label}
-        {active && (
-          <span className="alm-inbox-sorth__arrow" aria-hidden="true">
-            {sort.dir === 'asc' ? '▲' : '▼'}
-          </span>
-        )}
-      </button>
-    );
-  };
+  const makeSortHeader = (col: InboxSortCol, label: string, ariaLabel: string) => (
+    <SortHeader
+      label={label}
+      active={sort.col === col}
+      dir={sort.dir}
+      onClick={() => onSort?.(col)}
+      ariaLabel={ariaLabel}
+    />
+  );
 
   // Build columns with sortable headers.
   const COLUMNS: TableColumn[] = [

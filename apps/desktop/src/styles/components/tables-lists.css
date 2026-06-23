@@ -296,8 +296,11 @@
   padding: var(--alm-sp-1) var(--alm-sp-3);
 }
 
-/* Sortable column header (button-in-th). */
-.alm-sessions-sorth {
+/* Sortable column header (button-in-th) — the SINGLE shared control used by
+ * every list table (Sessions / Calibration / Projects / Targets / Inbox) via
+ * the <SortHeader> component. Do not reintroduce per-feature `*-sorth` classes;
+ * they drifted and left Inbox unstyled. */
+.alm-sorth {
   display: inline-flex;
   align-items: center;
   gap: var(--alm-sp-1);
@@ -311,9 +314,9 @@
   letter-spacing: inherit;
   cursor: pointer;
 }
-.alm-sessions-sorth:hover { color: var(--alm-text); }
-.alm-sessions-sorth--active { color: var(--alm-text); }
-.alm-sessions-sorth__arrow {
+.alm-sorth:hover { color: var(--alm-text); }
+.alm-sorth--active { color: var(--alm-text); }
+.alm-sorth__arrow {
   font-size: var(--alm-text-2xs);
   color: var(--alm-text-muted);
 }

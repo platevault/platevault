@@ -20,6 +20,8 @@ export type {
 } from './FilterToolbar';
 export { ListPageLayout } from './ListPageLayout';
 export type { ListPageLayoutProps } from './ListPageLayout';
+export { SortHeader } from './SortHeader';
+export type { SortHeaderProps } from './SortHeader';
 export { ListSidebar } from './ListSidebar';
 export type { ListSidebarProps } from './ListSidebar';
 export { ListItem } from './ListItem';

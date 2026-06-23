@@ -21,6 +21,7 @@ import { useMemo } from 'react';
 import { AlertTriangle } from 'lucide-react';
 import { m } from '@/lib/i18n';
 import { Table } from '@/ui';
+import { SortHeader } from '@/components';
 import type { TableColumn, TableRow } from '@/ui';
 import { projectStateLabel, projectStateVariant } from '@/lib/lifecycle';
 import { ProjectStatusTag } from './ProjectStatusTag';
@@ -145,21 +146,13 @@ export function ProjectsTable({
     key: c.key,
     className: c.className,
     label: c.sort ? (
-      <button
-        type="button"
-        className={
-          'alm-projects-sorth' + (sort.col === c.sort ? ' alm-projects-sorth--active' : '')
-        }
+      <SortHeader
+        label={c.label}
+        active={sort.col === c.sort}
+        dir={sort.dir}
         onClick={() => onSort(c.sort as ProjectSortCol)}
-        aria-label={m.projects_sort_by_aria({ col: c.label })}
-      >
-        {c.label}
-        {sort.col === c.sort && (
-          <span className="alm-projects-sorth__arrow" aria-hidden="true">
-            {sort.dir === 'asc' ? '▲' : '▼'}
-          </span>
-        )}
-      </button>
+        ariaLabel={m.projects_sort_by_aria({ col: c.label })}
+      />
     ) : (
       c.label
     ),

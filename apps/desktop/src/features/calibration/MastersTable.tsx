@@ -24,6 +24,7 @@
 import { useMemo } from 'react';
 import { Pill, Table, EmptyState } from '@/ui';
 import type { PillVariant, TableColumn, TableRow } from '@/ui';
+import { SortHeader } from '@/components';
 import type { CalibrationMaster_Serialize as CalibrationMaster } from '@/bindings/index';
 import { m } from '@/lib/i18n';
 import {
@@ -324,20 +325,13 @@ export function MastersTable({
     key: c.key,
     className: c.className,
     label: (
-      <button
-        type="button"
-        className={'alm-calib-sorth' + (sort.col === c.sort ? ' alm-calib-sorth--active' : '')}
+      <SortHeader
+        label={c.label}
+        active={sort.col === c.sort}
+        dir={sort.dir}
         onClick={() => onSort(c.sort)}
-        aria-label={m.calibration_sort_by_aria({ col: c.label })}
-      >
-        {c.label}
-        {sort.col === c.sort && (
-          <span className="alm-calib-sorth__arrow" aria-hidden="true">
-            { }
-            {sort.dir === 'asc' ? '▲' : '▼'}
-          </span>
-        )}
-      </button>
+        ariaLabel={m.calibration_sort_by_aria({ col: c.label })}
+      />
     ),
   }));
 

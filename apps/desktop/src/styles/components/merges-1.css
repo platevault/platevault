@@ -310,31 +310,8 @@
   padding: var(--alm-sp-1) var(--alm-sp-3);
 }
 
-/* Sortable column header (button-in-th) — matches .alm-sessions-sorth. */
-.alm-calib-sorth {
-  display: inline-flex;
-  align-items: center;
-  gap: var(--alm-sp-1);
-  background: none;
-  border: none;
-  padding: 0;
-  margin: 0;
-  font: inherit;
-  color: inherit;
-  text-transform: inherit;
-  letter-spacing: inherit;
-  cursor: pointer;
-}
-.alm-calib-sorth:hover {
-  color: var(--alm-text);
-}
-.alm-calib-sorth--active {
-  color: var(--alm-text);
-}
-.alm-calib-sorth__arrow {
-  font-size: var(--alm-text-2xs);
-  color: var(--alm-text-muted);
-}
+/* Sortable column header consolidated into the shared .alm-sorth
+ * (tables-lists.css) — used via the <SortHeader> component. */
 
 /* Kind group header row — spans the table, headlines the kind. */
 .alm-calib-table__group td {
@@ -471,27 +448,8 @@
 }
 .alm-projects-table__dash { color: var(--alm-text-muted); }
 
-/* Sortable column header (button-in-th). */
-.alm-projects-sorth {
-  display: inline-flex;
-  align-items: center;
-  gap: var(--alm-sp-1);
-  background: none;
-  border: none;
-  padding: 0;
-  margin: 0;
-  font: inherit;
-  color: inherit;
-  text-transform: inherit;
-  letter-spacing: inherit;
-  cursor: pointer;
-}
-.alm-projects-sorth:hover { color: var(--alm-text); }
-.alm-projects-sorth--active { color: var(--alm-text); }
-.alm-projects-sorth__arrow {
-  font-size: var(--alm-text-2xs);
-  color: var(--alm-text-muted);
-}
+/* Sortable column header consolidated into the shared .alm-sorth (see
+ * tables-lists.css) — used via the <SortHeader> component. */
 
 /* Empty + footer states. */
 .alm-projects-table__empty {
@@ -623,27 +581,8 @@
 }
 .alm-targets-table tbody td { height: var(--alm-row-height); }
 
-/* Sortable column header (button-in-th). */
-.alm-targets-sorth {
-  display: inline-flex;
-  align-items: center;
-  gap: var(--alm-sp-1);
-  background: none;
-  border: none;
-  padding: 0;
-  margin: 0;
-  font: inherit;
-  color: inherit;
-  text-transform: inherit;
-  letter-spacing: inherit;
-  cursor: pointer;
-}
-.alm-targets-sorth:hover { color: var(--alm-text); }
-.alm-targets-sorth--active { color: var(--alm-text); }
-.alm-targets-sorth__arrow {
-  font-size: var(--alm-text-2xs);
-  color: var(--alm-text-muted);
-}
+/* Sortable column header consolidated into the shared .alm-sorth (see
+ * tables-lists.css) — used via the <SortHeader> component. */
 
 /* Selectable target rows. */
 .alm-targets-table__row { cursor: pointer; }

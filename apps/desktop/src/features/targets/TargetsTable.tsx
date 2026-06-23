@@ -64,6 +64,7 @@ import { useMemo, useRef } from 'react';
 import { useVirtualizer } from '@tanstack/react-virtual';
 import type { TargetListItem } from '@/api/commands';
 import { Pill } from '@/ui';
+import { SortHeader } from '@/components';
 import { catalogueOf, catalogueLabel } from './planner-catalog';
 import { rowAltitudeFor, USABLE_ALT_DEG, type RowAltitude } from './planner-altitude';
 import { AltitudeSparkline } from './AltitudeSparkline';
@@ -465,22 +466,14 @@ export function TargetsTable({
     className: c.className,
     title: c.title,
     header: c.sort ? (
-      <button
-        type="button"
-        className={
-          'alm-targets-sorth' + (sort.col === c.sort ? ' alm-targets-sorth--active' : '')
-        }
+      <SortHeader
+        label={c.label}
+        active={sort.col === c.sort}
+        dir={sort.dir}
         onClick={() => onSort(c.sort as TargetSortCol)}
-        aria-label={m.targets_table_sort_by_aria({ col: c.label })}
+        ariaLabel={m.targets_table_sort_by_aria({ col: c.label })}
         title={c.title}
-      >
-        {c.label}
-        {sort.col === c.sort && (
-          <span className="alm-targets-sorth__arrow" aria-hidden="true">
-            {sort.dir === 'asc' ? '▲' : '▼'}
-          </span>
-        )}
-      </button>
+      />
     ) : (
       c.label
     ),

@@ -17,6 +17,7 @@ import { useMemo, type ReactNode } from 'react';
 import { AlertTriangle } from 'lucide-react';
 import type { InventorySource, InventorySession } from '@/api/commands';
 import { Table, Pill } from '@/ui';
+import { SortHeader } from '@/components';
 import { m } from '@/lib/i18n';
 import type { TableColumn, TableRow } from '@/ui';
 import { sessionStateLabel, sessionStateVariant } from '@/lib/lifecycle';
@@ -173,21 +174,13 @@ export function SessionsTable({
     key: c.key,
     className: c.className,
     label: c.sort ? (
-      <button
-        type="button"
-        className={
-          'alm-sessions-sorth' + (sort.col === c.sort ? ' alm-sessions-sorth--active' : '')
-        }
+      <SortHeader
+        label={c.label}
+        active={sort.col === c.sort}
+        dir={sort.dir}
         onClick={() => onSort(c.sort as SessionSortCol)}
-        aria-label={m.sessions_sort_by_aria({ col: c.label })}
-      >
-        {c.label}
-        {sort.col === c.sort && (
-          <span className="alm-sessions-sorth__arrow" aria-hidden="true">
-            {sort.dir === 'asc' ? '▲' : '▼'}
-          </span>
-        )}
-      </button>
+        ariaLabel={m.sessions_sort_by_aria({ col: c.label })}
+      />
     ) : (
       c.label
     ),
