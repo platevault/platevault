@@ -113,7 +113,7 @@ export function Cleanup({ save }: CleanupProps) {
       <SettingsSection title={m.settings_cleanup_protection_title()}>
         <SettingsRow
           label={m.settings_cleanup_block_delete_label()}
-          info="Routes all destructive operations through archive or trash workflows instead of immediate permanent deletion."
+          info={m.settings_cleanup_route_info()}
         >
           <Toggle
             checked={blockPermanentDelete}
@@ -126,7 +126,7 @@ export function Cleanup({ save }: CleanupProps) {
 
         <SettingsRow
           label={m.settings_cleanup_default_protection_label()}
-          info="Controls the starting protection level assigned to newly ingested sources. Protected sources are skipped by cleanup plans unless explicitly approved."
+          info={m.settings_cleanup_protection_info()}
         >
           <select
             className="alm-select alm-cleanup__protection-select"

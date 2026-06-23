@@ -41,9 +41,10 @@ import {
 
 // ── Constants ────────────────────────────────────────────────────────────────
 
-const TOOL_OPTIONS: RadioOption[] = [
-  { value: 'PixInsight', label: m.setup_tools_pixinsight_name(), desc: 'WBPP, StarAlignment, integration' },
-  { value: 'Siril', label: m.setup_tools_siril_name(), desc: 'Free open-source stacking' },
+// Render-time factory so option labels re-read the active locale (spec 046 #8).
+const toolOptions = (): RadioOption[] => [
+  { value: 'PixInsight', label: m.setup_tools_pixinsight_name(), desc: m.projects_create_tool_pixinsight_desc() },
+  { value: 'Siril', label: m.setup_tools_siril_name(), desc: m.projects_create_tool_siril_desc() },
 ];
 
 // ── Props ────────────────────────────────────────────────────────────────────
@@ -205,7 +206,7 @@ export function CreateProjectDialog({ open, onClose, onSuccess }: CreateProjectD
                   name="tool"
                   render={({ field }) => (
                     <RadioGroup
-                      options={TOOL_OPTIONS}
+                      options={toolOptions()}
                       value={field.value}
                       onChange={(v) => field.onChange(v)}
                       aria-label={m.projects_tool_label()}

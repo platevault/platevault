@@ -33,12 +33,13 @@ import { useHotkeys } from '@/lib/useHotkeys';
 
 // ── Level chip display helpers ────────────────────────────────────────────────
 
-const LEVEL_CHIPS: { value: LevelFilter; label: string }[] = [
-  { value: 'all', label: m.log_level_all() },
-  { value: 'error', label: m.settings_advanced_log_error() },
-  { value: 'warn', label: m.settings_advanced_log_warn() },
-  { value: 'info', label: m.settings_advanced_log_info() },
-  { value: 'debug', label: m.settings_advanced_log_debug() },
+// `label` is a render-time thunk so it re-reads the active locale (spec 046 #8).
+const LEVEL_CHIPS: { value: LevelFilter; label: () => string }[] = [
+  { value: 'all', label: () => m.log_level_all() },
+  { value: 'error', label: () => m.settings_advanced_log_error() },
+  { value: 'warn', label: () => m.settings_advanced_log_warn() },
+  { value: 'info', label: () => m.settings_advanced_log_info() },
+  { value: 'debug', label: () => m.settings_advanced_log_debug() },
 ];
 
 function passesLevelFilter(entryLevel: LogLevel, filter: LevelFilter): boolean {
@@ -265,7 +266,7 @@ export function LogPanel() {
                 onClick={() => setLevelFilter(chip.value)}
                 aria-pressed={levelFilter === chip.value}
               >
-                {chip.label}
+                {chip.label()}
               </button>
             ))}
 

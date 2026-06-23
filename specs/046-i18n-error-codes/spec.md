@@ -204,3 +204,38 @@ same term.
 - A user-facing locale picker / language switcher.
 - Changing error semantics, backend control flow, or when errors are raised.
 - Reworking logging/telemetry infrastructure beyond ensuring codes are recorded.
+
+## Implementation Notes
+
+Documents how the implementation realises the requirements above. Added
+post-implementation; does not change scope.
+
+- **Catalog & plurals.** Messages live in `apps/desktop/messages/en.json`
+  (Paraglide / `@inlang/plugin-message-format`), compiled to type-safe
+  `m.<key>()` accessors. Plurals use inlang **variant** messages
+  (`declarations`/`selectors`/`match` → `Intl.PluralRules`), **not** inline ICU
+  (`{count, plural, …}`), which this plugin does not support. The
+  `alm/no-js-plural` rule blocks JS-side suffix pluralization.
+- **The lint gate is the enforcing mechanism for SC-001/SC-002**, not
+  speckit-verify. `alm/no-user-string` runs at ERROR on `src/**` and in CI
+  (`pnpm --filter @astro-plan/desktop run lint:eslint`). It catches: JSX text,
+  user-facing attributes, toast args, object-label keys
+  (`label`/`title`/`desc`/`description`/`heading`/`subtitle`/`body`/…),
+  attribute & child ternaries, `??`/`||` literal fallbacks, template literals,
+  and — via limited single-function data-flow — user strings **assigned to a
+  variable and then rendered** (gated by a machine-token/prose heuristic to
+  avoid flagging enum values). `eslint-plugin-jsx-a11y` is enforced at ERROR.
+- **Render-time thunks (locale re-read).** Module-level config objects whose
+  labels call `m.*()` evaluate once at import, freezing the locale. Such configs
+  expose labels as render-time thunks (`label: () => m.key()`, called
+  `x.label()`); shared option-array configs (`FilterOption[]`, `RadioOption[]`)
+  use render-time **factories** instead of changing the shared type. This is
+  structural multilingual-readiness only — the app is English-pinned (no
+  switcher; see Out of Scope), so there is no runtime behaviour change today.
+- **Known eager exceptions.** Zod schema messages (`features/projects/schemas.ts`)
+  and the zustand guided-tour store (`features/guided/store.ts`) remain eager —
+  they are constructed at module load and would need a different mechanism
+  (custom error map / store restructure), deferred to the multilingual work.
+- **Wireframe-stub strings** in the project-create wizard (`StepCalibration`,
+  `StepReview`) are mock illustrative data, not real copy; tracked for
+  replacement + de-mocking in issue #327.

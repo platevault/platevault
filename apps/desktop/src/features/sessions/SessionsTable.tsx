@@ -93,15 +93,16 @@ function compareSessions(a: InventorySession, b: InventorySession, sort: Session
 
 // ── Column model ────────────────────────────────────────────────────────────────
 
-const COLUMNS: Array<{ key: string; label: string; sort?: SessionSortCol; className?: string }> = [
-  { key: 'target', label: m.projects_create_target_label(), sort: 'target' },
-  { key: 'filter', label: m.common_filter(), sort: 'filter' },
-  { key: 'frames', label: m.projects_wizard_col_frames(), sort: 'frames', className: 'alm-sessions-cell--num' },
-  { key: 'integration', label: m.projects_wizard_col_integration(), sort: 'exposure', className: 'alm-sessions-cell--mono' },
-  { key: 'night', label: m.sessions_col_night(), sort: 'night', className: 'alm-sessions-cell--mono' },
-  { key: 'camera', label: m.settings_calmatch_camera(), sort: 'camera', className: 'alm-sessions-cell--muted' },
-  { key: 'state', label: m.sessions_col_state(), sort: 'state' },
-  { key: 'projects', label: m.common_projects() },
+// `label` is a render-time thunk so headers re-read the active locale (spec 046 #8).
+const COLUMNS: Array<{ key: string; label: () => string; sort?: SessionSortCol; className?: string }> = [
+  { key: 'target', label: () => m.projects_create_target_label(), sort: 'target' },
+  { key: 'filter', label: () => m.common_filter(), sort: 'filter' },
+  { key: 'frames', label: () => m.projects_wizard_col_frames(), sort: 'frames', className: 'alm-sessions-cell--num' },
+  { key: 'integration', label: () => m.projects_wizard_col_integration(), sort: 'exposure', className: 'alm-sessions-cell--mono' },
+  { key: 'night', label: () => m.sessions_col_night(), sort: 'night', className: 'alm-sessions-cell--mono' },
+  { key: 'camera', label: () => m.settings_calmatch_camera(), sort: 'camera', className: 'alm-sessions-cell--muted' },
+  { key: 'state', label: () => m.sessions_col_state(), sort: 'state' },
+  { key: 'projects', label: () => m.common_projects() },
 ];
 
 const EMPTY_CELLS = {
@@ -175,14 +176,14 @@ export function SessionsTable({
     className: c.className,
     label: c.sort ? (
       <SortHeader
-        label={c.label}
+        label={c.label()}
         active={sort.col === c.sort}
         dir={sort.dir}
         onClick={() => onSort(c.sort as SessionSortCol)}
-        ariaLabel={m.sessions_sort_by_aria({ col: c.label })}
+        ariaLabel={m.sessions_sort_by_aria({ col: c.label() })}
       />
     ) : (
-      c.label
+      c.label()
     ),
   }));
 

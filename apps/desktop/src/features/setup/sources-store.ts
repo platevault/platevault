@@ -19,11 +19,12 @@ export const ALL_SOURCE_KINDS: SourceKind[] = [
   'inbox',
 ];
 
-export const SOURCE_KIND_LABELS: Record<SourceKind, string> = {
-  light_frames: m.setup_kind_light_frames(),
-  calibration: m.setup_kind_calibration(),
-  project: m.common_projects(),
-  inbox: m.settings_datasources_category_inbox(),
+// Values are render-time thunks so labels re-read the active locale (spec 046 #8).
+export const SOURCE_KIND_LABELS: Record<SourceKind, () => string> = {
+  light_frames: () => m.setup_kind_light_frames(),
+  calibration: () => m.setup_kind_calibration(),
+  project: () => m.common_projects(),
+  inbox: () => m.settings_datasources_category_inbox(),
 };
 
 // spec 039: inbox is now optional — users do not need a dedicated drop folder

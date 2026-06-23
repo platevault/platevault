@@ -84,13 +84,14 @@ export const PROJECT_ACCESSORS: Readonly<Record<string, DimensionAccessor<Projec
 
 // ── Column model ────────────────────────────────────────────────────────────────
 
-const COLUMNS: Array<{ key: string; label: string; sort?: ProjectSortCol; className?: string }> = [
-  { key: 'name', label: m.projects_col_name(), sort: 'name' },
-  { key: 'tool', label: m.projects_col_tool(), sort: 'tool', className: 'alm-projects-table__cell--muted' },
-  { key: 'target', label: m.projects_create_target_label(), className: 'alm-projects-table__cell--muted' },
-  { key: 'state', label: m.sessions_col_state(), sort: 'state' },
-  { key: 'sources', label: m.common_sources(), sort: 'sources', className: 'alm-projects-table__cell--num' },
-  { key: 'updated', label: m.projects_stepper_updated(), sort: 'updated', className: 'alm-projects-table__cell--mono' },
+// `label` is a render-time thunk so headers re-read the active locale (spec 046 #8).
+const COLUMNS: Array<{ key: string; label: () => string; sort?: ProjectSortCol; className?: string }> = [
+  { key: 'name', label: () => m.projects_col_name(), sort: 'name' },
+  { key: 'tool', label: () => m.projects_col_tool(), sort: 'tool', className: 'alm-projects-table__cell--muted' },
+  { key: 'target', label: () => m.projects_create_target_label(), className: 'alm-projects-table__cell--muted' },
+  { key: 'state', label: () => m.sessions_col_state(), sort: 'state' },
+  { key: 'sources', label: () => m.common_sources(), sort: 'sources', className: 'alm-projects-table__cell--num' },
+  { key: 'updated', label: () => m.projects_stepper_updated(), sort: 'updated', className: 'alm-projects-table__cell--mono' },
 ];
 
 // ── Props ───────────────────────────────────────────────────────────────────
@@ -147,14 +148,14 @@ export function ProjectsTable({
     className: c.className,
     label: c.sort ? (
       <SortHeader
-        label={c.label}
+        label={c.label()}
         active={sort.col === c.sort}
         dir={sort.dir}
         onClick={() => onSort(c.sort as ProjectSortCol)}
-        ariaLabel={m.projects_sort_by_aria({ col: c.label })}
+        ariaLabel={m.projects_sort_by_aria({ col: c.label() })}
       />
     ) : (
-      c.label
+      c.label()
     ),
   }));
 

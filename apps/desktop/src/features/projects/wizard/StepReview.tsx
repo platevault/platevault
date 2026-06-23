@@ -22,6 +22,7 @@ const PLAN_ITEMS: PlanRowItem[] = [
   { action: 'junction', destination: '…/wbpp_input/lights/Ha_300s_0002.fit', source: 'D:\\…\\Raw\\…\\Ha_300s_0002.fit' },
 ];
 
+// eslint-disable-next-line alm/no-user-string -- illustrative wireframe preview (mock plan data), not real UI copy; see issue #327
 const TRUNCATION_LABEL = '… 120 more junctions (118 lights + 4 masters)';
 
 const FINAL_ITEM: PlanRowItem = {
@@ -32,6 +33,7 @@ const FINAL_ITEM: PlanRowItem = {
 
 // ── Disk tree (matches wireframe <pre>) ─────────────────────────────────────
 
+// eslint-disable-next-line alm/no-user-string -- illustrative ASCII directory-tree wireframe (mock), not translatable copy; see issue #327
 const DISK_TREE = `NGC7000_HOO/
 ├── .alm/
 │   ├── project.json
