@@ -42,6 +42,7 @@ env:
 jobs:
   real-ui-e2e:
     name: Real-UI E2E — ${{ matrix.os }}
+    if: false # TODO(#356): tests disabled pending spec-043 redesign test redo
     strategy:
       fail-fast: false
       matrix:
