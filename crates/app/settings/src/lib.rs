@@ -37,6 +37,9 @@ use sqlx::SqlitePool;
 // value validation are all derived from that single table.
 mod descriptors;
 
+// ── Settings schema migration harness (spec 018 US5, T030 / T031) ────────────
+pub mod migrate;
+
 // ── Error mapping ──────────────────────────────────────────────────────────
 //
 // Canonical mappers live in `app_core_errors` (US11 T142). `db_err` now routes
@@ -160,6 +163,20 @@ pub fn validate_value(key: &str, value: &Value) -> Result<(), ContractError> {
         _ if is_tools_bundle_id_key(key) => {
             if !value.is_null() && !value.is_string() {
                 return Err(invalid("must be a string or null"));
+            }
+            // Validate that the tool_id references a known seeded ToolProfile.
+            // Extract tool_id from "tools.<tool_id>.bundle_id".
+            if let Some(tool_id) =
+                key.strip_prefix("tools.").and_then(|r| r.strip_suffix(".bundle_id"))
+            {
+                if workflow_profiles::seed::find(tool_id).is_none() {
+                    return Err(ContractError::new(
+                        ErrorCode::KeyUnknown,
+                        format!("unknown tool id: {tool_id}"),
+                        ErrorSeverity::Warning,
+                        false,
+                    ));
+                }
             }
         }
         _ if is_tools_executable_path_key(key) => {
@@ -388,6 +405,16 @@ fn apply_value_to_state(key: &str, value: Value, state: &mut SettingsState) {
                 state.patterns_by_type = v;
             }
         }
+        "toolWatchExtensions" => {
+            if let Ok(v) = serde_json::from_value(value) {
+                state.tool_watch_extensions = v;
+            }
+        }
+        "toolAttributionWindowHours" => {
+            if let Some(v) = value.as_f64() {
+                state.tool_attribution_window_hours = v;
+            }
+        }
         _ => {
             // Structured-path keys are not mapped to static SettingsState fields.
             // Use resolve_setting(key, source_id) to read them individually.
@@ -442,6 +469,12 @@ fn default_value_for_key(key: &str) -> Value {
         // Read-side falls back to per-type defaults, so the stored default is an
         // empty object (no explicit overrides).
         "patternsByType" => Value::Object(serde_json::Map::new()),
+        "toolWatchExtensions" => {
+            serde_json::to_value(&defaults.tool_watch_extensions).unwrap_or(Value::Null)
+        }
+        "toolAttributionWindowHours" => {
+            serde_json::json!(defaults.tool_attribution_window_hours)
+        }
         _ => Value::Null,
     }
 }

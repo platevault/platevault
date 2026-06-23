@@ -16,7 +16,9 @@ patterns = { path = "../../patterns" }
 persistence_db = { path = "../../persistence/db" }
 serde_json.workspace = true
 sqlx.workspace = true
+thiserror.workspace = true
 uuid = { workspace = true }
+workflow_profiles = { path = "../../workflow/profiles" }
 
 [features]
 # Developer-mode surface (spec 021). Gates the `devMode` settings key; release

@@ -8,7 +8,9 @@ import { getSettings } from '@/api/commands';
 import { getGuidedState, restartGuidedFlow, type GuidedFlowStateDto } from '@/features/guided/store';
 import { STEP_ORDER } from '@/features/guided/store';
 import { m } from '@/lib/i18n';
-import { SettingsSection, SettingsRow } from './SettingsKit';
+import { SettingsSection, SettingsRow, RestoreDefaultsBtn } from './SettingsKit';
+
+const ADVANCED_KEYS = ['logLevel', 'rememberFollowLogs', 'devMode'];
 
 interface AdvancedProps {
   save: (scope: string, values: Record<string, unknown>) => void;
@@ -21,16 +23,19 @@ export function Advanced({ save }: AdvancedProps) {
   const [guidedState, setGuidedState] = useState<GuidedFlowStateDto | null>(null);
   const [guidedRestarting, setGuidedRestarting] = useState(false);
 
+  const applyValues = (vals: Record<string, unknown>) => {
+    if (vals?.logLevel && typeof vals.logLevel === 'string') {
+      setLogLevel(vals.logLevel as LogLevel);
+    }
+  };
+
   // Load persisted logLevel from backend on mount (T015).
   useEffect(() => {
     let cancelled = false;
     getSettings({ scope: 'advanced' })
       .then((data) => {
         if (cancelled) return;
-        const vals = data.values as Record<string, unknown>;
-        if (vals?.logLevel && typeof vals.logLevel === 'string') {
-          setLogLevel(vals.logLevel as LogLevel);
-        }
+        applyValues(data.values as Record<string, unknown>);
       })
       .catch(() => {
         // Backend unavailable — stay with in-code default.
@@ -38,6 +43,7 @@ export function Advanced({ save }: AdvancedProps) {
     return () => {
       cancelled = true;
     };
+  // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
   // Load guided flow state on mount (spec 010, T042).
@@ -89,7 +95,16 @@ export function Advanced({ save }: AdvancedProps) {
       </SettingsSection>
 
       {/* Log level — persisted via spec 018 settings backend */}
-      <SettingsSection title={m.settings_advanced_log_title()}>
+      <SettingsSection
+        title={m.settings_advanced_log_title()}
+        action={
+          <RestoreDefaultsBtn
+            scope="advanced"
+            keys={ADVANCED_KEYS}
+            onRestored={applyValues}
+          />
+        }
+      >
         <SettingsRow
           label={m.settings_advanced_log_level()}
           info="Controls application log verbosity. Debug emits diagnostic detail; Info is the default; Warn and Error progressively quieter."

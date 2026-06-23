@@ -9,7 +9,7 @@ mod support;
 
 use app_core::log_stream::{self, RecentOptions};
 use app_core::settings;
-use audit::event_bus::TOPIC_SETTINGS_CHANGED;
+use audit::event_bus::{TOPIC_SETTINGS_CHANGED, TOPIC_SETTINGS_SNAPSHOT};
 use contracts_core::settings::{
     RestoreDefaultsRequest, RestoreDefaultsStatus, SettingsUpdateRequest, SettingsUpdateStatus,
 };
@@ -138,6 +138,106 @@ async fn restore_defaults_reverts_to_default_value() {
     assert_eq!(
         get2.settings.row_density, "dense",
         "rowDensity should revert to 'dense' (in-code default) after restore_defaults"
+    );
+}
+
+// ── T017: noisy key suppression + emit_snapshot ───────────────────────────────
+
+/// Updating a **noisy** key (e.g. `protectedCategories`) must NOT emit a
+/// per-change `settings.changed` audit event, while updating a **non-noisy**
+/// key (e.g. `logLevel`) must emit one.  Separately, `emit_snapshot` must
+/// publish a `settings.snapshot` event.
+#[tokio::test]
+async fn noisy_key_update_does_not_emit_changed_event_non_noisy_does() {
+    let (db, _repo, bus) = support::setup().await;
+    let pool = db.pool();
+
+    // ── non-noisy key: logLevel ───────────────────────────────────────────
+    let before_non_noisy: (i64,) =
+        sqlx::query_as("SELECT COUNT(*) FROM events WHERE topic = ?")
+            .bind(TOPIC_SETTINGS_CHANGED)
+            .fetch_one(pool)
+            .await
+            .expect("count query");
+
+    let req_non_noisy = SettingsUpdateRequest {
+        key: "logLevel".to_owned(),
+        value: JsonAny::from(serde_json::json!("warn")),
+    };
+    let resp_non_noisy = settings::update_setting(pool, &bus, &req_non_noisy)
+        .await
+        .expect("update logLevel");
+    assert_eq!(resp_non_noisy.status, SettingsUpdateStatus::Success);
+    // Non-noisy: audit_id must be present.
+    assert!(
+        resp_non_noisy.audit_id.is_some(),
+        "non-noisy key update must return an audit_id"
+    );
+
+    let after_non_noisy: (i64,) =
+        sqlx::query_as("SELECT COUNT(*) FROM events WHERE topic = ?")
+            .bind(TOPIC_SETTINGS_CHANGED)
+            .fetch_one(pool)
+            .await
+            .expect("count query");
+    assert_eq!(
+        after_non_noisy.0,
+        before_non_noisy.0 + 1,
+        "non-noisy logLevel update must emit exactly one settings.changed event"
+    );
+
+    // ── noisy key: protectedCategories ───────────────────────────────────
+    let before_noisy: (i64,) = sqlx::query_as("SELECT COUNT(*) FROM events WHERE topic = ?")
+        .bind(TOPIC_SETTINGS_CHANGED)
+        .fetch_one(pool)
+        .await
+        .expect("count query");
+
+    let req_noisy = SettingsUpdateRequest {
+        key: "protectedCategories".to_owned(),
+        value: JsonAny::from(serde_json::json!(["lights", "masters", "finals", "raw"])),
+    };
+    let resp_noisy = settings::update_setting(pool, &bus, &req_noisy)
+        .await
+        .expect("update protectedCategories");
+    assert_eq!(resp_noisy.status, SettingsUpdateStatus::Success);
+    // Noisy: audit_id must be absent.
+    assert!(
+        resp_noisy.audit_id.is_none(),
+        "noisy key update must NOT return an audit_id"
+    );
+
+    let after_noisy: (i64,) = sqlx::query_as("SELECT COUNT(*) FROM events WHERE topic = ?")
+        .bind(TOPIC_SETTINGS_CHANGED)
+        .fetch_one(pool)
+        .await
+        .expect("count query");
+    assert_eq!(
+        after_noisy.0,
+        before_noisy.0,
+        "noisy protectedCategories update must NOT emit a settings.changed event"
+    );
+
+    // ── emit_snapshot publishes settings.snapshot ─────────────────────────
+    let before_snap: (i64,) = sqlx::query_as("SELECT COUNT(*) FROM events WHERE topic = ?")
+        .bind(TOPIC_SETTINGS_SNAPSHOT)
+        .fetch_one(pool)
+        .await
+        .expect("snapshot count query");
+
+    settings::emit_snapshot(pool, &bus, "test")
+        .await
+        .expect("emit_snapshot must not error");
+
+    let after_snap: (i64,) = sqlx::query_as("SELECT COUNT(*) FROM events WHERE topic = ?")
+        .bind(TOPIC_SETTINGS_SNAPSHOT)
+        .fetch_one(pool)
+        .await
+        .expect("snapshot count query");
+    assert_eq!(
+        after_snap.0,
+        before_snap.0 + 1,
+        "emit_snapshot must persist exactly one settings.snapshot event"
     );
 }
 

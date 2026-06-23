@@ -254,6 +254,19 @@ pub(crate) const DESCRIPTORS: &[Descriptor] = &[
         overridable: false,
         validation: ValidationRule::PatternsByType,
     },
+    // ── Tool watch / attribution (spec 018 T043) ─────────────────────────
+    Descriptor {
+        key: "toolWatchExtensions",
+        noisy: false,
+        overridable: false,
+        validation: ValidationRule::Array,
+    },
+    Descriptor {
+        key: "toolAttributionWindowHours",
+        noisy: false,
+        overridable: false,
+        validation: ValidationRule::NumberMinZero,
+    },
 ];
 
 /// Look up the descriptor for a stable key, if any.
