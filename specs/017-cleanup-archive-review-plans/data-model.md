@@ -26,7 +26,7 @@ A reviewable proposed set of filesystem operations.
 | `itemsCancelled`          | integer                                   | cancelled so far (A3) |
 | `itemsPending`            | integer                                   | still pending |
 | `totalBytesRequired`      | integer                                   | pre-flight space estimate in bytes (A4) |
-| `destructiveDestination`  | enum: `archive` \| `os_trash`             | per-plan destination for destructive items, default `archive` (R-Trash-1) |
+| `destructiveDestination`  | enum: `archive` \| `trash`                | per-plan destination for destructive items, default `archive` (R-Trash-1). Canonical vocab per spec 033 / migration 0040 (`os_trash` was the pre-0040 token) |
 | `type`                    | enum: `split` \| `restructure` \| `cleanup` \| `archive` \| `source_map` | execution shape |
 | `parentPlanId`            | string (uuid, optional)                   | set on retry plans; references the terminal parent |
 | `discardedAt`             | timestamp (ISO 8601, optional)            | set when state transitions to `discarded` (A5) |
@@ -126,7 +126,7 @@ mutating the failed plan in place.
 - `totalBytesRequired` is computed at plan generation by summing source file
   sizes for copy/archive operations; stored on the plan row and surfaced in
   the review surface for user visibility (A4).
-- `destructiveDestination` defaults to `archive`; switching to `os_trash`
+- `destructiveDestination` defaults to `archive`; switching to `trash`
   before approval directs the apply executor to use the OS-native recycle
   bin API (R-Trash-1).
 - Destructive `PlanItem` rows include `archivePath` (computed as
