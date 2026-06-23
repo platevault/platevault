@@ -185,6 +185,101 @@ pub struct InboxPlanLinkRow {
     pub linked_at: String,
 }
 
+// ── SourceGroup CRUD ──────────────────────────────────────────────────────────
+
+/// Flat row from the `inbox_source_groups` table (spec 041, migration 0048).
+#[derive(Clone, Debug, Serialize, Deserialize, sqlx::FromRow)]
+pub struct InboxSourceGroupRow {
+    pub id: String,
+    pub root_id: String,
+    pub relative_path: String,
+    pub discovered_at: String,
+    pub last_scanned_at: String,
+    pub content_signature: Option<String>,
+    pub format: Option<String>,
+    pub lane: Option<String>,
+    pub child_count: i64,
+}
+
+/// Data required to upsert one `inbox_source_groups` row at scan time.
+///
+/// On first discovery the row is inserted; on rescan `last_scanned_at` and
+/// `content_signature` are refreshed via `ON CONFLICT … DO UPDATE`.
+/// `discovered_at` and `child_count` are preserved on conflict so repeated
+/// scans do not reset the discovery timestamp or lose the classify-written
+/// child_count.
+#[derive(Clone, Debug)]
+pub struct UpsertSourceGroup<'a> {
+    pub id: &'a str,
+    pub root_id: &'a str,
+    pub relative_path: &'a str,
+    pub content_signature: Option<&'a str>,
+    /// Dominant file format: `"fits"` | `"xisf"` | `"video"` | `"mixed"`.
+    pub format: Option<&'a str>,
+    /// Move-vs-catalogue lane: `"move"` (unorganized) or `"catalogue"` (organized).
+    pub lane: Option<&'a str>,
+}
+
+/// Upsert one `inbox_source_groups` row (spec 041 T065, R-10/R-12).
+///
+/// INSERT on first scan; on rescan updates `last_scanned_at` and
+/// `content_signature` only — preserves `discovered_at` and `child_count`.
+///
+/// # Errors
+/// Returns [`DbError::Database`] on constraint or connection failure.
+pub async fn upsert_inbox_source_group(
+    pool: &SqlitePool,
+    group: &UpsertSourceGroup<'_>,
+) -> DbResult<()> {
+    let now = Timestamp::now_iso();
+    sqlx::query(
+        "INSERT INTO inbox_source_groups
+            (id, root_id, relative_path, discovered_at, last_scanned_at,
+             content_signature, format, lane, child_count)
+         VALUES (?, ?, ?, ?, ?, ?, ?, ?, 0)
+         ON CONFLICT(root_id, relative_path) DO UPDATE SET
+             last_scanned_at   = excluded.last_scanned_at,
+             content_signature = excluded.content_signature,
+             format            = excluded.format,
+             lane              = excluded.lane",
+    )
+    .bind(group.id)
+    .bind(group.root_id)
+    .bind(group.relative_path)
+    .bind(&now)
+    .bind(&now)
+    .bind(group.content_signature)
+    .bind(group.format)
+    .bind(group.lane)
+    .execute(pool)
+    .await?;
+    Ok(())
+}
+
+/// Fetch one `inbox_source_groups` row by `(root_id, relative_path)`.
+///
+/// Returns `None` when no matching row exists.
+///
+/// # Errors
+/// Returns [`DbError::Database`] on connection failure.
+pub async fn get_inbox_source_group_by_path(
+    pool: &SqlitePool,
+    root_id: &str,
+    relative_path: &str,
+) -> DbResult<Option<InboxSourceGroupRow>> {
+    let row = sqlx::query_as::<_, InboxSourceGroupRow>(
+        "SELECT id, root_id, relative_path, discovered_at, last_scanned_at,
+                content_signature, format, lane, child_count
+         FROM inbox_source_groups
+         WHERE root_id = ? AND relative_path = ?",
+    )
+    .bind(root_id)
+    .bind(relative_path)
+    .fetch_optional(pool)
+    .await?;
+    Ok(row)
+}
+
 // ── InboxItem CRUD ────────────────────────────────────────────────────────────
 
 /// Insert a new inbox item in `pending_classification` state.
@@ -1960,5 +2055,169 @@ mod tests {
         assert_eq!(dark.image_count, 1, "dark image_count");
         assert_eq!(dark.master_count, 1, "dark master_count");
         assert_eq!(dark.folder_count, 2, "dark folder_count");
+    }
+
+    // ── Source-group upsert tests (T065) ──────────────────────────────────────
+
+    /// First scan inserts the source group row with the expected fields.
+    #[tokio::test]
+    async fn upsert_source_group_inserts_on_first_scan() {
+        let db = test_db().await;
+        let pool = db.pool();
+
+        upsert_inbox_source_group(
+            pool,
+            &UpsertSourceGroup {
+                id: "sg-t065-1",
+                root_id: "root-1",
+                relative_path: "2025-10-10/lights",
+                content_signature: Some("sig-abc123"),
+                format: Some("fits"),
+                lane: Some("move"),
+            },
+        )
+        .await
+        .unwrap();
+
+        let row = get_inbox_source_group_by_path(pool, "root-1", "2025-10-10/lights")
+            .await
+            .unwrap()
+            .expect("source group must exist after upsert");
+
+        assert_eq!(row.id, "sg-t065-1");
+        assert_eq!(row.root_id, "root-1");
+        assert_eq!(row.relative_path, "2025-10-10/lights");
+        assert_eq!(row.content_signature.as_deref(), Some("sig-abc123"));
+        assert_eq!(row.format.as_deref(), Some("fits"));
+        assert_eq!(row.lane.as_deref(), Some("move"));
+        assert_eq!(row.child_count, 0, "child_count starts at 0 (classify sets it)");
+    }
+
+    /// Rescan refreshes last_scanned_at and content_signature without duplicating the row.
+    #[tokio::test]
+    async fn upsert_source_group_rescan_refreshes_without_duplicate() {
+        let db = test_db().await;
+        let pool = db.pool();
+
+        // First scan.
+        upsert_inbox_source_group(
+            pool,
+            &UpsertSourceGroup {
+                id: "sg-t065-2",
+                root_id: "root-2",
+                relative_path: "2025-11-01/darks",
+                content_signature: Some("sig-old"),
+                format: Some("fits"),
+                lane: Some("catalogue"),
+            },
+        )
+        .await
+        .unwrap();
+
+        let first = get_inbox_source_group_by_path(pool, "root-2", "2025-11-01/darks")
+            .await
+            .unwrap()
+            .unwrap();
+
+        // Record discovered_at so we can verify it is preserved on rescan.
+        let discovered_at_first = first.discovered_at.clone();
+
+        // Rescan: same (root_id, relative_path), new signature.
+        upsert_inbox_source_group(
+            pool,
+            &UpsertSourceGroup {
+                id: "sg-t065-2-ignored", // id ignored on conflict; original preserved
+                root_id: "root-2",
+                relative_path: "2025-11-01/darks",
+                content_signature: Some("sig-new"),
+                format: Some("fits"),
+                lane: Some("catalogue"),
+            },
+        )
+        .await
+        .unwrap();
+
+        let second = get_inbox_source_group_by_path(pool, "root-2", "2025-11-01/darks")
+            .await
+            .unwrap()
+            .unwrap();
+
+        // Row count is still 1 (not duplicated).
+        let count: (i64,) = sqlx::query_as(
+            "SELECT COUNT(*) FROM inbox_source_groups WHERE root_id = 'root-2' AND relative_path = '2025-11-01/darks'",
+        )
+        .fetch_one(pool)
+        .await
+        .unwrap();
+        assert_eq!(count.0, 1, "rescan must not duplicate the source group row");
+
+        // content_signature updated.
+        assert_eq!(second.content_signature.as_deref(), Some("sig-new"));
+
+        // discovered_at preserved.
+        assert_eq!(second.discovered_at, discovered_at_first);
+
+        // child_count still 0 (classify hasn't run).
+        assert_eq!(second.child_count, 0);
+    }
+
+    /// Two distinct leaf folders under the same root produce two source group rows.
+    #[tokio::test]
+    async fn upsert_source_group_two_leaf_folders_produce_two_rows() {
+        let db = test_db().await;
+        let pool = db.pool();
+
+        for (id, path) in [("sg-t065-a", "session/lights"), ("sg-t065-b", "session/darks")] {
+            upsert_inbox_source_group(
+                pool,
+                &UpsertSourceGroup {
+                    id,
+                    root_id: "root-multi",
+                    relative_path: path,
+                    content_signature: Some("sig"),
+                    format: Some("fits"),
+                    lane: Some("move"),
+                },
+            )
+            .await
+            .unwrap();
+        }
+
+        let count: (i64,) =
+            sqlx::query_as("SELECT COUNT(*) FROM inbox_source_groups WHERE root_id = 'root-multi'")
+                .fetch_one(pool)
+                .await
+                .unwrap();
+        assert_eq!(count.0, 2, "each leaf folder is a distinct source group row");
+    }
+
+    /// Video-lane leaf folder is stored with lane = "move" (video sources are never
+    /// catalogue-in-place).  Format field carries "video".
+    #[tokio::test]
+    async fn upsert_source_group_video_lane_stored() {
+        let db = test_db().await;
+        let pool = db.pool();
+
+        upsert_inbox_source_group(
+            pool,
+            &UpsertSourceGroup {
+                id: "sg-t065-vid",
+                root_id: "root-vid",
+                relative_path: "planetary/jupiter",
+                content_signature: None,
+                format: Some("video"),
+                lane: Some("move"),
+            },
+        )
+        .await
+        .unwrap();
+
+        let row = get_inbox_source_group_by_path(pool, "root-vid", "planetary/jupiter")
+            .await
+            .unwrap()
+            .expect("video source group must be persisted");
+
+        assert_eq!(row.format.as_deref(), Some("video"));
+        assert_eq!(row.lane.as_deref(), Some("move"));
     }
 }

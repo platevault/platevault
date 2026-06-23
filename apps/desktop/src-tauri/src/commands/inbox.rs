@@ -26,8 +26,11 @@ use contracts_core::inbox::{
 };
 use contracts_core::plan_apply::PlanApplyResponse;
 use contracts_core::ContractError;
+use domain_core::first_run::OrganizationState;
+use persistence_db::repositories::first_run::get_source_organization_state;
 use persistence_db::repositories::inbox::{
-    grouping_keys_for_items, list_unacknowledged_across_roots,
+    grouping_keys_for_items, list_unacknowledged_across_roots, upsert_inbox_source_group,
+    UpsertSourceGroup,
 };
 use sqlx::SqlitePool;
 use std::path::PathBuf;
@@ -219,9 +222,41 @@ pub async fn inbox_scan_folder(
     let opts = ScanOptions { follow_symlinks: req.follow_symlinks };
     let scanned = scan_root(&root_path, &opts).map_err(ContractError::internal)?;
 
+    // Derive the move-vs-catalogue lane for source groups from the root's
+    // organization_state (spec 041 R-12, data-model §lane column).
+    // organized → "catalogue" (files are already in place; no move needed).
+    // unorganized / unknown → "move" (default for inbox sources).
+    let org_state = get_source_organization_state(&*pool, &req.root_id)
+        .await
+        .map_err(|e| ContractError::internal(e.to_string()))?;
+    let group_lane = match org_state {
+        Some(OrganizationState::Organized) => "catalogue",
+        _ => "move",
+    };
+
     let mut items: Vec<InboxItemSummary> = Vec::new();
 
     for scanned_item in &scanned {
+        // ── Source-group upsert (T065, R-10/R-12) ────────────────────────────
+        //
+        // One `inbox_source_groups` row per leaf folder — written at scan time,
+        // refreshed on rescan. child_count stays 0 here; classify (T066) sets it.
+        // No per-file header reads; reuses the cheap folder content_signature
+        // already computed by scan_root (Constitution §I, lazy hashing).
+        let sg_id = Uuid::new_v4().to_string();
+        upsert_inbox_source_group(
+            &*pool,
+            &UpsertSourceGroup {
+                id: &sg_id,
+                root_id: &req.root_id,
+                relative_path: &scanned_item.relative_path,
+                content_signature: Some(&scanned_item.content_signature),
+                format: Some(scanned_item.format.as_str()),
+                lane: Some(group_lane),
+            },
+        )
+        .await
+        .map_err(|e| ContractError::internal(e.to_string()))?;
         // ── A. Individual rows for detected calibration masters ────────────────
         for master in &scanned_item.masters {
             if let Some(summary) =
