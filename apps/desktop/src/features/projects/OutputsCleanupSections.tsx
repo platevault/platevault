@@ -131,8 +131,7 @@ export function CleanupPreviewSection({ preview, defaultOpen = true }: CleanupPr
           {preview ? (
             // STUB: this branch is currently unreachable (preview is always
             // undefined). Kept so wiring is trivial once the backend lands.
-            // eslint-disable-next-line alm/no-user-string -- lone plural suffix in unreachable STUB copy pending backend preview model
-            <span className="alm-project-detail__cleanup-note">{`Cleanup would review ${preview.candidateCount} candidate${preview.candidateCount === 1 ? '' : 's'} for archive or trash. Nothing is removed without explicit plan approval.`}</span>
+            <span className="alm-project-detail__cleanup-note">{m.projects_cleanup_candidate_count({ count: preview.candidateCount })}</span>
           ) : (
             <span className="alm-project-detail__cleanup-note">
               {m.projects_cleanup_no_preview()}

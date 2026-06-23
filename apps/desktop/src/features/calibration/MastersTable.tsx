@@ -124,12 +124,12 @@ function cameraCell(m: CalibrationMaster): string {
  * `usedBySessionIds` / `usedByProjectIds`. Renders "3 sessions · 1 project",
  * collapsing to the non-zero parts, or "unused" when nothing references it.
  */
-function usageSummary(m: CalibrationMaster): string {
-  const sessions = (m.usedBySessionIds ?? []).length;
-  const projects = (m.usedByProjectIds ?? []).length;
+function usageSummary(master: CalibrationMaster): string {
+  const sessions = (master.usedBySessionIds ?? []).length;
+  const projects = (master.usedByProjectIds ?? []).length;
   const parts: string[] = [];
-  if (sessions > 0) parts.push(`${sessions} session${sessions === 1 ? '' : 's'}`);
-  if (projects > 0) parts.push(`${projects} project${projects === 1 ? '' : 's'}`);
+  if (sessions > 0) parts.push(m.calibration_usage_sessions({ count: sessions }));
+  if (projects > 0) parts.push(m.calibration_usage_projects({ count: projects }));
   return parts.length > 0 ? parts.join(' · ') : 'unused';
 }
 

@@ -48,6 +48,9 @@ export default tseslint.config(
     ],
     rules: {
       'alm/no-user-string': 'error',
+      // JS-side pluralization ('s'/'es' suffix ternaries) bakes English plural
+      // rules into code; use inlang plural variant messages instead (spec 046 #7).
+      'alm/no-js-plural': 'error',
     },
   },
 

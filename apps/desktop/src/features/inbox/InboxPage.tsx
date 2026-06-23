@@ -445,8 +445,7 @@ export function InboxPage() {
 		} else {
 			addToast({
 				message: m.inbox_toast_bulk_confirmed({
-					success: String(successCount),
-					suffix: successCount !== 1 ? "s" : "",
+					count: successCount,
 				}),
 				variant: "info",
 			});
@@ -688,9 +687,9 @@ export function InboxPage() {
 		if (listLoading) return m.common_loading();
 		const parts: string[] = [];
 		if (folderCount > 0)
-			parts.push(`${folderCount} folder${folderCount !== 1 ? "s" : ""}`);
+			parts.push(m.inbox_count_folders({ count: folderCount }));
 		if (masterCount > 0)
-			parts.push(`${masterCount} master${masterCount !== 1 ? "s" : ""}`);
+			parts.push(m.inbox_count_masters({ count: masterCount }));
 		const base = parts.length > 0 ? parts.join(" · ") : "0 detections";
 		return isCapped ? `${base} (first ${listData?.limit ?? 500})` : base;
 	}, [listLoading, folderCount, masterCount, isCapped, listData?.limit]);
