@@ -88,3 +88,27 @@ export function useGrouping({
 
   return { dims, setSlot };
 }
+
+export interface UseCollapsibleGroupsResult {
+  /** Set of collapsed group paths. */
+  collapsed: Set<string>;
+  /** Toggle a group's collapsed state by its path. */
+  toggle: (path: string) => void;
+}
+
+/**
+ * Collapse state for a grouped list — paired with `flattenVisibleGroups`. Keyed
+ * by the group `path` the flattener emits.
+ */
+export function useCollapsibleGroups(): UseCollapsibleGroupsResult {
+  const [collapsed, setCollapsed] = useState<Set<string>>(() => new Set());
+  const toggle = useCallback((path: string) => {
+    setCollapsed((prev) => {
+      const next = new Set(prev);
+      if (next.has(path)) next.delete(path);
+      else next.add(path);
+      return next;
+    });
+  }, []);
+  return { collapsed, toggle };
+}
