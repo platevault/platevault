@@ -164,12 +164,24 @@
   border-bottom: 1px solid var(--alm-border);
   background: var(--alm-surface);
   white-space: nowrap;
+  /* Fixed-layout columns: truncate the header instead of clipping it mid-glyph
+     or letting it spill. Columns carry a title= tooltip with the full label. */
+  overflow: hidden;
+  text-overflow: ellipsis;
 }
 .alm-table td {
   padding: var(--alm-sp-2) var(--alm-sp-3);
   border-bottom: 1px solid var(--alm-border-subtle);
   font-size: var(--alm-text-sm);
   vertical-align: middle;
+  /* Keep cell content within its column box: with table-layout:fixed an
+     un-clipped cell (e.g. a Type pill) visually overflows into the next column
+     and wide content can push the last column off-screen. Clip + ellipsis.
+     Cells that must wrap (e.g. the Targets filter-badge strip) opt back in via
+     `white-space: normal` on their own class. */
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
 }
 .alm-table td.mono { font-family: var(--alm-font-mono); font-size: var(--alm-text-xs); }
 .alm-table td.num { font-variant-numeric: tabular-nums; text-align: right; }
