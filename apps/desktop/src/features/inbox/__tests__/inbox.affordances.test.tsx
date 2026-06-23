@@ -15,18 +15,14 @@ import { render, screen } from '@testing-library/react';
 import { describe, it, expect, vi } from 'vitest';
 import { InboxControls } from '../InboxControls';
 
-// The grouping / sort / frame-type controls moved out of InboxList into the
-// shared top-bar `InboxControls` (spec 043 #73/#31). These option assertions
-// now target that control directly.
+// The grouping controls moved from InboxList into the shared FilterToolbar on
+// InboxPage (spec 043 #73/#31). InboxControls is now a thin shim that renders
+// the grouping selects standalone for these option assertions.
 function renderControls(dims: string[] = []) {
   return render(
     <InboxControls
       dims={dims}
       setSlot={vi.fn()}
-      sortBy="name"
-      onSortByChange={vi.fn()}
-      filterType="all"
-      onFilterTypeChange={vi.fn()}
     />,
   );
 }

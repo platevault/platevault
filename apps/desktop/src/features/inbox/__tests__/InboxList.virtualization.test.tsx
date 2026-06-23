@@ -23,21 +23,26 @@
 import { render, screen, fireEvent, waitFor, cleanup } from '@testing-library/react';
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 import { InboxList } from '../InboxList';
-import { InboxControls, useInboxControls } from '../InboxControls';
+import { FilterToolbar } from '@/components';
+import { useGrouping } from '@/lib/use-grouping';
+import { GROUPING_DIMENSIONS, GROUPING_STORAGE_KEY } from '../InboxControls';
 import type { InboxListItem } from '@/api/commands';
 
-// Harness mirroring InboxPage: grouping/sort controls (top bar) feed InboxList.
+// Harness mirroring InboxPage: useGrouping + FilterToolbar.grouping feed InboxList.
 function Harness({ items }: { items: InboxListItem[] }) {
-  const { dims, sortBy, setSortBy, setSlot } = useInboxControls();
+  const { dims, setSlot } = useGrouping({
+    storageKey: GROUPING_STORAGE_KEY,
+    validIds: GROUPING_DIMENSIONS.map((d) => d.id),
+    defaultDims: [],
+  });
   return (
     <>
-      <InboxControls
-        dims={dims}
-        setSlot={setSlot}
-        sortBy={sortBy}
-        onSortByChange={setSortBy}
-        filterType="all"
-        onFilterTypeChange={vi.fn()}
+      <FilterToolbar
+        grouping={{
+          dimensions: GROUPING_DIMENSIONS.map((d) => ({ value: d.id, label: d.label })),
+          dims,
+          setSlot,
+        }}
       />
       <InboxList
         items={items}
@@ -45,7 +50,6 @@ function Harness({ items }: { items: InboxListItem[] }) {
         onSelect={vi.fn()}
         filterType="all"
         dims={dims}
-        sortBy={sortBy}
       />
     </>
   );
