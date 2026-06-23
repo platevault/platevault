@@ -1,4 +1,5 @@
--- Migration 0046: Add constellation and magnitude to canonical_target.
+-- Migration 0047: Add constellation and magnitude to canonical_target.
+-- (Renamed from 0046 to resolve a duplicate-version collision; see PR #317.)
 --
 -- These fields were absent from the original schema (migration 0031).
 -- Both are nullable:
