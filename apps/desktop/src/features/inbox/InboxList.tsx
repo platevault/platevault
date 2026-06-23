@@ -9,15 +9,33 @@
  * Format. When grouping is active, the chosen ordered dimensions render
  * collapsible group sub-header rows (shared `groupByDimensions` engine); leaf
  * rows indent under their group. Selection + grouping controls are owned by the
- * page / top-bar (`InboxControls`); this is a controlled presentational list.
+ * page / top-bar (FilterToolbar + useGrouping); this is a controlled
+ * presentational list.
+ *
+ * Sort: column headers are <button> elements that call onSort (SessionsTable
+ * convention). The page owns sort state and passes sortCol + sortDir.
+ * Kind filter: the page passes a `kindFilter` string that filters by the item's
+ * dominant frame type (groupFrameType / masterFrameType).
  */
 
 import { useState, useMemo, useCallback } from 'react';
 import type { InboxListItem } from '@/api/commands';
 import { Table, type TableColumn, type TableRow } from '@/ui';
 import { groupByDimensions, type GroupNode } from './grouping';
-import { ACCESSORS, DIM_LABELS, type InboxSortBy } from './InboxControls';
+import { ACCESSORS, DIM_LABELS } from './InboxControls';
 import { m } from '@/lib/i18n';
+
+// ── Sort model ────────────────────────────────────────────────────────────────
+
+export type InboxSortCol = 'detection' | 'type' | 'count' | 'format';
+export type SortDir = 'asc' | 'desc';
+
+export interface InboxSort {
+  col: InboxSortCol;
+  dir: SortDir;
+}
+
+export const DEFAULT_INBOX_SORT: InboxSort = { col: 'detection', dir: 'asc' };
 
 // ── Helpers ───────────────────────────────────────────────────────────────────
 
@@ -57,18 +75,54 @@ function formatTag(item: InboxListItem): string {
   return 'FITS';
 }
 
+/** Dominant frame-type key for kind-filtering (matches the Kind filter options). */
+function itemKind(item: InboxListItem): string {
+  if (item.isMaster) return item.masterFrameType ?? 'master';
+  return item.groupFrameType ?? '';
+}
+
+/** Sort comparator for inbox items. */
+function compareItems(a: InboxListItem, b: InboxListItem, sort: InboxSort): number {
+  let cmp = 0;
+  switch (sort.col) {
+    case 'detection':
+      cmp = a.relativePath.localeCompare(b.relativePath);
+      break;
+    case 'type':
+      cmp = classificationLabel(a).localeCompare(classificationLabel(b));
+      break;
+    case 'count':
+      cmp = a.fileCount - b.fileCount;
+      break;
+    case 'format':
+      cmp = formatTag(a).localeCompare(formatTag(b));
+      break;
+  }
+  return sort.dir === 'asc' ? cmp : -cmp;
+}
+
 // ── Component types ─────────────────────────────────────────────────────────────
 
 export interface InboxListProps {
   items: InboxListItem[];
   selectedIdx: number | null;
   onSelect: (idx: number) => void;
+  /** Lane filter ('all' | 'fits' | 'video'). Owned by the page (URL state). */
   filterType: string;
   /** Active ordered grouping dimensions (owned by the page / top-bar controls). */
   dims?: string[];
-  /** Active list sort (owned by the page / top-bar controls). */
-  sortBy?: InboxSortBy;
-  /** @deprecated The frame-type filter control moved to the top-bar InboxControls. */
+  /**
+   * Frame-type kind filter ('all' | 'bias' | 'dark' | 'flat' | 'light' | 'master').
+   * Owned by the page.
+   */
+  kindFilter?: string;
+  /** Active sort state. Owned by the page. */
+  sort?: InboxSort;
+  /** Called when the user clicks a sortable column header. */
+  onSort?: (col: InboxSortCol) => void;
+  /** @deprecated Sort state is now owned by column headers via sort/onSort. */
+  sortBy?: string;
+  /** @deprecated The frame-type filter control moved to the top-bar FilterToolbar. */
   onFilterTypeChange?: (type: string | undefined) => void;
 }
 
@@ -133,20 +187,6 @@ export function flattenVisibleTree(
   return rows;
 }
 
-// ── Columns ──────────────────────────────────────────────────────────────────────
-
-const COLUMNS: TableColumn[] = [
-  { key: 'detection', label: 'Detection' },
-  { key: 'type', label: m.inbox_col_type(), style: { width: '7.5rem' } },
-  { key: 'count', label: m.inbox_col_files(), className: 'num', style: { width: '5rem' } },
-  {
-    key: 'format',
-    label: m.inbox_dim_format(),
-    className: 'alm-inbox-cell--right',
-    style: { width: '7rem' },
-  },
-];
-
 // ── Component ───────────────────────────────────────────────────────────────────
 
 export function InboxList({
@@ -155,23 +195,26 @@ export function InboxList({
   onSelect,
   filterType,
   dims = [],
-  sortBy = 'name',
+  kindFilter,
+  sort = DEFAULT_INBOX_SORT,
+  onSort,
 }: InboxListProps) {
   const [collapsed, setCollapsed] = useState<Set<string>>(() => new Set());
 
   const filtered = useMemo(() => {
     let result = items;
+    // Lane filter (fits / video).
     if (filterType !== 'all') {
       result = result.filter((item) => item.lane === filterType);
     }
-    const sorted = [...result];
-    if (sortBy === 'name') {
-      sorted.sort((a, b) => a.relativePath.localeCompare(b.relativePath));
-    } else if (sortBy === 'state') {
-      sorted.sort((a, b) => a.state.localeCompare(b.state));
+    // Kind filter (bias / dark / flat / light / master).
+    if (kindFilter && kindFilter !== 'all') {
+      result = result.filter((item) => itemKind(item) === kindFilter);
     }
+    // Sort via column headers (replaces the old name/state sort dropdown).
+    const sorted = [...result].sort((a, b) => compareItems(a, b, sort));
     return sorted;
-  }, [items, filterType, sortBy]);
+  }, [items, filterType, kindFilter, sort]);
 
   const tree = useMemo(
     () => groupByDimensions(filtered, dims, ACCESSORS),
@@ -204,6 +247,54 @@ export function InboxList({
       indent: 0,
     }));
   }, [grouped, tree, collapsed, originalIndexById, filtered]);
+
+  // ── Sortable column headers (SessionsTable convention) ──────────────────────
+  const makeSortHeader = (col: InboxSortCol, label: string, ariaLabel: string) => {
+    const active = sort.col === col;
+    return (
+      <button
+        type="button"
+        className={
+          'alm-inbox-sorth' + (active ? ' alm-inbox-sorth--active' : '')
+        }
+        onClick={() => onSort?.(col)}
+        aria-label={ariaLabel}
+        aria-sort={active ? (sort.dir === 'asc' ? 'ascending' : 'descending') : undefined}
+      >
+        {label}
+        {active && (
+          <span className="alm-inbox-sorth__arrow" aria-hidden="true">
+            {sort.dir === 'asc' ? '▲' : '▼'}
+          </span>
+        )}
+      </button>
+    );
+  };
+
+  // Build columns with sortable headers.
+  const COLUMNS: TableColumn[] = [
+    {
+      key: 'detection',
+      label: makeSortHeader('detection', 'Detection', m.inbox_sort_detection_aria()),
+    },
+    {
+      key: 'type',
+      label: makeSortHeader('type', m.inbox_col_type(), m.inbox_sort_type_aria()),
+      style: { width: '7.5rem' },
+    },
+    {
+      key: 'count',
+      label: makeSortHeader('count', m.inbox_col_files(), m.inbox_sort_files_aria()),
+      className: 'num',
+      style: { width: '5rem' },
+    },
+    {
+      key: 'format',
+      label: makeSortHeader('format', m.inbox_dim_format(), m.inbox_sort_format_aria()),
+      className: 'alm-inbox-cell--right',
+      style: { width: '7rem' },
+    },
+  ];
 
   // Map the visual rows onto shared-Table rows (group sub-headers + item rows).
   const rows = useMemo<TableRow[]>(

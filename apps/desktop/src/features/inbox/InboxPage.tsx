@@ -41,12 +41,14 @@ import { FilterToolbar, ListPageLayout, PageTopBar } from "@/components";
 import { usePlanApplyProgress } from "@/features/plans/usePlanApplyProgress";
 import { m } from "@/lib/i18n";
 import type { FrameType } from "@/lib/route-contract";
+import { useGrouping } from "@/lib/use-grouping";
 import { useStaleSelectionCleanup } from "@/lib/use-stale-selection";
 import { addToast } from "@/shared/toast";
 import { Btn } from "@/ui";
-import { InboxControls, useInboxControls } from "./InboxControls";
+import { GROUPING_DIMENSIONS, GROUPING_STORAGE_KEY } from "./InboxControls";
 import { InboxDetail } from "./InboxDetail";
-import { InboxList } from "./InboxList";
+import { InboxList, DEFAULT_INBOX_SORT } from "./InboxList";
+import type { InboxSortCol, InboxSort } from "./InboxList";
 import { InboxStatsSummary } from "./InboxStatsSummary";
 import { deriveInboxStats } from "./inboxStatsFromItems";
 import { PlanApprovalOverlay } from "./PlanApprovalOverlay";
@@ -101,10 +103,31 @@ export function InboxPage() {
 	const items = listData?.items ?? [];
 
 	// Search + grouping / sort / frame-type controls now live in the top bar
-	// (spec 043 #73/#31). `useInboxControls` owns the persisted ordered grouping
-	// dimensions + sort; the frame-type filter stays URL-backed (`type`).
+	// (spec 043 #73/#31). `useGrouping` owns the persisted ordered grouping
+	// dimensions; sort is local column-header state; lane + kind filters are
+	// URL-backed (`type`) and local state respectively.
 	const [search, setSearch] = useState("");
-	const { dims, sortBy, setSortBy, setSlot } = useInboxControls();
+	const { dims, setSlot } = useGrouping({
+		storageKey: GROUPING_STORAGE_KEY,
+		validIds: GROUPING_DIMENSIONS.map((d) => d.id),
+		defaultDims: [],
+	});
+
+	// Column-header sort state (replaces the old sort dropdown).
+	const [inboxSort, setInboxSort] = useState<InboxSort>(DEFAULT_INBOX_SORT);
+	const handleSort = useCallback(
+		(col: InboxSortCol) => {
+			setInboxSort((prev) =>
+				prev.col === col
+					? { col, dir: prev.dir === "asc" ? "desc" : "asc" }
+					: { col, dir: "asc" },
+			);
+		},
+		[],
+	);
+
+	// Kind filter: frame type of the detection (bias/dark/flat/light/master).
+	const [kindFilter, setKindFilter] = useState("");
 
 	// spec 041: aggregate open-plan surface (all ingestions at once).
 	const { data: openPlansData, refresh: refreshOpenPlans } =
@@ -724,23 +747,47 @@ export function InboxPage() {
 						placeholder: "Search detections…",
 						ariaLabel: "Search inbox",
 					}}
-					actions={
-						<InboxControls
-							dims={dims}
-							setSlot={setSlot}
-							sortBy={sortBy}
-							onSortByChange={setSortBy}
-							filterType={type ?? "all"}
-							onFilterTypeChange={(t) =>
+					fields={[
+						{
+							key: "fileType",
+							label: m.inbox_filter_file_type_label(),
+							value: type ?? "",
+							options: [
+								{ value: "fits", label: m.inbox_filter_fits() },
+								{ value: "video", label: m.inbox_filter_video() },
+							],
+							allLabel: m.inbox_filter_all_file_types(),
+							onChange: (v) =>
 								navigate({
 									search: (prev) => ({
 										...prev,
-										type: t as FrameType | undefined,
+										type: (v || undefined) as FrameType | undefined,
 									}),
-								})
-							}
-						/>
-					}
+								}),
+						},
+						{
+							key: "kind",
+							label: m.inbox_filter_kind_label(),
+							value: kindFilter,
+							options: [
+								{ value: "bias", label: m.inbox_kind_bias() },
+								{ value: "dark", label: m.inbox_kind_dark() },
+								{ value: "flat", label: m.inbox_kind_flat() },
+								{ value: "light", label: m.inbox_kind_light() },
+								{ value: "master", label: m.inbox_kind_master() },
+							],
+							allLabel: m.inbox_filter_kind_all(),
+							onChange: setKindFilter,
+						},
+					]}
+					grouping={{
+						dimensions: GROUPING_DIMENSIONS.map((d) => ({
+							value: d.id,
+							label: d.label,
+						})),
+						dims,
+						setSlot,
+					}}
 				/>
 			}
 			actions={
@@ -831,7 +878,9 @@ export function InboxPage() {
 					onSelect={onSelect}
 					filterType={type ?? "all"}
 					dims={dims}
-					sortBy={sortBy}
+					kindFilter={kindFilter}
+					sort={inboxSort}
+					onSort={handleSort}
 				/>
 			</ListPageLayout>
 
