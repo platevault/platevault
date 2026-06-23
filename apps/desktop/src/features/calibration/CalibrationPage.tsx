@@ -24,18 +24,22 @@ import { PageTopBar, FilterToolbar, ListPageLayout } from '@/components';
 import { m } from '@/lib/i18n';
 import type { FilterOption } from '@/components';
 import { useStaleSelectionCleanup } from '@/lib/use-stale-selection';
+import { useGrouping } from '@/lib/use-grouping';
 import { MasterDetail } from './MasterDetail';
 import {
   MastersTable,
   DEFAULT_MASTER_SORT,
-  DEFAULT_MASTER_GROUP_BY,
 } from './MastersTable';
-import type { MasterSort, MasterSortCol, MasterGroupBy } from './MastersTable';
+import type { MasterSort, MasterSortCol } from './MastersTable';
 import { useCalibrationMasters, useCalibrationSettings } from './useCalibration';
 
 // ── Toolbar vocab ─────────────────────────────────────────────────────────────
 
-const GROUP_BY_OPTIONS: FilterOption[] = [{ value: 'kind', label: m.calibration_fp_kind() }];
+const CALIB_DIMENSIONS: FilterOption[] = [
+  { value: 'kind', label: m.calibration_fp_kind() },
+  { value: 'camera', label: m.settings_calmatch_camera() },
+  { value: 'instrument', label: m.calibration_dim_instrument() },
+];
 
 // ── Component ─────────────────────────────────────────────────────────────────
 
@@ -47,9 +51,12 @@ export function CalibrationPage() {
 
   const [search, setSearch] = useState('');
   const [sort, setSort] = useState<MasterSort>(DEFAULT_MASTER_SORT);
-  // Group-by is fixed to Kind in v1 (only meaningful grouping); the control is
-  // still surfaced for layout consistency with the other list pages.
-  const [groupBy, setGroupBy] = useState<MasterGroupBy>(DEFAULT_MASTER_GROUP_BY);
+
+  const { dims, setSlot } = useGrouping({
+    storageKey: 'calibration.grouping.dims.v1',
+    validIds: ['kind', 'camera', 'instrument'],
+    defaultDims: [],
+  });
 
   const master = masters.find((m) => m.id === selected) ?? null;
 
@@ -104,10 +111,10 @@ export function CalibrationPage() {
             placeholder: m.calibration_search_masters_placeholder(),
             ariaLabel: m.calibration_search_masters_aria(),
           }}
-          groupBy={{
-            value: groupBy,
-            options: GROUP_BY_OPTIONS,
-            onChange: (v) => setGroupBy(v as MasterGroupBy),
+          grouping={{
+            dimensions: CALIB_DIMENSIONS,
+            dims,
+            setSlot,
           }}
         />
       }
@@ -138,6 +145,7 @@ export function CalibrationPage() {
         sort={sort}
         onSort={handleSort}
         agingThresholdDays={agingThresholdDays}
+        dims={dims}
       />
     </ListPageLayout>
   );

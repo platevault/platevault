@@ -26,6 +26,12 @@ import { Pill, Table, EmptyState } from '@/ui';
 import type { PillVariant, TableColumn, TableRow } from '@/ui';
 import type { CalibrationMaster_Serialize as CalibrationMaster } from '@/bindings/index';
 import { m } from '@/lib/i18n';
+import {
+  groupByDimensions,
+  flattenVisibleGroups,
+  type DimensionAccessor,
+} from '@/lib/grouping';
+import { useCollapsibleGroups } from '@/lib/use-grouping';
 
 // ── Kind grouping model ────────────────────────────────────────────────────────
 
@@ -181,7 +187,15 @@ function compareMasters(a: CalibrationMaster, b: CalibrationMaster, sort: Master
   return sort.dir === 'asc' ? cmp : -cmp;
 }
 
-// ── Grouping ──────────────────────────────────────────────────────────────────
+// ── Multi-level grouping accessors ────────────────────────────────────────────
+
+export const MASTER_ACCESSORS: Readonly<Record<string, DimensionAccessor<CalibrationMaster>>> = {
+  kind: (m) => m.kind.toLowerCase(),
+  camera: (m) => m.fingerprint?.camera,
+  instrument: (m) => m.fingerprint?.camera, // instrument = camera in the fingerprint
+};
+
+// ── Legacy single-level grouping (kept for the flat-group fallback path) ──────
 
 interface MasterGroup {
   kind: Kind;
@@ -226,9 +240,16 @@ interface Props {
   onSort: (col: MasterSortCol) => void;
   /** Days threshold for the "aging" warning pill. Comes from persisted settings (FR-023). */
   agingThresholdDays: number;
+  /**
+   * Active ordered grouping dimension ids from `useGrouping`.
+   * When empty the table falls back to the fixed kind grouping.
+   */
+  dims?: string[];
 }
 
 // ── Component ─────────────────────────────────────────────────────────────────
+
+const INDENT_PER_DEPTH = 12;
 
 export function MastersTable({
   masters,
@@ -239,8 +260,30 @@ export function MastersTable({
   sort,
   onSort,
   agingThresholdDays,
+  dims = [],
 }: Props) {
-  const groups = useMemo(() => groupMasters(masters, sort), [masters, sort]);
+  const { collapsed, toggle } = useCollapsibleGroups();
+
+  const sorted = useMemo(
+    () => [...masters].sort((a, b) => compareMasters(a, b, sort)),
+    [masters, sort],
+  );
+
+  // Multi-level grouping (when dims non-empty) or fall back to kind grouping.
+  const useMultiGroup = dims.length > 0;
+
+  const tree = useMemo(
+    () => (useMultiGroup ? groupByDimensions(sorted, dims, MASTER_ACCESSORS) : []),
+    [sorted, dims, useMultiGroup],
+  );
+
+  const visualRows = useMemo(
+    () => (useMultiGroup ? flattenVisibleGroups(tree, collapsed) : []),
+    [tree, collapsed, useMultiGroup],
+  );
+
+  // Legacy fixed kind-grouping (when dims is empty).
+  const groups = useMemo(() => (useMultiGroup ? [] : groupMasters(masters, sort)), [masters, sort, useMultiGroup]);
 
   if (loading) {
     return (
@@ -292,52 +335,97 @@ export function MastersTable({
     ),
   }));
 
-  // Flatten groups into rows: a spanning kind-header row, then master rows.
-  const rows: TableRow[] = [];
-  for (const group of groups) {
-    rows.push({
-      _rowClassName: 'alm-calib-table__group',
+  const EMPTY_MASTER_CELLS = {
+    camera: '' as string,
+    filter: '' as string,
+    gain: '' as string,
+    exposure: '' as string,
+    temp: '' as string,
+    binning: '' as string,
+    usage: '' as string,
+    created: '' as string,
+  };
+
+  function masterItemRow(master: CalibrationMaster, indentPx = 0): TableRow {
+    const isAging = master.ageDays > agingThresholdDays;
+    const kindStr = master.kind.toLowerCase();
+    return {
+      _rowClassName:
+        'alm-calib-table__row' + (selected === master.id ? ' alm-calib-table__row--selected' : ''),
+      _onClick: () => onSelect(master.id),
       master: (
-        <span>
-          {group.label}
-          <span className="alm-calib-table__group-count">
-            {group.masters.length} {group.masters.length === 1 ? m.calibration_master_singular() : m.status_masters_label()}
-          </span>
+        <span
+          className="alm-calib-cell__master"
+          // eslint-disable-next-line no-restricted-syntax -- dynamic: nested-group leaf indent
+          style={indentPx ? { paddingLeft: indentPx } : undefined}
+        >
+          <Pill variant={kindVariant(kindStr)}>{kindStr.toUpperCase()}</Pill>
+          <span className="alm-calib-cell__master-label">{masterLabel(master)}</span>
+          {isAging && <Pill variant="warn">{m.calibration_aging_days({ days: master.ageDays })}</Pill>}
         </span>
       ),
-      camera: '',
-      filter: '',
-      gain: '',
-      exposure: '',
-      temp: '',
-      binning: '',
-      usage: '',
-      created: '',
-    });
+      camera: cameraCell(master),
+      filter: filterCell(master),
+      gain: gainCell(master),
+      exposure: exposureCell(master),
+      temp: tempCell(master),
+      binning: binningCell(master),
+      usage: <span data-testid={`master-usage-${master.id}`}>{usageSummary(master)}</span>,
+      created: createdDate(master),
+    };
+  }
 
-    for (const master of group.masters) {
-      const isAging = master.ageDays > agingThresholdDays;
-      const kindStr = master.kind.toLowerCase();
+  // Build rows: multi-level grouping path or fixed kind-grouping path.
+  const rows: TableRow[] = [];
+
+  if (useMultiGroup) {
+    for (const vrow of visualRows) {
+      if (vrow.kind === 'header') {
+        const { node, depth, path, collapsed: isCollapsed } = vrow;
+        rows.push({
+          _rowClassName: 'alm-calib-table__group',
+          master: (
+            <button
+              type="button"
+              className="alm-calib-table__group-cell"
+              data-testid={`calibration-group-${node.dimension}-${node.key}`}
+              aria-expanded={!isCollapsed}
+              onClick={() => toggle(path)}
+              // eslint-disable-next-line no-restricted-syntax -- dynamic: depth-based group-header indent
+              style={{ paddingLeft: 8 + depth * INDENT_PER_DEPTH }}
+            >
+              <span className="alm-calib-list__group-caret" aria-hidden="true">
+                {isCollapsed ? '▸' : '▾'}
+              </span>
+              <span className="alm-calib-list__group-label">{node.label}</span>
+              <span className="alm-calib-list__group-count">{node.count}</span>
+            </button>
+          ),
+          ...EMPTY_MASTER_CELLS,
+        });
+      } else {
+        const indentPx = 8 + vrow.depth * INDENT_PER_DEPTH;
+        rows.push(masterItemRow(vrow.item, indentPx));
+      }
+    }
+  } else {
+    // Flat kind-grouping (default, dims empty).
+    for (const group of groups) {
       rows.push({
-        _rowClassName:
-          'alm-calib-table__row' + (selected === master.id ? ' alm-calib-table__row--selected' : ''),
-        _onClick: () => onSelect(master.id),
+        _rowClassName: 'alm-calib-table__group',
         master: (
-          <span className="alm-calib-cell__master">
-            <Pill variant={kindVariant(kindStr)}>{kindStr.toUpperCase()}</Pill>
-            <span className="alm-calib-cell__master-label">{masterLabel(master)}</span>
-            {isAging && <Pill variant="warn">{m.calibration_aging_days({ days: master.ageDays })}</Pill>}
+          <span>
+            {group.label}
+            <span className="alm-calib-table__group-count">
+              {group.masters.length} {group.masters.length === 1 ? m.calibration_master_singular() : m.status_masters_label()}
+            </span>
           </span>
         ),
-        camera: cameraCell(master),
-        filter: filterCell(master),
-        gain: gainCell(master),
-        exposure: exposureCell(master),
-        temp: tempCell(master),
-        binning: binningCell(master),
-        usage: <span data-testid={`master-usage-${master.id}`}>{usageSummary(master)}</span>,
-        created: createdDate(master),
+        ...EMPTY_MASTER_CELLS,
       });
+      for (const master of group.masters) {
+        rows.push(masterItemRow(master));
+      }
     }
   }
 
