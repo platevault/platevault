@@ -26,8 +26,8 @@
  * Notes, Manifests, Calibration, Source views, Outputs, and Cleanup preview.
  * Both panels mount when a project is selected and close together.
  *
- * URL state (unchanged router contract):
- *   - `selected`: numeric index into the (unfiltered) list.
+ * URL state:
+ *   - `selected`: project UUID string (spec 023 caveat fix — was numeric index).
  *   - `lifecycle`: CSV state filter.
  */
 
@@ -97,18 +97,16 @@ export function ProjectsPage() {
     { value: 'target', label: m.projects_dim_target() },
   ];
 
-  // Stale-id cleanup: if selected index is out of range, clear it.
-  const selectedIdx = selected ?? 0;
-  const inRange = projects.length > 0 && selected != null && selectedIdx < projects.length;
-  useStaleSelectionCleanup(selected, inRange, () =>
+  // UUID-based selection (origin/main): find project by id, clear stale ids that
+  // no longer exist. (Supersedes redesign's index-based selectedIdx.)
+  const project: ProjectSummaryDto | undefined =
+    selected != null ? projects.find((p) => p.id === selected) : undefined;
+  useStaleSelectionCleanup(selected, project !== undefined || selected == null, () =>
     navigate({ search: (prev) => ({ ...prev, selected: undefined }), replace: true }),
   );
 
-  const project: ProjectSummaryDto | undefined = inRange ? projects[selectedIdx] : undefined;
-
   const onSelect = (id: string) => {
-    const idx = projects.findIndex((p) => p.id === id);
-    if (idx >= 0) void navigate({ search: (prev) => ({ ...prev, selected: idx }) });
+    void navigate({ search: (prev) => ({ ...prev, selected: id }) });
   };
 
   const clearSelection = useCallback(

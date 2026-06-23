@@ -112,7 +112,7 @@ retired. New operation contracts live in `crates/contracts/core` + `packages/con
 
 ### Migration 0046 — `acquisition_session.canonical_target_id`
 
-`crates/persistence/db/migrations/0046_acq_session_canonical_target.sql`:
+`crates/persistence/db/migrations/0046_session_canonical_target.sql`:
 
 ```sql
 ALTER TABLE acquisition_session ADD COLUMN canonical_target_id TEXT REFERENCES canonical_target(id);

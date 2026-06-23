@@ -77,10 +77,6 @@ pub struct SettingsState {
     /// Whether to surface calibration suggestions.
     pub suggest_calibration: bool,
 
-    // ── Advanced / density ────────────────────────────────────────────────
-    /// Row density (retained for mockup; FR-006 removes it later via T032).
-    pub row_density: String,
-
     // ── Application Log ──────────────────────────────────────────────────
     /// Log level: `"error"` | `"warn"` | `"info"` | `"debug"`.
     pub log_level: String,
@@ -136,6 +132,17 @@ pub struct SettingsState {
     /// from `crates/patterns::default_pattern` at read time; this map carries
     /// only the user's explicit overrides. Empty by default.
     pub patterns_by_type: std::collections::BTreeMap<String, String>,
+
+    // ── Tool watch / attribution (spec 018 T043) ─────────────────────────
+    /// File extensions the tool-launch watcher monitors (spec 018 T043).
+    ///
+    /// Default covers all common astrophotography formats (XISF, FITS, TIFF,
+    /// PNG, JPEG, SER, AVI). Stored as a flat global; no per-profile override.
+    pub tool_watch_extensions: Vec<String>,
+
+    /// Hours after a tool launch during which output files are attributed to
+    /// that session (spec 018 T043). Default: 6.0 hours.
+    pub tool_attribution_window_hours: f64,
 }
 
 impl Default for SettingsState {
@@ -149,7 +156,6 @@ impl Default for SettingsState {
             dark_match_tolerance: "strict".to_owned(),
             flat_matching: "filter-rot".to_owned(),
             suggest_calibration: true,
-            row_density: "dense".to_owned(),
             log_level: "info".to_owned(),
             remember_follow_logs: false,
             default_protection: "protected".to_owned(),
@@ -170,6 +176,18 @@ impl Default for SettingsState {
             calibration_aging_threshold_days: 90.0,
             imagetyp_normalization_user_mappings: vec![],
             patterns_by_type: std::collections::BTreeMap::new(),
+            tool_watch_extensions: vec![
+                ".xisf".to_owned(),
+                ".fits".to_owned(),
+                ".fit".to_owned(),
+                ".tif".to_owned(),
+                ".tiff".to_owned(),
+                ".png".to_owned(),
+                ".jpg".to_owned(),
+                ".ser".to_owned(),
+                ".avi".to_owned(),
+            ],
+            tool_attribution_window_hours: 6.0,
         }
     }
 }

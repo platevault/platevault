@@ -6,6 +6,7 @@
 //! spec 026 prepared source views, and spec 010 guided flow.
 //!
 //! Spec 013/023 gen-2 target repository (`targets`) removed by spec 036.
+//! Spec 023 US2/US3/US4 target history + notes queries live in `targets`.
 
 pub mod artifacts;
 pub mod calibration_assignment;
@@ -25,4 +26,5 @@ pub mod provenance;
 pub mod session_snapshot;
 pub mod settings;
 pub mod source_protection;
+pub mod targets;
 pub mod tool_launches;

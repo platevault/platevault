@@ -11,6 +11,8 @@
 //! - §III Metadata/identity only — no image processing.
 //! - §V SQLite (resolution cache / canonical_target) is the durable record.
 
+use audit::bus::EventBus;
+use audit::event_bus::{Source, TargetNoteUpdated, TOPIC_TARGET_NOTE_UPDATED};
 use sqlx::SqlitePool;
 use uuid::Uuid;
 
@@ -18,8 +20,11 @@ use contracts_core::targets::{
     AliasKind as ContractAliasKind, TargetAliasAddRequest, TargetAliasAddResult, TargetAliasDto,
     TargetAliasRemoveRequest, TargetAliasRemoveResult, TargetDetailV3,
     TargetDisplayAliasClearRequest, TargetDisplayAliasSetRequest, TargetGetRequest, TargetListItem,
-    TargetOpError,
+    TargetNoteGetRequest, TargetNoteGetResult, TargetNoteUpdateRequest, TargetNoteUpdateResult,
+    TargetOpError, TargetProjectItem, TargetProjectsListRequest, TargetSessionItem,
+    TargetSessionsListRequest,
 };
+use domain_core::ids::Timestamp;
 use targeting_resolver::cache::{self, CachedTarget, TargetListRow};
 use targeting_resolver::AliasKind;
 
@@ -299,9 +304,202 @@ pub async fn display_alias_clear(
     get(pool, &TargetGetRequest { target_id: req.target_id.clone() }).await
 }
 
+// ── Spec 023 US2/US3/US4 use cases ───────────────────────────────────────────
+
+/// `target.sessions.list` — list acquisition sessions linked to a target (spec 023 US2).
+///
+/// Returns sessions ordered newest first.  Returns an empty list when the
+/// target exists but has no linked sessions; returns `target.not_found` when
+/// `target_id` does not exist in `canonical_target`.
+///
+/// # Errors
+///
+/// Returns [`TargetOpError`] with code `target.not_found`, `target.invalid_id`,
+/// or `internal.database`.
+pub async fn sessions_list(
+    pool: &SqlitePool,
+    req: &TargetSessionsListRequest,
+) -> Result<Vec<TargetSessionItem>, TargetOpError> {
+    let _uuid = Uuid::parse_str(&req.target_id).map_err(|_| invalid_id(&req.target_id))?;
+    // Verify the target exists.
+    let exists: Option<(String,)> = sqlx::query_as("SELECT id FROM canonical_target WHERE id = ?")
+        .bind(&req.target_id)
+        .fetch_optional(pool)
+        .await
+        .map_err(|e| TargetOpError {
+            code: "internal.database".to_owned(),
+            message: format!("{e}"),
+            details: None,
+        })?;
+    if exists.is_none() {
+        return Err(not_found(&req.target_id));
+    }
+    let rows =
+        persistence_db::repositories::targets::list_sessions_for_target(pool, &req.target_id)
+            .await
+            .map_err(|e| TargetOpError {
+                code: "internal.database".to_owned(),
+                message: format!("{e}"),
+                details: None,
+            })?;
+    Ok(rows
+        .into_iter()
+        .map(|r| TargetSessionItem {
+            id: r.id,
+            session_key: r.session_key,
+            created_at: r.created_at,
+            frame_count: r.frame_count,
+            state: r.state,
+        })
+        .collect())
+}
+
+/// `target.projects.list` — list projects linked to a target (spec 023 US3).
+///
+/// Returns projects ordered alphabetically by name.  Returns an empty list
+/// when the target exists but has no linked projects; returns `target.not_found`
+/// when `target_id` does not exist.
+///
+/// # Errors
+///
+/// Returns [`TargetOpError`] with code `target.not_found`, `target.invalid_id`,
+/// or `internal.database`.
+pub async fn projects_list(
+    pool: &SqlitePool,
+    req: &TargetProjectsListRequest,
+) -> Result<Vec<TargetProjectItem>, TargetOpError> {
+    let _uuid = Uuid::parse_str(&req.target_id).map_err(|_| invalid_id(&req.target_id))?;
+    let exists: Option<(String,)> = sqlx::query_as("SELECT id FROM canonical_target WHERE id = ?")
+        .bind(&req.target_id)
+        .fetch_optional(pool)
+        .await
+        .map_err(|e| TargetOpError {
+            code: "internal.database".to_owned(),
+            message: format!("{e}"),
+            details: None,
+        })?;
+    if exists.is_none() {
+        return Err(not_found(&req.target_id));
+    }
+    let rows =
+        persistence_db::repositories::targets::list_projects_for_target(pool, &req.target_id)
+            .await
+            .map_err(|e| TargetOpError {
+                code: "internal.database".to_owned(),
+                message: format!("{e}"),
+                details: None,
+            })?;
+    Ok(rows
+        .into_iter()
+        .map(|r| TargetProjectItem { id: r.id, name: r.name, lifecycle: r.lifecycle })
+        .collect())
+}
+
+/// `target.note.get` — read the observing notes for a target (spec 023 US4).
+///
+/// Returns `notes: null` when no notes are stored.  Returns `target.not_found`
+/// when the target does not exist.
+///
+/// # Errors
+///
+/// Returns [`TargetOpError`] with code `target.not_found`, `target.invalid_id`,
+/// or `internal.database`.
+pub async fn note_get(
+    pool: &SqlitePool,
+    req: &TargetNoteGetRequest,
+) -> Result<TargetNoteGetResult, TargetOpError> {
+    let _uuid = Uuid::parse_str(&req.target_id).map_err(|_| invalid_id(&req.target_id))?;
+    let exists: Option<(String,)> = sqlx::query_as("SELECT id FROM canonical_target WHERE id = ?")
+        .bind(&req.target_id)
+        .fetch_optional(pool)
+        .await
+        .map_err(|e| TargetOpError {
+            code: "internal.database".to_owned(),
+            message: format!("{e}"),
+            details: None,
+        })?;
+    if exists.is_none() {
+        return Err(not_found(&req.target_id));
+    }
+    let notes = persistence_db::repositories::targets::get_target_notes(pool, &req.target_id)
+        .await
+        .map_err(|e| TargetOpError {
+            code: "internal.database".to_owned(),
+            message: format!("{e}"),
+            details: None,
+        })?;
+    Ok(TargetNoteGetResult { notes })
+}
+
+/// `target.note.update` — write observing notes for a target (spec 023 US4).
+///
+/// Empty or whitespace-only `notes` clears the field (stores NULL).
+/// Returns the stored value after the update.
+///
+/// Emits a `target.note.updated` audit event after a successful DB write.
+/// Bus publish failures are logged at `warn` but do NOT fail the operation.
+///
+/// # Errors
+///
+/// Returns [`TargetOpError`] with code `target.not_found`, `target.invalid_id`,
+/// or `internal.database`.
+pub async fn note_update(
+    pool: &SqlitePool,
+    bus: &EventBus,
+    req: &TargetNoteUpdateRequest,
+) -> Result<TargetNoteUpdateResult, TargetOpError> {
+    let _uuid = Uuid::parse_str(&req.target_id).map_err(|_| invalid_id(&req.target_id))?;
+    let exists: Option<(String,)> = sqlx::query_as("SELECT id FROM canonical_target WHERE id = ?")
+        .bind(&req.target_id)
+        .fetch_optional(pool)
+        .await
+        .map_err(|e| TargetOpError {
+            code: "internal.database".to_owned(),
+            message: format!("{e}"),
+            details: None,
+        })?;
+    if exists.is_none() {
+        return Err(not_found(&req.target_id));
+    }
+    // Blank/whitespace → store NULL (clear).
+    let trimmed = req.notes.trim();
+    let stored: Option<&str> = if trimmed.is_empty() { None } else { Some(trimmed) };
+    let updated =
+        persistence_db::repositories::targets::set_target_notes(pool, &req.target_id, stored)
+            .await
+            .map_err(|e| TargetOpError {
+                code: "internal.database".to_owned(),
+                message: format!("{e}"),
+                details: None,
+            })?;
+    if !updated {
+        // Should not happen (we verified existence above), but be defensive.
+        return Err(not_found(&req.target_id));
+    }
+
+    // Emit audit event — bus failure is non-fatal.
+    if let Err(e) = bus
+        .publish(
+            TOPIC_TARGET_NOTE_UPDATED,
+            Source::User,
+            TargetNoteUpdated {
+                target_id: req.target_id.clone(),
+                has_notes: stored.is_some(),
+                at: Timestamp::now_iso(),
+            },
+        )
+        .await
+    {
+        tracing::warn!(target_id = %req.target_id, error = %e, "audit bus publish failed for target.note.updated");
+    }
+
+    Ok(TargetNoteUpdateResult { notes: stored.map(str::to_owned) })
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
+    use audit::bus::EventBus;
     use persistence_db::Database;
     use targeting_resolver::cache::upsert_resolved;
     use targeting_resolver::ObjectType;
@@ -313,6 +511,10 @@ mod tests {
         let db = Database::in_memory().await.expect("in-memory DB");
         db.migrate().await.expect("migrations");
         db
+    }
+
+    fn make_bus(db: &Database) -> EventBus {
+        EventBus::with_pool(db.pool().clone())
     }
 
     fn m31() -> ResolvedIdentity {
@@ -503,7 +705,7 @@ mod tests {
         assert_eq!(items.len(), 1);
         assert_eq!(items[0].constellation.as_deref(), Some("And"), "constellation mismatch");
         assert!(
-            items[0].magnitude.map_or(false, |m| (m - 3.44).abs() < 1e-6),
+            items[0].magnitude.is_some_and(|m| (m - 3.44).abs() < 1e-6),
             "magnitude mismatch: {:?}",
             items[0].magnitude
         );
@@ -664,5 +866,185 @@ mod tests {
             Some("My Andromeda"),
             "FR-012: display_alias must survive re-resolution"
         );
+    }
+
+    // ── target.sessions.list (spec 023 US2) ──────────────────────────────────
+
+    async fn insert_session_linked_to(db: &Database, session_id: &str, target_id: Uuid) {
+        sqlx::query(
+            r#"INSERT INTO acquisition_session
+               (id, session_key, frame_ids, state, created_at, canonical_target_id)
+               VALUES (?, '{"target":"M 31","filter":"Ha","binning":"1","gain":"0","date":"2026-01-01"}',
+                       '[1,2,3]', 'confirmed', '2026-01-01T00:00:00Z', ?)"#,
+        )
+        .bind(session_id)
+        .bind(target_id.to_string())
+        .execute(db.pool())
+        .await
+        .expect("insert session failed");
+    }
+
+    async fn insert_project_linked_to(db: &Database, project_id: &str, target_id: Uuid) {
+        // Path must be unique per project (UNIQUE constraint on projects.path).
+        sqlx::query(
+            "INSERT INTO projects
+             (id, name, tool, lifecycle, path, canonical_target_id, channel_drift, created_at, updated_at)
+             VALUES (?, 'Test Project', 'PixInsight', 'ready', ?, ?, 0,
+                     '2026-01-01T00:00:00Z', '2026-01-01T00:00:00Z')",
+        )
+        .bind(project_id)
+        .bind(format!("projects/{project_id}"))
+        .bind(target_id.to_string())
+        .execute(db.pool())
+        .await
+        .expect("insert project failed");
+    }
+
+    #[tokio::test]
+    async fn sessions_list_returns_linked_sessions() {
+        let db = setup().await;
+        let id = seed_m31(&db).await;
+        insert_session_linked_to(&db, "s-001", id).await;
+        let req = TargetSessionsListRequest { target_id: id.to_string() };
+        let items = sessions_list(db.pool(), &req).await.unwrap();
+        assert_eq!(items.len(), 1);
+        assert_eq!(items[0].id, "s-001");
+        assert_eq!(items[0].frame_count, 3);
+        assert_eq!(items[0].state, "confirmed");
+    }
+
+    #[tokio::test]
+    async fn sessions_list_empty_for_target_with_no_sessions() {
+        let db = setup().await;
+        let id = seed_m31(&db).await;
+        let req = TargetSessionsListRequest { target_id: id.to_string() };
+        let items = sessions_list(db.pool(), &req).await.unwrap();
+        assert!(items.is_empty());
+    }
+
+    #[tokio::test]
+    async fn sessions_list_not_found_for_unknown_target() {
+        let db = setup().await;
+        let req = TargetSessionsListRequest { target_id: Uuid::new_v4().to_string() };
+        let err = sessions_list(db.pool(), &req).await.unwrap_err();
+        assert_eq!(err.code, "target.not_found");
+    }
+
+    #[tokio::test]
+    async fn sessions_list_invalid_id_returns_error() {
+        let db = setup().await;
+        let req = TargetSessionsListRequest { target_id: "not-a-uuid".to_owned() };
+        let err = sessions_list(db.pool(), &req).await.unwrap_err();
+        assert_eq!(err.code, "target.invalid_id");
+    }
+
+    // ── target.projects.list (spec 023 US3) ──────────────────────────────────
+
+    #[tokio::test]
+    async fn projects_list_returns_linked_projects() {
+        let db = setup().await;
+        let id = seed_m31(&db).await;
+        insert_project_linked_to(&db, "p-001", id).await;
+        let req = TargetProjectsListRequest { target_id: id.to_string() };
+        let items = projects_list(db.pool(), &req).await.unwrap();
+        assert_eq!(items.len(), 1);
+        assert_eq!(items[0].id, "p-001");
+        assert_eq!(items[0].lifecycle, "ready");
+    }
+
+    #[tokio::test]
+    async fn projects_list_empty_for_target_with_no_projects() {
+        let db = setup().await;
+        let id = seed_m31(&db).await;
+        let req = TargetProjectsListRequest { target_id: id.to_string() };
+        let items = projects_list(db.pool(), &req).await.unwrap();
+        assert!(items.is_empty());
+    }
+
+    #[tokio::test]
+    async fn projects_list_not_found_for_unknown_target() {
+        let db = setup().await;
+        let req = TargetProjectsListRequest { target_id: Uuid::new_v4().to_string() };
+        let err = projects_list(db.pool(), &req).await.unwrap_err();
+        assert_eq!(err.code, "target.not_found");
+    }
+
+    // ── target.note.get / target.note.update (spec 023 US4) ──────────────────
+
+    #[tokio::test]
+    async fn note_get_returns_none_when_no_note_set() {
+        let db = setup().await;
+        let id = seed_m31(&db).await;
+        let req = TargetNoteGetRequest { target_id: id.to_string() };
+        let result = note_get(db.pool(), &req).await.unwrap();
+        assert!(result.notes.is_none());
+    }
+
+    #[tokio::test]
+    async fn note_update_and_get_roundtrip() {
+        let db = setup().await;
+        let id = seed_m31(&db).await;
+        let bus = make_bus(&db);
+
+        let upd_req = TargetNoteUpdateRequest {
+            target_id: id.to_string(),
+            notes: "Great seeing.".to_owned(),
+        };
+        let upd_result = note_update(db.pool(), &bus, &upd_req).await.unwrap();
+        assert_eq!(upd_result.notes.as_deref(), Some("Great seeing."));
+
+        let get_req = TargetNoteGetRequest { target_id: id.to_string() };
+        let get_result = note_get(db.pool(), &get_req).await.unwrap();
+        assert_eq!(get_result.notes.as_deref(), Some("Great seeing."));
+    }
+
+    #[tokio::test]
+    async fn note_update_whitespace_clears_note() {
+        let db = setup().await;
+        let id = seed_m31(&db).await;
+        let bus = make_bus(&db);
+
+        // Set a note first.
+        note_update(
+            db.pool(),
+            &bus,
+            &TargetNoteUpdateRequest { target_id: id.to_string(), notes: "Initial.".to_owned() },
+        )
+        .await
+        .unwrap();
+
+        // Whitespace-only update should clear.
+        let clear_result = note_update(
+            db.pool(),
+            &bus,
+            &TargetNoteUpdateRequest { target_id: id.to_string(), notes: "   ".to_owned() },
+        )
+        .await
+        .unwrap();
+        assert!(clear_result.notes.is_none(), "whitespace should clear notes");
+
+        let get_result =
+            note_get(db.pool(), &TargetNoteGetRequest { target_id: id.to_string() }).await.unwrap();
+        assert!(get_result.notes.is_none());
+    }
+
+    #[tokio::test]
+    async fn note_get_not_found_returns_error() {
+        let db = setup().await;
+        let req = TargetNoteGetRequest { target_id: Uuid::new_v4().to_string() };
+        let err = note_get(db.pool(), &req).await.unwrap_err();
+        assert_eq!(err.code, "target.not_found");
+    }
+
+    #[tokio::test]
+    async fn note_update_not_found_returns_error() {
+        let db = setup().await;
+        let bus = make_bus(&db);
+        let req = TargetNoteUpdateRequest {
+            target_id: Uuid::new_v4().to_string(),
+            notes: "x".to_owned(),
+        };
+        let err = note_update(db.pool(), &bus, &req).await.unwrap_err();
+        assert_eq!(err.code, "target.not_found");
     }
 }

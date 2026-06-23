@@ -92,7 +92,8 @@ use crate::commands::sessions::{
     sessions_transition,
 };
 use crate::commands::settings::{
-    settings_get, settings_restore_defaults, settings_source_override_set, settings_update,
+    settings_get, settings_overridable_keys, settings_restore_defaults,
+    settings_source_override_set, settings_update,
 };
 use crate::commands::status::status_summary;
 use crate::commands::target_lookup::{
@@ -188,6 +189,11 @@ pub fn specta_builder() -> Builder<tauri::Wry> {
         target_mgmt_cmds::target_alias_remove,
         target_mgmt_cmds::target_display_alias_set,
         target_mgmt_cmds::target_display_alias_clear,
+        // target history + notes (spec 023 US2/US3/US4)
+        target_mgmt_cmds::target_sessions_list,
+        target_mgmt_cmds::target_projects_list,
+        target_mgmt_cmds::target_note_get,
+        target_mgmt_cmds::target_note_update,
         // target resolve (spec 035 — SIMBAD cache-first resolution)
         target_resolve,
         // target search (spec 035, US1)
@@ -255,6 +261,7 @@ pub fn specta_builder() -> Builder<tauri::Wry> {
         settings_update,
         settings_restore_defaults,
         settings_source_override_set,
+        settings_overridable_keys,
         // preferences
         preferences_get,
         preferences_set,
@@ -381,6 +388,11 @@ pub fn specta_builder() -> Builder<tauri::Wry> {
         target_mgmt_cmds::target_alias_remove,
         target_mgmt_cmds::target_display_alias_set,
         target_mgmt_cmds::target_display_alias_clear,
+        // target history + notes (spec 023 US2/US3/US4)
+        target_mgmt_cmds::target_sessions_list,
+        target_mgmt_cmds::target_projects_list,
+        target_mgmt_cmds::target_note_get,
+        target_mgmt_cmds::target_note_update,
         // target resolve (spec 035 — SIMBAD cache-first resolution)
         target_resolve,
         // target search (spec 035, US1)
@@ -448,6 +460,7 @@ pub fn specta_builder() -> Builder<tauri::Wry> {
         settings_update,
         settings_restore_defaults,
         settings_source_override_set,
+        settings_overridable_keys,
         // preferences
         preferences_get,
         preferences_set,

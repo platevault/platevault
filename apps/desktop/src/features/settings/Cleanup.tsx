@@ -11,7 +11,9 @@ import { Toggle, SegControl, Pill, Banner } from '@/ui';
 import { getSettings } from '@/api/commands';
 import { CLEANUP_TYPES, CLEANUP_STAGE_ORDER, type CleanupTypeFixture } from '@/data/fixtures/settings';
 import { m } from '@/lib/i18n';
-import { SettingsSection, SettingsRow } from './SettingsKit';
+import { SettingsSection, SettingsRow, RestoreDefaultsBtn } from './SettingsKit';
+
+const CLEANUP_KEYS = ['blockPermanentDelete', 'defaultProtection', 'protectedCategories'];
 
 type CleanupAction = CleanupTypeFixture['action'];
 type DefaultProtection = 'protected' | 'normal' | 'unprotected';
@@ -68,19 +70,22 @@ export function Cleanup({ save }: CleanupProps) {
   const [blockPermanentDelete, setBlockPermanentDelete] = useState(true);
   const [defaultProtection, setDefaultProtection] = useState<DefaultProtection>('protected');
 
+  const applyValues = (vals: Record<string, unknown>) => {
+    if (typeof vals?.blockPermanentDelete === 'boolean') {
+      setBlockPermanentDelete(vals.blockPermanentDelete);
+    }
+    if (vals?.defaultProtection && typeof vals.defaultProtection === 'string') {
+      setDefaultProtection(vals.defaultProtection as DefaultProtection);
+    }
+  };
+
   // Load persisted values from backend on mount (T015).
   useEffect(() => {
     let cancelled = false;
     getSettings({ scope: 'cleanup' })
       .then((data) => {
         if (cancelled) return;
-        const vals = data.values as Record<string, unknown>;
-        if (typeof vals?.blockPermanentDelete === 'boolean') {
-          setBlockPermanentDelete(vals.blockPermanentDelete);
-        }
-        if (vals?.defaultProtection && typeof vals.defaultProtection === 'string') {
-          setDefaultProtection(vals.defaultProtection as DefaultProtection);
-        }
+        applyValues(data.values as Record<string, unknown>);
       })
       .catch(() => {
         // Backend unavailable — stay with in-code defaults.
@@ -88,6 +93,7 @@ export function Cleanup({ save }: CleanupProps) {
     return () => {
       cancelled = true;
     };
+  // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
   // ── Per-type action table — persisted in localStorage (T061) ─────────────
@@ -110,7 +116,16 @@ export function Cleanup({ save }: CleanupProps) {
   return (
     <>
       {/* Source protection — spec 018 owned, persisted via settings backend */}
-      <SettingsSection title={m.settings_cleanup_protection_title()}>
+      <SettingsSection
+        title={m.settings_cleanup_protection_title()}
+        action={
+          <RestoreDefaultsBtn
+            scope="cleanup"
+            keys={CLEANUP_KEYS}
+            onRestored={applyValues}
+          />
+        }
+      >
         <SettingsRow
           label={m.settings_cleanup_block_delete_label()}
           info="Routes all destructive operations through archive or trash workflows instead of immediate permanent deletion."

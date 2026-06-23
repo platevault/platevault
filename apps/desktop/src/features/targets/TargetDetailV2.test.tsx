@@ -1,6 +1,6 @@
 /// <reference types="@testing-library/jest-dom" />
 /**
- * TargetDetailV2 component tests — spec 036 gen-3 detail pane.
+ * TargetDetailV2 component tests — spec 036 gen-3 detail pane + spec 023 US2/US3/US4.
  *
  * Tests:
  *  1. Shows loading state while fetch is in flight.
@@ -15,13 +15,22 @@
  * 10. alias.blank error shows inline error message.
  * 11. alias.not_removable error shows inline error message.
  * 12. Shows error state when getTargetDetail rejects.
- * 13. Sessions empty-state renders.
- * 14. Projects empty-state renders.
+ * 13. Sessions empty-state renders when no linked sessions.
+ * 14. Projects empty-state renders when no linked projects.
  * 15. Reloads detail after successful alias add.
  * 16. Reloads detail after successful alias remove.
  * 17. Display-alias Set/Edit button is visible.
  * 18. Setting display alias updates effectiveLabel.
  * 19. Clearing display alias reverts effectiveLabel to primaryDesignation.
+ * 20. (US2) Linked sessions list renders date, frameCount, state.
+ * 21. (US2) Clicking session row navigates to /sessions with selected=id.
+ * 22. (US3) Linked projects list renders name and lifecycle.
+ * 23. (US3) Clicking project row navigates to /projects with search: { selected: id }.
+ * 24. (US4) Observing notes: empty state renders placeholder.
+ * 25. (US4) Observing notes: existing notes body renders.
+ * 26. (US4) Edit → save calls updateTargetNote and reflects result.
+ * 27. (US4) Edit → cancel restores original notes.
+ * 28. (US4) Save error shows banner message.
  */
 
 import { render, screen, fireEvent, waitFor } from '@testing-library/react';
@@ -35,12 +44,20 @@ const {
   mockRemoveTargetAlias,
   mockSetDisplayAlias,
   mockClearDisplayAlias,
+  mockListTargetSessions,
+  mockListTargetProjects,
+  mockGetTargetNote,
+  mockUpdateTargetNote,
 } = vi.hoisted(() => ({
   mockGetTargetDetail: vi.fn(),
   mockAddTargetAlias: vi.fn(),
   mockRemoveTargetAlias: vi.fn(),
   mockSetDisplayAlias: vi.fn(),
   mockClearDisplayAlias: vi.fn(),
+  mockListTargetSessions: vi.fn(),
+  mockListTargetProjects: vi.fn(),
+  mockGetTargetNote: vi.fn(),
+  mockUpdateTargetNote: vi.fn(),
 }));
 
 vi.mock('@/api/commands', () => ({
@@ -49,10 +66,15 @@ vi.mock('@/api/commands', () => ({
   removeTargetAlias: mockRemoveTargetAlias,
   setDisplayAlias: mockSetDisplayAlias,
   clearDisplayAlias: mockClearDisplayAlias,
+  listTargetSessions: mockListTargetSessions,
+  listTargetProjects: mockListTargetProjects,
+  getTargetNote: mockGetTargetNote,
+  updateTargetNote: mockUpdateTargetNote,
 }));
 
+const mockNavigate = vi.fn();
 vi.mock('@tanstack/react-router', () => ({
-  useNavigate: () => vi.fn(),
+  useNavigate: () => mockNavigate,
 }));
 
 vi.mock('@tauri-apps/api/core', () => ({
@@ -93,6 +115,7 @@ function makeDetail(overrides?: {
 
 beforeEach(() => {
   vi.clearAllMocks();
+  mockNavigate.mockResolvedValue(undefined);
   mockGetTargetDetail.mockResolvedValue(makeDetail());
   mockAddTargetAlias.mockResolvedValue({
     alias: { id: 'alias-user-new', alias: 'New Alias', kind: 'user' },
@@ -100,6 +123,11 @@ beforeEach(() => {
   mockRemoveTargetAlias.mockResolvedValue({ removed: true });
   mockSetDisplayAlias.mockResolvedValue(makeDetail({ displayAlias: 'My NGC 7000' }));
   mockClearDisplayAlias.mockResolvedValue(makeDetail({ displayAlias: null }));
+  // US2/US3/US4 defaults: empty lists, no notes.
+  mockListTargetSessions.mockResolvedValue([]);
+  mockListTargetProjects.mockResolvedValue([]);
+  mockGetTargetNote.mockResolvedValue({ notes: null });
+  mockUpdateTargetNote.mockResolvedValue({ notes: null });
 });
 
 // ── Tests ─────────────────────────────────────────────────────────────────────
@@ -346,15 +374,216 @@ describe('TargetDetailV2', () => {
     mockClearDisplayAlias.mockResolvedValue(makeDetail({ displayAlias: null }));
 
     render(<TargetDetailV2 targetId={TARGET_ID} />);
-    await waitFor(() => screen.getByRole('button', { name: /^edit$/i }));
+    // Wait for at least one Edit button (display-alias + notes may both show Edit)
+    await waitFor(() =>
+      expect(screen.getAllByRole('button', { name: /^edit$/i }).length).toBeGreaterThanOrEqual(1),
+    );
 
-    fireEvent.click(screen.getByRole('button', { name: /^edit$/i }));
+    // The display-alias Edit button is the first in DOM order
+    fireEvent.click(screen.getAllByRole('button', { name: /^edit$/i })[0]);
     await waitFor(() => screen.getByRole('button', { name: /^clear$/i }));
 
     fireEvent.click(screen.getByRole('button', { name: /^clear$/i }));
 
     await waitFor(() =>
       expect(mockClearDisplayAlias).toHaveBeenCalledWith({ targetId: TARGET_ID }),
+    );
+  });
+
+  // ── US2: Linked sessions ───────────────────────────────────────────────────
+
+  it('20. (US2) sessions empty-state renders "No linked sessions yet."', async () => {
+    mockListTargetSessions.mockResolvedValue([]);
+    render(<TargetDetailV2 targetId={TARGET_ID} />);
+    await waitFor(() =>
+      expect(screen.getByText(/No linked sessions yet/i)).toBeInTheDocument(),
+    );
+  });
+
+  it('21. (US2) linked session rows render date, frameCount, and state', async () => {
+    mockListTargetSessions.mockResolvedValue([
+      {
+        id: 'sess-1',
+        sessionKey: '{}',
+        createdAt: '2026-03-15T22:00:00Z',
+        frameCount: 42,
+        state: 'confirmed',
+      },
+    ]);
+    render(<TargetDetailV2 targetId={TARGET_ID} />);
+    await waitFor(() => expect(screen.getByText(/42 frames/i)).toBeInTheDocument());
+    expect(screen.getByText(/confirmed/i)).toBeInTheDocument();
+  });
+
+  it('22. (US2) clicking session row navigates to /sessions with selected=id', async () => {
+    mockListTargetSessions.mockResolvedValue([
+      {
+        id: 'sess-abc',
+        sessionKey: '{}',
+        createdAt: '2026-03-15T22:00:00Z',
+        frameCount: 5,
+        state: 'confirmed',
+      },
+    ]);
+    render(<TargetDetailV2 targetId={TARGET_ID} />);
+    await waitFor(() => expect(screen.getByText(/5 frames/i)).toBeInTheDocument());
+
+    fireEvent.click(screen.getByText(/5 frames/i).closest('button')!);
+
+    await waitFor(() =>
+      expect(mockNavigate).toHaveBeenCalledWith({
+        to: '/sessions',
+        search: { selected: 'sess-abc' },
+      }),
+    );
+  });
+
+  // ── US3: Linked projects ───────────────────────────────────────────────────
+
+  it('23. (US3) projects empty-state renders "No projects linked."', async () => {
+    mockListTargetProjects.mockResolvedValue([]);
+    render(<TargetDetailV2 targetId={TARGET_ID} />);
+    await waitFor(() =>
+      expect(screen.getAllByText(/No projects linked/i).length).toBeGreaterThanOrEqual(1),
+    );
+  });
+
+  it('24. (US3) linked project rows render name and lifecycle', async () => {
+    mockListTargetProjects.mockResolvedValue([
+      { id: 'proj-1', name: 'Horsehead 2026', lifecycle: 'ready' },
+    ]);
+    render(<TargetDetailV2 targetId={TARGET_ID} />);
+    await waitFor(() =>
+      expect(screen.getAllByText('Horsehead 2026').length).toBeGreaterThanOrEqual(1),
+    );
+    expect(screen.getAllByText('ready').length).toBeGreaterThanOrEqual(1);
+  });
+
+  it('25. (US3) clicking project row navigates to /projects with selected=id (mid-page link row)', async () => {
+    mockListTargetProjects.mockResolvedValue([
+      { id: 'proj-1', name: 'Horsehead 2026', lifecycle: 'ready' },
+    ]);
+    render(<TargetDetailV2 targetId={TARGET_ID} />);
+    await waitFor(() =>
+      expect(screen.getAllByText('Horsehead 2026').length).toBeGreaterThanOrEqual(1),
+    );
+
+    // Click the first project button (mid-page link row)
+    fireEvent.click(screen.getAllByText('Horsehead 2026')[0].closest('button')!);
+
+    await waitFor(() =>
+      expect(mockNavigate).toHaveBeenCalledWith({
+        to: '/projects',
+        search: { selected: 'proj-1' },
+      }),
+    );
+  });
+
+  it('25b. (US3) clicking project row in bottom section navigates to /projects with selected=id', async () => {
+    mockListTargetProjects.mockResolvedValue([
+      { id: 'proj-1', name: 'Horsehead 2026', lifecycle: 'ready' },
+    ]);
+    render(<TargetDetailV2 targetId={TARGET_ID} />);
+    await waitFor(() =>
+      expect(screen.getAllByText('Horsehead 2026').length).toBeGreaterThanOrEqual(1),
+    );
+
+    // Click the last project button (bottom Projects section)
+    const btns = screen.getAllByText('Horsehead 2026').map((el) => el.closest('button')!);
+    fireEvent.click(btns[btns.length - 1]);
+
+    await waitFor(() =>
+      expect(mockNavigate).toHaveBeenCalledWith({
+        to: '/projects',
+        search: { selected: 'proj-1' },
+      }),
+    );
+  });
+
+  // ── US4: Observing notes ───────────────────────────────────────────────────
+
+  it('26. (US4) notes empty placeholder renders when no notes', async () => {
+    mockGetTargetNote.mockResolvedValue({ notes: null });
+    render(<TargetDetailV2 targetId={TARGET_ID} />);
+    await waitFor(() =>
+      expect(screen.getByTestId('target-notes-empty')).toBeInTheDocument(),
+    );
+    expect(screen.getByTestId('target-notes-empty')).toHaveTextContent('No notes yet.');
+  });
+
+  it('27. (US4) existing notes body renders', async () => {
+    mockGetTargetNote.mockResolvedValue({ notes: 'Great transparency last night.' });
+    render(<TargetDetailV2 targetId={TARGET_ID} />);
+    await waitFor(() =>
+      expect(screen.getByTestId('target-notes-body')).toHaveTextContent(
+        'Great transparency last night.',
+      ),
+    );
+  });
+
+  it('28. (US4) edit → save calls updateTargetNote and reflects result', async () => {
+    mockGetTargetNote.mockResolvedValue({ notes: 'Old note' });
+    mockUpdateTargetNote.mockResolvedValue({ notes: 'Updated note' });
+    render(<TargetDetailV2 targetId={TARGET_ID} />);
+    await waitFor(() => screen.getByTestId('target-notes-body'));
+
+    // Click Edit button (label reuses projects_detail_edit_btn = "Edit")
+    fireEvent.click(screen.getByRole('button', { name: /^edit$/i }));
+    await waitFor(() => screen.getByTestId('target-notes-textarea'));
+
+    fireEvent.change(screen.getByTestId('target-notes-textarea'), {
+      target: { value: 'Updated note' },
+    });
+    fireEvent.click(screen.getByRole('button', { name: /^save$/i }));
+
+    await waitFor(() =>
+      expect(mockUpdateTargetNote).toHaveBeenCalledWith({
+        targetId: TARGET_ID,
+        notes: 'Updated note',
+      }),
+    );
+    await waitFor(() =>
+      expect(screen.getByTestId('target-notes-body')).toHaveTextContent('Updated note'),
+    );
+  });
+
+  it('29. (US4) edit → cancel restores original notes without calling update', async () => {
+    mockGetTargetNote.mockResolvedValue({ notes: 'Original note' });
+    render(<TargetDetailV2 targetId={TARGET_ID} />);
+    await waitFor(() => screen.getByTestId('target-notes-body'));
+
+    fireEvent.click(screen.getByRole('button', { name: /^edit$/i }));
+    await waitFor(() => screen.getByTestId('target-notes-textarea'));
+
+    fireEvent.change(screen.getByTestId('target-notes-textarea'), {
+      target: { value: 'Changed but cancelled' },
+    });
+    fireEvent.click(screen.getByRole('button', { name: /^cancel$/i }));
+
+    await waitFor(() =>
+      expect(screen.getByTestId('target-notes-body')).toHaveTextContent('Original note'),
+    );
+    expect(mockUpdateTargetNote).not.toHaveBeenCalled();
+  });
+
+  it('30. (US4) save error shows banner message', async () => {
+    mockGetTargetNote.mockResolvedValue({ notes: null });
+    mockUpdateTargetNote.mockRejectedValue(new Error('db error'));
+    render(<TargetDetailV2 targetId={TARGET_ID} />);
+    await waitFor(() => screen.getByTestId('target-notes-empty'));
+
+    // Open edit with the notes "Edit" button (last Edit button on page is notes section)
+    const editBtns = screen.getAllByRole('button', { name: /^edit$/i });
+    fireEvent.click(editBtns[editBtns.length - 1]);
+    await waitFor(() => screen.getByTestId('target-notes-textarea'));
+
+    fireEvent.change(screen.getByTestId('target-notes-textarea'), {
+      target: { value: 'some notes' },
+    });
+    fireEvent.click(screen.getByRole('button', { name: /^save$/i }));
+
+    await waitFor(() =>
+      expect(screen.getByText('Failed to save notes.')).toBeInTheDocument(),
     );
   });
 });

@@ -18,7 +18,9 @@ import {
 } from "@/api/commands";
 import { Btn } from "@/ui";
 import { m } from "@/lib/i18n";
-import { SettingsSection, SettingsRow } from "./SettingsKit";
+import { SettingsSection, SettingsRow, RestoreDefaultsBtn } from "./SettingsKit";
+
+const NAMING_KEYS = ['pattern', 'autoApplyPattern', 'patternsByType'];
 
 interface NamingStructureProps {
 	save: (scope: string, values: Record<string, unknown>) => void;
@@ -823,22 +825,26 @@ export function NamingStructure({ save }: NamingStructureProps) {
 	} | null>(null);
 	const [loaded, setLoaded] = useState(false);
 
+	const applyValues = (vals: Record<string, unknown>) => {
+		if (Array.isArray(vals.pattern) && vals.pattern.length > 0) {
+			setPattern(vals.pattern as PatternPart[]);
+		}
+		if (typeof vals.autoApplyPattern === "boolean") {
+			setAutoApplyPattern(vals.autoApplyPattern);
+		}
+	};
+
 	// ── Load saved pattern on mount (spec 018 keys: pattern, autoApplyPattern) ─
 	useEffect(() => {
 		getSettings({ scope: "naming" })
 			.then((data) => {
-				const vals = data.values as Record<string, unknown>;
-				if (Array.isArray(vals.pattern) && vals.pattern.length > 0) {
-					setPattern(vals.pattern as PatternPart[]);
-				}
-				if (typeof vals.autoApplyPattern === "boolean") {
-					setAutoApplyPattern(vals.autoApplyPattern);
-				}
+				applyValues(data.values as Record<string, unknown>);
 			})
 			.catch(() => {
 				// Use defaults on load failure (e.g. in test/mock environment).
 			})
 			.finally(() => setLoaded(true));
+	// eslint-disable-next-line react-hooks/exhaustive-deps
 	}, []);
 
 	// ── Live validation (T1.3 / T1.4) ────────────────────────────────────────
@@ -898,7 +904,16 @@ export function NamingStructure({ save }: NamingStructureProps) {
 
 	return (
 		<>
-			<SettingsSection title={m.settings_naming_project_title()}>
+			<SettingsSection
+				title={m.settings_naming_project_title()}
+				action={
+					<RestoreDefaultsBtn
+						scope="naming"
+						keys={NAMING_KEYS}
+						onRestored={applyValues}
+					/>
+				}
+			>
 				<div className="alm-settings__row">
 					<div className="alm-settings__row-content">
 						<PatternChipsEditor

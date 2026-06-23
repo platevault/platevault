@@ -31,8 +31,13 @@ import {
   removeTargetAlias,
   setDisplayAlias,
   clearDisplayAlias,
+  listTargetSessions,
+  listTargetProjects,
+  getTargetNote,
+  updateTargetNote,
 } from '@/api/commands';
 import type { TargetDetailV3, TargetOpError, TargetListItem } from '@/api/commands';
+import type { TargetSessionItem, TargetProjectItem } from '@/bindings';
 import { DetailPane, PropertyTable, type PropertyDef } from '@/components';
 import { Pill, Section, EmptyState, Banner, Btn } from '@/ui';
 import { m } from '@/lib/i18n';
@@ -348,6 +353,23 @@ export function TargetDetailV2({ targetId, item = null, usableAltDeg = USABLE_AL
   const [displayAliasInput, setDisplayAliasInput] = useState('');
   const [displayAliasEditing, setDisplayAliasEditing] = useState(false);
   const [newProjectOpen, setNewProjectOpen] = useState(false);
+
+  // US2: linked sessions
+  const [sessions, setSessions] = useState<TargetSessionItem[]>([]);
+  const [sessionsLoading, setSessionsLoading] = useState(true);
+
+  // US3: linked projects
+  const [projects, setProjects] = useState<TargetProjectItem[]>([]);
+  const [projectsLoading, setProjectsLoading] = useState(true);
+
+  // US4: observing notes
+  const [notes, setNotes] = useState<string | null>(null);
+  const [notesEditing, setNotesEditing] = useState(false);
+  const [notesDraft, setNotesDraft] = useState('');
+  const [notesSaving, setNotesSaving] = useState(false);
+  const [notesSaved, setNotesSaved] = useState(false);
+  const [notesError, setNotesError] = useState<string | null>(null);
+
   const navigate = useNavigate();
 
   const load = useCallback(() => {
@@ -365,6 +387,58 @@ export function TargetDetailV2({ targetId, item = null, usableAltDeg = USABLE_AL
   useEffect(() => {
     load();
   }, [load]);
+
+  // US2: load linked sessions when targetId changes.
+  useEffect(() => {
+    setSessionsLoading(true);
+    listTargetSessions({ targetId })
+      .then((data) => setSessions(data))
+      .catch(() => setSessions([]))
+      .finally(() => setSessionsLoading(false));
+  }, [targetId]);
+
+  // US3: load linked projects when targetId changes.
+  useEffect(() => {
+    setProjectsLoading(true);
+    listTargetProjects({ targetId })
+      .then((data) => setProjects(data))
+      .catch(() => setProjects([]))
+      .finally(() => setProjectsLoading(false));
+  }, [targetId]);
+
+  // US4: load observing notes when targetId changes.
+  useEffect(() => {
+    getTargetNote({ targetId })
+      .then(({ notes: n }) => {
+        setNotes(n);
+        setNotesDraft(n ?? '');
+      })
+      .catch(() => {
+        setNotes(null);
+        setNotesDraft('');
+      });
+    // Reset editing state when target changes.
+    setNotesEditing(false);
+    setNotesSaved(false);
+    setNotesError(null);
+  }, [targetId]);
+
+  // US4: save notes handler.
+  const handleNotesSave = useCallback(async () => {
+    setNotesSaving(true);
+    setNotesError(null);
+    try {
+      const { notes: saved } = await updateTargetNote({ targetId, notes: notesDraft });
+      setNotes(saved);
+      setNotesDraft(saved ?? '');
+      setNotesEditing(false);
+      setNotesSaved(true);
+    } catch {
+      setNotesError(m.targets_detail_notes_save_error());
+    } finally {
+      setNotesSaving(false);
+    }
+  }, [targetId, notesDraft]);
 
   // Add user alias.
   const handleAliasAdd = useCallback(async () => {
@@ -573,19 +647,66 @@ export function TargetDetailV2({ targetId, item = null, usableAltDeg = USABLE_AL
       </div>
 
       {/* ── Linked sessions + projects ───────────────────────────────────── */}
-      {/* STUB: target↔session/project linkage backend pending (spec 036 open gap). */}
       <div className="alm-planner__links">
         <div>
           <p className="alm-planner__link-col-title">{m.common_sessions()}</p>
-          <span className="alm-planner__link-empty">
-            {m.targets_detail_no_sessions()}
-          </span>
+          {sessionsLoading ? (
+            <span className="alm-planner__link-empty">{m.common_loading()}</span>
+          ) : sessions.length === 0 ? (
+            <span className="alm-planner__link-empty">
+              {m.targets_detail_no_sessions()}
+            </span>
+          ) : (
+            <ul className="alm-planner__link-list">
+              {sessions.map((s) => {
+                const dateStr = new Date(s.createdAt).toLocaleDateString(undefined, {
+                  year: 'numeric',
+                  month: 'short',
+                  day: 'numeric',
+                });
+                return (
+                  <li key={s.id} className="alm-planner__link-item">
+                    <button
+                      className="alm-planner__link-btn"
+                      onClick={() =>
+                        void navigate({ to: '/sessions', search: { selected: s.id } })
+                      }
+                    >
+                      <span className="alm-planner__link-date">{dateStr}</span>
+                      <span className="alm-planner__link-meta">
+                        {m.targets_detail_session_frames({ count: s.frameCount })}
+                      </span>
+                      <span className="alm-planner__link-state">{s.state}</span>
+                    </button>
+                  </li>
+                );
+              })}
+            </ul>
+          )}
         </div>
         <div>
           <p className="alm-planner__link-col-title">{m.common_projects()}</p>
-          <span className="alm-planner__link-empty">
-            {m.targets_detail_no_projects_linked()}
-          </span>
+          {projectsLoading ? (
+            <span className="alm-planner__link-empty">{m.common_loading()}</span>
+          ) : projects.length === 0 ? (
+            <span className="alm-planner__link-empty">
+              {m.targets_detail_no_projects_linked()}
+            </span>
+          ) : (
+            <ul className="alm-planner__link-list">
+              {projects.map((p) => (
+                <li key={p.id} className="alm-planner__link-item">
+                  <button
+                    className="alm-planner__link-btn"
+                    onClick={() => void navigate({ to: '/projects', search: { selected: p.id } })}
+                  >
+                    <span className="alm-planner__link-name">{p.name}</span>
+                    <span className="alm-planner__link-state">{p.lifecycle}</span>
+                  </button>
+                </li>
+              ))}
+            </ul>
+          )}
         </div>
       </div>
 
@@ -712,13 +833,111 @@ export function TargetDetailV2({ targetId, item = null, usableAltDeg = USABLE_AL
           above (single source of truth) — the duplicate bottom Sessions
           section was removed to avoid two Sessions surfaces. */}
 
-      {/* ── Projects (empty-state stub) ──────────────────────────────────── */}
-      <Section title={m.common_projects()}>
-        {/* STUB: target↔project linkage backend pending */}
-        <EmptyState
-          title={m.targets_detail_no_projects_linked_title()}
-          desc={m.targets_detail_no_projects_linked()}
-        />
+      {/* ── Projects (spec 023 US3) ──────────────────────────────────────── */}
+      <Section title={m.common_projects()} count={projects.length}>
+        {projects.length === 0 ? (
+          <EmptyState
+            title={m.targets_detail_no_projects_linked_title()}
+            desc={m.targets_detail_no_projects_linked()}
+          />
+        ) : (
+          <ul className="alm-target-detail__project-list">
+            {projects.map((p) => (
+              <li key={p.id} className="alm-target-detail__project-item">
+                <button
+                  className="alm-target-detail__project-btn"
+                  onClick={() =>
+                    void navigate({ to: '/projects', search: { selected: p.id } })
+                  }
+                >
+                  <span className="alm-target-detail__project-name">{p.name}</span>
+                  <span className="alm-target-detail__project-lifecycle">{p.lifecycle}</span>
+                </button>
+              </li>
+            ))}
+          </ul>
+        )}
+      </Section>
+
+      {/* ── Observing notes (spec 023 US4) ──────────────────────────────── */}
+      <Section title={m.targets_detail_notes_title()}>
+        {notesEditing ? (
+          <div className="alm-target-detail__notes-edit">
+            <textarea
+              data-testid="target-notes-textarea"
+              aria-label={m.targets_detail_notes_title()}
+              className="alm-target-detail__notes-textarea"
+              placeholder={m.targets_detail_notes_placeholder()}
+              value={notesDraft}
+              rows={5}
+              disabled={notesSaving}
+              onChange={(e) => {
+                setNotesDraft(e.target.value);
+                setNotesError(null);
+              }}
+            />
+            <div className="alm-target-detail__notes-actions">
+              <button
+                className="alm-target-detail__action-btn alm-target-detail__action-btn--muted"
+                disabled={notesSaving}
+                onClick={() => {
+                  setNotesDraft(notes ?? '');
+                  setNotesEditing(false);
+                  setNotesError(null);
+                }}
+              >
+                {m.common_cancel()}
+              </button>
+              <button
+                className="alm-target-detail__action-btn"
+                disabled={notesSaving}
+                onClick={() => void handleNotesSave()}
+              >
+                {notesSaving ? m.common_saving() : m.common_save()}
+              </button>
+            </div>
+            {notesError && (
+              <Banner variant="danger" className="alm-target-detail__banner">
+                {notesError}
+              </Banner>
+            )}
+          </div>
+        ) : (
+          <div className="alm-target-detail__notes-view">
+            {notes ? (
+              <div
+                data-testid="target-notes-body"
+                className="alm-target-detail__notes-body"
+              >
+                {notes}
+              </div>
+            ) : (
+              <span
+                data-testid="target-notes-empty"
+                className="alm-target-detail__notes-empty"
+              >
+                {m.targets_detail_notes_empty()}
+              </span>
+            )}
+            <div className="alm-target-detail__notes-footer">
+              <button
+                className="alm-target-detail__edit-btn"
+                onClick={() => {
+                  setNotesDraft(notes ?? '');
+                  setNotesEditing(true);
+                  setNotesSaved(false);
+                }}
+              >
+                {m.projects_detail_edit_btn()}
+              </button>
+              {notesSaved && (
+                <span className="alm-target-detail__notes-saved">
+                  {m.targets_detail_notes_saved()}
+                </span>
+              )}
+            </div>
+          </div>
+        )}
       </Section>
 
       {/* Back button */}

@@ -353,6 +353,10 @@ recompute on each event using the dependency graph above.
 
 #### 6.2 Catalog event-bus topics (spec 014)
 
+> **⚠ SUPERSEDED (2026-06-23).** The `catalog.download.*` / `catalog.manifest.*` topics below belong to
+> the spec-014 bundled-catalog pipeline, which was **abandoned** in favour of SIMBAD resolve-on-demand
+> (spec 035). These topics are not emitted by shipped code. Retained for history.
+
 Catalog download and manifest-fetch operations publish the following
 additional topics on the same in-process event bus. These are owned by
 **spec 014** (`crates/targeting/catalogs/download.rs`); they are registered

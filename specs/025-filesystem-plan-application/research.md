@@ -220,7 +220,7 @@ All previously open points are now resolved:
 
 ## R2 (addendum). OS trash platform semantics (R-Trash-1)
 
-When `destructiveDestination == os_trash` on a plan, the executor uses:
+When `destructiveDestination == trash` on a plan, the executor uses:
 - **Windows**: `IFileOperation::DeleteItem` with `FOFX_RECYCLEONDELETE`.
 - **macOS**: `NSFileManager.trashItem(at:resultingItemURL:error:)`.
 - **Linux**: freedesktop trash spec / `gio trash` (XDG `$XDG_DATA_HOME/Trash`

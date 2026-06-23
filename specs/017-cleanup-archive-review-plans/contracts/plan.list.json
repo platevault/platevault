@@ -156,7 +156,7 @@
         },
         "destructiveDestination": {
           "type": "string",
-          "enum": ["archive", "os_trash"],
+          "enum": ["archive", "trash"],
           "description": "Per-plan destination for destructive items (R-Trash-1). Default: archive."
         },
         "type": {

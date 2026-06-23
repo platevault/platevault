@@ -97,6 +97,10 @@
           "uniqueItems": true,
           "description": "Inventory session ids to link at create time. Sources are picked from Inventory only (research R2); arbitrary disk paths are refused upstream by the UI picker."
         },
+        "canonicalTargetId": {
+          "type": "string",
+          "description": "Optional canonical_target id to link at creation (spec 035)."
+        },
         "notes": {
           "type": "string",
           "maxLength": 4096

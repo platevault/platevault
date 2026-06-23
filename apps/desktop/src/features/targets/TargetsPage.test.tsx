@@ -48,6 +48,10 @@ vi.mock('@/api/commands', () => ({
   removeTargetAlias: vi.fn().mockResolvedValue({ removed: true }),
   setDisplayAlias: vi.fn().mockResolvedValue({}),
   clearDisplayAlias: vi.fn().mockResolvedValue({}),
+  listTargetSessions: vi.fn().mockResolvedValue([]),
+  listTargetProjects: vi.fn().mockResolvedValue([]),
+  getTargetNote: vi.fn().mockResolvedValue({ notes: null }),
+  updateTargetNote: vi.fn().mockResolvedValue({ notes: null }),
 }));
 
 const mockNavigate = vi.fn();

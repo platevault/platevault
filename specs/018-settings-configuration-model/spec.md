@@ -11,7 +11,7 @@
 
 **Feature Branch**: `018-settings-configuration-model`  
 **Created**: 2026-05-09  
-**Status**: Draft  
+**Status**: Completed (archived 2026-06-23; PRs #348/#350/#352)  
 **Input**: User description: "Specify the settings model after the UI review: plain labels, one setting per line, hover information, auto-save, no internal technical controls, and grouped submenus that match user workflows."
 
 ## User Scenarios & Testing *(mandatory)*
@@ -67,12 +67,36 @@ As a user, I want settings grouped by workflow domain so that source behavior, c
 - **FR-002**: Settings MUST show one setting per line.
 - **FR-003**: Each setting row MUST include an information affordance that explains what the setting changes, how the app uses it, what the options mean, and any workflow or safety consequence; it MUST NOT merely restate the label.
 - **FR-004**: Settings MUST auto-save changes and MUST NOT require a global Save button.
-- **FR-005**: Destructive or high-risk setting changes MUST show confirmation before applying.
-- **FR-006**: Density MUST be fixed by the desktop design system; Settings MUST NOT expose compact/comfortable density controls.
+- **FR-005**: Destructive or high-risk setting changes MUST surface a prominent
+  warning (e.g. the Cleanup danger banner). *(Reconciled 2026-06-23 to the
+  auto-save model: settings persist immediately, so the binding *confirmation*
+  for an actual destructive filesystem operation is enforced at plan-application
+  time — the reviewable-plan gate, constitution §II — not at the auto-saved
+  toggle. A settings toggle sets policy; it does not itself mutate the
+  filesystem.)*
+- **FR-006**: Display density is a user-selectable **Appearance preference**, owned
+  by the appearance/theme system (spec 043), persisted via `prefs.density` and
+  applied app-wide by the shell. The legacy per-table `rowDensity` *settings* key
+  is removed (T032). *(Amended 2026-06-23: the original prohibition — "Settings
+  MUST NOT expose density controls" — is relaxed to keep density as an Appearance
+  preference per the design-v4/043 redesign. The constraint that density is not a
+  per-table or internal control is preserved; it is a single global Appearance
+  choice.)*
 - **FR-007**: Light/dark mode MUST be available as an icon control in the app shell and as a persisted appearance setting if exposed.
 - **FR-008**: Project folder and archive location patterns MUST use the token pattern builder, not freeform text.
 - **FR-009**: Calibration matching settings MUST be per calibration frame type.
-- **FR-010**: Catalog settings MUST allow selecting available catalog families and target lookup behavior.
+  *(Reconciled 2026-06-23 to as-built: per-frame-type lives in the backend model
+  — `darkMatchTolerance`/`flatMatching`, per-type dark/flat/bias override
+  penalties, and per-frame-type destination patterns (`patternsByType`). The
+  visible **Calibration Matching** pane presents per-criterion match-required
+  toggles (camera/binning/gain/offset/temp/aging) backed by the spec-007
+  `calibrationTolerances` store; per-frame-type granularity is in the keys it
+  consumes, not as separate dark/flat/bias rows.)*
+- **FR-010**: Catalog/target-lookup settings configure target resolution behavior.
+  *(Reconciled 2026-06-23: catalog-**family** selection (manifest/`active_catalogs`)
+  is superseded by [Spec 035 — SIMBAD Target Resolution](../035-simbad-target-resolution/spec.md);
+  T039 is OBSOLETE. The **Target Resolution** settings pane configures the SIMBAD
+  resolver — endpoint, enable/disable, and cache — in place of family selection.)*
 - **FR-011**: Tool settings MUST configure executable paths for each supported processing tool.
 - **FR-012**: API contract settings MUST NOT appear as a normal user settings section.
 - **FR-013**: Log settings MUST not expose export format or request/entity metadata toggles; request/entity metadata is always present and export is JSON when offered.
@@ -112,18 +136,19 @@ are now absorbed into the v1 settings model.
 
 **Target lookup**
 
-- `target_lookup.active_catalogs` (`string[]`, catalog_id enum): backend-derived
-  active catalog set for `target.lookup`; default is all 13 v1 catalogs per
-  spec 014. User can disable specific catalogs in Settings (spec 013 R-2.2).
+- ~~`target_lookup.active_catalogs`~~ **DROPPED** — referenced spec 014 catalog
+  manifest, which is superseded by spec 035 (SIMBAD resolve-on-demand). No
+  manifest exists; this key is not implemented.
 
 **Calibration matching**
 
 - `calibration.dark_temp_tolerance` (`number`, default `2.0` °C): dark frame
   temperature matching tolerance (spec 007 A5).
-- `calibration.dark.override_penalty` / `calibration.flat.override_penalty` /
-  `calibration.bias.override_penalty` (`number`, default `0.3`, range `[0, 1]`):
+- `calibration_dark_override_penalty` / `calibration_flat_override_penalty` /
+  `calibration_bias_override_penalty` (`number`, default `0.3`, range `[0, 1]`):
   per-frame-type confidence penalty applied when a user overrides the
-  auto-suggested calibration match (spec 007 R-OverridePenalty).
+  auto-suggested calibration match (spec 007 R-OverridePenalty). These are
+  **flat typed fields** on `SettingsState`, not structured-path keys.
 - `calibration.prefill_suggestion` (`boolean`, default `true`): when true, the
   assign dialog opens pre-filled with the top candidate; user must confirm
   (spec 007 R-Prefill).
@@ -134,19 +159,38 @@ are now absorbed into the v1 settings model.
   identifier used for `open -b` launching; seed values for known tools
   (PixInsight, Siril); user-editable for custom installs (spec 011 R-BundleId).
 
-**Workflow profile (artifact watcher)**
+**Artifact watcher (spec 012)**
 
-- `workflow_profile.<profile_id>.watch_extensions` (`string[]`): per-workflow-
-  profile allow-list of file extensions the watcher monitors (spec 012 R-ExtAllow).
-- `workflow_profile.<profile_id>.launch_attribution_window_hours` (`number`,
-  default `6`): per-workflow-profile attribution window for matching artifacts
-  to tool launches (spec 012 C3).
+- `tool_watch_extensions` (`string[]`, default `[".xisf",".fits",".fit",".tif",
+  ".tiff",".png",".jpg",".ser",".avi"]`): global allow-list of file extensions
+  monitored by the artifact-observation watcher (spec 012 R-ExtAllow). **Flat
+  global field** — replaces the former per-profile structured-path key.
+- `tool_attribution_window_hours` (`number`, default `6`): global attribution
+  window for matching artifacts to tool launches (spec 012 C3). **Flat global
+  field** — replaces the former per-profile structured-path key.
+
+**Inbox destination (spec 041)**
+
+- `patterns_by_type` (`BTreeMap<String, String>`): per-frame-type destination
+  pattern overrides; maps frame type strings to pattern tokens. Drives spec 041
+  FR-026/FR-026b single-type item destination resolution.
+
+**Ingestion gate**
+
+- `always_preview_before_plan` (`boolean`, default `false`): forces a preview
+  step before any filesystem plan is generated (also present in main field table).
+
+**Calibration aging (FR-023)**
+
+- `calibration_aging_threshold_days` (`f64`): threshold beyond which a
+  calibration frame is considered aged; used in calibration suggestion scoring
+  (spec 007/018 FR-023).
 
 **FITS classifier**
 
-- `imagetyp_normalization.user_mappings` (`Array<{ imagetyp_string: string,
-  frame_type: enum }>`): user-extensible table for IMAGETYP strings not covered
-  by the built-in normalization table; empty array default (spec 005
+- `imagetyp_normalization_user_mappings` (`Vec<{ imagetyp_string: string,
+  frame_type: FrameType }>`): user-extensible table for IMAGETYP strings not
+  covered by the built-in normalization table; empty array default (spec 005
   R-IMAGETYP-Norm).
 
 ## Success Criteria *(mandatory)*
@@ -170,38 +214,62 @@ are now absorbed into the v1 settings model.
 
 ## Implementation Status
 
-The Settings surface is implemented as a mockup in the desktop shell. Behavior
-captured in code already and reflected in this spec:
+*(Reconciled 2026-06-23 against as-built code on `main`.)*
 
-- **One-setting-per-line**: `SettingsPage.tsx` renders each setting as a single
-  row with label, info affordance, and a single control. No save button is
-  present anywhere on the page.
-- **Auto-save on every change**: `updateSettings(key, value)` in
-  `apps/desktop/src/data/settings.ts` writes immediately to a localStorage-backed
-  store under the versioned key `alm.settings.v1` and broadcasts to subscribers.
-- **No-op guard**: `updateSettings` short-circuits when the new value equals the
-  prior value. This prevents redundant persistence, redundant notifications, and
-  redundant audit entries for "phantom" changes.
-- **Noisy-key log policy**: `pattern` and `protectedCategories` are marked
-  noisy. Updates to these keys still persist, but do not append an entry to the
-  application log on every keystroke. All other keys log an `info`-level entry
-  to the `settings` source on change. This bounds the audit log against
-  token-editor and free-text drag activity while keeping discrete toggles
-  individually auditable.
-- **Per-source override scaffolding**: The Naming & Structure section exposes
-  per-source override stubs alongside the global token pattern builder. The
-  resolution model is global default → per-source override, with no further
-  inheritance levels in v1.
-- **Theme persistence separation**: The light/dark/system selector persists
-  under a separate localStorage key (`alm.theme`) managed by
-  `apps/desktop/src/app/theme.tsx`. Theme is intentionally not part of
-  `SettingsState v1`, so theme changes never participate in the settings
-  audit stream and never invalidate the settings schema.
-- **Wired sections**: Data Sources, Ingestion & Review, Naming & Structure,
-  Calibration, Tool Workflows, Catalogs, Cleanup & Archive, Source Protection,
-  Application Log, Appearance, and Advanced. API Contracts is not a user
-  section per FR-012.
+The backend settings subsystem is built and on `main`. The desktop UI panes are
+wired via `useAutoSave` and `apps/desktop/src/api/commands.ts`. The **localStorage
+mockup path is replaced** by a Tauri backend. Remaining work is in UI polish,
+US5 migration, dev_mode release gating, and two reframed key tasks (T042/T043).
 
-Persistence to the library SQLite database, schema migration, and an audit
-event stream remain unimplemented and are tracked in `plan.md`,
-`data-model.md`, `contracts/`, and `tasks.md`.
+### IPC Transport (scope/values)
+
+The IPC surface uses a **scope/values** model:
+
+- `settings.get { scope } → { scope, values }` — returns all keys owned by
+  `scope` as a flat JSON object; empty scope = full bag.
+- `settings.update { scope, values }` — persists every key in `values`; unknown
+  keys are silently skipped (best-effort write); per-key validation, no-op guard,
+  and audit emission happen in the repository layer.
+- `settings.restore-defaults` — restore one, several, or all keys to defaults.
+- `settings.source-override.set` — set a per-source override for an overridable key.
+
+Scope → key mapping:
+
+| Scope | Keys |
+|-------|------|
+| `advanced` | `logLevel`, `rememberFollowLogs`, `devMode` |
+| `general` | *(empty — `rowDensity` removed by T032; display density is an Appearance preference)* |
+| `cleanup` | `blockPermanentDelete`, `defaultProtection`, `protectedCategories` |
+| `naming` | `pattern`, `autoApplyPattern`, `patternsByType` |
+| `sources` | `followSymlinks`, `hashOnScan`, `alwaysPreviewBeforePlan` |
+| `calibration` | `darkMatchTolerance`, `flatMatching`, `suggestCalibration`, `calibrationDarkTempTolerance`, `calibrationPrefillSuggestion`, `calibrationDarkOverridePenalty`, `calibrationFlatOverridePenalty`, `calibrationBiasOverridePenalty`, `calibrationAgingThresholdDays` |
+
+### As-Built Reality
+
+- **Domain types**: `crates/domain/core/src/settings.rs` (`PatternPart`,
+  `ImageTypMapping`, `SettingsState`, `SourceOverride`), re-exported by
+  `crates/contracts/core/src/settings.rs` (spec 042 T254).
+- **Use-case layer**: `crates/app/settings/src/lib.rs` (crate `app_core_settings`,
+  re-exported as `app_core::settings`): `get_settings`, `update_setting`,
+  `restore_defaults`, `set_source_override`, `resolve_setting`, `emit_snapshot`.
+  Key metadata is descriptor-driven from `crates/app/settings/src/descriptors.rs`
+  (`DESCRIPTORS` table, 29 keys — single source for key set, noisy, overridable,
+  defaults, devMode cfg gate).
+- **Persistence**: migration `crates/persistence/db/migrations/0013_settings.sql`
+  (`settings` + `source_overrides` tables). Low-level repo:
+  `crates/persistence/db/src/repositories/settings.rs` (get_raw/set_raw/load_settings/
+  patterns_by_type helpers).
+- **Tauri commands**: `apps/desktop/src-tauri/src/commands/settings.rs`
+  (`settings_get`, `settings_update`, `settings_restore_defaults`,
+  `settings_source_override_set`).
+- **Desktop binding**: `apps/desktop/src/api/commands.ts`
+  (`settingsGet` / `settingsUpdate`); wired through `useAutoSave.ts` in section
+  panes. NOTE: `apps/desktop/src/data/settings.ts` does NOT exist.
+- **Audit variants**: `SettingsChanged`, `SettingsSnapshot`, `SettingsRepair`
+  in `crates/audit/src/event_bus.rs`.
+- **No `crates/app/core/usecases/settings.rs`**: this path does not exist.
+- **Wired settings sections**: advanced / general / cleanup / naming / sources /
+  calibration. API Contracts is not a user section (FR-012).
+- **Auto-save**: section panes use `useAutoSave.ts`; no per-key save button.
+- **Theme**: separate `alm.theme` localStorage key in
+  `apps/desktop/src/app/theme.tsx`; not part of `SettingsState`.

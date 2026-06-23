@@ -46,7 +46,7 @@ user wants to protect master frames or final stacks wherever they live.
 **Decision (updated 2026-05-22, R-OSTrash-Allowed)**: OS trash is treated as
 a **reversible** action and is NOT considered permanent delete. The
 `block_permanent_delete` flag therefore applies ONLY to the `permanent_delete`
-action. The `os_trash` destructive destination (spec 017 `destructiveDestination`)
+action. The `trash` destructive destination (spec 017 `destructiveDestination`)
 is always allowed regardless of `block_permanent_delete`, because the user can
 recover items from the OS recycle bin/trash.
 
@@ -55,7 +55,7 @@ Interaction table:
 | Action                                   | `block_permanent_delete = true` | `block_permanent_delete = false` |
 | ---------------------------------------- | ------------------------------- | -------------------------------- |
 | `archive` (move to archive root)         | Allowed                         | Allowed                          |
-| `os_trash` (OS recycle bin/trash)        | **Allowed** — reversible        | Allowed                          |
+| `trash` (OS recycle bin/trash)           | **Allowed** — reversible        | Allowed                          |
 | `permanent_delete`                       | **Blocked** — rewritten to archive | Allowed (with plan review)   |
 
 When the planner would emit a `permanent_delete` against a `protected` source
@@ -66,12 +66,12 @@ The rewrite is recorded on the plan item as `rewritten_action`.
 **Rationale**: archive is recoverable from inside the app; OS trash is
 recoverable from outside the app; permanent delete is not recoverable.
 Constitution principle II prefers archive over trash over delete. Blocking
-`os_trash` would be overly restrictive and would surprise users who have
+`trash` would be overly restrictive and would surprise users who have
 selected that destructive destination in the plan review.
 
 **Rejected alternatives**:
 
-- Block `os_trash` with `block_permanent_delete`: too restrictive; OS trash
+- Block `trash` with `block_permanent_delete`: too restrictive; OS trash
   is clearly reversible.
 - Always use OS trash: loses audit linkage and breaks on network drives where
   trash is not supported.

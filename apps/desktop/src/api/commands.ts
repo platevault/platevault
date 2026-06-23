@@ -410,6 +410,60 @@ export async function updateSettings(args: {
   unwrap(await commands.settingsUpdate(args.scope, args.values));
 }
 
+import type { RestoreDefaultsResponse, SetSourceOverrideResponse } from '@/bindings/index';
+export type { RestoreDefaultsResponse, SetSourceOverrideResponse };
+
+/**
+ * `settings.restore-defaults` — restore named keys (or all keys when `keys`
+ * is empty) to their default values (spec 018 T028).
+ *
+ * Field name mirrors the generated binding exactly: `{ keys: string[] }`.
+ * Pass an empty array to restore every v1 key.
+ */
+export async function settingsRestoreDefaults(
+  keys: string[],
+): Promise<RestoreDefaultsResponse> {
+  return unwrap(
+    await commands.settingsRestoreDefaults({ keys }),
+  ) as RestoreDefaultsResponse;
+}
+
+/**
+ * `settings.overridable-keys` — return the authoritative list of stable settings
+ * keys that can be overridden per source root (spec 018 T025).
+ *
+ * Falls back to a hardcoded pair when the command fails (forward-compat).
+ */
+export async function settingsOverridableKeys(): Promise<string[]> {
+  try {
+    return unwrap(await commands.settingsOverridableKeys()) as string[];
+  } catch {
+    // Fallback for older backends or failed calls — matches the formerly hardcoded list.
+    return ['hashOnScan', 'followSymlinks'];
+  }
+}
+
+/**
+ * `settings.source-override.set` — set a per-source settings override
+ * (spec 018 T025).
+ *
+ * Field names mirror the generated binding exactly (camelCase: `sourceId`,
+ * `key`, `value`). Known overridable keys: `hashOnScan`, `followSymlinks`.
+ */
+export async function settingsSourceOverrideSet(args: {
+  sourceId: string;
+  key: string;
+  value: unknown;
+}): Promise<SetSourceOverrideResponse> {
+  return unwrap(
+    await commands.settingsSourceOverrideSet({
+      sourceId: args.sourceId,
+      key: args.key,
+      value: args.value,
+    }),
+  ) as SetSourceOverrideResponse;
+}
+
 export async function registerRoot(args: {
   path: string;
   category: string;
@@ -1314,6 +1368,52 @@ export async function clearDisplayAlias(
   req: TargetDisplayAliasClearRequest,
 ): Promise<TargetDetailV3> {
   return unwrap(await commands.targetDisplayAliasClear(req)) as TargetDetailV3;
+}
+
+/**
+ * `target.sessions.list` — list acquisition sessions linked to a target (spec 023 US2).
+ *
+ * Returns sessions ordered by created_at descending. Empty list when none are linked.
+ */
+export async function listTargetSessions(
+  req: import('@/bindings').TargetSessionsListRequest,
+): Promise<import('@/bindings').TargetSessionItem[]> {
+  return unwrap(await commands.targetSessionsList(req));
+}
+
+/**
+ * `target.projects.list` — list projects linked to a target (spec 023 US3).
+ *
+ * Returns projects ordered alphabetically by name. Empty list when none are linked.
+ */
+export async function listTargetProjects(
+  req: import('@/bindings').TargetProjectsListRequest,
+): Promise<import('@/bindings').TargetProjectItem[]> {
+  return unwrap(await commands.targetProjectsList(req));
+}
+
+/**
+ * `target.note.get` — read observing notes for a target (spec 023 US4).
+ *
+ * Returns `{ notes: null }` when no notes are stored.
+ */
+export async function getTargetNote(
+  req: import('@/bindings').TargetNoteGetRequest,
+): Promise<{ notes: string | null }> {
+  const result = unwrap(await commands.targetNoteGet(req));
+  return { notes: result.notes ?? null };
+}
+
+/**
+ * `target.note.update` — write observing notes for a target (spec 023 US4).
+ *
+ * Empty/whitespace-only `notes` clears the field. Returns updated notes value.
+ */
+export async function updateTargetNote(
+  req: import('@/bindings').TargetNoteUpdateRequest,
+): Promise<{ notes: string | null }> {
+  const result = unwrap(await commands.targetNoteUpdate(req));
+  return { notes: result.notes ?? null };
 }
 
 // Re-export gen-3 target types for callers.

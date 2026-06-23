@@ -1,12 +1,28 @@
 # Feature Specification: Target Identity, History, And Notes
 
+> **RECONCILED + IMPLEMENTED on gen-3 (2026-06-23).** This spec originally targeted the **retired gen-2
+> model** (`target_aliases`, `target_id` FKs, `primary_designation` column) that spec 036 deleted; identity
+> now lives in the spec-035 `canonical_target` id-space and **Targets is a primary nav page** (reversing the
+> old "not top-level nav" assertion). The feature has now been **rebuilt on gen-3**:
+> - **Identity + aliases** (US1) — `target.get`, `target.alias.add/remove` shipped (gen-3).
+> - **US2 linked sessions / US3 linked projects / US4 observing notes** — shipped via new commands
+>   `target.sessions.list`, `target.projects.list`, `target.note.get/update` (migration `0048_target_notes`
+>   adds `canonical_target.notes`), wired into `TargetDetailV2.tsx`.
+> - **`target.primary.rename` is DROPPED** (out of scope; the contract is orphaned).
+>
+> The Foundations tasks below (new `target_alias` table, `target_id` FKs, `primary_designation` column) are
+> **obsolete** — superseded by the 035/036 gen-3 model. Known gap: linked-project rows deep-link to
+> `/projects` without selecting a specific project (the projects route keys `selected` on a numeric index,
+> not the canonical_target UUID) — follow-up.
+
 > **See Spec 030**: UI implementation of this feature must follow
 > [Spec 030 — UI Audit & Revision](../030-ui-audit-revision/spec.md)
 > for layout, navigation, and component patterns.
 
 **Feature Branch**: `023-target-identity-history-notes`  
 **Created**: 2026-05-09  
-**Status**: Draft  
+**Updated**: 2026-06-23  
+**Status**: Implemented on gen-3 — US1–US4 shipped (identity/aliases + linked sessions/projects + observing notes); `target.primary.rename` dropped. See banner.  
 **Input**: User description: "Specify target identity, aliases, target history, observing-plan references, and notes as bounded follow-on features beyond FITS OBJECT lookup."
 
 ## Implementation Status: NOT IMPLEMENTED

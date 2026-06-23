@@ -3,13 +3,19 @@
 import { useState, useEffect, useCallback } from 'react';
 import { Btn, Pill } from '@/ui';
 import { DirPicker } from '@/ui/DirPicker';
-import { listRoots, registerRoot, startScan } from '@/api/commands';
+import { listRoots, registerRoot, startScan, settingsSourceOverrideSet, settingsOverridableKeys } from '@/api/commands';
 import type { LibraryRoot } from '@/bindings/types';
 import type { RootCategory } from '@/bindings/index';
 import { errMessage } from '@/lib/errors';
 import { m } from '@/lib/i18n';
-import { SettingsSection } from './SettingsKit';
+import { SettingsSection, RestoreDefaultsBtn } from './SettingsKit';
 import { SourceProtectionOverride } from './SourceProtectionOverride';
+
+const SOURCES_KEYS = ['followSymlinks', 'hashOnScan', 'alwaysPreviewBeforePlan'];
+
+// Fallback list used before the backend responds or if the call fails.
+const OVERRIDABLE_KEYS_FALLBACK = ['hashOnScan', 'followSymlinks'] as const;
+type OverridableKey = string;
 
 interface DataSourcesProps {
   save: (scope: string, values: Record<string, unknown>) => void;
@@ -35,6 +41,43 @@ export function DataSources({ save: _save }: DataSourcesProps) {
   const [addingCategory, setAddingCategory] = useState<RootCategory>('raw');
   const [addError, setAddError] = useState<string | null>(null);
   const [adding, setAdding] = useState(false);
+
+  // ── Overridable keys — fetched from backend (T025) ──────────────────────────
+  const [overridableKeys, setOverridableKeys] = useState<string[]>([...OVERRIDABLE_KEYS_FALLBACK]);
+
+  useEffect(() => {
+    settingsOverridableKeys().then(setOverridableKeys).catch(() => {
+      // Keep fallback list on failure.
+    });
+  }, []);
+
+  // ── Per-source override (T025) ────────────────────────────────────────────
+  const [overrideSourceId, setOverrideSourceId] = useState('');
+  const [overrideKey, setOverrideKey] = useState<OverridableKey>('hashOnScan');
+  const [overrideValue, setOverrideValue] = useState('true');
+  const [overrideError, setOverrideError] = useState<string | null>(null);
+  const [overrideApplying, setOverrideApplying] = useState(false);
+
+  const handleOverrideApply = async () => {
+    if (!overrideSourceId) return;
+    setOverrideApplying(true);
+    setOverrideError(null);
+    try {
+      // Value arrives as string from the text input; cast to boolean when the
+      // key is a known boolean flag, otherwise pass as string.
+      const coerced: unknown =
+        overrideValue === 'true' ? true : overrideValue === 'false' ? false : overrideValue;
+      await settingsSourceOverrideSet({
+        sourceId: overrideSourceId,
+        key: overrideKey,
+        value: coerced,
+      });
+    } catch (err: unknown) {
+      setOverrideError(errMessage(err));
+    } finally {
+      setOverrideApplying(false);
+    }
+  };
 
   const loadRoots = useCallback(() => {
     setLoading(true);
@@ -87,16 +130,24 @@ export function DataSources({ save: _save }: DataSourcesProps) {
   })).filter((g) => g.roots.length > 0);
 
   return (
+    <>
     <SettingsSection
       title={m.common_sources()}
       action={
-        <Btn
-          variant="primary"
-          size="sm"
-          onClick={() => { setShowAdd(true); setAddError(null); }}
-        >
-          {m.settings_datasources_add_btn()}
-        </Btn>
+        <div style={{ display: 'flex', gap: '0.5rem', alignItems: 'center' }}>
+          <RestoreDefaultsBtn
+            scope="sources"
+            keys={SOURCES_KEYS}
+            onRestored={() => { /* sources pane has no controlled inputs to re-hydrate */ }}
+          />
+          <Btn
+            variant="primary"
+            size="sm"
+            onClick={() => { setShowAdd(true); setAddError(null); }}
+          >
+            {m.settings_datasources_add_btn()}
+          </Btn>
+        </div>
       }
     >
       {showAdd && (
@@ -167,6 +218,84 @@ export function DataSources({ save: _save }: DataSourcesProps) {
         </div>
       ))}
     </SettingsSection>
+
+    {/* Per-source setting override (spec 018 T025) */}
+    {roots.length > 0 && (
+      <div className="alm-settings__group" data-testid="source-override-panel">
+        <div className="alm-settings__group-title">
+          {m.settings_datasources_source_override_title()}
+        </div>
+        <div className="alm-settings__row">
+          <div className="alm-settings__row-label">
+            {m.settings_datasources_source_override_source_aria()}
+          </div>
+          <div className="alm-settings__row-content">
+            <select
+              className="alm-select"
+              value={overrideSourceId}
+              onChange={(e) => setOverrideSourceId(e.target.value)}
+              aria-label={m.settings_datasources_source_override_source_aria()}
+            >
+              <option value="">— select source —</option>
+              {roots.map((r) => (
+                <option key={r.id} value={r.id}>{r.path}</option>
+              ))}
+            </select>
+          </div>
+        </div>
+        <div className="alm-settings__row">
+          <div className="alm-settings__row-label">
+            {m.settings_datasources_source_override_key_aria()}
+          </div>
+          <div className="alm-settings__row-content">
+            <select
+              className="alm-select"
+              value={overrideKey}
+              onChange={(e) => setOverrideKey(e.target.value)}
+              aria-label={m.settings_datasources_source_override_key_aria()}
+            >
+              {overridableKeys.map((k) => (
+                <option key={k} value={k}>{k}</option>
+              ))}
+            </select>
+          </div>
+        </div>
+        <div className="alm-settings__row">
+          <div className="alm-settings__row-label">
+            {m.settings_datasources_source_override_value_aria()}
+          </div>
+          <div className="alm-settings__row-content">
+            <select
+              className="alm-select"
+              value={overrideValue}
+              onChange={(e) => setOverrideValue(e.target.value)}
+              aria-label={m.settings_datasources_source_override_value_aria()}
+            >
+              <option value="true">true</option>
+              <option value="false">false</option>
+            </select>
+          </div>
+        </div>
+        {overrideError && (
+          <div className="alm-data-sources__add-error">
+            {m.settings_datasources_source_override_error({ error: overrideError })}
+          </div>
+        )}
+        <div className="alm-settings__row">
+          <div className="alm-settings__row-label" />
+          <div className="alm-settings__row-content">
+            <Btn
+              size="sm"
+              onClick={() => void handleOverrideApply()}
+              disabled={!overrideSourceId || overrideApplying}
+            >
+              {m.settings_datasources_source_override_apply()}
+            </Btn>
+          </div>
+        </div>
+      </div>
+    )}
+    </>
   );
 }
 
