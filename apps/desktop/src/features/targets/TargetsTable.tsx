@@ -246,6 +246,12 @@ export const TARGET_ACCESSORS: Readonly<Record<string, DimensionAccessor<TargetL
     const cat = catalogueOf(t);
     return cat ? catalogueLabel(cat) : 'Other';
   },
+  // Applicable filters: group by the target's recommended band set (the same
+  // mock recommendation the Filter-bands filter uses), e.g. "Ha OIII SII".
+  filters: (t) => {
+    const bands = rowAltitudeFor(t, USABLE_ALT_DEG).filters.bands;
+    return bands.length > 0 ? bands.join(' ') : null;
+  },
 };
 
 function flattenGroups(groups: TargetGroup[]): FlatRow[] {

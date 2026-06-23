@@ -193,6 +193,12 @@ export const MASTER_ACCESSORS: Readonly<Record<string, DimensionAccessor<Calibra
   kind: (m) => m.kind.toLowerCase(),
   camera: (m) => m.fingerprint?.camera,
   instrument: (m) => m.fingerprint?.camera, // instrument = camera in the fingerprint
+  // Filter is meaningful for flats (Ha/OIII/L/…); null for bias/dark.
+  filter: (m) => m.fingerprint?.filter,
+  // No source-night field on the master yet → group on the master's creation
+  // date as a proxy (date part for Night, year-month for Month).
+  night: (m) => m.createdAt?.slice(0, 10),
+  month: (m) => m.createdAt?.slice(0, 7),
 };
 
 // ── Legacy single-level grouping (kept for the flat-group fallback path) ──────

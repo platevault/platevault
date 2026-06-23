@@ -102,6 +102,7 @@ const TARGETS_DIMENSIONS: FilterOption[] = [
   { value: 'catalogue', label: m.cmp_target_search_catalogue_label() },
   { value: 'type', label: m.targets_groupby_object_type() },
   { value: 'constellation', label: m.targets_dim_constellation() },
+  { value: 'filters', label: m.targets_dim_applicable_filters() },
 ];
 
 /** Catalogue multi-select options, in canonical display order. */
@@ -189,7 +190,7 @@ export function TargetsPage() {
   const [sort, setSort] = useState<TargetSort>(DEFAULT_TARGET_SORT);
   const { dims, setSlot } = useGrouping({
     storageKey: 'targets.grouping.dims.v1',
-    validIds: ['catalogue', 'type', 'constellation'],
+    validIds: ['catalogue', 'type', 'constellation', 'filters'],
     // defaultDims is empty: when no dims are selected the table falls back to
     // the legacy single-tier groupBy='catalogue' path which preserves the
     // sort-group ordering that the existing tests exercise.

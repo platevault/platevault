@@ -39,6 +39,9 @@ const CALIB_DIMENSIONS: FilterOption[] = [
   { value: 'kind', label: m.calibration_fp_kind() },
   { value: 'camera', label: m.settings_calmatch_camera() },
   { value: 'instrument', label: m.calibration_dim_instrument() },
+  { value: 'filter', label: m.common_filter() },
+  { value: 'night', label: m.sessions_col_night() },
+  { value: 'month', label: m.sessions_dim_month() },
 ];
 
 // ── Component ─────────────────────────────────────────────────────────────────
@@ -54,7 +57,7 @@ export function CalibrationPage() {
 
   const { dims, setSlot } = useGrouping({
     storageKey: 'calibration.grouping.dims.v1',
-    validIds: ['kind', 'camera', 'instrument'],
+    validIds: ['kind', 'camera', 'instrument', 'filter', 'night', 'month'],
     defaultDims: [],
   });
 
