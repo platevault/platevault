@@ -99,14 +99,14 @@ non-noisy change.
 
 ### Implementation for User Story 1
 
-- [ ] T010 [US1] MOCKUP-DONE: `SettingsState`, `useSettings()`,
+- [x] T010 [US1] MOCKUP-DONE: `SettingsState`, `useSettings()`,
       `updateSettings(key, value)`, `NOISY_KEYS`, default table in
       `apps/desktop/src/data/settings.ts`. Keep the localStorage path as the
       offline fallback after T013 lands.
-- [ ] T011 [US1] MOCKUP-DONE: `SettingsPage.tsx` rows for every v1 key with
+- [x] T011 [US1] MOCKUP-DONE: `SettingsPage.tsx` rows for every v1 key with
       one-per-line layout, info affordance, and auto-save status text in
       `apps/desktop/src/features/settings/SettingsPage.tsx`.
-- [ ] T012 [US1] MOCKUP-DONE: Theme persistence under `alm.theme` in
+- [x] T012 [US1] MOCKUP-DONE: Theme persistence under `alm.theme` in
       `apps/desktop/src/app/theme.tsx`. Keep Appearance section wired to this
       module rather than to `useSettings()`.
 - [x] T013 [US1] Get/update use case with no-op guard, validation, and audit
@@ -338,12 +338,12 @@ Tasks for keys absorbed from cross-spec ratification passes (2026-05-22).
 
 ## Phase 8: Polish
 
-- [ ] T032 [P] Remove the `rowDensity` key from `SettingsState` once FR-006 is
+- [x] T032 [P] Remove the `rowDensity` key from `SettingsState` once FR-006 is
       enforced everywhere in the desktop shell; update the v1 schema and
       migration table accordingly.
 - [ ] T033 Update `docs/research/` index to point at this feature's
       `research.md`.
-- [ ] T034 Quickstart pass: open Settings, change one of every kind of
+- [x] T034 Quickstart pass: open Settings, change one of every kind of
       control, verify auto-save and audit behavior end-to-end.
 
 ---
