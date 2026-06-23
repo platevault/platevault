@@ -135,9 +135,9 @@
 
 - [X] T061 [P] [US10] Migration **0048** (`0048_inbox_single_type.sql`; **0046 + 0047 already taken** by `0046_session_canonical_target.sql` + `0047_target_constellation_magnitude.sql` — the latter renamed by PR #317 to resolve the dual-0046): `inbox_source_groups`; `inbox_items` +source_group_id/group_key/group_label/frame_type + composite UNIQUE; `inbox_file_overrides`; collapse `inbox_classifications.result` to classified|unclassified; data re-derivation (FR-034/FR-042/FR-046/FR-054).
 - [X] T062 [P] [US16] Extend FITS+XISF extraction (FR-053): offset/temps/pointing/rotation/readout/focal/**pixel-size (`XPIXSZ`/`PIXSIZE`, XISF `Image:PixelSize`)**/observer/local-time + XISF unit conversions.
-- [ ] T063 [US11] Property registry module + `inbox.property_registry` contract (FR-044).
-- [ ] T064 [US10] Grouping engine: per-type recipe + bucketing + tolerances (pointing/rotation/temp) + per-dimension config (FR-035/FR-036/FR-037/FR-038/FR-039/FR-040).
-- [ ] T065 [US10] scan.rs: emit source-group rows, stay lazy (FR-041).
+- [X] T063 [US11] Property registry module + `inbox.property_registry` contract (FR-044).
+- [X] T064 [US10] Grouping engine: per-type recipe + bucketing + tolerances (pointing/rotation/temp) + per-dimension config (FR-035/FR-036/FR-037/FR-038/FR-039/FR-040).
+- [X] T065 [US10] scan.rs: emit source-group rows, stay lazy (FR-041).
 - [ ] T066 [US10] classify.rs: materialize single-type sub-items (classify-then-split) + per-sub-group signature (FR-041/FR-042).
 - [ ] T067 [P] [US10] Composite identity + signature stability tests (FR-042).
 - [ ] T068 [US11] reclassify.rs: field-agnostic property map + bulk; fill-missing-only; index-only; source-group-scoped; re-split (FR-044/FR-045/FR-049).
