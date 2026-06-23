@@ -330,7 +330,7 @@ Tasks for keys absorbed from cross-spec ratification passes (2026-05-22).
 ### Cross-group
 
 - [~] T045 [P] **OBSOLETE** — extends the `packages/contracts/settings/` mirror that was never built; obsolete with T001/T002. Canonical = `crates/contracts/core` + `packages/contracts/schemas`.
-- [ ] T046 [P] Extend `crates/app/core/tests/settings_update.rs` (T008) to
+- [x] T046 [P] Extend `crates/app/core/tests/settings_update.rs` (T008) to
       cover: (a) structured-path key happy paths for all three pattern groups,
       (b) `devMode` update rejected in release build, (c)
       `calibration.dark_temp_tolerance` out-of-range rejection, (d)
@@ -341,7 +341,7 @@ Tasks for keys absorbed from cross-spec ratification passes (2026-05-22).
 - [x] T032 [P] Remove the `rowDensity` key from `SettingsState` once FR-006 is
       enforced everywhere in the desktop shell; update the v1 schema and
       migration table accordingly.
-- [ ] T033 Update `docs/research/` index to point at this feature's
+- [x] T033 Update `docs/research/` index to point at this feature's
       `research.md`.
 - [x] T034 Quickstart pass: open Settings, change one of every kind of
       control, verify auto-save and audit behavior end-to-end.
