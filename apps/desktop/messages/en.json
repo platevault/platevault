@@ -1176,5 +1176,6 @@
   "plans_gate_normal_items": "{count} normal item(s)",
   "plans_gate_unprotected_items": "{count} unprotected item(s)",
   "projects_open_in": "Open in {tool}",
-  "targets_hours_above": "{hours} h"
+  "targets_hours_above": "{hours} h",
+  "sessions_dim_month": "Month"
 }

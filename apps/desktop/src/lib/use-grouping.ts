@@ -18,6 +18,8 @@ export interface UseGroupingOptions {
   validIds: readonly string[];
   /** Number of ordered grouping slots. Default 3. */
   maxLevels?: number;
+  /** Initial dimensions when nothing is persisted yet (e.g. Sessions → ['target']). */
+  defaultDims?: readonly string[];
 }
 
 export interface UseGroupingResult {
@@ -35,13 +37,16 @@ export function useGrouping({
   storageKey,
   validIds,
   maxLevels = 3,
+  defaultDims = [],
 }: UseGroupingOptions): UseGroupingResult {
   const valid = new Set(validIds);
 
   const load = useCallback((): string[] => {
     try {
       const raw = localStorage.getItem(storageKey);
-      if (!raw) return [];
+      if (!raw) {
+        return defaultDims.filter((d) => valid.has(d)).slice(0, maxLevels);
+      }
       const parsed = JSON.parse(raw);
       if (!Array.isArray(parsed)) return [];
       const seen = new Set<string>();
