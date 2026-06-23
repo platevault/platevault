@@ -479,7 +479,7 @@ export function InboxDetail({
 	const detectionProps: PropertyDef[] = [
 		{
 			key: "classification",
-			label: "Classification",
+			label: m.inbox_prop_classification(),
 			value:
 				classType === "single_type"
 					? (classification?.frameType ?? "single_type")
@@ -487,7 +487,7 @@ export function InboxDetail({
 		},
 		{
 			key: "files",
-			label: "Files",
+			label: m.inbox_col_files(),
 			value: classification
 				? String(
 						classification.breakdown?.reduce((s, e) => s + e.count, 0) ||
@@ -499,7 +499,7 @@ export function InboxDetail({
 			? [
 					{
 						key: "target",
-						label: "Target",
+						label: m.inbox_dim_target(),
 						value: repFile.object,
 						source: "fits",
 					} as PropertyDef,
@@ -509,7 +509,7 @@ export function InboxDetail({
 			? [
 					{
 						key: "filter",
-						label: "Filter",
+						label: m.common_filter(),
 						value: repFile.filter,
 						source: "fits",
 					} as PropertyDef,
@@ -519,7 +519,7 @@ export function InboxDetail({
 			? [
 					{
 						key: "exposure",
-						label: "Exposure",
+						label: m.inbox_col_exposure(),
 						value: fmtExposure(repFile.exposureS),
 						source: "fits",
 					} as PropertyDef,
@@ -529,7 +529,7 @@ export function InboxDetail({
 			? [
 					{
 						key: "binning",
-						label: "Binning",
+						label: m.settings_calmatch_binning(),
 						value: fmtBinning(repFile?.binningX, repFile?.binningY),
 						source: "fits",
 					} as PropertyDef,
@@ -539,7 +539,7 @@ export function InboxDetail({
 			? [
 					{
 						key: "gain",
-						label: "Gain",
+						label: m.inbox_col_gain(),
 						value: repFile.gain,
 						source: "fits",
 					} as PropertyDef,
@@ -549,7 +549,7 @@ export function InboxDetail({
 			? [
 					{
 						key: "temp",
-						label: "Sensor temp",
+						label: m.settings_calmatch_sensor_temp(),
 						value: fmtTemp(repFile.temperatureC),
 						source: "fits",
 					} as PropertyDef,
@@ -559,7 +559,7 @@ export function InboxDetail({
 			? [
 					{
 						key: "instrume",
-						label: "Instrument",
+						label: m.inbox_field_instrument(),
 						value: repFile.instrume,
 						source: "fits",
 					} as PropertyDef,
@@ -569,7 +569,7 @@ export function InboxDetail({
 			? [
 					{
 						key: "dims",
-						label: "Dimensions",
+						label: m.inbox_field_dimensions(),
 						value: fmtDimensions(repFile.naxis1, repFile.naxis2),
 						source: "fits",
 					} as PropertyDef,
@@ -579,7 +579,7 @@ export function InboxDetail({
 			? [
 					{
 						key: "date",
-						label: "Night",
+						label: m.sessions_col_night(),
 						value: repFile.dateObs,
 						source: "fits",
 					} as PropertyDef,
@@ -603,7 +603,7 @@ export function InboxDetail({
 					? (classification?.frameType ?? m.inbox_detail_single_fallback())
 					: classType}
 			</Pill>
-			{item.lane === "video" && <Pill variant="ghost">video</Pill>}
+			{item.lane === "video" && <Pill variant="ghost">{m.inbox_lane_video()}</Pill>}
 			{onConfirm && (
 				<Btn
 					size="sm"
@@ -621,15 +621,15 @@ export function InboxDetail({
 			    choose which library the files are placed in (Auto = backend pick). */}
 			{onConfirm && applicableRoots.length > 1 && (
 				<label className="alm-inbox-detail__dest-root">
-					<span className="alm-inbox-detail__dest-root-label">Library:</span>
+					<span className="alm-inbox-detail__dest-root-label">{m.inbox_dest_root_label()}</span>
 					<select
 						className="alm-select alm-select--sm"
 						value={selectedRootId ?? ""}
 						onChange={(e) => onSelectRoot?.(e.target.value)}
-						aria-label="Destination library"
+						aria-label={m.inbox_dest_root_aria()}
 						data-testid="inbox-dest-root-select"
 					>
-						<option value="">Auto</option>
+						<option value="">{m.projects_edit_channels_auto_tag()}</option>
 						{applicableRoots.map((r) => (
 							<option key={r.id} value={r.id}>
 								{basename(r.path)} · {r.category}
@@ -705,12 +705,12 @@ export function InboxDetail({
 
 				{/* Col C: Files — mixed-composition summary + the metadata popover */}
 				<div className="alm-session-detail2__col">
-					<div className="alm-session-detail2__head">Files</div>
+					<div className="alm-session-detail2__head">{m.inbox_col_files()}</div>
 
 					{/* FR-011: compact mixed-composition summary */}
 					{mixedSummary && (
 						<section
-							aria-label="Mixed composition summary"
+							aria-label={m.inbox_mixed_composition_summary_aria()}
 							className="alm-inbox-detail__mixed-summary"
 						>
 							{mixedSummary}
@@ -758,7 +758,7 @@ export function InboxDetail({
 					) : (
 						!mixedSummary && (
 							<span className="alm-session-detail2__muted">
-								No file metadata
+								{m.inbox_no_file_metadata()}
 							</span>
 						)
 					)}
@@ -912,7 +912,7 @@ export function InboxDetail({
 								>
 									{reclassifyLoading
 										? m.common_applying()
-										: `Apply ${Object.keys(pendingOverrides).length} override${Object.keys(pendingOverrides).length !== 1 ? "s" : ""}`}
+										: m.inbox_apply_n_overrides({ count: Object.keys(pendingOverrides).length })}
 								</button>
 							</div>
 						)}

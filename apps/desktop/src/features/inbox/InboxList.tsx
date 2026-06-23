@@ -136,7 +136,7 @@ export function flattenVisibleTree(
 // ── Columns ──────────────────────────────────────────────────────────────────────
 
 const COLUMNS: TableColumn[] = [
-  { key: 'detection', label: 'Detection' },
+  { key: 'detection', label: m.inbox_col_detection() },
   { key: 'type', label: m.inbox_col_type(), style: { width: '7.5rem' } },
   { key: 'count', label: m.inbox_col_files(), className: 'num', style: { width: '5rem' } },
   {
@@ -258,7 +258,7 @@ export function InboxList({
               // eslint-disable-next-line no-restricted-syntax -- dynamic: nested-group leaf indent
               style={indent ? { paddingLeft: indent } : undefined}
             >
-              {item.relativePath || '(root)'}
+              {item.relativePath || m.inbox_list_root_label()}
             </span>
           ),
           type: (
@@ -268,7 +268,7 @@ export function InboxList({
               {classificationLabel(item)}
             </span>
           ),
-          count: `${item.fileCount} ${item.fileCount !== 1 ? 'files' : 'file'}`,
+          count: `${item.fileCount} ${item.fileCount !== 1 ? m.inbox_list_file_plural() : m.inbox_list_file_singular()}`,
           format: item.isMaster
             ? `${item.masterFrameType ?? 'master'} master`
             : formatTag(item),
@@ -284,7 +284,7 @@ export function InboxList({
   return (
     <div className="alm-inbox-list" data-testid="inbox-list">
       {visualRows.length === 0 ? (
-        <div className="alm-inbox-list__empty">No detections.</div>
+        <div className="alm-inbox-list__empty">{m.inbox_no_detections()}</div>
       ) : (
         <Table
           className="alm-inbox-table"

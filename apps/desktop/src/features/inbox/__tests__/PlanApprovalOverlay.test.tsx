@@ -54,7 +54,6 @@ function renderOverlay(props: Partial<Props> & { plans: InboxOpenPlan[] }) {
   const defaults: Props = {
     open: true,
     onClose: vi.fn(),
-    plans: props.plans,
     totalActions: props.plans.reduce((n, p) => n + p.actions.length, 0),
     destructiveDestination: 'archive',
     onDestructiveDestinationChange: vi.fn(),
@@ -69,16 +68,16 @@ function renderOverlay(props: Partial<Props> & { plans: InboxOpenPlan[] }) {
 // ── Tests ─────────────────────────────────────────────────────────────────────
 
 describe('PlanApprovalOverlay', () => {
-  let onClose: ReturnType<typeof vi.fn>;
-  let onApplyAll: ReturnType<typeof vi.fn>;
-  let onApplySelected: ReturnType<typeof vi.fn>;
-  let onCancel: ReturnType<typeof vi.fn>;
+  let onClose: ReturnType<typeof vi.fn<() => void>>;
+  let onApplyAll: ReturnType<typeof vi.fn<() => void>>;
+  let onApplySelected: ReturnType<typeof vi.fn<(ids: string[]) => void>>;
+  let onCancel: ReturnType<typeof vi.fn<(id: string) => void>>;
 
   beforeEach(() => {
-    onClose = vi.fn();
-    onApplyAll = vi.fn();
-    onApplySelected = vi.fn();
-    onCancel = vi.fn();
+    onClose = vi.fn<() => void>();
+    onApplyAll = vi.fn<() => void>();
+    onApplySelected = vi.fn<(ids: string[]) => void>();
+    onCancel = vi.fn<(id: string) => void>();
   });
 
   // ── Render ─────────────────────────────────────────────────────────────────

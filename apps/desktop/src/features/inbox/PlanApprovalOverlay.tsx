@@ -11,6 +11,7 @@
 
 import { useEffect } from 'react';
 import { Modal } from '@/components';
+import { m } from '@/lib/i18n';
 import { PlanPanel } from './PlanPanel';
 import type { PlanPanelProps } from './PlanPanel';
 import type { InboxOpenPlan } from './store';
@@ -46,10 +47,10 @@ export function PlanApprovalOverlay({
     <Modal
       open={open}
       onClose={onClose}
-      title="Review plans"
+      title={m.inbox_review_plans_title()}
       subtitle={subtitle}
       size="xl"
-      ariaLabel="Review plans"
+      ariaLabel={m.inbox_review_plans_title()}
       data-testid="plan-approval-overlay"
     >
       <PlanPanel plans={plans} totalActions={totalActions} {...rest} />
