@@ -1,4 +1,5 @@
 import type { ReactNode, Ref } from 'react';
+import { m } from '@/lib/i18n';
 
 export interface ListSidebarProps {
   placeholder?: string;
@@ -34,11 +35,11 @@ export function ListSidebar({
       <div className="alm-list-sidebar__search">
         <input
           type="text"
-          placeholder={placeholder || 'Search…'}
+          placeholder={placeholder || m.common_search_placeholder()}
           value={searchValue ?? ''}
           onChange={onSearchChange ? (e) => onSearchChange(e.target.value) : undefined}
           readOnly={!onSearchChange}
-          aria-label={placeholder || 'Search'}
+          aria-label={placeholder || m.common_search_aria()}
         />
       </div>
       {controls && <div className="alm-list-sidebar__controls">{controls}</div>}

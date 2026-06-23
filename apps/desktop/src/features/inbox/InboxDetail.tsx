@@ -338,7 +338,7 @@ export function InboxDetail({
 		}
 	};
 
-	const title = item.relativePath || "(root)";
+	const title = item.relativePath || m.inbox_list_root_label();
 	const classType = classification?.type ?? "pending";
 
 	// Library picker (point 1): narrow the destination roots to the category that

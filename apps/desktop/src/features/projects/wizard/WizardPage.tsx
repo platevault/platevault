@@ -192,7 +192,7 @@ export function WizardPage() {
     naming_pattern: wizardData.layout.namingPattern,
   };
 
-  const projectLabel = wizardData.name.name || 'New project';
+  const projectLabel = wizardData.name.name || m.projects_create_title();
   const profileLabel = PROFILE_LABELS[wizardData.name.workflowProfile] || wizardData.name.workflowProfile;
 
   // Computed summary counts

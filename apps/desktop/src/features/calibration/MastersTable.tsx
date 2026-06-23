@@ -202,16 +202,17 @@ function groupMasters(masters: CalibrationMaster[], sort: MasterSort): MasterGro
 
 // ── Column model ──────────────────────────────────────────────────────────────
 
-const COLUMNS: Array<{ key: string; label: string; sort: MasterSortCol; className?: string }> = [
-  { key: 'master', label: m.calibration_col_master(), sort: 'master' },
-  { key: 'camera', label: m.settings_calmatch_camera(), sort: 'camera', className: 'alm-calib-cell--muted' },
-  { key: 'filter', label: m.common_filter(), sort: 'filter' },
-  { key: 'gain', label: m.settings_calmatch_gain(), sort: 'gain', className: 'alm-calib-cell--num' },
-  { key: 'exposure', label: m.calibration_fp_exposure(), sort: 'exposure', className: 'alm-calib-cell--mono' },
-  { key: 'temp', label: m.calibration_col_temp(), sort: 'temp', className: 'alm-calib-cell--mono' },
-  { key: 'binning', label: m.settings_calmatch_binning(), sort: 'binning', className: 'alm-calib-cell--mono' },
-  { key: 'usage', label: m.calibration_col_usage(), sort: 'usage', className: 'alm-calib-cell--muted' },
-  { key: 'created', label: m.archive_prop_date(), sort: 'created', className: 'alm-calib-cell--mono' },
+// `label` is a render-time thunk so headers re-read the active locale (spec 046 #8).
+const COLUMNS: Array<{ key: string; label: () => string; sort: MasterSortCol; className?: string }> = [
+  { key: 'master', label: () => m.calibration_col_master(), sort: 'master' },
+  { key: 'camera', label: () => m.settings_calmatch_camera(), sort: 'camera', className: 'alm-calib-cell--muted' },
+  { key: 'filter', label: () => m.common_filter(), sort: 'filter' },
+  { key: 'gain', label: () => m.settings_calmatch_gain(), sort: 'gain', className: 'alm-calib-cell--num' },
+  { key: 'exposure', label: () => m.calibration_fp_exposure(), sort: 'exposure', className: 'alm-calib-cell--mono' },
+  { key: 'temp', label: () => m.calibration_col_temp(), sort: 'temp', className: 'alm-calib-cell--mono' },
+  { key: 'binning', label: () => m.settings_calmatch_binning(), sort: 'binning', className: 'alm-calib-cell--mono' },
+  { key: 'usage', label: () => m.calibration_col_usage(), sort: 'usage', className: 'alm-calib-cell--muted' },
+  { key: 'created', label: () => m.archive_prop_date(), sort: 'created', className: 'alm-calib-cell--mono' },
 ];
 
 // ── Props ───────────────────────────────────────────────────────────────────────
@@ -279,9 +280,9 @@ export function MastersTable({
         type="button"
         className={'alm-calib-sorth' + (sort.col === c.sort ? ' alm-calib-sorth--active' : '')}
         onClick={() => onSort(c.sort)}
-        aria-label={m.calibration_sort_by_aria({ col: c.label })}
+        aria-label={m.calibration_sort_by_aria({ col: c.label() })}
       >
-        {c.label}
+        {c.label()}
         {sort.col === c.sort && (
           <span className="alm-calib-sorth__arrow" aria-hidden="true">
             { }

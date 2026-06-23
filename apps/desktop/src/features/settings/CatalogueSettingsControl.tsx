@@ -63,12 +63,12 @@ export function CatalogueSettingsControl() {
       {PLANNER_CATALOGS.map((c) => (
         <SettingsRow
           key={c.id}
-          label={c.label}
-          info={`Show ${c.label} objects by default in the Planner catalogue filter.`}
+          label={c.label()}
+          info={m.settings_catalogue_default_info({ label: c.label() })}
         >
           <Toggle
             checked={enabled.has(c.id)}
-            aria-label={m.settings_catalogue_enable_default_aria({ label: c.label })}
+            aria-label={m.settings_catalogue_enable_default_aria({ label: c.label() })}
             onChange={(v) => toggle(c.id, v)}
           />
         </SettingsRow>

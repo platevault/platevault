@@ -122,7 +122,9 @@ interface GroupSectionProps {
 }
 
 function ArtifactGroupSection({ group, projectId, onAction }: GroupSectionProps) {
-  const label = group.toolLaunchId ? `Launch ${group.toolLaunchId.slice(0, 8)}…` : 'Unattributed';
+  const label = group.toolLaunchId
+    ? m.projects_toollaunch_label({ id: group.toolLaunchId.slice(0, 8) })
+    : m.projects_toollaunch_unattributed();
   const counts = group.artifacts.reduce(
     (acc, a) => {
       acc[a.kind] = (acc[a.kind] ?? 0) + 1;

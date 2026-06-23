@@ -35,7 +35,8 @@ import { useCalibrationMasters, useCalibrationSettings } from './useCalibration'
 
 // ── Toolbar vocab ─────────────────────────────────────────────────────────────
 
-const GROUP_BY_OPTIONS: FilterOption[] = [{ value: 'kind', label: m.calibration_fp_kind() }];
+// Render-time factory so the option label re-reads the active locale (spec 046 #8).
+const groupByOptions = (): FilterOption[] => [{ value: 'kind', label: m.calibration_fp_kind() }];
 
 // ── Component ─────────────────────────────────────────────────────────────────
 
@@ -106,7 +107,7 @@ export function CalibrationPage() {
           }}
           groupBy={{
             value: groupBy,
-            options: GROUP_BY_OPTIONS,
+            options: groupByOptions(),
             onChange: (v) => setGroupBy(v as MasterGroupBy),
           }}
         />

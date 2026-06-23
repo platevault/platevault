@@ -135,7 +135,8 @@ export function flattenVisibleTree(
 
 // ── Columns ──────────────────────────────────────────────────────────────────────
 
-const COLUMNS: TableColumn[] = [
+// Render-time factory so column headers re-read the active locale (spec 046 #8).
+const columns = (): TableColumn[] => [
   { key: 'detection', label: m.inbox_col_detection() },
   { key: 'type', label: m.inbox_col_type(), style: { width: '7.5rem' } },
   { key: 'count', label: m.inbox_col_files(), className: 'num', style: { width: '5rem' } },
@@ -254,7 +255,7 @@ export function InboxList({
           detection: (
             <span
               className="alm-inbox-cell__path"
-              title={item.relativePath || '(root)'}
+              title={item.relativePath || m.inbox_list_root_label()}
               // eslint-disable-next-line no-restricted-syntax -- dynamic: nested-group leaf indent
               style={indent ? { paddingLeft: indent } : undefined}
             >
@@ -278,7 +279,7 @@ export function InboxList({
   );
 
   const groupingHint = grouped
-    ? `Grouped by ${dims.map((d) => DIM_LABELS[d]).join(' › ')}`
+    ? m.inbox_grouping_hint({ dims: dims.map((d) => DIM_LABELS[d]).join(' › ') })
     : null;
 
   return (
@@ -288,7 +289,7 @@ export function InboxList({
       ) : (
         <Table
           className="alm-inbox-table"
-          columns={COLUMNS}
+          columns={columns()}
           rows={rows}
           virtualized
           estimateRowHeight={40}

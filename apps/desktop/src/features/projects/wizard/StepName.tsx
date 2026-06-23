@@ -13,10 +13,11 @@ export interface StepNameProps {
   onChange: (data: StepNameData) => void;
 }
 
+// `label`/`description` are render-time thunks so they re-read the active locale (spec 046 #8).
 const PROFILES = [
-  { id: 'pixinsight' as const, label: m.projects_wizard_profile_pixinsight(), description: m.projects_wizard_profile_pixinsight_desc() },
-  { id: 'siril' as const, label: m.projects_wizard_profile_siril(), description: m.projects_wizard_profile_siril_desc() },
-  { id: 'planetary' as const, label: m.projects_wizard_profile_planetary(), description: m.projects_wizard_profile_planetary_desc() },
+  { id: 'pixinsight' as const, label: () => m.projects_wizard_profile_pixinsight(), description: () => m.projects_wizard_profile_pixinsight_desc() },
+  { id: 'siril' as const, label: () => m.projects_wizard_profile_siril(), description: () => m.projects_wizard_profile_siril_desc() },
+  { id: 'planetary' as const, label: () => m.projects_wizard_profile_planetary(), description: () => m.projects_wizard_profile_planetary_desc() },
 ];
 
 /**
@@ -114,16 +115,16 @@ export function StepName({ data, onChange }: StepNameProps) {
                   <Radio.Root
                     value={profile.id}
                     className="alm-radio"
-                    aria-label={profile.label}
+                    aria-label={profile.label()}
                   >
                     <Radio.Indicator className="alm-radio__indicator" />
                   </Radio.Root>
                   <div>
                     <div className="alm-wizard-name__profile-label">
-                      {profile.label}
+                      {profile.label()}
                     </div>
                     <div className="alm-wizard-name__profile-description">
-                      {profile.description}
+                      {profile.description()}
                     </div>
                   </div>
                 </label>

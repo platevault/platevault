@@ -97,17 +97,18 @@ const MY_TARGETS_VALUE = 'my';
  */
 const MY_TARGETS_EMPTY: TargetListItem[] = [];
 
+// These are render-time factories (not frozen consts) so option labels re-read
+// the active locale (spec 046 #8). FilterOption.label stays a plain string;
+// deferring evaluation to the call site is the locale-reactive equivalent.
 /** Group-by options for the Planner top bar (mirrors the other list pages). */
-const GROUP_BY_OPTIONS: FilterOption[] = [
+const groupByOptions = (): FilterOption[] => [
   { value: 'catalogue', label: m.cmp_target_search_catalogue_label() },
   { value: 'type', label: m.targets_groupby_object_type() },
 ];
 
 /** Catalogue multi-select options, in canonical display order. */
-const CATALOGUE_OPTIONS: FilterOption[] = PLANNER_CATALOGS.map((c) => ({
-  value: c.id,
-  label: c.label,
-}));
+const catalogueOptions = (): FilterOption[] =>
+  PLANNER_CATALOGS.map((c) => ({ value: c.id, label: c.label() }));
 
 /**
  * Normalize a designation or label for alias-aware matching (#103b).
@@ -154,7 +155,7 @@ export function matchesSearch(t: TargetListItem, query: string): boolean {
 }
 
 /** My Targets filter options for the FilterToolbar single-select (#91). */
-const MY_TARGETS_FILTER_OPTIONS: FilterOption[] = [
+const myTargetsFilterOptions = (): FilterOption[] => [
   { value: MY_TARGETS_VALUE, label: m.nav_my_targets() },
 ];
 
@@ -167,7 +168,7 @@ const MY_TARGETS_FILTER_OPTIONS: FilterOption[] = [
  * shows only rows where both are recommended — which in the simple mock means
  * any narrowband-possible target. MOCK — not astronomy.
  */
-const FILTER_BAND_OPTIONS: FilterOption[] = [
+const filterBandOptions = (): FilterOption[] => [
   { value: 'L', label: m.targets_band_l_lum() },
   { value: 'R', label: m.targets_band_r() },
   { value: 'G', label: m.targets_band_g() },
@@ -325,7 +326,7 @@ export function TargetsPage() {
               key: 'myTargets',
               label: m.targets_filter_show_label(),
               value: myTargetsFilter,
-              options: MY_TARGETS_FILTER_OPTIONS,
+              options: myTargetsFilterOptions(),
               onChange: setMyTargetsFilter,
               allLabel: m.targets_page_filter_all_targets(),
             },
@@ -339,7 +340,7 @@ export function TargetsPage() {
               key: 'catalogues',
               label: m.targets_filter_catalogues_label(),
               value: enabledCatalogues,
-              options: CATALOGUE_OPTIONS,
+              options: catalogueOptions(),
               onChange: (v) => setEnabledCatalogues(v as CatalogueId[]),
             },
             {
@@ -349,13 +350,13 @@ export function TargetsPage() {
               key: 'filterBands',
               label: m.common_filters(),
               value: filterBands,
-              options: FILTER_BAND_OPTIONS,
+              options: filterBandOptions(),
               onChange: (v) => setFilterBands(v as FilterBand[]),
             },
           ]}
           groupBy={{
             value: groupBy,
-            options: GROUP_BY_OPTIONS,
+            options: groupByOptions(),
             onChange: (v) => setGroupBy(v as TargetGroupBy),
           }}
         />

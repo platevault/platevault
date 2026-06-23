@@ -11,9 +11,12 @@ import { m } from '@/lib/i18n';
 
 type FontSize = 'small' | 'default' | 'large';
 
+// `label` is a render-time thunk so it re-reads the active locale (spec 046 #8).
+// THEMES carry static brand names (not translatable) — wrap them as thunks so
+// every CHOICES entry exposes the same `() => string` label shape.
 const CHOICES = [
-  { id: 'system' as const, label: m.settings_general_theme_system(), mode: 'auto' as const },
-  ...THEMES,
+  { id: 'system' as const, label: () => m.settings_general_theme_system(), mode: 'auto' as const },
+  ...THEMES.map((t) => ({ ...t, label: () => t.label })),
 ];
 
 export function General() {
@@ -44,7 +47,7 @@ export function General() {
                   <i className="alm-theme-swatch__surface" />
                   <i className="alm-theme-swatch__accent" />
                 </span>
-                <span className="alm-theme-swatch__name">{t.label}</span>
+                <span className="alm-theme-swatch__name">{t.label()}</span>
                 <span className="alm-theme-swatch__mode">
                   {/* eslint-disable-next-line alm/no-user-string -- theme discriminants compared, not displayed */}
                   {t.id === 'system' ? `auto · ${resolved.includes('dark') ? 'dark' : 'light'}` : t.mode}
