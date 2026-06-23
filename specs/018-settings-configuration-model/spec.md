@@ -67,12 +67,36 @@ As a user, I want settings grouped by workflow domain so that source behavior, c
 - **FR-002**: Settings MUST show one setting per line.
 - **FR-003**: Each setting row MUST include an information affordance that explains what the setting changes, how the app uses it, what the options mean, and any workflow or safety consequence; it MUST NOT merely restate the label.
 - **FR-004**: Settings MUST auto-save changes and MUST NOT require a global Save button.
-- **FR-005**: Destructive or high-risk setting changes MUST show confirmation before applying.
-- **FR-006**: Density MUST be fixed by the desktop design system; Settings MUST NOT expose compact/comfortable density controls.
+- **FR-005**: Destructive or high-risk setting changes MUST surface a prominent
+  warning (e.g. the Cleanup danger banner). *(Reconciled 2026-06-23 to the
+  auto-save model: settings persist immediately, so the binding *confirmation*
+  for an actual destructive filesystem operation is enforced at plan-application
+  time — the reviewable-plan gate, constitution §II — not at the auto-saved
+  toggle. A settings toggle sets policy; it does not itself mutate the
+  filesystem.)*
+- **FR-006**: Display density is a user-selectable **Appearance preference**, owned
+  by the appearance/theme system (spec 043), persisted via `prefs.density` and
+  applied app-wide by the shell. The legacy per-table `rowDensity` *settings* key
+  is removed (T032). *(Amended 2026-06-23: the original prohibition — "Settings
+  MUST NOT expose density controls" — is relaxed to keep density as an Appearance
+  preference per the design-v4/043 redesign. The constraint that density is not a
+  per-table or internal control is preserved; it is a single global Appearance
+  choice.)*
 - **FR-007**: Light/dark mode MUST be available as an icon control in the app shell and as a persisted appearance setting if exposed.
 - **FR-008**: Project folder and archive location patterns MUST use the token pattern builder, not freeform text.
 - **FR-009**: Calibration matching settings MUST be per calibration frame type.
-- **FR-010**: Catalog settings MUST allow selecting available catalog families and target lookup behavior.
+  *(Reconciled 2026-06-23 to as-built: per-frame-type lives in the backend model
+  — `darkMatchTolerance`/`flatMatching`, per-type dark/flat/bias override
+  penalties, and per-frame-type destination patterns (`patternsByType`). The
+  visible **Calibration Matching** pane presents per-criterion match-required
+  toggles (camera/binning/gain/offset/temp/aging) backed by the spec-007
+  `calibrationTolerances` store; per-frame-type granularity is in the keys it
+  consumes, not as separate dark/flat/bias rows.)*
+- **FR-010**: Catalog/target-lookup settings configure target resolution behavior.
+  *(Reconciled 2026-06-23: catalog-**family** selection (manifest/`active_catalogs`)
+  is superseded by [Spec 035 — SIMBAD Target Resolution](../035-simbad-target-resolution/spec.md);
+  T039 is OBSOLETE. The **Target Resolution** settings pane configures the SIMBAD
+  resolver — endpoint, enable/disable, and cache — in place of family selection.)*
 - **FR-011**: Tool settings MUST configure executable paths for each supported processing tool.
 - **FR-012**: API contract settings MUST NOT appear as a normal user settings section.
 - **FR-013**: Log settings MUST not expose export format or request/entity metadata toggles; request/entity metadata is always present and export is JSON when offered.
@@ -214,7 +238,7 @@ Scope → key mapping:
 | Scope | Keys |
 |-------|------|
 | `advanced` | `logLevel`, `rememberFollowLogs`, `devMode` |
-| `general` | `rowDensity` |
+| `general` | *(empty — `rowDensity` removed by T032; display density is an Appearance preference)* |
 | `cleanup` | `blockPermanentDelete`, `defaultProtection`, `protectedCategories` |
 | `naming` | `pattern`, `autoApplyPattern`, `patternsByType` |
 | `sources` | `followSymlinks`, `hashOnScan`, `alwaysPreviewBeforePlan` |
