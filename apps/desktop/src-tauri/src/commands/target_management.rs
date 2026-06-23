@@ -1,4 +1,4 @@
-//! Gen-3 target management Tauri commands (spec 036).
+//! Gen-3 target management Tauri commands (spec 036 / spec 023 US2-US4).
 //!
 //! ## Commands
 //!
@@ -8,6 +8,10 @@
 //! - `target.alias.remove` — remove a user alias by id (kind='user' only).
 //! - `target.display_alias.set` — set the user presentation label (FR-012).
 //! - `target.display_alias.clear` — clear the user presentation label (FR-012).
+//! - `target.sessions.list` — list acquisition sessions linked to a target (spec 023 US2).
+//! - `target.projects.list` — list projects linked to a target (spec 023 US3).
+//! - `target.note.get` — read observing notes for a target (spec 023 US4).
+//! - `target.note.update` — write observing notes for a target (spec 023 US4).
 //!
 //! The existing dotted command names `target.get`, `target.alias.add`, and
 //! `target.alias.remove` are reused here (repointed from gen-2 to gen-3 per
@@ -18,7 +22,9 @@
 use contracts_core::targets::{
     TargetAliasAddRequest, TargetAliasAddResult, TargetAliasRemoveRequest, TargetAliasRemoveResult,
     TargetDetailV3, TargetDisplayAliasClearRequest, TargetDisplayAliasSetRequest, TargetGetRequest,
-    TargetListItem, TargetOpError,
+    TargetListItem, TargetNoteGetRequest, TargetNoteGetResult, TargetNoteUpdateRequest,
+    TargetNoteUpdateResult, TargetOpError, TargetProjectItem, TargetProjectsListRequest,
+    TargetSessionItem, TargetSessionsListRequest,
 };
 use tauri::State;
 
@@ -139,4 +145,86 @@ pub async fn target_display_alias_clear(
 ) -> Result<TargetDetailV3, TargetOpError> {
     tracing::debug!("target.display_alias.clear target_id={}", req.target_id);
     app_core::target_management::display_alias_clear(state.repo.pool(), &req).await
+}
+
+// ── target.sessions.list (spec 023 US2) ──────────────────────────────────────
+
+/// `target.sessions.list` — list acquisition sessions linked to a canonical target.
+///
+/// Returns sessions ordered newest first (by `created_at`).  Returns an empty
+/// list when the target exists but has no linked sessions.
+///
+/// # Errors
+///
+/// Returns `Err(TargetOpError)` with code `target.not_found`,
+/// `target.invalid_id`, or `internal.database`.
+#[tauri::command]
+#[specta::specta]
+pub async fn target_sessions_list(
+    state: State<'_, AppState>,
+    req: TargetSessionsListRequest,
+) -> Result<Vec<TargetSessionItem>, TargetOpError> {
+    tracing::debug!("target.sessions.list target_id={}", req.target_id);
+    app_core::target_management::sessions_list(state.repo.pool(), &req).await
+}
+
+// ── target.projects.list (spec 023 US3) ──────────────────────────────────────
+
+/// `target.projects.list` — list projects linked to a canonical target.
+///
+/// Returns projects ordered alphabetically by name.  Returns an empty list
+/// when the target exists but has no linked projects.
+///
+/// # Errors
+///
+/// Returns `Err(TargetOpError)` with code `target.not_found`,
+/// `target.invalid_id`, or `internal.database`.
+#[tauri::command]
+#[specta::specta]
+pub async fn target_projects_list(
+    state: State<'_, AppState>,
+    req: TargetProjectsListRequest,
+) -> Result<Vec<TargetProjectItem>, TargetOpError> {
+    tracing::debug!("target.projects.list target_id={}", req.target_id);
+    app_core::target_management::projects_list(state.repo.pool(), &req).await
+}
+
+// ── target.note.get (spec 023 US4) ───────────────────────────────────────────
+
+/// `target.note.get` — read observing notes for a canonical target.
+///
+/// Returns `notes: null` when no notes are stored.
+///
+/// # Errors
+///
+/// Returns `Err(TargetOpError)` with code `target.not_found`,
+/// `target.invalid_id`, or `internal.database`.
+#[tauri::command]
+#[specta::specta]
+pub async fn target_note_get(
+    state: State<'_, AppState>,
+    req: TargetNoteGetRequest,
+) -> Result<TargetNoteGetResult, TargetOpError> {
+    tracing::debug!("target.note.get target_id={}", req.target_id);
+    app_core::target_management::note_get(state.repo.pool(), &req).await
+}
+
+// ── target.note.update (spec 023 US4) ────────────────────────────────────────
+
+/// `target.note.update` — write observing notes for a canonical target.
+///
+/// Empty or whitespace-only `notes` clears the field (stores NULL).
+///
+/// # Errors
+///
+/// Returns `Err(TargetOpError)` with code `target.not_found`,
+/// `target.invalid_id`, or `internal.database`.
+#[tauri::command]
+#[specta::specta]
+pub async fn target_note_update(
+    state: State<'_, AppState>,
+    req: TargetNoteUpdateRequest,
+) -> Result<TargetNoteUpdateResult, TargetOpError> {
+    tracing::debug!("target.note.update target_id={} notes_len={}", req.target_id, req.notes.len());
+    app_core::target_management::note_update(state.repo.pool(), &req).await
 }

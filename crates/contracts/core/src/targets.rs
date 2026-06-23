@@ -267,6 +267,95 @@ pub struct TargetDisplayAliasClearRequest {
     pub target_id: String,
 }
 
+// ── Spec 023 US2/US3/US4 DTOs — sessions, projects, notes ────────────────────
+
+/// A linked acquisition session returned by `target.sessions.list` (spec 023 US2).
+///
+/// Only columns reliably present in `acquisition_session` are surfaced:
+/// - `id` — row UUID.
+/// - `session_key` — raw JSON string (matches the `session_key` column, which
+///   stores the composite key as a JSON object — caller can parse it if needed).
+/// - `created_at` — RFC 3339 UTC timestamp the row was created.
+/// - `frame_count` — length of the `frame_ids` JSON array (computed via
+///   `json_array_length`; 0 for legacy rows with the default `'[]'`).
+/// - `state` — session lifecycle state string (e.g. `"confirmed"`, `"candidate"`).
+#[derive(Clone, Debug, Serialize, Deserialize, Type)]
+#[serde(rename_all = "camelCase")]
+pub struct TargetSessionItem {
+    pub id: String,
+    /// Raw JSON object stored in `acquisition_session.session_key`.
+    pub session_key: String,
+    /// RFC 3339 UTC creation timestamp.
+    pub created_at: String,
+    /// Number of frames in `frame_ids` JSON array.
+    pub frame_count: i64,
+    /// Lifecycle state (e.g. `"confirmed"`, `"candidate"`, `"needs_review"`).
+    pub state: String,
+}
+
+/// A linked project returned by `target.projects.list` (spec 023 US3).
+///
+/// Columns sourced from the `projects` table:
+/// - `id` — row UUID.
+/// - `name` — human-visible project name.
+/// - `lifecycle` — lifecycle state string (e.g. `"ready"`, `"processing"`, `"done"`).
+#[derive(Clone, Debug, Serialize, Deserialize, Type)]
+#[serde(rename_all = "camelCase")]
+pub struct TargetProjectItem {
+    pub id: String,
+    pub name: String,
+    /// Lifecycle state string (e.g. `"ready"`, `"processing"`, `"done"`).
+    pub lifecycle: String,
+}
+
+/// Request for `target.sessions.list` (spec 023 US2).
+#[derive(Clone, Debug, Serialize, Deserialize, Type)]
+#[serde(rename_all = "camelCase")]
+pub struct TargetSessionsListRequest {
+    pub target_id: String,
+}
+
+/// Request for `target.projects.list` (spec 023 US3).
+#[derive(Clone, Debug, Serialize, Deserialize, Type)]
+#[serde(rename_all = "camelCase")]
+pub struct TargetProjectsListRequest {
+    pub target_id: String,
+}
+
+/// Request for `target.note.get` (spec 023 US4).
+#[derive(Clone, Debug, Serialize, Deserialize, Type)]
+#[serde(rename_all = "camelCase")]
+pub struct TargetNoteGetRequest {
+    pub target_id: String,
+}
+
+/// Request for `target.note.update` (spec 023 US4).
+#[derive(Clone, Debug, Serialize, Deserialize, Type)]
+#[serde(rename_all = "camelCase")]
+pub struct TargetNoteUpdateRequest {
+    pub target_id: String,
+    /// New notes text. Empty/whitespace-only clears (stores NULL).
+    pub notes: String,
+}
+
+/// Response for `target.note.get` (spec 023 US4).
+#[derive(Clone, Debug, Serialize, Deserialize, Type)]
+#[serde(rename_all = "camelCase")]
+pub struct TargetNoteGetResult {
+    /// Current notes, or `null` when none are stored.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub notes: Option<String>,
+}
+
+/// Response for `target.note.update` (spec 023 US4).
+#[derive(Clone, Debug, Serialize, Deserialize, Type)]
+#[serde(rename_all = "camelCase")]
+pub struct TargetNoteUpdateResult {
+    /// Notes after the update, or `null` when cleared.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub notes: Option<String>,
+}
+
 // ── Spec 035 DTOs — SIMBAD target resolution ──────────────────────────────────
 //
 // These types implement the three JSON Schema contracts in
