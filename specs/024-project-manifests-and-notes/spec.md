@@ -6,7 +6,8 @@
 
 **Feature Branch**: `024-project-manifests-and-notes`  
 **Created**: 2026-05-09  
-**Status**: Draft  
+**Updated**: 2026-06-23  
+**Status**: Core implemented (32/37) — all 5 open tasks are explicitly DEFERRED (not unstarted). Closeout-ready pending a verify pass on the deferred set.  
 **Input**: User description: "Specify project manifests, manifest checkpoints, and notes as app-owned documentation for projects and generated source views."
 
 ## User Scenarios & Testing *(mandatory)*
