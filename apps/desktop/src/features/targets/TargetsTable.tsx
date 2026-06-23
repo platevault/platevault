@@ -360,7 +360,10 @@ export function TargetsTable({
   loading,
   sort,
   onSort,
-  groupBy = DEFAULT_TARGET_GROUP_BY,
+  // No default: when neither `dims` nor an explicit `groupBy` is supplied the
+  // table renders a FLAT sorted list (previously this defaulted to
+  // 'catalogue', which grouped Targets by catalogue even with nothing selected).
+  groupBy,
   dims,
   emptyMessage = m.targets_table_no_match(),
   usableAltDeg = USABLE_ALT_DEG,
@@ -425,9 +428,19 @@ export function TargetsTable({
         };
       });
     }
-    // Legacy single-tier grouping path.
-    const groups = groupTargets(targets, sort, groupBy, usableAltDeg);
-    return flattenGroups(groups);
+    // Single-tier legacy grouping ONLY if a caller explicitly asks for it.
+    if (groupBy) {
+      const groups = groupTargets(targets, sort, groupBy, usableAltDeg);
+      return flattenGroups(groups);
+    }
+    // Default: no grouping selected → FLAT sorted list (no group headers).
+    const withAlt = targets.map((t) => ({ target: t, alt: rowAltitudeFor(t, usableAltDeg) }));
+    const sortedWithAlt = [...withAlt].sort((a, b) =>
+      compareTargetRows(a.target, a.alt, b.target, b.alt, sort),
+    );
+    return sortedWithAlt.map(
+      (r): FlatRow => ({ kind: 'target', key: r.target.id, target: r.target, alt: r.alt, depth: 0 }),
+    );
   }, [targets, sort, groupBy, usableAltDeg, useMultiGroup, dims, collapsed]);
 
   const virtualizer = useVirtualizer({
