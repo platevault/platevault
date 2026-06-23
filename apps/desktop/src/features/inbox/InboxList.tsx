@@ -1,58 +1,29 @@
 /**
- * InboxList — left list of scanned inbox detections.
+ * InboxList — the inbox detection list, rendered with the shared `Table`
+ * construct (same as Sessions / Calibration) so font, row height, headers, and
+ * group sub-headers match the rest of the app. Virtualized via `Table`'s
+ * opt-in padding-spacer windowing (the inbox is capped at 500 rows but can
+ * still be large), so it stays windowed without a bespoke list.
  *
- * Each row shows the relative path, state, file count, format, and master
- * indicator using aligned text columns (FR-008) — no Pill components in the
- * per-row layout so nothing overflows horizontally at 1100×720.
- *
- * spec 043 (tasks #73/#31/#63 + #83 inbox redesign): the grouping / sort /
- * frame-type CONTROLS that used to sit stacked in this list's header have moved
- * UP into the shared PageTopBar's FilterToolbar (see `InboxControls`). This
- * component is now a CONTROLLED presentational list — it receives the active
- * ordered grouping dimensions (`dims`), `sortBy`, and `filterType` as props.
- *
- * #83: the list no longer wraps its rows in `ListSidebar`. ListSidebar carried
- * its OWN search box (a SECOND "Search inbox…" duplicating the top-bar search)
- * and its own footer count (a THIRD copy of the folder/master totals already in
- * the top bar + status bar). Both are dropped: the list is now just a single
- * self-scrolling viewport (`.alm-page__scroll`) of (virtualized) rows. The
- * "grouped by …" hint, when grouping is active, is the ONLY footer affordance —
- * it conveys grouping state, not a duplicate count.
- *
- * The user-configurable multi-level grouping (spec 041 T021) is preserved: the
- * chosen ordered dimensions render a nested, collapsible tree using the shared
- * `groupByDimensions` engine.
- *
- * Rendering is VIRTUALIZED: the grouped tree (or the flat list) is flattened
- * into a single array of visual rows (`flattenVisibleTree`) — headers plus the
- * leaf rows of expanded groups — and windowed with `@tanstack/react-virtual`
- * so a large inbox mounts only the rows in view. When the scroll viewport has
- * no measured height (e.g. jsdom under test, or the first paint before layout),
- * the virtualizer yields an empty window; in that case we fall back to
- * rendering every visual row so behavior and tests stay correct off-screen.
+ * Columns: Detection (path, primary) · Type (frame type / state) · Files ·
+ * Format. When grouping is active, the chosen ordered dimensions render
+ * collapsible group sub-header rows (shared `groupByDimensions` engine); leaf
+ * rows indent under their group. Selection + grouping controls are owned by the
+ * page / top-bar (`InboxControls`); this is a controlled presentational list.
  */
 
-import {
-  useState,
-  useMemo,
-  useCallback,
-  Fragment,
-  type KeyboardEvent as ReactKeyboardEvent,
-} from 'react';
-import { useVirtualizer } from '@tanstack/react-virtual';
+import { useState, useMemo, useCallback } from 'react';
 import type { InboxListItem } from '@/api/commands';
-import {
-  groupByDimensions,
-  type GroupNode,
-} from './grouping';
+import { Table, type TableColumn, type TableRow } from '@/ui';
+import { groupByDimensions, type GroupNode } from './grouping';
 import { ACCESSORS, DIM_LABELS, type InboxSortBy } from './InboxControls';
 
 // ── Helpers ───────────────────────────────────────────────────────────────────
 
 /**
- * Classification label shown in the primary (leftmost) grid column.
- * For classified / plan-open items we show the dominant frame type when
- * available so the column is frame-type-forward rather than state-forward.
+ * Classification label shown in the Type column. For classified / plan-open
+ * items we show the dominant frame type when available so the column is
+ * frame-type-forward rather than state-forward.
  */
 function classificationLabel(item: InboxListItem): string {
   if (item.isMaster) return item.masterFrameType ?? 'master';
@@ -66,10 +37,7 @@ function classificationLabel(item: InboxListItem): string {
   }
 }
 
-/**
- * CSS modifier for the classification cell so pending / classified / open / resolved
- * each get a distinct colour via the token-only classes in inbox-wave3.css.
- */
+/** CSS colour modifier for the Type cell. */
 function classificationMod(state: string): string {
   switch (state) {
     case 'pending_classification': return 'pending';
@@ -80,10 +48,7 @@ function classificationMod(state: string): string {
   }
 }
 
-/**
- * Short, uppercase format tag shown in the format column.
- * Keeps width predictable for alignment.
- */
+/** Short, uppercase format tag shown in the Format column. */
 function formatTag(item: InboxListItem): string {
   if (item.lane === 'video') return 'VIDEO';
   if (item.format === 'xisf') return 'XISF';
@@ -98,32 +63,21 @@ export interface InboxListProps {
   selectedIdx: number | null;
   onSelect: (idx: number) => void;
   filterType: string;
-  /**
-   * Active ordered grouping dimensions (owned by the page / top-bar controls).
-   * Optional — defaults to no grouping (flat list).
-   */
+  /** Active ordered grouping dimensions (owned by the page / top-bar controls). */
   dims?: string[];
-  /**
-   * Active list sort (owned by the page / top-bar controls). Optional —
-   * defaults to `'name'`.
-   */
+  /** Active list sort (owned by the page / top-bar controls). */
   sortBy?: InboxSortBy;
-  /**
-   * @deprecated The frame-type filter control moved to the top-bar
-   * `InboxControls`. Accepted (and ignored) here only so existing standalone
-   * test renders keep compiling; the page no longer passes it.
-   */
+  /** @deprecated The frame-type filter control moved to the top-bar InboxControls. */
   onFilterTypeChange?: (type: string | undefined) => void;
 }
 
-// ── Flattened visual-row model (drives virtualization) ───────────────────────────
+// ── Flattened visual-row model (drives grouping + windowing) ─────────────────────
 
 const INDENT_PER_DEPTH = 12;
 
 /** A collapsible group header row. */
 export interface HeaderVisualRow {
   kind: 'header';
-  /** Stable per-node collapse key (matches the GroupTree path scheme). */
   path: string;
   node: GroupNode<InboxListItem>;
   depth: number;
@@ -142,17 +96,10 @@ export interface ItemVisualRow {
 
 export type VisualRow = HeaderVisualRow | ItemVisualRow;
 
-/** Stable virtualization/react key for a visual row. */
-function rowKey(row: VisualRow): string {
-  return row.kind === 'header' ? `h:${row.path}` : `i:${row.item.inboxItemId}`;
-}
-
 /**
  * Walk the grouped tree in render order and produce the flat list of VISIBLE
  * visual rows: every group header, plus the leaf rows of groups that are not
- * collapsed. A collapsed group contributes only its header (descendants are
- * omitted). Leaf rows resolve their selection index via the O(1)
- * `originalIndexById` map. Mirrors the indent/path math of the old GroupTree.
+ * collapsed. A collapsed group contributes only its header.
  */
 export function flattenVisibleTree(
   nodes: readonly GroupNode<InboxListItem>[],
@@ -185,107 +132,19 @@ export function flattenVisibleTree(
   return rows;
 }
 
-// Estimated row heights for the virtualizer (real heights are measured on mount
-// via measureElement; these only seed the initial window + total size).
-const HEADER_SIZE_EST = 28;
-const ITEM_SIZE_EST = 52;
+// ── Columns ──────────────────────────────────────────────────────────────────────
 
-// ── Row renderers ────────────────────────────────────────────────────────────────
-
-function InboxRow({
-  item,
-  originalIdx,
-  selected,
-  onSelect,
-  indent,
-}: {
-  item: InboxListItem;
-  originalIdx: number;
-  selected: boolean;
-  onSelect: (idx: number) => void;
-  indent: number;
-}) {
-  // task 32: classification-forward grid. The classification column (leftmost)
-  // shows the dominant frame type when known, falling back to the lifecycle state.
-  const classLabel = classificationLabel(item);
-  const classMod = classificationMod(item.state);
-  const classCell = `alm-inbox-row__classification alm-inbox-row__classification--${classMod}`;
-
-  return (
-    <div
-      data-testid={`inbox-item-${item.inboxItemId}`}
-      className={[
-        'alm-inbox-row',
-        selected ? 'alm-inbox-row--selected' : '',
-        item.state === 'plan_open' ? 'alm-inbox-row--muted' : '',
-      ].filter(Boolean).join(' ')}
-      onClick={() => onSelect(originalIdx)}
-      role="button"
-      tabIndex={0}
-      onKeyDown={(e) => e.key === 'Enter' && onSelect(originalIdx)}
-      aria-selected={selected}
-      // eslint-disable-next-line no-restricted-syntax -- dynamic: depth-based indent padding for grouped inbox rows
-      style={indent ? { paddingLeft: indent } : undefined}
-    >
-      {/* ── Col 1: classification / frame type (task 32) ── */}
-      <span className={classCell} title={classLabel}>
-        {classLabel}
-      </span>
-
-      {/* ── Col 2: relative path (grows) ── */}
-      <span className="alm-inbox-row__path" title={item.relativePath || '(root)'}>
-        {item.relativePath || '(root)'}
-      </span>
-
-      {/* ── Col 3: file count (fixed right) ── */}
-      <span className="alm-inbox-row__count">
-        {item.fileCount} {item.fileCount !== 1 ? 'files' : 'file'}
-      </span>
-
-      {/* ── Col 4: format / master tag (fixed right) ── */}
-      <span className="alm-inbox-row__format">
-        {item.isMaster
-          ? `${item.masterFrameType ?? 'master'} master`
-          : formatTag(item)}
-      </span>
-    </div>
-  );
-}
-
-function GroupHeaderRow({
-  node,
-  depth,
-  collapsed,
-  onToggle,
-}: {
-  node: GroupNode<InboxListItem>;
-  depth: number;
-  collapsed: boolean;
-  onToggle: () => void;
-}) {
-  const headerIndent = depth * INDENT_PER_DEPTH;
-  return (
-    <button
-      type="button"
-      className="alm-list-group-header alm-inbox-list__group-header"
-      data-testid={`inbox-group-${node.dimension}-${node.key}`}
-      onClick={onToggle}
-      aria-expanded={!collapsed}
-      // eslint-disable-next-line no-restricted-syntax -- dynamic: depth-based indent padding for group header
-      style={{ paddingLeft: 8 + headerIndent }}
-    >
-      <span aria-hidden="true" className="alm-inbox-list__group-caret">
-        {collapsed ? '▸' : '▾'}
-      </span>
-      <span className="alm-inbox-list__group-label">
-        {node.label}
-      </span>
-      <span className="alm-inbox-list__group-count">
-        {node.count}
-      </span>
-    </button>
-  );
-}
+const COLUMNS: TableColumn[] = [
+  { key: 'detection', label: 'Detection' },
+  { key: 'type', label: 'Type', style: { width: '7.5rem' } },
+  { key: 'count', label: 'Files', className: 'num', style: { width: '5rem' } },
+  {
+    key: 'format',
+    label: 'Format',
+    className: 'alm-inbox-cell--right',
+    style: { width: '7rem' },
+  },
+];
 
 // ── Component ───────────────────────────────────────────────────────────────────
 
@@ -298,9 +157,6 @@ export function InboxList({
   sortBy = 'name',
 }: InboxListProps) {
   const [collapsed, setCollapsed] = useState<Set<string>>(() => new Set());
-  // The scroll viewport the virtualizer measures against — the
-  // `.alm-inbox-list__scroll` container (captured via `scrollRef` below).
-  const [scrollEl, setScrollEl] = useState<HTMLDivElement | null>(null);
 
   const filtered = useMemo(() => {
     let result = items;
@@ -316,25 +172,16 @@ export function InboxList({
     return sorted;
   }, [items, filterType, sortBy]);
 
-  // Build the nested grouping tree from the active (ordered, de-duplicated) dims.
   const tree = useMemo(
     () => groupByDimensions(filtered, dims, ACCESSORS),
     [filtered, dims],
   );
 
-  // O(1) original-index lookup by item id (stable across filter/sort/group).
   const originalIndexById = useMemo(() => {
     const m = new Map<string, number>();
     items.forEach((it, i) => m.set(it.inboxItemId, i));
     return m;
   }, [items]);
-
-  // The scrolling viewport is captured via a ref (the `.alm-inbox-list`
-  // container owns `overflow-y: auto`) so the virtualizer measures the right
-  // element now that ListSidebar (and its parent scroll div) is gone.
-  const scrollRef = useCallback((node: HTMLDivElement | null) => {
-    setScrollEl(node);
-  }, []);
 
   const toggle = useCallback((path: string) => {
     setCollapsed((prev) => {
@@ -345,11 +192,8 @@ export function InboxList({
     });
   }, []);
 
-  // Whether grouping is active at all (drives header rows vs a plain flat list).
   const grouped = dims.length > 0;
 
-  // Flatten to the visible visual rows the virtualizer windows. When grouped we
-  // walk the tree (headers + expanded leaves); otherwise it's a flat item list.
   const visualRows = useMemo<VisualRow[]>(() => {
     if (grouped) return flattenVisibleTree(tree, collapsed, originalIndexById);
     return filtered.map((item) => ({
@@ -360,112 +204,97 @@ export function InboxList({
     }));
   }, [grouped, tree, collapsed, originalIndexById, filtered]);
 
-  const rowVirtualizer = useVirtualizer({
-    count: visualRows.length,
-    getScrollElement: () => scrollEl,
-    estimateSize: (i) => (visualRows[i].kind === 'header' ? HEADER_SIZE_EST : ITEM_SIZE_EST),
-    getItemKey: (i) => rowKey(visualRows[i]),
-    overscan: 8,
-  });
-
-  const virtualItems = rowVirtualizer.getVirtualItems();
-  // Window only when the virtualizer has a measured viewport; otherwise (no
-  // size yet / jsdom) render every row so nothing is hidden off-screen.
-  const windowed = virtualItems.length > 0;
-
-  // ↑/↓ move the selection across visible leaf rows (skipping headers), keeping
-  // the moved-to row scrolled into view in the virtualized window.
-  const onListKeyDown = useCallback(
-    (e: ReactKeyboardEvent<HTMLDivElement>) => {
-      if (e.key !== 'ArrowDown' && e.key !== 'ArrowUp') return;
-      const itemPositions: number[] = [];
-      visualRows.forEach((r, i) => {
-        if (r.kind === 'item') itemPositions.push(i);
-      });
-      if (itemPositions.length === 0) return;
-      e.preventDefault();
-      const dir = e.key === 'ArrowDown' ? 1 : -1;
-      let cur = itemPositions.findIndex(
-        (i) => (visualRows[i] as ItemVisualRow).originalIdx === selectedIdx,
-      );
-      if (cur === -1) cur = dir === 1 ? -1 : itemPositions.length;
-      const nextPos = Math.min(Math.max(cur + dir, 0), itemPositions.length - 1);
-      const targetRowIndex = itemPositions[nextPos];
-      onSelect((visualRows[targetRowIndex] as ItemVisualRow).originalIdx);
-      rowVirtualizer.scrollToIndex(targetRowIndex);
-    },
-    [visualRows, selectedIdx, onSelect, rowVirtualizer],
+  // Map the visual rows onto shared-Table rows (group sub-headers + item rows).
+  const rows = useMemo<TableRow[]>(
+    () =>
+      visualRows.map((row) => {
+        if (row.kind === 'header') {
+          const { node, depth, path, collapsed: isCollapsed } = row;
+          return {
+            _rowClassName: 'alm-inbox-table__group',
+            // The collapse control is a real <button> (keyboard-accessible,
+            // announces expanded state) inside the group cell — not a clickable
+            // <tr>. It carries the group testid + aria-expanded.
+            detection: (
+              <button
+                type="button"
+                className="alm-inbox-table__group-cell"
+                data-testid={`inbox-group-${node.dimension}-${node.key}`}
+                aria-expanded={!isCollapsed}
+                onClick={() => toggle(path)}
+                // eslint-disable-next-line no-restricted-syntax -- dynamic: depth-based group-header indent
+                style={{ paddingLeft: 8 + depth * INDENT_PER_DEPTH }}
+              >
+                <span className="alm-inbox-list__group-caret" aria-hidden="true">
+                  {isCollapsed ? '▸' : '▾'}
+                </span>
+                <span className="alm-inbox-list__group-label">{node.label}</span>
+                <span className="alm-inbox-list__group-count">{node.count}</span>
+              </button>
+            ),
+            type: '',
+            count: '',
+            format: '',
+          };
+        }
+        const { item, originalIdx, indent } = row;
+        const selected = selectedIdx === originalIdx;
+        const mod = classificationMod(item.state);
+        return {
+          _testid: `inbox-item-${item.inboxItemId}`,
+          _rowClassName: [
+            'alm-inbox-table__row',
+            selected ? 'alm-inbox-table__row--selected' : '',
+            item.state === 'plan_open' ? 'alm-inbox-table__row--muted' : '',
+          ]
+            .filter(Boolean)
+            .join(' '),
+          _onClick: () => onSelect(originalIdx),
+          detection: (
+            <span
+              className="alm-inbox-cell__path"
+              title={item.relativePath || '(root)'}
+              // eslint-disable-next-line no-restricted-syntax -- dynamic: nested-group leaf indent
+              style={indent ? { paddingLeft: indent } : undefined}
+            >
+              {item.relativePath || '(root)'}
+            </span>
+          ),
+          type: (
+            <span
+              className={`alm-inbox-row__classification alm-inbox-row__classification--${mod}`}
+            >
+              {classificationLabel(item)}
+            </span>
+          ),
+          count: `${item.fileCount} ${item.fileCount !== 1 ? 'files' : 'file'}`,
+          format: item.isMaster
+            ? `${item.masterFrameType ?? 'master'} master`
+            : formatTag(item),
+        };
+      }),
+    [visualRows, selectedIdx, onSelect, toggle],
   );
 
-  const renderVisualRow = useCallback(
-    (row: VisualRow) =>
-      row.kind === 'header' ? (
-        <GroupHeaderRow
-          node={row.node}
-          depth={row.depth}
-          collapsed={row.collapsed}
-          onToggle={() => toggle(row.path)}
-        />
-      ) : (
-        <InboxRow
-          item={row.item}
-          originalIdx={row.originalIdx}
-          selected={selectedIdx === row.originalIdx}
-          onSelect={onSelect}
-          indent={row.indent}
-        />
-      ),
-    [toggle, selectedIdx, onSelect],
-  );
-
-  // #83: only a grouping-state hint as a footer — NOT a duplicate count (the
-  // folder/master totals live in the top bar summary + global status bar).
   const groupingHint = grouped
     ? `Grouped by ${dims.map((d) => DIM_LABELS[d]).join(' › ')}`
     : null;
 
   return (
     <div className="alm-inbox-list" data-testid="inbox-list">
-      <div
-        ref={scrollRef}
-        className="alm-inbox-list__scroll alm-page__scroll alm-virtual-scroll"
-        data-virtual-scroll="true"
-      >
-        <div
-          data-testid="inbox-virtual-sizer"
-          className="alm-inbox-list__sizer"
-          onKeyDown={onListKeyDown}
-          // eslint-disable-next-line no-restricted-syntax -- dynamic: virtualizer total height for windowed mode
-          style={{
-            height: windowed ? rowVirtualizer.getTotalSize() : undefined,
-          }}
-        >
-          {windowed
-            ? virtualItems.map((vi) => {
-                const row = visualRows[vi.index];
-                return (
-                  <div
-                    key={vi.key}
-                    data-index={vi.index}
-                    ref={rowVirtualizer.measureElement}
-                    // eslint-disable-next-line no-restricted-syntax -- dynamic: virtualizer translateY offset per inbox row
-                    style={{
-                      position: 'absolute',
-                      top: 0,
-                      left: 0,
-                      width: '100%',
-                      transform: `translateY(${vi.start}px)`,
-                    }}
-                  >
-                    {renderVisualRow(row)}
-                  </div>
-                );
-              })
-            : visualRows.map((row) => (
-                <Fragment key={rowKey(row)}>{renderVisualRow(row)}</Fragment>
-              ))}
-        </div>
-      </div>
+      {visualRows.length === 0 ? (
+        <div className="alm-inbox-list__empty">No detections.</div>
+      ) : (
+        <Table
+          className="alm-inbox-table"
+          columns={COLUMNS}
+          rows={rows}
+          virtualized
+          estimateRowHeight={40}
+          scrollClassName="alm-inbox-table__scroll"
+          scrollTestId="inbox-virtual-sizer"
+        />
+      )}
       {groupingHint && (
         <div className="alm-inbox-list__footer" data-testid="inbox-grouping-hint">
           {groupingHint}

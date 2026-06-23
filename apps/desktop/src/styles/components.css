@@ -522,6 +522,22 @@
 .alm-table td.num { font-variant-numeric: tabular-nums; text-align: right; }
 .alm-table td.muted { color: var(--alm-text-muted); }
 
+/* Virtualized Table (opt-in `virtualized` prop): own scroll container + sticky
+   header + zero-chrome sentinel spacer rows (padding-spacer windowing). */
+.alm-table__scroll {
+  min-height: 0;
+  overflow: auto;
+}
+.alm-table__scroll thead th {
+  position: sticky;
+  top: 0;
+  z-index: 1;
+}
+.alm-table__spacer td {
+  padding: 0;
+  border: 0;
+}
+
 /* === KV ROW === */
 .alm-kv { display: flex; padding: var(--alm-sp-1) 0; gap: var(--alm-sp-3); }
 .alm-kv__label {
@@ -7931,6 +7947,77 @@
   padding: var(--alm-sp-1) var(--alm-sp-3);
   border-top: 1px solid var(--alm-border);
   font-size: var(--alm-text-2xs);
+  color: var(--alm-text-muted);
+}
+.alm-inbox-list__empty {
+  padding: var(--alm-sp-4);
+  color: var(--alm-text-muted);
+  font-size: var(--alm-text-sm);
+}
+
+/* ── Inbox list on the shared Table construct (font/row-height/header parity) ── */
+.alm-inbox-table {
+  table-layout: fixed;
+  width: 100%;
+}
+/* The shared Table's scroll wrapper fills the flex-column inbox list. */
+.alm-inbox-table__scroll {
+  flex: 1;
+}
+.alm-inbox-table td.num,
+.alm-inbox-table th.num,
+.alm-inbox-table td.alm-inbox-cell--right,
+.alm-inbox-table th.alm-inbox-cell--right {
+  text-align: right;
+}
+/* Detection (path) cell: single line, ellipsis (needs table-layout:fixed). */
+.alm-inbox-cell__path {
+  display: block;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  font-weight: 500;
+  color: var(--alm-text);
+}
+.alm-inbox-table__row {
+  cursor: pointer;
+}
+.alm-inbox-table__row:hover {
+  background: var(--alm-hover-bg, var(--alm-surface));
+}
+.alm-inbox-table__row--selected,
+.alm-inbox-table__row--selected:hover {
+  background: var(--alm-info-bg);
+}
+.alm-inbox-table__row--muted {
+  opacity: 0.6;
+}
+/* Group sub-header row. */
+.alm-inbox-table__group {
+  cursor: pointer;
+}
+.alm-inbox-table__group td {
+  background: var(--alm-surface);
+  border-bottom: 1px solid var(--alm-border);
+}
+.alm-inbox-table__group:hover td {
+  background: var(--alm-hover-bg, var(--alm-surface));
+}
+/* The group cell is a real <button> — reset native chrome. */
+.alm-inbox-table__group-cell {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--alm-sp-2);
+  width: 100%;
+  background: none;
+  border: none;
+  cursor: pointer;
+  text-align: left;
+  font-family: inherit;
+  font-size: var(--alm-text-xs);
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  font-weight: var(--alm-weight-semibold);
   color: var(--alm-text-muted);
 }
 
