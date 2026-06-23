@@ -4,7 +4,9 @@
 
 **Created**: 2026-06-20
 
-**Status**: Draft
+**Updated**: 2026-06-23
+
+**Status**: Implemented — confirm pipeline + reviewable plan surface + apply (59/59 tasks); iteration-1 added single-type sub-items at ingest + destination model (PR #315). Supersedes spec 005; absorbed parts of specs 025/045.
 
 **Input**: User description: "Rework the inbox confirmation experience and the file-organization plan model so confirming an item produces a visible, reviewable plan; the review surface is structured (no overflowing pills, multi-level grouping) and shows per-file metadata; users can override header-derived values beyond frame type and apply overrides to a multi-selection; and whether files are moved or catalogued in place depends on where they came from (inbox vs already-organized library root)."
 

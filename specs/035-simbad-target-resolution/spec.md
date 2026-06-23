@@ -20,7 +20,9 @@
 
 **Created**: 2026-06-18
 
-**Status**: Draft
+**Updated**: 2026-06-23
+
+**Status**: Implemented — resolver + seed + cache + ingest grouping shipped (PRs #250–252, #307/#309). Validated end-to-end 2026-06-23: resolver unit 55/55, `simbad_resolution_integration` 4/4, `target_search_seeded` 8/8, `ingest_sessions_integration` 2/2.
 
 **Input**: User description: "Resolve target identities on demand against the SIMBAD astronomical
 database, backed by a bundled seed index of popular catalogues and a growing local cache; supersede

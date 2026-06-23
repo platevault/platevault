@@ -1,13 +1,20 @@
 # Feature Specification: Inbox Mixed-Folder Split
 
+> **⚠ SUPERSEDED (2026-06-23) by [Spec 041 — Inbox Plan Surface](../041-inbox-plan-surface/spec.md).**
+> The "detect mixed folder → warn → split into separate Inbox folders → only then move into Inventory"
+> flow specified here was never implemented as written (0/51 tasks). Spec 041's iteration-1 replaced it
+> with a **single-type sub-items at ingest** model (mixed folders split into per-type items at ingest,
+> field-agnostic reclassify, missing-mandatory gate, source-group provenance — landed in PR #315). The
+> mixed-vs-single detection intent here remains the conceptual origin; the implementation lives in 041.
+
 > **UI Revised**: The UI design in this spec has been revised by
 > [Spec 030 — UI Audit & Revision](../030-ui-audit-revision/spec.md).
 > When implementing, follow spec 030 for layout, navigation, and component patterns.
 
 **Feature Branch**: `005-inbox-mixed-folder-split`  
 **Created**: 2026-05-09  
-**Updated**: 2026-05-22  
-**Status**: Draft (mockup-only; pre-implementation forward fill)  
+**Updated**: 2026-06-23  
+**Status**: Superseded by spec 041 (was: Draft, mockup-only; 0/51 tasks — never implemented as written)  
 **Input**: User description: "Specify how mixed folders are detected in Inbox, warned about, split into separate Inbox folders, and only then moved into Inventory."
 
 ## Implementation Status
