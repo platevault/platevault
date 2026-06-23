@@ -17,6 +17,7 @@
 
 pub mod classify;
 pub mod confirm;
+pub mod grouping;
 pub mod metadata;
 pub mod plan_listener;
 pub mod reclassify;
