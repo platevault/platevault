@@ -110,7 +110,7 @@ export function CallList({ calls, contracts, onViewSchema }: CallListProps) {
                 </button>
                 <button
                   type="button"
-                  className="alm-btn alm-btn--xs"
+                  className={'alm-btn alm-btn--xs' + (isReplaySafe ? ' alm-dev-calls__replay-btn--safe' : ' alm-dev-calls__replay-btn--unsafe')}
                   disabled={!isReplaySafe}
                   title={
                     isReplaySafe
@@ -123,8 +123,6 @@ export function CallList({ calls, contracts, onViewSchema }: CallListProps) {
                       : `Replay disabled for write contract ${call.contract}`
                   }
                   aria-disabled={!isReplaySafe}
-                  // eslint-disable-next-line no-restricted-syntax -- dynamic: conditional opacity + cursor based on replay-safe state
-                  style={{ opacity: isReplaySafe ? 1 : 0.4, cursor: isReplaySafe ? 'pointer' : 'not-allowed' }}
                 >
                   Replay
                 </button>

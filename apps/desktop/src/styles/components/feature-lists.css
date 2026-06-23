@@ -384,6 +384,21 @@
   gap: var(--alm-sp-2);
 }
 
+/* Byte counter — normal state */
+.alm-project-notes__byte-counter {
+  color: var(--alm-text-muted);
+}
+
+/* Byte counter — approaching limit */
+.alm-project-notes__byte-counter--near {
+  color: var(--alm-warn);
+}
+
+/* Byte counter — over limit */
+.alm-project-notes__byte-counter--over {
+  color: var(--alm-danger);
+}
+
 /* === PROJECTS LIST === */
 
 /* Loading state placeholder */

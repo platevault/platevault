@@ -236,9 +236,7 @@ export function WizardPage() {
             {STEP_LABELS.slice(currentStep + 1).map((label, i) => (
               <div
                 key={label}
-                className="alm-wizard-page__coming-up-item"
-                // eslint-disable-next-line no-restricted-syntax -- dynamic: conditional border for last upcoming-step item
-                style={{ borderBottom: i < STEP_LABELS.length - currentStep - 2 ? '1px dotted var(--alm-border)' : 'none' }}
+                className={'alm-wizard-page__coming-up-item' + (i < STEP_LABELS.length - currentStep - 2 ? ' alm-wizard-page__coming-up-item--sep' : '')}
               >
                 {currentStep + i + 2}. {label}
               </div>
@@ -265,8 +263,7 @@ export function WizardPage() {
           </Btn>
         )}
         {currentStep < 5 && (
-          // eslint-disable-next-line no-restricted-syntax -- dynamic: flex:1 layout applied to Next button passthrough
-          <Btn variant="primary" size="sm" onClick={handleNext} disabled={!canAdvance()} style={{ flex: 1 }}>
+          <Btn variant="primary" size="sm" onClick={handleNext} disabled={!canAdvance()} className="alm-wizard-page__flex-fill">
             {nextLabels[currentStep]}
           </Btn>
         )}
@@ -276,8 +273,7 @@ export function WizardPage() {
             size="sm"
             onClick={() => void handleCreate()}
             disabled={creating || !wizardData.name.name.trim()}
-            // eslint-disable-next-line no-restricted-syntax -- dynamic: flex:1 layout applied to Create button passthrough
-            style={{ flex: 1 }}
+            className="alm-wizard-page__flex-fill"
             data-testid="wizard-create-btn"
           >
             {creating ? m.projects_create_creating() : m.projects_create_btn()}
@@ -319,8 +315,7 @@ export function WizardPage() {
       </div>
 
       {/* WizardShell fills the remaining space */}
-      {/* eslint-disable-next-line no-restricted-syntax -- dynamic: flex:1 minHeight:0 layout passthrough to WizardShell */}
-      <WizardShell steps={steps} currentStep={currentStep} summary={summary} style={{ flex: 1, minHeight: 0 }}>
+      <WizardShell steps={steps} currentStep={currentStep} summary={summary} className="alm-wizard-page__flex-fill--noscroll">
         {/* Step title + description */}
         {currentStep < 5 && (
           <div className="alm-wizard-page__step-header">

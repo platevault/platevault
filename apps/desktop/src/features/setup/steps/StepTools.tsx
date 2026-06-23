@@ -261,10 +261,8 @@ function ToolPathPicker({
         {m.setup_tools_executable_label()}
       </span>
       <span
-        className="alm-mono alm-step-tools__path-value"
+        className={'alm-mono alm-step-tools__path-value' + (path ? ' alm-step-tools__path-value--set' : '')}
         title={path ?? undefined}
-        // eslint-disable-next-line no-restricted-syntax -- dynamic: conditional token color for path set vs unset
-        style={{ color: path ? 'var(--alm-text-secondary)' : 'var(--alm-text-faint)' }}
       >
         {path ?? m.setup_tools_no_path()}
       </span>

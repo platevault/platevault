@@ -60,22 +60,15 @@ function ArtifactRow({ artifact, projectId, onResolved }: ArtifactRowProps) {
     >
       {/* Kind badge */}
       <span
-        className={`artifact-kind-badge artifact-kind-${artifact.kind} alm-tool-launches__kind-badge`}
+        className={`artifact-kind-badge artifact-kind-${artifact.kind} alm-tool-launches__kind-badge` + (isFallback ? ' alm-tool-launches__kind-badge--fallback' : '')}
         title={`${artifact.kind}${isFallback ? ' (low confidence)' : ''}`}
-        // eslint-disable-next-line no-restricted-syntax -- dynamic: conditional opacity for low-confidence fallback badge
-        style={{ opacity: isFallback ? 0.6 : 1 }}
       >
         {artifact.kind}
       </span>
 
       {/* File name — strikethrough when missing */}
       <span
-        className="artifact-file-name alm-tool-launches__file-name"
-        // eslint-disable-next-line no-restricted-syntax -- dynamic: conditional strikethrough + opacity for missing artifact
-        style={{
-          textDecoration: isMissing ? 'line-through' : 'none',
-          opacity: isMissing ? 0.5 : 1,
-        }}
+        className={'artifact-file-name alm-tool-launches__file-name' + (isMissing ? ' alm-tool-launches__file-name--missing' : '')}
         title={artifact.path}
       >
         {fileName}

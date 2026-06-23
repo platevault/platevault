@@ -99,9 +99,25 @@
   margin-top: var(--alm-sp-2);
 }
 
-/* "Coming up" step item — borderBottom is applied inline (conditional per index) */
+/* "Coming up" step item — default (no border on last item) */
 .alm-wizard-page__coming-up-item {
   padding: 3px 0;
+}
+
+/* "Coming up" step item — separator shown between items (not last) */
+.alm-wizard-page__coming-up-item--sep {
+  border-bottom: 1px dotted var(--alm-border);
+}
+
+/* Flex-fill utility used in WizardPage summary nav buttons */
+.alm-wizard-page__flex-fill {
+  flex: 1;
+}
+
+/* Flex-fill with min-height:0 — used to prevent flex overflow on WizardShell */
+.alm-wizard-page__flex-fill--noscroll {
+  flex: 1;
+  min-height: 0;
 }
 
 /* Footprint estimate box */
@@ -439,6 +455,12 @@
   border-bottom: 1px solid var(--alm-border);
   font-size: var(--alm-text-xs);
   cursor: pointer;
+  background: transparent;
+}
+
+/* Session row — selected */
+.alm-wizard-sources__row--selected {
+  background: var(--alm-surface);
 }
 
 /* Train ID cell — mono + truncate */
@@ -522,9 +544,25 @@
   color: var(--alm-text-muted);
 }
 
-/* Notes cell in shared table — font-size only; color is dynamic inline */
+/* Notes cell in shared table — default muted color */
 .alm-wizard-calib__cell-notes-dyn {
   font-size: var(--alm-text-xs);
+  color: var(--alm-text-muted);
+}
+
+/* Notes cell — warning state */
+.alm-wizard-calib__cell-notes-dyn--warn {
+  color: var(--alm-warn);
+}
+
+/* Score cell — warning state */
+.alm-wizard-calib__cell-score--warn {
+  color: var(--alm-warn);
+}
+
+/* Score cell — faint/dash state (score === '—') */
+.alm-wizard-calib__cell-score--faint {
+  color: var(--alm-text-faint);
 }
 
 /* Footer action row below shared calibration table */
@@ -925,8 +963,13 @@
   align-items: center;
   gap: var(--alm-sp-3);
   padding: var(--alm-sp-4);
-  /* cursor is set inline because it depends on runtime isExpandable state */
+  cursor: default;
   user-select: none;
+}
+
+/* Card header — expandable (pointer cursor) */
+.alm-setup-scan__header--expandable {
+  cursor: pointer;
 }
 
 .alm-setup-scan__chevron {
@@ -1445,7 +1488,7 @@
   color: var(--alm-text-muted);
 }
 
-/* Path display span (static layout; color applied inline — dynamic on path presence) */
+/* Path display span — no path set (faint placeholder) */
 .alm-step-tools__path-value {
   flex: 1;
   min-width: 0;
@@ -1453,6 +1496,12 @@
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
+  color: var(--alm-text-faint);
+}
+
+/* Path display span — path is set (secondary color) */
+.alm-step-tools__path-value--set {
+  color: var(--alm-text-secondary);
 }
 
 /* === WIZARD SHELL === */
@@ -1494,9 +1543,15 @@
   font-weight: var(--alm-weight-semibold);
 }
 
-/* Step label — color applied inline (dynamic per step state) */
+/* Step label — muted (non-active steps) */
 .alm-wizard__step-label {
   font-size: var(--alm-text-xs);
+  color: var(--alm-text-muted);
+}
+
+/* Step label — active step */
+.alm-wizard__step-label--active {
+  color: var(--alm-text);
 }
 
 /* Connector line between steps */
@@ -1550,7 +1605,7 @@
   margin-bottom: var(--alm-sp-6);
 }
 
-/* Individual step card — geometry only; background/color/fontWeight applied inline (dynamic) */
+/* Individual step card — future (default) */
 .alm-wizard__steps-card {
   flex: 1;
   padding: var(--alm-sp-2) var(--alm-sp-3);
@@ -1558,6 +1613,21 @@
   border-radius: var(--alm-radius-sm);
   font-size: var(--alm-text-xs);
   text-align: center;
+  background: var(--alm-bg);
+  color: var(--alm-text-muted);
+  font-weight: var(--alm-weight-normal);
+}
+
+/* Step card — past (visited) */
+.alm-wizard__steps-card--past {
+  background: var(--alm-surface);
+}
+
+/* Step card — active (current step) */
+.alm-wizard__steps-card--active {
+  background: var(--alm-surface);
+  color: var(--alm-text);
+  font-weight: var(--alm-weight-semibold);
 }
 
 /* Pinned navigation footer */

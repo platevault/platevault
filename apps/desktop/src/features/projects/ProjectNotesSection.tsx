@@ -172,14 +172,13 @@ export function ProjectNotesSection({
       <div className="alm-project-notes__toolbar">
         <span
           data-testid="notes-byte-counter"
-          // eslint-disable-next-line no-restricted-syntax -- dynamic: conditional token color (over-limit / near-limit / normal)
-          style={{
-            color: overLimit
-              ? 'var(--alm-danger)'
+          className={
+            overLimit
+              ? 'alm-project-notes__byte-counter--over'
               : nearLimit
-                ? 'var(--alm-warn)'
-                : 'var(--alm-text-muted)',
-          }}
+                ? 'alm-project-notes__byte-counter--near'
+                : 'alm-project-notes__byte-counter'
+          }
         >
           {byteCount.toLocaleString()} / {MAX_NOTE_BYTES.toLocaleString()} {m.projects_notes_bytes_unit()}
         </span>

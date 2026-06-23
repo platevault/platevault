@@ -200,20 +200,15 @@ export function StepCalibration({ selectedSessionIds: _selectedSessionIds, data,
                     </select>
                   </td>
                   <td
-                    className="alm-mono alm-wizard-calib__cell-score"
-                    // eslint-disable-next-line no-restricted-syntax -- dynamic: conditional token color for score warning / faint states
-                    style={{
-                      color: row.scoreWarn ? 'var(--alm-warn)' : row.score === '—' ? 'var(--alm-text-faint)' : undefined,
-                    }}
+                    className={
+                      'alm-mono alm-wizard-calib__cell-score' +
+                      (row.scoreWarn ? ' alm-wizard-calib__cell-score--warn' : row.score === '—' ? ' alm-wizard-calib__cell-score--faint' : '')
+                    }
                   >
                     {row.score}
                   </td>
                   <td
-                    className="alm-wizard-calib__cell-notes-dyn"
-                    // eslint-disable-next-line no-restricted-syntax -- dynamic: conditional token color for notes warning state
-                    style={{
-                      color: row.notesWarn ? 'var(--alm-warn)' : 'var(--alm-text-muted)',
-                    }}
+                    className={'alm-wizard-calib__cell-notes-dyn' + (row.notesWarn ? ' alm-wizard-calib__cell-notes-dyn--warn' : '')}
                   >
                     {row.notes}
                   </td>

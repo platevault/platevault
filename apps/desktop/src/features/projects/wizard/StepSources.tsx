@@ -116,11 +116,7 @@ export function StepSources({ data, onChange }: StepSourcesProps) {
            
           <label
             key={session.id}
-            className="alm-wizard-sources__row"
-            // eslint-disable-next-line no-restricted-syntax -- dynamic: conditional token background for selected session row
-            style={{
-              background: data.selectedSessionIds.includes(session.id) ? 'var(--alm-surface)' : 'transparent',
-            }}
+            className={'alm-wizard-sources__row' + (data.selectedSessionIds.includes(session.id) ? ' alm-wizard-sources__row--selected' : '')}
           >
             <Checkbox.Root
               className="alm-checkbox"

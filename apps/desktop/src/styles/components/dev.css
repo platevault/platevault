@@ -154,6 +154,18 @@
   color: var(--alm-text-muted);
 }
 
+/* Replay button — enabled state */
+.alm-dev-calls__replay-btn--safe {
+  opacity: 1;
+  cursor: pointer;
+}
+
+/* Replay button — disabled (write contract) state */
+.alm-dev-calls__replay-btn--unsafe {
+  opacity: 0.4;
+  cursor: not-allowed;
+}
+
 /* === DEV SCHEMA VIEWER === */
 
 /* Overlay — fixed full-screen scrim */

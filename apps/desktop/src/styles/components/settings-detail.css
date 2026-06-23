@@ -507,6 +507,12 @@
   padding: var(--alm-sp-2) var(--alm-sp-3);
   border: 1px solid var(--alm-border);
   border-radius: var(--alm-radius-md);
+  background: var(--alm-bg3);
+}
+
+/* Summary bar — all items acknowledged */
+.alm-plan-gate__summary-bar--done {
+  background: var(--alm-surface);
 }
 
 /* Text label inside the summary bar */
@@ -520,6 +526,12 @@
   border: 1px solid var(--alm-border);
   border-radius: var(--alm-radius-md);
   padding: var(--alm-sp-3);
+}
+
+/* Item card — acknowledged (done) state */
+.alm-plan-gate__item--done {
+  background: var(--alm-surface);
+  opacity: 0.7;
 }
 
 /* Item card header row: level pill + item-id code + ack pill */
@@ -627,9 +639,20 @@
   font-size: var(--alm-text-xs);
 }
 
+/* Kind badge — low-confidence fallback classification */
+.alm-tool-launches__kind-badge--fallback {
+  opacity: 0.6;
+}
+
 .alm-tool-launches__file-name {
   font-family: var(--alm-font-mono);
   font-size: var(--alm-text-sm);
+}
+
+/* File name — missing artifact (strikethrough + faded) */
+.alm-tool-launches__file-name--missing {
+  text-decoration: line-through;
+  opacity: 0.5;
 }
 
 /* ── Status badges ───────────────────────────────────────────────────────── */

@@ -67,9 +67,7 @@ export const WizardShell = forwardRef<HTMLDivElement, WizardShellProps>(
                   {step.completed && i !== currentStep ? '✓' : i + 1}
                 </span>
                 <span
-                  className="alm-wizard__step-label"
-                  // eslint-disable-next-line no-restricted-syntax -- dynamic: step-label conditional token color (active vs muted)
-                  style={{ color: i === currentStep ? 'var(--alm-text)' : 'var(--alm-text-muted)' }}
+                  className={'alm-wizard__step-label' + (i === currentStep ? ' alm-wizard__step-label--active' : '')}
                 >
                   {step.label}
                 </span>
@@ -108,14 +106,11 @@ export const WizardShell = forwardRef<HTMLDivElement, WizardShellProps>(
                     return (
                       <div
                         key={step.label}
-                        className="alm-wizard__steps-card"
+                        className={
+                          'alm-wizard__steps-card' +
+                          (isActive ? ' alm-wizard__steps-card--active' : isPast ? ' alm-wizard__steps-card--past' : '')
+                        }
                         aria-current={isActive ? 'step' : undefined}
-                        // eslint-disable-next-line no-restricted-syntax -- dynamic: steps-card conditional token colors + weight (active/past/future)
-                        style={{
-                          background: isPast || isActive ? 'var(--alm-surface)' : 'var(--alm-bg)',
-                          color: isActive ? 'var(--alm-text)' : 'var(--alm-text-muted)',
-                          fontWeight: isActive ? 'var(--alm-weight-semibold)' : 'var(--alm-weight-normal)',
-                        }}
                       >
                         {i + 1}. {step.label}
                       </div>
