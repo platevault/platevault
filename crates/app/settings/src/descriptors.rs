@@ -124,15 +124,6 @@ pub(crate) const DESCRIPTORS: &[Descriptor] = &[
         validation: ValidationRule::Bool,
     },
     Descriptor {
-        key: "rowDensity",
-        noisy: false,
-        overridable: false,
-        validation: ValidationRule::EnumStr {
-            allowed: &["dense", "comfortable"],
-            expected_msg: "must be \"dense\" or \"comfortable\"",
-        },
-    },
-    Descriptor {
         key: "logLevel",
         noisy: false,
         overridable: false,
@@ -253,6 +244,19 @@ pub(crate) const DESCRIPTORS: &[Descriptor] = &[
         noisy: false,
         overridable: false,
         validation: ValidationRule::PatternsByType,
+    },
+    // ── Tool watch / attribution (spec 018 T043) ─────────────────────────
+    Descriptor {
+        key: "toolWatchExtensions",
+        noisy: false,
+        overridable: false,
+        validation: ValidationRule::Array,
+    },
+    Descriptor {
+        key: "toolAttributionWindowHours",
+        noisy: false,
+        overridable: false,
+        validation: ValidationRule::NumberMinZero,
     },
 ];
 

@@ -16,7 +16,8 @@
 import { useState, useEffect } from 'react';
 import { Toggle, Pill } from '@/ui';
 import { m } from '@/lib/i18n';
-import { SettingsSection } from './SettingsKit';
+import { SettingsSection, RestoreDefaultsBtn } from './SettingsKit';
+
 import {
   calibrationTolerancesGet,
   calibrationTolerancesUpdate,
@@ -116,8 +117,34 @@ export function CalibrationMatching(_props: CalibrationMatchingProps) {
     persist({ agingLimitDays: n });
   }
 
+  // Restore defaults for THIS pane. Calibration tolerances live in their own
+  // `calibrationTolerances` IPC store (not the settings table), so we reset the
+  // visible fields to DEFAULTS and persist via that store — not
+  // `settings.restore-defaults`, which would touch unrelated settings keys.
+  const handleRestoreCalibration = async () => {
+    setRequireCamera(DEFAULTS.requireSameCamera);
+    setRequireBinning(DEFAULTS.requireSameBinning);
+    setRequireGain(DEFAULTS.requireSameGain);
+    setRequireOffset(DEFAULTS.requireSameOffset); // STUB-OFFSET-REQUIRED: local only
+    setTempTolerance(DEFAULTS.temperatureToleranceC);
+    setAgingLimit(DEFAULTS.agingLimitDays);
+    await calibrationTolerancesUpdate({
+      requireSameCamera: DEFAULTS.requireSameCamera,
+      requireSameBinning: DEFAULTS.requireSameBinning,
+      requireSameGain: DEFAULTS.requireSameGain,
+      temperatureToleranceC: DEFAULTS.temperatureToleranceC,
+      agingLimitDays: DEFAULTS.agingLimitDays,
+      exposureToleranceS: null, // not surfaced in this pane
+    });
+  };
+
   return (
-    <SettingsSection title={m.settings_calmatch_title()}>
+    <SettingsSection
+      title={m.settings_calmatch_title()}
+      action={
+        <RestoreDefaultsBtn onRestore={handleRestoreCalibration} />
+      }
+    >
       <table className="alm-table alm-calmatch__table">
         <thead>
           <tr>

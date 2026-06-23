@@ -88,7 +88,6 @@ import { ProjectDetail } from '@/features/projects/ProjectDetail';
 import { WizardPage } from '@/features/projects/wizard/WizardPage';
 
 import { SettingsPage } from '@/features/settings/SettingsPage';
-import { DensitySelector } from '@/features/settings/DensitySelector';
 
 import { SetupPage } from '@/features/setup/SetupPage';
 import { SetupWizard } from '@/features/setup/SetupWizard';
@@ -173,7 +172,6 @@ export type SmokeCheck = {
   projectDetail: typeof ProjectDetail;
   wizardPage: typeof WizardPage;
   settingsPage: typeof SettingsPage;
-  densitySelector: typeof DensitySelector;
   setupPage: typeof SetupPage;
   setupWizard: typeof SetupWizard;
   // Data

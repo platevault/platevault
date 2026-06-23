@@ -695,3 +695,30 @@ pub struct TargetResolveBatchCompleted {
 }
 
 pub const TOPIC_TARGET_RESOLVE_BATCH_COMPLETED: &str = "target.resolve_batch.completed";
+
+// ── Settings schema migration audit event (spec 018 US5 T031) ────────────────
+
+/// Payload for the `settings.migration` topic (spec 018 US5, T031).
+///
+/// Emitted once at `info` level when a settings schema migration run
+/// completes (v1 → v2 or any future version bump). Carries counts so the
+/// audit record is self-describing without requiring access to the DB diff.
+///
+/// Fields mirror `MigrationSummary` in `app_core_settings::migrate` so the
+/// wire payload is stable even if the internal struct diverges.
+#[derive(Clone, Debug, Serialize, Deserialize, JsonSchema, Type)]
+#[serde(rename_all = "camelCase")]
+pub struct SettingsMigration {
+    /// Human-readable label, e.g. `"v1->v2"`.
+    pub migration: String,
+    /// Number of keys carried over unchanged (retained).
+    pub migrated: usize,
+    /// Number of keys deleted because they are obsolete in the new version.
+    pub dropped: usize,
+    /// Number of keys reset to their in-code default (value semantics changed).
+    pub reset: usize,
+    /// ISO-8601 timestamp of the migration run.
+    pub at: String,
+}
+
+pub const TOPIC_SETTINGS_MIGRATION: &str = "settings.migration";

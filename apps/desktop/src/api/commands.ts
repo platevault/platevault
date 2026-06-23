@@ -410,6 +410,60 @@ export async function updateSettings(args: {
   unwrap(await commands.settingsUpdate(args.scope, args.values));
 }
 
+import type { RestoreDefaultsResponse, SetSourceOverrideResponse } from '@/bindings/index';
+export type { RestoreDefaultsResponse, SetSourceOverrideResponse };
+
+/**
+ * `settings.restore-defaults` — restore named keys (or all keys when `keys`
+ * is empty) to their default values (spec 018 T028).
+ *
+ * Field name mirrors the generated binding exactly: `{ keys: string[] }`.
+ * Pass an empty array to restore every v1 key.
+ */
+export async function settingsRestoreDefaults(
+  keys: string[],
+): Promise<RestoreDefaultsResponse> {
+  return unwrap(
+    await commands.settingsRestoreDefaults({ keys }),
+  ) as RestoreDefaultsResponse;
+}
+
+/**
+ * `settings.overridable-keys` — return the authoritative list of stable settings
+ * keys that can be overridden per source root (spec 018 T025).
+ *
+ * Falls back to a hardcoded pair when the command fails (forward-compat).
+ */
+export async function settingsOverridableKeys(): Promise<string[]> {
+  try {
+    return unwrap(await commands.settingsOverridableKeys()) as string[];
+  } catch {
+    // Fallback for older backends or failed calls — matches the formerly hardcoded list.
+    return ['hashOnScan', 'followSymlinks'];
+  }
+}
+
+/**
+ * `settings.source-override.set` — set a per-source settings override
+ * (spec 018 T025).
+ *
+ * Field names mirror the generated binding exactly (camelCase: `sourceId`,
+ * `key`, `value`). Known overridable keys: `hashOnScan`, `followSymlinks`.
+ */
+export async function settingsSourceOverrideSet(args: {
+  sourceId: string;
+  key: string;
+  value: unknown;
+}): Promise<SetSourceOverrideResponse> {
+  return unwrap(
+    await commands.settingsSourceOverrideSet({
+      sourceId: args.sourceId,
+      key: args.key,
+      value: args.value,
+    }),
+  ) as SetSourceOverrideResponse;
+}
+
 export async function registerRoot(args: {
   path: string;
   category: string;

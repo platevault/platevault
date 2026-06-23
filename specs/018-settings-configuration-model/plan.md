@@ -5,16 +5,22 @@
 
 ## Summary
 
+*(Reconciled 2026-06-23 against as-built code on `main`.)*
+
 Settings are workflow-grouped, one-per-line, auto-saved configuration values
 that drive application behavior across data sources, ingestion, naming,
 calibration, tools, catalogs, cleanup, source protection, logging, and
-appearance. The implementation today is a desktop-side mockup wired to
-localStorage. The plan promotes the mockup to a backend-canonical settings
-store: a single `SettingsStore` value type owned by `crates/app/core`, persisted
-in the library SQLite database, exposed through versioned JSON contracts, and
-read+written through Tauri commands. The desktop continues to wire each
-SettingsPage row through `useSettings()` and a typed `updateSettings(key, value)`
-mutator. Theme remains a separate concern with its own persistence key.
+appearance. The backend-canonical settings store is **built and on `main`**:
+persisted in the library SQLite database, exposed through a scope/values IPC
+transport, and read+written through Tauri commands. The desktop wires each
+settings section pane through `useAutoSave.ts` and `apps/desktop/src/api/commands.ts`.
+Theme remains a separate concern with its own persistence key.
+
+The localStorage mockup is replaced. There is no `SettingsStore` in
+`crates/app/core` — domain types live in `crates/domain/core/src/settings.rs`;
+the use-case layer is `crates/app/settings/src/lib.rs` (`app_core_settings`);
+low-level storage is in `crates/persistence/db/src/repositories/settings.rs`;
+the Tauri adapter is `apps/desktop/src-tauri/src/commands/settings.rs`.
 
 ## Technical Context
 
@@ -79,38 +85,73 @@ specs/018-settings-configuration-model/
 
 ```text
 apps/desktop/src/
-├── data/settings.ts              # SettingsState, useSettings(), updateSettings()
-├── features/settings/SettingsPage.tsx
-└── app/theme.tsx                 # separate theme persistence (alm.theme)
+├── api/commands.ts                     # settingsGet / settingsUpdate (canonical desktop binding)
+├── features/settings/
+│   ├── SettingsPage.tsx                # section panes, useAutoSave wiring
+│   └── useAutoSave.ts                  # auto-save hook for settings section panes
+└── app/theme.tsx                       # separate theme persistence (alm.theme)
+
+apps/desktop/src-tauri/src/commands/
+└── settings.rs                         # settings_get, settings_update,
+                                        # settings_restore_defaults, settings_source_override_set
 
 crates/
-├── app/core/usecases/settings.rs # future: get / update / restore / set_override
-├── persistence/db/               # future: settings + source_overrides tables, migrations
-├── audit/                        # future: settings change events
-└── contracts/core/               # future: Rust DTOs for settings contracts
+├── domain/core/src/settings.rs         # PatternPart, ImageTypMapping, SettingsState, SourceOverride
+├── contracts/core/src/settings.rs      # re-exports domain types as contract surface (spec 042 T254)
+├── app/settings/src/
+│   ├── lib.rs                          # app_core_settings: get_settings, update_setting,
+│   │                                   # restore_defaults, set_source_override,
+│   │                                   # resolve_setting, emit_snapshot
+│   └── descriptors.rs                  # DESCRIPTORS table (29 keys): key set, noisy,
+│                                       # overridable, defaults, devMode cfg gate
+├── persistence/db/
+│   ├── migrations/0013_settings.sql    # settings + source_overrides tables
+│   └── src/repositories/settings.rs   # low-level: get_raw, set_raw, load_settings,
+│                                       # patterns_by_type helpers
+└── audit/src/event_bus.rs              # SettingsChanged, SettingsSnapshot, SettingsRepair variants
 
 packages/contracts/
-└── settings/                     # JSON Schemas mirrored from specs/.../contracts/
+└── schemas/                            # JSON Schemas (canonical); no settings/ mirror
 ```
 
-**Structure Decision**: The settings model is a vertical slice that spans the
-desktop edge and the Rust core. The desktop hook stays the user-facing API.
-The Rust use-case crate becomes the canonical writer once Tauri-bound. The
-contracts directory is the boundary that decouples them.
+NOTE: `apps/desktop/src/data/settings.ts` does NOT exist.
+NOTE: `crates/app/core/usecases/settings.rs` does NOT exist.
+NOTE: `packages/contracts/settings/` mirror was never built; canonical surface is
+`crates/contracts/core` + `packages/contracts/schemas`.
+
+**Structure Decision**: The settings model is a vertical slice spanning the desktop
+edge and the Rust core. Domain types live in `domain_core`; persistence logic in the
+db repository; Tauri commands are the adapter boundary. `contracts_core` re-exports
+the domain types for the IPC surface. The contracts directory in this spec holds the
+operation JSON Schemas.
 
 ## Architecture
 
 ### Canonical Source
 
-`SettingsStore` (Rust, `crates/app/core/usecases/settings.rs`) is the canonical
-source of settings values once persistence lands. It owns:
+`crates/app/settings/src/lib.rs` (crate `app_core_settings`, re-exported as
+`app_core::settings`) is the canonical settings use-case layer. It owns:
 
-- Loading the row set from SQLite on startup, hydrating defaults for missing
-  keys.
-- Validating an incoming `(key, value)` pair against the v1 JSON Schema.
-- Writing the change inside a transaction with an `audit` event for non-noisy
-  keys.
-- Returning `prior_value`, `new_value`, and an optional `audit_id`.
+- `get_settings` / `update_setting` (no-op guard via `settings_value_eq`,
+  validation via `validate_value`, audit emission).
+- `restore_defaults`, `set_source_override`, `resolve_setting`, `emit_snapshot`.
+- Key metadata (key set, noisy membership, overridable membership, defaults,
+  devMode cfg gate) is descriptor-driven from
+  `crates/app/settings/src/descriptors.rs` (`DESCRIPTORS` table, 29 keys) — the
+  SINGLE SOURCE for the key registry.
+
+Low-level storage is in `crates/persistence/db/src/repositories/settings.rs`
+(get_raw / set_raw / load_settings / patterns_by_type helpers). The Tauri adapter
+is `apps/desktop/src-tauri/src/commands/settings.rs` (scope/values transport).
+
+Domain types (`PatternPart`, `ImageTypMapping`, `SettingsState`, `SourceOverride`)
+are defined in `crates/domain/core/src/settings.rs` and re-exported by
+`crates/contracts/core/src/settings.rs` (spec 042 T254). There is no
+`SettingsStore` type in `crates/app/core` and no `usecases/settings.rs`.
+
+The IPC transport uses a **scope/values** model: `settings.get { scope }` returns
+a flat JSON bag of all keys in that scope; `settings.update { scope, values }`
+persists every key present in `values`. Empty scope = full bag.
 
 The desktop maintains a typed in-memory snapshot fed by the initial
 `settings.get` response, and applies optimistic updates locally on
@@ -118,12 +159,11 @@ The desktop maintains a typed in-memory snapshot fed by the initial
 
 ### Desktop Wiring
 
-`SettingsPage.tsx` reads through `useSettings()` and writes through
-`updateSettings(key, value)`. Today this hook talks to localStorage; once the
-Tauri adapter is in place, `updateSettings` dispatches the
-`settings.update` command and applies the returned `new_value` back into the
-local store on success. The no-op guard runs both before and after dispatch
-to keep behavior identical when offline.
+Settings section panes read initial values from `settingsGet` and write
+changes through `useAutoSave.ts`, which dispatches `settingsUpdate` via
+`apps/desktop/src/api/commands.ts`. The no-op guard runs before dispatch.
+The localStorage path is replaced; `apps/desktop/src/data/settings.ts`
+does not exist.
 
 ### Persistence (Future, Replaces localStorage)
 
@@ -183,52 +223,56 @@ module, not through `useSettings()`.
 
 ### `devMode` — compile-time gating
 
-`devMode` is present in the settings schema unconditionally, but the
-use-case layer enforces compile-time behavior:
+`devMode` release gating is **enforced** in
+`crates/app/settings/src/descriptors.rs` via `#[cfg(not(feature = "dev-tools"))]`:
 
 - **`dev-tools` build**: `devMode` is read/write; the developer surface is
   shown when `true`.
 - **Release build**: `settings.get` returns `devMode: false` regardless of
-  stored value; `settings.update` on `devMode` returns `value.invalid`
-  (read-only in this build). The Settings UI row is hidden entirely.
+  stored value; `settings.update` on `devMode` returns `value.invalid` ("devMode
+  cannot be set in release builds"). The Settings UI row is hidden entirely.
 
-This is enforced via a `#[cfg(feature = "dev-tools")]` branch in the
-use-case module. No schema migration is needed: the row may be present or
-absent; both are handled uniformly.
+The `dev-tools` Cargo feature forwards `app_core` → `app_core_settings`.
+No schema migration is needed: the row may be present or absent; both are handled
+uniformly.
 
-### Structured-path keys — regex validation
+### Absorbed keys are flat typed fields
 
-Keys in the form `tools.<tool_id>.bundle_id`,
-`workflow_profile.<profile_id>.watch_extensions`, and
-`workflow_profile.<profile_id>.launch_attribution_window_hours` are validated
-by regex in the use-case before the value schema is checked. An unrecognised
-`<tool_id>` or `<profile_id>` slug (one that has no registered ToolProfile or
-WorkflowProfile row) returns `key.unknown`. A recognised slug with an invalid
-value returns `value.invalid`.
+All absorbed calibration-penalty keys and watcher configuration keys are **flat
+typed fields** on `SettingsState`, not structured-path keys. Only
+`tools.<tool_id>.bundle_id` remains a structured per-tool key.
 
-The `key` field in `settings.update` and `settings.restore-defaults` contracts
-accepts these patterns via a `oneOf` combining the existing flat-key enum with
-three `pattern` alternatives (see `contracts/settings.update.json`).
+### `tools.<tool_id>.bundle_id` — per-tool structured key
 
-### Per-frame-type override_penalty
+`tools.<tool_id>.bundle_id` is validated by looking up `<tool_id>` against
+existing ToolProfile rows in `crates/workflow/profiles` before writing. An
+unrecognised `<tool_id>` (no registered ToolProfile row) returns `key.unknown`.
+A recognised slug with an invalid value returns `value.invalid`. (T042, open.)
 
-`calibration.dark.override_penalty`, `calibration.flat.override_penalty`, and
-`calibration.bias.override_penalty` are three independent keys. The contracts
-validate the frame-type slot via a regex `^calibration\.(dark|flat|bias)\.override_penalty$`.
-All three share the same value schema: `number` in `[0, 1]`.
+### Per-frame-type override_penalty — flat fields
 
-### `target_lookup.active_catalogs` — runtime default
+`calibration_dark_override_penalty`, `calibration_flat_override_penalty`, and
+`calibration_bias_override_penalty` are three independent **flat typed fields**
+on `SettingsState` (f64 in [0,1], default 0.3). They are NOT structured-path
+keys and do not require regex validation. (T041, done.)
 
-No stored row means "all installed catalogs are active". The use-case
-resolves the default dynamically from the spec 014 catalog manifest rather
-than from an in-code literal list. Unknown catalog ids in a stored array are
-filtered with a `warn` audit entry (consistent with R2 unknown-key policy).
+### Artifact watcher — flat global fields
+
+`tool_watch_extensions` (string[]) and `tool_attribution_window_hours` (number)
+are flat global fields on `SettingsState`. They replace the former per-profile
+structured-path keys (`workflow_profile.<profile_id>.*`). The nonexistent
+`WorkflowProfile` model is dropped. (T043, open.)
+
+### `target_lookup.active_catalogs` — DROPPED
+
+This key referenced the spec 014 catalog manifest, which is superseded by
+spec 035 (SIMBAD resolve-on-demand). The key is not implemented and is removed
+from the absorbed key set. (T039, obsolete.)
 
 ### JSON-array keys
 
-`target_lookup.active_catalogs` (`string[]`),
-`workflow_profile.<profile_id>.watch_extensions` (`string[]`), and
-`imagetyp_normalization.user_mappings` (`object[]`) are stored as
+`tool_watch_extensions` (`string[]`) and
+`imagetyp_normalization_user_mappings` (`object[]`) are stored as
 JSON-encoded arrays in the `settings.value` column. Deep structural equality
 (R4.1) applies; element order is significant.
 
