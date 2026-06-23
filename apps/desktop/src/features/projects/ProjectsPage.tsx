@@ -39,6 +39,7 @@ import { Btn } from '@/ui';
 import { m } from '@/lib/i18n';
 import { useStaleSelectionCleanup } from '@/lib/use-stale-selection';
 import { projectStateLabel } from '@/lib/lifecycle';
+import { useGrouping } from '@/lib/use-grouping';
 import {
   ProjectsTable,
   DEFAULT_PROJECT_SORT,
@@ -83,6 +84,18 @@ export function ProjectsPage() {
 
   const [search, setSearch] = useState('');
   const [sort, setSort] = useState<ProjectSort>(DEFAULT_PROJECT_SORT);
+
+  const { dims, setSlot } = useGrouping({
+    storageKey: 'projects.grouping.dims.v1',
+    validIds: ['state', 'tool', 'target'],
+    defaultDims: [],
+  });
+
+  const PROJECTS_DIMENSIONS: FilterOption[] = [
+    { value: 'state', label: m.projects_dim_lifecycle() },
+    { value: 'tool', label: m.projects_dim_tool() },
+    { value: 'target', label: m.projects_dim_target() },
+  ];
 
   // Stale-id cleanup: if selected index is out of range, clear it.
   const selectedIdx = selected ?? 0;
@@ -159,6 +172,11 @@ export function ProjectsPage() {
               onChange: onLifecycleChange,
             },
           ]}
+          grouping={{
+            dimensions: PROJECTS_DIMENSIONS,
+            dims,
+            setSlot,
+          }}
         />
       }
       actions={
@@ -199,6 +217,7 @@ export function ProjectsPage() {
         loading={loading}
         sort={sort}
         onSort={handleHeaderSort}
+        dims={dims}
       />
     </ListPageLayout>
   );
