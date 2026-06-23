@@ -11,9 +11,13 @@
 > - **`target.primary.rename` is DROPPED** (out of scope; the contract is orphaned).
 >
 > The Foundations tasks below (new `target_alias` table, `target_id` FKs, `primary_designation` column) are
-> **obsolete** — superseded by the 035/036 gen-3 model. Known gap: linked-project rows deep-link to
-> `/projects` without selecting a specific project (the projects route keys `selected` on a numeric index,
-> not the canonical_target UUID) — follow-up.
+> **obsolete** — superseded by the 035/036 gen-3 model.
+>
+> **Closed out 2026-06-23.** Caveats resolved: note edits now emit a `target.note.updated` audit event;
+> the projects route was migrated to UUID-keyed `selected` (parseString), so linked-project rows now open
+> the right project. FR-004's 16 KB note cap is enforced (`note.content_too_large`). `speckit-verify` passed
+> (FR-009 dropped + SC-002 nav reversal are sanctioned scope changes; FR-005/FR-007 observing-plan refs
+> remain deferred / out of scope).
 
 > **See Spec 030**: UI implementation of this feature must follow
 > [Spec 030 — UI Audit & Revision](../030-ui-audit-revision/spec.md)
@@ -22,7 +26,7 @@
 **Feature Branch**: `023-target-identity-history-notes`  
 **Created**: 2026-05-09  
 **Updated**: 2026-06-23  
-**Status**: Implemented on gen-3 — US1–US4 shipped (identity/aliases + linked sessions/projects + observing notes); `target.primary.rename` dropped. See banner.  
+**Status**: **Closed (2026-06-23)** — US1–US4 shipped on gen-3 + caveats resolved + `speckit-verify` passed. `target.primary.rename` dropped; FR-005/FR-007 observing-plan refs deferred. See banner.  
 **Input**: User description: "Specify target identity, aliases, target history, observing-plan references, and notes as bounded follow-on features beyond FITS OBJECT lookup."
 
 ## Implementation Status: NOT IMPLEMENTED
@@ -194,9 +198,16 @@ alias. Then remove alias `NGC 224` (success).
 - **FR-001**: Target identity MUST be a durable record separate from raw FITS `OBJECT` hints.
 - **FR-002**: Target aliases and catalog identifiers MUST be stored as structured references.
 - **FR-003**: Target detail MUST show linked sessions and projects contextually.
-- **FR-004**: Target notes MUST be editable (max 16 KB UTF-8; A6) and auditable.
-- **FR-005**: Observing-plan references MUST be contextual links, not primary navigation.
-- **FR-006**: Manual target corrections MUST preserve the original hint and provenance.
+- **FR-004**: Target notes MUST be editable (max 16 KB UTF-8; A6) and auditable. *(gen-3: enforced — the
+  16 KB cap returns `note.content_too_large`; edits emit the `target.note.updated` audit event.)*
+- **FR-005**: Observing-plan references MUST be contextual links, not primary navigation. *(deferred — no
+  observing-plan surface exists yet; R5 out of scope.)*
+- **FR-006**: Manual target corrections MUST preserve the original hint and provenance. *(gen-3: satisfied
+  structurally — the original SIMBAD `primary_designation` is immutable and always visible (it is the
+  `effectiveLabel` fallback), resolution provenance is carried by `canonical_target.source`
+  (`seed`/`resolved`/`user-override`, spec 035), and user aliases are purely **additive** — adding or
+  removing a `kind='user'` alias cannot destroy or overwrite the original designation. There is no
+  destructive "rename" path: `target.primary.rename` was dropped in favour of an additive `display_alias`.)*
 - **FR-007**: Missing observing-plan references MUST warn without deleting historical records.
 - **FR-008**: Users MUST be able to remove an alias from a target (`target.alias.remove`), with `alias.is_primary` error when the alias is also the primary designation.
 - **FR-009**: Users MUST be able to rename the primary designation by promoting an existing alias (`target.primary.rename`), which demotes the prior primary to alias status.
