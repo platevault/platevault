@@ -356,7 +356,7 @@ export function InboxPage() {
 				}
 				if (code === "inbox.invalid_destination_root") {
 					addToast({
-						message: message || "That destination root is not valid.",
+						message: message || m.inbox_toast_invalid_destination_root(),
 						variant: "error",
 					});
 					return;
@@ -364,7 +364,7 @@ export function InboxPage() {
 				if (code === "inbox.no_destination_root") {
 					addToast({
 						message:
-							message || "No library root is registered for this frame type.",
+							message || m.inbox_toast_no_destination_root(),
 						variant: "error",
 					});
 					return;
@@ -600,8 +600,8 @@ export function InboxPage() {
 
 	const confirmLabel =
 		classification?.type === "mixed"
-			? "Generate split plan"
-			: "Confirm to inventory";
+			? m.inbox_generate_split_plan()
+			: m.inbox_confirm_to_inventory();
 
 	// spec 041 US6: aggregate inbox queue stats. Derived from the SAME item list
 	// the header/footer count from (distinct-folder counting) so the stats strip,
@@ -711,11 +711,11 @@ export function InboxPage() {
 		if (listLoading) return m.common_loading();
 		const parts: string[] = [];
 		if (folderCount > 0)
-			parts.push(`${folderCount} folder${folderCount !== 1 ? "s" : ""}`);
+			parts.push(m.inbox_summary_folders({ count: folderCount, suffix: folderCount !== 1 ? "s" : "" }));
 		if (masterCount > 0)
-			parts.push(`${masterCount} master${masterCount !== 1 ? "s" : ""}`);
-		const base = parts.length > 0 ? parts.join(" · ") : "0 detections";
-		return isCapped ? `${base} (first ${listData?.limit ?? 500})` : base;
+			parts.push(m.inbox_summary_masters({ count: masterCount, suffix: masterCount !== 1 ? "s" : "" }));
+		const base = parts.length > 0 ? parts.join(" · ") : m.inbox_summary_zero_detections();
+		return isCapped ? m.inbox_summary_capped({ base, limit: String(listData?.limit ?? 500) }) : base;
 	}, [listLoading, folderCount, masterCount, isCapped, listData?.limit]);
 
 	// ── Status bar: push the inbox-specific folder/master count + per-frame-type
@@ -744,8 +744,8 @@ export function InboxPage() {
 					search={{
 						value: search,
 						onChange: setSearch,
-						placeholder: "Search detections…",
-						ariaLabel: "Search inbox",
+						placeholder: m.inbox_search_placeholder(),
+						ariaLabel: m.inbox_search_aria_label(),
 					}}
 					fields={[
 						{
@@ -799,12 +799,12 @@ export function InboxPage() {
 							size="sm"
 							variant="accent"
 							onClick={() => setPlanOverlayOpen(true)}
-							aria-label={`Review plans (${planCount})`}
+							aria-label={m.inbox_review_plans_aria({ count: String(planCount) })}
 							data-testid="inbox-review-plans-btn"
 						>
 							{planCount > 0
-								? `Review plans (${planCount})`
-								: "Review plans"}
+								? m.inbox_review_plans_count({ count: String(planCount) })
+								: m.inbox_review_plans()}
 						</Btn>
 					)}
 					{/* task 35: bulk-confirm all cleanly-classified items in one action */}
@@ -814,7 +814,7 @@ export function InboxPage() {
 							variant="accent"
 							disabled={!canBulkConfirm}
 							onClick={() => void handleBulkConfirm()}
-							aria-label={`Confirm all ${bulkEligibleItems.length} classified item${bulkEligibleItems.length !== 1 ? "s" : ""}`}
+							aria-label={m.inbox_bulk_confirm_aria({ count: String(bulkEligibleItems.length), suffix: bulkEligibleItems.length !== 1 ? "s" : "" })}
 							data-testid="inbox-bulk-confirm-btn"
 						>
 							{bulkConfirmLoading
@@ -829,9 +829,9 @@ export function InboxPage() {
 						size="sm"
 						disabled={rescanLoading}
 						onClick={() => void rescan()}
-						aria-label="Rescan all roots"
+						aria-label={m.inbox_rescan_all_roots_aria()}
 					>
-						{rescanLoading ? "Rescanning…" : "Rescan"}
+						{rescanLoading ? m.inbox_rescanning() : m.common_rescan()}
 					</Btn>
 				</>
 			}
