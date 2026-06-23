@@ -16,6 +16,17 @@ body {
   font-feature-settings: 'tnum' 1;
 }
 
+/* Global font enforcement (product decision): the UI font family is defined
+   ONCE here and may NOT be overridden by any page, component, utility class, or
+   inline object. This neutralizes ad-hoc `font-family` overrides (e.g. monospace
+   on date/timestamp cells) that rendered inconsistently. Digit alignment is
+   preserved via the inherited `tnum` feature above — use `font-variant-numeric:
+   tabular-nums` where needed, NOT a different font family. Only weight/size/
+   variant may vary per element. */
+*, *::before, *::after {
+  font-family: var(--alm-font-sans) !important;
+}
+
 img, picture, video, canvas, svg { display: block; max-width: 100%; }
 input, button, textarea, select { font: inherit; }
 button { cursor: pointer; }
