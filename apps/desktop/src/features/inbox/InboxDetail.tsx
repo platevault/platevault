@@ -53,6 +53,23 @@ const FRAME_TYPE_OPTIONS = [
 	"dark_flat",
 ] as const;
 
+/**
+ * Applicable destination-root category for a frame type (point 1: only show
+ * libraries that can actually receive this image type). Light frames go to a
+ * "raw" root; calibration frames (bias/dark/flat) + their masters go to a
+ * "calibration" root. Returns null when we can't narrow (e.g. mixed) — then all
+ * roots are shown. NOTE: this is a pragmatic frontend mapping; the spec-045
+ * iterate (single-type sub-items) will make this authoritative per item.
+ */
+function applicableRootCategory(frameType?: string | null): string | null {
+	if (!frameType) return null;
+	const ft = frameType.toLowerCase();
+	if (ft.includes("light")) return "raw";
+	if (ft.includes("bias") || ft.includes("dark") || ft.includes("flat"))
+		return "calibration";
+	return null;
+}
+
 /** Last path segment of a relative file path (forward- or back-slash separated). */
 function basename(path: string): string {
 	const parts = path.replace(/\\/g, "/").split("/");
@@ -323,6 +340,22 @@ export function InboxDetail({
 	const title = item.relativePath || "(root)";
 	const classType = classification?.type ?? "pending";
 
+	// Library picker (point 1): narrow the destination roots to the category that
+	// can receive this item's frame type. Only meaningful for a single-type item
+	// (or a master); mixed/unknown → show all roots. The picker is shown only when
+	// MORE THAN ONE applicable root exists (otherwise there's nothing to choose).
+	const itemFrameType =
+		classType === "single_type"
+			? (classification?.frameType ?? null)
+			: item.isMaster
+				? (item.masterFrameType ?? null)
+				: null;
+	const applicableCategory = applicableRootCategory(itemFrameType);
+	const applicableRoots =
+		applicableCategory && destinationRoots
+			? destinationRoots.filter((r) => r.category === applicableCategory)
+			: (destinationRoots ?? []);
+
 	// ── Unclassified ("Needs review") table ───────────────────────────────────
 
 	const allSelected =
@@ -585,7 +618,7 @@ export function InboxDetail({
 			)}
 			{/* Destination library picker — to the RIGHT of Confirm. Lets the user
 			    choose which library the files are placed in (Auto = backend pick). */}
-			{onConfirm && destinationRoots && destinationRoots.length > 1 && (
+			{onConfirm && applicableRoots.length > 1 && (
 				<label className="alm-inbox-detail__dest-root">
 					<span className="alm-inbox-detail__dest-root-label">Library:</span>
 					<select
@@ -596,7 +629,7 @@ export function InboxDetail({
 						data-testid="inbox-dest-root-select"
 					>
 						<option value="">Auto</option>
-						{destinationRoots.map((r) => (
+						{applicableRoots.map((r) => (
 							<option key={r.id} value={r.id}>
 								{basename(r.path)} · {r.category}
 							</option>
