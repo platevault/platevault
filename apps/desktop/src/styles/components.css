@@ -9100,6 +9100,16 @@
  * at ~1100px total width (after the 420px side panel) to 3+ columns on wider
  * displays. The notes cell spans 2 columns to give editable prose room. */
 
+/* Standardised bottom detail: project identity stacked above the operational
+   sections in one full-width bottom panel (no right side panel). */
+.alm-project-detail-stack {
+  display: flex;
+  flex-direction: column;
+}
+.alm-project-detail-stack > * + * {
+  border-top: 1px solid var(--alm-border-subtle);
+}
+
 .alm-project-bottom {
   padding: var(--alm-sp-3);
 }

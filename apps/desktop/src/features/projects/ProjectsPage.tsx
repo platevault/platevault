@@ -176,12 +176,20 @@ export function ProjectsPage() {
   return (
     <ListPageLayout
       topBar={topBar}
-      detail={project ? <ProjectDetailContent projectId={project.id} /> : undefined}
+      // Standardised bottom-docked detail (Sessions/Calibration convention): the
+      // project identity (ProjectDetailContent) stacks above the operational
+      // sections (ProjectBottomDetail) in ONE full-width bottom panel — no right
+      // side panel. Keeps the projects table full-width and column layout stable.
+      detail={
+        project ? (
+          <div className="alm-project-detail-stack">
+            <ProjectDetailContent projectId={project.id} />
+            <ProjectBottomDetail projectId={project.id} />
+          </div>
+        ) : undefined
+      }
       onCloseDetail={project ? clearSelection : undefined}
       detailLabel="Project details"
-      detailPlacement="side-and-bottom"
-      bottomDetail={project ? <ProjectBottomDetail projectId={project.id} /> : undefined}
-      bottomDetailLabel="Project sections"
     >
       <ProjectsTable
         projects={filtered}
