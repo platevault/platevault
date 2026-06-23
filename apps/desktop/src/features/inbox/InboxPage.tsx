@@ -692,7 +692,7 @@ export function InboxPage() {
 					{showPlans && (
 						<Btn
 							size="sm"
-							variant="ghost"
+							variant="accent"
 							onClick={() => setPlanOverlayOpen(true)}
 							aria-label={`Review plans (${planCount})`}
 							data-testid="inbox-review-plans-btn"
@@ -706,7 +706,7 @@ export function InboxPage() {
 					{bulkEligibleItems.length > 0 && (
 						<Btn
 							size="sm"
-							variant="ghost"
+							variant="accent"
 							disabled={!canBulkConfirm}
 							onClick={() => void handleBulkConfirm()}
 							aria-label={`Confirm all ${bulkEligibleItems.length} classified item${bulkEligibleItems.length !== 1 ? "s" : ""}`}

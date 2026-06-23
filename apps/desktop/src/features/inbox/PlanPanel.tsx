@@ -14,7 +14,7 @@
  */
 
 import { useCallback, useEffect, useMemo, useState } from 'react';
-import { Banner, Btn } from '@/ui';
+import { Banner, Btn, Table } from '@/ui';
 import type { InboxOpenPlan, InboxPlanAction } from './store';
 
 // ── Types ─────────────────────────────────────────────────────────────────────
@@ -718,42 +718,50 @@ export function PlanPanel({
                 </Banner>
               )}
 
-              {/* Action rows — hidden until the group is expanded. */}
+              {/* Per-file action detail — standard Table, hidden until the
+                  group is expanded. Columns: Action · File · Destination. */}
               {isExpanded && (
                 <div className="alm-plan-panel__rows" id={rowsId}>
-                  {plan.actions.map((a, actionPos) => {
-                    const rowIdx = planRowOffsets[planIdx] + actionPos;
-                    // FR-031: prefer the absolute destination path from the last
-                    // confirm response (keyed by source path); fall back to the
-                    // root-relative preview for plans without a captured absolute.
-                    const absolute = absoluteByFromPath?.[a.fromPath];
-                    const destText = absolute ?? a.destinationPreview;
-                    return (
-                      <div
-                        key={a.index}
-                        className="alm-plan-panel__row"
-                      >
-                        <span
-                          className="alm-plan-panel__kind"
-                        >
-                          {actionLabel(a.action)}
-                        </span>
-                        <span
-                          className="alm-plan-panel__filename"
-                          title={a.fromPath}
-                        >
-                          {basename(a.fromPath)}
-                        </span>
-                        <code
-                          className="alm-plan-panel__dest"
-                          data-testid={`inbox-dest-absolute-${rowIdx}`}
-                          title={destText}
-                        >
-                          {destText}
-                        </code>
-                      </div>
-                    );
-                  })}
+                  <Table
+                    className="alm-plan-panel__table"
+                    columns={[
+                      { key: 'action', label: 'Action', style: { width: 96 } },
+                      { key: 'file', label: 'File', style: { width: 220 } },
+                      { key: 'dest', label: 'Destination' },
+                    ]}
+                    rows={plan.actions.map((a, actionPos) => {
+                      const rowIdx = planRowOffsets[planIdx] + actionPos;
+                      // FR-031: prefer the absolute destination path from the last
+                      // confirm response (keyed by source path); fall back to the
+                      // root-relative preview for plans without a captured absolute.
+                      const absolute = absoluteByFromPath?.[a.fromPath];
+                      const destText = absolute ?? a.destinationPreview;
+                      return {
+                        action: (
+                          <span className="alm-plan-panel__kind">
+                            {actionLabel(a.action)}
+                          </span>
+                        ),
+                        file: (
+                          <span
+                            className="alm-plan-panel__filename"
+                            title={a.fromPath}
+                          >
+                            {basename(a.fromPath)}
+                          </span>
+                        ),
+                        dest: (
+                          <code
+                            className="alm-plan-panel__dest"
+                            data-testid={`inbox-dest-absolute-${rowIdx}`}
+                            title={destText}
+                          >
+                            {destText}
+                          </code>
+                        ),
+                      };
+                    })}
+                  />
                 </div>
               )}
             </section>

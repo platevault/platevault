@@ -134,68 +134,26 @@ describe('PlanApprovalOverlay', () => {
 
   it('calls onClose when the ✕ button is clicked', () => {
     renderOverlay({ plans: [makePlan()], open: true, onClose });
-    fireEvent.click(screen.getByRole('button', { name: /close plan review/i }));
+    fireEvent.click(screen.getByRole('button', { name: /close/i }));
     expect(onClose).toHaveBeenCalled();
   });
 
-  // ── Rail ──────────────────────────────────────────────────────────────────
+  // ── All plans render together (no rail) ─────────────────────────────────────
 
-  it('does NOT show the rail when only one plan exists', () => {
+  it('renders every open plan group together (no plan-switcher rail)', () => {
     renderOverlay({
-      plans: [makePlan({ inboxItemId: 'solo' })],
+      plans: [
+        makePlan({ inboxItemId: 'a', itemName: 'Night-A' }),
+        makePlan({ inboxItemId: 'b', itemName: 'Night-B' }),
+      ],
       open: true,
       onClose,
     });
+    // Both groups are visible at once — the overlay no longer narrows to one.
+    expect(screen.getByTestId('plan-group-a')).toBeInTheDocument();
+    expect(screen.getByTestId('plan-group-b')).toBeInTheDocument();
+    // No rail navigation element.
     expect(screen.queryByRole('navigation', { name: /plans/i })).toBeNull();
-  });
-
-  it('shows the rail when > 1 plan exists', () => {
-    renderOverlay({
-      plans: [
-        makePlan({ inboxItemId: 'a', itemName: 'Night-A' }),
-        makePlan({ inboxItemId: 'b', itemName: 'Night-B' }),
-      ],
-      open: true,
-      onClose,
-    });
-    expect(screen.getByRole('navigation', { name: /plans/i })).toBeInTheDocument();
-    expect(screen.getByTestId('plan-overlay-rail-a')).toBeInTheDocument();
-    expect(screen.getByTestId('plan-overlay-rail-b')).toBeInTheDocument();
-  });
-
-  it('clicking a rail item narrows PlanPanel to that plan', () => {
-    renderOverlay({
-      plans: [
-        makePlan({ inboxItemId: 'a', itemName: 'Night-A' }),
-        makePlan({ inboxItemId: 'b', itemName: 'Night-B' }),
-      ],
-      open: true,
-      onClose,
-    });
-    // Initially both plan groups are visible (all-plans view).
-    expect(screen.getByTestId('plan-group-a')).toBeInTheDocument();
-    expect(screen.getByTestId('plan-group-b')).toBeInTheDocument();
-
-    // Select plan B via rail.
-    fireEvent.click(screen.getByTestId('plan-overlay-rail-b'));
-    // Only plan B visible; plan A hidden.
-    expect(screen.queryByTestId('plan-group-a')).toBeNull();
-    expect(screen.getByTestId('plan-group-b')).toBeInTheDocument();
-  });
-
-  it('clicking "All plans" in the rail restores all plans', () => {
-    renderOverlay({
-      plans: [
-        makePlan({ inboxItemId: 'a', itemName: 'Night-A' }),
-        makePlan({ inboxItemId: 'b', itemName: 'Night-B' }),
-      ],
-      open: true,
-      onClose,
-    });
-    fireEvent.click(screen.getByTestId('plan-overlay-rail-b'));
-    fireEvent.click(screen.getByTestId('plan-overlay-rail-all'));
-    expect(screen.getByTestId('plan-group-a')).toBeInTheDocument();
-    expect(screen.getByTestId('plan-group-b')).toBeInTheDocument();
   });
 
   // ── Auto-close ─────────────────────────────────────────────────────────────

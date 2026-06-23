@@ -1837,12 +1837,6 @@
 
 /* ── Hint line ──────────────────────────────────────────────── */
 
-.alm-plan-panel__hint {
-  font-size: var(--alm-text-xs);
-  color: var(--alm-text-muted);
-  margin-top: var(--alm-sp-1);
-}
-
 /* ── Plan group ─────────────────────────────────────────────── */
 
 .alm-plan-panel__group {
@@ -1885,11 +1879,6 @@
 }
 .alm-plan-panel__summary--inline .alm-plan-panel__summary-dest {
   max-width: 100%;
-}
-
-.alm-plan-panel__group-count {
-  color: var(--alm-text-muted);
-  font-size: var(--alm-text-xs);
 }
 
 /* ── Expand/collapse control + chevron ──────────────────────── */
@@ -5372,13 +5361,6 @@
   color: var(--alm-text-muted);
 }
 
-/* 4. InboxPage.tsx — top-bar right button row */
-.alm-inbox-page__bar-row {
-  display: flex;
-  gap: var(--alm-sp-2);
-  align-items: center;
-}
-
 /* 5. MastersList.tsx — loading status div */
 .alm-masters-list__status {
   padding: var(--alm-sp-2);
@@ -7781,118 +7763,6 @@
  *   - `.alm-inbox-meta-row--warn` state-modifier replacing an inline warn-bg.
  * ==========================================================================*/
 
-/* ── 3-zone body ──────────────────────────────────────────────────────────── */
-.alm-inbox-body {
-  flex: 1;
-  min-height: 0;
-  display: flex;
-  flex-direction: column;
-}
-/* Row 1: list (fills) + side detail panel (fixed width). Fills remaining space
- * above the (optional) bottom plan dock. */
-.alm-inbox-upper {
-  flex: 1;
-  min-height: 0;
-  display: flex;
-  min-width: 0;
-}
-.alm-inbox-upper__list {
-  flex: 1;
-  min-width: 0;
-  min-height: 0;
-  display: flex;
-  flex-direction: column;
-}
-/* SIDE panel: fixed, readable width so the inspector content is never crushed. */
-.alm-inbox-side {
-  flex: 0 0 var(--alm-inbox-side-width, 420px);
-  width: var(--alm-inbox-side-width, 420px);
-  min-height: 0;
-  display: flex;
-  flex-direction: column;
-  border-left: 1px solid var(--alm-border);
-  background: var(--alm-surface-raised);
-}
-.alm-inbox-side__bar {
-  flex-shrink: 0;
-  display: flex;
-  justify-content: flex-end;
-  padding: var(--alm-sp-1) var(--alm-sp-2);
-  border-bottom: 1px solid var(--alm-border-subtle);
-}
-.alm-inbox-side__close {
-  appearance: none;
-  background: none;
-  border: none;
-  cursor: pointer;
-  color: var(--alm-text-muted);
-  font-size: var(--alm-text-sm);
-  line-height: 1;
-  padding: 2px var(--alm-sp-1);
-  border-radius: var(--alm-radius-sm);
-}
-.alm-inbox-side__close:hover {
-  color: var(--alm-text);
-  background: var(--alm-hover-bg);
-}
-/* The side panel body is the single scroll region for the inspector. */
-.alm-inbox-side__body {
-  flex: 1;
-  min-height: 0;
-  overflow-y: auto;
-}
-.alm-inbox-side__empty {
-  flex: 1;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  padding: var(--alm-sp-4);
-}
-
-/* Row 2: planned-actions BOTTOM dock — full width, capped height, own scroll. */
-.alm-inbox-plandock {
-  flex-shrink: 0;
-  display: flex;
-  flex-direction: column;
-  max-height: 42vh;
-  min-height: 0;
-  border-top: 1px solid var(--alm-border);
-  background: var(--alm-surface-raised);
-}
-.alm-inbox-plandock__head {
-  flex-shrink: 0;
-  display: flex;
-  align-items: center;
-  gap: var(--alm-sp-2);
-  padding: var(--alm-sp-2) var(--alm-sp-3);
-  border-bottom: 1px solid var(--alm-border-subtle);
-}
-.alm-inbox-plandock__title {
-  font-size: var(--alm-text-sm);
-  font-weight: var(--alm-weight-semibold);
-  color: var(--alm-text);
-}
-.alm-inbox-plandock__badge {
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  min-width: 18px;
-  height: 18px;
-  padding: 0 5px;
-  border-radius: var(--alm-radius-pill, var(--alm-radius-sm));
-  background: var(--alm-accent-soft, var(--alm-surface));
-  color: var(--alm-accent);
-  font-size: var(--alm-text-2xs);
-  font-weight: var(--alm-weight-semibold);
-}
-/* The dock's scroll region — the PlanPanel scrolls here, independent of the
- * list and side panel. */
-.alm-inbox-plandock__scroll {
-  flex: 1;
-  min-height: 0;
-  overflow-y: auto;
-}
-
 /* ── Top-bar summary: count text + inline per-type chips ──────────────────── */
 .alm-inbox-summary {
   display: inline-flex;
@@ -8203,80 +8073,6 @@
  *                   to 40vh, own scroll, never taller than its content).
  * ========================================================================== */
 
-/* CHANGE 1 — RIGHT side panel now holds the PLAN.
- * Compact, content-driven width so it never takes more room than the plan
- * needs while staying readable. PlanPanel renders its own header/scroll, so the
- * side body is a plain flex column with no extra padding. */
-.alm-inbox-side--plan {
-  flex: 0 0 var(--alm-inbox-plan-width, 360px);
-  width: var(--alm-inbox-plan-width, 360px);
-}
-.alm-inbox-side--plan .alm-inbox-side__body {
-  display: flex;
-  flex-direction: column;
-  /* Reserve gutter space so a scrollbar appearing on group-expand never
-   * narrows the content width and shifts right-aligned items (Discard btn). */
-  scrollbar-gutter: stable;
-}
-
-/* The side-panel plan header mirrors the old plandock head (title + count
- * badge) so the swapped plan column still announces itself. */
-.alm-inbox-side__head {
-  flex-shrink: 0;
-  display: flex;
-  align-items: center;
-  gap: var(--alm-sp-2);
-  padding: var(--alm-sp-2) var(--alm-sp-3);
-  border-bottom: 1px solid var(--alm-border-subtle);
-}
-.alm-inbox-side__title {
-  font-size: var(--alm-text-sm);
-  font-weight: var(--alm-weight-semibold);
-  color: var(--alm-text);
-}
-.alm-inbox-side__badge {
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  min-width: 18px;
-  height: 18px;
-  padding: 0 5px;
-  border-radius: var(--alm-radius-pill, var(--alm-radius-sm));
-  background: var(--alm-accent-soft, var(--alm-surface));
-  color: var(--alm-accent);
-  font-size: var(--alm-text-2xs);
-  font-weight: var(--alm-weight-semibold);
-}
-
-/* CHANGE 1 — BOTTOM dock now holds the file DETAILS (inspector).
- * Auto-size to content: the dock is only as tall as the inspector needs, up to
- * a 40vh cap, then its body scrolls. Never steals the list/plan columns. */
-.alm-inbox-plandock--details {
-  max-height: 40vh;
-}
-.alm-inbox-plandock--details .alm-inbox-plandock__scroll {
-  padding: 0 var(--alm-sp-3) var(--alm-sp-2);
-}
-/* Close button in the details-dock head, right-aligned. */
-.alm-inbox-plandock__spacer {
-  flex: 1;
-}
-.alm-inbox-plandock__close {
-  appearance: none;
-  background: none;
-  border: none;
-  cursor: pointer;
-  color: var(--alm-text-muted);
-  font-size: var(--alm-text-sm);
-  line-height: 1;
-  padding: 2px var(--alm-sp-1);
-  border-radius: var(--alm-radius-sm);
-}
-.alm-inbox-plandock__close:hover {
-  color: var(--alm-text);
-  background: var(--alm-hover-bg);
-}
-
 /* CHANGE 2 — per-type breakdown summary line.
  * The collapsed group summary may now render a SINGLE line listing each frame
  * type with its count (e.g. "10 bias · 21 dark · 12 light → (root)") sourced
@@ -8390,57 +8186,6 @@
  *    store; no CSS needed — the existing `.alm-plan-panel__summary*` rules
  *    already render the per-type breakdown line.)
  * ==========================================================================*/
-
-/* ── CHANGE 1 — PLAN side-panel internal padding ──────────────────────────────
- * PlanPanel owns no outer padding of its own, so inside the side panel its bar,
- * summary, and destructive control press against the panel borders. Pad the
- * PlanPanel root within the plan side panel and tidy the internal rhythm. */
-.alm-inbox-side--plan .alm-plan-panel {
-  display: flex;
-  flex-direction: column;
-  gap: var(--alm-sp-2);
-  padding: var(--alm-sp-3);
-  min-width: 0;
-}
-
-/* The pinned header (select-all + counts + apply buttons) wraps gracefully in
- * the narrow column and keeps a little breathing room below itself. */
-.alm-inbox-side--plan .alm-plan-panel__bar {
-  display: flex;
-  flex-wrap: wrap;
-  align-items: center;
-  justify-content: space-between;
-  gap: var(--alm-sp-2);
-  padding-bottom: var(--alm-sp-2);
-  border-bottom: 1px solid var(--alm-border-subtle);
-}
-.alm-inbox-side--plan .alm-plan-panel__bar-left {
-  display: flex;
-  align-items: center;
-  gap: var(--alm-sp-2);
-  flex-wrap: wrap;
-  min-width: 0;
-}
-.alm-inbox-side--plan .alm-plan-panel__bar-actions {
-  flex-wrap: wrap;
-  gap: var(--alm-sp-2);
-}
-
-/* Hint line + the group list sit clear of the panel edge; long destinations
- * break instead of forcing horizontal overflow in the narrow column. */
-.alm-inbox-side--plan .alm-plan-panel__hint {
-  margin-top: 0;
-}
-.alm-inbox-side--plan .alm-plan-panel__summary-dest,
-.alm-inbox-side--plan .alm-plan-panel__dest {
-  word-break: break-all;
-}
-
-/* The destructive-destination control gets its own padded card that no longer
- * hugs the panel edge. */
-.alm-inbox-side--plan .alm-plan-panel__destructive {
-  margin-top: var(--alm-sp-2);
-}
 
 /* ── CHANGE 2 — bottom detail panel side-by-side layout ───────────────────────
  * Lay the detail body out as two columns: the primary detail (classification,
@@ -9913,6 +9658,116 @@
   letter-spacing: 0.05em;
   font-weight: var(--alm-weight-semibold);
   color: var(--alm-text-muted);
+}
+
+/* ==========================================================================
+ * Modal — shared parameterised dialog/overlay (components/Modal.tsx)
+ *
+ * Centered card over a dimmed backdrop. ✕ top-right in the header; body
+ * scrolls within a height cap; optional pinned footer. Width via size presets.
+ * ==========================================================================*/
+.alm-modal__backdrop {
+  position: fixed;
+  inset: 0;
+  z-index: 500;
+  background: color-mix(in srgb, var(--alm-ink) 45%, transparent);
+  backdrop-filter: blur(2px);
+}
+@supports not (backdrop-filter: blur(2px)) {
+  .alm-modal__backdrop {
+    background: color-mix(in srgb, var(--alm-ink) 55%, transparent);
+  }
+}
+
+.alm-modal {
+  position: fixed;
+  top: 50%;
+  left: 50%;
+  transform: translate(-50%, -50%);
+  z-index: 501;
+  display: flex;
+  flex-direction: column;
+  width: min(94vw, var(--alm-modal-w, 640px));
+  max-height: 88vh;
+  background: var(--alm-surface-raised);
+  border: 1px solid var(--alm-border);
+  border-radius: var(--alm-radius-lg);
+  box-shadow: 0 8px 32px color-mix(in srgb, var(--alm-ink) 16%, transparent);
+  overflow: hidden;
+}
+
+/* Width presets. `auto` hugs content up to a sane cap. */
+.alm-modal--sm {
+  --alm-modal-w: 420px;
+}
+.alm-modal--md {
+  --alm-modal-w: 640px;
+}
+.alm-modal--lg {
+  --alm-modal-w: 920px;
+}
+.alm-modal--xl {
+  --alm-modal-w: 1200px;
+}
+.alm-modal--auto {
+  width: auto;
+  max-width: 94vw;
+}
+
+.alm-modal__header {
+  flex-shrink: 0;
+  display: flex;
+  align-items: center;
+  gap: var(--alm-sp-3);
+  padding: var(--alm-sp-3) var(--alm-sp-4);
+  border-bottom: 1px solid var(--alm-border-subtle);
+}
+.alm-modal__title {
+  font-size: var(--alm-text-md);
+  font-weight: var(--alm-weight-semibold);
+  color: var(--alm-text);
+  margin: 0;
+}
+.alm-modal__title-spacer {
+  flex: 1;
+}
+.alm-modal__subtitle {
+  font-size: var(--alm-text-sm);
+  color: var(--alm-text-muted);
+}
+/* ✕ pinned to the top-right of the header. */
+.alm-modal__close {
+  margin-left: auto;
+  appearance: none;
+  background: none;
+  border: none;
+  cursor: pointer;
+  color: var(--alm-text-muted);
+  font-size: var(--alm-text-sm);
+  line-height: 1;
+  padding: var(--alm-sp-1) var(--alm-sp-2);
+  border-radius: var(--alm-radius-sm);
+}
+.alm-modal__close:hover {
+  color: var(--alm-text);
+  background: var(--alm-hover-bg);
+}
+
+.alm-modal__body {
+  flex: 1;
+  min-height: 0;
+  overflow-y: auto;
+  padding: var(--alm-sp-4);
+}
+
+.alm-modal__footer {
+  flex-shrink: 0;
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  gap: var(--alm-sp-2);
+  padding: var(--alm-sp-3) var(--alm-sp-4);
+  border-top: 1px solid var(--alm-border-subtle);
 }
 
 /* ==========================================================================

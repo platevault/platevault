@@ -42,6 +42,9 @@ export type { DetailGridProps, RailProps, RailCardProps } from './DetailGrid';
 export { Lifecycle } from './Lifecycle';
 export type { LifecycleProps } from './Lifecycle';
 
+export { Modal } from './Modal';
+export type { ModalProps, ModalSize } from './Modal';
+
 export { ConfirmOverlay } from './ConfirmOverlay';
 export type { ConfirmOverlayProps } from './ConfirmOverlay';
 
