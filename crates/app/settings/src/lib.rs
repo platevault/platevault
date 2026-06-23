@@ -1400,6 +1400,94 @@ mod tests {
         );
     }
 
+    // ── T046: absorbed-key coverage ───────────────────────────────────────
+
+    /// (T046-a) `tools.<id>.bundle_id` update round-trip: persists and reads back.
+    ///
+    /// validate_value happy path is already covered by `validate_value_accepts`
+    /// (`tools.pixinsight.bundle_id` with `"com.x"`). This test adds the missing
+    /// async write+read round-trip via `update_setting` + `resolve_setting`.
+    #[tokio::test]
+    async fn tools_bundle_id_update_round_trips() {
+        let (db, bus) = setup().await;
+
+        let req = SettingsUpdateRequest {
+            key: "tools.pixinsight.bundle_id".to_owned(),
+            value: contracts_core::JsonAny::from(serde_json::json!("com.example.App")),
+        };
+        let resp = update_setting(db.pool(), &bus, &req).await.unwrap();
+        assert_eq!(resp.status, SettingsUpdateStatus::Success);
+
+        // Read back via resolve_setting (no source override).
+        let resolved =
+            resolve_setting(db.pool(), "tools.pixinsight.bundle_id", None).await.unwrap();
+        assert_eq!(resolved, serde_json::json!("com.example.App"));
+    }
+
+    /// (T046-b) `devMode` is rejected in release builds (no `dev-tools` feature).
+    ///
+    /// The `ValidationRule::DevMode` arm in `descriptors::check_rule` returns
+    /// `ErrorCode::ValueInvalid` when compiled without the `dev-tools` feature.
+    #[cfg(not(feature = "dev-tools"))]
+    #[test]
+    fn dev_mode_rejected_in_release_build() {
+        let err = validate_value("devMode", &serde_json::json!(true))
+            .expect_err("devMode must be rejected in release builds");
+        assert_eq!(
+            err.code,
+            ErrorCode::ValueInvalid,
+            "devMode release rejection must use ValueInvalid error code"
+        );
+    }
+
+    /// (T046-c) `calibrationDarkTempTolerance` >= 0 range: positive value is accepted.
+    ///
+    /// The -1.0 rejection is already in `validate_value_rejects`. This adds the
+    /// explicit positive `2.0` acceptance case as T046 requires both sides.
+    #[test]
+    fn calibration_dark_temp_tolerance_accepts_positive() {
+        assert!(
+            validate_value("calibrationDarkTempTolerance", &serde_json::json!(2.0)).is_ok(),
+            "calibrationDarkTempTolerance must accept 2.0 (>= 0)"
+        );
+    }
+
+    /// (T046-d) `imagetypNormalizationUserMappings` deep-equal noop.
+    ///
+    /// Seed a non-default value, then send a structurally-identical array back.
+    /// `settings_value_eq` must detect equality and return `status == "noop"`.
+    /// No audit event should be emitted (the existing noop guard covers this).
+    #[tokio::test]
+    async fn imagetyp_mappings_deep_equal_noop() {
+        let (db, bus) = setup().await;
+
+        // A non-default mapping (default is the empty vec []).
+        let mapping = serde_json::json!([
+            { "imagetypString": "BIAS FRAME", "frameType": "bias" }
+        ]);
+
+        // First update: must succeed (not noop — differs from empty default).
+        let req = SettingsUpdateRequest {
+            key: "imagetypNormalizationUserMappings".to_owned(),
+            value: contracts_core::JsonAny::from(mapping.clone()),
+        };
+        let resp = update_setting(db.pool(), &bus, &req).await.unwrap();
+        assert_eq!(resp.status, SettingsUpdateStatus::Success, "initial write must succeed");
+
+        // Second update: structurally identical array — must be noop.
+        let req2 = SettingsUpdateRequest {
+            key: "imagetypNormalizationUserMappings".to_owned(),
+            value: contracts_core::JsonAny::from(mapping.clone()),
+        };
+        let resp2 = update_setting(db.pool(), &bus, &req2).await.unwrap();
+        assert_eq!(
+            resp2.status,
+            SettingsUpdateStatus::Noop,
+            "structurally-identical imagetypNormalizationUserMappings must be noop"
+        );
+        assert!(resp2.audit_id.is_none(), "noop must not emit audit event");
+    }
+
     // ── Property tests ─────────────────────────────────────────────────────
     //
     // Invariants over arbitrary input. Proptest uses a deterministic default

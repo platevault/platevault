@@ -42,7 +42,7 @@ Last reconciled: **2026-06-23** (after the 035 / 040 / 041 / 046 iteration waves
 | 015 token-pattern-builder | 🟡 Mockup only | 0/0 tasks |
 | 016 source-protection-defaults | 🟡 Near-complete | 17/20 (underpins 017) |
 | 017 cleanup-archive-review-plans | 🟠 Backend done, UI open | **19 real-open** |
-| 018 settings-configuration-model | 🟡 Backend largely shipped, tasks.md undercounts | 18/46 ticked but Rust+Tauri settings backend (SQLite migration 0013, restore-defaults, source-override, most scope keys) shipped unticked; genuine gaps = JSON-schema mirror + structured-path keys |
+| 018 settings-configuration-model | ✅ Reconciled + implemented (#348) | 42/46; spec reconciled to as-built scope/values architecture; backend + UI shipped & verified (live T034 walkthrough); 4 obsolete (contracts mirror, 014 key); open: FR-006↔043 density tension (cross-spec decision) |
 | 019 bottom-log-viewer | 🟡 Near-complete | 30/34 |
 | 020 router-url-state | ✅ Implemented | 22/23 |
 | 021 developer-contract-diagnostics | 🟡 Partial | 32/37 (behind `dev-tools` feature) |
@@ -101,7 +101,7 @@ PROJECTS CHAIN
                   011 tool-launch 🟡 ─▶ 012 artifact-observation 🟡
 
 INFRA / CROSS-CUTTING (mostly independent)
-  018 settings 🟠   021 dev-diagnostics 🟡   019 log-viewer 🟡
+  018 settings ✅   021 dev-diagnostics 🟡   019 log-viewer 🟡
   046 i18n ✅   042 stdlib ✅   043 ui-redesign 🔵
   037 e2e 🟠 ◀── now gated only on sessions.transition + tauri-driver (search/sessions/calibration are real)
   037 ipc-removal 🟡 (~8/15; Phases 1–2 shipped)
@@ -111,7 +111,6 @@ INFRA / CROSS-CUTTING (mostly independent)
 
 | Priority | Spec | Why ready | Size |
 |---|---|---|---|
-| 1 | **018 settings-configuration-model** | No upstream blocker; underpins many flows | 🟠 Large (28 open) |
 | 1 | **017 cleanup/archive review UI** | Backend + plan model (041) done; 016 nearly done | 🟠 Large (19 open) |
 | 2 | **025 plan-application** (rollback + progress UI) | Apply backend already shipped via 041 | 🟡 Medium |
 | 2 | **039 cross-root-inbox** | Greenfield; 041 base on main; needs plan/tasks | 🟡 Medium |
@@ -122,7 +121,7 @@ INFRA / CROSS-CUTTING (mostly independent)
 | 3 | **023 target-identity** | 035 done; needs `/speckit.tasks` to generate tasks | ⚪ Plan exists, 0 tasks |
 | active | **043 ui-redesign** | In progress on current branch | 🔵 Ongoing |
 
-**Suggested parallel lanes:** one engineer on **018 settings**; one on the **017 → 025 → 033** plan/cleanup chain; **043** continues on UI.
+**Suggested parallel lanes:** one engineer on the **017 → 025 → 033** plan/cleanup chain; **043** continues on UI. (018 settings shipped via #348.)
 
 ## Closeout-ready (verify pass, not new work)
 
