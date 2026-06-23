@@ -34,7 +34,7 @@
   display: flex;
   align-items: center;
   gap: var(--alm-sp-2);
-  padding: 4px var(--alm-sp-4);
+  padding: var(--alm-sp-1) var(--alm-sp-4);
   font-size: var(--alm-text-xs);
   color: var(--alm-text-muted);
   border-bottom: 1px solid var(--alm-border);
@@ -120,7 +120,7 @@
 .alm-wizard-page__footprint-value {
   font-size: 16px;
   font-weight: var(--alm-weight-semibold);
-  margin-top: 2px;
+  margin-top: var(--alm-sp-0);
 }
 
 /* Fine-print note inside footprint box */
@@ -591,7 +591,7 @@
 .alm-wizard-views__box-header {
   display: flex;
   justify-content: flex-end;
-  margin-bottom: 4px;
+  margin-bottom: var(--alm-sp-1);
 }
 
 .alm-wizard-views__box-link {
@@ -687,7 +687,7 @@
 .alm-wizard-views__radio-label {
   display: block;
   font-size: var(--alm-text-xs);
-  padding: 2px 0;
+  padding: var(--alm-sp-0) 0;
   cursor: pointer;
 }
 
@@ -753,7 +753,7 @@
 
 /* Individual token chip */
 .alm-wizard-layout__token-chip {
-  padding: 2px 6px;
+  padding: var(--alm-sp-0) 6px;
   background: var(--alm-surface);
   border: 1px solid var(--alm-border);
   border-radius: 4px;
@@ -995,7 +995,7 @@
   background: var(--alm-bg3);
   border: 1px solid var(--alm-border);
   border-radius: var(--alm-radius-sm);
-  padding: 2px var(--alm-sp-2);
+  padding: var(--alm-sp-0) var(--alm-sp-2);
   color: var(--alm-text-secondary);
 }
 

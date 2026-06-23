@@ -207,7 +207,7 @@
 }
 .alm-property-table__header {
   border-bottom: 1px solid var(--alm-rule);
-  padding-bottom: 6px; margin-bottom: 2px;
+  padding-bottom: 6px; margin-bottom: var(--alm-sp-0);
 }
 .alm-property-table__header .alm-property-table__cell {
   font-size: var(--alm-text-2xs); font-weight: var(--alm-weight-semibold);

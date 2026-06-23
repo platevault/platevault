@@ -54,7 +54,7 @@
 .alm-inbox-stats__per-type {
   display: inline-flex;
   align-items: baseline;
-  gap: 4px;
+  gap: var(--alm-sp-1);
   white-space: nowrap;
   padding: 1px var(--alm-sp-2);
   border: 1px solid var(--alm-border-subtle);
@@ -415,7 +415,7 @@
   display: flex;
   flex-wrap: wrap;
   align-items: baseline;
-  gap: 4px var(--alm-sp-2);
+  gap: var(--alm-sp-1) var(--alm-sp-2);
   min-width: 0;
 }
 .alm-plan-panel__summary-type {

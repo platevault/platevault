@@ -20,7 +20,7 @@
   color: var(--alm-accent-text); background: var(--alm-selected-bg);
   font-weight: var(--alm-weight-semibold);
   border-left: 2px solid var(--alm-accent);
-  padding-left: calc(var(--alm-sp-4) - 2px);
+  padding-left: calc(var(--alm-sp-4) - var(--alm-sp-0));
 }
 .alm-settings__nav-group { margin-bottom: var(--alm-sp-2); }
 .alm-settings__nav-group-label {
@@ -160,7 +160,7 @@
 /* Segmented control */
 .alm-seg { display: inline-flex; border: 1px solid var(--alm-border); border-radius: var(--alm-radius-sm); overflow: hidden; }
 .alm-seg__btn {
-  padding: 2px var(--alm-sp-2); font-size: var(--alm-text-2xs);
+  padding: var(--alm-sp-0) var(--alm-sp-2); font-size: var(--alm-text-2xs);
   border: none; background: var(--alm-bg); color: var(--alm-text-muted);
   cursor: pointer; font-family: var(--alm-font-sans); font-weight: var(--alm-weight-medium);
   border-right: 1px solid var(--alm-border);
@@ -191,7 +191,7 @@
 /* Token chip (naming builder) */
 .alm-token-chip {
   display: inline-flex; align-items: center; gap: var(--alm-sp-1);
-  padding: 2px var(--alm-sp-2); border-radius: var(--alm-radius-sm);
+  padding: var(--alm-sp-0) var(--alm-sp-2); border-radius: var(--alm-radius-sm);
   font-size: var(--alm-text-xs); font-family: var(--alm-font-mono);
   background: var(--alm-accent-bg); color: var(--alm-accent-text);
   border: 1px solid var(--alm-info-border);
@@ -200,7 +200,7 @@
 .alm-token-chip__x:hover { opacity: 1; }
 .alm-sep-chip {
   display: inline-flex; align-items: center;
-  padding: 2px var(--alm-sp-2); border-radius: var(--alm-radius-sm);
+  padding: var(--alm-sp-0) var(--alm-sp-2); border-radius: var(--alm-radius-sm);
   font-size: var(--alm-text-xs); font-family: var(--alm-font-mono);
   background: var(--alm-chip); color: var(--alm-text-secondary);
   border: 1px solid var(--alm-border);
@@ -208,7 +208,7 @@
 /* Literal path-segment chip (per-type destination pattern editor) */
 .alm-literal-chip {
   display: inline-flex; align-items: center; gap: var(--alm-sp-1);
-  padding: 2px var(--alm-sp-2); border-radius: var(--alm-radius-sm);
+  padding: var(--alm-sp-0) var(--alm-sp-2); border-radius: var(--alm-radius-sm);
   font-size: var(--alm-text-xs); font-family: var(--alm-font-mono);
   background: var(--alm-success-bg, var(--alm-surface-raised)); color: var(--alm-text);
   border: 1px solid var(--alm-border);

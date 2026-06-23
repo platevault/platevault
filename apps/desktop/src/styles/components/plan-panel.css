@@ -140,7 +140,7 @@
 .alm-plan-panel__file-dest {
   display: inline-flex;
   align-items: baseline;
-  gap: 2px;
+  gap: var(--alm-sp-0);
   min-width: 0;
 }
 .alm-plan-panel__inplace {
@@ -154,7 +154,7 @@
   color: var(--alm-danger, var(--alm-warn));
   border: 1px solid currentColor;
   border-radius: var(--alm-radius-sm);
-  padding: 0 4px;
+  padding: 0 var(--alm-sp-1);
 }
 
 .alm-plan-panel__list-head {

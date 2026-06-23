@@ -38,7 +38,7 @@
   align-items: baseline;
   font-size: var(--alm-text-xs);
   color: var(--alm-text-muted);
-  margin-top: 2px;
+  margin-top: var(--alm-sp-0);
 }
 
 .alm-inbox-list__meta-state {
@@ -322,7 +322,7 @@
 .alm-calib-match-panel__type-item {
   display: flex;
   align-items: center;
-  gap: 4px;
+  gap: var(--alm-sp-1);
 }
 
 /* Confidence percentage */
@@ -590,7 +590,7 @@
   border-radius: var(--alm-radius-sm);
   color: var(--alm-text);
   font-size: var(--alm-text-xs);
-  padding: 2px 8px;
+  padding: var(--alm-sp-0) var(--alm-sp-2);
   cursor: pointer;
   white-space: nowrap;
   transition: background var(--alm-transition-fast);
@@ -731,7 +731,7 @@
 
 /* Expandable inventory-refs disclosure widget */
 .alm-source-views__refs-details {
-  margin-top: 4px;
+  margin-top: var(--alm-sp-1);
 }
 
 /* Disclosure summary — pointer cursor, no text selection on click */
@@ -742,8 +742,8 @@
 
 /* Inventory-ref path list inside the disclosure */
 .alm-source-views__refs-list {
-  margin-top: 4px;
-  padding-left: 12px;
+  margin-top: var(--alm-sp-1);
+  padding-left: var(--alm-sp-3);
   list-style: disc;
   font-family: var(--alm-font-mono);
 }
