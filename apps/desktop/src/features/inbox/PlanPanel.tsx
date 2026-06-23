@@ -216,6 +216,13 @@ function frameTypeLabel(
   for (const [token, singular] of FRAME_TYPE_KEYWORDS) {
     if (segments.includes(token)) return singular;
   }
+  // Match a frame keyword INSIDE the file name (e.g. "bias_001.fits",
+  // "master_dark_300s.fits") so per-file rows of an in-place mixed folder get
+  // their real type instead of the folder's dominant hint.
+  const base = basename(action.fromPath).toLowerCase();
+  for (const [token, singular] of FRAME_TYPE_KEYWORDS) {
+    if (base.includes(token)) return singular;
+  }
   if (itemFrameType) return normalizeFrameTypeHint(itemFrameType);
   return actionLabel(action.action).toLowerCase();
 }
