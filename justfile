@@ -18,6 +18,22 @@ build:
     cargo build --workspace
     pnpm -r --if-present build
 
+# DB boundary ratchet — fail if production sqlx query/exec sites OUTSIDE
+# crates/persistence/db EXCEED the checked-in baseline. Counts may only shrink.
+# Wire this into CI (see docs/development/persistence-layer-hardening.md).
+# Regenerate the baseline after spec 041 merges:
+#   bash scripts/check-db-boundary.sh --generate
+db-boundary:
+    bash scripts/check-db-boundary.sh
+
+# Regenerate the sqlx offline query cache (.sqlx/) for compile-time verification.
+# Requires a DATABASE_URL pointing at a migrated SQLite db, or run after the
+# crate's migrations have been applied. Commit the resulting .sqlx/ dir so CI can
+# build with SQLX_OFFLINE=true. Run AFTER spec 041's migration 0048 lands so the
+# schema is final. See docs/development/persistence-layer-hardening.md.
+sqlx-prepare:
+    cargo sqlx prepare --workspace -- --all-targets
+
 # Type-check TypeScript workspaces when present.
 typecheck:
     pnpm -r --if-present typecheck

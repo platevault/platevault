@@ -56,6 +56,13 @@ unicode-security = "0.1"
 #   schemars 1.x emits JSON-Schema draft-2020-12 (matching the canonical contract dialect);
 #   the uuid1 feature still maps to uuid crate v1 (spec 042 CB2 / T116a).
 sqlx = { version = "0.9", default-features = false, features = ["sqlite", "runtime-tokio", "tls-rustls", "macros", "migrate", "uuid", "time", "json"] }
+# Dynamic query builder for the centralized persistence layer (persistence-layer
+# hardening, infra scaffolding). sea-query is a PURE builder with NO sqlx
+# dependency: it emits `(String, Values)` which we bind onto sqlx 0.9 ourselves.
+# We deliberately do NOT use `sea-query-binder` — its current release pins
+# sqlx 0.8 and lags our ratified sqlx 0.9, so it cannot bridge our stack.
+# See docs/development/persistence-layer-hardening.md for the binding pattern.
+sea-query = { version = "1", default-features = false, features = ["derive", "backend-sqlite"] }
 specta = { version = "2.0.0-rc.25", features = ["derive", "uuid", "time", "serde_json"] }
 specta-typescript = "0.0.12"
 tauri = { version = "2.11", default-features = false, features = ["wry"] }
@@ -99,5 +106,15 @@ rstest = "0.26"
 unsafe_code = "forbid"
 
 [workspace.lints.clippy]
-all = "warn"
-pedantic = "warn"
+# Groups carry priority -1 so the explicit per-lint overrides below win.
+all = { level = "warn", priority = -1 }
+pedantic = { level = "warn", priority = -1 }
+# DB boundary secondary signal. The `disallowed-methods` list in clippy.toml
+# flags raw sqlx calls, but it CANNOT be path-scoped to exclude the sanctioned
+# crates/persistence/db crate, so leaving it at `warn` under CI's `-D warnings`
+# would break the build on today's ~200 legitimate production sites. We hold it
+# at `allow` here: the authoritative ratchet is scripts/check-db-boundary.sh
+# (`just db-boundary`). Developers can surface the clippy signal on demand with
+#   cargo clippy -- -W clippy::disallowed_methods
+# See docs/development/persistence-layer-hardening.md.
+disallowed_methods = "allow"
