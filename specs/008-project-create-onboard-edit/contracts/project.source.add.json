@@ -22,7 +22,17 @@
         "frames": { "type": "integer", "minimum": 0 },
         "filter": { "type": "string", "minLength": 0, "maxLength": 32 },
         "exposure": { "type": "string", "minLength": 0, "maxLength": 32 },
-        "linkedAt": { "$ref": "#/$defs/Timestamp" }
+        "linkedAt": { "$ref": "#/$defs/Timestamp" },
+        "role": {
+          "type": "string",
+          "enum": ["light", "dark", "flat", "bias"],
+          "description": "Optional role of this source within the project (spec 008 data-model.md §ProjectSource). None until Inventory integration provides role metadata."
+        },
+        "selection": {
+          "type": "string",
+          "enum": ["selected", "candidate"],
+          "description": "Optional selection state of this source within the project (spec 008). None until Inventory integration provides selection metadata."
+        }
       }
     },
     "ProjectChannel": {

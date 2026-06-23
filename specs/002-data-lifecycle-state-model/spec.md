@@ -5,6 +5,11 @@
 > which resolves targets on demand against SIMBAD (no catalog download). All other lifecycle states /
 > events are unaffected.
 
+> **⚠ Session-lifecycle redesign (spec 041/045)**: sessions are now derived inventory rather than a
+> first-class review-state machine, so the session-candidate functional requirements FR-009, FR-011,
+> and FR-012 are partly historical — the state names remain valid but the owning flow has moved to
+> the Inbox ingest gate.
+
 > **See Spec 030**: UI implementation of this feature must follow
 > [Spec 030 — UI Audit & Revision](../030-ui-audit-revision/spec.md)
 > for layout, navigation, and component patterns.
