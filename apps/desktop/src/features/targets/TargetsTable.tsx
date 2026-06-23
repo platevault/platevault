@@ -70,6 +70,12 @@ import { AltitudeSparkline } from './AltitudeSparkline';
 import { FilterBadges } from './FilterBadges';
 import { m } from '@/lib/i18n';
 import { useFavourites } from './useFavourites';
+import {
+  groupByDimensions,
+  flattenVisibleGroups,
+  type DimensionAccessor,
+} from '@/lib/grouping';
+import { useCollapsibleGroups } from '@/lib/use-grouping';
 
 // ── Sort model ────────────────────────────────────────────────────────────────
 
@@ -228,8 +234,19 @@ function groupTargets(
 // same row height (keyed off --alm-row-height in CSS).
 
 type FlatRow =
-  | { kind: 'group'; key: string; label: string; count: number }
-  | { kind: 'target'; key: string; target: TargetListItem; alt: RowAltitude };
+  | { kind: 'group'; key: string; label: string; count: number; path?: string; depth?: number; collapsible?: boolean; collapsed?: boolean }
+  | { kind: 'target'; key: string; target: TargetListItem; alt: RowAltitude; depth?: number };
+
+// ── Multi-level grouping accessors ────────────────────────────────────────────
+
+export const TARGET_ACCESSORS: Readonly<Record<string, DimensionAccessor<TargetListItem>>> = {
+  constellation: (t) => (t as TargetListItem & { constellation?: string }).constellation ?? null,
+  type: (t) => t.objectType ? formatType(t.objectType) : null,
+  catalogue: (t) => {
+    const cat = catalogueOf(t);
+    return cat ? catalogueLabel(cat) : 'Other';
+  },
+};
 
 function flattenGroups(groups: TargetGroup[]): FlatRow[] {
   const rows: FlatRow[] = [];
@@ -295,8 +312,19 @@ interface Props {
   loading?: boolean;
   sort: TargetSort;
   onSort: (col: TargetSortCol) => void;
-  /** Group rows under spanning header rows by this key. Default 'catalogue'. */
+  /**
+   * Legacy single-tier group-by (kept for back-compat with tests).
+   * When `dims` is provided it takes precedence; `groupBy` is only used as
+   * the fallback when `dims` is empty.
+   * @deprecated Prefer `dims` from `useGrouping`.
+   */
   groupBy?: TargetGroupBy;
+  /**
+   * Active ordered grouping dimension ids from `useGrouping`.
+   * When non-empty, drives multi-level collapsible grouping; overrides `groupBy`.
+   * When empty, falls back to `groupBy` (single-tier, legacy).
+   */
+  dims?: string[];
   /** Message shown when the list is empty (tab-specific). */
   emptyMessage?: string;
   /**
@@ -326,6 +354,7 @@ export function TargetsTable({
   sort,
   onSort,
   groupBy = DEFAULT_TARGET_GROUP_BY,
+  dims,
   emptyMessage = m.targets_table_no_match(),
   usableAltDeg = USABLE_ALT_DEG,
   favouriteIds,
@@ -339,15 +368,60 @@ export function TargetsTable({
   const resolvedFavouriteIds = favouriteIds ?? internalFavourites.favouriteIds;
   const resolvedToggle = onToggleFavourite ?? internalFavourites.toggle;
   const scrollRef = useRef<HTMLDivElement>(null);
+  const { collapsed, toggle: toggleCollapsed } = useCollapsibleGroups();
 
   // Grouping + sorting + per-row altitude MOCK are all derived here so a filter
   // or sort change does one O(n) pass off the render hot path, not per-row work
   // inside the virtualized render loop. usableAltDeg is included in the dep
   // array so that changing the altitude threshold re-derives all rows.
+  //
+  // When `dims` is non-empty we use the shared multi-level groupByDimensions
+  // engine (with collapsible headers); when empty we fall back to the
+  // legacy single-tier groupTargets (using `groupBy`).
+  const useMultiGroup = dims != null && dims.length > 0;
+
   const flatRows = useMemo(() => {
+    if (useMultiGroup) {
+      // Pre-compute altitude for all items (needed for sort + display).
+      const withAlt = targets.map((t) => ({ target: t, alt: rowAltitudeFor(t, usableAltDeg) }));
+      // Sort the flat list first.
+      const sortedWithAlt = [...withAlt].sort((a, b) =>
+        compareTargetRows(a.target, a.alt, b.target, b.alt, sort),
+      );
+      const sorted = sortedWithAlt.map((r) => r.target);
+      const altMap = new Map(sortedWithAlt.map((r) => [r.target.id, r.alt]));
+
+      // Build the group tree using shared engine.
+      const tree = groupByDimensions(sorted, dims!, TARGET_ACCESSORS);
+      // Flatten with collapse state, then map to our FlatRow shape.
+      const visRows = flattenVisibleGroups(tree, collapsed);
+      return visRows.map((vrow): FlatRow => {
+        if (vrow.kind === 'header') {
+          return {
+            kind: 'group',
+            key: vrow.path,
+            label: vrow.node.label,
+            count: vrow.node.count,
+            path: vrow.path,
+            depth: vrow.depth,
+            collapsible: true,
+            collapsed: vrow.collapsed,
+          };
+        }
+        const t = vrow.item;
+        return {
+          kind: 'target',
+          key: t.id,
+          target: t,
+          alt: altMap.get(t.id) ?? rowAltitudeFor(t, usableAltDeg),
+          depth: vrow.depth,
+        };
+      });
+    }
+    // Legacy single-tier grouping path.
     const groups = groupTargets(targets, sort, groupBy, usableAltDeg);
     return flattenGroups(groups);
-  }, [targets, sort, groupBy, usableAltDeg]);
+  }, [targets, sort, groupBy, usableAltDeg, useMultiGroup, dims, collapsed]);
 
   const virtualizer = useVirtualizer({
     count: flatRows.length,
@@ -460,6 +534,38 @@ export function TargetsTable({
               const row = flatRows[index];
 
               if (row.kind === 'group') {
+                const depthIndent = (row.depth ?? 0) * 12;
+                if (row.collapsible && row.path != null) {
+                  // Multi-level collapsible group header.
+                  return (
+                    <tr
+                      key={row.key}
+                      data-index={index}
+                      className="alm-targets-table__group"
+                    >
+                      <td colSpan={COL_COUNT}>
+                        <button
+                          type="button"
+                          className="alm-targets-table__group-cell"
+                          data-testid={`targets-group-${row.key}`}
+                          aria-expanded={!row.collapsed}
+                          onClick={() => toggleCollapsed(row.path!)}
+                          // eslint-disable-next-line no-restricted-syntax -- dynamic: depth-based group-header indent
+                          style={{ paddingLeft: 8 + depthIndent }}
+                        >
+                          <span className="alm-targets-list__group-caret" aria-hidden="true">
+                            {row.collapsed ? '▸' : '▾'}
+                          </span>
+                          <span className="alm-targets-list__group-label">{row.label}</span>
+                          <span className="alm-targets-table__group-count">
+                            {m.targets_table_target_count({ count: row.count })}
+                          </span>
+                        </button>
+                      </td>
+                    </tr>
+                  );
+                }
+                // Legacy non-collapsible group header.
                 return (
                   <tr
                     key={row.key}

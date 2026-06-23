@@ -49,6 +49,7 @@ import { PageTopBar, FilterToolbar, ListPageLayout } from '@/components';
 import type { FilterOption } from '@/components';
 import { m } from '@/lib/i18n';
 import { Btn, EmptyState } from '@/ui';
+import { useGrouping } from '@/lib/use-grouping';
 import { AddTargetDialog } from './AddTargetDialog';
 import { TargetDetailV2 } from './TargetDetailV2';
 import {
@@ -63,9 +64,8 @@ import {
 import {
   TargetsTable,
   DEFAULT_TARGET_SORT,
-  DEFAULT_TARGET_GROUP_BY,
 } from './TargetsTable';
-import type { TargetSort, TargetSortCol, TargetGroupBy } from './TargetsTable';
+import type { TargetSort, TargetSortCol } from './TargetsTable';
 import { rowAltitudeFor, type FilterBand } from './planner-altitude';
 import { useAltitudeThreshold } from './altitude-settings';
 import { useFavourites } from './useFavourites';
@@ -97,10 +97,11 @@ const MY_TARGETS_VALUE = 'my';
  */
 const MY_TARGETS_EMPTY: TargetListItem[] = [];
 
-/** Group-by options for the Planner top bar (mirrors the other list pages). */
-const GROUP_BY_OPTIONS: FilterOption[] = [
+/** Multi-level grouping dimensions for the Planner top bar. */
+const TARGETS_DIMENSIONS: FilterOption[] = [
   { value: 'catalogue', label: m.cmp_target_search_catalogue_label() },
   { value: 'type', label: m.targets_groupby_object_type() },
+  { value: 'constellation', label: m.targets_dim_constellation() },
 ];
 
 /** Catalogue multi-select options, in canonical display order. */
@@ -186,7 +187,14 @@ export function TargetsPage() {
   const [myTargetsFilter, setMyTargetsFilter] = useState('');
   const [search, setSearch] = useState('');
   const [sort, setSort] = useState<TargetSort>(DEFAULT_TARGET_SORT);
-  const [groupBy, setGroupBy] = useState<TargetGroupBy>(DEFAULT_TARGET_GROUP_BY);
+  const { dims, setSlot } = useGrouping({
+    storageKey: 'targets.grouping.dims.v1',
+    validIds: ['catalogue', 'type', 'constellation'],
+    // defaultDims is empty: when no dims are selected the table falls back to
+    // the legacy single-tier groupBy='catalogue' path which preserves the
+    // sort-group ordering that the existing tests exercise.
+    defaultDims: [],
+  });
   // Catalogue multi-select: initialized from the persisted default-enabled
   // catalogues (Settings → Target Resolution), falling back to the in-code
   // default subset until that load resolves.
@@ -353,10 +361,10 @@ export function TargetsPage() {
               onChange: (v) => setFilterBands(v as FilterBand[]),
             },
           ]}
-          groupBy={{
-            value: groupBy,
-            options: GROUP_BY_OPTIONS,
-            onChange: (v) => setGroupBy(v as TargetGroupBy),
+          grouping={{
+            dimensions: TARGETS_DIMENSIONS,
+            dims,
+            setSlot,
           }}
         />
       }
@@ -400,7 +408,7 @@ export function TargetsPage() {
             loading={listState.status === 'loading'}
             sort={sort}
             onSort={handleSort}
-            groupBy={groupBy}
+            dims={dims}
             usableAltDeg={usableAltDeg}
             // task #18: pass the local favourite set down so the star column renders correctly.
             // STUB: localStorage only until task #54 backend linkage lands.
