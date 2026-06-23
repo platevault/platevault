@@ -13,6 +13,10 @@ use app_core::inbox::property_registry::property_registry as get_property_regist
 use app_core::inbox::reclassify::{reclassify, ReclassifyOverride, ReclassifyRequest};
 use app_core::inbox::scan::{scan_root, ScanOptions, ScannedMasterFile};
 use app_core::inbox::stats::inbox_stats as inbox_stats_uc;
+use app_core::inbox::target_recommendations::{
+    target_recommendations as target_recommendations_uc, RecommendationTarget,
+    DEFAULT_FIXED_RADIUS_DEG,
+};
 use app_core::inbox_plan::{
     apply_all_inbox_plans, apply_inbox_plan, apply_selected_inbox_plans, cancel_inbox_plan,
     get_inbox_plan, list_open_inbox_plans,
@@ -24,6 +28,7 @@ use contracts_core::inbox::{
     InboxListResponse, InboxOpenPlansResponse, InboxPlanCancelResponse, InboxPlanView,
     InboxPropertyRegistryResponse, InboxReclassifyRequest, InboxReclassifyResponse,
     InboxScanFolderRequest, InboxScanFolderResponse, InboxScanResult, InboxStatsResponse,
+    InboxTargetRecommendationsRequest, InboxTargetRecommendationsResponse,
 };
 use contracts_core::plan_apply::PlanApplyResponse;
 use contracts_core::ContractError;
@@ -204,6 +209,43 @@ pub async fn inbox_item_metadata(
 ) -> Result<InboxItemMetadataResponse, String> {
     let files = get_inbox_item_metadata(&pool, &req.inbox_item_id).await.map_err(|e| e.message)?;
     Ok(InboxItemMetadataResponse { inbox_item_id: req.inbox_item_id, files })
+}
+
+// ── inbox.target_recommendations ──────────────────────────────────────────────
+
+/// `inbox.target_recommendations` — recommend canonical targets for a light
+/// sub-group by sky-coordinate proximity (spec 041 R-17 / FR-052).
+///
+/// Ranks catalog targets by great-circle separation from the sub-group's
+/// pointing within a FOV-aware (or configurable fixed) radius. The `OBJECT`
+/// header is returned only as a display hint, never used for matching. The
+/// chosen target is written separately via `inbox.reclassify` (T068).
+///
+/// Identify the sub-group by `inboxItemId` (preferred) or `sourceGroupId`.
+///
+/// # Errors
+/// `inbox.item.not_found` — no resolvable inbox item; `internal.database` — query failed.
+#[tauri::command]
+#[specta::specta]
+pub async fn inbox_target_recommendations(
+    req: InboxTargetRecommendationsRequest,
+    pool: tauri::State<'_, SqlitePool>,
+) -> Result<InboxTargetRecommendationsResponse, ContractError> {
+    // inboxItemId takes precedence when both are supplied (contract semantics).
+    let target = if let Some(item_id) = req.inbox_item_id {
+        RecommendationTarget::InboxItem(item_id)
+    } else if let Some(sg_id) = req.source_group_id {
+        RecommendationTarget::SourceGroup(sg_id)
+    } else {
+        return Err(ContractError::new(
+            contracts_core::error_code::ErrorCode::InboxItemNotFound,
+            "target_recommendations requires inboxItemId or sourceGroupId".to_owned(),
+            contracts_core::ErrorSeverity::Blocking,
+            false,
+        ));
+    };
+
+    target_recommendations_uc(&pool, &target, DEFAULT_FIXED_RADIUS_DEG).await
 }
 
 // ── inbox.scan.folder ─────────────────────────────────────────────────────────

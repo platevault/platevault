@@ -464,6 +464,63 @@ pub struct InboxStatsResponse {
     pub totals: InboxStatsTotals,
 }
 
+// ── inbox.target_recommendations (spec 041 R-17 / FR-052) ─────────────────────
+
+/// Request for `inbox.target_recommendations`.
+///
+/// Identify a light sub-group by **either** its `inboxItemId` **or** its
+/// `sourceGroupId` (R-17: a sub-group is one homogeneous light group). Exactly
+/// one should be set; if both are present, `inboxItemId` takes precedence.
+#[derive(Clone, Debug, Serialize, Deserialize, Type)]
+#[serde(rename_all = "camelCase")]
+pub struct InboxTargetRecommendationsRequest {
+    /// The single-type inbox item (light sub-group) to resolve a target for.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub inbox_item_id: Option<String>,
+    /// Alternatively, the originating source group (R-12 provenance).
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub source_group_id: Option<String>,
+}
+
+/// The sky pointing a recommendation set was computed from (decimal degrees).
+#[derive(Clone, Copy, Debug, Serialize, Deserialize, Type)]
+#[serde(rename_all = "camelCase")]
+pub struct InboxPointing {
+    /// Right ascension, ICRS J2000 decimal degrees.
+    pub ra_deg: f64,
+    /// Declination, ICRS J2000 decimal degrees.
+    pub dec_deg: f64,
+}
+
+/// One ranked target candidate (R-17 coordinate nearest-neighbour).
+#[derive(Clone, Debug, Serialize, Deserialize, Type)]
+#[serde(rename_all = "camelCase")]
+pub struct InboxTargetCandidate {
+    /// Persisted `canonical_target.id` (UUID string).
+    pub target_id: String,
+    /// Effective display name (`display_alias ?? primary_designation`).
+    pub name: String,
+    /// Great-circle angular separation from the sub-group's pointing, in degrees.
+    pub separation_deg: f64,
+}
+
+/// Response from `inbox.target_recommendations`.
+///
+/// `candidates` is ranked ascending by angular separation within the configured
+/// FOV-aware (or fixed-fallback) radius; empty when no pointing is available.
+/// `pointing` is `None` when the light sub-group has no RA/Dec. `objectHint`
+/// carries the raw `OBJECT` header for **display only** — never used for
+/// matching/search (R-17).
+#[derive(Clone, Debug, Serialize, Deserialize, Type)]
+#[serde(rename_all = "camelCase")]
+pub struct InboxTargetRecommendationsResponse {
+    pub candidates: Vec<InboxTargetCandidate>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub pointing: Option<InboxPointing>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub object_hint: Option<String>,
+}
+
 // ── inbox.plan (spec 041 US1/FR-003/FR-004) ───────────────────────────────────
 
 /// One plan action entry in the in-context plan panel.
