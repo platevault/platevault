@@ -640,7 +640,7 @@ export function InboxPage() {
             >
               {bulkConfirmLoading
                 ? m.common_confirming()
-                : `Confirm all (${bulkEligibleItems.length})`}
+                : m.inbox_confirm_all({ count: bulkEligibleItems.length })}
             </Btn>
           )}
           <Btn

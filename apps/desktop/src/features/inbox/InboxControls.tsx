@@ -186,7 +186,7 @@ export function InboxControls({
                 (d) => d.id === value || !usedEarlier.has(d.id),
               ).map((d) => (
                 <option key={d.id} value={d.id}>
-                  {slot === 0 ? `Group: ${d.label}` : `then: ${d.label}`}
+                  {slot === 0 ? m.inbox_groupby_chip_primary({ label: d.label }) : m.inbox_groupby_chip_secondary({ label: d.label })}
                 </option>
               ))}
             </select>

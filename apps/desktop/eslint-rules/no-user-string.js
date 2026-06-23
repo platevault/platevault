@@ -195,6 +195,49 @@ const rule = {
         }
       },
 
+      // Template literals rendered as a JSX CHILD via an expression container,
+      // e.g. `{ok ? `Applied ${n} items` : `Failed`}`. Mirror of the Literal
+      // child check above. Attribute / object-property / call template literals
+      // are handled by their own visitors, so those contexts are skipped here to
+      // avoid double-reporting.
+      TemplateLiteral(node) {
+        if (!templateHasLetter(node)) return;
+        if (node.parent && node.parent.type === "TaggedTemplateExpression") return;
+        let n = node;
+        let parent = n.parent;
+        while (parent) {
+          if (
+            parent.type === "JSXAttribute" ||
+            parent.type === "CallExpression" ||
+            parent.type === "NewExpression" ||
+            parent.type === "Property"
+          ) {
+            return;
+          }
+          if (parent.type === "JSXExpressionContainer") {
+            const gp = parent.parent;
+            if (gp && (gp.type === "JSXElement" || gp.type === "JSXFragment")) {
+              context.report({
+                node,
+                messageId: "jsxText",
+                data: { text: quote(templatePreview(node)) },
+              });
+            }
+            return;
+          }
+          if (
+            parent.type === "ArrowFunctionExpression" ||
+            parent.type === "FunctionExpression" ||
+            parent.type === "JSXElement" ||
+            parent.type === "JSXFragment"
+          ) {
+            return;
+          }
+          n = parent;
+          parent = n.parent;
+        }
+      },
+
       JSXAttribute(node) {
         const name =
           node.name && node.name.type === "JSXIdentifier"
