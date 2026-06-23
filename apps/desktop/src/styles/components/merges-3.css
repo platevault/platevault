@@ -362,17 +362,17 @@
 .alm-filter-badges {
   display: inline-flex;
   flex-wrap: wrap;
-  gap: var(--alm-space-1);
+  gap: var(--alm-sp-1);
   align-items: center;
 }
 
 /* Individual filter badge — shared base. */
 .alm-filter-badge {
   display: inline-block;
-  padding: 0 var(--alm-space-1);
+  padding: 0 var(--alm-sp-1);
   border-radius: var(--alm-radius-sm);
   font-size: var(--alm-text-xs);
-  font-weight: var(--alm-font-medium);
+  font-weight: var(--alm-weight-medium);
   line-height: var(--alm-leading-tight);
   letter-spacing: 0.03em;
   border: 1px solid transparent;
@@ -400,7 +400,7 @@
 }
 
 .alm-settings__unit-label {
-  margin-left: var(--alm-space-2);
+  margin-left: var(--alm-sp-2);
   color: var(--alm-text-muted);
   font-size: var(--alm-text-sm);
 }
@@ -512,72 +512,6 @@
 .alm-inbox-row__classification--classified { color: var(--alm-info); }
 .alm-inbox-row__classification--plan_open { color: var(--alm-ok); }
 .alm-inbox-row__classification--resolved  { color: var(--alm-ink4); }
-
-/* ── task 33: breakdown rows as frame-type filters ──────────────────────────────
- *
- * Each breakdown row in InboxDetail is now a pressable button. When it is the
- * active filter it gets a filled background; when no filter is active all rows
- * look neutral. Clicking a row that is already active clears the filter.
- */
-
-.alm-breakdown-filter-row {
-  display: contents; /* table layout is owner; this class is the interaction host */
-}
-
-/* Wrapper <button> that wraps the entire breakdown table row cell contents.
- * We make the <tr> a button via role=button + tabIndex to keep table semantics. */
-.alm-breakdown-filter-btn {
-  all: unset;
-  display: flex;
-  align-items: center;
-  gap: var(--alm-space-2, 0.5rem);
-  width: 100%;
-  cursor: pointer;
-  border-radius: var(--alm-radius-sm, 3px);
-  padding: var(--alm-space-1, 0.25rem) var(--alm-space-2, 0.5rem);
-  transition: background var(--alm-transition-fast);
-}
-
-.alm-breakdown-filter-btn:hover {
-  background: var(--alm-surface);
-}
-
-.alm-breakdown-filter-btn:focus-visible {
-  outline: 2px solid var(--alm-info);
-  outline-offset: -2px;
-}
-
-/* Active: the selected frame-type filter row */
-.alm-breakdown-filter-btn--active {
-  background: var(--alm-info-bg);
-  color: var(--alm-info);
-}
-
-.alm-breakdown-filter-btn--active:hover {
-  background: var(--alm-info-bg);
-}
-
-/* Filter-active indicator label for the breakdown section header */
-.alm-breakdown-filter-label {
-  display: inline-flex;
-  align-items: center;
-  gap: var(--alm-space-1, 0.25rem);
-  font-size: var(--alm-text-xs, 0.75rem);
-  color: var(--alm-info);
-  margin-left: var(--alm-space-2, 0.5rem);
-}
-
-.alm-breakdown-filter-clear {
-  all: unset;
-  cursor: pointer;
-  font-size: var(--alm-text-xs, 0.75rem);
-  color: var(--alm-info);
-  text-decoration: underline;
-}
-
-.alm-breakdown-filter-clear:hover {
-  color: var(--alm-ink);
-}
 
 /* ── task 35: bulk-confirm button ───────────────────────────────────────────────
  *

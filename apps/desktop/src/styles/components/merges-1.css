@@ -663,7 +663,7 @@
 }
 .alm-targets-table__group-count {
   margin-left: var(--alm-sp-2);
-  font-weight: var(--alm-weight-regular);
+  font-weight: var(--alm-weight-normal);
   text-transform: none;
   letter-spacing: normal;
   color: var(--alm-text-muted);

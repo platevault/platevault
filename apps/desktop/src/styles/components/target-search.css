@@ -148,7 +148,6 @@
 .alm-source-group-header__path { font-weight: var(--alm-weight-semibold); color: var(--alm-text-secondary); }
 .alm-source-group-header .alm-pill { margin-left: var(--alm-sp-2); }
 .alm-list-empty { padding: var(--alm-sp-4); color: var(--alm-text-faint); font-size: var(--alm-text-sm); }
-.alm-needs-review-icon { color: var(--alm-warn); display: inline; vertical-align: middle; }
 .alm-target-row__desig { color: var(--alm-text-muted); font-size: var(--alm-text-xs); }
 
 /* === INBOX stats summary strip (was inline styles + undefined --alm-text-primary) === */

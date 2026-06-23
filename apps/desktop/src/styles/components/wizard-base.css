@@ -94,40 +94,6 @@
 }
 .alm-select:focus { border-color: var(--alm-accent); outline: none; }
 
-/* === MENU (base-ui dropdown/menu popup) === */
-.alm-menu__positioner { z-index: 100; }
-.alm-menu__popup {
-  min-width: 160px;
-  padding: var(--alm-sp-1);
-  background: var(--alm-surface-raised);
-  border: 1px solid var(--alm-border);
-  border-radius: var(--alm-radius-md);
-  box-shadow: var(--alm-shadow-sm);
-  outline: none;
-}
-.alm-menu__item {
-  display: flex;
-  align-items: center;
-  gap: 6px;
-  padding: 3px 6px;
-  border-radius: var(--alm-radius-sm);
-  font-size: var(--alm-text-sm);
-  color: var(--alm-text);
-  cursor: pointer;
-  user-select: none;
-  outline: none;
-}
-.alm-menu__item[data-highlighted] { background: var(--alm-selected-bg); }
-.alm-menu__indicator {
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  width: 14px;
-  flex-shrink: 0;
-  color: var(--alm-accent-text, var(--alm-accent));
-}
-.alm-menu__label { flex: 1 1 auto; }
-
 /* === LIFECYCLE FLOWCHART === */
 .alm-lifecycle {
   display: flex; flex-direction: column; gap: 0;
