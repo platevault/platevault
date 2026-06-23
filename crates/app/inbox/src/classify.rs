@@ -566,7 +566,7 @@ pub const SENTINEL_NEEDS_REVIEW: &str = "__needs_review__";
 /// observing-night) require additional FITS keywords not yet extracted by the
 /// core extractor — they default to `None` so those dimensions gracefully fall
 /// back to the [`crate::grouping::SENTINEL_MISSING`] bucket (R-9 best-effort).
-fn build_frame_metadata(
+pub(crate) fn build_frame_metadata(
     frame_type: FrameType,
     raw: &metadata_core::RawFileMetadata,
 ) -> FrameMetadata {
@@ -636,7 +636,7 @@ fn build_frame_metadata(
 /// Failures are silently ignored — classify's primary evidence/classification
 /// result is unaffected.
 #[allow(clippy::too_many_arguments)]
-async fn materialize_sub_items(
+pub(crate) async fn materialize_sub_items(
     pool: &sqlx::SqlitePool,
     source_group_id: &str,
     root_id: &str,
