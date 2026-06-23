@@ -227,7 +227,7 @@
   "inbox_mixed_folder_title": "Mixed folder",
   "inbox_pick_type_placeholder": "— pick type —",
   "inbox_rescan_all_roots_aria": "Rescan all roots",
-  "inbox_required_metadata_body":"{count} files missing required attribute(s) for their destination — confirm disabled. Assign the missing value(s) in “Needs review” above, then confirm.",
+  "inbox_required_metadata_body": "{count} files missing required attribute(s) for their destination — confirm disabled. Assign the missing value(s) in “Needs review” above, then confirm.",
   "inbox_required_metadata_missing_title": "Required metadata missing",
   "inbox_review_plans": "Review plans",
   "inbox_search_aria_label": "Search inbox",
@@ -1295,7 +1295,6 @@
   "inbox_plan_file_count_tooltip_inplace": "{count} catalogued in place",
   "inbox_destructive_flag": "destructive",
   "inbox_review_plans_with_count": "Review plans ({count})",
-  "inbox_review_plans": "Review plans",
   "calibration_session_popover_filter_label": "Filter sessions",
   "calibration_session_popover_filter_placeholder": "Filter…",
   "calibration_session_popover_no_matches": "No matches",
@@ -1511,5 +1510,8 @@
       }
     }
   ],
-  "targets_list_view_aria": "View {label}"
+  "targets_list_view_aria": "View {label}",
+  "settings_datasources_select_source": "— select source —",
+  "common_true": "true",
+  "common_false": "false"
 }

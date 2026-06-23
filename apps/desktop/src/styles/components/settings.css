@@ -213,3 +213,10 @@
   background: var(--alm-success-bg, var(--alm-surface-raised)); color: var(--alm-text);
   border: 1px solid var(--alm-border);
 }
+
+/* DataSources SettingsSection action row (was an inline style). */
+.alm-datasources__action-row {
+  display: flex;
+  gap: var(--alm-sp-2);
+  align-items: center;
+}

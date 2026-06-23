@@ -134,7 +134,7 @@ export function DataSources({ save: _save }: DataSourcesProps) {
     <SettingsSection
       title={m.common_sources()}
       action={
-        <div style={{ display: 'flex', gap: '0.5rem', alignItems: 'center' }}>
+        <div className="alm-datasources__action-row">
           <RestoreDefaultsBtn
             scope="sources"
             keys={SOURCES_KEYS}
@@ -236,7 +236,7 @@ export function DataSources({ save: _save }: DataSourcesProps) {
               onChange={(e) => setOverrideSourceId(e.target.value)}
               aria-label={m.settings_datasources_source_override_source_aria()}
             >
-              <option value="">— select source —</option>
+              <option value="">{m.settings_datasources_select_source()}</option>
               {roots.map((r) => (
                 <option key={r.id} value={r.id}>{r.path}</option>
               ))}
@@ -271,8 +271,8 @@ export function DataSources({ save: _save }: DataSourcesProps) {
               onChange={(e) => setOverrideValue(e.target.value)}
               aria-label={m.settings_datasources_source_override_value_aria()}
             >
-              <option value="true">true</option>
-              <option value="false">false</option>
+              <option value="true">{m.common_true()}</option>
+              <option value="false">{m.common_false()}</option>
             </select>
           </div>
         </div>
