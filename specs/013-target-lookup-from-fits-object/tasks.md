@@ -7,7 +7,14 @@ description: "Tasks for feature 013: Target Lookup From FITS OBJECT"
 **Input**: Design documents from `/specs/013-target-lookup-from-fits-object/`
 **Prerequisites**: spec.md, plan.md, research.md, data-model.md, contracts/
 
-## Implementation Status: IMPLEMENTED (2026-06-11)
+> **⚠ STALE (2026-06-23): superseded by [Spec 035 — SIMBAD Target Resolution](../035-simbad-target-resolution/spec.md).**
+> The "IMPLEMENTED" claim below is no longer true. The cited evidence (`crates/targeting/src/catalog.rs`,
+> `load.rs`, migration `0017_targets.sql`) was **removed** — spec 036 retired the gen-2 `targets`/`0017`
+> tables and the targeting crate now holds only `identity.rs`/`lib.rs`/`normalize.rs`. Lookup from the FITS
+> OBJECT keyword is now served by SIMBAD resolve-on-demand + bundled seed (spec 035), not the spec-014
+> catalog-download pipeline this spec assumed. Treat the tasks below as historical.
+
+## Implementation Status: IMPLEMENTED (2026-06-11) — STALE, see banner above
 
 All core tasks are complete. Deferred tasks are marked below with reasons.
 Verification: `cargo test --workspace` (0 failures), `cargo clippy --workspace

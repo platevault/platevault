@@ -8,6 +8,8 @@
 
 **Status**: Implemented — per-tool MasterDetector (PixInsight/Siril), individual master items, format field, confirm→Calibration page (PRs #290/#292/#293). Validated end-to-end 2026-06-23: `calibration_master_detect` 23/23, `confirm_master_integration` 3/3.
 
+> **Artifact deviation (2026-06-23):** this feature shipped with only `spec.md` + `research.md` + `checklists/` — no `plan.md`, `data-model.md`, `contracts/`, or `tasks.md`. Per the constitution's SpecKit quality gates these would normally exist; recorded here as a known deviation (backfill if 040 is reopened).
+
 **Input**: Detect calibration masters from XISF and FITS metadata via an extensible per-tool detector system; classify base frame type + an `isMaster` flag; distinguish masters by filter/exposure; show masters as individual items in the inbox and surface them on the Calibration page. (Sub-frames stay folder-grouped.)
 
 ## Background
