@@ -20,6 +20,7 @@ pub mod confirm;
 pub mod grouping;
 pub mod metadata;
 pub mod plan_listener;
+pub mod property_registry;
 pub mod reclassify;
 pub mod scan;
 pub mod signature;

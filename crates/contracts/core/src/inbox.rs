@@ -550,6 +550,81 @@ pub struct InboxOpenPlansResponse {
     pub total_actions: u32,
 }
 
+// ── inbox.property_registry (spec 041 R-13 / FR-044) ─────────────────────────
+
+/// Discriminant for the value kind of a property in the property registry.
+///
+/// Mirrors the `kind` column in the R-13 property table.  The UI uses this to
+/// select the appropriate editor widget (number input, enum dropdown, etc.).
+#[derive(Clone, Debug, Serialize, Deserialize, Type)]
+#[serde(rename_all = "camelCase")]
+pub enum PropertyKind {
+    /// Free-form text (e.g. camera name, filter label).
+    String,
+    /// IEEE-754 double (e.g. exposureS, raDeg).
+    Number,
+    /// Whole number (e.g. offset in ADU).
+    Integer,
+    /// Either a numeric or text representation (e.g. gain on some cameras).
+    NumberOrString,
+    /// One of a fixed set of string values (e.g. frameType).
+    Enum,
+    /// Calendar date (`YYYY-MM-DD`).
+    Date,
+    /// ISO-8601 date-time (e.g. obsTimeUtc, dateEnd).
+    Datetime,
+}
+
+/// One entry in the property registry exposed by `inbox.property_registry`.
+///
+/// Describes a named inbox-file property that the field-agnostic reclassifier
+/// (spec 041 R-13) can accept, validate, and persist as an index-side override.
+/// The UI uses this registry to render a generic metadata editor without
+/// hard-coding field names.
+///
+/// `sourceHeaders` — the FITS/XISF header keywords that feed this property
+/// during extraction; empty for derived or resolve-only properties.
+///
+/// `overridable` — when `false` the property is informational or derived and
+/// the reclassify endpoint will reject an explicit override for it.
+///
+/// `appliesTo` — frame types for which this property is meaningful; the UI
+/// SHOULD hide non-applicable properties rather than blocking on them.
+///
+/// `validation` — optional human-readable constraint description shown in the
+/// UI tooltip; not a machine-parseable expression (use for display only).
+#[derive(Clone, Debug, Serialize, Deserialize, Type)]
+#[serde(rename_all = "camelCase")]
+pub struct PropertyRegistryEntry {
+    /// Registry key, camelCase (e.g. `"frameType"`, `"exposureS"`).
+    pub key: String,
+    /// Value kind discriminant used by the UI for widget selection.
+    pub kind: PropertyKind,
+    /// Physical unit label for display (e.g. `"s"`, `"deg"`, `"ADU"`).  `None`
+    /// when the property is dimensionless or a free-form string.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub unit: Option<String>,
+    /// FITS/XISF source header keyword(s), in priority order.  Empty for
+    /// properties that are derived or resolved from external sources (e.g.
+    /// `target`, `opticTrain`).
+    pub source_headers: Vec<String>,
+    /// Whether a user override is accepted by the reclassify use case.
+    pub overridable: bool,
+    /// Frame types for which this property is applicable.
+    pub applies_to: Vec<String>,
+    /// Human-readable validation constraint for display in the UI.  `None`
+    /// means no documented constraint beyond the `kind` type.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub validation: Option<String>,
+}
+
+/// Response from `inbox.property_registry` (spec 041 FR-044).
+///
+/// The full ordered list of known per-file properties, their value kinds, and
+/// their editing semantics.  The UI renders this as a generic metadata editor
+/// without requiring hard-coded field knowledge.
+pub type InboxPropertyRegistryResponse = Vec<PropertyRegistryEntry>;
+
 /// Request for `inbox.plan.apply_selected` (spec 041, US2).
 #[derive(Clone, Debug, Serialize, Deserialize, Type)]
 #[serde(rename_all = "camelCase")]

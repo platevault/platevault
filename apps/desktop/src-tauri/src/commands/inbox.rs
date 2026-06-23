@@ -9,6 +9,7 @@
 use app_core::inbox::classify::{classify, ClassifyRequest};
 use app_core::inbox::confirm::{confirm, ConfirmRequest};
 use app_core::inbox::metadata::get_inbox_item_metadata;
+use app_core::inbox::property_registry::property_registry as get_property_registry;
 use app_core::inbox::reclassify::{reclassify, ReclassifyOverride, ReclassifyRequest};
 use app_core::inbox::scan::{scan_root, ScanOptions, ScannedMasterFile};
 use app_core::inbox::stats::inbox_stats as inbox_stats_uc;
@@ -21,8 +22,8 @@ use contracts_core::inbox::{
     InboxClassifyResponse, InboxConfirmRequest, InboxConfirmResponse, InboxFileEntry,
     InboxItemMetadataRequest, InboxItemMetadataResponse, InboxItemSummary, InboxListItem,
     InboxListResponse, InboxOpenPlansResponse, InboxPlanCancelResponse, InboxPlanView,
-    InboxReclassifyRequest, InboxReclassifyResponse, InboxScanFolderRequest,
-    InboxScanFolderResponse, InboxScanResult, InboxStatsResponse,
+    InboxPropertyRegistryResponse, InboxReclassifyRequest, InboxReclassifyResponse,
+    InboxScanFolderRequest, InboxScanFolderResponse, InboxScanResult, InboxStatsResponse,
 };
 use contracts_core::plan_apply::PlanApplyResponse;
 use contracts_core::ContractError;
@@ -596,4 +597,25 @@ pub async fn inbox_plan_cancel(
 #[specta::specta]
 pub async fn inbox_stats(pool: tauri::State<'_, SqlitePool>) -> Result<InboxStatsResponse, String> {
     inbox_stats_uc(&pool).await.map_err(|e| e.message)
+}
+
+// ── spec 041: property registry (FR-044) ──────────────────────────────────────
+
+/// `inbox.property_registry` — return the typed property registry.
+///
+/// The registry lists every per-file property that the field-agnostic
+/// reclassifier (spec 041 R-13) understands: its key, value kind, physical
+/// unit, source FITS/XISF header(s), whether it is user-overridable, the frame
+/// types it applies to, and an optional validation hint.
+///
+/// The UI uses this registry to render a generic metadata editor without
+/// hard-coding field names, so future properties can be added without frontend
+/// changes (FR-044).
+///
+/// # Errors
+/// Never fails; always returns `Ok`.
+#[tauri::command]
+#[specta::specta]
+pub async fn inbox_property_registry() -> Result<InboxPropertyRegistryResponse, String> {
+    Ok(get_property_registry())
 }
