@@ -6726,6 +6726,12 @@
   border: 1px solid var(--alm-border);
   border-radius: var(--alm-radius-sm);
 }
+/* Multi-level grouping configurator (Group / then / then). */
+.alm-filterbar__group {
+  display: flex;
+  align-items: center;
+  gap: var(--alm-sp-1);
+}
 .alm-filterbar__sort {
   display: flex;
   align-items: center;

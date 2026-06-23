@@ -14,6 +14,7 @@ export type {
   MultiFilterField,
   FilterOption,
   GroupByControl,
+  GroupingControl,
   SortControl,
   SearchControl,
 } from './FilterToolbar';

@@ -60,6 +60,24 @@ export interface GroupByControl {
   label?: string;
 }
 
+/**
+ * Ordered MULTI-LEVEL grouping control ("Group by X, then by Y, then by Z").
+ * The shared gold-standard grouping every list page gets — pair with the
+ * `useGrouping` hook (which owns `dims` + persistence) and feed `dims` to the
+ * page table's `groupByDimensions`. `dimensions` is the page-specific set of
+ * selectable grouping dimensions.
+ */
+export interface GroupingControl {
+  /** Selectable grouping dimensions for this page. */
+  dimensions: FilterOption[];
+  /** Active ordered dimension ids. */
+  dims: string[];
+  /** Set the dimension at a slot ("" clears it and deeper slots). */
+  setSlot: (slot: number, value: string) => void;
+  /** Number of ordered slots. Default 3. */
+  maxLevels?: number;
+}
+
 export interface SortControl {
   value: string;
   options: FilterOption[];
@@ -83,10 +101,52 @@ export interface FilterToolbarProps {
   fields?: FilterField[];
   /** Multi-select fields (set-valued), rendered after the single-select fields. */
   multiFields?: MultiFilterField[];
+  /** Single-tier group-by (legacy). Prefer `grouping` for multi-level. */
   groupBy?: GroupByControl;
+  /** Ordered multi-level grouping (the shared gold standard). */
+  grouping?: GroupingControl;
   sort?: SortControl;
   /** Trailing node rendered at the row's end (e.g. a secondary control). */
   actions?: ReactNode;
+}
+
+/**
+ * The ordered multi-level grouping configurator: N `<select>` slots, each
+ * offering this page's dimensions. A slot is enabled only once the previous
+ * slot has a dimension; dimensions chosen earlier are excluded from later
+ * slots. Selecting "—" clears the slot and all deeper ones.
+ */
+function GroupingSelects({ grouping }: { grouping: GroupingControl }) {
+  const { dimensions, dims, setSlot, maxLevels = 3 } = grouping;
+  return (
+    <div className="alm-filterbar__group">
+      {Array.from({ length: maxLevels }).map((_, slot) => {
+        const value = dims[slot] ?? '';
+        const disabled = slot > 0 && !dims[slot - 1];
+        const usedEarlier = new Set(dims.slice(0, slot));
+        return (
+          <select
+            // eslint-disable-next-line react/no-array-index-key -- fixed-length slot list
+            key={slot}
+            className="alm-filterbar__select"
+            value={value}
+            disabled={disabled}
+            onChange={(e) => setSlot(slot, e.target.value)}
+            aria-label={slot === 0 ? 'Group by' : `Then group by (level ${slot + 1})`}
+          >
+            <option value="">{slot === 0 ? 'Group: none' : 'then: —'}</option>
+            {dimensions
+              .filter((d) => d.value === value || !usedEarlier.has(d.value))
+              .map((d) => (
+                <option key={d.value} value={d.value}>
+                  {slot === 0 ? `Group: ${d.label}` : `then: ${d.label}`}
+                </option>
+              ))}
+          </select>
+        );
+      })}
+    </div>
+  );
 }
 
 function LabeledSelect({
@@ -190,6 +250,7 @@ export function FilterToolbar({
   fields,
   multiFields,
   groupBy,
+  grouping,
   sort,
   actions,
 }: FilterToolbarProps) {
@@ -228,6 +289,8 @@ export function FilterToolbar({
           onChange={f.onChange}
         />
       ))}
+
+      {grouping && <GroupingSelects grouping={grouping} />}
 
       {groupBy && (
         <LabeledSelect
