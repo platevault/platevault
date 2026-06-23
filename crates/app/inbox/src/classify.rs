@@ -1545,6 +1545,390 @@ mod tests {
         assert!(si.frame_type.is_none(), "sentinel sub-item must have no frame_type");
     }
 
+    // ── T067: composite identity + signature stability (FR-042) ──────────────
+
+    /// Write a minimal FITS file whose IMAGETYP + FILTER headers are embedded,
+    /// allowing the grouping engine to distinguish the filter dimension.
+    ///
+    /// Unlike `write_fits_with_imagetyp`, this also embeds a FILTER card so that
+    /// two files written with different filter values end up in different sub-groups.
+    fn write_fits_with_filter(dir: &std::path::Path, name: &str, imagetyp: &str, filter: &str) {
+        let path = dir.join(name);
+        let mut data = vec![b' '; 2880];
+        let mut idx = 0usize;
+
+        let mut write_card = |card: &str| {
+            let bytes = card.as_bytes();
+            let len = bytes.len().min(80);
+            data[idx * 80..idx * 80 + len].copy_from_slice(&bytes[..len]);
+            idx += 1;
+        };
+
+        write_card(&format!("{:<80}", format!("IMAGETYP= '{imagetyp:<8}'")));
+        write_card(&format!("{:<80}", format!("FILTER  = '{filter:<8}'")));
+        data[idx * 80..idx * 80 + 3].copy_from_slice(b"END");
+
+        use std::io::Write as _;
+        let mut f = std::fs::File::create(path).unwrap();
+        f.write_all(&data).unwrap();
+    }
+
+    /// T067-1 — Composite identity uniqueness.
+    ///
+    /// Two flat files that differ ONLY in the `FILTER` header (a grouping
+    /// dimension) must materialise as **two distinct sub-items** with distinct
+    /// `group_key`s. The identity triple `(root_id, relative_path, group_key)`
+    /// must be unique across the pair (R-11).
+    #[tokio::test]
+    async fn t067_composite_identity_differs_by_grouping_dimension() {
+        let tmp = tempfile::tempdir().unwrap();
+        // Two flat files — same folder, same type, but different filters.
+        // The flat recipe includes Filter as a dimension, so they split.
+        write_fits_with_filter(tmp.path(), "flat_ha.fits", "Flat Frame", "Ha");
+        write_fits_with_filter(tmp.path(), "flat_oiii.fits", "Flat Frame", "OIII");
+
+        let db = test_db().await;
+        insert_source_group_with_item(&db, "sg-t067-id", "item-t067-id", "root-t067a", "").await;
+
+        classify(
+            db.pool(),
+            ClassifyRequest {
+                inbox_item_id: "item-t067-id".to_owned(),
+                root_absolute_path: tmp.path().to_owned(),
+                force_rescan: false,
+            },
+        )
+        .await
+        .unwrap();
+
+        let sub_items = inbox_repo::list_inbox_sub_items(db.pool(), "sg-t067-id").await.unwrap();
+
+        // Two files in different filter groups → two sub-items.
+        assert_eq!(
+            sub_items.len(),
+            2,
+            "flat files differing only in FILTER must produce two distinct sub-items; got {sub_items:?}"
+        );
+
+        let keys: std::collections::HashSet<_> =
+            sub_items.iter().map(|s| s.group_key.as_str()).collect();
+        assert_eq!(
+            keys.len(),
+            2,
+            "group_key must differ between the two filter groups — identity is not unique: {sub_items:?}"
+        );
+
+        // Both sub-items share the same (root_id, relative_path) — only group_key differs.
+        for si in &sub_items {
+            assert_eq!(si.root_id, "root-t067a");
+            assert_eq!(si.relative_path, "");
+            assert!(
+                si.group_key.contains("filter="),
+                "group_key must embed the filter dimension: {}",
+                si.group_key
+            );
+        }
+
+        // The two group_keys contain different filter values.
+        let filter_values: Vec<_> = sub_items
+            .iter()
+            .map(|s| {
+                s.group_key
+                    .split('·')
+                    .find(|seg| seg.starts_with("filter="))
+                    .unwrap_or("filter=<missing>")
+                    .to_owned()
+            })
+            .collect();
+        assert_ne!(
+            filter_values[0], filter_values[1],
+            "the two group_keys must embed different filter tokens; both read: {}",
+            filter_values[0]
+        );
+    }
+
+    /// T067-2 — Per-sub-group signature correctness.
+    ///
+    /// Each sub-item's `content_signature` must equal
+    /// `folder_signature(sorted(per-file sigs of only the files in that group))`
+    /// (R-11). Two sub-groups in the same folder must therefore have **different**
+    /// signatures because they cover different file sets.
+    #[tokio::test]
+    async fn t067_per_subgroup_signatures_differ_and_match_formula() {
+        let tmp = tempfile::tempdir().unwrap();
+        // One Ha flat and one OIII flat → two distinct groups.
+        write_fits_with_filter(tmp.path(), "flat_ha.fits", "Flat Frame", "Ha");
+        write_fits_with_filter(tmp.path(), "flat_oiii.fits", "Flat Frame", "OIII");
+
+        let db = test_db().await;
+        insert_source_group_with_item(&db, "sg-t067-sig", "item-t067-sig", "root-t067b", "").await;
+
+        classify(
+            db.pool(),
+            ClassifyRequest {
+                inbox_item_id: "item-t067-sig".to_owned(),
+                root_absolute_path: tmp.path().to_owned(),
+                force_rescan: false,
+            },
+        )
+        .await
+        .unwrap();
+
+        let sub_items = inbox_repo::list_inbox_sub_items(db.pool(), "sg-t067-sig").await.unwrap();
+        assert_eq!(sub_items.len(), 2, "expected two sub-items");
+
+        // Both must have a non-empty content_signature.
+        for si in &sub_items {
+            assert!(
+                si.content_signature.as_deref().map(|s| !s.is_empty()).unwrap_or(false),
+                "sub-item {} must have a non-empty content_signature",
+                si.group_key
+            );
+        }
+
+        // The two sub-groups share the same folder but different file sets →
+        // their per-sub-group signatures must be distinct.
+        let sig_a = sub_items[0].content_signature.as_deref().unwrap_or("");
+        let sig_b = sub_items[1].content_signature.as_deref().unwrap_or("");
+        assert_ne!(
+            sig_a, sig_b,
+            "two sub-groups covering different files must have distinct content_signatures"
+        );
+
+        // Verify each signature matches the formula: folder_signature(sorted per-file sigs).
+        // We can do this by computing the expected signature for each group ourselves
+        // and comparing — we know which file belongs to which group from the group_key.
+        let ha_abs = tmp.path().join("flat_ha.fits");
+        let oiii_abs = tmp.path().join("flat_oiii.fits");
+
+        // Access signature primitives through the crate root (sibling module of classify).
+        let ha_file_sig =
+            crate::signature::file_signature(&ha_abs).expect("flat_ha.fits must be stat-able");
+        let oiii_file_sig =
+            crate::signature::file_signature(&oiii_abs).expect("flat_oiii.fits must be stat-able");
+
+        let expected_ha_sig = crate::signature::folder_signature(vec![ha_file_sig]);
+        let expected_oiii_sig = crate::signature::folder_signature(vec![oiii_file_sig]);
+
+        // Locate which sub-item corresponds to which filter.
+        let ha_item = sub_items
+            .iter()
+            .find(|s| s.group_key.contains("filter=ha"))
+            .expect("must find Ha sub-item by group_key");
+        let oiii_item = sub_items
+            .iter()
+            .find(|s| s.group_key.contains("filter=oiii"))
+            .expect("must find OIII sub-item by group_key");
+
+        assert_eq!(
+            ha_item.content_signature.as_deref().unwrap_or(""),
+            expected_ha_sig,
+            "Ha sub-item signature must equal folder_signature(sorted per-file sigs of Ha group)"
+        );
+        assert_eq!(
+            oiii_item.content_signature.as_deref().unwrap_or(""),
+            expected_oiii_sig,
+            "OIII sub-item signature must equal folder_signature(sorted per-file sigs of OIII group)"
+        );
+    }
+
+    /// T067-3 — Rescan determinism (the key FR-042 property).
+    ///
+    /// Classifying identical content twice must yield:
+    /// - identical `group_key` for every sub-item,
+    /// - identical `content_signature` for every sub-item, and
+    /// - **no new rows** (the UNIQUE constraint absorbs the upsert).
+    ///
+    /// This extends the existing `t066_rescan_determinism` test with an explicit
+    /// filter-split scenario (two sub-items) and asserts the count stays at two.
+    #[tokio::test]
+    async fn t067_rescan_determinism_no_item_churn() {
+        let tmp = tempfile::tempdir().unwrap();
+        write_fits_with_filter(tmp.path(), "flat_ha.fits", "Flat Frame", "Ha");
+        write_fits_with_filter(tmp.path(), "flat_oiii.fits", "Flat Frame", "OIII");
+
+        let db = test_db().await;
+        insert_source_group_with_item(&db, "sg-t067-redet", "item-t067-redet", "root-t067c", "")
+            .await;
+
+        // First classify.
+        classify(
+            db.pool(),
+            ClassifyRequest {
+                inbox_item_id: "item-t067-redet".to_owned(),
+                root_absolute_path: tmp.path().to_owned(),
+                force_rescan: false,
+            },
+        )
+        .await
+        .unwrap();
+
+        let first = inbox_repo::list_inbox_sub_items(db.pool(), "sg-t067-redet").await.unwrap();
+        let first_keys: Vec<_> = first.iter().map(|s| s.group_key.clone()).collect();
+        let first_sigs: Vec<_> = first.iter().map(|s| s.content_signature.clone()).collect();
+
+        // Second classify — force rescan, same files on disk.
+        classify(
+            db.pool(),
+            ClassifyRequest {
+                inbox_item_id: "item-t067-redet".to_owned(),
+                root_absolute_path: tmp.path().to_owned(),
+                force_rescan: true,
+            },
+        )
+        .await
+        .unwrap();
+
+        let second = inbox_repo::list_inbox_sub_items(db.pool(), "sg-t067-redet").await.unwrap();
+        let second_keys: Vec<_> = second.iter().map(|s| s.group_key.clone()).collect();
+        let second_sigs: Vec<_> = second.iter().map(|s| s.content_signature.clone()).collect();
+
+        // Count must not grow.
+        assert_eq!(
+            second.len(),
+            2,
+            "rescan must not create duplicate sub-items; expected 2, got {}",
+            second.len()
+        );
+
+        // Keys and signatures must be bitwise identical.
+        assert_eq!(
+            first_keys, second_keys,
+            "rescan of unchanged content must produce identical group_keys (FR-042)"
+        );
+        assert_eq!(
+            first_sigs, second_sigs,
+            "rescan of unchanged content must produce identical content_signatures (FR-042)"
+        );
+    }
+
+    /// T067-4 — Correct churn on change.
+    ///
+    /// When a file's metadata moves it to a different sub-group (here: we replace
+    /// a file on disk with a different FILTER header so the extractor sees a new
+    /// value), the affected sub-group signatures must change after the next
+    /// classify.  Specifically:
+    ///
+    /// - The old sub-group (Ha) now has zero files → it must be absent from the
+    ///   live sub-item list (not left as a stale row).
+    /// - The new sub-group (SII) appears with the moved file.
+    /// - The untouched group (OIII, flat_b) has a stable signature.
+    ///
+    /// This models the "file whose metadata/override moves it to a different group
+    /// changes both its old and new sub-group signatures" requirement (R-11).
+    ///
+    /// # KNOWN BUG (production code)
+    ///
+    /// `materialize_sub_items` (classify.rs) uses `upsert_inbox_sub_item` which
+    /// runs `ON CONFLICT … DO UPDATE` for groups that still exist after the rescan,
+    /// but **never deletes rows for groups that have become empty**.  After flat_a
+    /// moves from Ha→SII, the Ha row persists in `inbox_items` with its old
+    /// `file_count = 1` — it is never cleaned up.
+    ///
+    /// Expected result: 2 sub-items (OIII + SII) after the rescan.
+    /// Actual result:   3 sub-items (Ha stale + OIII + SII) — the Ha row survives.
+    ///
+    /// The failing assertion below (`ha_after.is_none()`) documents this bug.
+    /// Fix required: after upserting the current groups, delete `inbox_items` rows
+    /// belonging to this `source_group_id` whose `group_key` is NOT in the current
+    /// set (i.e. `DELETE … WHERE source_group_id = ? AND group_key NOT IN (…)`).
+    #[tokio::test]
+    async fn t067_churn_on_metadata_change_updates_group_signatures() {
+        let tmp = tempfile::tempdir().unwrap();
+        // Initial state: Ha flat + OIII flat → two sub-items.
+        write_fits_with_filter(tmp.path(), "flat_a.fits", "Flat Frame", "Ha");
+        write_fits_with_filter(tmp.path(), "flat_b.fits", "Flat Frame", "OIII");
+
+        let db = test_db().await;
+        insert_source_group_with_item(&db, "sg-t067-churn", "item-t067-churn", "root-t067d", "")
+            .await;
+
+        // First classify: Ha group (flat_a) + OIII group (flat_b).
+        classify(
+            db.pool(),
+            ClassifyRequest {
+                inbox_item_id: "item-t067-churn".to_owned(),
+                root_absolute_path: tmp.path().to_owned(),
+                force_rescan: false,
+            },
+        )
+        .await
+        .unwrap();
+
+        let first = inbox_repo::list_inbox_sub_items(db.pool(), "sg-t067-churn").await.unwrap();
+        assert_eq!(first.len(), 2, "initial classify: two filter groups");
+
+        let ha_sig_before = first
+            .iter()
+            .find(|s| s.group_key.contains("filter=ha"))
+            .expect("Ha sub-item must exist after first classify")
+            .content_signature
+            .clone();
+
+        // Change flat_a on disk: overwrite with SII filter header so it moves groups.
+        write_fits_with_filter(tmp.path(), "flat_a.fits", "Flat Frame", "SII");
+
+        // Second classify: now Ha is gone, OIII remains, SII appears.
+        classify(
+            db.pool(),
+            ClassifyRequest {
+                inbox_item_id: "item-t067-churn".to_owned(),
+                root_absolute_path: tmp.path().to_owned(),
+                force_rescan: true,
+            },
+        )
+        .await
+        .unwrap();
+
+        let second = inbox_repo::list_inbox_sub_items(db.pool(), "sg-t067-churn").await.unwrap();
+
+        // SII sub-item must now exist (new group from the moved file).
+        let sii_after = second.iter().find(|s| s.group_key.contains("filter=sii"));
+        assert!(
+            sii_after.is_some(),
+            "SII sub-item must appear after flat_a was rewritten with FILTER=SII; \
+             got sub-items: {second:?}"
+        );
+
+        // OIII sub-item must still exist and its signature must be unchanged
+        // (flat_b was not touched).
+        let oiii_before = first
+            .iter()
+            .find(|s| s.group_key.contains("filter=oiii"))
+            .expect("OIII sub-item must exist after first classify");
+        let oiii_after = second
+            .iter()
+            .find(|s| s.group_key.contains("filter=oiii"))
+            .expect("OIII sub-item must still exist after second classify");
+        assert_eq!(
+            oiii_before.content_signature, oiii_after.content_signature,
+            "OIII sub-item signature must be stable when its files are unchanged"
+        );
+
+        // The new SII sub-item's signature must differ from the old Ha signature
+        // because the file was rewritten on disk (different content → different file sig).
+        let sii_sig = sii_after.unwrap().content_signature.as_deref().unwrap_or("");
+        assert_ne!(
+            ha_sig_before.as_deref().unwrap_or(""),
+            sii_sig,
+            "SII sub-item signature must differ from the old Ha signature after the file changed"
+        );
+
+        // ── BUG ASSERTION (will fail until production code is fixed) ───────────
+        //
+        // After flat_a moved from Ha→SII, the Ha row must be purged.
+        // Currently `materialize_sub_items` never deletes stale group rows, so
+        // the Ha row survives.  Expected: 2 sub-items.  Actual (buggy): 3.
+        let ha_after = second.iter().find(|s| s.group_key.contains("filter=ha"));
+        assert!(
+            ha_after.is_none(),
+            "BUG: Ha sub-item must be absent after flat_a moved to SII (R-11 correct churn). \
+             materialize_sub_items must delete inbox_items rows for groups no longer in \
+             the current scan. Got stale row: {ha_after:?}. \
+             All sub-items after rescan: {second:?}"
+        );
+    }
+
     #[tokio::test]
     async fn t066_no_source_group_does_not_create_sub_items() {
         // Items without a source_group_id (legacy or pre-T065 scan) must not
