@@ -24,6 +24,7 @@
  */
 
 import { Banner } from '@/ui';
+import { m } from '@/lib/i18n';
 import { useProjectDetail } from './store';
 import { ProjectNotesSection } from './ProjectNotesSection';
 import { ManifestsAccordion } from './ManifestsAccordion';
@@ -45,7 +46,7 @@ export function ProjectBottomDetail({ projectId }: ProjectBottomDetailProps) {
   if (loading && !project) {
     return (
       <div className="alm-project-bottom__loading">
-        Loading…
+        {m.common_loading()}
       </div>
     );
   }
@@ -53,7 +54,7 @@ export function ProjectBottomDetail({ projectId }: ProjectBottomDetailProps) {
   if (error || !project) {
     return (
       <div className="alm-project-bottom__error">
-        <Banner variant="danger">Could not load project sections.</Banner>
+        <Banner variant="danger">{m.projects_bottom_load_error()}</Banner>
       </div>
     );
   }

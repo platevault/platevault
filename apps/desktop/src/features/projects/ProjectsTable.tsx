@@ -19,6 +19,7 @@
 
 import { useMemo } from 'react';
 import { AlertTriangle } from 'lucide-react';
+import { m } from '@/lib/i18n';
 import { Table } from '@/ui';
 import type { TableColumn, TableRow } from '@/ui';
 import { projectStateLabel, projectStateVariant } from '@/lib/lifecycle';
@@ -69,12 +70,12 @@ function compareProjects(a: ProjectSummaryDto, b: ProjectSummaryDto, sort: Proje
 // ── Column model ────────────────────────────────────────────────────────────────
 
 const COLUMNS: Array<{ key: string; label: string; sort?: ProjectSortCol; className?: string }> = [
-  { key: 'name', label: 'Name', sort: 'name' },
-  { key: 'tool', label: 'Tool', sort: 'tool', className: 'alm-projects-table__cell--muted' },
-  { key: 'target', label: 'Target', className: 'alm-projects-table__cell--muted' },
-  { key: 'state', label: 'State', sort: 'state' },
-  { key: 'sources', label: 'Sources', sort: 'sources', className: 'alm-projects-table__cell--num' },
-  { key: 'updated', label: 'Updated', sort: 'updated', className: 'alm-projects-table__cell--mono' },
+  { key: 'name', label: m.projects_col_name(), sort: 'name' },
+  { key: 'tool', label: m.projects_col_tool(), sort: 'tool', className: 'alm-projects-table__cell--muted' },
+  { key: 'target', label: m.projects_create_target_label(), className: 'alm-projects-table__cell--muted' },
+  { key: 'state', label: m.sessions_col_state(), sort: 'state' },
+  { key: 'sources', label: m.common_sources(), sort: 'sources', className: 'alm-projects-table__cell--num' },
+  { key: 'updated', label: m.projects_stepper_updated(), sort: 'updated', className: 'alm-projects-table__cell--mono' },
 ];
 
 // ── Props ───────────────────────────────────────────────────────────────────
@@ -114,7 +115,7 @@ export function ProjectsTable({
           'alm-projects-sorth' + (sort.col === c.sort ? ' alm-projects-sorth--active' : '')
         }
         onClick={() => onSort(c.sort as ProjectSortCol)}
-        aria-label={`Sort by ${c.label}`}
+        aria-label={m.projects_sort_by_aria({ col: c.label })}
       >
         {c.label}
         {sort.col === c.sort && (
@@ -139,14 +140,14 @@ export function ProjectsTable({
           <AlertTriangle
             size={13}
             role="img"
-            aria-label="Blocked"
+            aria-label={m.projects_table_blocked_aria()}
             className="alm-projects-table__blocked-icon"
           />
         )}
         {project.name}
         {project.channelDrift && (
-          <span className="alm-projects-table__drift-badge" title="Channel drift detected">
-            <AlertTriangle size={11} aria-hidden="true" /> channels
+          <span className="alm-projects-table__drift-badge" title={m.projects_table_channel_drift_title()}>
+            <AlertTriangle size={11} aria-hidden="true" /> {m.projects_table_channel_drift_label()}
           </span>
         )}
       </span>
@@ -170,11 +171,11 @@ export function ProjectsTable({
   }));
 
   if (loading && projects.length === 0) {
-    return <div className="alm-projects-table__empty">Loading projects…</div>;
+    return <div className="alm-projects-table__empty">{m.projects_table_loading()}</div>;
   }
 
   if (projects.length === 0) {
-    return <div className="alm-projects-table__empty">No projects found.</div>;
+    return <div className="alm-projects-table__empty">{m.projects_table_empty()}</div>;
   }
 
   // The project count moved to the bottom status bar (top-bar convention,

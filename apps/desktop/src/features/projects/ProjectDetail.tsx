@@ -27,6 +27,7 @@
  */
 
 import { useState } from 'react';
+import { m } from '@/lib/i18n';
 import {
   DetailHeader,
   DetailPane,
@@ -163,7 +164,7 @@ export function ProjectDetailContent({ projectId }: ProjectDetailContentProps) {
     return (
       <DetailPane fill>
         <div className="alm-project-detail__loading">
-          Loading project…
+          {m.projects_detail_loading()}
         </div>
       </DetailPane>
     );
@@ -172,7 +173,7 @@ export function ProjectDetailContent({ projectId }: ProjectDetailContentProps) {
   if (error || !project) {
     return (
       <DetailPane fill>
-        <Banner variant="danger">Could not load project.</Banner>
+        <Banner variant="danger">{m.projects_detail_load_error()}</Banner>
       </DetailPane>
     );
   }
@@ -188,7 +189,7 @@ export function ProjectDetailContent({ projectId }: ProjectDetailContentProps) {
     try {
       await callReinferChannels({ requestId: crypto.randomUUID(), projectId });
     } catch {
-      addToast({ message: 'Re-infer failed.', variant: 'error' });
+      addToast({ message: m.projects_toast_reinfer_failed(), variant: 'error' });
     } finally {
       setChannelWorking(false);
     }
@@ -200,7 +201,7 @@ export function ProjectDetailContent({ projectId }: ProjectDetailContentProps) {
     try {
       await callDismissChannelDrift({ requestId: crypto.randomUUID(), projectId });
     } catch {
-      addToast({ message: 'Dismiss failed.', variant: 'error' });
+      addToast({ message: m.projects_toast_dismiss_failed(), variant: 'error' });
     } finally {
       setChannelWorking(false);
     }
@@ -224,10 +225,10 @@ export function ProjectDetailContent({ projectId }: ProjectDetailContentProps) {
         actionLabel,
       );
       if (resp.status === 'success') {
-        addToast({ message: `Project ${resp.newState ?? nextState}.`, variant: 'success' });
+        addToast({ message: m.projects_toast_transitioned({ state: resp.newState ?? nextState }), variant: 'success' });
       } else if (resp.status === 'error' && isPlanRequiredError(resp.error?.code)) {
         addToast({
-          message: 'A filesystem plan is required before this transition. Create or approve a plan first.',
+          message: m.projects_toast_plan_required(),
           variant: 'info',
         });
       } else if (resp.status === 'error') {
@@ -237,7 +238,7 @@ export function ProjectDetailContent({ projectId }: ProjectDetailContentProps) {
         });
       }
     } catch {
-      addToast({ message: 'Transition failed.', variant: 'error' });
+      addToast({ message: m.projects_toast_transition_failed(), variant: 'error' });
     } finally {
       setTransitionWorking(false);
     }
@@ -287,11 +288,11 @@ export function ProjectDetailContent({ projectId }: ProjectDetailContentProps) {
   // ── Sources table ────────────────────────────────────────────────────────
 
   const sourceColumns = [
-    { key: 'role',   label: 'ROLE',   className: 'alm-project-detail__role-cell' },
-    { key: 'source', label: 'SOURCE' },
-    { key: 'filter', label: 'FILTER' },
-    { key: 'subs',   label: 'SUBS',  className: 'alm-project-detail__num-cell' },
-    { key: 'integ',  label: 'INTEG', className: 'alm-project-detail__integ-cell' },
+    { key: 'role',   label: m.projects_col_role(),   className: 'alm-project-detail__role-cell' },
+    { key: 'source', label: m.projects_col_source() },
+    { key: 'filter', label: m.common_filter() },
+    { key: 'subs',   label: m.projects_col_subs(),  className: 'alm-project-detail__num-cell' },
+    { key: 'integ',  label: m.projects_col_integ(), className: 'alm-project-detail__integ-cell' },
   ];
 
   const sourceRows = project.sources.map((src) => ({
@@ -334,7 +335,7 @@ export function ProjectDetailContent({ projectId }: ProjectDetailContentProps) {
         actions={
           lifecycle !== 'archived' && (
             <Btn size="sm" variant="ghost" onClick={() => setEditOpen(true)}>
-              Edit
+              {m.projects_detail_edit_btn()}
             </Btn>
           )
         }
@@ -360,7 +361,7 @@ export function ProjectDetailContent({ projectId }: ProjectDetailContentProps) {
           >
             {/* Reveal in Explorer */}
             <Btn size="sm" variant="ghost" data-testid="action-reveal">
-              Reveal in Explorer
+              {m.projects_detail_reveal_btn()}
             </Btn>
 
             {/* Open in processing tool */}
@@ -372,13 +373,13 @@ export function ProjectDetailContent({ projectId }: ProjectDetailContentProps) {
                 title={
                   launchDisabledReason
                     ? toolLaunchDisabledTooltip(launchDisabledReason)
-                    : `Open this project in ${projectToolStr}`
+                    : m.projects_open_in_tool_title({ tool: projectToolStr })
                 }
                 onClick={() => void launchTool()}
                 data-testid="tool-launch-btn"
                 data-guide-anchor="project.open-in-tool"
               >
-                {launchState.working ? 'Launching…' : `Open in ${projectToolStr}`}
+                {launchState.working ? m.projects_launching() : m.projects_open_in({ tool: projectToolStr })}
               </Btn>
             )}
 
@@ -417,13 +418,13 @@ export function ProjectDetailContent({ projectId }: ProjectDetailContentProps) {
       {/* ── Channel drift banner (US1c / US4) ────────────────────────────── */}
       {project.channelDrift?.hasNewSources && (
         <Banner variant="warn" role="status" aria-live="polite">
-          <span>New sources added since last channel review.</span>
+          <span>{m.projects_detail_channel_drift()}</span>
           <div className="alm-project-detail__drift-actions">
             <Btn size="sm" variant="primary" onClick={handleReinfer} disabled={channelWorking}>
-              Re-infer channels
+              {m.projects_detail_reinfer_btn()}
             </Btn>
             <Btn size="sm" variant="ghost" onClick={handleDismissDrift} disabled={channelWorking}>
-              Dismiss
+              {m.projects_detail_dismiss_btn()}
             </Btn>
           </div>
         </Banner>
@@ -436,11 +437,11 @@ export function ProjectDetailContent({ projectId }: ProjectDetailContentProps) {
             value: derivedChannels.reduce((s, c) => s + c.totalIntegS, 0) > 0
               ? fmtIntegS(derivedChannels.reduce((s, c) => s + c.totalIntegS, 0))
               : '—',
-            label: 'integration',
+            label: m.projects_metric_integration(),
           },
-          { value: project.sources.length, label: 'sources' },
-          { value: project.channels?.length ?? 0, label: 'channels' },
-          { value: toolLabel, label: 'tool' },
+          { value: project.sources.length, label: m.projects_metric_sources() },
+          { value: project.channels?.length ?? 0, label: m.projects_metric_channels() },
+          { value: toolLabel, label: m.projects_metric_tool() },
         ]}
       />
 
@@ -459,7 +460,7 @@ export function ProjectDetailContent({ projectId }: ProjectDetailContentProps) {
           className="alm-project-detail__target-info"
           data-testid="project-canonical-target"
         >
-          <span className="alm-project-detail__target-label">Target</span>
+          <span className="alm-project-detail__target-label">{m.projects_create_target_label()}</span>
           <span className="alm-project-detail__target-name">
             {project.canonicalTarget.primaryDesignation}
           </span>
@@ -473,10 +474,10 @@ export function ProjectDetailContent({ projectId }: ProjectDetailContentProps) {
 
       <div className="alm-project-detail__sections">
         {/* ── Sources section ────────────────────────────────────────────── */}
-        <Section title="Sources" count={project.sources.length}>
+        <Section title={m.common_sources()} count={project.sources.length}>
           {project.sources.length === 0 ? (
             <div className="alm-project-detail__sources-empty">
-              No sources linked yet.
+              {m.projects_sources_empty()}
             </div>
           ) : (
             <Table columns={sourceColumns} rows={sourceRows} />
@@ -492,8 +493,8 @@ export function ProjectDetailContent({ projectId }: ProjectDetailContentProps) {
          */}
         {(derivedChannels.length > 0 || (project.channels?.length ?? 0) > 0) && (
           <Section
-            title={paletteLabel ? `Channels — ${paletteLabel} palette` : 'Channels'}
-            right={allInSync ? <Pill variant="ghost">in sync</Pill> : undefined}
+            title={paletteLabel ? m.projects_channels_palette_title({ channels: m.projects_edit_channels_label(), palette: paletteLabel }) : m.projects_edit_channels_label()}
+            right={allInSync ? <Pill variant="ghost">{m.projects_channels_in_sync()}</Pill> : undefined}
           >
             <div className="alm-project-detail__channels-section">
               {derivedChannels.map((ch) => (
@@ -509,7 +510,7 @@ export function ProjectDetailContent({ projectId }: ProjectDetailContentProps) {
                   </span>
                   <div className="alm-project-detail__ch-status">
                     <Pill variant={ch.inSync ? 'ghost' : 'warn'}>
-                      {ch.inSync ? 'in sync' : 'pending'}
+                      {ch.inSync ? m.projects_channels_in_sync() : m.common_pending()}
                     </Pill>
                   </div>
                 </div>
@@ -534,9 +535,9 @@ export function ProjectDetailContent({ projectId }: ProjectDetailContentProps) {
           data-testid="tool-launch-footer"
         >
           <span className="alm-project-detail__tool-hint">
-            Tool path not configured —{' '}
+            {m.projects_tool_not_configured()}{' '}
             <a href="#/settings?pane=tools" className="alm-project-detail__tool-link">
-              Configure
+              {m.projects_tool_configure_link()}
             </a>
           </span>
         </div>
@@ -547,17 +548,17 @@ export function ProjectDetailContent({ projectId }: ProjectDetailContentProps) {
         <div
           role="dialog"
           aria-modal="true"
-          aria-label={`${projectToolStr} may already be running`}
+          aria-label={m.projects_tool_already_running_aria({ tool: projectToolStr })}
           className="alm-project-detail__modal-overlay"
           data-testid="relaunch-modal"
         >
           <div className="alm-project-detail__modal-card">
             <p className="alm-project-detail__modal-body">
-              {projectToolStr} may already be open for this project. Open another instance?
+              {m.projects_relaunch_body({ tool: projectToolStr })}
             </p>
             <div className="alm-project-detail__modal-actions">
               <Btn size="sm" variant="ghost" onClick={dismissPriorWarning} data-testid="relaunch-cancel">
-                Cancel
+                {m.common_cancel()}
               </Btn>
               <Btn
                 size="sm"
@@ -565,7 +566,7 @@ export function ProjectDetailContent({ projectId }: ProjectDetailContentProps) {
                 onClick={() => void launchTool(true)}
                 data-testid="relaunch-confirm"
               >
-                Open another instance
+                {m.projects_relaunch_confirm_btn()}
               </Btn>
             </div>
           </div>

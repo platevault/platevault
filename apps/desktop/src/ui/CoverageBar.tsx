@@ -22,6 +22,7 @@ export const CoverageBar = forwardRef<HTMLDivElement, CoverageBarProps>(
             style={{ width: `${pct}%` }}
           />
         </div>
+        {/* eslint-disable-next-line alm/no-user-string -- decorative: 'h' is a unit abbreviation, not translatable prose */}
         <span className="alm-coverage__value">{value}h</span>
       </div>
     );

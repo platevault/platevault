@@ -1,4 +1,5 @@
 import { useState } from 'react';
+import { m } from '@/lib/i18n';
 import { Pill, Box, Btn, Section } from '@/ui';
 
 export type SourceViewStrategy = 'symlink' | 'hardlink' | 'copy' | 'junction';
@@ -44,54 +45,53 @@ export function StepViews({ data, onChange }: StepViewsProps) {
     <div className="alm-wizard-views">
       {/* Step description */}
       <div className="alm-wizard-views__desc">
-        A source view is a tool-friendly projection of your source map. PixInsight/WBPP will
-        read source files through this view. The strategy is preset from{' '}
+        {m.projects_wizard_views_desc()}{' '}
         <a
           href="#"
           onClick={(e) => e.preventDefault()}
           className="alm-wizard-views__link"
         >
-          Settings &rarr; Source view strategy
+          {m.projects_wizard_views_settings_link()}
         </a>{' '}
-        &mdash; override here if you need.
+        {m.projects_wizard_views_override_note()}
       </div>
 
       {/* ── Strategy (from settings) ── */}
-      <Box title="Strategy (from settings)">
+      <Box title={m.projects_wizard_strategy_title()}>
         <div className="alm-wizard-views__box-header">
           <a
             href="#"
             onClick={(e) => e.preventDefault()}
             className="alm-wizard-views__box-link"
           >
-            Override for this project
+            {m.projects_wizard_strategy_override_link()}
           </a>
         </div>
         <div className="alm-wizard-views__strategy-row">
-          <Pill variant="ok">NTFS JUNCTION</Pill>
-          <span className="alm-wizard-views__strategy-label">Default for Windows + PixInsight</span>
+          <Pill variant="ok">{m.projects_wizard_strategy_ntfs()}</Pill>
+          <span className="alm-wizard-views__strategy-label">{m.projects_wizard_strategy_ntfs_label()}</span>
           <span className="alm-wizard-views__strategy-meta">
-            ~12 KB on disk &middot; no admin &middot; cleanup-safe
+            {m.projects_wizard_strategy_ntfs_meta()}
           </span>
         </div>
         <div className="alm-wizard-views__strategy-note">
-          If a fallback is needed (e.g. across volumes), the plan will indicate per item.
+          {m.projects_wizard_strategy_fallback_note()}
         </div>
       </Box>
 
       {/* ── Views to generate ── */}
-      <Section title="Views to generate">
+      <Section title={m.projects_wizard_views_title()}>
         <div className="alm-wizard-views__table-hint">
-          for mosaic projects, one view per panel; otherwise a single wbpp_input
+          {m.projects_wizard_views_hint()}
         </div>
         <table className="alm-simple-table">
           <thead>
             <tr>
-              <th>View name</th>
-              <th>Strategy</th>
-              <th>Scope</th>
-              <th>Items</th>
-              <th>Estimated size</th>
+              <th>{m.projects_wizard_col_view_name()}</th>
+              <th>{m.projects_wizard_col_strategy()}</th>
+              <th>{m.projects_wizard_col_scope()}</th>
+              <th>{m.projects_wizard_col_items()}</th>
+              <th>{m.projects_wizard_col_est_size()}</th>
             </tr>
           </thead>
           <tbody>
@@ -102,7 +102,7 @@ export function StepViews({ data, onChange }: StepViewsProps) {
                     value={viewName}
                     onChange={(e) => setViewName(e.target.value)}
                     className="alm-wizard-views__name-input"
-                    aria-label="View name"
+                    aria-label={m.projects_wizard_col_view_name()}
                   />
                 </td>
                 <td><Pill variant="ok">{row.strategy}</Pill></td>
@@ -113,18 +113,18 @@ export function StepViews({ data, onChange }: StepViewsProps) {
             ))}
           </tbody>
         </table>
-        <Btn size="sm" className="alm-wizard-views__add-btn">+ Add view (per panel / per filter)</Btn>
+        <Btn size="sm" className="alm-wizard-views__add-btn">{m.projects_wizard_add_view_btn()}</Btn>
       </Section>
 
       {/* ── Conflict policy ── */}
-      <Box title="Conflict policy">
+      <Box title={m.projects_wizard_conflict_title()}>
         <div className="alm-wizard-views__box-header">
           <a
             href="#"
             onClick={(e) => e.preventDefault()}
             className="alm-wizard-views__box-link"
           >
-            defaults from settings
+            {m.projects_wizard_conflict_defaults_link()}
           </a>
         </div>
         <div className="alm-wizard-views__radio-group">
@@ -135,7 +135,7 @@ export function StepViews({ data, onChange }: StepViewsProps) {
               checked={conflictPolicy === 'fail'}
               onChange={() => onChange({ ...data, conflictPolicy: 'fail' })}
             />{' '}
-            fail if exists (safest)
+            {m.projects_wizard_conflict_fail()}
           </label>
           <label className="alm-wizard-views__radio-label">
             <input
@@ -144,7 +144,7 @@ export function StepViews({ data, onChange }: StepViewsProps) {
               checked={conflictPolicy === 'rename'}
               onChange={() => onChange({ ...data, conflictPolicy: 'rename' })}
             />{' '}
-            rename with suffix
+            {m.projects_wizard_conflict_rename()}
           </label>
           <label className="alm-wizard-views__radio-label">
             <input
@@ -153,7 +153,7 @@ export function StepViews({ data, onChange }: StepViewsProps) {
               checked={conflictPolicy === 'skip'}
               onChange={() => onChange({ ...data, conflictPolicy: 'skip' })}
             />{' '}
-            skip existing
+            {m.projects_wizard_conflict_skip()}
           </label>
           <label className="alm-wizard-views__radio-label">
             <input
@@ -162,7 +162,7 @@ export function StepViews({ data, onChange }: StepViewsProps) {
               checked={conflictPolicy === 'manual'}
               onChange={() => onChange({ ...data, conflictPolicy: 'manual' })}
             />{' '}
-            require manual resolution
+            {m.projects_wizard_conflict_manual()}
           </label>
         </div>
       </Box>

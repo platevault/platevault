@@ -1,5 +1,6 @@
 import { useState } from 'react';
 import { Select } from '@base-ui-components/react/select';
+import { m } from '@/lib/i18n';
 
 interface SourceViewStrategyProps {
   save: (scope: string, values: Record<string, unknown>) => void;
@@ -14,25 +15,25 @@ interface StrategyOption {
 const STRATEGIES: StrategyOption[] = [
   {
     id: 'junctions',
-    label: 'NTFS Junctions',
+    label: m.settings_sourceview_label_junctions(),
     description:
       'Directory junctions on Windows. WBPP-friendly, no admin privileges required. Only works on the same volume.',
   },
   {
     id: 'symlinks',
-    label: 'Symbolic Links',
+    label: m.settings_sourceview_label_symlinks(),
     description:
       'POSIX-style symlinks. Cross-platform, cross-volume. May require admin/developer mode on Windows.',
   },
   {
     id: 'hardlinks',
-    label: 'Hard Links',
+    label: m.settings_sourceview_label_hardlinks(),
     description:
       'Same-volume file links sharing an inode. Zero extra disk usage but cannot cross volume boundaries.',
   },
   {
     id: 'copy',
-    label: 'Full Copy',
+    label: m.settings_sourceview_label_copy(),
     description:
       'Duplicate every source file into the project tree. Maximum compatibility but uses significant disk space.',
   },
@@ -53,10 +54,10 @@ export function SourceViewStrategy({ save }: SourceViewStrategyProps) {
     <div className="alm-svs">
       <div className="alm-svs__field">
         <label className="alm-svs__label" htmlFor="svs-strategy">
-          Default strategy
+          {m.settings_sourceview_default_strategy()}
         </label>
         <Select.Root value={selected} onValueChange={handleChange}>
-          <Select.Trigger className="alm-select" aria-label="Source view strategy">
+          <Select.Trigger className="alm-select" aria-label={m.settings_sourceview_strategy_aria()}>
             <Select.Value />
             <Select.Icon className="alm-select__icon" />
           </Select.Trigger>

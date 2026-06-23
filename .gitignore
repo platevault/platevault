@@ -359,3 +359,6 @@ apps/desktop/playwright-report/
 
 # Local-only tauri MCP bridge host (gateway IP differs per machine)
 .mcp.tauri.env
+
+# Paraglide compiled message catalog (spec 046) — regenerated on build/typecheck
+apps/desktop/src/paraglide/

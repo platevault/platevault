@@ -1,4 +1,5 @@
 import { useEffect } from 'react';
+import { m } from '@/lib/i18n';
 import { useForm, Controller } from 'react-hook-form';
 import { zodResolver } from '@hookform/resolvers/zod';
 import { RadioGroup } from '@base-ui-components/react/radio-group';
@@ -13,9 +14,9 @@ export interface StepNameProps {
 }
 
 const PROFILES = [
-  { id: 'pixinsight' as const, label: 'PixInsight / WBPP', description: 'Deep-sky processing with WeightedBatchPreProcessing' },
-  { id: 'siril' as const, label: 'Siril', description: 'Free deep-sky stacking and processing' },
-  { id: 'planetary' as const, label: 'Planetary / Lunar', description: 'Video-based capture with stacking tools' },
+  { id: 'pixinsight' as const, label: m.projects_wizard_profile_pixinsight(), description: m.projects_wizard_profile_pixinsight_desc() },
+  { id: 'siril' as const, label: m.projects_wizard_profile_siril(), description: m.projects_wizard_profile_siril_desc() },
+  { id: 'planetary' as const, label: m.projects_wizard_profile_planetary(), description: m.projects_wizard_profile_planetary_desc() },
 ];
 
 /**
@@ -65,12 +66,12 @@ export function StepName({ data, onChange }: StepNameProps) {
           htmlFor="project-name"
           className="alm-wizard-name__label"
         >
-          Project name
+          {m.projects_name_label()}
         </label>
         <input
           id="project-name"
           type="text"
-          placeholder="e.g. NGC 7000 — HOO Narrowband"
+          placeholder={m.projects_wizard_step_name_placeholder()}
           aria-invalid={Boolean(errors.name)}
           aria-describedby={errors.name ? 'project-name-error' : undefined}
           {...register('name')}
@@ -90,7 +91,7 @@ export function StepName({ data, onChange }: StepNameProps) {
       {/* Workflow profile */}
       <div className="alm-wizard-name__profile-group">
         <span className="alm-wizard-name__label">
-          Workflow profile
+          {m.projects_wizard_workflow_label()}
         </span>
         <Controller
           control={control}
@@ -99,7 +100,7 @@ export function StepName({ data, onChange }: StepNameProps) {
             <RadioGroup
               value={field.value}
               onValueChange={(value) => field.onChange(value as StepNameData['workflowProfile'])}
-              aria-label="Workflow profile"
+              aria-label={m.projects_wizard_workflow_label()}
               className="alm-wizard-name__radio-group"
             >
               {PROFILES.map((profile) => (

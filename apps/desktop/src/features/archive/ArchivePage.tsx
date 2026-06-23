@@ -9,6 +9,7 @@ import {
   ListItem,
 } from '@/components';
 import { Btn, Pill } from '@/ui';
+import { m } from '@/lib/i18n';
 import type { BtnVariant } from '@/ui';
 import { useStaleSelectionCleanup } from '@/lib/use-stale-selection';
 import { ArchiveDetail } from './ArchiveDetail';
@@ -22,13 +23,13 @@ interface ContextualAction {
 function archiveActions(item: ArchiveFixture): ContextualAction[] {
   switch (item.entityType) {
     case 'project':
-      return [{ label: 'Restore project', variant: 'primary' }, { label: 'Delete permanently', variant: 'danger' }];
+      return [{ label: m.archive_restore_project_btn(), variant: 'primary' }, { label: m.archive_delete_permanently_btn(), variant: 'danger' }];
     case 'session':
-      return [{ label: 'Restore session', variant: 'primary' }, { label: 'Delete permanently', variant: 'danger' }];
+      return [{ label: m.archive_restore_session_btn(), variant: 'primary' }, { label: m.archive_delete_permanently_btn(), variant: 'danger' }];
     case 'master':
-      return [{ label: 'Restore master', variant: 'primary' }, { label: 'Delete permanently', variant: 'danger' }];
+      return [{ label: m.archive_restore_master_btn(), variant: 'primary' }, { label: m.archive_delete_permanently_btn(), variant: 'danger' }];
     default:
-      return [{ label: 'Restore', variant: 'primary' }, { label: 'Delete permanently', variant: 'danger' }];
+      return [{ label: m.archive_restore_btn(), variant: 'primary' }, { label: m.archive_delete_permanently_btn(), variant: 'danger' }];
   }
 }
 
@@ -48,7 +49,7 @@ export function ArchivePage() {
       <ListDetailLayout
         topBar={
           <TopActionBar
-            title="Archive"
+            title={m.verb_archive()}
             subtitle={`${ARCHIVE_DATA.length} archived items`}
             right={
               item && (
@@ -58,7 +59,7 @@ export function ArchivePage() {
                       {a.label}
                     </Btn>
                   ))}
-                  <Btn size="sm">Reveal in Explorer</Btn>
+                  <Btn size="sm">{m.projects_detail_reveal_btn()}</Btn>
                 </>
               )
             }
@@ -66,7 +67,7 @@ export function ArchivePage() {
         }
         list={
           <ListSidebar
-            placeholder="Search archive…"
+            placeholder={m.archive_search_placeholder()}
             footer={`${ARCHIVE_DATA.length} items`}
           >
             {ARCHIVE_DATA.map((a) => (

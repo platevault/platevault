@@ -18,6 +18,7 @@
  */
 
 import type { TargetListItem } from '@/api/commands';
+import { m } from '@/lib/i18n';
 
 /** Stable id for each planner catalogue (persisted in Settings + used as group key). */
 export type CatalogueId = 'M' | 'NGC' | 'IC' | 'Sh2' | 'LBN' | 'LDN' | 'C' | 'B';
@@ -34,14 +35,14 @@ export type CatalogueId = 'M' | 'NGC' | 'IC' | 'Sh2' | 'LBN' | 'LDN' | 'C' | 'B'
  * ("M", "C", "B") so "NGC 7000" classifies as NGC, not as a stray "N…".
  */
 export const PLANNER_CATALOGS: ReadonlyArray<{ id: CatalogueId; prefix: string; label: string }> = [
-  { id: 'NGC', prefix: 'NGC', label: 'NGC' },
-  { id: 'Sh2', prefix: 'Sh2', label: 'Sharpless' },
-  { id: 'LBN', prefix: 'LBN', label: 'LBN' },
-  { id: 'LDN', prefix: 'LDN', label: 'LDN' },
-  { id: 'IC', prefix: 'IC', label: 'IC' },
-  { id: 'M', prefix: 'M', label: 'Messier' },
-  { id: 'C', prefix: 'C', label: 'Caldwell' },
-  { id: 'B', prefix: 'B', label: 'Barnard' },
+  { id: 'NGC', prefix: 'NGC', label: m.targets_catalog_ngc() },
+  { id: 'Sh2', prefix: 'Sh2', label: m.targets_catalog_sharpless() },
+  { id: 'LBN', prefix: 'LBN', label: m.targets_catalog_lbn() },
+  { id: 'LDN', prefix: 'LDN', label: m.targets_catalog_ldn() },
+  { id: 'IC', prefix: 'IC', label: m.targets_catalog_ic() },
+  { id: 'M', prefix: 'M', label: m.targets_catalog_messier() },
+  { id: 'C', prefix: 'C', label: m.targets_catalog_caldwell() },
+  { id: 'B', prefix: 'B', label: m.targets_catalog_barnard() },
 ] as const;
 
 /** Human label for a catalogue id (e.g. "M" → "Messier"). */

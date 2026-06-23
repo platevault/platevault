@@ -1,5 +1,6 @@
 import type { ArchiveFixture } from '@/data/fixtures/archive';
 import { DetailPane, DetailHeader, PropertyTable } from '@/components';
+import { m } from '@/lib/i18n';
 import { Pill, Section, Table, EmptyState } from '@/ui';
 
 // ─── Entity-type pill variant ────────────────────────────────────────────────
@@ -58,8 +59,8 @@ export function ArchiveDetail({ item }: Props) {
     return (
       <DetailPane>
         <EmptyState
-          title="Select an archived item"
-          desc="Choose an item from the list to view its details."
+          title={m.archive_select_item_title()}
+          desc={m.archive_select_item_desc()}
         />
       </DetailPane>
     );
@@ -74,33 +75,33 @@ export function ArchiveDetail({ item }: Props) {
         titleExtra={
           <>
             <Pill variant={entityVariant(item.entityType)}>{item.entityType}</Pill>
-            <Pill variant="ghost">archived</Pill>
+            <Pill variant="ghost">{m.archive_status_pill()}</Pill>
           </>
         }
-        subtitle={item.originalPath !== '—' ? item.originalPath : 'No original path recorded'}
+        subtitle={item.originalPath !== '—' ? item.originalPath : m.archive_subtitle_no_path()}
       />
 
       {/* Single column — no rail. The old rail (Status/Storage/Audit trail)
           duplicated the Details table and the Audit history table; dropped it
           along with the hero MetricLine. */}
-      <Section title="Details">
+      <Section title={m.common_details()}>
         <PropertyTable
           mode="view"
           properties={[
-            { key: 'archivedAt', label: 'Archived', value: item.archivedAt },
-            { key: 'reason', label: 'Reason', value: item.reason },
-            { key: 'entityType', label: 'Entity type', value: item.entityType },
-            { key: 'size', label: 'Size on disk', value: item.size },
-            { key: 'originalPath', label: 'Original path', value: item.originalPath },
+            { key: 'archivedAt', label: m.archive_prop_archived_at(), value: item.archivedAt },
+            { key: 'reason', label: m.archive_prop_reason(), value: item.reason },
+            { key: 'entityType', label: m.archive_prop_entity_type(), value: item.entityType },
+            { key: 'size', label: m.archive_prop_size(), value: item.size },
+            { key: 'originalPath', label: m.archive_prop_original_path(), value: item.originalPath },
           ]}
         />
       </Section>
 
-      <Section title="Audit history" count={history.length}>
+      <Section title={m.archive_audit_history_title()} count={history.length}>
         <Table
           columns={[
-            { key: 'ts', label: 'Date', style: { width: 120 } },
-            { key: 'detail', label: 'Event' },
+            { key: 'ts', label: m.archive_prop_date(), style: { width: 120 } },
+            { key: 'detail', label: m.archive_prop_event() },
           ]}
           rows={history.map((h) => ({
             ts: <span className="alm-mono">{h.ts}</span>,

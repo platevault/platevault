@@ -12,6 +12,7 @@
  * Forbidden edges (e.g. processing → ready) are not included.
  */
 
+import { m } from '@/lib/i18n';
 import type { ProjectLifecycleState } from './store';
 
 export interface LifecycleAction {
@@ -42,14 +43,14 @@ export function lifecycleFooterActions(
     case 'ready':
       return [
         {
-          label: 'Prepare',
+          label: m.projects_lifecycle_prepare(),
           nextState: 'prepared',
           requiresPlan: true,
           variant: 'primary',
           primary: true,
         },
         {
-          label: 'Mark as Processing',
+          label: m.projects_lifecycle_mark_processing(),
           nextState: 'processing',
           requiresPlan: false,
           variant: 'ghost',
@@ -60,14 +61,14 @@ export function lifecycleFooterActions(
     case 'prepared':
       return [
         {
-          label: 'Mark as Processing',
+          label: m.projects_lifecycle_mark_processing(),
           nextState: 'processing',
           requiresPlan: false,
           variant: 'primary',
           primary: true,
         },
         {
-          label: 'Revert to Ready',
+          label: m.projects_lifecycle_revert_ready(),
           nextState: 'ready',
           requiresPlan: true,
           variant: 'ghost',
@@ -78,7 +79,7 @@ export function lifecycleFooterActions(
     case 'processing':
       return [
         {
-          label: 'Mark as Completed',
+          label: m.projects_lifecycle_mark_completed(),
           nextState: 'completed',
           requiresPlan: false,
           variant: 'primary',
@@ -89,14 +90,14 @@ export function lifecycleFooterActions(
     case 'completed':
       return [
         {
-          label: 'Archive',
+          label: m.projects_lifecycle_archive(),
           nextState: 'archived',
           requiresPlan: true,
           variant: 'primary',
           primary: true,
         },
         {
-          label: 'Re-open',
+          label: m.projects_lifecycle_reopen(),
           nextState: 'processing',
           requiresPlan: false,
           variant: 'ghost',
@@ -107,14 +108,14 @@ export function lifecycleFooterActions(
     case 'archived':
       return [
         {
-          label: 'Unarchive',
+          label: m.projects_lifecycle_unarchive(),
           nextState: 'ready',
           requiresPlan: true,
           variant: 'primary',
           primary: true,
         },
         {
-          label: 'Unarchive and Resume',
+          label: m.projects_lifecycle_unarchive_resume(),
           nextState: 'processing',
           requiresPlan: true,
           variant: 'ghost',
@@ -127,7 +128,7 @@ export function lifecycleFooterActions(
       // The overflow menu may also show "Archive from blocked" (blocked → archived).
       return [
         {
-          label: 'Archive (blocked escape)',
+          label: m.projects_lifecycle_archive_blocked(),
           nextState: 'archived',
           requiresPlan: true,
           variant: 'ghost',

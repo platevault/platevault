@@ -109,6 +109,15 @@ Within each story, implement incrementally and keep the repo green at every comm
 - **US7**: typed mock fixtures, generated types in `useStatusSummary`, concrete
   `SettingsData`, `satisfies` in fixtures, empty-`catch` triage, delete `lib/display.ts`,
   exhaustive state-label fns.
+  **RECONCILE (2026-06-21)**: the `bindings/types.ts` hand-written struct universe (14
+  interfaces) MUST be removed entirely. The frontend consumes the generated `_Serialize`
+  camelCase types from `bindings/index.ts` directly (or via `bindings/aliases.ts`) for
+  every interface that has a backend DTO. Genuinely frontend-only types (no backend DTO)
+  move to a clearly-labelled frontend-types module — NOT `bindings/types.ts`. Field
+  accesses across the ~19 importer files are migrated snake_case→camelCase incrementally
+  by feature area, each batch independently verified with `tsc --noEmit` + `vitest run
+  <area>`. Fixtures and mocks are updated to camelCase in the same batch. End state:
+  `grep -c "export interface" bindings/types.ts` over hand-written structs = 0.
 - **US8**: `thiserror` derive for `GuidedFlowError`; `anyhow`+`.context()` at the app
   boundary incl. `.to_string()` sites; stray `eprintln!`→`tracing`; `tracing-subscriber`.
 - **US9**: `TryFrom/FromStr` for `CalibrationKind` (single fallback) + inventory state;
@@ -128,6 +137,11 @@ Within each story, implement incrementally and keep the repo green at every comm
 - **US15**: `rstest` + `proptest` dev-deps; convert sanitizer/settings tests.
 - **US16**: route plan-apply through `OperationHandle` + `OperationEvent` over a
   `tauri::ipc::Channel`; UI listener; (the dead per-feature event path retired for this flow).
+  **RECONCILE (2026-06-21)**: `applyPlan` MUST return the generated `PlanApplyResponse`
+  (`{planId, runId, newState}`) directly; the `as unknown as OperationHandle` cast at
+  `commands.ts:396` MUST be removed. Callers and tests are updated to the generated return
+  type. A real plan-apply progress consumer in the UI (live per-item progress over the
+  `OperationEvent` channel) is required for FR-021 to be met end-to-end (T271).
 
 ## Verification per story (gate before "complete")
 

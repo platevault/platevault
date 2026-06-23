@@ -11,6 +11,7 @@
 import { ResolverSettingsControl } from './ResolverSettingsControl';
 import { CatalogueSettingsControl } from './CatalogueSettingsControl';
 import { Attribution } from './Attribution';
+import { m } from '@/lib/i18n';
 import { SettingsSection } from './SettingsKit';
 
 interface ResolverSettingsPaneProps {
@@ -21,11 +22,11 @@ interface ResolverSettingsPaneProps {
 export function ResolverSettings(_props: ResolverSettingsPaneProps) {
   return (
     <>
-      <SettingsSection title="ONLINE RESOLUTION">
+      <SettingsSection title={m.settings_resolver_online_title()}>
         <ResolverSettingsControl />
       </SettingsSection>
 
-      <SettingsSection title="DEFAULT CATALOGUES">
+      <SettingsSection title={m.settings_resolver_catalogues_title()}>
         <CatalogueSettingsControl />
       </SettingsSection>
 

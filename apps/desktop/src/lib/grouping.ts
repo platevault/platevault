@@ -6,6 +6,8 @@
  * missing a grouping dimension are gathered under an explicit "(none)" group.
  */
 
+import { m } from '@/lib/i18n';
+
 /** Extracts the grouping key for one dimension from an item. */
 export type DimensionAccessor<T> = (item: T) => string | number | null | undefined;
 
@@ -59,7 +61,7 @@ export function groupByDimensions<T>(
       {
         dimension: '',
         key: '__all__',
-        label: 'All',
+        label: m.inbox_group_all_label(),
         count: items.length,
         items: [...items],
         children: [],

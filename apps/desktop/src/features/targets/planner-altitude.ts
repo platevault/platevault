@@ -29,6 +29,7 @@
  */
 
 import type { TargetListItem } from '@/api/commands';
+import { m } from '@/lib/i18n';
 
 /** Placeholder observer latitude — mirrors TargetDetailV2.STUB_OBSERVER_LAT_DEG. */
 export const STUB_OBSERVER_LAT_DEG = 52.1; // ~Netherlands latitude
@@ -139,12 +140,12 @@ export function filtersFor(lunarDistanceDeg: number): FiltersRecommendation {
   if (brightMoon && close) {
     return {
       bands: ['Ha', 'OIII', 'SII'],
-      label: 'Narrowband only',
+      label: m.targets_filters_narrowband_only(),
     };
   }
   return {
     bands: ['L', 'R', 'G', 'B', 'Ha', 'OIII', 'SII'],
-    label: 'Broadband + NB',
+    label: m.targets_filters_broadband_nb(),
   };
 }
 

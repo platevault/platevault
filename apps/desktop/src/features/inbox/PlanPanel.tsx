@@ -15,7 +15,9 @@
 
 import { useCallback, useEffect, useMemo, useState } from 'react';
 import { Banner, Btn } from '@/ui';
+import type { PlanApplyProgress } from '@/features/plans/usePlanApplyProgress';
 import type { InboxOpenPlan, InboxPlanAction } from './store';
+import { m } from '@/lib/i18n';
 
 // ── Types ─────────────────────────────────────────────────────────────────────
 
@@ -59,6 +61,19 @@ export interface PlanPanelProps {
   onApplySelected: (inboxItemIds: string[]) => void;
   /** Apply every open plan. */
   onApplyAll: () => void;
+  /**
+   * Apply a single ingestion group's plan with live per-item progress
+   * streamed over the long-operation `OperationEvent` channel (spec 042
+   * US16 / FR-021). Receives the group's `planId`.
+   */
+  onApplyOne?: (planId: string) => void;
+  /**
+   * Live progress for the plan currently streaming (the one whose `planId`
+   * matches `progressPlanId`). Null when no live apply is in flight.
+   */
+  progress?: PlanApplyProgress | null;
+  /** `planId` of the group whose live `progress` is being shown. */
+  progressPlanId?: string | null;
   /** Discard a single ingestion group's plan. */
   onCancel: (inboxItemId: string) => void;
   busy?: boolean;
@@ -375,6 +390,9 @@ export function PlanPanel({
   onDestructiveDestinationChange,
   onApplySelected,
   onApplyAll,
+  onApplyOne,
+  progress = null,
+  progressPlanId = null,
   onCancel,
   busy = false,
   pendingRootPick = null,
@@ -471,11 +489,10 @@ export function PlanPanel({
       data-testid="inbox-root-picker"
     >
       <div className="alm-plan-panel__root-picker-title">
-        Choose a destination library root
+        {m.inbox_choose_dest_root_title()}
       </div>
       <div className="alm-plan-panel__root-picker-desc">
-        More than one library root can host <strong>{pendingRootPick.category}</strong> frames.
-        Pick where these files should go to generate the plan.
+        {m.inbox_choose_dest_root_body({ category: pendingRootPick.category })}
       </div>
       <div className="alm-plan-panel__root-picker-options">
         {pendingRootPick.candidates.map((c) => (
@@ -485,7 +502,7 @@ export function PlanPanel({
             onClick={() => onPickDestinationRoot?.(c.rootId)}
             disabled={rootPickBusy}
             data-testid={`inbox-root-option-${c.rootId}`}
-            aria-label={`Use ${c.path} as destination root`}
+            aria-label={m.inbox_use_as_destination_root_aria({ path: c.path })}
             className="alm-plan-panel__root-option"
           >
             <span className="alm-plan-panel__root-option-inner">
@@ -531,16 +548,18 @@ export function PlanPanel({
               checked={allSelectableSelected}
               onChange={toggleAll}
               disabled={selectableIds.length === 0}
-              aria-label="Select all plans"
+              aria-label={m.inbox_select_all_plans_aria()}
               data-testid="plan-select-all"
             />
-            <span className="alm-plan-panel__select-all-label">Select all</span>
+            <span className="alm-plan-panel__select-all-label">{m.common_select_all()}</span>
           </label>
           <span
             className="alm-plan-panel__count-summary"
             data-testid="plan-total-count"
           >
+            {/* eslint-disable-next-line alm/no-user-string -- plural suffix fragments; ICU plurals not supported by the message-format plugin */}
             {plans.length} plan{plans.length !== 1 ? 's' : ''} · {totalActions} action
+            {/* eslint-disable-next-line alm/no-user-string -- plural suffix fragment; ICU plurals unsupported by the message-format plugin */}
             {totalActions !== 1 ? 's' : ''}
           </span>
         </div>
@@ -552,18 +571,18 @@ export function PlanPanel({
             onClick={() => onApplySelected(selectedArray)}
             disabled={applySelectedDisabled}
             data-testid="plan-apply-selected"
-            aria-label="Apply selected plans"
+            aria-label={m.inbox_apply_selected_plans_aria()}
           >
-            {busy ? 'Applying…' : `Apply selected (${selectedArray.length})`}
+            {busy ? m.common_applying() : m.inbox_apply_selected_plans({ count: selectedArray.length })}
           </Btn>
           <Btn
             variant="accent"
             onClick={onApplyAll}
             disabled={applyAllDisabled}
             data-testid="plan-apply-all"
-            aria-label="Apply all plans"
+            aria-label={m.inbox_apply_all_plans_aria()}
           >
-            Apply all
+            {m.inbox_apply_all()}
           </Btn>
         </div>
       </div>
@@ -631,7 +650,7 @@ export function PlanPanel({
                     checked={checked}
                     disabled={plan.stale}
                     onChange={() => toggleGroup(plan.inboxItemId, plan.stale)}
-                    aria-label={`Select plan for ${plan.itemName}`}
+                    aria-label={m.inbox_select_plan_aria({ name: plan.itemName })}
                     data-testid={`plan-group-check-${plan.inboxItemId}`}
                   />
                   <Btn
@@ -642,8 +661,8 @@ export function PlanPanel({
                     aria-controls={rowsId}
                     aria-label={
                       isExpanded
-                        ? `Hide files for ${plan.itemName}`
-                        : `Show files for ${plan.itemName}`
+                        ? m.inbox_hide_files_aria({ name: plan.itemName })
+                        : m.inbox_show_files_aria({ name: plan.itemName })
                     }
                     data-testid={`plan-group-toggle-${plan.inboxItemId}`}
                     className="alm-plan-panel__expand"
@@ -738,15 +757,30 @@ export function PlanPanel({
                   {plan.actions.length} file{plan.actions.length !== 1 ? 's' : ''}
                 </span>
 
-                {/* Col 6: stale badge + discard */}
+                {/* Col 6: stale badge + per-group apply (live progress) + discard */}
                 <span className="alm-plan-panel__group-actions">
                   {plan.stale && (
                     <span
                       className="alm-plan-panel__stale-badge"
                       data-testid={`plan-stale-${plan.inboxItemId}`}
                     >
-                      Stale
+                      {m.inbox_stale()}
                     </span>
+                  )}
+                  {/* Apply just this ingestion's plan with live per-item
+                      progress streamed over the OperationEvent channel
+                      (spec 042 US16 / FR-021). */}
+                  {onApplyOne && (
+                    <Btn
+                      variant="ghost"
+                      size="sm"
+                      onClick={() => onApplyOne(plan.planId)}
+                      disabled={busy || plan.stale}
+                      data-testid={`plan-apply-one-${plan.inboxItemId}`}
+                      aria-label={m.inbox_apply_plan_live_aria({ name: plan.itemName })}
+                    >
+                      {m.inbox_apply_action()}
+                    </Btn>
                   )}
                   <Btn
                     variant="ghost"
@@ -754,16 +788,61 @@ export function PlanPanel({
                     onClick={() => onCancel(plan.inboxItemId)}
                     disabled={busy}
                     data-testid={`plan-cancel-${plan.inboxItemId}`}
-                    aria-label={`Discard plan for ${plan.itemName}`}
+                    aria-label={m.inbox_discard_plan_aria({ name: plan.itemName })}
                   >
-                    Discard
+                    {m.inbox_discard()}
                   </Btn>
                 </span>
               </div>
 
+              {/* Live long-op progress for the plan currently streaming over
+                  the OperationEvent channel (spec 042 US16 / FR-021). */}
+              {progress && progressPlanId === plan.planId && (
+                <div
+                  className="alm-plan-panel__progress"
+                  data-testid={`plan-progress-${plan.inboxItemId}`}
+                  role="status"
+                  aria-live="polite"
+                >
+                  {(() => {
+                    // Count label ("N" or "N of M") — kept as a sub-message so the
+                    // "of" connector stays translatable; passed into the plural
+                    // variant messages below as {countText}.
+                    const countText =
+                      progress.total != null
+                        ? m.inbox_progress_count_of({
+                            applied: progress.applied,
+                            total: progress.total,
+                          })
+                        : String(progress.applied);
+                    if (progress.terminal === 'completed') {
+                      return m.inbox_progress_completed({
+                        applied: progress.applied,
+                        countText,
+                      });
+                    }
+                    if (progress.terminal === 'failed') {
+                      return m.inbox_progress_failed({
+                        applied: progress.applied,
+                        failed: progress.failed,
+                      });
+                    }
+                    const failedText =
+                      progress.failed > 0
+                        ? m.inbox_progress_failed_suffix({ failed: progress.failed })
+                        : '';
+                    return m.inbox_progress_running({
+                      applied: progress.applied,
+                      countText,
+                      failedText,
+                    });
+                  })()}
+                </div>
+              )}
+
               {plan.stale && (
                 <Banner variant="danger" className="alm-plan-panel__stale-banner">
-                  Source files changed — discard and re-confirm to regenerate this plan.
+                  {m.inbox_stale_plan_warning()}
                 </Banner>
               )}
 
@@ -845,7 +924,7 @@ export function PlanPanel({
           className="alm-plan-panel__destructive"
         >
           <div className="alm-plan-panel__destructive-title">
-            Where should removed source files go?
+            {m.inbox_where_source_files_go()}
           </div>
           <div
             className="alm-plan-panel__dest-options"
@@ -860,9 +939,9 @@ export function PlanPanel({
                 data-testid="plan-destructive-archive"
               />
               <span>
-                <strong>Archive folder</strong>
+                <strong>{m.inbox_archive_folder()}</strong>
                 <span className="alm-plan-panel__dest-label-hint">
-                  Archive keeps a recoverable copy; Trash is unrecoverable.
+                  {m.inbox_archive_hint()}
                 </span>
               </span>
             </label>
@@ -875,7 +954,7 @@ export function PlanPanel({
                 onChange={() => onDestructiveDestinationChange('trash')}
                 data-testid="plan-destructive-trash"
               />
-              <span>System Trash</span>
+              <span>{m.inbox_system_trash()}</span>
             </label>
           </div>
         </div>

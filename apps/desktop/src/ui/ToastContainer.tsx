@@ -9,6 +9,7 @@ import { forwardRef } from 'react';
 import type { HTMLAttributes } from 'react';
 import { X } from 'lucide-react';
 import { useToasts, type Toast as ToastType } from '@/shared/toast';
+import { m } from '@/lib/i18n';
 
 const VARIANT_CLASS: Record<string, string> = {
   info: 'alm-toast__item--info',
@@ -41,7 +42,7 @@ function ToastItem({
         )}
         <button
           onClick={() => onDismiss(toast.id)}
-          aria-label="Dismiss notification"
+          aria-label={m.ui_toast_dismiss_aria()}
           className="alm-toast__dismiss-btn"
         >
           <X size={14} aria-hidden="true" />

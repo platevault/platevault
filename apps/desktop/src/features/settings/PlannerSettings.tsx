@@ -12,6 +12,7 @@
  */
 
 import { useState } from 'react';
+import { m } from '@/lib/i18n';
 import { SettingsSection, SettingsRow } from './SettingsKit';
 import {
   useAltitudeThreshold,
@@ -40,9 +41,9 @@ export function PlannerSettings() {
   }
 
   return (
-    <SettingsSection title="ALTITUDE THRESHOLD">
+    <SettingsSection title={m.settings_planner_altitude_title()}>
       <SettingsRow
-        label="Usable altitude threshold (°)"
+        label={m.settings_planner_altitude_label()}
         info={
           `Minimum elevation above the horizon (in degrees) considered acceptable ` +
           `for imaging. Drives the "Visible tonight" and "Imaging time" columns in ` +
@@ -56,14 +57,14 @@ export function PlannerSettings() {
           min={ALTITUDE_THRESHOLD_MIN}
           max={ALTITUDE_THRESHOLD_MAX}
           step={1}
-          aria-label="Usable altitude threshold in degrees"
+          aria-label={m.settings_planner_altitude_aria()}
           onChange={(e) => setDraft(e.target.value)}
           onBlur={(e) => commit(e.target.value)}
           onKeyDown={(e) => {
             if (e.key === 'Enter') commit((e.target as HTMLInputElement).value);
           }}
         />
-        <span className="alm-settings__unit-label">degrees above horizon</span>
+        <span className="alm-settings__unit-label">{m.settings_planner_altitude_unit()}</span>
       </SettingsRow>
     </SettingsSection>
   );

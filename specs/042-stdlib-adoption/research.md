@@ -186,3 +186,37 @@ invalidation conventions the rest of the frontend reuses.
 
 ≈16 library ADOPTs · ≈24 REFACTOR/CONSOLIDATE/restructure (no new dep) · ≈11 KEEP ·
 several DEFER documented · 6 REJECT. Mapped to user stories US1–US16 in `spec.md`.
+
+## Reconcile decisions (2026-06-21)
+
+Recorded after post-merge phantom-completion audit. No new migrations; these are
+execution decisions for the re-opened SC-002/FR-021 work.
+
+### applyPlan return type (FR-021 / US16)
+
+`applyPlan` in `commands.ts` MUST return the generated `PlanApplyResponse`
+(`{planId, runId, newState}`) directly. The `as unknown as OperationHandle` cast at
+`commands.ts:396` is removed (T270). The OperationHandle/OperationEvent contract is not
+retired — it is exercised end-to-end for the plan-apply flow. A real UI consumer of the
+`OperationEvent` channel (live per-item progress) is required for FR-021 (T271). This is
+the "adopt end-to-end" resolution chosen in the clarifications session.
+
+### Frontend struct removal strategy (SC-002 / US7)
+
+The 14 hand-written `export interface` blocks in `bindings/types.ts` are removed
+entirely. For each interface with a backend DTO the frontend re-exports the generated
+`_Serialize` camelCase type from `bindings/index.ts` (or the collapsed alias module
+from T117). Interfaces with no backend DTO (purely frontend display/state shapes) move
+to a clearly-labelled frontend-types module, not `bindings/types.ts`. End state:
+`bindings/types.ts` contains zero hand-written struct definitions.
+
+Migration strategy: the ~19 importer files migrate snake_case field accesses to
+camelCase **incrementally by feature area** (T269). Each batch is independently verified
+with `tsc --noEmit` + `vitest run <area>` before moving to the next area, so any
+regression is isolated and revertable. Fixtures and mocks update in the same batch as
+their feature area. Regression risk is the primary concern for this 19-file migration.
+
+### US13 crate restructuring status
+
+T250–T254 are confirmed genuinely complete (split crates in active use). T272 is a
+verify-only checkpoint — no code change expected.

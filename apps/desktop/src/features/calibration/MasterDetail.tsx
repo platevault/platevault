@@ -26,6 +26,7 @@ import {
 	PropertyTable,
 } from "@/components";
 import { Btn, EmptyState } from "@/ui";
+import { m } from "@/lib/i18n";
 import { SessionListPopover } from "./SessionListPopover";
 
 // ── Helpers ───────────────────────────────────────────────────────────────────
@@ -105,8 +106,8 @@ export function MasterDetail({ master, agingThresholdDays }: Props) {
 		return (
 			<DetailPane>
 				<EmptyState
-					title="Select a master"
-					desc="Select a master to view its details."
+					title={m.calibration_select_master_title()}
+					desc={m.calibration_select_master_desc()}
 				/>
 			</DetailPane>
 		);
@@ -133,33 +134,33 @@ export function MasterDetail({ master, agingThresholdDays }: Props) {
 	// Fingerprint as flat PropertyTable rows — split across two columns like
 	// SessionDetail's factProps.
 	const fingerprintProps: PropertyDef[] = [
-		{ key: "kind", label: "Kind", value: kindStr },
-		{ key: "camera", label: "Camera", value: fp.camera },
-		{ key: "gain", label: "Gain", value: String(fp.gain) },
-		{ key: "exposure", label: "Exposure", value: `${fp.exposureS}s` },
+		{ key: "kind", label: m.calibration_fp_kind(), value: kindStr },
+		{ key: "camera", label: m.settings_calmatch_camera(), value: fp.camera },
+		{ key: "gain", label: m.settings_calmatch_gain(), value: String(fp.gain) },
+		{ key: "exposure", label: m.calibration_fp_exposure(), value: `${fp.exposureS}s` },
 		...(fp.tempC != null
 			? [
 					{
 						key: "temp",
-						label: "Temperature",
+						label: m.calibration_fp_temperature(),
 						value: `${fp.tempC}°C`,
 					} as PropertyDef,
 				]
 			: []),
 		...(fp.filter
-			? [{ key: "filter", label: "Filter", value: fp.filter } as PropertyDef]
+			? [{ key: "filter", label: m.common_filter(), value: fp.filter } as PropertyDef]
 			: []),
 		...(fp.sensorMode
 			? [
 					{
 						key: "sensorMode",
-						label: "Sensor mode",
+						label: m.calibration_fp_sensor_mode(),
 						value: fp.sensorMode,
 					} as PropertyDef,
 				]
 			: []),
-		{ key: "binning", label: "Binning", value: fp.binning },
-		{ key: "size", label: "Size", value: fmtBytes(master.sizeBytes) },
+		{ key: "binning", label: m.settings_calmatch_binning(), value: fp.binning },
+		{ key: "size", label: m.settings_advanced_db_size(), value: fmtBytes(master.sizeBytes) },
 	];
 
 	const mid = Math.ceil(fingerprintProps.length / 2);
@@ -170,14 +171,14 @@ export function MasterDetail({ master, agingThresholdDays }: Props) {
 	const actionButtons = (
 		<span className="alm-session-detail2__actions">
 			<Btn size="sm" variant="primary">
-				Use in project
+				{m.calibration_action_use_in_project()}
 			</Btn>
 			{(isAging1Year || isAgingWarn) && (
 				<Btn size="sm" variant="danger">
-					Replace master
+					{m.calibration_action_replace_master()}
 				</Btn>
 			)}
-			<Btn size="sm">Reveal in Explorer</Btn>
+			<Btn size="sm">{m.calibration_action_reveal_explorer()}</Btn>
 		</span>
 	);
 

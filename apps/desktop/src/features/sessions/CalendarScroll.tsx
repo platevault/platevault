@@ -7,6 +7,7 @@ import { useRef, useMemo } from 'react';
 import { useVirtualizer } from '@tanstack/react-virtual';
 import { Pill } from '@/ui';
 import { formatMonthYear } from '@/lib/datetime';
+import { m } from '@/lib/i18n';
 
 export interface CalendarNight {
   date: string;
@@ -69,7 +70,7 @@ export function CalendarScroll({ nights, onNightSelect }: CalendarScrollProps) {
       ref={parentRef}
       className="alm-calendar-scroll"
       role="list"
-      aria-label="Session calendar timeline"
+      aria-label={m.sessions_calendar_aria()}
     >
       <div
         className="alm-calendar-scroll__inner"
@@ -125,7 +126,7 @@ export function CalendarScroll({ nights, onNightSelect }: CalendarScrollProps) {
                 ))}
               </span>
               <span className="alm-calendar-scroll__frame-count alm-mono">
-                {night.sessions.reduce((sum, s) => sum + s.frames, 0)} frames
+                {night.sessions.reduce((sum, s) => sum + s.frames, 0)} {m.sessions_calendar_frames_suffix()}
               </span>
             </div>
           );

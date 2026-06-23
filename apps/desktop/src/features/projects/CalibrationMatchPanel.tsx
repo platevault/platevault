@@ -23,6 +23,7 @@ import type { PillVariant } from '@/ui';
 import { calibrationMatchSuggestBatch } from '@/api/commands';
 import type { BatchSessionResultDto, CalibrationMatchType } from '@/api/commands';
 import { errMessage } from '@/lib/errors';
+import { m } from '@/lib/i18n';
 
 // ── Helpers ───────────────────────────────────────────────────────────────────
 
@@ -102,12 +103,12 @@ export function CalibrationMatchPanel({ sessionIds, defaultOpen = true }: Props)
 
   if (loading) {
     return (
-      <Section title="Calibration readiness" defaultOpen={defaultOpen}>
+      <Section title={m.projects_calib_readiness_title()} defaultOpen={defaultOpen}>
         <div
           className="alm-calib-match-panel__loading"
           data-testid="cal-panel-loading"
         >
-          Checking calibration suggestions…
+          {m.projects_calib_checking()}
         </div>
       </Section>
     );
@@ -115,7 +116,7 @@ export function CalibrationMatchPanel({ sessionIds, defaultOpen = true }: Props)
 
   if (fetchError) {
     return (
-      <Section title="Calibration readiness" defaultOpen={defaultOpen}>
+      <Section title={m.projects_calib_readiness_title()} defaultOpen={defaultOpen}>
         <div
           className="alm-calib-match-panel__error"
           data-testid="cal-panel-error"
@@ -128,10 +129,10 @@ export function CalibrationMatchPanel({ sessionIds, defaultOpen = true }: Props)
 
   if (results.length === 0) {
     return (
-      <Section title="Calibration readiness" defaultOpen={defaultOpen}>
+      <Section title={m.projects_calib_readiness_title()} defaultOpen={defaultOpen}>
         <EmptyState
-          title="No calibration data"
-          desc="No calibration data. Run a metadata scan."
+          title={m.projects_calib_no_data_title()}
+          desc={m.projects_calib_no_data_title()}
           data-testid="cal-panel-empty"
         />
       </Section>
@@ -147,7 +148,7 @@ export function CalibrationMatchPanel({ sessionIds, defaultOpen = true }: Props)
   }
 
   return (
-    <Section title="Calibration readiness" count={sessionIds.length} defaultOpen={defaultOpen} data-testid="cal-panel">
+    <Section title={m.projects_calib_readiness_title()} count={sessionIds.length} defaultOpen={defaultOpen} data-testid="cal-panel">
       <div className="alm-calib-match-panel__list">
         {[...bySession.entries()].map(([sid, typeResults]) => (
           <div
@@ -189,7 +190,7 @@ export function CalibrationMatchPanel({ sessionIds, defaultOpen = true }: Props)
         ))}
       </div>
       <div className="alm-calib-match-panel__hint">
-        To assign calibration masters, open the Calibration page and select the appropriate master.
+        {m.projects_calib_assign_hint()}
       </div>
     </Section>
   );

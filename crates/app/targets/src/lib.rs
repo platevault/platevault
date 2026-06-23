@@ -12,6 +12,7 @@
 #![allow(clippy::doc_markdown)] // spec/domain terminology not appropriate for backticks
 
 pub mod ingest_resolution;
+pub mod ingest_sessions;
 pub mod resolver_settings;
 pub mod target_dto;
 pub mod target_management;

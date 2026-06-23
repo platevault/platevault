@@ -14,6 +14,7 @@
 
 import type { ReactNode } from 'react';
 import { Btn } from '@/ui';
+import { m } from '@/lib/i18n';
 
 export interface FilterOption {
   value: string;
@@ -132,14 +133,22 @@ function GroupingSelects({ grouping }: { grouping: GroupingControl }) {
             value={value}
             disabled={disabled}
             onChange={(e) => setSlot(slot, e.target.value)}
-            aria-label={slot === 0 ? 'Group by' : `Then group by (level ${slot + 1})`}
+            aria-label={
+              slot === 0
+                ? m.inbox_group_by_aria()
+                : m.inbox_group_by_level_aria({ level: slot + 1 })
+            }
           >
-            <option value="">{slot === 0 ? 'Group: none' : 'then: —'}</option>
+            <option value="">
+              {slot === 0 ? m.inbox_controls_group_none() : m.inbox_controls_then_none()}
+            </option>
             {dimensions
               .filter((d) => d.value === value || !usedEarlier.has(d.value))
               .map((d) => (
                 <option key={d.value} value={d.value}>
-                  {slot === 0 ? `Group: ${d.label}` : `then: ${d.label}`}
+                  {slot === 0
+                    ? m.inbox_groupby_chip_primary({ label: d.label })
+                    : m.inbox_groupby_chip_secondary({ label: d.label })}
                 </option>
               ))}
           </select>
@@ -316,8 +325,8 @@ export function FilterToolbar({
             variant="ghost"
             className="alm-filterbar__sort-dir"
             onClick={sort.onDirToggle}
-            aria-label={`Sort direction: ${sort.dir === 'asc' ? 'ascending' : 'descending'}`}
-            title={sort.dir === 'asc' ? 'Ascending' : 'Descending'}
+            aria-label={m.filter_sort_dir_aria({ dir: sort.dir === 'asc' ? m.filter_sort_dir_ascending() : m.filter_sort_dir_descending() })}
+            title={sort.dir === 'asc' ? m.filter_sort_dir_ascending() : m.filter_sort_dir_descending()}
           >
             <span aria-hidden="true">{sort.dir === 'asc' ? '▲' : '▼'}</span>
           </Btn>

@@ -3,6 +3,7 @@ import { useVirtualizer } from '@tanstack/react-virtual';
 import type { TargetListItem } from '@/api/commands';
 import { ListSidebar } from '@/components';
 import { Pill, SegControl } from '@/ui';
+import { m } from '@/lib/i18n';
 
 /**
  * Estimated row height (px) for the virtualizer's initial measurement.
@@ -63,7 +64,7 @@ export function TargetList({ targets, selected, onSelect }: Props) {
     <ListSidebar
       scrollRef={scrollRef}
       virtualized
-      placeholder="Search targets..."
+      placeholder={m.targets_page_search_placeholder()}
       searchValue={search}
       onSearchChange={setSearch}
       controls={
@@ -72,10 +73,10 @@ export function TargetList({ targets, selected, onSelect }: Props) {
             options={DENSITY_OPTIONS}
             value={density}
             onChange={(v) => setDensity(v as RowDensity)}
-            aria-label="Row density"
+            aria-label={m.targets_legacy_row_density_aria()}
           />
           <select defaultValue="name">
-            <option value="name">Sort: name</option>
+            <option value="name">{m.targets_legacy_sort_name()}</option>
           </select>
         </>
       }

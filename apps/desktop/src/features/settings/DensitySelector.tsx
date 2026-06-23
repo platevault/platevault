@@ -2,11 +2,12 @@ import { RadioGroup } from '@base-ui-components/react/radio-group';
 import { Radio } from '@base-ui-components/react/radio';
 import { usePreference } from '@/data/preferences';
 import type { Density } from '@/bindings/types';
+import { m } from '@/lib/i18n';
 
 const DENSITY_OPTIONS: { value: Density; label: string; description: string }[] = [
-  { value: 'compact', label: 'Compact', description: '24px row height — fits more rows on screen' },
-  { value: 'comfortable', label: 'Comfortable', description: '32px row height — default' },
-  { value: 'spacious', label: 'Spacious', description: '40px row height — easier to click' },
+  { value: 'compact', label: m.settings_density_compact(), description: '24px row height — fits more rows on screen' },
+  { value: 'comfortable', label: m.settings_density_comfortable(), description: '32px row height — default' },
+  { value: 'spacious', label: m.settings_density_spacious(), description: '40px row height — easier to click' },
 ];
 
 export function DensitySelector() {
@@ -14,12 +15,12 @@ export function DensitySelector() {
 
   return (
     <fieldset className="alm-density-selector">
-      <legend className="alm-density-selector__legend">Display density</legend>
+      <legend className="alm-density-selector__legend">{m.settings_density_legend()}</legend>
       <RadioGroup
         value={density}
         onValueChange={(value) => setDensity(value as Density)}
         className="alm-density-selector__group"
-        aria-label="Display density"
+        aria-label={m.settings_density_legend()}
       >
         {DENSITY_OPTIONS.map((opt) => (
           <label key={opt.value} className="alm-density-selector__option">

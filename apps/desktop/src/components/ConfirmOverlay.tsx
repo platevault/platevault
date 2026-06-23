@@ -9,6 +9,7 @@
 import { type ReactNode } from 'react';
 import { Dialog } from '@base-ui-components/react/dialog';
 import { Btn } from '@/ui';
+import { m } from '@/lib/i18n';
 
 export interface ConfirmOverlayProps {
   open: boolean;
@@ -58,7 +59,7 @@ export function ConfirmOverlay({
           {/* Footer */}
           <div className="alm-confirm-overlay__footer">
             <Btn variant="ghost" onClick={onClose}>
-              Cancel
+              {m.common_cancel()}
             </Btn>
             <Btn variant={confirmVariant} onClick={onConfirm}>
               {confirmLabel}

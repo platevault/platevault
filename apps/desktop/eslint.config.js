@@ -2,6 +2,14 @@
 import js from '@eslint/js';
 import tseslint from 'typescript-eslint';
 import reactHooks from 'eslint-plugin-react-hooks';
+import jsxA11y from 'eslint-plugin-jsx-a11y';
+import alm from './eslint-rules/no-user-string.js';
+
+// The i18n catalog migration is complete: the `alm/no-user-string` gate is
+// enforced across ALL of src (spec 046, FR-001 / SC-001 met). Non-user-facing
+// exclusions (tests, fixtures, mocks, dev surface, generated) are listed in the
+// gated config block's `ignores` below.
+const I18N_MIGRATED = ['src/**/*.{ts,tsx}'];
 
 export default tseslint.config(
   // Base JS recommended rules
@@ -19,6 +27,30 @@ export default tseslint.config(
     },
   },
 
+  // i18n catalog gate (spec 046). Plugin is registered globally but only
+  // ENFORCED on migrated areas (I18N_MIGRATED), so it can be rolled out wave by
+  // wave without turning the whole tree red at once.
+  {
+    plugins: { alm },
+  },
+  {
+    files: I18N_MIGRATED,
+    // Tests, fixtures, mocks, and the dev-tools surface are out of SC-001 scope
+    // (research R4): assertion literals are legitimate, and the dev surface is
+    // compiled out of release builds.
+    ignores: [
+      '**/*.test.{ts,tsx}',
+      '**/*.spec.{ts,tsx}',
+      '**/__fixtures__/**',
+      'src/api/mocks.ts',
+      'src/data/**',
+      'src/dev/**',
+    ],
+    rules: {
+      'alm/no-user-string': 'error',
+    },
+  },
+
   // React hooks rules
   {
     plugins: {
@@ -32,6 +64,19 @@ export default tseslint.config(
       // visible but don't block CI.
       'react-hooks/set-state-in-effect': 'warn',
     },
+  },
+
+  // Accessibility (eslint-plugin-jsx-a11y). The standard a11y gate, previously
+  // absent. Rolled out at `warn` first (same wave strategy as the i18n gate):
+  // the recommended set surfaces ~25 existing findings; once those are fixed in
+  // a focused a11y pass, promote this block to the error-level
+  // `jsxA11y.flatConfigs.recommended` and gate CI on it.
+  {
+    files: ['src/**/*.{ts,tsx}'],
+    plugins: { 'jsx-a11y': jsxA11y },
+    rules: Object.fromEntries(
+      Object.keys(jsxA11y.flatConfigs.recommended.rules).map((name) => [name, 'warn']),
+    ),
   },
 
   // Project-wide rule overrides — keep pragmatic
@@ -103,6 +148,7 @@ export default tseslint.config(
       'dist/**',
       'src-tauri/**',
       'src/bindings/**',
+      'src/paraglide/**',
       'src-archived-2026-05-24/**',
       'playwright.config.ts',
       'vite.config.ts',

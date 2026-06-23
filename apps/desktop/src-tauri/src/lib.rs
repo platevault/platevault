@@ -589,6 +589,88 @@ pub fn build_app() -> tauri::App {
         .expect("error while building tauri application")
 }
 
+/// Spawn the spec-035 US4/T043 background ingest-resolution drain.
+///
+/// Every interval the task rebuilds the resolver from the persisted
+/// `resolver_settings`, drains the pending `ingest_resolution` queue
+/// (cache-first → SIMBAD when online; cache-only when offline), then back-fills
+/// `acquisition_session.canonical_target_id` for sessions whose frames resolved
+/// this pass. Failures are logged, never fatal — the next pass retries.
+fn spawn_ingest_resolution_drain(pool: SqlitePool, bus: EventBus) {
+    use targeting_resolver::simbad::{
+        OfflineResolver, SimbadConfig, SimbadResolver, DEFAULT_TAP_ENDPOINT,
+    };
+    tokio::spawn(async move {
+        let interval = std::time::Duration::from_secs(30);
+        loop {
+            tokio::time::sleep(interval).await;
+
+            // Read resolver settings (online toggle + endpoint + timeout).
+            let settings: Option<(i64, String, i64)> = sqlx::query_as(
+                "SELECT online_enabled, simbad_endpoint, request_timeout_secs \
+                 FROM resolver_settings WHERE id = 1",
+            )
+            .fetch_optional(&pool)
+            .await
+            .unwrap_or(None);
+            let (online_enabled, endpoint, timeout_secs) = settings.map_or_else(
+                || (true, DEFAULT_TAP_ENDPOINT.to_owned(), 10),
+                |(o, e, t)| (o != 0, e, t),
+            );
+
+            // When online, build a SimbadResolver (falling back to offline if the
+            // client fails to build, mirroring target.resolve FIX-3); otherwise
+            // drain cache-only.
+            let drain = if online_enabled {
+                let config = SimbadConfig::from_settings(
+                    endpoint,
+                    u64::try_from(timeout_secs.max(1)).unwrap_or(10),
+                );
+                match SimbadResolver::new(&config) {
+                    Ok(resolver) => {
+                        app_core::ingest_resolution::resolve_pending(
+                            &pool,
+                            &resolver,
+                            Some(&bus),
+                            true,
+                            50,
+                        )
+                        .await
+                    }
+                    Err(_) => {
+                        app_core::ingest_resolution::resolve_pending(
+                            &pool,
+                            &OfflineResolver,
+                            Some(&bus),
+                            false,
+                            50,
+                        )
+                        .await
+                    }
+                }
+            } else {
+                app_core::ingest_resolution::resolve_pending(
+                    &pool,
+                    &OfflineResolver,
+                    Some(&bus),
+                    false,
+                    50,
+                )
+                .await
+            };
+            if let Err(e) = drain {
+                tracing::warn!("ingest_resolution drain failed: {e:?}");
+                continue;
+            }
+
+            // Back-fill sessions whose frames just resolved.
+            if let Err(e) = app_core::ingest_sessions::backfill_session_targets(&pool).await {
+                tracing::warn!("acquisition_session target back-fill failed: {e:?}");
+            }
+        }
+    });
+}
+
 pub fn run_app(app: tauri::App, pool: SqlitePool) {
     let bus = EventBus::with_pool(pool.clone());
 
@@ -638,6 +720,11 @@ pub fn run_app(app: tauri::App, pool: SqlitePool) {
             }
         });
     }
+
+    // spec 035 US4/T043: background ingest-resolution drain + session target
+    // back-fill on an interval. Non-blocking; transient/offline outcomes leave
+    // rows pending for the next pass.
+    spawn_ingest_resolution_drain(pool.clone(), bus.clone());
 
     // Inbox + inventory commands take `State<'_, SqlitePool>` directly (rather
     // than via AppState), so the raw pool must be managed too. Without this they

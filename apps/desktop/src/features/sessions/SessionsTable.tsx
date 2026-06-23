@@ -29,6 +29,7 @@ import { useMemo } from 'react';
 import { AlertTriangle } from 'lucide-react';
 import type { InventorySource, InventorySession } from '@/api/commands';
 import { Table, Pill } from '@/ui';
+import { m } from '@/lib/i18n';
 import type { TableColumn, TableRow } from '@/ui';
 import { sessionStateLabel, sessionStateVariant } from '@/lib/lifecycle';
 
@@ -149,14 +150,14 @@ function groupSessions(
 // ── Column model ────────────────────────────────────────────────────────────────
 
 const COLUMNS: Array<{ key: string; label: string; sort?: SessionSortCol; className?: string }> = [
-  { key: 'target', label: 'Target', sort: 'target' },
-  { key: 'filter', label: 'Filter', sort: 'filter' },
-  { key: 'frames', label: 'Frames', sort: 'frames', className: 'alm-sessions-cell--num' },
-  { key: 'integration', label: 'Integration', sort: 'exposure', className: 'alm-sessions-cell--mono' },
-  { key: 'night', label: 'Night', sort: 'night', className: 'alm-sessions-cell--mono' },
-  { key: 'camera', label: 'Camera', sort: 'camera', className: 'alm-sessions-cell--muted' },
-  { key: 'state', label: 'State', sort: 'state' },
-  { key: 'projects', label: 'Projects' },
+  { key: 'target', label: m.projects_create_target_label(), sort: 'target' },
+  { key: 'filter', label: m.common_filter(), sort: 'filter' },
+  { key: 'frames', label: m.projects_wizard_col_frames(), sort: 'frames', className: 'alm-sessions-cell--num' },
+  { key: 'integration', label: m.projects_wizard_col_integration(), sort: 'exposure', className: 'alm-sessions-cell--mono' },
+  { key: 'night', label: m.sessions_col_night(), sort: 'night', className: 'alm-sessions-cell--mono' },
+  { key: 'camera', label: m.settings_calmatch_camera(), sort: 'camera', className: 'alm-sessions-cell--muted' },
+  { key: 'state', label: m.sessions_col_state(), sort: 'state' },
+  { key: 'projects', label: m.common_projects() },
 ];
 
 function isNeedsReview(state: string): boolean {
@@ -166,7 +167,7 @@ function isNeedsReview(state: string): boolean {
 function stateLabel(state: string): string {
   // Full label, never truncated: all "needs review"-class states collapse to a
   // single readable label; everything else uses the canonical lifecycle label.
-  return isNeedsReview(state) ? 'Needs review' : sessionStateLabel(state);
+  return isNeedsReview(state) ? m.sessions_needs_review_aria() : sessionStateLabel(state);
 }
 
 // ── Component ────────────────────────────────────────────────────────────────
@@ -207,7 +208,7 @@ export function SessionsTable({
           'alm-sessions-sorth' + (sort.col === c.sort ? ' alm-sessions-sorth--active' : '')
         }
         onClick={() => onSort(c.sort as SessionSortCol)}
-        aria-label={`Sort by ${c.label}`}
+        aria-label={m.sessions_sort_by_aria({ col: c.label })}
       >
         {c.label}
         {sort.col === c.sort && (
@@ -230,7 +231,7 @@ export function SessionsTable({
         <span>
           {group.label}
           <span className="alm-sessions-table__group-count">
-            {group.sessions.length} {group.sessions.length === 1 ? 'session' : 'sessions'}
+            {group.sessions.length} {group.sessions.length === 1 ? m.sessions_singular() : m.status_sessions_label()}
           </span>
         </span>
       ),
@@ -260,7 +261,7 @@ export function SessionsTable({
             <AlertTriangle
               size={11}
               role="img"
-              aria-label="Needs review"
+              aria-label={m.sessions_needs_review_aria()}
               className="alm-sessions-cell__warn-icon"
             />
           </span>
@@ -293,7 +294,7 @@ export function SessionsTable({
 
   if (groups.length === 0 && !loading) {
     return (
-      <div className="alm-sessions-table__empty">No sessions match the current filters.</div>
+      <div className="alm-sessions-table__empty">{m.sessions_no_match()}</div>
     );
   }
 
