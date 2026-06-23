@@ -9,50 +9,13 @@ import { forwardRef } from 'react';
 import type { HTMLAttributes } from 'react';
 import { X } from 'lucide-react';
 import { useToasts, type Toast as ToastType } from '@/shared/toast';
+import { m } from '@/lib/i18n';
 
-const CONTAINER_STYLE: React.CSSProperties = {
-  position: 'fixed',
-  bottom: 'var(--alm-space-4, 16px)',
-  right: 'var(--alm-space-4, 16px)',
-  display: 'flex',
-  flexDirection: 'column',
-  gap: 'var(--alm-space-2, 8px)',
-  zIndex: 9999,
-  pointerEvents: 'none',
-  maxWidth: 400,
-};
-
-const VARIANT_STYLES: Record<string, React.CSSProperties> = {
-  info: {
-    background: 'var(--alm-surface, #1e1e2e)',
-    borderLeft: '3px solid var(--alm-info, #60a5fa)',
-  },
-  error: {
-    background: 'var(--alm-surface, #1e1e2e)',
-    borderLeft: '3px solid var(--alm-danger, #dc2626)',
-  },
-  success: {
-    background: 'var(--alm-surface, #1e1e2e)',
-    borderLeft: '3px solid var(--alm-ok, #22c55e)',
-  },
-  warn: {
-    background: 'var(--alm-surface, #1e1e2e)',
-    borderLeft: '3px solid var(--alm-warn, #f59e0b)',
-  },
-};
-
-const TOAST_STYLE: React.CSSProperties = {
-  padding: 'var(--alm-space-3, 12px) var(--alm-space-4, 16px)',
-  borderRadius: 'var(--alm-radius-sm, 4px)',
-  border: '1px solid var(--alm-border, #333)',
-  color: 'var(--alm-text, #e0e0e0)',
-  fontSize: 'var(--alm-text-sm, 13px)',
-  lineHeight: 1.5,
-  pointerEvents: 'auto',
-  display: 'flex',
-  alignItems: 'flex-start',
-  gap: 'var(--alm-space-3, 12px)',
-  boxShadow: '0 4px 12px rgba(0,0,0,0.3)',
+const VARIANT_CLASS: Record<string, string> = {
+  info: 'alm-toast__item--info',
+  error: 'alm-toast__item--error',
+  success: 'alm-toast__item--success',
+  warn: 'alm-toast__item--warn',
 };
 
 function ToastItem({
@@ -65,40 +28,22 @@ function ToastItem({
   return (
     <div
       role="alert"
-      style={{ ...TOAST_STYLE, ...VARIANT_STYLES[toast.variant] }}
+      className={`alm-toast__item ${VARIANT_CLASS[toast.variant] ?? ''}`}
     >
-      <span style={{ flex: 1 }}>{toast.message}</span>
-      <div style={{ display: 'flex', alignItems: 'center', gap: 'var(--alm-space-2, 8px)', flexShrink: 0 }}>
+      <span className="alm-toast__message">{toast.message}</span>
+      <div className="alm-toast__controls">
         {toast.action && (
           <button
             onClick={toast.action.onClick}
-            style={{
-              background: 'transparent',
-              border: '1px solid var(--alm-border, #444)',
-              borderRadius: 'var(--alm-radius-sm, 4px)',
-              color: 'var(--alm-text, #e0e0e0)',
-              fontSize: 'var(--alm-text-xs, 11px)',
-              padding: '2px 8px',
-              cursor: 'pointer',
-              whiteSpace: 'nowrap',
-            }}
+            className="alm-toast__action-btn"
           >
             {toast.action.label}
           </button>
         )}
         <button
           onClick={() => onDismiss(toast.id)}
-          aria-label="Dismiss notification"
-          style={{
-            background: 'transparent',
-            border: 'none',
-            color: 'var(--alm-text-muted, #888)',
-            fontSize: 14,
-            cursor: 'pointer',
-            lineHeight: 1,
-            padding: 0,
-            display: 'inline-flex',
-          }}
+          aria-label={m.ui_toast_dismiss_aria()}
+          className="alm-toast__dismiss-btn"
         >
           <X size={14} aria-hidden="true" />
         </button>
@@ -115,11 +60,11 @@ export const ToastContainer = forwardRef<HTMLDivElement, ToastContainerProps>(
 
     if (toasts.length === 0) return null;
 
-    const cls = className ? `${className}` : undefined;
-    const mergedStyle = style ? { ...CONTAINER_STYLE, ...style } : CONTAINER_STYLE;
+    const cls = ['alm-toast__container', className].filter(Boolean).join(' ');
 
     return (
-      <div ref={ref} style={mergedStyle} className={cls} aria-live="polite" {...rest}>
+      // eslint-disable-next-line no-restricted-syntax -- dynamic: ToastContainer style prop passthrough from caller
+      <div ref={ref} style={style} className={cls} aria-live="polite" {...rest}>
         {toasts.map((toast) => (
           <ToastItem key={toast.id} toast={toast} onDismiss={dismiss} />
         ))}

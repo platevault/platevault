@@ -2,6 +2,8 @@ import { useState, useMemo } from 'react';
 import { Btn, Pill, Table } from '@/ui';
 import { AUDIT_EVENTS, type AuditEventFixture } from '@/data/fixtures/settings';
 import { formatDateTime, compareDateDesc, toEpochMs } from '@/lib/datetime';
+import { m } from '@/lib/i18n';
+import { SettingsSection } from './SettingsKit';
 
 type AuditOutcome = AuditEventFixture['outcome'];
 
@@ -50,34 +52,30 @@ export function AuditLog() {
 
   return (
     <>
-      {/* Filters */}
-      <div className="alm-settings__group">
-        <div style={{ display: 'flex', gap: 'var(--alm-sp-2)', flexWrap: 'wrap', marginBottom: 'var(--alm-sp-3)' }}>
+      <SettingsSection title={m.settings_auditlog_title()}>
+        <div className="alm-audit-log__filters">
           <input
             type="text"
-            className="alm-input"
-            style={{ flex: 1, minWidth: 200 }}
-            placeholder="Search events, entities, details…"
+            className="alm-input alm-audit-log__search"
+            placeholder={m.settings_auditlog_search_placeholder()}
             value={search}
             onChange={(e) => { setSearch(e.target.value); setPage(0); }}
-            aria-label="Search audit events"
+            aria-label={m.settings_auditlog_search_aria()}
           />
-          <label style={{ display: 'flex', alignItems: 'center', gap: 'var(--alm-sp-1)', fontSize: 'var(--alm-text-sm)', color: 'var(--alm-text-muted)' }}>
-            From
+          <label className="alm-audit-log__date-label">
+            {m.settings_auditlog_date_from()}
             <input
               type="date"
-              className="alm-input"
-              style={{ width: 140 }}
+              className="alm-input alm-audit-log__date-input"
               value={dateFrom}
               onChange={(e) => { setDateFrom(e.target.value); setPage(0); }}
             />
           </label>
-          <label style={{ display: 'flex', alignItems: 'center', gap: 'var(--alm-sp-1)', fontSize: 'var(--alm-text-sm)', color: 'var(--alm-text-muted)' }}>
-            To
+          <label className="alm-audit-log__date-label">
+            {m.settings_auditlog_date_to()}
             <input
               type="date"
-              className="alm-input"
-              style={{ width: 140 }}
+              className="alm-input alm-audit-log__date-input"
               value={dateTo}
               onChange={(e) => { setDateTo(e.target.value); setPage(0); }}
             />
@@ -86,31 +84,31 @@ export function AuditLog() {
 
         <Table
           columns={[
-            { key: 'timestamp', label: 'Timestamp', style: { width: 150 } },
-            { key: 'event', label: 'Event' },
-            { key: 'entity', label: 'Entity' },
-            { key: 'outcome', label: 'Outcome', style: { width: 90 } },
-            { key: 'actor', label: 'Actor', style: { width: 72 } },
+            { key: 'timestamp', label: m.settings_auditlog_col_timestamp(), style: { width: 150 } },
+            { key: 'event', label: m.settings_auditlog_col_event() },
+            { key: 'entity', label: m.settings_auditlog_col_entity() },
+            { key: 'outcome', label: m.settings_auditlog_col_outcome(), style: { width: 90 } },
+            { key: 'actor', label: m.settings_auditlog_col_actor(), style: { width: 72 } },
           ]}
           rows={pageItems.map((e) => ({
             timestamp: (
-              <code className="alm-mono" style={{ fontSize: 'var(--alm-text-2xs)' }}>
+              <code className="alm-mono alm-audit-log__ts">
                 {formatDateTime(e.timestamp)}
               </code>
             ),
             event: (
-              <span style={{ fontSize: 'var(--alm-text-xs)', fontFamily: 'var(--alm-font-mono)' }}>
+              <span className="alm-audit-log__event">
                 {e.event}
               </span>
             ),
             entity: (
-              <span style={{ fontSize: 'var(--alm-text-xs)', color: 'var(--alm-text-muted)', maxWidth: 200, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', display: 'block' }} title={e.entity}>
+              <span className="alm-audit-log__entity" title={e.entity}>
                 {e.entity}
               </span>
             ),
             outcome: <Pill variant={outcomeVariant(e.outcome)}>{e.outcome}</Pill>,
             actor: (
-              <span style={{ fontSize: 'var(--alm-text-xs)', color: 'var(--alm-text-muted)' }}>
+              <span className="alm-audit-log__actor">
                 {e.actor}
               </span>
             ),
@@ -118,26 +116,27 @@ export function AuditLog() {
         />
 
         {pageItems.length === 0 && (
-          <p style={{ textAlign: 'center', color: 'var(--alm-text-muted)', fontSize: 'var(--alm-text-sm)', padding: 'var(--alm-sp-4)' }}>
-            No matching audit events.
+          <p className="alm-audit-log__empty">
+            {m.settings_auditlog_empty()}
           </p>
         )}
 
         {/* Pagination */}
-        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginTop: 'var(--alm-sp-3)' }}>
-          <span style={{ fontSize: 'var(--alm-text-xs)', color: 'var(--alm-text-muted)' }}>
+        <div className="alm-audit-log__pagination">
+          <span className="alm-audit-log__page-count">
+            {/* eslint-disable-next-line alm/no-user-string -- plural composite: count + page + total JS expressions cannot be split into a single catalog key without ICU plural support */}
             {filtered.length} event{filtered.length !== 1 ? 's' : ''} &middot; page {page + 1} of {totalPages}
           </span>
-          <div style={{ display: 'flex', gap: 'var(--alm-sp-1)' }}>
+          <div className="alm-audit-log__page-btns">
             <Btn size="sm" variant="ghost" onClick={() => setPage(Math.max(0, page - 1))} disabled={page === 0}>
-              Previous
+              {m.settings_auditlog_previous()}
             </Btn>
             <Btn size="sm" variant="ghost" onClick={() => setPage(Math.min(totalPages - 1, page + 1))} disabled={page >= totalPages - 1}>
-              Next
+              {m.settings_auditlog_next()}
             </Btn>
           </div>
         </div>
-      </div>
+      </SettingsSection>
     </>
   );
 }

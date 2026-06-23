@@ -1,57 +1,73 @@
 /**
- * ProjectsPage — spec 008 wired.
+ * ProjectsPage — spec 008 wired; spec 043 shared-layout adoption (tasks #73/#74/#104).
  *
- * List+detail layout for projects. Reads from `projects.list` / `projects.get`
- * (real commands) instead of PROJECTS_DATA fixture.
+ * Adopts the shared list-page system (the Sessions reference): a pinned
+ * `PageTopBar` over a `ListPageLayout` body — a DENSE FULL-WIDTH projects
+ * `ProjectsTable` as primary content with the existing `ProjectDetail` in the
+ * right-side detail pane that mounts only on selection.
  *
- * URL state:
- *   - `selected`: numeric index into the list (preserves existing router contract).
+ * Top-bar convention (user feedback): NO title/summary (the left nav names the
+ * page; per-page counts live in the bottom status bar) and NO sort control
+ * (sorting is via the clickable table column headers). The bar carries only the
+ * `FilterToolbar` (search over name/tool + a single State filter) and the
+ * page-level "+ New project" CTA.
+ *
+ * Top-bar actions: a page-level "+ New project" CTA. Per-project actions
+ * (Reveal in Explorer · Open in {tool} · lifecycle transitions incl. Mark as
+ * Completed) live in the detail pane's action bar, which only mounts when a
+ * project is selected — so they are, by construction, shown only on selection
+ * and carry the canonical `transition-btn-*` / `lifecycle-actions` testids.
+ *
+ * Dual-panel layout (task #104): the Projects page uses `detailPlacement=
+ * "side-and-bottom"`. The SIDE panel (ProjectDetailContent) shows the primary
+ * project identity — header, actions, metrics, stepper, target, Sources table,
+ * and Channels palette. The BOTTOM panel (ProjectBottomDetail) shows the
+ * secondary/operational sections that benefit from full-width horizontal room:
+ * Notes, Manifests, Calibration, Source views, Outputs, and Cleanup preview.
+ * Both panels mount when a project is selected and close together.
+ *
+ * URL state (unchanged router contract):
+ *   - `selected`: numeric index into the (unfiltered) list.
  *   - `lifecycle`: CSV state filter.
- *
- * "New project" button opens CreateProjectDialog (US1). On success, the list
- * is invalidated and the new project is navigated to.
  */
 
-import { useCallback } from 'react';
+import { useCallback, useMemo, useState } from 'react';
 import { useNavigate, useSearch } from '@tanstack/react-router';
-import { PageShell, ListDetailLayout, TopActionBar } from '@/components';
-import { Btn, EmptyState } from '@/ui';
-import type { BtnVariant } from '@/ui';
+import { PageTopBar, FilterToolbar, ListPageLayout } from '@/components';
+import type { FilterOption } from '@/components';
+import { Btn } from '@/ui';
+import { m } from '@/lib/i18n';
 import { useStaleSelectionCleanup } from '@/lib/use-stale-selection';
-import { ProjectsList } from './ProjectsList';
+import { projectStateLabel } from '@/lib/lifecycle';
+import {
+  ProjectsTable,
+  DEFAULT_PROJECT_SORT,
+  type ProjectSort,
+  type ProjectSortCol,
+} from './ProjectsTable';
 import { ProjectDetailContent } from './ProjectDetail';
+import { ProjectBottomDetail } from './ProjectBottomDetail';
 import { useProjects } from './store';
 import type { ProjectSummaryDto } from '@/bindings/index';
 
-// ── Contextual actions per lifecycle state ────────────────────────────────────
+// All selectable lifecycle states for the top-bar State filter.
+const LIFECYCLE_OPTIONS: FilterOption[] = [
+  'processing',
+  'ready',
+  'prepared',
+  'completed',
+  'archived',
+  'blocked',
+  'setup_incomplete',
+].map((value) => ({ value, label: projectStateLabel(value) }));
 
-interface ContextualAction {
-  label: string;
-  variant?: BtnVariant;
-}
-
-function projectActions(lifecycle: string): ContextualAction[] {
-  switch (lifecycle) {
-    case 'setup_incomplete':
-      return [{ label: 'Continue setup', variant: 'primary' }];
-    case 'ready':
-      return [{ label: 'Generate source view', variant: 'primary' }, { label: 'Add sessions' }];
-    case 'prepared':
-      return [{ label: 'Reveal source views', variant: 'primary' }];
-    case 'processing':
-      return [{ label: 'Mark complete', variant: 'primary' }];
-    case 'completed':
-      return [
-        { label: 'Generate cleanup plan', variant: 'primary' },
-        { label: 'Archive project' },
-      ];
-    case 'archived':
-      return [{ label: 'Unarchive' }];
-    case 'blocked':
-      return [{ label: 'Resolve block', variant: 'danger' }];
-    default:
-      return [];
-  }
+/** Client-side text search over name + tool. */
+function filterBySearch(projects: ProjectSummaryDto[], query: string): ProjectSummaryDto[] {
+  const q = query.trim().toLowerCase();
+  if (!q) return projects;
+  return projects.filter(
+    (p) => p.name.toLowerCase().includes(q) || p.tool.toLowerCase().includes(q),
+  );
 }
 
 // ── Component ────────────────────────────────────────────────────────────────
@@ -62,94 +78,120 @@ export function ProjectsPage() {
 
   const { data: projects = [], loading } = useProjects();
 
+  // (task #87) The per-page status-bar summary was removed: the status bar now
+  // shows GLOBAL library totals via useStatusSummary, not per-route counts.
+
+  const [search, setSearch] = useState('');
+  const [sort, setSort] = useState<ProjectSort>(DEFAULT_PROJECT_SORT);
+
   // Stale-id cleanup: if selected index is out of range, clear it.
   const selectedIdx = selected ?? 0;
-  const inRange = projects.length > 0 && selectedIdx < projects.length;
+  const inRange = projects.length > 0 && selected != null && selectedIdx < projects.length;
   useStaleSelectionCleanup(selected, inRange, () =>
     navigate({ search: (prev) => ({ ...prev, selected: undefined }), replace: true }),
   );
 
   const project: ProjectSummaryDto | undefined = inRange ? projects[selectedIdx] : undefined;
 
-  const onSelect = (idx: number) =>
-    void navigate({ search: (prev) => ({ ...prev, selected: idx }) });
+  const onSelect = (id: string) => {
+    const idx = projects.findIndex((p) => p.id === id);
+    if (idx >= 0) void navigate({ search: (prev) => ({ ...prev, selected: idx }) });
+  };
+
+  const clearSelection = useCallback(
+    () => navigate({ search: (prev) => ({ ...prev, selected: undefined }), replace: true }),
+    [navigate],
+  );
 
   type ProjectLifecycleFilter = NonNullable<typeof lifecycle>;
-  const onLifecycleChange = (states: string[]) =>
+  // The top-bar State filter is single-select; map it onto the CSV `lifecycle`
+  // URL param (an empty value clears it).
+  const lifecycleValue = lifecycle?.length === 1 ? lifecycle[0] : '';
+  const onLifecycleChange = (value: string) =>
     navigate({
       search: (prev) => ({
         ...prev,
-        lifecycle: states.length ? (states as ProjectLifecycleFilter) : undefined,
+        lifecycle: value ? ([value] as ProjectLifecycleFilter) : undefined,
       }),
     });
 
-  // T078c: navigate to wizard instead of opening modal
   const handleNewProject = useCallback(() => {
     void navigate({ to: '/projects/new' });
   }, [navigate]);
 
-  const filteredProjects = lifecycle?.length
-    ? projects.filter((p) => (lifecycle as string[]).includes(p.lifecycle))
-    : projects;
+  const handleHeaderSort = useCallback((col: ProjectSortCol) => {
+    setSort((prev) =>
+      prev.col === col ? { col, dir: prev.dir === 'asc' ? 'desc' : 'asc' } : { col, dir: 'asc' },
+    );
+  }, []);
+
+  // Apply the lifecycle filter (URL) then the client-side search.
+  const filtered = useMemo(() => {
+    const byState = lifecycle?.length
+      ? projects.filter((p) => (lifecycle as string[]).includes(p.lifecycle))
+      : projects;
+    return filterBySearch(byState, search);
+  }, [projects, lifecycle, search]);
+
+  // Per the top-bar convention (user feedback): OMIT title + summary (the left
+  // nav names the page; per-page counts live in the bottom status bar), and do
+  // NOT surface a sort control here — sorting is driven by the clickable
+  // ProjectsTable column headers. The bar carries only search + the State
+  // filter + the page-level "+ New project" CTA. Per-project actions live in
+  // the detail panel header, which mounts only on selection.
+  const topBar = (
+    <PageTopBar
+      filters={
+        <FilterToolbar
+          search={{
+            value: search,
+            onChange: setSearch,
+            placeholder: m.projects_search_placeholder(),
+            ariaLabel: m.projects_search_aria(),
+          }}
+          fields={[
+            {
+              key: 'state',
+              label: m.sessions_col_state(),
+              value: lifecycleValue,
+              options: LIFECYCLE_OPTIONS,
+              allLabel: m.projects_filter_all_states(),
+              onChange: onLifecycleChange,
+            },
+          ]}
+        />
+      }
+      actions={
+        <Btn
+          size="sm"
+          variant="primary"
+          onClick={handleNewProject}
+          data-guide-anchor="projects.create-cta"
+        >
+          {m.projects_new_btn()}
+        </Btn>
+      }
+    />
+  );
 
   return (
-    <PageShell>
-      <ListDetailLayout
-        topBar={
-          <TopActionBar
-            title="Projects"
-            subtitle={loading ? 'Loading…' : `${filteredProjects.length} projects`}
-            right={
-              <>
-                {project && (
-                  <>
-                    {projectActions(project.lifecycle).map((a) => (
-                      <Btn key={a.label} size="sm" variant={a.variant}>
-                        {a.label}
-                      </Btn>
-                    ))}
-                    <Btn size="sm">Reveal in Explorer</Btn>
-                  </>
-                )}
-                <Btn
-                  size="sm"
-                  variant="primary"
-                  onClick={handleNewProject}
-                  data-guide-anchor="projects.create-cta"
-                >
-                  + New project
-                </Btn>
-              </>
-            }
-          />
-        }
-        list={
-          <ProjectsList
-            projects={filteredProjects}
-            selectedId={project?.id}
-            onSelect={(id) => {
-              const idx = projects.findIndex((p) => p.id === id);
-              if (idx >= 0) onSelect(idx);
-            }}
-            lifecycle={lifecycle ?? []}
-            onLifecycleChange={onLifecycleChange}
-            loading={loading}
-          />
-        }
-        detail={
-          project ? (
-            <ProjectDetailContent projectId={project.id} />
-          ) : loading ? (
-            <EmptyState title="Loading projects…" desc="" />
-          ) : (
-            <EmptyState
-              title="Select a project"
-              desc="Choose a project from the list to view its details."
-            />
-          )
-        }
+    <ListPageLayout
+      topBar={topBar}
+      detail={project ? <ProjectDetailContent projectId={project.id} /> : undefined}
+      onCloseDetail={project ? clearSelection : undefined}
+      detailLabel="Project details"
+      detailPlacement="side-and-bottom"
+      bottomDetail={project ? <ProjectBottomDetail projectId={project.id} /> : undefined}
+      bottomDetailLabel="Project sections"
+    >
+      <ProjectsTable
+        projects={filtered}
+        selectedId={project?.id}
+        onSelect={onSelect}
+        loading={loading}
+        sort={sort}
+        onSort={handleHeaderSort}
       />
-
-    </PageShell>
+    </ListPageLayout>
   );
 }

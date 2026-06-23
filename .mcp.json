@@ -48,15 +48,13 @@
     },
     "tauri": {
       "type": "stdio",
-      "command": "npx",
+      "command": "bash",
       "args": [
-        "-y",
-        "tauri-plugin-mcp-server"
+        "-lc",
+        "set -a; [ -f .mcp.tauri.env ] && . ./.mcp.tauri.env; set +a; exec npx -y @hypothesi/tauri-mcp-server"
       ],
       "env": {
-        "TAURI_MCP_CONNECTION_TYPE": "tcp",
-        "TAURI_MCP_TCP_HOST": "127.0.0.1",
-        "TAURI_MCP_TCP_PORT": "9999"
+        "MCP_BRIDGE_PORT": "9223"
       }
     }
   }

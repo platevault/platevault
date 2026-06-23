@@ -135,15 +135,190 @@ describe('PlanPanel (aggregate surface)', () => {
     expect(screen.getByTestId('plan-total-count')).toHaveTextContent('3 actions');
   });
 
-  it('renders the action destination preview and basename per row', () => {
+  it('renders the action destination preview and basename per row when expanded', () => {
     const plans = [
       makePlan({
+        inboxItemId: 'item-1',
         actions: [makeAction({ fromPath: '/deep/path/ngc1234.fits', destinationPreview: '/dest/lights/ngc1234.fits' })],
       }),
     ];
     renderPanel(plans);
+    // Rows are collapsed by default — file basename + dest only appear once the
+    // group is expanded.
+    expect(screen.queryByText('ngc1234.fits')).toBeNull();
+    fireEvent.click(screen.getByTestId('plan-group-toggle-item-1'));
     expect(screen.getByText('ngc1234.fits')).toBeInTheDocument();
     expect(screen.getByText('/dest/lights/ngc1234.fits')).toBeInTheDocument();
+  });
+
+  it('collapses file rows by default and shows a per-group summary line', () => {
+    const plans = [
+      makePlan({
+        inboxItemId: 'g1',
+        actions: [
+          makeAction({ index: 0, fromPath: '/in/d1.fits', destinationPreview: '/lib/masters/darks/d1.fits' }),
+          makeAction({ index: 1, fromPath: '/in/d2.fits', destinationPreview: '/lib/masters/darks/d2.fits' }),
+        ],
+      }),
+    ];
+    renderPanel(plans);
+    // No per-file rows by default.
+    expect(screen.queryByText('d1.fits')).toBeNull();
+    // Summary present: "2 darks → …/masters/darks".
+    const summary = screen.getByTestId('plan-group-summary-g1');
+    expect(summary).toHaveTextContent('2 darks');
+    expect(summary).toHaveTextContent('masters/darks');
+  });
+
+  // ── #75: frame-type-hint aggregation for catalogue actions ───────────────────
+
+  it('aggregates catalogue actions by FRAME TYPE using frameTypeByItemId (no per-file degeneration)', () => {
+    // Catalogue actions keep files in place, so the destination path carries no
+    // frame keyword. Without the item hint these collapse to "N catalogue"; with
+    // it they aggregate to the real frame type from the item's classification.
+    const plans = [
+      makePlan({
+        inboxItemId: 'cat',
+        itemName: '(root)',
+        actions: [
+          makeAction({ index: 0, action: 'catalogue', fromPath: '/lib/cam/a.fits', destinationPreview: '/lib/cam/a.fits' }),
+          makeAction({ index: 1, action: 'catalogue', fromPath: '/lib/cam/b.fits', destinationPreview: '/lib/cam/b.fits' }),
+          makeAction({ index: 2, action: 'catalogue', fromPath: '/lib/cam/c.fits', destinationPreview: '/lib/cam/c.fits' }),
+        ],
+      }),
+    ];
+    render(
+      <PlanPanel
+        plans={plans}
+        totalActions={3}
+        destructiveDestination="archive"
+        onDestructiveDestinationChange={vi.fn()}
+        onApplySelected={vi.fn()}
+        onApplyAll={vi.fn()}
+        onCancel={vi.fn()}
+        frameTypeByItemId={{ cat: 'bias' }}
+      />,
+    );
+    const summary = screen.getByTestId('plan-group-summary-cat');
+    // Single aggregated frame-type line — "3 bias", NOT three "catalogue" rows.
+    expect(summary).toHaveTextContent('3 bias');
+    expect(summary).not.toHaveTextContent('catalogue');
+    // Still collapsed: no per-file rows visible.
+    expect(screen.queryByText('a.fits')).toBeNull();
+  });
+
+  // ── #75: per-type BREAKDOWN summary (collapsed by default, not per-file) ─────
+
+  it('is COLLAPSED by default and renders the per-type breakdown (not per-file rows)', () => {
+    // A MIXED ingestion: the plan actions carry no per-file frame type, so the
+    // single hint would mislabel every file. The breakdown supplies the true
+    // per-type tally, rendered as ONE summary line.
+    const plans = [
+      makePlan({
+        inboxItemId: 'mix',
+        itemName: '(root)',
+        actions: [
+          makeAction({ index: 0, action: 'catalogue', fromPath: '/lib/cam/bias_001.fits', destinationPreview: '/lib/cam/bias_001.fits' }),
+          makeAction({ index: 1, action: 'catalogue', fromPath: '/lib/cam/dark_001.fits', destinationPreview: '/lib/cam/dark_001.fits' }),
+          makeAction({ index: 2, action: 'catalogue', fromPath: '/lib/cam/light_001.fits', destinationPreview: '/lib/cam/light_001.fits' }),
+        ],
+      }),
+    ];
+    render(
+      <PlanPanel
+        plans={plans}
+        totalActions={3}
+        destructiveDestination="archive"
+        onDestructiveDestinationChange={vi.fn()}
+        onApplySelected={vi.fn()}
+        onApplyAll={vi.fn()}
+        onCancel={vi.fn()}
+        breakdownByItemId={{
+          mix: [
+            { kind: 'bias', count: 10 },
+            { kind: 'dark', count: 21 },
+            { kind: 'light', count: 12 },
+          ],
+        }}
+      />,
+    );
+    // COLLAPSED by default: no per-file rows are rendered.
+    expect(screen.queryByText('bias_001.fits')).toBeNull();
+    expect(screen.queryByText('dark_001.fits')).toBeNull();
+    // The summary shows the per-type breakdown — each type with its REAL count
+    // (10 bias · 21 dark · 12 light), NOT one mislabelled per-file line and NOT
+    // everything collapsed to a single wrong type.
+    const summary = screen.getByTestId('plan-group-summary-mix');
+    expect(summary).toHaveTextContent('10');
+    expect(summary).toHaveTextContent('bias');
+    expect(summary).toHaveTextContent('21');
+    expect(summary).toHaveTextContent('dark');
+    expect(summary).toHaveTextContent('12');
+    expect(summary).toHaveTextContent('light');
+    // It is a SINGLE summary line (one <li>), not three per-type/per-file lines.
+    expect(summary.querySelectorAll('.alm-plan-panel__summary-line')).toHaveLength(1);
+
+    // The ▸ toggle expands the per-file rows on demand.
+    fireEvent.click(screen.getByTestId('plan-group-toggle-mix'));
+    expect(screen.getByText('bias_001.fits')).toBeInTheDocument();
+  });
+
+  // ── #98: PRELOADED breakdown makes the collapsed summary accurate for an
+  // UNSELECTED mixed folder (no dominant-type degeneration) ───────────────────
+
+  it('renders the accurate per-type breakdown for an UNSELECTED item when its breakdown is preloaded (#98)', () => {
+    // A mixed in-place catalogue folder. The plan actions carry NO per-file
+    // frame type and NO frame keyword in their (in-place) destinations, so the
+    // action-only fallback would degenerate to one dominant guess (e.g.
+    // "41 catalogue"/"41 darks"). PlanPanel receives no `frameTypeByItemId` for
+    // this id (it is not the selected item) — only the PRELOADED breakdown,
+    // which the parent now fetches for every open plan regardless of selection.
+    const plans = [
+      makePlan({
+        inboxItemId: 'unsel',
+        itemName: '(root)',
+        actions: Array.from({ length: 41 }, (_, i) =>
+          makeAction({
+            index: i,
+            action: 'catalogue',
+            fromPath: `/lib/cam/frame_${i}.fits`,
+            destinationPreview: `/lib/cam/frame_${i}.fits`,
+          }),
+        ),
+      }),
+    ];
+    render(
+      <PlanPanel
+        plans={plans}
+        totalActions={41}
+        destructiveDestination="archive"
+        onDestructiveDestinationChange={vi.fn()}
+        onApplySelected={vi.fn()}
+        onApplyAll={vi.fn()}
+        onCancel={vi.fn()}
+        // No frameTypeByItemId — item is NOT selected. Only the preloaded
+        // authoritative breakdown is supplied (the #98 fix).
+        breakdownByItemId={{
+          unsel: [
+            { kind: 'bias', count: 10 },
+            { kind: 'dark', count: 16 },
+            { kind: 'flat', count: 15 },
+          ],
+        }}
+      />,
+    );
+    const summary = screen.getByTestId('plan-group-summary-unsel');
+    // Accurate per-type tally — NOT "41 darks" or "41 catalogue".
+    expect(summary).toHaveTextContent('10');
+    expect(summary).toHaveTextContent('bias');
+    expect(summary).toHaveTextContent('16');
+    expect(summary).toHaveTextContent('dark');
+    expect(summary).toHaveTextContent('15');
+    expect(summary).toHaveTextContent('flat');
+    expect(summary).not.toHaveTextContent('41');
+    expect(summary).not.toHaveTextContent('catalogue');
+    // It is a SINGLE collapsed summary line.
+    expect(summary.querySelectorAll('.alm-plan-panel__summary-line')).toHaveLength(1);
   });
 
   // ── Selection ──────────────────────────────────────────────────────────────
@@ -297,17 +472,22 @@ describe('PlanPanel destination-root picker (US8)', () => {
 
   it('shows the absolute destination path from absoluteByFromPath (FR-031)', () => {
     const plan = makePlan({
+      inboxItemId: 'item-1',
       actions: [makeAction({ fromPath: '/inbox/img.fits', destinationPreview: 'lights/img.fits' })],
     });
     renderWith({ plans: [plan], absoluteByFromPath: { '/inbox/img.fits': '/lib/A/lights/img.fits' } });
+    // Per-file rows (and their absolute-dest cell) are collapsed until expanded.
+    fireEvent.click(screen.getByTestId('plan-group-toggle-item-1'));
     expect(screen.getByTestId('inbox-dest-absolute-0')).toHaveTextContent('/lib/A/lights/img.fits');
   });
 
   it('falls back to the relative preview when no absolute path is captured', () => {
     const plan = makePlan({
+      inboxItemId: 'item-1',
       actions: [makeAction({ fromPath: '/inbox/img.fits', destinationPreview: 'lights/img.fits' })],
     });
     renderWith({ plans: [plan] });
+    fireEvent.click(screen.getByTestId('plan-group-toggle-item-1'));
     expect(screen.getByTestId('inbox-dest-absolute-0')).toHaveTextContent('lights/img.fits');
   });
 });

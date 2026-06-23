@@ -1,29 +1,31 @@
 /**
- * MasterDetail — spec 007 wired.
+ * MasterDetail — spec 007 wired · spec 043 §4 (calibration detail hero) ·
+ * tasks #100/#101.
  *
- * Shows master fingerprint facts (from the real CalibrationMaster DTO) and
- * the ranked match candidates panel (from calibration.match.suggest using the
- * master's sourceSessionId as the anchor session).
+ * Uses the canonical DetailPanel with the `facts` prop so the fingerprint +
+ * reuse KV sits in the pinned left column and the compatible-sessions match
+ * table sits in the scrolling right content column — matching the two-column
+ * contract from the unified DetailPanel design.
+ *
+ * The Lock icon was removed (task #101): it had no associated behavior, no
+ * tooltip reason, and no visual explanation. Masters are not user-locked; reuse
+ * is shown in the Reuse rail card.
  *
  * The calibration.match.suggest contract targets *light* sessions, not master
- * sessions. The MatchCandidatesPanel below is surfaced here so that when a user
- * selects a master they can see which sessions it would match (from that master's
- * originating session perspective). For the project-level accordion (T034) see
- * ProjectDetail.
+ * sessions, so we anchor it on the master's sourceSessionId to surface the
+ * sessions sharing this master's fingerprint.
  */
 
 import type { CalibrationMaster_Serialize as CalibrationMaster } from '@/bindings/index';
 import {
   DetailPane,
-  DetailHeader,
+  DetailPanel,
   MetricLine,
-  DetailGrid,
-  Rail,
   RailCard,
-  PropertyTable,
 } from '@/components';
-import { Pill, Section, EmptyState, Lock } from '@/ui';
+import { Pill, EmptyState, KV, Btn } from '@/ui';
 import type { PillVariant } from '@/ui';
+import { m } from '@/lib/i18n';
 import { useCalibrationSuggest, useCalibrationAssign } from './useCalibration';
 import { MatchCandidatesPanel } from './MatchCandidatesPanel';
 
@@ -32,6 +34,22 @@ import { MatchCandidatesPanel } from './MatchCandidatesPanel';
 function kindVariant(kind: string): PillVariant {
   const map: Record<string, PillVariant> = { dark: 'info', flat: 'accent', bias: 'neutral' };
   return map[kind.toLowerCase()] ?? 'neutral';
+}
+
+// Per-master contextual actions. These act on the selected master and therefore
+// live in the DETAIL panel header (not the global page top bar): the top bar
+// holds only page-level search / filters / group-by.
+interface ContextualAction {
+  label: string;
+  variant?: 'primary' | 'danger' | 'ghost';
+}
+
+function masterActions(master: CalibrationMaster, agingThresholdDays: number): ContextualAction[] {
+  const isAging = master.ageDays > agingThresholdDays;
+  const actions: ContextualAction[] = [{ label: m.calibration_action_use_in_project(), variant: 'primary' }];
+  if (isAging) actions.push({ label: m.calibration_action_replace_master(), variant: 'danger' });
+  actions.push({ label: m.calibration_action_reveal_explorer() });
+  return actions;
 }
 
 function fmtBytes(bytes: number): string {
@@ -73,8 +91,8 @@ export function MasterDetail({ master, prefillSuggestion, agingThresholdDays }: 
     return (
       <DetailPane>
         <EmptyState
-          title="Select a master"
-          desc="Choose a calibration master from the list to view its details and suggestions."
+          title={m.calibration_select_master_title()}
+          desc={m.calibration_select_master_desc()}
         />
       </DetailPane>
     );
@@ -85,92 +103,94 @@ export function MasterDetail({ master, prefillSuggestion, agingThresholdDays }: 
   const kindStr = master.kind.toString().toLowerCase().replace('_', ' ');
 
   const fp = master.fingerprint;
-  const properties: Array<{ key: string; label: string; value: string }> = [
-    { key: 'kind', label: 'Kind', value: kindStr },
-    { key: 'camera', label: 'Camera', value: fp.camera },
-    { key: 'gain', label: 'Gain', value: String(fp.gain) },
-    { key: 'exposure', label: 'Exposure', value: `${fp.exposureS}s` },
-  ];
-  if (fp.tempC != null) {
-    properties.push({ key: 'temp', label: 'Temperature', value: `${fp.tempC}°C` });
-  }
-  if (fp.filter) {
-    properties.push({ key: 'filter', label: 'Filter', value: fp.filter });
-  }
-  if (fp.sensorMode) {
-    properties.push({ key: 'sensor_mode', label: 'Sensor mode', value: fp.sensorMode });
-  }
-  properties.push({ key: 'binning', label: 'Binning', value: fp.binning });
-  properties.push({ key: 'size', label: 'Size', value: fmtBytes(master.sizeBytes) });
+
+  // Human-readable fingerprint identity for the header (was an id hash).
+  const kindCap = kindStr.charAt(0).toUpperCase() + kindStr.slice(1);
+  const masterDisc =
+    kindStr === 'dark' ? (fp.exposureS != null ? `${fp.exposureS}s` : '')
+    : kindStr === 'flat' ? (fp.filter ?? '')
+    : '';
+  const masterTitle = masterDisc ? `Master ${kindCap} · ${masterDisc}` : `Master ${kindCap}`;
+
+  // Facts column (left): fingerprint KV — compact, does not scroll.
+  const facts = (
+    <div className="alm-rail__panel">
+      <RailCard title={m.calibration_rail_fingerprint()}>
+        {/* 2-column KV grid: keeps the fingerprint compact so the whole
+            detail fits the wide-short bottom panel without inner scroll. */}
+        <div className="alm-calib-kvgrid">
+          <KV label={m.calibration_fp_kind()} value={kindStr} />
+          <KV label={m.settings_calmatch_camera()} value={fp.camera} />
+          <KV label={m.settings_calmatch_gain()} value={String(fp.gain)} />
+          <KV label={m.calibration_fp_exposure()} value={`${fp.exposureS}s`} />
+          {fp.tempC != null && <KV label={m.calibration_fp_temperature()} value={`${fp.tempC}°C`} />}
+          {fp.filter && <KV label={m.common_filter()} value={fp.filter} />}
+          {fp.sensorMode && <KV label={m.calibration_fp_sensor_mode()} value={fp.sensorMode} />}
+          <KV label={m.settings_calmatch_binning()} value={fp.binning} />
+          <KV label={m.settings_advanced_db_size()} value={fmtBytes(master.sizeBytes)} />
+        </div>
+      </RailCard>
+    </div>
+  );
+
+  // Aux column (right): reuse policy + usage stats.
+  const auxColumn = (
+    <div className="alm-rail__panel">
+      <RailCard title={m.calibration_rail_reuse()}>
+        <div className="alm-calib-kvgrid">
+          <KV label={m.calibration_reuse_sessions_matched()} value={String((master.usedBySessionIds ?? []).length)} />
+          <KV label={m.calibration_reuse_projects_linked()} value={String((master.usedByProjectIds ?? []).length)} />
+          <KV label={m.projects_stepper_created()} value={master.createdAt.split('T')[0]} />
+          <KV label={m.calibration_fp_age()} value={`${master.ageDays}d`} />
+        </div>
+      </RailCard>
+      <RailCard title={m.calibration_rail_usage()}>
+        <MetricLine
+          metrics={[
+            { value: fmtBytes(master.sizeBytes), label: m.calibration_metric_on_disk() },
+            { value: `${master.ageDays}d`, label: m.calibration_masters_sort_age() },
+            { value: (master.usedBySessionIds ?? []).length, label: m.status_sessions_label() },
+            { value: (master.usedByProjectIds ?? []).length, label: m.calibration_metric_projects() },
+          ]}
+        />
+      </RailCard>
+    </div>
+  );
 
   return (
-    <DetailPane fill>
-      <DetailHeader
-        title={
-          <>
-            <Lock />
-            <span className="alm-mono">{master.id.slice(0, 12)}…</span>
-          </>
-        }
-        titleExtra={
-          <>
-            <Pill variant={kindVariant(kindStr)}>{kindStr.toUpperCase()}</Pill>
-            {isAging1Year && <Pill variant="danger">aging &gt; 1 year</Pill>}
-            {isAgingWarn && <Pill variant="warn">aging {master.ageDays}d</Pill>}
-          </>
-        }
-        subtitle={`${kindStr} · ${fmtBytes(master.sizeBytes)}`}
+    <DetailPanel
+      variant="calibration"
+      // Title: master identity (kind + discriminator). The Lock icon was removed
+      // (task #101): it had no behavior, no tooltip reason, and no explanation.
+      // Masters are not user-locked; reuse is shown in the Reuse rail card.
+      title={<span>{masterTitle}</span>}
+      titleExtra={
+        <>
+          <Pill variant={kindVariant(kindStr)}>{kindStr.toUpperCase()}</Pill>
+          {isAging1Year && <Pill variant="danger">{m.calibration_aging_over_1yr()}</Pill>}
+          {isAgingWarn && <Pill variant="warn">{m.calibration_aging_days({ days: master.ageDays })}</Pill>}
+        </>
+      }
+      subtitle={`${kindStr} · ${fmtBytes(master.sizeBytes)}`}
+      actions={masterActions(master, agingThresholdDays).map((a) => (
+        <Btn key={a.label} size="sm" variant={a.variant}>
+          {a.label}
+        </Btn>
+      ))}
+      facts={facts}
+      aux={auxColumn}
+    >
+      {/* Content column (center, scrolls): compatible-sessions match table is
+          the hero of the master detail. */}
+      <MatchCandidatesPanel
+        sessionId={sessionId ?? ''}
+        response={response}
+        loading={suggestLoading}
+        error={suggestError}
+        onAssign={handleAssign}
+        assigning={assigning}
+        prefillSuggestion={prefillSuggestion}
       />
-
-      <MetricLine
-        metrics={[
-          { value: fmtBytes(master.sizeBytes), label: 'on disk' },
-          { value: `${master.ageDays}d`, label: 'age' },
-          { value: (master.usedBySessionIds ?? []).length, label: 'sessions' },
-          { value: (master.usedByProjectIds ?? []).length, label: 'projects' },
-        ]}
-      />
-
-      <DetailGrid
-        rail={
-          <Rail>
-            <RailCard title="Master fingerprint">
-              <PropertyTable mode="view" properties={properties} />
-            </RailCard>
-
-            <RailCard title="Reuse">
-              <div style={{ display: 'flex', flexDirection: 'column', gap: 'var(--alm-sp-1)', fontSize: 'var(--alm-text-xs)' }}>
-                <div style={{ color: 'var(--alm-text-secondary)' }}>
-                  <span style={{ color: 'var(--alm-text-faint)' }}>Sessions matched</span>{' '}
-                  <strong>{(master.usedBySessionIds ?? []).length}</strong>
-                </div>
-                <div style={{ color: 'var(--alm-text-secondary)' }}>
-                  <span style={{ color: 'var(--alm-text-faint)' }}>Projects linked</span>{' '}
-                  <strong>{(master.usedByProjectIds ?? []).length}</strong>
-                </div>
-                <div style={{ color: 'var(--alm-text-secondary)' }}>
-                  <span style={{ color: 'var(--alm-text-faint)' }}>Created</span>{' '}
-                  {master.createdAt.split('T')[0]}
-                </div>
-              </div>
-            </RailCard>
-          </Rail>
-        }
-      >
-        <Section title="Calibration fingerprint" count={properties.length}>
-          <PropertyTable mode="view" properties={properties} />
-        </Section>
-
-        <MatchCandidatesPanel
-          sessionId={sessionId ?? ''}
-          response={response}
-          loading={suggestLoading}
-          error={suggestError}
-          onAssign={handleAssign}
-          assigning={assigning}
-          prefillSuggestion={prefillSuggestion}
-        />
-      </DetailGrid>
-    </DetailPane>
+    </DetailPanel>
   );
 }

@@ -5,14 +5,15 @@
 // allows the user to change the level. When no per-source override exists the
 // component shows "Inherits global default" as an inheritance badge.
 //
-// This component is used wherever a source UUID is available (e.g. the
-// project detail source rows). DataSources.tsx uses fixture IDs (not UUIDs)
-// so it cannot be wired yet — see TODO comment there.
+// Used wherever a source UUID is available — wired into the DataSources
+// settings pane (one control per registered root, keyed by root.id) and
+// available for project detail source rows.
 
 import { useEffect, useState, useCallback } from 'react';
 import { Pill, Btn } from '@/ui';
 import { sourceProtectionGet, sourceProtectionSet } from '@/api/commands';
 import type { ProtectionLevel } from '@/api/commands';
+import { m } from '@/lib/i18n';
 
 interface SourceProtectionOverrideProps {
   /** Real source UUID from the backend. */
@@ -23,10 +24,10 @@ interface SourceProtectionOverrideProps {
 
 type LoadState = 'idle' | 'loading' | 'ready' | 'saving' | 'error';
 
-const LEVEL_LABEL: Record<ProtectionLevel, string> = {
-  protected: 'Protected',
-  normal: 'Normal',
-  unprotected: 'Unprotected',
+const LEVEL_LABEL: Record<ProtectionLevel, () => string> = {
+  protected: m.settings_cleanup_protection_protected,
+  normal: m.settings_cleanup_protection_normal,
+  unprotected: m.settings_cleanup_protection_unprotected,
 };
 
 const LEVEL_VARIANT: Record<ProtectionLevel, 'ok' | 'info' | 'warn' | 'danger' | 'neutral'> = {
@@ -101,75 +102,74 @@ export function SourceProtectionOverride({ sourceId, onSaved }: SourceProtection
 
   if (loadState === 'loading' || loadState === 'idle') {
     return (
-      <span style={{ fontSize: 'var(--alm-text-xs)', color: 'var(--alm-text-muted)' }}>
-        Loading…
+      <span className="alm-source-protect__status">
+        {m.common_loading()}
       </span>
     );
   }
 
   if (loadState === 'error' && !editing) {
     return (
-      <span style={{ fontSize: 'var(--alm-text-xs)', color: 'var(--alm-text-muted)' }}>
-        {errorMsg || 'Could not load protection'}
+      <span className="alm-source-protect__status">
+        {errorMsg || m.settings_protection_load_error()}
       </span>
     );
   }
 
   return (
-    <div style={{ display: 'flex', flexDirection: 'column', gap: 'var(--alm-sp-1)' }}>
+    <div className="alm-source-protect__root">
       {!editing ? (
-        <div style={{ display: 'flex', alignItems: 'center', gap: 'var(--alm-sp-2)', flexWrap: 'wrap' }}>
-          <Pill variant={LEVEL_VARIANT[level]}>{LEVEL_LABEL[level]}</Pill>
+        <div className="alm-source-protect__view-row">
+          <Pill variant={LEVEL_VARIANT[level]}>{LEVEL_LABEL[level]()}</Pill>
           {inheritsDefault && (
-            <Pill variant="neutral">Inherits global default</Pill>
+            <Pill variant="neutral">{m.settings_source_protect_inherits()}</Pill>
           )}
           <Btn size="sm" variant="ghost" onClick={() => setEditing(true)}>
-            Override
+            {m.common_override()}
           </Btn>
-          <div style={{ fontSize: 'var(--alm-text-xs)', color: 'var(--alm-text-muted)', flexBasis: '100%' }}>
+          <div className="alm-source-protect__hint">
             {levelHint(level, inheritsDefault)}
           </div>
         </div>
       ) : (
-        <div style={{ display: 'flex', flexDirection: 'column', gap: 'var(--alm-sp-2)' }}>
-          <div style={{ display: 'flex', alignItems: 'center', gap: 'var(--alm-sp-2)', flexWrap: 'wrap' }}>
+        <div className="alm-source-protect__edit-col">
+          <div className="alm-source-protect__edit-row">
             <label
               htmlFor={`protection-level-${sourceId}`}
-              style={{ fontSize: 'var(--alm-text-sm)' }}
+              className="alm-source-protect__label"
             >
-              Protection level
+              {m.settings_source_protect_level_label()}
             </label>
             <select
               id={`protection-level-${sourceId}`}
-              className="alm-select"
+              className="alm-select alm-source-protect__select"
               value={pendingLevel}
               onChange={(e) => setPendingLevel(e.target.value as ProtectionLevel)}
-              style={{ height: 28 }}
-              aria-label="Protection level override"
+              aria-label={m.settings_source_protect_level_aria()}
             >
-              <option value="protected">Protected</option>
-              <option value="normal">Normal</option>
-              <option value="unprotected">Unprotected</option>
+              <option value="protected">{m.settings_cleanup_protection_protected()}</option>
+              <option value="normal">{m.settings_cleanup_protection_normal()}</option>
+              <option value="unprotected">{m.settings_cleanup_protection_unprotected()}</option>
             </select>
-            <div style={{ fontSize: 'var(--alm-text-xs)', color: 'var(--alm-text-muted)', flexBasis: '100%' }}>
+            <div className="alm-source-protect__hint">
               {levelHint(pendingLevel, false)}
             </div>
           </div>
           {errorMsg && (
-            <div style={{ fontSize: 'var(--alm-text-xs)', color: 'var(--alm-danger)' }}>
+            <div className="alm-source-protect__error">
               {errorMsg}
             </div>
           )}
-          <div style={{ display: 'flex', gap: 'var(--alm-sp-1)' }}>
+          <div className="alm-source-protect__actions">
             <Btn
               size="sm"
               onClick={handleSave}
               disabled={loadState === 'saving'}
             >
-              {loadState === 'saving' ? 'Saving…' : 'Save override'}
+              {loadState === 'saving' ? m.common_saving() : m.settings_source_protect_save_btn()}
             </Btn>
             <Btn size="sm" variant="ghost" onClick={handleCancel}>
-              Cancel
+              {m.common_cancel()}
             </Btn>
           </div>
         </div>

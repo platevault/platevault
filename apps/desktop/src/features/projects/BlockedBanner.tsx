@@ -21,6 +21,7 @@
  */
 
 import { Banner, Btn } from '@/ui';
+import { m } from '@/lib/i18n';
 
 export interface BlockedReasonSourceMissing {
   kind: 'source_missing';
@@ -114,15 +115,9 @@ export function BlockedBanner({ reason, onResolve, disabled }: BlockedBannerProp
 
   return (
     <Banner variant="danger" role="alert" aria-live="assertive">
-      <div
-        style={{
-          display: 'flex',
-          flexDirection: 'column',
-          gap: 'var(--alm-sp-2)',
-        }}
-      >
+      <div className="alm-blocked-banner__body">
         <span data-testid="blocked-reason-message">{message}</span>
-        <div style={{ display: 'flex', gap: 'var(--alm-sp-2)' }}>
+        <div className="alm-blocked-banner__actions">
           <Btn
             size="sm"
             variant="danger"
@@ -130,7 +125,7 @@ export function BlockedBanner({ reason, onResolve, disabled }: BlockedBannerProp
             disabled={disabled}
             data-testid="blocked-resolve-btn"
           >
-            Resolve blocker
+            {m.projects_resolve_blocker()}
           </Btn>
         </div>
       </div>

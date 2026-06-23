@@ -1,3 +1,4 @@
+import { m } from '@/lib/i18n';
 import { Pill, Box, Btn, Section } from '@/ui';
 
 export interface CalibrationMapping {
@@ -34,9 +35,9 @@ const MOCK_FLAT_ROWS: FlatRow[] = [
     filter: 'Ha',
     lightsCovered: 'NGC 7000 · Ha · 11-30 (54×) · NGC 7000 · Ha · 12-15 (30×)',
     options: [
-      { id: 'm-7', label: 'MasterFlat_Ha_2024-11 (12d old)', isDefault: true },
-      { id: 'm-5', label: 'MasterFlat_Ha_2024-12 (newer)', isDefault: false },
-      { id: 'skip-ha', label: 'Skip — no flat for Ha', isDefault: false },
+      { id: 'm-7', label: m.projects_wizard_mock_flat_ha_2024_11(), isDefault: true },
+      { id: 'm-5', label: m.projects_wizard_mock_flat_ha_2024_12(), isDefault: false },
+      { id: 'skip-ha', label: m.projects_wizard_mock_skip_ha(), isDefault: false },
     ],
     score: '0.88',
     notes: 'filter-matched · same camera',
@@ -45,9 +46,9 @@ const MOCK_FLAT_ROWS: FlatRow[] = [
     filter: 'OIII',
     lightsCovered: 'NGC 7000 · OIII · 11-30 (38×)',
     options: [
-      { id: 'm-8', label: 'MasterFlat_OIII_2024-11 (12d old)', isDefault: true },
-      { id: 'm-6', label: 'MasterFlat_OIII_2024-12', isDefault: false },
-      { id: 'skip-oiii', label: 'Skip — no flat for OIII', isDefault: false },
+      { id: 'm-8', label: m.projects_wizard_mock_flat_oiii_2024_11(), isDefault: true },
+      { id: 'm-6', label: m.projects_wizard_mock_flat_oiii_2024_12(), isDefault: false },
+      { id: 'skip-oiii', label: m.projects_wizard_mock_skip_oiii(), isDefault: false },
     ],
     score: '0.88',
     notes: 'filter-matched · same camera',
@@ -72,9 +73,9 @@ const SHARED_ROWS: SharedRow[] = [
     role: 'dark',
     field: 'sharedDarkId',
     options: [
-      { value: 'm-1', label: 'MasterDark_300s_-10C_g100 · ASI2600MM · 23d (recommended)' },
-      { value: 'cal-sess', label: 'Use calibration session instead…' },
-      { value: '', label: 'Skip darks' },
+      { value: 'm-1', label: m.projects_wizard_mock_dark_recommended() },
+      { value: 'cal-sess', label: m.projects_wizard_mock_use_cal_session() },
+      { value: '', label: m.projects_wizard_mock_skip_darks() },
     ],
     defaultValue: 'm-1',
     score: '0.92',
@@ -86,8 +87,8 @@ const SHARED_ROWS: SharedRow[] = [
     role: 'bias',
     field: 'sharedBiasId',
     options: [
-      { value: 'm-10', label: 'MasterBias_g100 · ASI2600MM (180d old — aging)' },
-      { value: '', label: 'Skip bias (rely on darks)' },
+      { value: 'm-10', label: m.projects_wizard_mock_bias_aging() },
+      { value: '', label: m.projects_wizard_mock_skip_bias() },
     ],
     defaultValue: 'm-10',
     score: '0.71',
@@ -99,7 +100,7 @@ const SHARED_ROWS: SharedRow[] = [
     role: 'dark flat',
     field: 'sharedDarkFlatId',
     options: [
-      { value: '', label: 'Skip (no dark flats in library)' },
+      { value: '', label: m.projects_wizard_mock_skip_dark_flats() },
     ],
     defaultValue: '',
     score: '—',
@@ -109,44 +110,30 @@ const SHARED_ROWS: SharedRow[] = [
   },
 ];
 
-// ── Select styling (matches wireframe inline select) ────────────────────────
-
-const selectStyle: React.CSSProperties = {
-  width: '100%',
-  padding: '4px 6px',
-  border: '1px solid var(--alm-border)',
-  fontSize: 'var(--alm-text-xs)',
-  background: 'var(--alm-bg)',
-  fontFamily: 'inherit',
-  color: 'var(--alm-text)',
-};
-
 // ── Component ───────────────────────────────────────────────────────────────
 
 export function StepCalibration({ selectedSessionIds: _selectedSessionIds, data, onChange }: StepCalibrationProps) {
 
   return (
-    <div style={{ display: 'flex', flexDirection: 'column', gap: 'var(--alm-space-5)' }}>
+    <div className="alm-wizard-calib__root">
       {/* Step description */}
-      <div style={{ fontSize: 'var(--alm-text-sm)', color: 'var(--alm-text-muted)', maxWidth: 640 }}>
-        Map calibration to each light source. Flats are per-filter (Ha flats can only calibrate
-        Ha lights). Darks &amp; bias are usually shared across all lights of the same exposure /
-        camera / gain.
+      <div className="alm-wizard-calib__desc">
+        {m.projects_wizard_calib_desc()}
       </div>
 
       {/* ── Flats per light source (by filter) ── */}
-      <Section title="Flats — per light source">
-        <div style={{ fontSize: 'var(--alm-text-xs)', color: 'var(--alm-text-muted)', marginBottom: 'var(--alm-space-3)' }}>
-          one master flat per filter; light sources are auto-grouped by filter
+      <Section title={m.projects_wizard_flats_title()}>
+        <div className="alm-wizard-calib__flat-subtitle">
+          {m.projects_wizard_flats_subtitle()}
         </div>
         <table className="alm-simple-table">
           <thead>
             <tr>
-              <th>Filter</th>
-              <th>Lights covered</th>
-              <th>Master flat</th>
-              <th style={{ width: 60 }}>Score</th>
-              <th>Notes</th>
+              <th>{m.common_filter()}</th>
+              <th>{m.projects_wizard_col_lights()}</th>
+              <th>{m.projects_wizard_col_master_flat()}</th>
+              <th className="alm-wizard-calib__col-score">{m.projects_wizard_col_score()}</th>
+              <th>{m.projects_notes_label()}</th>
             </tr>
           </thead>
           <tbody>
@@ -155,7 +142,7 @@ export function StepCalibration({ selectedSessionIds: _selectedSessionIds, data,
               return (
                 <tr key={row.filter}>
                   <td><Pill variant="ghost">{row.filter}</Pill></td>
-                  <td style={{ fontSize: 'var(--alm-text-xs)' }}>{row.lightsCovered}</td>
+                  <td className="alm-wizard-calib__cell-lights">{row.lightsCovered}</td>
                   <td>
                     <select
                       value={currentValue}
@@ -165,33 +152,33 @@ export function StepCalibration({ selectedSessionIds: _selectedSessionIds, data,
                           flatMappings: { ...data.flatMappings, [row.filter]: e.target.value },
                         })
                       }
-                      style={selectStyle}
-                      aria-label={`Flat master for ${row.filter}`}
+                      className="alm-wizard-calib__select"
+                      aria-label={m.projects_wizard_flat_master_for_aria({ filter: row.filter })}
                     >
                       {row.options.map((opt) => (
                         <option key={opt.id} value={opt.id}>{opt.label}</option>
                       ))}
                     </select>
                   </td>
-                  <td className="alm-mono" style={{ fontSize: '11px' }}>{row.score}</td>
-                  <td style={{ fontSize: '11px', color: 'var(--alm-text-muted)' }}>{row.notes}</td>
+                  <td className="alm-mono alm-wizard-calib__cell-score">{row.score}</td>
+                  <td className="alm-wizard-calib__cell-notes">{row.notes}</td>
                 </tr>
               );
             })}
           </tbody>
         </table>
-        <Btn size="sm" style={{ marginTop: 'var(--alm-space-3)' }}>+ Add another flat (for a future filter)</Btn>
+        <Btn size="sm" className="alm-wizard-calib__add-flat-btn">{m.projects_wizard_add_flat_btn()}</Btn>
       </Section>
 
       {/* ── Shared calibration: darks, bias, dark flats ── */}
-      <Section title="Shared calibration — applies to all lights matching the fingerprint">
+      <Section title={m.projects_wizard_shared_calib_title()}>
         <table className="alm-simple-table">
           <thead>
             <tr>
-              <th style={{ width: 70 }}>Role</th>
-              <th>Pick</th>
-              <th style={{ width: 60 }}>Score</th>
-              <th>Notes</th>
+              <th className="alm-wizard-calib__col-role">{m.projects_wizard_col_role()}</th>
+              <th>{m.projects_wizard_col_pick()}</th>
+              <th className="alm-wizard-calib__col-score">{m.projects_wizard_col_score()}</th>
+              <th>{m.projects_notes_label()}</th>
             </tr>
           </thead>
           <tbody>
@@ -204,8 +191,8 @@ export function StepCalibration({ selectedSessionIds: _selectedSessionIds, data,
                     <select
                       value={currentValue}
                       onChange={(e) => onChange({ ...data, [row.field]: e.target.value })}
-                      style={selectStyle}
-                      aria-label={`Pick ${row.role}`}
+                      className="alm-wizard-calib__select"
+                      aria-label={m.projects_wizard_pick_role_aria({ role: row.role })}
                     >
                       {row.options.map((opt) => (
                         <option key={opt.value} value={opt.value}>{opt.label}</option>
@@ -213,17 +200,18 @@ export function StepCalibration({ selectedSessionIds: _selectedSessionIds, data,
                     </select>
                   </td>
                   <td
-                    className="alm-mono"
+                    className="alm-mono alm-wizard-calib__cell-score"
+                    // eslint-disable-next-line no-restricted-syntax -- dynamic: conditional token color for score warning / faint states
                     style={{
-                      fontSize: '11px',
                       color: row.scoreWarn ? 'var(--alm-warn)' : row.score === '—' ? 'var(--alm-text-faint)' : undefined,
                     }}
                   >
                     {row.score}
                   </td>
                   <td
+                    className="alm-wizard-calib__cell-notes-dyn"
+                    // eslint-disable-next-line no-restricted-syntax -- dynamic: conditional token color for notes warning state
                     style={{
-                      fontSize: '11px',
                       color: row.notesWarn ? 'var(--alm-warn)' : 'var(--alm-text-muted)',
                     }}
                   >
@@ -234,30 +222,21 @@ export function StepCalibration({ selectedSessionIds: _selectedSessionIds, data,
             })}
           </tbody>
         </table>
-        <div
-          style={{
-            padding: 'var(--alm-space-3) 0',
-            fontSize: 'var(--alm-text-xs)',
-            color: 'var(--alm-text-muted)',
-            display: 'flex',
-            alignItems: 'center',
-            gap: 'var(--alm-space-3)',
-          }}
-        >
-          <Btn size="sm">+ Add calibration session&hellip;</Btn>
-          <Btn size="sm">+ Import master&hellip;</Btn>
-          <span style={{ marginLeft: 'auto', color: 'var(--alm-warn)' }}>
-            &#9888; aging bias master &mdash; soft mismatch in plan
+        <div className="alm-wizard-calib__footer">
+          <Btn size="sm">{m.projects_wizard_add_calib_btn()}</Btn>
+          <Btn size="sm">{m.projects_wizard_import_master_btn()}</Btn>
+          <span className="alm-wizard-calib__footer-warn">
+            {m.projects_wizard_aging_bias_warn()}
           </span>
         </div>
       </Section>
 
       {/* ── Why these were recommended ── */}
-      <Box title="Why these were recommended">
-        <ul style={{ margin: 0, paddingLeft: 16, fontSize: 'var(--alm-text-xs)', color: 'var(--alm-text-secondary)' }}>
-          <li><strong>Flats</strong>: matched per filter; same camera; flats &lt; 30d old preferred</li>
-          <li><strong>Dark</strong>: exact match on EXPTIME (300s) &middot; temp &#916; 0.1&deg;C &middot; gain 100</li>
-          <li><strong>Bias</strong>: only g100 bias for this camera exists; soft mismatch on age</li>
+      <Box title={m.projects_wizard_why_title()}>
+        <ul className="alm-wizard-calib__why-list">
+          <li><strong>{m.projects_wizard_flats_label()}</strong>{m.projects_wizard_why_flats_val()}</li>
+          <li><strong>{m.projects_wizard_why_dark_key()}</strong>{m.projects_wizard_why_dark_val()}</li>
+          <li><strong>{m.projects_wizard_bias_label()}</strong>{m.projects_wizard_why_bias_val()}</li>
         </ul>
       </Box>
     </div>

@@ -996,6 +996,35 @@ export async function calibrationMatchSuggestBatch(args: {
   ) as CalibrationMatchBatchResponse;
 }
 
+// ── Calibration tolerances commands (spec 007) ───────────────────────────────
+
+import type {
+  CalibrationTolerances,
+  UpdateCalibrationTolerances,
+} from '@/bindings';
+
+export type { CalibrationTolerances, UpdateCalibrationTolerances };
+
+/**
+ * `calibration.tolerances.get` — returns the current calibration matching
+ * tolerances (temperature, aging limit, hard-required dimension flags).
+ */
+export async function calibrationTolerancesGet(): Promise<CalibrationTolerances> {
+  return unwrap(await commands.calibrationTolerancesGet()) as CalibrationTolerances;
+}
+
+/**
+ * `calibration.tolerances.update` — persist updated calibration matching
+ * tolerances.  Returns the saved state (echoed from the backend).
+ */
+export async function calibrationTolerancesUpdate(
+  request: UpdateCalibrationTolerances,
+): Promise<CalibrationTolerances> {
+  return unwrap(
+    await commands.calibrationTolerancesUpdate(request),
+  ) as CalibrationTolerances;
+}
+
 // ── Inventory commands (spec 006) ─────────────────────────────────────────────
 
 import type {

@@ -14,6 +14,7 @@
 
 import { useState, useCallback } from 'react';
 import { Dialog } from '@base-ui-components/react/dialog';
+import { m } from '@/lib/i18n';
 import { Btn, Pill } from '@/ui';
 import { TargetSearch } from '@/components';
 import { resolveTarget, TARGET_SEARCH_CONTRACT_VERSION } from '@/api/commands';
@@ -84,38 +85,36 @@ export function AddTargetDialog({ open, onClose, onAdded }: AddTargetDialogProps
       <Dialog.Portal>
         <Dialog.Backdrop className="alm-confirm-overlay__backdrop" />
         <Dialog.Popup
-          className="alm-confirm-overlay"
-          aria-label="Add target"
-          style={{ maxWidth: 480 }}
+          className="alm-confirm-overlay alm-add-target__popup"
+          aria-label={m.targets_add_target()}
         >
           <div className="alm-confirm-overlay__header">
-            <Dialog.Title className="alm-confirm-overlay__title">Add target</Dialog.Title>
+            <Dialog.Title className="alm-confirm-overlay__title">{m.targets_add_target()}</Dialog.Title>
             <Dialog.Description className="alm-confirm-overlay__description">
-              Search for an astronomical target to add it to your library.
+              {m.targets_add_target_desc()}
             </Dialog.Description>
           </div>
 
           <div
-            className="alm-confirm-overlay__body"
-            style={{ display: 'flex', flexDirection: 'column', gap: 'var(--alm-sp-4)' }}
+            className="alm-confirm-overlay__body alm-add-target__body"
           >
             {pending ? (
               <div>
-                <span className="alm-field-label">Selected target</span>
-                <div style={{ display: 'flex', alignItems: 'center', gap: 'var(--alm-sp-2)' }}>
+                <span className="alm-field-label">{m.targets_add_target_selected()}</span>
+                <div className="alm-add-target__selected-row">
                   <Pill variant="accent">{pending.primaryDesignation}</Pill>
                   {pending.commonName && (
                     <span className="alm-field-hint">{pending.commonName}</span>
                   )}
                   <Btn type="button" variant="ghost" onClick={reset}>
-                    Change
+                    {m.common_change()}
                   </Btn>
                 </div>
               </div>
             ) : (
               <TargetSearch
-                label="Search for a target"
-                placeholder="e.g. M31, NGC 224, Andromeda"
+                label={m.targets_add_target_search_label()}
+                placeholder={m.projects_create_target_search_placeholder()}
                 onSelect={handleSelect}
                 autoFocus
               />
@@ -135,7 +134,7 @@ export function AddTargetDialog({ open, onClose, onAdded }: AddTargetDialogProps
               onClick={() => handleOpenChange(false)}
               disabled={resolving}
             >
-              Cancel
+              {m.common_cancel()}
             </Btn>
             <Btn
               type="button"
@@ -143,7 +142,7 @@ export function AddTargetDialog({ open, onClose, onAdded }: AddTargetDialogProps
               disabled={!pending || resolving}
               onClick={() => void handleConfirm()}
             >
-              {resolving ? 'Adding…' : 'Add target'}
+              {resolving ? m.common_adding() : m.targets_add_target()}
             </Btn>
           </div>
         </Dialog.Popup>

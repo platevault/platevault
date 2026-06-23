@@ -1,14 +1,18 @@
 /// <reference types="@testing-library/jest-dom" />
 /**
- * ProjectDetail manifests + notes wiring tests — spec 024 T1.7 / T3.4 / T4.2.
+ * ProjectBottomDetail manifests + notes wiring tests — spec 024 T1.7 / T3.4 / T4.2.
  *
- * Tests that the wired ProjectDetailContent renders:
+ * Tests that the wired ProjectBottomDetail renders (task #104: sections moved
+ * from the narrow side panel to the full-width bottom panel):
  * 1. ManifestsAccordion — shows loading, then list, then expand, then reveal.
  * 2. ProjectNotesSection — shows "No notes." when note is empty; loads and saves.
  * 3. Reveal in OS calls revealManifestInOs and shows error toast on failure.
  * 4. ManifestsAccordion empty state when no manifests.
  * 5. ManifestsAccordion error state on fetch failure.
  * 6. Notes section shows readOnly on archived project.
+ *
+ * Sections are defaultOpen=true in the bottom panel (they have horizontal room),
+ * so tests no longer need to call expandSection() before asserting on content.
  */
 
 import { render, screen, fireEvent, waitFor, act } from '@testing-library/react';
@@ -76,7 +80,7 @@ vi.mock('@/shared/toast', () => ({
 
 // ── Imports ───────────────────────────────────────────────────────────────────
 
-import { ProjectDetailContent } from './ProjectDetail';
+import { ProjectBottomDetail } from './ProjectBottomDetail';
 import * as store from './store';
 import type { ProjectDetailDto } from '@/bindings/index';
 
@@ -123,8 +127,14 @@ function setupStore(project: Partial<ProjectDetailDto> = {}) {
   });
 }
 
+/**
+ * Render ProjectBottomDetail — the component that hosts Manifests, Notes, and
+ * other secondary sections (task #104: moved from the narrow side panel to the
+ * full-width bottom panel). Sections are defaultOpen=true here, so content is
+ * immediately visible without expanding.
+ */
 function renderDetail(projectId = 'proj-m1') {
-  return render(<ProjectDetailContent projectId={projectId} />);
+  return render(<ProjectBottomDetail projectId={projectId} />);
 }
 
 // ── Tests ─────────────────────────────────────────────────────────────────────
@@ -148,6 +158,7 @@ describe('ProjectDetail — manifests accordion (spec 024)', () => {
   it('1. shows manifests-empty state when project has no manifests', async () => {
     mockListManifests.mockResolvedValue({ manifests: [], nextCursor: null });
     renderDetail();
+    // Manifests section is defaultOpen=true in the bottom panel — no expand needed.
     await waitFor(() => {
       expect(screen.getByTestId('manifests-empty')).toBeInTheDocument();
     });
@@ -159,6 +170,7 @@ describe('ProjectDetail — manifests accordion (spec 024)', () => {
       nextCursor: null,
     });
     renderDetail();
+    // Manifests section is defaultOpen=true in the bottom panel — no expand needed.
     await waitFor(() => {
       expect(screen.getByTestId('manifests-list')).toBeInTheDocument();
     });
@@ -183,6 +195,7 @@ describe('ProjectDetail — manifests accordion (spec 024)', () => {
       },
     });
     renderDetail();
+    // Manifests section is defaultOpen=true in the bottom panel — no expand needed.
     await waitFor(() => {
       expect(screen.getByTestId(`manifest-row-${MANIFEST_SUMMARY.id}`)).toBeInTheDocument();
     });
@@ -203,6 +216,7 @@ describe('ProjectDetail — manifests accordion (spec 024)', () => {
       nextCursor: null,
     });
     renderDetail();
+    // Manifests section is defaultOpen=true in the bottom panel — no expand needed.
     await waitFor(() => {
       expect(screen.getByTestId(`manifest-reveal-${MANIFEST_SUMMARY.id}`)).toBeInTheDocument();
     });
@@ -223,6 +237,7 @@ describe('ProjectDetail — manifests accordion (spec 024)', () => {
     });
     mockRevealManifestInOs.mockRejectedValue('manifest file not found: /some/path');
     renderDetail();
+    // Manifests section is defaultOpen=true in the bottom panel — no expand needed.
     await waitFor(() => {
       expect(screen.getByTestId(`manifest-reveal-${MANIFEST_SUMMARY.id}`)).toBeInTheDocument();
     });
@@ -239,6 +254,7 @@ describe('ProjectDetail — manifests accordion (spec 024)', () => {
   it('6. manifests-error state shown on fetch failure', async () => {
     mockListManifests.mockRejectedValue(new Error('DB failure'));
     renderDetail();
+    // Manifests section is defaultOpen=true in the bottom panel — no expand needed.
     await waitFor(() => {
       expect(screen.getByTestId('manifests-error')).toBeInTheDocument();
     });

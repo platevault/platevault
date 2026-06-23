@@ -284,6 +284,47 @@ describe('InboxList', () => {
     fireEvent.click(screen.getByTestId('inbox-item-item-video'));
     expect(onSelect).toHaveBeenCalledWith(1);
   });
+
+  it('renders folder + master rows without a duplicate search box or footer count (#83)', () => {
+    const masterItem: InboxListItem = {
+      inboxItemId: 'item-master',
+      rootId: 'root-001',
+      rootAbsolutePath: '/astro/inbox',
+      relativePath: 'masters/dark_master.fits',
+      fileCount: 1,
+      lane: 'fits',
+      format: 'fits',
+      state: 'pending_classification',
+      contentSignature: 'sig-m',
+      isMaster: true,
+      masterFrameType: 'dark',
+      masterFilter: null,
+      masterExposureS: null,
+      organizationState: 'unorganized',
+    };
+
+    render(
+      <InboxList
+        items={[fitsItem, masterItem]}
+        selectedIdx={null}
+        onSelect={vi.fn()}
+        filterType="all"
+        onFilterTypeChange={vi.fn()}
+      />,
+    );
+
+    // Both detections render as rows.
+    expect(screen.getByTestId('inbox-item-item-fits')).toBeInTheDocument();
+    expect(screen.getByTestId('inbox-item-item-master')).toBeInTheDocument();
+
+    // #83: the list no longer carries ListSidebar's own search box or footer
+    // count — the single search lives in the top bar and the folder/master
+    // counts live in the top-bar summary + status bar (computed by
+    // deriveInboxStats, covered by inboxStatsFromItems.test.ts), not here.
+    expect(document.querySelector('.alm-list-sidebar__count')).toBeNull();
+    expect(document.querySelector('.alm-list-sidebar__search')).toBeNull();
+    expect(screen.queryByPlaceholderText(/search inbox/i)).toBeNull();
+  });
 });
 
 // ── Tests: confirm call payload ───────────────────────────────────────────

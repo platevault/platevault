@@ -176,6 +176,14 @@ pub struct TargetDetailV3 {
 }
 
 /// A single row in the target list returned by `target.list` (gen-3).
+///
+/// `raDeg` and `decDeg` are always populated (sourced from `canonical_target`).
+/// `constellation` and `magnitude` are optional because those columns were not
+/// in the original schema; they are populated from `canonical_target.constellation`
+/// and `canonical_target.magnitude` when present (migration 0046).
+/// `aliases` carries all alias display forms (designations, common names, and
+/// user-added) so client-side alias search (e.g. "Andromeda" → M31) works
+/// without a separate round-trip. Empty when no aliases are stored.
 #[derive(Clone, Debug, Serialize, Deserialize, Type)]
 #[serde(rename_all = "camelCase")]
 pub struct TargetListItem {
@@ -183,6 +191,22 @@ pub struct TargetListItem {
     pub effective_label: String,
     pub primary_designation: String,
     pub object_type: String,
+    /// ICRS J2000 right ascension in decimal degrees.
+    pub ra_deg: f64,
+    /// ICRS J2000 declination in decimal degrees.
+    pub dec_deg: f64,
+    /// IAU constellation abbreviation (e.g. `"And"`, `"Ori"`); `null` when
+    /// not yet stored (no constellation column in the schema before migration 0046).
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub constellation: Option<String>,
+    /// Visual magnitude; `null` when not stored or not applicable.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub magnitude: Option<f64>,
+    /// All alias display forms for this target (designations, common names,
+    /// user-added). Empty when none are stored. Additive field — older clients
+    /// that ignore unknown keys are unaffected.
+    #[serde(default)]
+    pub aliases: Vec<String>,
 }
 
 // ── Gen-3 request / response types ────────────────────────────────────────────

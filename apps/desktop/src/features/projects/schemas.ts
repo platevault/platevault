@@ -18,6 +18,7 @@
 
 import { z } from 'zod';
 import type { ProjectTool } from '@/bindings/index';
+import { m } from '@/lib/i18n';
 
 // ── Shared limits (kept in sync with the prior manual validation) ─────────────
 
@@ -51,15 +52,15 @@ export const createProjectFormSchema = z.object({
   name: z
     .string()
     .trim()
-    .min(1, 'Project name is required.')
-    .max(MAX_NAME_LEN, `Name must be ${MAX_NAME_LEN} characters or fewer.`),
+    .min(1, m.projects_schema_name_required())
+    .max(MAX_NAME_LEN, m.projects_schema_name_too_long({ max: String(MAX_NAME_LEN) })),
   tool: projectToolSchema.refine((v) => Boolean(v), {
-    message: 'Please select a processing tool.',
+    message: m.projects_schema_tool_required(),
   }),
-  path: z.string().trim().min(1, 'Project folder path is required.'),
+  path: z.string().trim().min(1, m.projects_schema_path_required()),
   notes: z
     .string()
-    .max(MAX_NOTES_LEN, `Notes must be ${MAX_NOTES_LEN} characters or fewer.`),
+    .max(MAX_NOTES_LEN, m.projects_schema_notes_too_long({ max: String(MAX_NOTES_LEN) })),
 });
 
 export type CreateProjectFormValues = z.infer<typeof createProjectFormSchema>;
@@ -77,10 +78,10 @@ export const editProjectFormSchema = z.object({
   name: z
     .string()
     .trim()
-    .min(1, 'Name is required.')
-    .max(MAX_NAME_LEN, `Name must be ${MAX_NAME_LEN} characters or fewer.`),
+    .min(1, m.projects_schema_edit_name_required())
+    .max(MAX_NAME_LEN, m.projects_schema_name_too_long({ max: String(MAX_NAME_LEN) })),
   tool: projectToolSchema,
-  notes: z.string().max(MAX_NOTES_LEN, `Notes must be ${MAX_NOTES_LEN} characters or fewer.`),
+  notes: z.string().max(MAX_NOTES_LEN, m.projects_schema_notes_too_long({ max: String(MAX_NOTES_LEN) })),
 });
 
 export type EditProjectFormValues = z.infer<typeof editProjectFormSchema>;
@@ -94,7 +95,7 @@ export type EditProjectFormValues = z.infer<typeof editProjectFormSchema>;
  * that `canAdvance()` enforced (length > 0 after trim).
  */
 export const wizardNameSchema = z.object({
-  name: z.string().trim().min(1, 'Project name is required.'),
+  name: z.string().trim().min(1, m.projects_schema_name_required()),
   workflowProfile: z.enum(['pixinsight', 'siril', 'planetary']),
 });
 

@@ -1,4 +1,5 @@
 import { useState } from 'react';
+import { m } from '@/lib/i18n';
 import { Pill, Box, Btn, Section } from '@/ui';
 
 export type SourceViewStrategy = 'symlink' | 'hardlink' | 'copy' | 'junction';
@@ -41,57 +42,56 @@ export function StepViews({ data, onChange }: StepViewsProps) {
   const conflictPolicy = data.conflictPolicy ?? 'fail';
 
   return (
-    <div style={{ display: 'flex', flexDirection: 'column', gap: 'var(--alm-space-5)' }}>
+    <div className="alm-wizard-views">
       {/* Step description */}
-      <div style={{ fontSize: 'var(--alm-text-sm)', color: 'var(--alm-text-muted)', maxWidth: 640 }}>
-        A source view is a tool-friendly projection of your source map. PixInsight/WBPP will
-        read source files through this view. The strategy is preset from{' '}
+      <div className="alm-wizard-views__desc">
+        {m.projects_wizard_views_desc()}{' '}
         <a
           href="#"
           onClick={(e) => e.preventDefault()}
-          style={{ color: 'var(--alm-accent)', textDecoration: 'underline' }}
+          className="alm-wizard-views__link"
         >
-          Settings &rarr; Source view strategy
+          {m.projects_wizard_views_settings_link()}
         </a>{' '}
-        &mdash; override here if you need.
+        {m.projects_wizard_views_override_note()}
       </div>
 
       {/* ── Strategy (from settings) ── */}
-      <Box title="Strategy (from settings)">
-        <div style={{ display: 'flex', justifyContent: 'flex-end', marginBottom: 4 }}>
+      <Box title={m.projects_wizard_strategy_title()}>
+        <div className="alm-wizard-views__box-header">
           <a
             href="#"
             onClick={(e) => e.preventDefault()}
-            style={{ fontSize: 'var(--alm-text-xs)', color: 'var(--alm-accent)', textDecoration: 'underline' }}
+            className="alm-wizard-views__box-link"
           >
-            Override for this project
+            {m.projects_wizard_strategy_override_link()}
           </a>
         </div>
-        <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
-          <Pill variant="ok">NTFS JUNCTION</Pill>
-          <span style={{ fontSize: 'var(--alm-text-sm)' }}>Default for Windows + PixInsight</span>
-          <span style={{ marginLeft: 'auto', fontSize: 'var(--alm-text-xs)', color: 'var(--alm-text-muted)' }}>
-            ~12 KB on disk &middot; no admin &middot; cleanup-safe
+        <div className="alm-wizard-views__strategy-row">
+          <Pill variant="ok">{m.projects_wizard_strategy_ntfs()}</Pill>
+          <span className="alm-wizard-views__strategy-label">{m.projects_wizard_strategy_ntfs_label()}</span>
+          <span className="alm-wizard-views__strategy-meta">
+            {m.projects_wizard_strategy_ntfs_meta()}
           </span>
         </div>
-        <div style={{ marginTop: 6, fontSize: 'var(--alm-text-xs)', color: 'var(--alm-text-muted)' }}>
-          If a fallback is needed (e.g. across volumes), the plan will indicate per item.
+        <div className="alm-wizard-views__strategy-note">
+          {m.projects_wizard_strategy_fallback_note()}
         </div>
       </Box>
 
       {/* ── Views to generate ── */}
-      <Section title="Views to generate">
-        <div style={{ fontSize: 'var(--alm-text-xs)', color: 'var(--alm-text-muted)', marginBottom: 'var(--alm-space-3)' }}>
-          for mosaic projects, one view per panel; otherwise a single wbpp_input
+      <Section title={m.projects_wizard_views_title()}>
+        <div className="alm-wizard-views__table-hint">
+          {m.projects_wizard_views_hint()}
         </div>
         <table className="alm-simple-table">
           <thead>
             <tr>
-              <th>View name</th>
-              <th>Strategy</th>
-              <th>Scope</th>
-              <th>Items</th>
-              <th>Estimated size</th>
+              <th>{m.projects_wizard_col_view_name()}</th>
+              <th>{m.projects_wizard_col_strategy()}</th>
+              <th>{m.projects_wizard_col_scope()}</th>
+              <th>{m.projects_wizard_col_items()}</th>
+              <th>{m.projects_wizard_col_est_size()}</th>
             </tr>
           </thead>
           <tbody>
@@ -101,76 +101,68 @@ export function StepViews({ data, onChange }: StepViewsProps) {
                   <input
                     value={viewName}
                     onChange={(e) => setViewName(e.target.value)}
-                    style={{
-                      width: 160,
-                      fontFamily: 'var(--alm-font-mono)',
-                      fontSize: 'var(--alm-text-xs)',
-                      padding: '3px 6px',
-                      border: '1px solid var(--alm-border)',
-                      background: 'var(--alm-bg)',
-                      color: 'var(--alm-text)',
-                    }}
-                    aria-label="View name"
+                    className="alm-wizard-views__name-input"
+                    aria-label={m.projects_wizard_col_view_name()}
                   />
                 </td>
                 <td><Pill variant="ok">{row.strategy}</Pill></td>
-                <td style={{ fontSize: 'var(--alm-text-xs)' }}>{row.scope}</td>
-                <td className="alm-mono" style={{ fontSize: '11px' }}>{row.items}</td>
-                <td className="alm-mono" style={{ fontSize: '11px' }}>{row.estimatedSize}</td>
+                <td className="alm-wizard-views__td-scope">{row.scope}</td>
+                <td className="alm-mono alm-wizard-views__td-small">{row.items}</td>
+                <td className="alm-mono alm-wizard-views__td-small">{row.estimatedSize}</td>
               </tr>
             ))}
           </tbody>
         </table>
-        <Btn size="sm" style={{ marginTop: 'var(--alm-space-3)' }}>+ Add view (per panel / per filter)</Btn>
+        <Btn size="sm" className="alm-wizard-views__add-btn">{m.projects_wizard_add_view_btn()}</Btn>
       </Section>
 
       {/* ── Conflict policy ── */}
-      <Box title="Conflict policy">
-        <div style={{ display: 'flex', justifyContent: 'flex-end', marginBottom: 4 }}>
+      <Box title={m.projects_wizard_conflict_title()}>
+        <div className="alm-wizard-views__box-header">
           <a
             href="#"
             onClick={(e) => e.preventDefault()}
-            style={{ fontSize: 'var(--alm-text-xs)', color: 'var(--alm-accent)', textDecoration: 'underline' }}
+            className="alm-wizard-views__box-link"
           >
-            defaults from settings
+            {m.projects_wizard_conflict_defaults_link()}
           </a>
         </div>
-        <div style={{ display: 'flex', flexDirection: 'column', gap: 0 }}>
-          <label style={{ display: 'block', fontSize: 'var(--alm-text-xs)', padding: '2px 0', cursor: 'pointer' }}>
+        <div className="alm-wizard-views__radio-group">
+          <label className="alm-wizard-views__radio-label">
             <input
               type="radio"
               name="conflict-policy"
               checked={conflictPolicy === 'fail'}
               onChange={() => onChange({ ...data, conflictPolicy: 'fail' })}
             />{' '}
-            fail if exists (safest)
+            {m.projects_wizard_conflict_fail()}
           </label>
-          <label style={{ display: 'block', fontSize: 'var(--alm-text-xs)', padding: '2px 0', cursor: 'pointer' }}>
+          <label className="alm-wizard-views__radio-label">
             <input
               type="radio"
               name="conflict-policy"
               checked={conflictPolicy === 'rename'}
               onChange={() => onChange({ ...data, conflictPolicy: 'rename' })}
             />{' '}
-            rename with suffix
+            {m.projects_wizard_conflict_rename()}
           </label>
-          <label style={{ display: 'block', fontSize: 'var(--alm-text-xs)', padding: '2px 0', cursor: 'pointer' }}>
+          <label className="alm-wizard-views__radio-label">
             <input
               type="radio"
               name="conflict-policy"
               checked={conflictPolicy === 'skip'}
               onChange={() => onChange({ ...data, conflictPolicy: 'skip' })}
             />{' '}
-            skip existing
+            {m.projects_wizard_conflict_skip()}
           </label>
-          <label style={{ display: 'block', fontSize: 'var(--alm-text-xs)', padding: '2px 0', cursor: 'pointer' }}>
+          <label className="alm-wizard-views__radio-label">
             <input
               type="radio"
               name="conflict-policy"
               checked={conflictPolicy === 'manual'}
               onChange={() => onChange({ ...data, conflictPolicy: 'manual' })}
             />{' '}
-            require manual resolution
+            {m.projects_wizard_conflict_manual()}
           </label>
         </div>
       </Box>

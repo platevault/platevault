@@ -1,20 +1,23 @@
 import { forwardRef } from 'react';
-import type { ReactNode, CSSProperties, TableHTMLAttributes } from 'react';
+import type { ReactNode, CSSProperties, TableHTMLAttributes, MouseEvent } from 'react';
 
 export interface TableColumn {
   key: string;
-  label: string;
+  /** Header content. Accepts a plain string or rich nodes (e.g. sortable header buttons). */
+  label: ReactNode;
   className?: string;
   style?: CSSProperties;
   cellStyle?: CSSProperties;
 }
 
 export type TableRow = {
-  [key: string]: ReactNode | CSSProperties | undefined;
+  [key: string]: ReactNode | CSSProperties | ((evt: MouseEvent) => void) | undefined;
   /** Optional per-row CSS applied to the <tr> element. Not rendered as a cell. */
   _rowStyle?: CSSProperties;
   /** Optional per-row className applied to the <tr> element. Not rendered as a cell. */
   _rowClassName?: string;
+  /** Optional click handler applied to the <tr> element. Not rendered as a cell. */
+  _onClick?: (evt: MouseEvent) => void;
 };
 
 export interface TableProps extends TableHTMLAttributes<HTMLTableElement> {
@@ -28,12 +31,20 @@ export const Table = forwardRef<HTMLTableElement, TableProps>(
     return (
       <table ref={ref} className={cls} {...rest}>
         <thead>
+          {/* eslint-disable-next-line no-restricted-syntax -- dynamic: Table column header style passthrough from caller */}
           <tr>{columns.map((c, i) => <th key={i} style={c.style}>{c.label}</th>)}</tr>
         </thead>
         <tbody>
           {rows.map((row, ri) => (
-            <tr key={ri} style={row._rowStyle} className={row._rowClassName}>
+            <tr
+              key={ri}
+              // eslint-disable-next-line no-restricted-syntax -- dynamic: Table row style passthrough from caller (_rowStyle)
+              style={row._rowStyle}
+              className={row._rowClassName}
+              onClick={row._onClick}
+            >
               {columns.map((c, ci) => (
+                // eslint-disable-next-line no-restricted-syntax -- dynamic: Table cell style passthrough from caller (cellStyle)
                 <td key={ci} className={c.className} style={c.cellStyle}>{row[c.key] as ReactNode}</td>
               ))}
             </tr>

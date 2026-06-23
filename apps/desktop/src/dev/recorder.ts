@@ -212,8 +212,12 @@ export function wrap(
     } catch (err: unknown) {
       const e = err as { code?: string; message?: string };
       error = {
+        // Diagnostic surface (dev-tools only): record the RAW backend code +
+        // message for fidelity. User-facing translation to a catalog message
+        // happens once at the display layer via errMessage (spec 046 FR-008),
+        // not here. Falls back to errMessage for non-Error throws.
         code: e?.code ?? 'unknown',
-        message: errMessage(err),
+        message: e?.message ?? errMessage(err),
       };
     }
 

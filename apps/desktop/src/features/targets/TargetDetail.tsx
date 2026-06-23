@@ -11,6 +11,7 @@ import {
 } from '@/components';
 import { Pill, KV, Section, Table, CoverageBar, Banner, EmptyState } from '@/ui';
 import type { PropertyDef } from '@/components';
+import { m } from '@/lib/i18n';
 import {
   sessionStateLabel,
   sessionStateVariant,
@@ -26,7 +27,7 @@ export function TargetDetailPaneInline({ target }: TargetDetailPaneInlineProps) 
   if (!target) {
     return (
       <DetailPane>
-        <EmptyState title="Select a target" desc="Choose a target from the list to view its details." />
+        <EmptyState title={m.targets_legacy_select_title()} desc={m.targets_legacy_select_desc()} />
       </DetailPane>
     );
   }
@@ -43,14 +44,14 @@ export function TargetDetailPaneInline({ target }: TargetDetailPaneInlineProps) 
     : [];
 
   const identityProps: PropertyDef[] = [
-    { key: 'name', label: 'Primary name', value: target.name },
-    ...(target.common ? [{ key: 'common', label: 'Common name', value: target.common }] : []),
-    { key: 'kind', label: 'Kind', value: target.kind },
+    { key: 'name', label: m.targets_legacy_prop_primary_name(), value: target.name },
+    ...(target.common ? [{ key: 'common', label: m.targets_legacy_prop_common_name(), value: target.common }] : []),
+    { key: 'kind', label: m.calibration_fp_kind(), value: target.kind },
     ...(detail
       ? [
           {
             key: 'catalog',
-            label: 'Catalog IDs',
+            label: m.targets_legacy_prop_catalog_ids(),
             value:
               Object.entries(detail.catalogIds)
                 .filter(([, v]) => v)
@@ -59,13 +60,13 @@ export function TargetDetailPaneInline({ target }: TargetDetailPaneInlineProps) 
           },
           {
             key: 'radec',
-            label: 'RA / Dec',
+            label: m.targets_prop_ra_dec(),
             value:
               detail.coordinates?.ra != null
                 ? `${detail.coordinates.ra}h / ${detail.coordinates.dec != null && detail.coordinates.dec >= 0 ? '+' : ''}${detail.coordinates.dec ?? '?'}°`
                 : 'N/A',
           },
-          { key: 'aliases', label: 'Aliases', value: detail.aliases.join(', ') || '—' },
+          { key: 'aliases', label: m.common_aliases(), value: detail.aliases.join(', ') || '—' },
         ]
       : []),
   ];
@@ -77,7 +78,7 @@ export function TargetDetailPaneInline({ target }: TargetDetailPaneInlineProps) 
           <>
             <strong>{target.name}</strong>
             {target.common && (
-              <span style={{ color: 'var(--alm-text-muted)', fontWeight: 400 }}> — {target.common}</span>
+              <span className="alm-target-detail-legacy__common-name"> — {target.common}</span>
             )}
           </>
         }
@@ -86,16 +87,16 @@ export function TargetDetailPaneInline({ target }: TargetDetailPaneInlineProps) 
 
       <MetricLine
         metrics={[
-          { value: `${target.hours.toFixed(1)}h`, label: 'integration' },
-          { value: target.sessions, label: 'sessions' },
-          { value: target.projects, label: 'projects' },
+          { value: `${target.hours.toFixed(1)}h`, label: m.targets_legacy_metric_integration() },
+          { value: target.sessions, label: m.status_sessions_label() },
+          { value: target.projects, label: m.status_projects_label() },
         ]}
       />
 
       <DetailGrid
         rail={
           <Rail>
-            <RailCard title="Coverage">
+            <RailCard title={m.common_coverage()}>
               {detail && coverageFilters.length > 0 ? (
                 <>
                   {coverageFilters.map((f) => (
@@ -107,78 +108,84 @@ export function TargetDetailPaneInline({ target }: TargetDetailPaneInlineProps) 
                     />
                   ))}
                   {coverageWarning && (
-                    <Banner variant="warn" style={{ marginTop: 'var(--alm-sp-2)' }}>
-                      Some filters are below the recommended integration.
+                    <Banner variant="warn" className="alm-target-detail-legacy__coverage-warn">
+                      {m.targets_legacy_no_coverage()}
                     </Banner>
                   )}
                 </>
               ) : (
-                <span style={{ fontSize: 'var(--alm-text-xs)', color: 'var(--alm-text-faint)' }}>No coverage data</span>
+                <span className="alm-target-detail-legacy__no-coverage">{m.targets_legacy_no_coverage()}</span>
               )}
             </RailCard>
-            <RailCard title="Totals">
-              <KV label="Integration" value={`${target.hours.toFixed(1)}h`} />
-              <KV label="Sessions" value={String(target.sessions)} />
-              <KV label="Projects" value={String(target.projects)} />
+            <RailCard title={m.targets_legacy_totals()}>
+              <KV label={m.projects_wizard_col_integration()} value={`${target.hours.toFixed(1)}h`} />
+              <KV label={m.common_sessions()} value={String(target.sessions)} />
+              <KV label={m.common_projects()} value={String(target.projects)} />
             </RailCard>
-            <RailCard title="Observing plans">
-              <div style={{ display: 'flex', flexDirection: 'column', gap: 'var(--alm-sp-2)', fontSize: 'var(--alm-text-xs)' }}>
+            <RailCard title={m.targets_legacy_obs_plans()}>
+              <div className="alm-target-detail-legacy__obs-plans">
                 <div>
+                  {/* eslint-disable-next-line alm/no-user-string -- fixture placeholder filename, not real UI */}
                   <div className="alm-mono">NGC7000_SHO_plan.nina</div>
-                  <div style={{ color: 'var(--alm-text-muted)' }}>NINA · linked 2024-11-29</div>
+                  {/* eslint-disable-next-line alm/no-user-string -- fixture placeholder metadata */}
+                  <div className="alm-target-detail-legacy__obs-plan-meta">NINA · linked 2024-11-29</div>
                 </div>
                 <div>
+                  {/* eslint-disable-next-line alm/no-user-string -- fixture placeholder filename, not real UI */}
                   <div className="alm-mono">NGC7000_panel_2.nina</div>
-                  <div style={{ color: 'var(--alm-text-muted)' }}>NINA · linked 2024-12-15</div>
+                  {/* eslint-disable-next-line alm/no-user-string -- fixture placeholder metadata */}
+                  <div className="alm-target-detail-legacy__obs-plan-meta">NINA · linked 2024-12-15</div>
                 </div>
               </div>
             </RailCard>
           </Rail>
         }
       >
-        <Section title="Identity & aliases">
+        <Section title={m.targets_legacy_identity_aliases()}>
           <PropertyTable mode="view" properties={identityProps} />
         </Section>
 
-        <Section title="Sessions" count={target.sessions}>
+        <Section title={m.common_sessions()} count={target.sessions}>
           {detail ? (
             <Table
               columns={[
-                { key: 'night', label: 'Night' },
-                { key: 'filter', label: 'Filter' },
-                { key: 'frames', label: 'Frames' },
-                { key: 'integ', label: 'Integ.' },
-                { key: 'state', label: 'State' },
-                { key: 'projects', label: 'Projects' },
+                { key: 'night', label: m.sessions_col_night() },
+                { key: 'filter', label: m.common_filter() },
+                { key: 'frames', label: m.projects_wizard_col_frames() },
+                { key: 'integ', label: m.targets_col_integ() },
+                { key: 'state', label: m.sessions_col_state() },
+                { key: 'projects', label: m.common_projects() },
               ]}
               rows={detail.sessions.map((s) => ({
                 night: <span className="alm-mono">{s.sessionKey.night}</span>,
                 filter: <Pill variant="ghost">{s.sessionKey.filter}</Pill>,
                 frames: <span className="alm-mono">{s.frameCount}</span>,
+                // eslint-disable-next-line alm/no-user-string -- unit abbreviation "h" is a universal scientific symbol
                 integ: <span className="alm-mono">{((s.totalIntegrationSeconds ?? 0) / 3600).toFixed(1)}h</span>,
                 state: <Pill variant={sessionStateVariant(s.state)}>{sessionStateLabel(s.state)}</Pill>,
                 projects:
                   s.projectIds.length === 0 ? (
-                    <span style={{ color: 'var(--alm-text-faint)' }}>—</span>
+                    <span className="alm-target-detail-legacy__no-projects-dash">—</span>
                   ) : (
+                    // eslint-disable-next-line alm/no-user-string -- abbreviated fixture stub
                     <span>{s.projectIds.length} proj</span>
                   ),
               }))}
             />
           ) : (
-            <span style={{ color: 'var(--alm-text-faint)', fontSize: 'var(--alm-text-sm)' }}>
-              {target.sessions} session{target.sessions !== 1 ? 's' : ''} · {target.hours.toFixed(1)}h total
+            <span className="alm-target-detail-legacy__sessions-summary">
+              {m.targets_legacy_sessions_summary({ sessions: target.sessions, hours: target.hours.toFixed(1) })}
             </span>
           )}
         </Section>
 
-        <Section title="Projects" count={target.projects}>
+        <Section title={m.common_projects()} count={target.projects}>
           {detail && detail.projects.length > 0 ? (
             <Table
               columns={[
-                { key: 'name', label: 'Project' },
-                { key: 'profile', label: 'Profile' },
-                { key: 'state', label: 'Lifecycle' },
+                { key: 'name', label: m.settings_datasources_category_project() },
+                { key: 'profile', label: m.targets_col_profile() },
+                { key: 'state', label: m.targets_col_lifecycle() },
               ]}
               rows={detail.projects.map((p) => ({
                 name: <strong>{p.name}</strong>,
@@ -187,7 +194,7 @@ export function TargetDetailPaneInline({ target }: TargetDetailPaneInlineProps) 
               }))}
             />
           ) : (
-            <span style={{ color: 'var(--alm-text-faint)', fontSize: 'var(--alm-text-sm)' }}>No projects</span>
+            <span className="alm-target-detail-legacy__projects-empty">{m.targets_legacy_no_projects()}</span>
           )}
         </Section>
       </DetailGrid>

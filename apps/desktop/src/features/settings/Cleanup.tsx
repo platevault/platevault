@@ -6,15 +6,19 @@
 // (key: 'alm.cleanup.type_actions') so they persist across reloads without
 // requiring the cleanup-plan backend spec. CLEANUP_TYPES provides the
 // defaults and the locked/unlocked flags. (T061 FR-024)
-import { useState, useEffect } from 'react';
-import { Toggle, SegControl, Pill } from '@/ui';
+import { useState, useEffect, Fragment } from 'react';
+import { Toggle, SegControl, Pill, Banner } from '@/ui';
 import { getSettings } from '@/api/commands';
-import { CLEANUP_TYPES, type CleanupTypeFixture } from '@/data/fixtures/settings';
+import { CLEANUP_TYPES, CLEANUP_STAGE_ORDER, type CleanupTypeFixture } from '@/data/fixtures/settings';
+import { m } from '@/lib/i18n';
+import { SettingsSection, SettingsRow } from './SettingsKit';
 
 type CleanupAction = CleanupTypeFixture['action'];
 type DefaultProtection = 'protected' | 'normal' | 'unprotected';
 
-const ACTIONS_STORAGE_KEY = 'alm.cleanup.type_actions';
+// Bumped to v2: row ids and the type set changed (per-type raw calibration
+// frames + per-type masters), so old persisted overrides no longer map.
+const ACTIONS_STORAGE_KEY = 'alm.cleanup.type_actions.v2';
 
 /** Load persisted per-type action overrides from localStorage. */
 function loadActionsFromStorage(): Record<number, CleanupAction> {
@@ -29,7 +33,7 @@ function loadActionsFromStorage(): Record<number, CleanupAction> {
     if (raw) {
       const saved = JSON.parse(raw) as Record<string, string>;
       for (const row of CLEANUP_TYPES) {
-        if (!row.locked && saved[String(row.id)]) {
+        if (saved[String(row.id)]) {
           init[row.id] = saved[String(row.id)] as CleanupAction;
         }
       }
@@ -97,99 +101,98 @@ export function Cleanup({ save }: CleanupProps) {
     });
   };
 
+  // Protected (high-value) categories currently set to a destructive action —
+  // surfaced as an impact warning so the change is deliberate. (T028)
+  const warnedTypes = CLEANUP_TYPES.filter(
+    (row) => row.warnOnChange && (actions[row.id] ?? row.action) !== 'Keep',
+  ).map((row) => row.type);
+
   return (
     <>
       {/* Source protection — spec 018 owned, persisted via settings backend */}
-      <div className="alm-settings__group">
-        <div className="alm-settings__group-title">Source Protection</div>
+      <SettingsSection title={m.settings_cleanup_protection_title()}>
+        <SettingsRow
+          label={m.settings_cleanup_block_delete_label()}
+          info="Routes all destructive operations through archive or trash workflows instead of immediate permanent deletion."
+        >
+          <Toggle
+            checked={blockPermanentDelete}
+            onChange={(v) => {
+              setBlockPermanentDelete(v);
+              save('cleanup', { blockPermanentDelete: v });
+            }}
+          />
+        </SettingsRow>
 
-        <div className="alm-settings__row">
-          <div className="alm-settings__row-label">Block permanent delete</div>
-          <div className="alm-settings__row-content">
-            <Toggle
-              checked={blockPermanentDelete}
-              onChange={(v) => {
-                setBlockPermanentDelete(v);
-                save('cleanup', { blockPermanentDelete: v });
-              }}
-            />
-            <div className="alm-settings__row-desc">
-              Routes all destructive operations through archive or trash workflows
-              instead of immediate permanent deletion.
-            </div>
-          </div>
-        </div>
-
-        <div className="alm-settings__row">
-          <div className="alm-settings__row-label">Default protection</div>
-          <div className="alm-settings__row-content">
-            <select
-              className="alm-select"
-              value={defaultProtection}
-              onChange={(e) => {
-                const v = e.target.value as DefaultProtection;
-                setDefaultProtection(v);
-                save('cleanup', { defaultProtection: v });
-              }}
-              style={{ height: 28 }}
-            >
-              <option value="protected">Protected</option>
-              <option value="normal">Normal</option>
-              <option value="unprotected">Unprotected</option>
-            </select>
-            <div className="alm-settings__row-desc">
-              {defaultProtection === 'protected' && 'New sources start protected — cleanup plans skip them unless explicitly approved.'}
-              {defaultProtection === 'normal' && 'New sources start at normal protection — cleanup plans may include them.'}
-              {defaultProtection === 'unprotected' && 'New sources start unprotected — cleanup plans may act on them without extra confirmation.'}
-            </div>
-          </div>
-        </div>
-      </div>
+        <SettingsRow
+          label={m.settings_cleanup_default_protection_label()}
+          info="Controls the starting protection level assigned to newly ingested sources. Protected sources are skipped by cleanup plans unless explicitly approved."
+        >
+          <select
+            className="alm-select alm-cleanup__protection-select"
+            value={defaultProtection}
+            onChange={(e) => {
+              const v = e.target.value as DefaultProtection;
+              setDefaultProtection(v);
+              save('cleanup', { defaultProtection: v });
+            }}
+          >
+            <option value="protected">{m.settings_cleanup_protection_protected()}</option>
+            <option value="normal">{m.settings_cleanup_protection_normal()}</option>
+            <option value="unprotected">{m.settings_cleanup_protection_unprotected()}</option>
+          </select>
+        </SettingsRow>
+      </SettingsSection>
 
       {/* Per-type cleanup actions — fixture mockup, not yet wired to backend */}
       {/* TODO(cleanup-plan-spec): replace CLEANUP_TYPES fixture with backend data */}
-      <div className="alm-settings__group">
-        <div className="alm-settings__group-title">Per-Type Default Actions</div>
+      <SettingsSection title={m.settings_cleanup_pertype_title()}>
+        {warnedTypes.length > 0 && (
+          <Banner variant="danger" className="alm-cleanup__warning">
+            {m.settings_cleanup_pertype_desc({ types: warnedTypes.join(', ') })}
+          </Banner>
+        )}
         <table className="alm-table">
           <thead>
             <tr>
-              <th>Data type</th>
-              <th style={{ width: 220 }}>Default action</th>
+              <th>{m.settings_cleanup_col_datatype()}</th>
+              <th className="alm-cleanup__action-col">{m.settings_cleanup_col_action()}</th>
             </tr>
           </thead>
           <tbody>
-            {CLEANUP_TYPES.map((row) => {
-              const current = actions[row.id] ?? row.action;
-              return (
-                <tr key={row.id}>
-                  <td>
-                    <span style={{ display: 'flex', alignItems: 'center', gap: 'var(--alm-sp-2)' }}>
-                      {row.type}
-                      {row.locked && (
-                        <Pill variant="neutral">Protected</Pill>
-                      )}
-                    </span>
-                  </td>
-                  <td>
-                    {row.locked ? (
-                      <span style={{ display: 'flex', alignItems: 'center', gap: 'var(--alm-sp-1)', color: 'var(--alm-text-muted)', fontSize: 'var(--alm-text-xs)' }}>
-                        <span>&#128274;</span> Keep (protected)
-                      </span>
-                    ) : (
-                      <SegControl
-                        options={['Keep', 'Archive', 'Delete']}
-                        value={current}
-                        onChange={(v) => handleTableChange(row.id, v)}
-                        danger
-                      />
-                    )}
-                  </td>
+            {CLEANUP_STAGE_ORDER.map((stage) => (
+              <Fragment key={stage}>
+                <tr className="alm-cleanup__group-row">
+                  <td colSpan={2}>{stage}</td>
                 </tr>
-              );
-            })}
+                {CLEANUP_TYPES.filter((row) => row.stage === stage).map((row) => {
+                  const current = actions[row.id] ?? row.action;
+                  return (
+                    <tr key={row.id}>
+                      <td>
+                        <span className="alm-cleanup__type-cell">
+                          {row.type}
+                          {row.warnOnChange && (
+                            <Pill variant="neutral">{m.settings_cleanup_protection_protected()}</Pill>
+                          )}
+                        </span>
+                      </td>
+                      <td>
+                        <SegControl
+                          options={['Keep', 'Archive', 'Delete']}
+                          value={current}
+                          onChange={(v) => handleTableChange(row.id, v)}
+                          danger
+                        />
+                      </td>
+                    </tr>
+                  );
+                })}
+              </Fragment>
+            ))}
           </tbody>
         </table>
-      </div>
+      </SettingsSection>
     </>
   );
 }

@@ -1,13 +1,20 @@
 /**
- * MatchCandidatesPanel — spec 007 US1-US4.
+ * MatchCandidatesPanel — spec 007 US1-US4 · spec 043 §4 (calibration hero).
  *
- * Renders the ranked calibration-match candidates for a given session,
- * returned by `calibration.match.suggest`. Shows:
+ * The DETAIL hero for a calibration master: a COMPATIBLE-SESSIONS MATCH TABLE —
+ * which acquisition sessions this master can calibrate, ranked by match
+ * confidence. Data comes from `calibration.match.suggest`; each row is one
+ * candidate session (`CalibrationMatchDto`). Shows:
  *   - Per-type suggest status badge (match / ambiguous / no_match / observer_location_missing)
- *   - Ranked candidates with confidence bar + dimension breakdown
+ *   - Session-oriented columns: Target · Filter · Night · Frames · Confidence
  *   - Dimension-mismatch warnings (reason + delta)
  *   - Assign button (calls calibration.match.assign; handles hard-violation errors)
  *   - Respects `prefillSuggestion` to auto-open confirm prompt on top candidate
+ *   - Humanized empty state when no sessions match.
+ *
+ * Target / Filter / Night / Frames are NOT carried on the suggest DTO
+ * (`CalibrationMatchDto` only has sessionId + confidence + dimension breakdown);
+ * those cells are marked `// STUB:` until the backend enriches the contract.
  *
  * No Playwright/visual smoke tests — jsdom unit-tested in MatchCandidatesPanel.test.tsx.
  */
@@ -22,6 +29,7 @@ import type {
   SuggestStatus,
   MismatchReason,
 } from '@/api/commands';
+import { m } from '@/lib/i18n';
 
 // ── Helpers ───────────────────────────────────────────────────────────────────
 
@@ -69,27 +77,16 @@ function ConfidenceBar({ value }: { value: number }) {
   const barColor =
     pct >= 90 ? 'var(--alm-ok)' : pct >= 70 ? 'var(--alm-warn)' : 'var(--alm-danger)';
   return (
-    <div style={{ display: 'flex', alignItems: 'center', gap: 'var(--alm-sp-1)' }}>
-      <div
-        style={{
-          width: 60,
-          height: 6,
-          background: 'var(--alm-surface-overlay)',
-          borderRadius: 3,
-          overflow: 'hidden',
-        }}
-      >
+    <div className="alm-match-candidates__conf-bar">
+      <div className="alm-match-candidates__conf-track">
         <div
-          style={{
-            width: `${pct}%`,
-            height: '100%',
-            background: barColor,
-            borderRadius: 3,
-          }}
+          className="alm-match-candidates__conf-fill"
+          // eslint-disable-next-line no-restricted-syntax -- dynamic: confidence bar width % and conditional token color
+          style={{ width: `${pct}%`, background: barColor }}
           data-testid="confidence-bar"
         />
       </div>
-      <span className="alm-mono" style={{ fontSize: 'var(--alm-text-xs)', minWidth: 32 }}>
+      <span className="alm-mono alm-match-candidates__conf-label">
         {confidencePct(value)}
       </span>
     </div>
@@ -101,21 +98,22 @@ function ConfidenceBar({ value }: { value: number }) {
 function DimensionBreakdown({ match }: { match: CalibrationMatchDto }) {
   const hasMismatches = match.dimensionsMismatched.length > 0;
   return (
-    <div style={{ display: 'flex', flexDirection: 'column', gap: 2 }}>
+    <div className="alm-match-candidates__dim-list">
       {match.dimensionsMatched.map((d) => (
         <span
           key={d.dimension}
-          style={{ fontSize: 'var(--alm-text-xs)', color: 'var(--alm-text-secondary)' }}
+          className="alm-match-candidates__dim-matched"
         >
           <Check
             size={12}
             role="img"
-            aria-label="matched"
-            style={{ color: 'var(--alm-ok)', display: 'inline', verticalAlign: 'middle' }}
+            aria-label={m.calibration_dim_matched_aria()}
+            className="alm-match-candidates__dim-check"
           />{' '}
           {d.dimension}
           {d.delta != null && d.delta > 0 && (
-            <span style={{ color: 'var(--alm-text-faint)' }}> (Δ{d.delta.toFixed(2)})</span>
+            // eslint-disable-next-line alm/no-user-string -- mathematical delta notation, not translatable prose
+            <span className="alm-match-candidates__dim-delta"> (Δ{d.delta.toFixed(2)})</span>
           )}
         </span>
       ))}
@@ -123,17 +121,18 @@ function DimensionBreakdown({ match }: { match: CalibrationMatchDto }) {
         match.dimensionsMismatched.map((d) => (
           <span
             key={d.dimension}
-            style={{ fontSize: 'var(--alm-text-xs)', color: 'var(--alm-warn)' }}
+            className="alm-match-candidates__dim-mismatch"
             data-testid={`mismatch-${d.dimension}`}
           >
             <AlertTriangle
               size={12}
-              aria-label="mismatch"
-              style={{ display: 'inline', verticalAlign: 'middle' }}
+              aria-label={m.calibration_dim_mismatch_aria()}
+              className="alm-match-candidates__dim-mismatch-icon"
             />{' '}
             {d.dimension}: {reasonLabel(d.reason)}
             {d.delta != null && (
-              <span style={{ color: 'var(--alm-text-faint)' }}> (Δ{d.delta.toFixed(2)})</span>
+              // eslint-disable-next-line alm/no-user-string -- mathematical delta notation, not translatable prose
+              <span className="alm-match-candidates__dim-delta"> (Δ{d.delta.toFixed(2)})</span>
             )}
           </span>
         ))}
@@ -192,8 +191,8 @@ function AssignButton({ match, sessionId: _sessionId, onAssign, assigning, prefi
 
   if (pending === 'confirming') {
     return (
-      <div style={{ display: 'flex', flexDirection: 'column', gap: 'var(--alm-sp-1)' }}>
-        <div style={{ display: 'flex', gap: 'var(--alm-sp-1)' }}>
+      <div className="alm-match-candidates__assign-col">
+        <div className="alm-match-candidates__assign-row">
           <Btn
             size="sm"
             variant="primary"
@@ -201,10 +200,10 @@ function AssignButton({ match, sessionId: _sessionId, onAssign, assigning, prefi
             disabled={assigning}
             data-testid="assign-confirm-btn"
           >
-            {assigning ? 'Assigning…' : 'Confirm assign'}
+            {assigning ? m.calibration_assign_assigning() : m.calibration_assign_confirm_btn()}
           </Btn>
           <Btn size="sm" variant="ghost" onClick={handleCancel} data-testid="assign-cancel-btn">
-            Cancel
+            {m.common_cancel()}
           </Btn>
         </div>
       </div>
@@ -213,14 +212,14 @@ function AssignButton({ match, sessionId: _sessionId, onAssign, assigning, prefi
 
   if (pending === 'override_confirm') {
     return (
-      <div style={{ display: 'flex', flexDirection: 'column', gap: 'var(--alm-sp-1)' }}>
+      <div className="alm-match-candidates__assign-col">
         <span
-          style={{ fontSize: 'var(--alm-text-xs)', color: 'var(--alm-warn)' }}
+          className="alm-match-candidates__override-warning"
           data-testid="override-warning"
         >
           {errorMsg}
         </span>
-        <div style={{ display: 'flex', gap: 'var(--alm-sp-1)' }}>
+        <div className="alm-match-candidates__assign-row">
           <Btn
             size="sm"
             variant="danger"
@@ -228,14 +227,14 @@ function AssignButton({ match, sessionId: _sessionId, onAssign, assigning, prefi
             disabled={assigning}
             data-testid="assign-override-btn"
           >
-            Force-assign
+            {m.calibration_assign_force_btn()}
           </Btn>
           <Btn size="sm" variant="ghost" onClick={handleCancel}>
-            Cancel
+            {m.common_cancel()}
           </Btn>
         </div>
-        <div style={{ fontSize: 'var(--alm-text-xs)', color: 'var(--alm-text-faint)' }}>
-          Violates: {overrideDims.join(', ')}
+        <div className="alm-match-candidates__override-dims">
+          {m.calibration_assign_violates({ dims: overrideDims.join(', ') })}
         </div>
       </div>
     );
@@ -248,7 +247,7 @@ function AssignButton({ match, sessionId: _sessionId, onAssign, assigning, prefi
       onClick={handleClick}
       data-testid={`assign-btn-${match.masterId}`}
     >
-      Assign
+      {m.calibration_assign_btn()}
     </Btn>
   );
 }
@@ -276,12 +275,12 @@ export function MatchCandidatesPanel({
 }: MatchCandidatesPanelProps) {
   if (loading) {
     return (
-      <Section title="Calibration suggestions">
+      <Section title={m.calibration_compatible_sessions_title()}>
         <div
-          style={{ fontSize: 'var(--alm-text-sm)', color: 'var(--alm-text-muted)', padding: 'var(--alm-sp-2)' }}
+          className="alm-match-candidates__loading"
           data-testid="suggest-loading"
         >
-          Loading suggestions…
+          {m.calibration_compatible_sessions_loading()}
         </div>
       </Section>
     );
@@ -289,9 +288,9 @@ export function MatchCandidatesPanel({
 
   if (error) {
     return (
-      <Section title="Calibration suggestions">
+      <Section title={m.calibration_compatible_sessions_title()}>
         <Banner variant="danger" data-testid="suggest-error">
-          Failed to load suggestions: {error}
+          {m.calibration_compatible_sessions_error({ error })}
         </Banner>
       </Section>
     );
@@ -299,23 +298,39 @@ export function MatchCandidatesPanel({
 
   if (!response) {
     return (
-      <Section title="Calibration suggestions">
-        <EmptyState title="No session selected" desc="Select a session to view suggestions." />
+      <Section title={m.calibration_compatible_sessions_title()}>
+        <EmptyState title={m.calibration_compatible_sessions_no_selection_title()} desc={m.calibration_compatible_sessions_no_selection_desc()} />
       </Section>
     );
   }
 
   if (response.status === 'error') {
     const code = response.error?.code ?? 'unknown';
+    // A missing anchor session is benign for a master view (a master has no
+    // originating light session to match against) — show a neutral empty state
+    // rather than a raw "Session … not found" error.
+    if (code === 'session.not_found') {
+      return (
+        <Section title={m.calibration_compatible_sessions_title()}>
+          <EmptyState
+            title={m.calibration_compatible_sessions_none_title()}
+            desc={m.calibration_compatible_sessions_no_anchor_desc()}
+          />
+        </Section>
+      );
+    }
     const isObserverMissing = code === 'match.observer_location_missing' || response.suggestStatus === 'observer_location_missing';
+     
+    const isMixedState = response.error?.code === 'session.mixed_state';
+    const guardMessage = isObserverMissing
+      ? m.calibration_observer_missing_guard()
+      : isMixedState
+        ? m.calibration_session_mixed_state()
+        : m.calibration_suggest_error({ message: response.error?.message ?? code });
     return (
-      <Section title="Calibration suggestions">
+      <Section title={m.calibration_compatible_sessions_title()}>
         <Banner variant="warn" data-testid="suggest-guard-error">
-          {isObserverMissing
-            ? 'Observer location or acquisition time is missing — cannot suggest calibration masters.'
-            : response.error?.code === 'session.mixed_state'
-              ? 'Session is mixed (light + dark frames). Split it before requesting calibration suggestions.'
-              : `Suggestion error: ${response.error?.message ?? code}`}
+          {guardMessage}
         </Banner>
       </Section>
     );
@@ -326,9 +341,9 @@ export function MatchCandidatesPanel({
 
   if (suggestStatus === 'observer_location_missing') {
     return (
-      <Section title="Calibration suggestions">
+      <Section title={m.calibration_compatible_sessions_title()}>
         <Banner variant="warn" data-testid="suggest-observer-missing">
-          Observer location or acquisition time is missing — cannot suggest calibration masters.
+          {m.calibration_observer_missing_match()}
         </Banner>
       </Section>
     );
@@ -336,10 +351,10 @@ export function MatchCandidatesPanel({
 
   if (suggestStatus === 'no_match' || matches.length === 0) {
     return (
-      <Section title="Calibration suggestions">
+      <Section title={m.calibration_compatible_sessions_title()}>
         <EmptyState
-          title="No compatible masters"
-          desc="No calibration masters matched this session's fingerprint. Add masters or adjust matching tolerances in Settings → Calibration."
+          title={m.calibration_compatible_sessions_none_title()}
+          desc={m.calibration_compatible_sessions_none_desc()}
         />
       </Section>
     );
@@ -347,51 +362,51 @@ export function MatchCandidatesPanel({
 
   return (
     <Section
-      title="Calibration suggestions"
+      title={m.calibration_compatible_sessions_title()}
       count={matches.length}
     >
-      <div style={{ marginBottom: 'var(--alm-sp-1)', display: 'flex', alignItems: 'center', gap: 'var(--alm-sp-1)' }}>
+      <div className="alm-match-candidates__status-row">
         <Pill variant={statusVariant(suggestStatus)} data-testid="suggest-status-pill">
           {statusLabel(suggestStatus)}
         </Pill>
+        { }
         {suggestStatus === 'ambiguous' && (
-          <span style={{ fontSize: 'var(--alm-text-xs)', color: 'var(--alm-text-muted)' }}>
-            Multiple candidates at similar confidence — review before assigning.
+          <span className="alm-match-candidates__ambiguous-hint">
+            {m.calibration_ambiguous_hint()}
           </span>
         )}
       </div>
       <Table
         columns={[
-          { key: 'rank', label: '#', style: { width: 28 } },
-          { key: 'type', label: 'Type', style: { width: 56 } },
-          { key: 'masterId', label: 'Master', style: { width: 160 } },
-          { key: 'confidence', label: 'Confidence', style: { width: 120 } },
-          { key: 'reason', label: 'Selection', style: { width: 110 } },
-          { key: 'dimensions', label: 'Dimensions' },
+          { key: 'session', label: m.calibration_col_session(), style: { width: 150 } },
+          { key: 'target', label: m.projects_create_target_label(), style: { width: 130 } },
+          { key: 'filter', label: m.common_filter(), style: { width: 64 } },
+          { key: 'night', label: m.sessions_col_night(), style: { width: 100 } },
+          { key: 'frames', label: m.projects_wizard_col_frames(), style: { width: 64 } },
+          { key: 'confidence', label: m.calibration_col_match(), style: { width: 120 } },
+          { key: 'dimensions', label: m.calibration_col_dimensions() },
           { key: 'assign', label: '', style: { width: 120 } },
         ]}
-        rows={matches.map((m, i) => ({
-          rank: (
-            <span className="alm-mono" style={{ fontSize: 'var(--alm-text-xs)', color: 'var(--alm-text-faint)' }}>
-              {i + 1}
-            </span>
-          ),
-          type: <Pill variant={m.calibrationType === 'dark' ? 'info' : m.calibrationType === 'flat' ? 'accent' : 'neutral'}>{m.calibrationType}</Pill>,
-          masterId: (
+        rows={matches.map((m) => ({
+          session: (
             <span
-              className="alm-mono"
-              style={{ fontSize: 'var(--alm-text-xs)' }}
-              data-testid={`candidate-master-${m.masterId}`}
+              className="alm-mono alm-match-candidates__session-id"
+              data-testid={`candidate-session-${m.sessionId}`}
             >
-              {m.masterId.slice(0, 8)}…
+              {m.sessionId.slice(0, 12)}
+              {m.sessionId.length > 12 ? '…' : ''}
             </span>
           ),
+          // STUB: target name not on CalibrationMatchDto (suggest contract).
+          // Backend enrichment needed to resolve sessionId → target.
+          target: <span className="alm-match-candidates__stub-cell">—</span>,
+          // STUB: filter not on CalibrationMatchDto. Backend enrichment needed.
+          filter: <span className="alm-match-candidates__stub-cell">—</span>,
+          // STUB: acquisition night not on CalibrationMatchDto. Backend enrichment needed.
+          night: <span className="alm-match-candidates__stub-cell">—</span>,
+          // STUB: frame count not on CalibrationMatchDto. Backend enrichment needed.
+          frames: <span className="alm-match-candidates__stub-cell">—</span>,
           confidence: <ConfidenceBar value={m.confidence} />,
-          reason: (
-            <span style={{ fontSize: 'var(--alm-text-xs)', color: 'var(--alm-text-secondary)' }}>
-              {m.selectionReason.replace(/_/g, ' ')}
-            </span>
-          ),
           dimensions: <DimensionBreakdown match={m} />,
           assign: (
             <AssignButton

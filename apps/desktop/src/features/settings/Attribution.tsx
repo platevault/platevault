@@ -1,4 +1,5 @@
 // Data sources & attribution notice (spec 035, T036 / FR-012).
+import { m } from '@/lib/i18n';
 //
 // Static frontend notice crediting the astronomical data sources the app relies
 // on: SIMBAD (CDS) for on-demand resolution and OpenNGC for the bundled seed.
@@ -31,10 +32,9 @@ const SOURCES: AttributionSource[] = [
 export function Attribution() {
   return (
     <div className="alm-settings__group">
-      <div className="alm-settings__group-title">Data Sources &amp; Attribution</div>
+      <div className="alm-settings__group-title">{m.settings_attribution_title()}</div>
       <p className="alm-settings__group-note">
-        Astro Library Manager identifies targets using the following astronomical
-        data sources. We gratefully acknowledge their work.
+        {m.settings_attribution_note()}
       </p>
       <ul className="alm-attribution__list">
         {SOURCES.map((s) => (

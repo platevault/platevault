@@ -386,29 +386,36 @@ fn count_frames(frame_ids_json: &str) -> u32 {
         .map_or(0, |v| u32::try_from(v.len()).unwrap_or(0))
 }
 
+/// The session's target: the linked `target_name` when present, otherwise the
+/// `target` field parsed out of the `session_key` JSON. `target_name` is
+/// currently always NULL in the projection (gen-3 canonical_target is not
+/// joined), so the session_key fallback is what gives every acquisition row its
+/// object identity instead of a generic "Session — <date>".
+fn effective_target(row: &SessionProjectionRow) -> Option<String> {
+    if let Some(ref t) = row.target_name {
+        return Some(t.clone());
+    }
+    serde_json::from_str::<serde_json::Value>(&row.session_key)
+        .ok()
+        .and_then(|k| k.get("target").and_then(|v| v.as_str()).map(ToOwned::to_owned))
+}
+
 /// Derive a human display name for an inventory session.
 fn derive_session_name(row: &SessionProjectionRow) -> String {
+    let date = &row.created_at[..10.min(row.created_at.len())];
     if row.session_kind == "calibration" {
-        format!(
-            "{} calibration — {}",
-            row.frame_type,
-            &row.created_at[..10.min(row.created_at.len())]
-        )
-    } else if let Some(ref target) = row.target_name {
-        // Try to parse session_key as JSON to extract filter/night.
-        if let Ok(key) = serde_json::from_str::<serde_json::Value>(&row.session_key) {
-            let filter = key.get("filter").and_then(|v| v.as_str()).unwrap_or("?");
-            let night = key
-                .get("night")
-                .and_then(|v| v.as_str())
-                .unwrap_or(&row.created_at[..10.min(row.created_at.len())]);
+        return format!("{} calibration — {date}", row.frame_type);
+    }
+    let key = serde_json::from_str::<serde_json::Value>(&row.session_key).ok();
+    match effective_target(row) {
+        Some(target) => {
+            let filter =
+                key.as_ref().and_then(|k| k.get("filter").and_then(|v| v.as_str())).unwrap_or("?");
+            let night =
+                key.as_ref().and_then(|k| k.get("night").and_then(|v| v.as_str())).unwrap_or(date);
             format!("{target} · {filter} — {night}")
-        } else {
-            format!("{target} — {}", &row.created_at[..10.min(row.created_at.len())])
         }
-    } else {
-        // Fallback: use session_key as-is or date.
-        format!("Session — {}", &row.created_at[..10.min(row.created_at.len())])
+        None => format!("Session — {date}"),
     }
 }
 
@@ -418,6 +425,7 @@ fn project_row_to_session(
 ) -> InventorySession {
     let frames = count_frames(&row.frame_ids);
     let name = derive_session_name(&row);
+    let target = effective_target(&row);
     let frame_type = map_frame_type(&row.frame_type);
     let state = map_session_state(&row.state);
 
@@ -469,7 +477,7 @@ fn project_row_to_session(
         source_id: row.root_id,
         frames,
         frame_type,
-        target: row.target_name,
+        target,
         filter,
         exposure,
         state,

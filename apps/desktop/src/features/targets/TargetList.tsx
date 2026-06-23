@@ -2,10 +2,25 @@ import { useMemo, useRef, useState } from 'react';
 import { useVirtualizer } from '@tanstack/react-virtual';
 import type { TargetListItem } from '@/api/commands';
 import { ListSidebar } from '@/components';
-import { Pill } from '@/ui';
+import { Pill, SegControl } from '@/ui';
+import { m } from '@/lib/i18n';
 
-/** Estimated row height (px) for the virtualizer's initial measurement. */
-const ROW_ESTIMATE = 52;
+/**
+ * Estimated row height (px) for the virtualizer's initial measurement.
+ *
+ * Dense  — single-line: label + type pill ≈ 34px
+ * Rich   — two-line: label row + meta row ≈ 54px
+ *
+ * NOTE: TargetListItem only carries effectiveLabel, primaryDesignation, and
+ * objectType. Fields shown in the authoritative mock (CON, COORDS, MAG,
+ * COVERAGE, best-season, sessions) live on the full-detail endpoint and are
+ * NOT available on list rows. They are omitted here rather than fabricated.
+ */
+const ROW_ESTIMATE_DENSE = 34;
+const ROW_ESTIMATE_RICH = 54;
+
+type RowDensity = 'Dense' | 'Rich';
+const DENSITY_OPTIONS: RowDensity[] = ['Dense', 'Rich'];
 
 interface Props {
   targets: TargetListItem[];
@@ -21,18 +36,27 @@ function matchesSearch(t: TargetListItem, query: string): boolean {
   );
 }
 
+/** Formats the objectType string into a readable label. */
+function formatType(objectType: string): string {
+  return objectType.replace(/_/g, ' ');
+}
+
 export function TargetList({ targets, selected, onSelect }: Props) {
   const [search, setSearch] = useState('');
+  const [density, setDensity] = useState<RowDensity>('Dense');
   const scrollRef = useRef<HTMLDivElement>(null);
+
   const filtered = useMemo(
     () => (search.trim() ? targets.filter((t) => matchesSearch(t, search.trim())) : targets),
     [targets, search],
   );
 
+  const rowEstimate = density === 'Dense' ? ROW_ESTIMATE_DENSE : ROW_ESTIMATE_RICH;
+
   const virtualizer = useVirtualizer({
     count: filtered.length,
     getScrollElement: () => scrollRef.current,
-    estimateSize: () => ROW_ESTIMATE,
+    estimateSize: () => rowEstimate,
     overscan: 8,
   });
 
@@ -40,13 +64,19 @@ export function TargetList({ targets, selected, onSelect }: Props) {
     <ListSidebar
       scrollRef={scrollRef}
       virtualized
-      placeholder="Search targets..."
+      placeholder={m.targets_page_search_placeholder()}
       searchValue={search}
       onSearchChange={setSearch}
       controls={
         <>
+          <SegControl
+            options={DENSITY_OPTIONS}
+            value={density}
+            onChange={(v) => setDensity(v as RowDensity)}
+            aria-label={m.targets_legacy_row_density_aria()}
+          />
           <select defaultValue="name">
-            <option value="name">Sort: name</option>
+            <option value="name">{m.targets_legacy_sort_name()}</option>
           </select>
         </>
       }
@@ -54,17 +84,23 @@ export function TargetList({ targets, selected, onSelect }: Props) {
     >
       <div
         className="alm-virtual-inner"
+        // eslint-disable-next-line no-restricted-syntax -- dynamic: virtualizer total height (getTotalSize)
         style={{ height: `${virtualizer.getTotalSize()}px`, position: 'relative' }}
       >
         {virtualizer.getVirtualItems().map((virtualRow) => {
           const t = filtered[virtualRow.index];
+          const isSelected = selected === t.id;
+          const showAltDesig =
+            t.effectiveLabel !== t.primaryDesignation;
+
           return (
             <div
               key={t.id}
               data-index={virtualRow.index}
               ref={virtualizer.measureElement}
-              className={`alm-list-item${selected === t.id ? ' alm-list-item--selected' : ''}`}
+              className={`alm-list-item${isSelected ? ' alm-list-item--selected' : ''}`}
               onClick={() => onSelect(t.id)}
+              // eslint-disable-next-line no-restricted-syntax -- dynamic: virtualizer translateY offset per target row
               style={{
                 position: 'absolute',
                 top: 0,
@@ -73,23 +109,33 @@ export function TargetList({ targets, selected, onSelect }: Props) {
                 transform: `translateY(${virtualRow.start}px)`,
               }}
             >
-              <div className="alm-list-item__title">
-                <strong>{t.effectiveLabel}</strong>
-                {t.effectiveLabel !== t.primaryDesignation && (
-                  <span
-                    style={{
-                      marginLeft: 'var(--alm-sp-1)',
-                      color: 'var(--alm-text-muted)',
-                      fontSize: 'var(--alm-text-xs)',
-                    }}
-                  >
-                    ({t.primaryDesignation})
-                  </span>
-                )}
-              </div>
-              <div className="alm-list-item__meta">
-                <Pill variant="ghost">{t.objectType.replace('_', ' ')}</Pill>
-              </div>
+              {density === 'Dense' ? (
+                /* ── Dense: single-line ─────────────────────────────── */
+                <div className="alm-target-row">
+                  <span className="alm-target-row__label">{t.effectiveLabel}</span>
+                  {showAltDesig && (
+                    <span className="alm-target-row__desig">({t.primaryDesignation})</span>
+                  )}
+                  <span className="alm-target-row__spacer" />
+                  <Pill variant="ghost">{formatType(t.objectType)}</Pill>
+                </div>
+              ) : (
+                /* ── Rich: two-line ──────────────────────────────────── */
+                <div className="alm-target-row alm-target-row--rich">
+                  <div className="alm-target-row__line1">
+                    <span className="alm-target-row__label">{t.effectiveLabel}</span>
+                    {showAltDesig && (
+                      <span className="alm-target-row__desig">{t.primaryDesignation}</span>
+                    )}
+                    <span className="alm-target-row__spacer" />
+                  </div>
+                  <div className="alm-target-row__line2">
+                    <span className="alm-target-row__type-label">{formatType(t.objectType)}</span>
+                    {/* CON · COORDS · MAG · best-season · sessions omitted:
+                        not present on TargetListItem (detail endpoint only) */}
+                  </div>
+                </div>
+              )}
             </div>
           );
         })}

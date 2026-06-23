@@ -166,7 +166,9 @@ describe('MatchCandidatesPanel', () => {
 
   it('5. no_match status renders empty state', () => {
     renderPanel({ response: noMatchResponse });
-    expect(screen.getByText('No compatible masters')).toBeInTheDocument();
+    // Hero is now a compatible-SESSIONS match table (spec 043 §4): the empty
+    // state reads "No compatible sessions".
+    expect(screen.getByText('No compatible sessions')).toBeInTheDocument();
   });
 
   it('6. renders ranked candidates with confidence bars', () => {

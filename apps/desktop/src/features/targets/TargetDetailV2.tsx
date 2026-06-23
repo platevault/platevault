@@ -1,16 +1,25 @@
 /**
  * TargetDetailV2 — spec 036 gen-3 detail pane for a single canonical target.
  *
- * Fetches target detail via `target.get` and renders:
- *   - Header: effectiveLabel (displayAlias ?? primaryDesignation), objectType pill,
- *     coordinates, source, simbadOid.
- *   - Display-alias control: set / clear the user presentation label (FR-012).
- *   - Alias list: all aliases with kind badge; only kind='user' aliases have a
- *     remove button (SIMBAD designations/common names are read-only).
- *   - Add-alias form: adds a user alias.
- *
- * Sessions and Projects sections are empty-state stubs — cross-spec FK wiring
- * is deferred (see spec 036 open gaps).
+ * Renders:
+ *   - Planner header: effectiveLabel, objectType + catalog pills, "Add to plan"
+ *     and "+ New project here" actions (FR-012).
+ *   - Identity table: Designation, Type, RA/Dec, Source, SIMBAD OID.
+ *     STUB fields (Constellation, Magnitude, Apparent size, Best season, Transit,
+ *     Moon, Altitude now) are marked below — the gen-3 backend does not yet return
+ *     these.
+ *   - Tonight altitude graph: approximate sinusoidal SVG curve from RA/Dec +
+ *     placeholder observer latitude.
+ *     // STUB: altitude ephemeris — replace with real astro calc when
+ *     // location/ephemeris backend lands.
+ *   - Coverage bars (filter integration hours) — stubbed; gen-3 backend does not
+ *     yet expose coverage per filter on the target.get endpoint.
+ *     // STUB: target coverage — backend pending.
+ *   - Linked sessions / linked projects — empty-state stubs; cross-spec FK wiring
+ *     is deferred (see spec 036 open gaps).
+ *     // STUB: target↔session/project linkage backend pending.
+ *   - Display-alias edit (FR-012).
+ *   - Alias list + add-alias form.
  */
 
 import { useState, useEffect, useCallback } from 'react';
@@ -23,14 +32,21 @@ import {
   setDisplayAlias,
   clearDisplayAlias,
 } from '@/api/commands';
-import type { TargetDetailV3, TargetOpError } from '@/api/commands';
-import { DetailPane, DetailHeader } from '@/components';
-import { Pill, Section, EmptyState, Banner } from '@/ui';
+import type { TargetDetailV3, TargetOpError, TargetListItem } from '@/api/commands';
+import { DetailPane, PropertyTable, type PropertyDef } from '@/components';
+import { Pill, Section, EmptyState, Banner, Btn } from '@/ui';
+import { m } from '@/lib/i18n';
+import { rowAltitudeFor, USABLE_ALT_DEG } from './planner-altitude';
+import { FilterBadges } from './FilterBadges';
 
 // ── Types ─────────────────────────────────────────────────────────────────────
 
 interface Props {
   targetId: string;
+  /** The selected list row — supplies constellation/magnitude + tonight stats. */
+  item?: TargetListItem | null;
+  /** Usable-altitude threshold (from Settings) for img-time / visible-tonight. */
+  usableAltDeg?: number;
 }
 
 type LoadState =
@@ -47,30 +63,33 @@ function kindLabel(kind: string): string {
       return 'desig';
     case 'common_name':
       return 'name';
+     
     case 'user':
-      return 'user';
+      return m.targets_alias_kind_user();
     default:
       return kind;
   }
 }
 
-/** Format decimal degrees to a short sexagesimal string for display. */
-function fmtDeg(deg: number, isRa: boolean): string {
+/** Format decimal RA degrees (0–360) to sexagesimal h m s string. */
+function fmtRa(deg: number): string {
   if (!Number.isFinite(deg)) return '—';
-  if (isRa) {
-    // RA in hours
-    const h = deg / 15;
-    const hh = Math.floor(h);
-    const mm = Math.floor((h - hh) * 60);
-    const ss = ((h - hh) * 60 - mm) * 60;
-    return `${hh}h ${mm}m ${ss.toFixed(1)}s`;
-  }
+  const h = deg / 15;
+  const hh = Math.floor(h);
+  const mm = Math.floor((h - hh) * 60);
+  const ss = ((h - hh) * 60 - mm) * 60;
+  return `${String(hh).padStart(2, '0')}h${String(mm).padStart(2, '0')}m${ss.toFixed(0).padStart(2, '0')}s`;
+}
+
+/** Format decimal Dec degrees to ±DD°MM′SS″ string. */
+function fmtDec(deg: number): string {
+  if (!Number.isFinite(deg)) return '—';
   const sign = deg < 0 ? '−' : '+';
   const abs = Math.abs(deg);
   const dd = Math.floor(abs);
   const mm = Math.floor((abs - dd) * 60);
   const ss = ((abs - dd) * 60 - mm) * 60;
-  return `${sign}${dd}° ${mm}′ ${ss.toFixed(0)}″`;
+  return `${sign}${String(dd).padStart(2, '0')}°${String(mm).padStart(2, '0')}′${ss.toFixed(0).padStart(2, '0')}″`;
 }
 
 /** Map TargetOpError.code to a user-readable message. */
@@ -91,15 +110,244 @@ function errorMessage(err: TargetOpError, fallback: string): string {
   }
 }
 
+// ── Altitude curve helper ─────────────────────────────────────────────────────
+//
+// STUB: altitude ephemeris — replace with real astro calc when
+// location/ephemeris backend lands. This helper approximates the altitude curve
+// using a sinusoidal model based on the target's declination and a placeholder
+// observer latitude. It does not account for refraction, precession, or
+// accurate LST computation. The transit hour is estimated from RA alone.
+
+const STUB_OBSERVER_LAT_DEG = 52.1; // placeholder: ~Netherlands latitude
+
+interface AltPoint {
+  /** Local solar time offset from 18:00 (start of night), in hours (0–12). */
+  tHour: number;
+  /** Approximate altitude in degrees (-90..+90). */
+  altDeg: number;
+}
+
+function altitudeCurve(raDeg: number | null, decDeg: number | null): AltPoint[] {
+  const points: AltPoint[] = [];
+  // Night spans roughly 18:00 → 06:00 (12 h). We sample every 20 min.
+  for (let i = 0; i <= 36; i++) {
+    const tHour = i * (12 / 36); // 0..12 hours into the night
+    const localHour = 18 + tHour; // local clock 18..30 (30=06:00 next day)
+
+    let altDeg: number;
+    if (raDeg == null || decDeg == null) {
+      altDeg = 0;
+    } else {
+      // Approximate hour angle from RA. We assume RA=raDeg/15 hours transits at
+      // midnight local time (LST ≈ 00:00), so HA = (localHour - 24) * 15 deg.
+      const haHour = (localHour - 24); // hours from midnight transit
+      const haDeg = haHour * 15;
+      const latRad = (STUB_OBSERVER_LAT_DEG * Math.PI) / 180;
+      const decRad = (decDeg * Math.PI) / 180;
+      const haRad = (haDeg * Math.PI) / 180;
+      const sinAlt =
+        Math.sin(latRad) * Math.sin(decRad) +
+        Math.cos(latRad) * Math.cos(decRad) * Math.cos(haRad);
+      altDeg = (Math.asin(Math.max(-1, Math.min(1, sinAlt))) * 180) / Math.PI;
+    }
+    points.push({ tHour, altDeg });
+  }
+  return points;
+}
+
+// ── Tonight Altitude SVG ──────────────────────────────────────────────────────
+
+interface AltitudeGraphProps {
+  /** Pre-sampled altitude curve (shared with the list's max-alt computation). */
+  points: AltPoint[];
+}
+
+const SVG_W = 400;
+const SVG_H = 140;
+const PAD_L = 32;
+const PAD_R = 12;
+const PAD_T = 10;
+const PAD_B = 28;
+const PLOT_W = SVG_W - PAD_L - PAD_R;
+const PLOT_H = SVG_H - PAD_T - PAD_B;
+const ALT_MIN = -10;
+const ALT_MAX = 90;
+
+function altToY(alt: number): number {
+  const frac = (alt - ALT_MIN) / (ALT_MAX - ALT_MIN);
+  return PAD_T + PLOT_H - frac * PLOT_H;
+}
+
+function hourToX(tHour: number): number {
+  return PAD_L + (tHour / 12) * PLOT_W;
+}
+
+function AltitudeGraph({ points }: AltitudeGraphProps) {
+  // Build SVG polyline points string (dynamic geometry — inline attribute ok)
+  const polylinePoints = points
+    .map((p) => `${hourToX(p.tHour).toFixed(1)},${altToY(p.altDeg).toFixed(1)}`)
+    .join(' ');
+
+  // Usable-altitude band (≥30°) shading
+  const y30 = altToY(30);
+  const yTop = altToY(ALT_MAX);
+
+  // Transit marker: find point closest to peak altitude
+  const peak = points.reduce(
+    (best, p) => (p.altDeg > best.altDeg ? p : best),
+    points[0],
+  );
+  const transitX = hourToX(peak.tHour);
+  // The curve is an approximate placeholder (see caption), so the marker is
+  // labelled "transit" without a precise time to avoid contradicting the
+  // identity table (which shows transit as "—" pending the ephemeris backend).
+
+  // X-axis tick labels (every 2 h from 18 to 06)
+  const xTicks: Array<{ tHour: number; label: string }> = [];
+  for (let h = 0; h <= 12; h += 2) {
+    const clock = (18 + h) % 24;
+    xTicks.push({ tHour: h, label: String(clock).padStart(2, '0') });
+  }
+
+  // Y-axis tick labels
+  const yTicks = [0, 30, 60, 90];
+
+  return (
+    <div className="alm-planner__graph-wrap">
+      {/* viewBox and width/height are geometry — inline SVG attributes */}
+      <svg
+        className="alm-planner__graph-svg"
+        viewBox={`0 0 ${SVG_W} ${SVG_H}`}
+        aria-label={m.targets_detail_alt_graph_aria()}
+        role="img"
+      >
+        {/* Usable altitude shaded band (≥30°) */}
+        <rect
+          x={PAD_L}
+          y={yTop}
+          width={PLOT_W}
+          height={y30 - yTop}
+          fill="var(--alm-ok-bg)"
+          opacity="0.6"
+        />
+
+        {/* 30° usable-altitude guide line */}
+        <line
+          x1={PAD_L}
+          y1={y30}
+          x2={PAD_L + PLOT_W}
+          y2={y30}
+          stroke="var(--alm-ok-border)"
+          strokeWidth="1"
+          strokeDasharray="3 3"
+        />
+
+        {/* Altitude curve */}
+        <polyline
+          points={polylinePoints}
+          fill="none"
+          stroke="var(--alm-accent)"
+          strokeWidth="1.5"
+          strokeLinejoin="round"
+          strokeLinecap="round"
+        />
+
+        {/* Transit vertical marker */}
+        <line
+          x1={transitX}
+          y1={PAD_T}
+          x2={transitX}
+          y2={PAD_T + PLOT_H}
+          stroke="var(--alm-accent)"
+          strokeWidth="1"
+          strokeDasharray="2 2"
+          opacity="0.6"
+        />
+        <text
+          x={transitX + 3}
+          y={PAD_T + 9}
+          className="alm-planner__graph-label-text"
+        >
+          {m.targets_detail_transit()}
+        </text>
+
+        {/* Y-axis */}
+        <line
+          x1={PAD_L}
+          y1={PAD_T}
+          x2={PAD_L}
+          y2={PAD_T + PLOT_H}
+          stroke="var(--alm-border)"
+          strokeWidth="1"
+        />
+        {/* X-axis */}
+        <line
+          x1={PAD_L}
+          y1={PAD_T + PLOT_H}
+          x2={PAD_L + PLOT_W}
+          y2={PAD_T + PLOT_H}
+          stroke="var(--alm-border)"
+          strokeWidth="1"
+        />
+
+        {/* Y-axis ticks + labels */}
+        {yTicks.map((alt) => (
+          <g key={alt}>
+            <line
+              x1={PAD_L - 3}
+              y1={altToY(alt)}
+              x2={PAD_L}
+              y2={altToY(alt)}
+              stroke="var(--alm-border)"
+              strokeWidth="1"
+            />
+            <text
+              x={PAD_L - 5}
+              y={altToY(alt) + 3}
+              textAnchor="end"
+              className="alm-planner__graph-axis-text"
+            >
+              {alt}°
+            </text>
+          </g>
+        ))}
+
+        {/* X-axis ticks + labels */}
+        {xTicks.map(({ tHour, label }) => (
+          <g key={tHour}>
+            <line
+              x1={hourToX(tHour)}
+              y1={PAD_T + PLOT_H}
+              x2={hourToX(tHour)}
+              y2={PAD_T + PLOT_H + 3}
+              stroke="var(--alm-border)"
+              strokeWidth="1"
+            />
+            <text
+              x={hourToX(tHour)}
+              y={PAD_T + PLOT_H + 12}
+              textAnchor="middle"
+              className="alm-planner__graph-axis-text"
+            >
+              {label}
+            </text>
+          </g>
+        ))}
+      </svg>
+    </div>
+  );
+}
+
 // ── TargetDetailV2 ────────────────────────────────────────────────────────────
 
-export function TargetDetailV2({ targetId }: Props) {
+export function TargetDetailV2({ targetId, item = null, usableAltDeg = USABLE_ALT_DEG }: Props) {
   const [loadState, setLoadState] = useState<LoadState>({ status: 'loading' });
   const [aliasInput, setAliasInput] = useState('');
   const [aliasError, setAliasError] = useState<string | null>(null);
   const [actionError, setActionError] = useState<string | null>(null);
   const [displayAliasInput, setDisplayAliasInput] = useState('');
   const [displayAliasEditing, setDisplayAliasEditing] = useState(false);
+  const [newProjectOpen, setNewProjectOpen] = useState(false);
   const navigate = useNavigate();
 
   const load = useCallback(() => {
@@ -184,7 +432,7 @@ export function TargetDetailV2({ targetId }: Props) {
   if (loadState.status === 'loading') {
     return (
       <DetailPane>
-        <EmptyState title="Loading…" desc="" />
+        <EmptyState title={m.common_loading()} desc="" />
       </DetailPane>
     );
   }
@@ -192,59 +440,164 @@ export function TargetDetailV2({ targetId }: Props) {
   if (loadState.status === 'error') {
     return (
       <DetailPane>
-        <EmptyState title="Error" desc={loadState.message} />
+        <EmptyState title={m.settings_advanced_log_error()} desc={loadState.message} />
       </DetailPane>
     );
   }
 
   const detail = loadState.data;
 
+  // Derive catalog pills from aliases with kind='designation' (non-primary).
+  const catalogPills = detail.aliases
+    .filter((a) => a.kind === 'designation' && a.alias !== detail.primaryDesignation)
+    .slice(0, 4);
+
+  // Common name (first common_name alias, if any).
+  const commonName = detail.aliases.find((a) => a.kind === 'common_name')?.alias ?? null;
+
+  // Tonight planner data — shared with the list row (same rowAltitudeFor source
+  // so the graph peak and the "Max alt" stat agree). Falls back to an RA/Dec
+  // curve when the list item isn't available.
+  const rowAlt = item ? rowAltitudeFor(item, usableAltDeg) : null;
+  const tonightPoints: AltPoint[] = rowAlt?.points ?? altitudeCurve(detail.raDeg, detail.decDeg);
+
+  const raDecStr =
+    detail.raDeg != null && detail.decDeg != null
+      ? `${fmtRa(detail.raDeg)} / ${fmtDec(detail.decDeg)}`
+      : null;
+
+  // Identity facts split across two tabular columns (left-packed).
+  const identityA: PropertyDef[] = [
+    { key: 'desig', label: m.targets_col_designation(), value: detail.primaryDesignation },
+    { key: 'type', label: m.cmp_target_search_type_label(), value: detail.objectType.replace(/_/g, ' ') },
+    { key: 'constellation', label: m.targets_prop_constellation(), value: item?.constellation ?? null },
+    { key: 'radec', label: m.targets_prop_ra_dec(), value: raDecStr },
+  ];
+  const identityB: PropertyDef[] = [
+    { key: 'magnitude', label: m.targets_prop_magnitude(), value: item?.magnitude ?? null },
+    { key: 'source', label: m.projects_wizard_col_source(), value: detail.source },
+    ...(detail.simbadOid != null
+      ? [{ key: 'simbad', label: m.targets_prop_simbad_oid(), value: detail.simbadOid } as PropertyDef]
+      : []),
+  ];
+
+  // Tonight stats (numeric) — Filters render separately (a component, not a value).
+  const tonightStats: PropertyDef[] = rowAlt
+    ? [
+        { key: 'maxalt', label: m.targets_col_max_alt(), value: `${Math.round(rowAlt.maxAltDeg)}°` },
+        { key: 'imgtime', label: m.targets_col_img_time(), value: `${rowAlt.hoursAboveUsable.toFixed(1)} h` },
+        { key: 'lunar', label: m.targets_col_lunar(), value: `${Math.round(rowAlt.lunarDistanceDeg)}°` },
+      ]
+    : [];
+
   return (
     <DetailPane fill>
-      <DetailHeader
-        title={<strong>{detail.effectiveLabel}</strong>}
-        titleExtra={
-          <span style={{ color: 'var(--alm-text-muted)', fontSize: 'var(--alm-text-sm)' }}>
-            <Pill variant="neutral">{detail.objectType.replace('_', ' ')}</Pill>
-          </span>
-        }
-      />
+      {/* ── Planner header ──────────────────────────────────────────────── */}
+      <div className="alm-planner__header">
+        <div className="alm-planner__header-left">
+          <h2 className="alm-planner__title">
+            {detail.effectiveLabel}
+            {commonName && commonName !== detail.effectiveLabel && (
+              <span className="alm-planner__subtitle"> — {commonName}</span>
+            )}
+          </h2>
+          <div className="alm-planner__pill-row">
+            <Pill variant="neutral">{detail.objectType.replace(/_/g, ' ')}</Pill>
+            {catalogPills.map((a) => (
+              <Pill key={a.id} variant="ghost">{a.alias}</Pill>
+            ))}
+          </div>
+        </div>
+        <div className="alm-planner__actions">
+          {/* STUB: "Add to plan" — observing-plan feature not yet implemented */}
+          <Btn size="sm" variant="ghost" disabled>
+            {m.targets_detail_add_to_plan()}
+          </Btn>
+          {/* "+ New project here" — opens CreateProjectDialog; pre-wiring
+              canonicalTargetId is deferred per spec 035 comment in
+              CreateProjectDialog.tsx (no backend field yet). Navigates to
+              /projects?newProject=1 so the projects page opens the dialog. */}
+          <Btn
+            size="sm"
+            variant="primary"
+            onClick={() => {
+              // STUB: pre-fill targetId in CreateProjectDialog — deferred
+              // (canonicalTargetId field not yet wired in backend contract).
+              // Navigate to /projects/new which opens the create-project dialog.
+              setNewProjectOpen(true);
+              void navigate({ to: '/projects/new' });
+            }}
+          >
+            {m.targets_detail_new_project()}
+          </Btn>
+        </div>
+      </div>
 
-      {/* Coordinates + metadata */}
-      <Section title="Identity">
-        <dl
-          style={{
-            display: 'grid',
-            gridTemplateColumns: 'max-content 1fr',
-            gap: 'var(--alm-sp-1) var(--alm-sp-3)',
-            fontSize: 'var(--alm-text-sm)',
-          }}
-        >
-          <dt style={{ color: 'var(--alm-text-muted)' }}>Designation</dt>
-          <dd>{detail.primaryDesignation}</dd>
-          <dt style={{ color: 'var(--alm-text-muted)' }}>RA</dt>
-          <dd>{detail.raDeg != null ? fmtDeg(detail.raDeg, true) : '—'}</dd>
-          <dt style={{ color: 'var(--alm-text-muted)' }}>Dec</dt>
-          <dd>{detail.decDeg != null ? fmtDeg(detail.decDeg, false) : '—'}</dd>
-          <dt style={{ color: 'var(--alm-text-muted)' }}>Source</dt>
-          <dd>
-            <Pill variant="ghost">{detail.source}</Pill>
-          </dd>
-          {detail.simbadOid != null && (
+      {/* Suppress unused-state warning; newProjectOpen drives the navigate above */}
+      {newProjectOpen && null}
+
+      {/* ── Identity + Tonight — left-packed: [facts A][facts B][tonight] ── */}
+      <div className="alm-planner__cols">
+        <div className="alm-planner__col">
+          <PropertyTable mode="view" properties={identityA} />
+        </div>
+        <div className="alm-planner__col">
+          <PropertyTable mode="view" properties={identityB} />
+        </div>
+
+        {/* Tonight column: a small transit graph + the planner stats. */}
+        <div className="alm-planner__tonight">
+          <div className="alm-planner__graph-title">
+            {m.targets_detail_tonight_title({ lat: Math.round(STUB_OBSERVER_LAT_DEG) })}
+          </div>
+          <AltitudeGraph points={tonightPoints} />
+          {rowAlt && (
             <>
-              <dt style={{ color: 'var(--alm-text-muted)' }}>SIMBAD OID</dt>
-              <dd>{detail.simbadOid}</dd>
+              <PropertyTable mode="view" properties={tonightStats} />
+              <div className="alm-planner__tonight-filters">
+                <span className="alm-planner__tonight-filters-label">{m.common_filters()}</span>
+                <FilterBadges recommendation={rowAlt.filters} />
+              </div>
             </>
           )}
-        </dl>
-      </Section>
+        </div>
+      </div>
 
-      {/* Display alias (FR-012: user presentation label) */}
-      <Section title="Display label">
+      {/* ── Coverage bars ────────────────────────────────────────────────── */}
+      {/* STUB: target coverage — gen-3 TargetDetailV3 does not yet expose
+          per-filter coverage. Render the section header with a stub note. */}
+      <div className="alm-planner__coverage">
+        <p className="alm-planner__section-title">{m.common_coverage()}</p>
+        <div className="alm-planner__coverage-list">
+          <span className="alm-planner__coverage-stub">
+            {m.targets_detail_no_coverage()}
+          </span>
+        </div>
+      </div>
+
+      {/* ── Linked sessions + projects ───────────────────────────────────── */}
+      {/* STUB: target↔session/project linkage backend pending (spec 036 open gap). */}
+      <div className="alm-planner__links">
+        <div>
+          <p className="alm-planner__link-col-title">{m.common_sessions()}</p>
+          <span className="alm-planner__link-empty">
+            {m.targets_detail_no_sessions()}
+          </span>
+        </div>
+        <div>
+          <p className="alm-planner__link-col-title">{m.common_projects()}</p>
+          <span className="alm-planner__link-empty">
+            {m.targets_detail_no_projects_linked()}
+          </span>
+        </div>
+      </div>
+
+      {/* ── Display label ────────────────────────────────────────────────── */}
+      <Section title={m.targets_detail_display_label_title()}>
         {displayAliasEditing ? (
-          <div style={{ display: 'flex', gap: 'var(--alm-sp-2)', flexWrap: 'wrap' }}>
+          <div className="alm-target-detail__display-alias-edit">
             <input
-              aria-label="Display label"
+              aria-label={m.targets_detail_display_label_title()}
               placeholder={detail.primaryDesignation}
               value={displayAliasInput}
               onChange={(e) => setDisplayAliasInput(e.target.value)}
@@ -252,92 +605,66 @@ export function TargetDetailV2({ targetId }: Props) {
                 if (e.key === 'Enter') void handleDisplayAliasSet();
                 if (e.key === 'Escape') setDisplayAliasEditing(false);
               }}
-              style={{ flex: 1, padding: 'var(--alm-sp-1)', fontSize: 'var(--alm-text-sm)' }}
+              className="alm-target-detail__text-input"
               autoFocus
             />
             <button
               onClick={handleDisplayAliasSet}
-              style={{ padding: 'var(--alm-sp-1) var(--alm-sp-2)' }}
+              className="alm-target-detail__action-btn"
             >
-              Save
+              {m.common_save()}
             </button>
             {detail.displayAlias != null && (
               <button
                 onClick={handleDisplayAliasClear}
-                style={{
-                  padding: 'var(--alm-sp-1) var(--alm-sp-2)',
-                  color: 'var(--alm-text-muted)',
-                }}
+                className="alm-target-detail__action-btn alm-target-detail__action-btn--muted"
               >
-                Clear
+                {m.common_clear()}
               </button>
             )}
             <button
               onClick={() => setDisplayAliasEditing(false)}
-              style={{
-                padding: 'var(--alm-sp-1) var(--alm-sp-2)',
-                color: 'var(--alm-text-muted)',
-              }}
+              className="alm-target-detail__action-btn alm-target-detail__action-btn--muted"
             >
-              Cancel
+              {m.common_cancel()}
             </button>
           </div>
         ) : (
-          <div style={{ display: 'flex', alignItems: 'center', gap: 'var(--alm-sp-2)' }}>
-            <span style={{ fontSize: 'var(--alm-text-sm)' }}>
+          <div className="alm-target-detail__display-alias-view">
+            <span className="alm-target-detail__display-alias-value">
               {detail.displayAlias ?? (
-                <em style={{ color: 'var(--alm-text-faint)' }}>
-                  Not set — showing primary designation
+                <em className="alm-target-detail__display-alias-placeholder">
+                  {m.targets_detail_display_label_unset()}
                 </em>
               )}
             </span>
             <button
               onClick={() => setDisplayAliasEditing(true)}
-              style={{
-                background: 'none',
-                border: '1px solid var(--alm-border)',
-                borderRadius: 'var(--alm-radius-sm)',
-                cursor: 'pointer',
-                padding: '2px var(--alm-sp-2)',
-                fontSize: 'var(--alm-text-xs)',
-              }}
+              className="alm-target-detail__edit-btn"
             >
-              {detail.displayAlias != null ? 'Edit' : 'Set'}
+              {detail.displayAlias != null
+                ? m.projects_detail_edit_btn()
+                : m.targets_detail_set_alias()}
             </button>
           </div>
         )}
       </Section>
 
-      {/* Aliases */}
-      <Section title="Aliases" count={detail.aliases.length}>
-        <div style={{ display: 'flex', flexWrap: 'wrap', gap: 'var(--alm-sp-1)' }}>
+      {/* ── Aliases ──────────────────────────────────────────────────────── */}
+      <Section title={m.common_aliases()} count={detail.aliases.length}>
+        <div className="alm-target-detail__alias-list">
           {detail.aliases.map((a) => (
             <Pill key={a.id} variant={a.kind === 'user' ? 'accent' : 'ghost'}>
-              <span title={`kind: ${a.kind}`}>
-                <span
-                  style={{
-                    fontSize: 'var(--alm-text-xs)',
-                    color: 'var(--alm-text-muted)',
-                    marginRight: 'var(--alm-sp-1)',
-                  }}
-                >
+              <span title={m.targets_detail_alias_kind_title({ kind: a.kind })}>
+                <span className="alm-target-detail__alias-kind">
                   [{kindLabel(a.kind)}]
                 </span>
                 {a.alias}
               </span>
               {a.kind === 'user' && (
                 <button
-                  aria-label={`Remove alias ${a.alias}`}
-                  style={{
-                    background: 'none',
-                    border: 'none',
-                    cursor: 'pointer',
-                    marginLeft: 'var(--alm-sp-1)',
-                    padding: 0,
-                    color: 'var(--alm-text-muted)',
-                    display: 'inline-flex',
-                    verticalAlign: 'middle',
-                  }}
+                  aria-label={m.targets_detail_alias_remove_aria({ alias: a.alias })}
+                  className="alm-target-detail__alias-remove"
                   onClick={() => handleAliasRemove(a.id)}
                 >
                   <X size={14} aria-hidden="true" />
@@ -346,70 +673,62 @@ export function TargetDetailV2({ targetId }: Props) {
             </Pill>
           ))}
           {detail.aliases.length === 0 && (
-            <span style={{ color: 'var(--alm-text-faint)', fontSize: 'var(--alm-text-sm)' }}>
-              No aliases
+            <span className="alm-target-detail__alias-empty">
+              {m.targets_detail_no_aliases()}
             </span>
           )}
         </div>
 
         {/* Add user alias form */}
-        <div style={{ display: 'flex', gap: 'var(--alm-sp-2)', marginTop: 'var(--alm-sp-2)' }}>
+        <div className="alm-target-detail__alias-add-row">
           <input
-            aria-label="New alias"
-            placeholder="Add user alias…"
+            aria-label={m.targets_detail_alias_input_aria()}
+            placeholder={m.targets_detail_alias_placeholder()}
             value={aliasInput}
             onChange={(e) => setAliasInput(e.target.value)}
             onKeyDown={(e) => {
               if (e.key === 'Enter') void handleAliasAdd();
             }}
-            style={{ flex: 1, padding: 'var(--alm-sp-1)', fontSize: 'var(--alm-text-sm)' }}
+            className="alm-target-detail__text-input"
           />
           <button
             onClick={handleAliasAdd}
-            style={{ padding: 'var(--alm-sp-1) var(--alm-sp-2)' }}
+            className="alm-target-detail__action-btn"
           >
-            Add
+            {m.common_add()}
           </button>
         </div>
         {aliasError && (
-          <Banner variant="danger" style={{ marginTop: 'var(--alm-sp-1)' }}>
+          <Banner variant="danger" className="alm-target-detail__banner">
             {aliasError}
           </Banner>
         )}
         {actionError && (
-          <Banner variant="danger" style={{ marginTop: 'var(--alm-sp-1)' }}>
+          <Banner variant="danger" className="alm-target-detail__banner">
             {actionError}
           </Banner>
         )}
       </Section>
 
-      {/* Sessions — empty state (cross-spec FK wiring deferred) */}
-      <Section title="Sessions">
-        <EmptyState
-          title="No sessions linked"
-          desc="Sessions appear here once the ingestion pipeline populates target_id from FITS OBJECT data."
-        />
-      </Section>
+      {/* Sessions surface lives in the mid-page SESSIONS/PROJECTS link row
+          above (single source of truth) — the duplicate bottom Sessions
+          section was removed to avoid two Sessions surfaces. */}
 
-      {/* Projects — empty state (cross-spec FK wiring deferred) */}
-      <Section title="Projects">
+      {/* ── Projects (empty-state stub) ──────────────────────────────────── */}
+      <Section title={m.common_projects()}>
+        {/* STUB: target↔project linkage backend pending */}
         <EmptyState
-          title="No projects linked"
-          desc="Projects appear here once they are created with a target reference."
+          title={m.targets_detail_no_projects_linked_title()}
+          desc={m.targets_detail_no_projects_linked()}
         />
       </Section>
 
       {/* Back button */}
       <button
-        style={{
-          margin: 'var(--alm-sp-3) 0',
-          padding: 'var(--alm-sp-1) var(--alm-sp-3)',
-          fontSize: 'var(--alm-text-sm)',
-          cursor: 'pointer',
-        }}
+        className="alm-target-detail__back-btn"
         onClick={() => navigate({ to: '/targets' })}
       >
-        ← All targets
+        {m.targets_detail_back()}
       </button>
     </DetailPane>
   );

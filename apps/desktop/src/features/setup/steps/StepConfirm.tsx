@@ -1,5 +1,6 @@
 import type { ReactNode } from 'react';
 import { Pill } from '@/ui/Pill';
+import { m } from '@/lib/i18n';
 import type { SourcesState } from '../sources-store';
 import { SOURCE_KIND_LABELS, getMissingRequiredKinds, getSourcesByKind, ALL_SOURCE_KINDS } from '../sources-store';
 import type { CatalogSettings } from './StepCatalogs';
@@ -14,20 +15,15 @@ export interface StepConfirmProps {
 }
 
 const TOOL_LABELS: Record<keyof ToolsState, string> = {
-  pixinsight: 'PixInsight',
-  siril: 'Siril',
+  pixinsight: m.setup_tools_pixinsight_name(),
+  siril: m.setup_tools_siril_name(),
 };
 
 // A titled section, matching the Configuration step's layout (no card chrome).
 function Section({ title, children }: { title: string; children: ReactNode }) {
   return (
-    <div style={{ display: 'flex', flexDirection: 'column', gap: 'var(--alm-sp-3)' }}>
-      <div
-        style={{
-          fontWeight: 'var(--alm-weight-semibold)',
-          fontSize: 'var(--alm-text-sm)',
-        }}
-      >
+    <div className="alm-setup-confirm__section">
+      <div className="alm-setup-confirm__section-title">
         {title}
       </div>
       {children}
@@ -61,57 +57,32 @@ export function StepConfirm({
   );
 
   return (
-    <div style={{ display: 'flex', flexDirection: 'column', gap: 'var(--alm-sp-5)' }}>
-      <Section title={`Source folders (${totalFolders} folder${totalFolders !== 1 ? 's' : ''})`}>
+    <div className="alm-setup-confirm">
+      <Section title={m.setup_confirm_source_folders_title({ count: totalFolders })}>
         {kindsWithFolders.length > 0 ? (
-          <div style={{ display: 'flex', flexDirection: 'column', gap: 'var(--alm-sp-4)' }}>
+          <div className="alm-setup-confirm__kind-list">
             {kindsWithFolders.map((kind) => (
               <div
                 key={kind}
-                style={{ display: 'flex', flexDirection: 'column', gap: 'var(--alm-sp-1)' }}
+                className="alm-setup-confirm__kind-group"
               >
-                <div
-                  style={{
-                    fontSize: 'var(--alm-text-2xs)',
-                    fontWeight: 'var(--alm-weight-semibold)',
-                    letterSpacing: '0.04em',
-                    textTransform: 'uppercase',
-                    color: 'var(--alm-text-muted)',
-                  }}
-                >
+                <div className="alm-setup-confirm__kind-label">
                   {SOURCE_KIND_LABELS[kind]}
                 </div>
                 {getSourcesByKind(sources, kind).map((entry, j) => (
                   <div
                     key={j}
-                    style={{
-                      display: 'flex',
-                      alignItems: 'center',
-                      justifyContent: 'space-between',
-                      gap: 'var(--alm-sp-3)',
-                    }}
+                    className="alm-setup-confirm__row"
                   >
                     <span
-                      className="alm-mono"
-                      style={{
-                        flex: 1,
-                        minWidth: 0,
-                        fontSize: 'var(--alm-text-sm)',
-                        overflow: 'hidden',
-                        textOverflow: 'ellipsis',
-                        whiteSpace: 'nowrap',
-                      }}
+                      className="alm-mono alm-setup-confirm__path"
                     >
                       {entry.path}
                     </span>
-                    <span
-                      style={{
-                        whiteSpace: 'nowrap',
-                        fontSize: 'var(--alm-text-xs)',
-                        color: 'var(--alm-text-muted)',
-                      }}
-                    >
-                      {entry.scanDepth === 'recursive' ? 'Recursive' : 'Single level'}
+                    <span className="alm-setup-confirm__scan-depth">
+                      {entry.scanDepth === 'recursive'
+                        ? m.setup_scan_recursive()
+                        : m.setup_scan_single_level()}
                     </span>
                   </div>
                 ))}
@@ -119,99 +90,61 @@ export function StepConfirm({
             ))}
           </div>
         ) : (
-          <div style={{ color: 'var(--alm-text-muted)', fontSize: 'var(--alm-text-sm)' }}>
-            No folders configured (you can add them later in Settings).
+          <div className="alm-setup-confirm__empty">
+            {m.setup_confirm_no_folders()}
           </div>
         )}
       </Section>
 
-      <Section title={`Processing tools (${enabledTools.length} enabled)`}>
+      <Section title={m.setup_confirm_tools_enabled_title({ count: enabledTools.length })}>
         {enabledTools.length > 0 ? (
-          <div style={{ display: 'flex', flexDirection: 'column', gap: 'var(--alm-sp-2)' }}>
+          <div className="alm-setup-confirm__tool-list">
             {enabledTools.map((key) => (
               <div
                 key={key}
-                style={{
-                  display: 'flex',
-                  alignItems: 'center',
-                  justifyContent: 'space-between',
-                  gap: 'var(--alm-sp-3)',
-                }}
+                className="alm-setup-confirm__row"
               >
-                <span style={{ fontWeight: 'var(--alm-weight-semibold)' }}>{TOOL_LABELS[key]}</span>
+                <span className="alm-setup-confirm__tool-name">{TOOL_LABELS[key]}</span>
                 {tools[key].path ? (
-                  <span
-                    style={{
-                      display: 'flex',
-                      alignItems: 'center',
-                      gap: 'var(--alm-sp-2)',
-                      minWidth: 0,
-                    }}
-                  >
-                    <span
-                      className="alm-mono"
-                      style={{
-                        fontSize: 'var(--alm-text-xs)',
-                        color: 'var(--alm-text-muted)',
-                        overflow: 'hidden',
-                        textOverflow: 'ellipsis',
-                        whiteSpace: 'nowrap',
-                      }}
-                    >
+                  <span className="alm-setup-confirm__tool-path-wrap">
+                    <span className="alm-mono alm-setup-confirm__tool-path">
                       {tools[key].path}
                     </span>
-                    <Pill variant="ok">OK</Pill>
+                    <Pill variant="ok">{m.setup_tools_ok()}</Pill>
                   </span>
                 ) : (
-                  <Pill variant="warn">No path set</Pill>
+                  <Pill variant="warn">{m.setup_tools_no_path()}</Pill>
                 )}
               </div>
             ))}
           </div>
         ) : (
-          <div style={{ color: 'var(--alm-text-muted)', fontSize: 'var(--alm-text-sm)' }}>
-            No tools enabled.
+          <div className="alm-setup-confirm__empty">
+            {m.setup_confirm_no_tools()}
           </div>
         )}
       </Section>
 
-      <Section title="What happens next">
-        <ul
-          style={{
-            margin: 0,
-            paddingLeft: 'var(--alm-sp-5)',
-            display: 'flex',
-            flexDirection: 'column',
-            gap: 'var(--alm-sp-1)',
-            fontSize: 'var(--alm-text-sm)',
-          }}
-        >
-          <li>Your selected folders are registered as library roots.</li>
-          <li>An initial scan runs after setup, reading file headers to build the index.</li>
-          <li>Light frames are grouped into acquisition sessions.</li>
+      <Section title={m.setup_confirm_what_next_title()}>
+        <ul className="alm-setup-confirm__next-list">
+          <li>{m.setup_confirm_next_roots()}</li>
+          <li>{m.setup_confirm_next_scan()}</li>
+          <li>{m.setup_confirm_next_sessions()}</li>
         </ul>
-        <div
-          style={{
-            fontSize: 'var(--alm-text-sm)',
-            color: 'var(--alm-text-muted)',
-          }}
-        >
-          <strong>Nothing is moved or modified.</strong> The scan only reads file headers and
-          builds an index — your files stay exactly where they are.
+        <div className="alm-setup-confirm__note">
+          <strong>{m.setup_confirm_safe_bold()}</strong> {m.setup_confirm_safe_body()}
         </div>
       </Section>
 
       {missingKinds.length > 0 && (
         <div className="alm-step-confirm__blocked" role="alert">
-          Cannot complete setup: missing required folder types —{' '}
-          {missingKinds.map((k) => SOURCE_KIND_LABELS[k]).join(', ')}. Go back to Step 1 to add
-          them.
+          {m.setup_confirm_blocked({ kinds: missingKinds.map((k) => SOURCE_KIND_LABELS[k]).join(', ') })}
         </div>
       )}
 
       {isSubmitting && (
-        <div style={{ color: 'var(--alm-text-muted)', fontSize: 'var(--alm-text-sm)' }}>
-          Registering roots and starting scan…
+        <div className="alm-setup-confirm__note">
+          {m.setup_confirm_registering()}
         </div>
       )}
     </div>

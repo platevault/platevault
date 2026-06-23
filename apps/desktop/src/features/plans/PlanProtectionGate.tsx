@@ -9,6 +9,7 @@
 
 import { useEffect, useState, useCallback } from 'react';
 import { Pill, Btn } from '@/ui';
+import { m } from '@/lib/i18n';
 import { planProtectionCheck, protectionPlanAcknowledged } from '@/api/commands';
 import type { ProtectedPlanItem, PlanProtectionCheckResponse } from '@/api/commands';
 
@@ -82,16 +83,16 @@ export function PlanProtectionGate({ planId, onAcknowledgedChange }: PlanProtect
 
   if (loadState === 'loading' || loadState === 'idle') {
     return (
-      <div style={{ fontSize: 'var(--alm-text-sm)', color: 'var(--alm-text-muted)' }}>
-        Checking plan protection…
+      <div className="alm-plan-gate__status">
+        {m.plans_gate_checking()}
       </div>
     );
   }
 
   if (loadState === 'error') {
     return (
-      <div style={{ fontSize: 'var(--alm-text-sm)', color: 'var(--alm-text-muted)' }}>
-        Could not load protection check. Plan may still proceed.
+      <div className="alm-plan-gate__status">
+        {m.plans_gate_load_error()}
       </div>
     );
   }
@@ -102,8 +103,8 @@ export function PlanProtectionGate({ planId, onAcknowledgedChange }: PlanProtect
       unprotectedCount: 0,
     };
     return (
-      <div style={{ fontSize: 'var(--alm-text-sm)', color: 'var(--alm-text-muted)' }}>
-        No protected items.
+      <div className="alm-plan-gate__status">
+        {m.plans_gate_no_protected()}
         {normalCount > 0 && ` ${normalCount} normal item(s).`}
         {unprotectedCount > 0 && ` ${unprotectedCount} unprotected item(s).`}
       </div>
@@ -115,25 +116,19 @@ export function PlanProtectionGate({ planId, onAcknowledgedChange }: PlanProtect
   const allDone = doneCount >= total;
 
   return (
-    <div style={{ display: 'flex', flexDirection: 'column', gap: 'var(--alm-sp-3)' }}>
+    <div className="alm-plan-gate__root">
       <div
-        style={{
-          display: 'flex',
-          alignItems: 'center',
-          gap: 'var(--alm-sp-2)',
-          padding: 'var(--alm-sp-2) var(--alm-sp-3)',
-          border: '1px solid var(--alm-border)',
-          borderRadius: 'var(--alm-radius-md)',
-          background: allDone ? 'var(--alm-surface)' : 'var(--alm-surface2)',
-        }}
+        className="alm-plan-gate__summary-bar"
+        // eslint-disable-next-line no-restricted-syntax -- dynamic: conditional token background (all-done vs pending state)
+        style={{ background: allDone ? 'var(--alm-surface)' : 'var(--alm-bg3)' }}
       >
         <Pill variant={allDone ? 'ok' : 'warn'}>
-          {allDone ? 'All acknowledged' : `${total - doneCount} of ${total} require acknowledgement`}
+          {allDone ? m.plans_all_acknowledged() : `${total - doneCount} of ${total} require acknowledgement`}
         </Pill>
-        <span style={{ fontSize: 'var(--alm-text-sm)', color: 'var(--alm-text-muted)' }}>
+        <span className="alm-plan-gate__summary-label">
           {allDone
-            ? 'You may proceed with plan execution.'
-            : 'Review and acknowledge each protected item below before running the plan.'}
+            ? m.plans_may_proceed()
+            : m.plans_review_acknowledge()}
         </span>
       </div>
 
@@ -142,74 +137,44 @@ export function PlanProtectionGate({ planId, onAcknowledgedChange }: PlanProtect
         return (
           <div
             key={item.itemId}
+            className="alm-plan-gate__item"
+            // eslint-disable-next-line no-restricted-syntax -- dynamic: conditional token background + opacity for acknowledged item state
             style={{
-              border: '1px solid var(--alm-border)',
-              borderRadius: 'var(--alm-radius-md)',
-              padding: 'var(--alm-sp-3)',
               background: isDone ? 'var(--alm-surface)' : undefined,
               opacity: isDone ? 0.7 : 1,
             }}
           >
-            <div
-              style={{
-                display: 'flex',
-                alignItems: 'flex-start',
-                gap: 'var(--alm-sp-2)',
-                flexWrap: 'wrap',
-                marginBottom: 'var(--alm-sp-2)',
-              }}
-            >
+            <div className="alm-plan-gate__item-header">
               <Pill variant="ok">{item.level}</Pill>
-              <code
-                className="alm-mono"
-                style={{ fontSize: 'var(--alm-text-xs)', flex: 1, wordBreak: 'break-all' }}
-              >
+              <code className="alm-mono alm-plan-gate__item-id">
                 {item.itemId}
               </code>
-              {isDone && <Pill variant="ok">Acknowledged</Pill>}
+              {isDone && <Pill variant="ok">{m.plans_gate_acknowledged()}</Pill>}
             </div>
 
-            <div style={{ fontSize: 'var(--alm-text-sm)', marginBottom: 'var(--alm-sp-1)' }}>
-              Action: <strong>{actionLabel(item)}</strong>
+            <div className="alm-plan-gate__item-action">
+              {m.plans_gate_action_label()} <strong>{actionLabel(item)}</strong>
             </div>
 
             {item.matchedCategories.length > 0 && (
-              <div
-                style={{
-                  fontSize: 'var(--alm-text-xs)',
-                  color: 'var(--alm-text-muted)',
-                  marginBottom: 'var(--alm-sp-1)',
-                }}
-              >
-                Protected categories: {item.matchedCategories.join(', ')}
+              <div className="alm-plan-gate__item-categories">
+                {m.plans_gate_categories_label()} {item.matchedCategories.join(', ')}
               </div>
             )}
 
-            <div
-              style={{
-                fontSize: 'var(--alm-text-xs)',
-                color: 'var(--alm-text-muted)',
-                marginBottom: 'var(--alm-sp-2)',
-              }}
-            >
+            <div className="alm-plan-gate__item-reason">
               {item.reason}
             </div>
 
             {ackErrors[item.itemId] && (
-              <div
-                style={{
-                  fontSize: 'var(--alm-text-xs)',
-                  color: 'var(--alm-danger)',
-                  marginBottom: 'var(--alm-sp-1)',
-                }}
-              >
+              <div className="alm-plan-gate__item-error">
                 {ackErrors[item.itemId]}
               </div>
             )}
 
             {!isDone && (
               <Btn size="sm" onClick={() => handleAcknowledge(item)}>
-                Acknowledge
+                {m.plans_gate_acknowledge_btn()}
               </Btn>
             )}
           </div>
@@ -219,8 +184,8 @@ export function PlanProtectionGate({ planId, onAcknowledgedChange }: PlanProtect
       {/* Non-blocking summary counts (FR-008) */}
       {(checkResult.nonBlockingSummary.normalCount > 0 ||
         checkResult.nonBlockingSummary.unprotectedCount > 0) && (
-        <div style={{ fontSize: 'var(--alm-text-xs)', color: 'var(--alm-text-muted)' }}>
-          Also in plan:{' '}
+        <div className="alm-plan-gate__footer-summary">
+          {m.plans_gate_also_in_plan()}{' '}
           {checkResult.nonBlockingSummary.normalCount > 0 &&
             `${checkResult.nonBlockingSummary.normalCount} normal item(s)`}
           {checkResult.nonBlockingSummary.normalCount > 0 &&
@@ -228,7 +193,7 @@ export function PlanProtectionGate({ planId, onAcknowledgedChange }: PlanProtect
             ', '}
           {checkResult.nonBlockingSummary.unprotectedCount > 0 &&
             `${checkResult.nonBlockingSummary.unprotectedCount} unprotected item(s)`}
-          {' — no acknowledgement required.'}
+          {' '}{m.plans_no_ack_required()}
         </div>
       )}
     </div>

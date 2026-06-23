@@ -110,10 +110,10 @@ describe('MastersList (spec 007)', () => {
         agingThresholdDays={90}
       />,
     );
-    // Find any clickable list items within the DARKS section.
-    // The master ID `dark-1` is 6 chars — slice(0,8) gives the whole id.
-    // We match on the text starting with 'dark-1' (the mono span content).
-    const item = screen.getByText((text) => text.startsWith('dark-1'));
+    // Rows now show a readable fingerprint title ("Master Dark · …") instead of
+    // an id-hash. The function matcher hits the title + its ancestors, so take
+    // the first match and walk up to the clickable row.
+    const item = screen.getAllByText((text) => text.startsWith('Master Dark'))[0];
     // Walk up to the nearest clickable ancestor.
     const clickable = item.closest('li') ?? item.closest('div') ?? item;
     fireEvent.click(clickable);
@@ -130,6 +130,24 @@ describe('MastersList (spec 007)', () => {
     // We can't know the exact DOM structure of ListItem but the selected prop is passed
     // Verify the component does not throw and renders all groups
     expect(screen.getByText('FLATS')).toBeInTheDocument();
+  });
+
+  it('9. usage count renders on rows (real usedBy* fields)', () => {
+    const used = makeMaster({
+      id: 'dark-used',
+      kind: 'dark',
+      ageDays: 10,
+      usedBySessionIds: ['s1', 's2', 's3'],
+      usedByProjectIds: ['p1'],
+    });
+    const unused = makeMaster({ id: 'dark-unused', kind: 'dark', ageDays: 10 });
+    render(
+      <MastersList masters={[used, unused]} loading={false} error={undefined} selected={null} onSelect={vi.fn()}
+        agingThresholdDays={90}
+      />,
+    );
+    expect(screen.getByTestId('master-usage-dark-used')).toHaveTextContent('3 sessions · 1 project');
+    expect(screen.getByTestId('master-usage-dark-unused')).toHaveTextContent('unused');
   });
 
   it('8. dark_flat kind is not shown in the grouped list (FR-001)', () => {

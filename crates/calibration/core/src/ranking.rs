@@ -82,6 +82,14 @@ pub struct MatchingRuleConfig {
     /// Confidence penalty when a bias is assigned as override. Default 0.3.
     pub bias_override_penalty: f64,
 
+    // ── Policy flags ──
+    /// When true, a master must carry the same OFFSET as the light session for
+    /// dark and bias matching (hard rule). When false, a missing or mismatched
+    /// offset is treated as a metadata-missing soft penalty instead of excluding
+    /// the candidate. Default: `true` (offset always required, matching the
+    /// original strict behaviour).
+    pub require_same_offset: bool,
+
     // ── UI ──
     /// When true, the assign dialog pre-fills with the top candidate (R-Prefill).
     pub prefill_suggestion: bool,
@@ -101,6 +109,7 @@ impl Default for MatchingRuleConfig {
             flat_night_max_penalty: 0.4,
             flat_override_penalty: 0.3,
             bias_override_penalty: 0.3,
+            require_same_offset: true,
             prefill_suggestion: true,
         }
     }

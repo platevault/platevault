@@ -85,7 +85,7 @@ async function invoke<T>(cmd: string, args?: Record<string, unknown>): Promise<T
 export async function listPreparedViews(
   projectId: string,
 ): Promise<PreparedViewListResponse> {
-  return invoke<PreparedViewListResponse>('preparedview.list', { projectId });
+  return invoke<PreparedViewListResponse>('preparedview_list', { projectId });
 }
 
 /**
@@ -97,7 +97,7 @@ export async function listPreparedViews(
 export async function removePreparedView(
   viewId: string,
 ): Promise<PreparedViewRemoveResponse> {
-  return invoke<PreparedViewRemoveResponse>('preparedview.remove', { viewId });
+  return invoke<PreparedViewRemoveResponse>('preparedview_remove', { viewId });
 }
 
 /**
@@ -109,7 +109,7 @@ export async function removePreparedView(
 export async function regeneratePreparedView(
   viewId: string,
 ): Promise<PreparedViewRegenerateResponse> {
-  return invoke<PreparedViewRegenerateResponse>('preparedview.regenerate', { viewId });
+  return invoke<PreparedViewRegenerateResponse>('preparedview_regenerate', { viewId });
 }
 
 // ── Display helpers ───────────────────────────────────────────────────────────

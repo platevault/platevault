@@ -1,12 +1,14 @@
 /// <reference types="@testing-library/jest-dom" />
 /**
- * InboxStatsSummary tests — spec 041 US6 / T039.
+ * InboxStatsSummary tests — spec 041 US6 / T039, reworked for spec 043 #83.
  *
- * Asserts:
- * 1. Totals (folders / masters / images) are rendered from the stats response.
- * 2. At least one per-type row is rendered (frameType label + counts).
- * 3. When perType is empty, no per-type rows are rendered.
- * 4. useInboxStats triggers inboxStats() on mount; summary appears in InboxPage.
+ * #83 collapsed the old folder/master/image TOTALS strip (which triplicated the
+ * top-bar + status-bar counts) into a single compact per-frame-type breakdown
+ * chip row. Asserts:
+ * 1. One chip per per-type entry (frame type label + folder count).
+ * 2. A type with masters annotates the master count.
+ * 3. When perType is empty, the component renders nothing (null).
+ * 4. useInboxStats triggers inboxStats() on mount.
  */
 
 import { render, screen, waitFor } from '@testing-library/react';
@@ -46,44 +48,34 @@ const statsEmpty: InboxStatsResponse = {
 import { InboxStatsSummary } from '../InboxStatsSummary';
 
 describe('InboxStatsSummary', () => {
-  it('renders totals: folders, masters, images', () => {
+  it('renders one compact chip per per-type entry', () => {
     render(<InboxStatsSummary stats={statsWithTypes} />);
 
-    const totalsEl = screen.getByTestId('inbox-stats-totals');
-    expect(totalsEl).toBeInTheDocument();
+    expect(screen.getByTestId('inbox-stats-summary')).toBeInTheDocument();
 
-    // Total values visible
-    expect(screen.getByTestId('inbox-stats-total-folders').textContent).toContain('12');
-    expect(screen.getByTestId('inbox-stats-total-masters').textContent).toContain('3');
-    expect(screen.getByTestId('inbox-stats-total-images').textContent).toContain('480');
+    // Light chip: type label + folder count (8).
+    const lightChip = screen.getByTestId('inbox-stats-type-light');
+    expect(lightChip.textContent).toContain('light');
+    expect(lightChip.textContent).toContain('8');
+
+    // Dark chip: type label + folder count (4) + master annotation (+3m).
+    const darkChip = screen.getByTestId('inbox-stats-type-dark');
+    expect(darkChip.textContent).toContain('dark');
+    expect(darkChip.textContent).toContain('4');
+    expect(darkChip.textContent).toContain('+3m');
   });
 
-  it('renders a row for each per-type entry', () => {
+  it('no longer renders the folder/master/image totals strip (#83)', () => {
     render(<InboxStatsSummary stats={statsWithTypes} />);
-
-    expect(screen.getByTestId('inbox-stats-type-light')).toBeInTheDocument();
-    expect(screen.getByTestId('inbox-stats-type-dark')).toBeInTheDocument();
-
-    // Light row shows folder count and image count
-    const lightRow = screen.getByTestId('inbox-stats-type-light');
-    expect(lightRow.textContent).toContain('light');
-    expect(lightRow.textContent).toContain('320');
-
-    // Dark row shows master count indicator
-    const darkRow = screen.getByTestId('inbox-stats-type-dark');
-    expect(darkRow.textContent).toContain('dark');
-    expect(darkRow.textContent).toContain('3M');
+    // The totals moved to the top-bar summary + status bar.
+    expect(screen.queryByTestId('inbox-stats-totals')).toBeNull();
+    expect(screen.queryByTestId('inbox-stats-total-folders')).toBeNull();
   });
 
-  it('renders no per-type rows when perType is empty', () => {
-    render(<InboxStatsSummary stats={statsEmpty} />);
-
-    // Totals still render (all zeros)
-    expect(screen.getByTestId('inbox-stats-totals')).toBeInTheDocument();
-    expect(screen.getByTestId('inbox-stats-total-folders').textContent).toContain('0');
-
-    // No per-type rows
-    expect(screen.queryByTestId(/^inbox-stats-type-/)).not.toBeInTheDocument();
+  it('renders nothing when perType is empty', () => {
+    const { container } = render(<InboxStatsSummary stats={statsEmpty} />);
+    expect(container).toBeEmptyDOMElement();
+    expect(screen.queryByTestId('inbox-stats-summary')).toBeNull();
   });
 });
 

@@ -1,3 +1,4 @@
+import { m } from '@/lib/i18n';
 import { Pill, Box } from '@/ui';
 
 export interface StepReviewProps {
@@ -53,46 +54,39 @@ const DISK_TREE = `NGC7000_HOO/
 
 export function StepReview({ wizardState: _wizardState }: StepReviewProps) {
   return (
-    <div style={{ display: 'flex', flexDirection: 'column', gap: 'var(--alm-space-5)' }}>
+    <div className="alm-wizard-review">
       {/* ── Green success banner ── */}
-      <div
-        style={{
-          padding: 12,
-          background: '#e9f1ec',
-          border: '1px solid #c5d6cb',
-        }}
-      >
-        <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
-          <span style={{ color: 'var(--alm-ok)', fontSize: 14 }}>&#10003;</span>
-          <div style={{ flex: 1, fontSize: 'var(--alm-text-sm)' }}>
-            <strong>No destructive items.</strong> This plan only creates directories, junctions,
-            and the project manifest. No source frames are moved, copied, or modified.
+      <div className="alm-wizard-review__banner">
+        <div className="alm-wizard-review__banner-row">
+          <span className="alm-wizard-review__banner-icon">&#10003;</span>
+          <div className="alm-wizard-review__banner-text">
+            <strong>{m.projects_wizard_review_no_destructive()}</strong> {m.projects_wizard_review_safe_desc()}
           </div>
         </div>
       </div>
 
       {/* ── 2-column grid: plan items (2fr) + disk tree / after creating (1fr) ── */}
-      <div style={{ display: 'grid', gridTemplateColumns: '2fr 1fr', gap: 14 }}>
+      <div className="alm-wizard-review__grid">
         {/* Left: Plan items */}
-        <Box title="Plan items (132)">
+        <Box title={m.projects_wizard_plan_items_title()}>
           <table className="alm-simple-table">
             <thead>
               <tr>
-                <th style={{ width: 80 }}>Action</th>
-                <th>Destination</th>
-                <th>Source</th>
+                <th className="alm-wizard-review__col-action">{m.projects_wizard_col_action()}</th>
+                <th>{m.projects_wizard_col_destination()}</th>
+                <th>{m.projects_wizard_col_source()}</th>
               </tr>
             </thead>
             <tbody>
               {PLAN_ITEMS.map((item, i) => (
                 <tr key={i}>
                   <td><Pill variant="info">{item.action}</Pill></td>
-                  <td className="alm-mono" style={{ fontSize: '11px' }}>{item.destination}</td>
+                  <td className="alm-mono alm-wizard-review__cell-path">{item.destination}</td>
                   <td>
                     {item.source === null ? (
-                      <span style={{ color: 'var(--alm-text-faint)' }}>&mdash;</span>
+                      <span className="alm-wizard-review__source-none">&mdash;</span>
                     ) : (
-                      <span className="alm-mono" style={{ fontSize: '11px', color: 'var(--alm-text-muted)' }}>
+                      <span className="alm-mono alm-wizard-review__source-path">
                         {item.source}
                       </span>
                     )}
@@ -101,19 +95,16 @@ export function StepReview({ wizardState: _wizardState }: StepReviewProps) {
               ))}
               {/* Truncation row */}
               <tr>
-                <td
-                  colSpan={3}
-                  style={{ fontSize: 'var(--alm-text-xs)', color: 'var(--alm-text-muted)', padding: 6 }}
-                >
+                <td colSpan={3} className="alm-wizard-review__truncation">
                   {TRUNCATION_LABEL}
                 </td>
               </tr>
               {/* Final manifest write */}
               <tr>
                 <td><Pill variant="info">{FINAL_ITEM.action}</Pill></td>
-                <td className="alm-mono" style={{ fontSize: '11px' }}>{FINAL_ITEM.destination}</td>
+                <td className="alm-mono alm-wizard-review__cell-path">{FINAL_ITEM.destination}</td>
                 <td>
-                  <span className="alm-mono" style={{ fontSize: '11px', color: 'var(--alm-text-muted)' }}>
+                  <span className="alm-mono alm-wizard-review__source-path">
                     {FINAL_ITEM.source}
                   </span>
                 </td>
@@ -123,38 +114,27 @@ export function StepReview({ wizardState: _wizardState }: StepReviewProps) {
         </Box>
 
         {/* Right column */}
-        <div style={{ display: 'flex', flexDirection: 'column', gap: 14 }}>
+        <div className="alm-wizard-review__right">
           {/* Disk tree */}
-          <Box title="What will exist on disk">
-            <pre
-              className="alm-mono"
-              style={{
-                fontSize: '10.5px',
-                margin: 0,
-                lineHeight: 1.5,
-                color: 'var(--alm-text-secondary)',
-                whiteSpace: 'pre-wrap',
-                wordBreak: 'break-all',
-              }}
-            >
+          <Box title={m.projects_wizard_disk_title()}>
+            <pre className="alm-mono alm-wizard-review__disk-tree">
               {DISK_TREE}
             </pre>
           </Box>
 
           {/* After creating */}
-          <Box title="After creating">
-            <ol style={{ margin: 0, paddingLeft: 18, fontSize: 'var(--alm-text-xs)' }}>
+          <Box title={m.projects_wizard_after_title()}>
+            <ol className="alm-wizard-review__after-list">
               <li>
-                Project lifecycle:{' '}
-                <span className="alm-mono">setup</span> &rarr;{' '}
-                <span className="alm-mono">prepared</span>
+                {m.projects_wizard_lifecycle_label()}{' '}
+                <span className="alm-mono">{m.projects_wizard_lifecycle_setup()}</span> &rarr;{' '}
+                <span className="alm-mono">{m.projects_wizard_lifecycle_prepared()}</span>
               </li>
               <li>
-                Open <span className="alm-mono">NGC7000_HOO/sources/views/wbpp_input</span> in
-                PixInsight/WBPP
+                {m.projects_wizard_open_in_wbpp()} <span className="alm-mono">{m.projects_wizard_open_in_wbpp_target()}</span> {m.projects_wizard_open_in_wbpp_app()}
               </li>
-              <li>Process there. The app will observe artifacts on refresh.</li>
-              <li>Record final outputs back here when done.</li>
+              <li>{m.projects_wizard_after_process()}</li>
+              <li>{m.projects_wizard_after_record()}</li>
             </ol>
           </Box>
         </div>

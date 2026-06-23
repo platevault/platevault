@@ -1,4 +1,5 @@
 import { forwardRef } from 'react';
+import { m } from '@/lib/i18n';
 import type { ReactNode, HTMLAttributes } from 'react';
 
 export interface WizardStep {
@@ -35,12 +36,6 @@ export const WizardShell = forwardRef<HTMLDivElement, WizardShellProps>(
       <div
         ref={ref}
         className={cls}
-        style={{
-          display: 'flex',
-          flexDirection: 'column',
-          flex: 1,
-          overflow: 'hidden',
-        }}
         {...rest}
       >
         {/* Step progress bar */}
@@ -50,59 +45,36 @@ export const WizardShell = forwardRef<HTMLDivElement, WizardShellProps>(
         ) : (
           <nav
             className="alm-wizard__rail"
-            aria-label="Wizard progress"
-            style={{
-              display: 'flex',
-              alignItems: 'center',
-              gap: 'var(--alm-sp-3)',
-              padding: 'var(--alm-sp-4) var(--alm-sp-5)',
-              borderBottom: '1px solid var(--alm-border)',
-              flexShrink: 0,
-            }}
+            aria-label={m.ui_wizard_progress_aria()}
           >
             {steps.map((step, i) => (
               <div
                 key={step.label}
                 className="alm-wizard__step"
                 aria-current={i === currentStep ? 'step' : undefined}
-                style={{ display: 'flex', alignItems: 'center', gap: 'var(--alm-sp-2)' }}
               >
                 <span
-                  style={{
-                    display: 'inline-flex',
-                    alignItems: 'center',
-                    justifyContent: 'center',
-                    width: 20,
-                    height: 20,
-                    borderRadius: '50%',
-                    fontSize: 'var(--alm-text-xs)',
-                    fontWeight: 'var(--alm-weight-semibold)',
-                    ...(i === currentStep
+                  className="alm-wizard__step-badge"
+                  // eslint-disable-next-line no-restricted-syntax -- dynamic: step-badge conditional token colors (active/completed/pending)
+                  style={
+                    i === currentStep
                       ? { background: 'var(--alm-ink)', color: 'var(--alm-on-accent)' }
                       : step.completed
                         ? { background: 'var(--alm-chip)', color: 'var(--alm-text-secondary)' }
-                        : { background: 'transparent', border: '1.5px solid var(--alm-border)', color: 'var(--alm-text-faint)' }),
-                  }}
+                        : { background: 'transparent', border: '1.5px solid var(--alm-border)', color: 'var(--alm-text-faint)' }
+                  }
                 >
                   {step.completed && i !== currentStep ? '✓' : i + 1}
                 </span>
                 <span
-                  style={{
-                    fontSize: 'var(--alm-text-xs)',
-                    color: i === currentStep ? 'var(--alm-text)' : 'var(--alm-text-muted)',
-                  }}
+                  className="alm-wizard__step-label"
+                  // eslint-disable-next-line no-restricted-syntax -- dynamic: step-label conditional token color (active vs muted)
+                  style={{ color: i === currentStep ? 'var(--alm-text)' : 'var(--alm-text-muted)' }}
                 >
                   {step.label}
                 </span>
                 {i < steps.length - 1 && (
-                  <span
-                    style={{
-                      width: 16,
-                      height: 1,
-                      background: 'var(--alm-border-subtle)',
-                      display: 'inline-block',
-                    }}
-                  />
+                  <span className="alm-wizard__step-connector" />
                 )}
               </div>
             ))}
@@ -112,42 +84,23 @@ export const WizardShell = forwardRef<HTMLDivElement, WizardShellProps>(
         {/* Body */}
         {hasSidebar ? (
           /* Sidebar layout (project wizard) */
-          <div style={{ display: 'flex', flex: 1, minHeight: 0, overflow: 'hidden' }}>
-            <div style={{ flex: 1, minWidth: 0, overflow: 'auto', padding: 'var(--alm-sp-5)' }}>
+          <div className="alm-wizard__body--sidebar">
+            <div className="alm-wizard__content--sidebar">
               {children}
             </div>
-            <aside
-              style={{
-                width: 'var(--alm-rail-width)',
-                borderLeft: '1px solid var(--alm-border)',
-                padding: 'var(--alm-sp-5)',
-                overflow: 'auto',
-                background: 'var(--alm-surface)',
-              }}
-            >
+            <aside className="alm-wizard__summary">
               {summary}
             </aside>
           </div>
         ) : (
           /* Centered layout (setup wizard) */
           <>
-            <div
-              style={{
-                flex: 1,
-                minHeight: 0,
-                overflow: 'auto',
-                padding: 'var(--alm-sp-6) var(--alm-sp-5)',
-              }}
-            >
-              <div style={{ maxWidth: 720, margin: '0 auto' }}>
+            <div className="alm-wizard__scroll">
+              <div className="alm-wizard__content--centered">
                 {/* Inline step bar for centered mode */}
                 <nav
-                  aria-label="Setup progress"
-                  style={{
-                    display: 'flex',
-                    gap: 'var(--alm-sp-1)',
-                    marginBottom: 'var(--alm-sp-6)',
-                  }}
+                  className="alm-wizard__steps-bar"
+                  aria-label={m.ui_wizard_setup_progress_aria()}
                 >
                   {steps.map((step, i) => {
                     const isActive = i === currentStep;
@@ -155,15 +108,11 @@ export const WizardShell = forwardRef<HTMLDivElement, WizardShellProps>(
                     return (
                       <div
                         key={step.label}
+                        className="alm-wizard__steps-card"
                         aria-current={isActive ? 'step' : undefined}
+                        // eslint-disable-next-line no-restricted-syntax -- dynamic: steps-card conditional token colors + weight (active/past/future)
                         style={{
-                          flex: 1,
-                          padding: 'var(--alm-sp-2) var(--alm-sp-3)',
-                          border: '1px solid var(--alm-border)',
-                          borderRadius: 'var(--alm-radius-sm)',
                           background: isPast || isActive ? 'var(--alm-surface)' : 'var(--alm-bg)',
-                          fontSize: 'var(--alm-text-xs)',
-                          textAlign: 'center',
                           color: isActive ? 'var(--alm-text)' : 'var(--alm-text-muted)',
                           fontWeight: isActive ? 'var(--alm-weight-semibold)' : 'var(--alm-weight-normal)',
                         }}
@@ -180,23 +129,8 @@ export const WizardShell = forwardRef<HTMLDivElement, WizardShellProps>(
 
             {/* Pinned navigation footer */}
             {hasCenteredFooter && (
-              <div
-                style={{
-                  borderTop: '1px solid var(--alm-border)',
-                  padding: 'var(--alm-sp-4) var(--alm-sp-5)',
-                  flexShrink: 0,
-                  background: 'var(--alm-surface)',
-                }}
-              >
-                <div
-                  style={{
-                    maxWidth: 720,
-                    margin: '0 auto',
-                    display: 'flex',
-                    alignItems: 'center',
-                    gap: 'var(--alm-sp-4)',
-                  }}
-                >
+              <div className="alm-wizard__footer">
+                <div className="alm-wizard__footer-inner">
                   {footer}
                 </div>
               </div>

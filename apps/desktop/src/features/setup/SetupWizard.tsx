@@ -2,6 +2,7 @@ import { useState, useEffect, useCallback, useMemo } from 'react';
 import { useNavigate } from '@tanstack/react-router';
 import { WizardShell } from '@/ui/WizardShell';
 import { Btn } from '@/ui/Btn';
+import { m } from '@/lib/i18n';
 import { setPreference } from '@/data/preferences';
 import { completeFirstRun, toolUpdate } from '@/api/commands';
 import {
@@ -38,29 +39,30 @@ interface WizardState {
 
 const STEPS = [
   {
-    label: 'Source Folders',
-    heading: 'Where does your data live?',
-    description: 'Add the folders where your light frames, calibration frames, projects, and incoming captures are stored.',
+    label: () => m.setup_step_sources_label(),
+    heading: () => m.setup_step_sources_heading(),
+    description: () => m.setup_step_sources_desc(),
   },
   {
-    label: 'Processing Tools',
-    heading: 'Processing tools',
-    description: 'Configure the astrophotography processing tools installed on your system.',
+    label: () => m.setup_step_tools_label(),
+    heading: () => m.setup_step_tools_heading(),
+    description: () => m.setup_step_tools_desc(),
   },
   {
-    label: 'Configuration',
-    heading: 'Configuration',
-    description: 'Set a few defaults now — you can change all of these later in Settings.',
+    // Step 3: label and heading share the same key (identical text).
+    label: () => m.setup_step_config_label_heading(),
+    heading: () => m.setup_step_config_label_heading(),
+    description: () => m.setup_step_config_desc(),
   },
   {
-    label: 'Confirm',
-    heading: 'Ready to go',
-    description: 'Review your configuration before starting the initial scan.',
+    label: () => m.setup_step_confirm_label(),
+    heading: () => m.setup_step_confirm_heading(),
+    description: () => m.setup_step_confirm_desc(),
   },
   {
-    label: 'Scan',
-    heading: 'Scanning your library',
-    description: 'Scanning each source folder and detecting ingestion groups.',
+    label: () => m.setup_step_scan_label(),
+    heading: () => m.setup_step_scan_heading(),
+    description: () => m.setup_step_scan_desc(),
   },
 ];
 
@@ -327,7 +329,7 @@ export function SetupWizard() {
   const stepMeta = STEPS[step];
 
   const wizardSteps = STEPS.map((s, i) => ({
-    label: s.label,
+    label: s.label(),
     completed: i < step,
   }));
 
@@ -344,18 +346,16 @@ export function SetupWizard() {
           onClick={() => goTo(isOnScanStep ? SCAN_STEP - 1 : step - 1)}
           disabled={isSubmitting || isFinishing}
         >
-          &larr; Back
+          {m.setup_wizard_back()}
         </Btn>
       ) : (
         <span />
       )}
-      <div style={{ flex: 1 }} />
+      <div className="alm-setup-wizard__footer-spacer" />
       {/* Folder count summary on source step */}
       {step === 0 && totalFolders > 0 && (
-        <span
-          style={{ fontSize: 'var(--alm-text-xs)', color: 'var(--alm-text-muted)' }}
-        >
-          {totalFolders} folder{totalFolders !== 1 ? 's' : ''} selected
+        <span className="alm-setup-wizard__folder-count">
+          {m.setup_wizard_folder_count({ count: totalFolders, suffix: totalFolders !== 1 ? 's' : '' })}
         </span>
       )}
       {isOnScanStep ? (
@@ -367,7 +367,7 @@ export function SetupWizard() {
           onClick={() => { void handleFinish(); }}
           disabled={!scanComplete || isFinishing}
         >
-          {isFinishing ? 'Finishing…' : 'Finish'}
+          {isFinishing ? m.setup_wizard_finishing() : m.setup_wizard_finish()}
         </Btn>
       ) : step < SCAN_STEP - 1 ? (
         // Steps 0–2: "Continue to <next>"
@@ -376,7 +376,7 @@ export function SetupWizard() {
           onClick={() => goTo(step + 1)}
           disabled={!canProceed}
         >
-          Continue to {STEPS[step + 1].label.toLowerCase()} &rarr;
+          {m.setup_wizard_continue_to({ label: STEPS[step + 1].label().toLowerCase() })}
         </Btn>
       ) : (
         // Step 3 (Confirm): register + enter Scan
@@ -385,7 +385,7 @@ export function SetupWizard() {
           onClick={() => { void handleEnterScan(); }}
           disabled={isSubmitting || !canProceed}
         >
-          {isSubmitting ? 'Registering…' : 'Start scan →'}
+          {isSubmitting ? m.setup_wizard_registering() : m.setup_wizard_start_scan()}
         </Btn>
       )}
     </>
@@ -396,41 +396,18 @@ export function SetupWizard() {
     // WizardShell fills the main content area instead of overflowing/mis-placing.
     <div
       className="alm-page alm-setup-wizard"
-      style={{ display: 'flex', flexDirection: 'column', flex: 1, minHeight: 0 }}
     >
-      <WizardShell steps={wizardSteps} currentStep={step} footer={footer} style={{ flex: 1, minHeight: 0 }}>
+      <WizardShell steps={wizardSteps} currentStep={step} footer={footer} className="alm-setup-wizard__shell">
         {/* Step label + heading */}
-        <div
-          style={{
-            fontSize: 'var(--alm-text-2xs)',
-            fontWeight: 'var(--alm-weight-semibold)',
-            textTransform: 'uppercase',
-            letterSpacing: '0.06em',
-            color: 'var(--alm-text-muted)',
-          }}
-        >
-          Setup &middot; Step {step + 1} of {STEPS.length}
+        <div className="alm-setup-wizard__step-label">
+          {m.setup_wizard_step_label({ step: step + 1, total: STEPS.length })}
         </div>
-        <h1
-          style={{
-            margin: 'var(--alm-sp-1) 0 0',
-            fontSize: 'var(--alm-text-2xl)',
-            fontWeight: 'var(--alm-weight-semibold)',
-            color: 'var(--alm-text)',
-          }}
-        >
-          {stepMeta.heading}
+        <h1 className="alm-setup-wizard__heading">
+          {stepMeta.heading()}
         </h1>
         {stepMeta.description && (
-          <p
-            style={{
-              margin: 'var(--alm-sp-2) 0 var(--alm-sp-5)',
-              fontSize: 'var(--alm-text-base)',
-              lineHeight: 'var(--alm-leading-normal)',
-              color: 'var(--alm-text-secondary)',
-            }}
-          >
-            {stepMeta.description}
+          <p className="alm-setup-wizard__description">
+            {stepMeta.description()}
           </p>
         )}
 

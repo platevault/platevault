@@ -23,6 +23,7 @@ import type { PillVariant } from '@/ui';
 import { calibrationMatchSuggestBatch } from '@/api/commands';
 import type { BatchSessionResultDto, CalibrationMatchType } from '@/api/commands';
 import { errMessage } from '@/lib/errors';
+import { m } from '@/lib/i18n';
 
 // ── Helpers ───────────────────────────────────────────────────────────────────
 
@@ -54,9 +55,11 @@ const CAL_TYPES: CalibrationMatchType[] = ['dark', 'flat', 'bias'];
 
 interface Props {
   sessionIds: string[];
+  /** Whether the collapsible section starts open. Default true. */
+  defaultOpen?: boolean;
 }
 
-export function CalibrationMatchPanel({ sessionIds }: Props) {
+export function CalibrationMatchPanel({ sessionIds, defaultOpen = true }: Props) {
   const [results, setResults] = useState<BatchSessionResultDto[]>([]);
   const [loading, setLoading] = useState(false);
   const [fetchError, setFetchError] = useState<string | undefined>(undefined);
@@ -100,12 +103,12 @@ export function CalibrationMatchPanel({ sessionIds }: Props) {
 
   if (loading) {
     return (
-      <Section title="Calibration readiness">
+      <Section title={m.projects_calib_readiness_title()} defaultOpen={defaultOpen}>
         <div
-          style={{ fontSize: 'var(--alm-text-sm)', color: 'var(--alm-text-muted)', padding: 'var(--alm-sp-1)' }}
+          className="alm-calib-match-panel__loading"
           data-testid="cal-panel-loading"
         >
-          Checking calibration suggestions…
+          {m.projects_calib_checking()}
         </div>
       </Section>
     );
@@ -113,9 +116,9 @@ export function CalibrationMatchPanel({ sessionIds }: Props) {
 
   if (fetchError) {
     return (
-      <Section title="Calibration readiness">
+      <Section title={m.projects_calib_readiness_title()} defaultOpen={defaultOpen}>
         <div
-          style={{ fontSize: 'var(--alm-text-xs)', color: 'var(--alm-text-muted)' }}
+          className="alm-calib-match-panel__error"
           data-testid="cal-panel-error"
         >
           {fetchError}
@@ -126,10 +129,10 @@ export function CalibrationMatchPanel({ sessionIds }: Props) {
 
   if (results.length === 0) {
     return (
-      <Section title="Calibration readiness">
+      <Section title={m.projects_calib_readiness_title()} defaultOpen={defaultOpen}>
         <EmptyState
-          title="No calibration data"
-          desc="Calibration fingerprints are not yet available for this project's sources. Run a metadata scan to populate them."
+          title={m.projects_calib_no_data_title()}
+          desc={m.projects_calib_no_data_title()}
           data-testid="cal-panel-empty"
         />
       </Section>
@@ -145,31 +148,24 @@ export function CalibrationMatchPanel({ sessionIds }: Props) {
   }
 
   return (
-    <Section title="Calibration readiness" count={sessionIds.length} data-testid="cal-panel">
-      <div style={{ display: 'flex', flexDirection: 'column', gap: 'var(--alm-sp-2)' }}>
+    <Section title={m.projects_calib_readiness_title()} count={sessionIds.length} defaultOpen={defaultOpen} data-testid="cal-panel">
+      <div className="alm-calib-match-panel__list">
         {[...bySession.entries()].map(([sid, typeResults]) => (
           <div
             key={sid}
-            style={{
-              display: 'flex',
-              flexDirection: 'column',
-              gap: 'var(--alm-sp-1)',
-              padding: 'var(--alm-sp-2)',
-              background: 'var(--alm-surface-overlay)',
-              borderRadius: 'var(--alm-radius-md)',
-            }}
+            className="alm-calib-match-panel__session"
             data-testid={`cal-session-${sid}`}
           >
-            <div style={{ fontSize: 'var(--alm-text-xs)', color: 'var(--alm-text-faint)', fontFamily: 'var(--alm-font-mono)' }}>
+            <div className="alm-calib-match-panel__session-id">
               {sid.slice(0, 12)}…
             </div>
-            <div style={{ display: 'flex', gap: 'var(--alm-sp-1)', flexWrap: 'wrap' }}>
+            <div className="alm-calib-match-panel__type-row">
               {typeResults.map((r) => {
                 const topConfidence = r.candidates?.[0]?.confidence;
                 return (
                   <div
                     key={r.calibrationType}
-                    style={{ display: 'flex', alignItems: 'center', gap: 4 }}
+                    className="alm-calib-match-panel__type-item"
                     data-testid={`cal-type-${r.calibrationType}-${sid}`}
                   >
                     <Pill variant={r.calibrationType === 'dark' ? 'info' : r.calibrationType === 'flat' ? 'accent' : 'neutral'}>
@@ -180,8 +176,7 @@ export function CalibrationMatchPanel({ sessionIds }: Props) {
                     </Pill>
                     {topConfidence != null && (
                       <span
-                        className="alm-mono"
-                        style={{ fontSize: 'var(--alm-text-xs)', color: 'var(--alm-text-secondary)' }}
+                        className="alm-mono alm-calib-match-panel__confidence"
                         data-testid={`cal-confidence-${r.calibrationType}-${sid}`}
                       >
                         {Math.round(topConfidence * 100)}%
@@ -194,8 +189,8 @@ export function CalibrationMatchPanel({ sessionIds }: Props) {
           </div>
         ))}
       </div>
-      <div style={{ marginTop: 'var(--alm-sp-1)', fontSize: 'var(--alm-text-xs)', color: 'var(--alm-text-faint)' }}>
-        To assign calibration masters, open the Calibration page and select the appropriate master.
+      <div className="alm-calib-match-panel__hint">
+        {m.projects_calib_assign_hint()}
       </div>
     </Section>
   );

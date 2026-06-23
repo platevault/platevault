@@ -18,6 +18,7 @@
 
 import { useState, useEffect } from 'react';
 import { Pill, Btn, Section, Banner } from '@/ui';
+import { m } from '@/lib/i18n';
 import { addToast } from '@/shared/toast';
 import {
   listPreparedViews,
@@ -37,11 +38,13 @@ export interface SourceViewsSectionProps {
   projectId: string;
   /** Called with planId after a plan is created so the parent can navigate. */
   onPlanCreated?: (planId: string) => void;
+  /** Whether the collapsible section starts open. Default true. */
+  defaultOpen?: boolean;
 }
 
 // ── Component ─────────────────────────────────────────────────────────────────
 
-export function SourceViewsSection({ projectId, onPlanCreated }: SourceViewsSectionProps) {
+export function SourceViewsSection({ projectId, onPlanCreated, defaultOpen = true }: SourceViewsSectionProps) {
   const [views, setViews] = useState<PreparedViewSummary[]>([]);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -80,8 +83,8 @@ export function SourceViewsSection({ projectId, onPlanCreated }: SourceViewsSect
       const planId = resp.planId;
       addToast({
         variant: 'info',
-        message: `Removal plan created. Review and apply plan to complete removal.`,
-        action: { label: 'View Plan', onClick: () => onPlanCreated?.(planId) },
+        message: m.projects_source_views_removal_toast(),
+        action: { label: m.projects_source_views_view_plan_btn(), onClick: () => onPlanCreated?.(planId) },
       });
       onPlanCreated?.(planId);
     } catch (err: unknown) {
@@ -91,7 +94,7 @@ export function SourceViewsSection({ projectId, onPlanCreated }: SourceViewsSect
           : 'internal';
       addToast({
         variant: 'warn',
-        message: `Could not create removal plan: ${code}`,
+        message: m.projects_source_views_removal_failed({ code }),
       });
     } finally {
       setBusyViewId(null);
@@ -105,12 +108,12 @@ export function SourceViewsSection({ projectId, onPlanCreated }: SourceViewsSect
       const planId = resp.planId;
       const warning =
         resp.unresolvedItemCount > 0
-          ? ` (${resp.unresolvedItemCount} unresolved references — review plan before applying)`
+          ? m.projects_source_views_regen_unresolved({ count: String(resp.unresolvedItemCount) })
           : '';
       addToast({
         variant: 'info',
-        message: `Regeneration plan created${warning}. Review and apply to rebuild the view.`,
-        action: { label: 'View Plan', onClick: () => onPlanCreated?.(planId) },
+        message: m.projects_source_views_regen_toast({ warning }),
+        action: { label: m.projects_source_views_view_plan_btn(), onClick: () => onPlanCreated?.(planId) },
       });
       onPlanCreated?.(planId);
     } catch (err: unknown) {
@@ -120,7 +123,7 @@ export function SourceViewsSection({ projectId, onPlanCreated }: SourceViewsSect
           : 'internal';
       addToast({
         variant: 'warn',
-        message: `Could not create regeneration plan: ${code}`,
+        message: m.projects_source_views_regen_failed({ code }),
       });
     } finally {
       setBusyViewId(null);
@@ -131,30 +134,30 @@ export function SourceViewsSection({ projectId, onPlanCreated }: SourceViewsSect
 
   if (loading) {
     return (
-      <Section title="Source Views">
-        <p className="text-muted text-sm">Loading…</p>
+      <Section title={m.projects_source_views_title()} defaultOpen={defaultOpen}>
+        <p className="text-muted text-sm">{m.common_loading()}</p>
       </Section>
     );
   }
 
   if (error) {
     return (
-      <Section title="Source Views">
-        <Banner variant="danger">Failed to load source views: {error}</Banner>
+      <Section title={m.projects_source_views_title()} defaultOpen={defaultOpen}>
+        <Banner variant="danger">{m.projects_source_views_load_error({ error })}</Banner>
       </Section>
     );
   }
 
   if (views.length === 0) {
     return (
-      <Section title="Source Views">
-        <p className="text-muted text-sm">No generated source views for this project.</p>
+      <Section title={m.projects_source_views_title()} defaultOpen={defaultOpen}>
+        <p className="text-muted text-sm">{m.projects_source_views_empty()}</p>
       </Section>
     );
   }
 
   return (
-    <Section title="Source Views">
+    <Section title={m.projects_source_views_title()} defaultOpen={defaultOpen}>
       <ul className="flex flex-col gap-3">
         {views.map((view) => (
           <li
@@ -171,29 +174,26 @@ export function SourceViewsSection({ projectId, onPlanCreated }: SourceViewsSect
                   {viewStateLabel(view.state)}
                 </Pill>
                 <span className="text-xs text-muted">{view.kind}</span>
-                <span className="text-xs text-muted">{view.itemCount} items</span>
+                <span className="text-xs text-muted">{view.itemCount} {m.projects_source_views_items_unit()}</span>
               </div>
 
               {/* FR-033 / T078: per-item inventory refs */}
               {view.items.length > 0 && (
-                <details className="text-xs text-muted" style={{ marginTop: 4 }}>
-                  <summary style={{ cursor: 'pointer', userSelect: 'none' }}>
-                    {view.items.length} inventory ref{view.items.length !== 1 ? 's' : ''}
+                <details className="text-xs text-muted alm-source-views__refs-details">
+                  <summary className="alm-source-views__refs-summary">
+                    {view.items.length} {m.projects_source_views_inventory_ref()}
+                    {/* eslint-disable-next-line alm/no-user-string -- lone plural suffix */}
+                    {view.items.length !== 1 ? 's' : ''}
                   </summary>
                   <ul
-                    style={{
-                      marginTop: 4,
-                      paddingLeft: 12,
-                      listStyle: 'disc',
-                      fontFamily: 'var(--alm-font-mono)',
-                    }}
+                    className="alm-source-views__refs-list"
                     data-testid={`source-view-items-${view.id}`}
                   >
                     {view.items.map((item: PreparedViewItemDetail) => (
                       <li
                         key={item.id}
-                        title={`Inventory item: ${item.inventoryItemId}`}
-                        style={{ padding: '1px 0', wordBreak: 'break-all' }}
+                        title={m.projects_source_view_item_title({ id: item.inventoryItemId })}
+                        className="alm-source-views__refs-item"
                       >
                         {item.viewRelativePath}
                       </li>
@@ -205,8 +205,7 @@ export function SourceViewsSection({ projectId, onPlanCreated }: SourceViewsSect
               {/* kind_diverged resolution affordance (D-026-H2) */}
               {view.state === 'kind_diverged' && (
                 <Banner variant="warn">
-                  Kind mismatch detected. Resolve this manually before removing or
-                  regenerating.
+                  {m.projects_source_views_kind_mismatch()}
                 </Banner>
               )}
             </div>
@@ -220,7 +219,7 @@ export function SourceViewsSection({ projectId, onPlanCreated }: SourceViewsSect
                   onClick={() => handleRemove(view.id)}
                   data-testid={`remove-view-${view.id}`}
                 >
-                  {busyViewId === view.id ? 'Working…' : 'Remove'}
+                  {busyViewId === view.id ? m.common_working() : m.common_remove()}
                 </Btn>
               )}
 
@@ -232,7 +231,7 @@ export function SourceViewsSection({ projectId, onPlanCreated }: SourceViewsSect
                   onClick={() => handleRegenerate(view.id)}
                   data-testid={`regenerate-view-${view.id}`}
                 >
-                  {busyViewId === view.id ? 'Working…' : 'Regenerate'}
+                  {busyViewId === view.id ? m.common_working() : m.common_regenerate()}
                 </Btn>
               )}
             </div>

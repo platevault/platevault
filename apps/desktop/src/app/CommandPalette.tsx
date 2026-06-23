@@ -1,4 +1,5 @@
 import { useState, useEffect, useCallback } from 'react';
+import { m } from '@/lib/i18n';
 import { Dialog } from '@base-ui-components/react/dialog';
 import { Command } from 'cmdk';
 import { useNavigate, useRouterState } from '@tanstack/react-router';
@@ -8,14 +9,14 @@ import { useHotkeys } from '@/lib/useHotkeys';
 import type { SearchResult } from '@/bindings/types';
 
 const PAGES: Array<{ label: string; route: string }> = [
-  { label: 'Sessions', route: '/sessions' },
-  { label: 'Review queue', route: '/review' },
-  { label: 'Calibration', route: '/calibration' },
-  { label: 'Targets', route: '/targets' },
-  { label: 'Projects', route: '/projects' },
-  { label: 'Plans', route: '/plans' },
-  { label: 'Audit log', route: '/audit' },
-  { label: 'Settings', route: '/settings' },
+  { label: m.common_sessions(), route: '/sessions' },
+  { label: m.cmdk_page_review_queue(), route: '/review' },
+  { label: m.settings_datasources_category_calibration(), route: '/calibration' },
+  { label: m.nav_targets(), route: '/targets' },
+  { label: m.common_projects(), route: '/projects' },
+  { label: m.cmdk_page_plans(), route: '/plans' },
+  { label: m.cmdk_page_audit_log(), route: '/audit' },
+  { label: m.settings_page_title(), route: '/settings' },
 ];
 
 interface PaletteAction {
@@ -27,7 +28,7 @@ interface PaletteAction {
 }
 
 const ACTIONS: Array<PaletteAction> = [
-  { label: 'New project', route: '/projects/new' },
+  { label: m.projects_create_title(), route: '/projects/new' },
 ];
 
 /**
@@ -35,7 +36,7 @@ const ACTIONS: Array<PaletteAction> = [
  * Appended to the Pages group only when devMode is on.
  */
 const DEV_PAGES: Array<{ label: string; route: string }> = [
-  { label: 'Developer / Contracts', route: '/dev/contracts' },
+  { label: m.cmdk_dev_contracts(), route: '/dev/contracts' },
 ];
 
 export function CommandPalette() {
@@ -128,7 +129,7 @@ export function CommandPalette() {
 
   const ALL_ACTIONS: Array<PaletteAction> = [
     ...ACTIONS,
-    { label: 'Show ignored items', onSelect: showIgnoredAction },
+    { label: m.cmdk_action_show_ignored(), onSelect: showIgnoredAction },
   ];
 
   // All visible pages: standard pages + dev pages when devMode is on.
@@ -138,11 +139,11 @@ export function CommandPalette() {
     <Dialog.Root open={open} onOpenChange={setOpen}>
       <Dialog.Portal>
         <Dialog.Backdrop className="alm-palette-backdrop" />
-        <Dialog.Popup className="alm-palette" aria-label="Command palette">
+        <Dialog.Popup className="alm-palette" aria-label={m.cmdk_aria_label()}>
           <Command shouldFilter={false}>
             <Command.Input
               className="alm-palette__input"
-              placeholder="Search sessions, targets, projects..."
+              placeholder={m.cmdk_placeholder()}
               value={query}
               onValueChange={setQuery}
               autoFocus
@@ -150,7 +151,7 @@ export function CommandPalette() {
             <Command.List className="alm-palette__list">
               {query.trim() && results.length === 0 && (
                 <Command.Empty className="alm-palette__empty">
-                  No results for &ldquo;{query.trim()}&rdquo;. Try a different search term.
+                  {m.cmdk_no_results({ query: query.trim() })}
                 </Command.Empty>
               )}
               {results.length > 0 && (
@@ -199,7 +200,7 @@ export function CommandPalette() {
                     void openInNewWindow(currentHref);
                   }}
                 >
-                  <span className="alm-palette__item-label">Open view in new window</span>
+                  <span className="alm-palette__item-label">{m.cmdk_open_new_window()}</span>
                 </Command.Item>
               </Command.Group>
             </Command.List>

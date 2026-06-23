@@ -13,6 +13,7 @@
 
 import { Component } from 'react';
 import type { ReactNode, ErrorInfo } from 'react';
+import { m } from '@/lib/i18n';
 
 interface Props {
   children: ReactNode;
@@ -56,55 +57,16 @@ export class AppErrorBoundary extends Component<Props, State> {
         <div
           role="alert"
           data-testid="app-error-boundary-fallback"
-          style={{
-            display: 'flex',
-            flexDirection: 'column',
-            alignItems: 'center',
-            justifyContent: 'center',
-            height: '100vh',
-            gap: 'var(--alm-sp-4)',
-            padding: 'var(--alm-sp-6)',
-            fontFamily: 'var(--alm-font-sans)',
-            color: 'var(--alm-text)',
-            background: 'var(--alm-bg)',
-          }}
+          className="alm-error-boundary__overlay"
         >
-          <h1
-            style={{
-              fontSize: 'var(--alm-text-xl)',
-              fontWeight: 'var(--alm-weight-semibold)',
-              color: 'var(--alm-danger)',
-              margin: 0,
-            }}
-          >
-            Something went wrong
+          <h1 className="alm-error-boundary__heading">
+            {m.shell_error_heading()}
           </h1>
-          <p
-            style={{
-              fontSize: 'var(--alm-text-base)',
-              color: 'var(--alm-text-secondary)',
-              margin: 0,
-              maxWidth: 480,
-              textAlign: 'center',
-            }}
-          >
-            An unexpected error occurred in the application. You can try reloading the view or
-            restarting the app if the problem persists.
+          <p className="alm-error-boundary__body">
+            {m.shell_error_body()}
           </p>
           {error.message && (
-            <pre
-              style={{
-                fontSize: 'var(--alm-text-xs)',
-                color: 'var(--alm-text-muted)',
-                background: 'var(--alm-surface)',
-                border: '1px solid var(--alm-border)',
-                borderRadius: 'var(--alm-radius-sm)',
-                padding: 'var(--alm-sp-3)',
-                maxWidth: 480,
-                overflow: 'auto',
-                margin: 0,
-              }}
-            >
+            <pre className="alm-error-boundary__detail">
               {error.message}
             </pre>
           )}
@@ -112,18 +74,9 @@ export class AppErrorBoundary extends Component<Props, State> {
             type="button"
             onClick={this.handleReset}
             data-testid="app-error-boundary-reset"
-            style={{
-              padding: 'var(--alm-sp-2) var(--alm-sp-4)',
-              background: 'var(--alm-accent)',
-              color: 'var(--alm-on-accent)',
-              border: 'none',
-              borderRadius: 'var(--alm-radius-sm)',
-              cursor: 'pointer',
-              fontSize: 'var(--alm-text-base)',
-              fontWeight: 'var(--alm-weight-medium)',
-            }}
+            className="alm-error-boundary__reset-btn"
           >
-            Try again
+            {m.common_try_again()}
           </button>
         </div>
       );

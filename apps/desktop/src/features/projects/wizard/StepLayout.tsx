@@ -1,4 +1,5 @@
 import { useMemo } from 'react';
+import { m } from '@/lib/i18n';
 import type { StepNameData } from './StepName';
 import type { SourceViewStrategy } from './StepViews';
 
@@ -63,14 +64,14 @@ export function StepLayout({ data, nameData, strategy, onChange }: StepLayoutPro
   }, [nameData, pattern, strategy]);
 
   return (
-    <div style={{ display: 'flex', flexDirection: 'column', gap: 'var(--alm-space-5)' }}>
+    <div className="alm-wizard-layout">
       {/* Naming pattern */}
-      <div style={{ display: 'flex', flexDirection: 'column', gap: 'var(--alm-space-2)' }}>
+      <div className="alm-wizard-layout__section">
         <label
           htmlFor="naming-pattern"
-          style={{ fontSize: 'var(--alm-text-sm)', fontWeight: 600 }}
+          className="alm-wizard-layout__label"
         >
-          Naming pattern
+          {m.projects_wizard_naming_pattern_label()}
         </label>
         <input
           id="naming-pattern"
@@ -78,31 +79,14 @@ export function StepLayout({ data, nameData, strategy, onChange }: StepLayoutPro
           value={pattern}
           onChange={(e) => onChange({ namingPattern: e.target.value })}
           placeholder={DEFAULT_PATTERN}
-          style={{
-            padding: 'var(--alm-space-2) var(--alm-space-3)',
-            border: '1px solid var(--alm-border)',
-            borderRadius: 4,
-            fontSize: 'var(--alm-text-sm)',
-            fontFamily: 'var(--alm-font-mono)',
-            background: 'var(--alm-surface)',
-            color: 'var(--alm-text)',
-          }}
+          className="alm-wizard-layout__input"
         />
-        <div style={{ display: 'flex', flexWrap: 'wrap', gap: 'var(--alm-space-2)', marginTop: 'var(--alm-space-1)' }}>
+        <div className="alm-wizard-layout__token-row">
           {AVAILABLE_TOKENS.map((t) => (
             <span
               key={t.token}
-              title={`Example: ${t.example}`}
-              style={{
-                padding: '2px 6px',
-                background: 'var(--alm-surface)',
-                border: '1px solid var(--alm-border)',
-                borderRadius: 4,
-                fontSize: '10px',
-                fontFamily: 'var(--alm-font-mono)',
-                color: 'var(--alm-text-muted)',
-                cursor: 'help',
-              }}
+              title={m.projects_wizard_token_example_title({ example: t.example })}
+              className="alm-wizard-layout__token-chip"
             >
               {t.token}
             </span>
@@ -111,32 +95,21 @@ export function StepLayout({ data, nameData, strategy, onChange }: StepLayoutPro
       </div>
 
       {/* Directory structure preview */}
-      <div style={{ display: 'flex', flexDirection: 'column', gap: 'var(--alm-space-2)' }}>
-        <h3 style={{ fontSize: 'var(--alm-text-sm)', fontWeight: 600 }}>
-          Directory structure preview
+      <div className="alm-wizard-layout__section">
+        <h3 className="alm-wizard-layout__label">
+          {m.projects_wizard_dir_preview_title()}
         </h3>
-        <div
-          style={{
-            padding: 'var(--alm-space-3) var(--alm-space-4)',
-            background: 'var(--alm-surface)',
-            border: '1px solid var(--alm-border)',
-            borderRadius: 6,
-            fontFamily: 'var(--alm-font-mono)',
-            fontSize: 'var(--alm-text-xs)',
-            lineHeight: 1.8,
-            overflow: 'auto',
-          }}
-        >
+        <div className="alm-wizard-layout__preview">
           {examplePaths.structure.map((path, i) => {
             const depth = path.split('/').length - examplePaths.root.split('/').length;
             const isDir = path.endsWith('/') || path.includes('(');
             return (
               <div
                 key={i}
-                style={{
-                  paddingLeft: `${Math.max(0, depth) * 12}px`,
-                  color: isDir ? 'var(--alm-info)' : 'var(--alm-text)',
-                }}
+                className="alm-wizard-layout__path-row"
+                data-dir={isDir ? 'true' : undefined}
+                // eslint-disable-next-line no-restricted-syntax -- dynamic: depth-based indent padding for layout tree rows
+                style={{ paddingLeft: `${Math.max(0, depth) * 12}px` }}
               >
                 {isDir ? '\u{1F4C1} ' : '\u{1F4C4} '}
                 {path.replace(examplePaths.root, '.')}

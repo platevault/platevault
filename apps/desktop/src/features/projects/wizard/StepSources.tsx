@@ -1,4 +1,5 @@
 import { useState, useMemo } from 'react';
+import { m } from '@/lib/i18n';
 import { Checkbox } from '@base-ui-components/react/checkbox';
 import { useQuery } from '@tanstack/react-query';
 import { queryKeys } from '@/data/queryKeys';
@@ -59,91 +60,62 @@ export function StepSources({ data, onChange }: StepSourcesProps) {
   }
 
   if (loading) {
-    return <div style={{ color: 'var(--alm-text-muted)' }}>Loading sessions...</div>;
+    return <div className="alm-wizard-sources__loading">{m.projects_wizard_sources_loading()}</div>;
   }
 
   return (
-    <div style={{ display: 'flex', flexDirection: 'column', gap: 'var(--alm-space-4)' }}>
+    <div className="alm-wizard-sources">
       {/* Filter row */}
-      <div style={{ display: 'flex', gap: 'var(--alm-space-2)' }}>
+      <div className="alm-wizard-sources__filter-row">
         <input
           type="text"
-          placeholder="Filter by target..."
+          placeholder={m.projects_wizard_filter_target_placeholder()}
           value={filterTarget}
           onChange={(e) => setFilterTarget(e.target.value)}
-          style={{
-            padding: 'var(--alm-space-1) var(--alm-space-2)',
-            border: '1px solid var(--alm-border)',
-            borderRadius: 4,
-            fontSize: 'var(--alm-text-xs)',
-            background: 'var(--alm-surface)',
-            color: 'var(--alm-text)',
-          }}
+          className="alm-wizard-sources__filter-input"
         />
         <input
           type="text"
-          placeholder="Filter by filter..."
+          placeholder={m.projects_wizard_filter_filter_placeholder()}
           value={filterFilter}
           onChange={(e) => setFilterFilter(e.target.value)}
-          style={{
-            padding: 'var(--alm-space-1) var(--alm-space-2)',
-            border: '1px solid var(--alm-border)',
-            borderRadius: 4,
-            fontSize: 'var(--alm-text-xs)',
-            background: 'var(--alm-surface)',
-            color: 'var(--alm-text)',
-          }}
+          className="alm-wizard-sources__filter-input"
         />
       </div>
 
       {/* Summary */}
-      <div style={{ fontSize: 'var(--alm-text-xs)', color: 'var(--alm-text-muted)', display: 'flex', gap: 'var(--alm-space-4)' }}>
-        <span><strong>{data.selectedSessionIds.length}</strong> sessions selected</span>
-        <span>Total integration: <strong>{formatIntegration(totalIntegration)}</strong></span>
+      <div className="alm-wizard-sources__summary">
+        <span><strong>{data.selectedSessionIds.length}</strong> {m.projects_wizard_sessions_selected()}</span>
+        <span>{m.projects_wizard_total_integration()} <strong>{formatIntegration(totalIntegration)}</strong></span>
       </div>
 
       {/* Session list */}
-      <div style={{ display: 'flex', flexDirection: 'column', gap: 0, border: '1px solid var(--alm-border)', borderRadius: 6, overflow: 'hidden' }}>
+      <div className="alm-wizard-sources__list">
         {/* Header */}
-        <div
-          style={{
-            display: 'grid',
-            gridTemplateColumns: '32px 1fr 80px 80px 100px',
-            padding: 'var(--alm-space-2) var(--alm-space-3)',
-            background: 'var(--alm-surface)',
-            borderBottom: '1px solid var(--alm-border)',
-            fontSize: 'var(--alm-text-xs)',
-            fontWeight: 600,
-            color: 'var(--alm-text-muted)',
-          }}
-        >
+        <div className="alm-wizard-sources__list-header">
           <Checkbox.Root
             className="alm-checkbox"
             checked={filtered.length > 0 && data.selectedSessionIds.length === filtered.length}
             onCheckedChange={toggleAll}
-            aria-label="Select all sessions"
+            aria-label={m.projects_wizard_select_all_aria()}
           >
             <Checkbox.Indicator className="alm-checkbox__indicator">
               &#x2713;
             </Checkbox.Indicator>
           </Checkbox.Root>
-          <span>Target / Filter / Night</span>
-          <span>Frames</span>
-          <span>Integration</span>
-          <span>Train</span>
+          <span>{m.projects_wizard_col_target_filter_night()}</span>
+          <span>{m.projects_wizard_col_frames()}</span>
+          <span>{m.projects_wizard_col_integration()}</span>
+          <span>{m.projects_wizard_col_train()}</span>
         </div>
 
         {/* Rows */}
         {filtered.map((session) => (
           <label
             key={session.id}
+            className="alm-wizard-sources__row"
+            // eslint-disable-next-line no-restricted-syntax -- dynamic: conditional token background for selected session row
             style={{
-              display: 'grid',
-              gridTemplateColumns: '32px 1fr 80px 80px 100px',
-              padding: 'var(--alm-space-2) var(--alm-space-3)',
-              borderBottom: '1px solid var(--alm-border)',
-              fontSize: 'var(--alm-text-xs)',
-              cursor: 'pointer',
               background: data.selectedSessionIds.includes(session.id) ? 'var(--alm-surface)' : 'transparent',
             }}
           >
@@ -151,7 +123,7 @@ export function StepSources({ data, onChange }: StepSourcesProps) {
               className="alm-checkbox"
               checked={data.selectedSessionIds.includes(session.id)}
               onCheckedChange={() => toggleSession(session.id)}
-              aria-label={`Select ${session.sessionKey.target} session`}
+              aria-label={m.projects_wizard_select_session_aria({ target: session.sessionKey.target })}
             >
               <Checkbox.Indicator className="alm-checkbox__indicator">
                 &#x2713;
@@ -162,15 +134,15 @@ export function StepSources({ data, onChange }: StepSourcesProps) {
             </span>
             <span>{session.frameCount}</span>
             <span>{formatIntegration(session.totalIntegrationSeconds ?? 0)}</span>
-            <span style={{ fontFamily: 'var(--alm-font-mono)', overflow: 'hidden', textOverflow: 'ellipsis' }}>
+            <span className="alm-wizard-sources__train-id">
               {session.opticalTrainId.slice(0, 8)}
             </span>
           </label>
         ))}
 
         {filtered.length === 0 && (
-          <div style={{ padding: 'var(--alm-space-4)', textAlign: 'center', color: 'var(--alm-text-muted)', fontSize: 'var(--alm-text-xs)' }}>
-            No confirmed sessions match filters
+          <div className="alm-wizard-sources__empty">
+            {m.projects_wizard_sessions_empty()}
           </div>
         )}
       </div>

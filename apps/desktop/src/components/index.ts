@@ -2,6 +2,23 @@ export { ListDetailLayout } from './ListDetailLayout';
 export type { ListDetailLayoutProps } from './ListDetailLayout';
 export { PageShell } from './PageShell';
 export type { PageShellProps } from './PageShell';
+
+// spec 043 shared layout system (tasks #62/#63/#73): the Sessions page pattern
+// generalized — pinned top bar + prop-driven filter row + list/detail scaffold.
+export { PageTopBar } from './PageTopBar';
+export type { PageTopBarProps } from './PageTopBar';
+export { FilterToolbar } from './FilterToolbar';
+export type {
+  FilterToolbarProps,
+  FilterField,
+  MultiFilterField,
+  FilterOption,
+  GroupByControl,
+  SortControl,
+  SearchControl,
+} from './FilterToolbar';
+export { ListPageLayout } from './ListPageLayout';
+export type { ListPageLayoutProps } from './ListPageLayout';
 export { ListSidebar } from './ListSidebar';
 export type { ListSidebarProps } from './ListSidebar';
 export { ListItem } from './ListItem';
@@ -12,6 +29,9 @@ export { DetailHeader } from './DetailHeader';
 export type { DetailHeaderProps } from './DetailHeader';
 export { DetailPane } from './DetailPane';
 export type { DetailPaneProps } from './DetailPane';
+// spec 043 §4 — tasks #100/#99/#101: shared detail panel + FactsKV helper.
+export { DetailPanel, FactsKV } from './DetailPanel';
+export type { DetailPanelProps, DetailPanelVariant, FactsKVProps } from './DetailPanel';
 
 // Design v4 detail standard: identity header → metric line → dashboard grid
 // (primary column + unified rail panel), plus the centralized lifecycle.

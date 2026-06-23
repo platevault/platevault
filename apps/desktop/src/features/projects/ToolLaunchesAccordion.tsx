@@ -12,6 +12,7 @@
 
 import { useCallback } from 'react';
 import { basename } from 'pathe';
+import { m } from '@/lib/i18n';
 import type { ArtifactSummary } from '@/api/commands';
 import {
   groupArtifactsByLaunch,
@@ -53,28 +54,27 @@ function ArtifactRow({ artifact, projectId, onResolved }: ArtifactRowProps) {
 
   return (
     <div
-      className="artifact-row"
+      className="artifact-row alm-tool-launches__artifact-row"
       data-state={artifact.state}
       data-kind={artifact.kind}
-      style={{ display: 'flex', alignItems: 'center', gap: 8, padding: '4px 0' }}
     >
       {/* Kind badge */}
       <span
-        className={`artifact-kind-badge artifact-kind-${artifact.kind}`}
+        className={`artifact-kind-badge artifact-kind-${artifact.kind} alm-tool-launches__kind-badge`}
         title={`${artifact.kind}${isFallback ? ' (low confidence)' : ''}`}
-        style={{ fontSize: 11, opacity: isFallback ? 0.6 : 1 }}
+        // eslint-disable-next-line no-restricted-syntax -- dynamic: conditional opacity for low-confidence fallback badge
+        style={{ opacity: isFallback ? 0.6 : 1 }}
       >
         {artifact.kind}
       </span>
 
       {/* File name — strikethrough when missing */}
       <span
-        className="artifact-file-name"
+        className="artifact-file-name alm-tool-launches__file-name"
+        // eslint-disable-next-line no-restricted-syntax -- dynamic: conditional strikethrough + opacity for missing artifact
         style={{
           textDecoration: isMissing ? 'line-through' : 'none',
           opacity: isMissing ? 0.5 : 1,
-          fontFamily: 'monospace',
-          fontSize: 12,
         }}
         title={artifact.path}
       >
@@ -83,21 +83,17 @@ function ArtifactRow({ artifact, projectId, onResolved }: ArtifactRowProps) {
 
       {/* Status badges */}
       {isMissing && (
-        <span
-          className="artifact-badge artifact-badge-missing"
-          style={{ fontSize: 10, color: 'var(--alm-danger)' }}
-        >
-          Missing
+        <span className="artifact-badge artifact-badge-missing alm-tool-launches__badge-missing">
+          {m.settings_tools_missing()}
         </span>
       )}
 
       {isManualOverride && (
         <span
-          className="artifact-badge artifact-badge-manual"
-          style={{ fontSize: 10, color: 'var(--alm-info)' }}
-          title="Classification manually overridden"
+          className="artifact-badge artifact-badge-manual alm-tool-launches__badge-manual"
+          title={m.projects_artifacts_manual_override_title()}
         >
-          (manual)
+          {m.projects_artifacts_manual_badge()}
         </span>
       )}
 
@@ -105,13 +101,12 @@ function ArtifactRow({ artifact, projectId, onResolved }: ArtifactRowProps) {
       {isMissing && (
         <button
           type="button"
-          className="artifact-mark-resolved-btn"
+          className="artifact-mark-resolved-btn alm-tool-launches__resolve-btn"
           onClick={handleMarkResolved}
           disabled={working}
-          style={{ fontSize: 11, marginLeft: 'auto', cursor: 'pointer' }}
-          aria-label={`Mark ${fileName} as resolved`}
+          aria-label={m.projects_mark_resolved_aria({ file: fileName })}
         >
-          {working ? 'Resolving…' : 'Mark resolved'}
+          {working ? m.common_resolving() : m.projects_mark_resolved()}
         </button>
       )}
     </div>
@@ -141,20 +136,11 @@ function ArtifactGroupSection({ group, projectId, onAction }: GroupSectionProps)
     .join(', ');
 
   return (
-    <div className="artifact-group" style={{ marginBottom: 12 }}>
-      <div
-        className="artifact-group-header"
-        style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 4 }}
-      >
-        <span style={{ fontWeight: 600, fontSize: 12 }}>{label}</span>
+    <div className="artifact-group alm-tool-launches__group">
+      <div className="artifact-group-header alm-tool-launches__group-header">
+        <span className="alm-tool-launches__group-label">{label}</span>
         <span
-          className="artifact-count-badge"
-          style={{
-            fontSize: 10,
-            background: 'var(--alm-bg3)',
-            borderRadius: 4,
-            padding: '1px 5px',
-          }}
+          className="artifact-count-badge alm-tool-launches__count-badge"
           title={countBadge}
         >
           {group.artifacts.length}
@@ -181,21 +167,21 @@ export function ToolLaunchesAccordion({ projectId, launchOrder = [] }: Props) {
   const groups = groupArtifactsByLaunch(artifacts, launchOrder);
 
   if (loading) {
-    return <div className="tool-launches-loading" style={{ fontSize: 12 }}>Loading artifacts…</div>;
+    return <div className="tool-launches-loading alm-tool-launches__loading">{m.projects_artifacts_loading()}</div>;
   }
 
   if (error) {
     return (
-      <div className="tool-launches-error" style={{ fontSize: 12, color: 'var(--alm-danger)' }}>
-        Failed to load artifacts: {error}
+      <div className="tool-launches-error alm-tool-launches__error">
+        {m.projects_artifacts_load_error({ error })}
       </div>
     );
   }
 
   if (groups.length === 0) {
     return (
-      <div className="tool-launches-empty" style={{ fontSize: 12, opacity: 0.6 }}>
-        No processing artifacts observed yet.
+      <div className="tool-launches-empty alm-tool-launches__empty">
+        {m.projects_artifacts_empty()}
       </div>
     );
   }

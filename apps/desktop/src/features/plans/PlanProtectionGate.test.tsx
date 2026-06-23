@@ -138,7 +138,7 @@ describe('PlanProtectionGate', () => {
     render(<PlanProtectionGate planId="plan-1" />);
 
     await waitFor(() => {
-      expect(screen.getByText(/Could not load protection check/i)).toBeTruthy();
+      expect(screen.getByText(/Protection check failed to load/i)).toBeTruthy();
     });
   });
 

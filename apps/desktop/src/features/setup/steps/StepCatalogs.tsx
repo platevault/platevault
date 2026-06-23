@@ -10,6 +10,7 @@
 import { useEffect, useState, type ReactNode } from 'react';
 import { ResolverSettingsControl } from '@/features/settings/ResolverSettingsControl';
 import { usePreference } from '@/data/preferences';
+import { m } from '@/lib/i18n';
 import type { Density } from '@/bindings/types';
 import { getSettings, updateSettings } from '@/api/commands';
 
@@ -64,13 +65,12 @@ function DefaultProtectionControl() {
     <select
       className="alm-select"
       value={value}
-      aria-label="Default source protection"
+      aria-label={m.setup_config_default_protection_title()}
       onChange={(e) => onChange(e.target.value as DefaultProtection)}
-      style={{ height: 28 }}
     >
-      <option value="protected">Protected</option>
-      <option value="normal">Normal</option>
-      <option value="unprotected">Unprotected</option>
+      <option value="protected">{m.settings_cleanup_protection_protected()}</option>
+      <option value="normal">{m.settings_cleanup_protection_normal()}</option>
+      <option value="unprotected">{m.settings_cleanup_protection_unprotected()}</option>
     </select>
   );
 }
@@ -83,13 +83,12 @@ function DensityControl() {
     <select
       className="alm-select"
       value={density}
-      aria-label="Display density"
+      aria-label={m.settings_density_legend()}
       onChange={(e) => setDensity(e.target.value as Density)}
-      style={{ height: 28 }}
     >
-      <option value="compact">Compact</option>
-      <option value="comfortable">Comfortable</option>
-      <option value="spacious">Spacious</option>
+      <option value="compact">{m.setup_config_density_compact()}</option>
+      <option value="comfortable">{m.setup_config_density_comfortable()}</option>
+      <option value="spacious">{m.setup_config_density_spacious()}</option>
     </select>
   );
 }
@@ -106,16 +105,9 @@ function ConfigOption({
   control: ReactNode;
 }) {
   return (
-    <div style={{ display: 'flex', flexDirection: 'column', gap: 'var(--alm-sp-2)' }}>
-      <div
-        style={{
-          display: 'flex',
-          alignItems: 'center',
-          justifyContent: 'space-between',
-          gap: 'var(--alm-sp-3)',
-        }}
-      >
-        <span style={{ fontWeight: 'var(--alm-weight-semibold)', whiteSpace: 'nowrap' }}>
+    <div className="alm-setup-catalogs__option">
+      <div className="alm-setup-catalogs__option-header">
+        <span className="alm-setup-catalogs__option-title">
           {title}
         </span>
         {control}
@@ -138,34 +130,32 @@ export function StepCatalogs(_props: StepCatalogsProps) {
   return (
     <div
       className="alm-step-catalogs"
-      style={{ display: 'flex', flexDirection: 'column', gap: 'var(--alm-sp-5)' }}
     >
       {/* Online SIMBAD resolution (label + toggle on one line, desc below). */}
       <ResolverSettingsControl compact />
 
       <ConfigOption
-        title="Display density"
-        description="How compact the interface is — affects row heights and spacing across the app."
+        title={m.settings_density_legend()}
+        description={m.setup_config_display_density_desc()}
         control={<DensityControl />}
       />
 
       <ConfigOption
-        title="Default source protection"
-        description="Protection level applied to newly added source folders. Protected sources are skipped by cleanup plans unless explicitly approved."
+        title={m.setup_config_default_protection_title()}
+        description={m.setup_config_default_protection_desc()}
         control={<DefaultProtectionControl />}
       />
 
       <ConfigOption
-        title="Appearance / theme"
-        description="Light / dark theme is coming soon — the app currently uses a single light theme."
+        title={m.setup_config_appearance_title()}
+        description={m.setup_config_appearance_desc()}
         control={
           <select
             className="alm-select"
             disabled
-            aria-label="Theme (coming soon)"
-            style={{ height: 28 }}
+            aria-label={m.settings_general_theme()}
           >
-            <option>Light (coming soon)</option>
+            <option>{m.setup_config_theme_light()}</option>
           </select>
         }
       />

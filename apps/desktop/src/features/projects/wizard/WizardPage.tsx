@@ -1,4 +1,5 @@
 import { useState, useEffect } from 'react';
+import { m } from '@/lib/i18n';
 import { useNavigate } from '@tanstack/react-router';
 import { WizardShell, Btn } from '@/ui';
 import type { WizardStep } from '@/ui';
@@ -155,22 +156,22 @@ export function WizardPage() {
 
       if (result.planId) {
         addToast({
-          message: `Project "${wizardData.name.name}" created. Review the folder plan before applying.`,
+          message: m.projects_wizard_toast_created_plan({ name: wizardData.name.name }),
           variant: 'info',
           action: {
-            label: 'View plan',
+            label: m.projects_wizard_view_plan_btn(),
             onClick: () => void navigate({ to: '/archive', search: { selected: undefined } as never }),
           },
         });
       } else {
-        addToast({ message: `Project "${wizardData.name.name}" created.`, variant: 'success' });
+        addToast({ message: m.projects_wizard_toast_created({ name: wizardData.name.name }), variant: 'success' });
       }
 
       // Navigate back to projects list; the list re-fetches automatically.
       void navigate({ to: '/projects' });
     } catch (err: unknown) {
       const msg = errMessage(err);
-      addToast({ message: `Could not create project: ${msg}`, variant: 'error' });
+      addToast({ message: m.projects_wizard_toast_failed({ msg }), variant: 'error' });
     } finally {
       setCreating(false);
     }
@@ -205,35 +206,40 @@ export function WizardPage() {
 
   // Summary panel (right rail)
   const summary = (
-    <div style={{ display: 'flex', flexDirection: 'column', gap: 'var(--alm-space-5)', fontSize: 'var(--alm-text-xs)' }}>
-      <div style={{ color: 'var(--alm-text-muted)', textTransform: 'uppercase', letterSpacing: '.04em', fontWeight: 600 }}>
-        Project summary
+    <div className="alm-wizard-page__summary">
+      <div className="alm-wizard-page__summary-heading">
+        {m.projects_wizard_summary_title()}
       </div>
       <div>
-        <div style={{ fontSize: 'var(--alm-text-sm)', fontWeight: 600 }}>{projectLabel}</div>
-        <div style={{ color: 'var(--alm-text-muted)' }}>{profileLabel}</div>
+        <div className="alm-wizard-page__summary-project-name">{projectLabel}</div>
+        <div className="alm-wizard-page__summary-profile">{profileLabel}</div>
       </div>
 
       <div>
-        <div style={{ color: 'var(--alm-text-muted)', textTransform: 'uppercase', fontWeight: 600 }}>
-          What&rsquo;s selected so far
+        <div className="alm-wizard-page__summary-section-heading">
+          {m.projects_wizard_summary_selected()}
         </div>
-        <div style={{ marginTop: 'var(--alm-space-2)' }}>
-          <SummaryRow label="Lights" value={`${wizardData.sources.selectedSessionIds.length} sess`} />
-          <SummaryRow label="Darks" value={`${darkSelected} master`} />
-          <SummaryRow label="Flats" value={`${flatsMapped} masters`} />
-          <SummaryRow label="Bias" value={`${biasSelected} master`} />
+        <div className="alm-wizard-page__summary-list">
+          <SummaryRow label={m.projects_wizard_summary_lights_label()} value={`${wizardData.sources.selectedSessionIds.length} sess`} />
+          <SummaryRow label={m.projects_wizard_summary_darks_label()} value={`${darkSelected} master`} />
+          <SummaryRow label={m.projects_wizard_flats_label()} value={`${flatsMapped} masters`} />
+          <SummaryRow label={m.projects_wizard_bias_label()} value={`${biasSelected} master`} />
         </div>
       </div>
 
       {currentStep < 5 && (
         <div>
-          <div style={{ color: 'var(--alm-text-muted)', textTransform: 'uppercase', fontWeight: 600 }}>
-            Coming up
+          <div className="alm-wizard-page__summary-section-heading">
+            {m.projects_wizard_summary_coming_up()}
           </div>
-          <div style={{ marginTop: 'var(--alm-space-2)' }}>
+          <div className="alm-wizard-page__summary-list">
             {STEP_LABELS.slice(currentStep + 1).map((label, i) => (
-              <div key={label} style={{ padding: '3px 0', borderBottom: i < STEP_LABELS.length - currentStep - 2 ? '1px dotted var(--alm-border)' : 'none' }}>
+              <div
+                key={label}
+                className="alm-wizard-page__coming-up-item"
+                // eslint-disable-next-line no-restricted-syntax -- dynamic: conditional border for last upcoming-step item
+                style={{ borderBottom: i < STEP_LABELS.length - currentStep - 2 ? '1px dotted var(--alm-border)' : 'none' }}
+              >
                 {currentStep + i + 2}. {label}
               </div>
             ))}
@@ -241,24 +247,25 @@ export function WizardPage() {
         </div>
       )}
 
-      <div style={{ padding: 'var(--alm-space-3)', background: 'var(--alm-bg)', border: '1px solid var(--alm-border)' }}>
-        <div style={{ color: 'var(--alm-text-muted)' }}>Estimated on-disk footprint</div>
-        <div className="alm-mono" style={{ fontSize: '16px', fontWeight: 600, marginTop: 2 }}>
-          ~12 KB
+      <div className="alm-wizard-page__footprint">
+        <div className="alm-wizard-page__footprint-label">{m.projects_wizard_footprint_label()}</div>
+        <div className="alm-mono alm-wizard-page__footprint-value">
+          {m.projects_wizard_footprint_value()}
         </div>
-        <div style={{ fontSize: '10.5px', color: 'var(--alm-text-muted)' }}>
-          plan will create directories + manifest only &middot; no light frames are copied
+        <div className="alm-wizard-page__footprint-note">
+          {m.projects_wizard_footprint_note()}
         </div>
       </div>
 
       {/* Navigation buttons in the summary rail */}
-      <div style={{ display: 'flex', gap: 'var(--alm-space-2)', marginTop: 'var(--alm-space-3)' }}>
+      <div className="alm-wizard-page__summary-nav">
         {currentStep > 0 && (
           <Btn size="sm" onClick={handleBack}>
             {backLabels[currentStep]}
           </Btn>
         )}
         {currentStep < 5 && (
+          // eslint-disable-next-line no-restricted-syntax -- dynamic: flex:1 layout applied to Next button passthrough
           <Btn variant="primary" size="sm" onClick={handleNext} disabled={!canAdvance()} style={{ flex: 1 }}>
             {nextLabels[currentStep]}
           </Btn>
@@ -269,10 +276,11 @@ export function WizardPage() {
             size="sm"
             onClick={() => void handleCreate()}
             disabled={creating || !wizardData.name.name.trim()}
+            // eslint-disable-next-line no-restricted-syntax -- dynamic: flex:1 layout applied to Create button passthrough
             style={{ flex: 1 }}
             data-testid="wizard-create-btn"
           >
-            {creating ? 'Creating…' : 'Create project'}
+            {creating ? m.projects_create_creating() : m.projects_create_btn()}
           </Btn>
         )}
       </div>
@@ -282,62 +290,42 @@ export function WizardPage() {
   // T078c layout fix: min-height: 0 prevents flex overflow that caused the
   // wizard to render at the bottom of the window instead of filling the main area.
   return (
-    <div className="alm-page" style={{ display: 'flex', flexDirection: 'column', flex: 1, minHeight: 0 }}>
+    <div className="alm-page alm-wizard-page">
       {/* Wizard toolbar — styled consistently with other page toolbars */}
-      <div
-        className="alm-page__bar"
-        style={{
-          display: 'flex',
-          alignItems: 'center',
-          gap: 'var(--alm-space-3)',
-          padding: '0 var(--alm-space-4)',
-          height: 'var(--alm-toolbar-height, 44px)',
-          borderBottom: '1px solid var(--alm-border)',
-        }}
-      >
-        <span style={{ fontSize: 'var(--alm-text-sm)', fontWeight: 600 }}>
-          New project &mdash; {projectLabel}
+      <div className="alm-page__bar alm-wizard-page__toolbar">
+        <span className="alm-wizard-page__toolbar-title">
+          {m.projects_wizard_toolbar_title()} {projectLabel}
         </span>
-        <span style={{ flex: 1 }} />
-        <Btn size="sm" onClick={() => saveDraft(wizardData)}>Save draft</Btn>
+        <span className="alm-wizard-page__spacer" />
+        <Btn size="sm" onClick={() => saveDraft(wizardData)}>{m.projects_wizard_save_draft_btn()}</Btn>
         {devSkip && (
           <Btn size="sm" onClick={() => { clearDraft(); setWizardData(INITIAL_DATA); setCurrentStep(0); }}>
-            Reset wizard
+            {m.projects_wizard_reset_btn()}
           </Btn>
         )}
-        <Btn size="sm" onClick={handleCancel}>Cancel</Btn>
+        <Btn size="sm" onClick={handleCancel}>{m.common_cancel()}</Btn>
       </div>
 
       {/* Sub-toolbar: workflow profile breadcrumb */}
-      <div
-        className="alm-page__bar"
-        style={{
-          display: 'flex',
-          alignItems: 'center',
-          gap: 'var(--alm-space-2)',
-          padding: '4px var(--alm-space-4)',
-          fontSize: 'var(--alm-text-xs)',
-          color: 'var(--alm-text-muted)',
-          borderBottom: '1px solid var(--alm-border)',
-        }}
-      >
-        <span>Workflow profile: {profileLabel}</span>
+      <div className="alm-page__bar alm-wizard-page__subbbar">
+        <span>{m.projects_wizard_workflow_profile_label()} {profileLabel}</span>
         <span>&middot;</span>
         {wizardData.name.name && (
-          <span>From target context: {wizardData.name.name.split(/[\s·—]/)[0]}</span>
+          <span>{m.projects_wizard_from_target_label()} {wizardData.name.name.split(/[\s·—]/)[0]}</span>
         )}
-        <span style={{ marginLeft: 'auto', color: 'var(--alm-text-faint)' }}>
-          Sources are selected here; the filesystem plan is shown at step 6 before anything is created.
+        <span className="alm-wizard-page__subbar-note">
+          {m.projects_wizard_subbar_note()}
         </span>
       </div>
 
       {/* WizardShell fills the remaining space */}
+      {/* eslint-disable-next-line no-restricted-syntax -- dynamic: flex:1 minHeight:0 layout passthrough to WizardShell */}
       <WizardShell steps={steps} currentStep={currentStep} summary={summary} style={{ flex: 1, minHeight: 0 }}>
         {/* Step title + description */}
         {currentStep < 5 && (
-          <div style={{ marginBottom: 'var(--alm-space-5)' }}>
-            <h2 style={{ fontSize: '18px', fontWeight: 600, margin: 0 }}>
-              Step {currentStep + 1} &middot; {STEP_LABELS[currentStep]}
+          <div className="alm-wizard-page__step-header">
+            <h2 className="alm-wizard-page__step-title">
+              {m.projects_wizard_step_label()} {currentStep + 1} &middot; {STEP_LABELS[currentStep]}
             </h2>
           </div>
         )}
@@ -384,8 +372,8 @@ export function WizardPage() {
 
 function SummaryRow({ label, value }: { label: string; value: string }) {
   return (
-    <div style={{ padding: '3px 0', borderBottom: '1px dotted var(--alm-border)', display: 'flex' }}>
-      <span style={{ flex: 1 }}>{label}</span>
+    <div className="alm-wizard-page__summary-row">
+      <span className="alm-wizard-page__summary-row-label">{label}</span>
       <span className="alm-mono">{value}</span>
     </div>
   );

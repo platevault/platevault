@@ -21,6 +21,8 @@ import {
   toolDiscover,
   type ToolProfileSummary,
 } from '@/api/commands';
+import { m } from '@/lib/i18n';
+import { SettingsSection, SettingsRow } from './SettingsKit';
 
 export function ProcessingTools() {
   const [tools, setTools] = useState<ToolProfileSummary[]>([]);
@@ -119,95 +121,95 @@ export function ProcessingTools() {
 
   if (loadError) {
     return (
-      <div className="alm-settings__group">
-        <div className="alm-settings__group-title">Tool Workflows</div>
-        <p style={{ color: 'var(--alm-text-danger)' }}>Failed to load tools: {loadError}</p>
-      </div>
+      <SettingsSection title={m.settings_tools_title()}>
+        <p className="alm-proc-tools__error">{m.settings_tools_load_error({ error: loadError })}</p>
+      </SettingsSection>
     );
   }
 
-  return (
-    <div className="alm-settings__group">
-      <div className="alm-settings__group-title">
-        Tool Workflows
-        <button
-          type="button"
-          className="alm-btn alm-btn--ghost"
-          style={{ marginLeft: '1rem', fontSize: 'var(--alm-text-xs)' }}
-          onClick={handleAutoDetect}
-          disabled={detecting}
-          aria-label="Re-run auto-detect for all tools"
-        >
-          {detecting ? 'Detecting…' : 'Auto-detect'}
-        </button>
-      </div>
+  const reDetectBtn = (
+    <button
+      type="button"
+      className="alm-btn alm-btn--ghost alm-proc-tools__auto-detect-btn"
+      onClick={handleAutoDetect}
+      disabled={detecting}
+      aria-label={m.settings_tools_redetect_aria()}
+    >
+      {detecting ? m.common_detecting() : m.settings_tools_redetect()}
+    </button>
+  );
 
+  return (
+    <SettingsSection title={m.settings_tools_title()} action={reDetectBtn}>
       {tools.length === 0 && !loadError && (
-        <p style={{ color: 'var(--alm-text-muted)', fontSize: 'var(--alm-text-sm)' }}>
-          Loading…
+        <p className="alm-proc-tools__loading">
+          {m.common_loading()}
         </p>
       )}
 
-      {tools.map((tool) => (
-        <div key={tool.id} className="alm-settings__row" style={{ marginBottom: '1rem' }}>
-          <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', marginBottom: '0.25rem' }}>
+      {tools.map((tool) => {
+        const label = (
+          <span className="alm-proc-tools__tool-header">
             <strong>{tool.name}</strong>
             {tool.autoDetected && (
-              <Pill variant="neutral" style={{ fontSize: 'var(--alm-text-2xs)' }}>
-                Auto-detected
+              <Pill variant="neutral" className="alm-proc-tools__pill">
+                {m.settings_tools_auto_detected()}
               </Pill>
             )}
             {tool.available && (
-              <Pill variant="ok" style={{ fontSize: 'var(--alm-text-2xs)' }}>
-                Available
+              <Pill variant="ok" className="alm-proc-tools__pill">
+                {m.settings_tools_available()}
               </Pill>
             )}
             {tool.configured && !tool.available && (
-              <Pill variant="warn" style={{ fontSize: 'var(--alm-text-2xs)' }}>
-                Missing
+              <Pill variant="warn" className="alm-proc-tools__pill">
+                {m.settings_tools_missing()}
               </Pill>
             )}
-          </div>
+          </span>
+        );
 
-          <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
-            <input
-              type="text"
-              className="alm-input"
-              style={{ flex: 1, fontSize: 'var(--alm-text-xs)', fontFamily: 'monospace' }}
-              value={pathDraft[tool.id] ?? ''}
-              placeholder="Executable path…"
-              aria-label={`Executable path for ${tool.name}`}
-              onChange={(e) =>
-                setPathDraft((prev) => ({ ...prev, [tool.id]: e.target.value }))
-              }
-              onBlur={(e) => {
-                const val = e.target.value.trim();
-                if (val !== (tool.executablePath ?? '')) {
-                  void saveToolPath(tool.id, val);
+        return (
+          <SettingsRow key={tool.id} label={label}>
+            <div className="alm-proc-tools__tool-controls">
+              <input
+                type="text"
+                className="alm-input alm-proc-tools__path-input"
+                value={pathDraft[tool.id] ?? ''}
+                placeholder={m.settings_tools_path_placeholder()}
+                aria-label={m.settings_tools_path_aria({ name: tool.name })}
+                onChange={(e) =>
+                  setPathDraft((prev) => ({ ...prev, [tool.id]: e.target.value }))
                 }
-              }}
-              onKeyDown={(e) => {
-                if (e.key === 'Enter') {
-                  const val = (e.target as HTMLInputElement).value.trim();
-                  void saveToolPath(tool.id, val);
-                }
-              }}
-            />
-            {(saving[tool.id] || validating[tool.id]) && (
-              <span style={{ color: 'var(--alm-text-muted)', fontSize: 'var(--alm-text-xs)' }}>
-                {saving[tool.id] ? 'Saving…' : 'Checking…'}
-              </span>
-            )}
-            <Toggle
-              checked={tool.enabled}
-              onChange={(v) => {
-                void handleToggle(tool.id, v);
-              }}
-              aria-label={`Enable ${tool.name}`}
-            />
-          </div>
-        </div>
-      ))}
-    </div>
+                onBlur={(e) => {
+                  const val = e.target.value.trim();
+                  if (val !== (tool.executablePath ?? '')) {
+                    void saveToolPath(tool.id, val);
+                  }
+                }}
+                onKeyDown={(e) => {
+                  if (e.key === 'Enter') {
+                    const val = (e.target as HTMLInputElement).value.trim();
+                    void saveToolPath(tool.id, val);
+                  }
+                }}
+              />
+              {(saving[tool.id] || validating[tool.id]) && (
+                <span className="alm-proc-tools__status">
+                  {saving[tool.id] ? m.common_saving() : m.settings_tools_checking()}
+                </span>
+              )}
+              <Toggle
+                checked={tool.enabled}
+                onChange={(v) => {
+                  void handleToggle(tool.id, v);
+                }}
+                aria-label={m.settings_tools_enable_aria({ name: tool.name })}
+              />
+            </div>
+          </SettingsRow>
+        );
+      })}
+    </SettingsSection>
   );
 }

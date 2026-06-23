@@ -23,7 +23,33 @@
 import { render, screen, fireEvent, waitFor, cleanup } from '@testing-library/react';
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 import { InboxList } from '../InboxList';
+import { InboxControls, useInboxControls } from '../InboxControls';
 import type { InboxListItem } from '@/api/commands';
+
+// Harness mirroring InboxPage: grouping/sort controls (top bar) feed InboxList.
+function Harness({ items }: { items: InboxListItem[] }) {
+  const { dims, sortBy, setSortBy, setSlot } = useInboxControls();
+  return (
+    <>
+      <InboxControls
+        dims={dims}
+        setSlot={setSlot}
+        sortBy={sortBy}
+        onSortByChange={setSortBy}
+        filterType="all"
+        onFilterTypeChange={vi.fn()}
+      />
+      <InboxList
+        items={items}
+        selectedIdx={null}
+        onSelect={vi.fn()}
+        filterType="all"
+        dims={dims}
+        sortBy={sortBy}
+      />
+    </>
+  );
+}
 
 // ── Fixtures ────────────────────────────────────────────────────────────────────
 
@@ -116,9 +142,7 @@ describe('InboxList — virtualization', () => {
       ),
     ];
 
-    render(
-      <InboxList items={items} selectedIdx={null} onSelect={vi.fn()} filterType="all" onFilterTypeChange={vi.fn()} />,
-    );
+    render(<Harness items={items} />);
 
     fireEvent.change(screen.getByLabelText('Group by'), { target: { value: 'frameType' } });
 

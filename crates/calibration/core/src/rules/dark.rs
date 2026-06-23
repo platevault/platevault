@@ -42,17 +42,32 @@ pub fn evaluate(
         }
     }
 
-    // ── Hard rule: offset ─────────────────────────────────────────────────────
+    // ── Hard rule: offset (controlled by config.require_same_offset) ─────────
+    //
+    // When `require_same_offset` is true (default) the offset must match
+    // exactly, mirroring the unconditional gain hard-rule above. When false a
+    // missing or mismatched offset is reported as a metadata-missing soft entry
+    // and reduces confidence rather than excluding the candidate entirely.
     match (session.offset, master.offset) {
         (Some(so), Some(mo)) => {
             if (so - mo).abs() < 1e-9 {
                 matched.push(MatchedDim::exact(Dimension::Offset));
-            } else {
+            } else if config.require_same_offset {
                 return None;
+            } else {
+                // Offset differs but policy allows it — report as soft mismatch.
+                mismatched
+                    .push(MismatchedDim::out_of_tolerance(Dimension::Offset, (so - mo).abs()));
+                confidence -= 0.2; // fixed soft penalty when offset relaxed
             }
         }
         _ => {
-            return None;
+            if config.require_same_offset {
+                return None;
+            }
+            // Missing offset with relaxed policy — soft metadata-missing entry.
+            mismatched.push(MismatchedDim::metadata_missing(Dimension::Offset));
+            confidence -= 0.2;
         }
     }
 
@@ -284,6 +299,61 @@ mod tests {
             "wider tolerance should now accept; got mismatched={:?}",
             r.dimensions_mismatched
         );
+    }
+
+    // ── require_same_offset tests ─────────────────────────────────────────────
+
+    #[test]
+    fn offset_hard_rule_violation_excludes_when_policy_strict() {
+        // Default policy: require_same_offset = true → mismatch excludes.
+        let r = evaluate(
+            &session(100.0, 50.0, 300.0, -10.0),
+            &master(100.0, 75.0, 300.0, -10.0),
+            &MatchingRuleConfig::default(),
+        );
+        assert!(r.is_none(), "strict offset policy should exclude on mismatch");
+    }
+
+    #[test]
+    fn offset_mismatch_accepted_when_policy_relaxed() {
+        let config =
+            MatchingRuleConfig { require_same_offset: false, ..MatchingRuleConfig::default() };
+        let r = evaluate(
+            &session(100.0, 50.0, 300.0, -10.0),
+            &master(100.0, 75.0, 300.0, -10.0),
+            &config,
+        );
+        assert!(r.is_some(), "relaxed offset policy should not exclude on mismatch");
+        let r = r.unwrap();
+        assert!(r.confidence < 1.0, "offset mismatch with relaxed policy should reduce confidence");
+        assert!(
+            r.dimensions_mismatched.iter().any(|d| d.dimension == "offset"),
+            "offset should appear in mismatched with out_of_tolerance reason"
+        );
+    }
+
+    #[test]
+    fn missing_offset_accepted_when_policy_relaxed() {
+        let config =
+            MatchingRuleConfig { require_same_offset: false, ..MatchingRuleConfig::default() };
+        let mut m = master(100.0, 50.0, 300.0, -10.0);
+        m.offset = None;
+        let r = evaluate(&session(100.0, 50.0, 300.0, -10.0), &m, &config);
+        assert!(r.is_some(), "relaxed policy should not exclude on missing offset");
+        let r = r.unwrap();
+        assert!(
+            r.dimensions_mismatched.iter().any(|d| d.dimension == "offset"
+                && d.reason == crate::candidate::MismatchReason::MetadataMissing),
+            "missing offset should produce a metadata_missing entry"
+        );
+    }
+
+    #[test]
+    fn missing_offset_excluded_when_policy_strict() {
+        let mut m = master(100.0, 50.0, 300.0, -10.0);
+        m.offset = None;
+        let r = evaluate(&session(100.0, 50.0, 300.0, -10.0), &m, &MatchingRuleConfig::default());
+        assert!(r.is_none(), "strict policy should exclude on missing offset");
     }
 
     #[test]

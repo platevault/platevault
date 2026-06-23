@@ -1,4 +1,5 @@
 import { Link, useRouterState } from '@tanstack/react-router';
+import { m } from '@/lib/i18n';
 import {
   Inbox,
   Camera,
@@ -29,27 +30,27 @@ interface NavGroup {
 // Grouped by workflow stage: capture → organize → work on.
 const NAV_GROUPS: NavGroup[] = [
   {
-    label: 'Capture',
-    items: [{ id: 'inbox', icon: Inbox, label: 'Inbox', path: '/inbox' }],
+    label: m.nav_group_capture(),
+    items: [{ id: 'inbox', icon: Inbox, label: m.settings_datasources_category_inbox(), path: '/inbox' }],
   },
   {
-    label: 'Library',
+    label: m.nav_group_library(),
     items: [
-      { id: 'sessions', icon: Camera, label: 'Sessions', path: '/sessions' },
-      { id: 'calibration', icon: Crosshair, label: 'Calibration', path: '/calibration' },
-      { id: 'targets', icon: Target, label: 'Targets', path: '/targets' },
+      { id: 'sessions', icon: Camera, label: m.common_sessions(), path: '/sessions' },
+      { id: 'calibration', icon: Crosshair, label: m.settings_datasources_category_calibration(), path: '/calibration' },
+      { id: 'targets', icon: Target, label: m.nav_targets(), path: '/targets' },
     ],
   },
   {
-    label: 'Work',
+    label: m.nav_group_work(),
     items: [
-      { id: 'projects', icon: FolderOpen, label: 'Projects', path: '/projects' },
-      { id: 'archive', icon: Archive, label: 'Archive', path: '/archive' },
+      { id: 'projects', icon: FolderOpen, label: m.common_projects(), path: '/projects' },
+      { id: 'archive', icon: Archive, label: m.verb_archive(), path: '/archive' },
     ],
   },
 ];
 
-const SETTINGS_ITEM: NavItem = { id: 'settings', icon: Settings, label: 'Settings', path: '/settings' };
+const SETTINGS_ITEM: NavItem = { id: 'settings', icon: Settings, label: m.settings_page_title(), path: '/settings' };
 
 function badgeFor(id: string, status: StatusSummary): number {
   switch (id) {
@@ -110,18 +111,19 @@ export function Sidebar() {
   return (
     <nav
       className={clsx('alm-sidebar', collapsed && 'alm-sidebar--collapsed')}
-      aria-label="Main navigation"
+      aria-label={m.nav_aria_label()}
     >
       {/* Header: brand mark + collapse, single line */}
       <div className="alm-sidebar__header">
-        {!collapsed && <div className="alm-sidebar__mark">A</div>}
-        {!collapsed && <span className="alm-sidebar__brand-name">ALM</span>}
-        {!collapsed && <span className="alm-sidebar__version">v0.4</span>}
+        {/* eslint-disable-next-line alm/no-user-string -- decorative brand glyph, not translatable content */}
+        {!collapsed && <div className="alm-sidebar__mark">P</div>}
+        {!collapsed && <span className="alm-sidebar__brand-name">{m.shell_brand_name()}</span>}
+        {!collapsed && <span className="alm-sidebar__version">{m.shell_version()}</span>}
         <button
           type="button"
           className="alm-sidebar__collapse"
           onClick={() => setCollapsed(!collapsed)}
-          aria-label={collapsed ? 'Expand sidebar' : 'Collapse sidebar'}
+          aria-label={collapsed ? m.nav_expand_sidebar_aria() : m.nav_collapse_sidebar_aria()}
         >
           {collapsed ? <ChevronRight size={16} /> : <ChevronLeft size={16} />}
         </button>
@@ -156,11 +158,11 @@ export function Sidebar() {
                   : 'alm-sidebar__root-dot--ok',
               )}
             />
-            {status.roots.length} roots &middot; {onlineRoots.length} online
+            {m.nav_roots_summary({ total: status.roots.length, online: onlineRoots.length })}
           </Link>
           {offlineRoots.length > 0 && (
             <div className="alm-sidebar__offline-warn">
-              {offlineRoots.map((r) => r.path.split(/[\\/]/).pop()).join(', ')} offline
+              {offlineRoots.map((r) => r.path.split(/[\\/]/).pop()).join(', ')} {m.nav_roots_offline_suffix()}
             </div>
           )}
         </div>

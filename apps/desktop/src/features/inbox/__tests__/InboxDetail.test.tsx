@@ -13,7 +13,7 @@
  *   naxis1, naxis2, stackCount, isMaster, overrideStale
  */
 import React from 'react';
-import { render as rtlRender, screen } from '@testing-library/react';
+import { render as rtlRender, screen, fireEvent } from '@testing-library/react';
 import { describe, it, expect, vi } from 'vitest';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 
@@ -319,5 +319,148 @@ describe('InboxDetail — FR-032: missing-attribute annotations', () => {
       />
     );
     expect(screen.queryByTestId('inbox-missing-attr-banner')).not.toBeInTheDocument();
+  });
+});
+
+// ── task #34: warnings = alert with inline action ────────────────────────────
+
+describe('InboxDetail — task #34: mixed-folder alert with inline action', () => {
+  it('renders the mixed alert with an inline "Generate split plan" button that fires the callback', () => {
+    const onGenerateSplitPlan = vi.fn();
+    render(
+      <InboxDetail
+        item={sampleItem as unknown as Parameters<typeof InboxDetail>[0]['item']}
+        rootAbsolutePath="/astro/inbox"
+        classification={mixedClassification as unknown as Parameters<typeof InboxDetail>[0]['classification']}
+        onGenerateSplitPlan={onGenerateSplitPlan}
+      />
+    );
+    expect(screen.getByTestId('inbox-mixed-alert')).toBeInTheDocument();
+    const btn = screen.getByTestId('inbox-mixed-split-btn');
+    fireEvent.click(btn);
+    expect(onGenerateSplitPlan).toHaveBeenCalledTimes(1);
+  });
+
+  it('disables the inline split action while busy', () => {
+    render(
+      <InboxDetail
+        item={sampleItem as unknown as Parameters<typeof InboxDetail>[0]['item']}
+        rootAbsolutePath="/astro/inbox"
+        classification={mixedClassification as unknown as Parameters<typeof InboxDetail>[0]['classification']}
+        onGenerateSplitPlan={vi.fn()}
+        splitPlanBusy
+      />
+    );
+    expect(screen.getByTestId('inbox-mixed-split-btn')).toBeDisabled();
+  });
+
+  it('renders the mixed alert without an action button when no callback is supplied', () => {
+    render(
+      <InboxDetail
+        item={sampleItem as unknown as Parameters<typeof InboxDetail>[0]['item']}
+        rootAbsolutePath="/astro/inbox"
+        classification={mixedClassification as unknown as Parameters<typeof InboxDetail>[0]['classification']}
+      />
+    );
+    expect(screen.getByTestId('inbox-mixed-alert')).toBeInTheDocument();
+    expect(screen.queryByTestId('inbox-mixed-split-btn')).not.toBeInTheDocument();
+  });
+
+  it('does NOT render the mixed alert for single-type folders', () => {
+    render(
+      <InboxDetail
+        item={sampleItem as unknown as Parameters<typeof InboxDetail>[0]['item']}
+        rootAbsolutePath="/astro/inbox"
+        classification={singleTypeClassification as unknown as Parameters<typeof InboxDetail>[0]['classification']}
+        onGenerateSplitPlan={vi.fn()}
+      />
+    );
+    expect(screen.queryByTestId('inbox-mixed-alert')).not.toBeInTheDocument();
+  });
+});
+
+// ── detail rework: 3-zone layout (facts | content | aux) ─────────────────────
+//
+// Updated to the redesign-ui-platevault 3-zone skeleton:
+//   facts = breakdown column (.alm-inbox-detail__facts-col)
+//   content = file metadata table (.alm-inbox-detail__meta-col, aria-label="File metadata")
+//   aux = FileInspector in DetailPanel aux rail (.alm-detailpanel__aux)
+
+describe('InboxDetail — 3-zone: breakdown-facts / file-content / inspector-aux', () => {
+  it('uses the 3-zone cols wrapper and places breakdown in facts, metadata in content', () => {
+    const { container } = render(
+      <InboxDetail
+        item={sampleItem as unknown as Parameters<typeof InboxDetail>[0]['item']}
+        rootAbsolutePath="/astro/inbox"
+        classification={singleTypeClassification as unknown as Parameters<typeof InboxDetail>[0]['classification']}
+        fileMetadata={fileMetadataFixture}
+      />
+    );
+    // Cols wrapper rendered by DetailPanel (facts + aux both provided → 3-zone).
+    const cols = container.querySelector('.alm-detailpanel__cols');
+    expect(cols).not.toBeNull();
+
+    // Facts column (left): contains breakdown.
+    const factsAside = container.querySelector('.alm-detailpanel__facts');
+    expect(factsAside).not.toBeNull();
+    expect(factsAside?.textContent).toContain('Frame type breakdown');
+
+    // Content column (center): file metadata table.
+    const metaCol = container.querySelector('.alm-inbox-detail__meta-col');
+    expect(metaCol).not.toBeNull();
+    expect(metaCol).toHaveAttribute('aria-label', 'File metadata');
+    expect(metaCol?.textContent).toContain('File metadata (2)');
+    expect(metaCol?.textContent).toContain('File');
+  });
+
+  it('does not render the content or aux columns when fileMetadata is absent', () => {
+    const { container } = render(
+      <InboxDetail
+        item={sampleItem as unknown as Parameters<typeof InboxDetail>[0]['item']}
+        rootAbsolutePath="/astro/inbox"
+        classification={singleTypeClassification as unknown as Parameters<typeof InboxDetail>[0]['classification']}
+      />
+    );
+    // facts col present (breakdown always shown); content + aux absent when no metadata.
+    const cols = container.querySelector('.alm-detailpanel__cols');
+    expect(cols).not.toBeNull();
+    expect(container.querySelector('.alm-inbox-detail__meta-col')).toBeNull();
+    expect(container.querySelector('.alm-detailpanel__aux')).toBeNull();
+  });
+
+  it('renders the file inspector in the aux rail when metadata exists', () => {
+    const { container } = render(
+      <InboxDetail
+        item={sampleItem as unknown as Parameters<typeof InboxDetail>[0]['item']}
+        rootAbsolutePath="/astro/inbox"
+        classification={singleTypeClassification as unknown as Parameters<typeof InboxDetail>[0]['classification']}
+        fileMetadata={fileMetadataFixture}
+      />
+    );
+    // Inspector is in the aux aside (empty state: no row clicked yet).
+    const auxAside = container.querySelector('.alm-detailpanel__aux');
+    expect(auxAside).not.toBeNull();
+    expect(auxAside?.querySelector('[data-testid="file-inspector"]')).not.toBeNull();
+  });
+
+  it('file metadata table is inside the content column', () => {
+    const { container } = render(
+      <InboxDetail
+        item={sampleItem as unknown as Parameters<typeof InboxDetail>[0]['item']}
+        rootAbsolutePath="/astro/inbox"
+        classification={singleTypeClassification as unknown as Parameters<typeof InboxDetail>[0]['classification']}
+        fileMetadata={fileMetadataFixture}
+      />
+    );
+    // Table is inside the content column, NOT in the facts or aux aside.
+    const contentDiv = container.querySelector('.alm-detailpanel__content');
+    expect(contentDiv).not.toBeNull();
+    expect(contentDiv?.querySelector('table')).not.toBeNull();
+
+    const factsAside = container.querySelector('.alm-detailpanel__facts');
+    const auxAside = container.querySelector('.alm-detailpanel__aux');
+    expect(factsAside?.querySelector('table')).toBeDefined();
+    // aux should contain the inspector, NOT a metadata table
+    expect(auxAside?.querySelector('.alm-inbox-detail__meta-col')).toBeNull();
   });
 });

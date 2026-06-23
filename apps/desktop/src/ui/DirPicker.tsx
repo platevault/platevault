@@ -3,6 +3,7 @@ import type { HTMLAttributes } from 'react';
 import { Folder } from 'lucide-react';
 import { Btn } from './Btn';
 import { useDirectoryPicker, type LastPathKind } from '@/shared/native/picker';
+import { m } from '@/lib/i18n';
 
 export interface DirPickerProps extends Omit<HTMLAttributes<HTMLDivElement>, 'onChange'> {
   value?: string;
@@ -30,23 +31,16 @@ export const DirPicker = forwardRef<HTMLDivElement, DirPickerProps>(
         {label && <span className="alm-kv-row__label">{label}</span>}
         <span className="alm-kv-row__value">
           <Folder size={14} />
-          <span style={{ fontFamily: 'var(--alm-font-mono)', fontSize: 'var(--alm-text-xs)', flex: 1, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
-            {value || 'No folder selected'}
+          <span className="alm-dir-picker__path">
+            {value || m.ui_dir_picker_no_folder()}
           </span>
           <Btn size="sm" onClick={handleChoose} disabled={loading}>
-            {loading ? 'Choosing...' : 'Choose folder…'}
+            {loading ? m.setup_choosing() : m.ui_dir_picker_choose()}
           </Btn>
         </span>
         {error && (
-          <div
-            style={{
-              marginTop: 'var(--alm-space-1)',
-              fontSize: 'var(--alm-text-xs)',
-              color: 'var(--alm-danger, #dc2626)',
-              lineHeight: 1.4,
-            }}
-          >
-            {error.message}
+          <div className="alm-dir-picker__error" title={error.message}>
+            {m.ui_dir_picker_error()}
           </div>
         )}
       </div>

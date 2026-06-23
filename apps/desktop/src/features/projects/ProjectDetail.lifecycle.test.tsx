@@ -80,10 +80,11 @@ describe('ProjectDetail lifecycle transitions (spec 009 US3-3)', () => {
     vi.clearAllMocks();
   });
 
-  it('renders lifecycle footer actions for ready state', () => {
+  it('renders lifecycle actions for ready state', () => {
     setupStore({ lifecycle: 'ready' });
     render(<ProjectDetailContent projectId="proj-001" />);
-    expect(screen.getByTestId('lifecycle-footer-actions')).toBeInTheDocument();
+    // Per-project actions live in the detail action bar (single source of truth).
+    expect(screen.getByTestId('lifecycle-actions')).toBeInTheDocument();
     // Should have a "Prepare" button (ready → prepared)
     expect(screen.getByTestId('transition-btn-prepared')).toBeInTheDocument();
     // Should have a "Mark as Processing" button (ready → processing)
@@ -179,10 +180,12 @@ describe('ProjectDetail lifecycle transitions (spec 009 US3-3)', () => {
     });
   });
 
-  it('does not render footer actions when lifecycle=setup_incomplete', () => {
+  it('does not render lifecycle transition buttons when lifecycle=setup_incomplete', () => {
     setupStore({ lifecycle: 'setup_incomplete' });
     render(<ProjectDetailContent projectId="proj-001" />);
-    expect(screen.queryByTestId('lifecycle-footer-actions')).not.toBeInTheDocument();
+    // The action bar still hosts always-present actions (Reveal / Open in tool),
+    // but no lifecycle transition buttons exist for setup_incomplete.
+    expect(screen.queryByTestId(/^transition-btn-/)).not.toBeInTheDocument();
   });
 
   it('renders unarchive actions for archived state', () => {

@@ -1,6 +1,7 @@
 import { useState } from 'react';
 import { Btn } from '@/ui/Btn';
 import { Pill } from '@/ui/Pill';
+import { m } from '@/lib/i18n';
 import { useDirectoryPicker } from '@/shared/native';
 import type { LastPathKind } from '@/shared/native';
 import type { SourceEntry, SourceKind, ScanDepth, OrganizationState } from '../sources-store';
@@ -50,27 +51,12 @@ export function StepSourceFolders({
   const indexed = entries.map((entry, index) => ({ entry, index }));
 
   return (
-    <div
-      className="alm-step-sources"
-      style={{ display: 'flex', flexDirection: 'column', gap: 'var(--alm-sp-3)' }}
-    >
-      <p
-        className="alm-step-sources__intro"
-        style={{
-          margin: 0,
-          fontSize: 'var(--alm-text-sm)',
-          lineHeight: 'var(--alm-leading-normal)',
-          color: 'var(--alm-text-secondary)',
-        }}
-      >
-        Add the folders where your data lives. At least one folder is required for each
-        required type below; raw files are never moved or copied.
+    <div className="alm-step-sources">
+      <p className="alm-step-sources__intro">
+        {m.setup_sources_intro()}
       </p>
 
-      <div
-        className="alm-step-sources__groups"
-        style={{ display: 'flex', flexDirection: 'column', gap: 'var(--alm-sp-2)' }}
-      >
+      <div className="alm-step-sources__groups">
         {ALL_SOURCE_KINDS.map((kind) => {
           const rows = indexed.filter(({ entry }) => entry.kind === kind);
           return (
@@ -113,58 +99,23 @@ function SourceGroup({
   const isMet = rows.length > 0;
   const hasRows = rows.length > 0;
 
-  // Requirement highlight: met required → ok accent; unmet required → warn
-  // accent; optional kinds render with the neutral box treatment.
-  let cardBorder = '1px solid var(--alm-border)';
-  let cardBackground = 'var(--alm-bg)';
-  let headerBorder = '1px solid var(--alm-border-subtle)';
-  if (isRequired && isMet) {
-    cardBorder = '1px solid var(--alm-ok-border)';
-    cardBackground = 'var(--alm-ok-bg)';
-    headerBorder = '1px solid var(--alm-ok-border)';
-  } else if (isRequired && !isMet) {
-    cardBorder = '1px solid var(--alm-warn-border)';
-    cardBackground = 'var(--alm-warn-bg)';
-    headerBorder = '1px solid var(--alm-warn-border)';
-  }
-
+  // Requirement highlight is driven entirely by CSS data-attribute selectors
+  // (data-required, data-requirement-met) — no inline style needed.
   return (
     <div
       className="alm-step-sources__group"
       data-testid={`source-group-${kind}`}
       data-required={isRequired ? 'true' : 'false'}
       data-requirement-met={isRequired ? (isMet ? 'true' : 'false') : undefined}
-      style={{
-        border: cardBorder,
-        borderRadius: 'var(--alm-radius-sm)',
-        background: cardBackground,
-        overflow: 'hidden',
-      }}
     >
       {/* Single compact header row: label + count + status + add button.
           When empty this is the entire card height. */}
-      <div
-        className="alm-step-sources__group-header"
-        style={{
-          display: 'flex',
-          alignItems: 'center',
-          gap: 'var(--alm-sp-2)',
-          padding: 'var(--alm-sp-1) var(--alm-sp-2)',
-          minHeight: 'var(--alm-row-height)',
-          borderBottom: hasRows ? headerBorder : 'none',
-        }}
-      >
-        <span
-          style={{
-            fontSize: 'var(--alm-text-xs)',
-            fontWeight: 'var(--alm-weight-semibold)',
-            color: 'var(--alm-text-secondary)',
-          }}
-        >
+      <div className="alm-step-sources__group-header">
+        <span className="alm-step-sources__group-header-label">
           {SOURCE_KIND_LABELS[kind]}
         </span>
         {hasRows && (
-          <span style={{ fontSize: 'var(--alm-text-2xs)', color: 'var(--alm-text-muted)' }}>
+          <span className="alm-step-sources__group-header-count">
             {rows.length}
           </span>
         )}
@@ -173,25 +124,20 @@ function SourceGroup({
             variant={isMet ? 'ok' : 'warn'}
             data-testid={`requirement-status-${kind}`}
           >
-            {isMet ? 'required ✓' : 'required'}
+            {isMet ? `${m.setup_sources_required()} ✓` : m.setup_sources_required()}
           </Pill>
         ) : (
-          <span style={{ fontSize: 'var(--alm-text-2xs)', color: 'var(--alm-text-faint)' }}>
-            optional
+          <span className="alm-step-sources__group-header-optional">
+            {m.setup_sources_optional()}
           </span>
         )}
-        <span style={{ flex: 1 }} />
+        <span className="alm-step-sources__group-header-spacer" />
         <AddFolderButton kind={kind} onAdd={onAdd} />
       </div>
 
       {/* Folder rows only render when present — no empty-state block. */}
       {hasRows && (
-        <div
-          style={{
-            display: 'flex',
-            flexDirection: 'column',
-          }}
-        >
+        <div>
           {rows.map(({ entry, index }, i) => (
             <SourceRow
               key={`${entry.path}-${index}`}
@@ -213,7 +159,7 @@ function SourceGroup({
 function SourceRow({
   entry,
   error,
-  isLast,
+  isLast: _isLast,
   onRemove,
   onScanDepthChange,
   onOrganizationStateChange,
@@ -227,28 +173,10 @@ function SourceRow({
 }) {
   const isInbox = entry.kind === 'inbox';
   return (
-    <div
-      className="alm-step-sources__row"
-      style={{
-        padding: 'var(--alm-sp-1) var(--alm-sp-2)',
-        background: 'var(--alm-surface-raised)',
-        borderBottom: isLast ? 'none' : '1px solid var(--alm-border-subtle)',
-      }}
-    >
-      <div
-        className="alm-step-sources__row-main"
-        style={{ display: 'flex', alignItems: 'center', gap: 'var(--alm-sp-2)', minHeight: 'var(--alm-row-height)' }}
-      >
+    <div className="alm-step-sources__row">
+      <div className="alm-step-sources__row-main">
         <span
           className="alm-step-sources__row-path alm-mono"
-          style={{
-            flex: 1,
-            minWidth: 0,
-            fontSize: 'var(--alm-text-sm)',
-            overflow: 'hidden',
-            textOverflow: 'ellipsis',
-            whiteSpace: 'nowrap',
-          }}
           title={entry.path}
         >
           {entry.path}
@@ -258,38 +186,29 @@ function SourceRow({
             className="alm-step-sources__org-select"
             value={entry.organizationState}
             onChange={(e) => onOrganizationStateChange(e.target.value as OrganizationState)}
-            aria-label="Organization state"
-            title="Already organized = files stay in place (catalogue only). Needs organizing = files will be moved to a library structure on confirm."
-            style={{ fontSize: 'var(--alm-text-2xs)' }}
+            aria-label={m.setup_sources_org_state_aria()}
+            title={m.setup_sources_org_state_title()}
           >
-            <option value="organized">Already organized</option>
-            <option value="unorganized">Needs organizing</option>
+            <option value="organized">{m.setup_sources_org_organized()}</option>
+            <option value="unorganized">{m.setup_sources_org_unorganized()}</option>
           </select>
         )}
         <select
           className="alm-step-sources__depth-select"
           value={entry.scanDepth}
           onChange={(e) => onScanDepthChange(e.target.value as ScanDepth)}
-          aria-label="Scan depth"
-          style={{ fontSize: 'var(--alm-text-2xs)' }}
+          aria-label={m.setup_sources_scan_depth_aria()}
         >
-          <option value="recursive">Recursive</option>
-          <option value="single">Single level</option>
+          <option value="recursive">{m.setup_scan_recursive()}</option>
+          <option value="single">{m.setup_scan_single_level()}</option>
         </select>
         <Btn size="sm" variant="ghost" onClick={onRemove}>
-          Remove
+          {m.common_remove()}
         </Btn>
       </div>
 
       {error && (
-        <div
-          className="alm-step-sources__row-error"
-          style={{
-            marginTop: 'var(--alm-sp-0)',
-            fontSize: 'var(--alm-text-2xs)',
-            color: 'var(--alm-danger)',
-          }}
-        >
+        <div className="alm-step-sources__row-error">
           {error}
         </div>
       )}
@@ -325,9 +244,9 @@ function AddFolderButton({
         variant="primary"
         onClick={handleChoose}
         disabled={loading}
-        aria-label={`Add ${SOURCE_KIND_LABELS[kind]} folder`}
+        aria-label={m.setup_sources_add_folder_aria({ kind: SOURCE_KIND_LABELS[kind] })}
       >
-        {loading ? 'Choosing…' : '+ Add folder…'}
+        {loading ? m.setup_choosing() : m.setup_add_folder()}
       </Btn>
       {/*
         CI-only path entry: WebDriver cannot drive the native folder picker, so
@@ -339,7 +258,7 @@ function AddFolderButton({
         <span data-testid={`e2e-add-by-path-${kind}`}>
           <input
             data-testid={`e2e-path-input-${kind}`}
-            aria-label={`E2E ${SOURCE_KIND_LABELS[kind]} path`}
+            aria-label={m.setup_sources_e2e_path_aria({ kind: SOURCE_KIND_LABELS[kind] })}
             value={e2ePath}
             onChange={(ev) => setE2ePath(ev.target.value)}
           />
@@ -354,15 +273,12 @@ function AddFolderButton({
               }
             }}
           >
-            Add by path (E2E)
+            {m.setup_sources_add_e2e()}
           </button>
         </span>
       ) : null}
       {error && (
-        <span
-          className="alm-step-sources__picker-error"
-          style={{ fontSize: 'var(--alm-text-2xs)', color: 'var(--alm-danger)' }}
-        >
+        <span className="alm-step-sources__picker-error">
           {error.message}
         </span>
       )}

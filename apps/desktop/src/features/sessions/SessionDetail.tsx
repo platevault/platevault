@@ -1,293 +1,181 @@
 /**
- * SessionDetail — spec 006 wired.
+ * SessionDetail — clean tabular session detail (spec 043 §4 redesign).
  *
- * Detail drawer for an InventorySession. Shows Lifecycle, Facts, Provenance,
- * and Linked sections per spec 006 research.md §5. Review actions are
- * action-bound (FR-006): Confirm only appears when eligible, Re-open only
- * when already confirmed/rejected, Reject as danger.
+ * The session's attributes render as a flat PropertyTable (Property | Value |
+ * Source) spread across two columns inside the canonical DetailPanel. Linked
+ * projects sit below with a clickable link per project. Review/Confirm actions
+ * live in the header.
  *
- * SC-004: no column is named Tags or Handling.
- * FR-004: state renders as plain structured data, not a decorative bubble.
+ * The per-frame frames table + review-state pill were removed: a session is a
+ * single frame-type group, so the frames table only duplicated the row data;
+ * the freed space lets the attribute table use both columns.
  */
 
 import type { InventorySession } from '@/api/commands';
 import {
   DetailPane,
-  DetailHeader,
-  MetricLine,
-  DetailGrid,
-  Rail,
-  RailCard,
+  DetailPanel,
   PropertyTable,
+  type PropertyDef,
 } from '@/components';
-import { Pill, Section, EmptyState, Lock } from '@/ui';
-import { sessionStateLabel, sessionStateVariant } from '@/lib/lifecycle';
+import { EmptyState, Btn } from '@/ui';
+import { m } from '@/lib/i18n';
 
 interface Props {
   session: InventorySession | null;
-  onConfirm: () => void;
-  onReopen: () => void;
-  onReject: () => void;
-  isPending?: boolean;
+  /** Contextual review-action handlers (act on this session). */
+  onConfirm?: () => void;
+  onReopen?: () => void;
+  onReject?: () => void;
+  /** Action visibility — driven by the session's canonical state on the page. */
+  confirmVisible?: boolean;
+  reopenVisible?: boolean;
+  rejectVisible?: boolean;
+  /** A review mutation is in flight for this session. */
+  pending?: boolean;
+  /** Open a linked project — wired by the page to navigation. */
+  onOpenProject?: (projectId: string) => void;
 }
 
-export function SessionDetail({ session, onConfirm, onReopen, onReject, isPending }: Props) {
+/** Equipment context subtitle: camera · gain · sensor temp · binning. */
+function equipmentSubtitle(session: InventorySession): string {
+  const parts: string[] = [];
+  if (session.camera) parts.push(session.camera);
+  if (session.gain) parts.push(`g${session.gain}`);
+  if (session.setTemp) parts.push(session.setTemp);
+  if (session.binning) parts.push(session.binning);
+  return parts.join(' · ');
+}
+
+/** Derive total integration seconds from frames × per-frame exposure. */
+function integrationSeconds(session: InventorySession): number | null {
+  if (!session.exposure) return null;
+  const raw = session.exposure.replace(/s$/i, '');
+  const secs = parseFloat(raw);
+  if (!Number.isFinite(secs) || secs <= 0) return null;
+  return secs * session.frames;
+}
+
+function fmtSeconds(totalSec: number): string {
+  const h = Math.floor(totalSec / 3600);
+  const m = Math.floor((totalSec % 3600) / 60);
+  if (h === 0) return `${m}m`;
+  if (m === 0) return `${h}h`;
+  return `${h}h ${m}m`;
+}
+
+// ── Component ─────────────────────────────────────────────────────────────────
+
+export function SessionDetail({
+  session,
+  onConfirm,
+  onReopen,
+  onReject,
+  confirmVisible = false,
+  reopenVisible = false,
+  rejectVisible = false,
+  pending = false,
+  onOpenProject,
+}: Props) {
   if (!session) {
     return (
       <DetailPane>
         <EmptyState
-          title="Select a session"
-          desc="Choose a session from the list to view its details."
+          title={m.sessions_select_title()}
+          desc={m.sessions_select_desc()}
         />
       </DetailPane>
     );
   }
 
   const isLinked = (session.linked?.projects?.length ?? 0) > 0;
+  const prov = session.provenance;
+  const totalSec = integrationSeconds(session);
+  const integrationLabel = totalSec != null ? fmtSeconds(totalSec) : null;
 
-  // Action-bound CTA visibility (spec 006 FR-006):
-  // Confirm only when in discovered / candidate / needs_review.
-  // Re-open only when confirmed or rejected.
-  // Reject always except when already rejected.
-  const confirmVisible = ['discovered', 'candidate', 'needs_review'].includes(session.state);
-  const reopenVisible = ['confirmed', 'rejected'].includes(session.state);
-  const rejectVisible = session.state !== 'rejected';
-
-  const displayPath = session.name;
-
-  const facts = [
-    { key: 'target', label: 'Target', value: session.target ?? '—', source: 'fits' as const },
-    { key: 'filter', label: 'Filter', value: session.filter ?? '—', source: 'fits' as const },
-    {
-      key: 'exposure',
-      label: 'Exposure',
-      value: session.exposure ?? '—',
-      source: 'fits' as const,
-    },
-    {
-      key: 'capturedOn',
-      label: 'Captured',
-      value: session.capturedOn ?? '—',
-      source: 'fits' as const,
-    },
-    { key: 'camera', label: 'Camera', value: session.camera ?? '—', source: 'fits' as const },
-    { key: 'gain', label: 'Gain', value: session.gain ?? '—', source: 'fits' as const },
-    {
-      key: 'binning',
-      label: 'Binning',
-      value: session.binning ?? '—',
-      source: 'fits' as const,
-    },
-    {
-      key: 'setTemp',
-      label: 'Sensor temp',
-      value: session.setTemp ?? '—',
-      source: 'fits' as const,
-    },
+  // Session facts as a clean tabular PropertyTable, spread across two columns.
+  const factProps: PropertyDef[] = [
+    { key: 'target', label: m.projects_create_target_label(), value: session.target ?? null, source: prov?.target ? 'inferred' : 'fits' },
+    { key: 'filter', label: m.common_filter(), value: session.filter ?? null, source: prov?.filter ? 'inferred' : 'fits' },
+    { key: 'frames', label: m.projects_wizard_col_frames(), value: session.frames },
+    { key: 'exposure', label: m.calibration_fp_exposure(), value: session.exposure ?? null, source: 'fits' },
+    ...(integrationLabel != null
+      ? [{ key: 'integration', label: m.sessions_col_total_integration(), value: integrationLabel } as PropertyDef]
+      : []),
+    { key: 'night', label: m.sessions_col_night(), value: session.capturedOn ?? null, source: 'fits' },
+    { key: 'camera', label: m.settings_calmatch_camera(), value: session.camera ?? null, source: 'fits' },
+    { key: 'gain', label: m.settings_calmatch_gain(), value: session.gain ?? null, source: 'fits' },
+    { key: 'binning', label: m.settings_calmatch_binning(), value: session.binning ?? null, source: 'fits' },
+    ...(session.setTemp
+      ? [{ key: 'temp', label: m.settings_calmatch_sensor_temp(), value: session.setTemp, source: 'fits' } as PropertyDef]
+      : []),
+    ...(prov?.confirmedBy
+      ? [{ key: 'confirmedby', label: m.sessions_col_confirmed_by(), value: prov.confirmedBy, source: 'user' } as PropertyDef]
+      : []),
   ];
 
-  // Provenance summary rows — confidence/evidence detail NOT shown (spec 002 FR-006).
-  const provenanceFacts = session.provenance
-    ? ([
-        session.provenance.target
-          ? {
-              key: 'prov-target',
-              label: 'Target provenance',
-              value: session.provenance.target,
-              source: 'inferred' as const,
-            }
-          : null,
-        session.provenance.filter
-          ? {
-              key: 'prov-filter',
-              label: 'Filter provenance',
-              value: session.provenance.filter,
-              source: 'inferred' as const,
-            }
-          : null,
-        session.provenance.inferred
-          ? {
-              key: 'prov-inferred',
-              label: 'Inferred',
-              value: session.provenance.inferred,
-              source: 'inferred' as const,
-            }
-          : null,
-        session.provenance.confirmedBy
-          ? {
-              key: 'prov-confirmed',
-              label: 'Confirmed by',
-              value: session.provenance.confirmedBy,
-              source: 'user' as const,
-            }
-          : null,
-      ].filter(Boolean) as Array<{
-        key: string;
-        label: string;
-        value: string;
-        source: 'fits' | 'user' | 'inferred';
-      }>)
-    : [];
+  const mid = Math.ceil(factProps.length / 2);
+  const colA = factProps.slice(0, mid);
+  const colB = factProps.slice(mid);
+
+  // Review actions sit inline with the title (left-grouped) so growing the
+  // panel only adds trailing whitespace — it never spreads the title and
+  // buttons apart.
+  const actionButtons = (
+    <span className="alm-session-detail2__actions">
+      {confirmVisible && (
+        <Btn size="sm" variant="primary" onClick={onConfirm} disabled={pending}>
+          {m.setup_step_confirm_label()}
+        </Btn>
+      )}
+      {reopenVisible && (
+        <Btn size="sm" onClick={onReopen} disabled={pending}>
+          {m.sessions_reopen_btn()}
+        </Btn>
+      )}
+      {rejectVisible && (
+        <Btn size="sm" variant="danger" onClick={onReject} disabled={pending}>
+          {m.sessions_reject_btn()}
+        </Btn>
+      )}
+    </span>
+  );
 
   return (
-    <DetailPane fill>
-      <DetailHeader
-        title={
-          <>
-            {isLinked && <Lock />}
-            <strong>{session.target ?? session.name}</strong>
-            {session.filter ? ` · ${session.filter}` : null}
-            {session.capturedOn ? ` · ${session.capturedOn}` : null}
-          </>
-        }
-        titleExtra={
-          <>
-            <Pill variant="neutral">{session.frames} frames</Pill>
-            {/* FR-004: state as plain structured data, not a decorative bubble */}
-            <Pill variant={sessionStateVariant(session.state)}>
-              {session.state === 'discovered' || session.state === 'candidate'
-                ? 'Needs review'
-                : sessionStateLabel(session.state)}
-            </Pill>
-          </>
-        }
-        subtitle={displayPath}
-      />
-
-      <MetricLine
-        metrics={[
-          { value: session.frames, label: 'frames' },
-          { value: session.exposure ?? '—', label: 'exposure' },
-          { value: session.type, label: 'type' },
-        ]}
-      />
-
-      <DetailGrid
-        rail={
-          <Rail>
-            <RailCard title="Review state">
-              <Pill variant={sessionStateVariant(session.state)}>
-                {session.state === 'discovered' || session.state === 'candidate'
-                  ? 'Needs review'
-                  : sessionStateLabel(session.state)}
-              </Pill>
-              <div
-                style={{
-                  marginTop: 'var(--alm-sp-2)',
-                  display: 'flex',
-                  flexDirection: 'column',
-                  gap: 'var(--alm-sp-1)',
-                }}
-              >
-                {confirmVisible && (
-                  <button
-                    className="alm-btn alm-btn--primary alm-btn--sm"
-                    onClick={onConfirm}
-                    disabled={isPending}
-                    data-testid="btn-confirm"
-                  >
-                    Confirm
-                  </button>
-                )}
-                {reopenVisible && (
-                  <button
-                    className="alm-btn alm-btn--sm"
-                    onClick={onReopen}
-                    disabled={isPending}
-                    data-testid="btn-reopen"
-                  >
-                    Re-open review
-                  </button>
-                )}
-                {rejectVisible && (
-                  <button
-                    className="alm-btn alm-btn--danger alm-btn--sm"
-                    onClick={onReject}
-                    disabled={isPending}
-                    data-testid="btn-reject"
-                  >
-                    Reject session
-                  </button>
-                )}
-                {isLinked && (
-                  <div
-                    style={{
-                      marginTop: 'var(--alm-sp-1)',
-                      fontSize: 'var(--alm-text-xs)',
-                      color: 'var(--alm-text-muted)',
-                    }}
-                  >
-                    Linked to a project — metadata locked while in use.
-                  </div>
-                )}
-              </div>
-            </RailCard>
-
-            <RailCard title="Linked projects">
-              {isLinked ? (
-                <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap' }}>
-                  {session.linked?.projects?.map((p) => (
-                    <Pill key={p.id} variant="info">
-                      {p.name}
-                    </Pill>
-                  ))}
-                </div>
-              ) : (
-                <span
-                  style={{
-                    fontSize: 'var(--alm-text-xs)',
-                    color: 'var(--alm-text-faint)',
-                  }}
+    <DetailPanel
+      variant="sessions"
+      title={<strong>{session.target ?? session.name}</strong>}
+      titleExtra={actionButtons}
+      subtitle={equipmentSubtitle(session) || undefined}
+    >
+      {/* Left-packed columns: [props A] [props B] [linked projects]. */}
+      <div className="alm-session-detail2">
+        <div className="alm-session-detail2__col">
+          <PropertyTable mode="view" showSource properties={colA} />
+        </div>
+        <div className="alm-session-detail2__col">
+          <PropertyTable mode="view" showSource properties={colB} />
+        </div>
+        <div className="alm-session-detail2__linked">
+          <div className="alm-session-detail2__head">{m.sessions_linked_projects_heading()}</div>
+          {isLinked ? (
+            <div className="alm-session-detail2__linked-list">
+              {session.linked?.projects?.map((p) => (
+                <button
+                  key={p.id}
+                  type="button"
+                  className="alm-session-detail2__link"
+                  onClick={() => onOpenProject?.(p.id)}
                 >
-                  None
-                </span>
-              )}
-            </RailCard>
-          </Rail>
-        }
-      >
-        <Section title="Facts">
-          <PropertyTable mode="view" showSource properties={facts} />
-        </Section>
-
-        {provenanceFacts.length > 0 && (
-          <Section title="Provenance">
-            <PropertyTable mode="view" showSource properties={provenanceFacts} />
-          </Section>
-        )}
-
-        {(session.linked?.calibration != null || session.linked?.session != null) && (
-          <Section title="Linked">
-            <PropertyTable
-              mode="view"
-              showSource
-              properties={([
-                session.linked?.session
-                  ? {
-                      key: 'linked-session',
-                      label: 'Session',
-                      value: session.linked.session,
-                      source: 'fits' as const,
-                    }
-                  : null,
-                session.linked?.calibration
-                  ? {
-                      key: 'linked-calibration',
-                      label: 'Calibration',
-                      value: session.linked.calibration,
-                      source: 'fits' as const,
-                    }
-                  : null,
-              ].filter(Boolean)) as Array<{
-                key: string;
-                label: string;
-                value: string;
-                source: 'fits' | 'user' | 'inferred';
-              }>}
-            />
-          </Section>
-        )}
-      </DetailGrid>
-    </DetailPane>
+                  {p.name}
+                </button>
+              ))}
+            </div>
+          ) : (
+            <span className="alm-session-detail2__muted">{m.common_none()}</span>
+          )}
+        </div>
+      </div>
+    </DetailPanel>
   );
 }

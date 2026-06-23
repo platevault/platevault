@@ -249,11 +249,15 @@ describe('TargetDetailV2', () => {
     );
   });
 
-  it('13. sessions empty-state renders', async () => {
+  it('13. sessions empty-state renders (single mid-page surface)', async () => {
     render(<TargetDetailV2 targetId={TARGET_ID} />);
     await waitFor(() =>
-      expect(screen.getByText('No sessions linked')).toBeInTheDocument(),
+      expect(
+        screen.getByText(/No linked sessions yet/i),
+      ).toBeInTheDocument(),
     );
+    // The duplicate bottom "No sessions linked" section has been removed.
+    expect(screen.queryByText('No sessions linked')).not.toBeInTheDocument();
   });
 
   it('14. projects empty-state renders', async () => {

@@ -1,23 +1,32 @@
 /// <reference types="@testing-library/jest-dom" />
 /**
- * TargetsPage tests — spec 036 gen-3 page wiring.
+ * TargetsPage tests — spec 043 shared list-page adoption (task #73).
+ *
+ * The page now uses the shared layout system: a pinned PageTopBar (FilterToolbar
+ * with My Targets filter + search + catalogues + group-by) over a ListPageLayout
+ * whose primary content is the full-width TargetsTable, with TargetDetailV2 in
+ * the detail pane that mounts only on selection.
  *
  * Tests:
- *  1. Shows loading state while listTargets is in flight.
- *  2. Renders target list items from listTargets backend response.
- *  3. Shows EmptyState when no target is selected.
- *  4. Selecting a list item triggers navigate with the target id.
+ *  1. Shows a loading footer while listTargets is in flight.
+ *  2. Renders target rows from listTargets backend response.
+ *  3. Detail pane mounts only on selection (no empty centered dashboard).
+ *  4. Clicking a row triggers navigate with the target id.
  *  5. When selected UUID provided, TargetDetailV2 mounts and calls getTargetDetail.
  *  6. effectiveLabel from backend renders in the detail pane.
  *  7. Shows error state when listTargets rejects.
- *  8. Target count appears in the subtitle.
- *  H1. Search input filters the target list by primaryDesignation.
- *  H2. Search input filters by effectiveLabel.
- *  H3. Clearing search restores the full list.
+ *  8. Target count appears in the table footer.
+ *  P1. "All targets" (default) filters to allowed planner catalogs.
+ *  P2. Selecting "My Targets" shows a STUB empty state (no backend linkage).
+ *  H1/H2/H3. Toolbar search filters the table by designation / label.
+ *  H4. Search "M31" matches "M 31" (alias-aware whitespace normalization). (#103b)
+ *  H5. Search "m31" matches "M 31" (case + whitespace insensitive). (#103b)
+ *  MT1. My Targets filter toggle activates and deactivates via the select. (#91)
  *  G1. "Add target" button opens the add dialog.
+ *  S1. Clicking a column header sorts the table.
  */
 
-import { render, screen, fireEvent, waitFor } from '@testing-library/react';
+import { render, screen, fireEvent, waitFor, within } from '@testing-library/react';
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 
 // ── Hoist mocks ───────────────────────────────────────────────────────────────
@@ -102,14 +111,13 @@ beforeEach(() => {
 // ── Tests ─────────────────────────────────────────────────────────────────────
 
 describe('TargetsPage', () => {
-  it('1. shows loading state while listTargets is in flight', () => {
+  it('1. shows a loading footer while listTargets is in flight', () => {
     mockListTargets.mockReturnValue(new Promise(() => {}));
     render(<TargetsPage />);
-    // List is in "..." subtitle state
-    expect(screen.getByText('… targets')).toBeInTheDocument();
+    expect(screen.getByText('Loading…')).toBeInTheDocument();
   });
 
-  it('2. renders target list items from backend response', async () => {
+  it('2. renders target rows from backend response', async () => {
     render(<TargetsPage />);
     await waitFor(() => {
       expect(screen.getByText('NGC 7000')).toBeInTheDocument();
@@ -117,19 +125,25 @@ describe('TargetsPage', () => {
     });
   });
 
-  it('3. shows EmptyState when no target is selected', async () => {
-    render(<TargetsPage />);
+  it('3. detail pane mounts only when a target is selected', async () => {
+    const { rerender } = render(<TargetsPage />);
+    await waitFor(() => screen.getByText('NGC 7000'));
+    // No selection → no detail pane region.
+    expect(screen.queryByRole('complementary', { name: 'Target details' })).not.toBeInTheDocument();
+
+    mockSelectedId.current = TARGET_ID;
+    rerender(<TargetsPage />);
     await waitFor(() =>
-      expect(screen.getByText('Select a target')).toBeInTheDocument(),
+      expect(screen.getByRole('complementary', { name: 'Target details' })).toBeInTheDocument(),
     );
   });
 
-  it('4. clicking a list item triggers navigate', async () => {
+  it('4. clicking a row triggers navigate', async () => {
     render(<TargetsPage />);
     await waitFor(() => screen.getByText('NGC 7000'));
 
-    const item = screen.getAllByText('NGC 7000')[0];
-    fireEvent.click(item.closest('li') ?? item);
+    const cell = screen.getByText('NGC 7000');
+    fireEvent.click(cell.closest('tr') ?? cell);
 
     expect(mockNavigate).toHaveBeenCalled();
   });
@@ -159,14 +173,46 @@ describe('TargetsPage', () => {
     );
   });
 
-  it('8. target count appears in the subtitle', async () => {
+  it('8. target count appears in the table footer', async () => {
     render(<TargetsPage />);
-    await waitFor(() =>
-      expect(screen.getByText('2 targets')).toBeInTheDocument(),
-    );
+    // Default tab is Planner; both NGC 7000 and M 31 are allowed catalogs.
+    await waitFor(() => expect(screen.getByText('2 targets')).toBeInTheDocument());
   });
 
-  // ── H: Search filters ──────────────────────────────────────────────────────
+  // ── P: My Targets vs Planner filter (task #40, task #91) ────────────────────
+
+  it('P1. "All targets" (default) filters to allowed planner catalogs', async () => {
+    mockListTargets.mockResolvedValue([
+      ...listItems,
+      // double-star dump entries that must NOT show in the Planner
+      { id: 'hd1', effectiveLabel: 'HD 1', primaryDesignation: 'HD 1', objectType: 'double_star' },
+      { id: 'wds1', effectiveLabel: 'WDS J1', primaryDesignation: 'WDS J00057+4549', objectType: 'double_star' },
+    ]);
+    render(<TargetsPage />);
+    await waitFor(() => expect(screen.getByText('NGC 7000')).toBeInTheDocument());
+
+    expect(screen.getByText('M 31')).toBeInTheDocument();
+    expect(screen.queryByText('HD 1')).not.toBeInTheDocument();
+    expect(screen.queryByText('WDS J1')).not.toBeInTheDocument();
+    // footer counts only the catalog targets
+    expect(screen.getByText('2 targets')).toBeInTheDocument();
+  });
+
+  it('P2. selecting "My Targets" shows a STUB empty state (no backend linkage)', async () => {
+    render(<TargetsPage />);
+    await waitFor(() => screen.getByText('NGC 7000'));
+
+    // The "Show" select is the My Targets filter; select the 'my' option.
+    const showSelect = screen.getByRole('combobox', { name: 'Show' });
+    fireEvent.change(showSelect, { target: { value: 'my' } });
+
+    // task #18: new empty message when no favourites are starred
+    expect(screen.getByText(/No favourites yet/i)).toBeInTheDocument();
+    // Planner-only catalog items are gone from the list
+    expect(screen.queryByText('NGC 7000')).not.toBeInTheDocument();
+  });
+
+  // ── H: Toolbar search filters ────────────────────────────────────────────────
 
   it('H1. search input filters by primaryDesignation', async () => {
     render(<TargetsPage />);
@@ -175,7 +221,6 @@ describe('TargetsPage', () => {
     const searchInput = screen.getByPlaceholderText('Search targets...');
     fireEvent.change(searchInput, { target: { value: 'NGC' } });
 
-    // NGC 7000 matches; M 31 does not
     expect(screen.getByText('NGC 7000')).toBeInTheDocument();
     expect(screen.queryByText('M 31')).not.toBeInTheDocument();
   });
@@ -204,6 +249,49 @@ describe('TargetsPage', () => {
     expect(screen.getByText('M 31')).toBeInTheDocument();
   });
 
+  it('H4. search "M31" matches "M 31" (alias-aware whitespace normalization)', async () => {
+    render(<TargetsPage />);
+    await waitFor(() => screen.getByText('M 31'));
+
+    const searchInput = screen.getByPlaceholderText('Search targets...');
+    fireEvent.change(searchInput, { target: { value: 'M31' } });
+
+    expect(screen.getByText('M 31')).toBeInTheDocument();
+    expect(screen.queryByText('NGC 7000')).not.toBeInTheDocument();
+  });
+
+  it('H5. search "m31" matches "M 31" (case + whitespace insensitive)', async () => {
+    render(<TargetsPage />);
+    await waitFor(() => screen.getByText('M 31'));
+
+    const searchInput = screen.getByPlaceholderText('Search targets...');
+    fireEvent.change(searchInput, { target: { value: 'm31' } });
+
+    expect(screen.getByText('M 31')).toBeInTheDocument();
+    expect(screen.queryByText('NGC 7000')).not.toBeInTheDocument();
+  });
+
+  // ── MT: My Targets filter (#91) ──────────────────────────────────────────────
+
+  it('MT1. My Targets filter toggles between full catalog and stub empty state', async () => {
+    render(<TargetsPage />);
+    await waitFor(() => screen.getByText('NGC 7000'));
+
+    const showSelect = screen.getByRole('combobox', { name: 'Show' });
+
+    // Default: "All targets" (empty value) — catalog rows visible.
+    expect(screen.getByText('NGC 7000')).toBeInTheDocument();
+
+    // Switch to My Targets — stub empty state (task #18: favourites not yet starred).
+    fireEvent.change(showSelect, { target: { value: 'my' } });
+    expect(screen.queryByText('NGC 7000')).not.toBeInTheDocument();
+    expect(screen.getByText(/No favourites yet/i)).toBeInTheDocument();
+
+    // Switch back to All — catalog rows return.
+    fireEvent.change(showSelect, { target: { value: '' } });
+    await waitFor(() => expect(screen.getByText('NGC 7000')).toBeInTheDocument());
+  });
+
   // ── G: Add target button ───────────────────────────────────────────────────
 
   it('G1. "Add target" button opens the add dialog', async () => {
@@ -213,9 +301,27 @@ describe('TargetsPage', () => {
     const addBtn = screen.getByRole('button', { name: /Add target/i });
     fireEvent.click(addBtn);
 
-    // Dialog should open — the dialog element itself should be present
     await waitFor(() =>
       expect(screen.getByRole('dialog', { name: /Add target/i })).toBeInTheDocument(),
     );
+  });
+
+  // ── S: Sortable column headers ───────────────────────────────────────────────
+
+  it('S1. clicking a column header sorts the table rows', async () => {
+    render(<TargetsPage />);
+    await waitFor(() => screen.getByText('NGC 7000'));
+
+    const table = screen.getByRole('table');
+    const designationHeader = screen.getByRole('button', { name: 'Sort by Designation' });
+
+    // Default sort is designation asc → "M 31" before "NGC 7000".
+    let rowText = within(table).getAllByText(/NGC 7000|M 31/);
+    expect(rowText[0]).toHaveTextContent('M 31');
+
+    // Toggle to desc → "NGC 7000" first.
+    fireEvent.click(designationHeader);
+    rowText = within(table).getAllByText(/NGC 7000|M 31/);
+    expect(rowText[0]).toHaveTextContent('NGC 7000');
   });
 });

@@ -1,6 +1,8 @@
 import { clsx } from 'clsx';
+import { m } from '@/lib/i18n';
 import { useLogPanel } from './LogPanelContext';
 import { useOperationStatus } from './OperationStatusContext';
+import { usePageStatus } from './PageStatusContext';
 import { useStatusSummary } from './useStatusSummary';
 
 function formatBytes(bytes: number): string {
@@ -10,15 +12,26 @@ function formatBytes(bytes: number): string {
   return `${(bytes / (1024 * 1024 * 1024)).toFixed(1)} GB`;
 }
 
+function formatCount(n: number): string {
+  return n.toLocaleString();
+}
+
 /**
  * Status bar (design v4): three zones. LEFT = the current operation (transient),
- * RIGHT = persistent storage/cleanup health, far right = log toggle. Library
- * inventory counts were removed — those live in the nav badges and on the pages.
+ * CENTER = GLOBAL library inventory totals (task #87 — stable across routes,
+ * NOT per-page counts), RIGHT = persistent storage/cleanup health + log toggle.
+ *
+ * The global totals come from `useStatusSummary()` → `commands.statusSummary()`
+ * (the real `LibraryStats` DTO: sessions / projects / calibration sets /
+ * targets). There is no library-wide image/file count in the contract yet (the
+ * Advanced settings "Records" line is hardcoded), so the image total is a STUB
+ * placeholder until the metadata-ingest pipeline exposes one.
  */
 export function StatusBar() {
   const { toggle } = useLogPanel();
   const { statusLabel } = useOperationStatus();
   const status = useStatusSummary();
+  const pageStatus = usePageStatus();
   const isActive = statusLabel !== 'Idle';
 
   return (
@@ -31,14 +44,39 @@ export function StatusBar() {
             <span>{statusLabel}</span>
           </>
         ) : (
-          <span className="alm-statusbar__idle">Ready</span>
+          <span className="alm-statusbar__idle">{m.status_ready()}</span>
         )}
+      </div>
+
+      {/* PAGE-CONTEXTUAL — shown only when the active page populates the slot
+          (currently: Inbox folder/master count + per-frame-type breakdown).
+          Sits left-of-center and is cleared automatically on route change. */}
+      {pageStatus != null && (
+        <div className="alm-statusbar__page" data-testid="statusbar-page-status">
+          {pageStatus}
+        </div>
+      )}
+
+      {/* CENTER — GLOBAL library inventory (stable across routes, task #87).
+          Sessions / projects / calibration masters / targets are real totals
+          from the status_summary contract. Images is a STUB until a library-wide
+          file count lands in the metadata pipeline. */}
+      <div className="alm-statusbar__lib" data-testid="statusbar-library-stats">
+        <span title={m.status_sessions_title()}>
+          {formatCount(status.sessionCount)} {m.status_sessions_label()}
+        </span>
+        <span className="alm-statusbar__sep">·</span>
+        <span title={m.status_projects_title()}>{formatCount(status.projectCount)} {m.status_projects_label()}</span>
+        <span className="alm-statusbar__sep">·</span>
+        <span title={m.status_masters_title()}>
+          {formatCount(status.calibrationCount)} {m.status_masters_label()}
+        </span>
       </div>
 
       {/* RIGHT — persistent storage / cleanup health + log */}
       <div className="alm-statusbar__right">
         {status.cleanupReclaimableBytes > 0 && (
-          <span>{formatBytes(status.cleanupReclaimableBytes)} reclaimable</span>
+          <span>{formatBytes(status.cleanupReclaimableBytes)} {m.status_reclaimable()}</span>
         )}
         {status.volumes.map((vol) => {
           const usedPct =
@@ -48,10 +86,11 @@ export function StatusBar() {
             <span
               key={vol.path}
               className={clsx('alm-statusbar__vol', vol.warning && 'alm-statusbar__vol--warn')}
-              title={`${vol.path}: ${formatBytes(vol.freeBytes)} free / ${formatBytes(vol.totalBytes)}`}
+              title={m.statusbar_vol_title({ path: vol.path, free: formatBytes(vol.freeBytes), total: formatBytes(vol.totalBytes) })}
             >
               <span>{label}</span>
               <span className="alm-statusbar__meter">
+                {/* eslint-disable-next-line no-restricted-syntax -- dynamic: disk usage meter width % */}
                 <i style={{ width: `${usedPct}%` }} />
               </span>
               <span>{usedPct}%</span>
@@ -62,9 +101,9 @@ export function StatusBar() {
           type="button"
           className="alm-statusbar__log-toggle"
           onClick={toggle}
-          aria-label="Toggle log panel"
+          aria-label={m.status_log_toggle_aria()}
         >
-          Log
+          {m.status_log_label()}
         </button>
       </div>
     </div>

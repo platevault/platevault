@@ -13,6 +13,7 @@
  */
 
 import { useState, useEffect, useCallback } from 'react';
+import { m } from '@/lib/i18n';
 import { useForm } from 'react-hook-form';
 import { zodResolver } from '@hookform/resolvers/zod';
 import { Btn, Banner } from '@/ui';
@@ -144,18 +145,18 @@ export function EditProjectPane({ project, onClose }: EditProjectPaneProps) {
   }, [channelWorking, project.id]);
 
   return (
-    <div className="alm-edit-project-pane" aria-label="Edit project">
+    <div className="alm-edit-project-pane" aria-label={m.projects_edit_pane_aria()}>
 
       {/* Channel drift banner (US1c / US4) */}
       {project.channelDrift?.hasNewSources && (
         <Banner variant="warn" role="status" aria-live="polite">
-          <span>New sources were added since the last channel review.</span>
-          <div style={{ display: 'flex', gap: 'var(--alm-sp-2)', marginTop: 'var(--alm-sp-2)' }}>
+          <span>{m.projects_edit_drift_banner()}</span>
+          <div className="alm-edit-project__drift-actions">
             <Btn size="sm" variant="primary" onClick={handleReinfer} disabled={channelWorking}>
-              Re-infer channels
+              {m.projects_detail_reinfer_btn()}
             </Btn>
             <Btn size="sm" variant="ghost" onClick={handleDismissDrift} disabled={channelWorking}>
-              Dismiss
+              {m.projects_detail_dismiss_btn()}
             </Btn>
           </div>
         </Banner>
@@ -164,19 +165,19 @@ export function EditProjectPane({ project, onClose }: EditProjectPaneProps) {
       {/* Read-only notice */}
       {readOnly && (
         <Banner variant="warn" role="status">
-          This project is archived. Settings are read-only.
+          {m.projects_edit_archived_notice()}
         </Banner>
       )}
 
       <form
         onSubmit={rhfHandleSubmit(onValid)}
         noValidate
-        style={{ display: 'flex', flexDirection: 'column', gap: 'var(--alm-sp-4)', padding: 'var(--alm-sp-4)' }}
+        className="alm-edit-project__form"
       >
 
         {/* Name */}
         <div>
-          <label className="alm-field-label" htmlFor="ep-name">Project name</label>
+          <label className="alm-field-label" htmlFor="ep-name">{m.projects_name_label()}</label>
           <input
             id="ep-name"
             className="alm-input"
@@ -196,7 +197,7 @@ export function EditProjectPane({ project, onClose }: EditProjectPaneProps) {
 
         {/* Tool */}
         <div>
-          <label className="alm-field-label" htmlFor="ep-tool">Processing tool</label>
+          <label className="alm-field-label" htmlFor="ep-tool">{m.projects_tool_label()}</label>
           <select
             id="ep-tool"
             className="alm-input"
@@ -204,19 +205,21 @@ export function EditProjectPane({ project, onClose }: EditProjectPaneProps) {
             aria-describedby={toolLocked ? 'ep-tool-lock' : undefined}
             {...register('tool')}
           >
+            {/* eslint-disable-next-line alm/no-user-string -- proper noun: PixInsight is a brand name */}
             <option value="PixInsight">PixInsight</option>
+            {/* eslint-disable-next-line alm/no-user-string -- proper noun: Siril is a brand name */}
             <option value="Siril">Siril</option>
           </select>
           {toolLocked && (
             <span id="ep-tool-lock" className="alm-field-hint">
-              Tool is locked in the current lifecycle state ({project.lifecycle}).
+              {m.projects_edit_tool_locked_hint({ lifecycle: project.lifecycle })}
             </span>
           )}
         </div>
 
         {/* Notes */}
         <div>
-          <label className="alm-field-label" htmlFor="ep-notes">Notes</label>
+          <label className="alm-field-label" htmlFor="ep-notes">{m.projects_notes_label()}</label>
           <textarea
             id="ep-notes"
             className="alm-input"
@@ -229,21 +232,26 @@ export function EditProjectPane({ project, onClose }: EditProjectPaneProps) {
 
         {/* Channels preview (US4) */}
         <div>
-          <span className="alm-field-label">Channels</span>
-          <div style={{ display: 'flex', flexWrap: 'wrap', gap: 'var(--alm-sp-1)', marginTop: 'var(--alm-sp-1)' }}>
+          <span className="alm-field-label">{m.projects_edit_channels_label()}</span>
+          <div className="alm-edit-project__channels">
             {channels.length === 0 ? (
-              <span className="alm-field-hint">No channels inferred yet.</span>
+              <span className="alm-field-hint">{m.projects_edit_channels_empty()}</span>
             ) : (
               channels.map((ch) => (
                 <span
                   key={ch.label}
                   className={`alm-channel-chip alm-channel-chip--${ch.source}`}
-                  title={ch.source === 'inferred' ? 'Auto-inferred from sources' : 'Manually added'}
+                  title={
+                     
+                    ch.source === 'inferred'
+                      ? m.projects_edit_inferred_title()
+                      : m.projects_edit_manual_title()
+                  }
                   aria-label={`${ch.label} (${ch.source})`}
                 >
                   {ch.label}
                   {ch.source === 'inferred' && (
-                    <span className="alm-channel-chip__tag">Auto</span>
+                    <span className="alm-channel-chip__tag">{m.projects_edit_channels_auto_tag()}</span>
                   )}
                 </span>
               ))
@@ -257,13 +265,13 @@ export function EditProjectPane({ project, onClose }: EditProjectPaneProps) {
         )}
 
         {/* Actions */}
-        <div style={{ display: 'flex', gap: 'var(--alm-sp-2)', justifyContent: 'flex-end' }}>
+        <div className="alm-edit-project__actions">
           <Btn type="button" variant="ghost" onClick={onClose} disabled={isSubmitting}>
-            Cancel
+            {m.common_cancel()}
           </Btn>
           {!readOnly && (
             <Btn type="submit" variant="primary" disabled={isSubmitting}>
-              {isSubmitting ? 'Saving…' : 'Save changes'}
+              {isSubmitting ? m.common_saving() : m.projects_edit_save_btn()}
             </Btn>
           )}
         </div>

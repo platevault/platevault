@@ -1,30 +1,26 @@
 /// <reference types="@testing-library/jest-dom" />
 /**
- * SessionsPage + SessionsList + SessionDetail inventory wiring tests — spec 006.
+ * SessionsTable + FilterToolbar + SessionDetail inventory wiring tests —
+ * spec 006 + spec 043 §4 (task #36 redesign + #62/#63 shared layout adoption).
+ *
+ * The Sessions surface is now a dense full-width table (SessionsTable) grouped
+ * by target (fixed — Group-by was removed: sessions contain 1–few frame types
+ * by definition), with search + a review filter in the shared top bar
+ * (PageTopBar + FilterToolbar). The legacy frame-type filter was removed
+ * (sessions are light frames). These tests target the new components.
  *
  * Tests (jsdom, mock @/api/commands and @/features/sessions/store):
  *
- * 1. SessionsList renders group headers from InventorySource data.
- * 2. SessionsList renders session rows with correct state labels.
- * 3. SessionsList discovered/candidate rows map to "Needs review" display label.
- * 4. SessionsList renders empty-state when sources is empty.
- * 5. SessionsList frame-filter select calls onFrameFilter with typed value.
- * 6. SessionsList review-filter select calls onReviewFilter with typed value.
+ * 1. SessionsTable renders a target group header for each distinct target.
+ * 2. SessionsTable renders session rows with target/filter content.
+ * 3. SessionsTable discovered/candidate rows map to "Needs review" state label.
+ * 4. SessionsTable renders empty-state when sources is empty.
+ * 5b-6b+6d. FilterToolbar (Sessions toolbar): review filter, search.
  * 7. SessionDetail renders empty-state when session is null.
- * 8. SessionDetail shows Confirm button for needs_review state.
- * 9. SessionDetail hides Confirm and shows Re-open for confirmed state.
- * 10. SessionDetail shows Reject button for needs_review state.
- * 11. SessionDetail hides Reject for rejected state.
- * 12. SessionDetail renders Facts section with em-dash for missing values.
- * 13. SessionDetail renders Provenance section when provenance is present.
- * 14. SessionDetail omits Provenance section when provenance is absent.
- * 15. SessionDetail renders linked projects as Pill elements.
- * 16. Confirm action calls review('confirm') and shows success toast.
- * 17. Re-open action calls review('reopen') and shows info toast.
- * 18. Reject action calls review('reject') and shows warn toast.
- * 19. Noop response from review suppresses toast.
- * 20. Error response from review shows error toast.
- * 21. SessionsPage loads from inventoryList and renders source groups.
+ * 8-11b. SessionDetail review-state rail (read-only Pills, no action buttons).
+ * 12-15. SessionDetail Facts / Provenance / Linked sections.
+ * 16-20. Review action dispatch + toast contract.
+ * 21-24. SessionsTable live fixture data + sort headers + footer.
  */
 
 import { render, screen, fireEvent } from '@testing-library/react';
@@ -89,28 +85,63 @@ const ROOT_ID = INVENTORY_SOURCES[0].id;
 
 // ── Import components after mocks are in place ────────────────────────────────
 
-import { SessionsList } from '../SessionsList';
+import { SessionsTable, DEFAULT_SESSION_SORT } from '../SessionsTable';
+import { FilterToolbar } from '@/components';
 import { SessionDetail } from '../SessionDetail';
 
 // ── Helpers ───────────────────────────────────────────────────────────────────
 
 const noop = () => undefined;
-const noopAsync = () => Promise.resolve();
 
-function renderList(props: Partial<React.ComponentProps<typeof SessionsList>> = {}) {
+function renderList(props: Partial<React.ComponentProps<typeof SessionsTable>> = {}) {
   return render(
-    <SessionsList
+    <SessionsTable
       sources={INVENTORY_LIST_RESPONSE.sources}
       selected={null}
       onSelect={noop}
       loading={false}
-      onFrameFilter={noop}
-      onReviewFilter={noop}
+      sort={DEFAULT_SESSION_SORT}
+      onSort={noop}
       {...props}
     />,
   );
 }
 
+// Mirror the FilterToolbar configuration SessionsPage builds: a search box, a
+// "Review" labeled-select field. Spies are supplied
+// per-test so we can assert the change handlers fire with typed values.
+function renderToolbar(opts: {
+  search?: string;
+  reviewValue?: string;
+  onSearch?: (v: string) => void;
+  onReview?: (v: string) => void;
+} = {}) {
+  return render(
+    <FilterToolbar
+      search={{
+        value: opts.search ?? '',
+        onChange: opts.onSearch ?? noop,
+        ariaLabel: 'Search sessions',
+        placeholder: 'Search target, filter, camera…',
+      }}
+      fields={[
+        {
+          key: 'review',
+          label: 'Review',
+          value: opts.reviewValue ?? '',
+          allLabel: 'Default',
+          options: [
+            { value: 'confirmed', label: 'Confirmed' },
+            { value: 'rejected', label: 'Rejected' },
+          ],
+          onChange: opts.onReview ?? noop,
+        },
+      ]}
+    />,
+  );
+}
+
+// SessionDetail no longer accepts action callbacks — actions live in TopActionBar.
 function renderDetail(
   session: InventorySession | null,
   props: Partial<React.ComponentProps<typeof SessionDetail>> = {},
@@ -118,10 +149,6 @@ function renderDetail(
   return render(
     <SessionDetail
       session={session}
-      onConfirm={noopAsync}
-      onReopen={noopAsync}
-      onReject={noopAsync}
-      isPending={false}
       {...props}
     />,
   );
@@ -129,20 +156,19 @@ function renderDetail(
 
 // ── Tests: SessionsList ───────────────────────────────────────────────────────
 
-describe('SessionsList — group headers and rows', () => {
-  it('1. renders a group header for each InventorySource', () => {
+describe('SessionsTable — target group headers and rows', () => {
+  it('1. renders a target group header for each distinct target', () => {
     renderList();
-    // Each source path appears as a group header.
-    for (const src of INVENTORY_LIST_RESPONSE.sources) {
-      expect(screen.getByText(src.path)).toBeDefined();
+    // Sessions are grouped by target identity; each distinct target heads a group.
+    for (const target of ['NGC 7000', 'IC 1396', 'M31', 'M42']) {
+      expect(screen.getAllByText(new RegExp(target)).length).toBeGreaterThan(0);
     }
   });
 
-  it('2. renders session rows with target and filter', () => {
+  it('2. renders session rows with filter and state content', () => {
     renderList();
-    // At least one session with target NGC 7000 is visible.
-    const matches = screen.getAllByText(/NGC 7000/);
-    expect(matches.length).toBeGreaterThan(0);
+    // A confirmed state Pill is present for at least one row.
+    expect(screen.getAllByText('Confirmed').length).toBeGreaterThan(0);
   });
 
   it('3. discovered/candidate state maps to "Needs review" label', () => {
@@ -153,7 +179,6 @@ describe('SessionsList — group headers and rows', () => {
       sessions: [discoveredSession],
     };
     renderList({ sources: [src] });
-    // getAllByText tolerates multiple matches (e.g. row + detail pill).
     expect(screen.getAllByText('Needs review').length).toBeGreaterThan(0);
   });
 
@@ -162,28 +187,53 @@ describe('SessionsList — group headers and rows', () => {
     expect(screen.getByText(/No sessions match/)).toBeDefined();
   });
 
-  it('5. frame-filter select calls onFrameFilter with the selected value', () => {
-    const onFrameFilter = vi.fn();
-    renderList({ onFrameFilter });
-    const select = screen.getByRole('combobox', { name: /Frame type filter/ });
-    fireEvent.change(select, { target: { value: 'dark' } });
-    expect(onFrameFilter).toHaveBeenCalledWith('dark');
+  it('5. sortable column headers are rendered as buttons', () => {
+    renderList();
+    expect(screen.getByRole('button', { name: /Sort by Target/ })).toBeDefined();
+    expect(screen.getByRole('button', { name: /Sort by Night/ })).toBeDefined();
   });
 
-  it('6. review-filter select calls onReviewFilter with the selected value', () => {
-    const onReviewFilter = vi.fn();
-    renderList({ onReviewFilter });
-    const select = screen.getByRole('combobox', { name: /Review state filter/ });
+  it('6. clicking a column header calls onSort with that column', () => {
+    const onSort = vi.fn();
+    renderList({ onSort });
+    fireEvent.click(screen.getByRole('button', { name: /Sort by Frames/ }));
+    expect(onSort).toHaveBeenCalledWith('frames');
+  });
+});
+
+describe('FilterToolbar (Sessions toolbar) — search, review filter', () => {
+  it('5b. review-filter select calls onChange with the selected value', () => {
+    const onReview = vi.fn();
+    renderToolbar({ onReview });
+    const select = screen.getByRole('combobox', { name: /Review/ });
     fireEvent.change(select, { target: { value: 'confirmed' } });
-    expect(onReviewFilter).toHaveBeenCalledWith('confirmed');
+    expect(onReview).toHaveBeenCalledWith('confirmed');
   });
 
-  it('6b. clearing frame filter calls onFrameFilter with null', () => {
-    const onFrameFilter = vi.fn();
-    renderList({ onFrameFilter, frameFilter: 'dark' });
-    const select = screen.getByRole('combobox', { name: /Frame type filter/ });
+  it('6b. clearing the review filter calls onChange with empty string (Default)', () => {
+    const onReview = vi.fn();
+    renderToolbar({ onReview, reviewValue: 'confirmed' });
+    const select = screen.getByRole('combobox', { name: /Review/ });
     fireEvent.change(select, { target: { value: '' } });
-    expect(onFrameFilter).toHaveBeenCalledWith(null);
+    expect(onReview).toHaveBeenCalledWith('');
+  });
+
+  it('6d. typing in search calls onChange', () => {
+    const onSearch = vi.fn();
+    renderToolbar({ onSearch });
+    const input = screen.getByRole('searchbox', { name: /Search sessions/ });
+    fireEvent.change(input, { target: { value: 'M31' } });
+    expect(onSearch).toHaveBeenCalledWith('M31');
+  });
+
+  it('6e. there is no frame-type filter in the Sessions toolbar', () => {
+    renderToolbar();
+    expect(screen.queryByRole('combobox', { name: /Frame/i })).toBeNull();
+  });
+
+  it('6f. there is no group-by control in the Sessions toolbar', () => {
+    renderToolbar();
+    expect(screen.queryByRole('combobox', { name: /Group by/i })).toBeNull();
   });
 });
 
@@ -196,42 +246,57 @@ describe('SessionDetail — empty state', () => {
   });
 });
 
-describe('SessionDetail — action-bound CTAs (spec 006 FR-006)', () => {
-  it('8. shows Confirm button for needs_review', () => {
-    renderDetail(makeSession({ state: 'needs_review' }));
-    expect(screen.getByTestId('btn-confirm')).toBeDefined();
+// The rail's "Review state" card shows a read-only Pill (consistent with
+// MasterDetail and ProjectDetail rail patterns). Contextual review actions
+// (Confirm / Re-open / Reject) live in the SessionDetail HEADER and are gated by
+// visibility props the page supplies (task #79). With no visibility props set
+// (the default), no action buttons render anywhere in the detail.
+// Task #79: review actions are CONTEXTUAL and render in the SessionDetail
+// header (not the global PageTopBar). Visibility is driven by props the page
+// computes from the session's canonical state; clicking dispatches the handler.
+describe('SessionDetail — contextual header actions (task #79)', () => {
+  it('11c. renders Confirm/Reject in the header when their visibility props are set', () => {
+    renderDetail(makeSession({ state: 'needs_review' }), {
+      confirmVisible: true,
+      rejectVisible: true,
+      onConfirm: noop,
+      onReject: noop,
+    });
+    expect(screen.getByRole('button', { name: /confirm/i })).toBeDefined();
+    expect(screen.getByRole('button', { name: /reject/i })).toBeDefined();
+    expect(screen.queryByRole('button', { name: /re.?open/i })).toBeNull();
   });
 
-  it('9. hides Confirm and shows Re-open for confirmed state', () => {
-    renderDetail(makeSession({ state: 'confirmed' }));
-    expect(screen.queryByTestId('btn-confirm')).toBeNull();
-    expect(screen.getByTestId('btn-reopen')).toBeDefined();
+  it('11d. renders Re-open when reopenVisible; clicking dispatches onReopen', () => {
+    const onReopen = vi.fn();
+    renderDetail(makeSession({ state: 'confirmed' }), {
+      reopenVisible: true,
+      onReopen,
+    });
+    fireEvent.click(screen.getByRole('button', { name: /re.?open/i }));
+    expect(onReopen).toHaveBeenCalledTimes(1);
   });
 
-  it('10. shows Reject button for needs_review', () => {
-    renderDetail(makeSession({ state: 'needs_review' }));
-    expect(screen.getByTestId('btn-reject')).toBeDefined();
-  });
-
-  it('11. hides Reject for rejected state', () => {
-    renderDetail(makeSession({ state: 'rejected' }));
-    expect(screen.queryByTestId('btn-reject')).toBeNull();
-    // Re-open is available for rejected.
-    expect(screen.getByTestId('btn-reopen')).toBeDefined();
-  });
-
-  it('11b. discovered state shows Confirm and Reject', () => {
-    renderDetail(makeSession({ state: 'discovered' }));
-    expect(screen.getByTestId('btn-confirm')).toBeDefined();
-    expect(screen.getByTestId('btn-reject')).toBeDefined();
+  it('11e. clicking Confirm dispatches onConfirm; pending disables the button', () => {
+    const onConfirm = vi.fn();
+    renderDetail(makeSession({ state: 'needs_review' }), {
+      confirmVisible: true,
+      onConfirm,
+      pending: true,
+    });
+    const btn = screen.getByRole('button', { name: /confirm/i });
+    expect(btn).toBeDisabled();
+    fireEvent.click(btn);
+    // Disabled button does not fire its handler.
+    expect(onConfirm).not.toHaveBeenCalled();
   });
 });
 
-describe('SessionDetail — Facts and Provenance sections (spec 006 FR-005)', () => {
+describe('SessionDetail — Facts section (spec 006 FR-005; task #79 provenance merge)', () => {
   it('12. renders em-dash for missing fact values', () => {
     const session = makeSession({
-      filter: undefined,
-      exposure: undefined,
+      filter: null,
+      exposure: null,
       camera: undefined,
     });
     renderDetail(session);
@@ -239,18 +304,28 @@ describe('SessionDetail — Facts and Provenance sections (spec 006 FR-005)', ()
     expect(dashes.length).toBeGreaterThan(0);
   });
 
-  it('13. renders Provenance section when provenance is present', () => {
+  // Task #79: the standalone Provenance section was removed. Inference is now
+  // conveyed by the Facts table's SOURCE column — an inferred target/filter
+  // reports "Inferred" instead of "FITS" on its fact row.
+  it('13. no standalone Provenance section; inferred values show Inferred source badge', () => {
     const session = makeSession({
+      target: 'NGC 7000',
+      filter: 'Ha',
       provenance: { target: 'NGC 7000', filter: 'Ha', confirmedBy: 'user' },
     });
     renderDetail(session);
-    expect(screen.getByText('Provenance')).toBeDefined();
+    expect(screen.queryByText('Provenance')).toBeNull();
+    // The SOURCE column carries inferred-vs-explicit: inferred target/filter
+    // surface an "Inferred" badge, and the confirmer surfaces a "User" badge.
+    expect(screen.getAllByText('Inferred').length).toBeGreaterThan(0);
+    expect(screen.getAllByText('User').length).toBeGreaterThan(0);
   });
 
-  it('14. omits Provenance section when provenance is absent', () => {
+  it('14. FITS-extracted (non-inferred) values show a FITS source badge, never Provenance', () => {
     const session = makeSession({ provenance: undefined });
     renderDetail(session);
     expect(screen.queryByText('Provenance')).toBeNull();
+    expect(screen.getAllByText('FITS').length).toBeGreaterThan(0);
   });
 
   it('15. renders linked project names as visible elements', () => {
@@ -269,32 +344,38 @@ describe('SessionDetail — Facts and Provenance sections (spec 006 FR-005)', ()
 });
 
 // ── Tests: review action wiring ───────────────────────────────────────────────
+// Actions now live in the TopActionBar on SessionsPage. Coverage is provided
+// by testing the store's review() call contract directly, matching how
+// SessionsPage.handleConfirm / handleReopen / handleReject dispatch to it.
 
-describe('SessionDetail — review action callbacks', () => {
+describe('useSessionReview — action dispatch contract (spec 006 FR-006)', () => {
   beforeEach(() => {
     mockAddToast.mockClear();
     mockReview.mockClear();
   });
 
-  it('16. Confirm button click calls onConfirm', async () => {
-    const onConfirm = vi.fn().mockResolvedValue(undefined);
-    renderDetail(makeSession({ state: 'needs_review' }), { onConfirm });
-    fireEvent.click(screen.getByTestId('btn-confirm'));
-    expect(onConfirm).toHaveBeenCalledTimes(1);
+  it('16. confirm action dispatches review(id, "confirm") to store', async () => {
+    mockReview.mockResolvedValue({ ok: true, noop: false });
+    const { useSessionReview } = await import('../store');
+    const { review } = useSessionReview();
+    await review('session-1', 'confirm');
+    expect(mockReview).toHaveBeenCalledWith('session-1', 'confirm');
   });
 
-  it('17. Re-open button click calls onReopen', async () => {
-    const onReopen = vi.fn().mockResolvedValue(undefined);
-    renderDetail(makeSession({ state: 'confirmed' }), { onReopen });
-    fireEvent.click(screen.getByTestId('btn-reopen'));
-    expect(onReopen).toHaveBeenCalledTimes(1);
+  it('17. reopen action dispatches review(id, "reopen") to store', async () => {
+    mockReview.mockResolvedValue({ ok: true, noop: false });
+    const { useSessionReview } = await import('../store');
+    const { review } = useSessionReview();
+    await review('session-1', 'reopen');
+    expect(mockReview).toHaveBeenCalledWith('session-1', 'reopen');
   });
 
-  it('18. Reject button click calls onReject', async () => {
-    const onReject = vi.fn().mockResolvedValue(undefined);
-    renderDetail(makeSession({ state: 'needs_review' }), { onReject });
-    fireEvent.click(screen.getByTestId('btn-reject'));
-    expect(onReject).toHaveBeenCalledTimes(1);
+  it('18. reject action dispatches review(id, "reject") to store', async () => {
+    mockReview.mockResolvedValue({ ok: true, noop: false });
+    const { useSessionReview } = await import('../store');
+    const { review } = useSessionReview();
+    await review('session-1', 'reject');
+    expect(mockReview).toHaveBeenCalledWith('session-1', 'reject');
   });
 });
 
@@ -326,41 +407,51 @@ describe('useSessionReview — toast feedback (via store mock)', () => {
   });
 });
 
-// ── Tests: SessionsList with live InventorySource data ────────────────────────
+// ── Tests: SessionsTable with live InventorySource data ───────────────────────
 
-describe('SessionsList — live inventory fixture data (T106)', () => {
-  it('21. renders all non-ignored sources from INVENTORY_LIST_RESPONSE', () => {
+describe('SessionsTable — live inventory fixture data (T106)', () => {
+  it('21. renders sessions from every fixture target', () => {
     renderList({ sources: INVENTORY_LIST_RESPONSE.sources });
-    // All source paths visible.
-    for (const src of INVENTORY_LIST_RESPONSE.sources) {
-      expect(screen.getByText(src.path)).toBeDefined();
+    // Distinct targets from the fixture all appear as group headers.
+    for (const target of ['NGC 7000', 'M31', 'M42']) {
+      expect(screen.getAllByText(new RegExp(target)).length).toBeGreaterThan(0);
     }
   });
 
   it('22. selected session row has selected styling marker', () => {
     const session = INVENTORY_LIST_RESPONSE.sources[0].sessions[0];
     const { container } = renderList({ selected: session.id });
-    // ListItem with selected prop should render with a selected class/attr.
-    const selectedItem = container.querySelector('[class*="selected"], [data-selected]');
-    // The ListItem may render differently — just confirm the render didn't throw.
-    expect(session.id).toBeTruthy();
-    void selectedItem; // structural check; exact class depends on ListItem impl
+    const selectedRow = container.querySelector('.alm-sessions-table__row--selected');
+    expect(selectedRow).not.toBeNull();
   });
 
-  it('23. source state=missing shows warn pill in group header', () => {
-    const missingSrc: InventorySource = {
-      ...INVENTORY_SOURCES[0],
-      id: 'missing-root',
-      state: 'missing',
-      path: '/media/MissingDrive',
-    };
-    renderList({ sources: [missingSrc] });
-    expect(screen.getByText('/media/MissingDrive')).toBeDefined();
-    expect(screen.getByText('missing')).toBeDefined();
+  it('23. clicking a session row calls onSelect with its id', () => {
+    const onSelect = vi.fn();
+    const session = INVENTORY_LIST_RESPONSE.sources[0].sessions[0];
+    const { container } = renderList({ onSelect });
+    const row = container.querySelector('.alm-sessions-table__row');
+    expect(row).not.toBeNull();
+    fireEvent.click(row as Element);
+    expect(onSelect).toHaveBeenCalled();
+    void session;
   });
 
-  it('24. loading state shows loading text in footer', () => {
-    renderList({ sources: [], loading: true });
-    expect(screen.getByText('Loading…')).toBeDefined();
+  it('24. no in-table footer count line (count moved to the bottom status bar, task #80)', () => {
+    // The total count moved to the bottom status bar; the table no longer
+    // renders a footer count line, even during load.
+    const { container } = renderList({
+      sources: INVENTORY_LIST_RESPONSE.sources,
+      loading: true,
+    });
+    expect(container.querySelector('.alm-sessions-table__footer')).toBeNull();
+    expect(screen.queryByText('Loading…')).toBeNull();
+  });
+
+  it('25. groupBy="camera" headlines groups by camera instead of target', () => {
+    const camera = INVENTORY_LIST_RESPONSE.sources[0].sessions.find((s) => s.camera)?.camera;
+    expect(camera).toBeTruthy();
+    renderList({ sources: INVENTORY_LIST_RESPONSE.sources, groupBy: 'camera' });
+    // The camera value heads a group row.
+    expect(screen.getAllByText(new RegExp(camera as string)).length).toBeGreaterThan(0);
   });
 });

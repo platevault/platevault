@@ -17,6 +17,8 @@ import {
 	updateSettings,
 } from "@/api/commands";
 import { Btn } from "@/ui";
+import { m } from "@/lib/i18n";
+import { SettingsSection, SettingsRow } from "./SettingsKit";
 
 interface NamingStructureProps {
 	save: (scope: string, values: Record<string, unknown>) => void;
@@ -203,6 +205,48 @@ const SAMPLE_METADATA = {
 	set_temp: "-10C",
 };
 
+// ── Per-type live preview (client-side token substitution) ────────────────────
+//
+// STUB: The canonical resolver lives in the Rust `patterns` crate
+// (`crates/patterns/src/per_type.rs`), but the only Tauri command exposed today
+// (`pattern.preview`) accepts the token/separator `PatternPart[]` model, which
+// cannot represent the literal path segments (e.g. `flats`, `masters`) that
+// per-type destination patterns rely on. Until a path-string preview command is
+// exposed, we resolve the preview client-side by substituting `{token}`
+// placeholders with representative sample values. Literal segments and `/`
+// separators are passed through verbatim. Replace this with the canonical
+// resolver once a path-string `pattern.preview` (or equivalent) command exists.
+
+const PER_TYPE_SAMPLE_TOKENS: Record<
+	(typeof AVAILABLE_TOKENS)[number],
+	string
+> = {
+	target: "IC1396",
+	filter: "Ha",
+	date: "2024-10-20",
+	frame_type: "light",
+	camera: "ASI2600MM",
+	exposure: "300s",
+	gain: "100",
+	binning: "1x1",
+	set_temp: "-10C",
+};
+
+/**
+ * Resolve a per-type destination pattern string into a sample path by replacing
+ * each `{token}` with a representative sample value. Unknown tokens are left as
+ * a bracketed placeholder so the preview makes the problem visible rather than
+ * silently dropping the segment.
+ */
+function resolvePerTypePreview(pattern: string): string {
+	if (pattern.trim() === "") return "";
+	return pattern.replace(/\{([^}]*)\}/g, (_match, token: string) => {
+		const sample =
+			PER_TYPE_SAMPLE_TOKENS[token as (typeof AVAILABLE_TOKENS)[number]];
+		return sample ?? `{${token}}`;
+	});
+}
+
 // ── Default pattern {target}/{filter}/{date}/{frame_type}/ ────────────────────
 
 const DEFAULT_PATTERN: PatternPart[] = [
@@ -255,15 +299,7 @@ function PatternChipsEditor({
 	return (
 		<div>
 			{/* Chip row */}
-			<div
-				style={{
-					display: "flex",
-					flexWrap: "wrap",
-					gap: "var(--alm-sp-1)",
-					alignItems: "center",
-					minHeight: 32,
-				}}
-			>
+			<div className="alm-naming__chip-row">
 				{pattern.map((part) => {
 					const isSep = part.kind === "separator";
 					const label = isSep
@@ -281,7 +317,7 @@ function PatternChipsEditor({
 								className="alm-token-chip__x"
 								role="button"
 								tabIndex={0}
-								aria-label={`Remove ${label}`}
+								aria-label={m.settings_naming_remove_token({ label })}
 								onClick={() => handleRemove(part.id)}
 								onKeyDown={(e) => {
 									if (e.key === "Enter") handleRemove(part.id);
@@ -294,7 +330,7 @@ function PatternChipsEditor({
 				})}
 
 				{/* Add Token menu */}
-				<div style={{ position: "relative", display: "inline-block" }}>
+				<div className="alm-naming__menu-anchor">
 					<Btn
 						size="sm"
 						onClick={() => {
@@ -302,45 +338,15 @@ function PatternChipsEditor({
 							setShowSepMenu(false);
 						}}
 					>
-						+ Token
+						{m.settings_naming_add_token()}
 					</Btn>
 					{showTokenMenu && (
-						<div
-							style={{
-								position: "absolute",
-								top: "100%",
-								left: 0,
-								zIndex: 10,
-								background: "var(--alm-surface)",
-								border: "1px solid var(--alm-border)",
-								borderRadius: "var(--alm-radius-md)",
-								padding: "var(--alm-sp-1)",
-								minWidth: 160,
-								boxShadow: "0 4px 12px rgba(0,0,0,0.12)",
-							}}
-						>
+						<div className="alm-naming__dropdown alm-naming__dropdown--token">
 							{AVAILABLE_TOKENS.map((t) => (
 								<button
 									key={t}
 									type="button"
-									style={{
-										display: "block",
-										width: "100%",
-										textAlign: "left",
-										padding: "4px 8px",
-										background: "none",
-										border: "none",
-										cursor: "pointer",
-										fontFamily: "var(--alm-font-mono)",
-										fontSize: "var(--alm-text-xs)",
-										color: "var(--alm-text)",
-									}}
-									onMouseOver={(e) =>
-										(e.currentTarget.style.background = "var(--alm-hover-bg)")
-									}
-									onMouseOut={(e) =>
-										(e.currentTarget.style.background = "none")
-									}
+									className="alm-naming__menu-item"
 									onClick={() => handleAddToken(t)}
 								>
 									{`{${t}}`}
@@ -351,7 +357,7 @@ function PatternChipsEditor({
 				</div>
 
 				{/* Add Separator menu */}
-				<div style={{ position: "relative", display: "inline-block" }}>
+				<div className="alm-naming__menu-anchor">
 					<Btn
 						size="sm"
 						onClick={() => {
@@ -359,51 +365,21 @@ function PatternChipsEditor({
 							setShowTokenMenu(false);
 						}}
 					>
-						+ Sep
+						{m.settings_naming_add_sep()}
 					</Btn>
 					{showSepMenu && (
-						<div
-							style={{
-								position: "absolute",
-								top: "100%",
-								left: 0,
-								zIndex: 10,
-								background: "var(--alm-surface)",
-								border: "1px solid var(--alm-border)",
-								borderRadius: "var(--alm-radius-md)",
-								padding: "var(--alm-sp-1)",
-								minWidth: 100,
-								boxShadow: "0 4px 12px rgba(0,0,0,0.12)",
-							}}
-						>
+						<div className="alm-naming__dropdown alm-naming__dropdown--sep">
 							{SEPARATORS.map((s) => (
 								<button
 									key={s}
 									type="button"
-									style={{
-										display: "block",
-										width: "100%",
-										textAlign: "left",
-										padding: "4px 8px",
-										background: "none",
-										border: "none",
-										cursor: "pointer",
-										fontFamily: "var(--alm-font-mono)",
-										fontSize: "var(--alm-text-xs)",
-										color: "var(--alm-text)",
-									}}
-									onMouseOver={(e) =>
-										(e.currentTarget.style.background = "var(--alm-hover-bg)")
-									}
-									onMouseOut={(e) =>
-										(e.currentTarget.style.background = "none")
-									}
+									className="alm-naming__menu-item"
 									onClick={() => handleAddSep(s)}
 								>
 									{s === "/"
-										? "/ (path separator)"
+										? m.settings_naming_sep_path_label()
 										: s === " "
-											? "⎵ (space)"
+											? "⎵"
 											: s}
 								</button>
 							))}
@@ -414,38 +390,27 @@ function PatternChipsEditor({
 
 			{/* Validation feedback */}
 			{errorCode && (
-				<div
-					style={{
-						marginTop: "var(--alm-sp-1)",
-						fontSize: "var(--alm-text-xs)",
-						color: "var(--alm-danger)",
-					}}
-					role="alert"
-				>
+				<div className="alm-naming__error" role="alert">
+					{ }
 					{errorCode === "pattern.empty" &&
-						"Pattern is empty — add at least one token."}
+						m.settings_naming_invalid_pattern()}
+					{ }
 					{errorCode === "token.unknown" &&
-						"Pattern contains an unknown token."}
+						m.settings_naming_invalid_pattern()}
 					{errorCode &&
 						!["pattern.empty", "token.unknown"].includes(errorCode) &&
-						`Invalid pattern (${errorCode})`}
+						m.settings_naming_invalid_pattern()}
 				</div>
 			)}
 			{warnings.length > 0 && (
-				<div
-					style={{
-						marginTop: "var(--alm-sp-1)",
-						fontSize: "var(--alm-text-xs)",
-						color: "var(--alm-text-muted)",
-					}}
-				>
+				<div className="alm-naming__warning">
 					{warnings.includes("no_path_separator") && (
 						<span>
-							No path separator (/) — all tokens resolve to one flat folder.{" "}
+							{m.settings_naming_warn_no_path_sep()}{" "}
 						</span>
 					)}
 					{warnings.includes("consecutive_separators") && (
-						<span>Consecutive separators detected. </span>
+						<span>{m.settings_naming_consecutive_seps()} </span>
 					)}
 				</div>
 			)}
@@ -515,24 +480,9 @@ function PerTypePatternChipsEditor({
 	return (
 		<div>
 			{/* Chip row */}
-			<div
-				style={{
-					display: "flex",
-					flexWrap: "wrap",
-					gap: "var(--alm-sp-1)",
-					alignItems: "center",
-					minHeight: 32,
-				}}
-			>
+			<div className="alm-naming__chip-row">
 				{isEmpty && (
-					<span
-						style={{
-							fontFamily: "var(--alm-font-mono)",
-							fontSize: "var(--alm-text-xs)",
-							color: "var(--alm-text-muted)",
-							fontStyle: "italic",
-						}}
-					>
+					<span className="alm-naming__chip-placeholder">
 						{defaultPlaceholder}
 					</span>
 				)}
@@ -557,7 +507,7 @@ function PerTypePatternChipsEditor({
 								className="alm-token-chip__x"
 								role="button"
 								tabIndex={0}
-								aria-label={`Remove ${label}`}
+								aria-label={m.settings_naming_remove_token({ label })}
 								onClick={() => handleRemove(chip.id)}
 								onKeyDown={(e) => {
 									if (e.key === "Enter") handleRemove(chip.id);
@@ -570,7 +520,7 @@ function PerTypePatternChipsEditor({
 				})}
 
 				{/* Add Token menu */}
-				<div style={{ position: "relative", display: "inline-block" }}>
+				<div className="alm-naming__menu-anchor">
 					<Btn
 						size="sm"
 						onClick={() => {
@@ -578,45 +528,15 @@ function PerTypePatternChipsEditor({
 							setShowLiteralInput(false);
 						}}
 					>
-						+ Token
+						{m.settings_naming_add_token()}
 					</Btn>
 					{showTokenMenu && (
-						<div
-							style={{
-								position: "absolute",
-								top: "100%",
-								left: 0,
-								zIndex: 10,
-								background: "var(--alm-surface)",
-								border: "1px solid var(--alm-border)",
-								borderRadius: "var(--alm-radius-md)",
-								padding: "var(--alm-sp-1)",
-								minWidth: 160,
-								boxShadow: "0 4px 12px rgba(0,0,0,0.12)",
-							}}
-						>
+						<div className="alm-naming__dropdown alm-naming__dropdown--token">
 							{AVAILABLE_TOKENS.map((t) => (
 								<button
 									key={t}
 									type="button"
-									style={{
-										display: "block",
-										width: "100%",
-										textAlign: "left",
-										padding: "4px 8px",
-										background: "none",
-										border: "none",
-										cursor: "pointer",
-										fontFamily: "var(--alm-font-mono)",
-										fontSize: "var(--alm-text-xs)",
-										color: "var(--alm-text)",
-									}}
-									onMouseOver={(e) =>
-										(e.currentTarget.style.background = "var(--alm-hover-bg)")
-									}
-									onMouseOut={(e) =>
-										(e.currentTarget.style.background = "none")
-									}
+									className="alm-naming__menu-item"
 									onClick={() => handleAddToken(t)}
 								>
 									{`{${t}}`}
@@ -628,11 +548,11 @@ function PerTypePatternChipsEditor({
 
 				{/* Add / separator */}
 				<Btn size="sm" onClick={handleAddSep}>
-					+ /
+					{m.settings_naming_add_path_sep()}
 				</Btn>
 
 				{/* Add Literal segment */}
-				<div style={{ position: "relative", display: "inline-block" }}>
+				<div className="alm-naming__menu-anchor">
 					<Btn
 						size="sm"
 						onClick={() => {
@@ -644,58 +564,29 @@ function PerTypePatternChipsEditor({
 							}
 						}}
 					>
-						+ Literal
+						{m.settings_naming_add_literal()}
 					</Btn>
 					{showLiteralInput && (
-						<div
-							style={{
-								position: "absolute",
-								top: "100%",
-								left: 0,
-								zIndex: 10,
-								background: "var(--alm-surface)",
-								border: "1px solid var(--alm-border)",
-								borderRadius: "var(--alm-radius-md)",
-								padding: "var(--alm-sp-1)",
-								minWidth: 160,
-								boxShadow: "0 4px 12px rgba(0,0,0,0.12)",
-								display: "flex",
-								gap: "var(--alm-sp-1)",
-							}}
-						>
+						<div className="alm-naming__dropdown alm-naming__dropdown--literal">
 							<input
 								ref={literalInputRef}
 								type="text"
-								className="alm-input"
-								style={{
-									fontFamily: "var(--alm-font-mono)",
-									fontSize: "var(--alm-text-xs)",
-									width: 100,
-									padding: "2px 6px",
-								}}
+								className="alm-naming__literal-input"
 								value={literalInput}
-								placeholder="e.g. flats"
+								placeholder={m.settings_naming_literal_placeholder()}
 								spellCheck={false}
 								autoCorrect="off"
 								autoCapitalize="off"
-								aria-label="Literal path segment"
+								aria-label={m.settings_naming_literal_aria()}
 								onChange={(e) => setLiteralInput(e.target.value)}
 								onKeyDown={handleLiteralKeyDown}
 							/>
 							<button
 								type="button"
-								style={{
-									padding: "2px 8px",
-									background: "var(--alm-accent)",
-									color: "var(--alm-accent-fg)",
-									border: "none",
-									borderRadius: "var(--alm-radius-md)",
-									cursor: "pointer",
-									fontSize: "var(--alm-text-xs)",
-								}}
+								className="alm-naming__literal-add-btn"
 								onClick={handleAddLiteral}
 							>
-								Add
+								{m.common_add()}
 							</button>
 						</div>
 					)}
@@ -707,11 +598,7 @@ function PerTypePatternChipsEditor({
 				<div
 					id={`${rowId}-error`}
 					role="alert"
-					style={{
-						marginTop: "var(--alm-sp-1)",
-						fontSize: "var(--alm-text-xs)",
-						color: "var(--alm-danger)",
-					}}
+					className="alm-naming__error"
 				>
 					{error}
 				</div>
@@ -843,17 +730,7 @@ function PerTypeDestinationPatterns() {
 	};
 
 	return (
-		<div className="alm-settings__group">
-			<div className="alm-settings__group-title">
-				Per-Type Destination Patterns
-			</div>
-			<div
-				className="alm-settings__row-desc"
-				style={{ marginBottom: "var(--alm-sp-2)" }}
-			>
-				Destination folder pattern per frame type, applied when confirming inbox
-				items. Empty = use the built-in default (shown as placeholder).
-			</div>
+		<SettingsSection title={m.settings_naming_pertype_title()}>
 			{FRAME_TYPE_CLASSES.map((cls) => {
 				const chips = chipsByClass[cls];
 				const isOverridden = !chipsAreEmpty(chips);
@@ -862,47 +739,73 @@ function PerTypeDestinationPatterns() {
 					loaded && isOverridden ? validatePatternString(patternStr) : null;
 				const error = backendErrors[cls] ?? clientError ?? undefined;
 				const rowId = `naming-pattern-${cls}`;
+				// Live preview: resolve the effective pattern (override or
+				// built-in default) against representative sample values. Only
+				// shown when the pattern is free of validation errors.
+				const effectivePattern = isOverridden
+					? patternStr
+					: FRAME_TYPE_DEFAULT_PATTERNS[cls];
+				const previewPath =
+					error == null ? resolvePerTypePreview(effectivePattern) : "";
 				return (
-					<div className="alm-settings__row" key={cls}>
-						<div className="alm-settings__row-label" id={`${rowId}-label`}>
-							{FRAME_TYPE_LABELS[cls]}
-						</div>
-						<div className="alm-settings__row-content">
+					<SettingsRow
+						key={cls}
+						label={<span id={`${rowId}-label`}>{FRAME_TYPE_LABELS[cls]}</span>}
+						info="Destination folder pattern for this frame type, applied when confirming inbox items. Empty = use the built-in default (shown as placeholder)."
+					>
+						{/* Editor and its buttons live on separate lines (spec 043 §4). */}
+						<div className="alm-naming__pertype-stack">
 							<div
-								style={{
-									display: "flex",
-									alignItems: "flex-start",
-									gap: "var(--alm-sp-2)",
-								}}
+								className="alm-naming__pertype-editor-wrap"
+								role="group"
+								aria-labelledby={`${rowId}-label`}
+								data-testid={rowId}
 							>
+								<PerTypePatternChipsEditor
+									chips={chips}
+									onChange={(c) => handleChipsChange(cls, c)}
+									error={error}
+									defaultPlaceholder={FRAME_TYPE_DEFAULT_PATTERNS[cls]}
+									rowId={rowId}
+								/>
+							</div>
+
+							{/* Working live preview of the resolved sample path. */}
+							{previewPath !== "" && (
 								<div
-									style={{ flex: 1 }}
-									role="group"
-									aria-labelledby={`${rowId}-label`}
-									data-testid={rowId}
+									className="alm-naming__pertype-preview"
+									data-testid={`${rowId}-preview`}
 								>
-									<PerTypePatternChipsEditor
-										chips={chips}
-										onChange={(c) => handleChipsChange(cls, c)}
-										error={error}
-										defaultPlaceholder={FRAME_TYPE_DEFAULT_PATTERNS[cls]}
-										rowId={rowId}
-									/>
+									<span className="alm-naming__pertype-preview-label">
+										{m.settings_naming_preview_label()}
+									</span>{" "}
+									<code className="alm-mono alm-naming__pertype-preview-code">
+										{previewPath}
+									</code>
+									{!isOverridden && (
+										<span className="alm-naming__pertype-preview-default">
+											{m.settings_naming_preview_default()}
+										</span>
+									)}
 								</div>
+							)}
+
+							{/* Buttons on their own line. */}
+							<div className="alm-naming__pertype-actions">
 								<Btn
 									size="sm"
 									disabled={!isOverridden}
 									data-testid={`naming-pattern-reset-${cls}`}
 									onClick={() => handleReset(cls)}
 								>
-									Reset to default
+									{m.common_reset()}
 								</Btn>
 							</div>
 						</div>
-					</div>
+					</SettingsRow>
 				);
 			})}
-		</div>
+		</SettingsSection>
 	);
 }
 
@@ -995,8 +898,7 @@ export function NamingStructure({ save }: NamingStructureProps) {
 
 	return (
 		<>
-			<div className="alm-settings__group">
-				<div className="alm-settings__group-title">Project Folder Pattern</div>
+			<SettingsSection title={m.settings_naming_project_title()}>
 				<div className="alm-settings__row">
 					<div className="alm-settings__row-content">
 						<PatternChipsEditor
@@ -1011,7 +913,7 @@ export function NamingStructure({ save }: NamingStructureProps) {
 						/>
 					</div>
 				</div>
-			</div>
+			</SettingsSection>
 
 			<PerTypeDestinationPatterns />
 
@@ -1020,78 +922,45 @@ export function NamingStructure({ save }: NamingStructureProps) {
 					<label className="alm-settings__row-label">
 						<input
 							type="checkbox"
+							className="alm-naming__checkbox"
 							checked={autoApplyPattern}
 							onChange={(e) => handleAutoApplyChange(e.target.checked)}
-							style={{ marginRight: "var(--alm-sp-1)" }}
 						/>
-						Auto-apply pattern to new projects without confirmation
+						{m.settings_naming_auto_apply()}
 					</label>
 				</div>
 			</div>
 
-			<div className="alm-settings__group">
-				<div className="alm-settings__group-title">Live Preview</div>
-				<div
-					style={{
-						fontSize: "var(--alm-text-xs)",
-						color: "var(--alm-text-muted)",
-						marginBottom: "var(--alm-sp-1)",
-					}}
-				>
-					Sample: NGC7000 / Ha / 2026-04-12 / light
+			<SettingsSection title={m.settings_naming_live_preview_title()}>
+				<div className="alm-naming__preview-sample">
+					{m.settings_naming_live_preview_sample()}
 				</div>
 				{!canSave && (
-					<div
-						style={{
-							fontSize: "var(--alm-text-xs)",
-							color: "var(--alm-text-muted)",
-							fontStyle: "italic",
-						}}
-					>
-						— (invalid or empty pattern)
+					<div className="alm-naming__preview-empty">
+						{m.settings_naming_invalid_pattern()}
 					</div>
 				)}
 				{previewError && (
-					<div
-						style={{
-							fontSize: "var(--alm-text-xs)",
-							color: "var(--alm-danger)",
-						}}
-					>
+					<div className="alm-naming__preview-error">
 						{previewError}
 					</div>
 				)}
 				{preview && canSave && (
-					<div
-						style={{
-							display: "flex",
-							gap: "var(--alm-sp-3)",
-							alignItems: "baseline",
-						}}
-					>
-						<code
-							className="alm-mono"
-							style={{ fontSize: "var(--alm-text-xs)" }}
-						>
+					<div className="alm-naming__preview-path-row">
+						<code className="alm-mono alm-naming__preview-code">
 							{preview.missingTokens.length > 0
 								? // Render path with fallback segments dimmed.
 									preview.resolvedPath
 								: preview.resolvedPath}
 						</code>
 						{preview.missingTokens.length > 0 && (
-							<span
-								style={{
-									fontSize: "var(--alm-text-xs)",
-									color: "var(--alm-text-muted)",
-									fontStyle: "italic",
-								}}
-							>
-								(fallback used for: {preview.missingTokens.join(", ")})
+							<span className="alm-naming__preview-fallback">
+								{m.settings_naming_fallback_used({ tokens: preview.missingTokens.join(", ") })}
 							</span>
 						)}
 					</div>
 				)}
-			</div>
+			</SettingsSection>
 		</>
 	);
 }

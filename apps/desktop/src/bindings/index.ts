@@ -172,7 +172,7 @@ export const commands = {
 	 * 
 	 *  Returns `Err(TargetOpError)` with code `internal.database`.
 	 */
-	targetList: () => typedError<TargetListItem[], TargetOpError_Serialize>(__TAURI_INVOKE("target_list")),
+	targetList: () => typedError<TargetListItem_Serialize[], TargetOpError_Serialize>(__TAURI_INVOKE("target_list")),
 	/**
 	 *  `target.alias.add` — add a user alias to a canonical target (gen-3).
 	 * 
@@ -5945,12 +5945,87 @@ export type TargetGetRequest = {
 /**  Classification of an astronomical target. */
 export type TargetKind = "deep_sky" | "planetary" | "lunar" | "solar" | "landscape";
 
-/**  A single row in the target list returned by `target.list` (gen-3). */
-export type TargetListItem = {
+/**
+ *  A single row in the target list returned by `target.list` (gen-3).
+ * 
+ *  `raDeg` and `decDeg` are always populated (sourced from `canonical_target`).
+ *  `constellation` and `magnitude` are optional because those columns were not
+ *  in the original schema; they are populated from `canonical_target.constellation`
+ *  and `canonical_target.magnitude` when present (migration 0046).
+ *  `aliases` carries all alias display forms (designations, common names, and
+ *  user-added) so client-side alias search (e.g. "Andromeda" → M31) works
+ *  without a separate round-trip. Empty when no aliases are stored.
+ */
+export type TargetListItem = TargetListItem_Serialize | TargetListItem_Deserialize;
+
+/**
+ *  A single row in the target list returned by `target.list` (gen-3).
+ * 
+ *  `raDeg` and `decDeg` are always populated (sourced from `canonical_target`).
+ *  `constellation` and `magnitude` are optional because those columns were not
+ *  in the original schema; they are populated from `canonical_target.constellation`
+ *  and `canonical_target.magnitude` when present (migration 0046).
+ *  `aliases` carries all alias display forms (designations, common names, and
+ *  user-added) so client-side alias search (e.g. "Andromeda" → M31) works
+ *  without a separate round-trip. Empty when no aliases are stored.
+ */
+export type TargetListItem_Deserialize = {
 	id: string,
 	effectiveLabel: string,
 	primaryDesignation: string,
 	objectType: string,
+	/**  ICRS J2000 right ascension in decimal degrees. */
+	raDeg: number | null,
+	/**  ICRS J2000 declination in decimal degrees. */
+	decDeg: number | null,
+	/**
+	 *  IAU constellation abbreviation (e.g. `"And"`, `"Ori"`); `null` when
+	 *  not yet stored (no constellation column in the schema before migration 0046).
+	 */
+	constellation: string | null,
+	/**  Visual magnitude; `null` when not stored or not applicable. */
+	magnitude: number | null,
+	/**
+	 *  All alias display forms for this target (designations, common names,
+	 *  user-added). Empty when none are stored. Additive field — older clients
+	 *  that ignore unknown keys are unaffected.
+	 */
+	aliases?: string[],
+};
+
+/**
+ *  A single row in the target list returned by `target.list` (gen-3).
+ * 
+ *  `raDeg` and `decDeg` are always populated (sourced from `canonical_target`).
+ *  `constellation` and `magnitude` are optional because those columns were not
+ *  in the original schema; they are populated from `canonical_target.constellation`
+ *  and `canonical_target.magnitude` when present (migration 0046).
+ *  `aliases` carries all alias display forms (designations, common names, and
+ *  user-added) so client-side alias search (e.g. "Andromeda" → M31) works
+ *  without a separate round-trip. Empty when no aliases are stored.
+ */
+export type TargetListItem_Serialize = {
+	id: string,
+	effectiveLabel: string,
+	primaryDesignation: string,
+	objectType: string,
+	/**  ICRS J2000 right ascension in decimal degrees. */
+	raDeg: number | null,
+	/**  ICRS J2000 declination in decimal degrees. */
+	decDeg: number | null,
+	/**
+	 *  IAU constellation abbreviation (e.g. `"And"`, `"Ori"`); `null` when
+	 *  not yet stored (no constellation column in the schema before migration 0046).
+	 */
+	constellation?: string | null,
+	/**  Visual magnitude; `null` when not stored or not applicable. */
+	magnitude?: number | null,
+	/**
+	 *  All alias display forms for this target (designations, common names,
+	 *  user-added). Empty when none are stored. Additive field — older clients
+	 *  that ignore unknown keys are unaffected.
+	 */
+	aliases: string[],
 };
 
 /**

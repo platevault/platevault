@@ -7,6 +7,7 @@ import { useRef, useMemo } from 'react';
 import { useVirtualizer } from '@tanstack/react-virtual';
 import { Pill } from '@/ui';
 import { formatMonthYear } from '@/lib/datetime';
+import { m } from '@/lib/i18n';
 
 export interface CalendarNight {
   date: string;
@@ -69,14 +70,12 @@ export function CalendarScroll({ nights, onNightSelect }: CalendarScrollProps) {
       ref={parentRef}
       className="alm-calendar-scroll"
       role="list"
-      aria-label="Session calendar timeline"
+      aria-label={m.sessions_calendar_aria()}
     >
       <div
         className="alm-calendar-scroll__inner"
-        style={{
-          height: `${virtualizer.getTotalSize()}px`,
-          position: 'relative',
-        }}
+        // eslint-disable-next-line no-restricted-syntax -- dynamic: virtualizer total height (getTotalSize)
+        style={{ height: `${virtualizer.getTotalSize()}px` }}
       >
         {virtualizer.getVirtualItems().map((virtualRow) => {
           const row = rows[virtualRow.index];
@@ -85,13 +84,10 @@ export function CalendarScroll({ nights, onNightSelect }: CalendarScrollProps) {
               <div
                 key={virtualRow.key}
                 className="alm-calendar-scroll__month-header"
+                // eslint-disable-next-line no-restricted-syntax -- dynamic: virtualizer translateY + height for month header row
                 style={{
-                  position: 'absolute',
-                  top: 0,
                   transform: `translateY(${virtualRow.start}px)`,
                   height: `${virtualRow.size}px`,
-                  left: 0,
-                  right: 0,
                 }}
                 role="heading"
                 aria-level={3}
@@ -106,13 +102,10 @@ export function CalendarScroll({ nights, onNightSelect }: CalendarScrollProps) {
             <div
               key={virtualRow.key}
               className="alm-calendar-scroll__night"
+              // eslint-disable-next-line no-restricted-syntax -- dynamic: virtualizer translateY + height for night row
               style={{
-                position: 'absolute',
-                top: 0,
                 transform: `translateY(${virtualRow.start}px)`,
                 height: `${virtualRow.size}px`,
-                left: 0,
-                right: 0,
               }}
               role="listitem"
               tabIndex={0}
@@ -133,7 +126,7 @@ export function CalendarScroll({ nights, onNightSelect }: CalendarScrollProps) {
                 ))}
               </span>
               <span className="alm-calendar-scroll__frame-count alm-mono">
-                {night.sessions.reduce((sum, s) => sum + s.frames, 0)} frames
+                {night.sessions.reduce((sum, s) => sum + s.frames, 0)} {m.sessions_calendar_frames_suffix()}
               </span>
             </div>
           );

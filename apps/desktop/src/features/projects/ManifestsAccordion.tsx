@@ -24,16 +24,19 @@ import {
 } from './manifests';
 import type { ManifestSummaryDto } from './manifests';
 import type { ManifestBodyDto_Serialize as ManifestBodyDto } from '@/bindings/index';
+import { m } from '@/lib/i18n';
 
 // ── Props ─────────────────────────────────────────────────────────────────────
 
 export interface ManifestsAccordionProps {
   projectId: string;
+  /** Whether the collapsible section starts open. Default true. */
+  defaultOpen?: boolean;
 }
 
 // ── Component ─────────────────────────────────────────────────────────────────
 
-export function ManifestsAccordion({ projectId }: ManifestsAccordionProps) {
+export function ManifestsAccordion({ projectId, defaultOpen = true }: ManifestsAccordionProps) {
   const [manifests, setManifests] = useState<ManifestSummaryDto[]>([]);
   const [loading, setLoading] = useState(true);
   const [fetchError, setFetchError] = useState<string | null>(null);
@@ -80,7 +83,7 @@ export function ManifestsAccordion({ projectId }: ManifestsAccordionProps) {
         setBodyMap((prev) => ({ ...prev, [id]: resp.manifest.body }));
       } catch (err: unknown) {
         const msg = typeof err === 'string' ? err : (err as Error)?.message ?? 'unknown';
-        addToast({ message: `Failed to load manifest: ${msg}`, variant: 'error' });
+        addToast({ message: m.projects_manifests_load_body_failed({ error: msg }), variant: 'error' });
       } finally {
         setBodyLoading(null);
       }
@@ -106,12 +109,12 @@ export function ManifestsAccordion({ projectId }: ManifestsAccordionProps) {
 
   if (loading) {
     return (
-      <Section title="Manifests">
+      <Section title={m.projects_manifests_title()} defaultOpen={defaultOpen}>
         <div
           data-testid="manifests-loading"
-          style={{ fontSize: 'var(--alm-text-sm)', color: 'var(--alm-text-muted)' }}
+          className="alm-manifests__status"
         >
-          Loading…
+          {m.common_loading()}
         </div>
       </Section>
     );
@@ -119,123 +122,86 @@ export function ManifestsAccordion({ projectId }: ManifestsAccordionProps) {
 
   if (fetchError) {
     return (
-      <Section title="Manifests">
+      <Section title={m.projects_manifests_title()} defaultOpen={defaultOpen}>
         <div
           data-testid="manifests-error"
-          style={{ fontSize: 'var(--alm-text-sm)', color: 'var(--alm-danger)' }}
+          className="alm-manifests__status--error"
         >
-          Could not load manifests.
+          {m.projects_manifests_load_error()}
         </div>
       </Section>
     );
   }
 
   return (
-    <Section title="Manifests" count={manifests.length}>
+    <Section title={m.projects_manifests_title()} count={manifests.length} defaultOpen={defaultOpen}>
       {manifests.length === 0 ? (
         <div
           data-testid="manifests-empty"
-          style={{ fontSize: 'var(--alm-text-sm)', color: 'var(--alm-text-muted)' }}
+          className="alm-manifests__status"
         >
-          No manifests yet. Manifests are generated automatically at lifecycle
-          checkpoints.
+          {m.projects_manifests_empty()}
         </div>
       ) : (
         <div data-testid="manifests-list">
-          {manifests.map((m) => (
+          {manifests.map((manifest) => (
             <div
-              key={m.id}
-              style={{
-                borderBottom: '1px solid var(--alm-border)',
-                paddingBottom: 'var(--alm-sp-2)',
-                marginBottom: 'var(--alm-sp-2)',
-              }}
+              key={manifest.id}
+              className="alm-manifests__item"
             >
               {/* Row header */}
-              <div
-                style={{
-                  display: 'flex',
-                  alignItems: 'center',
-                  gap: 'var(--alm-sp-2)',
-                }}
-              >
+              <div className="alm-manifests__row-header">
                 <button
-                  data-testid={`manifest-row-${m.id}`}
-                  onClick={() => void handleToggle(m.id)}
-                  style={{
-                    flex: 1,
-                    textAlign: 'left',
-                    background: 'none',
-                    border: 'none',
-                    cursor: 'pointer',
-                    padding: 'var(--alm-sp-1) 0',
-                    fontSize: 'var(--alm-text-sm)',
-                  }}
-                  aria-expanded={expandedId === m.id}
+                  data-testid={`manifest-row-${manifest.id}`}
+                  onClick={() => void handleToggle(manifest.id)}
+                  className="alm-manifests__toggle-btn"
+                  aria-expanded={expandedId === manifest.id}
                 >
-                  <span style={{ fontWeight: 500 }}>{manifestReasonLabel(m.reason)}</span>
-                  <span
-                    style={{
-                      marginLeft: 'var(--alm-sp-2)',
-                      color: 'var(--alm-text-muted)',
-                      fontSize: 'var(--alm-text-xs)',
-                    }}
-                  >
-                    {formatManifestTimestamp(m.timestamp)}
+                  <span className="alm-manifests__reason-label">{manifestReasonLabel(manifest.reason)}</span>
+                  <span className="alm-manifests__timestamp">
+                    {formatManifestTimestamp(manifest.timestamp)}
                   </span>
                 </button>
                 <Btn
                   size="sm"
                   variant="ghost"
-                  disabled={revealWorking === m.id}
-                  onClick={() => void handleReveal(m)}
-                  data-testid={`manifest-reveal-${m.id}`}
-                  title="Reveal in file manager"
+                  disabled={revealWorking === manifest.id}
+                  onClick={() => void handleReveal(manifest)}
+                  data-testid={`manifest-reveal-${manifest.id}`}
+                  title={m.projects_manifests_reveal_title()}
                 >
-                  Reveal
+                  {m.projects_manifests_reveal_btn()}
                 </Btn>
               </div>
 
               {/* Expanded body */}
-              {expandedId === m.id && (
+              {expandedId === manifest.id && (
                 <div
-                  data-testid={`manifest-body-${m.id}`}
-                  style={{
-                    marginTop: 'var(--alm-sp-2)',
-                    padding: 'var(--alm-sp-2)',
-                    background: 'var(--alm-bg3)',
-                    borderRadius: 4,
-                    fontSize: 'var(--alm-text-xs)',
-                  }}
+                  data-testid={`manifest-body-${manifest.id}`}
+                  className="alm-manifests__body-panel"
                 >
-                  {bodyLoading === m.id ? (
-                    <span>Loading body…</span>
-                  ) : bodyMap[m.id] ? (
+                  {bodyLoading === manifest.id ? (
+                    <span>{m.projects_manifests_body_loading()}</span>
+                  ) : bodyMap[manifest.id] ? (
                     <div>
                       <div>
-                        <strong>Lifecycle:</strong> {bodyMap[m.id].lifecycleState}
+                        <strong>{m.projects_manifests_lifecycle_label()}</strong> {bodyMap[manifest.id].lifecycleState}
                       </div>
-                      {bodyMap[m.id].workflowProfile && (
+                      {bodyMap[manifest.id].workflowProfile && (
                         <div>
-                          <strong>Workflow:</strong> {bodyMap[m.id].workflowProfile}
+                          <strong>{m.projects_manifests_workflow_label()}</strong> {bodyMap[manifest.id].workflowProfile}
                         </div>
                       )}
-                      {bodyMap[m.id].notes && (
-                        <div style={{ marginTop: 'var(--alm-sp-1)' }}>
-                          <strong>Notes snapshot:</strong>
-                          <div style={{ whiteSpace: 'pre-wrap', marginTop: 2 }}>
-                            {bodyMap[m.id].notes}
+                      {bodyMap[manifest.id].notes && (
+                        <div className="alm-manifests__notes-block">
+                          <strong>{m.projects_manifests_notes_label()}</strong>
+                          <div className="alm-manifests__notes-content">
+                            {bodyMap[manifest.id].notes}
                           </div>
                         </div>
                       )}
-                      <div
-                        style={{
-                          marginTop: 'var(--alm-sp-1)',
-                          color: 'var(--alm-text-muted)',
-                          fontFamily: 'var(--alm-font-mono)',
-                        }}
-                      >
-                        {m.path}
+                      <div className="alm-manifests__path">
+                        {manifest.path}
                       </div>
                     </div>
                   ) : null}

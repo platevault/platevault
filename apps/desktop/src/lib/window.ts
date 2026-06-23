@@ -31,7 +31,7 @@ export async function openInNewWindow(path: string): Promise<void> {
   const label = `alm-win-${Date.now()}-${windowSeq++}`;
   new WebviewWindow(label, {
     url: fullUrl,
-    title: 'Astro Library Manager',
+    title: 'PlateVault',
     width: 1280,
     height: 800,
   });

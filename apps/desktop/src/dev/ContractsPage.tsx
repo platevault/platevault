@@ -29,14 +29,13 @@ import { pickDirectory } from '@/shared/native/picker';
 function DevModeDisabledStub() {
   return (
     <div
-      className="alm-dev-stub alm-page__scroll"
-      style={{ padding: 'var(--alm-sp-8)', textAlign: 'center', color: 'var(--alm-text-muted)' }}
+      className="alm-dev-stub alm-page__scroll alm-dev-contracts-page__stub-body"
       data-testid="dev-disabled-stub"
     >
-      <h2 style={{ fontSize: 'var(--alm-text-lg)', marginBottom: 'var(--alm-sp-2)' }}>
+      <h2 className="alm-dev-contracts-page__stub-heading">
         Developer mode disabled
       </h2>
-      <p style={{ fontSize: 'var(--alm-text-sm)' }}>
+      <p className="alm-dev-contracts-page__stub-text">
         Enable <strong>devMode</strong> in Settings › Advanced, then restart the app to access
         developer diagnostics.
       </p>
@@ -144,7 +143,7 @@ export function ContractsPage() {
   if (devMode === null) {
     return (
       <PageShell>
-        <div className="alm-page__scroll" style={{ padding: 'var(--alm-sp-8)', color: 'var(--alm-text-muted)' }}>
+        <div className="alm-page__scroll alm-dev-contracts-page__loading">
           Loading…
         </div>
       </PageShell>
@@ -163,22 +162,13 @@ export function ContractsPage() {
   return (
     <PageShell>
     <div
-      className="alm-dev-contracts alm-page__scroll"
-      style={{ padding: 'var(--alm-sp-4)', display: 'flex', flexDirection: 'column', gap: 'var(--alm-sp-4)' }}
+      className="alm-dev-contracts alm-page__scroll alm-dev-contracts-page__body"
     >
-      <div
-        style={{
-          display: 'flex',
-          alignItems: 'center',
-          justifyContent: 'space-between',
-          borderBottom: '1px solid var(--alm-border)',
-          paddingBottom: 'var(--alm-sp-3)',
-        }}
-      >
-        <h1 style={{ fontSize: 'var(--alm-text-lg)', fontWeight: 600 }}>
+      <div className="alm-dev-contracts-page__header">
+        <h1 className="alm-dev-contracts-page__title">
           Developer Contract Diagnostics
         </h1>
-        <div style={{ display: 'flex', gap: 'var(--alm-sp-2)' }}>
+        <div className="alm-dev-contracts-page__actions">
           <button
             type="button"
             className="alm-btn alm-btn--sm"
@@ -202,7 +192,7 @@ export function ContractsPage() {
       {error && (
         <div
           role="alert"
-          style={{ color: 'var(--alm-danger)', fontSize: 'var(--alm-text-sm)' }}
+          className="alm-dev-contracts-page__error"
         >
           Error: {error}
         </div>
@@ -211,14 +201,14 @@ export function ContractsPage() {
       {exportResult && (
         <div
           role="status"
-          style={{ fontSize: 'var(--alm-text-sm)', color: 'var(--alm-text-muted)' }}
+          className="alm-dev-contracts-page__export-result"
         >
           {exportResult}
         </div>
       )}
 
       <section>
-        <h2 style={{ fontSize: 'var(--alm-text-md)', fontWeight: 600, marginBottom: 'var(--alm-sp-2)' }}>
+        <h2 className="alm-dev-contracts-page__section-heading">
           Contracts ({contracts.length})
         </h2>
         <ContractList
@@ -228,7 +218,7 @@ export function ContractsPage() {
       </section>
 
       <section>
-        <h2 style={{ fontSize: 'var(--alm-text-md)', fontWeight: 600, marginBottom: 'var(--alm-sp-2)' }}>
+        <h2 className="alm-dev-contracts-page__section-heading">
           Recent Calls ({calls.length})
         </h2>
         <CallList
