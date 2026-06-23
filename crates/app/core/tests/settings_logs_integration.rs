@@ -102,22 +102,19 @@ async fn restore_defaults_reverts_to_default_value() {
     let (db, _repo, bus) = support::setup().await;
     let pool = db.pool();
 
-    // Mutate rowDensity away from its in-code default ("dense") to "comfortable".
+    // Mutate logLevel away from its in-code default ("info") to "debug".
     let req = SettingsUpdateRequest {
-        key: "rowDensity".to_owned(),
-        value: JsonAny::from(serde_json::Value::String("comfortable".to_owned())),
+        key: "logLevel".to_owned(),
+        value: JsonAny::from(serde_json::Value::String("debug".to_owned())),
     };
-    settings::update_setting(pool, &bus, &req).await.expect("update rowDensity should succeed");
+    settings::update_setting(pool, &bus, &req).await.expect("update logLevel should succeed");
 
     // Confirm mutation landed.
     let get1 = settings::get_settings(pool, &bus).await.expect("get_settings after mutation");
-    assert_eq!(
-        get1.settings.row_density, "comfortable",
-        "precondition: should be 'comfortable' after write"
-    );
+    assert_eq!(get1.settings.log_level, "debug", "precondition: should be 'debug' after write");
 
-    // Restore only the rowDensity key.
-    let restore_req = RestoreDefaultsRequest { keys: vec!["rowDensity".to_owned()] };
+    // Restore only the logLevel key.
+    let restore_req = RestoreDefaultsRequest { keys: vec!["logLevel".to_owned()] };
     let restore_resp = settings::restore_defaults(pool, &bus, &restore_req)
         .await
         .expect("restore_defaults should succeed");
@@ -129,15 +126,15 @@ async fn restore_defaults_reverts_to_default_value() {
         restore_resp.status
     );
     assert!(
-        restore_resp.restored.contains(&"rowDensity".to_owned()),
-        "restored list should include 'rowDensity'"
+        restore_resp.restored.contains(&"logLevel".to_owned()),
+        "restored list should include 'logLevel'"
     );
 
-    // Read back after restore — should be back at the in-code default ("dense").
+    // Read back after restore — should be back at the in-code default ("info").
     let get2 = settings::get_settings(pool, &bus).await.expect("get_settings after restore");
     assert_eq!(
-        get2.settings.row_density, "dense",
-        "rowDensity should revert to 'dense' (in-code default) after restore_defaults"
+        get2.settings.log_level, "info",
+        "logLevel should revert to 'info' (in-code default) after restore_defaults"
     );
 }
 
@@ -153,33 +150,27 @@ async fn noisy_key_update_does_not_emit_changed_event_non_noisy_does() {
     let pool = db.pool();
 
     // ── non-noisy key: logLevel ───────────────────────────────────────────
-    let before_non_noisy: (i64,) =
-        sqlx::query_as("SELECT COUNT(*) FROM events WHERE topic = ?")
-            .bind(TOPIC_SETTINGS_CHANGED)
-            .fetch_one(pool)
-            .await
-            .expect("count query");
+    let before_non_noisy: (i64,) = sqlx::query_as("SELECT COUNT(*) FROM events WHERE topic = ?")
+        .bind(TOPIC_SETTINGS_CHANGED)
+        .fetch_one(pool)
+        .await
+        .expect("count query");
 
     let req_non_noisy = SettingsUpdateRequest {
         key: "logLevel".to_owned(),
         value: JsonAny::from(serde_json::json!("warn")),
     };
-    let resp_non_noisy = settings::update_setting(pool, &bus, &req_non_noisy)
-        .await
-        .expect("update logLevel");
+    let resp_non_noisy =
+        settings::update_setting(pool, &bus, &req_non_noisy).await.expect("update logLevel");
     assert_eq!(resp_non_noisy.status, SettingsUpdateStatus::Success);
     // Non-noisy: audit_id must be present.
-    assert!(
-        resp_non_noisy.audit_id.is_some(),
-        "non-noisy key update must return an audit_id"
-    );
+    assert!(resp_non_noisy.audit_id.is_some(), "non-noisy key update must return an audit_id");
 
-    let after_non_noisy: (i64,) =
-        sqlx::query_as("SELECT COUNT(*) FROM events WHERE topic = ?")
-            .bind(TOPIC_SETTINGS_CHANGED)
-            .fetch_one(pool)
-            .await
-            .expect("count query");
+    let after_non_noisy: (i64,) = sqlx::query_as("SELECT COUNT(*) FROM events WHERE topic = ?")
+        .bind(TOPIC_SETTINGS_CHANGED)
+        .fetch_one(pool)
+        .await
+        .expect("count query");
     assert_eq!(
         after_non_noisy.0,
         before_non_noisy.0 + 1,
@@ -197,15 +188,11 @@ async fn noisy_key_update_does_not_emit_changed_event_non_noisy_does() {
         key: "protectedCategories".to_owned(),
         value: JsonAny::from(serde_json::json!(["lights", "masters", "finals", "raw"])),
     };
-    let resp_noisy = settings::update_setting(pool, &bus, &req_noisy)
-        .await
-        .expect("update protectedCategories");
+    let resp_noisy =
+        settings::update_setting(pool, &bus, &req_noisy).await.expect("update protectedCategories");
     assert_eq!(resp_noisy.status, SettingsUpdateStatus::Success);
     // Noisy: audit_id must be absent.
-    assert!(
-        resp_noisy.audit_id.is_none(),
-        "noisy key update must NOT return an audit_id"
-    );
+    assert!(resp_noisy.audit_id.is_none(), "noisy key update must NOT return an audit_id");
 
     let after_noisy: (i64,) = sqlx::query_as("SELECT COUNT(*) FROM events WHERE topic = ?")
         .bind(TOPIC_SETTINGS_CHANGED)
@@ -213,8 +200,7 @@ async fn noisy_key_update_does_not_emit_changed_event_non_noisy_does() {
         .await
         .expect("count query");
     assert_eq!(
-        after_noisy.0,
-        before_noisy.0,
+        after_noisy.0, before_noisy.0,
         "noisy protectedCategories update must NOT emit a settings.changed event"
     );
 
@@ -225,9 +211,7 @@ async fn noisy_key_update_does_not_emit_changed_event_non_noisy_does() {
         .await
         .expect("snapshot count query");
 
-    settings::emit_snapshot(pool, &bus, "test")
-        .await
-        .expect("emit_snapshot must not error");
+    settings::emit_snapshot(pool, &bus, "test").await.expect("emit_snapshot must not error");
 
     let after_snap: (i64,) = sqlx::query_as("SELECT COUNT(*) FROM events WHERE topic = ?")
         .bind(TOPIC_SETTINGS_SNAPSHOT)

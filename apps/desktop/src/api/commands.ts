@@ -429,6 +429,21 @@ export async function settingsRestoreDefaults(
 }
 
 /**
+ * `settings.overridable-keys` — return the authoritative list of stable settings
+ * keys that can be overridden per source root (spec 018 T025).
+ *
+ * Falls back to a hardcoded pair when the command fails (forward-compat).
+ */
+export async function settingsOverridableKeys(): Promise<string[]> {
+  try {
+    return unwrap(await commands.settingsOverridableKeys()) as string[];
+  } catch {
+    // Fallback for older backends or failed calls — matches the formerly hardcoded list.
+    return ['hashOnScan', 'followSymlinks'];
+  }
+}
+
+/**
  * `settings.source-override.set` — set a per-source settings override
  * (spec 018 T025).
  *

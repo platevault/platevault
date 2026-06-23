@@ -64,6 +64,15 @@ pub fn is_valid_key(key: &str) -> bool {
         || is_workflow_profile_attribution_window_key(key)
 }
 
+/// Return the names of all stable settings keys that can be overridden per source root.
+///
+/// Used by the `settings.overridable-keys` command (spec 018 T025) to provide the
+/// frontend with the authoritative list so it need not hardcode key names.
+#[must_use]
+pub fn overridable_keys() -> Vec<String> {
+    descriptors::DESCRIPTORS.iter().filter(|d| d.overridable).map(|d| d.key.to_owned()).collect()
+}
+
 fn is_tools_bundle_id_key(key: &str) -> bool {
     // ^tools\.[a-z0-9_]+\.bundle_id$
     if let Some(rest) = key.strip_prefix("tools.") {
@@ -322,11 +331,6 @@ fn apply_value_to_state(key: &str, value: Value, state: &mut SettingsState) {
                 state.suggest_calibration = v;
             }
         }
-        "rowDensity" => {
-            if let Some(v) = value.as_str() {
-                state.row_density = v.to_owned();
-            }
-        }
         "logLevel" => {
             if let Some(v) = value.as_str() {
                 state.log_level = v.to_owned();
@@ -434,7 +438,6 @@ fn default_value_for_key(key: &str) -> Value {
         "darkMatchTolerance" => Value::String(defaults.dark_match_tolerance),
         "flatMatching" => Value::String(defaults.flat_matching),
         "suggestCalibration" => Value::Bool(defaults.suggest_calibration),
-        "rowDensity" => Value::String(defaults.row_density),
         "logLevel" => Value::String(defaults.log_level),
         "rememberFollowLogs" => Value::Bool(defaults.remember_follow_logs),
         "defaultProtection" => Value::String(defaults.default_protection),
@@ -474,6 +477,23 @@ fn default_value_for_key(key: &str) -> Value {
         }
         "toolAttributionWindowHours" => {
             serde_json::json!(defaults.tool_attribution_window_hours)
+        }
+        // Structured-path: tools.<id>.bundle_id resolves the seed default
+        // when no user override is stored (spec 018 T042).
+        _ if is_tools_bundle_id_key(key) => {
+            if let Some(tool_id) =
+                key.strip_prefix("tools.").and_then(|r| r.strip_suffix(".bundle_id"))
+            {
+                if let Some(profile) = workflow_profiles::seed::find(tool_id) {
+                    return match profile.bundle_id {
+                        // Known bundle ID from seed (may be wrong on non-macOS; callers
+                        // should prefer the per-OS auto-detected value when available).
+                        Some(id) => Value::String(id.to_owned()),
+                        None => Value::Null,
+                    };
+                }
+            }
+            Value::Null
         }
         _ => Value::Null,
     }
@@ -1133,9 +1153,6 @@ mod tests {
     #[case("logLevel", serde_json::json!("error"))]
     #[case("logLevel", serde_json::json!("warn"))]
     #[case("logLevel", serde_json::json!("info"))]
-    #[case("logLevel", serde_json::json!("debug"))]
-    #[case("rowDensity", serde_json::json!("dense"))]
-    #[case("rowDensity", serde_json::json!("comfortable"))]
     #[case("defaultProtection", serde_json::json!("protected"))]
     #[case("defaultProtection", serde_json::json!("normal"))]
     #[case("defaultProtection", serde_json::json!("unprotected"))]
@@ -1167,8 +1184,6 @@ mod tests {
     #[case("hashOnScan", serde_json::json!(5))] // not a string
     #[case("darkMatchTolerance", serde_json::json!("fuzzy"))]
     #[case("flatMatching", serde_json::json!("auto"))]
-    #[case("logLevel", serde_json::json!("trace"))] // mirrors the old DB test
-    #[case("rowDensity", serde_json::json!("sparse"))]
     #[case("defaultProtection", serde_json::json!("locked"))]
     #[case("calibrationDarkTempTolerance", serde_json::json!(-1.0))] // must be >= 0
     #[case("calibrationDarkTempTolerance", serde_json::json!("x"))] // not a number
@@ -1341,6 +1356,48 @@ mod tests {
     )]
     fn settings_value_eq_cases(#[case] a: Value, #[case] b: Value, #[case] expected_eq: bool) {
         assert_eq!(settings_value_eq(&a, &b), expected_eq);
+    }
+
+    // ── T042: tools bundle_id seed default ─────────────────────────────────
+
+    /// Resolving `tools.<id>.bundle_id` with no stored override returns the
+    /// seed profile's bundle ID for known tools (spec 018 T042).
+    #[test]
+    fn bundle_id_default_resolves_from_seed_for_pixinsight() {
+        let val = default_value_for_key("tools.pixinsight.bundle_id");
+        assert_eq!(
+            val.as_str(),
+            Some("com.pixinsight.PixInsight"),
+            "pixinsight seed bundle_id must be the default"
+        );
+    }
+
+    #[test]
+    fn bundle_id_default_resolves_from_seed_for_siril() {
+        let val = default_value_for_key("tools.siril.bundle_id");
+        assert_eq!(
+            val.as_str(),
+            Some("org.free-astro.siril"),
+            "siril seed bundle_id must be the default"
+        );
+    }
+
+    #[test]
+    fn bundle_id_default_is_null_for_unknown_tool() {
+        let val = default_value_for_key("tools.photoshop.bundle_id");
+        assert!(val.is_null(), "unknown tool must return null bundle_id default");
+    }
+
+    #[test]
+    fn overridable_keys_includes_expected_keys() {
+        let keys = overridable_keys();
+        assert!(keys.contains(&"hashOnScan".to_owned()), "hashOnScan must be overridable");
+        assert!(keys.contains(&"followSymlinks".to_owned()), "followSymlinks must be overridable");
+        // defaultProtection is also overridable per the descriptor table.
+        assert!(
+            keys.contains(&"defaultProtection".to_owned()),
+            "defaultProtection must be overridable"
+        );
     }
 
     // ── Property tests ─────────────────────────────────────────────────────

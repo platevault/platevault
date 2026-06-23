@@ -77,10 +77,6 @@ pub struct SettingsState {
     /// Whether to surface calibration suggestions.
     pub suggest_calibration: bool,
 
-    // ── Advanced / density ────────────────────────────────────────────────
-    /// Row density (retained for mockup; FR-006 removes it later via T032).
-    pub row_density: String,
-
     // ── Application Log ──────────────────────────────────────────────────
     /// Log level: `"error"` | `"warn"` | `"info"` | `"debug"`.
     pub log_level: String,
@@ -160,7 +156,6 @@ impl Default for SettingsState {
             dark_match_tolerance: "strict".to_owned(),
             flat_matching: "filter-rot".to_owned(),
             suggest_calibration: true,
-            row_density: "dense".to_owned(),
             log_level: "info".to_owned(),
             remember_follow_logs: false,
             default_protection: "protected".to_owned(),

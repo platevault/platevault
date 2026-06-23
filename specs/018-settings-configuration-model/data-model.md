@@ -28,7 +28,7 @@ keyed by field name. The localStorage path (`alm.settings.v1`) is superseded.
 | `darkMatchTolerance`      | `"strict" \| "loose" \| "any"`             | Calibration        | Dark match            | Per calibration frame type (dark).                                    |
 | `flatMatching`            | `"filter-rot" \| "filter" \| "manual"`     | Calibration        | Flat match            | Per calibration frame type (flat).                                    |
 | `suggestCalibration`      | `boolean`                                  | Calibration        | Suggest calibration   | Whether to surface calibration suggestions.                           |
-| `rowDensity`              | `"dense" \| "comfortable"`                 | Advanced           | Row density (mockup)  | FR-006 says density is fixed; key retained for mockup until removed.  |
+| `rowDensity`              | `"dense" \| "comfortable"`                 | Advanced           | ~~Row density~~ **REMOVED** | REMOVED: T032 (FR-006). Key was vestigial; no UI consumer. Removed 2026-06-23. |
 | `logLevel`                | `"error" \| "warn" \| "info" \| "debug"`   | Application Log    | Log level             |                                                                       |
 | `rememberFollowLogs`      | `boolean`                                  | Application Log    | Remember follow       | Whether the follow-tail toggle persists across restarts. See absorbed keys table for updated default. |
 | `defaultProtection`       | `"protected" \| "normal" \| "unprotected"` | Source Protection  | Default protection    | Overridable per source.                                               |
@@ -47,7 +47,7 @@ keyed by field name. The localStorage path (`alm.settings.v1`) is superseded.
 | `darkMatchTolerance`      | `"strict"`                                                                                               |
 | `flatMatching`            | `"filter-rot"`                                                                                           |
 | `suggestCalibration`      | `true`                                                                                                   |
-| `rowDensity`              | `"dense"`                                                                                                |
+| `rowDensity`              | ~~`"dense"`~~ **REMOVED** (T032)                                                                                 |
 | `logLevel`                | `"info"`                                                                                                 |
 | `rememberFollowLogs`      | `false` (amended from `true` per spec 019 E-019-3)                                                       |
 | `defaultProtection`       | `"protected"`                                                                                            |

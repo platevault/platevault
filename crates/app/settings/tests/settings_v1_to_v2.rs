@@ -45,7 +45,7 @@ async fn seed_v1_rows(db: &Database) {
     repo::set_raw(pool, "logLevel", &serde_json::json!("debug")).await.unwrap();
     repo::set_raw(pool, "followSymlinks", &serde_json::json!(true)).await.unwrap();
     repo::set_raw(pool, "hashOnScan", &serde_json::json!("eager")).await.unwrap();
-    repo::set_raw(pool, "rowDensity", &serde_json::json!("comfortable")).await.unwrap();
+    repo::set_raw(pool, "darkMatchTolerance", &serde_json::json!("loose")).await.unwrap();
     repo::set_raw(pool, "blockPermanentDelete", &serde_json::json!(false)).await.unwrap();
 }
 
@@ -70,8 +70,8 @@ async fn identity_migration_retains_all_v1_keys() {
     assert_eq!(repo::get_raw(pool, "followSymlinks").await.unwrap(), Some(serde_json::json!(true)));
     assert_eq!(repo::get_raw(pool, "hashOnScan").await.unwrap(), Some(serde_json::json!("eager")));
     assert_eq!(
-        repo::get_raw(pool, "rowDensity").await.unwrap(),
-        Some(serde_json::json!("comfortable"))
+        repo::get_raw(pool, "darkMatchTolerance").await.unwrap(),
+        Some(serde_json::json!("loose"))
     );
     assert_eq!(
         repo::get_raw(pool, "blockPermanentDelete").await.unwrap(),

@@ -11,7 +11,7 @@
 //!
 //! The scope groups keys by workflow area:
 //! - `"advanced"` → `logLevel`, `rememberFollowLogs`, `devMode`
-//! - `"general"`  → `rowDensity`
+//! - `"general"`  → (empty; rowDensity removed T032)
 //! - `"cleanup"`  → `blockPermanentDelete`, `defaultProtection`, `protectedCategories`
 //! - `"naming"`   → `pattern`, `autoApplyPattern`, `patternsByType`
 //! - `"sources"`  → `followSymlinks`, `hashOnScan`
@@ -50,7 +50,7 @@ use contracts_core::ContractError;
 fn scope_keys(scope: &str) -> &'static [&'static str] {
     match scope {
         "advanced" => &["logLevel", "rememberFollowLogs", "devMode"],
-        "general" => &["rowDensity"],
+        "general" => &[],
         "cleanup" => &["blockPermanentDelete", "defaultProtection", "protectedCategories"],
         "naming" => &["pattern", "autoApplyPattern", "patternsByType"],
         "sources" => &["followSymlinks", "hashOnScan", "alwaysPreviewBeforePlan"],
@@ -71,7 +71,6 @@ fn scope_keys(scope: &str) -> &'static [&'static str] {
             "logLevel",
             "rememberFollowLogs",
             "devMode",
-            "rowDensity",
             "blockPermanentDelete",
             "defaultProtection",
             "protectedCategories",
@@ -206,4 +205,20 @@ pub async fn settings_source_override_set(
         request.key
     );
     app_core::settings::set_source_override(state.repo.pool(), &request).await
+}
+
+/// `settings.overridable-keys` — return the list of stable settings keys that
+/// can be overridden per source root (spec 018 T025).
+///
+/// The frontend uses this to populate the key selector in the source override
+/// panel without hardcoding key names.
+///
+/// # Errors
+/// Never errors in practice; returns `Ok` always.
+#[tauri::command]
+#[specta::specta]
+pub async fn settings_overridable_keys(
+    _state: State<'_, AppState>,
+) -> Result<Vec<String>, ContractError> {
+    Ok(app_core::settings::overridable_keys())
 }

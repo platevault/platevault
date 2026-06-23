@@ -92,7 +92,8 @@ use crate::commands::sessions::{
     sessions_transition,
 };
 use crate::commands::settings::{
-    settings_get, settings_restore_defaults, settings_source_override_set, settings_update,
+    settings_get, settings_overridable_keys, settings_restore_defaults,
+    settings_source_override_set, settings_update,
 };
 use crate::commands::status::status_summary;
 use crate::commands::target_lookup::{
@@ -255,6 +256,7 @@ pub fn specta_builder() -> Builder<tauri::Wry> {
         settings_update,
         settings_restore_defaults,
         settings_source_override_set,
+        settings_overridable_keys,
         // preferences
         preferences_get,
         preferences_set,
@@ -448,6 +450,7 @@ pub fn specta_builder() -> Builder<tauri::Wry> {
         settings_update,
         settings_restore_defaults,
         settings_source_override_set,
+        settings_overridable_keys,
         // preferences
         preferences_get,
         preferences_set,

@@ -84,7 +84,7 @@ describe('useAutoSave', () => {
     const { result } = renderHook(() => useAutoSave());
 
     act(() => {
-      result.current.save('general', { rowDensity: 'compact' });
+      result.current.save('advanced', { logLevel: 'debug' });
     });
 
     await act(async () => {

@@ -152,9 +152,6 @@ fn apply_key_to_state(key: &str, value: Value, state: &mut SettingsState) -> DbR
             state.suggest_calibration =
                 serde_json::from_value(value).map_err(DbError::Serialise)?;
         }
-        "rowDensity" => {
-            state.row_density = serde_json::from_value(value).map_err(DbError::Serialise)?;
-        }
         "logLevel" => {
             state.log_level = serde_json::from_value(value).map_err(DbError::Serialise)?;
         }
@@ -615,7 +612,7 @@ mod byte_identity_guard {
     /// Frozen snapshot of `SettingsState::default()` exactly as persisted /
     /// emitted on the wire prior to the T254 move. Captured from the
     /// pre-move `contracts_core::settings::SettingsState` serialization.
-    const SETTINGS_STATE_DEFAULT_JSON: &str = r#"{"pattern":[{"id":"p0","kind":"token","value":"target"},{"id":"p1","kind":"separator","value":"/"},{"id":"p2","kind":"token","value":"filter"},{"id":"p3","kind":"separator","value":"/"},{"id":"p4","kind":"token","value":"date"},{"id":"p5","kind":"separator","value":"/"},{"id":"p6","kind":"token","value":"frame_type"},{"id":"p7","kind":"separator","value":"/"}],"autoApplyPattern":true,"alwaysPreviewBeforePlan":false,"followSymlinks":false,"hashOnScan":"lazy","darkMatchTolerance":"strict","flatMatching":"filter-rot","suggestCalibration":true,"rowDensity":"dense","logLevel":"info","rememberFollowLogs":false,"defaultProtection":"protected","blockPermanentDelete":true,"protectedCategories":["lights","masters","finals"],"devMode":false,"plansListDefaultAgeCutoffDays":90.0,"calibrationDarkTempTolerance":2.0,"calibrationPrefillSuggestion":true,"calibrationDarkOverridePenalty":0.3,"calibrationFlatOverridePenalty":0.3,"calibrationBiasOverridePenalty":0.3,"calibrationAgingThresholdDays":90.0,"imagetypNormalizationUserMappings":[],"patternsByType":{},"toolWatchExtensions":[".xisf",".fits",".fit",".tif",".tiff",".png",".jpg",".ser",".avi"],"toolAttributionWindowHours":6.0}"#;
+    const SETTINGS_STATE_DEFAULT_JSON: &str = r#"{"pattern":[{"id":"p0","kind":"token","value":"target"},{"id":"p1","kind":"separator","value":"/"},{"id":"p2","kind":"token","value":"filter"},{"id":"p3","kind":"separator","value":"/"},{"id":"p4","kind":"token","value":"date"},{"id":"p5","kind":"separator","value":"/"},{"id":"p6","kind":"token","value":"frame_type"},{"id":"p7","kind":"separator","value":"/"}],"autoApplyPattern":true,"alwaysPreviewBeforePlan":false,"followSymlinks":false,"hashOnScan":"lazy","darkMatchTolerance":"strict","flatMatching":"filter-rot","suggestCalibration":true,"logLevel":"info","rememberFollowLogs":false,"defaultProtection":"protected","blockPermanentDelete":true,"protectedCategories":["lights","masters","finals"],"devMode":false,"plansListDefaultAgeCutoffDays":90.0,"calibrationDarkTempTolerance":2.0,"calibrationPrefillSuggestion":true,"calibrationDarkOverridePenalty":0.3,"calibrationFlatOverridePenalty":0.3,"calibrationBiasOverridePenalty":0.3,"calibrationAgingThresholdDays":90.0,"imagetypNormalizationUserMappings":[],"patternsByType":{},"toolWatchExtensions":[".xisf",".fits",".fit",".tif",".tiff",".png",".jpg",".ser",".avi"],"toolAttributionWindowHours":6.0}"#;
 
     /// Frozen snapshot of a `SourceOverride` as persisted prior to the move.
     const SOURCE_OVERRIDE_JSON: &str = r#"{"sourceId":"src-1","key":"hashOnScan","value":"eager","updatedAt":"2026-01-01T00:00:00Z"}"#;

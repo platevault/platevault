@@ -3,7 +3,7 @@
 import { useState, useEffect, useCallback } from 'react';
 import { Btn, Pill } from '@/ui';
 import { DirPicker } from '@/ui/DirPicker';
-import { listRoots, registerRoot, startScan, settingsSourceOverrideSet } from '@/api/commands';
+import { listRoots, registerRoot, startScan, settingsSourceOverrideSet, settingsOverridableKeys } from '@/api/commands';
 import type { LibraryRoot } from '@/bindings/types';
 import type { RootCategory } from '@/bindings/index';
 import { errMessage } from '@/lib/errors';
@@ -13,10 +13,9 @@ import { SourceProtectionOverride } from './SourceProtectionOverride';
 
 const SOURCES_KEYS = ['followSymlinks', 'hashOnScan', 'alwaysPreviewBeforePlan'];
 
-// Known overridable keys for per-source overrides.
-// TODO(spec-018): replace with backend-provided list when available.
-const OVERRIDABLE_KEYS = ['hashOnScan', 'followSymlinks'] as const;
-type OverridableKey = (typeof OVERRIDABLE_KEYS)[number];
+// Fallback list used before the backend responds or if the call fails.
+const OVERRIDABLE_KEYS_FALLBACK = ['hashOnScan', 'followSymlinks'] as const;
+type OverridableKey = string;
 
 interface DataSourcesProps {
   save: (scope: string, values: Record<string, unknown>) => void;
@@ -42,6 +41,15 @@ export function DataSources({ save: _save }: DataSourcesProps) {
   const [addingCategory, setAddingCategory] = useState<RootCategory>('raw');
   const [addError, setAddError] = useState<string | null>(null);
   const [adding, setAdding] = useState(false);
+
+  // ── Overridable keys — fetched from backend (T025) ──────────────────────────
+  const [overridableKeys, setOverridableKeys] = useState<string[]>([...OVERRIDABLE_KEYS_FALLBACK]);
+
+  useEffect(() => {
+    settingsOverridableKeys().then(setOverridableKeys).catch(() => {
+      // Keep fallback list on failure.
+    });
+  }, []);
 
   // ── Per-source override (T025) ────────────────────────────────────────────
   const [overrideSourceId, setOverrideSourceId] = useState('');
@@ -240,14 +248,13 @@ export function DataSources({ save: _save }: DataSourcesProps) {
             {m.settings_datasources_source_override_key_aria()}
           </div>
           <div className="alm-settings__row-content">
-            {/* TODO(spec-018): replace hardcoded list with backend-provided overridable keys */}
             <select
               className="alm-select"
               value={overrideKey}
-              onChange={(e) => setOverrideKey(e.target.value as OverridableKey)}
+              onChange={(e) => setOverrideKey(e.target.value)}
               aria-label={m.settings_datasources_source_override_key_aria()}
             >
-              {OVERRIDABLE_KEYS.map((k) => (
+              {overridableKeys.map((k) => (
                 <option key={k} value={k}>{k}</option>
               ))}
             </select>

@@ -124,15 +124,6 @@ pub(crate) const DESCRIPTORS: &[Descriptor] = &[
         validation: ValidationRule::Bool,
     },
     Descriptor {
-        key: "rowDensity",
-        noisy: false,
-        overridable: false,
-        validation: ValidationRule::EnumStr {
-            allowed: &["dense", "comfortable"],
-            expected_msg: "must be \"dense\" or \"comfortable\"",
-        },
-    },
-    Descriptor {
         key: "logLevel",
         noisy: false,
         overridable: false,

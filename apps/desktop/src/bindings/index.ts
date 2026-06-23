@@ -733,6 +733,17 @@ export const commands = {
 	 */
 	settingsSourceOverrideSet: (request: SetSourceOverrideRequest) => typedError<SetSourceOverrideResponse, ContractError_Serialize>(__TAURI_INVOKE("settings_source_override_set", { request })),
 	/**
+	 *  `settings.overridable-keys` — return the list of stable settings keys that
+	 *  can be overridden per source root (spec 018 T025).
+	 * 
+	 *  The frontend uses this to populate the key selector in the source override
+	 *  panel without hardcoding key names.
+	 * 
+	 *  # Errors
+	 *  Never errors in practice; returns `Ok` always.
+	 */
+	settingsOverridableKeys: () => typedError<string[], ContractError_Serialize>(__TAURI_INVOKE("settings_overridable_keys")),
+	/**
 	 *  `preferences.get` — returns current application preferences.
 	 * 
 	 *  # Errors
