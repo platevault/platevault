@@ -155,6 +155,23 @@ describe('alm/no-user-string', () => {
     expect(out.filter((m) => m.ruleId === 'alm/no-user-string')).toHaveLength(0);
   });
 
+  it('alm/no-js-plural flags lone-suffix pluralization ternaries', () => {
+    const linter = new Linter();
+    const run = (code: string) =>
+      linter.verify(code, {
+        plugins: { alm: plugin },
+        languageOptions: { parserOptions: { ecmaVersion: 'latest', sourceType: 'module' } },
+        rules: { 'alm/no-js-plural': 'error' },
+      });
+    // inline JSX-suffix + suffix-param forms → flagged
+    expect(run("const a = n !== 1 ? 's' : '';").filter((m) => m.ruleId === 'alm/no-js-plural')).toHaveLength(1);
+    expect(run("f({ suffix: n === 1 ? '' : 's' });").filter((m) => m.ruleId === 'alm/no-js-plural')).toHaveLength(1);
+    expect(run("const a = n === 1 ? '' : 'es';").filter((m) => m.ruleId === 'alm/no-js-plural')).toHaveLength(1);
+    // full-word ternaries and non-plural ternaries → NOT flagged
+    expect(run("const a = ok ? 'Save' : 'Cancel';").filter((m) => m.ruleId === 'alm/no-js-plural')).toHaveLength(0);
+    expect(run("const a = n === 1 ? 'item' : 'items';").filter((m) => m.ruleId === 'alm/no-js-plural')).toHaveLength(0);
+  });
+
   it('ignores pure-interpolation / machine template literals (no letters)', () => {
     const out = lint(`
       function P({ a, b, id }) {

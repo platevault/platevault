@@ -181,9 +181,7 @@ export function SourceViewsSection({ projectId, onPlanCreated, defaultOpen = tru
               {view.items.length > 0 && (
                 <details className="text-xs text-muted alm-source-views__refs-details">
                   <summary className="alm-source-views__refs-summary">
-                    {view.items.length} {m.projects_source_views_inventory_ref()}
-                    {/* eslint-disable-next-line alm/no-user-string -- lone plural suffix */}
-                    {view.items.length !== 1 ? 's' : ''}
+                    {m.projects_source_views_inventory_ref_count({ count: view.items.length })}
                   </summary>
                   <ul
                     className="alm-source-views__refs-list"

@@ -129,7 +129,7 @@ function SourceSummary({ state }: SourceSummaryProps) {
   // Compact count summary for the always-visible header line.
   const countSummary =
     phase === 'done' && totalItems > 0
-      ? `${totalItems} folder${totalItems !== 1 ? 's' : ''} · ${totalFiles} file${totalFiles !== 1 ? 's' : ''}`
+      ? `${m.setup_scan_folder_count({ count: totalItems })} · ${m.setup_scan_file_count({ count: totalFiles })}`
       : null;
 
   return (
@@ -402,7 +402,7 @@ export function StepScan({ sources, flushResult, onAllDoneChange }: StepScanProp
               className="alm-setup-scan__summary"
             >
               {totalDetected > 0
-                ? m.setup_scan_summary_found({ count: totalDetected, suffix: totalDetected !== 1 ? 's' : '' })
+                ? m.setup_scan_summary_found({ count: totalDetected })
                 : m.setup_scan_summary_empty()}
             </p>
           )}

@@ -40,7 +40,7 @@ export function PlanApprovalOverlay({
 
   const subtitle =
     plans.length > 0
-      ? `${plans.length} plan${plans.length !== 1 ? 's' : ''} · ${totalActions} action${totalActions !== 1 ? 's' : ''}`
+      ? `${m.plan_count_label({ count: plans.length })} · ${m.action_count_label({ count: totalActions })}`
       : undefined;
 
   return (

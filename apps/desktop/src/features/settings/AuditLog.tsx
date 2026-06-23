@@ -124,8 +124,8 @@ export function AuditLog() {
         {/* Pagination */}
         <div className="alm-audit-log__pagination">
           <span className="alm-audit-log__page-count">
-            {/* eslint-disable-next-line alm/no-user-string -- plural composite: count + page + total JS expressions cannot be split into a single catalog key without ICU plural support */}
-            {filtered.length} event{filtered.length !== 1 ? 's' : ''} &middot; page {page + 1} of {totalPages}
+            {/* eslint-disable-next-line alm/no-user-string -- pagination separator fragments "· page X of Y" are structural, not translatable copy */}
+            {m.settings_auditlog_event_count({ count: filtered.length })} &middot; page {page + 1} of {totalPages}
           </span>
           <div className="alm-audit-log__page-btns">
             <Btn size="sm" variant="ghost" onClick={() => setPage(Math.max(0, page - 1))} disabled={page === 0}>

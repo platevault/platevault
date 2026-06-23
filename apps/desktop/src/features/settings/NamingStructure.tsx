@@ -178,15 +178,15 @@ function validatePatternString(value: string): string | null {
 	if (value.trim() === "") return null; // empty = use default
 	const unknown: string[] = [];
 	const re = /\{([^}]*)\}/g;
-	let m: RegExpExecArray | null;
-	while ((m = re.exec(value)) !== null) {
-		const token = m[1];
+	let match: RegExpExecArray | null;
+	while ((match = re.exec(value)) !== null) {
+		const token = match[1];
 		if (!VALID_PATTERN_TOKENS.has(token as (typeof AVAILABLE_TOKENS)[number])) {
 			unknown.push(token);
 		}
 	}
 	if (unknown.length > 0) {
-		return `Unknown token${unknown.length > 1 ? "s" : ""}: ${unknown.map((t) => `{${t}}`).join(", ")}`;
+		return `${m.settings_naming_unknown_tokens({ count: unknown.length })}: ${unknown.map((t) => `{${t}}`).join(", ")}`;
 	}
 	return null;
 }

@@ -684,7 +684,21 @@
   "setup_scan_phase_pending": "Pending",
   "setup_scan_scanning": "Scanning…",
   "setup_scan_summary_empty": "No folders detected. You can add more sources in Settings.",
-  "setup_scan_summary_found": "{count} folder{suffix} detected across all sources. Head to the Inbox to review and approve.",
+  "setup_scan_summary_found": [
+    {
+      "declarations": [
+        "input count",
+        "local pp = count: plural"
+      ],
+      "selectors": [
+        "pp"
+      ],
+      "match": {
+        "pp=one": "{count} folder detected across all sources. Head to the Inbox to review and approve.",
+        "pp=other": "{count} folders detected across all sources. Head to the Inbox to review and approve."
+      }
+    }
+  ],
   "setup_sources_add_folder_aria": "Add {kind} folder",
   "setup_sources_add_e2e": "Add by path (E2E)",
   "setup_sources_e2e_path_aria": "E2E {kind} path",
@@ -733,7 +747,21 @@
   "setup_wizard_continue_to": "Continue to {label} →",
   "setup_wizard_finish": "Finish",
   "setup_wizard_finishing": "Finishing…",
-  "setup_wizard_folder_count": "{count} folder{suffix} selected",
+  "setup_wizard_folder_count": [
+    {
+      "declarations": [
+        "input count",
+        "local pp = count: plural"
+      ],
+      "selectors": [
+        "pp"
+      ],
+      "match": {
+        "pp=one": "{count} folder selected",
+        "pp=other": "{count} folders selected"
+      }
+    }
+  ],
   "setup_wizard_registering": "Registering…",
   "setup_wizard_start_scan": "Start scan →",
   "setup_wizard_step_label": "Setup · Step {step} of {total}",
@@ -817,7 +845,21 @@
   "inbox_toast_confirm_failed": "Confirm failed: {message}",
   "inbox_toast_bulk_partial": "{success} confirmed; {fail} skipped (mixed, missing metadata, or needs root pick).",
   "inbox_toast_bulk_all_need_review": "Bulk confirm: all items need review (mixed folders or missing metadata).",
-  "inbox_toast_bulk_confirmed": "{success} item{suffix} confirmed — review plans below.",
+  "inbox_toast_bulk_confirmed": [
+    {
+      "declarations": [
+        "input count",
+        "local pp = count: plural"
+      ],
+      "selectors": [
+        "pp"
+      ],
+      "match": {
+        "pp=one": "{count} item confirmed — review plans below.",
+        "pp=other": "{count} items confirmed — review plans below."
+      }
+    }
+  ],
   "inbox_toast_plans_partial": "{applied} plan(s) applied; {failed} failed.",
   "inbox_toast_plans_applying": "{count} plan(s) are being applied.",
   "inbox_toast_all_plans_partial": "{applied} plans applied; {failed} failed.",
@@ -1276,6 +1318,186 @@
       "match": {
         "p=one": "Confirm all {count} classified item",
         "p=other": "Confirm all {count} classified items"
+      }
+    }
+  ],
+  "calibration_usage_sessions": [
+    {
+      "declarations": [
+        "input count",
+        "local pp = count: plural"
+      ],
+      "selectors": [
+        "pp"
+      ],
+      "match": {
+        "pp=one": "{count} session",
+        "pp=other": "{count} sessions"
+      }
+    }
+  ],
+  "calibration_usage_projects": [
+    {
+      "declarations": [
+        "input count",
+        "local pp = count: plural"
+      ],
+      "selectors": [
+        "pp"
+      ],
+      "match": {
+        "pp=one": "{count} project",
+        "pp=other": "{count} projects"
+      }
+    }
+  ],
+  "inbox_count_folders": [
+    {
+      "declarations": [
+        "input count",
+        "local pp = count: plural"
+      ],
+      "selectors": [
+        "pp"
+      ],
+      "match": {
+        "pp=one": "{count} folder",
+        "pp=other": "{count} folders"
+      }
+    }
+  ],
+  "inbox_count_masters": [
+    {
+      "declarations": [
+        "input count",
+        "local pp = count: plural"
+      ],
+      "selectors": [
+        "pp"
+      ],
+      "match": {
+        "pp=one": "{count} master",
+        "pp=other": "{count} masters"
+      }
+    }
+  ],
+  "plan_count_label": [
+    {
+      "declarations": [
+        "input count",
+        "local pp = count: plural"
+      ],
+      "selectors": [
+        "pp"
+      ],
+      "match": {
+        "pp=one": "{count} plan",
+        "pp=other": "{count} plans"
+      }
+    }
+  ],
+  "action_count_label": [
+    {
+      "declarations": [
+        "input count",
+        "local pp = count: plural"
+      ],
+      "selectors": [
+        "pp"
+      ],
+      "match": {
+        "pp=one": "{count} action",
+        "pp=other": "{count} actions"
+      }
+    }
+  ],
+  "projects_cleanup_candidate_count": [
+    {
+      "declarations": [
+        "input count",
+        "local pp = count: plural"
+      ],
+      "selectors": [
+        "pp"
+      ],
+      "match": {
+        "pp=one": "Cleanup would review {count} candidate for archive or trash. Nothing is removed without explicit plan approval.",
+        "pp=other": "Cleanup would review {count} candidates for archive or trash. Nothing is removed without explicit plan approval."
+      }
+    }
+  ],
+  "projects_source_views_inventory_ref_count": [
+    {
+      "declarations": [
+        "input count",
+        "local pp = count: plural"
+      ],
+      "selectors": [
+        "pp"
+      ],
+      "match": {
+        "pp=one": "{count} inventory ref",
+        "pp=other": "{count} inventory refs"
+      }
+    }
+  ],
+  "settings_auditlog_event_count": [
+    {
+      "declarations": [
+        "input count",
+        "local pp = count: plural"
+      ],
+      "selectors": [
+        "pp"
+      ],
+      "match": {
+        "pp=one": "{count} event",
+        "pp=other": "{count} events"
+      }
+    }
+  ],
+  "settings_naming_unknown_tokens": [
+    {
+      "declarations": [
+        "input count",
+        "local pp = count: plural"
+      ],
+      "selectors": [
+        "pp"
+      ],
+      "match": {
+        "pp=one": "Unknown token",
+        "pp=other": "Unknown tokens"
+      }
+    }
+  ],
+  "setup_scan_folder_count": [
+    {
+      "declarations": [
+        "input count",
+        "local pp = count: plural"
+      ],
+      "selectors": [
+        "pp"
+      ],
+      "match": {
+        "pp=one": "{count} folder",
+        "pp=other": "{count} folders"
+      }
+    }
+  ],
+  "setup_scan_file_count": [
+    {
+      "declarations": [
+        "input count",
+        "local pp = count: plural"
+      ],
+      "selectors": [
+        "pp"
+      ],
+      "match": {
+        "pp=one": "{count} file",
+        "pp=other": "{count} files"
       }
     }
   ]

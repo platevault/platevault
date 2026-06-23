@@ -557,10 +557,7 @@ export function PlanPanel({
             className="alm-plan-panel__count-summary"
             data-testid="plan-total-count"
           >
-            {/* eslint-disable-next-line alm/no-user-string -- plural suffix fragments; ICU plurals not supported by the message-format plugin */}
-            {plans.length} plan{plans.length !== 1 ? 's' : ''} · {totalActions} action
-            {/* eslint-disable-next-line alm/no-user-string -- plural suffix fragment; ICU plurals unsupported by the message-format plugin */}
-            {totalActions !== 1 ? 's' : ''}
+            {m.plan_count_label({ count: plans.length })} · {m.action_count_label({ count: totalActions })}
           </span>
         </div>
         <div
