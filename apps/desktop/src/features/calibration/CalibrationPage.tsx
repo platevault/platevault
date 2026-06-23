@@ -54,6 +54,11 @@ export function CalibrationPage() {
 
   const [search, setSearch] = useState('');
   const [sort, setSort] = useState<MasterSort>(DEFAULT_MASTER_SORT);
+  // Kind filter (bias / dark / flat / …) — options derived from the masters present.
+  const [kindFilter, setKindFilter] = useState('');
+  const kindOptions = [...new Set(masters.map((mm) => mm.kind.toLowerCase()))]
+    .sort()
+    .map((k) => ({ value: k, label: k }));
 
   const { dims, setSlot } = useGrouping({
     storageKey: 'calibration.grouping.dims.v1',
@@ -85,7 +90,7 @@ export function CalibrationPage() {
 
   // Client-side text search across the visible master fields.
   const q = search.trim().toLowerCase();
-  const visibleMasters =
+  const searchedMasters =
     q === ''
       ? masters
       : masters.filter((m) => {
@@ -103,6 +108,9 @@ export function CalibrationPage() {
             .toLowerCase();
           return haystack.includes(q);
         });
+  const visibleMasters = kindFilter
+    ? searchedMasters.filter((m) => m.kind.toLowerCase() === kindFilter)
+    : searchedMasters;
 
   const topBar = (
     <PageTopBar
@@ -114,6 +122,20 @@ export function CalibrationPage() {
             placeholder: m.calibration_search_masters_placeholder(),
             ariaLabel: m.calibration_search_masters_aria(),
           }}
+          fields={
+            kindOptions.length > 1
+              ? [
+                  {
+                    key: 'kind',
+                    label: m.calibration_fp_kind(),
+                    value: kindFilter,
+                    options: kindOptions,
+                    onChange: setKindFilter,
+                    allLabel: m.calibration_filter_all_kinds(),
+                  },
+                ]
+              : undefined
+          }
           grouping={{
             dimensions: CALIB_DIMENSIONS,
             dims,

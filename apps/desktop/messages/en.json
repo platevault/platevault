@@ -1188,5 +1188,6 @@
   "projects_dim_target": "Target",
   "targets_dim_constellation": "Constellation",
   "targets_dim_object_type": "Object type",
-  "targets_dim_applicable_filters": "Applicable filters"
+  "targets_dim_applicable_filters": "Applicable filters",
+  "calibration_filter_all_kinds": "All kinds"
 }
